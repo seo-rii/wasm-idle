@@ -52,9 +52,15 @@ class Java implements Sandbox {
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ?? new DOMException('Java runtime startup aborted', 'AbortError')
+			);
+		}
 		if (this.activeLoadCleanup || this.activeRunCleanup) {
 			return Promise.reject(
 				new BusyError('Java runtime already has an active operation', {
@@ -63,16 +69,37 @@ class Java implements Sandbox {
 				})
 			);
 		}
+		let onAbort: (() => void) | undefined;
 		let cleanedUp = false;
 		const cleanup = () => {
 			if (cleanedUp) return;
 			cleanedUp = true;
+			if (signal && onAbort) {
+				try {
+					signal.removeEventListener('abort', onAbort);
+				} catch {
+					// Cleanup must not replace the startup result.
+				}
+			}
 			if (this.activeLoadCleanup === cleanup) this.activeLoadCleanup = null;
 		};
+		onAbort = signal
+			? () => {
+					if (this.activeLoadCleanup !== cleanup) {
+						cleanup();
+						return;
+					}
+					const reason =
+						signal.reason ??
+						new DOMException('Java runtime startup aborted', 'AbortError');
+					cleanup();
+					this.workerSession.terminate(reason);
+				}
+			: undefined;
 		this.activeLoadCleanup = cleanup;
 		const loadPromise = this.workerSession.load(async (resolve, reject) => {
 			const resolveLoad = () => {
-				if (this.activeLoadCleanup !== cleanup) return;
+				if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
 				cleanup();
 				resolve();
 			};
@@ -100,9 +127,9 @@ class Java implements Sandbox {
 				if (!this.worker) {
 					const WorkerConstructor = (await import('$lib/playground/worker/java?worker'))
 						.default;
-					if (this.activeLoadCleanup !== cleanup) return;
+					if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
 					const worker = new WorkerConstructor();
-					if (this.activeLoadCleanup !== cleanup) {
+					if (this.activeLoadCleanup !== cleanup || signal?.aborted) {
 						worker.terminate();
 						return;
 					}
@@ -114,7 +141,11 @@ class Java implements Sandbox {
 						assetConfig,
 						progress
 					);
-					if (this.activeLoadCleanup !== cleanup || this.worker !== worker) {
+					if (
+						this.activeLoadCleanup !== cleanup ||
+						signal?.aborted ||
+						this.worker !== worker
+					) {
 						assetBridge.dispose();
 						return;
 					}
@@ -128,7 +159,7 @@ class Java implements Sandbox {
 							return;
 						}
 						if (assetBridge.handleMessage(event)) return;
-						if (this.activeLoadCleanup !== cleanup) return;
+						if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
 						if (event.data?.load) resolveLoad();
 						if (event.data?.error) rejectLoad(event.data.error);
 					};
@@ -147,6 +178,7 @@ class Java implements Sandbox {
 					assetBridge.rebind(worker, assetConfig, progress);
 					if (
 						this.activeLoadCleanup !== cleanup ||
+						signal?.aborted ||
 						this.worker !== worker ||
 						this.assetBridge !== assetBridge
 					) {
@@ -158,6 +190,10 @@ class Java implements Sandbox {
 				rejectLoad(error);
 			}
 		});
+		if (signal && onAbort) {
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		}
 		return loadPromise.finally(cleanup);
 	}
 

@@ -12,6 +12,7 @@ const { publicEnv } = vi.hoisted(() => ({
 }));
 let suppressAutoLoadAck = false;
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
+let onWorkerConstruct: (() => void) | null = null;
 
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
@@ -54,6 +55,7 @@ class MockWorker {
 
 	constructor() {
 		workerInstances.push(this);
+		onWorkerConstruct?.();
 	}
 }
 
@@ -72,6 +74,7 @@ describe('TeaVM Java sandbox', () => {
 		workerInstances.length = 0;
 		suppressAutoLoadAck = false;
 		onPostMessage = null;
+		onWorkerConstruct = null;
 	});
 
 	it('loads the TeaVM worker and resolves prepare/run messages', async () => {
@@ -215,6 +218,118 @@ describe('TeaVM Java sandbox', () => {
 
 		workerInstances[0].onmessage?.({ data: { load: true } } as MessageEvent<any>);
 		await expect(loading).resolves.toBeUndefined();
+	});
+
+	it('rejects a pre-aborted Java startup without changing its loaded worker or bridge', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		const assetBridge = sandbox.assetBridge!;
+		const rebind = vi.spyOn(assetBridge, 'rebind');
+		const dispose = vi.spyOn(assetBridge, 'dispose');
+		const baseUrl = sandbox.baseUrl;
+		const controller = new AbortController();
+		const reason = new Error('Java startup pre-aborted');
+		controller.abort(reason);
+
+		await expect(
+			sandbox.load('/other/', '', true, [], { signal: controller.signal })
+		).rejects.toBe(reason);
+
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(rebind).not.toHaveBeenCalled();
+		expect(dispose).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		expect(sandbox.assetBridge).toBe(assetBridge);
+		expect(sandbox.baseUrl).toBe(baseUrl);
+
+		await expect(sandbox.run('public class Main {}', false)).resolves.toBe(true);
+	});
+
+	it('aborts Java startup during worker construction before attaching it', async () => {
+		const sandbox = new Java();
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('Java constructor abort');
+		onWorkerConstruct = () => controller.abort(reason);
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+		).rejects.toBe(reason);
+
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).not.toHaveBeenCalled();
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.worker).toBeNull();
+		expect(sandbox.assetBridge).toBeNull();
+		expect(sandbox.exit).toBe(true);
+
+		onWorkerConstruct = null;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('public class Main {}', false)).resolves.toBe(true);
+	});
+
+	it('aborts Java readiness with its exact reason and ignores settled startup signals', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Java();
+		const progress = { set: vi.fn() };
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('Java readiness abort');
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const lateHandler = worker.onmessage;
+		const assetBridge = sandbox.assetBridge!;
+		const handleMessage = vi.spyOn(assetBridge, 'handleMessage');
+		const dispose = vi.spyOn(assetBridge, 'dispose');
+		const progressCalls = progress.set.mock.calls.length;
+
+		controller.abort(reason);
+		await expect(loading).rejects.toBe(reason);
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(dispose).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+
+		lateHandler?.({
+			data: {
+				assetProgress: { asset: 'teavm.wasm', loaded: 1, total: 1 },
+				load: true
+			}
+		} as MessageEvent<any>);
+		expect(handleMessage).not.toHaveBeenCalled();
+		expect(progress.set).toHaveBeenCalledTimes(progressCalls);
+
+		suppressAutoLoadAck = false;
+		const settledController = new AbortController();
+		const settledRemoveEventListener = vi.spyOn(
+			settledController.signal,
+			'removeEventListener'
+		);
+		await sandbox.load('/absproxy/5173', '', true, [], {
+			signal: settledController.signal
+		});
+		const retryWorker = workerInstances[1];
+		const retryBridge = sandbox.assetBridge!;
+		const retryDispose = vi.spyOn(retryBridge, 'dispose');
+		expect(settledRemoveEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+
+		settledController.abort(new Error('Java late startup abort'));
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+		expect(retryDispose).not.toHaveBeenCalled();
 	});
 
 	it('rejects operations that overlap an active Java run without rebinding assets', async () => {
