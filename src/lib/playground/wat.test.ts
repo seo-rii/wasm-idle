@@ -538,4 +538,39 @@ describe('WAT sandbox', () => {
 		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
 		await expect(runPromise).resolves.toBe(true);
 	});
+
+	it('clears queued input before an explicit WAT stdin run', async () => {
+		const sandbox = new Wat();
+		const worker = new MockWorker();
+		const runMessages: any[] = [];
+		const bufferedValues: Array<string | null> = [];
+
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementation((message) => {
+			runMessages.push(message);
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+				bufferedValues.push(readBufferedStdin(message.buffer));
+				if (runMessages.length === 1) {
+					sandbox.write('during\n');
+					sandbox.eof();
+				}
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+		sandbox.write('stale\n');
+		sandbox.eof();
+
+		await expect(
+			sandbox.run('(module)', false, true, undefined, [], {
+				stdin: 'injected\n'
+			})
+		).resolves.toBe(true);
+		await expect(sandbox.run('(module)', false)).resolves.toBe(true);
+
+		expect(runMessages).toHaveLength(2);
+		expect(runMessages[0].stdin).toBe('injected\n');
+		expect(runMessages[1].stdin).toBeUndefined();
+		expect(bufferedValues).toEqual(['', '']);
+	});
 });
