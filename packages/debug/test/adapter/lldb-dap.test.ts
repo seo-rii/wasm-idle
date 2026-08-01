@@ -211,6 +211,27 @@ describe('LldbDapAdapter', () => {
 		});
 	});
 
+	it.each([
+		{ response: {}, path: 'breakpoints' },
+		{
+			response: { breakpoints: [{ verified: 'true', line: 3 }] },
+			path: 'breakpoints[0].verified'
+		}
+	])('rejects malformed setBreakpoints responses at $path', async ({ response, path }) => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', {});
+		session.setResponse('setBreakpoints', response);
+		const adapter = createLldbDapAdapter(session);
+		await adapter.initialize();
+
+		const result = adapter.setBreakpoints({ path: '/workspace/main.cpp' }, [3]);
+		await expect(result).rejects.toBeInstanceOf(DebugAdapterProtocolError);
+		await expect(result).rejects.toMatchObject({
+			command: 'setBreakpoints',
+			path
+		});
+	});
+
 	it('isolates tracked breakpoint metadata from mutations to returned snapshots', async () => {
 		const session = new FakeDapSession();
 		session.setResponse('initialize', {});
@@ -396,6 +417,44 @@ describe('LldbDapAdapter', () => {
 		const supersededResult = expect(older).resolves.toEqual(currentBreakpoints);
 		rejectOlder(new Error('obsolete breakpoint failure'));
 		await supersededResult;
+	});
+
+	it('ignores a malformed superseded breakpoint response after the newest update succeeds', async () => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', {});
+		let resolveOlder!: (response: unknown) => void;
+		let resolveNewer!: (response: unknown) => void;
+		session.queueResponse(
+			'setBreakpoints',
+			new Promise((resolve) => {
+				resolveOlder = resolve;
+			})
+		);
+		session.queueResponse(
+			'setBreakpoints',
+			new Promise((resolve) => {
+				resolveNewer = resolve;
+			})
+		);
+		const adapter = createLldbDapAdapter(session);
+		await adapter.initialize();
+
+		const older = adapter.setBreakpoints({ path: '/workspace/main.cpp' }, [3]);
+		const newer = adapter.setBreakpoints({ path: '/workspace/main.cpp' }, [9]);
+		const currentBreakpoints = [
+			{
+				id: 79,
+				verified: true,
+				source: { path: '/workspace/main.cpp' },
+				requestedLine: 9,
+				line: 9
+			}
+		];
+		resolveNewer({ breakpoints: [{ id: 79, verified: true, line: 9 }] });
+		await expect(newer).resolves.toEqual(currentBreakpoints);
+		resolveOlder({});
+
+		await expect(older).resolves.toEqual(currentBreakpoints);
 	});
 
 	it('keeps variable children lazy and forwards paging to DAP', async () => {
@@ -846,5 +905,27 @@ describe('LldbDapAdapter', () => {
 		unsubscribe();
 		session.emit({ event: 'terminated' });
 		expect(events).toHaveLength(6);
+	});
+
+	it.each([
+		{ event: 'stopped', body: { reason: 7 } },
+		{ event: 'continued', body: { threadId: 0 } },
+		{ event: 'output', body: { output: 7 } },
+		{ event: 'exited', body: { exitCode: '0' } },
+		{ event: 'thread', body: { reason: 'started', threadId: 0 } },
+		{ event: 'process', body: { name: 'program.wasm', pointerSize: -1 } },
+		{
+			event: 'breakpoint',
+			body: { reason: 'new', breakpoint: { verified: 'true', line: 3 } }
+		}
+	])('downgrades malformed $event event bodies to raw DAP events', ({ event, body }) => {
+		const session = new FakeDapSession();
+		const adapter = createLldbDapAdapter(session);
+		const events: DebugAdapterEvent[] = [];
+		adapter.onEvent((adapterEvent) => events.push(adapterEvent));
+
+		session.emit({ event, body });
+
+		expect(events).toEqual([{ type: 'dap', event, body }]);
 	});
 });

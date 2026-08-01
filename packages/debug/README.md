@@ -48,6 +48,9 @@ and cannot exceed the requested byte count. A malformed body rejects with
 `DebugAdapterProtocolError`, whose `command` and `path` identify the failed field; hosts should treat
 it as a session failure and dispose the LLDB/WAMR workers. Stack and scope line or column values may
 be zero, matching DAP's representation for an unavailable source location.
+Recognized DAP events receive the same field validation. A malformed event is emitted only as a raw
+`dap` event, so it cannot move the selected thread/frame, append non-string output, change process
+state, or mutate the tracked breakpoint cache.
 
 The playground-facing controller also exposes `readMemory(memoryReference, offset, count)` while
 the target is paused. `DebugMemory` crosses the framework-neutral Sandbox and Terminal contracts
@@ -72,11 +75,11 @@ the UI. DAP `new` events enter the same per-source replacement set as response I
 and `removed` keep that set synchronized. A later source replacement therefore retires event-created
 IDs, and late events for an untracked ID are discarded. Superseded controller calls resolve with the
 current source snapshot instead of returning their stale result. Direct `LldbDapAdapter` calls use
-the same rule for both late successes and failures, and returned breakpoint/source objects are
-isolated from its event-correlation cache. The adapter controller and playground host also ignore a
-superseded request's late failure instead of surfacing it after the current update succeeds. Updates
-for different workspace files remain independent, while failures from the latest request still
-propagate.
+the same rule for late successes, failures, and malformed response bodies, and returned
+breakpoint/source objects are isolated from its event-correlation cache. The adapter controller and
+playground host also ignore a superseded request's late failure instead of surfacing it after the
+current update succeeds. Updates for different workspace files remain independent, while failures
+from the latest request still propagate.
 
 When a selected LLDB stack frame names another `/workspace/...` source, the host should await
 `selectFrame()`, open the matching workspace file, and then update the controller source path. This

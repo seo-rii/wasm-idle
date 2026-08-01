@@ -37,23 +37,6 @@ export interface LldbDapAdapterOptions {
 	};
 }
 
-interface DapBreakpoint {
-	id?: number;
-	verified?: boolean;
-	message?: string;
-	source?: DebugSource;
-	line?: number;
-	column?: number;
-	endLine?: number;
-	endColumn?: number;
-	instructionReference?: string;
-	offset?: number;
-}
-
-interface DapSetBreakpointsResponse {
-	breakpoints?: DapBreakpoint[];
-}
-
 const defaultInitializeArguments: DapInitializeRequestArguments = {
 	clientID: 'wasm-idle',
 	clientName: 'wasm-idle',
@@ -72,10 +55,6 @@ const defaultInitializeArguments: DapInitializeRequestArguments = {
 
 function isObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null;
-}
-
-function eventBody<T>(event: DapEvent) {
-	return (isObject(event.body) ? event.body : {}) as Partial<T>;
 }
 
 function invalidDapResponse(command: string, path: string, expectation: string): never {
@@ -111,6 +90,16 @@ function assertDapPositiveSafeInteger(
 ): asserts value is number {
 	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) {
 		invalidDapResponse(command, path, 'expected a positive safe integer');
+	}
+}
+
+function assertDapSafeInteger(
+	value: unknown,
+	command: string,
+	path: string
+): asserts value is number {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+		invalidDapResponse(command, path, 'expected a safe integer');
 	}
 }
 
@@ -172,6 +161,30 @@ function dapOptionalNonNegativeSafeInteger(
 	const value = record[field];
 	if (value === undefined) return undefined;
 	assertDapNonNegativeSafeInteger(value, command, dapPropertyPath(path, field));
+	return value;
+}
+
+function dapOptionalPositiveSafeInteger(
+	record: Record<string, unknown>,
+	field: string,
+	command: string,
+	path: string
+) {
+	const value = record[field];
+	if (value === undefined) return undefined;
+	assertDapPositiveSafeInteger(value, command, dapPropertyPath(path, field));
+	return value;
+}
+
+function dapOptionalSafeInteger(
+	record: Record<string, unknown>,
+	field: string,
+	command: string,
+	path: string
+) {
+	const value = record[field];
+	if (value === undefined) return undefined;
+	assertDapSafeInteger(value, command, dapPropertyPath(path, field));
 	return value;
 }
 
@@ -380,9 +393,9 @@ export class LldbDapAdapter implements DebugAdapter {
 		const sourceKey = debugSourceKey(requestSource);
 		const requestVersion = (this.#breakpointRequestVersions.get(sourceKey) ?? 0) + 1;
 		this.#breakpointRequestVersions.set(sourceKey, requestVersion);
-		let response: DapSetBreakpointsResponse;
+		let response: unknown;
 		try {
-			response = await this.#session.request<DapSetBreakpointsResponse>('setBreakpoints', {
+			response = await this.#session.request<unknown>('setBreakpoints', {
 				source: requestSource,
 				breakpoints: requestedLines.map((line) => ({ line })),
 				lines: requestedLines
@@ -393,9 +406,18 @@ export class LldbDapAdapter implements DebugAdapter {
 			}
 			throw error;
 		}
-		const dapBreakpoints = response?.breakpoints || [];
+		if (this.#breakpointRequestVersions.get(sourceKey) !== requestVersion) {
+			return cloneResolvedBreakpoints(this.#breakpointsBySource.get(sourceKey) ?? []);
+		}
+		const dapBreakpoints = dapResponseCollection(response, 'setBreakpoints', 'breakpoints');
 		const resolved = requestedLines.map((requestedLine, index) =>
-			this.#normalizeBreakpoint(dapBreakpoints[index], requestSource, requestedLine)
+			this.#normalizeBreakpoint(
+				dapBreakpoints[index],
+				requestSource,
+				requestedLine,
+				'setBreakpoints',
+				`breakpoints[${index}]`
+			)
 		);
 		if (this.#breakpointRequestVersions.get(sourceKey) === requestVersion) {
 			this.#replaceTrackedBreakpoints(requestSource, resolved);
@@ -760,24 +782,51 @@ export class LldbDapAdapter implements DebugAdapter {
 	}
 
 	#normalizeBreakpoint(
-		breakpoint: DapBreakpoint | undefined,
+		breakpoint: unknown,
 		fallbackSource: DebugSource,
-		requestedLine: number
+		requestedLine: number,
+		command: string,
+		path: string
 	): ResolvedBreakpoint {
+		if (breakpoint === undefined) {
+			return {
+				verified: false,
+				source: cloneDebugSource(fallbackSource),
+				requestedLine,
+				line: requestedLine
+			};
+		}
+		assertDapRecord(breakpoint, command, path);
+		assertDapBoolean(breakpoint.verified, command, `${path}.verified`);
+		const id = dapOptionalPositiveSafeInteger(breakpoint, 'id', command, path);
+		const source =
+			breakpoint.source === undefined
+				? cloneDebugSource(fallbackSource)
+				: normalizeDapSource(breakpoint.source, command, `${path}.source`);
+		const line = dapOptionalNonNegativeSafeInteger(breakpoint, 'line', command, path);
+		const column = dapOptionalNonNegativeSafeInteger(breakpoint, 'column', command, path);
+		const endLine = dapOptionalNonNegativeSafeInteger(breakpoint, 'endLine', command, path);
+		const endColumn = dapOptionalNonNegativeSafeInteger(breakpoint, 'endColumn', command, path);
+		const message = dapOptionalString(breakpoint, 'message', command, path);
+		const instructionReference = dapOptionalString(
+			breakpoint,
+			'instructionReference',
+			command,
+			path
+		);
+		const offset = dapOptionalSafeInteger(breakpoint, 'offset', command, path);
 		return {
-			...(breakpoint?.id === undefined ? {} : { id: breakpoint.id }),
-			verified: breakpoint?.verified === true,
-			source: cloneDebugSource(breakpoint?.source || fallbackSource),
+			...(id === undefined ? {} : { id }),
+			verified: breakpoint.verified,
+			source,
 			requestedLine,
-			line: breakpoint?.line || requestedLine,
-			...(breakpoint?.column === undefined ? {} : { column: breakpoint.column }),
-			...(breakpoint?.endLine === undefined ? {} : { endLine: breakpoint.endLine }),
-			...(breakpoint?.endColumn === undefined ? {} : { endColumn: breakpoint.endColumn }),
-			...(breakpoint?.message === undefined ? {} : { message: breakpoint.message }),
-			...(breakpoint?.instructionReference === undefined
-				? {}
-				: { instructionReference: breakpoint.instructionReference }),
-			...(breakpoint?.offset === undefined ? {} : { offset: breakpoint.offset })
+			line: line && line > 0 ? line : requestedLine,
+			...(column === undefined ? {} : { column }),
+			...(endLine === undefined ? {} : { endLine }),
+			...(endColumn === undefined ? {} : { endColumn }),
+			...(message === undefined ? {} : { message }),
+			...(instructionReference === undefined ? {} : { instructionReference }),
+			...(offset === undefined ? {} : { offset })
 		};
 	}
 
@@ -799,7 +848,13 @@ export class LldbDapAdapter implements DebugAdapter {
 	}
 
 	#handleDapEvent(event: DapEvent) {
-		const mapped = this.#mapDapEvent(event);
+		let mapped: DebugAdapterEvent | null;
+		try {
+			mapped = this.#mapDapEvent(event);
+		} catch (error) {
+			if (!(error instanceof DebugAdapterProtocolError)) throw error;
+			mapped = { type: 'dap', event: event.event, body: event.body };
+		}
 		if (mapped) this.#events.emit(mapped);
 	}
 
@@ -807,149 +862,192 @@ export class LldbDapAdapter implements DebugAdapter {
 		if (event.event === 'initialized') return { type: 'initialized' };
 
 		if (event.event === 'stopped') {
-			const body = eventBody<{
-				reason: string;
-				description: string;
-				threadId: number;
-				preserveFocusHint: boolean;
-				text: string;
-				allThreadsStopped: boolean;
-				hitBreakpointIds: number[];
-			}>(event);
+			const body = event.body;
+			assertDapRecord(body, 'event:stopped', 'body');
+			assertDapString(body.reason, 'event:stopped', 'reason');
+			const description = dapOptionalString(body, 'description', 'event:stopped', '');
+			const threadId = dapOptionalPositiveSafeInteger(body, 'threadId', 'event:stopped', '');
+			const preserveFocusHint = dapOptionalBoolean(
+				body,
+				'preserveFocusHint',
+				'event:stopped',
+				''
+			);
+			const text = dapOptionalString(body, 'text', 'event:stopped', '');
+			const allThreadsStopped = dapOptionalBoolean(
+				body,
+				'allThreadsStopped',
+				'event:stopped',
+				''
+			);
+			let hitBreakpointIds: number[] | undefined;
+			if (body.hitBreakpointIds !== undefined) {
+				if (!Array.isArray(body.hitBreakpointIds)) {
+					invalidDapResponse('event:stopped', 'hitBreakpointIds', 'expected an array');
+				}
+				hitBreakpointIds = body.hitBreakpointIds.map((id, index) => {
+					assertDapPositiveSafeInteger(id, 'event:stopped', `hitBreakpointIds[${index}]`);
+					return id;
+				});
+			}
 			return {
 				type: 'stopped',
-				reason: body.reason || 'unknown',
-				...(body.description === undefined ? {} : { description: body.description }),
-				...(body.threadId === undefined ? {} : { threadId: body.threadId }),
-				...(body.preserveFocusHint === undefined
-					? {}
-					: { preserveFocusHint: body.preserveFocusHint }),
-				...(body.text === undefined ? {} : { text: body.text }),
-				...(body.allThreadsStopped === undefined
-					? {}
-					: { allThreadsStopped: body.allThreadsStopped }),
-				...(body.hitBreakpointIds === undefined
-					? {}
-					: { hitBreakpointIds: [...body.hitBreakpointIds] })
+				reason: body.reason,
+				...(description === undefined ? {} : { description }),
+				...(threadId === undefined ? {} : { threadId }),
+				...(preserveFocusHint === undefined ? {} : { preserveFocusHint }),
+				...(text === undefined ? {} : { text }),
+				...(allThreadsStopped === undefined ? {} : { allThreadsStopped }),
+				...(hitBreakpointIds === undefined ? {} : { hitBreakpointIds })
 			};
 		}
 
 		if (event.event === 'continued') {
-			const body = eventBody<{
-				threadId: number;
-				allThreadsContinued: boolean;
-			}>(event);
-			if (body.threadId === undefined) {
-				return { type: 'dap', event: event.event, body: event.body };
-			}
+			const body = event.body;
+			assertDapRecord(body, 'event:continued', 'body');
+			assertDapPositiveSafeInteger(body.threadId, 'event:continued', 'threadId');
+			const allThreadsContinued = dapOptionalBoolean(
+				body,
+				'allThreadsContinued',
+				'event:continued',
+				''
+			);
 			return {
 				type: 'continued',
 				threadId: body.threadId,
-				...(body.allThreadsContinued === undefined
-					? {}
-					: { allThreadsContinued: body.allThreadsContinued })
+				...(allThreadsContinued === undefined ? {} : { allThreadsContinued })
 			};
 		}
 
 		if (event.event === 'output') {
-			const body = eventBody<{
-				category: string;
-				output: string;
-				group: 'start' | 'startCollapsed' | 'end';
-				variablesReference: number;
-				source: DebugSource;
-				line: number;
-				column: number;
-				data: unknown;
-			}>(event);
+			const body = event.body;
+			assertDapRecord(body, 'event:output', 'body');
+			assertDapString(body.output, 'event:output', 'output');
+			const category = dapOptionalString(body, 'category', 'event:output', '');
+			const group = dapOptionalStringEnum(
+				body,
+				'group',
+				['start', 'startCollapsed', 'end'],
+				'event:output',
+				''
+			);
+			const variablesReference = dapOptionalNonNegativeSafeInteger(
+				body,
+				'variablesReference',
+				'event:output',
+				''
+			);
+			const source =
+				body.source === undefined
+					? undefined
+					: normalizeDapSource(body.source, 'event:output', 'source');
+			const line = dapOptionalNonNegativeSafeInteger(body, 'line', 'event:output', '');
+			const column = dapOptionalNonNegativeSafeInteger(body, 'column', 'event:output', '');
 			return {
 				type: 'output',
-				output: body.output || '',
-				...(body.category === undefined ? {} : { category: body.category }),
-				...(body.group === undefined ? {} : { group: body.group }),
-				...(body.variablesReference === undefined
-					? {}
-					: { variablesReference: body.variablesReference }),
-				...(body.source === undefined ? {} : { source: cloneDebugSource(body.source) }),
-				...(body.line === undefined ? {} : { line: body.line }),
-				...(body.column === undefined ? {} : { column: body.column }),
+				output: body.output,
+				...(category === undefined ? {} : { category }),
+				...(group === undefined ? {} : { group }),
+				...(variablesReference === undefined ? {} : { variablesReference }),
+				...(source === undefined ? {} : { source }),
+				...(line === undefined ? {} : { line }),
+				...(column === undefined ? {} : { column }),
 				...(body.data === undefined ? {} : { data: body.data })
 			};
 		}
 
 		if (event.event === 'exited') {
-			const body = eventBody<{ exitCode: number }>(event);
-			return { type: 'exited', exitCode: body.exitCode || 0 };
+			const body = event.body;
+			assertDapRecord(body, 'event:exited', 'body');
+			assertDapSafeInteger(body.exitCode, 'event:exited', 'exitCode');
+			return { type: 'exited', exitCode: body.exitCode };
 		}
 
 		if (event.event === 'terminated') {
-			const body = eventBody<{ restart: unknown }>(event);
+			const body = event.body;
+			if (body !== undefined) assertDapRecord(body, 'event:terminated', 'body');
 			return {
 				type: 'terminated',
-				...(body.restart === undefined ? {} : { restart: body.restart })
+				...(body?.restart === undefined ? {} : { restart: body.restart })
 			};
 		}
 
 		if (event.event === 'thread') {
-			const body = eventBody<{ reason: 'started' | 'exited'; threadId: number }>(event);
-			if (
-				(body.reason !== 'started' && body.reason !== 'exited') ||
-				body.threadId === undefined
-			) {
-				return { type: 'dap', event: event.event, body: event.body };
-			}
+			const body = event.body;
+			assertDapRecord(body, 'event:thread', 'body');
+			assertDapStringEnum(body.reason, ['started', 'exited'], 'event:thread', 'reason');
+			assertDapPositiveSafeInteger(body.threadId, 'event:thread', 'threadId');
 			return { type: 'thread', reason: body.reason, threadId: body.threadId };
 		}
 
 		if (event.event === 'process') {
-			const body = eventBody<{
-				name: string;
-				systemProcessId: number;
-				isLocalProcess: boolean;
-				startMethod: 'launch' | 'attach' | 'attachForSuspendedLaunch';
-				pointerSize: number;
-			}>(event);
-			if (body.name === undefined) {
-				return { type: 'dap', event: event.event, body: event.body };
-			}
+			const body = event.body;
+			assertDapRecord(body, 'event:process', 'body');
+			assertDapString(body.name, 'event:process', 'name');
+			const systemProcessId = dapOptionalSafeInteger(
+				body,
+				'systemProcessId',
+				'event:process',
+				''
+			);
+			const isLocalProcess = dapOptionalBoolean(body, 'isLocalProcess', 'event:process', '');
+			const startMethod = dapOptionalStringEnum(
+				body,
+				'startMethod',
+				['launch', 'attach', 'attachForSuspendedLaunch'],
+				'event:process',
+				''
+			);
+			const pointerSize = dapOptionalNonNegativeSafeInteger(
+				body,
+				'pointerSize',
+				'event:process',
+				''
+			);
 			return {
 				type: 'process',
 				name: body.name,
-				...(body.systemProcessId === undefined
-					? {}
-					: { systemProcessId: body.systemProcessId }),
-				...(body.isLocalProcess === undefined
-					? {}
-					: { isLocalProcess: body.isLocalProcess }),
-				...(body.startMethod === undefined ? {} : { startMethod: body.startMethod }),
-				...(body.pointerSize === undefined ? {} : { pointerSize: body.pointerSize })
+				...(systemProcessId === undefined ? {} : { systemProcessId }),
+				...(isLocalProcess === undefined ? {} : { isLocalProcess }),
+				...(startMethod === undefined ? {} : { startMethod }),
+				...(pointerSize === undefined ? {} : { pointerSize })
 			};
 		}
 
 		if (event.event === 'breakpoint') {
-			const body = eventBody<{
-				reason: 'new' | 'changed' | 'removed';
-				breakpoint: DapBreakpoint;
-			}>(event);
-			if (
-				(body.reason !== 'new' && body.reason !== 'changed' && body.reason !== 'removed') ||
-				!body.breakpoint
-			) {
-				return { type: 'dap', event: event.event, body: event.body };
-			}
+			const body = event.body;
+			assertDapRecord(body, 'event:breakpoint', 'body');
+			assertDapStringEnum(
+				body.reason,
+				['new', 'changed', 'removed'],
+				'event:breakpoint',
+				'reason'
+			);
+			assertDapRecord(body.breakpoint, 'event:breakpoint', 'breakpoint');
+			const breakpointId = dapOptionalPositiveSafeInteger(
+				body.breakpoint,
+				'id',
+				'event:breakpoint',
+				'breakpoint'
+			);
 			const tracked =
-				body.breakpoint.id === undefined
-					? undefined
-					: this.#breakpointsById.get(body.breakpoint.id);
-			if (body.breakpoint.id !== undefined && !tracked && body.reason !== 'new') {
+				breakpointId === undefined ? undefined : this.#breakpointsById.get(breakpointId);
+			if (breakpointId !== undefined && !tracked && body.reason !== 'new') {
 				return null;
 			}
-			const fallbackSource = body.breakpoint.source || tracked?.source || {};
-			const requestedLine = tracked?.requestedLine || body.breakpoint.line || 1;
+			const eventLine = dapOptionalNonNegativeSafeInteger(
+				body.breakpoint,
+				'line',
+				'event:breakpoint',
+				'breakpoint'
+			);
+			const requestedLine = tracked?.requestedLine || eventLine || 1;
 			const breakpoint = this.#normalizeBreakpoint(
 				body.breakpoint,
-				fallbackSource,
-				requestedLine
+				tracked?.source || {},
+				requestedLine,
+				'event:breakpoint',
+				'breakpoint'
 			);
 			if (breakpoint.id !== undefined) {
 				const storedBreakpoint = cloneResolvedBreakpoints([breakpoint])[0]!;
