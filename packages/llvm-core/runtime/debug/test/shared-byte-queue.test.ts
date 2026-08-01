@@ -20,6 +20,17 @@ describe('SharedByteQueue', () => {
 		);
 	});
 
+	it('rejects descriptors that alias control and data storage', () => {
+		const shared = new SharedArrayBuffer(4096);
+		const header = new Int32Array(shared);
+		Atomics.store(header, 4, 4096);
+		Atomics.store(header, 6, 17);
+
+		expect(
+			() => new SharedByteQueue({ control: shared, data: shared, generation: 17 })
+		).toThrow(/distinct control and data SharedArrayBuffers/u);
+	});
+
 	it('rejects a stale generation when reading closed state', () => {
 		const descriptor = createSharedByteQueue(4096, 14);
 		const queue = new SharedByteQueue(descriptor);

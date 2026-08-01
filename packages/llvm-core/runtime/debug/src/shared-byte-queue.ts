@@ -75,6 +75,11 @@ export class SharedByteQueue {
 		) {
 			throw new TypeError('shared-ring-v1 requires control and data SharedArrayBuffers');
 		}
+		if (descriptor.control === descriptor.data) {
+			throw new TypeError(
+				'shared-ring-v1 requires distinct control and data SharedArrayBuffers'
+			);
+		}
 		if (descriptor.control.byteLength < CONTROL_LENGTH * Int32Array.BYTES_PER_ELEMENT) {
 			throw new RangeError('shared-ring-v1 control buffer is too small');
 		}
