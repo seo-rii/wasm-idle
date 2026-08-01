@@ -156,6 +156,18 @@ function snapshotBreakpointLines(lines: readonly number[]) {
 	return [...lines];
 }
 
+function assertPositiveSafeIntegerArgument(value: number, name: string) {
+	if (!Number.isSafeInteger(value) || value < 1) {
+		throw new RangeError(`${name} must be a positive safe integer.`);
+	}
+}
+
+function assertNonNegativeSafeIntegerArgument(value: number, name: string) {
+	if (!Number.isSafeInteger(value) || value < 0) {
+		throw new RangeError(`${name} must be a non-negative safe integer.`);
+	}
+}
+
 export class LldbSandboxSession {
 	private session?: BrowserLldbSession;
 	private activeThreadId = 1;
@@ -460,6 +472,9 @@ export class LldbSandboxSession {
 	}
 
 	async variables(variablesReference: number, start?: number, count?: number) {
+		assertPositiveSafeIntegerArgument(variablesReference, 'variablesReference');
+		if (start !== undefined) assertNonNegativeSafeIntegerArgument(start, 'start');
+		if (count !== undefined) assertNonNegativeSafeIntegerArgument(count, 'count');
 		const session = this.requireSession();
 		const stateVersion = this.stateVersion;
 		const scopeRequestVersion = this.scopeRequestVersion;
@@ -527,9 +542,7 @@ export class LldbSandboxSession {
 	}
 
 	async scopes(frameId: number) {
-		if (!Number.isInteger(frameId) || frameId <= 0) {
-			throw new RangeError('LLDB frame ID must be a positive integer.');
-		}
+		assertPositiveSafeIntegerArgument(frameId, 'frameId');
 		const session = this.requireSession();
 		const stateVersion = this.stateVersion;
 		const requestVersion = ++this.scopeRequestVersion;
@@ -562,6 +575,10 @@ export class LldbSandboxSession {
 		count: number
 	): Promise<DebugMemory | null> {
 		if (!this.supportsReadMemory) return null;
+		if (!Number.isSafeInteger(offset)) {
+			throw new RangeError('offset must be a safe integer.');
+		}
+		assertNonNegativeSafeIntegerArgument(count, 'count');
 		const session = this.requireSession();
 		const stateVersion = this.stateVersion;
 		try {

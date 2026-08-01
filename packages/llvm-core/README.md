@@ -121,6 +121,10 @@ workers, so invalid or concurrently changed timer settings cannot produce immedi
 browser timers. Per-request DAP response timeout overrides follow the same numeric rule and are
 rejected before the request is sent; `null` is the explicit opt-out for execution requests whose
 response arrives only after the target stops.
+Product `scopes`, `variables`, and `readMemory` calls validate frame IDs, variable references,
+pagination offsets/counts, and memory offsets/counts as safe integers before sending DAP. Invalid
+caller input rejects with `RangeError` without changing the selected frame, stopping the session,
+or creating a Worker request.
 DAP requests are fully encoded before pending transport state or send timers are registered.
 Circular, `BigInt`, or otherwise non-JSON arguments reject the returned Promise with the original
 encoding failure as its cause, while the client remains available for later valid requests.

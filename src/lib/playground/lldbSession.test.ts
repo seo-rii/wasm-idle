@@ -1313,6 +1313,95 @@ describe('LldbSandboxSession', () => {
 		await expect(completion).resolves.toBe(true);
 	});
 
+	it.each([
+		{
+			caseName: 'unsafe frame ID',
+			command: 'scopes',
+			message: 'frameId must be a positive safe integer.',
+			invoke: (controller: LldbSandboxSession) =>
+				controller.scopes(Number.MAX_SAFE_INTEGER + 1)
+		},
+		{
+			caseName: 'zero variables reference',
+			command: 'variables',
+			message: 'variablesReference must be a positive safe integer.',
+			invoke: (controller: LldbSandboxSession) => controller.variables(0)
+		},
+		{
+			caseName: 'negative variable start',
+			command: 'variables',
+			message: 'start must be a non-negative safe integer.',
+			invoke: (controller: LldbSandboxSession) => controller.variables(1, -1)
+		},
+		{
+			caseName: 'fractional variable count',
+			command: 'variables',
+			message: 'count must be a non-negative safe integer.',
+			invoke: (controller: LldbSandboxSession) => controller.variables(1, 0, 1.5)
+		},
+		{
+			caseName: 'unsafe memory offset',
+			command: 'readMemory',
+			message: 'offset must be a safe integer.',
+			invoke: (controller: LldbSandboxSession) =>
+				controller.readMemory('0x0', Number.MAX_SAFE_INTEGER + 1, 1)
+		},
+		{
+			caseName: 'negative memory count',
+			command: 'readMemory',
+			message: 'count must be a non-negative safe integer.',
+			invoke: (controller: LldbSandboxSession) => controller.readMemory('0x0', 0, -1)
+		}
+	])('rejects an invalid $caseName before sending DAP', async ({ command, message, invoke }) => {
+		const events: Array<{ type: string }> = [];
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { readMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start().then(
+			() => null,
+			(error: unknown) => error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		const requestCount = runtimeState.session!.requests.filter(
+			(request) => request.command === command
+		).length;
+
+		const callError = await invoke(controller).then(
+			() => null,
+			(error: unknown) => error
+		);
+		const disposeCountBeforeCleanup = runtimeState.session!.disposeCount;
+		const stopCountBeforeCleanup = events.filter((event) => event.type === 'stop').length;
+		if (disposeCountBeforeCleanup === 0) await controller.disconnect();
+		const completionError = await completion;
+
+		expect(callError).toBeInstanceOf(RangeError);
+		expect((callError as Error).message).toBe(message);
+		expect(
+			runtimeState.session!.requests.filter((request) => request.command === command)
+		).toHaveLength(requestCount);
+		expect(disposeCountBeforeCleanup).toBe(0);
+		expect(stopCountBeforeCleanup).toBe(0);
+		expect(completionError).toBeNull();
+	});
+
 	it('reads target memory through DAP and decodes the returned bytes', async () => {
 		const controller = new LldbSandboxSession({
 			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
