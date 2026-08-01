@@ -43,6 +43,25 @@ describe('DAP framing', () => {
 		expect(() => parser.push(frame)).toThrow(/DAP body is not valid UTF-8/u);
 	});
 
+	it('wraps malformed DAP JSON as a protocol frame error', () => {
+		const parser = new DapMessageParser();
+		const body = new TextEncoder().encode('{"seq":1,}');
+		const header = new TextEncoder().encode(`Content-Length: ${body.byteLength}\r\n\r\n`);
+		const frame = new Uint8Array([...header, ...body]);
+		let failure: unknown;
+
+		try {
+			parser.push(frame);
+		} catch (error) {
+			failure = error;
+		}
+
+		expect(failure).toMatchObject({
+			message: 'invalid DAP frame: DAP body is not valid JSON',
+			cause: expect.any(SyntaxError)
+		});
+	});
+
 	it('rejects frames without a content length', () => {
 		const parser = new DapMessageParser();
 		expect(() => parser.push(new TextEncoder().encode('Other: 1\r\n\r\n{}'))).toThrow(

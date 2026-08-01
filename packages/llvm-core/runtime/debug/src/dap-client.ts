@@ -95,9 +95,13 @@ export class DapMessageParser {
 			const frameEnd = bodyStart + contentLength;
 			if (this.buffer.byteLength < frameEnd) break;
 
-			const value: unknown = JSON.parse(
-				decodeDapUtf8(this.buffer.subarray(bodyStart, frameEnd), 'body')
-			);
+			const body = decodeDapUtf8(this.buffer.subarray(bodyStart, frameEnd), 'body');
+			let value: unknown;
+			try {
+				value = JSON.parse(body);
+			} catch (error) {
+				throw new Error('invalid DAP frame: DAP body is not valid JSON', { cause: error });
+			}
 			if (!value || typeof value !== 'object' || Array.isArray(value)) {
 				throw new Error('invalid DAP frame body');
 			}

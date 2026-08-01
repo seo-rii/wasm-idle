@@ -196,11 +196,12 @@ client continues parsing later events and responses on the same byte stream.
 `DapClient` and `BrowserLldbSession` snapshot listener registrations when each event dispatch
 starts. A listener registered by another callback begins with the next event, while a listener
 removed before its turn is skipped. Dispatch therefore cannot grow without bound during one event.
-The streaming DAP parser rejects malformed UTF-8 and duplicate `Content-Length` fields, caps an
-unterminated header at 8 KiB, and caps a declared JSON body at 16 MiB. Invalid bytes therefore
-cannot be replacement-decoded into silently changed source paths, expressions, or variable names.
-Oversized declarations fail before the body is buffered, preventing a corrupt worker frame from
-growing browser memory without bound.
+The streaming DAP parser rejects malformed UTF-8, malformed JSON, and duplicate `Content-Length`
+fields, caps an unterminated header at 8 KiB, and caps a declared JSON body at 16 MiB. Invalid bytes
+therefore cannot be replacement-decoded into silently changed source paths, expressions, or
+variable names. JSON syntax failures use a stable protocol error while retaining the engine's
+`SyntaxError` as their cause. Oversized declarations fail before the body is buffered, preventing a
+corrupt worker frame from growing browser memory without bound.
 
 Current producer modules expose Emscripten's canonical `HEAPU8` view. Each worker samples only its
 backing buffer length, emits an initial `onMemory(worker, bytes)` value, and emits again only when
