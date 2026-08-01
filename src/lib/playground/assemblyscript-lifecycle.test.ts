@@ -56,6 +56,75 @@ describe('AssemblyScript operation lifecycle', () => {
 		runDispatchError = undefined;
 	});
 
+	it('rejects pre-aborted operations without changing AssemblyScript state', async () => {
+		const sandbox = new AssemblyScript();
+		sandbox.write('queued input\n');
+		const controller = new AbortController();
+		const reason = new Error('do not start AssemblyScript');
+		controller.abort(reason);
+
+		await expect(
+			sandbox.load('/assets', '', true, [], { signal: controller.signal })
+		).rejects.toBe(reason);
+		await expect(
+			sandbox.run('export function main(): void {}', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+
+		expect(workerInstances).toHaveLength(0);
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('aborts before scheduled AssemblyScript startup can mutate state', async () => {
+		const sandbox = new AssemblyScript();
+		const controller = new AbortController();
+		const reason = new Error('cancel AssemblyScript immediately');
+		const loading = sandbox.load('/assets', '', true, [], {
+			signal: controller.signal
+		});
+
+		controller.abort(reason);
+
+		await expect(loading).rejects.toBe(reason);
+		expect(workerInstances).toHaveLength(0);
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('aborts pending startup and ignores late readiness during immediate retry', async () => {
+		autoResolveLoad = false;
+		const sandbox = new AssemblyScript();
+		const controller = new AbortController();
+		const reason = new Error('stop AssemblyScript startup');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const loading = sandbox.load('/assets', '', true, [], {
+			signal: controller.signal
+		});
+
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const oldWorker = workerInstances[0];
+		const staleReady = oldWorker?.onmessage;
+		controller.abort(reason);
+		autoResolveLoad = true;
+		const retry = sandbox.load('/assets');
+
+		await expect(loading).rejects.toBe(reason);
+		await expect(retry).resolves.toBeUndefined();
+		expect(oldWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		const replacementWorker = workerInstances[1];
+		staleReady?.({ data: { load: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBe(replacementWorker);
+		const abortRegistration = addEventListener.mock.calls.find(([type]) => type === 'abort');
+		expect(abortRegistration).toBeDefined();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+	});
+
 	it('preserves a pending startup across load and run overlaps', async () => {
 		autoResolveLoad = false;
 		const sandbox = new AssemblyScript();
@@ -118,6 +187,93 @@ describe('AssemblyScript operation lifecycle', () => {
 			sandbox.run('export function retry(): i32 { return 3; }', false)
 		).resolves.toBe(true);
 		expect(worker?.postMessage).toHaveBeenCalledTimes(3);
+	});
+
+	it('aborts a pending execution and ignores its stale result during retry', async () => {
+		autoResolveRun = false;
+		const sandbox = new AssemblyScript();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/assets');
+		const controller = new AbortController();
+		const reason = new Error('stop AssemblyScript execution');
+		const running = sandbox.run(
+			'export function oldRun(): void {}',
+			false,
+			true,
+			undefined,
+			[],
+			{ signal: controller.signal }
+		);
+		const oldWorker = workerInstances[0];
+		const staleResult = oldWorker?.onmessage;
+
+		controller.abort(reason);
+		autoResolveLoad = true;
+		const retryLoad = sandbox.load('/assets');
+
+		await expect(running).rejects.toBe(reason);
+		await expect(retryLoad).resolves.toBeUndefined();
+		expect(oldWorker?.terminate).toHaveBeenCalledOnce();
+		const replacementWorker = workerInstances[1];
+		const replacementRun = sandbox.run('export function replacement(): void {}', false);
+		const replacementHandler = replacementWorker?.onmessage;
+
+		staleResult?.({
+			data: { output: 'stale output\n', results: true }
+		} as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalledWith('stale output\n');
+		expect(replacementWorker?.onmessage).toBe(replacementHandler);
+
+		replacementWorker?.resolveRun('replacement output\n');
+		await expect(replacementRun).resolves.toBe(true);
+		expect(output).toHaveBeenCalledWith('replacement output\n');
+	});
+
+	it('preserves the abort reason when stdin cleanup fails', async () => {
+		autoResolveRun = false;
+		const sandbox = new AssemblyScript();
+		await sandbox.load('/assets');
+		const controller = new AbortController();
+		const reason = new Error('stop AssemblyScript with an invalid stdin buffer');
+		const running = sandbox.run('export function main(): void {}', false, true, undefined, [], {
+			signal: controller.signal
+		});
+		const oldWorker = workerInstances[0];
+		sandbox.buffer = new ArrayBuffer(0);
+
+		expect(() => controller.abort(reason)).not.toThrow();
+		autoResolveLoad = true;
+		const retry = sandbox.load('/assets');
+
+		await expect(running).rejects.toBe(reason);
+		await expect(retry).resolves.toBeUndefined();
+		expect(oldWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('removes a settled execution listener and keeps late abort inert', async () => {
+		const sandbox = new AssemblyScript();
+		await sandbox.load('/assets');
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+
+		await expect(
+			sandbox.run('export function main(): void {}', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).resolves.toBe(true);
+		const worker = sandbox.worker;
+		const uid = sandbox.uid;
+		const abortRegistration = addEventListener.mock.calls.find(([type]) => type === 'abort');
+		expect(abortRegistration).toBeDefined();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+
+		controller.abort(new Error('late AssemblyScript abort'));
+
+		expect(sandbox.worker).toBe(worker);
+		expect(sandbox.uid).toBe(uid);
 	});
 
 	it('releases execution ownership after worker and dispatch failures', async () => {
