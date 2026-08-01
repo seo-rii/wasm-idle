@@ -130,6 +130,190 @@ describe('Bash sandbox', () => {
 			signal: controller.signal
 		});
 		expect(fromFile).not.toHaveBeenCalled();
+		await expect(sandbox.load('/assets')).resolves.toBeUndefined();
+		expect(fromFile).toHaveBeenCalledOnce();
+	});
+
+	it('rejects operations that overlap a pending Bash load', async () => {
+		let resolvePackage!: (runtimePackage: {
+			entrypoint: { run: typeof commandRun };
+			free: ReturnType<typeof vi.fn>;
+		}) => void;
+		const pendingPackage = new Promise<{
+			entrypoint: { run: typeof commandRun };
+			free: ReturnType<typeof vi.fn>;
+		}>((resolve) => {
+			resolvePackage = resolve;
+		});
+		const firstFree = vi.fn();
+		fromFile.mockReturnValueOnce(pendingPackage);
+		const sandbox = new Bash();
+		const loading = sandbox.load('/assets');
+
+		try {
+			await vi.waitFor(() => expect(fromFile).toHaveBeenCalledOnce());
+			await expect(sandbox.load('/other/')).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				runtimeId: 'BASH',
+				phase: 'startup'
+			});
+			await expect(sandbox.run('printf nested', false)).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				runtimeId: 'BASH',
+				phase: 'startup'
+			});
+			expect(fetch).toHaveBeenCalledOnce();
+			expect(fromFile).toHaveBeenCalledOnce();
+			expect(commandRun).not.toHaveBeenCalled();
+
+			resolvePackage({ entrypoint: { run: commandRun }, free: firstFree });
+			await expect(loading).resolves.toBeUndefined();
+			expect(firstFree).not.toHaveBeenCalled();
+		} finally {
+			resolvePackage({ entrypoint: { run: commandRun }, free: firstFree });
+			await loading.catch(() => {});
+		}
+	});
+
+	it('keeps Bash load ownership through the final progress callback', async () => {
+		const sandbox = new Bash();
+		let nestedLoad: Promise<void> | undefined;
+		let nestedRun: Promise<boolean | string> | undefined;
+		const loading = sandbox.load(
+			'/assets',
+			'',
+			true,
+			[],
+			{},
+			{
+				set(value) {
+					if (value !== 1) return;
+					nestedLoad = sandbox.load('/other/');
+					nestedRun = sandbox.run('printf nested', false);
+					void nestedLoad.catch(() => undefined);
+					void nestedRun.catch(() => undefined);
+				}
+			}
+		);
+
+		await expect(loading).resolves.toBeUndefined();
+		await expect(nestedLoad).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'BASH',
+			phase: 'startup'
+		});
+		await expect(nestedRun).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'BASH',
+			phase: 'startup'
+		});
+		expect(fromFile).toHaveBeenCalledOnce();
+	});
+
+	it('rejects operations that overlap an active Bash run', async () => {
+		let resolveCommand!: (instance: {
+			stdin: undefined;
+			stdout: ReadableStream<Uint8Array>;
+			stderr: ReadableStream<Uint8Array>;
+			wait: ReturnType<typeof vi.fn>;
+			free: ReturnType<typeof vi.fn>;
+		}) => void;
+		const pendingCommand = new Promise<{
+			stdin: undefined;
+			stdout: ReadableStream<Uint8Array>;
+			stderr: ReadableStream<Uint8Array>;
+			wait: ReturnType<typeof vi.fn>;
+			free: ReturnType<typeof vi.fn>;
+		}>((resolve) => {
+			resolveCommand = resolve;
+		});
+		commandRun.mockReturnValueOnce(pendingCommand);
+		const firstFree = vi.fn();
+		const firstInstance = {
+			stdin: undefined,
+			stdout: byteStream('first\n'),
+			stderr: byteStream(''),
+			wait: vi.fn(async () => ({ ok: true, code: 0 })),
+			free: firstFree
+		};
+		commandRun.mockResolvedValueOnce({
+			stdin: undefined,
+			stdout: byteStream('retry\n'),
+			stderr: byteStream(''),
+			wait: vi.fn(async () => ({ ok: true, code: 0 })),
+			free: vi.fn()
+		});
+		const sandbox = new Bash();
+		const output: string[] = [];
+		sandbox.output = (chunk) => output.push(chunk);
+		await sandbox.load('/assets');
+		const running = sandbox.run('printf first', false);
+
+		try {
+			await vi.waitFor(() => expect(commandRun).toHaveBeenCalledOnce());
+			await expect(sandbox.run('printf nested', false)).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				runtimeId: 'BASH',
+				phase: 'execute'
+			});
+			await expect(sandbox.load('/other/')).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				runtimeId: 'BASH',
+				phase: 'execute'
+			});
+			expect(commandRun).toHaveBeenCalledOnce();
+			expect(fromFile).toHaveBeenCalledOnce();
+
+			resolveCommand(firstInstance);
+			await expect(running).resolves.toBe(true);
+			await expect(sandbox.run('printf retry', false)).resolves.toBe(true);
+			expect(output).toEqual(['first\n', 'retry\n']);
+			expect(firstFree).not.toHaveBeenCalled();
+		} finally {
+			resolveCommand(firstInstance);
+			await running.catch(() => {});
+		}
+	});
+
+	it('rejects a killed Bash load and frees its late package before retrying', async () => {
+		let resolvePackage!: (runtimePackage: {
+			entrypoint: { run: typeof commandRun };
+			free: ReturnType<typeof vi.fn>;
+		}) => void;
+		const pendingPackage = new Promise<{
+			entrypoint: { run: typeof commandRun };
+			free: ReturnType<typeof vi.fn>;
+		}>((resolve) => {
+			resolvePackage = resolve;
+		});
+		const lateFree = vi.fn();
+		const retryFree = vi.fn();
+		fromFile
+			.mockReturnValueOnce(pendingPackage)
+			.mockResolvedValueOnce({ entrypoint: { run: commandRun }, free: retryFree });
+		const sandbox = new Bash();
+		const loading = sandbox.load('/assets');
+
+		try {
+			await vi.waitFor(() => expect(fromFile).toHaveBeenCalledOnce());
+			sandbox.kill();
+			await expect(loading).rejects.toBe('Process terminated');
+
+			resolvePackage({ entrypoint: { run: commandRun }, free: lateFree });
+			await vi.waitFor(() => expect(lateFree).toHaveBeenCalledOnce());
+			await expect(sandbox.load('/assets')).resolves.toBeUndefined();
+			expect(fromFile).toHaveBeenCalledTimes(2);
+			expect(retryFree).not.toHaveBeenCalled();
+		} finally {
+			resolvePackage({ entrypoint: { run: commandRun }, free: lateFree });
+			await loading.catch(() => {});
+		}
 	});
 
 	it('rejects a pre-aborted execution without consuming queued stdin or starting Bash', async () => {

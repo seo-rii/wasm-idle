@@ -7,6 +7,7 @@ import {
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch';
+import { BusyError } from '@wasm-idle/core';
 
 type BashRuntimeAssetConfig = PlaygroundRuntimeAssets & {
 	bash?: { moduleUrl?: string; webcUrl?: string; workerUrl?: string };
@@ -42,6 +43,9 @@ class Bash implements Sandbox {
 	stdinWriter: WritableStreamDefaultWriter | null = null;
 	pendingInput: string[] = [];
 	pendingEof = false;
+	activeLoadReject: ((reason: unknown) => void) | null = null;
+	activeLoadCleanup: (() => void) | null = null;
+	private loadGeneration = 0;
 	activeReject: ((reason: unknown) => void) | null = null;
 	activeRunCleanup: (() => void) | null = null;
 	begin = 0;
@@ -49,7 +53,7 @@ class Bash implements Sandbox {
 	uid = 0;
 	exit = true;
 
-	async load(
+	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		_code = '',
 		_log = true,
@@ -57,49 +61,133 @@ class Bash implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		this.pendingInput = [];
-		this.pendingEof = false;
-		const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-		const bashAssets = (runtimeAssets as BashRuntimeAssetConfig)?.bash;
-		const configured = bashAssets?.webcUrl;
-		const rootUrl =
-			typeof runtimeAssets === 'string'
-				? runtimeAssets
-				: (runtimeAssets as BashRuntimeAssetConfig)?.rootUrl || '';
-		const normalizedRoot = rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
-		const nextWebcUrl = configured || `${normalizedRoot}/wasm-bash/bash.webc`;
-		this.webcUrl = currentUrl ? new URL(nextWebcUrl, currentUrl).href : nextWebcUrl;
-		const sdkModuleUrl = bashAssets?.moduleUrl || `${normalizedRoot}/wasm-bash/sdk/index.mjs`;
-		const sdkWorkerUrl = bashAssets?.workerUrl || `${normalizedRoot}/wasm-bash/sdk/worker.mjs`;
-		const resolvedSdkUrl = currentUrl ? new URL(sdkModuleUrl, currentUrl).href : sdkModuleUrl;
-		const resolvedThreadWorkerUrl = currentUrl
-			? new URL(sdkWorkerUrl, currentUrl).href
-			: sdkWorkerUrl;
-		const nextSdkCacheKey = `${resolvedSdkUrl}\n${resolvedThreadWorkerUrl}`;
-
-		progress?.set?.(0.1, 'Loading Bash runtime');
-		if (!sdkPromise || sdkCacheKey !== nextSdkCacheKey) {
-			sdkCacheKey = nextSdkCacheKey;
-			sdkPromise = importRuntimeModule<WasmerSdk>(resolvedSdkUrl).then(async (sdk) => {
-				await sdk.init({
-					sdkUrl: resolvedSdkUrl,
-					workerUrl: resolvedThreadWorkerUrl
-				});
-				return sdk;
-			});
+		if (this.activeLoadCleanup || this.activeRunCleanup) {
+			return Promise.reject(
+				new BusyError('Bash runtime already has an active operation', {
+					runtimeId: 'BASH',
+					phase: this.activeLoadCleanup ? 'startup' : 'execute'
+				})
+			);
 		}
-		const [webcBytes, sdk] = await Promise.all([
-			fetchRuntimeAssetBytes({
-				url: this.webcUrl,
-				label: 'Bash WEBc package',
-				maxAssetBytes: options.limits?.maxAssetBytes,
-				signal: options.signal
-			}),
-			sdkPromise
-		]);
-		this.runtimePackage?.free();
-		this.runtimePackage = await sdk.Wasmer.fromFile(webcBytes);
-		progress?.set?.(1, 'Bash runtime ready');
+		const loadGeneration = ++this.loadGeneration;
+		return new Promise<void>((resolve, reject) => {
+			let cleanedUp = false;
+			const cleanup = () => {
+				if (cleanedUp) return;
+				cleanedUp = true;
+				if (this.activeLoadCleanup === cleanup) this.activeLoadCleanup = null;
+				if (this.activeLoadReject === rejectLoad) this.activeLoadReject = null;
+			};
+			const rejectLoad = (reason: unknown) => {
+				cleanup();
+				reject(reason);
+			};
+			this.activeLoadCleanup = cleanup;
+			this.activeLoadReject = rejectLoad;
+			void (async () => {
+				let nextPackage: WasmerPackage | null = null;
+				try {
+					if (
+						this.activeLoadCleanup !== cleanup ||
+						loadGeneration !== this.loadGeneration
+					) {
+						return;
+					}
+					this.pendingInput = [];
+					this.pendingEof = false;
+					const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+					const bashAssets = (runtimeAssets as BashRuntimeAssetConfig)?.bash;
+					const configured = bashAssets?.webcUrl;
+					const rootUrl =
+						typeof runtimeAssets === 'string'
+							? runtimeAssets
+							: (runtimeAssets as BashRuntimeAssetConfig)?.rootUrl || '';
+					const normalizedRoot = rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
+					const nextWebcUrl = configured || `${normalizedRoot}/wasm-bash/bash.webc`;
+					const resolvedWebcUrl = currentUrl
+						? new URL(nextWebcUrl, currentUrl).href
+						: nextWebcUrl;
+					const sdkModuleUrl =
+						bashAssets?.moduleUrl || `${normalizedRoot}/wasm-bash/sdk/index.mjs`;
+					const sdkWorkerUrl =
+						bashAssets?.workerUrl || `${normalizedRoot}/wasm-bash/sdk/worker.mjs`;
+					const resolvedSdkUrl = currentUrl
+						? new URL(sdkModuleUrl, currentUrl).href
+						: sdkModuleUrl;
+					const resolvedThreadWorkerUrl = currentUrl
+						? new URL(sdkWorkerUrl, currentUrl).href
+						: sdkWorkerUrl;
+					const nextSdkCacheKey = `${resolvedSdkUrl}\n${resolvedThreadWorkerUrl}`;
+
+					progress?.set?.(0.1, 'Loading Bash runtime');
+					if (!sdkPromise || sdkCacheKey !== nextSdkCacheKey) {
+						sdkCacheKey = nextSdkCacheKey;
+						sdkPromise = importRuntimeModule<WasmerSdk>(resolvedSdkUrl).then(
+							async (sdk) => {
+								await sdk.init({
+									sdkUrl: resolvedSdkUrl,
+									workerUrl: resolvedThreadWorkerUrl
+								});
+								return sdk;
+							}
+						);
+					}
+					const [webcBytes, sdk] = await Promise.all([
+						fetchRuntimeAssetBytes({
+							url: resolvedWebcUrl,
+							label: 'Bash WEBc package',
+							maxAssetBytes: options.limits?.maxAssetBytes,
+							signal: options.signal
+						}),
+						sdkPromise
+					]);
+					if (
+						this.activeLoadCleanup !== cleanup ||
+						loadGeneration !== this.loadGeneration
+					) {
+						return;
+					}
+					nextPackage = await sdk.Wasmer.fromFile(webcBytes);
+					if (
+						this.activeLoadCleanup !== cleanup ||
+						loadGeneration !== this.loadGeneration
+					) {
+						nextPackage.free();
+						nextPackage = null;
+						return;
+					}
+					progress?.set?.(1, 'Bash runtime ready');
+					if (
+						this.activeLoadCleanup !== cleanup ||
+						loadGeneration !== this.loadGeneration
+					) {
+						nextPackage.free();
+						nextPackage = null;
+						return;
+					}
+					const previousPackage = this.runtimePackage;
+					this.runtimePackage = nextPackage;
+					nextPackage = null;
+					this.webcUrl = resolvedWebcUrl;
+					previousPackage?.free();
+					cleanup();
+					resolve();
+				} catch (error) {
+					try {
+						nextPackage?.free();
+					} catch {
+						// Preserve the startup failure.
+					}
+					if (
+						this.activeLoadCleanup !== cleanup ||
+						loadGeneration !== this.loadGeneration
+					) {
+						return;
+					}
+					rejectLoad(error);
+				}
+			})();
+		});
 	}
 
 	write(input: string) {
@@ -136,6 +224,12 @@ class Bash implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (this.activeLoadCleanup || this.activeRunCleanup) {
+			throw new BusyError('Bash runtime already has an active operation', {
+				runtimeId: 'BASH',
+				phase: this.activeLoadCleanup ? 'startup' : 'execute'
+			});
+		}
 		if (prepare) return true;
 		if (!this.runtimePackage) throw new Error('Bash runtime is not loaded');
 		const signal = options.signal;
@@ -310,19 +404,26 @@ class Bash implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		const loadReject = this.activeLoadReject;
+		const loadCleanup = this.activeLoadCleanup;
 		const reject = this.activeReject;
 		const cleanup = this.activeRunCleanup;
 		const writer = this.stdinWriter;
 		const instance = this.instance;
+		this.activeLoadReject = null;
+		this.activeLoadCleanup = null;
 		this.activeReject = null;
 		this.activeRunCleanup = null;
+		this.loadGeneration += 1;
 		this.uid += 1;
 		this.stdinWriter = null;
 		this.instance = null;
 		this.pendingInput = [];
 		this.pendingEof = false;
 		this.exit = true;
+		loadCleanup?.();
 		cleanup?.();
+		loadReject?.(reason);
 		reject?.(reason);
 		if (writer) {
 			try {
