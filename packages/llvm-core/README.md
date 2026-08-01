@@ -127,6 +127,11 @@ Every incoming DAP message must also carry a positive safe-integer `seq` and a r
 `request`, `response`, or `event` type. Event names must be non-empty strings. Invalid common or
 event envelopes fail the stream before listener dispatch or request timeout can hide the protocol
 error.
+The live playground session also validates the command-specific bodies it consumes after envelope
+parsing. Malformed `scopes`, `variables`, `readMemory`, or `evaluate` data raises a `ProtocolError`,
+stops the debug view, and disposes both workers. In particular, memory data must be valid Base64 and
+cannot exceed the requested byte count; expression fallback to `?` applies only to ordinary LLDB
+evaluation failures, not to a malformed successful response.
 Direct `DapClient` consumers can set `onEventError(error, event)` to observe an event-listener
 exception. Throwing listeners and a throwing error hook are isolated from one another, and the
 client continues parsing later events and responses on the same byte stream.

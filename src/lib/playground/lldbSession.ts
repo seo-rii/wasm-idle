@@ -7,6 +7,7 @@ import type {
 	DebugSessionEvent,
 	DebugVariable
 } from '$lib/playground/options';
+import { ProtocolError } from '@wasm-idle/core';
 import {
 	createBrowserLldbSession,
 	parseDebugRuntimeManifest,
@@ -65,20 +66,6 @@ interface DapStackFrame {
 	column: number;
 }
 
-interface DapScope {
-	name: string;
-	variablesReference: number;
-	expensive: boolean;
-}
-
-interface DapVariable {
-	name: string;
-	value: string;
-	type?: string;
-	variablesReference?: number;
-	memoryReference?: string;
-}
-
 function pauseReason(reason: string, command: DebugCommand | null): DebugPauseReason {
 	if (reason === 'breakpoint') return 'breakpoint';
 	if (reason === 'entry') return 'entry';
@@ -94,6 +81,45 @@ async function loadManifest(url: string, fetchImpl: typeof fetch): Promise<Runti
 		throw new Error(`Unable to load the LLDB runtime manifest (${response.status}).`);
 	}
 	return parseDebugRuntimeManifest(await response.json());
+}
+
+function invalidDapResponse(command: string, path: string, expectation: string): never {
+	throw new ProtocolError(`Invalid LLDB DAP ${command} response at ${path}: ${expectation}.`);
+}
+
+function assertDapRecord(
+	value: unknown,
+	command: string,
+	path: string
+): asserts value is Record<string, unknown> {
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+		invalidDapResponse(command, path, 'expected an object');
+	}
+}
+
+function assertDapString(value: unknown, command: string, path: string): asserts value is string {
+	if (typeof value !== 'string') invalidDapResponse(command, path, 'expected a string');
+}
+
+function assertDapBoolean(value: unknown, command: string, path: string): asserts value is boolean {
+	if (typeof value !== 'boolean') invalidDapResponse(command, path, 'expected a boolean');
+}
+
+function assertDapNonNegativeSafeInteger(
+	value: unknown,
+	command: string,
+	path: string
+): asserts value is number {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+		invalidDapResponse(command, path, 'expected a non-negative safe integer');
+	}
+}
+
+function dapResponseCollection(response: unknown, command: string, path: string): unknown[] {
+	assertDapRecord(response, command, 'body');
+	const collection = response[path];
+	if (!Array.isArray(collection)) invalidDapResponse(command, path, 'expected an array');
+	return collection;
 }
 
 export class LldbSandboxSession {
@@ -340,51 +366,95 @@ export class LldbSandboxSession {
 	async evaluate(expression: string) {
 		if (!this.supportsEvaluateExpressions || !this.activeFrameId) return '?';
 		try {
-			const result = await this.requireSession().request<{ result?: string }>('evaluate', {
+			const response = await this.requireSession().request<unknown>('evaluate', {
 				expression,
 				frameId: this.activeFrameId,
 				context: 'watch'
 			});
-			return result.result ?? '?';
-		} catch {
+			assertDapRecord(response, 'evaluate', 'body');
+			assertDapString(response.result, 'evaluate', 'result');
+			assertDapNonNegativeSafeInteger(
+				response.variablesReference,
+				'evaluate',
+				'variablesReference'
+			);
+			return response.result;
+		} catch (error) {
+			this.rethrowProtocolError(error);
 			return '?';
 		}
 	}
 
 	async variables(variablesReference: number, start?: number, count?: number) {
-		const response = await this.requireSession().request<{ variables?: DapVariable[] }>(
-			'variables',
-			{
+		try {
+			const response = await this.requireSession().request<unknown>('variables', {
 				variablesReference,
 				...(start === undefined ? {} : { start }),
 				...(count === undefined ? {} : { count })
-			}
-		);
-		return (response.variables ?? []).map<DebugVariable>((variable) => ({
-			name: variable.name,
-			value: variable.value,
-			type: variable.type,
-			variablesReference: variable.variablesReference ?? 0,
-			memoryReference: variable.memoryReference
-		}));
+			});
+			return dapResponseCollection(response, 'variables', 'variables').map<DebugVariable>(
+				(variable, index) => {
+					const path = `variables[${index}]`;
+					assertDapRecord(variable, 'variables', path);
+					assertDapString(variable.name, 'variables', `${path}.name`);
+					assertDapString(variable.value, 'variables', `${path}.value`);
+					assertDapNonNegativeSafeInteger(
+						variable.variablesReference,
+						'variables',
+						`${path}.variablesReference`
+					);
+					const type = variable.type;
+					if (type !== undefined) assertDapString(type, 'variables', `${path}.type`);
+					const memoryReference = variable.memoryReference;
+					if (memoryReference !== undefined) {
+						assertDapString(memoryReference, 'variables', `${path}.memoryReference`);
+					}
+					return {
+						name: variable.name,
+						value: variable.value,
+						type,
+						variablesReference: variable.variablesReference,
+						memoryReference
+					};
+				}
+			);
+		} catch (error) {
+			this.rethrowProtocolError(error);
+			throw error;
+		}
 	}
 
 	async scopes(frameId: number) {
 		if (!Number.isInteger(frameId) || frameId <= 0) {
 			throw new RangeError('LLDB frame ID must be a positive integer.');
 		}
-		const response = await this.requireSession().request<{ scopes?: DapScope[] }>('scopes', {
-			frameId
-		});
-		this.activeFrameId = frameId;
-		return (response.scopes ?? []).map(
-			(scope): DebugScope => ({
-				name: scope.name,
-				variablesReference: scope.variablesReference,
-				expensive: scope.expensive,
-				variables: []
-			})
-		);
+		try {
+			const response = await this.requireSession().request<unknown>('scopes', { frameId });
+			const scopes = dapResponseCollection(response, 'scopes', 'scopes').map(
+				(scope, index): DebugScope => {
+					const path = `scopes[${index}]`;
+					assertDapRecord(scope, 'scopes', path);
+					assertDapString(scope.name, 'scopes', `${path}.name`);
+					assertDapNonNegativeSafeInteger(
+						scope.variablesReference,
+						'scopes',
+						`${path}.variablesReference`
+					);
+					assertDapBoolean(scope.expensive, 'scopes', `${path}.expensive`);
+					return {
+						name: scope.name,
+						variablesReference: scope.variablesReference,
+						expensive: scope.expensive,
+						variables: []
+					};
+				}
+			);
+			this.activeFrameId = frameId;
+			return scopes;
+		} catch (error) {
+			this.rethrowProtocolError(error);
+			throw error;
+		}
 	}
 
 	async readMemory(
@@ -393,25 +463,46 @@ export class LldbSandboxSession {
 		count: number
 	): Promise<DebugMemory | null> {
 		if (!this.supportsReadMemory) return null;
-		const response = await this.requireSession().request<{
-			address?: string;
-			data?: string;
-			unreadableBytes?: number;
-		}>('readMemory', {
-			memoryReference,
-			offset,
-			count
-		});
-		const binary = globalThis.atob(response.data || '');
-		const data = new Uint8Array(binary.length);
-		for (let index = 0; index < binary.length; index += 1) {
-			data[index] = binary.charCodeAt(index);
+		try {
+			const response = await this.requireSession().request<unknown>('readMemory', {
+				memoryReference,
+				offset,
+				count
+			});
+			assertDapRecord(response, 'readMemory', 'body');
+			assertDapString(response.address, 'readMemory', 'address');
+			const encodedData = response.data;
+			if (encodedData !== undefined) assertDapString(encodedData, 'readMemory', 'data');
+			const unreadableBytes = response.unreadableBytes;
+			if (unreadableBytes !== undefined) {
+				assertDapNonNegativeSafeInteger(unreadableBytes, 'readMemory', 'unreadableBytes');
+			}
+			let binary: string;
+			try {
+				binary = globalThis.atob(encodedData ?? '');
+			} catch {
+				invalidDapResponse('readMemory', 'data', 'expected valid Base64');
+			}
+			if (binary.length > count) {
+				invalidDapResponse(
+					'readMemory',
+					'data',
+					`decoded ${binary.length} bytes for a ${count}-byte request`
+				);
+			}
+			const data = new Uint8Array(binary.length);
+			for (let index = 0; index < binary.length; index += 1) {
+				data[index] = binary.charCodeAt(index);
+			}
+			return {
+				address: response.address,
+				data,
+				unreadableBytes: unreadableBytes ?? 0
+			};
+		} catch (error) {
+			this.rethrowProtocolError(error);
+			throw error;
 		}
-		return {
-			address: response.address,
-			data,
-			unreadableBytes: response.unreadableBytes ?? 0
-		};
 	}
 
 	async disconnect() {
@@ -544,6 +635,12 @@ export class LldbSandboxSession {
 			scopes
 		});
 		this.command = null;
+	}
+
+	private rethrowProtocolError(error: unknown) {
+		if (!(error instanceof ProtocolError)) return;
+		this.fail(error);
+		throw error;
 	}
 
 	private finish(exitCode: number | null) {

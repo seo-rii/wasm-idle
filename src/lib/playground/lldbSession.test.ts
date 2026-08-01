@@ -1,3 +1,4 @@
+import { ProtocolError } from '@wasm-idle/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const runtimeState = vi.hoisted(() => ({
@@ -7,6 +8,7 @@ const runtimeState = vi.hoisted(() => ({
 	continueGate: null as Promise<void> | null,
 	disposeGate: null as Promise<void> | null,
 	scopesErrorFrameId: null as number | null,
+	responseOverrides: new Map<string, unknown>(),
 	breakpointResponseGates: [] as Array<
 		Promise<{
 			breakpoints?: Array<{ verified?: boolean; line?: number; message?: string }>;
@@ -55,6 +57,9 @@ class FakeRuntimeSession {
 		if (command === 'continue') await runtimeState.continueGate;
 		if (command === 'setBreakpoints' && runtimeState.breakpointResponseGates.length > 0) {
 			return (await runtimeState.breakpointResponseGates.shift()) as T;
+		}
+		if (runtimeState.responseOverrides.has(command)) {
+			return runtimeState.responseOverrides.get(command) as T;
 		}
 		if (command === 'threads') return { threads: [{ id: 7, name: 'wasm' }] } as T;
 		if (command === 'stackTrace') {
@@ -112,7 +117,7 @@ class FakeRuntimeSession {
 				unreadableBytes: 2
 			} as T;
 		}
-		if (command === 'evaluate') return { result: '42' } as T;
+		if (command === 'evaluate') return { result: '42', variablesReference: 0 } as T;
 		return {} as T;
 	}
 
@@ -184,6 +189,7 @@ describe('LldbSandboxSession', () => {
 		runtimeState.continueGate = null;
 		runtimeState.disposeGate = null;
 		runtimeState.scopesErrorFrameId = null;
+		runtimeState.responseOverrides.clear();
 		runtimeState.breakpointResponseGates = [];
 	});
 
@@ -833,6 +839,70 @@ describe('LldbSandboxSession', () => {
 		await controller.disconnect();
 		await expect(completion).resolves.toBe(true);
 	});
+
+	it.each([
+		{
+			command: 'scopes',
+			response: {
+				scopes: [{ name: 'Locals', variablesReference: -1, expensive: false }]
+			},
+			invoke: (controller: LldbSandboxSession) => controller.scopes(41)
+		},
+		{
+			command: 'variables',
+			response: { variables: [{ name: 7, value: '42', variablesReference: 0 }] },
+			invoke: (controller: LldbSandboxSession) => controller.variables(1)
+		},
+		{
+			command: 'readMemory',
+			response: { address: '0x1000', data: '***' },
+			invoke: (controller: LldbSandboxSession) => controller.readMemory('0x1000', 0, 1)
+		},
+		{
+			command: 'evaluate',
+			response: { variablesReference: 0 },
+			invoke: async (controller: LldbSandboxSession) => {
+				await controller.scopes(41);
+				return controller.evaluate('answer');
+			}
+		}
+	])(
+		'fails and disposes the live session for a malformed $command response',
+		async ({ command, response, invoke }) => {
+			const events: Array<{ type: string }> = [];
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: (event) => events.push(event),
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({
+						manifestVersion: 2,
+						debugger: {
+							capabilities: { evaluateExpressions: true, readMemory: true }
+						}
+					})
+				})) as unknown as typeof fetch
+			});
+
+			const completion = controller.start();
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			runtimeState.responseOverrides.set(command, response);
+
+			await expect(invoke(controller)).rejects.toBeInstanceOf(ProtocolError);
+			await expect(completion).rejects.toBeInstanceOf(ProtocolError);
+			await vi.waitFor(() => expect(runtimeState.session!.disposeCount).toBe(1));
+			expect(events.filter((event) => event.type === 'stop')).toHaveLength(1);
+		}
+	);
 
 	it('keeps a fast target exit successful when disposal rejects in-flight initialization', async () => {
 		let rejectInitialize!: (error: Error) => void;
