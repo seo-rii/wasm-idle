@@ -61,6 +61,12 @@ class Bash implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ?? new DOMException('Bash runtime startup aborted', 'AbortError')
+			);
+		}
 		if (this.activeLoadCleanup || this.activeRunCleanup) {
 			return Promise.reject(
 				new BusyError('Bash runtime already has an active operation', {
@@ -71,19 +77,48 @@ class Bash implements Sandbox {
 		}
 		const loadGeneration = ++this.loadGeneration;
 		return new Promise<void>((resolve, reject) => {
+			let onAbort: (() => void) | undefined;
+			let rejectLoad: (reason: unknown) => void;
 			let cleanedUp = false;
 			const cleanup = () => {
 				if (cleanedUp) return;
 				cleanedUp = true;
+				if (signal && onAbort) {
+					try {
+						signal.removeEventListener('abort', onAbort);
+					} catch {
+						// Cleanup must not replace the startup result.
+					}
+				}
 				if (this.activeLoadCleanup === cleanup) this.activeLoadCleanup = null;
 				if (this.activeLoadReject === rejectLoad) this.activeLoadReject = null;
 			};
-			const rejectLoad = (reason: unknown) => {
+			rejectLoad = (reason: unknown) => {
 				cleanup();
 				reject(reason);
 			};
+			onAbort = signal
+				? () => {
+						if (
+							this.activeLoadCleanup !== cleanup ||
+							loadGeneration !== this.loadGeneration
+						) {
+							cleanup();
+							return;
+						}
+						this.terminate(
+							signal.reason ??
+								new DOMException('Bash runtime startup aborted', 'AbortError')
+						);
+					}
+				: undefined;
 			this.activeLoadCleanup = cleanup;
 			this.activeLoadReject = rejectLoad;
+			if (signal && onAbort) {
+				signal.addEventListener('abort', onAbort, { once: true });
+				if (signal.aborted) onAbort();
+			}
+			if (this.activeLoadCleanup !== cleanup) return;
 			void (async () => {
 				let nextPackage: WasmerPackage | null = null;
 				try {
@@ -120,26 +155,44 @@ class Bash implements Sandbox {
 					const nextSdkCacheKey = `${resolvedSdkUrl}\n${resolvedThreadWorkerUrl}`;
 
 					progress?.set?.(0.1, 'Loading Bash runtime');
+					if (
+						this.activeLoadCleanup !== cleanup ||
+						loadGeneration !== this.loadGeneration
+					) {
+						return;
+					}
 					if (!sdkPromise || sdkCacheKey !== nextSdkCacheKey) {
 						sdkCacheKey = nextSdkCacheKey;
-						sdkPromise = importRuntimeModule<WasmerSdk>(resolvedSdkUrl).then(
-							async (sdk) => {
+						const createdSdkPromise = Promise.resolve()
+							.then(() => importRuntimeModule<WasmerSdk>(resolvedSdkUrl))
+							.then(async (sdk) => {
 								await sdk.init({
 									sdkUrl: resolvedSdkUrl,
 									workerUrl: resolvedThreadWorkerUrl
 								});
 								return sdk;
+							});
+						sdkPromise = createdSdkPromise;
+						void createdSdkPromise.catch(() => {
+							if (
+								sdkPromise === createdSdkPromise &&
+								sdkCacheKey === nextSdkCacheKey
+							) {
+								sdkPromise = undefined;
+								sdkCacheKey = '';
 							}
-						);
+						});
 					}
+					const loadSdkPromise = sdkPromise;
+					if (!loadSdkPromise) throw new Error('Bash SDK startup was not scheduled');
 					const [webcBytes, sdk] = await Promise.all([
 						fetchRuntimeAssetBytes({
 							url: resolvedWebcUrl,
 							label: 'Bash WEBc package',
 							maxAssetBytes: options.limits?.maxAssetBytes,
-							signal: options.signal
+							signal
 						}),
-						sdkPromise
+						loadSdkPromise
 					]);
 					if (
 						this.activeLoadCleanup !== cleanup ||
@@ -152,8 +205,13 @@ class Bash implements Sandbox {
 						this.activeLoadCleanup !== cleanup ||
 						loadGeneration !== this.loadGeneration
 					) {
-						nextPackage.free();
+						const stalePackage = nextPackage;
 						nextPackage = null;
+						try {
+							stalePackage.free();
+						} catch {
+							// Cleanup must not replace the startup result.
+						}
 						return;
 					}
 					progress?.set?.(1, 'Bash runtime ready');
@@ -161,20 +219,31 @@ class Bash implements Sandbox {
 						this.activeLoadCleanup !== cleanup ||
 						loadGeneration !== this.loadGeneration
 					) {
-						nextPackage.free();
+						const stalePackage = nextPackage;
 						nextPackage = null;
+						try {
+							stalePackage.free();
+						} catch {
+							// Cleanup must not replace the startup result.
+						}
 						return;
 					}
 					const previousPackage = this.runtimePackage;
 					this.runtimePackage = nextPackage;
 					nextPackage = null;
 					this.webcUrl = resolvedWebcUrl;
-					previousPackage?.free();
+					try {
+						previousPackage?.free();
+					} catch {
+						// Releasing the previous package must not replace startup success.
+					}
 					cleanup();
 					resolve();
 				} catch (error) {
+					const failedPackage = nextPackage;
+					nextPackage = null;
 					try {
-						nextPackage?.free();
+						failedPackage?.free();
 					} catch {
 						// Preserve the startup failure.
 					}

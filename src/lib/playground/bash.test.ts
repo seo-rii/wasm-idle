@@ -316,6 +316,242 @@ describe('Bash sandbox', () => {
 		}
 	});
 
+	it('rejects a pre-aborted Bash load without changing loaded or queued state', async () => {
+		const sandbox = new Bash();
+		await sandbox.load('/existing');
+		const runtimePackage = sandbox.runtimePackage;
+		const webcUrl = sandbox.webcUrl;
+		const fetchCalls = vi.mocked(fetch).mock.calls.length;
+		const importCalls = importRuntimeModule.mock.calls.length;
+		const packageCalls = fromFile.mock.calls.length;
+		sandbox.write('queued\n');
+		sandbox.eof();
+		const controller = new AbortController();
+		const reason = new Error('do not start Bash runtime');
+		controller.abort(reason);
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+
+		await expect(
+			sandbox.load('/replacement', '', true, [], { signal: controller.signal })
+		).rejects.toBe(reason);
+
+		expect(fetch).toHaveBeenCalledTimes(fetchCalls);
+		expect(importRuntimeModule).toHaveBeenCalledTimes(importCalls);
+		expect(fromFile).toHaveBeenCalledTimes(packageCalls);
+		expect(addEventListener).not.toHaveBeenCalled();
+		expect(sandbox.runtimePackage).toBe(runtimePackage);
+		expect(sandbox.webcUrl).toBe(webcUrl);
+		expect(sandbox.pendingInput).toEqual(['queued\n']);
+		expect(sandbox.pendingEof).toBe(true);
+		expect(sandbox.activeLoadCleanup).toBeNull();
+		expect(sandbox.activeLoadReject).toBeNull();
+	});
+
+	it.each(['import', 'init', 'package'] as const)(
+		'cancels Bash startup promptly while %s remains pending',
+		async (phase) => {
+			const sdk = { init, Wasmer: { fromFile } };
+			let resolveImport: ((value: typeof sdk) => void) | undefined;
+			let resolveInit: (() => void) | undefined;
+			type DeferredPackage = {
+				entrypoint: { run: typeof commandRun };
+				free: () => void;
+			};
+			let resolvePackage: ((runtimePackage: DeferredPackage) => void) | undefined;
+			const lateFree = vi.fn();
+			const latePackage: DeferredPackage = {
+				entrypoint: { run: commandRun },
+				free: lateFree
+			};
+			if (phase === 'import') {
+				importRuntimeModule.mockReturnValueOnce(
+					new Promise<typeof sdk>((resolve) => {
+						resolveImport = resolve;
+					})
+				);
+			}
+			if (phase === 'init') {
+				init.mockReturnValueOnce(
+					new Promise<void>((resolve) => {
+						resolveInit = resolve;
+					})
+				);
+			}
+			if (phase === 'package') {
+				fromFile.mockReturnValueOnce(
+					new Promise<DeferredPackage>((resolve) => {
+						resolvePackage = resolve;
+					})
+				);
+			}
+			const sandbox = new Bash();
+			const controller = new AbortController();
+			const reason = new Error(`stop pending Bash ${phase}`);
+			const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const progress = { set: vi.fn() };
+			const loading = sandbox.load(
+				`/slow-${phase}`,
+				'',
+				true,
+				[],
+				{ signal: controller.signal },
+				progress
+			);
+			let retry: Promise<void> | undefined;
+
+			try {
+				if (phase === 'import') {
+					await vi.waitFor(() => expect(importRuntimeModule).toHaveBeenCalledOnce());
+				} else if (phase === 'init') {
+					await vi.waitFor(() => expect(init).toHaveBeenCalledOnce());
+				} else {
+					await vi.waitFor(() => expect(fromFile).toHaveBeenCalledOnce());
+				}
+				controller.abort(reason);
+				await expect(observeSettlement(loading)).resolves.toEqual({
+					status: 'rejected',
+					reason
+				});
+				const abortRegistration = addEventListener.mock.calls.find(
+					([type]) => type === 'abort'
+				);
+				expect(abortRegistration).toBeDefined();
+				expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+				expect(sandbox.activeLoadCleanup).toBeNull();
+				expect(sandbox.activeLoadReject).toBeNull();
+				const progressCalls = progress.set.mock.calls.length;
+				retry = sandbox.load(`/slow-${phase}`);
+				if (phase === 'package') {
+					await expect(retry).resolves.toBeUndefined();
+					expect(fromFile).toHaveBeenCalledTimes(2);
+				} else {
+					expect(importRuntimeModule).toHaveBeenCalledOnce();
+					expect(fromFile).not.toHaveBeenCalled();
+				}
+
+				resolveImport?.(sdk);
+				resolveInit?.();
+				resolvePackage?.(latePackage);
+				await expect(retry).resolves.toBeUndefined();
+				await new Promise<void>((resolve) => setTimeout(resolve, 0));
+				if (phase === 'package') {
+					await vi.waitFor(() => expect(lateFree).toHaveBeenCalledOnce());
+				} else {
+					expect(fromFile).toHaveBeenCalledOnce();
+				}
+				expect(progress.set).toHaveBeenCalledTimes(progressCalls);
+				expect(sandbox.runtimePackage).not.toBeNull();
+			} finally {
+				controller.abort(reason);
+				resolveImport?.(sdk);
+				resolveInit?.();
+				resolvePackage?.(latePackage);
+				await loading.catch(() => {});
+				await retry?.catch(() => {});
+			}
+		}
+	);
+
+	it('stops Bash startup before loading assets when initial progress aborts', async () => {
+		const sandbox = new Bash();
+		const controller = new AbortController();
+		const reason = new Error('stop Bash from initial progress');
+		const progress = {
+			set: vi.fn((value: number) => {
+				if (value === 0.1) controller.abort(reason);
+			})
+		};
+
+		await expect(
+			sandbox.load('/progress-abort', '', true, [], { signal: controller.signal }, progress)
+		).rejects.toBe(reason);
+
+		expect(progress.set).toHaveBeenCalledOnce();
+		expect(progress.set).toHaveBeenCalledWith(0.1, 'Loading Bash runtime');
+		expect(fetch).not.toHaveBeenCalled();
+		expect(importRuntimeModule).not.toHaveBeenCalled();
+		expect(init).not.toHaveBeenCalled();
+		expect(fromFile).not.toHaveBeenCalled();
+		expect(sandbox.activeLoadCleanup).toBeNull();
+		expect(sandbox.activeLoadReject).toBeNull();
+	});
+
+	it('preserves the loaded Bash package when final progress aborts', async () => {
+		const sandbox = new Bash();
+		await sandbox.load('/existing-final-progress');
+		const runtimePackage = sandbox.runtimePackage;
+		const webcUrl = sandbox.webcUrl;
+		const staleFree = vi.fn(() => {
+			throw new Error('stale Bash package cleanup failed');
+		});
+		fromFile.mockResolvedValueOnce({ entrypoint: { run: commandRun }, free: staleFree });
+		const controller = new AbortController();
+		const reason = new Error('stop Bash from final progress');
+		const progress = {
+			set: vi.fn((value: number) => {
+				if (value === 1) controller.abort(reason);
+			})
+		};
+
+		await expect(
+			sandbox.load(
+				'/replacement-final-progress',
+				'',
+				true,
+				[],
+				{ signal: controller.signal },
+				progress
+			)
+		).rejects.toBe(reason);
+
+		expect(progress.set).toHaveBeenLastCalledWith(1, 'Bash runtime ready');
+		expect(staleFree).toHaveBeenCalledOnce();
+		expect(packageFree).not.toHaveBeenCalled();
+		expect(sandbox.runtimePackage).toBe(runtimePackage);
+		expect(sandbox.webcUrl).toBe(webcUrl);
+		expect(sandbox.activeLoadCleanup).toBeNull();
+		expect(sandbox.activeLoadReject).toBeNull();
+	});
+
+	it.each(['import', 'init'] as const)(
+		'retries Bash startup after an SDK %s failure',
+		async (phase) => {
+			const reason = new Error(`Bash SDK ${phase} failed`);
+			if (phase === 'import') importRuntimeModule.mockRejectedValueOnce(reason);
+			else init.mockRejectedValueOnce(reason);
+			const sandbox = new Bash();
+
+			await expect(sandbox.load(`/sdk-${phase}-failure`)).rejects.toBe(reason);
+			expect(sandbox.activeLoadCleanup).toBeNull();
+			expect(sandbox.activeLoadReject).toBeNull();
+
+			await expect(sandbox.load(`/sdk-${phase}-failure`)).resolves.toBeUndefined();
+			expect(importRuntimeModule).toHaveBeenCalledTimes(2);
+			expect(fromFile).toHaveBeenCalledOnce();
+		}
+	);
+
+	it('removes a settled Bash startup listener before a late abort', async () => {
+		const sandbox = new Bash();
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+
+		await sandbox.load('/settled', '', true, [], { signal: controller.signal });
+		const abortRegistration = addEventListener.mock.calls.find(([type]) => type === 'abort');
+		expect(abortRegistration).toBeDefined();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+		const runtimePackage = sandbox.runtimePackage;
+		const uid = sandbox.uid;
+
+		controller.abort(new Error('late Bash startup abort'));
+		expect(sandbox.runtimePackage).toBe(runtimePackage);
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.activeLoadCleanup).toBeNull();
+		expect(sandbox.activeLoadReject).toBeNull();
+	});
+
 	it('rejects a pre-aborted execution without consuming queued stdin or starting Bash', async () => {
 		const sandbox = new Bash();
 		await sandbox.load();
