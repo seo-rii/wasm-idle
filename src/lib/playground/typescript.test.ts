@@ -142,6 +142,120 @@ console.log(value);`;
 		);
 	});
 
+	describe.each([
+		{ language: 'TYPESCRIPT' as const, extension: 'ts' },
+		{ language: 'JAVASCRIPT' as const, extension: 'js' }
+	])('$language workspace boundary', ({ language, extension }) => {
+		it('normalizes valid paths before worker dispatch', async () => {
+			const sandbox = new TypeScriptSandbox(language);
+			await sandbox.load('/absproxy/5173');
+
+			await expect(
+				sandbox.run('main()', false, true, undefined, [], {
+					activePath: `nested\\main.${extension}`,
+					workspaceFiles: [
+						{ path: `fixtures\\helper.${extension}`, content: 'export {}' }
+					]
+				})
+			).resolves.toBe(true);
+
+			expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+				2,
+				expect.objectContaining({
+					activePath: `nested/main.${extension}`,
+					workspaceFiles: [{ path: `fixtures/helper.${extension}`, content: 'export {}' }]
+				})
+			);
+		});
+
+		it.each([
+			{
+				name: 'traversal path',
+				code: 'A',
+				options: { activePath: `../main.${extension}` },
+				expected: { code: 'invalid-path', path: `../main.${extension}` }
+			},
+			{
+				name: 'absolute path',
+				code: 'A',
+				options: { activePath: `/tmp/main.${extension}` },
+				expected: { code: 'invalid-path', path: `/tmp/main.${extension}` }
+			},
+			{
+				name: 'NUL path',
+				code: 'A',
+				options: { activePath: `bad\0.${extension}` },
+				expected: { code: 'invalid-path', path: `bad\0.${extension}` }
+			},
+			{
+				name: 'duplicate path',
+				code: 'A',
+				options: {
+					workspaceFiles: [
+						{ path: `data/module.${extension}`, content: 'A' },
+						{ path: `data/module.${extension}`, content: 'B' }
+					]
+				},
+				expected: { code: 'duplicate-path', path: `data/module.${extension}` }
+			},
+			{
+				name: 'case-colliding path',
+				code: 'A',
+				options: {
+					workspaceFiles: [
+						{ path: `DATA/module.${extension}`, content: 'A' },
+						{ path: `data/module.${extension}`, content: 'B' }
+					]
+				},
+				expected: { code: 'case-collision', path: `data/module.${extension}` }
+			},
+			{
+				name: 'file count overflow',
+				code: 'A',
+				options: {
+					workspaceFiles: [{ path: `data/module.${extension}`, content: 'B' }],
+					workspaceLimits: { maxFiles: 1 }
+				},
+				expected: { code: 'file-count-limit', limit: 1, actual: 2 }
+			},
+			{
+				name: 'per-file overflow clamped to execution limits',
+				code: '12345',
+				options: {
+					limits: { maxWorkspaceBytes: 4 },
+					workspaceLimits: { maxFileBytes: 100 }
+				},
+				expected: { code: 'file-size-limit', limit: 4, actual: 5 }
+			},
+			{
+				name: 'aggregate overflow clamped to execution limits',
+				code: '123',
+				options: {
+					limits: { maxWorkspaceBytes: 4 },
+					workspaceFiles: [{ path: `data/module.${extension}`, content: '45' }],
+					workspaceLimits: { maxTotalBytes: 100 }
+				},
+				expected: { code: 'total-size-limit', limit: 4, actual: 5 }
+			}
+		])('rejects $name before changing execution state', async ({ code, options, expected }) => {
+			const sandbox = new TypeScriptSandbox(language);
+			await sandbox.load('/absproxy/5173');
+			const worker = workerInstances[0];
+			const loadHandler = worker.onmessage;
+
+			await expect(
+				sandbox.run(code, false, true, undefined, [], options)
+			).rejects.toMatchObject({
+				name: 'WorkspaceValidationError',
+				...expected
+			});
+			expect(worker.postMessage).toHaveBeenCalledTimes(1);
+			expect(worker.onmessage).toBe(loadHandler);
+			expect(sandbox.uid).toBe(0);
+			expect(sandbox.exit).toBe(true);
+		});
+	});
+
 	it.each(['TYPESCRIPT', 'JAVASCRIPT'] as const)(
 		'rejects an overlapping %s run without disturbing the active execution',
 		async (language) => {

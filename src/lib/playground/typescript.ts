@@ -1,5 +1,10 @@
 import { resolveTypeScriptModuleUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
-import { BusyError } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -228,7 +233,32 @@ class TypeScriptSandbox implements Sandbox {
 					new DOMException(`${this.languageLabel} execution aborted`, 'AbortError')
 			);
 		}
-		const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
+		let executionArgs: ReturnType<typeof resolveSandboxExecutionArgs>;
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
+		try {
+			executionArgs = resolveSandboxExecutionArgs(this.language, args, options);
+			const limits = resolveExecutionLimits(options.limits);
+			workspace = validateExecutionWorkspace(
+				code,
+				options.workspaceFiles ?? [],
+				options.activePath ?? (this.language === 'JAVASCRIPT' ? 'main.js' : 'main.ts'),
+				{
+					...options.workspaceLimits,
+					maxFileBytes: Math.min(
+						options.workspaceLimits?.maxFileBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						options.workspaceLimits?.maxTotalBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					)
+				}
+			);
+		} catch (error) {
+			return Promise.reject(error);
+		}
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
@@ -312,13 +342,11 @@ class TypeScriptSandbox implements Sandbox {
 					code,
 					prepare,
 					buffer: this.buffer,
-					args: programArgs,
+					args: executionArgs.programArgs,
 					stdin: options.stdin,
 					language: this.compileLanguage,
-					activePath:
-						options.activePath ||
-						(this.language === 'JAVASCRIPT' ? 'main.js' : 'main.ts'),
-					workspaceFiles: options.workspaceFiles || [],
+					activePath: workspace.activePath,
+					workspaceFiles: workspace.workspaceFiles,
 					log: _log
 				});
 			} catch (error) {
