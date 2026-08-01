@@ -34,6 +34,75 @@ type LoadedAsset = {
 const encoder = new TextEncoder();
 const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
 const MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
+const typedArrayBufferGetter = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'buffer')?.get;
+const typedArrayByteLengthGetter = Object.getOwnPropertyDescriptor(
+	typedArrayPrototype,
+	'byteLength'
+)?.get;
+const typedArrayByteOffsetGetter = Object.getOwnPropertyDescriptor(
+	typedArrayPrototype,
+	'byteOffset'
+)?.get;
+const arrayBufferByteLengthGetter = Object.getOwnPropertyDescriptor(
+	ArrayBuffer.prototype,
+	'byteLength'
+)?.get;
+const blobSizeGetter = Object.getOwnPropertyDescriptor(Blob.prototype, 'size')?.get;
+
+const runtimeAssetSizeError = (asset: string, maxBytes = MAX_RUNTIME_ASSET_BYTES) =>
+	new Error(`Runtime asset ${asset} exceeds the ${maxBytes} byte limit`);
+
+const requireRuntimeAssetSize = (
+	asset: string,
+	byteLength: number,
+	maxBytes = MAX_RUNTIME_ASSET_BYTES
+) => {
+	if (!Number.isSafeInteger(byteLength) || byteLength < 0) {
+		throw new Error(`Runtime asset ${asset} has an invalid byte length`);
+	}
+	if (byteLength > maxBytes) throw runtimeAssetSizeError(asset, maxBytes);
+};
+
+const canonicalUint8Array = (value: Uint8Array) => {
+	if (!typedArrayBufferGetter || !typedArrayByteLengthGetter || !typedArrayByteOffsetGetter) {
+		throw new Error('Uint8Array intrinsic accessors are unavailable');
+	}
+	const buffer = Reflect.apply(typedArrayBufferGetter, value, []) as ArrayBufferLike;
+	const byteLength = Reflect.apply(typedArrayByteLengthGetter, value, []) as number;
+	const byteOffset = Reflect.apply(typedArrayByteOffsetGetter, value, []) as number;
+	return new Uint8Array(buffer, byteOffset, byteLength);
+};
+
+const intrinsicBlobSize = (blob: Blob) => {
+	if (!blobSizeGetter) throw new Error('Blob size accessor is unavailable');
+	return Reflect.apply(blobSizeGetter, blob, []) as number;
+};
+
+export const boundedUtf8ByteLength = (value: string, maxBytes = MAX_RUNTIME_ASSET_BYTES) => {
+	let byteLength = 0;
+	for (let index = 0; index < value.length; index += 1) {
+		const codeUnit = value.charCodeAt(index);
+		if (codeUnit <= 0x7f) {
+			byteLength += 1;
+		} else if (codeUnit <= 0x7ff) {
+			byteLength += 2;
+		} else if (
+			codeUnit >= 0xd800 &&
+			codeUnit <= 0xdbff &&
+			index + 1 < value.length &&
+			value.charCodeAt(index + 1) >= 0xdc00 &&
+			value.charCodeAt(index + 1) <= 0xdfff
+		) {
+			byteLength += 4;
+			index += 1;
+		} else {
+			byteLength += 3;
+		}
+		if (byteLength > maxBytes) return byteLength;
+	}
+	return byteLength;
+};
 
 const runtimeAssetAbortReason = (signal: AbortSignal) =>
 	signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
@@ -66,13 +135,21 @@ const readAbortableArrayBuffer = async (
 	}
 };
 
-const transferBuffer = (bytes: Uint8Array, transferOwnership = false) =>
-	transferOwnership &&
-	bytes.byteOffset === 0 &&
-	bytes.byteLength === bytes.buffer.byteLength &&
-	bytes.buffer instanceof ArrayBuffer
-		? bytes.buffer
-		: Uint8Array.from(bytes).buffer;
+const transferBuffer = (bytes: Uint8Array, transferOwnership = false) => {
+	const canonicalBytes = canonicalUint8Array(bytes);
+	const buffer = canonicalBytes.buffer;
+	const transferableBuffer = buffer instanceof ArrayBuffer ? buffer : undefined;
+	const transferableByteLength =
+		transferableBuffer && arrayBufferByteLengthGetter
+			? (Reflect.apply(arrayBufferByteLengthGetter, transferableBuffer, []) as number)
+			: undefined;
+	return transferOwnership &&
+		transferableBuffer &&
+		canonicalBytes.byteOffset === 0 &&
+		canonicalBytes.byteLength === transferableByteLength
+		? transferableBuffer
+		: Uint8Array.from(canonicalBytes).buffer;
+};
 
 const expectedAssetsForRuntime = (runtime: RuntimeAssetRuntime) =>
 	new Set<string>(RUNTIME_LOAD_ASSETS[runtime]);
@@ -140,6 +217,7 @@ export class WorkerAssetBridge {
 	private readonly expectedAssets: Set<string>;
 	private generation = 0;
 	private readonly activeLoads = new Set<AbortController>();
+	private readonly maxAssetBytes = MAX_RUNTIME_ASSET_BYTES;
 
 	constructor(
 		worker: Worker,
@@ -203,24 +281,18 @@ export class WorkerAssetBridge {
 		this.activeLoads.add(controller);
 		try {
 			const loaded = await this.loadAsset(request.asset, controller.signal);
-			if (loaded.bytes.byteLength > MAX_RUNTIME_ASSET_BYTES) {
-				throw new Error(
-					`Runtime asset ${request.asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
-				);
-			}
-			const runtimeBytes = request.asset.endsWith('.gz')
+			const deliveryBytes = canonicalUint8Array(loaded.bytes);
+			requireRuntimeAssetSize(request.asset, deliveryBytes.byteLength, this.maxAssetBytes);
+			const normalizedRuntimeBytes = request.asset.endsWith('.gz')
 				? await decompressGzip(
-						loaded.bytes,
+						deliveryBytes,
 						request.asset,
-						MAX_RUNTIME_ASSET_BYTES,
+						this.maxAssetBytes,
 						controller.signal
 					)
-				: loaded.bytes;
-			if (runtimeBytes.byteLength > MAX_RUNTIME_ASSET_BYTES) {
-				throw new Error(
-					`Runtime asset ${request.asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
-				);
-			}
+				: deliveryBytes;
+			const runtimeBytes = canonicalUint8Array(normalizedRuntimeBytes);
+			requireRuntimeAssetSize(request.asset, runtimeBytes.byteLength, this.maxAssetBytes);
 			const httpDecodedGzip = (loaded.contentEncoding || '')
 				.toLowerCase()
 				.split(',')
@@ -235,7 +307,7 @@ export class WorkerAssetBridge {
 			try {
 				const verification = this.verifyIntegrity(
 					request.asset,
-					loaded.bytes,
+					deliveryBytes,
 					runtimeBytes,
 					loaded.mimeType,
 					!httpDecodedGzip
@@ -249,7 +321,7 @@ export class WorkerAssetBridge {
 			if (controller.signal.aborted || generation !== this.generation) return;
 			const buffer = transferBuffer(
 				runtimeBytes,
-				runtimeBytes === loaded.bytes ? loaded.transferOwnership : true
+				normalizedRuntimeBytes === deliveryBytes ? loaded.transferOwnership : true
 			);
 			worker.postMessage(
 				{
@@ -393,12 +465,15 @@ export class WorkerAssetBridge {
 		}
 		if (result instanceof ArrayBuffer) {
 			const bytes = new Uint8Array(result);
+			requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
 			this.progress.update(asset, bytes.byteLength, bytes.byteLength);
 			return { bytes };
 		}
 		if (result instanceof Uint8Array) {
-			this.progress.update(asset, result.byteLength, result.byteLength);
-			return { bytes: result };
+			const bytes = canonicalUint8Array(result);
+			requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
+			this.progress.update(asset, bytes.byteLength, bytes.byteLength);
+			return { bytes };
 		}
 		const loaderBlob =
 			result instanceof Blob
@@ -411,8 +486,10 @@ export class WorkerAssetBridge {
 					: undefined;
 		if (loaderBlob) {
 			const { blob, mimeType } = loaderBlob;
+			requireRuntimeAssetSize(asset, intrinsicBlobSize(blob), this.maxAssetBytes);
 			const source = await readAbortableArrayBuffer(blob, signal);
 			const bytes = new Uint8Array(source);
+			requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
 			this.progress.update(asset, bytes.byteLength, bytes.byteLength);
 			return { bytes, mimeType, transferOwnership: true };
 		}
@@ -421,12 +498,19 @@ export class WorkerAssetBridge {
 		}
 		if ('data' in result) {
 			if (typeof result.data === 'string') {
-				const bytes = encoder.encode(result.data);
+				requireRuntimeAssetSize(
+					asset,
+					boundedUtf8ByteLength(result.data, this.maxAssetBytes),
+					this.maxAssetBytes
+				);
+				const bytes = canonicalUint8Array(encoder.encode(result.data));
+				requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
 				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
 				return { bytes, mimeType: result.mimeType, transferOwnership: true };
 			}
 			if (result.data instanceof ArrayBuffer) {
 				const bytes = new Uint8Array(result.data);
+				requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
 				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
 				return {
 					bytes,
@@ -435,9 +519,11 @@ export class WorkerAssetBridge {
 				};
 			}
 			if (result.data instanceof Uint8Array) {
-				this.progress.update(asset, result.data.byteLength, result.data.byteLength);
+				const bytes = canonicalUint8Array(result.data);
+				requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
+				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
 				return {
-					bytes: result.data,
+					bytes,
 					mimeType: result.mimeType,
 					transferOwnership: result.transferOwnership === true
 				};
@@ -542,10 +628,8 @@ export class WorkerAssetBridge {
 			}
 			contentLength = parsedContentLength;
 		}
-		if (contentLength !== undefined && contentLength > MAX_RUNTIME_ASSET_BYTES) {
-			const error = new Error(
-				`Runtime asset ${asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
-			);
+		if (contentLength !== undefined && contentLength > this.maxAssetBytes) {
+			const error = runtimeAssetSizeError(asset, this.maxAssetBytes);
 			cancelResponseBody(response, error);
 			throw error;
 		}
@@ -553,6 +637,7 @@ export class WorkerAssetBridge {
 		const contentEncoding = response.headers.get('content-encoding') || undefined;
 		if (!response.body) {
 			const bytes = new Uint8Array(await readAbortableArrayBuffer(response, signal));
+			requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
 			this.progress.update(asset, bytes.byteLength, contentLength ?? bytes.byteLength);
 			return { bytes, contentEncoding, mimeType, transferOwnership: true };
 		}
@@ -596,11 +681,10 @@ export class WorkerAssetBridge {
 				if (signal.aborted) throw runtimeAssetAbortReason(signal);
 				if (done) break;
 				if (!value) continue;
-				const nextLength = receivedLength + value.byteLength;
-				if (nextLength > MAX_RUNTIME_ASSET_BYTES) {
-					const error = new Error(
-						`Runtime asset ${asset} exceeds the ${MAX_RUNTIME_ASSET_BYTES} byte limit`
-					);
+				const chunk = canonicalUint8Array(value);
+				const nextLength = receivedLength + chunk.byteLength;
+				if (nextLength > this.maxAssetBytes) {
+					const error = runtimeAssetSizeError(asset, this.maxAssetBytes);
 					readerCancelled = true;
 					try {
 						void reader.cancel(error).catch(() => undefined);
@@ -609,14 +693,14 @@ export class WorkerAssetBridge {
 				}
 				if (nextLength > bytes.byteLength) {
 					const nextCapacity = Math.min(
-						MAX_RUNTIME_ASSET_BYTES,
+						this.maxAssetBytes,
 						Math.max(nextLength, bytes.byteLength * 2)
 					);
 					const grown = new Uint8Array(nextCapacity);
 					grown.set(bytes.subarray(0, receivedLength));
 					bytes = grown;
 				}
-				bytes.set(value, receivedLength);
+				bytes.set(chunk, receivedLength);
 				receivedLength = nextLength;
 				this.progress.update(asset, receivedLength, contentLength);
 			}

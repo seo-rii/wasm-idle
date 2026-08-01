@@ -5,12 +5,16 @@ import { gzipSync } from 'node:zlib';
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
 
 import { RUNTIME_LOAD_ASSETS } from '$lib/playground/assets';
-import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import { WorkerAssetBridge, boundedUtf8ByteLength } from '$lib/playground/assetBridge';
 
 afterEach(() => {
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
 });
+
+const setBridgeAssetByteLimit = (bridge: WorkerAssetBridge, maxAssetBytes: number) => {
+	(bridge as unknown as { maxAssetBytes: number }).maxAssetBytes = maxAssetBytes;
+};
 
 describe('WorkerAssetBridge progress', () => {
 	it('does not mark an asset complete from the first chunk when its total is unknown', () => {
@@ -41,6 +45,11 @@ describe('WorkerAssetBridge progress', () => {
 });
 
 describe('WorkerAssetBridge asset requests', () => {
+	it('counts UTF-8 bytes without materializing an oversized encoded buffer', () => {
+		expect(boundedUtf8ByteLength('Aé𐀀\ud800', 100)).toBe(10);
+		expect(boundedUtf8ByteLength('€€', 5)).toBe(6);
+	});
+
 	it('rejects assets outside the runtime allowlist before calling the loader', async () => {
 		const postMessage = vi.fn();
 		const loader = vi.fn();
@@ -253,6 +262,261 @@ describe('WorkerAssetBridge asset requests', () => {
 			resolveArrayBuffer(Uint8Array.of(1, 2, 3).buffer);
 			await loading.catch(() => {});
 		}
+	});
+
+	it.each([
+		{ label: 'bare', wrap: (blob: Blob) => blob },
+		{
+			label: 'wrapped',
+			wrap: (blob: Blob) => ({ data: blob, mimeType: 'application/wasm' })
+		}
+	])('rejects an oversized $label loader-owned Blob before materialization', async ({ wrap }) => {
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const byteLimit = 2;
+		const arrayBuffer = vi.fn().mockResolvedValue(Uint8Array.of(1, 2, 3).buffer);
+		const blob = new Blob([Uint8Array.of(1, 2, 3)], {
+			type: 'application/octet-stream'
+		});
+		Object.defineProperties(blob, {
+			size: { value: 0 },
+			arrayBuffer: { value: arrayBuffer }
+		});
+		const postMessage = vi.fn();
+		const progress = { set: vi.fn() };
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const bridge = new WorkerAssetBridge(
+			{ postMessage } as unknown as Worker,
+			'clang',
+			{
+				baseUrl: '/clang/',
+				loader: vi.fn().mockResolvedValue(wrap(blob)),
+				useAssetBridge: true
+			},
+			progress
+		);
+		setBridgeAssetByteLimit(bridge, byteLimit);
+		progress.set.mockClear();
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 33, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 33,
+				ok: false,
+				error: `Runtime asset ${asset} exceeds the ${byteLimit} byte limit`
+			}
+		});
+		expect(postMessage.mock.calls[0]).toHaveLength(1);
+		expect(arrayBuffer).not.toHaveBeenCalled();
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(progress.set).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{
+			label: 'bare ArrayBuffer',
+			create: () => {
+				const data = Uint8Array.of(1, 2, 3).buffer;
+				Object.defineProperty(data, 'byteLength', { value: 0 });
+				return data;
+			}
+		},
+		{
+			label: 'wrapped ArrayBuffer',
+			create: () => {
+				const data = Uint8Array.of(1, 2, 3).buffer;
+				Object.defineProperty(data, 'byteLength', { value: 0 });
+				return { data, transferOwnership: true };
+			}
+		},
+		{
+			label: 'bare Uint8Array',
+			create: () => {
+				const data = Uint8Array.of(1, 2, 3);
+				Object.defineProperty(data, 'byteLength', { value: 0 });
+				return data;
+			}
+		},
+		{
+			label: 'wrapped Uint8Array',
+			create: () => {
+				const data = Uint8Array.of(1, 2, 3);
+				Object.defineProperty(data, 'byteLength', { value: 0 });
+				return { data, transferOwnership: true };
+			}
+		}
+	])(
+		'rejects oversized $label results before progress or response transfer',
+		async ({ create }) => {
+			const asset = RUNTIME_LOAD_ASSETS.clang[0];
+			const byteLimit = 2;
+			const postMessage = vi.fn();
+			const progress = { set: vi.fn() };
+			const fetchMock = vi.fn();
+			vi.stubGlobal('fetch', fetchMock);
+			const bridge = new WorkerAssetBridge(
+				{ postMessage } as unknown as Worker,
+				'clang',
+				{
+					baseUrl: '/clang/',
+					loader: vi.fn().mockResolvedValue(create()),
+					useAssetBridge: true
+				},
+				progress
+			);
+			setBridgeAssetByteLimit(bridge, byteLimit);
+			progress.set.mockClear();
+
+			bridge.handleMessage({
+				data: { assetRequest: { id: 34, asset } }
+			} as MessageEvent);
+
+			await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+			expect(postMessage).toHaveBeenCalledWith({
+				assetResponse: {
+					id: 34,
+					ok: false,
+					error: `Runtime asset ${asset} exceeds the ${byteLimit} byte limit`
+				}
+			});
+			expect(postMessage.mock.calls[0]).toHaveLength(1);
+			expect(fetchMock).not.toHaveBeenCalled();
+			expect(progress.set).not.toHaveBeenCalled();
+		}
+	);
+
+	it('rejects an oversized string before encoding, progress, or transfer', async () => {
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const byteLimit = 2;
+		const encode = vi.spyOn(TextEncoder.prototype, 'encode');
+		const postMessage = vi.fn();
+		const progress = { set: vi.fn() };
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const bridge = new WorkerAssetBridge(
+			{ postMessage } as unknown as Worker,
+			'clang',
+			{
+				baseUrl: '/clang/',
+				loader: vi.fn().mockResolvedValue({ data: '€' }),
+				useAssetBridge: true
+			},
+			progress
+		);
+		setBridgeAssetByteLimit(bridge, byteLimit);
+		progress.set.mockClear();
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 36, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(encode).not.toHaveBeenCalled();
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 36,
+				ok: false,
+				error: `Runtime asset ${asset} exceeds the ${byteLimit} byte limit`
+			}
+		});
+		expect(postMessage.mock.calls[0]).toHaveLength(1);
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(progress.set).not.toHaveBeenCalled();
+	});
+
+	it('rejects a shadowed oversized encoded result before progress or transfer', async () => {
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const byteLimit = 2;
+		const encoded = Uint8Array.of(1, 2, 3);
+		Object.defineProperty(encoded, 'byteLength', { value: 0 });
+		const encode = vi.spyOn(TextEncoder.prototype, 'encode').mockReturnValue(encoded);
+		const postMessage = vi.fn();
+		const progress = { set: vi.fn() };
+		const bridge = new WorkerAssetBridge(
+			{ postMessage } as unknown as Worker,
+			'clang',
+			{
+				baseUrl: '/clang/',
+				loader: vi.fn().mockResolvedValue({ data: 'A' }),
+				useAssetBridge: true
+			},
+			progress
+		);
+		setBridgeAssetByteLimit(bridge, byteLimit);
+		progress.set.mockClear();
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 37, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(encode).toHaveBeenCalledWith('A');
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 37,
+				ok: false,
+				error: `Runtime asset ${asset} exceeds the ${byteLimit} byte limit`
+			}
+		});
+		expect(postMessage.mock.calls[0]).toHaveLength(1);
+		expect(progress.set).not.toHaveBeenCalled();
+	});
+
+	it('allows a loader-owned Blob at the exact intrinsic byte limit to materialize', async () => {
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const byteLimit = 2;
+		const arrayBuffer = vi.fn().mockResolvedValue(Uint8Array.of(1, 2).buffer);
+		const blob = new Blob([Uint8Array.of(1, 2)], { type: 'application/octet-stream' });
+		Object.defineProperties(blob, {
+			size: { value: byteLimit + 1 },
+			arrayBuffer: { value: arrayBuffer }
+		});
+		const postMessage = vi.fn();
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader: vi.fn().mockResolvedValue(blob),
+			useAssetBridge: true
+		});
+		setBridgeAssetByteLimit(bridge, byteLimit);
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 35, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(arrayBuffer).toHaveBeenCalledOnce();
+		expect(postMessage.mock.calls[0]?.[0]).toMatchObject({
+			assetResponse: { id: 35, ok: true }
+		});
+	});
+
+	it('copies a bounded view instead of transferring a larger shadowed backing buffer', async () => {
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const backing = Uint8Array.of(1, 2, 3).buffer;
+		Object.defineProperty(backing, 'byteLength', { value: 2 });
+		const data = new Uint8Array(backing, 0, 2);
+		const postMessage = vi.fn();
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader: vi.fn().mockResolvedValue({ data, transferOwnership: true }),
+			useAssetBridge: true
+		});
+		setBridgeAssetByteLimit(bridge, 2);
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 38, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		const response = postMessage.mock.calls[0]?.[0].assetResponse;
+		expect(response).toMatchObject({ id: 38, ok: true });
+		expect(response.bytes).not.toBe(backing);
+		expect(new Uint8Array(response.bytes)).toEqual(Uint8Array.of(1, 2));
+		expect(postMessage.mock.calls[0]?.[1]).toEqual([response.bytes]);
 	});
 
 	it('loads an integrity-pinned Clang runtime manifest through the bridge', async () => {
@@ -1405,13 +1669,14 @@ describe('WorkerAssetBridge asset requests', () => {
 	});
 
 	it('cancels a stream that crosses the runtime asset limit', async () => {
+		const byteLimit = 2;
 		const postMessage = vi.fn();
 		const cancel = vi.fn(async () => undefined);
 		const releaseLock = vi.fn();
 		const reader = {
 			read: vi.fn().mockResolvedValueOnce({
 				done: false,
-				value: { byteLength: 128 * 1024 * 1024 + 1 } as Uint8Array
+				value: Uint8Array.of(1, 2, 3)
 			}),
 			cancel,
 			releaseLock
@@ -1428,6 +1693,7 @@ describe('WorkerAssetBridge asset requests', () => {
 			baseUrl: 'https://assets.example.com/clang/',
 			useAssetBridge: true
 		});
+		setBridgeAssetByteLimit(bridge, byteLimit);
 		const asset = RUNTIME_LOAD_ASSETS.clang[0];
 
 		bridge.handleMessage({
@@ -1441,7 +1707,7 @@ describe('WorkerAssetBridge asset requests', () => {
 			assetResponse: {
 				id: 20,
 				ok: false,
-				error: `Runtime asset ${asset} exceeds the ${128 * 1024 * 1024} byte limit`
+				error: `Runtime asset ${asset} exceeds the ${byteLimit} byte limit`
 			}
 		});
 	});
