@@ -267,6 +267,97 @@ describe('Octave sandbox', () => {
 		await expect(sandbox.run('disp("retry")', false)).resolves.toBe(true);
 	});
 
+	it('rejects a pre-aborted Octave run without changing lifecycle state', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/absproxy/5173');
+		const controller = new AbortController();
+		const reason = new Error('Octave pre-aborted');
+		controller.abort(reason);
+
+		await expect(
+			sandbox.run('disp("cancelled")', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+		expect(workerInstances).toHaveLength(0);
+
+		await expect(sandbox.run('disp("retry")', false)).resolves.toBe(true);
+	});
+
+	it('aborts an Octave run while it is waiting for stdin', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/absproxy/5173');
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('Octave stdin abort');
+
+		const running = sandbox.run('n = str2double(fgetl(stdin));', false, true, undefined, [], {
+			signal: controller.signal
+		});
+		await Promise.resolve();
+		expect(sandbox.stdinWaiters).toHaveLength(1);
+		expect(workerInstances).toHaveLength(0);
+
+		controller.abort(reason);
+		await expect(running).rejects.toBe(reason);
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.stdinWaiters).toHaveLength(0);
+		expect(sandbox.exit).toBe(true);
+		expect(workerInstances).toHaveLength(0);
+
+		await expect(sandbox.run('disp("retry")', false)).resolves.toBe(true);
+	});
+
+	it('aborts an active Octave worker with its exact reason and ignores late aborts', async () => {
+		const sandbox = new Octave();
+		const outputs: string[] = [];
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+		await sandbox.load('/absproxy/5173');
+		onPostMessage = () => undefined;
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('Octave active abort');
+		const progress = {
+			set: vi.fn(() => controller.abort(reason))
+		};
+
+		const running = sandbox.run('disp("cancelled")', false, true, progress, [], {
+			signal: controller.signal
+		});
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const lateHandler = worker.onmessage;
+		lateHandler?.({
+			data: { progress: { percent: 50 }, output: 'after-abort\n', results: true }
+		} as MessageEvent<any>);
+
+		await expect(running).rejects.toBe(reason);
+		expect(progress.set).toHaveBeenCalledWith(0.5, undefined);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+
+		lateHandler?.({ data: { output: 'late\n', results: true } } as MessageEvent<any>);
+		expect(outputs).toEqual([]);
+
+		onPostMessage = null;
+		const settledController = new AbortController();
+		await expect(
+			sandbox.run('disp("retry")', false, true, undefined, [], {
+				signal: settledController.signal
+			})
+		).resolves.toBe(true);
+		const retryWorker = workerInstances[1];
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+
+		settledController.abort(new Error('Octave late abort'));
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+	});
+
 	it('collects queued terminal input before starting stdin-using Octave code', async () => {
 		const sandbox = new Octave();
 		await sandbox.load('/absproxy/5173');

@@ -171,6 +171,12 @@ class Octave implements Sandbox {
 		if (!this.baseUrl || !this.workerUrl || !this.manifestUrl) {
 			return Promise.reject('Octave runtime is not configured.');
 		}
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ?? new DOMException('Octave execution aborted', 'AbortError')
+			);
+		}
 		let programArgs: string[];
 		try {
 			programArgs = resolveSandboxExecutionArgs('OCTAVE', args, options).programArgs;
@@ -183,20 +189,45 @@ class Octave implements Sandbox {
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
-			let released = false;
-			const release = () => {
-				if (released) return;
-				released = true;
+			let onAbort: (() => void) | undefined;
+			let cleanedUp = false;
+			const cleanup = () => {
+				if (cleanedUp) return;
+				cleanedUp = true;
+				if (signal && onAbort) {
+					try {
+						signal.removeEventListener('abort', onAbort);
+					} catch {
+						// Cleanup must not replace the execution result.
+					}
+				}
 				if (this.activeRun === runToken) this.activeRun = null;
 			};
 			const rejectRun = (reason?: unknown) => {
-				release();
+				cleanup();
 				this.exit = true;
 				this.waitingForInput = false;
 				this.pendingEof = false;
 				reject(reason);
 			};
 			const operation = this.workerSession.beginRun(null, rejectRun);
+			onAbort = signal
+				? () => {
+						if (this.activeRun !== runToken || _uid !== this.uid) {
+							cleanup();
+							return;
+						}
+						this.terminate(
+							signal.reason ??
+								new DOMException('Octave execution aborted', 'AbortError')
+						);
+					}
+				: undefined;
+			if (signal && onAbort) {
+				signal.addEventListener('abort', onAbort, { once: true });
+				if (signal.aborted) onAbort();
+			}
+			if (this.activeRun !== runToken || _uid !== this.uid) return;
 			this.begin = Date.now();
 			this.collectStdinForRun(code, options)
 				.then((stdin) => {
@@ -217,26 +248,30 @@ class Octave implements Sandbox {
 							this.flushPendingInput();
 						}
 						reportWorkerProgress(_prog, progress);
+						if (this.activeRun !== runToken || _uid !== this.uid) return;
 						if (output) this.output?.(output);
+						if (this.activeRun !== runToken || _uid !== this.uid) return;
 						if (results) {
 							if (worker.onmessage === handler) worker.onmessage = null;
 							this.workerSession.complete(operation);
-							release();
+							cleanup();
 							this.elapse = Date.now() - this.begin;
 							this.exit = true;
 							this.waitingForInput = false;
 							this.pendingEof = false;
 							resolve(true);
+							return;
 						}
 						if (error) {
 							if (worker.onmessage === handler) worker.onmessage = null;
 							this.workerSession.complete(operation);
-							release();
+							cleanup();
 							this.elapse = Date.now() - this.begin;
 							this.exit = true;
 							this.waitingForInput = false;
 							this.pendingEof = false;
 							reject(error);
+							return;
 						}
 					};
 					worker.onmessage = handler;
