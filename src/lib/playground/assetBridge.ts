@@ -35,6 +35,10 @@ const encoder = new TextEncoder();
 const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
 const MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
 const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
+const typedArrayTagGetter = Object.getOwnPropertyDescriptor(
+	typedArrayPrototype,
+	Symbol.toStringTag
+)?.get;
 const typedArrayBufferGetter = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'buffer')?.get;
 const typedArrayByteLengthGetter = Object.getOwnPropertyDescriptor(
 	typedArrayPrototype,
@@ -49,6 +53,7 @@ const arrayBufferByteLengthGetter = Object.getOwnPropertyDescriptor(
 	'byteLength'
 )?.get;
 const blobSizeGetter = Object.getOwnPropertyDescriptor(Blob.prototype, 'size')?.get;
+const blobTypeGetter = Object.getOwnPropertyDescriptor(Blob.prototype, 'type')?.get;
 
 const runtimeAssetSizeError = (asset: string, maxBytes = MAX_RUNTIME_ASSET_BYTES) =>
 	new Error(`Runtime asset ${asset} exceeds the ${maxBytes} byte limit`);
@@ -65,8 +70,16 @@ const requireRuntimeAssetSize = (
 };
 
 const canonicalUint8Array = (value: Uint8Array) => {
-	if (!typedArrayBufferGetter || !typedArrayByteLengthGetter || !typedArrayByteOffsetGetter) {
+	if (
+		!typedArrayTagGetter ||
+		!typedArrayBufferGetter ||
+		!typedArrayByteLengthGetter ||
+		!typedArrayByteOffsetGetter
+	) {
 		throw new Error('Uint8Array intrinsic accessors are unavailable');
+	}
+	if (Reflect.apply(typedArrayTagGetter, value, []) !== 'Uint8Array') {
+		throw new TypeError('Runtime asset byte data must be a Uint8Array');
 	}
 	const buffer = Reflect.apply(typedArrayBufferGetter, value, []) as ArrayBufferLike;
 	const byteLength = Reflect.apply(typedArrayByteLengthGetter, value, []) as number;
@@ -74,9 +87,71 @@ const canonicalUint8Array = (value: Uint8Array) => {
 	return new Uint8Array(buffer, byteOffset, byteLength);
 };
 
-const intrinsicBlobSize = (blob: Blob) => {
-	if (!blobSizeGetter) throw new Error('Blob size accessor is unavailable');
-	return Reflect.apply(blobSizeGetter, blob, []) as number;
+const detachedRuntimeAssetBytesError = (asset: string) =>
+	new Error(`Runtime asset ${asset} byte data is detached or invalid`);
+
+const tryCanonicalUint8Array = (value: unknown, asset: string) => {
+	if (!typedArrayTagGetter) throw new Error('Uint8Array intrinsic accessors are unavailable');
+	let tag: unknown;
+	try {
+		tag = Reflect.apply(typedArrayTagGetter, value, []);
+	} catch {
+		return undefined;
+	}
+	if (tag !== 'Uint8Array') return undefined;
+	try {
+		return canonicalUint8Array(value as Uint8Array);
+	} catch {
+		throw detachedRuntimeAssetBytesError(asset);
+	}
+};
+
+const tryArrayBufferByteLength = (value: unknown) => {
+	if (!arrayBufferByteLengthGetter) return undefined;
+	try {
+		return Reflect.apply(arrayBufferByteLengthGetter, value, []) as number;
+	} catch {
+		return undefined;
+	}
+};
+
+const snapshotArrayBufferBytes = (value: unknown, asset: string, maxBytes: number) => {
+	const byteLength = tryArrayBufferByteLength(value);
+	if (byteLength === undefined) return undefined;
+	requireRuntimeAssetSize(asset, byteLength, maxBytes);
+	try {
+		return Uint8Array.from(new Uint8Array(value as ArrayBuffer));
+	} catch {
+		throw detachedRuntimeAssetBytesError(asset);
+	}
+};
+
+const snapshotLoaderBytes = (value: unknown, asset: string, maxBytes: number) => {
+	const bytes = tryCanonicalUint8Array(value, asset);
+	if (!bytes) return snapshotArrayBufferBytes(value, asset, maxBytes);
+	requireRuntimeAssetSize(asset, bytes.byteLength, maxBytes);
+	return Uint8Array.from(bytes);
+};
+
+const snapshotMaterializedArrayBuffer = (value: unknown, asset: string, maxBytes: number) => {
+	const bytes = snapshotArrayBufferBytes(value, asset, maxBytes);
+	if (!bytes) {
+		throw new Error(`Runtime asset ${asset} materialization did not return an ArrayBuffer`);
+	}
+	return bytes;
+};
+
+const tryCanonicalBlob = (value: unknown) => {
+	if (!blobSizeGetter || !blobTypeGetter) return undefined;
+	try {
+		return {
+			blob: value as Blob,
+			size: Reflect.apply(blobSizeGetter, value, []) as number,
+			type: Reflect.apply(blobTypeGetter, value, []) as string
+		};
+	} catch {
+		return undefined;
+	}
 };
 
 export const boundedUtf8ByteLength = (value: string, maxBytes = MAX_RUNTIME_ASSET_BYTES) => {
@@ -463,33 +538,32 @@ export class WorkerAssetBridge {
 		if (typeof result === 'string' || result instanceof URL) {
 			return await this.fetchAsset(String(result), asset, signal);
 		}
-		if (result instanceof ArrayBuffer) {
-			const bytes = new Uint8Array(result);
-			requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
-			this.progress.update(asset, bytes.byteLength, bytes.byteLength);
-			return { bytes };
+		const directBytes = snapshotLoaderBytes(result, asset, this.maxAssetBytes);
+		if (directBytes) {
+			this.progress.update(asset, directBytes.byteLength, directBytes.byteLength);
+			return { bytes: directBytes, transferOwnership: true };
 		}
-		if (result instanceof Uint8Array) {
-			const bytes = canonicalUint8Array(result);
-			requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
-			this.progress.update(asset, bytes.byteLength, bytes.byteLength);
-			return { bytes };
-		}
-		const loaderBlob =
-			result instanceof Blob
-				? { blob: result, mimeType: result.type || undefined }
-				: 'data' in result && result.data instanceof Blob
-					? {
-							blob: result.data,
-							mimeType: result.mimeType || result.data.type || undefined
-						}
-					: undefined;
+		const directBlob = tryCanonicalBlob(result);
+		const wrappedBlob =
+			typeof result === 'object' && result !== null && 'data' in result
+				? {
+						value: tryCanonicalBlob(result.data),
+						mimeType: result.mimeType
+					}
+				: undefined;
+		const loaderBlob = directBlob
+			? { ...directBlob, mimeType: directBlob.type || undefined }
+			: wrappedBlob?.value
+				? {
+						...wrappedBlob.value,
+						mimeType: wrappedBlob.mimeType || wrappedBlob.value.type || undefined
+					}
+				: undefined;
 		if (loaderBlob) {
-			const { blob, mimeType } = loaderBlob;
-			requireRuntimeAssetSize(asset, intrinsicBlobSize(blob), this.maxAssetBytes);
+			const { blob, size, mimeType } = loaderBlob;
+			requireRuntimeAssetSize(asset, size, this.maxAssetBytes);
 			const source = await readAbortableArrayBuffer(blob, signal);
-			const bytes = new Uint8Array(source);
-			requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
+			const bytes = snapshotMaterializedArrayBuffer(source, asset, this.maxAssetBytes);
 			this.progress.update(asset, bytes.byteLength, bytes.byteLength);
 			return { bytes, mimeType, transferOwnership: true };
 		}
@@ -508,24 +582,13 @@ export class WorkerAssetBridge {
 				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
 				return { bytes, mimeType: result.mimeType, transferOwnership: true };
 			}
-			if (result.data instanceof ArrayBuffer) {
-				const bytes = new Uint8Array(result.data);
-				requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
+			const bytes = snapshotLoaderBytes(result.data, asset, this.maxAssetBytes);
+			if (bytes) {
 				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
 				return {
 					bytes,
 					mimeType: result.mimeType,
-					transferOwnership: result.transferOwnership === true
-				};
-			}
-			if (result.data instanceof Uint8Array) {
-				const bytes = canonicalUint8Array(result.data);
-				requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
-				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
-				return {
-					bytes,
-					mimeType: result.mimeType,
-					transferOwnership: result.transferOwnership === true
+					transferOwnership: true
 				};
 			}
 		}
@@ -636,8 +699,11 @@ export class WorkerAssetBridge {
 		const mimeType = response.headers.get('content-type') || undefined;
 		const contentEncoding = response.headers.get('content-encoding') || undefined;
 		if (!response.body) {
-			const bytes = new Uint8Array(await readAbortableArrayBuffer(response, signal));
-			requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
+			const bytes = snapshotMaterializedArrayBuffer(
+				await readAbortableArrayBuffer(response, signal),
+				asset,
+				this.maxAssetBytes
+			);
 			this.progress.update(asset, bytes.byteLength, contentLength ?? bytes.byteLength);
 			return { bytes, contentEncoding, mimeType, transferOwnership: true };
 		}

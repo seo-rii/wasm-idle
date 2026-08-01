@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
+import { runInNewContext } from 'node:vm';
 import { gzipSync } from 'node:zlib';
 
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
@@ -318,6 +319,65 @@ describe('WorkerAssetBridge asset requests', () => {
 
 	it.each([
 		{
+			label: 'bare Blob returning an oversized array-like',
+			wrap: (blob: Blob) => blob,
+			materialize: () => ({ length: Number.MAX_SAFE_INTEGER })
+		},
+		{
+			label: 'wrapped Blob returning an oversized array-like',
+			wrap: (blob: Blob) => ({ data: blob }),
+			materialize: () => ({ length: Number.MAX_SAFE_INTEGER })
+		},
+		{
+			label: 'bare Blob returning a numeric length',
+			wrap: (blob: Blob) => blob,
+			materialize: () => Number.MAX_SAFE_INTEGER
+		},
+		{
+			label: 'wrapped Blob returning a numeric length',
+			wrap: (blob: Blob) => ({ data: blob }),
+			materialize: () => Number.MAX_SAFE_INTEGER
+		}
+	])('rejects a $label without materializing byte storage', async ({ wrap, materialize }) => {
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const blob = new Blob([Uint8Array.of(1)]);
+		const arrayBuffer = vi.fn().mockResolvedValue(materialize());
+		Object.defineProperty(blob, 'arrayBuffer', { value: arrayBuffer });
+		const postMessage = vi.fn();
+		const progress = { set: vi.fn() };
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const bridge = new WorkerAssetBridge(
+			{ postMessage } as unknown as Worker,
+			'clang',
+			{
+				baseUrl: '/clang/',
+				loader: vi.fn().mockReturnValue(wrap(blob)),
+				useAssetBridge: true
+			},
+			progress
+		);
+		progress.set.mockClear();
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 35, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 35,
+				ok: false,
+				error: `Runtime asset ${asset} materialization did not return an ArrayBuffer`
+			}
+		});
+		expect(arrayBuffer).toHaveBeenCalledOnce();
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(progress.set).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{
 			label: 'bare ArrayBuffer',
 			create: () => {
 				const data = Uint8Array.of(1, 2, 3).buffer;
@@ -388,6 +448,73 @@ describe('WorkerAssetBridge asset requests', () => {
 			expect(progress.set).not.toHaveBeenCalled();
 		}
 	);
+
+	it.each([
+		{
+			label: 'bare ArrayBuffer',
+			create: () => {
+				const data = Uint8Array.of(1, 2, 3).buffer;
+				structuredClone(data, { transfer: [data] });
+				return data;
+			}
+		},
+		{
+			label: 'wrapped ArrayBuffer',
+			create: () => {
+				const data = Uint8Array.of(1, 2, 3).buffer;
+				structuredClone(data, { transfer: [data] });
+				return { data, transferOwnership: true };
+			}
+		},
+		{
+			label: 'bare Uint8Array',
+			create: () => {
+				const data = Uint8Array.of(1, 2, 3);
+				structuredClone(data.buffer, { transfer: [data.buffer] });
+				return data;
+			}
+		},
+		{
+			label: 'wrapped Uint8Array',
+			create: () => {
+				const data = Uint8Array.of(1, 2, 3);
+				structuredClone(data.buffer, { transfer: [data.buffer] });
+				return { data, transferOwnership: true };
+			}
+		}
+	])('rejects a detached $label without falling back to the network', async ({ create }) => {
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const postMessage = vi.fn();
+		const progress = { set: vi.fn() };
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const bridge = new WorkerAssetBridge(
+			{ postMessage } as unknown as Worker,
+			'clang',
+			{
+				baseUrl: '/clang/',
+				loader: vi.fn().mockReturnValue(create()),
+				useAssetBridge: true
+			},
+			progress
+		);
+		progress.set.mockClear();
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 37, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 37,
+				ok: false,
+				error: `Runtime asset ${asset} byte data is detached or invalid`
+			}
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(progress.set).not.toHaveBeenCalled();
+	});
 
 	it('rejects an oversized string before encoding, progress, or transfer', async () => {
 		const asset = RUNTIME_LOAD_ASSETS.clang[0];
@@ -767,6 +894,173 @@ describe('WorkerAssetBridge asset requests', () => {
 		});
 	});
 
+	it.each([
+		{
+			label: 'bare Uint8Array',
+			create: () => {
+				const bytes = Uint8Array.of(1, 2, 3);
+				return { bytes, result: bytes };
+			}
+		},
+		{
+			label: 'ownership-wrapped Uint8Array',
+			create: () => {
+				const bytes = Uint8Array.of(1, 2, 3);
+				return { bytes, result: { data: bytes, transferOwnership: true } };
+			}
+		},
+		{
+			label: 'bare ArrayBuffer',
+			create: () => {
+				const bytes = Uint8Array.of(1, 2, 3);
+				return { bytes, result: bytes.buffer };
+			}
+		},
+		{
+			label: 'ownership-wrapped ArrayBuffer',
+			create: () => {
+				const bytes = Uint8Array.of(1, 2, 3);
+				return { bytes, result: { data: bytes.buffer, transferOwnership: true } };
+			}
+		},
+		{
+			label: 'bare Blob materialization',
+			create: () => {
+				const bytes = Uint8Array.of(1, 2, 3);
+				const blob = new Blob([bytes]);
+				Object.defineProperty(blob, 'arrayBuffer', {
+					value: vi.fn(async () => bytes.buffer)
+				});
+				return { bytes, result: blob };
+			}
+		},
+		{
+			label: 'wrapped Blob materialization',
+			create: () => {
+				const bytes = Uint8Array.of(1, 2, 3);
+				const blob = new Blob([bytes]);
+				Object.defineProperty(blob, 'arrayBuffer', {
+					value: vi.fn(async () => bytes.buffer)
+				});
+				return { bytes, result: { data: blob, transferOwnership: true } };
+			}
+		},
+		{
+			label: 'SharedArrayBuffer view',
+			create: () => {
+				const bytes = new Uint8Array(new SharedArrayBuffer(3));
+				bytes.set([1, 2, 3]);
+				return { bytes, result: bytes };
+			}
+		}
+	])(
+		'snapshots a mutable $label before asynchronous integrity verification',
+		async ({ create }) => {
+			let markDigestStarted!: () => void;
+			const digestStarted = new Promise<void>((resolve) => {
+				markDigestStarted = resolve;
+			});
+			let resolveDigest!: (value: ArrayBuffer) => void;
+			const digestPending = new Promise<ArrayBuffer>((resolve) => {
+				resolveDigest = resolve;
+			});
+			vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementationOnce(() => {
+				markDigestStarted();
+				return digestPending;
+			});
+			const { bytes, result } = create();
+			const originalBytes = Uint8Array.from(bytes);
+			const expectedSha256 = createHash('sha256').update(originalBytes).digest('hex');
+			const expectedDigest = Uint8Array.from(
+				createHash('sha256').update(originalBytes).digest()
+			).buffer;
+			const postMessage = vi.fn();
+			const asset = RUNTIME_LOAD_ASSETS.clang[0];
+			const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+				baseUrl: '/clang/',
+				loader: vi.fn().mockReturnValue(result),
+				integrity: {
+					[asset]: { bytes: originalBytes.byteLength, sha256: expectedSha256 }
+				},
+				useAssetBridge: true
+			});
+
+			bridge.handleMessage({
+				data: { assetRequest: { id: 32, asset } }
+			} as MessageEvent);
+			await digestStarted;
+			bytes[0] = 9;
+			resolveDigest(expectedDigest);
+
+			await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+			const response = postMessage.mock.calls[0]?.[0];
+			expect(response).toMatchObject({ assetResponse: { id: 32, ok: true } });
+			expect(new Uint8Array(response.assetResponse.bytes)).toEqual(originalBytes);
+		}
+	);
+
+	it.each([
+		{
+			label: 'Uint8Array',
+			create: () => runInNewContext('new Uint8Array([7, 8, 9])') as Uint8Array
+		},
+		{
+			label: 'ArrayBuffer',
+			create: () => runInNewContext('new Uint8Array([7, 8, 9]).buffer') as ArrayBuffer
+		}
+	])('accepts and snapshots a cross-realm $label loader result', async ({ create }) => {
+		const postMessage = vi.fn();
+		const result = create();
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader: vi.fn().mockReturnValue(result),
+			useAssetBridge: true
+		});
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 33, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+
+		const response = postMessage.mock.calls[0]?.[0];
+		expect(response).toMatchObject({ assetResponse: { id: 33, ok: true } });
+		expect(new Uint8Array(response.assetResponse.bytes)).toEqual(Uint8Array.of(7, 8, 9));
+	});
+
+	it.each([
+		{ label: 'bare', wrap: (blob: Blob) => blob },
+		{ label: 'wrapped', wrap: (blob: Blob) => ({ data: blob }) }
+	])('accepts a $label cross-realm Blob loader result', async ({ wrap }) => {
+		const iframe = document.createElement('iframe');
+		document.body.append(iframe);
+		const CrossRealmBlob = (iframe.contentWindow as (Window & { Blob: typeof Blob }) | null)
+			?.Blob;
+		if (!CrossRealmBlob) throw new Error('Cross-realm Blob is unavailable');
+		const blob = new CrossRealmBlob([Uint8Array.of(7, 8, 9)]);
+		const postMessage = vi.fn();
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: '/clang/',
+			loader: vi.fn().mockReturnValue(wrap(blob)),
+			useAssetBridge: true
+		});
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+
+		try {
+			expect(blob).not.toBeInstanceOf(Blob);
+			bridge.handleMessage({
+				data: { assetRequest: { id: 34, asset } }
+			} as MessageEvent);
+			await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+
+			const response = postMessage.mock.calls[0]?.[0];
+			expect(response).toMatchObject({ assetResponse: { id: 34, ok: true } });
+			expect(new Uint8Array(response.assetResponse.bytes)).toEqual(Uint8Array.of(7, 8, 9));
+		} finally {
+			iframe.remove();
+		}
+	});
+
 	it('disposes promptly while integrity verification is stalled', async () => {
 		let markDigestStarted!: () => void;
 		const digestStarted = new Promise<void>((resolve) => {
@@ -1078,6 +1372,41 @@ describe('WorkerAssetBridge asset requests', () => {
 		expect(postMessage.mock.calls[0]?.[0]).toMatchObject({
 			assetResponse: { id: 31, ok: true }
 		});
+	});
+
+	it('rejects invalid bodyless response materialization without allocating byte storage', async () => {
+		const postMessage = vi.fn();
+		const asset = RUNTIME_LOAD_ASSETS.python[0];
+		const assetUrl = `https://assets.example.com/python/${asset}`;
+		const arrayBuffer = vi.fn().mockResolvedValue({ length: Number.MAX_SAFE_INTEGER });
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			url: assetUrl,
+			redirected: false,
+			headers: new Headers(),
+			body: null,
+			arrayBuffer
+		});
+		vi.stubGlobal('fetch', fetchMock);
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'python', {
+			baseUrl: 'https://assets.example.com/python/',
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 36, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 36,
+				ok: false,
+				error: `Runtime asset ${asset} materialization did not return an ArrayBuffer`
+			}
+		});
+		expect(arrayBuffer).toHaveBeenCalledOnce();
 	});
 
 	it('aborts an uncooperative asset fetch and cancels its late response', async () => {
@@ -1515,7 +1844,7 @@ describe('WorkerAssetBridge asset requests', () => {
 		expect([...new Uint8Array(transferred)]).toEqual([...bytes]);
 	});
 
-	it('transfers loader buffers directly only with explicit ownership', async () => {
+	it('snapshots loader buffers even when explicit ownership transfer is requested', async () => {
 		const postMessage = vi.fn();
 		const bytes = new Uint8Array([4, 5, 6]);
 		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
@@ -1530,7 +1859,9 @@ describe('WorkerAssetBridge asset requests', () => {
 		} as MessageEvent);
 		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
 
-		expect(postMessage.mock.calls[0]?.[1]?.[0]).toBe(bytes.buffer);
+		const transferred = postMessage.mock.calls[0]?.[1]?.[0] as ArrayBuffer;
+		expect(transferred).not.toBe(bytes.buffer);
+		expect(new Uint8Array(transferred)).toEqual(bytes);
 	});
 
 	it('assembles streamed fetches without retaining copied chunks', async () => {
