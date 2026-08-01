@@ -51,9 +51,12 @@ class Haskell implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private loading = false;
+	private activeRunCleanup: (() => void) | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'Haskell',
 		onDispose: (worker) => {
+			this.activeRunCleanup?.();
+			this.activeRunCleanup = null;
 			if (this.worker === worker) delete this.worker;
 			this.exit = true;
 			this.waitingForInput = false;
@@ -176,6 +179,12 @@ class Haskell implements Sandbox {
 		}
 		const worker = this.worker;
 		if (!worker) return Promise.reject('Worker not loaded');
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ?? new DOMException('Haskell execution aborted', 'AbortError')
+			);
+		}
 		let compileArgs: string[];
 		let programArgs: string[];
 		try {
@@ -187,8 +196,23 @@ class Haskell implements Sandbox {
 		return new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
 			const operation = this.workerSession.beginRun(worker, reject);
+			let onAbort: (() => void) | undefined;
+			let cleanedUp = false;
+			const cleanup = () => {
+				if (cleanedUp) return;
+				cleanedUp = true;
+				if (signal && onAbort) {
+					try {
+						signal.removeEventListener('abort', onAbort);
+					} catch {
+						// Cleanup must not replace the execution result.
+					}
+				}
+				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
+			};
 			const handler = (event: Event & { data: any }) => {
 				if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) {
+					cleanup();
 					if (worker.onmessage === handler) worker.onmessage = null;
 					return;
 				}
@@ -201,6 +225,7 @@ class Haskell implements Sandbox {
 				if (output) this.output?.(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (results) {
+					cleanup();
 					if (worker.onmessage === handler) worker.onmessage = null;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
@@ -210,6 +235,7 @@ class Haskell implements Sandbox {
 					resolve(results as string);
 				}
 				if (error) {
+					cleanup();
 					if (worker.onmessage === handler) worker.onmessage = null;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
@@ -219,7 +245,29 @@ class Haskell implements Sandbox {
 					reject(error);
 				}
 			};
+			onAbort = signal
+				? () => {
+						if (
+							this.worker !== worker ||
+							worker.onmessage !== handler ||
+							_uid !== this.uid
+						) {
+							cleanup();
+							return;
+						}
+						this.terminate(
+							signal.reason ??
+								new DOMException('Haskell execution aborted', 'AbortError')
+						);
+					}
+				: undefined;
+			this.activeRunCleanup = cleanup;
 			worker.onmessage = handler;
+			if (signal && onAbort) {
+				signal.addEventListener('abort', onAbort, { once: true });
+				if (signal.aborted) onAbort();
+			}
+			if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) return;
 			this.begin = Date.now();
 			try {
 				worker.postMessage({
@@ -233,6 +281,7 @@ class Haskell implements Sandbox {
 					log: _log
 				});
 			} catch (error) {
+				cleanup();
 				if (worker.onmessage === handler) worker.onmessage = null;
 				this.workerSession.terminate(error);
 			}
@@ -243,11 +292,14 @@ class Haskell implements Sandbox {
 		this.terminate();
 	}
 
-	terminate() {
+	terminate(reason: unknown = 'Process terminated') {
+		const cleanup = this.activeRunCleanup;
+		this.activeRunCleanup = null;
+		cleanup?.();
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
-		this.workerSession.terminate();
+		this.workerSession.terminate(reason);
 		this.exit = true;
 	}
 
