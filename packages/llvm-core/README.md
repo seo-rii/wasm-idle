@@ -38,8 +38,10 @@ otherwise verified binary.
 worker to a dedicated WAMR target worker. DAP and GDB RSP are carried on separate
 `SharedArrayBuffer` byte queues, and stdin, stdout, and stderr use independent queues. Zero-length
 asynchronous and blocking reads complete immediately, so an empty consumer buffer cannot wait
-indefinitely for a queue signal. Queue generations are integers from 1 through 2147483647 because
-the transport stores them in signed `Int32Array` metadata. Every queue state accessor, including
+indefinitely for a queue signal. Blocking operations accept a non-negative finite timeout or
+`Infinity`; invalid values are rejected before bytes move or a wait begins. Queue generations are
+integers from 1 through 2147483647 because the transport stores them in signed `Int32Array`
+metadata. Every queue state accessor, including
 the closed-state check used during cleanup, rejects stale-generation metadata. Session disposal
 isolates each queue close, so one corrupt transport cannot prevent the remaining queues from closing
 or either Worker from terminating. The session verifies the module, source, loader, Wasm, and

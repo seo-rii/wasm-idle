@@ -81,6 +81,25 @@ describe('SharedByteQueue', () => {
 		expect(wait).not.toHaveBeenCalled();
 	});
 
+	it.each([Number.NaN, -1, Number.NEGATIVE_INFINITY])(
+		'rejects invalid blocking timeout %s before moving bytes',
+		(timeoutMs) => {
+			const readQueue = new SharedByteQueue(createSharedByteQueue(4096, 15));
+			readQueue.tryWrite(Uint8Array.of(42));
+
+			expect(() => readQueue.readBlocking(new Uint8Array(1), timeoutMs)).toThrow(
+				/non-negative finite number or Infinity/u
+			);
+			expect(readQueue.available).toBe(1);
+
+			const writeQueue = new SharedByteQueue(createSharedByteQueue(4096, 16));
+			expect(() => writeQueue.writeBlocking(Uint8Array.of(42), timeoutMs)).toThrow(
+				/non-negative finite number or Infinity/u
+			);
+			expect(writeQueue.available).toBe(0);
+		}
+	);
+
 	it('returns EOF after close and rejects stale generations', async () => {
 		const descriptor = createSharedByteQueue(4096, 9);
 		const queue = new SharedByteQueue(descriptor);

@@ -33,6 +33,14 @@ function validateGeneration(generation: number) {
 	}
 }
 
+function validateBlockingTimeout(timeoutMs: number) {
+	if ((timeoutMs !== Infinity && !Number.isFinite(timeoutMs)) || timeoutMs < 0) {
+		throw new RangeError(
+			'shared byte queue blocking timeout must be a non-negative finite number or Infinity'
+		);
+	}
+}
+
 function sleep(milliseconds: number) {
 	return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -176,6 +184,7 @@ export class SharedByteQueue {
 	}
 
 	readBlocking(destination: Uint8Array, timeoutMs = Infinity): number {
+		validateBlockingTimeout(timeoutMs);
 		if (destination.byteLength === 0) return 0;
 		const deadline = Number.isFinite(timeoutMs) ? Date.now() + timeoutMs : Infinity;
 		while (true) {
@@ -189,6 +198,7 @@ export class SharedByteQueue {
 	}
 
 	writeBlocking(source: Uint8Array, timeoutMs = Infinity): number {
+		validateBlockingTimeout(timeoutMs);
 		const deadline = Number.isFinite(timeoutMs) ? Date.now() + timeoutMs : Infinity;
 		let offset = 0;
 		while (offset < source.byteLength) {
