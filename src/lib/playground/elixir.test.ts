@@ -271,6 +271,43 @@ describe('Elixir sandbox', () => {
 		}
 	});
 
+	it('rejects startup when the ready progress callback throws and permits a clean retry', async () => {
+		const sandbox = new Elixir();
+		const callbackError = new Error('Elixir ready progress failed');
+		const progress = {
+			set: vi.fn((value: number) => {
+				if (value === 1) throw callbackError;
+			})
+		};
+
+		await expect(
+			sandbox.load(
+				{
+					elixir: {
+						bundleUrl: '/runtime/elixir/bundle.avm'
+					}
+				},
+				'',
+				true,
+				[],
+				{},
+				progress
+			)
+		).rejects.toBe(callbackError);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		await expect(
+			sandbox.load({
+				elixir: {
+					bundleUrl: '/runtime/elixir/bundle.avm'
+				}
+			})
+		).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+	});
+
 	it('aborts a stalled Elixir worker load and permits a clean retry', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Elixir();
@@ -484,6 +521,143 @@ describe('Elixir sandbox', () => {
 		).resolves.toBeUndefined();
 		await expect(sandbox.run('IO.puts("retry")', false)).resolves.toBe(':ok');
 		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('rejects a run when the streaming output callback throws and permits a clean retry', async () => {
+		const sandbox = new Elixir();
+		const callbackError = new Error('Elixir streaming output failed');
+		const failedOutput = vi.fn((output: string) => {
+			if (output === 'factorial_plus_bonus=27\n') throw callbackError;
+		});
+		sandbox.output = failedOutput;
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		const worker = workerInstances[0];
+		const running = sandbox.run('IO.puts("fail")', false);
+		const staleHandler = worker.onmessage;
+
+		await expect(running).rejects.toBe(callbackError);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		staleHandler?.({ data: { output: 'stale\n', results: ':stale' } } as MessageEvent<any>);
+		expect(failedOutput).not.toHaveBeenCalledWith('stale\n');
+
+		sandbox.output = vi.fn();
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		await expect(sandbox.run('IO.puts("retry")', false)).resolves.toBe(':ok');
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it.each([
+		{
+			name: 'Elixir',
+			language: 'ELIXIR' as const,
+			runtimeAssets: { elixir: { bundleUrl: '/runtime/elixir/bundle.avm' } }
+		},
+		{
+			name: 'Erlang',
+			language: 'ERLANG' as const,
+			runtimeAssets: { erlang: { bundleUrl: '/runtime/erlang/bundle.avm' } }
+		}
+	])('rejects a $name run when the evaluated-result output callback throws', async (testCase) => {
+		const sandbox = new Elixir(testCase.language);
+		const callbackError = new Error(`${testCase.name} result output failed`);
+		sandbox.output = vi.fn((output: string) => {
+			if (output === '=> :ok\n') throw callbackError;
+		});
+		await sandbox.load(testCase.runtimeAssets);
+		const worker = workerInstances[0];
+
+		await expect(sandbox.run('result_output_failure', false)).rejects.toBe(callbackError);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+		expect(sandbox.prepared).toBe(false);
+		expect(sandbox.hasExecuted).toBe(false);
+
+		sandbox.output = vi.fn();
+		await sandbox.load(testCase.runtimeAssets);
+		await expect(sandbox.run('retry', false)).resolves.toBe(':ok');
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('keeps result-output reentrant operations busy until the original run settles', async () => {
+		const sandbox = new Elixir();
+		const runtimeAssets = {
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		};
+		let reentrantLoadResult: Promise<unknown> | undefined;
+		let reentrantRunResult: Promise<unknown> | undefined;
+		await sandbox.load(runtimeAssets);
+		const worker = workerInstances[0];
+		sandbox.output = (output: string) => {
+			if (output !== '=> :ok\n') return;
+			reentrantLoadResult = sandbox.load(runtimeAssets).catch((reason) => reason);
+			reentrantRunResult = sandbox
+				.run('IO.puts("reentrant")', false)
+				.catch((reason) => reason);
+		};
+
+		await expect(sandbox.run('IO.puts("owner")', false)).resolves.toBe(':ok');
+		await expect(reentrantLoadResult).resolves.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'ELIXIR',
+			phase: 'execute'
+		});
+		await expect(reentrantRunResult).resolves.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'ELIXIR',
+			phase: 'execute'
+		});
+		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		sandbox.output = vi.fn();
+		await expect(sandbox.run('IO.puts("retry")', false)).resolves.toBe(':ok');
+	});
+
+	it('preserves reentrant termination and its replacement when an output callback throws', async () => {
+		const sandbox = new Elixir();
+		const terminationReason = new Error('stop from Elixir output');
+		const callbackError = new Error('throw after Elixir termination');
+		let replacementLoad: Promise<void> | undefined;
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		const oldWorker = workerInstances[0];
+		sandbox.output = (output: string) => {
+			if (output !== '=> :ok\n') return;
+			sandbox.terminate(terminationReason);
+			replacementLoad = sandbox.load({
+				elixir: {
+					bundleUrl: '/runtime/elixir/bundle.avm'
+				}
+			});
+			throw callbackError;
+		};
+
+		await expect(sandbox.run('IO.puts("replace")', false)).rejects.toBe(terminationReason);
+		expect(replacementLoad).toBeDefined();
+		await expect(replacementLoad).resolves.toBeUndefined();
+		expect(oldWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+
+		sandbox.output = vi.fn();
+		await expect(sandbox.run('IO.puts("retry")', false)).resolves.toBe(':ok');
 	});
 
 	it('releases Elixir operation ownership after kill', async () => {

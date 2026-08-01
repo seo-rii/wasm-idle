@@ -197,11 +197,15 @@ class Elixir implements Sandbox {
 						) {
 							return;
 						}
-						if (event.data?.load) {
-							progress?.set?.(1);
-							resolveLoad();
+						try {
+							if (event.data?.load) {
+								progress?.set?.(1);
+								resolveLoad();
+							}
+							if (event.data?.error) rejectLoad(event.data.error);
+						} catch (error) {
+							rejectLoad(error);
 						}
-						if (event.data?.error) rejectLoad(event.data.error);
 					};
 					worker.onmessage = handler;
 					worker.postMessage({
@@ -308,55 +312,65 @@ class Elixir implements Sandbox {
 			};
 			this.activeRunCleanup = cleanup;
 			const operation = this.workerSession.beginRun(worker, rejectRun);
-			const handler = (event: Event & { data: any }) => {
-				if (
-					this.worker !== worker ||
-					worker.onmessage !== handler ||
-					this.activeRunCleanup !== cleanup ||
-					activeUid !== this.uid
-				) {
+			let handler: (event: Event & { data: any }) => void;
+			const ownsRun = () =>
+				this.worker === worker &&
+				this.activeRunCleanup === cleanup &&
+				activeUid === this.uid;
+			const acceptsMessage = () => ownsRun() && worker.onmessage === handler;
+			const failRun = (reason?: unknown) => {
+				if (!acceptsMessage()) return;
+				this.workerSession.terminate(reason);
+			};
+			handler = (event: Event & { data: any }) => {
+				if (!acceptsMessage()) {
 					return;
 				}
-				const { output, error, buffer } = event.data;
-				const hasResults = Object.prototype.hasOwnProperty.call(
-					event.data || {},
-					'results'
-				);
-				if (buffer) {
-					this.waitingForInput = true;
-					this.flushPendingInput();
-				}
-				if (output) {
-					this.output?.(output);
-				}
-				if (this.activeRunCleanup !== cleanup || activeUid !== this.uid) return;
-				if (hasResults) {
-					const { results } = event.data;
-					this.workerSession.complete(operation);
-					cleanup();
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.waitingForInput = false;
-					this.pendingEof = false;
-					this.prepared = prepare;
-					this.hasExecuted = !prepare;
-					if (!prepare && typeof results === 'string' && results) {
-						this.output?.(`=> ${results}\n`);
+				try {
+					const { output, error, buffer } = event.data;
+					const hasResults = Object.prototype.hasOwnProperty.call(
+						event.data || {},
+						'results'
+					);
+					if (buffer) {
+						this.waitingForInput = true;
+						this.flushPendingInput();
 					}
-					resolve(results || true);
-					return;
-				}
-				if (error) {
-					this.workerSession.complete(operation);
-					cleanup();
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.waitingForInput = false;
-					this.pendingEof = false;
-					this.prepared = false;
-					this.hasExecuted = false;
-					reject(error);
-					return;
+					if (output) {
+						this.output?.(output);
+					}
+					if (!acceptsMessage()) return;
+					if (hasResults) {
+						const { results } = event.data;
+						if (!prepare && typeof results === 'string' && results) {
+							this.output?.(`=> ${results}\n`);
+							if (!acceptsMessage()) return;
+						}
+						if (!this.workerSession.complete(operation)) return;
+						cleanup();
+						this.elapse = Date.now() - this.begin;
+						this.exit = true;
+						this.waitingForInput = false;
+						this.pendingEof = false;
+						this.prepared = prepare;
+						this.hasExecuted = !prepare;
+						resolve(results || true);
+						return;
+					}
+					if (error) {
+						if (!this.workerSession.complete(operation)) return;
+						cleanup();
+						this.elapse = Date.now() - this.begin;
+						this.exit = true;
+						this.waitingForInput = false;
+						this.pendingEof = false;
+						this.prepared = false;
+						this.hasExecuted = false;
+						reject(error);
+						return;
+					}
+				} catch (error) {
+					failRun(error);
 				}
 			};
 			onAbort = signal
