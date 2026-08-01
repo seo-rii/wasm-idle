@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
 let suppressAutoLoadAck = false;
@@ -438,6 +439,41 @@ describe('WASM sandbox', () => {
 
 		replacementHandler?.({ data: { results: true } } as MessageEvent<any>);
 		await expect(replacementRun).resolves.toBe(true);
+	});
+
+	it('clears queued input before an explicit WASM stdin run', async () => {
+		const sandbox = new Wasm();
+		const worker = new MockWorker();
+		const runMessages: any[] = [];
+		const bufferedValues: Array<string | null> = [];
+
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementation((message) => {
+			runMessages.push(message);
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+				bufferedValues.push(readBufferedStdin(message.buffer));
+				if (runMessages.length === 1) {
+					sandbox.write('during\n');
+					sandbox.eof();
+				}
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+		sandbox.write('stale\n');
+		sandbox.eof();
+
+		await expect(
+			sandbox.run('AGFzbQ==', false, true, undefined, [], {
+				stdin: 'injected\n'
+			})
+		).resolves.toBe(true);
+		await expect(sandbox.run('AGFzbQ==', false)).resolves.toBe(true);
+
+		expect(runMessages).toHaveLength(2);
+		expect(runMessages[0].stdin).toBe('injected\n');
+		expect(runMessages[1].stdin).toBeUndefined();
+		expect(bufferedValues).toEqual(['', '']);
 	});
 
 	it('rejects load when the WASM worker script fails before posting load', async () => {
