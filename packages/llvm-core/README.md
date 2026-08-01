@@ -219,7 +219,10 @@ encoding applies the same body limit before pending request or shared-ring write
 Invalid bytes therefore cannot be replacement-decoded into silently changed source paths,
 expressions, or variable names. JSON syntax failures use a stable protocol error while retaining the
 engine's `SyntaxError` as their cause. Oversized declarations fail before the body is buffered,
-preventing a corrupt worker frame from growing browser memory without bound.
+preventing a corrupt worker frame from growing browser memory without bound. Once a valid length is
+known, the parser allocates that body buffer once and copies later transport fragments into place;
+large variables and memory replies therefore use linear allocation instead of repeatedly copying
+every previously received byte.
 
 Current producer modules expose Emscripten's canonical `HEAPU8` view. Each worker samples only its
 backing buffer length, emits an initial `onMemory(worker, bytes)` value, and emits again only when

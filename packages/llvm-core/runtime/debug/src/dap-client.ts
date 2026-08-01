@@ -22,16 +22,6 @@ function concatBytes(left: Uint8Array, right: Uint8Array) {
 	return result;
 }
 
-function indexOfSequence(haystack: Uint8Array, needle: Uint8Array) {
-	outer: for (let index = 0; index <= haystack.byteLength - needle.byteLength; index += 1) {
-		for (let offset = 0; offset < needle.byteLength; offset += 1) {
-			if (haystack[index + offset] !== needle[offset]) continue outer;
-		}
-		return index;
-	}
-	return -1;
-}
-
 function decodeDapUtf8(bytes: Uint8Array, section: 'header' | 'body') {
 	try {
 		return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
@@ -58,24 +48,102 @@ export function encodeDapMessage(message: DapMessage): Uint8Array {
 }
 
 export class DapMessageParser {
-	private buffer = new Uint8Array();
+	private readonly header = new Uint8Array(
+		MAXIMUM_DAP_HEADER_BYTES + HEADER_SEPARATOR.byteLength
+	);
+	private headerLength = 0;
+	private body?: Uint8Array;
+	private bodyLength = 0;
 
 	push(chunk: Uint8Array): DapMessage[] {
-		if (chunk.byteLength > 0) this.buffer = concatBytes(this.buffer, chunk);
 		const messages: DapMessage[] = [];
+		let chunkOffset = 0;
 
 		while (true) {
-			const separator = indexOfSequence(this.buffer, HEADER_SEPARATOR);
-			if (separator < 0) {
-				if (this.buffer.byteLength > MAXIMUM_DAP_HEADER_BYTES) {
+			if (this.body !== undefined) {
+				const length = Math.min(
+					this.body.byteLength - this.bodyLength,
+					chunk.byteLength - chunkOffset
+				);
+				if (length > 0) {
+					this.body.set(
+						chunk.subarray(chunkOffset, chunkOffset + length),
+						this.bodyLength
+					);
+					this.bodyLength += length;
+					chunkOffset += length;
+				}
+				if (this.bodyLength < this.body.byteLength) break;
+
+				const body = decodeDapUtf8(this.body, 'body');
+				this.body = undefined;
+				this.bodyLength = 0;
+				let value: unknown;
+				try {
+					value = JSON.parse(body);
+				} catch (error) {
+					throw new Error('invalid DAP frame: DAP body is not valid JSON', {
+						cause: error
+					});
+				}
+				if (!value || typeof value !== 'object' || Array.isArray(value)) {
+					throw new Error('invalid DAP frame body');
+				}
+				messages.push(value as DapMessage);
+				continue;
+			}
+
+			if (chunkOffset === chunk.byteLength) break;
+			let separator = -1;
+			while (chunkOffset < chunk.byteLength) {
+				if (this.headerLength === this.header.byteLength) {
 					throw new Error('invalid DAP frame: DAP header exceeds 8 KiB');
 				}
-				break;
+				this.header[this.headerLength] = chunk[chunkOffset]!;
+				this.headerLength += 1;
+				chunkOffset += 1;
+
+				if (this.headerLength >= HEADER_SEPARATOR.byteLength) {
+					const candidate = this.headerLength - HEADER_SEPARATOR.byteLength;
+					let matches = true;
+					for (let offset = 0; offset < HEADER_SEPARATOR.byteLength; offset += 1) {
+						if (this.header[candidate + offset] !== HEADER_SEPARATOR[offset]) {
+							matches = false;
+							break;
+						}
+					}
+					if (matches) {
+						separator = candidate;
+						break;
+					}
+				}
+
+				if (this.headerLength > MAXIMUM_DAP_HEADER_BYTES) {
+					const suffixLength = this.headerLength - MAXIMUM_DAP_HEADER_BYTES;
+					let canCompleteSeparator = suffixLength < HEADER_SEPARATOR.byteLength;
+					for (
+						let offset = 0;
+						canCompleteSeparator && offset < suffixLength;
+						offset += 1
+					) {
+						if (
+							this.header[MAXIMUM_DAP_HEADER_BYTES + offset] !==
+							HEADER_SEPARATOR[offset]
+						) {
+							canCompleteSeparator = false;
+						}
+					}
+					if (!canCompleteSeparator) {
+						throw new Error('invalid DAP frame: DAP header exceeds 8 KiB');
+					}
+				}
 			}
+			if (separator < 0) break;
 			if (separator > MAXIMUM_DAP_HEADER_BYTES) {
 				throw new Error('invalid DAP frame: DAP header exceeds 8 KiB');
 			}
-			const header = decodeDapUtf8(this.buffer.subarray(0, separator + 2), 'header');
+
+			const header = decodeDapUtf8(this.header.subarray(0, separator + 2), 'header');
 			const contentLengthHeaders = header
 				.split('\r\n')
 				.filter((line) => CONTENT_LENGTH_HEADER_PATTERN.test(line));
@@ -94,22 +162,8 @@ export class DapMessageParser {
 			if (contentLength > MAXIMUM_DAP_BODY_BYTES) {
 				throw new Error('invalid DAP frame: DAP body exceeds 16 MiB');
 			}
-			const bodyStart = separator + HEADER_SEPARATOR.byteLength;
-			const frameEnd = bodyStart + contentLength;
-			if (this.buffer.byteLength < frameEnd) break;
-
-			const body = decodeDapUtf8(this.buffer.subarray(bodyStart, frameEnd), 'body');
-			let value: unknown;
-			try {
-				value = JSON.parse(body);
-			} catch (error) {
-				throw new Error('invalid DAP frame: DAP body is not valid JSON', { cause: error });
-			}
-			if (!value || typeof value !== 'object' || Array.isArray(value)) {
-				throw new Error('invalid DAP frame body');
-			}
-			messages.push(value as DapMessage);
-			this.buffer = this.buffer.slice(frameEnd);
+			this.headerLength = 0;
+			this.body = new Uint8Array(contentLength);
 		}
 
 		return messages;

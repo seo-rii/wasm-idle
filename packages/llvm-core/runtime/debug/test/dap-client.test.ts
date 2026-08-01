@@ -25,6 +25,40 @@ describe('DAP framing', () => {
 		expect(parser.push(bytes.subarray(37))).toEqual([first, second]);
 	});
 
+	it('buffers a fragmented DAP body without reallocating all prior bytes', () => {
+		const message: DapEvent = {
+			seq: 1,
+			type: 'event',
+			event: 'output',
+			body: { output: 'x'.repeat(256 * 1024) }
+		};
+		const frame = encodeDapMessage(message);
+		const NativeUint8Array = Uint8Array;
+		let allocatedBytes = 0;
+		vi.stubGlobal(
+			'Uint8Array',
+			new Proxy(NativeUint8Array, {
+				construct(target, argumentsList, newTarget) {
+					if (typeof argumentsList[0] === 'number') allocatedBytes += argumentsList[0];
+					return Reflect.construct(target, argumentsList, newTarget);
+				}
+			})
+		);
+
+		try {
+			const parser = new DapMessageParser();
+			const messages: DapMessage[] = [];
+			for (let offset = 0; offset < frame.byteLength; offset += 1024) {
+				messages.push(...parser.push(frame.subarray(offset, offset + 1024)));
+			}
+
+			expect(messages).toEqual([message]);
+			expect(allocatedBytes).toBeLessThan(frame.byteLength * 4);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it('rejects malformed UTF-8 in a DAP header', () => {
 		const parser = new DapMessageParser();
 		const prefix = new TextEncoder().encode('Content-Length: 2\r\nX-Invalid: ');
