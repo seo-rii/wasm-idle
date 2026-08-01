@@ -96,6 +96,11 @@ untouched source, embedded DWARF, stable `/workspace/...` paths, and exact Clang
 `compileLinkRun()` rejects `lldb` because an LLDB artifact must not be instantiated through the
 normal browser execution path. Launch arguments, WASI environment variables, and the `/workspace`
 working directory are forwarded to WAMR rather than being applied only to LLDB's attach request.
+Launch configuration is validated before runtime assets are fetched or workers are created: the
+program and working directory stay at their reserved `/workspace` paths, entry pause is boolean,
+arguments are strings without NUL bytes, and environment keys/values follow WAMR's `--env` format.
+The target Worker repeats the byte-level argument and environment checks as a defense-in-depth
+boundary for direct worker messages.
 The same preflight-validated `/workspace/...` files provided to LLDB are mounted into WAMR's
 MEMFS before launch, so guest WASI file access observes the workspace used to compile the DWARF
 artifact. File paths must remain canonical beneath `/workspace`, and `/workspace/program.wasm` is

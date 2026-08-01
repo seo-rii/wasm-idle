@@ -1308,6 +1308,67 @@ describe('BrowserLldbSession', () => {
 		expect(created).toBe(false);
 	});
 
+	it.each([
+		{
+			caseName: 'NUL guest argument',
+			launch: { args: ['invalid\0argument'] },
+			error: /arguments cannot contain NUL/u
+		},
+		{
+			caseName: 'environment key',
+			launch: { env: { 'INVALID=KEY': 'value' } },
+			error: /invalid WAMR environment variable/u
+		},
+		{
+			caseName: 'NUL environment value',
+			launch: { env: { MODE: 'invalid\0value' } },
+			error: /invalid WAMR environment variable/u
+		},
+		{
+			caseName: 'working directory',
+			launch: { cwd: '/tmp' },
+			error: /working directory must be \/workspace/u
+		},
+		{
+			caseName: 'program path',
+			launch: { program: '/workspace/other.wasm' },
+			error: /program must be \/workspace\/program\.wasm/u
+		},
+		{
+			caseName: 'stopOnEntry value',
+			launch: { stopOnEntry: 'true' },
+			error: /stopOnEntry must be a boolean/u
+		}
+	])('rejects an invalid $caseName before runtime preflight', async ({ launch, error }) => {
+		let assetFetches = 0;
+		let created = false;
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: Uint8Array.of(0, 97, 115, 109),
+			sources: [],
+			launch: launch as BrowserLldbSessionOptions['launch'],
+			fetchImpl: async () => {
+				assetFetches += 1;
+				return new Response('debug-asset');
+			},
+			workerFactory: (kind) => {
+				created = true;
+				return new FakeWorker(kind, []);
+			},
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+
+		try {
+			await expect(session.initialize()).rejects.toThrow(error);
+			expect(assetFetches).toBe(0);
+			expect(created).toBe(false);
+		} finally {
+			await session.dispose();
+		}
+	});
+
 	it('keeps the module hash expectation fixed while its digest is pending', async () => {
 		let created = false;
 		const options: BrowserLldbSessionOptions = {

@@ -336,6 +336,64 @@ export class BrowserLldbSession {
 			source: { ...breakpoint.source },
 			lines: [...breakpoint.lines]
 		}));
+		const launchOption: unknown = this.options.launch;
+		if (
+			launchOption !== undefined &&
+			(typeof launchOption !== 'object' ||
+				launchOption === null ||
+				Array.isArray(launchOption))
+		) {
+			throw new TypeError('WAMR launch configuration must be an object');
+		}
+		const launchRecord = launchOption as Record<string, unknown> | undefined;
+		if (
+			launchRecord?.program !== undefined &&
+			launchRecord.program !== '/workspace/program.wasm'
+		) {
+			throw new RangeError('WAMR debug program must be /workspace/program.wasm');
+		}
+		if (launchRecord?.cwd !== undefined && launchRecord.cwd !== '/workspace') {
+			throw new RangeError('WAMR working directory must be /workspace');
+		}
+		if (
+			launchRecord?.stopOnEntry !== undefined &&
+			typeof launchRecord.stopOnEntry !== 'boolean'
+		) {
+			throw new TypeError('WAMR stopOnEntry must be a boolean');
+		}
+		if (launchRecord?.args !== undefined) {
+			if (!Array.isArray(launchRecord.args)) {
+				throw new TypeError('WAMR program arguments must be an array');
+			}
+			for (const argument of launchRecord.args) {
+				if (typeof argument !== 'string') {
+					throw new TypeError('WAMR program arguments must be strings');
+				}
+				if (argument.includes('\0')) {
+					throw new Error('WAMR program arguments cannot contain NUL bytes');
+				}
+			}
+		}
+		if (launchRecord?.env !== undefined) {
+			if (
+				typeof launchRecord.env !== 'object' ||
+				launchRecord.env === null ||
+				Array.isArray(launchRecord.env)
+			) {
+				throw new TypeError('WAMR environment must be an object');
+			}
+			for (const [key, value] of Object.entries(launchRecord.env)) {
+				if (
+					!key ||
+					key.includes('=') ||
+					key.includes('\0') ||
+					typeof value !== 'string' ||
+					value.includes('\0')
+				) {
+					throw new Error(`invalid WAMR environment variable: ${key || '<empty>'}`);
+				}
+			}
+		}
 		const launch = this.options.launch
 			? {
 					...this.options.launch,
