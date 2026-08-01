@@ -157,6 +157,131 @@ describe('Haskell sandbox', () => {
 		]);
 	});
 
+	it('rejects an overlapping Haskell run without disturbing the active execution', async () => {
+		const sandbox = new Haskell();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+		const outputs: string[] = [];
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		const firstRun = sandbox.run('main = putStrLn "first"', false);
+		const firstHandler = worker.onmessage;
+		await expect(sandbox.run('main = putStrLn "second"', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'HASKELL'
+		});
+
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(firstHandler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		firstHandler?.({ data: { output: 'first\n', results: true } } as MessageEvent<any>);
+		await expect(firstRun).resolves.toBe(true);
+		expect(outputs).toEqual(['first\n']);
+
+		worker.postMessage.mockImplementationOnce(() => {
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+		await expect(sandbox.run('main = pure ()', false)).resolves.toBe(true);
+		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+	});
+
+	it('rejects overlapping Haskell startup operations without superseding readiness', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Haskell();
+		const loading = sandbox.load('/absproxy/5173');
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const loadHandler = worker.onmessage;
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'HASKELL'
+		});
+		await expect(sandbox.run('main = pure ()', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'HASKELL'
+		});
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(loadHandler);
+
+		loadHandler?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(loading).resolves.toBeUndefined();
+		suppressAutoLoadAck = false;
+		await expect(sandbox.run('main = pure ()', false)).resolves.toBe(true);
+	});
+
+	it('rejects Haskell load while a run is active without replacing its handler', async () => {
+		const sandbox = new Haskell();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+
+		const running = sandbox.run('main = pure ()', false);
+		const runHandler = worker.onmessage;
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'HASKELL'
+		});
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(runHandler);
+
+		runHandler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(running).resolves.toBe(true);
+	});
+
+	it('releases Haskell run activity after synchronous dispatch failure', async () => {
+		const sandbox = new Haskell();
+		const worker = new MockWorker();
+		const dispatchError = new Error('Haskell dispatch failed');
+		worker.postMessage.mockImplementationOnce(() => {
+			throw dispatchError;
+		});
+		sandbox.worker = worker as unknown as Worker;
+
+		await expect(sandbox.run('main = pure ()', false)).rejects.toBe(dispatchError);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('main = pure ()', false)).resolves.toBe(true);
+	});
+
+	it('keeps Haskell execution idle when no worker is loaded', async () => {
+		const sandbox = new Haskell();
+
+		await expect(sandbox.run('main = pure ()', false)).rejects.toBe('Worker not loaded');
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('main = pure ()', false)).resolves.toBe(true);
+	});
+
+	it('releases Haskell startup activity after termination', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Haskell();
+		const loading = sandbox.load('/absproxy/5173');
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+
+		sandbox.terminate();
+		await expect(loading).rejects.toBe('Process terminated');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+
+		suppressAutoLoadAck = false;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('main = pure ()', false)).resolves.toBe(true);
+	});
+
 	it('rejects load when Haskell assets are not configured', async () => {
 		publicEnv.PUBLIC_WASM_HASKELL_MODULE_URL = '';
 		publicEnv.PUBLIC_WASM_HASKELL_ROOTFS_URL = '';

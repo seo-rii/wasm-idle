@@ -4,6 +4,7 @@ import {
 	resolveHaskellRootfsUrl,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
+import { BusyError } from '@wasm-idle/core';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -49,6 +50,7 @@ class Haskell implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private loading = false;
 	private readonly workerSession = new WorkerSession({
 		label: 'Haskell',
 		onDispose: (worker) => {
@@ -67,52 +69,69 @@ class Haskell implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		return this.workerSession.load(async (resolve, reject) => {
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const moduleUrl = resolveHaskellModuleUrl(runtimeAssets, currentUrl);
-			const rootfsUrl = resolveHaskellRootfsUrl(runtimeAssets, currentUrl);
-			const bsdtarUrl = resolveHaskellBsdtarUrl(runtimeAssets, currentUrl);
-			if (!moduleUrl || !rootfsUrl || !bsdtarUrl) {
-				return reject(
-					'Haskell runtime is not configured. Set PUBLIC_WASM_HASKELL_MODULE_URL, PUBLIC_WASM_HASKELL_ROOTFS_URL, and PUBLIC_WASM_HASKELL_BSDTAR_URL, or runtimeAssets.haskell.'
-				);
-			}
-			const runtimeConfig =
-				typeof runtimeAssets === 'object' ? runtimeAssets.haskell : undefined;
-			const nextRuntimeKey = haskellRuntimeKey(runtimeAssets, currentUrl);
-			const needsWorkerReset = !this.worker || this.runtimeKey !== nextRuntimeKey;
-			this.runtimeKey = nextRuntimeKey;
-			if (needsWorkerReset && this.worker) {
-				this.workerSession.reset();
-			}
-			if (!this.worker) {
-				this.worker = new (await import('$lib/playground/worker/haskell?worker')).default();
-				this.workerSession.attach(this.worker);
-				this.worker.onmessage = (event: MessageEvent<any>) => {
-					reportWorkerProgress(progress, event.data?.progress);
-					if (event.data?.load) {
-						progress?.set?.(1);
-						resolve();
-					}
-					if (event.data?.error) reject(event.data.error);
-				};
-				this.worker.postMessage({
-					load: true,
-					moduleUrl,
-					rootfsUrl,
-					bsdtarUrl,
-					mainSoPath: runtimeConfig?.mainSoPath || DEFAULT_HASKELL_MAIN_SO_PATH,
-					searchDirs: runtimeConfig?.searchDirs || DEFAULT_HASKELL_SEARCH_DIRS,
-					log: _log
-				});
-			} else {
-				progress?.set?.(1);
-				resolve();
-			}
-		});
+		if (this.loading || !this.exit) {
+			return Promise.reject(
+				new BusyError('Haskell runtime already has an active operation', {
+					runtimeId: 'HASKELL',
+					phase: this.loading ? 'startup' : 'execute'
+				})
+			);
+		}
+		this.loading = true;
+		return this.workerSession
+			.load(async (resolve, reject) => {
+				this.pendingInput = [];
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				const moduleUrl = resolveHaskellModuleUrl(runtimeAssets, currentUrl);
+				const rootfsUrl = resolveHaskellRootfsUrl(runtimeAssets, currentUrl);
+				const bsdtarUrl = resolveHaskellBsdtarUrl(runtimeAssets, currentUrl);
+				if (!moduleUrl || !rootfsUrl || !bsdtarUrl) {
+					return reject(
+						'Haskell runtime is not configured. Set PUBLIC_WASM_HASKELL_MODULE_URL, PUBLIC_WASM_HASKELL_ROOTFS_URL, and PUBLIC_WASM_HASKELL_BSDTAR_URL, or runtimeAssets.haskell.'
+					);
+				}
+				const runtimeConfig =
+					typeof runtimeAssets === 'object' ? runtimeAssets.haskell : undefined;
+				const nextRuntimeKey = haskellRuntimeKey(runtimeAssets, currentUrl);
+				const needsWorkerReset = !this.worker || this.runtimeKey !== nextRuntimeKey;
+				this.runtimeKey = nextRuntimeKey;
+				if (needsWorkerReset && this.worker) {
+					this.workerSession.reset();
+				}
+				if (!this.worker) {
+					const WorkerConstructor = (
+						await import('$lib/playground/worker/haskell?worker')
+					).default;
+					const worker = new WorkerConstructor();
+					this.worker = worker;
+					this.workerSession.attach(worker);
+					worker.onmessage = (event: MessageEvent<any>) => {
+						reportWorkerProgress(progress, event.data?.progress);
+						if (event.data?.load) {
+							progress?.set?.(1);
+							resolve();
+						}
+						if (event.data?.error) reject(event.data.error);
+					};
+					worker.postMessage({
+						load: true,
+						moduleUrl,
+						rootfsUrl,
+						bsdtarUrl,
+						mainSoPath: runtimeConfig?.mainSoPath || DEFAULT_HASKELL_MAIN_SO_PATH,
+						searchDirs: runtimeConfig?.searchDirs || DEFAULT_HASKELL_SEARCH_DIRS,
+						log: _log
+					});
+				} else {
+					progress?.set?.(1);
+					resolve();
+				}
+			})
+			.finally(() => {
+				this.loading = false;
+			});
 	}
 
 	write(input: string) {
@@ -147,19 +166,32 @@ class Haskell implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (this.loading || !this.exit) {
+			return Promise.reject(
+				new BusyError('Haskell runtime already has an active operation', {
+					runtimeId: 'HASKELL',
+					phase: this.loading ? 'startup' : 'execute'
+				})
+			);
+		}
+		const worker = this.worker;
+		if (!worker) return Promise.reject('Worker not loaded');
+		let compileArgs: string[];
+		let programArgs: string[];
+		try {
+			({ compileArgs, programArgs } = resolveSandboxExecutionArgs('HASKELL', args, options));
+		} catch (error) {
+			return Promise.reject(error);
+		}
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
-			const { compileArgs, programArgs } = resolveSandboxExecutionArgs(
-				'HASKELL',
-				args,
-				options
-			);
 			const _uid = ++this.uid;
-			const operation = this.workerSession.beginRun(this.worker, reject);
+			const operation = this.workerSession.beginRun(worker, reject);
 			const handler = (event: Event & { data: any }) => {
-				if (!this.worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (this.worker.onmessage = null);
+				if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) {
+					if (worker.onmessage === handler) worker.onmessage = null;
+					return;
+				}
 				const { output, results, error, buffer, diagnostic, progress } = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
@@ -169,6 +201,7 @@ class Haskell implements Sandbox {
 				if (output) this.output?.(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (results) {
+					if (worker.onmessage === handler) worker.onmessage = null;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -177,6 +210,7 @@ class Haskell implements Sandbox {
 					resolve(results as string);
 				}
 				if (error) {
+					if (worker.onmessage === handler) worker.onmessage = null;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -185,18 +219,23 @@ class Haskell implements Sandbox {
 					reject(error);
 				}
 			};
-			this.worker.onmessage = handler;
+			worker.onmessage = handler;
 			this.begin = Date.now();
-			this.worker.postMessage({
-				code,
-				prepare,
-				buffer: this.buffer,
-				ghcArgs: compileArgs.length ? compileArgs.join(' ') : programArgs.join(' '),
-				stdin: options.stdin,
-				activePath: options.activePath || 'main.hs',
-				workspaceFiles: options.workspaceFiles || [],
-				log: _log
-			});
+			try {
+				worker.postMessage({
+					code,
+					prepare,
+					buffer: this.buffer,
+					ghcArgs: compileArgs.length ? compileArgs.join(' ') : programArgs.join(' '),
+					stdin: options.stdin,
+					activePath: options.activePath || 'main.hs',
+					workspaceFiles: options.workspaceFiles || [],
+					log: _log
+				});
+			} catch (error) {
+				if (worker.onmessage === handler) worker.onmessage = null;
+				this.workerSession.terminate(error);
+			}
 		});
 	}
 
@@ -218,7 +257,7 @@ class Haskell implements Sandbox {
 		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
 		resetBufferedStdin(this.buffer);
-		if (!this.exit) {
+		if (!this.exit || this.loading) {
 			this.terminate();
 		}
 	}
