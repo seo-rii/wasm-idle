@@ -32,6 +32,13 @@ describe('DAP framing', () => {
 		);
 	});
 
+	it('rejects frames with duplicate content lengths', () => {
+		const parser = new DapMessageParser();
+		const frame = new TextEncoder().encode('Content-Length: 2\r\ncontent-length: 2\r\n\r\n{}');
+
+		expect(() => parser.push(frame)).toThrow(/duplicate Content-Length/u);
+	});
+
 	it('rejects an unterminated header larger than 8 KiB', () => {
 		const parser = new DapMessageParser();
 		const oversizedHeader = new Uint8Array(8 * 1024 + 1).fill('A'.charCodeAt(0));

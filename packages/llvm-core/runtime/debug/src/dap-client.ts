@@ -10,7 +10,8 @@ import type {
 } from './types.js';
 
 const HEADER_SEPARATOR = new TextEncoder().encode('\r\n\r\n');
-const CONTENT_LENGTH_PATTERN = /(?:^|\r\n)Content-Length:\s*(\d+)(?:\r\n|$)/iu;
+const CONTENT_LENGTH_PATTERN = /^Content-Length:\s*(\d+)$/iu;
+const CONTENT_LENGTH_HEADER_PATTERN = /^Content-Length:/iu;
 const MAXIMUM_DAP_HEADER_BYTES = 8 * 1024;
 const MAXIMUM_DAP_BODY_BYTES = 16 * 1024 * 1024;
 
@@ -64,8 +65,17 @@ export class DapMessageParser {
 				throw new Error('invalid DAP frame: DAP header exceeds 8 KiB');
 			}
 			const header = new TextDecoder().decode(this.buffer.subarray(0, separator + 2));
-			const match = CONTENT_LENGTH_PATTERN.exec(header);
-			if (!match) throw new Error('invalid DAP frame: missing Content-Length header');
+			const contentLengthHeaders = header
+				.split('\r\n')
+				.filter((line) => CONTENT_LENGTH_HEADER_PATTERN.test(line));
+			if (contentLengthHeaders.length === 0) {
+				throw new Error('invalid DAP frame: missing Content-Length header');
+			}
+			if (contentLengthHeaders.length > 1) {
+				throw new Error('invalid DAP frame: duplicate Content-Length header');
+			}
+			const match = CONTENT_LENGTH_PATTERN.exec(contentLengthHeaders[0]);
+			if (!match) throw new Error('invalid DAP frame: invalid Content-Length header');
 			const contentLength = Number(match[1]);
 			if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
 				throw new Error('invalid DAP frame: invalid Content-Length header');
