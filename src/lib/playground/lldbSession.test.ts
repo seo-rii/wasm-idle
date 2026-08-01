@@ -7,6 +7,7 @@ const runtimeState = vi.hoisted(() => ({
 	options: null as Record<string, unknown> | null,
 	initializeGate: null as Promise<void> | null,
 	continueGate: null as Promise<void> | null,
+	pauseGate: null as Promise<void> | null,
 	disposeGate: null as Promise<void> | null,
 	scopesErrorFrameId: null as number | null,
 	responseOverrides: new Map<string, unknown>(),
@@ -56,6 +57,7 @@ class FakeRuntimeSession {
 	async request<T>(command: string, args?: unknown): Promise<T> {
 		this.requests.push({ command, args });
 		if (command === 'continue') await runtimeState.continueGate;
+		if (command === 'pause') await runtimeState.pauseGate;
 		if (command === 'setBreakpoints' && runtimeState.breakpointResponseGates.length > 0) {
 			return (await runtimeState.breakpointResponseGates.shift()) as T;
 		}
@@ -199,6 +201,7 @@ describe('LldbSandboxSession', () => {
 		runtimeState.options = null;
 		runtimeState.initializeGate = null;
 		runtimeState.continueGate = null;
+		runtimeState.pauseGate = null;
 		runtimeState.disposeGate = null;
 		runtimeState.scopesErrorFrameId = null;
 		runtimeState.responseOverrides.clear();
@@ -1036,6 +1039,70 @@ describe('LldbSandboxSession', () => {
 		runtimeState.session!.emit({ event: 'terminated' });
 		runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
 		await completion;
+	});
+
+	it.each([
+		{ state: 'current', publishStop: false },
+		{ state: 'superseded', publishStop: true }
+	])('handles a deferred pause failure as $state', async ({ publishStop }) => {
+		const events: Array<{ type: string }> = [];
+		const failure = new Error('deferred pause failure');
+		let rejectPause!: (error: Error) => void;
+		runtimeState.pauseGate = new Promise<void>((_resolve, reject) => {
+			rejectPause = reject;
+		});
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.c', content: 'int main(void) {}' }]
+			},
+			sourcePath: '/workspace/main.c',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start().then(
+			() => null,
+			(error: unknown) => error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		const pauseResult = controller.pause().then(
+			() => null,
+			(error: unknown) => error
+		);
+		await vi.waitFor(() =>
+			expect(runtimeState.session!.requests).toContainEqual({
+				command: 'pause',
+				args: { threadId: 1 }
+			})
+		);
+		if (publishStop) {
+			runtimeState.session!.emit({
+				event: 'stopped',
+				body: { reason: 'exception', threadId: 7 }
+			});
+			await vi.waitFor(() =>
+				expect(events).toContainEqual(
+					expect.objectContaining({ type: 'pause', reason: 'pause' })
+				)
+			);
+		}
+
+		rejectPause(failure);
+		await expect(pauseResult).resolves.toBe(publishStop ? null : failure);
+		expect(runtimeState.session!.disposeCount).toBe(0);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(0);
+
+		runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+		await expect(completion).resolves.toBeNull();
 	});
 
 	it('does not send evaluate when the runtime manifest disables expressions', async () => {

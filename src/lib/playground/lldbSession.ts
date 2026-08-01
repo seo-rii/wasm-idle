@@ -143,6 +143,7 @@ export class LldbSandboxSession {
 	private activeFrameId?: number;
 	private command: DebugCommand | null = null;
 	private pauseRequested = false;
+	private pauseRequestVersion = 0;
 	private stopped = false;
 	private stateVersion = 0;
 	private completionResolve?: (value: true) => void;
@@ -357,12 +358,21 @@ export class LldbSandboxSession {
 	}
 
 	async pause() {
+		const session = this.requireSession();
+		const requestVersion = ++this.pauseRequestVersion;
 		this.pauseRequested = true;
 		try {
-			await this.requireSession().request('pause', {
+			await session.request('pause', {
 				threadId: this.activeThreadId
 			});
 		} catch (error) {
+			if (
+				this.session !== session ||
+				this.pauseRequestVersion !== requestVersion ||
+				!this.pauseRequested
+			) {
+				return;
+			}
 			this.pauseRequested = false;
 			throw error;
 		}

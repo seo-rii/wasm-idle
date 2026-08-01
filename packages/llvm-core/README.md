@@ -111,6 +111,9 @@ transport-write timeout; ordinary DAP requests still use the configured response
 A deferred execution failure is fatal only while that request still owns the current run state. If
 a valid `continued` or newer `stopped` event has already advanced the session, the obsolete failure
 is ignored and cannot tear down the running target or its newer pause.
+Pause requests are ordered separately. Once a `stopped` event has consumed a pending interrupt (or
+a newer pause or execution request supersedes it), a late pause failure is ignored instead of being
+reported after the target is already paused; a failure from the current request still propagates.
 Configured DAP response, transport-write, and worker-ready timeouts must be positive finite
 millisecond values. The session validates and snapshots them before loading assets or creating
 workers, so invalid or concurrently changed timer settings cannot produce immediate or overflowing
