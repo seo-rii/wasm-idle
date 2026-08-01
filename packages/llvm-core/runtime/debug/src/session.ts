@@ -844,16 +844,25 @@ export class BrowserLldbSession {
 		this.lifecycleAbortController.abort(disposeError);
 		this.disposePromise = (async () => {
 			this.disposeDapEvents?.();
-			if (this.stdin && !this.stdin.closed) this.stdin.close();
-			for (const queue of this.dapQueues) {
-				if (!queue.closed) queue.close();
-			}
-			for (const queue of this.rspQueues) {
-				if (!queue.closed) queue.close();
+			const transportQueues = [
+				...(this.stdin ? [this.stdin] : []),
+				...this.dapQueues,
+				...this.rspQueues
+			];
+			for (const queue of transportQueues) {
+				try {
+					if (!queue.closed) queue.close();
+				} catch {
+					// Corrupt queue metadata must not prevent session disposal.
+				}
 			}
 			this.outputAbortController.abort(disposeError);
 			for (const output of this.outputQueues) {
-				if (!output.closed) output.close();
+				try {
+					if (!output.closed) output.close();
+				} catch {
+					// Continue terminating workers even when an output queue is stale.
+				}
 			}
 			const workers = [this.lldbWorker, this.targetWorker].filter(
 				(worker): worker is WorkerLike => worker !== undefined

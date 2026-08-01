@@ -1666,6 +1666,58 @@ describe('BrowserLldbSession', () => {
 		expect(workers.every((worker) => worker.isTerminated)).toBe(true);
 	});
 
+	it('continues disposal when one transport queue generation becomes stale', async () => {
+		const workers: FakeWorker[] = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: Uint8Array.of(0, 97, 115, 109),
+			sources: [],
+			fetchImpl: async () => new Response('debug-asset'),
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, [], false, kind === 'lldb');
+				workers.push(worker);
+				return worker;
+			},
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+		const initialization = session.initialize();
+		await expect
+			.poll(() =>
+				workers.some((worker) =>
+					worker.received.some((message) => message.type === 'initialize-lldb')
+				)
+			)
+			.toBe(true);
+		const lldbInit = workers
+			.flatMap((worker) => worker.received)
+			.find((message) => message.type === 'initialize-lldb');
+		if (!lldbInit || lldbInit.type !== 'initialize-lldb') {
+			throw new Error('LLDB worker was not initialized');
+		}
+		const survivingQueue = new SharedByteQueue(lldbInit.rspInput);
+		Atomics.store(
+			new Int32Array(lldbInit.rspOutput.control),
+			6,
+			lldbInit.rspOutput.generation + 1
+		);
+		const [disposeResult, initializationResult] = await Promise.allSettled([
+			session.dispose(),
+			initialization
+		]);
+
+		expect(disposeResult).toEqual({ status: 'fulfilled', value: undefined });
+		expect(initializationResult.status).toBe('rejected');
+		if (initializationResult.status === 'rejected') {
+			expect(initializationResult.reason).toMatchObject({
+				message: expect.stringMatching(/disposed/u)
+			});
+		}
+		expect(survivingQueue.closed).toBe(true);
+		expect(workers.every((worker) => worker.isTerminated)).toBe(true);
+	});
+
 	it('closes session-owned RSP queues before gracefully terminating workers', async () => {
 		const commands: string[] = [];
 		const workers: FakeWorker[] = [];

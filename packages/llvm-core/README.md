@@ -40,8 +40,10 @@ worker to a dedicated WAMR target worker. DAP and GDB RSP are carried on separat
 asynchronous and blocking reads complete immediately, so an empty consumer buffer cannot wait
 indefinitely for a queue signal. Queue generations are integers from 1 through 2147483647 because
 the transport stores them in signed `Int32Array` metadata. Every queue state accessor, including
-the closed-state check used during cleanup, rejects stale-generation metadata. The session verifies
-the module, source, loader, Wasm, and pthread-sidecar hashes before creating either worker.
+the closed-state check used during cleanup, rejects stale-generation metadata. Session disposal
+isolates each queue close, so one corrupt transport cannot prevent the remaining queues from closing
+or either Worker from terminating. The session verifies the module, source, loader, Wasm, and
+pthread-sidecar hashes before creating either worker.
 When `initialize()` starts, it snapshots the module and its expected hash, source files, configured
 breakpoints, and launch arguments used by the workers and DAP. Mutating the caller-owned option
 objects while integrity and asset verification are in flight therefore cannot change the already
