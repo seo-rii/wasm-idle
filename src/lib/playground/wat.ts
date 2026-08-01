@@ -24,6 +24,7 @@ class Wat implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private activeLoad = false;
 	private activeRun = false;
 	private activeRunCleanup: (() => void) | null = null;
 	private readonly workerSession = new WorkerSession({
@@ -47,44 +48,54 @@ class Wat implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		this.activeRunCleanup?.();
-		this.activeRunCleanup = null;
-		this.activeRun = false;
-		return this.workerSession.load(async (resolve, reject) => {
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const nextModuleUrl = resolveWatModuleUrl(runtimeAssets, currentUrl);
-			if (!nextModuleUrl) {
-				return reject(
-					'WAT runtime is not configured. Set PUBLIC_WASM_WAT_MODULE_URL or runtimeAssets.wat.moduleUrl.'
-				);
-			}
-			const needsWorkerReset = !this.worker || this.moduleUrl !== nextModuleUrl;
-			this.moduleUrl = nextModuleUrl;
-			if (needsWorkerReset && this.worker) {
-				this.workerSession.reset();
-			}
-			if (!this.worker) {
-				this.worker = new (await import('$lib/playground/worker/wat?worker')).default();
-				this.workerSession.attach(this.worker);
-				this.worker.onmessage = (event: MessageEvent<any>) => {
-					if (event.data?.load) {
-						progress?.set?.(1);
-						resolve();
-					}
-					if (event.data?.error) reject(event.data.error);
-				};
-				this.worker.postMessage({
-					load: true,
-					moduleUrl: this.moduleUrl
-				});
-			} else {
-				progress?.set?.(1);
-				resolve();
-			}
-		});
+		if (this.activeLoad || this.activeRun) {
+			return Promise.reject(
+				new BusyError('WAT runtime already has an active operation', {
+					runtimeId: 'WAT',
+					phase: this.activeLoad ? 'startup' : 'execute'
+				})
+			);
+		}
+		this.activeLoad = true;
+		return this.workerSession
+			.load(async (resolve, reject) => {
+				this.pendingInput = [];
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				const nextModuleUrl = resolveWatModuleUrl(runtimeAssets, currentUrl);
+				if (!nextModuleUrl) {
+					return reject(
+						'WAT runtime is not configured. Set PUBLIC_WASM_WAT_MODULE_URL or runtimeAssets.wat.moduleUrl.'
+					);
+				}
+				const needsWorkerReset = !this.worker || this.moduleUrl !== nextModuleUrl;
+				this.moduleUrl = nextModuleUrl;
+				if (needsWorkerReset && this.worker) {
+					this.workerSession.reset();
+				}
+				if (!this.worker) {
+					this.worker = new (await import('$lib/playground/worker/wat?worker')).default();
+					this.workerSession.attach(this.worker);
+					this.worker.onmessage = (event: MessageEvent<any>) => {
+						if (event.data?.load) {
+							progress?.set?.(1);
+							resolve();
+						}
+						if (event.data?.error) reject(event.data.error);
+					};
+					this.worker.postMessage({
+						load: true,
+						moduleUrl: this.moduleUrl
+					});
+				} else {
+					progress?.set?.(1);
+					resolve();
+				}
+			})
+			.finally(() => {
+				this.activeLoad = false;
+			});
 	}
 
 	write(input: string) {
@@ -119,9 +130,12 @@ class Wat implements Sandbox {
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		if (this.activeRun) {
+		if (this.activeLoad || this.activeRun) {
 			return Promise.reject(
-				new BusyError('WAT runtime already has an active run', { runtimeId: 'WAT' })
+				new BusyError('WAT runtime already has an active operation', {
+					runtimeId: 'WAT',
+					phase: this.activeLoad ? 'startup' : 'execute'
+				})
 			);
 		}
 		const worker = this.worker;

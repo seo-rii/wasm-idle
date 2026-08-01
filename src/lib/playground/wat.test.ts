@@ -160,6 +160,54 @@ describe('WAT sandbox', () => {
 		await expect(thirdRun).resolves.toBe(true);
 	});
 
+	it('rejects load while a WAT run owns the worker handler', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new Wat();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const running = sandbox.run('(module (func (export "active")))', false);
+		const runHandler = worker.onmessage;
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'WAT'
+		});
+		expect(worker.onmessage).toBe(runHandler);
+		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+
+		runHandler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(running).resolves.toBe(true);
+	});
+
+	it('rejects overlapping WAT startup operations without superseding readiness', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Wat();
+		const loading = sandbox.load('/absproxy/5173');
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const loadHandler = worker.onmessage;
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'startup',
+			runtimeId: 'WAT'
+		});
+		await expect(sandbox.run('(module)', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'startup',
+			runtimeId: 'WAT'
+		});
+		expect(worker.onmessage).toBe(loadHandler);
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+
+		loadHandler?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(loading).resolves.toBeUndefined();
+	});
+
 	it('rejects a pre-aborted WAT run without changing worker or run state', async () => {
 		const sandbox = new Wat();
 		await sandbox.load('/absproxy/5173');
