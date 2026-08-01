@@ -242,6 +242,118 @@ func main() {}`,
 		expect(readBufferedStdin(runMessage.buffer)).toBe('42\n');
 	});
 
+	it('isolates explicit stdin from queued input before, during, and after execution', async () => {
+		const sandbox = new Go();
+		const worker = new MockWorker();
+		let explicitRunMessage: any;
+		let bufferedDuringExplicitRun: string | null | undefined;
+
+		sandbox.worker = worker as unknown as Worker;
+		sandbox.write('stale before explicit run\n');
+		worker.postMessage.mockImplementationOnce((message) => {
+			explicitRunMessage = message;
+			sandbox.write('stale during explicit run\n');
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+				bufferedDuringExplicitRun = readBufferedStdin(message.buffer);
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+
+		await expect(
+			sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+				stdin: 'explicit input\n'
+			})
+		).resolves.toBe(true);
+
+		expect(explicitRunMessage.stdin).toBe('explicit input\n');
+		expect(bufferedDuringExplicitRun).toBe('');
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(readBufferedStdin(explicitRunMessage.buffer)).toBe('');
+
+		let bufferedRunMessage: any;
+		worker.postMessage.mockImplementationOnce((message) => {
+			bufferedRunMessage = message;
+		});
+		const bufferedRun = sandbox.run('package main\nfunc main() {}', false);
+		worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+		expect(readBufferedStdin(bufferedRunMessage.buffer)).toBe('');
+
+		sandbox.write('fresh input\n');
+		expect(readBufferedStdin(bufferedRunMessage.buffer)).toBe('fresh input\n');
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(bufferedRun).resolves.toBe(true);
+	});
+
+	it('clears explicit stdin state after a worker error', async () => {
+		const sandbox = new Go();
+		const worker = new MockWorker();
+		let runMessage: any;
+
+		sandbox.worker = worker as unknown as Worker;
+		sandbox.write('stale before failed run\n');
+		worker.postMessage.mockImplementationOnce((message) => {
+			runMessage = message;
+			sandbox.write('stale during failed run\n');
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { error: 'Go execution failed' } } as MessageEvent<any>);
+			});
+		});
+
+		await expect(
+			sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+				stdin: 'explicit input\n'
+			})
+		).rejects.toBe('Go execution failed');
+
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(readBufferedStdin(runMessage.buffer)).toBe('');
+	});
+
+	it('clears explicit stdin state after synchronous dispatch failure', async () => {
+		const sandbox = new Go();
+		const worker = new MockWorker();
+		const dispatchError = new Error('Go dispatch failed');
+
+		sandbox.worker = worker as unknown as Worker;
+		sandbox.write('stale before dispatch\n');
+		worker.postMessage.mockImplementationOnce(() => {
+			throw dispatchError;
+		});
+
+		await expect(
+			sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+				stdin: ''
+			})
+		).rejects.toBe(dispatchError);
+
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(worker.onmessage).toBeNull();
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('clears explicit stdin state when execution is terminated', async () => {
+		const sandbox = new Go();
+		const worker = new MockWorker();
+		let runMessage: any;
+
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementationOnce((message) => {
+			runMessage = message;
+		});
+		const running = sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+			stdin: 'explicit input\n'
+		});
+		sandbox.write('stale during terminated run\n');
+
+		sandbox.kill();
+
+		await expect(running).rejects.toBe('Process terminated');
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(readBufferedStdin(runMessage.buffer)).toBe('');
+	});
+
 	it('passes debug buffers, breakpoints, and debug events through the worker host', async () => {
 		const sandbox = new Go();
 		const events: any[] = [];

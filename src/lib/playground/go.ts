@@ -35,9 +35,11 @@ class Go implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private activeExplicitStdinCleanup: (() => void) | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'Go',
 		onDispose: (worker) => {
+			this.activeExplicitStdinCleanup?.();
 			if (this.worker === worker) delete this.worker;
 			this.exit = true;
 			this.waitingForInput = false;
@@ -115,6 +117,13 @@ class Go implements Sandbox {
 		}
 	}
 
+	private resetStdinState() {
+		this.pendingInput = [];
+		this.waitingForInput = false;
+		this.pendingEof = false;
+		resetBufferedStdin(this.buffer);
+	}
+
 	run(
 		code: string,
 		prepare: boolean,
@@ -132,12 +141,27 @@ class Go implements Sandbox {
 			const _uid = ++this.uid;
 			const operation = this.workerSession.beginRun(this.worker, reject);
 			this.setBreakpoints(options.debug ? [...(options.breakpoints || [])] : []);
+			const hasExplicitStdin = !options.debug && options.stdin !== undefined;
+			this.activeExplicitStdinCleanup?.();
+			let explicitStdinCleaned = false;
+			const cleanupExplicitStdin = () => {
+				if (!hasExplicitStdin || explicitStdinCleaned) return;
+				explicitStdinCleaned = true;
+				if (this.activeExplicitStdinCleanup === cleanupExplicitStdin) {
+					this.activeExplicitStdinCleanup = null;
+				}
+				this.resetStdinState();
+			};
+			if (hasExplicitStdin) {
+				this.resetStdinState();
+				this.activeExplicitStdinCleanup = cleanupExplicitStdin;
+			}
 			const handler = (event: Event & { data: any }) => {
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
 				const { output, results, error, buffer, diagnostic, progress, debugEvent } =
 					event.data;
-				if (buffer) {
+				if (buffer && !hasExplicitStdin) {
 					this.waitingForInput = true;
 					this.flushPendingInput();
 				}
@@ -146,6 +170,7 @@ class Go implements Sandbox {
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (debugEvent) this.ondebug?.(debugEvent);
 				if (results) {
+					cleanupExplicitStdin();
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -155,6 +180,7 @@ class Go implements Sandbox {
 					resolve(results as string);
 				}
 				if (error) {
+					cleanupExplicitStdin();
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -166,19 +192,28 @@ class Go implements Sandbox {
 			};
 			this.worker.onmessage = handler;
 			this.begin = Date.now();
-			this.worker.postMessage({
-				code,
-				prepare,
-				buffer: this.buffer,
-				debugBuffer: this.debugBuffer,
-				stdin: options.stdin,
-				args: programArgs,
-				target,
-				log: _log,
-				debug: !!options.debug,
-				breakpoints: [...(options.breakpoints || [])],
-				pauseOnEntry: !!options.pauseOnEntry
-			});
+			try {
+				this.worker.postMessage({
+					code,
+					prepare,
+					buffer: this.buffer,
+					debugBuffer: this.debugBuffer,
+					stdin: options.stdin,
+					args: programArgs,
+					target,
+					log: _log,
+					debug: !!options.debug,
+					breakpoints: [...(options.breakpoints || [])],
+					pauseOnEntry: !!options.pauseOnEntry
+				});
+			} catch (error) {
+				if (!hasExplicitStdin) throw error;
+				cleanupExplicitStdin();
+				if (this.worker.onmessage === handler) this.worker.onmessage = null;
+				this.workerSession.complete(operation);
+				this.exit = true;
+				reject(error);
+			}
 		});
 	}
 
@@ -222,11 +257,8 @@ class Go implements Sandbox {
 	}
 
 	async clear() {
-		this.pendingInput = [];
-		this.waitingForInput = false;
-		this.pendingEof = false;
+		this.resetStdinState();
 		if (this.worker) this.worker.onmessage = null;
-		resetBufferedStdin(this.buffer);
 		new Int32Array(this.debugBuffer).fill(0);
 		if (!this.exit) {
 			this.terminate();
