@@ -7,6 +7,7 @@ import type {
 import { createDebugAdapterEventChannel } from './event-channel.js';
 import { cloneDebugSource, debugSourceKey, validateBreakpointLines } from './source.js';
 import {
+	DebugAdapterProtocolError,
 	DebugAdapterStateError,
 	UnsupportedDebugOperationError,
 	type DebugAdapter,
@@ -53,58 +54,6 @@ interface DapSetBreakpointsResponse {
 	breakpoints?: DapBreakpoint[];
 }
 
-interface DapThreadsResponse {
-	threads?: Array<{ id: number; name: string }>;
-}
-
-interface DapStackTraceResponse {
-	stackFrames?: Array<{
-		id: number;
-		name: string;
-		source?: DebugSource;
-		line: number;
-		column: number;
-		endLine?: number;
-		endColumn?: number;
-		canRestart?: boolean;
-		instructionPointerReference?: string;
-		moduleId?: number | string;
-		presentationHint?: 'normal' | 'label' | 'subtle';
-	}>;
-}
-
-interface DapScopesResponse {
-	scopes?: Array<{
-		name: string;
-		presentationHint?: 'arguments' | 'locals' | 'registers' | 'returnValue';
-		variablesReference: number;
-		namedVariables?: number;
-		indexedVariables?: number;
-		expensive: boolean;
-		source?: DebugSource;
-		line?: number;
-		column?: number;
-		endLine?: number;
-		endColumn?: number;
-	}>;
-}
-
-interface DapVariable {
-	name: string;
-	value: string;
-	type?: string;
-	presentationHint?: DebugVariablePresentationHint;
-	evaluateName?: string;
-	variablesReference?: number;
-	namedVariables?: number;
-	indexedVariables?: number;
-	memoryReference?: string;
-}
-
-interface DapVariablesResponse {
-	variables?: DapVariable[];
-}
-
 interface DapReadMemoryResponse {
 	address?: string;
 	data?: string;
@@ -143,6 +92,149 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 function eventBody<T>(event: DapEvent) {
 	return (isObject(event.body) ? event.body : {}) as Partial<T>;
+}
+
+function invalidDapResponse(command: string, path: string, expectation: string): never {
+	throw new DebugAdapterProtocolError(command, path, expectation);
+}
+
+function assertDapRecord(
+	value: unknown,
+	command: string,
+	path: string
+): asserts value is Record<string, unknown> {
+	if (!isObject(value) || Array.isArray(value)) {
+		invalidDapResponse(command, path, 'expected an object');
+	}
+}
+
+function assertDapString(value: unknown, command: string, path: string): asserts value is string {
+	if (typeof value !== 'string') {
+		invalidDapResponse(command, path, 'expected a string');
+	}
+}
+
+function assertDapBoolean(value: unknown, command: string, path: string): asserts value is boolean {
+	if (typeof value !== 'boolean') {
+		invalidDapResponse(command, path, 'expected a boolean');
+	}
+}
+
+function assertDapPositiveSafeInteger(
+	value: unknown,
+	command: string,
+	path: string
+): asserts value is number {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) {
+		invalidDapResponse(command, path, 'expected a positive safe integer');
+	}
+}
+
+function assertDapNonNegativeSafeInteger(
+	value: unknown,
+	command: string,
+	path: string
+): asserts value is number {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+		invalidDapResponse(command, path, 'expected a non-negative safe integer');
+	}
+}
+
+function assertDapStringEnum<const TValue extends string>(
+	value: unknown,
+	values: readonly TValue[],
+	command: string,
+	path: string
+): asserts value is TValue {
+	if (typeof value !== 'string' || !values.includes(value as TValue)) {
+		invalidDapResponse(command, path, `expected one of ${values.join(', ')}`);
+	}
+}
+
+function dapOptionalString(
+	record: Record<string, unknown>,
+	field: string,
+	command: string,
+	path: string
+) {
+	const value = record[field];
+	if (value === undefined) return undefined;
+	assertDapString(value, command, `${path}.${field}`);
+	return value;
+}
+
+function dapOptionalBoolean(
+	record: Record<string, unknown>,
+	field: string,
+	command: string,
+	path: string
+) {
+	const value = record[field];
+	if (value === undefined) return undefined;
+	assertDapBoolean(value, command, `${path}.${field}`);
+	return value;
+}
+
+function dapOptionalNonNegativeSafeInteger(
+	record: Record<string, unknown>,
+	field: string,
+	command: string,
+	path: string
+) {
+	const value = record[field];
+	if (value === undefined) return undefined;
+	assertDapNonNegativeSafeInteger(value, command, `${path}.${field}`);
+	return value;
+}
+
+function dapOptionalStringEnum<const TValue extends string>(
+	record: Record<string, unknown>,
+	field: string,
+	values: readonly TValue[],
+	command: string,
+	path: string
+) {
+	const value = record[field];
+	if (value === undefined) return undefined;
+	assertDapStringEnum(value, values, command, `${path}.${field}`);
+	return value;
+}
+
+function dapResponseCollection(response: unknown, command: string, path: string): unknown[] {
+	assertDapRecord(response, command, 'body');
+	const collection = response[path];
+	if (!Array.isArray(collection)) {
+		invalidDapResponse(command, path, 'expected an array');
+	}
+	return collection;
+}
+
+function normalizeDapSource(value: unknown, command: string, path: string): DebugSource {
+	assertDapRecord(value, command, path);
+	const name = dapOptionalString(value, 'name', command, path);
+	const sourcePath = dapOptionalString(value, 'path', command, path);
+	const origin = dapOptionalString(value, 'origin', command, path);
+	const sourceReference = dapOptionalNonNegativeSafeInteger(
+		value,
+		'sourceReference',
+		command,
+		path
+	);
+	const presentationHint = dapOptionalStringEnum(
+		value,
+		'presentationHint',
+		['normal', 'emphasize', 'deemphasize'],
+		command,
+		path
+	);
+	return {
+		...(name === undefined ? {} : { name }),
+		...(sourcePath === undefined ? {} : { path: sourcePath }),
+		...(sourceReference === undefined ? {} : { sourceReference }),
+		...(presentationHint === undefined ? {} : { presentationHint }),
+		...(origin === undefined ? {} : { origin }),
+		...(value.adapterData === undefined ? {} : { adapterData: value.adapterData })
+	};
 }
 
 function assertPositiveInteger(value: number, name: string) {
@@ -323,11 +415,16 @@ export class LldbDapAdapter implements DebugAdapter {
 
 	async threads() {
 		this.#requireInitialized();
-		const response = await this.#session.request<DapThreadsResponse>('threads');
-		return (response?.threads || []).map<DebugThread>((thread) => ({
-			id: thread.id,
-			name: thread.name
-		}));
+		const response = await this.#session.request<unknown>('threads');
+		return dapResponseCollection(response, 'threads', 'threads').map<DebugThread>(
+			(thread, index) => {
+				const path = `threads[${index}]`;
+				assertDapRecord(thread, 'threads', path);
+				assertDapPositiveSafeInteger(thread.id, 'threads', `${path}.id`);
+				assertDapString(thread.name, 'threads', `${path}.name`);
+				return { id: thread.id, name: thread.name };
+			}
+		);
 	}
 
 	async stackTrace(threadId: number, startFrame?: number, levels?: number) {
@@ -336,25 +433,143 @@ export class LldbDapAdapter implements DebugAdapter {
 		if (startFrame !== undefined) assertNonNegativeInteger(startFrame, 'startFrame');
 		if (levels !== undefined) assertNonNegativeInteger(levels, 'levels');
 
-		const response = await this.#session.request<DapStackTraceResponse>('stackTrace', {
+		const response = await this.#session.request<unknown>('stackTrace', {
 			threadId,
 			...(startFrame === undefined ? {} : { startFrame }),
 			...(levels === undefined ? {} : { levels })
 		});
-		return (response?.stackFrames || []).map<DebugStackFrame>((frame) => ({
-			...frame,
-			...(frame.source ? { source: cloneDebugSource(frame.source) } : {})
-		}));
+		return dapResponseCollection(response, 'stackTrace', 'stackFrames').map<DebugStackFrame>(
+			(frame, index) => {
+				const path = `stackFrames[${index}]`;
+				assertDapRecord(frame, 'stackTrace', path);
+				assertDapPositiveSafeInteger(frame.id, 'stackTrace', `${path}.id`);
+				assertDapString(frame.name, 'stackTrace', `${path}.name`);
+				assertDapNonNegativeSafeInteger(frame.line, 'stackTrace', `${path}.line`);
+				assertDapNonNegativeSafeInteger(frame.column, 'stackTrace', `${path}.column`);
+				const source =
+					frame.source === undefined
+						? undefined
+						: normalizeDapSource(frame.source, 'stackTrace', `${path}.source`);
+				const endLine = dapOptionalNonNegativeSafeInteger(
+					frame,
+					'endLine',
+					'stackTrace',
+					path
+				);
+				const endColumn = dapOptionalNonNegativeSafeInteger(
+					frame,
+					'endColumn',
+					'stackTrace',
+					path
+				);
+				const canRestart = dapOptionalBoolean(frame, 'canRestart', 'stackTrace', path);
+				const instructionPointerReference = dapOptionalString(
+					frame,
+					'instructionPointerReference',
+					'stackTrace',
+					path
+				);
+				const moduleId = frame.moduleId;
+				if (
+					moduleId !== undefined &&
+					typeof moduleId !== 'string' &&
+					!Number.isSafeInteger(moduleId)
+				) {
+					invalidDapResponse(
+						'stackTrace',
+						`${path}.moduleId`,
+						'expected a string or safe integer'
+					);
+				}
+				const presentationHint = dapOptionalStringEnum(
+					frame,
+					'presentationHint',
+					['normal', 'label', 'subtle'],
+					'stackTrace',
+					path
+				);
+				return {
+					id: frame.id,
+					name: frame.name,
+					...(source === undefined ? {} : { source }),
+					line: frame.line,
+					column: frame.column,
+					...(endLine === undefined ? {} : { endLine }),
+					...(endColumn === undefined ? {} : { endColumn }),
+					...(canRestart === undefined ? {} : { canRestart }),
+					...(instructionPointerReference === undefined
+						? {}
+						: { instructionPointerReference }),
+					...(moduleId === undefined ? {} : { moduleId: moduleId as number | string }),
+					...(presentationHint === undefined ? {} : { presentationHint })
+				};
+			}
+		);
 	}
 
 	async scopes(frameId: number) {
 		this.#requireInitialized();
 		assertPositiveInteger(frameId, 'frameId');
-		const response = await this.#session.request<DapScopesResponse>('scopes', { frameId });
-		return (response?.scopes || []).map<DebugScope>((scope) => ({
-			...scope,
-			...(scope.source ? { source: cloneDebugSource(scope.source) } : {})
-		}));
+		const response = await this.#session.request<unknown>('scopes', { frameId });
+		return dapResponseCollection(response, 'scopes', 'scopes').map<DebugScope>(
+			(scope, index) => {
+				const path = `scopes[${index}]`;
+				assertDapRecord(scope, 'scopes', path);
+				assertDapString(scope.name, 'scopes', `${path}.name`);
+				assertDapNonNegativeSafeInteger(
+					scope.variablesReference,
+					'scopes',
+					`${path}.variablesReference`
+				);
+				assertDapBoolean(scope.expensive, 'scopes', `${path}.expensive`);
+				const presentationHint = dapOptionalString(
+					scope,
+					'presentationHint',
+					'scopes',
+					path
+				);
+				const namedVariables = dapOptionalNonNegativeSafeInteger(
+					scope,
+					'namedVariables',
+					'scopes',
+					path
+				);
+				const indexedVariables = dapOptionalNonNegativeSafeInteger(
+					scope,
+					'indexedVariables',
+					'scopes',
+					path
+				);
+				const source =
+					scope.source === undefined
+						? undefined
+						: normalizeDapSource(scope.source, 'scopes', `${path}.source`);
+				const line = dapOptionalNonNegativeSafeInteger(scope, 'line', 'scopes', path);
+				const column = dapOptionalNonNegativeSafeInteger(scope, 'column', 'scopes', path);
+				const endLine = dapOptionalNonNegativeSafeInteger(scope, 'endLine', 'scopes', path);
+				const endColumn = dapOptionalNonNegativeSafeInteger(
+					scope,
+					'endColumn',
+					'scopes',
+					path
+				);
+				return {
+					name: scope.name,
+					...(presentationHint === undefined
+						? {}
+						: { presentationHint: presentationHint as DebugScope['presentationHint'] }),
+					variablesReference: scope.variablesReference,
+					...(namedVariables === undefined ? {} : { namedVariables }),
+					...(indexedVariables === undefined ? {} : { indexedVariables }),
+					expensive: scope.expensive,
+					...(source === undefined ? {} : { source }),
+					...(line === undefined ? {} : { line }),
+					...(column === undefined ? {} : { column }),
+					...(endLine === undefined ? {} : { endLine }),
+					...(endColumn === undefined ? {} : { endColumn })
+				};
+			}
+		);
 	}
 
 	async variables(variablesReference: number, start?: number, count?: number) {
@@ -363,15 +578,118 @@ export class LldbDapAdapter implements DebugAdapter {
 		if (start !== undefined) assertNonNegativeInteger(start, 'start');
 		if (count !== undefined) assertNonNegativeInteger(count, 'count');
 
-		const response = await this.#session.request<DapVariablesResponse>('variables', {
+		const response = await this.#session.request<unknown>('variables', {
 			variablesReference,
 			...(start === undefined ? {} : { start }),
 			...(count === undefined ? {} : { count })
 		});
-		return (response?.variables || []).map<DebugVariable>((variable) => ({
-			...variable,
-			variablesReference: variable.variablesReference || 0
-		}));
+		return dapResponseCollection(response, 'variables', 'variables').map<DebugVariable>(
+			(variable, index) => {
+				const path = `variables[${index}]`;
+				assertDapRecord(variable, 'variables', path);
+				assertDapString(variable.name, 'variables', `${path}.name`);
+				assertDapString(variable.value, 'variables', `${path}.value`);
+				assertDapNonNegativeSafeInteger(
+					variable.variablesReference,
+					'variables',
+					`${path}.variablesReference`
+				);
+				const variableType = dapOptionalString(variable, 'type', 'variables', path);
+				const evaluateName = dapOptionalString(variable, 'evaluateName', 'variables', path);
+				const memoryReference = dapOptionalString(
+					variable,
+					'memoryReference',
+					'variables',
+					path
+				);
+				const namedVariables = dapOptionalNonNegativeSafeInteger(
+					variable,
+					'namedVariables',
+					'variables',
+					path
+				);
+				const indexedVariables = dapOptionalNonNegativeSafeInteger(
+					variable,
+					'indexedVariables',
+					'variables',
+					path
+				);
+				let presentationHint: DebugVariablePresentationHint | undefined;
+				if (variable.presentationHint !== undefined) {
+					assertDapRecord(
+						variable.presentationHint,
+						'variables',
+						`${path}.presentationHint`
+					);
+					const hint = variable.presentationHint;
+					const kind = dapOptionalString(
+						hint,
+						'kind',
+						'variables',
+						`${path}.presentationHint`
+					);
+					const visibility = dapOptionalString(
+						hint,
+						'visibility',
+						'variables',
+						`${path}.presentationHint`
+					);
+					let attributes: string[] | undefined;
+					if (hint.attributes !== undefined) {
+						if (!Array.isArray(hint.attributes)) {
+							invalidDapResponse(
+								'variables',
+								`${path}.presentationHint.attributes`,
+								'expected an array'
+							);
+						}
+						hint.attributes.forEach((attribute, attributeIndex) => {
+							assertDapString(
+								attribute,
+								'variables',
+								`${path}.presentationHint.attributes[${attributeIndex}]`
+							);
+						});
+						attributes = [...hint.attributes];
+					}
+					const lazy = dapOptionalBoolean(
+						hint,
+						'lazy',
+						'variables',
+						`${path}.presentationHint`
+					);
+					presentationHint = {
+						...(kind === undefined
+							? {}
+							: { kind: kind as DebugVariablePresentationHint['kind'] }),
+						...(attributes === undefined
+							? {}
+							: {
+									attributes:
+										attributes as DebugVariablePresentationHint['attributes']
+								}),
+						...(visibility === undefined
+							? {}
+							: {
+									visibility:
+										visibility as DebugVariablePresentationHint['visibility']
+								}),
+						...(lazy === undefined ? {} : { lazy })
+					};
+				}
+				return {
+					name: variable.name,
+					value: variable.value,
+					...(variableType === undefined ? {} : { type: variableType }),
+					...(presentationHint === undefined ? {} : { presentationHint }),
+					...(evaluateName === undefined ? {} : { evaluateName }),
+					variablesReference: variable.variablesReference,
+					...(namedVariables === undefined ? {} : { namedVariables }),
+					...(indexedVariables === undefined ? {} : { indexedVariables }),
+					...(memoryReference === undefined ? {} : { memoryReference })
+				};
+			}
+		);
 	}
 
 	async readMemory(memoryReference: string, offset: number, count: number) {

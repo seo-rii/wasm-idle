@@ -8,7 +8,11 @@ export type {
 } from './dap.js';
 export type { LldbDapAdapterOptions } from './lldb-dap.js';
 export type { TraceDebugAdapterOptions, TraceDebugControl } from './trace.js';
-export { DebugAdapterStateError, UnsupportedDebugOperationError } from './types.js';
+export {
+	DebugAdapterProtocolError,
+	DebugAdapterStateError,
+	UnsupportedDebugOperationError
+} from './types.js';
 export type {
 	DebugAdapter,
 	DebugAdapterEvent,

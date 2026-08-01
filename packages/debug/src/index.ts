@@ -3,6 +3,7 @@ export { selectInlineDebugLocals } from './locals.js';
 export {
 	createLldbDapAdapter,
 	createTraceDebugAdapter,
+	DebugAdapterProtocolError,
 	DebugAdapterStateError,
 	LldbDapAdapter,
 	TraceDebugAdapter,

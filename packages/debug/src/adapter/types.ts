@@ -235,3 +235,15 @@ export class DebugAdapterStateError extends Error {
 		this.name = 'DebugAdapterStateError';
 	}
 }
+
+export class DebugAdapterProtocolError extends Error {
+	readonly command: string;
+	readonly path: string;
+
+	constructor(command: string, path: string, expectation: string) {
+		super(`Invalid DAP ${command} response at ${path}: ${expectation}.`);
+		this.name = 'DebugAdapterProtocolError';
+		this.command = command;
+		this.path = path;
+	}
+}

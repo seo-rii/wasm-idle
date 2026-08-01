@@ -40,6 +40,14 @@ lazy through `variablesReference`; consumers should not serialize an entire LLDB
 Supply an LLDB DAP session from `@wasm-idle/llvm-core/debug`. Runtime assets remain owned by the
 `wasm-llvm` producer and are deliberately excluded from this package.
 
+LLDB response bodies are validated again at the adapter boundary even though the lower-level DAP
+client already validates message envelopes. `threads`, `stackTrace`, `scopes`, and `variables`
+must contain their required arrays and well-formed identifiers, source descriptors, counts, and
+presentation fields. A malformed body rejects with `DebugAdapterProtocolError`, whose `command`
+and `path` identify the failed field; hosts should treat it as a session failure and dispose the
+LLDB/WAMR workers. Stack and scope line or column values may be zero, matching DAP's representation
+for an unavailable source location.
+
 The playground-facing controller also exposes `readMemory(memoryReference, offset, count)` while
 the target is paused. `DebugMemory` crosses the framework-neutral Sandbox and Terminal contracts
 as a `Uint8Array`; browser automation and other serialization boundaries should explicitly convert

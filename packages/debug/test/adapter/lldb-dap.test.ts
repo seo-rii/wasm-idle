@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import {
+	DebugAdapterProtocolError,
 	DebugAdapterStateError,
 	UnsupportedDebugOperationError,
 	createLldbDapAdapter,
@@ -411,7 +412,8 @@ describe('LldbDapAdapter', () => {
 					source: { path: '/workspace/main.cpp' },
 					line: 9,
 					column: 3
-				}
+				},
+				{ id: 71, name: 'runtime frame', line: 0, column: 0 }
 			]
 		});
 		session.setResponse('scopes', {
@@ -448,7 +450,8 @@ describe('LldbDapAdapter', () => {
 				source: { path: '/workspace/main.cpp' },
 				line: 9,
 				column: 3
-			}
+			},
+			{ id: 71, name: 'runtime frame', line: 0, column: 0 }
 		]);
 		await expect(adapter.scopes(70)).resolves.toEqual([
 			{
@@ -485,6 +488,143 @@ describe('LldbDapAdapter', () => {
 			requestArguments: expect.objectContaining({ variablesReference: 99 })
 		});
 	});
+
+	it.each([
+		{
+			command: 'threads',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) => adapter.threads(),
+			path: 'threads'
+		},
+		{
+			command: 'stackTrace',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) => adapter.stackTrace(1),
+			path: 'stackFrames'
+		},
+		{
+			command: 'scopes',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) => adapter.scopes(1),
+			path: 'scopes'
+		},
+		{
+			command: 'variables',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) => adapter.variables(1),
+			path: 'variables'
+		}
+	])(
+		'rejects a $command response without its required collection',
+		async ({ command, invoke, path }) => {
+			const session = new FakeDapSession();
+			session.setResponse('initialize', {});
+			session.setResponse(command, {});
+			const adapter = createLldbDapAdapter(session);
+			await adapter.initialize();
+
+			const response = invoke(adapter);
+			await expect(response).rejects.toBeInstanceOf(DebugAdapterProtocolError);
+			await expect(response).rejects.toMatchObject({
+				name: 'DebugAdapterProtocolError',
+				command,
+				path
+			});
+		}
+	);
+
+	it.each([
+		{
+			command: 'threads',
+			response: { threads: [{ id: 0, name: 'Wasm main thread' }] },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) => adapter.threads(),
+			path: 'threads[0].id'
+		},
+		{
+			command: 'threads',
+			response: { threads: [{ id: 1, name: 7 }] },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) => adapter.threads(),
+			path: 'threads[0].name'
+		},
+		{
+			command: 'stackTrace',
+			response: {
+				stackFrames: [{ id: 7, name: 'main', line: -1, column: 1 }]
+			},
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) => adapter.stackTrace(1),
+			path: 'stackFrames[0].line'
+		},
+		{
+			command: 'stackTrace',
+			response: {
+				stackFrames: [{ id: 7, name: 'main', source: 'main.cpp', line: 1, column: 1 }]
+			},
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) => adapter.stackTrace(1),
+			path: 'stackFrames[0].source'
+		},
+		{
+			command: 'stackTrace',
+			response: {
+				stackFrames: [
+					{ id: 7, name: 'main', line: 1, column: 1, presentationHint: 'invalid' }
+				]
+			},
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) => adapter.stackTrace(1),
+			path: 'stackFrames[0].presentationHint'
+		},
+		{
+			command: 'scopes',
+			response: {
+				scopes: [{ name: 'Locals', variablesReference: -1, expensive: false }]
+			},
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) => adapter.scopes(1),
+			path: 'scopes[0].variablesReference'
+		},
+		{
+			command: 'scopes',
+			response: {
+				scopes: [{ name: 'Locals', variablesReference: 1, expensive: 'false' }]
+			},
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) => adapter.scopes(1),
+			path: 'scopes[0].expensive'
+		},
+		{
+			command: 'variables',
+			response: {
+				variables: [{ name: 7, value: '42', variablesReference: 0 }]
+			},
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) => adapter.variables(1),
+			path: 'variables[0].name'
+		},
+		{
+			command: 'variables',
+			response: {
+				variables: [
+					{
+						name: 'answer',
+						value: '42',
+						variablesReference: 0,
+						presentationHint: { attributes: [7] }
+					}
+				]
+			},
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) => adapter.variables(1),
+			path: 'variables[0].presentationHint.attributes[0]'
+		}
+	])(
+		'rejects malformed $command collection entries',
+		async ({ command, response, invoke, path }) => {
+			const session = new FakeDapSession();
+			session.setResponse('initialize', {});
+			session.setResponse(command, response);
+			const adapter = createLldbDapAdapter(session);
+			await adapter.initialize();
+
+			const result = invoke(adapter);
+			await expect(result).rejects.toBeInstanceOf(DebugAdapterProtocolError);
+			await expect(result).rejects.toMatchObject({
+				name: 'DebugAdapterProtocolError',
+				command,
+				path
+			});
+		}
+	);
 
 	it('gates memory and evaluation requests on explicit capabilities', async () => {
 		const unsupportedSession = new FakeDapSession();
