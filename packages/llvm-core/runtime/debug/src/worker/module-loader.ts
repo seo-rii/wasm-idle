@@ -74,12 +74,29 @@ export function createTransportBindings(options: {
 	dapInput?: SharedByteQueueDescriptor;
 	dapOutput?: SharedByteQueueDescriptor;
 }): BrowserDebugTransportBindings {
+	if ((options.dapInput === undefined) !== (options.dapOutput === undefined)) {
+		throw new Error('DAP input and output descriptors must be provided together');
+	}
+	const rspInput = new SharedByteQueue(options.rspInput);
+	const rspOutput = new SharedByteQueue(options.rspOutput);
+	const dapInput = options.dapInput ? new SharedByteQueue(options.dapInput) : undefined;
+	const dapOutput = options.dapOutput ? new SharedByteQueue(options.dapOutput) : undefined;
+	const buffers = new Set<SharedArrayBuffer>();
+	for (const queue of [rspInput, rspOutput, dapInput, dapOutput]) {
+		if (!queue) continue;
+		for (const buffer of [queue.descriptor.control, queue.descriptor.data]) {
+			if (buffers.has(buffer)) {
+				throw new Error('debug transport channels must not reuse shared buffers');
+			}
+			buffers.add(buffer);
+		}
+	}
 	return {
 		generation: options.generation,
-		rspInput: new SharedByteQueue(options.rspInput),
-		rspOutput: new SharedByteQueue(options.rspOutput),
-		...(options.dapInput ? { dapInput: new SharedByteQueue(options.dapInput) } : {}),
-		...(options.dapOutput ? { dapOutput: new SharedByteQueue(options.dapOutput) } : {})
+		rspInput,
+		rspOutput,
+		...(dapInput ? { dapInput } : {}),
+		...(dapOutput ? { dapOutput } : {})
 	};
 }
 

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { createSharedByteQueue } from '../src/shared-byte-queue.js';
 import {
+	createTransportBindings,
 	mountDebugFiles,
 	startLinearMemoryTelemetry,
 	type EmscriptenDebugModule
@@ -17,6 +19,46 @@ function debugModule(bytes?: number): EmscriptenDebugModule {
 		callMain: vi.fn()
 	};
 }
+
+describe('debug transport bindings', () => {
+	it('rejects a queue descriptor reused in both RSP directions', () => {
+		const shared = createSharedByteQueue(4096, 41);
+
+		expect(() =>
+			createTransportBindings({
+				generation: 'aliased-rsp',
+				rspInput: shared,
+				rspOutput: shared
+			})
+		).toThrow(/debug transport channels must not reuse shared buffers/u);
+	});
+
+	it('rejects a payload buffer shared between RSP and DAP channels', () => {
+		const rspInput = createSharedByteQueue(4096, 42);
+		const dapInput = createSharedByteQueue(4096, 42);
+
+		expect(() =>
+			createTransportBindings({
+				generation: 'aliased-protocols',
+				rspInput,
+				rspOutput: createSharedByteQueue(4096, 42),
+				dapInput: { ...dapInput, data: rspInput.data },
+				dapOutput: createSharedByteQueue(4096, 42)
+			})
+		).toThrow(/debug transport channels must not reuse shared buffers/u);
+	});
+
+	it('requires DAP input and output descriptors together', () => {
+		expect(() =>
+			createTransportBindings({
+				generation: 'partial-dap',
+				rspInput: createSharedByteQueue(4096, 43),
+				rspOutput: createSharedByteQueue(4096, 43),
+				dapInput: createSharedByteQueue(4096, 43)
+			})
+		).toThrow(/DAP input and output descriptors must be provided together/u);
+	});
+});
 
 describe('debug file mounting', () => {
 	it.each([
