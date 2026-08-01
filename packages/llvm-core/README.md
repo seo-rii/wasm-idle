@@ -162,6 +162,10 @@ runtime: `request_seq` must be a positive safe integer, `command` a non-empty st
 a boolean; an optional failure `message` must be a string. Malformed values fail the stream instead
 of timing out, stringifying an arbitrary object as an adapter error, or treating a string such as
 `"false"` as success.
+The session also validates the initial DAP capability body before finishing startup. It must be an
+object, and every capability consumed by the browser integration must be boolean when present.
+Malformed capability data raises `DapProtocolError` and disposes both workers instead of publishing
+an initialized session with corrupt feature detection.
 Every incoming DAP message must also carry a positive safe-integer `seq` and a recognized
 `request`, `response`, or `event` type. Event names must be non-empty strings. Invalid common or
 event envelopes fail the stream before listener dispatch or request timeout can hide the protocol

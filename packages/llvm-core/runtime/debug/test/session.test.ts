@@ -92,7 +92,11 @@ class FakeWorker implements WorkerLike {
 		readonly commands: string[],
 		private readonly failAfterReady = false,
 		private readonly suppressReady = false,
-		private readonly suppressedResponses = new Set<string>()
+		private readonly suppressedResponses = new Set<string>(),
+		private readonly initializeBody: unknown = {
+			supportsConfigurationDoneRequest: true,
+			supportsReadMemoryRequest: true
+		}
 	) {}
 
 	postMessage(message: DebugWorkerInboundMessage) {
@@ -283,10 +287,7 @@ class FakeWorker implements WorkerLike {
 					success: true,
 					body:
 						request.command === 'initialize'
-							? {
-									supportsConfigurationDoneRequest: true,
-									supportsReadMemoryRequest: true
-								}
+							? this.initializeBody
 							: request.command === 'setBreakpoints'
 								? {
 										breakpoints: (
@@ -315,6 +316,32 @@ class FakeWorker implements WorkerLike {
 }
 
 describe('BrowserLldbSession', () => {
+	it.each([
+		['null body', null],
+		['array body', []],
+		['non-boolean capability', { supportsReadMemoryRequest: 'yes' }]
+	])('rejects an invalid DAP initialize capability %s', async (_label, initializeBody) => {
+		const workers: FakeWorker[] = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: Uint8Array.of(0, 97, 115, 109),
+			sources: [{ path: '/workspace/main.cpp', content: 'int main() { return 0; }' }],
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, [], false, false, new Set(), initializeBody);
+				workers.push(worker);
+				return worker;
+			},
+			fetchImpl: async () => new Response('debug-asset'),
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+
+		await expect(session.initialize()).rejects.toBeInstanceOf(DapProtocolError);
+		expect(workers).toHaveLength(2);
+		expect(workers.every((worker) => worker.isTerminated)).toBe(true);
+	});
+
 	it('connects before breakpoints and starts the target only after configurationDone', async () => {
 		const commands: string[] = [];
 		const workers: FakeWorker[] = [];

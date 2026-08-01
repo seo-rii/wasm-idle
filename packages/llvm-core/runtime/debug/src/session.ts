@@ -18,6 +18,15 @@ import type {
 
 const DEFAULT_QUEUE_CAPACITY = 256 * 1024;
 const WORKER_SHUTDOWN_GRACE_MS = 25;
+const DAP_BOOLEAN_CAPABILITY_KEYS = [
+	'supportsConfigurationDoneRequest',
+	'supportsReadMemoryRequest',
+	'supportsEvaluateForHovers',
+	'supportsConditionalBreakpoints',
+	'supportsLogPoints',
+	'supportsDataBreakpoints',
+	'supportsTerminateRequest'
+] as const satisfies readonly (keyof DebugCapabilities)[];
 let nextGeneration = 1;
 
 function createGeneration(): DebugSessionGeneration {
@@ -618,8 +627,8 @@ export class BrowserLldbSession {
 				}
 			});
 
-			const capabilities = await this.awaitWhileActive(
-				this.dap.request<DebugCapabilities>('initialize', {
+			const capabilityValue: unknown = await this.awaitWhileActive(
+				this.dap.request('initialize', {
 					clientID: 'wasm-idle',
 					clientName: 'wasm-idle',
 					adapterID: 'lldb',
@@ -632,6 +641,23 @@ export class BrowserLldbSession {
 					locale: 'en-US'
 				})
 			);
+			if (
+				typeof capabilityValue !== 'object' ||
+				capabilityValue === null ||
+				Array.isArray(capabilityValue)
+			) {
+				invalidDapResponse('initialize', 'body', 'expected an object');
+			}
+			const capabilityRecord = capabilityValue as Record<string, unknown>;
+			for (const key of DAP_BOOLEAN_CAPABILITY_KEYS) {
+				if (
+					capabilityRecord[key] !== undefined &&
+					typeof capabilityRecord[key] !== 'boolean'
+				) {
+					invalidDapResponse('initialize', `body.${key}`, 'expected a boolean');
+				}
+			}
+			const capabilities = { ...capabilityRecord } as DebugCapabilities;
 			const attachResponse = this.dap.request('attach', {
 				program: launch?.program ?? '/workspace/program.wasm',
 				stopOnEntry: launch?.stopOnEntry ?? false,
