@@ -4,6 +4,11 @@ import {
 	resolveRuntimeAssetConfig,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
+import {
+	DEFAULT_WORKSPACE_LIMITS,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
@@ -134,15 +139,42 @@ class Cobol implements Sandbox {
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
 		if (options.debug) return Promise.reject('COBOL debugging is not supported yet.');
-		this.exit = false;
-		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
-			const operation = this.workerSession.beginRun(this.worker, reject);
-			const { compileArgs, programArgs } = resolveSandboxExecutionArgs(
+		const worker = this.worker;
+		if (!worker) return Promise.reject('Worker not loaded');
+		let compileArgs: string[];
+		let programArgs: string[];
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
+		try {
+			({ compileArgs, programArgs } = resolveSandboxExecutionArgs(
 				this.language,
 				args,
 				options
+			));
+			const limits = resolveExecutionLimits(options.limits);
+			workspace = validateExecutionWorkspace(
+				code,
+				options.workspaceFiles ?? [],
+				options.activePath ?? 'main.cob',
+				{
+					...options.workspaceLimits,
+					maxFileBytes: Math.min(
+						options.workspaceLimits?.maxFileBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						options.workspaceLimits?.maxTotalBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					)
+				}
 			);
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		this.exit = false;
+		return new Promise<boolean | string>((resolve, reject) => {
+			const operation = this.workerSession.beginRun(worker, reject);
 			const _uid = ++this.uid;
 			const handler = (event: Event & { data: any }) => {
 				if (this.assetBridge?.handleMessage(event as MessageEvent<any>)) return;
@@ -173,9 +205,9 @@ class Cobol implements Sandbox {
 				}
 				if (progress != null) prog?.set?.(progress);
 			};
-			this.worker.onmessage = handler;
+			worker.onmessage = handler;
 			this.begin = Date.now();
-			this.worker.postMessage({
+			worker.postMessage({
 				code,
 				prepare,
 				buffer: this.buffer,
@@ -183,8 +215,8 @@ class Cobol implements Sandbox {
 				log,
 				compileArgs,
 				programArgs,
-				activePath: options.activePath,
-				workspaceFiles: options.workspaceFiles
+				activePath: workspace.activePath,
+				workspaceFiles: workspace.workspaceFiles
 			});
 		});
 	}
