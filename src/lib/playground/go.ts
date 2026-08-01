@@ -36,9 +36,13 @@ class Go implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeExplicitStdinCleanup: (() => void) | null = null;
+	private activeLoadSignalCleanup: (() => void) | null = null;
+	private activeRunSignalCleanup: (() => void) | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'Go',
 		onDispose: (worker) => {
+			this.activeRunSignalCleanup?.();
+			this.activeRunSignalCleanup = null;
 			this.activeExplicitStdinCleanup?.();
 			if (this.worker === worker) delete this.worker;
 			this.exit = true;
@@ -53,44 +57,114 @@ class Go implements Sandbox {
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		return this.workerSession.load(async (resolve, reject) => {
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const nextCompilerUrl = resolveGoCompilerUrl(runtimeAssets, currentUrl);
-			if (!nextCompilerUrl) {
-				return reject(
-					'Go runtime is not configured. Set PUBLIC_WASM_GO_COMPILER_URL or runtimeAssets.go.compilerUrl.'
-				);
+		const signal = options.debug ? undefined : options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ?? new DOMException('Go runtime startup aborted', 'AbortError')
+			);
+		}
+		let onAbort: (() => void) | undefined;
+		let cleanedUp = false;
+		const cleanupSignal = () => {
+			if (cleanedUp) return;
+			cleanedUp = true;
+			if (signal && onAbort) {
+				try {
+					signal.removeEventListener('abort', onAbort);
+				} catch {
+					// Cleanup must not replace the startup result.
+				}
 			}
-			const needsWorkerReset = !this.worker || this.compilerUrl !== nextCompilerUrl;
-			this.compilerUrl = nextCompilerUrl;
-			if (needsWorkerReset && this.worker) {
-				this.workerSession.reset();
+			if (this.activeLoadSignalCleanup === cleanupSignal) {
+				this.activeLoadSignalCleanup = null;
 			}
-			if (!this.worker) {
-				this.worker = new (await import('$lib/playground/worker/go?worker')).default();
-				this.workerSession.attach(this.worker);
-				this.worker.onmessage = (event: MessageEvent<any>) => {
-					if (event.data?.load) {
-						progress?.set?.(1);
-						resolve();
+		};
+		onAbort = signal
+			? () => {
+					if (this.activeLoadSignalCleanup !== cleanupSignal) {
+						cleanupSignal();
+						return;
 					}
-					if (event.data?.error) reject(event.data.error);
-				};
-				this.worker.postMessage({
-					load: true,
-					compilerUrl: this.compilerUrl
-				});
-			} else {
-				progress?.set?.(1);
+					const reason =
+						signal.reason ??
+						new DOMException('Go runtime startup aborted', 'AbortError');
+					cleanupSignal();
+					this.workerSession.terminate(reason);
+				}
+			: undefined;
+		const loadPromise = this.workerSession.load(async (resolve, reject) => {
+			const resolveLoad = () => {
+				cleanupSignal();
 				resolve();
+			};
+			const rejectLoad = (reason?: unknown) => {
+				cleanupSignal();
+				reject(reason);
+			};
+			try {
+				if (this.activeLoadSignalCleanup !== cleanupSignal || signal?.aborted) return;
+				this.pendingInput = [];
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				const nextCompilerUrl = resolveGoCompilerUrl(runtimeAssets, currentUrl);
+				if (!nextCompilerUrl) {
+					return rejectLoad(
+						'Go runtime is not configured. Set PUBLIC_WASM_GO_COMPILER_URL or runtimeAssets.go.compilerUrl.'
+					);
+				}
+				const needsWorkerReset = !this.worker || this.compilerUrl !== nextCompilerUrl;
+				this.compilerUrl = nextCompilerUrl;
+				if (needsWorkerReset && this.worker) {
+					this.workerSession.reset();
+				}
+				if (!this.worker) {
+					const WorkerConstructor = (await import('$lib/playground/worker/go?worker'))
+						.default;
+					if (this.activeLoadSignalCleanup !== cleanupSignal || signal?.aborted) return;
+					const worker = new WorkerConstructor();
+					if (this.activeLoadSignalCleanup !== cleanupSignal || signal?.aborted) {
+						worker.terminate();
+						return;
+					}
+					this.worker = worker;
+					this.workerSession.attach(worker);
+					worker.onmessage = (event: MessageEvent<any>) => {
+						if (
+							this.activeLoadSignalCleanup !== cleanupSignal ||
+							signal?.aborted ||
+							this.worker !== worker
+						) {
+							return;
+						}
+						if (event.data?.load) {
+							progress?.set?.(1);
+							resolveLoad();
+						}
+						if (event.data?.error) rejectLoad(event.data.error);
+					};
+					worker.postMessage({
+						load: true,
+						compilerUrl: this.compilerUrl
+					});
+				} else {
+					progress?.set?.(1);
+					if (this.activeLoadSignalCleanup !== cleanupSignal || signal?.aborted) return;
+					resolveLoad();
+				}
+			} catch (error) {
+				rejectLoad(error);
 			}
 		});
+		this.activeLoadSignalCleanup = cleanupSignal;
+		if (signal && onAbort) {
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		}
+		return loadPromise.finally(cleanupSignal);
 	}
 
 	write(input: string) {
@@ -133,13 +207,19 @@ class Go implements Sandbox {
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
 		if (options.debug) requireSharedArrayBuffer('Go debugging');
+		const signal = options.debug ? undefined : options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ?? new DOMException('Go execution aborted', 'AbortError')
+			);
+		}
+		const worker = this.worker;
+		if (!worker) return Promise.reject('Worker not loaded');
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
 			const { programArgs } = resolveSandboxExecutionArgs('GO', args, options);
 			const target = options.goTarget || 'wasip1/wasm';
 			const _uid = ++this.uid;
-			const operation = this.workerSession.beginRun(this.worker, reject);
 			this.setBreakpoints(options.debug ? [...(options.breakpoints || [])] : []);
 			const hasExplicitStdin = !options.debug && options.stdin !== undefined;
 			this.activeExplicitStdinCleanup?.();
@@ -156,9 +236,39 @@ class Go implements Sandbox {
 				this.resetStdinState();
 				this.activeExplicitStdinCleanup = cleanupExplicitStdin;
 			}
+			let onAbort: (() => void) | undefined;
+			let signalCleanedUp = false;
+			const cleanupSignal = () => {
+				if (signalCleanedUp) return;
+				signalCleanedUp = true;
+				if (signal && onAbort) {
+					try {
+						signal.removeEventListener('abort', onAbort);
+					} catch {
+						// Cleanup must not replace the execution result.
+					}
+				}
+				if (this.activeRunSignalCleanup === cleanupSignal) {
+					this.activeRunSignalCleanup = null;
+				}
+			};
+			const cleanup = () => {
+				cleanupSignal();
+				cleanupExplicitStdin();
+			};
+			const loadSignalCleanup = this.activeLoadSignalCleanup;
+			this.activeLoadSignalCleanup = null;
+			loadSignalCleanup?.();
+			const operation = this.workerSession.beginRun(worker, (reason) => {
+				cleanup();
+				reject(reason);
+			});
 			const handler = (event: Event & { data: any }) => {
-				if (!this.worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (this.worker.onmessage = null);
+				if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) {
+					cleanup();
+					if (worker.onmessage === handler) worker.onmessage = null;
+					return;
+				}
 				const { output, results, error, buffer, diagnostic, progress, debugEvent } =
 					event.data;
 				if (buffer && !hasExplicitStdin) {
@@ -170,7 +280,8 @@ class Go implements Sandbox {
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (debugEvent) this.ondebug?.(debugEvent);
 				if (results) {
-					cleanupExplicitStdin();
+					cleanup();
+					if (worker.onmessage === handler) worker.onmessage = null;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -180,7 +291,8 @@ class Go implements Sandbox {
 					resolve(results as string);
 				}
 				if (error) {
-					cleanupExplicitStdin();
+					cleanup();
+					if (worker.onmessage === handler) worker.onmessage = null;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -190,10 +302,32 @@ class Go implements Sandbox {
 					reject(error);
 				}
 			};
-			this.worker.onmessage = handler;
+			onAbort = signal
+				? () => {
+						if (
+							this.activeRunSignalCleanup !== cleanupSignal ||
+							this.worker !== worker ||
+							worker.onmessage !== handler ||
+							_uid !== this.uid
+						) {
+							cleanup();
+							return;
+						}
+						this.terminate(
+							signal.reason ?? new DOMException('Go execution aborted', 'AbortError')
+						);
+					}
+				: undefined;
+			this.activeRunSignalCleanup = cleanupSignal;
+			worker.onmessage = handler;
+			if (signal && onAbort) {
+				signal.addEventListener('abort', onAbort, { once: true });
+				if (signal.aborted) onAbort();
+			}
+			if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) return;
 			this.begin = Date.now();
 			try {
-				this.worker.postMessage({
+				worker.postMessage({
 					code,
 					prepare,
 					buffer: this.buffer,
@@ -207,9 +341,8 @@ class Go implements Sandbox {
 					pauseOnEntry: !!options.pauseOnEntry
 				});
 			} catch (error) {
-				if (!hasExplicitStdin) throw error;
-				cleanupExplicitStdin();
-				if (this.worker.onmessage === handler) this.worker.onmessage = null;
+				cleanup();
+				if (worker.onmessage === handler) worker.onmessage = null;
 				this.workerSession.complete(operation);
 				this.exit = true;
 				reject(error);
@@ -245,14 +378,20 @@ class Go implements Sandbox {
 		this.terminate();
 	}
 
-	terminate() {
+	terminate(reason: unknown = 'Process terminated') {
+		const loadSignalCleanup = this.activeLoadSignalCleanup;
+		this.activeLoadSignalCleanup = null;
+		loadSignalCleanup?.();
+		const runSignalCleanup = this.activeRunSignalCleanup;
+		this.activeRunSignalCleanup = null;
+		runSignalCleanup?.();
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
 		const control = new Int32Array(this.debugBuffer);
 		Atomics.add(control, 0, 1);
 		Atomics.notify(control, 0);
-		this.workerSession.terminate();
+		this.workerSession.terminate(reason);
 		this.exit = true;
 	}
 
@@ -260,7 +399,7 @@ class Go implements Sandbox {
 		this.resetStdinState();
 		if (this.worker) this.worker.onmessage = null;
 		new Int32Array(this.debugBuffer).fill(0);
-		if (!this.exit) {
+		if (!this.exit || this.activeLoadSignalCleanup) {
 			this.terminate();
 		}
 	}

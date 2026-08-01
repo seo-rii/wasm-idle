@@ -211,6 +211,175 @@ func main() {
 		);
 	});
 
+	it('rejects a pre-aborted non-debug load without changing runtime state', async () => {
+		const sandbox = new Go();
+		const reason = new Error('cancel before Go startup');
+		const controller = new AbortController();
+		controller.abort(reason);
+		sandbox.pendingInput = ['queued input\n'];
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+		).rejects.toBe(reason);
+
+		expect(workerInstances).toHaveLength(0);
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+		expect(sandbox.compilerUrl).toBe('');
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('aborts the active non-debug load and ignores its stale worker messages', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Go();
+		const reason = new Error('cancel active Go startup');
+		const controller = new AbortController();
+		const progress = { set: vi.fn() };
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		await vi.dynamicImportSettled();
+		const firstWorker = workerInstances[0];
+		const staleHandler = firstWorker.onmessage;
+
+		controller.abort(reason);
+
+		await expect(loading).rejects.toBe(reason);
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		expect(firstWorker.onmessage).toBeNull();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(progress.set).not.toHaveBeenCalled();
+
+		suppressAutoLoadAck = false;
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('removes the load abort handler after successful settlement', async () => {
+		const sandbox = new Go();
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+
+		await sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal });
+		const worker = workerInstances[0];
+		controller.abort(new Error('late Go startup cancellation'));
+
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+	});
+
+	it('rejects a pre-aborted non-debug run before dispatch or state changes', async () => {
+		const sandbox = new Go();
+		const worker = new MockWorker();
+		const reason = new Error('cancel before Go execution');
+		const controller = new AbortController();
+		controller.abort(reason);
+		sandbox.worker = worker as unknown as Worker;
+
+		await expect(
+			sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+
+		expect(worker.postMessage).not.toHaveBeenCalled();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(worker.onmessage).toBeNull();
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('aborts only the active non-debug run and permits a clean retry', async () => {
+		const sandbox = new Go();
+		const worker = new MockWorker();
+		const reason = new Error('cancel active Go execution');
+		const controller = new AbortController();
+		const output = vi.fn();
+		let runMessage: any;
+		sandbox.output = output;
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementationOnce((message) => {
+			runMessage = message;
+		});
+		const running = sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+			signal: controller.signal,
+			stdin: 'explicit input\n'
+		});
+		const staleHandler = worker.onmessage;
+
+		controller.abort(reason);
+
+		await expect(running).rejects.toBe(reason);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBeNull();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(readBufferedStdin(runMessage.buffer)).toBe('');
+		expect(sandbox.exit).toBe(true);
+		staleHandler?.({
+			data: { output: 'stale output\n', results: true }
+		} as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalled();
+
+		const retryWorker = new MockWorker();
+		sandbox.worker = retryWorker as unknown as Worker;
+		await expect(sandbox.run('package main\nfunc main() {}', false)).resolves.toBe(true);
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+	});
+
+	it('does not let a superseded load signal cancel the replacement run', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Go();
+		const loadController = new AbortController();
+		const staleLoadReason = new Error('stale Go startup cancellation');
+		const loading = sandbox.load('/absproxy/5173', '', true, [], {
+			signal: loadController.signal
+		});
+		const loadOutcome = loading.catch((reason) => reason);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+
+		const running = sandbox.run('package main\nfunc main() {}', false);
+		loadController.abort(staleLoadReason);
+
+		expect(worker.terminate).not.toHaveBeenCalled();
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(running).resolves.toBe(true);
+		await expect(loadOutcome).resolves.toBe('Worker operation superseded');
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+	});
+
+	it('removes the run abort handler after successful settlement', async () => {
+		const sandbox = new Go();
+		const worker = new MockWorker();
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		sandbox.output = vi.fn();
+		sandbox.worker = worker as unknown as Worker;
+
+		await expect(
+			sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).resolves.toBe(true);
+		controller.abort(new Error('late Go execution cancellation'));
+
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		expect(sandbox.exit).toBe(true);
+	});
+
 	it('writes queued terminal input when the worker requests stdin', async () => {
 		const sandbox = new Go();
 		const worker = new MockWorker();
@@ -314,7 +483,10 @@ func main() {}`,
 		const sandbox = new Go();
 		const worker = new MockWorker();
 		const dispatchError = new Error('Go dispatch failed');
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 
+		sandbox.output = vi.fn();
 		sandbox.worker = worker as unknown as Worker;
 		sandbox.write('stale before dispatch\n');
 		worker.postMessage.mockImplementationOnce(() => {
@@ -323,7 +495,8 @@ func main() {}`,
 
 		await expect(
 			sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
-				stdin: ''
+				stdin: '',
+				signal: controller.signal
 			})
 		).rejects.toBe(dispatchError);
 
@@ -331,6 +504,10 @@ func main() {}`,
 		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 		expect(worker.onmessage).toBeNull();
 		expect(sandbox.exit).toBe(true);
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		controller.abort(new Error('late cancellation after dispatch failure'));
+		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('package main\nfunc main() {}', false)).resolves.toBe(true);
 	});
 
 	it('clears explicit stdin state when execution is terminated', async () => {
