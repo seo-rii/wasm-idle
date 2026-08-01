@@ -1,5 +1,10 @@
 import { resolveLuaModuleUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
-import { BusyError } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -206,9 +211,29 @@ class Lua implements Sandbox {
 				signal.reason ?? new DOMException('Lua execution aborted', 'AbortError')
 			);
 		}
-		let programArgs: string[];
+		let executionArgs: ReturnType<typeof resolveSandboxExecutionArgs>;
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		try {
-			programArgs = resolveSandboxExecutionArgs('LUA', args, options).programArgs;
+			executionArgs = resolveSandboxExecutionArgs('LUA', args, options);
+			const limits = resolveExecutionLimits(options.limits);
+			workspace = validateExecutionWorkspace(
+				code,
+				options.workspaceFiles ?? [],
+				options.activePath ?? 'main.lua',
+				{
+					...options.workspaceLimits,
+					maxFileBytes: Math.min(
+						options.workspaceLimits?.maxFileBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						options.workspaceLimits?.maxTotalBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					)
+				}
+			);
 		} catch (error) {
 			return Promise.reject(error);
 		}
@@ -291,10 +316,10 @@ class Lua implements Sandbox {
 					code,
 					prepare,
 					buffer: this.buffer,
-					args: programArgs,
+					args: executionArgs.programArgs,
 					stdin: options.stdin,
-					activePath: options.activePath || 'main.lua',
-					workspaceFiles: options.workspaceFiles || [],
+					activePath: workspace.activePath,
+					workspaceFiles: workspace.workspaceFiles,
 					log: _log
 				});
 			} catch (error) {
