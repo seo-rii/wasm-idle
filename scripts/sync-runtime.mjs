@@ -3,6 +3,28 @@ import { fileURLToPath } from 'node:url';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 
+/**
+ * @typedef {{
+ *   name: string;
+ *   module: string;
+ *   exportName: string;
+ *   sourceArg: string;
+ *   targetArg: string;
+ *   manual?: boolean;
+ * }} RuntimeSyncConfig
+ */
+
+/**
+ * @typedef {{
+ *   sourceDir?: string;
+ *   sourceBrowserDistDir?: string;
+ *   targetDir?: string;
+ *   targetBrowserDistDir?: string;
+ *   [key: string]: unknown;
+ * }} RuntimeSyncResult
+ */
+
+/** @type {RuntimeSyncConfig[]} */
 export const RUNTIMES = [
 	{
 		name: 'wasm-clang',
@@ -231,6 +253,7 @@ export const RUNTIMES = [
 	}
 ];
 
+/** @param {RuntimeSyncConfig} runtime */
 export function runtimeListLine(runtime) {
 	return `${runtime.name}${runtime.manual ? '\tmanual' : ''}`;
 }
@@ -239,6 +262,7 @@ export function runtimesForAll({ includeManual = false } = {}) {
 	return RUNTIMES.filter((candidate) => includeManual || !candidate.manual);
 }
 
+/** @param {string[]} args */
 export function assertRuntimeSyncArgs(args) {
 	if (args.length > 2) {
 		throw new Error('runtime sync accepts at most sourceDir and targetDir arguments');
@@ -248,6 +272,7 @@ export function assertRuntimeSyncArgs(args) {
 	}
 }
 
+/** @param {string[]} args */
 export function assertAllRuntimeSyncArgs(args) {
 	if (args.length > 0) {
 		throw new Error(`Unknown option for all runtime sync: ${args[0]}`);
@@ -265,6 +290,7 @@ Runtime names:
 `);
 }
 
+/** @param {string[]} args @param {string} flag */
 function takeFlag(args, flag) {
 	const index = args.indexOf(flag);
 	if (index === -1) return false;
@@ -272,6 +298,12 @@ function takeFlag(args, flag) {
 	return true;
 }
 
+/**
+ * @param {RuntimeSyncConfig} runtime
+ * @param {string} [sourceDir]
+ * @param {string} [targetDir]
+ * @returns {Promise<RuntimeSyncResult>}
+ */
 async function syncRuntime(runtime, sourceDir, targetDir) {
 	const moduleUrl = new URL(runtime.module, import.meta.url);
 	const syncModule = await import(moduleUrl.href);
@@ -279,10 +311,11 @@ async function syncRuntime(runtime, sourceDir, targetDir) {
 	if (typeof sync !== 'function') {
 		throw new Error(`${runtime.module} does not export ${runtime.exportName}.`);
 	}
+	/** @type {Record<string, string>} */
 	const options = {};
 	if (sourceDir) options[runtime.sourceArg] = path.resolve(sourceDir);
 	if (targetDir) options[runtime.targetArg] = path.resolve(targetDir);
-	const result = await sync(options);
+	const result = /** @type {RuntimeSyncResult} */ (await sync(options));
 	const source = result.sourceDir || result.sourceBrowserDistDir || sourceDir || '(default)';
 	const target = result.targetDir || result.targetBrowserDistDir || targetDir || '(default)';
 	console.log(`Synced ${runtime.name} from ${source} to ${target}`);
