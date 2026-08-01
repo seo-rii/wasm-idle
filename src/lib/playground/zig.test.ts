@@ -145,6 +145,116 @@ describe('Zig sandbox', () => {
 		expect(outputs).toEqual(['zig artifact ready\n', 'zig-ok\n']);
 	});
 
+	it('normalizes a valid Zig workspace before worker dispatch', async () => {
+		const sandbox = new Zig();
+		await sandbox.load('/absproxy/5173');
+
+		await expect(
+			sandbox.run('pub fn main() void {}', false, true, undefined, [], {
+				activePath: 'nested\\main.zig',
+				workspaceFiles: [{ path: 'fixtures\\helper.zig', content: 'pub const helper = 1;' }]
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				activePath: 'nested/main.zig',
+				workspaceFiles: [{ path: 'fixtures/helper.zig', content: 'pub const helper = 1;' }]
+			})
+		);
+	});
+
+	it.each([
+		{
+			name: 'traversal path',
+			code: 'A',
+			options: { activePath: '../main.zig' },
+			expected: { code: 'invalid-path', path: '../main.zig' }
+		},
+		{
+			name: 'absolute path',
+			code: 'A',
+			options: { activePath: '/tmp/main.zig' },
+			expected: { code: 'invalid-path', path: '/tmp/main.zig' }
+		},
+		{
+			name: 'NUL path',
+			code: 'A',
+			options: { activePath: 'bad\0.zig' },
+			expected: { code: 'invalid-path', path: 'bad\0.zig' }
+		},
+		{
+			name: 'duplicate path',
+			code: 'A',
+			options: {
+				workspaceFiles: [
+					{ path: 'data/module.zig', content: 'A' },
+					{ path: 'data/module.zig', content: 'B' }
+				]
+			},
+			expected: { code: 'duplicate-path', path: 'data/module.zig' }
+		},
+		{
+			name: 'case-colliding path',
+			code: 'A',
+			options: {
+				workspaceFiles: [
+					{ path: 'DATA/module.zig', content: 'A' },
+					{ path: 'data/module.zig', content: 'B' }
+				]
+			},
+			expected: { code: 'case-collision', path: 'data/module.zig' }
+		},
+		{
+			name: 'file count overflow',
+			code: 'A',
+			options: {
+				workspaceFiles: [{ path: 'data/module.zig', content: 'B' }],
+				workspaceLimits: { maxFiles: 1 }
+			},
+			expected: { code: 'file-count-limit', limit: 1, actual: 2 }
+		},
+		{
+			name: 'per-file overflow clamped to execution limits',
+			code: '12345',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceLimits: { maxFileBytes: 100 }
+			},
+			expected: { code: 'file-size-limit', limit: 4, actual: 5 }
+		},
+		{
+			name: 'aggregate overflow clamped to execution limits',
+			code: '123',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceFiles: [{ path: 'data/module.zig', content: '45' }],
+				workspaceLimits: { maxTotalBytes: 100 }
+			},
+			expected: { code: 'total-size-limit', limit: 4, actual: 5 }
+		}
+	])(
+		'rejects a Zig workspace with $name before changing execution state',
+		async ({ code, options, expected }) => {
+			const sandbox = new Zig();
+			await sandbox.load('/absproxy/5173');
+			const worker = workerInstances[0];
+			const loadHandler = worker.onmessage;
+
+			await expect(
+				sandbox.run(code, false, true, undefined, [], options)
+			).rejects.toMatchObject({
+				name: 'WorkspaceValidationError',
+				...expected
+			});
+			expect(worker.postMessage).toHaveBeenCalledTimes(1);
+			expect(worker.onmessage).toBe(loadHandler);
+			expect(sandbox.uid).toBe(0);
+			expect(sandbox.exit).toBe(true);
+		}
+	);
+
 	it('rejects an overlapping Zig run without disturbing the active execution', async () => {
 		const sandbox = new Zig();
 		const worker = new MockWorker();
