@@ -304,6 +304,26 @@ describe('Lua sandbox', () => {
 		expect(bufferedValues).toEqual(['', '']);
 	});
 
+	it('does not stream terminal input into an explicit Lua stdin run', async () => {
+		const sandbox = new Lua();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+
+		const running = sandbox.run('print("explicit")', false, true, undefined, [], {
+			stdin: 'authoritative\n'
+		});
+		const handler = worker.onmessage;
+		sandbox.write('terminal input\n');
+		handler?.({ data: { buffer: true } } as MessageEvent<any>);
+
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(sandbox.pendingInput).toEqual(['terminal input\n']);
+		handler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(running).resolves.toBe(true);
+		expect(sandbox.pendingInput).toEqual([]);
+	});
+
 	it('rejects a pre-aborted Lua run without changing worker state', async () => {
 		const sandbox = new Lua();
 		const worker = new MockWorker();
@@ -469,6 +489,171 @@ describe('Lua sandbox', () => {
 		settledController.abort(new Error('late startup abort'));
 		expect(retryWorker.terminate).not.toHaveBeenCalled();
 	});
+
+	it('retires the Lua worker when the ready progress callback throws', async () => {
+		const sandbox = new Lua();
+		const callbackError = new Error('Lua startup progress failed');
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+
+		await expect(
+			sandbox.load(
+				'/absproxy/5173',
+				'',
+				true,
+				[],
+				{ signal: controller.signal },
+				{
+					set() {
+						throw callbackError;
+					}
+				}
+			)
+		).rejects.toBe(callbackError);
+
+		expect(workerInstances[0]?.terminate).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.worker).toBeUndefined();
+		controller.abort(new Error('late failed startup abort'));
+
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('keeps the active Lua operation while callbacks attempt reentrant work', async () => {
+		const sandbox = new Lua();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		sandbox.output = () => {
+			reentrantRun = sandbox.run('print("reentrant")', false);
+			reentrantLoad = sandbox.load('/replacement/');
+		};
+
+		const running = sandbox.run('print("first")', false);
+		const handler = worker.onmessage;
+		handler?.({ data: { output: 'trigger\n', results: true } } as MessageEvent<any>);
+
+		await expect(reentrantRun).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'LUA'
+		});
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'LUA'
+		});
+		await expect(running).resolves.toBe(true);
+		expect(worker.onmessage).toBeNull();
+		expect(worker.terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves a replacement after a Lua callback terminates and throws', async () => {
+		const sandbox = new Lua();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementation(() => undefined);
+		const controller = new AbortController();
+		const abortReason = new Error('Lua callback abort');
+		const callbackError = new Error('Lua callback throw after abort');
+		let replacement: Promise<void> | undefined;
+		sandbox.output = () => {
+			controller.abort(abortReason);
+			replacement = sandbox.load('/replacement/');
+			throw callbackError;
+		};
+		const running = sandbox.run('print("first")', false, true, undefined, [], {
+			stdin: 'fixed\n',
+			signal: controller.signal
+		});
+		const outcome = running.catch((error) => error);
+		const staleHandler = worker.onmessage;
+
+		expect(() =>
+			staleHandler?.({
+				data: { output: 'trigger\n', results: true }
+			} as MessageEvent<any>)
+		).not.toThrow();
+		await expect(outcome).resolves.toBe(abortReason);
+		await expect(replacement).resolves.toBeUndefined();
+		const replacementWorker = workerInstances[1];
+		const replacementHandler = replacementWorker.onmessage;
+		sandbox.write('replacement input\n');
+		sandbox.eof();
+
+		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBe(replacementWorker);
+		expect(replacementWorker.onmessage).toBe(replacementHandler);
+		expect(sandbox.pendingInput).toEqual(['replacement input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+	});
+
+	it.each(['progress', 'output', 'diagnostic'] as const)(
+		'rejects and retires the Lua worker when a %s callback throws',
+		async (callbackKind) => {
+			const sandbox = new Lua();
+			const worker = new MockWorker();
+			worker.postMessage.mockImplementation(() => undefined);
+			sandbox.worker = worker as unknown as Worker;
+			const callbackError = new Error(`Lua ${callbackKind} callback failed`);
+			const controller = new AbortController();
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const progress = {
+				set: vi.fn(() => {
+					if (callbackKind === 'progress') throw callbackError;
+				})
+			};
+			const output = vi.fn(() => {
+				if (callbackKind === 'output') throw callbackError;
+			});
+			const diagnostic = vi.fn(() => {
+				if (callbackKind === 'diagnostic') throw callbackError;
+			});
+			sandbox.output = output;
+			sandbox.oncompilerdiagnostic = diagnostic;
+
+			const running = sandbox.run('print("first")', false, true, progress, [], {
+				stdin: 'fixed\n',
+				signal: controller.signal
+			});
+			const handler = worker.onmessage;
+			sandbox.write('discard after explicit stdin\n');
+			expect(() =>
+				handler?.({
+					data: {
+						progress: 0.5,
+						output: 'callback output\n',
+						diagnostic: { message: 'callback diagnostic' },
+						results: true
+					}
+				} as MessageEvent<any>)
+			).not.toThrow();
+
+			await expect(running).rejects.toBe(callbackError);
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			expect(worker.onmessage).toBeNull();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+			expect(sandbox.worker).toBeUndefined();
+			expect(sandbox.pendingInput).toEqual([]);
+			expect(sandbox.pendingEof).toBe(false);
+			if (callbackKind === 'progress') {
+				expect(output).not.toHaveBeenCalled();
+				expect(diagnostic).not.toHaveBeenCalled();
+			} else if (callbackKind === 'output') {
+				expect(diagnostic).not.toHaveBeenCalled();
+			}
+
+			handler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+			sandbox.output = vi.fn();
+			sandbox.oncompilerdiagnostic = vi.fn();
+			await sandbox.load('/absproxy/5173');
+			await expect(sandbox.run('print("retry")', false)).resolves.toBe(true);
+			expect(workerInstances.at(-1)).not.toBe(worker);
+		}
+	);
 
 	it('rejects load when the Lua worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
