@@ -411,6 +411,19 @@ browser UI thread.
 
 ## Browser regression commands
 
+The root unit suite includes receipt-backed Clang and Fortran integration tests. A clean checkout
+does not contain the ignored compiler payloads under `static/clang/bin`, so prepare them before a
+local `pnpm test` run:
+
+```bash
+node scripts/prepare-clang-compiler-assets.mjs
+```
+
+The preparer downloads only the four compiler assets declared by `static/clang/runtime-build.json`,
+checks their exact sizes and SHA-256 digests, and reuses a local file only when both match. CI runs
+this step automatically. `WASM_IDLE_TEST_ASSET_BASE_URL` and `WASM_IDLE_TEST_BYPASS_COOKIE` can
+override the trusted asset origin and access cookie for a compatible mirror.
+
 Browser-level Rust and TinyGo checks are reproducible from this repo:
 
 ```bash
