@@ -596,6 +596,59 @@ describe('createAdapterDebugSessionController', () => {
 		expect(controller.selectedFrameId).toBe(10);
 	});
 
+	it('ignores an execution failure after the target has already continued', async () => {
+		const adapter = new FakeDebugAdapter();
+		adapter.threadsHandler = async () => [{ id: 1, name: 'main' }];
+		adapter.stackTraceHandler = async () => [{ id: 10, name: 'main', line: 5, column: 1 }];
+		adapter.scopesHandler = async () => [];
+		const continued = deferred<void>();
+		adapter.continueHandler = () => continued.promise;
+		const controller = createAdapterDebugSessionController(adapter);
+
+		adapter.emit({ type: 'stopped', reason: 'breakpoint', threadId: 1 });
+		await vi.waitFor(() => expect(controller.selectedFrameId).toBe(10));
+		const continuing = controller.continue();
+		adapter.emit({ type: 'continued', threadId: 1 });
+		continued.reject(new Error('obsolete continue failure'));
+
+		await expect(continuing).resolves.toBeUndefined();
+		expect(controller.error).toBeNull();
+
+		const currentFailure = new Error('current continue failure');
+		adapter.continueHandler = async () => {
+			throw currentFailure;
+		};
+		await expect(controller.continue()).rejects.toBe(currentFailure);
+		expect(controller.error).toBe(currentFailure);
+	});
+
+	it('ignores a pause failure after the target has already stopped', async () => {
+		const adapter = new FakeDebugAdapter();
+		adapter.threadsHandler = async () => [{ id: 1, name: 'main' }];
+		adapter.stackTraceHandler = async () => [{ id: 10, name: 'main', line: 5, column: 1 }];
+		adapter.scopesHandler = async () => [];
+		const paused = deferred<void>();
+		adapter.pauseHandler = () => paused.promise;
+		const controller = createAdapterDebugSessionController(adapter);
+
+		adapter.emit({ type: 'stopped', reason: 'breakpoint', threadId: 1 });
+		await vi.waitFor(() => expect(controller.selectedFrameId).toBe(10));
+		adapter.emit({ type: 'continued', threadId: 1 });
+		const pausing = controller.pause();
+		adapter.emit({ type: 'stopped', reason: 'pause', threadId: 1 });
+		paused.reject(new Error('obsolete pause failure'));
+
+		await expect(pausing).resolves.toBeUndefined();
+		expect(controller.error).toBeNull();
+
+		const currentFailure = new Error('current pause failure');
+		adapter.pauseHandler = async () => {
+			throw currentFailure;
+		};
+		await expect(controller.pause()).rejects.toBe(currentFailure);
+		expect(controller.error).toBe(currentFailure);
+	});
+
 	it('tracks output, exit, errors, and disconnect lifecycle state', async () => {
 		const adapter = new FakeDebugAdapter();
 		const controller = createAdapterDebugSessionController(adapter);

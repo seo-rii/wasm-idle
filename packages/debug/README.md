@@ -41,6 +41,10 @@ Both controller surfaces bind each lazy-variable request to the current stopped 
 disconnect, a newer stop, or another frame selection invalidates the request; a late success or
 failure resolves as an empty child list and cannot restore cleared locals or report an obsolete UI
 error.
+Execution control follows the same event-authoritative ordering. Once a `continued` or `stopped`
+event supersedes a pending continue, step, or pause request, a late transport failure resolves
+without replacing the newer state or surfacing an obsolete command error; failures from the current
+state still reject and remain visible.
 When callers provide a DAP `start` offset, the returned page is merged at that offset instead of
 replacing children loaded by earlier pages; omitting `start` remains an explicit full refresh.
 Supply an LLDB DAP session from `@wasm-idle/llvm-core/debug`. Runtime assets remain owned by the

@@ -419,7 +419,8 @@ export function createAdapterDebugSessionController(adapter: DebugAdapter) {
 				clearStoppedDetails({ preserveThreads: true });
 			}
 		} catch (error) {
-			if (isCurrentStop(sessionToken, stopToken)) recordError(error);
+			if (!isCurrentStop(sessionToken, stopToken)) return;
+			recordError(error);
 			throw error;
 		}
 	}
@@ -447,7 +448,8 @@ export function createAdapterDebugSessionController(adapter: DebugAdapter) {
 		try {
 			await adapter.pause(resolvedThreadId);
 		} catch (error) {
-			if (isCurrentStop(sessionToken, stopToken)) recordError(error);
+			if (!isCurrentStop(sessionToken, stopToken)) return;
+			recordError(error);
 			throw error;
 		}
 	}
