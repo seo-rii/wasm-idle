@@ -145,6 +145,8 @@ export class SharedByteQueue {
 	}
 
 	async read(destination: Uint8Array, signal?: AbortSignal): Promise<number> {
+		signal?.throwIfAborted();
+		if (destination.byteLength === 0) return 0;
 		while (true) {
 			signal?.throwIfAborted();
 			const epoch = Atomics.load(this.header, EPOCH);
@@ -165,6 +167,7 @@ export class SharedByteQueue {
 	}
 
 	readBlocking(destination: Uint8Array, timeoutMs = Infinity): number {
+		if (destination.byteLength === 0) return 0;
 		const deadline = Number.isFinite(timeoutMs) ? Date.now() + timeoutMs : Infinity;
 		while (true) {
 			const epoch = Atomics.load(this.header, EPOCH);

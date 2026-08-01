@@ -36,8 +36,10 @@ otherwise verified binary.
 
 `@wasm-idle/llvm-core/debug` provides the low-level browser session that connects a dedicated LLDB
 worker to a dedicated WAMR target worker. DAP and GDB RSP are carried on separate
-`SharedArrayBuffer` byte queues, and stdin, stdout, and stderr use independent queues. The session
-verifies the module, source, loader, Wasm, and pthread-sidecar hashes before creating either worker.
+`SharedArrayBuffer` byte queues, and stdin, stdout, and stderr use independent queues. Zero-length
+asynchronous and blocking reads complete immediately, so an empty consumer buffer cannot wait
+indefinitely for a queue signal. The session verifies the module, source, loader, Wasm, and
+pthread-sidecar hashes before creating either worker.
 When `initialize()` starts, it snapshots the module and its expected hash, source files, configured
 breakpoints, and launch arguments used by the workers and DAP. Mutating the caller-owned option
 objects while integrity and asset verification are in flight therefore cannot change the already

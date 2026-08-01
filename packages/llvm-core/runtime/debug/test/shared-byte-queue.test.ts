@@ -36,6 +36,24 @@ describe('SharedByteQueue', () => {
 		expect(rest).toEqual(bytes.subarray(2));
 	});
 
+	it('returns immediately from a zero-length asynchronous read', async () => {
+		const queue = new SharedByteQueue(createSharedByteQueue(4096, 11));
+		const controller = new AbortController();
+		const read = queue.read(new Uint8Array(), controller.signal);
+
+		controller.abort(new Error('zero-length read waited for a queue signal'));
+
+		await expect(read).resolves.toBe(0);
+	});
+
+	it('does not wait for a zero-length blocking read', () => {
+		const queue = new SharedByteQueue(createSharedByteQueue(4096, 12));
+		const wait = vi.spyOn(Atomics, 'wait').mockReturnValue('timed-out');
+
+		expect(queue.readBlocking(new Uint8Array(), 1)).toBe(0);
+		expect(wait).not.toHaveBeenCalled();
+	});
+
 	it('returns EOF after close and rejects stale generations', async () => {
 		const descriptor = createSharedByteQueue(4096, 9);
 		const queue = new SharedByteQueue(descriptor);
