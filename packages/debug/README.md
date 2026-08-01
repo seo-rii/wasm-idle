@@ -55,7 +55,8 @@ and cannot exceed the requested byte count. A malformed body rejects with
 it as a session failure and dispose the LLDB/WAMR workers. Stack and scope line or column values may
 be zero, matching DAP's representation for an unavailable source location.
 For `readMemory`, both the decoded data and `unreadableBytes` share the requested byte budget. A
-response cannot claim more readable-plus-unreadable bytes than the request count.
+response cannot claim more readable-plus-unreadable bytes than the request count, including when
+the adapter omits the optional `data` field because the entire range is unreadable.
 Recognized DAP events receive the same field validation. A malformed event is emitted only as a raw
 `dap` event, so it cannot move the selected thread/frame, append non-string output, change process
 state, or mutate the tracked breakpoint cache.

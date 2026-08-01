@@ -699,17 +699,17 @@ export class LldbDapAdapter implements DebugAdapter {
 					`decoded ${binary.length} bytes for a ${count}-byte request`
 				);
 			}
-			if (binary.length + unreadableBytes > count) {
-				invalidDapResponse(
-					'readMemory',
-					'unreadableBytes',
-					`reported ${binary.length} readable and ${unreadableBytes} unreadable bytes for a ${count}-byte request`
-				);
-			}
 			data = new Uint8Array(binary.length);
 			for (let index = 0; index < binary.length; index += 1) {
 				data[index] = binary.charCodeAt(index);
 			}
+		}
+		if (data.byteLength + unreadableBytes > count) {
+			invalidDapResponse(
+				'readMemory',
+				'unreadableBytes',
+				`reported ${data.byteLength} readable and ${unreadableBytes} unreadable bytes for a ${count}-byte request`
+			);
 		}
 		return {
 			address: response.address,
