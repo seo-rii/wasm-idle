@@ -1,5 +1,5 @@
 import type { DebugWorkerInboundMessage, TargetWorkerInitializeMessage } from '../types.js';
-import { SharedByteQueue } from '../shared-byte-queue.js';
+import { assertDistinctSharedByteQueueBuffers, SharedByteQueue } from '../shared-byte-queue.js';
 import {
 	createTransportBindings,
 	loadEmscriptenModuleFactory,
@@ -62,16 +62,28 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 		}
 		return `--env=${key}=${value}`;
 	});
-	activeGeneration = message.generation;
 	const transport = createTransportBindings({
 		generation: message.generation,
 		rspInput: message.rspInput,
 		rspOutput: message.rspOutput
 	});
-	globalThis.__wasmIdleDebugTransport = transport;
 	const stdoutQueue = new SharedByteQueue(message.stdout);
 	const stderrQueue = new SharedByteQueue(message.stderr);
+	const stdin = message.stdin ? new SharedByteQueue(message.stdin) : undefined;
+	assertDistinctSharedByteQueueBuffers(
+		[
+			transport.rspInput,
+			transport.rspOutput,
+			stdoutQueue,
+			stderrQueue,
+			...(stdin ? [stdin] : [])
+		],
+		'target debug channels must not reuse shared buffers'
+	);
+	activeGeneration = message.generation;
+	globalThis.__wasmIdleDebugTransport = transport;
 	activeOutputs = [stdoutQueue, stderrQueue];
+	activeStdin = stdin;
 	const stdout = (character: number | null) => {
 		if (character === null) {
 			closeQueue(stdoutQueue);
@@ -86,8 +98,6 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 		}
 		stderrQueue.writeBlocking(Uint8Array.of(character));
 	};
-	const stdin = message.stdin ? new SharedByteQueue(message.stdin) : undefined;
-	activeStdin = stdin;
 	const inputByte = new Uint8Array(1);
 	let resolveLifecycle!: () => void;
 	let rejectLifecycle!: (error: Error) => void;

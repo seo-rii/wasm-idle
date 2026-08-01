@@ -15,9 +15,17 @@ const workerMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../src/worker/module-loader.js', () => ({
-	createTransportBindings: vi.fn(() => ({
-		rspInput: { close: workerMocks.closeRspInput },
-		rspOutput: { close: workerMocks.closeRspOutput }
+	createTransportBindings: vi.fn((options: TargetWorkerInitializeMessage) => ({
+		rspInput: {
+			descriptor: options.rspInput,
+			closed: false,
+			close: workerMocks.closeRspInput
+		},
+		rspOutput: {
+			descriptor: options.rspOutput,
+			closed: false,
+			close: workerMocks.closeRspOutput
+		}
 	})),
 	loadEmscriptenModuleFactory: vi.fn(async () => async (options: Record<string, unknown>) => ({
 		FS: {
@@ -141,6 +149,38 @@ describe('WAMR target worker launch', () => {
 			);
 			expect(workerMocks.mountDebugFiles).not.toHaveBeenCalled();
 			expect(workerMocks.chdir).not.toHaveBeenCalled();
+
+			const recovery = initializeMessage(`${message.generation}-recovery`);
+			handleTargetWorkerMessage(recovery);
+			await vi.waitFor(() =>
+				expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
+					type: 'ready',
+					worker: 'target',
+					generation: recovery.generation
+				})
+			);
+		}
+	);
+
+	it.each(['stdout', 'stderr', 'stdin'] as const)(
+		'rejects %s sharing an RSP buffer before loading WAMR',
+		async (channel) => {
+			const { handleTargetWorkerMessage } = await loadTargetWorker();
+			const message = initializeMessage(`target-worker-shared-${channel}`);
+			message[channel] = message.rspInput;
+
+			handleTargetWorkerMessage(message);
+
+			await vi.waitFor(() =>
+				expect(workerMocks.postWorkerError).toHaveBeenCalledWith(
+					'target',
+					message.generation,
+					expect.objectContaining({
+						message: 'target debug channels must not reuse shared buffers'
+					})
+				)
+			);
+			expect(workerMocks.mountDebugFiles).not.toHaveBeenCalled();
 
 			const recovery = initializeMessage(`${message.generation}-recovery`);
 			handleTargetWorkerMessage(recovery);
