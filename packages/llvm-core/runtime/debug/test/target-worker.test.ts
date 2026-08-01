@@ -9,6 +9,7 @@ const workerMocks = vi.hoisted(() => ({
 	closeRspInput: vi.fn(),
 	closeRspOutput: vi.fn(),
 	lifecycle: 'exit' as 'exit' | 'abort' | 'pending',
+	loadFailure: undefined as Error | undefined,
 	mountDebugFiles: vi.fn(),
 	postWorkerError: vi.fn(),
 	postWorkerMessage: vi.fn()
@@ -27,27 +28,34 @@ vi.mock('../src/worker/module-loader.js', () => ({
 			close: workerMocks.closeRspOutput
 		}
 	})),
-	loadEmscriptenModuleFactory: vi.fn(async () => async (options: Record<string, unknown>) => ({
-		FS: {
-			mkdirTree: vi.fn(),
-			writeFile: vi.fn(),
-			chdir: workerMocks.chdir
-		},
-		HEAPU8: new Uint8Array(256),
-		callMain: (args: string[]) => {
-			workerMocks.callMain(args);
-			if (workerMocks.lifecycle === 'pending') return 0;
-			queueMicrotask(() => {
-				if (workerMocks.lifecycle === 'abort') {
-					(options.onAbort as (reason: unknown) => void)('runtime crash');
-					(options.onExit as (exitCode: unknown) => void)(undefined);
-				} else {
-					(options.onExit as (exitCode: unknown) => void)(0);
-				}
-			});
-			return 0;
+	loadEmscriptenModuleFactory: vi.fn(async () => {
+		if (workerMocks.loadFailure) {
+			const failure = workerMocks.loadFailure;
+			workerMocks.loadFailure = undefined;
+			throw failure;
 		}
-	})),
+		return async (options: Record<string, unknown>) => ({
+			FS: {
+				mkdirTree: vi.fn(),
+				writeFile: vi.fn(),
+				chdir: workerMocks.chdir
+			},
+			HEAPU8: new Uint8Array(256),
+			callMain: (args: string[]) => {
+				workerMocks.callMain(args);
+				if (workerMocks.lifecycle === 'pending') return 0;
+				queueMicrotask(() => {
+					if (workerMocks.lifecycle === 'abort') {
+						(options.onAbort as (reason: unknown) => void)('runtime crash');
+						(options.onExit as (exitCode: unknown) => void)(undefined);
+					} else {
+						(options.onExit as (exitCode: unknown) => void)(0);
+					}
+				});
+				return 0;
+			}
+		});
+	}),
 	mountDebugFiles: workerMocks.mountDebugFiles,
 	postWorkerError: workerMocks.postWorkerError,
 	postWorkerMessage: workerMocks.postWorkerMessage,
@@ -103,6 +111,7 @@ describe('WAMR target worker launch', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		workerMocks.lifecycle = 'exit';
+		workerMocks.loadFailure = undefined;
 	});
 
 	it.each([
@@ -193,6 +202,41 @@ describe('WAMR target worker launch', () => {
 			);
 		}
 	);
+
+	it('releases a failed WAMR initialization before accepting a recovery generation', async () => {
+		workerMocks.loadFailure = new Error('WAMR loader failed');
+		const { handleTargetWorkerMessage } = await loadTargetWorker();
+		const failed = initializeMessage('target-worker-loader-failure');
+		const stdout = new SharedByteQueue(failed.stdout);
+		const stderr = new SharedByteQueue(failed.stderr);
+		const stdin = new SharedByteQueue(failed.stdin!);
+
+		handleTargetWorkerMessage(failed);
+
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerError).toHaveBeenCalledWith(
+				'target',
+				failed.generation,
+				expect.objectContaining({ message: 'WAMR loader failed' })
+			)
+		);
+		expect(workerMocks.closeRspInput).toHaveBeenCalledOnce();
+		expect(workerMocks.closeRspOutput).toHaveBeenCalledOnce();
+		expect(stdout.closed).toBe(true);
+		expect(stderr.closed).toBe(true);
+		expect(stdin.closed).toBe(true);
+		expect(globalThis.__wasmIdleDebugTransport).toBeUndefined();
+
+		const recovery = initializeMessage('target-worker-loader-recovery');
+		handleTargetWorkerMessage(recovery);
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
+				type: 'ready',
+				worker: 'target',
+				generation: recovery.generation
+			})
+		);
+	});
 
 	it('rejects duplicate initialization without closing the active target outputs', async () => {
 		workerMocks.lifecycle = 'pending';

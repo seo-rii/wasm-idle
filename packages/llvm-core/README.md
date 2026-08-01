@@ -131,6 +131,10 @@ starting another lifecycle; its failure cannot close the live target's stdout or
 Both Workers treat an initialization replay carrying their already-active generation as idempotent:
 they neither start the runtime twice nor emit a fatal current-generation error. A competing
 generation is still rejected explicitly.
+If WAMR loading or target setup fails after claiming a generation, the target Worker closes every
+active RSP and WASI stream, clears its worker-global transport, and releases that generation before
+reporting the error. A later valid initialization can therefore recover without reusing stale
+queues.
 The same preflight-validated `/workspace/...` files provided to LLDB are mounted into WAMR's
 MEMFS before launch, so guest WASI file access observes the workspace used to compile the DWARF
 artifact. File paths must remain canonical beneath `/workspace`, and `/workspace/program.wasm` is

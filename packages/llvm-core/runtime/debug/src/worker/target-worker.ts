@@ -23,6 +23,16 @@ function closeQueue(queue: SharedByteQueue | undefined) {
 	}
 }
 
+function closeActiveTargetTransports() {
+	closeQueue(globalThis.__wasmIdleDebugTransport?.rspInput);
+	closeQueue(globalThis.__wasmIdleDebugTransport?.rspOutput);
+	globalThis.__wasmIdleDebugTransport = undefined;
+	closeQueue(activeStdin);
+	activeStdin = undefined;
+	for (const output of activeOutputs) closeQueue(output);
+	activeOutputs = [];
+}
+
 async function initialize(message: TargetWorkerInitializeMessage) {
 	if (activeGeneration) throw new Error('target worker is already initialized');
 	const cwdValue: unknown = message.cwd;
@@ -194,7 +204,8 @@ export function handleTargetWorkerMessage(message: DebugWorkerInboundMessage) {
 			return;
 		}
 		void initialize(message).catch((error) => {
-			for (const output of activeOutputs) closeQueue(output);
+			closeActiveTargetTransports();
+			if (activeGeneration === message.generation) activeGeneration = undefined;
 			postWorkerError('target', message.generation, error);
 		});
 		return;
@@ -202,13 +213,7 @@ export function handleTargetWorkerMessage(message: DebugWorkerInboundMessage) {
 	if (!activeGeneration || message.generation !== activeGeneration) return;
 	if (message.type === 'dispose') {
 		disposed = true;
-		closeQueue(globalThis.__wasmIdleDebugTransport?.rspInput);
-		closeQueue(globalThis.__wasmIdleDebugTransport?.rspOutput);
-		globalThis.__wasmIdleDebugTransport = undefined;
-		closeQueue(activeStdin);
-		activeStdin = undefined;
-		for (const output of activeOutputs) closeQueue(output);
-		activeOutputs = [];
+		closeActiveTargetTransports();
 	}
 }
 
