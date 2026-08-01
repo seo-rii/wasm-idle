@@ -155,6 +155,7 @@ export class LldbSandboxSession {
 	private supportsEvaluateExpressions = false;
 	private supportsReadMemory = false;
 	private breakpointVersion = 0;
+	private scopeRequestVersion = 0;
 	private dapExitCode: number | null = null;
 	private readonly breakpointsBySource = new Map<`/workspace/${string}`, number[]>();
 	private readonly breakpointRequestVersions = new Map<string, number>();
@@ -460,11 +461,27 @@ export class LldbSandboxSession {
 		if (!Number.isInteger(frameId) || frameId <= 0) {
 			throw new RangeError('LLDB frame ID must be a positive integer.');
 		}
+		const session = this.requireSession();
+		const stateVersion = this.stateVersion;
+		const requestVersion = ++this.scopeRequestVersion;
 		try {
-			const scopes = await this.requestScopes(frameId);
-			this.activeFrameId = frameId;
+			const scopes = await this.requestScopes(session, frameId);
+			if (
+				this.session === session &&
+				this.stateVersion === stateVersion &&
+				this.scopeRequestVersion === requestVersion
+			) {
+				this.activeFrameId = frameId;
+			}
 			return scopes;
 		} catch (error) {
+			if (
+				this.session !== session ||
+				this.stateVersion !== stateVersion ||
+				this.scopeRequestVersion !== requestVersion
+			) {
+				throw error;
+			}
 			this.rethrowProtocolError(error);
 			throw error;
 		}
@@ -701,7 +718,7 @@ export class LldbSandboxSession {
 		const isWorkspaceFrame = this.options.artifact.sources.some(
 			(source) => source.path === selectedFrame.source?.path
 		);
-		const scopes = isWorkspaceFrame ? await this.requestScopes(selectedFrame.id) : [];
+		const scopes = isWorkspaceFrame ? await this.requestScopes(session, selectedFrame.id) : [];
 		if (version !== this.stateVersion || this.session !== session) return;
 		this.activeThreadId = threadId;
 		this.activeFrameId = selectedFrame.id;
@@ -736,8 +753,8 @@ export class LldbSandboxSession {
 		this.command = null;
 	}
 
-	private async requestScopes(frameId: number) {
-		const response = await this.requireSession().request<unknown>('scopes', { frameId });
+	private async requestScopes(session: BrowserLldbSession, frameId: number) {
+		const response = await session.request<unknown>('scopes', { frameId });
 		return dapResponseCollection(response, 'scopes', 'scopes').map(
 			(scope, index): DebugScope => {
 				const path = `scopes[${index}]`;

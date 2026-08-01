@@ -405,6 +405,7 @@ describe('LldbSandboxSession', () => {
 			command: 'evaluate',
 			args: { expression: 'answer', frameId: 41, context: 'watch' }
 		});
+
 		runtimeState.session!.emit({
 			event: 'output',
 			body: { output: 'hello\n' }
@@ -414,6 +415,97 @@ describe('LldbSandboxSession', () => {
 		runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
 		await expect(completion).resolves.toBe(true);
 	});
+
+	it.each([
+		{
+			kind: 'valid',
+			response: {
+				scopes: [{ name: 'Older', variablesReference: 73, expensive: false }]
+			},
+			malformed: false
+		},
+		{
+			kind: 'malformed',
+			response: {
+				scopes: [{ name: 'Older', variablesReference: -1, expensive: false }]
+			},
+			malformed: true
+		}
+	])(
+		'keeps the newest frame after an obsolete $kind scopes response',
+		async ({ response, malformed }) => {
+			const events: Array<{ type: string }> = [];
+			let resolveOlderScopes!: (response: unknown) => void;
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: (event) => events.push(event),
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({
+						manifestVersion: 2,
+						debugger: { capabilities: { evaluateExpressions: true } }
+					})
+				})) as unknown as typeof fetch
+			});
+			const completion = controller.start().then(
+				() => null,
+				(error: unknown) => error
+			);
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			runtimeState.responseOverrides.set(
+				'scopes',
+				new Promise<unknown>((resolve) => {
+					resolveOlderScopes = resolve;
+				})
+			);
+
+			const olderScopes = controller.scopes(41).then(
+				(scopes) => scopes,
+				(error: unknown) => error
+			);
+			await vi.waitFor(() =>
+				expect(runtimeState.session!.requests.at(-1)).toEqual({
+					command: 'scopes',
+					args: { frameId: 41 }
+				})
+			);
+			runtimeState.responseOverrides.delete('scopes');
+			await controller.scopes(42);
+			resolveOlderScopes(response);
+
+			if (malformed) {
+				await expect(olderScopes).resolves.toBeInstanceOf(ProtocolError);
+			} else {
+				await expect(olderScopes).resolves.toEqual([
+					{
+						name: 'Older',
+						variablesReference: 73,
+						expensive: false,
+						variables: []
+					}
+				]);
+			}
+			await expect(controller.evaluate('answer')).resolves.toBe('42');
+			expect(runtimeState.session!.requests.at(-1)).toEqual({
+				command: 'evaluate',
+				args: { expression: 'answer', frameId: 42, context: 'watch' }
+			});
+			expect(runtimeState.session!.disposeCount).toBe(0);
+			expect(events.filter((event) => event.type === 'stop')).toHaveLength(0);
+
+			runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			await expect(completion).resolves.toBeNull();
+		}
+	);
 
 	it('orders breakpoint responses per source without blocking other files', async () => {
 		const events: Array<{

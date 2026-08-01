@@ -140,6 +140,9 @@ resume, or exit snapshot.
 A valid `continued` event invalidates every in-flight stopped-state lookup. Late `stackTrace` or
 `scopes` success and failure therefore remain ignored and cannot stop a target that has already
 resumed.
+Explicit frame selections are ordered independently as well. Only the newest successful `scopes`
+request can change the frame used by watch evaluation, while a protocol error from a superseded
+selection rejects only its original caller and does not dispose the live session.
 `BrowserLldbSession` also normalizes every resolved breakpoint before updating its cache. A
 malformed current `setBreakpoints` response rejects with the exported `DapProtocolError`; a stale
 response remains ignored, while an omitted per-line result stays unverified at its requested
