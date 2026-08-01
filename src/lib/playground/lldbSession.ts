@@ -296,18 +296,20 @@ export class LldbSandboxSession {
 			) {
 				return completion;
 			}
-			const protocolError = this.asProtocolError(error);
-			if (
-				protocolError &&
-				lifecycleVersion === this.lifecycleVersion &&
-				this.session === session
-			) {
-				this.fail(protocolError);
+			if (lifecycleVersion !== this.lifecycleVersion) {
+				await session.dispose();
+				return completion;
+			}
+			if (this.session === session) {
+				this.fail(
+					this.asProtocolError(error) ??
+						(error instanceof Error
+							? error
+							: new Error('Unable to initialize the LLDB debug session.'))
+				);
 				return completion;
 			}
 			await session.dispose();
-			if (this.session === session) this.session = undefined;
-			if (lifecycleVersion !== this.lifecycleVersion) return completion;
 			throw error;
 		}
 		return completion;

@@ -920,6 +920,38 @@ describe('LldbSandboxSession', () => {
 		}
 	);
 
+	it('publishes one stop and disposes after an active initialization failure', async () => {
+		const events: Array<{ type: string }> = [];
+		const failure = new Error('LLDB initialization failed');
+		runtimeState.initializeGate = Promise.reject(failure);
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+
+		const startError = await controller.start().then(
+			() => null,
+			(error: unknown) => error
+		);
+
+		expect(startError).toBe(failure);
+		expect(runtimeState.session!.disposeCount).toBe(1);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(1);
+	});
+
 	it('fails and disposes initialization after a malformed breakpoint response', async () => {
 		const events: Array<{ type: string }> = [];
 		runtimeState.initializeGate = Promise.reject(

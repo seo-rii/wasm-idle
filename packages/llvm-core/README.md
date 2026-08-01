@@ -144,7 +144,8 @@ mutate the cache used by the playground.
 For the live playground, a current `DapProtocolError` during initial configuration or a later
 breakpoint update is converted to the shared Core `ProtocolError`. The session publishes one stop,
 disposes both debug workers, and rejects its completion with the low-level error retained as the
-cause.
+cause. Other active initialization failures preserve their original `Error` while following the
+same single-stop and Worker-disposal lifecycle, including failures while flushing startup input.
 Direct `DapClient` consumers can set `onEventError(error, event)` to observe an event-listener
 exception. Throwing listeners and a throwing error hook are isolated from one another, and the
 client continues parsing later events and responses on the same byte stream.
