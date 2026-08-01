@@ -468,6 +468,44 @@ describe('createDebugSessionController', () => {
 		}
 	);
 
+	it('merges paginated lazy-variable children at their requested offsets', async () => {
+		const firstPage = [
+			{ name: '[0]', value: '10', variablesReference: 0 },
+			{ name: '[1]', value: '20', variablesReference: 0 }
+		];
+		const secondPage = [{ name: '[2]', value: '30', variablesReference: 0 }];
+		const debugVariables = vi
+			.fn()
+			.mockResolvedValueOnce(firstPage)
+			.mockResolvedValueOnce(secondPage);
+		const controller = createDebugSessionController({
+			terminal: { debugVariables } as never
+		});
+		controller.handleEvent({
+			type: 'pause',
+			line: 7,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: [{ id: 11, functionName: 'main', line: 7 }],
+			scopes: [
+				{
+					name: 'Locals',
+					variablesReference: 50,
+					expensive: false,
+					variables: []
+				}
+			]
+		});
+
+		await expect(controller.loadVariableChildren(50, 0, 2)).resolves.toEqual(firstPage);
+		await expect(controller.loadVariableChildren(50, 2, 2)).resolves.toEqual(secondPage);
+
+		expect(debugVariables).toHaveBeenNthCalledWith(1, 50, 0, 2);
+		expect(debugVariables).toHaveBeenNthCalledWith(2, 50, 2, 2);
+		expect(controller.variablesByReference.get(50)).toEqual([...firstPage, ...secondPage]);
+		expect(controller.locals).toEqual([...firstPage, ...secondPage]);
+	});
+
 	it('reads LLDB memory through the paused terminal session', async () => {
 		const debugReadMemory = vi.fn(async () => ({
 			address: '0x20',

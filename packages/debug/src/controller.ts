@@ -511,7 +511,14 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		if (version !== frameRequestVersion || !get(pausedStore)) return [];
 		variablesByReferenceStore.update((current) => {
 			const next = new Map(current);
-			next.set(variablesReference, [...variables]);
+			if (start === undefined) {
+				next.set(variablesReference, [...variables]);
+				return next;
+			}
+			const merged = [...(current.get(variablesReference) || [])];
+			const insertionIndex = Math.min(start, merged.length);
+			merged.splice(insertionIndex, variables.length, ...variables);
+			next.set(variablesReference, merged);
 			return next;
 		});
 		if (get(scopesStore).some((scope) => scope.variablesReference === variablesReference)) {
