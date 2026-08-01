@@ -89,6 +89,118 @@ describe('Octave sandbox', () => {
 		expect(outputs).toContain('factorial_plus_bonus=27\n');
 	});
 
+	it('normalizes a valid Octave workspace before worker dispatch', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/absproxy/5173');
+
+		await expect(
+			sandbox.run('disp(helper())', false, true, undefined, [], {
+				activePath: 'nested\\main.m',
+				workspaceFiles: [
+					{ path: 'fixtures\\helper.m', content: 'function x = helper(); x = 1; end' }
+				]
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				activePath: 'nested/main.m',
+				workspaceFiles: [
+					{ path: 'fixtures/helper.m', content: 'function x = helper(); x = 1; end' }
+				]
+			})
+		);
+	});
+
+	it.each([
+		{
+			name: 'traversal path',
+			code: 'A',
+			options: { activePath: '../main.m' },
+			expected: { code: 'invalid-path', path: '../main.m' }
+		},
+		{
+			name: 'absolute path',
+			code: 'A',
+			options: { activePath: '/tmp/main.m' },
+			expected: { code: 'invalid-path', path: '/tmp/main.m' }
+		},
+		{
+			name: 'NUL path',
+			code: 'A',
+			options: { activePath: 'bad\0.m' },
+			expected: { code: 'invalid-path', path: 'bad\0.m' }
+		},
+		{
+			name: 'duplicate path',
+			code: 'A',
+			options: {
+				workspaceFiles: [
+					{ path: 'data/helper.m', content: 'A' },
+					{ path: 'data/helper.m', content: 'B' }
+				]
+			},
+			expected: { code: 'duplicate-path', path: 'data/helper.m' }
+		},
+		{
+			name: 'case-colliding path',
+			code: 'A',
+			options: {
+				workspaceFiles: [
+					{ path: 'DATA/helper.m', content: 'A' },
+					{ path: 'data/helper.m', content: 'B' }
+				]
+			},
+			expected: { code: 'case-collision', path: 'data/helper.m' }
+		},
+		{
+			name: 'file count overflow',
+			code: 'A',
+			options: {
+				workspaceFiles: [{ path: 'data/helper.m', content: 'B' }],
+				workspaceLimits: { maxFiles: 1 }
+			},
+			expected: { code: 'file-count-limit', limit: 1, actual: 2 }
+		},
+		{
+			name: 'per-file overflow clamped to execution limits',
+			code: '12345',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceLimits: { maxFileBytes: 100 }
+			},
+			expected: { code: 'file-size-limit', limit: 4, actual: 5 }
+		},
+		{
+			name: 'aggregate overflow clamped to execution limits',
+			code: '123',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceFiles: [{ path: 'data/helper.m', content: '45' }],
+				workspaceLimits: { maxTotalBytes: 100 }
+			},
+			expected: { code: 'total-size-limit', limit: 4, actual: 5 }
+		}
+	])(
+		'rejects an Octave workspace with $name before changing execution state',
+		async ({ code, options, expected }) => {
+			const sandbox = new Octave();
+			await sandbox.load('/absproxy/5173');
+
+			await expect(
+				sandbox.run(code, false, true, undefined, [], options)
+			).rejects.toMatchObject({
+				name: 'WorkspaceValidationError',
+				...expected
+			});
+			expect(workerInstances).toHaveLength(0);
+			expect(sandbox.uid).toBe(0);
+			expect(sandbox.exit).toBe(true);
+
+			await expect(sandbox.run('disp("retry")', false)).resolves.toBe(true);
+		}
+	);
+
 	it('rejects overlapping Octave operations without replacing the active worker', async () => {
 		const sandbox = new Octave();
 		const outputs: string[] = [];

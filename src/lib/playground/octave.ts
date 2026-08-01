@@ -7,7 +7,12 @@ import {
 	type CompilerDiagnostic,
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
-import { BusyError } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
@@ -178,8 +183,28 @@ class Octave implements Sandbox {
 			);
 		}
 		let programArgs: string[];
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		try {
 			programArgs = resolveSandboxExecutionArgs('OCTAVE', args, options).programArgs;
+			const limits = resolveExecutionLimits(options.limits);
+			workspace = validateExecutionWorkspace(
+				code,
+				options.workspaceFiles ?? [],
+				options.activePath ?? 'main.m',
+				{
+					...options.workspaceLimits,
+					maxFileBytes: Math.min(
+						options.workspaceLimits?.maxFileBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						options.workspaceLimits?.maxTotalBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					)
+				}
+			);
 		} catch (error) {
 			return Promise.reject(error);
 		}
@@ -283,8 +308,8 @@ class Octave implements Sandbox {
 						code,
 						args: programArgs,
 						stdin,
-						activePath: options.activePath || 'main.m',
-						workspaceFiles: options.workspaceFiles || [],
+						activePath: workspace.activePath,
+						workspaceFiles: workspace.workspaceFiles,
 						log: _log
 					});
 				})
