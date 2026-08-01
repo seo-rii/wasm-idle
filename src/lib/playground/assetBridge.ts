@@ -534,7 +534,7 @@ export class WorkerAssetBridge {
 				!Number.isSafeInteger(parsedContentLength)
 			) {
 				const error = new ProtocolError(
-					`Runtime asset ${asset} has an invalid ${contentLengthHeader}: ${rawContentLength}`,
+					`Runtime asset ${asset} has an invalid ${contentLengthHeader}`,
 					{ phase: 'asset', runtimeId: this.runtime }
 				);
 				cancelResponseBody(response, error);

@@ -1322,7 +1322,7 @@ describe('WorkerAssetBridge asset requests', () => {
 		['content-length', '1e2'],
 		['content-length', '3, 3'],
 		['content-length', '9007199254740992'],
-		['x-wasm-idle-original-content-length', 'invalid']
+		['x-wasm-idle-original-content-length', 'sensitive-length-token']
 	])('rejects an invalid %s before reading its response body: %s', async (header, value) => {
 		const postMessage = vi.fn();
 		const cancel = vi.fn(async () => undefined);
@@ -1357,9 +1357,10 @@ describe('WorkerAssetBridge asset requests', () => {
 			assetResponse: {
 				id: 27,
 				ok: false,
-				error: `Runtime asset ${asset} has an invalid ${header}: ${value}`
+				error: `Runtime asset ${asset} has an invalid ${header}`
 			}
 		});
+		if (value) expect(JSON.stringify(postMessage.mock.calls[0]?.[0])).not.toContain(value);
 		expect(cancel).toHaveBeenCalledOnce();
 		expect(getReader).not.toHaveBeenCalled();
 		expect(arrayBuffer).not.toHaveBeenCalled();
