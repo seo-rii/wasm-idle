@@ -18,13 +18,12 @@ import {
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
+import { BusyError, ProtocolError } from '@wasm-idle/core';
 
-type RuntimeGlobal = Record<string, unknown>;
-type RuntimeAssetEntry = {
-	path: string;
-	basename: string;
-	relativeFromSourceDir: string;
-	objectUrl: string;
+type OcamlOperation = {
+	token: symbol;
+	phase: 'startup' | 'execute';
+	cancelled: boolean;
 };
 
 class Ocaml implements Sandbox {
@@ -41,6 +40,7 @@ class Ocaml implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private activeOperation: OcamlOperation | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'OCaml',
 		onDispose: (worker) => {
@@ -51,6 +51,30 @@ class Ocaml implements Sandbox {
 		}
 	});
 
+	private beginOperation(phase: OcamlOperation['phase']) {
+		if (this.activeOperation) {
+			throw new BusyError('OCaml runtime already has an active operation', {
+				runtimeId: 'OCAML',
+				phase: this.activeOperation.phase
+			});
+		}
+		const operation = {
+			token: Symbol(phase),
+			phase,
+			cancelled: false
+		} satisfies OcamlOperation;
+		this.activeOperation = operation;
+		return operation;
+	}
+
+	private completeOperation(operation: OcamlOperation) {
+		if (this.activeOperation?.token === operation.token) this.activeOperation = null;
+	}
+
+	private isOperationActive(operation: OcamlOperation) {
+		return this.activeOperation?.token === operation.token && !operation.cancelled;
+	}
+
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		_code = '',
@@ -59,7 +83,14 @@ class Ocaml implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		return this.workerSession.load(async (resolve, reject) => {
+		let operation: OcamlOperation;
+		try {
+			operation = this.beginOperation('startup');
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		const loading = this.workerSession.load(async (resolve, reject) => {
+			if (!this.isOperationActive(operation)) return;
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
@@ -76,31 +107,59 @@ class Ocaml implements Sandbox {
 				!this.worker ||
 				this.moduleUrl !== nextModuleUrl ||
 				this.manifestUrl !== nextManifestUrl;
-			this.moduleUrl = nextModuleUrl;
-			this.manifestUrl = nextManifestUrl;
-			if (needsWorkerReset && this.worker) {
-				this.workerSession.reset();
-			}
-			if (!this.worker) {
-				this.worker = new (await import('$lib/playground/worker/ocaml?worker')).default();
-				this.workerSession.attach(this.worker);
-				this.worker.onmessage = (event: MessageEvent<any>) => {
-					if (event.data?.load) {
-						progress?.set?.(1);
-						resolve();
+			if (needsWorkerReset) {
+				const WorkerConstructor = (await import('$lib/playground/worker/ocaml?worker'))
+					.default;
+				if (!this.isOperationActive(operation)) return;
+				const worker = new WorkerConstructor();
+				if (!this.isOperationActive(operation)) {
+					worker.terminate();
+					return;
+				}
+				this.worker = worker;
+				this.workerSession.attach(worker);
+				const handler = (event: MessageEvent<any>) => {
+					if (
+						!this.isOperationActive(operation) ||
+						this.worker !== worker ||
+						worker.onmessage !== handler
+					) {
+						return;
 					}
-					if (event.data?.error) reject(event.data.error);
+					try {
+						if (event.data?.load) {
+							progress?.set?.(1);
+							if (
+								!this.isOperationActive(operation) ||
+								this.worker !== worker ||
+								worker.onmessage !== handler
+							) {
+								return;
+							}
+							worker.onmessage = null;
+							this.moduleUrl = nextModuleUrl;
+							this.manifestUrl = nextManifestUrl;
+							resolve();
+							return;
+						}
+						if (event.data?.error !== undefined) reject(event.data.error);
+					} catch (error) {
+						reject(error);
+					}
 				};
-				this.worker.postMessage({
+				worker.onmessage = handler;
+				worker.postMessage({
 					load: true,
-					moduleUrl: this.moduleUrl,
-					manifestUrl: this.manifestUrl
+					moduleUrl: nextModuleUrl,
+					manifestUrl: nextManifestUrl
 				});
 			} else {
 				progress?.set?.(1);
+				if (!this.isOperationActive(operation)) return;
 				resolve();
 			}
 		});
+		return loading.finally(() => this.completeOperation(operation));
 	}
 
 	write(input: string) {
@@ -127,7 +186,7 @@ class Ocaml implements Sandbox {
 		}
 	}
 
-	run(
+	async run(
 		code: string,
 		prepare: boolean,
 		_log = true,
@@ -135,279 +194,138 @@ class Ocaml implements Sandbox {
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		this.exit = false;
-		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
+		const operation = this.beginOperation('execute');
+		try {
+			if (!this.worker) throw 'Worker not loaded';
+			const worker = this.worker;
 			const target: OcamlBackend = options.ocamlBackend || 'wasm';
 			const wasmBinaryenMode: OcamlWasmBinaryenMode = options.ocamlWasmBinaryenMode || 'fast';
-			const _uid = ++this.uid;
-			const operation = this.workerSession.beginRun(this.worker, reject);
-			const handler = async (event: Event & { data: any }) => {
-				if (!this.worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (this.worker.onmessage = null);
-				const { output, results, error, diagnostic, progress, runtime } = event.data;
-				reportWorkerProgress(_prog, progress);
-				if (event.data?.buffer) {
-					this.waitingForInput = true;
-					this.flushPendingInput();
-				}
-				if (output) this.output(output);
-				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
-				if (runtime) {
-					const createdObjectUrls: string[] = [];
-					const originalConsole = window.console;
-					const originalFetch = window.fetch.bind(window);
-					const originalInstantiate = WebAssembly.instantiate.bind(
-						WebAssembly
-					) as typeof WebAssembly.instantiate;
-					const originalInstantiateStreaming = WebAssembly.instantiateStreaming
-						? (WebAssembly.instantiateStreaming.bind(
-								WebAssembly
-							) as typeof WebAssembly.instantiateStreaming)
-						: undefined;
-					const runtimePromiseKey = '__wasm_of_js_of_ocaml_runtime_promise';
-					const assetResolverKey = '__wasm_of_js_of_ocaml_resolve_asset';
-					const runtimeGlobal = window as unknown as RuntimeGlobal;
-					const hadProcess = Object.prototype.hasOwnProperty.call(
-						runtimeGlobal,
-						'process'
-					);
-					const hadRequire = Object.prototype.hasOwnProperty.call(
-						runtimeGlobal,
-						'require'
-					);
-					const hadModule = Object.prototype.hasOwnProperty.call(runtimeGlobal, 'module');
-					const hadExports = Object.prototype.hasOwnProperty.call(
-						runtimeGlobal,
-						'exports'
-					);
-					const originalProcess = runtimeGlobal['process'];
-					const originalRequire = runtimeGlobal['require'];
-					const originalModule = runtimeGlobal['module'];
-					const originalExports = runtimeGlobal['exports'];
-					originalConsole.log(
-						`[wasm-idle:ocaml-runtime] start source=${String(runtime.sourcePath || '')} chars=${String(String(runtime.programSource || '').length)} assets=${String(Array.isArray(runtime.assetFiles) ? runtime.assetFiles.length : 0)}`
-					);
-					const sourceDir = String(runtime.sourcePath || '').replace(/\/[^/]+$/, '');
-					const assetEntries: RuntimeAssetEntry[] = Array.isArray(runtime.assetFiles)
-						? runtime.assetFiles.map(
-								(assetFile: { path: string; data: Uint8Array }) => {
-									const copiedAssetData = new Uint8Array(
-										assetFile.data.byteLength
-									);
-									copiedAssetData.set(assetFile.data);
-									const objectUrl = URL.createObjectURL(
-										new Blob([copiedAssetData], {
-											type: assetFile.path.endsWith('.wasm')
-												? 'application/wasm'
-												: 'application/octet-stream'
-										})
-									);
-									createdObjectUrls.push(objectUrl);
-									return {
-										path: assetFile.path,
-										basename:
-											assetFile.path.split('/').at(-1) || assetFile.path,
-										relativeFromSourceDir: assetFile.path.startsWith(
-											`${sourceDir}/`
-										)
-											? assetFile.path.slice(sourceDir.length + 1)
-											: assetFile.path.replace(/^\/+/, ''),
-										objectUrl
-									};
-								}
-							)
-						: [];
-					const emitOutput = (...args: unknown[]) => {
-						const text = args.map((value) => String(value)).join(' ');
-						this.output(text.endsWith('\n') ? text : `${text}\n`);
-					};
-					const resolveAssetUrl = (requestedAsset: string) =>
-						assetEntries
-							.map((assetEntry: RuntimeAssetEntry) => {
-								const candidates = [String(requestedAsset)];
-								try {
-									candidates.push(
-										new URL(String(requestedAsset), window.location.href)
-											.pathname
-									);
-								} catch {
-									// ignore URL parse errors
-								}
-								return candidates.some(
-									(candidate) =>
-										candidate === assetEntry.path ||
-										candidate === assetEntry.relativeFromSourceDir ||
-										candidate.endsWith(
-											`/${assetEntry.relativeFromSourceDir}`
-										) ||
-										candidate.endsWith(`/${assetEntry.basename}`)
-								)
-									? assetEntry.objectUrl
-									: null;
-							})
-							.find((candidate: string | null) => !!candidate) || null;
-					window.console = {
-						...originalConsole,
-						log: (...args: unknown[]) => {
-							emitOutput(...args);
-							originalConsole.log(...args);
-						},
-						info: (...args: unknown[]) => {
-							emitOutput(...args);
-							originalConsole.info(...args);
-						},
-						warn: (...args: unknown[]) => {
-							emitOutput(...args);
-							originalConsole.warn(...args);
-						},
-						error: (...args: unknown[]) => {
-							emitOutput(...args);
-							originalConsole.error(...args);
-						}
-					} as Console;
-					window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-						const requestUrl =
-							typeof input === 'string'
-								? input
-								: input instanceof URL
-									? input.toString()
-									: input.url;
-						const resolvedAssetUrl = resolveAssetUrl(requestUrl);
-						if (resolvedAssetUrl) {
-							return await originalFetch(resolvedAssetUrl, init);
-						}
-						return await originalFetch(input, init);
-					}) as typeof fetch;
-					WebAssembly.instantiate = (async (
-						source: BufferSource | WebAssembly.Module,
-						importObject?: WebAssembly.Imports
-					) => {
-						return await originalInstantiate(source, importObject);
-					}) as typeof WebAssembly.instantiate;
-					if (originalInstantiateStreaming) {
-						WebAssembly.instantiateStreaming = (async (
-							source: Response | PromiseLike<Response>,
-							importObject?: WebAssembly.Imports
-						) => {
-							return await originalInstantiateStreaming(source, importObject);
-						}) as typeof WebAssembly.instantiateStreaming;
-					}
-					runtimeGlobal['process'] = undefined;
-					runtimeGlobal['require'] = undefined;
-					runtimeGlobal['module'] = undefined;
-					runtimeGlobal['exports'] = undefined;
-					runtimeGlobal[assetResolverKey] = resolveAssetUrl;
-					try {
-						const normalizedSource = String(runtime.programSource || '').includes(
-							'($=>async a=>{'
-						)
-							? String(runtime.programSource).replace(
-									'($=>async a=>{',
-									`globalThis.${runtimePromiseKey}=($=>async a=>{`
-								)
-							: String(runtime.programSource || '');
-						const sourceWithAssetResolver = normalizedSource.replace(
-							/function ([A-Za-z$_][\w$]*)\(([A-Za-z$_][\w$]*)\)\{const ([A-Za-z$_][\w$]*)=([A-Za-z$_][\w$]*)\?new URL\(\2,\4\):\2;return fetch\(\3\)\}/,
-							`function $1($2){if(globalThis.${assetResolverKey}){const resolvedAsset=globalThis.${assetResolverKey}($2);if(resolvedAsset)return fetch(resolvedAsset)}const $3=$4?new URL($2,$4):$2;return fetch($3)}`
-						);
-						new Function(
-							`${sourceWithAssetResolver}\n//# sourceURL=${String(runtime.sourcePath || 'ocaml-runtime.js')}`
-						)();
-						originalConsole.log('[wasm-idle:ocaml-runtime] script invoked');
-						const runtimePromise = runtimeGlobal[runtimePromiseKey];
-						originalConsole.log(
-							`[wasm-idle:ocaml-runtime] runtime promise=${String(runtimePromise instanceof Promise)}`
-						);
-						if (runtimePromise instanceof Promise) {
-							await runtimePromise;
-						}
-						this.elapse = Date.now() - this.begin;
-						this.exit = true;
-						this.workerSession.complete(operation);
-						resolve(true);
-					} catch (runtimeError: any) {
-						this.elapse = Date.now() - this.begin;
-						this.exit = true;
-						this.workerSession.complete(operation);
-						reject(runtimeError?.message || String(runtimeError));
-					} finally {
-						window.console = originalConsole;
-						window.fetch = originalFetch;
-						WebAssembly.instantiate = originalInstantiate;
-						if (originalInstantiateStreaming) {
-							WebAssembly.instantiateStreaming = originalInstantiateStreaming;
-						}
-						delete runtimeGlobal[runtimePromiseKey];
-						delete runtimeGlobal[assetResolverKey];
-						if (!hadProcess) {
-							delete runtimeGlobal['process'];
-						} else {
-							runtimeGlobal['process'] = originalProcess;
-						}
-						if (!hadRequire) {
-							delete runtimeGlobal['require'];
-						} else {
-							runtimeGlobal['require'] = originalRequire;
-						}
-						if (!hadModule) {
-							delete runtimeGlobal['module'];
-						} else {
-							runtimeGlobal['module'] = originalModule;
-						}
-						if (!hadExports) {
-							delete runtimeGlobal['exports'];
-						} else {
-							runtimeGlobal['exports'] = originalExports;
-						}
-						for (const objectUrl of createdObjectUrls) {
-							URL.revokeObjectURL(objectUrl);
-						}
-					}
-					return;
-				}
-				if (results) {
+			this.exit = false;
+			return await new Promise<boolean | string>((resolve, reject) => {
+				const runUid = ++this.uid;
+				const workerOperation = this.workerSession.beginRun(worker, reject);
+				let handler: (event: Event & { data: any }) => void;
+				const failRun = (error: unknown, disposeWorker = false) => {
+					if (worker.onmessage === handler) worker.onmessage = null;
+					this.workerSession.complete(workerOperation);
+					if (disposeWorker && this.worker === worker) this.workerSession.reset();
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.workerSession.complete(operation);
-					resolve(results as string);
-				}
-				if (error) {
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.waitingForInput = false;
-					this.pendingEof = false;
-					this.workerSession.complete(operation);
 					reject(error);
+				};
+				handler = (event) => {
+					if (
+						!this.isOperationActive(operation) ||
+						this.worker !== worker ||
+						worker.onmessage !== handler ||
+						runUid !== this.uid
+					) {
+						return;
+					}
+					try {
+						const { output, results, error, diagnostic, progress, runtime } =
+							event.data;
+						reportWorkerProgress(_prog, progress);
+						if (
+							!this.isOperationActive(operation) ||
+							this.worker !== worker ||
+							worker.onmessage !== handler ||
+							runUid !== this.uid
+						) {
+							return;
+						}
+						if (event.data?.buffer) {
+							this.waitingForInput = true;
+							this.flushPendingInput();
+							if (
+								!this.isOperationActive(operation) ||
+								this.worker !== worker ||
+								worker.onmessage !== handler ||
+								runUid !== this.uid
+							) {
+								return;
+							}
+						}
+						if (output) {
+							this.output?.(output);
+							if (
+								!this.isOperationActive(operation) ||
+								this.worker !== worker ||
+								worker.onmessage !== handler ||
+								runUid !== this.uid
+							) {
+								return;
+							}
+						}
+						if (diagnostic) {
+							this.oncompilerdiagnostic?.(diagnostic);
+							if (
+								!this.isOperationActive(operation) ||
+								this.worker !== worker ||
+								worker.onmessage !== handler ||
+								runUid !== this.uid
+							) {
+								return;
+							}
+						}
+						if (runtime) {
+							failRun(
+								new ProtocolError('Unexpected OCaml page runtime message', {
+									phase: 'execute',
+									runtimeId: 'OCAML'
+								}),
+								true
+							);
+							return;
+						}
+						if (results !== undefined) {
+							if (worker.onmessage === handler) worker.onmessage = null;
+							this.elapse = Date.now() - this.begin;
+							this.exit = true;
+							this.waitingForInput = false;
+							this.pendingEof = false;
+							this.workerSession.complete(workerOperation);
+							resolve(results as boolean | string);
+							return;
+						}
+						if (error !== undefined) failRun(error);
+					} catch (error) {
+						failRun(error, true);
+					}
+				};
+				worker.onmessage = handler;
+				this.begin = Date.now();
+				try {
+					worker.postMessage({
+						code,
+						prepare,
+						target,
+						wasmBinaryenMode,
+						log: _log,
+						buffer: this.buffer,
+						stdin: options.stdin
+					});
+				} catch (error) {
+					failRun(error);
 				}
-			};
-			this.worker.onmessage = (event) => {
-				void handler(event as Event & { data: any });
-			};
-			this.begin = Date.now();
-			this.worker.postMessage({
-				code,
-				prepare,
-				target,
-				wasmBinaryenMode,
-				log: _log,
-				buffer: this.buffer,
-				stdin: options.stdin
 			});
-		});
+		} finally {
+			this.completeOperation(operation);
+		}
 	}
 
 	kill() {
 		this.terminate();
 	}
 
-	terminate() {
+	terminate(reason: unknown = 'Process terminated') {
+		if (this.activeOperation) this.activeOperation.cancelled = true;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
-		this.workerSession.terminate();
+		this.workerSession.terminate(reason);
 		this.exit = true;
 	}
 
@@ -417,7 +335,7 @@ class Ocaml implements Sandbox {
 		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
 		resetBufferedStdin(this.buffer);
-		if (!this.exit) {
+		if (this.activeOperation || !this.exit) {
 			this.terminate();
 		}
 	}

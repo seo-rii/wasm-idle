@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { BusyError, ProtocolError } from '@wasm-idle/core';
+
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
@@ -10,6 +12,8 @@ const { publicEnv } = vi.hoisted(() => ({
 	}
 }));
 let suppressAutoLoadAck = false;
+let suppressAutoRunAck = false;
+let runDispatchError: unknown = null;
 
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
@@ -21,6 +25,8 @@ class MockWorker {
 			queueMicrotask(() => this.onmessage?.({ data: { load: true } } as MessageEvent<any>));
 			return;
 		}
+		if (runDispatchError !== null) throw runDispatchError;
+		if (suppressAutoRunAck) return;
 		if (message.prepare) {
 			queueMicrotask(() => {
 				this.onmessage?.({
@@ -82,6 +88,8 @@ describe('OCaml sandbox', () => {
 		publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL =
 			'/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json';
 		suppressAutoLoadAck = false;
+		suppressAutoRunAck = false;
+		runDispatchError = null;
 	});
 
 	it('loads the OCaml worker and forwards diagnostics plus run output', async () => {
@@ -257,5 +265,203 @@ describe('OCaml sandbox', () => {
 		).resolves.toBe(true);
 
 		expect(readBufferedStdin(runMessage.buffer)).toBeNull();
+	});
+
+	it('rejects overlapping startup and execution while load is pending', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Ocaml();
+		const firstLoad = sandbox.load('/absproxy/5173');
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'startup'
+		});
+		await expect(sandbox.run('let () = ()', false)).rejects.toBeInstanceOf(BusyError);
+
+		worker.onmessage?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(firstLoad).resolves.toBeUndefined();
+	});
+
+	it('commits runtime URLs only after a successful load callback', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Ocaml();
+		const callbackError = new Error('progress callback failed');
+		const loadPromise = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{},
+			{
+				set() {
+					throw callbackError;
+				}
+			}
+		);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+
+		worker.onmessage?.({ data: { load: true } } as MessageEvent<any>);
+
+		await expect(loadPromise).rejects.toBe(callbackError);
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.manifestUrl).toBe('');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+
+		suppressAutoLoadAck = false;
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('rejects overlapping runs and loads until the active run settles', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const worker = workerInstances[0];
+		const firstRun = sandbox.run('let () = ()', false);
+		const handler = worker.onmessage;
+
+		await expect(sandbox.run('let () = ()', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute'
+		});
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			phase: 'execute'
+		});
+
+		handler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(firstRun).resolves.toBe(true);
+
+		suppressAutoRunAck = false;
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
+	it('cancels a run reentrantly without accepting the rest of the worker message', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		sandbox.output = () => sandbox.terminate('stopped from output');
+
+		await expect(sandbox.run('let () = print_endline "stop"', false)).rejects.toBe(
+			'stopped from output'
+		);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+
+		sandbox.output = vi.fn();
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
+	it('quarantines a worker when an execution callback throws', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const callbackError = new Error('output callback failed');
+		sandbox.output = () => {
+			throw callbackError;
+		};
+
+		await expect(sandbox.run('let () = print_endline "fail"', false)).rejects.toBe(
+			callbackError
+		);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		sandbox.output = vi.fn();
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('keeps the loaded worker reusable after a synchronous run dispatch failure', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const dispatchError = new Error('postMessage failed');
+		runDispatchError = dispatchError;
+
+		await expect(sandbox.run('let () = ()', false)).rejects.toBe(dispatchError);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+
+		runDispatchError = null;
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
+	it('fails closed on the removed page-runtime protocol without patching globals', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const worker = workerInstances[0];
+		const originalConsole = window.console;
+		const originalFetch = window.fetch;
+		const originalInstantiate = WebAssembly.instantiate;
+		const originalInstantiateStreaming = WebAssembly.instantiateStreaming;
+		const runPromise = sandbox.run('let () = ()', false);
+		const handler = worker.onmessage;
+
+		handler?.({
+			data: {
+				runtime: {
+					programSource: 'globalThis.__ocamlLegacyRuntimeExecuted = true'
+				}
+			}
+		} as MessageEvent<any>);
+		const error = await runPromise.catch((reason) => reason);
+
+		expect(error).toBeInstanceOf(ProtocolError);
+		expect(error).toMatchObject({
+			name: 'ProtocolError',
+			code: 'protocol',
+			phase: 'execute',
+			runtimeId: 'OCAML'
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(window.console).toBe(originalConsole);
+		expect(window.fetch).toBe(originalFetch);
+		expect(WebAssembly.instantiate).toBe(originalInstantiate);
+		expect(WebAssembly.instantiateStreaming).toBe(originalInstantiateStreaming);
+		expect(
+			(globalThis as typeof globalThis & { __ocamlLegacyRuntimeExecuted?: boolean })
+				.__ocamlLegacyRuntimeExecuted
+		).toBeUndefined();
+
+		suppressAutoRunAck = false;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
+	it('ignores a stale run handler after a worker error and allows a clean retry', async () => {
+		const sandbox = new Ocaml();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const worker = workerInstances[0];
+		const runPromise = sandbox.run('let () = ()', false);
+		const staleHandler = worker.onmessage;
+
+		worker.onerror?.({
+			message: 'worker crashed',
+			filename: '/worker/ocaml.js',
+			lineno: 12,
+			colno: 8
+		} as ErrorEvent);
+
+		await expect(runPromise).rejects.toContain(
+			'OCaml worker script error: worker crashed (/worker/ocaml.js:12:8)'
+		);
+		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalled();
+
+		suppressAutoRunAck = false;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
 	});
 });
