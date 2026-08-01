@@ -130,10 +130,19 @@ export function handleLldbWorkerMessage(message: DebugWorkerInboundMessage) {
 		disposed = true;
 		finishActiveLifecycle?.();
 		finishActiveLifecycle = undefined;
-		globalThis.__wasmIdleDebugTransport?.dapInput?.close();
-		globalThis.__wasmIdleDebugTransport?.dapOutput?.close();
-		globalThis.__wasmIdleDebugTransport?.rspInput.close();
-		globalThis.__wasmIdleDebugTransport?.rspOutput.close();
+		const transport = globalThis.__wasmIdleDebugTransport;
+		for (const queue of [
+			transport?.dapInput,
+			transport?.dapOutput,
+			transport?.rspInput,
+			transport?.rspOutput
+		]) {
+			try {
+				queue?.close();
+			} catch {
+				// Continue releasing worker state when one shared queue is stale.
+			}
+		}
 		globalThis.__wasmIdleDebugTransport = undefined;
 		globalThis.wasmLldbSharedRingV1 = undefined;
 	}

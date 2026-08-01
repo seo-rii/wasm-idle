@@ -14,6 +14,15 @@ let disposed = false;
 let activeStdin: SharedByteQueue | undefined;
 let activeOutputs: SharedByteQueue[] = [];
 
+function closeQueue(queue: SharedByteQueue | undefined) {
+	if (!queue) return;
+	try {
+		if (!queue.closed) queue.close();
+	} catch {
+		// A stale queue must not prevent the worker from closing its other transports.
+	}
+}
+
 async function initialize(message: TargetWorkerInitializeMessage) {
 	if (activeGeneration) throw new Error('target worker is already initialized');
 	activeGeneration = message.generation;
@@ -28,14 +37,14 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 	activeOutputs = [stdoutQueue, stderrQueue];
 	const stdout = (character: number | null) => {
 		if (character === null) {
-			if (!stdoutQueue.closed) stdoutQueue.close();
+			closeQueue(stdoutQueue);
 			return;
 		}
 		stdoutQueue.writeBlocking(Uint8Array.of(character));
 	};
 	const stderr = (character: number | null) => {
 		if (character === null) {
-			if (!stderrQueue.closed) stderrQueue.close();
+			closeQueue(stderrQueue);
 			return;
 		}
 		stderrQueue.writeBlocking(Uint8Array.of(character));
@@ -141,9 +150,7 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 export function handleTargetWorkerMessage(message: DebugWorkerInboundMessage) {
 	if (message.type === 'initialize-target') {
 		void initialize(message).catch((error) => {
-			for (const output of activeOutputs) {
-				if (!output.closed) output.close();
-			}
+			for (const output of activeOutputs) closeQueue(output);
 			postWorkerError('target', message.generation, error);
 		});
 		return;
@@ -151,14 +158,12 @@ export function handleTargetWorkerMessage(message: DebugWorkerInboundMessage) {
 	if (!activeGeneration || message.generation !== activeGeneration) return;
 	if (message.type === 'dispose') {
 		disposed = true;
-		globalThis.__wasmIdleDebugTransport?.rspInput.close();
-		globalThis.__wasmIdleDebugTransport?.rspOutput.close();
+		closeQueue(globalThis.__wasmIdleDebugTransport?.rspInput);
+		closeQueue(globalThis.__wasmIdleDebugTransport?.rspOutput);
 		globalThis.__wasmIdleDebugTransport = undefined;
-		activeStdin?.close();
+		closeQueue(activeStdin);
 		activeStdin = undefined;
-		for (const output of activeOutputs) {
-			if (!output.closed) output.close();
-		}
+		for (const output of activeOutputs) closeQueue(output);
 		activeOutputs = [];
 	}
 }

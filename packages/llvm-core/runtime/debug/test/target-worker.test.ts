@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createSharedByteQueue } from '../src/shared-byte-queue.js';
+import { SharedByteQueue, createSharedByteQueue } from '../src/shared-byte-queue.js';
 import type { TargetWorkerInitializeMessage } from '../src/types.js';
 
 const workerMocks = vi.hoisted(() => ({
 	callMain: vi.fn(),
 	chdir: vi.fn(),
+	closeRspInput: vi.fn(),
+	closeRspOutput: vi.fn(),
 	lifecycle: 'exit' as 'exit' | 'abort',
 	mountDebugFiles: vi.fn(),
 	postWorkerError: vi.fn(),
@@ -14,8 +16,8 @@ const workerMocks = vi.hoisted(() => ({
 
 vi.mock('../src/worker/module-loader.js', () => ({
 	createTransportBindings: vi.fn(() => ({
-		rspInput: { close: vi.fn() },
-		rspOutput: { close: vi.fn() }
+		rspInput: { close: workerMocks.closeRspInput },
+		rspOutput: { close: workerMocks.closeRspOutput }
 	})),
 	loadEmscriptenModuleFactory: vi.fn(async () => async (options: Record<string, unknown>) => ({
 		FS: {
@@ -158,5 +160,29 @@ describe('WAMR target worker launch', () => {
 		expect(workerMocks.postWorkerMessage).not.toHaveBeenCalledWith(
 			expect.objectContaining({ type: 'exit' })
 		);
+	});
+
+	it('continues target disposal after a transport queue close fails', async () => {
+		const { handleTargetWorkerMessage } = await loadTargetWorker();
+		const message = initializeMessage('target-worker-dispose');
+
+		handleTargetWorkerMessage(message);
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
+				type: 'ready',
+				worker: 'target',
+				generation: message.generation
+			})
+		);
+		workerMocks.closeRspInput.mockImplementationOnce(() => {
+			throw new Error('stale RSP input queue');
+		});
+
+		expect(() =>
+			handleTargetWorkerMessage({ type: 'dispose', generation: message.generation })
+		).not.toThrow();
+		expect(workerMocks.closeRspOutput).toHaveBeenCalledOnce();
+		expect(globalThis.__wasmIdleDebugTransport).toBeUndefined();
+		expect(new SharedByteQueue(message.stdin!).closed).toBe(true);
 	});
 });

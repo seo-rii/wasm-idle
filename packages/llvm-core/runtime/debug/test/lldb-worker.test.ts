@@ -5,6 +5,10 @@ import type { LldbWorkerInitializeMessage } from '../src/types.js';
 
 const workerMocks = vi.hoisted(() => ({
 	callMain: vi.fn(async () => 0),
+	closeDapInput: vi.fn(),
+	closeDapOutput: vi.fn(),
+	closeRspInput: vi.fn(),
+	closeRspOutput: vi.fn(),
 	moduleOptions: undefined as Record<string, unknown> | undefined,
 	postWorkerError: vi.fn(),
 	postWorkerMessage: vi.fn()
@@ -13,10 +17,10 @@ const workerMocks = vi.hoisted(() => ({
 vi.mock('../src/worker/module-loader.js', () => ({
 	createByteOutput: vi.fn(() => vi.fn()),
 	createTransportBindings: vi.fn(() => ({
-		dapInput: { close: vi.fn() },
-		dapOutput: { close: vi.fn() },
-		rspInput: { close: vi.fn() },
-		rspOutput: { close: vi.fn() }
+		dapInput: { close: workerMocks.closeDapInput },
+		dapOutput: { close: workerMocks.closeDapOutput },
+		rspInput: { close: workerMocks.closeRspInput },
+		rspOutput: { close: workerMocks.closeRspOutput }
 	})),
 	loadEmscriptenModuleFactory: vi.fn(async () => async (options: Record<string, unknown>) => {
 		workerMocks.moduleOptions = options;
@@ -96,5 +100,17 @@ describe('LLDB worker lifecycle', () => {
 				})
 			)
 		);
+
+		workerMocks.closeDapInput.mockImplementationOnce(() => {
+			throw new Error('stale DAP input queue');
+		});
+		expect(() =>
+			handleLldbWorkerMessage({ type: 'dispose', generation: message.generation })
+		).not.toThrow();
+		expect(workerMocks.closeDapOutput).toHaveBeenCalledOnce();
+		expect(workerMocks.closeRspInput).toHaveBeenCalledOnce();
+		expect(workerMocks.closeRspOutput).toHaveBeenCalledOnce();
+		expect(globalThis.__wasmIdleDebugTransport).toBeUndefined();
+		expect(globalThis.wasmLldbSharedRingV1).toBeUndefined();
 	});
 });
