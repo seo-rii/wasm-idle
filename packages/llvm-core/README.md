@@ -137,6 +137,9 @@ plus the follow-up `threads` and `stackTrace` responses are checked before they 
 selected thread, frame, source location, call stack, stopped-snapshot generation, or process exit
 code. A malformed value fails and disposes the live session instead of publishing a corrupt pause,
 resume, or exit snapshot.
+A valid `continued` event invalidates every in-flight stopped-state lookup. Late `stackTrace` or
+`scopes` success and failure therefore remain ignored and cannot stop a target that has already
+resumed.
 `BrowserLldbSession` also normalizes every resolved breakpoint before updating its cache. A
 malformed current `setBreakpoints` response rejects with the exported `DapProtocolError`; a stale
 response remains ignored, while an omitted per-line result stays unverified at its requested

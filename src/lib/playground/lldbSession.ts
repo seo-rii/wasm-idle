@@ -461,26 +461,7 @@ export class LldbSandboxSession {
 			throw new RangeError('LLDB frame ID must be a positive integer.');
 		}
 		try {
-			const response = await this.requireSession().request<unknown>('scopes', { frameId });
-			const scopes = dapResponseCollection(response, 'scopes', 'scopes').map(
-				(scope, index): DebugScope => {
-					const path = `scopes[${index}]`;
-					assertDapRecord(scope, 'scopes', path);
-					assertDapString(scope.name, 'scopes', `${path}.name`);
-					assertDapNonNegativeSafeInteger(
-						scope.variablesReference,
-						'scopes',
-						`${path}.variablesReference`
-					);
-					assertDapBoolean(scope.expensive, 'scopes', `${path}.expensive`);
-					return {
-						name: scope.name,
-						variablesReference: scope.variablesReference,
-						expensive: scope.expensive,
-						variables: []
-					};
-				}
-			);
+			const scopes = await this.requestScopes(frameId);
 			this.activeFrameId = frameId;
 			return scopes;
 		} catch (error) {
@@ -592,12 +573,14 @@ export class LldbSandboxSession {
 			const reason =
 				this.pauseRequested && body.reason === 'exception' ? 'pause' : body.reason;
 			this.pauseRequested = false;
+			const session = this.requireSession();
 			const version = ++this.stateVersion;
-			void this.resolveStoppedState(threadId, reason, version).catch((error) =>
+			void this.resolveStoppedState(threadId, reason, version).catch((error) => {
+				if (version !== this.stateVersion || this.session !== session) return;
 				this.fail(
 					error instanceof Error ? error : new Error('Unable to read LLDB stopped state.')
-				)
-			);
+				);
+			});
 			return;
 		}
 		if (event.event === 'continued') {
@@ -718,7 +701,7 @@ export class LldbSandboxSession {
 		const isWorkspaceFrame = this.options.artifact.sources.some(
 			(source) => source.path === selectedFrame.source?.path
 		);
-		const scopes = isWorkspaceFrame ? await this.scopes(selectedFrame.id) : [];
+		const scopes = isWorkspaceFrame ? await this.requestScopes(selectedFrame.id) : [];
 		if (version !== this.stateVersion || this.session !== session) return;
 		this.activeThreadId = threadId;
 		this.activeFrameId = selectedFrame.id;
@@ -751,6 +734,29 @@ export class LldbSandboxSession {
 			scopes
 		});
 		this.command = null;
+	}
+
+	private async requestScopes(frameId: number) {
+		const response = await this.requireSession().request<unknown>('scopes', { frameId });
+		return dapResponseCollection(response, 'scopes', 'scopes').map(
+			(scope, index): DebugScope => {
+				const path = `scopes[${index}]`;
+				assertDapRecord(scope, 'scopes', path);
+				assertDapString(scope.name, 'scopes', `${path}.name`);
+				assertDapNonNegativeSafeInteger(
+					scope.variablesReference,
+					'scopes',
+					`${path}.variablesReference`
+				);
+				assertDapBoolean(scope.expensive, 'scopes', `${path}.expensive`);
+				return {
+					name: scope.name,
+					variablesReference: scope.variablesReference,
+					expensive: scope.expensive,
+					variables: []
+				};
+			}
+		);
 	}
 
 	private rethrowProtocolError(error: unknown) {

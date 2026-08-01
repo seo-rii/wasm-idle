@@ -596,6 +596,85 @@ describe('LldbSandboxSession', () => {
 		await completion;
 	});
 
+	it.each([
+		{
+			command: 'stackTrace',
+			response: undefined
+		},
+		{
+			command: 'scopes',
+			response: {
+				scopes: [{ name: 'Locals', variablesReference: -1, expensive: false }]
+			}
+		}
+	])(
+		'ignores a stale $command failure after the target continues',
+		async ({ command, response }) => {
+			const events: Array<{ type: string }> = [];
+			let resolveResponse!: (value: unknown) => void;
+			let rejectResponse!: (error: Error) => void;
+			runtimeState.responseOverrides.set(
+				command,
+				new Promise<unknown>((resolve, reject) => {
+					resolveResponse = resolve;
+					rejectResponse = reject;
+				})
+			);
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: false,
+				onDebugEvent: (event) => events.push(event),
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({ manifestVersion: 2 })
+				})) as unknown as typeof fetch
+			});
+			const completion = controller.start().then(
+				() => null,
+				(error: unknown) => error
+			);
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+			runtimeState.session!.emit({
+				event: 'stopped',
+				body: { reason: 'step', threadId: 7 }
+			});
+			await vi.waitFor(() =>
+				expect(
+					runtimeState.session!.requests.some((request) => request.command === command)
+				).toBe(true)
+			);
+			runtimeState.session!.emit({
+				event: 'continued',
+				body: { threadId: 7, allThreadsContinued: true }
+			});
+			if (response === undefined) rejectResponse(new Error('obsolete stopped-state failure'));
+			else resolveResponse(response);
+			await new Promise((resolve) => setTimeout(resolve, 0));
+
+			const disposeCountBeforeExit = runtimeState.session!.disposeCount;
+			const stopCountBeforeExit = events.filter((event) => event.type === 'stop').length;
+			const pauseCount = events.filter((event) => event.type === 'pause').length;
+			if (disposeCountBeforeExit === 0) {
+				runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			}
+			const outcome = await completion;
+
+			expect(disposeCountBeforeExit).toBe(0);
+			expect(stopCountBeforeExit).toBe(0);
+			expect(pauseCount).toBe(0);
+			expect(outcome).toBeNull();
+		}
+	);
+
 	it('publishes a running target before a pending continue response settles', async () => {
 		const events: Array<{ type: string; command?: string }> = [];
 		let releaseContinue: () => void = () => undefined;
