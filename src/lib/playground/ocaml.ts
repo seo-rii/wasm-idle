@@ -321,7 +321,11 @@ class Ocaml implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
-		if (this.activeOperation) this.activeOperation.cancelled = true;
+		const operation = this.activeOperation;
+		if (operation) {
+			operation.cancelled = true;
+			this.completeOperation(operation);
+		}
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;

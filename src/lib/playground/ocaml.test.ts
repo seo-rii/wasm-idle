@@ -285,6 +285,35 @@ describe('OCaml sandbox', () => {
 		await expect(firstLoad).resolves.toBeUndefined();
 	});
 
+	it('releases a terminated startup before its rejection settles', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Ocaml();
+		const firstLoad = sandbox.load('/absproxy/5173');
+		const firstResult = firstLoad.catch((reason) => reason);
+		await vi.dynamicImportSettled();
+		const oldWorker = workerInstances[0];
+		const staleHandler = oldWorker.onmessage;
+		const reason = new Error('stop pending OCaml startup');
+
+		sandbox.terminate(reason);
+		const replacementLoad = sandbox.load('/absproxy/5173');
+
+		await vi.dynamicImportSettled();
+		await expect(firstResult).resolves.toBe(reason);
+		expect(oldWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		const replacementWorker = workerInstances[1];
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			phase: 'startup'
+		});
+
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBe(replacementWorker);
+		replacementWorker.onmessage?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(replacementLoad).resolves.toBeUndefined();
+	});
+
 	it('commits runtime URLs only after a successful load callback', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Ocaml();
@@ -336,6 +365,39 @@ describe('OCaml sandbox', () => {
 
 		handler?.({ data: { results: true } } as MessageEvent<any>);
 		await expect(firstRun).resolves.toBe(true);
+
+		suppressAutoRunAck = false;
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
+	it('releases a terminated run before its rejection settles', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const oldWorker = workerInstances[0];
+		const firstRun = sandbox.run('let () = ()', false);
+		const firstResult = firstRun.catch((reason) => reason);
+		const staleHandler = oldWorker.onmessage;
+		const reason = new Error('stop active OCaml run');
+		suppressAutoLoadAck = true;
+
+		sandbox.terminate(reason);
+		const replacementLoad = sandbox.load('/absproxy/5173');
+
+		await vi.dynamicImportSettled();
+		await expect(firstResult).resolves.toBe(reason);
+		expect(oldWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		const replacementWorker = workerInstances[1];
+		await expect(sandbox.run('let () = ()', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			phase: 'startup'
+		});
+
+		staleHandler?.({ data: { results: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBe(replacementWorker);
+		replacementWorker.onmessage?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(replacementLoad).resolves.toBeUndefined();
 
 		suppressAutoRunAck = false;
 		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
