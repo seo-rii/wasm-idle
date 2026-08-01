@@ -340,6 +340,115 @@ describe('Octave sandbox', () => {
 		expect(workerInstances).toHaveLength(2);
 	});
 
+	it.each(['progress', 'output'] as const)(
+		'rejects and retires the Octave worker when a %s callback throws',
+		async (callbackKind) => {
+			const sandbox = new Octave();
+			await sandbox.load('/absproxy/5173');
+			onPostMessage = () => undefined;
+			const callbackError = new Error(`Octave ${callbackKind} callback failed`);
+			const controller = new AbortController();
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const progress =
+				callbackKind === 'progress'
+					? {
+							set: vi.fn(() => {
+								throw callbackError;
+							})
+						}
+					: undefined;
+			sandbox.output =
+				callbackKind === 'output'
+					? () => {
+							throw callbackError;
+						}
+					: vi.fn();
+			const running = sandbox.run(
+				'n = str2double(fgetl(stdin));',
+				false,
+				true,
+				progress,
+				[],
+				{ stdin: 'fixed\n', signal: controller.signal }
+			);
+			await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+			const worker = workerInstances[0];
+			const staleHandler = worker.onmessage;
+			sandbox.write('discard after explicit stdin\n');
+
+			staleHandler?.({
+				data: {
+					progress: callbackKind === 'progress' ? { percent: 50 } : undefined,
+					output: callbackKind === 'output' ? 'callback output\n' : undefined,
+					results: true
+				}
+			} as MessageEvent<any>);
+
+			await expect(running).rejects.toBe(callbackError);
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+			expect(sandbox.worker).toBeUndefined();
+			expect(sandbox.pendingInput).toEqual([]);
+			expect(sandbox.pendingEof).toBe(false);
+			expect((sandbox as any).activeRun).toBeNull();
+
+			staleHandler?.({
+				data: { progress: { percent: 75 }, output: 'stale\n', results: true }
+			} as MessageEvent<any>);
+			sandbox.output = vi.fn();
+			onPostMessage = null;
+			await expect(sandbox.run('disp("retry")', false)).resolves.toBe(true);
+			expect(workerInstances).toHaveLength(2);
+		}
+	);
+
+	it('preserves abort and replacement stdin when an Octave output callback subsequently throws', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/absproxy/5173');
+		onPostMessage = () => undefined;
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const abortReason = new Error('abort Octave output callback');
+		const callbackError = new Error('throw after Octave abort');
+		sandbox.output = () => {
+			controller.abort(abortReason);
+			sandbox.write('replacement Octave input\n');
+			sandbox.eof();
+			throw callbackError;
+		};
+		const running = sandbox.run('n = str2double(fgetl(stdin));', false, true, undefined, [], {
+			stdin: '',
+			signal: controller.signal
+		});
+		const outcome = running.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+		sandbox.write('discard before abort\n');
+
+		staleHandler?.({ data: { output: 'trigger abort\n', results: true } } as MessageEvent<any>);
+
+		await expect(outcome).resolves.toBe(abortReason);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.pendingInput).toEqual(['replacement Octave input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+
+		sandbox.output = vi.fn();
+		const retry = sandbox.run('n = str2double(fgetl(stdin));', false);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		const replacement = workerInstances[1];
+		const replacementHandler = replacement.onmessage;
+		expect(replacement.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ stdin: 'replacement Octave input\n' })
+		);
+
+		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		expect(replacement.onmessage).toBe(replacementHandler);
+		replacementHandler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(retry).resolves.toBe(true);
+	});
+
 	it('ignores a stale Octave worker handler after a clean rerun', async () => {
 		const sandbox = new Octave();
 		const outputs: string[] = [];

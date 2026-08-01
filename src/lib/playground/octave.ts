@@ -232,7 +232,11 @@ class Octave implements Sandbox {
 					this.waitingForInput = false;
 					this.pendingEof = false;
 					this.resolveStdinWaiters();
-					resetBufferedStdin(this.buffer);
+					try {
+						resetBufferedStdin(this.buffer);
+					} catch {
+						// Stdin cleanup must not replace the execution result.
+					}
 				}
 				if (signal && onAbort) {
 					try {
@@ -273,45 +277,53 @@ class Octave implements Sandbox {
 				.then((stdin) => {
 					if (this.activeRun !== runToken || _uid !== this.uid) return;
 					const worker = this.createWorker();
-					const handler = (event: MessageEvent<OctaveWorkerMessage>) => {
-						if (
-							this.activeRun !== runToken ||
-							this.worker !== worker ||
-							worker.onmessage !== handler ||
-							_uid !== this.uid
-						) {
-							return;
-						}
-						const { output, results, error, buffer, progress } = event.data;
-						if (buffer) {
-							this.waitingForInput = true;
-							this.flushPendingInput();
-						}
-						reportWorkerProgress(_prog, progress);
-						if (this.activeRun !== runToken || _uid !== this.uid) return;
-						if (output) this.output?.(output);
-						if (this.activeRun !== runToken || _uid !== this.uid) return;
-						if (results) {
-							if (worker.onmessage === handler) worker.onmessage = null;
-							this.workerSession.complete(operation);
-							cleanup();
-							this.elapse = Date.now() - this.begin;
-							this.exit = true;
-							this.waitingForInput = false;
-							this.pendingEof = false;
-							resolve(true);
-							return;
-						}
-						if (error) {
-							if (worker.onmessage === handler) worker.onmessage = null;
-							this.workerSession.complete(operation);
-							cleanup();
-							this.elapse = Date.now() - this.begin;
-							this.exit = true;
-							this.waitingForInput = false;
-							this.pendingEof = false;
-							reject(error);
-							return;
+					let handler: (event: MessageEvent<OctaveWorkerMessage>) => void;
+					const ownsRun = () =>
+						this.activeRun === runToken &&
+						this.worker === worker &&
+						worker.onmessage === handler &&
+						_uid === this.uid;
+					const failRun = (error: unknown) => {
+						if (!ownsRun()) return;
+						this.workerSession.terminate(error);
+					};
+					handler = (event) => {
+						if (!ownsRun()) return;
+						try {
+							const { output, results, error, buffer, progress } = event.data;
+							if (buffer) {
+								this.waitingForInput = true;
+								this.flushPendingInput();
+								if (!ownsRun()) return;
+							}
+							reportWorkerProgress(_prog, progress);
+							if (!ownsRun()) return;
+							if (output) this.output?.(output);
+							if (!ownsRun()) return;
+							if (results) {
+								if (worker.onmessage === handler) worker.onmessage = null;
+								this.workerSession.complete(operation);
+								cleanup();
+								this.elapse = Date.now() - this.begin;
+								this.exit = true;
+								this.waitingForInput = false;
+								this.pendingEof = false;
+								resolve(true);
+								return;
+							}
+							if (error) {
+								if (worker.onmessage === handler) worker.onmessage = null;
+								this.workerSession.complete(operation);
+								cleanup();
+								this.elapse = Date.now() - this.begin;
+								this.exit = true;
+								this.waitingForInput = false;
+								this.pendingEof = false;
+								reject(error);
+								return;
+							}
+						} catch (error) {
+							failRun(error);
 						}
 					};
 					worker.onmessage = handler;
