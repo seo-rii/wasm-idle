@@ -26,8 +26,13 @@ interface WasixInstance {
 	free(): void;
 }
 
+interface WasmerCommand {
+	run(options: Record<string, unknown>): Promise<WasixInstance>;
+	free(): void;
+}
+
 interface WasmerPackage {
-	entrypoint?: { run(options: Record<string, unknown>): Promise<WasixInstance> };
+	entrypoint?: WasmerCommand;
 	free(): void;
 }
 
@@ -46,6 +51,7 @@ class Bash implements Sandbox {
 	runtimePackage: WasmerPackage | null = null;
 	instance: WasixInstance | null = null;
 	stdinWriter: WritableStreamDefaultWriter | null = null;
+	outputController: AbortController | null = null;
 	pendingInput: string[] = [];
 	pendingEof = false;
 	activeLoadReject: ((reason: unknown) => void) | null = null;
@@ -286,7 +292,48 @@ class Bash implements Sandbox {
 		if (this.pendingEof && this.stdinWriter === writer) {
 			this.pendingEof = false;
 			await writer.close();
-			if (this.stdinWriter === writer) this.stdinWriter = null;
+			if (this.stdinWriter === writer) {
+				this.stdinWriter = null;
+				try {
+					writer.releaseLock();
+				} catch {
+					// The completed stream may already have released its writer.
+				}
+			}
+		}
+	}
+
+	private disposeRunHandles(
+		instance: WasixInstance | null,
+		writer: WritableStreamDefaultWriter | null,
+		outputController: AbortController | null,
+		reason: unknown
+	) {
+		try {
+			outputController?.abort(reason);
+		} catch {
+			// Preserve the operation result.
+		}
+		if (writer) {
+			const releaseWriter = () => {
+				try {
+					writer.releaseLock();
+				} catch {
+					// Pending stream operations may still own the writer lock.
+				}
+			};
+			try {
+				void Promise.resolve(writer.abort(reason))
+					.catch(() => undefined)
+					.finally(releaseWriter);
+			} catch {
+				releaseWriter();
+			}
+		}
+		try {
+			instance?.free();
+		} catch {
+			// Preserve the operation result.
 		}
 	}
 
@@ -390,18 +437,24 @@ class Bash implements Sandbox {
 				try {
 					const command = this.runtimePackage?.entrypoint;
 					if (!command) throw new Error('Bash WEBc package has no entrypoint');
-					const instance = await command.run({
-						args: ['-c', code, mountedActivePath, ...programArgs],
-						mount: { '/workspace': mountedFiles },
-						cwd: '/workspace',
-						...(suppliedStdin === undefined ? {} : { stdin: suppliedStdin })
-					});
-					if (runUid !== this.uid) {
+					let instancePromise: Promise<WasixInstance>;
+					try {
+						instancePromise = command.run({
+							args: ['-c', code, mountedActivePath, ...programArgs],
+							mount: { '/workspace': mountedFiles },
+							cwd: '/workspace',
+							...(suppliedStdin === undefined ? {} : { stdin: suppliedStdin })
+						});
+					} finally {
 						try {
-							instance.free();
+							command.free();
 						} catch {
-							// The cancelled caller has already received its reason.
+							// Command cleanup must not replace the execution result.
 						}
+					}
+					const instance = await instancePromise;
+					if (runUid !== this.uid) {
+						this.disposeRunHandles(instance, null, null, signal?.reason);
 						return;
 					}
 					let writer: WritableStreamDefaultWriter | null = null;
@@ -411,28 +464,11 @@ class Bash implements Sandbox {
 								? instance.stdin?.getWriter() || null
 								: null;
 					} catch (error) {
-						try {
-							instance.free();
-						} catch {
-							// Preserve the writer acquisition failure.
-						}
+						this.disposeRunHandles(instance, null, null, error);
 						throw error;
 					}
 					if (runUid !== this.uid) {
-						if (writer) {
-							try {
-								void Promise.resolve(writer.abort(signal?.reason)).catch(
-									() => undefined
-								);
-							} catch {
-								// The cancelled caller has already received its reason.
-							}
-						}
-						try {
-							instance.free();
-						} catch {
-							// The cancelled caller has already received its reason.
-						}
+						this.disposeRunHandles(instance, writer, null, signal?.reason);
 						return;
 					}
 					this.instance = instance;
@@ -440,25 +476,41 @@ class Bash implements Sandbox {
 					await this.flushPendingInput();
 					if (runUid !== this.uid) return;
 
-					const stdoutDone = instance.stdout.pipeTo(
-						new WritableStream({
-							write: (chunk) => {
-								if (runUid === this.uid) {
-									this.output?.(new TextDecoder().decode(chunk));
-								}
-							}
-						})
-					);
-					const stderrDone = instance.stderr.pipeTo(
-						new WritableStream({
-							write: (chunk) => {
-								if (runUid === this.uid) {
-									this.output?.(new TextDecoder().decode(chunk));
-								}
-							}
-						})
-					);
-					const outputDone = Promise.allSettled([stdoutDone, stderrDone]);
+					const outputController = new AbortController();
+					this.outputController = outputController;
+					const outputPipes: Promise<void>[] = [];
+					try {
+						outputPipes.push(
+							instance.stdout.pipeTo(
+								new WritableStream({
+									write: (chunk) => {
+										if (runUid === this.uid) {
+											this.output?.(new TextDecoder().decode(chunk));
+										}
+									}
+								}),
+								{ signal: outputController.signal }
+							)
+						);
+						outputPipes.push(
+							instance.stderr.pipeTo(
+								new WritableStream({
+									write: (chunk) => {
+										if (runUid === this.uid) {
+											this.output?.(new TextDecoder().decode(chunk));
+										}
+									}
+								}),
+								{ signal: outputController.signal }
+							)
+						);
+					} catch (error) {
+						void Promise.allSettled(outputPipes);
+						throw error;
+					}
+					const outputDone = Promise.allSettled(outputPipes);
+					if (runUid !== this.uid) return;
+					this.instance = null;
 					const result = await instance.wait();
 					await outputDone;
 					if (runUid !== this.uid) return;
@@ -466,8 +518,17 @@ class Bash implements Sandbox {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					if (this.activeReject === reject) this.activeReject = null;
+					const settledWriter = this.stdinWriter;
 					this.stdinWriter = null;
 					this.instance = null;
+					if (this.outputController === outputController) {
+						this.outputController = null;
+					}
+					try {
+						settledWriter?.releaseLock();
+					} catch {
+						// The completed stream may already have released its writer.
+					}
 					if (!result.ok) {
 						reject(`Bash exited with status ${result.code}.`);
 						return;
@@ -477,8 +538,13 @@ class Bash implements Sandbox {
 					if (runUid !== this.uid) return;
 					this.exit = true;
 					if (this.activeReject === reject) this.activeReject = null;
+					const writer = this.stdinWriter;
+					const instance = this.instance;
+					const outputController = this.outputController;
 					this.stdinWriter = null;
 					this.instance = null;
+					this.outputController = null;
+					this.disposeRunHandles(instance, writer, outputController, error);
 					reject(error instanceof Error ? error.message : String(error));
 				} finally {
 					cleanup();
@@ -498,6 +564,7 @@ class Bash implements Sandbox {
 		const cleanup = this.activeRunCleanup;
 		const writer = this.stdinWriter;
 		const instance = this.instance;
+		const outputController = this.outputController;
 		this.activeLoadReject = null;
 		this.activeLoadCleanup = null;
 		this.activeReject = null;
@@ -506,6 +573,7 @@ class Bash implements Sandbox {
 		this.uid += 1;
 		this.stdinWriter = null;
 		this.instance = null;
+		this.outputController = null;
 		this.pendingInput = [];
 		this.pendingEof = false;
 		this.exit = true;
@@ -513,24 +581,18 @@ class Bash implements Sandbox {
 		cleanup?.();
 		loadReject?.(reason);
 		reject?.(reason);
-		if (writer) {
-			try {
-				void Promise.resolve(writer.abort(reason)).catch(() => undefined);
-			} catch {
-				// Preserve the termination reason.
-			}
-		}
-		try {
-			instance?.free();
-		} catch {
-			// Preserve the termination reason.
-		}
+		this.disposeRunHandles(instance, writer, outputController, reason);
 	}
 
 	async clear() {
 		this.terminate();
-		this.runtimePackage?.free();
+		const runtimePackage = this.runtimePackage;
 		this.runtimePackage = null;
+		try {
+			runtimePackage?.free();
+		} catch {
+			// The sandbox is cleared even when the SDK cleanup hook fails.
+		}
 	}
 }
 

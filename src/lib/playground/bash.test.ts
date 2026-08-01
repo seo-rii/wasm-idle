@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { commandRun, fromFile, importRuntimeModule, init, packageFree } = vi.hoisted(() => ({
-	commandRun: vi.fn(),
-	fromFile: vi.fn(),
-	importRuntimeModule: vi.fn(),
-	init: vi.fn(async () => {}),
-	packageFree: vi.fn()
-}));
+const { commandFree, commandRun, fromFile, importRuntimeModule, init, packageFree } = vi.hoisted(
+	() => ({
+		commandFree: vi.fn(),
+		commandRun: vi.fn(),
+		fromFile: vi.fn(),
+		importRuntimeModule: vi.fn(),
+		init: vi.fn(async () => {}),
+		packageFree: vi.fn()
+	})
+);
 
 vi.mock('$lib/playground/runtimeModule', () => ({ importRuntimeModule }));
 
@@ -42,7 +45,10 @@ describe('Bash sandbox', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		importRuntimeModule.mockResolvedValue({ init, Wasmer: { fromFile } });
-		fromFile.mockResolvedValue({ entrypoint: { run: commandRun }, free: packageFree });
+		fromFile.mockResolvedValue({
+			entrypoint: { run: commandRun, free: commandFree },
+			free: packageFree
+		});
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async () => new Response(new Uint8Array([0, 97, 115, 109])))
@@ -103,8 +109,52 @@ describe('Bash sandbox', () => {
 			stdin: '68\n'
 		});
 		expect(output.join('')).toBe('main=73 arg=demo\n');
+		expect(commandFree).toHaveBeenCalledOnce();
 		expect(free).not.toHaveBeenCalled();
 		expect(sandbox.stdinWriter).toBeNull();
+	});
+
+	it.each(['throw', 'reject'] as const)(
+		'frees the Bash command handle when entrypoint startup %ss',
+		async (failureMode) => {
+			const reason = new Error('Bash command startup failed');
+			if (failureMode === 'throw') {
+				commandRun.mockImplementationOnce(() => {
+					throw reason;
+				});
+			} else {
+				commandRun.mockRejectedValueOnce(reason);
+			}
+			const sandbox = new Bash();
+			await sandbox.load();
+
+			await expect(sandbox.run('printf unreachable', false)).rejects.toBe(reason.message);
+
+			expect(commandFree).toHaveBeenCalledOnce();
+			expect(sandbox.instance).toBeNull();
+			expect(sandbox.stdinWriter).toBeNull();
+		}
+	);
+
+	it('preserves Bash success when command cleanup throws', async () => {
+		const instanceFree = vi.fn();
+		commandRun.mockResolvedValueOnce({
+			stdin: undefined,
+			stdout: byteStream('ok\n'),
+			stderr: byteStream(''),
+			wait: vi.fn(async () => ({ ok: true, code: 0 })),
+			free: instanceFree
+		});
+		commandFree.mockImplementationOnce(() => {
+			throw new Error('Bash command cleanup failed');
+		});
+		const sandbox = new Bash();
+		await sandbox.load();
+
+		await expect(sandbox.run('printf ok', false)).resolves.toBe(true);
+
+		expect(commandFree).toHaveBeenCalledOnce();
+		expect(instanceFree).not.toHaveBeenCalled();
 	});
 
 	it('propagates caller cancellation and enforces byte limits while loading WEBc', async () => {
@@ -613,6 +663,7 @@ describe('Bash sandbox', () => {
 
 		try {
 			await vi.waitFor(() => expect(commandRun).toHaveBeenCalledOnce());
+			expect(commandFree).toHaveBeenCalledOnce();
 			controller.abort(reason);
 			await expect(observeSettlement(running)).resolves.toEqual({
 				status: 'rejected',
@@ -626,6 +677,7 @@ describe('Bash sandbox', () => {
 
 			resolveCommand(lateInstance);
 			await vi.waitFor(() => expect(lateFree).toHaveBeenCalledOnce());
+			expect(commandFree).toHaveBeenCalledOnce();
 			expect(lateGetWriter).not.toHaveBeenCalled();
 			expect(lateWait).not.toHaveBeenCalled();
 			await expect(sandbox.run('printf retry', false)).resolves.toBe(true);
@@ -673,6 +725,73 @@ describe('Bash sandbox', () => {
 		expect(writerAbort).toHaveBeenCalledWith(reason);
 		expect(wait).not.toHaveBeenCalled();
 		expect(sandbox.stdinWriter).toBeNull();
+		expect(sandbox.instance).toBeNull();
+	});
+
+	it.each(['write', 'close'] as const)(
+		'frees pre-wait Bash resources when queued stdin %s fails',
+		async (operation) => {
+			const failure = new Error(`Bash stdin ${operation} failed`);
+			const writerAbort = vi.fn(async () => {});
+			const write = vi.fn(async () => {
+				if (operation === 'write') throw failure;
+			});
+			const close = vi.fn(async () => {
+				if (operation === 'close') throw failure;
+			});
+			const wait = vi.fn(async () => ({ ok: true, code: 0 }));
+			const free = vi.fn();
+			const sandbox = new Bash();
+			commandRun.mockResolvedValueOnce({
+				stdin: {
+					getWriter() {
+						if (operation === 'close') sandbox.eof();
+						return { write, close, abort: writerAbort };
+					}
+				},
+				stdout: byteStream(''),
+				stderr: byteStream(''),
+				wait,
+				free
+			});
+			await sandbox.load();
+			if (operation === 'write') sandbox.write('queued\n');
+
+			await expect(sandbox.run('read value', false)).rejects.toBe(failure.message);
+
+			expect(writerAbort).toHaveBeenCalledOnce();
+			expect(writerAbort).toHaveBeenCalledWith(failure);
+			expect(free).toHaveBeenCalledOnce();
+			expect(wait).not.toHaveBeenCalled();
+			expect(sandbox.stdinWriter).toBeNull();
+			expect(sandbox.instance).toBeNull();
+		}
+	);
+
+	it('frees a pre-wait Bash instance when output stream setup throws', async () => {
+		const failure = new Error('Bash stderr stream setup failed');
+		const stdoutPipe = vi.fn(async () => {});
+		const stderrPipe = vi.fn(() => {
+			throw failure;
+		});
+		const wait = vi.fn(async () => ({ ok: true, code: 0 }));
+		const free = vi.fn();
+		commandRun.mockResolvedValueOnce({
+			stdin: undefined,
+			stdout: { pipeTo: stdoutPipe },
+			stderr: { pipeTo: stderrPipe },
+			wait,
+			free
+		});
+		const sandbox = new Bash();
+		await sandbox.load();
+
+		await expect(sandbox.run('printf unreachable', false)).rejects.toBe(failure.message);
+
+		expect(stdoutPipe).toHaveBeenCalledOnce();
+		expect(stderrPipe).toHaveBeenCalledOnce();
+		expect(free).toHaveBeenCalledOnce();
+		expect(wait).not.toHaveBeenCalled();
 		expect(sandbox.instance).toBeNull();
 	});
 
@@ -728,7 +847,7 @@ describe('Bash sandbox', () => {
 				});
 				expect(writerAbort).toHaveBeenCalledOnce();
 				expect(writerAbort).toHaveBeenCalledWith(reason);
-				expect(free).toHaveBeenCalledOnce();
+				expect(free).not.toHaveBeenCalled();
 				expect(sandbox.activeReject).toBeNull();
 				expect(sandbox.activeRunCleanup).toBeNull();
 				expect(sandbox.stdinWriter).toBeNull();
@@ -820,18 +939,14 @@ describe('Bash sandbox', () => {
 		}
 	);
 
-	it('ignores stale output after cancellation and removes the signal listener after retry', async () => {
-		let stdoutController!: ReadableStreamDefaultController<Uint8Array>;
-		let stderrController!: ReadableStreamDefaultController<Uint8Array>;
+	it('cancels stale output after cancellation and removes the signal listener after retry', async () => {
+		const stdoutCancel = vi.fn();
+		const stderrCancel = vi.fn();
 		const oldStdout = new ReadableStream<Uint8Array>({
-			start(controller) {
-				stdoutController = controller;
-			}
+			cancel: stdoutCancel
 		});
 		const oldStderr = new ReadableStream<Uint8Array>({
-			start(controller) {
-				stderrController = controller;
-			}
+			cancel: stderrCancel
 		});
 		let resolveOldWait!: (result: { ok: boolean; code: number }) => void;
 		const oldWait = vi.fn(
@@ -842,12 +957,14 @@ describe('Bash sandbox', () => {
 		);
 		const oldFree = vi.fn();
 		const oldWriterAbort = vi.fn(async () => {});
+		const oldWriterRelease = vi.fn();
 		commandRun.mockResolvedValueOnce({
 			stdin: {
 				getWriter: () => ({
 					write: vi.fn(async () => {}),
 					close: vi.fn(async () => {}),
-					abort: oldWriterAbort
+					abort: oldWriterAbort,
+					releaseLock: oldWriterRelease
 				})
 			},
 			stdout: oldStdout,
@@ -869,7 +986,6 @@ describe('Bash sandbox', () => {
 		await sandbox.load();
 		const oldController = new AbortController();
 		const oldReason = new Error('replace stalled Bash wait');
-		let oldStreamsClosed = false;
 		const oldRunning = sandbox.run('read old', false, true, undefined, [], {
 			signal: oldController.signal
 		});
@@ -890,20 +1006,15 @@ describe('Bash sandbox', () => {
 			expect(sandbox.uid).toBe(settledUid);
 			expect(retryFree).not.toHaveBeenCalled();
 
-			stdoutController.enqueue(new TextEncoder().encode('stale stdout\n'));
-			stderrController.enqueue(new TextEncoder().encode('stale stderr\n'));
-			stdoutController.close();
-			stderrController.close();
-			oldStreamsClosed = true;
+			await vi.waitFor(() => expect(stdoutCancel).toHaveBeenCalledWith(oldReason));
+			expect(stderrCancel).toHaveBeenCalledWith(oldReason);
+			expect(oldWriterRelease).toHaveBeenCalledOnce();
 			resolveOldWait({ ok: true, code: 0 });
-			await vi.waitFor(() => expect(oldFree).toHaveBeenCalledOnce());
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(oldFree).not.toHaveBeenCalled();
 			expect(oldWriterAbort).toHaveBeenCalledWith(oldReason);
 			expect(output).toEqual(['retry only\n']);
 		} finally {
-			if (!oldStreamsClosed) {
-				stdoutController.close();
-				stderrController.close();
-			}
 			resolveOldWait({ ok: true, code: 0 });
 			await oldRunning.catch(() => {});
 		}
@@ -912,6 +1023,7 @@ describe('Bash sandbox', () => {
 	it('connects write and eof to a running Bash stdin stream', async () => {
 		const writes: Uint8Array[] = [];
 		const close = vi.fn(async () => {});
+		const releaseLock = vi.fn();
 		let finish: ((value: { ok: boolean; code: number }) => void) | undefined;
 		const finished = new Promise<{ ok: boolean; code: number }>((resolve) => {
 			finish = resolve;
@@ -919,7 +1031,8 @@ describe('Bash sandbox', () => {
 		const writer = {
 			write: vi.fn(async (chunk: Uint8Array) => writes.push(chunk)),
 			close,
-			abort: vi.fn(async () => {})
+			abort: vi.fn(async () => {}),
+			releaseLock
 		};
 		commandRun.mockResolvedValue({
 			stdin: { getWriter: () => writer },
@@ -941,6 +1054,7 @@ describe('Bash sandbox', () => {
 
 		expect(writes.map((chunk) => new TextDecoder().decode(chunk))).toEqual(['typed\n']);
 		expect(close).toHaveBeenCalledOnce();
+		expect(releaseLock).toHaveBeenCalledOnce();
 		expect(commandRun).toHaveBeenCalledWith(
 			expect.objectContaining({
 				mount: { '/workspace': { 'main.sh': 'read value; printf "%s\\n" "$value"' } },
@@ -1194,12 +1308,13 @@ describe('Bash sandbox', () => {
 	});
 
 	it('reports a non-zero Bash exit status after forwarding stderr', async () => {
+		const free = vi.fn();
 		commandRun.mockResolvedValue({
 			stdin: undefined,
 			stdout: byteStream(''),
 			stderr: byteStream('main.sh: syntax error\n'),
 			wait: vi.fn(async () => ({ ok: false, code: 2 })),
-			free: vi.fn()
+			free
 		});
 		const sandbox = new Bash();
 		const output: string[] = [];
@@ -1208,5 +1323,53 @@ describe('Bash sandbox', () => {
 
 		await expect(sandbox.run('if', false)).rejects.toBe('Bash exited with status 2.');
 		expect(output.join('')).toContain('syntax error');
+		expect(free).not.toHaveBeenCalled();
+	});
+
+	it('does not free a Bash instance after wait consumes it and rejects', async () => {
+		const failure = new Error('Bash wait failed');
+		const free = vi.fn();
+		commandRun.mockResolvedValueOnce({
+			stdin: undefined,
+			stdout: byteStream(''),
+			stderr: byteStream(''),
+			wait: vi.fn(async () => {
+				throw failure;
+			}),
+			free
+		});
+		const sandbox = new Bash();
+		await sandbox.load();
+
+		await expect(sandbox.run('exit 0', false)).rejects.toBe(failure.message);
+
+		expect(free).not.toHaveBeenCalled();
+		expect(sandbox.instance).toBeNull();
+	});
+
+	it('detaches a Bash package when SDK cleanup throws and keeps clear idempotent', async () => {
+		const cleanupFailure = new Error('Bash package cleanup failed');
+		const free = vi.fn(() => {
+			throw cleanupFailure;
+		});
+		fromFile.mockResolvedValueOnce({ entrypoint: { run: commandRun }, free });
+		const sandbox = new Bash();
+		await sandbox.load();
+
+		await expect(sandbox.clear()).resolves.toBeUndefined();
+		await expect(sandbox.clear()).resolves.toBeUndefined();
+
+		expect(free).toHaveBeenCalledOnce();
+		expect(sandbox.runtimePackage).toBeNull();
+
+		commandRun.mockResolvedValueOnce({
+			stdin: undefined,
+			stdout: byteStream('retry\n'),
+			stderr: byteStream(''),
+			wait: vi.fn(async () => ({ ok: true, code: 0 })),
+			free: vi.fn()
+		});
+		await expect(sandbox.load('/retry')).resolves.toBeUndefined();
+		await expect(sandbox.run('printf retry', false)).resolves.toBe(true);
 	});
 });
