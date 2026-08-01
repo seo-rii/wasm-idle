@@ -1,3 +1,4 @@
+export const DEFAULT_BROWSER_BASE_PATH: string;
 /**
  * @param {string} browserUrl
  */

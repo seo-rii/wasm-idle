@@ -124,7 +124,8 @@ export function assertLoadingProgressTrace(trace, runtimeLabel) {
 		if (
 			!entry.label ||
 			(mode === 'determinate' &&
-				(!Number.isFinite(entry.value) ||
+				(typeof entry.value !== 'number' ||
+					!Number.isFinite(entry.value) ||
 					entry.value < 0 ||
 					entry.value > 100 ||
 					entry.value < previousValue))
