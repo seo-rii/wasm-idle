@@ -145,6 +145,131 @@ describe('Zig sandbox', () => {
 		expect(outputs).toEqual(['zig artifact ready\n', 'zig-ok\n']);
 	});
 
+	it('rejects an overlapping Zig run without disturbing the active execution', async () => {
+		const sandbox = new Zig();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+		const outputs: string[] = [];
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		const firstRun = sandbox.run('pub fn main() void {}', false);
+		const firstHandler = worker.onmessage;
+		await expect(sandbox.run('pub fn main() void {}', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'ZIG'
+		});
+
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(firstHandler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		firstHandler?.({ data: { output: 'first\n', results: true } } as MessageEvent<any>);
+		await expect(firstRun).resolves.toBe(true);
+		expect(outputs).toEqual(['first\n']);
+
+		worker.postMessage.mockImplementationOnce(() => {
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
+		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+	});
+
+	it('rejects overlapping Zig startup operations without superseding readiness', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Zig();
+		const loading = sandbox.load('/absproxy/5173');
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const loadHandler = worker.onmessage;
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'ZIG'
+		});
+		await expect(sandbox.run('pub fn main() void {}', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'ZIG'
+		});
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(loadHandler);
+
+		loadHandler?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(loading).resolves.toBeUndefined();
+		suppressAutoLoadAck = false;
+		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
+	});
+
+	it('rejects Zig load while a run is active without replacing its handler', async () => {
+		const sandbox = new Zig();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+
+		const running = sandbox.run('pub fn main() void {}', false);
+		const runHandler = worker.onmessage;
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'ZIG'
+		});
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(runHandler);
+
+		runHandler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(running).resolves.toBe(true);
+	});
+
+	it('releases Zig run activity after synchronous dispatch failure', async () => {
+		const sandbox = new Zig();
+		const worker = new MockWorker();
+		const dispatchError = new Error('Zig dispatch failed');
+		worker.postMessage.mockImplementationOnce(() => {
+			throw dispatchError;
+		});
+		sandbox.worker = worker as unknown as Worker;
+
+		await expect(sandbox.run('pub fn main() void {}', false)).rejects.toBe(dispatchError);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
+	});
+
+	it('keeps Zig execution idle when no worker is loaded', async () => {
+		const sandbox = new Zig();
+
+		await expect(sandbox.run('pub fn main() void {}', false)).rejects.toBe('Worker not loaded');
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
+	});
+
+	it('releases Zig startup activity after termination', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Zig();
+		const loading = sandbox.load('/absproxy/5173');
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+
+		sandbox.terminate();
+		await expect(loading).rejects.toBe('Process terminated');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+
+		suppressAutoLoadAck = false;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
+	});
+
 	it('rejects load when Zig compiler or stdlib assets are not configured', async () => {
 		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = '';
 		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '';

@@ -9,6 +9,7 @@ import {
 	resolveZigStdlibUrl,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
+import { BusyError } from '@wasm-idle/core';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
@@ -33,6 +34,7 @@ class Zig implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private loading = false;
 	private readonly workerSession = new WorkerSession({
 		label: 'Zig',
 		onDispose: (worker) => {
@@ -51,49 +53,65 @@ class Zig implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		return this.workerSession.load(async (resolve, reject) => {
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const nextCompilerUrl = resolveZigCompilerUrl(runtimeAssets, currentUrl);
-			const nextStdlibUrl = resolveZigStdlibUrl(runtimeAssets, currentUrl);
-			if (!nextCompilerUrl || !nextStdlibUrl) {
-				return reject(
-					'Zig runtime is not configured. Set PUBLIC_WASM_ZIG_COMPILER_URL and PUBLIC_WASM_ZIG_STDLIB_URL, or runtimeAssets.zig.compilerUrl and runtimeAssets.zig.stdlibUrl.'
-				);
-			}
-			const needsWorkerReset =
-				!this.worker ||
-				this.compilerUrl !== nextCompilerUrl ||
-				this.stdlibUrl !== nextStdlibUrl;
-			this.compilerUrl = nextCompilerUrl;
-			this.stdlibUrl = nextStdlibUrl;
-			if (needsWorkerReset && this.worker) {
-				this.workerSession.reset();
-			}
-			if (!this.worker) {
-				this.worker = new (await import('$lib/playground/worker/zig?worker')).default();
-				this.workerSession.attach(this.worker);
-				this.worker.onmessage = (event: MessageEvent<any>) => {
-					reportWorkerProgress(progress, event.data?.progress);
-					if (event.data?.load) {
-						progress?.set?.(1);
-						resolve();
-					}
-					if (event.data?.error) reject(event.data.error);
-				};
-				this.worker.postMessage({
-					load: true,
-					compilerUrl: this.compilerUrl,
-					stdlibUrl: this.stdlibUrl,
-					log: _log
-				});
-			} else {
-				progress?.set?.(1);
-				resolve();
-			}
-		});
+		if (this.loading || !this.exit) {
+			return Promise.reject(
+				new BusyError('Zig runtime already has an active operation', {
+					runtimeId: 'ZIG',
+					phase: this.loading ? 'startup' : 'execute'
+				})
+			);
+		}
+		this.loading = true;
+		return this.workerSession
+			.load(async (resolve, reject) => {
+				this.pendingInput = [];
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				const nextCompilerUrl = resolveZigCompilerUrl(runtimeAssets, currentUrl);
+				const nextStdlibUrl = resolveZigStdlibUrl(runtimeAssets, currentUrl);
+				if (!nextCompilerUrl || !nextStdlibUrl) {
+					return reject(
+						'Zig runtime is not configured. Set PUBLIC_WASM_ZIG_COMPILER_URL and PUBLIC_WASM_ZIG_STDLIB_URL, or runtimeAssets.zig.compilerUrl and runtimeAssets.zig.stdlibUrl.'
+					);
+				}
+				const needsWorkerReset =
+					!this.worker ||
+					this.compilerUrl !== nextCompilerUrl ||
+					this.stdlibUrl !== nextStdlibUrl;
+				this.compilerUrl = nextCompilerUrl;
+				this.stdlibUrl = nextStdlibUrl;
+				if (needsWorkerReset && this.worker) {
+					this.workerSession.reset();
+				}
+				if (!this.worker) {
+					const WorkerConstructor = (await import('$lib/playground/worker/zig?worker'))
+						.default;
+					const worker = new WorkerConstructor();
+					this.worker = worker;
+					this.workerSession.attach(worker);
+					worker.onmessage = (event: MessageEvent<any>) => {
+						reportWorkerProgress(progress, event.data?.progress);
+						if (event.data?.load) {
+							progress?.set?.(1);
+							resolve();
+						}
+						if (event.data?.error) reject(event.data.error);
+					};
+					worker.postMessage({
+						load: true,
+						compilerUrl: this.compilerUrl,
+						stdlibUrl: this.stdlibUrl,
+						log: _log
+					});
+				} else {
+					progress?.set?.(1);
+					resolve();
+				}
+			})
+			.finally(() => {
+				this.loading = false;
+			});
 	}
 
 	write(input: string) {
@@ -128,16 +146,33 @@ class Zig implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (this.loading || !this.exit) {
+			return Promise.reject(
+				new BusyError('Zig runtime already has an active operation', {
+					runtimeId: 'ZIG',
+					phase: this.loading ? 'startup' : 'execute'
+				})
+			);
+		}
+		const worker = this.worker;
+		if (!worker) return Promise.reject('Worker not loaded');
+		let compileArgs: string[];
+		let programArgs: string[];
+		try {
+			({ compileArgs, programArgs } = resolveSandboxExecutionArgs('ZIG', args, options));
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		const targetTriple: ZigTargetTriple = options.zigTargetTriple || 'wasm64-wasi';
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
-			const { compileArgs, programArgs } = resolveSandboxExecutionArgs('ZIG', args, options);
-			const targetTriple: ZigTargetTriple = options.zigTargetTriple || 'wasm64-wasi';
 			const _uid = ++this.uid;
-			const operation = this.workerSession.beginRun(this.worker, reject);
+			const operation = this.workerSession.beginRun(worker, reject);
 			const handler = (event: Event & { data: any }) => {
-				if (!this.worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (this.worker.onmessage = null);
+				if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) {
+					if (worker.onmessage === handler) worker.onmessage = null;
+					return;
+				}
 				const { output, results, error, buffer, diagnostic, progress } = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
@@ -147,6 +182,7 @@ class Zig implements Sandbox {
 				if (output) this.output?.(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (results) {
+					if (worker.onmessage === handler) worker.onmessage = null;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -155,6 +191,7 @@ class Zig implements Sandbox {
 					resolve(results as string);
 				}
 				if (error) {
+					if (worker.onmessage === handler) worker.onmessage = null;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -163,20 +200,25 @@ class Zig implements Sandbox {
 					reject(error);
 				}
 			};
-			this.worker.onmessage = handler;
+			worker.onmessage = handler;
 			this.begin = Date.now();
-			this.worker.postMessage({
-				code,
-				prepare,
-				buffer: this.buffer,
-				args: programArgs,
-				compileArgs,
-				stdin: options.stdin,
-				activePath: options.activePath || 'main.zig',
-				workspaceFiles: options.workspaceFiles || [],
-				targetTriple,
-				log: _log
-			});
+			try {
+				worker.postMessage({
+					code,
+					prepare,
+					buffer: this.buffer,
+					args: programArgs,
+					compileArgs,
+					stdin: options.stdin,
+					activePath: options.activePath || 'main.zig',
+					workspaceFiles: options.workspaceFiles || [],
+					targetTriple,
+					log: _log
+				});
+			} catch (error) {
+				if (worker.onmessage === handler) worker.onmessage = null;
+				this.workerSession.terminate(error);
+			}
 		});
 	}
 
@@ -198,7 +240,7 @@ class Zig implements Sandbox {
 		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
 		resetBufferedStdin(this.buffer);
-		if (!this.exit) {
+		if (!this.exit || this.loading) {
 			this.terminate();
 		}
 	}
