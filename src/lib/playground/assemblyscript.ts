@@ -1,4 +1,5 @@
 import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
+import { BusyError } from '@wasm-idle/core';
 import {
 	resolveAssemblyScriptRuntimeModuleUrl,
 	type PlaygroundRuntimeAssets
@@ -13,6 +14,11 @@ import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
 
+type AssemblyScriptOperation = {
+	token: symbol;
+	phase: 'startup' | 'execute';
+};
+
 class AssemblyScriptSandbox implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
@@ -26,6 +32,7 @@ class AssemblyScriptSandbox implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private activeOperation: AssemblyScriptOperation | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'AssemblyScript',
 		onDispose: (worker) => {
@@ -44,7 +51,14 @@ class AssemblyScriptSandbox implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		return this.workerSession.load(async (resolve, reject) => {
+		let operation: AssemblyScriptOperation;
+		try {
+			operation = this.beginOperation('startup');
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		const loading = this.workerSession.load(async (resolve, reject) => {
+			if (!this.isOperationActive(operation)) return;
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
@@ -53,27 +67,65 @@ class AssemblyScriptSandbox implements Sandbox {
 			if (this.worker && this.moduleUrl !== nextModuleUrl) this.workerSession.reset();
 			this.moduleUrl = nextModuleUrl;
 			if (!this.worker) {
-				this.worker = new (
+				const WorkerConstructor = (
 					await import('$lib/playground/worker/assemblyscript?worker')
-				).default();
-				this.workerSession.attach(this.worker);
-				this.worker.onmessage = (event: MessageEvent<any>) => {
+				).default;
+				if (!this.isOperationActive(operation)) return;
+				const worker = new WorkerConstructor();
+				if (!this.isOperationActive(operation)) {
+					worker.terminate();
+					return;
+				}
+				this.worker = worker;
+				this.workerSession.attach(worker);
+				const handler = (event: MessageEvent<any>) => {
+					if (
+						!this.isOperationActive(operation) ||
+						this.worker !== worker ||
+						worker.onmessage !== handler
+					) {
+						return;
+					}
 					if (event.data?.load) {
 						progress?.set?.(1);
+						if (!this.isOperationActive(operation)) return;
 						resolve();
 					}
 					if (event.data?.error) reject(event.data.error);
 				};
-				this.worker.postMessage({
+				worker.onmessage = handler;
+				worker.postMessage({
 					load: true,
 					moduleUrl: this.moduleUrl,
 					log: _log
 				});
 			} else {
 				progress?.set?.(1);
+				if (!this.isOperationActive(operation)) return;
 				resolve();
 			}
 		});
+		return loading.finally(() => this.completeOperation(operation));
+	}
+
+	private beginOperation(phase: AssemblyScriptOperation['phase']) {
+		if (this.activeOperation) {
+			throw new BusyError('AssemblyScript runtime already has an active operation', {
+				runtimeId: 'ASSEMBLYSCRIPT',
+				phase: this.activeOperation.phase
+			});
+		}
+		const operation = { token: Symbol(phase), phase } satisfies AssemblyScriptOperation;
+		this.activeOperation = operation;
+		return operation;
+	}
+
+	private completeOperation(operation: AssemblyScriptOperation) {
+		if (this.activeOperation?.token === operation.token) this.activeOperation = null;
+	}
+
+	private isOperationActive(operation: AssemblyScriptOperation) {
+		return this.activeOperation?.token === operation.token;
 	}
 
 	write(input: string) {
@@ -108,28 +160,52 @@ class AssemblyScriptSandbox implements Sandbox {
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		let activeOperation: AssemblyScriptOperation;
+		try {
+			activeOperation = this.beginOperation('execute');
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		if (!this.worker) {
+			this.completeOperation(activeOperation);
+			return Promise.reject('Worker not loaded');
+		}
+		const worker = this.worker;
 		this.exit = false;
-		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
+		const running = new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
-			const operation = this.workerSession.beginRun(this.worker, reject);
+			const workerOperation = this.workerSession.beginRun(worker, reject);
 			const handler = (event: Event & { data: any }) => {
-				if (!this.worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (this.worker.onmessage = null);
+				if (
+					!this.isOperationActive(activeOperation) ||
+					this.worker !== worker ||
+					worker.onmessage !== handler ||
+					_uid !== this.uid
+				) {
+					return;
+				}
 				const { output, results, error, buffer, diagnostic, progress } = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
 					this.flushPendingInput();
 				}
 				reportWorkerProgress(_prog, progress);
-				if (output) this.output?.(output);
-				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
+				if (!this.isOperationActive(activeOperation)) return;
+				if (output) {
+					this.output?.(output);
+					if (!this.isOperationActive(activeOperation)) return;
+				}
+				if (diagnostic) {
+					this.oncompilerdiagnostic?.(diagnostic);
+					if (!this.isOperationActive(activeOperation)) return;
+				}
 				if (results) {
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.workerSession.complete(operation);
+					if (worker.onmessage === handler) worker.onmessage = null;
+					this.workerSession.complete(workerOperation);
 					resolve(results as string);
 				}
 				if (error) {
@@ -137,22 +213,34 @@ class AssemblyScriptSandbox implements Sandbox {
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.workerSession.complete(operation);
+					if (worker.onmessage === handler) worker.onmessage = null;
+					this.workerSession.complete(workerOperation);
 					reject(error);
 				}
 			};
-			this.worker.onmessage = handler;
+			worker.onmessage = handler;
 			this.begin = Date.now();
-			this.worker.postMessage({
-				code,
-				prepare,
-				buffer: this.buffer,
-				stdin: options.stdin,
-				activePath: options.activePath || 'main.as.ts',
-				workspaceFiles: options.workspaceFiles || [],
-				log: _log
-			});
+			try {
+				worker.postMessage({
+					code,
+					prepare,
+					buffer: this.buffer,
+					stdin: options.stdin,
+					activePath: options.activePath || 'main.as.ts',
+					workspaceFiles: options.workspaceFiles || [],
+					log: _log
+				});
+			} catch (error) {
+				if (worker.onmessage === handler) worker.onmessage = null;
+				this.workerSession.complete(workerOperation);
+				this.elapse = Date.now() - this.begin;
+				this.exit = true;
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				reject(error);
+			}
 		});
+		return running.finally(() => this.completeOperation(activeOperation));
 	}
 
 	kill() {
@@ -160,6 +248,7 @@ class AssemblyScriptSandbox implements Sandbox {
 	}
 
 	terminate() {
+		this.activeOperation = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
@@ -173,7 +262,7 @@ class AssemblyScriptSandbox implements Sandbox {
 		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
 		resetBufferedStdin(this.buffer);
-		if (!this.exit) {
+		if (this.activeOperation || !this.exit) {
 			this.terminate();
 		}
 	}
