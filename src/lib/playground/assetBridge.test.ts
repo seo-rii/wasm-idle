@@ -688,9 +688,10 @@ describe('WorkerAssetBridge asset requests', () => {
 			assetResponse: {
 				id: 22,
 				ok: false,
-				error: `Runtime asset ${asset} URL is outside the allowed asset bases: https://assets.example.com/private/tool.wasm`
+				error: `Runtime asset ${asset} URL is outside the allowed asset bases`
 			}
 		});
+		expect(JSON.stringify(postMessage.mock.calls[0]?.[0])).not.toContain('private/tool.wasm');
 	});
 
 	it.each([
@@ -730,15 +731,18 @@ describe('WorkerAssetBridge asset requests', () => {
 		});
 	});
 
-	it('rejects redirects outside the configured asset bases and omits credentials', async () => {
+	it('rejects a substituted response inside the configured asset base before reading', async () => {
 		const postMessage = vi.fn();
 		const cancel = vi.fn(async () => undefined);
+		const getReader = vi.fn();
+		const arrayBuffer = vi.fn();
 		const fetchMock = vi.fn().mockResolvedValue({
 			ok: true,
-			url: 'https://evil.example.com/clang/tool.wasm',
+			url: 'https://assets.example.com/clang/alternate.wasm?token=secret',
+			redirected: true,
 			headers: { get: vi.fn(() => null) },
-			body: { cancel },
-			arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer)
+			body: { cancel, getReader },
+			arrayBuffer
 		});
 		vi.stubGlobal('fetch', fetchMock);
 		const asset = RUNTIME_LOAD_ASSETS.clang[0];
@@ -756,7 +760,7 @@ describe('WorkerAssetBridge asset requests', () => {
 			`https://assets.example.com/clang/${asset}`,
 			expect.objectContaining({
 				credentials: 'omit',
-				redirect: 'follow',
+				redirect: 'error',
 				referrerPolicy: 'no-referrer'
 			})
 		);
@@ -764,10 +768,52 @@ describe('WorkerAssetBridge asset requests', () => {
 			assetResponse: {
 				id: 23,
 				ok: false,
-				error: `Runtime asset ${asset} URL is outside the allowed asset bases: https://evil.example.com/clang/tool.wasm`
+				error: `Runtime asset ${asset} final response URL does not match the requested asset`
 			}
 		});
+		expect(JSON.stringify(postMessage.mock.calls[0]?.[0])).not.toContain('token=secret');
 		expect(cancel).toHaveBeenCalledOnce();
+		expect(getReader).not.toHaveBeenCalled();
+		expect(arrayBuffer).not.toHaveBeenCalled();
+	});
+
+	it('accepts an exact final response URL with least-authority fetch options', async () => {
+		const postMessage = vi.fn();
+		const asset = RUNTIME_LOAD_ASSETS.python[0];
+		const assetUrl = `https://assets.example.com/python/${asset}`;
+		const arrayBuffer = vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]).buffer);
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			url: assetUrl,
+			redirected: false,
+			headers: new Headers({ 'content-length': '3' }),
+			body: null,
+			arrayBuffer
+		});
+		vi.stubGlobal('fetch', fetchMock);
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'python', {
+			baseUrl: 'https://assets.example.com/python/',
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 31, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(fetchMock).toHaveBeenCalledWith(
+			assetUrl,
+			expect.objectContaining({
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer'
+			})
+		);
+		expect(arrayBuffer).toHaveBeenCalledOnce();
+		expect(postMessage.mock.calls[0]?.[0]).toMatchObject({
+			assetResponse: { id: 31, ok: true }
+		});
 	});
 
 	it('aborts an uncooperative asset fetch and cancels its late response', async () => {
@@ -1057,66 +1103,57 @@ describe('WorkerAssetBridge asset requests', () => {
 			assetResponse: {
 				id: 25,
 				ok: false,
-				error: `Runtime asset ${asset} has an invalid final response URL: tool.wasm`
+				error: `Runtime asset ${asset} final response URL does not match the requested asset`
 			}
 		});
+		expect(JSON.stringify(postMessage.mock.calls[0]?.[0])).not.toContain('tool.wasm');
 		expect(cancel).toHaveBeenCalledOnce();
 		expect(getReader).not.toHaveBeenCalled();
 		expect(arrayBuffer).not.toHaveBeenCalled();
 	});
 
 	it.each([
-		[
-			'credentials',
-			'https://user:secret@assets.example.com/clang/tool.wasm',
-			'URL must not include credentials'
-		],
-		[
-			'a fragment',
-			'https://assets.example.com/clang/tool.wasm#token',
-			'URL must not include a fragment'
-		]
-	])(
-		'rejects final response URLs containing %s before reading',
-		async (_kind, url, errorSuffix) => {
-			const postMessage = vi.fn();
-			const cancel = vi.fn(async () => undefined);
-			const getReader = vi.fn();
-			const arrayBuffer = vi.fn();
-			vi.stubGlobal(
-				'fetch',
-				vi.fn().mockResolvedValue({
-					ok: true,
-					status: 200,
-					url,
-					headers: new Headers(),
-					body: { cancel, getReader },
-					arrayBuffer
-				})
-			);
-			const asset = RUNTIME_LOAD_ASSETS.clang[0];
-			const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
-				baseUrl: 'https://assets.example.com/clang/',
-				useAssetBridge: true
-			});
+		['credentials', 'https://user:secret@assets.example.com/clang/tool.wasm'],
+		['a fragment', 'https://assets.example.com/clang/tool.wasm#token']
+	])('rejects final response URLs containing %s before reading', async (_kind, url) => {
+		const postMessage = vi.fn();
+		const cancel = vi.fn(async () => undefined);
+		const getReader = vi.fn();
+		const arrayBuffer = vi.fn();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				url,
+				headers: new Headers(),
+				body: { cancel, getReader },
+				arrayBuffer
+			})
+		);
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: 'https://assets.example.com/clang/',
+			useAssetBridge: true
+		});
 
-			bridge.handleMessage({
-				data: { assetRequest: { id: 30, asset } }
-			} as MessageEvent);
+		bridge.handleMessage({
+			data: { assetRequest: { id: 30, asset } }
+		} as MessageEvent);
 
-			await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
-			expect(postMessage).toHaveBeenCalledWith({
-				assetResponse: {
-					id: 30,
-					ok: false,
-					error: `Runtime asset ${asset} ${errorSuffix}`
-				}
-			});
-			expect(cancel).toHaveBeenCalledOnce();
-			expect(getReader).not.toHaveBeenCalled();
-			expect(arrayBuffer).not.toHaveBeenCalled();
-		}
-	);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 30,
+				ok: false,
+				error: `Runtime asset ${asset} final response URL does not match the requested asset`
+			}
+		});
+		expect(JSON.stringify(postMessage.mock.calls[0]?.[0])).not.toContain(url);
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(getReader).not.toHaveBeenCalled();
+		expect(arrayBuffer).not.toHaveBeenCalled();
+	});
 
 	it.each(['pending', 'throw', 'reject'] as const)(
 		'reports a failed HTTP response without awaiting %s cancellation',

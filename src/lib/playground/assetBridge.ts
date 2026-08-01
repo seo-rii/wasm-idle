@@ -457,7 +457,7 @@ export class WorkerAssetBridge {
 			fetch(requestUrl.href, {
 				signal,
 				credentials: 'omit',
-				redirect: 'follow',
+				redirect: 'error',
 				referrerPolicy: 'no-referrer'
 			})
 		);
@@ -495,23 +495,24 @@ export class WorkerAssetBridge {
 			cancelResponseBody(response, reason);
 			throw reason;
 		}
-		let finalResponseUrl = requestUrl.href;
 		if (response.url) {
+			let finalResponseUrl: string;
 			try {
 				finalResponseUrl = new URL(response.url).href;
 			} catch {
 				const error = new Error(
-					`Runtime asset ${asset} has an invalid final response URL: ${response.url}`
+					`Runtime asset ${asset} final response URL does not match the requested asset`
 				);
 				cancelResponseBody(response, error);
 				throw error;
 			}
-		}
-		try {
-			this.requireAllowedAssetUrl(asset, finalResponseUrl);
-		} catch (error) {
-			cancelResponseBody(response, error);
-			throw error;
+			if (response.redirected || finalResponseUrl !== requestUrl.href) {
+				const error = new Error(
+					`Runtime asset ${asset} final response URL does not match the requested asset`
+				);
+				cancelResponseBody(response, error);
+				throw error;
+			}
 		}
 		if (!response.ok) {
 			const error = new Error(`Failed to load ${asset}: ${response.status}`);
@@ -657,7 +658,7 @@ export class WorkerAssetBridge {
 		try {
 			url = new URL(value, this.config.baseUrl);
 		} catch {
-			throw new Error(`Runtime asset ${asset} has an invalid URL: ${value}`);
+			throw new Error(`Runtime asset ${asset} has an invalid URL`);
 		}
 		if (url.protocol !== 'https:' && url.protocol !== 'http:') {
 			throw new Error(
@@ -684,9 +685,7 @@ export class WorkerAssetBridge {
 			}
 		);
 		if (!allowed) {
-			throw new Error(
-				`Runtime asset ${asset} URL is outside the allowed asset bases: ${url.href}`
-			);
+			throw new Error(`Runtime asset ${asset} URL is outside the allowed asset bases`);
 		}
 		return url;
 	}
