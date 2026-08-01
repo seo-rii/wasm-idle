@@ -30,9 +30,12 @@ class Wasm implements Sandbox {
 	pendingEof = false;
 	private activeLoad = false;
 	private activeRun = false;
+	private activeRunCleanup: (() => void) | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'WASM',
 		onDispose: (worker) => {
+			this.activeRunCleanup?.();
+			this.activeRunCleanup = null;
 			if (this.worker === worker) delete this.worker;
 			this.activeRun = false;
 			this.exit = true;
@@ -131,6 +134,12 @@ class Wasm implements Sandbox {
 		}
 		const worker = this.worker;
 		if (!worker) return Promise.reject('Worker not loaded');
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ?? new DOMException('WASM execution aborted', 'AbortError')
+			);
+		}
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		try {
 			const limits = resolveExecutionLimits(options.limits);
@@ -160,8 +169,23 @@ class Wasm implements Sandbox {
 		return new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
 			const operation = this.workerSession.beginRun(worker, reject);
+			let onAbort: (() => void) | undefined;
+			let cleanedUp = false;
+			const cleanup = () => {
+				if (cleanedUp) return;
+				cleanedUp = true;
+				if (signal && onAbort) {
+					try {
+						signal.removeEventListener('abort', onAbort);
+					} catch {
+						// Cleanup must not replace the execution result.
+					}
+				}
+				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
+			};
 			const handler = (event: Event & { data: any }) => {
 				if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) {
+					cleanup();
 					if (worker.onmessage === handler) worker.onmessage = null;
 					return;
 				}
@@ -174,6 +198,7 @@ class Wasm implements Sandbox {
 				if (output) this.output?.(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (results) {
+					cleanup();
 					this.activeRun = false;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
@@ -183,6 +208,7 @@ class Wasm implements Sandbox {
 					resolve(results as string);
 				}
 				if (error) {
+					cleanup();
 					this.activeRun = false;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
@@ -192,7 +218,30 @@ class Wasm implements Sandbox {
 					reject(error);
 				}
 			};
+			onAbort = signal
+				? () => {
+						if (
+							!this.activeRun ||
+							this.worker !== worker ||
+							worker.onmessage !== handler ||
+							_uid !== this.uid
+						) {
+							cleanup();
+							return;
+						}
+						this.terminate(
+							signal.reason ??
+								new DOMException('WASM execution aborted', 'AbortError')
+						);
+					}
+				: undefined;
+			this.activeRunCleanup = cleanup;
 			worker.onmessage = handler;
+			if (signal && onAbort) {
+				signal.addEventListener('abort', onAbort, { once: true });
+				if (signal.aborted) onAbort();
+			}
+			if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) return;
 			this.begin = Date.now();
 			try {
 				worker.postMessage({
@@ -206,6 +255,7 @@ class Wasm implements Sandbox {
 					log: _log
 				});
 			} catch (error) {
+				cleanup();
 				this.activeRun = false;
 				this.workerSession.terminate(error);
 			}
@@ -216,12 +266,15 @@ class Wasm implements Sandbox {
 		this.terminate();
 	}
 
-	terminate() {
+	terminate(reason: unknown = 'Process terminated') {
+		const cleanup = this.activeRunCleanup;
+		this.activeRunCleanup = null;
+		cleanup?.();
 		this.activeRun = false;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
-		this.workerSession.terminate();
+		this.workerSession.terminate(reason);
 		this.exit = true;
 	}
 
