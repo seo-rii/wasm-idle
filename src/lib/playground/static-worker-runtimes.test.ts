@@ -750,6 +750,276 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(2);
 	});
 
+	it('settles a throwing worker-ready callback and ignores the retired worker during retry', async () => {
+		autoStartWorkers = false;
+		const callbackError = new Error('worker-ready progress failed');
+		const cleanupError = new Error('startup listener cleanup failed');
+		const controller = new AbortController();
+		let throwOnReady = true;
+		const progress = {
+			set: vi.fn((_value: number, stage?: string) => {
+				if (throwOnReady && stage === 'Prolog worker ready') throw callbackError;
+			})
+		};
+		const sandbox = new Prolog();
+		const load = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		vi.spyOn(controller.signal, 'removeEventListener').mockImplementation(() => {
+			throw cleanupError;
+		});
+		const retiredWorker = workerInstances[0];
+		const staleReady = retiredWorker.onmessage;
+		const staleError = retiredWorker.onerror;
+
+		staleReady?.({
+			data: { __wasmIdleStaticWorkerReady: true }
+		} as MessageEvent<any>);
+
+		await expect(load).rejects.toBe(callbackError);
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+
+		throwOnReady = false;
+		const retry = sandbox.load('/absproxy/5173', '', true, [], {}, progress);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		const replacementWorker = workerInstances[1];
+		staleReady?.({
+			data: { __wasmIdleStaticWorkerReady: true }
+		} as MessageEvent<any>);
+		staleError?.(new ErrorEvent('error', { message: 'retired worker failed' }));
+		expect(replacementWorker.terminate).not.toHaveBeenCalled();
+
+		replacementWorker.onmessage?.({
+			data: { __wasmIdleStaticWorkerReady: true }
+		} as MessageEvent<any>);
+		await expect(retry).resolves.toBeUndefined();
+	});
+
+	it('settles successful worker startup when caller-owned signal cleanup throws', async () => {
+		autoStartWorkers = false;
+		const controller = new AbortController();
+		const sandbox = new Prolog();
+		const load = sandbox.load('/absproxy/5173', '', true, [], {
+			signal: controller.signal
+		});
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		vi.spyOn(controller.signal, 'removeEventListener').mockImplementation(() => {
+			throw new Error('startup listener cleanup failed');
+		});
+
+		workerInstances[0].onmessage?.({
+			data: { __wasmIdleStaticWorkerReady: true }
+		} as MessageEvent<any>);
+
+		await expect(load).resolves.toBeUndefined();
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+	});
+
+	it('reserves run ownership before the initial progress callback can reenter', async () => {
+		onPostMessage = () => {};
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		let nested: Promise<boolean | string> | undefined;
+		let reenter = true;
+		const progress = {
+			set: vi.fn((_value: number, stage?: string) => {
+				if (!reenter || stage !== 'Starting Prolog run') return;
+				reenter = false;
+				nested = sandbox.run('writeln(nested).', false, true, undefined, [], {
+					stdin: ''
+				});
+			})
+		};
+
+		const outer = sandbox.run('writeln(outer).', false, true, progress, [], { stdin: '' });
+
+		expect(nested).toBeDefined();
+		await expect(nested).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'PROLOG'
+		});
+		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+		workerInstances[0].onmessage?.({
+			data: { runId: workerInstances[0].lastRunId, results: true }
+		} as MessageEvent<any>);
+		await expect(outer).resolves.toBe(true);
+	});
+
+	it('returns a rejected Promise when the initial run progress callback throws', async () => {
+		const callbackError = new Error('initial run progress failed');
+		let throwOnStart = true;
+		const progress = {
+			set: vi.fn((_value: number, stage?: string) => {
+				if (!throwOnStart || stage !== 'Starting Prolog run') return;
+				throwOnStart = false;
+				throw callbackError;
+			})
+		};
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		let failed: Promise<boolean | string> | undefined;
+
+		expect(() => {
+			failed = sandbox.run('writeln(failed).', false, true, progress, [], { stdin: '' });
+		}).not.toThrow();
+		expect(failed).toBeDefined();
+		await expect(failed).rejects.toBe(callbackError);
+		await expect(
+			sandbox.run('writeln(retry).', false, true, progress, [], { stdin: '' })
+		).resolves.toBe(true);
+	});
+
+	it.each(['progress', 'output', 'diagnostic'] as const)(
+		'settles a throwing runtime %s callback and permits retry',
+		async (callbackKind) => {
+			onPostMessage = () => {};
+			const callbackError = new Error(`${callbackKind} callback failed`);
+			let throwCallback = true;
+			const progress = {
+				set: vi.fn((_value: number, stage?: string) => {
+					if (
+						throwCallback &&
+						callbackKind === 'progress' &&
+						stage === 'Runtime callback'
+					) {
+						throw callbackError;
+					}
+				})
+			};
+			const output = vi.fn(() => {
+				if (throwCallback && callbackKind === 'output') throw callbackError;
+			});
+			const diagnosticSink = vi.fn(() => {
+				if (throwCallback && callbackKind === 'diagnostic') throw callbackError;
+			});
+			const sandbox = new Prolog();
+			sandbox.output = output;
+			sandbox.oncompilerdiagnostic = diagnosticSink;
+			await sandbox.load('/absproxy/5173');
+			const run = sandbox.run('writeln(callback).', false, true, progress, [], {
+				stdin: ''
+			});
+			const outcome = run.catch((error) => error);
+			await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+			const worker = workerInstances[0];
+			const diagnostic = {
+				lineNumber: 1,
+				severity: 'warning' as const,
+				message: 'runtime warning'
+			};
+
+			worker.onmessage?.({
+				data: {
+					runId: worker.lastRunId,
+					progress: { percent: 50, stage: 'Runtime callback' },
+					output: 'callback output\n',
+					diagnostic,
+					results: true
+				}
+			} as MessageEvent<any>);
+
+			await expect(outcome).resolves.toBe(callbackError);
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			expect(output).toHaveBeenCalledTimes(callbackKind === 'progress' ? 0 : 1);
+			expect(diagnosticSink).toHaveBeenCalledTimes(callbackKind === 'diagnostic' ? 1 : 0);
+
+			throwCallback = false;
+			onPostMessage = null;
+			await expect(
+				sandbox.run('writeln(retry).', false, true, progress, [], { stdin: '' })
+			).resolves.toBe(true);
+			expect(workerInstances).toHaveLength(2);
+		}
+	);
+
+	it('rejects when completion progress throws even if worker cleanup also fails', async () => {
+		onPostMessage = () => {};
+		const callbackError = new Error('completion progress failed');
+		const progress = {
+			set: vi.fn((_value: number, stage?: string) => {
+				if (stage === 'Prolog run complete') throw callbackError;
+			})
+		};
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const run = sandbox.run('writeln(complete).', false, true, progress, [], { stdin: '' });
+		const outcome = run.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		Object.defineProperty(worker, 'onmessage', {
+			configurable: true,
+			get: () => handler,
+			set: () => {
+				throw new Error('worker handler cleanup failed');
+			}
+		});
+		worker.terminate.mockImplementationOnce(() => {
+			throw new Error('worker cleanup failed');
+		});
+
+		handler?.({
+			data: { runId: worker.lastRunId, results: true }
+		} as MessageEvent<any>);
+
+		await expect(outcome).resolves.toBe(callbackError);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+	});
+
+	it('preserves a replacement run when completion progress terminates and then throws', async () => {
+		onPostMessage = () => {};
+		const callbackError = new Error('stale completion callback failed');
+		const sandbox = new Prolog();
+		let replacement: Promise<boolean | string> | undefined;
+		let replaceOnCompletion = true;
+		const progress = {
+			set: vi.fn((_value: number, stage?: string) => {
+				if (!replaceOnCompletion || stage !== 'Prolog run complete') return;
+				replaceOnCompletion = false;
+				sandbox.terminate();
+				replacement = sandbox.run('writeln(replacement).', false, true, progress, [], {
+					stdin: ''
+				});
+				throw callbackError;
+			})
+		};
+		await sandbox.load('/absproxy/5173');
+		const first = sandbox.run('writeln(first).', false, true, progress, [], { stdin: '' });
+		const firstOutcome = first.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+		const retiredWorker = workerInstances[0];
+		const staleHandler = retiredWorker.onmessage;
+
+		staleHandler?.({
+			data: { runId: retiredWorker.lastRunId, results: true }
+		} as MessageEvent<any>);
+
+		await expect(firstOutcome).resolves.toBe('Process terminated');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		const replacementWorker = workerInstances[1];
+		await vi.waitFor(() => expect(replacementWorker.postMessage).toHaveBeenCalledOnce());
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(replacementWorker.terminate).not.toHaveBeenCalled();
+		expect(replacement).toBeDefined();
+
+		staleHandler?.({
+			data: { runId: retiredWorker.lastRunId, results: true }
+		} as MessageEvent<any>);
+		expect(replacementWorker.terminate).not.toHaveBeenCalled();
+		replacementWorker.onmessage?.({
+			data: { runId: replacementWorker.lastRunId, results: true }
+		} as MessageEvent<any>);
+		await expect(replacement).resolves.toBe(true);
+	});
+
 	it('rejects an overlapping run while worker startup is pending', async () => {
 		autoStartWorkers = false;
 		const sandbox = new Prolog();
@@ -779,6 +1049,75 @@ describe('static worker backed language sandboxes', () => {
 		} as MessageEvent<any>);
 		await load;
 		await expect(first).resolves.toBe(true);
+	});
+
+	it('settles a shared pending startup when its active run is cancelled', async () => {
+		autoStartWorkers = false;
+		const sandbox = new Prolog();
+		const loadOutcome = sandbox.load('/absproxy/5173').catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const retiredWorker = workerInstances[0];
+		const controller = new AbortController();
+		const runOutcome = sandbox
+			.run('writeln(cancelled).', false, true, undefined, [], {
+				stdin: '',
+				signal: controller.signal
+			})
+			.catch((error) => error);
+
+		controller.abort(new Error('cancel shared startup'));
+
+		const runError = await runOutcome;
+		await expect(loadOutcome).resolves.toBe(runError);
+		expect(runError).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'execute',
+			runtimeId: 'PROLOG'
+		});
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+
+		const retry = sandbox.load('/absproxy/5173');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		workerInstances[1].onmessage?.({
+			data: { __wasmIdleStaticWorkerReady: true }
+		} as MessageEvent<any>);
+		await expect(retry).resolves.toBeUndefined();
+	});
+
+	it('ignores a stale abort listener when cleanup fails and a replacement awaits stdin', async () => {
+		onPostMessage = () => {};
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const controller = new AbortController();
+		vi.spyOn(controller.signal, 'removeEventListener').mockImplementation(() => {
+			throw new Error('run listener cleanup failed');
+		});
+		const first = sandbox.run('writeln(first).', false, true, undefined, [], {
+			stdin: '',
+			signal: controller.signal
+		});
+		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+		workerInstances[0].onmessage?.({
+			data: { runId: workerInstances[0].lastRunId, results: true }
+		} as MessageEvent<any>);
+		await expect(first).resolves.toBe(true);
+
+		const second = sandbox.run(
+			'main :- read_line_to_string(user_input, Line), writeln(Line).',
+			false
+		);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		await Promise.resolve();
+		controller.abort(new Error('late stale abort'));
+		sandbox.write('replacement\n');
+		sandbox.eof();
+		await vi.waitFor(() => expect(workerInstances[1].postMessage).toHaveBeenCalledOnce());
+		workerInstances[1].onmessage?.({
+			data: { runId: workerInstances[1].lastRunId, results: true }
+		} as MessageEvent<any>);
+
+		await expect(second).resolves.toBe(true);
 	});
 
 	it('rejects an overlapping run while the first run waits for stdin', async () => {

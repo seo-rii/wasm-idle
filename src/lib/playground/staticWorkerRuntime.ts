@@ -126,7 +126,8 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	private lifecycleProgress?: SandboxProgress;
 	private readonly progressController = new RuntimeProgressController();
 	private progressUid = 0;
-	private startupReject: ((reason: Error) => void) | null = null;
+	private startingRunId: string | null = null;
+	private startupReject: ((reason: unknown) => void) | null = null;
 	private workerGeneration = 0;
 	private workerStartPromise: Promise<Worker> | null = null;
 
@@ -169,7 +170,10 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			this.workerUrl !== urls.workerUrl ||
 			this.manifestUrl !== nextManifestUrl;
 
-		if (runtimeChanged && (this.worker || this.workerStartPromise || this.activeRun)) {
+		if (
+			runtimeChanged &&
+			(this.worker || this.workerStartPromise || this.activeRun || this.startingRunId)
+		) {
 			this.terminate();
 		}
 		this.baseUrl = urls.baseUrl;
@@ -649,7 +653,11 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			);
 		} finally {
 			clearTimeout(timeout);
-			signal?.removeEventListener('abort', onAbort);
+			try {
+				signal?.removeEventListener('abort', onAbort);
+			} catch {
+				// Caller-owned signal cleanup must not replace the download result.
+			}
 		}
 	}
 
@@ -692,8 +700,13 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 
 	private revokeBootstrapUrl() {
 		if (!this.bootstrapUrl) return;
-		URL.revokeObjectURL(this.bootstrapUrl);
+		const bootstrapUrl = this.bootstrapUrl;
 		this.bootstrapUrl = '';
+		try {
+			URL.revokeObjectURL(bootstrapUrl);
+		} catch {
+			// The bootstrap is already detached; cleanup must not replace the lifecycle result.
+		}
 	}
 
 	private ensureWorkerStarted(
@@ -742,30 +755,39 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		return await new Promise<Worker>((resolve, reject) => {
 			let settled = false;
 			const cleanup = () => {
-				clearTimeout(timeout);
-				controls.signal?.removeEventListener('abort', onAbort);
+				try {
+					clearTimeout(timeout);
+				} catch {
+					// Timer cleanup is best effort once startup has settled.
+				}
+				try {
+					controls.signal?.removeEventListener('abort', onAbort);
+				} catch {
+					// Caller-owned signal cleanup must not prevent startup settlement.
+				}
 			};
-			const rejectStartup = (reason: Error) => {
-				if (settled) return;
+			const rejectStartup = (reason: unknown) => {
+				if (settled) return false;
 				settled = true;
 				cleanup();
 				if (this.startupReject === rejectStartup) this.startupReject = null;
 				reject(reason);
+				return true;
 			};
 			const onAbort = () => {
-				rejectStartup(
+				const rejected = rejectStartup(
 					new CancelledError(`${this.config.displayName} worker startup cancelled`, {
 						cause: controls.signal?.reason,
 						phase: 'startup',
 						runtimeId: this.config.languageId
 					})
 				);
-				if (generation === this.workerGeneration && this.worker === worker) {
+				if (rejected && generation === this.workerGeneration && this.worker === worker) {
 					this.disposeWorker();
 				}
 			};
 			const timeout = setTimeout(() => {
-				rejectStartup(
+				const rejected = rejectStartup(
 					new TimeoutError(
 						`${this.config.displayName} worker startup timed out after ${controls.limits.startupTimeoutMs} ms`,
 						{
@@ -775,7 +797,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 						}
 					)
 				);
-				if (generation === this.workerGeneration && this.worker === worker) {
+				if (rejected && generation === this.workerGeneration && this.worker === worker) {
 					this.disposeWorker();
 				}
 			}, controls.limits.startupTimeoutMs);
@@ -783,23 +805,50 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 			this.worker = worker;
 			this.startupReject = rejectStartup;
 			worker.onmessage = (event: MessageEvent<StaticWorkerMessage>) => {
+				if (generation !== this.workerGeneration || this.worker !== worker) return;
 				if (event.data?.__wasmIdleStaticWorkerReady) {
-					if (settled) return;
+					if (settled || this.startupReject !== rejectStartup) return;
+					try {
+						this.reportProgress(
+							progress,
+							0.25,
+							`${this.config.displayName} worker ready`
+						);
+					} catch (error) {
+						const rejected = rejectStartup(error);
+						if (
+							rejected &&
+							generation === this.workerGeneration &&
+							this.worker === worker
+						) {
+							this.disposeWorker();
+						}
+						return;
+					}
+					if (
+						settled ||
+						generation !== this.workerGeneration ||
+						this.worker !== worker ||
+						this.startupReject !== rejectStartup
+					) {
+						return;
+					}
 					settled = true;
 					cleanup();
 					this.startupReject = null;
 					this.revokeBootstrapUrl();
-					this.reportProgress(progress, 0.25, `${this.config.displayName} worker ready`);
 					resolve(worker);
 					return;
 				}
 				this.handleWorkerMessage(event);
 			};
 			worker.onerror = (event: ErrorEvent) => {
+				if (generation !== this.workerGeneration || this.worker !== worker) return;
 				event.preventDefault?.();
 				this.handleWorkerFailure(this.formatWorkerError(event));
 			};
 			worker.onmessageerror = () => {
+				if (generation !== this.workerGeneration || this.worker !== worker) return;
 				this.handleWorkerFailure(
 					`${this.config.displayName} worker message deserialization failed`
 				);
@@ -813,69 +862,72 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		const activeRun = this.activeRun;
 		if (!activeRun) return;
 		if (event.data?.runId !== activeRun.id) return;
-		if (event.data?.type === 'stdin-request') {
-			try {
+		try {
+			if (event.data?.type === 'stdin-request') {
 				activeRun.stdinRing?.consumerRequestedInput();
-			} catch (error) {
+				return;
+			}
+			const { output, results, error, diagnostic, progress } = event.data || {};
+			if (progress && typeof progress.percent === 'number') {
+				const runtimeProgress = Math.max(0, Math.min(progress.percent / 100, 1));
+				this.reportProgress(
+					activeRun.progress,
+					0.3 + runtimeProgress * 0.65,
+					progress.stage || `Running ${this.config.displayName}`
+				);
+				if (this.activeRun !== activeRun) return;
+			}
+			if (typeof output === 'string' && output.length > 0) {
+				const outputBytes = activeRun.outputBytes + outputEncoder.encode(output).byteLength;
+				if (outputBytes > activeRun.limits.maxOutputBytes) {
+					this.rejectRun(
+						activeRun.id,
+						new OutputLimitError(
+							`${this.config.displayName} output exceeded ${activeRun.limits.maxOutputBytes} bytes`,
+							{
+								actual: outputBytes,
+								limit: activeRun.limits.maxOutputBytes,
+								phase: 'execute',
+								runtimeId: this.config.languageId
+							}
+						)
+					);
+					return;
+				}
+				activeRun.outputBytes = outputBytes;
+				this.output?.(output);
+				if (this.activeRun !== activeRun) return;
+			}
+			if (diagnostic) {
+				const diagnosticCount = activeRun.diagnosticCount + 1;
+				if (diagnosticCount > activeRun.limits.maxDiagnostics) {
+					this.rejectRun(
+						activeRun.id,
+						new DiagnosticLimitError(
+							`${this.config.displayName} diagnostics exceeded ${activeRun.limits.maxDiagnostics} messages`,
+							{
+								actual: diagnosticCount,
+								limit: activeRun.limits.maxDiagnostics,
+								phase: 'execute',
+								runtimeId: this.config.languageId
+							}
+						)
+					);
+					return;
+				}
+				activeRun.diagnosticCount = diagnosticCount;
+				this.oncompilerdiagnostic?.(diagnostic);
+				if (this.activeRun !== activeRun) return;
+			}
+			if (typeof error === 'string') {
 				this.rejectRun(activeRun.id, error);
-			}
-			return;
-		}
-		const { output, results, error, diagnostic, progress } = event.data || {};
-		if (progress && typeof progress.percent === 'number') {
-			const runtimeProgress = Math.max(0, Math.min(progress.percent / 100, 1));
-			this.reportProgress(
-				activeRun.progress,
-				0.3 + runtimeProgress * 0.65,
-				progress.stage || `Running ${this.config.displayName}`
-			);
-		}
-		if (typeof output === 'string' && output.length > 0) {
-			const outputBytes = activeRun.outputBytes + outputEncoder.encode(output).byteLength;
-			if (outputBytes > activeRun.limits.maxOutputBytes) {
-				this.rejectRun(
-					activeRun.id,
-					new OutputLimitError(
-						`${this.config.displayName} output exceeded ${activeRun.limits.maxOutputBytes} bytes`,
-						{
-							actual: outputBytes,
-							limit: activeRun.limits.maxOutputBytes,
-							phase: 'execute',
-							runtimeId: this.config.languageId
-						}
-					)
-				);
 				return;
 			}
-			activeRun.outputBytes = outputBytes;
-			this.output?.(output);
-		}
-		if (diagnostic) {
-			const diagnosticCount = activeRun.diagnosticCount + 1;
-			if (diagnosticCount > activeRun.limits.maxDiagnostics) {
-				this.rejectRun(
-					activeRun.id,
-					new DiagnosticLimitError(
-						`${this.config.displayName} diagnostics exceeded ${activeRun.limits.maxDiagnostics} messages`,
-						{
-							actual: diagnosticCount,
-							limit: activeRun.limits.maxDiagnostics,
-							phase: 'execute',
-							runtimeId: this.config.languageId
-						}
-					)
-				);
-				return;
+			if (results !== undefined) {
+				this.resolveRun(activeRun.id, typeof results === 'string' ? results : results);
 			}
-			activeRun.diagnosticCount = diagnosticCount;
-			this.oncompilerdiagnostic?.(diagnostic);
-		}
-		if (typeof error === 'string') {
-			this.rejectRun(activeRun.id, error);
-			return;
-		}
-		if (results !== undefined) {
-			this.resolveRun(activeRun.id, typeof results === 'string' ? results : results);
+		} catch (error) {
+			if (this.activeRun === activeRun) this.rejectRun(activeRun.id, error);
 		}
 	}
 
@@ -903,30 +955,54 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 	private resolveRun(id: string, result: boolean | string) {
 		const activeRun = this.activeRun;
 		if (!activeRun || activeRun.id !== id) return;
-		activeRun.cleanup();
-		activeRun.stdinRing?.cancel();
+		try {
+			this.reportProgress(activeRun.progress, 1, `${this.config.displayName} run complete`);
+		} catch (error) {
+			if (this.activeRun === activeRun) this.rejectRun(id, error);
+			return;
+		}
+		if (this.activeRun !== activeRun) return;
+		const claimedRun = this.claimRun(id);
+		if (claimedRun !== activeRun) return;
+		this.cleanupRun(activeRun);
 		this.elapse = Date.now() - this.begin;
 		this.exit = true;
-		this.activeRun = null;
-		this.activeReject = null;
 		this.clearPendingStdin();
-		this.reportProgress(activeRun.progress, 1, `${this.config.displayName} run complete`);
 		this.disposeWorker();
 		activeRun.resolve(result);
 	}
 
 	private rejectRun(id: string, reason: unknown) {
-		const activeRun = this.activeRun;
-		if (!activeRun || activeRun.id !== id) return;
-		activeRun.cleanup();
-		activeRun.stdinRing?.cancel();
+		const activeRun = this.claimRun(id);
+		if (!activeRun) return;
+		this.cleanupRun(activeRun);
 		this.elapse = Date.now() - this.begin;
 		this.exit = true;
-		this.activeRun = null;
-		this.activeReject = null;
 		this.clearPendingStdin();
+		this.startupReject?.(reason);
 		this.disposeWorker();
 		activeRun.reject(reason);
+	}
+
+	private claimRun(id: string) {
+		const activeRun = this.activeRun;
+		if (!activeRun || activeRun.id !== id) return null;
+		this.activeRun = null;
+		this.activeReject = null;
+		return activeRun;
+	}
+
+	private cleanupRun(activeRun: ActiveRun) {
+		try {
+			activeRun.cleanup();
+		} catch {
+			// Lifecycle cleanup is best effort and must not replace the run result.
+		}
+		try {
+			activeRun.stdinRing?.cancel();
+		} catch {
+			// The stdin channel is already detached; preserve the run result.
+		}
 	}
 
 	private disposeWorker() {
@@ -934,13 +1010,29 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		this.workerGeneration += 1;
 		this.workerStartPromise = null;
 		this.startupReject = null;
-		if (this.worker) {
-			this.worker.onmessage = null;
-			this.worker.onerror = null;
-			this.worker.onmessageerror = null;
-			this.worker.terminate();
-		}
+		const worker = this.worker;
 		delete this.worker;
+		if (!worker) return;
+		try {
+			worker.onmessage = null;
+		} catch {
+			// Continue detaching and terminating even if a custom worker setter fails.
+		}
+		try {
+			worker.onerror = null;
+		} catch {
+			// Continue detaching and terminating even if a custom worker setter fails.
+		}
+		try {
+			worker.onmessageerror = null;
+		} catch {
+			// Continue detaching and terminating even if a custom worker setter fails.
+		}
+		try {
+			worker.terminate();
+		} catch {
+			// The worker is detached before cleanup, so a throwing terminate remains harmless.
+		}
 	}
 
 	run(
@@ -954,7 +1046,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		if (!this.baseUrl || !this.workerUrl) {
 			return Promise.reject(`${this.config.displayName} runtime is not configured.`);
 		}
-		if (this.activeRun) {
+		if (this.activeRun || this.startingRunId) {
 			return Promise.reject(
 				new BusyError(`${this.config.displayName} runtime already has an active run`, {
 					runtimeId: this.config.languageId
@@ -978,16 +1070,29 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 				})
 			);
 		}
+		const id = `static-${++this.uid}`;
+		this.startingRunId = id;
 		const progressSink = this.selectProgress(_prog);
-		const lifecycle = this.beginProgressLifecycle(
-			progressSink,
-			prepare
-				? `Preparing ${this.config.displayName} runtime`
-				: `Starting ${this.config.displayName} run`
-		);
+		let lifecycle: ReturnType<StaticWorkerRuntimeSandbox['beginProgressLifecycle']>;
+		try {
+			lifecycle = this.beginProgressLifecycle(
+				progressSink,
+				prepare
+					? `Preparing ${this.config.displayName} runtime`
+					: `Starting ${this.config.displayName} run`
+			);
+		} catch (error) {
+			if (this.startingRunId === id) this.startingRunId = null;
+			return Promise.reject(error);
+		}
+		if (this.startingRunId !== id) {
+			lifecycle.end();
+			return Promise.reject('Process terminated');
+		}
 		const progress = lifecycle.progress;
 
 		if (prepare) {
+			this.startingRunId = null;
 			return this.ensureWorkerStarted(progress, controls)
 				.then(() => {
 					this.reportProgress(progress, 0.25, `${this.config.displayName} worker ready`);
@@ -998,7 +1103,6 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
-			const id = `static-${++this.uid}`;
 			let stdinRing: StaticStdinRingHost | undefined;
 			if (this.stdinMode === 'streaming') {
 				try {
@@ -1019,6 +1123,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 					stdinRing.enqueue(initialInput);
 					if (initialEof) stdinRing.close();
 				} catch (error) {
+					if (this.startingRunId === id) this.startingRunId = null;
 					this.exit = true;
 					reject(error);
 					return;
@@ -1026,6 +1131,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 			}
 			let deadline: ReturnType<typeof setTimeout> | undefined;
 			const onAbort = () => {
+				if (this.activeRun?.id !== id) return;
 				const error = new CancelledError(`${this.config.displayName} run cancelled`, {
 					cause: controls.signal?.reason,
 					phase: 'execute',
@@ -1050,8 +1156,14 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 				...(stdinRing ? { stdinRing } : {})
 			};
 			this.activeReject = reject;
+			this.startingRunId = null;
 			this.begin = Date.now();
-			controls.signal?.addEventListener('abort', onAbort, { once: true });
+			try {
+				controls.signal?.addEventListener('abort', onAbort, { once: true });
+			} catch (error) {
+				this.rejectRun(id, error);
+				return;
+			}
 			if (controls.signal?.aborted) {
 				onAbort();
 				return;
@@ -1124,20 +1236,20 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		const reason = 'Process terminated';
 		this.progressController.invalidate();
 		this.uid += 1;
+		this.startingRunId = null;
 		this.startupReject?.(new Error(reason));
 		this.startupReject = null;
 		this.rejectStdinWaiters(reason);
 		if (this.activeRun) {
-			const activeRun = this.activeRun;
-			activeRun.cleanup();
-			activeRun.stdinRing?.cancel();
-			this.activeRun = null;
-			this.activeReject = null;
-			activeRun.reject(reason);
+			const activeRun = this.claimRun(this.activeRun.id);
+			if (activeRun) {
+				this.cleanupRun(activeRun);
+				activeRun.reject(reason);
+			}
 		}
 		this.clearPendingStdin();
-		this.disposeWorker();
 		this.exit = true;
+		this.disposeWorker();
 	}
 
 	async clear() {
