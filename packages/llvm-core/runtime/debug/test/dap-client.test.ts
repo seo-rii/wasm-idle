@@ -206,6 +206,28 @@ describe('DapClient', () => {
 		}
 	});
 
+	it('rejects oversized requests before registering pending transport state', async () => {
+		const inputDescriptor = createSharedByteQueue(4096, 46);
+		const outputDescriptor = createSharedByteQueue(4096, 46);
+		const input = new SharedByteQueue(inputDescriptor);
+		const client = new DapClient({
+			input: inputDescriptor,
+			output: outputDescriptor,
+			requestTimeoutMs: 1_000,
+			transportWriteTimeoutMs: 25
+		}).start();
+
+		try {
+			await expect(
+				client.request('evaluate', { expression: 'x'.repeat(16 * 1024 * 1024) })
+			).rejects.toThrow(/failed to encode DAP request: evaluate/u);
+			expect(input.available).toBe(0);
+			expect(input.closed).toBe(false);
+		} finally {
+			await client.close();
+		}
+	});
+
 	it('correlates responses and forwards events over partial shared-ring reads', async () => {
 		const inputDescriptor = createSharedByteQueue(4096, 3);
 		const outputDescriptor = createSharedByteQueue(4096, 3);

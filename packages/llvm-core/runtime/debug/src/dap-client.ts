@@ -50,6 +50,9 @@ export function resolveDapTimeout(value: number | undefined, defaultValue: numbe
 
 export function encodeDapMessage(message: DapMessage): Uint8Array {
 	const body = new TextEncoder().encode(JSON.stringify(message));
+	if (body.byteLength > MAXIMUM_DAP_BODY_BYTES) {
+		throw new Error('cannot encode DAP frame: DAP body exceeds 16 MiB');
+	}
 	const header = new TextEncoder().encode(`Content-Length: ${body.byteLength}\r\n\r\n`);
 	return concatBytes(header, body);
 }
