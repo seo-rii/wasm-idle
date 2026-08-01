@@ -1,4 +1,5 @@
 import { ProtocolError } from '@wasm-idle/core';
+import { DapProtocolError } from '@wasm-idle/llvm-core/debug';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const runtimeState = vi.hoisted(() => ({
@@ -171,6 +172,17 @@ class FakeRuntimeSession {
 }
 
 vi.mock('@wasm-idle/llvm-core/debug', () => ({
+	DapProtocolError: class DapProtocolError extends Error {
+		readonly command: string;
+		readonly path: string;
+
+		constructor(command: string, path: string, expectation: string) {
+			super(`Invalid DAP ${command} response at ${path}: ${expectation}.`);
+			this.name = 'DapProtocolError';
+			this.command = command;
+			this.path = path;
+		}
+	},
 	parseDebugRuntimeManifest: (value: unknown) => value,
 	createBrowserLldbSession: (options: Record<string, unknown>) => {
 		runtimeState.options = options;
@@ -907,6 +919,96 @@ describe('LldbSandboxSession', () => {
 			expect(events.filter((event) => event.type === 'stop')).toHaveLength(1);
 		}
 	);
+
+	it('fails and disposes initialization after a malformed breakpoint response', async () => {
+		const events: Array<{ type: string }> = [];
+		runtimeState.initializeGate = Promise.reject(
+			new DapProtocolError(
+				'setBreakpoints',
+				'breakpoints[0].column',
+				'expected a non-negative safe integer'
+			)
+		);
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [1],
+			pauseOnEntry: true,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+
+		const startError = await controller.start().then(
+			() => null,
+			(error: unknown) => error
+		);
+
+		expect(startError).toBeInstanceOf(ProtocolError);
+		expect((startError as Error).cause).toBeInstanceOf(DapProtocolError);
+		expect(runtimeState.session!.disposeCount).toBe(1);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(1);
+	});
+
+	it('fails and disposes a running session after a malformed breakpoint response', async () => {
+		const events: Array<{ type: string }> = [];
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		const completionError = completion.then(
+			() => null,
+			(error: unknown) => error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		runtimeState.breakpointResponseGates = [
+			Promise.reject(
+				new DapProtocolError(
+					'setBreakpoints',
+					'breakpoints[0].column',
+					'expected a non-negative safe integer'
+				)
+			)
+		];
+
+		const updateError = await controller.setBreakpoints([7]).then(
+			() => null,
+			(error: unknown) => error
+		);
+		if (runtimeState.session!.disposeCount === 0) {
+			runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+		}
+		const sessionError = await completionError;
+
+		expect(updateError).toBeInstanceOf(ProtocolError);
+		expect((updateError as Error).cause).toBeInstanceOf(DapProtocolError);
+		expect(sessionError).toBeInstanceOf(ProtocolError);
+		expect(runtimeState.session!.disposeCount).toBe(1);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(1);
+	});
 
 	it.each([
 		{

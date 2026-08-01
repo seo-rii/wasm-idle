@@ -141,6 +141,10 @@ malformed current `setBreakpoints` response rejects with the exported `DapProtoc
 response remains ignored, while an omitted per-line result stays unverified at its requested
 location. A malformed asynchronous `breakpoint` event is delivered to raw listeners but cannot
 mutate the cache used by the playground.
+For the live playground, a current `DapProtocolError` during initial configuration or a later
+breakpoint update is converted to the shared Core `ProtocolError`. The session publishes one stop,
+disposes both debug workers, and rejects its completion with the low-level error retained as the
+cause.
 Direct `DapClient` consumers can set `onEventError(error, event)` to observe an event-listener
 exception. Throwing listeners and a throwing error hook are isolated from one another, and the
 client continues parsing later events and responses on the same byte stream.

@@ -10,6 +10,7 @@ import type {
 import { ProtocolError } from '@wasm-idle/core';
 import {
 	createBrowserLldbSession,
+	DapProtocolError,
 	parseDebugRuntimeManifest,
 	type BrowserLldbSession,
 	type DapEvent,
@@ -295,6 +296,15 @@ export class LldbSandboxSession {
 			) {
 				return completion;
 			}
+			const protocolError = this.asProtocolError(error);
+			if (
+				protocolError &&
+				lifecycleVersion === this.lifecycleVersion &&
+				this.session === session
+			) {
+				this.fail(protocolError);
+				return completion;
+			}
 			await session.dispose();
 			if (this.session === session) this.session = undefined;
 			if (lifecycleVersion !== this.lifecycleVersion) return completion;
@@ -371,6 +381,7 @@ export class LldbSandboxSession {
 			) {
 				return;
 			}
+			this.rethrowProtocolError(error);
 			throw error;
 		}
 		if (
@@ -719,9 +730,18 @@ export class LldbSandboxSession {
 	}
 
 	private rethrowProtocolError(error: unknown) {
-		if (!(error instanceof ProtocolError)) return;
-		this.fail(error);
-		throw error;
+		const protocolError = this.asProtocolError(error);
+		if (!protocolError) return;
+		this.fail(protocolError);
+		throw protocolError;
+	}
+
+	private asProtocolError(error: unknown) {
+		if (error instanceof ProtocolError) return error;
+		if (error instanceof DapProtocolError) {
+			return new ProtocolError(error.message, { cause: error });
+		}
+		return null;
 	}
 
 	private finish(exitCode: number | null) {
