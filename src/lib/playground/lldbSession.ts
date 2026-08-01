@@ -137,6 +137,18 @@ function dapResponseCollection(response: unknown, command: string, path: string)
 	return collection;
 }
 
+function dapOptionalNonNegativeSafeInteger(
+	record: Record<string, unknown>,
+	property: string,
+	command: string,
+	path: string
+) {
+	const value = record[property];
+	if (value === undefined) return undefined;
+	assertDapNonNegativeSafeInteger(value, command, `${path}.${property}`);
+	return value;
+}
+
 function snapshotBreakpointLines(lines: readonly number[]) {
 	if (lines.some((line) => !Number.isSafeInteger(line) || line < 1)) {
 		throw new RangeError('LLDB breakpoint lines must be positive safe integers.');
@@ -473,16 +485,35 @@ export class LldbSandboxSession {
 					);
 					const type = variable.type;
 					if (type !== undefined) assertDapString(type, 'variables', `${path}.type`);
+					const evaluateName = variable.evaluateName;
+					if (evaluateName !== undefined) {
+						assertDapString(evaluateName, 'variables', `${path}.evaluateName`);
+					}
 					const memoryReference = variable.memoryReference;
 					if (memoryReference !== undefined) {
 						assertDapString(memoryReference, 'variables', `${path}.memoryReference`);
 					}
+					const namedVariables = dapOptionalNonNegativeSafeInteger(
+						variable,
+						'namedVariables',
+						'variables',
+						path
+					);
+					const indexedVariables = dapOptionalNonNegativeSafeInteger(
+						variable,
+						'indexedVariables',
+						'variables',
+						path
+					);
 					return {
 						name: variable.name,
 						value: variable.value,
 						type,
+						...(evaluateName === undefined ? {} : { evaluateName }),
 						variablesReference: variable.variablesReference,
-						memoryReference
+						memoryReference,
+						...(namedVariables === undefined ? {} : { namedVariables }),
+						...(indexedVariables === undefined ? {} : { indexedVariables })
 					};
 				}
 			);
@@ -808,9 +839,23 @@ export class LldbSandboxSession {
 					`${path}.variablesReference`
 				);
 				assertDapBoolean(scope.expensive, 'scopes', `${path}.expensive`);
+				const namedVariables = dapOptionalNonNegativeSafeInteger(
+					scope,
+					'namedVariables',
+					'scopes',
+					path
+				);
+				const indexedVariables = dapOptionalNonNegativeSafeInteger(
+					scope,
+					'indexedVariables',
+					'scopes',
+					path
+				);
 				return {
 					name: scope.name,
 					variablesReference: scope.variablesReference,
+					...(namedVariables === undefined ? {} : { namedVariables }),
+					...(indexedVariables === undefined ? {} : { indexedVariables }),
 					expensive: scope.expensive,
 					variables: []
 				};

@@ -1352,6 +1352,80 @@ describe('LldbSandboxSession', () => {
 		await expect(completion).resolves.toBe(true);
 	});
 
+	it('preserves lazy-variable count and evaluation metadata from DAP', async () => {
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		runtimeState.responseOverrides.set('scopes', {
+			scopes: [
+				{
+					name: 'Locals',
+					variablesReference: 10,
+					namedVariables: 2,
+					indexedVariables: 3,
+					expensive: false
+				}
+			]
+		});
+
+		await expect(controller.scopes(41)).resolves.toEqual([
+			{
+				name: 'Locals',
+				variablesReference: 10,
+				namedVariables: 2,
+				indexedVariables: 3,
+				expensive: false,
+				variables: []
+			}
+		]);
+
+		runtimeState.responseOverrides.set('variables', {
+			variables: [
+				{
+					name: 'node',
+					value: '{...}',
+					type: 'Node',
+					evaluateName: 'node',
+					variablesReference: 20,
+					memoryReference: '0x20',
+					namedVariables: 4,
+					indexedVariables: 5
+				}
+			]
+		});
+		await expect(controller.variables(10)).resolves.toEqual([
+			{
+				name: 'node',
+				value: '{...}',
+				type: 'Node',
+				evaluateName: 'node',
+				variablesReference: 20,
+				memoryReference: '0x20',
+				namedVariables: 4,
+				indexedVariables: 5
+			}
+		]);
+
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
 	it.each([
 		{
 			command: 'scopes',
@@ -1361,8 +1435,50 @@ describe('LldbSandboxSession', () => {
 			invoke: (controller: LldbSandboxSession) => controller.scopes(41)
 		},
 		{
+			command: 'scopes',
+			response: {
+				scopes: [
+					{
+						name: 'Locals',
+						variablesReference: 1,
+						namedVariables: -1,
+						expensive: false
+					}
+				]
+			},
+			invoke: (controller: LldbSandboxSession) => controller.scopes(41)
+		},
+		{
 			command: 'variables',
 			response: { variables: [{ name: 7, value: '42', variablesReference: 0 }] },
+			invoke: (controller: LldbSandboxSession) => controller.variables(1)
+		},
+		{
+			command: 'variables',
+			response: {
+				variables: [
+					{
+						name: 'answer',
+						value: '42',
+						evaluateName: 73,
+						variablesReference: 0
+					}
+				]
+			},
+			invoke: (controller: LldbSandboxSession) => controller.variables(1)
+		},
+		{
+			command: 'variables',
+			response: {
+				variables: [
+					{
+						name: 'answer',
+						value: '42',
+						variablesReference: 0,
+						indexedVariables: -1
+					}
+				]
+			},
 			invoke: (controller: LldbSandboxSession) => controller.variables(1)
 		},
 		{

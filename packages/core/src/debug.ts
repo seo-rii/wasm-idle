@@ -46,6 +46,8 @@ export interface DebugFrame {
 export interface DebugScope {
 	name: string;
 	variablesReference: number;
+	namedVariables?: number;
+	indexedVariables?: number;
 	expensive: boolean;
 	variables: DebugVariable[];
 }
