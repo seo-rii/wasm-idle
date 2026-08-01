@@ -7,9 +7,15 @@ import {
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
+import { BusyError } from '@wasm-idle/core';
 
 type DotnetSandboxLanguage = 'FSHARP' | 'CSHARP' | 'VBNET';
 type DotnetCompileLanguage = 'fsharp' | 'csharp' | 'vbnet';
+type DotnetOperation = {
+	token: symbol;
+	phase: 'startup' | 'execute';
+	cancelled: boolean;
+};
 type DotnetRuntimeModule = {
 	createDotnetCompiler: (options?: { loadReferences?: boolean }) => {
 		compile(request: {
@@ -63,6 +69,7 @@ class Dotnet implements Sandbox {
 	compiledCacheKey = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	private activeExplicitStdinCleanup: (() => void) | null = null;
+	private activeOperation: DotnetOperation | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: () => this.languageLabel,
 		onDispose: (worker) => {
@@ -86,6 +93,30 @@ class Dotnet implements Sandbox {
 		return this.language === 'CSHARP' ? 'C#' : this.language === 'VBNET' ? 'VB.NET' : 'F#';
 	}
 
+	private beginOperation(phase: DotnetOperation['phase']) {
+		if (this.activeOperation) {
+			throw new BusyError(`${this.languageLabel} runtime already has an active operation`, {
+				runtimeId: this.language,
+				phase: this.activeOperation.phase
+			});
+		}
+		const operation = {
+			token: Symbol(phase),
+			phase,
+			cancelled: false
+		} satisfies DotnetOperation;
+		this.activeOperation = operation;
+		return operation;
+	}
+
+	private completeOperation(operation: DotnetOperation) {
+		if (this.activeOperation?.token === operation.token) this.activeOperation = null;
+	}
+
+	private isOperationActive(operation: DotnetOperation) {
+		return this.activeOperation?.token === operation.token && !operation.cancelled;
+	}
+
 	private shouldRunOnMainThread() {
 		return (
 			typeof window !== 'undefined' &&
@@ -103,15 +134,15 @@ class Dotnet implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		if (!this.exit) {
-			this.uid += 1;
-			this.activeExplicitStdinCleanup?.();
-			this.resetStdinState();
-			if (this.worker) this.workerSession.reset();
-			this.exit = true;
+		let operation: DotnetOperation;
+		try {
+			operation = this.beginOperation('startup');
+		} catch (error) {
+			return Promise.reject(error);
 		}
-		return this.workerSession.load(async (resolve, reject) => {
+		const loading = this.workerSession.load(async (resolve, reject) => {
 			try {
+				if (!this.isOperationActive(operation)) return;
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 				const nextModuleUrl = resolveDotnetModuleUrl(runtimeAssets, currentUrl);
 				if (!nextModuleUrl) {
@@ -120,16 +151,16 @@ class Dotnet implements Sandbox {
 					);
 				}
 				const needsWorkerReset = !this.worker || this.moduleUrl !== nextModuleUrl;
-				const needsRuntimeReset = !this.runtimeModule || this.moduleUrl !== nextModuleUrl;
-				this.moduleUrl = nextModuleUrl;
+				const needsRuntimeReset =
+					!this.runtimeModule || !this.compiler || this.moduleUrl !== nextModuleUrl;
 				if (this.shouldRunOnMainThread()) {
-					if (this.worker) {
-						this.workerSession.reset();
-					}
+					let runtimeModule = this.runtimeModule;
+					let compiler = this.compiler;
 					if (needsRuntimeReset) {
-						const runtimeModule = (await import(
-							/* @vite-ignore */ this.moduleUrl
+						runtimeModule = (await import(
+							/* @vite-ignore */ nextModuleUrl
 						)) as DotnetRuntimeModule;
+						if (!this.isOperationActive(operation)) return;
 						if (typeof runtimeModule.createDotnetCompiler !== 'function') {
 							return reject('wasm-dotnet module must export createDotnetCompiler');
 						}
@@ -138,46 +169,75 @@ class Dotnet implements Sandbox {
 								'wasm-dotnet module must export executeBrowserDotnetArtifact'
 							);
 						}
-						this.runtimeModule = runtimeModule;
-						this.compiler = runtimeModule.createDotnetCompiler();
+						compiler = runtimeModule.createDotnetCompiler();
+						if (!this.isOperationActive(operation)) return;
+					}
+					if (!this.isOperationActive(operation)) return;
+					progress?.set?.(1);
+					if (!this.isOperationActive(operation)) return;
+					if (this.worker) this.workerSession.reset();
+					if (!this.isOperationActive(operation)) return;
+					this.moduleUrl = nextModuleUrl;
+					this.runtimeModule = runtimeModule;
+					this.compiler = compiler;
+					if (needsRuntimeReset) {
 						this.compiledArtifact = null;
 						this.compiledCacheKey = '';
 					}
-					progress?.set?.(1);
 					resolve();
 					return;
 				}
-				this.runtimeModule = null;
-				this.compiler = null;
-				this.compiledArtifact = null;
-				this.compiledCacheKey = '';
-				if (needsWorkerReset && this.worker) {
-					this.workerSession.reset();
-				}
-				if (!this.worker) {
-					this.worker = new (
-						await import('$lib/playground/worker/dotnet?worker')
-					).default();
-					this.workerSession.attach(this.worker);
-					this.worker.onmessage = (event: MessageEvent<any>) => {
-						if (event.data?.load) {
-							progress?.set?.(1);
-							resolve();
+				if (needsWorkerReset) {
+					const WorkerConstructor = (await import('$lib/playground/worker/dotnet?worker'))
+						.default;
+					if (!this.isOperationActive(operation)) return;
+					const worker = new WorkerConstructor();
+					if (!this.isOperationActive(operation)) {
+						worker.terminate();
+						return;
+					}
+					this.worker = worker;
+					this.workerSession.attach(worker);
+					worker.onmessage = (event: MessageEvent<any>) => {
+						if (!this.isOperationActive(operation) || this.worker !== worker) return;
+						try {
+							if (event.data?.load) {
+								progress?.set?.(1);
+								if (!this.isOperationActive(operation) || this.worker !== worker)
+									return;
+								this.moduleUrl = nextModuleUrl;
+								this.runtimeModule = null;
+								this.compiler = null;
+								this.compiledArtifact = null;
+								this.compiledCacheKey = '';
+								resolve();
+								return;
+							}
+							if (event.data?.error) reject(event.data.error);
+						} catch (error) {
+							reject(error);
 						}
-						if (event.data?.error) reject(event.data.error);
 					};
-					this.worker.postMessage({
+					worker.postMessage({
 						load: true,
-						moduleUrl: this.moduleUrl
+						moduleUrl: nextModuleUrl
 					});
 				} else {
+					if (!this.isOperationActive(operation)) return;
 					progress?.set?.(1);
+					if (!this.isOperationActive(operation)) return;
+					this.moduleUrl = nextModuleUrl;
+					this.runtimeModule = null;
+					this.compiler = null;
+					this.compiledArtifact = null;
+					this.compiledCacheKey = '';
 					resolve();
 				}
 			} catch (error: any) {
 				reject(error?.message || String(error));
 			}
 		});
+		return loading.finally(() => this.completeOperation(operation));
 	}
 
 	write(input: string) {
@@ -237,80 +297,141 @@ class Dotnet implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		if (options.stdin !== undefined && typeof options.stdin !== 'string') {
-			return Promise.reject(new TypeError(`${this.languageLabel} stdin must be a string`));
-		}
-		if (this.runtimeModule && this.compiler) {
-			return this.runOnMainThread(code, prepare, _log, _prog, args, options);
-		}
-		if (!this.worker) return Promise.reject('Worker not loaded');
-		const worker = this.worker;
-		this.exit = false;
-		return new Promise<boolean | string>((resolve, reject) => {
-			const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
-			const _uid = ++this.uid;
-			const operation = this.workerSession.beginRun(worker, reject);
-			const hasExplicitStdin = !prepare && options.stdin !== undefined;
-			this.activeExplicitStdinCleanup?.();
-			let explicitStdinCleaned = false;
-			const cleanupExplicitStdin = () => {
-				if (!hasExplicitStdin || explicitStdinCleaned) return;
-				explicitStdinCleaned = true;
-				if (this.activeExplicitStdinCleanup !== cleanupExplicitStdin) return;
-				this.activeExplicitStdinCleanup = null;
-				this.resetStdinState();
-			};
-			if (hasExplicitStdin) {
-				this.resetStdinState();
-				this.activeExplicitStdinCleanup = cleanupExplicitStdin;
+		const operation = this.beginOperation('execute');
+		try {
+			if (options.stdin !== undefined && typeof options.stdin !== 'string') {
+				throw new TypeError(`${this.languageLabel} stdin must be a string`);
 			}
-			const handler = (event: Event & { data: any }) => {
-				if (this.worker !== worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (worker.onmessage = null);
-				const { output, results, error, diagnostic, progress } = event.data;
-				reportWorkerProgress(_prog, progress);
-				if (output) this.output?.(output);
-				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
-				if (results) {
-					cleanupExplicitStdin();
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.workerSession.complete(operation);
-					resolve(results as string);
+			if (this.runtimeModule && this.compiler) {
+				return await this.runOnMainThread(
+					operation,
+					code,
+					prepare,
+					_log,
+					_prog,
+					args,
+					options
+				);
+			}
+			if (!this.worker) throw 'Worker not loaded';
+			const worker = this.worker;
+			const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
+			this.exit = false;
+			return await new Promise<boolean | string>((resolve, reject) => {
+				const _uid = ++this.uid;
+				const workerOperation = this.workerSession.beginRun(worker, reject);
+				const hasExplicitStdin = !prepare && options.stdin !== undefined;
+				this.activeExplicitStdinCleanup?.();
+				let explicitStdinCleaned = false;
+				const cleanupExplicitStdin = () => {
+					if (!hasExplicitStdin || explicitStdinCleaned) return;
+					explicitStdinCleaned = true;
+					if (this.activeExplicitStdinCleanup !== cleanupExplicitStdin) return;
+					this.activeExplicitStdinCleanup = null;
+					this.resetStdinState();
+				};
+				if (hasExplicitStdin) {
+					this.resetStdinState();
+					this.activeExplicitStdinCleanup = cleanupExplicitStdin;
 				}
-				if (error) {
-					cleanupExplicitStdin();
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.workerSession.complete(operation);
-					reject(error);
-				}
-			};
-			worker.onmessage = handler;
-			this.begin = Date.now();
-			this.collectStdinForRun(code, prepare, options, _uid)
-				.then((stdin) => {
-					if (this.worker !== worker || _uid !== this.uid) return;
-					worker.postMessage({
-						code,
-						language: this.compileLanguage,
-						prepare,
-						args: programArgs,
-						stdin,
-						log: _log
-					});
-				})
-				.catch((error) => {
+				let handler: (event: Event & { data: any }) => void;
+				const failRun = (error: unknown, disposeWorker = false) => {
 					cleanupExplicitStdin();
 					if (worker.onmessage === handler) worker.onmessage = null;
-					this.workerSession.complete(operation);
+					this.workerSession.complete(workerOperation);
+					if (disposeWorker && this.worker === worker) this.workerSession.reset();
 					this.exit = true;
 					reject(error);
-				});
-		});
+				};
+				handler = (event: Event & { data: any }) => {
+					if (
+						!this.isOperationActive(operation) ||
+						this.worker !== worker ||
+						worker.onmessage !== handler ||
+						_uid !== this.uid
+					) {
+						cleanupExplicitStdin();
+						if (worker.onmessage === handler) worker.onmessage = null;
+						return;
+					}
+					try {
+						const { output, results, error, diagnostic, progress } = event.data;
+						reportWorkerProgress(_prog, progress);
+						if (
+							!this.isOperationActive(operation) ||
+							this.worker !== worker ||
+							worker.onmessage !== handler ||
+							_uid !== this.uid
+						) {
+							return;
+						}
+						if (output) this.output?.(output);
+						if (
+							!this.isOperationActive(operation) ||
+							this.worker !== worker ||
+							worker.onmessage !== handler ||
+							_uid !== this.uid
+						) {
+							return;
+						}
+						if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
+						if (
+							!this.isOperationActive(operation) ||
+							this.worker !== worker ||
+							worker.onmessage !== handler ||
+							_uid !== this.uid
+						) {
+							return;
+						}
+						if (results) {
+							cleanupExplicitStdin();
+							if (worker.onmessage === handler) worker.onmessage = null;
+							this.elapse = Date.now() - this.begin;
+							this.exit = true;
+							this.workerSession.complete(workerOperation);
+							resolve(results as string);
+							return;
+						}
+						if (error) {
+							this.elapse = Date.now() - this.begin;
+							failRun(error);
+						}
+					} catch (error) {
+						failRun(error, true);
+					}
+				};
+				worker.onmessage = handler;
+				this.begin = Date.now();
+				this.collectStdinForRun(code, prepare, options, _uid)
+					.then((stdin) => {
+						if (
+							!this.isOperationActive(operation) ||
+							this.worker !== worker ||
+							worker.onmessage !== handler ||
+							_uid !== this.uid
+						) {
+							return;
+						}
+						worker.postMessage({
+							code,
+							language: this.compileLanguage,
+							prepare,
+							args: programArgs,
+							stdin,
+							log: _log
+						});
+					})
+					.catch((error) => {
+						failRun(error);
+					});
+			});
+		} finally {
+			this.completeOperation(operation);
+		}
 	}
 
 	private async runOnMainThread(
+		operation: DotnetOperation,
 		code: string,
 		prepare: boolean,
 		_log = true,
@@ -319,10 +440,10 @@ class Dotnet implements Sandbox {
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
 		if (!this.runtimeModule || !this.compiler) throw new Error('Runtime not loaded');
+		const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
 		this.exit = false;
 		this.begin = Date.now();
 		const _uid = ++this.uid;
-		const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
 		const hasExplicitStdin = !prepare && options.stdin !== undefined;
 		this.activeExplicitStdinCleanup?.();
 		let explicitStdinCleaned = false;
@@ -346,16 +467,24 @@ class Dotnet implements Sandbox {
 					target: 'browser-wasm',
 					prepare,
 					log: _log,
-					onProgress: (progress) => reportWorkerProgress(_prog, progress)
+					onProgress: (progress) => {
+						if (this.isOperationActive(operation) && _uid === this.uid) {
+							reportWorkerProgress(_prog, progress);
+						}
+					}
 				});
-				if (_uid !== this.uid) return false;
+				if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 				for (const diagnostic of result.diagnostics || []) {
+					if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 					this.oncompilerdiagnostic?.(diagnostic);
 				}
 				for (const line of result.logs || []) {
+					if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 					this.output?.(line.endsWith('\n') ? line : `${line}\n`);
 				}
+				if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 				if (result.stdout) this.output?.(result.stdout);
+				if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 				if (!result.success || !result.artifact) {
 					throw new Error(
 						result.stderr ||
@@ -366,13 +495,14 @@ class Dotnet implements Sandbox {
 					);
 				}
 				if (result.stderr) this.output?.(result.stderr);
+				if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 				this.compiledArtifact = result.artifact;
 				this.compiledCacheKey = compileCacheKey;
 			}
 			if (prepare) return true;
 
 			const stdin = await this.collectStdinForRun(code, prepare, options, _uid);
-			if (_uid !== this.uid) return false;
+			if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 			const execution = await this.runtimeModule.executeBrowserDotnetArtifact(
 				this.compiledArtifact,
 				{
@@ -382,14 +512,18 @@ class Dotnet implements Sandbox {
 					},
 					stdin,
 					stdout: (output) => {
-						if (output) this.output?.(output);
+						if (output && this.isOperationActive(operation) && _uid === this.uid) {
+							this.output?.(output);
+						}
 					},
 					stderr: (output) => {
-						if (output) this.output?.(output);
+						if (output && this.isOperationActive(operation) && _uid === this.uid) {
+							this.output?.(output);
+						}
 					}
 				}
 			);
-			if (_uid !== this.uid) return false;
+			if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 			if (execution.exitCode !== 0) {
 				throw new Error(
 					`${this.languageLabel} program exited with code ${execution.exitCode}`
@@ -398,7 +532,7 @@ class Dotnet implements Sandbox {
 			return true;
 		} finally {
 			cleanupExplicitStdin();
-			if (_uid === this.uid) {
+			if (this.isOperationActive(operation) && _uid === this.uid) {
 				this.elapse = Date.now() - this.begin;
 				this.exit = true;
 			}
@@ -410,6 +544,7 @@ class Dotnet implements Sandbox {
 	}
 
 	terminate() {
+		if (this.activeOperation) this.activeOperation.cancelled = true;
 		this.activeExplicitStdinCleanup?.();
 		this.uid += 1;
 		this.resolveStdinWaiters();
@@ -420,7 +555,7 @@ class Dotnet implements Sandbox {
 	async clear() {
 		if (this.worker) this.worker.onmessage = null;
 		this.resetStdinState();
-		if (!this.exit) {
+		if (this.activeOperation) {
 			this.terminate();
 		}
 	}

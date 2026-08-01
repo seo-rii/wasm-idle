@@ -196,6 +196,132 @@ End Module`;
 		);
 	});
 
+	it('rejects run and load calls while worker startup remains active', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Dotnet('CSHARP');
+		const loading = sandbox.load('/absproxy/5173');
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const loadHandler = worker.onmessage;
+
+		await expect(sandbox.run('Console.WriteLine("hello");', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'startup',
+			runtimeId: 'CSHARP',
+			recoverable: true
+		});
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'startup',
+			runtimeId: 'CSHARP',
+			recoverable: true
+		});
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(loadHandler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+
+		worker.onmessage?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(loading).resolves.toBeUndefined();
+		suppressAutoLoadAck = false;
+		await expect(sandbox.run('Console.WriteLine("hello");', false)).resolves.toBe(true);
+	});
+
+	it('releases the startup gate when a worker load callback throws', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const progressError = new Error('dotnet load progress failed');
+		const progress = {
+			set: vi.fn(() => {
+				throw progressError;
+			})
+		};
+
+		await expect(sandbox.load('/absproxy/5173', '', true, [], {}, progress)).rejects.toBe(
+			progressError
+		);
+		expect(workerInstances[0]?.terminate).toHaveBeenCalledOnce();
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('rejects overlapping and reentrant worker runs without replacing the handler', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		let reentrantRun: Promise<boolean | string> | undefined;
+		sandbox.output = () => {
+			reentrantRun = sandbox.run('Console.WriteLine("reentrant");', false);
+		};
+		const firstRun = sandbox.run('Console.WriteLine("first");', false);
+		await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledTimes(2));
+		const firstHandler = worker.onmessage;
+		const firstUid = sandbox.uid;
+
+		await expect(sandbox.run('Console.WriteLine("overlap");', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'CSHARP',
+			recoverable: true
+		});
+		worker.onmessage?.({ data: { output: 'trigger reentry\n' } } as MessageEvent<any>);
+		await expect(reentrantRun).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'CSHARP'
+		});
+		expect(worker.onmessage).toBe(firstHandler);
+		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.uid).toBe(firstUid);
+		expect(sandbox.exit).toBe(false);
+
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(firstRun).resolves.toBe(true);
+		const retry = sandbox.run('Console.WriteLine("retry");', false);
+		await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledTimes(3));
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(retry).resolves.toBe(true);
+	});
+
+	it('disposes the worker and releases its gate when an output callback throws', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new Dotnet('CSHARP');
+		const outputError = new Error('dotnet output callback failed');
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		sandbox.output = () => {
+			throw outputError;
+		};
+
+		const firstRun = sandbox.run('Console.WriteLine("first");', false);
+		await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledTimes(2));
+		const staleHandler = worker.onmessage;
+		staleHandler?.({ data: { output: 'first output\n' } } as MessageEvent<any>);
+		await expect(firstRun).rejects.toBe(outputError);
+		expect(worker.onmessage).toBeNull();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+
+		sandbox.output = vi.fn();
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		const retry = sandbox.run('Console.WriteLine("retry");', false);
+		const retryWorker = workerInstances[1];
+		await vi.waitFor(() => expect(retryWorker?.postMessage).toHaveBeenCalledTimes(2));
+		const retryHandler = retryWorker?.onmessage;
+		staleHandler?.({ data: { results: true } } as MessageEvent<any>);
+		await Promise.resolve();
+		expect(retryWorker?.onmessage).toBe(retryHandler);
+		expect(sandbox.exit).toBe(false);
+		retryWorker?.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(retry).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
 	it('collects stdin submitted immediately after a cached run starts', async () => {
 		const sandbox = new Dotnet();
 		const code = 'let input = System.Console.ReadLine()';
@@ -319,6 +445,12 @@ End Module`;
 		);
 		expect(sandbox.pendingInput).toEqual([]);
 		expect(sandbox.pendingEof).toBe(false);
+		runDispatchError = undefined;
+		suppressAutoRunAck = false;
+		await expect(sandbox.run(code, false, true, undefined, [], { stdin: '' })).resolves.toBe(
+			true
+		);
+		expect(worker?.terminate).not.toHaveBeenCalled();
 	});
 
 	it('clears an explicit worker stdin run on termination without stale cleanup', async () => {
@@ -374,32 +506,40 @@ End Module`;
 		await expect(retry).resolves.toBe(true);
 	});
 
-	it('does not let a worker stdin waiter superseded by load consume replacement input', async () => {
+	it('rejects reload while a worker stdin run remains active', async () => {
 		suppressAutoRunAck = true;
 		const sandbox = new Dotnet('CSHARP');
 		const code = 'var input = Console.ReadLine();';
 		await sandbox.load('/absproxy/5173');
 		const worker = workerInstances[0];
-		const staleRun = sandbox.run(code, false);
+		const activeRun = sandbox.run(code, false);
 		await vi.dynamicImportSettled();
 		expect(worker?.postMessage).toHaveBeenCalledOnce();
+		const runHandler = worker?.onmessage;
+		const runUid = sandbox.uid;
 
 		const reload = sandbox.load('/absproxy/5173');
-		sandbox.write('fresh after reload\n');
-
-		await expect(staleRun).rejects.toBe('Worker operation superseded');
-		await expect(reload).resolves.toBeUndefined();
-		expect(sandbox.pendingInput).toEqual(['fresh after reload\n']);
+		await expect(reload).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'CSHARP',
+			recoverable: true
+		});
+		expect(sandbox.uid).toBe(runUid);
+		expect(worker?.onmessage).toBe(runHandler);
 		expect(worker?.postMessage).toHaveBeenCalledOnce();
-		expect(worker?.terminate).toHaveBeenCalledOnce();
-		const replacementWorker = workerInstances[1];
-		const retry = sandbox.run(code, false);
-		await vi.waitFor(() => expect(replacementWorker?.postMessage).toHaveBeenCalledTimes(2));
-		expect(replacementWorker?.postMessage.mock.calls[1]?.[0]).toEqual(
-			expect.objectContaining({ stdin: 'fresh after reload\n' })
+		expect(worker?.terminate).not.toHaveBeenCalled();
+
+		sandbox.write('input for active run\n');
+		await vi.waitFor(() => expect(worker?.postMessage).toHaveBeenCalledTimes(2));
+		expect(worker?.postMessage.mock.calls[1]?.[0]).toEqual(
+			expect.objectContaining({ stdin: 'input for active run\n' })
 		);
-		replacementWorker?.onmessage?.({ data: { results: true } } as MessageEvent<any>);
-		await expect(retry).resolves.toBe(true);
+		worker?.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(activeRun).resolves.toBe(true);
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(1);
 	});
 
 	it('isolates explicit stdin on the main-thread dotnet runtime', async () => {
@@ -445,6 +585,21 @@ export function executeBrowserDotnetArtifact(artifact, options) {
 			const explicitRun = sandbox.run(code, false, true, undefined, [], { stdin: '' });
 			await executionStarted;
 			expect(execute.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ stdin: '' }));
+			await expect(sandbox.run(code, false)).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				phase: 'execute',
+				runtimeId: 'CSHARP',
+				recoverable: true
+			});
+			await expect(sandbox.load({ dotnet: { moduleUrl } })).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				phase: 'execute',
+				runtimeId: 'CSHARP',
+				recoverable: true
+			});
+			expect(execute).toHaveBeenCalledOnce();
 			sandbox.write('during\n');
 			sandbox.eof();
 			releaseExecution();
@@ -477,25 +632,226 @@ export function executeBrowserDotnetArtifact(artifact, options) {
 			);
 			await expect(retry).resolves.toBe(true);
 
-			const staleReloadRun = sandbox.run(code, false);
+			const activeReloadRun = sandbox.run(code, false);
 			await Promise.resolve();
 			expect(execute).toHaveBeenCalledTimes(3);
 			const reload = sandbox.load({ dotnet: { moduleUrl } });
-			sandbox.write('fresh after main-thread reload\n');
-			await expect(staleReloadRun).resolves.toBe(false);
-			await expect(reload).resolves.toBeUndefined();
-			expect(sandbox.pendingInput).toEqual(['fresh after main-thread reload\n']);
-
-			const reloadRetry = sandbox.run(code, false);
+			await expect(reload).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				phase: 'execute',
+				runtimeId: 'CSHARP',
+				recoverable: true
+			});
+			expect(execute).toHaveBeenCalledTimes(3);
+			sandbox.write('input for active main-thread run\n');
 			await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(4));
 			expect(execute.mock.calls[3]?.[1]).toEqual(
-				expect.objectContaining({ stdin: 'fresh after main-thread reload\n' })
+				expect.objectContaining({ stdin: 'input for active main-thread run\n' })
 			);
-			await expect(reloadRetry).resolves.toBe(true);
+			await expect(activeReloadRun).resolves.toBe(true);
+			await expect(sandbox.load({ dotnet: { moduleUrl } })).resolves.toBeUndefined();
 		} finally {
 			releaseExecution();
 			delete (globalThis as any)[fixtureKey];
 		}
+	});
+
+	it('releases the main-thread gate after compile failure and rejects output reentry', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const compileError = new Error('dotnet compiler failed synchronously');
+		const compile = vi
+			.fn()
+			.mockImplementationOnce(() => {
+				throw compileError;
+			})
+			.mockResolvedValue({ success: true, artifact: { id: 'retry-artifact' } });
+		let reentrantLoad: Promise<void> | undefined;
+		const execute = vi.fn(
+			async (_artifact: unknown, options?: { stdout?: (output: string) => void }) => {
+				options?.stdout?.('main-thread output\n');
+				return { exitCode: 0, stdout: '', stderr: '' };
+			}
+		);
+		const runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.runtimeModule = runtimeModule;
+		sandbox.compiler = { compile };
+		sandbox.output = () => {
+			reentrantLoad = sandbox.load('/absproxy/5173');
+		};
+
+		await expect(sandbox.run('Console.WriteLine("first");', false)).rejects.toBe(compileError);
+		expect(sandbox.exit).toBe(true);
+		await expect(sandbox.run('Console.WriteLine("retry");', false)).resolves.toBe(true);
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'CSHARP'
+		});
+		expect(compile).toHaveBeenCalledTimes(2);
+		expect(execute).toHaveBeenCalledOnce();
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('keeps the previous main-thread runtime when a replacement factory fails', async () => {
+		vi.stubGlobal('crossOriginIsolated', true);
+		vi.stubGlobal('navigator', { serviceWorker: { controller: {} } });
+		const fixtureKey = '__wasm_idle_dotnet_factory_retry_fixture';
+		const factoryError = new Error('dotnet compiler factory failed');
+		const compileA = vi.fn(async () => ({ success: true, artifact: { id: 'runtime-a' } }));
+		const compileB = vi.fn(async () => ({ success: true, artifact: { id: 'runtime-b' } }));
+		const createA = vi.fn(() => ({ compile: compileA }));
+		const createB = vi
+			.fn()
+			.mockImplementationOnce(() => {
+				throw factoryError;
+			})
+			.mockReturnValue({ compile: compileB });
+		(globalThis as any)[fixtureKey] = { createA, createB };
+		const moduleSourceA = `
+const fixture = globalThis[${JSON.stringify(fixtureKey)}];
+export function createDotnetCompiler() {
+	return fixture.createA();
+}
+export async function executeBrowserDotnetArtifact() {
+	return { exitCode: 0, stdout: '', stderr: '' };
+}
+`;
+		const moduleSourceB = `
+const fixture = globalThis[${JSON.stringify(fixtureKey)}];
+export function createDotnetCompiler() {
+	return fixture.createB();
+}
+export async function executeBrowserDotnetArtifact() {
+	return { exitCode: 0, stdout: '', stderr: '' };
+}
+`;
+		const moduleUrlA = `data:text/javascript;charset=utf-8,${encodeURIComponent(moduleSourceA)}`;
+		const moduleUrlB = `data:text/javascript;charset=utf-8,${encodeURIComponent(moduleSourceB)}`;
+		const sandbox = new Dotnet('CSHARP');
+
+		try {
+			await expect(
+				sandbox.load({ dotnet: { moduleUrl: moduleUrlA } })
+			).resolves.toBeUndefined();
+			await expect(sandbox.run('Console.WriteLine("runtime a");', true)).resolves.toBe(true);
+			const runtimeA = sandbox.runtimeModule;
+			const compilerA = sandbox.compiler;
+			const artifactA = sandbox.compiledArtifact;
+			const cacheKeyA = sandbox.compiledCacheKey;
+
+			await expect(sandbox.load({ dotnet: { moduleUrl: moduleUrlB } })).rejects.toBe(
+				factoryError.message
+			);
+			expect(sandbox.moduleUrl).toBe(moduleUrlA);
+			expect(sandbox.runtimeModule).toBe(runtimeA);
+			expect(sandbox.compiler).toBe(compilerA);
+			expect(sandbox.compiledArtifact).toBe(artifactA);
+			expect(sandbox.compiledCacheKey).toBe(cacheKeyA);
+
+			await expect(
+				sandbox.load({ dotnet: { moduleUrl: moduleUrlB } })
+			).resolves.toBeUndefined();
+			expect(sandbox.moduleUrl).toBe(moduleUrlB);
+			expect(sandbox.runtimeModule).not.toBe(runtimeA);
+			expect(sandbox.compiler).not.toBe(compilerA);
+			expect(sandbox.compiledArtifact).toBeNull();
+			expect(sandbox.compiledCacheKey).toBe('');
+			expect(createA).toHaveBeenCalledOnce();
+			expect(createB).toHaveBeenCalledTimes(2);
+			expect(compileA).toHaveBeenCalledOnce();
+			expect(compileB).not.toHaveBeenCalled();
+		} finally {
+			delete (globalThis as any)[fixtureKey];
+		}
+	});
+
+	it('does not commit a main-thread runtime terminated during compiler creation', async () => {
+		vi.stubGlobal('crossOriginIsolated', true);
+		vi.stubGlobal('navigator', { serviceWorker: { controller: {} } });
+		const fixtureKey = '__wasm_idle_dotnet_factory_terminate_fixture';
+		const compile = vi.fn(async () => ({ success: true, artifact: { id: 'fixture' } }));
+		const fixture = {
+			terminateOnCreate: true,
+			sandbox: null as Dotnet | null,
+			create: vi.fn(() => {
+				if (fixture.terminateOnCreate) fixture.sandbox?.terminate();
+				return { compile };
+			})
+		};
+		(globalThis as any)[fixtureKey] = fixture;
+		const moduleSource = `
+const fixture = globalThis[${JSON.stringify(fixtureKey)}];
+export function createDotnetCompiler() {
+	return fixture.create();
+}
+export async function executeBrowserDotnetArtifact() {
+	return { exitCode: 0, stdout: '', stderr: '' };
+}
+`;
+		const moduleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(moduleSource)}`;
+		const sandbox = new Dotnet('CSHARP');
+		fixture.sandbox = sandbox;
+
+		try {
+			await expect(sandbox.load({ dotnet: { moduleUrl } })).rejects.toBe(
+				'Process terminated'
+			);
+			expect(sandbox.moduleUrl).toBe('');
+			expect(sandbox.runtimeModule).toBeNull();
+			expect(sandbox.compiler).toBeNull();
+
+			fixture.terminateOnCreate = false;
+			await expect(sandbox.load({ dotnet: { moduleUrl } })).resolves.toBeUndefined();
+			expect(sandbox.moduleUrl).toBe(moduleUrl);
+			expect(sandbox.runtimeModule).not.toBeNull();
+			expect(sandbox.compiler).not.toBeNull();
+			expect(fixture.create).toHaveBeenCalledTimes(2);
+		} finally {
+			delete (globalThis as any)[fixtureKey];
+		}
+	});
+
+	it('keeps a cancelled main-thread operation busy until compilation settles', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		let markCompileStarted!: () => void;
+		const compileStarted = new Promise<void>((resolve) => {
+			markCompileStarted = resolve;
+		});
+		let releaseCompile!: () => void;
+		const compileGate = new Promise<void>((resolve) => {
+			releaseCompile = resolve;
+		});
+		const compile = vi.fn(async () => {
+			markCompileStarted();
+			await compileGate;
+			return { success: true, artifact: { id: 'compiled' } };
+		});
+		const execute = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		sandbox.runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.compiler = { compile };
+
+		const running = sandbox.run('Console.WriteLine("cancelled");', true);
+		await compileStarted;
+		sandbox.terminate();
+		await expect(sandbox.run('Console.WriteLine("busy");', true)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'CSHARP'
+		});
+		releaseCompile();
+		await expect(running).resolves.toBe(false);
+		await expect(sandbox.run('Console.WriteLine("retry");', true)).resolves.toBe(true);
+		expect(compile).toHaveBeenCalledTimes(2);
+		expect(execute).not.toHaveBeenCalled();
 	});
 
 	it('rejects invalid explicit stdin before changing worker state', async () => {
