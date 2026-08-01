@@ -994,7 +994,11 @@ export class BrowserLldbSession {
 		if (this.targetExitPending) return;
 		this.targetExitPending = true;
 		for (const output of this.outputQueues) {
-			if (!output.closed) output.close();
+			try {
+				if (!output.closed) output.close();
+			} catch {
+				// A stale channel must not suppress target exit or worker-error delivery.
+			}
 		}
 		void Promise.allSettled(this.outputReaders).then(() => {
 			if (!this.disposed) callback();

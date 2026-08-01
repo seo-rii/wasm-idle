@@ -1242,6 +1242,51 @@ describe('BrowserLldbSession', () => {
 		await session.dispose();
 	});
 
+	it('publishes target exit when one final output queue is stale', async () => {
+		const workers: FakeWorker[] = [];
+		const lifecycle: string[] = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: Uint8Array.of(0, 97, 115, 109),
+			sources: [],
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, []);
+				workers.push(worker);
+				return worker;
+			},
+			fetchImpl: async () => new Response('debug-asset'),
+			onLifecycle: (event) => lifecycle.push(event.type),
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+
+		await session.initialize();
+		const targetWorker = workers.find((worker) => worker.kind === 'target');
+		const targetInit = targetWorker?.received.find(
+			(message) => message.type === 'initialize-target'
+		);
+		if (!targetWorker || !targetInit || targetInit.type !== 'initialize-target') {
+			throw new Error('target worker was not initialized');
+		}
+		Atomics.store(
+			new Int32Array(targetInit.stdout.control),
+			6,
+			targetInit.stdout.generation + 1
+		);
+
+		expect(() =>
+			targetWorker.emitRaw({
+				type: 'exit',
+				exitCode: 0,
+				generation: session.generation
+			})
+		).not.toThrow();
+		await expect.poll(() => lifecycle).toContain('target-exit');
+		expect(new SharedByteQueue(targetInit.stderr).closed).toBe(true);
+		await session.dispose();
+	});
+
 	it('fails instead of publishing a malformed current-generation worker message', async () => {
 		const workers: FakeWorker[] = [];
 		const lifecycle: Array<

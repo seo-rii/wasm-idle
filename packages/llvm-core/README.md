@@ -45,7 +45,8 @@ metadata. Every queue state accessor, including
 the closed-state check used during cleanup, rejects stale-generation metadata. Session and worker
 disposal isolate each queue close, so one corrupt transport cannot prevent the remaining queues from
 closing, worker-global transport state from being released, or either Worker from terminating. The
-session verifies the module, source, loader, Wasm, and
+final target-output drain applies the same isolation so a stale channel cannot suppress the target
+exit or worker-error lifecycle event. The session verifies the module, source, loader, Wasm, and
 pthread-sidecar hashes before creating either worker.
 Debug manifest assets must use canonical relative URL paths; percent-encoded dot segments and path
 separators are rejected before they can escape or change the configured runtime root.
