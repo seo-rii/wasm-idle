@@ -259,6 +259,13 @@ class Zig implements Sandbox {
 			return Promise.reject(error);
 		}
 		const targetTriple: ZigTargetTriple = options.zigTargetTriple || 'wasm64-wasi';
+		const hasExplicitStdin = options.stdin !== undefined;
+		if (hasExplicitStdin) {
+			this.pendingInput = [];
+			this.pendingEof = false;
+			this.waitingForInput = false;
+			resetBufferedStdin(this.buffer);
+		}
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
@@ -268,6 +275,12 @@ class Zig implements Sandbox {
 			const cleanup = () => {
 				if (cleanedUp) return;
 				cleanedUp = true;
+				if (hasExplicitStdin) {
+					this.pendingInput = [];
+					this.pendingEof = false;
+					this.waitingForInput = false;
+					resetBufferedStdin(this.buffer);
+				}
 				if (signal && onAbort) {
 					try {
 						signal.removeEventListener('abort', onAbort);
