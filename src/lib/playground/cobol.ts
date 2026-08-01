@@ -25,6 +25,7 @@ type CobolOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
+	explicitStdin: boolean;
 };
 
 const abortReason = (signal: AbortSignal, phase: CobolOperation['phase']) =>
@@ -78,11 +79,12 @@ class Cobol implements Sandbox {
 				phase: this.activeOperation.phase
 			});
 		}
-		const operation = {
+		const operation: CobolOperation = {
 			token: Symbol(phase),
 			phase,
-			cancelled: false
-		} satisfies CobolOperation;
+			cancelled: false,
+			explicitStdin: false
+		};
 		this.activeOperation = operation;
 		return operation;
 	}
@@ -120,6 +122,23 @@ class Cobol implements Sandbox {
 				// Listener cleanup must not replace the operation result.
 			}
 		};
+	}
+
+	private resetExplicitStdinState() {
+		this.pendingInput = [];
+		this.pendingEof = false;
+		this.waitingForInput = false;
+		try {
+			resetBufferedStdin(this.buffer);
+		} catch {
+			// Explicit stdin never consumes the shared terminal buffer.
+		}
+	}
+
+	private finishExplicitStdin(operation: CobolOperation) {
+		if (!operation.explicitStdin) return;
+		operation.explicitStdin = false;
+		this.resetExplicitStdinState();
 	}
 
 	load(
@@ -347,6 +366,11 @@ class Cobol implements Sandbox {
 					)
 				}
 			);
+			const hasExplicitStdin = options.stdin !== undefined;
+			if (hasExplicitStdin) {
+				activeOperation.explicitStdin = true;
+				this.resetExplicitStdinState();
+			}
 			this.exit = false;
 			return await new Promise<boolean | string>((resolve, reject) => {
 				const workerOperation = this.workerSession.beginRun(worker, reject);
@@ -355,6 +379,7 @@ class Cobol implements Sandbox {
 				const runUid = ++this.uid;
 				let handler: (event: Event & { data: any }) => void;
 				const failRun = (error: unknown, disposeWorker = false) => {
+					this.finishExplicitStdin(activeOperation);
 					this.workerSession.complete(workerOperation);
 					cleanupSignal();
 					this.completeOperation(activeOperation);
@@ -377,7 +402,7 @@ class Cobol implements Sandbox {
 						if (assetBridge.handleMessage(event as MessageEvent<any>)) return;
 						if (!this.isOperationActive(activeOperation) || runUid !== this.uid) return;
 						const { output, results, log, error, buffer, progress } = event.data;
-						if (buffer) {
+						if (buffer && !hasExplicitStdin) {
 							this.waitingForInput = true;
 							this.flushPendingInput();
 							if (
@@ -403,6 +428,7 @@ class Cobol implements Sandbox {
 							}
 						}
 						if (results !== undefined) {
+							this.finishExplicitStdin(activeOperation);
 							this.elapse = Date.now() - this.begin;
 							this.exit = true;
 							this.waitingForInput = false;
@@ -464,6 +490,7 @@ class Cobol implements Sandbox {
 				}
 			});
 		} finally {
+			this.finishExplicitStdin(activeOperation);
 			cleanupSignal();
 			this.completeOperation(activeOperation);
 		}
@@ -471,6 +498,7 @@ class Cobol implements Sandbox {
 
 	private cancelOperation(operation: CobolOperation, reason: unknown) {
 		if (!this.isOperationActive(operation)) return;
+		this.finishExplicitStdin(operation);
 		operation.cancelled = true;
 		this.activeOperation = null;
 		this.waitingForInput = false;

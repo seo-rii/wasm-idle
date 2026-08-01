@@ -53,6 +53,7 @@ vi.mock('$lib/playground/worker/cobol?worker', () => ({
 }));
 
 import Cobol from './cobol';
+import { readBufferedStdin } from './stdinBuffer';
 
 describe('COBOL sandbox workspace boundary', () => {
 	beforeEach(() => {
@@ -202,6 +203,68 @@ describe('COBOL sandbox workspace boundary', () => {
 			);
 		}
 	);
+
+	it('isolates empty explicit stdin from queued terminal input across runs', async () => {
+		const sandbox = new Cobol();
+		await sandbox.load('/assets');
+		const worker = workerInstances[0];
+		autoResolveRun = false;
+		sandbox.write('queued before explicit run\n');
+		sandbox.eof();
+		const explicitRun = sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+			stdin: ''
+		});
+
+		expect(worker.postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({ stdin: '' })
+		);
+		sandbox.write('queued during explicit run\n');
+		sandbox.eof();
+		worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+		worker.resolveRun();
+		await expect(explicitRun).resolves.toBe(true);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+		const bufferedRun = sandbox.run('PROGRAM-ID. BUFFERED.', false);
+		worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+		expect(sandbox.waitingForInput).toBe(true);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+		sandbox.write('fresh input\n');
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('fresh input\n');
+		worker.resolveRun();
+		await expect(bufferedRun).resolves.toBe(true);
+	});
+
+	it('does not clear queued terminal input when explicit-stdin validation fails', async () => {
+		const sandbox = new Cobol();
+		await sandbox.load('/assets');
+		sandbox.write('preserved input\n');
+		sandbox.eof();
+
+		await expect(
+			sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+				stdin: '',
+				activePath: '../main.cob'
+			})
+		).rejects.toMatchObject({
+			name: 'WorkspaceValidationError',
+			code: 'invalid-path'
+		});
+
+		expect(sandbox.pendingInput).toEqual(['preserved input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+	});
 
 	it('preserves a pending startup across load and run overlaps', async () => {
 		autoResolveLoad = false;
@@ -660,9 +723,13 @@ describe('COBOL sandbox workspace boundary', () => {
 		const controller = new AbortController();
 		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		sandbox.write('queued before cancelled explicit run\n');
 		const running = sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
-			signal: controller.signal
+			signal: controller.signal,
+			stdin: ''
 		});
+		sandbox.write('queued during cancelled explicit run\n');
+		sandbox.eof();
 		const staleHandler = oldWorker.onmessage;
 		const registration = addEventListener.mock.calls.find(([type]) => type === 'abort');
 		const reason = new Error('COBOL execution cancelled');
@@ -675,6 +742,10 @@ describe('COBOL sandbox workspace boundary', () => {
 		expect(sandbox.worker).toBeUndefined();
 		expect(sandbox.assetBridge).toBeNull();
 		expect(sandbox.exit).toBe(true);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
 		expect(output).not.toHaveBeenCalled();
 
@@ -915,10 +986,13 @@ describe('COBOL sandbox workspace boundary', () => {
 		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		runDispatchError = dispatchError;
+		sandbox.write('queued before failed explicit dispatch\n');
+		sandbox.eof();
 
 		await expect(
 			sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
-				signal: controller.signal
+				signal: controller.signal,
+				stdin: ''
 			})
 		).rejects.toBe(dispatchError);
 		const registration = addEventListener.mock.calls.find(([type]) => type === 'abort');
@@ -927,10 +1001,129 @@ describe('COBOL sandbox workspace boundary', () => {
 		expect(sandbox.worker).toBe(worker);
 		expect(sandbox.assetBridge).toBe(assetBridge);
 		expect(worker.onmessage).toEqual(expect.any(Function));
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 
 		runDispatchError = undefined;
 		await expect(sandbox.run('PROGRAM-ID. RETRY.', false)).resolves.toBe(true);
 	});
+
+	it('clears explicit stdin state after a worker execution error', async () => {
+		const sandbox = new Cobol();
+		await sandbox.load('/assets');
+		autoResolveRun = false;
+		const worker = workerInstances[0];
+		sandbox.write('queued before failed explicit run\n');
+		const running = sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+			stdin: 'explicit input\n'
+		});
+		sandbox.write('queued during failed explicit run\n');
+		sandbox.eof();
+
+		worker.rejectRun('COBOL execution failed');
+
+		await expect(running).rejects.toBe('COBOL execution failed');
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+		autoResolveRun = true;
+		await expect(sandbox.run('PROGRAM-ID. RETRY.', false)).resolves.toBe(true);
+	});
+
+	it('keeps replacement input written after explicit-run termination', async () => {
+		const sandbox = new Cobol();
+		await sandbox.load('/assets');
+		autoResolveRun = false;
+		const running = sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+			stdin: ''
+		});
+		const result = running.catch((reason) => reason);
+		sandbox.write('discarded explicit-run input\n');
+		const reason = new Error('stop explicit COBOL run');
+
+		sandbox.terminate(reason);
+		sandbox.write('replacement input\n');
+
+		await expect(result).resolves.toBe(reason);
+		expect(sandbox.pendingInput).toEqual(['replacement input\n']);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+	});
+
+	it('keeps an immediate replacement load owned after explicit-run termination', async () => {
+		const sandbox = new Cobol();
+		await sandbox.load('/assets');
+		autoResolveRun = false;
+		const oldWorker = workerInstances[0];
+		const running = sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+			stdin: ''
+		});
+		const result = running.catch((reason) => reason);
+		const reason = new Error('replace explicit COBOL run');
+		autoResolveLoad = false;
+
+		sandbox.terminate(reason);
+		const replacementLoad = sandbox.load('/assets');
+
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		await expect(result).resolves.toBe(reason);
+		expect(oldWorker.terminate).toHaveBeenCalledOnce();
+		await expect(sandbox.load('/assets')).rejects.toMatchObject({
+			name: 'BusyError',
+			phase: 'startup'
+		});
+
+		workerInstances[1].resolveLoad();
+		await expect(replacementLoad).resolves.toBeUndefined();
+	});
+
+	it.each(['script error', 'message error'])(
+		'clears explicit stdin state when the execution worker reports a $kind',
+		async (kind) => {
+			const sandbox = new Cobol();
+			await sandbox.load('/assets');
+			autoResolveRun = false;
+			const worker = workerInstances[0];
+			const running = sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+				stdin: 'explicit input\n'
+			});
+			sandbox.write('queued during crashed explicit run\n');
+			sandbox.eof();
+
+			if (kind === 'script error') {
+				worker.onerror?.({
+					message: 'worker crashed',
+					filename: '/worker/cobol.js',
+					lineno: 6,
+					colno: 4
+				} as ErrorEvent);
+			} else {
+				worker.onmessageerror?.({ data: null } as MessageEvent<any>);
+			}
+
+			await expect(running).rejects.toContain(
+				kind === 'script error'
+					? 'COBOL worker script error: worker crashed (/worker/cobol.js:6:4)'
+					: 'COBOL worker message deserialization failed'
+			);
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			expect(sandbox.pendingInput).toEqual([]);
+			expect(sandbox.pendingEof).toBe(false);
+			expect(sandbox.waitingForInput).toBe(false);
+			expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+			autoResolveLoad = true;
+			autoResolveRun = true;
+			await sandbox.load('/assets');
+			await expect(sandbox.run('PROGRAM-ID. RETRY.', false)).resolves.toBe(true);
+		}
+	);
 
 	it('quarantines a worker when an execution callback throws', async () => {
 		const sandbox = new Cobol();
@@ -941,7 +1134,12 @@ describe('COBOL sandbox workspace boundary', () => {
 		sandbox.output = () => {
 			throw callbackError;
 		};
-		const running = sandbox.run('IDENTIFICATION DIVISION.', false);
+		sandbox.write('queued before callback failure\n');
+		const running = sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+			stdin: ''
+		});
+		sandbox.write('queued during callback failure\n');
+		sandbox.eof();
 
 		worker.resolveRun('output\n');
 
@@ -949,6 +1147,10 @@ describe('COBOL sandbox workspace boundary', () => {
 		expect(worker.terminate).toHaveBeenCalledOnce();
 		expect(sandbox.worker).toBeUndefined();
 		expect(sandbox.assetBridge).toBeNull();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 
 		autoResolveRun = true;
 		sandbox.output = vi.fn();
