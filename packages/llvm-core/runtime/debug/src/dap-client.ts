@@ -161,6 +161,9 @@ export class DapClient implements DapRequestSession {
 		if (this.abortController.signal.aborted) {
 			return Promise.reject(new Error('DAP client is closed'));
 		}
+		if (typeof command !== 'string' || command.length === 0) {
+			return Promise.reject(new TypeError('DAP request command must be a non-empty string'));
+		}
 		let responseTimeoutMs: number | null;
 		try {
 			responseTimeoutMs =

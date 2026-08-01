@@ -128,6 +128,8 @@ or creating a Worker request.
 DAP requests are fully encoded before pending transport state or send timers are registered.
 Circular, `BigInt`, or otherwise non-JSON arguments reject the returned Promise with the original
 encoding failure as its cause, while the client remains available for later valid requests.
+Request commands are likewise checked for a non-empty string before encoding or touching the
+transport, so invalid low-level client calls cannot become opaque response timeouts.
 DAP responses are correlated by both request sequence and command. A mismatched command is treated
 as a transport protocol failure: every pending request is rejected and both byte queues are closed
 instead of resolving a request with another command's body. Response envelopes are also validated

@@ -103,6 +103,30 @@ describe('DapClient', () => {
 		}
 	);
 
+	it.each([
+		['empty', ''],
+		['non-string', 42 as unknown as string]
+	] as const)('rejects a request command that is %s before sending', async (_label, command) => {
+		const inputDescriptor = createSharedByteQueue(4096, 44);
+		const outputDescriptor = createSharedByteQueue(4096, 44);
+		const input = new SharedByteQueue(inputDescriptor);
+		const client = new DapClient({
+			input: inputDescriptor,
+			output: outputDescriptor,
+			requestTimeoutMs: 25
+		}).start();
+
+		try {
+			await expect(client.request(command)).rejects.toThrow(
+				/DAP request command must be a non-empty string/u
+			);
+			expect(input.available).toBe(0);
+			expect(input.closed).toBe(false);
+		} finally {
+			await client.close();
+		}
+	});
+
 	it('rejects unencodable requests before registering pending transport state', async () => {
 		const inputDescriptor = createSharedByteQueue(4096, 38);
 		const outputDescriptor = createSharedByteQueue(4096, 38);
