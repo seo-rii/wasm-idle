@@ -20,6 +20,16 @@ describe('SharedByteQueue', () => {
 		);
 	});
 
+	it('rejects a stale generation when reading closed state', () => {
+		const descriptor = createSharedByteQueue(4096, 14);
+		const queue = new SharedByteQueue(descriptor);
+		const header = new Int32Array(descriptor.control);
+
+		Atomics.store(header, 6, 15);
+
+		expect(() => queue.closed).toThrow(/stale shared byte queue generation/u);
+	});
+
 	it('preserves bytes across partial writes and wrap-around reads', () => {
 		const descriptor = createSharedByteQueue(4096, 7);
 		const queue = new SharedByteQueue(descriptor);

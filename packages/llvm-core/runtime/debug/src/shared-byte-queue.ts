@@ -83,6 +83,7 @@ export class SharedByteQueue {
 	}
 
 	get closed() {
+		this.assertGeneration();
 		return Atomics.load(this.header, STATE) !== 0;
 	}
 
