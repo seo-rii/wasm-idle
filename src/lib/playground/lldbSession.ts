@@ -594,6 +594,21 @@ export class LldbSandboxSession {
 			return;
 		}
 		if (event.event === 'continued') {
+			if (
+				typeof event.body !== 'object' ||
+				event.body === null ||
+				Array.isArray(event.body)
+			) {
+				invalidDapPayload('continued event', 'body', 'expected an object');
+			}
+			const body = event.body as Record<string, unknown>;
+			assertDapPositiveSafeInteger(body.threadId, 'continued event', 'threadId');
+			if (
+				body.allThreadsContinued !== undefined &&
+				typeof body.allThreadsContinued !== 'boolean'
+			) {
+				invalidDapPayload('continued event', 'allThreadsContinued', 'expected a boolean');
+			}
 			this.stateVersion += 1;
 			return;
 		}

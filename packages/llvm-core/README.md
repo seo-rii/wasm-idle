@@ -132,10 +132,11 @@ parsing. Malformed `scopes`, `variables`, `readMemory`, or `evaluate` data raise
 stops the debug view, and disposes both workers. In particular, memory data must be valid Base64 and
 cannot exceed the requested byte count; expression fallback to `?` applies only to ordinary LLDB
 evaluation failures, not to a malformed successful response.
-Stopped-state publication has the same boundary: `stopped` and `exited` event fields plus the
-follow-up `threads` and `stackTrace` responses are checked before they can change the selected
-thread, frame, source location, call stack, or process exit code. A malformed value fails and
-disposes the live session instead of publishing a corrupt pause or exit snapshot.
+Stopped-state publication has the same boundary: `stopped`, `continued`, and `exited` event fields
+plus the follow-up `threads` and `stackTrace` responses are checked before they can change the
+selected thread, frame, source location, call stack, stopped-snapshot generation, or process exit
+code. A malformed value fails and disposes the live session instead of publishing a corrupt pause,
+resume, or exit snapshot.
 `BrowserLldbSession` also normalizes every resolved breakpoint before updating its cache. A
 malformed current `setBreakpoints` response rejects with the exported `DapProtocolError`; a stale
 response remains ignored, while an omitted per-line result stays unverified at its requested

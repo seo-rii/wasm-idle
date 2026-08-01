@@ -1153,6 +1153,44 @@ describe('LldbSandboxSession', () => {
 		expect(events.filter((event) => event.type === 'stop')).toHaveLength(1);
 	});
 
+	it('fails before a malformed continued event can change the live session state', async () => {
+		const events: Array<{ type: string }> = [];
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		const completionError = completion.then(
+			() => null,
+			(error: unknown) => error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		runtimeState.session!.emit({
+			event: 'continued',
+			body: { threadId: 0, allThreadsContinued: 'yes' }
+		});
+		runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+
+		await expect(completionError).resolves.toBeInstanceOf(ProtocolError);
+		expect(runtimeState.session!.disposeCount).toBe(1);
+		expect(events.filter((event) => event.type === 'pause')).toHaveLength(0);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(1);
+	});
+
 	it('keeps a fast target exit successful when disposal rejects in-flight initialization', async () => {
 		let rejectInitialize!: (error: Error) => void;
 		runtimeState.initializeGate = new Promise<void>((_resolve, reject) => {
