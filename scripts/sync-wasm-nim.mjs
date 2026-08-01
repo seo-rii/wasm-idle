@@ -103,6 +103,7 @@ async function resolveStaticSourceDir(sourceDir) {
 	throw new Error(`Nim WASM source assets were not found under ${resolved}`);
 }
 
+/** @param {string} staticSourceDir */
 async function findOptionalSourceRoot(staticSourceDir) {
 	let current = path.resolve(staticSourceDir);
 	for (let depth = 0; depth < 4; depth += 1) {
@@ -186,6 +187,7 @@ async function writeRuntimeManifest(targetDir, fingerprint, files) {
 	);
 }
 
+/** @param {string} source */
 function patchClangJs(source) {
 	const match = source.match(/a="([A-Za-z0-9+/=]+)"/);
 	if (!match) throw new Error('clang.js did not contain the embedded worker payload.');

@@ -23,10 +23,12 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 );
 const DEFAULT_SHARED_LLD_DIR = path.resolve(REPO_ROOT, 'static', 'shared', 'emscripten-lld');
 
+/** @param {string} sourcePath */
 function shouldSkipCopy(sourcePath) {
 	return sourcePath.endsWith('.d.ts') || sourcePath.endsWith('.tsbuildinfo');
 }
 
+/** @param {string} sourceDir @param {string} targetDir */
 async function copyDirectory(sourceDir, targetDir) {
 	const entries = await readdir(sourceDir, { withFileTypes: true });
 	for (const entry of entries) {
@@ -42,8 +44,10 @@ async function copyDirectory(sourceDir, targetDir) {
 	}
 }
 
+/** @param {string} rootDir @returns {Promise<string[]>} */
 async function listFiles(rootDir) {
 	const entries = await readdir(rootDir, { withFileTypes: true });
+	/** @type {string[]} */
 	const files = [];
 	for (const entry of entries) {
 		const entryPath = path.join(rootDir, entry.name);
@@ -57,6 +61,7 @@ async function listFiles(rootDir) {
 	return files.sort();
 }
 
+/** @param {string} sourceDir @param {string[]} additionalFiles */
 async function computeBundleFingerprint(sourceDir, additionalFiles = []) {
 	const hash = createHash('sha256');
 	for (const filePath of await listFiles(sourceDir)) {
@@ -74,6 +79,7 @@ async function computeBundleFingerprint(sourceDir, additionalFiles = []) {
 	return hash.digest('hex').slice(0, 16);
 }
 
+/** @param {string} versionModulePath @param {string} fingerprint */
 async function writeVersionModule(versionModulePath, fingerprint) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
 	const moduleSource = `export const WASM_D_ASSET_VERSION = ${JSON.stringify(fingerprint)};\n`;
@@ -144,6 +150,14 @@ export async function syncWasmDDist({
 	});
 	const manifestPath = path.join(targetDir, 'runtime', 'runtime-manifest.v1.json');
 	const runtimeBuildPath = path.join(targetDir, 'runtime', 'runtime-build.json');
+	/**
+	 * @type {{
+	 *   assets?: Array<{ asset: string }>;
+	 *   manifestSha256?: string;
+	 *   sharedLlvmProfiles?: unknown[];
+	 *   [key: string]: unknown;
+	 * }}
+	 */
 	const runtimeBuild = JSON.parse(await readFile(runtimeBuildPath, 'utf8'));
 	if (Array.isArray(runtimeBuild.assets)) {
 		runtimeBuild.assets = runtimeBuild.assets.filter(

@@ -47,10 +47,12 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	'wasmOcamlVersion.ts'
 );
 
+/** @param {string} sourcePath */
 function shouldSkipCopy(sourcePath) {
 	return sourcePath.endsWith('.d.ts') || sourcePath.endsWith('.tsbuildinfo');
 }
 
+/** @param {string} sourceDir @param {string} targetDir */
 async function copyDirectory(sourceDir, targetDir) {
 	const entries = await readdir(sourceDir, { withFileTypes: true });
 
@@ -68,8 +70,10 @@ async function copyDirectory(sourceDir, targetDir) {
 	}
 }
 
+/** @param {string} rootDir @returns {Promise<string[]>} */
 async function listFiles(rootDir) {
 	const entries = await readdir(rootDir, { withFileTypes: true });
+	/** @type {string[]} */
 	const files = [];
 	for (const entry of entries) {
 		const entryPath = path.join(rootDir, entry.name);
@@ -85,6 +89,7 @@ async function listFiles(rootDir) {
 	return files.sort();
 }
 
+/** @param {string[]} rootDirs */
 async function computeBundleFingerprint(rootDirs) {
 	const hash = createHash('sha256');
 	for (const rootDir of rootDirs) {
@@ -102,6 +107,7 @@ async function computeBundleFingerprint(rootDirs) {
 	return hash.digest('hex').slice(0, 16);
 }
 
+/** @param {string} versionModulePath @param {string} fingerprint */
 async function writeVersionModule(versionModulePath, fingerprint) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
 	const moduleSource = `export const WASM_OCAML_ASSET_VERSION = '${fingerprint}';\n`;
@@ -110,6 +116,7 @@ async function writeVersionModule(versionModulePath, fingerprint) {
 	await writeFile(versionModulePath, moduleSource, 'utf8');
 }
 
+/** @param {string} nativeWorkerPath */
 async function validateBrowserNativeWorker(nativeWorkerPath) {
 	const source = await readFile(nativeWorkerPath, 'utf8');
 	if (!source.includes('request.binaryenTools') || !source.includes('runBinaryenTool')) {

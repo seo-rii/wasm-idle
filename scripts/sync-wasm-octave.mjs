@@ -33,22 +33,27 @@ const ENTRY_SCRIPT_FILE = 'bin/octave-cli-10.3.0.js';
 const ENTRY_WASM_FILE = 'bin/octave-cli.wasm';
 const REQUIRED_RUNTIME_FILES = [ENTRY_SOURCE_FILE, ENTRY_WASM_FILE];
 
+/** @param {string} filePath */
 function toPosixPath(filePath) {
 	return filePath.split(path.sep).join('/');
 }
 
+/** @param {string} filePath */
 async function fileExists(filePath) {
 	const fileStats = await stat(filePath).catch(() => null);
 	return !!fileStats?.isFile();
 }
 
+/** @param {string} filePath */
 async function directoryExists(filePath) {
 	const fileStats = await stat(filePath).catch(() => null);
 	return !!fileStats?.isDirectory();
 }
 
+/** @param {string} rootDir @param {string} relativeDir @returns {Promise<string[]>} */
 async function listFiles(rootDir, relativeDir = '') {
 	const entries = await readdir(path.join(rootDir, relativeDir), { withFileTypes: true });
+	/** @type {string[]} */
 	const files = [];
 	for (const entry of entries) {
 		const relativePath = path.join(relativeDir, entry.name);
@@ -61,6 +66,7 @@ async function listFiles(rootDir, relativeDir = '') {
 	return files.sort();
 }
 
+/** @param {string} url @param {string} targetPath */
 async function downloadFile(url, targetPath) {
 	const response = await fetch(url);
 	if (!response.ok) {
@@ -70,6 +76,7 @@ async function downloadFile(url, targetPath) {
 	await writeFile(targetPath, Buffer.from(await response.arrayBuffer()));
 }
 
+/** @param {string} archivePath @param {string} targetDir */
 function extractTarBzip2(archivePath, targetDir) {
 	const result = spawnSync('tar', ['-xjf', archivePath, '-C', targetDir], {
 		stdio: 'pipe',
@@ -82,6 +89,7 @@ function extractTarBzip2(archivePath, targetDir) {
 	}
 }
 
+/** @param {string} cacheDir @param {string} packageUrl */
 async function ensureDefaultSourceDir(cacheDir, packageUrl) {
 	const archivePath = path.join(cacheDir, OCTAVE_PACKAGE_FILE);
 	const extractDir = path.join(cacheDir, OCTAVE_PACKAGE_FILE.replace(/\.tar\.bz2$/, ''));
@@ -96,6 +104,7 @@ async function ensureDefaultSourceDir(cacheDir, packageUrl) {
 	return extractDir;
 }
 
+/** @param {string} relativePath */
 function isRuntimeFile(relativePath) {
 	if (REQUIRED_RUNTIME_FILES.includes(relativePath)) return true;
 	if (relativePath.startsWith(`lib/octave/${OCTAVE_VERSION}/`)) {
@@ -107,6 +116,7 @@ function isRuntimeFile(relativePath) {
 	);
 }
 
+/** @param {string} sourceDir @returns {Promise<string[]>} */
 async function collectRuntimeFiles(sourceDir) {
 	for (const fileName of REQUIRED_RUNTIME_FILES) {
 		if (!(await fileExists(path.join(sourceDir, fileName)))) {
@@ -122,17 +132,20 @@ async function collectRuntimeFiles(sourceDir) {
 	return (await listFiles(sourceDir)).filter(isRuntimeFile);
 }
 
+/** @param {string} sourceFileName @returns {string[]} */
 function targetRuntimeFileNames(sourceFileName) {
 	if (sourceFileName === ENTRY_SOURCE_FILE) return [ENTRY_SOURCE_FILE, ENTRY_SCRIPT_FILE];
 	return [sourceFileName];
 }
 
+/** @param {string} filePath */
 async function sha256File(filePath) {
 	return createHash('sha256')
 		.update(await readFile(filePath))
 		.digest('hex');
 }
 
+/** @param {string} versionModulePath @param {string} fingerprint */
 async function writeVersionModule(versionModulePath, fingerprint) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
 	const moduleSource = `export const WASM_OCTAVE_ASSET_VERSION = '${fingerprint}';\n`;
@@ -141,6 +154,7 @@ async function writeVersionModule(versionModulePath, fingerprint) {
 	await writeFile(versionModulePath, moduleSource, 'utf8');
 }
 
+/** @param {string} targetDir @param {string[]} files @param {string} runnerWorkerPath */
 async function computeFingerprint(targetDir, files, runnerWorkerPath) {
 	const hash = createHash('sha256');
 	for (const fileName of files) {
@@ -158,6 +172,7 @@ async function computeFingerprint(targetDir, files, runnerWorkerPath) {
 	return hash.digest('hex').slice(0, 16);
 }
 
+/** @param {string} targetDir @param {string[]} files @param {string} fingerprint */
 async function writeRuntimeManifest(targetDir, files, fingerprint) {
 	const manifestFiles = [];
 	for (const fileName of files) {
