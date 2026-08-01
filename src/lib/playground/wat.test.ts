@@ -160,6 +160,64 @@ describe('WAT sandbox', () => {
 		await expect(thirdRun).resolves.toBe(true);
 	});
 
+	it('rejects a pre-aborted WAT run without changing worker or run state', async () => {
+		const sandbox = new Wat();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const controller = new AbortController();
+		const reason = new Error('do not start WAT');
+		controller.abort(reason);
+
+		await expect(
+			sandbox.run('(module)', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(worker.postMessage).toHaveBeenCalledTimes(1);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+
+		await expect(sandbox.run('(module)', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('cancels an active WAT run with the caller reason and permits a clean retry', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new Wat();
+		await sandbox.load('/absproxy/5173');
+		const oldWorker = workerInstances[0];
+		const controller = new AbortController();
+		const reason = new Error('stop active WAT');
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const running = sandbox.run('(module)', false, true, undefined, [], {
+			signal: controller.signal
+		});
+		const abortRegistration = addEventListener.mock.calls.find(([type]) => type === 'abort');
+
+		controller.abort(reason);
+		await expect(running).rejects.toBe(reason);
+		expect(oldWorker.terminate).toHaveBeenCalledOnce();
+		expect(abortRegistration).toBeDefined();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
+		expect(sandbox.exit).toBe(true);
+
+		suppressAutoRunAck = false;
+		await sandbox.load('/absproxy/5173');
+		const replacementWorker = workerInstances[1];
+		const retryController = new AbortController();
+		await expect(
+			sandbox.run('(module)', false, true, undefined, [], {
+				signal: retryController.signal
+			})
+		).resolves.toBe(true);
+		const settledUid = sandbox.uid;
+		retryController.abort(new Error('late WAT abort'));
+		expect(sandbox.uid).toBe(settledUid);
+		expect(replacementWorker.terminate).not.toHaveBeenCalled();
+	});
+
 	it('keeps a replacement worker handler when a terminated run posts a stale message', async () => {
 		suppressAutoRunAck = true;
 		const sandbox = new Wat();
