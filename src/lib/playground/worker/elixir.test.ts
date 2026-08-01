@@ -316,7 +316,8 @@ describe('Elixir worker', () => {
 	});
 
 	it('cancels an unsuccessful bundle response before reporting it', async () => {
-		const bodyCancel = vi.fn(async () => undefined);
+		const bodyCancel = vi.fn(() => new Promise<void>(() => undefined));
+		const bundleUrl = new URL('/runtime/elixir/bundle.avm', globalThis.location.href).href;
 		(globalThis as any).fetch.mockResolvedValueOnce({
 			body: { cancel: bodyCancel },
 			headers: new Headers(),
@@ -326,17 +327,30 @@ describe('Elixir worker', () => {
 			url: ''
 		});
 		await import('./elixir');
-		await (globalThis as any).self.onmessage({
+		const handled = (globalThis as any).self.onmessage({
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
 				log: false
 			}
 		});
+		await expect(
+			Promise.race([
+				handled.then(() => 'handled'),
+				new Promise<string>((resolve) => {
+					setTimeout(() => resolve('timed out'), 100);
+				})
+			])
+		).resolves.toBe('handled');
 
 		expect(bodyCancel).toHaveBeenCalledOnce();
+		expect(bodyCancel).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: `failed to load Elixir bundle from ${bundleUrl}: 503`
+			})
+		);
 		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
-			error: 'Failed to fetch Elixir bundle: 503 Unavailable'
+			error: `failed to load Elixir bundle from ${bundleUrl}: 503`
 		});
 	});
 
@@ -366,7 +380,7 @@ describe('Elixir worker', () => {
 	});
 
 	it('cancels an unknown-length stream when it crosses the bundle byte limit', async () => {
-		const readerCancel = vi.fn(async () => undefined);
+		const readerCancel = vi.fn(() => new Promise<void>(() => undefined));
 		const releaseLock = vi.fn();
 		const read = vi.fn().mockResolvedValueOnce({
 			done: false,
@@ -383,15 +397,28 @@ describe('Elixir worker', () => {
 			url: ''
 		});
 		await import('./elixir');
-		await (globalThis as any).self.onmessage({
+		const handled = (globalThis as any).self.onmessage({
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
 				log: false
 			}
 		});
+		await expect(
+			Promise.race([
+				handled.then(() => 'handled'),
+				new Promise<string>((resolve) => {
+					setTimeout(() => resolve('timed out'), 100);
+				})
+			])
+		).resolves.toBe('handled');
 
 		expect(readerCancel).toHaveBeenCalledOnce();
+		expect(readerCancel).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: 'Elixir bundle exceeds the 134217728 byte limit'
+			})
+		);
 		expect(releaseLock).toHaveBeenCalledOnce();
 		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
 			error: 'Elixir bundle exceeds the 134217728 byte limit'

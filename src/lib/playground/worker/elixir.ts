@@ -1,4 +1,5 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch';
 
 declare var self: any;
 
@@ -16,7 +17,6 @@ const workerHost = {
 const popcornBrowserGlobal = ['globalThis', 'window'].join('.');
 const popcornParentGlobal = [popcornBrowserGlobal, 'parent'].join('.');
 const workerHostGlobal = 'globalThis.__wasmIdleElixirWorkerHost';
-const DEFAULT_BUNDLE_BUFFER_BYTES = 64 * 1024;
 const MAX_ELIXIR_BUNDLE_BYTES = 128 * 1024 * 1024;
 
 self.document = workerDocument;
@@ -403,125 +403,11 @@ async function loadRuntime(nextBundleUrl: string, log: boolean) {
 			throw new Error(`Elixir bundle URL must not include a fragment: ${nextBundleUrl}`);
 		}
 
-		const response = await fetch(requestUrl.href, {
-			credentials: 'omit',
-			redirect: 'error',
-			referrerPolicy: 'no-referrer'
+		const bundleBytes = await fetchRuntimeAssetBytes({
+			url: requestUrl.href,
+			label: 'Elixir bundle',
+			maxAssetBytes: MAX_ELIXIR_BUNDLE_BYTES
 		});
-		if (response.url) {
-			let responseUrl: URL;
-			try {
-				responseUrl = new URL(response.url);
-			} catch {
-				try {
-					await response.body?.cancel();
-				} catch {
-					// Preserve the URL validation failure.
-				}
-				throw new Error(`Elixir bundle response URL is invalid: ${response.url}`);
-			}
-			if (responseUrl.href !== requestUrl.href) {
-				try {
-					await response.body?.cancel();
-				} catch {
-					// Preserve the redirect/substitution failure.
-				}
-				throw new Error(
-					`Elixir bundle response URL mismatch: expected ${requestUrl.href}, received ${responseUrl.href}`
-				);
-			}
-		}
-		if (!response.ok) {
-			try {
-				await response.body?.cancel();
-			} catch {
-				// Preserve the HTTP failure.
-			}
-			throw new Error(
-				`Failed to fetch Elixir bundle: ${response.status} ${response.statusText}`
-			);
-		}
-
-		const rawContentLength = response.headers.get('content-length');
-		let contentLength: number | undefined;
-		if (rawContentLength !== null) {
-			const parsedContentLength = Number(rawContentLength);
-			if (
-				!/^\d+$/u.test(rawContentLength.trim()) ||
-				!Number.isSafeInteger(parsedContentLength)
-			) {
-				try {
-					await response.body?.cancel();
-				} catch {
-					// Preserve the invalid-length failure.
-				}
-				throw new Error(`Elixir bundle has an invalid Content-Length: ${rawContentLength}`);
-			}
-			contentLength = parsedContentLength;
-		}
-		if (contentLength !== undefined && contentLength > MAX_ELIXIR_BUNDLE_BYTES) {
-			try {
-				await response.body?.cancel();
-			} catch {
-				// Preserve the size-limit failure.
-			}
-			throw new Error(`Elixir bundle exceeds the ${MAX_ELIXIR_BUNDLE_BYTES} byte limit`);
-		}
-
-		let bundleBytes: Uint8Array;
-		if (!response.body) {
-			bundleBytes = new Uint8Array(await response.arrayBuffer());
-			if (bundleBytes.byteLength > MAX_ELIXIR_BUNDLE_BYTES) {
-				throw new Error(`Elixir bundle exceeds the ${MAX_ELIXIR_BUNDLE_BYTES} byte limit`);
-			}
-		} else {
-			const reader = response.body.getReader();
-			let readerCancelled = false;
-			let receivedLength = 0;
-			let bytes = new Uint8Array(contentLength || DEFAULT_BUNDLE_BUFFER_BYTES);
-			try {
-				while (true) {
-					const { done, value } = await reader.read();
-					if (done) break;
-					if (!value) continue;
-					const nextLength = receivedLength + value.byteLength;
-					if (nextLength > MAX_ELIXIR_BUNDLE_BYTES) {
-						try {
-							await reader.cancel();
-						} catch {
-							// Preserve the size-limit failure.
-						}
-						readerCancelled = true;
-						throw new Error(
-							`Elixir bundle exceeds the ${MAX_ELIXIR_BUNDLE_BYTES} byte limit`
-						);
-					}
-					if (nextLength > bytes.byteLength) {
-						const nextCapacity = Math.min(
-							MAX_ELIXIR_BUNDLE_BYTES,
-							Math.max(nextLength, bytes.byteLength * 2)
-						);
-						const grown = new Uint8Array(nextCapacity);
-						grown.set(bytes.subarray(0, receivedLength));
-						bytes = grown;
-					}
-					bytes.set(value, receivedLength);
-					receivedLength = nextLength;
-				}
-			} catch (error) {
-				if (!readerCancelled) {
-					try {
-						await reader.cancel();
-					} catch {
-						// Preserve the stream failure.
-					}
-				}
-				throw error;
-			} finally {
-				reader.releaseLock();
-			}
-			bundleBytes = bytes.slice(0, receivedLength);
-		}
 		return await startVm(new Int8Array(bundleBytes), requestUrl.href, log);
 	})();
 	return await runtimePromise;
