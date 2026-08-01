@@ -1610,8 +1610,8 @@ function extractStringArrayFromExportedConst(source, fileName, exportName) {
 	const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
 	/** @type {Map<string, import('typescript').Expression>} */
 	const initializers = new Map();
-	/** @type {import('typescript').Expression | null} */
-	let exportedInitializer = null;
+	/** @type {Map<string, import('typescript').Expression>} */
+	const exportedInitializers = new Map();
 	/** @param {import('typescript').Node} node */
 	function visit(node) {
 		if (ts.isVariableStatement(node)) {
@@ -1622,13 +1622,14 @@ function extractStringArrayFromExportedConst(source, fileName, exportName) {
 				if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
 				initializers.set(declaration.name.text, declaration.initializer);
 				if (exported && declaration.name.text === exportName) {
-					exportedInitializer = declaration.initializer;
+					exportedInitializers.set(declaration.name.text, declaration.initializer);
 				}
 			}
 		}
 		ts.forEachChild(node, visit);
 	}
 	visit(sourceFile);
+	const exportedInitializer = exportedInitializers.get(exportName);
 	if (!exportedInitializer) {
 		throw new Error(`Could not find exported const ${exportName} in ${fileName}`);
 	}
