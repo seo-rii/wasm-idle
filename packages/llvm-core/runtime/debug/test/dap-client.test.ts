@@ -604,6 +604,31 @@ describe('DapClient', () => {
 		await client.close();
 	});
 
+	it('continues cleanup when one queue generation becomes stale', async () => {
+		const inputDescriptor = createSharedByteQueue(4096, 45);
+		const outputDescriptor = createSharedByteQueue(4096, 45);
+		const input = new SharedByteQueue(inputDescriptor);
+		const output = new SharedByteQueue(outputDescriptor);
+		const client = new DapClient({
+			input: inputDescriptor,
+			output: outputDescriptor,
+			requestTimeoutMs: 25
+		}).start();
+		const request = client.request('threads');
+		await input.read(new Uint8Array(256));
+		Atomics.store(new Int32Array(inputDescriptor.control), 6, 46);
+		const shutdown = new Error('expected DAP shutdown');
+
+		const [closeResult, requestResult] = await Promise.allSettled([
+			client.close(shutdown),
+			request
+		]);
+
+		expect(closeResult).toEqual({ status: 'fulfilled', value: undefined });
+		expect(requestResult).toEqual({ status: 'rejected', reason: shutdown });
+		expect(output.closed).toBe(true);
+	});
+
 	it('rejects pending requests when the response transport closes', async () => {
 		const inputDescriptor = createSharedByteQueue(4096, 6);
 		const outputDescriptor = createSharedByteQueue(4096, 6);

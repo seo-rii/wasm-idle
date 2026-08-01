@@ -279,8 +279,13 @@ export class DapClient implements DapRequestSession {
 
 	private fail(error: Error) {
 		if (!this.abortController.signal.aborted) this.abortController.abort(error);
-		if (!this.input.closed) this.input.close();
-		if (!this.output.closed) this.output.close();
+		for (const queue of [this.input, this.output]) {
+			try {
+				if (!queue.closed) queue.close();
+			} catch {
+				// Corrupt queue metadata must not prevent pending request cleanup.
+			}
+		}
 		for (const pending of this.pending.values()) {
 			if (pending.sendTimeout !== undefined) clearTimeout(pending.sendTimeout);
 			if (pending.responseTimeout !== undefined) clearTimeout(pending.responseTimeout);

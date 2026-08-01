@@ -141,10 +141,12 @@ Request commands are likewise checked for a non-empty string before encoding or 
 transport, so invalid low-level client calls cannot become opaque response timeouts.
 DAP responses are correlated by both request sequence and command. A mismatched command is treated
 as a transport protocol failure: every pending request is rejected and both byte queues are closed
-instead of resolving a request with another command's body. Response envelopes are also validated
-at runtime: `request_seq` must be a positive safe integer, `command` a non-empty string, and
-`success` a boolean. Malformed values fail the stream instead of timing out or treating a string
-such as `"false"` as success.
+instead of resolving a request with another command's body. Each queue close is best-effort and
+isolated, so stale or corrupt metadata in one queue cannot block closing the other queue or
+rejecting every pending request with the original failure. Response envelopes are also validated at
+runtime: `request_seq` must be a positive safe integer, `command` a non-empty string, and `success`
+a boolean. Malformed values fail the stream instead of timing out or treating a string such as
+`"false"` as success.
 Every incoming DAP message must also carry a positive safe-integer `seq` and a recognized
 `request`, `response`, or `event` type. Event names must be non-empty strings. Invalid common or
 event envelopes fail the stream before listener dispatch or request timeout can hide the protocol
