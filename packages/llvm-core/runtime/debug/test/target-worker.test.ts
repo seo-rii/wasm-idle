@@ -96,6 +96,63 @@ describe('WAMR target worker launch', () => {
 		workerMocks.lifecycle = 'exit';
 	});
 
+	it.each([
+		{
+			name: 'working directory',
+			corruption: { cwd: '/outside' },
+			error: 'WAMR working directory must be /workspace'
+		},
+		{
+			name: 'argument list',
+			corruption: { args: 'not-an-array' },
+			error: 'WAMR program arguments must be an array'
+		},
+		{
+			name: 'argument value',
+			corruption: { args: [42] },
+			error: 'WAMR program arguments must be strings'
+		},
+		{
+			name: 'environment object',
+			corruption: { env: ['MODE=debug'] },
+			error: 'WAMR environment must be an object'
+		},
+		{
+			name: 'environment value',
+			corruption: { env: { MODE: 42 } },
+			error: 'invalid WAMR environment variable: MODE'
+		}
+	])(
+		'rejects an invalid direct-worker $name before loading WAMR',
+		async ({ corruption, error }) => {
+			const { handleTargetWorkerMessage } = await loadTargetWorker();
+			const message = initializeMessage(`target-worker-invalid-${error}`);
+			Object.assign(message, corruption);
+
+			handleTargetWorkerMessage(message);
+
+			await vi.waitFor(() =>
+				expect(workerMocks.postWorkerError).toHaveBeenCalledWith(
+					'target',
+					message.generation,
+					expect.objectContaining({ message: error })
+				)
+			);
+			expect(workerMocks.mountDebugFiles).not.toHaveBeenCalled();
+			expect(workerMocks.chdir).not.toHaveBeenCalled();
+
+			const recovery = initializeMessage(`${message.generation}-recovery`);
+			handleTargetWorkerMessage(recovery);
+			await vi.waitFor(() =>
+				expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
+					type: 'ready',
+					worker: 'target',
+					generation: recovery.generation
+				})
+			);
+		}
+	);
+
 	it('passes cwd, environment, and guest arguments to the debug runtime', async () => {
 		const { handleTargetWorkerMessage } = await loadTargetWorker();
 		const message = initializeMessage('target-worker-launch');

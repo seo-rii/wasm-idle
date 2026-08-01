@@ -25,6 +25,43 @@ function closeQueue(queue: SharedByteQueue | undefined) {
 
 async function initialize(message: TargetWorkerInitializeMessage) {
 	if (activeGeneration) throw new Error('target worker is already initialized');
+	const cwdValue: unknown = message.cwd;
+	if (cwdValue !== undefined && cwdValue !== '/workspace') {
+		throw new RangeError('WAMR working directory must be /workspace');
+	}
+	const cwd = '/workspace';
+	const argsValue: unknown = message.args;
+	if (argsValue !== undefined && !Array.isArray(argsValue)) {
+		throw new TypeError('WAMR program arguments must be an array');
+	}
+	const args = [...(argsValue ?? [])];
+	for (const argument of args) {
+		if (typeof argument !== 'string') {
+			throw new TypeError('WAMR program arguments must be strings');
+		}
+		if (argument.includes('\0')) {
+			throw new Error('WAMR program arguments cannot contain NUL bytes');
+		}
+	}
+	const envValue: unknown = message.env;
+	if (
+		envValue !== undefined &&
+		(typeof envValue !== 'object' || envValue === null || Array.isArray(envValue))
+	) {
+		throw new TypeError('WAMR environment must be an object');
+	}
+	const environmentArgs = Object.entries(envValue ?? {}).map(([key, value]) => {
+		if (
+			!key ||
+			key.includes('=') ||
+			key.includes('\0') ||
+			typeof value !== 'string' ||
+			value.includes('\0')
+		) {
+			throw new Error(`invalid WAMR environment variable: ${key || '<empty>'}`);
+		}
+		return `--env=${key}=${value}`;
+	});
 	activeGeneration = message.generation;
 	const transport = createTransportBindings({
 		generation: message.generation,
@@ -107,20 +144,7 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 		}
 	});
 	mountDebugFiles(module, message.module, message.workspaceFiles);
-	const cwd = message.cwd ?? '/workspace';
 	module.FS.chdir(cwd);
-	const args = message.args ?? [];
-	for (const argument of args) {
-		if (argument.includes('\0')) {
-			throw new Error('WAMR program arguments cannot contain NUL bytes');
-		}
-	}
-	const environmentArgs = Object.entries(message.env ?? {}).map(([key, value]) => {
-		if (!key || key.includes('=') || key.includes('\0') || value.includes('\0')) {
-			throw new Error(`invalid WAMR environment variable: ${key || '<empty>'}`);
-		}
-		return `--env=${key}=${value}`;
-	});
 	const stopMemoryTelemetry = startLinearMemoryTelemetry(module, 'target', message.generation);
 	try {
 		postWorkerMessage({

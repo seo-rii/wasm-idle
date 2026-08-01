@@ -117,8 +117,10 @@ working directory are forwarded to WAMR rather than being applied only to LLDB's
 Launch configuration is validated before runtime assets are fetched or workers are created: the
 program and working directory stay at their reserved `/workspace` paths, entry pause is boolean,
 arguments are strings without NUL bytes, and environment keys/values follow WAMR's `--env` format.
-The target Worker repeats the byte-level argument and environment checks as a defense-in-depth
-boundary for direct worker messages.
+The target Worker repeats the working-directory, collection-shape, value-type, and byte-level
+argument/environment checks as a defense-in-depth boundary for direct worker messages. It performs
+that validation before claiming the session generation, creating transports, loading WAMR, or
+mounting files, so a rejected message neither executes runtime code nor leaves the Worker occupied.
 The same preflight-validated `/workspace/...` files provided to LLDB are mounted into WAMR's
 MEMFS before launch, so guest WASI file access observes the workspace used to compile the DWARF
 artifact. File paths must remain canonical beneath `/workspace`, and `/workspace/program.wasm` is
