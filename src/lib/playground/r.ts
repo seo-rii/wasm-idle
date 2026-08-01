@@ -28,6 +28,7 @@ class R implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private activeLoadCleanup: (() => void) | null = null;
 	private activeRunCleanup: (() => void) | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'R',
@@ -46,46 +47,120 @@ class R implements Sandbox {
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		return this.workerSession.load(async (resolve, reject) => {
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const nextBaseUrl = resolveRBaseUrl(runtimeAssets, currentUrl);
-			if (!nextBaseUrl) {
-				return reject(
-					'R runtime is not configured. Set PUBLIC_WASM_R_BASE_URL or runtimeAssets.r.baseUrl.'
-				);
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ?? new DOMException('R runtime startup aborted', 'AbortError')
+			);
+		}
+		if (this.activeLoadCleanup || !this.exit) {
+			return Promise.reject(
+				new BusyError('R runtime already has an active operation', { runtimeId: 'R' })
+			);
+		}
+		let onAbort: (() => void) | undefined;
+		let cleanedUp = false;
+		const cleanup = () => {
+			if (cleanedUp) return;
+			cleanedUp = true;
+			if (signal && onAbort) {
+				try {
+					signal.removeEventListener('abort', onAbort);
+				} catch {
+					// Cleanup must not replace the startup result.
+				}
 			}
-			const needsWorkerReset = !this.worker || this.baseUrl !== nextBaseUrl;
-			this.baseUrl = nextBaseUrl;
-			if (needsWorkerReset && this.worker) {
-				this.workerSession.reset();
-			}
-			if (!this.worker) {
-				this.worker = new (await import('$lib/playground/worker/r?worker')).default();
-				this.workerSession.attach(this.worker);
-				this.worker.onmessage = (event: MessageEvent<any>) => {
-					reportWorkerProgress(progress, event.data?.progress);
-					if (event.data?.load) {
-						progress?.set?.(1);
-						resolve();
+			if (this.activeLoadCleanup === cleanup) this.activeLoadCleanup = null;
+		};
+		onAbort = signal
+			? () => {
+					if (this.activeLoadCleanup !== cleanup) {
+						cleanup();
+						return;
 					}
-					if (event.data?.error) reject(event.data.error);
-				};
-				this.worker.postMessage({
-					load: true,
-					baseUrl: this.baseUrl,
-					log: _log
-				});
-			} else {
-				progress?.set?.(1);
+					const reason =
+						signal.reason ??
+						new DOMException('R runtime startup aborted', 'AbortError');
+					cleanup();
+					this.workerSession.terminate(reason);
+				}
+			: undefined;
+		const loadPromise = this.workerSession.load(async (resolve, reject) => {
+			const resolveLoad = () => {
+				cleanup();
 				resolve();
+			};
+			const rejectLoad = (reason?: unknown) => {
+				cleanup();
+				reject(reason);
+			};
+			try {
+				if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
+				this.pendingInput = [];
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				const nextBaseUrl = resolveRBaseUrl(runtimeAssets, currentUrl);
+				if (!nextBaseUrl) {
+					return rejectLoad(
+						'R runtime is not configured. Set PUBLIC_WASM_R_BASE_URL or runtimeAssets.r.baseUrl.'
+					);
+				}
+				const needsWorkerReset = !this.worker || this.baseUrl !== nextBaseUrl;
+				this.baseUrl = nextBaseUrl;
+				if (needsWorkerReset && this.worker) {
+					this.workerSession.reset();
+				}
+				if (!this.worker) {
+					const WorkerConstructor = (await import('$lib/playground/worker/r?worker'))
+						.default;
+					if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
+					const worker = new WorkerConstructor();
+					if (this.activeLoadCleanup !== cleanup || signal?.aborted) {
+						worker.terminate();
+						return;
+					}
+					this.worker = worker;
+					this.workerSession.attach(worker);
+					worker.onmessage = (event: MessageEvent<any>) => {
+						if (
+							this.activeLoadCleanup !== cleanup ||
+							signal?.aborted ||
+							this.worker !== worker
+						) {
+							return;
+						}
+						reportWorkerProgress(progress, event.data?.progress);
+						if (event.data?.load) {
+							progress?.set?.(1);
+							if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
+							resolveLoad();
+						}
+						if (event.data?.error) rejectLoad(event.data.error);
+					};
+					worker.postMessage({
+						load: true,
+						baseUrl: this.baseUrl,
+						log: _log
+					});
+				} else {
+					progress?.set?.(1);
+					if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
+					resolveLoad();
+				}
+			} catch (error) {
+				rejectLoad(error);
 			}
 		});
+		this.activeLoadCleanup = cleanup;
+		if (signal && onAbort) {
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		}
+		return loadPromise.finally(cleanup);
 	}
 
 	write(input: string) {
@@ -120,12 +195,12 @@ class R implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		if (!this.worker) return Promise.reject('Worker not loaded');
-		if (!this.exit) {
+		if (this.activeLoadCleanup || !this.exit) {
 			return Promise.reject(
-				new BusyError('R runtime already has an active run', { runtimeId: 'R' })
+				new BusyError('R runtime already has an active operation', { runtimeId: 'R' })
 			);
 		}
+		if (!this.worker) return Promise.reject('Worker not loaded');
 		const worker = this.worker;
 		const signal = options.signal;
 		if (signal?.aborted) {

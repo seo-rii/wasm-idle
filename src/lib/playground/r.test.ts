@@ -249,6 +249,85 @@ describe('R sandbox', () => {
 		);
 	});
 
+	it('rejects a pre-aborted R startup without changing an existing worker', async () => {
+		const sandbox = new R();
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+		const worker = workerInstances[0];
+		worker.postMessage.mockClear();
+		const progress = { set: vi.fn() };
+		const controller = new AbortController();
+		const reason = new Error('R startup pre-aborted');
+		controller.abort(reason);
+
+		await expect(
+			sandbox.load(
+				{ r: { baseUrl: '/webr/test/' } },
+				'',
+				true,
+				[],
+				{ signal: controller.signal },
+				progress
+			)
+		).rejects.toBe(reason);
+
+		expect(sandbox.worker).toBe(worker);
+		expect(worker.postMessage).not.toHaveBeenCalled();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(progress.set).not.toHaveBeenCalled();
+	});
+
+	it('aborts an active R startup and ignores stale completion', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new R();
+		const progress = { set: vi.fn() };
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('R startup aborted');
+		const loading = sandbox.load(
+			{ r: { baseUrl: '/webr/test/' } },
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+
+		await expect(sandbox.load({ r: { baseUrl: '/webr/test/' } })).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'R'
+		});
+		await expect(sandbox.run('cat("too soon\\n")', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'R'
+		});
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+
+		controller.abort(reason);
+		await expect(loading).rejects.toBe(reason);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(progress.set).not.toHaveBeenCalled();
+
+		suppressAutoLoadAck = false;
+		const settledController = new AbortController();
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } }, '', true, [], {
+			signal: settledController.signal
+		});
+		const retryWorker = workerInstances.at(-1)!;
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+
+		settledController.abort(new Error('late startup abort'));
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+	});
+
 	it('writes queued terminal input when the worker requests stdin', async () => {
 		const sandbox = new R();
 		const worker = new MockWorker();
