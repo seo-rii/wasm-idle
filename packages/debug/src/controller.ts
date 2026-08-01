@@ -500,7 +500,15 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		if (!Number.isInteger(variablesReference) || variablesReference <= 0) return [];
 		const terminal = get(terminalStore);
 		if (!terminal?.debugVariables) return [];
-		const variables = await terminal.debugVariables(variablesReference, start, count);
+		const version = frameRequestVersion;
+		let variables: DebugVariable[];
+		try {
+			variables = await terminal.debugVariables(variablesReference, start, count);
+		} catch (error) {
+			if (version !== frameRequestVersion || !get(pausedStore)) return [];
+			throw error;
+		}
+		if (version !== frameRequestVersion || !get(pausedStore)) return [];
 		variablesByReferenceStore.update((current) => {
 			const next = new Map(current);
 			next.set(variablesReference, [...variables]);

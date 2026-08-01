@@ -421,6 +421,53 @@ describe('createDebugSessionController', () => {
 		]);
 	});
 
+	it.each(['success', 'failure'] as const)(
+		'discards a late lazy-variable %s after resume',
+		async (settlement) => {
+			let resolveVariables!: (variables: Array<{ name: string; value: string }>) => void;
+			let rejectVariables!: (error: Error) => void;
+			const debugVariables = vi.fn(
+				() =>
+					new Promise<Array<{ name: string; value: string }>>((resolve, reject) => {
+						resolveVariables = resolve;
+						rejectVariables = reject;
+					})
+			);
+			const controller = createDebugSessionController({
+				terminal: { debugVariables } as never
+			});
+			controller.handleEvent({
+				type: 'pause',
+				line: 7,
+				reason: 'breakpoint',
+				locals: [],
+				callStack: [{ id: 11, functionName: 'main', line: 7 }],
+				scopes: [
+					{
+						name: 'Locals',
+						variablesReference: 50,
+						expensive: false,
+						variables: []
+					}
+				]
+			});
+
+			const loading = controller.loadVariableChildren(50);
+			expect(debugVariables).toHaveBeenCalledWith(50, undefined, undefined);
+			controller.handleEvent({ type: 'resume', command: 'continue' });
+			if (settlement === 'success') {
+				resolveVariables([{ name: 'late', value: '1' }]);
+			} else {
+				rejectVariables(new Error('obsolete variable failure'));
+			}
+
+			await expect(loading).resolves.toEqual([]);
+			expect(controller.variablesByReference.has(50)).toBe(false);
+			expect(controller.locals).toEqual([]);
+			expect(controller.paused).toBe(false);
+		}
+	);
+
 	it('reads LLDB memory through the paused terminal session', async () => {
 		const debugReadMemory = vi.fn(async () => ({
 			address: '0x20',

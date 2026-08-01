@@ -551,6 +551,27 @@ describe('createAdapterDebugSessionController', () => {
 		expect(controller.selectedThreadId).toBe(1);
 	});
 
+	it('does not surface a child-variable failure after continue invalidates the stop', async () => {
+		const adapter = new FakeDebugAdapter();
+		adapter.threadsHandler = async () => [{ id: 1, name: 'main' }];
+		adapter.stackTraceHandler = async () => [{ id: 10, name: 'main', line: 1, column: 1 }];
+		adapter.scopesHandler = async () => [];
+		const childVariables = deferred<DebugVariable[]>();
+		adapter.variablesHandler = (variablesReference) =>
+			variablesReference === 50 ? childVariables.promise : Promise.resolve([]);
+		const controller = createAdapterDebugSessionController(adapter);
+
+		adapter.emit({ type: 'stopped', reason: 'breakpoint', threadId: 1 });
+		await vi.waitFor(() => expect(controller.selectedFrameId).toBe(10));
+		const loading = controller.loadVariableChildren(50);
+		adapter.emit({ type: 'continued', threadId: 1 });
+		childVariables.reject(new Error('obsolete variable failure'));
+
+		await expect(loading).resolves.toEqual([]);
+		expect(controller.variablesByReference.has(50)).toBe(false);
+		expect(controller.error).toBeNull();
+	});
+
 	it('does not clear a newer stop when an older resume request resolves late', async () => {
 		const adapter = new FakeDebugAdapter();
 		adapter.threadsHandler = async () => [{ id: 1, name: 'main' }];

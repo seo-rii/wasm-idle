@@ -37,6 +37,10 @@ Add the adapter method and its product-path tests before enabling the correspond
 
 `createAdapterDebugSessionController()` provides the shared view model. Variable children remain
 lazy through `variablesReference`; consumers should not serialize an entire LLDB variable tree.
+Both controller surfaces bind each lazy-variable request to the current stopped frame. Resume,
+disconnect, a newer stop, or another frame selection invalidates the request; a late success or
+failure resolves as an empty child list and cannot restore cleared locals or report an obsolete UI
+error.
 Supply an LLDB DAP session from `@wasm-idle/llvm-core/debug`. Runtime assets remain owned by the
 `wasm-llvm` producer and are deliberately excluded from this package.
 

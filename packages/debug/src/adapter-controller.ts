@@ -394,7 +394,8 @@ export function createAdapterDebugSessionController(adapter: DebugAdapter) {
 		try {
 			return await loadVariables(variablesReference, start, count, sessionToken, stopToken);
 		} catch (error) {
-			if (isCurrentStop(sessionToken, stopToken)) recordError(error);
+			if (!isCurrentStop(sessionToken, stopToken)) return [];
+			recordError(error);
 			throw error;
 		}
 	}
