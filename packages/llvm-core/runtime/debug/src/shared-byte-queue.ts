@@ -10,6 +10,7 @@ const GENERATION = 6;
 const CONTROL_LENGTH = 7;
 const MINIMUM_CAPACITY = 4 * 1024;
 const MAXIMUM_CAPACITY = 16 * 1024 * 1024;
+const MAXIMUM_GENERATION = 2_147_483_647;
 
 function validateCapacity(capacity: number) {
 	if (
@@ -24,6 +25,14 @@ function validateCapacity(capacity: number) {
 	}
 }
 
+function validateGeneration(generation: number) {
+	if (!Number.isInteger(generation) || generation < 1 || generation > MAXIMUM_GENERATION) {
+		throw new RangeError(
+			'shared byte queue generation must be an integer between 1 and 2147483647'
+		);
+	}
+}
+
 function sleep(milliseconds: number) {
 	return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -33,9 +42,7 @@ export function createSharedByteQueue(
 	generation = 1
 ): SharedByteQueueDescriptor {
 	validateCapacity(capacity);
-	if (!Number.isSafeInteger(generation) || generation <= 0) {
-		throw new RangeError('shared byte queue generation must be a positive integer');
-	}
+	validateGeneration(generation);
 	const control = new SharedArrayBuffer(CONTROL_LENGTH * Int32Array.BYTES_PER_ELEMENT);
 	const header = new Int32Array(control);
 	Atomics.store(header, CAPACITY, capacity);
@@ -67,6 +74,7 @@ export class SharedByteQueue {
 		this.bytes = new Uint8Array(descriptor.data);
 		this.capacity = this.bytes.byteLength;
 		validateCapacity(this.capacity);
+		validateGeneration(descriptor.generation);
 		this.generation = descriptor.generation;
 		if (Atomics.load(this.header, CAPACITY) !== this.capacity) {
 			throw new Error('shared-ring-v1 capacity metadata does not match its data buffer');

@@ -3,6 +3,23 @@ import { describe, expect, it, vi } from 'vitest';
 import { SharedByteQueue, createSharedByteQueue } from '../src/shared-byte-queue.js';
 
 describe('SharedByteQueue', () => {
+	it('restricts queue generations to positive signed 32-bit metadata', () => {
+		const maximum = createSharedByteQueue(4096, 2_147_483_647);
+
+		expect(new SharedByteQueue(maximum).generation).toBe(2_147_483_647);
+		expect(() => createSharedByteQueue(4096, 2_147_483_648)).toThrow(
+			/between 1 and 2147483647/u
+		);
+	});
+
+	it('validates descriptor generations before comparing shared metadata', () => {
+		const descriptor = createSharedByteQueue(4096, 13);
+
+		expect(() => new SharedByteQueue({ ...descriptor, generation: 1.5 })).toThrow(
+			/between 1 and 2147483647/u
+		);
+	});
+
 	it('preserves bytes across partial writes and wrap-around reads', () => {
 		const descriptor = createSharedByteQueue(4096, 7);
 		const queue = new SharedByteQueue(descriptor);
