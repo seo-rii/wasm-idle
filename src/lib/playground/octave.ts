@@ -7,6 +7,7 @@ import {
 	type CompilerDiagnostic,
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
+import { BusyError } from '@wasm-idle/core';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
@@ -42,6 +43,8 @@ class Octave implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	stdinWaiters: Array<() => void> = [];
+	private activeLoad = false;
+	private activeRun: symbol | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'Octave',
 		onDispose: (worker) => {
@@ -60,6 +63,15 @@ class Octave implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
+		if (this.activeLoad || this.activeRun) {
+			return Promise.reject(
+				new BusyError('Octave runtime already has an active operation', {
+					runtimeId: 'OCTAVE',
+					phase: this.activeLoad ? 'startup' : 'execute'
+				})
+			);
+		}
+		this.activeLoad = true;
 		return new Promise<void>((resolve) => {
 			this.pendingInput = [];
 			this.waitingForInput = false;
@@ -71,6 +83,8 @@ class Octave implements Sandbox {
 			this.manifestUrl = config.manifestUrl;
 			progress?.set?.(1);
 			resolve();
+		}).finally(() => {
+			this.activeLoad = false;
 		});
 	}
 
@@ -145,23 +159,58 @@ class Octave implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (this.activeLoad || this.activeRun) {
+			return Promise.reject(
+				new BusyError('Octave runtime already has an active operation', {
+					runtimeId: 'OCTAVE',
+					phase: this.activeLoad ? 'startup' : 'execute'
+				})
+			);
+		}
 		if (prepare) return Promise.resolve(true);
+		if (!this.baseUrl || !this.workerUrl || !this.manifestUrl) {
+			return Promise.reject('Octave runtime is not configured.');
+		}
+		let programArgs: string[];
+		try {
+			programArgs = resolveSandboxExecutionArgs('OCTAVE', args, options).programArgs;
+		} catch (error) {
+			return Promise.reject(error);
+		}
 
+		const runToken = Symbol('Octave run');
+		this.activeRun = runToken;
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.baseUrl || !this.workerUrl || !this.manifestUrl) {
-				return reject('Octave runtime is not configured.');
-			}
-			const { programArgs } = resolveSandboxExecutionArgs('OCTAVE', args, options);
 			const _uid = ++this.uid;
-			const operation = this.workerSession.beginRun(null, reject);
+			let released = false;
+			const release = () => {
+				if (released) return;
+				released = true;
+				if (this.activeRun === runToken) this.activeRun = null;
+			};
+			const rejectRun = (reason?: unknown) => {
+				release();
+				this.exit = true;
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				reject(reason);
+			};
+			const operation = this.workerSession.beginRun(null, rejectRun);
 			this.begin = Date.now();
 			this.collectStdinForRun(code, options)
 				.then((stdin) => {
-					if (_uid !== this.uid) return;
+					if (this.activeRun !== runToken || _uid !== this.uid) return;
 					const worker = this.createWorker();
-					worker.onmessage = (event: MessageEvent<OctaveWorkerMessage>) => {
-						if (_uid !== this.uid) return;
+					const handler = (event: MessageEvent<OctaveWorkerMessage>) => {
+						if (
+							this.activeRun !== runToken ||
+							this.worker !== worker ||
+							worker.onmessage !== handler ||
+							_uid !== this.uid
+						) {
+							return;
+						}
 						const { output, results, error, buffer, progress } = event.data;
 						if (buffer) {
 							this.waitingForInput = true;
@@ -170,22 +219,27 @@ class Octave implements Sandbox {
 						reportWorkerProgress(_prog, progress);
 						if (output) this.output?.(output);
 						if (results) {
+							if (worker.onmessage === handler) worker.onmessage = null;
+							this.workerSession.complete(operation);
+							release();
 							this.elapse = Date.now() - this.begin;
 							this.exit = true;
 							this.waitingForInput = false;
 							this.pendingEof = false;
-							this.workerSession.complete(operation);
 							resolve(true);
 						}
 						if (error) {
+							if (worker.onmessage === handler) worker.onmessage = null;
+							this.workerSession.complete(operation);
+							release();
 							this.elapse = Date.now() - this.begin;
 							this.exit = true;
 							this.waitingForInput = false;
 							this.pendingEof = false;
-							this.workerSession.complete(operation);
 							reject(error);
 						}
 					};
+					worker.onmessage = handler;
 					worker.postMessage({
 						run: true,
 						baseUrl: this.baseUrl,
@@ -200,8 +254,8 @@ class Octave implements Sandbox {
 					});
 				})
 				.catch((error) => {
-					this.workerSession.complete(operation);
-					reject(error);
+					if (this.activeRun !== runToken || _uid !== this.uid) return;
+					this.terminate(error);
 				});
 		});
 	}
@@ -210,12 +264,14 @@ class Octave implements Sandbox {
 		this.terminate();
 	}
 
-	terminate() {
+	terminate(reason: unknown = 'Process terminated') {
+		this.activeLoad = false;
+		this.activeRun = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
 		this.resolveStdinWaiters();
-		this.workerSession.terminate();
+		this.workerSession.terminate(reason);
 		this.exit = true;
 	}
 
@@ -226,7 +282,7 @@ class Octave implements Sandbox {
 		this.resolveStdinWaiters();
 		if (this.worker) this.worker.onmessage = null;
 		resetBufferedStdin(this.buffer);
-		if (!this.exit) {
+		if (!this.exit || this.activeLoad || this.activeRun) {
 			this.terminate();
 		}
 	}
