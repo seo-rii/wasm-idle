@@ -398,12 +398,19 @@ export class LldbSandboxSession {
 
 	async evaluate(expression: string) {
 		if (!this.supportsEvaluateExpressions || !this.activeFrameId) return '?';
+		const session = this.requireSession();
+		const stateVersion = this.stateVersion;
+		const scopeRequestVersion = this.scopeRequestVersion;
+		const frameId = this.activeFrameId;
 		try {
-			const response = await this.requireSession().request<unknown>('evaluate', {
+			const response = await session.request<unknown>('evaluate', {
 				expression,
-				frameId: this.activeFrameId,
+				frameId,
 				context: 'watch'
 			});
+			if (!this.isCurrentValueRequest(session, stateVersion, scopeRequestVersion)) {
+				return '?';
+			}
 			assertDapRecord(response, 'evaluate', 'body');
 			assertDapString(response.result, 'evaluate', 'result');
 			assertDapNonNegativeSafeInteger(
@@ -413,18 +420,27 @@ export class LldbSandboxSession {
 			);
 			return response.result;
 		} catch (error) {
+			if (!this.isCurrentValueRequest(session, stateVersion, scopeRequestVersion)) {
+				return '?';
+			}
 			this.rethrowProtocolError(error);
 			return '?';
 		}
 	}
 
 	async variables(variablesReference: number, start?: number, count?: number) {
+		const session = this.requireSession();
+		const stateVersion = this.stateVersion;
+		const scopeRequestVersion = this.scopeRequestVersion;
 		try {
-			const response = await this.requireSession().request<unknown>('variables', {
+			const response = await session.request<unknown>('variables', {
 				variablesReference,
 				...(start === undefined ? {} : { start }),
 				...(count === undefined ? {} : { count })
 			});
+			if (!this.isCurrentValueRequest(session, stateVersion, scopeRequestVersion)) {
+				return [];
+			}
 			return dapResponseCollection(response, 'variables', 'variables').map<DebugVariable>(
 				(variable, index) => {
 					const path = `variables[${index}]`;
@@ -452,6 +468,9 @@ export class LldbSandboxSession {
 				}
 			);
 		} catch (error) {
+			if (!this.isCurrentValueRequest(session, stateVersion, scopeRequestVersion)) {
+				return [];
+			}
 			this.rethrowProtocolError(error);
 			throw error;
 		}
@@ -493,12 +512,15 @@ export class LldbSandboxSession {
 		count: number
 	): Promise<DebugMemory | null> {
 		if (!this.supportsReadMemory) return null;
+		const session = this.requireSession();
+		const stateVersion = this.stateVersion;
 		try {
-			const response = await this.requireSession().request<unknown>('readMemory', {
+			const response = await session.request<unknown>('readMemory', {
 				memoryReference,
 				offset,
 				count
 			});
+			if (!this.isCurrentValueRequest(session, stateVersion)) return null;
 			assertDapRecord(response, 'readMemory', 'body');
 			assertDapString(response.address, 'readMemory', 'address');
 			const encodedData = response.data;
@@ -537,6 +559,7 @@ export class LldbSandboxSession {
 				unreadableBytes: unreadableBytes ?? 0
 			};
 		} catch (error) {
+			if (!this.isCurrentValueRequest(session, stateVersion)) return null;
 			this.rethrowProtocolError(error);
 			throw error;
 		}
@@ -773,6 +796,18 @@ export class LldbSandboxSession {
 					variables: []
 				};
 			}
+		);
+	}
+
+	private isCurrentValueRequest(
+		session: BrowserLldbSession,
+		stateVersion: number,
+		scopeRequestVersion?: number
+	) {
+		return (
+			this.session === session &&
+			this.stateVersion === stateVersion &&
+			(scopeRequestVersion === undefined || this.scopeRequestVersion === scopeRequestVersion)
 		);
 	}
 

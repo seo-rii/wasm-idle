@@ -143,6 +143,10 @@ resumed.
 Explicit frame selections are ordered independently as well. Only the newest successful `scopes`
 request can change the frame used by watch evaluation, while a protocol error from a superseded
 selection rejects only its original caller and does not dispose the live session.
+Lazy `variables`, watch `evaluate`, and `readMemory` calls also capture their stopped-state
+generation before sending DAP. Once the target resumes or the selected frame changes, late valid
+or malformed replies resolve to `[]`, `?`, or `null` respectively and cannot terminate the current
+session. A malformed reply for the current stopped state remains fatal.
 `BrowserLldbSession` also normalizes every resolved breakpoint before updating its cache. A
 malformed current `setBreakpoints` response rejects with the exported `DapProtocolError`; a stale
 response remains ignored, while an omitted per-line result stays unverified at its requested
