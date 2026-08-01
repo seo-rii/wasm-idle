@@ -10,11 +10,20 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_TINYGO_MODULE_URL: ''
 	}
 }));
+let suppressAutoLoadAck = false;
+let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
 
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
+	onerror: ((event: ErrorEvent) => void) | null = null;
+	onmessageerror: ((event: MessageEvent<any>) => void) | null = null;
 	postMessage = vi.fn((message: any) => {
+		if (onPostMessage) {
+			onPostMessage(this, message);
+			return;
+		}
 		if (message.load) {
+			if (suppressAutoLoadAck) return;
 			queueMicrotask(() => this.onmessage?.({ data: { load: true } } as MessageEvent<any>));
 			return;
 		}
@@ -61,6 +70,8 @@ import Java from './java';
 describe('TeaVM Java sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
+		suppressAutoLoadAck = false;
+		onPostMessage = null;
 	});
 
 	it('loads the TeaVM worker and resolves prepare/run messages', async () => {
@@ -131,6 +142,216 @@ describe('TeaVM Java sandbox', () => {
 				message: 'unused import'
 			}
 		]);
+	});
+
+	it('rejects operations that overlap a pending Java load', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Java();
+		const loading = sandbox.load('/absproxy/5173');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const loadHandler = worker.onmessage;
+		const assetBridge = sandbox.assetBridge;
+		const baseUrl = sandbox.baseUrl;
+
+		await expect(sandbox.load('/other/')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'JAVA',
+			phase: 'startup'
+		});
+		await expect(sandbox.run('public class Main {}', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'JAVA',
+			phase: 'startup'
+		});
+
+		expect(workerInstances).toHaveLength(1);
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(loadHandler);
+		expect(sandbox.assetBridge).toBe(assetBridge);
+		expect(sandbox.baseUrl).toBe(baseUrl);
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		loadHandler?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(loading).resolves.toBeUndefined();
+		await expect(sandbox.run('public class Main {}', false)).resolves.toBe(true);
+	});
+
+	it('keeps Java load ownership through a reentrant asset progress callback', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Java();
+		let nestedLoad: Promise<void> | undefined;
+		let nestedRun: Promise<boolean | string> | undefined;
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{},
+			{
+				set() {
+					nestedLoad = sandbox.load('/other/');
+					nestedRun = sandbox.run('public class Nested {}', false);
+					void nestedLoad.catch(() => undefined);
+					void nestedRun.catch(() => undefined);
+				}
+			}
+		);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+
+		await expect(nestedLoad).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'JAVA'
+		});
+		await expect(nestedRun).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'JAVA'
+		});
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+
+		workerInstances[0].onmessage?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(loading).resolves.toBeUndefined();
+	});
+
+	it('rejects operations that overlap an active Java run without rebinding assets', async () => {
+		const sandbox = new Java();
+		const outputs: string[] = [];
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const assetBridge = sandbox.assetBridge!;
+		const handleMessage = vi.spyOn(assetBridge, 'handleMessage');
+		onPostMessage = () => undefined;
+
+		const running = sandbox.run('public class Main {}', false);
+		const firstHandler = worker.onmessage;
+		firstHandler?.({
+			data: { assetProgress: { asset: 'teavm.wasm', loaded: 1, total: 2 } }
+		} as MessageEvent<any>);
+		expect(handleMessage).toHaveBeenCalledOnce();
+
+		await expect(sandbox.run('public class Second {}', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'JAVA',
+			phase: 'execute'
+		});
+		await expect(sandbox.load('/other/')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'JAVA',
+			phase: 'execute'
+		});
+		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+		expect(worker.onmessage).toBe(firstHandler);
+		expect(sandbox.assetBridge).toBe(assetBridge);
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		firstHandler?.({ data: { output: 'first\n', results: true } } as MessageEvent<any>);
+		await expect(running).resolves.toBe(true);
+		expect(outputs).toEqual(['first\n']);
+
+		handleMessage.mockClear();
+		const secondRun = sandbox.run('public class Second {}', false);
+		const secondHandler = worker.onmessage;
+		firstHandler?.({
+			data: {
+				assetProgress: { asset: 'teavm.wasm', loaded: 2, total: 2 },
+				output: 'stale\n',
+				results: true
+			}
+		} as MessageEvent<any>);
+		expect(handleMessage).not.toHaveBeenCalled();
+		expect(worker.onmessage).toBe(secondHandler);
+		expect(outputs).toEqual(['first\n']);
+
+		secondHandler?.({ data: { output: 'second\n', results: true } } as MessageEvent<any>);
+		await expect(secondRun).resolves.toBe(true);
+		expect(outputs).toEqual(['first\n', 'second\n']);
+	});
+
+	it('keeps Java idle when run is called without a loaded worker', async () => {
+		const sandbox = new Java();
+
+		await expect(sandbox.run('public class Main {}', false)).rejects.toBe('Worker not loaded');
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+		expect(sandbox.assetBridge).toBeNull();
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('public class Main {}', false)).resolves.toBe(true);
+	});
+
+	it('releases Java operation ownership after synchronous dispatch failure', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const dispatchError = new Error('Java dispatch failed');
+		onPostMessage = () => {
+			throw dispatchError;
+		};
+
+		await expect(sandbox.run('public class Main {}', false)).rejects.toBe(dispatchError);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+		expect(sandbox.exit).toBe(true);
+
+		onPostMessage = null;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('public class Main {}', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('releases Java ownership after a worker error and ignores its stale handler', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const assetBridge = sandbox.assetBridge!;
+		const handleMessage = vi.spyOn(assetBridge, 'handleMessage');
+		onPostMessage = () => undefined;
+
+		const running = sandbox.run('public class Main {}', false);
+		const staleHandler = worker.onmessage;
+		worker.onerror?.({
+			message: 'worker crashed',
+			filename: '/worker/java.js',
+			lineno: 7,
+			colno: 3
+		} as ErrorEvent);
+
+		await expect(running).rejects.toContain(
+			'Java worker script error: worker crashed (/worker/java.js:7:3)'
+		);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+		expect(sandbox.exit).toBe(true);
+
+		onPostMessage = null;
+		await sandbox.load('/absproxy/5173');
+		const replacementWorker = workerInstances[1];
+		const replacementBridge = sandbox.assetBridge;
+		onPostMessage = () => undefined;
+		const replacementRun = sandbox.run('public class Replacement {}', false);
+		const replacementHandler = replacementWorker.onmessage;
+
+		staleHandler?.({
+			data: {
+				assetProgress: { asset: 'teavm.wasm', loaded: 1, total: 1 },
+				results: true
+			}
+		} as MessageEvent<any>);
+		expect(handleMessage).not.toHaveBeenCalled();
+		expect(sandbox.assetBridge).toBe(replacementBridge);
+		expect(replacementWorker.onmessage).toBe(replacementHandler);
+
+		replacementHandler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(replacementRun).resolves.toBe(true);
 	});
 
 	it('writes queued terminal input when the worker requests stdin', async () => {
