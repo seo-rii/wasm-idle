@@ -16,7 +16,8 @@ const workerMocks = vi.hoisted(() => ({
 	postWorkerMessage: vi.fn()
 }));
 
-vi.mock('../src/worker/module-loader.js', () => ({
+vi.mock('../src/worker/module-loader.js', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../src/worker/module-loader.js')>()),
 	createTransportBindings: vi.fn((options: TargetWorkerInitializeMessage) => ({
 		rspInput: {
 			descriptor: options.rspInput,
@@ -142,10 +143,20 @@ describe('WAMR target worker launch', () => {
 			name: 'environment value',
 			corruption: { env: { MODE: 42 } },
 			error: 'invalid WAMR environment variable: MODE'
+		},
+		{
+			name: 'empty generation',
+			corruption: { generation: '' },
+			error: 'debug worker generation must be a non-empty string without NUL bytes'
+		},
+		{
+			name: 'NUL generation',
+			corruption: { generation: 'target\0generation' },
+			error: 'debug worker generation must be a non-empty string without NUL bytes'
 		}
 	])(
 		'rejects an invalid direct-worker $name before loading WAMR',
-		async ({ corruption, error }) => {
+		async ({ name, corruption, error }) => {
 			const { handleTargetWorkerMessage } = await loadTargetWorker();
 			const message = initializeMessage(`target-worker-invalid-${error}`);
 			Object.assign(message, corruption);
@@ -162,7 +173,9 @@ describe('WAMR target worker launch', () => {
 			expect(workerMocks.mountDebugFiles).not.toHaveBeenCalled();
 			expect(workerMocks.chdir).not.toHaveBeenCalled();
 
-			const recovery = initializeMessage(`${message.generation}-recovery`);
+			const recovery = initializeMessage(
+				`target-worker-${name.replaceAll(' ', '-')}-recovery`
+			);
 			handleTargetWorkerMessage(recovery);
 			await vi.waitFor(() =>
 				expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({

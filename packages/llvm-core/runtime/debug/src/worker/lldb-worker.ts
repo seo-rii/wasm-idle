@@ -6,7 +6,8 @@ import {
 	mountDebugFiles,
 	postWorkerError,
 	postWorkerMessage,
-	startLinearMemoryTelemetry
+	startLinearMemoryTelemetry,
+	validateDebugSessionGeneration
 } from './module-loader.js';
 
 let activeGeneration: string | undefined;
@@ -32,6 +33,7 @@ function closeActiveLldbTransports() {
 }
 
 async function initialize(message: LldbWorkerInitializeMessage) {
+	validateDebugSessionGeneration(message.generation);
 	if (activeGeneration) throw new Error('LLDB worker is already initialized');
 	activeGeneration = message.generation;
 	let lifecycleSettled = false;

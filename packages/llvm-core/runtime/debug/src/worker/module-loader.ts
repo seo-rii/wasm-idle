@@ -67,6 +67,14 @@ export async function loadEmscriptenModuleFactory(url: string): Promise<Emscript
 	return candidate as EmscriptenModuleFactory;
 }
 
+export function validateDebugSessionGeneration(
+	generation: unknown
+): asserts generation is DebugSessionGeneration {
+	if (typeof generation !== 'string' || !generation || generation.includes('\0')) {
+		throw new TypeError('debug worker generation must be a non-empty string without NUL bytes');
+	}
+}
+
 export function createTransportBindings(options: {
 	generation: DebugSessionGeneration;
 	rspInput: SharedByteQueueDescriptor;

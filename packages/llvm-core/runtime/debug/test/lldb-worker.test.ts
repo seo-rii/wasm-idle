@@ -16,7 +16,8 @@ const workerMocks = vi.hoisted(() => ({
 	postWorkerMessage: vi.fn()
 }));
 
-vi.mock('../src/worker/module-loader.js', () => ({
+vi.mock('../src/worker/module-loader.js', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../src/worker/module-loader.js')>()),
 	createByteOutput: vi.fn(() => vi.fn()),
 	createTransportBindings: vi.fn(() => ({
 		dapInput: { close: workerMocks.closeDapInput },
@@ -192,5 +193,38 @@ describe('LLDB worker lifecycle', () => {
 			expect.objectContaining({ type: 'ready', generation: message.generation })
 		);
 		expect(workerMocks.postWorkerError).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{ name: 'empty', generation: '' },
+		{ name: 'NUL-bearing', generation: 'lldb\0generation' }
+	])('rejects an invalid direct-worker $name generation', async ({ name, generation }) => {
+		const { handleLldbWorkerMessage } = await loadLldbWorker();
+		const failed = initializeMessage('lldb-worker-invalid-generation');
+		failed.generation = generation;
+
+		handleLldbWorkerMessage(failed);
+
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerError).toHaveBeenCalledWith(
+				'lldb',
+				generation,
+				expect.objectContaining({
+					message: 'debug worker generation must be a non-empty string without NUL bytes'
+				})
+			)
+		);
+		expect(workerMocks.callMain).not.toHaveBeenCalled();
+
+		const recovery = initializeMessage(`lldb-worker-${name}-generation-recovery`);
+		handleLldbWorkerMessage(recovery);
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
+				type: 'ready',
+				worker: 'lldb',
+				generation: recovery.generation
+			})
+		);
+		handleLldbWorkerMessage({ type: 'dispose', generation: recovery.generation });
 	});
 });

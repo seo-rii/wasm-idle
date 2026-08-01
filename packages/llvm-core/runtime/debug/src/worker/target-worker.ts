@@ -6,7 +6,8 @@ import {
 	mountDebugFiles,
 	postWorkerError,
 	postWorkerMessage,
-	startLinearMemoryTelemetry
+	startLinearMemoryTelemetry,
+	validateDebugSessionGeneration
 } from './module-loader.js';
 
 let activeGeneration: string | undefined;
@@ -34,6 +35,7 @@ function closeActiveTargetTransports() {
 }
 
 async function initialize(message: TargetWorkerInitializeMessage) {
+	validateDebugSessionGeneration(message.generation);
 	if (activeGeneration) throw new Error('target worker is already initialized');
 	const cwdValue: unknown = message.cwd;
 	if (cwdValue !== undefined && cwdValue !== '/workspace') {
