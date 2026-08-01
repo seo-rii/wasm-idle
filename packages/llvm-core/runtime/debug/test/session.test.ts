@@ -220,6 +220,10 @@ class FakeWorker implements WorkerLike {
 		});
 	}
 
+	emitRaw(message: unknown) {
+		this.emit(message as DebugWorkerOutboundMessage);
+	}
+
 	async emitDapEvent(event: DapEvent) {
 		if (!this.dapOutput) throw new Error('LLDB DAP output was not initialized');
 		await this.dapOutput.write(encodeDapMessage(event));
@@ -1236,6 +1240,55 @@ describe('BrowserLldbSession', () => {
 			.poll(() => lifecycleOutput)
 			.toEqual([expect.stringContaining('stderr:final output\n')]);
 		await session.dispose();
+	});
+
+	it('fails instead of publishing a malformed current-generation worker message', async () => {
+		const workers: FakeWorker[] = [];
+		const lifecycle: Array<
+			| { type: 'worker-error'; worker: 'lldb' | 'target'; message: string }
+			| { type: 'target-exit'; exitCode: number | null }
+		> = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: Uint8Array.of(0, 97, 115, 109),
+			sources: [],
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, []);
+				workers.push(worker);
+				return worker;
+			},
+			fetchImpl: async () => new Response('debug-asset'),
+			onLifecycle: (event) => lifecycle.push(event),
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+
+		await session.initialize();
+		const targetWorker = workers.find((worker) => worker.kind === 'target');
+		if (!targetWorker) throw new Error('target worker was not created');
+		targetWorker.emitRaw({
+			type: 'exit',
+			exitCode: 'stale',
+			generation: 'stale-generation'
+		});
+		await Promise.resolve();
+		expect(lifecycle).toEqual([]);
+		targetWorker.emitRaw({
+			type: 'exit',
+			exitCode: '0',
+			generation: session.generation
+		});
+
+		await expect.poll(() => lifecycle).toHaveLength(1);
+		expect(lifecycle[0]).toMatchObject({
+			type: 'worker-error',
+			worker: 'target',
+			message: expect.stringContaining('invalid exitCode')
+		});
+		expect(lifecycle).not.toContainEqual(expect.objectContaining({ type: 'target-exit' }));
+		await session.dispose();
+		expect(workers.every((worker) => worker.isTerminated)).toBe(true);
 	});
 
 	it('rejects stale module bytes before creating workers', async () => {

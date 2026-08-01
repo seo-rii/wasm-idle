@@ -141,6 +141,89 @@ function normalizeDapBreakpoint(
 	};
 }
 
+function parseDebugWorkerMessage(
+	value: unknown,
+	expectedWorker: DebugWorkerKind,
+	activeGeneration: DebugSessionGeneration
+): DebugWorkerOutboundMessage | null {
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+		throw new Error(`${expectedWorker} debug worker sent an invalid message object`);
+	}
+	const record = value as Record<string, unknown>;
+	if (typeof record.generation !== 'string') {
+		throw new Error(`${expectedWorker} debug worker sent an invalid generation`);
+	}
+	if (record.generation !== activeGeneration) return null;
+	if (typeof record.type !== 'string') {
+		throw new Error(`${expectedWorker} debug worker sent an invalid message type`);
+	}
+	if (record.type === 'ready') {
+		if (record.worker !== expectedWorker) {
+			throw new Error(`${expectedWorker} debug worker sent an invalid ready worker`);
+		}
+		return { type: 'ready', worker: expectedWorker, generation: record.generation };
+	}
+	if (record.type === 'output') {
+		if (record.channel !== 'stdout' && record.channel !== 'stderr') {
+			throw new Error(`${expectedWorker} debug worker sent an invalid output channel`);
+		}
+		if (typeof record.data !== 'string') {
+			throw new Error(`${expectedWorker} debug worker sent invalid output data`);
+		}
+		return {
+			type: 'output',
+			channel: record.channel,
+			data: record.data,
+			generation: record.generation
+		};
+	}
+	if (record.type === 'memory') {
+		if (record.worker !== expectedWorker) {
+			throw new Error(`${expectedWorker} debug worker sent an invalid memory worker`);
+		}
+		if (
+			typeof record.bytes !== 'number' ||
+			!Number.isSafeInteger(record.bytes) ||
+			record.bytes < 0
+		) {
+			throw new Error(`${expectedWorker} debug worker sent invalid memory bytes`);
+		}
+		return {
+			type: 'memory',
+			worker: expectedWorker,
+			bytes: record.bytes,
+			generation: record.generation
+		};
+	}
+	if (record.type === 'exit') {
+		if (expectedWorker !== 'target') {
+			throw new Error(`${expectedWorker} debug worker sent an unexpected exit message`);
+		}
+		if (
+			record.exitCode !== null &&
+			(typeof record.exitCode !== 'number' || !Number.isSafeInteger(record.exitCode))
+		) {
+			throw new Error(`${expectedWorker} debug worker sent an invalid exitCode`);
+		}
+		return { type: 'exit', exitCode: record.exitCode, generation: record.generation };
+	}
+	if (record.type === 'error') {
+		if (record.worker !== expectedWorker) {
+			throw new Error(`${expectedWorker} debug worker sent an invalid error worker`);
+		}
+		if (typeof record.message !== 'string') {
+			throw new Error(`${expectedWorker} debug worker sent an invalid error message`);
+		}
+		return {
+			type: 'error',
+			worker: expectedWorker,
+			message: record.message,
+			generation: record.generation
+		};
+	}
+	throw new Error(`${expectedWorker} debug worker sent an unknown message type: ${record.type}`);
+}
+
 function defaultWorkerFactory(kind: DebugWorkerKind): WorkerLike {
 	if (kind === 'lldb') {
 		return new Worker(new URL('./worker/lldb-worker.js', import.meta.url), {
@@ -755,10 +838,20 @@ export class BrowserLldbSession {
 	}
 
 	private attachWorkerEvents(worker: WorkerLike, kind: DebugWorkerKind) {
-		const messageListener = (event: MessageEvent<DebugWorkerOutboundMessage>) => {
-			const message = event.data;
-			if (message.generation !== this.generation) return;
+		const messageListener = (event: MessageEvent<unknown>) => {
 			if (this.disposed) return;
+			let message: DebugWorkerOutboundMessage | null;
+			try {
+				message = parseDebugWorkerMessage(event.data, kind, this.generation);
+			} catch (error) {
+				fail(
+					error instanceof Error
+						? error
+						: new Error(`${kind} debug worker sent an invalid message`)
+				);
+				return;
+			}
+			if (!message) return;
 			if (message.type === 'output') {
 				this.invokeConsumerCallback('output', () =>
 					this.options.onOutput?.(message.channel, message.data)
@@ -862,9 +955,20 @@ export class BrowserLldbSession {
 				cleanup();
 				reject(this.workerEventError(expectedKind, event));
 			};
-			const listener = (event: MessageEvent<DebugWorkerOutboundMessage>) => {
-				const message = event.data;
-				if (message.generation !== this.generation) return;
+			const listener = (event: MessageEvent<unknown>) => {
+				let message: DebugWorkerOutboundMessage | null;
+				try {
+					message = parseDebugWorkerMessage(event.data, expectedKind, this.generation);
+				} catch (error) {
+					cleanup();
+					reject(
+						error instanceof Error
+							? error
+							: new Error(`${expectedKind} debug worker sent an invalid message`)
+					);
+					return;
+				}
+				if (!message) return;
 				if (message.type === 'error' && message.worker === expectedKind) {
 					cleanup();
 					reject(new Error(message.message));
