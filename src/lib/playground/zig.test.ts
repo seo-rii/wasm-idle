@@ -276,6 +276,66 @@ describe('Zig sandbox', () => {
 		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
 	});
 
+	it('rejects a pre-aborted Zig startup without changing an existing worker', async () => {
+		const sandbox = new Zig();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockClear();
+		const progress = { set: vi.fn() };
+		const controller = new AbortController();
+		const reason = new Error('Zig startup pre-aborted');
+		controller.abort(reason);
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal }, progress)
+		).rejects.toBe(reason);
+
+		expect(sandbox.worker).toBe(worker);
+		expect(worker.postMessage).not.toHaveBeenCalled();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(progress.set).not.toHaveBeenCalled();
+	});
+
+	it('aborts an active Zig startup and ignores stale completion', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Zig();
+		const progress = { set: vi.fn() };
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('Zig startup aborted');
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+
+		controller.abort(reason);
+		await expect(loading).rejects.toBe(reason);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { progress: 0.8, load: true } } as MessageEvent<any>);
+		expect(progress.set).not.toHaveBeenCalled();
+
+		suppressAutoLoadAck = false;
+		const settledController = new AbortController();
+		await sandbox.load('/absproxy/5173', '', true, [], {
+			signal: settledController.signal
+		});
+		const retryWorker = workerInstances.at(-1)!;
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+
+		settledController.abort(new Error('late startup abort'));
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+	});
+
 	it('rejects Zig load while a run is active without replacing its handler', async () => {
 		const sandbox = new Zig();
 		const worker = new MockWorker();
