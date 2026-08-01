@@ -66,6 +66,14 @@ type TinyGoRuntimeModule = {
 type TinyGoOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
+	cancelled: boolean;
+	reason?: unknown;
+	reject?: (reason: unknown) => void;
+};
+
+type TinyGoRuntimeProgressOwner = {
+	operationToken: symbol;
+	runtimeToken: symbol;
 };
 
 const ACTIVITY_PREFIX_PATTERN = /^\[\d{2}:\d{2}:\d{2}\]\s?/gm;
@@ -84,7 +92,9 @@ class TinyGo implements Sandbox {
 	assetLoader: TinyGoRuntimeAssetLoader | undefined = undefined;
 	assetPacks: TinyGoRuntimeAssetPackReference[] | undefined = undefined;
 	runtime: TinyGoRuntimeHooks | null = null;
+	runtimeToken: symbol | null = null;
 	runtimePromise: Promise<TinyGoRuntimeHooks> | null = null;
+	private runtimePromiseToken: symbol | null = null;
 	loadPromise: Promise<void> | null = null;
 	compiledArtifact: Uint8Array | null = null;
 	compiledArtifactExecutionError = '';
@@ -97,6 +107,7 @@ class TinyGo implements Sandbox {
 	runtimeProgressEnd = 0;
 	runtimeProgressValue = 0;
 	runtimeProgressAssets = new Map<string, { loaded: number; total: number }>();
+	private runtimeProgressOwner: TinyGoRuntimeProgressOwner | null = null;
 	private activeOperation: TinyGoOperation | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'TinyGo',
@@ -108,55 +119,63 @@ class TinyGo implements Sandbox {
 		}
 	});
 
-	async load(
+	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	): Promise<void> {
-		const operation = this.beginOperation('startup');
-		try {
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const nextModuleUrl = resolveTinyGoModuleUrl(runtimeAssets, currentUrl);
-			const nextRustCompilerUrl = resolveRustCompilerUrl(runtimeAssets, currentUrl);
-			const nextRustRuntimeBaseUrl = nextRustCompilerUrl
-				? new URL('./runtime/', nextRustCompilerUrl).toString()
-				: '';
-			if (!nextModuleUrl) {
-				throw new Error(
-					'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL or runtimeAssets.tinygo.moduleUrl.'
-				);
+		return this.executeOperation('startup', options.signal, async (operation) => {
+			try {
+				this.pendingInput = [];
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				const nextModuleUrl = resolveTinyGoModuleUrl(runtimeAssets, currentUrl);
+				const nextRustCompilerUrl = resolveRustCompilerUrl(runtimeAssets, currentUrl);
+				const nextRustRuntimeBaseUrl = nextRustCompilerUrl
+					? new URL('./runtime/', nextRustCompilerUrl).toString()
+					: '';
+				if (!nextModuleUrl) {
+					throw new Error(
+						'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL or runtimeAssets.tinygo.moduleUrl.'
+					);
+				}
+				if (
+					(this.moduleUrl && this.moduleUrl !== nextModuleUrl) ||
+					this.rustRuntimeBaseUrl !== nextRustRuntimeBaseUrl
+				) {
+					this.disposeRuntime();
+					this.compiledArtifact = null;
+					this.compiledArtifactExecutionError = '';
+					this.compiledCacheKey = '';
+				}
+				this.assetLoader =
+					typeof runtimeAssets === 'object'
+						? runtimeAssets?.tinygo?.assetLoader
+						: undefined;
+				this.assetPacks =
+					typeof runtimeAssets === 'object'
+						? runtimeAssets?.tinygo?.assetPacks
+						: undefined;
+				this.moduleUrl = nextModuleUrl;
+				this.rustRuntimeBaseUrl = nextRustRuntimeBaseUrl;
+				progress?.set?.(0.25);
+				this.assertOperation(operation);
+				await this.ensureWorker(operation);
+				this.assertOperation(operation);
+				progress?.set?.(0.5);
+				this.assertOperation(operation);
+				await this.ensureRuntime(operation);
+				this.assertOperation(operation);
+				progress?.set?.(1);
+				this.assertOperation(operation);
+			} catch (error) {
+				throw new Error(error instanceof Error ? error.message : String(error));
 			}
-			if (
-				(this.moduleUrl && this.moduleUrl !== nextModuleUrl) ||
-				this.rustRuntimeBaseUrl !== nextRustRuntimeBaseUrl
-			) {
-				this.disposeRuntime();
-				this.compiledArtifact = null;
-				this.compiledArtifactExecutionError = '';
-				this.compiledCacheKey = '';
-			}
-			this.assetLoader =
-				typeof runtimeAssets === 'object' ? runtimeAssets?.tinygo?.assetLoader : undefined;
-			this.assetPacks =
-				typeof runtimeAssets === 'object' ? runtimeAssets?.tinygo?.assetPacks : undefined;
-			this.moduleUrl = nextModuleUrl;
-			this.rustRuntimeBaseUrl = nextRustRuntimeBaseUrl;
-			progress?.set?.(0.25);
-			await this.ensureWorker();
-			progress?.set?.(0.5);
-			await this.ensureRuntime();
-			progress?.set?.(1);
-		} catch (error) {
-			throw new Error(error instanceof Error ? error.message : String(error));
-		} finally {
-			this.completeOperation(operation);
-		}
+		});
 	}
 
 	private beginOperation(phase: TinyGoOperation['phase']) {
@@ -166,7 +185,11 @@ class TinyGo implements Sandbox {
 				phase: this.activeOperation.phase
 			});
 		}
-		const operation = { token: Symbol(phase), phase } satisfies TinyGoOperation;
+		const operation = {
+			token: Symbol(phase),
+			phase,
+			cancelled: false
+		} satisfies TinyGoOperation;
 		this.activeOperation = operation;
 		return operation;
 	}
@@ -175,6 +198,106 @@ class TinyGo implements Sandbox {
 		if (this.activeOperation?.token === operation.token) {
 			this.activeOperation = null;
 		}
+	}
+
+	private isOperationActive(operation: TinyGoOperation) {
+		return this.activeOperation?.token === operation.token && !operation.cancelled;
+	}
+
+	private assertOperation(operation: TinyGoOperation) {
+		if (!this.isOperationActive(operation)) {
+			throw operation.reason ?? 'Process terminated';
+		}
+	}
+
+	private executeOperation<T>(
+		phase: TinyGoOperation['phase'],
+		signal: AbortSignal | undefined,
+		execute: (operation: TinyGoOperation) => Promise<T>
+	): Promise<T> {
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ??
+					new DOMException(
+						phase === 'startup' ? 'TinyGo startup aborted' : 'TinyGo execution aborted',
+						'AbortError'
+					)
+			);
+		}
+		let operation: TinyGoOperation;
+		try {
+			operation = this.beginOperation(phase);
+		} catch (error) {
+			return Promise.reject(error);
+		}
+
+		return new Promise<T>((resolve, reject) => {
+			let settled = false;
+			let onAbort: (() => void) | undefined;
+			const cleanup = () => {
+				if (signal && onAbort) {
+					try {
+						signal.removeEventListener('abort', onAbort);
+					} catch {
+						// Cleanup must not replace the operation result.
+					}
+				}
+				delete operation.reject;
+				this.completeOperation(operation);
+			};
+			const resolveOperation = (value: T) => {
+				if (settled) return;
+				settled = true;
+				cleanup();
+				resolve(value);
+			};
+			const rejectOperation = (reason: unknown) => {
+				if (settled) return;
+				settled = true;
+				cleanup();
+				reject(reason);
+			};
+			operation.reject = rejectOperation;
+			onAbort = signal
+				? () => {
+						if (!this.isOperationActive(operation)) return;
+						this.cancelOperation(
+							operation,
+							signal.reason ??
+								new DOMException(
+									phase === 'startup'
+										? 'TinyGo startup aborted'
+										: 'TinyGo execution aborted',
+									'AbortError'
+								)
+						);
+					}
+				: undefined;
+			if (signal && onAbort) {
+				try {
+					signal.addEventListener('abort', onAbort, { once: true });
+				} catch (error) {
+					rejectOperation(error);
+					return;
+				}
+				if (signal.aborted) onAbort();
+			}
+			if (settled) return;
+
+			void Promise.resolve()
+				.then(() => {
+					this.assertOperation(operation);
+					return execute(operation);
+				})
+				.then(
+					(value) => {
+						if (this.isOperationActive(operation)) resolveOperation(value);
+					},
+					(error) => {
+						if (this.isOperationActive(operation)) rejectOperation(error);
+					}
+				);
+		});
 	}
 
 	write(input: string) {
@@ -201,124 +324,170 @@ class TinyGo implements Sandbox {
 		}
 	}
 
-	private async ensureWorker() {
+	private async ensureWorker(operation: TinyGoOperation) {
+		this.assertOperation(operation);
 		if (this.worker) return;
-		if (this.loadPromise) {
-			await this.loadPromise;
+		const pendingLoad = this.loadPromise;
+		if (pendingLoad) {
+			await pendingLoad;
+			this.assertOperation(operation);
 			return;
 		}
-		this.loadPromise = (async () => {
+		const loadPromise = (async () => {
 			const WorkerConstructor = (await import('$lib/playground/worker/tinygo?worker'))
 				.default;
-			this.worker = new WorkerConstructor();
-			await this.workerSession.waitForLoad(this.worker, (resolve, reject) => {
-				if (!this.worker) return reject('Worker not loaded');
-				this.worker.onmessage = (event: MessageEvent<any>) => {
+			this.assertOperation(operation);
+			const worker = new WorkerConstructor();
+			if (!this.isOperationActive(operation)) {
+				worker.terminate();
+				this.assertOperation(operation);
+			}
+			this.worker = worker;
+			await this.workerSession.waitForLoad(worker, (resolve, reject) => {
+				if (!this.isOperationActive(operation) || this.worker !== worker) {
+					return reject(operation.reason ?? 'Worker not loaded');
+				}
+				worker.onmessage = (event: MessageEvent<any>) => {
+					if (!this.isOperationActive(operation) || this.worker !== worker) return;
 					if (event.data?.load) resolve();
 					if (event.data?.error) reject(event.data.error);
 				};
-				this.worker.postMessage({ load: true });
+				worker.postMessage({ load: true });
 			});
-		})().finally(() => {
-			this.loadPromise = null;
-		});
-		await this.loadPromise;
+			this.assertOperation(operation);
+			if (this.worker !== worker) throw operation.reason ?? 'Worker not loaded';
+		})();
+		this.loadPromise = loadPromise;
+		try {
+			await loadPromise;
+		} finally {
+			if (this.loadPromise === loadPromise) this.loadPromise = null;
+		}
 	}
 
 	private disposeRuntime() {
-		this.runtime?.dispose?.();
+		const runtime = this.runtime;
 		this.runtime = null;
+		this.runtimeToken = null;
 		this.runtimePromise = null;
+		this.runtimePromiseToken = null;
 		this.lastActivityLog = '';
 		this.compiledArtifactExecutionError = '';
+		this.runtimeProgress = undefined;
+		this.runtimeProgressOwner = null;
+		this.runtimeProgressAssets.clear();
+		try {
+			runtime?.dispose?.();
+		} catch {
+			// Runtime cleanup must not replace the lifecycle result.
+		}
 	}
 
-	private async ensureRuntime() {
+	private reportRuntimeProgress(runtimeToken: symbol, progress: TinyGoRuntimeAssetProgress) {
+		const owner = this.runtimeProgressOwner;
+		if (
+			!owner ||
+			owner.runtimeToken !== runtimeToken ||
+			this.activeOperation?.token !== owner.operationToken ||
+			!this.runtimeProgress
+		) {
+			return;
+		}
+		const total = progress.total && progress.total > 0 ? progress.total : progress.loaded;
+		const key = progress.assetUrl || progress.assetPath;
+		this.runtimeProgressAssets.set(key, {
+			loaded: Math.max(0, progress.loaded),
+			total: Math.max(1, total)
+		});
+		let loaded = 0;
+		let size = 0;
+		for (const entry of this.runtimeProgressAssets.values()) {
+			loaded += Math.min(entry.loaded, entry.total);
+			size += entry.total;
+		}
+		if (size <= 0) return;
+		const nextValue =
+			this.runtimeProgressStart +
+			((this.runtimeProgressEnd - this.runtimeProgressStart) * loaded) / size;
+		if (nextValue <= this.runtimeProgressValue) return;
+		this.runtimeProgressValue = nextValue;
+		this.runtimeProgress.set?.(nextValue);
+	}
+
+	private async ensureRuntime(operation: TinyGoOperation) {
+		this.assertOperation(operation);
 		if (this.runtime) {
 			return this.runtime;
 		}
-		if (this.runtimePromise) {
-			return await this.runtimePromise;
+		const pendingRuntime = this.runtimePromise;
+		if (pendingRuntime) {
+			const runtime = await pendingRuntime;
+			this.assertOperation(operation);
+			return runtime;
 		}
 		const moduleUrl = this.moduleUrl;
-		this.runtimePromise = (async () => {
-			const runtimeModule = (await import(
-				/* @vite-ignore */ moduleUrl
-			)) as TinyGoRuntimeModule;
-			if (typeof runtimeModule.createBundledTinyGoRuntime === 'function') {
-				this.runtime = runtimeModule.createBundledTinyGoRuntime({
-					assetLoader: this.assetLoader,
-					assetPacks: this.assetPacks,
-					rustRuntimeBaseUrl: this.rustRuntimeBaseUrl || undefined,
-					onProgress: (progress) => {
-						if (!this.runtimeProgress) return;
-						const total =
-							progress.total && progress.total > 0 ? progress.total : progress.loaded;
-						const key = progress.assetUrl || progress.assetPath;
-						this.runtimeProgressAssets.set(key, {
-							loaded: Math.max(0, progress.loaded),
-							total: Math.max(1, total)
-						});
-						let loaded = 0;
-						let size = 0;
-						for (const entry of this.runtimeProgressAssets.values()) {
-							loaded += Math.min(entry.loaded, entry.total);
-							size += entry.total;
-						}
-						if (size <= 0) return;
-						const nextValue =
-							this.runtimeProgressStart +
-							((this.runtimeProgressEnd - this.runtimeProgressStart) * loaded) / size;
-						if (nextValue <= this.runtimeProgressValue) return;
-						this.runtimeProgressValue = nextValue;
-						this.runtimeProgress.set?.(nextValue);
-					}
-				});
-				return this.runtime;
+		const runtimeToken = Symbol('runtime');
+		const runtimePromiseToken = Symbol('runtime-startup');
+		this.runtimePromiseToken = runtimePromiseToken;
+		const assetLoader = this.assetLoader;
+		const assetPacks = this.assetPacks;
+		const rustRuntimeBaseUrl = this.rustRuntimeBaseUrl;
+		let nextRuntime: TinyGoRuntimeHooks | null = null;
+		const runtimePromise = (async () => {
+			try {
+				const runtimeModule = (await import(
+					/* @vite-ignore */ moduleUrl
+				)) as TinyGoRuntimeModule;
+				this.assertOperation(operation);
+				const commonOptions = {
+					assetLoader,
+					assetPacks,
+					rustRuntimeBaseUrl: rustRuntimeBaseUrl || undefined,
+					onProgress: (progress: TinyGoRuntimeAssetProgress) =>
+						this.reportRuntimeProgress(runtimeToken, progress)
+				};
+				if (typeof runtimeModule.createBundledTinyGoRuntime === 'function') {
+					nextRuntime = runtimeModule.createBundledTinyGoRuntime(commonOptions);
+				} else if (typeof runtimeModule.createTinyGoRuntime === 'function') {
+					nextRuntime = runtimeModule.createTinyGoRuntime({
+						assetBaseUrl: new URL('./', moduleUrl).toString(),
+						...commonOptions
+					});
+				} else {
+					throw new Error(
+						'TinyGo runtime module must export createBundledTinyGoRuntime or createTinyGoRuntime'
+					);
+				}
+				this.assertOperation(operation);
+				if (this.runtimePromiseToken !== runtimePromiseToken) {
+					throw operation.reason ?? 'TinyGo runtime startup superseded';
+				}
+				const runtime = nextRuntime;
+				nextRuntime = null;
+				this.runtime = runtime;
+				this.runtimeToken = runtimeToken;
+				return runtime;
+			} finally {
+				try {
+					nextRuntime?.dispose?.();
+				} catch {
+					// A stale runtime must not replace the active lifecycle result.
+				}
 			}
-			if (typeof runtimeModule.createTinyGoRuntime === 'function') {
-				this.runtime = runtimeModule.createTinyGoRuntime({
-					assetBaseUrl: new URL('./', moduleUrl).toString(),
-					assetLoader: this.assetLoader,
-					assetPacks: this.assetPacks,
-					rustRuntimeBaseUrl: this.rustRuntimeBaseUrl || undefined,
-					onProgress: (progress) => {
-						if (!this.runtimeProgress) return;
-						const total =
-							progress.total && progress.total > 0 ? progress.total : progress.loaded;
-						const key = progress.assetUrl || progress.assetPath;
-						this.runtimeProgressAssets.set(key, {
-							loaded: Math.max(0, progress.loaded),
-							total: Math.max(1, total)
-						});
-						let loaded = 0;
-						let size = 0;
-						for (const entry of this.runtimeProgressAssets.values()) {
-							loaded += Math.min(entry.loaded, entry.total);
-							size += entry.total;
-						}
-						if (size <= 0) return;
-						const nextValue =
-							this.runtimeProgressStart +
-							((this.runtimeProgressEnd - this.runtimeProgressStart) * loaded) / size;
-						if (nextValue <= this.runtimeProgressValue) return;
-						this.runtimeProgressValue = nextValue;
-						this.runtimeProgress.set?.(nextValue);
-					}
-				});
-				return this.runtime;
+		})();
+		this.runtimePromise = runtimePromise;
+		try {
+			return await runtimePromise;
+		} finally {
+			if (this.runtimePromise === runtimePromise) {
+				this.runtimePromise = null;
+				this.runtimePromiseToken = null;
 			}
-			throw new Error(
-				'TinyGo runtime module must export createBundledTinyGoRuntime or createTinyGoRuntime'
-			);
-		})().catch((error) => {
-			this.disposeRuntime();
-			throw error;
-		});
-		return await this.runtimePromise;
+		}
 	}
 
-	private emitActivityLog(hooks: TinyGoRuntimeHooks) {
+	private emitActivityLog(hooks: TinyGoRuntimeHooks, operation: TinyGoOperation) {
+		this.assertOperation(operation);
 		const nextActivityLog = hooks.readActivityLog();
 		const delta = nextActivityLog.startsWith(this.lastActivityLog)
 			? nextActivityLog.slice(this.lastActivityLog.length)
@@ -327,6 +496,7 @@ class TinyGo implements Sandbox {
 		if (!delta) return;
 		const sanitized = delta.replace(ACTIVITY_PREFIX_PATTERN, '');
 		if (sanitized) this.output?.(sanitized);
+		this.assertOperation(operation);
 	}
 
 	private extractCompileFailure() {
@@ -344,11 +514,13 @@ class TinyGo implements Sandbox {
 	}
 
 	private async compileArtifact(
+		operation: TinyGoOperation,
 		code: string,
 		target: TinyGoTarget = 'wasm',
 		log = true,
 		prog?: SandboxProgress
 	) {
+		this.assertOperation(operation);
 		const compileCacheKey = JSON.stringify({
 			code,
 			moduleUrl: this.moduleUrl,
@@ -357,40 +529,68 @@ class TinyGo implements Sandbox {
 		if (this.compiledArtifact && this.compiledCacheKey === compileCacheKey) {
 			return;
 		}
-		const runtime = await this.ensureRuntime();
+		const runtime = await this.ensureRuntime(operation);
+		this.assertOperation(operation);
+		const runtimeToken = this.runtimeToken;
+		if (!runtimeToken || this.runtime !== runtime) {
+			throw operation.reason ?? 'TinyGo compiler runtime is not available';
+		}
 		runtime.reset();
+		this.assertOperation(operation);
 		this.lastActivityLog = runtime.readActivityLog();
+		this.assertOperation(operation);
 		runtime.setWorkspaceFiles({ 'main.go': code });
+		this.assertOperation(operation);
 		runtime.setBuildRequestOverrides?.({ target });
+		this.assertOperation(operation);
 		this.runtimeProgress = prog;
+		this.runtimeProgressOwner = {
+			operationToken: operation.token,
+			runtimeToken
+		};
 		this.runtimeProgressAssets.clear();
 		this.runtimeProgressStart = 0.05;
 		this.runtimeProgressEnd = 0.35;
 		this.runtimeProgressValue = 0.05;
 		try {
 			prog?.set?.(0.05);
+			this.assertOperation(operation);
 			await runtime.boot();
-			this.emitActivityLog(runtime);
+			this.assertOperation(operation);
+			this.emitActivityLog(runtime, operation);
 			this.runtimeProgressAssets.clear();
 			this.runtimeProgressStart = 0.35;
 			this.runtimeProgressEnd = 0.65;
 			this.runtimeProgressValue = Math.max(this.runtimeProgressValue, 0.35);
 			prog?.set?.(this.runtimeProgressValue);
+			this.assertOperation(operation);
 			await runtime.plan();
-			this.emitActivityLog(runtime);
+			this.assertOperation(operation);
+			this.emitActivityLog(runtime, operation);
 			this.runtimeProgressAssets.clear();
 			this.runtimeProgressStart = 0.65;
 			this.runtimeProgressEnd = 0.92;
 			this.runtimeProgressValue = Math.max(this.runtimeProgressValue, 0.65);
 			prog?.set?.(this.runtimeProgressValue);
+			this.assertOperation(operation);
 			await runtime.execute();
-			this.emitActivityLog(runtime);
+			this.assertOperation(operation);
+			this.emitActivityLog(runtime, operation);
 			prog?.set?.(0.95);
+			this.assertOperation(operation);
 		} finally {
-			this.runtimeProgress = undefined;
-			this.runtimeProgressAssets.clear();
+			if (
+				this.runtimeProgressOwner?.operationToken === operation.token &&
+				this.runtimeProgressOwner.runtimeToken === runtimeToken
+			) {
+				this.runtimeProgress = undefined;
+				this.runtimeProgressOwner = null;
+				this.runtimeProgressAssets.clear();
+			}
 		}
+		this.assertOperation(operation);
 		const artifact = runtime.readBuildArtifact();
+		this.assertOperation(operation);
 		if (!artifact) {
 			const compileFailure = this.extractCompileFailure();
 			if (/(?:probe-only|supported WASI entrypoint)/i.test(compileFailure)) {
@@ -400,8 +600,9 @@ class TinyGo implements Sandbox {
 			}
 			throw new Error(compileFailure);
 		}
-		const runtimeLogLines = runtime
-			.readActivityLog()
+		const runtimeActivityLog = runtime.readActivityLog();
+		this.assertOperation(operation);
+		const runtimeLogLines = runtimeActivityLog
 			.replace(ACTIVITY_PREFIX_PATTERN, '')
 			.split('\n')
 			.map((line) => line.trim())
@@ -417,8 +618,8 @@ class TinyGo implements Sandbox {
 				break;
 			}
 		}
-		this.compiledArtifact = new Uint8Array(artifact.bytes);
-		this.compiledArtifactExecutionError =
+		const compiledArtifact = new Uint8Array(artifact.bytes);
+		const compiledArtifactExecutionError =
 			artifact.runnable === false
 				? browserRuntimeFailure !== ''
 					? `TinyGo browser runtime could not produce a runnable execution artifact: ${browserRuntimeFailure}.`
@@ -428,13 +629,17 @@ class TinyGo implements Sandbox {
 							? 'TinyGo browser runtime produced a non-runnable probe artifact without a supported WASI entrypoint.'
 							: 'TinyGo browser runtime produced a non-runnable artifact without a supported WASI entrypoint.'
 				: '';
+		this.assertOperation(operation);
+		this.compiledArtifact = compiledArtifact;
+		this.compiledArtifactExecutionError = compiledArtifactExecutionError;
 		this.compiledCacheKey = compileCacheKey;
 		if (log) {
 			this.output?.(`tinygo artifact ready: ${artifact.path}\n`);
+			this.assertOperation(operation);
 		}
 	}
 
-	async run(
+	run(
 		code: string,
 		prepare: boolean,
 		_log = true,
@@ -442,95 +647,147 @@ class TinyGo implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		const operation = this.beginOperation('execute');
-		this.exit = false;
-		try {
-			this.begin = Date.now();
-			await this.ensureWorker();
-			const target = options.tinygoTarget || 'wasm';
-			await this.compileArtifact(code, target, _log, prepare ? _prog : undefined);
-			if (prepare) {
-				this.elapse = Date.now() - this.begin;
-				this.exit = true;
-				return true;
-			}
-			if (this.compiledArtifactExecutionError) {
-				throw new Error(this.compiledArtifactExecutionError);
-			}
-			if (!this.worker || !this.compiledArtifact) {
-				throw new Error('TinyGo runtime did not prepare an artifact');
-			}
-			const worker = this.worker;
-			const compiledArtifact = this.compiledArtifact;
-			const { programArgs } = resolveSandboxExecutionArgs('TINYGO', args, options);
-			const _uid = ++this.uid;
-			return await new Promise<boolean | string>((resolve, reject) => {
-				const workerOperation = this.workerSession.beginRun(worker, reject);
-				worker.onmessage = (event: Event & { data: any }) => {
-					if (this.worker !== worker) return reject('Worker not loaded');
-					if (_uid !== this.uid) return (worker.onmessage = null);
-					const { output, results, error, buffer } = event.data;
-					if (buffer) {
-						this.waitingForInput = true;
-						this.flushPendingInput();
+		return this.executeOperation('execute', options.signal, async (operation) => {
+			this.exit = false;
+			try {
+				this.begin = Date.now();
+				await this.ensureWorker(operation);
+				this.assertOperation(operation);
+				const target = options.tinygoTarget || 'wasm';
+				await this.compileArtifact(
+					operation,
+					code,
+					target,
+					_log,
+					prepare ? _prog : undefined
+				);
+				this.assertOperation(operation);
+				if (prepare) {
+					this.elapse = Date.now() - this.begin;
+					this.exit = true;
+					return true;
+				}
+				if (this.compiledArtifactExecutionError) {
+					throw new Error(this.compiledArtifactExecutionError);
+				}
+				if (!this.worker || !this.compiledArtifact) {
+					throw new Error('TinyGo runtime did not prepare an artifact');
+				}
+				const worker = this.worker;
+				const compiledArtifact = this.compiledArtifact;
+				const { programArgs } = resolveSandboxExecutionArgs('TINYGO', args, options);
+				const runUid = ++this.uid;
+				return await new Promise<boolean | string>((resolve, reject) => {
+					const workerOperation = this.workerSession.beginRun(worker, reject);
+					const handleMessage = (event: Event & { data: any }) => {
+						if (
+							!this.isOperationActive(operation) ||
+							this.worker !== worker ||
+							runUid !== this.uid
+						) {
+							if (worker.onmessage === handleMessage) worker.onmessage = null;
+							return;
+						}
+						const { output, results, error, buffer } = event.data;
+						if (buffer) {
+							this.waitingForInput = true;
+							this.flushPendingInput();
+						}
+						if (output) {
+							this.output?.(output);
+							if (!this.isOperationActive(operation)) return;
+						}
+						if (results) {
+							this.elapse = Date.now() - this.begin;
+							this.exit = true;
+							this.waitingForInput = false;
+							this.pendingEof = false;
+							this.workerSession.complete(workerOperation);
+							resolve(results as string);
+						}
+						if (error) {
+							this.elapse = Date.now() - this.begin;
+							this.exit = true;
+							this.waitingForInput = false;
+							this.pendingEof = false;
+							this.workerSession.complete(workerOperation);
+							reject(error);
+						}
+					};
+					worker.onmessage = handleMessage;
+					try {
+						worker.postMessage({
+							artifact: new Uint8Array(compiledArtifact),
+							buffer: this.buffer,
+							args: programArgs,
+							log: _log
+						});
+					} catch (error) {
+						this.workerSession.terminate(error);
 					}
-					if (output) this.output?.(output);
-					if (results) {
-						this.elapse = Date.now() - this.begin;
-						this.exit = true;
-						this.waitingForInput = false;
-						this.pendingEof = false;
-						this.workerSession.complete(workerOperation);
-						resolve(results as string);
-					}
-					if (error) {
-						this.elapse = Date.now() - this.begin;
-						this.exit = true;
-						this.waitingForInput = false;
-						this.pendingEof = false;
-						this.workerSession.complete(workerOperation);
-						reject(error);
-					}
-				};
-				worker.postMessage({
-					artifact: new Uint8Array(compiledArtifact),
-					buffer: this.buffer,
-					args: programArgs,
-					log: _log
 				});
-			});
-		} catch (error) {
-			this.elapse = Date.now() - this.begin;
-			this.exit = true;
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			throw error instanceof Error ? error.message : String(error);
-		} finally {
-			this.completeOperation(operation);
-		}
+			} catch (error) {
+				if (this.isOperationActive(operation)) {
+					this.elapse = Date.now() - this.begin;
+					this.exit = true;
+					this.waitingForInput = false;
+					this.pendingEof = false;
+					throw error instanceof Error ? error.message : String(error);
+				}
+				throw error;
+			}
+		});
+	}
+
+	private cancelOperation(operation: TinyGoOperation, reason: unknown) {
+		if (!this.isOperationActive(operation)) return;
+		operation.cancelled = true;
+		operation.reason = reason;
+		const reject = operation.reject;
+		this.uid += 1;
+		this.waitingForInput = false;
+		this.pendingInput = [];
+		this.pendingEof = false;
+		this.exit = true;
+		this.loadPromise = null;
+		this.runtimeProgress = undefined;
+		this.runtimeProgressOwner = null;
+		this.runtimeProgressAssets.clear();
+		this.compiledArtifact = null;
+		this.compiledArtifactExecutionError = '';
+		this.compiledCacheKey = '';
+		resetBufferedStdin(this.buffer);
+		reject?.(reason);
+		this.workerSession.terminate(reason);
+		this.disposeRuntime();
 	}
 
 	kill() {
 		this.terminate();
 	}
 
-	terminate() {
+	terminate(reason: unknown = 'Process terminated') {
+		const operation = this.activeOperation;
+		if (operation) {
+			this.cancelOperation(operation, reason);
+			return;
+		}
 		this.waitingForInput = false;
+		this.pendingInput = [];
 		this.pendingEof = false;
 		this.uid += 1;
-		this.workerSession.terminate();
+		resetBufferedStdin(this.buffer);
+		this.workerSession.terminate(reason);
 		this.exit = true;
 	}
 
 	async clear() {
-		this.pendingInput = [];
-		this.waitingForInput = false;
-		this.pendingEof = false;
-		if (this.worker) this.worker.onmessage = null;
-		resetBufferedStdin(this.buffer);
-		if (!this.exit) {
-			this.terminate();
-		}
+		this.terminate();
+		this.loadPromise = null;
+		this.disposeRuntime();
+		this.compiledArtifact = null;
+		this.compiledArtifactExecutionError = '';
+		this.compiledCacheKey = '';
 	}
 }
 
