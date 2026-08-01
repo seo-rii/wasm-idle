@@ -57,7 +57,7 @@ const scenarios = [
 	},
 	{
 		name: '@wasm-idle/lsp install',
-		packageNames: ['@wasm-idle/lsp', '@wasm-idle/llvm-core'],
+		packageNames: ['@wasm-idle/lsp', '@wasm-idle/llvm-core', '@wasm-idle/core'],
 		imports: [
 			"await import('@wasm-idle/llvm-core/core/gcc-compat');",
 			"await import('@wasm-idle/lsp');",

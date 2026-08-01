@@ -157,4 +157,20 @@ describe('LLVM runtime package scripts', () => {
 		}
 		expect(verifier).toContain("['wasm-idle', '.']");
 	});
+
+	it('installs the local core tarball with the standalone LSP package', async () => {
+		const verifier = await readPackageVerifier();
+		const scenarioStart = verifier.indexOf("name: '@wasm-idle/lsp install'");
+		const scenarioEnd = verifier.indexOf(
+			"name: 'all public packages/adapters aggregate'",
+			scenarioStart
+		);
+		const scenario = verifier.slice(scenarioStart, scenarioEnd);
+
+		expect(scenarioStart).toBeGreaterThanOrEqual(0);
+		expect(scenarioEnd).toBeGreaterThan(scenarioStart);
+		expect(scenario).toContain(
+			"packageNames: ['@wasm-idle/lsp', '@wasm-idle/llvm-core', '@wasm-idle/core']"
+		);
+	});
 });
