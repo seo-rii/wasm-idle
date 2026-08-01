@@ -118,22 +118,33 @@ class Wasm implements Sandbox {
 					}
 					this.worker = worker;
 					this.workerSession.attach(worker);
-					worker.onmessage = (event: MessageEvent<any>) => {
-						if (
-							this.activeLoadCleanup !== cleanup ||
-							signal?.aborted ||
-							this.worker !== worker
-						) {
-							return;
-						}
-						reportWorkerProgress(progress, event.data?.progress);
-						if (event.data?.load) {
-							progress?.set?.(1);
-							if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
-							resolveLoad();
-						}
-						if (event.data?.error) rejectLoad(event.data.error);
+					let handler: (event: MessageEvent<any>) => void;
+					const ownsLoad = () =>
+						this.activeLoadCleanup === cleanup &&
+						!signal?.aborted &&
+						this.worker === worker &&
+						worker.onmessage === handler;
+					const failLoad = (error: unknown) => {
+						if (!ownsLoad()) return;
+						rejectLoad(error);
 					};
+					handler = (event: MessageEvent<any>) => {
+						if (!ownsLoad()) return;
+						try {
+							reportWorkerProgress(progress, event.data?.progress);
+							if (!ownsLoad()) return;
+							if (event.data?.load) {
+								progress?.set?.(1);
+								if (!ownsLoad()) return;
+								resolveLoad();
+								return;
+							}
+							if (event.data?.error) rejectLoad(event.data.error);
+						} catch (error) {
+							failLoad(error);
+						}
+					};
+					worker.onmessage = handler;
 					worker.postMessage({
 						load: true,
 						log: _log
@@ -244,11 +255,16 @@ class Wasm implements Sandbox {
 			const cleanup = () => {
 				if (cleanedUp) return;
 				cleanedUp = true;
-				if (hasExplicitStdin) {
+				const ownsInput = this.activeRunCleanup === cleanup;
+				if (hasExplicitStdin && ownsInput) {
 					this.pendingInput = [];
 					this.pendingEof = false;
 					this.waitingForInput = false;
-					resetBufferedStdin(this.buffer);
+					try {
+						resetBufferedStdin(this.buffer);
+					} catch {
+						// Stdin cleanup must not replace the execution result.
+					}
 				}
 				if (signal && onAbort) {
 					try {
@@ -259,39 +275,57 @@ class Wasm implements Sandbox {
 				}
 				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
 			};
-			const handler = (event: Event & { data: any }) => {
-				if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) {
-					cleanup();
-					if (worker.onmessage === handler) worker.onmessage = null;
-					return;
-				}
-				const { output, results, error, buffer, diagnostic, progress } = event.data;
-				if (buffer) {
-					this.waitingForInput = true;
-					this.flushPendingInput();
-				}
-				reportWorkerProgress(_prog, progress);
-				if (output) this.output?.(output);
-				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
-				if (results) {
-					cleanup();
-					this.activeRun = false;
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.waitingForInput = false;
-					this.pendingEof = false;
-					this.workerSession.complete(operation);
-					resolve(results as string);
-				}
-				if (error) {
-					cleanup();
-					this.activeRun = false;
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.waitingForInput = false;
-					this.pendingEof = false;
-					this.workerSession.complete(operation);
-					reject(error);
+			let handler: (event: Event & { data: any }) => void;
+			const ownsRun = () =>
+				this.activeRun &&
+				this.activeRunCleanup === cleanup &&
+				this.worker === worker &&
+				worker.onmessage === handler &&
+				_uid === this.uid;
+			const failRun = (error: unknown) => {
+				if (!ownsRun()) return;
+				this.workerSession.terminate(error);
+			};
+			handler = (event: Event & { data: any }) => {
+				if (!ownsRun()) return;
+				try {
+					const { output, results, error, buffer, diagnostic, progress } = event.data;
+					if (buffer && !hasExplicitStdin) {
+						this.waitingForInput = true;
+						this.flushPendingInput();
+						if (!ownsRun()) return;
+					}
+					reportWorkerProgress(_prog, progress);
+					if (!ownsRun()) return;
+					if (output) this.output?.(output);
+					if (!ownsRun()) return;
+					if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
+					if (!ownsRun()) return;
+					if (results) {
+						if (!this.workerSession.complete(operation)) return;
+						if (worker.onmessage === handler) worker.onmessage = null;
+						cleanup();
+						this.activeRun = false;
+						this.elapse = Date.now() - this.begin;
+						this.exit = true;
+						this.waitingForInput = false;
+						this.pendingEof = false;
+						resolve(results as string);
+						return;
+					}
+					if (error) {
+						if (!this.workerSession.complete(operation)) return;
+						if (worker.onmessage === handler) worker.onmessage = null;
+						cleanup();
+						this.activeRun = false;
+						this.elapse = Date.now() - this.begin;
+						this.exit = true;
+						this.waitingForInput = false;
+						this.pendingEof = false;
+						reject(error);
+					}
+				} catch (error) {
+					failRun(error);
 				}
 			};
 			onAbort = signal
@@ -331,9 +365,7 @@ class Wasm implements Sandbox {
 					log: _log
 				});
 			} catch (error) {
-				cleanup();
-				this.activeRun = false;
-				this.workerSession.terminate(error);
+				failRun(error);
 			}
 		});
 	}
@@ -344,10 +376,8 @@ class Wasm implements Sandbox {
 
 	terminate(reason: unknown = 'Process terminated') {
 		const loadCleanup = this.activeLoadCleanup;
-		this.activeLoadCleanup = null;
 		loadCleanup?.();
 		const cleanup = this.activeRunCleanup;
-		this.activeRunCleanup = null;
 		cleanup?.();
 		this.activeRun = false;
 		this.waitingForInput = false;

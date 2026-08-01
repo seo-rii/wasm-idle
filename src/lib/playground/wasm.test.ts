@@ -387,6 +387,183 @@ describe('WASM sandbox', () => {
 		expect(retryWorker.terminate).not.toHaveBeenCalled();
 	});
 
+	it.each([
+		{ stage: 'streamed', message: { progress: { percent: 50 } } },
+		{ stage: 'ready', message: { load: true } }
+	])('retires the WASM worker when the $stage progress callback throws', async ({ message }) => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Wasm();
+		const callbackError = new Error('WASM startup progress failed');
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const progress = {
+			set: vi.fn(() => {
+				throw callbackError;
+			})
+		};
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+
+		expect(() => staleHandler?.({ data: message } as MessageEvent<any>)).not.toThrow();
+		await expect(loading).rejects.toBe(callbackError);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.worker).toBeUndefined();
+		controller.abort(new Error('late failed startup abort'));
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(progress.set).toHaveBeenCalledOnce();
+
+		suppressAutoLoadAck = false;
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('keeps the active WASM operation while callbacks attempt reentrant work', async () => {
+		const sandbox = new Wasm();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		sandbox.output = () => {
+			reentrantRun = sandbox.run('AGFzbQ==', false);
+			reentrantLoad = sandbox.load('/replacement/');
+		};
+
+		const running = sandbox.run('AGFzbQ==', false);
+		const handler = worker.onmessage;
+		handler?.({ data: { output: 'trigger\n', results: true } } as MessageEvent<any>);
+
+		await expect(reentrantRun).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'WASM'
+		});
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'WASM'
+		});
+		await expect(running).resolves.toBe(true);
+		expect(worker.onmessage).toBeNull();
+		expect(worker.terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves a replacement after a WASM callback terminates and throws', async () => {
+		const sandbox = new Wasm();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+		const controller = new AbortController();
+		const abortReason = new Error('WASM callback abort');
+		const callbackError = new Error('WASM callback throw after abort');
+		let replacement: Promise<void> | undefined;
+		sandbox.output = () => {
+			controller.abort(abortReason);
+			replacement = sandbox.load('/replacement/');
+			throw callbackError;
+		};
+		const running = sandbox.run('AGFzbQ==', false, true, undefined, [], {
+			stdin: 'fixed\n',
+			signal: controller.signal
+		});
+		const outcome = running.catch((error) => error);
+		const staleHandler = worker.onmessage;
+
+		expect(() =>
+			staleHandler?.({
+				data: { output: 'trigger\n', results: true }
+			} as MessageEvent<any>)
+		).not.toThrow();
+		await expect(outcome).resolves.toBe(abortReason);
+		await expect(replacement).resolves.toBeUndefined();
+		const replacementWorker = workerInstances.at(-1)!;
+		const replacementHandler = replacementWorker.onmessage;
+		sandbox.write('replacement input\n');
+		sandbox.eof();
+
+		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBe(replacementWorker);
+		expect(replacementWorker.onmessage).toBe(replacementHandler);
+		expect(sandbox.pendingInput).toEqual(['replacement input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+	});
+
+	it.each(['progress', 'output', 'diagnostic'] as const)(
+		'rejects and retires the WASM worker when a %s callback throws',
+		async (callbackKind) => {
+			const sandbox = new Wasm();
+			const worker = new MockWorker();
+			worker.postMessage.mockImplementation(() => undefined);
+			sandbox.worker = worker as unknown as Worker;
+			const callbackError = new Error(`WASM ${callbackKind} callback failed`);
+			const controller = new AbortController();
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const progress = {
+				set: vi.fn(() => {
+					if (callbackKind === 'progress') throw callbackError;
+				})
+			};
+			const output = vi.fn(() => {
+				if (callbackKind === 'output') throw callbackError;
+			});
+			const diagnostic = vi.fn(() => {
+				if (callbackKind === 'diagnostic') throw callbackError;
+			});
+			sandbox.output = output;
+			sandbox.oncompilerdiagnostic = diagnostic;
+
+			const running = sandbox.run('AGFzbQ==', false, true, progress, [], {
+				stdin: 'fixed\n',
+				signal: controller.signal
+			});
+			const handler = worker.onmessage;
+			sandbox.write('discard after explicit stdin\n');
+			expect(() =>
+				handler?.({
+					data: {
+						progress: 0.5,
+						output: 'callback output\n',
+						diagnostic: { message: 'callback diagnostic' },
+						results: true
+					}
+				} as MessageEvent<any>)
+			).not.toThrow();
+
+			await expect(running).rejects.toBe(callbackError);
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			expect(worker.onmessage).toBeNull();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+			expect(sandbox.worker).toBeUndefined();
+			expect(sandbox.pendingInput).toEqual([]);
+			expect(sandbox.pendingEof).toBe(false);
+			if (callbackKind === 'progress') {
+				expect(output).not.toHaveBeenCalled();
+				expect(diagnostic).not.toHaveBeenCalled();
+			} else if (callbackKind === 'output') {
+				expect(diagnostic).not.toHaveBeenCalled();
+			}
+
+			handler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+			sandbox.output = vi.fn();
+			sandbox.oncompilerdiagnostic = vi.fn();
+			await sandbox.load('/absproxy/5173');
+			await expect(sandbox.run('AGFzbQ==', false)).resolves.toBe(true);
+			expect(workerInstances.at(-1)).not.toBe(worker);
+		}
+	);
+
 	it('releases WASM run activity after synchronous dispatch failure', async () => {
 		const sandbox = new Wasm();
 		const worker = new MockWorker();
@@ -474,6 +651,26 @@ describe('WASM sandbox', () => {
 		expect(runMessages[0].stdin).toBe('injected\n');
 		expect(runMessages[1].stdin).toBeUndefined();
 		expect(bufferedValues).toEqual(['', '']);
+	});
+
+	it('does not stream terminal input into an explicit WASM stdin run', async () => {
+		const sandbox = new Wasm();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+
+		const running = sandbox.run('AGFzbQ==', false, true, undefined, [], {
+			stdin: 'authoritative\n'
+		});
+		const handler = worker.onmessage;
+		sandbox.write('terminal input\n');
+		handler?.({ data: { buffer: true } } as MessageEvent<any>);
+
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(sandbox.pendingInput).toEqual(['terminal input\n']);
+		handler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(running).resolves.toBe(true);
+		expect(sandbox.pendingInput).toEqual([]);
 	});
 
 	it('rejects load when the WASM worker script fails before posting load', async () => {
