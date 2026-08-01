@@ -156,18 +156,30 @@ class Java implements Sandbox {
 						return;
 					}
 					this.assetBridge = assetBridge;
-					const handler = (event: MessageEvent<any>) => {
-						if (
-							this.worker !== worker ||
-							worker.onmessage !== handler ||
-							this.assetBridge !== assetBridge
-						) {
-							return;
+					let handler: (event: MessageEvent<any>) => void;
+					const ownsWorker = () =>
+						this.worker === worker &&
+						worker.onmessage === handler &&
+						this.assetBridge === assetBridge;
+					const ownsLoad = () =>
+						ownsWorker() && this.activeLoadCleanup === cleanup && !signal?.aborted;
+					const failLoad = (error: unknown) => {
+						if (!ownsLoad()) return;
+						rejectLoad(error);
+					};
+					handler = (event: MessageEvent<any>) => {
+						if (!ownsWorker()) return;
+						try {
+							if (assetBridge.handleMessage(event)) return;
+							if (!ownsLoad()) return;
+							if (event.data?.load) {
+								resolveLoad();
+								return;
+							}
+							if (event.data?.error) rejectLoad(event.data.error);
+						} catch (error) {
+							failLoad(error);
 						}
-						if (assetBridge.handleMessage(event)) return;
-						if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
-						if (event.data?.load) resolveLoad();
-						if (event.data?.error) rejectLoad(event.data.error);
 					};
 					worker.onmessage = handler;
 					worker.postMessage({
@@ -294,11 +306,16 @@ class Java implements Sandbox {
 			const cleanup = () => {
 				if (cleanedUp) return;
 				cleanedUp = true;
-				if (hasExplicitStdin) {
+				const ownsInput = this.activeRunCleanup === cleanup;
+				if (hasExplicitStdin && ownsInput) {
 					this.pendingInput = [];
 					this.pendingEof = false;
 					this.waitingForInput = false;
-					resetBufferedStdin(this.buffer);
+					try {
+						resetBufferedStdin(this.buffer);
+					} catch {
+						// Stdin cleanup must not replace the execution result.
+					}
 				}
 				if (signal && onAbort) {
 					try {
@@ -318,44 +335,53 @@ class Java implements Sandbox {
 			};
 			this.activeRunCleanup = cleanup;
 			const operation = this.workerSession.beginRun(worker, rejectRun);
-			const handler = (event: Event & { data: any }) => {
-				if (
-					this.worker !== worker ||
-					worker.onmessage !== handler ||
-					this.assetBridge !== assetBridge
-				) {
-					return;
-				}
-				if (assetBridge?.handleMessage(event as MessageEvent<any>)) return;
-				if (this.activeRunCleanup !== cleanup || _uid !== this.uid) return;
-				const { output, results, error, buffer, diagnostic } = event.data;
-				if (buffer) {
-					this.waitingForInput = true;
-					this.flushPendingInput();
-				}
-				if (output) this.output?.(output);
-				if (this.activeRunCleanup !== cleanup || _uid !== this.uid) return;
-				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
-				if (this.activeRunCleanup !== cleanup || _uid !== this.uid) return;
-				if (results) {
-					this.workerSession.complete(operation);
-					cleanup();
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.waitingForInput = false;
-					this.pendingEof = false;
-					resolve(results as string);
-					return;
-				}
-				if (error) {
-					this.workerSession.complete(operation);
-					cleanup();
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.waitingForInput = false;
-					this.pendingEof = false;
-					reject(error);
-					return;
+			let handler: (event: Event & { data: any }) => void;
+			const ownsWorker = () =>
+				this.worker === worker &&
+				worker.onmessage === handler &&
+				this.assetBridge === assetBridge;
+			const ownsRun = () =>
+				ownsWorker() && this.activeRunCleanup === cleanup && _uid === this.uid;
+			const failRun = (error: unknown) => {
+				if (!ownsRun()) return;
+				this.workerSession.terminate(error);
+			};
+			handler = (event: Event & { data: any }) => {
+				if (!ownsWorker()) return;
+				try {
+					if (assetBridge?.handleMessage(event as MessageEvent<any>)) return;
+					if (!ownsRun()) return;
+					const { output, results, error, buffer, diagnostic } = event.data;
+					if (buffer) {
+						this.waitingForInput = true;
+						this.flushPendingInput();
+						if (!ownsRun()) return;
+					}
+					if (output) this.output?.(output);
+					if (!ownsRun()) return;
+					if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
+					if (!ownsRun()) return;
+					if (results) {
+						if (!this.workerSession.complete(operation)) return;
+						cleanup();
+						this.elapse = Date.now() - this.begin;
+						this.exit = true;
+						this.waitingForInput = false;
+						this.pendingEof = false;
+						resolve(results as string);
+						return;
+					}
+					if (error) {
+						if (!this.workerSession.complete(operation)) return;
+						cleanup();
+						this.elapse = Date.now() - this.begin;
+						this.exit = true;
+						this.waitingForInput = false;
+						this.pendingEof = false;
+						reject(error);
+					}
+				} catch (error) {
+					failRun(error);
 				}
 			};
 			onAbort = signal
@@ -401,8 +427,7 @@ class Java implements Sandbox {
 					workspaceFiles: workspace.workspaceFiles
 				});
 			} catch (error) {
-				if (worker.onmessage === handler) worker.onmessage = null;
-				this.workerSession.terminate(error);
+				failRun(error);
 			}
 		});
 	}
@@ -413,10 +438,8 @@ class Java implements Sandbox {
 
 	terminate(reason: unknown = 'Process terminated') {
 		const loadCleanup = this.activeLoadCleanup;
-		this.activeLoadCleanup = null;
 		loadCleanup?.();
 		const runCleanup = this.activeRunCleanup;
-		this.activeRunCleanup = null;
 		runCleanup?.();
 		this.waitingForInput = false;
 		this.pendingEof = false;

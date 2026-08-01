@@ -359,6 +359,100 @@ public class Main {
 		await expect(loading).resolves.toBeUndefined();
 	});
 
+	it('retires the Java worker when a startup asset progress callback throws', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Java();
+		const callbackError = new Error('Java startup progress failed');
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const progress = {
+			set: vi.fn((value: number) => {
+				if (value > 0) throw callbackError;
+			})
+		};
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+		const assetBridge = sandbox.assetBridge!;
+		const dispose = vi.spyOn(assetBridge, 'dispose');
+
+		expect(() =>
+			staleHandler?.({
+				data: {
+					assetProgress: { asset: 'compiler.wasm', loaded: 1, total: 1 }
+				}
+			} as MessageEvent<any>)
+		).not.toThrow();
+		await expect(loading).rejects.toBe(callbackError);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(dispose).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+		controller.abort(new Error('late failed startup abort'));
+		staleHandler?.({
+			data: {
+				assetProgress: { asset: 'compiler.wasm', loaded: 1, total: 1 },
+				load: true
+			}
+		} as MessageEvent<any>);
+		expect(progress.set).toHaveBeenCalledTimes(2);
+
+		suppressAutoLoadAck = false;
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('preserves a Java replacement after startup progress terminates and throws', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Java();
+		const terminationReason = new Error('terminate Java startup progress');
+		const callbackError = new Error('Java startup callback throw after termination');
+		let replacement: Promise<void> | undefined;
+		let callbackArmed = false;
+		const loading = sandbox.load(
+			'/cancelled/',
+			'',
+			true,
+			[],
+			{},
+			{
+				set(value: number) {
+					if (!callbackArmed || value === 0) return;
+					sandbox.terminate(terminationReason);
+					suppressAutoLoadAck = false;
+					replacement = sandbox.load('/replacement/');
+					throw callbackError;
+				}
+			}
+		);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const staleHandler = workerInstances[0].onmessage;
+		callbackArmed = true;
+
+		expect(() =>
+			staleHandler?.({
+				data: {
+					assetProgress: { asset: 'compiler.wasm', loaded: 1, total: 1 }
+				}
+			} as MessageEvent<any>)
+		).not.toThrow();
+		await expect(loading).rejects.toBe(terminationReason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(sandbox.assetBridge).not.toBeNull();
+		expect(workerInstances[0]?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
 	it('rejects a pre-aborted Java startup without changing its loaded worker or bridge', async () => {
 		const sandbox = new Java();
 		await sandbox.load('/absproxy/5173');
@@ -528,6 +622,45 @@ public class Main {
 		expect(outputs).toEqual(['first\n', 'second\n']);
 	});
 
+	it('keeps the active Java operation while callbacks attempt reentrant work', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const assetBridge = sandbox.assetBridge!;
+		const handleMessage = vi.spyOn(assetBridge, 'handleMessage');
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		sandbox.output = () => {
+			reentrantRun = sandbox.run('public class Nested {}', false);
+			reentrantLoad = sandbox.load('/replacement/');
+		};
+		onPostMessage = () => undefined;
+
+		const running = sandbox.run('public class Main {}', false);
+		const handler = worker.onmessage;
+		handler?.({ data: { output: 'trigger\n', results: true } } as MessageEvent<any>);
+
+		await expect(reentrantRun).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'JAVA'
+		});
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'JAVA'
+		});
+		await expect(running).resolves.toBe(true);
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		handleMessage.mockClear();
+		handler?.({
+			data: { assetProgress: { asset: 'compiler.wasm', loaded: 1, total: 1 } }
+		} as MessageEvent<any>);
+		expect(handleMessage).toHaveBeenCalledOnce();
+	});
+
 	it('keeps Java idle when run is called without a loaded worker', async () => {
 		const sandbox = new Java();
 
@@ -638,6 +771,57 @@ public class Main {
 		expect(retryDispose).not.toHaveBeenCalled();
 	});
 
+	it('preserves a replacement after a Java callback terminates and throws', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const assetBridge = sandbox.assetBridge!;
+		const handleMessage = vi.spyOn(assetBridge, 'handleMessage');
+		const controller = new AbortController();
+		const abortReason = new Error('Java callback abort');
+		const callbackError = new Error('Java callback throw after abort');
+		let replacement: Promise<void> | undefined;
+		sandbox.output = () => {
+			controller.abort(abortReason);
+			onPostMessage = null;
+			replacement = sandbox.load('/replacement/');
+			throw callbackError;
+		};
+		onPostMessage = () => undefined;
+		const running = sandbox.run('public class Main {}', false, true, undefined, [], {
+			stdin: 'fixed\n',
+			signal: controller.signal
+		});
+		const outcome = running.catch((error) => error);
+		const staleHandler = worker.onmessage;
+
+		expect(() =>
+			staleHandler?.({ data: { output: 'trigger\n', results: true } } as MessageEvent<any>)
+		).not.toThrow();
+		await expect(outcome).resolves.toBe(abortReason);
+		await expect(replacement).resolves.toBeUndefined();
+		const replacementWorker = workerInstances[1];
+		const replacementBridge = sandbox.assetBridge;
+		const replacementHandler = replacementWorker.onmessage;
+		sandbox.write('replacement input\n');
+		sandbox.eof();
+
+		handleMessage.mockClear();
+		staleHandler?.({
+			data: {
+				assetProgress: { asset: 'compiler.wasm', loaded: 1, total: 1 },
+				output: 'stale\n',
+				results: true
+			}
+		} as MessageEvent<any>);
+		expect(handleMessage).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(replacementWorker);
+		expect(sandbox.assetBridge).toBe(replacementBridge);
+		expect(replacementWorker.onmessage).toBe(replacementHandler);
+		expect(sandbox.pendingInput).toEqual(['replacement input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+	});
+
 	it('releases Java operation ownership after synchronous dispatch failure', async () => {
 		const sandbox = new Java();
 		await sandbox.load('/absproxy/5173');
@@ -711,6 +895,110 @@ public class Main {
 
 		replacementHandler?.({ data: { results: true } } as MessageEvent<any>);
 		await expect(replacementRun).resolves.toBe(true);
+	});
+
+	it.each(['asset-progress', 'output', 'diagnostic'] as const)(
+		'rejects and retires the Java worker when a %s callback throws',
+		async (callbackKind) => {
+			const sandbox = new Java();
+			const callbackError = new Error(`Java ${callbackKind} callback failed`);
+			let progressArmed = false;
+			const progress = {
+				set: vi.fn((value: number) => {
+					if (progressArmed && callbackKind === 'asset-progress' && value > 0) {
+						throw callbackError;
+					}
+				})
+			};
+			await sandbox.load('/absproxy/5173', '', true, [], {}, progress);
+			const worker = workerInstances[0];
+			const assetBridge = sandbox.assetBridge!;
+			const dispose = vi.spyOn(assetBridge, 'dispose');
+			const controller = new AbortController();
+			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+			const output = vi.fn(() => {
+				if (callbackKind === 'output') throw callbackError;
+			});
+			const diagnostic = vi.fn(() => {
+				if (callbackKind === 'diagnostic') throw callbackError;
+			});
+			sandbox.output = output;
+			sandbox.oncompilerdiagnostic = diagnostic;
+			onPostMessage = () => undefined;
+
+			const running = sandbox.run('public class Main {}', false, true, undefined, [], {
+				stdin: 'fixed\n',
+				signal: controller.signal
+			});
+			const staleHandler = worker.onmessage;
+			sandbox.write('discard after explicit stdin\n');
+			progressArmed = true;
+			const message =
+				callbackKind === 'asset-progress'
+					? {
+							assetProgress: { asset: 'compiler.wasm', loaded: 1, total: 1 }
+						}
+					: {
+							output: 'callback output\n',
+							diagnostic: { message: 'callback diagnostic' },
+							results: true
+						};
+			expect(() => staleHandler?.({ data: message } as MessageEvent<any>)).not.toThrow();
+
+			await expect(running).rejects.toBe(callbackError);
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			expect(dispose).toHaveBeenCalledOnce();
+			expect(worker.onmessage).toBeNull();
+			expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+			expect(sandbox.worker).toBeUndefined();
+			expect(sandbox.assetBridge).toBeNull();
+			expect(sandbox.pendingInput).toEqual([]);
+			expect(sandbox.pendingEof).toBe(false);
+			if (callbackKind === 'asset-progress') {
+				expect(output).not.toHaveBeenCalled();
+				expect(diagnostic).not.toHaveBeenCalled();
+			} else if (callbackKind === 'output') {
+				expect(diagnostic).not.toHaveBeenCalled();
+			}
+
+			staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+			onPostMessage = null;
+			sandbox.output = vi.fn();
+			sandbox.oncompilerdiagnostic = vi.fn();
+			await sandbox.load('/absproxy/5173');
+			await expect(sandbox.run('public class Retry {}', false)).resolves.toBe(true);
+			expect(workerInstances.at(-1)).not.toBe(worker);
+		}
+	);
+
+	it('releases Java operation ownership after a normal worker error', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const assetBridge = sandbox.assetBridge!;
+		const handleMessage = vi.spyOn(assetBridge, 'handleMessage');
+		const runtimeError = new Error('Java worker execution failed');
+		onPostMessage = () => undefined;
+
+		const running = sandbox.run('public class Main {}', false);
+		const handler = worker.onmessage;
+		handler?.({ data: { error: runtimeError } } as MessageEvent<any>);
+
+		await expect(running).rejects.toBe(runtimeError);
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		expect(sandbox.assetBridge).toBe(assetBridge);
+		expect(sandbox.exit).toBe(true);
+
+		handleMessage.mockClear();
+		handler?.({
+			data: { assetProgress: { asset: 'compiler.wasm', loaded: 1, total: 1 } }
+		} as MessageEvent<any>);
+		expect(handleMessage).toHaveBeenCalledOnce();
+
+		onPostMessage = null;
+		await expect(sandbox.run('public class Retry {}', false)).resolves.toBe(true);
 	});
 
 	it('writes queued terminal input when the worker requests stdin', async () => {
