@@ -522,6 +522,13 @@ export class LldbSandboxSession {
 					`decoded ${binary.length} bytes for a ${count}-byte request`
 				);
 			}
+			if (binary.length + (unreadableBytes ?? 0) > count) {
+				invalidDapResponse(
+					'readMemory',
+					'unreadableBytes',
+					`reported ${binary.length} readable and ${unreadableBytes ?? 0} unreadable bytes for a ${count}-byte request`
+				);
+			}
 			const data = new Uint8Array(binary.length);
 			for (let index = 0; index < binary.length; index += 1) {
 				data[index] = binary.charCodeAt(index);

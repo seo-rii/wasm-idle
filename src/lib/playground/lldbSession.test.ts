@@ -871,6 +871,11 @@ describe('LldbSandboxSession', () => {
 			invoke: (controller: LldbSandboxSession) => controller.readMemory('0x1000', 0, 1)
 		},
 		{
+			command: 'readMemory',
+			response: { address: '0x1000', data: 'AQIDBA==', unreadableBytes: 3 },
+			invoke: (controller: LldbSandboxSession) => controller.readMemory('0x1000', 0, 6)
+		},
+		{
 			command: 'evaluate',
 			response: { variablesReference: 0 },
 			invoke: async (controller: LldbSandboxSession) => {

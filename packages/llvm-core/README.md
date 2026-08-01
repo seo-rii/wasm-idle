@@ -130,8 +130,8 @@ error.
 The live playground session also validates the command-specific bodies it consumes after envelope
 parsing. Malformed `scopes`, `variables`, `readMemory`, or `evaluate` data raises a `ProtocolError`,
 stops the debug view, and disposes both workers. In particular, memory data must be valid Base64 and
-cannot exceed the requested byte count; expression fallback to `?` applies only to ordinary LLDB
-evaluation failures, not to a malformed successful response.
+the readable-plus-unreadable total cannot exceed the requested byte count; expression fallback to
+`?` applies only to ordinary LLDB evaluation failures, not to a malformed successful response.
 Stopped-state publication has the same boundary: `stopped`, `continued`, and `exited` event fields
 plus the follow-up `threads` and `stackTrace` responses are checked before they can change the
 selected thread, frame, source location, call stack, stopped-snapshot generation, or process exit

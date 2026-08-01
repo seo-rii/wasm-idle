@@ -777,6 +777,13 @@ describe('LldbDapAdapter', () => {
 			path: 'data'
 		},
 		{
+			command: 'readMemory',
+			response: { address: '0x1000', data: 'AQIDBA==', unreadableBytes: 3 },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.readMemory('memory', 0, 6),
+			path: 'unreadableBytes'
+		},
+		{
 			command: 'evaluate',
 			response: { result: 42, variablesReference: 0 },
 			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
