@@ -43,9 +43,17 @@ class Fortran implements Sandbox {
 	private readonly workerSession = new WorkerSession({
 		label: 'Fortran',
 		onDispose: (worker) => {
-			if (this.worker === worker) delete this.worker;
-			this.assetBridge = null;
-			this.activeFortranAssetsKey = '';
+			if (this.worker === worker) {
+				const assetBridge = this.assetBridge;
+				delete this.worker;
+				this.assetBridge = null;
+				this.activeFortranAssetsKey = '';
+				try {
+					assetBridge?.dispose();
+				} catch {
+					// Asset cleanup must not replace the worker operation result.
+				}
+			}
 			this.exit = true;
 			this.waitingForInput = false;
 			this.pendingEof = false;
