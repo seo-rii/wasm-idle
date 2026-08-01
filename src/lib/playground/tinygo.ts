@@ -18,6 +18,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { BusyError } from '@wasm-idle/core';
 
 type TinyGoRuntimeHooks = {
 	boot(): Promise<void>;
@@ -62,6 +63,11 @@ type TinyGoRuntimeModule = {
 	}) => TinyGoRuntimeHooks;
 };
 
+type TinyGoOperation = {
+	token: symbol;
+	phase: 'startup' | 'execute';
+};
+
 const ACTIVITY_PREFIX_PATTERN = /^\[\d{2}:\d{2}:\d{2}\]\s?/gm;
 
 class TinyGo implements Sandbox {
@@ -91,6 +97,7 @@ class TinyGo implements Sandbox {
 	runtimeProgressEnd = 0;
 	runtimeProgressValue = 0;
 	runtimeProgressAssets = new Map<string, { loaded: number; total: number }>();
+	private activeOperation: TinyGoOperation | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'TinyGo',
 		onDispose: (worker) => {
@@ -109,36 +116,37 @@ class TinyGo implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	): Promise<void> {
-		this.pendingInput = [];
-		this.waitingForInput = false;
-		this.pendingEof = false;
-		const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-		const nextModuleUrl = resolveTinyGoModuleUrl(runtimeAssets, currentUrl);
-		const nextRustCompilerUrl = resolveRustCompilerUrl(runtimeAssets, currentUrl);
-		const nextRustRuntimeBaseUrl = nextRustCompilerUrl
-			? new URL('./runtime/', nextRustCompilerUrl).toString()
-			: '';
-		if (!nextModuleUrl) {
-			throw new Error(
-				'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL or runtimeAssets.tinygo.moduleUrl.'
-			);
-		}
-		if (
-			(this.moduleUrl && this.moduleUrl !== nextModuleUrl) ||
-			this.rustRuntimeBaseUrl !== nextRustRuntimeBaseUrl
-		) {
-			this.disposeRuntime();
-			this.compiledArtifact = null;
-			this.compiledArtifactExecutionError = '';
-			this.compiledCacheKey = '';
-		}
-		this.assetLoader =
-			typeof runtimeAssets === 'object' ? runtimeAssets?.tinygo?.assetLoader : undefined;
-		this.assetPacks =
-			typeof runtimeAssets === 'object' ? runtimeAssets?.tinygo?.assetPacks : undefined;
-		this.moduleUrl = nextModuleUrl;
-		this.rustRuntimeBaseUrl = nextRustRuntimeBaseUrl;
+		const operation = this.beginOperation('startup');
 		try {
+			this.pendingInput = [];
+			this.waitingForInput = false;
+			this.pendingEof = false;
+			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			const nextModuleUrl = resolveTinyGoModuleUrl(runtimeAssets, currentUrl);
+			const nextRustCompilerUrl = resolveRustCompilerUrl(runtimeAssets, currentUrl);
+			const nextRustRuntimeBaseUrl = nextRustCompilerUrl
+				? new URL('./runtime/', nextRustCompilerUrl).toString()
+				: '';
+			if (!nextModuleUrl) {
+				throw new Error(
+					'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL or runtimeAssets.tinygo.moduleUrl.'
+				);
+			}
+			if (
+				(this.moduleUrl && this.moduleUrl !== nextModuleUrl) ||
+				this.rustRuntimeBaseUrl !== nextRustRuntimeBaseUrl
+			) {
+				this.disposeRuntime();
+				this.compiledArtifact = null;
+				this.compiledArtifactExecutionError = '';
+				this.compiledCacheKey = '';
+			}
+			this.assetLoader =
+				typeof runtimeAssets === 'object' ? runtimeAssets?.tinygo?.assetLoader : undefined;
+			this.assetPacks =
+				typeof runtimeAssets === 'object' ? runtimeAssets?.tinygo?.assetPacks : undefined;
+			this.moduleUrl = nextModuleUrl;
+			this.rustRuntimeBaseUrl = nextRustRuntimeBaseUrl;
 			progress?.set?.(0.25);
 			await this.ensureWorker();
 			progress?.set?.(0.5);
@@ -146,6 +154,26 @@ class TinyGo implements Sandbox {
 			progress?.set?.(1);
 		} catch (error) {
 			throw new Error(error instanceof Error ? error.message : String(error));
+		} finally {
+			this.completeOperation(operation);
+		}
+	}
+
+	private beginOperation(phase: TinyGoOperation['phase']) {
+		if (this.activeOperation) {
+			throw new BusyError('TinyGo runtime already has an active operation', {
+				runtimeId: 'TINYGO',
+				phase: this.activeOperation.phase
+			});
+		}
+		const operation = { token: Symbol(phase), phase } satisfies TinyGoOperation;
+		this.activeOperation = operation;
+		return operation;
+	}
+
+	private completeOperation(operation: TinyGoOperation) {
+		if (this.activeOperation?.token === operation.token) {
+			this.activeOperation = null;
 		}
 	}
 
@@ -414,6 +442,7 @@ class TinyGo implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		const operation = this.beginOperation('execute');
 		this.exit = false;
 		try {
 			this.begin = Date.now();
@@ -436,7 +465,7 @@ class TinyGo implements Sandbox {
 			const { programArgs } = resolveSandboxExecutionArgs('TINYGO', args, options);
 			const _uid = ++this.uid;
 			return await new Promise<boolean | string>((resolve, reject) => {
-				const operation = this.workerSession.beginRun(worker, reject);
+				const workerOperation = this.workerSession.beginRun(worker, reject);
 				worker.onmessage = (event: Event & { data: any }) => {
 					if (this.worker !== worker) return reject('Worker not loaded');
 					if (_uid !== this.uid) return (worker.onmessage = null);
@@ -451,7 +480,7 @@ class TinyGo implements Sandbox {
 						this.exit = true;
 						this.waitingForInput = false;
 						this.pendingEof = false;
-						this.workerSession.complete(operation);
+						this.workerSession.complete(workerOperation);
 						resolve(results as string);
 					}
 					if (error) {
@@ -459,7 +488,7 @@ class TinyGo implements Sandbox {
 						this.exit = true;
 						this.waitingForInput = false;
 						this.pendingEof = false;
-						this.workerSession.complete(operation);
+						this.workerSession.complete(workerOperation);
 						reject(error);
 					}
 				};
@@ -476,6 +505,8 @@ class TinyGo implements Sandbox {
 			this.waitingForInput = false;
 			this.pendingEof = false;
 			throw error instanceof Error ? error.message : String(error);
+		} finally {
+			this.completeOperation(operation);
 		}
 	}
 
