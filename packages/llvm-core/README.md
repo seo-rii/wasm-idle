@@ -79,7 +79,8 @@ await session.setBreakpoints({ path: '/workspace/main.cpp' }, [12, 18]);
 
 Configured and dynamic breakpoint lines must be positive safe integers. The product session
 validates and snapshots them before changing its per-source state; invalid lines are rejected before
-debug workers or a DAP request are created and do not supersede an in-flight valid update.
+debug workers or a DAP request are created and do not supersede an in-flight valid update. Values
+above `Number.MAX_SAFE_INTEGER` are rejected instead of being rounded in a DAP message.
 
 `setBreakpoints()` updates the session's resolved-breakpoint cache as well as sending DAP. Later
 `breakpoint` events therefore retain the IDs and source mapping from dynamic editor changes;

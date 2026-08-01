@@ -35,8 +35,10 @@ function cloneResolvedBreakpoints(breakpoints: readonly ResolvedBreakpoint[]) {
 
 function validateBreakpointLines(lines: readonly number[]) {
 	for (const line of lines) {
-		if (!Number.isInteger(line) || line < 1) {
-			throw new RangeError(`Breakpoint lines must be positive integers; received ${line}.`);
+		if (!Number.isSafeInteger(line) || line < 1) {
+			throw new RangeError(
+				`Breakpoint lines must be positive safe integers; received ${line}.`
+			);
 		}
 	}
 	return [...lines];

@@ -593,8 +593,8 @@ describe('BrowserLldbSession', () => {
 		]);
 		const invalidLineRequestCount = lldbWorker!.requests.length;
 		const invalidLineResults = await Promise.allSettled(
-			[0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY].map((line) =>
-				session.setBreakpoints({ path: '/workspace/main.cpp' }, [line])
+			[0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1].map(
+				(line) => session.setBreakpoints({ path: '/workspace/main.cpp' }, [line])
 			)
 		);
 		expect(invalidLineResults.map((result) => result.status)).toEqual(
@@ -1444,7 +1444,7 @@ describe('BrowserLldbSession', () => {
 		}
 	});
 
-	it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+	it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(
 		'rejects configured breakpoint line $line before creating workers',
 		async (line) => {
 			let created = false;
