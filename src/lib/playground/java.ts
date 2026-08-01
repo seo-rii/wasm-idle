@@ -37,6 +37,7 @@ class Java implements Sandbox {
 			this.activeRunCleanup?.();
 			this.activeRunCleanup = null;
 			if (this.worker === worker) {
+				this.assetBridge?.dispose();
 				delete this.worker;
 				this.assetBridge = null;
 			}
@@ -202,6 +203,12 @@ class Java implements Sandbox {
 		}
 		const worker = this.worker;
 		if (!worker) return Promise.reject('Worker not loaded');
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(
+				signal.reason ?? new DOMException('Java execution aborted', 'AbortError')
+			);
+		}
 		let programArgs: string[];
 		try {
 			programArgs = resolveSandboxExecutionArgs('JAVA', args, options).programArgs;
@@ -212,10 +219,18 @@ class Java implements Sandbox {
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
+			let onAbort: (() => void) | undefined;
 			let cleanedUp = false;
 			const cleanup = () => {
 				if (cleanedUp) return;
 				cleanedUp = true;
+				if (signal && onAbort) {
+					try {
+						signal.removeEventListener('abort', onAbort);
+					} catch {
+						// Cleanup must not replace the execution result.
+					}
+				}
 				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
 			};
 			const rejectRun = (reason?: unknown) => {
@@ -267,7 +282,36 @@ class Java implements Sandbox {
 					return;
 				}
 			};
+			onAbort = signal
+				? () => {
+						if (
+							this.activeRunCleanup !== cleanup ||
+							this.worker !== worker ||
+							worker.onmessage !== handler ||
+							_uid !== this.uid
+						) {
+							cleanup();
+							return;
+						}
+						this.terminate(
+							signal.reason ??
+								new DOMException('Java execution aborted', 'AbortError')
+						);
+					}
+				: undefined;
 			worker.onmessage = handler;
+			if (signal && onAbort) {
+				signal.addEventListener('abort', onAbort, { once: true });
+				if (signal.aborted) onAbort();
+			}
+			if (
+				this.activeRunCleanup !== cleanup ||
+				this.worker !== worker ||
+				worker.onmessage !== handler ||
+				_uid !== this.uid
+			) {
+				return;
+			}
 			this.begin = Date.now();
 			try {
 				worker.postMessage({

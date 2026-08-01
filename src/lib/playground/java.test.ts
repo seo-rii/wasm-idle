@@ -286,17 +286,122 @@ describe('TeaVM Java sandbox', () => {
 		await expect(sandbox.run('public class Main {}', false)).resolves.toBe(true);
 	});
 
+	it('rejects a pre-aborted Java run without changing its loaded worker or bridge', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		const assetBridge = sandbox.assetBridge!;
+		const dispose = vi.spyOn(assetBridge, 'dispose');
+		const controller = new AbortController();
+		const reason = new Error('Java pre-aborted');
+		controller.abort(reason);
+
+		await expect(
+			sandbox.run('public class Main {}', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(dispose).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		expect(sandbox.assetBridge).toBe(assetBridge);
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+
+		await expect(sandbox.run('public class Main {}', false)).resolves.toBe(true);
+	});
+
+	it('aborts an active Java worker with its exact reason and disposes owned assets', async () => {
+		const sandbox = new Java();
+		const outputs: string[] = [];
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const assetBridge = sandbox.assetBridge!;
+		const handleMessage = vi.spyOn(assetBridge, 'handleMessage');
+		const dispose = vi.spyOn(assetBridge, 'dispose');
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		const reason = new Error('Java active abort');
+		sandbox.output = (chunk: string) => {
+			outputs.push(chunk);
+			controller.abort(reason);
+		};
+		onPostMessage = () => undefined;
+
+		const running = sandbox.run('public class Main {}', false, true, undefined, [], {
+			signal: controller.signal
+		});
+		const lateHandler = worker.onmessage;
+		lateHandler?.({ data: { output: 'before-abort\n', results: true } } as MessageEvent<any>);
+
+		await expect(running).rejects.toBe(reason);
+		expect(outputs).toEqual(['before-abort\n']);
+		expect(handleMessage).toHaveBeenCalledOnce();
+		expect(dispose).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+		expect(sandbox.exit).toBe(true);
+
+		handleMessage.mockClear();
+		lateHandler?.({
+			data: {
+				assetProgress: { asset: 'teavm.wasm', loaded: 1, total: 1 },
+				output: 'late\n',
+				results: true
+			}
+		} as MessageEvent<any>);
+		expect(handleMessage).not.toHaveBeenCalled();
+		expect(outputs).toEqual(['before-abort\n']);
+
+		onPostMessage = null;
+		sandbox.output = () => undefined;
+		await sandbox.load('/absproxy/5173');
+		const retryWorker = workerInstances[1];
+		const retryBridge = sandbox.assetBridge!;
+		const retryDispose = vi.spyOn(retryBridge, 'dispose');
+		const settledController = new AbortController();
+		const settledRemoveEventListener = vi.spyOn(
+			settledController.signal,
+			'removeEventListener'
+		);
+		await expect(
+			sandbox.run('public class Retry {}', false, true, undefined, [], {
+				signal: settledController.signal
+			})
+		).resolves.toBe(true);
+		expect(settledRemoveEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+		expect(retryDispose).not.toHaveBeenCalled();
+
+		settledController.abort(new Error('Java late abort'));
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+		expect(retryDispose).not.toHaveBeenCalled();
+	});
+
 	it('releases Java operation ownership after synchronous dispatch failure', async () => {
 		const sandbox = new Java();
 		await sandbox.load('/absproxy/5173');
 		const worker = workerInstances[0];
 		const dispatchError = new Error('Java dispatch failed');
+		const controller = new AbortController();
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		onPostMessage = () => {
 			throw dispatchError;
 		};
 
-		await expect(sandbox.run('public class Main {}', false)).rejects.toBe(dispatchError);
+		await expect(
+			sandbox.run('public class Main {}', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).rejects.toBe(dispatchError);
 		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
 		expect(sandbox.worker).toBeUndefined();
 		expect(sandbox.assetBridge).toBeNull();
 		expect(sandbox.exit).toBe(true);
