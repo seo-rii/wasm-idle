@@ -155,6 +155,39 @@ describe('worker direct runtime asset fallback', () => {
 		expect(bodyCancel).toHaveBeenCalledOnce();
 	});
 
+	it.each(['pending', 'rejected', 'thrown'] as const)(
+		'does not let a %s response cancellation hide the HTTP failure',
+		async (cancelMode) => {
+			const cleanupFailure = new Error('response cleanup failed');
+			const bodyCancel = vi.fn(() => {
+				if (cancelMode === 'pending') return new Promise<void>(() => undefined);
+				if (cancelMode === 'rejected') return Promise.reject(cleanupFailure);
+				throw cleanupFailure;
+			});
+			const fetchMock = vi.fn(async () => ({
+				body: { cancel: bodyCancel },
+				headers: new Headers(),
+				ok: false,
+				status: 503,
+				statusText: 'Unavailable',
+				url: `${runtimeBaseUrl}compiler.wasm`
+			}));
+			const { loadWorkerRuntimeAsset } = await setupDirectAssetLoader(fetchMock);
+			const guardedLoad = Promise.race([
+				loadWorkerRuntimeAsset('compiler.wasm'),
+				new Promise<never>((_resolve, reject) => {
+					setTimeout(() => reject(new Error('response cleanup timed out')), 100);
+				})
+			]);
+
+			await expect(guardedLoad).rejects.toThrow('Failed to load compiler.wasm: 503');
+			expect(bodyCancel).toHaveBeenCalledOnce();
+			expect(bodyCancel).toHaveBeenCalledWith(
+				expect.objectContaining({ message: 'Failed to load compiler.wasm: 503' })
+			);
+		}
+	);
+
 	it('rejects a substituted final URL and cancels the response body', async () => {
 		const bodyCancel = vi.fn(async () => undefined);
 		const fetchMock = vi.fn(async () => ({
@@ -210,6 +243,88 @@ describe('worker direct runtime asset fallback', () => {
 		);
 		expect(cancel).toHaveBeenCalledOnce();
 		expect(releaseLock).toHaveBeenCalledOnce();
+	});
+
+	it.each(['pending', 'rejected', 'thrown'] as const)(
+		'does not let a %s reader cancellation hide the byte-limit failure',
+		async (cancelMode) => {
+			const cleanupFailure = new Error('reader cleanup failed');
+			const cancel = vi.fn(() => {
+				if (cancelMode === 'pending') return new Promise<void>(() => undefined);
+				if (cancelMode === 'rejected') return Promise.reject(cleanupFailure);
+				throw cleanupFailure;
+			});
+			const releaseLock = vi.fn();
+			const read = vi.fn().mockResolvedValueOnce({ done: false, value: new Uint8Array(5) });
+			const fetchMock = vi.fn(async () => ({
+				body: {
+					getReader: () => ({ cancel, read, releaseLock })
+				},
+				headers: new Headers(),
+				ok: true,
+				status: 200,
+				statusText: 'OK',
+				url: `${runtimeBaseUrl}compiler.wasm`
+			}));
+			const { loadWorkerRuntimeAsset } = await setupDirectAssetLoader(fetchMock, 4);
+			const guardedLoad = Promise.race([
+				loadWorkerRuntimeAsset('compiler.wasm'),
+				new Promise<never>((_resolve, reject) => {
+					setTimeout(() => reject(new Error('reader cleanup timed out')), 100);
+				})
+			]);
+
+			await expect(guardedLoad).rejects.toThrow(
+				'Runtime asset compiler.wasm exceeds the 4 byte limit'
+			);
+			expect(cancel).toHaveBeenCalledOnce();
+			expect(cancel).toHaveBeenCalledWith(
+				expect.objectContaining({
+					message: 'Runtime asset compiler.wasm exceeds the 4 byte limit'
+				})
+			);
+			expect(releaseLock).toHaveBeenCalledOnce();
+		}
+	);
+
+	it('preserves a stream failure when releasing the reader also fails', async () => {
+		const cancel = vi.fn(async () => undefined);
+		const releaseLock = vi.fn(() => {
+			throw new Error('reader release failed');
+		});
+		const read = vi.fn().mockRejectedValueOnce(new Error('asset stream failed'));
+		const fetchMock = vi.fn(async () => ({
+			body: {
+				getReader: () => ({ cancel, read, releaseLock })
+			},
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			statusText: 'OK',
+			url: `${runtimeBaseUrl}compiler.wasm`
+		}));
+		const { loadWorkerRuntimeAsset } = await setupDirectAssetLoader(fetchMock);
+
+		await expect(loadWorkerRuntimeAsset('compiler.wasm')).rejects.toThrow(
+			'asset stream failed'
+		);
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(releaseLock).toHaveBeenCalledOnce();
+	});
+
+	it('reports a reader release failure after a successful stream', async () => {
+		const streamed = createStreamResponse([new Uint8Array([1])]);
+		streamed.releaseLock.mockImplementation(() => {
+			throw new Error('reader release failed');
+		});
+		const fetchMock = vi.fn(async () => streamed.response);
+		const { loadWorkerRuntimeAsset } = await setupDirectAssetLoader(fetchMock);
+
+		await expect(loadWorkerRuntimeAsset('compiler.wasm')).rejects.toThrow(
+			'reader release failed'
+		);
+		expect(streamed.cancel).not.toHaveBeenCalled();
+		expect(streamed.releaseLock).toHaveBeenCalledOnce();
 	});
 
 	it('checks the byte limit after a no-body fallback is materialized', async () => {

@@ -30,6 +30,14 @@ let nextAssetRequestId = 0;
 
 const pendingAssetRequests = new Map<number, PendingAssetRequest>();
 
+const cancelResponseBody = (response: Response, reason?: unknown) => {
+	try {
+		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
+	} catch {
+		// Preserve the validation or HTTP failure that caused cancellation.
+	}
+};
+
 const configuredBaseUrl = () => {
 	if (!activeConfig) return null;
 	const locationOrigin = globalThis.location?.origin;
@@ -128,53 +136,38 @@ const loadAssetFromUrl = async (url: string, asset: string) => {
 		try {
 			responseUrl = new URL(response.url);
 		} catch {
-			try {
-				await response.body?.cancel();
-			} catch {
-				// Preserve the URL validation failure.
-			}
-			throw new Error(`Runtime asset response URL is invalid: ${response.url}`);
+			const error = new Error(`Runtime asset response URL is invalid: ${response.url}`);
+			cancelResponseBody(response, error);
+			throw error;
 		}
 		if (responseUrl.href !== requestUrl) {
-			try {
-				await response.body?.cancel();
-			} catch {
-				// Preserve the redirect/substitution failure.
-			}
-			throw new Error(
+			const error = new Error(
 				`Runtime asset response URL mismatch: expected ${requestUrl}, received ${responseUrl.href}`
 			);
+			cancelResponseBody(response, error);
+			throw error;
 		}
 	}
 	if (!response.ok) {
-		try {
-			await response.body?.cancel();
-		} catch {
-			// Preserve the HTTP failure.
-		}
-		throw new Error(`Failed to load ${asset}: ${response.status}`);
+		const error = new Error(`Failed to load ${asset}: ${response.status}`);
+		cancelResponseBody(response, error);
+		throw error;
 	}
 	const rawContentLength = response.headers.get('content-length');
 	let total: number | undefined;
 	if (rawContentLength !== null) {
 		const parsedContentLength = Number(rawContentLength);
 		if (!/^\d+$/u.test(rawContentLength.trim()) || !Number.isSafeInteger(parsedContentLength)) {
-			try {
-				await response.body?.cancel();
-			} catch {
-				// Preserve the invalid-length failure.
-			}
-			throw new Error(`Runtime asset ${asset} has an invalid Content-Length`);
+			const error = new Error(`Runtime asset ${asset} has an invalid Content-Length`);
+			cancelResponseBody(response, error);
+			throw error;
 		}
 		total = parsedContentLength || undefined;
 	}
 	if (total !== undefined && total > maxAssetBytes) {
-		try {
-			await response.body?.cancel();
-		} catch {
-			// Preserve the size-limit failure.
-		}
-		throw new Error(`Runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`);
+		const error = new Error(`Runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`);
+		cancelResponseBody(response, error);
+		throw error;
 	}
 	const mimeType = response.headers.get('content-type') || undefined;
 	if (!response.body) {
@@ -194,22 +187,31 @@ const loadAssetFromUrl = async (url: string, asset: string) => {
 
 	const reader = response.body.getReader();
 	let readerCancelled = false;
+	const cancelReader = (reason?: unknown) => {
+		if (readerCancelled) return;
+		readerCancelled = true;
+		try {
+			void Promise.resolve(reader.cancel(reason)).catch(() => undefined);
+		} catch {
+			// Preserve the stream or size-limit failure that caused cancellation.
+		}
+	};
 	let receivedLength = 0;
-	let bytes = new Uint8Array(total || Math.min(DEFAULT_STREAM_BUFFER_BYTES, maxAssetBytes));
+	let bytes!: Uint8Array<ArrayBuffer>;
+	let releaseFailure: { error: unknown } | undefined;
 	try {
+		bytes = new Uint8Array(total || Math.min(DEFAULT_STREAM_BUFFER_BYTES, maxAssetBytes));
 		while (true) {
 			const { done, value } = await reader.read();
 			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > maxAssetBytes) {
-				try {
-					await reader.cancel();
-				} catch {
-					// Preserve the size-limit failure.
-				}
-				readerCancelled = true;
-				throw new Error(`Runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`);
+				const error = new Error(
+					`Runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`
+				);
+				cancelReader(error);
+				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
 				const nextCapacity = Math.min(
@@ -231,17 +233,16 @@ const loadAssetFromUrl = async (url: string, asset: string) => {
 			});
 		}
 	} catch (error) {
-		if (!readerCancelled) {
-			try {
-				await reader.cancel();
-			} catch {
-				// Preserve the stream failure.
-			}
-		}
+		cancelReader(error);
 		throw error;
 	} finally {
-		reader.releaseLock();
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			releaseFailure = { error };
+		}
 	}
+	if (releaseFailure) throw releaseFailure.error;
 	if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
 	self.postMessage({
 		assetProgress: {
