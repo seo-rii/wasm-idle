@@ -93,6 +93,101 @@ describe('WASM sandbox', () => {
 		expect(outputs).toContain('main=65\n');
 	});
 
+	it('normalizes a valid WASM workspace before worker dispatch', async () => {
+		const sandbox = new Wasm();
+		await sandbox.load('/absproxy/5173');
+
+		await expect(
+			sandbox.run('AGFzbQ==', false, true, undefined, [], {
+				activePath: 'nested\\main.wasm',
+				workspaceFiles: [{ path: 'fixtures\\helper.wasm', content: 'AGFzbQ==' }]
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				activePath: 'nested/main.wasm',
+				workspaceFiles: [{ path: 'fixtures/helper.wasm', content: 'AGFzbQ==' }]
+			})
+		);
+	});
+
+	it.each([
+		{
+			name: 'traversal path',
+			code: 'A',
+			options: { activePath: '../main.wasm' },
+			expected: { code: 'invalid-path', path: '../main.wasm' }
+		},
+		{
+			name: 'duplicate path',
+			code: 'A',
+			options: {
+				workspaceFiles: [
+					{ path: 'data/module.wasm', content: 'A' },
+					{ path: 'data/module.wasm', content: 'B' }
+				]
+			},
+			expected: { code: 'duplicate-path', path: 'data/module.wasm' }
+		},
+		{
+			name: 'case-colliding path',
+			code: 'A',
+			options: {
+				workspaceFiles: [
+					{ path: 'DATA/module.wasm', content: 'A' },
+					{ path: 'data/module.wasm', content: 'B' }
+				]
+			},
+			expected: { code: 'case-collision', path: 'data/module.wasm' }
+		},
+		{
+			name: 'file count overflow',
+			code: 'A',
+			options: {
+				workspaceFiles: [{ path: 'data/module.wasm', content: 'B' }],
+				workspaceLimits: { maxFiles: 1 }
+			},
+			expected: { code: 'file-count-limit', limit: 1, actual: 2 }
+		},
+		{
+			name: 'per-file overflow clamped to execution limits',
+			code: '12345',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceLimits: { maxFileBytes: 100 }
+			},
+			expected: { code: 'file-size-limit', limit: 4, actual: 5 }
+		},
+		{
+			name: 'aggregate overflow clamped to execution limits',
+			code: '123',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceFiles: [{ path: 'data/module.wasm', content: '45' }],
+				workspaceLimits: { maxTotalBytes: 100 }
+			},
+			expected: { code: 'total-size-limit', limit: 4, actual: 5 }
+		}
+	])(
+		'rejects a WASM workspace with $name before dispatch',
+		async ({ code, options, expected }) => {
+			const sandbox = new Wasm();
+			await sandbox.load('/absproxy/5173');
+
+			await expect(
+				sandbox.run(code, false, true, undefined, [], options)
+			).rejects.toMatchObject({
+				name: 'WorkspaceValidationError',
+				...expected
+			});
+			expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
+			expect(sandbox.uid).toBe(0);
+			expect(sandbox.exit).toBe(true);
+		}
+	);
+
 	it('rejects load when the WASM worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Wasm();
