@@ -19,6 +19,20 @@ describe('required CI workflow gates', () => {
 		expect(unitTests).toBeGreaterThan(prepareAssets);
 	});
 
+	it('prepares pinned clangd assets before the package LSP suite', async () => {
+		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+		const packagesJobStart = workflow.indexOf('    packages:');
+		const nextJobStart = workflow.indexOf('    lsp-browser-smoke:', packagesJobStart);
+		const packagesJob = workflow.slice(packagesJobStart, nextJobStart);
+		const prepareAssets = packagesJob.indexOf('- run: node scripts/prepare-clangd-assets.mjs');
+		const lspTests = packagesJob.indexOf('- run: pnpm --dir packages/lsp test');
+
+		expect(packagesJobStart).toBeGreaterThanOrEqual(0);
+		expect(nextJobStart).toBeGreaterThan(packagesJobStart);
+		expect(prepareAssets).toBeGreaterThanOrEqual(0);
+		expect(lspTests).toBeGreaterThan(prepareAssets);
+	});
+
 	it('prepares pinned OCaml assets before the full browser LSP matrix', async () => {
 		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
 		const fullJobStart = workflow.indexOf('    lsp-browser-full:');
