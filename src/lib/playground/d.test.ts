@@ -139,6 +139,83 @@ void main() {
 		expect(values).toEqual([0.25]);
 	});
 
+	it('rejects an overlapping D run without disturbing the active execution', async () => {
+		const sandbox = new D();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+		const outputs: string[] = [];
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		const firstRun = sandbox.run('void main() {}', false);
+		const firstHandler = worker.onmessage;
+		await expect(sandbox.run('void main() {}', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'D'
+		});
+
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(firstHandler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		firstHandler?.({ data: { output: 'first\n', results: true } } as MessageEvent<any>);
+		await expect(firstRun).resolves.toBe(true);
+		expect(outputs).toEqual(['first\n']);
+
+		worker.postMessage.mockImplementationOnce(() => {
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+		await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
+		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+	});
+
+	it('rejects overlapping D startup operations without superseding readiness', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new D();
+		const loading = sandbox.load('/absproxy/5173');
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const loadHandler = worker.onmessage;
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'D'
+		});
+		await expect(sandbox.run('void main() {}', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'D'
+		});
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(loadHandler);
+
+		loadHandler?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(loading).resolves.toBeUndefined();
+		await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
+	});
+
+	it('releases D run activity after synchronous dispatch failure', async () => {
+		const sandbox = new D();
+		const worker = new MockWorker();
+		const dispatchFailure = new Error('D dispatch failed');
+		worker.postMessage.mockImplementationOnce(() => {
+			throw dispatchFailure;
+		});
+		sandbox.worker = worker as unknown as Worker;
+
+		await expect(sandbox.run('void main() {}', false)).rejects.toBe(dispatchFailure);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
+	});
+
 	it('rejects load when no D module url is configured', async () => {
 		publicEnv.PUBLIC_WASM_D_MODULE_URL = '';
 		const sandbox = new D();

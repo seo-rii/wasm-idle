@@ -1,4 +1,5 @@
 import { resolveDModuleUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import { BusyError } from '@wasm-idle/core';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -27,6 +28,7 @@ class D implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private loading = false;
 	private readonly workerSession = new WorkerSession({
 		label: 'D',
 		onDispose: (worker) => {
@@ -45,42 +47,52 @@ class D implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		return this.workerSession.load(async (resolve, reject) => {
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const nextModuleUrl = resolveDModuleUrl(runtimeAssets, currentUrl);
-			if (!nextModuleUrl) {
-				return reject(
-					'D runtime is not configured. Set PUBLIC_WASM_D_MODULE_URL or runtimeAssets.d.moduleUrl.'
-				);
-			}
-			const needsWorkerReset = !this.worker || this.moduleUrl !== nextModuleUrl;
-			this.moduleUrl = nextModuleUrl;
-			if (needsWorkerReset && this.worker) {
-				this.workerSession.reset();
-			}
-			if (!this.worker) {
-				this.worker = new (await import('$lib/playground/worker/d?worker')).default();
-				this.workerSession.attach(this.worker);
-				this.worker.onmessage = (event: MessageEvent<any>) => {
-					if (event.data?.load) {
-						progress?.set?.(1);
-						resolve();
-					}
-					if (event.data?.error) reject(event.data.error);
-				};
-				this.worker.postMessage({
-					load: true,
-					moduleUrl: this.moduleUrl,
-					log: _log
-				});
-			} else {
-				progress?.set?.(1);
-				resolve();
-			}
-		});
+		if (this.loading || !this.exit) {
+			return Promise.reject(
+				new BusyError('D runtime already has an active operation', { runtimeId: 'D' })
+			);
+		}
+		this.loading = true;
+		return this.workerSession
+			.load(async (resolve, reject) => {
+				this.pendingInput = [];
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				const nextModuleUrl = resolveDModuleUrl(runtimeAssets, currentUrl);
+				if (!nextModuleUrl) {
+					return reject(
+						'D runtime is not configured. Set PUBLIC_WASM_D_MODULE_URL or runtimeAssets.d.moduleUrl.'
+					);
+				}
+				const needsWorkerReset = !this.worker || this.moduleUrl !== nextModuleUrl;
+				this.moduleUrl = nextModuleUrl;
+				if (needsWorkerReset && this.worker) {
+					this.workerSession.reset();
+				}
+				if (!this.worker) {
+					this.worker = new (await import('$lib/playground/worker/d?worker')).default();
+					this.workerSession.attach(this.worker);
+					this.worker.onmessage = (event: MessageEvent<any>) => {
+						if (event.data?.load) {
+							progress?.set?.(1);
+							resolve();
+						}
+						if (event.data?.error) reject(event.data.error);
+					};
+					this.worker.postMessage({
+						load: true,
+						moduleUrl: this.moduleUrl,
+						log: _log
+					});
+				} else {
+					progress?.set?.(1);
+					resolve();
+				}
+			})
+			.finally(() => {
+				this.loading = false;
+			});
 	}
 
 	write(input: string) {
@@ -115,15 +127,28 @@ class D implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (this.loading || !this.exit) {
+			return Promise.reject(
+				new BusyError('D runtime already has an active operation', { runtimeId: 'D' })
+			);
+		}
+		if (!this.worker) return Promise.reject('Worker not loaded');
+		const worker = this.worker;
+		let programArgs: string[];
+		try {
+			programArgs = resolveSandboxExecutionArgs('D', args, options).programArgs;
+		} catch (error) {
+			return Promise.reject(error);
+		}
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
-			const { programArgs } = resolveSandboxExecutionArgs('D', args, options);
 			const _uid = ++this.uid;
-			const operation = this.workerSession.beginRun(this.worker, reject);
+			const operation = this.workerSession.beginRun(worker, reject);
 			const handler = (event: Event & { data: any }) => {
-				if (!this.worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (this.worker.onmessage = null);
+				if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) {
+					if (worker.onmessage === handler) worker.onmessage = null;
+					return;
+				}
 				const { output, results, error, buffer, diagnostic, progress } = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
@@ -149,17 +174,21 @@ class D implements Sandbox {
 					reject(error);
 				}
 			};
-			this.worker.onmessage = handler;
+			worker.onmessage = handler;
 			this.begin = Date.now();
-			this.worker.postMessage({
-				code,
-				prepare,
-				buffer: this.buffer,
-				args: programArgs,
-				stdin: options.stdin,
-				fileName: options.activePath || 'main.d',
-				log: _log
-			});
+			try {
+				worker.postMessage({
+					code,
+					prepare,
+					buffer: this.buffer,
+					args: programArgs,
+					stdin: options.stdin,
+					fileName: options.activePath || 'main.d',
+					log: _log
+				});
+			} catch (error) {
+				this.workerSession.terminate(error);
+			}
 		});
 	}
 
