@@ -5,6 +5,7 @@ import {
 } from '$lib/playground/assets';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
+import { BusyError } from '@wasm-idle/core';
 import {
 	flushBufferedEof,
 	flushQueuedStdin,
@@ -30,9 +31,13 @@ class Elixir implements Sandbox {
 	hasExecuted = false;
 	waitingForInput = false;
 	pendingEof = false;
+	private activeLoadCleanup: (() => void) | null = null;
+	private activeRunCleanup: (() => void) | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: () => (this.language === 'ERLANG' ? 'Erlang' : 'Elixir'),
 		onDispose: (worker) => {
+			this.activeRunCleanup?.();
+			this.activeRunCleanup = null;
 			if (this.worker === worker) delete this.worker;
 			this.exit = true;
 			this.prepared = false;
@@ -62,85 +67,169 @@ class Elixir implements Sandbox {
 					new DOMException(`${runtimeLabel} runtime startup aborted`, 'AbortError')
 			);
 		}
+		if (this.activeLoadCleanup || this.activeRunCleanup) {
+			return Promise.reject(
+				new BusyError(`${runtimeLabel} runtime already has an active operation`, {
+					runtimeId: this.language,
+					phase: this.activeLoadCleanup ? 'startup' : 'execute'
+				})
+			);
+		}
 		const activeUid = ++this.uid;
 		let onAbort: (() => void) | undefined;
+		let cleanedUp = false;
 		const cleanup = () => {
-			if (onAbort) signal?.removeEventListener('abort', onAbort);
+			if (cleanedUp) return;
+			cleanedUp = true;
+			if (signal && onAbort) {
+				try {
+					signal.removeEventListener('abort', onAbort);
+				} catch {
+					// Cleanup must not replace the startup result.
+				}
+			}
+			if (this.activeLoadCleanup === cleanup) this.activeLoadCleanup = null;
 		};
-		if (signal) {
-			onAbort = () => {
-				cleanup();
-				if (activeUid !== this.uid) return;
-				this.terminate(
-					signal.reason ??
-						new DOMException(`${runtimeLabel} runtime startup aborted`, 'AbortError')
-				);
-			};
-			signal.addEventListener('abort', onAbort, { once: true });
-		}
+		onAbort = signal
+			? () => {
+					if (this.activeLoadCleanup !== cleanup || activeUid !== this.uid) {
+						cleanup();
+						return;
+					}
+					const reason =
+						signal.reason ??
+						new DOMException(`${runtimeLabel} runtime startup aborted`, 'AbortError');
+					cleanup();
+					this.terminate(reason);
+				}
+			: undefined;
+		this.activeLoadCleanup = cleanup;
 		const loadPromise = this.workerSession.load(async (resolve, reject) => {
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const nextBundleUrl =
-				this.language === 'ERLANG'
-					? resolveErlangBundleUrl(runtimeAssets, currentUrl)
-					: resolveElixirBundleUrl(runtimeAssets, currentUrl);
-			if (!nextBundleUrl) {
+			const resolveLoad = () => {
+				if (
+					this.activeLoadCleanup !== cleanup ||
+					activeUid !== this.uid ||
+					signal?.aborted
+				) {
+					return;
+				}
 				cleanup();
-				return reject(
-					`${runtimeLabel} runtime is not configured. Set ${
-						this.language === 'ERLANG'
-							? 'PUBLIC_WASM_ERLANG_BUNDLE_URL or runtimeAssets.erlang.bundleUrl'
-							: 'PUBLIC_WASM_ELIXIR_BUNDLE_URL or runtimeAssets.elixir.bundleUrl'
-					}.`
-				);
-			}
-
-			const needsWorkerReset = !this.worker || this.bundleUrl !== nextBundleUrl;
-			const preservePendingInput = this.prepared && !needsWorkerReset;
-			if (!preservePendingInput) {
-				this.pendingInput = [];
-				this.pendingEof = false;
-			}
-			this.waitingForInput = false;
-			this.bundleUrl = nextBundleUrl;
-			if (needsWorkerReset && this.worker) {
-				this.workerSession.reset();
-			}
-			if (!this.worker) {
-				progress?.set?.(0.2);
-				const WorkerConstructor = (await import('$lib/playground/worker/elixir?worker'))
-					.default;
-				if (activeUid !== this.uid || signal?.aborted) return;
-				const worker = new WorkerConstructor();
-				this.worker = worker;
-				this.workerSession.attach(worker);
-				progress?.set?.(0.5);
-				if (activeUid !== this.uid || signal?.aborted || this.worker !== worker) return;
-				worker.onmessage = (event: MessageEvent<any>) => {
-					if (activeUid !== this.uid || signal?.aborted || this.worker !== worker) return;
-					if (event.data?.load) {
-						cleanup();
-						progress?.set?.(1);
-						resolve();
-					}
-					if (event.data?.error) {
-						cleanup();
-						reject(event.data.error);
-					}
-				};
-				worker.postMessage({
-					load: true,
-					bundleUrl: this.bundleUrl,
-					log
-				});
-			} else {
-				cleanup();
-				progress?.set?.(1);
 				resolve();
+			};
+			const rejectLoad = (reason?: unknown) => {
+				if (this.activeLoadCleanup !== cleanup || activeUid !== this.uid) return;
+				cleanup();
+				reject(reason);
+			};
+			try {
+				if (this.activeLoadCleanup !== cleanup || activeUid !== this.uid) return;
+				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				const nextBundleUrl =
+					this.language === 'ERLANG'
+						? resolveErlangBundleUrl(runtimeAssets, currentUrl)
+						: resolveElixirBundleUrl(runtimeAssets, currentUrl);
+				if (!nextBundleUrl) {
+					return rejectLoad(
+						`${runtimeLabel} runtime is not configured. Set ${
+							this.language === 'ERLANG'
+								? 'PUBLIC_WASM_ERLANG_BUNDLE_URL or runtimeAssets.erlang.bundleUrl'
+								: 'PUBLIC_WASM_ELIXIR_BUNDLE_URL or runtimeAssets.elixir.bundleUrl'
+						}.`
+					);
+				}
+
+				const needsWorkerReset = !this.worker || this.bundleUrl !== nextBundleUrl;
+				const preservePendingInput = this.prepared && !needsWorkerReset;
+				if (!preservePendingInput) {
+					this.pendingInput = [];
+					this.pendingEof = false;
+				}
+				this.waitingForInput = false;
+				this.bundleUrl = nextBundleUrl;
+				if (needsWorkerReset && this.worker) {
+					this.workerSession.reset();
+				}
+				if (!this.worker) {
+					progress?.set?.(0.2);
+					if (
+						this.activeLoadCleanup !== cleanup ||
+						activeUid !== this.uid ||
+						signal?.aborted
+					) {
+						return;
+					}
+					const WorkerConstructor = (await import('$lib/playground/worker/elixir?worker'))
+						.default;
+					if (
+						this.activeLoadCleanup !== cleanup ||
+						activeUid !== this.uid ||
+						signal?.aborted
+					) {
+						return;
+					}
+					const worker = new WorkerConstructor();
+					if (
+						this.activeLoadCleanup !== cleanup ||
+						activeUid !== this.uid ||
+						signal?.aborted
+					) {
+						worker.terminate();
+						return;
+					}
+					this.worker = worker;
+					this.workerSession.attach(worker);
+					progress?.set?.(0.5);
+					if (
+						this.activeLoadCleanup !== cleanup ||
+						activeUid !== this.uid ||
+						signal?.aborted ||
+						this.worker !== worker
+					) {
+						return;
+					}
+					const handler = (event: MessageEvent<any>) => {
+						if (
+							this.worker !== worker ||
+							worker.onmessage !== handler ||
+							this.activeLoadCleanup !== cleanup ||
+							activeUid !== this.uid ||
+							signal?.aborted
+						) {
+							return;
+						}
+						if (event.data?.load) {
+							progress?.set?.(1);
+							resolveLoad();
+						}
+						if (event.data?.error) rejectLoad(event.data.error);
+					};
+					worker.onmessage = handler;
+					worker.postMessage({
+						load: true,
+						bundleUrl: this.bundleUrl,
+						log
+					});
+				} else {
+					const worker = this.worker;
+					progress?.set?.(1);
+					if (
+						this.activeLoadCleanup !== cleanup ||
+						activeUid !== this.uid ||
+						signal?.aborted ||
+						this.worker !== worker
+					) {
+						return;
+					}
+					resolveLoad();
+				}
+			} catch (error) {
+				rejectLoad(error);
 			}
 		});
-		if (!signal) return loadPromise;
-		if (signal.aborted) onAbort?.();
+		if (signal && onAbort) {
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		}
 		return loadPromise.finally(cleanup);
 	}
 
@@ -176,14 +265,44 @@ class Elixir implements Sandbox {
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		const runtimeLabel = this.language === 'ERLANG' ? 'Erlang' : 'Elixir';
+		if (this.activeLoadCleanup || this.activeRunCleanup) {
+			return Promise.reject(
+				new BusyError(`${runtimeLabel} runtime already has an active operation`, {
+					runtimeId: this.language,
+					phase: this.activeLoadCleanup ? 'startup' : 'execute'
+				})
+			);
+		}
+		const worker = this.worker;
+		if (!worker) return Promise.reject('Worker not loaded');
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
 			const activeUid = ++this.uid;
-			const operation = this.workerSession.beginRun(this.worker, reject);
+			let cleanedUp = false;
+			const cleanup = () => {
+				if (cleanedUp) return;
+				cleanedUp = true;
+				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
+			};
+			const rejectRun = (reason?: unknown) => {
+				cleanup();
+				this.exit = true;
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				reject(reason);
+			};
+			this.activeRunCleanup = cleanup;
+			const operation = this.workerSession.beginRun(worker, rejectRun);
 			const handler = (event: Event & { data: any }) => {
-				if (!this.worker) return reject('Worker not loaded');
-				if (activeUid !== this.uid) return (this.worker.onmessage = null);
+				if (
+					this.worker !== worker ||
+					worker.onmessage !== handler ||
+					this.activeRunCleanup !== cleanup ||
+					activeUid !== this.uid
+				) {
+					return;
+				}
 				const { output, error, buffer } = event.data;
 				const hasResults = Object.prototype.hasOwnProperty.call(
 					event.data || {},
@@ -196,41 +315,51 @@ class Elixir implements Sandbox {
 				if (output) {
 					this.output?.(output);
 				}
+				if (this.activeRunCleanup !== cleanup || activeUid !== this.uid) return;
 				if (hasResults) {
 					const { results } = event.data;
+					this.workerSession.complete(operation);
+					cleanup();
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.workerSession.complete(operation);
 					this.prepared = prepare;
 					this.hasExecuted = !prepare;
 					if (!prepare && typeof results === 'string' && results) {
 						this.output?.(`=> ${results}\n`);
 					}
 					resolve(results || true);
+					return;
 				}
 				if (error) {
+					this.workerSession.complete(operation);
+					cleanup();
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.workerSession.complete(operation);
 					this.prepared = false;
 					this.hasExecuted = false;
 					reject(error);
+					return;
 				}
 			};
-			this.worker.onmessage = handler;
+			worker.onmessage = handler;
 			this.begin = Date.now();
-			this.worker.postMessage({
-				code,
-				prepare,
-				buffer: this.buffer,
-				language: this.language,
-				log,
-				stdin: options.stdin
-			});
+			try {
+				worker.postMessage({
+					code,
+					prepare,
+					buffer: this.buffer,
+					language: this.language,
+					log,
+					stdin: options.stdin
+				});
+			} catch (error) {
+				if (worker.onmessage === handler) worker.onmessage = null;
+				this.workerSession.terminate(error);
+			}
 		});
 	}
 
@@ -239,6 +368,12 @@ class Elixir implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		const loadCleanup = this.activeLoadCleanup;
+		this.activeLoadCleanup = null;
+		loadCleanup?.();
+		const runCleanup = this.activeRunCleanup;
+		this.activeRunCleanup = null;
+		runCleanup?.();
 		this.uid += 1;
 		this.prepared = false;
 		this.hasExecuted = false;
@@ -256,7 +391,7 @@ class Elixir implements Sandbox {
 			this.worker.onmessage = null;
 		}
 		resetBufferedStdin(this.buffer);
-		if (!this.exit || this.hasExecuted) {
+		if (!this.exit || this.hasExecuted || this.activeLoadCleanup || this.activeRunCleanup) {
 			this.terminate();
 		}
 	}

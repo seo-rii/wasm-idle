@@ -337,91 +337,178 @@ describe('Elixir sandbox', () => {
 		}
 	});
 
-	it('ignores an old load abort after a replacement load starts', async () => {
+	it('rejects operations that overlap a pending Elixir load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Elixir();
-		const controller = new AbortController();
-		const firstLoad = sandbox.load(
-			{
-				elixir: {
-					bundleUrl: '/runtime/elixir/bundle.avm'
-				}
-			},
-			'',
-			true,
-			[],
-			{ signal: controller.signal }
-		);
-		const firstOutcome = firstLoad.then(
-			() => ({ status: 'resolved' as const }),
-			(error) => ({ status: 'rejected' as const, reason: error as unknown })
-		);
+		const firstLoad = sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
+		const loadHandler = worker.onmessage;
+		const bundleUrl = sandbox.bundleUrl;
 
 		try {
-			suppressAutoLoadAck = false;
-			const replacementLoad = sandbox.load({
-				elixir: {
-					bundleUrl: '/runtime/elixir/bundle.avm'
-				}
+			await expect(
+				sandbox.load({
+					elixir: {
+						bundleUrl: '/runtime/elixir/other.avm'
+					}
+				})
+			).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				runtimeId: 'ELIXIR',
+				phase: 'startup'
 			});
-			controller.abort(new Error('late superseded load abort'));
-
-			await expect(firstOutcome).resolves.toEqual({
-				status: 'rejected',
-				reason: 'Worker operation superseded'
+			await expect(sandbox.run('IO.puts("busy")', false)).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				runtimeId: 'ELIXIR',
+				phase: 'startup'
 			});
-			await expect(replacementLoad).resolves.toBeUndefined();
-			expect(worker.terminate).not.toHaveBeenCalled();
 			expect(workerInstances).toHaveLength(1);
+			expect(worker.postMessage).toHaveBeenCalledOnce();
+			expect(worker.onmessage).toBe(loadHandler);
+			expect(sandbox.bundleUrl).toBe(bundleUrl);
+			expect(worker.terminate).not.toHaveBeenCalled();
+
+			loadHandler?.({ data: { load: true } } as MessageEvent<any>);
+			await expect(firstLoad).resolves.toBeUndefined();
+
+			suppressAutoLoadAck = false;
+			await expect(
+				sandbox.load({
+					elixir: {
+						bundleUrl: '/runtime/elixir/bundle.avm'
+					}
+				})
+			).resolves.toBeUndefined();
 		} finally {
 			sandbox.terminate();
 			await firstLoad.catch(() => {});
 		}
 	});
 
-	it('ignores an old load abort after a run starts', async () => {
-		suppressAutoLoadAck = true;
+	it('rejects operations that overlap an active Elixir run', async () => {
 		const sandbox = new Elixir();
-		const controller = new AbortController();
-		const firstLoad = sandbox.load(
-			{
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const firstRun = sandbox.run('IO.puts("first")', false);
+		const firstHandler = worker.onmessage;
+
+		try {
+			await expect(sandbox.run('IO.puts("second")', false)).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				runtimeId: 'ELIXIR',
+				phase: 'execute'
+			});
+			await expect(
+				sandbox.load({
+					elixir: {
+						bundleUrl: '/runtime/elixir/other.avm'
+					}
+				})
+			).rejects.toMatchObject({
+				name: 'BusyError',
+				code: 'busy',
+				runtimeId: 'ELIXIR',
+				phase: 'execute'
+			});
+			expect(worker.postMessage).toHaveBeenCalledTimes(2);
+			expect(worker.onmessage).toBe(firstHandler);
+			expect(worker.terminate).not.toHaveBeenCalled();
+
+			firstHandler?.({
+				data: { output: 'first\n', results: ':first' }
+			} as MessageEvent<any>);
+			await expect(firstRun).resolves.toBe(':first');
+			expect(output).toHaveBeenCalledWith('first\n');
+
+			const secondRun = sandbox.run('IO.puts("second")', false);
+			const secondHandler = worker.onmessage;
+			firstHandler?.({ data: { output: 'stale\n', results: ':stale' } } as MessageEvent<any>);
+			expect(worker.onmessage).toBe(secondHandler);
+			expect(output).not.toHaveBeenCalledWith('stale\n');
+			await expect(secondRun).resolves.toBe(':ok');
+		} finally {
+			sandbox.terminate();
+			await firstRun.catch(() => {});
+		}
+	});
+
+	it('keeps Elixir idle when run is called without a loaded worker', async () => {
+		const sandbox = new Elixir();
+
+		await expect(sandbox.run('IO.puts("missing")', false)).rejects.toBe('Worker not loaded');
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+		expect(sandbox.prepared).toBe(false);
+		expect(sandbox.hasExecuted).toBe(false);
+	});
+
+	it('releases Elixir operation ownership after synchronous dispatch failure', async () => {
+		const sandbox = new Elixir();
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		const worker = workerInstances[0];
+		const dispatchError = new Error('Elixir dispatch failed');
+		worker.postMessage.mockImplementationOnce(() => {
+			throw dispatchError;
+		});
+
+		await expect(sandbox.run('IO.puts("fail")', false)).rejects.toBe(dispatchError);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+
+		await expect(
+			sandbox.load({
 				elixir: {
 					bundleUrl: '/runtime/elixir/bundle.avm'
 				}
-			},
-			'',
-			true,
-			[],
-			{ signal: controller.signal }
-		);
-		const firstOutcome = firstLoad.then(
-			() => ({ status: 'resolved' as const }),
-			(error) => ({ status: 'rejected' as const, reason: error as unknown })
-		);
-		await vi.dynamicImportSettled();
-		const worker = workerInstances[0];
-		worker.postMessage.mockImplementationOnce(() => {
-			queueMicrotask(() =>
-				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>)
-			);
+			})
+		).resolves.toBeUndefined();
+		await expect(sandbox.run('IO.puts("retry")', false)).resolves.toBe(':ok');
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('releases Elixir operation ownership after kill', async () => {
+		const sandbox = new Elixir();
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
 		});
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('IO.puts("wait")', false);
 
-		try {
-			const running = sandbox.run('IO.puts("ready")', false);
-			controller.abort(new Error('late load abort after run start'));
+		sandbox.kill();
 
-			await expect(firstOutcome).resolves.toEqual({
-				status: 'rejected',
-				reason: 'Worker operation superseded'
-			});
-			await expect(running).resolves.toBe(true);
-			expect(worker.terminate).not.toHaveBeenCalled();
-		} finally {
-			sandbox.terminate();
-			await firstLoad.catch(() => {});
-		}
+		await expect(running).rejects.toBe('Process terminated');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		await expect(
+			sandbox.load({
+				elixir: {
+					bundleUrl: '/runtime/elixir/bundle.avm'
+				}
+			})
+		).resolves.toBeUndefined();
+		await expect(sandbox.run('IO.puts("retry")', false)).resolves.toBe(':ok');
 	});
 
 	it('flushes queued terminal input into the worker stdin buffer when Elixir requests it', async () => {
