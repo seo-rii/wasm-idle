@@ -10,6 +10,7 @@ const workerMocks = vi.hoisted(() => ({
 	closeRspInput: vi.fn(),
 	closeRspOutput: vi.fn(),
 	loadFailure: undefined as Error | undefined,
+	loadGate: undefined as Promise<void> | undefined,
 	moduleOptions: undefined as Record<string, unknown> | undefined,
 	postWorkerError: vi.fn(),
 	postWorkerMessage: vi.fn()
@@ -24,6 +25,7 @@ vi.mock('../src/worker/module-loader.js', () => ({
 		rspOutput: { close: workerMocks.closeRspOutput }
 	})),
 	loadEmscriptenModuleFactory: vi.fn(async () => {
+		if (workerMocks.loadGate) await workerMocks.loadGate;
 		if (workerMocks.loadFailure) {
 			const failure = workerMocks.loadFailure;
 			workerMocks.loadFailure = undefined;
@@ -80,6 +82,7 @@ describe('LLDB worker lifecycle', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		workerMocks.loadFailure = undefined;
+		workerMocks.loadGate = undefined;
 		workerMocks.moduleOptions = undefined;
 	});
 
@@ -169,5 +172,25 @@ describe('LLDB worker lifecycle', () => {
 			})
 		);
 		handleLldbWorkerMessage({ type: 'dispose', generation: recovery.generation });
+	});
+
+	it('does not launch LLDB when disposal wins the loader race', async () => {
+		let releaseLoader!: () => void;
+		workerMocks.loadGate = new Promise<void>((resolve) => {
+			releaseLoader = resolve;
+		});
+		const { handleLldbWorkerMessage } = await loadLldbWorker();
+		const message = initializeMessage('lldb-worker-disposed-during-load');
+
+		handleLldbWorkerMessage(message);
+		handleLldbWorkerMessage({ type: 'dispose', generation: message.generation });
+		releaseLoader();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(workerMocks.callMain).not.toHaveBeenCalled();
+		expect(workerMocks.postWorkerMessage).not.toHaveBeenCalledWith(
+			expect.objectContaining({ type: 'ready', generation: message.generation })
+		);
+		expect(workerMocks.postWorkerError).not.toHaveBeenCalled();
 	});
 });

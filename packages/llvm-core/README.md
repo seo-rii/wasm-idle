@@ -142,6 +142,9 @@ The LLDB Worker applies the same recovery contract to all DAP and RSP streams an
 ring registry when its loader, module setup, or adapter lifecycle fails. It releases the failed
 generation before emitting the worker error, so a replacement adapter cannot observe stale
 connections.
+LLDB disposal also wins at both pending Emscripten loader boundaries, preventing a late module from
+mounting the program, reporting readiness, or entering the adapter main loop after its DAP/RSP
+queues have closed.
 The same preflight-validated `/workspace/...` files provided to LLDB are mounted into WAMR's
 MEMFS before launch, so guest WASI file access observes the workspace used to compile the DWARF
 artifact. File paths must remain canonical beneath `/workspace`, and `/workspace/program.wasm` is

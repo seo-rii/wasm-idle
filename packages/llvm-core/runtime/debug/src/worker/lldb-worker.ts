@@ -93,6 +93,7 @@ async function initialize(message: LldbWorkerInitializeMessage) {
 			})
 		);
 	const factory = await loadEmscriptenModuleFactory(message.assets.js);
+	if (disposed) return;
 	const module = await factory({
 		noInitialRun: true,
 		wasmLldbSharedRingV1: registry,
@@ -120,6 +121,7 @@ async function initialize(message: LldbWorkerInitializeMessage) {
 			failLifecycle(new Error(`LLDB debug adapter exited unexpectedly${suffix}`));
 		}
 	});
+	if (disposed) return;
 	mountDebugFiles(module, message.module, message.sources);
 	const stopMemoryTelemetry = startLinearMemoryTelemetry(module, 'lldb', message.generation);
 	try {
