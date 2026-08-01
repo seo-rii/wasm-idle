@@ -54,6 +54,9 @@ and cannot exceed the requested byte count. A malformed body rejects with
 `DebugAdapterProtocolError`, whose `command` and `path` identify the failed field; hosts should treat
 it as a session failure and dispose the LLDB/WAMR workers. Stack and scope line or column values may
 be zero, matching DAP's representation for an unavailable source location.
+Numeric request identifiers, pagination bounds, memory offsets, and byte counts must be JavaScript
+safe integers. Invalid values reject with `RangeError` before a DAP request is sent, avoiding JSON
+number precision loss at the LLDB boundary.
 For `readMemory`, both the decoded data and `unreadableBytes` share the requested byte budget. A
 response cannot claim more readable-plus-unreadable bytes than the request count, including when
 the adapter omits the optional `data` field because the entire range is unreadable.

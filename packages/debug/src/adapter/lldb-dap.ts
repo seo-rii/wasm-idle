@@ -269,15 +269,15 @@ function normalizeDapVariablePresentationHint(
 	};
 }
 
-function assertPositiveInteger(value: number, name: string) {
-	if (!Number.isInteger(value) || value < 1) {
-		throw new RangeError(`${name} must be a positive integer.`);
+function assertPositiveSafeInteger(value: number, name: string) {
+	if (!Number.isSafeInteger(value) || value < 1) {
+		throw new RangeError(`${name} must be a positive safe integer.`);
 	}
 }
 
-function assertNonNegativeInteger(value: number, name: string) {
-	if (!Number.isInteger(value) || value < 0) {
-		throw new RangeError(`${name} must be a non-negative integer.`);
+function assertNonNegativeSafeInteger(value: number, name: string) {
+	if (!Number.isSafeInteger(value) || value < 0) {
+		throw new RangeError(`${name} must be a non-negative safe integer.`);
 	}
 }
 
@@ -461,9 +461,9 @@ export class LldbDapAdapter implements DebugAdapter {
 
 	async stackTrace(threadId: number, startFrame?: number, levels?: number) {
 		this.#requireInitialized();
-		assertPositiveInteger(threadId, 'threadId');
-		if (startFrame !== undefined) assertNonNegativeInteger(startFrame, 'startFrame');
-		if (levels !== undefined) assertNonNegativeInteger(levels, 'levels');
+		assertPositiveSafeInteger(threadId, 'threadId');
+		if (startFrame !== undefined) assertNonNegativeSafeInteger(startFrame, 'startFrame');
+		if (levels !== undefined) assertNonNegativeSafeInteger(levels, 'levels');
 
 		const response = await this.#session.request<unknown>('stackTrace', {
 			threadId,
@@ -541,7 +541,7 @@ export class LldbDapAdapter implements DebugAdapter {
 
 	async scopes(frameId: number) {
 		this.#requireInitialized();
-		assertPositiveInteger(frameId, 'frameId');
+		assertPositiveSafeInteger(frameId, 'frameId');
 		const response = await this.#session.request<unknown>('scopes', { frameId });
 		return dapResponseCollection(response, 'scopes', 'scopes').map<DebugScope>(
 			(scope, index) => {
@@ -606,9 +606,9 @@ export class LldbDapAdapter implements DebugAdapter {
 
 	async variables(variablesReference: number, start?: number, count?: number) {
 		this.#requireInitialized();
-		assertPositiveInteger(variablesReference, 'variablesReference');
-		if (start !== undefined) assertNonNegativeInteger(start, 'start');
-		if (count !== undefined) assertNonNegativeInteger(count, 'count');
+		assertPositiveSafeInteger(variablesReference, 'variablesReference');
+		if (start !== undefined) assertNonNegativeSafeInteger(start, 'start');
+		if (count !== undefined) assertNonNegativeSafeInteger(count, 'count');
 
 		const response = await this.#session.request<unknown>('variables', {
 			variablesReference,
@@ -671,8 +671,8 @@ export class LldbDapAdapter implements DebugAdapter {
 
 	async readMemory(memoryReference: string, offset: number, count: number) {
 		this.#requireCapability('supportsReadMemory', 'read memory');
-		if (!Number.isInteger(offset)) throw new RangeError('offset must be an integer.');
-		assertNonNegativeInteger(count, 'count');
+		if (!Number.isSafeInteger(offset)) throw new RangeError('offset must be a safe integer.');
+		assertNonNegativeSafeInteger(count, 'count');
 
 		const response = await this.#session.request<unknown>('readMemory', {
 			memoryReference,
@@ -720,7 +720,7 @@ export class LldbDapAdapter implements DebugAdapter {
 
 	async evaluate(expression: string, frameId?: number) {
 		this.#requireCapability('supportsEvaluate', 'evaluate expressions');
-		if (frameId !== undefined) assertPositiveInteger(frameId, 'frameId');
+		if (frameId !== undefined) assertPositiveSafeInteger(frameId, 'frameId');
 		const response = await this.#session.request<unknown>('evaluate', {
 			expression,
 			context: 'watch',
@@ -772,7 +772,7 @@ export class LldbDapAdapter implements DebugAdapter {
 
 	async #threadRequest(command: string, threadId: number) {
 		this.#requireInitialized();
-		assertPositiveInteger(threadId, 'threadId');
+		assertPositiveSafeInteger(threadId, 'threadId');
 		await this.#session.request(command, { threadId });
 	}
 

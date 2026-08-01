@@ -169,6 +169,42 @@ describe('LldbDapAdapter', () => {
 		]);
 	});
 
+	it.each([
+		{
+			argument: 'thread ID',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.continue(Number.MAX_SAFE_INTEGER + 1)
+		},
+		{
+			argument: 'frame ID',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.scopes(Number.MAX_SAFE_INTEGER + 1)
+		},
+		{
+			argument: 'variable reference',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.variables(Number.MAX_SAFE_INTEGER + 1)
+		},
+		{
+			argument: 'memory offset',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.readMemory('memory', Number.MAX_SAFE_INTEGER + 1, 1)
+		},
+		{
+			argument: 'memory count',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.readMemory('memory', 0, Number.MAX_SAFE_INTEGER + 1)
+		}
+	])('rejects an unsafe $argument before sending DAP', async ({ invoke }) => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', { supportsReadMemoryRequest: true });
+		const adapter = createLldbDapAdapter(session);
+		await adapter.initialize();
+
+		await expect(invoke(adapter)).rejects.toBeInstanceOf(RangeError);
+		expect(session.requests).toHaveLength(1);
+	});
+
 	it('returns source-aware verified and unverified breakpoints', async () => {
 		const session = new FakeDapSession();
 		session.setResponse('initialize', {});
