@@ -106,6 +106,59 @@ describe('R sandbox', () => {
 		expect(outputs).toContain('factorial_plus_bonus=27\n');
 	});
 
+	it('rejects an overlapping run without disturbing the active R execution', async () => {
+		const sandbox = new R();
+		const worker = new MockWorker();
+		worker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = worker as unknown as Worker;
+		const outputs: string[] = [];
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		const firstRun = sandbox.run('cat("first\\n")', false);
+		const firstHandler = worker.onmessage;
+		await expect(sandbox.run('cat("second\\n")', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			runtimeId: 'R'
+		});
+
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBe(firstHandler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		firstHandler?.({
+			data: { output: 'first\n', results: true }
+		} as MessageEvent<any>);
+		await expect(firstRun).resolves.toBe(true);
+		expect(outputs).toEqual(['first\n']);
+
+		worker.postMessage.mockImplementationOnce(() => {
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		});
+		await expect(sandbox.run('cat("retry\\n")', false)).resolves.toBe(true);
+		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+	});
+
+	it('releases R run activity after synchronous dispatch failure', async () => {
+		const sandbox = new R();
+		const worker = new MockWorker();
+		const dispatchFailure = new Error('R dispatch failed');
+		worker.postMessage.mockImplementationOnce(() => {
+			throw dispatchFailure;
+		});
+		sandbox.worker = worker as unknown as Worker;
+
+		await expect(sandbox.run('stop("fail")', false)).rejects.toBe(dispatchFailure);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.exit).toBe(true);
+
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+		await expect(sandbox.run('cat("retry\\n")', false)).resolves.toBe(true);
+	});
+
 	it('rejects load when the R worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new R();

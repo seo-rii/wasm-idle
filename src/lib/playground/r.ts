@@ -1,4 +1,5 @@
 import { resolveRBaseUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import { BusyError } from '@wasm-idle/core';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -116,15 +117,28 @@ class R implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (!this.worker) return Promise.reject('Worker not loaded');
+		if (!this.exit) {
+			return Promise.reject(
+				new BusyError('R runtime already has an active run', { runtimeId: 'R' })
+			);
+		}
+		const worker = this.worker;
+		let programArgs: string[];
+		try {
+			programArgs = resolveSandboxExecutionArgs('R', args, options).programArgs;
+		} catch (error) {
+			return Promise.reject(error);
+		}
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
-			const { programArgs } = resolveSandboxExecutionArgs('R', args, options);
 			const _uid = ++this.uid;
-			const operation = this.workerSession.beginRun(this.worker, reject);
+			const operation = this.workerSession.beginRun(worker, reject);
 			const handler = (event: Event & { data: any }) => {
-				if (!this.worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (this.worker.onmessage = null);
+				if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) {
+					if (worker.onmessage === handler) worker.onmessage = null;
+					return;
+				}
 				const { output, results, error, buffer, diagnostic, progress } = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
@@ -150,18 +164,22 @@ class R implements Sandbox {
 					reject(error);
 				}
 			};
-			this.worker.onmessage = handler;
+			worker.onmessage = handler;
 			this.begin = Date.now();
-			this.worker.postMessage({
-				code,
-				prepare,
-				buffer: this.buffer,
-				args: programArgs,
-				stdin: options.stdin,
-				activePath: options.activePath || 'main.R',
-				workspaceFiles: options.workspaceFiles || [],
-				log: _log
-			});
+			try {
+				worker.postMessage({
+					code,
+					prepare,
+					buffer: this.buffer,
+					args: programArgs,
+					stdin: options.stdin,
+					activePath: options.activePath || 'main.R',
+					workspaceFiles: options.workspaceFiles || [],
+					log: _log
+				});
+			} catch (error) {
+				this.workerSession.terminate(error);
+			}
 		});
 	}
 
