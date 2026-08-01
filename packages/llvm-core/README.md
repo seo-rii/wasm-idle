@@ -108,6 +108,9 @@ runtime reports a real exit, abort, or session disposal.
 LLDB may defer `continue`, `next`, `stepIn`, and `stepOut` responses until the target stops again.
 Those execution requests therefore opt out of the DAP response timeout while retaining the
 transport-write timeout; ordinary DAP requests still use the configured response deadline.
+A deferred execution failure is fatal only while that request still owns the current run state. If
+a valid `continued` or newer `stopped` event has already advanced the session, the obsolete failure
+is ignored and cannot tear down the running target or its newer pause.
 Configured DAP response, transport-write, and worker-ready timeouts must be positive finite
 millisecond values. The session validates and snapshots them before loading assets or creating
 workers, so invalid or concurrently changed timer settings cannot produce immediate or overflowing

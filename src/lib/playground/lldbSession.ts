@@ -339,20 +339,21 @@ export class LldbSandboxSession {
 					: command === 'stepOut'
 						? 'stepOut'
 						: 'continue';
-		this.stateVersion += 1;
+		const stateVersion = ++this.stateVersion;
 		const request = session.request(
 			dapCommand,
 			{ threadId: this.activeThreadId },
 			{ responseTimeoutMs: null }
 		);
 		this.options.onDebugEvent({ type: 'resume', command });
-		void request.catch((error: unknown) =>
+		void request.catch((error: unknown) => {
+			if (this.session !== session || this.stateVersion !== stateVersion) return;
 			this.fail(
 				error instanceof Error
 					? error
 					: new Error(`Unable to send the LLDB ${dapCommand} request.`)
-			)
-		);
+			);
+		});
 	}
 
 	async pause() {
