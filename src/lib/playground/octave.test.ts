@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { readBufferedStdin } from './stdinBuffer';
+
 const workerInstances: MockWorker[] = [];
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
@@ -493,5 +495,46 @@ describe('Octave sandbox', () => {
 
 		await expect(runPromise).resolves.toBe(true);
 		expect(runMessage.stdin).toBe('42\n');
+	});
+
+	it('isolates explicit Octave stdin from queued and subsequent terminal input', async () => {
+		const sandbox = new Octave();
+		const runMessages: any[] = [];
+		const bufferedValues: Array<string | null> = [];
+		await sandbox.load('/absproxy/5173');
+
+		onPostMessage = (worker, message) => {
+			runMessages.push(message);
+			queueMicrotask(() => {
+				worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+				bufferedValues.push(readBufferedStdin(message.buffer));
+				if (runMessages.length === 1) {
+					sandbox.write('during\n');
+					sandbox.eof();
+				}
+				worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+			});
+		};
+		sandbox.write('stale\n');
+		sandbox.eof();
+
+		await expect(
+			sandbox.run('n = str2double(fgetl(stdin));', false, true, undefined, [], {
+				stdin: 'injected\n'
+			})
+		).resolves.toBe(true);
+
+		const bufferedRun = sandbox.run('n = str2double(fgetl(stdin));', false);
+		await Promise.resolve();
+		expect(workerInstances).toHaveLength(1);
+		expect(runMessages).toHaveLength(1);
+
+		sandbox.write('fresh\n');
+		await expect(bufferedRun).resolves.toBe(true);
+
+		expect(runMessages).toHaveLength(2);
+		expect(runMessages[0].stdin).toBe('injected\n');
+		expect(runMessages[1].stdin).toBe('fresh\n');
+		expect(bufferedValues).toEqual(['', '']);
 	});
 });

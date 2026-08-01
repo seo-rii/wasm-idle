@@ -208,6 +208,14 @@ class Octave implements Sandbox {
 		} catch (error) {
 			return Promise.reject(error);
 		}
+		const hasExplicitStdin = options.stdin !== undefined;
+		if (hasExplicitStdin) {
+			this.pendingInput = [];
+			this.waitingForInput = false;
+			this.pendingEof = false;
+			this.resolveStdinWaiters();
+			resetBufferedStdin(this.buffer);
+		}
 
 		const runToken = Symbol('Octave run');
 		this.activeRun = runToken;
@@ -219,6 +227,13 @@ class Octave implements Sandbox {
 			const cleanup = () => {
 				if (cleanedUp) return;
 				cleanedUp = true;
+				if (hasExplicitStdin) {
+					this.pendingInput = [];
+					this.waitingForInput = false;
+					this.pendingEof = false;
+					this.resolveStdinWaiters();
+					resetBufferedStdin(this.buffer);
+				}
 				if (signal && onAbort) {
 					try {
 						signal.removeEventListener('abort', onAbort);
