@@ -147,7 +147,8 @@ instead of resolving a request with another command's body. Each queue close is 
 isolated, so stale or corrupt metadata in one queue cannot block closing the other queue or
 rejecting every pending request with the original failure. Response envelopes are also validated at
 runtime: `request_seq` must be a positive safe integer, `command` a non-empty string, and `success`
-a boolean. Malformed values fail the stream instead of timing out or treating a string such as
+a boolean; an optional failure `message` must be a string. Malformed values fail the stream instead
+of timing out, stringifying an arbitrary object as an adapter error, or treating a string such as
 `"false"` as success.
 Every incoming DAP message must also carry a positive safe-integer `seq` and a recognized
 `request`, `response`, or `event` type. Event names must be non-empty strings. Invalid common or

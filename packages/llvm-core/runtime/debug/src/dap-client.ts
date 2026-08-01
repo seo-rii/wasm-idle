@@ -352,6 +352,10 @@ export class DapClient implements DapRequestSession {
 			this.fail(new Error('invalid DAP response: success must be a boolean'));
 			return;
 		}
+		if (response.message !== undefined && typeof response.message !== 'string') {
+			this.fail(new Error('invalid DAP response: message must be a string when provided'));
+			return;
+		}
 		const pending = this.pending.get(response.request_seq);
 		if (!pending) return;
 		if (response.command !== pending.command) {

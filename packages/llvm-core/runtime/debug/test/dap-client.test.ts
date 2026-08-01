@@ -490,6 +490,17 @@ describe('DapClient', () => {
 					command: request.command,
 					success: 'false'
 				})
+			},
+			{
+				field: 'message',
+				create: (request: DapRequest) => ({
+					seq: 43,
+					type: 'response',
+					request_seq: request.seq,
+					command: request.command,
+					success: false,
+					message: { text: 'corrupt failure' }
+				})
 			}
 		] as const;
 
