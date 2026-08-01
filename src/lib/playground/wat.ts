@@ -1,3 +1,4 @@
+import { BusyError } from '@wasm-idle/core';
 import { resolveWatModuleUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
@@ -23,10 +24,12 @@ class Wat implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private activeRun = false;
 	private readonly workerSession = new WorkerSession({
 		label: 'WAT',
 		onDispose: (worker) => {
 			if (this.worker === worker) delete this.worker;
+			this.activeRun = false;
 			this.exit = true;
 			this.waitingForInput = false;
 			this.pendingEof = false;
@@ -41,6 +44,7 @@ class Wat implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
+		this.activeRun = false;
 		return this.workerSession.load(async (resolve, reject) => {
 			this.pendingInput = [];
 			this.waitingForInput = false;
@@ -110,14 +114,23 @@ class Wat implements Sandbox {
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (this.activeRun) {
+			return Promise.reject(
+				new BusyError('WAT runtime already has an active run', { runtimeId: 'WAT' })
+			);
+		}
+		const worker = this.worker;
+		if (!worker) return Promise.reject('Worker not loaded');
+		this.activeRun = true;
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
 			const _uid = ++this.uid;
-			const operation = this.workerSession.beginRun(this.worker, reject);
+			const operation = this.workerSession.beginRun(worker, reject);
 			const handler = (event: Event & { data: any }) => {
-				if (!this.worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (this.worker.onmessage = null);
+				if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) {
+					if (worker.onmessage === handler) worker.onmessage = null;
+					return;
+				}
 				const { output, results, error, buffer, diagnostic, progress } = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
@@ -127,6 +140,7 @@ class Wat implements Sandbox {
 				if (output) this.output?.(output);
 				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 				if (results) {
+					this.activeRun = false;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -135,6 +149,7 @@ class Wat implements Sandbox {
 					resolve(results as string);
 				}
 				if (error) {
+					this.activeRun = false;
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
@@ -143,17 +158,22 @@ class Wat implements Sandbox {
 					reject(error);
 				}
 			};
-			this.worker.onmessage = handler;
+			worker.onmessage = handler;
 			this.begin = Date.now();
-			this.worker.postMessage({
-				code,
-				prepare,
-				buffer: this.buffer,
-				stdin: options.stdin,
-				activePath: options.activePath || 'main.wat',
-				workspaceFiles: options.workspaceFiles || [],
-				log: _log
-			});
+			try {
+				worker.postMessage({
+					code,
+					prepare,
+					buffer: this.buffer,
+					stdin: options.stdin,
+					activePath: options.activePath || 'main.wat',
+					workspaceFiles: options.workspaceFiles || [],
+					log: _log
+				});
+			} catch (error) {
+				this.activeRun = false;
+				this.workerSession.terminate(error);
+			}
 		});
 	}
 
@@ -162,6 +182,7 @@ class Wat implements Sandbox {
 	}
 
 	terminate() {
+		this.activeRun = false;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;

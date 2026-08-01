@@ -120,6 +120,81 @@ describe('WAT sandbox', () => {
 		]);
 	});
 
+	it('rejects an overlapping run without replacing the active WAT operation', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new Wat();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const firstRun = sandbox.run('(module (func (export "first")))', false);
+		const firstHandler = worker.onmessage;
+		let firstSettled = false;
+		void firstRun.then(
+			() => {
+				firstSettled = true;
+			},
+			() => {
+				firstSettled = true;
+			}
+		);
+
+		await expect(sandbox.run('(module (func (export "second")))', false)).rejects.toMatchObject(
+			{
+				name: 'BusyError',
+				code: 'busy',
+				phase: 'execute',
+				runtimeId: 'WAT',
+				recoverable: true
+			}
+		);
+		expect(firstSettled).toBe(false);
+		expect(worker.onmessage).toBe(firstHandler);
+		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+		expect(sandbox.uid).toBe(1);
+
+		firstHandler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(firstRun).resolves.toBe(true);
+
+		const thirdRun = sandbox.run('(module (func (export "third")))', false);
+		expect(worker.postMessage).toHaveBeenCalledTimes(3);
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(thirdRun).resolves.toBe(true);
+	});
+
+	it('keeps a replacement worker handler when a terminated run posts a stale message', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new Wat();
+		await sandbox.load('/absproxy/5173');
+		const oldWorker = workerInstances[0];
+		const oldRun = sandbox.run('(module (func (export "old")))', false);
+		const oldHandler = oldWorker.onmessage;
+
+		sandbox.kill();
+		await expect(oldRun).rejects.toBe('Process terminated');
+		expect(oldWorker.terminate).toHaveBeenCalledOnce();
+
+		await sandbox.load('/absproxy/5173');
+		const replacementWorker = workerInstances[1];
+		const replacementRun = sandbox.run('(module (func (export "replacement")))', false);
+		const replacementHandler = replacementWorker.onmessage;
+		let replacementSettled = false;
+		void replacementRun.then(
+			() => {
+				replacementSettled = true;
+			},
+			() => {
+				replacementSettled = true;
+			}
+		);
+
+		oldHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		await Promise.resolve();
+		expect(replacementWorker.onmessage).toBe(replacementHandler);
+		expect(replacementSettled).toBe(false);
+
+		replacementHandler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(replacementRun).resolves.toBe(true);
+	});
+
 	it('rejects load when no WAT module url is configured', async () => {
 		publicEnv.PUBLIC_WASM_WAT_MODULE_URL = '';
 		const sandbox = new Wat();
