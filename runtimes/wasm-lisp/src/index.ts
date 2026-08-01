@@ -112,6 +112,14 @@ function throwIfAborted(signal?: AbortSignal) {
 	if (signal?.aborted) throw abortReason(signal);
 }
 
+function cancelResponseBody(response: Response, reason?: unknown) {
+	try {
+		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
+	} catch {
+		// Cleanup must not replace the abort, validation, or HTTP failure.
+	}
+}
+
 function waitForPromiseWithSignal<T>(pending: Promise<T>, signal: AbortSignal) {
 	return new Promise<T>((resolve, reject) => {
 		let settled = false;
@@ -372,10 +380,7 @@ async function fetchBytes(
 				void pendingResponse.then(
 					(candidate) => {
 						if (settled) {
-							const reason = abortReason(signal);
-							void Promise.resolve()
-								.then(() => candidate.body?.cancel(reason))
-								.catch(() => {});
+							cancelResponseBody(candidate, abortReason(signal));
 							return;
 						}
 						settled = true;
@@ -400,7 +405,7 @@ async function fetchBytes(
 	}
 	if (signal?.aborted) {
 		const reason = abortReason(signal);
-		await response.body?.cancel(reason).catch(() => {});
+		cancelResponseBody(response, reason);
 		throw reason;
 	}
 	if (response.url) {
@@ -408,30 +413,37 @@ async function fetchBytes(
 		try {
 			finalUrl = new URL(response.url);
 		} catch {
-			await response.body?.cancel().catch(() => {});
-			throw new Error('wasm-lisp runtime asset returned an invalid final URL');
+			const error = new Error('wasm-lisp runtime asset returned an invalid final URL');
+			cancelResponseBody(response, error);
+			throw error;
 		}
 		if (finalUrl.href !== url.href) {
-			await response.body?.cancel().catch(() => {});
-			throw new Error('wasm-lisp runtime asset returned an unexpected final URL');
+			const error = new Error('wasm-lisp runtime asset returned an unexpected final URL');
+			cancelResponseBody(response, error);
+			throw error;
 		}
 	}
 	if (!response.ok) {
-		await response.body?.cancel().catch(() => {});
-		throw new Error(`failed to load ${url.href}: ${response.status}`);
+		const error = new Error(`failed to load ${url.href}: ${response.status}`);
+		cancelResponseBody(response, error);
+		throw error;
 	}
 	const contentLengthValue = response.headers.get('content-length');
 	let contentLength: number | undefined;
 	if (contentLengthValue !== null) {
 		contentLength = Number(contentLengthValue);
 		if (!/^\d+$/u.test(contentLengthValue) || !Number.isSafeInteger(contentLength)) {
-			await response.body?.cancel().catch(() => {});
-			throw new Error('wasm-lisp runtime asset has an invalid Content-Length');
+			const error = new Error('wasm-lisp runtime asset has an invalid Content-Length');
+			cancelResponseBody(response, error);
+			throw error;
 		}
 	}
 	if (contentLength !== undefined && contentLength > maxAssetBytes) {
-		await response.body?.cancel().catch(() => {});
-		throw new Error(`wasm-lisp runtime asset exceeds the ${maxAssetBytes} byte download limit`);
+		const error = new Error(
+			`wasm-lisp runtime asset exceeds the ${maxAssetBytes} byte download limit`
+		);
+		cancelResponseBody(response, error);
+		throw error;
 	}
 	if (!response.body) {
 		let cancelOnAbort: (() => void) | undefined;
@@ -462,26 +474,62 @@ async function fetchBytes(
 		return bytes;
 	}
 	const reader = response.body.getReader();
-	const cancelOnAbort = () => {
-		void reader.cancel(abortReason(signal!)).catch(() => {});
+	let readerCancelled = false;
+	const cancelReader = (reason?: unknown) => {
+		if (readerCancelled) return;
+		readerCancelled = true;
+		try {
+			void Promise.resolve(reader.cancel(reason)).catch(() => undefined);
+		} catch {
+			// Cleanup must not replace the abort, stream, or size-limit failure.
+		}
 	};
-	signal?.addEventListener('abort', cancelOnAbort, { once: true });
-	let bytes = new Uint8Array(
-		Math.min(maxAssetBytes, contentLength || DEFAULT_RUNTIME_ASSET_BUFFER_BYTES)
-	);
+	if (signal?.aborted) {
+		const reason = abortReason(signal);
+		cancelReader(reason);
+		try {
+			reader.releaseLock();
+		} catch {
+			// Preserve the caller's abort reason.
+		}
+		throw reason;
+	}
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = signal
+		? new Promise<never>((_resolve, reject) => {
+				cancelOnAbort = () => {
+					const reason = abortReason(signal);
+					cancelReader(reason);
+					reject(reason);
+				};
+				signal.addEventListener('abort', cancelOnAbort, { once: true });
+			})
+		: undefined;
+	if (aborted) void aborted.catch(() => undefined);
+	if (signal?.aborted) cancelOnAbort?.();
+	let bytes!: Uint8Array<ArrayBuffer>;
 	let receivedLength = 0;
+	let releaseFailure: { error: unknown } | undefined;
 	try {
-		throwIfAborted(signal);
+		bytes = new Uint8Array(
+			Math.min(maxAssetBytes, contentLength || DEFAULT_RUNTIME_ASSET_BUFFER_BYTES)
+		);
 		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
 			throwIfAborted(signal);
+			const pendingRead = reader.read();
+			const { done, value } = aborted
+				? await Promise.race([pendingRead, aborted])
+				: await pendingRead;
+			throwIfAborted(signal);
+			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > maxAssetBytes) {
-				throw new Error(
+				const error = new Error(
 					`wasm-lisp runtime asset exceeds the ${maxAssetBytes} byte download limit`
 				);
+				cancelReader(error);
+				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
 				const nextCapacity = Math.min(
@@ -496,15 +544,21 @@ async function fetchBytes(
 			receivedLength = nextLength;
 		}
 		throwIfAborted(signal);
-		return bytes.subarray(0, receivedLength);
 	} catch (error) {
-		await reader.cancel(error).catch(() => {});
-		if (signal?.aborted) throw abortReason(signal);
+		cancelReader(signal?.aborted ? abortReason(signal) : error);
+		throwIfAborted(signal);
 		throw error;
 	} finally {
-		signal?.removeEventListener('abort', cancelOnAbort);
-		reader.releaseLock();
+		if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			if (!signal?.aborted) releaseFailure = { error };
+		}
 	}
+	if (releaseFailure) throw releaseFailure.error;
+	throwIfAborted(signal);
+	return bytes.subarray(0, receivedLength);
 }
 
 function toBase64(bytes: Uint8Array) {

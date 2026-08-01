@@ -207,9 +207,6 @@ export async function instantiate() {
 		let fetchCount = 0;
 		let requestSignal: AbortSignal | null | undefined;
 		let cancelReason: unknown;
-		let resolveBlockedRead:
-			| ((result: ReadableStreamReadResult<Uint8Array>) => void)
-			| undefined;
 		let markReadStarted!: () => void;
 		const readStarted = new Promise<void>((resolve) => {
 			markReadStarted = resolve;
@@ -220,15 +217,15 @@ export async function instantiate() {
 					return Promise.resolve({ done: false, value: new Uint8Array([0]) });
 				}
 				markReadStarted();
-				return new Promise<ReadableStreamReadResult<Uint8Array>>((resolve) => {
-					resolveBlockedRead = resolve;
-				});
+				return new Promise<ReadableStreamReadResult<Uint8Array>>(() => {});
 			}),
-			cancel: vi.fn(async (reason: unknown) => {
+			cancel: vi.fn((reason: unknown) => {
 				cancelReason = reason;
-				resolveBlockedRead?.({ done: true, value: undefined });
+				return new Promise<void>(() => {});
 			}),
-			releaseLock: vi.fn()
+			releaseLock: vi.fn(() => {
+				throw new Error('reader lock release failed');
+			})
 		};
 		const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 			fetchCount += 1;
@@ -254,8 +251,18 @@ export async function instantiate() {
 
 		await readStarted;
 		controller.abort(reason);
-		await expect(abortedCompile).rejects.toBe(reason);
+		const outcome = await Promise.race([
+			abortedCompile.then(
+				(value) => ({ status: 'resolved' as const, value }),
+				(error) => ({ status: 'rejected' as const, reason: error })
+			),
+			new Promise<{ status: 'pending' }>((resolve) => {
+				setTimeout(() => resolve({ status: 'pending' }), 25);
+			})
+		]);
+		expect(outcome).toEqual({ status: 'rejected', reason });
 		expect(requestSignal).toBe(controller.signal);
+		expect(reader.cancel).toHaveBeenCalledOnce();
 		expect(reader.cancel).toHaveBeenCalledWith(reason);
 		expect(cancelReason).toBe(reason);
 		expect(reader.releaseLock).toHaveBeenCalledOnce();
@@ -483,6 +490,61 @@ export async function instantiate() {
 		expect(fetchImpl).toHaveBeenCalled();
 		expect(cancel).toHaveBeenCalledTimes(fetchImpl.mock.calls.length);
 	});
+
+	it.each(['pending', 'throws', 'rejects'] as const)(
+		'preserves validation failures when response cancellation %s',
+		async (cleanupBehavior) => {
+			const cleanupError = new Error(`response cancellation ${cleanupBehavior}`);
+			const cancel = vi.fn((reason: unknown) => {
+				if (cleanupBehavior === 'pending') return new Promise<void>(() => {});
+				if (cleanupBehavior === 'throws') throw cleanupError;
+				return Promise.reject(cleanupError);
+			});
+			const getReader = vi.fn();
+			const fetchImpl = vi.fn(
+				async () =>
+					({
+						ok: true,
+						url: '',
+						headers: new Headers({ 'content-length': 'invalid-length-secret' }),
+						body: { cancel, getReader }
+					}) as unknown as Response
+			);
+			const compiler = await createCompilerWithFetch(fetchImpl, 1024);
+			const compile = compiler.compile({ code: '(display 1)' });
+			let timeout: ReturnType<typeof setTimeout> | undefined;
+
+			try {
+				const outcome = await Promise.race([
+					compile.then((result) => ({
+						status: 'settled' as const,
+						success: result.success,
+						stderr: result.stderr
+					})),
+					new Promise<{ status: 'pending' }>((resolve) => {
+						timeout = setTimeout(() => resolve({ status: 'pending' }), 25);
+					})
+				]);
+
+				expect(outcome).toEqual({
+					status: 'settled',
+					success: false,
+					stderr: 'wasm-lisp runtime asset has an invalid Content-Length'
+				});
+				expect(getReader).not.toHaveBeenCalled();
+				expect(cancel).toHaveBeenCalledTimes(fetchImpl.mock.calls.length);
+				for (const [reason] of cancel.mock.calls) {
+					expect(reason).toEqual(
+						expect.objectContaining({
+							message: 'wasm-lisp runtime asset has an invalid Content-Length'
+						})
+					);
+				}
+			} finally {
+				if (timeout) clearTimeout(timeout);
+			}
+		}
+	);
 
 	it('allows a zero Content-Length declaration', async () => {
 		const compiler = await createCompilerWithFetch(
