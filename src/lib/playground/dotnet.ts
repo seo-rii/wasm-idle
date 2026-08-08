@@ -1,9 +1,5 @@
 import { resolveDotnetModuleUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
-import {
-	resolveSandboxExecutionArgs,
-	type CompilerDiagnostic,
-	type SandboxExecutionOptions
-} from '$lib/playground/options';
+import { type CompilerDiagnostic, type SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
@@ -15,7 +11,10 @@ type DotnetOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
+	cancellationReason?: unknown;
 	deferCompletion: boolean;
+	abortReasonReading: boolean;
+	sessionActive: boolean;
 	signal?: AbortSignal;
 	onAbort?: () => void;
 	abortReject?: (reason: unknown) => void;
@@ -108,7 +107,9 @@ class Dotnet implements Sandbox {
 			token: Symbol(phase),
 			phase,
 			cancelled: false,
-			deferCompletion: false
+			deferCompletion: false,
+			abortReasonReading: false,
+			sessionActive: false
 		};
 		this.activeOperation = operation;
 		return operation;
@@ -122,6 +123,12 @@ class Dotnet implements Sandbox {
 
 	private isOperationActive(operation: DotnetOperation) {
 		return this.activeOperation?.token === operation.token && !operation.cancelled;
+	}
+
+	private releaseBeforeSession(operation: DotnetOperation, fallback: unknown) {
+		const outcome = operation.cancelled ? operation.cancellationReason : fallback;
+		this.completeOperation(operation);
+		return outcome;
 	}
 
 	private releaseAbortSignal(operation: DotnetOperation) {
@@ -138,7 +145,8 @@ class Dotnet implements Sandbox {
 	}
 
 	private abortReason(signal: AbortSignal, phase: DotnetOperation['phase']) {
-		if (signal.reason !== undefined) return signal.reason;
+		const reason = signal.reason;
+		if (reason !== undefined) return reason;
 		return new DOMException(
 			phase === 'startup'
 				? `${this.languageLabel} runtime startup aborted`
@@ -155,34 +163,63 @@ class Dotnet implements Sandbox {
 		const rejectAbort = operation.abortReject;
 		operation.abortReject = undefined;
 		operation.cancelled = true;
-		this.releaseAbortSignal(operation);
-		if (!operation.deferCompletion) this.completeOperation(operation);
+		operation.cancellationReason = reason;
 		this.activeExplicitStdinCleanup?.();
 		this.uid += 1;
 		this.resolveStdinWaiters();
 		this.workerSession.terminate(reason);
 		this.exit = true;
 		rejectAbort?.(reason);
+		if (operation.deferCompletion) this.releaseAbortSignal(operation);
+		else this.completeOperation(operation);
+	}
+
+	private cancelBeforeSession(operation: DotnetOperation, reason: unknown) {
+		if (!this.isOperationActive(operation)) return;
+		operation.cancelled = true;
+		operation.cancellationReason = reason;
+		this.completeOperation(operation);
 	}
 
 	private bindAbortSignal(operation: DotnetOperation, signal?: AbortSignal) {
-		if (!signal) return;
+		if (!signal || !this.isOperationActive(operation)) return;
 		const onAbort = () => {
-			if (!this.isOperationActive(operation)) {
-				this.releaseAbortSignal(operation);
-				return;
+			if (!this.isOperationActive(operation) || operation.abortReasonReading) return;
+			operation.abortReasonReading = true;
+			let reason: unknown;
+			try {
+				reason = this.abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			} finally {
+				operation.abortReasonReading = false;
 			}
-			this.abortOperation(operation, this.abortReason(signal, operation.phase));
+			if (!this.isOperationActive(operation)) return;
+			if (operation.sessionActive) this.abortOperation(operation, reason);
+			else this.cancelBeforeSession(operation, reason);
 		};
 		operation.signal = signal;
 		operation.onAbort = onAbort;
 		try {
 			signal.addEventListener('abort', onAbort, { once: true });
 		} catch (error) {
-			this.abortOperation(operation, error);
+			if (!this.isOperationActive(operation)) return;
+			let signalAborted = false;
+			try {
+				signalAborted = signal.aborted;
+			} catch {
+				if (!this.isOperationActive(operation)) return;
+			}
+			if (signalAborted) onAbort();
+			else this.cancelBeforeSession(operation, error);
 			return;
 		}
-		if (signal.aborted) onAbort();
+		if (!this.isOperationActive(operation)) return;
+		try {
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			if (this.isOperationActive(operation)) this.cancelBeforeSession(operation, error);
+		}
 	}
 
 	private shouldRunOnMainThread() {
@@ -202,30 +239,119 @@ class Dotnet implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		const signal = options.signal;
-		if (signal?.aborted) {
-			return Promise.reject(this.abortReason(signal, 'startup'));
-		}
 		let operation: DotnetOperation;
 		try {
 			operation = this.beginOperation('startup');
 		} catch (error) {
 			return Promise.reject(error);
 		}
+		let signal: AbortSignal | undefined;
+		let nextModuleUrl: string;
+		let runOnMainThread: boolean;
+		try {
+			signal = options.signal;
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} runtime startup cancelled`
+					)
+				);
+			}
+			this.bindAbortSignal(operation, signal);
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} runtime startup cancelled`
+					)
+				);
+			}
+			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} runtime startup cancelled`
+					)
+				);
+			}
+			if (typeof runtimeAssets === 'string') {
+				nextModuleUrl = resolveDotnetModuleUrl(runtimeAssets, currentUrl);
+			} else {
+				const dotnetAssets = runtimeAssets?.dotnet;
+				if (!this.isOperationActive(operation)) {
+					return Promise.reject(
+						this.releaseBeforeSession(
+							operation,
+							`${this.languageLabel} runtime startup cancelled`
+						)
+					);
+				}
+				const configuredModuleUrl = dotnetAssets?.moduleUrl;
+				if (!this.isOperationActive(operation)) {
+					return Promise.reject(
+						this.releaseBeforeSession(
+							operation,
+							`${this.languageLabel} runtime startup cancelled`
+						)
+					);
+				}
+				nextModuleUrl = resolveDotnetModuleUrl(
+					configuredModuleUrl === undefined
+						? {}
+						: { dotnet: { moduleUrl: configuredModuleUrl } },
+					currentUrl
+				);
+				if (!nextModuleUrl) {
+					const rootUrl = runtimeAssets?.rootUrl;
+					if (!this.isOperationActive(operation)) {
+						return Promise.reject(
+							this.releaseBeforeSession(
+								operation,
+								`${this.languageLabel} runtime startup cancelled`
+							)
+						);
+					}
+					nextModuleUrl = resolveDotnetModuleUrl({ rootUrl }, currentUrl);
+				}
+			}
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} runtime startup cancelled`
+					)
+				);
+			}
+			if (!nextModuleUrl) {
+				return Promise.reject(
+					this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} runtime is not configured. Set runtimeAssets.dotnet.moduleUrl or PUBLIC_WASM_DOTNET_MODULE_URL.`
+					)
+				);
+			}
+			runOnMainThread = this.shouldRunOnMainThread();
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} runtime startup cancelled`
+					)
+				);
+			}
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(operation, error));
+		}
+		operation.sessionActive = true;
 		const loading = this.workerSession.load(async (resolve, reject) => {
 			try {
 				if (!this.isOperationActive(operation)) return;
-				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-				const nextModuleUrl = resolveDotnetModuleUrl(runtimeAssets, currentUrl);
-				if (!nextModuleUrl) {
-					return reject(
-						`${this.languageLabel} runtime is not configured. Set runtimeAssets.dotnet.moduleUrl or PUBLIC_WASM_DOTNET_MODULE_URL.`
-					);
-				}
 				const needsWorkerReset = !this.worker || this.moduleUrl !== nextModuleUrl;
 				const needsRuntimeReset =
 					!this.runtimeModule || !this.compiler || this.moduleUrl !== nextModuleUrl;
-				if (this.shouldRunOnMainThread()) {
+				if (runOnMainThread) {
 					let runtimeModule = this.runtimeModule;
 					let compiler = this.compiler;
 					if (needsRuntimeReset) {
@@ -256,8 +382,8 @@ class Dotnet implements Sandbox {
 						this.compiledArtifact = null;
 						this.compiledCacheKey = '';
 					}
-					this.completeOperation(operation);
 					resolve();
+					this.completeOperation(operation);
 					return;
 				}
 				if (needsWorkerReset) {
@@ -283,8 +409,8 @@ class Dotnet implements Sandbox {
 								this.compiler = null;
 								this.compiledArtifact = null;
 								this.compiledCacheKey = '';
-								this.completeOperation(operation);
 								resolve();
+								this.completeOperation(operation);
 								return;
 							}
 							if (event.data?.error) reject(event.data.error);
@@ -305,14 +431,13 @@ class Dotnet implements Sandbox {
 					this.compiler = null;
 					this.compiledArtifact = null;
 					this.compiledCacheKey = '';
-					this.completeOperation(operation);
 					resolve();
+					this.completeOperation(operation);
 				}
 			} catch (error: any) {
 				reject(error?.message || String(error));
 			}
 		});
-		this.bindAbortSignal(operation, signal);
 		return loading.finally(() => this.completeOperation(operation));
 	}
 
@@ -341,10 +466,10 @@ class Dotnet implements Sandbox {
 	private async collectStdinForRun(
 		code: string,
 		prepare: boolean,
-		options: SandboxExecutionOptions,
+		explicitStdin: string | undefined,
 		runUid: number
 	) {
-		const hasExplicitStdin = !prepare && options.stdin !== undefined;
+		const hasExplicitStdin = !prepare && explicitStdin !== undefined;
 		if (runUid !== this.uid) return '';
 		if (
 			!prepare &&
@@ -356,8 +481,8 @@ class Dotnet implements Sandbox {
 			await new Promise<void>((resolve) => this.stdinWaiters.push(resolve));
 		}
 		if (runUid !== this.uid) return '';
-		if (hasExplicitStdin) return options.stdin as string;
-		const stdin = `${options.stdin ?? ''}${this.pendingInput.join('')}`;
+		if (hasExplicitStdin) return explicitStdin;
+		const stdin = `${explicitStdin ?? ''}${this.pendingInput.join('')}`;
 		if (!prepare) {
 			this.pendingInput = [];
 			this.pendingEof = false;
@@ -373,14 +498,67 @@ class Dotnet implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		const signal = options.signal;
-		if (signal?.aborted) throw this.abortReason(signal, 'execute');
 		const operation = this.beginOperation('execute');
-		let completionDeferred = false;
+		let signal: AbortSignal | undefined;
+		let request: { programArgs: string[]; stdin: string | undefined };
 		try {
-			if (options.stdin !== undefined && typeof options.stdin !== 'string') {
+			signal = options.signal;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			this.bindAbortSignal(operation, signal);
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			const stdin = options.stdin;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			if (stdin !== undefined && typeof stdin !== 'string') {
 				throw new TypeError(`${this.languageLabel} stdin must be a string`);
 			}
+			const configuredProgramArgs = options.programArgs;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			const sourceArgs = configuredProgramArgs ?? args;
+			const programArgs: string[] = [];
+			if (Array.isArray(sourceArgs)) {
+				const length = sourceArgs.length;
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} execution cancelled`
+					);
+				}
+				for (let index = 0; index < length; index += 1) {
+					programArgs.push(sourceArgs[index]);
+					if (!this.isOperationActive(operation)) {
+						throw this.releaseBeforeSession(
+							operation,
+							`${this.languageLabel} execution cancelled`
+						);
+					}
+				}
+			}
+			request = { programArgs, stdin };
+		} catch (error) {
+			throw this.releaseBeforeSession(operation, error);
+		}
+		let completionDeferred = false;
+		try {
 			if (this.runtimeModule && this.compiler) {
 				operation.deferCompletion = true;
 				let abortPromise: Promise<never> | undefined;
@@ -389,20 +567,14 @@ class Dotnet implements Sandbox {
 						operation.abortReject = reject;
 					});
 				}
-				this.bindAbortSignal(operation, signal);
-				if (!this.isOperationActive(operation)) {
-					operation.deferCompletion = false;
-					this.completeOperation(operation);
-					return await abortPromise!;
-				}
+				operation.sessionActive = true;
 				const execution = this.runOnMainThread(
 					operation,
 					code,
 					prepare,
 					_log,
 					_prog,
-					args,
-					options
+					request
 				).finally(() => this.completeOperation(operation));
 				completionDeferred = true;
 				return abortPromise
@@ -411,12 +583,12 @@ class Dotnet implements Sandbox {
 			}
 			if (!this.worker) throw 'Worker not loaded';
 			const worker = this.worker;
-			const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
 			this.exit = false;
+			operation.sessionActive = true;
 			return await new Promise<boolean | string>((resolve, reject) => {
 				const _uid = ++this.uid;
 				const workerOperation = this.workerSession.beginRun(worker, reject);
-				const hasExplicitStdin = !prepare && options.stdin !== undefined;
+				const hasExplicitStdin = !prepare && request.stdin !== undefined;
 				this.activeExplicitStdinCleanup?.();
 				let explicitStdinCleaned = false;
 				const cleanupExplicitStdin = () => {
@@ -475,17 +647,16 @@ class Dotnet implements Sandbox {
 					}
 				};
 				worker.onmessage = handler;
-				this.bindAbortSignal(operation, signal);
 				if (!ownsRun()) return;
 				this.begin = Date.now();
-				this.collectStdinForRun(code, prepare, options, _uid)
+				this.collectStdinForRun(code, prepare, request.stdin, _uid)
 					.then((stdin) => {
 						if (!ownsRun()) return;
 						worker.postMessage({
 							code,
 							language: this.compileLanguage,
 							prepare,
-							args: programArgs,
+							args: request.programArgs,
 							stdin,
 							log: _log
 						});
@@ -503,17 +674,15 @@ class Dotnet implements Sandbox {
 		operation: DotnetOperation,
 		code: string,
 		prepare: boolean,
-		_log = true,
-		_prog?: SandboxProgress,
-		args: string[] = [],
-		options: SandboxExecutionOptions = {}
+		_log: boolean,
+		_prog: SandboxProgress | undefined,
+		request: { programArgs: string[]; stdin: string | undefined }
 	): Promise<boolean | string> {
 		if (!this.runtimeModule || !this.compiler) throw new Error('Runtime not loaded');
-		const { programArgs } = resolveSandboxExecutionArgs(this.language, args, options);
 		this.exit = false;
 		this.begin = Date.now();
 		const _uid = ++this.uid;
-		const hasExplicitStdin = !prepare && options.stdin !== undefined;
+		const hasExplicitStdin = !prepare && request.stdin !== undefined;
 		this.activeExplicitStdinCleanup?.();
 		let explicitStdinCleaned = false;
 		const cleanupExplicitStdin = () => {
@@ -570,12 +739,12 @@ class Dotnet implements Sandbox {
 			}
 			if (prepare) return true;
 
-			const stdin = await this.collectStdinForRun(code, prepare, options, _uid);
+			const stdin = await this.collectStdinForRun(code, prepare, request.stdin, _uid);
 			if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 			const execution = await this.runtimeModule.executeBrowserDotnetArtifact(
 				this.compiledArtifact,
 				{
-					args: programArgs,
+					args: request.programArgs,
 					env: {
 						USER: 'jungol'
 					},
@@ -614,17 +783,22 @@ class Dotnet implements Sandbox {
 
 	terminate(reason: unknown = 'Process terminated') {
 		const operation = this.activeOperation;
+		const rejectAbort = operation?.abortReject;
 		if (operation) {
 			operation.cancelled = true;
+			operation.cancellationReason = reason;
 			operation.abortReject = undefined;
-			this.releaseAbortSignal(operation);
-			if (!operation.deferCompletion) this.completeOperation(operation);
 		}
 		this.activeExplicitStdinCleanup?.();
 		this.uid += 1;
 		this.resolveStdinWaiters();
 		this.workerSession.terminate(reason);
 		this.exit = true;
+		rejectAbort?.(reason);
+		if (operation) {
+			if (operation.deferCompletion) this.releaseAbortSignal(operation);
+			else this.completeOperation(operation);
+		}
 	}
 
 	async clear() {

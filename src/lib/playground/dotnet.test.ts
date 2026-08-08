@@ -233,6 +233,130 @@ End Module`;
 		await expect(sandbox.run('Console.WriteLine("retry");', false)).resolves.toBe(true);
 	});
 
+	it('snapshots a pre-aborted reason once and preserves falsy values', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const controller = new AbortController();
+		controller.abort(new Error('internal reason'));
+		let reasonReads = 0;
+		Object.defineProperty(controller.signal, 'reason', {
+			configurable: true,
+			get() {
+				reasonReads += 1;
+				return reasonReads === 1 ? false : new Error('replacement reason');
+			}
+		});
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+		).rejects.toBe(false);
+		expect(reasonReads).toBe(1);
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('keeps a replacement load when the abort reason getter terminates its owner', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const controller = new AbortController();
+		controller.abort(new Error('internal reason'));
+		const reason = new Error('terminate dotnet reason snapshot');
+		const laterFailure = new Error('late dotnet reason getter failure');
+		let replacement: Promise<void> | undefined;
+		Object.defineProperty(controller.signal, 'reason', {
+			configurable: true,
+			get() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/absproxy/5173');
+				throw laterFailure;
+			}
+		});
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+		).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves an abort raised before signal listener registration throws', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const controller = new AbortController();
+		const reason = new Error('abort while binding dotnet signal');
+		const laterFailure = new Error('dotnet listener registration failed afterward');
+		vi.spyOn(controller.signal, 'addEventListener').mockImplementation(() => {
+			controller.abort(reason);
+			throw laterFailure;
+		});
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+		).rejects.toBe(reason);
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('does not inspect signal state after listener registration loses its owner', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const controller = new AbortController();
+		const reason = new Error('terminate dotnet listener registration owner');
+		let replacement: Promise<void> | undefined;
+		let abortedReads = 0;
+		vi.spyOn(controller.signal, 'addEventListener').mockImplementation(() => {
+			sandbox.terminate(reason);
+			replacement = sandbox.load('/absproxy/5173');
+		});
+		Object.defineProperty(controller.signal, 'aborted', {
+			configurable: true,
+			get() {
+				abortedReads += 1;
+				throw new Error('stale dotnet binding inspected signal state');
+			}
+		});
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+		).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(abortedReads).toBe(0);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves an abort raised while observing the bound signal state', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const controller = new AbortController();
+		const reason = new Error('abort while observing dotnet signal');
+		const laterFailure = new Error('dotnet aborted getter failed afterward');
+		Object.defineProperty(controller.signal, 'aborted', {
+			configurable: true,
+			get() {
+				controller.abort(reason);
+				throw laterFailure;
+			}
+		});
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+		).rejects.toBe(reason);
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('returns a rejected load promise when the signal getter throws', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const reason = new Error('dotnet signal getter failed');
+		const options = {};
+		Object.defineProperty(options, 'signal', {
+			get() {
+				throw reason;
+			}
+		});
+		let loading: Promise<void> | undefined;
+
+		expect(() => {
+			loading = sandbox.load('/absproxy/5173', '', true, [], options);
+		}).not.toThrow();
+		await expect(loading).rejects.toBe(reason);
+		expect(workerInstances).toHaveLength(0);
+	});
+
 	it('aborts before scheduled worker startup can create a dotnet worker', async () => {
 		const sandbox = new Dotnet('CSHARP');
 		const controller = new AbortController();
@@ -331,24 +455,80 @@ End Module`;
 	it('removes settled dotnet listeners and keeps late aborts inert', async () => {
 		const sandbox = new Dotnet('CSHARP');
 		const loadController = new AbortController();
+		const loadAddEventListener = vi.spyOn(loadController.signal, 'addEventListener');
 		const loadRemoveEventListener = vi.spyOn(loadController.signal, 'removeEventListener');
 		await sandbox.load('/absproxy/5173', '', true, [], { signal: loadController.signal });
 		const worker = workerInstances[0];
+		expect(loadAddEventListener).toHaveBeenCalledTimes(1);
+		expect(loadRemoveEventListener).toHaveBeenCalledTimes(1);
 		expect(loadRemoveEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
 
 		loadController.abort(new Error('late dotnet startup abort'));
 		expect(worker?.terminate).not.toHaveBeenCalled();
 
 		const runController = new AbortController();
+		const runAddEventListener = vi.spyOn(runController.signal, 'addEventListener');
 		const runRemoveEventListener = vi.spyOn(runController.signal, 'removeEventListener');
 		await sandbox.run('Console.WriteLine("done");', false, true, undefined, [], {
 			signal: runController.signal
 		});
+		expect(runAddEventListener).toHaveBeenCalledTimes(1);
+		expect(runRemoveEventListener).toHaveBeenCalledTimes(1);
 		expect(runRemoveEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
 
 		runController.abort(new Error('late dotnet execution abort'));
 		expect(worker?.terminate).not.toHaveBeenCalled();
 		await expect(sandbox.run('Console.WriteLine("retry");', false)).resolves.toBe(true);
+	});
+
+	it('settles startup before listener removal can abort and start a replacement', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Dotnet('CSHARP');
+		const controller = new AbortController();
+		const abortAtCleanup = new Error('abort during dotnet listener cleanup');
+		const cleanupFailure = new Error('dotnet listener cleanup failed afterward');
+		let replacement: Promise<void> | undefined;
+		vi.spyOn(controller.signal, 'removeEventListener').mockImplementation(() => {
+			controller.abort(abortAtCleanup);
+			replacement = sandbox.load('/absproxy/5173');
+			throw cleanupFailure;
+		});
+		const loading = sandbox.load('/absproxy/5173', '', true, [], {
+			signal: controller.signal
+		});
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+
+		worker?.onmessage?.({ data: { load: true } } as MessageEvent<any>);
+		await expect(loading).resolves.toBeUndefined();
+		await expect(replacement).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(1);
+		expect(worker?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('does not let termination cleanup retire a replacement worker', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const originalWorker = workerInstances[0];
+		const controller = new AbortController();
+		const reason = new Error('terminate dotnet before listener cleanup');
+		let replacement: Promise<void> | undefined;
+		vi.spyOn(controller.signal, 'removeEventListener').mockImplementation(() => {
+			replacement = sandbox.load('/absproxy/5173');
+			throw new Error('dotnet termination listener cleanup failed');
+		});
+		const running = sandbox.run('Console.WriteLine("pending");', false, true, undefined, [], {
+			signal: controller.signal
+		});
+		await vi.waitFor(() => expect(originalWorker?.postMessage).toHaveBeenCalledTimes(2));
+
+		sandbox.terminate(reason);
+		await expect(running).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(originalWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
 	});
 
 	it('rejects run and load calls while worker startup remains active', async () => {
@@ -358,21 +538,34 @@ End Module`;
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 		const loadHandler = worker.onmessage;
+		let signalReads = 0;
+		const hostileOptions = {};
+		Object.defineProperty(hostileOptions, 'signal', {
+			get() {
+				signalReads += 1;
+				throw new Error('busy calls must not inspect their signal');
+			}
+		});
 
-		await expect(sandbox.run('Console.WriteLine("hello");', false)).rejects.toMatchObject({
+		await expect(
+			sandbox.run('Console.WriteLine("hello");', false, true, undefined, [], hostileOptions)
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
 			phase: 'startup',
 			runtimeId: 'CSHARP',
 			recoverable: true
 		});
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], hostileOptions)
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
 			phase: 'startup',
 			runtimeId: 'CSHARP',
 			recoverable: true
 		});
+		expect(signalReads).toBe(0);
 		expect(worker.postMessage).toHaveBeenCalledOnce();
 		expect(worker.onmessage).toBe(loadHandler);
 		expect(worker.terminate).not.toHaveBeenCalled();
@@ -383,6 +576,104 @@ End Module`;
 		await expect(loading).resolves.toBeUndefined();
 		suppressAutoLoadAck = false;
 		await expect(sandbox.run('Console.WriteLine("hello");', false)).resolves.toBe(true);
+	});
+
+	it('keeps a replacement load when a runtime asset getter terminates the snapshot owner', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const reason = new Error('terminate dotnet runtime asset snapshot');
+		const laterFailure = new Error('late dotnet module URL getter failure');
+		let replacement: Promise<void> | undefined;
+		const runtimeAssets = {};
+		Object.defineProperty(runtimeAssets, 'dotnet', {
+			get() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/absproxy/5173');
+				return {
+					get moduleUrl() {
+						throw laterFailure;
+					}
+				};
+			}
+		});
+
+		await expect(sandbox.load(runtimeAssets)).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('keeps a replacement load when a program argument getter terminates a run snapshot', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		const originalWorker = workerInstances[0];
+		const reason = new Error('terminate dotnet argument snapshot');
+		const laterFailure = new Error('late dotnet argument getter failure');
+		let replacement: Promise<void> | undefined;
+		const programArgs: string[] = [];
+		Object.defineProperty(programArgs, '0', {
+			get() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/absproxy/5173');
+				throw laterFailure;
+			}
+		});
+		programArgs.length = 1;
+
+		await expect(
+			sandbox.run('Console.WriteLine("snapshot");', false, true, undefined, [], {
+				programArgs
+			})
+		).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(originalWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('keeps a replacement load when the stdin getter terminates a run snapshot', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		const originalWorker = workerInstances[0];
+		const reason = new Error('terminate dotnet stdin snapshot');
+		const laterFailure = new Error('late dotnet stdin getter failure');
+		let replacement: Promise<void> | undefined;
+		const options = {};
+		Object.defineProperty(options, 'stdin', {
+			get() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/absproxy/5173');
+				throw laterFailure;
+			}
+		});
+
+		await expect(
+			sandbox.run('Console.WriteLine("snapshot");', false, true, undefined, [], options)
+		).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(originalWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('does not read irrelevant compile arguments for a dotnet execution', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		let compileArgReads = 0;
+		const options = { stdin: '' };
+		Object.defineProperty(options, 'compileArgs', {
+			get() {
+				compileArgReads += 1;
+				throw new Error('dotnet does not consume compile arguments');
+			}
+		});
+
+		await expect(
+			sandbox.run('Console.WriteLine("snapshot");', false, true, undefined, ['one'], options)
+		).resolves.toBe(true);
+		expect(compileArgReads).toBe(0);
+		expect(workerInstances[0]?.postMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({ args: ['one'], stdin: '' })
+		);
 	});
 
 	it('releases the startup gate when a worker load callback throws', async () => {
@@ -1019,6 +1310,84 @@ export async function executeBrowserDotnetArtifact() {
 		}
 	});
 
+	it('uses detached args and stdin after main-thread compilation yields', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		let markCompileStarted!: () => void;
+		const compileStarted = new Promise<void>((resolve) => {
+			markCompileStarted = resolve;
+		});
+		let releaseCompile!: () => void;
+		const compileGate = new Promise<void>((resolve) => {
+			releaseCompile = resolve;
+		});
+		const compile = vi.fn(async () => {
+			markCompileStarted();
+			await compileGate;
+			return { success: true, artifact: { id: 'snapshot-artifact' } };
+		});
+		const execute = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		sandbox.runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.compiler = { compile };
+		const args = ['original-arg'];
+		const options = { stdin: 'original-stdin' };
+		const running = sandbox.run(
+			'var input = Console.ReadLine();',
+			false,
+			true,
+			undefined,
+			args,
+			options
+		);
+		await compileStarted;
+
+		args[0] = 'mutated-arg';
+		options.stdin = 'mutated-stdin';
+		releaseCompile();
+
+		await expect(running).resolves.toBe(true);
+		expect(execute).toHaveBeenCalledWith(
+			{ id: 'snapshot-artifact' },
+			expect.objectContaining({ args: ['original-arg'], stdin: 'original-stdin' })
+		);
+	});
+
+	it('binds one signal listener across a main-thread execution', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const compile = vi.fn(async () => ({
+			success: true,
+			artifact: { id: 'single-listener-artifact' }
+		}));
+		const execute = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		sandbox.runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.compiler = { compile };
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		let abortedReads = 0;
+		Object.defineProperty(controller.signal, 'aborted', {
+			configurable: true,
+			get() {
+				abortedReads += 1;
+				return false;
+			}
+		});
+
+		await expect(
+			sandbox.run('Console.WriteLine("single listener");', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).resolves.toBe(true);
+		expect(abortedReads).toBe(1);
+		expect(addEventListener).toHaveBeenCalledTimes(1);
+		expect(removeEventListener).toHaveBeenCalledTimes(1);
+	});
+
 	it('rejects main-thread compilation abort promptly but holds Busy until compile settles', async () => {
 		const sandbox = new Dotnet('CSHARP');
 		let markCompileStarted!: () => void;
@@ -1093,6 +1462,67 @@ export async function executeBrowserDotnetArtifact() {
 		await expect(sandbox.run('Console.WriteLine("compile");', true)).resolves.toBe(true);
 		expect(compile).toHaveBeenCalledTimes(2);
 		expect(execute).not.toHaveBeenCalled();
+	});
+
+	it('settles a main-thread abort when its reason getter terminates the operation', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		let markCompileStarted!: () => void;
+		const compileStarted = new Promise<void>((resolve) => {
+			markCompileStarted = resolve;
+		});
+		let releaseCompile!: () => void;
+		const compileGate = new Promise<void>((resolve) => {
+			releaseCompile = resolve;
+		});
+		const compile = vi.fn(async () => {
+			markCompileStarted();
+			await compileGate;
+			return { success: true, artifact: { id: 'reason-getter-artifact' } };
+		});
+		const execute = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		sandbox.runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.compiler = { compile };
+		const controller = new AbortController();
+		const reason = new Error('terminate dotnet main-thread reason snapshot');
+		const laterFailure = new Error('late dotnet main-thread reason getter failure');
+		let reasonReads = 0;
+		Object.defineProperty(controller.signal, 'reason', {
+			configurable: true,
+			get() {
+				reasonReads += 1;
+				sandbox.terminate(reason);
+				throw laterFailure;
+			}
+		});
+		const running = sandbox.run(
+			'Console.WriteLine("reason getter");',
+			true,
+			true,
+			undefined,
+			[],
+			{
+				signal: controller.signal
+			}
+		);
+		const outcome = running.catch((error) => error);
+		await compileStarted;
+
+		controller.abort(new Error('internal abort reason'));
+		await expect(outcome).resolves.toBe(reason);
+		expect(reasonReads).toBe(1);
+		await expect(sandbox.run('Console.WriteLine("busy");', true)).rejects.toMatchObject({
+			name: 'BusyError',
+			phase: 'execute',
+			runtimeId: 'CSHARP'
+		});
+
+		releaseCompile();
+		await vi.waitFor(() => expect((sandbox as any).activeOperation).toBeNull());
+		expect(execute).not.toHaveBeenCalled();
+		await expect(sandbox.run('Console.WriteLine("retry");', true)).resolves.toBe(true);
 	});
 
 	it('suppresses late main-thread execution output and preserves replacement stdin after abort', async () => {
