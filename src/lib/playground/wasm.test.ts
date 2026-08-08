@@ -673,6 +673,88 @@ describe('WASM sandbox', () => {
 		expect(sandbox.pendingInput).toEqual([]);
 	});
 
+	it('preserves an exact null pre-abort reason without changing idle WASM state', async () => {
+		const sandbox = new Wasm();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		const uid = sandbox.uid;
+		sandbox.write('queued input\n');
+		const controller = new AbortController();
+		controller.abort(null);
+
+		await expect(
+			sandbox.load('/replacement/', '', true, [], { signal: controller.signal })
+		).rejects.toBeNull();
+		await expect(
+			sandbox.run('AGFzbQ==', false, true, undefined, [], {
+				signal: controller.signal,
+				stdin: ''
+			})
+		).rejects.toBeNull();
+
+		expect(sandbox.worker).toBe(worker);
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('preserves replacement startup when the outer signal getter terminates WASM', async () => {
+		const sandbox = new Wasm();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace WASM during startup option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get signal() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement/');
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.load('/outer/', '', true, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves the first cancellation and replacement across later WASM option failure', async () => {
+		const sandbox = new Wasm();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace WASM during execution option snapshot');
+		const laterError = new Error('later WASM workspace getter failed');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get limits() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement/');
+				return undefined;
+			},
+			get workspaceFiles(): never {
+				throw laterError;
+			}
+		};
+
+		const superseded = sandbox.run('AGFzbQ==', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(retiredWorker.postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
 	it('rejects load when the WASM worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Wasm();
