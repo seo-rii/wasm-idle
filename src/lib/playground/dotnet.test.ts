@@ -873,6 +873,71 @@ export async function executeBrowserDotnetArtifact() {
 		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
 	});
 
+	it('does not read a later callback slot after the output owner is replaced', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		const originalWorker = workerInstances[0];
+		const reason = new Error('terminate dotnet output callback snapshot');
+		const laterFailure = new Error('late dotnet diagnostic callback getter failure');
+		let replacement: Promise<void> | undefined;
+		let diagnosticReads = 0;
+		Object.defineProperty(sandbox, 'output', {
+			configurable: true,
+			get() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/absproxy/5173');
+				return vi.fn();
+			}
+		});
+		Object.defineProperty(sandbox, 'oncompilerdiagnostic', {
+			configurable: true,
+			get() {
+				diagnosticReads += 1;
+				sandbox.terminate(laterFailure);
+				throw laterFailure;
+			}
+		});
+
+		await expect(sandbox.run('Console.WriteLine("snapshot");', false)).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(diagnosticReads).toBe(0);
+		expect(originalWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('keeps worker callbacks bound to the run that captured them', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const worker = workerInstances[0];
+		const firstOutput = vi.fn();
+		const secondOutput = vi.fn();
+		const firstDiagnostic = vi.fn();
+		const secondDiagnostic = vi.fn();
+		sandbox.output = firstOutput;
+		sandbox.oncompilerdiagnostic = firstDiagnostic;
+		const running = sandbox.run('Console.WriteLine("callbacks");', false);
+		await vi.waitFor(() => expect(worker?.postMessage).toHaveBeenCalledTimes(2));
+		const handler = worker?.onmessage;
+
+		sandbox.output = secondOutput;
+		sandbox.oncompilerdiagnostic = secondDiagnostic;
+		handler?.({ data: { output: 'captured output\n' } } as MessageEvent<any>);
+		handler?.({
+			data: { diagnostic: { message: 'captured diagnostic' } }
+		} as MessageEvent<any>);
+		handler?.({ data: { results: true } } as MessageEvent<any>);
+
+		await expect(running).resolves.toBe(true);
+		expect(firstOutput).toHaveBeenCalledWith('captured output\n');
+		expect(firstDiagnostic).toHaveBeenCalledWith({ message: 'captured diagnostic' });
+		expect(firstOutput.mock.contexts).toEqual([sandbox]);
+		expect(firstDiagnostic.mock.contexts).toEqual([sandbox]);
+		expect(secondOutput).not.toHaveBeenCalled();
+		expect(secondDiagnostic).not.toHaveBeenCalled();
+	});
+
 	it('does not read irrelevant compile arguments for a dotnet execution', async () => {
 		const sandbox = new Dotnet('CSHARP');
 		await sandbox.load('/absproxy/5173');
@@ -1570,6 +1635,239 @@ export async function executeBrowserDotnetArtifact() {
 			{ id: 'snapshot-artifact' },
 			expect.objectContaining({ args: ['original-arg'], stdin: 'original-stdin' })
 		);
+	});
+
+	it('keeps main-thread backends and callbacks bound to their captured run', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		let markCompileStarted!: () => void;
+		const compileStarted = new Promise<void>((resolve) => {
+			markCompileStarted = resolve;
+		});
+		let releaseCompile!: () => void;
+		const compileGate = new Promise<void>((resolve) => {
+			releaseCompile = resolve;
+		});
+		const diagnosticA = {
+			lineNumber: 1,
+			severity: 'warning' as const,
+			message: 'runtime a diagnostic'
+		};
+		const diagnosticB = {
+			lineNumber: 1,
+			severity: 'warning' as const,
+			message: 'runtime b diagnostic'
+		};
+		const compileA = vi.fn(async () => {
+			markCompileStarted();
+			await compileGate;
+			return {
+				success: true,
+				artifact: { id: 'runtime-a-artifact' },
+				diagnostics: [diagnosticA],
+				logs: ['runtime a log']
+			};
+		});
+		const compileB = vi.fn(async () => ({
+			success: true,
+			artifact: { id: 'runtime-b-artifact' },
+			diagnostics: [diagnosticB],
+			logs: ['runtime b log']
+		}));
+		const executeA = vi.fn(
+			async (_artifact: unknown, options?: { stdout?: (output: string) => void }) => {
+				options?.stdout?.('runtime a output\n');
+				return { exitCode: 0, stdout: '', stderr: '' };
+			}
+		);
+		const executeB = vi.fn(
+			async (_artifact: unknown, options?: { stdout?: (output: string) => void }) => {
+				options?.stdout?.('runtime b output\n');
+				return { exitCode: 0, stdout: '', stderr: '' };
+			}
+		);
+		const compilerA = { compile: compileA };
+		const compilerB = { compile: compileB };
+		const runtimeA = {
+			createDotnetCompiler: () => compilerA,
+			executeBrowserDotnetArtifact: executeA
+		};
+		const runtimeB = {
+			createDotnetCompiler: () => compilerB,
+			executeBrowserDotnetArtifact: executeB
+		};
+		const outputA = vi.fn();
+		const outputB = vi.fn();
+		const onDiagnosticA = vi.fn();
+		const onDiagnosticB = vi.fn();
+		sandbox.runtimeModule = runtimeA;
+		sandbox.compiler = compilerA;
+		sandbox.output = outputA;
+		sandbox.oncompilerdiagnostic = onDiagnosticA;
+		const code = 'Console.WriteLine("backend snapshot");';
+		const running = sandbox.run(code, false, true, undefined, [], { stdin: '' });
+		await compileStarted;
+
+		sandbox.runtimeModule = runtimeB;
+		sandbox.compiler = compilerB;
+		sandbox.output = outputB;
+		sandbox.oncompilerdiagnostic = onDiagnosticB;
+		releaseCompile();
+
+		await expect(running).resolves.toBe(true);
+		expect(compileA).toHaveBeenCalledOnce();
+		expect(executeA).toHaveBeenCalledWith({ id: 'runtime-a-artifact' }, expect.any(Object));
+		expect(compileA.mock.contexts).toEqual([compilerA]);
+		expect(executeA.mock.contexts).toEqual([runtimeA]);
+		expect(compileB).not.toHaveBeenCalled();
+		expect(executeB).not.toHaveBeenCalled();
+		expect(outputA).toHaveBeenCalledWith('runtime a log\n');
+		expect(outputA).toHaveBeenCalledWith('runtime a output\n');
+		expect(onDiagnosticA).toHaveBeenCalledWith(diagnosticA);
+		expect(outputA.mock.contexts.every((context) => context === sandbox)).toBe(true);
+		expect(onDiagnosticA.mock.contexts).toEqual([sandbox]);
+		expect(outputB).not.toHaveBeenCalled();
+		expect(onDiagnosticB).not.toHaveBeenCalled();
+
+		await expect(sandbox.run(code, false, true, undefined, [], { stdin: '' })).resolves.toBe(
+			true
+		);
+		expect(compileB).toHaveBeenCalledOnce();
+		expect(executeB).toHaveBeenCalledWith({ id: 'runtime-b-artifact' }, expect.any(Object));
+		expect(compileB.mock.contexts).toEqual([compilerB]);
+		expect(executeB.mock.contexts).toEqual([runtimeB]);
+		expect(outputB).toHaveBeenCalledWith('runtime b log\n');
+		expect(outputB).toHaveBeenCalledWith('runtime b output\n');
+		expect(onDiagnosticB).toHaveBeenCalledWith(diagnosticB);
+		expect(outputB.mock.contexts.every((context) => context === sandbox)).toBe(true);
+		expect(onDiagnosticB.mock.contexts).toEqual([sandbox]);
+	});
+
+	it('invalidates the main-thread cache when backend objects change independently', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const compileA = vi.fn(async () => ({
+			success: true,
+			artifact: { id: 'compiler-a-artifact' }
+		}));
+		const compileB = vi.fn(async () => ({
+			success: true,
+			artifact: { id: 'compiler-b-artifact' }
+		}));
+		const execute = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		const compilerA = { compile: compileA };
+		const compilerB = { compile: compileB };
+		const runtimeA = {
+			createDotnetCompiler: () => compilerA,
+			executeBrowserDotnetArtifact: execute
+		};
+		const runtimeB = {
+			createDotnetCompiler: () => compilerB,
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.runtimeModule = runtimeA;
+		sandbox.compiler = compilerA;
+		const code = 'Console.WriteLine("object identity");';
+
+		await expect(sandbox.run(code, false, true, undefined, [], { stdin: '' })).resolves.toBe(
+			true
+		);
+		expect(compileA).toHaveBeenCalledOnce();
+
+		sandbox.compiler = compilerB;
+		await expect(sandbox.run(code, false, true, undefined, [], { stdin: '' })).resolves.toBe(
+			true
+		);
+		expect(compileB).toHaveBeenCalledOnce();
+
+		sandbox.runtimeModule = runtimeB;
+		await expect(sandbox.run(code, false, true, undefined, [], { stdin: '' })).resolves.toBe(
+			true
+		);
+		expect(compileB).toHaveBeenCalledTimes(2);
+		expect(execute).toHaveBeenCalledTimes(3);
+	});
+
+	it('invalidates the main-thread cache when captured backend methods change in place', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const compileA = vi.fn(async () => ({
+			success: true,
+			artifact: { id: 'compile-a-artifact' }
+		}));
+		const compileB = vi.fn(async () => ({
+			success: true,
+			artifact: { id: 'compile-b-artifact' }
+		}));
+		const executeA = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		const executeB = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		const compiler = { compile: compileA };
+		const runtimeModule = {
+			createDotnetCompiler: () => compiler,
+			executeBrowserDotnetArtifact: executeA
+		};
+		sandbox.runtimeModule = runtimeModule;
+		sandbox.compiler = compiler;
+		const code = 'Console.WriteLine("method identity");';
+
+		await expect(sandbox.run(code, false, true, undefined, [], { stdin: '' })).resolves.toBe(
+			true
+		);
+		expect(compileA).toHaveBeenCalledOnce();
+		expect(executeA).toHaveBeenLastCalledWith({ id: 'compile-a-artifact' }, expect.any(Object));
+
+		compiler.compile = compileB;
+		await expect(sandbox.run(code, false, true, undefined, [], { stdin: '' })).resolves.toBe(
+			true
+		);
+		expect(compileB).toHaveBeenCalledOnce();
+		expect(executeA).toHaveBeenLastCalledWith({ id: 'compile-b-artifact' }, expect.any(Object));
+
+		runtimeModule.executeBrowserDotnetArtifact = executeB;
+		await expect(sandbox.run(code, false, true, undefined, [], { stdin: '' })).resolves.toBe(
+			true
+		);
+		expect(compileB).toHaveBeenCalledTimes(2);
+		expect(executeB).toHaveBeenCalledWith({ id: 'compile-b-artifact' }, expect.any(Object));
+	});
+
+	it('does not read a later main-thread method after its owner is replaced', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const reason = new Error('terminate dotnet backend method snapshot');
+		const laterFailure = new Error('late dotnet execute getter failure');
+		let replacement: Promise<void> | undefined;
+		let executeReads = 0;
+		const compiler = {} as { compile: (request: unknown) => Promise<unknown> };
+		Object.defineProperty(compiler, 'compile', {
+			configurable: true,
+			get() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/absproxy/5173');
+				return vi.fn();
+			}
+		});
+		const runtimeModule = {
+			createDotnetCompiler: () => compiler
+		} as {
+			createDotnetCompiler: () => typeof compiler;
+			executeBrowserDotnetArtifact: (
+				artifact: unknown,
+				options?: unknown
+			) => Promise<unknown>;
+		};
+		Object.defineProperty(runtimeModule, 'executeBrowserDotnetArtifact', {
+			configurable: true,
+			get() {
+				executeReads += 1;
+				sandbox.terminate(laterFailure);
+				throw laterFailure;
+			}
+		});
+		sandbox.runtimeModule = runtimeModule as never;
+		sandbox.compiler = compiler as never;
+
+		await expect(sandbox.run('Console.WriteLine("snapshot");', false)).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(executeReads).toBe(0);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0]?.terminate).not.toHaveBeenCalled();
 	});
 
 	it('binds one signal listener across a main-thread execution', async () => {

@@ -54,6 +54,23 @@ type DotnetRuntimeModule = {
 	}>;
 };
 
+type DotnetCompiler = ReturnType<DotnetRuntimeModule['createDotnetCompiler']>;
+type DotnetMainThreadBackend = {
+	kind: 'main-thread';
+	runtimeModule: DotnetRuntimeModule;
+	compiler: DotnetCompiler;
+	compile: DotnetCompiler['compile'];
+	execute: DotnetRuntimeModule['executeBrowserDotnetArtifact'];
+};
+type DotnetRunBackend = DotnetMainThreadBackend | { kind: 'worker'; worker: Worker };
+type DotnetRunRequest = {
+	programArgs: string[];
+	stdin: string | undefined;
+	output: any;
+	onDiagnostic: ((diagnostic: CompilerDiagnostic) => void) | undefined;
+	backend: DotnetRunBackend;
+};
+
 type DotnetExecutionLimits = ReturnType<typeof resolveExecutionLimits>;
 
 const executionLimitKeys = [
@@ -76,7 +93,7 @@ class Dotnet implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
 	runtimeModule: DotnetRuntimeModule | null = null;
-	compiler: ReturnType<DotnetRuntimeModule['createDotnetCompiler']> | null = null;
+	compiler: DotnetCompiler | null = null;
 	begin = 0;
 	elapse = 0;
 	uid = 0;
@@ -87,6 +104,10 @@ class Dotnet implements Sandbox {
 	stdinWaiters: Array<() => void> = [];
 	compiledArtifact: unknown = null;
 	compiledCacheKey = '';
+	compiledRuntimeModule: DotnetRuntimeModule | null = null;
+	compiledCompiler: DotnetCompiler | null = null;
+	compiledCompile: DotnetCompiler['compile'] | null = null;
+	compiledExecute: DotnetRuntimeModule['executeBrowserDotnetArtifact'] | null = null;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	private activeExplicitStdinCleanup: (() => void) | null = null;
 	private activeOperation: DotnetOperation | null = null;
@@ -300,6 +321,15 @@ class Dotnet implements Sandbox {
 		return resolveExecutionLimits(snapshot);
 	}
 
+	private clearCompiledArtifact() {
+		this.compiledArtifact = null;
+		this.compiledCacheKey = '';
+		this.compiledRuntimeModule = null;
+		this.compiledCompiler = null;
+		this.compiledCompile = null;
+		this.compiledExecute = null;
+	}
+
 	private shouldRunOnMainThread() {
 		return (
 			typeof window !== 'undefined' &&
@@ -476,8 +506,7 @@ class Dotnet implements Sandbox {
 					this.runtimeModule = runtimeModule;
 					this.compiler = compiler;
 					if (needsRuntimeReset) {
-						this.compiledArtifact = null;
-						this.compiledCacheKey = '';
+						this.clearCompiledArtifact();
 					}
 					resolve();
 					this.completeOperation(operation);
@@ -504,8 +533,7 @@ class Dotnet implements Sandbox {
 								this.moduleUrl = nextModuleUrl;
 								this.runtimeModule = null;
 								this.compiler = null;
-								this.compiledArtifact = null;
-								this.compiledCacheKey = '';
+								this.clearCompiledArtifact();
 								resolve();
 								this.completeOperation(operation);
 								return;
@@ -526,8 +554,7 @@ class Dotnet implements Sandbox {
 					this.moduleUrl = nextModuleUrl;
 					this.runtimeModule = null;
 					this.compiler = null;
-					this.compiledArtifact = null;
-					this.compiledCacheKey = '';
+					this.clearCompiledArtifact();
 					resolve();
 					this.completeOperation(operation);
 				}
@@ -602,7 +629,7 @@ class Dotnet implements Sandbox {
 		const operation = this.beginOperation('execute');
 		let signal: AbortSignal | undefined;
 		let limits: DotnetExecutionLimits;
-		let request: { programArgs: string[]; stdin: string | undefined };
+		let request: DotnetRunRequest;
 		try {
 			signal = options.signal;
 			if (!this.isOperationActive(operation)) {
@@ -669,14 +696,76 @@ class Dotnet implements Sandbox {
 					}
 				}
 			}
-			request = { programArgs, stdin };
+			const output = this.output;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			const onDiagnostic = this.oncompilerdiagnostic;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			let backend: DotnetRunBackend | undefined;
+			const runtimeModule = this.runtimeModule;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			if (runtimeModule) {
+				const compiler = this.compiler;
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} execution cancelled`
+					);
+				}
+				if (compiler) {
+					const compile = compiler.compile;
+					if (!this.isOperationActive(operation)) {
+						throw this.releaseBeforeSession(
+							operation,
+							`${this.languageLabel} execution cancelled`
+						);
+					}
+					const execute = runtimeModule.executeBrowserDotnetArtifact;
+					if (!this.isOperationActive(operation)) {
+						throw this.releaseBeforeSession(
+							operation,
+							`${this.languageLabel} execution cancelled`
+						);
+					}
+					if (typeof compile !== 'function' || typeof execute !== 'function') {
+						throw new TypeError(`${this.languageLabel} runtime backend is invalid`);
+					}
+					backend = { kind: 'main-thread', runtimeModule, compiler, compile, execute };
+				}
+			}
+			if (!backend) {
+				const worker = this.worker;
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} execution cancelled`
+					);
+				}
+				if (!worker) throw 'Worker not loaded';
+				backend = { kind: 'worker', worker };
+			}
+			request = { programArgs, stdin, output, onDiagnostic, backend };
 		} catch (error) {
 			throw this.releaseBeforeSession(operation, error);
 		}
 		let completionDeferred = false;
 		const timeoutMs = Math.min(2_147_483_647, limits.compileTimeoutMs + limits.runTimeoutMs);
 		try {
-			if (this.runtimeModule && this.compiler) {
+			if (request.backend.kind === 'main-thread') {
 				operation.deferCompletion = true;
 				const cancellation = new Promise<never>((_resolve, reject) => {
 					operation.deferredReject = reject;
@@ -695,13 +784,13 @@ class Dotnet implements Sandbox {
 					prepare,
 					_log,
 					_prog,
-					request
+					request,
+					request.backend
 				).finally(() => this.completeOperation(operation));
 				completionDeferred = true;
 				return await Promise.race<boolean | string>([cancellation, execution]);
 			}
-			if (!this.worker) throw 'Worker not loaded';
-			const worker = this.worker;
+			const worker = request.backend.worker;
 			this.exit = false;
 			operation.sessionActive = true;
 			return await new Promise<boolean | string>((resolve, reject) => {
@@ -745,9 +834,13 @@ class Dotnet implements Sandbox {
 						const { output, results, error, diagnostic, progress } = event.data;
 						reportWorkerProgress(_prog, progress);
 						if (!ownsRun()) return;
-						if (output) this.output?.(output);
+						if (output && request.output != null) {
+							Reflect.apply(request.output, this, [output]);
+						}
 						if (!ownsRun()) return;
-						if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
+						if (diagnostic && request.onDiagnostic != null) {
+							Reflect.apply(request.onDiagnostic, this, [diagnostic]);
+						}
 						if (!ownsRun()) return;
 						if (results) {
 							cleanupExplicitStdin();
@@ -797,9 +890,9 @@ class Dotnet implements Sandbox {
 		prepare: boolean,
 		_log: boolean,
 		_prog: SandboxProgress | undefined,
-		request: { programArgs: string[]; stdin: string | undefined }
+		request: DotnetRunRequest,
+		backend: DotnetMainThreadBackend
 	): Promise<boolean | string> {
-		if (!this.runtimeModule || !this.compiler) throw new Error('Runtime not loaded');
 		this.exit = false;
 		this.begin = Date.now();
 		const _uid = ++this.uid;
@@ -819,30 +912,49 @@ class Dotnet implements Sandbox {
 		}
 		try {
 			const compileCacheKey = `${this.compileLanguage}\n${code}`;
-			if (!this.compiledArtifact || this.compiledCacheKey !== compileCacheKey) {
-				const result = await this.compiler.compile({
-					code,
-					language: this.compileLanguage,
-					target: 'browser-wasm',
-					prepare,
-					log: _log,
-					onProgress: (progress) => {
-						if (this.isOperationActive(operation) && _uid === this.uid) {
-							reportWorkerProgress(_prog, progress);
+			let compiledArtifact =
+				this.compiledArtifact &&
+				this.compiledCacheKey === compileCacheKey &&
+				this.compiledRuntimeModule === backend.runtimeModule &&
+				this.compiledCompiler === backend.compiler &&
+				this.compiledCompile === backend.compile &&
+				this.compiledExecute === backend.execute
+					? this.compiledArtifact
+					: null;
+			if (!compiledArtifact) {
+				const result = await Reflect.apply(backend.compile, backend.compiler, [
+					{
+						code,
+						language: this.compileLanguage,
+						target: 'browser-wasm',
+						prepare,
+						log: _log,
+						onProgress: (progress: { percent?: number; stage?: string }) => {
+							if (this.isOperationActive(operation) && _uid === this.uid) {
+								reportWorkerProgress(_prog, progress);
+							}
 						}
 					}
-				});
+				]);
 				if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 				for (const diagnostic of result.diagnostics || []) {
 					if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
-					this.oncompilerdiagnostic?.(diagnostic);
+					if (request.onDiagnostic != null) {
+						Reflect.apply(request.onDiagnostic, this, [diagnostic]);
+					}
 				}
 				for (const line of result.logs || []) {
 					if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
-					this.output?.(line.endsWith('\n') ? line : `${line}\n`);
+					if (request.output != null) {
+						Reflect.apply(request.output, this, [
+							line.endsWith('\n') ? line : `${line}\n`
+						]);
+					}
 				}
 				if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
-				if (result.stdout) this.output?.(result.stdout);
+				if (result.stdout && request.output != null) {
+					Reflect.apply(request.output, this, [result.stdout]);
+				}
 				if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 				if (!result.success || !result.artifact) {
 					throw new Error(
@@ -853,35 +965,52 @@ class Dotnet implements Sandbox {
 							`${this.languageLabel} compilation failed`
 					);
 				}
-				if (result.stderr) this.output?.(result.stderr);
+				if (result.stderr && request.output != null) {
+					Reflect.apply(request.output, this, [result.stderr]);
+				}
 				if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
-				this.compiledArtifact = result.artifact;
+				compiledArtifact = result.artifact;
+				this.compiledArtifact = compiledArtifact;
 				this.compiledCacheKey = compileCacheKey;
+				this.compiledRuntimeModule = backend.runtimeModule;
+				this.compiledCompiler = backend.compiler;
+				this.compiledCompile = backend.compile;
+				this.compiledExecute = backend.execute;
 			}
 			if (prepare) return true;
 
 			const stdin = await this.collectStdinForRun(code, prepare, request.stdin, _uid);
 			if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
-			const execution = await this.runtimeModule.executeBrowserDotnetArtifact(
-				this.compiledArtifact,
+			const execution = await Reflect.apply(backend.execute, backend.runtimeModule, [
+				compiledArtifact,
 				{
 					args: request.programArgs,
 					env: {
 						USER: 'jungol'
 					},
 					stdin,
-					stdout: (output) => {
-						if (output && this.isOperationActive(operation) && _uid === this.uid) {
-							this.output?.(output);
+					stdout: (output: string) => {
+						if (
+							output &&
+							request.output != null &&
+							this.isOperationActive(operation) &&
+							_uid === this.uid
+						) {
+							Reflect.apply(request.output, this, [output]);
 						}
 					},
-					stderr: (output) => {
-						if (output && this.isOperationActive(operation) && _uid === this.uid) {
-							this.output?.(output);
+					stderr: (output: string) => {
+						if (
+							output &&
+							request.output != null &&
+							this.isOperationActive(operation) &&
+							_uid === this.uid
+						) {
+							Reflect.apply(request.output, this, [output]);
 						}
 					}
 				}
-			);
+			]);
 			if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 			if (execution.exitCode !== 0) {
 				throw new Error(
