@@ -78,6 +78,16 @@ type TinyGoRuntimeProgressOwner = {
 
 const ACTIVITY_PREFIX_PATTERN = /^\[\d{2}:\d{2}:\d{2}\]\s?/gm;
 
+const abortReason = (signal: AbortSignal, phase: TinyGoOperation['phase']) => {
+	const reason = signal.reason;
+	return reason !== undefined
+		? reason
+		: new DOMException(
+				phase === 'startup' ? 'TinyGo startup aborted' : 'TinyGo execution aborted',
+				'AbortError'
+			);
+};
+
 class TinyGo implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
@@ -127,7 +137,7 @@ class TinyGo implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	): Promise<void> {
-		return this.executeOperation('startup', options.signal, async (operation) => {
+		return this.executeOperation('startup', options, async (operation) => {
 			try {
 				this.pendingInput = [];
 				this.waitingForInput = false;
@@ -212,18 +222,9 @@ class TinyGo implements Sandbox {
 
 	private executeOperation<T>(
 		phase: TinyGoOperation['phase'],
-		signal: AbortSignal | undefined,
+		options: Pick<SandboxExecutionOptions, 'signal'>,
 		execute: (operation: TinyGoOperation) => Promise<T>
 	): Promise<T> {
-		if (signal?.aborted) {
-			return Promise.reject(
-				signal.reason ??
-					new DOMException(
-						phase === 'startup' ? 'TinyGo startup aborted' : 'TinyGo execution aborted',
-						'AbortError'
-					)
-			);
-		}
 		let operation: TinyGoOperation;
 		try {
 			operation = this.beginOperation(phase);
@@ -233,8 +234,11 @@ class TinyGo implements Sandbox {
 
 		return new Promise<T>((resolve, reject) => {
 			let settled = false;
+			let signal: AbortSignal | undefined;
 			let onAbort: (() => void) | undefined;
 			const cleanup = () => {
+				delete operation.reject;
+				this.completeOperation(operation);
 				if (signal && onAbort) {
 					try {
 						signal.removeEventListener('abort', onAbort);
@@ -242,8 +246,6 @@ class TinyGo implements Sandbox {
 						// Cleanup must not replace the operation result.
 					}
 				}
-				delete operation.reject;
-				this.completeOperation(operation);
 			};
 			const resolveOperation = (value: T) => {
 				if (settled) return;
@@ -258,19 +260,41 @@ class TinyGo implements Sandbox {
 				reject(reason);
 			};
 			operation.reject = rejectOperation;
+			try {
+				signal = options.signal;
+			} catch (error) {
+				rejectOperation(operation.cancelled ? operation.reason : error);
+				return;
+			}
+			if (settled) return;
+			let preAborted = false;
+			try {
+				preAborted = signal?.aborted === true;
+			} catch (error) {
+				rejectOperation(error);
+				return;
+			}
+			if (settled) return;
+			if (preAborted && signal) {
+				try {
+					rejectOperation(abortReason(signal, phase));
+				} catch (error) {
+					rejectOperation(error);
+				}
+				return;
+			}
 			onAbort = signal
 				? () => {
 						if (!this.isOperationActive(operation)) return;
-						this.cancelOperation(
-							operation,
-							signal.reason ??
-								new DOMException(
-									phase === 'startup'
-										? 'TinyGo startup aborted'
-										: 'TinyGo execution aborted',
-									'AbortError'
-								)
-						);
+						let reason: unknown;
+						try {
+							reason = abortReason(signal, phase);
+						} catch (error) {
+							reason = error;
+						}
+						if (this.isOperationActive(operation)) {
+							this.cancelOperation(operation, reason);
+						}
 					}
 				: undefined;
 			if (signal && onAbort) {
@@ -280,7 +304,13 @@ class TinyGo implements Sandbox {
 					rejectOperation(error);
 					return;
 				}
-				if (signal.aborted) onAbort();
+				if (settled) return;
+				try {
+					if (signal.aborted) onAbort();
+				} catch (error) {
+					rejectOperation(error);
+					return;
+				}
 			}
 			if (settled) return;
 
@@ -647,7 +677,7 @@ class TinyGo implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		return this.executeOperation('execute', options.signal, async (operation) => {
+		return this.executeOperation('execute', options, async (operation) => {
 			this.exit = false;
 			try {
 				this.begin = Date.now();
@@ -744,6 +774,7 @@ class TinyGo implements Sandbox {
 		operation.cancelled = true;
 		operation.reason = reason;
 		const reject = operation.reject;
+		this.completeOperation(operation);
 		this.uid += 1;
 		this.waitingForInput = false;
 		this.pendingInput = [];
@@ -756,10 +787,14 @@ class TinyGo implements Sandbox {
 		this.compiledArtifact = null;
 		this.compiledArtifactExecutionError = '';
 		this.compiledCacheKey = '';
-		resetBufferedStdin(this.buffer);
-		reject?.(reason);
+		try {
+			resetBufferedStdin(this.buffer);
+		} catch {
+			// Stdin cleanup must not replace the cancellation reason.
+		}
 		this.workerSession.terminate(reason);
 		this.disposeRuntime();
+		reject?.(reason);
 	}
 
 	kill() {
@@ -776,7 +811,11 @@ class TinyGo implements Sandbox {
 		this.pendingInput = [];
 		this.pendingEof = false;
 		this.uid += 1;
-		resetBufferedStdin(this.buffer);
+		try {
+			resetBufferedStdin(this.buffer);
+		} catch {
+			// Idle cleanup remains best effort for a caller-replaced buffer.
+		}
 		this.workerSession.terminate(reason);
 		this.exit = true;
 	}

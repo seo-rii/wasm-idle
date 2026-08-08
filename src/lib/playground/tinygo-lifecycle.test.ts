@@ -315,6 +315,158 @@ describe('TinyGo operation lifecycle', () => {
 		expect(sandbox.exit).toBe(true);
 	});
 
+	it('preserves an exact null pre-abort reason without changing idle TinyGo state', async () => {
+		const sandbox = new TinyGo();
+		sandbox.write('queued\n');
+		const controller = new AbortController();
+		controller.abort(null);
+
+		await expect(
+			sandbox.load(runtimeAssets, '', true, [], { signal: controller.signal })
+		).rejects.toBeNull();
+		await expect(
+			sandbox.run('package main', false, true, undefined, [], {
+				signal: controller.signal
+			})
+		).rejects.toBeNull();
+
+		expect(workerInstances).toHaveLength(0);
+		expect(runtimeFixtureState.runtimeRecords).toHaveLength(0);
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.pendingInput).toEqual(['queued\n']);
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('preserves replacement startup when the outer signal getter terminates TinyGo', async () => {
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const retiredRuntime = runtimeFixtureState.runtimeRecords[0];
+		const reason = new Error('replace TinyGo during startup option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get signal() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load(runtimeAssets);
+				void replacement.catch(() => undefined);
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets, '', true, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(retiredRuntime?.disposeCalls).toBe(1);
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves the first cancellation across a later TinyGo signal getter failure', async () => {
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace TinyGo during execution option snapshot');
+		const laterError = new Error('TinyGo signal getter failed after replacement');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get signal(): never {
+				sandbox.terminate(reason);
+				replacement = sandbox.load(runtimeAssets);
+				void replacement.catch(() => undefined);
+				throw laterError;
+			}
+		};
+
+		const superseded = sandbox.run(
+			'package main\nfunc main() {}',
+			false,
+			true,
+			undefined,
+			[],
+			options
+		);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(runtimeFixtureState.bootCalls).toBe(0);
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('snapshots a reentrant TinyGo abort reason exactly once', async () => {
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace TinyGo while reading the abort reason');
+		const staleReason = new Error('stale reason returned after replacement');
+		let reasonReads = 0;
+		let replacement: Promise<void> | undefined;
+		const signal = {
+			aborted: true,
+			get reason() {
+				reasonReads += 1;
+				sandbox.terminate(reason);
+				replacement = sandbox.load(runtimeAssets);
+				void replacement.catch(() => undefined);
+				return staleReason;
+			}
+		} as AbortSignal;
+
+		const superseded = sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+			signal
+		});
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(reasonReads).toBe(1);
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves cancellation and cleanup when the TinyGo stdin buffer is invalid', async () => {
+		autoResolveRun = false;
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const controller = new AbortController();
+		const reason = new Error('stop TinyGo with an invalid stdin buffer');
+		const running = sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+			signal: controller.signal
+		});
+
+		await vi.waitFor(() =>
+			expect(workerInstances[0]?.postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({ artifact: expect.any(Uint8Array) })
+			)
+		);
+		const retiredWorker = workerInstances[0];
+		const retiredRuntime = runtimeFixtureState.runtimeRecords[0];
+		const originalBuffer = sandbox.buffer;
+		sandbox.buffer = new ArrayBuffer(0);
+
+		expect(() => controller.abort(reason)).not.toThrow();
+		sandbox.buffer = originalBuffer;
+
+		await expect(running).rejects.toBe(reason);
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(retiredRuntime?.disposeCalls).toBe(1);
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+
+		sandbox.buffer = new ArrayBuffer(0);
+		await expect(sandbox.clear()).resolves.toBeUndefined();
+		expect(workerInstances[1]?.terminate).toHaveBeenCalledOnce();
+		expect(runtimeFixtureState.runtimeRecords[1]?.disposeCalls).toBe(1);
+		sandbox.buffer = originalBuffer;
+	});
+
 	it('aborts TinyGo before its scheduled startup can mutate configuration', async () => {
 		const sandbox = new TinyGo();
 		const controller = new AbortController();
