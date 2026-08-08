@@ -43,7 +43,8 @@ async function observeSettlement<T>(promise: Promise<T>) {
 
 describe('Bash sandbox', () => {
 	beforeEach(() => {
-		vi.clearAllMocks();
+		vi.resetAllMocks();
+		init.mockResolvedValue(undefined);
 		importRuntimeModule.mockResolvedValue({ init, Wasmer: { fromFile } });
 		fromFile.mockResolvedValue({
 			entrypoint: { run: commandRun, free: commandFree },
@@ -623,6 +624,578 @@ describe('Bash sandbox', () => {
 		expect(sandbox.exit).toBe(true);
 		expect(sandbox.pendingInput).toEqual(['queued\n']);
 		expect(sandbox.pendingEof).toBe(true);
+	});
+
+	it('preserves an exact null pre-abort reason without changing idle Bash state', async () => {
+		const sandbox = new Bash();
+		await sandbox.load('/existing-null');
+		const runtimePackage = sandbox.runtimePackage;
+		const webcUrl = sandbox.webcUrl;
+		const uid = sandbox.uid;
+		sandbox.write('queued null input\n');
+		sandbox.eof();
+		const controller = new AbortController();
+		controller.abort(null);
+
+		await expect(
+			sandbox.load('/replacement-null', '', true, [], { signal: controller.signal })
+		).rejects.toBeNull();
+		await expect(
+			sandbox.run('read value', false, true, undefined, [], {
+				signal: controller.signal,
+				stdin: ''
+			})
+		).rejects.toBeNull();
+
+		expect(sandbox.runtimePackage).toBe(runtimePackage);
+		expect(sandbox.webcUrl).toBe(webcUrl);
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.exit).toBe(true);
+		expect(sandbox.pendingInput).toEqual(['queued null input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+		expect(commandRun).not.toHaveBeenCalled();
+	});
+
+	it('preserves replacement startup when the outer Bash signal getter terminates', async () => {
+		const sandbox = new Bash();
+		await sandbox.load('/existing-signal-getter');
+		const reason = new Error('replace Bash during startup option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get signal() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement-signal-getter');
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.load('/outer-signal-getter', '', true, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(sandbox.webcUrl).toMatch(/\/replacement-signal-getter\/wasm-bash\/bash\.webc$/);
+		expect(sandbox.runtimePackage).not.toBeNull();
+	});
+
+	it('preserves the first Bash cancellation when the triggering option getter later throws', async () => {
+		const sandbox = new Bash();
+		await sandbox.load('/existing-option-failure');
+		const reason = new Error('replace Bash during execution option snapshot');
+		const laterError = new Error('later Bash option failure');
+		const controller = new AbortController();
+		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
+		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			signal: controller.signal,
+			get limits(): never {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement-option-failure');
+				throw laterError;
+			}
+		};
+
+		const superseded = sandbox.run('printf stale', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(commandRun).not.toHaveBeenCalled();
+		expect(addEventListener).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledOnce();
+		expect(sandbox.webcUrl).toMatch(/\/replacement-option-failure\/wasm-bash\/bash\.webc$/);
+	});
+
+	it('preserves a Bash replacement when a later option getter aborts the snapshot', async () => {
+		const sandbox = new Bash();
+		await sandbox.load('/existing-option-abort');
+		const controller = new AbortController();
+		const reason = new Error('abort Bash during execution option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			signal: controller.signal,
+			get limits() {
+				controller.abort(reason);
+				replacement = sandbox.load('/replacement-option-abort');
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.run('printf stale', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(commandRun).not.toHaveBeenCalled();
+		expect(sandbox.webcUrl).toMatch(/\/replacement-option-abort\/wasm-bash\/bash\.webc$/);
+	});
+
+	it('preserves a Bash replacement started by a pre-session abort reason getter', async () => {
+		const sandbox = new Bash();
+		await sandbox.load('/existing-reason-getter');
+		const reason = new Error('replace Bash while reading the abort reason');
+		const staleReason = new Error('stale Bash abort reason');
+		let replacement: Promise<void> | undefined;
+		let reasonReads = 0;
+		const signal = {
+			aborted: true,
+			get reason() {
+				reasonReads += 1;
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement-reason-getter');
+				return staleReason;
+			},
+			addEventListener: vi.fn(),
+			removeEventListener: vi.fn()
+		} as unknown as AbortSignal;
+
+		const superseded = sandbox.run('printf stale', false, true, undefined, [], { signal });
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(reasonReads).toBe(1);
+		expect(commandRun).not.toHaveBeenCalled();
+		expect(sandbox.webcUrl).toMatch(/\/replacement-reason-getter\/wasm-bash\/bash\.webc$/);
+	});
+
+	it('stops the Bash snapshot when the bound signal aborted getter starts a replacement', async () => {
+		const sandbox = new Bash();
+		await sandbox.load('/existing-aborted-getter');
+		const reason = new Error('replace Bash while rechecking the abort signal');
+		let replacement: Promise<void> | undefined;
+		let abortedReads = 0;
+		let staleLimitReads = 0;
+		const addEventListener = vi.fn();
+		const removeEventListener = vi.fn();
+		const signal = {
+			get aborted() {
+				abortedReads += 1;
+				if (abortedReads === 2) {
+					sandbox.terminate(reason);
+					replacement = sandbox.load('/replacement-aborted-getter');
+				}
+				return false;
+			},
+			reason: undefined,
+			addEventListener,
+			removeEventListener
+		} as unknown as AbortSignal;
+		const options = {
+			signal,
+			get limits() {
+				staleLimitReads += 1;
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.run('printf stale', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(abortedReads).toBe(2);
+		expect(staleLimitReads).toBe(0);
+		expect(addEventListener).toHaveBeenCalledOnce();
+		expect(removeEventListener).toHaveBeenCalledOnce();
+		expect(commandRun).not.toHaveBeenCalled();
+		expect(sandbox.webcUrl).toMatch(/\/replacement-aborted-getter\/wasm-bash\/bash\.webc$/);
+	});
+
+	it('snapshots explicit Bash asset fields once without reading the root URL', async () => {
+		const sandbox = new Bash();
+		const reads = { bash: 0, rootUrl: 0, webcUrl: 0, moduleUrl: 0, workerUrl: 0 };
+		let webcUrl = '/snapshot-bash/package.webc';
+		let moduleUrl = '/snapshot-bash/sdk.mjs';
+		let workerUrl = '/snapshot-bash/worker.mjs';
+		const runtimeConfig = {
+			get webcUrl() {
+				reads.webcUrl += 1;
+				return webcUrl;
+			},
+			get moduleUrl() {
+				reads.moduleUrl += 1;
+				return moduleUrl;
+			},
+			get workerUrl() {
+				reads.workerUrl += 1;
+				return workerUrl;
+			}
+		};
+		const runtimeAssets = {
+			get rootUrl() {
+				reads.rootUrl += 1;
+				return '/unused-bash-root';
+			},
+			get bash() {
+				reads.bash += 1;
+				return runtimeConfig;
+			}
+		};
+
+		const loading = sandbox.load(runtimeAssets);
+		webcUrl = '/mutated-bash/package.webc';
+		moduleUrl = '/mutated-bash/sdk.mjs';
+		workerUrl = '/mutated-bash/worker.mjs';
+		await loading;
+
+		expect(reads).toEqual({ bash: 1, rootUrl: 0, webcUrl: 1, moduleUrl: 1, workerUrl: 1 });
+		expect(fetch).toHaveBeenCalledWith('http://localhost:3000/snapshot-bash/package.webc', {
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer'
+		});
+		expect(importRuntimeModule).toHaveBeenCalledWith(
+			'http://localhost:3000/snapshot-bash/sdk.mjs'
+		);
+		expect(init).toHaveBeenCalledWith({
+			sdkUrl: 'http://localhost:3000/snapshot-bash/sdk.mjs',
+			workerUrl: 'http://localhost:3000/snapshot-bash/worker.mjs'
+		});
+		expect(sandbox.webcUrl).toBe('http://localhost:3000/snapshot-bash/package.webc');
+	});
+
+	it('reads the Bash root URL once when resolving fallback assets', async () => {
+		const sandbox = new Bash();
+		let rootUrlReads = 0;
+		const runtimeAssets = {
+			get rootUrl() {
+				rootUrlReads += 1;
+				return '/snapshot-bash-root';
+			}
+		};
+
+		await sandbox.load(runtimeAssets);
+
+		expect(rootUrlReads).toBe(1);
+		expect(sandbox.webcUrl).toMatch(/\/snapshot-bash-root\/wasm-bash\/bash\.webc$/);
+	});
+
+	it('stops reading nested Bash limits after a getter starts a replacement', async () => {
+		const sandbox = new Bash();
+		await sandbox.load('/existing-nested-limits');
+		const reason = new Error('replace Bash while reading nested execution limits');
+		let replacement: Promise<void> | undefined;
+		let staleLimitReads = 0;
+		const limits = {
+			get assetTimeoutMs() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement-nested-limits');
+				return 1000;
+			},
+			get startupTimeoutMs() {
+				staleLimitReads += 1;
+				return 1000;
+			}
+		};
+
+		const superseded = sandbox.load('/superseded-nested-limits', '', true, [], { limits });
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleLimitReads).toBe(0);
+		expect(sandbox.webcUrl).toMatch(/\/replacement-nested-limits\/wasm-bash\/bash\.webc$/);
+	});
+
+	it('ignores a stale Bash config after its top-level getter starts a replacement', async () => {
+		const sandbox = new Bash();
+		await sandbox.load('/existing-top-level-config');
+		const reason = new Error('replace Bash while reading runtime config');
+		let replacement: Promise<void> | undefined;
+		let staleWebcReads = 0;
+		const runtimeAssets = {
+			get bash() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement-top-level-config');
+				return {
+					get webcUrl() {
+						staleWebcReads += 1;
+						return '/superseded.webc';
+					}
+				};
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleWebcReads).toBe(0);
+		expect(sandbox.webcUrl).toMatch(/\/replacement-top-level-config\/wasm-bash\/bash\.webc$/);
+	});
+
+	it('ignores later Bash asset getters after the WEBc getter starts a replacement', async () => {
+		const sandbox = new Bash();
+		await sandbox.load('/existing-nested-config');
+		const reason = new Error('replace Bash while reading WEBc URL');
+		let replacement: Promise<void> | undefined;
+		let staleModuleReads = 0;
+		const runtimeAssets = {
+			bash: {
+				get webcUrl() {
+					sandbox.terminate(reason);
+					replacement = sandbox.load('/replacement-nested-config');
+					return '/superseded.webc';
+				},
+				get moduleUrl() {
+					staleModuleReads += 1;
+					return '/superseded.mjs';
+				}
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleModuleReads).toBe(0);
+		expect(sandbox.webcUrl).toMatch(/\/replacement-nested-config\/wasm-bash\/bash\.webc$/);
+	});
+
+	it('snapshots Bash args, workspace, limits, and stdin once before dispatch', async () => {
+		commandRun.mockResolvedValueOnce({
+			stdin: undefined,
+			stdout: byteStream('snapshot\n'),
+			stderr: byteStream(''),
+			wait: vi.fn(async () => ({ ok: true, code: 0 })),
+			free: vi.fn()
+		});
+		const sandbox = new Bash();
+		await sandbox.load('/snapshot-run');
+		const reads = {
+			programArgs: 0,
+			workspaceFiles: 0,
+			path: 0,
+			content: 0,
+			activePath: 0,
+			workspaceLimits: 0,
+			maxFiles: 0,
+			stdin: 0
+		};
+		let filePath = 'lib/original.sh';
+		let fileContent = 'value=original';
+		let stdin = 'original stdin\n';
+		const workspaceFile = {
+			get path() {
+				reads.path += 1;
+				return filePath;
+			},
+			get content() {
+				reads.content += 1;
+				return fileContent;
+			}
+		};
+		const workspaceLimits = {
+			get maxFiles() {
+				reads.maxFiles += 1;
+				return 3;
+			}
+		};
+		const options = {
+			get programArgs() {
+				reads.programArgs += 1;
+				return ['original-arg'];
+			},
+			get workspaceFiles() {
+				reads.workspaceFiles += 1;
+				return [workspaceFile];
+			},
+			get activePath() {
+				reads.activePath += 1;
+				return 'scripts/original.sh';
+			},
+			get workspaceLimits() {
+				reads.workspaceLimits += 1;
+				return workspaceLimits;
+			},
+			get stdin() {
+				reads.stdin += 1;
+				return stdin;
+			}
+		};
+
+		const running = sandbox.run(
+			'source ../lib/original.sh',
+			false,
+			true,
+			undefined,
+			[],
+			options
+		);
+		filePath = 'lib/mutated.sh';
+		fileContent = 'value=mutated';
+		stdin = 'mutated stdin\n';
+		await expect(running).resolves.toBe(true);
+
+		expect(reads).toEqual({
+			programArgs: 1,
+			workspaceFiles: 1,
+			path: 1,
+			content: 1,
+			activePath: 1,
+			workspaceLimits: 1,
+			maxFiles: 1,
+			stdin: 1
+		});
+		expect(commandRun).toHaveBeenCalledWith({
+			args: ['-c', 'source ../lib/original.sh', 'scripts/original.sh', 'original-arg'],
+			mount: {
+				'/workspace': {
+					'lib/original.sh': 'value=original',
+					'scripts/original.sh': 'source ../lib/original.sh'
+				}
+			},
+			cwd: '/workspace',
+			stdin: 'original stdin\n'
+		});
+	});
+
+	it('stops reading nested Bash arguments after an element starts a replacement', async () => {
+		const sandbox = new Bash();
+		await sandbox.load('/existing-nested-args');
+		const reason = new Error('replace Bash while reading a nested program argument');
+		let replacement: Promise<void> | undefined;
+		let compileArgReads = 0;
+		let staleProgramArgReads = 0;
+		const programArgs = ['first', 'second'];
+		Object.defineProperty(programArgs, 0, {
+			configurable: true,
+			get() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement-nested-args');
+				return 'stale-first';
+			}
+		});
+		Object.defineProperty(programArgs, 1, {
+			configurable: true,
+			get() {
+				staleProgramArgReads += 1;
+				return 'stale-second';
+			}
+		});
+		const options = {
+			get compileArgs() {
+				compileArgReads += 1;
+				return ['unused'];
+			},
+			programArgs
+		};
+
+		const superseded = sandbox.run('printf stale', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(compileArgReads).toBe(0);
+		expect(staleProgramArgReads).toBe(0);
+		expect(commandRun).not.toHaveBeenCalled();
+		expect(sandbox.webcUrl).toMatch(/\/replacement-nested-args\/wasm-bash\/bash\.webc$/);
+	});
+
+	it('preserves exact null while cancelling active Bash startup and execution', async () => {
+		let resolvePackage!: (value: {
+			entrypoint: { run: typeof commandRun };
+			free: ReturnType<typeof vi.fn>;
+		}) => void;
+		const latePackageFree = vi.fn();
+		fromFile.mockReturnValueOnce(
+			new Promise((resolve) => {
+				resolvePackage = resolve;
+			})
+		);
+		const loadingSandbox = new Bash();
+		const loadController = new AbortController();
+		const loading = loadingSandbox.load('/active-null-load', '', true, [], {
+			signal: loadController.signal
+		});
+		await vi.waitFor(() => expect(fromFile).toHaveBeenCalledOnce());
+		loadController.abort(null);
+		await expect(loading).rejects.toBeNull();
+		resolvePackage({ entrypoint: { run: commandRun }, free: latePackageFree });
+		await vi.waitFor(() => expect(latePackageFree).toHaveBeenCalledOnce());
+
+		let resolveInstance!: (value: {
+			stdin: undefined;
+			stdout: ReadableStream<Uint8Array>;
+			stderr: ReadableStream<Uint8Array>;
+			wait: ReturnType<typeof vi.fn>;
+			free: ReturnType<typeof vi.fn>;
+		}) => void;
+		const lateInstanceFree = vi.fn();
+		commandRun.mockReturnValueOnce(
+			new Promise((resolve) => {
+				resolveInstance = resolve;
+			})
+		);
+		const runningSandbox = new Bash();
+		await runningSandbox.load('/active-null-run');
+		const runController = new AbortController();
+		const running = runningSandbox.run('sleep forever', false, true, undefined, [], {
+			signal: runController.signal
+		});
+		await vi.waitFor(() => expect(commandRun).toHaveBeenCalledOnce());
+		runController.abort(null);
+		await expect(running).rejects.toBeNull();
+		resolveInstance({
+			stdin: undefined,
+			stdout: byteStream('late'),
+			stderr: byteStream(''),
+			wait: vi.fn(async () => ({ ok: true, code: 0 })),
+			free: lateInstanceFree
+		});
+		await vi.waitFor(() => expect(lateInstanceFree).toHaveBeenCalledOnce());
+	});
+
+	it('reads an active Bash abort reason once without cancelling its replacement', async () => {
+		let resolveInstance:
+			| ((value: {
+					stdin: undefined;
+					stdout: ReadableStream<Uint8Array>;
+					stderr: ReadableStream<Uint8Array>;
+					wait: ReturnType<typeof vi.fn>;
+					free: ReturnType<typeof vi.fn>;
+			  }) => void)
+			| undefined;
+		const lateInstanceFree = vi.fn();
+		commandRun.mockReturnValueOnce(
+			new Promise((resolve) => {
+				resolveInstance = resolve;
+			})
+		);
+		const sandbox = new Bash();
+		await sandbox.load('/active-reason-getter');
+		const controller = new AbortController();
+		const reason = new Error('replace Bash while reading an active abort reason');
+		const staleReason = new Error('stale active Bash abort reason');
+		let replacement: Promise<void> | undefined;
+		let reasonReads = 0;
+		Object.defineProperty(controller.signal, 'reason', {
+			configurable: true,
+			get() {
+				reasonReads += 1;
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement-active-reason');
+				if (reasonReads > 1) throw new Error('Bash abort reason was read more than once');
+				return staleReason;
+			}
+		});
+		const running = sandbox.run('sleep forever', false, true, undefined, [], {
+			signal: controller.signal
+		});
+
+		try {
+			await vi.waitFor(() => expect(commandRun).toHaveBeenCalledOnce());
+			controller.abort(staleReason);
+			await expect(running).rejects.toBe(reason);
+			await expect(replacement).resolves.toBeUndefined();
+			expect(reasonReads).toBe(1);
+			expect(sandbox.webcUrl).toMatch(/\/replacement-active-reason\/wasm-bash\/bash\.webc$/);
+		} finally {
+			resolveInstance?.({
+				stdin: undefined,
+				stdout: byteStream('late'),
+				stderr: byteStream(''),
+				wait: vi.fn(async () => ({ ok: true, code: 0 })),
+				free: lateInstanceFree
+			});
+			await running.catch(() => {});
+		}
+		await vi.waitFor(() => expect(lateInstanceFree).toHaveBeenCalledOnce());
 	});
 
 	it('cancels a stalled Bash startup and frees its late instance before retrying', async () => {

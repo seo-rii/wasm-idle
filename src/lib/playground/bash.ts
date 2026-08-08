@@ -1,9 +1,5 @@
 import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
-import {
-	resolveSandboxExecutionArgs,
-	type CompilerDiagnostic,
-	type SandboxExecutionOptions
-} from '$lib/playground/options';
+import { type CompilerDiagnostic, type SandboxExecutionOptions } from '$lib/playground/options';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch';
@@ -11,6 +7,7 @@ import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
 	resolveExecutionLimits,
+	type ExecutionLimits,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
 
@@ -44,6 +41,39 @@ interface WasmerSdk {
 let sdkPromise: Promise<WasmerSdk> | undefined;
 let sdkCacheKey = '';
 
+type BashOperation = {
+	token: symbol;
+	phase: 'startup' | 'execute';
+	cancelled: boolean;
+	cancellationReason?: unknown;
+	cleanedUp: boolean;
+	cleanups: Array<() => void>;
+};
+
+const abortReason = (signal: AbortSignal, phase: BashOperation['phase']) => {
+	const reason = signal.reason;
+	return reason !== undefined
+		? reason
+		: new DOMException(
+				phase === 'startup' ? 'Bash runtime startup aborted' : 'Bash execution aborted',
+				'AbortError'
+			);
+};
+
+const EXECUTION_LIMIT_KEYS = [
+	'assetTimeoutMs',
+	'startupTimeoutMs',
+	'compileTimeoutMs',
+	'runTimeoutMs',
+	'maxOutputBytes',
+	'maxDiagnostics',
+	'maxWorkspaceBytes',
+	'maxAssetBytes',
+	'maxWasmMemoryBytes',
+	'maxWorkers',
+	'maxThreads'
+] as const satisfies readonly (keyof ExecutionLimits)[];
+
 class Bash implements Sandbox {
 	output?: (data: string) => void;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
@@ -63,6 +93,132 @@ class Bash implements Sandbox {
 	elapse = 0;
 	uid = 0;
 	exit = true;
+	private activeOperation: BashOperation | null = null;
+
+	private beginOperation(phase: BashOperation['phase']) {
+		if (this.activeOperation) {
+			throw new BusyError('Bash runtime already has an active operation', {
+				runtimeId: 'BASH',
+				phase: this.activeOperation.phase
+			});
+		}
+		const operation: BashOperation = {
+			token: Symbol(phase),
+			phase,
+			cancelled: false,
+			cleanedUp: false,
+			cleanups: []
+		};
+		this.activeOperation = operation;
+		return operation;
+	}
+
+	private isOperationActive(operation: BashOperation) {
+		return this.activeOperation?.token === operation.token && !operation.cancelled;
+	}
+
+	private requireOperationActive(operation: BashOperation) {
+		if (this.isOperationActive(operation)) return;
+		throw operation.cancelled
+			? operation.cancellationReason
+			: operation.phase === 'startup'
+				? 'Bash runtime startup cancelled'
+				: 'Bash execution cancelled';
+	}
+
+	private snapshotExecutionLimits(
+		operation: BashOperation,
+		source: Partial<ExecutionLimits> | undefined
+	) {
+		const snapshot: Partial<ExecutionLimits> = {};
+		if (source) {
+			for (const key of EXECUTION_LIMIT_KEYS) {
+				this.requireOperationActive(operation);
+				const value = source[key];
+				this.requireOperationActive(operation);
+				if (value !== undefined) {
+					(snapshot as Record<keyof ExecutionLimits, number | undefined>)[key] = value;
+				}
+			}
+		}
+		const limits = resolveExecutionLimits(snapshot);
+		this.requireOperationActive(operation);
+		return limits;
+	}
+
+	private releaseOperation(operation: BashOperation) {
+		if (this.activeOperation?.token !== operation.token) return false;
+		this.activeOperation = null;
+		return true;
+	}
+
+	private cleanupOperation(operation: BashOperation) {
+		if (operation.cleanedUp) return;
+		operation.cleanedUp = true;
+		const cleanups = operation.cleanups.splice(0);
+		for (const cleanup of cleanups) {
+			try {
+				cleanup();
+			} catch {
+				// Caller-owned cleanup must not replace the operation result.
+			}
+		}
+	}
+
+	private releaseBeforeSession(operation: BashOperation, reason: unknown) {
+		const outcome = operation.cancelled ? operation.cancellationReason : reason;
+		this.releaseOperation(operation);
+		this.cleanupOperation(operation);
+		return outcome;
+	}
+
+	private bindPreSessionAbort(operation: BashOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return () => undefined;
+		let registered = false;
+		let unbound = false;
+		const unbind = () => {
+			if (unbound) return;
+			unbound = true;
+			if (registered) signal.removeEventListener('abort', onAbort);
+		};
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			if (!this.isOperationActive(operation)) return;
+			operation.cancelled = true;
+			operation.cancellationReason = reason;
+			this.releaseOperation(operation);
+			this.cleanupOperation(operation);
+		};
+		operation.cleanups.push(unbind);
+		try {
+			const alreadyAborted = signal.aborted;
+			if (!this.isOperationActive(operation)) return unbind;
+			if (alreadyAborted) {
+				onAbort();
+				return unbind;
+			}
+			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (!this.isOperationActive(operation)) return unbind;
+			const abortedAfterBinding = signal.aborted;
+			if (!this.isOperationActive(operation)) return unbind;
+			if (abortedAfterBinding) onAbort();
+		} catch (error) {
+			if (this.isOperationActive(operation)) {
+				operation.cancelled = true;
+				operation.cancellationReason = error;
+				this.releaseOperation(operation);
+				this.cleanupOperation(operation);
+			}
+		}
+		return unbind;
+	}
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -72,24 +228,70 @@ class Bash implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		const signal = options.signal;
-		if (signal?.aborted) {
-			return Promise.reject(
-				signal.reason ?? new DOMException('Bash runtime startup aborted', 'AbortError')
-			);
+		let activeOperation: BashOperation;
+		try {
+			activeOperation = this.beginOperation('startup');
+		} catch (error) {
+			return Promise.reject(error);
 		}
-		if (this.activeLoadCleanup || this.activeRunCleanup) {
-			return Promise.reject(
-				new BusyError('Bash runtime already has an active operation', {
-					runtimeId: 'BASH',
-					phase: this.activeLoadCleanup ? 'startup' : 'execute'
-				})
-			);
+		let signal: AbortSignal | undefined;
+		let limits: ReturnType<typeof resolveExecutionLimits>;
+		let resolvedWebcUrl: string;
+		let resolvedSdkUrl: string;
+		let resolvedThreadWorkerUrl: string;
+		let unbindPreSessionAbort: () => void = () => undefined;
+		try {
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			this.requireOperationActive(activeOperation);
+			const limitSource = options.limits;
+			this.requireOperationActive(activeOperation);
+			limits = this.snapshotExecutionLimits(activeOperation, limitSource);
+			let configuredWebcUrl: string | undefined;
+			let configuredSdkUrl: string | undefined;
+			let configuredWorkerUrl: string | undefined;
+			let rootUrl = '';
+			if (runtimeAssets && typeof runtimeAssets === 'object') {
+				const bashAssets = (runtimeAssets as BashRuntimeAssetConfig).bash;
+				this.requireOperationActive(activeOperation);
+				if (bashAssets) {
+					configuredWebcUrl = bashAssets.webcUrl;
+					this.requireOperationActive(activeOperation);
+					configuredSdkUrl = bashAssets.moduleUrl;
+					this.requireOperationActive(activeOperation);
+					configuredWorkerUrl = bashAssets.workerUrl;
+					this.requireOperationActive(activeOperation);
+				}
+				if (!configuredWebcUrl || !configuredSdkUrl || !configuredWorkerUrl) {
+					rootUrl = (runtimeAssets as BashRuntimeAssetConfig).rootUrl || '';
+					this.requireOperationActive(activeOperation);
+				}
+			} else {
+				rootUrl = typeof runtimeAssets === 'string' ? runtimeAssets : '';
+			}
+			const normalizedRoot = rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
+			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			const nextWebcUrl = configuredWebcUrl || `${normalizedRoot}/wasm-bash/bash.webc`;
+			const sdkModuleUrl = configuredSdkUrl || `${normalizedRoot}/wasm-bash/sdk/index.mjs`;
+			const sdkWorkerUrl =
+				configuredWorkerUrl || `${normalizedRoot}/wasm-bash/sdk/worker.mjs`;
+			resolvedWebcUrl = currentUrl ? new URL(nextWebcUrl, currentUrl).href : nextWebcUrl;
+			this.requireOperationActive(activeOperation);
+			resolvedSdkUrl = currentUrl ? new URL(sdkModuleUrl, currentUrl).href : sdkModuleUrl;
+			this.requireOperationActive(activeOperation);
+			resolvedThreadWorkerUrl = currentUrl
+				? new URL(sdkWorkerUrl, currentUrl).href
+				: sdkWorkerUrl;
+			this.requireOperationActive(activeOperation);
+			unbindPreSessionAbort();
+			this.requireOperationActive(activeOperation);
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
 		}
 		const loadGeneration = ++this.loadGeneration;
 		return new Promise<void>((resolve, reject) => {
 			let onAbort: (() => void) | undefined;
-			let rejectLoad: (reason: unknown) => void;
+			let settleRejectedLoad: (reason: unknown) => void;
 			let cleanedUp = false;
 			const cleanup = () => {
 				if (cleanedUp) return;
@@ -102,72 +304,72 @@ class Bash implements Sandbox {
 					}
 				}
 				if (this.activeLoadCleanup === cleanup) this.activeLoadCleanup = null;
-				if (this.activeLoadReject === rejectLoad) this.activeLoadReject = null;
+				if (this.activeLoadReject === settleRejectedLoad) this.activeLoadReject = null;
+				this.releaseOperation(activeOperation);
+				this.cleanupOperation(activeOperation);
 			};
-			rejectLoad = (reason: unknown) => {
+			settleRejectedLoad = (reason: unknown) => {
 				cleanup();
 				reject(reason);
+			};
+			const rejectLoad = (reason: unknown) => {
+				if (!this.isOperationActive(activeOperation)) return;
+				settleRejectedLoad(reason);
 			};
 			onAbort = signal
 				? () => {
 						if (
-							this.activeLoadCleanup !== cleanup ||
+							!this.isOperationActive(activeOperation) ||
 							loadGeneration !== this.loadGeneration
 						) {
 							cleanup();
 							return;
 						}
-						this.terminate(
-							signal.reason ??
-								new DOMException('Bash runtime startup aborted', 'AbortError')
-						);
+						let reason: unknown;
+						try {
+							reason = abortReason(signal, 'startup');
+						} catch (error) {
+							reason = error;
+						}
+						if (
+							!this.isOperationActive(activeOperation) ||
+							loadGeneration !== this.loadGeneration
+						) {
+							return;
+						}
+						this.terminate(reason);
 					}
 				: undefined;
 			this.activeLoadCleanup = cleanup;
-			this.activeLoadReject = rejectLoad;
-			if (signal && onAbort) {
-				signal.addEventListener('abort', onAbort, { once: true });
-				if (signal.aborted) onAbort();
+			this.activeLoadReject = settleRejectedLoad;
+			try {
+				if (signal && onAbort) {
+					signal.addEventListener('abort', onAbort, { once: true });
+					if (!this.isOperationActive(activeOperation)) return;
+					const abortedAfterBinding = signal.aborted;
+					if (!this.isOperationActive(activeOperation)) return;
+					if (abortedAfterBinding) onAbort();
+				}
+			} catch (error) {
+				if (this.isOperationActive(activeOperation)) this.terminate(error);
 			}
-			if (this.activeLoadCleanup !== cleanup) return;
+			if (!this.isOperationActive(activeOperation)) return;
 			void (async () => {
 				let nextPackage: WasmerPackage | null = null;
 				try {
 					if (
-						this.activeLoadCleanup !== cleanup ||
+						!this.isOperationActive(activeOperation) ||
 						loadGeneration !== this.loadGeneration
 					) {
 						return;
 					}
 					this.pendingInput = [];
 					this.pendingEof = false;
-					const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-					const bashAssets = (runtimeAssets as BashRuntimeAssetConfig)?.bash;
-					const configured = bashAssets?.webcUrl;
-					const rootUrl =
-						typeof runtimeAssets === 'string'
-							? runtimeAssets
-							: (runtimeAssets as BashRuntimeAssetConfig)?.rootUrl || '';
-					const normalizedRoot = rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
-					const nextWebcUrl = configured || `${normalizedRoot}/wasm-bash/bash.webc`;
-					const resolvedWebcUrl = currentUrl
-						? new URL(nextWebcUrl, currentUrl).href
-						: nextWebcUrl;
-					const sdkModuleUrl =
-						bashAssets?.moduleUrl || `${normalizedRoot}/wasm-bash/sdk/index.mjs`;
-					const sdkWorkerUrl =
-						bashAssets?.workerUrl || `${normalizedRoot}/wasm-bash/sdk/worker.mjs`;
-					const resolvedSdkUrl = currentUrl
-						? new URL(sdkModuleUrl, currentUrl).href
-						: sdkModuleUrl;
-					const resolvedThreadWorkerUrl = currentUrl
-						? new URL(sdkWorkerUrl, currentUrl).href
-						: sdkWorkerUrl;
 					const nextSdkCacheKey = `${resolvedSdkUrl}\n${resolvedThreadWorkerUrl}`;
 
 					progress?.set?.(0.1, 'Loading Bash runtime');
 					if (
-						this.activeLoadCleanup !== cleanup ||
+						!this.isOperationActive(activeOperation) ||
 						loadGeneration !== this.loadGeneration
 					) {
 						return;
@@ -200,20 +402,20 @@ class Bash implements Sandbox {
 						fetchRuntimeAssetBytes({
 							url: resolvedWebcUrl,
 							label: 'Bash WEBc package',
-							maxAssetBytes: options.limits?.maxAssetBytes,
+							maxAssetBytes: limits.maxAssetBytes,
 							signal
 						}),
 						loadSdkPromise
 					]);
 					if (
-						this.activeLoadCleanup !== cleanup ||
+						!this.isOperationActive(activeOperation) ||
 						loadGeneration !== this.loadGeneration
 					) {
 						return;
 					}
 					nextPackage = await sdk.Wasmer.fromFile(webcBytes);
 					if (
-						this.activeLoadCleanup !== cleanup ||
+						!this.isOperationActive(activeOperation) ||
 						loadGeneration !== this.loadGeneration
 					) {
 						const stalePackage = nextPackage;
@@ -227,7 +429,7 @@ class Bash implements Sandbox {
 					}
 					progress?.set?.(1, 'Bash runtime ready');
 					if (
-						this.activeLoadCleanup !== cleanup ||
+						!this.isOperationActive(activeOperation) ||
 						loadGeneration !== this.loadGeneration
 					) {
 						const stalePackage = nextPackage;
@@ -259,7 +461,7 @@ class Bash implements Sandbox {
 						// Preserve the startup failure.
 					}
 					if (
-						this.activeLoadCleanup !== cleanup ||
+						!this.isOperationActive(activeOperation) ||
 						loadGeneration !== this.loadGeneration
 					) {
 						return;
@@ -345,48 +547,113 @@ class Bash implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		if (this.activeLoadCleanup || this.activeRunCleanup) {
-			throw new BusyError('Bash runtime already has an active operation', {
-				runtimeId: 'BASH',
-				phase: this.activeLoadCleanup ? 'startup' : 'execute'
-			});
+		const activeOperation = this.beginOperation('execute');
+		if (prepare) {
+			this.releaseOperation(activeOperation);
+			this.cleanupOperation(activeOperation);
+			return true;
 		}
-		if (prepare) return true;
-		if (!this.runtimePackage) throw new Error('Bash runtime is not loaded');
-		const signal = options.signal;
-		if (signal?.aborted) {
-			throw signal.reason ?? new DOMException('Bash execution aborted', 'AbortError');
+		const runtimePackage = this.runtimePackage;
+		if (!runtimePackage) {
+			throw this.releaseBeforeSession(
+				activeOperation,
+				new Error('Bash runtime is not loaded')
+			);
 		}
-		const { programArgs } = resolveSandboxExecutionArgs('BASH', args, options);
-		const limits = resolveExecutionLimits(options.limits);
-		const workspace = validateExecutionWorkspace(
-			code,
-			options.workspaceFiles ?? [],
-			options.activePath ?? 'main.sh',
-			{
-				...options.workspaceLimits,
+		let signal: AbortSignal | undefined;
+		let programArgs: string[];
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
+		let stdin: SandboxExecutionOptions['stdin'];
+		let unbindPreSessionAbort: () => void = () => undefined;
+		try {
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			this.requireOperationActive(activeOperation);
+			const configuredProgramArgs = options.programArgs;
+			this.requireOperationActive(activeOperation);
+			const programArgsSource = configuredProgramArgs ?? args;
+			programArgs = [];
+			if (Array.isArray(programArgsSource)) {
+				const programArgCount = programArgsSource.length;
+				this.requireOperationActive(activeOperation);
+				for (let index = 0; index < programArgCount; index += 1) {
+					const argument = programArgsSource[index];
+					this.requireOperationActive(activeOperation);
+					programArgs.push(argument);
+				}
+			}
+			const limitSource = options.limits;
+			this.requireOperationActive(activeOperation);
+			const limits = this.snapshotExecutionLimits(activeOperation, limitSource);
+			const workspaceFilesSource = options.workspaceFiles ?? [];
+			this.requireOperationActive(activeOperation);
+			if (!Array.isArray(workspaceFilesSource)) {
+				throw new TypeError('Bash workspace files must be an array');
+			}
+			const workspaceFileCount = workspaceFilesSource.length;
+			this.requireOperationActive(activeOperation);
+			const workspaceFiles: Array<{ path: string; content: string }> = [];
+			for (let index = 0; index < workspaceFileCount; index += 1) {
+				const file = workspaceFilesSource[index];
+				this.requireOperationActive(activeOperation);
+				const path = file.path;
+				this.requireOperationActive(activeOperation);
+				const content = file.content;
+				this.requireOperationActive(activeOperation);
+				workspaceFiles.push({ path, content });
+			}
+			const activePath = options.activePath ?? 'main.sh';
+			this.requireOperationActive(activeOperation);
+			const workspaceLimitsSource = options.workspaceLimits;
+			this.requireOperationActive(activeOperation);
+			let workspaceLimits: SandboxExecutionOptions['workspaceLimits'] = {};
+			if (workspaceLimitsSource) {
+				const maxFiles = workspaceLimitsSource.maxFiles;
+				this.requireOperationActive(activeOperation);
+				const maxFileBytes = workspaceLimitsSource.maxFileBytes;
+				this.requireOperationActive(activeOperation);
+				const maxTotalBytes = workspaceLimitsSource.maxTotalBytes;
+				this.requireOperationActive(activeOperation);
+				const maxPathBytes = workspaceLimitsSource.maxPathBytes;
+				this.requireOperationActive(activeOperation);
+				const caseSensitive = workspaceLimitsSource.caseSensitive;
+				this.requireOperationActive(activeOperation);
+				workspaceLimits = {
+					maxFiles,
+					maxFileBytes,
+					maxTotalBytes,
+					maxPathBytes,
+					caseSensitive
+				};
+			}
+			workspace = validateExecutionWorkspace(code, workspaceFiles, activePath, {
+				...workspaceLimits,
 				maxFileBytes: Math.min(
-					options.workspaceLimits?.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+					workspaceLimits.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
 					limits.maxWorkspaceBytes
 				),
 				maxTotalBytes: Math.min(
-					options.workspaceLimits?.maxTotalBytes ??
-						DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+					workspaceLimits.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
 					limits.maxWorkspaceBytes
 				)
-			}
-		);
+			});
+			this.requireOperationActive(activeOperation);
+			stdin = options.stdin;
+			this.requireOperationActive(activeOperation);
+			unbindPreSessionAbort();
+			this.requireOperationActive(activeOperation);
+		} catch (error) {
+			throw this.releaseBeforeSession(activeOperation, error);
+		}
 		const mountedFiles = Object.fromEntries(
 			workspace.workspaceFiles.map((file) => [file.path, file.content])
 		);
 		const mountedActivePath = workspace.activePath ?? 'main.sh';
 		mountedFiles[mountedActivePath] = code;
-		const hasExplicitStdin = options.stdin !== undefined;
+		const hasExplicitStdin = stdin !== undefined;
 		const queuedStdin = this.pendingInput.length > 0 ? this.pendingInput.join('') : undefined;
-		const suppliedStdin = options.stdin ?? (this.pendingEof ? queuedStdin || '' : undefined);
-		if (signal?.aborted) {
-			throw signal.reason ?? new DOMException('Bash execution aborted', 'AbortError');
-		}
+		const suppliedStdin = stdin ?? (this.pendingEof ? queuedStdin || '' : undefined);
+		this.requireOperationActive(activeOperation);
 
 		this.exit = false;
 		this.begin = Date.now();
@@ -397,6 +664,7 @@ class Bash implements Sandbox {
 		}
 
 		return new Promise<boolean | string>((resolve, reject) => {
+			let settleRejectedRun: (reason: unknown) => void;
 			let cleanedUp = false;
 			const cleanup = () => {
 				if (cleanedUp) return;
@@ -413,29 +681,51 @@ class Bash implements Sandbox {
 					}
 				}
 				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
+				if (this.activeReject === settleRejectedRun) this.activeReject = null;
+				this.releaseOperation(activeOperation);
+				this.cleanupOperation(activeOperation);
+			};
+			settleRejectedRun = (reason: unknown) => {
+				cleanup();
+				reject(reason);
 			};
 			const onAbort = signal
 				? () => {
-						if (runUid !== this.uid) {
+						if (!this.isOperationActive(activeOperation) || runUid !== this.uid) {
 							cleanup();
 							return;
 						}
-						this.terminate(
-							signal.reason ??
-								new DOMException('Bash execution aborted', 'AbortError')
-						);
+						let reason: unknown;
+						try {
+							reason = abortReason(signal, 'execute');
+						} catch (error) {
+							reason = error;
+						}
+						if (!this.isOperationActive(activeOperation) || runUid !== this.uid) {
+							return;
+						}
+						this.terminate(reason);
 					}
 				: undefined;
-			this.activeReject = reject;
+			this.activeReject = settleRejectedRun;
 			this.activeRunCleanup = cleanup;
-			if (signal && onAbort) {
-				signal.addEventListener('abort', onAbort, { once: true });
-				if (signal.aborted) onAbort();
+			try {
+				if (signal && onAbort) {
+					signal.addEventListener('abort', onAbort, { once: true });
+					if (!this.isOperationActive(activeOperation)) return;
+					const abortedAfterBinding = signal.aborted;
+					if (!this.isOperationActive(activeOperation)) return;
+					if (abortedAfterBinding) onAbort();
+				}
+			} catch (error) {
+				if (this.isOperationActive(activeOperation)) this.terminate(error);
 			}
-			if (runUid !== this.uid) return;
+			if (!this.isOperationActive(activeOperation) || runUid !== this.uid) return;
 			void (async () => {
+				const ownsRun = () =>
+					this.isOperationActive(activeOperation) && runUid === this.uid;
 				try {
-					const command = this.runtimePackage?.entrypoint;
+					const command = runtimePackage.entrypoint;
 					if (!command) throw new Error('Bash WEBc package has no entrypoint');
 					let instancePromise: Promise<WasixInstance>;
 					try {
@@ -453,8 +743,13 @@ class Bash implements Sandbox {
 						}
 					}
 					const instance = await instancePromise;
-					if (runUid !== this.uid) {
-						this.disposeRunHandles(instance, null, null, signal?.reason);
+					if (!ownsRun()) {
+						this.disposeRunHandles(
+							instance,
+							null,
+							null,
+							activeOperation.cancellationReason
+						);
 						return;
 					}
 					let writer: WritableStreamDefaultWriter | null = null;
@@ -467,14 +762,19 @@ class Bash implements Sandbox {
 						this.disposeRunHandles(instance, null, null, error);
 						throw error;
 					}
-					if (runUid !== this.uid) {
-						this.disposeRunHandles(instance, writer, null, signal?.reason);
+					if (!ownsRun()) {
+						this.disposeRunHandles(
+							instance,
+							writer,
+							null,
+							activeOperation.cancellationReason
+						);
 						return;
 					}
 					this.instance = instance;
 					this.stdinWriter = writer;
 					await this.flushPendingInput();
-					if (runUid !== this.uid) return;
+					if (!ownsRun()) return;
 
 					const outputController = new AbortController();
 					this.outputController = outputController;
@@ -484,7 +784,7 @@ class Bash implements Sandbox {
 							instance.stdout.pipeTo(
 								new WritableStream({
 									write: (chunk) => {
-										if (runUid === this.uid) {
+										if (ownsRun()) {
 											this.output?.(new TextDecoder().decode(chunk));
 										}
 									}
@@ -496,7 +796,7 @@ class Bash implements Sandbox {
 							instance.stderr.pipeTo(
 								new WritableStream({
 									write: (chunk) => {
-										if (runUid === this.uid) {
+										if (ownsRun()) {
 											this.output?.(new TextDecoder().decode(chunk));
 										}
 									}
@@ -509,15 +809,14 @@ class Bash implements Sandbox {
 						throw error;
 					}
 					const outputDone = Promise.allSettled(outputPipes);
-					if (runUid !== this.uid) return;
+					if (!ownsRun()) return;
 					this.instance = null;
 					const result = await instance.wait();
 					await outputDone;
-					if (runUid !== this.uid) return;
+					if (!ownsRun()) return;
 
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
-					if (this.activeReject === reject) this.activeReject = null;
 					const settledWriter = this.stdinWriter;
 					this.stdinWriter = null;
 					this.instance = null;
@@ -530,14 +829,14 @@ class Bash implements Sandbox {
 						// The completed stream may already have released its writer.
 					}
 					if (!result.ok) {
-						reject(`Bash exited with status ${result.code}.`);
+						settleRejectedRun(`Bash exited with status ${result.code}.`);
 						return;
 					}
+					cleanup();
 					resolve(true);
 				} catch (error) {
-					if (runUid !== this.uid) return;
+					if (!ownsRun()) return;
 					this.exit = true;
-					if (this.activeReject === reject) this.activeReject = null;
 					const writer = this.stdinWriter;
 					const instance = this.instance;
 					const outputController = this.outputController;
@@ -545,7 +844,7 @@ class Bash implements Sandbox {
 					this.instance = null;
 					this.outputController = null;
 					this.disposeRunHandles(instance, writer, outputController, error);
-					reject(error instanceof Error ? error.message : String(error));
+					settleRejectedRun(error instanceof Error ? error.message : String(error));
 				} finally {
 					cleanup();
 				}
@@ -558,6 +857,13 @@ class Bash implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		const activeOperation = this.activeOperation;
+		if (activeOperation) {
+			activeOperation.cancelled = true;
+			activeOperation.cancellationReason = reason;
+			this.activeOperation = null;
+			this.cleanupOperation(activeOperation);
+		}
 		const loadReject = this.activeLoadReject;
 		const loadCleanup = this.activeLoadCleanup;
 		const reject = this.activeReject;
