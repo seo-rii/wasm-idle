@@ -5,6 +5,7 @@ import {
 	type PlaygroundRuntimeAssets,
 	type ResolvedFortranRuntimeAssetConfig
 } from '$lib/playground/assets';
+import { BusyError, TimeoutError, resolveExecutionLimits } from '@wasm-idle/core';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
@@ -25,6 +26,25 @@ const fortranAssetsKey = (assets: ResolvedFortranRuntimeAssetConfig) =>
 		analyzerUrl: assets.analyzerUrl
 	});
 
+type FortranOperation = {
+	token: symbol;
+	phase: 'startup' | 'execute';
+	cancelled: boolean;
+	explicitStdin: boolean;
+	cleanedUp: boolean;
+	cleanups: Array<() => void>;
+};
+
+const abortReason = (signal: AbortSignal, phase: FortranOperation['phase']) =>
+	signal.reason !== undefined
+		? signal.reason
+		: new DOMException(
+				phase === 'startup'
+					? 'Fortran runtime startup aborted'
+					: 'Fortran execution aborted',
+				'AbortError'
+			);
+
 class Fortran implements Sandbox {
 	language = 'FORTRAN';
 	output?: (data: string) => void;
@@ -40,6 +60,8 @@ class Fortran implements Sandbox {
 	exit = true;
 	assetBridge: WorkerAssetBridge | null = null;
 	activeFortranAssetsKey = '';
+	private activeOperation: FortranOperation | null = null;
+	private preserveOperationOnWorkerDispose = false;
 	private readonly workerSession = new WorkerSession({
 		label: 'Fortran',
 		onDispose: (worker) => {
@@ -48,6 +70,13 @@ class Fortran implements Sandbox {
 				delete this.worker;
 				this.assetBridge = null;
 				this.activeFortranAssetsKey = '';
+				if (!this.preserveOperationOnWorkerDispose && this.activeOperation) {
+					const operation = this.activeOperation;
+					this.finishExplicitStdin(operation);
+					operation.cancelled = true;
+					this.releaseOperation(operation);
+					this.cleanupOperation(operation);
+				}
 				try {
 					assetBridge?.dispose();
 				} catch {
@@ -60,63 +89,276 @@ class Fortran implements Sandbox {
 		}
 	});
 
+	private requireOperationIdle() {
+		if (this.activeOperation) {
+			throw new BusyError('Fortran runtime already has an active operation', {
+				runtimeId: this.language,
+				phase: this.activeOperation.phase
+			});
+		}
+	}
+
+	private beginOperation(phase: FortranOperation['phase']) {
+		this.requireOperationIdle();
+		const operation: FortranOperation = {
+			token: Symbol(phase),
+			phase,
+			cancelled: false,
+			explicitStdin: false,
+			cleanedUp: false,
+			cleanups: []
+		};
+		this.activeOperation = operation;
+		return operation;
+	}
+
+	private isOperationActive(operation: FortranOperation) {
+		return this.activeOperation?.token === operation.token && !operation.cancelled;
+	}
+
+	private releaseOperation(operation: FortranOperation) {
+		if (this.activeOperation?.token !== operation.token) return false;
+		this.activeOperation = null;
+		return true;
+	}
+
+	private cleanupOperation(operation: FortranOperation) {
+		if (operation.cleanedUp) return;
+		operation.cleanedUp = true;
+		const cleanups = operation.cleanups.splice(0);
+		for (const cleanup of cleanups) {
+			try {
+				cleanup();
+			} catch {
+				// Caller-owned lifecycle cleanup must not replace the operation result.
+			}
+		}
+	}
+
+	private bindAbortSignal(operation: FortranOperation, signal: AbortSignal | undefined) {
+		if (!signal) return;
+		let registered = false;
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			this.cancelOperation(operation, abortReason(signal, operation.phase));
+		};
+		operation.cleanups.push(() => {
+			if (registered) signal.removeEventListener('abort', onAbort);
+		});
+		try {
+			signal.addEventListener('abort', onAbort, { once: true });
+			registered = true;
+		} catch (error) {
+			this.cancelOperation(operation, error);
+			return;
+		}
+		if (signal.aborted) onAbort();
+	}
+
+	private bindOperationTimeout(operation: FortranOperation, timeoutMs: number) {
+		const timeout = setTimeout(() => {
+			if (!this.isOperationActive(operation)) return;
+			const label = operation.phase === 'startup' ? 'startup' : 'execution';
+			this.cancelOperation(
+				operation,
+				new TimeoutError(`Fortran ${label} timed out after ${timeoutMs} ms`, {
+					phase: operation.phase,
+					runtimeId: this.language,
+					timeoutMs
+				})
+			);
+		}, timeoutMs);
+		operation.cleanups.push(() => clearTimeout(timeout));
+	}
+
+	private resetExplicitStdinState() {
+		this.pendingInput = [];
+		this.pendingEof = false;
+		this.waitingForInput = false;
+		try {
+			resetBufferedStdin(this.buffer);
+		} catch {
+			// Explicit stdin never consumes the shared terminal buffer.
+		}
+	}
+
+	private finishExplicitStdin(operation: FortranOperation) {
+		if (!operation.explicitStdin) return;
+		operation.explicitStdin = false;
+		this.resetExplicitStdinState();
+	}
+
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		code = '',
 		log = true,
 		args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		return this.workerSession.load(async (resolve, reject) => {
-			this.log = log;
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const clangAssets = resolveRuntimeAssetConfig('clang', runtimeAssets, currentUrl);
-			const fortranAssets = resolveFortranRuntimeAssetConfig(runtimeAssets, currentUrl);
-			const nextFortranAssetsKey = fortranAssetsKey(fortranAssets);
-			const needsWorkerReset =
-				!this.worker ||
-				!this.assetBridge ||
-				!this.assetBridge.matches(clangAssets) ||
-				this.activeFortranAssetsKey !== nextFortranAssetsKey;
-			if (needsWorkerReset && this.worker) {
-				this.workerSession.reset();
-			}
-			if (!this.worker) {
-				this.worker = new (await import('$lib/playground/worker/fortran?worker')).default();
-				this.workerSession.attach(this.worker);
-				this.assetBridge = new WorkerAssetBridge(
-					this.worker,
-					'clang',
-					clangAssets,
-					progress
-				);
-				this.activeFortranAssetsKey = nextFortranAssetsKey;
-				this.worker.onmessage = (event: MessageEvent<any>) => {
-					if (this.assetBridge?.handleMessage(event)) return;
-					if (event.data?.progress != null) progress?.set?.(event.data.progress);
-					if (event.data?.load) resolve();
-					if (event.data?.error) reject(event.data.error);
-				};
-				this.worker.postMessage({
-					load: true,
-					log,
-					code,
-					args,
-					clangAssets: {
-						baseUrl: clangAssets.baseUrl,
-						useAssetBridge: clangAssets.useAssetBridge
-					},
-					fortranAssets
-				});
-			} else {
-				this.assetBridge?.rebind(this.worker, clangAssets, progress);
-				this.worker.postMessage({ log });
+		let limits: ReturnType<typeof resolveExecutionLimits>;
+		try {
+			limits = resolveExecutionLimits(options.limits);
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		if (options.signal?.aborted) {
+			return Promise.reject(abortReason(options.signal, 'startup'));
+		}
+		let operation: FortranOperation;
+		try {
+			operation = this.beginOperation('startup');
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		const loading = this.workerSession.load(async (resolve, reject) => {
+			const resolveOperation = () => {
+				if (!this.releaseOperation(operation)) return;
 				resolve();
+				this.cleanupOperation(operation);
+			};
+			const rejectOperation = (reason?: unknown) => {
+				if (!this.releaseOperation(operation)) return;
+				reject(reason);
+				this.cleanupOperation(operation);
+			};
+			try {
+				if (!this.isOperationActive(operation)) return;
+				this.pendingInput = [];
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				const clangAssets = resolveRuntimeAssetConfig('clang', runtimeAssets, currentUrl);
+				const fortranAssets = resolveFortranRuntimeAssetConfig(runtimeAssets, currentUrl);
+				const nextFortranAssetsKey = fortranAssetsKey(fortranAssets);
+				const needsWorkerReset =
+					!this.worker ||
+					!this.assetBridge ||
+					!this.assetBridge.matches(clangAssets) ||
+					this.activeFortranAssetsKey !== nextFortranAssetsKey;
+				if (needsWorkerReset && this.worker) {
+					this.preserveOperationOnWorkerDispose = true;
+					try {
+						this.workerSession.reset();
+					} finally {
+						this.preserveOperationOnWorkerDispose = false;
+					}
+				}
+				if (!this.worker) {
+					const WorkerConstructor = (
+						await import('$lib/playground/worker/fortran?worker')
+					).default;
+					if (!this.isOperationActive(operation)) return;
+					const worker = new WorkerConstructor();
+					if (!this.isOperationActive(operation)) {
+						try {
+							worker.terminate();
+						} catch {
+							// The unattached worker is already detached.
+						}
+						return;
+					}
+					let assetBridge: WorkerAssetBridge;
+					try {
+						assetBridge = new WorkerAssetBridge(worker, 'clang', clangAssets, progress);
+					} catch (error) {
+						try {
+							worker.terminate();
+						} catch {
+							// Worker cleanup must not replace the progress callback error.
+						}
+						throw error;
+					}
+					if (!this.isOperationActive(operation)) {
+						try {
+							assetBridge.dispose();
+						} catch {
+							// Stale asset cleanup is best effort.
+						}
+						try {
+							worker.terminate();
+						} catch {
+							// The unattached worker is already detached.
+						}
+						return;
+					}
+					this.worker = worker;
+					this.assetBridge = assetBridge;
+					this.workerSession.attach(worker);
+					const handler = (event: MessageEvent<any>) => {
+						if (
+							this.worker !== worker ||
+							this.assetBridge !== assetBridge ||
+							worker.onmessage !== handler
+						) {
+							return;
+						}
+						try {
+							if (assetBridge.handleMessage(event)) return;
+							if (!this.isOperationActive(operation)) return;
+							if (event.data?.progress != null) {
+								progress?.set?.(event.data.progress);
+								if (
+									!this.isOperationActive(operation) ||
+									this.worker !== worker ||
+									this.assetBridge !== assetBridge ||
+									worker.onmessage !== handler
+								) {
+									return;
+								}
+							}
+							if (event.data?.load) {
+								this.log = log;
+								this.activeFortranAssetsKey = nextFortranAssetsKey;
+								resolveOperation();
+								return;
+							}
+							if (event.data?.error !== undefined) {
+								rejectOperation(event.data.error);
+							}
+						} catch (error) {
+							rejectOperation(error);
+						}
+					};
+					worker.onmessage = handler;
+					worker.postMessage({
+						load: true,
+						log,
+						code,
+						args,
+						clangAssets: {
+							baseUrl: clangAssets.baseUrl,
+							useAssetBridge: clangAssets.useAssetBridge
+						},
+						fortranAssets
+					});
+				} else {
+					const worker = this.worker;
+					const assetBridge = this.assetBridge;
+					if (!assetBridge) return rejectOperation('Fortran asset bridge is not loaded');
+					assetBridge.rebind(worker, clangAssets, progress);
+					if (
+						!this.isOperationActive(operation) ||
+						this.worker !== worker ||
+						this.assetBridge !== assetBridge
+					) {
+						return;
+					}
+					worker.postMessage({ log });
+					this.log = log;
+					this.activeFortranAssetsKey = nextFortranAssetsKey;
+					resolveOperation();
+				}
+			} catch (error) {
+				rejectOperation(error);
 			}
+		});
+		const timeoutMs = Math.min(2_147_483_647, limits.assetTimeoutMs + limits.startupTimeoutMs);
+		this.bindOperationTimeout(operation, timeoutMs);
+		this.bindAbortSignal(operation, options.signal);
+		return loading.finally(() => {
+			this.releaseOperation(operation);
+			this.cleanupOperation(operation);
 		});
 	}
 
@@ -144,7 +386,7 @@ class Fortran implements Sandbox {
 		}
 	}
 
-	run(
+	async run(
 		code: string,
 		prepare: boolean,
 		log = this.log,
@@ -153,70 +395,170 @@ class Fortran implements Sandbox {
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
 		if (options.debug) return Promise.reject('Fortran debugging is not supported yet.');
-		this.exit = false;
-		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
-			const operation = this.workerSession.beginRun(this.worker, reject);
-			const { compileArgs, programArgs } = resolveSandboxExecutionArgs(
-				this.language,
-				args,
-				options
-			);
-			const _uid = ++this.uid;
-			const handler = (event: Event & { data: any }) => {
-				if (this.assetBridge?.handleMessage(event as MessageEvent<any>)) return;
-				if (!this.worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (this.worker.onmessage = null);
-				const { output, results, log, error, buffer, progress } = event.data;
-				if (buffer) {
-					this.waitingForInput = true;
-					this.flushPendingInput();
-				}
-				if (output) this.output?.(output);
-				if (results) {
+		this.requireOperationIdle();
+		const limits = resolveExecutionLimits(options.limits);
+		const signal = options.signal;
+		if (signal?.aborted) {
+			return Promise.reject(abortReason(signal, 'execute'));
+		}
+		const { compileArgs, programArgs } = resolveSandboxExecutionArgs(
+			this.language,
+			args,
+			options
+		);
+		const stdin = options.stdin;
+		const activePath = options.activePath;
+		const workspaceFiles = options.workspaceFiles;
+		const activeOperation = this.beginOperation('execute');
+		try {
+			const worker = this.worker;
+			if (!worker) throw 'Worker not loaded';
+			const assetBridge = this.assetBridge;
+			if (!assetBridge) throw 'Fortran asset bridge is not loaded';
+			const hasExplicitStdin = stdin !== undefined;
+			if (hasExplicitStdin) {
+				activeOperation.explicitStdin = true;
+				this.resetExplicitStdinState();
+			}
+			this.exit = false;
+			return await new Promise<boolean | string>((resolve, reject) => {
+				const workerOperation = this.workerSession.beginRun(worker, reject);
+				const timeoutMs = Math.min(
+					2_147_483_647,
+					limits.compileTimeoutMs + limits.runTimeoutMs
+				);
+				this.bindOperationTimeout(activeOperation, timeoutMs);
+				this.bindAbortSignal(activeOperation, signal);
+				if (!this.isOperationActive(activeOperation)) return;
+				const runUid = ++this.uid;
+				let handler: (event: Event & { data: any }) => void;
+				const ownsRun = () =>
+					this.isOperationActive(activeOperation) &&
+					this.worker === worker &&
+					this.assetBridge === assetBridge &&
+					worker.onmessage === handler &&
+					runUid === this.uid;
+				const settleRunState = () => {
+					this.finishExplicitStdin(activeOperation);
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
-					this.workerSession.complete(operation);
-					resolve(results as string);
-				}
-				if (log) console.log(log);
-				if (error) {
-					this.elapse = Date.now() - this.begin;
-					this.waitingForInput = false;
-					this.pendingEof = false;
-					this.workerSession.complete(operation);
-					this.exit = true;
+				};
+				const failRun = (error: unknown, disposeWorker = false) => {
+					if (!ownsRun()) return;
+					settleRunState();
+					this.workerSession.complete(workerOperation);
+					this.releaseOperation(activeOperation);
+					if (disposeWorker && this.worker === worker) this.workerSession.reset();
+					this.cleanupOperation(activeOperation);
 					reject(error);
+				};
+				handler = (event) => {
+					if (
+						this.worker !== worker ||
+						this.assetBridge !== assetBridge ||
+						worker.onmessage !== handler
+					) {
+						return;
+					}
+					try {
+						if (assetBridge.handleMessage(event as MessageEvent<any>)) return;
+						if (!ownsRun()) return;
+						const {
+							output,
+							results,
+							log: workerLog,
+							error,
+							buffer,
+							progress
+						} = event.data;
+						if (buffer && !hasExplicitStdin) {
+							this.waitingForInput = true;
+							this.flushPendingInput();
+							if (!ownsRun()) return;
+						}
+						if (typeof output === 'string' && output.length > 0) {
+							this.output?.(output);
+							if (!ownsRun()) return;
+						}
+						if (results !== undefined) {
+							if (!ownsRun()) return;
+							settleRunState();
+							this.workerSession.complete(workerOperation);
+							this.releaseOperation(activeOperation);
+							this.cleanupOperation(activeOperation);
+							resolve(results as boolean | string);
+							return;
+						}
+						if (workerLog) {
+							console.log(workerLog);
+							if (!ownsRun()) return;
+						}
+						if (error !== undefined) {
+							failRun(error);
+							return;
+						}
+						if (progress != null) {
+							prog?.set?.(progress);
+							if (!ownsRun()) return;
+						}
+					} catch (error) {
+						failRun(error, true);
+					}
+				};
+				worker.onmessage = handler;
+				this.begin = Date.now();
+				try {
+					worker.postMessage({
+						code,
+						prepare,
+						buffer: this.buffer,
+						stdin,
+						log,
+						compileArgs,
+						programArgs,
+						activePath,
+						workspaceFiles
+					});
+				} catch (error) {
+					failRun(error);
 				}
-				if (progress) prog?.set?.(progress);
-			};
-			this.worker.onmessage = handler;
-			this.begin = Date.now();
-			this.worker.postMessage({
-				code,
-				prepare,
-				buffer: this.buffer,
-				stdin: options.stdin,
-				log,
-				compileArgs,
-				programArgs,
-				activePath: options.activePath,
-				workspaceFiles: options.workspaceFiles
 			});
-		});
+		} finally {
+			this.finishExplicitStdin(activeOperation);
+			this.releaseOperation(activeOperation);
+			this.cleanupOperation(activeOperation);
+		}
+	}
+
+	private cancelOperation(operation: FortranOperation, reason: unknown) {
+		if (!this.isOperationActive(operation)) return;
+		this.finishExplicitStdin(operation);
+		operation.cancelled = true;
+		this.activeOperation = null;
+		this.waitingForInput = false;
+		this.pendingEof = false;
+		this.uid += 1;
+		this.exit = true;
+		this.workerSession.terminate(reason);
+		this.cleanupOperation(operation);
 	}
 
 	kill() {
 		this.terminate();
 	}
 
-	terminate() {
+	terminate(reason: unknown = 'Process terminated') {
+		const operation = this.activeOperation;
+		if (operation) {
+			this.cancelOperation(operation, reason);
+			return;
+		}
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
-		this.workerSession.terminate();
+		this.workerSession.terminate(reason);
 		this.exit = true;
 	}
 
