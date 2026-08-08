@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
@@ -75,6 +75,10 @@ describe('TeaVM Java sandbox', () => {
 		suppressAutoLoadAck = false;
 		onPostMessage = null;
 		onWorkerConstruct = null;
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it('loads the TeaVM worker and resolves prepare/run messages', async () => {
@@ -1509,5 +1513,148 @@ public class Main {
 				false
 			)
 		).rejects.toContain('ArithmeticException');
+	});
+
+	it('enforces the aggregate Java startup deadline and ignores stale bridge messages', async () => {
+		vi.useFakeTimers();
+		suppressAutoLoadAck = true;
+		const sandbox = new Java();
+		const progress = { set: vi.fn() };
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 } },
+			progress
+		);
+		const rejected = expect(loading).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'startup',
+			runtimeId: 'JAVA',
+			timeoutMs: 12
+		});
+		await vi.dynamicImportSettled();
+		const retiredWorker = workerInstances[0];
+		const staleHandler = retiredWorker.onmessage;
+		const progressCalls = progress.set.mock.calls.length;
+
+		await vi.advanceTimersByTimeAsync(12);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+
+		staleHandler?.({
+			data: {
+				assetProgress: { asset: 'compiler.wasm', loaded: 1, total: 1 },
+				load: true
+			}
+		} as MessageEvent<any>);
+		expect(progress.set).toHaveBeenCalledTimes(progressCalls);
+
+		suppressAutoLoadAck = false;
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('enforces the aggregate Java execution deadline and permits a clean retry', async () => {
+		const sandbox = new Java();
+		const progress = { set: vi.fn() };
+		await sandbox.load('/absproxy/5173', '', true, [], {}, progress);
+		const retiredWorker = workerInstances[0];
+		const output = vi.fn();
+		sandbox.output = output;
+		onPostMessage = () => undefined;
+		vi.useFakeTimers();
+		const running = sandbox.run('public class Main {}', false, true, undefined, [], {
+			limits: { compileTimeoutMs: 4, runTimeoutMs: 6 }
+		});
+		const rejected = expect(running).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'JAVA',
+			timeoutMs: 10
+		});
+		const staleHandler = retiredWorker.onmessage;
+		progress.set.mockClear();
+
+		await vi.advanceTimersByTimeAsync(10);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+
+		staleHandler?.({
+			data: {
+				assetProgress: { asset: 'compiler.wasm', loaded: 1, total: 1 },
+				output: 'stale output',
+				results: true
+			}
+		} as MessageEvent<any>);
+		expect(progress.set).not.toHaveBeenCalled();
+		expect(output).not.toHaveBeenCalled();
+
+		onPostMessage = null;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('public class Retry {}', false)).resolves.toBe(true);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('clears settled Java deadlines before they can retire an idle worker', async () => {
+		vi.useFakeTimers();
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173', '', true, [], {
+			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
+		});
+		const worker = workerInstances[0];
+		await expect(
+			sandbox.run('public class Main {}', false, true, undefined, [], {
+				limits: { compileTimeoutMs: 2, runTimeoutMs: 3 }
+			})
+		).resolves.toBe(true);
+
+		await vi.advanceTimersByTimeAsync(10);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		await expect(sandbox.run('public class Retry {}', false)).resolves.toBe(true);
+	});
+
+	it('aborts an in-flight Java asset loader when startup times out', async () => {
+		vi.useFakeTimers();
+		suppressAutoLoadAck = true;
+		const sandbox = new Java();
+		let loaderSignal: AbortSignal | undefined;
+		const loader = vi.fn(({ signal }: { signal?: AbortSignal }) => {
+			loaderSignal = signal;
+			return new Promise<never>(() => undefined);
+		});
+		const loading = sandbox.load({ java: { loader } }, '', true, [], {
+			limits: { assetTimeoutMs: 3, startupTimeoutMs: 5 }
+		});
+		const rejected = expect(loading).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'startup',
+			runtimeId: 'JAVA',
+			timeoutMs: 8
+		});
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		worker.onmessage?.({
+			data: { assetRequest: { id: 1, asset: 'compiler.wasm' } }
+		} as MessageEvent<any>);
+		expect(loader).toHaveBeenCalledOnce();
+		expect(loaderSignal?.aborted).toBe(false);
+
+		await vi.advanceTimersByTimeAsync(8);
+		await rejected;
+		expect(loaderSignal?.aborted).toBe(true);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
 	});
 });
