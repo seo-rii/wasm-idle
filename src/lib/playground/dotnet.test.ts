@@ -1301,6 +1301,32 @@ export async function executeBrowserDotnetArtifact() {
 		expect(secondDiagnostic).not.toHaveBeenCalled();
 	});
 
+	it('treats false results and empty errors as terminal worker payloads', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const worker = workerInstances[0];
+
+		const falseResult = sandbox.run('Console.WriteLine("false result");', false);
+		await vi.waitFor(() => expect(worker?.postMessage).toHaveBeenCalledTimes(2));
+		worker?.onmessage?.({ data: { results: false } } as MessageEvent<any>);
+		await expect(falseResult).resolves.toBe(false);
+		expect((sandbox as any).activeOperation).toBeNull();
+		expect(sandbox.exit).toBe(true);
+
+		const emptyError = sandbox.run('Console.WriteLine("empty error");', false);
+		const rejected = expect(emptyError).rejects.toBe('');
+		await vi.waitFor(() => expect(worker?.postMessage).toHaveBeenCalledTimes(3));
+		worker?.onmessage?.({ data: { error: '' } } as MessageEvent<any>);
+		await rejected;
+		expect((sandbox as any).activeOperation).toBeNull();
+		expect(sandbox.exit).toBe(true);
+		expect(worker?.terminate).not.toHaveBeenCalled();
+
+		suppressAutoRunAck = false;
+		await expect(sandbox.run('Console.WriteLine("retry");', false)).resolves.toBe(true);
+	});
+
 	it('does not read irrelevant compile arguments for a dotnet execution', async () => {
 		const sandbox = new Dotnet('CSHARP');
 		await sandbox.load('/absproxy/5173');

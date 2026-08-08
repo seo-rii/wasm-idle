@@ -1039,7 +1039,16 @@ class Dotnet implements Sandbox {
 				handler = (event: Event & { data: any }) => {
 					if (!ownsRun()) return;
 					try {
-						const { output, results, error, diagnostic, progress } = event.data;
+						const message = event.data;
+						const hasResults = Object.prototype.hasOwnProperty.call(
+							message ?? {},
+							'results'
+						);
+						const hasError = Object.prototype.hasOwnProperty.call(
+							message ?? {},
+							'error'
+						);
+						const { output, results, error, diagnostic, progress } = message;
 						reportWorkerProgress(_prog, progress);
 						if (!ownsRun()) return;
 						if (output && request.output != null) {
@@ -1050,17 +1059,17 @@ class Dotnet implements Sandbox {
 							Reflect.apply(request.onDiagnostic, this, [diagnostic]);
 						}
 						if (!ownsRun()) return;
-						if (results) {
+						if (hasResults) {
 							cleanupExplicitStdin();
 							if (worker.onmessage === handler) worker.onmessage = null;
 							this.elapse = Date.now() - this.begin;
 							this.exit = true;
 							this.workerSession.complete(workerOperation);
 							this.completeOperation(operation);
-							resolve(results as string);
+							resolve(results as boolean | string);
 							return;
 						}
-						if (error) {
+						if (hasError) {
 							this.elapse = Date.now() - this.begin;
 							failRun(error);
 						}
