@@ -5,11 +5,7 @@ import {
 	type TinyGoRuntimeAssetLoader,
 	type TinyGoRuntimeAssetPackReference
 } from '$lib/playground/assets';
-import {
-	resolveSandboxExecutionArgs,
-	type SandboxExecutionOptions,
-	type TinyGoTarget
-} from '$lib/playground/options';
+import type { SandboxExecutionOptions, TinyGoTarget } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
@@ -21,9 +17,13 @@ import { WorkerSession } from '$lib/playground/workerSession';
 import {
 	BusyError,
 	DEFAULT_EXECUTION_LIMITS,
+	DEFAULT_WORKSPACE_LIMITS,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
+	WorkspaceValidationError,
 	resolveExecutionLimits,
+	validateExecutionWorkspace,
 	type ExecutionLimits
 } from '@wasm-idle/core';
 
@@ -85,10 +85,17 @@ type TinyGoRuntimeProgressOwner = {
 	runtimeToken: symbol;
 };
 
+type TinyGoRunRequest = {
+	programArgs: string[];
+	target: TinyGoTarget;
+	workspaceFiles: Record<string, string>;
+};
+
 const ACTIVITY_PREFIX_PATTERN = /^\[\d{2}:\d{2}:\d{2}\]\s?/gm;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const EXECUTION_LIMIT_KEYS = Object.keys(DEFAULT_EXECUTION_LIMITS) as Array<keyof ExecutionLimits>;
 const OUTPUT_ENCODER = new TextEncoder();
+const TINYGO_TARGETS = new Set<TinyGoTarget>(['wasm', 'wasip1', 'wasip2', 'wasip3']);
 
 const abortReason = (signal: AbortSignal, phase: TinyGoOperation['phase']) => {
 	const reason = signal.reason;
@@ -254,10 +261,11 @@ class TinyGo implements Sandbox {
 		return limits;
 	}
 
-	private executeOperation<T>(
+	private executeOperation<T, Request = undefined>(
 		phase: TinyGoOperation['phase'],
 		options: Pick<SandboxExecutionOptions, 'limits' | 'signal'>,
-		execute: (operation: TinyGoOperation) => Promise<T>
+		execute: (operation: TinyGoOperation, request: Request) => Promise<T>,
+		snapshot?: (operation: TinyGoOperation) => Request
 	): Promise<T> {
 		let operation: TinyGoOperation;
 		try {
@@ -401,11 +409,20 @@ class TinyGo implements Sandbox {
 				return;
 			}
 			deadline = scheduledDeadline;
+			let request: Request;
+			try {
+				this.assertOperation(operation);
+				request = snapshot ? snapshot(operation) : (undefined as Request);
+			} catch (error) {
+				rejectOperation(operation.cancelled ? operation.reason : error);
+				return;
+			}
+			if (settled || !this.isOperationActive(operation)) return;
 
 			void Promise.resolve()
 				.then(() => {
 					this.assertOperation(operation);
-					return execute(operation);
+					return execute(operation, request);
 				})
 				.then(
 					(value) => {
@@ -666,16 +683,16 @@ class TinyGo implements Sandbox {
 
 	private async compileArtifact(
 		operation: TinyGoOperation,
-		code: string,
+		workspaceFiles: Record<string, string>,
 		target: TinyGoTarget = 'wasm',
 		log = true,
 		prog?: SandboxProgress
 	) {
 		this.assertOperation(operation);
 		const compileCacheKey = JSON.stringify({
-			code,
 			moduleUrl: this.moduleUrl,
-			target
+			target,
+			workspaceFiles
 		});
 		if (this.compiledArtifact && this.compiledCacheKey === compileCacheKey) {
 			return;
@@ -690,7 +707,7 @@ class TinyGo implements Sandbox {
 		this.assertOperation(operation);
 		this.lastActivityLog = runtime.readActivityLog();
 		this.assertOperation(operation);
-		runtime.setWorkspaceFiles({ 'main.go': code });
+		runtime.setWorkspaceFiles(workspaceFiles);
 		this.assertOperation(operation);
 		runtime.setBuildRequestOverrides?.({ target });
 		this.assertOperation(operation);
@@ -798,101 +815,256 @@ class TinyGo implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		return this.executeOperation('execute', options, async (operation) => {
-			this.exit = false;
-			try {
-				this.begin = Date.now();
-				await this.ensureWorker(operation);
-				this.assertOperation(operation);
-				const target = options.tinygoTarget || 'wasm';
-				await this.compileArtifact(
-					operation,
-					code,
-					target,
-					_log,
-					prepare ? _prog : undefined
-				);
-				this.assertOperation(operation);
-				if (prepare) {
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					return true;
-				}
-				if (this.compiledArtifactExecutionError) {
-					throw new Error(this.compiledArtifactExecutionError);
-				}
-				if (!this.worker || !this.compiledArtifact) {
-					throw new Error('TinyGo runtime did not prepare an artifact');
-				}
-				const worker = this.worker;
-				const compiledArtifact = this.compiledArtifact;
-				const { programArgs } = resolveSandboxExecutionArgs('TINYGO', args, options);
-				const runUid = ++this.uid;
-				return await new Promise<boolean | string>((resolve, reject) => {
-					const workerOperation = this.workerSession.beginRun(worker, reject);
-					const handleMessage = (event: Event & { data: any }) => {
-						if (
-							!this.isOperationActive(operation) ||
-							this.worker !== worker ||
-							runUid !== this.uid
-						) {
-							if (worker.onmessage === handleMessage) worker.onmessage = null;
-							return;
-						}
-						const message = event.data ?? {};
-						const hasResults = Object.prototype.hasOwnProperty.call(message, 'results');
-						const hasError = Object.prototype.hasOwnProperty.call(message, 'error');
-						const { output, results, error, buffer } = message;
-						if (buffer) {
-							this.waitingForInput = true;
-							this.flushPendingInput();
-						}
-						if (output) {
-							if (!this.emitOutput(operation, output)) return;
-						}
-						if (hasResults) {
-							if (worker.onmessage === handleMessage) worker.onmessage = null;
-							this.elapse = Date.now() - this.begin;
-							this.exit = true;
-							this.waitingForInput = false;
-							this.pendingEof = false;
-							this.workerSession.complete(workerOperation);
-							resolve(results as boolean | string);
-							return;
-						}
-						if (hasError) {
-							if (worker.onmessage === handleMessage) worker.onmessage = null;
-							this.elapse = Date.now() - this.begin;
-							this.exit = true;
-							this.waitingForInput = false;
-							this.pendingEof = false;
-							this.workerSession.complete(workerOperation);
-							reject(error);
-						}
-					};
-					worker.onmessage = handleMessage;
-					try {
-						worker.postMessage({
-							artifact: new Uint8Array(compiledArtifact),
-							buffer: this.buffer,
-							args: programArgs,
-							log: _log
-						});
-					} catch (error) {
-						this.workerSession.terminate(error);
+		return this.executeOperation(
+			'execute',
+			options,
+			async (operation, request: TinyGoRunRequest) => {
+				this.exit = false;
+				try {
+					this.begin = Date.now();
+					await this.ensureWorker(operation);
+					this.assertOperation(operation);
+					await this.compileArtifact(
+						operation,
+						request.workspaceFiles,
+						request.target,
+						_log,
+						prepare ? _prog : undefined
+					);
+					this.assertOperation(operation);
+					if (prepare) {
+						this.elapse = Date.now() - this.begin;
+						this.exit = true;
+						return true;
 					}
-				});
-			} catch (error) {
-				if (this.isOperationActive(operation)) {
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.waitingForInput = false;
-					this.pendingEof = false;
-					throw error instanceof Error ? error.message : String(error);
+					if (this.compiledArtifactExecutionError) {
+						throw new Error(this.compiledArtifactExecutionError);
+					}
+					if (!this.worker || !this.compiledArtifact) {
+						throw new Error('TinyGo runtime did not prepare an artifact');
+					}
+					const worker = this.worker;
+					const compiledArtifact = this.compiledArtifact;
+					const runUid = ++this.uid;
+					return await new Promise<boolean | string>((resolve, reject) => {
+						const workerOperation = this.workerSession.beginRun(worker, reject);
+						const handleMessage = (event: Event & { data: any }) => {
+							if (
+								!this.isOperationActive(operation) ||
+								this.worker !== worker ||
+								runUid !== this.uid
+							) {
+								if (worker.onmessage === handleMessage) worker.onmessage = null;
+								return;
+							}
+							const message = event.data ?? {};
+							const hasResults = Object.prototype.hasOwnProperty.call(
+								message,
+								'results'
+							);
+							const hasError = Object.prototype.hasOwnProperty.call(message, 'error');
+							const { output, results, error, buffer } = message;
+							if (buffer) {
+								this.waitingForInput = true;
+								this.flushPendingInput();
+							}
+							if (output) {
+								if (!this.emitOutput(operation, output)) return;
+							}
+							if (hasResults) {
+								if (worker.onmessage === handleMessage) worker.onmessage = null;
+								this.elapse = Date.now() - this.begin;
+								this.exit = true;
+								this.waitingForInput = false;
+								this.pendingEof = false;
+								this.workerSession.complete(workerOperation);
+								resolve(results as boolean | string);
+								return;
+							}
+							if (hasError) {
+								if (worker.onmessage === handleMessage) worker.onmessage = null;
+								this.elapse = Date.now() - this.begin;
+								this.exit = true;
+								this.waitingForInput = false;
+								this.pendingEof = false;
+								this.workerSession.complete(workerOperation);
+								reject(error);
+							}
+						};
+						worker.onmessage = handleMessage;
+						try {
+							worker.postMessage({
+								artifact: new Uint8Array(compiledArtifact),
+								buffer: this.buffer,
+								args: request.programArgs,
+								log: _log
+							});
+						} catch (error) {
+							this.workerSession.terminate(error);
+						}
+					});
+				} catch (error) {
+					if (this.isOperationActive(operation)) {
+						this.elapse = Date.now() - this.begin;
+						this.exit = true;
+						this.waitingForInput = false;
+						this.pendingEof = false;
+						throw error instanceof Error ? error.message : String(error);
+					}
+					throw error;
 				}
-				throw error;
+			},
+			(operation) => {
+				this.assertOperation(operation);
+				if (typeof code !== 'string') {
+					throw new TypeError('TinyGo source code must be a string');
+				}
+				const configuredTarget = options.tinygoTarget;
+				this.assertOperation(operation);
+				const target = configuredTarget ?? 'wasm';
+				if (!TINYGO_TARGETS.has(target)) {
+					throw new TypeError('TinyGo target must be wasm, wasip1, wasip2, or wasip3');
+				}
+
+				const workspaceLimitsSource = options.workspaceLimits;
+				this.assertOperation(operation);
+				let workspaceLimits: NonNullable<SandboxExecutionOptions['workspaceLimits']> = {};
+				if (workspaceLimitsSource !== undefined) {
+					if (
+						workspaceLimitsSource === null ||
+						typeof workspaceLimitsSource !== 'object' ||
+						Array.isArray(workspaceLimitsSource)
+					) {
+						throw new TypeError('TinyGo workspace limits must be an object');
+					}
+					const maxFiles = workspaceLimitsSource.maxFiles;
+					this.assertOperation(operation);
+					const maxFileBytes = workspaceLimitsSource.maxFileBytes;
+					this.assertOperation(operation);
+					const maxTotalBytes = workspaceLimitsSource.maxTotalBytes;
+					this.assertOperation(operation);
+					const maxPathBytes = workspaceLimitsSource.maxPathBytes;
+					this.assertOperation(operation);
+					const caseSensitive = workspaceLimitsSource.caseSensitive;
+					this.assertOperation(operation);
+					workspaceLimits = {
+						maxFiles,
+						maxFileBytes,
+						maxTotalBytes,
+						maxPathBytes,
+						caseSensitive
+					};
+				}
+				for (const name of [
+					'maxFiles',
+					'maxFileBytes',
+					'maxTotalBytes',
+					'maxPathBytes'
+				] as const) {
+					const value = workspaceLimits[name];
+					if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
+						throw new WorkspaceValidationError(
+							'invalid-limit',
+							`Workspace limit ${name} must be a non-negative safe integer`
+						);
+					}
+				}
+				if (
+					workspaceLimits.caseSensitive !== undefined &&
+					typeof workspaceLimits.caseSensitive !== 'boolean'
+				) {
+					throw new WorkspaceValidationError(
+						'invalid-limit',
+						'Workspace limit caseSensitive must be a boolean'
+					);
+				}
+
+				const workspaceFilesSource = options.workspaceFiles;
+				this.assertOperation(operation);
+				const sourceFiles = workspaceFilesSource ?? [];
+				if (!Array.isArray(sourceFiles)) {
+					throw new TypeError('TinyGo workspace files must be an array');
+				}
+				const workspaceFileCount = sourceFiles.length;
+				this.assertOperation(operation);
+				const maxFiles = workspaceLimits.maxFiles ?? DEFAULT_WORKSPACE_LIMITS.maxFiles;
+				if (workspaceFileCount > maxFiles) {
+					throw new WorkspaceValidationError(
+						'file-count-limit',
+						`Workspace contains ${workspaceFileCount} files; limit is ${maxFiles}`,
+						{ limit: maxFiles, actual: workspaceFileCount }
+					);
+				}
+				const workspaceFiles: Array<{ path: string; content: string }> = [];
+				for (let index = 0; index < workspaceFileCount; index += 1) {
+					const file = sourceFiles[index];
+					this.assertOperation(operation);
+					if (file === null || typeof file !== 'object') {
+						throw new TypeError('TinyGo workspace file must be an object');
+					}
+					const path = file.path;
+					this.assertOperation(operation);
+					const content = file.content;
+					this.assertOperation(operation);
+					if (typeof path !== 'string') {
+						throw new TypeError('TinyGo workspace file path must be a string');
+					}
+					if (typeof content !== 'string') {
+						throw new TypeError(`TinyGo workspace file ${path} must contain a string`);
+					}
+					workspaceFiles.push({ path, content });
+				}
+
+				const configuredActivePath = options.activePath;
+				this.assertOperation(operation);
+				const activePath = configuredActivePath ?? 'main.go';
+				const maxWorkspaceBytes =
+					operation.limits?.maxWorkspaceBytes ??
+					DEFAULT_EXECUTION_LIMITS.maxWorkspaceBytes;
+				const workspace = validateExecutionWorkspace(code, workspaceFiles, activePath, {
+					...workspaceLimits,
+					maxFileBytes: Math.min(
+						workspaceLimits.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						workspaceLimits.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						maxWorkspaceBytes
+					)
+				});
+				this.assertOperation(operation);
+				if (workspace.activePath !== 'main.go') {
+					throw new RuntimeConfigurationError(
+						'TinyGo runtime currently requires activePath to be main.go',
+						{ phase: 'execute', runtimeId: 'TINYGO' }
+					);
+				}
+				const runtimeWorkspace = Object.fromEntries([
+					['main.go', code],
+					...workspace.workspaceFiles.map((file) => [file.path, file.content])
+				]) as Record<string, string>;
+
+				const configuredProgramArgs = options.programArgs;
+				this.assertOperation(operation);
+				const sourceArgs = configuredProgramArgs ?? args;
+				if (!Array.isArray(sourceArgs)) {
+					throw new TypeError('TinyGo program arguments must be an array');
+				}
+				const argCount = sourceArgs.length;
+				this.assertOperation(operation);
+				const programArgs: string[] = [];
+				for (let index = 0; index < argCount; index += 1) {
+					const argument = sourceArgs[index];
+					this.assertOperation(operation);
+					if (typeof argument !== 'string') {
+						throw new TypeError(`TinyGo program argument ${index} must be a string`);
+					}
+					programArgs.push(argument);
+				}
+
+				return { programArgs, target, workspaceFiles: runtimeWorkspace };
 			}
-		});
+		);
 	}
 
 	private cancelOperation(operation: TinyGoOperation, reason: unknown) {

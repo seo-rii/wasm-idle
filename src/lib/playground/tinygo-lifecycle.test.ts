@@ -14,9 +14,11 @@ type RuntimeFixtureState = {
 	runtimeRecords: Array<{
 		artifact: { path: string; bytes: Uint8Array; runnable: boolean } | null;
 		bootCalls: number;
+		buildRequestOverrides: { target?: string } | null;
 		disposeCalls: number;
 		executeCalls: number;
 		planCalls: number;
+		workspaceFiles: Record<string, string> | null;
 	}>;
 };
 
@@ -55,9 +57,11 @@ const record = {
   activityLog: '',
   artifact: null,
   bootCalls: 0,
+  buildRequestOverrides: null,
   disposeCalls: 0,
   executeCalls: 0,
-  planCalls: 0
+  planCalls: 0,
+  workspaceFiles: null
 };
 state.runtimeRecords.push(record);
 return ({
@@ -96,8 +100,12 @@ return ({
   readBuildArtifact() {
     return record.artifact;
   },
-  setBuildRequestOverrides() {},
-  setWorkspaceFiles() {},
+  setBuildRequestOverrides(overrides) {
+    record.buildRequestOverrides = overrides ? { ...overrides } : null;
+  },
+  setWorkspaceFiles(files) {
+    record.workspaceFiles = files ? Object.fromEntries(Object.entries(files)) : null;
+  },
   dispose() {
     state.disposeCalls += 1;
     record.disposeCalls += 1;
@@ -158,6 +166,7 @@ vi.mock('$env/dynamic/public', () => ({
 }));
 
 import TinyGo from './tinygo';
+import type { SandboxExecutionOptions } from './options';
 
 const runtimeAssets = {
 	rootUrl: '/assets',
@@ -436,6 +445,139 @@ describe('TinyGo operation lifecycle', () => {
 		await expect(retry).resolves.toBe(true);
 		expect(workerInstances).toHaveLength(2);
 		expect(replacementWorker?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('snapshots TinyGo workspace, target, and program arguments before compilation', async () => {
+		let releaseBoot!: () => void;
+		runtimeFixtureState.bootGate = new Promise<void>((resolve) => {
+			releaseBoot = resolve;
+		});
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const workspaceFiles = [
+			{
+				path: 'message.go',
+				content: 'package main\nconst message = "original"'
+			}
+		];
+		const programArgs = ['original-argument'];
+		const options: SandboxExecutionOptions = {
+			activePath: 'main.go',
+			programArgs,
+			tinygoTarget: 'wasip2',
+			workspaceFiles
+		};
+		const running = sandbox.run(
+			'package main\nfunc main() { println(message) }',
+			false,
+			false,
+			undefined,
+			[],
+			options
+		);
+
+		options.activePath = 'changed/main.go';
+		options.tinygoTarget = 'wasip3';
+		programArgs[0] = 'changed-argument';
+		workspaceFiles[0]!.path = 'changed/message.go';
+		workspaceFiles[0]!.content = 'package main\nconst message = "changed"';
+		workspaceFiles.push({ path: 'late.go', content: 'package main' });
+
+		try {
+			await vi.waitFor(() => expect(runtimeFixtureState.bootCalls).toBe(1));
+			releaseBoot();
+			await expect(running).resolves.toBe(true);
+		} finally {
+			releaseBoot();
+			await running.catch(() => undefined);
+		}
+
+		const runtime = runtimeFixtureState.runtimeRecords[0];
+		expect(runtime?.buildRequestOverrides).toEqual({ target: 'wasip2' });
+		expect(runtime?.workspaceFiles).toEqual({
+			'main.go': 'package main\nfunc main() { println(message) }',
+			'message.go': 'package main\nconst message = "original"'
+		});
+		expect(workerInstances[0]?.postMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({ args: ['original-argument'] })
+		);
+
+		await expect(
+			sandbox.run(
+				'package main\nfunc main() { println(message) }',
+				true,
+				false,
+				undefined,
+				[],
+				{
+					tinygoTarget: 'wasip2',
+					workspaceFiles: [
+						{ path: 'message.go', content: 'package main\nconst message = "updated"' }
+					]
+				}
+			)
+		).resolves.toBe(true);
+		expect(runtime?.bootCalls).toBe(2);
+		expect(runtime?.workspaceFiles?.['message.go']).toContain('"updated"');
+	});
+
+	it('rejects invalid TinyGo workspaces before changing compiler state', async () => {
+		const sandbox = new TinyGo();
+		const code = 'package main\nfunc main() {}';
+		await sandbox.load(runtimeAssets);
+		await sandbox.run(code, true);
+		const runtime = runtimeFixtureState.runtimeRecords[0];
+		const compiledCacheKey = sandbox.compiledCacheKey;
+
+		await expect(
+			sandbox.run(code, true, true, undefined, [], {
+				activePath: 'cmd/demo/main.go'
+			})
+		).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'execute',
+			runtimeId: 'TINYGO'
+		});
+		await expect(
+			sandbox.run(code, true, true, undefined, [], {
+				workspaceFiles: [{ path: '../escape.go', content: 'package main' }]
+			})
+		).rejects.toMatchObject({
+			name: 'WorkspaceValidationError',
+			code: 'invalid-path',
+			path: '../escape.go'
+		});
+		await expect(
+			sandbox.run(code, true, true, undefined, [], {
+				workspaceFiles: [
+					{ path: 'cache', content: 'file' },
+					{ path: 'cache/data.go', content: 'package cache' }
+				]
+			})
+		).rejects.toMatchObject({
+			name: 'WorkspaceValidationError',
+			code: 'path-prefix-collision'
+		});
+		await expect(
+			sandbox.run(code, true, true, undefined, [], {
+				limits: { maxWorkspaceBytes: 4 }
+			})
+		).rejects.toMatchObject({
+			name: 'WorkspaceValidationError',
+			code: 'file-size-limit',
+			limit: 4
+		});
+
+		expect(runtime?.bootCalls).toBe(1);
+		expect(runtime?.planCalls).toBe(1);
+		expect(runtime?.executeCalls).toBe(1);
+		expect(sandbox.compiledCacheKey).toBe(compiledCacheKey);
+		expect(sandbox.runtime).not.toBeNull();
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0]?.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run(code, true)).resolves.toBe(true);
+		expect(runtime?.bootCalls).toBe(1);
 	});
 
 	it('rejects pre-aborted TinyGo operations without changing runtime state', async () => {
