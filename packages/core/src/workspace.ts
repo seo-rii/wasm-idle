@@ -195,16 +195,17 @@ export function validateExecutionWorkspace<T extends WorkspaceFile>(
 	activePath?: string,
 	limits: Partial<WorkspaceLimits> = {}
 ): ValidatedExecutionWorkspace<T> {
-	const workspaceFiles = validateWorkspaceFiles(files, limits);
+	const validatedWorkspaceFiles = validateWorkspaceFiles(files, limits);
 	const normalizedActivePath =
 		activePath === undefined ? undefined : normalizeWorkspacePath(activePath);
+	const workspaceFiles =
+		normalizedActivePath === undefined
+			? validatedWorkspaceFiles
+			: validatedWorkspaceFiles.filter((file) => file.path !== normalizedActivePath);
 
 	if (normalizedActivePath !== undefined) {
 		validateWorkspaceFiles(
-			[
-				...workspaceFiles.filter((file) => file.path !== normalizedActivePath),
-				{ path: normalizedActivePath, content: code }
-			],
+			[...workspaceFiles, { path: normalizedActivePath, content: code }],
 			limits
 		);
 	} else {

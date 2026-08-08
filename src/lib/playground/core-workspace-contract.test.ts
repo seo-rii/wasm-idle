@@ -92,7 +92,10 @@ describe('core workspace policy', () => {
 	it('validates the active source and workspace as one execution filesystem', () => {
 		const workspace = validateExecutionWorkspace(
 			'export const answer = helper;\n',
-			[{ path: 'src\\helper.ts', content: 'export const helper = 42;\n' }],
+			[
+				{ path: 'src\\helper.ts', content: 'export const helper = 42;\n' },
+				{ path: 'src\\main.ts', content: 'throw new Error("stale source");\n' }
+			],
 			'src\\main.ts'
 		);
 
