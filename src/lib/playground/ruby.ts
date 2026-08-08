@@ -20,6 +20,7 @@ import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
@@ -29,7 +30,17 @@ type RubyOperation = {
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
 	cancellationReason?: unknown;
+	cleanedUp: boolean;
+	cleanups: Array<() => void>;
 };
+
+const abortReason = (signal: AbortSignal, phase: RubyOperation['phase']) =>
+	signal.reason !== undefined
+		? signal.reason
+		: new DOMException(
+				phase === 'startup' ? 'Ruby runtime startup aborted' : 'Ruby execution aborted',
+				'AbortError'
+			);
 
 class Ruby implements Sandbox {
 	output: any = null;
@@ -67,7 +78,9 @@ class Ruby implements Sandbox {
 		const operation: RubyOperation = {
 			token: Symbol(phase),
 			phase,
-			cancelled: false
+			cancelled: false,
+			cleanedUp: false,
+			cleanups: []
 		};
 		this.activeOperation = operation;
 		return operation;
@@ -83,10 +96,125 @@ class Ruby implements Sandbox {
 		return true;
 	}
 
+	private cleanupOperation(operation: RubyOperation) {
+		if (operation.cleanedUp) return;
+		operation.cleanedUp = true;
+		const cleanups = operation.cleanups.splice(0);
+		for (const cleanup of cleanups) {
+			try {
+				cleanup();
+			} catch {
+				// Caller-owned lifecycle cleanup must not replace the operation result.
+			}
+		}
+	}
+
 	private releaseBeforeSession(operation: RubyOperation, reason: unknown) {
 		const outcome = operation.cancelled ? operation.cancellationReason : reason;
 		this.releaseOperation(operation);
+		this.cleanupOperation(operation);
 		return outcome;
+	}
+
+	private bindPreSessionAbort(operation: RubyOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return () => undefined;
+		let registered = false;
+		let unbound = false;
+		const unbind = () => {
+			if (unbound) return;
+			unbound = true;
+			if (registered) signal.removeEventListener('abort', onAbort);
+		};
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			operation.cancelled = true;
+			operation.cancellationReason = reason;
+			this.releaseOperation(operation);
+			this.cleanupOperation(operation);
+		};
+		operation.cleanups.push(unbind);
+		try {
+			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			if (this.isOperationActive(operation)) {
+				operation.cancelled = true;
+				operation.cancellationReason = error;
+				this.releaseOperation(operation);
+				this.cleanupOperation(operation);
+			}
+		}
+		return unbind;
+	}
+
+	private bindAbortSignal(operation: RubyOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return;
+		let registered = false;
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			this.cancelOperation(operation, reason);
+		};
+		operation.cleanups.push(() => {
+			if (registered) signal.removeEventListener('abort', onAbort);
+		});
+		try {
+			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			this.cancelOperation(operation, error);
+		}
+	}
+
+	private bindOperationTimeout(operation: RubyOperation, timeoutMs: number) {
+		if (!this.isOperationActive(operation)) return;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		operation.cleanups.push(() => {
+			if (timeout !== undefined) clearTimeout(timeout);
+		});
+		try {
+			timeout = setTimeout(() => {
+				if (!this.isOperationActive(operation)) return;
+				const label = operation.phase === 'startup' ? 'startup' : 'execution';
+				this.cancelOperation(
+					operation,
+					new TimeoutError(`Ruby ${label} timed out after ${timeoutMs} ms`, {
+						phase: operation.phase,
+						runtimeId: 'RUBY',
+						timeoutMs
+					})
+				);
+			}, timeoutMs);
+			if (operation.cleanedUp) clearTimeout(timeout);
+		} catch (error) {
+			this.cancelOperation(operation, error);
+		}
+	}
+
+	private cancelOperation(operation: RubyOperation, reason: unknown) {
+		if (!this.isOperationActive(operation)) return;
+		operation.cancelled = true;
+		operation.cancellationReason = reason;
+		this.activeOperation = null;
+		this.waitingForInput = false;
+		this.pendingEof = false;
+		this.uid += 1;
+		this.exit = true;
+		this.workerSession.terminate(reason);
+		this.cleanupOperation(operation);
 	}
 
 	load(
@@ -94,7 +222,7 @@ class Ruby implements Sandbox {
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
 		let activeOperation: RubyOperation;
@@ -103,14 +231,42 @@ class Ruby implements Sandbox {
 		} catch (error) {
 			return Promise.reject(error);
 		}
+		let limits: ReturnType<typeof resolveExecutionLimits>;
+		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
+		try {
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
+				);
+			}
+			limits = resolveExecutionLimits(options.limits);
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
+				);
+			}
+			unbindPreSessionAbort();
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
+		}
+		if (!this.isOperationActive(activeOperation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
+			);
+		}
 		const loading = this.workerSession.load(async (resolve, reject) => {
 			const resolveOperation = () => {
 				if (!this.releaseOperation(activeOperation)) return;
 				resolve();
+				this.cleanupOperation(activeOperation);
 			};
 			const rejectOperation = (reason?: unknown) => {
 				if (!this.releaseOperation(activeOperation)) return;
 				reject(reason);
+				this.cleanupOperation(activeOperation);
 			};
 			try {
 				if (!this.isOperationActive(activeOperation)) return;
@@ -188,8 +344,12 @@ class Ruby implements Sandbox {
 				rejectOperation(error);
 			}
 		});
+		const timeoutMs = Math.min(2_147_483_647, limits.assetTimeoutMs + limits.startupTimeoutMs);
+		this.bindOperationTimeout(activeOperation, timeoutMs);
+		this.bindAbortSignal(activeOperation, signal);
 		return loading.finally(() => {
 			this.releaseOperation(activeOperation);
+			this.cleanupOperation(activeOperation);
 		});
 	}
 
@@ -231,6 +391,9 @@ class Ruby implements Sandbox {
 		} catch (error) {
 			return Promise.reject(error);
 		}
+		let limits: ReturnType<typeof resolveExecutionLimits>;
+		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
 		let request: {
 			programArgs: string[];
 			stdin: string | undefined;
@@ -238,7 +401,14 @@ class Ruby implements Sandbox {
 			workspaceFiles: NonNullable<SandboxExecutionOptions['workspaceFiles']>;
 		};
 		try {
-			const limits = resolveExecutionLimits(options.limits);
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Ruby execution cancelled')
+				);
+			}
+			limits = resolveExecutionLimits(options.limits);
 			const workspace = validateExecutionWorkspace(
 				code,
 				options.workspaceFiles ?? [],
@@ -263,6 +433,12 @@ class Ruby implements Sandbox {
 				activePath: workspace.activePath ?? 'main.rb',
 				workspaceFiles: workspace.workspaceFiles
 			};
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Ruby execution cancelled')
+				);
+			}
+			unbindPreSessionAbort();
 		} catch (error) {
 			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
 		}
@@ -278,6 +454,13 @@ class Ruby implements Sandbox {
 		this.exit = false;
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			const workerOperation = this.workerSession.beginRun(worker, reject);
+			const timeoutMs = Math.min(
+				2_147_483_647,
+				limits.compileTimeoutMs + limits.runTimeoutMs
+			);
+			this.bindOperationTimeout(activeOperation, timeoutMs);
+			this.bindAbortSignal(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) return;
 			const runUid = ++this.uid;
 			let handler: (event: Event & { data: any }) => void;
 			const ownsRun = () =>
@@ -296,6 +479,7 @@ class Ruby implements Sandbox {
 				settleRunState();
 				this.workerSession.complete(workerOperation);
 				this.releaseOperation(activeOperation);
+				this.cleanupOperation(activeOperation);
 				try {
 					if (worker.onmessage === handler) worker.onmessage = null;
 				} catch {
@@ -361,10 +545,12 @@ class Ruby implements Sandbox {
 			}
 		});
 		return running.finally(() => {
-			if (!this.releaseOperation(activeOperation)) return;
-			this.exit = true;
-			this.waitingForInput = false;
-			this.pendingEof = false;
+			if (this.releaseOperation(activeOperation)) {
+				this.exit = true;
+				this.waitingForInput = false;
+				this.pendingEof = false;
+			}
+			this.cleanupOperation(activeOperation);
 		});
 	}
 
@@ -375,9 +561,8 @@ class Ruby implements Sandbox {
 	terminate(reason: unknown = 'Process terminated') {
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
-			activeOperation.cancelled = true;
-			activeOperation.cancellationReason = reason;
-			this.releaseOperation(activeOperation);
+			this.cancelOperation(activeOperation, reason);
+			return;
 		}
 		this.waitingForInput = false;
 		this.pendingEof = false;
