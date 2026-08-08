@@ -2125,6 +2125,109 @@ describe('WorkerAssetBridge asset requests', () => {
 		});
 	});
 
+	it('does not revive when rebind abort cleanup disposes the bridge', async () => {
+		const firstWorkerPostMessage = vi.fn();
+		const secondWorkerPostMessage = vi.fn();
+		let bridge!: WorkerAssetBridge;
+		let firstSignal: AbortSignal | undefined;
+		const firstLoader = vi.fn((request: { signal?: AbortSignal }) => {
+			firstSignal = request.signal;
+			request.signal?.addEventListener('abort', () => bridge.dispose(), { once: true });
+			return new Promise<Uint8Array>(() => undefined);
+		});
+		bridge = new WorkerAssetBridge(
+			{ postMessage: firstWorkerPostMessage } as unknown as Worker,
+			'clang',
+			{ baseUrl: '/clang/', loader: firstLoader, useAssetBridge: true }
+		);
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		bridge.handleMessage({
+			data: { assetRequest: { id: 29, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(firstLoader).toHaveBeenCalledOnce());
+		const replacementProgress = { set: vi.fn() };
+		const replacementConfig = {
+			baseUrl: '/replacement/',
+			loader: vi.fn().mockResolvedValue(new Uint8Array([4, 5, 6])),
+			useAssetBridge: true
+		};
+
+		expect(() =>
+			bridge.rebind(
+				{ postMessage: secondWorkerPostMessage } as unknown as Worker,
+				replacementConfig,
+				replacementProgress
+			)
+		).toThrow('Cannot rebind a disposed worker asset bridge');
+
+		expect(firstSignal?.aborted).toBe(true);
+		expect(bridge.matches(replacementConfig)).toBe(false);
+		expect(replacementProgress.set).not.toHaveBeenCalled();
+		expect(
+			bridge.handleMessage({
+				data: { assetRequest: { id: 30, asset } }
+			} as MessageEvent)
+		).toBe(true);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(replacementConfig.loader).not.toHaveBeenCalled();
+		expect(firstWorkerPostMessage).not.toHaveBeenCalled();
+		expect(secondWorkerPostMessage).not.toHaveBeenCalled();
+	});
+
+	it('suppresses reentrant asset requests while rebind aborts the old generation', async () => {
+		const firstWorkerPostMessage = vi.fn();
+		const secondWorkerPostMessage = vi.fn();
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		let bridge!: WorkerAssetBridge;
+		let reentered = false;
+		const firstLoader = vi.fn((request: { signal?: AbortSignal }) => {
+			if (!reentered) {
+				request.signal?.addEventListener(
+					'abort',
+					() => {
+						reentered = true;
+						expect(
+							bridge.handleMessage({
+								data: { assetRequest: { id: 32, asset } }
+							} as MessageEvent)
+						).toBe(true);
+					},
+					{ once: true }
+				);
+			}
+			return new Promise<Uint8Array>(() => undefined);
+		});
+		bridge = new WorkerAssetBridge(
+			{ postMessage: firstWorkerPostMessage } as unknown as Worker,
+			'clang',
+			{ baseUrl: '/clang/', loader: firstLoader, useAssetBridge: true }
+		);
+		bridge.handleMessage({
+			data: { assetRequest: { id: 31, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(firstLoader).toHaveBeenCalledOnce());
+		const secondLoader = vi.fn().mockResolvedValue(new Uint8Array([7, 8, 9]));
+
+		bridge.rebind({ postMessage: secondWorkerPostMessage } as unknown as Worker, {
+			baseUrl: '/clang/',
+			loader: secondLoader,
+			useAssetBridge: true
+		});
+
+		expect(reentered).toBe(true);
+		expect(firstLoader).toHaveBeenCalledOnce();
+		expect(firstWorkerPostMessage).not.toHaveBeenCalled();
+		expect(secondWorkerPostMessage).not.toHaveBeenCalled();
+		bridge.handleMessage({
+			data: { assetRequest: { id: 33, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(secondWorkerPostMessage).toHaveBeenCalledOnce());
+		expect(secondLoader).toHaveBeenCalledOnce();
+		expect(secondWorkerPostMessage.mock.calls[0]?.[0]).toMatchObject({
+			assetResponse: { id: 33, ok: true }
+		});
+	});
+
 	it('aborts active loads when disposed', async () => {
 		const postMessage = vi.fn();
 		let signal: AbortSignal | undefined;
@@ -2152,6 +2255,97 @@ describe('WorkerAssetBridge asset requests', () => {
 		expect(signal?.aborted).toBe(true);
 		resolveLoad(new Uint8Array([1, 2, 3]));
 		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(postMessage).not.toHaveBeenCalled();
+	});
+
+	it('keeps disposal terminal across late requests, progress, and rebinding', async () => {
+		const postMessage = vi.fn();
+		const loader = vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]));
+		const progress = { set: vi.fn() };
+		const config = {
+			baseUrl: '/clang/',
+			loader,
+			useAssetBridge: true
+		};
+		const bridge = new WorkerAssetBridge(
+			{ postMessage } as unknown as Worker,
+			'clang',
+			config,
+			progress
+		);
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		progress.set.mockClear();
+
+		bridge.dispose();
+		bridge.dispose();
+		const requestHandled = bridge.handleMessage({
+			data: { assetRequest: { id: 12, asset } }
+		} as MessageEvent);
+		const progressHandled = bridge.handleMessage({
+			data: { assetProgress: { asset, loaded: 1, total: 1 } }
+		} as MessageEvent);
+		const unrelatedHandled = bridge.handleMessage({ data: { ready: true } } as MessageEvent);
+		const replacementProgress = { set: vi.fn() };
+		bridge.resetProgress(replacementProgress);
+
+		expect(requestHandled).toBe(true);
+		expect(progressHandled).toBe(true);
+		expect(unrelatedHandled).toBe(false);
+		expect(bridge.matches(config)).toBe(false);
+		expect(() => bridge.rebind({ postMessage: vi.fn() } as unknown as Worker, config)).toThrow(
+			'Cannot rebind a disposed worker asset bridge'
+		);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(loader).not.toHaveBeenCalled();
+		expect(progress.set).not.toHaveBeenCalled();
+		expect(replacementProgress.set).not.toHaveBeenCalled();
+		expect(postMessage).not.toHaveBeenCalled();
+	});
+
+	it('marks itself disposed and detaches progress before abort callbacks reenter', async () => {
+		const postMessage = vi.fn();
+		const progress = { set: vi.fn() };
+		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		let bridge!: WorkerAssetBridge;
+		let reentrantRequestHandled: boolean | undefined;
+		let reentrantProgressHandled: boolean | undefined;
+		let registeredAbortCallback = false;
+		const loader = vi.fn((request: { signal?: AbortSignal }) => {
+			if (!registeredAbortCallback) {
+				registeredAbortCallback = true;
+				request.signal?.addEventListener(
+					'abort',
+					() => {
+						reentrantRequestHandled = bridge.handleMessage({
+							data: { assetRequest: { id: 14, asset } }
+						} as MessageEvent);
+						reentrantProgressHandled = bridge.handleMessage({
+							data: { assetProgress: { asset, loaded: 1, total: 1 } }
+						} as MessageEvent);
+					},
+					{ once: true }
+				);
+			}
+			return new Promise<Uint8Array>(() => undefined);
+		});
+		bridge = new WorkerAssetBridge(
+			{ postMessage } as unknown as Worker,
+			'clang',
+			{ baseUrl: '/clang/', loader, useAssetBridge: true },
+			progress
+		);
+		progress.set.mockClear();
+		bridge.handleMessage({
+			data: { assetRequest: { id: 13, asset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+
+		bridge.dispose();
+
+		expect(reentrantRequestHandled).toBe(true);
+		expect(reentrantProgressHandled).toBe(true);
+		expect(loader).toHaveBeenCalledOnce();
+		expect(progress.set).not.toHaveBeenCalled();
 		expect(postMessage).not.toHaveBeenCalled();
 	});
 

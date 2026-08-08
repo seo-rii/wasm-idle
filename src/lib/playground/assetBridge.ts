@@ -31,6 +31,8 @@ type LoadedAsset = {
 	transferOwnership?: boolean;
 };
 
+type AssetBridgeState = 'active' | 'rebinding' | 'disposed';
+
 const encoder = new TextEncoder();
 const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
 const MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
@@ -291,6 +293,7 @@ export class WorkerAssetBridge {
 	private readonly progress: RuntimeLoadProgress;
 	private readonly expectedAssets: Set<string>;
 	private generation = 0;
+	private state: AssetBridgeState = 'active';
 	private readonly activeLoads = new Set<AbortController>();
 	private readonly maxAssetBytes = MAX_RUNTIME_ASSET_BYTES;
 
@@ -310,6 +313,7 @@ export class WorkerAssetBridge {
 
 	matches(config: ResolvedRuntimeAssetConfig) {
 		return (
+			this.state === 'active' &&
 			this.config.baseUrl === config.baseUrl &&
 			this.config.loader === config.loader &&
 			integrityKey(this.config) === integrityKey(config) &&
@@ -319,37 +323,68 @@ export class WorkerAssetBridge {
 	}
 
 	rebind(worker: Worker, config: ResolvedRuntimeAssetConfig, progress?: ProgressLike) {
-		this.generation += 1;
-		this.abortActiveLoads();
-		this.worker = worker;
-		this.config = config;
-		this.progress.reset(progress);
+		if (this.state === 'disposed') {
+			throw new Error('Cannot rebind a disposed worker asset bridge');
+		}
+		if (this.state === 'rebinding') {
+			throw new Error('Cannot rebind a worker asset bridge while another rebind is active');
+		}
+		this.state = 'rebinding';
+		const generation = ++this.generation;
+		this.progress.reset();
+		try {
+			this.abortActiveLoads();
+			if (this.state !== 'rebinding' || this.generation !== generation) {
+				throw new Error('Cannot rebind a disposed worker asset bridge');
+			}
+			this.worker = worker;
+			this.config = config;
+			this.progress.reset(progress);
+			if (this.state !== 'rebinding' || this.generation !== generation) {
+				throw new Error('Cannot rebind a disposed worker asset bridge');
+			}
+			this.state = 'active';
+		} catch (error) {
+			if (this.state === 'rebinding' && this.generation === generation) this.dispose();
+			throw error;
+		}
 	}
 
 	dispose() {
+		if (this.state === 'disposed') return;
+		this.state = 'disposed';
 		this.generation += 1;
+		this.progress.reset();
 		this.abortActiveLoads();
 	}
 
 	resetProgress(progress?: ProgressLike) {
+		if (this.state !== 'active') return;
 		this.progress.reset(progress);
 	}
 
 	handleMessage(event: MessageEvent<any>) {
 		const assetRequest = event.data?.assetRequest as AssetRequestMessage | undefined;
 		if (assetRequest) {
-			void this.respond(assetRequest);
+			if (this.state === 'active') void this.respond(assetRequest);
 			return true;
 		}
 		const assetProgress = event.data?.assetProgress as AssetProgressMessage | undefined;
 		if (assetProgress) {
-			this.progress.update(assetProgress.asset, assetProgress.loaded, assetProgress.total);
+			if (this.state === 'active') {
+				this.progress.update(
+					assetProgress.asset,
+					assetProgress.loaded,
+					assetProgress.total
+				);
+			}
 			return true;
 		}
 		return false;
 	}
 
 	private async respond(request: AssetRequestMessage) {
+		if (this.state !== 'active') return;
 		const worker = this.worker;
 		const generation = this.generation;
 		const controller = new AbortController();
@@ -841,7 +876,8 @@ export class WorkerAssetBridge {
 	}
 
 	private abortActiveLoads() {
-		for (const controller of this.activeLoads) controller.abort();
+		const controllers = [...this.activeLoads];
 		this.activeLoads.clear();
+		for (const controller of controllers) controller.abort();
 	}
 }
