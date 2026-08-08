@@ -5,7 +5,13 @@ import {
 	type PlaygroundRuntimeAssets,
 	type ResolvedFortranRuntimeAssetConfig
 } from '$lib/playground/assets';
-import { BusyError, TimeoutError, resolveExecutionLimits } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	TimeoutError,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
@@ -407,8 +413,23 @@ class Fortran implements Sandbox {
 			options
 		);
 		const stdin = options.stdin;
-		const activePath = options.activePath;
-		const workspaceFiles = options.workspaceFiles;
+		const workspace = validateExecutionWorkspace(
+			code,
+			options.workspaceFiles ?? [],
+			options.activePath ?? 'main.f',
+			{
+				...options.workspaceLimits,
+				maxFileBytes: Math.min(
+					options.workspaceLimits?.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+					limits.maxWorkspaceBytes
+				),
+				maxTotalBytes: Math.min(
+					options.workspaceLimits?.maxTotalBytes ??
+						DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+					limits.maxWorkspaceBytes
+				)
+			}
+		);
 		const activeOperation = this.beginOperation('execute');
 		try {
 			const worker = this.worker;
@@ -518,8 +539,8 @@ class Fortran implements Sandbox {
 						log,
 						compileArgs,
 						programArgs,
-						activePath,
-						workspaceFiles
+						activePath: workspace.activePath,
+						workspaceFiles: workspace.workspaceFiles
 					});
 				} catch (error) {
 					failRun(error);
