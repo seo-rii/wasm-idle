@@ -23,17 +23,20 @@ type AssemblyScriptOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
-	reason?: unknown;
+	cancellationReason?: unknown;
+	cleanedUp: boolean;
+	cleanups: Array<() => void>;
 };
 
 const abortReason = (signal: AbortSignal, phase: AssemblyScriptOperation['phase']) =>
-	signal.reason ??
-	new DOMException(
-		phase === 'startup'
-			? 'AssemblyScript runtime startup aborted'
-			: 'AssemblyScript execution aborted',
-		'AbortError'
-	);
+	signal.reason !== undefined
+		? signal.reason
+		: new DOMException(
+				phase === 'startup'
+					? 'AssemblyScript runtime startup aborted'
+					: 'AssemblyScript execution aborted',
+				'AbortError'
+			);
 
 class AssemblyScriptSandbox implements Sandbox {
 	output: any = null;
@@ -67,14 +70,30 @@ class AssemblyScriptSandbox implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		if (options.signal?.aborted) {
-			return Promise.reject(abortReason(options.signal, 'startup'));
-		}
 		let operation: AssemblyScriptOperation;
 		try {
 			operation = this.beginOperation('startup');
 		} catch (error) {
 			return Promise.reject(error);
+		}
+		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
+		try {
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(operation, signal);
+			if (!this.isOperationActive(operation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(operation, 'AssemblyScript runtime startup cancelled')
+				);
+			}
+			unbindPreSessionAbort();
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(operation, error));
+		}
+		if (!this.isOperationActive(operation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(operation, 'AssemblyScript runtime startup cancelled')
+			);
 		}
 		const loading = this.workerSession.load(async (resolve, reject) => {
 			if (!this.isOperationActive(operation)) return;
@@ -83,6 +102,7 @@ class AssemblyScriptSandbox implements Sandbox {
 			this.pendingEof = false;
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const nextModuleUrl = resolveAssemblyScriptRuntimeModuleUrl(runtimeAssets, currentUrl);
+			if (!this.isOperationActive(operation)) return;
 			if (this.worker && this.moduleUrl !== nextModuleUrl) this.workerSession.reset();
 			this.moduleUrl = nextModuleUrl;
 			if (!this.worker) {
@@ -104,8 +124,9 @@ class AssemblyScriptSandbox implements Sandbox {
 					worker.onmessage === handler;
 				const failLoad = (reason: unknown) => {
 					if (!ownsLoad()) return;
-					this.completeOperation(operation);
+					this.releaseOperation(operation);
 					reject(reason);
+					this.cleanupOperation(operation);
 				};
 				handler = (event: MessageEvent<any>) => {
 					if (!ownsLoad()) return;
@@ -113,8 +134,9 @@ class AssemblyScriptSandbox implements Sandbox {
 						if (event.data?.load) {
 							progress?.set?.(1);
 							if (!ownsLoad()) return;
-							this.completeOperation(operation);
+							this.releaseOperation(operation);
 							resolve();
+							this.cleanupOperation(operation);
 							return;
 						}
 						if (event.data?.error !== undefined) failLoad(event.data.error);
@@ -132,19 +154,21 @@ class AssemblyScriptSandbox implements Sandbox {
 				try {
 					progress?.set?.(1);
 					if (!this.isOperationActive(operation)) return;
-					this.completeOperation(operation);
+					this.releaseOperation(operation);
 					resolve();
+					this.cleanupOperation(operation);
 				} catch (error) {
 					if (!this.isOperationActive(operation)) return;
-					this.completeOperation(operation);
+					this.releaseOperation(operation);
 					reject(error);
+					this.cleanupOperation(operation);
 				}
 			}
 		});
-		const cleanupSignal = this.bindAbortSignal(operation, options.signal);
+		this.bindAbortSignal(operation, signal);
 		return loading.finally(() => {
-			cleanupSignal();
-			this.completeOperation(operation);
+			this.releaseOperation(operation);
+			this.cleanupOperation(operation);
 		});
 	}
 
@@ -158,45 +182,108 @@ class AssemblyScriptSandbox implements Sandbox {
 		const operation = {
 			token: Symbol(phase),
 			phase,
-			cancelled: false
+			cancelled: false,
+			cleanedUp: false,
+			cleanups: []
 		} satisfies AssemblyScriptOperation;
 		this.activeOperation = operation;
 		return operation;
 	}
 
-	private completeOperation(operation: AssemblyScriptOperation) {
-		if (this.activeOperation?.token === operation.token) this.activeOperation = null;
+	private releaseOperation(operation: AssemblyScriptOperation) {
+		if (this.activeOperation?.token !== operation.token) return false;
+		this.activeOperation = null;
+		return true;
 	}
 
 	private isOperationActive(operation: AssemblyScriptOperation) {
 		return this.activeOperation?.token === operation.token && !operation.cancelled;
 	}
 
-	private bindAbortSignal(operation: AssemblyScriptOperation, signal: AbortSignal | undefined) {
-		if (!signal) return () => undefined;
+	private cleanupOperation(operation: AssemblyScriptOperation) {
+		if (operation.cleanedUp) return;
+		operation.cleanedUp = true;
+		const cleanups = operation.cleanups.splice(0);
+		for (const cleanup of cleanups) {
+			try {
+				cleanup();
+			} catch {
+				// Caller-owned lifecycle cleanup must not replace the operation result.
+			}
+		}
+	}
+
+	private releaseBeforeSession(operation: AssemblyScriptOperation, reason: unknown) {
+		const outcome = operation.cancelled ? operation.cancellationReason : reason;
+		this.releaseOperation(operation);
+		this.cleanupOperation(operation);
+		return outcome;
+	}
+
+	private bindPreSessionAbort(
+		operation: AssemblyScriptOperation,
+		signal: AbortSignal | undefined
+	) {
+		if (!signal || !this.isOperationActive(operation)) return () => undefined;
 		let registered = false;
-		let cleanedUp = false;
+		let unbound = false;
+		const unbind = () => {
+			if (unbound) return;
+			unbound = true;
+			if (registered) signal.removeEventListener('abort', onAbort);
+		};
 		const onAbort = () => {
 			if (!this.isOperationActive(operation)) return;
-			this.cancelOperation(operation, abortReason(signal, operation.phase));
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			operation.cancelled = true;
+			operation.cancellationReason = reason;
+			this.releaseOperation(operation);
+			this.cleanupOperation(operation);
 		};
+		operation.cleanups.push(unbind);
 		try {
-			signal.addEventListener('abort', onAbort, { once: true });
 			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			if (this.isOperationActive(operation)) {
+				operation.cancelled = true;
+				operation.cancellationReason = error;
+				this.releaseOperation(operation);
+				this.cleanupOperation(operation);
+			}
+		}
+		return unbind;
+	}
+
+	private bindAbortSignal(operation: AssemblyScriptOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return;
+		let registered = false;
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			this.cancelOperation(operation, reason);
+		};
+		operation.cleanups.push(() => {
+			if (registered) signal.removeEventListener('abort', onAbort);
+		});
+		try {
+			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
 		} catch (error) {
 			this.cancelOperation(operation, error);
 		}
-		if (signal.aborted) onAbort();
-		return () => {
-			if (cleanedUp) return;
-			cleanedUp = true;
-			if (!registered) return;
-			try {
-				signal.removeEventListener('abort', onAbort);
-			} catch {
-				// Listener cleanup must not replace the operation result.
-			}
-		};
 	}
 
 	write(input: string) {
@@ -231,23 +318,33 @@ class AssemblyScriptSandbox implements Sandbox {
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		if (options.signal?.aborted) {
-			return Promise.reject(abortReason(options.signal, 'execute'));
-		}
 		let activeOperation: AssemblyScriptOperation;
 		try {
 			activeOperation = this.beginOperation('execute');
 		} catch (error) {
 			return Promise.reject(error);
 		}
-		if (!this.worker) {
-			this.completeOperation(activeOperation);
-			return Promise.reject('Worker not loaded');
-		}
-		const worker = this.worker;
+		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
+		let worker: Worker;
+		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
+		let stdin: SandboxExecutionOptions['stdin'];
 		try {
-			const limits = resolveExecutionLimits(options.limits);
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'AssemblyScript execution cancelled')
+				);
+			}
+			if (!this.worker) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Worker not loaded')
+				);
+			}
+			worker = this.worker;
+			limits = resolveExecutionLimits(options.limits);
 			workspace = validateExecutionWorkspace(
 				code,
 				options.workspaceFiles ?? [],
@@ -266,11 +363,22 @@ class AssemblyScriptSandbox implements Sandbox {
 					)
 				}
 			);
+			stdin = options.stdin;
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'AssemblyScript execution cancelled')
+				);
+			}
+			unbindPreSessionAbort();
 		} catch (error) {
-			this.completeOperation(activeOperation);
-			return Promise.reject(error);
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
 		}
-		const hasExplicitStdin = options.stdin !== undefined;
+		if (!this.isOperationActive(activeOperation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(activeOperation, 'AssemblyScript execution cancelled')
+			);
+		}
+		const hasExplicitStdin = stdin !== undefined;
 		if (hasExplicitStdin) {
 			this.pendingInput = [];
 			this.pendingEof = false;
@@ -295,11 +403,10 @@ class AssemblyScriptSandbox implements Sandbox {
 			}
 		};
 		this.exit = false;
-		let cleanupSignal: () => void = () => undefined;
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
 			const workerOperation = this.workerSession.beginRun(worker, reject);
-			cleanupSignal = this.bindAbortSignal(activeOperation, options.signal);
+			this.bindAbortSignal(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) return;
 			let handler: (event: Event & { data: any }) => void;
 			const ownsRun = () =>
@@ -315,8 +422,8 @@ class AssemblyScriptSandbox implements Sandbox {
 				this.waitingForInput = false;
 				this.pendingEof = false;
 				this.workerSession.complete(workerOperation);
-				cleanupSignal();
-				this.completeOperation(activeOperation);
+				this.releaseOperation(activeOperation);
+				this.cleanupOperation(activeOperation);
 				try {
 					if (worker.onmessage === handler) worker.onmessage = null;
 				} catch {
@@ -325,19 +432,12 @@ class AssemblyScriptSandbox implements Sandbox {
 				return true;
 			};
 			const failRun = (reason: unknown, disposeWorker = false) => {
-				if (!claimRun()) return;
-				if (disposeWorker && this.worker === worker) {
-					try {
-						this.workerSession.reset();
-					} catch {
-						if (this.worker === worker) delete this.worker;
-						try {
-							worker.terminate();
-						} catch {
-							// Worker cleanup must not replace the callback error.
-						}
-					}
+				if (disposeWorker) {
+					if (!ownsRun()) return;
+					this.cancelOperation(activeOperation, reason);
+					return;
 				}
+				if (!claimRun()) return;
 				reject(reason);
 			};
 			handler = (event) => {
@@ -377,7 +477,7 @@ class AssemblyScriptSandbox implements Sandbox {
 					code,
 					prepare,
 					buffer: this.buffer,
-					stdin: options.stdin,
+					stdin,
 					activePath: workspace.activePath,
 					workspaceFiles: workspace.workspaceFiles,
 					log: _log
@@ -387,16 +487,15 @@ class AssemblyScriptSandbox implements Sandbox {
 			}
 		});
 		return running.finally(() => {
-			if (this.isOperationActive(activeOperation)) cleanupExplicitStdin();
-			cleanupSignal();
-			this.completeOperation(activeOperation);
+			if (this.releaseOperation(activeOperation)) cleanupExplicitStdin();
+			this.cleanupOperation(activeOperation);
 		});
 	}
 
 	private cancelOperation(operation: AssemblyScriptOperation, reason: unknown) {
 		if (!this.isOperationActive(operation)) return;
 		operation.cancelled = true;
-		operation.reason = reason;
+		operation.cancellationReason = reason;
 		this.activeOperation = null;
 		this.uid += 1;
 		this.pendingInput = [];
@@ -409,6 +508,7 @@ class AssemblyScriptSandbox implements Sandbox {
 			// Stdin cleanup must not replace the cancellation reason.
 		}
 		this.workerSession.terminate(reason);
+		this.cleanupOperation(operation);
 	}
 
 	kill() {

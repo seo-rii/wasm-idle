@@ -714,6 +714,97 @@ describe('AssemblyScript operation lifecycle', () => {
 		}
 	);
 
+	it('preserves an exact null pre-abort reason without changing idle AssemblyScript state', async () => {
+		const sandbox = new AssemblyScript();
+		await sandbox.load('/assets');
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		const moduleUrl = sandbox.moduleUrl;
+		const uid = sandbox.uid;
+		sandbox.write('queued input\n');
+		const controller = new AbortController();
+		controller.abort(null);
+
+		await expect(
+			sandbox.load('/replacement', '', true, [], { signal: controller.signal })
+		).rejects.toBeNull();
+		await expect(
+			sandbox.run('export function main(): void {}', false, true, undefined, [], {
+				signal: controller.signal,
+				stdin: ''
+			})
+		).rejects.toBeNull();
+
+		expect(sandbox.worker).toBe(worker);
+		expect(worker?.onmessage).toBe(handler);
+		expect(worker?.terminate).not.toHaveBeenCalled();
+		expect(worker?.postMessage).toHaveBeenCalledOnce();
+		expect(sandbox.moduleUrl).toBe(moduleUrl);
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('preserves replacement startup when the outer signal getter terminates AssemblyScript', async () => {
+		const sandbox = new AssemblyScript();
+		await sandbox.load('/assets');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace AssemblyScript during startup option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get signal() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement');
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.load('/outer', '', true, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves the first cancellation and replacement across later AssemblyScript option failure', async () => {
+		const sandbox = new AssemblyScript();
+		await sandbox.load('/assets');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace AssemblyScript during execution option snapshot');
+		const laterError = new Error('later AssemblyScript workspace getter failed');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get limits() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement');
+				return undefined;
+			},
+			get workspaceFiles(): never {
+				throw laterError;
+			}
+		};
+
+		const superseded = sandbox.run(
+			'export function main(): void {}',
+			false,
+			true,
+			undefined,
+			[],
+			options
+		);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(retiredWorker?.postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
 	it('ignores a retained handler from a terminated worker after retry', async () => {
 		autoResolveRun = false;
 		const sandbox = new AssemblyScript();
