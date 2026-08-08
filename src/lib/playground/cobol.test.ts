@@ -1214,4 +1214,86 @@ describe('COBOL sandbox workspace boundary', () => {
 		await expect(replacementRun).resolves.toBe(true);
 		expect(output).toHaveBeenCalledWith('replacement\n');
 	});
+
+	it('preserves replacement startup when the outer signal getter terminates COBOL', async () => {
+		const sandbox = new Cobol();
+		await sandbox.load('/assets');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace COBOL during startup option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get signal() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement');
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.load('/outer', '', true, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves the first cancellation and replacement across later COBOL option failure', async () => {
+		const sandbox = new Cobol();
+		await sandbox.load('/assets');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace COBOL during execution option snapshot');
+		const laterError = new Error('later COBOL workspace getter failed');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get limits() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement');
+				return undefined;
+			},
+			get workspaceFiles(): never {
+				throw laterError;
+			}
+		};
+
+		const superseded = sandbox.run(
+			'IDENTIFICATION DIVISION.',
+			false,
+			true,
+			undefined,
+			[],
+			options
+		);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(retiredWorker.postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('reads explicit COBOL stdin once before worker dispatch', async () => {
+		const sandbox = new Cobol();
+		await sandbox.load('/assets');
+		let reads = 0;
+		const options = {
+			get stdin() {
+				reads += 1;
+				if (reads > 1) throw new Error('COBOL stdin was read more than once');
+				return 'captured input\n';
+			}
+		};
+
+		await expect(
+			sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], options)
+		).resolves.toBe(true);
+
+		expect(reads).toBe(1);
+		expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({ stdin: 'captured input\n' })
+		);
+	});
 });

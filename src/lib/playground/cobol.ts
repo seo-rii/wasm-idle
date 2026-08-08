@@ -25,6 +25,9 @@ type CobolOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
+	cancellationReason?: unknown;
+	cleanedUp: boolean;
+	cleanups: Array<() => void>;
 	explicitStdin: boolean;
 };
 
@@ -83,45 +86,110 @@ class Cobol implements Sandbox {
 			token: Symbol(phase),
 			phase,
 			cancelled: false,
+			cleanedUp: false,
+			cleanups: [],
 			explicitStdin: false
 		};
 		this.activeOperation = operation;
 		return operation;
 	}
 
-	private completeOperation(operation: CobolOperation) {
-		if (this.activeOperation?.token === operation.token) this.activeOperation = null;
-	}
-
 	private isOperationActive(operation: CobolOperation) {
 		return this.activeOperation?.token === operation.token && !operation.cancelled;
 	}
 
-	private bindAbortSignal(operation: CobolOperation, signal: AbortSignal | undefined) {
-		if (!signal) return () => undefined;
+	private releaseOperation(operation: CobolOperation) {
+		if (this.activeOperation?.token !== operation.token) return false;
+		this.activeOperation = null;
+		return true;
+	}
+
+	private cleanupOperation(operation: CobolOperation) {
+		if (operation.cleanedUp) return;
+		operation.cleanedUp = true;
+		const cleanups = operation.cleanups.splice(0);
+		for (const cleanup of cleanups) {
+			try {
+				cleanup();
+			} catch {
+				// Caller-owned lifecycle cleanup must not replace the operation result.
+			}
+		}
+	}
+
+	private releaseBeforeSession(operation: CobolOperation, reason: unknown) {
+		const outcome = operation.cancelled ? operation.cancellationReason : reason;
+		this.releaseOperation(operation);
+		this.cleanupOperation(operation);
+		return outcome;
+	}
+
+	private bindPreSessionAbort(operation: CobolOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return () => undefined;
 		let registered = false;
-		let cleanedUp = false;
+		let unbound = false;
+		const unbind = () => {
+			if (unbound) return;
+			unbound = true;
+			if (registered) signal.removeEventListener('abort', onAbort);
+		};
 		const onAbort = () => {
 			if (!this.isOperationActive(operation)) return;
-			this.cancelOperation(operation, abortReason(signal, operation.phase));
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			operation.cancelled = true;
+			operation.cancellationReason = reason;
+			this.releaseOperation(operation);
+			this.cleanupOperation(operation);
 		};
+		operation.cleanups.push(unbind);
 		try {
-			signal.addEventListener('abort', onAbort, { once: true });
 			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
 		} catch (error) {
-			this.cancelOperation(operation, error);
+			if (this.isOperationActive(operation)) {
+				operation.cancelled = true;
+				operation.cancellationReason = error;
+				this.releaseOperation(operation);
+				this.cleanupOperation(operation);
+			}
 		}
-		if (signal.aborted) onAbort();
-		return () => {
-			if (cleanedUp) return;
-			cleanedUp = true;
+		return unbind;
+	}
+
+	private bindAbortSignal(operation: CobolOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return;
+		let registered = false;
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			this.cancelOperation(operation, reason);
+		};
+		operation.cleanups.push(() => {
 			if (!registered) return;
 			try {
 				signal.removeEventListener('abort', onAbort);
 			} catch {
 				// Listener cleanup must not replace the operation result.
 			}
-		};
+		});
+		try {
+			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			this.cancelOperation(operation, error);
+		}
 	}
 
 	private resetExplicitStdinState() {
@@ -149,28 +217,41 @@ class Cobol implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		if (options.signal?.aborted) {
-			return Promise.reject(abortReason(options.signal, 'startup'));
-		}
 		let operation: CobolOperation;
 		try {
 			operation = this.beginOperation('startup');
 		} catch (error) {
 			return Promise.reject(error);
 		}
-		let cleanupSignal: () => void = () => undefined;
+		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
+		try {
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(operation, signal);
+			if (!this.isOperationActive(operation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(operation, 'COBOL runtime startup cancelled')
+				);
+			}
+			unbindPreSessionAbort();
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(operation, error));
+		}
+		if (!this.isOperationActive(operation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(operation, 'COBOL runtime startup cancelled')
+			);
+		}
 		const loading = this.workerSession.load(async (resolve, reject) => {
-			const settleOperation = () => {
-				cleanupSignal();
-				this.completeOperation(operation);
-			};
 			const resolveOperation = () => {
-				settleOperation();
+				if (!this.releaseOperation(operation)) return;
 				resolve();
+				this.cleanupOperation(operation);
 			};
 			const rejectOperation = (reason?: unknown) => {
-				settleOperation();
+				if (!this.releaseOperation(operation)) return;
 				reject(reason);
+				this.cleanupOperation(operation);
 			};
 			try {
 				if (!this.isOperationActive(operation)) return;
@@ -179,7 +260,9 @@ class Cobol implements Sandbox {
 				this.pendingEof = false;
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 				const clangAssets = resolveRuntimeAssetConfig('clang', runtimeAssets, currentUrl);
+				if (!this.isOperationActive(operation)) return;
 				const cobolBaseUrl = resolveCobolBaseUrl(runtimeAssets, currentUrl);
+				if (!this.isOperationActive(operation)) return;
 				const needsWorkerReset =
 					!this.worker ||
 					!this.assetBridge ||
@@ -224,27 +307,20 @@ class Cobol implements Sandbox {
 					this.worker = worker;
 					this.assetBridge = assetBridge;
 					this.workerSession.attach(worker);
-					const handler = (event: MessageEvent<any>) => {
-						if (
-							this.worker !== worker ||
-							this.assetBridge !== assetBridge ||
-							worker.onmessage !== handler
-						) {
-							return;
-						}
+					let handler: (event: MessageEvent<any>) => void;
+					const ownsWorker = () =>
+						this.worker === worker &&
+						this.assetBridge === assetBridge &&
+						worker.onmessage === handler;
+					const ownsLoad = () => this.isOperationActive(operation) && ownsWorker();
+					handler = (event: MessageEvent<any>) => {
+						if (!ownsWorker()) return;
 						try {
 							if (assetBridge.handleMessage(event)) return;
-							if (!this.isOperationActive(operation)) return;
+							if (!ownsLoad()) return;
 							if (event.data?.progress != null) {
 								progress?.set?.(event.data.progress);
-								if (
-									!this.isOperationActive(operation) ||
-									this.worker !== worker ||
-									this.assetBridge !== assetBridge ||
-									worker.onmessage !== handler
-								) {
-									return;
-								}
+								if (!ownsLoad()) return;
 							}
 							if (event.data?.load) {
 								this.log = log;
@@ -292,10 +368,10 @@ class Cobol implements Sandbox {
 				rejectOperation(error);
 			}
 		});
-		cleanupSignal = this.bindAbortSignal(operation, options.signal);
+		this.bindAbortSignal(operation, signal);
 		return loading.finally(() => {
-			cleanupSignal();
-			this.completeOperation(operation);
+			this.releaseOperation(operation);
+			this.cleanupOperation(operation);
 		});
 	}
 
@@ -331,125 +407,153 @@ class Cobol implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		if (options.debug) return Promise.reject('COBOL debugging is not supported yet.');
-		if (options.signal?.aborted) {
-			return Promise.reject(abortReason(options.signal, 'execute'));
-		}
-		const activeOperation = this.beginOperation('execute');
-		let cleanupSignal: () => void = () => undefined;
+		let activeOperation: CobolOperation;
 		try {
-			const worker = this.worker;
+			activeOperation = this.beginOperation('execute');
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
+		let worker: Worker;
+		let assetBridge: WorkerAssetBridge;
+		let compileArgs: string[];
+		let programArgs: string[];
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
+		let stdin: SandboxExecutionOptions['stdin'];
+		try {
+			const debug = options.debug;
+			if (!this.isOperationActive(activeOperation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'COBOL execution cancelled')
+				);
+			}
+			if (debug) {
+				return Promise.reject(
+					this.releaseBeforeSession(
+						activeOperation,
+						'COBOL debugging is not supported yet.'
+					)
+				);
+			}
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'COBOL execution cancelled')
+				);
+			}
+			const currentWorker = this.worker;
+			worker = currentWorker as Worker;
 			if (!worker) throw 'Worker not loaded';
-			const assetBridge = this.assetBridge;
+			const currentAssetBridge = this.assetBridge;
+			assetBridge = currentAssetBridge as WorkerAssetBridge;
 			if (!assetBridge) throw 'COBOL asset bridge is not loaded';
-			const { compileArgs, programArgs } = resolveSandboxExecutionArgs(
+			({ compileArgs, programArgs } = resolveSandboxExecutionArgs(
 				this.language,
 				args,
 				options
-			);
+			));
 			const limits = resolveExecutionLimits(options.limits);
-			const workspace = validateExecutionWorkspace(
-				code,
-				options.workspaceFiles ?? [],
-				options.activePath ?? 'main.cob',
-				{
-					...options.workspaceLimits,
-					maxFileBytes: Math.min(
-						options.workspaceLimits?.maxFileBytes ??
-							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
-						limits.maxWorkspaceBytes
-					),
-					maxTotalBytes: Math.min(
-						options.workspaceLimits?.maxTotalBytes ??
-							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
-						limits.maxWorkspaceBytes
-					)
-				}
-			);
-			const hasExplicitStdin = options.stdin !== undefined;
-			if (hasExplicitStdin) {
-				activeOperation.explicitStdin = true;
-				this.resetExplicitStdinState();
+			const workspaceFiles = options.workspaceFiles ?? [];
+			const activePath = options.activePath ?? 'main.cob';
+			const workspaceLimits = options.workspaceLimits;
+			workspace = validateExecutionWorkspace(code, workspaceFiles, activePath, {
+				...workspaceLimits,
+				maxFileBytes: Math.min(
+					workspaceLimits?.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+					limits.maxWorkspaceBytes
+				),
+				maxTotalBytes: Math.min(
+					workspaceLimits?.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+					limits.maxWorkspaceBytes
+				)
+			});
+			stdin = options.stdin;
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'COBOL execution cancelled')
+				);
 			}
-			this.exit = false;
+			unbindPreSessionAbort();
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
+		}
+		if (!this.isOperationActive(activeOperation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(activeOperation, 'COBOL execution cancelled')
+			);
+		}
+		const hasExplicitStdin = stdin !== undefined;
+		if (hasExplicitStdin) {
+			activeOperation.explicitStdin = true;
+			this.resetExplicitStdinState();
+		}
+		this.exit = false;
+		try {
 			return await new Promise<boolean | string>((resolve, reject) => {
 				const workerOperation = this.workerSession.beginRun(worker, reject);
-				cleanupSignal = this.bindAbortSignal(activeOperation, options.signal);
+				this.bindAbortSignal(activeOperation, signal);
 				if (!this.isOperationActive(activeOperation)) return;
 				const runUid = ++this.uid;
 				let handler: (event: Event & { data: any }) => void;
-				const failRun = (error: unknown, disposeWorker = false) => {
+				const ownsWorker = () =>
+					this.worker === worker &&
+					this.assetBridge === assetBridge &&
+					worker.onmessage === handler;
+				const ownsRun = () =>
+					this.isOperationActive(activeOperation) && ownsWorker() && runUid === this.uid;
+				const claimRun = () => {
+					if (!ownsRun()) return false;
 					this.finishExplicitStdin(activeOperation);
 					this.workerSession.complete(workerOperation);
-					cleanupSignal();
-					this.completeOperation(activeOperation);
-					if (disposeWorker && this.worker === worker) this.workerSession.reset();
+					this.releaseOperation(activeOperation);
+					this.cleanupOperation(activeOperation);
 					this.elapse = Date.now() - this.begin;
 					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
+					return true;
+				};
+				const failRun = (error: unknown, disposeWorker = false) => {
+					if (!ownsRun()) return;
+					if (disposeWorker) {
+						this.cancelOperation(activeOperation, error);
+						return;
+					}
+					if (!claimRun()) return;
 					reject(error);
 				};
 				handler = (event) => {
-					if (
-						this.worker !== worker ||
-						this.assetBridge !== assetBridge ||
-						worker.onmessage !== handler
-					) {
-						return;
-					}
+					if (!ownsWorker()) return;
 					try {
 						if (assetBridge.handleMessage(event as MessageEvent<any>)) return;
-						if (!this.isOperationActive(activeOperation) || runUid !== this.uid) return;
-						const { output, results, log, error, buffer, progress } = event.data;
+						if (!ownsRun()) return;
+						const {
+							output,
+							results,
+							log: workerLog,
+							error,
+							buffer,
+							progress
+						} = event.data;
 						if (buffer && !hasExplicitStdin) {
 							this.waitingForInput = true;
 							this.flushPendingInput();
-							if (
-								!this.isOperationActive(activeOperation) ||
-								this.worker !== worker ||
-								this.assetBridge !== assetBridge ||
-								worker.onmessage !== handler ||
-								runUid !== this.uid
-							) {
-								return;
-							}
+							if (!ownsRun()) return;
 						}
 						if (output) {
 							this.output?.(output);
-							if (
-								!this.isOperationActive(activeOperation) ||
-								this.worker !== worker ||
-								this.assetBridge !== assetBridge ||
-								worker.onmessage !== handler ||
-								runUid !== this.uid
-							) {
-								return;
-							}
+							if (!ownsRun()) return;
 						}
 						if (results !== undefined) {
-							this.finishExplicitStdin(activeOperation);
-							this.elapse = Date.now() - this.begin;
-							this.exit = true;
-							this.waitingForInput = false;
-							this.pendingEof = false;
-							this.workerSession.complete(workerOperation);
-							cleanupSignal();
-							this.completeOperation(activeOperation);
+							if (!claimRun()) return;
 							resolve(results as boolean | string);
 							return;
 						}
-						if (log) {
-							console.log(log);
-							if (
-								!this.isOperationActive(activeOperation) ||
-								this.worker !== worker ||
-								this.assetBridge !== assetBridge ||
-								worker.onmessage !== handler ||
-								runUid !== this.uid
-							) {
-								return;
-							}
+						if (workerLog) {
+							console.log(workerLog);
+							if (!ownsRun()) return;
 						}
 						if (error !== undefined) {
 							failRun(error);
@@ -457,28 +561,21 @@ class Cobol implements Sandbox {
 						}
 						if (progress != null) {
 							prog?.set?.(progress);
-							if (
-								!this.isOperationActive(activeOperation) ||
-								this.worker !== worker ||
-								this.assetBridge !== assetBridge ||
-								worker.onmessage !== handler ||
-								runUid !== this.uid
-							) {
-								return;
-							}
+							if (!ownsRun()) return;
 						}
 					} catch (error) {
 						failRun(error, true);
 					}
 				};
 				worker.onmessage = handler;
+				if (!ownsRun()) return;
 				this.begin = Date.now();
 				try {
 					worker.postMessage({
 						code,
 						prepare,
 						buffer: this.buffer,
-						stdin: options.stdin,
+						stdin,
 						log,
 						compileArgs,
 						programArgs,
@@ -490,9 +587,11 @@ class Cobol implements Sandbox {
 				}
 			});
 		} finally {
-			this.finishExplicitStdin(activeOperation);
-			cleanupSignal();
-			this.completeOperation(activeOperation);
+			if (this.releaseOperation(activeOperation)) {
+				this.finishExplicitStdin(activeOperation);
+				this.exit = true;
+			}
+			this.cleanupOperation(activeOperation);
 		}
 	}
 
@@ -500,12 +599,14 @@ class Cobol implements Sandbox {
 		if (!this.isOperationActive(operation)) return;
 		this.finishExplicitStdin(operation);
 		operation.cancelled = true;
+		operation.cancellationReason = reason;
 		this.activeOperation = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
 		this.workerSession.terminate(reason);
 		this.exit = true;
+		this.cleanupOperation(operation);
 	}
 
 	kill() {
