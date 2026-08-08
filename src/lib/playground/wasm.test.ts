@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
@@ -41,8 +41,13 @@ import Wasm from './wasm';
 
 describe('WASM sandbox', () => {
 	beforeEach(() => {
+		vi.useRealTimers();
 		workerInstances.length = 0;
 		suppressAutoLoadAck = false;
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it('loads the WASM worker and forwards stdin-capable run output', async () => {
@@ -753,6 +758,87 @@ describe('WASM sandbox', () => {
 		expect(workerInstances).toHaveLength(2);
 		expect(sandbox.worker).toBe(workerInstances[1]);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('enforces the aggregate WASM startup deadline and ignores stale readiness', async () => {
+		vi.useFakeTimers();
+		suppressAutoLoadAck = true;
+		const sandbox = new Wasm();
+		const loading = sandbox.load('/absproxy/5173', '', true, [], {
+			limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
+		});
+		const rejected = expect(loading).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'startup',
+			runtimeId: 'WASM',
+			timeoutMs: 12
+		});
+		await vi.dynamicImportSettled();
+		const retiredWorker = workerInstances[0];
+		const staleHandler = retiredWorker.onmessage;
+
+		await vi.advanceTimersByTimeAsync(12);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { progress: 1, load: true } } as MessageEvent<any>);
+		suppressAutoLoadAck = false;
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('enforces the aggregate WASM execution deadline and permits a clean retry', async () => {
+		const sandbox = new Wasm();
+		const retiredWorker = new MockWorker();
+		retiredWorker.postMessage.mockImplementation(() => undefined);
+		sandbox.worker = retiredWorker as unknown as Worker;
+		const output = vi.fn();
+		sandbox.output = output;
+		vi.useFakeTimers();
+		const running = sandbox.run('AGFzbQ==', false, true, undefined, [], {
+			limits: { compileTimeoutMs: 4, runTimeoutMs: 6 }
+		});
+		const rejected = expect(running).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'WASM',
+			timeoutMs: 10
+		});
+		const staleHandler = retiredWorker.onmessage;
+
+		await vi.advanceTimersByTimeAsync(10);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { output: 'stale output\n', results: true } } as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalled();
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('AGFzbQ==', false)).resolves.toBe(true);
+		expect(workerInstances.at(-1)?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('clears settled WASM deadlines before they can retire an idle worker', async () => {
+		vi.useFakeTimers();
+		const sandbox = new Wasm();
+		await sandbox.load('/absproxy/5173', '', true, [], {
+			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
+		});
+		const worker = workerInstances[0];
+		await expect(
+			sandbox.run('AGFzbQ==', false, true, undefined, [], {
+				limits: { compileTimeoutMs: 2, runTimeoutMs: 3 }
+			})
+		).resolves.toBe(true);
+
+		await vi.advanceTimersByTimeAsync(10);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		await expect(sandbox.run('AGFzbQ==', false)).resolves.toBe(true);
 	});
 
 	it('rejects load when the WASM worker script fails before posting load', async () => {
