@@ -21,6 +21,7 @@ import { WorkerSession } from '$lib/playground/workerSession';
 import {
 	BusyError,
 	DEFAULT_EXECUTION_LIMITS,
+	OutputLimitError,
 	TimeoutError,
 	resolveExecutionLimits,
 	type ExecutionLimits
@@ -73,6 +74,8 @@ type TinyGoOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
+	outputBytes: number;
+	limits?: ExecutionLimits;
 	reason?: unknown;
 	reject?: (reason: unknown) => void;
 };
@@ -85,6 +88,7 @@ type TinyGoRuntimeProgressOwner = {
 const ACTIVITY_PREFIX_PATTERN = /^\[\d{2}:\d{2}:\d{2}\]\s?/gm;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const EXECUTION_LIMIT_KEYS = Object.keys(DEFAULT_EXECUTION_LIMITS) as Array<keyof ExecutionLimits>;
+const OUTPUT_ENCODER = new TextEncoder();
 
 const abortReason = (signal: AbortSignal, phase: TinyGoOperation['phase']) => {
 	const reason = signal.reason;
@@ -206,7 +210,8 @@ class TinyGo implements Sandbox {
 		const operation = {
 			token: Symbol(phase),
 			phase,
-			cancelled: false
+			cancelled: false,
+			outputBytes: 0
 		} satisfies TinyGoOperation;
 		this.activeOperation = operation;
 		return operation;
@@ -362,6 +367,7 @@ class TinyGo implements Sandbox {
 				return;
 			}
 			if (settled) return;
+			operation.limits = limits;
 			const timeoutMs = Math.min(
 				MAX_TIMER_DELAY_MS,
 				phase === 'startup'
@@ -410,6 +416,31 @@ class TinyGo implements Sandbox {
 					}
 				);
 		});
+	}
+
+	private emitOutput(operation: TinyGoOperation, data: string) {
+		this.assertOperation(operation);
+		const limit = operation.limits?.maxOutputBytes ?? DEFAULT_EXECUTION_LIMITS.maxOutputBytes;
+		const actual = operation.outputBytes + OUTPUT_ENCODER.encode(data).byteLength;
+		this.assertOperation(operation);
+		if (actual > limit) {
+			operation.outputBytes = actual;
+			this.cancelOperation(
+				operation,
+				new OutputLimitError(`TinyGo output exceeded ${limit} bytes`, {
+					actual,
+					limit,
+					phase: 'execute',
+					runtimeId: 'TINYGO'
+				})
+			);
+			return false;
+		}
+		operation.outputBytes = actual;
+		const output = this.output;
+		this.assertOperation(operation);
+		if (output) Reflect.apply(output, this, [data]);
+		return this.isOperationActive(operation);
 	}
 
 	write(input: string) {
@@ -613,7 +644,9 @@ class TinyGo implements Sandbox {
 		this.lastActivityLog = nextActivityLog;
 		if (!delta) return;
 		const sanitized = delta.replace(ACTIVITY_PREFIX_PATTERN, '');
-		if (sanitized) this.output?.(sanitized);
+		if (sanitized && !this.emitOutput(operation, sanitized)) {
+			this.assertOperation(operation);
+		}
 		this.assertOperation(operation);
 	}
 
@@ -752,7 +785,7 @@ class TinyGo implements Sandbox {
 		this.compiledArtifactExecutionError = compiledArtifactExecutionError;
 		this.compiledCacheKey = compileCacheKey;
 		if (log) {
-			this.output?.(`tinygo artifact ready: ${artifact.path}\n`);
+			this.emitOutput(operation, `tinygo artifact ready: ${artifact.path}\n`);
 			this.assertOperation(operation);
 		}
 	}
@@ -815,8 +848,7 @@ class TinyGo implements Sandbox {
 							this.flushPendingInput();
 						}
 						if (output) {
-							this.output?.(output);
-							if (!this.isOperationActive(operation)) return;
+							if (!this.emitOutput(operation, output)) return;
 						}
 						if (hasResults) {
 							if (worker.onmessage === handleMessage) worker.onmessage = null;

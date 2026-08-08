@@ -346,6 +346,98 @@ describe('TinyGo operation lifecycle', () => {
 		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
 	});
 
+	it('enforces the TinyGo output budget during compiler activity', async () => {
+		const sandbox = new TinyGo();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const retiredRuntime = runtimeFixtureState.runtimeRecords[0];
+
+		await expect(
+			sandbox.run('package main\nfunc main() {}', true, false, undefined, [], {
+				limits: { maxOutputBytes: 1 }
+			})
+		).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			runtimeId: 'TINYGO',
+			limit: 1,
+			actual: 14
+		});
+
+		expect(output).not.toHaveBeenCalled();
+		expect(runtimeFixtureState.bootCalls).toBe(1);
+		expect(runtimeFixtureState.planCalls).toBe(0);
+		expect(runtimeFixtureState.executeCalls).toBe(0);
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(retiredRuntime?.disposeCalls).toBe(1);
+
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+		await expect(sandbox.run('package main\nfunc main() {}', true)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('enforces one UTF-8 TinyGo output budget across compilation and execution', async () => {
+		autoResolveRun = false;
+		const sandbox = new TinyGo();
+		const output: string[] = [];
+		sandbox.output = (chunk: string) => output.push(chunk);
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const retiredRuntime = runtimeFixtureState.runtimeRecords[0];
+		const running = sandbox.run('package main\nfunc main() {}', false, false, undefined, [], {
+			limits: { maxOutputBytes: 64 }
+		});
+
+		await vi.waitFor(() =>
+			expect(retiredWorker?.postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({ artifact: expect.any(Uint8Array) })
+			)
+		);
+		const compilerBytes = new TextEncoder().encode(output.join('')).byteLength;
+		expect(compilerBytes).toBeLessThan(64);
+		retiredWorker?.onmessage?.({
+			data: { output: 'x'.repeat(64 - compilerBytes) }
+		} as MessageEvent<unknown>);
+		const staleResult = retiredWorker?.onmessage;
+		staleResult?.({ data: { output: 'é' } } as MessageEvent<unknown>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			runtimeId: 'TINYGO',
+			limit: 64,
+			actual: 66
+		});
+		expect(new TextEncoder().encode(output.join('')).byteLength).toBe(64);
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(retiredRuntime?.disposeCalls).toBe(1);
+		expect(sandbox.worker).toBeUndefined();
+
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+		const replacementWorker = workerInstances[1];
+		const retry = sandbox.run('package main\nfunc main() {}', false);
+		await vi.waitFor(() =>
+			expect(replacementWorker?.postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({ artifact: expect.any(Uint8Array) })
+			)
+		);
+		const replacementHandler = replacementWorker?.onmessage;
+		staleResult?.({
+			data: { output: 'stale overflow output', results: true }
+		} as MessageEvent<unknown>);
+		expect(output.join('')).not.toContain('stale overflow output');
+		expect(replacementWorker?.onmessage).toBe(replacementHandler);
+		replacementWorker?.resolveRun();
+		await expect(retry).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(replacementWorker?.terminate).not.toHaveBeenCalled();
+	});
+
 	it('rejects pre-aborted TinyGo operations without changing runtime state', async () => {
 		const sandbox = new TinyGo();
 		sandbox.write('queued\n');
