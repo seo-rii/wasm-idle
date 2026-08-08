@@ -44,14 +44,10 @@ function cancelResponseBody(response: Response, reason?: unknown) {
 }
 
 function abortReason(signal: AbortSignal) {
-	return (
-		signal.reason ?? new DOMException('The runtime asset download was aborted', 'AbortError')
-	);
-}
-
-function throwIfAborted(signal?: AbortSignal) {
-	if (!signal?.aborted) return;
-	throw abortReason(signal);
+	const reason = signal.reason;
+	return reason !== undefined
+		? reason
+		: new DOMException('The runtime asset download was aborted', 'AbortError');
 }
 
 export async function fetchRuntimeAssetBytes({
@@ -65,203 +61,318 @@ export async function fetchRuntimeAssetBytes({
 	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes <= 0) {
 		throw new TypeError('Runtime asset maxAssetBytes must be a positive safe integer');
 	}
-	throwIfAborted(signal);
-	const requestUrl = resolveRuntimeAssetUrl(url, label);
-	const requestInit: RequestInit = {
-		credentials: 'omit',
-		redirect: 'error',
-		referrerPolicy: 'no-referrer'
-	};
-	if (cache) requestInit.cache = cache;
-	if (signal) requestInit.signal = signal;
-	const pendingResponse = Promise.resolve(fetch(requestUrl.href, requestInit));
-	const response = signal
-		? await new Promise<Response>((resolve, reject) => {
-				let settled = false;
-				const onAbort = () => {
-					if (settled) return;
-					settled = true;
-					signal.removeEventListener('abort', onAbort);
-					reject(abortReason(signal));
-				};
-				signal.addEventListener('abort', onAbort, { once: true });
-				void pendingResponse.then(
-					(candidate) => {
-						if (settled) {
-							void cancelResponseBody(candidate, abortReason(signal));
-							return;
-						}
-						settled = true;
-						signal.removeEventListener('abort', onAbort);
-						resolve(candidate);
-					},
-					(error) => {
-						if (settled) return;
-						settled = true;
-						signal.removeEventListener('abort', onAbort);
-						reject(error);
-					}
-				);
-				if (signal.aborted) onAbort();
+
+	let abortFailure: unknown;
+	let abortRejection: { reason: unknown } | undefined;
+	let selectedStreamFailure: { reason: unknown } | undefined;
+	let abortSettled = false;
+	let abortReasonReading = false;
+	let rejectAbort: ((reason?: unknown) => void) | undefined;
+	let cleanupCurrentResource: ((reason: unknown) => void) | undefined;
+	const aborted = signal
+		? new Promise<never>((_resolve, reject) => {
+				rejectAbort = reject;
 			})
-		: await pendingResponse;
-	if (signal?.aborted) {
-		cancelResponseBody(response, abortReason(signal));
-		throwIfAborted(signal);
-	}
-
-	if (response.url) {
-		let responseUrl: URL;
+		: undefined;
+	if (aborted) void aborted.catch(() => undefined);
+	const settleAbort = (reason: unknown) => {
+		if (abortSettled) return;
+		abortSettled = true;
+		abortFailure = reason;
+		abortRejection = { reason };
+		const cleanup = cleanupCurrentResource;
+		cleanupCurrentResource = undefined;
 		try {
-			responseUrl = new URL(response.url);
+			cleanup?.(reason);
 		} catch {
-			const error = new Error(`${label} response URL is invalid: ${response.url}`);
-			cancelResponseBody(response, error);
-			throw error;
+			// Preserve the first observed abort outcome.
 		}
-		if (responseUrl.href !== requestUrl.href) {
-			const error = new Error(
-				`${label} response URL mismatch: expected ${requestUrl.href}, received ${responseUrl.href}`
-			);
-			cancelResponseBody(response, error);
-			throw error;
-		}
-	}
-	if (!response.ok) {
-		const error = new Error(
-			`failed to load ${label} from ${requestUrl.href}: ${response.status}`
-		);
-		cancelResponseBody(response, error);
-		throw error;
-	}
-
-	const rawContentLength = response.headers.get('content-length');
-	let total: number | undefined;
-	if (rawContentLength !== null) {
-		const normalizedContentLength = rawContentLength.trim();
-		const parsedContentLength = Number(normalizedContentLength);
-		if (!/^\d+$/u.test(normalizedContentLength) || !Number.isSafeInteger(parsedContentLength)) {
-			const error = new Error(`${label} has an invalid Content-Length`);
-			cancelResponseBody(response, error);
-			throw error;
-		}
-		total = parsedContentLength;
-	}
-	if (total !== undefined && total > maxAssetBytes) {
-		const error = new Error(`${label} exceeds the ${maxAssetBytes} byte limit`);
-		cancelResponseBody(response, error);
-		throw error;
-	}
-
-	if (!response.body) {
-		let cancelOnAbort: (() => void) | undefined;
-		const aborted = signal
-			? new Promise<never>((_resolve, reject) => {
-					cancelOnAbort = () => reject(abortReason(signal));
-					signal.addEventListener('abort', cancelOnAbort, { once: true });
-				})
-			: undefined;
-		if (aborted) void aborted.catch(() => undefined);
+		rejectAbort?.(abortRejection);
+	};
+	const onAbort = () => {
+		if (abortSettled || abortReasonReading || !signal) return;
+		abortReasonReading = true;
+		let reason: unknown;
 		try {
-			throwIfAborted(signal);
-			const materialized = response.arrayBuffer();
+			reason = abortReason(signal);
+		} catch (error) {
+			reason = error;
+		} finally {
+			abortReasonReading = false;
+		}
+		settleAbort(reason);
+	};
+	const throwIfObservedAbort = () => {
+		if (abortSettled) throw abortRejection;
+		if (!signal) return;
+		let signalAborted: boolean;
+		try {
+			signalAborted = signal.aborted;
+		} catch (error) {
+			if (!abortSettled) settleAbort(error);
+			throw abortRejection;
+		}
+		if (signalAborted) onAbort();
+		if (abortSettled) throw abortRejection;
+	};
+	let abortListenerRegistrationAttempted = false;
+
+	try {
+		if (signal) {
+			abortListenerRegistrationAttempted = true;
+			try {
+				signal.addEventListener('abort', onAbort, { once: true });
+			} catch (error) {
+				throwIfObservedAbort();
+				throw error;
+			}
+			throwIfObservedAbort();
+		}
+		const requestUrl = resolveRuntimeAssetUrl(url, label);
+		const requestInit: RequestInit = {
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer'
+		};
+		if (cache) requestInit.cache = cache;
+		if (signal) requestInit.signal = signal;
+
+		let pendingResponse: Promise<Response>;
+		try {
+			pendingResponse = Promise.resolve(fetch(requestUrl.href, requestInit));
+		} catch (error) {
+			throwIfObservedAbort();
+			throw error;
+		}
+		let response: Response;
+		try {
+			throwIfObservedAbort();
+			response = aborted
+				? await Promise.race([pendingResponse, aborted])
+				: await pendingResponse;
+		} catch (error) {
+			if (abortSettled && error === abortRejection) {
+				const reason = abortFailure;
+				void pendingResponse.then(
+					(candidate) => cancelResponseBody(candidate, reason),
+					() => undefined
+				);
+			}
+			throw error;
+		}
+		cleanupCurrentResource = (reason) => cancelResponseBody(response, reason);
+		throwIfObservedAbort();
+
+		let total: number | undefined;
+		let responseBody: Response['body'];
+		try {
+			if (response.url) {
+				let responseUrl: URL;
+				try {
+					responseUrl = new URL(response.url);
+				} catch {
+					throw new Error(`${label} response URL is invalid: ${response.url}`);
+				}
+				if (responseUrl.href !== requestUrl.href) {
+					throw new Error(
+						`${label} response URL mismatch: expected ${requestUrl.href}, received ${responseUrl.href}`
+					);
+				}
+			}
+			if (!response.ok) {
+				throw new Error(
+					`failed to load ${label} from ${requestUrl.href}: ${response.status}`
+				);
+			}
+
+			const rawContentLength = response.headers.get('content-length');
+			if (rawContentLength !== null) {
+				const normalizedContentLength = rawContentLength.trim();
+				const parsedContentLength = Number(normalizedContentLength);
+				if (
+					!/^\d+$/u.test(normalizedContentLength) ||
+					!Number.isSafeInteger(parsedContentLength)
+				) {
+					throw new Error(`${label} has an invalid Content-Length`);
+				}
+				total = parsedContentLength;
+			}
+			if (total !== undefined && total > maxAssetBytes) {
+				throw new Error(`${label} exceeds the ${maxAssetBytes} byte limit`);
+			}
+			responseBody = response.body;
+		} catch (error) {
+			throwIfObservedAbort();
+			throw error;
+		}
+		throwIfObservedAbort();
+
+		if (!responseBody) {
+			throwIfObservedAbort();
+			let materialized: Promise<ArrayBuffer>;
+			try {
+				materialized = response.arrayBuffer();
+			} catch (error) {
+				throwIfObservedAbort();
+				throw error;
+			}
+			void materialized.catch(() => undefined);
+			throwIfObservedAbort();
 			const source = aborted
 				? await Promise.race([materialized, aborted])
 				: await materialized;
-			throwIfAborted(signal);
+			throwIfObservedAbort();
 			const bytes = new Uint8Array(source);
 			if (bytes.byteLength > maxAssetBytes) {
 				throw new Error(`${label} exceeds the ${maxAssetBytes} byte limit`);
 			}
-			onProgress?.({ loaded: bytes.byteLength, total: total ?? bytes.byteLength });
-			return bytes;
-		} finally {
-			if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
-		}
-	}
-
-	const reader = response.body.getReader();
-	let readerCancelled = false;
-	const cancelReader = (reason?: unknown) => {
-		if (readerCancelled) return;
-		readerCancelled = true;
-		try {
-			void Promise.resolve(reader.cancel(reason)).catch(() => undefined);
-		} catch {
-			// Preserve the abort, stream, or size-limit failure.
-		}
-	};
-	if (signal?.aborted) {
-		const reason = abortReason(signal);
-		cancelReader(reason);
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the abort reason when the reader cannot release immediately.
-		}
-		throw reason;
-	}
-	let cancelOnAbort: (() => void) | undefined;
-	const aborted = signal
-		? new Promise<never>((_resolve, reject) => {
-				cancelOnAbort = () => {
-					const reason = abortReason(signal);
-					cancelReader(reason);
-					reject(reason);
-				};
-				signal.addEventListener('abort', cancelOnAbort, { once: true });
-			})
-		: undefined;
-	if (aborted) void aborted.catch(() => undefined);
-	if (signal?.aborted) cancelOnAbort?.();
-	let receivedLength = 0;
-	let bytes!: Uint8Array<ArrayBuffer>;
-	let releaseFailure: { error: unknown } | undefined;
-	try {
-		bytes = new Uint8Array(Math.min(maxAssetBytes, total ?? DEFAULT_STREAM_BUFFER_BYTES));
-		while (true) {
-			throwIfAborted(signal);
-			const pendingRead = reader.read();
-			const { done, value } = aborted
-				? await Promise.race([pendingRead, aborted])
-				: await pendingRead;
-			throwIfAborted(signal);
-			if (done) break;
-			if (!value) continue;
-			const nextLength = receivedLength + value.byteLength;
-			if (nextLength > maxAssetBytes) {
-				const error = new Error(`${label} exceeds the ${maxAssetBytes} byte limit`);
-				cancelReader(error);
+			try {
+				onProgress?.({ loaded: bytes.byteLength, total: total ?? bytes.byteLength });
+			} catch (error) {
+				throwIfObservedAbort();
 				throw error;
 			}
-			if (nextLength > bytes.byteLength) {
-				const nextCapacity = Math.min(
-					maxAssetBytes,
-					Math.max(nextLength, bytes.byteLength * 2)
-				);
-				const grown = new Uint8Array(nextCapacity);
-				grown.set(bytes.subarray(0, receivedLength));
-				bytes = grown;
+			throwIfObservedAbort();
+			cleanupCurrentResource = undefined;
+			if (signal && abortListenerRegistrationAttempted) {
+				abortListenerRegistrationAttempted = false;
+				try {
+					signal.removeEventListener('abort', onAbort);
+				} catch {
+					// Listener cleanup must not replace a successful download.
+				}
+				throwIfObservedAbort();
 			}
-			bytes.set(value, receivedLength);
-			receivedLength = nextLength;
-			onProgress?.({ loaded: receivedLength, total });
+			return bytes;
 		}
-	} catch (error) {
-		cancelReader(signal?.aborted ? abortReason(signal) : error);
-		throwIfAborted(signal);
-		throw error;
-	} finally {
-		if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
+
+		let reader: ReturnType<NonNullable<Response['body']>['getReader']>;
 		try {
-			reader.releaseLock();
+			reader = responseBody.getReader();
 		} catch (error) {
-			if (!signal?.aborted) releaseFailure = { error };
+			throwIfObservedAbort();
+			throw error;
+		}
+		let readerCancelled = false;
+		const cancelReader = (reason?: unknown) => {
+			if (readerCancelled) return;
+			readerCancelled = true;
+			try {
+				void Promise.resolve(reader.cancel(reason)).catch(() => undefined);
+			} catch {
+				// Preserve the abort, stream, or size-limit failure.
+			}
+		};
+		cleanupCurrentResource = cancelReader;
+
+		let receivedLength = 0;
+		let bytes!: Uint8Array<ArrayBuffer>;
+		let releaseFailure: { error: unknown } | undefined;
+		try {
+			throwIfObservedAbort();
+			bytes = new Uint8Array(Math.min(maxAssetBytes, total ?? DEFAULT_STREAM_BUFFER_BYTES));
+			while (true) {
+				throwIfObservedAbort();
+				let pendingRead: ReturnType<typeof reader.read>;
+				try {
+					pendingRead = reader.read();
+				} catch (error) {
+					throwIfObservedAbort();
+					throw error;
+				}
+				void pendingRead.catch(() => undefined);
+				throwIfObservedAbort();
+				const { done, value } = aborted
+					? await Promise.race([pendingRead, aborted])
+					: await pendingRead;
+				throwIfObservedAbort();
+				if (done) break;
+				if (!value) continue;
+				const nextLength = receivedLength + value.byteLength;
+				if (nextLength > maxAssetBytes) {
+					throw new Error(`${label} exceeds the ${maxAssetBytes} byte limit`);
+				}
+				if (nextLength > bytes.byteLength) {
+					const nextCapacity = Math.min(
+						maxAssetBytes,
+						Math.max(nextLength, bytes.byteLength * 2)
+					);
+					const grown = new Uint8Array(nextCapacity);
+					grown.set(bytes.subarray(0, receivedLength));
+					bytes = grown;
+				}
+				bytes.set(value, receivedLength);
+				receivedLength = nextLength;
+				try {
+					onProgress?.({ loaded: receivedLength, total });
+				} catch (error) {
+					throwIfObservedAbort();
+					throw error;
+				}
+				throwIfObservedAbort();
+			}
+		} catch (error) {
+			const failure = abortSettled && error === abortRejection ? abortFailure : error;
+			const cleanup = cleanupCurrentResource;
+			cleanupCurrentResource = undefined;
+			try {
+				cleanup?.(failure);
+			} catch {
+				// Preserve the selected stream failure.
+			}
+			selectedStreamFailure = { reason: failure };
+		} finally {
+			try {
+				reader.releaseLock();
+			} catch (error) {
+				if (!abortSettled) releaseFailure = { error };
+			}
+		}
+		if (selectedStreamFailure) throw selectedStreamFailure;
+		throwIfObservedAbort();
+		if (releaseFailure) throw releaseFailure.error;
+
+		if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
+		try {
+			onProgress?.({ loaded: receivedLength, total: total ?? receivedLength });
+		} catch (error) {
+			throwIfObservedAbort();
+			throw error;
+		}
+		throwIfObservedAbort();
+		cleanupCurrentResource = undefined;
+		if (signal && abortListenerRegistrationAttempted) {
+			abortListenerRegistrationAttempted = false;
+			try {
+				signal.removeEventListener('abort', onAbort);
+			} catch {
+				// Listener cleanup must not replace a successful download.
+			}
+			throwIfObservedAbort();
+		}
+		return bytes;
+	} catch (error) {
+		const failure =
+			selectedStreamFailure && error === selectedStreamFailure
+				? selectedStreamFailure.reason
+				: abortSettled && error === abortRejection
+					? abortFailure
+					: error;
+		const cleanup = cleanupCurrentResource;
+		cleanupCurrentResource = undefined;
+		try {
+			cleanup?.(failure);
+		} catch {
+			// Preserve the operation failure when cleanup is hostile.
+		}
+		throw failure;
+	} finally {
+		if (signal && abortListenerRegistrationAttempted) {
+			try {
+				signal.removeEventListener('abort', onAbort);
+			} catch {
+				// Listener cleanup must not replace the operation outcome.
+			}
 		}
 	}
-	if (releaseFailure) throw releaseFailure.error;
-
-	if (receivedLength !== bytes.byteLength) bytes = bytes.slice(0, receivedLength);
-	onProgress?.({ loaded: receivedLength, total: total ?? receivedLength });
-	return bytes;
 }

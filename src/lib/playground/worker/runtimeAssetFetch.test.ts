@@ -69,6 +69,521 @@ describe('runtime asset fetch', () => {
 		expect(streamed.releaseLock).toHaveBeenCalledOnce();
 	});
 
+	it.each([null, false, 0, ''])(
+		'preserves the exact falsy pre-abort reason %j before fetching an asset',
+		async (reason) => {
+			const fetchMock = vi.fn();
+			(globalThis as any).fetch = fetchMock;
+			const controller = new AbortController();
+			controller.abort(reason);
+
+			await expect(
+				fetchRuntimeAssetBytes({
+					url: assetUrl,
+					label: 'test compiler',
+					signal: controller.signal
+				})
+			).rejects.toBe(reason);
+			expect(fetchMock).not.toHaveBeenCalled();
+		}
+	);
+
+	it('preserves exact null while aborting an uncooperative asset fetch', async () => {
+		let markFetchStarted!: () => void;
+		const fetchStarted = new Promise<void>((resolve) => {
+			markFetchStarted = resolve;
+		});
+		let resolveFetch!: (response: unknown) => void;
+		(globalThis as any).fetch = vi.fn(() => {
+			markFetchStarted();
+			return new Promise((resolve) => {
+				resolveFetch = resolve;
+			});
+		});
+		const cancel = vi.fn(async () => undefined);
+		const lateResponse = {
+			body: { cancel, getReader: vi.fn() },
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: assetUrl
+		};
+		const controller = new AbortController();
+		const loading = fetchRuntimeAssetBytes({
+			url: assetUrl,
+			label: 'test compiler',
+			signal: controller.signal
+		});
+
+		try {
+			await fetchStarted;
+			controller.abort(null);
+			await expect(loading).rejects.toBeNull();
+			resolveFetch(lateResponse);
+			await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith(null));
+		} finally {
+			resolveFetch(lateResponse);
+			await loading.catch(() => {});
+		}
+	});
+
+	it('preserves exact null while cancelling a pending asset stream read', async () => {
+		let markReadStarted!: () => void;
+		const readStarted = new Promise<void>((resolve) => {
+			markReadStarted = resolve;
+		});
+		let resolveRead!: (value: { done: true; value: undefined }) => void;
+		const read = vi.fn(() => {
+			markReadStarted();
+			return new Promise<{ done: true; value: undefined }>((resolve) => {
+				resolveRead = resolve;
+			});
+		});
+		const cancel = vi.fn(async () => undefined);
+		const releaseLock = vi.fn();
+		(globalThis as any).fetch = vi.fn(async () => ({
+			body: { getReader: () => ({ cancel, read, releaseLock }) },
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: assetUrl
+		}));
+		const controller = new AbortController();
+		const loading = fetchRuntimeAssetBytes({
+			url: assetUrl,
+			label: 'test compiler',
+			signal: controller.signal
+		});
+
+		try {
+			await readStarted;
+			controller.abort(null);
+			await expect(loading).rejects.toBeNull();
+			expect(cancel).toHaveBeenCalledWith(null);
+			expect(releaseLock).toHaveBeenCalledOnce();
+		} finally {
+			resolveRead({ done: true, value: undefined });
+			await loading.catch(() => {});
+		}
+	});
+
+	it('rejects before fetching when abort listener registration fails', async () => {
+		const fetchMock = vi.fn();
+		(globalThis as any).fetch = fetchMock;
+		const controller = new AbortController();
+		const reason = new Error('abort listener registration failed');
+		vi.spyOn(controller.signal, 'addEventListener').mockImplementation(() => {
+			throw reason;
+		});
+		const removeEventListener = vi
+			.spyOn(controller.signal, 'removeEventListener')
+			.mockImplementation(() => undefined);
+
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(removeEventListener).toHaveBeenCalledOnce();
+	});
+
+	it('preserves a synchronous abort raised by failing listener registration', async () => {
+		const fetchMock = vi.fn();
+		(globalThis as any).fetch = fetchMock;
+		const controller = new AbortController();
+		const reason = new Error('abort while registering listener');
+		const registrationFailure = new Error('listener registration failed afterward');
+		vi.spyOn(controller.signal, 'addEventListener').mockImplementation(() => {
+			controller.abort(reason);
+			throw registrationFailure;
+		});
+
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('preserves an abort raised while observing the initial signal state', async () => {
+		const fetchMock = vi.fn();
+		(globalThis as any).fetch = fetchMock;
+		const controller = new AbortController();
+		const reason = new Error('abort during initial signal observation');
+		const getterFailure = new Error('aborted getter failed afterward');
+		Object.defineProperty(controller.signal, 'aborted', {
+			configurable: true,
+			get() {
+				controller.abort(reason);
+				throw getterFailure;
+			}
+		});
+
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('preserves an abort raised before fetch throws', async () => {
+		const controller = new AbortController();
+		const reason = new Error('abort inside fetch');
+		const fetchFailure = new Error('fetch failed afterward');
+		(globalThis as any).fetch = vi.fn(() => {
+			controller.abort(reason);
+			throw fetchFailure;
+		});
+
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+	});
+
+	it.each(['before', 'after'] as const)(
+		'preserves an abort raised %s successful listener removal',
+		async (abortOrder) => {
+			(globalThis as any).fetch = vi.fn(async () => ({
+				arrayBuffer: async () => new Uint8Array([1]).buffer,
+				body: null,
+				headers: new Headers(),
+				ok: true,
+				status: 200,
+				url: assetUrl
+			}));
+			const controller = new AbortController();
+			const reason = new Error(`abort ${abortOrder} listener removal`);
+			const removeEventListener = controller.signal.removeEventListener.bind(
+				controller.signal
+			);
+			vi.spyOn(controller.signal, 'removeEventListener').mockImplementation(
+				(type, listener, options) => {
+					if (abortOrder === 'before') controller.abort(reason);
+					removeEventListener(type, listener, options);
+					if (abortOrder === 'after') controller.abort(reason);
+				}
+			);
+
+			await expect(
+				fetchRuntimeAssetBytes({
+					url: assetUrl,
+					label: 'test compiler',
+					signal: controller.signal
+				})
+			).rejects.toBe(reason);
+		}
+	);
+
+	it('preserves cancellation when abort listener removal throws', async () => {
+		let markFetchStarted!: () => void;
+		const fetchStarted = new Promise<void>((resolve) => {
+			markFetchStarted = resolve;
+		});
+		let resolveFetch!: (response: unknown) => void;
+		(globalThis as any).fetch = vi.fn(() => {
+			markFetchStarted();
+			return new Promise((resolve) => {
+				resolveFetch = resolve;
+			});
+		});
+		const cancel = vi.fn(async () => undefined);
+		const lateResponse = {
+			body: { cancel, getReader: vi.fn() },
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: assetUrl
+		};
+		const controller = new AbortController();
+		const reason = new Error('stop despite listener cleanup failure');
+		vi.spyOn(controller.signal, 'removeEventListener').mockImplementation(() => {
+			throw new Error('listener cleanup failed');
+		});
+		const loading = fetchRuntimeAssetBytes({
+			url: assetUrl,
+			label: 'test compiler',
+			signal: controller.signal
+		});
+
+		try {
+			await fetchStarted;
+			controller.abort(reason);
+			await expect(loading).rejects.toBe(reason);
+			resolveFetch(lateResponse);
+			await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith(reason));
+		} finally {
+			resolveFetch(lateResponse);
+			await loading.catch(() => {});
+		}
+	});
+
+	it('snapshots a reentrant abort reason once for rejection and late cleanup', async () => {
+		let markFetchStarted!: () => void;
+		const fetchStarted = new Promise<void>((resolve) => {
+			markFetchStarted = resolve;
+		});
+		let resolveFetch!: (response: unknown) => void;
+		(globalThis as any).fetch = vi.fn(() => {
+			markFetchStarted();
+			return new Promise((resolve) => {
+				resolveFetch = resolve;
+			});
+		});
+		const cancel = vi.fn(async () => undefined);
+		const lateResponse = {
+			body: { cancel, getReader: vi.fn() },
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: assetUrl
+		};
+		const controller = new AbortController();
+		const firstReason = new Error('first abort reason');
+		const replacementReason = new Error('replacement abort reason');
+		let reasonReads = 0;
+		Object.defineProperty(controller.signal, 'reason', {
+			configurable: true,
+			get() {
+				reasonReads += 1;
+				return reasonReads === 1 ? firstReason : replacementReason;
+			}
+		});
+		const loading = fetchRuntimeAssetBytes({
+			url: assetUrl,
+			label: 'test compiler',
+			signal: controller.signal
+		});
+
+		try {
+			await fetchStarted;
+			controller.abort(firstReason);
+			await expect(loading).rejects.toBe(firstReason);
+			resolveFetch(lateResponse);
+			await vi.waitFor(() => expect(cancel).toHaveBeenCalledWith(firstReason));
+			expect(reasonReads).toBe(1);
+		} finally {
+			resolveFetch(lateResponse);
+			await loading.catch(() => {});
+		}
+	});
+
+	it('cancels and releases an acquired reader when abort state observation fails', async () => {
+		const cancel = vi.fn(async () => undefined);
+		const read = vi.fn();
+		const releaseLock = vi.fn();
+		let readerAcquired = false;
+		(globalThis as any).fetch = vi.fn(async () => ({
+			body: {
+				getReader() {
+					readerAcquired = true;
+					return { cancel, read, releaseLock };
+				}
+			},
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: assetUrl
+		}));
+		const controller = new AbortController();
+		const reason = new Error('abort state getter failed');
+		Object.defineProperty(controller.signal, 'aborted', {
+			configurable: true,
+			get() {
+				if (readerAcquired) throw reason;
+				return false;
+			}
+		});
+
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(read).not.toHaveBeenCalled();
+		expect(cancel).toHaveBeenCalledWith(reason);
+		expect(releaseLock).toHaveBeenCalledOnce();
+	});
+
+	it('preserves an abort raised before a response getter throws', async () => {
+		const controller = new AbortController();
+		const reason = new Error('abort inside response getter');
+		const getterFailure = new Error('response getter failed afterward');
+		const bodyCancel = vi.fn(async () => undefined);
+		(globalThis as any).fetch = vi.fn(async () => ({
+			body: { cancel: bodyCancel, getReader: vi.fn() },
+			headers: new Headers(),
+			get ok() {
+				controller.abort(reason);
+				throw getterFailure;
+			},
+			status: 200,
+			url: assetUrl
+		}));
+
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(bodyCancel).toHaveBeenCalledWith(reason);
+	});
+
+	it('preserves an abort raised before reader acquisition throws', async () => {
+		const controller = new AbortController();
+		const reason = new Error('abort while acquiring reader');
+		const readerFailure = new Error('reader acquisition failed afterward');
+		const bodyCancel = vi.fn(async () => undefined);
+		(globalThis as any).fetch = vi.fn(async () => ({
+			body: {
+				cancel: bodyCancel,
+				getReader() {
+					controller.abort(reason);
+					throw readerFailure;
+				}
+			},
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: assetUrl
+		}));
+
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(bodyCancel).toHaveBeenCalledWith(reason);
+	});
+
+	it('preserves a bodyless progress callback abort', async () => {
+		(globalThis as any).fetch = vi.fn(async () => ({
+			arrayBuffer: async () => new Uint8Array([1]).buffer,
+			body: null,
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: assetUrl
+		}));
+		const controller = new AbortController();
+		const reason = new Error('stop bodyless progress');
+		const progress = vi.fn(() => controller.abort(reason));
+
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				onProgress: progress,
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(progress).toHaveBeenCalledOnce();
+	});
+
+	it('consumes a late bodyless rejection after a synchronous abort', async () => {
+		const controller = new AbortController();
+		const reason = new Error('abort while starting bodyless materialization');
+		const lateFailure = new Error('late bodyless materialization failure');
+		let rejectMaterialization!: (reason: unknown) => void;
+		(globalThis as any).fetch = vi.fn(async () => ({
+			arrayBuffer() {
+				controller.abort(reason);
+				return new Promise<ArrayBuffer>((_resolve, reject) => {
+					rejectMaterialization = reject;
+				});
+			},
+			body: null,
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: assetUrl
+		}));
+
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		rejectMaterialization(lateFailure);
+		await Promise.resolve();
+		await Promise.resolve();
+	});
+
+	it('preserves a final stream progress callback abort', async () => {
+		const streamed = createStreamResponse([]);
+		(globalThis as any).fetch = vi.fn(async () => streamed.response);
+		const controller = new AbortController();
+		const reason = new Error('stop final stream progress');
+		const progress = vi.fn(() => controller.abort(reason));
+
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				onProgress: progress,
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(progress).toHaveBeenCalledOnce();
+		expect(streamed.cancel).toHaveBeenCalledWith(reason);
+		expect(streamed.releaseLock).toHaveBeenCalledOnce();
+	});
+
+	it('consumes a late stream-read rejection after a synchronous abort', async () => {
+		const controller = new AbortController();
+		const reason = new Error('abort while starting stream read');
+		const lateFailure = new Error('late stream read failure');
+		let rejectRead!: (reason: unknown) => void;
+		const read = vi.fn(() => {
+			controller.abort(reason);
+			return new Promise<{ done: true; value: undefined }>((_resolve, reject) => {
+				rejectRead = reject;
+			});
+		});
+		const cancel = vi.fn(async () => undefined);
+		const releaseLock = vi.fn();
+		(globalThis as any).fetch = vi.fn(async () => ({
+			body: { getReader: () => ({ cancel, read, releaseLock }) },
+			headers: new Headers(),
+			ok: true,
+			status: 200,
+			url: assetUrl
+		}));
+
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'test compiler',
+				signal: controller.signal
+			})
+		).rejects.toBe(reason);
+		expect(cancel).toHaveBeenCalledWith(reason);
+		expect(releaseLock).toHaveBeenCalledOnce();
+		rejectRead(lateFailure);
+		await Promise.resolve();
+		await Promise.resolve();
+	});
+
 	it('cancels and releases the reader when the initial buffer allocation fails', async () => {
 		const cancel = vi.fn(async () => undefined);
 		const read = vi.fn();
@@ -103,7 +618,7 @@ describe('runtime asset fetch', () => {
 		expect(cancel).toHaveBeenCalledWith(outcome.reason);
 		expect(releaseLock).toHaveBeenCalledOnce();
 		const abortRegistrations = addEventListener.mock.calls.filter(([type]) => type === 'abort');
-		expect(abortRegistrations).toHaveLength(2);
+		expect(abortRegistrations).toHaveLength(1);
 		for (const registration of abortRegistrations) {
 			expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
 		}
@@ -208,7 +723,7 @@ describe('runtime asset fetch', () => {
 				const abortRegistrations = addEventListener.mock.calls.filter(
 					([type]) => type === 'abort'
 				);
-				expect(abortRegistrations).toHaveLength(2);
+				expect(abortRegistrations).toHaveLength(1);
 				for (const registration of abortRegistrations) {
 					expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
 				}
@@ -420,6 +935,9 @@ describe('runtime asset fetch', () => {
 				expect(cancel).toHaveBeenCalledOnce();
 				expect(cancel).toHaveBeenCalledWith(reason);
 				expect(releaseLock).toHaveBeenCalledOnce();
+				expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(
+					releaseLock.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
+				);
 			} finally {
 				if (timeout) clearTimeout(timeout);
 				resolveCancellation();
