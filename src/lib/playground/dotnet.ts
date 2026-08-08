@@ -3,7 +3,7 @@ import { type CompilerDiagnostic, type SandboxExecutionOptions } from '$lib/play
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
-import { BusyError } from '@wasm-idle/core';
+import { BusyError, TimeoutError, resolveExecutionLimits } from '@wasm-idle/core';
 
 type DotnetSandboxLanguage = 'FSHARP' | 'CSHARP' | 'VBNET';
 type DotnetCompileLanguage = 'fsharp' | 'csharp' | 'vbnet';
@@ -17,7 +17,8 @@ type DotnetOperation = {
 	sessionActive: boolean;
 	signal?: AbortSignal;
 	onAbort?: () => void;
-	abortReject?: (reason: unknown) => void;
+	deferredReject?: (reason: unknown) => void;
+	timeout?: ReturnType<typeof setTimeout>;
 };
 type DotnetRuntimeModule = {
 	createDotnetCompiler: (options?: { loadReferences?: boolean }) => {
@@ -52,6 +53,22 @@ type DotnetRuntimeModule = {
 		stderr: string;
 	}>;
 };
+
+type DotnetExecutionLimits = ReturnType<typeof resolveExecutionLimits>;
+
+const executionLimitKeys = [
+	'assetTimeoutMs',
+	'startupTimeoutMs',
+	'compileTimeoutMs',
+	'runTimeoutMs',
+	'maxOutputBytes',
+	'maxDiagnostics',
+	'maxWorkspaceBytes',
+	'maxAssetBytes',
+	'maxWasmMemoryBytes',
+	'maxWorkers',
+	'maxThreads'
+] as const satisfies readonly (keyof DotnetExecutionLimits)[];
 
 const readsConsoleStdin = (code: string) => /\b(?:System\.)?Console\.(?:ReadLine|In)\b/.test(code);
 
@@ -116,9 +133,10 @@ class Dotnet implements Sandbox {
 	}
 
 	private completeOperation(operation: DotnetOperation) {
+		operation.deferredReject = undefined;
+		this.releaseOperationTimeout(operation);
 		if (this.activeOperation?.token === operation.token) this.activeOperation = null;
 		this.releaseAbortSignal(operation);
-		operation.abortReject = undefined;
 	}
 
 	private isOperationActive(operation: DotnetOperation) {
@@ -144,6 +162,17 @@ class Dotnet implements Sandbox {
 		}
 	}
 
+	private releaseOperationTimeout(operation: DotnetOperation) {
+		const timeout = operation.timeout;
+		operation.timeout = undefined;
+		if (timeout === undefined) return;
+		try {
+			clearTimeout(timeout);
+		} catch {
+			// Timer cleanup must not replace the operation result.
+		}
+	}
+
 	private abortReason(signal: AbortSignal, phase: DotnetOperation['phase']) {
 		const reason = signal.reason;
 		if (reason !== undefined) return reason;
@@ -160,8 +189,8 @@ class Dotnet implements Sandbox {
 			this.releaseAbortSignal(operation);
 			return;
 		}
-		const rejectAbort = operation.abortReject;
-		operation.abortReject = undefined;
+		const rejectDeferred = operation.deferredReject;
+		operation.deferredReject = undefined;
 		operation.cancelled = true;
 		operation.cancellationReason = reason;
 		this.activeExplicitStdinCleanup?.();
@@ -169,9 +198,11 @@ class Dotnet implements Sandbox {
 		this.resolveStdinWaiters();
 		this.workerSession.terminate(reason);
 		this.exit = true;
-		rejectAbort?.(reason);
-		if (operation.deferCompletion) this.releaseAbortSignal(operation);
-		else this.completeOperation(operation);
+		rejectDeferred?.(reason);
+		if (operation.deferCompletion) {
+			this.releaseOperationTimeout(operation);
+			this.releaseAbortSignal(operation);
+		} else this.completeOperation(operation);
 	}
 
 	private cancelBeforeSession(operation: DotnetOperation, reason: unknown) {
@@ -222,6 +253,53 @@ class Dotnet implements Sandbox {
 		}
 	}
 
+	private bindOperationTimeout(operation: DotnetOperation, timeoutMs: number) {
+		if (!this.isOperationActive(operation)) return;
+		let timeout: ReturnType<typeof setTimeout>;
+		try {
+			timeout = setTimeout(() => {
+				if (operation.timeout === timeout) operation.timeout = undefined;
+				if (!this.isOperationActive(operation)) return;
+				const label = operation.phase === 'startup' ? 'runtime startup' : 'execution';
+				this.abortOperation(
+					operation,
+					new TimeoutError(
+						`${this.languageLabel} ${label} timed out after ${timeoutMs} ms`,
+						{
+							phase: operation.phase,
+							runtimeId: this.language,
+							timeoutMs
+						}
+					)
+				);
+			}, timeoutMs);
+		} catch (error) {
+			this.abortOperation(operation, error);
+			return;
+		}
+		if (!this.isOperationActive(operation)) {
+			if (this.activeOperation?.token === operation.token) operation.timeout = timeout;
+			return;
+		}
+		operation.timeout = timeout;
+	}
+
+	private resolveOperationLimits(
+		operation: DotnetOperation,
+		configured: Partial<DotnetExecutionLimits> | undefined
+	) {
+		if (!configured) return resolveExecutionLimits();
+		const snapshot: Partial<DotnetExecutionLimits> = {};
+		for (const key of executionLimitKeys) {
+			const enumerable = Object.prototype.propertyIsEnumerable.call(configured, key);
+			if (!this.isOperationActive(operation)) throw operation.cancellationReason;
+			if (!enumerable) continue;
+			snapshot[key] = configured[key];
+			if (!this.isOperationActive(operation)) throw operation.cancellationReason;
+		}
+		return resolveExecutionLimits(snapshot);
+	}
+
 	private shouldRunOnMainThread() {
 		return (
 			typeof window !== 'undefined' &&
@@ -246,6 +324,7 @@ class Dotnet implements Sandbox {
 			return Promise.reject(error);
 		}
 		let signal: AbortSignal | undefined;
+		let limits: DotnetExecutionLimits;
 		let nextModuleUrl: string;
 		let runOnMainThread: boolean;
 		try {
@@ -259,6 +338,24 @@ class Dotnet implements Sandbox {
 				);
 			}
 			this.bindAbortSignal(operation, signal);
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} runtime startup cancelled`
+					)
+				);
+			}
+			const configuredLimits = options.limits;
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} runtime startup cancelled`
+					)
+				);
+			}
+			limits = this.resolveOperationLimits(operation, configuredLimits);
 			if (!this.isOperationActive(operation)) {
 				return Promise.reject(
 					this.releaseBeforeSession(
@@ -438,6 +535,10 @@ class Dotnet implements Sandbox {
 				reject(error?.message || String(error));
 			}
 		});
+		this.bindOperationTimeout(
+			operation,
+			Math.min(2_147_483_647, limits.assetTimeoutMs + limits.startupTimeoutMs)
+		);
 		return loading.finally(() => this.completeOperation(operation));
 	}
 
@@ -500,6 +601,7 @@ class Dotnet implements Sandbox {
 	): Promise<boolean | string> {
 		const operation = this.beginOperation('execute');
 		let signal: AbortSignal | undefined;
+		let limits: DotnetExecutionLimits;
 		let request: { programArgs: string[]; stdin: string | undefined };
 		try {
 			signal = options.signal;
@@ -510,6 +612,20 @@ class Dotnet implements Sandbox {
 				);
 			}
 			this.bindAbortSignal(operation, signal);
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			const configuredLimits = options.limits;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			limits = this.resolveOperationLimits(operation, configuredLimits);
 			if (!this.isOperationActive(operation)) {
 				throw this.releaseBeforeSession(
 					operation,
@@ -558,16 +674,21 @@ class Dotnet implements Sandbox {
 			throw this.releaseBeforeSession(operation, error);
 		}
 		let completionDeferred = false;
+		const timeoutMs = Math.min(2_147_483_647, limits.compileTimeoutMs + limits.runTimeoutMs);
 		try {
 			if (this.runtimeModule && this.compiler) {
 				operation.deferCompletion = true;
-				let abortPromise: Promise<never> | undefined;
-				if (signal) {
-					abortPromise = new Promise<never>((_resolve, reject) => {
-						operation.abortReject = reject;
-					});
-				}
+				const cancellation = new Promise<never>((_resolve, reject) => {
+					operation.deferredReject = reject;
+				});
 				operation.sessionActive = true;
+				this.bindOperationTimeout(operation, timeoutMs);
+				if (!this.isOperationActive(operation)) {
+					return await Promise.race<boolean | string>([
+						cancellation,
+						Promise.reject(operation.cancellationReason)
+					]);
+				}
 				const execution = this.runOnMainThread(
 					operation,
 					code,
@@ -577,9 +698,7 @@ class Dotnet implements Sandbox {
 					request
 				).finally(() => this.completeOperation(operation));
 				completionDeferred = true;
-				return abortPromise
-					? await Promise.race<boolean | string>([abortPromise, execution])
-					: await execution;
+				return await Promise.race<boolean | string>([cancellation, execution]);
 			}
 			if (!this.worker) throw 'Worker not loaded';
 			const worker = this.worker;
@@ -588,6 +707,8 @@ class Dotnet implements Sandbox {
 			return await new Promise<boolean | string>((resolve, reject) => {
 				const _uid = ++this.uid;
 				const workerOperation = this.workerSession.beginRun(worker, reject);
+				this.bindOperationTimeout(operation, timeoutMs);
+				if (!this.isOperationActive(operation)) return;
 				const hasExplicitStdin = !prepare && request.stdin !== undefined;
 				this.activeExplicitStdinCleanup?.();
 				let explicitStdinCleaned = false;
@@ -783,21 +904,23 @@ class Dotnet implements Sandbox {
 
 	terminate(reason: unknown = 'Process terminated') {
 		const operation = this.activeOperation;
-		const rejectAbort = operation?.abortReject;
+		const rejectDeferred = operation?.signal ? operation.deferredReject : undefined;
 		if (operation) {
 			operation.cancelled = true;
 			operation.cancellationReason = reason;
-			operation.abortReject = undefined;
+			operation.deferredReject = undefined;
 		}
 		this.activeExplicitStdinCleanup?.();
 		this.uid += 1;
 		this.resolveStdinWaiters();
 		this.workerSession.terminate(reason);
 		this.exit = true;
-		rejectAbort?.(reason);
+		rejectDeferred?.(reason);
 		if (operation) {
-			if (operation.deferCompletion) this.releaseAbortSignal(operation);
-			else this.completeOperation(operation);
+			if (operation.deferCompletion) {
+				this.releaseOperationTimeout(operation);
+				this.releaseAbortSignal(operation);
+			} else this.completeOperation(operation);
 		}
 	}
 

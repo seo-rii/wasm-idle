@@ -64,6 +64,7 @@ import Dotnet from './dotnet';
 
 describe('Dotnet sandbox', () => {
 	beforeEach(() => {
+		vi.useRealTimers();
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_DOTNET_MODULE_URL = '/wasm-dotnet/index.js';
 		suppressAutoLoadAck = false;
@@ -72,6 +73,7 @@ describe('Dotnet sandbox', () => {
 	});
 
 	afterEach(() => {
+		vi.useRealTimers();
 		vi.unstubAllGlobals();
 	});
 
@@ -531,6 +533,154 @@ End Module`;
 		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
 	});
 
+	it('enforces the aggregate dotnet startup deadline and ignores stale readiness', async () => {
+		vi.useFakeTimers();
+		suppressAutoLoadAck = true;
+		const sandbox = new Dotnet('CSHARP');
+		const progress = { set: vi.fn() };
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 } },
+			progress
+		);
+		const rejected = expect(loading).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'startup',
+			runtimeId: 'CSHARP',
+			timeoutMs: 12
+		});
+		await vi.dynamicImportSettled();
+		const retiredWorker = workerInstances[0];
+		const staleHandler = retiredWorker?.onmessage;
+
+		await vi.advanceTimersByTimeAsync(12);
+		await rejected;
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(progress.set).not.toHaveBeenCalled();
+		suppressAutoLoadAck = false;
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('times out main-thread startup without committing a late runtime module', async () => {
+		vi.useFakeTimers();
+		vi.stubGlobal('crossOriginIsolated', true);
+		vi.stubGlobal('navigator', { serviceWorker: { controller: {} } });
+		const fixtureKey = '__wasm_idle_dotnet_startup_timeout_fixture';
+		let releaseImport!: () => void;
+		const importGate = new Promise<void>((resolve) => {
+			releaseImport = resolve;
+		});
+		(globalThis as any)[fixtureKey] = { importGate };
+		const moduleSource = `
+await globalThis[${JSON.stringify(fixtureKey)}].importGate;
+export function createDotnetCompiler() {
+	return { compile: async () => ({ success: true, artifact: {} }) };
+}
+export async function executeBrowserDotnetArtifact() {
+	return { exitCode: 0, stdout: '', stderr: '' };
+}
+`;
+		const moduleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(moduleSource)}`;
+		const sandbox = new Dotnet('CSHARP');
+
+		try {
+			const loading = sandbox.load({ dotnet: { moduleUrl } }, '', true, [], {
+				limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
+			});
+			const rejected = expect(loading).rejects.toMatchObject({
+				name: 'TimeoutError',
+				code: 'timeout',
+				phase: 'startup',
+				runtimeId: 'CSHARP',
+				timeoutMs: 12
+			});
+
+			await vi.advanceTimersByTimeAsync(12);
+			await rejected;
+			expect(sandbox.moduleUrl).toBe('');
+			expect(sandbox.runtimeModule).toBeNull();
+			expect(sandbox.compiler).toBeNull();
+
+			releaseImport();
+			vi.useRealTimers();
+			await vi.dynamicImportSettled();
+			expect(sandbox.moduleUrl).toBe('');
+			expect(sandbox.runtimeModule).toBeNull();
+			await expect(sandbox.load({ dotnet: { moduleUrl } })).resolves.toBeUndefined();
+			expect(sandbox.runtimeModule).not.toBeNull();
+			expect(workerInstances).toHaveLength(0);
+		} finally {
+			releaseImport();
+			delete (globalThis as any)[fixtureKey];
+		}
+	});
+
+	it('enforces the aggregate dotnet execution deadline and permits a clean retry', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		suppressAutoRunAck = true;
+		const output = vi.fn();
+		const progress = { set: vi.fn() };
+		sandbox.output = output;
+		vi.useFakeTimers();
+		const running = sandbox.run('Console.WriteLine("timeout");', false, true, progress, [], {
+			limits: { compileTimeoutMs: 4, runTimeoutMs: 6 }
+		});
+		const rejected = expect(running).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'CSHARP',
+			timeoutMs: 10
+		});
+		await Promise.resolve();
+		const staleHandler = retiredWorker?.onmessage;
+
+		await vi.advanceTimersByTimeAsync(10);
+		await rejected;
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({
+			data: { output: 'stale output', progress: 0.5, results: true }
+		} as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalled();
+		expect(progress.set).not.toHaveBeenCalled();
+		suppressAutoRunAck = false;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('Console.WriteLine("retry");', false)).resolves.toBe(true);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('clears settled dotnet deadlines before they can retire an idle worker', async () => {
+		vi.useFakeTimers();
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173', '', true, [], {
+			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
+		});
+		const worker = workerInstances[0];
+		await expect(
+			sandbox.run('Console.WriteLine("settled");', false, true, undefined, [], {
+				limits: { compileTimeoutMs: 2, runTimeoutMs: 3 }
+			})
+		).resolves.toBe(true);
+
+		await vi.advanceTimersByTimeAsync(10);
+		expect(worker?.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		await expect(sandbox.run('Console.WriteLine("retry");', false)).resolves.toBe(true);
+	});
+
 	it('rejects run and load calls while worker startup remains active', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Dotnet('CSHARP');
@@ -602,6 +752,37 @@ End Module`;
 		expect(workerInstances[0]?.terminate).not.toHaveBeenCalled();
 	});
 
+	it('does not read startup limit fields after their snapshot owner is replaced', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const reason = new Error('terminate dotnet startup limits snapshot');
+		const laterFailure = new Error('late dotnet startup limit property failure');
+		let replacement: Promise<void> | undefined;
+		let lateLimitReads = 0;
+		const limits = {};
+		Object.defineProperty(limits, 'assetTimeoutMs', {
+			enumerable: true,
+			get() {
+				lateLimitReads += 1;
+				sandbox.terminate(laterFailure);
+				throw laterFailure;
+			}
+		});
+		const options = {};
+		Object.defineProperty(options, 'limits', {
+			get() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/absproxy/5173');
+				return limits;
+			}
+		});
+
+		await expect(sandbox.load('/absproxy/5173', '', true, [], options)).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(lateLimitReads).toBe(0);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0]?.terminate).not.toHaveBeenCalled();
+	});
+
 	it('keeps a replacement load when a program argument getter terminates a run snapshot', async () => {
 		const sandbox = new Dotnet('CSHARP');
 		await sandbox.load('/absproxy/5173');
@@ -650,6 +831,43 @@ End Module`;
 			sandbox.run('Console.WriteLine("snapshot");', false, true, undefined, [], options)
 		).rejects.toBe(reason);
 		await expect(replacement).resolves.toBeUndefined();
+		expect(originalWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('keeps a replacement load when the limits getter terminates a run snapshot', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		const originalWorker = workerInstances[0];
+		const reason = new Error('terminate dotnet limits snapshot');
+		const laterFailure = new Error('late dotnet limit property failure');
+		let replacement: Promise<void> | undefined;
+		let lateLimitReads = 0;
+		const limits = {};
+		Object.defineProperty(limits, 'assetTimeoutMs', {
+			enumerable: true,
+			get() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/absproxy/5173');
+				return 5;
+			}
+		});
+		Object.defineProperty(limits, 'startupTimeoutMs', {
+			enumerable: true,
+			get() {
+				lateLimitReads += 1;
+				sandbox.terminate(laterFailure);
+				throw laterFailure;
+			}
+		});
+		const options = { limits };
+
+		await expect(
+			sandbox.run('Console.WriteLine("snapshot");', false, true, undefined, [], options)
+		).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(lateLimitReads).toBe(0);
 		expect(originalWorker?.terminate).toHaveBeenCalledOnce();
 		expect(workerInstances).toHaveLength(2);
 		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
@@ -1462,6 +1680,91 @@ export async function executeBrowserDotnetArtifact() {
 		await expect(sandbox.run('Console.WriteLine("compile");', true)).resolves.toBe(true);
 		expect(compile).toHaveBeenCalledTimes(2);
 		expect(execute).not.toHaveBeenCalled();
+	});
+
+	it('rejects a main-thread execution deadline promptly but holds Busy until compile settles', async () => {
+		vi.useFakeTimers();
+		const sandbox = new Dotnet('CSHARP');
+		let markCompileStarted!: () => void;
+		const compileStarted = new Promise<void>((resolve) => {
+			markCompileStarted = resolve;
+		});
+		let releaseCompile!: () => void;
+		const compileGate = new Promise<void>((resolve) => {
+			releaseCompile = resolve;
+		});
+		const compile = vi
+			.fn()
+			.mockImplementationOnce(async () => {
+				markCompileStarted();
+				await compileGate;
+				return { success: true, artifact: { id: 'timed-out-artifact' } };
+			})
+			.mockResolvedValue({ success: true, artifact: { id: 'retry-artifact' } });
+		const execute = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		sandbox.runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.compiler = { compile };
+		const running = sandbox.run('Console.WriteLine("timeout");', true, true, undefined, [], {
+			limits: { compileTimeoutMs: 4, runTimeoutMs: 6 }
+		});
+		const rejected = expect(running).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'CSHARP',
+			timeoutMs: 10
+		});
+		await compileStarted;
+
+		await vi.advanceTimersByTimeAsync(10);
+		await rejected;
+		await expect(sandbox.run('Console.WriteLine("busy");', true)).rejects.toMatchObject({
+			name: 'BusyError',
+			phase: 'execute',
+			runtimeId: 'CSHARP'
+		});
+
+		vi.useRealTimers();
+		releaseCompile();
+		await vi.waitFor(() => expect((sandbox as any).activeOperation).toBeNull());
+		expect(sandbox.compiledArtifact).toBeNull();
+		expect(execute).not.toHaveBeenCalled();
+		await expect(sandbox.run('Console.WriteLine("retry");', true)).resolves.toBe(true);
+		expect(compile).toHaveBeenCalledTimes(2);
+	});
+
+	it('settles main-thread setup when timer registration terminates its owner', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const compile = vi.fn(async () => ({
+			success: true,
+			artifact: { id: 'timer-registration-artifact' }
+		}));
+		const execute = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		sandbox.runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.compiler = { compile };
+		const reason = new Error('terminate dotnet timer registration owner');
+		const timeoutHandle = 1_234_567;
+		const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementationOnce((() => {
+			sandbox.terminate(reason);
+			return timeoutHandle;
+		}) as unknown as typeof setTimeout);
+		const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+
+		await expect(sandbox.run('Console.WriteLine("never starts");', true)).rejects.toBe(reason);
+		expect(clearTimeoutSpy).toHaveBeenCalledWith(timeoutHandle);
+		expect((sandbox as any).activeOperation).toBeNull();
+		expect(compile).not.toHaveBeenCalled();
+
+		setTimeoutSpy.mockRestore();
+		clearTimeoutSpy.mockRestore();
+		await expect(sandbox.run('Console.WriteLine("retry");', true)).resolves.toBe(true);
+		expect(compile).toHaveBeenCalledOnce();
 	});
 
 	it('settles a main-thread abort when its reason getter terminates the operation', async () => {
