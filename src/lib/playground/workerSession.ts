@@ -89,10 +89,7 @@ export class WorkerSession {
 	release(worker: Worker) {
 		if (this.worker !== worker) return false;
 		this.worker = null;
-		worker.onmessage = null;
-		worker.onerror = null;
-		worker.onmessageerror = null;
-		worker.terminate();
+		this.retireWorker(worker);
 		return true;
 	}
 
@@ -146,14 +143,30 @@ export class WorkerSession {
 		if (!worker) return null;
 
 		this.worker = null;
-		worker.onmessage = null;
-		worker.onerror = null;
-		worker.onmessageerror = null;
+		this.retireWorker(worker);
+		return worker;
+	}
+
+	private retireWorker(worker: Worker) {
+		try {
+			worker.onmessage = null;
+		} catch {
+			// Handler cleanup is best effort; the active operation must still settle.
+		}
+		try {
+			worker.onerror = null;
+		} catch {
+			// Handler cleanup is best effort; the active operation must still settle.
+		}
+		try {
+			worker.onmessageerror = null;
+		} catch {
+			// Handler cleanup is best effort; the active operation must still settle.
+		}
 		try {
 			worker.terminate();
 		} catch {
 			// The worker is already detached; cleanup remains best effort.
 		}
-		return worker;
 	}
 }

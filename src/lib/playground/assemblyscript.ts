@@ -97,20 +97,30 @@ class AssemblyScriptSandbox implements Sandbox {
 				}
 				this.worker = worker;
 				this.workerSession.attach(worker);
-				const handler = (event: MessageEvent<any>) => {
-					if (
-						!this.isOperationActive(operation) ||
-						this.worker !== worker ||
-						worker.onmessage !== handler
-					) {
-						return;
+				let handler: (event: MessageEvent<any>) => void;
+				const ownsLoad = () =>
+					this.isOperationActive(operation) &&
+					this.worker === worker &&
+					worker.onmessage === handler;
+				const failLoad = (reason: unknown) => {
+					if (!ownsLoad()) return;
+					this.completeOperation(operation);
+					reject(reason);
+				};
+				handler = (event: MessageEvent<any>) => {
+					if (!ownsLoad()) return;
+					try {
+						if (event.data?.load) {
+							progress?.set?.(1);
+							if (!ownsLoad()) return;
+							this.completeOperation(operation);
+							resolve();
+							return;
+						}
+						if (event.data?.error !== undefined) failLoad(event.data.error);
+					} catch (error) {
+						failLoad(error);
 					}
-					if (event.data?.load) {
-						progress?.set?.(1);
-						if (!this.isOperationActive(operation)) return;
-						resolve();
-					}
-					if (event.data?.error) reject(event.data.error);
 				};
 				worker.onmessage = handler;
 				worker.postMessage({
@@ -119,9 +129,16 @@ class AssemblyScriptSandbox implements Sandbox {
 					log: _log
 				});
 			} else {
-				progress?.set?.(1);
-				if (!this.isOperationActive(operation)) return;
-				resolve();
+				try {
+					progress?.set?.(1);
+					if (!this.isOperationActive(operation)) return;
+					this.completeOperation(operation);
+					resolve();
+				} catch (error) {
+					if (!this.isOperationActive(operation)) return;
+					this.completeOperation(operation);
+					reject(error);
+				}
 			}
 		});
 		const cleanupSignal = this.bindAbortSignal(operation, options.signal);
@@ -264,6 +281,19 @@ class AssemblyScriptSandbox implements Sandbox {
 				// Explicit stdin does not consume the shared terminal buffer.
 			}
 		}
+		let explicitStdinCleaned = false;
+		const cleanupExplicitStdin = () => {
+			if (!hasExplicitStdin || explicitStdinCleaned) return;
+			explicitStdinCleaned = true;
+			this.pendingInput = [];
+			this.pendingEof = false;
+			this.waitingForInput = false;
+			try {
+				resetBufferedStdin(this.buffer);
+			} catch {
+				// Stdin cleanup must not replace the execution result.
+			}
+		};
 		this.exit = false;
 		let cleanupSignal: () => void = () => undefined;
 		const running = new Promise<boolean | string>((resolve, reject) => {
@@ -271,47 +301,72 @@ class AssemblyScriptSandbox implements Sandbox {
 			const workerOperation = this.workerSession.beginRun(worker, reject);
 			cleanupSignal = this.bindAbortSignal(activeOperation, options.signal);
 			if (!this.isOperationActive(activeOperation)) return;
-			const handler = (event: Event & { data: any }) => {
-				if (
-					!this.isOperationActive(activeOperation) ||
-					this.worker !== worker ||
-					worker.onmessage !== handler ||
-					_uid !== this.uid
-				) {
-					return;
-				}
-				const { output, results, error, buffer, diagnostic, progress } = event.data;
-				if (buffer && !hasExplicitStdin) {
-					this.waitingForInput = true;
-					this.flushPendingInput();
-				}
-				reportWorkerProgress(_prog, progress);
-				if (!this.isOperationActive(activeOperation)) return;
-				if (output) {
-					this.output?.(output);
-					if (!this.isOperationActive(activeOperation)) return;
-				}
-				if (diagnostic) {
-					this.oncompilerdiagnostic?.(diagnostic);
-					if (!this.isOperationActive(activeOperation)) return;
-				}
-				if (results) {
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.waitingForInput = false;
-					this.pendingEof = false;
+			let handler: (event: Event & { data: any }) => void;
+			const ownsRun = () =>
+				this.isOperationActive(activeOperation) &&
+				this.worker === worker &&
+				worker.onmessage === handler &&
+				_uid === this.uid;
+			const claimRun = () => {
+				if (!ownsRun()) return false;
+				cleanupExplicitStdin();
+				this.elapse = Date.now() - this.begin;
+				this.exit = true;
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				this.workerSession.complete(workerOperation);
+				cleanupSignal();
+				this.completeOperation(activeOperation);
+				try {
 					if (worker.onmessage === handler) worker.onmessage = null;
-					this.workerSession.complete(workerOperation);
-					resolve(results as string);
+				} catch {
+					// Handler cleanup must not replace or defer the execution result.
 				}
-				if (error) {
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.waitingForInput = false;
-					this.pendingEof = false;
-					if (worker.onmessage === handler) worker.onmessage = null;
-					this.workerSession.complete(workerOperation);
-					reject(error);
+				return true;
+			};
+			const failRun = (reason: unknown, disposeWorker = false) => {
+				if (!claimRun()) return;
+				if (disposeWorker && this.worker === worker) {
+					try {
+						this.workerSession.reset();
+					} catch {
+						if (this.worker === worker) delete this.worker;
+						try {
+							worker.terminate();
+						} catch {
+							// Worker cleanup must not replace the callback error.
+						}
+					}
+				}
+				reject(reason);
+			};
+			handler = (event) => {
+				if (!ownsRun()) return;
+				try {
+					const { output, results, error, buffer, diagnostic, progress } = event.data;
+					if (buffer && !hasExplicitStdin) {
+						this.waitingForInput = true;
+						this.flushPendingInput();
+						if (!ownsRun()) return;
+					}
+					reportWorkerProgress(_prog, progress);
+					if (!ownsRun()) return;
+					if (output) {
+						this.output?.(output);
+						if (!ownsRun()) return;
+					}
+					if (diagnostic !== undefined) {
+						this.oncompilerdiagnostic?.(diagnostic);
+						if (!ownsRun()) return;
+					}
+					if (results !== undefined) {
+						if (!claimRun()) return;
+						resolve(results as boolean | string);
+						return;
+					}
+					if (error !== undefined) failRun(error);
+				} catch (error) {
+					failRun(error, true);
 				}
 			};
 			worker.onmessage = handler;
@@ -328,26 +383,11 @@ class AssemblyScriptSandbox implements Sandbox {
 					log: _log
 				});
 			} catch (error) {
-				if (worker.onmessage === handler) worker.onmessage = null;
-				this.workerSession.complete(workerOperation);
-				this.elapse = Date.now() - this.begin;
-				this.exit = true;
-				this.waitingForInput = false;
-				this.pendingEof = false;
-				reject(error);
+				failRun(error);
 			}
 		});
 		return running.finally(() => {
-			if (hasExplicitStdin && this.isOperationActive(activeOperation)) {
-				this.pendingInput = [];
-				this.pendingEof = false;
-				this.waitingForInput = false;
-				try {
-					resetBufferedStdin(this.buffer);
-				} catch {
-					// Stdin cleanup must not replace the execution result.
-				}
-			}
+			if (this.isOperationActive(activeOperation)) cleanupExplicitStdin();
 			cleanupSignal();
 			this.completeOperation(activeOperation);
 		});

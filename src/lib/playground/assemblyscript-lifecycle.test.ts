@@ -5,9 +5,11 @@ const workerInstances: MockWorker[] = [];
 let autoResolveLoad = true;
 let autoResolveRun = true;
 let runDispatchError: unknown;
+let handlerClearError: unknown;
+let persistHandlerClearError = false;
 
 class MockWorker {
-	onmessage: ((event: MessageEvent<any>) => void) | null = null;
+	private messageHandler: ((event: MessageEvent<any>) => void) | null = null;
 	onerror: ((event: ErrorEvent) => void) | null = null;
 	onmessageerror: ((event: MessageEvent<any>) => void) | null = null;
 	postMessage = vi.fn((message: any) => {
@@ -28,16 +30,33 @@ class MockWorker {
 		workerInstances.push(this);
 	}
 
+	get onmessage() {
+		return this.messageHandler;
+	}
+
+	set onmessage(handler: ((event: MessageEvent<any>) => void) | null) {
+		if (handler === null && handlerClearError !== undefined) {
+			const error = handlerClearError;
+			if (!persistHandlerClearError) handlerClearError = undefined;
+			throw error;
+		}
+		this.messageHandler = handler;
+	}
+
 	resolveLoad() {
-		this.onmessage?.({ data: { load: true } } as MessageEvent<any>);
+		this.emit({ load: true });
 	}
 
 	resolveRun(output?: string) {
-		this.onmessage?.({ data: { output, results: true } } as MessageEvent<any>);
+		this.emit({ output, results: true });
 	}
 
 	rejectRun(reason: unknown) {
-		this.onmessage?.({ data: { error: reason } } as MessageEvent<any>);
+		this.emit({ error: reason });
+	}
+
+	emit(data: Record<string, unknown>) {
+		this.onmessage?.({ data } as MessageEvent<any>);
 	}
 }
 
@@ -55,6 +74,8 @@ describe('AssemblyScript operation lifecycle', () => {
 		autoResolveLoad = true;
 		autoResolveRun = true;
 		runDispatchError = undefined;
+		handlerClearError = undefined;
+		persistHandlerClearError = false;
 	});
 
 	it('rejects pre-aborted operations without changing AssemblyScript state', async () => {
@@ -188,6 +209,159 @@ describe('AssemblyScript operation lifecycle', () => {
 			sandbox.run('export function retry(): i32 { return 3; }', false)
 		).resolves.toBe(true);
 		expect(worker?.postMessage).toHaveBeenCalledTimes(3);
+	});
+
+	it('settles a throwing startup progress callback and permits reload', async () => {
+		autoResolveLoad = false;
+		const sandbox = new AssemblyScript();
+		const callbackError = new Error('AssemblyScript startup progress failed');
+		const cleanupError = new Error('AssemblyScript startup handler cleanup failed');
+		let throwProgress = true;
+		const progress = {
+			set: vi.fn(() => {
+				if (throwProgress) throw callbackError;
+			})
+		};
+		const loading = sandbox.load('/assets', '', true, [], {}, progress);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const retiredWorker = workerInstances[0];
+		handlerClearError = cleanupError;
+		persistHandlerClearError = true;
+
+		try {
+			retiredWorker.resolveLoad();
+		} catch {
+			// The regression assertion below distinguishes a settled rejection from a throw.
+		}
+		const outcome = await Promise.race([
+			loading.catch((error) => error),
+			new Promise((resolve) => setTimeout(() => resolve('still pending'), 25))
+		]);
+
+		expect(outcome).toBe(callbackError);
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		handlerClearError = undefined;
+		persistHandlerClearError = false;
+		throwProgress = false;
+		autoResolveLoad = true;
+		await expect(sandbox.load('/assets', '', true, [], {}, progress)).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it.each(['progress', 'output', 'diagnostic'] as const)(
+		'settles a throwing run %s callback, retires its worker, and permits retry',
+		async (callbackKind) => {
+			autoResolveRun = false;
+			const sandbox = new AssemblyScript();
+			const callbackError = new Error(`AssemblyScript ${callbackKind} callback failed`);
+			let throwCallback = true;
+			const progress = {
+				set: vi.fn(() => {
+					if (throwCallback && callbackKind === 'progress') throw callbackError;
+				})
+			};
+			sandbox.output = vi.fn(() => {
+				if (throwCallback && callbackKind === 'output') throw callbackError;
+			});
+			sandbox.oncompilerdiagnostic = vi.fn(() => {
+				if (throwCallback && callbackKind === 'diagnostic') throw callbackError;
+			});
+			await sandbox.load('/assets');
+			const retiredWorker = workerInstances[0];
+			const running = sandbox.run('export function main(): void {}', false, true, progress);
+			const payload =
+				callbackKind === 'progress'
+					? { progress: 0.5 }
+					: callbackKind === 'output'
+						? { output: 'combined output', results: true }
+						: { diagnostic: { message: 'diagnostic' } };
+
+			try {
+				retiredWorker.emit(payload);
+			} catch {
+				// The regression assertion below distinguishes a settled rejection from a throw.
+			}
+			const outcome = await Promise.race([
+				running.catch((error) => error),
+				new Promise((resolve) => setTimeout(() => resolve('still pending'), 25))
+			]);
+
+			expect(outcome).toBe(callbackError);
+			expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+			throwCallback = false;
+			autoResolveRun = true;
+			await sandbox.load('/assets');
+			await expect(
+				sandbox.run('export function retry(): void {}', false, true, progress)
+			).resolves.toBe(true);
+			expect(workerInstances).toHaveLength(2);
+		}
+	);
+
+	it('preserves a callback error when handler cleanup also throws', async () => {
+		autoResolveRun = false;
+		const sandbox = new AssemblyScript();
+		const callbackError = new Error('AssemblyScript output callback failed first');
+		const cleanupError = new Error('AssemblyScript handler cleanup failed');
+		sandbox.output = () => {
+			throw callbackError;
+		};
+		await sandbox.load('/assets');
+		const retiredWorker = workerInstances[0];
+		const running = sandbox.run('export function main(): void {}', false);
+		handlerClearError = cleanupError;
+		persistHandlerClearError = true;
+
+		try {
+			retiredWorker.emit({ output: 'trigger callback' });
+		} catch {
+			// The regression assertion below distinguishes settlement from cleanup failure.
+		}
+		const outcome = await Promise.race([
+			running.catch((error) => error),
+			new Promise((resolve) => setTimeout(() => resolve('still pending'), 25))
+		]);
+
+		expect(outcome).toBe(callbackError);
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		handlerClearError = undefined;
+		persistHandlerClearError = false;
+		autoResolveRun = true;
+		sandbox.output = vi.fn();
+		await sandbox.load('/assets');
+		await expect(sandbox.run('export function retry(): void {}', false)).resolves.toBe(true);
+	});
+
+	it('preserves terminate-and-reload reentry when an output callback then throws', async () => {
+		autoResolveRun = false;
+		const sandbox = new AssemblyScript();
+		const callbackError = new Error('stale AssemblyScript output callback failed');
+		const terminationReason = new Error('replace AssemblyScript execution');
+		let replacement: Promise<void> | undefined;
+		sandbox.output = () => {
+			sandbox.terminate(terminationReason);
+			replacement = sandbox.load('/replacement');
+			void replacement.catch(() => undefined);
+			throw callbackError;
+		};
+		await sandbox.load('/assets');
+		const retiredWorker = workerInstances[0];
+		const running = sandbox.run('export function oldRun(): void {}', false);
+		const runningOutcome = running.catch((error) => error);
+		const staleHandler = retiredWorker.onmessage;
+
+		expect(() =>
+			retiredWorker.emit({ output: 'before replacement', results: true })
+		).not.toThrow();
+
+		await expect(runningOutcome).resolves.toBe(terminationReason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		const replacementWorker = workerInstances[1];
+		expect(sandbox.worker).toBe(replacementWorker);
+		staleHandler?.({ data: { output: 'late', results: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBe(replacementWorker);
+		expect(replacementWorker.terminate).not.toHaveBeenCalled();
 	});
 
 	it('aborts a pending execution and ignores its stale result during retry', async () => {

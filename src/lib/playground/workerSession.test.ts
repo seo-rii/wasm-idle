@@ -8,6 +8,42 @@ class MockWorker {
 	terminate = vi.fn();
 }
 
+class ThrowingHandlerCleanupWorker {
+	private messageHandler: ((event: MessageEvent) => void) | null = null;
+	private errorHandler: ((event: ErrorEvent) => void) | null = null;
+	private messageErrorHandler: ((event: MessageEvent) => void) | null = null;
+	terminate = vi.fn();
+
+	constructor(private readonly cleanupError: Error) {}
+
+	get onmessage() {
+		return this.messageHandler;
+	}
+
+	set onmessage(handler: ((event: MessageEvent) => void) | null) {
+		if (handler === null) throw this.cleanupError;
+		this.messageHandler = handler;
+	}
+
+	get onerror() {
+		return this.errorHandler;
+	}
+
+	set onerror(handler: ((event: ErrorEvent) => void) | null) {
+		if (handler === null) throw this.cleanupError;
+		this.errorHandler = handler;
+	}
+
+	get onmessageerror() {
+		return this.messageErrorHandler;
+	}
+
+	set onmessageerror(handler: ((event: MessageEvent) => void) | null) {
+		if (handler === null) throw this.cleanupError;
+		this.messageErrorHandler = handler;
+	}
+}
+
 async function expectStaleWorkerHandlerIgnored(
 	selectHandler: (worker: MockWorker) => ((event: never) => void) | null,
 	event: ErrorEvent | MessageEvent
@@ -136,6 +172,26 @@ describe('WorkerSession', () => {
 		expect(worker.onmessage).toBeNull();
 		expect(worker.onerror).toBeNull();
 		expect(worker.onmessageerror).toBeNull();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(onDispose).toHaveBeenCalledWith(worker);
+	});
+
+	it('settles the operation when every handler cleanup setter throws', async () => {
+		const cleanupError = new Error('worker handler cleanup failed');
+		const worker = new ThrowingHandlerCleanupWorker(cleanupError);
+		const onDispose = vi.fn();
+		const session = new WorkerSession({ label: 'AssemblyScript', onDispose });
+		const reason = new Error('AssemblyScript callback failed');
+		const load = session.waitForLoad(worker as unknown as Worker, (_resolve, reject) => {
+			reject(reason);
+		});
+
+		const outcome = await Promise.race([
+			load.catch((error) => error),
+			new Promise((resolve) => setTimeout(() => resolve('still pending'), 25))
+		]);
+
+		expect(outcome).toBe(reason);
 		expect(worker.terminate).toHaveBeenCalledOnce();
 		expect(onDispose).toHaveBeenCalledWith(worker);
 	});
