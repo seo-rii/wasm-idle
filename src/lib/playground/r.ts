@@ -2,6 +2,7 @@ import { resolveRBaseUrl, type PlaygroundRuntimeAssets } from '$lib/playground/a
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
@@ -182,6 +183,31 @@ class R implements Sandbox {
 		}
 	}
 
+	private bindOperationTimeout(operation: ROperation, timeoutMs: number) {
+		if (!this.isOperationActive(operation)) return;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		operation.cleanups.push(() => {
+			if (timeout !== undefined) clearTimeout(timeout);
+		});
+		try {
+			timeout = setTimeout(() => {
+				if (!this.isOperationActive(operation)) return;
+				const label = operation.phase === 'startup' ? 'startup' : 'execution';
+				this.cancelOperation(
+					operation,
+					new TimeoutError(`R ${label} timed out after ${timeoutMs} ms`, {
+						phase: operation.phase,
+						runtimeId: 'R',
+						timeoutMs
+					})
+				);
+			}, timeoutMs);
+			if (operation.cleanedUp) clearTimeout(timeout);
+		} catch (error) {
+			this.cancelOperation(operation, error);
+		}
+	}
+
 	private resetExplicitStdinState() {
 		this.pendingInput = [];
 		this.pendingEof = false;
@@ -214,10 +240,17 @@ class R implements Sandbox {
 			return Promise.reject(error);
 		}
 		let signal: AbortSignal | undefined;
+		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let unbindPreSessionAbort: () => void = () => undefined;
 		try {
 			signal = options.signal;
 			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'R runtime startup cancelled')
+				);
+			}
+			limits = resolveExecutionLimits(options.limits);
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'R runtime startup cancelled')
@@ -313,6 +346,8 @@ class R implements Sandbox {
 				rejectLoad(error);
 			}
 		});
+		const timeoutMs = Math.min(2_147_483_647, limits.assetTimeoutMs + limits.startupTimeoutMs);
+		this.bindOperationTimeout(activeOperation, timeoutMs);
 		this.bindAbortSignal(activeOperation, signal);
 		return loadPromise.finally(() => {
 			this.releaseOperation(activeOperation);
@@ -365,6 +400,7 @@ class R implements Sandbox {
 		let signal: AbortSignal | undefined;
 		let unbindPreSessionAbort: () => void = () => undefined;
 		let programArgs: string[];
+		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		let stdin: SandboxExecutionOptions['stdin'];
 		try {
@@ -376,7 +412,7 @@ class R implements Sandbox {
 				);
 			}
 			programArgs = resolveSandboxExecutionArgs('R', args, options).programArgs;
-			const limits = resolveExecutionLimits(options.limits);
+			limits = resolveExecutionLimits(options.limits);
 			const workspaceFiles = options.workspaceFiles ?? [];
 			const activePath = options.activePath ?? 'main.R';
 			const workspaceLimits = options.workspaceLimits;
@@ -415,6 +451,11 @@ class R implements Sandbox {
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
 			const operation = this.workerSession.beginRun(worker, reject);
+			const timeoutMs = Math.min(
+				2_147_483_647,
+				limits.compileTimeoutMs + limits.runTimeoutMs
+			);
+			this.bindOperationTimeout(activeOperation, timeoutMs);
 			this.bindAbortSignal(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) return;
 			let handler: (event: Event & { data: any }) => void;

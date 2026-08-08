@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
@@ -50,9 +50,14 @@ import R from './r';
 
 describe('R sandbox', () => {
 	beforeEach(() => {
+		vi.useRealTimers();
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_R_BASE_URL = '';
 		suppressAutoLoadAck = false;
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it('loads the R worker and forwards run output', async () => {
@@ -865,5 +870,83 @@ describe('R sandbox', () => {
 		expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
 			expect.objectContaining({ stdin: 'captured input\n' })
 		);
+	});
+
+	it('enforces the aggregate R startup deadline and ignores stale readiness', async () => {
+		vi.useFakeTimers();
+		suppressAutoLoadAck = true;
+		const sandbox = new R();
+		const loading = sandbox.load({ r: { baseUrl: '/webr/test/' } }, '', true, [], {
+			limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
+		});
+		const rejected = expect(loading).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'startup',
+			runtimeId: 'R',
+			timeoutMs: 12
+		});
+		await vi.dynamicImportSettled();
+		const retiredWorker = workerInstances[0];
+		const staleHandler = retiredWorker.onmessage;
+
+		await vi.advanceTimersByTimeAsync(12);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		suppressAutoLoadAck = false;
+		await expect(sandbox.load({ r: { baseUrl: '/webr/test/' } })).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('enforces the aggregate R execution deadline and permits a clean retry', async () => {
+		const sandbox = new R();
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+		const retiredWorker = workerInstances[0];
+		retiredWorker.postMessage.mockImplementationOnce(() => undefined);
+		vi.useFakeTimers();
+		const running = sandbox.run('cat("timeout\\n")', false, true, undefined, [], {
+			limits: { compileTimeoutMs: 4, runTimeoutMs: 6 }
+		});
+		const rejected = expect(running).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'R',
+			timeoutMs: 10
+		});
+		const staleHandler = retiredWorker.onmessage;
+
+		await vi.advanceTimersByTimeAsync(10);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { output: 'stale output', results: true } } as MessageEvent<any>);
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+		await expect(sandbox.run('cat("retry\\n")', false)).resolves.toBe(true);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('clears settled R deadlines before they can retire an idle worker', async () => {
+		vi.useFakeTimers();
+		const sandbox = new R();
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } }, '', true, [], {
+			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
+		});
+		const worker = workerInstances[0];
+		await expect(
+			sandbox.run('cat("settled\\n")', false, true, undefined, [], {
+				limits: { compileTimeoutMs: 2, runTimeoutMs: 3 }
+			})
+		).resolves.toBe(true);
+
+		await vi.advanceTimersByTimeAsync(10);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		await expect(sandbox.run('cat("retry\\n")', false)).resolves.toBe(true);
 	});
 });
