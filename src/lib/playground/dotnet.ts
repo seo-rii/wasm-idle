@@ -3,7 +3,15 @@ import { type CompilerDiagnostic, type SandboxExecutionOptions } from '$lib/play
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
-import { BusyError, TimeoutError, resolveExecutionLimits } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	RuntimeConfigurationError,
+	TimeoutError,
+	WorkspaceValidationError,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 
 type DotnetSandboxLanguage = 'FSHARP' | 'CSHARP' | 'VBNET';
 type DotnetCompileLanguage = 'fsharp' | 'csharp' | 'vbnet';
@@ -657,6 +665,206 @@ class Dotnet implements Sandbox {
 				throw this.releaseBeforeSession(
 					operation,
 					`${this.languageLabel} execution cancelled`
+				);
+			}
+			const configuredWorkspaceFiles = options.workspaceFiles;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			const workspaceFilesSource =
+				configuredWorkspaceFiles === undefined ? [] : configuredWorkspaceFiles;
+			if (!Array.isArray(workspaceFilesSource)) {
+				throw new TypeError(`${this.languageLabel} workspace files must be an array`);
+			}
+			const workspaceLimitsSource = options.workspaceLimits;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			let workspaceLimits: SandboxExecutionOptions['workspaceLimits'] = {};
+			if (workspaceLimitsSource !== undefined) {
+				if (
+					workspaceLimitsSource === null ||
+					typeof workspaceLimitsSource !== 'object' ||
+					Array.isArray(workspaceLimitsSource)
+				) {
+					throw new TypeError(`${this.languageLabel} workspace limits must be an object`);
+				}
+				const maxFiles = workspaceLimitsSource.maxFiles;
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} execution cancelled`
+					);
+				}
+				if (maxFiles !== undefined && (!Number.isSafeInteger(maxFiles) || maxFiles < 0)) {
+					throw new WorkspaceValidationError(
+						'invalid-limit',
+						'Workspace limit maxFiles must be a non-negative safe integer'
+					);
+				}
+				const maxFileBytes = workspaceLimitsSource.maxFileBytes;
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} execution cancelled`
+					);
+				}
+				if (
+					maxFileBytes !== undefined &&
+					(!Number.isSafeInteger(maxFileBytes) || maxFileBytes < 0)
+				) {
+					throw new WorkspaceValidationError(
+						'invalid-limit',
+						'Workspace limit maxFileBytes must be a non-negative safe integer'
+					);
+				}
+				const maxTotalBytes = workspaceLimitsSource.maxTotalBytes;
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} execution cancelled`
+					);
+				}
+				if (
+					maxTotalBytes !== undefined &&
+					(!Number.isSafeInteger(maxTotalBytes) || maxTotalBytes < 0)
+				) {
+					throw new WorkspaceValidationError(
+						'invalid-limit',
+						'Workspace limit maxTotalBytes must be a non-negative safe integer'
+					);
+				}
+				const maxPathBytes = workspaceLimitsSource.maxPathBytes;
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} execution cancelled`
+					);
+				}
+				if (
+					maxPathBytes !== undefined &&
+					(!Number.isSafeInteger(maxPathBytes) || maxPathBytes < 0)
+				) {
+					throw new WorkspaceValidationError(
+						'invalid-limit',
+						'Workspace limit maxPathBytes must be a non-negative safe integer'
+					);
+				}
+				const caseSensitive = workspaceLimitsSource.caseSensitive;
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} execution cancelled`
+					);
+				}
+				if (caseSensitive !== undefined && typeof caseSensitive !== 'boolean') {
+					throw new WorkspaceValidationError(
+						'invalid-limit',
+						'Workspace limit caseSensitive must be a boolean'
+					);
+				}
+				workspaceLimits = {
+					maxFiles,
+					maxFileBytes,
+					maxTotalBytes,
+					maxPathBytes,
+					caseSensitive
+				};
+			}
+			const maxFiles = workspaceLimits.maxFiles ?? DEFAULT_WORKSPACE_LIMITS.maxFiles;
+			const workspaceFileCount = workspaceFilesSource.length;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			if (!Number.isSafeInteger(workspaceFileCount) || workspaceFileCount < 0) {
+				throw new WorkspaceValidationError(
+					'file-count-limit',
+					'.NET workspace file count must be a non-negative safe integer',
+					{ limit: maxFiles }
+				);
+			}
+			if (workspaceFileCount > maxFiles) {
+				throw new WorkspaceValidationError(
+					'file-count-limit',
+					`Workspace contains ${workspaceFileCount} files; limit is ${maxFiles}`,
+					{ limit: maxFiles, actual: workspaceFileCount }
+				);
+			}
+			const workspaceFiles: Array<{ path: string; content: string }> = [];
+			for (let index = 0; index < workspaceFileCount; index += 1) {
+				const file = workspaceFilesSource[index];
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} execution cancelled`
+					);
+				}
+				if (file === null || typeof file !== 'object') {
+					throw new TypeError(`${this.languageLabel} workspace file must be an object`);
+				}
+				const path = file.path;
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} execution cancelled`
+					);
+				}
+				const content = file.content;
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(
+						operation,
+						`${this.languageLabel} execution cancelled`
+					);
+				}
+				workspaceFiles.push({ path, content });
+			}
+			const configuredActivePath = options.activePath;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			const activePath =
+				configuredActivePath === undefined
+					? this.language === 'CSHARP'
+						? 'Program.cs'
+						: this.language === 'VBNET'
+							? 'Program.vb'
+							: 'Program.fs'
+					: configuredActivePath;
+			const maxFileBytes = Math.min(
+				workspaceLimits.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+				limits.maxWorkspaceBytes
+			);
+			const maxTotalBytes = Math.min(
+				workspaceLimits.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+				limits.maxWorkspaceBytes
+			);
+			const workspace = validateExecutionWorkspace(code, workspaceFiles, activePath, {
+				...workspaceLimits,
+				maxFileBytes,
+				maxTotalBytes
+			});
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(
+					operation,
+					`${this.languageLabel} execution cancelled`
+				);
+			}
+			if (workspace.workspaceFiles.length > 0) {
+				throw new RuntimeConfigurationError(
+					`${this.languageLabel} runtime does not support auxiliary workspace files`,
+					{ phase: 'execute', runtimeId: this.language }
 				);
 			}
 			const stdin = options.stdin;

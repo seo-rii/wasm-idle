@@ -198,6 +198,369 @@ End Module`;
 		);
 	});
 
+	it.each([
+		{
+			name: 'traversal active path',
+			code: 'A',
+			options: { activePath: '../Program.cs' },
+			expected: { code: 'invalid-path', path: '../Program.cs' }
+		},
+		{
+			name: 'absolute active path',
+			code: 'A',
+			options: { activePath: '/tmp/Program.cs' },
+			expected: { code: 'invalid-path', path: '/tmp/Program.cs' }
+		},
+		{
+			name: 'null active path',
+			code: 'A',
+			options: { activePath: null as never },
+			expected: { code: 'invalid-path', path: null }
+		},
+		{
+			name: 'URL-style path',
+			code: 'A',
+			options: {
+				workspaceFiles: [{ path: 'https://example.com/Helper.cs', content: 'B' }]
+			},
+			expected: { code: 'invalid-path', path: 'https://example.com/Helper.cs' }
+		},
+		{
+			name: 'empty path segment',
+			code: 'A',
+			options: { workspaceFiles: [{ path: 'src//Helper.cs', content: 'B' }] },
+			expected: { code: 'invalid-path', path: 'src//Helper.cs' }
+		},
+		{
+			name: 'NUL path',
+			code: 'A',
+			options: { workspaceFiles: [{ path: 'bad\0.cs', content: 'B' }] },
+			expected: { code: 'invalid-path', path: 'bad\0.cs' }
+		},
+		{
+			name: 'duplicate path',
+			code: 'A',
+			options: {
+				workspaceFiles: [
+					{ path: 'src/Helper.cs', content: 'B' },
+					{ path: 'src/Helper.cs', content: 'C' }
+				]
+			},
+			expected: { code: 'duplicate-path', path: 'src/Helper.cs' }
+		},
+		{
+			name: 'case-colliding path',
+			code: 'A',
+			options: {
+				workspaceFiles: [
+					{ path: 'SRC/Helper.cs', content: 'B' },
+					{ path: 'src/Helper.cs', content: 'C' }
+				]
+			},
+			expected: { code: 'case-collision', path: 'src/Helper.cs' }
+		},
+		{
+			name: 'invalid file content',
+			code: 'A',
+			options: {
+				workspaceFiles: [{ path: 'src/Helper.cs', content: null as never }]
+			},
+			expected: { code: 'invalid-content', path: 'src/Helper.cs' }
+		},
+		{
+			name: 'file count overflow',
+			code: 'A',
+			options: {
+				workspaceFiles: [{ path: 'src/Helper.cs', content: 'B' }],
+				workspaceLimits: { maxFiles: 1 }
+			},
+			expected: { code: 'file-count-limit', limit: 1, actual: 2 }
+		},
+		{
+			name: 'active source overflow clamped to execution limits',
+			code: '12345',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceLimits: { maxFileBytes: 100 }
+			},
+			expected: { code: 'file-size-limit', limit: 4, actual: 5 }
+		},
+		{
+			name: 'active path byte overflow',
+			code: 'A',
+			options: { workspaceLimits: { maxPathBytes: 9 } },
+			expected: { code: 'path-size-limit', path: 'Program.cs', limit: 9, actual: 10 }
+		},
+		{
+			name: 'invalid infinite workspace limit',
+			code: 'A',
+			options: { workspaceLimits: { maxFileBytes: Number.POSITIVE_INFINITY } },
+			expected: { code: 'invalid-limit' }
+		},
+		{
+			name: 'invalid null workspace limit',
+			code: 'A',
+			options: { workspaceLimits: { maxFiles: null as never } },
+			expected: { code: 'invalid-limit' }
+		},
+		{
+			name: 'invalid case-sensitivity limit',
+			code: 'A',
+			options: { workspaceLimits: { caseSensitive: null as never } },
+			expected: { code: 'invalid-limit' }
+		},
+		{
+			name: 'aggregate overflow clamped to execution limits',
+			code: '123',
+			options: {
+				limits: { maxWorkspaceBytes: 4 },
+				workspaceFiles: [{ path: 'src/Helper.cs', content: '45' }],
+				workspaceLimits: { maxTotalBytes: 100 }
+			},
+			expected: { code: 'total-size-limit', limit: 4, actual: 5 }
+		}
+	])(
+		'rejects a .NET workspace with $name before changing execution state',
+		async ({ code, options, expected }) => {
+			const sandbox = new Dotnet('CSHARP');
+			await sandbox.load('/absproxy/5173');
+			const worker = workerInstances[0];
+
+			await expect(
+				sandbox.run(code, false, true, undefined, [], options)
+			).rejects.toMatchObject({
+				name: 'WorkspaceValidationError',
+				...expected
+			});
+			expect(worker?.postMessage).toHaveBeenCalledOnce();
+			expect(worker?.terminate).not.toHaveBeenCalled();
+			expect(sandbox.uid).toBe(0);
+			expect(sandbox.exit).toBe(true);
+
+			await expect(sandbox.run('Console.WriteLine("retry");', false)).resolves.toBe(true);
+			expect(worker?.postMessage).toHaveBeenCalledTimes(2);
+		}
+	);
+
+	it('rejects a non-array .NET workspace before changing execution state', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+
+		await expect(
+			sandbox.run('Console.WriteLine("invalid");', false, true, undefined, [], {
+				workspaceFiles: null as never
+			})
+		).rejects.toThrow('C# workspace files must be an array');
+		expect(worker?.postMessage).toHaveBeenCalledOnce();
+		expect(worker?.terminate).not.toHaveBeenCalled();
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('enforces .NET maxFiles before reading any workspace array element', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const workspaceFiles = new Array<{ path: string; content: string }>(2);
+		let indexReads = 0;
+		Object.defineProperty(workspaceFiles, 0, {
+			configurable: true,
+			get() {
+				indexReads += 1;
+				throw new Error('workspace index must not be read');
+			}
+		});
+
+		await expect(
+			sandbox.run('Console.WriteLine("bounded");', false, true, undefined, [], {
+				workspaceFiles,
+				workspaceLimits: { maxFiles: 1 }
+			})
+		).rejects.toMatchObject({
+			name: 'WorkspaceValidationError',
+			code: 'file-count-limit',
+			limit: 1,
+			actual: 2
+		});
+		expect(indexReads).toBe(0);
+		expect(worker?.postMessage).toHaveBeenCalledOnce();
+		expect(worker?.terminate).not.toHaveBeenCalled();
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('rejects a non-object .NET workspace limit set before changing execution state', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+
+		await expect(
+			sandbox.run('Console.WriteLine("invalid");', false, true, undefined, [], {
+				workspaceLimits: null as never
+			})
+		).rejects.toThrow('C# workspace limits must be an object');
+		expect(worker?.postMessage).toHaveBeenCalledOnce();
+		expect(worker?.terminate).not.toHaveBeenCalled();
+		expect(sandbox.uid).toBe(0);
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it.each([false, true])(
+		'rejects unsupported auxiliary .NET files instead of silently ignoring them (prepare=%s)',
+		async (prepare) => {
+			const sandbox = new Dotnet('CSHARP');
+			await sandbox.load('/absproxy/5173');
+			const worker = workerInstances[0];
+			sandbox.write('queued before workspace rejection\n');
+
+			await expect(
+				sandbox.run('Console.WriteLine("main");', prepare, true, undefined, [], {
+					activePath: 'src/Program.cs',
+					workspaceFiles: [{ path: 'src/Helper.cs', content: 'class Helper {}' }]
+				})
+			).rejects.toMatchObject({
+				name: 'RuntimeConfigurationError',
+				code: 'runtime-configuration',
+				phase: 'execute',
+				runtimeId: 'CSHARP'
+			});
+			expect(worker?.postMessage).toHaveBeenCalledOnce();
+			expect(worker?.terminate).not.toHaveBeenCalled();
+			expect(sandbox.uid).toBe(0);
+			expect(sandbox.exit).toBe(true);
+			expect(sandbox.pendingInput).toEqual(['queued before workspace rejection\n']);
+
+			await expect(sandbox.run('Console.WriteLine("retry");', false)).resolves.toBe(true);
+		}
+	);
+
+	it.each([
+		['FSHARP' as const, 'Program.fs', 'printfn "canonical"'],
+		['CSHARP' as const, 'Program.cs', 'Console.WriteLine("canonical");'],
+		[
+			'VBNET' as const,
+			'Program.vb',
+			'Module Program\nSub Main()\nConsole.WriteLine("canonical")\nEnd Sub\nEnd Module'
+		]
+	])(
+		'uses %s default active path %s as the authoritative source',
+		async (language, path, code) => {
+			const sandbox = new Dotnet(language);
+			await sandbox.load('/absproxy/5173');
+			const worker = workerInstances[0];
+
+			await expect(
+				sandbox.run(code, false, true, undefined, [], {
+					workspaceFiles: [{ path, content: 'stale source' }],
+					workspaceLimits: { maxFiles: 1 }
+				})
+			).resolves.toBe(true);
+			expect(worker?.postMessage).toHaveBeenNthCalledWith(
+				2,
+				expect.objectContaining({ code })
+			);
+		}
+	);
+
+	it('accepts one canonical active .NET source without treating its stale copy as auxiliary', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const code = 'Console.WriteLine("canonical");';
+
+		await expect(
+			sandbox.run(code, false, true, undefined, [], {
+				activePath: 'src\\Program.cs',
+				workspaceFiles: [{ path: 'src/Program.cs', content: 'stale source' }],
+				workspaceLimits: { maxFiles: 1 }
+			})
+		).resolves.toBe(true);
+		expect(worker?.postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({ code, language: 'csharp' })
+		);
+	});
+
+	it('stops reading a .NET workspace file after its path getter replaces the owner', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		const originalWorker = workerInstances[0];
+		const reason = new Error('terminate dotnet workspace path snapshot');
+		const laterFailure = new Error('late dotnet workspace content getter failure');
+		let replacement: Promise<void> | undefined;
+		let contentReads = 0;
+		const workspaceFile = {} as { path: string; content: string };
+		Object.defineProperty(workspaceFile, 'path', {
+			configurable: true,
+			get() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/absproxy/5173');
+				return 'src/Helper.cs';
+			}
+		});
+		Object.defineProperty(workspaceFile, 'content', {
+			configurable: true,
+			get() {
+				contentReads += 1;
+				sandbox.terminate(laterFailure);
+				throw laterFailure;
+			}
+		});
+
+		await expect(
+			sandbox.run('Console.WriteLine("snapshot");', false, true, undefined, [], {
+				workspaceFiles: [workspaceFile]
+			})
+		).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(contentReads).toBe(0);
+		expect(originalWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('stops reading .NET workspace limits after the first getter replaces the owner', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load('/absproxy/5173');
+		const originalWorker = workerInstances[0];
+		const reason = new Error('terminate dotnet workspace limit snapshot');
+		const laterFailure = new Error('late dotnet workspace limit getter failure');
+		let replacement: Promise<void> | undefined;
+		let laterReads = 0;
+		const workspaceLimits = {} as {
+			maxFiles: number;
+			maxFileBytes: number;
+		};
+		Object.defineProperty(workspaceLimits, 'maxFiles', {
+			configurable: true,
+			get() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/absproxy/5173');
+				return 1;
+			}
+		});
+		Object.defineProperty(workspaceLimits, 'maxFileBytes', {
+			configurable: true,
+			get() {
+				laterReads += 1;
+				sandbox.terminate(laterFailure);
+				throw laterFailure;
+			}
+		});
+
+		await expect(
+			sandbox.run('Console.WriteLine("snapshot");', false, true, undefined, [], {
+				workspaceLimits
+			})
+		).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(laterReads).toBe(0);
+		expect(originalWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
 	it('rejects pre-aborted startup and execution without changing dotnet state', async () => {
 		const sandbox = new Dotnet('CSHARP');
 		const startupController = new AbortController();
@@ -1634,6 +1997,54 @@ export async function executeBrowserDotnetArtifact() {
 		expect(execute).toHaveBeenCalledWith(
 			{ id: 'snapshot-artifact' },
 			expect.objectContaining({ args: ['original-arg'], stdin: 'original-stdin' })
+		);
+	});
+
+	it('preserves the main-thread cache and stdin when a workspace is rejected', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const artifact = { id: 'cached-before-workspace-rejection' };
+		const compile = vi.fn(async () => ({ success: true, artifact }));
+		const execute = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		const compiler = { compile };
+		const runtimeModule = {
+			createDotnetCompiler: () => compiler,
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.runtimeModule = runtimeModule;
+		sandbox.compiler = compiler;
+		const code = 'Console.WriteLine("cache");';
+		await expect(sandbox.run(code, true)).resolves.toBe(true);
+		const cacheKey = sandbox.compiledCacheKey;
+		const uid = sandbox.uid;
+		sandbox.write('queued before main-thread workspace rejection\n');
+
+		await expect(
+			sandbox.run(code, false, true, undefined, [], {
+				workspaceFiles: [{ path: 'Helper.cs', content: 'class Helper {}' }]
+			})
+		).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'execute',
+			runtimeId: 'CSHARP'
+		});
+		expect(compile).toHaveBeenCalledOnce();
+		expect(execute).not.toHaveBeenCalled();
+		expect(sandbox.compiledArtifact).toBe(artifact);
+		expect(sandbox.compiledCacheKey).toBe(cacheKey);
+		expect(sandbox.compiledRuntimeModule).toBe(runtimeModule);
+		expect(sandbox.compiledCompiler).toBe(compiler);
+		expect(sandbox.compiledCompile).toBe(compile);
+		expect(sandbox.compiledExecute).toBe(execute);
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.exit).toBe(true);
+		expect(sandbox.pendingInput).toEqual(['queued before main-thread workspace rejection\n']);
+
+		await expect(sandbox.run(code, false)).resolves.toBe(true);
+		expect(compile).toHaveBeenCalledOnce();
+		expect(execute).toHaveBeenCalledWith(
+			artifact,
+			expect.objectContaining({ stdin: 'queued before main-thread workspace rejection\n' })
 		);
 	});
 
