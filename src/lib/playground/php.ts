@@ -13,7 +13,7 @@ import {
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
-import { BusyError } from '@wasm-idle/core';
+import { BusyError, TimeoutError, resolveExecutionLimits } from '@wasm-idle/core';
 
 type PhpOperation = {
 	token: symbol;
@@ -22,7 +22,17 @@ type PhpOperation = {
 	cancellationReason?: unknown;
 	explicitStdin: boolean;
 	ownsStdin: boolean;
+	cleanedUp: boolean;
+	cleanups: Array<() => void>;
 };
+
+const abortReason = (signal: AbortSignal, phase: PhpOperation['phase']) =>
+	signal.reason !== undefined
+		? signal.reason
+		: new DOMException(
+				phase === 'startup' ? 'PHP runtime startup aborted' : 'PHP execution aborted',
+				'AbortError'
+			);
 
 class Php implements Sandbox {
 	output: any = null;
@@ -61,7 +71,9 @@ class Php implements Sandbox {
 			phase,
 			cancelled: false,
 			explicitStdin: false,
-			ownsStdin: false
+			ownsStdin: false,
+			cleanedUp: false,
+			cleanups: []
 		};
 		this.activeOperation = operation;
 		return operation;
@@ -75,6 +87,76 @@ class Php implements Sandbox {
 		if (this.activeOperation?.token !== operation.token) return false;
 		this.activeOperation = null;
 		return true;
+	}
+
+	private cleanupOperation(operation: PhpOperation) {
+		if (operation.cleanedUp) return;
+		operation.cleanedUp = true;
+		const cleanups = operation.cleanups.splice(0);
+		for (const cleanup of cleanups) {
+			try {
+				cleanup();
+			} catch {
+				// Caller-owned lifecycle cleanup must not replace the operation result.
+			}
+		}
+	}
+
+	private releaseBeforeSession(operation: PhpOperation, reason: unknown) {
+		const outcome = operation.cancelled ? operation.cancellationReason : reason;
+		this.releaseOperation(operation);
+		this.cleanupOperation(operation);
+		return outcome;
+	}
+
+	private bindAbortSignal(operation: PhpOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return;
+		let registered = false;
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			this.cancelOperation(operation, reason);
+		};
+		operation.cleanups.push(() => {
+			if (registered) signal.removeEventListener('abort', onAbort);
+		});
+		try {
+			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			this.cancelOperation(operation, error);
+		}
+	}
+
+	private bindOperationTimeout(operation: PhpOperation, timeoutMs: number) {
+		if (!this.isOperationActive(operation)) return;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		operation.cleanups.push(() => {
+			if (timeout !== undefined) clearTimeout(timeout);
+		});
+		try {
+			timeout = setTimeout(() => {
+				if (!this.isOperationActive(operation)) return;
+				const label = operation.phase === 'startup' ? 'startup' : 'execution';
+				this.cancelOperation(
+					operation,
+					new TimeoutError(`PHP ${label} timed out after ${timeoutMs} ms`, {
+						phase: operation.phase,
+						runtimeId: 'PHP',
+						timeoutMs
+					})
+				);
+			}, timeoutMs);
+			if (operation.cleanedUp) clearTimeout(timeout);
+		} catch (error) {
+			this.cancelOperation(operation, error);
+		}
 	}
 
 	private resetSharedStdinBuffer() {
@@ -107,12 +189,26 @@ class Php implements Sandbox {
 		if (resetSharedBuffer) this.resetSharedStdinBuffer();
 	}
 
+	private cancelOperation(operation: PhpOperation, reason: unknown) {
+		if (!this.isOperationActive(operation)) return;
+		operation.cancelled = true;
+		operation.cancellationReason = reason;
+		this.finishRunStdin(operation);
+		this.activeOperation = null;
+		this.waitingForInput = false;
+		this.pendingEof = false;
+		this.uid += 1;
+		this.exit = true;
+		this.workerSession.terminate(reason);
+		this.cleanupOperation(operation);
+	}
+
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
 		let activeOperation: PhpOperation;
@@ -121,14 +217,34 @@ class Php implements Sandbox {
 		} catch (error) {
 			return Promise.reject(error);
 		}
+		let limits: ReturnType<typeof resolveExecutionLimits>;
+		let signal: AbortSignal | undefined;
+		try {
+			limits = resolveExecutionLimits(options.limits);
+			signal = options.signal;
+			if (signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, abortReason(signal, 'startup'))
+				);
+			}
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
+		}
+		if (!this.isOperationActive(activeOperation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(activeOperation, 'PHP runtime startup cancelled')
+			);
+		}
 		const loading = this.workerSession.load(async (resolve, reject) => {
 			const resolveOperation = () => {
 				if (!this.releaseOperation(activeOperation)) return;
 				resolve();
+				this.cleanupOperation(activeOperation);
 			};
 			const rejectOperation = (reason?: unknown) => {
 				if (!this.releaseOperation(activeOperation)) return;
 				reject(reason);
+				this.cleanupOperation(activeOperation);
 			};
 			try {
 				if (!this.isOperationActive(activeOperation)) return;
@@ -209,8 +325,12 @@ class Php implements Sandbox {
 				rejectOperation(error);
 			}
 		});
+		const timeoutMs = Math.min(2_147_483_647, limits.assetTimeoutMs + limits.startupTimeoutMs);
+		this.bindOperationTimeout(activeOperation, timeoutMs);
+		this.bindAbortSignal(activeOperation, signal);
 		return loading.finally(() => {
 			this.releaseOperation(activeOperation);
+			this.cleanupOperation(activeOperation);
 		});
 	}
 
@@ -253,10 +373,8 @@ class Php implements Sandbox {
 			return Promise.reject(error);
 		}
 		const worker = this.worker;
-		if (!worker) {
-			this.releaseOperation(activeOperation);
-			return Promise.reject('Worker not loaded');
-		}
+		let limits: ReturnType<typeof resolveExecutionLimits>;
+		let signal: AbortSignal | undefined;
 		let request: {
 			programArgs: string[];
 			stdin: string | undefined;
@@ -264,6 +382,13 @@ class Php implements Sandbox {
 			workspaceFiles: NonNullable<SandboxExecutionOptions['workspaceFiles']>;
 		};
 		try {
+			limits = resolveExecutionLimits(options.limits);
+			signal = options.signal;
+			if (signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, abortReason(signal, 'execute'))
+				);
+			}
 			request = {
 				programArgs: resolveSandboxExecutionArgs('PHP', args, options).programArgs,
 				stdin: options.stdin,
@@ -271,22 +396,27 @@ class Php implements Sandbox {
 				workspaceFiles: options.workspaceFiles || []
 			};
 		} catch (error) {
-			this.releaseOperation(activeOperation);
-			return Promise.reject(
-				activeOperation.cancelled ? activeOperation.cancellationReason : error
-			);
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
+		}
+		if (!worker) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, 'Worker not loaded'));
 		}
 		if (!this.isOperationActive(activeOperation) || this.worker !== worker) {
-			return Promise.reject(
-				activeOperation.cancelled ? activeOperation.cancellationReason : 'Worker not loaded'
-			);
+			return Promise.reject(this.releaseBeforeSession(activeOperation, 'Worker not loaded'));
 		}
 		const hasExplicitStdin = request.stdin !== undefined;
 		this.prepareRunStdin(activeOperation, hasExplicitStdin);
 		this.exit = false;
 		const running = new Promise<boolean | string>((resolve, reject) => {
-			const runUid = ++this.uid;
 			const workerOperation = this.workerSession.beginRun(worker, reject);
+			const timeoutMs = Math.min(
+				2_147_483_647,
+				limits.compileTimeoutMs + limits.runTimeoutMs
+			);
+			this.bindOperationTimeout(activeOperation, timeoutMs);
+			this.bindAbortSignal(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) return;
+			const runUid = ++this.uid;
 			let handler: (event: Event & { data: any }) => void;
 			const ownsRun = () =>
 				this.isOperationActive(activeOperation) &&
@@ -305,6 +435,7 @@ class Php implements Sandbox {
 				settleRunState();
 				this.workerSession.complete(workerOperation);
 				this.releaseOperation(activeOperation);
+				this.cleanupOperation(activeOperation);
 				try {
 					if (worker.onmessage === handler) worker.onmessage = null;
 				} catch {
@@ -370,12 +501,14 @@ class Php implements Sandbox {
 			}
 		});
 		return running.finally(() => {
-			if (!this.isOperationActive(activeOperation)) return;
-			this.finishRunStdin(activeOperation);
-			this.releaseOperation(activeOperation);
-			this.exit = true;
-			this.waitingForInput = false;
-			this.pendingEof = false;
+			if (this.isOperationActive(activeOperation)) {
+				this.finishRunStdin(activeOperation);
+				this.releaseOperation(activeOperation);
+				this.exit = true;
+				this.waitingForInput = false;
+				this.pendingEof = false;
+			}
+			this.cleanupOperation(activeOperation);
 		});
 	}
 
@@ -386,10 +519,8 @@ class Php implements Sandbox {
 	terminate(reason: unknown = 'Process terminated') {
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
-			activeOperation.cancelled = true;
-			activeOperation.cancellationReason = reason;
-			this.finishRunStdin(activeOperation);
-			this.releaseOperation(activeOperation);
+			this.cancelOperation(activeOperation, reason);
+			return;
 		}
 		this.waitingForInput = false;
 		this.pendingEof = false;
