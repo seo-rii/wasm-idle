@@ -74,6 +74,41 @@ describe('SQLite workspace boundary', () => {
 		);
 	});
 
+	it('preserves termination ownership when workspace getters start a replacement load', async () => {
+		const sandbox = new Sqlite();
+		await sandbox.load('/assets');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace SQLite during validation');
+		const laterError = new Error('SQLite workspace getter failed after replacement');
+		let replacement: Promise<void> | undefined;
+		const options: SandboxExecutionOptions = {};
+		Object.defineProperty(options, 'workspaceFiles', {
+			get() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement');
+				void replacement.catch(() => undefined);
+				return [];
+			}
+		});
+		Object.defineProperty(options, 'activePath', {
+			get() {
+				throw laterError;
+			}
+		});
+
+		await expect(sandbox.run('select 1;', false, true, undefined, [], options)).rejects.toBe(
+			reason
+		);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+
+		await expect(sandbox.run('select 2;', false)).resolves.toBe(true);
+		expect(workerInstances[1].postMessage).toHaveBeenCalledTimes(2);
+	});
+
 	it.each([
 		{
 			name: 'active path traversal',

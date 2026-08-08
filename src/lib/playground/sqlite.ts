@@ -18,6 +18,7 @@ type SqliteOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
+	cancellationReason?: unknown;
 };
 
 class Sqlite implements Sandbox {
@@ -67,6 +68,12 @@ class Sqlite implements Sandbox {
 		if (this.activeOperation?.token !== operation.token) return false;
 		this.activeOperation = null;
 		return true;
+	}
+
+	private releaseBeforeSession(operation: SqliteOperation, reason: unknown) {
+		const outcome = operation.cancelled ? operation.cancellationReason : reason;
+		this.releaseOperation(operation);
+		return outcome;
 	}
 
 	load(
@@ -185,9 +192,13 @@ class Sqlite implements Sandbox {
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
 		let activeOperation: SqliteOperation;
+		try {
+			activeOperation = this.beginOperation('execute');
+		} catch (error) {
+			return Promise.reject(error);
+		}
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		try {
-			this.requireOperationIdle();
 			const limits = resolveExecutionLimits(options.limits);
 			workspace = validateExecutionWorkspace(
 				code,
@@ -207,14 +218,22 @@ class Sqlite implements Sandbox {
 					)
 				}
 			);
-			activeOperation = this.beginOperation('execute');
+			if (!this.isOperationActive(activeOperation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'SQLite execution cancelled')
+				);
+			}
 		} catch (error) {
-			return Promise.reject(error);
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
+		}
+		if (!this.isOperationActive(activeOperation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(activeOperation, 'SQLite execution cancelled')
+			);
 		}
 		const worker = this.worker;
 		if (!worker) {
-			this.releaseOperation(activeOperation);
-			return Promise.reject('Worker not loaded');
+			return Promise.reject(this.releaseBeforeSession(activeOperation, 'Worker not loaded'));
 		}
 		this.exit = false;
 		const running = new Promise<boolean | string>((resolve, reject) => {
@@ -302,6 +321,7 @@ class Sqlite implements Sandbox {
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			activeOperation.cancelled = true;
+			activeOperation.cancellationReason = reason;
 			this.releaseOperation(activeOperation);
 		}
 		this.uid += 1;
