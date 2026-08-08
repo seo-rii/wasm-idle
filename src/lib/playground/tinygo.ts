@@ -18,7 +18,13 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
-import { BusyError } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_EXECUTION_LIMITS,
+	TimeoutError,
+	resolveExecutionLimits,
+	type ExecutionLimits
+} from '@wasm-idle/core';
 
 type TinyGoRuntimeHooks = {
 	boot(): Promise<void>;
@@ -77,6 +83,8 @@ type TinyGoRuntimeProgressOwner = {
 };
 
 const ACTIVITY_PREFIX_PATTERN = /^\[\d{2}:\d{2}:\d{2}\]\s?/gm;
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const EXECUTION_LIMIT_KEYS = Object.keys(DEFAULT_EXECUTION_LIMITS) as Array<keyof ExecutionLimits>;
 
 const abortReason = (signal: AbortSignal, phase: TinyGoOperation['phase']) => {
 	const reason = signal.reason;
@@ -220,9 +228,30 @@ class TinyGo implements Sandbox {
 		}
 	}
 
+	private snapshotExecutionLimits(
+		operation: TinyGoOperation,
+		configured: Partial<ExecutionLimits> | undefined
+	) {
+		const snapshot: Partial<ExecutionLimits> = {};
+		if (configured) {
+			for (const key of EXECUTION_LIMIT_KEYS) {
+				this.assertOperation(operation);
+				const enumerable = Object.prototype.propertyIsEnumerable.call(configured, key);
+				this.assertOperation(operation);
+				if (!enumerable) continue;
+				const value = configured[key];
+				this.assertOperation(operation);
+				if (value !== undefined) snapshot[key] = value;
+			}
+		}
+		const limits = resolveExecutionLimits(snapshot);
+		this.assertOperation(operation);
+		return limits;
+	}
+
 	private executeOperation<T>(
 		phase: TinyGoOperation['phase'],
-		options: Pick<SandboxExecutionOptions, 'signal'>,
+		options: Pick<SandboxExecutionOptions, 'limits' | 'signal'>,
 		execute: (operation: TinyGoOperation) => Promise<T>
 	): Promise<T> {
 		let operation: TinyGoOperation;
@@ -236,9 +265,19 @@ class TinyGo implements Sandbox {
 			let settled = false;
 			let signal: AbortSignal | undefined;
 			let onAbort: (() => void) | undefined;
+			let deadline: ReturnType<typeof setTimeout> | undefined;
 			const cleanup = () => {
 				delete operation.reject;
 				this.completeOperation(operation);
+				if (deadline !== undefined) {
+					const settledDeadline = deadline;
+					deadline = undefined;
+					try {
+						clearTimeout(settledDeadline);
+					} catch {
+						// Timer cleanup must not replace the operation result.
+					}
+				}
 				if (signal && onAbort) {
 					try {
 						signal.removeEventListener('abort', onAbort);
@@ -313,6 +352,49 @@ class TinyGo implements Sandbox {
 				}
 			}
 			if (settled) return;
+			let limits: ExecutionLimits;
+			try {
+				const configuredLimits = options.limits;
+				if (settled) return;
+				limits = this.snapshotExecutionLimits(operation, configuredLimits);
+			} catch (error) {
+				rejectOperation(operation.cancelled ? operation.reason : error);
+				return;
+			}
+			if (settled) return;
+			const timeoutMs = Math.min(
+				MAX_TIMER_DELAY_MS,
+				phase === 'startup'
+					? limits.assetTimeoutMs + limits.startupTimeoutMs
+					: limits.compileTimeoutMs + limits.runTimeoutMs
+			);
+			let scheduledDeadline: ReturnType<typeof setTimeout>;
+			try {
+				scheduledDeadline = setTimeout(() => {
+					if (!this.isOperationActive(operation)) return;
+					const label = phase === 'startup' ? 'runtime startup' : 'execution';
+					this.cancelOperation(
+						operation,
+						new TimeoutError(`TinyGo ${label} timed out after ${timeoutMs} ms`, {
+							phase,
+							runtimeId: 'TINYGO',
+							timeoutMs
+						})
+					);
+				}, timeoutMs);
+			} catch (error) {
+				rejectOperation(error);
+				return;
+			}
+			if (settled || !this.isOperationActive(operation)) {
+				try {
+					clearTimeout(scheduledDeadline);
+				} catch {
+					// A synchronously settled deadline is already detached.
+				}
+				return;
+			}
+			deadline = scheduledDeadline;
 
 			void Promise.resolve()
 				.then(() => {

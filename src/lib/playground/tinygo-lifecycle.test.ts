@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 type RuntimeFixtureState = {
 	bootCalls: number;
@@ -191,6 +191,10 @@ describe('TinyGo operation lifecycle', () => {
 		window.history.replaceState({}, '', 'http://localhost:3000/');
 		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
 		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it('rejects load and run calls that overlap TinyGo startup', async () => {
@@ -465,6 +469,200 @@ describe('TinyGo operation lifecycle', () => {
 		expect(workerInstances[1]?.terminate).toHaveBeenCalledOnce();
 		expect(runtimeFixtureState.runtimeRecords[1]?.disposeCalls).toBe(1);
 		sandbox.buffer = originalBuffer;
+	});
+
+	it('stops TinyGo limit snapshots after cancellation and preserves the replacement', async () => {
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace TinyGo during execution limit snapshot');
+		const laterError = new Error('later TinyGo limit getter failed');
+		let laterReads = 0;
+		let replacement: Promise<void> | undefined;
+		const limits = {
+			get assetTimeoutMs() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load(runtimeAssets);
+				void replacement.catch(() => undefined);
+				return 1;
+			},
+			get startupTimeoutMs(): never {
+				laterReads += 1;
+				throw laterError;
+			}
+		};
+
+		const superseded = sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+			limits
+		});
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(laterReads).toBe(0);
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('rejects invalid TinyGo deadlines without changing a loaded runtime', async () => {
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const worker = workerInstances[0];
+		const runtime = sandbox.runtime;
+		const moduleUrl = sandbox.moduleUrl;
+		sandbox.write('queued\n');
+
+		await expect(
+			sandbox.load(runtimeAssets, '', true, [], {
+				limits: { assetTimeoutMs: 0 }
+			})
+		).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration'
+		});
+		await expect(
+			sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+				limits: { compileTimeoutMs: Number.POSITIVE_INFINITY }
+			})
+		).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration'
+		});
+
+		expect(sandbox.worker).toBe(worker);
+		expect(worker?.terminate).not.toHaveBeenCalled();
+		expect(sandbox.runtime).toBe(runtime);
+		expect(sandbox.moduleUrl).toBe(moduleUrl);
+		expect(sandbox.pendingInput).toEqual(['queued\n']);
+		expect(runtimeFixtureState.bootCalls).toBe(0);
+	});
+
+	it('enforces the aggregate TinyGo startup deadline and ignores stale readiness', async () => {
+		vi.useFakeTimers();
+		autoResolveLoad = false;
+		const sandbox = new TinyGo();
+		const loading = sandbox.load(runtimeAssets, '', true, [], {
+			limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
+		});
+		const rejected = expect(loading).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'startup',
+			runtimeId: 'TINYGO',
+			timeoutMs: 12
+		});
+		await vi.dynamicImportSettled();
+		await vi.advanceTimersByTimeAsync(0);
+		const retiredWorker = workerInstances[0];
+		const staleReady = retiredWorker?.onmessage;
+
+		await vi.advanceTimersByTimeAsync(12);
+		await rejected;
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleReady?.({ data: { load: true } } as MessageEvent<unknown>);
+		autoResolveLoad = true;
+		vi.useRealTimers();
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('enforces the aggregate TinyGo compiler deadline and remains reusable', async () => {
+		let releaseBoot!: () => void;
+		runtimeFixtureState.bootGate = new Promise<void>((resolve) => {
+			releaseBoot = resolve;
+		});
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const retiredRuntime = runtimeFixtureState.runtimeRecords[0];
+		vi.useFakeTimers();
+		const running = sandbox.run('package main\nfunc main() {}', true, true, undefined, [], {
+			limits: { compileTimeoutMs: 4, runTimeoutMs: 6 }
+		});
+		const rejected = expect(running).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'TINYGO',
+			timeoutMs: 10
+		});
+		await vi.advanceTimersByTimeAsync(0);
+		expect(runtimeFixtureState.bootCalls).toBe(1);
+
+		await vi.advanceTimersByTimeAsync(10);
+		await rejected;
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(retiredRuntime?.disposeCalls).toBe(1);
+
+		runtimeFixtureState.bootGate = Promise.resolve();
+		releaseBoot();
+		await vi.advanceTimersByTimeAsync(0);
+		vi.useRealTimers();
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+		await expect(sandbox.run('package main\nfunc main() {}', true)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('enforces the aggregate TinyGo execution-worker deadline and remains reusable', async () => {
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		autoResolveRun = false;
+		vi.useFakeTimers();
+		const running = sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+			limits: { compileTimeoutMs: 4, runTimeoutMs: 6 }
+		});
+		const rejected = expect(running).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'TINYGO',
+			timeoutMs: 10
+		});
+		await vi.advanceTimersByTimeAsync(0);
+		expect(retiredWorker?.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ artifact: expect.any(Uint8Array) })
+		);
+		const staleResult = retiredWorker?.onmessage;
+
+		await vi.advanceTimersByTimeAsync(10);
+		await rejected;
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleResult?.({ data: { output: 'stale output', results: true } } as MessageEvent<unknown>);
+		autoResolveRun = true;
+		vi.useRealTimers();
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+		await expect(sandbox.run('package main\nfunc main() {}', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('clears settled TinyGo deadlines before they can retire an idle runtime', async () => {
+		vi.useFakeTimers();
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets, '', true, [], {
+			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
+		});
+		const worker = workerInstances[0];
+		const runtime = runtimeFixtureState.runtimeRecords[0];
+		await expect(
+			sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+				limits: { compileTimeoutMs: 2, runTimeoutMs: 3 }
+			})
+		).resolves.toBe(true);
+
+		await vi.advanceTimersByTimeAsync(5_000);
+
+		expect(sandbox.worker).toBe(worker);
+		expect(worker?.terminate).not.toHaveBeenCalled();
+		expect(runtime?.disposeCalls).toBe(0);
 	});
 
 	it('aborts TinyGo before its scheduled startup can mutate configuration', async () => {
