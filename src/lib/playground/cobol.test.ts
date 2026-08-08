@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$env/dynamic/public', () => ({
 	env: {}
@@ -57,12 +57,17 @@ import { readBufferedStdin } from './stdinBuffer';
 
 describe('COBOL sandbox workspace boundary', () => {
 	beforeEach(() => {
+		vi.useRealTimers();
 		workerInstances.length = 0;
 		autoResolveLoad = true;
 		autoResolveRun = true;
 		loadDispatchError = undefined;
 		runDispatchError = undefined;
 		cachedLoadDispatchError = undefined;
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it('canonicalizes the active path and workspace files before worker dispatch', async () => {
@@ -1295,5 +1300,85 @@ describe('COBOL sandbox workspace boundary', () => {
 		expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
 			expect.objectContaining({ stdin: 'captured input\n' })
 		);
+	});
+
+	it('enforces the aggregate COBOL startup deadline and ignores stale readiness', async () => {
+		vi.useFakeTimers();
+		autoResolveLoad = false;
+		const sandbox = new Cobol();
+		const loading = sandbox.load('/assets', '', true, [], {
+			limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
+		});
+		const rejected = expect(loading).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'startup',
+			runtimeId: 'COBOL',
+			timeoutMs: 12
+		});
+		await vi.dynamicImportSettled();
+		const retiredWorker = workerInstances[0];
+		const staleHandler = retiredWorker.onmessage;
+
+		await vi.advanceTimersByTimeAsync(12);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		autoResolveLoad = true;
+		await expect(sandbox.load('/assets')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('enforces the aggregate COBOL execution deadline and permits a clean retry', async () => {
+		const sandbox = new Cobol();
+		await sandbox.load('/assets');
+		const retiredWorker = workerInstances[0];
+		autoResolveRun = false;
+		vi.useFakeTimers();
+		const running = sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+			limits: { compileTimeoutMs: 4, runTimeoutMs: 6 }
+		});
+		const rejected = expect(running).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'COBOL',
+			timeoutMs: 10
+		});
+		const staleHandler = retiredWorker.onmessage;
+
+		await vi.advanceTimersByTimeAsync(10);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { output: 'stale output', results: true } } as MessageEvent<any>);
+		autoResolveLoad = true;
+		autoResolveRun = true;
+		await sandbox.load('/assets');
+		await expect(sandbox.run('PROGRAM-ID. RETRY.', false)).resolves.toBe(true);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('clears settled COBOL deadlines before they can retire an idle worker', async () => {
+		vi.useFakeTimers();
+		const sandbox = new Cobol();
+		await sandbox.load('/assets', '', true, [], {
+			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
+		});
+		const worker = workerInstances[0];
+		await expect(
+			sandbox.run('IDENTIFICATION DIVISION.', false, true, undefined, [], {
+				limits: { compileTimeoutMs: 2, runTimeoutMs: 3 }
+			})
+		).resolves.toBe(true);
+
+		await vi.advanceTimersByTimeAsync(10);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		await expect(sandbox.run('PROGRAM-ID. RETRY.', false)).resolves.toBe(true);
 	});
 });
