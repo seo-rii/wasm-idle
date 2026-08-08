@@ -17,6 +17,14 @@ import {
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
+import { BusyError } from '@wasm-idle/core';
+
+type RubyOperation = {
+	token: symbol;
+	phase: 'startup' | 'execute';
+	cancelled: boolean;
+	cancellationReason?: unknown;
+};
 
 class Ruby implements Sandbox {
 	output: any = null;
@@ -32,15 +40,49 @@ class Ruby implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
+	private activeOperation: RubyOperation | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'Ruby',
 		onDispose: (worker) => {
-			if (this.worker === worker) delete this.worker;
+			if (this.worker !== worker) return;
+			delete this.worker;
 			this.exit = true;
 			this.waitingForInput = false;
 			this.pendingEof = false;
 		}
 	});
+
+	private beginOperation(phase: RubyOperation['phase']) {
+		if (this.activeOperation) {
+			throw new BusyError('Ruby runtime already has an active operation', {
+				runtimeId: 'RUBY',
+				phase: this.activeOperation.phase
+			});
+		}
+		const operation: RubyOperation = {
+			token: Symbol(phase),
+			phase,
+			cancelled: false
+		};
+		this.activeOperation = operation;
+		return operation;
+	}
+
+	private isOperationActive(operation: RubyOperation) {
+		return this.activeOperation?.token === operation.token && !operation.cancelled;
+	}
+
+	private releaseOperation(operation: RubyOperation) {
+		if (this.activeOperation?.token !== operation.token) return false;
+		this.activeOperation = null;
+		return true;
+	}
+
+	private releaseBeforeSession(operation: RubyOperation, reason: unknown) {
+		const outcome = operation.cancelled ? operation.cancellationReason : reason;
+		this.releaseOperation(operation);
+		return outcome;
+	}
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -50,39 +92,99 @@ class Ruby implements Sandbox {
 		_options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		return this.workerSession.load(async (resolve, reject) => {
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const nextWasmUrl = resolveRubyWasmUrl(runtimeAssets, currentUrl);
-			const nextModuleUrl = resolveRubyRuntimeModuleUrl(runtimeAssets, currentUrl);
-			const needsWorkerReset =
-				!this.worker || this.wasmUrl !== nextWasmUrl || this.moduleUrl !== nextModuleUrl;
-			this.wasmUrl = nextWasmUrl;
-			this.moduleUrl = nextModuleUrl;
-			if (needsWorkerReset && this.worker) {
-				this.workerSession.reset();
-			}
-			if (!this.worker) {
-				this.worker = new (await import('$lib/playground/worker/ruby?worker')).default();
-				this.workerSession.attach(this.worker);
-				this.worker.onmessage = (event: MessageEvent<any>) => {
-					if (event.data?.load) {
-						progress?.set?.(1);
-						resolve();
-					}
-					if (event.data?.error) reject(event.data.error);
-				};
-				this.worker.postMessage({
-					load: true,
-					moduleUrl: this.moduleUrl,
-					wasmUrl: this.wasmUrl
-				});
-			} else {
-				progress?.set?.(1);
+		let activeOperation: RubyOperation;
+		try {
+			activeOperation = this.beginOperation('startup');
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		const loading = this.workerSession.load(async (resolve, reject) => {
+			const resolveOperation = () => {
+				if (!this.releaseOperation(activeOperation)) return;
 				resolve();
+			};
+			const rejectOperation = (reason?: unknown) => {
+				if (!this.releaseOperation(activeOperation)) return;
+				reject(reason);
+			};
+			try {
+				if (!this.isOperationActive(activeOperation)) return;
+				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				const nextWasmUrl = resolveRubyWasmUrl(runtimeAssets, currentUrl);
+				if (!this.isOperationActive(activeOperation)) return;
+				const nextModuleUrl = resolveRubyRuntimeModuleUrl(runtimeAssets, currentUrl);
+				if (!this.isOperationActive(activeOperation)) return;
+				const needsWorkerReset =
+					!this.worker ||
+					this.wasmUrl !== nextWasmUrl ||
+					this.moduleUrl !== nextModuleUrl;
+				if (needsWorkerReset && this.worker) this.workerSession.reset();
+				if (!this.isOperationActive(activeOperation)) return;
+				this.wasmUrl = nextWasmUrl;
+				this.moduleUrl = nextModuleUrl;
+				this.pendingInput = [];
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				if (!this.worker) {
+					const WorkerConstructor = (await import('$lib/playground/worker/ruby?worker'))
+						.default;
+					if (!this.isOperationActive(activeOperation)) return;
+					const worker = new WorkerConstructor();
+					if (!this.isOperationActive(activeOperation)) {
+						try {
+							worker.terminate();
+						} catch {
+							// The unattached worker is already detached.
+						}
+						return;
+					}
+					this.worker = worker;
+					this.workerSession.attach(worker);
+					let handler: (event: MessageEvent<any>) => void;
+					handler = (event) => {
+						if (
+							!this.isOperationActive(activeOperation) ||
+							this.worker !== worker ||
+							worker.onmessage !== handler
+						) {
+							return;
+						}
+						try {
+							if (event.data?.load) {
+								progress?.set?.(1);
+								if (
+									!this.isOperationActive(activeOperation) ||
+									this.worker !== worker ||
+									worker.onmessage !== handler
+								) {
+									return;
+								}
+								resolveOperation();
+								return;
+							}
+							if (event.data?.error !== undefined) rejectOperation(event.data.error);
+						} catch (error) {
+							rejectOperation(error);
+						}
+					};
+					worker.onmessage = handler;
+					worker.postMessage({
+						load: true,
+						moduleUrl: this.moduleUrl,
+						wasmUrl: this.wasmUrl
+					});
+				} else {
+					const worker = this.worker;
+					progress?.set?.(1);
+					if (!this.isOperationActive(activeOperation) || this.worker !== worker) return;
+					resolveOperation();
+				}
+			} catch (error) {
+				rejectOperation(error);
 			}
+		});
+		return loading.finally(() => {
+			this.releaseOperation(activeOperation);
 		});
 	}
 
@@ -118,52 +220,127 @@ class Ruby implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		this.exit = false;
-		return new Promise<boolean | string>((resolve, reject) => {
-			if (!this.worker) return reject('Worker not loaded');
-			const { programArgs } = resolveSandboxExecutionArgs('RUBY', args, options);
-			const _uid = ++this.uid;
-			const operation = this.workerSession.beginRun(this.worker, reject);
-			const handler = (event: Event & { data: any }) => {
-				if (!this.worker) return reject('Worker not loaded');
-				if (_uid !== this.uid) return (this.worker.onmessage = null);
-				const { output, results, error, buffer, diagnostic, progress } = event.data;
-				if (buffer) {
-					this.waitingForInput = true;
-					this.flushPendingInput();
-				}
-				reportWorkerProgress(_prog, progress);
-				if (output) this.output?.(output);
-				if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
-				if (results) {
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.waitingForInput = false;
-					this.pendingEof = false;
-					this.workerSession.complete(operation);
-					resolve(results as string);
-				}
-				if (error) {
-					this.elapse = Date.now() - this.begin;
-					this.exit = true;
-					this.waitingForInput = false;
-					this.pendingEof = false;
-					this.workerSession.complete(operation);
-					reject(error);
-				}
-			};
-			this.worker.onmessage = handler;
-			this.begin = Date.now();
-			this.worker.postMessage({
-				code,
-				prepare,
-				buffer: this.buffer,
-				args: programArgs,
+		let activeOperation: RubyOperation;
+		try {
+			activeOperation = this.beginOperation('execute');
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		let request: {
+			programArgs: string[];
+			stdin: string | undefined;
+			activePath: string;
+			workspaceFiles: NonNullable<SandboxExecutionOptions['workspaceFiles']>;
+		};
+		try {
+			request = {
+				programArgs: resolveSandboxExecutionArgs('RUBY', args, options).programArgs,
 				stdin: options.stdin,
 				activePath: options.activePath || 'main.rb',
-				workspaceFiles: options.workspaceFiles || [],
-				log: _log
-			});
+				workspaceFiles: options.workspaceFiles || []
+			};
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
+		}
+		if (!this.isOperationActive(activeOperation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(activeOperation, 'Ruby execution cancelled')
+			);
+		}
+		const worker = this.worker;
+		if (!worker) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, 'Worker not loaded'));
+		}
+		this.exit = false;
+		const running = new Promise<boolean | string>((resolve, reject) => {
+			const workerOperation = this.workerSession.beginRun(worker, reject);
+			const runUid = ++this.uid;
+			let handler: (event: Event & { data: any }) => void;
+			const ownsRun = () =>
+				this.isOperationActive(activeOperation) &&
+				this.worker === worker &&
+				worker.onmessage === handler &&
+				runUid === this.uid;
+			const settleRunState = () => {
+				this.elapse = Date.now() - this.begin;
+				this.exit = true;
+				this.waitingForInput = false;
+				this.pendingEof = false;
+			};
+			const claimRun = () => {
+				if (!ownsRun()) return false;
+				settleRunState();
+				this.workerSession.complete(workerOperation);
+				this.releaseOperation(activeOperation);
+				try {
+					if (worker.onmessage === handler) worker.onmessage = null;
+				} catch {
+					// Handler cleanup must not replace the execution result.
+				}
+				return true;
+			};
+			const failRun = (reason: unknown, disposeWorker = false) => {
+				if (!claimRun()) return;
+				if (disposeWorker && this.worker === worker) this.workerSession.reset();
+				reject(reason);
+			};
+			handler = (event) => {
+				if (
+					this.worker !== worker ||
+					worker.onmessage !== handler ||
+					!this.isOperationActive(activeOperation)
+				) {
+					return;
+				}
+				try {
+					const { output, results, error, buffer, diagnostic, progress } = event.data;
+					if (buffer) {
+						this.waitingForInput = true;
+						this.flushPendingInput();
+						if (!ownsRun()) return;
+					}
+					reportWorkerProgress(_prog, progress);
+					if (!ownsRun()) return;
+					if (typeof output === 'string' && output.length > 0) {
+						this.output?.(output);
+						if (!ownsRun()) return;
+					}
+					if (diagnostic !== undefined) {
+						this.oncompilerdiagnostic?.(diagnostic);
+						if (!ownsRun()) return;
+					}
+					if (results !== undefined) {
+						if (!claimRun()) return;
+						resolve(results as boolean | string);
+						return;
+					}
+					if (error !== undefined) failRun(error);
+				} catch (error) {
+					failRun(error, true);
+				}
+			};
+			worker.onmessage = handler;
+			this.begin = Date.now();
+			try {
+				worker.postMessage({
+					code,
+					prepare,
+					buffer: this.buffer,
+					args: request.programArgs,
+					stdin: request.stdin,
+					activePath: request.activePath,
+					workspaceFiles: request.workspaceFiles,
+					log: _log
+				});
+			} catch (error) {
+				failRun(error);
+			}
+		});
+		return running.finally(() => {
+			if (!this.releaseOperation(activeOperation)) return;
+			this.exit = true;
+			this.waitingForInput = false;
+			this.pendingEof = false;
 		});
 	}
 
@@ -171,23 +348,34 @@ class Ruby implements Sandbox {
 		this.terminate();
 	}
 
-	terminate() {
+	terminate(reason: unknown = 'Process terminated') {
+		const activeOperation = this.activeOperation;
+		if (activeOperation) {
+			activeOperation.cancelled = true;
+			activeOperation.cancellationReason = reason;
+			this.releaseOperation(activeOperation);
+		}
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
-		this.workerSession.terminate();
+		this.workerSession.terminate(reason);
 		this.exit = true;
 	}
 
 	async clear() {
+		if (this.activeOperation) this.terminate();
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
-		if (this.worker) this.worker.onmessage = null;
-		resetBufferedStdin(this.buffer);
-		if (!this.exit) {
-			this.terminate();
+		const worker = this.worker;
+		if (worker) {
+			try {
+				worker.onmessage = null;
+			} catch {
+				// Idle handler cleanup is best effort.
+			}
 		}
+		resetBufferedStdin(this.buffer);
 	}
 }
 
