@@ -106,7 +106,7 @@ describe('Haskell sandbox', () => {
 		await expect(
 			sandbox.run(code, true, true, undefined, ['-Wall'], {
 				activePath: 'src/Main.hs',
-				workspaceFiles: [{ path: 'src/Main.hs', content: code }]
+				workspaceFiles: [{ path: 'src/Helper.hs', content: 'helper = ()' }]
 			})
 		).resolves.toBe(true);
 		await expect(sandbox.run(code, false, true, undefined, ['-Wall'])).resolves.toBe(true);
@@ -130,7 +130,7 @@ describe('Haskell sandbox', () => {
 				code,
 				ghcArgs: '-Wall',
 				activePath: 'src/Main.hs',
-				workspaceFiles: [{ path: 'src/Main.hs', content: code }],
+				workspaceFiles: [{ path: 'src/Helper.hs', content: 'helper = ()' }],
 				log: true
 			})
 		);
@@ -761,8 +761,24 @@ describe('Haskell sandbox', () => {
 		publicEnv.PUBLIC_WASM_HASKELL_ROOTFS_URL = '';
 		publicEnv.PUBLIC_WASM_HASKELL_BSDTAR_URL = '';
 		const sandbox = new Haskell();
+		let optionalReads = 0;
+		const runtimeAssets = {
+			haskell: {
+				get mainSoPath(): never {
+					optionalReads += 1;
+					throw new Error('mainSoPath must remain unread');
+				},
+				get searchDirs(): never {
+					optionalReads += 1;
+					throw new Error('searchDirs must remain unread');
+				}
+			}
+		};
 
-		await expect(sandbox.load({})).rejects.toContain('Haskell runtime is not configured');
+		await expect(sandbox.load(runtimeAssets)).rejects.toContain(
+			'Haskell runtime is not configured'
+		);
+		expect(optionalReads).toBe(0);
 	});
 
 	it('rejects load when the worker script fails before posting load', async () => {
@@ -861,5 +877,324 @@ describe('Haskell sandbox', () => {
 		handler?.({ data: { results: true } } as MessageEvent<any>);
 		await expect(running).resolves.toBe(true);
 		expect(sandbox.pendingInput).toEqual([]);
+	});
+
+	it('preserves an exact null pre-abort reason without changing idle Haskell state', async () => {
+		const sandbox = new Haskell();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		const runtimeKey = sandbox.runtimeKey;
+		const uid = sandbox.uid;
+		sandbox.write('queued input\n');
+		const controller = new AbortController();
+		controller.abort(null);
+
+		await expect(
+			sandbox.load('/replacement', '', true, [], { signal: controller.signal })
+		).rejects.toBeNull();
+		await expect(
+			sandbox.run('main = pure ()', false, true, undefined, [], {
+				signal: controller.signal,
+				stdin: ''
+			})
+		).rejects.toBeNull();
+
+		expect(sandbox.worker).toBe(worker);
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(sandbox.runtimeKey).toBe(runtimeKey);
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('preserves replacement startup when the outer signal getter terminates Haskell', async () => {
+		const sandbox = new Haskell();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Haskell during startup option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get signal() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement');
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.load('/outer', '', true, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves the first cancellation and replacement across later Haskell option failure', async () => {
+		const sandbox = new Haskell();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Haskell during execution option snapshot');
+		const laterError = new Error('later Haskell workspace getter failed');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get limits() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement');
+				return undefined;
+			},
+			get workspaceFiles(): never {
+				throw laterError;
+			}
+		};
+
+		const superseded = sandbox.run('main = pure ()', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(retiredWorker.postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves a Haskell replacement when a later option getter aborts the snapshot', async () => {
+		const sandbox = new Haskell();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const controller = new AbortController();
+		const reason = new Error('abort Haskell during execution option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			signal: controller.signal,
+			get limits() {
+				controller.abort(reason);
+				replacement = sandbox.load({
+					haskell: {
+						moduleUrl: '/replacement/dyld.mjs',
+						rootfsUrl: '/replacement/rootfs.tar.zst',
+						bsdtarUrl: '/replacement/bsdtar.wasm'
+					}
+				});
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.run('main = pure ()', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(retiredWorker.postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('snapshots each Haskell runtime asset once before asynchronous startup', async () => {
+		const sandbox = new Haskell();
+		const reads = {
+			rootUrl: 0,
+			haskell: 0,
+			moduleUrl: 0,
+			rootfsUrl: 0,
+			bsdtarUrl: 0,
+			mainSoPath: 0,
+			searchDirs: 0
+		};
+		const configuredSearchDirs = ['/snapshot/lib'];
+		const runtimeConfig = {
+			get moduleUrl() {
+				reads.moduleUrl += 1;
+				return '/snapshot/dyld.mjs';
+			},
+			get rootfsUrl() {
+				reads.rootfsUrl += 1;
+				return '/snapshot/rootfs.tar.zst';
+			},
+			get bsdtarUrl() {
+				reads.bsdtarUrl += 1;
+				return '/snapshot/bsdtar.wasm';
+			},
+			get mainSoPath() {
+				reads.mainSoPath += 1;
+				return '/snapshot/main.so';
+			},
+			get searchDirs() {
+				reads.searchDirs += 1;
+				queueMicrotask(() => configuredSearchDirs.push('/mutated/lib'));
+				return configuredSearchDirs;
+			}
+		};
+		const runtimeAssets = {
+			get rootUrl() {
+				reads.rootUrl += 1;
+				return '/snapshot-root';
+			},
+			get haskell() {
+				reads.haskell += 1;
+				return runtimeConfig;
+			}
+		};
+
+		await sandbox.load(runtimeAssets);
+
+		const loadMessage = workerInstances[0].postMessage.mock.calls[0][0];
+		const runtimeSnapshot = {
+			moduleUrl: loadMessage.moduleUrl,
+			rootfsUrl: loadMessage.rootfsUrl,
+			bsdtarUrl: loadMessage.bsdtarUrl,
+			mainSoPath: loadMessage.mainSoPath,
+			searchDirs: loadMessage.searchDirs
+		};
+		expect(reads).toEqual({
+			rootUrl: 0,
+			haskell: 1,
+			moduleUrl: 1,
+			rootfsUrl: 1,
+			bsdtarUrl: 1,
+			mainSoPath: 1,
+			searchDirs: 1
+		});
+		expect(runtimeSnapshot.searchDirs).toEqual(['/snapshot/lib']);
+		expect(configuredSearchDirs).toEqual(['/snapshot/lib', '/mutated/lib']);
+		expect(JSON.parse(sandbox.runtimeKey)).toEqual(runtimeSnapshot);
+	});
+
+	it('reads the Haskell root URL once when runtime assets use fallback resolution', async () => {
+		publicEnv.PUBLIC_WASM_HASKELL_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_HASKELL_ROOTFS_URL = '';
+		publicEnv.PUBLIC_WASM_HASKELL_BSDTAR_URL = '';
+		const sandbox = new Haskell();
+		let rootUrlReads = 0;
+		const runtimeAssets = {
+			get rootUrl() {
+				rootUrlReads += 1;
+				return '/fallback';
+			}
+		};
+
+		await sandbox.load(runtimeAssets);
+
+		expect(rootUrlReads).toBe(1);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				moduleUrl: expect.stringMatching(/\/fallback\/wasm-haskell\/dyld\.mjs$/),
+				rootfsUrl: expect.stringMatching(/\/fallback\/wasm-haskell\/rootfs\.tar\.zst$/),
+				bsdtarUrl: expect.stringMatching(/\/fallback\/wasm-haskell\/bsdtar\.wasm$/)
+			})
+		);
+	});
+
+	it('ignores resolved Haskell assets after the resolver starts a replacement', async () => {
+		const sandbox = new Haskell();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Haskell while resolving assets');
+		let replacement: Promise<void> | undefined;
+		const runtimeAssets = {
+			haskell: {
+				get moduleUrl() {
+					sandbox.terminate(reason);
+					replacement = sandbox.load({
+						haskell: {
+							moduleUrl: '/replacement/dyld.mjs',
+							rootfsUrl: '/replacement/rootfs.tar.zst',
+							bsdtarUrl: '/replacement/bsdtar.wasm'
+						}
+					});
+					return '/superseded/dyld.mjs';
+				},
+				rootfsUrl: '/superseded/rootfs.tar.zst',
+				bsdtarUrl: '/superseded/bsdtar.wasm'
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(JSON.parse(sandbox.runtimeKey)).toMatchObject({
+			moduleUrl: expect.stringMatching(/\/replacement\/dyld\.mjs$/),
+			rootfsUrl: expect.stringMatching(/\/replacement\/rootfs\.tar\.zst$/),
+			bsdtarUrl: expect.stringMatching(/\/replacement\/bsdtar\.wasm$/)
+		});
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('ignores a Haskell runtime key after serialization starts a replacement', async () => {
+		const sandbox = new Haskell();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Haskell while serializing the runtime key');
+		let replacement: Promise<void> | undefined;
+		const reentrantSearchDir = {
+			toJSON() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load({
+					haskell: {
+						moduleUrl: '/replacement/dyld.mjs',
+						rootfsUrl: '/replacement/rootfs.tar.zst',
+						bsdtarUrl: '/replacement/bsdtar.wasm'
+					}
+				});
+				return '/superseded/lib';
+			}
+		};
+		const runtimeAssets = {
+			haskell: {
+				moduleUrl: '/superseded/dyld.mjs',
+				rootfsUrl: '/superseded/rootfs.tar.zst',
+				bsdtarUrl: '/superseded/bsdtar.wasm',
+				searchDirs: [reentrantSearchDir as unknown as string]
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(JSON.parse(sandbox.runtimeKey)).toMatchObject({
+			moduleUrl: expect.stringMatching(/\/replacement\/dyld\.mjs$/)
+		});
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('reads explicit Haskell stdin once and preserves compile argument precedence', async () => {
+		const sandbox = new Haskell();
+		await sandbox.load('/absproxy/5173');
+		let reads = 0;
+		const options = {
+			compileArgs: ['-O2', '-Wall'],
+			programArgs: ['ignored-program-arg'],
+			get stdin() {
+				reads += 1;
+				if (reads > 1) throw new Error('Haskell stdin was read more than once');
+				return 'captured input\n';
+			}
+		};
+
+		await expect(
+			sandbox.run('main = pure ()', false, true, undefined, ['ignored-legacy-arg'], options)
+		).resolves.toBe(true);
+
+		expect(reads).toBe(1);
+		expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				ghcArgs: '-O2 -Wall',
+				stdin: 'captured input\n'
+			})
+		);
 	});
 });
