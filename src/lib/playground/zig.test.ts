@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
@@ -64,10 +64,15 @@ import Zig from './zig';
 
 describe('Zig sandbox', () => {
 	beforeEach(() => {
+		vi.useRealTimers();
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = '/wasm-zig/zig_small.wasm';
 		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '/wasm-zig/std.tar.gz';
 		suppressAutoLoadAck = false;
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it('loads the Zig worker and forwards prepare/run requests', async () => {
@@ -1144,5 +1149,97 @@ describe('Zig sandbox', () => {
 				targetTriple: 'wasm64-wasi'
 			})
 		);
+	});
+
+	it('enforces the aggregate Zig startup deadline and ignores stale readiness', async () => {
+		vi.useFakeTimers();
+		suppressAutoLoadAck = true;
+		const sandbox = new Zig();
+		const progress = { set: vi.fn() };
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 } },
+			progress
+		);
+		const rejected = expect(loading).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'startup',
+			runtimeId: 'ZIG',
+			timeoutMs: 12
+		});
+		await vi.dynamicImportSettled();
+		const retiredWorker = workerInstances[0];
+		const staleHandler = retiredWorker.onmessage;
+
+		await vi.advanceTimersByTimeAsync(12);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { progress: 0.5, load: true } } as MessageEvent<any>);
+		expect(progress.set).not.toHaveBeenCalled();
+		suppressAutoLoadAck = false;
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('enforces the aggregate Zig execution deadline and permits a clean retry', async () => {
+		const sandbox = new Zig();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		retiredWorker.postMessage.mockImplementationOnce(() => undefined);
+		const output = vi.fn();
+		const progress = { set: vi.fn() };
+		sandbox.output = output;
+		vi.useFakeTimers();
+		const running = sandbox.run('pub fn main() void {}', false, true, progress, [], {
+			limits: { compileTimeoutMs: 4, runTimeoutMs: 6 }
+		});
+		const rejected = expect(running).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'ZIG',
+			timeoutMs: 10
+		});
+		const staleHandler = retiredWorker.onmessage;
+
+		await vi.advanceTimersByTimeAsync(10);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({
+			data: { output: 'stale output', progress: 0.5, results: true }
+		} as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalled();
+		expect(progress.set).not.toHaveBeenCalled();
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('clears settled Zig deadlines before they can retire an idle worker', async () => {
+		vi.useFakeTimers();
+		const sandbox = new Zig();
+		await sandbox.load('/absproxy/5173', '', true, [], {
+			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
+		});
+		const worker = workerInstances[0];
+		await expect(
+			sandbox.run('pub fn main() void {}', false, true, undefined, [], {
+				limits: { compileTimeoutMs: 2, runTimeoutMs: 3 }
+			})
+		).resolves.toBe(true);
+
+		await vi.advanceTimersByTimeAsync(10);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
 	});
 });

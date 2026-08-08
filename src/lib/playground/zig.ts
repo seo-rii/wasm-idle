@@ -12,6 +12,7 @@ import {
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
@@ -188,6 +189,31 @@ class Zig implements Sandbox {
 		}
 	}
 
+	private bindOperationTimeout(operation: ZigOperation, timeoutMs: number) {
+		if (!this.isOperationActive(operation)) return;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		operation.cleanups.push(() => {
+			if (timeout !== undefined) clearTimeout(timeout);
+		});
+		try {
+			timeout = setTimeout(() => {
+				if (!this.isOperationActive(operation)) return;
+				const label = operation.phase === 'startup' ? 'startup' : 'execution';
+				this.cancelOperation(
+					operation,
+					new TimeoutError(`Zig ${label} timed out after ${timeoutMs} ms`, {
+						phase: operation.phase,
+						runtimeId: 'ZIG',
+						timeoutMs
+					})
+				);
+			}, timeoutMs);
+			if (operation.cleanedUp) clearTimeout(timeout);
+		} catch (error) {
+			this.cancelOperation(operation, error);
+		}
+	}
+
 	private resetExplicitStdinState() {
 		this.pendingInput = [];
 		this.pendingEof = false;
@@ -220,10 +246,17 @@ class Zig implements Sandbox {
 			return Promise.reject(error);
 		}
 		let signal: AbortSignal | undefined;
+		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let unbindPreSessionAbort: () => void = () => undefined;
 		try {
 			signal = options.signal;
 			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Zig runtime startup cancelled')
+				);
+			}
+			limits = resolveExecutionLimits(options.limits);
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'Zig runtime startup cancelled')
@@ -343,6 +376,8 @@ class Zig implements Sandbox {
 				rejectLoad(error);
 			}
 		});
+		const timeoutMs = Math.min(2_147_483_647, limits.assetTimeoutMs + limits.startupTimeoutMs);
+		this.bindOperationTimeout(activeOperation, timeoutMs);
 		this.bindAbortSignal(activeOperation, signal);
 		return loadPromise.finally(() => {
 			this.releaseOperation(activeOperation);
@@ -396,6 +431,7 @@ class Zig implements Sandbox {
 		let unbindPreSessionAbort: () => void = () => undefined;
 		let compileArgs: string[];
 		let programArgs: string[];
+		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let targetTriple: ZigTargetTriple;
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		let stdin: SandboxExecutionOptions['stdin'];
@@ -408,7 +444,7 @@ class Zig implements Sandbox {
 				);
 			}
 			({ compileArgs, programArgs } = resolveSandboxExecutionArgs('ZIG', args, options));
-			const limits = resolveExecutionLimits(options.limits);
+			limits = resolveExecutionLimits(options.limits);
 			const workspaceFiles = options.workspaceFiles ?? [];
 			const activePath = options.activePath ?? 'main.zig';
 			const workspaceLimits = options.workspaceLimits;
@@ -448,6 +484,11 @@ class Zig implements Sandbox {
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
 			const operation = this.workerSession.beginRun(worker, reject);
+			const timeoutMs = Math.min(
+				2_147_483_647,
+				limits.compileTimeoutMs + limits.runTimeoutMs
+			);
+			this.bindOperationTimeout(activeOperation, timeoutMs);
 			this.bindAbortSignal(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) return;
 			let handler: (event: Event & { data: any }) => void;
