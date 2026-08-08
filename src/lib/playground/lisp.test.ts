@@ -902,6 +902,33 @@ describe('Lisp sandbox', () => {
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
 
+	it('preserves a Lisp replacement when a later option getter aborts the snapshot', async () => {
+		const sandbox = new Lisp();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const controller = new AbortController();
+		const reason = new Error('abort Lisp during execution option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			signal: controller.signal,
+			get limits() {
+				controller.abort(reason);
+				replacement = sandbox.load({ lisp: { moduleUrl: '/replacement/index.js' } });
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.run('(display "outer")', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(retiredWorker.postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
 	it('preserves replacement startup across a reentrant Lisp asset resolver failure', async () => {
 		const sandbox = new Lisp();
 		await sandbox.load('/absproxy/5173');
@@ -926,6 +953,33 @@ describe('Lisp sandbox', () => {
 		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
 		expect(workerInstances).toHaveLength(2);
 		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('ignores a resolved Lisp asset URL after the resolver starts a replacement', async () => {
+		const sandbox = new Lisp();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Lisp while resolving a module URL');
+		let replacement: Promise<void> | undefined;
+		const runtimeAssets = {
+			lisp: {
+				get moduleUrl() {
+					sandbox.terminate(reason);
+					replacement = sandbox.load({ lisp: { moduleUrl: '/replacement/index.js' } });
+					return '/superseded/index.js';
+				}
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(sandbox.moduleUrl).toMatch(/\/replacement\/index\.js$/);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
 
