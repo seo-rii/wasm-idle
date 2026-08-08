@@ -758,4 +758,112 @@ describe('R sandbox', () => {
 		await expect(running).resolves.toBe(true);
 		expect(sandbox.pendingInput).toEqual([]);
 	});
+
+	it('preserves an exact null pre-abort reason without changing idle R state', async () => {
+		const sandbox = new R();
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		const baseUrl = sandbox.baseUrl;
+		const uid = sandbox.uid;
+		sandbox.write('queued input\n');
+		const controller = new AbortController();
+		controller.abort(null);
+
+		await expect(
+			sandbox.load({ r: { baseUrl: '/webr/replacement/' } }, '', true, [], {
+				signal: controller.signal
+			})
+		).rejects.toBeNull();
+		await expect(
+			sandbox.run('cat("cancelled\\n")', false, true, undefined, [], {
+				signal: controller.signal,
+				stdin: ''
+			})
+		).rejects.toBeNull();
+
+		expect(sandbox.worker).toBe(worker);
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(sandbox.baseUrl).toBe(baseUrl);
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('preserves replacement startup when the outer signal getter terminates R', async () => {
+		const sandbox = new R();
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace R during startup option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get signal() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load({ r: { baseUrl: '/webr/replacement/' } });
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.load({ r: { baseUrl: '/webr/outer/' } }, '', true, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves the first cancellation and replacement across later R option failure', async () => {
+		const sandbox = new R();
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace R during execution option snapshot');
+		const laterError = new Error('later R workspace getter failed');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get limits() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load({ r: { baseUrl: '/webr/replacement/' } });
+				return undefined;
+			},
+			get workspaceFiles(): never {
+				throw laterError;
+			}
+		};
+
+		const superseded = sandbox.run('cat("outer\\n")', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(retiredWorker.postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('reads explicit R stdin once before worker dispatch', async () => {
+		const sandbox = new R();
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+		let reads = 0;
+		const options = {
+			get stdin() {
+				reads += 1;
+				if (reads > 1) throw new Error('R stdin was read more than once');
+				return 'captured input\n';
+			}
+		};
+
+		await expect(
+			sandbox.run('cat("captured\\n")', false, true, undefined, [], options)
+		).resolves.toBe(true);
+
+		expect(reads).toBe(1);
+		expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({ stdin: 'captured input\n' })
+		);
+	});
 });
