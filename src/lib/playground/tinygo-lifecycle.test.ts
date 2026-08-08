@@ -295,6 +295,57 @@ describe('TinyGo operation lifecycle', () => {
 		}
 	});
 
+	it('treats false TinyGo results and empty errors as terminal payloads', async () => {
+		autoResolveRun = false;
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const worker = workerInstances[0];
+		const falseResult = sandbox.run('package main\nfunc main() {}', false);
+
+		await vi.waitFor(() =>
+			expect(worker?.postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({ artifact: expect.any(Uint8Array) })
+			)
+		);
+		worker?.onmessage?.({
+			data: { results: false, error: 'ignored after result' }
+		} as MessageEvent<unknown>);
+
+		await expect(falseResult).resolves.toBe(false);
+		expect(worker?.onmessage).toBeNull();
+
+		const emptyError = sandbox.run('package main\nfunc main() {}', false);
+		await vi.waitFor(() => expect(worker?.onmessage).not.toBeNull());
+		worker?.onmessage?.({ data: { error: '' } } as MessageEvent<unknown>);
+
+		await expect(emptyError).rejects.toBe('');
+		expect(worker?.onmessage).toBeNull();
+
+		autoResolveRun = true;
+		await expect(sandbox.run('package main\nfunc main() {}', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(1);
+		expect(worker?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('settles an empty TinyGo startup error and permits a clean retry', async () => {
+		autoResolveLoad = false;
+		const sandbox = new TinyGo();
+		const loading = sandbox.load(runtimeAssets);
+
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const retiredWorker = workerInstances[0];
+		retiredWorker?.onmessage?.({ data: { error: '' } } as MessageEvent<unknown>);
+
+		await expect(loading).rejects.toMatchObject({ name: 'Error', message: '' });
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		autoResolveLoad = true;
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
 	it('rejects pre-aborted TinyGo operations without changing runtime state', async () => {
 		const sandbox = new TinyGo();
 		sandbox.write('queued\n');

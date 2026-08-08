@@ -461,8 +461,14 @@ class TinyGo implements Sandbox {
 				}
 				worker.onmessage = (event: MessageEvent<any>) => {
 					if (!this.isOperationActive(operation) || this.worker !== worker) return;
-					if (event.data?.load) resolve();
-					if (event.data?.error) reject(event.data.error);
+					const message = event.data ?? {};
+					if (message.load) {
+						resolve();
+						return;
+					}
+					if (Object.prototype.hasOwnProperty.call(message, 'error')) {
+						reject(message.error);
+					}
 				};
 				worker.postMessage({ load: true });
 			});
@@ -800,7 +806,10 @@ class TinyGo implements Sandbox {
 							if (worker.onmessage === handleMessage) worker.onmessage = null;
 							return;
 						}
-						const { output, results, error, buffer } = event.data;
+						const message = event.data ?? {};
+						const hasResults = Object.prototype.hasOwnProperty.call(message, 'results');
+						const hasError = Object.prototype.hasOwnProperty.call(message, 'error');
+						const { output, results, error, buffer } = message;
 						if (buffer) {
 							this.waitingForInput = true;
 							this.flushPendingInput();
@@ -809,15 +818,18 @@ class TinyGo implements Sandbox {
 							this.output?.(output);
 							if (!this.isOperationActive(operation)) return;
 						}
-						if (results) {
+						if (hasResults) {
+							if (worker.onmessage === handleMessage) worker.onmessage = null;
 							this.elapse = Date.now() - this.begin;
 							this.exit = true;
 							this.waitingForInput = false;
 							this.pendingEof = false;
 							this.workerSession.complete(workerOperation);
-							resolve(results as string);
+							resolve(results as boolean | string);
+							return;
 						}
-						if (error) {
+						if (hasError) {
+							if (worker.onmessage === handleMessage) worker.onmessage = null;
 							this.elapse = Date.now() - this.begin;
 							this.exit = true;
 							this.waitingForInput = false;
