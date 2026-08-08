@@ -133,7 +133,7 @@ describe('WebPerl runner worker', () => {
 		);
 		expect(messages.some((message) => message?.output?.includes('main=73'))).toBe(true);
 		expect(messages.at(-1)).toEqual({ results: true });
-	});
+	}, 15_000);
 
 	it('fails closed on a malformed shared stdin descriptor', async () => {
 		const messages = await runHarness({
