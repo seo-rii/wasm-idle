@@ -7,7 +7,12 @@ import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playgroun
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
-import { BusyError } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 
 type SqliteOperation = {
 	token: symbol;
@@ -35,13 +40,16 @@ class Sqlite implements Sandbox {
 		}
 	});
 
+	private requireOperationIdle() {
+		if (!this.activeOperation) return;
+		throw new BusyError('SQLite runtime already has an active operation', {
+			runtimeId: 'SQLITE',
+			phase: this.activeOperation.phase
+		});
+	}
+
 	private beginOperation(phase: SqliteOperation['phase']) {
-		if (this.activeOperation) {
-			throw new BusyError('SQLite runtime already has an active operation', {
-				runtimeId: 'SQLITE',
-				phase: this.activeOperation.phase
-			});
-		}
+		this.requireOperationIdle();
 		const operation: SqliteOperation = {
 			token: Symbol(phase),
 			phase,
@@ -177,7 +185,28 @@ class Sqlite implements Sandbox {
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
 		let activeOperation: SqliteOperation;
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		try {
+			this.requireOperationIdle();
+			const limits = resolveExecutionLimits(options.limits);
+			workspace = validateExecutionWorkspace(
+				code,
+				options.workspaceFiles ?? [],
+				options.activePath ?? 'main.sql',
+				{
+					...options.workspaceLimits,
+					maxFileBytes: Math.min(
+						options.workspaceLimits?.maxFileBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						options.workspaceLimits?.maxTotalBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					)
+				}
+			);
 			activeOperation = this.beginOperation('execute');
 		} catch (error) {
 			return Promise.reject(error);
@@ -251,8 +280,8 @@ class Sqlite implements Sandbox {
 				worker.postMessage({
 					code,
 					prepare,
-					activePath: options.activePath || 'main.sql',
-					workspaceFiles: options.workspaceFiles || [],
+					activePath: workspace.activePath,
+					workspaceFiles: workspace.workspaceFiles,
 					log: _log
 				});
 			} catch (error) {
