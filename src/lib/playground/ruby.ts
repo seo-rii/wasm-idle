@@ -20,6 +20,7 @@ import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -30,6 +31,8 @@ type RubyOperation = {
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
 	cancellationReason?: unknown;
+	explicitStdin: boolean;
+	ownsStdin: boolean;
 	cleanedUp: boolean;
 	cleanups: Array<() => void>;
 };
@@ -79,6 +82,8 @@ class Ruby implements Sandbox {
 			token: Symbol(phase),
 			phase,
 			cancelled: false,
+			explicitStdin: false,
+			ownsStdin: false,
 			cleanedUp: false,
 			cleanups: []
 		};
@@ -204,10 +209,41 @@ class Ruby implements Sandbox {
 		}
 	}
 
+	private resetSharedStdinBuffer() {
+		try {
+			resetBufferedStdin(this.buffer);
+		} catch {
+			// Stdin cleanup must not replace the execution result.
+		}
+	}
+
+	private prepareRunStdin(operation: RubyOperation, explicitStdin: boolean) {
+		operation.ownsStdin = true;
+		operation.explicitStdin = explicitStdin;
+		if (explicitStdin) {
+			this.pendingInput = [];
+			this.pendingEof = false;
+		}
+		this.waitingForInput = false;
+		this.resetSharedStdinBuffer();
+	}
+
+	private finishRunStdin(operation: RubyOperation) {
+		if (!operation.ownsStdin) return;
+		const resetSharedBuffer = operation.explicitStdin;
+		operation.ownsStdin = false;
+		operation.explicitStdin = false;
+		this.pendingInput = [];
+		this.pendingEof = false;
+		this.waitingForInput = false;
+		if (resetSharedBuffer) this.resetSharedStdinBuffer();
+	}
+
 	private cancelOperation(operation: RubyOperation, reason: unknown) {
 		if (!this.isOperationActive(operation)) return;
 		operation.cancelled = true;
 		operation.cancellationReason = reason;
+		this.finishRunStdin(operation);
 		this.activeOperation = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
@@ -427,9 +463,17 @@ class Ruby implements Sandbox {
 					)
 				}
 			);
+			const programArgs = resolveSandboxExecutionArgs('RUBY', args, options).programArgs;
+			const stdin = options.stdin;
+			if (stdin !== undefined && typeof stdin !== 'string') {
+				throw new RuntimeConfigurationError('Ruby stdin must be a string', {
+					phase: 'execute',
+					runtimeId: 'RUBY'
+				});
+			}
 			request = {
-				programArgs: resolveSandboxExecutionArgs('RUBY', args, options).programArgs,
-				stdin: options.stdin,
+				programArgs,
+				stdin,
 				activePath: workspace.activePath ?? 'main.rb',
 				workspaceFiles: workspace.workspaceFiles
 			};
@@ -451,6 +495,8 @@ class Ruby implements Sandbox {
 		if (!worker) {
 			return Promise.reject(this.releaseBeforeSession(activeOperation, 'Worker not loaded'));
 		}
+		const hasExplicitStdin = request.stdin !== undefined;
+		this.prepareRunStdin(activeOperation, hasExplicitStdin);
 		this.exit = false;
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			const workerOperation = this.workerSession.beginRun(worker, reject);
@@ -469,6 +515,7 @@ class Ruby implements Sandbox {
 				worker.onmessage === handler &&
 				runUid === this.uid;
 			const settleRunState = () => {
+				this.finishRunStdin(activeOperation);
 				this.elapse = Date.now() - this.begin;
 				this.exit = true;
 				this.waitingForInput = false;
@@ -502,7 +549,7 @@ class Ruby implements Sandbox {
 				}
 				try {
 					const { output, results, error, buffer, diagnostic, progress } = event.data;
-					if (buffer) {
+					if (buffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
 						this.flushPendingInput();
 						if (!ownsRun()) return;
@@ -545,7 +592,9 @@ class Ruby implements Sandbox {
 			}
 		});
 		return running.finally(() => {
-			if (this.releaseOperation(activeOperation)) {
+			if (this.isOperationActive(activeOperation)) {
+				this.finishRunStdin(activeOperation);
+				this.releaseOperation(activeOperation);
 				this.exit = true;
 				this.waitingForInput = false;
 				this.pendingEof = false;
@@ -584,7 +633,7 @@ class Ruby implements Sandbox {
 				// Idle handler cleanup is best effort.
 			}
 		}
-		resetBufferedStdin(this.buffer);
+		this.resetSharedStdinBuffer();
 	}
 }
 
