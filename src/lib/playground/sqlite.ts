@@ -10,6 +10,7 @@ import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
@@ -19,7 +20,17 @@ type SqliteOperation = {
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
 	cancellationReason?: unknown;
+	cleanedUp: boolean;
+	cleanups: Array<() => void>;
 };
+
+const abortReason = (signal: AbortSignal, phase: SqliteOperation['phase']) =>
+	signal.reason !== undefined
+		? signal.reason
+		: new DOMException(
+				phase === 'startup' ? 'SQLite runtime startup aborted' : 'SQLite execution aborted',
+				'AbortError'
+			);
 
 class Sqlite implements Sandbox {
 	output: any = null;
@@ -54,7 +65,9 @@ class Sqlite implements Sandbox {
 		const operation: SqliteOperation = {
 			token: Symbol(phase),
 			phase,
-			cancelled: false
+			cancelled: false,
+			cleanedUp: false,
+			cleanups: []
 		};
 		this.activeOperation = operation;
 		return operation;
@@ -70,10 +83,123 @@ class Sqlite implements Sandbox {
 		return true;
 	}
 
+	private cleanupOperation(operation: SqliteOperation) {
+		if (operation.cleanedUp) return;
+		operation.cleanedUp = true;
+		const cleanups = operation.cleanups.splice(0);
+		for (const cleanup of cleanups) {
+			try {
+				cleanup();
+			} catch {
+				// Caller-owned lifecycle cleanup must not replace the operation result.
+			}
+		}
+	}
+
 	private releaseBeforeSession(operation: SqliteOperation, reason: unknown) {
 		const outcome = operation.cancelled ? operation.cancellationReason : reason;
 		this.releaseOperation(operation);
+		this.cleanupOperation(operation);
 		return outcome;
+	}
+
+	private bindPreSessionAbort(operation: SqliteOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return () => undefined;
+		let registered = false;
+		let unbound = false;
+		const unbind = () => {
+			if (unbound) return;
+			unbound = true;
+			if (registered) signal.removeEventListener('abort', onAbort);
+		};
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			operation.cancelled = true;
+			operation.cancellationReason = reason;
+			this.releaseOperation(operation);
+			this.cleanupOperation(operation);
+		};
+		operation.cleanups.push(unbind);
+		try {
+			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			if (this.isOperationActive(operation)) {
+				operation.cancelled = true;
+				operation.cancellationReason = error;
+				this.releaseOperation(operation);
+				this.cleanupOperation(operation);
+			}
+		}
+		return unbind;
+	}
+
+	private bindAbortSignal(operation: SqliteOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return;
+		let registered = false;
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			this.cancelOperation(operation, reason);
+		};
+		operation.cleanups.push(() => {
+			if (registered) signal.removeEventListener('abort', onAbort);
+		});
+		try {
+			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			this.cancelOperation(operation, error);
+		}
+	}
+
+	private bindOperationTimeout(operation: SqliteOperation, timeoutMs: number) {
+		if (!this.isOperationActive(operation)) return;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		operation.cleanups.push(() => {
+			if (timeout !== undefined) clearTimeout(timeout);
+		});
+		try {
+			timeout = setTimeout(() => {
+				if (!this.isOperationActive(operation)) return;
+				const label = operation.phase === 'startup' ? 'startup' : 'execution';
+				this.cancelOperation(
+					operation,
+					new TimeoutError(`SQLite ${label} timed out after ${timeoutMs} ms`, {
+						phase: operation.phase,
+						runtimeId: 'SQLITE',
+						timeoutMs
+					})
+				);
+			}, timeoutMs);
+			if (operation.cleanedUp) clearTimeout(timeout);
+		} catch (error) {
+			this.cancelOperation(operation, error);
+		}
+	}
+
+	private cancelOperation(operation: SqliteOperation, reason: unknown) {
+		if (!this.isOperationActive(operation)) return;
+		operation.cancelled = true;
+		operation.cancellationReason = reason;
+		this.activeOperation = null;
+		this.uid += 1;
+		this.exit = true;
+		this.workerSession.terminate(reason);
+		this.cleanupOperation(operation);
 	}
 
 	load(
@@ -81,7 +207,7 @@ class Sqlite implements Sandbox {
 		_code = '',
 		_log = true,
 		_args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
 		let activeOperation: SqliteOperation;
@@ -90,14 +216,42 @@ class Sqlite implements Sandbox {
 		} catch (error) {
 			return Promise.reject(error);
 		}
+		let limits: ReturnType<typeof resolveExecutionLimits>;
+		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
+		try {
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'SQLite runtime startup cancelled')
+				);
+			}
+			limits = resolveExecutionLimits(options.limits);
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'SQLite runtime startup cancelled')
+				);
+			}
+			unbindPreSessionAbort();
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
+		}
+		if (!this.isOperationActive(activeOperation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(activeOperation, 'SQLite runtime startup cancelled')
+			);
+		}
 		const loading = this.workerSession.load(async (resolve, reject) => {
 			const resolveOperation = () => {
 				if (!this.releaseOperation(activeOperation)) return;
 				resolve();
+				this.cleanupOperation(activeOperation);
 			};
 			const rejectOperation = (reason?: unknown) => {
 				if (!this.releaseOperation(activeOperation)) return;
 				reject(reason);
+				this.cleanupOperation(activeOperation);
 			};
 			try {
 				if (!this.isOperationActive(activeOperation)) return;
@@ -174,8 +328,12 @@ class Sqlite implements Sandbox {
 				rejectOperation(error);
 			}
 		});
+		const timeoutMs = Math.min(2_147_483_647, limits.assetTimeoutMs + limits.startupTimeoutMs);
+		this.bindOperationTimeout(activeOperation, timeoutMs);
+		this.bindAbortSignal(activeOperation, signal);
 		return loading.finally(() => {
 			this.releaseOperation(activeOperation);
+			this.cleanupOperation(activeOperation);
 		});
 	}
 
@@ -197,9 +355,19 @@ class Sqlite implements Sandbox {
 		} catch (error) {
 			return Promise.reject(error);
 		}
+		let limits: ReturnType<typeof resolveExecutionLimits>;
+		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		try {
-			const limits = resolveExecutionLimits(options.limits);
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'SQLite execution cancelled')
+				);
+			}
+			limits = resolveExecutionLimits(options.limits);
 			workspace = validateExecutionWorkspace(
 				code,
 				options.workspaceFiles ?? [],
@@ -218,11 +386,12 @@ class Sqlite implements Sandbox {
 					)
 				}
 			);
-			if (!this.isOperationActive(activeOperation)) {
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'SQLite execution cancelled')
 				);
 			}
+			unbindPreSessionAbort();
 		} catch (error) {
 			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
 		}
@@ -239,6 +408,13 @@ class Sqlite implements Sandbox {
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			const runUid = ++this.uid;
 			const workerOperation = this.workerSession.beginRun(worker, reject);
+			const timeoutMs = Math.min(
+				2_147_483_647,
+				limits.compileTimeoutMs + limits.runTimeoutMs
+			);
+			this.bindOperationTimeout(activeOperation, timeoutMs);
+			this.bindAbortSignal(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) return;
 			let handler: (event: Event & { data: any }) => void;
 			const ownsRun = () =>
 				this.isOperationActive(activeOperation) &&
@@ -251,6 +427,7 @@ class Sqlite implements Sandbox {
 				this.exit = true;
 				this.workerSession.complete(workerOperation);
 				this.releaseOperation(activeOperation);
+				this.cleanupOperation(activeOperation);
 				try {
 					if (worker.onmessage === handler) worker.onmessage = null;
 				} catch {
@@ -308,8 +485,8 @@ class Sqlite implements Sandbox {
 			}
 		});
 		return running.finally(() => {
-			if (!this.releaseOperation(activeOperation)) return;
-			this.exit = true;
+			if (this.releaseOperation(activeOperation)) this.exit = true;
+			this.cleanupOperation(activeOperation);
 		});
 	}
 
@@ -320,9 +497,8 @@ class Sqlite implements Sandbox {
 	terminate(reason: unknown = 'Process terminated') {
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
-			activeOperation.cancelled = true;
-			activeOperation.cancellationReason = reason;
-			this.releaseOperation(activeOperation);
+			this.cancelOperation(activeOperation, reason);
+			return;
 		}
 		this.uid += 1;
 		this.workerSession.terminate(reason);
