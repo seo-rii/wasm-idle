@@ -260,6 +260,8 @@ export const DEFAULT_TINYGO_BOOTSTRAP_GO_ENTRY_SOURCE = `package main
 func main() {}
 `;
 
+const EMCEPTION_BOOT_DISPOSED_MESSAGE = 'TinyGo runtime was disposed during compiler startup';
+
 const cloneJsonValue = <T>(value: T) => JSON.parse(JSON.stringify(value)) as T;
 
 const buildDirectoryContentsFromTextEntries = (
@@ -394,6 +396,8 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 	let emceptionWorker: Worker | null = null;
 	let emception: EmceptionBridge | null = null;
 	let bootPromise: Promise<EmceptionBridge> | null = null;
+	let emceptionAbortController: AbortController | null = null;
+	let emceptionGeneration = 0;
 	let runtimeWorkingTreeDirty = false;
 	let lastBuildResult: TinyGoBuildResult | null = null;
 	let lastBuildArtifactPath: string | null = null;
@@ -435,12 +439,13 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 
 	const resolveAssetUrl = (assetPath: string) => new URL(assetPath, assetBaseUrl).toString();
 
-	const resolveWorkerUrl = async (assetPath: string) =>
+	const resolveWorkerUrl = async (assetPath: string, signal?: AbortSignal) =>
 		await resolveRuntimeAssetUrl({
 			assetPath,
 			assetUrl: resolveAssetUrl(assetPath),
 			label: assetPath,
-			loader: options.assetLoader
+			loader: options.assetLoader,
+			signal
 		});
 
 	const loadAssetBytes = async (assetPath: string, label: string) =>
@@ -882,11 +887,24 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 	};
 
 	const disposeEmceptionRuntime = () => {
-		emceptionWorker?.terminate();
+		emceptionGeneration += 1;
+		const abortController = emceptionAbortController;
+		const worker = emceptionWorker;
+		emceptionAbortController = null;
 		emceptionWorker = null;
 		emception = null;
 		bootPromise = null;
 		runtimeWorkingTreeDirty = false;
+		try {
+			abortController?.abort(new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE));
+		} catch {
+			// Runtime disposal must continue even if abort notification fails.
+		}
+		try {
+			worker?.terminate();
+		} catch {
+			// Runtime disposal must invalidate the generation even if worker cleanup fails.
+		}
 	};
 
 	const invalidateCachedBuildState = () => {
@@ -932,48 +950,148 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 			return bootPromise;
 		}
 
-		bootPromise = (async () => {
+		const bootGeneration = emceptionGeneration;
+		const abortController = new AbortController();
+		emceptionAbortController = abortController;
+		const pendingBoot = (async () => {
 			setControlsLocked(true);
+			if (bootGeneration !== emceptionGeneration) {
+				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
+			}
 			setPhase('toolchain', 'booting', 'running');
+			if (bootGeneration !== emceptionGeneration) {
+				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
+			}
 			appendLog('Fetching patched emception worker', 'running');
+			if (bootGeneration !== emceptionGeneration) {
+				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
+			}
 
-			const workerUrl = await resolveWorkerUrl('vendor/emception/emception.worker.js');
-			emceptionWorker = new Worker(workerUrl, { type: 'classic', name: 'emception-worker' });
-			emception = Comlink.wrap<unknown>(emceptionWorker) as unknown as EmceptionBridge;
-			(emception as unknown as Record<string, unknown>).onstdout = Comlink.proxy(
+			const workerUrl = await resolveWorkerUrl(
+				'vendor/emception/emception.worker.js',
+				abortController.signal
+			);
+			if (bootGeneration !== emceptionGeneration) {
+				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
+			}
+			const worker = new Worker(workerUrl, {
+				type: 'classic',
+				name: 'emception-worker'
+			});
+			if (bootGeneration !== emceptionGeneration) {
+				try {
+					worker.terminate();
+				} catch {
+					// A superseded local worker is never published to the runtime.
+				}
+				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
+			}
+			emceptionWorker = worker;
+			const bridge = Comlink.wrap<unknown>(worker) as unknown as EmceptionBridge;
+			emception = bridge;
+			(bridge as unknown as Record<string, unknown>).onstdout = Comlink.proxy(
 				async (line: string) => {
+					if (bootGeneration !== emceptionGeneration) return;
 					appendLog(line, 'running');
 				}
 			);
-			(emception as unknown as Record<string, unknown>).onstderr = Comlink.proxy(
+			if (bootGeneration !== emceptionGeneration) {
+				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
+			}
+			(bridge as unknown as Record<string, unknown>).onstderr = Comlink.proxy(
 				async (line: string) => {
+					if (bootGeneration !== emceptionGeneration) return;
 					appendLog(line, 'error');
 				}
 			);
-			(emception as unknown as Record<string, unknown>).onprocessstart = Comlink.proxy(
+			if (bootGeneration !== emceptionGeneration) {
+				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
+			}
+			(bridge as unknown as Record<string, unknown>).onprocessstart = Comlink.proxy(
 				async (argv: string[]) => {
+					if (bootGeneration !== emceptionGeneration) return;
 					appendLog(`spawn ${argv.join(' ')}`, 'running');
 				}
 			);
-			await emception.init();
+			if (bootGeneration !== emceptionGeneration) {
+				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
+			}
+			let cancelInitOnAbort: (() => void) | undefined;
+			const initAborted = new Promise<never>((_resolve, reject) => {
+				cancelInitOnAbort = () =>
+					reject(
+						abortController.signal.reason ?? new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE)
+					);
+				abortController.signal.addEventListener('abort', cancelInitOnAbort, { once: true });
+			});
+			try {
+				await Promise.race([bridge.init(), initAborted]);
+			} finally {
+				if (cancelInitOnAbort) {
+					abortController.signal.removeEventListener('abort', cancelInitOnAbort);
+				}
+			}
+			if (bootGeneration !== emceptionGeneration) {
+				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
+			}
 			runtimeWorkingTreeDirty = false;
 			setPhase('toolchain', 'ready', 'success');
+			if (bootGeneration !== emceptionGeneration) {
+				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
+			}
 			appendLog('emception toolchain is ready', 'success');
+			if (bootGeneration !== emceptionGeneration) {
+				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
+			}
 			setControlsLocked(false);
+			if (bootGeneration !== emceptionGeneration) {
+				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
+			}
+			if (emceptionAbortController === abortController) {
+				emceptionAbortController = null;
+			}
 
-			return emception;
-		})().catch((error) => {
-			setPhase('toolchain', 'failed', 'error');
-			setControlsLocked(false);
-			disposeEmceptionRuntime();
-			appendLog(
-				`emception boot failed: ${error instanceof Error ? error.message : String(error)}`,
-				'error'
-			);
+			return bridge;
+		})();
+		let ownedBootPromise!: Promise<EmceptionBridge>;
+		ownedBootPromise = pendingBoot.catch((error) => {
+			const ownsBoot = () =>
+				bootGeneration === emceptionGeneration && bootPromise === ownedBootPromise;
+			if (ownsBoot()) {
+				try {
+					setPhase('toolchain', 'failed', 'error');
+				} catch {
+					// Notification failures must not replace the compiler boot failure.
+				}
+			}
+			if (ownsBoot()) {
+				try {
+					setControlsLocked(false);
+				} catch {
+					// Notification failures must not replace the compiler boot failure.
+				}
+			}
+			if (ownsBoot()) {
+				try {
+					appendLog(
+						`emception boot failed: ${error instanceof Error ? error.message : String(error)}`,
+						'error'
+					);
+				} catch {
+					// Notification failures must not replace the compiler boot failure.
+				}
+			}
+			if (ownsBoot()) disposeEmceptionRuntime();
 			throw error;
 		});
+		if (
+			bootGeneration === emceptionGeneration &&
+			emceptionAbortController === abortController
+		) {
+			bootPromise = ownedBootPromise;
+		}
 
-		return bootPromise;
+		return ownedBootPromise;
 	};
 
 	const planBuild = async (
@@ -2879,6 +2997,7 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 			injectedWorkspaceFiles = null;
 			clearActivityLog();
 			resetPhasesToIdle();
+			setControlsLocked(false);
 		},
 		readActivityLog: () => activityLog,
 		readBuildArtifact: () => {
