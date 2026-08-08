@@ -824,6 +824,346 @@ public class Main {
 		expect(sandbox.pendingEof).toBe(true);
 	});
 
+	it('preserves an exact null pre-abort reason without changing idle Java state', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		const assetBridge = sandbox.assetBridge;
+		const baseUrl = sandbox.baseUrl;
+		const uid = sandbox.uid;
+		sandbox.write('queued input\n');
+		const controller = new AbortController();
+		controller.abort(null);
+
+		await expect(
+			sandbox.load('/replacement', '', true, [], { signal: controller.signal })
+		).rejects.toBeNull();
+		await expect(
+			sandbox.run('public class Main {}', false, true, undefined, [], {
+				signal: controller.signal,
+				stdin: ''
+			})
+		).rejects.toBeNull();
+
+		expect(sandbox.worker).toBe(worker);
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(sandbox.assetBridge).toBe(assetBridge);
+		expect(sandbox.baseUrl).toBe(baseUrl);
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('preserves replacement startup when the outer signal getter terminates Java', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Java during startup option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get signal() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement');
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.load('/outer', '', true, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves the first cancellation and replacement across later Java option failure', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Java during execution option snapshot');
+		const laterError = new Error('later Java workspace getter failed');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get limits() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement');
+				return undefined;
+			},
+			get workspaceFiles(): never {
+				throw laterError;
+			}
+		};
+
+		const superseded = sandbox.run('public class Main {}', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(retiredWorker.postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves a Java replacement when a later option getter aborts the snapshot', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const controller = new AbortController();
+		const reason = new Error('abort Java during execution option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			signal: controller.signal,
+			get limits() {
+				controller.abort(reason);
+				replacement = sandbox.load({ java: { baseUrl: '/replacement/' } });
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.run('public class Main {}', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(retiredWorker.postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('snapshots each explicit Java asset field once without reading the root URL', async () => {
+		const sandbox = new Java();
+		const loader = vi.fn();
+		const reads = {
+			rootUrl: 0,
+			java: 0,
+			baseUrl: 0,
+			loader: 0,
+			integrity: 0,
+			sha256: 0,
+			allowedBaseUrls: 0
+		};
+		let integritySha256 = 'a'.repeat(64);
+		const integrityEntry = {
+			get sha256() {
+				reads.sha256 += 1;
+				return integritySha256;
+			}
+		};
+		const integrity = { 'compiler.wasm': integrityEntry };
+		const allowedBaseUrls = ['/snapshot-mirror/'];
+		const runtimeConfig = {
+			get baseUrl() {
+				reads.baseUrl += 1;
+				return '/snapshot-java/';
+			},
+			get loader() {
+				reads.loader += 1;
+				return loader;
+			},
+			get integrity() {
+				reads.integrity += 1;
+				queueMicrotask(() => {
+					integritySha256 = 'b'.repeat(64);
+					allowedBaseUrls[0] = '/mutated-mirror/';
+				});
+				return integrity;
+			},
+			get allowedBaseUrls() {
+				reads.allowedBaseUrls += 1;
+				return allowedBaseUrls;
+			}
+		};
+		const runtimeAssets = {
+			get rootUrl() {
+				reads.rootUrl += 1;
+				return '/unused-root/';
+			},
+			get java() {
+				reads.java += 1;
+				return runtimeConfig;
+			}
+		};
+
+		await sandbox.load(runtimeAssets);
+
+		expect(reads).toEqual({
+			rootUrl: 0,
+			java: 1,
+			baseUrl: 1,
+			loader: 1,
+			integrity: 1,
+			sha256: 1,
+			allowedBaseUrls: 1
+		});
+		expect(
+			sandbox.assetBridge?.matches({
+				baseUrl: new URL('/snapshot-java/', window.location.href).href,
+				loader,
+				integrity: { 'compiler.wasm': { sha256: 'a'.repeat(64) } },
+				allowedBaseUrls: [new URL('/snapshot-mirror/', window.location.href).href],
+				useAssetBridge: true
+			})
+		).toBe(true);
+		expect(sandbox.baseUrl).toMatch(/\/snapshot-java\/$/);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				assets: {
+					baseUrl: sandbox.baseUrl,
+					useAssetBridge: true
+				}
+			})
+		);
+	});
+
+	it('reads the Java root URL once when resolving its fallback assets', async () => {
+		const sandbox = new Java();
+		let rootUrlReads = 0;
+		const runtimeAssets = {
+			get rootUrl() {
+				rootUrlReads += 1;
+				return '/fallback';
+			}
+		};
+
+		await sandbox.load(runtimeAssets);
+
+		expect(rootUrlReads).toBe(1);
+		expect(sandbox.baseUrl).toMatch(/\/fallback\/teavm\/$/);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				assets: expect.objectContaining({ baseUrl: sandbox.baseUrl })
+			})
+		);
+	});
+
+	it('ignores a Java config after its top-level getter starts a replacement', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Java while reading the runtime config');
+		let replacement: Promise<void> | undefined;
+		let staleBaseReads = 0;
+		const runtimeAssets = {
+			get java() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load({ java: { baseUrl: '/replacement/' } });
+				return {
+					get baseUrl() {
+						staleBaseReads += 1;
+						return '/superseded/';
+					}
+				};
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleBaseReads).toBe(0);
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(sandbox.baseUrl).toMatch(/\/replacement\/$/);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('ignores the rest of a Java config after its base getter starts a replacement', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Java while resolving assets');
+		let replacement: Promise<void> | undefined;
+		let staleLoaderReads = 0;
+		const runtimeAssets = {
+			java: {
+				get baseUrl() {
+					sandbox.terminate(reason);
+					replacement = sandbox.load({ java: { baseUrl: '/replacement/' } });
+					return '/superseded/';
+				},
+				get loader() {
+					staleLoaderReads += 1;
+					return vi.fn();
+				}
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleLoaderReads).toBe(0);
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(sandbox.baseUrl).toMatch(/\/replacement\/$/);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves a replacement when Java bridge rebind progress terminates and throws', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Java during bridge rebind');
+		const laterError = new Error('Java rebind progress failed after replacement');
+		let replacement: Promise<void> | undefined;
+		const superseded = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{},
+			{
+				set() {
+					sandbox.terminate(reason);
+					replacement = sandbox.load('/replacement/');
+					throw laterError;
+				}
+			}
+		);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(sandbox.baseUrl).toMatch(/\/replacement\/teavm\/$/);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('reads explicit Java stdin once before worker dispatch', async () => {
+		const sandbox = new Java();
+		await sandbox.load('/absproxy/5173');
+		let stdinReads = 0;
+		const options = {
+			get stdin() {
+				stdinReads += 1;
+				if (stdinReads > 1) throw new Error('Java stdin was read more than once');
+				return 'captured input\n';
+			}
+		};
+
+		await expect(
+			sandbox.run('public class Main {}', false, true, undefined, [], options)
+		).resolves.toBe(true);
+
+		expect(stdinReads).toBe(1);
+		expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				stdin: 'captured input\n',
+				hasExplicitStdin: true
+			})
+		);
+	});
+
 	it('releases Java operation ownership after synchronous dispatch failure', async () => {
 		const sandbox = new Java();
 		await sandbox.load('/absproxy/5173');

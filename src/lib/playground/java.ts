@@ -4,7 +4,12 @@ import {
 	type SandboxExecutionOptions
 } from '$lib/playground/options';
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
-import { resolveRuntimeAssetConfig, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import {
+	resolveRuntimeAssetConfig,
+	type PlaygroundRuntimeAssets,
+	type RuntimeAssetConfig,
+	type RuntimeAssetIntegrityMap
+} from '$lib/playground/assets';
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
@@ -21,6 +26,24 @@ import {
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 
+type JavaOperation = {
+	token: symbol;
+	phase: 'startup' | 'execute';
+	cancelled: boolean;
+	cancellationReason?: unknown;
+	cleanedUp: boolean;
+	cleanups: Array<() => void>;
+	explicitStdin: boolean;
+};
+
+const abortReason = (signal: AbortSignal, phase: JavaOperation['phase']) =>
+	signal.reason !== undefined
+		? signal.reason
+		: new DOMException(
+				phase === 'startup' ? 'Java runtime startup aborted' : 'Java execution aborted',
+				'AbortError'
+			);
+
 class Java implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
@@ -35,13 +58,10 @@ class Java implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	assetBridge: WorkerAssetBridge | null = null;
-	private activeLoadCleanup: (() => void) | null = null;
-	private activeRunCleanup: (() => void) | null = null;
+	private activeOperation: JavaOperation | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'Java',
 		onDispose: (worker) => {
-			this.activeRunCleanup?.();
-			this.activeRunCleanup = null;
 			if (this.worker === worker) {
 				this.assetBridge?.dispose();
 				delete this.worker;
@@ -53,6 +73,143 @@ class Java implements Sandbox {
 		}
 	});
 
+	private requireOperationIdle() {
+		if (!this.activeOperation) return;
+		throw new BusyError('Java runtime already has an active operation', {
+			runtimeId: 'JAVA',
+			phase: this.activeOperation.phase
+		});
+	}
+
+	private beginOperation(phase: JavaOperation['phase']) {
+		this.requireOperationIdle();
+		const operation: JavaOperation = {
+			token: Symbol(phase),
+			phase,
+			cancelled: false,
+			cleanedUp: false,
+			cleanups: [],
+			explicitStdin: false
+		};
+		this.activeOperation = operation;
+		return operation;
+	}
+
+	private isOperationActive(operation: JavaOperation) {
+		return this.activeOperation?.token === operation.token && !operation.cancelled;
+	}
+
+	private releaseOperation(operation: JavaOperation) {
+		if (this.activeOperation?.token !== operation.token) return false;
+		this.activeOperation = null;
+		return true;
+	}
+
+	private cleanupOperation(operation: JavaOperation) {
+		if (operation.cleanedUp) return;
+		operation.cleanedUp = true;
+		const cleanups = operation.cleanups.splice(0);
+		for (const cleanup of cleanups) {
+			try {
+				cleanup();
+			} catch {
+				// Caller-owned lifecycle cleanup must not replace the operation result.
+			}
+		}
+	}
+
+	private releaseBeforeSession(operation: JavaOperation, reason: unknown) {
+		const outcome = operation.cancelled ? operation.cancellationReason : reason;
+		this.releaseOperation(operation);
+		this.cleanupOperation(operation);
+		return outcome;
+	}
+
+	private bindPreSessionAbort(operation: JavaOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return () => undefined;
+		let registered = false;
+		let unbound = false;
+		const unbind = () => {
+			if (unbound) return;
+			unbound = true;
+			if (registered) signal.removeEventListener('abort', onAbort);
+		};
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			operation.cancelled = true;
+			operation.cancellationReason = reason;
+			this.releaseOperation(operation);
+			this.cleanupOperation(operation);
+		};
+		operation.cleanups.push(unbind);
+		try {
+			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			if (this.isOperationActive(operation)) {
+				operation.cancelled = true;
+				operation.cancellationReason = error;
+				this.releaseOperation(operation);
+				this.cleanupOperation(operation);
+			}
+		}
+		return unbind;
+	}
+
+	private bindAbortSignal(operation: JavaOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return;
+		let registered = false;
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			this.cancelOperation(operation, reason);
+		};
+		operation.cleanups.push(() => {
+			if (!registered) return;
+			try {
+				signal.removeEventListener('abort', onAbort);
+			} catch {
+				// Listener cleanup must not replace the operation result.
+			}
+		});
+		try {
+			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			this.cancelOperation(operation, error);
+		}
+	}
+
+	private resetExplicitStdinState() {
+		this.pendingInput = [];
+		this.pendingEof = false;
+		this.waitingForInput = false;
+		try {
+			resetBufferedStdin(this.buffer);
+		} catch {
+			// Explicit stdin never consumes the shared terminal buffer.
+		}
+	}
+
+	private finishExplicitStdin(operation: JavaOperation) {
+		if (!operation.explicitStdin) return;
+		operation.explicitStdin = false;
+		this.resetExplicitStdinState();
+	}
+
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
 		_code = '',
@@ -61,81 +218,137 @@ class Java implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		const signal = options.signal;
-		if (signal?.aborted) {
-			return Promise.reject(
-				signal.reason ?? new DOMException('Java runtime startup aborted', 'AbortError')
-			);
+		let activeOperation: JavaOperation;
+		try {
+			activeOperation = this.beginOperation('startup');
+		} catch (error) {
+			return Promise.reject(error);
 		}
-		if (this.activeLoadCleanup || this.activeRunCleanup) {
-			return Promise.reject(
-				new BusyError('Java runtime already has an active operation', {
-					runtimeId: 'JAVA',
-					phase: this.activeLoadCleanup ? 'startup' : 'execute'
-				})
-			);
-		}
-		let onAbort: (() => void) | undefined;
-		let cleanedUp = false;
-		const cleanup = () => {
-			if (cleanedUp) return;
-			cleanedUp = true;
-			if (signal && onAbort) {
-				try {
-					signal.removeEventListener('abort', onAbort);
-				} catch {
-					// Cleanup must not replace the startup result.
-				}
+		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
+		try {
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Java runtime startup cancelled')
+				);
 			}
-			if (this.activeLoadCleanup === cleanup) this.activeLoadCleanup = null;
-		};
-		onAbort = signal
-			? () => {
-					if (this.activeLoadCleanup !== cleanup) {
-						cleanup();
-						return;
-					}
-					const reason =
-						signal.reason ??
-						new DOMException('Java runtime startup aborted', 'AbortError');
-					cleanup();
-					this.workerSession.terminate(reason);
-				}
-			: undefined;
-		this.activeLoadCleanup = cleanup;
+			unbindPreSessionAbort();
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
+		}
+		if (!this.isOperationActive(activeOperation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(activeOperation, 'Java runtime startup cancelled')
+			);
+		}
 		const loadPromise = this.workerSession.load(async (resolve, reject) => {
 			const resolveLoad = () => {
-				if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
-				cleanup();
+				if (!this.releaseOperation(activeOperation)) return;
 				resolve();
+				this.cleanupOperation(activeOperation);
 			};
 			const rejectLoad = (reason?: unknown) => {
-				if (this.activeLoadCleanup !== cleanup) return;
-				cleanup();
+				if (!this.releaseOperation(activeOperation)) return;
 				reject(reason);
+				this.cleanupOperation(activeOperation);
 			};
 			try {
-				if (this.activeLoadCleanup !== cleanup) return;
+				if (!this.isOperationActive(activeOperation)) return;
 				this.pendingInput = [];
 				this.waitingForInput = false;
 				this.pendingEof = false;
-				const assetConfig = resolveRuntimeAssetConfig(
-					'java',
-					runtimeAssets,
-					typeof window !== 'undefined' ? window.location.href : ''
-				);
+				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				let resolverAssets: string | PlaygroundRuntimeAssets = runtimeAssets;
+				if (runtimeAssets && typeof runtimeAssets === 'object') {
+					const runtimeConfig = runtimeAssets.java;
+					if (!this.isOperationActive(activeOperation)) return;
+					let java: RuntimeAssetConfig | undefined;
+					if (runtimeConfig) {
+						const baseUrl = runtimeConfig.baseUrl;
+						if (!this.isOperationActive(activeOperation)) return;
+						const loader = runtimeConfig.loader;
+						if (!this.isOperationActive(activeOperation)) return;
+						const integritySource = runtimeConfig.integrity;
+						if (!this.isOperationActive(activeOperation)) return;
+						let integrity: RuntimeAssetIntegrityMap | undefined;
+						if (integritySource) {
+							integrity = Object.create(null) as RuntimeAssetIntegrityMap;
+							const assets = Object.keys(integritySource);
+							if (!this.isOperationActive(activeOperation)) return;
+							for (const asset of assets) {
+								const entry = integritySource[asset];
+								if (!this.isOperationActive(activeOperation)) return;
+								let snapshot: RuntimeAssetIntegrityMap[string];
+								if (typeof entry === 'string') {
+									snapshot = entry;
+								} else {
+									const sha256 = entry.sha256;
+									if (!this.isOperationActive(activeOperation)) return;
+									const bytes = entry.bytes;
+									if (!this.isOperationActive(activeOperation)) return;
+									const mediaType = entry.mediaType;
+									if (!this.isOperationActive(activeOperation)) return;
+									const uncompressedSha256 = entry.uncompressedSha256;
+									if (!this.isOperationActive(activeOperation)) return;
+									const uncompressedBytes = entry.uncompressedBytes;
+									if (!this.isOperationActive(activeOperation)) return;
+									snapshot = {
+										sha256,
+										bytes,
+										mediaType,
+										uncompressedSha256,
+										uncompressedBytes
+									};
+								}
+								Object.defineProperty(integrity, asset, {
+									value: snapshot,
+									enumerable: true,
+									configurable: true,
+									writable: true
+								});
+							}
+						}
+						const allowedBaseUrlsSource = runtimeConfig.allowedBaseUrls;
+						if (!this.isOperationActive(activeOperation)) return;
+						const allowedBaseUrls = allowedBaseUrlsSource
+							? [...allowedBaseUrlsSource]
+							: undefined;
+						if (!this.isOperationActive(activeOperation)) return;
+						java = { baseUrl, loader, integrity, allowedBaseUrls };
+					}
+					let rootUrl: string | undefined;
+					let rootUrlRead = false;
+					const operationIsActive = () => this.isOperationActive(activeOperation);
+					resolverAssets = {
+						get rootUrl() {
+							if (!rootUrlRead) {
+								rootUrlRead = true;
+								rootUrl = runtimeAssets.rootUrl;
+								if (!operationIsActive()) return undefined;
+							}
+							return rootUrl;
+						},
+						java
+					};
+				}
+				const assetConfig = resolveRuntimeAssetConfig('java', resolverAssets, currentUrl);
+				if (!this.isOperationActive(activeOperation)) return;
 				this.baseUrl = assetConfig.baseUrl;
 				const needsWorkerReset =
 					!this.worker || !this.assetBridge || !this.assetBridge.matches(assetConfig);
+				if (!this.isOperationActive(activeOperation)) return;
 				if (needsWorkerReset && this.worker) {
 					this.workerSession.reset();
 				}
+				if (!this.isOperationActive(activeOperation)) return;
 				if (!this.worker) {
 					const WorkerConstructor = (await import('$lib/playground/worker/java?worker'))
 						.default;
-					if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
+					if (!this.isOperationActive(activeOperation)) return;
 					const worker = new WorkerConstructor();
-					if (this.activeLoadCleanup !== cleanup || signal?.aborted) {
+					if (!this.isOperationActive(activeOperation)) {
 						worker.terminate();
 						return;
 					}
@@ -147,11 +360,7 @@ class Java implements Sandbox {
 						assetConfig,
 						progress
 					);
-					if (
-						this.activeLoadCleanup !== cleanup ||
-						signal?.aborted ||
-						this.worker !== worker
-					) {
+					if (!this.isOperationActive(activeOperation) || this.worker !== worker) {
 						assetBridge.dispose();
 						return;
 					}
@@ -161,8 +370,7 @@ class Java implements Sandbox {
 						this.worker === worker &&
 						worker.onmessage === handler &&
 						this.assetBridge === assetBridge;
-					const ownsLoad = () =>
-						ownsWorker() && this.activeLoadCleanup === cleanup && !signal?.aborted;
+					const ownsLoad = () => ownsWorker() && this.isOperationActive(activeOperation);
 					const failLoad = (error: unknown) => {
 						if (!ownsLoad()) return;
 						rejectLoad(error);
@@ -195,8 +403,7 @@ class Java implements Sandbox {
 					if (!assetBridge) return rejectLoad('Worker asset bridge unavailable');
 					assetBridge.rebind(worker, assetConfig, progress);
 					if (
-						this.activeLoadCleanup !== cleanup ||
-						signal?.aborted ||
+						!this.isOperationActive(activeOperation) ||
 						this.worker !== worker ||
 						this.assetBridge !== assetBridge
 					) {
@@ -208,11 +415,11 @@ class Java implements Sandbox {
 				rejectLoad(error);
 			}
 		});
-		if (signal && onAbort) {
-			signal.addEventListener('abort', onAbort, { once: true });
-			if (signal.aborted) onAbort();
-		}
-		return loadPromise.finally(cleanup);
+		this.bindAbortSignal(activeOperation, signal);
+		return loadPromise.finally(() => {
+			this.releaseOperation(activeOperation);
+			this.cleanupOperation(activeOperation);
+		});
 	}
 
 	write(input: string) {
@@ -247,104 +454,110 @@ class Java implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		if (this.activeLoadCleanup || this.activeRunCleanup) {
-			return Promise.reject(
-				new BusyError('Java runtime already has an active operation', {
-					runtimeId: 'JAVA',
-					phase: this.activeLoadCleanup ? 'startup' : 'execute'
-				})
-			);
-		}
-		const worker = this.worker;
-		if (!worker) return Promise.reject('Worker not loaded');
-		const signal = options.signal;
-		if (signal?.aborted) {
-			return Promise.reject(
-				signal.reason ?? new DOMException('Java execution aborted', 'AbortError')
-			);
-		}
-		let programArgs: string[];
-		let workspace: ReturnType<typeof validateExecutionWorkspace>;
+		let activeOperation: JavaOperation;
 		try {
-			programArgs = resolveSandboxExecutionArgs('JAVA', args, options).programArgs;
-			const { sourcePath } = resolveJavaSourceIdentity(code);
-			const limits = resolveExecutionLimits(options.limits);
-			workspace = validateExecutionWorkspace(
-				code,
-				options.workspaceFiles ?? [],
-				options.activePath ?? sourcePath,
-				{
-					...options.workspaceLimits,
-					maxFileBytes: Math.min(
-						options.workspaceLimits?.maxFileBytes ??
-							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
-						limits.maxWorkspaceBytes
-					),
-					maxTotalBytes: Math.min(
-						options.workspaceLimits?.maxTotalBytes ??
-							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
-						limits.maxWorkspaceBytes
-					)
-				}
-			);
+			activeOperation = this.beginOperation('execute');
 		} catch (error) {
 			return Promise.reject(error);
 		}
-		const hasExplicitStdin = options.stdin !== undefined;
-		if (hasExplicitStdin) {
-			this.pendingInput = [];
-			this.pendingEof = false;
-			this.waitingForInput = false;
-			resetBufferedStdin(this.buffer);
+		const worker = this.worker;
+		if (!worker) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, 'Worker not loaded'));
 		}
 		const assetBridge = this.assetBridge;
+		const baseUrl = this.baseUrl;
+		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
+		let programArgs: string[];
+		let limits: ReturnType<typeof resolveExecutionLimits>;
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
+		let stdin: SandboxExecutionOptions['stdin'];
+		try {
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Java execution cancelled')
+				);
+			}
+			programArgs = resolveSandboxExecutionArgs('JAVA', args, options).programArgs;
+			const { sourcePath } = resolveJavaSourceIdentity(code);
+			limits = resolveExecutionLimits(options.limits);
+			const workspaceFiles = options.workspaceFiles ?? [];
+			const activePath = options.activePath ?? sourcePath;
+			const workspaceLimitsSource = options.workspaceLimits;
+			const workspaceLimits = workspaceLimitsSource
+				? {
+						maxFiles: workspaceLimitsSource.maxFiles,
+						maxFileBytes: workspaceLimitsSource.maxFileBytes,
+						maxTotalBytes: workspaceLimitsSource.maxTotalBytes,
+						maxPathBytes: workspaceLimitsSource.maxPathBytes,
+						caseSensitive: workspaceLimitsSource.caseSensitive
+					}
+				: {};
+			workspace = validateExecutionWorkspace(code, workspaceFiles, activePath, {
+				...workspaceLimits,
+				maxFileBytes: Math.min(
+					workspaceLimits.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+					limits.maxWorkspaceBytes
+				),
+				maxTotalBytes: Math.min(
+					workspaceLimits.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+					limits.maxWorkspaceBytes
+				)
+			});
+			stdin = options.stdin;
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Java execution cancelled')
+				);
+			}
+			unbindPreSessionAbort();
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
+		}
+		if (!this.isOperationActive(activeOperation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(activeOperation, 'Java execution cancelled')
+			);
+		}
+		const hasExplicitStdin = stdin !== undefined;
+		if (hasExplicitStdin) {
+			activeOperation.explicitStdin = true;
+			this.resetExplicitStdinState();
+		}
 		this.exit = false;
-		return new Promise<boolean | string>((resolve, reject) => {
+		const running = new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
-			let onAbort: (() => void) | undefined;
-			let cleanedUp = false;
-			const cleanup = () => {
-				if (cleanedUp) return;
-				cleanedUp = true;
-				const ownsInput = this.activeRunCleanup === cleanup;
-				if (hasExplicitStdin && ownsInput) {
-					this.pendingInput = [];
-					this.pendingEof = false;
-					this.waitingForInput = false;
-					try {
-						resetBufferedStdin(this.buffer);
-					} catch {
-						// Stdin cleanup must not replace the execution result.
-					}
-				}
-				if (signal && onAbort) {
-					try {
-						signal.removeEventListener('abort', onAbort);
-					} catch {
-						// Cleanup must not replace the execution result.
-					}
-				}
-				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
-			};
-			const rejectRun = (reason?: unknown) => {
-				cleanup();
-				this.exit = true;
-				this.waitingForInput = false;
-				this.pendingEof = false;
-				reject(reason);
-			};
-			this.activeRunCleanup = cleanup;
-			const operation = this.workerSession.beginRun(worker, rejectRun);
+			const operation = this.workerSession.beginRun(worker, reject);
+			this.bindAbortSignal(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) return;
 			let handler: (event: Event & { data: any }) => void;
 			const ownsWorker = () =>
 				this.worker === worker &&
 				worker.onmessage === handler &&
 				this.assetBridge === assetBridge;
 			const ownsRun = () =>
-				ownsWorker() && this.activeRunCleanup === cleanup && _uid === this.uid;
-			const failRun = (error: unknown) => {
+				ownsWorker() && this.isOperationActive(activeOperation) && _uid === this.uid;
+			const claimRun = () => {
+				if (!ownsRun() || !this.workerSession.complete(operation)) return false;
+				this.finishExplicitStdin(activeOperation);
+				this.elapse = Date.now() - this.begin;
+				this.exit = true;
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				this.releaseOperation(activeOperation);
+				this.cleanupOperation(activeOperation);
+				return true;
+			};
+			const failRun = (error: unknown, disposeWorker = false) => {
 				if (!ownsRun()) return;
-				this.workerSession.terminate(error);
+				if (disposeWorker) {
+					this.cancelOperation(activeOperation, error);
+					return;
+				}
+				if (!claimRun()) return;
+				reject(error);
 			};
 			handler = (event: Event & { data: any }) => {
 				if (!ownsWorker()) return;
@@ -362,58 +575,17 @@ class Java implements Sandbox {
 					if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 					if (!ownsRun()) return;
 					if (results) {
-						if (!this.workerSession.complete(operation)) return;
-						cleanup();
-						this.elapse = Date.now() - this.begin;
-						this.exit = true;
-						this.waitingForInput = false;
-						this.pendingEof = false;
+						if (!claimRun()) return;
 						resolve(results as string);
 						return;
 					}
-					if (error) {
-						if (!this.workerSession.complete(operation)) return;
-						cleanup();
-						this.elapse = Date.now() - this.begin;
-						this.exit = true;
-						this.waitingForInput = false;
-						this.pendingEof = false;
-						reject(error);
-					}
+					if (error) failRun(error);
 				} catch (error) {
-					failRun(error);
+					failRun(error, true);
 				}
 			};
-			onAbort = signal
-				? () => {
-						if (
-							this.activeRunCleanup !== cleanup ||
-							this.worker !== worker ||
-							worker.onmessage !== handler ||
-							_uid !== this.uid
-						) {
-							cleanup();
-							return;
-						}
-						this.terminate(
-							signal.reason ??
-								new DOMException('Java execution aborted', 'AbortError')
-						);
-					}
-				: undefined;
 			worker.onmessage = handler;
-			if (signal && onAbort) {
-				signal.addEventListener('abort', onAbort, { once: true });
-				if (signal.aborted) onAbort();
-			}
-			if (
-				this.activeRunCleanup !== cleanup ||
-				this.worker !== worker ||
-				worker.onmessage !== handler ||
-				_uid !== this.uid
-			) {
-				return;
-			}
+			if (!ownsRun()) return;
 			this.begin = Date.now();
 			try {
 				worker.postMessage({
@@ -421,16 +593,37 @@ class Java implements Sandbox {
 					prepare,
 					buffer: this.buffer,
 					args: programArgs,
-					stdin: options.stdin ?? '',
+					stdin: stdin ?? '',
 					hasExplicitStdin,
-					baseUrl: this.baseUrl,
+					baseUrl,
 					activePath: workspace.activePath,
 					workspaceFiles: workspace.workspaceFiles
 				});
 			} catch (error) {
-				failRun(error);
+				failRun(error, true);
 			}
 		});
+		return running.finally(() => {
+			if (this.releaseOperation(activeOperation)) {
+				this.finishExplicitStdin(activeOperation);
+				this.exit = true;
+			}
+			this.cleanupOperation(activeOperation);
+		});
+	}
+
+	private cancelOperation(operation: JavaOperation, reason: unknown) {
+		if (!this.isOperationActive(operation)) return;
+		operation.cancelled = true;
+		operation.cancellationReason = reason;
+		this.activeOperation = null;
+		this.uid += 1;
+		this.finishExplicitStdin(operation);
+		this.waitingForInput = false;
+		this.pendingEof = false;
+		this.exit = true;
+		this.workerSession.terminate(reason);
+		this.cleanupOperation(operation);
 	}
 
 	kill() {
@@ -438,10 +631,11 @@ class Java implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
-		const loadCleanup = this.activeLoadCleanup;
-		loadCleanup?.();
-		const runCleanup = this.activeRunCleanup;
-		runCleanup?.();
+		const activeOperation = this.activeOperation;
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, reason);
+			return;
+		}
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
@@ -453,11 +647,12 @@ class Java implements Sandbox {
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
-		if (this.worker) this.worker.onmessage = null;
 		resetBufferedStdin(this.buffer);
-		if (!this.exit || this.activeLoadCleanup || this.activeRunCleanup) {
+		if (this.activeOperation) {
 			this.terminate();
+			return;
 		}
+		if (this.worker) this.worker.onmessage = null;
 	}
 }
 
