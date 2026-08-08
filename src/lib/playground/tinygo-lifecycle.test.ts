@@ -167,6 +167,7 @@ vi.mock('$env/dynamic/public', () => ({
 
 import TinyGo from './tinygo';
 import type { SandboxExecutionOptions } from './options';
+import { bufferedSequence } from './stdinBuffer';
 
 const runtimeAssets = {
 	rootUrl: '/assets',
@@ -519,6 +520,135 @@ describe('TinyGo operation lifecycle', () => {
 		).resolves.toBe(true);
 		expect(runtime?.bootCalls).toBe(2);
 		expect(runtime?.workspaceFiles?.['message.go']).toContain('"updated"');
+	});
+
+	it('snapshots explicit TinyGo stdin and replaces previously queued input with EOF', async () => {
+		autoResolveRun = false;
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		sandbox.write('stale queued input\n');
+		sandbox.eof();
+		const options: SandboxExecutionOptions = { stdin: '' };
+		const running = sandbox.run(
+			'package main\nfunc main() {}',
+			false,
+			true,
+			undefined,
+			[],
+			options
+		);
+		options.stdin = 'late mutation\n';
+
+		const worker = workerInstances[0];
+		await vi.waitFor(() =>
+			expect(worker?.postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({ artifact: expect.any(Uint8Array) })
+			)
+		);
+		const runMessage = worker?.postMessage.mock.calls.find(
+			([message]) => 'artifact' in message
+		)?.[0] as unknown as { buffer: ArrayBufferLike; stdin?: string };
+		const initialSequence = bufferedSequence(runMessage.buffer);
+		worker?.onmessage?.({ data: { buffer: true } } as MessageEvent<unknown>);
+
+		expect(runMessage.stdin).toBe('');
+		expect(bufferedSequence(runMessage.buffer)).toBe(initialSequence);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		worker?.resolveRun();
+		await expect(running).resolves.toBe(true);
+	});
+
+	it('isolates explicit TinyGo stdin from terminal writes and the next execution', async () => {
+		autoResolveRun = false;
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const worker = workerInstances[0];
+		const running = sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+			stdin: 'x'.repeat(3_000)
+		});
+
+		await vi.waitFor(() =>
+			expect(worker?.postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({ artifact: expect.any(Uint8Array) })
+			)
+		);
+		const firstRunMessage = worker?.postMessage.mock.calls.find(
+			([message]) => 'artifact' in message
+		)?.[0] as unknown as { buffer: ArrayBufferLike; stdin?: string };
+		const explicitSequence = bufferedSequence(firstRunMessage.buffer);
+		expect(firstRunMessage.stdin).toBe('x'.repeat(3_000));
+		sandbox.write('interactive input must be isolated\n');
+		sandbox.eof();
+		worker?.onmessage?.({ data: { buffer: true } } as MessageEvent<unknown>);
+		expect(bufferedSequence(firstRunMessage.buffer)).toBe(explicitSequence);
+
+		worker?.resolveRun();
+		await expect(running).resolves.toBe(true);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+
+		worker?.postMessage.mockClear();
+		const nextRun = sandbox.run('package main\nfunc main() {}', false);
+		await vi.waitFor(() =>
+			expect(worker?.postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({ artifact: expect.any(Uint8Array) })
+			)
+		);
+		const nextRunMessage = worker?.postMessage.mock.calls.find(
+			([message]) => 'artifact' in message
+		)?.[0] as unknown as { stdin?: string };
+		expect(nextRunMessage.stdin).toBeUndefined();
+		worker?.onmessage?.({ data: { buffer: true } } as MessageEvent<unknown>);
+		expect(bufferedSequence(firstRunMessage.buffer)).toBe(explicitSequence);
+		worker?.resolveRun();
+		await expect(nextRun).resolves.toBe(true);
+	});
+
+	it('clears terminal writes after an explicit TinyGo stdin execution fails', async () => {
+		autoResolveRun = false;
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const worker = workerInstances[0];
+		const running = sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+			stdin: 'fixed input\n'
+		});
+
+		await vi.waitFor(() =>
+			expect(worker?.postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					artifact: expect.any(Uint8Array),
+					stdin: 'fixed input\n'
+				})
+			)
+		);
+		sandbox.write('discard after failure\n');
+		sandbox.eof();
+		worker?.onmessage?.({
+			data: { error: 'TinyGo execution failed' }
+		} as MessageEvent<unknown>);
+
+		await expect(running).rejects.toBe('TinyGo execution failed');
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+	});
+
+	it('rejects invalid explicit TinyGo stdin before changing compiler or queued input state', async () => {
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		sandbox.write('queued\n');
+
+		await expect(
+			sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+				stdin: 42
+			} as unknown as SandboxExecutionOptions)
+		).rejects.toThrow('TinyGo stdin must be a string');
+
+		expect(runtimeFixtureState.bootCalls).toBe(0);
+		expect(runtimeFixtureState.planCalls).toBe(0);
+		expect(runtimeFixtureState.executeCalls).toBe(0);
+		expect(sandbox.pendingInput).toEqual(['queued\n']);
+		expect(workerInstances[0]?.terminate).not.toHaveBeenCalled();
 	});
 
 	it('rejects invalid TinyGo workspaces before changing compiler state', async () => {

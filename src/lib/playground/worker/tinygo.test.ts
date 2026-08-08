@@ -143,6 +143,50 @@ describe('TinyGo worker', () => {
 		);
 	});
 
+	it('reads explicit stdin without requesting or requiring a shared buffer', async () => {
+		const stdin = 'x'.repeat(2_048);
+		await import('./tinygo');
+		await (globalThis as any).self.onmessage({
+			data: {
+				artifact: new Uint8Array([0, 97, 115, 109]),
+				buffer: new ArrayBuffer(0),
+				stdin,
+				args: ['explicit'],
+				log: false
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({ buffer: true });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'x'.repeat(1_024) });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+		expect(wasiState.lastArgs).toEqual(['explicit']);
+		expect(wasiState.lastFds[0].fd_read(1_024).data).toHaveLength(0);
+	});
+
+	it('releases explicit stdin after TinyGo wasm initialization fails', async () => {
+		(globalThis as any).WebAssembly.instantiate = vi.fn(async () => {
+			throw new Error('TinyGo wasm initialization failed');
+		});
+
+		await import('./tinygo');
+		await (globalThis as any).self.onmessage({
+			data: {
+				artifact: new Uint8Array([0, 97, 115, 109]),
+				buffer: new ArrayBuffer(0),
+				stdin: 'sensitive input',
+				args: ['explicit-failure'],
+				log: false
+			}
+		});
+		await Promise.resolve();
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'TinyGo wasm initialization failed'
+		});
+		expect(wasiState.lastFds[0].fd_read(1_024).data).toHaveLength(0);
+	});
+
 	it('initializes and runs a reactor-style TinyGo artifact when _start is absent', async () => {
 		(globalThis as any).WebAssembly = {
 			instantiate: vi.fn(async () => ({

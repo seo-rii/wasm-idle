@@ -87,6 +87,7 @@ type TinyGoRuntimeProgressOwner = {
 
 type TinyGoRunRequest = {
 	programArgs: string[];
+	stdin?: string;
 	target: TinyGoTarget;
 	workspaceFiles: Record<string, string>;
 };
@@ -143,8 +144,7 @@ class TinyGo implements Sandbox {
 		onDispose: (worker) => {
 			if (this.worker === worker) delete this.worker;
 			this.exit = true;
-			this.waitingForInput = false;
-			this.pendingEof = false;
+			this.clearPendingStdin();
 		}
 	});
 
@@ -158,9 +158,7 @@ class TinyGo implements Sandbox {
 	): Promise<void> {
 		return this.executeOperation('startup', options, async (operation) => {
 			try {
-				this.pendingInput = [];
-				this.waitingForInput = false;
-				this.pendingEof = false;
+				this.clearPendingStdin();
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 				const nextModuleUrl = resolveTinyGoModuleUrl(runtimeAssets, currentUrl);
 				const nextRustCompilerUrl = resolveRustCompilerUrl(runtimeAssets, currentUrl);
@@ -458,6 +456,12 @@ class TinyGo implements Sandbox {
 		this.assertOperation(operation);
 		if (output) Reflect.apply(output, this, [data]);
 		return this.isOperationActive(operation);
+	}
+
+	private clearPendingStdin() {
+		this.pendingInput = [];
+		this.pendingEof = false;
+		this.waitingForInput = false;
 	}
 
 	write(input: string) {
@@ -845,6 +849,10 @@ class TinyGo implements Sandbox {
 					}
 					const worker = this.worker;
 					const compiledArtifact = this.compiledArtifact;
+					const hasExplicitStdin = request.stdin !== undefined;
+					if (hasExplicitStdin) {
+						this.clearPendingStdin();
+					}
 					const runUid = ++this.uid;
 					return await new Promise<boolean | string>((resolve, reject) => {
 						const workerOperation = this.workerSession.beginRun(worker, reject);
@@ -864,7 +872,7 @@ class TinyGo implements Sandbox {
 							);
 							const hasError = Object.prototype.hasOwnProperty.call(message, 'error');
 							const { output, results, error, buffer } = message;
-							if (buffer) {
+							if (buffer && !hasExplicitStdin) {
 								this.waitingForInput = true;
 								this.flushPendingInput();
 							}
@@ -875,8 +883,7 @@ class TinyGo implements Sandbox {
 								if (worker.onmessage === handleMessage) worker.onmessage = null;
 								this.elapse = Date.now() - this.begin;
 								this.exit = true;
-								this.waitingForInput = false;
-								this.pendingEof = false;
+								this.clearPendingStdin();
 								this.workerSession.complete(workerOperation);
 								resolve(results as boolean | string);
 								return;
@@ -885,8 +892,7 @@ class TinyGo implements Sandbox {
 								if (worker.onmessage === handleMessage) worker.onmessage = null;
 								this.elapse = Date.now() - this.begin;
 								this.exit = true;
-								this.waitingForInput = false;
-								this.pendingEof = false;
+								this.clearPendingStdin();
 								this.workerSession.complete(workerOperation);
 								reject(error);
 							}
@@ -897,7 +903,8 @@ class TinyGo implements Sandbox {
 								artifact: new Uint8Array(compiledArtifact),
 								buffer: this.buffer,
 								args: request.programArgs,
-								log: _log
+								log: _log,
+								stdin: request.stdin
 							});
 						} catch (error) {
 							this.workerSession.terminate(error);
@@ -907,8 +914,7 @@ class TinyGo implements Sandbox {
 					if (this.isOperationActive(operation)) {
 						this.elapse = Date.now() - this.begin;
 						this.exit = true;
-						this.waitingForInput = false;
-						this.pendingEof = false;
+						this.clearPendingStdin();
 						throw error instanceof Error ? error.message : String(error);
 					}
 					throw error;
@@ -1062,7 +1068,13 @@ class TinyGo implements Sandbox {
 					programArgs.push(argument);
 				}
 
-				return { programArgs, target, workspaceFiles: runtimeWorkspace };
+				const stdin = options.stdin;
+				this.assertOperation(operation);
+				if (stdin !== undefined && typeof stdin !== 'string') {
+					throw new TypeError('TinyGo stdin must be a string');
+				}
+
+				return { programArgs, stdin, target, workspaceFiles: runtimeWorkspace };
 			}
 		);
 	}
@@ -1074,9 +1086,7 @@ class TinyGo implements Sandbox {
 		const reject = operation.reject;
 		this.completeOperation(operation);
 		this.uid += 1;
-		this.waitingForInput = false;
-		this.pendingInput = [];
-		this.pendingEof = false;
+		this.clearPendingStdin();
 		this.exit = true;
 		this.loadPromise = null;
 		this.runtimeProgress = undefined;
@@ -1105,9 +1115,7 @@ class TinyGo implements Sandbox {
 			this.cancelOperation(operation, reason);
 			return;
 		}
-		this.waitingForInput = false;
-		this.pendingInput = [];
-		this.pendingEof = false;
+		this.clearPendingStdin();
 		this.uid += 1;
 		try {
 			resetBufferedStdin(this.buffer);

@@ -32,14 +32,13 @@ class TinyGoStdin extends Fd {
 	}
 
 	fd_read(size: number) {
-		if (stdinBufferTinyGo === null) {
-			return {
-				ret: wasi.ERRNO_SUCCESS,
-				data: new Uint8Array(0)
-			};
-		}
-
 		if (stdinChunkOffsetTinyGo >= stdinChunkTinyGo.length) {
+			if (stdinBufferTinyGo === null) {
+				return {
+					ret: wasi.ERRNO_SUCCESS,
+					data: new Uint8Array(0)
+				};
+			}
 			const nextChunk = waitForBufferedStdin(stdinBufferTinyGo, () =>
 				postMessage({ buffer: true })
 			);
@@ -66,7 +65,7 @@ class TinyGoStdin extends Fd {
 }
 
 self.onmessage = async (event: { data: any }) => {
-	const { load, artifact, buffer, args = [], log } = event.data;
+	const { load, artifact, buffer, stdin, args = [], log } = event.data;
 
 	try {
 		if (load) {
@@ -86,8 +85,11 @@ self.onmessage = async (event: { data: any }) => {
 			throw new Error('TinyGo worker expected a wasm artifact');
 		}
 
-		stdinBufferTinyGo = new Int32Array(buffer);
-		stdinChunkTinyGo = new Uint8Array(0);
+		if (stdin !== undefined && typeof stdin !== 'string') {
+			throw new Error('TinyGo worker expected stdin to be a string');
+		}
+		stdinBufferTinyGo = stdin === undefined ? new Int32Array(buffer) : null;
+		stdinChunkTinyGo = stdin === undefined ? new Uint8Array(0) : encoder.encode(stdin);
 		stdinChunkOffsetTinyGo = 0;
 
 		const stdout = new ConsoleStdout((chunk) => {
@@ -162,5 +164,15 @@ self.onmessage = async (event: { data: any }) => {
 			console.error('[wasm-idle:tinygo-worker] failed', error);
 		}
 		postMessage({ error: error?.message || String(error) });
+	} finally {
+		const stdinChunk = stdinChunkTinyGo;
+		stdinBufferTinyGo = null;
+		stdinChunkTinyGo = new Uint8Array(0);
+		stdinChunkOffsetTinyGo = 0;
+		try {
+			stdinChunk.fill(0);
+		} catch {
+			// Stdin cleanup must not replace the execution result.
+		}
 	}
 };
