@@ -20,6 +20,24 @@ import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
 
+type LuaOperation = {
+	token: symbol;
+	phase: 'startup' | 'execute';
+	cancelled: boolean;
+	cancellationReason?: unknown;
+	cleanedUp: boolean;
+	cleanups: Array<() => void>;
+	explicitStdin: boolean;
+};
+
+const abortReason = (signal: AbortSignal, phase: LuaOperation['phase']) =>
+	signal.reason !== undefined
+		? signal.reason
+		: new DOMException(
+				phase === 'startup' ? 'Lua runtime startup aborted' : 'Lua execution aborted',
+				'AbortError'
+			);
+
 class Lua implements Sandbox {
 	output: any = null;
 	worker?: Worker = <any>null;
@@ -33,19 +51,153 @@ class Lua implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
-	private activeLoadCleanup: (() => void) | null = null;
-	private activeRunCleanup: (() => void) | null = null;
+	private activeOperation: LuaOperation | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'Lua',
 		onDispose: (worker) => {
-			this.activeRunCleanup?.();
-			this.activeRunCleanup = null;
 			if (this.worker === worker) delete this.worker;
 			this.exit = true;
 			this.waitingForInput = false;
 			this.pendingEof = false;
 		}
 	});
+
+	private requireOperationIdle() {
+		if (!this.activeOperation) return;
+		throw new BusyError('Lua runtime already has an active operation', {
+			runtimeId: 'LUA',
+			phase: this.activeOperation.phase
+		});
+	}
+
+	private beginOperation(phase: LuaOperation['phase']) {
+		this.requireOperationIdle();
+		const operation: LuaOperation = {
+			token: Symbol(phase),
+			phase,
+			cancelled: false,
+			cleanedUp: false,
+			cleanups: [],
+			explicitStdin: false
+		};
+		this.activeOperation = operation;
+		return operation;
+	}
+
+	private isOperationActive(operation: LuaOperation) {
+		return this.activeOperation?.token === operation.token && !operation.cancelled;
+	}
+
+	private releaseOperation(operation: LuaOperation) {
+		if (this.activeOperation?.token !== operation.token) return false;
+		this.activeOperation = null;
+		return true;
+	}
+
+	private cleanupOperation(operation: LuaOperation) {
+		if (operation.cleanedUp) return;
+		operation.cleanedUp = true;
+		const cleanups = operation.cleanups.splice(0);
+		for (const cleanup of cleanups) {
+			try {
+				cleanup();
+			} catch {
+				// Caller-owned lifecycle cleanup must not replace the operation result.
+			}
+		}
+	}
+
+	private releaseBeforeSession(operation: LuaOperation, reason: unknown) {
+		const outcome = operation.cancelled ? operation.cancellationReason : reason;
+		this.releaseOperation(operation);
+		this.cleanupOperation(operation);
+		return outcome;
+	}
+
+	private bindPreSessionAbort(operation: LuaOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return () => undefined;
+		let registered = false;
+		let unbound = false;
+		const unbind = () => {
+			if (unbound) return;
+			unbound = true;
+			if (registered) signal.removeEventListener('abort', onAbort);
+		};
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			operation.cancelled = true;
+			operation.cancellationReason = reason;
+			this.releaseOperation(operation);
+			this.cleanupOperation(operation);
+		};
+		operation.cleanups.push(unbind);
+		try {
+			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			if (this.isOperationActive(operation)) {
+				operation.cancelled = true;
+				operation.cancellationReason = error;
+				this.releaseOperation(operation);
+				this.cleanupOperation(operation);
+			}
+		}
+		return unbind;
+	}
+
+	private bindAbortSignal(operation: LuaOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return;
+		let registered = false;
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			this.cancelOperation(operation, reason);
+		};
+		operation.cleanups.push(() => {
+			if (!registered) return;
+			try {
+				signal.removeEventListener('abort', onAbort);
+			} catch {
+				// Listener cleanup must not replace the operation result.
+			}
+		});
+		try {
+			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			this.cancelOperation(operation, error);
+		}
+	}
+
+	private resetExplicitStdinState() {
+		this.pendingInput = [];
+		this.pendingEof = false;
+		this.waitingForInput = false;
+		try {
+			resetBufferedStdin(this.buffer);
+		} catch {
+			// Explicit stdin never consumes the shared terminal buffer.
+		}
+	}
+
+	private finishExplicitStdin(operation: LuaOperation) {
+		if (!operation.explicitStdin) return;
+		operation.explicitStdin = false;
+		this.resetExplicitStdinState();
+	}
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -55,60 +207,50 @@ class Lua implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		const signal = options.signal;
-		if (signal?.aborted) {
-			return Promise.reject(
-				signal.reason ?? new DOMException('Lua runtime startup aborted', 'AbortError')
-			);
+		let activeOperation: LuaOperation;
+		try {
+			activeOperation = this.beginOperation('startup');
+		} catch (error) {
+			return Promise.reject(error);
 		}
-		if (this.activeLoadCleanup || !this.exit) {
-			return Promise.reject(
-				new BusyError('Lua runtime already has an active operation', { runtimeId: 'LUA' })
-			);
-		}
-		let onAbort: (() => void) | undefined;
-		let cleanedUp = false;
-		const cleanup = () => {
-			if (cleanedUp) return;
-			cleanedUp = true;
-			if (signal && onAbort) {
-				try {
-					signal.removeEventListener('abort', onAbort);
-				} catch {
-					// Cleanup must not replace the startup result.
-				}
+		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
+		try {
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Lua runtime startup cancelled')
+				);
 			}
-			if (this.activeLoadCleanup === cleanup) this.activeLoadCleanup = null;
-		};
-		onAbort = signal
-			? () => {
-					if (this.activeLoadCleanup !== cleanup) {
-						cleanup();
-						return;
-					}
-					const reason =
-						signal.reason ??
-						new DOMException('Lua runtime startup aborted', 'AbortError');
-					cleanup();
-					this.workerSession.terminate(reason);
-				}
-			: undefined;
+			unbindPreSessionAbort();
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
+		}
+		if (!this.isOperationActive(activeOperation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(activeOperation, 'Lua runtime startup cancelled')
+			);
+		}
 		const loadPromise = this.workerSession.load(async (resolve, reject) => {
 			const resolveLoad = () => {
-				cleanup();
+				if (!this.releaseOperation(activeOperation)) return;
 				resolve();
+				this.cleanupOperation(activeOperation);
 			};
 			const rejectLoad = (reason?: unknown) => {
-				cleanup();
+				if (!this.releaseOperation(activeOperation)) return;
 				reject(reason);
+				this.cleanupOperation(activeOperation);
 			};
 			try {
-				if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
+				if (!this.isOperationActive(activeOperation)) return;
 				this.pendingInput = [];
 				this.waitingForInput = false;
 				this.pendingEof = false;
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 				const nextModuleUrl = resolveLuaModuleUrl(runtimeAssets, currentUrl);
+				if (!this.isOperationActive(activeOperation)) return;
 				if (!nextModuleUrl) {
 					return rejectLoad(
 						'Lua runtime is not configured. Set PUBLIC_WASM_LUA_MODULE_URL or runtimeAssets.lua.moduleUrl.'
@@ -122,9 +264,9 @@ class Lua implements Sandbox {
 				if (!this.worker) {
 					const WorkerConstructor = (await import('$lib/playground/worker/lua?worker'))
 						.default;
-					if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
+					if (!this.isOperationActive(activeOperation)) return;
 					const worker = new WorkerConstructor();
-					if (this.activeLoadCleanup !== cleanup || signal?.aborted) {
+					if (!this.isOperationActive(activeOperation)) {
 						worker.terminate();
 						return;
 					}
@@ -132,8 +274,7 @@ class Lua implements Sandbox {
 					this.workerSession.attach(worker);
 					let handler: (event: MessageEvent<any>) => void;
 					const ownsLoad = () =>
-						this.activeLoadCleanup === cleanup &&
-						!signal?.aborted &&
+						this.isOperationActive(activeOperation) &&
 						this.worker === worker &&
 						worker.onmessage === handler;
 					const failLoad = (error: unknown) => {
@@ -160,20 +301,20 @@ class Lua implements Sandbox {
 						moduleUrl: this.moduleUrl
 					});
 				} else {
+					const worker = this.worker;
 					progress?.set?.(1);
-					if (this.activeLoadCleanup !== cleanup || signal?.aborted) return;
+					if (!this.isOperationActive(activeOperation) || this.worker !== worker) return;
 					resolveLoad();
 				}
 			} catch (error) {
 				rejectLoad(error);
 			}
 		});
-		this.activeLoadCleanup = cleanup;
-		if (signal && onAbort) {
-			signal.addEventListener('abort', onAbort, { once: true });
-			if (signal.aborted) onAbort();
-		}
-		return loadPromise.finally(cleanup);
+		this.bindAbortSignal(activeOperation, signal);
+		return loadPromise.finally(() => {
+			this.releaseOperation(activeOperation);
+			this.cleanupOperation(activeOperation);
+		});
 	}
 
 	write(input: string) {
@@ -208,90 +349,102 @@ class Lua implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		if (this.activeLoadCleanup || !this.exit) {
-			return Promise.reject(
-				new BusyError('Lua runtime already has an active operation', { runtimeId: 'LUA' })
-			);
-		}
-		if (!this.worker) return Promise.reject('Worker not loaded');
-		const worker = this.worker;
-		const signal = options.signal;
-		if (signal?.aborted) {
-			return Promise.reject(
-				signal.reason ?? new DOMException('Lua execution aborted', 'AbortError')
-			);
-		}
-		let executionArgs: ReturnType<typeof resolveSandboxExecutionArgs>;
-		let workspace: ReturnType<typeof validateExecutionWorkspace>;
+		let activeOperation: LuaOperation;
 		try {
-			executionArgs = resolveSandboxExecutionArgs('LUA', args, options);
-			const limits = resolveExecutionLimits(options.limits);
-			workspace = validateExecutionWorkspace(
-				code,
-				options.workspaceFiles ?? [],
-				options.activePath ?? 'main.lua',
-				{
-					...options.workspaceLimits,
-					maxFileBytes: Math.min(
-						options.workspaceLimits?.maxFileBytes ??
-							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
-						limits.maxWorkspaceBytes
-					),
-					maxTotalBytes: Math.min(
-						options.workspaceLimits?.maxTotalBytes ??
-							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
-						limits.maxWorkspaceBytes
-					)
-				}
-			);
+			activeOperation = this.beginOperation('execute');
 		} catch (error) {
 			return Promise.reject(error);
 		}
-		const hasExplicitStdin = options.stdin !== undefined;
+		const worker = this.worker;
+		if (!worker) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, 'Worker not loaded'));
+		}
+		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
+		let executionArgs: ReturnType<typeof resolveSandboxExecutionArgs>;
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
+		let stdin: SandboxExecutionOptions['stdin'];
+		try {
+			signal = options.signal;
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Lua execution cancelled')
+				);
+			}
+			executionArgs = resolveSandboxExecutionArgs('LUA', args, options);
+			const limits = resolveExecutionLimits(options.limits);
+			const workspaceFiles = options.workspaceFiles ?? [];
+			const activePath = options.activePath ?? 'main.lua';
+			const workspaceLimits = options.workspaceLimits;
+			workspace = validateExecutionWorkspace(code, workspaceFiles, activePath, {
+				...workspaceLimits,
+				maxFileBytes: Math.min(
+					workspaceLimits?.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+					limits.maxWorkspaceBytes
+				),
+				maxTotalBytes: Math.min(
+					workspaceLimits?.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+					limits.maxWorkspaceBytes
+				)
+			});
+			stdin = options.stdin;
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Lua execution cancelled')
+				);
+			}
+			unbindPreSessionAbort();
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
+		}
+		if (!this.isOperationActive(activeOperation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(activeOperation, 'Lua execution cancelled')
+			);
+		}
+		const hasExplicitStdin = stdin !== undefined;
 		if (hasExplicitStdin) {
-			this.pendingInput = [];
-			this.pendingEof = false;
-			this.waitingForInput = false;
-			resetBufferedStdin(this.buffer);
+			activeOperation.explicitStdin = true;
+			this.resetExplicitStdinState();
 		}
 		this.exit = false;
-		return new Promise<boolean | string>((resolve, reject) => {
+		const running = new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
 			const operation = this.workerSession.beginRun(worker, reject);
-			let onAbort: (() => void) | undefined;
-			let cleanedUp = false;
-			const cleanup = () => {
-				if (cleanedUp) return;
-				cleanedUp = true;
-				const ownsInput = this.activeRunCleanup === cleanup;
-				if (hasExplicitStdin && ownsInput) {
-					this.pendingInput = [];
-					this.pendingEof = false;
-					this.waitingForInput = false;
-					try {
-						resetBufferedStdin(this.buffer);
-					} catch {
-						// Stdin cleanup must not replace the execution result.
-					}
-				}
-				if (signal && onAbort) {
-					try {
-						signal.removeEventListener('abort', onAbort);
-					} catch {
-						// Cleanup must not replace the execution result.
-					}
-				}
-				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
-			};
+			this.bindAbortSignal(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) return;
 			let handler: (event: Event & { data: any }) => void;
 			const ownsRun = () =>
-				this.activeRunCleanup === cleanup &&
+				this.isOperationActive(activeOperation) &&
 				this.worker === worker &&
 				worker.onmessage === handler &&
 				_uid === this.uid;
-			const failRun = (error: unknown) => {
+			const claimRun = () => {
+				if (!ownsRun()) return false;
+				this.finishExplicitStdin(activeOperation);
+				this.elapse = Date.now() - this.begin;
+				this.exit = true;
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				this.workerSession.complete(operation);
+				this.releaseOperation(activeOperation);
+				this.cleanupOperation(activeOperation);
+				try {
+					if (worker.onmessage === handler) worker.onmessage = null;
+				} catch {
+					// Handler cleanup must not replace the operation result.
+				}
+				return true;
+			};
+			const failRun = (error: unknown, disposeWorker = false) => {
 				if (!ownsRun()) return;
-				this.workerSession.terminate(error);
+				if (disposeWorker) {
+					this.cancelOperation(activeOperation, error);
+					return;
+				}
+				if (!claimRun()) return;
+				reject(error);
 			};
 			handler = (event: Event & { data: any }) => {
 				if (!ownsRun()) return;
@@ -309,52 +462,17 @@ class Lua implements Sandbox {
 					if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
 					if (!ownsRun()) return;
 					if (results) {
-						if (!this.workerSession.complete(operation)) return;
-						if (worker.onmessage === handler) worker.onmessage = null;
-						cleanup();
-						this.elapse = Date.now() - this.begin;
-						this.exit = true;
-						this.waitingForInput = false;
-						this.pendingEof = false;
+						if (!claimRun()) return;
 						resolve(results as string);
 						return;
 					}
-					if (error) {
-						if (!this.workerSession.complete(operation)) return;
-						if (worker.onmessage === handler) worker.onmessage = null;
-						cleanup();
-						this.elapse = Date.now() - this.begin;
-						this.exit = true;
-						this.waitingForInput = false;
-						this.pendingEof = false;
-						reject(error);
-					}
+					if (error) failRun(error);
 				} catch (error) {
-					failRun(error);
+					failRun(error, true);
 				}
 			};
-			onAbort = signal
-				? () => {
-						if (
-							this.worker !== worker ||
-							worker.onmessage !== handler ||
-							_uid !== this.uid
-						) {
-							cleanup();
-							return;
-						}
-						this.terminate(
-							signal.reason ?? new DOMException('Lua execution aborted', 'AbortError')
-						);
-					}
-				: undefined;
-			this.activeRunCleanup = cleanup;
 			worker.onmessage = handler;
-			if (signal && onAbort) {
-				signal.addEventListener('abort', onAbort, { once: true });
-				if (signal.aborted) onAbort();
-			}
-			if (this.worker !== worker || worker.onmessage !== handler || _uid !== this.uid) return;
+			if (!ownsRun()) return;
 			this.begin = Date.now();
 			try {
 				worker.postMessage({
@@ -362,15 +480,36 @@ class Lua implements Sandbox {
 					prepare,
 					buffer: this.buffer,
 					args: executionArgs.programArgs,
-					stdin: options.stdin,
+					stdin,
 					activePath: workspace.activePath,
 					workspaceFiles: workspace.workspaceFiles,
 					log: _log
 				});
 			} catch (error) {
-				failRun(error);
+				failRun(error, true);
 			}
 		});
+		return running.finally(() => {
+			if (this.releaseOperation(activeOperation)) {
+				this.finishExplicitStdin(activeOperation);
+				this.exit = true;
+			}
+			this.cleanupOperation(activeOperation);
+		});
+	}
+
+	private cancelOperation(operation: LuaOperation, reason: unknown) {
+		if (!this.isOperationActive(operation)) return;
+		operation.cancelled = true;
+		operation.cancellationReason = reason;
+		this.activeOperation = null;
+		this.uid += 1;
+		this.finishExplicitStdin(operation);
+		this.waitingForInput = false;
+		this.pendingEof = false;
+		this.exit = true;
+		this.workerSession.terminate(reason);
+		this.cleanupOperation(operation);
 	}
 
 	kill() {
@@ -378,10 +517,11 @@ class Lua implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
-		const loadCleanup = this.activeLoadCleanup;
-		loadCleanup?.();
-		const cleanup = this.activeRunCleanup;
-		cleanup?.();
+		const activeOperation = this.activeOperation;
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, reason);
+			return;
+		}
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
@@ -393,11 +533,12 @@ class Lua implements Sandbox {
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
-		if (this.worker) this.worker.onmessage = null;
 		resetBufferedStdin(this.buffer);
-		if (!this.exit || this.activeLoadCleanup) {
+		if (this.activeOperation) {
 			this.terminate();
+			return;
 		}
+		if (this.worker) this.worker.onmessage = null;
 	}
 }
 
