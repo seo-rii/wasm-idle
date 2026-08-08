@@ -6,6 +6,7 @@ import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	TimeoutError,
 	resolveExecutionLimits,
 	type ExecutionLimits,
 	validateExecutionWorkspace
@@ -48,6 +49,7 @@ type BashOperation = {
 	cancellationReason?: unknown;
 	cleanedUp: boolean;
 	cleanups: Array<() => void>;
+	abortController: AbortController;
 };
 
 const abortReason = (signal: AbortSignal, phase: BashOperation['phase']) => {
@@ -107,7 +109,8 @@ class Bash implements Sandbox {
 			phase,
 			cancelled: false,
 			cleanedUp: false,
-			cleanups: []
+			cleanups: [],
+			abortController: new AbortController()
 		};
 		this.activeOperation = operation;
 		return operation;
@@ -165,6 +168,38 @@ class Bash implements Sandbox {
 		}
 	}
 
+	private abortOperationSignal(operation: BashOperation, reason: unknown) {
+		try {
+			operation.abortController.abort(reason);
+		} catch {
+			// Internal abort cleanup must not replace the operation result.
+		}
+	}
+
+	private bindOperationTimeout(operation: BashOperation, timeoutMs: number) {
+		if (!this.isOperationActive(operation)) return;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		operation.cleanups.push(() => {
+			if (timeout !== undefined) clearTimeout(timeout);
+		});
+		try {
+			timeout = setTimeout(() => {
+				if (!this.isOperationActive(operation)) return;
+				const label = operation.phase === 'startup' ? 'startup' : 'execution';
+				this.terminate(
+					new TimeoutError(`Bash ${label} timed out after ${timeoutMs} ms`, {
+						phase: operation.phase,
+						runtimeId: 'BASH',
+						timeoutMs
+					})
+				);
+			}, timeoutMs);
+			if (operation.cleanedUp) clearTimeout(timeout);
+		} catch (error) {
+			if (this.isOperationActive(operation)) this.terminate(error);
+		}
+	}
+
 	private releaseBeforeSession(operation: BashOperation, reason: unknown) {
 		const outcome = operation.cancelled ? operation.cancellationReason : reason;
 		this.releaseOperation(operation);
@@ -194,6 +229,7 @@ class Bash implements Sandbox {
 			operation.cancellationReason = reason;
 			this.releaseOperation(operation);
 			this.cleanupOperation(operation);
+			this.abortOperationSignal(operation, reason);
 		};
 		operation.cleanups.push(unbind);
 		try {
@@ -215,6 +251,7 @@ class Bash implements Sandbox {
 				operation.cancellationReason = error;
 				this.releaseOperation(operation);
 				this.cleanupOperation(operation);
+				this.abortOperationSignal(operation, error);
 			}
 		}
 		return unbind;
@@ -288,6 +325,7 @@ class Bash implements Sandbox {
 		} catch (error) {
 			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
 		}
+		const timeoutMs = Math.min(2_147_483_647, limits.assetTimeoutMs + limits.startupTimeoutMs);
 		const loadGeneration = ++this.loadGeneration;
 		return new Promise<void>((resolve, reject) => {
 			let onAbort: (() => void) | undefined;
@@ -315,6 +353,7 @@ class Bash implements Sandbox {
 			const rejectLoad = (reason: unknown) => {
 				if (!this.isOperationActive(activeOperation)) return;
 				settleRejectedLoad(reason);
+				this.abortOperationSignal(activeOperation, reason);
 			};
 			onAbort = signal
 				? () => {
@@ -353,6 +392,7 @@ class Bash implements Sandbox {
 			} catch (error) {
 				if (this.isOperationActive(activeOperation)) this.terminate(error);
 			}
+			this.bindOperationTimeout(activeOperation, timeoutMs);
 			if (!this.isOperationActive(activeOperation)) return;
 			void (async () => {
 				let nextPackage: WasmerPackage | null = null;
@@ -403,7 +443,7 @@ class Bash implements Sandbox {
 							url: resolvedWebcUrl,
 							label: 'Bash WEBc package',
 							maxAssetBytes: limits.maxAssetBytes,
-							signal
+							signal: activeOperation.abortController.signal
 						}),
 						loadSdkPromise
 					]);
@@ -562,6 +602,7 @@ class Bash implements Sandbox {
 		}
 		let signal: AbortSignal | undefined;
 		let programArgs: string[];
+		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		let stdin: SandboxExecutionOptions['stdin'];
 		let unbindPreSessionAbort: () => void = () => undefined;
@@ -584,7 +625,7 @@ class Bash implements Sandbox {
 			}
 			const limitSource = options.limits;
 			this.requireOperationActive(activeOperation);
-			const limits = this.snapshotExecutionLimits(activeOperation, limitSource);
+			limits = this.snapshotExecutionLimits(activeOperation, limitSource);
 			const workspaceFilesSource = options.workspaceFiles ?? [];
 			this.requireOperationActive(activeOperation);
 			if (!Array.isArray(workspaceFilesSource)) {
@@ -645,6 +686,7 @@ class Bash implements Sandbox {
 		} catch (error) {
 			throw this.releaseBeforeSession(activeOperation, error);
 		}
+		const timeoutMs = Math.min(2_147_483_647, limits.compileTimeoutMs + limits.runTimeoutMs);
 		const mountedFiles = Object.fromEntries(
 			workspace.workspaceFiles.map((file) => [file.path, file.content])
 		);
@@ -669,7 +711,7 @@ class Bash implements Sandbox {
 			const cleanup = () => {
 				if (cleanedUp) return;
 				cleanedUp = true;
-				if (hasExplicitStdin) {
+				if (hasExplicitStdin && this.activeOperation?.token === activeOperation.token) {
 					this.pendingInput = [];
 					this.pendingEof = false;
 				}
@@ -720,6 +762,7 @@ class Bash implements Sandbox {
 			} catch (error) {
 				if (this.isOperationActive(activeOperation)) this.terminate(error);
 			}
+			this.bindOperationTimeout(activeOperation, timeoutMs);
 			if (!this.isOperationActive(activeOperation) || runUid !== this.uid) return;
 			void (async () => {
 				const ownsRun = () =>
@@ -859,10 +902,36 @@ class Bash implements Sandbox {
 	terminate(reason: unknown = 'Process terminated') {
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
+			const loadReject = this.activeLoadReject;
+			const loadCleanup = this.activeLoadCleanup;
+			const reject = this.activeReject;
+			const cleanup = this.activeRunCleanup;
+			const writer = this.stdinWriter;
+			const instance = this.instance;
+			const outputController = this.outputController;
 			activeOperation.cancelled = true;
 			activeOperation.cancellationReason = reason;
 			this.activeOperation = null;
+			this.activeLoadReject = null;
+			this.activeLoadCleanup = null;
+			this.activeReject = null;
+			this.activeRunCleanup = null;
+			this.loadGeneration += 1;
+			this.uid += 1;
+			this.stdinWriter = null;
+			this.instance = null;
+			this.outputController = null;
+			this.pendingInput = [];
+			this.pendingEof = false;
+			this.exit = true;
 			this.cleanupOperation(activeOperation);
+			loadCleanup?.();
+			cleanup?.();
+			loadReject?.(reason);
+			reject?.(reason);
+			this.abortOperationSignal(activeOperation, reason);
+			this.disposeRunHandles(instance, writer, outputController, reason);
+			return;
 		}
 		const loadReject = this.activeLoadReject;
 		const loadCleanup = this.activeLoadCleanup;

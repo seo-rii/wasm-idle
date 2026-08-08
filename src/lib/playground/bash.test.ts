@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { commandFree, commandRun, fromFile, importRuntimeModule, init, packageFree } = vi.hoisted(
 	() => ({
@@ -42,6 +42,11 @@ async function observeSettlement<T>(promise: Promise<T>) {
 }
 
 describe('Bash sandbox', () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.useRealTimers();
+	});
+
 	beforeEach(() => {
 		vi.resetAllMocks();
 		init.mockResolvedValue(undefined);
@@ -84,7 +89,8 @@ describe('Bash sandbox', () => {
 		expect(fetch).toHaveBeenCalledWith('http://localhost:3000/assets/wasm-bash/bash.webc', {
 			credentials: 'omit',
 			redirect: 'error',
-			referrerPolicy: 'no-referrer'
+			referrerPolicy: 'no-referrer',
+			signal: expect.any(AbortSignal)
 		});
 		expect(init).toHaveBeenCalledWith({
 			sdkUrl: 'http://localhost:3000/assets/wasm-bash/sdk/index.mjs',
@@ -178,7 +184,7 @@ describe('Bash sandbox', () => {
 			credentials: 'omit',
 			redirect: 'error',
 			referrerPolicy: 'no-referrer',
-			signal: controller.signal
+			signal: expect.any(AbortSignal)
 		});
 		expect(fromFile).not.toHaveBeenCalled();
 		await expect(sandbox.load('/assets')).resolves.toBeUndefined();
@@ -583,6 +589,29 @@ describe('Bash sandbox', () => {
 		}
 	);
 
+	it('aborts a pending Bash WEBc fetch when SDK startup fails first', async () => {
+		let resolveFetch: ((response: Response) => void) | undefined;
+		let requestSignal: AbortSignal | undefined;
+		vi.mocked(fetch).mockImplementationOnce((_input, init) => {
+			requestSignal = init?.signal ?? undefined;
+			return new Promise<Response>((resolve) => {
+				resolveFetch = resolve;
+			});
+		});
+		const reason = new Error('Bash SDK failed before its WEBc fetch');
+		importRuntimeModule.mockRejectedValueOnce(reason);
+		const sandbox = new Bash();
+
+		await expect(sandbox.load('/sdk-failure-pending-fetch')).rejects.toBe(reason);
+		expect(requestSignal?.aborted).toBe(true);
+		expect(requestSignal?.reason).toBe(reason);
+
+		resolveFetch?.(new Response(new Uint8Array([0, 97, 115, 109])));
+		await expect(sandbox.load('/sdk-failure-pending-fetch')).resolves.toBeUndefined();
+		expect(importRuntimeModule).toHaveBeenCalledTimes(2);
+		expect(fromFile).toHaveBeenCalledOnce();
+	});
+
 	it('removes a settled Bash startup listener before a late abort', async () => {
 		const sandbox = new Bash();
 		const controller = new AbortController();
@@ -839,7 +868,8 @@ describe('Bash sandbox', () => {
 		expect(fetch).toHaveBeenCalledWith('http://localhost:3000/snapshot-bash/package.webc', {
 			credentials: 'omit',
 			redirect: 'error',
-			referrerPolicy: 'no-referrer'
+			referrerPolicy: 'no-referrer',
+			signal: expect.any(AbortSignal)
 		});
 		expect(importRuntimeModule).toHaveBeenCalledWith(
 			'http://localhost:3000/snapshot-bash/sdk.mjs'
@@ -1125,12 +1155,16 @@ describe('Bash sandbox', () => {
 		const runningSandbox = new Bash();
 		await runningSandbox.load('/active-null-run');
 		const runController = new AbortController();
+		vi.useFakeTimers();
 		const running = runningSandbox.run('sleep forever', false, true, undefined, [], {
-			signal: runController.signal
+			signal: runController.signal,
+			limits: { compileTimeoutMs: 4, runTimeoutMs: 6 }
 		});
-		await vi.waitFor(() => expect(commandRun).toHaveBeenCalledOnce());
+		expect(commandRun).toHaveBeenCalledOnce();
 		runController.abort(null);
 		await expect(running).rejects.toBeNull();
+		expect(vi.getTimerCount()).toBe(0);
+		await vi.advanceTimersByTimeAsync(10);
 		resolveInstance({
 			stdin: undefined,
 			stdout: byteStream('late'),
@@ -1138,7 +1172,8 @@ describe('Bash sandbox', () => {
 			wait: vi.fn(async () => ({ ok: true, code: 0 })),
 			free: lateInstanceFree
 		});
-		await vi.waitFor(() => expect(lateInstanceFree).toHaveBeenCalledOnce());
+		await vi.advanceTimersByTimeAsync(0);
+		expect(lateInstanceFree).toHaveBeenCalledOnce();
 	});
 
 	it('reads an active Bash abort reason once without cancelling its replacement', async () => {
@@ -1878,6 +1913,287 @@ describe('Bash sandbox', () => {
 				}
 			})
 		);
+	});
+
+	it('enforces the aggregate Bash startup deadline and aborts an in-flight WEBc fetch', async () => {
+		vi.useFakeTimers();
+		let resolveFetch: ((response: Response) => void) | undefined;
+		let requestSignal: AbortSignal | undefined;
+		let replacement: Promise<void> | undefined;
+		const sandbox = new Bash();
+		vi.mocked(fetch).mockImplementationOnce((_input, init) => {
+			requestSignal = init?.signal ?? undefined;
+			requestSignal?.addEventListener(
+				'abort',
+				() => {
+					replacement = sandbox.load('/startup-timeout-replacement');
+				},
+				{ once: true }
+			);
+			return new Promise<Response>((resolve) => {
+				resolveFetch = resolve;
+			});
+		});
+		const progress = { set: vi.fn() };
+		const loading = sandbox.load(
+			'/startup-timeout',
+			'',
+			true,
+			[],
+			{ limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 } },
+			progress
+		);
+		const rejected = loading.catch((reason: unknown) => reason);
+
+		expect(requestSignal?.aborted).toBe(false);
+		await vi.advanceTimersByTimeAsync(12);
+		const timeout = await rejected;
+		expect(timeout).toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'startup',
+			runtimeId: 'BASH',
+			timeoutMs: 12
+		});
+		expect(requestSignal?.aborted).toBe(true);
+		expect(requestSignal?.reason).toBe(timeout);
+		await expect(replacement).resolves.toBeUndefined();
+		const progressCalls = progress.set.mock.calls.length;
+
+		resolveFetch?.(new Response(new Uint8Array([0, 97, 115, 109])));
+		vi.useRealTimers();
+		await vi.waitFor(() => expect(fromFile).toHaveBeenCalledOnce());
+		expect(progress.set).toHaveBeenCalledTimes(progressCalls);
+		expect(sandbox.webcUrl).toMatch(/\/startup-timeout-replacement\/wasm-bash\/bash\.webc$/);
+	});
+
+	it('caps the aggregate Bash startup deadline at the host timer maximum', async () => {
+		vi.useFakeTimers();
+		const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+		let resolveFetch: ((response: Response) => void) | undefined;
+		vi.mocked(fetch).mockImplementationOnce(
+			() =>
+				new Promise<Response>((resolve) => {
+					resolveFetch = resolve;
+				})
+		);
+		const sandbox = new Bash();
+		const loading = sandbox.load('/capped-startup-timeout', '', true, [], {
+			limits: {
+				assetTimeoutMs: Number.MAX_SAFE_INTEGER,
+				startupTimeoutMs: Number.MAX_SAFE_INTEGER
+			}
+		});
+		const reason = new Error('stop capped Bash startup');
+
+		expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2_147_483_647);
+		sandbox.terminate(reason);
+		await expect(loading).rejects.toBe(reason);
+		expect(vi.getTimerCount()).toBe(0);
+
+		resolveFetch?.(new Response(new Uint8Array([0, 97, 115, 109])));
+		await vi.advanceTimersByTimeAsync(0);
+	});
+
+	it('frees a Bash package that arrives after the startup deadline', async () => {
+		vi.useFakeTimers();
+		let resolvePackage:
+			| ((value: {
+					entrypoint: { run: typeof commandRun };
+					free: ReturnType<typeof vi.fn>;
+			  }) => void)
+			| undefined;
+		const latePackageFree = vi.fn();
+		fromFile.mockReturnValueOnce(
+			new Promise((resolve) => {
+				resolvePackage = resolve;
+			})
+		);
+		const sandbox = new Bash();
+		const loading = sandbox.load('/late-package-timeout', '', true, [], {
+			limits: { assetTimeoutMs: 3, startupTimeoutMs: 5 }
+		});
+		const rejected = loading.catch((reason: unknown) => reason);
+		await vi.advanceTimersByTimeAsync(0);
+		expect(fromFile).toHaveBeenCalledOnce();
+
+		await vi.advanceTimersByTimeAsync(8);
+		const timeout = await rejected;
+		expect(timeout).toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'startup',
+			runtimeId: 'BASH',
+			timeoutMs: 8
+		});
+
+		resolvePackage?.({ entrypoint: { run: commandRun }, free: latePackageFree });
+		await vi.waitFor(() => expect(latePackageFree).toHaveBeenCalledOnce());
+		vi.useRealTimers();
+		await expect(sandbox.load('/late-package-timeout-retry')).resolves.toBeUndefined();
+		expect(sandbox.webcUrl).toMatch(/\/late-package-timeout-retry\/wasm-bash\/bash\.webc$/);
+	});
+
+	it('enforces the aggregate Bash execution deadline and frees a late instance', async () => {
+		let resolveInstance:
+			| ((value: {
+					stdin: undefined;
+					stdout: ReadableStream<Uint8Array>;
+					stderr: ReadableStream<Uint8Array>;
+					wait: ReturnType<typeof vi.fn>;
+					free: ReturnType<typeof vi.fn>;
+			  }) => void)
+			| undefined;
+		const lateInstanceFree = vi.fn();
+		commandRun.mockReturnValueOnce(
+			new Promise((resolve) => {
+				resolveInstance = resolve;
+			})
+		);
+		commandRun.mockResolvedValueOnce({
+			stdin: undefined,
+			stdout: byteStream('retry only\n'),
+			stderr: byteStream(''),
+			wait: vi.fn(async () => ({ ok: true, code: 0 })),
+			free: vi.fn()
+		});
+		const sandbox = new Bash();
+		const output: string[] = [];
+		sandbox.output = (chunk) => output.push(chunk);
+		await sandbox.load('/execution-timeout');
+		const controller = new AbortController();
+		const callerReason = new Error('late caller cancellation after Bash timeout');
+		vi.useFakeTimers();
+		const running = sandbox.run('sleep forever', false, true, undefined, [], {
+			limits: { compileTimeoutMs: 4, runTimeoutMs: 6 },
+			signal: controller.signal
+		});
+		const rejected = running.catch((reason: unknown) => reason);
+		expect(commandRun).toHaveBeenCalledOnce();
+
+		await vi.advanceTimersByTimeAsync(10);
+		const timeout = await rejected;
+		expect(timeout).toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'BASH',
+			timeoutMs: 10
+		});
+		expect(vi.getTimerCount()).toBe(0);
+		controller.abort(callerReason);
+		await vi.advanceTimersByTimeAsync(0);
+		expect(output).toEqual([]);
+
+		resolveInstance?.({
+			stdin: undefined,
+			stdout: byteStream('stale output\n'),
+			stderr: byteStream(''),
+			wait: vi.fn(async () => ({ ok: true, code: 0 })),
+			free: lateInstanceFree
+		});
+		await vi.advanceTimersByTimeAsync(0);
+		expect(lateInstanceFree).toHaveBeenCalledOnce();
+
+		vi.useRealTimers();
+		await expect(sandbox.run('printf retry', false)).resolves.toBe(true);
+		expect(output).toEqual(['retry only\n']);
+	});
+
+	it('times out a consumed Bash wait without freeing its transferred instance', async () => {
+		let resolveWait: ((value: { ok: boolean; code: number }) => void) | undefined;
+		const wait = vi.fn(
+			() =>
+				new Promise<{ ok: boolean; code: number }>((resolve) => {
+					resolveWait = resolve;
+				})
+		);
+		const instanceFree = vi.fn();
+		const writerAbort = vi.fn(async () => undefined);
+		const writerRelease = vi.fn();
+		const writer = {
+			write: vi.fn(async () => undefined),
+			close: vi.fn(async () => undefined),
+			abort: writerAbort,
+			releaseLock: writerRelease
+		} as unknown as WritableStreamDefaultWriter;
+		const stdoutCancel = vi.fn();
+		const stderrCancel = vi.fn();
+		commandRun.mockResolvedValueOnce({
+			stdin: { getWriter: vi.fn(() => writer) } as unknown as WritableStream<Uint8Array>,
+			stdout: new ReadableStream<Uint8Array>({ cancel: stdoutCancel }),
+			stderr: new ReadableStream<Uint8Array>({ cancel: stderrCancel }),
+			wait,
+			free: instanceFree
+		});
+		commandRun.mockResolvedValueOnce({
+			stdin: undefined,
+			stdout: byteStream('retry\n'),
+			stderr: byteStream(''),
+			wait: vi.fn(async () => ({ ok: true, code: 0 })),
+			free: vi.fn()
+		});
+		const sandbox = new Bash();
+		await sandbox.load('/wait-timeout');
+		vi.useFakeTimers();
+		const running = sandbox.run('sleep forever', false, true, undefined, [], {
+			limits: { compileTimeoutMs: 40, runTimeoutMs: 60 }
+		});
+		const rejected = running.catch((reason: unknown) => reason);
+		await vi.advanceTimersByTimeAsync(0);
+		expect(wait).toHaveBeenCalledOnce();
+
+		await vi.advanceTimersByTimeAsync(100);
+		const timeout = await rejected;
+		expect(timeout).toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'BASH',
+			timeoutMs: 100
+		});
+		await vi.advanceTimersByTimeAsync(0);
+		expect(writerAbort).toHaveBeenCalledWith(timeout);
+		expect(writerRelease).toHaveBeenCalledOnce();
+		expect(stdoutCancel).toHaveBeenCalledWith(timeout);
+		expect(stderrCancel).toHaveBeenCalledWith(timeout);
+		expect(instanceFree).not.toHaveBeenCalled();
+
+		resolveWait?.({ ok: true, code: 0 });
+		await vi.advanceTimersByTimeAsync(0);
+		vi.useRealTimers();
+		await expect(sandbox.run('printf retry', false)).resolves.toBe(true);
+		expect(instanceFree).not.toHaveBeenCalled();
+	});
+
+	it('clears settled Bash deadlines before they can affect an idle runtime', async () => {
+		commandRun.mockResolvedValue({
+			stdin: undefined,
+			stdout: byteStream('ok\n'),
+			stderr: byteStream(''),
+			wait: vi.fn(async () => ({ ok: true, code: 0 })),
+			free: vi.fn()
+		});
+		vi.useFakeTimers();
+		const sandbox = new Bash();
+		await sandbox.load('/settled-deadlines', '', true, [], {
+			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
+		});
+		await expect(
+			sandbox.run('printf ok', false, true, undefined, [], {
+				limits: { compileTimeoutMs: 2, runTimeoutMs: 3 }
+			})
+		).resolves.toBe(true);
+		const runtimePackage = sandbox.runtimePackage;
+		const uid = sandbox.uid;
+		expect(vi.getTimerCount()).toBe(0);
+
+		await vi.advanceTimersByTimeAsync(20);
+		expect(sandbox.runtimePackage).toBe(runtimePackage);
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.exit).toBe(true);
+		await expect(sandbox.run('printf retry', false)).resolves.toBe(true);
+		expect(vi.getTimerCount()).toBe(0);
 	});
 
 	it('reports a non-zero Bash exit status after forwarding stderr', async () => {
