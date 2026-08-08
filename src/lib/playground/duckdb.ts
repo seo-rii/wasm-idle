@@ -6,12 +6,18 @@ import {
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
-import { BusyError } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 
 type DuckDbOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
+	cancellationReason?: unknown;
 };
 
 class DuckDB implements Sandbox {
@@ -57,6 +63,12 @@ class DuckDB implements Sandbox {
 		if (this.activeOperation?.token !== operation.token) return false;
 		this.activeOperation = null;
 		return true;
+	}
+
+	private releaseBeforeSession(operation: DuckDbOperation, reason: unknown) {
+		const outcome = operation.cancelled ? operation.cancellationReason : reason;
+		this.releaseOperation(operation);
+		return outcome;
 	}
 
 	load(
@@ -173,10 +185,40 @@ class DuckDB implements Sandbox {
 		} catch (error) {
 			return Promise.reject(error);
 		}
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
+		let stdin: string | undefined;
+		try {
+			const limits = resolveExecutionLimits(options.limits);
+			workspace = validateExecutionWorkspace(
+				code,
+				options.workspaceFiles ?? [],
+				options.activePath ?? 'main.duckdb',
+				{
+					...options.workspaceLimits,
+					maxFileBytes: Math.min(
+						options.workspaceLimits?.maxFileBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						options.workspaceLimits?.maxTotalBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					)
+				}
+			);
+			stdin = options.stdin;
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
+		}
+		if (!this.isOperationActive(activeOperation)) {
+			return Promise.reject(
+				this.releaseBeforeSession(activeOperation, 'DuckDB execution cancelled')
+			);
+		}
 		const worker = this.worker;
 		if (!worker) {
-			this.releaseOperation(activeOperation);
-			return Promise.reject('Worker not loaded');
+			return Promise.reject(this.releaseBeforeSession(activeOperation, 'Worker not loaded'));
 		}
 		this.exit = false;
 		const running = new Promise<boolean | string>((resolve, reject) => {
@@ -242,9 +284,9 @@ class DuckDB implements Sandbox {
 				worker.postMessage({
 					code,
 					prepare,
-					activePath: options.activePath || 'main.duckdb',
-					workspaceFiles: options.workspaceFiles || [],
-					stdin: options.stdin,
+					activePath: workspace.activePath ?? 'main.duckdb',
+					workspaceFiles: workspace.workspaceFiles,
+					stdin,
 					log: _log
 				});
 			} catch (error) {
@@ -265,6 +307,7 @@ class DuckDB implements Sandbox {
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			activeOperation.cancelled = true;
+			activeOperation.cancellationReason = reason;
 			this.releaseOperation(activeOperation);
 		}
 		this.uid += 1;
