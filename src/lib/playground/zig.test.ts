@@ -75,10 +75,8 @@ describe('Zig sandbox', () => {
 		const outputs: string[] = [];
 		const progressValues: number[] = [];
 		const code = 'pub fn main() void {}';
-		const workspaceFiles = [
-			{ path: 'src/main.zig', content: code },
-			{ path: 'src/helper.zig', content: 'pub const bonus = 3;' }
-		];
+		const helperFile = { path: 'src/helper.zig', content: 'pub const bonus = 3;' };
+		const workspaceFiles = [{ path: 'src/main.zig', content: code }, helperFile];
 
 		sandbox.output = (chunk: string) => outputs.push(chunk);
 
@@ -124,7 +122,7 @@ describe('Zig sandbox', () => {
 				args: [],
 				compileArgs: ['-O', 'Debug'],
 				activePath: 'src/main.zig',
-				workspaceFiles,
+				workspaceFiles: [helperFile],
 				targetTriple: 'wasm64-wasi',
 				log: true
 			})
@@ -845,5 +843,306 @@ describe('Zig sandbox', () => {
 		handler?.({ data: { results: true } } as MessageEvent<any>);
 		await expect(running).resolves.toBe(true);
 		expect(sandbox.pendingInput).toEqual([]);
+	});
+
+	it('preserves an exact null pre-abort reason without changing idle Zig state', async () => {
+		const sandbox = new Zig();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		const compilerUrl = sandbox.compilerUrl;
+		const stdlibUrl = sandbox.stdlibUrl;
+		const uid = sandbox.uid;
+		sandbox.write('queued input\n');
+		const controller = new AbortController();
+		controller.abort(null);
+
+		await expect(
+			sandbox.load('/replacement', '', true, [], { signal: controller.signal })
+		).rejects.toBeNull();
+		await expect(
+			sandbox.run('pub fn main() void {}', false, true, undefined, [], {
+				signal: controller.signal,
+				stdin: ''
+			})
+		).rejects.toBeNull();
+
+		expect(sandbox.worker).toBe(worker);
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(sandbox.compilerUrl).toBe(compilerUrl);
+		expect(sandbox.stdlibUrl).toBe(stdlibUrl);
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.exit).toBe(true);
+	});
+
+	it('preserves replacement startup when the outer signal getter terminates Zig', async () => {
+		const sandbox = new Zig();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Zig during startup option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get signal() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement');
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.load('/outer', '', true, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves the first cancellation and replacement across later Zig option failure', async () => {
+		const sandbox = new Zig();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Zig during execution option snapshot');
+		const laterError = new Error('later Zig workspace getter failed');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			get limits() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement');
+				return undefined;
+			},
+			get workspaceFiles(): never {
+				throw laterError;
+			}
+		};
+
+		const superseded = sandbox.run(
+			'pub fn main() void {}',
+			false,
+			true,
+			undefined,
+			[],
+			options
+		);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(retiredWorker.postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('preserves a Zig replacement when a later option getter aborts the snapshot', async () => {
+		const sandbox = new Zig();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const controller = new AbortController();
+		const reason = new Error('abort Zig during execution option snapshot');
+		let replacement: Promise<void> | undefined;
+		const options = {
+			signal: controller.signal,
+			get limits() {
+				controller.abort(reason);
+				replacement = sandbox.load({
+					zig: {
+						compilerUrl: '/replacement/zig.wasm',
+						stdlibUrl: '/replacement/std.tar.gz'
+					}
+				});
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.run(
+			'pub fn main() void {}',
+			false,
+			true,
+			undefined,
+			[],
+			options
+		);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(retiredWorker.postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('snapshots each explicit Zig runtime asset once without reading the root URL', async () => {
+		const sandbox = new Zig();
+		const reads = { rootUrl: 0, zig: 0, compilerUrl: 0, stdlibUrl: 0 };
+		const runtimeConfig = {
+			get compilerUrl() {
+				reads.compilerUrl += 1;
+				return '/snapshot/zig.wasm';
+			},
+			get stdlibUrl() {
+				reads.stdlibUrl += 1;
+				return '/snapshot/std.tar.gz';
+			}
+		};
+		const runtimeAssets = {
+			get rootUrl() {
+				reads.rootUrl += 1;
+				return '/snapshot-root';
+			},
+			get zig() {
+				reads.zig += 1;
+				return runtimeConfig;
+			}
+		};
+
+		await sandbox.load(runtimeAssets);
+
+		expect(reads).toEqual({ rootUrl: 0, zig: 1, compilerUrl: 1, stdlibUrl: 1 });
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				compilerUrl: expect.stringMatching(/\/snapshot\/zig\.wasm$/),
+				stdlibUrl: expect.stringMatching(/\/snapshot\/std\.tar\.gz$/)
+			})
+		);
+		expect(sandbox.compilerUrl).toMatch(/\/snapshot\/zig\.wasm$/);
+		expect(sandbox.stdlibUrl).toMatch(/\/snapshot\/std\.tar\.gz$/);
+	});
+
+	it('reads the Zig root URL once when both runtime assets use fallback resolution', async () => {
+		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = '';
+		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '';
+		const sandbox = new Zig();
+		let rootUrlReads = 0;
+		const runtimeAssets = {
+			get rootUrl() {
+				rootUrlReads += 1;
+				return '/fallback';
+			}
+		};
+
+		await sandbox.load(runtimeAssets);
+
+		expect(rootUrlReads).toBe(1);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				compilerUrl: expect.stringMatching(/\/fallback\/wasm-zig\/zig_small\.wasm$/),
+				stdlibUrl: expect.stringMatching(/\/fallback\/wasm-zig\/std\.tar\.gz$/)
+			})
+		);
+	});
+
+	it('ignores a Zig config after its top-level getter starts a replacement', async () => {
+		const sandbox = new Zig();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Zig while reading the runtime config');
+		let replacement: Promise<void> | undefined;
+		let staleCompilerReads = 0;
+		const runtimeAssets = {
+			get zig() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load({
+					zig: {
+						compilerUrl: '/replacement/zig.wasm',
+						stdlibUrl: '/replacement/std.tar.gz'
+					}
+				});
+				return {
+					get compilerUrl() {
+						staleCompilerReads += 1;
+						return '/superseded/zig.wasm';
+					},
+					stdlibUrl: '/superseded/std.tar.gz'
+				};
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleCompilerReads).toBe(0);
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(sandbox.compilerUrl).toMatch(/\/replacement\/zig\.wasm$/);
+		expect(sandbox.stdlibUrl).toMatch(/\/replacement\/std\.tar\.gz$/);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('ignores resolved Zig assets after the compiler resolver starts a replacement', async () => {
+		const sandbox = new Zig();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Zig while resolving assets');
+		let replacement: Promise<void> | undefined;
+		let staleStdlibReads = 0;
+		const runtimeAssets = {
+			zig: {
+				get compilerUrl() {
+					sandbox.terminate(reason);
+					replacement = sandbox.load({
+						zig: {
+							compilerUrl: '/replacement/zig.wasm',
+							stdlibUrl: '/replacement/std.tar.gz'
+						}
+					});
+					return '/superseded/zig.wasm';
+				},
+				get stdlibUrl() {
+					staleStdlibReads += 1;
+					return '/superseded/std.tar.gz';
+				}
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleStdlibReads).toBe(0);
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(sandbox.compilerUrl).toMatch(/\/replacement\/zig\.wasm$/);
+		expect(sandbox.stdlibUrl).toMatch(/\/replacement\/std\.tar\.gz$/);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('reads explicit Zig stdin and target triple once before worker dispatch', async () => {
+		const sandbox = new Zig();
+		await sandbox.load('/absproxy/5173');
+		let stdinReads = 0;
+		let targetReads = 0;
+		const options = {
+			get zigTargetTriple() {
+				targetReads += 1;
+				if (targetReads > 1) throw new Error('Zig target was read more than once');
+				return 'wasm64-wasi' as const;
+			},
+			get stdin() {
+				stdinReads += 1;
+				if (stdinReads > 1) throw new Error('Zig stdin was read more than once');
+				return 'captured input\n';
+			}
+		};
+
+		await expect(
+			sandbox.run('pub fn main() void {}', false, true, undefined, [], options)
+		).resolves.toBe(true);
+
+		expect({ stdinReads, targetReads }).toEqual({ stdinReads: 1, targetReads: 1 });
+		expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				stdin: 'captured input\n',
+				targetTriple: 'wasm64-wasi'
+			})
+		);
 	});
 });
