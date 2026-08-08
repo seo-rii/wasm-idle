@@ -101,7 +101,7 @@ console.log(value);`;
 				args: [],
 				language: 'typescript',
 				activePath: 'src/main.ts',
-				workspaceFiles: [{ path: 'src/main.ts', content: code }],
+				workspaceFiles: [],
 				log: true
 			})
 		);

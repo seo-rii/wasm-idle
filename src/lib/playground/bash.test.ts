@@ -1801,7 +1801,10 @@ describe('Bash sandbox', () => {
 			code: 'printf ok',
 			options: {
 				activePath: 'main.sh',
-				workspaceFiles: [{ path: 'MAIN.sh', content: 'printf stale' }]
+				workspaceFiles: [
+					{ path: 'MAIN.sh', content: 'printf first stale' },
+					{ path: 'main.sh', content: 'printf second stale' }
+				]
 			},
 			expected: { code: 'case-collision', path: 'main.sh' }
 		},
