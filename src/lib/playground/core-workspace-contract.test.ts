@@ -145,6 +145,70 @@ describe('core workspace policy', () => {
 		);
 	});
 
+	it('replaces one stale active file before content and quota validation', () => {
+		expect(
+			validateExecutionWorkspace(
+				'new',
+				[{ path: 'src/main.ts', content: 'stale content beyond the limit' }],
+				'src/main.ts',
+				{ maxFileBytes: 3, maxTotalBytes: 3 }
+			)
+		).toEqual({ activePath: 'src/main.ts', workspaceFiles: [] });
+
+		expect(
+			validateExecutionWorkspace(
+				'new',
+				[{ path: 'SRC/Main.ts', content: 'stale content beyond the limit' }],
+				'src/main.ts',
+				{ maxFileBytes: 3, maxTotalBytes: 3 }
+			)
+		).toEqual({ activePath: 'src/main.ts', workspaceFiles: [] });
+
+		expect(
+			validateExecutionWorkspace(
+				'new',
+				[{ path: 'src/main.ts', content: 42 as never }],
+				'src/main.ts'
+			)
+		).toEqual({ activePath: 'src/main.ts', workspaceFiles: [] });
+	});
+
+	it('retains active-path collision checks and case-sensitive siblings', () => {
+		expect(() =>
+			validateExecutionWorkspace(
+				'new',
+				[
+					{ path: 'src/main.ts', content: 'first' },
+					{ path: 'src/main.ts', content: 'second' }
+				],
+				'src/main.ts'
+			)
+		).toThrowError(expect.objectContaining({ code: 'duplicate-path' }));
+
+		expect(() =>
+			validateExecutionWorkspace(
+				'new',
+				[
+					{ path: 'SRC/Main.ts', content: 'first' },
+					{ path: 'src/main.ts', content: 'second' }
+				],
+				'src/main.ts'
+			)
+		).toThrowError(expect.objectContaining({ code: 'case-collision' }));
+
+		expect(
+			validateExecutionWorkspace(
+				'new',
+				[{ path: 'SRC/Main.ts', content: 'sibling' }],
+				'src/main.ts',
+				{ caseSensitive: true }
+			)
+		).toEqual({
+			activePath: 'src/main.ts',
+			workspaceFiles: [{ path: 'SRC/Main.ts', content: 'sibling' }]
+		});
+	});
+
 	it('publishes finite conservative defaults', () => {
 		expect(DEFAULT_WORKSPACE_LIMITS).toEqual({
 			maxFiles: 256,
