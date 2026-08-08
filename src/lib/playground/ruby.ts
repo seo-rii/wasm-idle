@@ -17,7 +17,12 @@ import {
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
-import { BusyError } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 
 type RubyOperation = {
 	token: symbol;
@@ -233,11 +238,30 @@ class Ruby implements Sandbox {
 			workspaceFiles: NonNullable<SandboxExecutionOptions['workspaceFiles']>;
 		};
 		try {
+			const limits = resolveExecutionLimits(options.limits);
+			const workspace = validateExecutionWorkspace(
+				code,
+				options.workspaceFiles ?? [],
+				options.activePath ?? 'main.rb',
+				{
+					...options.workspaceLimits,
+					maxFileBytes: Math.min(
+						options.workspaceLimits?.maxFileBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						options.workspaceLimits?.maxTotalBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					)
+				}
+			);
 			request = {
 				programArgs: resolveSandboxExecutionArgs('RUBY', args, options).programArgs,
 				stdin: options.stdin,
-				activePath: options.activePath || 'main.rb',
-				workspaceFiles: options.workspaceFiles || []
+				activePath: workspace.activePath ?? 'main.rb',
+				workspaceFiles: workspace.workspaceFiles
 			};
 		} catch (error) {
 			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
