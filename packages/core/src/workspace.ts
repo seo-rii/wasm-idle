@@ -2,6 +2,7 @@ export type WorkspaceValidationErrorCode =
 	| 'invalid-path'
 	| 'duplicate-path'
 	| 'case-collision'
+	| 'path-prefix-collision'
 	| 'file-count-limit'
 	| 'file-size-limit'
 	| 'total-size-limit'
@@ -114,6 +115,8 @@ export function validateWorkspaceFiles<T extends WorkspaceFile>(
 
 	const exactPaths = new Set<string>();
 	const foldedPaths = new Map<string, string>();
+	const filePaths = new Map<string, string>();
+	const directoryPrefixes = new Map<string, string>();
 	let totalBytes = 0;
 	return files.map((file) => {
 		const path = normalizeWorkspacePath(file.path);
@@ -148,6 +151,33 @@ export function validateWorkspaceFiles<T extends WorkspaceFile>(
 			}
 			foldedPaths.set(foldedPath, path);
 		}
+
+		const pathKey = resolvedLimits.caseSensitive ? path : path.toLowerCase();
+		const descendantPath = directoryPrefixes.get(pathKey);
+		if (descendantPath) {
+			throw new WorkspaceValidationError(
+				'path-prefix-collision',
+				`Workspace path ${path} is both a file and a parent directory of ${descendantPath}`,
+				{ path }
+			);
+		}
+		let separatorIndex = pathKey.indexOf('/');
+		while (separatorIndex !== -1) {
+			const prefix = pathKey.slice(0, separatorIndex);
+			const parentFilePath = filePaths.get(prefix);
+			if (parentFilePath) {
+				throw new WorkspaceValidationError(
+					'path-prefix-collision',
+					`Workspace path ${parentFilePath} is both a file and a parent directory of ${path}`,
+					{ path }
+				);
+			}
+			if (!directoryPrefixes.has(prefix)) {
+				directoryPrefixes.set(prefix, path);
+			}
+			separatorIndex = pathKey.indexOf('/', separatorIndex + 1);
+		}
+		filePaths.set(pathKey, path);
 
 		let fileBytes: number;
 		if (typeof file.content === 'string') {

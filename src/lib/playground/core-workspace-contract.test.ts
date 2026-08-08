@@ -57,6 +57,25 @@ describe('core workspace policy', () => {
 		).toThrowError(expect.objectContaining({ code: 'case-collision' }));
 	});
 
+	it.each([
+		[
+			{ path: 'cache', content: 'file' },
+			{ path: 'cache/data.bin', content: 'child' }
+		],
+		[
+			{ path: 'cache/data.bin', content: 'child' },
+			{ path: 'cache', content: 'file' }
+		],
+		[
+			{ path: 'Cache', content: 'file' },
+			{ path: 'cache/data.bin', content: 'child' }
+		]
+	])('rejects file and directory prefix collisions regardless of order', (...files) => {
+		expect(() => validateWorkspaceFiles(files)).toThrowError(
+			expect.objectContaining({ code: 'path-prefix-collision' })
+		);
+	});
+
 	it('enforces file count, per-file bytes, total bytes, and path bytes', () => {
 		expect(() =>
 			validateWorkspaceFiles(
@@ -106,6 +125,13 @@ describe('core workspace policy', () => {
 		expect(() => validateExecutionWorkspace('source', [], '../main.ts')).toThrowError(
 			expect.objectContaining({ code: 'invalid-path' })
 		);
+		expect(() =>
+			validateExecutionWorkspace(
+				'source',
+				[{ path: 'src', content: 'file at directory path' }],
+				'src/main.ts'
+			)
+		).toThrowError(expect.objectContaining({ code: 'path-prefix-collision' }));
 		expect(() =>
 			validateExecutionWorkspace('1234', [{ path: 'data.txt', content: '5678' }], undefined, {
 				maxTotalBytes: 7
