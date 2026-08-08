@@ -13,7 +13,13 @@ import {
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
-import { BusyError, TimeoutError, resolveExecutionLimits } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	TimeoutError,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 
 type PhpOperation = {
 	token: symbol;
@@ -107,6 +113,44 @@ class Php implements Sandbox {
 		this.releaseOperation(operation);
 		this.cleanupOperation(operation);
 		return outcome;
+	}
+
+	private bindPreSessionAbort(operation: PhpOperation, signal: AbortSignal | undefined) {
+		if (!signal || !this.isOperationActive(operation)) return () => undefined;
+		let registered = false;
+		let unbound = false;
+		const unbind = () => {
+			if (unbound) return;
+			unbound = true;
+			if (registered) signal.removeEventListener('abort', onAbort);
+		};
+		const onAbort = () => {
+			if (!this.isOperationActive(operation)) return;
+			let reason: unknown;
+			try {
+				reason = abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			}
+			operation.cancelled = true;
+			operation.cancellationReason = reason;
+			this.releaseOperation(operation);
+			this.cleanupOperation(operation);
+		};
+		operation.cleanups.push(unbind);
+		try {
+			registered = true;
+			signal.addEventListener('abort', onAbort, { once: true });
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			if (this.isOperationActive(operation)) {
+				operation.cancelled = true;
+				operation.cancellationReason = error;
+				this.releaseOperation(operation);
+				this.cleanupOperation(operation);
+			}
+		}
+		return unbind;
 	}
 
 	private bindAbortSignal(operation: PhpOperation, signal: AbortSignal | undefined) {
@@ -219,14 +263,22 @@ class Php implements Sandbox {
 		}
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
 		try {
-			limits = resolveExecutionLimits(options.limits);
 			signal = options.signal;
-			if (signal?.aborted) {
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) {
 				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, abortReason(signal, 'startup'))
+					this.releaseBeforeSession(activeOperation, 'PHP runtime startup cancelled')
 				);
 			}
+			limits = resolveExecutionLimits(options.limits);
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'PHP runtime startup cancelled')
+				);
+			}
+			unbindPreSessionAbort();
 		} catch (error) {
 			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
 		}
@@ -375,6 +427,7 @@ class Php implements Sandbox {
 		const worker = this.worker;
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let signal: AbortSignal | undefined;
+		let unbindPreSessionAbort: () => void = () => undefined;
 		let request: {
 			programArgs: string[];
 			stdin: string | undefined;
@@ -382,19 +435,44 @@ class Php implements Sandbox {
 			workspaceFiles: NonNullable<SandboxExecutionOptions['workspaceFiles']>;
 		};
 		try {
-			limits = resolveExecutionLimits(options.limits);
 			signal = options.signal;
-			if (signal?.aborted) {
+			unbindPreSessionAbort = this.bindPreSessionAbort(activeOperation, signal);
+			if (!this.isOperationActive(activeOperation)) {
 				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, abortReason(signal, 'execute'))
+					this.releaseBeforeSession(activeOperation, 'PHP execution cancelled')
 				);
 			}
+			limits = resolveExecutionLimits(options.limits);
+			const workspace = validateExecutionWorkspace(
+				code,
+				options.workspaceFiles ?? [],
+				options.activePath ?? 'main.php',
+				{
+					...options.workspaceLimits,
+					maxFileBytes: Math.min(
+						options.workspaceLimits?.maxFileBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						options.workspaceLimits?.maxTotalBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					)
+				}
+			);
 			request = {
 				programArgs: resolveSandboxExecutionArgs('PHP', args, options).programArgs,
 				stdin: options.stdin,
-				activePath: options.activePath || 'main.php',
-				workspaceFiles: options.workspaceFiles || []
+				activePath: workspace.activePath ?? 'main.php',
+				workspaceFiles: workspace.workspaceFiles
 			};
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'PHP execution cancelled')
+				);
+			}
+			unbindPreSessionAbort();
 		} catch (error) {
 			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
 		}

@@ -9,9 +9,11 @@ const encoder = new TextEncoder();
 let stdinBufferPhp: Int32Array | null = null;
 let runtimeModuleUrl = '';
 let phpPromise: Promise<PhpRuntime> | null = null;
+let workspaceDirty = false;
 
 interface PhpRuntime {
 	mkdir(path: string): void;
+	rmdir(path: string, options?: { recursive?: boolean }): void;
 	writeFile(path: string, content: string): void;
 	run(options: Record<string, unknown>): Promise<{
 		text: string;
@@ -33,6 +35,7 @@ async function loadPhp(moduleUrl: string, log = true) {
 	if (runtimeModuleUrl !== moduleUrl) {
 		runtimeModuleUrl = moduleUrl;
 		phpPromise = null;
+		workspaceDirty = false;
 	}
 	if (phpPromise) return await phpPromise;
 	phpPromise = (async () => {
@@ -48,6 +51,14 @@ async function loadPhp(moduleUrl: string, log = true) {
 		return php;
 	})();
 	return await phpPromise;
+}
+
+function prepareWorkspace(php: PhpRuntime) {
+	if (workspaceDirty) {
+		php.rmdir('/workspace', { recursive: true });
+		php.mkdir('/workspace');
+	}
+	workspaceDirty = true;
 }
 
 function normalizeWorkspacePath(path: string) {
@@ -148,6 +159,7 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
+		prepareWorkspace(php);
 		for (const file of workspaceFiles as SandboxWorkspaceFile[]) {
 			await writeWorkspaceFile(php, file.path, file.content);
 		}
