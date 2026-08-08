@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
@@ -63,10 +63,15 @@ import Wat from './wat';
 
 describe('WAT sandbox', () => {
 	beforeEach(() => {
+		vi.useRealTimers();
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_WAT_MODULE_URL = '/wasm-wat/index.js';
 		suppressAutoLoadAck = false;
 		suppressAutoRunAck = false;
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it('loads the WAT worker and forwards diagnostics plus run output', async () => {
@@ -779,6 +784,85 @@ describe('WAT sandbox', () => {
 		expect(workerInstances).toHaveLength(2);
 		expect(sandbox.worker).toBe(workerInstances[1]);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('enforces the aggregate WAT startup deadline and ignores stale readiness', async () => {
+		vi.useFakeTimers();
+		suppressAutoLoadAck = true;
+		const sandbox = new Wat();
+		const loading = sandbox.load('/absproxy/5173', '', true, [], {
+			limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
+		});
+		const rejected = expect(loading).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'startup',
+			runtimeId: 'WAT',
+			timeoutMs: 12
+		});
+		await vi.dynamicImportSettled();
+		const retiredWorker = workerInstances[0];
+		const staleHandler = retiredWorker.onmessage;
+
+		await vi.advanceTimersByTimeAsync(12);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		suppressAutoLoadAck = false;
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('enforces the aggregate WAT execution deadline and permits a clean retry', async () => {
+		const sandbox = new Wat();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		suppressAutoRunAck = true;
+		vi.useFakeTimers();
+		const running = sandbox.run('(module)', false, true, undefined, [], {
+			limits: { compileTimeoutMs: 4, runTimeoutMs: 6 }
+		});
+		const rejected = expect(running).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'WAT',
+			timeoutMs: 10
+		});
+		const staleHandler = retiredWorker.onmessage;
+
+		await vi.advanceTimersByTimeAsync(10);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { output: 'stale output', results: true } } as MessageEvent<any>);
+		suppressAutoRunAck = false;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('(module)', false)).resolves.toBe(true);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('clears settled WAT deadlines before they can retire an idle worker', async () => {
+		vi.useFakeTimers();
+		const sandbox = new Wat();
+		await sandbox.load('/absproxy/5173', '', true, [], {
+			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
+		});
+		const worker = workerInstances[0];
+		await expect(
+			sandbox.run('(module)', false, true, undefined, [], {
+				limits: { compileTimeoutMs: 2, runTimeoutMs: 3 }
+			})
+		).resolves.toBe(true);
+
+		await vi.advanceTimersByTimeAsync(10);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
+		await expect(sandbox.run('(module)', false)).resolves.toBe(true);
 	});
 
 	it('writes EOF when the worker requests stdin after eof is signaled', async () => {
