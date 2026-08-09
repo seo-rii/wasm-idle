@@ -455,9 +455,14 @@ class TinyGo implements Sandbox {
 			return false;
 		}
 		operation.outputBytes = actual;
-		const output = this.output;
-		this.assertOperation(operation);
-		if (output) Reflect.apply(output, this, [data]);
+		try {
+			const output = this.output;
+			this.assertOperation(operation);
+			if (output) Reflect.apply(output, this, [data]);
+		} catch (error) {
+			if (this.isOperationActive(operation)) this.cancelOperation(operation, error);
+			return false;
+		}
 		return this.isOperationActive(operation);
 	}
 

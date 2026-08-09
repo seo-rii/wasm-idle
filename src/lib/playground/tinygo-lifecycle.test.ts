@@ -455,6 +455,111 @@ describe('TinyGo operation lifecycle', () => {
 		expect(replacementWorker?.terminate).not.toHaveBeenCalled();
 	});
 
+	it('retires TinyGo compiler ownership when its output callback throws', async () => {
+		const sandbox = new TinyGo();
+		const callbackError = new Error('TinyGo compiler output failed');
+		sandbox.output = vi.fn(() => {
+			throw callbackError;
+		});
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const retiredRuntime = runtimeFixtureState.runtimeRecords[0];
+
+		await expect(sandbox.run('package main\nfunc main() {}', true, false)).rejects.toBe(
+			callbackError
+		);
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(retiredRuntime?.disposeCalls).toBe(1);
+		expect(sandbox.worker).toBeUndefined();
+
+		sandbox.output = vi.fn();
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+		await expect(sandbox.run('package main\nfunc main() {}', true, false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('rejects a TinyGo worker output callback failure before a same-message result', async () => {
+		autoResolveRun = false;
+		const sandbox = new TinyGo();
+		const callbackError = new Error('TinyGo worker output failed');
+		sandbox.output = vi.fn((output: string) => {
+			if (output === 'callback failure') throw callbackError;
+		});
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const retiredRuntime = runtimeFixtureState.runtimeRecords[0];
+		const running = sandbox.run('package main\nfunc main() {}', false, false);
+		const rejected = expect(running).rejects.toBe(callbackError);
+		await vi.waitFor(() =>
+			expect(retiredWorker?.postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({ artifact: expect.any(Uint8Array) })
+			)
+		);
+
+		retiredWorker?.onmessage?.({
+			data: { output: 'callback failure', results: true }
+		} as MessageEvent<unknown>);
+
+		await rejected;
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(retiredRuntime?.disposeCalls).toBe(1);
+		expect(sandbox.worker).toBeUndefined();
+
+		autoResolveRun = true;
+		sandbox.output = vi.fn();
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+		await expect(sandbox.run('package main\nfunc main() {}', false, false)).resolves.toBe(true);
+	});
+
+	it('preserves a replacement after TinyGo output terminates and then throws', async () => {
+		autoResolveRun = false;
+		const sandbox = new TinyGo();
+		const terminationReason = new Error('replace TinyGo from output');
+		const laterError = new Error('TinyGo output threw after replacement');
+		let replacement: Promise<void> | undefined;
+		let callbackCalls = 0;
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const running = sandbox.run('package main\nfunc main() {}', false, false);
+		const rejected = expect(running).rejects.toBe(terminationReason);
+		await vi.waitFor(() =>
+			expect(retiredWorker?.postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({ artifact: expect.any(Uint8Array) })
+			)
+		);
+		const staleHandler = retiredWorker?.onmessage;
+		sandbox.output = () => {
+			callbackCalls += 1;
+			sandbox.terminate(terminationReason);
+			replacement = sandbox.load(runtimeAssets);
+			void replacement.catch(() => undefined);
+			throw laterError;
+		};
+
+		staleHandler?.({
+			data: { output: 'replace runtime', results: true }
+		} as MessageEvent<unknown>);
+
+		await rejected;
+		expect(replacement).toBeDefined();
+		await expect(replacement).resolves.toBeUndefined();
+		expect(callbackCalls).toBe(1);
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+
+		staleHandler?.({
+			data: { output: 'stale output', results: true }
+		} as MessageEvent<unknown>);
+		expect(callbackCalls).toBe(1);
+
+		autoResolveRun = true;
+		sandbox.output = vi.fn();
+		await expect(sandbox.run('package main\nfunc main() {}', false, false)).resolves.toBe(true);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
 	it('snapshots TinyGo workspace, target, and program arguments before compilation', async () => {
 		let releaseBoot!: () => void;
 		runtimeFixtureState.bootGate = new Promise<void>((resolve) => {
