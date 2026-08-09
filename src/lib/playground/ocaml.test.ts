@@ -1051,6 +1051,95 @@ describe('OCaml sandbox', () => {
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
 
+	it('enforces the OCaml output byte limit without an output callback', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const retiredWorker = workerInstances[0];
+		const running = sandbox.run('let () = ()', false, true, undefined, [], {
+			limits: { maxOutputBytes: 2 }
+		});
+		const staleHandler = retiredWorker.onmessage;
+
+		staleHandler?.({ data: { output: 'é' } } as MessageEvent<any>);
+		staleHandler?.({ data: { output: 'é', results: true } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			runtimeId: 'OCAML',
+			limit: 2,
+			actual: 4
+		});
+		expect(sandbox.output).toBeNull();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { results: true } } as MessageEvent<any>);
+		suppressAutoRunAck = false;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('suppresses the OCaml output chunk that crosses the byte limit', async () => {
+		const sandbox = new Ocaml();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const worker = workerInstances[0];
+		const running = sandbox.run('let () = ()', false, true, undefined, [], {
+			limits: { maxOutputBytes: 2 }
+		});
+		const handler = worker.onmessage;
+
+		handler?.({ data: { output: 'ok' } } as MessageEvent<any>);
+		handler?.({ data: { output: '💥', results: true } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			limit: 2,
+			actual: 6
+		});
+		expect(output).toHaveBeenCalledOnce();
+		expect(output).toHaveBeenCalledWith('ok');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+	});
+
+	it('enforces the OCaml diagnostic limit without a diagnostic callback', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const worker = workerInstances[0];
+		const running = sandbox.run('let () = ()', true, true, undefined, [], {
+			limits: { maxDiagnostics: 1 }
+		});
+		const handler = worker.onmessage;
+		const diagnostic = {
+			fileName: 'main.ml',
+			lineNumber: 1,
+			severity: 'warning',
+			message: 'unused value'
+		};
+
+		handler?.({ data: { diagnostic } } as MessageEvent<any>);
+		handler?.({ data: { diagnostic, results: true } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'DiagnosticLimitError',
+			code: 'diagnostic-limit',
+			phase: 'execute',
+			runtimeId: 'OCAML',
+			limit: 1,
+			actual: 2
+		});
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+	});
+
 	it('releases a terminated run before its rejection settles', async () => {
 		const sandbox = new Ocaml();
 		await sandbox.load('/absproxy/5173');

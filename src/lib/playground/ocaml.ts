@@ -21,6 +21,8 @@ import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	DiagnosticLimitError,
+	OutputLimitError,
 	ProtocolError,
 	TimeoutError,
 	WorkspaceValidationError,
@@ -51,6 +53,8 @@ const OCAML_WORKSPACE_LIMIT_KEYS = [
 	'maxPathBytes',
 	'caseSensitive'
 ] as const satisfies readonly (keyof WorkspaceLimits)[];
+
+const OUTPUT_ENCODER = new TextEncoder();
 
 type OcamlOperation = {
 	token: symbol;
@@ -677,6 +681,8 @@ class Ocaml implements Sandbox {
 			this.exit = false;
 			return await new Promise<boolean | string>((resolve, reject) => {
 				const runUid = ++this.uid;
+				let outputBytes = 0;
+				let diagnosticCount = 0;
 				const workerOperation = this.workerSession.beginRun(worker, reject);
 				this.bindOperationTimeout(
 					operation,
@@ -731,6 +737,24 @@ class Ocaml implements Sandbox {
 							}
 						}
 						if (output) {
+							const actual =
+								outputBytes + OUTPUT_ENCODER.encode(String(output)).byteLength;
+							if (actual > limits.maxOutputBytes) {
+								failRun(
+									new OutputLimitError(
+										`OCaml output exceeded ${limits.maxOutputBytes} bytes`,
+										{
+											actual,
+											limit: limits.maxOutputBytes,
+											phase: 'execute',
+											runtimeId: 'OCAML'
+										}
+									),
+									true
+								);
+								return;
+							}
+							outputBytes = actual;
 							if (outputCallback != null) {
 								Reflect.apply(outputCallback, this, [output]);
 							}
@@ -739,6 +763,23 @@ class Ocaml implements Sandbox {
 							}
 						}
 						if (diagnostic) {
+							const actual = diagnosticCount + 1;
+							if (actual > limits.maxDiagnostics) {
+								failRun(
+									new DiagnosticLimitError(
+										`OCaml diagnostics exceeded ${limits.maxDiagnostics} messages`,
+										{
+											actual,
+											limit: limits.maxDiagnostics,
+											phase: 'execute',
+											runtimeId: 'OCAML'
+										}
+									),
+									true
+								);
+								return;
+							}
+							diagnosticCount = actual;
 							if (onDiagnostic != null)
 								Reflect.apply(onDiagnostic, this, [diagnostic]);
 							if (!ownsRun()) {
