@@ -386,6 +386,78 @@ describe('OCaml worker', () => {
 		]);
 	});
 
+	it('forwards the OCaml workspace and invalidates the cache when a file changes', async () => {
+		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			globalThis.__ocamlWorkspaceCompileRequests = [];
+
+			export async function compile(request) {
+				globalThis.__ocamlWorkspaceCompileRequests.push(request);
+				return {
+					success: true,
+					stdout: '',
+					stderr: '',
+					diagnostics: [],
+					artifacts: [
+						{
+							path: '/workspace/_build/main.js',
+							kind: 'js',
+							data: \`globalThis.__wasm_of_js_of_ocaml_runtime_promise=Promise.resolve();\`
+						}
+					]
+				};
+			}
+
+			export function createBrowserWorkerSystemDispatcher() {
+				return {};
+			}
+		`);
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl }
+		});
+		const runRequest = {
+			code: 'let () = Helper.print_message ()',
+			prepare: true,
+			target: 'wasm',
+			activePath: 'src/main.ml',
+			workspaceFiles: [
+				{ path: 'src/helper.ml', content: 'let print_message () = print_endline "one"' }
+			]
+		};
+
+		await (globalThis as any).self.onmessage({ data: runRequest });
+		await (globalThis as any).self.onmessage({ data: runRequest });
+		await (globalThis as any).self.onmessage({
+			data: {
+				...runRequest,
+				workspaceFiles: [
+					{
+						path: 'src/helper.ml',
+						content: 'let print_message () = print_endline "two"'
+					}
+				]
+			}
+		});
+
+		expect((globalThis as any).__ocamlWorkspaceCompileRequests).toEqual([
+			expect.objectContaining({
+				entry: 'src/main.ml',
+				files: {
+					'src/helper.ml': 'let print_message () = print_endline "one"',
+					'src/main.ml': 'let () = Helper.print_message ()'
+				}
+			}),
+			expect.objectContaining({
+				entry: 'src/main.ml',
+				files: {
+					'src/helper.ml': 'let print_message () = print_endline "two"',
+					'src/main.ml': 'let () = Helper.print_message ()'
+				}
+			})
+		]);
+	});
+
 	it('bridges wasm_of_ocaml Node-style fs.readSync stdin reads', async () => {
 		const compilerModuleUrl = await createMockOcamlCompilerModule(`
 			export async function compile() {

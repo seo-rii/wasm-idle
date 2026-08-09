@@ -97,6 +97,8 @@ type LoadRequest = {
 type RunRequest = {
 	load?: false;
 	code: string;
+	activePath?: string;
+	workspaceFiles?: Array<{ path: string; content: string }>;
 	prepare: boolean;
 	target?: 'js' | 'wasm';
 	wasmBinaryenMode?: 'fast' | 'full';
@@ -565,26 +567,27 @@ async function executeCompileResult(result: CompileResult, log = false, stdin?: 
 }
 
 self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
-	const {
-		load,
-		moduleUrl: nextModuleUrl,
-		manifestUrl: nextManifestUrl,
-		code,
-		prepare,
-		target = 'wasm',
-		wasmBinaryenMode = 'fast',
-		log = true,
-		buffer,
-		stdin
-	} = event.data as LoadRequest & RunRequest;
+	let log = true;
 	try {
-		if (load) {
-			moduleUrl = nextModuleUrl;
-			manifestUrl = nextManifestUrl;
+		if (event.data.load) {
+			moduleUrl = event.data.moduleUrl;
+			manifestUrl = event.data.manifestUrl;
 			await Promise.all([loadCompiler(moduleUrl), loadManifest(manifestUrl)]);
 			postMessage({ load: true });
 			return;
 		}
+		const {
+			code,
+			prepare,
+			target = 'wasm',
+			wasmBinaryenMode = 'fast',
+			log: configuredLog = true,
+			buffer,
+			stdin,
+			activePath = 'main.ml',
+			workspaceFiles = []
+		} = event.data;
+		log = configuredLog;
 
 		stdinBufferOcaml = buffer ? new Int32Array(buffer) : null;
 
@@ -600,15 +603,22 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		]);
 		postMessage({ progress: { stage: 'compile-ready', percent: 25 } });
 
-		const compileKey = `${target}\n${wasmBinaryenMode}\n${code}`;
+		const files = Object.fromEntries([
+			...workspaceFiles.map((file) => [file.path, file.content]),
+			[activePath, code]
+		]);
+		const compileKey = JSON.stringify({
+			target,
+			wasmBinaryenMode,
+			entry: activePath,
+			files
+		});
 		let compiledFresh = false;
 		if (!compiledResult || compiledCacheKey !== compileKey) {
 			const result = await compilerModule.compile(
 				{
-					files: {
-						'main.ml': code
-					},
-					entry: 'main.ml',
+					files,
+					entry: activePath,
 					target,
 					effectsMode: 'cps',
 					wasmBinaryenMode

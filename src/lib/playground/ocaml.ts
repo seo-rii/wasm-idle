@@ -18,7 +18,39 @@ import {
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
-import { BusyError, ProtocolError } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	ProtocolError,
+	TimeoutError,
+	WorkspaceValidationError,
+	resolveExecutionLimits,
+	validateExecutionWorkspace,
+	type ExecutionLimits,
+	type WorkspaceLimits
+} from '@wasm-idle/core';
+
+const OCAML_EXECUTION_LIMIT_KEYS = [
+	'assetTimeoutMs',
+	'startupTimeoutMs',
+	'compileTimeoutMs',
+	'runTimeoutMs',
+	'maxOutputBytes',
+	'maxDiagnostics',
+	'maxWorkspaceBytes',
+	'maxAssetBytes',
+	'maxWasmMemoryBytes',
+	'maxWorkers',
+	'maxThreads'
+] as const satisfies readonly (keyof ExecutionLimits)[];
+
+const OCAML_WORKSPACE_LIMIT_KEYS = [
+	'maxFiles',
+	'maxFileBytes',
+	'maxTotalBytes',
+	'maxPathBytes',
+	'caseSensitive'
+] as const satisfies readonly (keyof WorkspaceLimits)[];
 
 type OcamlOperation = {
 	token: symbol;
@@ -29,6 +61,7 @@ type OcamlOperation = {
 	sessionActive: boolean;
 	abortReasonReading: boolean;
 	buffer?: ArrayBufferLike;
+	timeout?: ReturnType<typeof setTimeout>;
 	signal?: AbortSignal;
 	onAbort?: () => void;
 };
@@ -79,6 +112,15 @@ class Ocaml implements Sandbox {
 
 	private completeOperation(operation: OcamlOperation) {
 		if (this.activeOperation?.token === operation.token) this.activeOperation = null;
+		const timeout = operation.timeout;
+		operation.timeout = undefined;
+		if (timeout !== undefined) {
+			try {
+				clearTimeout(timeout);
+			} catch {
+				// Timer cleanup must not replace the operation result.
+			}
+		}
 		const { signal, onAbort } = operation;
 		operation.signal = undefined;
 		operation.onAbort = undefined;
@@ -113,6 +155,25 @@ class Ocaml implements Sandbox {
 		const outcome = operation.cancelled ? operation.cancellationReason : fallback;
 		this.completeOperation(operation);
 		return outcome;
+	}
+
+	private resolveOperationLimits(
+		operation: OcamlOperation,
+		configured: Partial<ExecutionLimits> | undefined
+	) {
+		if (configured === undefined) return resolveExecutionLimits();
+		if (configured === null || typeof configured !== 'object') {
+			throw new TypeError('OCaml execution limits must be an object');
+		}
+		const snapshot: Partial<ExecutionLimits> = {};
+		for (const key of OCAML_EXECUTION_LIMIT_KEYS) {
+			const value = configured[key];
+			if (!this.isOperationActive(operation)) {
+				throw operation.cancellationReason ?? 'OCaml operation cancelled';
+			}
+			if (value !== undefined) snapshot[key] = value;
+		}
+		return resolveExecutionLimits(snapshot);
 	}
 
 	private resetExplicitStdinState(buffer: ArrayBufferLike) {
@@ -183,6 +244,38 @@ class Ocaml implements Sandbox {
 		}
 	}
 
+	private bindOperationTimeout(operation: OcamlOperation, timeoutMs: number) {
+		if (!this.isOperationActive(operation)) return;
+		let timeout: ReturnType<typeof setTimeout>;
+		try {
+			timeout = setTimeout(() => {
+				if (operation.timeout === timeout) operation.timeout = undefined;
+				if (!this.isOperationActive(operation)) return;
+				const label = operation.phase === 'startup' ? 'startup' : 'execution';
+				this.abortOperation(
+					operation,
+					new TimeoutError(`OCaml ${label} timed out after ${timeoutMs} ms`, {
+						phase: operation.phase,
+						runtimeId: 'OCAML',
+						timeoutMs
+					})
+				);
+			}, timeoutMs);
+		} catch (error) {
+			this.abortOperation(operation, error);
+			return;
+		}
+		if (!this.isOperationActive(operation)) {
+			try {
+				clearTimeout(timeout);
+			} catch {
+				// The superseded timer can no longer own the operation.
+			}
+			return;
+		}
+		operation.timeout = timeout;
+	}
+
 	private cancelBeforeSession(operation: OcamlOperation, reason: unknown) {
 		if (!this.isOperationActive(operation)) return;
 		operation.cancelled = true;
@@ -218,6 +311,7 @@ class Ocaml implements Sandbox {
 			return Promise.reject(error);
 		}
 		let signal: AbortSignal | undefined;
+		let limits: ExecutionLimits;
 		let nextModuleUrl: string;
 		let nextManifestUrl: string;
 		let buffer: ArrayBufferLike;
@@ -229,6 +323,18 @@ class Ocaml implements Sandbox {
 				);
 			}
 			this.bindAbortSignal(operation, signal);
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
+				);
+			}
+			const configuredLimits = options.limits;
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
+				);
+			}
+			limits = this.resolveOperationLimits(operation, configuredLimits);
 			if (!this.isOperationActive(operation)) {
 				return Promise.reject(
 					this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
@@ -362,6 +468,10 @@ class Ocaml implements Sandbox {
 				this.completeOperation(operation);
 			}
 		});
+		this.bindOperationTimeout(
+			operation,
+			Math.min(2_147_483_647, limits.assetTimeoutMs + limits.startupTimeoutMs)
+		);
 		return loading.finally(() => this.completeOperation(operation));
 	}
 
@@ -402,6 +512,8 @@ class Ocaml implements Sandbox {
 		let worker: Worker;
 		let target: OcamlBackend;
 		let wasmBinaryenMode: OcamlWasmBinaryenMode;
+		let limits: ExecutionLimits;
+		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		let stdin: SandboxExecutionOptions['stdin'];
 		let buffer: ArrayBufferLike;
 		let outputCallback: any;
@@ -431,6 +543,107 @@ class Ocaml implements Sandbox {
 				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
 			}
 			wasmBinaryenMode = configuredBinaryenMode || 'fast';
+			const configuredLimits = options.limits;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			limits = this.resolveOperationLimits(operation, configuredLimits);
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			const configuredWorkspaceLimits = options.workspaceLimits;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			if (
+				configuredWorkspaceLimits !== undefined &&
+				(configuredWorkspaceLimits === null ||
+					typeof configuredWorkspaceLimits !== 'object')
+			) {
+				throw new TypeError('OCaml workspace limits must be an object');
+			}
+			const workspaceLimitSnapshot: Partial<WorkspaceLimits> = {};
+			if (configuredWorkspaceLimits !== undefined) {
+				for (const key of OCAML_WORKSPACE_LIMIT_KEYS) {
+					const value = configuredWorkspaceLimits[key];
+					if (!this.isOperationActive(operation)) {
+						throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+					}
+					if (value !== undefined) {
+						Object.assign(workspaceLimitSnapshot, { [key]: value });
+					}
+				}
+			}
+			validateExecutionWorkspace('', [], 'main.ml', workspaceLimitSnapshot);
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			const workspaceFilesSource = options.workspaceFiles;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			if (workspaceFilesSource !== undefined && !Array.isArray(workspaceFilesSource)) {
+				throw new TypeError('OCaml workspace files must be an array');
+			}
+			const workspaceFileCount = workspaceFilesSource?.length ?? 0;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			const maxFiles = workspaceLimitSnapshot.maxFiles ?? DEFAULT_WORKSPACE_LIMITS.maxFiles;
+			if (workspaceFileCount > maxFiles) {
+				throw new WorkspaceValidationError(
+					'file-count-limit',
+					`Workspace contains ${workspaceFileCount} files; limit is ${maxFiles}`,
+					{ limit: maxFiles, actual: workspaceFileCount }
+				);
+			}
+			const workspaceFiles: Array<{ path: string; content: string }> = [];
+			for (let index = 0; index < workspaceFileCount; index += 1) {
+				const file = workspaceFilesSource?.[index];
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+				}
+				if (file === null || typeof file !== 'object' || Array.isArray(file)) {
+					throw new TypeError('OCaml workspace file must be an object');
+				}
+				const path = file.path;
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+				}
+				const content = file.content;
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+				}
+				if (typeof content !== 'string') {
+					throw new TypeError('OCaml workspace file content must be a string');
+				}
+				workspaceFiles.push({ path, content });
+			}
+			const configuredActivePath = options.activePath;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			workspace = validateExecutionWorkspace(
+				code,
+				workspaceFiles,
+				configuredActivePath ?? 'main.ml',
+				{
+					...workspaceLimitSnapshot,
+					maxFileBytes: Math.min(
+						workspaceLimitSnapshot.maxFileBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						workspaceLimitSnapshot.maxTotalBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					)
+				}
+			);
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
 			stdin = options.stdin;
 			if (!this.isOperationActive(operation)) {
 				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
@@ -465,6 +678,11 @@ class Ocaml implements Sandbox {
 			return await new Promise<boolean | string>((resolve, reject) => {
 				const runUid = ++this.uid;
 				const workerOperation = this.workerSession.beginRun(worker, reject);
+				this.bindOperationTimeout(
+					operation,
+					Math.min(2_147_483_647, limits.compileTimeoutMs + limits.runTimeoutMs)
+				);
+				if (!this.isOperationActive(operation)) return;
 				let handler: (event: Event & { data: any }) => void;
 				const ownsRun = () => this.ownsWorkerOperation(operation, worker, handler, runUid);
 				const failRun = (error: unknown, disposeWorker = false) => {
@@ -567,7 +785,9 @@ class Ocaml implements Sandbox {
 						wasmBinaryenMode,
 						log: _log,
 						buffer,
-						stdin
+						stdin,
+						activePath: workspace.activePath,
+						workspaceFiles: workspace.workspaceFiles
 					});
 				} catch (error) {
 					failRun(error);

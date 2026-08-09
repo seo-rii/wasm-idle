@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BusyError, ProtocolError } from '@wasm-idle/core';
 
@@ -83,6 +83,7 @@ import Ocaml from './ocaml';
 
 describe('OCaml sandbox', () => {
 	beforeEach(() => {
+		vi.useRealTimers();
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_OCAML_MODULE_URL = '/wasm-of-js-of-ocaml/browser-native/src/index.js';
 		publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL =
@@ -90,6 +91,10 @@ describe('OCaml sandbox', () => {
 		suppressAutoLoadAck = false;
 		suppressAutoRunAck = false;
 		runDispatchError = null;
+	});
+
+	afterEach(() => {
+		vi.useRealTimers();
 	});
 
 	it('loads the OCaml worker and forwards diagnostics plus run output', async () => {
@@ -847,6 +852,137 @@ describe('OCaml sandbox', () => {
 		);
 	});
 
+	it('validates and forwards a canonical multi-file OCaml workspace', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		const code = 'let () = Helper.print_message ()';
+
+		await expect(
+			sandbox.run(code, true, true, undefined, [], {
+				activePath: 'src/main.ml',
+				workspaceFiles: [
+					{
+						path: 'src\\helper.ml',
+						content: 'let print_message () = print_endline "ok"'
+					},
+					{ path: 'src/main.ml', content: 'stale active source' }
+				]
+			})
+		).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				code,
+				activePath: 'src/main.ml',
+				workspaceFiles: [
+					{
+						path: 'src/helper.ml',
+						content: 'let print_message () = print_endline "ok"'
+					}
+				]
+			})
+		);
+	});
+
+	it('rejects an unsafe OCaml workspace before mutating the loaded worker', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+
+		await expect(
+			sandbox.run('let () = ()', false, true, undefined, [], {
+				workspaceFiles: [{ path: '../outside.ml', content: 'let escaped = true' }]
+			})
+		).rejects.toMatchObject({
+			name: 'WorkspaceValidationError',
+			code: 'invalid-path',
+			path: '../outside.ml'
+		});
+
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
+	it('clamps OCaml workspace overrides to the execution byte ceiling', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+
+		await expect(
+			sandbox.run('ab', false, true, undefined, [], {
+				limits: { maxWorkspaceBytes: 3 },
+				workspaceLimits: { maxFileBytes: 100, maxTotalBytes: 100 },
+				workspaceFiles: [{ path: 'helper.ml', content: 'cd' }]
+			})
+		).rejects.toMatchObject({
+			name: 'WorkspaceValidationError',
+			code: 'total-size-limit',
+			limit: 3,
+			actual: 4
+		});
+
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
+	it('stops reading OCaml workspace entries after a getter replaces the run', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/initial/');
+		const reason = new Error('replace OCaml while reading a workspace path');
+		let replacement: Promise<void> | undefined;
+		let staleContentReads = 0;
+		const workspaceFile = {
+			get path() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement/');
+				return 'superseded.ml';
+			},
+			get content() {
+				staleContentReads += 1;
+				return 'let stale = true';
+			}
+		};
+
+		const superseded = sandbox.run('let () = ()', false, true, undefined, [], {
+			workspaceFiles: [workspaceFile]
+		});
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleContentReads).toBe(0);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+	});
+
+	it('stops reading OCaml limits after a getter replaces startup ownership', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/initial/');
+		const reason = new Error('replace OCaml while reading startup limits');
+		let replacement: Promise<void> | undefined;
+		let staleLimitReads = 0;
+		const limits = {
+			get assetTimeoutMs() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement/');
+				return 5;
+			},
+			get startupTimeoutMs() {
+				staleLimitReads += 1;
+				return 7;
+			}
+		};
+
+		const superseded = sandbox.load('/superseded/', '', true, [], { limits });
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleLimitReads).toBe(0);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+	});
+
 	it('preserves an OCaml replacement started during signal listener cleanup', async () => {
 		const sandbox = new Ocaml();
 		await sandbox.load('/absproxy/5173');
@@ -1236,6 +1372,85 @@ describe('OCaml sandbox', () => {
 		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
 
 		suppressAutoRunAck = false;
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
+	it('enforces the aggregate OCaml startup deadline and ignores stale readiness', async () => {
+		vi.useFakeTimers();
+		suppressAutoLoadAck = true;
+		const sandbox = new Ocaml();
+		const loading = sandbox.load('/absproxy/5173', '', true, [], {
+			limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
+		});
+		const rejected = expect(loading).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'startup',
+			runtimeId: 'OCAML',
+			timeoutMs: 12
+		});
+		await vi.dynamicImportSettled();
+		const retiredWorker = workerInstances[0];
+		const staleHandler = retiredWorker.onmessage;
+
+		await vi.advanceTimersByTimeAsync(12);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		suppressAutoLoadAck = false;
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('enforces the aggregate OCaml execution deadline and permits a clean retry', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		const retiredWorker = workerInstances[0];
+		suppressAutoRunAck = true;
+		vi.useFakeTimers();
+		const running = sandbox.run('let () = ()', false, true, undefined, [], {
+			limits: { compileTimeoutMs: 4, runTimeoutMs: 6 }
+		});
+		const rejected = expect(running).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			runtimeId: 'OCAML',
+			timeoutMs: 10
+		});
+		const staleHandler = retiredWorker.onmessage;
+
+		await vi.advanceTimersByTimeAsync(10);
+		await rejected;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { output: 'stale output', results: true } } as MessageEvent<any>);
+		suppressAutoRunAck = false;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('clears settled OCaml deadlines before they can retire an idle worker', async () => {
+		vi.useFakeTimers();
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173', '', true, [], {
+			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
+		});
+		const worker = workerInstances[0];
+		await expect(
+			sandbox.run('let () = ()', false, true, undefined, [], {
+				limits: { compileTimeoutMs: 2, runTimeoutMs: 3 }
+			})
+		).resolves.toBe(true);
+
+		await vi.advanceTimersByTimeAsync(10);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
 		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
 	});
 
