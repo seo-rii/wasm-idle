@@ -157,6 +157,136 @@ describe('TeaVM Java sandbox', () => {
 		]);
 	});
 
+	it('terminates Java output before exceeding the cumulative UTF-8 byte limit', async () => {
+		const sandbox = new Java();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('class Main {}', false, true, undefined, [], {
+			limits: { maxOutputBytes: 5 }
+		});
+		const staleHandler = worker.onmessage;
+
+		staleHandler?.({ data: { output: 'é' } } as MessageEvent<any>);
+		staleHandler?.({ data: { output: '🙂' } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			runtimeId: 'JAVA',
+			actual: 6,
+			limit: 5
+		});
+		expect(output).toHaveBeenCalledOnce();
+		expect(output).toHaveBeenCalledWith('é');
+		expect(output).not.toHaveBeenCalledWith('🙂');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+
+		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalledWith('stale\n');
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('class Main {}', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('detaches Java host state before output-limit disposal aborts asset loaders', async () => {
+		const sandbox = new Java();
+		let loaderSignal: AbortSignal | undefined;
+		let workerSeenDuringAbort: Worker | undefined;
+		let bridgeSeenDuringAbort: typeof sandbox.assetBridge | undefined;
+		let replacement: Promise<void> | undefined;
+		const loader = vi.fn(({ signal }: { signal?: AbortSignal }) => {
+			loaderSignal = signal;
+			signal?.addEventListener(
+				'abort',
+				() => {
+					workerSeenDuringAbort = sandbox.worker;
+					bridgeSeenDuringAbort = sandbox.assetBridge;
+					replacement = sandbox.load('/replacement/');
+				},
+				{ once: true }
+			);
+			return new Promise<never>(() => undefined);
+		});
+
+		await sandbox.load({ java: { loader } });
+		const retiredWorker = workerInstances[0];
+		const retiredBridge = sandbox.assetBridge;
+		retiredWorker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('class Main {}', false, true, undefined, [], {
+			limits: { maxOutputBytes: 1 }
+		});
+		const staleHandler = retiredWorker.onmessage;
+		staleHandler?.({
+			data: { assetRequest: { id: 1, asset: 'compiler.wasm' } }
+		} as MessageEvent<any>);
+		await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+		expect(loaderSignal?.aborted).toBe(false);
+
+		staleHandler?.({ data: { output: 'xx' } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			runtimeId: 'JAVA'
+		});
+		await expect(replacement).resolves.toBeUndefined();
+		expect(loaderSignal?.aborted).toBe(true);
+		expect(workerSeenDuringAbort).toBeUndefined();
+		expect(bridgeSeenDuringAbort).toBeNull();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+		expect(sandbox.assetBridge).not.toBe(retiredBridge);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('terminates Java diagnostics before exceeding the message limit', async () => {
+		const sandbox = new Java();
+		const oncompilerdiagnostic = vi.fn();
+		sandbox.oncompilerdiagnostic = oncompilerdiagnostic;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('class Main {}', true, true, undefined, [], {
+			limits: { maxDiagnostics: 1 }
+		});
+		const staleHandler = worker.onmessage;
+		const diagnostic = {
+			fileName: 'Main.java',
+			lineNumber: 1,
+			columnNumber: 1,
+			severity: 'warning',
+			message: 'bounded warning'
+		};
+
+		staleHandler?.({ data: { diagnostic } } as MessageEvent<any>);
+		staleHandler?.({ data: { diagnostic } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'DiagnosticLimitError',
+			code: 'diagnostic-limit',
+			phase: 'execute',
+			runtimeId: 'JAVA',
+			actual: 2,
+			limit: 1
+		});
+		expect(oncompilerdiagnostic).toHaveBeenCalledOnce();
+		expect(oncompilerdiagnostic).toHaveBeenCalledWith(diagnostic);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+
+		staleHandler?.({ data: { diagnostic, results: true } } as MessageEvent<any>);
+		expect(oncompilerdiagnostic).toHaveBeenCalledOnce();
+	});
+
 	it('normalizes a valid Java workspace before worker dispatch', async () => {
 		const sandbox = new Java();
 		const code = `package nested;
