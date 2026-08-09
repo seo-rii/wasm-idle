@@ -55,12 +55,17 @@ type TinyGoRuntimeAssetProgress = {
 	total: number | null;
 };
 
+type TinyGoRuntimeLogEntry = {
+	line: string;
+};
+
 type TinyGoRuntimeModule = {
 	createBundledTinyGoRuntime?: (options?: {
 		assetLoader?: TinyGoRuntimeAssetLoader;
 		assetPacks?: TinyGoRuntimeAssetPackReference[];
 		maxAssetBytes?: number;
 		rustRuntimeBaseUrl?: string;
+		onLogAppended?: (entry: TinyGoRuntimeLogEntry) => void;
 		onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 	}) => TinyGoRuntimeHooks;
 	createTinyGoRuntime?: (options: {
@@ -69,6 +74,7 @@ type TinyGoRuntimeModule = {
 		assetPacks?: TinyGoRuntimeAssetPackReference[];
 		maxAssetBytes?: number;
 		rustRuntimeBaseUrl?: string;
+		onLogAppended?: (entry: TinyGoRuntimeLogEntry) => void;
 		onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 	}) => TinyGoRuntimeHooks;
 };
@@ -635,6 +641,23 @@ class TinyGo implements Sandbox {
 					assetPacks,
 					maxAssetBytes,
 					rustRuntimeBaseUrl: rustRuntimeBaseUrl || undefined,
+					onLogAppended: () => {
+						const owner = this.runtimeProgressOwner;
+						const activeOperation = this.activeOperation;
+						const runtime = this.runtime;
+						if (
+							!owner ||
+							!activeOperation ||
+							owner.operationToken !== activeOperation.token ||
+							owner.runtimeToken !== runtimeToken ||
+							this.runtimeToken !== runtimeToken ||
+							!runtime ||
+							!this.isOperationActive(activeOperation)
+						) {
+							return;
+						}
+						this.emitActivityLog(runtime, activeOperation);
+					},
 					onProgress: (progress: TinyGoRuntimeAssetProgress) =>
 						this.reportRuntimeProgress(runtimeToken, progress)
 				};

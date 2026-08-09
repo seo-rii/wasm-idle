@@ -12,6 +12,7 @@ type RuntimeFixtureState = {
 	planCalls: number;
 	planGate: Promise<void>;
 	runtimeRecords: Array<{
+		appendLog: (line: string) => void;
 		artifact: { path: string; bytes: Uint8Array; runnable: boolean } | null;
 		bootCalls: number;
 		buildRequestOverrides: { target?: string } | null;
@@ -57,6 +58,10 @@ const gates = {
 };
 const record = {
   activityLog: '',
+  appendLog(line) {
+    record.activityLog += line;
+    options.onLogAppended?.({ line, message: line.trim(), tone: 'idle' });
+  },
   artifact: null,
   bootCalls: 0,
   buildRequestOverrides: null,
@@ -74,20 +79,20 @@ return ({
     record.bootCalls += 1;
     await gates.boot;
     options.onProgress?.({ assetPath: 'boot.wasm', assetUrl: 'boot.wasm', label: 'boot', loaded: 1, total: 1 });
-    record.activityLog += 'boot complete\\n';
+    record.appendLog('boot complete\\n');
   },
   async plan() {
     state.planCalls += 1;
     record.planCalls += 1;
     await gates.plan;
-    record.activityLog += 'plan complete\\n';
+    record.appendLog('plan complete\\n');
     return { ok: true };
   },
   async execute() {
     state.executeCalls += 1;
     record.executeCalls += 1;
     await gates.execute;
-    record.activityLog += 'execute complete\\n';
+    record.appendLog('execute complete\\n');
     record.artifact = {
       path: '/working/out.wasm',
       bytes: new Uint8Array([0, 97, 115, 109]),
@@ -359,6 +364,57 @@ describe('TinyGo operation lifecycle', () => {
 
 		autoResolveLoad = true;
 		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('enforces the TinyGo output budget while a compiler phase is still pending', async () => {
+		let releaseBoot!: () => void;
+		runtimeFixtureState.bootGate = new Promise<void>((resolve) => {
+			releaseBoot = resolve;
+		});
+		const sandbox = new TinyGo();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const retiredRuntime = runtimeFixtureState.runtimeRecords[0];
+		const running = sandbox.run('package main\nfunc main() {}', true, false, undefined, [], {
+			limits: { maxOutputBytes: 5 }
+		});
+		void running.catch(() => undefined);
+
+		try {
+			await vi.waitFor(() => expect(runtimeFixtureState.bootCalls).toBe(1));
+			expect(runtimeFixtureState.planCalls).toBe(0);
+			expect(runtimeFixtureState.executeCalls).toBe(0);
+			let hookError: unknown;
+			try {
+				retiredRuntime?.appendLog('overflow\n');
+			} catch (error) {
+				hookError = error;
+			}
+			expect(hookError).toMatchObject({
+				name: 'OutputLimitError',
+				code: 'output-limit',
+				phase: 'execute',
+				runtimeId: 'TINYGO',
+				limit: 5,
+				actual: 9
+			});
+			await expect(running).rejects.toBe(hookError);
+			expect(output).not.toHaveBeenCalled();
+			expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+			expect(retiredRuntime?.disposeCalls).toBe(1);
+			expect(sandbox.worker).toBeUndefined();
+		} finally {
+			releaseBoot();
+		}
+
+		runtimeFixtureState.bootGate = Promise.resolve();
+		sandbox.output = vi.fn();
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+		await expect(sandbox.run('package main\nfunc main() {}', true, false)).resolves.toBe(true);
 		expect(workerInstances).toHaveLength(2);
 		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
 	});
