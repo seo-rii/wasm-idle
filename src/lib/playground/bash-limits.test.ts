@@ -1,17 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { commandFree, commandRun, fromFile, importRuntimeModule, init, packageFree } = vi.hoisted(
-	() => ({
-		commandFree: vi.fn(),
-		commandRun: vi.fn(),
-		fromFile: vi.fn(),
-		importRuntimeModule: vi.fn(),
-		init: vi.fn(async () => {}),
-		packageFree: vi.fn()
-	})
-);
+const {
+	commandFree,
+	commandRun,
+	fromFile,
+	importRuntimeModule,
+	init,
+	packageFree,
+	verifyRuntimeAssetIntegrity
+} = vi.hoisted(() => ({
+	commandFree: vi.fn(),
+	commandRun: vi.fn(),
+	fromFile: vi.fn(),
+	importRuntimeModule: vi.fn(),
+	init: vi.fn(async () => {}),
+	packageFree: vi.fn(),
+	verifyRuntimeAssetIntegrity: vi.fn()
+}));
 
 vi.mock('$lib/playground/runtimeModule', () => ({ importRuntimeModule }));
+vi.mock('@wasm-idle/core', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@wasm-idle/core')>()),
+	verifyRuntimeAssetIntegrity
+}));
 
 import Bash from './bash';
 
@@ -27,6 +38,7 @@ describe('Bash execution output limits', () => {
 	beforeEach(() => {
 		vi.resetAllMocks();
 		init.mockResolvedValue(undefined);
+		verifyRuntimeAssetIntegrity.mockResolvedValue(undefined);
 		importRuntimeModule.mockResolvedValue({ init, Wasmer: { fromFile } });
 		fromFile.mockResolvedValue({
 			entrypoint: { run: commandRun, free: commandFree },
