@@ -384,7 +384,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(outputs).toContain('factorial_plus_bonus=27\n');
 	});
 
-	it('uses a module worker and manifest url for Gleam', async () => {
+	it('uses a module worker and reuses it for warm Gleam runs', async () => {
 		const sandbox = new Gleam();
 		await sandbox.load('/absproxy/5173');
 		await expect(
@@ -398,6 +398,10 @@ describe('static worker backed language sandboxes', () => {
 					stdin: '42\n'
 				}
 			)
+		).resolves.toBe(true);
+		const firstRunId = workerInstances[0].lastRunId;
+		await expect(
+			sandbox.run('pub fn main() { Nil }', false, true, undefined, [], { stdin: '' })
 		).resolves.toBe(true);
 
 		await expectWorkerBootstrap(
@@ -413,6 +417,9 @@ describe('static worker backed language sandboxes', () => {
 				stdin: '42\n'
 			})
 		);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].lastRunId).not.toBe(firstRunId);
+		await sandbox.dispose();
 	});
 
 	it('loads Perl runtime urls and forwards stdin to the WebPerl worker', async () => {

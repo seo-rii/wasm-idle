@@ -71,6 +71,90 @@ async function runHarness(request: Record<string, unknown>, onMessage?: (message
 	}
 }
 
+async function runCompilerLifecycleHarness({
+	requests,
+	deleteFailureProjectId = null
+}: {
+	requests: Array<Record<string, unknown>>;
+	deleteFailureProjectId?: number | null;
+}) {
+	const workerSource = await readWorkerSource();
+	const lifecycleOverrides = `
+const __lifecycleEvents = [];
+const __compiler = {
+  reset_filesystem(projectId) {
+    __lifecycleEvents.push({ event: 'reset', projectId, projectType: typeof projectId });
+  },
+  delete_project(projectId) {
+    __lifecycleEvents.push({ event: 'delete', projectId, projectType: typeof projectId });
+    if (projectId === ${JSON.stringify(deleteFailureProjectId)}) {
+      throw new Error('synthetic project cleanup failure');
+    }
+  }
+};
+loadCompiler = async () => __compiler;
+loadManifest = async () => ({ files: [], javascriptFiles: [] });
+buildModuleSources = async (_compiler, projectId, _baseUrl, _manifest, code) => {
+  __lifecycleEvents.push({ event: 'build', projectId, projectType: typeof projectId });
+  if (code === 'compile-fail') throw new Error('synthetic compile failure');
+  return { moduleSources: new Map() };
+};
+executeMain = async (_moduleSources, _baseUrl, executionId) => {
+  __lifecycleEvents.push({
+    event: 'execute',
+    executionId,
+    executionType: typeof executionId
+  });
+};
+const __productionOnMessage = self.onmessage;
+const __nativePostMessage = self.postMessage;
+self.postMessage = (message) => {
+  if (message?.results !== undefined || message?.error !== undefined) {
+    __lifecycleEvents.push({
+      event: 'terminal',
+      kind: message?.error !== undefined ? 'error' : 'results',
+      message: message?.error
+    });
+  }
+  __nativePostMessage(message);
+};
+self.onmessage = async (event) => {
+  await __productionOnMessage(event);
+  __nativePostMessage({ lifecycle: [...__lifecycleEvents] });
+};
+`;
+	const harness = `
+const { parentPort } = require('node:worker_threads');
+globalThis.self = globalThis;
+self.postMessage = (message) => parentPort.postMessage(message);
+(0, eval)(${JSON.stringify(workerSource)} + ${JSON.stringify(lifecycleOverrides)});
+parentPort.on('message', (data) => self.onmessage({ data }));
+`;
+	const worker = new NodeWorker(harness, { eval: true });
+	try {
+		return await new Promise<any[]>((resolve, reject) => {
+			let completed = 0;
+			worker.on('message', (message) => {
+				if (!Array.isArray(message?.lifecycle)) return;
+				completed += 1;
+				if (completed < requests.length) {
+					worker.postMessage(requests[completed]);
+					return;
+				}
+				resolve(message.lifecycle);
+			});
+			worker.once('error', reject);
+			worker.once('exit', (code) => {
+				if (code !== 0)
+					reject(new Error(`Gleam lifecycle harness exited with code ${code}`));
+			});
+			worker.postMessage(requests[0]);
+		});
+	} finally {
+		await worker.terminate();
+	}
+}
+
 async function readLogicalAsset(fileName: string) {
 	try {
 		return await readFile(new URL(fileName, staticRuntimeUrl));
@@ -124,6 +208,49 @@ describe('Gleam runner worker', () => {
 		);
 		expect(messages.some((message) => message?.output?.includes('main=안녕'))).toBe(true);
 		expect(messages.at(-1)).toEqual({ results: true });
+	});
+
+	it('uses numeric compiler projects and deletes them before terminal settlement', async () => {
+		const lifecycle = await runCompilerLifecycleHarness({
+			requests: [
+				{ baseUrl: 'https://example.test/wasm-gleam/', code: 'ok' },
+				{ baseUrl: 'https://example.test/wasm-gleam/', code: 'compile-fail' }
+			]
+		});
+
+		expect(lifecycle).toEqual([
+			{ event: 'reset', projectId: 1, projectType: 'number' },
+			{ event: 'build', projectId: 1, projectType: 'number' },
+			{
+				event: 'execute',
+				executionId: expect.stringMatching(/^wasm_idle_\d+_1$/),
+				executionType: 'string'
+			},
+			{ event: 'delete', projectId: 1, projectType: 'number' },
+			{ event: 'terminal', kind: 'results', message: undefined },
+			{ event: 'reset', projectId: 2, projectType: 'number' },
+			{ event: 'build', projectId: 2, projectType: 'number' },
+			{ event: 'delete', projectId: 2, projectType: 'number' },
+			{ event: 'terminal', kind: 'error', message: 'synthetic compile failure' }
+		]);
+	});
+
+	it('reports project cleanup failure instead of reusing the worker', async () => {
+		const lifecycle = await runCompilerLifecycleHarness({
+			deleteFailureProjectId: 1,
+			requests: [{ baseUrl: 'https://example.test/wasm-gleam/', code: 'ok' }]
+		});
+
+		expect(lifecycle.at(-2)).toEqual({
+			event: 'delete',
+			projectId: 1,
+			projectType: 'number'
+		});
+		expect(lifecycle.at(-1)).toEqual({
+			event: 'terminal',
+			kind: 'error',
+			message: 'synthetic project cleanup failure'
+		});
 	});
 
 	it('fails closed on a malformed shared stdin descriptor', async () => {

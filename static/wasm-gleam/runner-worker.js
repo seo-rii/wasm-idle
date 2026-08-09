@@ -174,7 +174,6 @@ async function collectJavascriptSources(baseUrl, manifest) {
 async function buildModuleSources(compiler, projectId, baseUrl, manifest, code, workspaceFiles) {
 	const stdlibSources = await collectStdlibSources(baseUrl, manifest);
 	const javascriptSources = await collectJavascriptSources(baseUrl, manifest);
-	compiler.reset_filesystem(projectId);
 	compiler.write_file(
 		projectId,
 		'/gleam.toml',
@@ -269,9 +268,14 @@ self.onmessage = async (event) => {
 		workspaceFiles = [],
 		log
 	} = event.data || {};
-	const projectId = `wasm_idle_${Date.now()}_${++projectCounter}`;
+	const projectId = ++projectCounter;
+	const executionId = `wasm_idle_${Date.now()}_${projectId}`;
 	const originalLog = console.log;
 	const originalError = console.error;
+	let compiler;
+	let projectAllocated = false;
+	let failed = false;
+	let failure;
 	console.log = (...args) => {
 		self.postMessage({ output: `${args.map(String).join(' ')}\n` });
 	};
@@ -283,7 +287,9 @@ self.onmessage = async (event) => {
 		if (log) {
 			originalLog(`[wasm-idle:gleam-worker] compile start baseUrl=${baseUrl}`);
 		}
-		const compiler = await loadCompiler(baseUrl);
+		compiler = await loadCompiler(baseUrl);
+		projectAllocated = true;
+		compiler.reset_filesystem(projectId);
 		const manifest = await loadManifest(
 			manifestUrl || assetUrl(baseUrl, 'source-manifest.v1.json')
 		);
@@ -295,19 +301,36 @@ self.onmessage = async (event) => {
 			code,
 			workspaceFiles
 		);
-		await executeMain(moduleSources, baseUrl, projectId);
-		if (log) {
-			originalLog('[wasm-idle:gleam-worker] run settled');
-		}
-		self.postMessage({ results: true });
+		await executeMain(moduleSources, baseUrl, executionId);
 	} catch (error) {
-		if (log) {
-			originalError('[wasm-idle:gleam-worker] failed', error);
-		}
-		self.postMessage({ error: error?.message || String(error) });
+		failed = true;
+		failure = error;
 	} finally {
+		if (compiler && projectAllocated) {
+			try {
+				await compiler.delete_project(projectId);
+			} catch (cleanupError) {
+				if (!failed) {
+					failed = true;
+					failure = cleanupError;
+				} else if (log) {
+					originalError('[wasm-idle:gleam-worker] project cleanup failed', cleanupError);
+				}
+			}
+		}
 		console.log = originalLog;
 		console.error = originalError;
 		delete globalThis.__wasmIdleReadLine;
 	}
+	if (failed) {
+		if (log) {
+			originalError('[wasm-idle:gleam-worker] failed', failure);
+		}
+		self.postMessage({ error: failure?.message || String(failure) });
+		return;
+	}
+	if (log) {
+		originalLog('[wasm-idle:gleam-worker] run settled');
+	}
+	self.postMessage({ results: true });
 };

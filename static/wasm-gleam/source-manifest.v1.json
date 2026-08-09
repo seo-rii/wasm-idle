@@ -1,7 +1,7 @@
 {
   "format": "wasm-gleam-source-manifest-v1",
   "compilerVersion": "v1.3.0",
-  "fingerprint": "24fecac3bd9bb765",
+  "fingerprint": "65abde1d0b535057",
   "files": [
     {
       "path": "dict.mjs",
