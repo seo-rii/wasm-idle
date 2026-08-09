@@ -5,7 +5,7 @@ import {
 } from '$lib/playground/assets';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
-import { BusyError, OutputLimitError, resolveExecutionLimits } from '@wasm-idle/core';
+import { BusyError, OutputLimitError, TimeoutError, resolveExecutionLimits } from '@wasm-idle/core';
 import {
 	flushBufferedEof,
 	flushQueuedStdin,
@@ -17,6 +17,7 @@ import { WorkerSession } from '$lib/playground/workerSession';
 type BeamEvalLanguage = 'ELIXIR' | 'ERLANG';
 
 const OUTPUT_ENCODER = new TextEncoder();
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
 
 class Elixir implements Sandbox {
 	language: BeamEvalLanguage;
@@ -38,9 +39,8 @@ class Elixir implements Sandbox {
 	private readonly workerSession = new WorkerSession({
 		label: () => (this.language === 'ERLANG' ? 'Erlang' : 'Elixir'),
 		onDispose: (worker) => {
-			this.activeRunCleanup?.();
-			this.activeRunCleanup = null;
-			if (this.worker === worker) delete this.worker;
+			if (this.worker !== worker) return;
+			delete this.worker;
 			this.exit = true;
 			this.prepared = false;
 			this.hasExecuted = false;
@@ -79,10 +79,20 @@ class Elixir implements Sandbox {
 		}
 		const activeUid = ++this.uid;
 		let onAbort: (() => void) | undefined;
+		let deadline: ReturnType<typeof setTimeout> | undefined;
 		let cleanedUp = false;
 		const cleanup = () => {
 			if (cleanedUp) return;
 			cleanedUp = true;
+			if (this.activeLoadCleanup === cleanup) this.activeLoadCleanup = null;
+			if (deadline !== undefined) {
+				try {
+					clearTimeout(deadline);
+				} catch {
+					// Timer cleanup must not replace the startup result.
+				}
+				deadline = undefined;
+			}
 			if (signal && onAbort) {
 				try {
 					signal.removeEventListener('abort', onAbort);
@@ -90,7 +100,6 @@ class Elixir implements Sandbox {
 					// Cleanup must not replace the startup result.
 				}
 			}
-			if (this.activeLoadCleanup === cleanup) this.activeLoadCleanup = null;
 		};
 		onAbort = signal
 			? () => {
@@ -101,7 +110,6 @@ class Elixir implements Sandbox {
 					const reason =
 						signal.reason ??
 						new DOMException(`${runtimeLabel} runtime startup aborted`, 'AbortError');
-					cleanup();
 					this.terminate(reason);
 				}
 			: undefined;
@@ -115,16 +123,50 @@ class Elixir implements Sandbox {
 				) {
 					return;
 				}
-				cleanup();
 				resolve();
+				cleanup();
 			};
 			const rejectLoad = (reason?: unknown) => {
 				if (this.activeLoadCleanup !== cleanup || activeUid !== this.uid) return;
-				cleanup();
 				reject(reason);
+				cleanup();
 			};
 			try {
 				if (this.activeLoadCleanup !== cleanup || activeUid !== this.uid) return;
+				const limits = resolveExecutionLimits(options.limits);
+				if (this.activeLoadCleanup !== cleanup || activeUid !== this.uid) return;
+				const timeoutMs = Math.min(
+					MAX_TIMER_DELAY_MS,
+					limits.assetTimeoutMs + limits.startupTimeoutMs
+				);
+				let scheduledDeadline: ReturnType<typeof setTimeout>;
+				try {
+					scheduledDeadline = setTimeout(() => {
+						if (this.activeLoadCleanup !== cleanup || activeUid !== this.uid) return;
+						this.terminate(
+							new TimeoutError(
+								`${runtimeLabel} startup timed out after ${timeoutMs} ms`,
+								{
+									phase: 'startup',
+									runtimeId: this.language,
+									timeoutMs
+								}
+							)
+						);
+					}, timeoutMs);
+				} catch (error) {
+					rejectLoad(error);
+					return;
+				}
+				if (cleanedUp) {
+					try {
+						clearTimeout(scheduledDeadline);
+					} catch {
+						// A synchronously settled timer is already detached.
+					}
+					return;
+				}
+				deadline = scheduledDeadline;
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 				const nextBundleUrl =
 					this.language === 'ERLANG'
@@ -296,15 +338,26 @@ class Elixir implements Sandbox {
 		return new Promise<boolean | string>((resolve, reject) => {
 			let activeUid = this.uid;
 			let outputBytes = 0;
-			let maxOutputBytes = 0;
+			let limits: ReturnType<typeof resolveExecutionLimits>;
 			let signal: AbortSignal | undefined;
 			let stdin: string | undefined;
 			let hasExplicitStdin = false;
 			let onAbort: (() => void) | undefined;
+			let deadline: ReturnType<typeof setTimeout> | undefined;
 			let cleanedUp = false;
 			const cleanup = () => {
 				if (cleanedUp) return;
 				cleanedUp = true;
+				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
+				if (deadline !== undefined) {
+					try {
+						clearTimeout(deadline);
+					} catch {
+						// Timer cleanup must not replace the execution result.
+					}
+					deadline = undefined;
+				}
+				if (hasExplicitStdin) this.resetExplicitStdinState();
 				if (signal && onAbort) {
 					try {
 						signal.removeEventListener('abort', onAbort);
@@ -312,14 +365,12 @@ class Elixir implements Sandbox {
 						// Cleanup must not replace the execution result.
 					}
 				}
-				if (hasExplicitStdin) this.resetExplicitStdinState();
-				if (this.activeRunCleanup === cleanup) this.activeRunCleanup = null;
 			};
 			const rejectRun = (reason?: unknown) => {
-				cleanup();
 				this.exit = true;
 				this.waitingForInput = false;
 				this.pendingEof = false;
+				cleanup();
 				reject(reason);
 			};
 			this.activeRunCleanup = cleanup;
@@ -346,7 +397,7 @@ class Elixir implements Sandbox {
 					if (ownsReservation()) failBeforeDispatch(reason);
 					return;
 				}
-				maxOutputBytes = resolveExecutionLimits(options.limits).maxOutputBytes;
+				limits = resolveExecutionLimits(options.limits);
 				if (!ownsReservation()) return;
 				stdin = options.stdin;
 				if (!ownsReservation()) return;
@@ -387,13 +438,13 @@ class Elixir implements Sandbox {
 					for (const emission of emissions) {
 						const actual =
 							outputBytes + OUTPUT_ENCODER.encode(String(emission)).byteLength;
-						if (actual > maxOutputBytes) {
+						if (actual > limits.maxOutputBytes) {
 							failRun(
 								new OutputLimitError(
-									`${runtimeLabel} output exceeded ${maxOutputBytes} bytes`,
+									`${runtimeLabel} output exceeded ${limits.maxOutputBytes} bytes`,
 									{
 										actual,
-										limit: maxOutputBytes,
+										limit: limits.maxOutputBytes,
 										phase: 'execute',
 										runtimeId: this.language
 									}
@@ -407,25 +458,25 @@ class Elixir implements Sandbox {
 					}
 					if (hasResults) {
 						if (!this.workerSession.complete(operation)) return;
-						cleanup();
 						this.elapse = Date.now() - this.begin;
 						this.exit = true;
 						this.waitingForInput = false;
 						this.pendingEof = false;
 						this.prepared = prepare;
 						this.hasExecuted = !prepare;
+						cleanup();
 						resolve(results || true);
 						return;
 					}
 					if (error) {
 						if (!this.workerSession.complete(operation)) return;
-						cleanup();
 						this.elapse = Date.now() - this.begin;
 						this.exit = true;
 						this.waitingForInput = false;
 						this.pendingEof = false;
 						this.prepared = false;
 						this.hasExecuted = false;
+						cleanup();
 						reject(error);
 						return;
 					}
@@ -463,6 +514,38 @@ class Elixir implements Sandbox {
 			) {
 				return;
 			}
+			const timeoutMs = Math.min(
+				MAX_TIMER_DELAY_MS,
+				limits.compileTimeoutMs + limits.runTimeoutMs
+			);
+			let scheduledDeadline: ReturnType<typeof setTimeout>;
+			try {
+				scheduledDeadline = setTimeout(() => {
+					if (!acceptsMessage()) return;
+					failRun(
+						new TimeoutError(
+							`${runtimeLabel} execution timed out after ${timeoutMs} ms`,
+							{
+								phase: 'execute',
+								runtimeId: this.language,
+								timeoutMs
+							}
+						)
+					);
+				}, timeoutMs);
+			} catch (error) {
+				failRun(error);
+				return;
+			}
+			if (cleanedUp || !acceptsMessage()) {
+				try {
+					clearTimeout(scheduledDeadline);
+				} catch {
+					// A synchronously settled timer is already detached.
+				}
+				return;
+			}
+			deadline = scheduledDeadline;
 			this.begin = Date.now();
 			try {
 				worker.postMessage({
@@ -487,17 +570,17 @@ class Elixir implements Sandbox {
 	terminate(reason: unknown = 'Process terminated') {
 		const loadCleanup = this.activeLoadCleanup;
 		this.activeLoadCleanup = null;
-		loadCleanup?.();
 		const runCleanup = this.activeRunCleanup;
 		this.activeRunCleanup = null;
-		runCleanup?.();
 		this.uid += 1;
 		this.prepared = false;
 		this.hasExecuted = false;
 		this.waitingForInput = false;
 		this.pendingEof = false;
-		this.workerSession.terminate(reason);
 		this.exit = true;
+		this.workerSession.terminate(reason);
+		loadCleanup?.();
+		runCleanup?.();
 	}
 
 	async clear() {
