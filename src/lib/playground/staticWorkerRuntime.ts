@@ -1722,6 +1722,7 @@ self.postMessage = (message, transferOrOptions) => {
 						baseUrl: this.baseUrl,
 						manifestUrl: this.manifestUrl,
 						manifestFingerprint: this.manifestFingerprint,
+						maxAssetBytes: controls.limits.maxAssetBytes,
 						code,
 						args: programArgs,
 						stdin,

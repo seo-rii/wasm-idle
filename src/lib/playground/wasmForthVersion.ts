@@ -1,1 +1,6 @@
-export const WASM_FORTH_ASSET_VERSION = 'dabe720dbaa84277';
+export const WASM_FORTH_ASSET_VERSION =
+	'86da4fe96b8e3b6f7b0f6b01660b08cc12ae88d8f8418cc01a33a353c4d6cbf4';
+export const WASM_FORTH_RUNNER_RECEIPT = {
+	bytes: 13463,
+	sha256: '6f9d36b8c8843b3e88ab472847690fbeae6d274032a0259e3bf9987cb94901cd'
+} as const;

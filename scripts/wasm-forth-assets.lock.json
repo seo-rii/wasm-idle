@@ -1,0 +1,11 @@
+{
+	"schemaVersion": 1,
+	"profileId": "waforth-0.20.1",
+	"upstream": {
+		"packageName": "waforth",
+		"packageVersion": "0.20.1",
+		"assetPath": "dist/index.js",
+		"bytes": 33335,
+		"sha256": "cd2c53366c653a176f82d596d8414acf1954c1bb40826e4f7f0c58e094ca5774"
+	}
+}

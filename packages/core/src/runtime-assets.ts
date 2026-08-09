@@ -108,7 +108,13 @@ export interface RuntimeAssetKeySource {
 	tcl?: { baseUrl?: string; workerUrl?: string };
 	awk?: { baseUrl?: string; workerUrl?: string };
 	pascal?: { baseUrl?: string; workerUrl?: string };
-	forth?: { baseUrl?: string; workerUrl?: string };
+	forth?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	j?: { baseUrl?: string; workerUrl?: string };
 	bqn?: { baseUrl?: string; workerUrl?: string };
 	janet?: { baseUrl?: string; workerUrl?: string };
@@ -529,6 +535,18 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'pascal', property: 'workerUrl', key: 'pascalWorkerUrl' },
 	{ runtime: 'forth', property: 'baseUrl', key: 'forthBaseUrl' },
 	{ runtime: 'forth', property: 'workerUrl', key: 'forthWorkerUrl' },
+	{ runtime: 'forth', property: 'manifestUrl', key: 'forthManifestUrl' },
+	{
+		runtime: 'forth',
+		property: 'manifestFingerprint',
+		key: 'forthManifestFingerprint'
+	},
+	{
+		runtime: 'forth',
+		property: 'workerReceipt',
+		key: 'forthWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'j', property: 'baseUrl', key: 'jBaseUrl' },
 	{ runtime: 'j', property: 'workerUrl', key: 'jWorkerUrl' },
 	{ runtime: 'bqn', property: 'baseUrl', key: 'bqnBaseUrl' },

@@ -107,7 +107,9 @@ import {
 } from './staticStdinRing';
 import { StaticWorkerRuntimeSandbox } from './staticWorkerRuntime';
 import Tcl from './tcl';
+import forthWorkerSource from '../../../scripts/runtime-workers/wasm-forth-runner-worker.js?raw';
 import gleamWorkerSource from '../../../scripts/runtime-workers/wasm-gleam-runner-worker.js?raw';
+import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 
 function createStreamingTestSandbox() {
@@ -173,18 +175,22 @@ async function expectWorkerBootstrap(worker: MockWorker, targetUrl: string) {
 	);
 }
 
-async function expectVerifiedGleamWorkerBootstrap(worker: MockWorker, targetUrl: string) {
+async function expectVerifiedWorkerBootstrap(
+	worker: MockWorker,
+	targetUrl: string,
+	workerSource: string
+) {
 	expect(worker.url).toMatch(/^blob:wasm-idle-worker-/);
 	const bootstrap = workerBootstrapBlobs.get(worker.url);
 	expect(bootstrap).toBeDefined();
 	const source = await bootstrap!.text();
 	expect(source).not.toContain(JSON.stringify(targetUrl));
 	expect(source).toContain('/* wasm-idle verified worker source */');
-	expect(source).toContain(gleamWorkerSource);
+	expect(source).toContain(workerSource);
 	expect(source.indexOf('self.postMessage =')).toBeLessThan(
 		source.indexOf('/* wasm-idle verified worker source */')
 	);
-	expect(source.indexOf(gleamWorkerSource)).toBeLessThan(
+	expect(source.indexOf(workerSource)).toBeLessThan(
 		source.indexOf('__wasmIdleStaticWorkerReady')
 	);
 }
@@ -203,9 +209,12 @@ describe('static worker backed language sandboxes', () => {
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async (input: RequestInfo | URL) => {
-				const source = String(input).includes('/wasm-gleam/runner-worker.js')
+				const inputUrl = String(input);
+				const source = inputUrl.includes('/wasm-gleam/runner-worker.js')
 					? gleamWorkerSource
-					: '/* static worker */';
+					: inputUrl.includes('/wasm-forth/runner-worker.js')
+						? forthWorkerSource
+						: '/* static worker */';
 				return new Response(source, {
 					status: 200,
 					headers: {
@@ -429,9 +438,10 @@ describe('static worker backed language sandboxes', () => {
 			sandbox.run('pub fn main() { Nil }', false, true, undefined, [], { stdin: '' })
 		).resolves.toBe(true);
 
-		await expectVerifiedGleamWorkerBootstrap(
+		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/absproxy/5173/wasm-gleam/runner-worker.js'
+			'http://localhost:3000/absproxy/5173/wasm-gleam/runner-worker.js',
+			gleamWorkerSource
 		);
 		expect(workerInstances[0].options).toEqual({ type: 'module' });
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
@@ -672,21 +682,50 @@ describe('static worker backed language sandboxes', () => {
 		});
 		await expect(
 			sandbox.run('KEY EMIT', false, true, undefined, [], {
-				stdin: 'ok\n'
+				stdin: 'ok\n',
+				limits: { maxAssetBytes: 64_000 }
 			})
 		).resolves.toBe(true);
 
-		await expectWorkerBootstrap(
+		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/wasm-forth/runner-worker.js?v=test'
+			'http://localhost:3000/wasm-forth/runner-worker.js?v=test',
+			forthWorkerSource
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-forth/',
+				manifestUrl: 'http://localhost:3000/wasm-forth/runtime-manifest.v2.json',
+				manifestFingerprint: WASM_FORTH_ASSET_VERSION,
+				maxAssetBytes: 64_000,
 				stdin: 'ok\n',
 				activePath: 'main.fth'
 			})
 		);
+		expect(sandbox.workerReceipt).toEqual(WASM_FORTH_RUNNER_RECEIPT);
+		expect(fetch).toHaveBeenCalledWith(
+			'http://localhost:3000/wasm-forth/runner-worker.js?v=test',
+			expect.objectContaining({ cache: 'no-store' })
+		);
+	});
+
+	it('rejects a modified Forth runner before creating a worker', async () => {
+		const modifiedSource = `x${forthWorkerSource.slice(1)}`;
+		vi.mocked(fetch).mockResolvedValueOnce(
+			new Response(modifiedSource, {
+				status: 200,
+				headers: {
+					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
+				}
+			})
+		);
+		const sandbox = new Forth();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'FORTH'
+		});
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('loads J runtime urls and forwards stdin to the official J wasm worker', async () => {

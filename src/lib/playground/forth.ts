@@ -3,6 +3,7 @@ import {
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
 import { StaticWorkerRuntimeSandbox } from '$lib/playground/staticWorkerRuntime';
+import { RuntimeConfigurationError } from '@wasm-idle/core';
 
 class Forth extends StaticWorkerRuntimeSandbox {
 	constructor() {
@@ -14,8 +15,19 @@ class Forth extends StaticWorkerRuntimeSandbox {
 				mode: 'streaming',
 				sourceHintPattern: /\b(?:KEY|ACCEPT|REFILL)\b/i
 			},
+			inlineVerifiedWorker: true,
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {
-				return resolveForthRuntimeAssetConfig(runtimeAssets, currentUrl);
+				const resolved = resolveForthRuntimeAssetConfig(runtimeAssets, currentUrl);
+				if (
+					!/^[a-f0-9]{64}$/u.test(resolved.manifestFingerprint || '') ||
+					!resolved.workerReceipt
+				) {
+					throw new RuntimeConfigurationError(
+						'Forth runtime requires a manifest fingerprint and worker receipt.',
+						{ runtimeId: 'FORTH' }
+					);
+				}
+				return resolved;
 			}
 		});
 	}

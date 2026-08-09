@@ -384,7 +384,10 @@ describe('core language contract', () => {
 			},
 			forth: {
 				baseUrl: '/wasm-forth/',
-				workerUrl: '/wasm-forth/runner-worker.js?v=test'
+				workerUrl: '/wasm-forth/runner-worker.js?v=test',
+				manifestUrl: '/wasm-forth/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: 'c'.repeat(64),
+				workerReceipt: { bytes: 5678, sha256: 'd'.repeat(64) }
 			},
 			j: {
 				baseUrl: '/wasm-j/',
@@ -412,6 +415,9 @@ describe('core language contract', () => {
 		expect(key).toContain('"pascalWorkerUrl":"/wasm-pascal/runner-worker.js?v=test"');
 		expect(key).toContain('"forthBaseUrl":"/wasm-forth/"');
 		expect(key).toContain('"forthWorkerUrl":"/wasm-forth/runner-worker.js?v=test"');
+		expect(key).toContain('"forthManifestUrl":"/wasm-forth/runtime-manifest.v2.json?v=test"');
+		expect(key).toContain(`"forthManifestFingerprint":"${'c'.repeat(64)}"`);
+		expect(key).toContain('"forthWorkerReceipt":');
 		expect(key).toContain('"jBaseUrl":"/wasm-j/"');
 		expect(key).toContain('"jWorkerUrl":"/wasm-j/runner-worker.js?v=test"');
 		expect(key).toContain('"bqnBaseUrl":"/wasm-bqn/"');

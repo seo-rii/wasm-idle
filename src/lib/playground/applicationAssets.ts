@@ -7,7 +7,7 @@ import { WASM_CLOJURESCRIPT_ASSET_VERSION } from './wasmClojureScriptVersion';
 import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 import { WASM_DOTNET_ASSET_VERSION } from './wasmDotnetVersion';
 import { WASM_ELIXIR_ASSET_RECEIPTS, WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
-import { WASM_FORTH_ASSET_VERSION } from './wasmForthVersion';
+import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
 import {
 	WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS,
 	WASM_FORTRAN_EXECUTION_ASSET_VERSION
@@ -130,7 +130,10 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		forth: {
 			baseUrl: asset('wasm-forth/'),
-			workerUrl: asset('wasm-forth/runner-worker.js', WASM_FORTH_ASSET_VERSION)
+			workerUrl: asset('wasm-forth/runner-worker.js', WASM_FORTH_RUNNER_RECEIPT.sha256),
+			manifestUrl: asset('wasm-forth/runtime-manifest.v2.json', WASM_FORTH_ASSET_VERSION),
+			manifestFingerprint: WASM_FORTH_ASSET_VERSION,
+			workerReceipt: WASM_FORTH_RUNNER_RECEIPT
 		},
 		j: {
 			baseUrl: asset('wasm-j/'),

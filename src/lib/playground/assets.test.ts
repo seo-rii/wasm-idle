@@ -95,6 +95,7 @@ import {
 } from './assets';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from './wasmFortranExecutionAssets';
+import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 
@@ -1011,7 +1012,11 @@ describe('runtime asset config resolution', () => {
 		expect(resolveForthRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
 			{
 				baseUrl: 'https://example.com/absproxy/5173/wasm-forth/',
-				workerUrl: 'https://example.com/absproxy/5173/wasm-forth/runner-worker.js'
+				workerUrl: 'https://example.com/absproxy/5173/wasm-forth/runner-worker.js',
+				manifestUrl:
+					'https://example.com/absproxy/5173/wasm-forth/runtime-manifest.v2.json',
+				manifestFingerprint: WASM_FORTH_ASSET_VERSION,
+				workerReceipt: WASM_FORTH_RUNNER_RECEIPT
 			}
 		);
 		expect(resolveJRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
@@ -1045,6 +1050,21 @@ describe('runtime asset config resolution', () => {
 				manifestUrl: 'https://example.com/absproxy/5173/wasm-swift/runtime-manifest.v1.json'
 			}
 		);
+	});
+
+	it('preserves relative default Forth urls when no current url is available', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_FORTH_BASE_URL = '';
+		publicEnv.PUBLIC_WASM_FORTH_WORKER_URL = '';
+		const { resolveForthRuntimeAssetConfig } = await import('./assets');
+
+		expect(resolveForthRuntimeAssetConfig(undefined)).toEqual({
+			baseUrl: '/wasm-forth/',
+			workerUrl: '/wasm-forth/runner-worker.js',
+			manifestUrl: '/wasm-forth/runtime-manifest.v2.json',
+			manifestFingerprint: WASM_FORTH_ASSET_VERSION,
+			workerReceipt: WASM_FORTH_RUNNER_RECEIPT
+		});
 	});
 
 	it('prefers explicit static worker runtime urls over public env overrides', async () => {
@@ -1147,12 +1167,23 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(
 			resolveForthRuntimeAssetConfig(
-				{ forth: { baseUrl: '/runtime/forth', workerUrl: '/runtime/forth/worker.js' } },
+				{
+					forth: {
+						baseUrl: '/runtime/forth',
+						workerUrl: '/runtime/forth/worker.js',
+						manifestUrl: '/runtime/forth/manifest.json',
+						manifestFingerprint: customFingerprint,
+						workerReceipt: customWorkerReceipt
+					}
+				},
 				'https://example.com/app'
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/forth/',
-			workerUrl: 'https://example.com/runtime/forth/worker.js'
+			workerUrl: 'https://example.com/runtime/forth/worker.js',
+			manifestUrl: 'https://example.com/runtime/forth/manifest.json',
+			manifestFingerprint: customFingerprint,
+			workerReceipt: customWorkerReceipt
 		});
 		expect(
 			resolveJRuntimeAssetConfig(

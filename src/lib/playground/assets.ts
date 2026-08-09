@@ -11,6 +11,10 @@ import {
 	WASM_GLEAM_ASSET_VERSION,
 	WASM_GLEAM_RUNNER_RECEIPT
 } from '$lib/playground/wasmGleamVersion';
+import {
+	WASM_FORTH_ASSET_VERSION,
+	WASM_FORTH_RUNNER_RECEIPT
+} from '$lib/playground/wasmForthVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from '$lib/playground/wasmFortranExecutionAssets';
 import { WASM_D_OUTER_ASSET_RECEIPTS } from '$lib/playground/wasmDIntegrity';
@@ -228,6 +232,9 @@ export interface PascalRuntimeAssetConfig {
 export interface ForthRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
+	manifestUrl?: string;
+	manifestFingerprint?: string;
+	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
 export interface JRuntimeAssetConfig {
@@ -2244,31 +2251,32 @@ export function resolveForthWorkerUrl(
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
 	}
+	return `${resolveForthBaseUrl(options, currentUrl)}runner-worker.js`;
+}
 
-	if (typeof options === 'string') {
-		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-forth/runner-worker.js`,
-			currentUrl
-		);
+export function resolveForthManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl =
+		typeof options === 'object' ? options?.forth?.manifestUrl : undefined;
+	if (configuredManifestUrl) {
+		return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
 	}
-
-	if (options?.rootUrl) {
-		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-forth/runner-worker.js`,
-			currentUrl
-		);
-	}
-
-	return resolveConfiguredUrl('/wasm-forth/runner-worker.js', currentUrl);
+	return `${resolveForthBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
 }
 
 export function resolveForthRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
+	const configured = typeof options === 'object' ? options?.forth : undefined;
 	return {
 		baseUrl: resolveForthBaseUrl(options, currentUrl),
-		workerUrl: resolveForthWorkerUrl(options, currentUrl)
+		workerUrl: resolveForthWorkerUrl(options, currentUrl),
+		manifestUrl: resolveForthManifestUrl(options, currentUrl),
+		manifestFingerprint: configured?.manifestFingerprint?.trim() || WASM_FORTH_ASSET_VERSION,
+		workerReceipt: configured?.workerReceipt || WASM_FORTH_RUNNER_RECEIPT
 	};
 }
 
