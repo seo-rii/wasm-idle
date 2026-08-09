@@ -132,6 +132,138 @@ describe('Dotnet sandbox', () => {
 		]);
 	});
 
+	it('terminates dotnet worker output before exceeding the cumulative UTF-8 byte limit', async () => {
+		const sandbox = new Dotnet();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		suppressAutoRunAck = true;
+		const running = sandbox.run('printfn "bounded"', false, true, undefined, [], {
+			limits: { maxOutputBytes: 5 }
+		});
+		await vi.waitFor(() => expect(worker.onmessage).not.toBeNull());
+		const staleHandler = worker.onmessage;
+
+		staleHandler?.({ data: { output: 'é' } } as MessageEvent<any>);
+		staleHandler?.({ data: { output: '🙂', results: true } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			runtimeId: 'FSHARP',
+			actual: 6,
+			limit: 5
+		});
+		expect(output).toHaveBeenCalledOnce();
+		expect(output).toHaveBeenCalledWith('é');
+		expect(output).not.toHaveBeenCalledWith('🙂');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalledWith('stale\n');
+
+		suppressAutoRunAck = false;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('printfn "retry"', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('terminates dotnet worker diagnostics before exceeding the message limit', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const onDiagnostic = vi.fn();
+		sandbox.oncompilerdiagnostic = onDiagnostic;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		suppressAutoRunAck = true;
+		const running = sandbox.run('Console.WriteLine("bounded");', false, true, undefined, [], {
+			limits: { maxDiagnostics: 1 }
+		});
+		await vi.waitFor(() => expect(worker.onmessage).not.toBeNull());
+		const staleHandler = worker.onmessage;
+		const firstDiagnostic = { message: 'first diagnostic' };
+		const exceedingDiagnostic = { message: 'exceeding diagnostic' };
+
+		staleHandler?.({ data: { diagnostic: firstDiagnostic } } as MessageEvent<any>);
+		staleHandler?.({ data: { diagnostic: exceedingDiagnostic } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'DiagnosticLimitError',
+			code: 'diagnostic-limit',
+			phase: 'execute',
+			runtimeId: 'CSHARP',
+			actual: 2,
+			limit: 1
+		});
+		expect(onDiagnostic).toHaveBeenCalledOnce();
+		expect(onDiagnostic).toHaveBeenCalledWith(firstDiagnostic);
+		expect(onDiagnostic).not.toHaveBeenCalledWith(exceedingDiagnostic);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+
+		staleHandler?.({
+			data: { diagnostic: { message: 'stale diagnostic' }, results: true }
+		} as MessageEvent<any>);
+		expect(onDiagnostic).not.toHaveBeenCalledWith({ message: 'stale diagnostic' });
+
+		suppressAutoRunAck = false;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('Console.WriteLine("retry");', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it.each([
+		{
+			name: 'output',
+			limits: { maxOutputBytes: 5 },
+			messages: [{ output: 'é' }, { output: '🙂' }],
+			expected: {
+				name: 'OutputLimitError',
+				code: 'output-limit',
+				actual: 6,
+				limit: 5
+			}
+		},
+		{
+			name: 'diagnostics',
+			limits: { maxDiagnostics: 1 },
+			messages: [
+				{ diagnostic: { message: 'first diagnostic' } },
+				{ diagnostic: { message: 'exceeding diagnostic' } }
+			],
+			expected: {
+				name: 'DiagnosticLimitError',
+				code: 'diagnostic-limit',
+				actual: 2,
+				limit: 1
+			}
+		}
+	])(
+		'enforces dotnet worker $name limits without a registered callback',
+		async ({ limits, messages, expected }) => {
+			const sandbox = new Dotnet();
+			await sandbox.load('/absproxy/5173');
+			const worker = workerInstances[0];
+			suppressAutoRunAck = true;
+			const running = sandbox.run('printfn "bounded"', false, true, undefined, [], {
+				limits
+			});
+			const handler = worker.onmessage;
+
+			for (const message of messages) {
+				handler?.({ data: message } as MessageEvent<any>);
+			}
+
+			await expect(running).rejects.toMatchObject({
+				...expected,
+				phase: 'execute',
+				runtimeId: 'FSHARP'
+			});
+			expect(worker.terminate).toHaveBeenCalledOnce();
+		}
+	);
+
 	it('forwards C# compile requests to the dotnet worker', async () => {
 		const sandbox = new Dotnet('CSHARP');
 		const code = 'Console.WriteLine("hello");';
@@ -1813,6 +1945,162 @@ export function executeBrowserDotnetArtifact(artifact, options) {
 		expect(compile).toHaveBeenCalledTimes(2);
 		expect(execute).toHaveBeenCalledOnce();
 		expect(sandbox.exit).toBe(true);
+	});
+
+	it('shares the main-thread output byte limit across compile and execution streams', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const output = vi.fn();
+		const compile = vi.fn(async () => ({
+			success: true,
+			artifact: { id: 'bounded-artifact' },
+			logs: ['é'],
+			stdout: 'a',
+			stderr: 'b'
+		}));
+		let swallowedQuotaError: unknown;
+		let releaseExecution!: () => void;
+		const executionGate = new Promise<void>((resolve) => {
+			releaseExecution = resolve;
+		});
+		const execute = vi
+			.fn()
+			.mockImplementationOnce(
+				async (
+					_artifact: unknown,
+					options?: {
+						stdout?: (output: string) => void;
+						stderr?: (output: string) => void;
+					}
+				) => {
+					options?.stdout?.('x');
+					try {
+						options?.stderr?.('🙂');
+					} catch (error) {
+						swallowedQuotaError = error;
+					}
+					options?.stdout?.('late output');
+					await executionGate;
+					return { exitCode: 0, stdout: '', stderr: '' };
+				}
+			)
+			.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' });
+		const runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.runtimeModule = runtimeModule;
+		sandbox.compiler = { compile };
+		sandbox.output = output;
+
+		await expect(
+			sandbox.run('Console.WriteLine("bounded");', false, true, undefined, [], {
+				limits: { maxOutputBytes: 6 }
+			})
+		).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			runtimeId: 'CSHARP',
+			actual: 10,
+			limit: 6
+		});
+		expect(output.mock.calls).toEqual([['é\n'], ['a'], ['b'], ['x']]);
+		expect(output).not.toHaveBeenCalledWith('🙂');
+		expect(output).not.toHaveBeenCalledWith('late output');
+		expect(swallowedQuotaError).toMatchObject({
+			name: 'OutputLimitError',
+			actual: 10,
+			limit: 6
+		});
+		await expect(sandbox.run('Console.WriteLine("busy");', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'CSHARP'
+		});
+
+		releaseExecution();
+		await vi.waitFor(() => expect((sandbox as any).activeOperation).toBeNull());
+		await expect(sandbox.run('Console.WriteLine("bounded");', false)).resolves.toBe(true);
+		expect(compile).toHaveBeenCalledOnce();
+		expect(execute).toHaveBeenCalledTimes(2);
+	});
+
+	it('preserves main-thread compile failure stderr outside the output meter', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const compile = vi.fn(async () => ({
+			success: false,
+			stderr: 'compile failed 🙂'
+		}));
+		const execute = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		const runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.runtimeModule = runtimeModule;
+		sandbox.compiler = { compile };
+
+		const failure = sandbox.run('invalid C#', true, true, undefined, [], {
+			limits: { maxOutputBytes: 1 }
+		});
+
+		await expect(failure).rejects.toEqual(new Error('compile failed 🙂'));
+		expect(execute).not.toHaveBeenCalled();
+	});
+
+	it('limits main-thread compiler diagnostics before executing an artifact', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const firstDiagnostic = {
+			lineNumber: 1,
+			severity: 'warning' as const,
+			message: 'first diagnostic'
+		};
+		const exceedingDiagnostic = {
+			lineNumber: 2,
+			severity: 'warning' as const,
+			message: 'exceeding diagnostic'
+		};
+		const compile = vi
+			.fn()
+			.mockResolvedValueOnce({
+				success: true,
+				artifact: { id: 'bounded-diagnostics' },
+				diagnostics: [firstDiagnostic, exceedingDiagnostic]
+			})
+			.mockResolvedValueOnce({
+				success: true,
+				artifact: { id: 'retry-artifact' },
+				diagnostics: []
+			});
+		const execute = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		const runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		const onDiagnostic = vi.fn();
+		sandbox.runtimeModule = runtimeModule;
+		sandbox.compiler = { compile };
+		sandbox.oncompilerdiagnostic = onDiagnostic;
+
+		await expect(
+			sandbox.run('Console.WriteLine("bounded");', true, true, undefined, [], {
+				limits: { maxDiagnostics: 1 }
+			})
+		).rejects.toMatchObject({
+			name: 'DiagnosticLimitError',
+			code: 'diagnostic-limit',
+			phase: 'execute',
+			runtimeId: 'CSHARP',
+			actual: 2,
+			limit: 1
+		});
+		expect(onDiagnostic).toHaveBeenCalledOnce();
+		expect(onDiagnostic).toHaveBeenCalledWith(firstDiagnostic);
+		expect(onDiagnostic).not.toHaveBeenCalledWith(exceedingDiagnostic);
+		expect(execute).not.toHaveBeenCalled();
+
+		await expect(sandbox.run('Console.WriteLine("retry");', true)).resolves.toBe(true);
+		expect(compile).toHaveBeenCalledTimes(2);
 	});
 
 	it('keeps the previous main-thread runtime when a replacement factory fails', async () => {

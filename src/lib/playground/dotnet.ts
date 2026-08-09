@@ -6,6 +6,8 @@ import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	DiagnosticLimitError,
+	OutputLimitError,
 	RuntimeConfigurationError,
 	TimeoutError,
 	WorkspaceValidationError,
@@ -76,7 +78,13 @@ type DotnetRunRequest = {
 	stdin: string | undefined;
 	output: any;
 	onDiagnostic: ((diagnostic: CompilerDiagnostic) => void) | undefined;
+	meter: DotnetRunMeter;
 	backend: DotnetRunBackend;
+};
+
+type DotnetRunMeter = {
+	recordOutput: (output: unknown) => void;
+	recordDiagnostic: () => void;
 };
 
 type DotnetExecutionLimits = ReturnType<typeof resolveExecutionLimits>;
@@ -94,6 +102,8 @@ const executionLimitKeys = [
 	'maxWorkers',
 	'maxThreads'
 ] as const satisfies readonly (keyof DotnetExecutionLimits)[];
+
+const OUTPUT_ENCODER = new TextEncoder();
 
 const readsConsoleStdin = (code: string) => /\b(?:System\.)?Console\.(?:ReadLine|In)\b/.test(code);
 
@@ -966,7 +976,41 @@ class Dotnet implements Sandbox {
 				if (!worker) throw 'Worker not loaded';
 				backend = { kind: 'worker', worker };
 			}
-			request = { programArgs, stdin, output, onDiagnostic, backend };
+			let outputBytes = 0;
+			let diagnosticCount = 0;
+			const meter: DotnetRunMeter = {
+				recordOutput: (value) => {
+					const actual = outputBytes + OUTPUT_ENCODER.encode(String(value)).byteLength;
+					if (actual > limits.maxOutputBytes) {
+						throw new OutputLimitError(
+							`${this.languageLabel} output exceeded ${limits.maxOutputBytes} bytes`,
+							{
+								actual,
+								limit: limits.maxOutputBytes,
+								phase: 'execute',
+								runtimeId: this.language
+							}
+						);
+					}
+					outputBytes = actual;
+				},
+				recordDiagnostic: () => {
+					const actual = diagnosticCount + 1;
+					if (actual > limits.maxDiagnostics) {
+						throw new DiagnosticLimitError(
+							`${this.languageLabel} diagnostics exceeded ${limits.maxDiagnostics} messages`,
+							{
+								actual,
+								limit: limits.maxDiagnostics,
+								phase: 'execute',
+								runtimeId: this.language
+							}
+						);
+					}
+					diagnosticCount = actual;
+				}
+			};
+			request = { programArgs, stdin, output, onDiagnostic, meter, backend };
 		} catch (error) {
 			throw this.releaseBeforeSession(operation, error);
 		}
@@ -1051,12 +1095,20 @@ class Dotnet implements Sandbox {
 						const { output, results, error, diagnostic, progress } = message;
 						reportWorkerProgress(_prog, progress);
 						if (!ownsRun()) return;
-						if (output && request.output != null) {
-							Reflect.apply(request.output, this, [output]);
+						if (output) {
+							request.meter.recordOutput(output);
+							if (!ownsRun()) return;
+							if (request.output != null) {
+								Reflect.apply(request.output, this, [output]);
+							}
 						}
 						if (!ownsRun()) return;
-						if (diagnostic && request.onDiagnostic != null) {
-							Reflect.apply(request.onDiagnostic, this, [diagnostic]);
+						if (diagnostic) {
+							request.meter.recordDiagnostic();
+							if (!ownsRun()) return;
+							if (request.onDiagnostic != null) {
+								Reflect.apply(request.onDiagnostic, this, [diagnostic]);
+							}
 						}
 						if (!ownsRun()) return;
 						if (hasResults) {
@@ -1128,6 +1180,24 @@ class Dotnet implements Sandbox {
 			this.activeExplicitStdinCleanup = cleanupExplicitStdin;
 		}
 		try {
+			const emitExecutionOutput = (output: string) => {
+				if (!output || !this.isOperationActive(operation) || _uid !== this.uid) return;
+				try {
+					request.meter.recordOutput(output);
+				} catch (error) {
+					if (this.isOperationActive(operation) && _uid === this.uid) {
+						this.abortOperation(operation, error);
+					}
+					throw error;
+				}
+				if (
+					request.output != null &&
+					this.isOperationActive(operation) &&
+					_uid === this.uid
+				) {
+					Reflect.apply(request.output, this, [output]);
+				}
+			};
 			const compileCacheKey = `${this.compileLanguage}\n${code}`;
 			let compiledArtifact =
 				this.compiledArtifact &&
@@ -1156,21 +1226,28 @@ class Dotnet implements Sandbox {
 				if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 				for (const diagnostic of result.diagnostics || []) {
 					if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
+					request.meter.recordDiagnostic();
+					if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 					if (request.onDiagnostic != null) {
 						Reflect.apply(request.onDiagnostic, this, [diagnostic]);
 					}
 				}
 				for (const line of result.logs || []) {
 					if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
+					const output = line.endsWith('\n') ? line : `${line}\n`;
+					request.meter.recordOutput(output);
+					if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 					if (request.output != null) {
-						Reflect.apply(request.output, this, [
-							line.endsWith('\n') ? line : `${line}\n`
-						]);
+						Reflect.apply(request.output, this, [output]);
 					}
 				}
 				if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
-				if (result.stdout && request.output != null) {
-					Reflect.apply(request.output, this, [result.stdout]);
+				if (result.stdout) {
+					request.meter.recordOutput(result.stdout);
+					if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
+					if (request.output != null) {
+						Reflect.apply(request.output, this, [result.stdout]);
+					}
 				}
 				if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 				if (!result.success || !result.artifact) {
@@ -1182,8 +1259,12 @@ class Dotnet implements Sandbox {
 							`${this.languageLabel} compilation failed`
 					);
 				}
-				if (result.stderr && request.output != null) {
-					Reflect.apply(request.output, this, [result.stderr]);
+				if (result.stderr) {
+					request.meter.recordOutput(result.stderr);
+					if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
+					if (request.output != null) {
+						Reflect.apply(request.output, this, [result.stderr]);
+					}
 				}
 				if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 				compiledArtifact = result.artifact;
@@ -1206,26 +1287,8 @@ class Dotnet implements Sandbox {
 						USER: 'jungol'
 					},
 					stdin,
-					stdout: (output: string) => {
-						if (
-							output &&
-							request.output != null &&
-							this.isOperationActive(operation) &&
-							_uid === this.uid
-						) {
-							Reflect.apply(request.output, this, [output]);
-						}
-					},
-					stderr: (output: string) => {
-						if (
-							output &&
-							request.output != null &&
-							this.isOperationActive(operation) &&
-							_uid === this.uid
-						) {
-							Reflect.apply(request.output, this, [output]);
-						}
-					}
+					stdout: (output: string) => emitExecutionOutput(output),
+					stderr: (output: string) => emitExecutionOutput(output)
 				}
 			]);
 			if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
