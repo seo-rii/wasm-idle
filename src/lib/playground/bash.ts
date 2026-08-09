@@ -6,6 +6,7 @@ import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	OutputLimitError,
 	TimeoutError,
 	resolveExecutionLimits,
 	type ExecutionLimits,
@@ -706,6 +707,7 @@ class Bash implements Sandbox {
 		}
 
 		return new Promise<boolean | string>((resolve, reject) => {
+			let outputBytes = 0;
 			let settleRejectedRun: (reason: unknown) => void;
 			let cleanedUp = false;
 			const cleanup = () => {
@@ -822,15 +824,31 @@ class Bash implements Sandbox {
 					const outputController = new AbortController();
 					this.outputController = outputController;
 					const outputPipes: Promise<void>[] = [];
+					const writeOutput = (chunk: Uint8Array) => {
+						if (!ownsRun()) return;
+						const actual = outputBytes + chunk.byteLength;
+						if (actual > limits.maxOutputBytes) {
+							this.terminate(
+								new OutputLimitError(
+									`Bash output exceeded ${limits.maxOutputBytes} bytes`,
+									{
+										actual,
+										limit: limits.maxOutputBytes,
+										phase: 'execute',
+										runtimeId: 'BASH'
+									}
+								)
+							);
+							return;
+						}
+						outputBytes = actual;
+						this.output?.(new TextDecoder().decode(chunk));
+					};
 					try {
 						outputPipes.push(
 							instance.stdout.pipeTo(
 								new WritableStream({
-									write: (chunk) => {
-										if (ownsRun()) {
-											this.output?.(new TextDecoder().decode(chunk));
-										}
-									}
+									write: (chunk) => writeOutput(chunk)
 								}),
 								{ signal: outputController.signal }
 							)
@@ -838,11 +856,7 @@ class Bash implements Sandbox {
 						outputPipes.push(
 							instance.stderr.pipeTo(
 								new WritableStream({
-									write: (chunk) => {
-										if (ownsRun()) {
-											this.output?.(new TextDecoder().decode(chunk));
-										}
-									}
+									write: (chunk) => writeOutput(chunk)
 								}),
 								{ signal: outputController.signal }
 							)
