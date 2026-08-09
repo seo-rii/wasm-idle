@@ -7,6 +7,7 @@ import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
 	OutputLimitError,
+	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
@@ -418,10 +419,20 @@ class Octave implements Sandbox {
 			const _uid = ++this.uid;
 			let outputBytes = 0;
 			let onAbort: (() => void) | undefined;
+			let timeout: ReturnType<typeof setTimeout> | undefined;
 			let cleanedUp = false;
 			const cleanup = () => {
 				if (cleanedUp) return;
 				cleanedUp = true;
+				if (timeout !== undefined) {
+					const ownedTimeout = timeout;
+					timeout = undefined;
+					try {
+						clearTimeout(ownedTimeout);
+					} catch {
+						// Timer cleanup must not replace the execution result.
+					}
+				}
 				const ownsRun = this.activeRun?.token === runToken;
 				if (ownsRun) {
 					this.activeRun = null;
@@ -522,6 +533,42 @@ class Octave implements Sandbox {
 				if (signalAborted) onAbort();
 			}
 			if (this.activeRun?.token !== runToken || runOperation.cancelled || _uid !== this.uid) {
+				return;
+			}
+			const timeoutMs = Math.min(
+				2_147_483_647,
+				limits.assetTimeoutMs +
+					limits.startupTimeoutMs +
+					limits.compileTimeoutMs +
+					limits.runTimeoutMs
+			);
+			try {
+				timeout = setTimeout(() => {
+					if (
+						this.activeRun?.token !== runToken ||
+						runOperation.cancelled ||
+						_uid !== this.uid
+					) {
+						return;
+					}
+					this.terminate(
+						new TimeoutError(`Octave execution timed out after ${timeoutMs} ms`, {
+							phase: 'execute',
+							runtimeId: 'OCTAVE',
+							timeoutMs
+						})
+					);
+				}, timeoutMs);
+			} catch (error) {
+				if (
+					this.activeRun?.token === runToken &&
+					!runOperation.cancelled &&
+					_uid === this.uid
+				) {
+					this.terminate(error);
+				} else {
+					cleanup();
+				}
 				return;
 			}
 			this.begin = Date.now();

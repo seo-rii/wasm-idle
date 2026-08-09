@@ -129,6 +129,114 @@ describe('Octave sandbox', () => {
 		expect(workerInstances).toHaveLength(2);
 	});
 
+	it('times out an Octave execution while it is waiting for stdin', async () => {
+		vi.useFakeTimers();
+		try {
+			const sandbox = new Octave();
+			await sandbox.load('/absproxy/5173');
+
+			const running = sandbox.run('value = input("value: ");', false, true, undefined, [], {
+				limits: {
+					assetTimeoutMs: 2,
+					startupTimeoutMs: 3,
+					compileTimeoutMs: 5,
+					runTimeoutMs: 7
+				}
+			});
+			const rejected = running.catch((error) => error);
+
+			await vi.advanceTimersByTimeAsync(17);
+
+			await expect(rejected).resolves.toMatchObject({
+				name: 'TimeoutError',
+				code: 'timeout',
+				phase: 'execute',
+				runtimeId: 'OCTAVE',
+				timeoutMs: 17
+			});
+			expect(workerInstances).toHaveLength(0);
+			expect(sandbox.exit).toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('retires an unresponsive Octave worker at the aggregate runtime deadline', async () => {
+		vi.useFakeTimers();
+		try {
+			const sandbox = new Octave();
+			const output = vi.fn();
+			sandbox.output = output;
+			await sandbox.load('/absproxy/5173');
+			onPostMessage = () => undefined;
+
+			const running = sandbox.run('disp("bounded")', false, true, undefined, [], {
+				limits: {
+					assetTimeoutMs: 2,
+					startupTimeoutMs: 3,
+					compileTimeoutMs: 5,
+					runTimeoutMs: 7
+				}
+			});
+			const rejected = running.catch((error) => error);
+			await vi.advanceTimersByTimeAsync(0);
+			expect(workerInstances).toHaveLength(1);
+			const worker = workerInstances[0];
+			const staleHandler = worker.onmessage;
+
+			await vi.advanceTimersByTimeAsync(17);
+
+			await expect(rejected).resolves.toMatchObject({
+				name: 'TimeoutError',
+				code: 'timeout',
+				phase: 'execute',
+				runtimeId: 'OCTAVE',
+				timeoutMs: 17
+			});
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			expect(sandbox.worker).toBeUndefined();
+
+			staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+			expect(output).not.toHaveBeenCalled();
+
+			onPostMessage = null;
+			const retry = sandbox.run('disp("retry")', false);
+			await vi.advanceTimersByTimeAsync(0);
+			await expect(retry).resolves.toBe(true);
+			expect(workerInstances).toHaveLength(2);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('clears the Octave execution deadline after a successful run', async () => {
+		vi.useFakeTimers();
+		try {
+			const sandbox = new Octave();
+			await sandbox.load('/absproxy/5173');
+
+			const running = sandbox.run('disp("done")', false, true, undefined, [], {
+				limits: {
+					assetTimeoutMs: 2,
+					startupTimeoutMs: 3,
+					compileTimeoutMs: 5,
+					runTimeoutMs: 7
+				}
+			});
+			await vi.advanceTimersByTimeAsync(0);
+			await expect(running).resolves.toBe(true);
+			const worker = workerInstances[0];
+
+			await vi.advanceTimersByTimeAsync(17);
+
+			expect(worker.terminate).not.toHaveBeenCalled();
+			expect(sandbox.worker).toBe(worker);
+			expect(sandbox.exit).toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it('normalizes a valid Octave workspace before worker dispatch', async () => {
 		const sandbox = new Octave();
 		await sandbox.load('/absproxy/5173');
