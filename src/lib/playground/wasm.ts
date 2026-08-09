@@ -1,6 +1,8 @@
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	DiagnosticLimitError,
+	OutputLimitError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -26,6 +28,8 @@ type WasmOperation = {
 	cleanups: Array<() => void>;
 	explicitStdin: boolean;
 };
+
+const OUTPUT_ENCODER = new TextEncoder();
 
 const abortReason = (signal: AbortSignal, phase: WasmOperation['phase']) =>
 	signal.reason !== undefined
@@ -428,6 +432,8 @@ class Wasm implements Sandbox {
 		this.exit = false;
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
+			let diagnosticCount = 0;
+			let outputBytes = 0;
 			const operation = this.workerSession.beginRun(worker, reject);
 			const timeoutMs = Math.min(
 				2_147_483_647,
@@ -479,9 +485,48 @@ class Wasm implements Sandbox {
 					}
 					reportWorkerProgress(_prog, progress);
 					if (!ownsRun()) return;
-					if (output) this.output?.(output);
+					if (output) {
+						const actual =
+							outputBytes + OUTPUT_ENCODER.encode(String(output)).byteLength;
+						if (actual > limits.maxOutputBytes) {
+							failRun(
+								new OutputLimitError(
+									`WASM output exceeded ${limits.maxOutputBytes} bytes`,
+									{
+										actual,
+										limit: limits.maxOutputBytes,
+										phase: 'execute',
+										runtimeId: 'WASM'
+									}
+								),
+								true
+							);
+							return;
+						}
+						outputBytes = actual;
+						this.output?.(output);
+					}
 					if (!ownsRun()) return;
-					if (diagnostic) this.oncompilerdiagnostic?.(diagnostic);
+					if (diagnostic) {
+						const actual = diagnosticCount + 1;
+						if (actual > limits.maxDiagnostics) {
+							failRun(
+								new DiagnosticLimitError(
+									`WASM diagnostics exceeded ${limits.maxDiagnostics} messages`,
+									{
+										actual,
+										limit: limits.maxDiagnostics,
+										phase: 'execute',
+										runtimeId: 'WASM'
+									}
+								),
+								true
+							);
+							return;
+						}
+						diagnosticCount = actual;
+						this.oncompilerdiagnostic?.(diagnostic);
+					}
 					if (!ownsRun()) return;
 					if (results) {
 						if (!claimRun()) return;
