@@ -32,6 +32,7 @@ export interface Sandbox {
 	) => Promise<boolean | string>;
 	terminate: () => void | Promise<void>;
 	clear: () => Promise<void>;
+	dispose?: () => void | Promise<void>;
 
 	kill?: () => void | Promise<void>;
 	write?: (data: string) => void;
@@ -51,7 +52,7 @@ export interface Sandbox {
 	elapse?: number;
 }
 
-export interface BoundSandbox extends Omit<Sandbox, 'load'> {
+export interface BoundSandbox extends Omit<Sandbox, 'load' | 'dispose'> {
 	load: (
 		code?: string,
 		log?: boolean,
@@ -59,6 +60,7 @@ export interface BoundSandbox extends Omit<Sandbox, 'load'> {
 		options?: SandboxExecutionOptions,
 		progress?: SandboxProgress
 	) => Promise<void>;
+	dispose?: () => Promise<void>;
 	runtimeAssets: SandboxRuntimeAssets;
 }
 

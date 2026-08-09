@@ -123,15 +123,48 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 
 	private activeRun: ActiveRun | null = null;
 	private bootstrapUrl = '';
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private disposeReason: CancelledError | null = null;
 	private lifecycleProgress?: SandboxProgress;
 	private readonly progressController = new RuntimeProgressController();
 	private progressUid = 0;
 	private startingRunId: string | null = null;
 	private startupReject: ((reason: unknown) => void) | null = null;
+	private workerStartAbortController: AbortController | null = null;
 	private workerGeneration = 0;
 	private workerStartPromise: Promise<Worker> | null = null;
 
 	constructor(private readonly config: StaticWorkerRuntimeConfig) {}
+
+	private getDisposeReason() {
+		if (!this.disposeReason) {
+			this.disposeReason = new CancelledError(
+				`${this.config.displayName} runtime was disposed`,
+				{
+					phase: 'dispose',
+					runtimeId: this.config.languageId
+				}
+			);
+		}
+		return this.disposeReason;
+	}
+
+	private assertNotDisposed() {
+		if (!this.disposed) return;
+		throw new RuntimeConfigurationError(`${this.config.displayName} runtime is disposed`, {
+			phase: 'dispose',
+			runtimeId: this.config.languageId
+		});
+	}
+
+	private assertOperationNotDisposed() {
+		if (this.disposed) throw this.getDisposeReason();
+	}
+
+	private preserveDisposeReason(error: unknown) {
+		return this.disposed ? this.getDisposeReason() : error;
+	}
 
 	get stdinMode(): RuntimeStdinMode {
 		if (this.config.stdin.mode !== 'streaming') return this.config.stdin.mode;
@@ -152,62 +185,75 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		const controls = this.resolveExecutionControls(options);
-		if (controls.signal?.aborted) {
-			throw new CancelledError(`${this.config.displayName} startup cancelled`, {
-				cause: controls.signal.reason,
-				phase: 'startup',
-				runtimeId: this.config.languageId
-			});
-		}
-		this.validateWorkspace(code, options, controls.limits);
-		const progressSink = this.selectProgress(progress);
-		const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-		const urls = this.config.resolveRuntimeAssets(runtimeAssets, currentUrl);
-		const nextManifestUrl = urls.manifestUrl || '';
-		const runtimeChanged =
-			this.baseUrl !== urls.baseUrl ||
-			this.workerUrl !== urls.workerUrl ||
-			this.manifestUrl !== nextManifestUrl;
-
-		if (
-			runtimeChanged &&
-			(this.worker || this.workerStartPromise || this.activeRun || this.startingRunId)
-		) {
-			this.terminate();
-		}
-		this.baseUrl = urls.baseUrl;
-		this.workerUrl = urls.workerUrl;
-		this.manifestUrl = nextManifestUrl;
-
-		if (!this.baseUrl || !this.workerUrl) {
-			throw new RuntimeConfigurationError(
-				`${this.config.displayName} runtime is not configured.`,
-				{ runtimeId: this.config.languageId }
-			);
-		}
-		if (!runtimeChanged && this.workerStartPromise) {
-			await this.workerStartPromise;
-			return;
-		}
-
-		const lifecycle = this.beginProgressLifecycle(
-			progressSink,
-			`Resolving ${this.config.displayName} runtime`
-		);
+		this.assertNotDisposed();
 		try {
-			this.reportProgress(
-				lifecycle.progress,
-				0.02,
+			const controls = this.resolveExecutionControls(options);
+			this.assertOperationNotDisposed();
+			if (controls.signal?.aborted) {
+				throw new CancelledError(`${this.config.displayName} startup cancelled`, {
+					cause: controls.signal.reason,
+					phase: 'startup',
+					runtimeId: this.config.languageId
+				});
+			}
+			this.validateWorkspace(code, options, controls.limits);
+			this.assertOperationNotDisposed();
+			const progressSink = this.selectProgress(progress);
+			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			const urls = this.config.resolveRuntimeAssets(runtimeAssets, currentUrl);
+			this.assertOperationNotDisposed();
+			const nextManifestUrl = urls.manifestUrl || '';
+			const runtimeChanged =
+				this.baseUrl !== urls.baseUrl ||
+				this.workerUrl !== urls.workerUrl ||
+				this.manifestUrl !== nextManifestUrl;
+
+			if (
+				runtimeChanged &&
+				(this.worker || this.workerStartPromise || this.activeRun || this.startingRunId)
+			) {
+				this.terminate();
+			}
+			this.baseUrl = urls.baseUrl;
+			this.workerUrl = urls.workerUrl;
+			this.manifestUrl = nextManifestUrl;
+
+			if (!this.baseUrl || !this.workerUrl) {
+				throw new RuntimeConfigurationError(
+					`${this.config.displayName} runtime is not configured.`,
+					{ runtimeId: this.config.languageId }
+				);
+			}
+			if (!runtimeChanged && this.workerStartPromise) {
+				await this.workerStartPromise;
+				this.assertOperationNotDisposed();
+				return;
+			}
+
+			const lifecycle = this.beginProgressLifecycle(
+				progressSink,
 				`Resolving ${this.config.displayName} runtime`
 			);
-			await this.ensureWorkerStarted(lifecycle.progress, controls);
-		} finally {
-			lifecycle.end();
+			try {
+				this.assertOperationNotDisposed();
+				this.reportProgress(
+					lifecycle.progress,
+					0.02,
+					`Resolving ${this.config.displayName} runtime`
+				);
+				this.assertOperationNotDisposed();
+				await this.ensureWorkerStarted(lifecycle.progress, controls);
+				this.assertOperationNotDisposed();
+			} finally {
+				lifecycle.end();
+			}
+		} catch (error) {
+			throw this.preserveDisposeReason(error);
 		}
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		const activeRun = this.activeRun;
 		if (activeRun?.stdinRing) {
 			try {
@@ -221,6 +267,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	}
 
 	eof() {
+		if (this.disposed) return;
 		const activeRun = this.activeRun;
 		if (activeRun?.stdinRing) {
 			try {
@@ -385,8 +432,14 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			timedOut = true;
 			phaseController.abort();
 		}, limits.assetTimeoutMs);
-		this.reportProgress(progress, 0.05, `Loading ${this.config.displayName} worker script`);
 		try {
+			this.reportProgress(progress, 0.05, `Loading ${this.config.displayName} worker script`);
+			if (phaseController.signal.aborted) {
+				throw (
+					phaseController.signal.reason ??
+					new DOMException('Worker script fetch aborted', 'AbortError')
+				);
+			}
 			const pendingResponse = Promise.resolve(
 				fetch(workerRequestUrl.href, {
 					cache: 'force-cache',
@@ -633,6 +686,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			}
 			if (releaseError) throw releaseError;
 		} catch (error) {
+			if (this.disposed) throw this.getDisposeReason();
 			if (isWasmIdleError(error)) throw error;
 			if (timedOut) {
 				throw new TimeoutError(
@@ -716,13 +770,88 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		progress: SandboxProgress | undefined,
 		controls: StaticWorkerExecutionControls
 	) {
+		this.assertOperationNotDisposed();
 		if (this.workerStartPromise) return this.workerStartPromise;
+		const startAbortController = new AbortController();
 		const generation = ++this.workerGeneration;
-		const startPromise = this.startWorker(generation, progress, controls);
-		this.workerStartPromise = startPromise;
-		void startPromise.catch(() => {
-			if (this.workerStartPromise === startPromise) this.disposeWorker();
-		});
+		this.workerStartAbortController = startAbortController;
+		const callerSignal = controls.signal;
+		let callerListenerAttempted = false;
+		const ownsStartup = () =>
+			!this.disposed &&
+			this.workerGeneration === generation &&
+			this.workerStartAbortController === startAbortController;
+		const invalidatedReason = () =>
+			this.disposed
+				? this.getDisposeReason()
+				: new CancelledError(`${this.config.displayName} worker startup terminated`, {
+						phase: 'startup',
+						runtimeId: this.config.languageId
+					});
+		const abortStartup = (reason?: unknown) => {
+			if (startAbortController.signal.aborted) return;
+			try {
+				startAbortController.abort(reason);
+			} catch {
+				// Reservation state is detached separately; abort is best effort.
+			}
+		};
+		const forwardAbort = () => {
+			if (startAbortController.signal.aborted) return;
+			let reason: unknown;
+			try {
+				reason = callerSignal?.reason;
+			} catch (error) {
+				reason = error;
+			}
+			if (!ownsStartup() || startAbortController.signal.aborted) return;
+			abortStartup(reason);
+		};
+		const cleanupStartSignal = () => {
+			if (callerListenerAttempted) {
+				try {
+					callerSignal?.removeEventListener('abort', forwardAbort);
+				} catch {
+					// Caller-owned signal cleanup must not replace startup settlement.
+				}
+			}
+			if (this.workerStartAbortController === startAbortController) {
+				this.workerStartAbortController = null;
+			}
+		};
+		let startPromise: Promise<Worker>;
+		try {
+			if (callerSignal) {
+				callerListenerAttempted = true;
+				callerSignal.addEventListener('abort', forwardAbort, { once: true });
+				if (!ownsStartup()) throw invalidatedReason();
+				const callerAborted = callerSignal.aborted;
+				if (!ownsStartup()) throw invalidatedReason();
+				if (callerAborted) forwardAbort();
+				if (!ownsStartup()) throw invalidatedReason();
+			}
+			startPromise = this.startWorker(generation, progress, {
+				limits: controls.limits,
+				signal: startAbortController.signal
+			});
+			if (!ownsStartup()) {
+				void startPromise.catch(() => undefined);
+				throw invalidatedReason();
+			}
+			this.workerStartPromise = startPromise;
+		} catch (error) {
+			const reason = ownsStartup() ? this.preserveDisposeReason(error) : invalidatedReason();
+			abortStartup(reason);
+			cleanupStartSignal();
+			throw reason;
+		}
+		void startPromise.then(
+			() => cleanupStartSignal(),
+			(error) => {
+				cleanupStartSignal();
+				if (this.workerStartPromise === startPromise) this.disposeWorker(error);
+			}
+		);
 		return startPromise;
 	}
 
@@ -732,6 +861,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		controls: StaticWorkerExecutionControls
 	) {
 		await this.preloadWorkerScript(progress, controls);
+		if (this.disposed) throw this.getDisposeReason();
 		if (generation !== this.workerGeneration) {
 			throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
 				phase: 'startup',
@@ -739,8 +869,27 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 			});
 		}
 
-		this.reportProgress(progress, 0.22, `Starting ${this.config.displayName} worker`);
+		try {
+			this.reportProgress(progress, 0.22, `Starting ${this.config.displayName} worker`);
+		} catch (error) {
+			throw this.preserveDisposeReason(error);
+		}
+		if (this.disposed) throw this.getDisposeReason();
+		if (generation !== this.workerGeneration) {
+			throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
+				phase: 'startup',
+				runtimeId: this.config.languageId
+			});
+		}
 		this.bootstrapUrl = this.createBootstrapUrl();
+		if (this.disposed || generation !== this.workerGeneration) {
+			this.revokeBootstrapUrl();
+			if (this.disposed) throw this.getDisposeReason();
+			throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
+				phase: 'startup',
+				runtimeId: this.config.languageId
+			});
+		}
 		let worker: Worker;
 		try {
 			worker = this.config.moduleWorker
@@ -748,13 +897,21 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 				: new Worker(this.bootstrapUrl);
 		} catch (error) {
 			this.revokeBootstrapUrl();
+			if (this.disposed) throw this.getDisposeReason();
+			if (generation !== this.workerGeneration) {
+				throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
+					phase: 'startup',
+					runtimeId: this.config.languageId
+				});
+			}
 			throw new Error(
 				`${this.config.displayName} worker failed to start: ${this.errorMessage(error)}`
 			);
 		}
-		if (generation !== this.workerGeneration) {
-			worker.terminate();
+		if (this.disposed || generation !== this.workerGeneration) {
+			this.detachAndTerminateWorker(worker);
 			this.revokeBootstrapUrl();
+			if (this.disposed) throw this.getDisposeReason();
 			throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
 				phase: 'startup',
 				runtimeId: this.config.languageId
@@ -763,11 +920,14 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 
 		return await new Promise<Worker>((resolve, reject) => {
 			let settled = false;
+			let timeout: ReturnType<typeof setTimeout> | undefined;
 			const cleanup = () => {
-				try {
-					clearTimeout(timeout);
-				} catch {
-					// Timer cleanup is best effort once startup has settled.
+				if (timeout !== undefined) {
+					try {
+						clearTimeout(timeout);
+					} catch {
+						// Timer cleanup is best effort once startup has settled.
+					}
 				}
 				try {
 					controls.signal?.removeEventListener('abort', onAbort);
@@ -783,87 +943,100 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 				reject(reason);
 				return true;
 			};
-			const onAbort = () => {
-				const rejected = rejectStartup(
-					new CancelledError(`${this.config.displayName} worker startup cancelled`, {
-						cause: controls.signal?.reason,
-						phase: 'startup',
-						runtimeId: this.config.languageId
-					})
-				);
-				if (rejected && generation === this.workerGeneration && this.worker === worker) {
+			const retireStartedWorker = () => {
+				if (generation === this.workerGeneration && this.worker === worker) {
 					this.disposeWorker();
+					return;
 				}
+				this.detachAndTerminateWorker(worker);
 			};
-			const timeout = setTimeout(() => {
-				const rejected = rejectStartup(
-					new TimeoutError(
-						`${this.config.displayName} worker startup timed out after ${controls.limits.startupTimeoutMs} ms`,
-						{
-							phase: 'startup',
-							runtimeId: this.config.languageId,
-							timeoutMs: controls.limits.startupTimeoutMs
-						}
-					)
-				);
-				if (rejected && generation === this.workerGeneration && this.worker === worker) {
-					this.disposeWorker();
+			const failStartup = (reason: unknown) => {
+				if (!rejectStartup(this.preserveDisposeReason(reason))) return;
+				retireStartedWorker();
+			};
+			const onAbort = () => {
+				let signalReason: unknown;
+				try {
+					signalReason = controls.signal?.reason;
+				} catch (error) {
+					signalReason = error;
 				}
-			}, controls.limits.startupTimeoutMs);
+				failStartup(
+					signalReason === this.disposeReason
+						? this.getDisposeReason()
+						: new CancelledError(
+								`${this.config.displayName} worker startup cancelled`,
+								{
+									cause: signalReason,
+									phase: 'startup',
+									runtimeId: this.config.languageId
+								}
+							)
+				);
+			};
 
 			this.worker = worker;
 			this.startupReject = rejectStartup;
-			worker.onmessage = (event: MessageEvent<StaticWorkerMessage>) => {
-				if (generation !== this.workerGeneration || this.worker !== worker) return;
-				if (event.data?.__wasmIdleStaticWorkerReady) {
-					if (settled || this.startupReject !== rejectStartup) return;
-					try {
-						this.reportProgress(
-							progress,
-							0.25,
-							`${this.config.displayName} worker ready`
-						);
-					} catch (error) {
-						const rejected = rejectStartup(error);
-						if (
-							rejected &&
-							generation === this.workerGeneration &&
-							this.worker === worker
-						) {
-							this.disposeWorker();
+			try {
+				timeout = setTimeout(() => {
+					failStartup(
+						new TimeoutError(
+							`${this.config.displayName} worker startup timed out after ${controls.limits.startupTimeoutMs} ms`,
+							{
+								phase: 'startup',
+								runtimeId: this.config.languageId,
+								timeoutMs: controls.limits.startupTimeoutMs
+							}
+						)
+					);
+				}, controls.limits.startupTimeoutMs);
+				worker.onmessage = (event: MessageEvent<StaticWorkerMessage>) => {
+					if (generation !== this.workerGeneration || this.worker !== worker) return;
+					if (event.data?.__wasmIdleStaticWorkerReady) {
+						if (settled || this.startupReject !== rejectStartup) return;
+						try {
+							this.reportProgress(
+								progress,
+								0.25,
+								`${this.config.displayName} worker ready`
+							);
+						} catch (error) {
+							failStartup(error);
+							return;
 						}
+						if (
+							settled ||
+							generation !== this.workerGeneration ||
+							this.worker !== worker ||
+							this.startupReject !== rejectStartup
+						) {
+							return;
+						}
+						settled = true;
+						cleanup();
+						this.startupReject = null;
+						this.revokeBootstrapUrl();
+						resolve(worker);
 						return;
 					}
-					if (
-						settled ||
-						generation !== this.workerGeneration ||
-						this.worker !== worker ||
-						this.startupReject !== rejectStartup
-					) {
-						return;
-					}
-					settled = true;
-					cleanup();
-					this.startupReject = null;
-					this.revokeBootstrapUrl();
-					resolve(worker);
-					return;
-				}
-				this.handleWorkerMessage(event);
-			};
-			worker.onerror = (event: ErrorEvent) => {
-				if (generation !== this.workerGeneration || this.worker !== worker) return;
-				event.preventDefault?.();
-				this.handleWorkerFailure(this.formatWorkerError(event));
-			};
-			worker.onmessageerror = () => {
-				if (generation !== this.workerGeneration || this.worker !== worker) return;
-				this.handleWorkerFailure(
-					`${this.config.displayName} worker message deserialization failed`
-				);
-			};
-			controls.signal?.addEventListener('abort', onAbort, { once: true });
-			if (controls.signal?.aborted) onAbort();
+					this.handleWorkerMessage(event);
+				};
+				worker.onerror = (event: ErrorEvent) => {
+					if (generation !== this.workerGeneration || this.worker !== worker) return;
+					event.preventDefault?.();
+					this.handleWorkerFailure(this.formatWorkerError(event));
+				};
+				worker.onmessageerror = () => {
+					if (generation !== this.workerGeneration || this.worker !== worker) return;
+					this.handleWorkerFailure(
+						`${this.config.displayName} worker message deserialization failed`
+					);
+				};
+				controls.signal?.addEventListener('abort', onAbort, { once: true });
+				if (controls.signal?.aborted) onAbort();
+			} catch (error) {
+				failStartup(error);
+			}
 		});
 	}
 
@@ -1014,14 +1187,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		}
 	}
 
-	private disposeWorker() {
-		this.revokeBootstrapUrl();
-		this.workerGeneration += 1;
-		this.workerStartPromise = null;
-		this.startupReject = null;
-		const worker = this.worker;
-		delete this.worker;
-		if (!worker) return;
+	private detachAndTerminateWorker(worker: Worker) {
 		try {
 			worker.onmessage = null;
 		} catch {
@@ -1044,6 +1210,26 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		}
 	}
 
+	private disposeWorker(reason?: unknown) {
+		const startAbortController = this.workerStartAbortController;
+		this.workerStartAbortController = null;
+		this.workerGeneration += 1;
+		this.workerStartPromise = null;
+		this.startupReject = null;
+		const worker = this.worker;
+		delete this.worker;
+		this.revokeBootstrapUrl();
+		if (startAbortController && !startAbortController.signal.aborted) {
+			try {
+				startAbortController.abort(reason);
+			} catch {
+				// Startup state is already detached; abort cleanup is best effort.
+			}
+		}
+		if (!worker) return;
+		this.detachAndTerminateWorker(worker);
+	}
+
 	run(
 		code: string,
 		prepare: boolean,
@@ -1052,6 +1238,11 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		try {
+			this.assertNotDisposed();
+		} catch (error) {
+			return Promise.reject(error);
+		}
 		if (!this.baseUrl || !this.workerUrl) {
 			return Promise.reject(
 				new RuntimeConfigurationError(
@@ -1071,18 +1262,24 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		try {
 			controls = this.resolveExecutionControls(options);
+			this.assertOperationNotDisposed();
 			workspace = this.validateWorkspace(code, options, controls.limits);
+			this.assertOperationNotDisposed();
 		} catch (error) {
-			return Promise.reject(error);
+			return Promise.reject(this.preserveDisposeReason(error));
 		}
-		if (controls.signal?.aborted) {
-			return Promise.reject(
-				new CancelledError(`${this.config.displayName} run cancelled`, {
-					cause: controls.signal.reason,
-					phase: 'execute',
-					runtimeId: this.config.languageId
-				})
-			);
+		try {
+			if (controls.signal?.aborted) {
+				return Promise.reject(
+					new CancelledError(`${this.config.displayName} run cancelled`, {
+						cause: controls.signal.reason,
+						phase: 'execute',
+						runtimeId: this.config.languageId
+					})
+				);
+			}
+		} catch (error) {
+			return Promise.reject(this.preserveDisposeReason(error));
 		}
 		const id = `static-${++this.uid}`;
 		this.startingRunId = id;
@@ -1097,32 +1294,65 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 			);
 		} catch (error) {
 			if (this.startingRunId === id) this.startingRunId = null;
-			return Promise.reject(error);
+			return Promise.reject(this.preserveDisposeReason(error));
 		}
 		if (this.startingRunId !== id) {
 			lifecycle.end();
 			return Promise.reject(
-				new CancelledError(
-					prepare
-						? `${this.config.displayName} worker startup terminated`
-						: `${this.config.displayName} run terminated`,
-					{
-						phase: prepare ? 'startup' : 'execute',
-						runtimeId: this.config.languageId
-					}
-				)
+				this.disposed
+					? this.getDisposeReason()
+					: new CancelledError(
+							prepare
+								? `${this.config.displayName} worker startup terminated`
+								: `${this.config.displayName} run terminated`,
+							{
+								phase: prepare ? 'startup' : 'execute',
+								runtimeId: this.config.languageId
+							}
+						)
 			);
 		}
 		const progress = lifecycle.progress;
 
 		if (prepare) {
-			this.startingRunId = null;
-			return this.ensureWorkerStarted(progress, controls)
+			let startup: Promise<Worker>;
+			try {
+				startup = this.ensureWorkerStarted(progress, controls);
+			} catch (error) {
+				startup = Promise.reject(error);
+			}
+			return startup
 				.then(() => {
+					if (this.startingRunId !== id) {
+						throw new CancelledError(
+							`${this.config.displayName} worker startup terminated`,
+							{
+								phase: 'startup',
+								runtimeId: this.config.languageId
+							}
+						);
+					}
+					this.assertOperationNotDisposed();
 					this.reportProgress(progress, 0.25, `${this.config.displayName} worker ready`);
+					this.assertOperationNotDisposed();
+					if (this.startingRunId !== id) {
+						throw new CancelledError(
+							`${this.config.displayName} worker startup terminated`,
+							{
+								phase: 'startup',
+								runtimeId: this.config.languageId
+							}
+						);
+					}
 					return true;
 				})
-				.finally(() => lifecycle.end());
+				.catch((error) => {
+					throw this.preserveDisposeReason(error);
+				})
+				.finally(() => {
+					if (this.startingRunId === id) this.startingRunId = null;
+					lifecycle.end();
+				});
 		}
 
 		this.exit = false;
@@ -1143,13 +1373,19 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 						? (options.stdin ?? '')
 						: this.pendingInput.join('');
 					const initialEof = explicitStdin || this.pendingEof;
+					this.assertOperationNotDisposed();
 					this.clearPendingStdin();
 					stdinRing.enqueue(initialInput);
 					if (initialEof) stdinRing.close();
 				} catch (error) {
+					try {
+						stdinRing?.cancel();
+					} catch {
+						// A local stdin channel must not outlive a rejected reservation.
+					}
 					if (this.startingRunId === id) this.startingRunId = null;
 					this.exit = true;
-					reject(error);
+					reject(this.preserveDisposeReason(error));
 					return;
 				}
 			}
@@ -1229,6 +1465,9 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 						0.3,
 						`Loading ${this.config.displayName} runtime`
 					);
+					if (this.disposed || this.activeRun !== activeRun || this.worker !== worker) {
+						return;
+					}
 					worker.postMessage({
 						run: true,
 						runId: id,
@@ -1246,7 +1485,11 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 						log: _log
 					});
 				} catch (error) {
-					this.rejectRun(id, isWasmIdleError(error) ? error : this.errorMessage(error));
+					const reason = this.preserveDisposeReason(error);
+					this.rejectRun(
+						id,
+						isWasmIdleError(reason) ? reason : this.errorMessage(reason)
+					);
 				}
 			})();
 		}).finally(() => lifecycle.end());
@@ -1256,18 +1499,8 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		this.terminate();
 	}
 
-	terminate() {
-		const startupReason = new CancelledError(
-			`${this.config.displayName} worker startup terminated`,
-			{
-				phase: 'startup',
-				runtimeId: this.config.languageId
-			}
-		);
-		const runReason = new CancelledError(`${this.config.displayName} run terminated`, {
-			phase: 'execute',
-			runtimeId: this.config.languageId
-		});
+	private terminateLifecycle(startupReason: unknown, runReason: unknown) {
+		const workerReason = this.activeRun ? runReason : startupReason;
 		this.progressController.invalidate();
 		this.uid += 1;
 		this.startingRunId = null;
@@ -1281,13 +1514,45 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 				activeRun.reject(runReason);
 			}
 		}
+		this.activeReject = null;
 		this.clearPendingStdin();
 		this.exit = true;
-		this.disposeWorker();
+		this.disposeWorker(workerReason);
+	}
+
+	terminate() {
+		if (this.disposed) return;
+		const startupReason = new CancelledError(
+			`${this.config.displayName} worker startup terminated`,
+			{
+				phase: 'startup',
+				runtimeId: this.config.languageId
+			}
+		);
+		const runReason = new CancelledError(`${this.config.displayName} run terminated`, {
+			phase: 'execute',
+			runtimeId: this.config.languageId
+		});
+		this.terminateLifecycle(startupReason, runReason);
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+		const reason = this.getDisposeReason();
+		this.terminateLifecycle(reason, reason);
+		this.lifecycleProgress = undefined;
+		this.output = null;
+		this.oncompilerdiagnostic = undefined;
+		this.baseUrl = '';
+		this.workerUrl = '';
+		this.manifestUrl = '';
+		return this.disposePromise;
 	}
 
 	async clear() {
-		this.terminate();
+		if (!this.disposed) this.terminate();
 		this.lifecycleProgress = undefined;
 	}
 }

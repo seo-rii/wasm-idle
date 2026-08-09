@@ -97,6 +97,7 @@ import Perl from './perl';
 import Pascal from './pascal';
 import Prolog from './prolog';
 import {
+	STATIC_STDIN_RING_CANCELLED_INDEX,
 	STATIC_STDIN_RING_CLOSED_INDEX,
 	STATIC_STDIN_RING_CONTROL_SLOTS,
 	STATIC_STDIN_RING_WRITE_INDEX
@@ -902,6 +903,53 @@ describe('static worker backed language sandboxes', () => {
 		).resolves.toBe(true);
 	});
 
+	it('preserves disposal when initial run progress disposes and then throws', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const callbackError = new Error('initial run progress failed after disposal');
+		const progress = {
+			set: vi.fn((_value: number, stage?: string) => {
+				if (stage !== 'Starting Prolog run') return;
+				void sandbox.dispose();
+				throw callbackError;
+			})
+		};
+
+		await expect(
+			sandbox.run('writeln(disposed).', false, true, progress, [], { stdin: '' })
+		).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'PROLOG'
+		});
+		expect(worker.postMessage).not.toHaveBeenCalled();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+	});
+
+	it('does not dispatch a run after progress reentrantly disposes its worker', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const progress = {
+			set: vi.fn((value: number) => {
+				if (value === 0.3) void sandbox.dispose();
+			})
+		};
+
+		await expect(
+			sandbox.run('writeln(disposed).', false, true, progress, [], { stdin: '' })
+		).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'PROLOG'
+		});
+		expect(worker.postMessage).not.toHaveBeenCalled();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+	});
+
 	it('classifies reentrant termination of a prepare-only run as startup cancellation', async () => {
 		const sandbox = new Prolog();
 		await sandbox.load('/absproxy/5173');
@@ -921,6 +969,108 @@ describe('static worker backed language sandboxes', () => {
 			runtimeId: 'PROLOG'
 		});
 		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('rejects a prepare run asynchronously when signal registration throws and permits retry', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		sandbox.terminate();
+		const callbackError = new Error('signal registration failed');
+		const removeEventListener = vi.fn();
+		const signal = {
+			aborted: false,
+			reason: undefined,
+			addEventListener: vi.fn(() => {
+				throw callbackError;
+			}),
+			removeEventListener
+		} as unknown as AbortSignal;
+		let failed: Promise<boolean | string> | undefined;
+
+		expect(() => {
+			failed = sandbox.run('', true, true, undefined, [], { signal });
+		}).not.toThrow();
+		expect(failed).toBeDefined();
+		await expect(failed).rejects.toBe(callbackError);
+		expect(removeEventListener).toHaveBeenCalledOnce();
+		await expect(sandbox.run('', true)).resolves.toBe(true);
+	});
+
+	it('cancels an immediately terminated prepare startup without recreating its worker', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		sandbox.terminate();
+		const retiredWorker = workerInstances[0];
+
+		const pending = sandbox.run('', true);
+		sandbox.terminate();
+
+		await expect(pending).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'startup',
+			runtimeId: 'PROLOG'
+		});
+		expect(workerInstances).toEqual([retiredWorker]);
+	});
+
+	it('cancels an immediately terminated warm prepare', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+
+		const pending = sandbox.run('', true);
+		sandbox.terminate();
+
+		await expect(pending).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'startup',
+			runtimeId: 'PROLOG'
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toEqual([worker]);
+	});
+
+	it('preserves disposal when warm prepare progress disposes and then throws', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const callbackError = new Error('warm prepare progress failed after disposal');
+		const progress = {
+			set: vi.fn((_value: number, stage?: string) => {
+				if (stage !== 'Prolog worker ready') return;
+				void sandbox.dispose();
+				throw callbackError;
+			})
+		};
+
+		await expect(sandbox.run('', true, true, progress)).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'PROLOG'
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+	});
+
+	it('cancels warm prepare when ready progress reentrantly terminates it', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const progress = {
+			set: vi.fn((_value: number, stage?: string) => {
+				if (stage === 'Prolog worker ready') sandbox.terminate();
+			})
+		};
+
+		await expect(sandbox.run('', true, true, progress)).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'startup',
+			runtimeId: 'PROLOG'
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
 	});
 
 	it.each(['progress', 'output', 'diagnostic'] as const)(
@@ -2096,6 +2246,356 @@ describe('static worker backed language sandboxes', () => {
 		expect(cancel).toHaveBeenCalledOnce();
 		expect(releaseLock).toHaveBeenCalledOnce();
 		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('preserves disposal when initial load progress disposes and then throws', async () => {
+		const sandbox = new Prolog();
+		const callbackError = new Error('initial load progress failed');
+		const progress = {
+			set: vi.fn((value: number, stage?: string) => {
+				if (value !== 0 || stage !== 'Resolving Prolog runtime') return;
+				void sandbox.dispose();
+				throw callbackError;
+			})
+		};
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], {}, progress)
+		).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'PROLOG'
+		});
+		expect(fetch).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it.each([0.05, 0.22])(
+		'preserves disposal and cleans the asset deadline at %s load progress',
+		async (disposeAt) => {
+			const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+			const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+			const sandbox = new Prolog();
+			const callbackError = new Error(`load progress ${disposeAt} failed`);
+			const progress = {
+				set: vi.fn((value: number) => {
+					if (value !== disposeAt) return;
+					void sandbox.dispose();
+					throw callbackError;
+				})
+			};
+
+			await expect(
+				sandbox.load(
+					'/absproxy/5173',
+					'',
+					true,
+					[],
+					{ limits: { assetTimeoutMs: 12_345 } },
+					progress
+				)
+			).rejects.toMatchObject({
+				name: 'CancelledError',
+				code: 'cancelled',
+				phase: 'dispose',
+				runtimeId: 'PROLOG'
+			});
+			const assetTimerIndex = setTimeoutSpy.mock.calls.findIndex(
+				([, delay]) => delay === 12_345
+			);
+			expect(assetTimerIndex).toBeGreaterThanOrEqual(0);
+			expect(clearTimeoutSpy).toHaveBeenCalledWith(
+				setTimeoutSpy.mock.results[assetTimerIndex]?.value
+			);
+			expect(workerInstances).toHaveLength(0);
+		}
+	);
+
+	it('does not start a fetch when signal registration reentrantly disposes the sandbox', async () => {
+		const sandbox = new Prolog();
+		const removeEventListener = vi.fn();
+		const signal = {
+			aborted: false,
+			reason: undefined,
+			addEventListener: vi.fn(() => {
+				void sandbox.dispose();
+			}),
+			removeEventListener
+		} as unknown as AbortSignal;
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], { signal })
+		).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'PROLOG'
+		});
+		expect(fetch).not.toHaveBeenCalled();
+		expect(removeEventListener).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('preserves disposal when worker construction reenters and termination throws', async () => {
+		autoStartWorkers = false;
+		const previousWorker = globalThis.Worker;
+		let sandbox!: Prolog;
+		class ReentrantWorker extends MockWorker {
+			constructor(url: string, options?: WorkerOptions) {
+				super(url, options);
+				this.terminate.mockImplementation(() => {
+					throw new Error('worker termination failed');
+				});
+				void sandbox.dispose();
+			}
+		}
+		vi.stubGlobal('Worker', ReentrantWorker);
+
+		try {
+			sandbox = new Prolog();
+			await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+				name: 'CancelledError',
+				code: 'cancelled',
+				phase: 'dispose',
+				runtimeId: 'PROLOG'
+			});
+			expect(workerInstances).toHaveLength(1);
+			expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+			expect(URL.revokeObjectURL).toHaveBeenCalledOnce();
+		} finally {
+			vi.stubGlobal('Worker', previousWorker);
+		}
+	});
+
+	it('preserves disposal when a reentrant worker constructor throws', async () => {
+		autoStartWorkers = false;
+		const previousWorker = globalThis.Worker;
+		let sandbox!: Prolog;
+		class ReentrantThrowingWorker extends MockWorker {
+			constructor(url: string, options?: WorkerOptions) {
+				super(url, options);
+				void sandbox.dispose();
+				throw new Error('worker construction failed');
+			}
+		}
+		vi.stubGlobal('Worker', ReentrantThrowingWorker);
+
+		try {
+			sandbox = new Prolog();
+			await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+				name: 'CancelledError',
+				code: 'cancelled',
+				phase: 'dispose',
+				runtimeId: 'PROLOG'
+			});
+			expect(URL.revokeObjectURL).toHaveBeenCalledOnce();
+		} finally {
+			vi.stubGlobal('Worker', previousWorker);
+		}
+	});
+
+	it('cleans startup state when a worker handler setter throws', async () => {
+		autoStartWorkers = false;
+		const previousWorker = globalThis.Worker;
+		const handlerSetter = vi.fn(() => {
+			throw new Error('worker handler assignment failed');
+		});
+		class ThrowingHandlerWorker extends MockWorker {
+			constructor(url: string, options?: WorkerOptions) {
+				super(url, options);
+				Object.defineProperty(this, 'onerror', {
+					configurable: true,
+					get: () => null,
+					set: handlerSetter
+				});
+			}
+		}
+		vi.stubGlobal('Worker', ThrowingHandlerWorker);
+		const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+		const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+
+		try {
+			const sandbox = new Prolog();
+			await expect(
+				sandbox.load('/absproxy/5173', '', true, [], {
+					limits: { startupTimeoutMs: 23_456 }
+				})
+			).rejects.toThrow('worker handler assignment failed');
+			const startupTimerIndex = setTimeoutSpy.mock.calls.findIndex(
+				([, delay]) => delay === 23_456
+			);
+			expect(startupTimerIndex).toBeGreaterThanOrEqual(0);
+			expect(clearTimeoutSpy).toHaveBeenCalledWith(
+				setTimeoutSpy.mock.results[startupTimerIndex]?.value
+			);
+			expect(handlerSetter).toHaveBeenCalledTimes(2);
+			expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+		} finally {
+			vi.stubGlobal('Worker', previousWorker);
+		}
+	});
+
+	it('aborts a pending worker download and rejects later use after idempotent disposal', async () => {
+		let fetchSignal: AbortSignal | undefined;
+		vi.mocked(fetch).mockImplementationOnce(
+			(_input, init) =>
+				new Promise<Response>((_resolve, reject) => {
+					fetchSignal = init?.signal ?? undefined;
+					fetchSignal?.addEventListener('abort', () => reject(fetchSignal?.reason), {
+						once: true
+					});
+				})
+		);
+		const sandbox = new Prolog();
+		const load = sandbox.load('/absproxy/5173');
+		await vi.waitFor(() => expect(fetchSignal).toBeDefined());
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+
+		expect(secondDisposal).toBe(firstDisposal);
+		await expect(load).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'PROLOG'
+		});
+		await expect(firstDisposal).resolves.toBeUndefined();
+		expect(fetchSignal?.aborted).toBe(true);
+		expect(workerInstances).toHaveLength(0);
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'PROLOG'
+		});
+		await expect(sandbox.run('writeln(ok).', false)).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'PROLOG'
+		});
+		sandbox.write('ignored after disposal\n');
+		sandbox.eof();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(fetch).toHaveBeenCalledOnce();
+	});
+
+	it('detaches a pending worker bootstrap exactly once when disposed', async () => {
+		autoStartWorkers = false;
+		const sandbox = new Prolog();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		const load = sandbox.load('/absproxy/5173');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const bootstrapUrl = worker.url;
+
+		await sandbox.dispose();
+
+		await expect(load).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'PROLOG'
+		});
+		expect(worker.onmessage).toBeNull();
+		expect(worker.onerror).toBeNull();
+		expect(worker.onmessageerror).toBeNull();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(URL.revokeObjectURL).toHaveBeenCalledOnce();
+		expect(URL.revokeObjectURL).toHaveBeenCalledWith(bootstrapUrl);
+		expect(sandbox.output).toBeNull();
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+
+		sandbox.terminate();
+		await sandbox.clear();
+		await sandbox.dispose();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+	});
+
+	it('settles a prebuffered stdin waiter with the disposal reason', async () => {
+		await withCrossOriginIsolation(false, async () => {
+			const sandbox = createStreamingTestSandbox();
+			await sandbox.load();
+			const worker = workerInstances[0];
+			const run = sandbox.run('read()', false);
+			await vi.waitFor(() => expect(sandbox.stdinWaiters).toHaveLength(1));
+
+			await sandbox.dispose();
+
+			await expect(run).rejects.toMatchObject({
+				name: 'CancelledError',
+				code: 'cancelled',
+				phase: 'dispose',
+				runtimeId: 'STREAMING_STDIN_TEST'
+			});
+			expect(sandbox.stdinWaiters).toEqual([]);
+			expect(sandbox.pendingInput).toEqual([]);
+			expect(sandbox.pendingEof).toBe(false);
+			expect(worker.terminate).toHaveBeenCalledOnce();
+		});
+	});
+
+	it('cancels an active streaming stdin ring when disposed', async () => {
+		await withCrossOriginIsolation(true, async () => {
+			const messages: any[] = [];
+			onPostMessage = (_worker, message) => messages.push(message);
+			const sandbox = createStreamingTestSandbox();
+			await sandbox.load();
+			const worker = workerInstances[0];
+			const run = sandbox.run('read()', false);
+			await vi.waitFor(() => expect(messages.some((message) => message.run)).toBe(true));
+			const runMessage = messages.find((message) => message.run);
+			const control = new Int32Array(
+				runMessage.stdinChannel.buffer,
+				0,
+				STATIC_STDIN_RING_CONTROL_SLOTS
+			);
+
+			await sandbox.dispose();
+
+			await expect(run).rejects.toMatchObject({
+				name: 'CancelledError',
+				code: 'cancelled',
+				phase: 'dispose',
+				runtimeId: 'STREAMING_STDIN_TEST'
+			});
+			expect(Atomics.load(control, STATIC_STDIN_RING_CANCELLED_INDEX)).toBe(1);
+			expect(Atomics.load(control, STATIC_STDIN_RING_CLOSED_INDEX)).toBe(1);
+			expect(worker.onmessage).toBeNull();
+			expect(worker.terminate).toHaveBeenCalledOnce();
+		});
+	});
+
+	it('preserves disposal when a streaming stdin getter disposes and then throws', async () => {
+		await withCrossOriginIsolation(true, async () => {
+			const sandbox = createStreamingTestSandbox();
+			await sandbox.load();
+			const worker = workerInstances[0];
+			const options = {
+				get stdin(): string {
+					void sandbox.dispose();
+					throw new Error('stdin getter failed after disposal');
+				}
+			};
+
+			await expect(
+				sandbox.run('read()', false, true, undefined, [], options)
+			).rejects.toMatchObject({
+				name: 'CancelledError',
+				code: 'cancelled',
+				phase: 'dispose',
+				runtimeId: 'STREAMING_STDIN_TEST'
+			});
+			expect(worker.postMessage).not.toHaveBeenCalled();
+			expect(worker.terminate).toHaveBeenCalledOnce();
+		});
 	});
 
 	it('terminates a pending worker startup when its signal is aborted', async () => {
