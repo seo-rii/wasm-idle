@@ -10,6 +10,8 @@ import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	DiagnosticLimitError,
+	OutputLimitError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -23,6 +25,8 @@ type SqliteOperation = {
 	cleanedUp: boolean;
 	cleanups: Array<() => void>;
 };
+
+const OUTPUT_ENCODER = new TextEncoder();
 
 const abortReason = (signal: AbortSignal, phase: SqliteOperation['phase']) =>
 	signal.reason !== undefined
@@ -407,6 +411,8 @@ class Sqlite implements Sandbox {
 		this.exit = false;
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			const runUid = ++this.uid;
+			let diagnosticCount = 0;
+			let outputBytes = 0;
 			const workerOperation = this.workerSession.beginRun(worker, reject);
 			const timeoutMs = Math.min(
 				2_147_483_647,
@@ -436,8 +442,12 @@ class Sqlite implements Sandbox {
 				return true;
 			};
 			const failRun = (reason: unknown, disposeWorker = false) => {
+				if (disposeWorker) {
+					if (!ownsRun()) return;
+					this.cancelOperation(activeOperation, reason);
+					return;
+				}
 				if (!claimRun()) return;
-				if (disposeWorker && this.worker === worker) this.workerSession.reset();
 				reject(reason);
 			};
 			handler = (event) => {
@@ -453,10 +463,44 @@ class Sqlite implements Sandbox {
 					reportWorkerProgress(_prog, progress);
 					if (!ownsRun()) return;
 					if (typeof output === 'string' && output.length > 0) {
+						const actual = outputBytes + OUTPUT_ENCODER.encode(output).byteLength;
+						if (actual > limits.maxOutputBytes) {
+							failRun(
+								new OutputLimitError(
+									`SQLite output exceeded ${limits.maxOutputBytes} bytes`,
+									{
+										actual,
+										limit: limits.maxOutputBytes,
+										phase: 'execute',
+										runtimeId: 'SQLITE'
+									}
+								),
+								true
+							);
+							return;
+						}
+						outputBytes = actual;
 						this.output?.(output);
 						if (!ownsRun()) return;
 					}
 					if (diagnostic !== undefined) {
+						const actual = diagnosticCount + 1;
+						if (actual > limits.maxDiagnostics) {
+							failRun(
+								new DiagnosticLimitError(
+									`SQLite diagnostics exceeded ${limits.maxDiagnostics} messages`,
+									{
+										actual,
+										limit: limits.maxDiagnostics,
+										phase: 'execute',
+										runtimeId: 'SQLITE'
+									}
+								),
+								true
+							);
+							return;
+						}
+						diagnosticCount = actual;
 						this.oncompilerdiagnostic?.(diagnostic);
 						if (!ownsRun()) return;
 					}
