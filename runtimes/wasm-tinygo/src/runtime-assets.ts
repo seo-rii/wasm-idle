@@ -58,6 +58,9 @@ export const DEFAULT_MAX_TINYGO_ASSET_BYTES = 128 * 1024 * 1024;
 export const MAX_TINYGO_RUNTIME_PACK_FILES = 65_536;
 export const MAX_TINYGO_RUNTIME_PATH_LENGTH = 4_096;
 const DEFAULT_TINYGO_ASSET_BUFFER_BYTES = 64 * 1024;
+const EMCEPTION_BLOB_PUBLIC_PATH_SNIPPET =
+	'__webpack_require__.p=new URL("./",self.location.href).href';
+const EMCEPTION_BLOB_BASE_URL_SNIPPET = '__webpack_require__.b=self.location+""';
 
 function cacheIdentity(value: object | undefined) {
 	if (!value) return 'none';
@@ -100,6 +103,53 @@ function resolveMaxAssetBytes(maxAssetBytes?: number) {
 		throw new Error('wasm-tinygo maxAssetBytes must be a non-negative safe integer');
 	}
 	return resolved;
+}
+
+export function createTinyGoCompilerWorkerSource(options: {
+	assetBaseUrl: string;
+	source: string;
+}) {
+	let assetBaseUrl: URL;
+	try {
+		assetBaseUrl = new URL('./', options.assetBaseUrl);
+	} catch {
+		throw new Error('wasm-tinygo compiler worker asset base URL must be absolute');
+	}
+	if (assetBaseUrl.protocol !== 'http:' && assetBaseUrl.protocol !== 'https:') {
+		throw new Error(
+			`unsupported wasm-tinygo compiler worker asset base URL scheme: ${assetBaseUrl.protocol}`
+		);
+	}
+	if (assetBaseUrl.username || assetBaseUrl.password) {
+		throw new Error('wasm-tinygo compiler worker asset base URL must not include credentials');
+	}
+	const publicPathIndex = options.source.indexOf(EMCEPTION_BLOB_PUBLIC_PATH_SNIPPET);
+	if (
+		publicPathIndex < 0 ||
+		publicPathIndex !== options.source.lastIndexOf(EMCEPTION_BLOB_PUBLIC_PATH_SNIPPET)
+	) {
+		throw new Error(
+			'wasm-tinygo compiler worker does not contain exactly one supported public-path initializer'
+		);
+	}
+	const baseUrlIndex = options.source.indexOf(EMCEPTION_BLOB_BASE_URL_SNIPPET);
+	if (
+		baseUrlIndex < 0 ||
+		baseUrlIndex !== options.source.lastIndexOf(EMCEPTION_BLOB_BASE_URL_SNIPPET)
+	) {
+		throw new Error(
+			'wasm-tinygo compiler worker does not contain exactly one supported base-URL initializer'
+		);
+	}
+	return options.source
+		.replace(
+			EMCEPTION_BLOB_PUBLIC_PATH_SNIPPET,
+			`__webpack_require__.p=${JSON.stringify(assetBaseUrl.href)}`
+		)
+		.replace(
+			EMCEPTION_BLOB_BASE_URL_SNIPPET,
+			`__webpack_require__.b=${JSON.stringify(assetBaseUrl.href)}`
+		);
 }
 
 function runtimeAssetAbortReason(signal: AbortSignal) {

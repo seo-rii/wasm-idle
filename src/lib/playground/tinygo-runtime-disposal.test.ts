@@ -13,6 +13,9 @@ type ComlinkMessage = {
 	type: string;
 };
 
+const COMPILER_WORKER_SOURCE =
+	'const __webpack_require__={p:""};__webpack_require__.p=new URL("./",self.location.href).href;__webpack_require__.b=self.location+"";';
+
 const createDeferred = <T>(): Deferred<T> => {
 	let resolve!: (value: T) => void;
 	const promise = new Promise<T>((next) => {
@@ -48,6 +51,15 @@ const installMockWorker = (holdInit = false) => {
 	const initStarted = createDeferred<void>();
 	let pendingInit: { message: ComlinkMessage; worker: MockWorker } | null = null;
 	const workers: MockWorker[] = [];
+	let objectUrlId = 0;
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async () => new Response(COMPILER_WORKER_SOURCE))
+	);
+	vi.spyOn(URL, 'createObjectURL').mockImplementation(
+		() => `blob:tinygo-worker-${++objectUrlId}`
+	);
+	const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
 
 	class MockWorker {
 		readonly listeners = new Set<(event: MessageEvent<unknown>) => void>();
@@ -98,6 +110,7 @@ const installMockWorker = (holdInit = false) => {
 			pendingInit.worker.respond(pendingInit.message);
 			pendingInit = null;
 		},
+		revokeObjectURL,
 		workers
 	};
 };
@@ -134,7 +147,7 @@ describe('TinyGo compiler runtime disposal', () => {
 	});
 
 	it('suppresses late compiler readiness after disposal during initialization', async () => {
-		const { initStarted, releaseInit, workers } = installMockWorker(true);
+		const { initStarted, releaseInit, revokeObjectURL, workers } = installMockWorker(true);
 		const activity: string[] = [];
 		const runtime = createTinyGoRuntime({
 			assetBaseUrl: 'https://runtime.invalid/',
@@ -148,6 +161,7 @@ describe('TinyGo compiler runtime disposal', () => {
 		runtime.dispose();
 		const activityAfterDispose = activity.length;
 		expect(workers[0]?.terminateCalls).toBe(1);
+		expect(revokeObjectURL).toHaveBeenCalledOnce();
 		await expectPromptDisposalRejection(booting);
 		releaseInit();
 
@@ -180,22 +194,99 @@ describe('TinyGo compiler runtime disposal', () => {
 	});
 
 	it('retires a booted compiler worker when the asset byte limit changes', async () => {
-		const { workers } = installMockWorker();
+		const { revokeObjectURL, workers } = installMockWorker();
 		const runtime = createTinyGoRuntime({
 			assetBaseUrl: 'https://runtime.invalid/',
 			assetLoader: () => 'https://runtime.invalid/emception.worker.js',
-			maxAssetBytes: 8
+			maxAssetBytes: 8192
 		});
 
 		await runtime.boot();
 		expect(workers).toHaveLength(1);
+		expect(revokeObjectURL).toHaveBeenCalledOnce();
 
-		runtime.setMaxAssetBytes(4);
+		runtime.setMaxAssetBytes(4096);
 		expect(workers[0]?.terminateCalls).toBe(1);
 
 		await runtime.boot();
 		expect(workers).toHaveLength(2);
+		expect(revokeObjectURL).toHaveBeenCalledTimes(2);
 		runtime.dispose();
 		expect(workers[1]?.terminateCalls).toBe(1);
+	});
+
+	it('rejects an oversized compiler worker before constructing it', async () => {
+		const { workers } = installMockWorker();
+		const assetLoader = vi.fn(() => 'https://runtime.invalid/emception.worker.js');
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response('oversized', {
+						headers: { 'content-length': '9' }
+					})
+			)
+		);
+		const runtime = createTinyGoRuntime({
+			assetBaseUrl: 'https://runtime.invalid/',
+			assetLoader,
+			maxAssetBytes: 8
+		});
+
+		await expect(runtime.boot()).rejects.toThrow('download size exceeds the 8 byte limit');
+		expect(assetLoader).toHaveBeenCalledOnce();
+		expect(workers).toHaveLength(0);
+	});
+
+	it('resolves loader-provided relative worker URLs against the browser location', async () => {
+		const { workers } = installMockWorker();
+		vi.stubGlobal('location', { href: 'https://app.invalid/wasm-idle/' });
+		const fetchMock = vi.fn(async () => new Response(COMPILER_WORKER_SOURCE));
+		vi.stubGlobal('fetch', fetchMock);
+		const runtime = createTinyGoRuntime({
+			assetBaseUrl: 'https://runtime.invalid/',
+			assetLoader: () => 'assets/emception.worker.js'
+		});
+
+		await runtime.boot();
+		expect(fetchMock).toHaveBeenCalledWith(
+			'https://app.invalid/wasm-idle/assets/emception.worker.js',
+			expect.objectContaining({ credentials: 'omit', redirect: 'error' })
+		);
+		expect(workers).toHaveLength(1);
+		runtime.dispose();
+	});
+
+	it('cancels a stalled compiler worker download during disposal', async () => {
+		const { workers } = installMockWorker();
+		const readStarted = createDeferred<void>();
+		let cancelled = false;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(
+						new ReadableStream<Uint8Array>({
+							pull() {
+								readStarted.resolve();
+							},
+							cancel() {
+								cancelled = true;
+							}
+						})
+					)
+			)
+		);
+		const runtime = createTinyGoRuntime({
+			assetBaseUrl: 'https://runtime.invalid/',
+			assetLoader: () => 'https://runtime.invalid/emception.worker.js'
+		});
+		const booting = runtime.boot();
+
+		await readStarted.promise;
+		runtime.dispose();
+		await expectPromptDisposalRejection(booting);
+		expect(cancelled).toBe(true);
+		expect(workers).toHaveLength(0);
 	});
 });

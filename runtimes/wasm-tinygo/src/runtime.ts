@@ -13,6 +13,7 @@ import {
 	type TinyGoRuntimeAssetLoader,
 	type TinyGoRuntimeAssetPackReference,
 	type TinyGoRuntimeAssetProgress,
+	createTinyGoCompilerWorkerSource,
 	loadRuntimeAssetBytes,
 	resolveRuntimeAssetUrl
 } from './runtime-assets';
@@ -402,6 +403,7 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 	}
 
 	let emceptionWorker: Worker | null = null;
+	let emceptionWorkerObjectUrl: string | null = null;
 	let emception: EmceptionBridge | null = null;
 	let bootPromise: Promise<EmceptionBridge> | null = null;
 	let emceptionAbortController: AbortController | null = null;
@@ -447,8 +449,8 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 
 	const resolveAssetUrl = (assetPath: string) => new URL(assetPath, assetBaseUrl).toString();
 
-	const resolveWorkerUrl = async (assetPath: string, signal?: AbortSignal) =>
-		await resolveRuntimeAssetUrl({
+	const prepareWorkerUrl = async (assetPath: string, signal?: AbortSignal) => {
+		const resolvedWorkerUrl = await resolveRuntimeAssetUrl({
 			assetPath,
 			assetUrl: resolveAssetUrl(assetPath),
 			label: assetPath,
@@ -456,6 +458,29 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 			signal,
 			maxAssetBytes
 		});
+		let absoluteWorkerUrl: string;
+		try {
+			absoluteWorkerUrl = new URL(resolvedWorkerUrl, globalThis.location?.href).href;
+		} catch {
+			throw new Error('wasm-tinygo runtime asset URLs must be absolute outside a browser');
+		}
+		const workerBytes = await loadRuntimeAssetBytes({
+			assetPath,
+			assetUrl: absoluteWorkerUrl,
+			label: assetPath,
+			onProgress: options.onProgress,
+			signal,
+			maxAssetBytes
+		});
+		const workerSource = createTinyGoCompilerWorkerSource({
+			assetBaseUrl: new URL('./', absoluteWorkerUrl).href,
+			source: textDecoder.decode(workerBytes)
+		});
+		if (typeof URL.createObjectURL !== 'function') {
+			throw new Error('wasm-tinygo compiler workers require URL.createObjectURL()');
+		}
+		return URL.createObjectURL(new Blob([workerSource], { type: 'application/javascript' }));
+	};
 
 	const loadAssetBytes = async (assetPath: string, label: string) =>
 		await loadRuntimeAssetBytes({
@@ -896,6 +921,17 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 		return (instantiated as WebAssembly.WebAssemblyInstantiatedSource).instance;
 	};
 
+	const revokeEmceptionWorkerObjectUrl = () => {
+		const objectUrl = emceptionWorkerObjectUrl;
+		emceptionWorkerObjectUrl = null;
+		if (!objectUrl || typeof URL.revokeObjectURL !== 'function') return;
+		try {
+			URL.revokeObjectURL(objectUrl);
+		} catch {
+			// Worker disposal must continue even if the browser rejects URL cleanup.
+		}
+	};
+
 	const disposeEmceptionRuntime = () => {
 		emceptionGeneration += 1;
 		const abortController = emceptionAbortController;
@@ -905,6 +941,7 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 		emception = null;
 		bootPromise = null;
 		runtimeWorkingTreeDirty = false;
+		revokeEmceptionWorkerObjectUrl();
 		try {
 			abortController?.abort(new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE));
 		} catch {
@@ -977,23 +1014,36 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
 			}
 
-			const workerUrl = await resolveWorkerUrl(
+			const workerUrl = await prepareWorkerUrl(
 				'vendor/emception/emception.worker.js',
 				abortController.signal
 			);
 			if (bootGeneration !== emceptionGeneration) {
+				try {
+					URL.revokeObjectURL(workerUrl);
+				} catch {
+					// A superseded worker script URL is never published to the runtime.
+				}
 				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
 			}
-			const worker = new Worker(workerUrl, {
-				type: 'classic',
-				name: 'emception-worker'
-			});
+			emceptionWorkerObjectUrl = workerUrl;
+			let worker: Worker;
+			try {
+				worker = new Worker(workerUrl, {
+					type: 'classic',
+					name: 'emception-worker'
+				});
+			} catch (error) {
+				revokeEmceptionWorkerObjectUrl();
+				throw error;
+			}
 			if (bootGeneration !== emceptionGeneration) {
 				try {
 					worker.terminate();
 				} catch {
 					// A superseded local worker is never published to the runtime.
 				}
+				revokeEmceptionWorkerObjectUrl();
 				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
 			}
 			emceptionWorker = worker;
@@ -1044,6 +1094,7 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 			if (bootGeneration !== emceptionGeneration) {
 				throw new Error(EMCEPTION_BOOT_DISPOSED_MESSAGE);
 			}
+			revokeEmceptionWorkerObjectUrl();
 			runtimeWorkingTreeDirty = false;
 			setPhase('toolchain', 'ready', 'success');
 			if (bootGeneration !== emceptionGeneration) {
