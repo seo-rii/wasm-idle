@@ -9,9 +9,9 @@ export interface RuntimeWorkerLease<Worker> {
 	release(options?: { readonly reusable?: boolean }): void;
 }
 
-export interface RuntimeWorkerLifetimeControllerOptions<Worker> {
+export interface RuntimeWorkerLifetimeControllerOptions<Worker, Context = void> {
 	readonly policy: RuntimeWorkerLifetimePolicy;
-	readonly createWorker: () => Worker | Promise<Worker>;
+	readonly createWorker: (context: Context) => Worker | Promise<Worker>;
 	readonly disposeWorker: (worker: Worker) => void;
 	readonly runtimeId?: string;
 }
@@ -22,13 +22,13 @@ interface WorkerEntry<Worker> {
 	idleTimer?: ReturnType<typeof setTimeout>;
 }
 
-export class RuntimeWorkerLifetimeController<Worker> {
+export class RuntimeWorkerLifetimeController<Worker, Context = void> {
 	readonly policy: RuntimeWorkerLifetimePolicy;
 	private readonly entries: WorkerEntry<Worker>[] = [];
 	private creating = 0;
 	private disposed = false;
 
-	constructor(private readonly options: RuntimeWorkerLifetimeControllerOptions<Worker>) {
+	constructor(private readonly options: RuntimeWorkerLifetimeControllerOptions<Worker, Context>) {
 		this.policy = defineRuntimeWorkerLifetimePolicy(
 			options.policy,
 			options.runtimeId ?? 'runtime'
@@ -47,7 +47,9 @@ export class RuntimeWorkerLifetimeController<Worker> {
 		return this.entries.length + this.creating;
 	}
 
-	async acquire(): Promise<RuntimeWorkerLease<Worker>> {
+	async acquire(
+		...args: [Context] extends [void] ? [] : [context: Context]
+	): Promise<RuntimeWorkerLease<Worker>> {
 		this.requireActive();
 		if (this.policy.mode !== 'per-run') {
 			const idleEntry = this.entries.find((entry) => !entry.busy);
@@ -73,7 +75,7 @@ export class RuntimeWorkerLifetimeController<Worker> {
 		this.creating += 1;
 		let worker: Worker;
 		try {
-			worker = await this.options.createWorker();
+			worker = await this.options.createWorker(args[0] as Context);
 		} finally {
 			this.creating -= 1;
 		}
@@ -94,6 +96,13 @@ export class RuntimeWorkerLifetimeController<Worker> {
 			return 0;
 		}
 		return this.evictIdle();
+	}
+
+	retireWorker(worker: Worker) {
+		const entry = this.entries.find((candidate) => candidate.worker === worker);
+		if (!entry) return false;
+		this.removeAndDispose(entry);
+		return true;
 	}
 
 	evictIdle() {

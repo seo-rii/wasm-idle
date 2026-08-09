@@ -10,12 +10,15 @@ import {
 	ProtocolError,
 	RuntimeConfigurationError,
 	RuntimeProgressController,
+	RuntimeWorkerLifetimeController,
 	TimeoutError,
 	isWasmIdleError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace,
 	type ExecutionLimits,
-	type RuntimeStdinMode
+	type RuntimeStdinMode,
+	type RuntimeWorkerLease,
+	type RuntimeWorkerLifetimePolicy
 } from '@wasm-idle/core';
 import {
 	resolveSandboxExecutionArgs,
@@ -50,6 +53,7 @@ export interface StaticWorkerRuntimeConfig {
 	defaultActivePath: string;
 	moduleWorker?: boolean;
 	stdin: StaticWorkerRuntimeStdin;
+	workerLifetime?: RuntimeWorkerLifetimePolicy;
 	resolveRuntimeAssets: (
 		runtimeAssets: string | PlaygroundRuntimeAssets,
 		currentUrl: string
@@ -87,6 +91,12 @@ type ActiveRun = {
 type StaticWorkerExecutionControls = {
 	limits: ExecutionLimits;
 	signal?: AbortSignal;
+};
+
+type StaticWorkerCreationContext = {
+	controls: StaticWorkerExecutionControls;
+	generation: number;
+	progress?: SandboxProgress;
 };
 
 type StdinWaiter = {
@@ -131,11 +141,29 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	private progressUid = 0;
 	private startingRunId: string | null = null;
 	private startupReject: ((reason: unknown) => void) | null = null;
+	private workerLease: RuntimeWorkerLease<Worker> | null = null;
+	private readonly workerLifetimeController: RuntimeWorkerLifetimeController<
+		Worker,
+		StaticWorkerCreationContext
+	>;
 	private workerStartAbortController: AbortController | null = null;
 	private workerGeneration = 0;
 	private workerStartPromise: Promise<Worker> | null = null;
 
-	constructor(private readonly config: StaticWorkerRuntimeConfig) {}
+	constructor(private readonly config: StaticWorkerRuntimeConfig) {
+		this.workerLifetimeController = new RuntimeWorkerLifetimeController<
+			Worker,
+			StaticWorkerCreationContext
+		>({
+			policy: config.workerLifetime ?? { mode: 'per-run' },
+			runtimeId: config.languageId,
+			createWorker: (context) => {
+				context.generation = ++this.workerGeneration;
+				return this.startWorker(context.generation, context.progress, context.controls);
+			},
+			disposeWorker: (worker) => this.retireManagedWorker(worker)
+		});
+	}
 
 	private getDisposeReason() {
 		if (!this.disposeReason) {
@@ -210,7 +238,11 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 
 			if (
 				runtimeChanged &&
-				(this.worker || this.workerStartPromise || this.activeRun || this.startingRunId)
+				(this.worker ||
+					this.workerStartPromise ||
+					this.activeRun ||
+					this.startingRunId ||
+					this.workerLifetimeController.totalWorkers > 0)
 			) {
 				this.terminate();
 			}
@@ -224,7 +256,10 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 					{ runtimeId: this.config.languageId }
 				);
 			}
-			if (!runtimeChanged && this.workerStartPromise) {
+			if (
+				!runtimeChanged &&
+				(this.workerStartPromise || this.workerLifetimeController.idleWorkers > 0)
+			) {
 				await this.workerStartPromise;
 				this.assertOperationNotDisposed();
 				return;
@@ -244,6 +279,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				this.assertOperationNotDisposed();
 				await this.ensureWorkerStarted(lifecycle.progress, controls);
 				this.assertOperationNotDisposed();
+				this.releasePreparedWorkerIfIdle();
 			} finally {
 				lifecycle.end();
 			}
@@ -745,9 +781,18 @@ self.postMessage = (message, transferOrOptions) => {
   const correlated = executionMessage
     ? Object.assign({}, message, { runId: __wasmIdleRunId })
     : message;
-  return transferOrOptions === undefined
-    ? __wasmIdleNativePostMessage(correlated)
-    : __wasmIdleNativePostMessage(correlated, transferOrOptions);
+  const terminalRunId = executionMessage &&
+    (Object.prototype.hasOwnProperty.call(message, 'results') ||
+      Object.prototype.hasOwnProperty.call(message, 'error'))
+    ? __wasmIdleRunId
+    : null;
+  try {
+    return transferOrOptions === undefined
+      ? __wasmIdleNativePostMessage(correlated)
+      : __wasmIdleNativePostMessage(correlated, transferOrOptions);
+  } finally {
+    if (terminalRunId !== null && __wasmIdleRunId === terminalRunId) __wasmIdleRunId = null;
+  }
 };
 ${importStatement}
 __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
@@ -773,7 +818,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		this.assertOperationNotDisposed();
 		if (this.workerStartPromise) return this.workerStartPromise;
 		const startAbortController = new AbortController();
-		const generation = ++this.workerGeneration;
+		let generation = this.workerGeneration;
 		this.workerStartAbortController = startAbortController;
 		const callerSignal = controls.signal;
 		let callerListenerAttempted = false;
@@ -781,13 +826,26 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 			!this.disposed &&
 			this.workerGeneration === generation &&
 			this.workerStartAbortController === startAbortController;
-		const invalidatedReason = () =>
-			this.disposed
-				? this.getDisposeReason()
-				: new CancelledError(`${this.config.displayName} worker startup terminated`, {
-						phase: 'startup',
-						runtimeId: this.config.languageId
-					});
+		const invalidatedReason = () => {
+			if (this.disposed) return this.getDisposeReason();
+			if (startAbortController.signal.aborted) {
+				let cause: unknown;
+				try {
+					cause = startAbortController.signal.reason;
+				} catch (error) {
+					cause = error;
+				}
+				return new CancelledError(`${this.config.displayName} worker startup cancelled`, {
+					cause,
+					phase: 'startup',
+					runtimeId: this.config.languageId
+				});
+			}
+			return new CancelledError(`${this.config.displayName} worker startup terminated`, {
+				phase: 'startup',
+				runtimeId: this.config.languageId
+			});
+		};
 		const abortStartup = (reason?: unknown) => {
 			if (startAbortController.signal.aborted) return;
 			try {
@@ -828,11 +886,35 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 				const callerAborted = callerSignal.aborted;
 				if (!ownsStartup()) throw invalidatedReason();
 				if (callerAborted) forwardAbort();
-				if (!ownsStartup()) throw invalidatedReason();
+				if (!ownsStartup() || startAbortController.signal.aborted) {
+					throw invalidatedReason();
+				}
 			}
-			startPromise = this.startWorker(generation, progress, {
-				limits: controls.limits,
-				signal: startAbortController.signal
+			const creationContext: StaticWorkerCreationContext = {
+				generation,
+				progress,
+				controls: {
+					limits: controls.limits,
+					signal: startAbortController.signal
+				}
+			};
+			const acquisition = this.workerLifetimeController.acquire(creationContext);
+			generation = creationContext.generation;
+			startPromise = acquisition.then((lease) => {
+				if (!ownsStartup() || startAbortController.signal.aborted) {
+					lease.release({ reusable: false });
+					throw invalidatedReason();
+				}
+				if (this.worker && this.worker !== lease.worker) {
+					lease.release({ reusable: false });
+					throw new CancelledError(
+						`${this.config.displayName} worker startup was superseded`,
+						{ phase: 'startup', runtimeId: this.config.languageId }
+					);
+				}
+				this.worker = lease.worker;
+				this.workerLease = lease;
+				return lease.worker;
 			});
 			if (!ownsStartup()) {
 				void startPromise.catch(() => undefined);
@@ -1146,23 +1228,23 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		if (this.activeRun !== activeRun) return;
 		const claimedRun = this.claimRun(id);
 		if (claimedRun !== activeRun) return;
-		this.cleanupRun(activeRun);
 		this.elapse = Date.now() - this.begin;
 		this.exit = true;
 		this.clearPendingStdin();
-		this.disposeWorker();
+		this.releaseWorkerLease(true);
+		this.cleanupRun(activeRun);
 		activeRun.resolve(result);
 	}
 
 	private rejectRun(id: string, reason: unknown) {
 		const activeRun = this.claimRun(id);
 		if (!activeRun) return;
-		this.cleanupRun(activeRun);
 		this.elapse = Date.now() - this.begin;
 		this.exit = true;
 		this.clearPendingStdin();
 		this.startupReject?.(reason);
 		this.disposeWorker();
+		this.cleanupRun(activeRun);
 		activeRun.reject(reason);
 	}
 
@@ -1185,6 +1267,38 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		} catch {
 			// The stdin channel is already detached; preserve the run result.
 		}
+	}
+
+	private releasePreparedWorkerIfIdle() {
+		if (this.workerLifetimeController.policy.mode === 'per-run') return;
+		if (this.activeRun || this.startingRunId) return;
+		this.releaseWorkerLease(true);
+	}
+
+	private releaseWorkerLease(reusable: boolean) {
+		const lease = this.workerLease;
+		this.workerLease = null;
+		this.workerStartPromise = null;
+		if (!lease) return;
+		try {
+			lease.release({ reusable });
+		} catch {
+			// A hostile timer implementation must not replace a completed run.
+			this.workerLifetimeController.evictIdle();
+		}
+	}
+
+	handleMemoryPressure() {
+		return this.workerLifetimeController.handleMemoryPressure();
+	}
+
+	private retireManagedWorker(worker: Worker) {
+		if (this.worker === worker) {
+			delete this.worker;
+			this.workerStartPromise = null;
+			this.workerGeneration += 1;
+		}
+		this.detachAndTerminateWorker(worker);
 	}
 
 	private detachAndTerminateWorker(worker: Worker) {
@@ -1216,6 +1330,8 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		this.workerGeneration += 1;
 		this.workerStartPromise = null;
 		this.startupReject = null;
+		const lease = this.workerLease;
+		this.workerLease = null;
 		const worker = this.worker;
 		delete this.worker;
 		this.revokeBootstrapUrl();
@@ -1226,8 +1342,13 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 				// Startup state is already detached; abort cleanup is best effort.
 			}
 		}
-		if (!worker) return;
-		this.detachAndTerminateWorker(worker);
+		if (lease) {
+			lease.release({ reusable: false });
+			if (worker && worker !== lease.worker) this.detachAndTerminateWorker(worker);
+		} else if (worker && !this.workerLifetimeController.retireWorker(worker)) {
+			this.detachAndTerminateWorker(worker);
+		}
+		this.workerLifetimeController.evictIdle();
 	}
 
 	run(
@@ -1351,6 +1472,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 				})
 				.finally(() => {
 					if (this.startingRunId === id) this.startingRunId = null;
+					this.releasePreparedWorkerIfIdle();
 					lifecycle.end();
 				});
 		}
@@ -1542,6 +1664,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		this.disposePromise = Promise.resolve();
 		const reason = this.getDisposeReason();
 		this.terminateLifecycle(reason, reason);
+		this.workerLifetimeController.dispose();
 		this.lifecycleProgress = undefined;
 		this.output = null;
 		this.oncompilerdiagnostic = undefined;

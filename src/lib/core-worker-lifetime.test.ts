@@ -62,6 +62,40 @@ describe('runtime worker lifetime controller', () => {
 		expect(controller.totalWorkers).toBe(0);
 	});
 
+	it('passes acquisition context only when a new worker must be created', async () => {
+		const createdWith: Array<{ requestId: string }> = [];
+		let nextId = 0;
+		const controller = new RuntimeWorkerLifetimeController<TestWorker, { requestId: string }>({
+			policy: {
+				mode: 'persistent',
+				idleTimeoutMs: 1_000,
+				evictOnMemoryPressure: true
+			},
+			createWorker: (context) => {
+				createdWith.push(context);
+				return { id: ++nextId, disposed: false };
+			},
+			disposeWorker: (worker) => {
+				worker.disposed = true;
+			}
+		});
+		const firstContext = { requestId: 'first' };
+		const reusedContext = { requestId: 'reuse' };
+		const replacementContext = { requestId: 'replacement' };
+
+		const first = await controller.acquire(firstContext);
+		first.release();
+		const reused = await controller.acquire(reusedContext);
+		expect(reused.worker).toBe(first.worker);
+		expect(createdWith).toEqual([firstContext]);
+		reused.release({ reusable: false });
+
+		const replacement = await controller.acquire(replacementContext);
+		expect(replacement.worker).not.toBe(first.worker);
+		expect(createdWith).toEqual([firstContext, replacementContext]);
+		replacement.release({ reusable: false });
+	});
+
 	it('rejects overlapping persistent leases and exhausted pools', async () => {
 		const persistent = createController({
 			mode: 'persistent',
@@ -111,6 +145,21 @@ describe('runtime worker lifetime controller', () => {
 		evictedLease.release();
 		expect(evicted.handleMemoryPressure()).toBe(1);
 		expect(evictedLease.worker.disposed).toBe(true);
+	});
+
+	it('retires an exact managed worker once', async () => {
+		const controller = createController({
+			mode: 'persistent',
+			idleTimeoutMs: 1_000,
+			evictOnMemoryPressure: true
+		});
+		const lease = await controller.acquire();
+		lease.release();
+
+		expect(controller.retireWorker(lease.worker)).toBe(true);
+		expect(controller.retireWorker(lease.worker)).toBe(false);
+		expect(lease.worker.disposed).toBe(true);
+		expect(controller.totalWorkers).toBe(0);
 	});
 
 	it('disposes workers that finish creating after controller disposal', async () => {

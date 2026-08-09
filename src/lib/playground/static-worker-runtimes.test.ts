@@ -118,6 +118,26 @@ function createStreamingTestSandbox() {
 	});
 }
 
+const PERSISTENT_TEST_IDLE_TIMEOUT_MS = 1_000;
+
+function createPersistentTestSandbox() {
+	return new StaticWorkerRuntimeSandbox({
+		languageId: 'PERSISTENT_TEST',
+		displayName: 'Persistent test',
+		defaultActivePath: 'main.txt',
+		stdin: { mode: 'none' },
+		workerLifetime: {
+			mode: 'persistent',
+			idleTimeoutMs: PERSISTENT_TEST_IDLE_TIMEOUT_MS,
+			evictOnMemoryPressure: true
+		},
+		resolveRuntimeAssets: (runtimeAssets) => ({
+			baseUrl: `${String(runtimeAssets || '/persistent-test').replace(/\/$/u, '')}/`,
+			workerUrl: `${String(runtimeAssets || '/persistent-test').replace(/\/$/u, '')}/worker.js`
+		})
+	});
+}
+
 async function withCrossOriginIsolation(value: boolean, callback: () => Promise<void>) {
 	const previous = Object.getOwnPropertyDescriptor(globalThis, 'crossOriginIsolated');
 	Object.defineProperty(globalThis, 'crossOriginIsolated', { configurable: true, value });
@@ -141,6 +161,7 @@ async function expectWorkerBootstrap(worker: MockWorker, targetUrl: string) {
 	expect(source).toContain(JSON.stringify(targetUrl));
 	expect(source).toContain("['output', 'results', 'error', 'diagnostic', 'progress']");
 	expect(source).toContain('runId: __wasmIdleRunId');
+	expect(source).toContain('__wasmIdleRunId === terminalRunId');
 	expect(source).toContain("message.type === 'stdin-request'");
 	expect(source.indexOf('self.postMessage =')).toBeLessThan(
 		source.indexOf(JSON.stringify(targetUrl))
@@ -180,6 +201,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	afterEach(() => {
+		vi.useRealTimers();
 		vi.restoreAllMocks();
 		restoreCrossOriginIsolation(initialCrossOriginIsolation);
 	});
@@ -774,6 +796,102 @@ describe('static worker backed language sandboxes', () => {
 		expect(secondRunValues).toContain(0.05);
 		expect(secondRunValues.at(-1)).toBe(1);
 		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('reuses a successful persistent worker until its renewed idle deadline', async () => {
+		vi.useFakeTimers();
+		const sandbox = createPersistentTestSandbox();
+		await sandbox.load('/persistent-v1');
+		const worker = workerInstances[0];
+
+		await expect(sandbox.run('first', false)).resolves.toBe(true);
+		const firstRunId = worker.lastRunId;
+		vi.advanceTimersByTime(PERSISTENT_TEST_IDLE_TIMEOUT_MS / 2);
+		await expect(sandbox.run('second', false)).resolves.toBe(true);
+		const secondRunId = worker.lastRunId;
+
+		expect(workerInstances).toEqual([worker]);
+		expect(firstRunId).not.toBe(secondRunId);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		vi.advanceTimersByTime(PERSISTENT_TEST_IDLE_TIMEOUT_MS / 2);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		vi.advanceTimersByTime(PERSISTENT_TEST_IDLE_TIMEOUT_MS / 2 - 1);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		vi.advanceTimersByTime(1);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+
+		await expect(sandbox.run('replacement', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		await sandbox.dispose();
+		expect(workerInstances[1].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('discards failed persistent workers before the next run', async () => {
+		const sandbox = createPersistentTestSandbox();
+		await sandbox.load('/persistent-v1');
+		const failedWorker = workerInstances[0];
+		onPostMessage = (worker, message) => {
+			queueMicrotask(() => {
+				worker.onmessage?.({
+					data: { runId: message.runId, error: 'persistent run failed' }
+				} as MessageEvent<any>);
+			});
+		};
+
+		await expect(sandbox.run('first', false)).rejects.toBe('persistent run failed');
+		expect(failedWorker.terminate).toHaveBeenCalledOnce();
+
+		onPostMessage = null;
+		await expect(sandbox.run('second', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		await sandbox.dispose();
+	});
+
+	it.each([
+		[
+			'an idle script crash',
+			(worker: MockWorker) => {
+				worker.onerror?.({
+					message: 'idle worker crashed',
+					preventDefault: vi.fn()
+				} as unknown as ErrorEvent);
+			}
+		],
+		[
+			'an idle message error',
+			(worker: MockWorker) => {
+				worker.onmessageerror?.({} as MessageEvent<any>);
+			}
+		]
+	])('retires a persistent worker after %s', async (_label, failWorker) => {
+		const sandbox = createPersistentTestSandbox();
+		await sandbox.load('/persistent-v1');
+		const failedWorker = workerInstances[0];
+
+		failWorker(failedWorker);
+		expect(failedWorker.terminate).toHaveBeenCalledOnce();
+
+		await expect(sandbox.run('replacement', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		await sandbox.dispose();
+	});
+
+	it('evicts an idle persistent worker on memory pressure or runtime replacement', async () => {
+		const sandbox = createPersistentTestSandbox();
+		await sandbox.load('/persistent-v1');
+		const pressureEvicted = workerInstances[0];
+
+		expect(sandbox.handleMemoryPressure()).toBe(1);
+		expect(sandbox.handleMemoryPressure()).toBe(0);
+		expect(pressureEvicted.terminate).toHaveBeenCalledOnce();
+
+		await sandbox.load('/persistent-v1');
+		const replaced = workerInstances[1];
+		await sandbox.load('/persistent-v2');
+		expect(replaced.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(3);
+		await sandbox.dispose();
+		expect(workerInstances[2].terminate).toHaveBeenCalledOnce();
 	});
 
 	it('settles a throwing worker-ready callback and ignores the retired worker during retry', async () => {
