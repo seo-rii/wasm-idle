@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_MAX_RUNTIME_ASSET_BYTES, fetchRuntimeAssetBytes } from '../src/runtime-asset.js';
@@ -5,6 +6,32 @@ import {
 	DEFAULT_MAX_RUNTIME_MANIFEST_BYTES,
 	loadRuntimeManifest
 } from '../src/runtime-manifest.js';
+import type { RuntimeAssetIntegrity, RuntimeAssetIntegrityVerifier } from '../src/types.js';
+
+const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+
+const createIntegrity = (
+	deliveryBytes: Uint8Array,
+	runtimeBytes: Uint8Array
+): RuntimeAssetIntegrity => ({
+	bytes: deliveryBytes.byteLength,
+	sha256: sha256(deliveryBytes),
+	uncompressedBytes: runtimeBytes.byteLength,
+	uncompressedSha256: sha256(runtimeBytes)
+});
+
+const verifyIntegrity: RuntimeAssetIntegrityVerifier = async ({
+	asset,
+	bytes,
+	expected,
+	stage
+}) => {
+	const expectedBytes = stage === 'compressed' ? expected.bytes : expected.uncompressedBytes;
+	const expectedSha256 = stage === 'compressed' ? expected.sha256 : expected.uncompressedSha256;
+	if (bytes.byteLength !== expectedBytes || sha256(bytes) !== expectedSha256) {
+		throw new Error(`integrity mismatch for ${asset} at ${stage}`);
+	}
+};
 
 afterEach(() => {
 	vi.useRealTimers();
@@ -23,6 +50,186 @@ describe('runtime asset loader', () => {
 		);
 
 		expect(new TextDecoder().decode(bytes)).toBe('compressed D runtime asset');
+	});
+
+	it('verifies paired delivery and runtime receipts before publishing gzip assets', async () => {
+		const runtimeBytes = new TextEncoder().encode('verified D runtime asset');
+		const deliveryBytes = new Uint8Array(gzipSync(runtimeBytes));
+		const integrity = createIntegrity(deliveryBytes, runtimeBytes);
+		const verifier = vi.fn(verifyIntegrity);
+
+		const bytes = await fetchRuntimeAssetBytes(
+			'https://example.test/runtime/bin/ldc2.wasm.gz',
+			'ldc2.wasm',
+			async () =>
+				new Response(deliveryBytes, {
+					headers: { 'Content-Length': String(deliveryBytes.byteLength) }
+				}),
+			undefined,
+			'gzip',
+			DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+			undefined,
+			integrity,
+			verifier
+		);
+
+		expect(bytes).toEqual(runtimeBytes);
+		expect(verifier).toHaveBeenCalledTimes(2);
+		expect(verifier.mock.calls.map(([request]) => request.stage)).toEqual([
+			'compressed',
+			'uncompressed'
+		]);
+	});
+
+	it('preserves cancellation while an integrity verifier is stalled', async () => {
+		const runtimeBytes = new TextEncoder().encode('verified D runtime asset');
+		const deliveryBytes = new Uint8Array(gzipSync(runtimeBytes));
+		let releaseVerification!: () => void;
+		const verificationGate = new Promise<void>((resolve) => {
+			releaseVerification = resolve;
+		});
+		const verifier = vi.fn(async () => {
+			await verificationGate;
+		});
+		const controller = new AbortController();
+		const reason = new Error('stop stalled D integrity verification');
+		const loading = fetchRuntimeAssetBytes(
+			'https://example.test/runtime/bin/ldc2.wasm.gz',
+			'ldc2.wasm',
+			async () => new Response(deliveryBytes),
+			undefined,
+			'gzip',
+			DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+			controller.signal,
+			createIntegrity(deliveryBytes, runtimeBytes),
+			verifier
+		);
+
+		await vi.waitFor(() => expect(verifier).toHaveBeenCalledOnce());
+		controller.abort(reason);
+		await expect(loading).rejects.toBe(reason);
+		releaseVerification();
+		await verificationGate;
+		expect(verifier).toHaveBeenCalledOnce();
+	});
+
+	it('rejects corrupt delivery bytes before decompression or publication', async () => {
+		const runtimeBytes = new TextEncoder().encode('expected D runtime asset');
+		const expectedDelivery = new Uint8Array(gzipSync(runtimeBytes));
+		const corruptDelivery = Uint8Array.from(expectedDelivery);
+		corruptDelivery[corruptDelivery.length - 1] ^= 1;
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/bin/ldc2.wasm.gz',
+				'ldc2.wasm',
+				async () => new Response(corruptDelivery),
+				undefined,
+				'gzip',
+				DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+				undefined,
+				createIntegrity(expectedDelivery, runtimeBytes),
+				verifyIntegrity
+			)
+		).rejects.toThrow('integrity mismatch for ldc2.wasm at compressed');
+	});
+
+	it('rejects a truncated receipt-backed response before invoking the verifier', async () => {
+		const runtimeBytes = new TextEncoder().encode('expected D runtime asset');
+		const expectedDelivery = new Uint8Array(gzipSync(runtimeBytes));
+		const truncatedDelivery = expectedDelivery.subarray(0, expectedDelivery.byteLength - 1);
+		const verifier = vi.fn(verifyIntegrity);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/bin/ldc2.wasm.gz',
+				'ldc2.wasm',
+				async () => new Response(truncatedDelivery),
+				undefined,
+				'gzip',
+				DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+				undefined,
+				createIntegrity(expectedDelivery, runtimeBytes),
+				verifier
+			)
+		).rejects.toThrow(
+			`ldc2.wasm download size mismatch: expected ${expectedDelivery.byteLength} bytes, received ${truncatedDelivery.byteLength}`
+		);
+		expect(verifier).not.toHaveBeenCalled();
+	});
+
+	it('requires a verifier before fetching receipt-backed assets', async () => {
+		const runtimeBytes = new TextEncoder().encode('verified D runtime asset');
+		const deliveryBytes = new Uint8Array(gzipSync(runtimeBytes));
+		const fetchImpl = vi.fn();
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/bin/ldc2.wasm.gz',
+				'ldc2.wasm',
+				fetchImpl,
+				undefined,
+				'gzip',
+				DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+				undefined,
+				createIntegrity(deliveryBytes, runtimeBytes)
+			)
+		).rejects.toThrow('D runtime asset ldc2.wasm requires an integrity verifier');
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('verifies transparently decoded gzip against its runtime receipt', async () => {
+		const runtimeBytes = new TextEncoder().encode('decoded D runtime asset');
+		const deliveryBytes = new Uint8Array(gzipSync(runtimeBytes));
+		const verifier = vi.fn(verifyIntegrity);
+
+		const loaded = await fetchRuntimeAssetBytes(
+			'https://example.test/runtime/bin/ldc2.wasm.gz',
+			'ldc2.wasm',
+			async () =>
+				new Response(runtimeBytes, {
+					headers: {
+						'Content-Encoding': 'gzip',
+						'Content-Length': String(deliveryBytes.byteLength)
+					}
+				}),
+			undefined,
+			'gzip',
+			DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+			undefined,
+			createIntegrity(deliveryBytes, runtimeBytes),
+			verifier
+		);
+
+		expect(loaded).toEqual(runtimeBytes);
+		expect(verifier).toHaveBeenCalledOnce();
+		expect(verifier.mock.calls[0]?.[0].stage).toBe('uncompressed');
+	});
+
+	it('rejects corrupt transparently decoded gzip logical bytes', async () => {
+		const runtimeBytes = new TextEncoder().encode('decoded D runtime asset');
+		const corruptRuntimeBytes = new TextEncoder().encode('corrupt D runtime asset');
+		const deliveryBytes = new Uint8Array(gzipSync(runtimeBytes));
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/bin/ldc2.wasm.gz',
+				'ldc2.wasm',
+				async () =>
+					new Response(corruptRuntimeBytes, {
+						headers: {
+							'Content-Encoding': 'gzip',
+							'Content-Length': String(deliveryBytes.byteLength)
+						}
+					}),
+				undefined,
+				'gzip',
+				DEFAULT_MAX_RUNTIME_ASSET_BYTES,
+				undefined,
+				createIntegrity(deliveryBytes, runtimeBytes),
+				verifyIntegrity
+			)
+		).rejects.toThrow('integrity mismatch for ldc2.wasm at uncompressed');
 	});
 
 	it('does not inflate again when fetch already decoded gzip content encoding', async () => {

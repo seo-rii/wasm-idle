@@ -1,10 +1,16 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import {
+	loadVerifiedDOuterAssets,
+	snapshotDOuterAssetConfig,
+	type DOuterAssetConfig
+} from '$lib/playground/dOuterAssets';
+import { createRuntimeAssetsKey, verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 
 declare var self: any;
 
 let stdinBufferD: Int32Array | null = null;
-let moduleUrl = '';
-let loadedModuleUrl = '';
+let runtimeConfig: DOuterAssetConfig | null = null;
+let loadedRuntimeKey = '';
 let runtimePromise: Promise<{
 	compiler: any;
 	executeBrowserDArtifact: (
@@ -25,20 +31,31 @@ let runtimePromise: Promise<{
 let compiledArtifact: any = null;
 let compiledCacheKey = '';
 
-async function loadRuntime(url: string) {
-	if (!url) {
-		throw new Error(
-			'D runtime is not configured. Set PUBLIC_WASM_D_MODULE_URL or runtimeAssets.d.moduleUrl.'
-		);
-	}
-	if (loadedModuleUrl === url && runtimePromise) {
+async function loadRuntime(config: DOuterAssetConfig) {
+	const snapshot = snapshotDOuterAssetConfig(config);
+	const runtimeKey = createRuntimeAssetsKey({ d: snapshot });
+	if (!runtimeKey) throw new TypeError('D runtime asset key could not be created');
+	if (loadedRuntimeKey === runtimeKey && runtimePromise) {
 		return await runtimePromise;
 	}
-	loadedModuleUrl = url;
+	loadedRuntimeKey = runtimeKey;
 	compiledArtifact = null;
 	compiledCacheKey = '';
-	runtimePromise = (async () => {
-		const module = await import(/* @vite-ignore */ url);
+	const pendingRuntime = (async () => {
+		const { moduleBytes, manifestBytes } = await loadVerifiedDOuterAssets(snapshot);
+		const moduleObjectUrl = URL.createObjectURL(
+			new Blob([moduleBytes.slice().buffer], { type: 'text/javascript' })
+		);
+		let module: any;
+		try {
+			module = await import(/* @vite-ignore */ moduleObjectUrl);
+		} finally {
+			try {
+				URL.revokeObjectURL(moduleObjectUrl);
+			} catch {
+				// Cleanup must not replace module import success or failure.
+			}
+		}
 		const factory =
 			typeof module.createDCompiler === 'function'
 				? module.createDCompiler
@@ -51,13 +68,33 @@ async function loadRuntime(url: string) {
 		if (typeof module.executeBrowserDArtifact !== 'function') {
 			throw new Error('wasm-d module must export executeBrowserDArtifact');
 		}
-		const runtimeBaseUrl = new URL('runtime/', url).href;
+		if (typeof module.parseRuntimeManifest !== 'function') {
+			throw new Error('wasm-d module must export parseRuntimeManifest');
+		}
+		const manifestSource = new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes);
+		const manifest = module.parseRuntimeManifest(JSON.parse(manifestSource));
+		const manifestUrl = new URL(snapshot.manifestUrl);
+		const runtimeBaseUrl = new URL('./', manifestUrl);
+		runtimeBaseUrl.search = manifestUrl.search;
 		return {
-			compiler: await factory({ runtimeBaseUrl }),
+			compiler: await factory({
+				runtimeBaseUrl: runtimeBaseUrl.href,
+				manifest,
+				verifyRuntimeAssetIntegrity
+			}),
 			executeBrowserDArtifact: module.executeBrowserDArtifact
 		};
 	})();
-	return await runtimePromise;
+	runtimePromise = pendingRuntime;
+	try {
+		return await pendingRuntime;
+	} catch (error) {
+		if (runtimePromise === pendingRuntime && loadedRuntimeKey === runtimeKey) {
+			runtimePromise = null;
+			loadedRuntimeKey = '';
+		}
+		throw error;
+	}
 }
 
 function normalizeDiagnostic(diagnostic: any) {
@@ -80,6 +117,8 @@ self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
 		moduleUrl: nextModuleUrl,
+		manifestUrl: nextManifestUrl,
+		outerIntegrity,
 		buffer,
 		code,
 		prepare,
@@ -90,15 +129,20 @@ self.onmessage = async (event: { data: any }) => {
 	} = event.data;
 	try {
 		if (load) {
-			moduleUrl = nextModuleUrl;
-			if (log) console.log(`[wasm-idle:d-worker] load moduleUrl=${moduleUrl}`);
-			await loadRuntime(moduleUrl);
+			runtimeConfig = snapshotDOuterAssetConfig({
+				moduleUrl: nextModuleUrl,
+				manifestUrl: nextManifestUrl,
+				integrity: outerIntegrity
+			});
+			if (log) console.log(`[wasm-idle:d-worker] load moduleUrl=${runtimeConfig.moduleUrl}`);
+			await loadRuntime(runtimeConfig);
 			postMessage({ load: true });
 			return;
 		}
 
 		stdinBufferD = new Int32Array(buffer);
-		const runtime = await loadRuntime(moduleUrl);
+		if (!runtimeConfig) throw new Error('D runtime has not been loaded');
+		const runtime = await loadRuntime(runtimeConfig);
 		const compileCacheKey = `${fileName}\n${code}`;
 		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
 			if (log) {
@@ -180,10 +224,10 @@ self.onmessage = async (event: { data: any }) => {
 				}
 				return chunk;
 			},
-			stdout: (output) => {
+			stdout: (output: string) => {
 				if (output) postMessage({ output });
 			},
-			stderr: (output) => {
+			stderr: (output: string) => {
 				if (output) postMessage({ output });
 			}
 		});

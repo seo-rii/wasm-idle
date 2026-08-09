@@ -16,6 +16,8 @@ export type {
 	BrowserDTarget,
 	CompilerDiagnostic,
 	CompilerDiagnosticSeverity,
+	RuntimeAssetIntegrity,
+	RuntimeAssetIntegrityVerifier,
 	RuntimeManifestV1
 } from './types.js';
 export type { CreateDCompilerOptions } from './compiler.js';

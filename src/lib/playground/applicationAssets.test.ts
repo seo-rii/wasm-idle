@@ -7,6 +7,7 @@ import {
 } from './applicationAssets';
 import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
 import { WASM_BASH_ASSET_VERSION, WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
+import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
@@ -188,6 +189,9 @@ describe('application runtime asset root', () => {
 		const key = JSON.parse(createRuntimeAssetsKey(assets) || '{}') as Record<string, unknown>;
 
 		expect(key).toMatchObject({
+			dModuleUrl: assets.d?.moduleUrl,
+			dManifestUrl: assets.d?.manifestUrl,
+			dIntegrity: expect.any(String),
 			typeScriptLibUrl: assets.typescript?.libUrl,
 			fortranBaseUrl: assets.fortran?.baseUrl,
 			fortranF2cWasmUrl: assets.fortran?.f2cWasmUrl,
@@ -202,6 +206,16 @@ describe('application runtime asset root', () => {
 			objectiveCFoundationHeadersUrl: assets.objectivec?.foundationHeadersUrl,
 			objectiveCLibffiUrl: assets.objectivec?.libffiUrl,
 			objectiveCIntegrity: expect.any(String)
+		});
+	});
+
+	it('pins both D outer trust roots to one generated integrity version', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+
+		expect(assets.d).toEqual({
+			moduleUrl: `/foo/bar/wasm-d/index.js?v=${WASM_D_INTEGRITY_VERSION}`,
+			manifestUrl: `/foo/bar/wasm-d/runtime/runtime-manifest.v1.json?v=${WASM_D_INTEGRITY_VERSION}`,
+			integrity: WASM_D_OUTER_ASSET_RECEIPTS
 		});
 	});
 

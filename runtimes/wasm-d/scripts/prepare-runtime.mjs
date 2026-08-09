@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { gzip } from 'node:zlib';
+import { gunzipSync, gzip } from 'node:zlib';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const runtimeRoot = path.resolve(scriptDir, '..');
@@ -96,6 +96,20 @@ async function sha256File(filePath) {
 	return hash.digest('hex');
 }
 
+async function pairedAssetReceipt(deliveryPath, compression) {
+	const deliveryBytes = await fs.readFile(deliveryPath);
+	const runtimeBytes = compression === 'gzip' ? gunzipSync(deliveryBytes) : deliveryBytes;
+	if (deliveryBytes.byteLength <= 0 || runtimeBytes.byteLength <= 0) {
+		throw new Error(`wasm-d runtime asset must be non-empty: ${deliveryPath}`);
+	}
+	return {
+		bytes: deliveryBytes.byteLength,
+		sha256: crypto.createHash('sha256').update(deliveryBytes).digest('hex'),
+		uncompressedBytes: runtimeBytes.byteLength,
+		uncompressedSha256: crypto.createHash('sha256').update(runtimeBytes).digest('hex')
+	};
+}
+
 async function run(command, args, options = {}) {
 	return await new Promise((resolve, reject) => {
 		const child = spawn(command, args, {
@@ -130,7 +144,18 @@ async function extractTarZst(archivePath, targetDir) {
 
 async function createUncompressedTar(sourceDir, archivePath) {
 	await fs.mkdir(path.dirname(archivePath), { recursive: true });
-	await run('tar', ['-cf', archivePath, '-C', sourceDir, '.']);
+	await run('tar', [
+		'--sort=name',
+		'--mtime=@0',
+		'--owner=0',
+		'--group=0',
+		'--numeric-owner',
+		'-cf',
+		archivePath,
+		'-C',
+		sourceDir,
+		'.'
+	]);
 }
 
 async function gzipFile(sourcePath, targetPath) {
@@ -139,6 +164,10 @@ async function gzipFile(sourcePath, targetPath) {
 }
 
 const options = parseArgs(process.argv.slice(2));
+const sourceDateEpoch = Number(process.env.SOURCE_DATE_EPOCH || 0);
+if (!Number.isSafeInteger(sourceDateEpoch) || sourceDateEpoch < 0) {
+	throw new Error('SOURCE_DATE_EPOCH must be a non-negative safe integer');
+}
 const sourceManifestPath = path.join(options.sourceDir, 'runtime-manifest.v1.json');
 const sourceManifest = JSON.parse(await fs.readFile(sourceManifestPath, 'utf8'));
 if (sourceManifest.manifestVersion !== 1) {
@@ -196,6 +225,7 @@ await gzipFile(
 );
 
 const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'wasm-idle-d-runtime-'));
+let toolchainIntegrity;
 try {
 	const toolchainRoot = path.join(tempRoot, 'toolchain');
 	await fs.mkdir(path.join(toolchainRoot, 'etc'), { recursive: true });
@@ -214,10 +244,24 @@ try {
 	);
 	const toolchainTarPath = path.join(tempRoot, 'toolchain.tar');
 	await createUncompressedTar(toolchainRoot, toolchainTarPath);
-	await gzipFile(toolchainTarPath, path.join(options.targetDir, TOOLCHAIN_ASSET));
+	const toolchainDeliveryPath = path.join(options.targetDir, TOOLCHAIN_ASSET);
+	await gzipFile(toolchainTarPath, toolchainDeliveryPath);
+	toolchainIntegrity = await pairedAssetReceipt(toolchainDeliveryPath, 'gzip');
 } finally {
 	await fs.rm(tempRoot, { recursive: true, force: true });
 }
+
+if (!toolchainIntegrity) {
+	throw new Error('wasm-d toolchain integrity metadata was not produced');
+}
+
+const assetIntegrity = {
+	ldc2: await pairedAssetReceipt(path.join(options.targetDir, targetLdc2Asset), 'gzip'),
+	toolchain: toolchainIntegrity,
+	linkerJs: await pairedAssetReceipt(path.join(options.targetDir, linkerAssets.js)),
+	linkerWasm: await pairedAssetReceipt(path.join(options.targetDir, linkerAssets.wasm), 'gzip'),
+	linkerData: await pairedAssetReceipt(path.join(options.targetDir, linkerAssets.data), 'gzip')
+};
 
 const targetManifest = {
 	manifestVersion: 1,
@@ -228,25 +272,30 @@ const targetManifest = {
 		ldc2: {
 			asset: targetLdc2Asset,
 			argv0: sourceManifest.compiler.ldc2.argv0 || 'ldc2',
-			compression: 'gzip'
+			compression: 'gzip',
+			integrity: assetIntegrity.ldc2
 		},
 		toolchain: {
 			asset: TOOLCHAIN_ASSET,
-			compression: 'gzip'
+			compression: 'gzip',
+			integrity: assetIntegrity.toolchain
 		},
 		linker: {
 			kind: 'emscripten-lld',
 			argv0: sourceManifest.compiler.linker.argv0 || 'wasm-ld',
 			js: {
-				asset: linkerAssets.js
+				asset: linkerAssets.js,
+				integrity: assetIntegrity.linkerJs
 			},
 			wasm: {
 				asset: linkerAssets.wasm,
-				compression: 'gzip'
+				compression: 'gzip',
+				integrity: assetIntegrity.linkerWasm
 			},
 			data: {
 				asset: linkerAssets.data,
-				compression: 'gzip'
+				compression: 'gzip',
+				integrity: assetIntegrity.linkerData
 			}
 		}
 	},
@@ -260,27 +309,24 @@ const targetManifest = {
 	}
 };
 
-await fs.writeFile(
-	path.join(options.targetDir, 'runtime-manifest.v1.json'),
-	`${JSON.stringify(targetManifest, null, 2)}\n`,
-	'utf8'
-);
+const targetManifestPath = path.join(options.targetDir, 'runtime-manifest.v1.json');
+await fs.writeFile(targetManifestPath, `${JSON.stringify(targetManifest, null, 2)}\n`, 'utf8');
 
 const targetAssets = [
-	targetLdc2Asset,
-	linkerAssets.js,
-	linkerAssets.wasm,
-	linkerAssets.data,
-	TOOLCHAIN_ASSET
+	[targetLdc2Asset, assetIntegrity.ldc2],
+	[linkerAssets.js, assetIntegrity.linkerJs],
+	[linkerAssets.wasm, assetIntegrity.linkerWasm],
+	[linkerAssets.data, assetIntegrity.linkerData],
+	[TOOLCHAIN_ASSET, assetIntegrity.toolchain]
 ];
 const preparedAssets = [];
-for (const asset of targetAssets) {
-	const filePath = path.join(options.targetDir, asset);
-	const stat = await fs.stat(filePath);
+for (const [asset, integrity] of targetAssets) {
 	preparedAssets.push({
 		asset,
-		size: stat.size,
-		sha256: await sha256File(filePath)
+		size: integrity.bytes,
+		sha256: integrity.sha256,
+		uncompressedSize: integrity.uncompressedBytes,
+		uncompressedSha256: integrity.uncompressedSha256
 	});
 }
 
@@ -288,9 +334,9 @@ await fs.writeFile(
 	path.join(options.targetDir, 'runtime-build.json'),
 	`${JSON.stringify(
 		{
-			generatedAt: new Date().toISOString(),
+			generatedAt: new Date(sourceDateEpoch * 1000).toISOString(),
 			source: path.relative(wasmIdleRoot, options.sourceDir),
-			manifestSha256: await sha256File(sourceManifestPath),
+			manifestSha256: await sha256File(targetManifestPath),
 			sourceAssets,
 			assets: preparedAssets
 		},

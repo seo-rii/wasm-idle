@@ -71,7 +71,23 @@ export interface RuntimeAssetConfig {
 	asset: string;
 	argv0?: string;
 	compression?: 'gzip';
+	integrity: RuntimeAssetIntegrity;
 }
+
+export interface RuntimeAssetIntegrity {
+	bytes: number;
+	sha256: string;
+	uncompressedBytes: number;
+	uncompressedSha256: string;
+}
+
+export type RuntimeAssetIntegrityVerifier = (request: {
+	asset: string;
+	bytes: Uint8Array;
+	expected: RuntimeAssetIntegrity;
+	stage: 'compressed' | 'uncompressed';
+	runtimeId: 'D';
+}) => Promise<unknown>;
 
 export interface EmscriptenLldRuntimeAssetConfig {
 	kind: 'emscripten-lld';

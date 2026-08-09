@@ -4,7 +4,7 @@ import { WASM_AWK_ASSET_VERSION } from './wasmAwkVersion';
 import { WASM_BASH_ASSET_VERSION, WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
 import { WASM_BQN_ASSET_VERSION } from './wasmBqnVersion';
 import { WASM_CLOJURESCRIPT_ASSET_VERSION } from './wasmClojureScriptVersion';
-import { WASM_D_ASSET_VERSION } from './wasmDVersion';
+import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 import { WASM_DOTNET_ASSET_VERSION } from './wasmDotnetVersion';
 import { WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
 import { WASM_FORTH_ASSET_VERSION } from './wasmForthVersion';
@@ -82,7 +82,9 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			manifestUrl: asset('wasm-go/runtime/runtime-manifest.v1.json', WASM_GO_ASSET_VERSION)
 		},
 		d: {
-			moduleUrl: asset('wasm-d/index.js', WASM_D_ASSET_VERSION)
+			moduleUrl: asset('wasm-d/index.js', WASM_D_INTEGRITY_VERSION),
+			manifestUrl: asset('wasm-d/runtime/runtime-manifest.v1.json', WASM_D_INTEGRITY_VERSION),
+			integrity: WASM_D_OUTER_ASSET_RECEIPTS
 		},
 		dotnet: {
 			moduleUrl: asset('wasm-dotnet/index.js', WASM_DOTNET_ASSET_VERSION)

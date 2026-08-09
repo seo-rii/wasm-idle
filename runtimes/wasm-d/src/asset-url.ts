@@ -1,7 +1,7 @@
-const DEFAULT_RUNTIME_BASE_URL = new URL('./runtime/', import.meta.url);
+const defaultRuntimeBaseUrl = () => new URL('./runtime/', import.meta.url);
 
 export function resolveRuntimeBaseUrl(baseUrl?: string | URL) {
-	return new URL(baseUrl?.toString() || DEFAULT_RUNTIME_BASE_URL.toString());
+	return new URL(baseUrl?.toString() || defaultRuntimeBaseUrl().toString());
 }
 
 export function resolveVersionedAssetUrl(baseUrl: string | URL, asset: string) {

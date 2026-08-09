@@ -15,6 +15,8 @@
 		IMonacoSetting
 	} from '@seorii/monaco';
 	import type { EditorLanguageServerHandle, LanguageServerStatus } from '@wasm-idle/lsp';
+	import type { DOuterAssetReceipts } from '$lib/playground/dOuterAssets';
+	import { WASM_D_OUTER_ASSET_RECEIPTS } from '$lib/playground/wasmDIntegrity';
 	import type monaco from 'monaco-editor';
 	import { onMount, untrack } from 'svelte';
 	import {
@@ -2352,6 +2354,8 @@
 		gleamLspManifestFingerprint?: string;
 		dLspEnabled?: boolean;
 		dLspModuleUrl?: string;
+		dLspManifestUrl?: string;
+		dLspIntegrity?: DOuterAssetReceipts;
 		tclLspEnabled?: boolean;
 		tclLspBaseUrl?: string;
 		tclLspWorkerUrl?: string;
@@ -2441,6 +2445,8 @@
 		gleamLspManifestFingerprint,
 		dLspEnabled = false,
 		dLspModuleUrl,
+		dLspManifestUrl,
+		dLspIntegrity = WASM_D_OUTER_ASSET_RECEIPTS,
 		tclLspEnabled = false,
 		tclLspBaseUrl,
 		tclLspWorkerUrl,
@@ -2599,6 +2605,9 @@
 			gleamLspEnabled ? gleamLspManifestUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestFingerprint || '' : '',
 			dLspEnabled ? dLspModuleUrl || '' : '',
+			dLspEnabled ? dLspManifestUrl || '' : '',
+			dLspEnabled ? dLspIntegrity['index.js'].sha256 : '',
+			dLspEnabled ? dLspIntegrity['runtime/runtime-manifest.v1.json'].sha256 : '',
 			tclLspEnabled ? tclLspBaseUrl || '' : '',
 			tclLspEnabled ? tclLspWorkerUrl || '' : '',
 			pascalLspEnabled ? pascalLspBaseUrl || '' : '',
@@ -2966,10 +2975,17 @@
 			setStatus: (status) => (dLspStatus = status),
 			load: async (currentUrl) => {
 				const { getDLanguageServer } = await import('@wasm-idle/lsp/d');
+				const moduleUrl = new URL(dLspModuleUrl || '', currentUrl);
+				const manifestUrl = dLspManifestUrl
+					? new URL(dLspManifestUrl, currentUrl)
+					: new URL('runtime/runtime-manifest.v1.json', moduleUrl);
+				if (!dLspManifestUrl) manifestUrl.search = moduleUrl.search;
 				return await getDLanguageServer({
 					currentUrl,
 					d: {
-						moduleUrl: dLspModuleUrl || ''
+						moduleUrl: moduleUrl.href,
+						manifestUrl: manifestUrl.href,
+						integrity: dLspIntegrity
 					},
 					onStatus: (status) => (dLspStatus = status)
 				});

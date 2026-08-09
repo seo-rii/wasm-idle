@@ -116,9 +116,15 @@ export {
 } from './go/index.js';
 export {
 	createDWorkerService,
+	BUNDLED_D_INTEGRITY_VERSION,
+	BUNDLED_D_OUTER_ASSET_RECEIPTS,
+	D_OUTER_ASSETS,
 	getDLanguageServer,
 	type DLanguageServerConfig,
 	type DLanguageServerOptions,
+	type DOuterAssetName,
+	type DOuterAssetReceipt,
+	type DOuterAssetReceipts,
 	type DWorkerOptions,
 	type LoadDCompilerHost
 } from './d/index.js';

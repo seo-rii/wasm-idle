@@ -4,8 +4,9 @@ import {
 	verifyRuntimeAssetIntegrity,
 	type RuntimeAssetIntegrityEntry
 } from '@wasm-idle/core';
+import { D_OUTER_ASSETS } from './d/assets.js';
 
-export type LanguageToolAssetRuntime = 'clangd';
+export type LanguageToolAssetRuntime = 'clangd' | 'd';
 
 export interface LanguageToolAssetLoadRequest {
 	runtime: LanguageToolAssetRuntime;
@@ -55,6 +56,9 @@ export interface LanguageToolAssetConfig {
 	loader?: LanguageToolAssetLoader;
 	allowedBaseUrls?: string[];
 	integrity?: LanguageToolAssetIntegrityMap;
+	cache?: RequestCache;
+	redirect?: RequestRedirect;
+	requireExactResponseUrl?: boolean;
 }
 
 export interface ResolvedLanguageToolAssetConfig {
@@ -62,6 +66,9 @@ export interface ResolvedLanguageToolAssetConfig {
 	loader?: LanguageToolAssetLoader;
 	allowedBaseUrls?: string[];
 	integrity?: LanguageToolAssetIntegrityMap;
+	cache?: RequestCache;
+	redirect?: RequestRedirect;
+	requireExactResponseUrl?: boolean;
 }
 
 export interface LoadedLanguageToolAsset {
@@ -84,29 +91,39 @@ const textEncoder = new TextEncoder();
 const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
 const MAX_LANGUAGE_TOOL_ASSET_BYTES = 128 * 1024 * 1024;
 
-const enforceAssetSize = (asset: string, bytes: Uint8Array) => {
-	if (bytes.byteLength > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
-		throw new Error(
-			`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
-		);
+const configuredAssetByteLimit = (asset: string, config: ResolvedLanguageToolAssetConfig) => {
+	const expected = config.integrity?.[asset];
+	if (typeof expected !== 'object' || expected.bytes === undefined) {
+		return MAX_LANGUAGE_TOOL_ASSET_BYTES;
+	}
+	if (!Number.isSafeInteger(expected.bytes) || expected.bytes < 0) {
+		throw new Error(`Runtime asset ${asset} has an invalid expected byte size`);
+	}
+	return Math.min(MAX_LANGUAGE_TOOL_ASSET_BYTES, expected.bytes);
+};
+
+const enforceAssetSize = (asset: string, bytes: Uint8Array, byteLimit: number) => {
+	if (bytes.byteLength > byteLimit) {
+		throw new Error(`Runtime asset ${asset} exceeds the ${byteLimit} byte limit`);
 	}
 	return bytes;
 };
 
 const verifyAssetIntegrity = async (
+	runtime: LanguageToolAssetRuntime,
 	asset: string,
 	loaded: LoadedLanguageToolAsset,
 	config: ResolvedLanguageToolAssetConfig
 ) => {
 	const configured = config.integrity?.[asset];
-	if (!configured) return loaded;
+	if (configured === undefined) return loaded;
 	await verifyRuntimeAssetIntegrity({
 		asset,
 		bytes: loaded.bytes,
 		expected: configured,
 		stage: 'compressed',
 		mimeType: loaded.mimeType,
-		runtimeId: 'clangd'
+		runtimeId: runtime
 	});
 	return loaded;
 };
@@ -159,7 +176,16 @@ export const normalizeRootUrl = (rootUrl: string) =>
 export const resolveRootToolBaseUrl = (rootUrl: string, toolPath: string, currentUrl = '') =>
 	normalizeBaseUrl(`${normalizeRootUrl(rootUrl) || ''}${toolPath}`, currentUrl);
 
+const cancelResponseBody = (response: Response, reason?: unknown) => {
+	try {
+		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
+	} catch {
+		// Preserve the asset protocol error that triggered cleanup.
+	}
+};
+
 async function fetchAsset(
+	runtime: LanguageToolAssetRuntime,
 	url: string,
 	asset: string,
 	config: ResolvedLanguageToolAssetConfig,
@@ -167,9 +193,11 @@ async function fetchAsset(
 	signal: AbortSignal
 ): Promise<LoadedLanguageToolAsset> {
 	const requestUrl = requireAllowedAssetUrl(asset, url, config);
+	const byteLimit = configuredAssetByteLimit(asset, config);
 	const response = await fetch(requestUrl.href, {
+		...(config.cache ? { cache: config.cache } : {}),
 		credentials: 'omit',
-		redirect: 'follow',
+		redirect: config.redirect ?? 'follow',
 		referrerPolicy: 'no-referrer',
 		signal
 	});
@@ -179,18 +207,23 @@ async function fetchAsset(
 			finalResponseUrl = new URL(response.url).href;
 		} catch {
 			const error = new Error(`Runtime asset ${asset} has an invalid final response URL`);
-			await response.body?.cancel(error).catch(() => {});
+			cancelResponseBody(response, error);
 			throw error;
 		}
 	}
 	try {
 		requireAllowedAssetUrl(asset, finalResponseUrl, config);
 	} catch (error) {
-		await response.body?.cancel(error).catch(() => {});
+		cancelResponseBody(response, error);
+		throw error;
+	}
+	if (config.requireExactResponseUrl && finalResponseUrl !== requestUrl.href) {
+		const error = new Error(`Runtime asset ${asset} returned an unexpected final URL`);
+		cancelResponseBody(response, error);
 		throw error;
 	}
 	if (!response.ok) {
-		await response.body?.cancel().catch(() => {});
+		cancelResponseBody(response);
 		throw new Error(`Failed to load ${asset}: ${response.status}`);
 	}
 	const contentLengthValue = response.headers.get('content-length');
@@ -201,18 +234,16 @@ async function fetchAsset(
 		if (!/^\d+$/u.test(normalizedContentLength) || !Number.isSafeInteger(parsedContentLength)) {
 			const error = new ProtocolError(
 				`Runtime asset ${asset} has an invalid Content-Length`,
-				{ phase: 'asset', runtimeId: 'clangd' }
+				{ phase: 'asset', runtimeId: runtime }
 			);
-			await response.body?.cancel(error).catch(() => {});
+			cancelResponseBody(response, error);
 			throw error;
 		}
 		contentLength = parsedContentLength;
 	}
-	if (contentLength !== undefined && contentLength > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
-		await response.body?.cancel().catch(() => {});
-		throw new Error(
-			`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
-		);
+	if (contentLength !== undefined && contentLength > byteLimit) {
+		cancelResponseBody(response);
+		throw new Error(`Runtime asset ${asset} exceeds the ${byteLimit} byte limit`);
 	}
 	const mimeType = response.headers.get('content-type') || undefined;
 	if (!response.body) {
@@ -229,7 +260,8 @@ async function fetchAsset(
 			const materialized = response.arrayBuffer();
 			const bytes = enforceAssetSize(
 				asset,
-				new Uint8Array(await Promise.race([materialized, aborted]))
+				new Uint8Array(await Promise.race([materialized, aborted])),
+				byteLimit
 			);
 			if (signal.aborted) {
 				throw signal.reason ?? new Error('Runtime asset load was aborted');
@@ -271,7 +303,9 @@ async function fetchAsset(
 	let releaseError: unknown;
 	try {
 		let receivedLength = 0;
-		let bytes = new Uint8Array(contentLength ?? DEFAULT_STREAM_BUFFER_BYTES);
+		let bytes = new Uint8Array(
+			contentLength ?? Math.min(DEFAULT_STREAM_BUFFER_BYTES, byteLimit)
+		);
 		while (true) {
 			if (signal.aborted) {
 				throw signal.reason ?? new Error('Runtime asset load was aborted');
@@ -284,18 +318,15 @@ async function fetchAsset(
 			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
-			if (nextLength > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
+			if (nextLength > byteLimit) {
 				const error = new Error(
-					`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
+					`Runtime asset ${asset} exceeds the ${byteLimit} byte limit`
 				);
 				cancelReader(error);
 				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
-				const capacity = Math.min(
-					MAX_LANGUAGE_TOOL_ASSET_BYTES,
-					Math.max(nextLength, bytes.byteLength * 2)
-				);
+				const capacity = Math.min(byteLimit, Math.max(nextLength, bytes.byteLength * 2));
 				const grown = new Uint8Array(capacity);
 				grown.set(bytes.subarray(0, receivedLength));
 				bytes = grown;
@@ -331,6 +362,7 @@ async function fetchAsset(
 }
 
 async function normalizeLoaderResult(
+	runtime: LanguageToolAssetRuntime,
 	result: LanguageToolAssetLoaderResult,
 	asset: string,
 	config: ResolvedLanguageToolAssetConfig,
@@ -340,17 +372,18 @@ async function normalizeLoaderResult(
 	if (signal.aborted) {
 		throw signal.reason ?? new Error('Runtime asset load was aborted');
 	}
+	const byteLimit = configuredAssetByteLimit(asset, config);
 	if (!result) return null;
 	if (typeof result === 'string' || result instanceof URL) {
-		return await fetchAsset(String(result), asset, config, reportProgress, signal);
+		return await fetchAsset(runtime, String(result), asset, config, reportProgress, signal);
 	}
 	if (result instanceof ArrayBuffer) {
-		const bytes = enforceAssetSize(asset, new Uint8Array(result));
+		const bytes = enforceAssetSize(asset, new Uint8Array(result), byteLimit);
 		reportProgress(bytes.byteLength, bytes.byteLength);
 		return { bytes };
 	}
 	if (result instanceof Uint8Array) {
-		enforceAssetSize(asset, result);
+		enforceAssetSize(asset, result, byteLimit);
 		reportProgress(result.byteLength, result.byteLength);
 		return { bytes: result };
 	}
@@ -358,6 +391,7 @@ async function normalizeLoaderResult(
 		result instanceof Blob ? { data: result, mimeType: result.type || undefined } : result;
 	if ('url' in normalizedResult && normalizedResult.url) {
 		return await fetchAsset(
+			runtime,
 			String(normalizedResult.url),
 			asset,
 			config,
@@ -367,24 +401,26 @@ async function normalizeLoaderResult(
 	}
 	if ('data' in normalizedResult) {
 		if (typeof normalizedResult.data === 'string') {
-			const bytes = enforceAssetSize(asset, textEncoder.encode(normalizedResult.data));
+			const bytes = enforceAssetSize(
+				asset,
+				textEncoder.encode(normalizedResult.data),
+				byteLimit
+			);
 			reportProgress(bytes.byteLength, bytes.byteLength);
 			return { bytes, mimeType: normalizedResult.mimeType };
 		}
 		if (normalizedResult.data instanceof ArrayBuffer) {
-			const bytes = enforceAssetSize(asset, new Uint8Array(normalizedResult.data));
+			const bytes = enforceAssetSize(asset, new Uint8Array(normalizedResult.data), byteLimit);
 			reportProgress(bytes.byteLength, bytes.byteLength);
 			return { bytes, mimeType: normalizedResult.mimeType };
 		}
 		if (normalizedResult.data instanceof Uint8Array) {
-			enforceAssetSize(asset, normalizedResult.data);
+			enforceAssetSize(asset, normalizedResult.data, byteLimit);
 			reportProgress(normalizedResult.data.byteLength, normalizedResult.data.byteLength);
 			return { bytes: normalizedResult.data, mimeType: normalizedResult.mimeType };
 		}
-		if (normalizedResult.data.size > MAX_LANGUAGE_TOOL_ASSET_BYTES) {
-			throw new Error(
-				`Runtime asset ${asset} exceeds the ${MAX_LANGUAGE_TOOL_ASSET_BYTES} byte limit`
-			);
+		if (normalizedResult.data.size > byteLimit) {
+			throw new Error(`Runtime asset ${asset} exceeds the ${byteLimit} byte limit`);
 		}
 		let cancelOnAbort: (() => void) | undefined;
 		const aborted = new Promise<never>((_resolve, reject) => {
@@ -399,7 +435,8 @@ async function normalizeLoaderResult(
 			const materialized = normalizedResult.data.arrayBuffer();
 			const bytes = enforceAssetSize(
 				asset,
-				new Uint8Array(await Promise.race([materialized, aborted]))
+				new Uint8Array(await Promise.race([materialized, aborted])),
+				byteLimit
 			);
 			if (signal.aborted) {
 				throw signal.reason ?? new Error('Runtime asset load was aborted');
@@ -425,6 +462,9 @@ export async function loadLanguageToolAsset(
 ): Promise<LoadedLanguageToolAsset> {
 	if (runtime === 'clangd' && !(CLANGD_ASSETS as readonly string[]).includes(asset)) {
 		throw new Error(`Unexpected clangd runtime asset: ${asset}`);
+	}
+	if (runtime === 'd' && !(D_OUTER_ASSETS as readonly string[]).includes(asset)) {
+		throw new Error(`Unexpected D runtime asset: ${asset}`);
 	}
 	if (config.integrity && !Object.hasOwn(config.integrity, asset)) {
 		throw new Error(`Runtime asset ${asset} is missing integrity metadata`);
@@ -461,6 +501,7 @@ export async function loadLanguageToolAsset(
 					if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
 				}
 				loaded = await normalizeLoaderResult(
+					runtime,
 					loaderResult,
 					asset,
 					config,
@@ -468,9 +509,16 @@ export async function loadLanguageToolAsset(
 					signal
 				);
 			}
-			loaded ||= await fetchAsset(asset, asset, config, reportProgress, signal);
-			loaded = { ...loaded, bytes: enforceAssetSize(asset, loaded.bytes) };
-			return await verifyAssetIntegrity(asset, loaded, config);
+			loaded ||= await fetchAsset(runtime, asset, asset, config, reportProgress, signal);
+			loaded = {
+				...loaded,
+				bytes: enforceAssetSize(
+					asset,
+					loaded.bytes,
+					configuredAssetByteLimit(asset, config)
+				)
+			};
+			return await verifyAssetIntegrity(runtime, asset, loaded, config);
 		},
 		{
 			signal: options.signal,

@@ -1,6 +1,6 @@
 import { runtimeManifestUrl } from './asset-url.js';
 import { defaultFetch, fetchRuntimeAssetJson } from './runtime-asset.js';
-import type { RuntimeManifestV1 } from './types.js';
+import type { RuntimeAssetIntegrity, RuntimeManifestV1 } from './types.js';
 
 export const DEFAULT_MAX_RUNTIME_MANIFEST_BYTES = 4 * 1024 * 1024;
 
@@ -24,6 +24,36 @@ function expectCompression(value: unknown, label: string) {
 		throw new Error(`invalid ${label} in wasm-d runtime manifest`);
 	}
 	return value;
+}
+
+function expectPositiveSafeInteger(value: unknown, label: string) {
+	if (!Number.isSafeInteger(value) || Number(value) <= 0) {
+		throw new Error(`invalid ${label} in wasm-d runtime manifest`);
+	}
+	return Number(value);
+}
+
+function expectSha256(value: unknown, label: string) {
+	if (typeof value !== 'string' || !/^[0-9a-f]{64}$/u.test(value)) {
+		throw new Error(`invalid ${label} in wasm-d runtime manifest`);
+	}
+	return value;
+}
+
+function expectIntegrity(value: unknown, label: string): RuntimeAssetIntegrity {
+	const integrity = expectObject(value, label);
+	return Object.freeze({
+		bytes: expectPositiveSafeInteger(integrity.bytes, `${label}.bytes`),
+		sha256: expectSha256(integrity.sha256, `${label}.sha256`),
+		uncompressedBytes: expectPositiveSafeInteger(
+			integrity.uncompressedBytes,
+			`${label}.uncompressedBytes`
+		),
+		uncompressedSha256: expectSha256(
+			integrity.uncompressedSha256,
+			`${label}.uncompressedSha256`
+		)
+	});
 }
 
 export function parseRuntimeManifest(value: unknown): RuntimeManifestV1 {
@@ -54,7 +84,7 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifestV1 {
 			'invalid root.targets.wasm32-wasi.execution.kind in wasm-d runtime manifest'
 		);
 	}
-	return {
+	const parsed: RuntimeManifestV1 = {
 		manifestVersion: 1,
 		name: 'wasm-d',
 		version: expectString(root.version, 'root.version'),
@@ -63,14 +93,16 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifestV1 {
 			ldc2: {
 				asset: expectString(ldc2.asset, 'root.compiler.ldc2.asset'),
 				argv0: typeof ldc2.argv0 === 'string' ? ldc2.argv0 : 'ldc2',
-				compression: expectCompression(ldc2.compression, 'root.compiler.ldc2.compression')
+				compression: expectCompression(ldc2.compression, 'root.compiler.ldc2.compression'),
+				integrity: expectIntegrity(ldc2.integrity, 'root.compiler.ldc2.integrity')
 			},
 			toolchain: {
 				asset: expectString(toolchain.asset, 'root.compiler.toolchain.asset'),
 				compression: expectCompression(
 					toolchain.compression,
 					'root.compiler.toolchain.compression'
-				)
+				),
+				integrity: expectIntegrity(toolchain.integrity, 'root.compiler.toolchain.integrity')
 			},
 			linker: {
 				kind: 'emscripten-lld',
@@ -80,6 +112,10 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifestV1 {
 					compression: expectCompression(
 						linkerJs.compression,
 						'root.compiler.linker.js.compression'
+					),
+					integrity: expectIntegrity(
+						linkerJs.integrity,
+						'root.compiler.linker.js.integrity'
 					)
 				},
 				wasm: {
@@ -87,6 +123,10 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifestV1 {
 					compression: expectCompression(
 						linkerWasm.compression,
 						'root.compiler.linker.wasm.compression'
+					),
+					integrity: expectIntegrity(
+						linkerWasm.integrity,
+						'root.compiler.linker.wasm.integrity'
 					)
 				},
 				data: {
@@ -94,6 +134,10 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifestV1 {
 					compression: expectCompression(
 						linkerData.compression,
 						'root.compiler.linker.data.compression'
+					),
+					integrity: expectIntegrity(
+						linkerData.integrity,
+						'root.compiler.linker.data.integrity'
 					)
 				}
 			}
@@ -107,6 +151,17 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifestV1 {
 			}
 		}
 	};
+	Object.freeze(parsed.compiler.ldc2);
+	Object.freeze(parsed.compiler.toolchain);
+	Object.freeze(parsed.compiler.linker.js);
+	Object.freeze(parsed.compiler.linker.wasm);
+	Object.freeze(parsed.compiler.linker.data);
+	Object.freeze(parsed.compiler.linker);
+	Object.freeze(parsed.compiler);
+	Object.freeze(parsed.targets['wasm32-wasi'].execution);
+	Object.freeze(parsed.targets['wasm32-wasi']);
+	Object.freeze(parsed.targets);
+	return Object.freeze(parsed);
 }
 
 export async function loadRuntimeManifest(

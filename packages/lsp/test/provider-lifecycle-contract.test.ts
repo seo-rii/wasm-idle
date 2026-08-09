@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockState = vi.hoisted(() => {
 	const workers: FakeWorker[] = [];
@@ -93,9 +94,29 @@ vi.mock('../src/jsonrpc.js', () => ({
 }));
 
 import { editorLanguageServerProviders } from '../src/registry.js';
+import type { DOuterAssetReceipts } from '../src/d/assets.js';
 import type { EditorLanguageServerRuntimeOptions } from '../src/types.js';
 
 const applicationOrigin = 'https://app.example.com';
+const dAssetBytes = {
+	'index.js': new TextEncoder().encode('export const createDCompiler = () => undefined;'),
+	'runtime/runtime-manifest.v1.json': new TextEncoder().encode('{}')
+} as const;
+const createDReceipt = (bytes: Uint8Array) => {
+	const sha256 = createHash('sha256').update(bytes).digest('hex');
+	return {
+		bytes: bytes.byteLength,
+		sha256,
+		uncompressedBytes: bytes.byteLength,
+		uncompressedSha256: sha256
+	};
+};
+const dAssetIntegrity = {
+	'index.js': createDReceipt(dAssetBytes['index.js']),
+	'runtime/runtime-manifest.v1.json': createDReceipt(
+		dAssetBytes['runtime/runtime-manifest.v1.json']
+	)
+} satisfies DOuterAssetReceipts;
 const deploymentBases = [
 	{ label: 'root', rootUrl: '/', currentUrl: `${applicationOrigin}/` },
 	{
@@ -127,6 +148,9 @@ const createProviderOptions = (
 	},
 	gleam: {
 		manifestFingerprint: 'a'.repeat(64)
+	},
+	d: {
+		integrity: dAssetIntegrity
 	}
 });
 
@@ -164,6 +188,31 @@ describe('registered LSP provider lifecycle contract', () => {
 		mockState.readers.splice(0, mockState.readers.length);
 		mockState.writers.splice(0, mockState.writers.length);
 		mockState.behavior.respondToInit = true;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL | Request) => {
+				const requestUrl = new URL(
+					typeof input === 'string' || input instanceof URL ? input : input.url
+				);
+				const asset = requestUrl.pathname.endsWith('/runtime/runtime-manifest.v1.json')
+					? 'runtime/runtime-manifest.v1.json'
+					: requestUrl.pathname.endsWith('/index.js')
+						? 'index.js'
+						: undefined;
+				if (!asset)
+					throw new Error(`Unexpected lifecycle asset request: ${requestUrl.href}`);
+				const bytes = dAssetBytes[asset];
+				const response = new Response(bytes, {
+					headers: { 'content-length': String(bytes.byteLength) }
+				});
+				Object.defineProperty(response, 'url', { value: requestUrl.href });
+				return response;
+			})
+		);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
 	});
 
 	it.each(editorLanguageServerProviders)(

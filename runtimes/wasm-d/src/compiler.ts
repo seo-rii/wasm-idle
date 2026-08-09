@@ -2,7 +2,7 @@ import { Directory } from '@bjorn3/browser_wasi_shim';
 import { resolveRuntimeBaseUrl, resolveVersionedAssetUrl } from './asset-url.js';
 import { runEmscriptenLld, type EmscriptenLldAssets } from './emscripten-lld.js';
 import { defaultFetch, fetchRuntimeAssetBytes } from './runtime-asset.js';
-import { loadRuntimeManifest } from './runtime-manifest.js';
+import { loadRuntimeManifest, parseRuntimeManifest } from './runtime-manifest.js';
 import { parseTar } from './tar.js';
 import {
 	ensureGuestDirectory,
@@ -16,6 +16,7 @@ import type {
 	BrowserDCompileRequest,
 	BrowserDCompilerResult,
 	CompilerDiagnosticSeverity,
+	RuntimeAssetIntegrityVerifier,
 	RuntimeManifestV1
 } from './types.js';
 
@@ -24,6 +25,7 @@ export interface CreateDCompilerOptions {
 	clangRuntimeBaseUrl?: string | URL;
 	manifest?: RuntimeManifestV1;
 	fetchImpl?: typeof fetch;
+	verifyRuntimeAssetIntegrity?: RuntimeAssetIntegrityVerifier;
 	log?: boolean;
 }
 
@@ -103,7 +105,7 @@ function resultFromFailure(message: string, stdout = '', stderr = message): Brow
 
 async function resolveManifest(options: CreateDCompilerOptions, request: BrowserDCompileRequest) {
 	const fetchImpl = options.fetchImpl || defaultFetch;
-	if (options.manifest) return options.manifest;
+	if (options.manifest) return parseRuntimeManifest(options.manifest);
 	emitProgress(request, 'manifest', 0, 'loading D runtime manifest');
 	return await loadRuntimeManifest(
 		options.runtimeBaseUrl,
@@ -135,50 +137,72 @@ async function loadRuntimeAssets(
 		emitProgress(request, 'assets', lastAssetsPercent, 'loading D compiler assets');
 	};
 	const linker = manifest.compiler.linker;
-	const [ldc2Bytes, toolchainTarBytes, linkerWasmBytes, linkerDataBytes] = await Promise.all([
-		fetchRuntimeAssetBytes(
-			resolveVersionedAssetUrl(runtimeBaseUrl, manifest.compiler.ldc2.asset),
-			'ldc2.wasm',
-			fetchImpl,
-			report,
-			manifest.compiler.ldc2.compression,
-			undefined,
-			request.signal
-		),
-		fetchRuntimeAssetBytes(
-			resolveVersionedAssetUrl(runtimeBaseUrl, manifest.compiler.toolchain.asset),
-			'D toolchain',
-			fetchImpl,
-			report,
-			manifest.compiler.toolchain.compression,
-			undefined,
-			request.signal
-		),
-		fetchRuntimeAssetBytes(
-			resolveVersionedAssetUrl(runtimeBaseUrl, linker.wasm.asset),
-			'wasm-ld.wasm',
-			fetchImpl,
-			report,
-			linker.wasm.compression,
-			undefined,
-			request.signal
-		),
-		fetchRuntimeAssetBytes(
-			resolveVersionedAssetUrl(runtimeBaseUrl, linker.data.asset),
-			'wasm-ld.data',
-			fetchImpl,
-			report,
-			linker.data.compression,
-			undefined,
-			request.signal
-		)
-	]);
+	const verifyIntegrity = options.verifyRuntimeAssetIntegrity;
+	const [ldc2Bytes, toolchainTarBytes, linkerJsBytes, linkerWasmBytes, linkerDataBytes] =
+		await Promise.all([
+			fetchRuntimeAssetBytes(
+				resolveVersionedAssetUrl(runtimeBaseUrl, manifest.compiler.ldc2.asset),
+				'ldc2.wasm',
+				fetchImpl,
+				report,
+				manifest.compiler.ldc2.compression,
+				undefined,
+				request.signal,
+				manifest.compiler.ldc2.integrity,
+				verifyIntegrity
+			),
+			fetchRuntimeAssetBytes(
+				resolveVersionedAssetUrl(runtimeBaseUrl, manifest.compiler.toolchain.asset),
+				'D toolchain',
+				fetchImpl,
+				report,
+				manifest.compiler.toolchain.compression,
+				undefined,
+				request.signal,
+				manifest.compiler.toolchain.integrity,
+				verifyIntegrity
+			),
+			fetchRuntimeAssetBytes(
+				resolveVersionedAssetUrl(runtimeBaseUrl, linker.js.asset),
+				'wasm-ld.js',
+				fetchImpl,
+				report,
+				linker.js.compression,
+				undefined,
+				request.signal,
+				linker.js.integrity,
+				verifyIntegrity
+			),
+			fetchRuntimeAssetBytes(
+				resolveVersionedAssetUrl(runtimeBaseUrl, linker.wasm.asset),
+				'wasm-ld.wasm',
+				fetchImpl,
+				report,
+				linker.wasm.compression,
+				undefined,
+				request.signal,
+				linker.wasm.integrity,
+				verifyIntegrity
+			),
+			fetchRuntimeAssetBytes(
+				resolveVersionedAssetUrl(runtimeBaseUrl, linker.data.asset),
+				'wasm-ld.data',
+				fetchImpl,
+				report,
+				linker.data.compression,
+				undefined,
+				request.signal,
+				linker.data.integrity,
+				verifyIntegrity
+			)
+		]);
 	emitProgress(request, 'assets', 25, 'D compiler assets loaded');
 	return {
 		ldc2Bytes,
 		toolchainEntries: parseTar(toolchainTarBytes),
 		linkerAssets: {
 			jsUrl: resolveVersionedAssetUrl(runtimeBaseUrl, linker.js.asset),
+			jsBytes: linkerJsBytes,
 			wasmBytes: linkerWasmBytes,
 			dataBytes: linkerDataBytes
 		} satisfies EmscriptenLldAssets

@@ -66,6 +66,7 @@ vi.mock('$env/dynamic/public', () => ({
 }));
 
 import D from './d';
+import { WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 
 describe('D sandbox', () => {
 	beforeEach(() => {
@@ -108,7 +109,11 @@ void main() {
 			1,
 			expect.objectContaining({
 				load: true,
-				moduleUrl: expect.stringMatching(/\/wasm-d\/index\.js$/)
+				moduleUrl: expect.stringMatching(/\/wasm-d\/index\.js$/),
+				manifestUrl: expect.stringMatching(
+					/\/wasm-d\/runtime\/runtime-manifest\.v1\.json$/
+				),
+				outerIntegrity: WASM_D_OUTER_ASSET_RECEIPTS
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
@@ -142,6 +147,40 @@ void main() {
 			}
 		]);
 		expect(values).toEqual([0.25]);
+	});
+
+	it('replaces the D worker when an outer asset receipt changes', async () => {
+		const sandbox = new D();
+		const moduleUrl = 'https://runtime.example/wasm-d/index.js?v=one';
+		const manifestUrl = 'https://runtime.example/wasm-d/runtime/runtime-manifest.v1.json?v=one';
+		await sandbox.load({
+			d: {
+				moduleUrl,
+				manifestUrl,
+				integrity: WASM_D_OUTER_ASSET_RECEIPTS
+			}
+		});
+		const firstWorker = workerInstances[0];
+		const firstAssetsKey = sandbox.activeDAssetsKey;
+		const changedIntegrity = {
+			'index.js': {
+				...WASM_D_OUTER_ASSET_RECEIPTS['index.js'],
+				sha256: 'a'.repeat(64),
+				uncompressedSha256: 'a'.repeat(64)
+			},
+			'runtime/runtime-manifest.v1.json': {
+				...WASM_D_OUTER_ASSET_RECEIPTS['runtime/runtime-manifest.v1.json']
+			}
+		};
+
+		await sandbox.load({ d: { moduleUrl, manifestUrl, integrity: changedIntegrity } });
+
+		expect(sandbox.activeDAssetsKey).not.toBe(firstAssetsKey);
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ outerIntegrity: changedIntegrity })
+		);
 	});
 
 	it('terminates D output before exceeding the cumulative UTF-8 byte limit', async () => {
@@ -716,7 +755,7 @@ void main() {
 		publicEnv.PUBLIC_WASM_D_MODULE_URL = '';
 		const sandbox = new D();
 
-		await expect(sandbox.load({})).rejects.toContain('D runtime is not configured');
+		await expect(sandbox.load({})).rejects.toThrow('D runtime is not configured');
 	});
 
 	it('rejects load when the D worker script fails before posting load', async () => {

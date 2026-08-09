@@ -225,6 +225,8 @@
 	);
 	const dLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'd');
 	const dLspModuleUrl = $derived(dLspEnabled ? runtimeAssets.d?.moduleUrl : undefined);
+	const dLspManifestUrl = $derived(dLspEnabled ? runtimeAssets.d?.manifestUrl : undefined);
+	const dLspIntegrity = $derived(dLspEnabled ? runtimeAssets.d?.integrity : undefined);
 	const tclLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'tcl');
 	const tclLspBaseUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.baseUrl : undefined);
 	const tclLspWorkerUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.workerUrl : undefined);
@@ -2870,6 +2872,8 @@
 				{gleamLspManifestFingerprint}
 				{dLspEnabled}
 				{dLspModuleUrl}
+				{dLspManifestUrl}
+				{dLspIntegrity}
 				{tclLspEnabled}
 				{tclLspBaseUrl}
 				{tclLspWorkerUrl}

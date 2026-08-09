@@ -24,6 +24,111 @@ describe('language tool asset loading', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	it('rejects assets outside the D bootstrap allowlist before fetching', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			loadLanguageToolAsset(
+				'd',
+				'../../private',
+				{ baseUrl: 'https://assets.example.com/wasm-d/' },
+				vi.fn()
+			)
+		).rejects.toThrow('Unexpected D runtime asset: ../../private');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('enforces exact no-store response URLs for D bootstrap assets', async () => {
+		const cancel = vi.fn(async () => {});
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			status: 200,
+			url: 'https://assets.example.com/wasm-d/index.js?v=substituted',
+			headers: new Headers(),
+			body: { cancel }
+		});
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			loadLanguageToolAsset(
+				'd',
+				'index.js',
+				{
+					baseUrl: 'https://assets.example.com/wasm-d/',
+					cache: 'no-store',
+					redirect: 'error',
+					requireExactResponseUrl: true
+				},
+				vi.fn()
+			)
+		).rejects.toThrow('Runtime asset index.js returned an unexpected final URL');
+		expect(fetchMock).toHaveBeenCalledWith(
+			'https://assets.example.com/wasm-d/index.js',
+			expect.objectContaining({
+				cache: 'no-store',
+				credentials: 'omit',
+				redirect: 'error'
+			})
+		);
+		expect(cancel).toHaveBeenCalledOnce();
+	});
+
+	it('does not treat an empty D receipt as integrity opt-out', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				url: 'https://assets.example.com/wasm-d/index.js',
+				headers: new Headers({ 'Content-Length': '1' }),
+				body: null,
+				arrayBuffer: vi.fn().mockResolvedValue(Uint8Array.of(1).buffer)
+			})
+		);
+
+		await expect(
+			loadLanguageToolAsset(
+				'd',
+				'index.js',
+				{
+					baseUrl: 'https://assets.example.com/wasm-d/',
+					integrity: { 'index.js': '' }
+				},
+				vi.fn()
+			)
+		).rejects.toMatchObject({
+			name: 'AssetIntegrityError',
+			runtimeId: 'd'
+		});
+	});
+
+	it('attributes malformed D response lengths to the D runtime', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				url: 'https://assets.example.com/wasm-d/index.js',
+				headers: new Headers({ 'Content-Length': '1e2' }),
+				body: { cancel: vi.fn(async () => {}) }
+			})
+		);
+
+		await expect(
+			loadLanguageToolAsset(
+				'd',
+				'index.js',
+				{ baseUrl: 'https://assets.example.com/wasm-d/' },
+				vi.fn()
+			)
+		).rejects.toMatchObject({
+			name: 'ProtocolError',
+			phase: 'asset',
+			runtimeId: 'd'
+		});
+	});
+
 	it.each([
 		[
 			'credentials',

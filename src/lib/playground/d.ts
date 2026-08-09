@@ -1,6 +1,11 @@
-import { resolveDModuleUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import {
+	resolveDRuntimeAssetConfig,
+	type PlaygroundRuntimeAssets,
+	type ResolvedDRuntimeAssetConfig
+} from '$lib/playground/assets';
 import {
 	BusyError,
+	createRuntimeAssetsKey,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
@@ -53,6 +58,9 @@ class D implements Sandbox {
 	uid = 0;
 	exit = true;
 	moduleUrl = '';
+	manifestUrl = '';
+	outerIntegrity?: ResolvedDRuntimeAssetConfig['integrity'];
+	activeDAssetsKey = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -286,15 +294,15 @@ class D implements Sandbox {
 				this.waitingForInput = false;
 				this.pendingEof = false;
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-				const nextModuleUrl = resolveDModuleUrl(runtimeAssets, currentUrl);
+				const nextAssets = resolveDRuntimeAssetConfig(runtimeAssets, currentUrl);
 				if (!this.isOperationActive(activeOperation)) return;
-				if (!nextModuleUrl) {
-					return rejectLoad(
-						'D runtime is not configured. Set PUBLIC_WASM_D_MODULE_URL or runtimeAssets.d.moduleUrl.'
-					);
-				}
-				const needsWorkerReset = !this.worker || this.moduleUrl !== nextModuleUrl;
-				this.moduleUrl = nextModuleUrl;
+				const nextAssetsKey = createRuntimeAssetsKey({ d: nextAssets });
+				if (!nextAssetsKey) throw new TypeError('D runtime asset key could not be created');
+				const needsWorkerReset = !this.worker || this.activeDAssetsKey !== nextAssetsKey;
+				this.moduleUrl = nextAssets.moduleUrl;
+				this.manifestUrl = nextAssets.manifestUrl;
+				this.outerIntegrity = nextAssets.integrity;
+				this.activeDAssetsKey = nextAssetsKey;
 				if (needsWorkerReset && this.worker) {
 					this.workerSession.reset();
 				}
@@ -338,6 +346,8 @@ class D implements Sandbox {
 					worker.postMessage({
 						load: true,
 						moduleUrl: this.moduleUrl,
+						manifestUrl: this.manifestUrl,
+						outerIntegrity: this.outerIntegrity,
 						log: _log
 					});
 				} else {

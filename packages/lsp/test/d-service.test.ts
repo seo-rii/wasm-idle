@@ -1,6 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createDWorkerService, type LspDocument, type LspDocumentContext } from '../src/index.js';
+
+afterEach(() => {
+	vi.restoreAllMocks();
+	delete (globalThis as typeof globalThis & { __dLspFactoryOptions?: unknown })
+		.__dLspFactoryOptions;
+});
 
 describe('createDWorkerService', () => {
 	it('uses the wasm-d compiler API for diagnostics, completion, hover, and symbols', async () => {
@@ -36,6 +43,23 @@ describe('createDWorkerService', () => {
 		await service.initialize?.(
 			{
 				moduleUrl: 'https://static.example.com/wasm-d/index.js',
+				manifestUrl: 'https://static.example.com/wasm-d/runtime/runtime-manifest.v1.json',
+				integrity: {
+					'index.js': {
+						bytes: 1,
+						sha256: 'a'.repeat(64),
+						uncompressedBytes: 1,
+						uncompressedSha256: 'a'.repeat(64)
+					},
+					'runtime/runtime-manifest.v1.json': {
+						bytes: 1,
+						sha256: 'b'.repeat(64),
+						uncompressedBytes: 1,
+						uncompressedSha256: 'b'.repeat(64)
+					}
+				},
+				moduleBytes: Uint8Array.of(1),
+				manifestBytes: Uint8Array.of(2),
 				compileArgs: ['-preview=dip1000']
 			},
 			context
@@ -81,5 +105,107 @@ describe('createDWorkerService', () => {
 		expect(context.reportProgress).toHaveBeenCalledWith('load-d-compiler');
 		expect(context.reportProgress).toHaveBeenCalledWith('d-diagnostics');
 		expect(context.reportProgress).toHaveBeenCalledWith('compile', 30, 100);
+	});
+
+	it('copies and verifies bootstrap bytes before importing the default compiler host', async () => {
+		const moduleSource = `
+export const parseRuntimeManifest = (manifest) => Object.freeze(manifest);
+export const createDCompiler = async (options) => {
+  globalThis.__dLspFactoryOptions = options;
+  return { compile: async () => ({ success: true, diagnostics: [] }) };
+};`;
+		const moduleBytes = new TextEncoder().encode(moduleSource);
+		const manifestBytes = new TextEncoder().encode('{"manifestVersion":1}');
+		const receipt = (bytes: Uint8Array) => ({
+			bytes: bytes.byteLength,
+			sha256: createHash('sha256').update(bytes).digest('hex'),
+			uncompressedBytes: bytes.byteLength,
+			uncompressedSha256: createHash('sha256').update(bytes).digest('hex')
+		});
+		const originalDigest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle);
+		let releaseDigest!: () => void;
+		const digestGate = new Promise<void>((resolve) => {
+			releaseDigest = resolve;
+		});
+		let markDigestStarted!: () => void;
+		const digestStarted = new Promise<void>((resolve) => {
+			markDigestStarted = resolve;
+		});
+		vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation(async (algorithm, data) => {
+			markDigestStarted();
+			await digestGate;
+			return await originalDigest(algorithm, data);
+		});
+		vi.spyOn(URL, 'createObjectURL').mockReturnValue(
+			`data:text/javascript;charset=utf-8,${encodeURIComponent(moduleSource)}`
+		);
+		const revokeObjectUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+		const service = createDWorkerService();
+		const context: LspDocumentContext = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		const initializing = service.initialize?.(
+			{
+				moduleUrl: 'https://static.example.com/wasm-d/index.js?v=pinned',
+				manifestUrl:
+					'https://static.example.com/wasm-d/runtime/runtime-manifest.v1.json?v=pinned',
+				integrity: {
+					'index.js': receipt(moduleBytes),
+					'runtime/runtime-manifest.v1.json': receipt(manifestBytes)
+				},
+				moduleBytes,
+				manifestBytes
+			},
+			context
+		);
+
+		await digestStarted;
+		moduleBytes.fill(0);
+		manifestBytes.fill(0);
+		releaseDigest();
+		await expect(initializing).resolves.toBeUndefined();
+
+		expect(revokeObjectUrl).toHaveBeenCalledOnce();
+		expect(
+			(globalThis as typeof globalThis & { __dLspFactoryOptions?: any }).__dLspFactoryOptions
+		).toMatchObject({
+			runtimeBaseUrl: 'https://static.example.com/wasm-d/runtime/?v=pinned',
+			manifest: { manifestVersion: 1 },
+			verifyRuntimeAssetIntegrity: expect.any(Function)
+		});
+	});
+
+	it('rejects malformed bootstrap receipts before invoking an injected compiler loader', async () => {
+		const load = vi.fn();
+		const service = createDWorkerService(load);
+		const context: LspDocumentContext = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+
+		await expect(
+			service.initialize?.(
+				{
+					moduleUrl: 'https://static.example.com/wasm-d/index.js',
+					manifestUrl:
+						'https://static.example.com/wasm-d/runtime/runtime-manifest.v1.json',
+					integrity: {
+						'index.js': {
+							bytes: 1,
+							sha256: 'A'.repeat(64),
+							uncompressedBytes: 1,
+							uncompressedSha256: 'A'.repeat(64)
+						}
+					} as never,
+					moduleBytes: Uint8Array.of(1),
+					manifestBytes: Uint8Array.of(2)
+				},
+				context
+			)
+		).rejects.toThrow('D language server requires exactly two outer asset receipts');
+		expect(load).not.toHaveBeenCalled();
 	});
 });

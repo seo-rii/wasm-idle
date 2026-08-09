@@ -43,7 +43,11 @@ export interface RuntimeAssetKeySource {
 	go?: { compilerUrl?: string; manifestUrl?: string };
 	assemblyscript?: { moduleUrl?: string };
 	duckdb?: { moduleUrl?: string };
-	d?: { moduleUrl?: string };
+	d?: {
+		moduleUrl?: string;
+		manifestUrl?: string;
+		integrity?: RuntimeAssetIntegrityMap;
+	};
 	dotnet?: { moduleUrl?: string };
 	elixir?: { bundleUrl?: string };
 	erlang?: { bundleUrl?: string };
@@ -391,6 +395,13 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'assemblyscript', property: 'moduleUrl', key: 'assemblyScriptModuleUrl' },
 	{ runtime: 'duckdb', property: 'moduleUrl', key: 'duckDbModuleUrl' },
 	{ runtime: 'd', property: 'moduleUrl', key: 'dModuleUrl' },
+	{ runtime: 'd', property: 'manifestUrl', key: 'dManifestUrl' },
+	{
+		runtime: 'd',
+		property: 'integrity',
+		key: 'dIntegrity',
+		serialize: serializeIntegrity
+	},
 	{ runtime: 'dotnet', property: 'moduleUrl', key: 'dotnetModuleUrl' },
 	{ runtime: 'elixir', property: 'bundleUrl', key: 'elixirBundleUrl' },
 	{ runtime: 'erlang', property: 'bundleUrl', key: 'erlangBundleUrl' },

@@ -1,6 +1,7 @@
 import type { MessageReader, MessageWriter } from 'vscode-jsonrpc';
 import type { CompilerOptions } from 'typescript';
 import type { LanguageToolAssetConfig } from './assets.js';
+import type { DOuterAssetReceipts } from './d/assets.js';
 import type { DocumentLanguageId } from './document/service.js';
 
 export interface DuckDBBundleConfig {
@@ -48,6 +49,8 @@ export interface EditorLanguageServerRuntimeOptions {
 	};
 	d?: {
 		moduleUrl?: string;
+		manifestUrl?: string;
+		integrity?: DOuterAssetReceipts;
 		compileArgs?: string[];
 	};
 	typescript?: {

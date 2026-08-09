@@ -1,11 +1,13 @@
 import { env as dynamicPublicEnv } from '$env/dynamic/public';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from '$lib/playground/clangAssetIntegrity';
+import { snapshotDOuterAssetConfig, type DOuterAssetReceipts } from '$lib/playground/dOuterAssets';
 import { normalizeTeaVmBaseUrl, resolveTeaVmBaseUrl } from '$lib/playground/teavmConfig';
 import {
 	WASM_GLEAM_ASSET_VERSION,
 	WASM_GLEAM_RUNNER_RECEIPT
 } from '$lib/playground/wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
+import { WASM_D_OUTER_ASSET_RECEIPTS } from '$lib/playground/wasmDIntegrity';
 import type { RuntimeAssetIntegrityEntry as CoreRuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 import type {
 	ObjectiveCAssetIntegrityMap,
@@ -78,6 +80,8 @@ export interface GoRuntimeAssetConfig {
 
 export interface DRuntimeAssetConfig {
 	moduleUrl?: string;
+	manifestUrl?: string;
+	integrity?: DOuterAssetReceipts;
 }
 
 export interface DotnetRuntimeAssetConfig {
@@ -361,6 +365,12 @@ export interface ResolvedFortranRuntimeAssetConfig {
 	libf2cUrl: string;
 	f2cHeaderUrl: string;
 	analyzerUrl: string;
+}
+
+export interface ResolvedDRuntimeAssetConfig {
+	moduleUrl: string;
+	manifestUrl: string;
+	integrity: DOuterAssetReceipts;
 }
 
 export interface ResolvedObjectiveCRuntimeAssetConfig {
@@ -662,6 +672,36 @@ export function resolveDModuleUrl(
 	}
 
 	return '';
+}
+
+export function resolveDRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+): ResolvedDRuntimeAssetConfig {
+	const moduleUrl = resolveDModuleUrl(options, currentUrl);
+	if (!moduleUrl) {
+		throw new TypeError(
+			'D runtime is not configured. Set PUBLIC_WASM_D_MODULE_URL or runtimeAssets.d.moduleUrl.'
+		);
+	}
+	const configuredManifestUrl =
+		(typeof options === 'object' && options?.d?.manifestUrl) ||
+		(publicEnv.PUBLIC_WASM_D_MANIFEST_URL || '').trim();
+	let manifestUrl: string;
+	if (configuredManifestUrl) {
+		manifestUrl = resolveConfiguredUrl(configuredManifestUrl, currentUrl);
+	} else {
+		const module = new URL(moduleUrl);
+		const manifest = new URL('runtime/runtime-manifest.v1.json', module);
+		manifest.search = module.search;
+		manifestUrl = manifest.href;
+	}
+	return snapshotDOuterAssetConfig({
+		moduleUrl,
+		manifestUrl,
+		integrity:
+			(typeof options === 'object' && options?.d?.integrity) || WASM_D_OUTER_ASSET_RECEIPTS
+	});
 }
 
 export function resolveDotnetModuleUrl(

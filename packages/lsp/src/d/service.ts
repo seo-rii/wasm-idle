@@ -7,9 +7,17 @@ import {
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
+import { verifyRuntimeAssetIntegrity, verifyRuntimeAssetPair } from '@wasm-idle/core';
+import { D_OUTER_ASSETS, snapshotDOuterAssetReceipts, type DOuterAssetReceipts } from './assets.js';
+
+const [D_MODULE_ASSET, D_MANIFEST_ASSET] = D_OUTER_ASSETS;
 
 export interface DWorkerOptions {
 	moduleUrl: string;
+	manifestUrl: string;
+	integrity: DOuterAssetReceipts;
+	moduleBytes: Uint8Array;
+	manifestBytes: Uint8Array;
 	compileArgs?: string[];
 }
 
@@ -177,7 +185,45 @@ const wordAt = (text: string, position: LspPosition) => {
 };
 
 async function defaultLoadDCompilerHost(options: DWorkerOptions): Promise<DCompilerHost> {
-	const module = await import(/* @vite-ignore */ options.moduleUrl);
+	const moduleBytes = Uint8Array.from(options.moduleBytes);
+	const manifestBytes = Uint8Array.from(options.manifestBytes);
+	const integrity = snapshotDOuterAssetReceipts(options.integrity);
+	await Promise.all([
+		verifyRuntimeAssetPair({
+			asset: D_MODULE_ASSET,
+			compressed: moduleBytes,
+			uncompressed: moduleBytes,
+			expected: integrity[D_MODULE_ASSET],
+			runtimeId: 'D'
+		}),
+		verifyRuntimeAssetPair({
+			asset: D_MANIFEST_ASSET,
+			compressed: manifestBytes,
+			uncompressed: manifestBytes,
+			expected: integrity[D_MANIFEST_ASSET],
+			runtimeId: 'D'
+		})
+	]);
+	if (
+		typeof URL.createObjectURL !== 'function' ||
+		typeof URL.revokeObjectURL !== 'function' ||
+		typeof Blob !== 'function'
+	) {
+		throw new Error('D language server requires Blob module URL support');
+	}
+	const moduleUrl = URL.createObjectURL(
+		new Blob([moduleBytes.buffer], { type: 'text/javascript' })
+	);
+	let module: any;
+	try {
+		module = await import(/* @vite-ignore */ moduleUrl);
+	} finally {
+		try {
+			URL.revokeObjectURL(moduleUrl);
+		} catch {
+			// Cleanup must not replace module import success or failure.
+		}
+	}
 	const factory =
 		typeof module.createDCompiler === 'function'
 			? module.createDCompiler
@@ -187,8 +233,19 @@ async function defaultLoadDCompilerHost(options: DWorkerOptions): Promise<DCompi
 	if (!factory) {
 		throw new Error('wasm-d module must export createDCompiler or a default factory');
 	}
-	const runtimeBaseUrl = new URL('runtime/', options.moduleUrl).href;
-	return await factory({ runtimeBaseUrl });
+	if (typeof module.parseRuntimeManifest !== 'function') {
+		throw new Error('wasm-d module must export parseRuntimeManifest');
+	}
+	const manifestSource = new TextDecoder('utf-8', { fatal: true }).decode(manifestBytes);
+	const manifest = module.parseRuntimeManifest(JSON.parse(manifestSource));
+	const manifestUrl = new URL(options.manifestUrl);
+	const runtimeBaseUrl = new URL('./', manifestUrl);
+	runtimeBaseUrl.search = manifestUrl.search;
+	return await factory({
+		runtimeBaseUrl: runtimeBaseUrl.href,
+		manifest,
+		verifyRuntimeAssetIntegrity
+	});
 }
 
 const activePathFor = (document: LspDocument) =>
@@ -212,13 +269,34 @@ export function createDWorkerService(
 		},
 		async initialize(options, context) {
 			const nextConfig = (options || {}) as DWorkerOptions;
-			if (!nextConfig.moduleUrl) {
-				throw new Error('D language server requires a wasm-d moduleUrl');
+			if (
+				!nextConfig.moduleUrl ||
+				!nextConfig.manifestUrl ||
+				!(nextConfig.moduleBytes instanceof Uint8Array) ||
+				!(nextConfig.manifestBytes instanceof Uint8Array)
+			) {
+				throw new Error('D language server requires verified wasm-d outer assets');
 			}
-			config = {
-				moduleUrl: nextConfig.moduleUrl,
-				compileArgs: nextConfig.compileArgs || []
-			};
+			const urls = [nextConfig.moduleUrl, nextConfig.manifestUrl].map((value) => {
+				const url = new URL(value);
+				if (
+					!['http:', 'https:'].includes(url.protocol) ||
+					url.username ||
+					url.password ||
+					url.hash
+				) {
+					throw new TypeError('D language server outer asset URL is unsafe');
+				}
+				return url.href;
+			});
+			config = Object.freeze({
+				moduleUrl: urls[0],
+				manifestUrl: urls[1],
+				integrity: snapshotDOuterAssetReceipts(nextConfig.integrity),
+				moduleBytes: Uint8Array.from(nextConfig.moduleBytes),
+				manifestBytes: Uint8Array.from(nextConfig.manifestBytes),
+				compileArgs: [...(nextConfig.compileArgs || [])]
+			});
 			context.reportProgress('load-d-compiler');
 			compiler = await loadDCompilerHost(config, context);
 		},
@@ -226,7 +304,7 @@ export function createDWorkerService(
 			if (!compiler || !config || !document.text.trim()) return [];
 			const activePath = activePathFor(document);
 			const compileArgs = config.compileArgs || [];
-			const key = `${config.moduleUrl}\n${activePath}\n${compileArgs.join('\0')}\n${document.text}`;
+			const key = `${config.moduleUrl}\n${config.manifestUrl}\n${config.integrity[D_MODULE_ASSET].sha256}\n${config.integrity[D_MANIFEST_ASSET].sha256}\n${activePath}\n${compileArgs.join('\0')}\n${document.text}`;
 			if (key === lastKey) return lastDiagnostics;
 			context.reportProgress('d-diagnostics');
 			const result = await compiler.compile({

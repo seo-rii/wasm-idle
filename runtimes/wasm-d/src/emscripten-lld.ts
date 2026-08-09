@@ -1,5 +1,6 @@
 export interface EmscriptenLldAssets {
 	jsUrl: string | URL;
+	jsBytes: Uint8Array;
 	wasmBytes: Uint8Array;
 	dataBytes: Uint8Array;
 }
@@ -45,13 +46,41 @@ function createObjectUrl(bytes: ArrayBuffer, type: string) {
 	return URL.createObjectURL(new Blob([bytes], { type }));
 }
 
-async function importLldFactory(jsUrl: string | URL) {
-	const module = await import(/* @vite-ignore */ jsUrl.toString());
-	const factory = module.default || module;
-	if (typeof factory !== 'function') {
-		throw new Error('wasm-d linker asset must export an Emscripten module factory');
+async function importLldFactory(jsBytes: Uint8Array, jsUrl: string | URL) {
+	const runtimeGlobal = globalThis as typeof globalThis & {
+		process?: { versions?: { node?: string } };
+	};
+	if (runtimeGlobal.process?.versions?.node) {
+		const source = new TextDecoder('utf-8', { fatal: true })
+			.decode(jsBytes)
+			.replaceAll('import.meta.url', JSON.stringify(new URL(jsUrl.toString()).href));
+		const module = await import(
+			/* @vite-ignore */ `data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`
+		);
+		const factory = module.default || module;
+		if (typeof factory !== 'function') {
+			throw new Error('wasm-d linker asset must export an Emscripten module factory');
+		}
+		return factory as EmscriptenLldFactory;
 	}
-	return factory as EmscriptenLldFactory;
+	const jsObjectUrl = createObjectUrl(toArrayBuffer(jsBytes), 'text/javascript');
+	if (!jsObjectUrl) {
+		throw new Error('wasm-d linker asset requires Blob module URL support');
+	}
+	try {
+		const module = await import(/* @vite-ignore */ jsObjectUrl);
+		const factory = module.default || module;
+		if (typeof factory !== 'function') {
+			throw new Error('wasm-d linker asset must export an Emscripten module factory');
+		}
+		return factory as EmscriptenLldFactory;
+	} finally {
+		try {
+			URL.revokeObjectURL(jsObjectUrl);
+		} catch {
+			// Blob cleanup must not replace module import success or failure.
+		}
+	}
 }
 
 function ensureEmscriptenDirectory(fs: EmscriptenFs, directoryPath: string) {
@@ -85,7 +114,7 @@ export async function runEmscriptenLld(
 ): Promise<EmscriptenLldRunResult> {
 	const stdout: string[] = [];
 	const stderr: string[] = [];
-	const factory = await importLldFactory(assets.jsUrl);
+	const factory = await importLldFactory(assets.jsBytes, assets.jsUrl);
 	const wasmBinary = toArrayBuffer(assets.wasmBytes);
 	const dataBytes = toArrayBuffer(assets.dataBytes);
 	const wasmObjectUrl = createObjectUrl(wasmBinary, 'application/wasm');
@@ -148,7 +177,19 @@ export async function runEmscriptenLld(
 			output
 		};
 	} finally {
-		if (wasmObjectUrl) URL.revokeObjectURL(wasmObjectUrl);
-		if (dataObjectUrl) URL.revokeObjectURL(dataObjectUrl);
+		if (wasmObjectUrl) {
+			try {
+				URL.revokeObjectURL(wasmObjectUrl);
+			} catch {
+				// Cleanup must not replace the linker result.
+			}
+		}
+		if (dataObjectUrl) {
+			try {
+				URL.revokeObjectURL(dataObjectUrl);
+			} catch {
+				// Cleanup must not replace the linker result.
+			}
+		}
 	}
 }

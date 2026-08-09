@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockState = vi.hoisted(() => {
 	const workers: FakeWorker[] = [];
@@ -94,6 +95,10 @@ describe('additional language server workers', () => {
 		mockState.workers.splice(0, mockState.workers.length);
 	});
 
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
 	it('starts Zig with compiler and stdlib URLs', async () => {
 		const handle = await getZigLanguageServer({
 			rootUrl: 'https://static.example.com/repl_20240807',
@@ -168,10 +173,30 @@ describe('additional language server workers', () => {
 	});
 
 	it('starts D with the wasm-d module URL', async () => {
+		const moduleBytes = new TextEncoder().encode('export const d = true;');
+		const manifestBytes = new TextEncoder().encode('{"manifestVersion":1}');
+		const receipt = (bytes: Uint8Array) => ({
+			bytes: bytes.byteLength,
+			sha256: createHash('sha256').update(bytes).digest('hex'),
+			uncompressedBytes: bytes.byteLength,
+			uncompressedSha256: createHash('sha256').update(bytes).digest('hex')
+		});
+		const integrity = {
+			'index.js': receipt(moduleBytes),
+			'runtime/runtime-manifest.v1.json': receipt(manifestBytes)
+		};
+		const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+			const url = input.toString();
+			const bytes = url.includes('runtime-manifest') ? manifestBytes : moduleBytes;
+			return new Response(bytes, {
+				headers: { 'Content-Length': String(bytes.byteLength) }
+			});
+		});
+		vi.stubGlobal('fetch', fetchMock);
 		const handle = await getDLanguageServer({
 			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
-			d: { compileArgs: ['-preview=dip1000'] },
+			d: { compileArgs: ['-preview=dip1000'], integrity },
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
 
@@ -179,11 +204,74 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-d/index.js',
+				manifestUrl:
+					'https://static.example.com/repl_20240807/wasm-d/runtime/runtime-manifest.v1.json',
+				integrity,
+				moduleBytes,
+				manifestBytes,
 				compileArgs: ['-preview=dip1000']
 			}
 		});
+		const workerIntegrity = mockState.workers[0]?.messages[0]?.options?.integrity;
+		expect(workerIntegrity).not.toBe(integrity);
+		expect(workerIntegrity['index.js']).not.toBe(integrity['index.js']);
+		expect(Object.isFrozen(workerIntegrity['index.js'])).toBe(true);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		for (const [, init] of fetchMock.mock.calls) {
+			expect(init).toMatchObject({
+				cache: 'no-store',
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer'
+			});
+		}
 
 		handle.dispose();
+	});
+
+	it('rejects corrupt D bootstrap assets before creating the language worker', async () => {
+		const moduleBytes = Uint8Array.of(1);
+		const manifestBytes = Uint8Array.of(2);
+		const onStatus = vi.fn();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async (input: RequestInfo | URL) =>
+					new Response(
+						input.toString().includes('runtime-manifest') ? manifestBytes : moduleBytes
+					)
+			)
+		);
+
+		await expect(
+			getDLanguageServer({
+				rootUrl: 'https://static.example.com/repl_20240807',
+				currentUrl: 'https://app.example.com/editor',
+				d: {
+					integrity: {
+						'index.js': {
+							bytes: 1,
+							sha256: '0'.repeat(64),
+							uncompressedBytes: 1,
+							uncompressedSha256: '0'.repeat(64)
+						},
+						'runtime/runtime-manifest.v1.json': {
+							bytes: 1,
+							sha256: '0'.repeat(64),
+							uncompressedBytes: 1,
+							uncompressedSha256: '0'.repeat(64)
+						}
+					}
+				},
+				createWorker: () => new mockState.FakeWorker() as unknown as Worker,
+				onStatus
+			})
+		).rejects.toThrow('Runtime asset index.js compressed SHA-256 mismatch');
+		expect(mockState.workers).toHaveLength(0);
+		expect(onStatus).toHaveBeenCalledWith(
+			expect.objectContaining({ state: 'loading', stage: 'd-assets' })
+		);
+		expect(onStatus).toHaveBeenLastCalledWith(expect.objectContaining({ state: 'error' }));
 	});
 
 	it('starts Tcl with Wacl worker assets', async () => {

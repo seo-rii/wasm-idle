@@ -6,6 +6,7 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_RUST_COMPILER_URL: '',
 		PUBLIC_WASM_GO_COMPILER_URL: '',
 		PUBLIC_WASM_D_MODULE_URL: '',
+		PUBLIC_WASM_D_MANIFEST_URL: '',
 		PUBLIC_WASM_DOTNET_MODULE_URL: '',
 		PUBLIC_WASM_ELIXIR_BUNDLE_URL: '',
 		PUBLIC_WASM_ERLANG_BUNDLE_URL: '',
@@ -431,6 +432,55 @@ describe('runtime asset config resolution', () => {
 		expect(resolveDModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/absproxy/5173/wasm-d/index.js'
 		);
+	});
+
+	it('resolves one pinned D module and manifest snapshot with version propagation', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_D_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_D_MANIFEST_URL = '';
+		const { resolveDRuntimeAssetConfig } = await import('./assets');
+		const { WASM_D_OUTER_ASSET_RECEIPTS } = await import('./wasmDIntegrity');
+
+		const resolved = resolveDRuntimeAssetConfig(
+			{
+				d: {
+					moduleUrl: '/runtime/d/index.js?v=pinned'
+				}
+			},
+			'https://example.com/app'
+		);
+
+		expect(resolved).toEqual({
+			moduleUrl: 'https://example.com/runtime/d/index.js?v=pinned',
+			manifestUrl: 'https://example.com/runtime/d/runtime/runtime-manifest.v1.json?v=pinned',
+			integrity: WASM_D_OUTER_ASSET_RECEIPTS
+		});
+		expect(Object.isFrozen(resolved)).toBe(true);
+		expect(Object.isFrozen(resolved.integrity)).toBe(true);
+	});
+
+	it('rejects incomplete replacement D outer receipts before worker startup', async () => {
+		vi.resetModules();
+		const { resolveDRuntimeAssetConfig } = await import('./assets');
+
+		expect(() =>
+			resolveDRuntimeAssetConfig(
+				{
+					d: {
+						moduleUrl: 'https://runtime.example/d/index.js',
+						integrity: {
+							'index.js': {
+								bytes: 1,
+								sha256: 'a'.repeat(64),
+								uncompressedBytes: 1,
+								uncompressedSha256: 'a'.repeat(64)
+							}
+						} as never
+					}
+				},
+				'https://example.com/app'
+			)
+		).toThrow('D outer runtime receipt must describe exactly two assets');
 	});
 
 	it('prefers an explicit Dotnet module url over the public env override', async () => {

@@ -1,4 +1,5 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
+import type { RuntimeAssetIntegrity, RuntimeAssetIntegrityVerifier } from './types.js';
 
 type RuntimeAssetProgressReporter = (loaded: number, total?: number) => void;
 type RuntimeAssetCompression = 'gzip' | undefined;
@@ -197,11 +198,36 @@ export async function fetchRuntimeAssetBytes(
 	reportProgress?: RuntimeAssetProgressReporter,
 	compression?: RuntimeAssetCompression,
 	maxOutputBytes = DEFAULT_MAX_RUNTIME_ASSET_BYTES,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	integrity?: RuntimeAssetIntegrity,
+	verifyIntegrity?: RuntimeAssetIntegrityVerifier
 ) {
 	throwIfAborted(signal);
 	if (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 0) {
 		throw new Error('D runtime asset byte limit must be a non-negative safe integer');
+	}
+	if (integrity) {
+		if (
+			!Number.isSafeInteger(integrity.bytes) ||
+			integrity.bytes <= 0 ||
+			!Number.isSafeInteger(integrity.uncompressedBytes) ||
+			integrity.uncompressedBytes <= 0 ||
+			!/^[0-9a-f]{64}$/u.test(integrity.sha256) ||
+			!/^[0-9a-f]{64}$/u.test(integrity.uncompressedSha256)
+		) {
+			throw new Error(`D runtime asset ${assetLabel} has invalid integrity metadata`);
+		}
+		if (!verifyIntegrity) {
+			throw new Error(`D runtime asset ${assetLabel} requires an integrity verifier`);
+		}
+		if (integrity.bytes > maxOutputBytes) {
+			throw new Error(`${assetLabel} download size exceeds the ${maxOutputBytes} byte limit`);
+		}
+		if (integrity.uncompressedBytes > maxOutputBytes) {
+			throw new Error(
+				`${assetLabel} decompressed size exceeds the ${maxOutputBytes} byte limit`
+			);
+		}
 	}
 	const resolvedUrl = new URL(assetUrl.toString());
 	if (!['file:', 'http:', 'https:'].includes(resolvedUrl.protocol)) {
@@ -298,6 +324,113 @@ export async function fetchRuntimeAssetBytes(
 		throw new Error(`${assetLabel} download size exceeds the ${maxOutputBytes} byte limit`);
 	}
 	const shouldDecompress = shouldDecompressResponse(response, compression);
+	const wasTransparentlyDecoded = compression === 'gzip' && !shouldDecompress;
+	if (integrity && contentLength !== undefined && contentLength !== integrity.bytes) {
+		await response.body?.cancel().catch(() => {});
+		throw new Error(
+			`${assetLabel} download size mismatch: expected ${integrity.bytes} bytes, received ${contentLength}`
+		);
+	}
+	if (integrity && verifyIntegrity) {
+		const observedByteLimit = wasTransparentlyDecoded
+			? integrity.uncompressedBytes
+			: integrity.bytes;
+		let observedBytes: Uint8Array;
+		if (!response.body) {
+			let cancelOnAbort: (() => void) | undefined;
+			const aborted = signal
+				? new Promise<never>((_resolve, reject) => {
+						cancelOnAbort = () => reject(abortReason(signal));
+						signal.addEventListener('abort', cancelOnAbort, { once: true });
+					})
+				: undefined;
+			try {
+				throwIfAborted(signal);
+				const materialized = response.arrayBuffer();
+				const source = aborted
+					? await Promise.race([materialized, aborted])
+					: await materialized;
+				throwIfAborted(signal);
+				observedBytes = new Uint8Array(source);
+			} finally {
+				if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
+			}
+			if (observedBytes.byteLength > observedByteLimit) {
+				throw new Error(
+					`${assetLabel} download size exceeds the ${observedByteLimit} byte limit`
+				);
+			}
+			reportProgress?.(observedBytes.byteLength, observedByteLimit);
+		} else {
+			observedBytes = await readBoundedStream(
+				response.body,
+				assetLabel,
+				observedByteLimit,
+				'download size',
+				reportProgress,
+				observedByteLimit,
+				signal
+			);
+		}
+		if (observedBytes.byteLength !== observedByteLimit) {
+			throw new Error(
+				`${assetLabel} download size mismatch: expected ${observedByteLimit} bytes, received ${observedBytes.byteLength}`
+			);
+		}
+		throwIfAborted(signal);
+		let cancelVerificationOnAbort: (() => void) | undefined;
+		const verificationAborted = signal
+			? new Promise<never>((_resolve, reject) => {
+					cancelVerificationOnAbort = () => reject(abortReason(signal));
+					signal.addEventListener('abort', cancelVerificationOnAbort, { once: true });
+				})
+			: undefined;
+		try {
+			if (!wasTransparentlyDecoded) {
+				const deliveryVerification = verifyIntegrity({
+					asset: assetLabel,
+					bytes: observedBytes,
+					expected: integrity,
+					stage: 'compressed',
+					runtimeId: 'D'
+				});
+				await (verificationAborted
+					? Promise.race([deliveryVerification, verificationAborted])
+					: deliveryVerification);
+				throwIfAborted(signal);
+			}
+			const runtimeBytes = shouldDecompress
+				? await decompressGzip(
+						observedBytes,
+						assetLabel,
+						integrity.uncompressedBytes,
+						signal
+					)
+				: observedBytes;
+			if (runtimeBytes.byteLength !== integrity.uncompressedBytes) {
+				throw new Error(
+					`${assetLabel} decompressed size mismatch: expected ${integrity.uncompressedBytes} bytes, received ${runtimeBytes.byteLength}`
+				);
+			}
+			throwIfAborted(signal);
+			const runtimeVerification = verifyIntegrity({
+				asset: assetLabel,
+				bytes: runtimeBytes,
+				expected: integrity,
+				stage: 'uncompressed',
+				runtimeId: 'D'
+			});
+			await (verificationAborted
+				? Promise.race([runtimeVerification, verificationAborted])
+				: runtimeVerification);
+			throwIfAborted(signal);
+			return runtimeBytes;
+		} finally {
+			if (cancelVerificationOnAbort) {
+				signal?.removeEventListener('abort', cancelVerificationOnAbort);
+			}
+		}
+	}
 	if (!response.body) {
 		let cancelOnAbort: (() => void) | undefined;
 		const aborted = signal
