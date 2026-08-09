@@ -124,6 +124,82 @@ describe('Lisp sandbox', () => {
 		]);
 	});
 
+	it('terminates Lisp output before exceeding the cumulative UTF-8 byte limit', async () => {
+		const sandbox = new Lisp();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('(display "bounded")', false, true, undefined, [], {
+			limits: { maxOutputBytes: 5 }
+		});
+		const staleHandler = worker.onmessage;
+
+		staleHandler?.({ data: { output: 'é' } } as MessageEvent<any>);
+		staleHandler?.({ data: { output: '🙂' } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			runtimeId: 'LISP',
+			actual: 6,
+			limit: 5
+		});
+		expect(output).toHaveBeenCalledOnce();
+		expect(output).toHaveBeenCalledWith('é');
+		expect(output).not.toHaveBeenCalledWith('🙂');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalledWith('stale\n');
+
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('(display "retry")', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('terminates Lisp diagnostics before exceeding the message limit', async () => {
+		const sandbox = new Lisp();
+		const oncompilerdiagnostic = vi.fn();
+		sandbox.oncompilerdiagnostic = oncompilerdiagnostic;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('(display "bounded")', true, true, undefined, [], {
+			limits: { maxDiagnostics: 1 }
+		});
+		const staleHandler = worker.onmessage;
+		const diagnostic = {
+			fileName: 'main.scm',
+			lineNumber: 1,
+			columnNumber: 2,
+			severity: 'warning',
+			message: 'bounded warning'
+		};
+
+		staleHandler?.({ data: { diagnostic } } as MessageEvent<any>);
+		staleHandler?.({ data: { diagnostic } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'DiagnosticLimitError',
+			code: 'diagnostic-limit',
+			phase: 'execute',
+			runtimeId: 'LISP',
+			actual: 2,
+			limit: 1
+		});
+		expect(oncompilerdiagnostic).toHaveBeenCalledOnce();
+		expect(oncompilerdiagnostic).toHaveBeenCalledWith(diagnostic);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { diagnostic, results: true } } as MessageEvent<any>);
+		expect(oncompilerdiagnostic).toHaveBeenCalledOnce();
+	});
+
 	it('normalizes a valid Lisp workspace before worker dispatch', async () => {
 		const sandbox = new Lisp();
 		await sandbox.load('/absproxy/5173');
