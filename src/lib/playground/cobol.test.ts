@@ -99,6 +99,45 @@ describe('COBOL sandbox workspace boundary', () => {
 		);
 	});
 
+	it('terminates COBOL output before exceeding the cumulative UTF-8 byte limit', async () => {
+		const sandbox = new Cobol();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		autoResolveRun = false;
+		const running = sandbox.run('       IDENTIFICATION DIVISION.', false, true, undefined, [], {
+			limits: { maxOutputBytes: 5 }
+		});
+		const staleHandler = worker.onmessage;
+
+		staleHandler?.({ data: { output: 'é' } } as MessageEvent<any>);
+		staleHandler?.({ data: { output: '🙂' } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			runtimeId: 'COBOL',
+			actual: 6,
+			limit: 5
+		});
+		expect(output).toHaveBeenCalledOnce();
+		expect(output).toHaveBeenCalledWith('é');
+		expect(output).not.toHaveBeenCalledWith('🙂');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+
+		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalledWith('stale\n');
+
+		autoResolveRun = true;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('       PROGRAM-ID. RETRY.', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
 	it.each([
 		{
 			name: 'active path traversal',

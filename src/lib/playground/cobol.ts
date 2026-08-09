@@ -7,6 +7,7 @@ import {
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	OutputLimitError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -31,6 +32,8 @@ type CobolOperation = {
 	cleanups: Array<() => void>;
 	explicitStdin: boolean;
 };
+
+const OUTPUT_ENCODER = new TextEncoder();
 
 const abortReason = (signal: AbortSignal, phase: CobolOperation['phase']) =>
 	signal.reason !== undefined
@@ -528,6 +531,7 @@ class Cobol implements Sandbox {
 		this.exit = false;
 		try {
 			return await new Promise<boolean | string>((resolve, reject) => {
+				let outputBytes = 0;
 				const workerOperation = this.workerSession.beginRun(worker, reject);
 				const timeoutMs = Math.min(
 					2_147_483_647,
@@ -584,6 +588,24 @@ class Cobol implements Sandbox {
 							if (!ownsRun()) return;
 						}
 						if (output) {
+							const actual =
+								outputBytes + OUTPUT_ENCODER.encode(String(output)).byteLength;
+							if (actual > limits.maxOutputBytes) {
+								failRun(
+									new OutputLimitError(
+										`COBOL output exceeded ${limits.maxOutputBytes} bytes`,
+										{
+											actual,
+											limit: limits.maxOutputBytes,
+											phase: 'execute',
+											runtimeId: 'COBOL'
+										}
+									),
+									true
+								);
+								return;
+							}
+							outputBytes = actual;
 							this.output?.(output);
 							if (!ownsRun()) return;
 						}
