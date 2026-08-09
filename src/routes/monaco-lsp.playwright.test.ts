@@ -576,7 +576,104 @@ async function prepareBrowserContext(context: BrowserContext, browserUrl: string
 async function waitForPreparedPage(page: Page, browserUrl: string) {
 	const testUrl = withLspTestQuery(browserUrl);
 	for (let attempt = 0; attempt < 5; attempt += 1) {
-		await page.goto(testUrl, { waitUntil: 'domcontentloaded' });
+		const response = await page.goto(testUrl, { waitUntil: 'domcontentloaded' });
+		if (process.env.WASM_IDLE_STRICT_CSP === '1') {
+			const responsePolicy = response?.headers()['content-security-policy'] || '';
+			expect(responsePolicy).toContain(
+				"script-src 'self' blob: 'wasm-unsafe-eval' 'unsafe-inline'"
+			);
+			expect(responsePolicy).not.toContain("'unsafe-eval'");
+			const documentPolicy =
+				(await page
+					.locator('meta[http-equiv="content-security-policy"]')
+					.getAttribute('content')) || '';
+			expect(documentPolicy).toContain("script-src 'self' blob: 'wasm-unsafe-eval'");
+			expect(documentPolicy).toMatch(/'sha256-[A-Za-z0-9+/=]+'/u);
+			expect(documentPolicy).not.toContain("'unsafe-eval'");
+			const probe = await page.evaluate(async () => {
+				const inlineMarker = '__wasmIdleCspInlineProbe';
+				const evalMarker = '__wasmIdleCspEvalProbe';
+				const evalResultMarker = '__wasmIdleCspEvalProbeResult';
+				const violations: Array<{
+					blockedUri: string;
+					disposition: string;
+					effectiveDirective: string;
+				}> = [];
+				const onViolation = (event: SecurityPolicyViolationEvent) => {
+					violations.push({
+						blockedUri: event.blockedURI,
+						disposition: event.disposition,
+						effectiveDirective: event.effectiveDirective
+					});
+				};
+				document.addEventListener('securitypolicyviolation', onViolation);
+				let blobScript: HTMLScriptElement | null = null;
+				let blobUrl = '';
+				try {
+					const script = document.createElement('script');
+					script.textContent = `globalThis.${inlineMarker} = true;`;
+					document.head.append(script);
+					script.remove();
+					blobUrl = URL.createObjectURL(
+						new Blob(
+							[
+								`try {
+	(0, eval)('globalThis.${evalMarker} = true');
+	globalThis.${evalResultMarker} = { errorName: '' };
+} catch (error) {
+	globalThis.${evalResultMarker} = {
+		errorName: error instanceof Error ? error.name : typeof error
+	};
+}`
+							],
+							{ type: 'text/javascript' }
+						)
+					);
+					blobScript = document.createElement('script');
+					blobScript.src = blobUrl;
+					await new Promise<void>((resolve) => {
+						blobScript!.addEventListener('load', () => resolve(), { once: true });
+						blobScript!.addEventListener('error', () => resolve(), { once: true });
+						document.head.append(blobScript!);
+					});
+					await new Promise((resolve) => setTimeout(resolve, 50));
+					const evalResult = Reflect.get(globalThis, evalResultMarker);
+					return {
+						evalErrorName:
+							typeof evalResult === 'object' &&
+							evalResult !== null &&
+							typeof Reflect.get(evalResult, 'errorName') === 'string'
+								? Reflect.get(evalResult, 'errorName')
+								: '',
+						evalRan: Reflect.get(globalThis, evalMarker) === true,
+						inlineRan: Reflect.get(globalThis, inlineMarker) === true,
+						violations
+					};
+				} finally {
+					blobScript?.remove();
+					if (blobUrl) URL.revokeObjectURL(blobUrl);
+					Reflect.deleteProperty(globalThis, inlineMarker);
+					Reflect.deleteProperty(globalThis, evalMarker);
+					Reflect.deleteProperty(globalThis, evalResultMarker);
+					document.removeEventListener('securitypolicyviolation', onViolation);
+				}
+			});
+			expect(probe.inlineRan).toBe(false);
+			expect(probe.evalRan).toBe(false);
+			expect(probe.evalErrorName).toBe('EvalError');
+			expect(
+				probe.violations.some(
+					(violation) =>
+						violation.blockedUri === 'inline' && violation.disposition === 'enforce'
+				)
+			).toBe(true);
+			expect(
+				probe.violations.some(
+					(violation) =>
+						violation.blockedUri === 'eval' && violation.disposition === 'enforce'
+				)
+			).toBe(true);
+		}
 		const ready = await page
 			.evaluate(
 				() =>
@@ -766,6 +863,7 @@ async function runLspCase(
 	testCase: LspBrowserCase,
 	lspRequests: string[]
 ) {
+	const strictWorkerResponsePolicies = new Map<string, string>();
 	page.setDefaultTimeout(testCase.timeoutMs ?? browserTimeoutMs);
 	page.on('request', (request) => {
 		const url = request.url();
@@ -774,6 +872,15 @@ async function runLspCase(
 	page.on('response', (response) => {
 		const url = response.url();
 		if (requestLooksLspRelated(url)) lspRequests.push(`< ${response.status()} ${url}`);
+		if (
+			process.env.WASM_IDLE_STRICT_CSP === '1' &&
+			/\/_app\/immutable\/workers\/[^/]+\.js$/u.test(new URL(url).pathname)
+		) {
+			strictWorkerResponsePolicies.set(
+				url,
+				response.headers()['content-security-policy'] || ''
+			);
+		}
 	});
 
 	await waitForPreparedPage(page, browserUrl);
@@ -785,6 +892,7 @@ async function runLspCase(
 			{ timeout: 10_000 }
 		)
 		.catch(() => {});
+	const workersBeforeLsp = new Set(page.workers().map((worker) => worker.url()));
 
 	for (const pattern of testCase.assertNoPreEnableRequests || []) {
 		expect(lspRequests.some((request) => urlMatches(request, pattern))).toBe(false);
@@ -802,6 +910,21 @@ async function runLspCase(
 	await enableLsp(page);
 	await waitForVisibleLspStatus(page);
 	await waitForLspReady(page, testCase);
+	if (process.env.WASM_IDLE_STRICT_CSP === '1') {
+		const lspWorkerUrls = page
+			.workers()
+			.map((worker) => worker.url())
+			.filter((url) => !workersBeforeLsp.has(url));
+		expect(lspWorkerUrls.length).toBeGreaterThan(0);
+		for (const workerUrl of lspWorkerUrls) {
+			const workerPolicy = strictWorkerResponsePolicies.get(workerUrl) || '';
+			expect(workerUrl).toMatch(/\/_app\/immutable\/workers\/[^/]+\.js$/u);
+			expect(workerPolicy).toContain(
+				"script-src 'self' blob: 'wasm-unsafe-eval' 'unsafe-inline'"
+			);
+			expect(workerPolicy).not.toContain("'unsafe-eval'");
+		}
+	}
 	const progressTrace = await readAndStopLspProgressProbe(page);
 	expect(
 		progressTrace.some(

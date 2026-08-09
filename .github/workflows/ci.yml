@@ -49,6 +49,7 @@ jobs:
             - run: pnpm exec playwright-core install --with-deps chromium
             - run: node scripts/prepare-clangd-assets.mjs
             - run: pnpm run test:lsp:browser:smoke
+            - run: pnpm run test:lsp:browser:gleam:csp
 
     lsp-browser-full:
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -68,3 +69,4 @@ jobs:
             - run: node scripts/prepare-clangd-assets.mjs
             - run: node scripts/prepare-ocaml-lsp-assets.mjs
             - run: pnpm run test:lsp:browser:full
+            - run: pnpm run test:lsp:browser:gleam:csp
