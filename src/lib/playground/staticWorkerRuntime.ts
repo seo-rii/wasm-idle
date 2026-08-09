@@ -181,7 +181,10 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		this.manifestUrl = nextManifestUrl;
 
 		if (!this.baseUrl || !this.workerUrl) {
-			throw new Error(`${this.config.displayName} runtime is not configured.`);
+			throw new RuntimeConfigurationError(
+				`${this.config.displayName} runtime is not configured.`,
+				{ runtimeId: this.config.languageId }
+			);
 		}
 		if (!runtimeChanged && this.workerStartPromise) {
 			await this.workerStartPromise;
@@ -730,7 +733,10 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 	) {
 		await this.preloadWorkerScript(progress, controls);
 		if (generation !== this.workerGeneration) {
-			throw new Error('Process terminated');
+			throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
+				phase: 'startup',
+				runtimeId: this.config.languageId
+			});
 		}
 
 		this.reportProgress(progress, 0.22, `Starting ${this.config.displayName} worker`);
@@ -749,7 +755,10 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		if (generation !== this.workerGeneration) {
 			worker.terminate();
 			this.revokeBootstrapUrl();
-			throw new Error('Process terminated');
+			throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
+				phase: 'startup',
+				runtimeId: this.config.languageId
+			});
 		}
 
 		return await new Promise<Worker>((resolve, reject) => {
@@ -1044,7 +1053,12 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
 		if (!this.baseUrl || !this.workerUrl) {
-			return Promise.reject(`${this.config.displayName} runtime is not configured.`);
+			return Promise.reject(
+				new RuntimeConfigurationError(
+					`${this.config.displayName} runtime is not configured.`,
+					{ runtimeId: this.config.languageId }
+				)
+			);
 		}
 		if (this.activeRun || this.startingRunId) {
 			return Promise.reject(
@@ -1087,7 +1101,17 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		}
 		if (this.startingRunId !== id) {
 			lifecycle.end();
-			return Promise.reject('Process terminated');
+			return Promise.reject(
+				new CancelledError(
+					prepare
+						? `${this.config.displayName} worker startup terminated`
+						: `${this.config.displayName} run terminated`,
+					{
+						phase: prepare ? 'startup' : 'execute',
+						runtimeId: this.config.languageId
+					}
+				)
+			);
 		}
 		const progress = lifecycle.progress;
 
@@ -1233,18 +1257,28 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 	}
 
 	terminate() {
-		const reason = 'Process terminated';
+		const startupReason = new CancelledError(
+			`${this.config.displayName} worker startup terminated`,
+			{
+				phase: 'startup',
+				runtimeId: this.config.languageId
+			}
+		);
+		const runReason = new CancelledError(`${this.config.displayName} run terminated`, {
+			phase: 'execute',
+			runtimeId: this.config.languageId
+		});
 		this.progressController.invalidate();
 		this.uid += 1;
 		this.startingRunId = null;
-		this.startupReject?.(new Error(reason));
+		this.startupReject?.(startupReason);
 		this.startupReject = null;
-		this.rejectStdinWaiters(reason);
+		this.rejectStdinWaiters(runReason);
 		if (this.activeRun) {
 			const activeRun = this.claimRun(this.activeRun.id);
 			if (activeRun) {
 				this.cleanupRun(activeRun);
-				activeRun.reject(reason);
+				activeRun.reject(runReason);
 			}
 		}
 		this.clearPendingStdin();

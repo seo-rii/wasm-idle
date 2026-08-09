@@ -221,6 +221,31 @@ describe('static worker backed language sandboxes', () => {
 		);
 	});
 
+	it('rejects missing static runtime configuration with a typed error', async () => {
+		const sandbox = new StaticWorkerRuntimeSandbox({
+			languageId: 'UNCONFIGURED_TEST',
+			displayName: 'Unconfigured test',
+			defaultActivePath: 'main.txt',
+			stdin: { mode: 'none' },
+			resolveRuntimeAssets: () => ({ baseUrl: '', workerUrl: '' })
+		});
+
+		await expect(sandbox.load()).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'configuration',
+			runtimeId: 'UNCONFIGURED_TEST'
+		});
+		await expect(sandbox.run('', false)).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'configuration',
+			runtimeId: 'UNCONFIGURED_TEST'
+		});
+		expect(fetch).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
+	});
+
 	it('streams run-correlated input after dispatch through a bounded shared ring', async () => {
 		await withCrossOriginIsolation(true, async () => {
 			const messages: any[] = [];
@@ -877,6 +902,27 @@ describe('static worker backed language sandboxes', () => {
 		).resolves.toBe(true);
 	});
 
+	it('classifies reentrant termination of a prepare-only run as startup cancellation', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		let terminateOnPrepare = true;
+		const progress = {
+			set: vi.fn((_value: number, stage?: string) => {
+				if (!terminateOnPrepare || stage !== 'Preparing Prolog runtime') return;
+				terminateOnPrepare = false;
+				sandbox.terminate();
+			})
+		};
+
+		await expect(sandbox.run('', true, true, progress)).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'startup',
+			runtimeId: 'PROLOG'
+		});
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
 	it.each(['progress', 'output', 'diagnostic'] as const)(
 		'settles a throwing runtime %s callback and permits retry',
 		async (callbackKind) => {
@@ -1002,7 +1048,12 @@ describe('static worker backed language sandboxes', () => {
 			data: { runId: retiredWorker.lastRunId, results: true }
 		} as MessageEvent<any>);
 
-		await expect(firstOutcome).resolves.toBe('Process terminated');
+		await expect(firstOutcome).resolves.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'execute',
+			runtimeId: 'PROLOG'
+		});
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
 		const replacementWorker = workerInstances[1];
 		await vi.waitFor(() => expect(replacementWorker.postMessage).toHaveBeenCalledOnce());
@@ -1357,7 +1408,12 @@ describe('static worker backed language sandboxes', () => {
 		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
 
 		sandbox.kill();
-		await expect(first).rejects.toBe('Process terminated');
+		await expect(first).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'execute',
+			runtimeId: 'PROLOG'
+		});
 		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
 
 		onPostMessage = null;
@@ -2052,6 +2108,23 @@ describe('static worker backed language sandboxes', () => {
 		const outcome = load.catch((error) => error);
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
 		controller.abort(new Error('cancel startup'));
+
+		await expect(outcome).resolves.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'startup',
+			runtimeId: 'PROLOG'
+		});
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('reports manual termination of pending startup as typed cancellation', async () => {
+		autoStartWorkers = false;
+		const sandbox = new Prolog();
+		const outcome = sandbox.load('/absproxy/5173').catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+
+		sandbox.terminate();
 
 		await expect(outcome).resolves.toMatchObject({
 			name: 'CancelledError',
