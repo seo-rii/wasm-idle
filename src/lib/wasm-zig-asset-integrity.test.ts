@@ -16,7 +16,9 @@ type ZigRuntimeBuild = {
 	profileId: string;
 	fingerprint: string;
 	upstream: {
+		lockSchemaVersion: number;
 		releaseBaseUrl: string;
+		allowedRedirectOrigins: string[];
 		inputs: Record<string, Receipt>;
 	};
 	assets: Record<string, Receipt>;
@@ -26,6 +28,7 @@ type ZigInputLock = {
 	schemaVersion: number;
 	profileId: string;
 	releaseBaseUrl: string;
+	allowedRedirectOrigins: string[];
 	inputs: Record<string, Receipt>;
 };
 
@@ -74,9 +77,12 @@ describe('checked-in Zig execution asset receipts', () => {
 			)
 		]);
 
-		expect(runtimeBuild.schemaVersion).toBe(1);
+		expect(lock.schemaVersion).toBe(2);
+		expect(runtimeBuild.schemaVersion).toBe(2);
 		expect(runtimeBuild.profileId).toBe(lock.profileId);
+		expect(runtimeBuild.upstream.lockSchemaVersion).toBe(lock.schemaVersion);
 		expect(runtimeBuild.upstream.releaseBaseUrl).toBe(lock.releaseBaseUrl);
+		expect(runtimeBuild.upstream.allowedRedirectOrigins).toEqual(lock.allowedRedirectOrigins);
 		expect(runtimeBuild.upstream.inputs).toEqual(lock.inputs);
 		expect(Object.keys(runtimeBuild.assets).sort()).toEqual(['std.tar.gz', 'zig_small.wasm']);
 		expect(runtimeBuild.assets).toEqual(WASM_ZIG_ASSET_RECEIPTS);

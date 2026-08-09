@@ -28,6 +28,8 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	'wasmZigVersion.ts'
 );
 const DEFAULT_LOCK_FILE_PATH = path.resolve(THIS_DIR, 'wasm-zig-assets.lock.json');
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 120_000;
+const MAX_TIMER_MS = 2_147_483_647;
 const TARGET_RECEIPT_FILE = 'runtime-build.json';
 const INPUT_ASSET_NAMES = /** @type {const} */ (['zig_small.wasm', 'std.zip']);
 export const WASM_ZIG_EXECUTION_ASSET_FILES = /** @type {const} */ ([
@@ -36,7 +38,7 @@ export const WASM_ZIG_EXECUTION_ASSET_FILES = /** @type {const} */ ([
 ]);
 
 /** @typedef {{ bytes: number; sha256: string; uncompressedBytes?: number; uncompressedSha256?: string }} ZigAssetReceipt */
-/** @typedef {{ schemaVersion: 1; profileId: string; releaseBaseUrl: string; inputs: Record<string, ZigAssetReceipt> }} ZigInputLock */
+/** @typedef {{ schemaVersion: 2; profileId: string; releaseBaseUrl: string; allowedRedirectOrigins: readonly string[]; inputs: Record<string, ZigAssetReceipt> }} ZigInputLock */
 /** @typedef {{ fileName: 'zig_small.wasm' | 'std.tar.gz'; data: Buffer; expandedData?: Buffer }} ZigBundleFile */
 
 /**
@@ -48,6 +50,8 @@ export const WASM_ZIG_EXECUTION_ASSET_FILES = /** @type {const} */ ([
  *   releaseBaseUrl?: string;
  *   fetchImpl?: typeof fetch;
  *   renamePath?: typeof rename;
+ *   signal?: AbortSignal;
+ *   downloadTimeoutMs?: number;
  * }} SyncWasmZigOptions
  */
 
@@ -59,6 +63,77 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
  * @returns {value is Record<string, unknown>}
  */
 const isObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+
+/** @param {AbortSignal} signal @param {string} label */
+function signalReason(signal, label) {
+	return signal.reason === undefined ? new Error(`${label} was cancelled`) : signal.reason;
+}
+
+/** @param {AbortSignal} signal @param {string} label */
+function throwIfAborted(signal, label) {
+	if (signal.aborted) throw signalReason(signal, label);
+}
+
+/** @param {{ cancel?: (reason?: unknown) => Promise<unknown> | unknown } | null | undefined} target @param {unknown} reason */
+function cancelReadable(target, reason) {
+	if (!target?.cancel) return;
+	try {
+		void Promise.resolve(target.cancel(reason)).catch(() => undefined);
+	} catch {
+		// Cancellation is best effort and must not replace the primary failure.
+	}
+}
+
+/**
+ * @template T
+ * @param {PromiseLike<T>} promise
+ * @param {AbortSignal} signal
+ * @param {string} label
+ * @param {{ onAbort?: (reason: unknown) => void; onLateResolve?: (value: T, reason: unknown) => void }} [options]
+ * @returns {Promise<T>}
+ */
+function raceWithAbort(promise, signal, label, options = {}) {
+	return new Promise((resolve, reject) => {
+		let settled = false;
+		const cleanup = () => signal.removeEventListener('abort', onAbort);
+		const onAbort = () => {
+			if (settled) return;
+			settled = true;
+			cleanup();
+			const reason = signalReason(signal, label);
+			try {
+				options.onAbort?.(reason);
+			} catch {
+				// Cleanup cannot replace the cancellation reason.
+			}
+			reject(reason);
+		};
+
+		signal.addEventListener('abort', onAbort, { once: true });
+		if (signal.aborted) onAbort();
+		Promise.resolve(promise).then(
+			(value) => {
+				if (settled) {
+					try {
+						options.onLateResolve?.(value, signalReason(signal, label));
+					} catch {
+						// A late resource is already outside the active operation.
+					}
+					return;
+				}
+				settled = true;
+				cleanup();
+				resolve(value);
+			},
+			(error) => {
+				if (settled) return;
+				settled = true;
+				cleanup();
+				reject(error);
+			}
+		);
+	});
+}
 
 /** @param {string} filePath */
 async function pathExists(filePath) {
@@ -128,6 +203,32 @@ function validateReceipt(value, label) {
 	return Object.freeze({ bytes: value.bytes, sha256: value.sha256 });
 }
 
+/** @param {unknown} value */
+function normalizeRedirectOrigin(value) {
+	if (typeof value !== 'string') {
+		throw new Error('wasm-zig input lock redirect origins must be HTTPS origins');
+	}
+	let url;
+	try {
+		url = new URL(value);
+	} catch {
+		throw new Error('wasm-zig input lock has an invalid redirect origin');
+	}
+	if (
+		url.protocol !== 'https:' ||
+		url.username ||
+		url.password ||
+		url.pathname !== '/' ||
+		url.search ||
+		url.hash
+	) {
+		throw new Error(
+			'wasm-zig input lock redirect origins must be credential-free HTTPS origins'
+		);
+	}
+	return url.origin;
+}
+
 /** @param {string} lockFilePath */
 async function readInputLock(lockFilePath) {
 	if (!(await isRegularFile(lockFilePath))) {
@@ -136,10 +237,11 @@ async function readInputLock(lockFilePath) {
 	const value = await readJson(lockFilePath, 'wasm-zig input lock');
 	if (
 		!isObject(value) ||
-		value.schemaVersion !== 1 ||
+		value.schemaVersion !== 2 ||
 		typeof value.profileId !== 'string' ||
 		!value.profileId.trim() ||
 		typeof value.releaseBaseUrl !== 'string' ||
+		!Array.isArray(value.allowedRedirectOrigins) ||
 		!isObject(value.inputs)
 	) {
 		throw new Error('wasm-zig input lock has invalid profile metadata');
@@ -159,6 +261,10 @@ async function readInputLock(lockFilePath) {
 	) {
 		throw new Error('wasm-zig input lock release base URL must be a credential-free HTTPS URL');
 	}
+	const allowedRedirectOrigins = value.allowedRedirectOrigins.map(normalizeRedirectOrigin);
+	if (new Set(allowedRedirectOrigins).size !== allowedRedirectOrigins.length) {
+		throw new Error('wasm-zig input lock redirect origins must be unique');
+	}
 	const receivedInputs = Object.keys(value.inputs).sort();
 	const expectedInputs = [...INPUT_ASSET_NAMES].sort();
 	if (
@@ -173,9 +279,10 @@ async function readInputLock(lockFilePath) {
 		inputs[asset] = validateReceipt(value.inputs[asset], `wasm-zig input ${asset}`);
 	}
 	return Object.freeze({
-		schemaVersion: /** @type {const} */ (1),
+		schemaVersion: /** @type {const} */ (2),
 		profileId: value.profileId.trim(),
 		releaseBaseUrl: releaseUrl.href.replace(/\/$/u, ''),
+		allowedRedirectOrigins: Object.freeze(allowedRedirectOrigins),
 		inputs: Object.freeze(inputs)
 	});
 }
@@ -187,47 +294,122 @@ function verifyBytes(data, receipt, label) {
 	}
 }
 
-/** @param {Response} response @param {Readonly<ZigAssetReceipt>} receipt @param {string} label */
-async function readBoundedResponse(response, receipt, label) {
-	if (!response.ok) {
-		throw new Error(`failed to download ${label}: ${response.status}`);
-	}
-	const rawLength = response.headers.get('content-length');
-	if (rawLength !== null) {
-		const normalized = rawLength.trim();
-		const declared = Number(normalized);
-		if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(declared)) {
-			throw new Error(`${label} download has an invalid Content-Length`);
+/**
+ * @param {Response} response
+ * @param {{ requestedUrl: string; allowedRedirectOrigins: readonly string[]; receipt: Readonly<ZigAssetReceipt>; label: string; signal: AbortSignal }} options
+ */
+async function readBoundedResponse(
+	response,
+	{ requestedUrl, allowedRedirectOrigins, receipt, label, signal }
+) {
+	try {
+		throwIfAborted(signal, `${label} download`);
+		if (!response.ok) {
+			throw new Error(`failed to download ${label}: ${response.status}`);
 		}
-		if (declared !== receipt.bytes) {
-			throw new Error(`${label} download size does not match the pinned receipt`);
+		let finalUrl;
+		try {
+			if (!response.url) throw new Error('missing final URL');
+			finalUrl = new URL(response.url);
+		} catch {
+			throw new Error(`${label} download has invalid final URL metadata`);
 		}
+		if (
+			finalUrl.protocol !== 'https:' ||
+			finalUrl.username ||
+			finalUrl.password ||
+			finalUrl.hash
+		) {
+			throw new Error(`${label} download has unsafe final URL metadata`);
+		}
+		const requestedOrigin = new URL(requestedUrl).origin;
+		if (
+			finalUrl.origin !== requestedOrigin &&
+			!allowedRedirectOrigins.includes(finalUrl.origin)
+		) {
+			throw new Error(`${label} download redirected to an untrusted origin`);
+		}
+
+		const rawLength = response.headers.get('content-length');
+		if (rawLength !== null) {
+			const normalized = rawLength.trim();
+			const declared = Number(normalized);
+			if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(declared)) {
+				throw new Error(`${label} download has an invalid Content-Length`);
+			}
+			if (declared !== receipt.bytes) {
+				throw new Error(`${label} download size does not match the pinned receipt`);
+			}
+		}
+	} catch (error) {
+		cancelReadable(response.body, error);
+		throw error;
 	}
+
 	if (!response.body) {
-		const data = Buffer.from(await response.arrayBuffer());
+		/** @type {ArrayBuffer} */
+		const arrayBuffer = await raceWithAbort(
+			Promise.resolve().then(() => response.arrayBuffer()),
+			signal,
+			`${label} download`
+		);
+		const data = Buffer.from(arrayBuffer);
+		throwIfAborted(signal, `${label} download`);
 		verifyBytes(data, receipt, label);
 		return data;
 	}
 
 	const output = Buffer.alloc(receipt.bytes);
-	const reader = response.body.getReader();
+	let reader;
+	try {
+		reader = response.body.getReader();
+	} catch (error) {
+		cancelReadable(response.body, error);
+		throw error;
+	}
 	let offset = 0;
+	let readerCancelled = false;
+	let readFailed = false;
+	/** @type {unknown} */
+	let releaseError;
+	/** @param {unknown} reason */
+	const cancelReader = (reason) => {
+		if (readerCancelled) return;
+		readerCancelled = true;
+		cancelReadable(reader, reason);
+	};
 	try {
 		for (;;) {
-			const { value, done } = await reader.read();
+			const { value, done } = await raceWithAbort(
+				Promise.resolve().then(() => reader.read()),
+				signal,
+				`${label} download`,
+				{ onAbort: cancelReader }
+			);
 			if (done) break;
 			if (!value) continue;
 			const nextOffset = offset + value.byteLength;
 			if (nextOffset > receipt.bytes) {
-				void reader.cancel(`${label} exceeded its pinned byte size`).catch(() => undefined);
-				throw new Error(`${label} download exceeds the pinned byte size`);
+				const error = new Error(`${label} download exceeds the pinned byte size`);
+				cancelReader(error);
+				throw error;
 			}
 			output.set(value, offset);
 			offset = nextOffset;
 		}
+	} catch (error) {
+		readFailed = true;
+		cancelReader(error);
+		throw error;
 	} finally {
-		reader.releaseLock();
+		try {
+			reader.releaseLock();
+		} catch (error) {
+			if (!readFailed && !signal.aborted) releaseError = error;
+		}
 	}
+	if (releaseError) throw releaseError;
+	throwIfAborted(signal, `${label} download`);
 	if (offset !== receipt.bytes) {
 		throw new Error(`${label} download is truncated`);
 	}
@@ -254,27 +436,46 @@ async function validateLocalSource(sourceDir) {
 }
 
 /**
- * @param {{ sourceDir: string; useLocalSource: boolean; releaseBaseUrl: string; asset: string; receipt: Readonly<ZigAssetReceipt>; fetchImpl: typeof fetch }} options
+ * @param {{ sourceDir: string; useLocalSource: boolean; releaseBaseUrl: string; allowedRedirectOrigins: readonly string[]; asset: string; receipt: Readonly<ZigAssetReceipt>; fetchImpl: typeof fetch; signal: AbortSignal }} options
  */
 async function readInputAsset({
 	sourceDir,
 	useLocalSource,
 	releaseBaseUrl,
+	allowedRedirectOrigins,
 	asset,
 	receipt,
-	fetchImpl
+	fetchImpl,
+	signal
 }) {
 	if (useLocalSource) {
-		const data = await readFile(path.join(sourceDir, asset));
+		throwIfAborted(signal, `wasm-zig source asset ${asset}`);
+		const data = await readFile(path.join(sourceDir, asset), { signal });
+		throwIfAborted(signal, `wasm-zig source asset ${asset}`);
 		verifyBytes(data, receipt, `wasm-zig source asset ${asset}`);
 		return data;
 	}
-	const response = await fetchImpl(`${releaseBaseUrl}/${asset}`, {
-		credentials: 'omit',
-		redirect: 'follow',
-		referrerPolicy: 'no-referrer'
+	const requestedUrl = `${releaseBaseUrl}/${asset}`;
+	const label = `wasm-zig source asset ${asset}`;
+	throwIfAborted(signal, label);
+	const pendingResponse = Promise.resolve().then(() =>
+		fetchImpl(requestedUrl, {
+			credentials: 'omit',
+			redirect: 'follow',
+			referrerPolicy: 'no-referrer',
+			signal
+		})
+	);
+	const response = await raceWithAbort(pendingResponse, signal, `${label} download`, {
+		onLateResolve: (lateResponse, reason) => cancelReadable(lateResponse.body, reason)
 	});
-	return await readBoundedResponse(response, receipt, `wasm-zig source asset ${asset}`);
+	return await readBoundedResponse(response, {
+		requestedUrl,
+		allowedRedirectOrigins,
+		receipt,
+		label,
+		signal
+	});
 }
 
 /** @param {Buffer} compilerBytes */
@@ -414,11 +615,13 @@ export const WASM_ZIG_ASSET_RECEIPTS = Object.freeze({
 function renderRuntimeBuild(lock, receipts) {
 	return `${JSON.stringify(
 		{
-			schemaVersion: 1,
+			schemaVersion: 2,
 			profileId: lock.profileId,
 			fingerprint: fingerprintReceipts(lock.profileId, receipts),
 			upstream: {
+				lockSchemaVersion: lock.schemaVersion,
 				releaseBaseUrl: lock.releaseBaseUrl,
+				allowedRedirectOrigins: lock.allowedRedirectOrigins,
 				inputs: lock.inputs
 			},
 			assets: receipts
@@ -533,6 +736,16 @@ export async function syncWasmZigAssets(options = {}) {
 	const lockFilePath = path.resolve(options.lockFilePath || DEFAULT_LOCK_FILE_PATH);
 	const fetchImpl = options.fetchImpl || globalThis.fetch;
 	const renamePath = options.renamePath || rename;
+	const downloadTimeoutMs = options.downloadTimeoutMs ?? DEFAULT_DOWNLOAD_TIMEOUT_MS;
+	if (
+		!Number.isSafeInteger(downloadTimeoutMs) ||
+		downloadTimeoutMs <= 0 ||
+		downloadTimeoutMs > MAX_TIMER_MS
+	) {
+		throw new TypeError(
+			`wasm-zig downloadTimeoutMs must be an integer between 1 and ${MAX_TIMER_MS}`
+		);
+	}
 	const sourceStats = await stat(sourceDir).catch(() => null);
 	if (options.sourceDir && !sourceStats?.isDirectory()) {
 		throw new Error(`wasm-zig source directory was not found at ${sourceDir}`);
@@ -583,18 +796,56 @@ export async function syncWasmZigAssets(options = {}) {
 		throw new Error('wasm-zig releaseBaseUrl must match the pinned input lock');
 	}
 	if (useLocalSource) await validateLocalSource(sourceDir);
-	const [compilerBytes, stdlibZip] = await Promise.all(
-		INPUT_ASSET_NAMES.map((asset) =>
-			readInputAsset({
-				sourceDir,
-				useLocalSource,
-				releaseBaseUrl,
-				asset,
-				receipt: lock.inputs[asset],
-				fetchImpl
-			})
-		)
-	);
+	const downloadController = new AbortController();
+	const externalSignal = options.signal;
+	let externalAbortBound = false;
+	const onExternalAbort = () => {
+		if (!downloadController.signal.aborted && externalSignal) {
+			downloadController.abort(signalReason(externalSignal, 'wasm-zig download'));
+		}
+	};
+	if (externalSignal) {
+		externalAbortBound = true;
+		externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+		if (externalSignal.aborted) onExternalAbort();
+	}
+	let downloadTimeout;
+	if (!useLocalSource) {
+		downloadTimeout = setTimeout(() => {
+			if (downloadController.signal.aborted) return;
+			const error = new Error(`wasm-zig downloads timed out after ${downloadTimeoutMs} ms`);
+			error.name = 'TimeoutError';
+			downloadController.abort(error);
+		}, downloadTimeoutMs);
+	}
+	let compilerBytes;
+	let stdlibZip;
+	try {
+		throwIfAborted(downloadController.signal, 'wasm-zig download');
+		[compilerBytes, stdlibZip] = await Promise.all(
+			INPUT_ASSET_NAMES.map((asset) =>
+				readInputAsset({
+					sourceDir,
+					useLocalSource,
+					releaseBaseUrl,
+					allowedRedirectOrigins: lock.allowedRedirectOrigins,
+					asset,
+					receipt: lock.inputs[asset],
+					fetchImpl,
+					signal: downloadController.signal
+				}).catch((error) => {
+					if (!downloadController.signal.aborted) downloadController.abort(error);
+					throw error;
+				})
+			)
+		);
+	} finally {
+		if (downloadTimeout !== undefined) clearTimeout(downloadTimeout);
+		if (externalAbortBound && externalSignal) {
+			externalSignal.removeEventListener('abort', onExternalAbort);
+		}
+	}
+	if (externalSignal?.aborted) throw signalReason(externalSignal, 'wasm-zig sync');
 	validateCompiler(compilerBytes);
 	const stdlib = repackageStandardLibrary(stdlibZip);
 	/** @type {readonly ZigBundleFile[]} */
@@ -627,6 +878,7 @@ export async function syncWasmZigAssets(options = {}) {
 		);
 		await validateInstalledSnapshot(nextTargetDir, receipts);
 		await writeFile(nextVersionModulePath, renderVersionModule(fingerprint, receipts), 'utf8');
+		if (externalSignal?.aborted) throw signalReason(externalSignal, 'wasm-zig sync');
 		await publishSwaps(
 			[
 				{ current: targetDir, next: nextTargetDir, previous: previousTargetDir },

@@ -11,6 +11,7 @@ const tempDirs: string[] = [];
 const compilerBytes = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
 const stdlibZip = zipSync({ 'std/std.zig': strToU8('pub const std = true;') });
 const releaseBaseUrl = 'https://downloads.example.test/zigc-wasm/v0.11.0';
+const allowedRedirectOrigin = 'https://cdn.example.test';
 
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
@@ -30,16 +31,22 @@ async function writeInputLock(
 	inputs: Record<string, Uint8Array> = {
 		'zig_small.wasm': compilerBytes,
 		'std.zip': stdlibZip
-	}
+	},
+	overrides: {
+		schemaVersion?: number;
+		releaseBaseUrl?: string;
+		allowedRedirectOrigins?: unknown;
+	} = {}
 ) {
 	const lockFilePath = path.join(await makeTempDir(), 'wasm-zig-assets.lock.json');
 	await writeFile(
 		lockFilePath,
 		`${JSON.stringify(
 			{
-				schemaVersion: 1,
+				schemaVersion: overrides.schemaVersion ?? 2,
 				profileId: 'fixture-zigc-wasm',
-				releaseBaseUrl,
+				releaseBaseUrl: overrides.releaseBaseUrl ?? releaseBaseUrl,
+				allowedRedirectOrigins: overrides.allowedRedirectOrigins ?? [allowedRedirectOrigin],
 				inputs: Object.fromEntries(
 					Object.entries(inputs).map(([asset, bytes]) => [
 						asset,
@@ -55,6 +62,12 @@ async function writeInputLock(
 	return lockFilePath;
 }
 
+function responseFor(body: BodyInit | null, url: string, init: ResponseInit = {}) {
+	const response = new Response(body, init);
+	Object.defineProperty(response, 'url', { value: url });
+	return response;
+}
+
 async function writeValidSource() {
 	const sourceDir = await makeTempDir();
 	await writeFixtureFile(sourceDir, 'zig_small.wasm', compilerBytes);
@@ -62,14 +75,23 @@ async function writeValidSource() {
 	return sourceDir;
 }
 
-async function syncFromRemote(fetchImpl: typeof fetch) {
+async function syncFromRemote(
+	fetchImpl: typeof fetch,
+	options: {
+		signal?: AbortSignal;
+		downloadTimeoutMs?: number;
+		lockFilePath?: string;
+	} = {}
+) {
 	const parentDir = await makeTempDir();
 	return await syncWasmZigAssets({
 		targetDir: path.join(parentDir, 'runtime'),
 		versionModulePath: path.join(parentDir, 'version.ts'),
-		lockFilePath: await writeInputLock(),
+		lockFilePath: options.lockFilePath ?? (await writeInputLock()),
 		fetchImpl,
-		releaseBaseUrl
+		releaseBaseUrl,
+		signal: options.signal,
+		downloadTimeoutMs: options.downloadTimeoutMs
 	});
 }
 
@@ -108,10 +130,20 @@ describe('syncWasmZigAssets', () => {
 		const runtimeBuild = JSON.parse(
 			await readFile(path.join(targetDir, 'runtime-build.json'), 'utf8')
 		) as {
+			schemaVersion: number;
 			profileId: string;
+			upstream: {
+				lockSchemaVersion: number;
+				allowedRedirectOrigins: string[];
+			};
 			assets: Record<string, Record<string, string | number>>;
 		};
+		expect(runtimeBuild.schemaVersion).toBe(2);
 		expect(runtimeBuild.profileId).toBe('fixture-zigc-wasm');
+		expect(runtimeBuild.upstream).toMatchObject({
+			lockSchemaVersion: 2,
+			allowedRedirectOrigins: [allowedRedirectOrigin]
+		});
 		expect(runtimeBuild.assets['zig_small.wasm']).toEqual(result.receipts['zig_small.wasm']);
 		expect(runtimeBuild.assets['std.tar.gz']).toEqual(result.receipts['std.tar.gz']);
 		expect(runtimeBuild.assets['std.tar.gz'].uncompressedBytes).toBe(stdlibTar.byteLength);
@@ -255,29 +287,230 @@ describe('syncWasmZigAssets', () => {
 	it('verifies pinned remote downloads before publishing them', async () => {
 		const fetchImpl = vi.fn(async (url: string | URL | Request) => {
 			const asset = String(url).endsWith('zig_small.wasm') ? compilerBytes : stdlibZip;
-			return new Response(asset, {
-				status: 200,
-				headers: { 'content-length': String(asset.byteLength) }
-			});
+			return responseFor(
+				asset,
+				`${allowedRedirectOrigin}/${path.basename(String(url))}?token=1`,
+				{
+					status: 200,
+					headers: { 'content-length': String(asset.byteLength) }
+				}
+			);
 		});
 
 		const result = await syncFromRemote(fetchImpl as typeof fetch);
 
 		expect(fetchImpl).toHaveBeenCalledTimes(2);
-		expect(fetchImpl).toHaveBeenCalledWith(`${releaseBaseUrl}/zig_small.wasm`, {
-			credentials: 'omit',
-			redirect: 'follow',
-			referrerPolicy: 'no-referrer'
-		});
+		expect(fetchImpl).toHaveBeenCalledWith(
+			`${releaseBaseUrl}/zig_small.wasm`,
+			expect.objectContaining({
+				credentials: 'omit',
+				redirect: 'follow',
+				referrerPolicy: 'no-referrer',
+				signal: expect.any(AbortSignal)
+			})
+		);
 		await expect(
 			readFile(path.join(result.targetDir, 'runtime-build.json'), 'utf8')
 		).resolves.toContain('fixture-zigc-wasm');
 	});
 
+	it('rejects untrusted redirect destinations before reading their bodies', async () => {
+		const cancel = vi.fn(async () => undefined);
+		const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+			if (!String(url).endsWith('zig_small.wasm')) {
+				return responseFor(stdlibZip, String(url));
+			}
+			return {
+				ok: true,
+				status: 200,
+				url: 'https://untrusted.example.test/zig_small.wasm',
+				headers: { get: () => String(compilerBytes.byteLength) },
+				body: { cancel }
+			} as unknown as Response;
+		});
+
+		await expect(syncFromRemote(fetchImpl as typeof fetch)).rejects.toThrow(
+			'redirected to an untrusted origin'
+		);
+		expect(cancel).toHaveBeenCalledOnce();
+	});
+
+	it('rejects responses without trustworthy final URL metadata', async () => {
+		const cancel = vi.fn(async () => undefined);
+		const fetchImpl = vi.fn(async () => {
+			return {
+				ok: true,
+				status: 200,
+				url: '',
+				headers: { get: () => null },
+				body: { cancel }
+			} as unknown as Response;
+		});
+
+		await expect(syncFromRemote(fetchImpl as typeof fetch)).rejects.toThrow(
+			'invalid final URL metadata'
+		);
+		expect(cancel).toHaveBeenCalled();
+	});
+
+	it('rejects malformed redirect allowlists in the input lock', async () => {
+		const fetchImpl = vi.fn();
+		const legacyLock = await writeInputLock(undefined, { schemaVersion: 1 });
+		const insecureLock = await writeInputLock(undefined, {
+			allowedRedirectOrigins: ['http://cdn.example.test']
+		});
+		const duplicateLock = await writeInputLock(undefined, {
+			allowedRedirectOrigins: [allowedRedirectOrigin, `${allowedRedirectOrigin}/`]
+		});
+
+		await expect(
+			syncFromRemote(fetchImpl as typeof fetch, { lockFilePath: legacyLock })
+		).rejects.toThrow('invalid profile metadata');
+		await expect(
+			syncFromRemote(fetchImpl as typeof fetch, { lockFilePath: insecureLock })
+		).rejects.toThrow('credential-free HTTPS origins');
+		await expect(
+			syncFromRemote(fetchImpl as typeof fetch, { lockFilePath: duplicateLock })
+		).rejects.toThrow('redirect origins must be unique');
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('cancels stalled fetches at the configured download deadline', async () => {
+		const signals: AbortSignal[] = [];
+		const fetchImpl = vi.fn(
+			(_url: string | URL | Request, init?: RequestInit) =>
+				new Promise<Response>(() => {
+					if (init?.signal) signals.push(init.signal);
+				})
+		);
+
+		await expect(
+			syncFromRemote(fetchImpl as typeof fetch, { downloadTimeoutMs: 10 })
+		).rejects.toMatchObject({
+			name: 'TimeoutError',
+			message: 'wasm-zig downloads timed out after 10 ms'
+		});
+		expect(signals).toHaveLength(2);
+		expect(signals.every((signal) => signal.aborted)).toBe(true);
+	});
+
+	it('cancels response bodies that arrive after the download deadline', async () => {
+		const cancel = vi.fn(async () => undefined);
+		const resolveResponses: Array<(response: Response) => void> = [];
+		const fetchImpl = vi.fn(
+			() =>
+				new Promise<Response>((resolve) => {
+					resolveResponses.push(resolve);
+				})
+		);
+
+		await expect(
+			syncFromRemote(fetchImpl as typeof fetch, { downloadTimeoutMs: 10 })
+		).rejects.toMatchObject({ name: 'TimeoutError' });
+		for (const resolve of resolveResponses) {
+			resolve({ body: { cancel } } as unknown as Response);
+		}
+		await vi.waitFor(() => expect(cancel).toHaveBeenCalledTimes(2));
+	});
+
+	it('cancels and releases an active reader at the download deadline', async () => {
+		const cancel = vi.fn(async () => undefined);
+		const releaseLock = vi.fn();
+		const read = vi.fn(
+			() => new Promise<ReadableStreamReadResult<Uint8Array>>(() => undefined)
+		);
+		const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+			if (!String(url).endsWith('zig_small.wasm')) {
+				return responseFor(stdlibZip, String(url));
+			}
+			return {
+				ok: true,
+				status: 200,
+				url: String(url),
+				headers: { get: () => null },
+				body: { getReader: () => ({ read, cancel, releaseLock }) }
+			} as unknown as Response;
+		});
+
+		await expect(
+			syncFromRemote(fetchImpl as typeof fetch, { downloadTimeoutMs: 10 })
+		).rejects.toMatchObject({ name: 'TimeoutError' });
+		expect(read).toHaveBeenCalledOnce();
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(releaseLock).toHaveBeenCalledOnce();
+	});
+
+	it('propagates external cancellation and aborts every pending request', async () => {
+		const controller = new AbortController();
+		const reason = new Error('caller cancelled Zig sync');
+		const signals: AbortSignal[] = [];
+		let markStarted: (() => void) | undefined;
+		const started = new Promise<void>((resolve) => {
+			markStarted = resolve;
+		});
+		const fetchImpl = vi.fn(
+			(_url: string | URL | Request, init?: RequestInit) =>
+				new Promise<Response>(() => {
+					if (init?.signal) signals.push(init.signal);
+					if (signals.length === 2) markStarted?.();
+				})
+		);
+
+		const sync = syncFromRemote(fetchImpl as typeof fetch, {
+			signal: controller.signal,
+			downloadTimeoutMs: 1_000
+		});
+		await started;
+		controller.abort(reason);
+
+		await expect(sync).rejects.toBe(reason);
+		expect(signals).toHaveLength(2);
+		expect(signals.every((signal) => signal.aborted && signal.reason === reason)).toBe(true);
+	});
+
+	it('aborts a sibling request when either pinned download fails', async () => {
+		let siblingSignal: AbortSignal | undefined;
+		let markSiblingStarted: (() => void) | undefined;
+		const siblingStarted = new Promise<void>((resolve) => {
+			markSiblingStarted = resolve;
+		});
+		const fetchImpl = vi.fn((url: string | URL | Request, init?: RequestInit) => {
+			if (String(url).endsWith('zig_small.wasm')) {
+				return Promise.resolve(
+					responseFor(compilerBytes, String(url), {
+						status: 200,
+						headers: { 'content-length': String(compilerBytes.byteLength + 1) }
+					})
+				);
+			}
+			siblingSignal = init?.signal ?? undefined;
+			markSiblingStarted?.();
+			return new Promise<Response>((_resolve, reject) => {
+				siblingSignal?.addEventListener('abort', () => reject(siblingSignal?.reason), {
+					once: true
+				});
+			});
+		});
+
+		const sync = syncFromRemote(fetchImpl as typeof fetch);
+		await siblingStarted;
+		await expect(sync).rejects.toThrow('download size does not match the pinned receipt');
+		expect(siblingSignal?.aborted).toBe(true);
+	});
+
+	it('validates the download deadline before starting network work', async () => {
+		const fetchImpl = vi.fn();
+
+		await expect(
+			syncFromRemote(fetchImpl as typeof fetch, { downloadTimeoutMs: 0 })
+		).rejects.toThrow('downloadTimeoutMs must be an integer between 1');
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
 	it('rejects a remote Content-Length that differs from the pinned receipt', async () => {
 		const fetchImpl = vi.fn(async (url: string | URL | Request) => {
 			const asset = String(url).endsWith('zig_small.wasm') ? compilerBytes : stdlibZip;
-			return new Response(asset, {
+			return responseFor(asset, String(url), {
 				status: 200,
 				headers: {
 					'content-length': String(
@@ -302,10 +535,13 @@ describe('syncWasmZigAssets', () => {
 			done: false
 		}));
 		const fetchImpl = vi.fn(async (url: string | URL | Request) => {
-			if (!String(url).endsWith('zig_small.wasm')) return new Response(stdlibZip);
+			if (!String(url).endsWith('zig_small.wasm')) {
+				return responseFor(stdlibZip, String(url));
+			}
 			return {
 				ok: true,
 				status: 200,
+				url: String(url),
 				headers: { get: () => null },
 				body: { getReader: () => ({ read, cancel, releaseLock }) }
 			} as unknown as Response;
@@ -323,7 +559,7 @@ describe('syncWasmZigAssets', () => {
 		corruptCompiler[7] ^= 1;
 		const fetchImpl = vi.fn(async (url: string | URL | Request) => {
 			const asset = String(url).endsWith('zig_small.wasm') ? corruptCompiler : stdlibZip;
-			return new Response(asset, {
+			return responseFor(asset, String(url), {
 				status: 200,
 				headers: { 'content-length': String(asset.byteLength) }
 			});

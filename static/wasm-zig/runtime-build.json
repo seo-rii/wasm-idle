@@ -1,9 +1,13 @@
 {
-	"schemaVersion": 1,
+	"schemaVersion": 2,
 	"profileId": "zigc-wasm-0.11.0",
 	"fingerprint": "df5423149ff36642",
 	"upstream": {
+		"lockSchemaVersion": 2,
 		"releaseBaseUrl": "https://github.com/Afirium/zigc-wasm/releases/download/v0.11.0",
+		"allowedRedirectOrigins": [
+			"https://release-assets.githubusercontent.com"
+		],
 		"inputs": {
 			"zig_small.wasm": {
 				"bytes": 5018805,
