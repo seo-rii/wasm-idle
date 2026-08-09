@@ -1,11 +1,15 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
+import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch';
+import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 
 declare var self: any;
 
 let stdinBufferTypeScript: Int32Array | null = null;
 let moduleUrl = '';
-let loadedModuleUrl = '';
+let moduleReceipt: TypeScriptModuleReceipt | null = null;
+let maxAssetBytes = 0;
+let loadedModuleIdentity = '';
 let runtimePromise: Promise<{
 	compiler: any;
 	executeBrowserTypeScriptArtifact: (
@@ -28,20 +32,107 @@ let runtimePromise: Promise<{
 let compiledArtifact: any = null;
 let compiledCacheKey = '';
 
-async function loadRuntime(url: string) {
-	if (!url) {
+interface TypeScriptModuleReceipt {
+	bytes: number;
+	sha256: string;
+}
+
+function snapshotModuleReceipt(value: unknown): TypeScriptModuleReceipt {
+	if (!value || typeof value !== 'object') {
+		throw new Error('TypeScript runtime integrity receipt is required');
+	}
+	const bytes = (value as { bytes?: unknown }).bytes;
+	const sha256 = (value as { sha256?: unknown }).sha256;
+	if (!Number.isSafeInteger(bytes) || (bytes as number) <= 0) {
+		throw new Error('TypeScript runtime integrity receipt has an invalid byte size');
+	}
+	if (typeof sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(sha256)) {
+		throw new Error('TypeScript runtime integrity receipt has an invalid SHA-256 digest');
+	}
+	return Object.freeze({ bytes: bytes as number, sha256 });
+}
+
+function requireMaxAssetBytes(value: unknown) {
+	if (!Number.isSafeInteger(value) || (value as number) <= 0) {
+		throw new Error('TypeScript runtime maxAssetBytes must be a positive safe integer');
+	}
+	return value as number;
+}
+
+function requireModuleUrl(value: unknown) {
+	if (typeof value !== 'string' || !value.trim()) {
 		throw new Error(
 			'TypeScript runtime is not configured. Set PUBLIC_WASM_TYPESCRIPT_MODULE_URL or runtimeAssets.typescript.moduleUrl.'
 		);
 	}
-	if (loadedModuleUrl === url && runtimePromise) {
+	let url: URL;
+	try {
+		url = new URL(value);
+	} catch {
+		throw new Error(`TypeScript runtime module URL is invalid: ${value}`);
+	}
+	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+		throw new Error(`TypeScript runtime module URL must use HTTP(S): ${value}`);
+	}
+	if (url.username || url.password || url.hash) {
+		throw new Error(
+			`TypeScript runtime module URL must not include credentials or a fragment: ${value}`
+		);
+	}
+	if (/%2f|%5c/iu.test(url.pathname)) {
+		throw new Error(
+			`TypeScript runtime module URL must not include encoded path separators: ${value}`
+		);
+	}
+	return url.href;
+}
+
+async function loadRuntime(urlValue: unknown, receiptValue: unknown, maxAssetBytesValue: unknown) {
+	const url = requireModuleUrl(urlValue);
+	const receipt = snapshotModuleReceipt(receiptValue);
+	const byteLimit = requireMaxAssetBytes(maxAssetBytesValue);
+	if (receipt.bytes > byteLimit) {
+		throw new Error(`TypeScript runtime module exceeds the ${byteLimit} byte limit`);
+	}
+	const identity = JSON.stringify([url, receipt.bytes, receipt.sha256]);
+	if (loadedModuleIdentity === identity && runtimePromise) {
 		return await runtimePromise;
 	}
-	loadedModuleUrl = url;
+	loadedModuleIdentity = identity;
 	compiledArtifact = null;
 	compiledCacheKey = '';
 	runtimePromise = (async () => {
-		const module = await import(/* @vite-ignore */ url);
+		const bytes = await fetchRuntimeAssetBytes({
+			url,
+			label: 'TypeScript runtime module',
+			maxAssetBytes: receipt.bytes
+		});
+		await verifyRuntimeAssetIntegrity({
+			asset: url,
+			bytes,
+			expected: receipt,
+			runtimeId: 'TYPESCRIPT'
+		});
+		if (
+			typeof URL.createObjectURL !== 'function' ||
+			typeof URL.revokeObjectURL !== 'function'
+		) {
+			throw new Error('TypeScript runtime requires Blob URL support');
+		}
+		const revokeObjectURL = URL.revokeObjectURL.bind(URL);
+		const verifiedModuleUrl = URL.createObjectURL(
+			new Blob([bytes], { type: 'text/javascript' })
+		);
+		let module: Record<string, any>;
+		try {
+			module = await import(/* @vite-ignore */ verifiedModuleUrl);
+		} finally {
+			try {
+				revokeObjectURL(verifiedModuleUrl);
+			} catch {
+				// Blob URL cleanup must not replace the verified module's import outcome.
+			}
+		}
 		const factory =
 			typeof module.createTypeScriptCompiler === 'function'
 				? module.createTypeScriptCompiler
@@ -88,6 +179,8 @@ self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
 		moduleUrl: nextModuleUrl,
+		moduleReceipt: nextModuleReceipt,
+		maxAssetBytes: nextMaxAssetBytes,
 		buffer,
 		code,
 		prepare,
@@ -100,17 +193,26 @@ self.onmessage = async (event: { data: any }) => {
 	} = event.data;
 	try {
 		if (load) {
-			moduleUrl = nextModuleUrl;
+			const configuredModuleUrl = requireModuleUrl(nextModuleUrl);
+			const configuredModuleReceipt = snapshotModuleReceipt(nextModuleReceipt);
+			const configuredMaxAssetBytes = requireMaxAssetBytes(nextMaxAssetBytes);
 			if (log) {
-				console.log(`[wasm-idle:typescript-worker] load moduleUrl=${moduleUrl}`);
+				console.log(`[wasm-idle:typescript-worker] load moduleUrl=${configuredModuleUrl}`);
 			}
-			await loadRuntime(moduleUrl);
+			await loadRuntime(
+				configuredModuleUrl,
+				configuredModuleReceipt,
+				configuredMaxAssetBytes
+			);
+			moduleUrl = configuredModuleUrl;
+			moduleReceipt = configuredModuleReceipt;
+			maxAssetBytes = configuredMaxAssetBytes;
 			postMessage({ load: true });
 			return;
 		}
 
 		stdinBufferTypeScript = new Int32Array(buffer);
-		const runtime = await loadRuntime(moduleUrl);
+		const runtime = await loadRuntime(moduleUrl, moduleReceipt, maxAssetBytes);
 		const compileCacheKey = `${language}\n${activePath}\n${code}`;
 		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
 			if (log) {

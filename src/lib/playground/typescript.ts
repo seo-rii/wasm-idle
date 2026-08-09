@@ -1,5 +1,6 @@
 import { resolveTypeScriptModuleUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import {
+	AssetTooLargeError,
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
@@ -21,6 +22,7 @@ import {
 	createWasmIdleSharedBuffer,
 	type WasmIdleSharedBuffer
 } from '$lib/playground/sharedBuffer';
+import { WASM_TYPESCRIPT_MODULE_RECEIPT } from '$lib/playground/wasmTypeScriptVersion';
 import { WorkerSession } from '$lib/playground/workerSession';
 
 type TypeScriptSandboxLanguage = 'JAVASCRIPT' | 'TYPESCRIPT';
@@ -360,6 +362,16 @@ class TypeScriptSandbox implements Sandbox {
 				nextModuleUrl = resolveTypeScriptModuleUrl(runtimeAssets, currentUrl);
 				this.requireOperationActive(activeOperation);
 			}
+			if (WASM_TYPESCRIPT_MODULE_RECEIPT.bytes > limits.maxAssetBytes) {
+				throw new AssetTooLargeError(
+					`${this.languageLabel} runtime module exceeds the ${limits.maxAssetBytes} byte limit`,
+					{
+						runtimeId: this.language,
+						limit: limits.maxAssetBytes,
+						actual: WASM_TYPESCRIPT_MODULE_RECEIPT.bytes
+					}
+				);
+			}
 			progressTarget = progress;
 			progressSet = progressTarget?.set;
 			this.requireOperationActive(activeOperation);
@@ -453,7 +465,9 @@ class TypeScriptSandbox implements Sandbox {
 					worker.onmessage = handler;
 					worker.postMessage({
 						load: true,
-						moduleUrl: this.moduleUrl
+						moduleUrl: this.moduleUrl,
+						moduleReceipt: { ...WASM_TYPESCRIPT_MODULE_RECEIPT },
+						maxAssetBytes: limits.maxAssetBytes
 					});
 				} else {
 					const worker = this.worker;
