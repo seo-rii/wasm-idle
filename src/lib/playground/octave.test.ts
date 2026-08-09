@@ -91,6 +91,44 @@ describe('Octave sandbox', () => {
 		expect(outputs).toContain('factorial_plus_bonus=27\n');
 	});
 
+	it('terminates Octave output before exceeding the cumulative UTF-8 byte limit', async () => {
+		const sandbox = new Octave();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/absproxy/5173');
+		onPostMessage = () => undefined;
+		const running = sandbox.run('disp("bounded")', false, true, undefined, [], {
+			limits: { maxOutputBytes: 5 }
+		});
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+
+		staleHandler?.({ data: { output: 'é' } } as MessageEvent<any>);
+		staleHandler?.({ data: { output: '🙂' } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			runtimeId: 'OCTAVE',
+			actual: 6,
+			limit: 5
+		});
+		expect(output).toHaveBeenCalledOnce();
+		expect(output).toHaveBeenCalledWith('é');
+		expect(output).not.toHaveBeenCalledWith('🙂');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalledWith('stale\n');
+
+		onPostMessage = null;
+		await expect(sandbox.run('disp("retry")', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
 	it('normalizes a valid Octave workspace before worker dispatch', async () => {
 		const sandbox = new Octave();
 		await sandbox.load('/absproxy/5173');

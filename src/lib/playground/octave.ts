@@ -6,6 +6,7 @@ import { type CompilerDiagnostic, type SandboxExecutionOptions } from '$lib/play
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	OutputLimitError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
@@ -44,6 +45,8 @@ type OctaveRunOperation = OctaveOperation & {
 	phase: 'execute';
 	stdinBuffer?: ArrayBufferLike;
 };
+
+const OUTPUT_ENCODER = new TextEncoder();
 
 class Octave implements Sandbox {
 	output: any = null;
@@ -335,6 +338,7 @@ class Octave implements Sandbox {
 			this.activeRun?.token === runOperation.token && !runOperation.cancelled;
 		let signal: AbortSignal | undefined;
 		let programArgs: string[];
+		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		let stdinOption: SandboxExecutionOptions['stdin'];
 		try {
@@ -355,7 +359,7 @@ class Octave implements Sandbox {
 			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
 			const limitOverrides = options.limits;
 			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
-			const limits = resolveExecutionLimits(limitOverrides);
+			limits = resolveExecutionLimits(limitOverrides);
 			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
 			const workspaceFiles = options.workspaceFiles ?? [];
 			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
@@ -412,6 +416,7 @@ class Octave implements Sandbox {
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
+			let outputBytes = 0;
 			let onAbort: (() => void) | undefined;
 			let cleanedUp = false;
 			const cleanup = () => {
@@ -552,7 +557,26 @@ class Octave implements Sandbox {
 							}
 							reportWorkerProgress(_prog, progress);
 							if (!ownsRun()) return;
-							if (output) this.output?.(output);
+							if (output) {
+								const actual =
+									outputBytes + OUTPUT_ENCODER.encode(String(output)).byteLength;
+								if (actual > limits.maxOutputBytes) {
+									failRun(
+										new OutputLimitError(
+											`Octave output exceeded ${limits.maxOutputBytes} bytes`,
+											{
+												actual,
+												limit: limits.maxOutputBytes,
+												phase: 'execute',
+												runtimeId: 'OCTAVE'
+											}
+										)
+									);
+									return;
+								}
+								outputBytes = actual;
+								this.output?.(output);
+							}
 							if (!ownsRun()) return;
 							if (results) {
 								if (worker.onmessage === handler) worker.onmessage = null;
