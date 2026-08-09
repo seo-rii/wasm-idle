@@ -5,7 +5,15 @@ import {
 } from '$lib/playground/assets';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
-import { BusyError, OutputLimitError, TimeoutError, resolveExecutionLimits } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	OutputLimitError,
+	RuntimeConfigurationError,
+	TimeoutError,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 import {
 	flushBufferedEof,
 	flushQueuedStdin,
@@ -399,6 +407,43 @@ class Elixir implements Sandbox {
 				}
 				limits = resolveExecutionLimits(options.limits);
 				if (!ownsReservation()) return;
+				const workspaceFiles = options.workspaceFiles ?? [];
+				if (!ownsReservation()) return;
+				const activePath =
+					options.activePath ?? (this.language === 'ERLANG' ? 'main.erl' : 'main.exs');
+				if (!ownsReservation()) return;
+				const workspaceLimits = options.workspaceLimits;
+				if (!ownsReservation()) return;
+				const maxFiles = workspaceLimits?.maxFiles;
+				if (!ownsReservation()) return;
+				const maxFileBytes = workspaceLimits?.maxFileBytes;
+				if (!ownsReservation()) return;
+				const maxTotalBytes = workspaceLimits?.maxTotalBytes;
+				if (!ownsReservation()) return;
+				const maxPathBytes = workspaceLimits?.maxPathBytes;
+				if (!ownsReservation()) return;
+				const caseSensitive = workspaceLimits?.caseSensitive;
+				if (!ownsReservation()) return;
+				const workspace = validateExecutionWorkspace(code, workspaceFiles, activePath, {
+					maxFiles,
+					maxFileBytes: Math.min(
+						maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxPathBytes,
+					caseSensitive
+				});
+				if (!ownsReservation()) return;
+				if (workspace.workspaceFiles.length > 0) {
+					throw new RuntimeConfigurationError(
+						`${runtimeLabel} runtime does not support auxiliary workspace files`,
+						{ phase: 'execute', runtimeId: this.language }
+					);
+				}
 				stdin = options.stdin;
 				if (!ownsReservation()) return;
 				hasExplicitStdin = !prepare && stdin !== undefined;

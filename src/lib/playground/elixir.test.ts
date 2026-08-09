@@ -995,6 +995,141 @@ describe('Elixir sandbox', () => {
 		await expect(sandbox.run('IO.puts("retry")', false)).resolves.toBe(':ok');
 	});
 
+	it.each([
+		{
+			name: 'Elixir',
+			language: 'ELIXIR' as const,
+			runtimeAssets: { elixir: { bundleUrl: '/runtime/elixir/bundle.avm' } },
+			code: 'IO.puts("workspace")',
+			activePath: '../main.exs'
+		},
+		{
+			name: 'Erlang',
+			language: 'ERLANG' as const,
+			runtimeAssets: { erlang: { bundleUrl: '/runtime/erlang/bundle.avm' } },
+			code: 'io:format("workspace~n").',
+			activePath: '/main.erl'
+		}
+	])('rejects an unsafe $name active path before worker dispatch', async (testCase) => {
+		const sandbox = new Elixir(testCase.language);
+		await sandbox.load(testCase.runtimeAssets);
+		const worker = workerInstances[0];
+
+		await expect(
+			sandbox.run(testCase.code, false, true, undefined, [], {
+				activePath: testCase.activePath
+			})
+		).rejects.toMatchObject({
+			name: 'WorkspaceValidationError',
+			code: 'invalid-path',
+			path: testCase.activePath
+		});
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.exit).toBe(true);
+
+		await expect(sandbox.run(testCase.code, false)).resolves.toBe(':ok');
+	});
+
+	it.each([
+		{
+			name: 'Elixir',
+			language: 'ELIXIR' as const,
+			runtimeAssets: { elixir: { bundleUrl: '/runtime/elixir/bundle.avm' } },
+			activePath: 'lib/main.exs'
+		},
+		{
+			name: 'Erlang',
+			language: 'ERLANG' as const,
+			runtimeAssets: { erlang: { bundleUrl: '/runtime/erlang/bundle.avm' } },
+			activePath: 'src/main.erl'
+		}
+	])('rejects unsupported auxiliary $name workspace files', async (testCase) => {
+		const sandbox = new Elixir(testCase.language);
+		await sandbox.load(testCase.runtimeAssets);
+		const worker = workerInstances[0];
+
+		await expect(
+			sandbox.run('workspace_source', false, true, undefined, [], {
+				activePath: testCase.activePath,
+				workspaceFiles: [{ path: 'lib/helper.txt', content: 'helper' }]
+			})
+		).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'execute',
+			runtimeId: testCase.language
+		});
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		await expect(
+			sandbox.run('workspace_source', false, true, undefined, [], {
+				activePath: testCase.activePath,
+				workspaceFiles: [{ path: testCase.activePath, content: 'stale source' }]
+			})
+		).resolves.toBe(':ok');
+	});
+
+	it('clamps the Elixir workspace byte limit to the execution ceiling', async () => {
+		const sandbox = new Elixir();
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		const worker = workerInstances[0];
+
+		await expect(
+			sandbox.run('four', false, true, undefined, [], {
+				limits: { maxWorkspaceBytes: 3 },
+				workspaceLimits: { maxFileBytes: 100, maxTotalBytes: 100 }
+			})
+		).rejects.toMatchObject({
+			name: 'WorkspaceValidationError',
+			code: 'file-size-limit',
+			limit: 3,
+			actual: 4
+		});
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.terminate).not.toHaveBeenCalled();
+
+		await expect(sandbox.run('ok', false)).resolves.toBe(':ok');
+	});
+
+	it('preserves a replacement Elixir load when a workspace getter terminates the run', async () => {
+		const sandbox = new Elixir();
+		const runtimeAssets = {
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		};
+		const terminationReason = new Error('replace Elixir during workspace snapshot');
+		let replacementLoad: Promise<void> | undefined;
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const options = Object.defineProperty({}, 'workspaceFiles', {
+			enumerable: true,
+			get: () => {
+				sandbox.terminate(terminationReason);
+				replacementLoad = sandbox.load(runtimeAssets);
+				return [];
+			}
+		});
+
+		const superseded = sandbox.run('superseded', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(terminationReason);
+		expect(replacementLoad).toBeDefined();
+		await expect(replacementLoad).resolves.toBeUndefined();
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(retiredWorker.postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+
+		await expect(sandbox.run('retry', false)).resolves.toBe(':ok');
+	});
+
 	it('aborts only the active Elixir execution and permits a clean retry', async () => {
 		const sandbox = new Elixir();
 		const output = vi.fn();
