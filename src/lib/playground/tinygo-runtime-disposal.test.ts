@@ -178,4 +178,24 @@ describe('TinyGo compiler runtime disposal', () => {
 		runtime.dispose();
 		expect(workers[0]?.terminateCalls).toBe(1);
 	});
+
+	it('retires a booted compiler worker when the asset byte limit changes', async () => {
+		const { workers } = installMockWorker();
+		const runtime = createTinyGoRuntime({
+			assetBaseUrl: 'https://runtime.invalid/',
+			assetLoader: () => 'https://runtime.invalid/emception.worker.js',
+			maxAssetBytes: 8
+		});
+
+		await runtime.boot();
+		expect(workers).toHaveLength(1);
+
+		runtime.setMaxAssetBytes(4);
+		expect(workers[0]?.terminateCalls).toBe(1);
+
+		await runtime.boot();
+		expect(workers).toHaveLength(2);
+		runtime.dispose();
+		expect(workers[1]?.terminateCalls).toBe(1);
+	});
 });

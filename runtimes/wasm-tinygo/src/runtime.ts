@@ -9,6 +9,7 @@ import {
 } from '@bjorn3/browser_wasi_shim';
 import * as Comlink from 'comlink';
 import {
+	DEFAULT_MAX_TINYGO_ASSET_BYTES,
 	type TinyGoRuntimeAssetLoader,
 	type TinyGoRuntimeAssetPackReference,
 	type TinyGoRuntimeAssetProgress,
@@ -198,6 +199,7 @@ export type TinyGoTestHooks = {
 	readFrontendAnalysisInputManifest(): TinyGoFrontendInputManifest | null;
 	setBuildRequestOverrides(overrides: TinyGoBuildRequestOverrides | null): void;
 	setDriverBridgeManifest(manifest: TinyGoDriverBridgeManifest | null): void;
+	setMaxAssetBytes(maxAssetBytes: number): void;
 	setWorkspaceFiles(files: Record<string, string> | null): void;
 };
 
@@ -230,6 +232,7 @@ export type TinyGoRuntimeOptions = {
 	assetPacks?: TinyGoRuntimeAssetPackReference[];
 	bootstrapGoEntrySource?: string;
 	hostCompileUrl?: string;
+	maxAssetBytes?: number;
 	onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 	initialLogMessages?: Array<{ message: string; tone?: Exclude<PhaseTone, 'idle'> | 'idle' }>;
 	onControlsLockedChange?: (locked: boolean) => void;
@@ -247,6 +250,7 @@ export type TinyGoBrowserRuntimeOptions = {
 	assetPacks?: TinyGoRuntimeAssetPackReference[];
 	bootstrapGoEntrySource?: string;
 	hostCompileUrl?: string;
+	maxAssetBytes?: number;
 	onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 	initialLogs?: string[];
 	onActivityLogChange?: (activityLog: string, tone: Exclude<PhaseTone, 'idle'> | 'idle') => void;
@@ -392,6 +396,10 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 	const textDecoder = new TextDecoder();
 	const bootstrapGoEntrySource =
 		options.bootstrapGoEntrySource ?? DEFAULT_TINYGO_BOOTSTRAP_GO_ENTRY_SOURCE;
+	let maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_TINYGO_ASSET_BYTES;
+	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes < 0) {
+		throw new Error('wasm-tinygo maxAssetBytes must be a non-negative safe integer');
+	}
 
 	let emceptionWorker: Worker | null = null;
 	let emception: EmceptionBridge | null = null;
@@ -445,7 +453,8 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 			assetUrl: resolveAssetUrl(assetPath),
 			label: assetPath,
 			loader: options.assetLoader,
-			signal
+			signal,
+			maxAssetBytes
 		});
 
 	const loadAssetBytes = async (assetPath: string, label: string) =>
@@ -456,7 +465,8 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 			loader: options.assetLoader,
 			packs: options.assetPacks ?? null,
 			assetBaseUrl,
-			onProgress: options.onProgress
+			onProgress: options.onProgress,
+			maxAssetBytes
 		});
 
 	const loadCompilerManifest = async (): Promise<TinyGoCompilerManifest | null> => {
@@ -3035,6 +3045,17 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 			setPhase('smoke', 'idle', 'idle');
 			setPhase('verify', 'idle', 'idle');
 		},
+		setMaxAssetBytes: (nextMaxAssetBytes) => {
+			ensureActionIdle();
+			if (!Number.isSafeInteger(nextMaxAssetBytes) || nextMaxAssetBytes < 0) {
+				throw new Error('wasm-tinygo maxAssetBytes must be a non-negative safe integer');
+			}
+			if (maxAssetBytes === nextMaxAssetBytes) return;
+			maxAssetBytes = nextMaxAssetBytes;
+			compilerManifestPromise = null;
+			disposeEmceptionRuntime();
+			invalidateCachedBuildState();
+		},
 		setWorkspaceFiles: (files) => {
 			ensureActionIdle();
 			invalidateCachedBuildState();
@@ -3064,6 +3085,7 @@ export const createTinyGoBrowserRuntime = (
 		assetPacks: options.assetPacks,
 		bootstrapGoEntrySource: options.bootstrapGoEntrySource,
 		hostCompileUrl: options.hostCompileUrl,
+		maxAssetBytes: options.maxAssetBytes,
 		initialLogMessages: (options.initialLogs ?? []).map((message) => ({ message })),
 		onControlsLockedChange: options.onControlsLockedChange,
 		onPhaseChange: options.onPhaseChange,

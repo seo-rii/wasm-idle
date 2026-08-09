@@ -112,6 +112,7 @@ export const createBundledTinyGoRuntime = (options = {}) => {
   setBuildRequestOverrides(overrides) {
     state.buildRequestOverrides = overrides;
   },
+  setMaxAssetBytes() {},
   dispose() {
     state.disposeCalls += 1;
   },

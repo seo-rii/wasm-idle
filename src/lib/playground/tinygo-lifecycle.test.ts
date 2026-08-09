@@ -17,6 +17,8 @@ type RuntimeFixtureState = {
 		buildRequestOverrides: { target?: string } | null;
 		disposeCalls: number;
 		executeCalls: number;
+		initialMaxAssetBytes: number | null;
+		maxAssetByteLimits: number[];
 		planCalls: number;
 		workspaceFiles: Record<string, string> | null;
 	}>;
@@ -60,6 +62,8 @@ const record = {
   buildRequestOverrides: null,
   disposeCalls: 0,
   executeCalls: 0,
+  initialMaxAssetBytes: options.maxAssetBytes ?? null,
+  maxAssetByteLimits: [],
   planCalls: 0,
   workspaceFiles: null
 };
@@ -103,6 +107,9 @@ return ({
   setBuildRequestOverrides(overrides) {
     record.buildRequestOverrides = overrides ? { ...overrides } : null;
   },
+  setMaxAssetBytes(maxAssetBytes) {
+    record.maxAssetByteLimits.push(maxAssetBytes);
+  },
   setWorkspaceFiles(files) {
     record.workspaceFiles = files ? Object.fromEntries(Object.entries(files)) : null;
   },
@@ -115,8 +122,8 @@ return ({
 }
 `;
 
-const createRuntimeModuleUrl = (marker = 'default') =>
-	`data:text/javascript;base64,${Buffer.from(`${runtimeModuleSource}\n// ${marker}`, 'utf8').toString('base64')}`;
+const createRuntimeModuleUrl = (marker = 'default', source = runtimeModuleSource) =>
+	`data:text/javascript;base64,${Buffer.from(`${source}\n// ${marker}`, 'utf8').toString('base64')}`;
 
 const runtimeModuleUrl = createRuntimeModuleUrl();
 
@@ -520,6 +527,56 @@ describe('TinyGo operation lifecycle', () => {
 		).resolves.toBe(true);
 		expect(runtime?.bootCalls).toBe(2);
 		expect(runtime?.workspaceFiles?.['message.go']).toContain('"updated"');
+	});
+
+	it('updates the cached TinyGo compiler asset quota for every execution', async () => {
+		const sandbox = new TinyGo();
+		const source = 'package main\nfunc main() {}';
+		await sandbox.load(runtimeAssets, '', true, [], {
+			limits: { maxAssetBytes: 64 }
+		});
+
+		await expect(
+			sandbox.run(source, false, true, undefined, [], {
+				limits: { maxAssetBytes: 64 }
+			})
+		).resolves.toBe(true);
+		await expect(
+			sandbox.run(source, false, true, undefined, [], {
+				limits: { maxAssetBytes: 32 }
+			})
+		).resolves.toBe(true);
+
+		expect(runtimeFixtureState.runtimeRecords).toHaveLength(1);
+		expect(runtimeFixtureState.runtimeRecords[0]).toMatchObject({
+			bootCalls: 2,
+			initialMaxAssetBytes: 64,
+			maxAssetByteLimits: [64, 32]
+		});
+	});
+
+	it('rejects a TinyGo runtime that cannot enforce per-operation asset quotas', async () => {
+		const legacyRuntimeSource = runtimeModuleSource.replace(
+			`  setMaxAssetBytes(maxAssetBytes) {
+    record.maxAssetByteLimits.push(maxAssetBytes);
+  },
+`,
+			''
+		);
+		const sandbox = new TinyGo();
+
+		await expect(
+			sandbox.load({
+				rootUrl: '/assets',
+				tinygo: {
+					moduleUrl: createRuntimeModuleUrl('missing-asset-limit', legacyRuntimeSource)
+				}
+			})
+		).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			runtimeId: 'TINYGO'
+		});
 	});
 
 	it('snapshots explicit TinyGo stdin and replaces previously queued input with EOF', async () => {

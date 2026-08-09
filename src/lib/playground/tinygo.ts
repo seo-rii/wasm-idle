@@ -42,6 +42,7 @@ type TinyGoRuntimeHooks = {
 		reason?: 'bootstrap-artifact' | 'missing-wasi-entrypoint';
 	} | null;
 	setBuildRequestOverrides?(overrides: { target?: TinyGoTarget } | null): void;
+	setMaxAssetBytes?(maxAssetBytes: number): void;
 	setWorkspaceFiles(files: Record<string, string> | null): void;
 	dispose?(): void;
 };
@@ -58,6 +59,7 @@ type TinyGoRuntimeModule = {
 	createBundledTinyGoRuntime?: (options?: {
 		assetLoader?: TinyGoRuntimeAssetLoader;
 		assetPacks?: TinyGoRuntimeAssetPackReference[];
+		maxAssetBytes?: number;
 		rustRuntimeBaseUrl?: string;
 		onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 	}) => TinyGoRuntimeHooks;
@@ -65,6 +67,7 @@ type TinyGoRuntimeModule = {
 		assetBaseUrl: string;
 		assetLoader?: TinyGoRuntimeAssetLoader;
 		assetPacks?: TinyGoRuntimeAssetPackReference[];
+		maxAssetBytes?: number;
 		rustRuntimeBaseUrl?: string;
 		onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 	}) => TinyGoRuntimeHooks;
@@ -200,7 +203,7 @@ class TinyGo implements Sandbox {
 				progress?.set?.(1);
 				this.assertOperation(operation);
 			} catch (error) {
-				throw new Error(error instanceof Error ? error.message : String(error));
+				throw error instanceof Error ? error : new Error(String(error));
 			}
 		});
 	}
@@ -584,6 +587,17 @@ class TinyGo implements Sandbox {
 		this.runtimeProgress.set?.(nextValue);
 	}
 
+	private requireRuntimeAssetLimitSetter(runtime: TinyGoRuntimeHooks) {
+		const setMaxAssetBytes = runtime.setMaxAssetBytes;
+		if (typeof setMaxAssetBytes !== 'function') {
+			throw new RuntimeConfigurationError(
+				'TinyGo runtime module must implement setMaxAssetBytes()',
+				{ runtimeId: 'TINYGO' }
+			);
+		}
+		return (maxAssetBytes: number) => setMaxAssetBytes.call(runtime, maxAssetBytes);
+	}
+
 	private async ensureRuntime(operation: TinyGoOperation) {
 		this.assertOperation(operation);
 		if (this.runtime) {
@@ -602,6 +616,8 @@ class TinyGo implements Sandbox {
 		const assetLoader = this.assetLoader;
 		const assetPacks = this.assetPacks;
 		const rustRuntimeBaseUrl = this.rustRuntimeBaseUrl;
+		const maxAssetBytes =
+			operation.limits?.maxAssetBytes ?? DEFAULT_EXECUTION_LIMITS.maxAssetBytes;
 		let nextRuntime: TinyGoRuntimeHooks | null = null;
 		const runtimePromise = (async () => {
 			try {
@@ -612,6 +628,7 @@ class TinyGo implements Sandbox {
 				const commonOptions = {
 					assetLoader,
 					assetPacks,
+					maxAssetBytes,
 					rustRuntimeBaseUrl: rustRuntimeBaseUrl || undefined,
 					onProgress: (progress: TinyGoRuntimeAssetProgress) =>
 						this.reportRuntimeProgress(runtimeToken, progress)
@@ -628,6 +645,7 @@ class TinyGo implements Sandbox {
 						'TinyGo runtime module must export createBundledTinyGoRuntime or createTinyGoRuntime'
 					);
 				}
+				this.requireRuntimeAssetLimitSetter(nextRuntime);
 				this.assertOperation(operation);
 				if (this.runtimePromiseToken !== runtimePromiseToken) {
 					throw operation.reason ?? 'TinyGo runtime startup superseded';
@@ -695,6 +713,8 @@ class TinyGo implements Sandbox {
 		this.assertOperation(operation);
 		const compileCacheKey = JSON.stringify({
 			moduleUrl: this.moduleUrl,
+			maxAssetBytes:
+				operation.limits?.maxAssetBytes ?? DEFAULT_EXECUTION_LIMITS.maxAssetBytes,
 			target,
 			workspaceFiles
 		});
@@ -707,6 +727,10 @@ class TinyGo implements Sandbox {
 		if (!runtimeToken || this.runtime !== runtime) {
 			throw operation.reason ?? 'TinyGo compiler runtime is not available';
 		}
+		this.requireRuntimeAssetLimitSetter(runtime)(
+			operation.limits?.maxAssetBytes ?? DEFAULT_EXECUTION_LIMITS.maxAssetBytes
+		);
+		this.assertOperation(operation);
 		runtime.reset();
 		this.assertOperation(operation);
 		this.lastActivityLog = runtime.readActivityLog();
