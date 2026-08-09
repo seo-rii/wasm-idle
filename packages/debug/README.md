@@ -134,3 +134,13 @@ opt-in soak; adjust the existing
 Streaming input is verified on the same product path: a C target resumes from an LLDB source
 breakpoint, flushes a prompt, blocks in WASI `stdin`, and receives input plus EOF only after the
 browser observes that prompt. This keeps debugger control traffic independent from terminal I/O.
+
+Transport preemption is also tested with the real product adapter. One fixture stalls the browser
+output readers until both dedicated stdout and stderr rings are within 16 KiB of capacity, then
+requires Pause, Stop Debug, balanced Worker disposal, and a clean recovery launch. Another fixture
+leaves WAMR blocked in `scanf` after its prompt. Because that synchronous read may defer the RSP
+interrupt, the fixture bounds the pause attempt to five seconds, requires disconnect and cleanup
+within twice that interval, and proves that a replacement LLDB/WAMR session can immediately run to
+completion. The pause bound is configurable through
+`WASM_IDLE_DEBUG_TRANSPORT_PAUSE_TIMEOUT_MS`; a timeout ends that pause attempt explicitly and never
+silently switches the live session to trace debugging.

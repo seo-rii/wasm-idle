@@ -323,6 +323,19 @@ The session gives DAP `disconnect` a short best-effort grace period, then closes
 terminates both workers without waiting for LLDB's deferred response. The fixture requires the UI
 to return to Ready within five seconds. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-disconnect` to run only
 this fixture locally.
+Two transport-adversary fixtures exercise the same cleanup boundary under blocked WASI I/O. The
+output fixture stalls the browser's queue consumers for three seconds while an infinite C target
+alternates 16 KiB writes to stdout and stderr. It requires both independent rings to reach within
+16 KiB of capacity, requests Pause in the same browser turn, and verifies a source stop before
+disconnecting and launching a clean recovery program. Set
+`WASM_IDLE_DEBUG_BROWSER_CASES=c-transport-saturation` to select it. The stdin fixture continues
+past a source breakpoint, observes a flushed prompt, deliberately supplies no input, and requests
+Pause while WAMR is blocked in `scanf`. A synchronous WAMR stdin read may not service that
+interrupt, so the gate records either a pause or an explicit five-second timeout, then requires
+disconnect and Worker cleanup within twice that interval and an immediate successful relaunch.
+Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-blocked-stdin` to select it. Override the bounded pause interval
+with `WASM_IDLE_DEBUG_TRANSPORT_PAUSE_TIMEOUT_MS`; the existing disconnect timeout override remains
+available for slower CI hosts.
 A fourth C fixture repeats that running-target launch and disconnect sequence three times in one
 page. It instruments page-created workers, requires every extra LLDB/WAMR worker pair to terminate,
 and verifies that the active worker count returns to the first-run baseline after each disconnect.
