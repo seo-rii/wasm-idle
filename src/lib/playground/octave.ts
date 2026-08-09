@@ -2,11 +2,7 @@ import {
 	resolveOctaveRuntimeAssetConfig,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
-import {
-	resolveSandboxExecutionArgs,
-	type CompilerDiagnostic,
-	type SandboxExecutionOptions
-} from '$lib/playground/options';
+import { type CompilerDiagnostic, type SandboxExecutionOptions } from '$lib/playground/options';
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
@@ -32,9 +28,21 @@ type OctaveWorkerMessage = {
 	progress?: { percent?: number; stage?: string };
 };
 
-type OctaveLoadOperation = {
+type OctaveOperation = {
 	token: symbol;
+	phase: 'startup' | 'execute';
+	cancelled: boolean;
+	cancellationReason?: unknown;
+};
+
+type OctaveLoadOperation = OctaveOperation & {
+	phase: 'startup';
 	reject: (reason?: unknown) => void;
+};
+
+type OctaveRunOperation = OctaveOperation & {
+	phase: 'execute';
+	stdinBuffer?: ArrayBufferLike;
 };
 
 class Octave implements Sandbox {
@@ -54,7 +62,7 @@ class Octave implements Sandbox {
 	pendingEof = false;
 	stdinWaiters: Array<() => void> = [];
 	private activeLoad: OctaveLoadOperation | null = null;
-	private activeRun: symbol | null = null;
+	private activeRun: OctaveRunOperation | null = null;
 	private readonly workerSession = new WorkerSession({
 		label: 'Octave',
 		onDispose: (worker) => {
@@ -66,7 +74,8 @@ class Octave implements Sandbox {
 	});
 
 	private abortReason(signal: AbortSignal, phase: 'startup' | 'execute') {
-		if (signal.reason !== undefined) return signal.reason;
+		const reason = signal.reason;
+		if (reason !== undefined) return reason;
 		return new DOMException(
 			phase === 'startup' ? 'Octave runtime startup aborted' : 'Octave execution aborted',
 			'AbortError'
@@ -81,10 +90,6 @@ class Octave implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		const signal = options.signal;
-		if (signal?.aborted) {
-			return Promise.reject(this.abortReason(signal, 'startup'));
-		}
 		if (this.activeLoad || this.activeRun) {
 			return Promise.reject(
 				new BusyError('Octave runtime already has an active operation', {
@@ -95,9 +100,33 @@ class Octave implements Sandbox {
 		}
 		const operation: OctaveLoadOperation = {
 			token: Symbol('Octave load'),
+			phase: 'startup',
+			cancelled: false,
 			reject: () => undefined
 		};
 		this.activeLoad = operation;
+		let signal: AbortSignal | undefined;
+		try {
+			signal = options.signal;
+			if (this.activeLoad?.token !== operation.token || operation.cancelled) {
+				return Promise.reject(operation.cancellationReason);
+			}
+			const signalAborted = signal?.aborted ?? false;
+			if (this.activeLoad?.token !== operation.token || operation.cancelled) {
+				return Promise.reject(operation.cancellationReason);
+			}
+			if (signalAborted && signal) {
+				const reason = this.abortReason(signal, 'startup');
+				if (this.activeLoad?.token !== operation.token || operation.cancelled) {
+					return Promise.reject(operation.cancellationReason);
+				}
+				if (this.activeLoad?.token === operation.token) this.activeLoad = null;
+				return Promise.reject(reason);
+			}
+		} catch (error) {
+			if (this.activeLoad?.token === operation.token) this.activeLoad = null;
+			return Promise.reject(operation.cancelled ? operation.cancellationReason : error);
+		}
 		let cleanup = () => {
 			if (this.activeLoad?.token === operation.token) this.activeLoad = null;
 		};
@@ -128,21 +157,73 @@ class Octave implements Sandbox {
 				reject(reason);
 			};
 			operation.reject = rejectLoad;
-			onAbort = signal ? () => rejectLoad(this.abortReason(signal, 'startup')) : undefined;
+			onAbort = signal
+				? () => {
+						let reason: unknown;
+						try {
+							reason = this.abortReason(signal, 'startup');
+						} catch (error) {
+							reason = error;
+						}
+						rejectLoad(reason);
+					}
+				: undefined;
 			if (signal && onAbort) {
 				try {
-					signal.addEventListener('abort', onAbort, { once: true });
 					listenerRegistered = true;
+					signal.addEventListener('abort', onAbort, { once: true });
 				} catch (error) {
 					rejectLoad(error);
 					return;
 				}
-				if (signal.aborted) onAbort();
+				if (!ownsLoad()) {
+					cleanup();
+					return;
+				}
+				let signalAborted: boolean;
+				try {
+					signalAborted = signal.aborted;
+				} catch (error) {
+					rejectLoad(error);
+					return;
+				}
+				if (!ownsLoad()) {
+					cleanup();
+					return;
+				}
+				if (signalAborted) onAbort();
 			}
 			if (!ownsLoad()) return;
 			try {
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-				const config = resolveOctaveRuntimeAssetConfig(runtimeAssets, currentUrl);
+				let resolverAssets: string | PlaygroundRuntimeAssets = runtimeAssets;
+				if (typeof runtimeAssets === 'object') {
+					const source = runtimeAssets.octave;
+					if (!ownsLoad()) return;
+					let octave: PlaygroundRuntimeAssets['octave'];
+					if (source) {
+						const baseUrl = source.baseUrl;
+						if (!ownsLoad()) return;
+						const workerUrl = source.workerUrl;
+						if (!ownsLoad()) return;
+						const manifestUrl = source.manifestUrl;
+						if (!ownsLoad()) return;
+						octave = { baseUrl, workerUrl, manifestUrl };
+					}
+					let rootUrl: string | undefined;
+					let rootUrlRead = false;
+					resolverAssets = {
+						get rootUrl() {
+							if (!rootUrlRead) {
+								rootUrlRead = true;
+								rootUrl = runtimeAssets.rootUrl;
+							}
+							return rootUrl;
+						},
+						octave
+					};
+				}
+				const config = resolveOctaveRuntimeAssetConfig(resolverAssets, currentUrl);
 				if (!ownsLoad()) return;
 				progress?.set?.(1);
 				if (!ownsLoad()) return;
@@ -183,16 +264,16 @@ class Octave implements Sandbox {
 		return /\bstdin\b|\binput\s*\(/.test(code);
 	}
 
-	private async collectStdinForRun(code: string, options: SandboxExecutionOptions) {
+	private async collectStdinForRun(code: string, stdinOption: SandboxExecutionOptions['stdin']) {
 		if (
-			typeof options.stdin !== 'string' &&
+			typeof stdinOption !== 'string' &&
 			this.pendingInput.length === 0 &&
 			!this.pendingEof &&
 			this.readsOctaveStdin(code)
 		) {
 			await new Promise<void>((resolve) => this.stdinWaiters.push(resolve));
 		}
-		if (typeof options.stdin === 'string') return options.stdin;
+		if (typeof stdinOption === 'string') return stdinOption;
 		if (!this.readsOctaveStdin(code)) return undefined;
 		const stdin = this.pendingInput.join('');
 		this.pendingInput = [];
@@ -244,47 +325,90 @@ class Octave implements Sandbox {
 		if (!this.baseUrl || !this.workerUrl || !this.manifestUrl) {
 			return Promise.reject('Octave runtime is not configured.');
 		}
-		const signal = options.signal;
-		if (signal?.aborted) {
-			return Promise.reject(this.abortReason(signal, 'execute'));
-		}
+		const runOperation: OctaveRunOperation = {
+			token: Symbol('Octave run'),
+			phase: 'execute',
+			cancelled: false
+		};
+		this.activeRun = runOperation;
+		const ownsSnapshot = () =>
+			this.activeRun?.token === runOperation.token && !runOperation.cancelled;
+		let signal: AbortSignal | undefined;
 		let programArgs: string[];
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
+		let stdinOption: SandboxExecutionOptions['stdin'];
 		try {
-			programArgs = resolveSandboxExecutionArgs('OCTAVE', args, options).programArgs;
-			const limits = resolveExecutionLimits(options.limits);
-			workspace = validateExecutionWorkspace(
-				code,
-				options.workspaceFiles ?? [],
-				options.activePath ?? 'main.m',
-				{
-					...options.workspaceLimits,
-					maxFileBytes: Math.min(
-						options.workspaceLimits?.maxFileBytes ??
-							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
-						limits.maxWorkspaceBytes
-					),
-					maxTotalBytes: Math.min(
-						options.workspaceLimits?.maxTotalBytes ??
-							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
-						limits.maxWorkspaceBytes
-					)
-				}
-			);
+			signal = options.signal;
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			const signalAborted = signal?.aborted ?? false;
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			if (signalAborted && signal) {
+				const reason = this.abortReason(signal, 'execute');
+				if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+				if (this.activeRun?.token === runOperation.token) this.activeRun = null;
+				return Promise.reject(reason);
+			}
+			const configuredProgramArgs = options.programArgs;
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			const selectedProgramArgs = configuredProgramArgs ?? args;
+			programArgs = Array.isArray(selectedProgramArgs) ? [...selectedProgramArgs] : [];
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			const limitOverrides = options.limits;
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			const limits = resolveExecutionLimits(limitOverrides);
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			const workspaceFiles = options.workspaceFiles ?? [];
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			const activePath = options.activePath ?? 'main.m';
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			const workspaceLimits = options.workspaceLimits;
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			workspace = validateExecutionWorkspace(code, workspaceFiles, activePath, {
+				...workspaceLimits,
+				maxFileBytes: Math.min(
+					workspaceLimits?.maxFileBytes ?? DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+					limits.maxWorkspaceBytes
+				),
+				maxTotalBytes: Math.min(
+					workspaceLimits?.maxTotalBytes ?? DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+					limits.maxWorkspaceBytes
+				)
+			});
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			stdinOption = options.stdin;
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
 		} catch (error) {
-			return Promise.reject(error);
+			if (this.activeRun?.token === runOperation.token) this.activeRun = null;
+			return Promise.reject(runOperation.cancelled ? runOperation.cancellationReason : error);
 		}
-		const hasExplicitStdin = options.stdin !== undefined;
+		const hasExplicitStdin = stdinOption !== undefined;
 		if (hasExplicitStdin) {
-			this.pendingInput = [];
-			this.waitingForInput = false;
-			this.pendingEof = false;
-			this.resolveStdinWaiters();
-			resetBufferedStdin(this.buffer);
+			try {
+				const buffer = this.buffer;
+				if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+				resetBufferedStdin(buffer);
+				if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+				runOperation.stdinBuffer = buffer;
+				this.pendingInput = [];
+				this.waitingForInput = false;
+				this.pendingEof = false;
+				this.resolveStdinWaiters();
+			} catch (error) {
+				if (this.activeRun?.token === runOperation.token) {
+					this.activeRun = null;
+					this.pendingInput = [];
+					this.waitingForInput = false;
+					this.pendingEof = false;
+					this.exit = true;
+					this.resolveStdinWaiters();
+				}
+				return Promise.reject(
+					runOperation.cancelled ? runOperation.cancellationReason : error
+				);
+			}
 		}
 
-		const runToken = Symbol('Octave run');
-		this.activeRun = runToken;
+		const runToken = runOperation.token;
 		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
 			const _uid = ++this.uid;
@@ -293,13 +417,18 @@ class Octave implements Sandbox {
 			const cleanup = () => {
 				if (cleanedUp) return;
 				cleanedUp = true;
-				if (hasExplicitStdin) {
-					this.pendingInput = [];
+				const ownsRun = this.activeRun?.token === runToken;
+				if (ownsRun) {
+					this.activeRun = null;
+					this.exit = true;
 					this.waitingForInput = false;
 					this.pendingEof = false;
+				}
+				if (ownsRun && runOperation.stdinBuffer) {
+					this.pendingInput = [];
 					this.resolveStdinWaiters();
 					try {
-						resetBufferedStdin(this.buffer);
+						resetBufferedStdin(runOperation.stdinBuffer);
 					} catch {
 						// Stdin cleanup must not replace the execution result.
 					}
@@ -311,38 +440,100 @@ class Octave implements Sandbox {
 						// Cleanup must not replace the execution result.
 					}
 				}
-				if (this.activeRun === runToken) this.activeRun = null;
 			};
 			const rejectRun = (reason?: unknown) => {
 				cleanup();
-				this.exit = true;
-				this.waitingForInput = false;
-				this.pendingEof = false;
 				reject(reason);
 			};
 			const operation = this.workerSession.beginRun(null, rejectRun);
 			onAbort = signal
 				? () => {
-						if (this.activeRun !== runToken || _uid !== this.uid) {
+						if (
+							this.activeRun?.token !== runToken ||
+							runOperation.cancelled ||
+							_uid !== this.uid
+						) {
 							cleanup();
 							return;
 						}
-						this.terminate(this.abortReason(signal, 'execute'));
+						let reason: unknown;
+						try {
+							reason = this.abortReason(signal, 'execute');
+						} catch (error) {
+							reason = error;
+						}
+						if (
+							this.activeRun?.token !== runToken ||
+							runOperation.cancelled ||
+							_uid !== this.uid
+						) {
+							cleanup();
+							return;
+						}
+						this.terminate(reason);
 					}
 				: undefined;
 			if (signal && onAbort) {
-				signal.addEventListener('abort', onAbort, { once: true });
-				if (signal.aborted) onAbort();
+				try {
+					signal.addEventListener('abort', onAbort, { once: true });
+				} catch (error) {
+					if (
+						this.activeRun?.token === runToken &&
+						!runOperation.cancelled &&
+						_uid === this.uid
+					) {
+						this.terminate(error);
+					} else {
+						cleanup();
+					}
+				}
 			}
-			if (this.activeRun !== runToken || _uid !== this.uid) return;
+			if (this.activeRun?.token !== runToken || runOperation.cancelled || _uid !== this.uid) {
+				return;
+			}
+			if (signal && onAbort) {
+				let signalAborted: boolean;
+				try {
+					signalAborted = signal.aborted;
+				} catch (error) {
+					if (
+						this.activeRun?.token === runToken &&
+						!runOperation.cancelled &&
+						_uid === this.uid
+					) {
+						this.terminate(error);
+					} else {
+						cleanup();
+					}
+					return;
+				}
+				if (
+					this.activeRun?.token !== runToken ||
+					runOperation.cancelled ||
+					_uid !== this.uid
+				) {
+					return;
+				}
+				if (signalAborted) onAbort();
+			}
+			if (this.activeRun?.token !== runToken || runOperation.cancelled || _uid !== this.uid) {
+				return;
+			}
 			this.begin = Date.now();
-			this.collectStdinForRun(code, options)
+			this.collectStdinForRun(code, stdinOption)
 				.then((stdin) => {
-					if (this.activeRun !== runToken || _uid !== this.uid) return;
+					if (
+						this.activeRun?.token !== runToken ||
+						runOperation.cancelled ||
+						_uid !== this.uid
+					) {
+						return;
+					}
 					const worker = this.createWorker();
 					let handler: (event: MessageEvent<OctaveWorkerMessage>) => void;
 					const ownsRun = () =>
-						this.activeRun === runToken &&
+						this.activeRun?.token === runToken &&
+						!runOperation.cancelled &&
 						this.worker === worker &&
 						worker.onmessage === handler &&
 						_uid === this.uid;
@@ -366,22 +557,16 @@ class Octave implements Sandbox {
 							if (results) {
 								if (worker.onmessage === handler) worker.onmessage = null;
 								this.workerSession.complete(operation);
-								cleanup();
 								this.elapse = Date.now() - this.begin;
-								this.exit = true;
-								this.waitingForInput = false;
-								this.pendingEof = false;
+								cleanup();
 								resolve(true);
 								return;
 							}
 							if (error) {
 								if (worker.onmessage === handler) worker.onmessage = null;
 								this.workerSession.complete(operation);
-								cleanup();
 								this.elapse = Date.now() - this.begin;
-								this.exit = true;
-								this.waitingForInput = false;
-								this.pendingEof = false;
+								cleanup();
 								reject(error);
 								return;
 							}
@@ -404,7 +589,13 @@ class Octave implements Sandbox {
 					});
 				})
 				.catch((error) => {
-					if (this.activeRun !== runToken || _uid !== this.uid) return;
+					if (
+						this.activeRun?.token !== runToken ||
+						runOperation.cancelled ||
+						_uid !== this.uid
+					) {
+						return;
+					}
 					this.terminate(error);
 				});
 		});
@@ -415,14 +606,35 @@ class Octave implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
-		this.activeLoad?.reject(reason);
-		this.activeRun = null;
+		const activeLoad = this.activeLoad;
+		const activeRun = this.activeRun;
+		if (activeLoad) {
+			activeLoad.cancelled = true;
+			activeLoad.cancellationReason = reason;
+		}
+		if (activeRun) {
+			activeRun.cancelled = true;
+			activeRun.cancellationReason = reason;
+			if (this.activeRun?.token === activeRun.token) this.activeRun = null;
+		}
+		if (activeRun?.stdinBuffer) {
+			this.pendingInput = [];
+			try {
+				resetBufferedStdin(activeRun.stdinBuffer);
+			} catch {
+				// Stdin cleanup must not replace the termination result.
+			}
+		}
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		this.uid += 1;
 		this.resolveStdinWaiters();
-		this.workerSession.terminate(reason);
 		this.exit = true;
+		this.workerSession.terminate(reason);
+		if (activeLoad) {
+			activeLoad.reject(reason);
+			if (this.activeLoad?.token === activeLoad.token) this.activeLoad = null;
+		}
 	}
 
 	async clear() {

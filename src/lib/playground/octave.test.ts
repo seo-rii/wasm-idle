@@ -442,6 +442,100 @@ describe('Octave sandbox', () => {
 		await expect(sandbox.run('disp("replacement")', false)).resolves.toBe(true);
 	});
 
+	it('reserves Octave startup ownership before reading the signal getter', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/initial/');
+		await sandbox.run('disp("idle worker")', false);
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace Octave while reading the startup signal');
+		let replacement: Promise<void> | undefined;
+		let staleAssetReads = 0;
+		const runtimeAssets = {
+			get octave() {
+				staleAssetReads += 1;
+				return { baseUrl: '/superseded/' };
+			}
+		};
+		const options = {
+			get signal() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement/');
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets, '', true, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleAssetReads).toBe(0);
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.baseUrl).toBe('http://localhost:3000/replacement/wasm-octave/runtime/');
+		await expect(sandbox.run('disp("replacement")', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('stops Octave startup when the aborted getter replaces its operation', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/initial/');
+		const reason = new Error('replace Octave while reading startup aborted');
+		let replacement: Promise<void> | undefined;
+		let staleAssetReads = 0;
+		const signal = {
+			get aborted() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement/');
+				return false;
+			},
+			get reason() {
+				throw new Error('stale Octave startup reason was read');
+			}
+		} as unknown as AbortSignal;
+		const runtimeAssets = {
+			get octave() {
+				staleAssetReads += 1;
+				return { baseUrl: '/superseded/' };
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets, '', true, [], { signal });
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleAssetReads).toBe(0);
+		expect(sandbox.baseUrl).toBe('http://localhost:3000/replacement/wasm-octave/runtime/');
+	});
+
+	it('preserves an Octave run started while an active load removes its signal listener', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/initial/');
+		const reason = new Error('terminate active Octave load');
+		let replacement: Promise<boolean | string> | undefined;
+		const signal = {
+			aborted: false,
+			reason: undefined,
+			addEventListener: vi.fn(),
+			removeEventListener() {
+				replacement = sandbox.run('disp("replacement")', false);
+			}
+		} as unknown as AbortSignal;
+		const runtimeAssets = {
+			get octave() {
+				sandbox.terminate(reason);
+				return { baseUrl: '/superseded/' };
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets, '', true, [], { signal });
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+		expect(sandbox.baseUrl).toBe('http://localhost:3000/initial/wasm-octave/runtime/');
+	});
+
 	it('removes Octave startup listeners on success and callback failure', async () => {
 		const sandbox = new Octave();
 		const settledController = new AbortController();
@@ -495,6 +589,168 @@ describe('Octave sandbox', () => {
 
 		await sandbox.load('/absproxy/5173');
 		await expect(sandbox.run('disp("ready")', false)).resolves.toBe(true);
+	});
+
+	it('reserves Octave run ownership before option getters and preserves its replacement', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/initial/');
+		const reason = new Error('replace Octave while reading execution limits');
+		let replacement: Promise<void> | undefined;
+		let staleWorkspaceReads = 0;
+		const options = {
+			get limits() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement/');
+				return undefined;
+			},
+			get workspaceFiles() {
+				staleWorkspaceReads += 1;
+				return [];
+			}
+		};
+
+		const superseded = sandbox.run('disp("superseded")', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleWorkspaceReads).toBe(0);
+		expect(sandbox.baseUrl).toBe('http://localhost:3000/replacement/wasm-octave/runtime/');
+		await expect(sandbox.run('disp("replacement")', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+	});
+
+	it('keeps the first Octave cancellation when the signal reason getter replaces the run', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/initial/');
+		const firstReason = new Error('first Octave cancellation');
+		const laterReason = new Error('later Octave signal reason');
+		let replacement: Promise<void> | undefined;
+		let staleArgumentReads = 0;
+		const signal = {
+			aborted: true,
+			get reason() {
+				sandbox.terminate(firstReason);
+				replacement = sandbox.load('/replacement/');
+				return laterReason;
+			}
+		} as unknown as AbortSignal;
+		const options = {
+			signal,
+			get programArgs() {
+				staleArgumentReads += 1;
+				return [];
+			}
+		};
+
+		const superseded = sandbox.run('disp("superseded")', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(firstReason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleArgumentReads).toBe(0);
+		expect(sandbox.baseUrl).toBe('http://localhost:3000/replacement/wasm-octave/runtime/');
+		await expect(sandbox.run('disp("replacement")', false)).resolves.toBe(true);
+	});
+
+	it('snapshots explicit Octave stdin once before asynchronous collection', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/absproxy/5173');
+		let stdinReads = 0;
+		const options = {
+			get stdin() {
+				stdinReads += 1;
+				if (stdinReads > 1) throw new Error('Octave stdin was read more than once');
+				return 'captured input\n';
+			}
+		};
+
+		await expect(
+			sandbox.run('n = str2double(fgetl(stdin));', false, true, undefined, [], options)
+		).resolves.toBe(true);
+
+		expect(stdinReads).toBe(1);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ stdin: 'captured input\n' })
+		);
+	});
+
+	it('releases Octave run ownership when explicit stdin buffer reset fails', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/absproxy/5173');
+		const originalBuffer = sandbox.buffer;
+		sandbox.write('stale input\n');
+		sandbox.eof();
+		sandbox.buffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT);
+
+		await expect(
+			sandbox.run('value = fgetl(stdin);', false, true, undefined, [], { stdin: 'input\n' })
+		).rejects.toMatchObject({ name: 'RangeError' });
+		expect(workerInstances).toHaveLength(0);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+
+		sandbox.buffer = originalBuffer;
+		const retry = sandbox.run('value = fgetl(stdin);', false);
+		sandbox.write('fresh input\n');
+		sandbox.eof();
+		await expect(retry).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ stdin: 'fresh input\n' })
+		);
+	});
+
+	it('releases Octave run ownership when signal listener registration throws', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/absproxy/5173');
+		const listenerError = new Error('Octave signal listener registration failed');
+		const signal = {
+			aborted: false,
+			reason: undefined,
+			addEventListener() {
+				throw listenerError;
+			},
+			removeEventListener: vi.fn()
+		} as unknown as AbortSignal;
+
+		await expect(
+			sandbox.run('disp("fail")', false, true, undefined, [], { signal })
+		).rejects.toBe(listenerError);
+		expect(workerInstances).toHaveLength(0);
+		expect(sandbox.exit).toBe(true);
+
+		await expect(sandbox.run('disp("retry")', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('preserves an Octave replacement started during signal listener cleanup', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/absproxy/5173');
+		let replacement: Promise<boolean | string> | undefined;
+		let removeCalls = 0;
+		const signal = {
+			aborted: false,
+			reason: undefined,
+			addEventListener: vi.fn(),
+			removeEventListener() {
+				removeCalls += 1;
+				if (removeCalls !== 1) return;
+				replacement = sandbox.run('value = fgetl(stdin);', false);
+				sandbox.write('replacement input\n');
+				sandbox.eof();
+			}
+		} as unknown as AbortSignal;
+
+		const completed = sandbox.run('disp("completed")', false, true, undefined, [], { signal });
+
+		await expect(completed).resolves.toBe(true);
+		await expect(replacement).resolves.toBe(true);
+		expect(removeCalls).toBe(1);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ stdin: 'replacement input\n' })
+		);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
 
 	it('releases Octave operation ownership after synchronous dispatch failure', async () => {
