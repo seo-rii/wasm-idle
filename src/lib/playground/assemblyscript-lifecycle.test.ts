@@ -870,6 +870,76 @@ describe('AssemblyScript operation lifecycle', () => {
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
 
+	it('terminates AssemblyScript output before exceeding the cumulative UTF-8 byte limit', async () => {
+		autoResolveRun = false;
+		const sandbox = new AssemblyScript();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/assets');
+		const retiredWorker = workerInstances[0];
+		const running = sandbox.run('export function main(): void {}', false, true, undefined, [], {
+			limits: { maxOutputBytes: 5 }
+		});
+		const staleHandler = retiredWorker?.onmessage;
+
+		retiredWorker?.emit({ output: 'é' });
+		retiredWorker?.emit({ output: '🙂' });
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			runtimeId: 'ASSEMBLYSCRIPT',
+			actual: 6,
+			limit: 5
+		});
+		expect(output).toHaveBeenCalledOnce();
+		expect(output).toHaveBeenCalledWith('é');
+		expect(output).not.toHaveBeenCalledWith('🙂');
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { output: 'stale output', results: true } } as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalledWith('stale output');
+
+		autoResolveRun = true;
+		await sandbox.load('/assets');
+		await expect(sandbox.run('export function retry(): void {}', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('counts AssemblyScript diagnostics even when no callback is registered', async () => {
+		autoResolveRun = false;
+		const sandbox = new AssemblyScript();
+		await sandbox.load('/assets');
+		const retiredWorker = workerInstances[0];
+		const running = sandbox.run('export function main(): void {}', false, true, undefined, [], {
+			limits: { maxDiagnostics: 1 }
+		});
+
+		retiredWorker?.emit({ diagnostic: { message: 'first diagnostic' } });
+		const onDiagnostic = vi.fn();
+		sandbox.oncompilerdiagnostic = onDiagnostic;
+		retiredWorker?.emit({ diagnostic: { message: 'second diagnostic' } });
+
+		await expect(running).rejects.toMatchObject({
+			name: 'DiagnosticLimitError',
+			code: 'diagnostic-limit',
+			phase: 'execute',
+			runtimeId: 'ASSEMBLYSCRIPT',
+			actual: 2,
+			limit: 1
+		});
+		expect(onDiagnostic).not.toHaveBeenCalled();
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		autoResolveRun = true;
+		await sandbox.load('/assets');
+		await expect(sandbox.run('export function retry(): void {}', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
 	it('clears settled AssemblyScript deadlines before they can retire an idle worker', async () => {
 		vi.useFakeTimers();
 		const sandbox = new AssemblyScript();
