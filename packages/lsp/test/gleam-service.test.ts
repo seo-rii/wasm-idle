@@ -29,7 +29,7 @@ describe('createGleamWorkerService', () => {
 			service.initialize?.(
 				{
 					baseUrl: 'https://static.example.com/wasm-gleam/',
-					manifestUrl: 'https://static.example.com/wasm-gleam/source-manifest.v1.json'
+					manifestUrl: 'https://static.example.com/wasm-gleam/source-manifest.v2.json'
 				},
 				{
 					documents: new Map(),
@@ -57,7 +57,7 @@ describe('createGleamWorkerService', () => {
 			service.initialize?.(
 				{
 					baseUrl: 'https://static.example.com/wasm-gleam/',
-					manifestUrl: 'https://static.example.com/wasm-gleam/source-manifest.v1.json'
+					manifestUrl: 'https://static.example.com/wasm-gleam/source-manifest.v2.json'
 				},
 				{
 					documents: new Map(),
@@ -80,7 +80,7 @@ describe('createGleamWorkerService', () => {
 			})
 		};
 		const fetchMock = vi.fn(async (url: string) => {
-			if (url.endsWith('source-manifest.v1.json')) {
+			if (url.endsWith('source-manifest.v2.json')) {
 				return new Response(JSON.stringify({ files: ['gleam/io.gleam'] }));
 			}
 			return new Response('pub fn println(_value: String) -> Nil { Nil }\n');
@@ -97,7 +97,7 @@ describe('createGleamWorkerService', () => {
 		await service.initialize?.(
 			{
 				baseUrl: 'https://static.example.com/wasm-gleam/',
-				manifestUrl: 'https://static.example.com/wasm-gleam/source-manifest.v1.json'
+				manifestUrl: 'https://static.example.com/wasm-gleam/source-manifest.v2.json'
 			},
 			context
 		);
@@ -112,7 +112,7 @@ describe('createGleamWorkerService', () => {
 		);
 
 		expect(fetchMock).toHaveBeenCalledWith(
-			'https://static.example.com/wasm-gleam/source-manifest.v1.json',
+			'https://static.example.com/wasm-gleam/source-manifest.v2.json',
 			expect.objectContaining({
 				cache: 'no-store',
 				credentials: 'omit',

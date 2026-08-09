@@ -483,7 +483,9 @@ describe('core language contract', () => {
 			gleam: {
 				baseUrl: '/wasm-gleam/',
 				workerUrl: '/wasm-gleam/runner-worker.js?v=test',
-				manifestUrl: '/wasm-gleam/source-manifest.v1.json?v=test'
+				manifestUrl: '/wasm-gleam/source-manifest.v2.json?v=test',
+				manifestFingerprint: 'a'.repeat(64),
+				workerReceipt: { bytes: 1234, sha256: 'b'.repeat(64) }
 			},
 			perl: {
 				baseUrl: '/wasm-perl/',
@@ -503,7 +505,9 @@ describe('core language contract', () => {
 		expect(key).toContain('"prologWorkerUrl":"/wasm-prolog/runner-worker.js?v=test"');
 		expect(key).toContain('"gleamBaseUrl":"/wasm-gleam/"');
 		expect(key).toContain('"gleamWorkerUrl":"/wasm-gleam/runner-worker.js?v=test"');
-		expect(key).toContain('"gleamManifestUrl":"/wasm-gleam/source-manifest.v1.json?v=test"');
+		expect(key).toContain('"gleamManifestUrl":"/wasm-gleam/source-manifest.v2.json?v=test"');
+		expect(key).toContain(`"gleamManifestFingerprint":"${'a'.repeat(64)}"`);
+		expect(key).toContain(`"gleamWorkerReceipt":"[[\\"worker\\",`);
 		expect(key).toContain('"perlBaseUrl":"/wasm-perl/"');
 		expect(key).toContain('"perlWorkerUrl":"/wasm-perl/runner-worker.js?v=test"');
 		expect(key).toContain('"tclBaseUrl":"/wasm-tcl/"');

@@ -7,6 +7,7 @@ import {
 } from './applicationAssets';
 import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
 import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
+import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
 import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
 
@@ -46,7 +47,7 @@ describe('application runtime asset root', () => {
 		for (const [runtime, config] of Object.entries(assets)) {
 			if (runtime === 'rootUrl' || typeof config !== 'object' || !config) continue;
 			for (const [assetKey, value] of Object.entries(config)) {
-				if (typeof value !== 'string') continue;
+				if (typeof value !== 'string' || !assetKey.endsWith('Url')) continue;
 				expect(
 					value.startsWith(`${expectedRoot}/`),
 					`${runtime}.${assetKey} escaped ${rootUrl}: ${value}`
@@ -110,6 +111,13 @@ describe('application runtime asset root', () => {
 			compilerUrl: `/foo/bar/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`,
 			manifestUrl: `/foo/bar/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`
 		});
+		expect(assets.gleam).toEqual({
+			baseUrl: '/foo/bar/wasm-gleam/',
+			workerUrl: `/foo/bar/wasm-gleam/runner-worker.js?v=${WASM_GLEAM_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-gleam/source-manifest.v2.json?v=${WASM_GLEAM_ASSET_VERSION}`,
+			manifestFingerprint: WASM_GLEAM_ASSET_VERSION,
+			workerReceipt: WASM_GLEAM_RUNNER_RECEIPT
+		});
 		expect(assets.typescript?.libUrl).toMatch(
 			/^\/foo\/bar\/lsp\/typescript-libs\.json\.gz\?v=/u
 		);
@@ -123,8 +131,10 @@ describe('application runtime asset root', () => {
 
 		for (const [runtime, config] of Object.entries(assets)) {
 			if (runtime === 'rootUrl' || typeof config !== 'object' || !config) continue;
-			for (const value of Object.values(config)) {
-				if (typeof value === 'string') expect(value).toMatch(/^\/foo\/bar\//u);
+			for (const [assetKey, value] of Object.entries(config)) {
+				if (typeof value === 'string' && assetKey.endsWith('Url')) {
+					expect(value).toMatch(/^\/foo\/bar\//u);
+				}
 			}
 		}
 	});
@@ -136,7 +146,17 @@ describe('application runtime asset root', () => {
 
 		expect(key).toMatchObject({
 			rustManifestUrl: `/foo/bar/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`,
-			goManifestUrl: `/foo/bar/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`
+			goManifestUrl: `/foo/bar/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`,
+			gleamManifestFingerprint: WASM_GLEAM_ASSET_VERSION,
+			gleamWorkerReceipt: JSON.stringify([
+				[
+					'worker',
+					{
+						sha256: WASM_GLEAM_RUNNER_RECEIPT.sha256,
+						bytes: WASM_GLEAM_RUNNER_RECEIPT.bytes
+					}
+				]
+			])
 		});
 	});
 

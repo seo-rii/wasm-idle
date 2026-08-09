@@ -9,7 +9,7 @@ import { WASM_DOTNET_ASSET_VERSION } from './wasmDotnetVersion';
 import { WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
 import { WASM_FORTH_ASSET_VERSION } from './wasmForthVersion';
 import { WASM_FORTRAN_ASSET_VERSION } from './wasmFortranVersion';
-import { WASM_GLEAM_ASSET_VERSION } from './wasmGleamVersion';
+import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_HASKELL_ASSET_VERSION } from './wasmHaskellVersion';
 import { WASM_J_ASSET_VERSION } from './wasmJVersion';
@@ -96,8 +96,10 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		gleam: {
 			baseUrl: asset('wasm-gleam/'),
-			workerUrl: asset('wasm-gleam/runner-worker.js', WASM_GLEAM_ASSET_VERSION),
-			manifestUrl: asset('wasm-gleam/source-manifest.v1.json', WASM_GLEAM_ASSET_VERSION)
+			workerUrl: asset('wasm-gleam/runner-worker.js', WASM_GLEAM_RUNNER_RECEIPT.sha256),
+			manifestUrl: asset('wasm-gleam/source-manifest.v2.json', WASM_GLEAM_ASSET_VERSION),
+			manifestFingerprint: WASM_GLEAM_ASSET_VERSION,
+			workerReceipt: WASM_GLEAM_RUNNER_RECEIPT
 		},
 		perl: {
 			baseUrl: asset('wasm-perl/'),

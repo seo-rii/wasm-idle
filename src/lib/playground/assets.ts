@@ -1,6 +1,10 @@
 import { env as dynamicPublicEnv } from '$env/dynamic/public';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from '$lib/playground/clangAssetIntegrity';
 import { normalizeTeaVmBaseUrl, resolveTeaVmBaseUrl } from '$lib/playground/teavmConfig';
+import {
+	WASM_GLEAM_ASSET_VERSION,
+	WASM_GLEAM_RUNNER_RECEIPT
+} from '$lib/playground/wasmGleamVersion';
 import type { RuntimeAssetIntegrityEntry as CoreRuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 
 const publicEnv = (dynamicPublicEnv || {}) as Record<string, string | undefined>;
@@ -172,6 +176,8 @@ export interface GleamRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
 	manifestUrl?: string;
+	manifestFingerprint?: string;
+	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
 export interface PerlRuntimeAssetConfig {
@@ -1702,29 +1708,58 @@ export function resolveGleamManifestUrl(
 
 	if (typeof options === 'string') {
 		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-gleam/source-manifest.v1.json`,
+			`${normalizeRootUrl(options) || ''}/wasm-gleam/source-manifest.v2.json`,
 			currentUrl
 		);
 	}
 
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-gleam/source-manifest.v1.json`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-gleam/source-manifest.v2.json`,
 			currentUrl
 		);
 	}
 
-	return resolveConfiguredUrl('/wasm-gleam/source-manifest.v1.json', currentUrl);
+	return resolveConfiguredUrl('/wasm-gleam/source-manifest.v2.json', currentUrl);
 }
 
 export function resolveGleamRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
+	const configured = typeof options === 'object' ? options?.gleam : undefined;
+	const envManifestFingerprint = (publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_FINGERPRINT || '').trim();
+	const envWorkerSha256 = (publicEnv.PUBLIC_WASM_GLEAM_WORKER_SHA256 || '').trim();
+	const envWorkerBytesSource = (publicEnv.PUBLIC_WASM_GLEAM_WORKER_BYTES || '').trim();
+	const envWorkerBytes = /^\d+$/u.test(envWorkerBytesSource)
+		? Number(envWorkerBytesSource)
+		: Number.NaN;
+	const envWorkerReceipt =
+		/^[a-f0-9]{64}$/u.test(envWorkerSha256) &&
+		Number.isSafeInteger(envWorkerBytes) &&
+		envWorkerBytes > 0
+			? { bytes: envWorkerBytes, sha256: envWorkerSha256 }
+			: undefined;
+	const usesCustomUrls = Boolean(
+		configured?.baseUrl ||
+		configured?.workerUrl ||
+		configured?.manifestUrl ||
+		(publicEnv.PUBLIC_WASM_GLEAM_BASE_URL || '').trim() ||
+		(publicEnv.PUBLIC_WASM_GLEAM_WORKER_URL || '').trim() ||
+		(publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_URL || '').trim()
+	);
 	return {
 		baseUrl: resolveGleamBaseUrl(options, currentUrl),
 		workerUrl: resolveGleamWorkerUrl(options, currentUrl),
-		manifestUrl: resolveGleamManifestUrl(options, currentUrl)
+		manifestUrl: resolveGleamManifestUrl(options, currentUrl),
+		manifestFingerprint:
+			configured?.manifestFingerprint?.trim() ||
+			envManifestFingerprint ||
+			(!usesCustomUrls ? WASM_GLEAM_ASSET_VERSION : undefined),
+		workerReceipt:
+			configured?.workerReceipt ||
+			envWorkerReceipt ||
+			(!usesCustomUrls ? WASM_GLEAM_RUNNER_RECEIPT : undefined)
 	};
 }
 

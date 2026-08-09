@@ -875,7 +875,7 @@ End Module`;
 			gleam: {
 				baseUrl: '/absproxy/5173/wasm-gleam/',
 				workerUrl: '/absproxy/5173/wasm-gleam/runner-worker.js?v=test',
-				manifestUrl: '/absproxy/5173/wasm-gleam/source-manifest.v1.json?v=test'
+				manifestUrl: '/absproxy/5173/wasm-gleam/source-manifest.v2.json?v=test'
 			},
 			perl: {
 				baseUrl: '/absproxy/5173/wasm-perl/',

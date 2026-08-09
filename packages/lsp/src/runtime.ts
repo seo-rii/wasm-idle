@@ -228,7 +228,7 @@ export function resolveGleamLanguageServerManifestUrl(
 		return resolveFileUrl(options.gleam.manifestUrl, currentUrl);
 	}
 	return resolveFileUrl(
-		`${resolveGleamLanguageServerBaseUrl(options, currentUrl)}source-manifest.v1.json`,
+		`${resolveGleamLanguageServerBaseUrl(options, currentUrl)}source-manifest.v2.json`,
 		currentUrl
 	);
 }

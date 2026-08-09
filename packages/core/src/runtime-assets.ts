@@ -87,7 +87,13 @@ export interface RuntimeAssetKeySource {
 	r?: { baseUrl?: string };
 	octave?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
 	prolog?: { baseUrl?: string; workerUrl?: string };
-	gleam?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
+	gleam?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	perl?: { baseUrl?: string; workerUrl?: string };
 	tcl?: { baseUrl?: string; workerUrl?: string };
 	awk?: { baseUrl?: string; workerUrl?: string };
@@ -280,6 +286,9 @@ const serializeIntegrity = (value: unknown) => {
 	return JSON.stringify(entries);
 };
 
+const serializeIntegrityEntry = (value: unknown) =>
+	value === undefined ? '' : serializeIntegrity({ worker: value });
+
 const loaderIdentities = new WeakMap<object, string>();
 let nextLoaderIdentity = 0;
 
@@ -447,6 +456,17 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'gleam', property: 'baseUrl', key: 'gleamBaseUrl' },
 	{ runtime: 'gleam', property: 'workerUrl', key: 'gleamWorkerUrl' },
 	{ runtime: 'gleam', property: 'manifestUrl', key: 'gleamManifestUrl' },
+	{
+		runtime: 'gleam',
+		property: 'manifestFingerprint',
+		key: 'gleamManifestFingerprint'
+	},
+	{
+		runtime: 'gleam',
+		property: 'workerReceipt',
+		key: 'gleamWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'perl', property: 'baseUrl', key: 'perlBaseUrl' },
 	{ runtime: 'perl', property: 'workerUrl', key: 'perlWorkerUrl' },
 	{ runtime: 'tcl', property: 'baseUrl', key: 'tclBaseUrl' },

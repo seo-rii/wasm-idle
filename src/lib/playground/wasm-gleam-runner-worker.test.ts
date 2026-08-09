@@ -7,7 +7,7 @@ import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 
 import { StaticStdinRingHost } from './staticStdinRing';
-import { WASM_GLEAM_ASSET_VERSION } from './wasmGleamVersion';
+import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 
 const workerSourceUrl = new URL(
 	'../../../scripts/runtime-workers/wasm-gleam-runner-worker.js',
@@ -94,7 +94,7 @@ const __compiler = {
 };
 loadCompiler = async () => __compiler;
 loadManifest = async () => ({ files: [], javascriptFiles: [] });
-buildModuleSources = async (_compiler, projectId, _baseUrl, _manifest, code) => {
+buildModuleSources = async (_compiler, projectId, _manifest, code) => {
   __lifecycleEvents.push({ event: 'build', projectId, projectType: typeof projectId });
   if (code === 'compile-fail') throw new Error('synthetic compile failure');
   return { moduleSources: new Map() };
@@ -164,30 +164,281 @@ async function readLogicalAsset(fileName: string) {
 	}
 }
 
+type GleamAssetReceipt = { path: string; size: number; sha256: string };
+
+function compareCodeUnits(left: string, right: string) {
+	return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function sha256(bytes: Uint8Array | string) {
+	return createHash('sha256').update(bytes).digest('hex');
+}
+
+function computeRuntimeFingerprint(receipts: GleamAssetReceipt[], compilerVersion: string) {
+	const hash = createHash('sha256');
+	hash.update('wasm-idle:gleam-runtime-manifest:v2\n');
+	hash.update('format\0wasm-gleam-runtime-manifest-v2\n');
+	hash.update(`compilerVersion\0${compilerVersion}\n`);
+	for (const receipt of [...receipts].sort((left, right) =>
+		compareCodeUnits(left.path, right.path)
+	)) {
+		hash.update(receipt.path);
+		hash.update('\0');
+		hash.update(String(receipt.size));
+		hash.update('\0');
+		hash.update(receipt.sha256);
+		hash.update('\n');
+	}
+	return hash.digest('hex');
+}
+
+function createRuntimePackFixture() {
+	const baseUrl = 'https://runtime.example.test/wasm-gleam/';
+	const compilerVersion = 'v-test';
+	const assetBytes = new Map<string, Uint8Array>([
+		[
+			'compiler/gleam_wasm.js',
+			new TextEncoder().encode('export default async function init(_bytes) {}\n')
+		],
+		['compiler/gleam_wasm_bg.wasm', Uint8Array.from([0, 97, 115, 109])],
+		['javascript/gleam.mjs', new TextEncoder().encode('export const Nil = undefined;\n')],
+		['src/gleam.gleam', new TextEncoder().encode('pub type Nil { Nil }\n')]
+	]);
+	const assets = [...assetBytes]
+		.map(([path, bytes]) => ({ path, size: bytes.byteLength, sha256: sha256(bytes) }))
+		.sort((left, right) => compareCodeUnits(left.path, right.path));
+	const fingerprint = computeRuntimeFingerprint(assets, compilerVersion);
+	const sourceReceipt = assets.find((receipt) => receipt.path === 'src/gleam.gleam')!;
+	const manifest = {
+		format: 'wasm-gleam-runtime-manifest-v2',
+		compilerVersion,
+		fingerprint,
+		assets,
+		files: [
+			{
+				path: 'gleam.gleam',
+				size: sourceReceipt.size,
+				sha256: sourceReceipt.sha256
+			}
+		],
+		javascriptFiles: ['gleam.mjs']
+	};
+	return {
+		assetBytes,
+		baseUrl,
+		fingerprint,
+		manifest,
+		manifestUrl: `${baseUrl}source-manifest.v2.json?v=${fingerprint}`
+	};
+}
+
+async function runRuntimePackHarness({
+	assetOverrides = new Map<string, Uint8Array>(),
+	expectedFingerprint,
+	manifest
+}: {
+	assetOverrides?: Map<string, Uint8Array>;
+	expectedFingerprint?: string;
+	manifest?: Record<string, unknown>;
+} = {}) {
+	const fixture = createRuntimePackFixture();
+	const effectiveManifest = manifest ?? fixture.manifest;
+	const responses = new Map<string, Uint8Array>([
+		[fixture.manifestUrl, new TextEncoder().encode(`${JSON.stringify(effectiveManifest)}\n`)]
+	]);
+	for (const [path, bytes] of fixture.assetBytes) {
+		const url = new URL(path, fixture.baseUrl);
+		url.searchParams.set('v', fixture.fingerprint);
+		responses.set(url.href, assetOverrides.get(path) ?? bytes);
+	}
+	const serializedResponses = Object.fromEntries(
+		[...responses].map(([url, bytes]) => [url, Buffer.from(bytes).toString('base64')])
+	);
+	const workerSource = await readWorkerSource();
+	const harnessHandler = `
+self.onmessage = async () => {
+  try {
+    const pack = await loadManifest(
+      ${JSON.stringify(fixture.manifestUrl)},
+      ${JSON.stringify(fixture.baseUrl)},
+      ${JSON.stringify(expectedFingerprint ?? fixture.fingerprint)}
+    );
+    self.postMessage({
+      ok: true,
+      paths: [...pack.assetBytes.keys()],
+      requests: globalThis.__wasmIdleRequests
+    });
+  } catch (error) {
+    self.postMessage({
+      ok: false,
+      error: error?.message || String(error),
+      requests: globalThis.__wasmIdleRequests
+    });
+  }
+};
+`;
+	const harness = `
+const { parentPort } = require('node:worker_threads');
+const { webcrypto } = require('node:crypto');
+globalThis.self = globalThis;
+Object.defineProperty(globalThis, 'crypto', { configurable: true, value: webcrypto });
+const __responses = new Map(Object.entries(${JSON.stringify(serializedResponses)}).map(
+  ([url, bytes]) => [url, Buffer.from(bytes, 'base64')]
+));
+globalThis.__wasmIdleRequests = [];
+globalThis.fetch = async (url, options) => {
+  const href = String(url);
+  globalThis.__wasmIdleRequests.push({
+    url: href,
+    cache: options?.cache,
+    credentials: options?.credentials,
+    redirect: options?.redirect,
+    referrerPolicy: options?.referrerPolicy
+  });
+  const bytes = __responses.get(href);
+  if (!bytes) return new Response('missing', { status: 404 });
+  return new Response(bytes, {
+    status: 200,
+    headers: { 'content-length': String(bytes.byteLength) }
+  });
+};
+self.postMessage = (message) => parentPort.postMessage(message);
+(0, eval)(${JSON.stringify(workerSource)} + ${JSON.stringify(harnessHandler)});
+parentPort.on('message', (data) => self.onmessage({ data }));
+`;
+	const worker = new NodeWorker(harness, { eval: true });
+	try {
+		return await new Promise<any>((resolve, reject) => {
+			worker.once('message', resolve);
+			worker.once('error', reject);
+			worker.postMessage({});
+		});
+	} finally {
+		await worker.terminate();
+	}
+}
+
 describe('Gleam runner worker', () => {
 	it('keeps the synced worker and cache-busting fingerprint current', async () => {
 		const source = await readWorkerSource();
 		expect(await readFile(staticWorkerUrl, 'utf8')).toBe(source);
 
 		const manifest = JSON.parse(
-			await readFile(new URL('source-manifest.v1.json', staticRuntimeUrl), 'utf8')
+			await readFile(new URL('source-manifest.v2.json', staticRuntimeUrl), 'utf8')
 		);
-		const logicalFiles = [
-			'compiler/gleam_wasm.js',
-			'compiler/gleam_wasm_bg.wasm',
-			...manifest.files.map((entry: { path: string }) => `src/${entry.path}`),
-			...manifest.javascriptFiles.map((path: string) => `javascript/${path}`),
-			'runner-worker.js'
-		].sort();
-		const hash = createHash('sha256');
-		for (const fileName of logicalFiles) {
-			hash.update(fileName);
-			hash.update('\0');
-			hash.update(await readLogicalAsset(fileName));
-			hash.update('\n');
+		expect(manifest.format).toBe('wasm-gleam-runtime-manifest-v2');
+		expect(manifest.assets).toHaveLength(50);
+		expect(manifest.assets.map((entry: GleamAssetReceipt) => entry.path)).toEqual(
+			manifest.assets.map((entry: GleamAssetReceipt) => entry.path).sort(compareCodeUnits)
+		);
+		for (const receipt of manifest.assets as GleamAssetReceipt[]) {
+			const bytes = await readLogicalAsset(receipt.path);
+			expect(bytes.byteLength, receipt.path).toBe(receipt.size);
+			expect(sha256(bytes), receipt.path).toBe(receipt.sha256);
 		}
-		expect(hash.digest('hex').slice(0, 16)).toBe(WASM_GLEAM_ASSET_VERSION);
+		expect(computeRuntimeFingerprint(manifest.assets, manifest.compilerVersion)).toBe(
+			WASM_GLEAM_ASSET_VERSION
+		);
 		expect(manifest.fingerprint).toBe(WASM_GLEAM_ASSET_VERSION);
+		expect(WASM_GLEAM_ASSET_VERSION).toMatch(/^[a-f0-9]{64}$/u);
+
+		const runnerBytes = await readLogicalAsset('runner-worker.js');
+		expect(WASM_GLEAM_RUNNER_RECEIPT).toEqual({
+			bytes: runnerBytes.byteLength,
+			sha256: sha256(runnerBytes)
+		});
+		expect(
+			manifest.assets.some((entry: GleamAssetReceipt) => entry.path === 'runner-worker.js')
+		).toBe(false);
+
+		const compilerModule = new TextDecoder().decode(
+			await readLogicalAsset('compiler/gleam_wasm.js')
+		);
+		expect(compilerModule).not.toMatch(/^\s*(?:import\s|export\s+.+\s+from\s)/mu);
+		expect(compilerModule).not.toMatch(/\bimport\s*\(/u);
+		expect(compilerModule).toContain("if (typeof input === 'undefined')");
+	});
+
+	it('loads only the exact receipt allowlist after verifying the full pack', async () => {
+		const fixture = createRuntimePackFixture();
+		const result = await runRuntimePackHarness();
+
+		expect(result).toMatchObject({
+			ok: true,
+			paths: fixture.manifest.assets.map((receipt) => receipt.path)
+		});
+		expect(result.requests).toEqual([
+			{
+				url: fixture.manifestUrl,
+				cache: 'no-store',
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer'
+			},
+			...fixture.manifest.assets.map((receipt) => {
+				const url = new URL(receipt.path, fixture.baseUrl);
+				url.searchParams.set('v', fixture.fingerprint);
+				return {
+					url: url.href,
+					cache: undefined,
+					credentials: 'omit',
+					redirect: 'error',
+					referrerPolicy: 'no-referrer'
+				};
+			})
+		]);
+	});
+
+	it('fails closed when a declared runtime asset is modified', async () => {
+		const fixture = createRuntimePackFixture();
+		const modifiedBytes = fixture.assetBytes.get('javascript/gleam.mjs')!.slice();
+		modifiedBytes[0] ^= 1;
+		const result = await runRuntimePackHarness({
+			assetOverrides: new Map([['javascript/gleam.mjs', modifiedBytes]])
+		});
+
+		expect(result).toMatchObject({
+			ok: false,
+			error: 'Gleam runtime asset javascript/gleam.mjs failed SHA-256 verification.'
+		});
+	});
+
+	it('rejects a manifest that does not match the host-pinned fingerprint', async () => {
+		const result = await runRuntimePackHarness({
+			expectedFingerprint: '0'.repeat(64)
+		});
+
+		expect(result).toMatchObject({
+			ok: false,
+			error: 'Gleam runtime manifest fingerprint does not match the pinned runtime.'
+		});
+		expect(result.requests).toHaveLength(1);
+	});
+
+	it('rejects a modified receipt graph before issuing asset requests', async () => {
+		const fixture = createRuntimePackFixture();
+		const manifest = structuredClone(fixture.manifest);
+		manifest.assets[0].size += 1;
+		const result = await runRuntimePackHarness({ manifest });
+
+		expect(result).toMatchObject({
+			ok: false,
+			error: 'Gleam runtime receipt graph failed fingerprint verification.'
+		});
+		expect(result.requests).toHaveLength(1);
+	});
+
+	it('rejects encoded traversal paths before issuing asset requests', async () => {
+		const fixture = createRuntimePackFixture();
+		const manifest = structuredClone(fixture.manifest) as typeof fixture.manifest;
+		manifest.assets[0].path = '%2e%2e/escape';
+		const result = await runRuntimePackHarness({ manifest });
+
+		expect(result).toMatchObject({
+			ok: false,
+			error: 'Gleam runtime asset 0 path is invalid.'
+		});
+		expect(result.requests).toHaveLength(1);
 	});
 
 	it('prints a prompt before reading a UTF-8 line from the shared ring', async () => {

@@ -9,6 +9,9 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_GLEAM_BASE_URL: '',
 		PUBLIC_WASM_GLEAM_WORKER_URL: '',
 		PUBLIC_WASM_GLEAM_MANIFEST_URL: '',
+		PUBLIC_WASM_GLEAM_MANIFEST_FINGERPRINT: '',
+		PUBLIC_WASM_GLEAM_WORKER_SHA256: '',
+		PUBLIC_WASM_GLEAM_WORKER_BYTES: '',
 		PUBLIC_WASM_PERL_BASE_URL: '',
 		PUBLIC_WASM_PERL_WORKER_URL: '',
 		PUBLIC_WASM_TCL_BASE_URL: '',
@@ -104,6 +107,8 @@ import {
 } from './staticStdinRing';
 import { StaticWorkerRuntimeSandbox } from './staticWorkerRuntime';
 import Tcl from './tcl';
+import gleamWorkerSource from '../../../scripts/runtime-workers/wasm-gleam-runner-worker.js?raw';
+import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 
 function createStreamingTestSandbox() {
 	return new StaticWorkerRuntimeSandbox({
@@ -168,6 +173,22 @@ async function expectWorkerBootstrap(worker: MockWorker, targetUrl: string) {
 	);
 }
 
+async function expectVerifiedGleamWorkerBootstrap(worker: MockWorker, targetUrl: string) {
+	expect(worker.url).toMatch(/^blob:wasm-idle-worker-/);
+	const bootstrap = workerBootstrapBlobs.get(worker.url);
+	expect(bootstrap).toBeDefined();
+	const source = await bootstrap!.text();
+	expect(source).not.toContain(JSON.stringify(targetUrl));
+	expect(source).toContain('/* wasm-idle verified worker source */');
+	expect(source).toContain(gleamWorkerSource);
+	expect(source.indexOf('self.postMessage =')).toBeLessThan(
+		source.indexOf('/* wasm-idle verified worker source */')
+	);
+	expect(source.indexOf(gleamWorkerSource)).toBeLessThan(
+		source.indexOf('__wasmIdleStaticWorkerReady')
+	);
+}
+
 describe('static worker backed language sandboxes', () => {
 	beforeEach(() => {
 		Object.defineProperty(globalThis, 'crossOriginIsolated', {
@@ -181,13 +202,17 @@ describe('static worker backed language sandboxes', () => {
 		workerBootstrapId = 0;
 		vi.stubGlobal(
 			'fetch',
-			vi.fn(
-				async () =>
-					new Response('/* static worker */', {
-						status: 200,
-						headers: { 'content-length': '19' }
-					})
-			)
+			vi.fn(async (input: RequestInfo | URL) => {
+				const source = String(input).includes('/wasm-gleam/runner-worker.js')
+					? gleamWorkerSource
+					: '/* static worker */';
+				return new Response(source, {
+					status: 200,
+					headers: {
+						'content-length': String(new TextEncoder().encode(source).byteLength)
+					}
+				});
+			})
 		);
 		vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
 			const url = `blob:wasm-idle-worker-${workerBootstrapId++}`;
@@ -404,7 +429,7 @@ describe('static worker backed language sandboxes', () => {
 			sandbox.run('pub fn main() { Nil }', false, true, undefined, [], { stdin: '' })
 		).resolves.toBe(true);
 
-		await expectWorkerBootstrap(
+		await expectVerifiedGleamWorkerBootstrap(
 			workerInstances[0],
 			'http://localhost:3000/absproxy/5173/wasm-gleam/runner-worker.js'
 		);
@@ -413,13 +438,76 @@ describe('static worker backed language sandboxes', () => {
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/absproxy/5173/wasm-gleam/',
 				manifestUrl:
-					'http://localhost:3000/absproxy/5173/wasm-gleam/source-manifest.v1.json',
+					'http://localhost:3000/absproxy/5173/wasm-gleam/source-manifest.v2.json',
+				manifestFingerprint: WASM_GLEAM_ASSET_VERSION,
 				stdin: '42\n'
 			})
+		);
+		expect(sandbox.workerReceipt).toEqual(WASM_GLEAM_RUNNER_RECEIPT);
+		expect(fetch).toHaveBeenCalledWith(
+			'http://localhost:3000/absproxy/5173/wasm-gleam/runner-worker.js',
+			expect.objectContaining({ cache: 'no-store' })
 		);
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].lastRunId).not.toBe(firstRunId);
 		await sandbox.dispose();
+	});
+
+	it('rejects a modified Gleam runner before creating a worker', async () => {
+		const modifiedSource = `x${gleamWorkerSource.slice(1)}`;
+		vi.mocked(fetch).mockResolvedValueOnce(
+			new Response(modifiedSource, {
+				status: 200,
+				headers: {
+					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
+				}
+			})
+		);
+		const sandbox = new Gleam();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'GLEAM'
+		});
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects an oversized Gleam runner declaration at its exact receipt limit', async () => {
+		const response = new Response(gleamWorkerSource, {
+			status: 200,
+			headers: { 'content-length': String(WASM_GLEAM_RUNNER_RECEIPT.bytes + 1) }
+		});
+		const cancel = vi.spyOn(response.body!, 'cancel');
+		vi.mocked(fetch).mockResolvedValueOnce(response);
+		const sandbox = new Gleam();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'asset-too-large',
+			actual: WASM_GLEAM_RUNNER_RECEIPT.bytes + 1,
+			limit: WASM_GLEAM_RUNNER_RECEIPT.bytes,
+			runtimeId: 'GLEAM'
+		});
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('requires explicit integrity pins for custom Gleam runtime URLs', async () => {
+		const sandbox = new Gleam();
+
+		await expect(
+			sandbox.load({
+				gleam: {
+					baseUrl: '/custom-gleam/',
+					workerUrl: '/custom-gleam/runner-worker.js',
+					manifestUrl: '/custom-gleam/source-manifest.v2.json'
+				}
+			})
+		).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			runtimeId: 'GLEAM'
+		});
+		expect(fetch).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('loads Perl runtime urls and forwards stdin to the WebPerl worker', async () => {
@@ -1859,6 +1947,30 @@ describe('static worker backed language sandboxes', () => {
 		});
 		expect(fetchSignal?.aborted).toBe(true);
 		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('enforces the Gleam asset deadline while runner integrity verification is stalled', async () => {
+		const digest = vi
+			.spyOn(globalThis.crypto.subtle, 'digest')
+			.mockImplementation(() => new Promise<ArrayBuffer>(() => {}));
+		const sandbox = new Gleam();
+
+		try {
+			await expect(
+				sandbox.load('/absproxy/5173', '', true, [], {
+					limits: { assetTimeoutMs: 5 }
+				})
+			).rejects.toMatchObject({
+				name: 'TimeoutError',
+				code: 'timeout',
+				phase: 'asset',
+				runtimeId: 'GLEAM',
+				timeoutMs: 5
+			});
+			expect(workerInstances).toHaveLength(0);
+		} finally {
+			digest.mockRestore();
+		}
 	});
 
 	it('enforces the asset deadline when worker-script fetch ignores its signal', async () => {

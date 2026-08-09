@@ -128,7 +128,7 @@ describe('lsp runtime asset resolution', () => {
 			[resolveGoLanguageServerCompilerUrl, 'wasm-go/index.js'],
 			[resolveDLanguageServerModuleUrl, 'wasm-d/index.js'],
 			[resolveGleamLanguageServerBaseUrl, 'wasm-gleam/'],
-			[resolveGleamLanguageServerManifestUrl, 'wasm-gleam/source-manifest.v1.json'],
+			[resolveGleamLanguageServerManifestUrl, 'wasm-gleam/source-manifest.v2.json'],
 			[resolveElixirLanguageServerBundleUrl, 'wasm-elixir/bundle.avm'],
 			[resolveErlangLanguageServerBundleUrl, 'wasm-elixir/bundle.avm'],
 			[resolveZigLanguageServerCompilerUrl, 'wasm-zig/zig_small.wasm'],
@@ -341,7 +341,7 @@ describe('lsp runtime asset resolution', () => {
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
 			)
-		).toBe('https://static.example.com/repl_20240807/wasm-gleam/source-manifest.v1.json');
+		).toBe('https://static.example.com/repl_20240807/wasm-gleam/source-manifest.v2.json');
 		expect(
 			resolveElixirLanguageServerBundleUrl(
 				'https://static.example.com/repl_20240807',

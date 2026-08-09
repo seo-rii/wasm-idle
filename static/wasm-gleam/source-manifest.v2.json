@@ -1,0 +1,401 @@
+{
+  "format": "wasm-gleam-runtime-manifest-v2",
+  "compilerVersion": "v1.3.0",
+  "fingerprint": "4cdb70d711e433b4b077680beb4d16cdc5503344b30fcf889bd410982f337506",
+  "assets": [
+    {
+      "path": "compiler/gleam_wasm.js",
+      "size": 14912,
+      "sha256": "e7534733174686371994aaf69a8c7cc0d9ba206419e075c50823f648b3f7980b"
+    },
+    {
+      "path": "compiler/gleam_wasm_bg.wasm",
+      "size": 3471893,
+      "sha256": "6f2f5943a3874eb8188291cee8c779bb6a2b760626cd236b04f1359756aef8c1"
+    },
+    {
+      "path": "javascript/dict.mjs",
+      "size": 23205,
+      "sha256": "67435ecfe61bddcfe1c9040120952fae9b0dc950a2770bd3e4eeff4f607cf9d3"
+    },
+    {
+      "path": "javascript/gleam.mjs",
+      "size": 32,
+      "sha256": "9c181aeb462fa80608297e3190111dde0c1ddaf75b77459c168528a21ef33c1e"
+    },
+    {
+      "path": "javascript/gleam/bit_array.mjs",
+      "size": 1725,
+      "sha256": "7fceb51edadd0fe1ff886967a3ef1e78991270fd5a9c0e7911383e488bf8e562"
+    },
+    {
+      "path": "javascript/gleam/bool.mjs",
+      "size": 1723,
+      "sha256": "2509f32fea9ecb22fb1e00e0ac266373f1bf274c80c4a7fd67965cb0866c7249"
+    },
+    {
+      "path": "javascript/gleam/bytes_builder.mjs",
+      "size": 3520,
+      "sha256": "8a5de7c13e496522daddcc19637366875853267ff7248ce0867576a5e3c10f75"
+    },
+    {
+      "path": "javascript/gleam/dict.mjs",
+      "size": 6221,
+      "sha256": "74e147f8b6dca6603f2b5ac37ceed8794c7b87b04a0dea235d7f76ec238802aa"
+    },
+    {
+      "path": "javascript/gleam/dynamic.mjs",
+      "size": 20488,
+      "sha256": "e91e1b3b20edbf8ffd37cd19d98c4089e4b494a2c9a66d07c30eea0117d9b7b4"
+    },
+    {
+      "path": "javascript/gleam/float.mjs",
+      "size": 3446,
+      "sha256": "0b308be2eb933b15fc08541edcdfe79316d46d31d9a15f3e8bb8df82596ddec5"
+    },
+    {
+      "path": "javascript/gleam/function.mjs",
+      "size": 1322,
+      "sha256": "4626f4310aecf4a659c32b2982b28c867ec382e1765eedfabfe316de7034a3a5"
+    },
+    {
+      "path": "javascript/gleam/int.mjs",
+      "size": 6223,
+      "sha256": "1212cdc338b4a3f38a6d71737bd68ba68e987612d807db6a2043e3298c038f9d"
+    },
+    {
+      "path": "javascript/gleam/io.mjs",
+      "size": 658,
+      "sha256": "86bee4d0a558196067be076d5cdca8a93bdc53486ccd87d1a2c8090aa5f9ec9f"
+    },
+    {
+      "path": "javascript/gleam/iterator.mjs",
+      "size": 21878,
+      "sha256": "9d897115801660899a8a66e0df11e2392b8fe00ca1138fb7fcac324fdc4ac323"
+    },
+    {
+      "path": "javascript/gleam/list.mjs",
+      "size": 40097,
+      "sha256": "f7410a243a0a82de0cbfbac47b397d799ce0a5fbd0ae05ede63cdea300550de0"
+    },
+    {
+      "path": "javascript/gleam/option.mjs",
+      "size": 2720,
+      "sha256": "10fe1e22ead6142efb1089b18b1e71ffc570b08d3b31013f0c73422943c88c0a"
+    },
+    {
+      "path": "javascript/gleam/order.mjs",
+      "size": 1608,
+      "sha256": "4066f10d8fbf394b75d3bfe8501598ee18ef26bcdf7487724e5ab813a8ccae32"
+    },
+    {
+      "path": "javascript/gleam/pair.mjs",
+      "size": 487,
+      "sha256": "4a9c4dcb44b4995adc8fb5a3b4fd35cae01369c7f17f9454f09305e771193a3f"
+    },
+    {
+      "path": "javascript/gleam/queue.mjs",
+      "size": 3616,
+      "sha256": "6e588e189d8f56a6556b5fa284ff91fd2afc1edcb7a85b8fd68fdba64275bced"
+    },
+    {
+      "path": "javascript/gleam/regex.mjs",
+      "size": 1175,
+      "sha256": "10a4cacb5d8bb4d9989d299008f71d4c631a14715e99747c0d23e746f9b52096"
+    },
+    {
+      "path": "javascript/gleam/result.mjs",
+      "size": 3444,
+      "sha256": "e5fbc10a8963e0718b8af3dd989465250f5f4d76d8f17d44d7d9110d5916af06"
+    },
+    {
+      "path": "javascript/gleam/set.mjs",
+      "size": 2370,
+      "sha256": "e96229ab56d07220f78a4dbb40abf96fe0f49d740c35581a00e6a66d15ebbea2"
+    },
+    {
+      "path": "javascript/gleam/string.mjs",
+      "size": 7720,
+      "sha256": "93812bc67afa27ff82ea65b9912bb27f73c9a2b10785dfc25360a24edc888152"
+    },
+    {
+      "path": "javascript/gleam/string_builder.mjs",
+      "size": 2051,
+      "sha256": "8cde81eb69125b81644de4e5e2a982e34301680ed3798d5ff2baf4359ea1a205"
+    },
+    {
+      "path": "javascript/gleam/uri.mjs",
+      "size": 12390,
+      "sha256": "6a30e0d5c2e6a73a265e8f789d6f1038b6b2fa293e8b0e31554016ac7f797243"
+    },
+    {
+      "path": "javascript/gleam_prelude.mjs",
+      "size": 7949,
+      "sha256": "83a25385b27d02d9e4516a43e17e5c0ceca587ec94827bfdff1bd764b82e0e80"
+    },
+    {
+      "path": "javascript/gleam_stdlib.mjs",
+      "size": 21144,
+      "sha256": "8e048e1bb26b598abf4b7db14e062591a2c4880854d17381b5348c974f21229b"
+    },
+    {
+      "path": "src/dict.mjs",
+      "size": 23205,
+      "sha256": "67435ecfe61bddcfe1c9040120952fae9b0dc950a2770bd3e4eeff4f607cf9d3"
+    },
+    {
+      "path": "src/gleam/bit_array.gleam",
+      "size": 5680,
+      "sha256": "15c3c643370ae43d0a6b1d7911750bc5fca805286e4817ed0f9fffce00dda3e7"
+    },
+    {
+      "path": "src/gleam/bool.gleam",
+      "size": 7082,
+      "sha256": "09379714087867004e2e1db57f119d568b710d457cc23639afe132fcd057dd51"
+    },
+    {
+      "path": "src/gleam/bytes_builder.gleam",
+      "size": 5691,
+      "sha256": "07c17bdfe67c2fdac75c7de3fa9453ea2cbe724e4d9fc238660782a623096c35"
+    },
+    {
+      "path": "src/gleam/dict.gleam",
+      "size": 13817,
+      "sha256": "66ac4b82b7814590b8c432b6b974b996bc0dfcb1f0e2df9f94499622d386e418"
+    },
+    {
+      "path": "src/gleam/dynamic.gleam",
+      "size": 37646,
+      "sha256": "9c5906382110d216d8b1ec8f7928419e70563dcdd16a65e1629c0cf4c45888d1"
+    },
+    {
+      "path": "src/gleam/float.gleam",
+      "size": 10952,
+      "sha256": "e1bfd4f316d5cfd6572cd2097f3c972a241825afb3fb16403b657adfc6522318"
+    },
+    {
+      "path": "src/gleam/function.gleam",
+      "size": 4490,
+      "sha256": "55f5a6343b13d24208551408a23cbfe0fd0c67b053007499ca389267c621e5fb"
+    },
+    {
+      "path": "src/gleam/int.gleam",
+      "size": 17176,
+      "sha256": "3d7e41b53583a5a0d2633d9cf5f586f92a3d45d9083f7e316462bc95546085b8"
+    },
+    {
+      "path": "src/gleam/io.gleam",
+      "size": 2461,
+      "sha256": "ad71598d61f8bd98f91776aca5c482f781320e448b9c9d9e99abe97f58cc7f7b"
+    },
+    {
+      "path": "src/gleam/iterator.gleam",
+      "size": 37070,
+      "sha256": "1432b6caa22351c71fa0179d0438ad0dbe4273d3c1759407fa3114a5045847ce"
+    },
+    {
+      "path": "src/gleam/list.gleam",
+      "size": 52264,
+      "sha256": "ffd71633fa1d6cbd03bc15c5d6fd3d9b66f043386e6c2cf5e7603155f23385ac"
+    },
+    {
+      "path": "src/gleam/option.gleam",
+      "size": 7204,
+      "sha256": "f5a4d999d04ae316fffeeea085d9fd1adeed44e3c5a2744972a414c86ab5cf5d"
+    },
+    {
+      "path": "src/gleam/order.gleam",
+      "size": 3153,
+      "sha256": "c72c1da6ff7b4e06cf157a0758ee6fe9e67b06088f462c249eb804424c41cffd"
+    },
+    {
+      "path": "src/gleam/pair.gleam",
+      "size": 1467,
+      "sha256": "3defaee82f71823b7a562b1ee7f03be372868e18d5e724d851fc52ffd01aadfe"
+    },
+    {
+      "path": "src/gleam/queue.gleam",
+      "size": 7113,
+      "sha256": "8fdc49a6a68096b6ea75aed2a98adf1b8344dc3fae6c988f32063a41e36bbbfc"
+    },
+    {
+      "path": "src/gleam/regex.gleam",
+      "size": 4965,
+      "sha256": "ea1ff9c5c9edd4e12a72cf5669a97a9540b08c4180d891979ac6dc48d4aa0352"
+    },
+    {
+      "path": "src/gleam/result.gleam",
+      "size": 9771,
+      "sha256": "9a00815d6529e97b9f833dad5d773e26eed427c889b15b6297231773821c6e0c"
+    },
+    {
+      "path": "src/gleam/set.gleam",
+      "size": 7575,
+      "sha256": "430bb63f84446739b045ee8f9849333786c36b6e6e3224507178afd1a03fc24c"
+    },
+    {
+      "path": "src/gleam/string.gleam",
+      "size": 21133,
+      "sha256": "a51748571a0284f8dc2430177b0a808fba72afdb4b21e572c140d6f5d531fe99"
+    },
+    {
+      "path": "src/gleam/string_builder.gleam",
+      "size": 7326,
+      "sha256": "22eabab1b23c79c520193c14f8a2f6301aae330e3b9dde579a764a2bfe7d77cf"
+    },
+    {
+      "path": "src/gleam/uri.gleam",
+      "size": 12300,
+      "sha256": "ac286b26f3db33a0b4c3dfe219a26b5c053deb68567d76a3274e57aa0ccc3536"
+    },
+    {
+      "path": "src/gleam_stdlib.mjs",
+      "size": 21144,
+      "sha256": "8e048e1bb26b598abf4b7db14e062591a2c4880854d17381b5348c974f21229b"
+    }
+  ],
+  "files": [
+    {
+      "path": "dict.mjs",
+      "size": 23205,
+      "sha256": "67435ecfe61bddcfe1c9040120952fae9b0dc950a2770bd3e4eeff4f607cf9d3"
+    },
+    {
+      "path": "gleam/bit_array.gleam",
+      "size": 5680,
+      "sha256": "15c3c643370ae43d0a6b1d7911750bc5fca805286e4817ed0f9fffce00dda3e7"
+    },
+    {
+      "path": "gleam/bool.gleam",
+      "size": 7082,
+      "sha256": "09379714087867004e2e1db57f119d568b710d457cc23639afe132fcd057dd51"
+    },
+    {
+      "path": "gleam/bytes_builder.gleam",
+      "size": 5691,
+      "sha256": "07c17bdfe67c2fdac75c7de3fa9453ea2cbe724e4d9fc238660782a623096c35"
+    },
+    {
+      "path": "gleam/dict.gleam",
+      "size": 13817,
+      "sha256": "66ac4b82b7814590b8c432b6b974b996bc0dfcb1f0e2df9f94499622d386e418"
+    },
+    {
+      "path": "gleam/dynamic.gleam",
+      "size": 37646,
+      "sha256": "9c5906382110d216d8b1ec8f7928419e70563dcdd16a65e1629c0cf4c45888d1"
+    },
+    {
+      "path": "gleam/float.gleam",
+      "size": 10952,
+      "sha256": "e1bfd4f316d5cfd6572cd2097f3c972a241825afb3fb16403b657adfc6522318"
+    },
+    {
+      "path": "gleam/function.gleam",
+      "size": 4490,
+      "sha256": "55f5a6343b13d24208551408a23cbfe0fd0c67b053007499ca389267c621e5fb"
+    },
+    {
+      "path": "gleam/int.gleam",
+      "size": 17176,
+      "sha256": "3d7e41b53583a5a0d2633d9cf5f586f92a3d45d9083f7e316462bc95546085b8"
+    },
+    {
+      "path": "gleam/io.gleam",
+      "size": 2461,
+      "sha256": "ad71598d61f8bd98f91776aca5c482f781320e448b9c9d9e99abe97f58cc7f7b"
+    },
+    {
+      "path": "gleam/iterator.gleam",
+      "size": 37070,
+      "sha256": "1432b6caa22351c71fa0179d0438ad0dbe4273d3c1759407fa3114a5045847ce"
+    },
+    {
+      "path": "gleam/list.gleam",
+      "size": 52264,
+      "sha256": "ffd71633fa1d6cbd03bc15c5d6fd3d9b66f043386e6c2cf5e7603155f23385ac"
+    },
+    {
+      "path": "gleam/option.gleam",
+      "size": 7204,
+      "sha256": "f5a4d999d04ae316fffeeea085d9fd1adeed44e3c5a2744972a414c86ab5cf5d"
+    },
+    {
+      "path": "gleam/order.gleam",
+      "size": 3153,
+      "sha256": "c72c1da6ff7b4e06cf157a0758ee6fe9e67b06088f462c249eb804424c41cffd"
+    },
+    {
+      "path": "gleam/pair.gleam",
+      "size": 1467,
+      "sha256": "3defaee82f71823b7a562b1ee7f03be372868e18d5e724d851fc52ffd01aadfe"
+    },
+    {
+      "path": "gleam/queue.gleam",
+      "size": 7113,
+      "sha256": "8fdc49a6a68096b6ea75aed2a98adf1b8344dc3fae6c988f32063a41e36bbbfc"
+    },
+    {
+      "path": "gleam/regex.gleam",
+      "size": 4965,
+      "sha256": "ea1ff9c5c9edd4e12a72cf5669a97a9540b08c4180d891979ac6dc48d4aa0352"
+    },
+    {
+      "path": "gleam/result.gleam",
+      "size": 9771,
+      "sha256": "9a00815d6529e97b9f833dad5d773e26eed427c889b15b6297231773821c6e0c"
+    },
+    {
+      "path": "gleam/set.gleam",
+      "size": 7575,
+      "sha256": "430bb63f84446739b045ee8f9849333786c36b6e6e3224507178afd1a03fc24c"
+    },
+    {
+      "path": "gleam/string.gleam",
+      "size": 21133,
+      "sha256": "a51748571a0284f8dc2430177b0a808fba72afdb4b21e572c140d6f5d531fe99"
+    },
+    {
+      "path": "gleam/string_builder.gleam",
+      "size": 7326,
+      "sha256": "22eabab1b23c79c520193c14f8a2f6301aae330e3b9dde579a764a2bfe7d77cf"
+    },
+    {
+      "path": "gleam/uri.gleam",
+      "size": 12300,
+      "sha256": "ac286b26f3db33a0b4c3dfe219a26b5c053deb68567d76a3274e57aa0ccc3536"
+    },
+    {
+      "path": "gleam_stdlib.mjs",
+      "size": 21144,
+      "sha256": "8e048e1bb26b598abf4b7db14e062591a2c4880854d17381b5348c974f21229b"
+    }
+  ],
+  "javascriptFiles": [
+    "dict.mjs",
+    "gleam.mjs",
+    "gleam/bit_array.mjs",
+    "gleam/bool.mjs",
+    "gleam/bytes_builder.mjs",
+    "gleam/dict.mjs",
+    "gleam/dynamic.mjs",
+    "gleam/float.mjs",
+    "gleam/function.mjs",
+    "gleam/int.mjs",
+    "gleam/io.mjs",
+    "gleam/iterator.mjs",
+    "gleam/list.mjs",
+    "gleam/option.mjs",
+    "gleam/order.mjs",
+    "gleam/pair.mjs",
+    "gleam/queue.mjs",
+    "gleam/regex.mjs",
+    "gleam/result.mjs",
+    "gleam/set.mjs",
+    "gleam/string.mjs",
+    "gleam/string_builder.mjs",
+    "gleam/uri.mjs",
+    "gleam_prelude.mjs",
+    "gleam_stdlib.mjs"
+  ]
+}

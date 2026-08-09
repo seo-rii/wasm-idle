@@ -15,7 +15,9 @@ import {
 	isWasmIdleError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace,
+	verifyRuntimeAssetIntegrity,
 	type ExecutionLimits,
+	type RuntimeAssetIntegrityEntry,
 	type RuntimeStdinMode,
 	type RuntimeWorkerLease,
 	type RuntimeWorkerLifetimePolicy
@@ -28,10 +30,14 @@ import {
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { StaticStdinRingHost } from '$lib/playground/staticStdinRing';
 
+type StaticWorkerReceipt = Readonly<Required<Pick<RuntimeAssetIntegrityEntry, 'bytes' | 'sha256'>>>;
+
 export interface StaticWorkerRuntimeUrls {
 	baseUrl: string;
 	workerUrl: string;
 	manifestUrl?: string;
+	manifestFingerprint?: string;
+	workerReceipt?: StaticWorkerReceipt;
 }
 
 export type StaticWorkerRuntimeStdin =
@@ -51,6 +57,7 @@ export interface StaticWorkerRuntimeConfig {
 	languageId: string;
 	displayName: string;
 	defaultActivePath: string;
+	inlineVerifiedWorker?: boolean;
 	moduleWorker?: boolean;
 	stdin: StaticWorkerRuntimeStdin;
 	workerLifetime?: RuntimeWorkerLifetimePolicy;
@@ -126,6 +133,8 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	baseUrl = '';
 	workerUrl = '';
 	manifestUrl = '';
+	manifestFingerprint = '';
+	workerReceipt: StaticWorkerReceipt | null = null;
 	activeReject: ((reason: unknown) => void) | null = null;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	pendingEof = false;
@@ -231,10 +240,32 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			const urls = this.config.resolveRuntimeAssets(runtimeAssets, currentUrl);
 			this.assertOperationNotDisposed();
 			const nextManifestUrl = urls.manifestUrl || '';
+			const nextManifestFingerprint = urls.manifestFingerprint || '';
+			const nextWorkerReceipt = urls.workerReceipt
+				? Object.freeze({
+						bytes: urls.workerReceipt.bytes,
+						sha256: urls.workerReceipt.sha256
+					})
+				: null;
+			if (
+				this.config.inlineVerifiedWorker &&
+				(!nextWorkerReceipt ||
+					!Number.isSafeInteger(nextWorkerReceipt.bytes) ||
+					nextWorkerReceipt.bytes <= 0 ||
+					!/^[a-f0-9]{64}$/u.test(nextWorkerReceipt.sha256))
+			) {
+				throw new RuntimeConfigurationError(
+					`${this.config.displayName} requires a pinned worker receipt.`,
+					{ runtimeId: this.config.languageId }
+				);
+			}
 			const runtimeChanged =
 				this.baseUrl !== urls.baseUrl ||
 				this.workerUrl !== urls.workerUrl ||
-				this.manifestUrl !== nextManifestUrl;
+				this.manifestUrl !== nextManifestUrl ||
+				this.manifestFingerprint !== nextManifestFingerprint ||
+				this.workerReceipt?.bytes !== nextWorkerReceipt?.bytes ||
+				this.workerReceipt?.sha256 !== nextWorkerReceipt?.sha256;
 
 			if (
 				runtimeChanged &&
@@ -249,6 +280,8 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			this.baseUrl = urls.baseUrl;
 			this.workerUrl = urls.workerUrl;
 			this.manifestUrl = nextManifestUrl;
+			this.manifestFingerprint = nextManifestFingerprint;
+			this.workerReceipt = nextWorkerReceipt;
 
 			if (!this.baseUrl || !this.workerUrl) {
 				throw new RuntimeConfigurationError(
@@ -418,11 +451,52 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		progress.set?.(clamped, stage);
 	}
 
+	private async verifyWorkerReceipt(
+		bytes: Uint8Array,
+		receipt: StaticWorkerReceipt,
+		signal: AbortSignal
+	) {
+		const abortReason = () =>
+			signal.reason ?? new DOMException('Worker script verification aborted', 'AbortError');
+		let onAbort: (() => void) | undefined;
+		const aborted = new Promise<never>((_resolve, reject) => {
+			onAbort = () => reject(abortReason());
+			signal.addEventListener('abort', onAbort, { once: true });
+		});
+		try {
+			if (signal.aborted) throw abortReason();
+			await Promise.race([
+				verifyRuntimeAssetIntegrity({
+					asset: this.workerUrl,
+					bytes,
+					expected: receipt,
+					runtimeId: this.config.languageId
+				}),
+				aborted
+			]);
+			if (signal.aborted) throw abortReason();
+		} finally {
+			if (onAbort) signal.removeEventListener('abort', onAbort);
+		}
+	}
+
 	private async preloadWorkerScript(
 		progress: SandboxProgress | undefined,
 		controls: StaticWorkerExecutionControls
-	) {
+	): Promise<Uint8Array<ArrayBuffer> | undefined> {
 		const { limits, signal } = controls;
+		const workerReceipt = this.config.inlineVerifiedWorker ? this.workerReceipt : null;
+		const workerByteLimit = workerReceipt?.bytes ?? limits.maxAssetBytes;
+		if (workerReceipt && workerReceipt.bytes > limits.maxAssetBytes) {
+			throw new AssetTooLargeError(
+				`${this.config.displayName} worker script exceeds ${limits.maxAssetBytes} bytes`,
+				{
+					actual: workerReceipt.bytes,
+					limit: limits.maxAssetBytes,
+					runtimeId: this.config.languageId
+				}
+			);
+		}
 		if (signal?.aborted) {
 			throw new CancelledError(`${this.config.displayName} worker download cancelled`, {
 				cause: signal.reason,
@@ -478,7 +552,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			}
 			const pendingResponse = Promise.resolve(
 				fetch(workerRequestUrl.href, {
-					cache: 'force-cache',
+					cache: this.config.inlineVerifiedWorker ? 'no-store' : 'force-cache',
 					credentials: 'omit',
 					redirect: 'error',
 					referrerPolicy: 'no-referrer',
@@ -567,12 +641,12 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				}
 				total = declaredLength;
 			}
-			if (total > limits.maxAssetBytes) {
+			if (total > workerByteLimit) {
 				const error = new AssetTooLargeError(
-					`${this.config.displayName} worker script exceeds ${limits.maxAssetBytes} bytes`,
+					`${this.config.displayName} worker script exceeds ${workerByteLimit} bytes`,
 					{
 						actual: total,
-						limit: limits.maxAssetBytes,
+						limit: workerByteLimit,
 						runtimeId: this.config.languageId
 					}
 				);
@@ -599,19 +673,19 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 						);
 					}
 					const materialized = response.arrayBuffer();
-					const bytes = await Promise.race([materialized, aborted]);
+					const buffer = await Promise.race([materialized, aborted]);
 					if (phaseController.signal.aborted) {
 						throw (
 							phaseController.signal.reason ??
 							new DOMException('Worker script read aborted', 'AbortError')
 						);
 					}
-					if (bytes.byteLength > limits.maxAssetBytes) {
+					if (buffer.byteLength > workerByteLimit) {
 						throw new AssetTooLargeError(
-							`${this.config.displayName} worker script exceeds ${limits.maxAssetBytes} bytes`,
+							`${this.config.displayName} worker script exceeds ${workerByteLimit} bytes`,
 							{
-								actual: bytes.byteLength,
-								limit: limits.maxAssetBytes,
+								actual: buffer.byteLength,
+								limit: workerByteLimit,
 								runtimeId: this.config.languageId
 							}
 						);
@@ -621,7 +695,16 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 						0.2,
 						`${this.config.displayName} worker downloaded`
 					);
-					return;
+					const bytes = new Uint8Array(buffer);
+					if (workerReceipt) {
+						await this.verifyWorkerReceipt(
+							bytes,
+							workerReceipt,
+							phaseController.signal
+						);
+						return bytes;
+					}
+					return undefined;
 				} finally {
 					if (cancelOnAbort) {
 						phaseController.signal.removeEventListener('abort', cancelOnAbort);
@@ -630,6 +713,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			}
 
 			const reader = response.body.getReader();
+			const chunks: Uint8Array[] = [];
 			let readerCancelled = false;
 			let cancelOnAbort: (() => void) | undefined;
 			const aborted = new Promise<never>((_resolve, reject) => {
@@ -667,12 +751,12 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 					}
 					if (done) break;
 					loaded += value.byteLength;
-					if (loaded > limits.maxAssetBytes) {
+					if (loaded > workerByteLimit) {
 						const error = new AssetTooLargeError(
-							`${this.config.displayName} worker script exceeds ${limits.maxAssetBytes} bytes`,
+							`${this.config.displayName} worker script exceeds ${workerByteLimit} bytes`,
 							{
 								actual: loaded,
-								limit: limits.maxAssetBytes,
+								limit: workerByteLimit,
 								runtimeId: this.config.languageId
 							}
 						);
@@ -682,6 +766,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 						} catch {}
 						throw error;
 					}
+					if (workerReceipt) chunks.push(value.slice());
 					const ratio = total > 0 ? Math.min(loaded / total, 1) : 0.5;
 					this.reportProgress(
 						progress,
@@ -721,6 +806,17 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				}
 			}
 			if (releaseError) throw releaseError;
+			if (workerReceipt) {
+				const bytes = new Uint8Array(loaded);
+				let offset = 0;
+				for (const chunk of chunks) {
+					bytes.set(chunk, offset);
+					offset += chunk.byteLength;
+				}
+				await this.verifyWorkerReceipt(bytes, workerReceipt, phaseController.signal);
+				return bytes;
+			}
+			return undefined;
 		} catch (error) {
 			if (this.disposed) throw this.getDisposeReason();
 			if (isWasmIdleError(error)) throw error;
@@ -754,7 +850,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		}
 	}
 
-	private createBootstrapUrl() {
+	private createBootstrapUrl(verifiedWorkerBytes?: Uint8Array<ArrayBuffer>) {
 		if (
 			typeof Blob !== 'function' ||
 			typeof URL?.createObjectURL !== 'function' ||
@@ -762,10 +858,29 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		) {
 			throw new Error(`${this.config.displayName} worker bootstrap is unavailable.`);
 		}
-		const importStatement = this.config.moduleWorker
-			? `await import(${JSON.stringify(this.workerUrl)});`
-			: `importScripts(${JSON.stringify(this.workerUrl)});`;
-		const source = `const __wasmIdleNativePostMessage = self.postMessage.bind(self);
+		let verifiedWorkerSource: Uint8Array<ArrayBuffer> | undefined;
+		if (this.config.inlineVerifiedWorker) {
+			if (!verifiedWorkerBytes) {
+				throw new RuntimeConfigurationError(
+					`${this.config.displayName} verified worker bytes are unavailable.`,
+					{ runtimeId: this.config.languageId }
+				);
+			}
+			try {
+				new TextDecoder('utf-8', { fatal: true }).decode(verifiedWorkerBytes);
+			} catch (error) {
+				throw new ProtocolError(
+					`${this.config.displayName} worker script is not valid UTF-8`,
+					{
+						cause: error,
+						phase: 'asset',
+						runtimeId: this.config.languageId
+					}
+				);
+			}
+			verifiedWorkerSource = verifiedWorkerBytes;
+		}
+		const prefix = `const __wasmIdleNativePostMessage = self.postMessage.bind(self);
 let __wasmIdleRunId = null;
 const __wasmIdleExecutionKeys = ['output', 'results', 'error', 'diagnostic', 'progress'];
 self.addEventListener('message', (event) => {
@@ -791,13 +906,24 @@ self.postMessage = (message, transferOrOptions) => {
       ? __wasmIdleNativePostMessage(correlated)
       : __wasmIdleNativePostMessage(correlated, transferOrOptions);
   } finally {
-    if (terminalRunId !== null && __wasmIdleRunId === terminalRunId) __wasmIdleRunId = null;
-  }
+	    if (terminalRunId !== null && __wasmIdleRunId === terminalRunId) __wasmIdleRunId = null;
+	  }
 };
-${importStatement}
-__wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 `;
-		return URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+		const suffix = `__wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });\n`;
+		const workerSource = this.config.moduleWorker
+			? `await import(${JSON.stringify(this.workerUrl)});`
+			: `importScripts(${JSON.stringify(this.workerUrl)});`;
+		const parts: BlobPart[] = verifiedWorkerSource
+			? [
+					prefix,
+					'\n/* wasm-idle verified worker source */\n',
+					verifiedWorkerSource,
+					'\n',
+					suffix
+				]
+			: [prefix, workerSource, '\n', suffix];
+		return URL.createObjectURL(new Blob(parts, { type: 'text/javascript' }));
 	}
 
 	private revokeBootstrapUrl() {
@@ -942,7 +1068,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		progress: SandboxProgress | undefined,
 		controls: StaticWorkerExecutionControls
 	) {
-		await this.preloadWorkerScript(progress, controls);
+		const verifiedWorkerBytes = await this.preloadWorkerScript(progress, controls);
 		if (this.disposed) throw this.getDisposeReason();
 		if (generation !== this.workerGeneration) {
 			throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
@@ -963,7 +1089,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 				runtimeId: this.config.languageId
 			});
 		}
-		this.bootstrapUrl = this.createBootstrapUrl();
+		this.bootstrapUrl = this.createBootstrapUrl(verifiedWorkerBytes);
 		if (this.disposed || generation !== this.workerGeneration) {
 			this.revokeBootstrapUrl();
 			if (this.disposed) throw this.getDisposeReason();
@@ -1595,6 +1721,7 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 						runId: id,
 						baseUrl: this.baseUrl,
 						manifestUrl: this.manifestUrl,
+						manifestFingerprint: this.manifestFingerprint,
 						code,
 						args: programArgs,
 						stdin,
@@ -1671,6 +1798,8 @@ __wasmIdleNativePostMessage({ ${JSON.stringify(WORKER_READY_MESSAGE)}: true });
 		this.baseUrl = '';
 		this.workerUrl = '';
 		this.manifestUrl = '';
+		this.manifestFingerprint = '';
+		this.workerReceipt = null;
 		return this.disposePromise;
 	}
 

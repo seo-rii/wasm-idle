@@ -203,7 +203,7 @@ export function createGleamWorkerService(
 			const config = (options || {}) as GleamWorkerOptions;
 			if (!config.baseUrl) throw new Error('Gleam language server requires a baseUrl');
 			baseUrl = config.baseUrl;
-			manifestUrl = config.manifestUrl || assetUrl(baseUrl, 'source-manifest.v1.json');
+			manifestUrl = config.manifestUrl || assetUrl(baseUrl, 'source-manifest.v2.json');
 			context.reportProgress('load-gleam-compiler');
 			compiler = await loadCompiler(baseUrl);
 			const manifest = await fetchJson(manifestUrl);

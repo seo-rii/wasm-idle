@@ -46,6 +46,9 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_GLEAM_BASE_URL: '',
 		PUBLIC_WASM_GLEAM_WORKER_URL: '',
 		PUBLIC_WASM_GLEAM_MANIFEST_URL: '',
+		PUBLIC_WASM_GLEAM_MANIFEST_FINGERPRINT: '',
+		PUBLIC_WASM_GLEAM_WORKER_SHA256: '',
+		PUBLIC_WASM_GLEAM_WORKER_BYTES: '',
 		PUBLIC_WASM_PERL_BASE_URL: '',
 		PUBLIC_WASM_PERL_WORKER_URL: '',
 		PUBLIC_WASM_TCL_BASE_URL: '',
@@ -90,6 +93,7 @@ import {
 	resolveRuntimeAssetConfig
 } from './assets';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
+import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 
 describe('runtime asset config resolution', () => {
 	it.each([
@@ -899,7 +903,9 @@ describe('runtime asset config resolution', () => {
 			{
 				baseUrl: 'https://example.com/absproxy/5173/wasm-gleam/',
 				workerUrl: 'https://example.com/absproxy/5173/wasm-gleam/runner-worker.js',
-				manifestUrl: 'https://example.com/absproxy/5173/wasm-gleam/source-manifest.v1.json'
+				manifestUrl: 'https://example.com/absproxy/5173/wasm-gleam/source-manifest.v2.json',
+				manifestFingerprint: WASM_GLEAM_ASSET_VERSION,
+				workerReceipt: WASM_GLEAM_RUNNER_RECEIPT
 			}
 		);
 		expect(resolvePerlRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
@@ -960,6 +966,8 @@ describe('runtime asset config resolution', () => {
 	});
 
 	it('prefers explicit static worker runtime urls over public env overrides', async () => {
+		const customFingerprint = 'a'.repeat(64);
+		const customWorkerReceipt = { bytes: 1234, sha256: 'b'.repeat(64) };
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = 'https://env.example.com/prolog/';
 		publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = 'https://env.example.com/gleam/';
@@ -1005,7 +1013,9 @@ describe('runtime asset config resolution', () => {
 					gleam: {
 						baseUrl: '/runtime/gleam',
 						workerUrl: '/runtime/gleam/worker.js',
-						manifestUrl: '/runtime/gleam/manifest.json'
+						manifestUrl: '/runtime/gleam/manifest.json',
+						manifestFingerprint: customFingerprint,
+						workerReceipt: customWorkerReceipt
 					}
 				},
 				'https://example.com/app'
@@ -1013,7 +1023,9 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/gleam/',
 			workerUrl: 'https://example.com/runtime/gleam/worker.js',
-			manifestUrl: 'https://example.com/runtime/gleam/manifest.json'
+			manifestUrl: 'https://example.com/runtime/gleam/manifest.json',
+			manifestFingerprint: customFingerprint,
+			workerReceipt: customWorkerReceipt
 		});
 		expect(
 			resolvePerlRuntimeAssetConfig(
@@ -1121,6 +1133,36 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/runtime/swift/worker.js',
 			manifestUrl: 'https://example.com/runtime/swift/manifest.json'
 		});
+	});
+
+	it('accepts custom Gleam URL environment overrides only with complete integrity pins', async () => {
+		const manifestFingerprint = 'c'.repeat(64);
+		const workerSha256 = 'd'.repeat(64);
+		publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = 'https://runtime.example.com/gleam/';
+		publicEnv.PUBLIC_WASM_GLEAM_WORKER_URL = 'https://runtime.example.com/gleam/runner.js';
+		publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_URL =
+			'https://runtime.example.com/gleam/manifest.json';
+		publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_FINGERPRINT = manifestFingerprint;
+		publicEnv.PUBLIC_WASM_GLEAM_WORKER_SHA256 = workerSha256;
+		publicEnv.PUBLIC_WASM_GLEAM_WORKER_BYTES = '4321';
+		vi.resetModules();
+		try {
+			const { resolveGleamRuntimeAssetConfig } = await import('./assets');
+			expect(resolveGleamRuntimeAssetConfig(undefined, 'https://example.com/app')).toEqual({
+				baseUrl: 'https://runtime.example.com/gleam/',
+				workerUrl: 'https://runtime.example.com/gleam/runner.js',
+				manifestUrl: 'https://runtime.example.com/gleam/manifest.json',
+				manifestFingerprint,
+				workerReceipt: { bytes: 4321, sha256: workerSha256 }
+			});
+		} finally {
+			publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = '';
+			publicEnv.PUBLIC_WASM_GLEAM_WORKER_URL = '';
+			publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_URL = '';
+			publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_FINGERPRINT = '';
+			publicEnv.PUBLIC_WASM_GLEAM_WORKER_SHA256 = '';
+			publicEnv.PUBLIC_WASM_GLEAM_WORKER_BYTES = '';
+		}
 	});
 
 	it('derives Swift worker and manifest urls from an explicit Swift base url', async () => {

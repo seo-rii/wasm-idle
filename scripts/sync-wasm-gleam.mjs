@@ -28,7 +28,29 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 );
 
 export const GLEAM_COMPILER_VERSION = 'v1.3.0';
+export const GLEAM_MANIFEST_FORMAT = 'wasm-gleam-runtime-manifest-v2';
 const COMPILER_FILES = ['gleam_wasm.js', 'gleam_wasm_bg.wasm'];
+const FINGERPRINT_DOMAIN = 'wasm-idle:gleam-runtime-manifest:v2';
+
+function compareCodeUnits(left, right) {
+	return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function requireAssetPath(fileName) {
+	if (
+		typeof fileName !== 'string' ||
+		!fileName ||
+		fileName.length > 512 ||
+		!/^[A-Za-z0-9._/-]+$/u.test(fileName) ||
+		fileName.startsWith('/') ||
+		fileName
+			.split('/')
+			.some((part) => !part || part === '.' || part === '..' || part.length > 128)
+	) {
+		throw new Error(`Gleam runtime asset path is invalid: ${fileName}`);
+	}
+	return fileName;
+}
 
 function toPosixPath(filePath) {
 	return filePath.split(path.sep).join('/');
@@ -50,7 +72,7 @@ async function listFiles(rootDir, relativeDir = '') {
 		}
 		if (entry.isFile()) files.push(toPosixPath(relativePath));
 	}
-	return files.sort();
+	return files.sort(compareCodeUnits);
 }
 
 async function sha256File(filePath) {
@@ -59,22 +81,41 @@ async function sha256File(filePath) {
 		.digest('hex');
 }
 
-async function writeVersionModule(versionModulePath, fingerprint) {
+async function writeVersionModule(versionModulePath, fingerprint, runnerReceipt) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource = `export const WASM_GLEAM_ASSET_VERSION = '${fingerprint}';\n`;
+	const moduleSource = `export const WASM_GLEAM_ASSET_VERSION =\n\t'${fingerprint}';\nexport const WASM_GLEAM_RUNNER_RECEIPT = {\n\tbytes: ${runnerReceipt.bytes},\n\tsha256: '${runnerReceipt.sha256}'\n} as const;\n`;
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current !== moduleSource) await writeFile(versionModulePath, moduleSource, 'utf8');
 }
 
-async function computeFingerprint(targetDir, files) {
+async function createAssetReceipts(targetDir, files) {
+	const receipts = [];
+	for (const fileName of files.sort(compareCodeUnits)) {
+		requireAssetPath(fileName);
+		const bytes = await readFile(path.join(targetDir, fileName));
+		receipts.push({
+			path: fileName,
+			size: bytes.byteLength,
+			sha256: createHash('sha256').update(bytes).digest('hex')
+		});
+	}
+	return receipts;
+}
+
+function computeFingerprint(receipts) {
 	const hash = createHash('sha256');
-	for (const fileName of files.sort()) {
-		hash.update(fileName);
+	hash.update(`${FINGERPRINT_DOMAIN}\n`);
+	hash.update(`format\0${GLEAM_MANIFEST_FORMAT}\n`);
+	hash.update(`compilerVersion\0${GLEAM_COMPILER_VERSION}\n`);
+	for (const receipt of receipts) {
+		hash.update(receipt.path);
 		hash.update('\0');
-		hash.update(await readFile(path.join(targetDir, fileName)));
+		hash.update(String(receipt.size));
+		hash.update('\0');
+		hash.update(receipt.sha256);
 		hash.update('\n');
 	}
-	return hash.digest('hex').slice(0, 16);
+	return hash.digest('hex');
 }
 
 async function writeSourceManifest(
@@ -82,7 +123,8 @@ async function writeSourceManifest(
 	stdlibSourceDir,
 	stdlibFiles,
 	fingerprint,
-	javascriptFiles
+	javascriptFiles,
+	assets
 ) {
 	const files = [];
 	for (const fileName of stdlibFiles) {
@@ -95,14 +137,15 @@ async function writeSourceManifest(
 		});
 	}
 	const manifest = {
-		format: 'wasm-gleam-source-manifest-v1',
+		format: GLEAM_MANIFEST_FORMAT,
 		compilerVersion: GLEAM_COMPILER_VERSION,
 		fingerprint,
+		assets,
 		files,
 		javascriptFiles
 	};
 	await writeFile(
-		path.join(targetDir, 'source-manifest.v1.json'),
+		path.join(targetDir, 'source-manifest.v2.json'),
 		`${JSON.stringify(manifest, null, 2)}\n`,
 		'utf8'
 	);
@@ -175,15 +218,24 @@ export async function syncWasmGleamAssets({
 	}
 	await cp(workerSourcePath, path.join(targetDir, 'runner-worker.js'));
 	copiedFiles.push('runner-worker.js');
-	const fingerprint = await computeFingerprint(targetDir, copiedFiles);
+	const assets = await createAssetReceipts(
+		targetDir,
+		copiedFiles.filter((fileName) => fileName !== 'runner-worker.js')
+	);
+	const [runnerReceipt] = await createAssetReceipts(targetDir, ['runner-worker.js']);
+	const fingerprint = computeFingerprint(assets);
 	await writeSourceManifest(
 		targetDir,
 		stdlibSourceDir,
 		stdlibFiles,
 		fingerprint,
-		[...precompiledJsFiles, 'gleam_prelude.mjs'].sort()
+		[...precompiledJsFiles, 'gleam_prelude.mjs'].sort(compareCodeUnits),
+		assets
 	);
-	await writeVersionModule(versionModulePath, fingerprint);
+	await writeVersionModule(versionModulePath, fingerprint, {
+		bytes: runnerReceipt.size,
+		sha256: runnerReceipt.sha256
+	});
 	return { sourceDir, targetDir, fingerprint, versionModulePath };
 }
 
