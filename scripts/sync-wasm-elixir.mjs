@@ -114,8 +114,8 @@ export async function syncWasmElixirDist({
 	].map((entry) => ({ ...entry, hadPrevious: false, installed: false }));
 	let completed = false;
 	let fingerprint = '';
-	/** @type {Readonly<Record<string, Readonly<ElixirAssetReceipt>>> | undefined} */
-	let receipts;
+	/** @type {Readonly<Record<string, Readonly<ElixirAssetReceipt>>>} */
+	let receipts = Object.freeze({});
 	try {
 		await copyAsset(bundlePath, path.join(nextTargetDir, 'bundle.avm'));
 		await copyAsset(
