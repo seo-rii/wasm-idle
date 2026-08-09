@@ -6,6 +6,7 @@ import {
 	type ResolvedFortranRuntimeAssetConfig
 } from '$lib/playground/assets';
 import {
+	AssetTooLargeError,
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
 	OutputLimitError,
@@ -13,6 +14,7 @@ import {
 	resolveExecutionLimits,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
+import { FORTRAN_EXECUTION_ASSET_NAMES } from '$lib/playground/fortranAssets';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
@@ -30,13 +32,15 @@ const fortranAssetsKey = (assets: ResolvedFortranRuntimeAssetConfig) =>
 		f2cWasmUrl: assets.f2cWasmUrl,
 		libf2cUrl: assets.libf2cUrl,
 		f2cHeaderUrl: assets.f2cHeaderUrl,
-		analyzerUrl: assets.analyzerUrl
+		analyzerUrl: assets.analyzerUrl,
+		integrity: assets.integrity
 	});
 
 type FortranOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
+	cancellation?: { reason: unknown };
 	explicitStdin: boolean;
 	cleanedUp: boolean;
 	cleanups: Array<() => void>;
@@ -220,6 +224,51 @@ class Fortran implements Sandbox {
 		} catch (error) {
 			return Promise.reject(error);
 		}
+		let clangAssets: ReturnType<typeof resolveRuntimeAssetConfig>;
+		let fortranAssets: ResolvedFortranRuntimeAssetConfig;
+		let nextFortranAssetsKey: string;
+		let needsWorkerReset: boolean;
+		try {
+			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			clangAssets = resolveRuntimeAssetConfig('clang', runtimeAssets, currentUrl);
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(operation.cancellation?.reason);
+			}
+			fortranAssets = resolveFortranRuntimeAssetConfig(runtimeAssets, currentUrl);
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(operation.cancellation?.reason);
+			}
+			for (const asset of FORTRAN_EXECUTION_ASSET_NAMES) {
+				const receipt = fortranAssets.integrity[asset];
+				if (receipt.bytes > limits.maxAssetBytes) {
+					throw new AssetTooLargeError(
+						`Fortran execution asset ${asset} exceeds the ${limits.maxAssetBytes} byte limit`,
+						{
+							actual: receipt.bytes,
+							limit: limits.maxAssetBytes,
+							runtimeId: this.language
+						}
+					);
+				}
+			}
+			nextFortranAssetsKey = fortranAssetsKey(fortranAssets);
+			needsWorkerReset =
+				!this.worker ||
+				!this.assetBridge ||
+				!this.assetBridge.matches(clangAssets) ||
+				this.activeFortranAssetsKey !== nextFortranAssetsKey;
+		} catch (error) {
+			const failure = operation.cancellation ? operation.cancellation.reason : error;
+			this.releaseOperation(operation);
+			this.cleanupOperation(operation);
+			return Promise.reject(failure);
+		}
+		const timeoutMs = Math.min(2_147_483_647, limits.assetTimeoutMs + limits.startupTimeoutMs);
+		this.bindOperationTimeout(operation, timeoutMs);
+		this.bindAbortSignal(operation, options.signal);
+		if (!this.isOperationActive(operation)) {
+			return Promise.reject(operation.cancellation?.reason);
+		}
 		const loading = this.workerSession.load(async (resolve, reject) => {
 			const resolveOperation = () => {
 				if (!this.releaseOperation(operation)) return;
@@ -236,15 +285,6 @@ class Fortran implements Sandbox {
 				this.pendingInput = [];
 				this.waitingForInput = false;
 				this.pendingEof = false;
-				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-				const clangAssets = resolveRuntimeAssetConfig('clang', runtimeAssets, currentUrl);
-				const fortranAssets = resolveFortranRuntimeAssetConfig(runtimeAssets, currentUrl);
-				const nextFortranAssetsKey = fortranAssetsKey(fortranAssets);
-				const needsWorkerReset =
-					!this.worker ||
-					!this.assetBridge ||
-					!this.assetBridge.matches(clangAssets) ||
-					this.activeFortranAssetsKey !== nextFortranAssetsKey;
 				if (needsWorkerReset && this.worker) {
 					this.preserveOperationOnWorkerDispose = true;
 					try {
@@ -339,7 +379,10 @@ class Fortran implements Sandbox {
 							baseUrl: clangAssets.baseUrl,
 							useAssetBridge: clangAssets.useAssetBridge
 						},
-						fortranAssets
+						fortranAssets: {
+							...fortranAssets,
+							maxAssetBytes: limits.maxAssetBytes
+						}
 					});
 				} else {
 					const worker = this.worker;
@@ -362,9 +405,6 @@ class Fortran implements Sandbox {
 				rejectOperation(error);
 			}
 		});
-		const timeoutMs = Math.min(2_147_483_647, limits.assetTimeoutMs + limits.startupTimeoutMs);
-		this.bindOperationTimeout(operation, timeoutMs);
-		this.bindAbortSignal(operation, options.signal);
 		return loading.finally(() => {
 			this.releaseOperation(operation);
 			this.cleanupOperation(operation);
@@ -578,6 +618,7 @@ class Fortran implements Sandbox {
 		if (!this.isOperationActive(operation)) return;
 		this.finishExplicitStdin(operation);
 		operation.cancelled = true;
+		operation.cancellation = { reason };
 		this.activeOperation = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;

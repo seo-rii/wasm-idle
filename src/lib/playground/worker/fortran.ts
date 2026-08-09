@@ -2,11 +2,20 @@ import { WASI } from '@bjorn3/browser_wasi_shim';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import {
+	snapshotFortranExecutionAssetReceipts,
+	type FortranExecutionAssetName,
+	type FortranExecutionAssetReceipt,
+	type FortranExecutionAssetReceipts
+} from '$lib/playground/fortranAssets';
+import {
 	configureWorkerRuntimeAssets,
 	handleWorkerAssetMessage,
 	type WorkerRuntimeAssetConfig
 } from '$lib/playground/worker/assets';
-import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch';
+import {
+	fetchRuntimeAssetBytes,
+	resolveRuntimeAssetUrl
+} from '$lib/playground/worker/runtimeAssetFetch';
 import type {
 	BrowserClangArtifact,
 	BrowserClangRuntime as Clang
@@ -18,6 +27,7 @@ import {
 	loadRuntimeManifest,
 	resolveRuntimeManifestUrl
 } from '@wasm-idle/llvm-core/clang';
+import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 
 declare var self: any;
 self.document = {
@@ -30,9 +40,11 @@ interface FortranWorkerAssetConfig {
 	f2cWasmUrl: string;
 	libf2cUrl: string;
 	f2cHeaderUrl: string;
+	integrity: FortranExecutionAssetReceipts;
+	maxAssetBytes: number;
 }
 
-const textDecoder = new TextDecoder();
+const textDecoder = new TextDecoder('utf-8', { fatal: true });
 
 const F2C_COMPAT_SOURCE = `#include <stdarg.h>
 #include <stdio.h>
@@ -99,12 +111,31 @@ const resolveInputPath = (activePath?: string) => {
 	return /\.[A-Za-z0-9_-]+$/.test(normalized) ? normalized : `${normalized}.f`;
 };
 
-async function fetchBytes(url: string, label: string) {
-	return await fetchRuntimeAssetBytes({ url, label });
+async function fetchVerifiedBytes(
+	url: string,
+	asset: FortranExecutionAssetName,
+	receipt: FortranExecutionAssetReceipt
+) {
+	const bytes = await fetchRuntimeAssetBytes({
+		url,
+		label: asset,
+		maxAssetBytes: receipt.bytes
+	});
+	await verifyRuntimeAssetIntegrity({
+		asset,
+		bytes,
+		expected: receipt,
+		runtimeId: 'FORTRAN'
+	});
+	return bytes;
 }
 
-async function fetchText(url: string, label: string) {
-	return textDecoder.decode(await fetchBytes(url, label));
+async function fetchVerifiedText(
+	url: string,
+	asset: FortranExecutionAssetName,
+	receipt: FortranExecutionAssetReceipt
+) {
+	return textDecoder.decode(await fetchVerifiedBytes(url, asset, receipt));
 }
 
 async function loadFortranRuntime(
@@ -112,10 +143,44 @@ async function loadFortranRuntime(
 	fortranAssets: FortranWorkerAssetConfig,
 	log: boolean
 ) {
+	const receipts = snapshotFortranExecutionAssetReceipts(fortranAssets.integrity);
+	if (!Number.isSafeInteger(fortranAssets.maxAssetBytes) || fortranAssets.maxAssetBytes <= 0) {
+		throw new TypeError('Fortran maxAssetBytes must be a positive safe integer');
+	}
+	for (const [asset, url] of [
+		['f2c.wasm', fortranAssets.f2cWasmUrl],
+		['libf2c.a', fortranAssets.libf2cUrl],
+		['f2c.h', fortranAssets.f2cHeaderUrl]
+	] as const) {
+		resolveRuntimeAssetUrl(url, asset);
+		if (receipts[asset].bytes > fortranAssets.maxAssetBytes) {
+			throw new Error(
+				`Fortran execution asset ${asset} exceeds the ${fortranAssets.maxAssetBytes} byte limit`
+			);
+		}
+	}
+
+	const f2cWasmBytes = await fetchVerifiedBytes(
+		fortranAssets.f2cWasmUrl,
+		'f2c.wasm',
+		receipts['f2c.wasm']
+	);
+	const libf2cBytes = await fetchVerifiedBytes(
+		fortranAssets.libf2cUrl,
+		'libf2c.a',
+		receipts['libf2c.a']
+	);
+	const f2cHeader = await fetchVerifiedText(
+		fortranAssets.f2cHeaderUrl,
+		'f2c.h',
+		receipts['f2c.h']
+	);
+	const nextF2cModule = await WebAssembly.compile(f2cWasmBytes);
+
 	configureWorkerRuntimeAssets(clangAssets || null);
 	const clangBaseUrl = clangAssets?.baseUrl || '';
 	const manifest = await loadRuntimeManifest(resolveRuntimeManifestUrl(clangBaseUrl));
-	clang = new BrowserClangRuntime({
+	const nextClang = new BrowserClangRuntime({
 		stdout: (output) => postMessage({ output }),
 		stdin: () => '',
 		progress: (value) => postMessage({ progress: value }),
@@ -123,16 +188,11 @@ async function loadFortranRuntime(
 		runtimeBaseUrl: clangBaseUrl,
 		manifest
 	});
-
-	const [f2cWasmBytes, libf2cBytes, f2cHeader] = await Promise.all([
-		fetchBytes(fortranAssets.f2cWasmUrl, 'f2c.wasm'),
-		fetchBytes(fortranAssets.libf2cUrl, 'libf2c.a'),
-		fetchText(fortranAssets.f2cHeaderUrl, 'f2c.h')
-	]);
-	f2cModule = await WebAssembly.compile(f2cWasmBytes);
-	await clang.ready;
-	clang.memfs.addFile('f2c.h', f2cHeader);
-	clang.memfs.addFile('libf2c.a', libf2cBytes);
+	await nextClang.ready;
+	nextClang.memfs.addFile('f2c.h', f2cHeader);
+	nextClang.memfs.addFile('libf2c.a', libf2cBytes);
+	clang = nextClang;
+	f2cModule = nextF2cModule;
 }
 
 function readProgramStdin() {

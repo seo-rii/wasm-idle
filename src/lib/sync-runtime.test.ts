@@ -30,16 +30,35 @@ describe('sync-runtime registry', () => {
 		expect(runtimeListLine(swiftRuntime!)).toBe('wasm-swift\tmanual');
 	});
 
+	it('registers the receipt-gated Fortran synchronizer as manual', () => {
+		const fortranRuntime = RUNTIMES.find((runtime) => runtime.name === 'wasm-fortran');
+
+		expect(fortranRuntime).toMatchObject({
+			name: 'wasm-fortran',
+			module: './sync-wasm-fortran.mjs',
+			exportName: 'syncWasmFortranAssets',
+			sourceArg: 'sourceDir',
+			targetArg: 'targetDir',
+			manual: true,
+			sourceRequired: true
+		});
+		expect(runtimeListLine(fortranRuntime!)).toBe('wasm-fortran\tmanual\tsource-required');
+	});
+
 	it('excludes manual runtimes from all-sync unless explicitly requested', () => {
 		const automaticRuntimeNames = runtimesForAll().map((runtime) => runtime.name);
 
 		expect(automaticRuntimeNames).not.toContain('wasm-swift');
+		expect(automaticRuntimeNames).not.toContain('wasm-fortran');
 		expect(
 			runtimesForAll({ includeManual: false }).map((runtime) => runtime.name)
 		).not.toContain('wasm-swift');
 		expect(runtimesForAll({ includeManual: true }).map((runtime) => runtime.name)).toContain(
 			'wasm-swift'
 		);
+		expect(
+			runtimesForAll({ includeManual: true }).map((runtime) => runtime.name)
+		).not.toContain('wasm-fortran');
 		for (const runtime of RUNTIMES.filter((candidate) => candidate.manual)) {
 			expect(automaticRuntimeNames).not.toContain(runtime.name);
 		}
@@ -66,6 +85,18 @@ describe('sync-runtime registry', () => {
 		);
 	});
 
+	it('rejects direct source-required syncs before importing the producer synchronizer', () => {
+		const result = spawnSync(process.execPath, ['scripts/sync-runtime.mjs', 'wasm-fortran'], {
+			encoding: 'utf8'
+		});
+
+		expect(result.status).not.toBe(0);
+		expect(result.stderr).toContain(
+			'wasm-fortran sync requires an explicit sourceDir argument'
+		);
+		expect(result.stderr).not.toMatch(/\n\s+at /u);
+	});
+
 	it('reports runtime sync dispatcher argument errors without stack traces', () => {
 		const result = spawnSync(
 			process.execPath,
@@ -78,7 +109,7 @@ describe('sync-runtime registry', () => {
 		expect(result.stderr).not.toMatch(/\n\s+at /u);
 	});
 
-	it('lists Swift as manual in the runtime sync CLI output', () => {
+	it('lists manual runtimes in the runtime sync CLI output', () => {
 		const implicitList = spawnSync(process.execPath, ['scripts/sync-runtime.mjs'], {
 			encoding: 'utf8'
 		});
@@ -90,6 +121,8 @@ describe('sync-runtime registry', () => {
 			expect(result.status).toBe(0);
 			expect(result.stdout).toContain('wasm-swift\tmanual');
 			expect(result.stdout).not.toContain('wasm-swift\n');
+			expect(result.stdout).toContain('wasm-fortran\tmanual\tsource-required');
+			expect(result.stdout).not.toContain('wasm-fortran\n');
 			expect(result.stderr).toBe('');
 		}
 	});

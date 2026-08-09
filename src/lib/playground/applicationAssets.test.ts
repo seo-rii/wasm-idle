@@ -9,6 +9,11 @@ import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
 import { WASM_BASH_ASSET_VERSION, WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
 import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 import { WASM_ELIXIR_ASSET_RECEIPTS, WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
+import {
+	WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS,
+	WASM_FORTRAN_EXECUTION_ASSET_VERSION
+} from './wasmFortranExecutionAssets';
+import { WASM_FORTRAN_ASSET_VERSION } from './wasmFortranVersion';
 import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
@@ -133,6 +138,14 @@ describe('application runtime asset root', () => {
 			integrity: WASM_ELIXIR_ASSET_RECEIPTS
 		});
 		expect(assets.erlang).toEqual(assets.elixir);
+		expect(assets.fortran).toEqual({
+			baseUrl: '/foo/bar/wasm-fortran/',
+			f2cWasmUrl: `/foo/bar/wasm-fortran/f2c.wasm?v=${WASM_FORTRAN_EXECUTION_ASSET_VERSION}`,
+			libf2cUrl: `/foo/bar/wasm-fortran/libf2c.a?v=${WASM_FORTRAN_EXECUTION_ASSET_VERSION}`,
+			f2cHeaderUrl: `/foo/bar/wasm-fortran/f2c.h?v=${WASM_FORTRAN_EXECUTION_ASSET_VERSION}`,
+			analyzerUrl: `/foo/bar/wasm-fortran/analyzer.js?v=${WASM_FORTRAN_ASSET_VERSION}`,
+			integrity: WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS
+		});
 		expect(assets.typescript?.libUrl).toMatch(
 			/^\/foo\/bar\/lsp\/typescript-libs\.json\.gz\?v=/u
 		);
@@ -172,6 +185,17 @@ describe('application runtime asset root', () => {
 					}
 				])
 		);
+		const serializedFortranIntegrity = JSON.stringify(
+			Object.entries(WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS)
+				.sort(([left], [right]) => left.localeCompare(right))
+				.map(([asset, entry]) => [
+					asset,
+					{
+						sha256: entry.sha256,
+						bytes: entry.bytes
+					}
+				])
+		);
 
 		expect(key).toMatchObject({
 			rustManifestUrl: `/foo/bar/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`,
@@ -197,6 +221,7 @@ describe('application runtime asset root', () => {
 			]),
 			elixirIntegrity: serializedElixirIntegrity,
 			erlangIntegrity: serializedElixirIntegrity,
+			fortranIntegrity: serializedFortranIntegrity,
 			objectiveCIntegrity: JSON.stringify(
 				Object.entries(WASM_OBJECTIVEC_ASSET_RECEIPTS)
 					.sort(([left], [right]) => left.localeCompare(right))
@@ -221,6 +246,7 @@ describe('application runtime asset root', () => {
 			fortranLibf2cUrl: assets.fortran?.libf2cUrl,
 			fortranF2cHeaderUrl: assets.fortran?.f2cHeaderUrl,
 			fortranAnalyzerUrl: assets.fortran?.analyzerUrl,
+			fortranIntegrity: expect.any(String),
 			objectiveCBaseUrl: assets.objectivec?.baseUrl,
 			objectiveCLibobjcUrl: assets.objectivec?.libobjcUrl,
 			objectiveCHeadersUrl: assets.objectivec?.headersUrl,

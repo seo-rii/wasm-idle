@@ -26,3 +26,11 @@ SHA-256:
 
 @cowasm/f2c package:
 https://www.npmjs.com/package/@cowasm/f2c
+
+Receipt publication:
+- A producer directory must contain f2c.wasm, libf2c.a, f2c.h, and producer-receipt.json.
+- `node scripts/sync-wasm-fortran.mjs <producer-directory>` validates that receipt, overlays only
+  the three execution assets while preserving the LFortran analyzer installation, and publishes
+  runtime-build.json plus the generated application receipt atomically.
+- Browser verification covers the logical bytes returned after static gzip delivery; gzip bytes
+  remain outside this receipt contract.

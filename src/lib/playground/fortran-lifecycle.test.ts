@@ -61,7 +61,24 @@ vi.mock('$lib/playground/worker/fortran?worker', () => ({
 }));
 
 import Fortran from './fortran';
+import type { FortranExecutionAssetReceipts } from './fortranAssets';
 import { readBufferedStdin } from './stdinBuffer';
+
+const fortranReceipts = (f2cDigest: string) =>
+	({
+		'f2c.wasm': {
+			bytes: 3,
+			sha256: f2cDigest.repeat(64)
+		},
+		'libf2c.a': {
+			bytes: 7,
+			sha256: 'b'.repeat(64)
+		},
+		'f2c.h': {
+			bytes: 13,
+			sha256: 'd'.repeat(64)
+		}
+	}) satisfies FortranExecutionAssetReceipts;
 
 describe('Fortran worker lifecycle', () => {
 	beforeEach(() => {
@@ -169,6 +186,77 @@ describe('Fortran worker lifecycle', () => {
 
 		worker.resolveLoad();
 		await expect(loading).resolves.toBeUndefined();
+	});
+
+	it('binds worker reuse to the detached Fortran execution trust root', async () => {
+		const sandbox = new Fortran();
+		const firstReceipts = fortranReceipts('a');
+		await sandbox.load({ fortran: { integrity: firstReceipts } });
+		const firstWorker = workerInstances[0];
+		const firstLoad = firstWorker.postMessage.mock.calls[0][0];
+
+		expect(firstLoad.fortranAssets.integrity).toEqual(firstReceipts);
+		expect(firstLoad.fortranAssets.integrity).not.toBe(firstReceipts);
+		expect(Object.isFrozen(firstLoad.fortranAssets.integrity)).toBe(true);
+		expect(firstLoad.fortranAssets.maxAssetBytes).toBe(128 * 1024 * 1024);
+
+		const secondReceipts = fortranReceipts('e');
+		await sandbox.load({ fortran: { integrity: secondReceipts } });
+
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].postMessage.mock.calls[0][0].fortranAssets.integrity).toEqual(
+			secondReceipts
+		);
+	});
+
+	it('does not let a stale receipt getter replace a reentrant load', async () => {
+		const sandbox = new Fortran();
+		const terminationReason = new Error('replace Fortran receipt snapshot');
+		let replacement: Promise<void> | undefined;
+		let reenter = true;
+		const fortranConfig = {
+			get integrity() {
+				if (reenter) {
+					reenter = false;
+					sandbox.terminate(terminationReason);
+					replacement = sandbox.load('/replacement');
+					void replacement.catch(() => undefined);
+				}
+				return fortranReceipts('a');
+			}
+		};
+
+		const staleLoad = sandbox.load({ fortran: fortranConfig });
+
+		await expect(staleLoad).rejects.toBe(terminationReason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(1);
+		expect(sandbox.worker).toBe(workerInstances[0]);
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+	});
+
+	it('rejects a lower asset limit before reusing an already loaded worker', async () => {
+		const sandbox = new Fortran();
+		const receipts = fortranReceipts('a');
+		await sandbox.load({ fortran: { integrity: receipts } });
+		const worker = workerInstances[0];
+		const postMessageCalls = worker.postMessage.mock.calls.length;
+
+		await expect(
+			sandbox.load({ fortran: { integrity: receipts } }, '', true, [], {
+				limits: { maxAssetBytes: 2 }
+			})
+		).rejects.toMatchObject({
+			name: 'AssetTooLargeError',
+			code: 'asset-too-large',
+			actual: 3,
+			limit: 2,
+			runtimeId: 'FORTRAN'
+		});
+		expect(worker.postMessage).toHaveBeenCalledTimes(postMessageCalls);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(worker);
 	});
 
 	it('rejects run and load overlap while execution keeps its handler', async () => {

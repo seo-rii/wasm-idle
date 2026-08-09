@@ -129,6 +129,9 @@ describe('LLVM runtime package scripts', () => {
 		}
 
 		expect(pkg.scripts?.['sync:wasm-clang']).toBe('node scripts/sync-wasm-clang.mjs');
+		expect(pkg.scripts?.['sync:wasm-fortran']).toBe(
+			'node scripts/sync-runtime.mjs wasm-fortran'
+		);
 		expect(pkg.scripts?.['sync:wasm-cobol']).toBe('node scripts/sync-runtime.mjs wasm-cobol');
 		expect(pkg.scripts?.['sync:wasm-swift']).toBe('node scripts/sync-runtime.mjs wasm-swift');
 

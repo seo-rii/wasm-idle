@@ -75,6 +75,7 @@ export interface RuntimeAssetKeySource {
 		libf2cUrl?: string;
 		f2cHeaderUrl?: string;
 		analyzerUrl?: string;
+		integrity?: RuntimeAssetIntegrityMap;
 	};
 	zig?: { compilerUrl?: string; stdlibUrl?: string };
 	objectivec?: {
@@ -452,6 +453,12 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'fortran', property: 'libf2cUrl', key: 'fortranLibf2cUrl' },
 	{ runtime: 'fortran', property: 'f2cHeaderUrl', key: 'fortranF2cHeaderUrl' },
 	{ runtime: 'fortran', property: 'analyzerUrl', key: 'fortranAnalyzerUrl' },
+	{
+		runtime: 'fortran',
+		property: 'integrity',
+		key: 'fortranIntegrity',
+		serialize: serializeIntegrity
+	},
 	{ runtime: 'zig', property: 'compilerUrl', key: 'zigCompilerUrl' },
 	{ runtime: 'zig', property: 'stdlibUrl', key: 'zigStdlibUrl' },
 	{ runtime: 'objectivec', property: 'baseUrl', key: 'objectiveCBaseUrl' },

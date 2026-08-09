@@ -94,6 +94,7 @@ import {
 	resolveRuntimeAssetConfig
 } from './assets';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
+import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from './wasmFortranExecutionAssets';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 
@@ -1390,7 +1391,8 @@ describe('runtime asset config resolution', () => {
 			f2cWasmUrl: 'https://example.com/absproxy/5173/wasm-fortran/f2c.wasm',
 			libf2cUrl: 'https://example.com/absproxy/5173/wasm-fortran/libf2c.a',
 			f2cHeaderUrl: 'https://example.com/absproxy/5173/wasm-fortran/f2c.h',
-			analyzerUrl: 'https://example.com/absproxy/5173/wasm-fortran/analyzer.js'
+			analyzerUrl: 'https://example.com/absproxy/5173/wasm-fortran/analyzer.js',
+			integrity: WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS
 		});
 	});
 
@@ -1440,8 +1442,34 @@ describe('runtime asset config resolution', () => {
 			f2cWasmUrl: 'https://example.com/runtime/fortran/f2c.wasm?v=test',
 			libf2cUrl: 'https://example.com/runtime/fortran/libf2c.a?v=test',
 			f2cHeaderUrl: 'https://example.com/runtime/fortran/f2c.h?v=test',
-			analyzerUrl: 'https://example.com/runtime/fortran/analyzer.js?v=test'
+			analyzerUrl: 'https://example.com/runtime/fortran/analyzer.js?v=test',
+			integrity: WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS
 		});
+	});
+
+	it('snapshots a custom Fortran execution trust root', () => {
+		const integrity = structuredClone(WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS);
+		const resolved = resolveFortranRuntimeAssetConfig(
+			{ fortran: { integrity } },
+			'https://example.com/app'
+		);
+		(integrity['f2c.wasm'] as { bytes: number }).bytes = 1;
+
+		expect(resolved.integrity['f2c.wasm'].bytes).toBe(
+			WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS['f2c.wasm'].bytes
+		);
+		expect(resolved.integrity).not.toBe(integrity);
+		expect(Object.isFrozen(resolved.integrity)).toBe(true);
+		expect(Object.isFrozen(resolved.integrity['f2c.h'])).toBe(true);
+	});
+
+	it('rejects an explicitly malformed Fortran trust root instead of using bundled receipts', () => {
+		expect(() =>
+			resolveFortranRuntimeAssetConfig(
+				{ fortran: { integrity: null as never } },
+				'https://example.com/app'
+			)
+		).toThrow('exactly three asset receipts');
 	});
 
 	it('falls back to PUBLIC_WASM_FORTRAN_BASE_URL for unconfigured Fortran asset urls', async () => {
@@ -1458,7 +1486,8 @@ describe('runtime asset config resolution', () => {
 			f2cWasmUrl: 'https://env.example.com/fortran/f2c.wasm',
 			libf2cUrl: 'https://env.example.com/fortran/libf2c.a',
 			f2cHeaderUrl: 'https://env.example.com/fortran/f2c.h',
-			analyzerUrl: 'https://env.example.com/fortran/analyzer.js'
+			analyzerUrl: 'https://env.example.com/fortran/analyzer.js',
+			integrity: WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS
 		});
 	});
 

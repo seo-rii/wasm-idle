@@ -16,7 +16,7 @@ export const DEFAULT_RUNTIME_ASSET_MAX_BYTES = 128 * 1024 * 1024;
 
 const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
 
-function resolveRuntimeAssetUrl(value: string, label: string) {
+export function resolveRuntimeAssetUrl(value: string, label: string) {
 	let url: URL;
 	try {
 		url = new URL(value);

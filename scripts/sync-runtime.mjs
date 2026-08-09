@@ -11,6 +11,7 @@ const THIS_FILE = fileURLToPath(import.meta.url);
  *   sourceArg: string;
  *   targetArg: string;
  *   manual?: boolean;
+ *   sourceRequired?: boolean;
  * }} RuntimeSyncConfig
  */
 
@@ -117,6 +118,15 @@ export const RUNTIMES = [
 		sourceArg: 'sourceDir',
 		targetArg: 'targetDir',
 		manual: true
+	},
+	{
+		name: 'wasm-fortran',
+		module: './sync-wasm-fortran.mjs',
+		exportName: 'syncWasmFortranAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true,
+		sourceRequired: true
 	},
 	{
 		name: 'wasm-elixir',
@@ -255,11 +265,13 @@ export const RUNTIMES = [
 
 /** @param {RuntimeSyncConfig} runtime */
 export function runtimeListLine(runtime) {
-	return `${runtime.name}${runtime.manual ? '\tmanual' : ''}`;
+	return `${runtime.name}${runtime.manual ? '\tmanual' : ''}${runtime.sourceRequired ? '\tsource-required' : ''}`;
 }
 
 export function runtimesForAll({ includeManual = false } = {}) {
-	return RUNTIMES.filter((candidate) => includeManual || !candidate.manual);
+	return RUNTIMES.filter(
+		(candidate) => !candidate.sourceRequired && (includeManual || !candidate.manual)
+	);
 }
 
 /** @param {string[]} args */
@@ -305,6 +317,9 @@ function takeFlag(args, flag) {
  * @returns {Promise<RuntimeSyncResult>}
  */
 async function syncRuntime(runtime, sourceDir, targetDir) {
+	if (runtime.sourceRequired && !sourceDir) {
+		throw new Error(`${runtime.name} sync requires an explicit sourceDir argument`);
+	}
 	const moduleUrl = new URL(runtime.module, import.meta.url);
 	const syncModule = await import(moduleUrl.href);
 	const sync = syncModule[runtime.exportName];

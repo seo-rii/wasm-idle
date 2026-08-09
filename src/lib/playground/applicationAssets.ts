@@ -8,6 +8,10 @@ import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIn
 import { WASM_DOTNET_ASSET_VERSION } from './wasmDotnetVersion';
 import { WASM_ELIXIR_ASSET_RECEIPTS, WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
 import { WASM_FORTH_ASSET_VERSION } from './wasmForthVersion';
+import {
+	WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS,
+	WASM_FORTRAN_EXECUTION_ASSET_VERSION
+} from './wasmFortranExecutionAssets';
 import { WASM_FORTRAN_ASSET_VERSION } from './wasmFortranVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
@@ -206,10 +210,11 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		fortran: {
 			baseUrl: asset('wasm-fortran/'),
-			f2cWasmUrl: asset('wasm-fortran/f2c.wasm', WASM_FORTRAN_ASSET_VERSION),
-			libf2cUrl: asset('wasm-fortran/libf2c.a', WASM_FORTRAN_ASSET_VERSION),
-			f2cHeaderUrl: asset('wasm-fortran/f2c.h', WASM_FORTRAN_ASSET_VERSION),
-			analyzerUrl: asset('wasm-fortran/analyzer.js', WASM_FORTRAN_ASSET_VERSION)
+			f2cWasmUrl: asset('wasm-fortran/f2c.wasm', WASM_FORTRAN_EXECUTION_ASSET_VERSION),
+			libf2cUrl: asset('wasm-fortran/libf2c.a', WASM_FORTRAN_EXECUTION_ASSET_VERSION),
+			f2cHeaderUrl: asset('wasm-fortran/f2c.h', WASM_FORTRAN_EXECUTION_ASSET_VERSION),
+			analyzerUrl: asset('wasm-fortran/analyzer.js', WASM_FORTRAN_ASSET_VERSION),
+			integrity: WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS
 		},
 		cobol: {
 			baseUrl: asset('wasm-cobol/')

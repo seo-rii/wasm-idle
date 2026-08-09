@@ -2,12 +2,17 @@ import { env as dynamicPublicEnv } from '$env/dynamic/public';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from '$lib/playground/clangAssetIntegrity';
 import { snapshotDOuterAssetConfig, type DOuterAssetReceipts } from '$lib/playground/dOuterAssets';
 import type { ElixirRuntimeAssetReceipts } from '$lib/playground/elixirAssets';
+import {
+	snapshotFortranExecutionAssetReceipts,
+	type FortranExecutionAssetReceipts
+} from '$lib/playground/fortranAssets';
 import { normalizeTeaVmBaseUrl, resolveTeaVmBaseUrl } from '$lib/playground/teavmConfig';
 import {
 	WASM_GLEAM_ASSET_VERSION,
 	WASM_GLEAM_RUNNER_RECEIPT
 } from '$lib/playground/wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
+import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from '$lib/playground/wasmFortranExecutionAssets';
 import { WASM_D_OUTER_ASSET_RECEIPTS } from '$lib/playground/wasmDIntegrity';
 import type { RuntimeAssetIntegrityEntry as CoreRuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 import type {
@@ -139,6 +144,7 @@ export interface FortranRuntimeAssetConfig {
 	libf2cUrl?: string;
 	f2cHeaderUrl?: string;
 	analyzerUrl?: string;
+	integrity?: FortranExecutionAssetReceipts;
 }
 
 export interface CobolRuntimeAssetConfig {
@@ -368,6 +374,7 @@ export interface ResolvedFortranRuntimeAssetConfig {
 	libf2cUrl: string;
 	f2cHeaderUrl: string;
 	analyzerUrl: string;
+	integrity: FortranExecutionAssetReceipts;
 }
 
 export interface ResolvedDRuntimeAssetConfig {
@@ -1247,12 +1254,19 @@ export function resolveFortranRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ): ResolvedFortranRuntimeAssetConfig {
+	const configuredIntegrity =
+		typeof options === 'object' ? options?.fortran?.integrity : undefined;
 	return {
 		baseUrl: resolveFortranBaseUrl(options, currentUrl),
 		f2cWasmUrl: resolveFortranF2cWasmUrl(options, currentUrl),
 		libf2cUrl: resolveFortranLibf2cUrl(options, currentUrl),
 		f2cHeaderUrl: resolveFortranF2cHeaderUrl(options, currentUrl),
-		analyzerUrl: resolveFortranAnalyzerUrl(options, currentUrl)
+		analyzerUrl: resolveFortranAnalyzerUrl(options, currentUrl),
+		integrity: snapshotFortranExecutionAssetReceipts(
+			configuredIntegrity === undefined
+				? WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS
+				: configuredIntegrity
+		)
 	};
 }
 
