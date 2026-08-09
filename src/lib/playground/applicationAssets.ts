@@ -18,7 +18,10 @@ import { WASM_JULIA_ASSET_VERSION } from './wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from './wasmLispVersion';
 import { WASM_LUA_ASSET_VERSION } from './wasmLuaVersion';
 import { WASM_NIM_ASSET_VERSION } from './wasmNimVersion';
-import { WASM_OBJECTIVEC_ASSET_VERSION } from './wasmObjectiveCVersion';
+import {
+	WASM_OBJECTIVEC_ASSET_RECEIPTS,
+	WASM_OBJECTIVEC_ASSET_VERSION
+} from './wasmObjectiveCVersion';
 import { WASM_OCAML_ASSET_VERSION } from './wasmOcamlVersion';
 import { WASM_OCTAVE_ASSET_VERSION } from './wasmOctaveVersion';
 import { WASM_PASCAL_ASSET_VERSION } from './wasmPascalVersion';
@@ -223,7 +226,8 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 				'wasm-objectivec/foundation-headers.json',
 				WASM_OBJECTIVEC_ASSET_VERSION
 			),
-			libffiUrl: asset('wasm-objectivec/libffi.a', WASM_OBJECTIVEC_ASSET_VERSION)
+			libffiUrl: asset('wasm-objectivec/libffi.a', WASM_OBJECTIVEC_ASSET_VERSION),
+			integrity: WASM_OBJECTIVEC_ASSET_RECEIPTS
 		},
 		r: {
 			baseUrl: asset(`webr/${WASM_R_ASSET_VERSION}/`)

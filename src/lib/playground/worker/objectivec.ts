@@ -4,11 +4,13 @@ import {
 	handleWorkerAssetMessage
 } from '$lib/playground/worker/assets';
 import { installObjectiveCWorker } from '@wasm-idle/llvm-core/objective-c';
+import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 
 declare const self: unknown;
 
 installObjectiveCWorker(self as any, {
 	configureRuntimeAssets: configureWorkerRuntimeAssets,
 	handleAssetMessage: handleWorkerAssetMessage,
-	waitForStdin: waitForBufferedStdin
+	waitForStdin: waitForBufferedStdin,
+	verifyRuntimeAssetIntegrity
 });

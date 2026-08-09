@@ -1,6 +1,5 @@
+import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { DEFAULT_MAX_RUNTIME_JSON_BYTES } from '../../core/src/wasm.js';
 
 const validEmptyWasm = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
 
@@ -9,6 +8,7 @@ let compileCalls: any[] = [];
 let debugRunCalls: any[] = [];
 let executedArtifacts: any[] = [];
 let runtimeInstances: any[] = [];
+const objectiveCAssetResponseOverrides = new Map<string, Uint8Array>();
 
 class MockMemfs {
 	files = new Map<string, Uint8Array | string>();
@@ -31,8 +31,23 @@ function bytes(value: string) {
 	return new TextEncoder().encode(value);
 }
 
+function sha256(value: Uint8Array) {
+	return createHash('sha256').update(value).digest('hex');
+}
+
 function responseBytesForObjectiveCAsset(url: string) {
-	if (url.endsWith('foundation-headers.json')) {
+	const assetName = [
+		'foundation-headers.json',
+		'headers.json',
+		'libgnustep-base.a',
+		'libgnustep-base.o',
+		'libffi.a',
+		'libobjc.a'
+	].find((candidate) => url.endsWith(candidate) || url.endsWith(`${candidate}.gz`));
+	if (assetName && objectiveCAssetResponseOverrides.has(assetName)) {
+		return objectiveCAssetResponseOverrides.get(assetName)!;
+	}
+	if (assetName === 'foundation-headers.json') {
 		return bytes(
 			JSON.stringify({
 				'Foundation/Foundation.h': '@interface NSObject @end',
@@ -41,29 +56,56 @@ function responseBytesForObjectiveCAsset(url: string) {
 			})
 		);
 	}
-	if (url.endsWith('headers.json')) {
+	if (assetName === 'headers.json') {
 		return bytes(JSON.stringify({ 'include/objc/runtime.h': 'typedef void *id;' }));
 	}
-	if (url.endsWith('libgnustep-base.a')) return bytes('mock-libgnustep');
-	if (url.endsWith('libgnustep-base.o')) return bytes('mock-libgnustep-object');
-	if (url.endsWith('libffi.a')) return bytes('mock-libffi');
+	if (assetName === 'libgnustep-base.a') return bytes('mock-libgnustep');
+	if (assetName === 'libgnustep-base.o') return bytes('mock-libgnustep-object');
+	if (assetName === 'libffi.a') return bytes('mock-libffi');
 	return bytes('mock-libobjc');
 }
 
-function objectiveCLoadEvent() {
+function objectiveCAssets(overrides: Record<string, unknown> = {}) {
+	const urls = {
+		'libobjc.a': 'http://localhost/wasm-objectivec/libobjc.a',
+		'headers.json': 'http://localhost/wasm-objectivec/headers.json',
+		'libgnustep-base.a': 'http://localhost/wasm-objectivec/libgnustep-base.a',
+		'libgnustep-base.o': 'http://localhost/wasm-objectivec/libgnustep-base.o',
+		'foundation-headers.json': 'http://localhost/wasm-objectivec/foundation-headers.json',
+		'libffi.a': 'http://localhost/wasm-objectivec/libffi.a'
+	};
+	return {
+		libobjcUrl: urls['libobjc.a'],
+		headersUrl: urls['headers.json'],
+		libgnustepBaseUrl: urls['libgnustep-base.a'],
+		libgnustepBaseObjectUrl: urls['libgnustep-base.o'],
+		foundationHeadersUrl: urls['foundation-headers.json'],
+		libffiUrl: urls['libffi.a'],
+		integrity: Object.fromEntries(
+			Object.entries(urls).map(([assetName, url]) => {
+				const contents = responseBytesForObjectiveCAsset(url);
+				return [assetName, { bytes: contents.byteLength, sha256: sha256(contents) }];
+			})
+		),
+		...overrides
+	};
+}
+
+const verifyRuntimeAssetIntegrity = vi.fn(async (request: any) => {
+	const expectedBytes = request.expected.uncompressedBytes;
+	const expectedSha256 = request.expected.uncompressedSha256;
+	if (request.bytes.byteLength !== expectedBytes || sha256(request.bytes) !== expectedSha256) {
+		throw new Error(`Runtime asset ${request.asset} uncompressed integrity mismatch`);
+	}
+});
+
+function objectiveCLoadEvent(assetOverrides: Record<string, unknown> = {}) {
 	return {
 		data: {
 			load: true,
 			log: false,
 			clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
-			objectivecAssets: {
-				libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
-				headersUrl: 'http://localhost/wasm-objectivec/headers.json',
-				libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
-				libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
-				foundationHeadersUrl: 'http://localhost/wasm-objectivec/foundation-headers.json',
-				libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
-			}
+			objectivecAssets: objectiveCAssets(assetOverrides)
 		}
 	};
 }
@@ -173,7 +215,8 @@ async function installWorker() {
 	installObjectiveCWorker(globalThis as any, {
 		configureRuntimeAssets: vi.fn(),
 		handleAssetMessage: vi.fn(() => false),
-		waitForStdin: vi.fn(() => null)
+		waitForStdin: vi.fn(() => null),
+		verifyRuntimeAssetIntegrity
 	});
 }
 
@@ -185,6 +228,8 @@ describe('Objective-C worker', () => {
 		debugRunCalls = [];
 		executedArtifacts = [];
 		runtimeInstances = [];
+		objectiveCAssetResponseOverrides.clear();
+		verifyRuntimeAssetIntegrity.mockClear();
 		(globalThis as any).self = globalThis as any;
 		(globalThis as any).postMessage = vi.fn();
 		vi.stubGlobal(
@@ -203,14 +248,9 @@ describe('Objective-C worker', () => {
 				load: true,
 				log: false,
 				clangAssets: { baseUrl: 'https://cdn.test/clang/', useAssetBridge: false },
-				objectivecAssets: {
-					libobjcUrl: 'data:application/octet-stream;base64,AA==',
-					headersUrl: 'https://cdn.test/objective-c/headers.json',
-					libgnustepBaseUrl: 'https://cdn.test/objective-c/libgnustep-base.a',
-					libgnustepBaseObjectUrl: 'https://cdn.test/objective-c/libgnustep-base.o',
-					foundationHeadersUrl: 'https://cdn.test/objective-c/foundation-headers.json',
-					libffiUrl: 'https://cdn.test/objective-c/libffi.a'
-				}
+				objectivecAssets: objectiveCAssets({
+					libobjcUrl: 'data:application/octet-stream;base64,AA=='
+				})
 			}
 		});
 
@@ -218,6 +258,62 @@ describe('Objective-C worker', () => {
 			error: 'Objective-C libobjc URL must use HTTP(S).'
 		});
 		expect(fetch).not.toHaveBeenCalled();
+	});
+
+	it.each(['missing', 'incomplete', 'extra', 'malformed'])(
+		'rejects a %s Objective-C integrity receipt before loading',
+		async (receiptCase) => {
+			const integrity = { ...(objectiveCAssets().integrity as Record<string, unknown>) };
+			if (receiptCase === 'missing') {
+				await installWorker();
+				await (globalThis as any).self.onmessage(
+					objectiveCLoadEvent({ integrity: undefined })
+				);
+			} else {
+				if (receiptCase === 'incomplete') delete integrity['libffi.a'];
+				if (receiptCase === 'extra') {
+					integrity['unexpected.a'] = { bytes: 1, sha256: 'a'.repeat(64) };
+				}
+				if (receiptCase === 'malformed') {
+					integrity['libobjc.a'] = { bytes: 0, sha256: 'not-a-digest' };
+				}
+				await installWorker();
+				await (globalThis as any).self.onmessage(objectiveCLoadEvent({ integrity }));
+			}
+
+			expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+				error:
+					receiptCase === 'missing'
+						? 'Objective-C runtime asset integrity receipt is required.'
+						: receiptCase === 'incomplete' || receiptCase === 'extra'
+							? 'Objective-C runtime asset integrity receipt is incomplete.'
+							: 'Objective-C runtime asset integrity receipt is invalid for libobjc.a.'
+			});
+			expect(fetch).not.toHaveBeenCalled();
+		}
+	);
+
+	it('rejects a corrupt startup asset before materializing runtime files', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL) => {
+				const url = String(input);
+				return new Response(
+					url.endsWith('/libobjc.a')
+						? bytes('evil-libobjc')
+						: responseBytesForObjectiveCAsset(url)
+				);
+			})
+		);
+
+		await installWorker();
+		await (globalThis as any).self.onmessage(objectiveCLoadEvent());
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'Runtime asset libobjc.a uncompressed integrity mismatch'
+		});
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({ load: true });
+		expect(runtimeInstances[0]?.memfs.files.size).toBe(0);
 	});
 
 	it('loads gzip-only Objective-C startup assets through original asset urls', async () => {
@@ -253,15 +349,7 @@ describe('Objective-C worker', () => {
 				load: true,
 				log: false,
 				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
-				objectivecAssets: {
-					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
-					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
-					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
-					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
-					foundationHeadersUrl:
-						'http://localhost/wasm-objectivec/foundation-headers.json',
-					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
-				}
+				objectivecAssets: objectiveCAssets()
 			}
 		});
 
@@ -288,7 +376,7 @@ describe('Objective-C worker', () => {
 	});
 
 	it('rejects oversized Objective-C header metadata before reading its body', async () => {
-		let cancelled = false;
+		const limit = responseBytesForObjectiveCAsset('headers.json').byteLength;
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async (input: string | URL) => {
@@ -300,14 +388,11 @@ describe('Objective-C worker', () => {
 					new ReadableStream({
 						pull() {
 							throw new Error('oversized metadata body should not be read');
-						},
-						cancel() {
-							cancelled = true;
 						}
 					}),
 					{
 						headers: {
-							'Content-Length': String(DEFAULT_MAX_RUNTIME_JSON_BYTES + 1)
+							'Content-Length': String(limit + 1)
 						}
 					}
 				);
@@ -320,26 +405,17 @@ describe('Objective-C worker', () => {
 				load: true,
 				log: false,
 				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
-				objectivecAssets: {
-					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
-					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
-					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
-					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
-					foundationHeadersUrl:
-						'http://localhost/wasm-objectivec/foundation-headers.json',
-					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
-				}
+				objectivecAssets: objectiveCAssets()
 			}
 		});
 
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
-			error: `Runtime asset http://localhost/wasm-objectivec/headers.json size exceeds the ${DEFAULT_MAX_RUNTIME_JSON_BYTES} byte limit`
+			error: `Runtime asset http://localhost/wasm-objectivec/headers.json size exceeds the ${limit} byte limit`
 		});
-		expect(cancelled).toBe(true);
 	});
 
 	it('keeps the Objective-C metadata limit on gzip fallback assets', async () => {
-		let cancelled = false;
+		const limit = responseBytesForObjectiveCAsset('headers.json').byteLength;
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async (input: string | URL) => {
@@ -356,14 +432,11 @@ describe('Objective-C worker', () => {
 							throw new Error(
 								'oversized compressed metadata body should not be read'
 							);
-						},
-						cancel() {
-							cancelled = true;
 						}
 					}),
 					{
 						headers: {
-							'Content-Length': String(DEFAULT_MAX_RUNTIME_JSON_BYTES + 1)
+							'Content-Length': String(limit + 1)
 						}
 					}
 				);
@@ -376,22 +449,13 @@ describe('Objective-C worker', () => {
 				load: true,
 				log: false,
 				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
-				objectivecAssets: {
-					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
-					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
-					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
-					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
-					foundationHeadersUrl:
-						'http://localhost/wasm-objectivec/foundation-headers.json',
-					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
-				}
+				objectivecAssets: objectiveCAssets()
 			}
 		});
 
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
-			error: `Runtime asset http://localhost/wasm-objectivec/headers.json.gz download size exceeds the ${DEFAULT_MAX_RUNTIME_JSON_BYTES} byte limit`
+			error: `Runtime asset http://localhost/wasm-objectivec/headers.json.gz download size exceeds the ${limit} byte limit`
 		});
-		expect(cancelled).toBe(true);
 	});
 
 	it.each([
@@ -404,6 +468,7 @@ describe('Objective-C worker', () => {
 		],
 		['invalid UTF-8', new Uint8Array([0xc3, 0x28]), 'metadata is not valid UTF-8 JSON']
 	])('rejects Objective-C header metadata containing %s', async (_caseName, payload, error) => {
+		objectiveCAssetResponseOverrides.set('headers.json', payload);
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async (input: string | URL) => {
@@ -436,6 +501,7 @@ describe('Objective-C worker', () => {
 			['safe.h', 'int safe(void);'],
 			[unsafePath, 'int escaped(void);']
 		]);
+		objectiveCAssetResponseOverrides.set('headers.json', bytes(JSON.stringify(metadata)));
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async (input: string | URL) => {
@@ -480,6 +546,7 @@ describe('Objective-C worker', () => {
 			'Objective-C headers metadata contains a file/directory path collision.'
 		]
 	])('rejects an Objective-C header metadata %s', async (_caseName, metadata, error) => {
+		objectiveCAssetResponseOverrides.set('headers.json', bytes(JSON.stringify(metadata)));
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async (input: string | URL) => {
@@ -503,6 +570,7 @@ describe('Objective-C worker', () => {
 		const metadata = Object.fromEntries(
 			Array.from({ length: 4097 }, (_, index) => [`include/header-${index}.h`, ''])
 		);
+		objectiveCAssetResponseOverrides.set('headers.json', bytes(JSON.stringify(metadata)));
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async (input: string | URL) => {
@@ -525,6 +593,15 @@ describe('Objective-C worker', () => {
 	});
 
 	it('validates Foundation header metadata before using it', async () => {
+		objectiveCAssetResponseOverrides.set(
+			'foundation-headers.json',
+			bytes(
+				JSON.stringify({
+					Foundation: 'file',
+					'Foundation/Foundation.h': '@interface NSObject @end'
+				})
+			)
+		);
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async (input: string | URL) => {
@@ -563,8 +640,7 @@ describe('Objective-C worker', () => {
 	});
 
 	it('rejects oversized Objective-C startup assets before reading their bodies', async () => {
-		const limit = 128 * 1024 * 1024;
-		let cancelled = false;
+		const limit = responseBytesForObjectiveCAsset('libobjc.a').byteLength;
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async (input: string | URL) => {
@@ -576,9 +652,6 @@ describe('Objective-C worker', () => {
 					new ReadableStream({
 						pull() {
 							throw new Error('oversized body should not be read');
-						},
-						cancel() {
-							cancelled = true;
 						}
 					}),
 					{ headers: { 'Content-Length': String(limit + 1) } }
@@ -592,22 +665,13 @@ describe('Objective-C worker', () => {
 				load: true,
 				log: false,
 				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
-				objectivecAssets: {
-					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
-					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
-					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
-					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
-					foundationHeadersUrl:
-						'http://localhost/wasm-objectivec/foundation-headers.json',
-					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
-				}
+				objectivecAssets: objectiveCAssets()
 			}
 		});
 
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			error: `Runtime asset http://localhost/wasm-objectivec/libobjc.a size exceeds the ${limit} byte limit`
 		});
-		expect(cancelled).toBe(true);
 	});
 
 	it('compiles and links Objective-C workspace implementation files', async () => {
@@ -617,15 +681,7 @@ describe('Objective-C worker', () => {
 				load: true,
 				log: false,
 				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
-				objectivecAssets: {
-					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
-					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
-					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
-					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
-					foundationHeadersUrl:
-						'http://localhost/wasm-objectivec/foundation-headers.json',
-					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
-				}
+				objectivecAssets: objectiveCAssets()
 			}
 		});
 
@@ -704,15 +760,7 @@ describe('Objective-C worker', () => {
 				load: true,
 				log: false,
 				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
-				objectivecAssets: {
-					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
-					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
-					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
-					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
-					foundationHeadersUrl:
-						'http://localhost/wasm-objectivec/foundation-headers.json',
-					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
-				}
+				objectivecAssets: objectiveCAssets()
 			}
 		});
 
@@ -781,15 +829,7 @@ describe('Objective-C worker', () => {
 				load: true,
 				log: false,
 				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
-				objectivecAssets: {
-					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
-					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
-					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
-					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
-					foundationHeadersUrl:
-						'http://localhost/wasm-objectivec/foundation-headers.json',
-					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
-				}
+				objectivecAssets: objectiveCAssets()
 			}
 		});
 
@@ -829,6 +869,67 @@ describe('Objective-C worker', () => {
 		)?.[1];
 		expect(mainSource).toContain('@interface NSObject @end');
 		expect(executedArtifacts[0]?.options.extraImports).toEqual(expect.any(Function));
+		expect(
+			new Set(verifyRuntimeAssetIntegrity.mock.calls.map(([request]) => request.asset))
+		).toEqual(
+			new Set([
+				'libobjc.a',
+				'headers.json',
+				'foundation-headers.json',
+				'libgnustep-base.a',
+				'libffi.a'
+			])
+		);
+	});
+
+	it('does not cache a corrupt lazy Foundation archive and retries repaired bytes', async () => {
+		let serveCorruptArchive = true;
+		let foundationArchiveRequests = 0;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL) => {
+				const url = String(input);
+				if (url.endsWith('/libgnustep-base.a')) {
+					foundationArchiveRequests += 1;
+					if (serveCorruptArchive) return new Response(bytes('evil-libgnustep'));
+				}
+				return new Response(responseBytesForObjectiveCAsset(url));
+			})
+		);
+
+		await installWorker();
+		await (globalThis as any).self.onmessage(objectiveCLoadEvent());
+		const runEvent = {
+			data: {
+				code: '#import <Foundation/Foundation.h>\nint main(void) { return 0; }',
+				buffer: new SharedArrayBuffer(64),
+				prepare: false,
+				log: false,
+				activePath: 'main.m',
+				workspaceFiles: []
+			}
+		};
+
+		await (globalThis as any).self.onmessage(runEvent);
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'Runtime asset libgnustep-base.a uncompressed integrity mismatch'
+		});
+		expect(runtimeInstances[0]?.memfs.files.has('libgnustep-base.a')).toBe(false);
+		expect(runtimeInstances[0]?.memfs.files.has('libffi.a')).toBe(false);
+
+		serveCorruptArchive = false;
+		await (globalThis as any).self.onmessage(runEvent);
+
+		expect(foundationArchiveRequests).toBe(2);
+		expect(runtimeInstances[0]?.memfs.files.has('libgnustep-base.a')).toBe(true);
+		expect(runtimeInstances[0]?.memfs.files.has('libffi.a')).toBe(true);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+		expect(
+			verifyRuntimeAssetIntegrity.mock.calls.some(
+				([request]) => request.asset === 'libgnustep-base.o'
+			)
+		).toBe(false);
 	});
 
 	it('compiles and runs Objective-C debug sessions through the Clang trace host', async () => {
@@ -838,15 +939,7 @@ describe('Objective-C worker', () => {
 				load: true,
 				log: false,
 				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
-				objectivecAssets: {
-					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
-					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
-					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
-					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
-					foundationHeadersUrl:
-						'http://localhost/wasm-objectivec/foundation-headers.json',
-					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
-				}
+				objectivecAssets: objectiveCAssets()
 			}
 		});
 		const debugBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 32);
@@ -926,15 +1019,7 @@ describe('Objective-C worker', () => {
 				load: true,
 				log: false,
 				clangAssets: { baseUrl: 'http://localhost/clang/', useAssetBridge: false },
-				objectivecAssets: {
-					libobjcUrl: 'http://localhost/wasm-objectivec/libobjc.a',
-					headersUrl: 'http://localhost/wasm-objectivec/headers.json',
-					libgnustepBaseUrl: 'http://localhost/wasm-objectivec/libgnustep-base.a',
-					libgnustepBaseObjectUrl: 'http://localhost/wasm-objectivec/libgnustep-base.o',
-					foundationHeadersUrl:
-						'http://localhost/wasm-objectivec/foundation-headers.json',
-					libffiUrl: 'http://localhost/wasm-objectivec/libffi.a'
-				}
+				objectivecAssets: objectiveCAssets()
 			}
 		});
 

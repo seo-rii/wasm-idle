@@ -81,6 +81,7 @@ export interface RuntimeAssetKeySource {
 		libgnustepBaseObjectUrl?: string;
 		foundationHeadersUrl?: string;
 		libffiUrl?: string;
+		integrity?: RuntimeAssetIntegrityMap;
 	};
 	lisp?: { moduleUrl?: string };
 	ruby?: { moduleUrl?: string; wasmUrl?: string };
@@ -449,6 +450,12 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		key: 'objectiveCFoundationHeadersUrl'
 	},
 	{ runtime: 'objectivec', property: 'libffiUrl', key: 'objectiveCLibffiUrl' },
+	{
+		runtime: 'objectivec',
+		property: 'integrity',
+		key: 'objectiveCIntegrity',
+		serialize: serializeIntegrity
+	},
 	{ runtime: 'lisp', property: 'moduleUrl', key: 'lispModuleUrl' },
 	{ runtime: 'ruby', property: 'moduleUrl', key: 'rubyModuleUrl' },
 	{ runtime: 'ruby', property: 'wasmUrl', key: 'rubyWasmUrl' },

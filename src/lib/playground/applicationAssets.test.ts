@@ -9,6 +9,7 @@ import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
 import { WASM_BASH_ASSET_VERSION, WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
 import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
+import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
 import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
 
@@ -131,6 +132,7 @@ describe('application runtime asset root', () => {
 		expect(assets.objectivec?.foundationHeadersUrl).toMatch(
 			/^\/foo\/bar\/wasm-objectivec\/foundation-headers\.json\?v=/u
 		);
+		expect(assets.objectivec?.integrity).toBe(WASM_OBJECTIVEC_ASSET_RECEIPTS);
 		expect(assets.r?.baseUrl).toBe(`/foo/bar/webr/${WASM_R_ASSET_VERSION}/`);
 		expect(assets.sqlite?.moduleUrl).toBe(
 			`/foo/bar/wasm-sqlite/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
@@ -172,7 +174,12 @@ describe('application runtime asset root', () => {
 						bytes: WASM_BASH_WEBC_RECEIPT.bytes
 					}
 				]
-			])
+			]),
+			objectiveCIntegrity: JSON.stringify(
+				Object.entries(WASM_OBJECTIVEC_ASSET_RECEIPTS)
+					.sort(([left], [right]) => left.localeCompare(right))
+					.map(([asset, entry]) => [asset, { sha256: entry.sha256, bytes: entry.bytes }])
+			)
 		});
 	});
 
@@ -193,7 +200,8 @@ describe('application runtime asset root', () => {
 			objectiveCLibgnustepBaseUrl: assets.objectivec?.libgnustepBaseUrl,
 			objectiveCLibgnustepBaseObjectUrl: assets.objectivec?.libgnustepBaseObjectUrl,
 			objectiveCFoundationHeadersUrl: assets.objectivec?.foundationHeadersUrl,
-			objectiveCLibffiUrl: assets.objectivec?.libffiUrl
+			objectiveCLibffiUrl: assets.objectivec?.libffiUrl,
+			objectiveCIntegrity: expect.any(String)
 		});
 	});
 

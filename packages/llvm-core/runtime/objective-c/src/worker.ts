@@ -7,6 +7,41 @@ import {
 } from '../../clang/src/index.js';
 import { DEFAULT_MAX_RUNTIME_JSON_BYTES, readBuffer } from '../../core/src/wasm.js';
 
+const OBJECTIVEC_ASSET_NAMES = [
+	'libobjc.a',
+	'headers.json',
+	'libgnustep-base.a',
+	'libgnustep-base.o',
+	'foundation-headers.json',
+	'libffi.a'
+] as const;
+
+export type ObjectiveCAssetName = (typeof OBJECTIVEC_ASSET_NAMES)[number];
+
+export interface ObjectiveCAssetIntegrityReceipt {
+	bytes: number;
+	sha256: string;
+}
+
+export type ObjectiveCAssetIntegrityMap = Record<
+	ObjectiveCAssetName,
+	ObjectiveCAssetIntegrityReceipt
+>;
+
+export interface ObjectiveCAssetIntegrityVerificationRequest {
+	asset: ObjectiveCAssetName;
+	bytes: Uint8Array;
+	expected: {
+		sha256: string;
+		bytes: number;
+		uncompressedSha256: string;
+		uncompressedBytes: number;
+	};
+	stage: 'uncompressed';
+	runtimeId: 'OBJC';
+	profileId: 'wasm-llvm/objective-c-browser';
+}
+
 export interface ObjectiveCWorkspaceFile {
 	path: string;
 	content: string;
@@ -27,6 +62,9 @@ export interface ObjectiveCWorkerDependencies {
 	configureRuntimeAssets(config: ObjectiveCWorkerRuntimeAssetConfig | null): void;
 	handleAssetMessage(message: unknown): boolean;
 	waitForStdin(buffer: Int32Array | null, requestInput: () => void): string | null;
+	verifyRuntimeAssetIntegrity(
+		request: ObjectiveCAssetIntegrityVerificationRequest
+	): Promise<unknown>;
 }
 
 let workerScope: ObjectiveCWorkerScope | null = null;
@@ -49,6 +87,7 @@ export interface ObjectiveCWorkerAssetConfig {
 	libgnustepBaseObjectUrl: string;
 	foundationHeadersUrl: string;
 	libffiUrl: string;
+	integrity: ObjectiveCAssetIntegrityMap;
 }
 
 type ObjectiveCSourceLanguage = 'c' | 'objective-c' | 'objective-c++';
@@ -156,6 +195,41 @@ function resolveHostedAssetUrl(value: string, label: string) {
 }
 
 function resolveObjectiveCAssetConfig(assets: ObjectiveCWorkerAssetConfig) {
+	if (typeof workerDependencies?.verifyRuntimeAssetIntegrity !== 'function') {
+		throw new Error('Objective-C runtime asset integrity verifier is not installed.');
+	}
+	const integrity = assets.integrity;
+	if (!integrity || typeof integrity !== 'object' || Array.isArray(integrity)) {
+		throw new Error('Objective-C runtime asset integrity receipt is required.');
+	}
+	const receivedAssetNames = Object.keys(integrity).sort();
+	const expectedAssetNames = [...OBJECTIVEC_ASSET_NAMES].sort();
+	if (
+		receivedAssetNames.length !== expectedAssetNames.length ||
+		receivedAssetNames.some((assetName, index) => assetName !== expectedAssetNames[index])
+	) {
+		throw new Error('Objective-C runtime asset integrity receipt is incomplete.');
+	}
+	const verifiedIntegrity = Object.freeze(
+		Object.fromEntries(
+			OBJECTIVEC_ASSET_NAMES.map((assetName) => {
+				const receipt = integrity[assetName];
+				if (
+					!receipt ||
+					typeof receipt !== 'object' ||
+					!Number.isSafeInteger(receipt.bytes) ||
+					receipt.bytes <= 0 ||
+					typeof receipt.sha256 !== 'string' ||
+					!/^[a-f0-9]{64}$/u.test(receipt.sha256)
+				) {
+					throw new Error(
+						`Objective-C runtime asset integrity receipt is invalid for ${assetName}.`
+					);
+				}
+				return [assetName, Object.freeze({ bytes: receipt.bytes, sha256: receipt.sha256 })];
+			})
+		)
+	) as ObjectiveCAssetIntegrityMap;
 	return {
 		libobjcUrl: resolveHostedAssetUrl(assets.libobjcUrl, 'Objective-C libobjc URL'),
 		headersUrl: resolveHostedAssetUrl(assets.headersUrl, 'Objective-C headers URL'),
@@ -171,7 +245,8 @@ function resolveObjectiveCAssetConfig(assets: ObjectiveCWorkerAssetConfig) {
 			assets.foundationHeadersUrl,
 			'Objective-C Foundation headers URL'
 		),
-		libffiUrl: resolveHostedAssetUrl(assets.libffiUrl, 'Objective-C libffi URL')
+		libffiUrl: resolveHostedAssetUrl(assets.libffiUrl, 'Objective-C libffi URL'),
+		integrity: verifiedIntegrity
 	} satisfies ObjectiveCWorkerAssetConfig;
 }
 
@@ -181,10 +256,22 @@ const resolveInputPath = (activePath?: string) => {
 	return /\.[A-Za-z0-9_-]+$/.test(normalized) ? normalized : `${normalized}.m`;
 };
 
-async function fetchBytes(url: string, label: string, maxOutputBytes?: number) {
+async function fetchBytes(
+	url: string,
+	label: string,
+	assetName: ObjectiveCAssetName,
+	integrity: ObjectiveCAssetIntegrityMap,
+	maxOutputBytes = integrity[assetName].bytes
+) {
+	const receipt = integrity[assetName];
+	const byteLimit = Math.min(maxOutputBytes, receipt.bytes);
 	const resolvedUrl = new URL(url).href;
+	// readBuffer caches successful reads before this worker can verify them. A per-load
+	// signal keeps unverified bytes out of that shared URL cache so a repaired asset can retry.
+	const requestSignal = new AbortController().signal;
+	let bytes: Uint8Array;
 	try {
-		return await readBuffer(resolvedUrl, undefined, maxOutputBytes);
+		bytes = await readBuffer(resolvedUrl, undefined, byteLimit, requestSignal);
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		const failedResponsePrefix = `Failed to load runtime asset ${resolvedUrl}: `;
@@ -193,7 +280,7 @@ async function fetchBytes(url: string, label: string, maxOutputBytes?: number) {
 		compressedAssetUrl.pathname += '.gz';
 		const compressedUrl = compressedAssetUrl.href;
 		try {
-			return await readBuffer(compressedUrl, undefined, maxOutputBytes);
+			bytes = await readBuffer(compressedUrl, undefined, byteLimit, requestSignal);
 		} catch (compressedError) {
 			const compressedMessage =
 				compressedError instanceof Error
@@ -210,10 +297,39 @@ async function fetchBytes(url: string, label: string, maxOutputBytes?: number) {
 			);
 		}
 	}
+	const verifyIntegrity = workerDependencies?.verifyRuntimeAssetIntegrity;
+	if (!verifyIntegrity) {
+		throw new Error('Objective-C runtime asset integrity verifier is not installed.');
+	}
+	await verifyIntegrity({
+		asset: assetName,
+		bytes,
+		expected: {
+			sha256: receipt.sha256,
+			bytes: receipt.bytes,
+			uncompressedSha256: receipt.sha256,
+			uncompressedBytes: receipt.bytes
+		},
+		stage: 'uncompressed',
+		runtimeId: 'OBJC',
+		profileId: 'wasm-llvm/objective-c-browser'
+	});
+	return bytes;
 }
 
-async function fetchJson(url: string, label: string) {
-	const bytes = await fetchBytes(url, label, DEFAULT_MAX_RUNTIME_JSON_BYTES);
+async function fetchJson(
+	url: string,
+	label: string,
+	assetName: ObjectiveCAssetName,
+	integrity: ObjectiveCAssetIntegrityMap
+) {
+	const bytes = await fetchBytes(
+		url,
+		label,
+		assetName,
+		integrity,
+		DEFAULT_MAX_RUNTIME_JSON_BYTES
+	);
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(textDecoder.decode(bytes));
@@ -482,8 +598,18 @@ async function loadObjectiveCRuntime(
 	foundationLibrariesInstalledObjectiveC = false;
 	installedHeaderPathsObjectiveC.clear();
 	const [libobjcBytes, headers] = await Promise.all([
-		fetchBytes(hostedObjectiveCAssets.libobjcUrl, 'libobjc.a'),
-		fetchJson(hostedObjectiveCAssets.headersUrl, 'Objective-C headers')
+		fetchBytes(
+			hostedObjectiveCAssets.libobjcUrl,
+			'libobjc.a',
+			'libobjc.a',
+			hostedObjectiveCAssets.integrity
+		),
+		fetchJson(
+			hostedObjectiveCAssets.headersUrl,
+			'Objective-C headers',
+			'headers.json',
+			hostedObjectiveCAssets.integrity
+		)
 	]);
 	await clang.ready;
 	for (const [headerPath, headerSource] of Object.entries(headers)) {
@@ -501,7 +627,9 @@ async function ensureObjectiveCFoundationAssets() {
 	if (foundationAssetsLoadedObjectiveC) return;
 	const foundationHeaders = await fetchJson(
 		objectiveCAssetsObjectiveC.foundationHeadersUrl,
-		'Objective-C Foundation headers'
+		'Objective-C Foundation headers',
+		'foundation-headers.json',
+		objectiveCAssetsObjectiveC.integrity
 	);
 	foundationHeadersObjectiveC = foundationHeaders;
 	if (
@@ -526,8 +654,18 @@ async function installObjectiveCFoundationLibraries() {
 	if (foundationLibrariesInstalledObjectiveC) return;
 	if (!libgnustepBaseBytesObjectiveC || !libffiBytesObjectiveC) {
 		const [libgnustepBaseBytes, libffiBytes] = await Promise.all([
-			fetchBytes(objectiveCAssetsObjectiveC.libgnustepBaseUrl, 'libgnustep-base.a'),
-			fetchBytes(objectiveCAssetsObjectiveC.libffiUrl, 'libffi.a')
+			fetchBytes(
+				objectiveCAssetsObjectiveC.libgnustepBaseUrl,
+				'libgnustep-base.a',
+				'libgnustep-base.a',
+				objectiveCAssetsObjectiveC.integrity
+			),
+			fetchBytes(
+				objectiveCAssetsObjectiveC.libffiUrl,
+				'libffi.a',
+				'libffi.a',
+				objectiveCAssetsObjectiveC.integrity
+			)
 		]);
 		libgnustepBaseBytesObjectiveC = libgnustepBaseBytes;
 		libffiBytesObjectiveC = libffiBytes;

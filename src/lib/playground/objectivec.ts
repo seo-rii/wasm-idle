@@ -18,19 +18,12 @@ import {
 	resetBufferedStdin,
 	waitForBufferedSequenceChange
 } from '$lib/playground/stdinBuffer';
+import { createRuntimeAssetsKey } from '@wasm-idle/core';
 
 const debugBreakpointBufferInts = 1028;
 
 const objectiveCAssetsKey = (assets: ResolvedObjectiveCRuntimeAssetConfig) =>
-	JSON.stringify({
-		baseUrl: assets.baseUrl,
-		libobjcUrl: assets.libobjcUrl,
-		headersUrl: assets.headersUrl,
-		libgnustepBaseUrl: assets.libgnustepBaseUrl,
-		libgnustepBaseObjectUrl: assets.libgnustepBaseObjectUrl,
-		foundationHeadersUrl: assets.foundationHeadersUrl,
-		libffiUrl: assets.libffiUrl
-	});
+	createRuntimeAssetsKey({ objectivec: assets }) || '';
 
 class ObjectiveC implements Sandbox {
 	language = 'OBJC';

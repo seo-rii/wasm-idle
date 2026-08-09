@@ -5,7 +5,12 @@ import {
 	WASM_GLEAM_ASSET_VERSION,
 	WASM_GLEAM_RUNNER_RECEIPT
 } from '$lib/playground/wasmGleamVersion';
+import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import type { RuntimeAssetIntegrityEntry as CoreRuntimeAssetIntegrityEntry } from '@wasm-idle/core';
+import type {
+	ObjectiveCAssetIntegrityMap,
+	ObjectiveCAssetName
+} from '@wasm-idle/llvm-core/objective-c';
 
 const publicEnv = (dynamicPublicEnv || {}) as Record<string, string | undefined>;
 
@@ -141,6 +146,7 @@ export interface ObjectiveCRuntimeAssetConfig {
 	libgnustepBaseObjectUrl?: string;
 	foundationHeadersUrl?: string;
 	libffiUrl?: string;
+	integrity?: ObjectiveCAssetIntegrityMap;
 }
 
 export interface ZigRuntimeAssetConfig {
@@ -365,6 +371,7 @@ export interface ResolvedObjectiveCRuntimeAssetConfig {
 	libgnustepBaseObjectUrl: string;
 	foundationHeadersUrl: string;
 	libffiUrl: string;
+	integrity: ObjectiveCAssetIntegrityMap;
 }
 
 export const PYTHON_RUNTIME_LOAD_ASSETS = [
@@ -1370,6 +1377,46 @@ export function resolveObjectiveCRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ): ResolvedObjectiveCRuntimeAssetConfig {
+	const configuredIntegrity =
+		typeof options === 'object' ? options?.objectivec?.integrity : undefined;
+	let integrity: ObjectiveCAssetIntegrityMap = WASM_OBJECTIVEC_ASSET_RECEIPTS;
+	if (configuredIntegrity !== undefined) {
+		if (
+			!configuredIntegrity ||
+			typeof configuredIntegrity !== 'object' ||
+			Array.isArray(configuredIntegrity)
+		) {
+			throw new TypeError('Objective-C runtime asset integrity receipt is required.');
+		}
+		const expectedAssetNames = Object.keys(WASM_OBJECTIVEC_ASSET_RECEIPTS).sort();
+		const receivedAssetNames = Object.keys(configuredIntegrity).sort();
+		if (
+			receivedAssetNames.length !== expectedAssetNames.length ||
+			receivedAssetNames.some((assetName, index) => assetName !== expectedAssetNames[index])
+		) {
+			throw new TypeError('Objective-C runtime asset integrity receipt is incomplete.');
+		}
+		integrity = Object.freeze(
+			Object.fromEntries(
+				expectedAssetNames.map((assetName) => {
+					const receipt = configuredIntegrity[assetName as ObjectiveCAssetName];
+					const bytes = receipt?.bytes;
+					const sha256 = receipt?.sha256;
+					if (
+						!Number.isSafeInteger(bytes) ||
+						(bytes as number) <= 0 ||
+						typeof sha256 !== 'string' ||
+						!/^[a-f0-9]{64}$/u.test(sha256)
+					) {
+						throw new TypeError(
+							`Objective-C runtime asset integrity receipt is invalid for ${assetName}.`
+						);
+					}
+					return [assetName, Object.freeze({ bytes: bytes as number, sha256 })];
+				})
+			)
+		) as ObjectiveCAssetIntegrityMap;
+	}
 	return {
 		baseUrl: resolveObjectiveCBaseUrl(options, currentUrl),
 		libobjcUrl: resolveObjectiveCLibobjcUrl(options, currentUrl),
@@ -1377,7 +1424,8 @@ export function resolveObjectiveCRuntimeAssetConfig(
 		libgnustepBaseUrl: resolveObjectiveCLibgnustepBaseUrl(options, currentUrl),
 		libgnustepBaseObjectUrl: resolveObjectiveCLibgnustepBaseObjectUrl(options, currentUrl),
 		foundationHeadersUrl: resolveObjectiveCFoundationHeadersUrl(options, currentUrl),
-		libffiUrl: resolveObjectiveCLibffiUrl(options, currentUrl)
+		libffiUrl: resolveObjectiveCLibffiUrl(options, currentUrl),
+		integrity
 	};
 }
 

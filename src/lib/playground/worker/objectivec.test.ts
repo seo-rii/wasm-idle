@@ -4,6 +4,7 @@ const installObjectiveCWorker = vi.fn();
 const configureWorkerRuntimeAssets = vi.fn();
 const handleWorkerAssetMessage = vi.fn();
 const waitForBufferedStdin = vi.fn();
+const verifyRuntimeAssetIntegrity = vi.fn();
 
 vi.mock('@wasm-idle/llvm-core/objective-c', () => ({ installObjectiveCWorker }));
 vi.mock('$lib/playground/worker/assets', () => ({
@@ -11,6 +12,7 @@ vi.mock('$lib/playground/worker/assets', () => ({
 	handleWorkerAssetMessage
 }));
 vi.mock('$lib/playground/stdinBuffer', () => ({ waitForBufferedStdin }));
+vi.mock('@wasm-idle/core', () => ({ verifyRuntimeAssetIntegrity }));
 
 describe('Objective-C worker adapter', () => {
 	beforeEach(() => {
@@ -26,7 +28,8 @@ describe('Objective-C worker adapter', () => {
 		expect(installObjectiveCWorker).toHaveBeenCalledWith(globalThis, {
 			configureRuntimeAssets: configureWorkerRuntimeAssets,
 			handleAssetMessage: handleWorkerAssetMessage,
-			waitForStdin: waitForBufferedStdin
+			waitForStdin: waitForBufferedStdin,
+			verifyRuntimeAssetIntegrity
 		});
 	});
 });

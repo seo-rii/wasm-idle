@@ -94,6 +94,7 @@ import {
 } from './assets';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
+import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 
 describe('runtime asset config resolution', () => {
 	it.each([
@@ -1424,7 +1425,8 @@ describe('runtime asset config resolution', () => {
 				'https://example.com/absproxy/5173/wasm-objectivec/libgnustep-base.o',
 			foundationHeadersUrl:
 				'https://example.com/absproxy/5173/wasm-objectivec/foundation-headers.json',
-			libffiUrl: 'https://example.com/absproxy/5173/wasm-objectivec/libffi.a'
+			libffiUrl: 'https://example.com/absproxy/5173/wasm-objectivec/libffi.a',
+			integrity: WASM_OBJECTIVEC_ASSET_RECEIPTS
 		});
 	});
 
@@ -1441,23 +1443,27 @@ describe('runtime asset config resolution', () => {
 			'https://env.example.com/foundation-headers.json';
 		publicEnv.PUBLIC_WASM_OBJECTIVEC_LIBFFI_URL = 'https://env.example.com/libffi.a';
 		const { resolveObjectiveCRuntimeAssetConfig } = await import('./assets');
+		const customIntegrity = {
+			...WASM_OBJECTIVEC_ASSET_RECEIPTS,
+			'libobjc.a': { bytes: 73, sha256: 'a'.repeat(64) }
+		};
 
-		expect(
-			resolveObjectiveCRuntimeAssetConfig(
-				{
-					objectivec: {
-						baseUrl: '/runtime/objectivec/',
-						libobjcUrl: '/runtime/objectivec/libobjc.a?v=test',
-						headersUrl: '/runtime/objectivec/headers.json?v=test',
-						libgnustepBaseUrl: '/runtime/objectivec/libgnustep-base.a?v=test',
-						libgnustepBaseObjectUrl: '/runtime/objectivec/libgnustep-base.o?v=test',
-						foundationHeadersUrl: '/runtime/objectivec/foundation-headers.json?v=test',
-						libffiUrl: '/runtime/objectivec/libffi.a?v=test'
-					}
-				},
-				'https://example.com/app'
-			)
-		).toEqual({
+		const resolved = resolveObjectiveCRuntimeAssetConfig(
+			{
+				objectivec: {
+					baseUrl: '/runtime/objectivec/',
+					libobjcUrl: '/runtime/objectivec/libobjc.a?v=test',
+					headersUrl: '/runtime/objectivec/headers.json?v=test',
+					libgnustepBaseUrl: '/runtime/objectivec/libgnustep-base.a?v=test',
+					libgnustepBaseObjectUrl: '/runtime/objectivec/libgnustep-base.o?v=test',
+					foundationHeadersUrl: '/runtime/objectivec/foundation-headers.json?v=test',
+					libffiUrl: '/runtime/objectivec/libffi.a?v=test',
+					integrity: customIntegrity
+				}
+			},
+			'https://example.com/app'
+		);
+		expect(resolved).toEqual({
 			baseUrl: 'https://example.com/runtime/objectivec/',
 			libobjcUrl: 'https://example.com/runtime/objectivec/libobjc.a?v=test',
 			headersUrl: 'https://example.com/runtime/objectivec/headers.json?v=test',
@@ -1466,7 +1472,19 @@ describe('runtime asset config resolution', () => {
 				'https://example.com/runtime/objectivec/libgnustep-base.o?v=test',
 			foundationHeadersUrl:
 				'https://example.com/runtime/objectivec/foundation-headers.json?v=test',
-			libffiUrl: 'https://example.com/runtime/objectivec/libffi.a?v=test'
+			libffiUrl: 'https://example.com/runtime/objectivec/libffi.a?v=test',
+			integrity: customIntegrity
+		});
+		expect(resolved.integrity).not.toBe(customIntegrity);
+		expect(resolved.integrity['libobjc.a']).not.toBe(customIntegrity['libobjc.a']);
+		expect(Object.isFrozen(resolved.integrity)).toBe(true);
+		expect(Object.isFrozen(resolved.integrity['libobjc.a'])).toBe(true);
+
+		customIntegrity['libobjc.a'].bytes = 74;
+		customIntegrity['libobjc.a'].sha256 = 'b'.repeat(64);
+		expect(resolved.integrity['libobjc.a']).toEqual({
+			bytes: 73,
+			sha256: 'a'.repeat(64)
 		});
 	});
 
@@ -1488,7 +1506,8 @@ describe('runtime asset config resolution', () => {
 			libgnustepBaseUrl: 'https://env.example.com/objectivec/libgnustep-base.a',
 			libgnustepBaseObjectUrl: 'https://env.example.com/objectivec/libgnustep-base.o',
 			foundationHeadersUrl: 'https://env.example.com/objectivec/foundation-headers.json',
-			libffiUrl: 'https://env.example.com/objectivec/libffi.a'
+			libffiUrl: 'https://env.example.com/objectivec/libffi.a',
+			integrity: WASM_OBJECTIVEC_ASSET_RECEIPTS
 		});
 	});
 });

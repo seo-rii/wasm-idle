@@ -1,12 +1,19 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { cp, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
+import { cp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
 const DEFAULT_TARGET_DIR = path.join(REPO_ROOT, 'static', 'wasm-objectivec');
+const DEFAULT_VERSION_MODULE_PATH = path.join(
+	REPO_ROOT,
+	'src',
+	'lib',
+	'playground',
+	'wasmObjectiveCVersion.ts'
+);
 
 const ASSET_FILES = [
 	'libobjc.a',
@@ -18,6 +25,19 @@ const ASSET_FILES = [
 ];
 const SOURCE_RECEIPT = 'producer-receipt.json';
 const TARGET_RECEIPT = 'runtime-build.json';
+
+/** @typedef {{ bytes: number; sha256: string }} ObjectiveCAssetReceipt */
+/** @typedef {{ assets: Record<string, ObjectiveCAssetReceipt> }} ObjectiveCProducerReceipt */
+
+/**
+ * @typedef {{
+ *   sourceDir?: string;
+ *   targetDir?: string;
+ *   versionModulePath?: string;
+ *   copyAsset?: typeof cp;
+ *   renamePath?: typeof rename;
+ * }} SyncWasmObjectiveCOptions
+ */
 
 /** @param {unknown} value */
 function isObject(value) {
@@ -75,7 +95,7 @@ async function validateAssetSet(directory, receiptFilename) {
 		if (
 			!isObject(metadata) ||
 			!Number.isSafeInteger(metadata.bytes) ||
-			metadata.bytes < 0 ||
+			metadata.bytes <= 0 ||
 			typeof metadata.sha256 !== 'string' ||
 			!/^[0-9a-f]{64}$/.test(metadata.sha256)
 		) {
@@ -93,59 +113,167 @@ async function validateAssetSet(directory, receiptFilename) {
 		}
 	}
 
-	return receipt;
+	return /** @type {ObjectiveCProducerReceipt} */ (receipt);
 }
 
-/** @param {{ sourceDir?: string; targetDir?: string }} [options] */
-export async function syncWasmObjectiveCAssets({ sourceDir, targetDir = DEFAULT_TARGET_DIR } = {}) {
+/** @param {SyncWasmObjectiveCOptions} [options] */
+export async function syncWasmObjectiveCAssets({
+	sourceDir,
+	targetDir = DEFAULT_TARGET_DIR,
+	versionModulePath,
+	copyAsset = cp,
+	renamePath = rename
+} = {}) {
 	if (!sourceDir) {
 		throw new Error('wasm-objectivec sync requires an explicit source directory.');
 	}
 
 	const resolvedSourceDir = path.resolve(sourceDir);
 	const resolvedTargetDir = path.resolve(targetDir);
+	const resolvedVersionModulePath = versionModulePath
+		? path.resolve(versionModulePath)
+		: resolvedTargetDir === path.resolve(DEFAULT_TARGET_DIR)
+			? DEFAULT_VERSION_MODULE_PATH
+			: undefined;
 	await validateAssetSet(resolvedSourceDir, SOURCE_RECEIPT);
 
 	await mkdir(path.dirname(resolvedTargetDir), { recursive: true });
 	const suffix = `${process.pid}-${randomUUID()}`;
 	const nextTarget = `${resolvedTargetDir}.next-${suffix}`;
 	const previousTarget = `${resolvedTargetDir}.previous-${suffix}`;
+	const nextVersionModule = resolvedVersionModulePath
+		? `${resolvedVersionModulePath}.next-${suffix}`
+		: undefined;
+	const previousVersionModule = resolvedVersionModulePath
+		? `${resolvedVersionModulePath}.previous-${suffix}`
+		: undefined;
 	await mkdir(nextTarget, { recursive: true });
 
 	let hadPrevious = false;
 	let installedNext = false;
+	let hadPreviousVersion = false;
+	let installedVersion = false;
+	let completed = false;
+	let fingerprint = '';
+	/** @type {Readonly<Record<string, Readonly<ObjectiveCAssetReceipt>>> | undefined} */
+	let browserReceipt;
 	try {
 		for (const filename of ASSET_FILES) {
-			await cp(path.join(resolvedSourceDir, filename), path.join(nextTarget, filename));
+			await copyAsset(
+				path.join(resolvedSourceDir, filename),
+				path.join(nextTarget, filename)
+			);
 		}
-		await cp(
+		await copyAsset(
 			path.join(resolvedSourceDir, SOURCE_RECEIPT),
 			path.join(nextTarget, TARGET_RECEIPT)
 		);
-		await validateAssetSet(nextTarget, TARGET_RECEIPT);
+		const installedReceipt = await validateAssetSet(nextTarget, TARGET_RECEIPT);
+		fingerprint = (await sha256File(path.join(nextTarget, TARGET_RECEIPT))).slice(0, 16);
+		const installedBrowserReceipt = Object.freeze(
+			Object.fromEntries(
+				ASSET_FILES.map((filename) => [
+					filename,
+					Object.freeze({
+						bytes: installedReceipt.assets[filename].bytes,
+						sha256: installedReceipt.assets[filename].sha256
+					})
+				])
+			)
+		);
+		browserReceipt = installedBrowserReceipt;
+		if (nextVersionModule && resolvedVersionModulePath) {
+			const receiptSource = ASSET_FILES.map(
+				(filename) => `\t'${filename}': Object.freeze({
+\t\tbytes: ${installedBrowserReceipt[filename].bytes},
+\t\tsha256: '${installedBrowserReceipt[filename].sha256}'
+\t})`
+			).join(',\n');
+			const versionSource = `export const WASM_OBJECTIVEC_ASSET_VERSION = '${fingerprint}';
+
+export const WASM_OBJECTIVEC_ASSET_RECEIPTS = Object.freeze({
+${receiptSource}
+});
+`;
+			await mkdir(path.dirname(resolvedVersionModulePath), { recursive: true });
+			await writeFile(nextVersionModule, versionSource, 'utf8');
+		}
 
 		if (await stat(resolvedTargetDir).catch(() => null)) {
-			await rename(resolvedTargetDir, previousTarget);
+			await renamePath(resolvedTargetDir, previousTarget);
 			hadPrevious = true;
 		}
-		await rename(nextTarget, resolvedTargetDir);
+		if (
+			resolvedVersionModulePath &&
+			previousVersionModule &&
+			(await stat(resolvedVersionModulePath).catch(() => null))
+		) {
+			await renamePath(resolvedVersionModulePath, previousVersionModule);
+			hadPreviousVersion = true;
+		}
+		await renamePath(nextTarget, resolvedTargetDir);
 		installedNext = true;
+		if (nextVersionModule && resolvedVersionModulePath) {
+			await renamePath(nextVersionModule, resolvedVersionModulePath);
+			installedVersion = true;
+		}
+		completed = true;
 	} catch (error) {
+		/** @type {unknown[]} */
+		const rollbackErrors = [];
+		if (installedVersion && resolvedVersionModulePath) {
+			try {
+				await rm(resolvedVersionModulePath, { force: true });
+			} catch (rollbackError) {
+				rollbackErrors.push(rollbackError);
+			}
+		}
+		if (hadPreviousVersion && previousVersionModule && resolvedVersionModulePath) {
+			try {
+				await renamePath(previousVersionModule, resolvedVersionModulePath);
+			} catch (rollbackError) {
+				rollbackErrors.push(rollbackError);
+			}
+		}
 		if (installedNext) {
-			await rm(resolvedTargetDir, { recursive: true, force: true });
+			try {
+				await rm(resolvedTargetDir, { recursive: true, force: true });
+			} catch (rollbackError) {
+				rollbackErrors.push(rollbackError);
+			}
 		}
 		if (hadPrevious) {
-			await rename(previousTarget, resolvedTargetDir).catch(() => {});
+			try {
+				await renamePath(previousTarget, resolvedTargetDir);
+			} catch (rollbackError) {
+				rollbackErrors.push(rollbackError);
+			}
+		}
+		if (rollbackErrors.length) {
+			throw new AggregateError(
+				[error, ...rollbackErrors],
+				'wasm-objectivec sync failed and rollback could not restore the previous installation'
+			);
 		}
 		throw error;
 	} finally {
 		await rm(nextTarget, { recursive: true, force: true });
-		if (installedNext) {
+		if (nextVersionModule) await rm(nextVersionModule, { force: true });
+		if (completed && hadPrevious) {
 			await rm(previousTarget, { recursive: true, force: true }).catch(() => {});
+		}
+		if (completed && hadPreviousVersion && previousVersionModule) {
+			await rm(previousVersionModule, { force: true }).catch(() => {});
 		}
 	}
 
-	return { sourceDir: resolvedSourceDir, targetDir: resolvedTargetDir };
+	return {
+		sourceDir: resolvedSourceDir,
+		targetDir: resolvedTargetDir,
+		versionModulePath: resolvedVersionModulePath,
+		fingerprint,
+		receipt: browserReceipt
+	};
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {
