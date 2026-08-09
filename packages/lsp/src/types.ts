@@ -3,6 +3,7 @@ import type { CompilerOptions } from 'typescript';
 import type { LanguageToolAssetConfig } from './assets.js';
 import type { DOuterAssetReceipts } from './d/assets.js';
 import type { DocumentLanguageId } from './document/service.js';
+import type { ElixirRuntimeAssetReceipts } from './elixir/assets.js';
 
 export interface DuckDBBundleConfig {
 	mainModule: string;
@@ -72,10 +73,12 @@ export interface EditorLanguageServerRuntimeOptions {
 	elixir?: {
 		bundleUrl?: string;
 		workerUrl?: string;
+		integrity?: ElixirRuntimeAssetReceipts;
 	};
 	erlang?: {
 		bundleUrl?: string;
 		workerUrl?: string;
+		integrity?: ElixirRuntimeAssetReceipts;
 	};
 	gleam?: {
 		baseUrl?: string;

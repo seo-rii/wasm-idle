@@ -6,6 +6,7 @@ import {
 	type ResolvedLanguageToolAssetConfig
 } from './assets.js';
 import { BUNDLED_CLANGD_ASSET_INTEGRITY } from './bundledClangdAssetIntegrity.js';
+import { BUNDLED_ELIXIR_ASSET_VERSION } from './bundledElixirRuntimeIntegrity.js';
 import { BUNDLED_GLEAM_MANIFEST_FINGERPRINT } from './bundledGleamRuntime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from './types.js';
 
@@ -259,7 +260,7 @@ export function resolveElixirLanguageServerBundleUrl(
 ) {
 	if (typeof options === 'string') {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-elixir/bundle.avm`,
+			`${normalizeRootUrl(options) || ''}/wasm-elixir/bundle.avm?v=${BUNDLED_ELIXIR_ASSET_VERSION}`,
 			currentUrl
 		);
 	}
@@ -268,7 +269,7 @@ export function resolveElixirLanguageServerBundleUrl(
 	}
 	if (options?.rootUrl) {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-elixir/bundle.avm`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-elixir/bundle.avm?v=${BUNDLED_ELIXIR_ASSET_VERSION}`,
 			currentUrl
 		);
 	}
@@ -290,7 +291,7 @@ export function resolveErlangLanguageServerBundleUrl(
 ) {
 	if (typeof options === 'string') {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-elixir/bundle.avm`,
+			`${normalizeRootUrl(options) || ''}/wasm-elixir/bundle.avm?v=${BUNDLED_ELIXIR_ASSET_VERSION}`,
 			currentUrl
 		);
 	}
@@ -302,7 +303,7 @@ export function resolveErlangLanguageServerBundleUrl(
 	}
 	if (options?.rootUrl) {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-elixir/bundle.avm`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-elixir/bundle.avm?v=${BUNDLED_ELIXIR_ASSET_VERSION}`,
 			currentUrl
 		);
 	}

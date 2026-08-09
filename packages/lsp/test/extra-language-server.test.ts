@@ -58,6 +58,7 @@ vi.mock('../src/jsonrpc.js', () => ({
 }));
 
 import {
+	BUNDLED_ELIXIR_ASSET_RECEIPTS,
 	getAssemblyScriptLanguageServer,
 	getCssLanguageServer,
 	getElixirLanguageServer,
@@ -138,7 +139,8 @@ describe('additional language server workers', () => {
 			options: {
 				language: 'elixir',
 				bundleUrl: '/wasm-elixir/bundle.avm?v=123',
-				workerUrl: '/assets/elixir-worker.js'
+				workerUrl: '/assets/elixir-worker.js',
+				integrity: BUNDLED_ELIXIR_ASSET_RECEIPTS
 			}
 		});
 		elixir.dispose();
@@ -149,7 +151,32 @@ describe('additional language server workers', () => {
 			options: {
 				language: 'erlang',
 				bundleUrl: '/wasm-elixir/bundle.avm?v=123',
-				workerUrl: '/assets/elixir-worker.js'
+				workerUrl: '/assets/elixir-worker.js',
+				integrity: BUNDLED_ELIXIR_ASSET_RECEIPTS
+			}
+		});
+		erlang.dispose();
+	});
+
+	it('inherits a shared custom Elixir trust root for the Erlang provider', async () => {
+		const integrity = structuredClone(BUNDLED_ELIXIR_ASSET_RECEIPTS);
+		integrity['bundle.avm'].uncompressedSha256 = 'a'.repeat(64);
+		const erlang = await getErlangLanguageServer({
+			elixir: {
+				bundleUrl: '/custom-beam/bundle.avm',
+				workerUrl: '/assets/elixir-worker.js',
+				integrity
+			},
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+
+		expect(mockState.workers[0]?.messages[0]).toEqual({
+			type: 'init',
+			options: {
+				language: 'erlang',
+				bundleUrl: '/custom-beam/bundle.avm',
+				workerUrl: '/assets/elixir-worker.js',
+				integrity
 			}
 		});
 		erlang.dispose();

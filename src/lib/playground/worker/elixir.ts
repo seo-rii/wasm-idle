@@ -1,5 +1,12 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import {
+	ELIXIR_RUNTIME_ASSET_NAMES,
+	snapshotElixirRuntimeAssetReceipts,
+	type ElixirRuntimeAssetName,
+	type ElixirRuntimeAssetReceipts
+} from '$lib/playground/elixirAssets';
 import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch';
+import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 
 declare var self: any;
 
@@ -17,7 +24,7 @@ const workerHost = {
 const popcornBrowserGlobal = ['globalThis', 'window'].join('.');
 const popcornParentGlobal = [popcornBrowserGlobal, 'parent'].join('.');
 const workerHostGlobal = 'globalThis.__wasmIdleElixirWorkerHost';
-const MAX_ELIXIR_BUNDLE_BYTES = 128 * 1024 * 1024;
+const MAX_ELIXIR_ASSET_BYTES = 128 * 1024 * 1024;
 
 self.document = workerDocument;
 (globalThis as any).__wasmIdleElixirWorkerHost = workerHost;
@@ -60,7 +67,8 @@ type AtomVmModule = {
 type AtomVmInitializer = (options?: Record<string, unknown>) => Promise<AtomVmModule>;
 
 let bundleUrl = '';
-let loadedBundleUrl = '';
+let bundleReceipts: ElixirRuntimeAssetReceipts | null = null;
+let loadedRuntimeIdentity = '';
 let runtimePromise: Promise<{ module: AtomVmModule; process: string | null }> | null = null;
 let stdinBufferElixir: Int32Array | null = null;
 const elixirStdinCallNames = [
@@ -78,18 +86,38 @@ function resolveElixirRuntimeAssetUrl(assetName: string, bundleAssetUrl: string)
 		bundleAssetUrl.startsWith('/') ? `http://localhost${bundleAssetUrl}` : bundleAssetUrl,
 		globalThis.location?.href || 'http://localhost/'
 	);
-	return new URL(assetName, absoluteBundleUrl).toString();
+	const assetUrl = new URL(assetName, absoluteBundleUrl);
+	assetUrl.search = absoluteBundleUrl.search;
+	return assetUrl.toString();
 }
 
-async function resolveAtomVmInitializer(moduleAssetUrl: string) {
+function createAtomVmModuleBlob(moduleBytes: Uint8Array) {
+	const copy = new Uint8Array(moduleBytes.byteLength);
+	copy.set(moduleBytes);
+	return new Blob([copy.buffer], { type: 'text/javascript' });
+}
+
+async function resolveAtomVmInitializer(moduleBytes: Uint8Array) {
 	const injectedInitializer = (globalThis as any).__wasmIdleAtomVmInit;
 	if (typeof injectedInitializer === 'function') {
 		return injectedInitializer as AtomVmInitializer;
 	}
-	const module = (await import(/* @vite-ignore */ moduleAssetUrl)) as {
-		default: AtomVmInitializer;
-	};
-	return module.default;
+	if (typeof URL.createObjectURL !== 'function' || typeof URL.revokeObjectURL !== 'function') {
+		throw new Error('Elixir runtime requires Blob URL support');
+	}
+	const moduleUrl = URL.createObjectURL(createAtomVmModuleBlob(moduleBytes));
+	try {
+		const module = (await import(/* @vite-ignore */ moduleUrl)) as {
+			default: AtomVmInitializer;
+		};
+		return module.default;
+	} finally {
+		try {
+			URL.revokeObjectURL(moduleUrl);
+		} catch {
+			// Blob URL cleanup must not replace the verified module import outcome.
+		}
+	}
 }
 
 function skipQuotedLiteral(source: string, start: number) {
@@ -314,7 +342,11 @@ function configureMessagingBridge(module: AtomVmModule) {
 	module.call = (process, args) => originalCall(process, module.serialize(args));
 }
 
-async function startVm(avmBundle: Int8Array, bundleAssetUrl: string, log: boolean) {
+async function startVm(
+	assets: Readonly<Record<ElixirRuntimeAssetName, Uint8Array>>,
+	bundleAssetUrl: string,
+	log: boolean
+) {
 	let resolveProcess: ((process: string | null) => void) | null = null;
 	const processPromise = new Promise<string | null>((resolve, reject) => {
 		const timeout = setTimeout(() => {
@@ -327,10 +359,11 @@ async function startVm(avmBundle: Int8Array, bundleAssetUrl: string, log: boolea
 			resolve(process);
 		};
 	});
-	const atomVmModuleUrl = resolveElixirRuntimeAssetUrl('AtomVM.mjs', bundleAssetUrl);
 	const atomVmWasmUrl = resolveElixirRuntimeAssetUrl('AtomVM.wasm', bundleAssetUrl);
-	const initAtomVm = await resolveAtomVmInitializer(atomVmModuleUrl);
+	const initAtomVm = await resolveAtomVmInitializer(assets['AtomVM.mjs']);
 	const module = (await initAtomVm({
+		mainScriptUrlOrBlob: createAtomVmModuleBlob(assets['AtomVM.mjs']),
+		wasmBinary: assets['AtomVM.wasm'],
 		locateFile(path: string) {
 			if (path === 'AtomVM.wasm') {
 				return atomVmWasmUrl;
@@ -340,7 +373,7 @@ async function startVm(avmBundle: Int8Array, bundleAssetUrl: string, log: boolea
 		preRun: [
 			({ FS }: AtomVmModule) => {
 				FS.mkdir('/data');
-				FS.writeFile('/data/bundle.avm', avmBundle);
+				FS.writeFile('/data/bundle.avm', new Int8Array(assets['bundle.avm']));
 			}
 		],
 		arguments: ['/data/bundle.avm'],
@@ -365,58 +398,98 @@ async function startVm(avmBundle: Int8Array, bundleAssetUrl: string, log: boolea
 	};
 }
 
-async function loadRuntime(nextBundleUrl: string, log: boolean) {
+async function loadRuntime(
+	nextBundleUrl: string,
+	nextAssetReceipts: ElixirRuntimeAssetReceipts | undefined,
+	log: boolean
+) {
 	if (typeof nextBundleUrl !== 'string' || !nextBundleUrl.trim()) {
 		throw new Error(
 			'Elixir runtime is not configured. Set PUBLIC_WASM_ELIXIR_BUNDLE_URL or runtimeAssets.elixir.bundleUrl.'
 		);
 	}
-	if (loadedBundleUrl === nextBundleUrl && runtimePromise) {
+	let requestUrl: URL;
+	try {
+		const locationOrigin = globalThis.location?.origin;
+		const locationHref = globalThis.location?.href;
+		const baseUrl =
+			locationOrigin && locationOrigin !== 'null'
+				? `${locationOrigin}/`
+				: locationHref?.startsWith('blob:')
+					? locationHref.slice('blob:'.length)
+					: locationHref || 'http://localhost/';
+		requestUrl = new URL(nextBundleUrl.trim(), baseUrl);
+	} catch {
+		throw new Error(`Elixir bundle URL is invalid: ${nextBundleUrl}`);
+	}
+	if (requestUrl.protocol !== 'http:' && requestUrl.protocol !== 'https:') {
+		throw new Error(`Elixir bundle URL must use HTTP(S): ${nextBundleUrl}`);
+	}
+	if (requestUrl.username || requestUrl.password) {
+		throw new Error(`Elixir bundle URL must not include credentials: ${nextBundleUrl}`);
+	}
+	if (requestUrl.hash) {
+		throw new Error(`Elixir bundle URL must not include a fragment: ${nextBundleUrl}`);
+	}
+	const receipts = snapshotElixirRuntimeAssetReceipts(nextAssetReceipts);
+	for (const asset of ELIXIR_RUNTIME_ASSET_NAMES) {
+		if (receipts[asset].uncompressedBytes > MAX_ELIXIR_ASSET_BYTES) {
+			throw new Error(
+				`Elixir runtime asset exceeds the ${MAX_ELIXIR_ASSET_BYTES} byte limit`
+			);
+		}
+	}
+	const identity = JSON.stringify([requestUrl.href, receipts]);
+	if (loadedRuntimeIdentity === identity && runtimePromise) {
 		return await runtimePromise;
 	}
-	loadedBundleUrl = nextBundleUrl;
-	runtimePromise = (async () => {
-		if (log) {
-			console.log(`[wasm-idle:elixir-worker] load bundleUrl=${nextBundleUrl}`);
+	if (log) {
+		console.log(`[wasm-idle:elixir-worker] load bundleUrl=${requestUrl.href}`);
+	}
+	const candidate = (async () => {
+		const loadedAssets: Array<readonly [ElixirRuntimeAssetName, Uint8Array]> = [];
+		for (const asset of ELIXIR_RUNTIME_ASSET_NAMES) {
+			const assetUrl =
+				asset === 'bundle.avm'
+					? requestUrl.href
+					: resolveElixirRuntimeAssetUrl(asset, requestUrl.href);
+			const receipt = receipts[asset];
+			const bytes = await fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: `Elixir runtime asset ${asset}`,
+				maxAssetBytes: receipt.uncompressedBytes
+			});
+			await verifyRuntimeAssetIntegrity({
+				asset,
+				bytes,
+				expected: receipt,
+				stage: 'uncompressed',
+				runtimeId: 'ELIXIR'
+			});
+			loadedAssets.push([asset, bytes]);
 		}
-		let requestUrl: URL;
-		try {
-			const locationOrigin = globalThis.location?.origin;
-			const locationHref = globalThis.location?.href;
-			const baseUrl =
-				locationOrigin && locationOrigin !== 'null'
-					? `${locationOrigin}/`
-					: locationHref?.startsWith('blob:')
-						? locationHref.slice('blob:'.length)
-						: locationHref || 'http://localhost/';
-			requestUrl = new URL(nextBundleUrl.trim(), baseUrl);
-		} catch {
-			throw new Error(`Elixir bundle URL is invalid: ${nextBundleUrl}`);
-		}
-		if (requestUrl.protocol !== 'http:' && requestUrl.protocol !== 'https:') {
-			throw new Error(`Elixir bundle URL must use HTTP(S): ${nextBundleUrl}`);
-		}
-		if (requestUrl.username || requestUrl.password) {
-			throw new Error(`Elixir bundle URL must not include credentials: ${nextBundleUrl}`);
-		}
-		if (requestUrl.hash) {
-			throw new Error(`Elixir bundle URL must not include a fragment: ${nextBundleUrl}`);
-		}
-
-		const bundleBytes = await fetchRuntimeAssetBytes({
-			url: requestUrl.href,
-			label: 'Elixir bundle',
-			maxAssetBytes: MAX_ELIXIR_BUNDLE_BYTES
-		});
-		return await startVm(new Int8Array(bundleBytes), requestUrl.href, log);
+		const assets = Object.freeze(Object.fromEntries(loadedAssets)) as Readonly<
+			Record<ElixirRuntimeAssetName, Uint8Array>
+		>;
+		return await startVm(assets, requestUrl.href, log);
 	})();
-	return await runtimePromise;
+	loadedRuntimeIdentity = identity;
+	runtimePromise = candidate;
+	try {
+		return await candidate;
+	} catch (error) {
+		if (runtimePromise === candidate) {
+			runtimePromise = null;
+			loadedRuntimeIdentity = '';
+		}
+		throw error;
+	}
 }
 
 function normalizeCallError(module: AtomVmModule, error: unknown) {
 	if (error === 'noproc') {
 		runtimePromise = null;
-		loadedBundleUrl = '';
+		loadedRuntimeIdentity = '';
 		return 'Elixir runtime process is unavailable';
 	}
 	if (typeof error === 'string') {
@@ -441,6 +514,7 @@ self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
 		bundleUrl: nextBundleUrl,
+		assetReceipts: nextAssetReceipts,
 		buffer,
 		code,
 		diagnose = false,
@@ -452,16 +526,19 @@ self.onmessage = async (event: { data: any }) => {
 	const evalLanguage = language === 'ERLANG' ? 'ERLANG' : 'ELIXIR';
 	try {
 		if (load) {
+			await loadRuntime(nextBundleUrl, nextAssetReceipts, log);
+			const configuredReceipts = snapshotElixirRuntimeAssetReceipts(nextAssetReceipts);
 			bundleUrl = nextBundleUrl;
-			await loadRuntime(bundleUrl, log);
+			bundleReceipts = configuredReceipts;
 			postMessage({ load: true });
 			return;
 		}
 
-		if (nextBundleUrl && bundleUrl !== nextBundleUrl) {
+		if (nextBundleUrl) {
 			bundleUrl = nextBundleUrl;
+			bundleReceipts = snapshotElixirRuntimeAssetReceipts(nextAssetReceipts);
 		}
-		if (!bundleUrl) {
+		if (!bundleUrl || !bundleReceipts) {
 			throw new Error('Elixir runtime not loaded');
 		}
 		stdinBufferElixir = buffer ? new Int32Array(buffer) : null;
@@ -470,7 +547,7 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
-		const runtime = await loadRuntime(bundleUrl, log);
+		const runtime = await loadRuntime(bundleUrl, bundleReceipts, log);
 		if (!runtime.process) {
 			throw new Error('Popcorn runtime did not expose a default process');
 		}

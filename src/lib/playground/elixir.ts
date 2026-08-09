@@ -3,6 +3,7 @@ import {
 	resolveErlangBundleUrl,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
+import { snapshotElixirRuntimeAssetReceipts } from '$lib/playground/elixirAssets';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
@@ -21,6 +22,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { WASM_ELIXIR_ASSET_RECEIPTS } from '$lib/playground/wasmElixirVersion';
 
 type BeamEvalLanguage = 'ELIXIR' | 'ERLANG';
 
@@ -38,6 +40,7 @@ class Elixir implements Sandbox {
 	uid = 0;
 	exit = true;
 	bundleUrl = '';
+	bundleIdentity = '';
 	prepared = false;
 	hasExecuted = false;
 	waitingForInput = false;
@@ -49,6 +52,7 @@ class Elixir implements Sandbox {
 		onDispose: (worker) => {
 			if (this.worker !== worker) return;
 			delete this.worker;
+			this.bundleIdentity = '';
 			this.exit = true;
 			this.prepared = false;
 			this.hasExecuted = false;
@@ -189,8 +193,18 @@ class Elixir implements Sandbox {
 						}.`
 					);
 				}
+				const configuredReceipts =
+					typeof runtimeAssets === 'object'
+						? this.language === 'ERLANG'
+							? runtimeAssets.erlang?.integrity || runtimeAssets.elixir?.integrity
+							: runtimeAssets.elixir?.integrity
+						: undefined;
+				const assetReceipts = snapshotElixirRuntimeAssetReceipts(
+					configuredReceipts || WASM_ELIXIR_ASSET_RECEIPTS
+				);
+				const nextBundleIdentity = JSON.stringify([nextBundleUrl, assetReceipts]);
 
-				const needsWorkerReset = !this.worker || this.bundleUrl !== nextBundleUrl;
+				const needsWorkerReset = !this.worker || this.bundleIdentity !== nextBundleIdentity;
 				const preservePendingInput = this.prepared && !needsWorkerReset;
 				if (!preservePendingInput) {
 					this.pendingInput = [];
@@ -201,6 +215,7 @@ class Elixir implements Sandbox {
 				if (needsWorkerReset && this.worker) {
 					this.workerSession.reset();
 				}
+				this.bundleIdentity = nextBundleIdentity;
 				if (!this.worker) {
 					progress?.set?.(0.2);
 					if (
@@ -263,6 +278,7 @@ class Elixir implements Sandbox {
 					worker.postMessage({
 						load: true,
 						bundleUrl: this.bundleUrl,
+						assetReceipts,
 						log
 					});
 				} else {

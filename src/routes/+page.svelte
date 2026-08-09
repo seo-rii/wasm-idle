@@ -208,9 +208,15 @@
 	const elixirLspBundleUrl = $derived(
 		elixirLspEnabled ? runtimeAssets.elixir?.bundleUrl : undefined
 	);
+	const elixirLspIntegrity = $derived(
+		elixirLspEnabled ? runtimeAssets.elixir?.integrity : undefined
+	);
 	const erlangLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'erlang');
 	const erlangLspBundleUrl = $derived(
 		erlangLspEnabled ? runtimeAssets.erlang?.bundleUrl : undefined
+	);
+	const erlangLspIntegrity = $derived(
+		erlangLspEnabled ? runtimeAssets.erlang?.integrity : undefined
 	);
 	const beamLspWorkerUrl = $derived(
 		elixirLspEnabled || erlangLspEnabled ? elixirRuntimeWorkerUrl : undefined
@@ -2863,9 +2869,11 @@
 				{elixirLspEnabled}
 				{elixirLspBundleUrl}
 				elixirLspWorkerUrl={beamLspWorkerUrl}
+				{elixirLspIntegrity}
 				{erlangLspEnabled}
 				{erlangLspBundleUrl}
 				erlangLspWorkerUrl={beamLspWorkerUrl}
+				{erlangLspIntegrity}
 				{gleamLspEnabled}
 				{gleamLspBaseUrl}
 				{gleamLspManifestUrl}

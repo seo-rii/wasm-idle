@@ -1,6 +1,6 @@
-export const WASM_ELIXIR_ASSET_VERSION = '34e9ca0a219a3f50';
+export const BUNDLED_ELIXIR_ASSET_VERSION = '34e9ca0a219a3f50';
 
-export const WASM_ELIXIR_ASSET_RECEIPTS = Object.freeze({
+export const BUNDLED_ELIXIR_ASSET_RECEIPTS = Object.freeze({
 	'bundle.avm': Object.freeze({
 		bytes: 3463541,
 		sha256: '8780669718b86172236754b1f00aad38e96cbe8879bf3b5f9c29696043a17ad1',

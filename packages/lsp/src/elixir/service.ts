@@ -6,6 +6,7 @@ import {
 	type WorkerLanguageService
 } from '../lsp.js';
 import { runRuntimeWorkerDiagnostics } from '../runtime-worker.js';
+import { snapshotElixirRuntimeAssetReceipts, type ElixirRuntimeAssetReceipts } from './assets.js';
 
 export type BeamLanguageServerLanguage = 'elixir' | 'erlang';
 
@@ -13,12 +14,14 @@ export interface BeamWorkerOptions {
 	language: BeamLanguageServerLanguage;
 	bundleUrl: string;
 	workerUrl: string;
+	integrity: ElixirRuntimeAssetReceipts;
 }
 
 export interface BeamDiagnosticRunnerRequest {
 	language: BeamLanguageServerLanguage;
 	bundleUrl: string;
 	workerUrl: string;
+	integrity: ElixirRuntimeAssetReceipts;
 	code: string;
 	activePath: string;
 }
@@ -95,6 +98,7 @@ const defaultRunDiagnostics: RunBeamDiagnostics = (request) =>
 		timeoutMessage: `${request.language === 'erlang' ? 'Erlang' : 'Elixir'} diagnostics timed out`,
 		message: {
 			bundleUrl: request.bundleUrl,
+			assetReceipts: request.integrity,
 			code: request.code,
 			activePath: request.activePath,
 			language: request.language === 'erlang' ? 'ERLANG' : 'ELIXIR',
@@ -197,9 +201,11 @@ export function createBeamWorkerService(
 			if (!nextConfig.bundleUrl || !nextConfig.workerUrl) {
 				throw new Error(`${label} language server requires bundleUrl and workerUrl`);
 			}
+			const integrity = snapshotElixirRuntimeAssetReceipts(nextConfig.integrity);
 			config = {
 				...nextConfig,
-				language
+				language,
+				integrity
 			};
 			context.reportProgress(`load-${language}-runtime`);
 		},
@@ -207,7 +213,7 @@ export function createBeamWorkerService(
 			if (!config || !document.text.trim()) return [];
 			const activePath =
 				document.uri.split('/').pop() || (language === 'erlang' ? 'main.erl' : 'main.exs');
-			const key = `${config.bundleUrl}\n${config.workerUrl}\n${activePath}\n${document.text}`;
+			const key = `${config.bundleUrl}\n${config.workerUrl}\n${JSON.stringify(config.integrity)}\n${activePath}\n${document.text}`;
 			if (key === lastKey) return lastDiagnostics;
 			context.reportProgress(`${language}-diagnostics`);
 			lastKey = key;
@@ -215,6 +221,7 @@ export function createBeamWorkerService(
 				language,
 				bundleUrl: config.bundleUrl,
 				workerUrl: config.workerUrl,
+				integrity: config.integrity,
 				code: document.text,
 				activePath
 			});

@@ -156,16 +156,28 @@ export {
 	type GleamWorkerOptions
 } from './gleam/index.js';
 export {
+	BUNDLED_ELIXIR_ASSET_RECEIPTS,
+	BUNDLED_ELIXIR_ASSET_VERSION,
+	ELIXIR_RUNTIME_ASSETS,
 	createBeamWorkerService,
 	getElixirLanguageServer,
+	snapshotElixirRuntimeAssetReceipts,
 	type BeamDiagnosticRunnerRequest,
 	type BeamDiagnosticRunnerResult,
 	type BeamLanguageServerLanguage,
 	type BeamWorkerOptions,
+	type ElixirLanguageServerConfig,
 	type ElixirLanguageServerOptions,
+	type ElixirRuntimeAssetName,
+	type ElixirRuntimeAssetReceipt,
+	type ElixirRuntimeAssetReceipts,
 	type RunBeamDiagnostics
 } from './elixir/index.js';
-export { getErlangLanguageServer, type ErlangLanguageServerOptions } from './erlang/index.js';
+export {
+	getErlangLanguageServer,
+	type ErlangLanguageServerConfig,
+	type ErlangLanguageServerOptions
+} from './erlang/index.js';
 export {
 	createDocumentWorkerService,
 	createGraphqlWorkerService,

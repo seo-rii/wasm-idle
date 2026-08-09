@@ -1,20 +1,51 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { atomVmInitMock, lastInitOptions, lastModule, waitForBufferedStdinMock } = vi.hoisted(
-	() => ({
-		atomVmInitMock: vi.fn(),
-		lastInitOptions: {
-			current: null as any
-		},
-		lastModule: {
-			current: null as any
-		},
-		waitForBufferedStdinMock: vi.fn()
+const {
+	atomVmInitMock,
+	lastInitOptions,
+	lastModule,
+	verifyRuntimeAssetIntegrityMock,
+	waitForBufferedStdinMock
+} = vi.hoisted(() => ({
+	atomVmInitMock: vi.fn(),
+	lastInitOptions: {
+		current: null as any
+	},
+	lastModule: {
+		current: null as any
+	},
+	verifyRuntimeAssetIntegrityMock: vi.fn(),
+	waitForBufferedStdinMock: vi.fn()
+}));
+
+const TEST_ASSET_RECEIPTS = Object.freeze({
+	'bundle.avm': Object.freeze({
+		bytes: 3,
+		sha256: '1'.repeat(64),
+		uncompressedBytes: 128 * 1024 * 1024,
+		uncompressedSha256: '2'.repeat(64)
+	}),
+	'AtomVM.mjs': Object.freeze({
+		bytes: 3,
+		sha256: '3'.repeat(64),
+		uncompressedBytes: 3,
+		uncompressedSha256: '4'.repeat(64)
+	}),
+	'AtomVM.wasm': Object.freeze({
+		bytes: 3,
+		sha256: '5'.repeat(64),
+		uncompressedBytes: 3,
+		uncompressedSha256: '6'.repeat(64)
 	})
-);
+});
 
 vi.mock('$lib/playground/stdinBuffer', () => ({
 	waitForBufferedStdin: waitForBufferedStdinMock
+}));
+
+vi.mock('@wasm-idle/core', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@wasm-idle/core')>()),
+	verifyRuntimeAssetIntegrity: verifyRuntimeAssetIntegrityMock
 }));
 
 describe('Elixir worker', () => {
@@ -39,6 +70,8 @@ describe('Elixir worker', () => {
 		lastInitOptions.current = null;
 		lastModule.current = null;
 		atomVmInitMock.mockReset();
+		verifyRuntimeAssetIntegrityMock.mockReset();
+		verifyRuntimeAssetIntegrityMock.mockResolvedValue(undefined);
 		waitForBufferedStdinMock.mockReset();
 		atomVmInitMock.mockImplementation(async (options) => {
 			lastInitOptions.current = options;
@@ -132,10 +165,13 @@ describe('Elixir worker', () => {
 		});
 	});
 
-	it('loads AtomVM with the Popcorn wasm asset and evaluates Elixir code inside the worker', async () => {
+	it('preserves a custom bundle filename and query while loading sibling AtomVM assets', async () => {
 		const popcornBrowserGlobal = ['globalThis', 'window'].join('.');
 		const popcornParentGlobal = [popcornBrowserGlobal, 'parent'].join('.');
-		const bundleUrl = new URL('/runtime/elixir/bundle.avm', globalThis.location.href).href;
+		const bundleUrl = new URL(
+			'/runtime/elixir/runtime-abc.avm?v=receipt-1',
+			globalThis.location.href
+		).href;
 		(globalThis as any).fetch.mockResolvedValueOnce(
 			new Response(
 				new ReadableStream({
@@ -157,7 +193,8 @@ describe('Elixir worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				load: true,
-				bundleUrl: '/runtime/elixir/bundle.avm',
+				bundleUrl: '/runtime/elixir/runtime-abc.avm?v=receipt-1',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: true
 			}
 		});
@@ -168,9 +205,35 @@ describe('Elixir worker', () => {
 			redirect: 'error',
 			referrerPolicy: 'no-referrer'
 		});
+		expect((globalThis as any).fetch).toHaveBeenCalledTimes(3);
+		expect((globalThis as any).fetch).toHaveBeenNthCalledWith(
+			2,
+			new URL('/runtime/elixir/AtomVM.mjs?v=receipt-1', globalThis.location.href).href,
+			expect.any(Object)
+		);
+		expect((globalThis as any).fetch).toHaveBeenNthCalledWith(
+			3,
+			new URL('/runtime/elixir/AtomVM.wasm?v=receipt-1', globalThis.location.href).href,
+			expect.any(Object)
+		);
+		expect(verifyRuntimeAssetIntegrityMock).toHaveBeenCalledTimes(3);
+		expect(verifyRuntimeAssetIntegrityMock).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				asset: 'bundle.avm',
+				expected: TEST_ASSET_RECEIPTS['bundle.avm'],
+				stage: 'uncompressed',
+				runtimeId: 'ELIXIR'
+			})
+		);
 		expect(atomVmInitMock).toHaveBeenCalledTimes(1);
+		expect(lastInitOptions.current.mainScriptUrlOrBlob).toBeInstanceOf(Blob);
+		expect(
+			new Uint8Array(await lastInitOptions.current.mainScriptUrlOrBlob.arrayBuffer())
+		).toEqual(new Uint8Array([1, 2, 3]));
+		expect(lastInitOptions.current.wasmBinary).toEqual(new Uint8Array([1, 2, 3]));
 		expect(lastInitOptions.current.locateFile('AtomVM.wasm')).toBe(
-			new URL('AtomVM.wasm', bundleUrl).href
+			new URL('/runtime/elixir/AtomVM.wasm?v=receipt-1', globalThis.location.href).href
 		);
 		expect(lastModule.current.FS.mkdir).toHaveBeenCalledWith('/data');
 		expect(lastModule.current.FS.writeFile).toHaveBeenCalledWith(
@@ -264,6 +327,7 @@ describe('Elixir worker', () => {
 			data: {
 				load: true,
 				bundleUrl,
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: false
 			}
 		});
@@ -279,6 +343,7 @@ describe('Elixir worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				load: true,
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: false
 			}
 		});
@@ -287,6 +352,61 @@ describe('Elixir worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
 			error: 'Elixir runtime is not configured. Set PUBLIC_WASM_ELIXIR_BUNDLE_URL or runtimeAssets.elixir.bundleUrl.'
 		});
+	});
+
+	it('rejects a runtime load without the complete receipt set before fetching', async () => {
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				log: false
+			}
+		});
+
+		expect((globalThis as any).fetch).not.toHaveBeenCalled();
+		expect(atomVmInitMock).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: 'Elixir runtime requires exactly three asset receipts'
+		});
+	});
+
+	it('does not initialize AtomVM from unverified assets and permits a clean retry', async () => {
+		verifyRuntimeAssetIntegrityMock
+			.mockResolvedValueOnce(undefined)
+			.mockRejectedValueOnce(new Error('AtomVM module integrity mismatch'));
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
+				log: false
+			}
+		});
+
+		expect((globalThis as any).fetch).toHaveBeenCalledTimes(2);
+		expect(atomVmInitMock).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: 'AtomVM module integrity mismatch'
+		});
+
+		(globalThis as any).fetch.mockClear();
+		(globalThis as any).postMessage.mockClear();
+		verifyRuntimeAssetIntegrityMock.mockReset();
+		verifyRuntimeAssetIntegrityMock.mockResolvedValue(undefined);
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
+				log: false
+			}
+		});
+
+		expect((globalThis as any).fetch).toHaveBeenCalledTimes(3);
+		expect(atomVmInitMock).toHaveBeenCalledOnce();
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({ load: true });
 	});
 
 	it('rejects a substituted final bundle URL and cancels its body', async () => {
@@ -305,13 +425,14 @@ describe('Elixir worker', () => {
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: false
 			}
 		});
 
 		expect(bodyCancel).toHaveBeenCalledOnce();
 		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
-			error: `Elixir bundle response URL mismatch: expected ${bundleUrl}, received https://cdn.example.com/substituted.avm`
+			error: `Elixir runtime asset bundle.avm response URL mismatch: expected ${bundleUrl}, received https://cdn.example.com/substituted.avm`
 		});
 	});
 
@@ -331,6 +452,7 @@ describe('Elixir worker', () => {
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: false
 			}
 		});
@@ -346,11 +468,11 @@ describe('Elixir worker', () => {
 		expect(bodyCancel).toHaveBeenCalledOnce();
 		expect(bodyCancel).toHaveBeenCalledWith(
 			expect.objectContaining({
-				message: `failed to load Elixir bundle from ${bundleUrl}: 503`
+				message: `failed to load Elixir runtime asset bundle.avm from ${bundleUrl}: 503`
 			})
 		);
 		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
-			error: `failed to load Elixir bundle from ${bundleUrl}: 503`
+			error: `failed to load Elixir runtime asset bundle.avm from ${bundleUrl}: 503`
 		});
 	});
 
@@ -369,13 +491,14 @@ describe('Elixir worker', () => {
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: false
 			}
 		});
 
 		expect(bodyCancel).toHaveBeenCalledOnce();
 		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
-			error: 'Elixir bundle exceeds the 134217728 byte limit'
+			error: 'Elixir runtime asset bundle.avm exceeds the 134217728 byte limit'
 		});
 	});
 
@@ -401,6 +524,7 @@ describe('Elixir worker', () => {
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: false
 			}
 		});
@@ -416,12 +540,12 @@ describe('Elixir worker', () => {
 		expect(readerCancel).toHaveBeenCalledOnce();
 		expect(readerCancel).toHaveBeenCalledWith(
 			expect.objectContaining({
-				message: 'Elixir bundle exceeds the 134217728 byte limit'
+				message: 'Elixir runtime asset bundle.avm exceeds the 134217728 byte limit'
 			})
 		);
 		expect(releaseLock).toHaveBeenCalledOnce();
 		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
-			error: 'Elixir bundle exceeds the 134217728 byte limit'
+			error: 'Elixir runtime asset bundle.avm exceeds the 134217728 byte limit'
 		});
 	});
 
@@ -444,6 +568,7 @@ describe('Elixir worker', () => {
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: false
 			}
 		});
@@ -462,6 +587,7 @@ describe('Elixir worker', () => {
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: true
 			}
 		});
@@ -536,6 +662,7 @@ describe('Elixir worker', () => {
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: true
 			}
 		});
@@ -571,6 +698,7 @@ describe('Elixir worker', () => {
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: true
 			}
 		});
@@ -606,6 +734,7 @@ describe('Elixir worker', () => {
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: true
 			}
 		});
@@ -614,6 +743,7 @@ describe('Elixir worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				code: 'IO.puts("hello")',
 				diagnose: true,
 				language: 'ELIXIR',
@@ -631,6 +761,7 @@ describe('Elixir worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				code: 'main() -> ok.',
 				diagnose: true,
 				language: 'ERLANG',
@@ -661,6 +792,7 @@ main() ->
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: true
 			}
 		});
@@ -696,6 +828,7 @@ main() ->
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: true
 			}
 		});
@@ -735,6 +868,7 @@ main() ->
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: true
 			}
 		});
@@ -771,6 +905,7 @@ main() ->
 			data: {
 				load: true,
 				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: TEST_ASSET_RECEIPTS,
 				log: true
 			}
 		});

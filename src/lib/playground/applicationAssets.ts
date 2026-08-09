@@ -6,7 +6,7 @@ import { WASM_BQN_ASSET_VERSION } from './wasmBqnVersion';
 import { WASM_CLOJURESCRIPT_ASSET_VERSION } from './wasmClojureScriptVersion';
 import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 import { WASM_DOTNET_ASSET_VERSION } from './wasmDotnetVersion';
-import { WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
+import { WASM_ELIXIR_ASSET_RECEIPTS, WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
 import { WASM_FORTH_ASSET_VERSION } from './wasmForthVersion';
 import { WASM_FORTRAN_ASSET_VERSION } from './wasmFortranVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
@@ -90,10 +90,12 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			moduleUrl: asset('wasm-dotnet/index.js', WASM_DOTNET_ASSET_VERSION)
 		},
 		elixir: {
-			bundleUrl: asset('wasm-elixir/bundle.avm', WASM_ELIXIR_ASSET_VERSION)
+			bundleUrl: asset('wasm-elixir/bundle.avm', WASM_ELIXIR_ASSET_VERSION),
+			integrity: WASM_ELIXIR_ASSET_RECEIPTS
 		},
 		erlang: {
-			bundleUrl: asset('wasm-elixir/bundle.avm', WASM_ELIXIR_ASSET_VERSION)
+			bundleUrl: asset('wasm-elixir/bundle.avm', WASM_ELIXIR_ASSET_VERSION),
+			integrity: WASM_ELIXIR_ASSET_RECEIPTS
 		},
 		prolog: {
 			baseUrl: asset('wasm-prolog/'),

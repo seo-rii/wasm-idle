@@ -8,6 +8,7 @@ import {
 import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
 import { WASM_BASH_ASSET_VERSION, WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
 import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
+import { WASM_ELIXIR_ASSET_RECEIPTS, WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
 import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
@@ -127,6 +128,11 @@ describe('application runtime asset root', () => {
 			workerUrl: `/foo/bar/wasm-bash/sdk/worker.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`,
 			webcReceipt: WASM_BASH_WEBC_RECEIPT
 		});
+		expect(assets.elixir).toEqual({
+			bundleUrl: `/foo/bar/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`,
+			integrity: WASM_ELIXIR_ASSET_RECEIPTS
+		});
+		expect(assets.erlang).toEqual(assets.elixir);
 		expect(assets.typescript?.libUrl).toMatch(
 			/^\/foo\/bar\/lsp\/typescript-libs\.json\.gz\?v=/u
 		);
@@ -153,6 +159,19 @@ describe('application runtime asset root', () => {
 		const key = JSON.parse(
 			createRuntimeAssetsKey(createApplicationRuntimeAssets('/foo/bar')) || '{}'
 		) as Record<string, unknown>;
+		const serializedElixirIntegrity = JSON.stringify(
+			Object.entries(WASM_ELIXIR_ASSET_RECEIPTS)
+				.sort(([left], [right]) => left.localeCompare(right))
+				.map(([asset, entry]) => [
+					asset,
+					{
+						sha256: entry.sha256,
+						bytes: entry.bytes,
+						uncompressedSha256: entry.uncompressedSha256,
+						uncompressedBytes: entry.uncompressedBytes
+					}
+				])
+		);
 
 		expect(key).toMatchObject({
 			rustManifestUrl: `/foo/bar/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`,
@@ -176,6 +195,8 @@ describe('application runtime asset root', () => {
 					}
 				]
 			]),
+			elixirIntegrity: serializedElixirIntegrity,
+			erlangIntegrity: serializedElixirIntegrity,
 			objectiveCIntegrity: JSON.stringify(
 				Object.entries(WASM_OBJECTIVEC_ASSET_RECEIPTS)
 					.sort(([left], [right]) => left.localeCompare(right))
@@ -192,6 +213,8 @@ describe('application runtime asset root', () => {
 			dModuleUrl: assets.d?.moduleUrl,
 			dManifestUrl: assets.d?.manifestUrl,
 			dIntegrity: expect.any(String),
+			elixirIntegrity: expect.any(String),
+			erlangIntegrity: expect.any(String),
 			typeScriptLibUrl: assets.typescript?.libUrl,
 			fortranBaseUrl: assets.fortran?.baseUrl,
 			fortranF2cWasmUrl: assets.fortran?.f2cWasmUrl,

@@ -1,4 +1,9 @@
-export { getErlangLanguageServer, type ErlangLanguageServerOptions } from './server.js';
+export {
+	getErlangLanguageServer,
+	type ErlangLanguageServerConfig,
+	type ErlangLanguageServerOptions
+} from './server.js';
+export type { ElixirRuntimeAssetReceipts } from '../elixir/assets.js';
 export {
 	createBeamWorkerService,
 	type BeamDiagnosticRunnerRequest,

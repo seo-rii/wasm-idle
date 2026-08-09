@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BUNDLED_CLANGD_ASSET_INTEGRITY } from '../src/bundledClangdAssetIntegrity.js';
+import { BUNDLED_ELIXIR_ASSET_VERSION } from '../src/bundledElixirRuntimeIntegrity.js';
 import { BUNDLED_GLEAM_MANIFEST_FINGERPRINT } from '../src/bundledGleamRuntime.js';
 import {
 	LanguageServerAssetConfigurationError,
@@ -152,8 +153,14 @@ describe('lsp runtime asset resolution', () => {
 			[resolveDLanguageServerModuleUrl, 'wasm-d/index.js'],
 			[resolveGleamLanguageServerBaseUrl, 'wasm-gleam/'],
 			[resolveGleamLanguageServerManifestUrl, 'wasm-gleam/source-manifest.v2.json'],
-			[resolveElixirLanguageServerBundleUrl, 'wasm-elixir/bundle.avm'],
-			[resolveErlangLanguageServerBundleUrl, 'wasm-elixir/bundle.avm'],
+			[
+				resolveElixirLanguageServerBundleUrl,
+				`wasm-elixir/bundle.avm?v=${BUNDLED_ELIXIR_ASSET_VERSION}`
+			],
+			[
+				resolveErlangLanguageServerBundleUrl,
+				`wasm-elixir/bundle.avm?v=${BUNDLED_ELIXIR_ASSET_VERSION}`
+			],
 			[resolveZigLanguageServerCompilerUrl, 'wasm-zig/zig_small.wasm'],
 			[resolveZigLanguageServerStdlibUrl, 'wasm-zig/std.tar.gz'],
 			[resolveLuaLanguageServerModuleUrl, 'wasm-lua/index.js'],
@@ -370,13 +377,17 @@ describe('lsp runtime asset resolution', () => {
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
 			)
-		).toBe('https://static.example.com/repl_20240807/wasm-elixir/bundle.avm');
+		).toBe(
+			`https://static.example.com/repl_20240807/wasm-elixir/bundle.avm?v=${BUNDLED_ELIXIR_ASSET_VERSION}`
+		);
 		expect(
 			resolveErlangLanguageServerBundleUrl(
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
 			)
-		).toBe('https://static.example.com/repl_20240807/wasm-elixir/bundle.avm');
+		).toBe(
+			`https://static.example.com/repl_20240807/wasm-elixir/bundle.avm?v=${BUNDLED_ELIXIR_ASSET_VERSION}`
+		);
 		expect(
 			resolveAwkLanguageServerBaseUrl(
 				'https://static.example.com/repl_20240807',

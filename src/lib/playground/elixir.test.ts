@@ -49,6 +49,7 @@ vi.mock('$env/dynamic/public', () => ({
 
 import Elixir from './elixir';
 import { readBufferedStdin } from './stdinBuffer';
+import { WASM_ELIXIR_ASSET_RECEIPTS } from './wasmElixirVersion';
 
 describe('Elixir sandbox', () => {
 	beforeEach(() => {
@@ -87,6 +88,7 @@ describe('Elixir sandbox', () => {
 			expect.objectContaining({
 				load: true,
 				bundleUrl: expect.stringMatching(/\/runtime\/elixir\/bundle\.avm$/),
+				assetReceipts: WASM_ELIXIR_ASSET_RECEIPTS,
 				log: true
 			})
 		);
@@ -166,6 +168,7 @@ describe('Elixir sandbox', () => {
 			expect.objectContaining({
 				load: true,
 				bundleUrl: expect.stringMatching(/\/runtime\/erlang\/bundle\.avm$/),
+				assetReceipts: WASM_ELIXIR_ASSET_RECEIPTS,
 				log: true
 			})
 		);
@@ -178,6 +181,68 @@ describe('Elixir sandbox', () => {
 			language: 'ERLANG',
 			log: true
 		});
+	});
+
+	it('snapshots custom receipts and replaces the worker when the trust root changes', async () => {
+		const sandbox = new Elixir();
+		const firstBundleReceipt = {
+			...WASM_ELIXIR_ASSET_RECEIPTS['bundle.avm'],
+			uncompressedSha256: 'a'.repeat(64)
+		};
+		const firstIntegrity = {
+			...WASM_ELIXIR_ASSET_RECEIPTS,
+			'bundle.avm': firstBundleReceipt
+		};
+
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				integrity: firstIntegrity
+			}
+		});
+		const firstWorker = workerInstances[0];
+		const firstMessage = firstWorker.postMessage.mock.calls[0]?.[0];
+		firstBundleReceipt.uncompressedSha256 = 'b'.repeat(64);
+
+		expect(firstMessage.assetReceipts['bundle.avm'].uncompressedSha256).toBe('a'.repeat(64));
+		expect(firstMessage.assetReceipts).not.toBe(firstIntegrity);
+		expect(Object.isFrozen(firstMessage.assetReceipts)).toBe(true);
+
+		const replacementIntegrity = {
+			...WASM_ELIXIR_ASSET_RECEIPTS,
+			'bundle.avm': {
+				...WASM_ELIXIR_ASSET_RECEIPTS['bundle.avm'],
+				uncompressedSha256: 'c'.repeat(64)
+			}
+		};
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				integrity: replacementIntegrity
+			}
+		});
+
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ assetReceipts: replacementIntegrity })
+		);
+	});
+
+	it('rejects malformed receipts before creating a worker', async () => {
+		const sandbox = new Elixir();
+
+		await expect(
+			sandbox.load({
+				elixir: {
+					bundleUrl: '/runtime/elixir/bundle.avm',
+					integrity: {
+						'bundle.avm': WASM_ELIXIR_ASSET_RECEIPTS['bundle.avm']
+					} as never
+				}
+			})
+		).rejects.toThrow('requires exactly three asset receipts');
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('rejects load when no Elixir bundle is configured', async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+	BUNDLED_ELIXIR_ASSET_RECEIPTS,
 	createBeamWorkerService,
 	type LspDocument,
 	type LspDocumentContext
@@ -27,7 +28,11 @@ describe('createBeamWorkerService', () => {
 		const context = contextFor(document);
 
 		await service.initialize?.(
-			{ bundleUrl: '/wasm-elixir/bundle.avm', workerUrl: '/assets/elixir-worker.js' },
+			{
+				bundleUrl: '/wasm-elixir/bundle.avm',
+				workerUrl: '/assets/elixir-worker.js',
+				integrity: BUNDLED_ELIXIR_ASSET_RECEIPTS
+			},
 			context
 		);
 		const diagnostics = await service.diagnostics?.(document, context);
@@ -45,6 +50,7 @@ describe('createBeamWorkerService', () => {
 			language: 'elixir',
 			bundleUrl: '/wasm-elixir/bundle.avm',
 			workerUrl: '/assets/elixir-worker.js',
+			integrity: BUNDLED_ELIXIR_ASSET_RECEIPTS,
 			code: document.text,
 			activePath: 'main.exs'
 		});
@@ -80,7 +86,11 @@ describe('createBeamWorkerService', () => {
 		const context = contextFor(document);
 
 		await service.initialize?.(
-			{ bundleUrl: '/wasm-elixir/bundle.avm', workerUrl: '/assets/elixir-worker.js' },
+			{
+				bundleUrl: '/wasm-elixir/bundle.avm',
+				workerUrl: '/assets/elixir-worker.js',
+				integrity: BUNDLED_ELIXIR_ASSET_RECEIPTS
+			},
 			context
 		);
 		const diagnostics = await service.diagnostics?.(document, context);
@@ -98,6 +108,7 @@ describe('createBeamWorkerService', () => {
 			language: 'erlang',
 			bundleUrl: '/wasm-elixir/bundle.avm',
 			workerUrl: '/assets/elixir-worker.js',
+			integrity: BUNDLED_ELIXIR_ASSET_RECEIPTS,
 			code: document.text,
 			activePath: 'main.erl'
 		});
@@ -117,5 +128,69 @@ describe('createBeamWorkerService', () => {
 			expect.objectContaining({ name: 'main', kind: 12 })
 		]);
 		expect(context.reportProgress).toHaveBeenCalledWith('load-erlang-runtime');
+	});
+
+	it('snapshots receipts and invalidates cached diagnostics when the trust root changes', async () => {
+		const runDiagnostics = vi.fn(async () => ({}));
+		const service = createBeamWorkerService('elixir', runDiagnostics);
+		const document: LspDocument = {
+			uri: 'file:///workspace/main.exs',
+			languageId: 'elixir',
+			version: 1,
+			text: 'IO.puts("hello")'
+		};
+		const context = contextFor(document);
+		const firstIntegrity = structuredClone(BUNDLED_ELIXIR_ASSET_RECEIPTS);
+
+		await service.initialize?.(
+			{
+				bundleUrl: '/wasm-elixir/bundle.avm',
+				workerUrl: '/assets/elixir-worker.js',
+				integrity: firstIntegrity
+			},
+			context
+		);
+		firstIntegrity['bundle.avm'].uncompressedBytes = 1;
+		await service.diagnostics?.(document, context);
+
+		const nextIntegrity = structuredClone(BUNDLED_ELIXIR_ASSET_RECEIPTS);
+		nextIntegrity['bundle.avm'].uncompressedSha256 = 'a'.repeat(64);
+		await service.initialize?.(
+			{
+				bundleUrl: '/wasm-elixir/bundle.avm',
+				workerUrl: '/assets/elixir-worker.js',
+				integrity: nextIntegrity
+			},
+			context
+		);
+		await service.diagnostics?.(document, context);
+
+		expect(runDiagnostics).toHaveBeenCalledTimes(2);
+		expect(runDiagnostics.mock.calls[0]?.[0].integrity['bundle.avm'].uncompressedBytes).toBe(
+			BUNDLED_ELIXIR_ASSET_RECEIPTS['bundle.avm'].uncompressedBytes
+		);
+		expect(runDiagnostics.mock.calls[0]?.[0].integrity).not.toBe(firstIntegrity);
+		expect(Object.isFrozen(runDiagnostics.mock.calls[0]?.[0].integrity)).toBe(true);
+	});
+
+	it('rejects incomplete receipt sets at the public service boundary', async () => {
+		const service = createBeamWorkerService('elixir');
+		const document: LspDocument = {
+			uri: 'file:///workspace/main.exs',
+			languageId: 'elixir',
+			version: 1,
+			text: ''
+		};
+
+		expect(() =>
+			service.initialize?.(
+				{
+					bundleUrl: '/wasm-elixir/bundle.avm',
+					workerUrl: '/assets/elixir-worker.js',
+					integrity: { 'bundle.avm': BUNDLED_ELIXIR_ASSET_RECEIPTS['bundle.avm'] }
+				},
+				contextFor(document)
+			)
+		).toThrow('requires exactly three asset receipts');
 	});
 });

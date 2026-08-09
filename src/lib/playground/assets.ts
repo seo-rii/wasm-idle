@@ -1,6 +1,7 @@
 import { env as dynamicPublicEnv } from '$env/dynamic/public';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from '$lib/playground/clangAssetIntegrity';
 import { snapshotDOuterAssetConfig, type DOuterAssetReceipts } from '$lib/playground/dOuterAssets';
+import type { ElixirRuntimeAssetReceipts } from '$lib/playground/elixirAssets';
 import { normalizeTeaVmBaseUrl, resolveTeaVmBaseUrl } from '$lib/playground/teavmConfig';
 import {
 	WASM_GLEAM_ASSET_VERSION,
@@ -103,10 +104,12 @@ export interface TinyGoRuntimeAssetConfig {
 
 export interface ElixirRuntimeAssetConfig {
 	bundleUrl?: string;
+	integrity?: ElixirRuntimeAssetReceipts;
 }
 
 export interface ErlangRuntimeAssetConfig {
 	bundleUrl?: string;
+	integrity?: ElixirRuntimeAssetReceipts;
 }
 
 export interface TypeScriptRuntimeAssetConfig {

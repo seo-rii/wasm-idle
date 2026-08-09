@@ -16,7 +16,9 @@
 	} from '@seorii/monaco';
 	import type { EditorLanguageServerHandle, LanguageServerStatus } from '@wasm-idle/lsp';
 	import type { DOuterAssetReceipts } from '$lib/playground/dOuterAssets';
+	import type { ElixirRuntimeAssetReceipts } from '$lib/playground/elixirAssets';
 	import { WASM_D_OUTER_ASSET_RECEIPTS } from '$lib/playground/wasmDIntegrity';
+	import { WASM_ELIXIR_ASSET_RECEIPTS } from '$lib/playground/wasmElixirVersion';
 	import type monaco from 'monaco-editor';
 	import { onMount, untrack } from 'svelte';
 	import {
@@ -2345,9 +2347,11 @@
 		elixirLspEnabled?: boolean;
 		elixirLspBundleUrl?: string;
 		elixirLspWorkerUrl?: string;
+		elixirLspIntegrity?: ElixirRuntimeAssetReceipts;
 		erlangLspEnabled?: boolean;
 		erlangLspBundleUrl?: string;
 		erlangLspWorkerUrl?: string;
+		erlangLspIntegrity?: ElixirRuntimeAssetReceipts;
 		gleamLspEnabled?: boolean;
 		gleamLspBaseUrl?: string;
 		gleamLspManifestUrl?: string;
@@ -2436,9 +2440,11 @@
 		elixirLspEnabled = false,
 		elixirLspBundleUrl,
 		elixirLspWorkerUrl,
+		elixirLspIntegrity = WASM_ELIXIR_ASSET_RECEIPTS,
 		erlangLspEnabled = false,
 		erlangLspBundleUrl,
 		erlangLspWorkerUrl,
+		erlangLspIntegrity = WASM_ELIXIR_ASSET_RECEIPTS,
 		gleamLspEnabled = false,
 		gleamLspBaseUrl,
 		gleamLspManifestUrl,
@@ -2599,8 +2605,10 @@
 			dotnetLspEnabled ? dotnetLspModuleUrl || '' : '',
 			elixirLspEnabled ? elixirLspBundleUrl || '' : '',
 			elixirLspEnabled ? elixirLspWorkerUrl || '' : '',
+			elixirLspEnabled ? JSON.stringify(elixirLspIntegrity) : '',
 			erlangLspEnabled ? erlangLspBundleUrl || '' : '',
 			erlangLspEnabled ? erlangLspWorkerUrl || '' : '',
+			erlangLspEnabled ? JSON.stringify(erlangLspIntegrity) : '',
 			gleamLspEnabled ? gleamLspBaseUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestFingerprint || '' : '',
@@ -2930,7 +2938,8 @@
 					currentUrl,
 					elixir: {
 						bundleUrl: elixirLspBundleUrl || '',
-						workerUrl: elixirLspWorkerUrl || ''
+						workerUrl: elixirLspWorkerUrl || '',
+						integrity: elixirLspIntegrity
 					},
 					onStatus: (status) => (elixirLspStatus = status)
 				});
@@ -2946,7 +2955,8 @@
 					currentUrl,
 					erlang: {
 						bundleUrl: erlangLspBundleUrl || '',
-						workerUrl: erlangLspWorkerUrl || ''
+						workerUrl: erlangLspWorkerUrl || '',
+						integrity: erlangLspIntegrity
 					},
 					onStatus: (status) => (erlangLspStatus = status)
 				});
