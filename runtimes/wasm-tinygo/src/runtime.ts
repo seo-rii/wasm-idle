@@ -474,6 +474,7 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 		});
 		const workerSource = createTinyGoCompilerWorkerSource({
 			assetBaseUrl: new URL('./', absoluteWorkerUrl).href,
+			maxAssetBytes,
 			source: textDecoder.decode(workerBytes)
 		});
 		if (typeof URL.createObjectURL !== 'function') {

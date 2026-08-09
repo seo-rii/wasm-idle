@@ -14,7 +14,7 @@ type ComlinkMessage = {
 };
 
 const COMPILER_WORKER_SOURCE =
-	'const __webpack_require__={p:""};__webpack_require__.p=new URL("./",self.location.href).href;__webpack_require__.b=self.location+"";';
+	'const __webpack_require__={p:""};__webpack_require__.p=new URL("./",self.location.href).href;__webpack_require__.b=self.location+"";async cachedLazyFile(e,r,t,n){const o=await this._cache;const r=this.readFile(`${o}/${t}`,{encoding:"binary"});this.writeFile(e,r);return void 0!==e.response?new Uint8Array(e.response||[]):intArrayFromString(e.responseText||"",!0)}persist(e){};await e.cachedLazyFile(n,...t)}e.exists("/emscripten/cache/cache.lock")';
 
 const createDeferred = <T>(): Deferred<T> => {
 	let resolve!: (value: T) => void;
@@ -51,14 +51,16 @@ const installMockWorker = (holdInit = false) => {
 	const initStarted = createDeferred<void>();
 	let pendingInit: { message: ComlinkMessage; worker: MockWorker } | null = null;
 	const workers: MockWorker[] = [];
+	const workerBlobs: Blob[] = [];
 	let objectUrlId = 0;
 	vi.stubGlobal(
 		'fetch',
 		vi.fn(async () => new Response(COMPILER_WORKER_SOURCE))
 	);
-	vi.spyOn(URL, 'createObjectURL').mockImplementation(
-		() => `blob:tinygo-worker-${++objectUrlId}`
-	);
+	vi.spyOn(URL, 'createObjectURL').mockImplementation((value) => {
+		workerBlobs.push(value as Blob);
+		return `blob:tinygo-worker-${++objectUrlId}`;
+	});
 	const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
 
 	class MockWorker {
@@ -111,6 +113,7 @@ const installMockWorker = (holdInit = false) => {
 			pendingInit = null;
 		},
 		revokeObjectURL,
+		workerBlobs,
 		workers
 	};
 };
@@ -194,7 +197,7 @@ describe('TinyGo compiler runtime disposal', () => {
 	});
 
 	it('retires a booted compiler worker when the asset byte limit changes', async () => {
-		const { revokeObjectURL, workers } = installMockWorker();
+		const { revokeObjectURL, workerBlobs, workers } = installMockWorker();
 		const runtime = createTinyGoRuntime({
 			assetBaseUrl: 'https://runtime.invalid/',
 			assetLoader: () => 'https://runtime.invalid/emception.worker.js',
@@ -204,6 +207,9 @@ describe('TinyGo compiler runtime disposal', () => {
 		await runtime.boot();
 		expect(workers).toHaveLength(1);
 		expect(revokeObjectURL).toHaveBeenCalledOnce();
+		await expect(workerBlobs[0]?.text()).resolves.toContain(
+			'const __wasmIdleTinyGoCompilerAssetMaxBytes=8192;'
+		);
 
 		runtime.setMaxAssetBytes(4096);
 		expect(workers[0]?.terminateCalls).toBe(1);
@@ -211,6 +217,9 @@ describe('TinyGo compiler runtime disposal', () => {
 		await runtime.boot();
 		expect(workers).toHaveLength(2);
 		expect(revokeObjectURL).toHaveBeenCalledTimes(2);
+		await expect(workerBlobs[1]?.text()).resolves.toContain(
+			'const __wasmIdleTinyGoCompilerAssetMaxBytes=4096;'
+		);
 		runtime.dispose();
 		expect(workers[1]?.terminateCalls).toBe(1);
 	});

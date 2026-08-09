@@ -61,6 +61,15 @@ const DEFAULT_TINYGO_ASSET_BUFFER_BYTES = 64 * 1024;
 const EMCEPTION_BLOB_PUBLIC_PATH_SNIPPET =
 	'__webpack_require__.p=new URL("./",self.location.href).href';
 const EMCEPTION_BLOB_BASE_URL_SNIPPET = '__webpack_require__.b=self.location+""';
+const EMCEPTION_CACHED_LAZY_FILE_SNIPPET =
+	'async cachedLazyFile(e,r,t,n){const o=await this._cache;';
+const EMCEPTION_CACHED_LAZY_FILE_END_SNIPPET = '}persist(e){';
+const EMCEPTION_CACHED_ASSET_READ_SNIPPET =
+	'const r=this.readFile(`${o}/${t}`,{encoding:"binary"});this.writeFile(e,r)';
+const EMCEPTION_XHR_ASSET_RESULT_SNIPPET =
+	'return void 0!==e.response?new Uint8Array(e.response||[]):intArrayFromString(e.responseText||"",!0)';
+const EMCEPTION_CACHE_POPULATION_END_SNIPPET =
+	'await e.cachedLazyFile(n,...t)}e.exists("/emscripten/cache/cache.lock")';
 
 function cacheIdentity(value: object | undefined) {
 	if (!value) return 'none';
@@ -107,8 +116,10 @@ function resolveMaxAssetBytes(maxAssetBytes?: number) {
 
 export function createTinyGoCompilerWorkerSource(options: {
 	assetBaseUrl: string;
+	maxAssetBytes: number;
 	source: string;
 }) {
+	const maxAssetBytes = resolveMaxAssetBytes(options.maxAssetBytes);
 	let assetBaseUrl: URL;
 	try {
 		assetBaseUrl = new URL('./', options.assetBaseUrl);
@@ -141,15 +152,134 @@ export function createTinyGoCompilerWorkerSource(options: {
 			'wasm-tinygo compiler worker does not contain exactly one supported base-URL initializer'
 		);
 	}
-	return options.source
-		.replace(
-			EMCEPTION_BLOB_PUBLIC_PATH_SNIPPET,
-			`__webpack_require__.p=${JSON.stringify(assetBaseUrl.href)}`
-		)
-		.replace(
-			EMCEPTION_BLOB_BASE_URL_SNIPPET,
-			`__webpack_require__.b=${JSON.stringify(assetBaseUrl.href)}`
+	const cachedLazyFileIndex = options.source.indexOf(EMCEPTION_CACHED_LAZY_FILE_SNIPPET);
+	if (
+		cachedLazyFileIndex < 0 ||
+		cachedLazyFileIndex !== options.source.lastIndexOf(EMCEPTION_CACHED_LAZY_FILE_SNIPPET)
+	) {
+		throw new Error(
+			'wasm-tinygo compiler worker does not contain exactly one supported lazy-file initializer'
 		);
+	}
+	const cachedAssetReadIndex = options.source.indexOf(EMCEPTION_CACHED_ASSET_READ_SNIPPET);
+	if (
+		cachedAssetReadIndex < 0 ||
+		cachedAssetReadIndex !== options.source.lastIndexOf(EMCEPTION_CACHED_ASSET_READ_SNIPPET)
+	) {
+		throw new Error(
+			'wasm-tinygo compiler worker does not contain exactly one supported cached-asset read'
+		);
+	}
+	const xhrAssetResultIndex = options.source.indexOf(EMCEPTION_XHR_ASSET_RESULT_SNIPPET);
+	if (
+		xhrAssetResultIndex < 0 ||
+		xhrAssetResultIndex !== options.source.lastIndexOf(EMCEPTION_XHR_ASSET_RESULT_SNIPPET)
+	) {
+		throw new Error(
+			'wasm-tinygo compiler worker does not contain exactly one supported XHR asset result'
+		);
+	}
+	const cachedLazyFileEndIndex = options.source.indexOf(
+		EMCEPTION_CACHED_LAZY_FILE_END_SNIPPET,
+		cachedLazyFileIndex
+	);
+	if (
+		cachedLazyFileEndIndex < 0 ||
+		cachedLazyFileEndIndex !==
+			options.source.lastIndexOf(EMCEPTION_CACHED_LAZY_FILE_END_SNIPPET)
+	) {
+		throw new Error(
+			'wasm-tinygo compiler worker does not contain exactly one supported lazy-file boundary'
+		);
+	}
+	const cachePopulationEndIndex = options.source.indexOf(EMCEPTION_CACHE_POPULATION_END_SNIPPET);
+	if (
+		cachePopulationEndIndex < 0 ||
+		cachePopulationEndIndex !==
+			options.source.lastIndexOf(EMCEPTION_CACHE_POPULATION_END_SNIPPET)
+	) {
+		throw new Error(
+			'wasm-tinygo compiler worker does not contain exactly one supported cache-population boundary'
+		);
+	}
+	const boundedCachedAssetMethod =
+		'async cachedLazyFile(e,r,t,n){' +
+		'__wasmIdleValidateTinyGoCompilerAssetSize(r,e);' +
+		'const o=await this._cache;' +
+		'if(this.exists(e)&&this.unlink(e),this.exists(`${o}/${t}`)){' +
+		'const n=this.readFile(`${o}/${t}`,{encoding:"binary"});' +
+		'__wasmIdleValidateTinyGoCompilerAssetBytes(n,r,e);this.writeFile(e,n)' +
+		'}else{' +
+		'const a=await __wasmIdleLoadTinyGoCompilerAsset(n,r,e);' +
+		'this.writeFile(e,a);this.writeFile(`${o}/${t}`,a)' +
+		'}}';
+	const workerWithBoundedCachedAssets =
+		options.source.slice(0, cachedLazyFileIndex) +
+		boundedCachedAssetMethod +
+		options.source.slice(cachedLazyFileEndIndex + 1);
+	const assetLimitPrelude = `
+const __wasmIdleTinyGoCompilerAssetMaxBytes=${maxAssetBytes};
+const __wasmIdleTinyGoCompilerAssetBaseUrl=new URL(${JSON.stringify(assetBaseUrl.href)});
+const __wasmIdleTinyGoCompilerFetch=typeof globalThis.fetch==="function"?globalThis.fetch.bind(globalThis):null;
+const __wasmIdleCancelTinyGoCompilerAssetBody=(body,reason)=>{try{const pending=body?.cancel(reason);if(pending&&typeof pending.catch==="function")pending.catch(()=>{})}catch{}};
+const __wasmIdleValidateTinyGoCompilerAssetSize=(size,label)=>{
+	if(!Number.isSafeInteger(size)||size<0)throw new Error("wasm-tinygo compiler asset "+label+" has an invalid declared size");
+	if(size>__wasmIdleTinyGoCompilerAssetMaxBytes)throw new Error("wasm-tinygo compiler asset "+label+" exceeds the "+__wasmIdleTinyGoCompilerAssetMaxBytes+" byte limit");
+};
+const __wasmIdleValidateTinyGoCompilerAssetBytes=(bytes,expectedSize,label)=>{
+	__wasmIdleValidateTinyGoCompilerAssetSize(expectedSize,label);
+	const size=bytes?.byteLength??bytes?.length;
+	if(!Number.isSafeInteger(size)||size<0)throw new Error("wasm-tinygo compiler asset "+label+" has an invalid byte length");
+	if(size>__wasmIdleTinyGoCompilerAssetMaxBytes)throw new Error("wasm-tinygo compiler asset "+label+" exceeds the "+__wasmIdleTinyGoCompilerAssetMaxBytes+" byte limit");
+	if(size!==expectedSize)throw new Error("wasm-tinygo compiler asset "+label+" expected "+expectedSize+" bytes but received "+size);
+	return bytes;
+};
+const __wasmIdleLoadTinyGoCompilerAsset=async(url,expectedSize,label)=>{
+	__wasmIdleValidateTinyGoCompilerAssetSize(expectedSize,label);
+	if(!__wasmIdleTinyGoCompilerFetch)throw new Error("wasm-tinygo compiler assets require fetch");
+	const resolvedUrl=new URL(url,__wasmIdleTinyGoCompilerAssetBaseUrl);
+	if((resolvedUrl.protocol!=="http:"&&resolvedUrl.protocol!=="https:")||resolvedUrl.username||resolvedUrl.password||resolvedUrl.hash||resolvedUrl.origin!==__wasmIdleTinyGoCompilerAssetBaseUrl.origin||!resolvedUrl.pathname.startsWith(__wasmIdleTinyGoCompilerAssetBaseUrl.pathname))throw new Error("wasm-tinygo compiler asset "+label+" is outside the configured asset base");
+	const response=await __wasmIdleTinyGoCompilerFetch(resolvedUrl.href,{credentials:"omit",redirect:"error",referrerPolicy:"no-referrer"});
+	if(!response.ok){const error=new Error("failed to fetch wasm-tinygo compiler asset "+label+": HTTP "+response.status);__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}
+	if(response.url){let finalUrl;try{finalUrl=new URL(response.url).href}catch{const error=new Error("wasm-tinygo compiler asset "+label+" returned an invalid final URL");__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}if(finalUrl!==resolvedUrl.href){const error=new Error("wasm-tinygo compiler asset "+label+" returned an unexpected final URL");__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}}
+	const contentLengthValue=response.headers.get("content-length");
+	if(contentLengthValue!==null){
+		if(!/^\\d+$/.test(contentLengthValue)){const error=new Error("wasm-tinygo compiler asset "+label+" has an invalid Content-Length");__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}
+		try{__wasmIdleValidateTinyGoCompilerAssetSize(Number(contentLengthValue),label)}catch(error){__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}
+	}
+	if(!response.body)throw new Error("wasm-tinygo compiler asset "+label+" did not provide a readable response body");
+	let bytes;try{bytes=new Uint8Array(expectedSize)}catch(error){__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}
+	let reader;try{reader=response.body.getReader()}catch(error){__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}
+	let loaded=0;
+	try{
+		while(true){
+			const {done,value}=await reader.read();
+			if(done)break;
+			if(!value)continue;
+			const nextLength=loaded+value.byteLength;
+			if(nextLength>expectedSize)throw new Error("wasm-tinygo compiler asset "+label+" exceeds its declared "+expectedSize+" byte size");
+			bytes.set(value,loaded);loaded=nextLength;
+		}
+	}catch(error){__wasmIdleCancelTinyGoCompilerAssetBody(reader,error);throw error}finally{try{reader.releaseLock()}catch{}}
+	return __wasmIdleValidateTinyGoCompilerAssetBytes(bytes.subarray(0,loaded),expectedSize,label);
+};
+`;
+	return (
+		assetLimitPrelude +
+		workerWithBoundedCachedAssets
+			.replace(
+				EMCEPTION_BLOB_PUBLIC_PATH_SNIPPET,
+				`__webpack_require__.p=${JSON.stringify(assetBaseUrl.href)}`
+			)
+			.replace(
+				EMCEPTION_BLOB_BASE_URL_SNIPPET,
+				`__webpack_require__.b=${JSON.stringify(assetBaseUrl.href)}`
+			)
+			.replace(
+				EMCEPTION_CACHE_POPULATION_END_SNIPPET,
+				'await e.cachedLazyFile(n,...t)}await e.push(),e.exists("/emscripten/cache/cache.lock")'
+			)
+	);
 }
 
 function runtimeAssetAbortReason(signal: AbortSignal) {
