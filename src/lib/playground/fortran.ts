@@ -8,6 +8,7 @@ import {
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
+	OutputLimitError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -40,6 +41,8 @@ type FortranOperation = {
 	cleanedUp: boolean;
 	cleanups: Array<() => void>;
 };
+
+const OUTPUT_ENCODER = new TextEncoder();
 
 const abortReason = (signal: AbortSignal, phase: FortranOperation['phase']) =>
 	signal.reason !== undefined
@@ -443,6 +446,7 @@ class Fortran implements Sandbox {
 			}
 			this.exit = false;
 			return await new Promise<boolean | string>((resolve, reject) => {
+				let outputBytes = 0;
 				const workerOperation = this.workerSession.beginRun(worker, reject);
 				const timeoutMs = Math.min(
 					2_147_483_647,
@@ -500,6 +504,23 @@ class Fortran implements Sandbox {
 							if (!ownsRun()) return;
 						}
 						if (typeof output === 'string' && output.length > 0) {
+							const actual = outputBytes + OUTPUT_ENCODER.encode(output).byteLength;
+							if (actual > limits.maxOutputBytes) {
+								failRun(
+									new OutputLimitError(
+										`Fortran output exceeded ${limits.maxOutputBytes} bytes`,
+										{
+											actual,
+											limit: limits.maxOutputBytes,
+											phase: 'execute',
+											runtimeId: this.language
+										}
+									),
+									true
+								);
+								return;
+							}
+							outputBytes = actual;
 							this.output?.(output);
 							if (!ownsRun()) return;
 						}
