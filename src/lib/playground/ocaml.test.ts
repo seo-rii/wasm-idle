@@ -237,6 +237,165 @@ describe('OCaml sandbox', () => {
 		expect(workerInstances).toHaveLength(1);
 	});
 
+	it('reserves OCaml startup ownership before reading the signal getter', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/initial/');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace OCaml while reading the startup signal');
+		let replacement: Promise<void> | undefined;
+		let staleAssetReads = 0;
+		const runtimeAssets = {
+			get ocaml() {
+				staleAssetReads += 1;
+				return {
+					moduleUrl: '/superseded/index.js',
+					manifestUrl: '/superseded/manifest.json'
+				};
+			}
+		};
+		const options = {
+			get signal() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load({
+					ocaml: {
+						moduleUrl: '/replacement/index.js',
+						manifestUrl: '/replacement/manifest.json'
+					}
+				});
+				return undefined;
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets, '', true, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleAssetReads).toBe(0);
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.moduleUrl).toBe('http://localhost:3000/replacement/index.js');
+		expect(sandbox.manifestUrl).toBe('http://localhost:3000/replacement/manifest.json');
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('stops OCaml startup when the aborted getter replaces its operation', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/initial/');
+		const reason = new Error('replace OCaml while reading startup aborted');
+		let replacement: Promise<void> | undefined;
+		let staleAssetReads = 0;
+		const signal = {
+			get aborted() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement/');
+				return false;
+			},
+			get reason() {
+				throw new Error('stale OCaml startup reason was read');
+			},
+			addEventListener: vi.fn(),
+			removeEventListener: vi.fn()
+		} as unknown as AbortSignal;
+		const runtimeAssets = {
+			get ocaml() {
+				staleAssetReads += 1;
+				return {
+					moduleUrl: '/superseded/index.js',
+					manifestUrl: '/superseded/manifest.json'
+				};
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets, '', true, [], { signal });
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleAssetReads).toBe(0);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+	});
+
+	it('stops snapshotting OCaml assets when a nested getter replaces the owner', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/initial/');
+		const retiredWorker = workerInstances[0];
+		const reason = new Error('replace OCaml while reading the module URL');
+		let replacement: Promise<void> | undefined;
+		let staleManifestReads = 0;
+		const runtimeAssets = {
+			ocaml: {
+				get moduleUrl() {
+					sandbox.terminate(reason);
+					replacement = sandbox.load({
+						ocaml: {
+							moduleUrl: '/replacement/index.js',
+							manifestUrl: '/replacement/manifest.json'
+						}
+					});
+					return '/superseded/index.js';
+				},
+				get manifestUrl() {
+					staleManifestReads += 1;
+					return '/superseded/manifest.json';
+				}
+			}
+		};
+
+		const superseded = sandbox.load(runtimeAssets);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleManifestReads).toBe(0);
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.moduleUrl).toBe('http://localhost:3000/replacement/index.js');
+		expect(sandbox.manifestUrl).toBe('http://localhost:3000/replacement/manifest.json');
+	});
+
+	it('does not read the OCaml asset root when both explicit URLs are configured', async () => {
+		const sandbox = new Ocaml();
+		let rootReads = 0;
+		const runtimeAssets = {
+			get rootUrl(): string {
+				rootReads += 1;
+				throw new Error('unused OCaml asset root was read');
+			},
+			ocaml: {
+				moduleUrl: '/explicit/index.js',
+				manifestUrl: '/explicit/manifest.json'
+			}
+		};
+
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+
+		expect(rootReads).toBe(0);
+		expect(sandbox.moduleUrl).toBe('http://localhost:3000/explicit/index.js');
+		expect(sandbox.manifestUrl).toBe('http://localhost:3000/explicit/manifest.json');
+	});
+
+	it('reads the OCaml asset root once when both URLs need the fallback', async () => {
+		publicEnv.PUBLIC_WASM_OCAML_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL = '';
+		const sandbox = new Ocaml();
+		let rootReads = 0;
+		const runtimeAssets = {
+			get rootUrl() {
+				rootReads += 1;
+				if (rootReads > 1) throw new Error('OCaml asset root was read more than once');
+				return '/captured/';
+			}
+		};
+
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+
+		expect(rootReads).toBe(1);
+		expect(sandbox.moduleUrl).toBe(
+			'http://localhost:3000/captured/wasm-of-js-of-ocaml/browser-native/src/index.js'
+		);
+		expect(sandbox.manifestUrl).toBe(
+			'http://localhost:3000/captured/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+		);
+	});
+
 	it('preserves a null abort reason and supplies phase-specific fallback errors', async () => {
 		const nullController = new AbortController();
 		nullController.abort(null);
@@ -597,6 +756,163 @@ describe('OCaml sandbox', () => {
 
 		suppressAutoRunAck = false;
 		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
+	it('reserves OCaml run ownership before option getters and preserves its replacement', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/initial/');
+		const reason = new Error('replace OCaml while reading the execution backend');
+		let replacement: Promise<void> | undefined;
+		let staleModeReads = 0;
+		let staleStdinReads = 0;
+		const options = {
+			get ocamlBackend() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement/');
+				return 'js' as const;
+			},
+			get ocamlWasmBinaryenMode() {
+				staleModeReads += 1;
+				return 'full' as const;
+			},
+			get stdin() {
+				staleStdinReads += 1;
+				return 'superseded input\n';
+			}
+		};
+
+		const superseded = sandbox.run('let () = ()', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(reason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleModeReads).toBe(0);
+		expect(staleStdinReads).toBe(0);
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
+	it('keeps the first OCaml cancellation when the signal reason getter replaces the run', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/initial/');
+		const firstReason = new Error('first OCaml cancellation');
+		const laterReason = new Error('later OCaml signal reason');
+		let replacement: Promise<void> | undefined;
+		let staleBackendReads = 0;
+		const signal = {
+			aborted: true,
+			get reason() {
+				sandbox.terminate(firstReason);
+				replacement = sandbox.load('/replacement/');
+				return laterReason;
+			},
+			addEventListener: vi.fn(),
+			removeEventListener: vi.fn()
+		} as unknown as AbortSignal;
+		const options = {
+			signal,
+			get ocamlBackend() {
+				staleBackendReads += 1;
+				return 'js' as const;
+			}
+		};
+
+		const superseded = sandbox.run('let () = ()', false, true, undefined, [], options);
+
+		await expect(superseded).rejects.toBe(firstReason);
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleBackendReads).toBe(0);
+		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
+	});
+
+	it('snapshots explicit OCaml stdin once before dispatch', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		let stdinReads = 0;
+		const options = {
+			get stdin() {
+				stdinReads += 1;
+				if (stdinReads > 1) throw new Error('OCaml stdin was read more than once');
+				return 'captured input\n';
+			}
+		};
+
+		await expect(
+			sandbox.run('let () = ignore (read_line ())', false, true, undefined, [], options)
+		).resolves.toBe(true);
+
+		expect(stdinReads).toBe(1);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ stdin: 'captured input\n' })
+		);
+	});
+
+	it('preserves an OCaml replacement started during signal listener cleanup', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const worker = workerInstances[0];
+		let replacement: Promise<boolean | string> | undefined;
+		let removeCalls = 0;
+		const signal = {
+			aborted: false,
+			reason: undefined,
+			addEventListener: vi.fn(),
+			removeEventListener() {
+				removeCalls += 1;
+				if (removeCalls !== 1) return;
+				replacement = sandbox.run('let () = ignore (read_line ())', false);
+				sandbox.write('replacement input\n');
+				sandbox.eof();
+			}
+		} as unknown as AbortSignal;
+		const completed = sandbox.run('let () = ()', false, true, undefined, [], { signal });
+		const completedHandler = worker.onmessage;
+
+		completedHandler?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(completed).resolves.toBe(true);
+		expect(removeCalls).toBe(1);
+		const replacementHandler = worker.onmessage;
+		replacementHandler?.({ data: { buffer: true } } as MessageEvent<any>);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('replacement input\n');
+		replacementHandler?.({ data: { results: true } } as MessageEvent<any>);
+
+		await expect(replacement).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(1);
+		expect(worker.terminate).not.toHaveBeenCalled();
+	});
+
+	it('stops reading an OCaml worker message after a getter replaces the run', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load('/absproxy/5173');
+		suppressAutoRunAck = true;
+		const oldWorker = workerInstances[0];
+		const reason = new Error('replace OCaml while reading worker output');
+		let replacement: Promise<void> | undefined;
+		let staleResultReads = 0;
+		const running = sandbox.run('let () = ()', false);
+		const staleHandler = oldWorker.onmessage;
+		const message = {
+			get output() {
+				sandbox.terminate(reason);
+				replacement = sandbox.load('/replacement/');
+				return 'superseded output\n';
+			},
+			get results() {
+				staleResultReads += 1;
+				return true;
+			}
+		};
+
+		staleHandler?.({ data: message } as MessageEvent<any>);
+
+		await expect(running).rejects.toBe(reason);
+		await vi.dynamicImportSettled();
+		await expect(replacement).resolves.toBeUndefined();
+		expect(staleResultReads).toBe(0);
+		expect(oldWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
 
 	it('releases a terminated run before its rejection settles', async () => {

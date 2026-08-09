@@ -24,7 +24,11 @@ type OcamlOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
+	cancellationReason?: unknown;
 	explicitStdin: boolean;
+	sessionActive: boolean;
+	abortReasonReading: boolean;
+	buffer?: ArrayBufferLike;
 	signal?: AbortSignal;
 	onAbort?: () => void;
 };
@@ -65,7 +69,9 @@ class Ocaml implements Sandbox {
 			token: Symbol(phase),
 			phase,
 			cancelled: false,
-			explicitStdin: false
+			explicitStdin: false,
+			sessionActive: false,
+			abortReasonReading: false
 		};
 		this.activeOperation = operation;
 		return operation;
@@ -89,12 +95,32 @@ class Ocaml implements Sandbox {
 		return this.activeOperation?.token === operation.token && !operation.cancelled;
 	}
 
-	private resetExplicitStdinState() {
+	private ownsWorkerOperation(
+		operation: OcamlOperation,
+		worker: Worker,
+		handler: unknown,
+		uid?: number
+	) {
+		return (
+			this.isOperationActive(operation) &&
+			this.worker === worker &&
+			worker.onmessage === handler &&
+			(uid === undefined || uid === this.uid)
+		);
+	}
+
+	private releaseBeforeSession(operation: OcamlOperation, fallback: unknown) {
+		const outcome = operation.cancelled ? operation.cancellationReason : fallback;
+		this.completeOperation(operation);
+		return outcome;
+	}
+
+	private resetExplicitStdinState(buffer: ArrayBufferLike) {
 		this.pendingInput = [];
 		this.pendingEof = false;
 		this.waitingForInput = false;
 		try {
-			resetBufferedStdin(this.buffer);
+			resetBufferedStdin(buffer);
 		} catch {
 			// Explicit stdin never consumes the shared terminal buffer.
 		}
@@ -103,11 +129,13 @@ class Ocaml implements Sandbox {
 	private finishExplicitStdin(operation: OcamlOperation) {
 		if (!operation.explicitStdin) return;
 		operation.explicitStdin = false;
-		this.resetExplicitStdinState();
+		const buffer = operation.buffer;
+		if (buffer) this.resetExplicitStdinState(buffer);
 	}
 
 	private abortReason(signal: AbortSignal, phase: OcamlOperation['phase']) {
-		if (signal.reason !== undefined) return signal.reason;
+		const reason = signal.reason;
+		if (reason !== undefined) return reason;
 		return new DOMException(
 			phase === 'startup' ? 'OCaml runtime startup aborted' : 'OCaml execution aborted',
 			'AbortError'
@@ -115,18 +143,64 @@ class Ocaml implements Sandbox {
 	}
 
 	private bindAbortSignal(operation: OcamlOperation, signal?: AbortSignal) {
-		if (!signal) return;
+		if (!signal || !this.isOperationActive(operation)) return;
 		const onAbort = () => {
-			if (!this.isOperationActive(operation)) {
-				this.completeOperation(operation);
-				return;
+			if (!this.isOperationActive(operation) || operation.abortReasonReading) return;
+			operation.abortReasonReading = true;
+			let reason: unknown;
+			try {
+				reason = this.abortReason(signal, operation.phase);
+			} catch (error) {
+				reason = error;
+			} finally {
+				operation.abortReasonReading = false;
 			}
-			this.terminate(this.abortReason(signal, operation.phase));
+			if (!this.isOperationActive(operation)) return;
+			if (operation.sessionActive) this.abortOperation(operation, reason);
+			else this.cancelBeforeSession(operation, reason);
 		};
 		operation.signal = signal;
 		operation.onAbort = onAbort;
-		signal.addEventListener('abort', onAbort, { once: true });
-		if (signal.aborted) onAbort();
+		try {
+			signal.addEventListener('abort', onAbort, { once: true });
+		} catch (error) {
+			if (!this.isOperationActive(operation)) return;
+			let signalAborted = false;
+			try {
+				signalAborted = signal.aborted;
+			} catch {
+				if (!this.isOperationActive(operation)) return;
+			}
+			if (signalAborted) onAbort();
+			else this.cancelBeforeSession(operation, error);
+			return;
+		}
+		if (!this.isOperationActive(operation)) return;
+		try {
+			if (signal.aborted) onAbort();
+		} catch (error) {
+			if (this.isOperationActive(operation)) this.cancelBeforeSession(operation, error);
+		}
+	}
+
+	private cancelBeforeSession(operation: OcamlOperation, reason: unknown) {
+		if (!this.isOperationActive(operation)) return;
+		operation.cancelled = true;
+		operation.cancellationReason = reason;
+		this.completeOperation(operation);
+	}
+
+	private abortOperation(operation: OcamlOperation, reason: unknown) {
+		if (!this.isOperationActive(operation)) return;
+		operation.cancelled = true;
+		operation.cancellationReason = reason;
+		this.finishExplicitStdin(operation);
+		this.waitingForInput = false;
+		this.pendingEof = false;
+		this.uid += 1;
+		this.workerSession.terminate(reason);
+		this.exit = true;
+		this.completeOperation(operation);
 	}
 
 	load(
@@ -137,30 +211,105 @@ class Ocaml implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		const signal = options.signal;
-		if (signal?.aborted) {
-			return Promise.reject(this.abortReason(signal, 'startup'));
-		}
 		let operation: OcamlOperation;
 		try {
 			operation = this.beginOperation('startup');
 		} catch (error) {
 			return Promise.reject(error);
 		}
+		let signal: AbortSignal | undefined;
+		let nextModuleUrl: string;
+		let nextManifestUrl: string;
+		let buffer: ArrayBufferLike;
+		try {
+			signal = options.signal;
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
+				);
+			}
+			this.bindAbortSignal(operation, signal);
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
+				);
+			}
+			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
+				);
+			}
+			let resolverAssets: string | PlaygroundRuntimeAssets = runtimeAssets;
+			if (runtimeAssets === null) {
+				resolverAssets = {};
+			} else if (typeof runtimeAssets === 'object') {
+				const source = runtimeAssets.ocaml;
+				if (!this.isOperationActive(operation)) {
+					return Promise.reject(
+						this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
+					);
+				}
+				const moduleUrl = source?.moduleUrl;
+				if (!this.isOperationActive(operation)) {
+					return Promise.reject(
+						this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
+					);
+				}
+				const manifestUrl = source?.manifestUrl;
+				if (!this.isOperationActive(operation)) {
+					return Promise.reject(
+						this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
+					);
+				}
+				let rootUrl: string | undefined;
+				let rootUrlRead = false;
+				resolverAssets = { ocaml: source ? { moduleUrl, manifestUrl } : undefined };
+				Object.defineProperty(resolverAssets, 'rootUrl', {
+					get: () => {
+						if (!rootUrlRead) {
+							rootUrlRead = true;
+							rootUrl = runtimeAssets.rootUrl;
+						}
+						if (!this.isOperationActive(operation)) {
+							throw operation.cancellationReason;
+						}
+						return rootUrl;
+					}
+				});
+			}
+			nextModuleUrl = resolveOcamlModuleUrl(resolverAssets, currentUrl);
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
+				);
+			}
+			nextManifestUrl = resolveOcamlManifestUrl(resolverAssets, currentUrl);
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
+				);
+			}
+			if (!nextModuleUrl || !nextManifestUrl) {
+				throw 'OCaml runtime is not configured. Set runtimeAssets.ocaml.moduleUrl and runtimeAssets.ocaml.manifestUrl or sync the bundled wasm-of-js-of-ocaml assets.';
+			}
+			buffer = this.buffer;
+			if (!this.isOperationActive(operation)) {
+				return Promise.reject(
+					this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
+				);
+			}
+		} catch (error) {
+			return Promise.reject(this.releaseBeforeSession(operation, error));
+		}
+		operation.sessionActive = true;
 		const loading = this.workerSession.load(async (resolve, reject) => {
 			if (!this.isOperationActive(operation)) return;
 			this.pendingInput = [];
 			this.waitingForInput = false;
 			this.pendingEof = false;
-			resetBufferedStdin(this.buffer);
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const nextModuleUrl = resolveOcamlModuleUrl(runtimeAssets, currentUrl);
-			const nextManifestUrl = resolveOcamlManifestUrl(runtimeAssets, currentUrl);
-			if (!nextModuleUrl || !nextManifestUrl) {
-				return reject(
-					'OCaml runtime is not configured. Set runtimeAssets.ocaml.moduleUrl and runtimeAssets.ocaml.manifestUrl or sync the bundled wasm-of-js-of-ocaml assets.'
-				);
-			}
+			resetBufferedStdin(buffer);
+			if (!this.isOperationActive(operation)) return;
 			const needsWorkerReset =
 				!this.worker ||
 				this.moduleUrl !== nextModuleUrl ||
@@ -177,31 +326,25 @@ class Ocaml implements Sandbox {
 				this.worker = worker;
 				this.workerSession.attach(worker);
 				const handler = (event: MessageEvent<any>) => {
-					if (
-						!this.isOperationActive(operation) ||
-						this.worker !== worker ||
-						worker.onmessage !== handler
-					) {
-						return;
-					}
+					if (!this.ownsWorkerOperation(operation, worker, handler)) return;
 					try {
-						if (event.data?.load) {
+						const message = event.data;
+						if (!this.ownsWorkerOperation(operation, worker, handler)) return;
+						const loaded = message?.load;
+						if (!this.ownsWorkerOperation(operation, worker, handler)) return;
+						const error = message?.error;
+						if (!this.ownsWorkerOperation(operation, worker, handler)) return;
+						if (loaded) {
 							progress?.set?.(1);
-							if (
-								!this.isOperationActive(operation) ||
-								this.worker !== worker ||
-								worker.onmessage !== handler
-							) {
-								return;
-							}
+							if (!this.ownsWorkerOperation(operation, worker, handler)) return;
 							worker.onmessage = null;
 							this.moduleUrl = nextModuleUrl;
 							this.manifestUrl = nextManifestUrl;
-							this.completeOperation(operation);
 							resolve();
+							this.completeOperation(operation);
 							return;
 						}
-						if (event.data?.error !== undefined) reject(event.data.error);
+						if (error !== undefined) reject(error);
 					} catch (error) {
 						reject(error);
 					}
@@ -215,15 +358,10 @@ class Ocaml implements Sandbox {
 			} else {
 				progress?.set?.(1);
 				if (!this.isOperationActive(operation)) return;
-				this.completeOperation(operation);
 				resolve();
+				this.completeOperation(operation);
 			}
 		});
-		try {
-			this.bindAbortSignal(operation, signal);
-		} catch (error) {
-			this.terminate(error);
-		}
 		return loading.finally(() => this.completeOperation(operation));
 	}
 
@@ -238,14 +376,14 @@ class Ocaml implements Sandbox {
 		this.flushPendingInput();
 	}
 
-	private flushPendingInput() {
+	private flushPendingInput(buffer = this.activeOperation?.buffer ?? this.buffer) {
 		if (!this.waitingForInput) return;
-		if (flushQueuedStdin(this.pendingInput, this.buffer)) {
+		if (flushQueuedStdin(this.pendingInput, buffer)) {
 			this.waitingForInput = false;
 			return;
 		}
 		if (this.pendingEof) {
-			flushBufferedEof(this.buffer);
+			flushBufferedEof(buffer);
 			this.pendingEof = false;
 			this.waitingForInput = false;
 		}
@@ -259,29 +397,76 @@ class Ocaml implements Sandbox {
 		_args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
-		const signal = options.signal;
-		if (signal?.aborted) throw this.abortReason(signal, 'execute');
 		const operation = this.beginOperation('execute');
+		let signal: AbortSignal | undefined;
+		let worker: Worker;
+		let target: OcamlBackend;
+		let wasmBinaryenMode: OcamlWasmBinaryenMode;
+		let stdin: SandboxExecutionOptions['stdin'];
+		let buffer: ArrayBufferLike;
+		let outputCallback: any;
+		let onDiagnostic: ((diagnostic: CompilerDiagnostic) => void) | undefined;
 		try {
-			if (!this.worker) throw 'Worker not loaded';
-			const worker = this.worker;
-			const target: OcamlBackend = options.ocamlBackend || 'wasm';
-			const wasmBinaryenMode: OcamlWasmBinaryenMode = options.ocamlWasmBinaryenMode || 'fast';
-			const hasExplicitStdin = options.stdin !== undefined;
-			if (hasExplicitStdin) {
-				operation.explicitStdin = true;
-				this.resetExplicitStdinState();
+			signal = options.signal;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
 			}
+			this.bindAbortSignal(operation, signal);
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			const configuredWorker = this.worker;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			if (!configuredWorker) throw 'Worker not loaded';
+			worker = configuredWorker;
+			const configuredTarget = options.ocamlBackend;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			target = configuredTarget || 'wasm';
+			const configuredBinaryenMode = options.ocamlWasmBinaryenMode;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			wasmBinaryenMode = configuredBinaryenMode || 'fast';
+			stdin = options.stdin;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			buffer = this.buffer;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			outputCallback = this.output;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			onDiagnostic = this.oncompilerdiagnostic;
+			if (!this.isOperationActive(operation)) {
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+			}
+			operation.buffer = buffer;
+			if (stdin !== undefined) {
+				operation.explicitStdin = true;
+				this.resetExplicitStdinState(buffer);
+				if (!this.isOperationActive(operation)) {
+					throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
+				}
+			}
+		} catch (error) {
+			throw this.releaseBeforeSession(operation, error);
+		}
+		const hasExplicitStdin = stdin !== undefined;
+		operation.sessionActive = true;
+		try {
 			this.exit = false;
 			return await new Promise<boolean | string>((resolve, reject) => {
 				const runUid = ++this.uid;
 				const workerOperation = this.workerSession.beginRun(worker, reject);
 				let handler: (event: Event & { data: any }) => void;
-				const ownsRun = () =>
-					this.isOperationActive(operation) &&
-					this.worker === worker &&
-					worker.onmessage === handler &&
-					runUid === this.uid;
+				const ownsRun = () => this.ownsWorkerOperation(operation, worker, handler, runUid);
 				const failRun = (error: unknown, disposeWorker = false) => {
 					if (!ownsRun()) return;
 					this.finishExplicitStdin(operation);
@@ -300,27 +485,44 @@ class Ocaml implements Sandbox {
 						return;
 					}
 					try {
-						const { output, results, error, diagnostic, progress, runtime } =
-							event.data;
+						const message = event.data;
+						if (!ownsRun()) return;
+						const output = message?.output;
+						if (!ownsRun()) return;
+						const results = message?.results;
+						if (!ownsRun()) return;
+						const error = message?.error;
+						if (!ownsRun()) return;
+						const diagnostic = message?.diagnostic;
+						if (!ownsRun()) return;
+						const progress = message?.progress;
+						if (!ownsRun()) return;
+						const runtime = message?.runtime;
+						if (!ownsRun()) return;
+						const requestsInput = message?.buffer;
+						if (!ownsRun()) return;
 						reportWorkerProgress(_prog, progress);
 						if (!ownsRun()) {
 							return;
 						}
-						if (event.data?.buffer && !hasExplicitStdin) {
+						if (requestsInput && !hasExplicitStdin) {
 							this.waitingForInput = true;
-							this.flushPendingInput();
+							this.flushPendingInput(buffer);
 							if (!ownsRun()) {
 								return;
 							}
 						}
 						if (output) {
-							this.output?.(output);
+							if (outputCallback != null) {
+								Reflect.apply(outputCallback, this, [output]);
+							}
 							if (!ownsRun()) {
 								return;
 							}
 						}
 						if (diagnostic) {
-							this.oncompilerdiagnostic?.(diagnostic);
+							if (onDiagnostic != null)
+								Reflect.apply(onDiagnostic, this, [diagnostic]);
 							if (!ownsRun()) {
 								return;
 							}
@@ -353,12 +555,6 @@ class Ocaml implements Sandbox {
 					}
 				};
 				worker.onmessage = handler;
-				try {
-					this.bindAbortSignal(operation, signal);
-				} catch (error) {
-					failRun(error);
-					return;
-				}
 				if (!ownsRun()) {
 					return;
 				}
@@ -370,8 +566,8 @@ class Ocaml implements Sandbox {
 						target,
 						wasmBinaryenMode,
 						log: _log,
-						buffer: this.buffer,
-						stdin: options.stdin
+						buffer,
+						stdin
 					});
 				} catch (error) {
 					failRun(error);
@@ -390,9 +586,9 @@ class Ocaml implements Sandbox {
 	terminate(reason: unknown = 'Process terminated') {
 		const operation = this.activeOperation;
 		if (operation) {
-			this.finishExplicitStdin(operation);
-			operation.cancelled = true;
-			this.completeOperation(operation);
+			if (operation.sessionActive) this.abortOperation(operation, reason);
+			else this.cancelBeforeSession(operation, reason);
+			return;
 		}
 		this.waitingForInput = false;
 		this.pendingEof = false;
