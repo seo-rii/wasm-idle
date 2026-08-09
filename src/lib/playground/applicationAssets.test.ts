@@ -6,6 +6,7 @@ import {
 	normalizeApplicationAssetRootUrl
 } from './applicationAssets';
 import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
+import { WASM_BASH_ASSET_VERSION, WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
 import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
@@ -118,6 +119,12 @@ describe('application runtime asset root', () => {
 			manifestFingerprint: WASM_GLEAM_ASSET_VERSION,
 			workerReceipt: WASM_GLEAM_RUNNER_RECEIPT
 		});
+		expect(assets.bash).toEqual({
+			moduleUrl: `/foo/bar/wasm-bash/sdk/index.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`,
+			webcUrl: `/foo/bar/wasm-bash/bash.webc?v=${WASM_BASH_ASSET_VERSION}`,
+			workerUrl: `/foo/bar/wasm-bash/sdk/worker.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`,
+			webcReceipt: WASM_BASH_WEBC_RECEIPT
+		});
 		expect(assets.typescript?.libUrl).toMatch(
 			/^\/foo\/bar\/lsp\/typescript-libs\.json\.gz\?v=/u
 		);
@@ -154,6 +161,15 @@ describe('application runtime asset root', () => {
 					{
 						sha256: WASM_GLEAM_RUNNER_RECEIPT.sha256,
 						bytes: WASM_GLEAM_RUNNER_RECEIPT.bytes
+					}
+				]
+			]),
+			bashWebcReceipt: JSON.stringify([
+				[
+					'worker',
+					{
+						sha256: WASM_BASH_WEBC_RECEIPT.sha256,
+						bytes: WASM_BASH_WEBC_RECEIPT.bytes
 					}
 				]
 			])

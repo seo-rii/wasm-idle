@@ -1,7 +1,7 @@
 import type { PlaygroundRuntimeAssets } from './assets';
 import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
 import { WASM_AWK_ASSET_VERSION } from './wasmAwkVersion';
-import { WASM_BASH_ASSET_VERSION } from './wasmBashVersion';
+import { WASM_BASH_ASSET_VERSION, WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
 import { WASM_BQN_ASSET_VERSION } from './wasmBqnVersion';
 import { WASM_CLOJURESCRIPT_ASSET_VERSION } from './wasmClojureScriptVersion';
 import { WASM_D_ASSET_VERSION } from './wasmDVersion';
@@ -144,7 +144,8 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		bash: {
 			moduleUrl: asset('wasm-bash/sdk/index.mjs', STATIC_RUNTIME_MODULE_VERSION),
 			webcUrl: asset('wasm-bash/bash.webc', WASM_BASH_ASSET_VERSION),
-			workerUrl: asset('wasm-bash/sdk/worker.mjs', STATIC_RUNTIME_MODULE_VERSION)
+			workerUrl: asset('wasm-bash/sdk/worker.mjs', STATIC_RUNTIME_MODULE_VERSION),
+			webcReceipt: WASM_BASH_WEBC_RECEIPT
 		},
 		clojurescript: {
 			baseUrl: asset('wasm-clojurescript/'),

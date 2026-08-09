@@ -299,8 +299,22 @@ describe('core language contract', () => {
 	});
 
 	it('includes the Bash WEBc url in runtime asset cache keys', () => {
-		const key = createRuntimeAssetsKey({ bash: { webcUrl: '/wasm-bash/bash.webc?v=test' } });
+		const key = createRuntimeAssetsKey({
+			bash: {
+				webcUrl: '/wasm-bash/bash.webc?v=test',
+				webcReceipt: { bytes: 4, sha256: 'a'.repeat(64) }
+			}
+		});
 		expect(key).toContain('"bashWebcUrl":"/wasm-bash/bash.webc?v=test"');
+		expect(key).toContain('"bashWebcReceipt":');
+		expect(key).not.toBe(
+			createRuntimeAssetsKey({
+				bash: {
+					webcUrl: '/wasm-bash/bash.webc?v=test',
+					webcReceipt: { bytes: 4, sha256: 'b'.repeat(64) }
+				}
+			})
+		);
 	});
 
 	it('exposes ClojureScript aliases and static worker urls', () => {

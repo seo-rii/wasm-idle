@@ -2,19 +2,29 @@ import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import { type CompilerDiagnostic, type SandboxExecutionOptions } from '$lib/playground/options';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
+import { WASM_BASH_WEBC_RECEIPT } from '$lib/playground/wasmBashVersion';
 import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch';
 import {
+	AssetTooLargeError,
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
+	verifyRuntimeAssetIntegrity,
 	type ExecutionLimits,
+	type RuntimeAssetIntegrityEntry,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
 
 type BashRuntimeAssetConfig = PlaygroundRuntimeAssets & {
-	bash?: { moduleUrl?: string; webcUrl?: string; workerUrl?: string };
+	bash?: {
+		moduleUrl?: string;
+		webcUrl?: string;
+		workerUrl?: string;
+		webcReceipt?: RuntimeAssetIntegrityEntry;
+	};
 };
 
 interface WasixInstance {
@@ -277,6 +287,7 @@ class Bash implements Sandbox {
 		let resolvedWebcUrl: string;
 		let resolvedSdkUrl: string;
 		let resolvedThreadWorkerUrl: string;
+		let webcReceipt: Readonly<{ bytes: number; sha256: string }>;
 		let unbindPreSessionAbort: () => void = () => undefined;
 		try {
 			signal = options.signal;
@@ -288,6 +299,7 @@ class Bash implements Sandbox {
 			let configuredWebcUrl: string | undefined;
 			let configuredSdkUrl: string | undefined;
 			let configuredWorkerUrl: string | undefined;
+			let configuredWebcReceipt: RuntimeAssetIntegrityEntry | undefined;
 			let rootUrl = '';
 			if (runtimeAssets && typeof runtimeAssets === 'object') {
 				const bashAssets = (runtimeAssets as BashRuntimeAssetConfig).bash;
@@ -298,6 +310,8 @@ class Bash implements Sandbox {
 					configuredSdkUrl = bashAssets.moduleUrl;
 					this.requireOperationActive(activeOperation);
 					configuredWorkerUrl = bashAssets.workerUrl;
+					this.requireOperationActive(activeOperation);
+					configuredWebcReceipt = bashAssets.webcReceipt;
 					this.requireOperationActive(activeOperation);
 				}
 				if (!configuredWebcUrl || !configuredSdkUrl || !configuredWorkerUrl) {
@@ -321,6 +335,34 @@ class Bash implements Sandbox {
 				? new URL(sdkWorkerUrl, currentUrl).href
 				: sdkWorkerUrl;
 			this.requireOperationActive(activeOperation);
+			const receiptSource = configuredWebcReceipt ?? WASM_BASH_WEBC_RECEIPT;
+			const receiptBytes = receiptSource.bytes;
+			this.requireOperationActive(activeOperation);
+			const receiptSha256 = receiptSource.sha256;
+			this.requireOperationActive(activeOperation);
+			if (
+				receiptBytes === undefined ||
+				!Number.isSafeInteger(receiptBytes) ||
+				receiptBytes <= 0 ||
+				typeof receiptSha256 !== 'string' ||
+				!/^[a-f0-9]{64}$/u.test(receiptSha256)
+			) {
+				throw new RuntimeConfigurationError(
+					'Bash WEBc receipt must provide a positive byte size and lowercase SHA-256 digest',
+					{ phase: 'asset', runtimeId: 'BASH' }
+				);
+			}
+			if (receiptBytes > limits.maxAssetBytes) {
+				throw new AssetTooLargeError(
+					`Bash WEBc receipt exceeds the ${limits.maxAssetBytes} byte limit`,
+					{
+						actual: receiptBytes,
+						limit: limits.maxAssetBytes,
+						runtimeId: 'BASH'
+					}
+				);
+			}
+			webcReceipt = Object.freeze({ bytes: receiptBytes, sha256: receiptSha256 });
 			unbindPreSessionAbort();
 			this.requireOperationActive(activeOperation);
 		} catch (error) {
@@ -443,11 +485,18 @@ class Bash implements Sandbox {
 						fetchRuntimeAssetBytes({
 							url: resolvedWebcUrl,
 							label: 'Bash WEBc package',
-							maxAssetBytes: limits.maxAssetBytes,
+							maxAssetBytes: webcReceipt.bytes,
 							signal: activeOperation.abortController.signal
 						}),
 						loadSdkPromise
 					]);
+					await verifyRuntimeAssetIntegrity({
+						asset: 'bash.webc',
+						bytes: webcBytes,
+						expected: webcReceipt,
+						profileId: 'wasmer/bash@1.0.25',
+						runtimeId: 'BASH'
+					});
 					if (
 						!this.isOperationActive(activeOperation) ||
 						loadGeneration !== this.loadGeneration

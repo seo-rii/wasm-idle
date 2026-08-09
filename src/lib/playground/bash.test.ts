@@ -1,19 +1,31 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { commandFree, commandRun, fromFile, importRuntimeModule, init, packageFree } = vi.hoisted(
-	() => ({
-		commandFree: vi.fn(),
-		commandRun: vi.fn(),
-		fromFile: vi.fn(),
-		importRuntimeModule: vi.fn(),
-		init: vi.fn(async () => {}),
-		packageFree: vi.fn()
-	})
-);
+const {
+	commandFree,
+	commandRun,
+	fromFile,
+	importRuntimeModule,
+	init,
+	packageFree,
+	verifyRuntimeAssetIntegrity
+} = vi.hoisted(() => ({
+	commandFree: vi.fn(),
+	commandRun: vi.fn(),
+	fromFile: vi.fn(),
+	importRuntimeModule: vi.fn(),
+	init: vi.fn(async () => {}),
+	packageFree: vi.fn(),
+	verifyRuntimeAssetIntegrity: vi.fn()
+}));
 
 vi.mock('$lib/playground/runtimeModule', () => ({ importRuntimeModule }));
+vi.mock('@wasm-idle/core', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@wasm-idle/core')>()),
+	verifyRuntimeAssetIntegrity
+}));
 
 import Bash from './bash';
+import { WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
 
 function byteStream(text: string) {
 	return new ReadableStream({
@@ -55,6 +67,7 @@ describe('Bash sandbox', () => {
 			entrypoint: { run: commandRun, free: commandFree },
 			free: packageFree
 		});
+		verifyRuntimeAssetIntegrity.mockResolvedValue(undefined);
 		vi.stubGlobal(
 			'fetch',
 			vi.fn(async () => new Response(new Uint8Array([0, 97, 115, 109])))
@@ -100,6 +113,16 @@ describe('Bash sandbox', () => {
 			'http://localhost:3000/assets/wasm-bash/sdk/index.mjs'
 		);
 		expect(fromFile).toHaveBeenCalledWith(expect.any(Uint8Array));
+		expect(verifyRuntimeAssetIntegrity).toHaveBeenCalledWith({
+			asset: 'bash.webc',
+			bytes: expect.any(Uint8Array),
+			expected: WASM_BASH_WEBC_RECEIPT,
+			profileId: 'wasmer/bash@1.0.25',
+			runtimeId: 'BASH'
+		});
+		expect(verifyRuntimeAssetIntegrity.mock.invocationCallOrder[0]).toBeLessThan(
+			fromFile.mock.invocationCallOrder[0]!
+		);
 		expect(commandRun).toHaveBeenCalledWith({
 			args: [
 				'-c',
@@ -178,17 +201,67 @@ describe('Bash sandbox', () => {
 				limits: { maxAssetBytes: 4 },
 				signal: controller.signal
 			})
-		).rejects.toThrow('Bash WEBc package exceeds the 4 byte limit');
+		).rejects.toThrow('Bash WEBc receipt exceeds the 4 byte limit');
 
-		expect(fetch).toHaveBeenCalledWith('http://localhost:3000/assets/wasm-bash/bash.webc', {
-			credentials: 'omit',
-			redirect: 'error',
-			referrerPolicy: 'no-referrer',
-			signal: expect.any(AbortSignal)
-		});
+		expect(fetch).not.toHaveBeenCalled();
 		expect(fromFile).not.toHaveBeenCalled();
 		await expect(sandbox.load('/assets')).resolves.toBeUndefined();
 		expect(fromFile).toHaveBeenCalledOnce();
+	});
+
+	it('rejects corrupt WEBc bytes before constructing a Wasmer package', async () => {
+		verifyRuntimeAssetIntegrity.mockRejectedValueOnce(new Error('WEBc integrity mismatch'));
+		const sandbox = new Bash();
+
+		await expect(sandbox.load('/assets')).rejects.toThrow('WEBc integrity mismatch');
+
+		expect(verifyRuntimeAssetIntegrity).toHaveBeenCalledOnce();
+		expect(fromFile).not.toHaveBeenCalled();
+	});
+
+	it('snapshots a custom WEBc receipt before asynchronous startup', async () => {
+		const receipt = { bytes: 4, sha256: 'a'.repeat(64) };
+		const sandbox = new Bash();
+		const loading = sandbox.load({
+			bash: {
+				moduleUrl: '/custom/bash-sdk.mjs',
+				webcUrl: '/custom/bash.webc',
+				workerUrl: '/custom/bash-worker.mjs',
+				webcReceipt: receipt
+			}
+		});
+		receipt.bytes = 5;
+		receipt.sha256 = 'b'.repeat(64);
+
+		await expect(loading).resolves.toBeUndefined();
+
+		expect(verifyRuntimeAssetIntegrity).toHaveBeenCalledWith(
+			expect.objectContaining({
+				expected: { bytes: 4, sha256: 'a'.repeat(64) }
+			})
+		);
+		expect(verifyRuntimeAssetIntegrity.mock.calls[0]?.[0].expected).not.toBe(receipt);
+	});
+
+	it('caps the WEBc download at the verified receipt size', async () => {
+		vi.mocked(fetch).mockResolvedValueOnce(
+			new Response(new Uint8Array(5), { headers: { 'content-length': '5' } })
+		);
+		const sandbox = new Bash();
+
+		await expect(
+			sandbox.load({
+				bash: {
+					moduleUrl: '/custom/bash-sdk.mjs',
+					webcUrl: '/custom/bash.webc',
+					workerUrl: '/custom/bash-worker.mjs',
+					webcReceipt: { bytes: 4, sha256: 'a'.repeat(64) }
+				}
+			})
+		).rejects.toThrow('Bash WEBc package exceeds the 4 byte limit');
+
+		expect(verifyRuntimeAssetIntegrity).not.toHaveBeenCalled();
+		expect(fromFile).not.toHaveBeenCalled();
 	});
 
 	it('rejects operations that overlap a pending Bash load', async () => {

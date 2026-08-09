@@ -234,6 +234,7 @@ export interface BashRuntimeAssetConfig {
 	moduleUrl?: string;
 	webcUrl?: string;
 	workerUrl?: string;
+	webcReceipt?: RuntimeAssetIntegrityEntry;
 }
 
 export interface ClojureScriptRuntimeAssetConfig {

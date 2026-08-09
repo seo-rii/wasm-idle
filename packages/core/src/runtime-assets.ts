@@ -104,7 +104,12 @@ export interface RuntimeAssetKeySource {
 	janet?: { baseUrl?: string; workerUrl?: string };
 	julia?: { baseUrl?: string; workerUrl?: string };
 	nim?: { baseUrl?: string; workerUrl?: string };
-	bash?: { moduleUrl?: string; webcUrl?: string; workerUrl?: string };
+	bash?: {
+		moduleUrl?: string;
+		webcUrl?: string;
+		workerUrl?: string;
+		webcReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	clojurescript?: { baseUrl?: string; workerUrl?: string };
 	cobol?: { baseUrl?: string };
 	swift?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
@@ -490,6 +495,12 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'bash', property: 'moduleUrl', key: 'bashModuleUrl' },
 	{ runtime: 'bash', property: 'webcUrl', key: 'bashWebcUrl' },
 	{ runtime: 'bash', property: 'workerUrl', key: 'bashWorkerUrl' },
+	{
+		runtime: 'bash',
+		property: 'webcReceipt',
+		key: 'bashWebcReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'clojurescript', property: 'baseUrl', key: 'clojurescriptBaseUrl' },
 	{ runtime: 'clojurescript', property: 'workerUrl', key: 'clojurescriptWorkerUrl' },
 	{ runtime: 'cobol', property: 'baseUrl', key: 'cobolBaseUrl' },

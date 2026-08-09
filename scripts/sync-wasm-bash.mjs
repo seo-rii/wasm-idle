@@ -17,10 +17,33 @@ const DEFAULT_VERSION_MODULE_PATH = path.join(
 const REQUIRED_FILES = ['LICENSE.txt', 'bash.webc', 'runtime-build.json'];
 const SOURCE_REVISION = 'fc8096485478055f4fcf31402004fdd8ff6b72b7';
 
+/**
+ * @typedef {{
+ *   package: string;
+ *   packageVersion: string;
+ *   sourceRevision: string;
+ *   webcBytes: number;
+ *   webcSha256: string;
+ *   licenseSha256: string;
+ * }} BashRuntimeMetadata
+ */
+
+/**
+ * @typedef {{
+ *   sourceDir?: string;
+ *   targetDir?: string;
+ *   versionModulePath?: string;
+ *   copyAsset?: typeof cp;
+ * }} SyncWasmBashOptions
+ */
+
+/** @param {string} filePath */
 async function sha256File(filePath) {
-	return createHash('sha256').update(await readFile(filePath)).digest('hex');
+	const bytes = await readFile(filePath);
+	return createHash('sha256').update(bytes).digest('hex');
 }
 
+/** @param {string} sourceDir */
 async function validateSource(sourceDir) {
 	for (const filename of REQUIRED_FILES) {
 		const filePath = path.join(sourceDir, filename);
@@ -29,7 +52,9 @@ async function validateSource(sourceDir) {
 			throw new Error(`wasm-bash asset ${filename} was not found in ${sourceDir}`);
 		}
 	}
-	const metadata = JSON.parse(await readFile(path.join(sourceDir, 'runtime-build.json'), 'utf8'));
+	const metadata = /** @type {BashRuntimeMetadata} */ (
+		JSON.parse(await readFile(path.join(sourceDir, 'runtime-build.json'), 'utf8'))
+	);
 	if (metadata.sourceRevision !== SOURCE_REVISION) {
 		throw new Error(
 			`wasm-bash source revision mismatch: expected ${SOURCE_REVISION}, received ${metadata.sourceRevision}`
@@ -48,6 +73,7 @@ async function validateSource(sourceDir) {
 	return metadata;
 }
 
+/** @param {string} directory */
 async function computeFingerprint(directory) {
 	const hash = createHash('sha256');
 	for (const filename of [...REQUIRED_FILES].sort()) {
@@ -59,23 +85,24 @@ async function computeFingerprint(directory) {
 	return hash.digest('hex').slice(0, 16);
 }
 
+/** @param {SyncWasmBashOptions} [options] */
 export async function syncWasmBashAssets({
 	sourceDir,
 	targetDir = DEFAULT_TARGET_DIR,
-	versionModulePath = DEFAULT_VERSION_MODULE_PATH
+	versionModulePath = DEFAULT_VERSION_MODULE_PATH,
+	copyAsset = cp
 } = {}) {
 	let resolvedSourceDir = sourceDir;
 	if (!resolvedSourceDir) {
 		const sourceStats = await stat(DEFAULT_SOURCE_DIR).catch(() => null);
 		if (!sourceStats?.isDirectory()) {
-			const { prepareBashRuntime } = await import(
-				'../runtimes/wasm-bash/scripts/prepare-runtime.mjs'
-			);
+			const producerModulePath = '../runtimes/wasm-bash/scripts/prepare-runtime.mjs';
+			const { prepareBashRuntime } = await import(producerModulePath);
 			await prepareBashRuntime();
 		}
 		resolvedSourceDir = DEFAULT_SOURCE_DIR;
 	}
-	const metadata = await validateSource(resolvedSourceDir);
+	await validateSource(resolvedSourceDir);
 
 	const nextTarget = `${targetDir}.next-${process.pid}`;
 	const previousTarget = `${targetDir}.previous-${process.pid}`;
@@ -83,8 +110,9 @@ export async function syncWasmBashAssets({
 	await rm(previousTarget, { recursive: true, force: true });
 	await mkdir(nextTarget, { recursive: true });
 	for (const filename of REQUIRED_FILES) {
-		await cp(path.join(resolvedSourceDir, filename), path.join(nextTarget, filename));
+		await copyAsset(path.join(resolvedSourceDir, filename), path.join(nextTarget, filename));
 	}
+	const metadata = await validateSource(nextTarget);
 	const fingerprint = await computeFingerprint(nextTarget);
 	await writeFile(
 		path.join(nextTarget, 'runtime-manifest.v1.json'),
@@ -103,8 +131,6 @@ export async function syncWasmBashAssets({
 		)}\n`,
 		'utf8'
 	);
-	await validateSource(nextTarget);
-
 	let hadPrevious = false;
 	try {
 		const targetStats = await stat(targetDir).catch(() => null);
@@ -121,7 +147,13 @@ export async function syncWasmBashAssets({
 		await rm(nextTarget, { recursive: true, force: true });
 	}
 
-	const versionSource = `export const WASM_BASH_ASSET_VERSION = '${fingerprint}';\n`;
+	const versionSource = `export const WASM_BASH_ASSET_VERSION = '${fingerprint}';
+
+export const WASM_BASH_WEBC_RECEIPT = Object.freeze({
+\tbytes: ${metadata.webcBytes},
+\tsha256: '${metadata.webcSha256}'
+});
+`;
 	const currentVersionSource = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (currentVersionSource !== versionSource) {
 		await mkdir(path.dirname(versionModulePath), { recursive: true });
@@ -131,7 +163,11 @@ export async function syncWasmBashAssets({
 		sourceDir: resolvedSourceDir,
 		targetDir,
 		versionModulePath,
-		fingerprint
+		fingerprint,
+		webcReceipt: Object.freeze({
+			bytes: metadata.webcBytes,
+			sha256: metadata.webcSha256
+		})
 	};
 }
 
