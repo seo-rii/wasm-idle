@@ -265,6 +265,71 @@ static __attribute__((noinline)) int add_three(int value) {
 		testId: 'c-interrupt'
 	},
 	{
+		activePath: 'transport-saturation.c',
+		backend: 'lldb',
+		breakpointLine: 9,
+		expectedLocal: { name: 'value', value: '0' },
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		recoveryOutput: 'lldb-transport-recovery=73',
+		recoverySource: `#include <stdio.h>
+
+int main(void) {
+    int value = 73;
+    printf("lldb-transport-recovery=%d\\n", value);
+    return 0;
+}`,
+		source: `#include <stdio.h>
+#include <string.h>
+
+int main(void) {
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+    char chunk[16384];
+    memset(chunk, 'x', sizeof(chunk));
+    volatile int value = 0;
+    for (;;) {
+        fwrite(chunk, 1, sizeof(chunk), stdout);
+        fwrite(chunk, 1, sizeof(chunk), stderr);
+        value += 1;
+    }
+}`,
+		testId: 'c-transport-saturation',
+		transportStress: 'output'
+	},
+	{
+		activePath: 'blocked-stdin.c',
+		backend: 'lldb',
+		breakpointLine: 4,
+		expectedLocal: { name: 'value', value: '0' },
+		expectedPrompt: 'lldb-blocked-input? ',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		recoveryOutput: 'lldb-stdin-recovery=73',
+		recoverySource: `#include <stdio.h>
+
+int main(void) {
+    int value = 73;
+    printf("lldb-stdin-recovery=%d\\n", value);
+    return 0;
+}`,
+		source: `#include <stdio.h>
+
+int main(void) {
+    int value = 0;
+    printf("lldb-blocked-input? ");
+    fflush(stdout);
+    if (scanf("%d", &value) != 1) {
+        return 2;
+    }
+    return value;
+}`,
+		testId: 'c-blocked-stdin',
+		transportStress: 'stdin'
+	},
+	{
 		activePath: 'disconnect.c',
 		afterContinue: 'disconnect',
 		backend: 'lldb',
@@ -623,6 +688,12 @@ describe('native-source browser debugging in Chromium', () => {
 				let terminated = 0;
 				const liveWorkers = new WeakSet<Worker>();
 				const debugWorkers = new Map<'lldb' | 'target', Worker>();
+				type DebugQueueDescriptor = {
+					control: SharedArrayBuffer;
+					data: SharedArrayBuffer;
+					generation: number;
+				};
+				const targetQueues = new Map<'stdin' | 'stdout' | 'stderr', DebugQueueDescriptor>();
 				const linearMemory = {
 					lldb: { peakBytes: 0, samples: 0 },
 					target: { peakBytes: 0, samples: 0 }
@@ -666,13 +737,42 @@ describe('native-source browser debugging in Chromium', () => {
 						}
 					}
 
+					override postMessage(
+						message: any,
+						transferOrOptions?: Transferable[] | StructuredSerializeOptions
+					) {
+						if (
+							message?.type === 'initialize-target' &&
+							message.stdout?.control instanceof SharedArrayBuffer &&
+							message.stdout?.data instanceof SharedArrayBuffer &&
+							message.stderr?.control instanceof SharedArrayBuffer &&
+							message.stderr?.data instanceof SharedArrayBuffer
+						) {
+							targetQueues.set('stdout', message.stdout);
+							targetQueues.set('stderr', message.stderr);
+							if (
+								message.stdin?.control instanceof SharedArrayBuffer &&
+								message.stdin?.data instanceof SharedArrayBuffer
+							) {
+								targetQueues.set('stdin', message.stdin);
+							}
+						}
+						if (Array.isArray(transferOrOptions)) {
+							super.postMessage(message, transferOrOptions);
+						} else {
+							super.postMessage(message, transferOrOptions);
+						}
+					}
+
 					override terminate() {
 						if (liveWorkers.delete(this)) {
 							active -= 1;
 							terminated += 1;
 						}
 						for (const [kind, worker] of debugWorkers) {
-							if (worker === this) debugWorkers.delete(kind);
+							if (worker !== this) continue;
+							debugWorkers.delete(kind);
+							if (kind === 'target') targetQueues.clear();
 						}
 						super.terminate();
 					}
@@ -697,6 +797,32 @@ describe('native-source browser debugging in Chromium', () => {
 				Object.defineProperty(globalThis, '__wasmIdleDebugWorkerFaults', {
 					configurable: true,
 					value: {
+						saturateOutputAndPause(durationMs: number) {
+							if (!Number.isFinite(durationMs) || durationMs < 0) return null;
+							const deadline = performance.now() + durationMs;
+							while (performance.now() < deadline) {
+								// Deliberately stop the product-side output readers while WAMR fills both rings.
+							}
+							const metric = (channel: 'stdout' | 'stderr') => {
+								const descriptor = targetQueues.get(channel);
+								if (!descriptor) return null;
+								const header = new Int32Array(descriptor.control);
+								const read = Atomics.load(header, 0) >>> 0;
+								const write = Atomics.load(header, 1) >>> 0;
+								return {
+									available: (write - read) >>> 0,
+									capacity: descriptor.data.byteLength
+								};
+							};
+							const stdout = metric('stdout');
+							const stderr = metric('stderr');
+							const pauseButton = document.querySelector<HTMLButtonElement>(
+								'button[aria-label="Pause"]'
+							);
+							const pauseRequested = !!pauseButton && !pauseButton.disabled;
+							if (pauseRequested) pauseButton.click();
+							return { pauseRequested, stdout, stderr };
+						},
 						injectStaleGeneration() {
 							const lldbWorker = debugWorkers.get('lldb');
 							const targetWorker = debugWorkers.get('target');
@@ -1583,6 +1709,144 @@ describe('native-source browser debugging in Chromium', () => {
 									),
 								testCase.stdinAfterPrompt
 							);
+						}
+						if ('transportStress' in testCase) {
+							await page
+								.locator('.debug-status-pill--active')
+								.waitFor({ state: 'visible' });
+							const beforeStress = await readBrowserLifecycleMetrics(page);
+							if (testCase.transportStress === 'output') {
+								const saturation = await page.evaluate(
+									(durationMs) =>
+										(
+											window as any
+										).__wasmIdleDebugWorkerFaults?.saturateOutputAndPause?.(
+											durationMs
+										) ?? null,
+									3_000
+								);
+								expect(saturation).toMatchObject({
+									pauseRequested: true,
+									stdout: {
+										available: expect.any(Number),
+										capacity: expect.any(Number)
+									},
+									stderr: {
+										available: expect.any(Number),
+										capacity: expect.any(Number)
+									}
+								});
+								if (!saturation)
+									throw new Error('output saturation hook is unavailable');
+								for (const channel of [saturation.stdout, saturation.stderr]) {
+									expect(channel.available).toBeGreaterThanOrEqual(
+										channel.capacity - 16_384
+									);
+								}
+							} else {
+								await page.waitForFunction(
+									(expectedPrompt) =>
+										document
+											.querySelector('[data-testid="terminal-debug-output"]')
+											?.textContent?.includes(expectedPrompt),
+									testCase.expectedPrompt
+								);
+								const pauseRequested = await page.evaluate(() => {
+									const button = document.querySelector<HTMLButtonElement>(
+										'button[aria-label="Pause"]'
+									);
+									if (!button || button.disabled) return false;
+									button.click();
+									return true;
+								});
+								expect(pauseRequested).toBe(true);
+							}
+							const stressPauseTimeoutMs = Number(
+								process.env.WASM_IDLE_DEBUG_TRANSPORT_PAUSE_TIMEOUT_MS || '5000'
+							);
+							let pauseOutcome: 'paused' | 'timeout' = 'paused';
+							try {
+								await page
+									.locator('.debug-status-pill--paused')
+									.waitFor({ state: 'visible', timeout: stressPauseTimeoutMs });
+							} catch (error) {
+								if (!(error instanceof Error) || error.name !== 'TimeoutError')
+									throw error;
+								pauseOutcome = 'timeout';
+							}
+							if (testCase.transportStress === 'output') {
+								expect(pauseOutcome).toBe('paused');
+							}
+							if (pauseOutcome === 'paused') {
+								const pausedStressState = await page.evaluate(() =>
+									(window as any).__wasmIdleDebug.getDebugState()
+								);
+								expect(pausedStressState.paused).toBe(true);
+							}
+							await page.getByRole('button', { name: 'Stop Debug' }).click();
+							await debugButton.waitFor({
+								state: 'visible',
+								timeout: Number(
+									process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS ||
+										String(stressPauseTimeoutMs * 2)
+								)
+							});
+							await expect
+								.poll(
+									async () =>
+										(await readBrowserLifecycleMetrics(page)).terminated,
+									{ timeout: 5_000 }
+								)
+								.toBeGreaterThanOrEqual(beforeStress.terminated + 2);
+							await page.evaluate(
+								async (source) =>
+									await (window as any).__wasmIdleDebug.setEditorValue(source),
+								testCase.recoverySource
+							);
+							await page.evaluate(() =>
+								(window as any).__wasmIdleDebug.setBreakpoints([])
+							);
+							await debugButton.click();
+							await page
+								.getByRole('button', { name: 'Stop Debug' })
+								.waitFor({ state: 'visible', timeout: 120_000 });
+							await page
+								.locator('.debug-status-pill--paused')
+								.waitFor({ state: 'visible', timeout: 120_000 });
+							await page.locator('button[aria-label="Continue"]').click();
+							await page.waitForFunction(
+								(expectedOutput) =>
+									document
+										.querySelector('[data-testid="terminal-debug-output"]')
+										?.textContent?.includes(expectedOutput),
+								testCase.recoveryOutput,
+								{ timeout: 120_000 }
+							);
+							await debugButton.waitFor({ state: 'visible' });
+							await expect
+								.poll(
+									async () =>
+										(await readBrowserLifecycleMetrics(page)).terminated,
+									{ timeout: 5_000 }
+								)
+								.toBeGreaterThanOrEqual(beforeStress.terminated + 4);
+							const recoveredMetrics = await readBrowserLifecycleMetrics(page);
+							expect(recoveredMetrics.created).toBeGreaterThanOrEqual(
+								beforeStress.created + 2
+							);
+							expect(recoveredMetrics.active).toBeLessThanOrEqual(
+								beforeStress.active - 2
+							);
+							console.info(
+								`[wasm-idle:lldb-transport-stress] ${JSON.stringify({
+									kind: testCase.transportStress,
+									pauseOutcome,
+									before: beforeStress,
+									after: recoveredMetrics
+								})}`
+							);
+							expect(pageErrors).toEqual([]);
+							continue;
 						}
 						if (
 							'afterContinue' in testCase &&
