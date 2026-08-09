@@ -10,6 +10,13 @@ type RuntimeFixtureState = {
 	importCalls: number;
 	importGate: Promise<void>;
 	planCalls: number;
+	planDiagnostics: Array<{
+		message: string;
+		severity: 'error' | 'warning' | 'other';
+		fileName?: string | null;
+		lineNumber?: number;
+		columnNumber?: number;
+	}>;
 	planGate: Promise<void>;
 	runtimeRecords: Array<{
 		appendLog: (line: string) => void;
@@ -17,6 +24,7 @@ type RuntimeFixtureState = {
 		bootCalls: number;
 		buildRequestOverrides: { target?: string } | null;
 		disposeCalls: number;
+		emitDiagnostic: (diagnostic: RuntimeFixtureState['planDiagnostics'][number]) => void;
 		executeCalls: number;
 		initialMaxAssetBytes: number | null;
 		maxAssetByteLimits: number[];
@@ -35,6 +43,7 @@ const createRuntimeFixtureState = (): RuntimeFixtureState => ({
 	importCalls: 0,
 	importGate: Promise.resolve(),
 	planCalls: 0,
+	planDiagnostics: [],
 	planGate: Promise.resolve(),
 	runtimeRecords: []
 });
@@ -66,6 +75,9 @@ const record = {
   bootCalls: 0,
   buildRequestOverrides: null,
   disposeCalls: 0,
+  emitDiagnostic(diagnostic) {
+    options.onCompilerDiagnostic?.(diagnostic);
+  },
   executeCalls: 0,
   initialMaxAssetBytes: options.maxAssetBytes ?? null,
   maxAssetByteLimits: [],
@@ -85,6 +97,7 @@ return ({
     state.planCalls += 1;
     record.planCalls += 1;
     await gates.plan;
+    for (const diagnostic of state.planDiagnostics) record.emitDiagnostic(diagnostic);
     record.appendLog('plan complete\\n');
     return { ok: true };
   },
@@ -450,6 +463,105 @@ describe('TinyGo operation lifecycle', () => {
 		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
 		await expect(sandbox.run('package main\nfunc main() {}', true)).resolves.toBe(true);
 		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('forwards structured compiler diagnostics without counting activity logs', async () => {
+		runtimeFixtureState.planDiagnostics = [
+			{
+				message: 'unused value',
+				severity: 'warning',
+				fileName: 'main.go',
+				lineNumber: 3,
+				columnNumber: 7
+			}
+		];
+		const sandbox = new TinyGo();
+		const diagnostic = vi.fn();
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load(runtimeAssets);
+
+		await expect(
+			sandbox.run('package main\nfunc main() {}', true, false, undefined, [], {
+				limits: { maxDiagnostics: 1 }
+			})
+		).resolves.toBe(true);
+
+		expect(diagnostic).toHaveBeenCalledOnce();
+		expect(diagnostic).toHaveBeenCalledWith({
+			message: 'unused value',
+			severity: 'warning',
+			fileName: 'main.go',
+			lineNumber: 3,
+			columnNumber: 7
+		});
+		expect(runtimeFixtureState.bootCalls).toBe(1);
+		expect(runtimeFixtureState.planCalls).toBe(1);
+		expect(runtimeFixtureState.executeCalls).toBe(1);
+	});
+
+	it('counts compiler diagnostics without a callback and suppresses the first overflow', async () => {
+		runtimeFixtureState.planDiagnostics = [
+			{ message: 'first error', severity: 'error', lineNumber: 1 },
+			{ message: 'second error', severity: 'error', lineNumber: 2 }
+		];
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const retiredRuntime = runtimeFixtureState.runtimeRecords[0];
+
+		await expect(
+			sandbox.run('package main\nfunc main() {}', true, false, undefined, [], {
+				limits: { maxDiagnostics: 1 }
+			})
+		).rejects.toMatchObject({
+			name: 'DiagnosticLimitError',
+			code: 'diagnostic-limit',
+			phase: 'execute',
+			runtimeId: 'TINYGO',
+			limit: 1,
+			actual: 2
+		});
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(retiredRuntime?.disposeCalls).toBe(1);
+		expect(() =>
+			retiredRuntime?.emitDiagnostic({
+				message: 'stale error',
+				severity: 'error',
+				lineNumber: 3
+			})
+		).not.toThrow();
+
+		runtimeFixtureState.planDiagnostics = [];
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+		await expect(sandbox.run('package main\nfunc main() {}', true, false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
+	});
+
+	it('retires the exact TinyGo runtime when a diagnostic callback throws', async () => {
+		runtimeFixtureState.planDiagnostics = [
+			{ message: 'callback error', severity: 'error', lineNumber: 1 }
+		];
+		const sandbox = new TinyGo();
+		const callbackError = new Error('TinyGo diagnostic callback failed');
+		sandbox.oncompilerdiagnostic = () => {
+			throw callbackError;
+		};
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		const retiredRuntime = runtimeFixtureState.runtimeRecords[0];
+
+		await expect(sandbox.run('package main\nfunc main() {}', true, false)).rejects.toBe(
+			callbackError
+		);
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(retiredRuntime?.disposeCalls).toBe(1);
+
+		runtimeFixtureState.planDiagnostics = [];
+		sandbox.oncompilerdiagnostic = undefined;
+		await expect(sandbox.load(runtimeAssets)).resolves.toBeUndefined();
+		await expect(sandbox.run('package main\nfunc main() {}', true, false)).resolves.toBe(true);
 		expect(workerInstances[1]?.terminate).not.toHaveBeenCalled();
 	});
 

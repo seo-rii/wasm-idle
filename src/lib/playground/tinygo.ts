@@ -5,7 +5,11 @@ import {
 	type TinyGoRuntimeAssetLoader,
 	type TinyGoRuntimeAssetPackReference
 } from '$lib/playground/assets';
-import type { SandboxExecutionOptions, TinyGoTarget } from '$lib/playground/options';
+import type {
+	CompilerDiagnostic,
+	SandboxExecutionOptions,
+	TinyGoTarget
+} from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
 	flushBufferedEof,
@@ -18,6 +22,7 @@ import {
 	BusyError,
 	DEFAULT_EXECUTION_LIMITS,
 	DEFAULT_WORKSPACE_LIMITS,
+	DiagnosticLimitError,
 	OutputLimitError,
 	RuntimeConfigurationError,
 	TimeoutError,
@@ -59,12 +64,22 @@ type TinyGoRuntimeLogEntry = {
 	line: string;
 };
 
+type TinyGoRuntimeDiagnostic = {
+	message: string;
+	severity: 'error' | 'warning' | 'other';
+	fileName?: string | null;
+	lineNumber?: number;
+	columnNumber?: number;
+	endColumnNumber?: number;
+};
+
 type TinyGoRuntimeModule = {
 	createBundledTinyGoRuntime?: (options?: {
 		assetLoader?: TinyGoRuntimeAssetLoader;
 		assetPacks?: TinyGoRuntimeAssetPackReference[];
 		maxAssetBytes?: number;
 		rustRuntimeBaseUrl?: string;
+		onCompilerDiagnostic?: (diagnostic: TinyGoRuntimeDiagnostic) => void;
 		onLogAppended?: (entry: TinyGoRuntimeLogEntry) => void;
 		onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 	}) => TinyGoRuntimeHooks;
@@ -74,6 +89,7 @@ type TinyGoRuntimeModule = {
 		assetPacks?: TinyGoRuntimeAssetPackReference[];
 		maxAssetBytes?: number;
 		rustRuntimeBaseUrl?: string;
+		onCompilerDiagnostic?: (diagnostic: TinyGoRuntimeDiagnostic) => void;
 		onLogAppended?: (entry: TinyGoRuntimeLogEntry) => void;
 		onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 	}) => TinyGoRuntimeHooks;
@@ -83,6 +99,7 @@ type TinyGoOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
 	cancelled: boolean;
+	diagnosticCount: number;
 	outputBytes: number;
 	limits?: ExecutionLimits;
 	reason?: unknown;
@@ -128,6 +145,7 @@ class TinyGo implements Sandbox {
 	exit = true;
 	moduleUrl = '';
 	rustRuntimeBaseUrl = '';
+	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	assetLoader: TinyGoRuntimeAssetLoader | undefined = undefined;
 	assetPacks: TinyGoRuntimeAssetPackReference[] | undefined = undefined;
 	runtime: TinyGoRuntimeHooks | null = null;
@@ -225,6 +243,7 @@ class TinyGo implements Sandbox {
 			token: Symbol(phase),
 			phase,
 			cancelled: false,
+			diagnosticCount: 0,
 			outputBytes: 0
 		} satisfies TinyGoOperation;
 		this.activeOperation = operation;
@@ -472,6 +491,81 @@ class TinyGo implements Sandbox {
 		return this.isOperationActive(operation);
 	}
 
+	private emitCompilerDiagnostic(
+		operation: TinyGoOperation,
+		diagnostic: TinyGoRuntimeDiagnostic
+	) {
+		this.assertOperation(operation);
+		try {
+			if (!diagnostic || typeof diagnostic !== 'object') {
+				throw new RuntimeConfigurationError(
+					'TinyGo runtime emitted an invalid compiler diagnostic',
+					{ phase: operation.phase, runtimeId: 'TINYGO' }
+				);
+			}
+			const message = diagnostic.message;
+			this.assertOperation(operation);
+			const rawSeverity = diagnostic.severity;
+			this.assertOperation(operation);
+			const rawFileName = diagnostic.fileName;
+			this.assertOperation(operation);
+			const rawLineNumber = diagnostic.lineNumber;
+			this.assertOperation(operation);
+			const rawColumnNumber = diagnostic.columnNumber;
+			this.assertOperation(operation);
+			const rawEndColumnNumber = diagnostic.endColumnNumber;
+			this.assertOperation(operation);
+			if (typeof message !== 'string' || message.length === 0) {
+				throw new RuntimeConfigurationError(
+					'TinyGo runtime emitted a compiler diagnostic without a message',
+					{ phase: operation.phase, runtimeId: 'TINYGO' }
+				);
+			}
+			const actual = operation.diagnosticCount + 1;
+			const limit =
+				operation.limits?.maxDiagnostics ?? DEFAULT_EXECUTION_LIMITS.maxDiagnostics;
+			if (actual > limit) {
+				operation.diagnosticCount = actual;
+				this.cancelOperation(
+					operation,
+					new DiagnosticLimitError(`TinyGo diagnostics exceeded ${limit} messages`, {
+						actual,
+						limit,
+						phase: operation.phase,
+						runtimeId: 'TINYGO'
+					})
+				);
+				this.assertOperation(operation);
+			}
+			operation.diagnosticCount = actual;
+			const compilerDiagnostic: CompilerDiagnostic = {
+				message,
+				severity:
+					rawSeverity === 'error' || rawSeverity === 'warning' ? rawSeverity : 'other',
+				lineNumber:
+					Number.isSafeInteger(rawLineNumber) && Number(rawLineNumber) >= 0
+						? Number(rawLineNumber)
+						: 1
+			};
+			if (rawFileName === null || typeof rawFileName === 'string') {
+				compilerDiagnostic.fileName = rawFileName;
+			}
+			if (Number.isSafeInteger(rawColumnNumber) && Number(rawColumnNumber) >= 0) {
+				compilerDiagnostic.columnNumber = Number(rawColumnNumber);
+			}
+			if (Number.isSafeInteger(rawEndColumnNumber) && Number(rawEndColumnNumber) >= 0) {
+				compilerDiagnostic.endColumnNumber = Number(rawEndColumnNumber);
+			}
+			const callback = this.oncompilerdiagnostic;
+			this.assertOperation(operation);
+			if (callback) Reflect.apply(callback, this, [compilerDiagnostic]);
+			this.assertOperation(operation);
+		} catch (error) {
+			if (this.isOperationActive(operation)) this.cancelOperation(operation, error);
+			this.assertOperation(operation);
+		}
+	}
+
 	private clearPendingStdin() {
 		this.pendingInput = [];
 		this.pendingEof = false;
@@ -641,6 +735,23 @@ class TinyGo implements Sandbox {
 					assetPacks,
 					maxAssetBytes,
 					rustRuntimeBaseUrl: rustRuntimeBaseUrl || undefined,
+					onCompilerDiagnostic: (diagnostic: TinyGoRuntimeDiagnostic) => {
+						const owner = this.runtimeProgressOwner;
+						const activeOperation = this.activeOperation;
+						const runtime = this.runtime;
+						if (
+							!owner ||
+							!activeOperation ||
+							owner.operationToken !== activeOperation.token ||
+							owner.runtimeToken !== runtimeToken ||
+							this.runtimeToken !== runtimeToken ||
+							!runtime ||
+							!this.isOperationActive(activeOperation)
+						) {
+							return;
+						}
+						this.emitCompilerDiagnostic(activeOperation, diagnostic);
+					},
 					onLogAppended: () => {
 						const owner = this.runtimeProgressOwner;
 						const activeOperation = this.activeOperation;

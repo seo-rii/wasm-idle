@@ -32,6 +32,11 @@ import {
 	type GeneratedFile
 } from './emception-files';
 import {
+	emitTinyGoCompilerDiagnostics,
+	type TinyGoCompilerDiagnostic
+} from './compiler-diagnostics';
+export type { TinyGoCompilerDiagnostic } from './compiler-diagnostics';
+import {
 	verifyTinyGoLoweredArtifactExports,
 	verifyTinyGoLoweredBitcodeFiles,
 	verifyTinyGoFinalArtifactFile,
@@ -208,7 +213,7 @@ export type TinyGoRuntime = TinyGoTestHooks & {
 	dispose(): void;
 };
 
-type TinyGoRuntimeLogEntry = {
+export type TinyGoRuntimeLogEntry = {
 	line: string;
 	message: string;
 	tone: Exclude<PhaseTone, 'idle'> | 'idle';
@@ -237,6 +242,7 @@ export type TinyGoRuntimeOptions = {
 	onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 	initialLogMessages?: Array<{ message: string; tone?: Exclude<PhaseTone, 'idle'> | 'idle' }>;
 	onControlsLockedChange?: (locked: boolean) => void;
+	onCompilerDiagnostic?: (diagnostic: TinyGoCompilerDiagnostic) => void;
 	onLogAppended?: (entry: TinyGoRuntimeLogEntry) => void;
 	onLogReset?: () => void;
 	onPhaseChange?: (phase: TinyGoRuntimePhase, label: string, tone: PhaseTone) => void;
@@ -256,6 +262,7 @@ export type TinyGoBrowserRuntimeOptions = {
 	initialLogs?: string[];
 	onActivityLogChange?: (activityLog: string, tone: Exclude<PhaseTone, 'idle'> | 'idle') => void;
 	onControlsLockedChange?: (locked: boolean) => void;
+	onCompilerDiagnostic?: (diagnostic: TinyGoCompilerDiagnostic) => void;
 	onPhaseChange?: (phase: TinyGoRuntimePhase, label: string, tone: PhaseTone) => void;
 	now?: () => Date;
 };
@@ -1224,6 +1231,7 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 
 			const result = JSON.parse(textDecoder.decode(resultNode.data)) as TinyGoBuildResult;
 			if (!result.ok) {
+				emitTinyGoCompilerDiagnostics(result.diagnostics, options.onCompilerDiagnostic);
 				throw new Error(
 					result.diagnostics.join('; ') ||
 						`tinygo driver returned a failed result (exit ${driverExitCode})`
@@ -1510,10 +1518,19 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 					const frontendAnalysisResult = JSON.parse(
 						textDecoder.decode(frontendAnalysisResultNode.data)
 					) as TinyGoFrontEndAnalysisResult;
-					if (!frontendAnalysisResult.ok || !frontendAnalysisResult.analysis) {
+					if (!frontendAnalysisResult.ok) {
+						emitTinyGoCompilerDiagnostics(
+							frontendAnalysisResult.diagnostics,
+							options.onCompilerDiagnostic
+						);
 						throw new Error(
 							frontendAnalysisResult.diagnostics.join('; ') ||
 								`tinygo frontend-analysis returned a failed result (exit ${frontendAnalysisExitCode})`
+						);
+					}
+					if (!frontendAnalysisResult.analysis) {
+						throw new Error(
+							'tinygo frontend-analysis returned success without an analysis payload'
 						);
 					}
 					if (
@@ -1689,10 +1706,19 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 					const frontendRealAdapterResult = JSON.parse(
 						textDecoder.decode(frontendRealAdapterResultNode.data)
 					) as TinyGoFrontEndAdapterResult;
-					if (!frontendRealAdapterResult.ok || !frontendRealAdapterResult.adapter) {
+					if (!frontendRealAdapterResult.ok) {
+						emitTinyGoCompilerDiagnostics(
+							frontendRealAdapterResult.diagnostics,
+							options.onCompilerDiagnostic
+						);
 						throw new Error(
 							frontendRealAdapterResult.diagnostics.join('; ') ||
 								`tinygo frontend-real-adapter returned a failed result (exit ${frontendRealAdapterExitCode})`
+						);
+					}
+					if (!frontendRealAdapterResult.adapter) {
+						throw new Error(
+							'tinygo frontend-real-adapter returned success without an adapter payload'
 						);
 					}
 					if (
@@ -1821,6 +1847,10 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 					textDecoder.decode(frontendResultNode.data)
 				) as TinyGoFrontEndResult;
 				if (!frontendResult.ok) {
+					emitTinyGoCompilerDiagnostics(
+						frontendResult.diagnostics,
+						options.onCompilerDiagnostic
+					);
 					throw new Error(
 						frontendResult.diagnostics.join('; ') ||
 							`tinygo frontend returned a failed result (exit ${frontendExitCode})`
@@ -2184,6 +2214,10 @@ export const createTinyGoRuntime = (options: TinyGoRuntimeOptions): TinyGoRuntim
 						textDecoder.decode(backendResultNode.data)
 					) as TinyGoBackendResultManifest;
 					if (!backendResult.ok) {
+						emitTinyGoCompilerDiagnostics(
+							backendResult.diagnostics ?? [],
+							options.onCompilerDiagnostic
+						);
 						throw new Error(
 							(backendResult.diagnostics ?? []).join('; ') ||
 								`tinygo backend returned a failed result (exit ${backendExitCode})`
@@ -3140,6 +3174,7 @@ export const createTinyGoBrowserRuntime = (
 		maxAssetBytes: options.maxAssetBytes,
 		initialLogMessages: (options.initialLogs ?? []).map((message) => ({ message })),
 		onControlsLockedChange: options.onControlsLockedChange,
+		onCompilerDiagnostic: options.onCompilerDiagnostic,
 		onPhaseChange: options.onPhaseChange,
 		now: options.now,
 		onLogReset: () => {
