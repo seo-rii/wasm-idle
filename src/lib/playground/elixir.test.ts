@@ -669,6 +669,136 @@ describe('Elixir sandbox', () => {
 			language: 'ERLANG' as const,
 			runtimeAssets: { erlang: { bundleUrl: '/runtime/erlang/bundle.avm' } }
 		}
+	])('enforces a cumulative UTF-8 output budget for $name', async (testCase) => {
+		const sandbox = new Elixir(testCase.language);
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load(testCase.runtimeAssets);
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('unicode_output', false, true, undefined, [], {
+			limits: { maxOutputBytes: 5 }
+		});
+		const staleHandler = worker.onmessage;
+
+		staleHandler?.({ data: { output: 'é' } } as MessageEvent<any>);
+		staleHandler?.({ data: { output: '🙂' } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			runtimeId: testCase.language,
+			actual: 6,
+			limit: 5
+		});
+		expect(output).toHaveBeenCalledOnce();
+		expect(output).toHaveBeenCalledWith('é');
+		expect(output).not.toHaveBeenCalledWith('🙂');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+
+		staleHandler?.({ data: { output: 'stale\n', results: ':stale' } } as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalledWith('stale\n');
+
+		sandbox.output = vi.fn();
+		await sandbox.load(testCase.runtimeAssets);
+		await expect(sandbox.run('retry', false)).resolves.toBe(':ok');
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it.each([
+		{
+			name: 'Elixir',
+			language: 'ELIXIR' as const,
+			runtimeAssets: { elixir: { bundleUrl: '/runtime/elixir/bundle.avm' } }
+		},
+		{
+			name: 'Erlang',
+			language: 'ERLANG' as const,
+			runtimeAssets: { erlang: { bundleUrl: '/runtime/erlang/bundle.avm' } }
+		}
+	])('counts the evaluated $name result in the same output budget', async (testCase) => {
+		const sandbox = new Elixir(testCase.language);
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load(testCase.runtimeAssets);
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('result_output', false, true, undefined, [], {
+			limits: { maxOutputBytes: 6 }
+		});
+
+		worker.onmessage?.({ data: { results: ':ok' } } as MessageEvent<any>);
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			runtimeId: testCase.language,
+			actual: 7,
+			limit: 6
+		});
+		expect(output).not.toHaveBeenCalled();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+	});
+
+	it.each([
+		{
+			name: 'Elixir',
+			language: 'ELIXIR' as const,
+			runtimeAssets: { elixir: { bundleUrl: '/runtime/elixir/bundle.avm' } }
+		},
+		{
+			name: 'Erlang',
+			language: 'ERLANG' as const,
+			runtimeAssets: { erlang: { bundleUrl: '/runtime/erlang/bundle.avm' } }
+		}
+	])(
+		'preserves a replacement $name load when a limit getter terminates the provisional run',
+		async (testCase) => {
+			const sandbox = new Elixir(testCase.language);
+			const terminationReason = new Error(`replace ${testCase.name} during limits`);
+			let replacementLoad: Promise<void> | undefined;
+			await sandbox.load(testCase.runtimeAssets);
+			const retiredWorker = workerInstances[0];
+			const limits = Object.defineProperty({}, 'maxOutputBytes', {
+				enumerable: true,
+				get: () => {
+					sandbox.terminate(terminationReason);
+					replacementLoad = sandbox.load(testCase.runtimeAssets);
+					return 5;
+				}
+			});
+
+			const superseded = sandbox.run('superseded', false, true, undefined, [], {
+				limits
+			});
+
+			await expect(superseded).rejects.toBe(terminationReason);
+			expect(replacementLoad).toBeDefined();
+			await expect(replacementLoad).resolves.toBeUndefined();
+			expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+			expect(retiredWorker.postMessage).toHaveBeenCalledOnce();
+			expect(workerInstances).toHaveLength(2);
+			expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+
+			await expect(sandbox.run('retry', false)).resolves.toBe(':ok');
+		}
+	);
+
+	it.each([
+		{
+			name: 'Elixir',
+			language: 'ELIXIR' as const,
+			runtimeAssets: { elixir: { bundleUrl: '/runtime/elixir/bundle.avm' } }
+		},
+		{
+			name: 'Erlang',
+			language: 'ERLANG' as const,
+			runtimeAssets: { erlang: { bundleUrl: '/runtime/erlang/bundle.avm' } }
+		}
 	])('rejects a $name run when the evaluated-result output callback throws', async (testCase) => {
 		const sandbox = new Elixir(testCase.language);
 		const callbackError = new Error(`${testCase.name} result output failed`);
@@ -835,6 +965,34 @@ describe('Elixir sandbox', () => {
 		expect(sandbox.exit).toBe(true);
 		expect(sandbox.pendingInput).toEqual(['preserved pre-abort input\n']);
 		expect(sandbox.pendingEof).toBe(true);
+	});
+
+	it('releases the provisional run without retiring the worker when limits are invalid', async () => {
+		const sandbox = new Elixir();
+		await sandbox.load({
+			elixir: {
+				bundleUrl: '/runtime/elixir/bundle.avm'
+			}
+		});
+		const worker = workerInstances[0];
+		const handler = worker.onmessage;
+		const uid = sandbox.uid;
+
+		await expect(
+			sandbox.run('IO.puts("invalid")', false, true, undefined, [], {
+				limits: { maxOutputBytes: 0 }
+			})
+		).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'configuration'
+		});
+		expect(worker.onmessage).toBe(handler);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.uid).toBe(uid);
+		expect(sandbox.exit).toBe(true);
+
+		await expect(sandbox.run('IO.puts("retry")', false)).resolves.toBe(':ok');
 	});
 
 	it('aborts only the active Elixir execution and permits a clean retry', async () => {

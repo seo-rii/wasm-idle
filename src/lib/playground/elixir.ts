@@ -5,7 +5,7 @@ import {
 } from '$lib/playground/assets';
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
-import { BusyError } from '@wasm-idle/core';
+import { BusyError, OutputLimitError, resolveExecutionLimits } from '@wasm-idle/core';
 import {
 	flushBufferedEof,
 	flushQueuedStdin,
@@ -15,6 +15,8 @@ import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 
 type BeamEvalLanguage = 'ELIXIR' | 'ERLANG';
+
+const OUTPUT_ENCODER = new TextEncoder();
 
 class Elixir implements Sandbox {
 	language: BeamEvalLanguage;
@@ -291,16 +293,13 @@ class Elixir implements Sandbox {
 		}
 		const worker = this.worker;
 		if (!worker) return Promise.reject('Worker not loaded');
-		const signal = options.signal;
-		if (signal?.aborted) {
-			return Promise.reject(
-				signal.reason ?? new DOMException(`${runtimeLabel} execution aborted`, 'AbortError')
-			);
-		}
-		const hasExplicitStdin = !prepare && options.stdin !== undefined;
-		this.exit = false;
 		return new Promise<boolean | string>((resolve, reject) => {
-			const activeUid = ++this.uid;
+			let activeUid = this.uid;
+			let outputBytes = 0;
+			let maxOutputBytes = 0;
+			let signal: AbortSignal | undefined;
+			let stdin: string | undefined;
+			let hasExplicitStdin = false;
 			let onAbort: (() => void) | undefined;
 			let cleanedUp = false;
 			const cleanup = () => {
@@ -324,13 +323,42 @@ class Elixir implements Sandbox {
 				reject(reason);
 			};
 			this.activeRunCleanup = cleanup;
-			if (hasExplicitStdin) this.resetExplicitStdinState();
 			const operation = this.workerSession.beginRun(worker, rejectRun);
 			let handler: (event: Event & { data: any }) => void;
-			const ownsRun = () =>
+			const ownsReservation = () =>
 				this.worker === worker &&
 				this.activeRunCleanup === cleanup &&
 				activeUid === this.uid;
+			const failBeforeDispatch = (reason: unknown) => {
+				if (!ownsReservation() || !this.workerSession.complete(operation)) return;
+				cleanup();
+				reject(reason);
+			};
+			try {
+				signal = options.signal;
+				if (!ownsReservation()) return;
+				const signalAborted = signal?.aborted ?? false;
+				if (!ownsReservation()) return;
+				if (signalAborted) {
+					const reason =
+						signal?.reason ??
+						new DOMException(`${runtimeLabel} execution aborted`, 'AbortError');
+					if (ownsReservation()) failBeforeDispatch(reason);
+					return;
+				}
+				maxOutputBytes = resolveExecutionLimits(options.limits).maxOutputBytes;
+				if (!ownsReservation()) return;
+				stdin = options.stdin;
+				if (!ownsReservation()) return;
+				hasExplicitStdin = !prepare && stdin !== undefined;
+			} catch (error) {
+				failBeforeDispatch(error);
+				return;
+			}
+			activeUid = ++this.uid;
+			if (hasExplicitStdin) this.resetExplicitStdinState();
+			this.exit = false;
+			const ownsRun = () => ownsReservation();
 			const acceptsMessage = () => ownsRun() && worker.onmessage === handler;
 			const failRun = (reason?: unknown) => {
 				if (!acceptsMessage()) return;
@@ -346,20 +374,38 @@ class Elixir implements Sandbox {
 						event.data || {},
 						'results'
 					);
+					const results = hasResults ? event.data.results : undefined;
 					if (buffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
 						this.flushPendingInput();
 					}
-					if (output) {
-						this.output?.(output);
+					const emissions: unknown[] = [];
+					if (output) emissions.push(output);
+					if (!prepare && typeof results === 'string' && results) {
+						emissions.push(`=> ${results}\n`);
 					}
-					if (!acceptsMessage()) return;
-					if (hasResults) {
-						const { results } = event.data;
-						if (!prepare && typeof results === 'string' && results) {
-							this.output?.(`=> ${results}\n`);
-							if (!acceptsMessage()) return;
+					for (const emission of emissions) {
+						const actual =
+							outputBytes + OUTPUT_ENCODER.encode(String(emission)).byteLength;
+						if (actual > maxOutputBytes) {
+							failRun(
+								new OutputLimitError(
+									`${runtimeLabel} output exceeded ${maxOutputBytes} bytes`,
+									{
+										actual,
+										limit: maxOutputBytes,
+										phase: 'execute',
+										runtimeId: this.language
+									}
+								)
+							);
+							return;
 						}
+						outputBytes = actual;
+						this.output?.(emission);
+						if (!acceptsMessage()) return;
+					}
+					if (hasResults) {
 						if (!this.workerSession.complete(operation)) return;
 						cleanup();
 						this.elapse = Date.now() - this.begin;
@@ -425,7 +471,7 @@ class Elixir implements Sandbox {
 					buffer: this.buffer,
 					language: this.language,
 					log,
-					stdin: options.stdin
+					stdin
 				});
 			} catch (error) {
 				if (worker.onmessage === handler) worker.onmessage = null;
