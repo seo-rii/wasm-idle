@@ -19,6 +19,7 @@ import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleam
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
 import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
+import { WASM_ZIG_ASSET_RECEIPTS, WASM_ZIG_ASSET_VERSION } from './wasmZigVersion';
 
 describe('application runtime asset root', () => {
 	it.each([
@@ -146,6 +147,11 @@ describe('application runtime asset root', () => {
 			analyzerUrl: `/foo/bar/wasm-fortran/analyzer.js?v=${WASM_FORTRAN_ASSET_VERSION}`,
 			integrity: WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS
 		});
+		expect(assets.zig).toEqual({
+			compilerUrl: `/foo/bar/wasm-zig/zig_small.wasm?v=${WASM_ZIG_ASSET_VERSION}`,
+			stdlibUrl: `/foo/bar/wasm-zig/std.tar.gz?v=${WASM_ZIG_ASSET_VERSION}`,
+			integrity: WASM_ZIG_ASSET_RECEIPTS
+		});
 		expect(assets.typescript?.libUrl).toMatch(
 			/^\/foo\/bar\/lsp\/typescript-libs\.json\.gz\?v=/u
 		);
@@ -196,6 +202,23 @@ describe('application runtime asset root', () => {
 					}
 				])
 		);
+		const serializedZigIntegrity = JSON.stringify(
+			Object.entries(WASM_ZIG_ASSET_RECEIPTS)
+				.sort(([left], [right]) => left.localeCompare(right))
+				.map(([asset, entry]) => [
+					asset,
+					{
+						sha256: entry.sha256,
+						bytes: entry.bytes,
+						...('uncompressedSha256' in entry
+							? {
+									uncompressedSha256: entry.uncompressedSha256,
+									uncompressedBytes: entry.uncompressedBytes
+								}
+							: {})
+					}
+				])
+		);
 
 		expect(key).toMatchObject({
 			rustManifestUrl: `/foo/bar/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`,
@@ -222,6 +245,7 @@ describe('application runtime asset root', () => {
 			elixirIntegrity: serializedElixirIntegrity,
 			erlangIntegrity: serializedElixirIntegrity,
 			fortranIntegrity: serializedFortranIntegrity,
+			zigIntegrity: serializedZigIntegrity,
 			objectiveCIntegrity: JSON.stringify(
 				Object.entries(WASM_OBJECTIVEC_ASSET_RECEIPTS)
 					.sort(([left], [right]) => left.localeCompare(right))
@@ -247,6 +271,9 @@ describe('application runtime asset root', () => {
 			fortranF2cHeaderUrl: assets.fortran?.f2cHeaderUrl,
 			fortranAnalyzerUrl: assets.fortran?.analyzerUrl,
 			fortranIntegrity: expect.any(String),
+			zigCompilerUrl: assets.zig?.compilerUrl,
+			zigStdlibUrl: assets.zig?.stdlibUrl,
+			zigIntegrity: expect.any(String),
 			objectiveCBaseUrl: assets.objectivec?.baseUrl,
 			objectiveCLibobjcUrl: assets.objectivec?.libobjcUrl,
 			objectiveCHeadersUrl: assets.objectivec?.headersUrl,

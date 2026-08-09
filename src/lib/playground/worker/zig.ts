@@ -9,9 +9,15 @@ import {
 	wasi
 } from '@bjorn3/browser_wasi_shim';
 import { decompressGzip, untar } from '@wasm-idle/llvm-core';
+import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile, ZigTargetTriple } from '$lib/playground/options';
-import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
+import {
+	snapshotZigExecutionAssetReceipts,
+	type ZigExecutionAssetReceipt,
+	type ZigExecutionAssetReceipts
+} from '$lib/playground/zigAssets';
+import { fetchRuntimeAssetBytes, resolveRuntimeAssetUrl } from './runtimeAssetFetch';
 
 declare var self: any;
 
@@ -32,10 +38,14 @@ let stdinChunkOffsetZig = 0;
 let compilerUrl = '';
 let stdlibUrl = '';
 let loadedAssetKey = '';
-let assetsPromise: Promise<{
+type LoadedZigAssets = {
 	compilerModule: WebAssembly.Module;
 	stdDirectory: Directory;
-}> | null = null;
+};
+let loadedAssets: LoadedZigAssets | null = null;
+let loadingAssets: { key: string; promise: Promise<LoadedZigAssets> } | null = null;
+let assetIntegrity: ZigExecutionAssetReceipts | null = null;
+let runtimeMaxAssetBytes = 0;
 let compiledArtifact: Uint8Array | null = null;
 let compiledCacheKey = '';
 
@@ -176,10 +186,17 @@ function buildWorkspaceRoot(
 	return { root, entryPath };
 }
 
-async function fetchBytes(url: string, label: string, progressStart: number, progressEnd: number) {
+async function fetchBytes(
+	url: string,
+	asset: string,
+	maxAssetBytes: number,
+	progressStart: number,
+	progressEnd: number
+) {
 	const data = await fetchRuntimeAssetBytes({
 		url,
-		label,
+		label: asset,
+		maxAssetBytes,
 		onProgress: ({ loaded, total }) => {
 			if (total && total > 0) {
 				postProgress(progressStart + ((progressEnd - progressStart) * loaded) / total);
@@ -290,7 +307,8 @@ class ZigStdlibArchiveBudget {
 export async function loadStdDirectory(
 	source: Uint8Array,
 	assetUrl: string,
-	limits: ZigStdlibArchiveLimits = {}
+	limits: ZigStdlibArchiveLimits = {},
+	receipt?: ZigExecutionAssetReceipt
 ) {
 	const maxExpandedBytes = limits.maxExpandedBytes ?? DEFAULT_ZIG_STDLIB_MAX_EXPANDED_BYTES;
 	const maxFiles = limits.maxFiles ?? DEFAULT_ZIG_STDLIB_MAX_FILES;
@@ -305,6 +323,9 @@ export async function loadStdDirectory(
 	const root = new Directory(new Map());
 	const budget = new ZigStdlibArchiveBudget(maxExpandedBytes, maxFiles);
 	if (source.byteLength >= 2 && source[0] === 0x50 && source[1] === 0x4b) {
+		if (receipt) {
+			throw new Error('Zig receipt-backed standard library must be a gzip archive or TAR');
+		}
 		const { Unzip, UnzipInflate } = await import('fflate');
 		let archiveError: unknown;
 		const unzip = new Unzip((file) => {
@@ -384,7 +405,28 @@ export async function loadStdDirectory(
 		unzip.push(source, true);
 		if (archiveError) throw archiveError;
 	} else {
-		untar(await decompressGzip(source, assetUrl, maxExpandedBytes), {
+		const sourceIsGzip = source.byteLength >= 2 && source[0] === 0x1f && source[1] === 0x8b;
+		if (receipt && sourceIsGzip) {
+			await verifyRuntimeAssetIntegrity({
+				asset: 'std.tar.gz',
+				bytes: source,
+				expected: receipt,
+				runtimeId: 'ZIG'
+			});
+		}
+		const expanded = sourceIsGzip
+			? await decompressGzip(source, assetUrl, maxExpandedBytes)
+			: source;
+		if (receipt) {
+			await verifyRuntimeAssetIntegrity({
+				asset: 'std.tar.gz',
+				bytes: expanded,
+				expected: receipt,
+				stage: 'uncompressed',
+				runtimeId: 'ZIG'
+			});
+		}
+		untar(expanded, {
 			addDirectory(directoryPath) {
 				budget.addDirectory(directoryPath);
 			},
@@ -406,33 +448,87 @@ function postProgress(percent: number) {
 	postMessage({ progress: { percent: Math.max(0, Math.min(100, percent)) } });
 }
 
-async function loadAssets(nextCompilerUrl: string, nextStdlibUrl: string) {
+async function loadAssets(
+	nextCompilerUrl: string,
+	nextStdlibUrl: string,
+	nextIntegrity: ZigExecutionAssetReceipts,
+	maxAssetBytes: number
+) {
 	if (!nextCompilerUrl || !nextStdlibUrl) {
 		throw new Error(
 			'Zig runtime is not configured. Set PUBLIC_WASM_ZIG_COMPILER_URL and PUBLIC_WASM_ZIG_STDLIB_URL, or runtimeAssets.zig.compilerUrl and runtimeAssets.zig.stdlibUrl.'
 		);
 	}
-	const nextAssetKey = `${nextCompilerUrl}\n${nextStdlibUrl}`;
-	if (loadedAssetKey === nextAssetKey && assetsPromise) {
-		return await assetsPromise;
+	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes <= 0) {
+		throw new TypeError('Zig maxAssetBytes must be a positive safe integer');
 	}
-	loadedAssetKey = nextAssetKey;
-	compiledArtifact = null;
-	compiledCacheKey = '';
-	assetsPromise = (async () => {
+	const receipts = snapshotZigExecutionAssetReceipts(nextIntegrity);
+	for (const [asset, url] of [
+		['zig_small.wasm', nextCompilerUrl],
+		['std.tar.gz', nextStdlibUrl]
+	] as const) {
+		resolveRuntimeAssetUrl(url, asset);
+		const receipt = receipts[asset];
+		if (Math.max(receipt.bytes, receipt.uncompressedBytes || 0) > maxAssetBytes) {
+			throw new Error(`Zig execution asset ${asset} exceeds the ${maxAssetBytes} byte limit`);
+		}
+	}
+	const nextAssetKey = JSON.stringify({
+		compilerUrl: nextCompilerUrl,
+		stdlibUrl: nextStdlibUrl,
+		integrity: receipts
+	});
+	if (loadedAssetKey === nextAssetKey && loadedAssets) return loadedAssets;
+	if (loadingAssets?.key === nextAssetKey) return await loadingAssets.promise;
+
+	const pending = (async () => {
 		postProgress(5);
 		const [compilerBytes, stdlibBytes] = await Promise.all([
-			fetchBytes(nextCompilerUrl, 'zig compiler', 5, 45),
-			fetchBytes(nextStdlibUrl, 'zig standard library', 45, 70)
+			fetchBytes(nextCompilerUrl, 'zig_small.wasm', receipts['zig_small.wasm'].bytes, 5, 45),
+			fetchBytes(
+				nextStdlibUrl,
+				'std.tar.gz',
+				Math.max(
+					receipts['std.tar.gz'].bytes,
+					receipts['std.tar.gz'].uncompressedBytes || 0
+				),
+				45,
+				70
+			)
 		]);
+		await verifyRuntimeAssetIntegrity({
+			asset: 'zig_small.wasm',
+			bytes: compilerBytes,
+			expected: receipts['zig_small.wasm'],
+			runtimeId: 'ZIG'
+		});
 		const [compilerModule, stdDirectory] = await Promise.all([
 			WebAssembly.compile(compilerBytes),
-			loadStdDirectory(stdlibBytes, nextStdlibUrl)
+			loadStdDirectory(
+				stdlibBytes,
+				nextStdlibUrl,
+				{ maxExpandedBytes: maxAssetBytes },
+				receipts['std.tar.gz']
+			)
 		]);
 		postProgress(100);
 		return { compilerModule, stdDirectory };
 	})();
-	return await assetsPromise;
+	loadingAssets = { key: nextAssetKey, promise: pending };
+	try {
+		const nextAssets = await pending;
+		if (loadingAssets?.promise === pending) {
+			loadedAssetKey = nextAssetKey;
+			loadedAssets = nextAssets;
+			loadingAssets = null;
+			compiledArtifact = null;
+			compiledCacheKey = '';
+		}
+		return nextAssets;
+	} catch (error) {
+		if (loadingAssets?.promise === pending) loadingAssets = null;
+		throw error;
+	}
 }
 
 function instantiateResult(
@@ -456,7 +552,13 @@ async function compileZig({
 	compileArgs: string[];
 	log: boolean;
 }) {
-	const { compilerModule, stdDirectory } = await loadAssets(compilerUrl, stdlibUrl);
+	if (!assetIntegrity) throw new Error('Zig runtime assets are not loaded');
+	const { compilerModule, stdDirectory } = await loadAssets(
+		compilerUrl,
+		stdlibUrl,
+		assetIntegrity,
+		runtimeMaxAssetBytes
+	);
 	const { root, entryPath } = buildWorkspaceRoot(code, activePath, workspaceFiles);
 	let compilerOutput = '';
 	const outputFd = new ConsoleStdout((chunk) => {
@@ -568,6 +670,8 @@ self.onmessage = async (event: { data: any }) => {
 		load,
 		compilerUrl: nextCompilerUrl,
 		stdlibUrl: nextStdlibUrl,
+		integrity: nextIntegrity,
+		maxAssetBytes: nextMaxAssetBytes,
 		buffer,
 		code,
 		prepare,
@@ -581,14 +685,17 @@ self.onmessage = async (event: { data: any }) => {
 	} = event.data;
 	try {
 		if (load) {
-			compilerUrl = nextCompilerUrl;
-			stdlibUrl = nextStdlibUrl;
 			if (log) {
 				console.log(
-					`[wasm-idle:zig-worker] load compilerUrl=${compilerUrl} stdlibUrl=${stdlibUrl}`
+					`[wasm-idle:zig-worker] load compilerUrl=${nextCompilerUrl} stdlibUrl=${nextStdlibUrl}`
 				);
 			}
-			await loadAssets(compilerUrl, stdlibUrl);
+			const receipts = snapshotZigExecutionAssetReceipts(nextIntegrity);
+			await loadAssets(nextCompilerUrl, nextStdlibUrl, receipts, nextMaxAssetBytes);
+			compilerUrl = nextCompilerUrl;
+			stdlibUrl = nextStdlibUrl;
+			assetIntegrity = receipts;
+			runtimeMaxAssetBytes = nextMaxAssetBytes;
 			postMessage({ load: true });
 			return;
 		}

@@ -786,6 +786,36 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
+	it('snapshots Zig receipt overrides with the resolved asset URLs', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL = '';
+		publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL = '';
+		const { resolveZigRuntimeAssetConfig } = await import('./assets');
+		const integrity = {
+			'zig_small.wasm': { bytes: 4, sha256: 'a'.repeat(64) },
+			'std.tar.gz': {
+				bytes: 5,
+				sha256: 'b'.repeat(64),
+				uncompressedBytes: 10,
+				uncompressedSha256: 'c'.repeat(64)
+			}
+		};
+
+		const resolved = resolveZigRuntimeAssetConfig(
+			{
+				rootUrl: '/runtime',
+				zig: { integrity }
+			},
+			'https://example.com/app'
+		);
+		integrity['zig_small.wasm'].sha256 = 'd'.repeat(64);
+
+		expect(resolved.compilerUrl).toBe('https://example.com/runtime/wasm-zig/zig_small.wasm');
+		expect(resolved.stdlibUrl).toBe('https://example.com/runtime/wasm-zig/std.tar.gz');
+		expect(resolved.integrity['zig_small.wasm'].sha256).toBe('a'.repeat(64));
+		expect(Object.isFrozen(resolved.integrity)).toBe(true);
+	});
+
 	it('prefers an explicit Lisp module url over the public env override', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_LISP_MODULE_URL = 'https://env.example.com/wasm-lisp/index.js';

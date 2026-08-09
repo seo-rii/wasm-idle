@@ -38,7 +38,7 @@ import { WASM_TCL_ASSET_VERSION } from './wasmTclVersion';
 import { WASM_TINYGO_ASSET_VERSION } from './wasmTinyGoVersion';
 import { WASM_TYPESCRIPT_ASSET_VERSION } from './wasmTypeScriptVersion';
 import { WASM_WAT_ASSET_VERSION } from './wasmWatVersion';
-import { WASM_ZIG_ASSET_VERSION } from './wasmZigVersion';
+import { WASM_ZIG_ASSET_RECEIPTS, WASM_ZIG_ASSET_VERSION } from './wasmZigVersion';
 
 export function normalizeApplicationAssetRootUrl(rootUrl: string): string {
 	const normalized = rootUrl.trim();
@@ -195,7 +195,8 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		zig: {
 			compilerUrl: asset('wasm-zig/zig_small.wasm', WASM_ZIG_ASSET_VERSION),
-			stdlibUrl: asset('wasm-zig/std.tar.gz', WASM_ZIG_ASSET_VERSION)
+			stdlibUrl: asset('wasm-zig/std.tar.gz', WASM_ZIG_ASSET_VERSION),
+			integrity: WASM_ZIG_ASSET_RECEIPTS
 		},
 		lisp: {
 			moduleUrl: asset('wasm-lisp/index.js', WASM_LISP_ASSET_VERSION)

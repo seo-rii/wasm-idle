@@ -61,6 +61,8 @@ vi.mock('$env/dynamic/public', () => ({
 }));
 
 import Zig from './zig';
+import { WASM_ZIG_ASSET_RECEIPTS } from './wasmZigVersion';
+import type { ZigExecutionAssetReceipts } from './zigAssets';
 
 describe('Zig sandbox', () => {
 	beforeEach(() => {
@@ -146,6 +148,66 @@ describe('Zig sandbox', () => {
 		);
 		expect(progressValues).toContain(1);
 		expect(outputs).toEqual(['zig artifact ready\n', 'zig-ok\n']);
+	});
+
+	it('rejects malformed or over-limit receipts before creating a worker', async () => {
+		const sandbox = new Zig();
+		const urls = {
+			compilerUrl: '/wasm-zig/zig_small.wasm',
+			stdlibUrl: '/wasm-zig/std.tar.gz'
+		};
+
+		await expect(
+			sandbox.load({
+				zig: {
+					...urls,
+					integrity: {
+						'zig_small.wasm': WASM_ZIG_ASSET_RECEIPTS['zig_small.wasm']
+					} as never
+				}
+			})
+		).rejects.toThrow('exactly two asset receipts');
+		expect(workerInstances).toHaveLength(0);
+
+		await expect(
+			sandbox.load({ zig: { ...urls, integrity: WASM_ZIG_ASSET_RECEIPTS } }, '', true, [], {
+				limits: {
+					maxAssetBytes: WASM_ZIG_ASSET_RECEIPTS['std.tar.gz'].uncompressedBytes - 1
+				}
+			})
+		).rejects.toContain('byte limit');
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('replaces a warm worker when only the pinned receipt changes', async () => {
+		const sandbox = new Zig();
+		const firstIntegrity = structuredClone(WASM_ZIG_ASSET_RECEIPTS);
+		const secondIntegrity = {
+			...structuredClone(WASM_ZIG_ASSET_RECEIPTS),
+			'zig_small.wasm': {
+				...WASM_ZIG_ASSET_RECEIPTS['zig_small.wasm'],
+				sha256: 'd'.repeat(64)
+			}
+		};
+		const runtimeAssets = (integrity: ZigExecutionAssetReceipts) => ({
+			rootUrl: '/absproxy/5173',
+			zig: { integrity }
+		});
+
+		await sandbox.load(runtimeAssets(firstIntegrity));
+		const firstWorker = workerInstances[0];
+		await sandbox.load(runtimeAssets(secondIntegrity));
+
+		expect(workerInstances).toHaveLength(2);
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances[1].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				integrity: expect.objectContaining({
+					'zig_small.wasm': expect.objectContaining({ sha256: 'd'.repeat(64) })
+				}),
+				maxAssetBytes: expect.any(Number)
+			})
+		);
 	});
 
 	it('terminates Zig output before exceeding the cumulative UTF-8 byte limit', async () => {

@@ -14,6 +14,11 @@ import {
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from '$lib/playground/wasmFortranExecutionAssets';
 import { WASM_D_OUTER_ASSET_RECEIPTS } from '$lib/playground/wasmDIntegrity';
+import { WASM_ZIG_ASSET_RECEIPTS } from '$lib/playground/wasmZigVersion';
+import {
+	snapshotZigExecutionAssetReceipts,
+	type ZigExecutionAssetReceipts
+} from '$lib/playground/zigAssets';
 import type { RuntimeAssetIntegrityEntry as CoreRuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 import type {
 	ObjectiveCAssetIntegrityMap,
@@ -165,6 +170,7 @@ export interface ObjectiveCRuntimeAssetConfig {
 export interface ZigRuntimeAssetConfig {
 	compilerUrl?: string;
 	stdlibUrl?: string;
+	integrity?: ZigExecutionAssetReceipts;
 }
 
 export interface LispRuntimeAssetConfig {
@@ -392,6 +398,12 @@ export interface ResolvedObjectiveCRuntimeAssetConfig {
 	foundationHeadersUrl: string;
 	libffiUrl: string;
 	integrity: ObjectiveCAssetIntegrityMap;
+}
+
+export interface ResolvedZigRuntimeAssetConfig {
+	compilerUrl: string;
+	stdlibUrl: string;
+	integrity: ZigExecutionAssetReceipts;
 }
 
 export const PYTHON_RUNTIME_LOAD_ASSETS = [
@@ -1513,6 +1525,20 @@ export function resolveZigStdlibUrl(
 	}
 
 	return '';
+}
+
+export function resolveZigRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+): ResolvedZigRuntimeAssetConfig {
+	const configuredIntegrity = typeof options === 'object' ? options?.zig?.integrity : undefined;
+	return {
+		compilerUrl: resolveZigCompilerUrl(options, currentUrl),
+		stdlibUrl: resolveZigStdlibUrl(options, currentUrl),
+		integrity: snapshotZigExecutionAssetReceipts(
+			configuredIntegrity === undefined ? WASM_ZIG_ASSET_RECEIPTS : configuredIntegrity
+		)
+	};
 }
 
 export function resolveLispModuleUrl(

@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { strToU8, zipSync } from 'fflate';
 import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { flushQueuedStdin } from '$lib/playground/stdinBuffer';
 
 const encoder = new TextEncoder();
+const compilerAsset = new Uint8Array([0, 97, 115, 109]);
 const stdlibFile = strToU8('pub const std = true;');
 const stdlibArchive = zipSync({
 	'std/std.zig': stdlibFile
@@ -28,15 +30,27 @@ stdlibTarHeader.write(
 	8,
 	'ascii'
 );
-const stdlibTarGzip = gzipSync(
-	Buffer.concat([
-		stdlibTarHeader,
-		Buffer.from(stdlibFile),
-		Buffer.alloc((512 - (stdlibFile.byteLength % 512)) % 512),
-		Buffer.alloc(1024)
-	]),
-	{ level: 9 }
-);
+const stdlibTar = Buffer.concat([
+	stdlibTarHeader,
+	Buffer.from(stdlibFile),
+	Buffer.alloc((512 - (stdlibFile.byteLength % 512)) % 512),
+	Buffer.alloc(1024)
+]);
+const stdlibTarGzip = gzipSync(stdlibTar, { level: 9 });
+const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+const runtimeIntegrity = {
+	'zig_small.wasm': {
+		bytes: compilerAsset.byteLength,
+		sha256: sha256(compilerAsset)
+	},
+	'std.tar.gz': {
+		bytes: stdlibTarGzip.byteLength,
+		sha256: sha256(stdlibTarGzip),
+		uncompressedBytes: stdlibTar.byteLength,
+		uncompressedSha256: sha256(stdlibTar)
+	}
+};
+const maxAssetBytes = 128 * 1024 * 1024;
 
 const shim = vi.hoisted(() => {
 	const encoder = new TextEncoder();
@@ -171,8 +185,7 @@ describe('Zig worker', () => {
 		(globalThis as any).self = globalThis as any;
 		(globalThis as any).postMessage = vi.fn();
 		(globalThis as any).fetch = vi.fn(async (url: string) => {
-			if (url.endsWith('zig_small.wasm'))
-				return responseFor(new Uint8Array([0, 97, 115, 109]), url);
+			if (url.endsWith('zig_small.wasm')) return responseFor(compilerAsset, url);
 			if (url.endsWith('std.tar.gz')) return responseFor(stdlibTarGzip, url);
 			if (url.endsWith('std.zip')) return responseFor(stdlibArchive, url);
 			return { ok: false, status: 404, headers: { get: () => null } };
@@ -208,6 +221,8 @@ describe('Zig worker', () => {
 				load: true,
 				compilerUrl: 'https://assets.example.test/wasm-zig/zig_small.wasm',
 				stdlibUrl: 'https://assets.example.test/wasm-zig/std.tar.gz',
+				integrity: runtimeIntegrity,
+				maxAssetBytes,
 				log: false
 			}
 		});
@@ -282,7 +297,9 @@ describe('Zig worker', () => {
 			data: {
 				load: true,
 				compilerUrl: 'https://assets.example.test/wasm-zig/zig_small.wasm',
-				stdlibUrl: 'https://assets.example.test/wasm-zig/std.zip',
+				stdlibUrl: 'https://assets.example.test/wasm-zig/std.tar.gz',
+				integrity: runtimeIntegrity,
+				maxAssetBytes,
 				log: false
 			}
 		});
@@ -325,6 +342,8 @@ describe('Zig worker', () => {
 				load: true,
 				compilerUrl: 'https://assets.example.test/wasm-zig/zig_small.wasm',
 				stdlibUrl: 'https://assets.example.test/wasm-zig/std.tar.gz',
+				integrity: runtimeIntegrity,
+				maxAssetBytes,
 				log: false
 			}
 		});
@@ -345,6 +364,78 @@ describe('Zig worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'compile log\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ error: 'compile log\n' });
 		expect(shim.state.runCount).toBe(0);
+	});
+
+	it('rejects corrupt compiler bytes before compilation and permits a clean retry', async () => {
+		const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+		const corruptCompiler = Uint8Array.from(compilerAsset);
+		corruptCompiler[3] ^= 1;
+		fetchMock.mockImplementation(async (url: string) => {
+			if (url.endsWith('zig_small.wasm')) return responseFor(corruptCompiler, url);
+			return responseFor(stdlibTarGzip, url);
+		});
+
+		await import('./zig');
+		const loadRequest = {
+			load: true,
+			compilerUrl: 'https://assets.example.test/wasm-zig/zig_small.wasm',
+			stdlibUrl: 'https://assets.example.test/wasm-zig/std.tar.gz',
+			integrity: runtimeIntegrity,
+			maxAssetBytes,
+			log: false
+		};
+		await (globalThis as any).self.onmessage({ data: loadRequest });
+
+		expect(WebAssembly.compile).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ error: expect.stringContaining('SHA-256 mismatch') })
+		);
+
+		fetchMock.mockImplementation(async (url: string) => {
+			if (url.endsWith('zig_small.wasm')) return responseFor(compilerAsset, url);
+			return responseFor(stdlibTarGzip, url);
+		});
+		await (globalThis as any).self.onmessage({ data: loadRequest });
+
+		expect(WebAssembly.compile).toHaveBeenCalledOnce();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
+	});
+
+	it('rejects incomplete receipts and oversized expanded metadata before fetching', async () => {
+		await import('./zig');
+		const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: 'https://assets.example.test/wasm-zig/zig_small.wasm',
+				stdlibUrl: 'https://assets.example.test/wasm-zig/std.tar.gz',
+				integrity: { 'zig_small.wasm': runtimeIntegrity['zig_small.wasm'] },
+				maxAssetBytes,
+				log: false
+			}
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				error: expect.stringContaining('exactly two asset receipts')
+			})
+		);
+
+		(globalThis as any).postMessage.mockClear();
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: 'https://assets.example.test/wasm-zig/zig_small.wasm',
+				stdlibUrl: 'https://assets.example.test/wasm-zig/std.tar.gz',
+				integrity: runtimeIntegrity,
+				maxAssetBytes: stdlibTar.byteLength - 1,
+				log: false
+			}
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ error: expect.stringContaining('byte limit') })
+		);
 	});
 
 	it('rejects a ZIP entry whose declared output exceeds the expanded-byte budget', async () => {
@@ -408,5 +499,52 @@ describe('Zig worker', () => {
 				}
 			)
 		).rejects.toThrow('512 byte limit');
+	});
+
+	it('accepts a transparently decoded TAR only after uncompressed receipt verification', async () => {
+		const { loadStdDirectory } = await import('./zig');
+
+		await expect(
+			loadStdDirectory(
+				new Uint8Array(stdlibTar),
+				'https://assets.example.test/std.tar.gz',
+				{ maxExpandedBytes: maxAssetBytes, maxFiles: 10 },
+				runtimeIntegrity['std.tar.gz']
+			)
+		).resolves.toBeInstanceOf(shim.Directory);
+
+		const corruptTar = Uint8Array.from(stdlibTar);
+		corruptTar[512] ^= 1;
+		await expect(
+			loadStdDirectory(
+				corruptTar,
+				'https://assets.example.test/std.tar.gz',
+				{ maxExpandedBytes: maxAssetBytes, maxFiles: 10 },
+				runtimeIntegrity['std.tar.gz']
+			)
+		).rejects.toThrow('uncompressed SHA-256 mismatch');
+	});
+
+	it('rejects corrupt gzip and alternate ZIP encodings under the receipt-backed path', async () => {
+		const { loadStdDirectory } = await import('./zig');
+		const corruptGzip = Uint8Array.from(stdlibTarGzip);
+		corruptGzip[corruptGzip.length - 1] ^= 1;
+
+		await expect(
+			loadStdDirectory(
+				corruptGzip,
+				'https://assets.example.test/std.tar.gz',
+				{ maxExpandedBytes: maxAssetBytes, maxFiles: 10 },
+				runtimeIntegrity['std.tar.gz']
+			)
+		).rejects.toThrow('compressed SHA-256 mismatch');
+		await expect(
+			loadStdDirectory(
+				stdlibArchive,
+				'https://assets.example.test/std.tar.gz',
+				{ maxExpandedBytes: maxAssetBytes, maxFiles: 10 },
+				runtimeIntegrity['std.tar.gz']
+			)
+		).rejects.toThrow('must be a gzip archive or TAR');
 	});
 });

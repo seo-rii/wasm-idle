@@ -77,7 +77,11 @@ export interface RuntimeAssetKeySource {
 		analyzerUrl?: string;
 		integrity?: RuntimeAssetIntegrityMap;
 	};
-	zig?: { compilerUrl?: string; stdlibUrl?: string };
+	zig?: {
+		compilerUrl?: string;
+		stdlibUrl?: string;
+		integrity?: RuntimeAssetIntegrityMap;
+	};
 	objectivec?: {
 		baseUrl?: string;
 		libobjcUrl?: string;
@@ -461,6 +465,12 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	},
 	{ runtime: 'zig', property: 'compilerUrl', key: 'zigCompilerUrl' },
 	{ runtime: 'zig', property: 'stdlibUrl', key: 'zigStdlibUrl' },
+	{
+		runtime: 'zig',
+		property: 'integrity',
+		key: 'zigIntegrity',
+		serialize: serializeIntegrity
+	},
 	{ runtime: 'objectivec', property: 'baseUrl', key: 'objectiveCBaseUrl' },
 	{ runtime: 'objectivec', property: 'libobjcUrl', key: 'objectiveCLibobjcUrl' },
 	{ runtime: 'objectivec', property: 'headersUrl', key: 'objectiveCHeadersUrl' },

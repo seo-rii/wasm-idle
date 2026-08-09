@@ -9,6 +9,8 @@ import {
 	resolveZigStdlibUrl,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
+import { snapshotZigExecutionAssetReceipts } from '$lib/playground/zigAssets';
+import { WASM_ZIG_ASSET_RECEIPTS } from '$lib/playground/wasmZigVersion';
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
@@ -59,6 +61,7 @@ class Zig implements Sandbox {
 	exit = true;
 	compilerUrl = '';
 	stdlibUrl = '';
+	assetKey = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -313,17 +316,37 @@ class Zig implements Sandbox {
 				if (!this.isOperationActive(activeOperation)) return;
 				const nextStdlibUrl = resolveZigStdlibUrl(resolverAssets, currentUrl);
 				if (!this.isOperationActive(activeOperation)) return;
+				const configuredIntegrity =
+					typeof resolverAssets === 'object' ? resolverAssets.zig?.integrity : undefined;
+				if (!this.isOperationActive(activeOperation)) return;
+				const nextIntegrity = snapshotZigExecutionAssetReceipts(
+					configuredIntegrity === undefined
+						? WASM_ZIG_ASSET_RECEIPTS
+						: configuredIntegrity
+				);
+				if (!this.isOperationActive(activeOperation)) return;
 				if (!nextCompilerUrl || !nextStdlibUrl) {
 					return rejectLoad(
 						'Zig runtime is not configured. Set PUBLIC_WASM_ZIG_COMPILER_URL and PUBLIC_WASM_ZIG_STDLIB_URL, or runtimeAssets.zig.compilerUrl and runtimeAssets.zig.stdlibUrl.'
 					);
 				}
-				const needsWorkerReset =
-					!this.worker ||
-					this.compilerUrl !== nextCompilerUrl ||
-					this.stdlibUrl !== nextStdlibUrl;
+				for (const [asset, receipt] of Object.entries(nextIntegrity)) {
+					const largestStage = Math.max(receipt.bytes, receipt.uncompressedBytes || 0);
+					if (largestStage > limits.maxAssetBytes) {
+						return rejectLoad(
+							`Zig execution asset ${asset} exceeds the ${limits.maxAssetBytes} byte limit`
+						);
+					}
+				}
+				const nextAssetKey = JSON.stringify({
+					compilerUrl: nextCompilerUrl,
+					stdlibUrl: nextStdlibUrl,
+					integrity: nextIntegrity
+				});
+				const needsWorkerReset = !this.worker || this.assetKey !== nextAssetKey;
 				this.compilerUrl = nextCompilerUrl;
 				this.stdlibUrl = nextStdlibUrl;
+				this.assetKey = nextAssetKey;
 				if (needsWorkerReset && this.worker) {
 					this.workerSession.reset();
 				}
@@ -368,6 +391,8 @@ class Zig implements Sandbox {
 						load: true,
 						compilerUrl: nextCompilerUrl,
 						stdlibUrl: nextStdlibUrl,
+						integrity: nextIntegrity,
+						maxAssetBytes: limits.maxAssetBytes,
 						log: _log
 					});
 				} else {

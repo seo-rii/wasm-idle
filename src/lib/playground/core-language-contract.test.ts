@@ -446,17 +446,34 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('scheme')).toBe(true);
 	});
 
-	it('includes Zig compiler and stdlib urls in runtime asset cache keys', () => {
+	it('includes Zig compiler, stdlib, and receipt identity in runtime asset cache keys', () => {
 		const key = createRuntimeAssetsKey({
 			rootUrl: '/repl',
 			zig: {
 				compilerUrl: '/wasm-zig/zig_small.wasm?v=test',
-				stdlibUrl: '/wasm-zig/std.tar.gz?v=test'
+				stdlibUrl: '/wasm-zig/std.tar.gz?v=test',
+				integrity: {
+					'zig_small.wasm': { bytes: 4, sha256: 'a'.repeat(64) },
+					'std.tar.gz': {
+						bytes: 5,
+						sha256: 'b'.repeat(64),
+						uncompressedBytes: 10,
+						uncompressedSha256: 'c'.repeat(64)
+					}
+				}
 			}
 		});
 
 		expect(key).toContain('"zigCompilerUrl":"/wasm-zig/zig_small.wasm?v=test"');
 		expect(key).toContain('"zigStdlibUrl":"/wasm-zig/std.tar.gz?v=test"');
+		const parsedKey = JSON.parse(key || '{}') as { zigIntegrity?: string };
+		expect(JSON.parse(parsedKey.zigIntegrity || '[]')).toContainEqual([
+			'std.tar.gz',
+			expect.objectContaining({
+				uncompressedSha256: 'c'.repeat(64),
+				uncompressedBytes: 10
+			})
+		]);
 	});
 
 	it('includes R base url in runtime asset cache keys', () => {
