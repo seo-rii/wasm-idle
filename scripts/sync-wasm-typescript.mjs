@@ -15,11 +15,21 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	'playground',
 	'wasmTypeScriptVersion.ts'
 );
+const ENTRY_MODULE = 'index.js';
+const RUNTIME_BUILD_RECEIPT = 'runtime-build.json';
 
+/** @typedef {{ readonly bytes: number; readonly sha256: string }} TypeScriptModuleReceipt */
+
+/** @param {string} sourcePath */
 function shouldSkipCopy(sourcePath) {
-	return sourcePath.endsWith('.d.ts') || sourcePath.endsWith('.tsbuildinfo');
+	return (
+		path.basename(sourcePath) === RUNTIME_BUILD_RECEIPT ||
+		sourcePath.endsWith('.d.ts') ||
+		sourcePath.endsWith('.tsbuildinfo')
+	);
 }
 
+/** @param {string} sourceDir @param {string} targetDir @returns {Promise<void>} */
 async function copyDirectory(sourceDir, targetDir) {
 	const entries = await readdir(sourceDir, { withFileTypes: true });
 	for (const entry of entries) {
@@ -35,8 +45,10 @@ async function copyDirectory(sourceDir, targetDir) {
 	}
 }
 
+/** @param {string} rootDir @returns {Promise<string[]>} */
 async function listFiles(rootDir) {
 	const entries = await readdir(rootDir, { withFileTypes: true });
+	/** @type {string[]} */
 	const files = [];
 	for (const entry of entries) {
 		const entryPath = path.join(rootDir, entry.name);
@@ -50,6 +62,7 @@ async function listFiles(rootDir) {
 	return files.sort();
 }
 
+/** @param {string} sourceDir @returns {Promise<string>} */
 async function computeBundleFingerprint(sourceDir) {
 	const hash = createHash('sha256');
 	for (const filePath of await listFiles(sourceDir)) {
@@ -61,9 +74,49 @@ async function computeBundleFingerprint(sourceDir) {
 	return hash.digest('hex').slice(0, 16);
 }
 
-async function writeVersionModule(versionModulePath, fingerprint) {
+/** @param {string} modulePath @returns {Promise<Readonly<TypeScriptModuleReceipt>>} */
+async function computeModuleReceipt(modulePath) {
+	const bytes = await readFile(modulePath);
+	return Object.freeze({
+		bytes: bytes.byteLength,
+		sha256: createHash('sha256').update(bytes).digest('hex')
+	});
+}
+
+/**
+ * @param {string} targetDir
+ * @param {string} fingerprint
+ * @param {Readonly<TypeScriptModuleReceipt>} moduleReceipt
+ * @returns {Promise<string>}
+ */
+async function writeRuntimeBuildReceipt(targetDir, fingerprint, moduleReceipt) {
+	const receiptPath = path.join(targetDir, RUNTIME_BUILD_RECEIPT);
+	const receipt = {
+		format: 'wasm-typescript-runtime-build-v1',
+		fingerprint,
+		assets: {
+			[ENTRY_MODULE]: moduleReceipt
+		}
+	};
+	await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, 'utf8');
+	return receiptPath;
+}
+
+/**
+ * @param {string} versionModulePath
+ * @param {string} fingerprint
+ * @param {Readonly<TypeScriptModuleReceipt>} moduleReceipt
+ * @returns {Promise<void>}
+ */
+async function writeVersionModule(versionModulePath, fingerprint, moduleReceipt) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource = `export const WASM_TYPESCRIPT_ASSET_VERSION = '${fingerprint}';\n`;
+	const moduleSource = `export const WASM_TYPESCRIPT_ASSET_VERSION = '${fingerprint}';
+
+export const WASM_TYPESCRIPT_MODULE_RECEIPT = Object.freeze({
+\tbytes: ${moduleReceipt.bytes},
+\tsha256: '${moduleReceipt.sha256}'
+});
+`;
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current === moduleSource) return;
 	await writeFile(versionModulePath, moduleSource, 'utf8');
@@ -80,7 +133,7 @@ export async function syncWasmTypeScriptDist({
 			`wasm-typescript dist directory was not found at ${sourceDir}. Build wasm-typescript first with "pnpm --dir runtimes/wasm-typescript build".`
 		);
 	}
-	const entryModulePath = path.join(sourceDir, 'index.js');
+	const entryModulePath = path.join(sourceDir, ENTRY_MODULE);
 	const entryModuleStats = await stat(entryModulePath).catch(() => null);
 	if (!entryModuleStats?.isFile()) {
 		throw new Error(`wasm-typescript dist entry was not found at ${entryModulePath}.`);
@@ -90,8 +143,17 @@ export async function syncWasmTypeScriptDist({
 	await mkdir(targetDir, { recursive: true });
 	await copyDirectory(sourceDir, targetDir);
 	const fingerprint = await computeBundleFingerprint(targetDir);
-	await writeVersionModule(versionModulePath, fingerprint);
-	return { sourceDir, targetDir, fingerprint, versionModulePath };
+	const moduleReceipt = await computeModuleReceipt(path.join(targetDir, ENTRY_MODULE));
+	const receiptPath = await writeRuntimeBuildReceipt(targetDir, fingerprint, moduleReceipt);
+	await writeVersionModule(versionModulePath, fingerprint, moduleReceipt);
+	return {
+		sourceDir,
+		targetDir,
+		fingerprint,
+		moduleReceipt,
+		receiptPath,
+		versionModulePath
+	};
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {
