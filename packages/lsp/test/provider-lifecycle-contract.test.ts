@@ -124,6 +124,9 @@ const createProviderOptions = (
 	},
 	javascript: {
 		libUrl: `${deployment.rootUrl}typescript-libs.json.gz`
+	},
+	gleam: {
+		manifestFingerprint: 'a'.repeat(64)
 	}
 });
 

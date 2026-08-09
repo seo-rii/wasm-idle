@@ -26,6 +26,13 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 	'playground',
 	'wasmGleamVersion.ts'
 );
+const DEFAULT_LSP_VERSION_MODULE_PATH = path.resolve(
+	REPO_ROOT,
+	'packages',
+	'lsp',
+	'src',
+	'bundledGleamRuntime.ts'
+);
 
 export const GLEAM_COMPILER_VERSION = 'v1.3.0';
 export const GLEAM_MANIFEST_FORMAT = 'wasm-gleam-runtime-manifest-v2';
@@ -155,7 +162,8 @@ export async function syncWasmGleamAssets({
 	sourceDir = DEFAULT_SOURCE_DIR,
 	targetDir = DEFAULT_TARGET_DIR,
 	workerSourcePath = DEFAULT_WORKER_SOURCE_PATH,
-	versionModulePath = DEFAULT_VERSION_MODULE_PATH
+	versionModulePath = DEFAULT_VERSION_MODULE_PATH,
+	lspVersionModulePath = DEFAULT_LSP_VERSION_MODULE_PATH
 } = {}) {
 	const compilerSourceDir = path.join(sourceDir, 'compiler', GLEAM_COMPILER_VERSION);
 	const stdlibSourceDir = path.join(sourceDir, 'build', 'packages', 'gleam_stdlib', 'src');
@@ -236,7 +244,13 @@ export async function syncWasmGleamAssets({
 		bytes: runnerReceipt.size,
 		sha256: runnerReceipt.sha256
 	});
-	return { sourceDir, targetDir, fingerprint, versionModulePath };
+	await mkdir(path.dirname(lspVersionModulePath), { recursive: true });
+	const lspModuleSource = `export const BUNDLED_GLEAM_MANIFEST_FINGERPRINT =\n\t'${fingerprint}';\n`;
+	const currentLspModule = await readFile(lspVersionModulePath, 'utf8').catch(() => '');
+	if (currentLspModule !== lspModuleSource) {
+		await writeFile(lspVersionModulePath, lspModuleSource, 'utf8');
+	}
+	return { sourceDir, targetDir, fingerprint, versionModulePath, lspVersionModulePath };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {

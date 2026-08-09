@@ -170,8 +170,13 @@ describe('example route debug actions', () => {
 
 		for (const [runtime, config] of Object.entries(applicationRuntimeAssets)) {
 			if (runtime === 'rootUrl' || !config || typeof config !== 'object') continue;
-			for (const value of Object.values(config)) {
-				if (typeof value === 'string') expect(value).toMatch(/^\/wasm-idle\//u);
+			for (const [key, value] of Object.entries(config)) {
+				if (typeof value !== 'string') continue;
+				if (key.endsWith('Fingerprint')) {
+					expect(value).toMatch(/^[a-f0-9]{64}$/u);
+				} else {
+					expect(value).toMatch(/^\/wasm-idle\//u);
+				}
 			}
 		}
 	});

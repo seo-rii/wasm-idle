@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BUNDLED_CLANGD_ASSET_INTEGRITY } from '../src/bundledClangdAssetIntegrity.js';
+import { BUNDLED_GLEAM_MANIFEST_FINGERPRINT } from '../src/bundledGleamRuntime.js';
 import {
 	LanguageServerAssetConfigurationError,
 	resolveCppLanguageServerBaseUrl,
@@ -13,6 +14,7 @@ import {
 	resolveFortranLanguageServerAnalyzerUrl,
 	resolveGoLanguageServerCompilerUrl,
 	resolveGleamLanguageServerBaseUrl,
+	resolveGleamLanguageServerManifestFingerprint,
 	resolveGleamLanguageServerManifestUrl,
 	resolveHaskellLanguageServerBsdtarUrl,
 	resolveHaskellLanguageServerModuleUrl,
@@ -99,6 +101,27 @@ describe('lsp runtime asset resolution', () => {
 				'https://app.example.com/wasm-idle/'
 			)
 		).toBe('');
+	});
+
+	it('pins bundled Gleam roots and requires a fingerprint for custom assets', () => {
+		expect(resolveGleamLanguageServerManifestFingerprint({ rootUrl: '/wasm-idle' })).toBe(
+			BUNDLED_GLEAM_MANIFEST_FINGERPRINT
+		);
+		expect(() =>
+			resolveGleamLanguageServerManifestFingerprint({
+				gleam: { baseUrl: 'https://gleam.example.com/' }
+			})
+		).toThrow(LanguageServerAssetConfigurationError);
+		expect(() =>
+			resolveGleamLanguageServerManifestFingerprint({
+				gleam: { manifestFingerprint: 'not-a-digest' }
+			})
+		).toThrow(LanguageServerAssetConfigurationError);
+		expect(
+			resolveGleamLanguageServerManifestFingerprint({
+				gleam: { manifestFingerprint: 'a'.repeat(64) }
+			})
+		).toBe('a'.repeat(64));
 	});
 
 	it('requires host context for document-relative asset overrides', () => {
@@ -446,7 +469,8 @@ describe('lsp runtime asset resolution', () => {
 			},
 			gleam: {
 				baseUrl: 'https://gleam.example.com/wasm-gleam/',
-				manifestUrl: 'https://gleam.example.com/manifest.json'
+				manifestUrl: 'https://gleam.example.com/manifest.json',
+				manifestFingerprint: 'a'.repeat(64)
 			},
 			elixir: {
 				bundleUrl: 'https://beam.example.com/bundle.avm?v=20240807',
@@ -543,6 +567,7 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolveGleamLanguageServerManifestUrl(options)).toBe(
 			'https://gleam.example.com/manifest.json'
 		);
+		expect(resolveGleamLanguageServerManifestFingerprint(options)).toBe('a'.repeat(64));
 		expect(resolveElixirLanguageServerBundleUrl(options)).toBe(
 			'https://beam.example.com/bundle.avm?v=20240807'
 		);

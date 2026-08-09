@@ -1,5 +1,6 @@
 import {
 	resolveGleamLanguageServerBaseUrl,
+	resolveGleamLanguageServerManifestFingerprint,
 	resolveGleamLanguageServerManifestUrl
 } from '../runtime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
@@ -26,7 +27,8 @@ export async function getGleamLanguageServer(
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
 			baseUrl: resolveGleamLanguageServerBaseUrl(options, baseUrl),
-			manifestUrl: resolveGleamLanguageServerManifestUrl(options, baseUrl)
+			manifestUrl: resolveGleamLanguageServerManifestUrl(options, baseUrl),
+			manifestFingerprint: resolveGleamLanguageServerManifestFingerprint(options)
 		},
 		onStatus: hostOptions?.onStatus,
 		lifecycle: hostOptions

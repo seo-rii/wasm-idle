@@ -77,6 +77,7 @@ export interface EditorLanguageServerRuntimeOptions {
 	gleam?: {
 		baseUrl?: string;
 		manifestUrl?: string;
+		manifestFingerprint?: string;
 	};
 	assemblyscript?: {
 		moduleUrl?: string;

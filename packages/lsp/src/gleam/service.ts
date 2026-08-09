@@ -1,9 +1,18 @@
+import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
+
 import { positionAt, type LspDiagnostic, type WorkerLanguageService } from '../lsp.js';
 import { DEFAULT_MAX_EXTERNAL_ASSET_BYTES, fetchBoundedExternalAsset } from '../external-asset.js';
 
 export interface GleamWorkerOptions {
 	baseUrl: string;
 	manifestUrl?: string;
+	manifestFingerprint: string;
+}
+
+export interface GleamCompilerAssets {
+	manifestFingerprint: string;
+	moduleBytes: Uint8Array<ArrayBuffer>;
+	wasmBytes: Uint8Array<ArrayBuffer>;
 }
 
 export interface GleamCompiler {
@@ -12,10 +21,13 @@ export interface GleamCompiler {
 	write_file(projectId: number, path: string, content: string): void;
 	write_module(projectId: number, moduleName: string, code: string): void;
 	compile_package(projectId: number, target: string): void;
-	default?(wasmUrl: string): Promise<void>;
+	default?(wasm: string | Uint8Array<ArrayBuffer>): Promise<void>;
 }
 
-export type LoadGleamCompiler = (baseUrl: string) => Promise<GleamCompiler>;
+export type LoadGleamCompiler = (
+	baseUrl: string,
+	assets: GleamCompilerAssets
+) => Promise<GleamCompiler>;
 
 const GLEAM_KEYWORDS = [
 	'as',
@@ -45,7 +57,13 @@ const stdinFfiSource = `export function read_line() {
 `;
 
 let nextProjectId = 0;
+const GLEAM_MANIFEST_FORMAT = 'wasm-gleam-runtime-manifest-v2';
+const GLEAM_FINGERPRINT_DOMAIN = 'wasm-idle:gleam-runtime-manifest:v2';
+const MAX_GLEAM_MANIFEST_BYTES = 4 * 1024 * 1024;
+const MAX_GLEAM_RUNTIME_ASSETS = 8_192;
 const MAX_GLEAM_STDLIB_SOURCE_FILES = 4_096;
+const fatalTextDecoder = new TextDecoder('utf-8', { fatal: true });
+const textEncoder = new TextEncoder();
 
 function assetUrl(baseUrl: string, path: string) {
 	return new URL(path, baseUrl).href;
@@ -55,26 +73,45 @@ export function resolveGleamCompilerUrl(baseUrl: string) {
 	return assetUrl(baseUrl, 'compiler/gleam_wasm.js');
 }
 
-async function defaultLoadGleamCompiler(baseUrl: string): Promise<GleamCompiler> {
-	const compiler = (await import(
-		/* @vite-ignore */ resolveGleamCompilerUrl(baseUrl)
-	)) as GleamCompiler;
-	if (typeof compiler.default === 'function') {
-		await compiler.default(assetUrl(baseUrl, 'compiler/gleam_wasm_bg.wasm'));
+async function defaultLoadGleamCompiler(
+	_baseUrl: string,
+	assets: GleamCompilerAssets
+): Promise<GleamCompiler> {
+	if (typeof URL.createObjectURL !== 'function' || typeof URL.revokeObjectURL !== 'function') {
+		throw new Error('Gleam compiler verification requires Blob URL support');
 	}
+	const moduleUrl = URL.createObjectURL(
+		new Blob([assets.moduleBytes], { type: 'text/javascript' })
+	);
+	let compiler: GleamCompiler;
+	try {
+		compiler = (await import(/* @vite-ignore */ moduleUrl)) as GleamCompiler;
+	} finally {
+		try {
+			URL.revokeObjectURL(moduleUrl);
+		} catch {
+			// Blob URL cleanup must not replace the verified import outcome.
+		}
+	}
+	if (typeof compiler.default !== 'function') {
+		throw new Error('Gleam compiler module does not export an initializer');
+	}
+	await compiler.default(assets.wasmBytes);
 	return compiler;
 }
 
 async function fetchJson(url: string) {
-	return JSON.parse(
-		new TextDecoder().decode(
-			await fetchBoundedExternalAsset({
-				url,
-				label: 'Gleam source manifest',
-				cache: 'no-store'
-			})
-		)
-	) as unknown;
+	const bytes = await fetchBoundedExternalAsset({
+		url,
+		label: 'Gleam source manifest',
+		cache: 'no-store',
+		maxBytes: MAX_GLEAM_MANIFEST_BYTES
+	});
+	try {
+		return JSON.parse(fatalTextDecoder.decode(bytes)) as unknown;
+	} catch {
+		throw new Error('Gleam source manifest is not valid UTF-8 JSON');
+	}
 }
 
 function normalizeWorkspacePath(path: string) {
@@ -103,56 +140,229 @@ function moduleNameFromUri(uri: string) {
 	return 'main';
 }
 
-async function collectStdlibSources(baseUrl: string, manifest: unknown) {
-	const sources = new Map<string, string>();
-	const files = Array.isArray((manifest as { files?: unknown[] })?.files)
-		? (manifest as { files: unknown[] }).files
-		: [];
-	const sourceEntries = files.filter((entry) => {
-		const path = typeof entry === 'string' ? entry : (entry as { path?: unknown })?.path;
-		return typeof path === 'string' && path.endsWith('.gleam');
+interface GleamAssetReceipt {
+	path: string;
+	size: number;
+	sha256: string;
+}
+
+interface VerifiedGleamRuntimePack {
+	compilerAssets: GleamCompilerAssets;
+	sources: Map<string, string>;
+}
+
+async function collectStdlibSources(
+	baseUrl: string,
+	manifest: unknown,
+	expectedFingerprint: string
+): Promise<VerifiedGleamRuntimePack> {
+	if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
+		throw new Error('Gleam source manifest must be an object');
+	}
+	const value = manifest as Record<string, unknown>;
+	if (value.format !== GLEAM_MANIFEST_FORMAT) {
+		throw new Error('Gleam source manifest format is unsupported');
+	}
+	if (
+		typeof value.compilerVersion !== 'string' ||
+		!/^[A-Za-z0-9._-]{1,64}$/u.test(value.compilerVersion)
+	) {
+		throw new Error('Gleam source manifest compiler version is invalid');
+	}
+	if (!/^[a-f0-9]{64}$/u.test(expectedFingerprint)) {
+		throw new Error('Gleam language server requires a valid manifest fingerprint');
+	}
+	if (value.fingerprint !== expectedFingerprint) {
+		throw new Error('Gleam source manifest does not match the pinned fingerprint');
+	}
+	if (
+		!Array.isArray(value.assets) ||
+		value.assets.length === 0 ||
+		value.assets.length > MAX_GLEAM_RUNTIME_ASSETS
+	) {
+		throw new Error('Gleam source manifest assets are invalid');
+	}
+
+	const receipts: GleamAssetReceipt[] = [];
+	for (const [index, entry] of value.assets.entries()) {
+		if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+			throw new Error(`Gleam runtime asset ${index} receipt is invalid`);
+		}
+		const { path, size, sha256 } = entry as Record<string, unknown>;
+		if (
+			typeof path !== 'string' ||
+			!path ||
+			path.length > 512 ||
+			!/^[A-Za-z0-9._/-]+$/u.test(path) ||
+			path.startsWith('/') ||
+			path
+				.split('/')
+				.some((part) => !part || part === '.' || part === '..' || part.length > 128)
+		) {
+			throw new Error(`Gleam runtime asset ${index} path is invalid`);
+		}
+		if (!Number.isSafeInteger(size) || Number(size) <= 0) {
+			throw new Error(`Gleam runtime asset ${path} size is invalid`);
+		}
+		if (typeof sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(sha256)) {
+			throw new Error(`Gleam runtime asset ${path} SHA-256 is invalid`);
+		}
+		receipts.push({ path, size: Number(size), sha256 });
+	}
+	receipts.sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0));
+	const receiptByPath = new Map<string, GleamAssetReceipt>();
+	let declaredBytes = 0;
+	for (const receipt of receipts) {
+		if (receiptByPath.has(receipt.path)) {
+			throw new Error(`Gleam source manifest contains a duplicate asset: ${receipt.path}`);
+		}
+		declaredBytes += receipt.size;
+		if (
+			!Number.isSafeInteger(declaredBytes) ||
+			declaredBytes > DEFAULT_MAX_EXTERNAL_ASSET_BYTES
+		) {
+			throw new Error('Gleam source manifest exceeds the aggregate asset byte limit');
+		}
+		receiptByPath.set(receipt.path, receipt);
+	}
+	const canonical = `${GLEAM_FINGERPRINT_DOMAIN}\nformat\0${GLEAM_MANIFEST_FORMAT}\ncompilerVersion\0${value.compilerVersion}\n${receipts
+		.map((receipt) => `${receipt.path}\0${receipt.size}\0${receipt.sha256}\n`)
+		.join('')}`;
+	await verifyRuntimeAssetIntegrity({
+		asset: 'Gleam runtime receipt graph',
+		bytes: textEncoder.encode(canonical),
+		expected: expectedFingerprint,
+		runtimeId: 'gleam-lsp',
+		profileId: expectedFingerprint
 	});
-	if (sourceEntries.length > MAX_GLEAM_STDLIB_SOURCE_FILES) {
+
+	if (!Array.isArray(value.files) || value.files.length > MAX_GLEAM_STDLIB_SOURCE_FILES) {
 		throw new Error(
 			`Gleam source manifest exceeds the ${MAX_GLEAM_STDLIB_SOURCE_FILES} file limit`
 		);
 	}
-	const seenPaths = new Set<string>();
-	const validatedPaths: string[] = [];
-	for (const entry of sourceEntries) {
-		const path = typeof entry === 'string' ? entry : (entry as { path?: unknown })?.path;
-		if (typeof path !== 'string') continue;
-		const pathParts = path.replaceAll('\\', '/').split('/');
-		if (
-			path.startsWith('/') ||
-			path.includes('\\') ||
-			path.includes('\0') ||
-			path.includes('?') ||
-			path.includes('#') ||
-			pathParts.some(
-				(part) => !part || part === '.' || part === '..' || !/^[A-Za-z0-9_.-]+$/u.test(part)
-			)
-		) {
-			throw new Error(`Gleam source manifest contains an unsafe path: ${path}`);
+	const sourceReceipts: GleamAssetReceipt[] = [];
+	const sourcePaths = new Set<string>();
+	const requiredPaths = new Set(['compiler/gleam_wasm.js', 'compiler/gleam_wasm_bg.wasm']);
+	for (const entry of value.files) {
+		if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+			throw new Error('Gleam source manifest receipt is invalid');
 		}
-		if (seenPaths.has(path)) {
+		const { path, size, sha256 } = entry as Record<string, unknown>;
+		const pathParts = typeof path === 'string' ? path.split('/') : [];
+		if (
+			typeof path !== 'string' ||
+			!path ||
+			path.length > 512 ||
+			!/^[A-Za-z0-9._/-]+$/u.test(path) ||
+			path.startsWith('/') ||
+			pathParts.some((part) => !part || part === '.' || part === '..' || part.length > 128) ||
+			(!path.endsWith('.gleam') && !path.endsWith('.mjs'))
+		) {
+			throw new Error(`Gleam source manifest contains an unsafe path: ${String(path)}`);
+		}
+		if (sourcePaths.has(path)) {
 			throw new Error(`Gleam source manifest contains a duplicate path: ${path}`);
 		}
-		seenPaths.add(path);
-		validatedPaths.push(path);
+		if (
+			!Number.isSafeInteger(size) ||
+			Number(size) <= 0 ||
+			typeof sha256 !== 'string' ||
+			!/^[a-f0-9]{64}$/u.test(sha256)
+		) {
+			throw new Error(`Gleam source manifest receipt is invalid for ${path}`);
+		}
+		const receipt = { path, size: Number(size), sha256 };
+		const assetPath = `src/${path}`;
+		const assetReceipt = receiptByPath.get(assetPath);
+		if (
+			!assetReceipt ||
+			assetReceipt.size !== receipt.size ||
+			assetReceipt.sha256 !== receipt.sha256
+		) {
+			throw new Error(`Gleam source receipt does not match asset ${assetPath}`);
+		}
+		sourcePaths.add(path);
+		requiredPaths.add(assetPath);
+		sourceReceipts.push(receipt);
 	}
-	let totalBytes = 0;
-	for (const path of validatedPaths) {
-		const sourceUrl = assetUrl(baseUrl, `src/${path}`);
+
+	if (!Array.isArray(value.javascriptFiles) || value.javascriptFiles.length > 4_096) {
+		throw new Error('Gleam JavaScript source manifest is invalid');
+	}
+	const javascriptPaths = new Set<string>();
+	for (const entry of value.javascriptFiles) {
+		if (
+			typeof entry !== 'string' ||
+			!entry ||
+			entry.length > 512 ||
+			!/^[A-Za-z0-9._/-]+$/u.test(entry) ||
+			entry.startsWith('/') ||
+			entry
+				.split('/')
+				.some((part) => !part || part === '.' || part === '..' || part.length > 128) ||
+			!entry.endsWith('.mjs')
+		) {
+			throw new Error('Gleam JavaScript source manifest path is invalid');
+		}
+		if (javascriptPaths.has(entry)) {
+			throw new Error(`Gleam JavaScript source manifest contains a duplicate path: ${entry}`);
+		}
+		const assetPath = `javascript/${entry}`;
+		if (!receiptByPath.has(assetPath)) {
+			throw new Error(`Gleam JavaScript source receipt is missing for ${assetPath}`);
+		}
+		javascriptPaths.add(entry);
+		requiredPaths.add(assetPath);
+	}
+	if (
+		requiredPaths.size !== receiptByPath.size ||
+		[...requiredPaths].some((path) => !receiptByPath.has(path))
+	) {
+		throw new Error('Gleam source manifest asset allowlist is inconsistent');
+	}
+
+	const bytesByPath = new Map<string, Uint8Array<ArrayBuffer>>();
+	for (const assetPath of [
+		'compiler/gleam_wasm.js',
+		'compiler/gleam_wasm_bg.wasm',
+		...sourceReceipts.map((receipt) => `src/${receipt.path}`)
+	]) {
+		const receipt = receiptByPath.get(assetPath)!;
+		const url = new URL(assetPath, baseUrl);
+		url.searchParams.set('v', expectedFingerprint);
 		const bytes = await fetchBoundedExternalAsset({
-			url: sourceUrl,
-			label: `Gleam source ${sourceUrl}`,
-			maxBytes: DEFAULT_MAX_EXTERNAL_ASSET_BYTES - totalBytes
+			url,
+			label: `Gleam runtime asset ${assetPath}`,
+			maxBytes: receipt.size
 		});
-		totalBytes += bytes.byteLength;
-		sources.set(path, new TextDecoder().decode(bytes));
+		await verifyRuntimeAssetIntegrity({
+			asset: assetPath,
+			bytes,
+			expected: { bytes: receipt.size, sha256: receipt.sha256 },
+			runtimeId: 'gleam-lsp',
+			profileId: expectedFingerprint
+		});
+		bytesByPath.set(assetPath, bytes);
 	}
-	return sources;
+
+	const sources = new Map<string, string>();
+	for (const receipt of sourceReceipts) {
+		const bytes = bytesByPath.get(`src/${receipt.path}`)!;
+		try {
+			sources.set(receipt.path, fatalTextDecoder.decode(bytes));
+		} catch {
+			throw new Error(`Gleam source ${receipt.path} is not valid UTF-8`);
+		}
+	}
+	return {
+		compilerAssets: {
+			manifestFingerprint: expectedFingerprint,
+			moduleBytes: bytesByPath.get('compiler/gleam_wasm.js')!,
+			wasmBytes: bytesByPath.get('compiler/gleam_wasm_bg.wasm')!
+		},
+		sources
+	};
 }
 
 function diagnosticFromError(error: unknown, text: string): LspDiagnostic {
@@ -189,6 +399,7 @@ export function createGleamWorkerService(
 	let compiler: GleamCompiler | null = null;
 	let baseUrl = '';
 	let manifestUrl = '';
+	let manifestFingerprint = '';
 	let stdlibSources = new Map<string, string>();
 	let lastKey = '';
 	let lastDiagnostics: LspDiagnostic[] = [];
@@ -202,17 +413,33 @@ export function createGleamWorkerService(
 		async initialize(options, context) {
 			const config = (options || {}) as GleamWorkerOptions;
 			if (!config.baseUrl) throw new Error('Gleam language server requires a baseUrl');
-			baseUrl = config.baseUrl;
-			manifestUrl = config.manifestUrl || assetUrl(baseUrl, 'source-manifest.v2.json');
+			if (!/^[a-f0-9]{64}$/u.test(config.manifestFingerprint)) {
+				throw new Error('Gleam language server requires a valid manifest fingerprint');
+			}
+			const nextBaseUrl = config.baseUrl;
+			const nextManifestUrl =
+				config.manifestUrl || assetUrl(nextBaseUrl, 'source-manifest.v2.json');
+			const nextManifestFingerprint = config.manifestFingerprint;
 			context.reportProgress('load-gleam-compiler');
-			compiler = await loadCompiler(baseUrl);
-			const manifest = await fetchJson(manifestUrl);
-			stdlibSources = await collectStdlibSources(baseUrl, manifest);
+			const manifest = await fetchJson(nextManifestUrl);
+			const runtime = await collectStdlibSources(
+				nextBaseUrl,
+				manifest,
+				nextManifestFingerprint
+			);
+			const nextCompiler = await loadCompiler(nextBaseUrl, runtime.compilerAssets);
+			baseUrl = nextBaseUrl;
+			manifestUrl = nextManifestUrl;
+			manifestFingerprint = nextManifestFingerprint;
+			compiler = nextCompiler;
+			stdlibSources = runtime.sources;
+			lastKey = '';
+			lastDiagnostics = [];
 		},
 		async diagnostics(document, context) {
 			if (!compiler) return [];
 			if (!document.text.trim()) return [];
-			const key = `${baseUrl}\n${manifestUrl}\n${document.uri}\n${document.text}`;
+			const key = `${baseUrl}\n${manifestUrl}\n${manifestFingerprint}\n${document.uri}\n${document.text}`;
 			if (key === lastKey) return lastDiagnostics;
 			context.reportProgress('gleam-diagnostics');
 			const projectId = ++nextProjectId;

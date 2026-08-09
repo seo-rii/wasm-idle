@@ -2349,6 +2349,7 @@
 		gleamLspEnabled?: boolean;
 		gleamLspBaseUrl?: string;
 		gleamLspManifestUrl?: string;
+		gleamLspManifestFingerprint?: string;
 		dLspEnabled?: boolean;
 		dLspModuleUrl?: string;
 		tclLspEnabled?: boolean;
@@ -2437,6 +2438,7 @@
 		gleamLspEnabled = false,
 		gleamLspBaseUrl,
 		gleamLspManifestUrl,
+		gleamLspManifestFingerprint,
 		dLspEnabled = false,
 		dLspModuleUrl,
 		tclLspEnabled = false,
@@ -2595,6 +2597,7 @@
 			erlangLspEnabled ? erlangLspWorkerUrl || '' : '',
 			gleamLspEnabled ? gleamLspBaseUrl || '' : '',
 			gleamLspEnabled ? gleamLspManifestUrl || '' : '',
+			gleamLspEnabled ? gleamLspManifestFingerprint || '' : '',
 			dLspEnabled ? dLspModuleUrl || '' : '',
 			tclLspEnabled ? tclLspBaseUrl || '' : '',
 			tclLspEnabled ? tclLspWorkerUrl || '' : '',
@@ -2950,7 +2953,8 @@
 					currentUrl,
 					gleam: {
 						baseUrl: gleamLspBaseUrl || '',
-						manifestUrl: gleamLspManifestUrl
+						manifestUrl: gleamLspManifestUrl,
+						manifestFingerprint: gleamLspManifestFingerprint
 					},
 					onStatus: (status) => (gleamLspStatus = status)
 				});

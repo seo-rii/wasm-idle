@@ -6,6 +6,7 @@ import {
 	type ResolvedLanguageToolAssetConfig
 } from './assets.js';
 import { BUNDLED_CLANGD_ASSET_INTEGRITY } from './bundledClangdAssetIntegrity.js';
+import { BUNDLED_GLEAM_MANIFEST_FINGERPRINT } from './bundledGleamRuntime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from './types.js';
 
 export class LanguageServerAssetConfigurationError extends Error {
@@ -230,6 +231,25 @@ export function resolveGleamLanguageServerManifestUrl(
 	return resolveFileUrl(
 		`${resolveGleamLanguageServerBaseUrl(options, currentUrl)}source-manifest.v2.json`,
 		currentUrl
+	);
+}
+
+export function resolveGleamLanguageServerManifestFingerprint(
+	options: EditorLanguageServerOptions | undefined
+) {
+	const fingerprint =
+		typeof options === 'object' ? options.gleam?.manifestFingerprint?.trim() || '' : '';
+	if (/^[a-f0-9]{64}$/u.test(fingerprint)) return fingerprint;
+	const usesBundledRoot =
+		typeof options === 'string' ||
+		(typeof options === 'object' &&
+			!!options.rootUrl &&
+			!options.gleam?.baseUrl &&
+			!options.gleam?.manifestUrl);
+	if (usesBundledRoot && !fingerprint) return BUNDLED_GLEAM_MANIFEST_FINGERPRINT;
+	throw new LanguageServerAssetConfigurationError(
+		'Gleam LSP',
+		'an explicit 64-character gleam.manifestFingerprint'
 	);
 }
 

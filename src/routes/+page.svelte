@@ -220,6 +220,9 @@
 	const gleamLspManifestUrl = $derived(
 		gleamLspEnabled ? runtimeAssets.gleam?.manifestUrl : undefined
 	);
+	const gleamLspManifestFingerprint = $derived(
+		gleamLspEnabled ? runtimeAssets.gleam?.manifestFingerprint : undefined
+	);
 	const dLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'd');
 	const dLspModuleUrl = $derived(dLspEnabled ? runtimeAssets.d?.moduleUrl : undefined);
 	const tclLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'tcl');
@@ -2864,6 +2867,7 @@
 				{gleamLspEnabled}
 				{gleamLspBaseUrl}
 				{gleamLspManifestUrl}
+				{gleamLspManifestFingerprint}
 				{dLspEnabled}
 				{dLspModuleUrl}
 				{tclLspEnabled}

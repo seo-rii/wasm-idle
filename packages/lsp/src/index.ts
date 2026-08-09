@@ -22,6 +22,7 @@ export {
 	resolveFortranLanguageServerAnalyzerUrl,
 	resolveGoLanguageServerCompilerUrl,
 	resolveGleamLanguageServerBaseUrl,
+	resolveGleamLanguageServerManifestFingerprint,
 	resolveGleamLanguageServerManifestUrl,
 	resolveHaskellLanguageServerBsdtarUrl,
 	resolveHaskellLanguageServerModuleUrl,
