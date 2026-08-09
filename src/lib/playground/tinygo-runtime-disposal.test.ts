@@ -13,8 +13,10 @@ type ComlinkMessage = {
 	type: string;
 };
 
+const WASM_FETCH_FALLBACK_SNIPPET = '.catch((function(){return getBinary(wasmBinaryFile)}))';
 const COMPILER_WORKER_SOURCE =
-	'const __webpack_require__={p:""};__webpack_require__.p=new URL("./",self.location.href).href;__webpack_require__.b=self.location+"";async cachedLazyFile(e,r,t,n){const o=await this._cache;const r=this.readFile(`${o}/${t}`,{encoding:"binary"});this.writeFile(e,r);return void 0!==e.response?new Uint8Array(e.response||[]):intArrayFromString(e.responseText||"",!0)}persist(e){};await e.cachedLazyFile(n,...t)}e.exists("/emscripten/cache/cache.lock")';
+	'e.exports=t.p+"tool-a.wasm";e.exports=t.p+"tool-b.wasm";const __webpack_require__={p:""};__webpack_require__.p=new URL("./",self.location.href).href;__webpack_require__.b=self.location+"";async cachedLazyFile(e,r,t,n){const o=await this._cache;const r=this.readFile(`${o}/${t}`,{encoding:"binary"});this.writeFile(e,r);return void 0!==e.response?new Uint8Array(e.response||[]):intArrayFromString(e.responseText||"",!0)}persist(e){};await e.cachedLazyFile(n,...t)}e.exists("/emscripten/cache/cache.lock");' +
+	WASM_FETCH_FALLBACK_SNIPPET.repeat(6);
 
 const createDeferred = <T>(): Deferred<T> => {
 	let resolve!: (value: T) => void;

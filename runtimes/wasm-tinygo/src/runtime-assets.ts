@@ -70,6 +70,10 @@ const EMCEPTION_XHR_ASSET_RESULT_SNIPPET =
 	'return void 0!==e.response?new Uint8Array(e.response||[]):intArrayFromString(e.responseText||"",!0)';
 const EMCEPTION_CACHE_POPULATION_END_SNIPPET =
 	'await e.cachedLazyFile(n,...t)}e.exists("/emscripten/cache/cache.lock")';
+const EMCEPTION_WASM_FETCH_FALLBACK_SNIPPET =
+	'.catch((function(){return getBinary(wasmBinaryFile)}))';
+const EMCEPTION_WASM_FETCH_FALLBACK_COUNT = 6;
+const EMCEPTION_WASM_ASSET_COUNT = 2;
 
 function cacheIdentity(value: object | undefined) {
 	if (!value) return 'none';
@@ -202,6 +206,25 @@ export function createTinyGoCompilerWorkerSource(options: {
 			'wasm-tinygo compiler worker does not contain exactly one supported cache-population boundary'
 		);
 	}
+	const wasmFetchFallbackCount =
+		options.source.split(EMCEPTION_WASM_FETCH_FALLBACK_SNIPPET).length - 1;
+	if (wasmFetchFallbackCount !== EMCEPTION_WASM_FETCH_FALLBACK_COUNT) {
+		throw new Error(
+			`wasm-tinygo compiler worker contains ${wasmFetchFallbackCount} supported Wasm fetch fallbacks; expected ${EMCEPTION_WASM_FETCH_FALLBACK_COUNT}`
+		);
+	}
+	const wasmAssetNames = [
+		...options.source.matchAll(/e\.exports=t\.p\+"([^"/\\]+\.wasm)"/gu)
+	].map((match) => match[1]);
+	if (
+		wasmAssetNames.length !== EMCEPTION_WASM_ASSET_COUNT ||
+		new Set(wasmAssetNames).size !== EMCEPTION_WASM_ASSET_COUNT
+	) {
+		throw new Error(
+			`wasm-tinygo compiler worker contains ${wasmAssetNames.length} supported Wasm assets; expected ${EMCEPTION_WASM_ASSET_COUNT}`
+		);
+	}
+	const wasmAssetUrls = wasmAssetNames.map((assetName) => new URL(assetName, assetBaseUrl).href);
 	const boundedCachedAssetMethod =
 		'async cachedLazyFile(e,r,t,n){' +
 		'__wasmIdleValidateTinyGoCompilerAssetSize(r,e);' +
@@ -220,6 +243,7 @@ export function createTinyGoCompilerWorkerSource(options: {
 	const assetLimitPrelude = `
 const __wasmIdleTinyGoCompilerAssetMaxBytes=${maxAssetBytes};
 const __wasmIdleTinyGoCompilerAssetBaseUrl=new URL(${JSON.stringify(assetBaseUrl.href)});
+const __wasmIdleTinyGoCompilerWasmAssetUrls=new Set(${JSON.stringify(wasmAssetUrls)});
 const __wasmIdleTinyGoCompilerFetch=typeof globalThis.fetch==="function"?globalThis.fetch.bind(globalThis):null;
 const __wasmIdleCancelTinyGoCompilerAssetBody=(body,reason)=>{try{const pending=body?.cancel(reason);if(pending&&typeof pending.catch==="function")pending.catch(()=>{})}catch{}};
 const __wasmIdleValidateTinyGoCompilerAssetSize=(size,label)=>{
@@ -263,6 +287,46 @@ const __wasmIdleLoadTinyGoCompilerAsset=async(url,expectedSize,label)=>{
 	}catch(error){__wasmIdleCancelTinyGoCompilerAssetBody(reader,error);throw error}finally{try{reader.releaseLock()}catch{}}
 	return __wasmIdleValidateTinyGoCompilerAssetBytes(bytes.subarray(0,loaded),expectedSize,label);
 };
+const __wasmIdleBoundedTinyGoCompilerFetch=async(input,init={})=>{
+	if(!__wasmIdleTinyGoCompilerFetch)throw new Error("wasm-tinygo compiler assets require fetch");
+	if(typeof input!=="string"&&!(input instanceof URL))throw new Error("wasm-tinygo compiler asset request has an invalid URL");
+	const inputUrl=String(input);
+	const method=String(init?.method??"GET").toUpperCase();
+	if(method!=="GET")throw new Error("wasm-tinygo compiler assets only allow GET requests");
+	let resolvedUrl;try{resolvedUrl=new URL(inputUrl,__wasmIdleTinyGoCompilerAssetBaseUrl)}catch{throw new Error("wasm-tinygo compiler asset request has an invalid URL")}
+	const label="Wasm toolchain asset";
+	if((resolvedUrl.protocol!=="http:"&&resolvedUrl.protocol!=="https:")||resolvedUrl.username||resolvedUrl.password||resolvedUrl.hash||resolvedUrl.origin!==__wasmIdleTinyGoCompilerAssetBaseUrl.origin||!resolvedUrl.pathname.startsWith(__wasmIdleTinyGoCompilerAssetBaseUrl.pathname))throw new Error("wasm-tinygo compiler asset request is outside the configured asset base");
+	if(!__wasmIdleTinyGoCompilerWasmAssetUrls.has(resolvedUrl.href))throw new Error("wasm-tinygo compiler asset request is not declared by the worker bundle");
+	const response=await __wasmIdleTinyGoCompilerFetch(resolvedUrl.href,{...init,method:"GET",credentials:"omit",redirect:"error",referrerPolicy:"no-referrer"});
+	if(!response.ok){const error=new Error("failed to fetch wasm-tinygo compiler "+label+": HTTP "+response.status);__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}
+	if(response.url){let finalUrl;try{finalUrl=new URL(response.url).href}catch{const error=new Error("wasm-tinygo compiler "+label+" returned an invalid final URL");__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}if(finalUrl!==resolvedUrl.href){const error=new Error("wasm-tinygo compiler "+label+" returned an unexpected final URL");__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}}
+	const contentLengthValue=response.headers.get("content-length");
+	let contentLength=null;
+	if(contentLengthValue!==null){
+		if(!/^\\d+$/.test(contentLengthValue)){const error=new Error("wasm-tinygo compiler "+label+" has an invalid Content-Length");__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}
+		contentLength=Number(contentLengthValue);
+		try{__wasmIdleValidateTinyGoCompilerAssetSize(contentLength,label)}catch(error){__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}
+	}
+	if(!response.body)throw new Error("wasm-tinygo compiler "+label+" did not provide a readable response body");
+	const initialCapacity=Math.min(__wasmIdleTinyGoCompilerAssetMaxBytes,contentLength??65536);
+	let bytes;try{bytes=new Uint8Array(initialCapacity)}catch(error){__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}
+	let reader;try{reader=response.body.getReader()}catch(error){__wasmIdleCancelTinyGoCompilerAssetBody(response.body,error);throw error}
+	let loaded=0;
+	try{
+		while(true){
+			const {done,value}=await reader.read();
+			if(done)break;
+			if(!value)continue;
+			const nextLength=loaded+value.byteLength;
+			if(nextLength>__wasmIdleTinyGoCompilerAssetMaxBytes)throw new Error("wasm-tinygo compiler "+label+" exceeds the "+__wasmIdleTinyGoCompilerAssetMaxBytes+" byte limit");
+			if(nextLength>bytes.byteLength){const capacity=Math.min(__wasmIdleTinyGoCompilerAssetMaxBytes,Math.max(nextLength,Math.max(bytes.byteLength*2,1)));const grown=new Uint8Array(capacity);grown.set(bytes.subarray(0,loaded));bytes=grown}
+			bytes.set(value,loaded);loaded=nextLength;
+		}
+	}catch(error){__wasmIdleCancelTinyGoCompilerAssetBody(reader,error);throw error}finally{try{reader.releaseLock()}catch{}}
+	const headers=new Headers(response.headers);headers.delete("content-length");
+	return new Response(bytes.subarray(0,loaded),{status:response.status,statusText:response.statusText,headers});
+};
+globalThis.fetch=__wasmIdleBoundedTinyGoCompilerFetch;
 `;
 	return (
 		assetLimitPrelude +
@@ -279,6 +343,8 @@ const __wasmIdleLoadTinyGoCompilerAsset=async(url,expectedSize,label)=>{
 				EMCEPTION_CACHE_POPULATION_END_SNIPPET,
 				'await e.cachedLazyFile(n,...t)}await e.push(),e.exists("/emscripten/cache/cache.lock")'
 			)
+			.split(EMCEPTION_WASM_FETCH_FALLBACK_SNIPPET)
+			.join('.catch((function(error){throw error}))')
 	);
 }
 

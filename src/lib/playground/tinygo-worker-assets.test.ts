@@ -11,9 +11,11 @@ const XHR_ASSET_RESULT_SNIPPET =
 	'return void 0!==e.response?new Uint8Array(e.response||[]):intArrayFromString(e.responseText||"",!0)';
 const CACHE_POPULATION_END_SNIPPET =
 	'await e.cachedLazyFile(n,...t)}e.exists("/emscripten/cache/cache.lock")';
+const WASM_FETCH_FALLBACK_SNIPPET = '.catch((function(){return getBinary(wasmBinaryFile)}))';
+const WASM_ASSET_SNIPPETS = 'e.exports=t.p+"tool-a.wasm";e.exports=t.p+"tool-b.wasm";';
 
 const createWorkerSource = () =>
-	`${PUBLIC_PATH_SNIPPET};${BASE_URL_SNIPPET};${CACHED_LAZY_FILE_SNIPPET}${CACHED_ASSET_READ_SNIPPET};${XHR_ASSET_RESULT_SNIPPET};}persist(e){};${CACHE_POPULATION_END_SNIPPET}`;
+	`${WASM_ASSET_SNIPPETS}${PUBLIC_PATH_SNIPPET};${BASE_URL_SNIPPET};${CACHED_LAZY_FILE_SNIPPET}${CACHED_ASSET_READ_SNIPPET};${XHR_ASSET_RESULT_SNIPPET};}persist(e){};${CACHE_POPULATION_END_SNIPPET};${WASM_FETCH_FALLBACK_SNIPPET.repeat(6)}`;
 
 const createWorkerAssetValidators = (maxAssetBytes = 8) => {
 	const source = createTinyGoCompilerWorkerSource({
@@ -21,10 +23,11 @@ const createWorkerAssetValidators = (maxAssetBytes = 8) => {
 		maxAssetBytes,
 		source: createWorkerSource()
 	});
-	const prelude = source.slice(0, source.indexOf('__webpack_require__.p='));
+	const prelude = source.slice(0, source.indexOf(WASM_ASSET_SNIPPETS));
 	const createValidators = new Function(
-		`${prelude}return { loadAsset: __wasmIdleLoadTinyGoCompilerAsset, validateBytes: __wasmIdleValidateTinyGoCompilerAssetBytes, validateSize: __wasmIdleValidateTinyGoCompilerAssetSize };`
+		`${prelude}return { boundedFetch: __wasmIdleBoundedTinyGoCompilerFetch, loadAsset: __wasmIdleLoadTinyGoCompilerAsset, validateBytes: __wasmIdleValidateTinyGoCompilerAssetBytes, validateSize: __wasmIdleValidateTinyGoCompilerAssetSize };`
 	) as () => {
+		boundedFetch(input: string | URL, init?: RequestInit): Promise<Response>;
 		loadAsset(url: string, expectedSize: number, label: string): Promise<Uint8Array>;
 		validateBytes(
 			bytes: ArrayBufferView | number[],
@@ -67,6 +70,9 @@ describe('TinyGo compiler worker asset base', () => {
 			'await e.cachedLazyFile(n,...t)}await e.push(),e.exists("/emscripten/cache/cache.lock")'
 		);
 		expect(source).not.toContain('new XMLHttpRequest');
+		expect(source).toContain('globalThis.fetch=__wasmIdleBoundedTinyGoCompilerFetch;');
+		expect(source).not.toContain(WASM_FETCH_FALLBACK_SNIPPET);
+		expect(source.match(/\.catch\(\(function\(error\)\{throw error\}\)\)/gu)).toHaveLength(6);
 	});
 
 	it('rejects oversized declared, downloaded, and cached compiler assets', () => {
@@ -105,6 +111,18 @@ describe('TinyGo compiler worker asset base', () => {
 			'https://runtime.invalid/vendor/emception/toolchain.a',
 			expect.objectContaining({ credentials: 'omit', redirect: 'error' })
 		);
+
+		const wasmResponse = await validators.boundedFetch(
+			'https://runtime.invalid/vendor/emception/tool-a.wasm',
+			{ credentials: 'same-origin' }
+		);
+		await expect(wasmResponse.arrayBuffer()).resolves.toEqual(
+			new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]).buffer
+		);
+		expect(fetchMock).toHaveBeenCalledWith(
+			'https://runtime.invalid/vendor/emception/tool-a.wasm',
+			expect.objectContaining({ credentials: 'omit', redirect: 'error' })
+		);
 	});
 
 	it('cancels a compiler asset stream that exceeds its declared size', async () => {
@@ -138,6 +156,38 @@ describe('TinyGo compiler worker asset base', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it('bounds Wasm fetches without waiting for stalled stream cleanup', async () => {
+		let cancelled = false;
+		const fetchMock = vi.fn(
+			async () =>
+				new Response(
+					new ReadableStream<Uint8Array>({
+						start(controller) {
+							controller.enqueue(new Uint8Array(9));
+						},
+						cancel() {
+							cancelled = true;
+							return new Promise<void>(() => {});
+						}
+					})
+				)
+		);
+		vi.stubGlobal('fetch', fetchMock);
+		const validators = createWorkerAssetValidators();
+
+		await expect(
+			validators.boundedFetch('https://runtime.invalid/vendor/emception/tool-a.wasm')
+		).rejects.toThrow('exceeds the 8 byte limit');
+		expect(cancelled).toBe(true);
+		await expect(validators.boundedFetch('https://attacker.invalid/tool.wasm')).rejects.toThrow(
+			'outside the configured asset base'
+		);
+		await expect(
+			validators.boundedFetch('https://runtime.invalid/vendor/emception/undeclared.wasm')
+		).rejects.toThrow('not declared by the worker bundle');
+		expect(fetchMock).toHaveBeenCalledOnce();
+	});
+
 	it('rejects worker layouts whose URL initializers cannot be patched exactly once', () => {
 		expect(() =>
 			createTinyGoCompilerWorkerSource({
@@ -160,5 +210,22 @@ describe('TinyGo compiler worker asset base', () => {
 				source: `${PUBLIC_PATH_SNIPPET};${BASE_URL_SNIPPET}`
 			})
 		).toThrow('lazy-file initializer');
+		expect(() =>
+			createTinyGoCompilerWorkerSource({
+				assetBaseUrl: 'https://runtime.invalid/vendor/emception/',
+				maxAssetBytes: 8,
+				source: createWorkerSource().replace(WASM_FETCH_FALLBACK_SNIPPET, '')
+			})
+		).toThrow('contains 5 supported Wasm fetch fallbacks; expected 6');
+		expect(() =>
+			createTinyGoCompilerWorkerSource({
+				assetBaseUrl: 'https://runtime.invalid/vendor/emception/',
+				maxAssetBytes: 8,
+				source: createWorkerSource().replace(
+					WASM_ASSET_SNIPPETS,
+					'e.exports=t.p+"tool-a.wasm";'
+				)
+			})
+		).toThrow('contains 1 supported Wasm assets; expected 2');
 	});
 });
