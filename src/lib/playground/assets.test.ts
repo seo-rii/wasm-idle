@@ -876,7 +876,23 @@ describe('runtime asset config resolution', () => {
 		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
 		const { resolveRubyWasmUrl } = await import('./assets');
 
-		expect(resolveRubyWasmUrl('/absproxy/5173', 'https://example.com/app')).toBe('');
+		expect(resolveRubyWasmUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm'
+		);
+	});
+
+	it('preserves the verified module query when deriving the Ruby wasm sibling', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
+		const { resolveRubyWasmUrl } = await import('./assets');
+
+		expect(
+			resolveRubyWasmUrl(
+				{ ruby: { moduleUrl: '/runtime/runtime.mjs?v=verified-profile' } },
+				'https://example.com/app'
+			)
+		).toBe('https://example.com/runtime/assets/ruby_stdlib-C40Yu-vu.wasm?v=verified-profile');
 	});
 
 	it('prefers an explicit R base url over the public env override', async () => {

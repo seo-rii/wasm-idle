@@ -1,12 +1,13 @@
 import { runWithSignalAndTimeout } from './lifecycle.js';
 import {
 	ProtocolError,
+	RUBY_RUNTIME_ASSET_NAMES,
 	verifyRuntimeAssetIntegrity,
 	type RuntimeAssetIntegrityEntry
 } from '@wasm-idle/core';
 import { D_OUTER_ASSETS } from './d/assets.js';
 
-export type LanguageToolAssetRuntime = 'clangd' | 'd';
+export type LanguageToolAssetRuntime = 'clangd' | 'd' | 'ruby';
 
 export interface LanguageToolAssetLoadRequest {
 	runtime: LanguageToolAssetRuntime;
@@ -465,6 +466,9 @@ export async function loadLanguageToolAsset(
 	}
 	if (runtime === 'd' && !(D_OUTER_ASSETS as readonly string[]).includes(asset)) {
 		throw new Error(`Unexpected D runtime asset: ${asset}`);
+	}
+	if (runtime === 'ruby' && !(RUBY_RUNTIME_ASSET_NAMES as readonly string[]).includes(asset)) {
+		throw new Error(`Unexpected Ruby runtime asset: ${asset}`);
 	}
 	if (config.integrity && !Object.hasOwn(config.integrity, asset)) {
 		throw new Error(`Runtime asset ${asset} is missing integrity metadata`);

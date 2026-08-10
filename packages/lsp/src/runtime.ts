@@ -9,6 +9,7 @@ import { BUNDLED_CLANGD_ASSET_INTEGRITY } from './bundledClangdAssetIntegrity.js
 import { BUNDLED_ELIXIR_ASSET_VERSION } from './bundledElixirRuntimeIntegrity.js';
 import { BUNDLED_GLEAM_MANIFEST_FINGERPRINT } from './bundledGleamRuntime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from './types.js';
+import { deriveRubyRuntimeWasmUrl } from '@wasm-idle/core';
 
 export class LanguageServerAssetConfigurationError extends Error {
 	readonly provider: string;
@@ -680,7 +681,10 @@ export function resolveRubyLanguageServerWasmUrl(
 	if (typeof options === 'object' && options.ruby?.wasmUrl) {
 		return resolveFileUrl(options.ruby.wasmUrl, currentUrl);
 	}
-	return '';
+	return deriveRubyRuntimeWasmUrl(
+		resolveRubyLanguageServerModuleUrl(options, currentUrl),
+		currentUrl
+	);
 }
 
 export function resolveRubyLanguageServerModuleUrl(

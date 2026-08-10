@@ -8,9 +8,12 @@ import typesSource from '../src/types.ts?raw';
 
 describe('heavy LSP static runtime loaders', () => {
 	it('uses Vite-ignored dynamic imports for configured runtime modules', () => {
-		for (const source of [assemblyScriptServiceSource, sqlServiceSource, rubyServiceSource]) {
+		for (const source of [assemblyScriptServiceSource, sqlServiceSource]) {
 			expect(source).toContain('/* @vite-ignore */ options.moduleUrl');
 		}
+		expect(rubyServiceSource).toContain('/* @vite-ignore */ moduleUrl');
+		expect(rubyServiceSource).toContain('rewriteRuntimeModuleAssetSpecifier');
+		expect(rubyServiceSource).toContain('verifyRuntimeAssetIntegrity');
 	});
 
 	it('does not import heavy runtime packages from LSP source', () => {

@@ -1,8 +1,10 @@
 import {
 	resolveRubyRuntimeModuleUrl,
+	resolveRubyRuntimeAssetIntegrity,
 	resolveRubyWasmUrl,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
+import { snapshotRubyRuntimeAssetConfig } from '$lib/playground/rubyAssets';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -24,6 +26,7 @@ import {
 	OutputLimitError,
 	RuntimeConfigurationError,
 	TimeoutError,
+	createRuntimeAssetsKey,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
@@ -60,6 +63,7 @@ class Ruby implements Sandbox {
 	exit = true;
 	wasmUrl = '';
 	moduleUrl = '';
+	private runtimeAssetKey = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -272,6 +276,8 @@ class Ruby implements Sandbox {
 			return Promise.reject(error);
 		}
 		let limits: ReturnType<typeof resolveExecutionLimits>;
+		let nextConfig: ReturnType<typeof snapshotRubyRuntimeAssetConfig>;
+		let nextAssetKey: string;
 		let signal: AbortSignal | undefined;
 		let unbindPreSessionAbort: () => void = () => undefined;
 		try {
@@ -283,6 +289,50 @@ class Ruby implements Sandbox {
 				);
 			}
 			limits = resolveExecutionLimits(options.limits);
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
+				);
+			}
+			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+			const nextModuleUrl = resolveRubyRuntimeModuleUrl(runtimeAssets, currentUrl);
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
+				);
+			}
+			const nextWasmUrl = resolveRubyWasmUrl(runtimeAssets, currentUrl);
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
+				);
+			}
+			const nextIntegrity = resolveRubyRuntimeAssetIntegrity(runtimeAssets);
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
+				);
+			}
+			nextConfig = snapshotRubyRuntimeAssetConfig({
+				moduleUrl: nextModuleUrl,
+				wasmUrl: nextWasmUrl,
+				integrity: nextIntegrity,
+				maxAssetBytes: limits.maxAssetBytes
+			});
+			const resolvedAssetKey = createRuntimeAssetsKey({
+				ruby: {
+					moduleUrl: nextConfig.moduleUrl,
+					wasmUrl: nextConfig.wasmUrl,
+					integrity: nextConfig.integrity
+				}
+			});
+			if (!resolvedAssetKey) {
+				throw new RuntimeConfigurationError('Ruby runtime asset key could not be created', {
+					phase: 'startup',
+					runtimeId: 'RUBY'
+				});
+			}
+			nextAssetKey = resolvedAssetKey;
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
@@ -310,19 +360,12 @@ class Ruby implements Sandbox {
 			};
 			try {
 				if (!this.isOperationActive(activeOperation)) return;
-				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-				const nextWasmUrl = resolveRubyWasmUrl(runtimeAssets, currentUrl);
-				if (!this.isOperationActive(activeOperation)) return;
-				const nextModuleUrl = resolveRubyRuntimeModuleUrl(runtimeAssets, currentUrl);
-				if (!this.isOperationActive(activeOperation)) return;
-				const needsWorkerReset =
-					!this.worker ||
-					this.wasmUrl !== nextWasmUrl ||
-					this.moduleUrl !== nextModuleUrl;
+				const needsWorkerReset = !this.worker || this.runtimeAssetKey !== nextAssetKey;
 				if (needsWorkerReset && this.worker) this.workerSession.reset();
 				if (!this.isOperationActive(activeOperation)) return;
-				this.wasmUrl = nextWasmUrl;
-				this.moduleUrl = nextModuleUrl;
+				this.wasmUrl = nextConfig.wasmUrl;
+				this.moduleUrl = nextConfig.moduleUrl;
+				this.runtimeAssetKey = nextAssetKey;
 				this.pendingInput = [];
 				this.waitingForInput = false;
 				this.pendingEof = false;
@@ -371,8 +414,10 @@ class Ruby implements Sandbox {
 					worker.onmessage = handler;
 					worker.postMessage({
 						load: true,
-						moduleUrl: this.moduleUrl,
-						wasmUrl: this.wasmUrl
+						moduleUrl: nextConfig.moduleUrl,
+						wasmUrl: nextConfig.wasmUrl,
+						integrity: nextConfig.integrity,
+						maxAssetBytes: nextConfig.maxAssetBytes
 					});
 				} else {
 					const worker = this.worker;

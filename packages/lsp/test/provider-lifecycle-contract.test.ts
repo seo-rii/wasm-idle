@@ -96,6 +96,7 @@ vi.mock('../src/jsonrpc.js', () => ({
 import { editorLanguageServerProviders } from '../src/registry.js';
 import type { DOuterAssetReceipts } from '../src/d/assets.js';
 import type { EditorLanguageServerRuntimeOptions } from '../src/types.js';
+import { RUBY_RUNTIME_ASSET_PATH, type RubyRuntimeAssetReceipts } from '@wasm-idle/core';
 
 const applicationOrigin = 'https://app.example.com';
 const dAssetBytes = {
@@ -117,6 +118,21 @@ const dAssetIntegrity = {
 		dAssetBytes['runtime/runtime-manifest.v1.json']
 	)
 } satisfies DOuterAssetReceipts;
+const rubyAssetBytes = {
+	'runtime.mjs': new TextEncoder().encode(
+		`new URL(${JSON.stringify(RUBY_RUNTIME_ASSET_PATH)}, import.meta.url);`
+	),
+	[RUBY_RUNTIME_ASSET_PATH]: Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)
+} as const;
+const rubyAssetIntegrity = Object.fromEntries(
+	Object.entries(rubyAssetBytes).map(([asset, bytes]) => [
+		asset,
+		{
+			bytes: bytes.byteLength,
+			sha256: createHash('sha256').update(bytes).digest('hex')
+		}
+	])
+) as RubyRuntimeAssetReceipts;
 const deploymentBases = [
 	{ label: 'root', rootUrl: '/', currentUrl: `${applicationOrigin}/` },
 	{
@@ -151,6 +167,9 @@ const createProviderOptions = (
 	},
 	d: {
 		integrity: dAssetIntegrity
+	},
+	ruby: {
+		integrity: rubyAssetIntegrity
 	}
 });
 
@@ -194,14 +213,19 @@ describe('registered LSP provider lifecycle contract', () => {
 				const requestUrl = new URL(
 					typeof input === 'string' || input instanceof URL ? input : input.url
 				);
-				const asset = requestUrl.pathname.endsWith('/runtime/runtime-manifest.v1.json')
+				const dAsset = requestUrl.pathname.endsWith('/runtime/runtime-manifest.v1.json')
 					? 'runtime/runtime-manifest.v1.json'
 					: requestUrl.pathname.endsWith('/index.js')
 						? 'index.js'
 						: undefined;
-				if (!asset)
+				const rubyAsset = requestUrl.pathname.endsWith('/runtime.mjs')
+					? 'runtime.mjs'
+					: requestUrl.pathname.endsWith(`/${RUBY_RUNTIME_ASSET_PATH}`)
+						? RUBY_RUNTIME_ASSET_PATH
+						: undefined;
+				if (!dAsset && !rubyAsset)
 					throw new Error(`Unexpected lifecycle asset request: ${requestUrl.href}`);
-				const bytes = dAssetBytes[asset];
+				const bytes = dAsset ? dAssetBytes[dAsset] : rubyAssetBytes[rubyAsset!];
 				const response = new Response(bytes, {
 					headers: { 'content-length': String(bytes.byteLength) }
 				});

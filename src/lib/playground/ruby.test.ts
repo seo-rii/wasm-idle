@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { RUBY_RUNTIME_ASSET_PATH, RUBY_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
@@ -92,7 +93,11 @@ describe('Ruby sandbox', () => {
 				expect.objectContaining({
 					load: true,
 					moduleUrl: expect.stringMatching(/\/wasm-ruby\/runtime\.mjs$/),
-					wasmUrl: ''
+					wasmUrl: expect.stringMatching(
+						new RegExp(`/wasm-ruby/${RUBY_RUNTIME_ASSET_PATH.replace('.', '\\.')}$`)
+					),
+					integrity: RUBY_RUNTIME_ASSET_RECEIPTS,
+					maxAssetBytes: 128 * 1024 * 1024
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(

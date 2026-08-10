@@ -141,6 +141,17 @@ export {
 	type RuntimeAssetProfileKeySource
 } from './runtime-assets.js';
 export {
+	RUBY_RUNTIME_ASSET_PATH,
+	RUBY_RUNTIME_ASSET_NAMES,
+	RUBY_RUNTIME_ASSET_RECEIPTS,
+	RUBY_RUNTIME_ASSET_VERSION,
+	deriveRubyRuntimeWasmUrl,
+	snapshotRubyRuntimeAssetReceipts,
+	type RubyRuntimeAssetName,
+	type RubyRuntimeAssetReceipt,
+	type RubyRuntimeAssetReceipts
+} from './ruby-runtime.js';
+export {
 	RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION,
 	defineRuntimeRegistryManifest,
 	defineRuntimeWorkerLifetimePolicy,
@@ -178,6 +189,10 @@ export {
 	type RuntimeAssetDecodeRequest,
 	type RuntimeAssetDecoder
 } from './runtime-preflight-activation.js';
+export {
+	rewriteRuntimeModuleAssetSpecifier,
+	type RuntimeModuleAssetSpecifierRewriteRequest
+} from './module-asset-rewrite.js';
 export {
 	RuntimeResourceBudget,
 	type RuntimeResourceBudgetOptions,

@@ -16,6 +16,11 @@ import {
 	WASM_FORTH_RUNNER_RECEIPT
 } from '$lib/playground/wasmForthVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
+import {
+	RUBY_RUNTIME_ASSET_RECEIPTS,
+	deriveRubyRuntimeWasmUrl,
+	type RubyRuntimeAssetReceipts
+} from '@wasm-idle/core';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from '$lib/playground/wasmFortranExecutionAssets';
 import { WASM_D_OUTER_ASSET_RECEIPTS } from '$lib/playground/wasmDIntegrity';
 import { WASM_ZIG_ASSET_RECEIPTS } from '$lib/playground/wasmZigVersion';
@@ -184,6 +189,7 @@ export interface LispRuntimeAssetConfig {
 export interface RubyRuntimeAssetConfig {
 	moduleUrl?: string;
 	wasmUrl?: string;
+	integrity?: RubyRuntimeAssetReceipts;
 }
 
 export interface RRuntimeAssetConfig {
@@ -1588,8 +1594,14 @@ export function resolveRubyWasmUrl(
 	if (configuredWasmUrl) {
 		return resolveConfiguredUrl(configuredWasmUrl, currentUrl);
 	}
+	return deriveRubyRuntimeWasmUrl(resolveRubyRuntimeModuleUrl(options, currentUrl), currentUrl);
+}
 
-	return '';
+export function resolveRubyRuntimeAssetIntegrity(
+	options: string | PlaygroundRuntimeAssets | undefined
+) {
+	const configured = typeof options === 'object' ? options?.ruby?.integrity : undefined;
+	return configured === undefined ? RUBY_RUNTIME_ASSET_RECEIPTS : configured;
 }
 
 export function resolveRBaseUrl(

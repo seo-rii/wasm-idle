@@ -32,6 +32,11 @@ import { WASM_PASCAL_ASSET_VERSION } from './wasmPascalVersion';
 import { WASM_PERL_ASSET_VERSION } from './wasmPerlVersion';
 import { WASM_PROLOG_ASSET_VERSION } from './wasmPrologVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
+import {
+	RUBY_RUNTIME_ASSET_PATH,
+	RUBY_RUNTIME_ASSET_RECEIPTS,
+	RUBY_RUNTIME_ASSET_VERSION
+} from '@wasm-idle/core';
 import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
 import { WASM_SWIFT_ASSET_VERSION } from './wasmSwiftVersion';
 import { WASM_TCL_ASSET_VERSION } from './wasmTclVersion';
@@ -205,7 +210,9 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			moduleUrl: asset('wasm-lisp/index.js', WASM_LISP_ASSET_VERSION)
 		},
 		ruby: {
-			moduleUrl: asset('wasm-ruby/runtime.mjs', STATIC_RUNTIME_MODULE_VERSION)
+			moduleUrl: asset('wasm-ruby/runtime.mjs', RUBY_RUNTIME_ASSET_VERSION),
+			wasmUrl: asset(`wasm-ruby/${RUBY_RUNTIME_ASSET_PATH}`, RUBY_RUNTIME_ASSET_VERSION),
+			integrity: RUBY_RUNTIME_ASSET_RECEIPTS
 		},
 		haskell: {
 			moduleUrl: asset('wasm-haskell/dyld.mjs', WASM_HASKELL_ASSET_VERSION),

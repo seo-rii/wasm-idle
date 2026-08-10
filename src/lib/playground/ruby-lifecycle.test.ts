@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { RUBY_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
 
 vi.mock('$env/dynamic/public', () => ({
 	env: {}
@@ -148,6 +149,32 @@ describe('Ruby worker lifecycle', () => {
 
 		replacementWorker.resolveRun('replacement result');
 		await expect(replacement).resolves.toBe('replacement result');
+	});
+
+	it('rejects an invalid replacement receipt before retiring a warm worker', async () => {
+		const sandbox = new Ruby();
+		await sandbox.load('/assets');
+		const warmWorker = workerInstances[0];
+
+		await expect(
+			sandbox.load({
+				ruby: {
+					moduleUrl: '/replacement/runtime.mjs',
+					wasmUrl: '/replacement/runtime.wasm',
+					integrity: {
+						...RUBY_RUNTIME_ASSET_RECEIPTS,
+						'runtime.mjs': {
+							...RUBY_RUNTIME_ASSET_RECEIPTS['runtime.mjs'],
+							bytes: 0
+						}
+					}
+				}
+			})
+		).rejects.toThrow('Ruby runtime receipt is invalid for runtime.mjs');
+
+		expect(workerInstances).toHaveLength(1);
+		expect(warmWorker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('puts 1', false)).resolves.toBe(true);
 	});
 
 	it('cancels pending startup through clear and ignores its retained handler after retry', async () => {

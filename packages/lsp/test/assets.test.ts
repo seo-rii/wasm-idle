@@ -39,6 +39,21 @@ describe('language tool asset loading', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	it('rejects assets outside the Ruby runtime allowlist before fetching', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			loadLanguageToolAsset(
+				'ruby',
+				'../../private',
+				{ baseUrl: 'https://assets.example.com/wasm-ruby/' },
+				vi.fn()
+			)
+		).rejects.toThrow('Unexpected Ruby runtime asset: ../../private');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it('enforces exact no-store response URLs for D bootstrap assets', async () => {
 		const cancel = vi.fn(async () => {});
 		const fetchMock = vi.fn().mockResolvedValue({

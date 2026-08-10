@@ -153,11 +153,13 @@ describe('Ruby execution message limits', () => {
 		const replacementWorker = workerInstances[1];
 		expect(sandbox.worker).toBe(replacementWorker);
 		expect(replacementWorker.terminate).not.toHaveBeenCalled();
-		expect(replacementWorker.postMessage).toHaveBeenCalledWith({
-			load: true,
-			moduleUrl: 'http://localhost:3000/replacement/ruby.mjs',
-			wasmUrl: 'http://localhost:3000/replacement/ruby.wasm'
-		});
+		expect(replacementWorker.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				load: true,
+				moduleUrl: 'http://localhost:3000/replacement/ruby.mjs',
+				wasmUrl: 'http://localhost:3000/replacement/ruby.wasm'
+			})
+		);
 
 		const retry = sandbox.run('puts "retry"', false);
 		replacementWorker.emit({ results: true });

@@ -4,11 +4,20 @@ import {
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
-import { fetchBoundedExternalAsset } from '../external-asset.js';
+import {
+	RUBY_RUNTIME_ASSET_PATH,
+	rewriteRuntimeModuleAssetSpecifier,
+	snapshotRubyRuntimeAssetReceipts,
+	verifyRuntimeAssetIntegrity,
+	type RubyRuntimeAssetReceipts
+} from '@wasm-idle/core';
 
 export interface RubyWorkerOptions {
-	moduleUrl?: string;
-	wasmUrl?: string;
+	readonly moduleUrl: string;
+	readonly wasmUrl: string;
+	readonly integrity: RubyRuntimeAssetReceipts;
+	readonly moduleBytes: Uint8Array<ArrayBuffer>;
+	readonly wasmBytes: Uint8Array<ArrayBuffer>;
 }
 
 interface RubyVirtualMachine {
@@ -44,7 +53,6 @@ interface RubyRuntimeModule {
 			options?: { debug?: boolean }
 		) => RubyWasi;
 	};
-	rubyStdlibWasmUrl?: string;
 }
 
 export interface RubySyntaxDiagnostic {
@@ -122,21 +130,98 @@ const wordAt = (text: string, position: LspPosition) => {
 	);
 };
 
-async function loadRubyWasmChecker(options: RubyWorkerOptions): Promise<RubySyntaxChecker> {
-	if (!options.moduleUrl) {
-		throw new Error('Ruby language server requires a runtime module URL');
+const requireSafeRuntimeUrl = (value: unknown, label: string) => {
+	if (typeof value !== 'string' || !value || value.length > 8_192 || value.includes('\0')) {
+		throw new TypeError(`Ruby language server requires a safe ${label} URL`);
 	}
-	const runtime = (await import(/* @vite-ignore */ options.moduleUrl)) as RubyRuntimeModule;
+	let url: URL;
+	try {
+		url = new URL(value);
+	} catch {
+		throw new TypeError(`Ruby language server requires an absolute ${label} URL`);
+	}
+	if (
+		(url.protocol !== 'http:' && url.protocol !== 'https:') ||
+		url.username ||
+		url.password ||
+		url.hash ||
+		/%2f|%5c/iu.test(url.pathname)
+	) {
+		throw new TypeError(`Ruby language server ${label} URL is unsafe`);
+	}
+	return url.href;
+};
+
+const snapshotAssetBytes = (value: unknown, label: string): Uint8Array<ArrayBuffer> => {
+	if (
+		!ArrayBuffer.isView(value) ||
+		Object.prototype.toString.call(value) !== '[object Uint8Array]'
+	) {
+		throw new TypeError(`Ruby language server requires ${label} bytes`);
+	}
+	return Uint8Array.from(value as Uint8Array);
+};
+
+const snapshotRubyWorkerOptions = (value: unknown): RubyWorkerOptions => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new TypeError('Ruby language server requires verified runtime assets');
+	}
+	const options = value as Partial<RubyWorkerOptions>;
+	return Object.freeze({
+		moduleUrl: requireSafeRuntimeUrl(options.moduleUrl, 'runtime module'),
+		wasmUrl: requireSafeRuntimeUrl(options.wasmUrl, 'runtime Wasm'),
+		integrity: snapshotRubyRuntimeAssetReceipts(options.integrity),
+		moduleBytes: snapshotAssetBytes(options.moduleBytes, 'runtime module'),
+		wasmBytes: snapshotAssetBytes(options.wasmBytes, 'runtime Wasm')
+	});
+};
+
+const verifyRubyWorkerAssets = async (options: RubyWorkerOptions) => {
+	await Promise.all([
+		verifyRuntimeAssetIntegrity({
+			asset: 'runtime.mjs',
+			bytes: options.moduleBytes,
+			expected: options.integrity['runtime.mjs'],
+			runtimeId: 'ruby-lsp'
+		}),
+		verifyRuntimeAssetIntegrity({
+			asset: RUBY_RUNTIME_ASSET_PATH,
+			bytes: options.wasmBytes,
+			expected: options.integrity[RUBY_RUNTIME_ASSET_PATH],
+			runtimeId: 'ruby-lsp'
+		})
+	]);
+};
+
+async function loadRubyWasmChecker(options: RubyWorkerOptions): Promise<RubySyntaxChecker> {
+	const moduleSource = rewriteRuntimeModuleAssetSpecifier({
+		bytes: options.moduleBytes,
+		assetPath: RUBY_RUNTIME_ASSET_PATH,
+		assetUrl: options.wasmUrl,
+		label: 'Ruby language server runtime module'
+	});
+	const module = await WebAssembly.compile(options.wasmBytes);
+	if (
+		typeof URL.createObjectURL !== 'function' ||
+		typeof URL.revokeObjectURL !== 'function' ||
+		typeof Blob !== 'function'
+	) {
+		throw new Error('Ruby language server requires Blob module URL support');
+	}
+	const moduleUrl = URL.createObjectURL(new Blob([moduleSource], { type: 'text/javascript' }));
+	let runtime: RubyRuntimeModule;
+	try {
+		runtime = (await import(/* @vite-ignore */ moduleUrl)) as RubyRuntimeModule;
+	} finally {
+		try {
+			URL.revokeObjectURL(moduleUrl);
+		} catch {
+			// Cleanup must not replace module import success or failure.
+		}
+	}
 	if (!runtime.RubyVM || !runtime.consolePrinter || !runtime.wasiShim) {
 		throw new Error('Ruby runtime module is missing required Ruby or WASI exports');
 	}
-	const wasmUrl = options.wasmUrl || runtime.rubyStdlibWasmUrl;
-	if (!wasmUrl) {
-		throw new Error('Ruby language server requires a ruby.wasm URL');
-	}
-	const module = await WebAssembly.compile(
-		await fetchBoundedExternalAsset({ url: wasmUrl, label: 'Ruby WASM asset' })
-	);
 	const { RubyVM, consolePrinter, wasiShim } = runtime;
 	const { File: WasiFile, OpenFile, WASI } = wasiShim;
 
@@ -211,6 +296,7 @@ export function createRubyWorkerService(
 	loadChecker: LoadRubySyntaxChecker = loadRubyWasmChecker
 ): WorkerLanguageService {
 	let checker: RubySyntaxChecker | null = null;
+	let checkerGeneration = 0;
 	let lastKey = '';
 	let lastDiagnostics: LspDiagnostic[] = [];
 
@@ -223,19 +309,38 @@ export function createRubyWorkerService(
 			documentSymbolProvider: true
 		},
 		async initialize(options, context) {
-			const config = (options || {}) as RubyWorkerOptions;
+			const config = snapshotRubyWorkerOptions(options);
 			context.reportProgress('load-ruby-runtime');
-			checker = await loadChecker(config);
+			await verifyRubyWorkerAssets(config);
+			const nextChecker = await loadChecker(config);
+			const previousChecker = checker;
+			checker = nextChecker;
+			checkerGeneration += 1;
+			lastKey = '';
+			lastDiagnostics = [];
+			if (previousChecker && previousChecker !== nextChecker) {
+				try {
+					await previousChecker.dispose?.();
+				} catch {
+					// A retired checker cannot invalidate the successfully prepared replacement.
+				}
+			}
 		},
 		async diagnostics(document: LspDocument) {
-			if (!checker || !document.text.trim()) return [];
+			const activeChecker = checker;
+			if (!activeChecker || !document.text.trim()) return [];
+			const generation = checkerGeneration;
 			const fileName = document.uri.split('/').pop() || 'main.rb';
 			const key = `${fileName}\n${document.text}`;
 			if (key === lastKey) return lastDiagnostics;
-			lastKey = key;
-			const diagnostics = await checker.check(document.text, fileName);
-			lastDiagnostics = diagnostics.map(diagnosticFor);
-			return lastDiagnostics;
+			const diagnostics = (await activeChecker.check(document.text, fileName)).map(
+				diagnosticFor
+			);
+			if (checker === activeChecker && checkerGeneration === generation) {
+				lastKey = key;
+				lastDiagnostics = diagnostics;
+			}
+			return diagnostics;
 		},
 		completion() {
 			return {
@@ -285,8 +390,12 @@ export function createRubyWorkerService(
 			return symbols;
 		},
 		async dispose() {
-			await checker?.dispose?.();
+			const previousChecker = checker;
 			checker = null;
+			checkerGeneration += 1;
+			lastKey = '';
+			lastDiagnostics = [];
+			await previousChecker?.dispose?.();
 		}
 	};
 }

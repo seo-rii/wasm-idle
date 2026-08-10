@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RUBY_RUNTIME_ASSET_PATH } from '@wasm-idle/core';
 
 const mockState = vi.hoisted(() => {
 	const workers: FakeWorker[] = [];
@@ -606,10 +607,32 @@ describe('additional language server workers', () => {
 	});
 
 	it('starts Ruby with an explicitly provided Ruby WASM URL', async () => {
+		const moduleBytes = new TextEncoder().encode(
+			`new URL(${JSON.stringify(RUBY_RUNTIME_ASSET_PATH)}, import.meta.url);`
+		);
+		const wasmBytes = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
+		const receipt = (bytes: Uint8Array) => ({
+			bytes: bytes.byteLength,
+			sha256: createHash('sha256').update(bytes).digest('hex')
+		});
+		const integrity = {
+			'runtime.mjs': receipt(moduleBytes),
+			[RUBY_RUNTIME_ASSET_PATH]: receipt(wasmBytes)
+		};
+		const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+			const url = input.toString();
+			const bytes = url.endsWith('/assets/ruby+stdlib.wasm') ? wasmBytes : moduleBytes;
+			const response = new Response(bytes, {
+				headers: { 'Content-Length': String(bytes.byteLength) }
+			});
+			Object.defineProperty(response, 'url', { value: url });
+			return response;
+		});
+		vi.stubGlobal('fetch', fetchMock);
 		const handle = await getRubyLanguageServer({
 			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
-			ruby: { wasmUrl: '/assets/ruby+stdlib.wasm' },
+			ruby: { wasmUrl: '/assets/ruby+stdlib.wasm', integrity },
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
 
@@ -617,9 +640,21 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-ruby/runtime.mjs',
-				wasmUrl: 'https://app.example.com/assets/ruby+stdlib.wasm'
+				wasmUrl: 'https://app.example.com/assets/ruby+stdlib.wasm',
+				integrity,
+				moduleBytes,
+				wasmBytes
 			}
 		});
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		for (const [, init] of fetchMock.mock.calls) {
+			expect(init).toMatchObject({
+				cache: 'no-store',
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer'
+			});
+		}
 
 		handle.dispose();
 	});

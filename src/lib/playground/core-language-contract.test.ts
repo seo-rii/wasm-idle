@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	RUBY_RUNTIME_ASSET_PATH,
 	createRuntimeAssetsKey,
 	isDeferredProgressLanguage,
 	normalizeLanguageId,
@@ -608,17 +609,27 @@ describe('core language contract', () => {
 		expect(key).toContain('"lispModuleUrl":"/wasm-lisp/index.js?v=test"');
 	});
 
-	it('includes Ruby runtime module and wasm urls in runtime asset cache keys', () => {
+	it('includes Ruby runtime urls and receipts in runtime asset cache keys', () => {
+		const integrity = {
+			'runtime.mjs': { bytes: 1, sha256: 'a'.repeat(64) },
+			[RUBY_RUNTIME_ASSET_PATH]: { bytes: 2, sha256: 'b'.repeat(64) }
+		};
 		const key = createRuntimeAssetsKey({
 			rootUrl: '/repl',
 			ruby: {
 				moduleUrl: '/wasm-ruby/runtime.mjs?v=test',
-				wasmUrl: '/ruby/ruby+stdlib.wasm?v=test'
+				wasmUrl: '/ruby/ruby+stdlib.wasm?v=test',
+				integrity
 			}
 		});
 
 		expect(key).toContain('"rubyModuleUrl":"/wasm-ruby/runtime.mjs?v=test"');
 		expect(key).toContain('"rubyWasmUrl":"/ruby/ruby+stdlib.wasm?v=test"');
+		const serialized = JSON.parse(key || '{}') as { rubyIntegrity: string };
+		expect(JSON.parse(serialized.rubyIntegrity)).toEqual([
+			[RUBY_RUNTIME_ASSET_PATH, integrity[RUBY_RUNTIME_ASSET_PATH]],
+			['runtime.mjs', integrity['runtime.mjs']]
+		]);
 	});
 
 	it('includes external runtime module urls in runtime asset cache keys', () => {

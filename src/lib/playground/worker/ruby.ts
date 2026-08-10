@@ -1,17 +1,20 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
+import {
+	loadVerifiedRubyRuntimeAssets,
+	snapshotRubyRuntimeAssetConfig,
+	type RubyRuntimeAssetConfig
+} from '$lib/playground/rubyAssets';
 
 declare var self: any;
 
 const encoder = new TextEncoder();
 
 let stdinBufferRuby: Int32Array | null = null;
-let wasmUrl = '';
-let runtimeModuleUrl = '';
-let loadedWasmUrl = '';
-let modulePromise: Promise<WebAssembly.Module> | null = null;
-let runtimePromise: Promise<RubyRuntimeModule> | null = null;
+let runtimeConfig: RubyRuntimeAssetConfig | null = null;
+let loadedRuntimeIdentity = '';
+let runtimePromise: Promise<LoadedRubyRuntime> | null = null;
 
 interface RubyRuntimeModule {
 	RubyVM: any;
@@ -20,15 +23,66 @@ interface RubyRuntimeModule {
 	wasiShim: any;
 }
 
-async function loadRuntime(url: string) {
-	if (!url) throw new Error('Ruby runtime module URL is not configured.');
-	if (!runtimePromise || runtimeModuleUrl !== url) {
-		runtimeModuleUrl = url;
-		runtimePromise = importRuntimeModule<RubyRuntimeModule>(url);
-		loadedWasmUrl = '';
-		modulePromise = null;
+interface LoadedRubyRuntime {
+	module: WebAssembly.Module;
+	runtime: RubyRuntimeModule;
+}
+
+const runtimeIdentity = (config: RubyRuntimeAssetConfig) =>
+	JSON.stringify([
+		config.moduleUrl,
+		config.wasmUrl,
+		Object.entries(config.integrity).sort(([left], [right]) =>
+			left < right ? -1 : left > right ? 1 : 0
+		)
+	]);
+
+async function loadRubyModule(config: RubyRuntimeAssetConfig) {
+	const snapshot = snapshotRubyRuntimeAssetConfig(config);
+	const identity = runtimeIdentity(snapshot);
+	if (loadedRuntimeIdentity === identity && runtimePromise) return await runtimePromise;
+	const pending = (async (): Promise<LoadedRubyRuntime> => {
+		const { moduleSource, wasmBytes } = await loadVerifiedRubyRuntimeAssets(snapshot);
+		if (
+			typeof Blob !== 'function' ||
+			typeof URL.createObjectURL !== 'function' ||
+			typeof URL.revokeObjectURL !== 'function'
+		) {
+			throw new Error('Ruby runtime requires Blob module URL support.');
+		}
+		const verifiedModuleUrl = URL.createObjectURL(
+			new Blob([moduleSource], { type: 'text/javascript' })
+		);
+		let runtime: RubyRuntimeModule;
+		let module: WebAssembly.Module;
+		try {
+			[runtime, module] = await Promise.all([
+				importRuntimeModule<RubyRuntimeModule>(verifiedModuleUrl),
+				WebAssembly.compile(wasmBytes)
+			]);
+		} finally {
+			try {
+				URL.revokeObjectURL(verifiedModuleUrl);
+			} catch {
+				// Blob URL cleanup must not replace import or compilation outcomes.
+			}
+		}
+		if (!runtime.RubyVM || !runtime.consolePrinter || !runtime.wasiShim) {
+			throw new Error('Ruby runtime module is missing required Ruby or WASI exports.');
+		}
+		return { module, runtime };
+	})();
+	loadedRuntimeIdentity = identity;
+	runtimePromise = pending;
+	try {
+		return await pending;
+	} catch (error) {
+		if (runtimePromise === pending && loadedRuntimeIdentity === identity) {
+			runtimePromise = null;
+			loadedRuntimeIdentity = '';
+		}
+		throw error;
 	}
-	return await runtimePromise;
 }
 
 function createRubyStdin(
@@ -84,25 +138,6 @@ function createRubyStdin(
 	})();
 }
 
-async function loadRubyModule(moduleUrl: string, url: string) {
-	const runtime = await loadRuntime(moduleUrl);
-	const nextUrl = url || runtime.rubyStdlibWasmUrl;
-	if (loadedWasmUrl === nextUrl && modulePromise) {
-		return { module: await modulePromise, runtime };
-	}
-	loadedWasmUrl = nextUrl;
-	modulePromise = (async () => {
-		const response = await fetch(nextUrl);
-		if (!response.ok) {
-			throw new Error(
-				`Failed to load Ruby WASM asset: ${response.status} ${response.statusText}`
-			);
-		}
-		return WebAssembly.compile(await response.arrayBuffer());
-	})();
-	return { module: await modulePromise, runtime };
-}
-
 type WorkspaceTree = Map<string, string | WorkspaceTree>;
 
 function insertWorkspaceFile(tree: WorkspaceTree, path: string, content: string) {
@@ -145,8 +180,10 @@ function workspaceContents(runtime: RubyRuntimeModule, workspaceFiles: SandboxWo
 self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
-		moduleUrl: nextModuleUrl,
-		wasmUrl: nextWasmUrl,
+		moduleUrl,
+		wasmUrl,
+		integrity,
+		maxAssetBytes,
 		buffer,
 		code,
 		prepare,
@@ -158,14 +195,16 @@ self.onmessage = async (event: { data: any }) => {
 	} = event.data;
 	try {
 		if (load) {
-			wasmUrl = nextWasmUrl || '';
-			const moduleUrl = nextModuleUrl || runtimeModuleUrl;
+			runtimeConfig = snapshotRubyRuntimeAssetConfig({
+				moduleUrl,
+				wasmUrl,
+				integrity,
+				maxAssetBytes
+			});
 			postMessage({ progress: { percent: 5, stage: 'Loading Ruby runtime' } });
-			const loaded = await loadRubyModule(moduleUrl, wasmUrl);
+			await loadRubyModule(runtimeConfig);
 			if (log) {
-				console.log(
-					`[wasm-idle:ruby-worker] load moduleUrl=${moduleUrl} wasmUrl=${wasmUrl || loaded.runtime.rubyStdlibWasmUrl}`
-				);
+				console.log(`[wasm-idle:ruby-worker] load moduleUrl=${runtimeConfig.moduleUrl}`);
 			}
 			postMessage({ progress: { percent: 100, stage: 'Ruby runtime ready' } });
 			postMessage({ load: true });
@@ -173,7 +212,8 @@ self.onmessage = async (event: { data: any }) => {
 		}
 
 		stdinBufferRuby = new Int32Array(buffer);
-		const { module: rubyModule, runtime } = await loadRubyModule(runtimeModuleUrl, wasmUrl);
+		if (!runtimeConfig) throw new Error('Ruby runtime has not been loaded.');
+		const { module: rubyModule, runtime } = await loadRubyModule(runtimeConfig);
 
 		if (prepare) {
 			postMessage({ results: true });

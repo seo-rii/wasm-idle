@@ -93,7 +93,11 @@ export interface RuntimeAssetKeySource {
 		integrity?: RuntimeAssetIntegrityMap;
 	};
 	lisp?: { moduleUrl?: string };
-	ruby?: { moduleUrl?: string; wasmUrl?: string };
+	ruby?: {
+		moduleUrl?: string;
+		wasmUrl?: string;
+		integrity?: RuntimeAssetIntegrityMap;
+	};
 	r?: { baseUrl?: string };
 	octave?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
 	prolog?: { baseUrl?: string; workerUrl?: string };
@@ -505,6 +509,12 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'lisp', property: 'moduleUrl', key: 'lispModuleUrl' },
 	{ runtime: 'ruby', property: 'moduleUrl', key: 'rubyModuleUrl' },
 	{ runtime: 'ruby', property: 'wasmUrl', key: 'rubyWasmUrl' },
+	{
+		runtime: 'ruby',
+		property: 'integrity',
+		key: 'rubyIntegrity',
+		serialize: serializeIntegrity
+	},
 	{ runtime: 'r', property: 'baseUrl', key: 'rBaseUrl' },
 	{ runtime: 'octave', property: 'baseUrl', key: 'octaveBaseUrl' },
 	{ runtime: 'octave', property: 'workerUrl', key: 'octaveWorkerUrl' },

@@ -1,4 +1,9 @@
-import { createRuntimeAssetsKey } from '@wasm-idle/core';
+import {
+	RUBY_RUNTIME_ASSET_PATH,
+	RUBY_RUNTIME_ASSET_RECEIPTS,
+	RUBY_RUNTIME_ASSET_VERSION,
+	createRuntimeAssetsKey
+} from '@wasm-idle/core';
 import { describe, expect, it } from 'vitest';
 import {
 	createApplicationAssetResolver,
@@ -171,6 +176,11 @@ describe('application runtime asset root', () => {
 		expect(assets.sqlite?.moduleUrl).toBe(
 			`/foo/bar/wasm-sqlite/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
 		);
+		expect(assets.ruby).toEqual({
+			moduleUrl: `/foo/bar/wasm-ruby/runtime.mjs?v=${RUBY_RUNTIME_ASSET_VERSION}`,
+			wasmUrl: `/foo/bar/wasm-ruby/${RUBY_RUNTIME_ASSET_PATH}?v=${RUBY_RUNTIME_ASSET_VERSION}`,
+			integrity: RUBY_RUNTIME_ASSET_RECEIPTS
+		});
 
 		for (const [runtime, config] of Object.entries(assets)) {
 			if (runtime === 'rootUrl' || typeof config !== 'object' || !config) continue;
@@ -227,6 +237,11 @@ describe('application runtime asset root', () => {
 					}
 				])
 		);
+		const serializedRubyIntegrity = JSON.stringify(
+			Object.entries(RUBY_RUNTIME_ASSET_RECEIPTS)
+				.sort(([left], [right]) => left.localeCompare(right))
+				.map(([asset, entry]) => [asset, { sha256: entry.sha256, bytes: entry.bytes }])
+		);
 
 		expect(key).toMatchObject({
 			rustManifestUrl: `/foo/bar/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`,
@@ -264,6 +279,7 @@ describe('application runtime asset root', () => {
 			erlangIntegrity: serializedElixirIntegrity,
 			fortranIntegrity: serializedFortranIntegrity,
 			zigIntegrity: serializedZigIntegrity,
+			rubyIntegrity: serializedRubyIntegrity,
 			objectiveCIntegrity: JSON.stringify(
 				Object.entries(WASM_OBJECTIVEC_ASSET_RECEIPTS)
 					.sort(([left], [right]) => left.localeCompare(right))
