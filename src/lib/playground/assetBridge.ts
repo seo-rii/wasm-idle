@@ -184,6 +184,13 @@ export const boundedUtf8ByteLength = (value: string, maxBytes = MAX_RUNTIME_ASSE
 const runtimeAssetAbortReason = (signal: AbortSignal) =>
 	signal.reason ?? new DOMException('Runtime asset load aborted', 'AbortError');
 
+const requireBridgeMaxAssetBytes = (value: number) => {
+	if (!Number.isSafeInteger(value) || value <= 0) {
+		throw new TypeError('Worker asset bridge maxAssetBytes must be a positive safe integer');
+	}
+	return value;
+};
+
 const cancelResponseBody = (response: Response, reason?: unknown) => {
 	try {
 		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
@@ -295,25 +302,28 @@ export class WorkerAssetBridge {
 	private generation = 0;
 	private state: AssetBridgeState = 'active';
 	private readonly activeLoads = new Set<AbortController>();
-	private readonly maxAssetBytes = MAX_RUNTIME_ASSET_BYTES;
+	private maxAssetBytes: number;
 
 	constructor(
 		worker: Worker,
 		runtime: RuntimeAssetRuntime,
 		config: ResolvedRuntimeAssetConfig,
-		progress?: ProgressLike
+		progress?: ProgressLike,
+		maxAssetBytes = MAX_RUNTIME_ASSET_BYTES
 	) {
 		this.worker = worker;
 		this.runtime = runtime;
 		this.config = config;
+		this.maxAssetBytes = requireBridgeMaxAssetBytes(maxAssetBytes);
 		this.progress = new RuntimeLoadProgress(runtime);
 		this.expectedAssets = expectedAssetsForRuntime(runtime);
 		this.progress.reset(progress);
 	}
 
-	matches(config: ResolvedRuntimeAssetConfig) {
+	matches(config: ResolvedRuntimeAssetConfig, maxAssetBytes = this.maxAssetBytes) {
 		return (
 			this.state === 'active' &&
+			this.maxAssetBytes === requireBridgeMaxAssetBytes(maxAssetBytes) &&
 			this.config.baseUrl === config.baseUrl &&
 			this.config.loader === config.loader &&
 			integrityKey(this.config) === integrityKey(config) &&
@@ -322,13 +332,19 @@ export class WorkerAssetBridge {
 		);
 	}
 
-	rebind(worker: Worker, config: ResolvedRuntimeAssetConfig, progress?: ProgressLike) {
+	rebind(
+		worker: Worker,
+		config: ResolvedRuntimeAssetConfig,
+		progress?: ProgressLike,
+		maxAssetBytes = this.maxAssetBytes
+	) {
 		if (this.state === 'disposed') {
 			throw new Error('Cannot rebind a disposed worker asset bridge');
 		}
 		if (this.state === 'rebinding') {
 			throw new Error('Cannot rebind a worker asset bridge while another rebind is active');
 		}
+		const nextMaxAssetBytes = requireBridgeMaxAssetBytes(maxAssetBytes);
 		this.state = 'rebinding';
 		const generation = ++this.generation;
 		this.progress.reset();
@@ -339,6 +355,7 @@ export class WorkerAssetBridge {
 			}
 			this.worker = worker;
 			this.config = config;
+			this.maxAssetBytes = nextMaxAssetBytes;
 			this.progress.reset(progress);
 			if (this.state !== 'rebinding' || this.generation !== generation) {
 				throw new Error('Cannot rebind a disposed worker asset bridge');
@@ -361,6 +378,50 @@ export class WorkerAssetBridge {
 	resetProgress(progress?: ProgressLike) {
 		if (this.state !== 'active') return;
 		this.progress.reset(progress);
+	}
+
+	private configuredReceiptByteLimit(asset: string, value: unknown) {
+		if (value === undefined) return undefined;
+		if (!Number.isSafeInteger(value) || (value as number) < 0) {
+			throw new ProtocolError(`Runtime asset ${asset} has an invalid integrity byte count`, {
+				phase: 'asset',
+				runtimeId: this.runtime
+			});
+		}
+		const byteLimit = value as number;
+		if (byteLimit > this.maxAssetBytes) {
+			throw runtimeAssetSizeError(asset, this.maxAssetBytes);
+		}
+		return byteLimit;
+	}
+
+	private runtimeAssetByteLimit(asset: string) {
+		const configured = this.config.integrity?.[asset];
+		if (!configured || typeof configured === 'string') return this.maxAssetBytes;
+		return (
+			this.configuredReceiptByteLimit(
+				asset,
+				configured.uncompressedBytes ?? configured.bytes
+			) ?? this.maxAssetBytes
+		);
+	}
+
+	private sourceAssetByteLimit(asset: string) {
+		const configured = this.config.integrity?.[asset];
+		if (!configured || typeof configured === 'string') return this.maxAssetBytes;
+		const paired =
+			configured.uncompressedBytes !== undefined ||
+			configured.uncompressedSha256 !== undefined;
+		if (asset.endsWith('.gz')) {
+			return paired
+				? (this.configuredReceiptByteLimit(asset, configured.bytes) ?? this.maxAssetBytes)
+				: this.maxAssetBytes;
+		}
+		const deliveryLimit = this.configuredReceiptByteLimit(asset, configured.bytes);
+		const runtimeLimit = this.configuredReceiptByteLimit(asset, configured.uncompressedBytes);
+		return deliveryLimit !== undefined || runtimeLimit !== undefined
+			? Math.max(deliveryLimit ?? 0, runtimeLimit ?? 0)
+			: this.maxAssetBytes;
 	}
 
 	handleMessage(event: MessageEvent<any>) {
@@ -392,17 +453,19 @@ export class WorkerAssetBridge {
 		try {
 			const loaded = await this.loadAsset(request.asset, controller.signal);
 			const deliveryBytes = canonicalUint8Array(loaded.bytes);
-			requireRuntimeAssetSize(request.asset, deliveryBytes.byteLength, this.maxAssetBytes);
+			const sourceAssetByteLimit = this.sourceAssetByteLimit(request.asset);
+			const runtimeAssetByteLimit = this.runtimeAssetByteLimit(request.asset);
+			requireRuntimeAssetSize(request.asset, deliveryBytes.byteLength, sourceAssetByteLimit);
 			const normalizedRuntimeBytes = request.asset.endsWith('.gz')
 				? await decompressGzip(
 						deliveryBytes,
 						request.asset,
-						this.maxAssetBytes,
+						runtimeAssetByteLimit,
 						controller.signal
 					)
 				: deliveryBytes;
 			const runtimeBytes = canonicalUint8Array(normalizedRuntimeBytes);
-			requireRuntimeAssetSize(request.asset, runtimeBytes.byteLength, this.maxAssetBytes);
+			requireRuntimeAssetSize(request.asset, runtimeBytes.byteLength, runtimeAssetByteLimit);
 			const httpDecodedGzip = (loaded.contentEncoding || '')
 				.toLowerCase()
 				.split(',')
@@ -472,6 +535,8 @@ export class WorkerAssetBridge {
 		if (signal.aborted) {
 			throw runtimeAssetAbortReason(signal);
 		}
+		const sourceAssetByteLimit = this.sourceAssetByteLimit(asset);
+		this.runtimeAssetByteLimit(asset);
 		const reportProgress = (loaded: number, total?: number) => {
 			if (!signal.aborted) this.progress.update(asset, loaded, total);
 		};
@@ -512,13 +577,18 @@ export class WorkerAssetBridge {
 			if (signal.aborted) {
 				throw runtimeAssetAbortReason(signal);
 			}
-			const loaded = await this.normalizeLoaderResult(result, asset, signal);
+			const loaded = await this.normalizeLoaderResult(
+				result,
+				asset,
+				signal,
+				sourceAssetByteLimit
+			);
 			if (signal.aborted) {
 				throw runtimeAssetAbortReason(signal);
 			}
 			if (loaded) return loaded;
 		}
-		return await this.fetchAsset(asset, asset, signal);
+		return await this.fetchAsset(asset, asset, signal, sourceAssetByteLimit);
 	}
 
 	private async verifyIntegrity(
@@ -567,13 +637,14 @@ export class WorkerAssetBridge {
 	private async normalizeLoaderResult(
 		result: RuntimeAssetLoaderResult,
 		asset: string,
-		signal: AbortSignal
+		signal: AbortSignal,
+		maxAssetBytes: number
 	): Promise<LoadedAsset | null> {
 		if (!result) return null;
 		if (typeof result === 'string' || result instanceof URL) {
-			return await this.fetchAsset(String(result), asset, signal);
+			return await this.fetchAsset(String(result), asset, signal, maxAssetBytes);
 		}
-		const directBytes = snapshotLoaderBytes(result, asset, this.maxAssetBytes);
+		const directBytes = snapshotLoaderBytes(result, asset, maxAssetBytes);
 		if (directBytes) {
 			this.progress.update(asset, directBytes.byteLength, directBytes.byteLength);
 			return { bytes: directBytes, transferOwnership: true };
@@ -596,28 +667,28 @@ export class WorkerAssetBridge {
 				: undefined;
 		if (loaderBlob) {
 			const { blob, size, mimeType } = loaderBlob;
-			requireRuntimeAssetSize(asset, size, this.maxAssetBytes);
+			requireRuntimeAssetSize(asset, size, maxAssetBytes);
 			const source = await readAbortableArrayBuffer(blob, signal);
-			const bytes = snapshotMaterializedArrayBuffer(source, asset, this.maxAssetBytes);
+			const bytes = snapshotMaterializedArrayBuffer(source, asset, maxAssetBytes);
 			this.progress.update(asset, bytes.byteLength, bytes.byteLength);
 			return { bytes, mimeType, transferOwnership: true };
 		}
 		if ('url' in result && result.url) {
-			return await this.fetchAsset(String(result.url), asset, signal);
+			return await this.fetchAsset(String(result.url), asset, signal, maxAssetBytes);
 		}
 		if ('data' in result) {
 			if (typeof result.data === 'string') {
 				requireRuntimeAssetSize(
 					asset,
-					boundedUtf8ByteLength(result.data, this.maxAssetBytes),
-					this.maxAssetBytes
+					boundedUtf8ByteLength(result.data, maxAssetBytes),
+					maxAssetBytes
 				);
 				const bytes = canonicalUint8Array(encoder.encode(result.data));
-				requireRuntimeAssetSize(asset, bytes.byteLength, this.maxAssetBytes);
+				requireRuntimeAssetSize(asset, bytes.byteLength, maxAssetBytes);
 				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
 				return { bytes, mimeType: result.mimeType, transferOwnership: true };
 			}
-			const bytes = snapshotLoaderBytes(result.data, asset, this.maxAssetBytes);
+			const bytes = snapshotLoaderBytes(result.data, asset, maxAssetBytes);
 			if (bytes) {
 				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
 				return {
@@ -633,7 +704,8 @@ export class WorkerAssetBridge {
 	private async fetchAsset(
 		url: string,
 		asset: string,
-		signal: AbortSignal
+		signal: AbortSignal,
+		maxAssetBytes = this.sourceAssetByteLimit(asset)
 	): Promise<LoadedAsset> {
 		const requestUrl = this.requireAllowedAssetUrl(asset, url);
 		if (signal.aborted) throw runtimeAssetAbortReason(signal);
@@ -726,8 +798,8 @@ export class WorkerAssetBridge {
 			}
 			contentLength = parsedContentLength;
 		}
-		if (contentLength !== undefined && contentLength > this.maxAssetBytes) {
-			const error = runtimeAssetSizeError(asset, this.maxAssetBytes);
+		if (contentLength !== undefined && contentLength > maxAssetBytes) {
+			const error = runtimeAssetSizeError(asset, maxAssetBytes);
 			cancelResponseBody(response, error);
 			throw error;
 		}
@@ -737,7 +809,7 @@ export class WorkerAssetBridge {
 			const bytes = snapshotMaterializedArrayBuffer(
 				await readAbortableArrayBuffer(response, signal),
 				asset,
-				this.maxAssetBytes
+				maxAssetBytes
 			);
 			this.progress.update(asset, bytes.byteLength, contentLength ?? bytes.byteLength);
 			return { bytes, contentEncoding, mimeType, transferOwnership: true };
@@ -771,7 +843,9 @@ export class WorkerAssetBridge {
 			signal.addEventListener('abort', cancelOnAbort, { once: true });
 		});
 		let receivedLength = 0;
-		let bytes = new Uint8Array(contentLength || DEFAULT_STREAM_BUFFER_BYTES);
+		let bytes = new Uint8Array(
+			Math.min(maxAssetBytes, contentLength || DEFAULT_STREAM_BUFFER_BYTES)
+		);
 		let loadedAsset!: LoadedAsset;
 		let releaseError: unknown;
 		try {
@@ -784,8 +858,8 @@ export class WorkerAssetBridge {
 				if (!value) continue;
 				const chunk = canonicalUint8Array(value);
 				const nextLength = receivedLength + chunk.byteLength;
-				if (nextLength > this.maxAssetBytes) {
-					const error = runtimeAssetSizeError(asset, this.maxAssetBytes);
+				if (nextLength > maxAssetBytes) {
+					const error = runtimeAssetSizeError(asset, maxAssetBytes);
 					readerCancelled = true;
 					try {
 						void reader.cancel(error).catch(() => undefined);
@@ -794,7 +868,7 @@ export class WorkerAssetBridge {
 				}
 				if (nextLength > bytes.byteLength) {
 					const nextCapacity = Math.min(
-						this.maxAssetBytes,
+						maxAssetBytes,
 						Math.max(nextLength, bytes.byteLength * 2)
 					);
 					const grown = new Uint8Array(nextCapacity);

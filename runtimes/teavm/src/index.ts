@@ -7,6 +7,35 @@ export const TEAVM_LOAD_ASSETS = [
 
 export type TeaVmLoadAsset = (typeof TEAVM_LOAD_ASSETS)[number];
 
+export interface TeaVmAssetReceipt {
+	bytes: number;
+	sha256: string;
+}
+
+export type TeaVmAssetReceipts = Readonly<Record<TeaVmLoadAsset, Readonly<TeaVmAssetReceipt>>>;
+
+export const TEAVM_ASSET_VERSION =
+	'2ccdddaf88a24761835c97047dccda500fdfb450e8ab1fcacd479e5a394df546';
+
+export const TEAVM_ASSET_RECEIPTS = Object.freeze({
+	'compiler.wasm-runtime.js': Object.freeze({
+		bytes: 13_936,
+		sha256: 'bd103f277be99fd2f3ffc0248b3558e6c2c85a44902bfeef042c6bedcf0b2c63'
+	}),
+	'compiler.wasm': Object.freeze({
+		bytes: 4_299_273,
+		sha256: '9eb047426613c3ed3006838daae49e29929ad0d560ec6b1f8b50e15e2c3865d6'
+	}),
+	'compile-classlib-teavm.bin': Object.freeze({
+		bytes: 200_621,
+		sha256: '71746dc82ddad5ad8be829f461c235a747bdaf121d1b7abd16dbbbbe6a17f53d'
+	}),
+	'runtime-classlib-teavm.bin': Object.freeze({
+		bytes: 2_394_175,
+		sha256: 'f0c9c8c0426e310d08751e57cc88fdfd63ea2f428e4d6cb1b7e59a3dc20844ad'
+	})
+}) satisfies TeaVmAssetReceipts;
+
 export interface TeaVmAssetResolverOptions {
 	baseUrl: string | URL;
 	currentUrl?: string | URL;
@@ -16,6 +45,7 @@ export interface TeaVmFetchAssetOptions extends TeaVmAssetResolverOptions {
 	fetch?: typeof fetch;
 	signal?: AbortSignal;
 	maxAssetBytes?: number;
+	integrity?: TeaVmAssetReceipts;
 }
 
 const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/u;
@@ -27,6 +57,100 @@ const ensureTrailingSlash = (baseUrl: string) => (baseUrl.endsWith('/') ? baseUr
 const stringifyUrl = (url: string | URL) => (url instanceof URL ? url.href : url);
 
 const canResolveWithUrl = (baseUrl: string) => ABSOLUTE_URL_PATTERN.test(baseUrl);
+
+const snapshotTeaVmAssetReceipt = (
+	asset: TeaVmLoadAsset,
+	value: unknown
+): Readonly<TeaVmAssetReceipt> => {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new TypeError(`TeaVM runtime receipt is invalid for ${asset}`);
+	}
+	const receipt = value as Partial<TeaVmAssetReceipt>;
+	const bytes = receipt.bytes;
+	const sha256 = receipt.sha256;
+	if (
+		!Number.isSafeInteger(bytes) ||
+		(bytes as number) <= 0 ||
+		typeof sha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(sha256)
+	) {
+		throw new TypeError(`TeaVM runtime receipt is invalid for ${asset}`);
+	}
+	return Object.freeze({ bytes: bytes as number, sha256 });
+};
+
+export function snapshotTeaVmAssetReceipts(
+	value: unknown = TEAVM_ASSET_RECEIPTS
+): TeaVmAssetReceipts {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new TypeError('TeaVM runtime integrity must describe exactly four assets');
+	}
+	const receivedNames = Object.keys(value).sort();
+	const expectedNames = [...TEAVM_LOAD_ASSETS].sort();
+	if (
+		receivedNames.length !== expectedNames.length ||
+		receivedNames.some((name, index) => name !== expectedNames[index])
+	) {
+		throw new TypeError('TeaVM runtime integrity must describe exactly four assets');
+	}
+	const receipts = value as Record<TeaVmLoadAsset, unknown>;
+	return Object.freeze(
+		Object.fromEntries(
+			TEAVM_LOAD_ASSETS.map((asset) => [
+				asset,
+				snapshotTeaVmAssetReceipt(asset, receipts[asset])
+			])
+		) as unknown as TeaVmAssetReceipts
+	);
+}
+
+const digestWithSignal = async (bytes: Uint8Array<ArrayBuffer>, signal?: AbortSignal) => {
+	const subtle = globalThis.crypto?.subtle;
+	if (!subtle) throw new Error('Web Crypto is required to verify TeaVM runtime assets.');
+	if (signal?.aborted) {
+		throw signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
+	}
+	const pendingDigest = Promise.resolve(subtle.digest('SHA-256', bytes));
+	void pendingDigest.catch(() => undefined);
+	if (!signal) return await pendingDigest;
+	let cancelOnAbort: (() => void) | undefined;
+	const aborted = new Promise<never>((_resolve, reject) => {
+		cancelOnAbort = () =>
+			reject(signal.reason ?? new Error('TeaVM runtime asset load was aborted.'));
+		signal.addEventListener('abort', cancelOnAbort, { once: true });
+		if (signal.aborted) cancelOnAbort();
+	});
+	try {
+		const digest = await Promise.race([pendingDigest, aborted]);
+		if (signal.aborted) {
+			throw signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
+		}
+		return digest;
+	} finally {
+		if (cancelOnAbort) signal.removeEventListener('abort', cancelOnAbort);
+	}
+};
+
+const verifyTeaVmAsset = async (
+	asset: TeaVmLoadAsset,
+	bytes: Uint8Array<ArrayBuffer>,
+	receipt: Readonly<TeaVmAssetReceipt>,
+	signal?: AbortSignal
+) => {
+	if (signal?.aborted) {
+		throw signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
+	}
+	const snapshot = Uint8Array.from(bytes);
+	if (snapshot.byteLength !== receipt.bytes) {
+		throw new Error(`TeaVM runtime asset ${asset} failed its byte-size receipt`);
+	}
+	const digest = new Uint8Array(await digestWithSignal(snapshot, signal));
+	const sha256 = [...digest].map((value) => value.toString(16).padStart(2, '0')).join('');
+	if (sha256 !== receipt.sha256) {
+		throw new Error(`TeaVM runtime asset ${asset} failed its SHA-256 receipt`);
+	}
+	return snapshot;
+};
 
 export function normalizeTeaVmBaseUrl(baseUrl: string | URL, currentUrl?: string | URL) {
 	if (baseUrl == null) throw new TypeError('TeaVM asset base URL is required.');
@@ -104,6 +228,21 @@ export async function fetchTeaVmAsset(
 	if (options.signal?.aborted) {
 		throw options.signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
 	}
+	const integritySource = options.integrity;
+	if (options.signal?.aborted) {
+		throw options.signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
+	}
+	const integrity = snapshotTeaVmAssetReceipts(
+		integritySource === undefined ? TEAVM_ASSET_RECEIPTS : integritySource
+	);
+	if (options.signal?.aborted) {
+		throw options.signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
+	}
+	const receipt = integrity[asset];
+	if (receipt.bytes > maxAssetBytes) {
+		throw new Error(`TeaVM runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`);
+	}
+	const byteLimit = receipt.bytes;
 	const fetchImpl = options.fetch ?? globalThis.fetch?.bind(globalThis);
 	if (!fetchImpl) throw new Error('fetch is required to load TeaVM runtime assets.');
 	const assetUrl = resolveTeaVmAssetUrl(asset, options);
@@ -196,9 +335,9 @@ export async function fetchTeaVmAsset(
 			throw new Error(`TeaVM runtime asset ${asset} has an invalid Content-Length`);
 		}
 	}
-	if (contentLength !== undefined && contentLength > maxAssetBytes) {
+	if (contentLength !== undefined && contentLength > byteLimit) {
 		await response.body?.cancel().catch(() => {});
-		throw new Error(`TeaVM runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`);
+		throw new Error(`TeaVM runtime asset ${asset} exceeds the ${byteLimit} byte limit`);
 	}
 	if (!response.body) {
 		const signal = options.signal;
@@ -221,12 +360,10 @@ export async function fetchTeaVmAsset(
 			if (signal?.aborted) {
 				throw signal.reason ?? new Error('TeaVM runtime asset load was aborted.');
 			}
-			if (bytes.byteLength > maxAssetBytes) {
-				throw new Error(
-					`TeaVM runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`
-				);
+			if (bytes.byteLength > byteLimit) {
+				throw new Error(`TeaVM runtime asset ${asset} exceeds the ${byteLimit} byte limit`);
 			}
-			return bytes;
+			return await verifyTeaVmAsset(asset, bytes, receipt, signal);
 		} finally {
 			if (cancelOnAbort) {
 				signal?.removeEventListener('abort', cancelOnAbort);
@@ -265,7 +402,7 @@ export async function fetchTeaVmAsset(
 			})
 		: undefined;
 	let bytes = new Uint8Array(
-		Math.min(maxAssetBytes, contentLength ?? DEFAULT_TEAVM_ASSET_BUFFER_BYTES)
+		Math.min(byteLimit, contentLength ?? DEFAULT_TEAVM_ASSET_BUFFER_BYTES)
 	);
 	let receivedLength = 0;
 	let loadedBytes!: Uint8Array<ArrayBuffer>;
@@ -285,16 +422,16 @@ export async function fetchTeaVmAsset(
 			if (done) break;
 			if (!value) continue;
 			const nextLength = receivedLength + value.byteLength;
-			if (nextLength > maxAssetBytes) {
+			if (nextLength > byteLimit) {
 				const error = new Error(
-					`TeaVM runtime asset ${asset} exceeds the ${maxAssetBytes} byte limit`
+					`TeaVM runtime asset ${asset} exceeds the ${byteLimit} byte limit`
 				);
 				cancelReader(error);
 				throw error;
 			}
 			if (nextLength > bytes.byteLength) {
 				const nextCapacity = Math.min(
-					maxAssetBytes,
+					byteLimit,
 					Math.max(nextLength, Math.max(bytes.byteLength * 2, 1))
 				);
 				const grown = new Uint8Array(nextCapacity);
@@ -326,5 +463,5 @@ export async function fetchTeaVmAsset(
 		}
 	}
 	if (releaseFailure) throw releaseFailure.error;
-	return loadedBytes;
+	return await verifyTeaVmAsset(asset, loadedBytes, receipt, options.signal);
 }

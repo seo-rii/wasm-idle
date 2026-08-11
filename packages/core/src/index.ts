@@ -152,6 +152,15 @@ export {
 	type RubyRuntimeAssetReceipts
 } from './ruby-runtime.js';
 export {
+	TEAVM_RUNTIME_ASSET_NAMES,
+	TEAVM_RUNTIME_ASSET_RECEIPTS,
+	TEAVM_RUNTIME_ASSET_VERSION,
+	snapshotTeaVmRuntimeAssetReceipts,
+	type TeaVmRuntimeAssetName,
+	type TeaVmRuntimeAssetReceipt,
+	type TeaVmRuntimeAssetReceipts
+} from './teavm-runtime.js';
+export {
 	RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION,
 	defineRuntimeRegistryManifest,
 	defineRuntimeWorkerLifetimePolicy,

@@ -1,13 +1,31 @@
+import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+	TEAVM_ASSET_RECEIPTS,
 	fetchTeaVmAsset,
 	resolveTeaVmAssetUrl,
+	snapshotTeaVmAssetReceipts,
+	type TeaVmAssetReceipts,
 	type TeaVmLoadAsset
 } from '../../runtimes/teavm/src/index';
 
 afterEach(() => {
+	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
+});
+
+const receiptFor = (bytes: Uint8Array) => ({
+	bytes: bytes.byteLength,
+	sha256: createHash('sha256').update(bytes).digest('hex')
+});
+
+const integrityFor = (
+	bytes: Uint8Array,
+	asset: TeaVmLoadAsset = 'compiler.wasm'
+): TeaVmAssetReceipts => ({
+	...TEAVM_ASSET_RECEIPTS,
+	[asset]: receiptFor(bytes)
 });
 
 describe('TeaVM runtime asset boundary', () => {
@@ -59,7 +77,8 @@ describe('TeaVM runtime asset boundary', () => {
 		const bytes = await fetchTeaVmAsset('compiler.wasm', {
 			baseUrl: 'https://assets.example/teavm/',
 			fetch: fetchMock,
-			maxAssetBytes: 8
+			maxAssetBytes: 8,
+			integrity: integrityFor(Uint8Array.of(1, 2, 3, 4))
 		});
 
 		expect([...bytes]).toEqual([1, 2, 3, 4]);
@@ -90,7 +109,8 @@ describe('TeaVM runtime asset boundary', () => {
 			fetchTeaVmAsset('compiler.wasm', {
 				baseUrl: 'https://assets.example/teavm/',
 				fetch: fetchMock,
-				maxAssetBytes: 8
+				maxAssetBytes: 8,
+				integrity: integrityFor(new Uint8Array(8))
 			})
 		).rejects.toThrow('exceeds the 8 byte limit');
 		expect(getReader).not.toHaveBeenCalled();
@@ -160,13 +180,13 @@ describe('TeaVM runtime asset boundary', () => {
 		expect(cancel).toHaveBeenCalledOnce();
 	});
 
-	it('allows a zero Content-Length declaration', async () => {
+	it('accepts a zero Content-Length declaration before failing the pinned receipt', async () => {
 		await expect(
 			fetchTeaVmAsset('compiler.wasm', {
 				baseUrl: 'https://assets.example/teavm/',
 				fetch: async () => new Response(null, { headers: { 'content-length': '0' } })
 			})
-		).resolves.toEqual(new Uint8Array());
+		).rejects.toThrow('failed its byte-size receipt');
 	});
 
 	it('cancels an unknown-length stream that crosses the byte limit', async () => {
@@ -189,10 +209,98 @@ describe('TeaVM runtime asset boundary', () => {
 			fetchTeaVmAsset('compiler.wasm', {
 				baseUrl: 'https://assets.example/teavm/',
 				fetch: fetchMock,
-				maxAssetBytes: 4
+				maxAssetBytes: 4,
+				integrity: integrityFor(Uint8Array.of(1, 2, 3, 4))
 			})
 		).rejects.toThrow('exceeds the 4 byte limit');
 		expect(cancelled).toBe(true);
+	});
+
+	it('rejects same-length corruption after copying the fetched bytes', async () => {
+		const expected = Uint8Array.of(1, 2, 3, 4);
+		const fetched = Uint8Array.of(1, 2, 3, 5);
+
+		await expect(
+			fetchTeaVmAsset('compiler.wasm', {
+				baseUrl: 'https://assets.example/teavm/',
+				fetch: async () => new Response(fetched),
+				integrity: integrityFor(expected)
+			})
+		).rejects.toThrow('failed its SHA-256 receipt');
+	});
+
+	it('rejects malformed, widened, and over-limit receipt profiles before fetching', async () => {
+		const fetchMock = vi.fn();
+		await expect(
+			fetchTeaVmAsset('compiler.wasm', {
+				baseUrl: 'https://assets.example/teavm/',
+				fetch: fetchMock,
+				integrity: {
+					...TEAVM_ASSET_RECEIPTS,
+					unexpected: receiptFor(Uint8Array.of(1))
+				} as never
+			})
+		).rejects.toThrow('exactly four assets');
+		await expect(
+			fetchTeaVmAsset('compiler.wasm', {
+				baseUrl: 'https://assets.example/teavm/',
+				fetch: fetchMock,
+				integrity: {
+					...TEAVM_ASSET_RECEIPTS,
+					'compiler.wasm': { bytes: 0, sha256: 'a'.repeat(64) }
+				}
+			})
+		).rejects.toThrow('receipt is invalid for compiler.wasm');
+		await expect(
+			fetchTeaVmAsset('compiler.wasm', {
+				baseUrl: 'https://assets.example/teavm/',
+				fetch: fetchMock,
+				maxAssetBytes: 3,
+				integrity: integrityFor(Uint8Array.of(1, 2, 3, 4))
+			})
+		).rejects.toThrow('exceeds the 3 byte limit');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('rejects promptly with the exact reason when integrity hashing is aborted', async () => {
+		const bytes = Uint8Array.of(1, 2, 3, 4);
+		let markDigestStarted!: () => void;
+		const digestStarted = new Promise<void>((resolve) => {
+			markDigestStarted = resolve;
+		});
+		vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation(
+			() =>
+				new Promise<ArrayBuffer>(() => {
+					markDigestStarted();
+				})
+		);
+		const controller = new AbortController();
+		const reason = new Error('stop TeaVM integrity verification');
+		const pending = fetchTeaVmAsset('compiler.wasm', {
+			baseUrl: 'https://assets.example/teavm/',
+			fetch: async () => new Response(bytes),
+			integrity: integrityFor(bytes),
+			signal: controller.signal
+		});
+
+		await digestStarted;
+		controller.abort(reason);
+
+		await expect(pending).rejects.toBe(reason);
+	});
+
+	it('snapshots complete replacement receipt profiles away from their caller', () => {
+		const caller = structuredClone(TEAVM_ASSET_RECEIPTS) as Record<
+			TeaVmLoadAsset,
+			{ bytes: number; sha256: string }
+		>;
+		const snapshot = snapshotTeaVmAssetReceipts(caller);
+		caller['compiler.wasm'].bytes = 1;
+
+		expect(snapshot).toEqual(TEAVM_ASSET_RECEIPTS);
+		expect(snapshot).not.toBe(caller);
+		expect(Object.isFrozen(snapshot)).toBe(true);
+		expect(Object.isFrozen(snapshot['compiler.wasm'])).toBe(true);
 	});
 
 	it('rejects promptly and cancels a late response when custom fetch ignores abort', async () => {

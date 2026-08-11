@@ -18,7 +18,10 @@ import {
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import {
 	RUBY_RUNTIME_ASSET_RECEIPTS,
+	TEAVM_RUNTIME_ASSET_NAMES,
+	TEAVM_RUNTIME_ASSET_RECEIPTS,
 	deriveRubyRuntimeWasmUrl,
+	snapshotTeaVmRuntimeAssetReceipts,
 	type RubyRuntimeAssetReceipts
 } from '@wasm-idle/core';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from '$lib/playground/wasmFortranExecutionAssets';
@@ -426,12 +429,7 @@ export const PYTHON_RUNTIME_LOAD_ASSETS = [
 	'python_stdlib.zip'
 ] as const;
 
-export const JAVA_RUNTIME_LOAD_ASSETS = [
-	'compiler.wasm-runtime.js',
-	'compiler.wasm',
-	'compile-classlib-teavm.bin',
-	'runtime-classlib-teavm.bin'
-] as const;
+export const JAVA_RUNTIME_LOAD_ASSETS = TEAVM_RUNTIME_ASSET_NAMES;
 
 export const CLANG_RUNTIME_LOAD_ASSETS = [
 	'runtime-manifest.v1.json',
@@ -477,6 +475,11 @@ const resolveRuntimeAssetIntegrity = (
 	runtime: RuntimeAssetRuntime,
 	config: RuntimeAssetConfig | undefined
 ): RuntimeAssetIntegrityMap | undefined => {
+	if (runtime === 'java') {
+		return snapshotTeaVmRuntimeAssetReceipts(
+			config?.integrity === undefined ? TEAVM_RUNTIME_ASSET_RECEIPTS : config.integrity
+		);
+	}
 	if (config?.integrity) return config.integrity;
 	if (runtime === 'clang' && !config?.baseUrl && !config?.loader) {
 		return BUNDLED_CLANG_ASSET_INTEGRITY;
@@ -567,7 +570,7 @@ export function resolveRuntimeAssetConfig(
 			loader: runtimeConfig.loader,
 			integrity,
 			allowedBaseUrls,
-			useAssetBridge: useAssetBridgeForConfig(runtimeConfig)
+			useAssetBridge: useAssetBridgeForConfig(runtimeConfig, integrity)
 		};
 	}
 
@@ -585,7 +588,7 @@ export function resolveRuntimeAssetConfig(
 		return {
 			baseUrl: runtimeFolder.virtualBaseUrl,
 			loader: runtimeConfig.loader,
-			integrity: runtimeConfig.integrity,
+			integrity,
 			allowedBaseUrls,
 			useAssetBridge: true
 		};
@@ -594,7 +597,7 @@ export function resolveRuntimeAssetConfig(
 	if (runtimeConfig?.integrity || runtimeConfig?.allowedBaseUrls?.length) {
 		return {
 			baseUrl: resolveRuntimeRootBaseUrl(runtimeFolder, '', currentUrl),
-			integrity: runtimeConfig?.integrity,
+			integrity,
 			allowedBaseUrls,
 			useAssetBridge: true
 		};

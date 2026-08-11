@@ -11,10 +11,12 @@ import {
 	type RuntimeAssetIntegrityMap
 } from '$lib/playground/assets';
 import {
+	AssetTooLargeError,
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	TEAVM_RUNTIME_ASSET_NAMES,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -377,9 +379,25 @@ class Java implements Sandbox {
 				}
 				const assetConfig = resolveRuntimeAssetConfig('java', resolverAssets, currentUrl);
 				if (!this.isOperationActive(activeOperation)) return;
+				for (const asset of TEAVM_RUNTIME_ASSET_NAMES) {
+					const receipt = assetConfig.integrity?.[asset];
+					const bytes = typeof receipt === 'object' ? receipt.bytes : undefined;
+					if (bytes !== undefined && bytes > limits.maxAssetBytes) {
+						throw new AssetTooLargeError(
+							`TeaVM runtime receipt exceeds the ${limits.maxAssetBytes} byte limit for ${asset}`,
+							{
+								actual: bytes,
+								limit: limits.maxAssetBytes,
+								runtimeId: 'JAVA'
+							}
+						);
+					}
+				}
 				this.baseUrl = assetConfig.baseUrl;
 				const needsWorkerReset =
-					!this.worker || !this.assetBridge || !this.assetBridge.matches(assetConfig);
+					!this.worker ||
+					!this.assetBridge ||
+					!this.assetBridge.matches(assetConfig, limits.maxAssetBytes);
 				if (!this.isOperationActive(activeOperation)) return;
 				if (needsWorkerReset && this.worker) {
 					this.workerSession.reset();
@@ -400,7 +418,8 @@ class Java implements Sandbox {
 						worker,
 						'java',
 						assetConfig,
-						progress
+						progress,
+						limits.maxAssetBytes
 					);
 					if (!this.isOperationActive(activeOperation) || this.worker !== worker) {
 						assetBridge.dispose();
@@ -443,7 +462,7 @@ class Java implements Sandbox {
 					const worker = this.worker;
 					const assetBridge = this.assetBridge;
 					if (!assetBridge) return rejectLoad('Worker asset bridge unavailable');
-					assetBridge.rebind(worker, assetConfig, progress);
+					assetBridge.rebind(worker, assetConfig, progress, limits.maxAssetBytes);
 					if (
 						!this.isOperationActive(activeOperation) ||
 						this.worker !== worker ||

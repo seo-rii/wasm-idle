@@ -1,0 +1,47 @@
+{
+  "formatVersion": 1,
+  "profileId": "teavm-browser-legacy",
+  "fingerprint": "2ccdddaf88a24761835c97047dccda500fdfb450e8ab1fcacd479e5a394df546",
+  "provenance": {
+    "kind": "legacy-checkin",
+    "importedByCommit": "c1c3ef79190ccc4b577604a9aaf020edb94320b0"
+  },
+  "files": [
+    {
+      "path": "compile-classlib-teavm.bin",
+      "bytes": 200621,
+      "sha256": "71746dc82ddad5ad8be829f461c235a747bdaf121d1b7abd16dbbbbe6a17f53d",
+      "storagePath": "compile-classlib-teavm.bin",
+      "storageEncoding": "identity",
+      "storageBytes": 200621,
+      "storageSha256": "71746dc82ddad5ad8be829f461c235a747bdaf121d1b7abd16dbbbbe6a17f53d"
+    },
+    {
+      "path": "compiler.wasm",
+      "bytes": 4299273,
+      "sha256": "9eb047426613c3ed3006838daae49e29929ad0d560ec6b1f8b50e15e2c3865d6",
+      "storagePath": "compiler.wasm.gz",
+      "storageEncoding": "gzip",
+      "storageBytes": 1678507,
+      "storageSha256": "5f46653e00fb5832e0bb2daba4fe49bf3e7bce369a3d16fcb30025fb7ed96bf2"
+    },
+    {
+      "path": "compiler.wasm-runtime.js",
+      "bytes": 13936,
+      "sha256": "bd103f277be99fd2f3ffc0248b3558e6c2c85a44902bfeef042c6bedcf0b2c63",
+      "storagePath": "compiler.wasm-runtime.js",
+      "storageEncoding": "identity",
+      "storageBytes": 13936,
+      "storageSha256": "bd103f277be99fd2f3ffc0248b3558e6c2c85a44902bfeef042c6bedcf0b2c63"
+    },
+    {
+      "path": "runtime-classlib-teavm.bin",
+      "bytes": 2394175,
+      "sha256": "f0c9c8c0426e310d08751e57cc88fdfd63ea2f428e4d6cb1b7e59a3dc20844ad",
+      "storagePath": "runtime-classlib-teavm.bin.gz",
+      "storageEncoding": "gzip",
+      "storageBytes": 2358693,
+      "storageSha256": "bf0d0ba86f2e35c4360e54151a171b2e2729a2c5e6cb9cfbdc7ecefae8ced4c4"
+    }
+  ]
+}

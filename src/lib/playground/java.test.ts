@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
+import { TEAVM_RUNTIME_ASSET_NAMES, TEAVM_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
 
 const workerInstances: MockWorker[] = [];
 const { publicEnv } = vi.hoisted(() => ({
@@ -118,7 +119,7 @@ describe('TeaVM Java sandbox', () => {
 					baseUrl: expect.stringMatching(
 						/^http:\/\/localhost(?::\d+)?\/absproxy\/5173\/teavm\/$/
 					),
-					useAssetBridge: false
+					useAssetBridge: true
 				})
 			})
 		);
@@ -155,6 +156,23 @@ describe('TeaVM Java sandbox', () => {
 				message: 'unused import'
 			}
 		]);
+	});
+
+	it('rejects an over-limit TeaVM receipt before creating a worker', async () => {
+		const sandbox = new Java();
+
+		await expect(
+			sandbox.load('/absproxy/5173', '', true, [], {
+				limits: { maxAssetBytes: 4_000_000 }
+			})
+		).rejects.toMatchObject({
+			name: 'AssetTooLargeError',
+			code: 'asset-too-large',
+			runtimeId: 'JAVA',
+			actual: TEAVM_RUNTIME_ASSET_RECEIPTS['compiler.wasm'].bytes,
+			limit: 4_000_000
+		});
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('terminates Java output before exceeding the cumulative UTF-8 byte limit', async () => {
@@ -1085,12 +1103,18 @@ public class Main {
 		};
 		let integritySha256 = 'a'.repeat(64);
 		const integrityEntry = {
+			bytes: TEAVM_RUNTIME_ASSET_RECEIPTS['compiler.wasm'].bytes,
 			get sha256() {
 				reads.sha256 += 1;
 				return integritySha256;
 			}
 		};
-		const integrity = { 'compiler.wasm': integrityEntry };
+		const integrity = Object.fromEntries(
+			TEAVM_RUNTIME_ASSET_NAMES.map((asset) => [
+				asset,
+				asset === 'compiler.wasm' ? integrityEntry : TEAVM_RUNTIME_ASSET_RECEIPTS[asset]
+			])
+		);
 		const allowedBaseUrls = ['/snapshot-mirror/'];
 		const runtimeConfig = {
 			get baseUrl() {
@@ -1140,7 +1164,13 @@ public class Main {
 			sandbox.assetBridge?.matches({
 				baseUrl: new URL('/snapshot-java/', window.location.href).href,
 				loader,
-				integrity: { 'compiler.wasm': { sha256: 'a'.repeat(64) } },
+				integrity: {
+					...TEAVM_RUNTIME_ASSET_RECEIPTS,
+					'compiler.wasm': {
+						bytes: TEAVM_RUNTIME_ASSET_RECEIPTS['compiler.wasm'].bytes,
+						sha256: 'a'.repeat(64)
+					}
+				},
 				allowedBaseUrls: [new URL('/snapshot-mirror/', window.location.href).href],
 				useAssetBridge: true
 			})

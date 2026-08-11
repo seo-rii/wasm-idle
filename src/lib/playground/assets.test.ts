@@ -94,6 +94,7 @@ import {
 	resolveRuntimeAssetConfig
 } from './assets';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
+import { TEAVM_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from './wasmFortranExecutionAssets';
 import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
@@ -166,7 +167,10 @@ describe('runtime asset config resolution', () => {
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/teavm/',
-			useAssetBridge: false
+			loader: undefined,
+			integrity: TEAVM_RUNTIME_ASSET_RECEIPTS,
+			allowedBaseUrls: undefined,
+			useAssetBridge: true
 		});
 	});
 
@@ -196,8 +200,61 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://cdn.example.com/teavm/',
 			loader,
+			integrity: TEAVM_RUNTIME_ASSET_RECEIPTS,
+			allowedBaseUrls: undefined,
 			useAssetBridge: true
 		});
+	});
+
+	it('keeps an explicit TeaVM mirror on the bundled receipt generation', () => {
+		expect(
+			resolveRuntimeAssetConfig(
+				'java',
+				{ java: { baseUrl: 'https://cdn.example.com/teavm/' } },
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://cdn.example.com/teavm/',
+			loader: undefined,
+			integrity: TEAVM_RUNTIME_ASSET_RECEIPTS,
+			allowedBaseUrls: undefined,
+			useAssetBridge: true
+		});
+	});
+
+	it('snapshots a complete replacement TeaVM receipt generation', () => {
+		const integrity = structuredClone(TEAVM_RUNTIME_ASSET_RECEIPTS) as Record<
+			string,
+			{ bytes: number; sha256: string }
+		>;
+		const resolved = resolveRuntimeAssetConfig('java', { java: { integrity } });
+		integrity['compiler.wasm'].bytes = 1;
+
+		expect(resolved.integrity).toEqual(TEAVM_RUNTIME_ASSET_RECEIPTS);
+		expect(resolved.integrity).not.toBe(integrity);
+		expect(Object.isFrozen(resolved.integrity)).toBe(true);
+		expect(Object.isFrozen(resolved.integrity?.['compiler.wasm'])).toBe(true);
+		expect(resolved.useAssetBridge).toBe(true);
+	});
+
+	it('rejects incomplete or widened TeaVM receipt generations', () => {
+		expect(() =>
+			resolveRuntimeAssetConfig('java', {
+				java: {
+					integrity: { 'compiler.wasm': TEAVM_RUNTIME_ASSET_RECEIPTS['compiler.wasm'] }
+				}
+			})
+		).toThrow('exactly four assets');
+		expect(() =>
+			resolveRuntimeAssetConfig('java', {
+				java: {
+					integrity: {
+						...TEAVM_RUNTIME_ASSET_RECEIPTS,
+						unexpected: { bytes: 1, sha256: 'a'.repeat(64) }
+					}
+				}
+			})
+		).toThrow('exactly four assets');
 	});
 
 	it('derives the default clang asset base url from the shared root path', () => {
