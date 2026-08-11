@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
@@ -55,12 +55,35 @@ async function isRegularFile(filePath) {
 }
 
 /** @param {string} parent @param {string} candidate */
-function pathsOverlap(parent, candidate) {
+function containsPath(parent, candidate) {
 	const relative = path.relative(parent, candidate);
 	return (
 		relative === '' ||
 		(!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`))
 	);
+}
+
+/** @param {string} left @param {string} right */
+const pathsOverlap = (left, right) => containsPath(left, right) || containsPath(right, left);
+
+/** Resolve existing ancestors so symlink spellings cannot bypass publication boundaries. */
+async function resolveBoundaryPath(filePath) {
+	let cursor = path.resolve(filePath);
+	/** @type {string[]} */
+	const unresolved = [];
+	for (;;) {
+		try {
+			return path.join(await realpath(cursor), ...unresolved.reverse());
+		} catch (error) {
+			const code =
+				error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+			if (code !== 'ENOENT') throw error;
+			const parent = path.dirname(cursor);
+			if (parent === cursor) return path.resolve(filePath);
+			unresolved.push(path.basename(cursor));
+			cursor = parent;
+		}
+	}
 }
 
 /** @param {unknown} value @param {string} label */
@@ -207,20 +230,20 @@ export async function syncWasmJAssets(options = {}) {
 	if (versionStats && !versionStats.isFile()) {
 		throw new Error(`wasm-j version module must be a regular file: ${versionModulePath}`);
 	}
-	if (pathsOverlap(targetDir, versionModulePath) || pathsOverlap(versionModulePath, targetDir)) {
+	const [targetBoundary, versionBoundary, workerBoundary, lockBoundary] = await Promise.all(
+		[targetDir, versionModulePath, workerSourcePath, lockFilePath].map(resolveBoundaryPath)
+	);
+	if (pathsOverlap(targetBoundary, versionBoundary)) {
 		throw new Error('wasm-j runtime target and version module must not overlap');
 	}
-	for (const [candidate, label] of [
-		[workerSourcePath, 'worker source'],
-		[lockFilePath, 'input lock']
+	for (const [candidateBoundary, label] of [
+		[workerBoundary, 'worker source'],
+		[lockBoundary, 'input lock']
 	]) {
-		if (pathsOverlap(targetDir, candidate) || pathsOverlap(candidate, targetDir)) {
+		if (pathsOverlap(targetBoundary, candidateBoundary)) {
 			throw new Error(`wasm-j runtime target and ${label} must not overlap`);
 		}
-		if (
-			pathsOverlap(versionModulePath, candidate) ||
-			pathsOverlap(candidate, versionModulePath)
-		) {
+		if (pathsOverlap(versionBoundary, candidateBoundary)) {
 			throw new Error(`wasm-j version module and ${label} must not overlap`);
 		}
 	}
@@ -230,10 +253,10 @@ export async function syncWasmJAssets(options = {}) {
 
 	const lock = await readInputLock(lockFilePath);
 	const resolvedSourceDir = await resolveSourceDir(options.sourceDir, targetDir);
-	if (
-		resolvedSourceDir &&
-		(pathsOverlap(targetDir, resolvedSourceDir) || pathsOverlap(resolvedSourceDir, targetDir))
-	) {
+	const sourceBoundary = resolvedSourceDir
+		? await resolveBoundaryPath(resolvedSourceDir)
+		: targetBoundary;
+	if (resolvedSourceDir && pathsOverlap(targetBoundary, sourceBoundary)) {
 		throw new Error('wasm-j source directory and runtime target must not overlap');
 	}
 	const sourceBase = resolvedSourceDir || targetDir;

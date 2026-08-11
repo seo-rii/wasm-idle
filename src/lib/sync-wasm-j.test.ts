@@ -1,5 +1,14 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import {
+	mkdtemp,
+	mkdir,
+	readFile,
+	readdir,
+	rename,
+	rm,
+	symlink,
+	writeFile
+} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
@@ -259,6 +268,36 @@ describe('syncWasmJAssets', () => {
 			})
 		).rejects.toThrow('source directory and runtime target must not overlap');
 		await expect(readFile(path.join(targetDir, 'jamalgam.wasm'))).resolves.toEqual(wasmBytes);
+	});
+
+	it('rejects a source directory that aliases the publication target through a symlink', async () => {
+		const runtimeParent = await makeTempDir();
+		const sourceDir = path.join(runtimeParent, 'runtime');
+		const aliasParent = path.join(await makeTempDir(), 'alias');
+		await symlink(runtimeParent, aliasParent, 'dir');
+		const targetDir = path.join(aliasParent, 'runtime');
+		const versionModulePath = path.join(await makeTempDir(), 'wasmJVersion.ts');
+		const workerSourcePath = await writeFixtureFile(
+			await makeTempDir(),
+			'runner-worker.js',
+			'self.onmessage = () => {};\n'
+		);
+		const moduleBytes = fixtureModuleBytes();
+		const wasmBytes = Buffer.from('symlink alias wasm', 'utf8');
+		await writeFixtureFile(sourceDir, 'jamalgam.js', moduleBytes);
+		await writeFixtureFile(sourceDir, 'jamalgam.wasm', wasmBytes);
+		const lockFilePath = await writeFixtureLock(await makeTempDir(), moduleBytes, wasmBytes);
+
+		await expect(
+			syncWasmJAssets({
+				sourceDir,
+				targetDir,
+				workerSourcePath,
+				versionModulePath,
+				lockFilePath
+			})
+		).rejects.toThrow('source directory and runtime target must not overlap');
+		await expect(readFile(path.join(sourceDir, 'jamalgam.wasm'))).resolves.toEqual(wasmBytes);
 	});
 
 	it('rolls back both published outputs when the version swap fails', async () => {
