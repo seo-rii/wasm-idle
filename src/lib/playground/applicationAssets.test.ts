@@ -13,6 +13,10 @@ import {
 import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
 import { WASM_BASH_ASSET_VERSION, WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
+import {
+	WASM_CLOJURESCRIPT_ASSET_VERSION,
+	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
+} from './wasmClojureScriptVersion';
 import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 import { WASM_ELIXIR_ASSET_RECEIPTS, WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
 import {
@@ -156,6 +160,13 @@ describe('application runtime asset root', () => {
 			manifestUrl: `/foo/bar/wasm-bqn/runtime-manifest.v2.json?v=${WASM_BQN_ASSET_VERSION}`,
 			manifestFingerprint: WASM_BQN_ASSET_VERSION,
 			workerReceipt: WASM_BQN_RUNNER_RECEIPT
+		});
+		expect(assets.clojurescript).toEqual({
+			baseUrl: '/foo/bar/wasm-clojurescript/',
+			workerUrl: `/foo/bar/wasm-clojurescript/runner-worker.js?v=${WASM_CLOJURESCRIPT_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-clojurescript/runtime-manifest.v2.json?v=${WASM_CLOJURESCRIPT_ASSET_VERSION}`,
+			manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
+			workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 		});
 		expect(assets.bash).toEqual({
 			moduleUrl: `/foo/bar/wasm-bash/sdk/index.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`,
@@ -340,6 +351,9 @@ describe('application runtime asset root', () => {
 			jManifestUrl: assets.j?.manifestUrl,
 			jManifestFingerprint: assets.j?.manifestFingerprint,
 			jWorkerReceipt: expect.any(String),
+			clojurescriptManifestUrl: assets.clojurescript?.manifestUrl,
+			clojurescriptManifestFingerprint: assets.clojurescript?.manifestFingerprint,
+			clojurescriptWorkerReceipt: expect.any(String),
 			typeScriptLibUrl: assets.typescript?.libUrl,
 			fortranBaseUrl: assets.fortran?.baseUrl,
 			fortranF2cWasmUrl: assets.fortran?.f2cWasmUrl,

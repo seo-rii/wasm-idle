@@ -142,7 +142,13 @@ export interface RuntimeAssetKeySource {
 		workerUrl?: string;
 		webcReceipt?: RuntimeAssetIntegrityEntry;
 	};
-	clojurescript?: { baseUrl?: string; workerUrl?: string };
+	clojurescript?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	cobol?: { baseUrl?: string };
 	swift?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
 	sqlite?: { moduleUrl?: string; wasmUrl?: string };
@@ -614,6 +620,18 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	},
 	{ runtime: 'clojurescript', property: 'baseUrl', key: 'clojurescriptBaseUrl' },
 	{ runtime: 'clojurescript', property: 'workerUrl', key: 'clojurescriptWorkerUrl' },
+	{ runtime: 'clojurescript', property: 'manifestUrl', key: 'clojurescriptManifestUrl' },
+	{
+		runtime: 'clojurescript',
+		property: 'manifestFingerprint',
+		key: 'clojurescriptManifestFingerprint'
+	},
+	{
+		runtime: 'clojurescript',
+		property: 'workerReceipt',
+		key: 'clojurescriptWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'cobol', property: 'baseUrl', key: 'cobolBaseUrl' },
 	{ runtime: 'swift', property: 'baseUrl', key: 'swiftBaseUrl' },
 	{ runtime: 'swift', property: 'workerUrl', key: 'swiftWorkerUrl' },

@@ -3,7 +3,10 @@ import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
 import { WASM_AWK_ASSET_VERSION } from './wasmAwkVersion';
 import { WASM_BASH_ASSET_VERSION, WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
-import { WASM_CLOJURESCRIPT_ASSET_VERSION } from './wasmClojureScriptVersion';
+import {
+	WASM_CLOJURESCRIPT_ASSET_VERSION,
+	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
+} from './wasmClojureScriptVersion';
 import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 import { WASM_DOTNET_ASSET_VERSION } from './wasmDotnetVersion';
 import { WASM_ELIXIR_ASSET_RECEIPTS, WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
@@ -176,8 +179,14 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			baseUrl: asset('wasm-clojurescript/'),
 			workerUrl: asset(
 				'wasm-clojurescript/runner-worker.js',
+				WASM_CLOJURESCRIPT_RUNNER_RECEIPT.sha256
+			),
+			manifestUrl: asset(
+				'wasm-clojurescript/runtime-manifest.v2.json',
 				WASM_CLOJURESCRIPT_ASSET_VERSION
-			)
+			),
+			manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
+			workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 		},
 		swift: {
 			baseUrl: asset('wasm-swift/'),

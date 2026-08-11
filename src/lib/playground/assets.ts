@@ -16,6 +16,10 @@ import {
 	WASM_FORTH_RUNNER_RECEIPT
 } from '$lib/playground/wasmForthVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from '$lib/playground/wasmBqnVersion';
+import {
+	WASM_CLOJURESCRIPT_ASSET_VERSION,
+	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
+} from '$lib/playground/wasmClojureScriptVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from '$lib/playground/wasmJVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import {
@@ -289,6 +293,9 @@ export interface BashRuntimeAssetConfig {
 export interface ClojureScriptRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
+	manifestUrl?: string;
+	manifestFingerprint?: string;
+	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
 export interface SwiftRuntimeAssetConfig {
@@ -2227,13 +2234,30 @@ export function resolveClojureScriptWorkerUrl(
 	return resolveConfiguredUrl('/wasm-clojurescript/runner-worker.js', currentUrl);
 }
 
+export function resolveClojureScriptManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl =
+		typeof options === 'object' ? options?.clojurescript?.manifestUrl : undefined;
+	if (configuredManifestUrl) {
+		return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
+	}
+	return `${resolveClojureScriptBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
+}
+
 export function resolveClojureScriptRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
+	const configured = typeof options === 'object' ? options?.clojurescript : undefined;
 	return {
 		baseUrl: resolveClojureScriptBaseUrl(options, currentUrl),
-		workerUrl: resolveClojureScriptWorkerUrl(options, currentUrl)
+		workerUrl: resolveClojureScriptWorkerUrl(options, currentUrl),
+		manifestUrl: resolveClojureScriptManifestUrl(options, currentUrl),
+		manifestFingerprint:
+			configured?.manifestFingerprint?.trim() || WASM_CLOJURESCRIPT_ASSET_VERSION,
+		workerReceipt: configured?.workerReceipt || WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 	};
 }
 

@@ -108,11 +108,16 @@ import {
 import { StaticWorkerRuntimeSandbox } from './staticWorkerRuntime';
 import Tcl from './tcl';
 import bqnWorkerSource from '../../../scripts/runtime-workers/wasm-bqn-runner-worker.js?raw';
+import clojureScriptWorkerSource from '../../../scripts/runtime-workers/wasm-clojurescript-runner-worker.js?raw';
 import forthWorkerSource from '../../../scripts/runtime-workers/wasm-forth-runner-worker.js?raw';
 import gleamWorkerSource from '../../../scripts/runtime-workers/wasm-gleam-runner-worker.js?raw';
 import jWorkerSource from '../../../scripts/runtime-workers/wasm-j-runner-worker.js?raw';
 import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
+import {
+	WASM_CLOJURESCRIPT_ASSET_VERSION,
+	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
+} from './wasmClojureScriptVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 
@@ -222,7 +227,9 @@ describe('static worker backed language sandboxes', () => {
 							? jWorkerSource
 							: inputUrl.includes('/wasm-bqn/runner-worker.js')
 								? bqnWorkerSource
-								: '/* static worker */';
+								: inputUrl.includes('/wasm-clojurescript/runner-worker.js')
+									? clojureScriptWorkerSource
+									: '/* static worker */';
 				return new Response(source, {
 					status: 200,
 					headers: {
@@ -652,7 +659,10 @@ describe('static worker backed language sandboxes', () => {
 		await sandbox.load({
 			clojurescript: {
 				baseUrl: '/wasm-clojurescript/',
-				workerUrl: '/wasm-clojurescript/runner-worker.js?v=test'
+				workerUrl: '/wasm-clojurescript/runner-worker.js?v=test',
+				manifestUrl: '/wasm-clojurescript/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
+				workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 			}
 		});
 		await expect(
@@ -663,14 +673,18 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		await expectWorkerBootstrap(
+		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/wasm-clojurescript/runner-worker.js?v=test'
+			'http://localhost:3000/wasm-clojurescript/runner-worker.js?v=test',
+			clojureScriptWorkerSource
 		);
 		expect(workerInstances[0].options).toBeUndefined();
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-clojurescript/',
+				manifestUrl:
+					'http://localhost:3000/wasm-clojurescript/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
 				code,
 				args: ['demo'],
 				stdin: '68\n',

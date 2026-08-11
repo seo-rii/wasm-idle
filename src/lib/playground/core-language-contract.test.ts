@@ -326,13 +326,21 @@ describe('core language contract', () => {
 		const key = createRuntimeAssetsKey({
 			clojurescript: {
 				baseUrl: '/wasm-clojurescript/',
-				workerUrl: '/wasm-clojurescript/runner-worker.js?v=test'
+				workerUrl: '/wasm-clojurescript/runner-worker.js?v=test',
+				manifestUrl: '/wasm-clojurescript/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: 'a'.repeat(64),
+				workerReceipt: { bytes: 1234, sha256: 'b'.repeat(64) }
 			}
 		});
 		expect(key).toContain('"clojurescriptBaseUrl":"/wasm-clojurescript/"');
 		expect(key).toContain(
 			'"clojurescriptWorkerUrl":"/wasm-clojurescript/runner-worker.js?v=test"'
 		);
+		expect(key).toContain(
+			'"clojurescriptManifestUrl":"/wasm-clojurescript/runtime-manifest.v2.json?v=test"'
+		);
+		expect(key).toContain('"clojurescriptManifestFingerprint":');
+		expect(key).toContain('"clojurescriptWorkerReceipt":');
 	});
 
 	it('exposes COBOL aliases as a deferred browser runtime language', () => {

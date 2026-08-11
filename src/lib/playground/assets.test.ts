@@ -70,6 +70,8 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_JULIA_WORKER_URL: '',
 		PUBLIC_WASM_NIM_BASE_URL: '',
 		PUBLIC_WASM_NIM_WORKER_URL: '',
+		PUBLIC_WASM_CLOJURESCRIPT_BASE_URL: '',
+		PUBLIC_WASM_CLOJURESCRIPT_WORKER_URL: '',
 		PUBLIC_WASM_SWIFT_BASE_URL: '',
 		PUBLIC_WASM_SWIFT_WORKER_URL: '',
 		PUBLIC_WASM_SWIFT_MANIFEST_URL: '',
@@ -98,6 +100,10 @@ import { TEAVM_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from './wasmFortranExecutionAssets';
 import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
+import {
+	WASM_CLOJURESCRIPT_ASSET_VERSION,
+	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
+} from './wasmClojureScriptVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
@@ -1045,6 +1051,7 @@ describe('runtime asset config resolution', () => {
 			resolveNimRuntimeAssetConfig,
 			resolveSwiftRuntimeAssetConfig,
 			resolveBqnRuntimeAssetConfig,
+			resolveClojureScriptRuntimeAssetConfig,
 			resolvePascalRuntimeAssetConfig,
 			resolvePerlRuntimeAssetConfig,
 			resolvePrologRuntimeAssetConfig,
@@ -1108,6 +1115,16 @@ describe('runtime asset config resolution', () => {
 			manifestFingerprint: WASM_BQN_ASSET_VERSION,
 			workerReceipt: WASM_BQN_RUNNER_RECEIPT
 		});
+		expect(
+			resolveClojureScriptRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
+		).toEqual({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-clojurescript/',
+			workerUrl: 'https://example.com/absproxy/5173/wasm-clojurescript/runner-worker.js',
+			manifestUrl:
+				'https://example.com/absproxy/5173/wasm-clojurescript/runtime-manifest.v2.json',
+			manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
+			workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
+		});
 		expect(resolveJanetRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
 			{
 				baseUrl: 'https://example.com/absproxy/5173/wasm-janet/',
@@ -1163,6 +1180,21 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
+	it('preserves relative default ClojureScript urls and pins when no current url is available', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_CLOJURESCRIPT_BASE_URL = '';
+		publicEnv.PUBLIC_WASM_CLOJURESCRIPT_WORKER_URL = '';
+		const { resolveClojureScriptRuntimeAssetConfig } = await import('./assets');
+
+		expect(resolveClojureScriptRuntimeAssetConfig(undefined)).toEqual({
+			baseUrl: '/wasm-clojurescript/',
+			workerUrl: '/wasm-clojurescript/runner-worker.js',
+			manifestUrl: '/wasm-clojurescript/runtime-manifest.v2.json',
+			manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
+			workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
+		});
+	});
+
 	it('prefers explicit static worker runtime urls over public env overrides', async () => {
 		const customFingerprint = 'a'.repeat(64);
 		const customWorkerReceipt = { bytes: 1234, sha256: 'b'.repeat(64) };
@@ -1179,10 +1211,12 @@ describe('runtime asset config resolution', () => {
 		publicEnv.PUBLIC_WASM_JANET_BASE_URL = 'https://env.example.com/janet/';
 		publicEnv.PUBLIC_WASM_JULIA_BASE_URL = 'https://env.example.com/julia/';
 		publicEnv.PUBLIC_WASM_NIM_BASE_URL = 'https://env.example.com/nim/';
+		publicEnv.PUBLIC_WASM_CLOJURESCRIPT_BASE_URL = 'https://env.example.com/clojurescript/';
 		publicEnv.PUBLIC_WASM_SWIFT_BASE_URL = 'https://env.example.com/swift/';
 		const {
 			resolveAwkRuntimeAssetConfig,
 			resolveBqnRuntimeAssetConfig,
+			resolveClojureScriptRuntimeAssetConfig,
 			resolveForthRuntimeAssetConfig,
 			resolveGleamRuntimeAssetConfig,
 			resolveJRuntimeAssetConfig,
@@ -1318,6 +1352,26 @@ describe('runtime asset config resolution', () => {
 			baseUrl: 'https://example.com/runtime/bqn/',
 			workerUrl: 'https://example.com/runtime/bqn/worker.js',
 			manifestUrl: 'https://example.com/runtime/bqn/manifest.json',
+			manifestFingerprint: customFingerprint,
+			workerReceipt: customWorkerReceipt
+		});
+		expect(
+			resolveClojureScriptRuntimeAssetConfig(
+				{
+					clojurescript: {
+						baseUrl: '/runtime/clojurescript',
+						workerUrl: '/runtime/clojurescript/worker.js',
+						manifestUrl: '/runtime/clojurescript/manifest.json',
+						manifestFingerprint: customFingerprint,
+						workerReceipt: customWorkerReceipt
+					}
+				},
+				'https://example.com/app'
+			)
+		).toEqual({
+			baseUrl: 'https://example.com/runtime/clojurescript/',
+			workerUrl: 'https://example.com/runtime/clojurescript/worker.js',
+			manifestUrl: 'https://example.com/runtime/clojurescript/manifest.json',
 			manifestFingerprint: customFingerprint,
 			workerReceipt: customWorkerReceipt
 		});
