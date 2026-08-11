@@ -22,6 +22,7 @@ import { WASM_FORTRAN_ASSET_VERSION } from './wasmFortranVersion';
 import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
 import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
+import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
 import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
@@ -140,6 +141,13 @@ describe('application runtime asset root', () => {
 			manifestUrl: `/foo/bar/wasm-forth/runtime-manifest.v2.json?v=${WASM_FORTH_ASSET_VERSION}`,
 			manifestFingerprint: WASM_FORTH_ASSET_VERSION,
 			workerReceipt: WASM_FORTH_RUNNER_RECEIPT
+		});
+		expect(assets.j).toEqual({
+			baseUrl: '/foo/bar/wasm-j/',
+			workerUrl: `/foo/bar/wasm-j/runner-worker.js?v=${WASM_J_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-j/runtime-manifest.v2.json?v=${WASM_J_ASSET_VERSION}`,
+			manifestFingerprint: WASM_J_ASSET_VERSION,
+			workerReceipt: WASM_J_RUNNER_RECEIPT
 		});
 		expect(assets.bash).toEqual({
 			moduleUrl: `/foo/bar/wasm-bash/sdk/index.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`,
@@ -266,6 +274,16 @@ describe('application runtime asset root', () => {
 					}
 				]
 			]),
+			jManifestFingerprint: WASM_J_ASSET_VERSION,
+			jWorkerReceipt: JSON.stringify([
+				[
+					'worker',
+					{
+						sha256: WASM_J_RUNNER_RECEIPT.sha256,
+						bytes: WASM_J_RUNNER_RECEIPT.bytes
+					}
+				]
+			]),
 			bashWebcReceipt: JSON.stringify([
 				[
 					'worker',
@@ -301,6 +319,9 @@ describe('application runtime asset root', () => {
 			forthManifestUrl: assets.forth?.manifestUrl,
 			forthManifestFingerprint: assets.forth?.manifestFingerprint,
 			forthWorkerReceipt: expect.any(String),
+			jManifestUrl: assets.j?.manifestUrl,
+			jManifestFingerprint: assets.j?.manifestFingerprint,
+			jWorkerReceipt: expect.any(String),
 			typeScriptLibUrl: assets.typescript?.libUrl,
 			fortranBaseUrl: assets.fortran?.baseUrl,
 			fortranF2cWasmUrl: assets.fortran?.f2cWasmUrl,

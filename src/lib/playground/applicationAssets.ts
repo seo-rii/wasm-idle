@@ -16,7 +16,7 @@ import { WASM_FORTRAN_ASSET_VERSION } from './wasmFortranVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_HASKELL_ASSET_VERSION } from './wasmHaskellVersion';
-import { WASM_J_ASSET_VERSION } from './wasmJVersion';
+import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_JANET_ASSET_VERSION } from './wasmJanetVersion';
 import { WASM_JULIA_ASSET_VERSION } from './wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from './wasmLispVersion';
@@ -142,7 +142,10 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		j: {
 			baseUrl: asset('wasm-j/'),
-			workerUrl: asset('wasm-j/runner-worker.js', WASM_J_ASSET_VERSION)
+			workerUrl: asset('wasm-j/runner-worker.js', WASM_J_RUNNER_RECEIPT.sha256),
+			manifestUrl: asset('wasm-j/runtime-manifest.v2.json', WASM_J_ASSET_VERSION),
+			manifestFingerprint: WASM_J_ASSET_VERSION,
+			workerReceipt: WASM_J_RUNNER_RECEIPT
 		},
 		bqn: {
 			baseUrl: asset('wasm-bqn/'),

@@ -1,8 +1,14 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
-import { syncWasmJAssets } from '../../scripts/sync-wasm-j.mjs';
+import {
+	J_MANIFEST_FORMAT,
+	computeJRuntimeFingerprint,
+	syncWasmJAssets
+} from '../../scripts/sync-wasm-j.mjs';
 
 const tempDirs: string[] = [];
 const originalWasmJSourceDir = process.env.WASM_J_SOURCE_DIR;
@@ -13,11 +19,59 @@ async function makeTempDir() {
 	return dir;
 }
 
-async function writeFixtureFile(baseDir: string, relativePath: string, contents: string) {
+async function writeFixtureFile(baseDir: string, relativePath: string, contents: string | Buffer) {
 	const targetPath = path.join(baseDir, relativePath);
 	await mkdir(path.dirname(targetPath), { recursive: true });
-	await writeFile(targetPath, contents, 'utf8');
+	await writeFile(targetPath, contents);
 	return targetPath;
+}
+
+function sha256(bytes: Uint8Array) {
+	return createHash('sha256').update(bytes).digest('hex');
+}
+
+async function writeFixtureLock(
+	baseDir: string,
+	moduleBytes: Buffer,
+	wasmBytes: Buffer,
+	profileId = 'jsoftware-j-playground-test'
+) {
+	return await writeFixtureFile(
+		baseDir,
+		'wasm-j-assets.lock.json',
+		`${JSON.stringify(
+			{
+				schemaVersion: 1,
+				profileId,
+				source: {
+					repository: 'https://github.com/jsoftware/j-playground',
+					path: 'bin/html2',
+					revision: 'fixture'
+				},
+				assets: [
+					{
+						path: 'jamalgam.js',
+						bytes: moduleBytes.byteLength,
+						sha256: sha256(moduleBytes)
+					},
+					{
+						path: 'jamalgam.wasm',
+						bytes: wasmBytes.byteLength,
+						sha256: sha256(wasmBytes)
+					}
+				]
+			},
+			null,
+			2
+		)}\n`
+	);
+}
+
+function fixtureModuleBytes() {
+	return Buffer.from(
+		'export default function createModule() {}; em_jdo; WebAssembly.instantiate;\n',
+		'utf8'
+	);
 }
 
 describe('syncWasmJAssets', () => {
@@ -32,73 +86,219 @@ describe('syncWasmJAssets', () => {
 		);
 	});
 
-	it('copies official J playground wasm assets and writes a version module', async () => {
+	it('publishes a deterministic receipt-backed J runtime snapshot', async () => {
 		const sourceDir = await makeTempDir();
-		const targetDir = await makeTempDir();
+		const targetDir = path.join(await makeTempDir(), 'runtime');
 		const versionModulePath = path.join(await makeTempDir(), 'wasmJVersion.ts');
+		const workerBytes = Buffer.from('self.onmessage = () => {};\n', 'utf8');
 		const workerSourcePath = await writeFixtureFile(
 			await makeTempDir(),
 			'runner-worker.js',
-			'self.onmessage = () => {};\n'
+			workerBytes
 		);
-		await writeFixtureFile(
-			sourceDir,
-			'jamalgam.js',
-			'export default function createModule() {}; em_jdo; WebAssembly.instantiate;\n'
-		);
-		await writeFixtureFile(sourceDir, 'jamalgam.wasm', 'wasm');
+		const moduleBytes = fixtureModuleBytes();
+		const wasmBytes = Buffer.from('wasm fixture', 'utf8');
+		await writeFixtureFile(sourceDir, 'jamalgam.js', moduleBytes);
+		await writeFixtureFile(sourceDir, 'jamalgam.wasm', wasmBytes);
+		const lockFilePath = await writeFixtureLock(await makeTempDir(), moduleBytes, wasmBytes);
 
 		const result = await syncWasmJAssets({
 			sourceDir,
 			targetDir,
 			workerSourcePath,
-			versionModulePath
+			versionModulePath,
+			lockFilePath
 		});
 
-		await expect(readFile(path.join(targetDir, 'jamalgam.js'), 'utf8')).resolves.toContain(
-			'em_jdo'
-		);
-		await expect(readFile(path.join(targetDir, 'jamalgam.wasm'), 'utf8')).resolves.toBe('wasm');
-		await expect(readFile(path.join(targetDir, 'runner-worker.js'), 'utf8')).resolves.toContain(
-			'self.onmessage'
-		);
+		expect((await readdir(targetDir)).sort()).toEqual([
+			'jamalgam.js',
+			'jamalgam.wasm.gz',
+			'runner-worker.js',
+			'runtime-manifest.v1.json',
+			'runtime-manifest.v2.json'
+		]);
+		expect(await readFile(path.join(targetDir, 'jamalgam.js'))).toEqual(moduleBytes);
+		const installedGzip = await readFile(path.join(targetDir, 'jamalgam.wasm.gz'));
+		expect(gunzipSync(installedGzip)).toEqual(wasmBytes);
+		expect(installedGzip).toEqual(gzipSync(wasmBytes, { level: 9 }));
+		expect(await readFile(path.join(targetDir, 'runner-worker.js'))).toEqual(workerBytes);
+
 		const manifest = JSON.parse(
-			await readFile(path.join(targetDir, 'runtime-manifest.v1.json'), 'utf8')
-		) as { format: string; runtime: string; files: string[] };
-		expect(manifest).toMatchObject({
-			format: 'wasm-j-runtime-manifest-v1',
-			runtime: 'jsoftware-j-playground',
-			files: ['jamalgam.js', 'jamalgam.wasm']
-		});
-		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
-			`export const WASM_J_ASSET_VERSION = '${result.fingerprint}';`
+			await readFile(path.join(targetDir, 'runtime-manifest.v2.json'), 'utf8')
 		);
+		expect(manifest).toMatchObject({
+			format: J_MANIFEST_FORMAT,
+			runtime: 'jsoftware-j-playground',
+			profileId: 'jsoftware-j-playground-test',
+			fingerprint: result.fingerprint,
+			assets: [
+				{
+					path: 'jamalgam.js',
+					size: moduleBytes.byteLength,
+					sha256: sha256(moduleBytes)
+				},
+				{
+					path: 'jamalgam.wasm',
+					size: wasmBytes.byteLength,
+					sha256: sha256(wasmBytes)
+				}
+			],
+			storage: [
+				{
+					path: 'jamalgam.js',
+					encoding: 'identity',
+					size: moduleBytes.byteLength,
+					sha256: sha256(moduleBytes)
+				},
+				{
+					path: 'jamalgam.wasm.gz',
+					encoding: 'gzip',
+					size: installedGzip.byteLength,
+					sha256: sha256(installedGzip)
+				}
+			]
+		});
+		expect(computeJRuntimeFingerprint(manifest)).toBe(result.fingerprint);
+		const versionModule = await readFile(versionModulePath, 'utf8');
+		expect(versionModule).toContain(result.fingerprint);
+		expect(versionModule).toContain(`bytes: ${workerBytes.byteLength}`);
+		expect(versionModule).toContain(`sha256: '${sha256(workerBytes)}'`);
 	});
 
-	it('refreshes the worker and version module from an existing vendored target', async () => {
-		const targetDir = await makeTempDir();
+	it('revalidates and republishes an existing gzip-only vendored target', async () => {
+		const targetDir = path.join(await makeTempDir(), 'runtime');
 		const versionModulePath = path.join(await makeTempDir(), 'wasmJVersion.ts');
 		const workerSourcePath = await writeFixtureFile(
 			await makeTempDir(),
 			'runner-worker.js',
 			'self.onmessage = () => { self.postMessage({ results: true }); };\n'
 		);
-		await writeFixtureFile(targetDir, 'jamalgam.js', 'em_jdo; WebAssembly.instantiate;\n');
-		await writeFixtureFile(targetDir, 'jamalgam.wasm.gz', 'compressed-wasm');
+		const moduleBytes = fixtureModuleBytes();
+		const wasmBytes = Buffer.from('existing wasm fixture', 'utf8');
+		await writeFixtureFile(targetDir, 'jamalgam.js', moduleBytes);
+		await writeFixtureFile(targetDir, 'jamalgam.wasm.gz', gzipSync(wasmBytes, { level: 9 }));
+		const lockFilePath = await writeFixtureLock(await makeTempDir(), moduleBytes, wasmBytes);
 		process.env.WASM_J_SOURCE_DIR = path.join(await makeTempDir(), 'missing');
 
-		const result = await syncWasmJAssets({ targetDir, workerSourcePath, versionModulePath });
+		const result = await syncWasmJAssets({
+			targetDir,
+			workerSourcePath,
+			versionModulePath,
+			lockFilePath
+		});
 
-		await expect(readFile(path.join(targetDir, 'jamalgam.wasm.gz'), 'utf8')).resolves.toBe(
-			'compressed-wasm'
+		expect(gunzipSync(await readFile(path.join(targetDir, 'jamalgam.wasm.gz')))).toEqual(
+			wasmBytes
 		);
-		await expect(readFile(path.join(targetDir, 'runner-worker.js'), 'utf8')).resolves.toContain(
-			'postMessage'
-		);
-		const manifest = JSON.parse(
-			await readFile(path.join(targetDir, 'runtime-manifest.v1.json'), 'utf8')
-		) as { files: string[] };
-		expect(manifest.files).toEqual(['jamalgam.js', 'jamalgam.wasm.gz']);
+		await expect(
+			readFile(path.join(targetDir, 'runtime-manifest.v2.json'), 'utf8')
+		).resolves.toContain(result.fingerprint);
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(result.fingerprint);
+	});
+
+	it('rejects source drift before replacing an installed runtime', async () => {
+		const sourceDir = await makeTempDir();
+		const targetDir = path.join(await makeTempDir(), 'runtime');
+		const versionModulePath = await writeFixtureFile(
+			await makeTempDir(),
+			'wasmJVersion.ts',
+			'previous version\n'
+		);
+		const workerSourcePath = await writeFixtureFile(
+			await makeTempDir(),
+			'runner-worker.js',
+			'self.onmessage = () => {};\n'
+		);
+		const moduleBytes = fixtureModuleBytes();
+		const wasmBytes = Buffer.from('locked wasm', 'utf8');
+		const lockFilePath = await writeFixtureLock(await makeTempDir(), moduleBytes, wasmBytes);
+		await writeFixtureFile(
+			sourceDir,
+			'jamalgam.js',
+			Buffer.concat([moduleBytes, Buffer.from('x')])
+		);
+		await writeFixtureFile(sourceDir, 'jamalgam.wasm', wasmBytes);
+		await writeFixtureFile(targetDir, 'previous.txt', 'previous runtime\n');
+
+		await expect(
+			syncWasmJAssets({
+				sourceDir,
+				targetDir,
+				workerSourcePath,
+				versionModulePath,
+				lockFilePath
+			})
+		).rejects.toThrow('does not match the input lock');
+		await expect(readFile(path.join(targetDir, 'previous.txt'), 'utf8')).resolves.toBe(
+			'previous runtime\n'
+		);
+		await expect(readFile(versionModulePath, 'utf8')).resolves.toBe('previous version\n');
+	});
+
+	it('rejects an explicit source directory that overlaps the publication target', async () => {
+		const targetDir = path.join(await makeTempDir(), 'runtime');
+		const versionModulePath = path.join(await makeTempDir(), 'wasmJVersion.ts');
+		const workerSourcePath = await writeFixtureFile(
+			await makeTempDir(),
+			'runner-worker.js',
+			'self.onmessage = () => {};\n'
+		);
+		const moduleBytes = fixtureModuleBytes();
+		const wasmBytes = Buffer.from('overlap wasm', 'utf8');
+		await writeFixtureFile(targetDir, 'jamalgam.js', moduleBytes);
+		await writeFixtureFile(targetDir, 'jamalgam.wasm', wasmBytes);
+		const lockFilePath = await writeFixtureLock(await makeTempDir(), moduleBytes, wasmBytes);
+
+		await expect(
+			syncWasmJAssets({
+				sourceDir: targetDir,
+				targetDir,
+				workerSourcePath,
+				versionModulePath,
+				lockFilePath
+			})
+		).rejects.toThrow('source directory and runtime target must not overlap');
+		await expect(readFile(path.join(targetDir, 'jamalgam.wasm'))).resolves.toEqual(wasmBytes);
+	});
+
+	it('rolls back both published outputs when the version swap fails', async () => {
+		const sourceDir = await makeTempDir();
+		const targetDir = path.join(await makeTempDir(), 'runtime');
+		const versionModulePath = await writeFixtureFile(
+			await makeTempDir(),
+			'wasmJVersion.ts',
+			'previous version\n'
+		);
+		const workerSourcePath = await writeFixtureFile(
+			await makeTempDir(),
+			'runner-worker.js',
+			'self.onmessage = () => {};\n'
+		);
+		const moduleBytes = fixtureModuleBytes();
+		const wasmBytes = Buffer.from('rollback wasm', 'utf8');
+		await writeFixtureFile(sourceDir, 'jamalgam.js', moduleBytes);
+		await writeFixtureFile(sourceDir, 'jamalgam.wasm', wasmBytes);
+		await writeFixtureFile(targetDir, 'previous.txt', 'previous runtime\n');
+		const lockFilePath = await writeFixtureLock(await makeTempDir(), moduleBytes, wasmBytes);
+		let renameCount = 0;
+
+		await expect(
+			syncWasmJAssets({
+				sourceDir,
+				targetDir,
+				workerSourcePath,
+				versionModulePath,
+				lockFilePath,
+				renamePath: async (sourcePath, destinationPath) => {
+					renameCount += 1;
+					if (renameCount === 4) throw new Error('fixture version publication failure');
+					await rename(sourcePath, destinationPath);
+				}
+			})
+		).rejects.toThrow('fixture version publication failure');
+		await expect(readFile(path.join(targetDir, 'previous.txt'), 'utf8')).resolves.toBe(
+			'previous runtime\n'
+		);
+		await expect(readFile(versionModulePath, 'utf8')).resolves.toBe('previous version\n');
 	});
 });

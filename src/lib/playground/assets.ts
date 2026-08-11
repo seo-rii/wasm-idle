@@ -15,6 +15,7 @@ import {
 	WASM_FORTH_ASSET_VERSION,
 	WASM_FORTH_RUNNER_RECEIPT
 } from '$lib/playground/wasmForthVersion';
+import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from '$lib/playground/wasmJVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import {
 	RUBY_RUNTIME_ASSET_RECEIPTS,
@@ -249,6 +250,9 @@ export interface ForthRuntimeAssetConfig {
 export interface JRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
+	manifestUrl?: string;
+	manifestFingerprint?: string;
+	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
 export interface BqnRuntimeAssetConfig {
@@ -2347,13 +2351,28 @@ export function resolveJWorkerUrl(
 	return resolveConfiguredUrl('/wasm-j/runner-worker.js', currentUrl);
 }
 
+export function resolveJManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl = typeof options === 'object' ? options?.j?.manifestUrl : undefined;
+	if (configuredManifestUrl) {
+		return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
+	}
+	return `${resolveJBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
+}
+
 export function resolveJRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
+	const configured = typeof options === 'object' ? options?.j : undefined;
 	return {
 		baseUrl: resolveJBaseUrl(options, currentUrl),
-		workerUrl: resolveJWorkerUrl(options, currentUrl)
+		workerUrl: resolveJWorkerUrl(options, currentUrl),
+		manifestUrl: resolveJManifestUrl(options, currentUrl),
+		manifestFingerprint: configured?.manifestFingerprint?.trim() || WASM_J_ASSET_VERSION,
+		workerReceipt: configured?.workerReceipt || WASM_J_RUNNER_RECEIPT
 	};
 }
 

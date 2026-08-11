@@ -1,7 +1,7 @@
 {
   "format": "wasm-j-runtime-manifest-v1",
   "runtime": "jsoftware-j-playground",
-  "fingerprint": "f732f3afb28560be",
+  "fingerprint": "a2691b6f10750acc",
   "files": [
     "jamalgam.js",
     "jamalgam.wasm.gz"

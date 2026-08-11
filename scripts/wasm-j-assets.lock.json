@@ -1,0 +1,21 @@
+{
+	"schemaVersion": 1,
+	"profileId": "jsoftware-j-playground-wasm-idle-d647850c",
+	"source": {
+		"repository": "https://github.com/jsoftware/j-playground",
+		"path": "bin/html2",
+		"revision": "legacy-import-unrecorded;wasm-idle:d647850cd6448b457f778d01c304358aefa5244b"
+	},
+	"assets": [
+		{
+			"path": "jamalgam.js",
+			"bytes": 170649,
+			"sha256": "a4abe92ddf874d06d01d6873e151b641837b79d4075529fa17541b576eeb92e3"
+		},
+		{
+			"path": "jamalgam.wasm",
+			"bytes": 4832581,
+			"sha256": "22549b50a69575ce09326f08fbf35396edfe4eedc583c8dd273d06ebbe920358"
+		}
+	]
+}

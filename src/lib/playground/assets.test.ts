@@ -97,6 +97,7 @@ import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
 import { TEAVM_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from './wasmFortranExecutionAssets';
 import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
+import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 
@@ -1094,7 +1095,10 @@ describe('runtime asset config resolution', () => {
 		);
 		expect(resolveJRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-j/',
-			workerUrl: 'https://example.com/absproxy/5173/wasm-j/runner-worker.js'
+			workerUrl: 'https://example.com/absproxy/5173/wasm-j/runner-worker.js',
+			manifestUrl: 'https://example.com/absproxy/5173/wasm-j/runtime-manifest.v2.json',
+			manifestFingerprint: WASM_J_ASSET_VERSION,
+			workerReceipt: WASM_J_RUNNER_RECEIPT
 		});
 		expect(resolveBqnRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-bqn/',
@@ -1137,6 +1141,21 @@ describe('runtime asset config resolution', () => {
 			manifestUrl: '/wasm-forth/runtime-manifest.v2.json',
 			manifestFingerprint: WASM_FORTH_ASSET_VERSION,
 			workerReceipt: WASM_FORTH_RUNNER_RECEIPT
+		});
+	});
+
+	it('preserves relative default J urls and pins when no current url is available', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_J_BASE_URL = '';
+		publicEnv.PUBLIC_WASM_J_WORKER_URL = '';
+		const { resolveJRuntimeAssetConfig } = await import('./assets');
+
+		expect(resolveJRuntimeAssetConfig(undefined)).toEqual({
+			baseUrl: '/wasm-j/',
+			workerUrl: '/wasm-j/runner-worker.js',
+			manifestUrl: '/wasm-j/runtime-manifest.v2.json',
+			manifestFingerprint: WASM_J_ASSET_VERSION,
+			workerReceipt: WASM_J_RUNNER_RECEIPT
 		});
 	});
 
@@ -1260,12 +1279,23 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(
 			resolveJRuntimeAssetConfig(
-				{ j: { baseUrl: '/runtime/j', workerUrl: '/runtime/j/worker.js' } },
+				{
+					j: {
+						baseUrl: '/runtime/j',
+						workerUrl: '/runtime/j/worker.js',
+						manifestUrl: '/runtime/j/manifest.json',
+						manifestFingerprint: customFingerprint,
+						workerReceipt: customWorkerReceipt
+					}
+				},
 				'https://example.com/app'
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/j/',
-			workerUrl: 'https://example.com/runtime/j/worker.js'
+			workerUrl: 'https://example.com/runtime/j/worker.js',
+			manifestUrl: 'https://example.com/runtime/j/manifest.json',
+			manifestFingerprint: customFingerprint,
+			workerReceipt: customWorkerReceipt
 		});
 		expect(
 			resolveBqnRuntimeAssetConfig(

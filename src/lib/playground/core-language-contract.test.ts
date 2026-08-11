@@ -392,7 +392,10 @@ describe('core language contract', () => {
 			},
 			j: {
 				baseUrl: '/wasm-j/',
-				workerUrl: '/wasm-j/runner-worker.js?v=test'
+				workerUrl: '/wasm-j/runner-worker.js?v=test',
+				manifestUrl: '/wasm-j/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: 'e'.repeat(64),
+				workerReceipt: { bytes: 6789, sha256: 'f'.repeat(64) }
 			},
 			bqn: {
 				baseUrl: '/wasm-bqn/',
@@ -421,6 +424,9 @@ describe('core language contract', () => {
 		expect(key).toContain('"forthWorkerReceipt":');
 		expect(key).toContain('"jBaseUrl":"/wasm-j/"');
 		expect(key).toContain('"jWorkerUrl":"/wasm-j/runner-worker.js?v=test"');
+		expect(key).toContain('"jManifestUrl":"/wasm-j/runtime-manifest.v2.json?v=test"');
+		expect(key).toContain(`"jManifestFingerprint":"${'e'.repeat(64)}"`);
+		expect(key).toContain('"jWorkerReceipt":');
 		expect(key).toContain('"bqnBaseUrl":"/wasm-bqn/"');
 		expect(key).toContain('"bqnWorkerUrl":"/wasm-bqn/runner-worker.js?v=test"');
 		expect(key).toContain('"janetBaseUrl":"/wasm-janet/"');
