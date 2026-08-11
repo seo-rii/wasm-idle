@@ -127,7 +127,9 @@ func main() {
 	assert.equal(exitCode, 0, output);
 	const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 	assert.equal(manifest.buildMode, 'direct');
-	assert.equal(manifest.artifactKind, 'compiler');
+	assert.equal(manifest.implementationKind, 'wasm-idle-go-ast-to-c-subset');
+	assert.equal(manifest.upstreamCompiler, false);
+	assert.equal(manifest.artifactKind, 'porting-harness');
 });
 
 test('patch-tinygo-wasi generates a browser-specific tinygo command', async (t) => {
@@ -611,6 +613,8 @@ func NewConfig(options *compileopts.Options) (*compileopts.Config, error) {
 	assert.equal(exitCode, 0, output);
 	const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 	assert.equal(manifest.buildMode, 'patched-upstream-direct');
+	assert.equal(manifest.implementationKind, 'upstream-tinygo');
+	assert.equal(manifest.upstreamCompiler, true);
 	assert.equal(manifest.artifactKind, 'compiler');
 	assert.equal(manifest.patchedDirectFailureReason, null);
 	assert.ok(Array.isArray(manifest.blockers));
@@ -778,6 +782,8 @@ func Build(pkgName, outpath, tmpdir string, config *compileopts.Config) (BuildRe
 	assert.equal(exitCode, 0, output);
 	const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 	assert.equal(manifest.buildMode, 'patched-browser-entry');
+	assert.equal(manifest.implementationKind, 'wasm-idle-go-ast-to-c-subset');
+	assert.equal(manifest.upstreamCompiler, false);
 	assert.equal(manifest.artifactKind, 'bootstrap');
 	assert.deepEqual(manifest.blockers, ['serial']);
 	assert.match(manifest.fallbackReason ?? '', /go\.bug\.st\/serial/);
@@ -1009,7 +1015,9 @@ go 1.22
 
 	const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 	assert.equal(manifest.buildMode, 'direct');
-	assert.equal(manifest.artifactKind, 'compiler');
+	assert.equal(manifest.implementationKind, 'wasm-idle-go-ast-to-c-subset');
+	assert.equal(manifest.upstreamCompiler, false);
+	assert.equal(manifest.artifactKind, 'porting-harness');
 	assert.deepEqual(manifest.blockers, []);
 	assert.equal(manifest.fallbackReason, null);
 });

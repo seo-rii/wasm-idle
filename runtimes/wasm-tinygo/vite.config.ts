@@ -14,11 +14,14 @@ export default defineConfig({
 			preserveEntrySignatures: 'strict',
 			input: {
 				app: path.resolve(__dirname, 'index.html'),
-				runtime: path.resolve(__dirname, 'src/runtime-entry.ts')
+				runtime: path.resolve(__dirname, 'src/runtime-entry.ts'),
+				upstream: path.resolve(__dirname, 'src/upstream-entry.ts')
 			},
 			output: {
 				entryFileNames: (chunkInfo) =>
-					chunkInfo.name === 'runtime' ? 'runtime.js' : 'assets/[name]-[hash].js',
+					chunkInfo.name === 'runtime' || chunkInfo.name === 'upstream'
+						? `${chunkInfo.name}.js`
+						: 'assets/[name]-[hash].js',
 				chunkFileNames: 'assets/[name]-[hash].js',
 				assetFileNames: 'assets/[name]-[hash][extname]'
 			}

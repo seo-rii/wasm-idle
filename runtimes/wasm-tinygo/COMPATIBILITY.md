@@ -1,8 +1,19 @@
 # Compatibility
 
-This document describes the compatibility level of `wasm-tinygo` as of 2026-04-24.
+This document describes the compatibility level of `wasm-tinygo` as of 2026-08-09.
 
-The current implementation is a **browser-side bootstrap driver**, not a full TinyGo port.
+The legacy `runtime.js` implementation is a **browser-side bootstrap/subset driver**, not a full
+TinyGo port. The separate `upstream.js` entry runs a source-pinned TinyGo 0.40.1 compiler and Go
+1.24.6 `cmd/go` package provider and never falls back to the legacy path.
+
+The upstream entry accepts an in-memory local module workspace, derives its package graph with the
+same upstream code as native Go, and has passed a 45-package CGo/C/freestanding-C++/Clang-assembly
+Node/Chromium compile-and-run fixture. Compile protocol v4 verifies native source/dependency
+evidence, target-C and freestanding-C++17 ThinLTO bitcode, uppercase `.S` assembler-with-cpp
+objects, and the separately generated `go:embed` objects. The path remains non-public because
+hosted C++, general assembly, and custom native/linker flags are unsupported, external module
+downloads are disabled, synchronous phases lack hard resource limits, and broader differential
+fixtures are still needed.
 
 ## Overall status
 
@@ -182,7 +193,7 @@ This remains a compatibility slice, not a full compiler. Unsupported Go syntax o
 
 The app may work outside Chromium-family browsers, but this has not been verified in this repository.
 
-## TinyGo compatibility level
+## Legacy harness compatibility level
 
 ### Compatible concepts
 
@@ -200,6 +211,25 @@ The app may work outside Chromium-family browsers, but this has not been verifie
 - serial monitor / USB / board-specific flows
 - multi-package workspaces
 - board targets beyond the placeholder `wasm` / `wasip1` / `wasip2` / `wasip3` bootstrap targets
+
+## Independent upstream entry compatibility
+
+### Verified
+
+- source-pinned Go/TinyGo package selection for local module workspaces and TinyGo build tags
+- exact package-graph parity with the same pinned native `cmd/go`, including `go:embed` discovery
+- real TinyGo compiler, protocol-v4 CGo/C/C++/assembly and generated embed-object handoff, raw LLD, Binaryen
+  asyncify/O1, and separate WASI execution
+- byte-identical program, target-C/C++/assembly, and embed objects plus unoptimized/final Wasm for a
+  45-package workspace in the Node browser-WASI shim and headless Chromium 147
+
+### Fail-closed or unavailable
+
+- hosted C++ features: libc++/libc++abi, standard-library headers, exceptions, RTTI, static lifetime,
+  or user `CXXFLAGS`
+- lowercase `.s`, Go/Plan 9 assembly, assembly outside a CGo package, or custom `#cgo LDFLAGS`
+- network module downloads or an implicit external module cache
+- hard interruption of an in-progress synchronous Wasm phase
 
 ## Test coverage backing this document
 
@@ -291,9 +321,13 @@ This is checked-in runtime verification via `npm run test:browser`, not just an 
 
 ## Practical interpretation
 
-If you want to know whether `wasm-tinygo` is already “TinyGo in the browser”, the answer is:
+If you want to know whether `wasm-tinygo` is already “TinyGo in the browser”, distinguish the two
+entries:
 
-- **infrastructure compatibility:** yes, for the first bootstrap slice
-- **TinyGo compiler compatibility:** not yet
+- **legacy `runtime.js`:** no; its bridge-less path is a wasm-idle-authored AST-to-C subset
+- **independent `upstream.js`:** yes for the receipt-bound TinyGo 0.40.1 fixed profile, including
+  real CGo, C, freestanding C++17, and CGo-package uppercase `.S`, but not yet as unrestricted
+  public language support
 
-The next major compatibility step is replacing the remaining synthetic compile-unit derivation inside that probe-backed front-end seam with direct TinyGo-owned frontend state while keeping `clang`/`wasm-ld` execution delegated to `emception`.
+Future compatibility work should extend and bound the real upstream path. The legacy subset must
+remain explicitly labeled and must never be used as a fallback for upstream compilation.

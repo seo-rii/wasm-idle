@@ -2,7 +2,8 @@
 
 This document describes how the reusable browser runtime in `src/runtime.ts`
 drives the current `wasm-tinygo` pipeline, and how `src/main.ts` wraps that
-runtime for the demo app.
+runtime for the demo app. Most sections describe the legacy porting harness;
+the independent upstream compiler path is called out separately below.
 
 It is narrower than `docs/architecture.md` and `docs/manifests.md`. Those files
 describe stage ownership and manifest contracts. This file explains the browser
@@ -13,12 +14,14 @@ test hooks.
 
 ## Library entry
 
-`wasm-tinygo` now ships two browser-facing entries:
+`wasm-tinygo` now ships three browser-facing entries:
 
 - `index.html`
   standalone demo app
 - `runtime.js`
   reusable library bundle that exports `createBundledTinyGoRuntime(...)`
+- `upstream.js`
+  independent receipt-verified upstream TinyGo compiler consumer
 
 The demo page uses `createTinyGoBrowserRuntime(...)`, which is a UI-friendly
 adapter around the same runtime core. Host apps such as `wasm-idle` import
@@ -147,6 +150,50 @@ two files:
 The runtime uses `assetPacks` to resolve runtime assets before falling back to
 direct fetch or loader URLs. This mirrors the wasm-rust runtime pack flow.
 
+### Upstream toolchain assets
+
+`loadTinyGoUpstreamToolchainAssets(...)` starts from
+`tools/upstream/upstream-toolchain.v2.json`. It uses the same browser asset-loader and progress
+contract, but loads only the compiler, package-graph provider, reduced root archive, their producer
+receipts, and raw LLD declared by that manifest. `prepareTinyGoUpstreamToolchain(...)` then verifies
+byte counts and SHA-256 digests, checks both producer identities, safely expands the bounded root
+archive, validates its runtime closure, and accepts only WASI Preview 1 imports.
+
+The provider and compiler receive only `/tinygo-root`, `/workspace`, and `/work` preopens. A compile
+request supplies workspace files and a root package (`.` in protocols v1 through v4), not package JSON. The
+provider runs the fixed offline `go list` request, and its graph is validated against the mounted
+paths before compilation. The verified producer receipt selects the legacy single-object v1,
+v2 embed-object, v3 CGo/C, or v4 bounded C++/assembly ordered object-set contract. In v3 and v4 every object path, kind, format,
+byte count, SHA-256, source/dependency identity, linker argument, link order, and aggregate limit is
+checked before raw LLD runs from a fresh link-only VFS. Binaryen 129 then performs the declared
+asyncify/O1 finalization. Compilation and execution are separate calls, so a program is not run
+once with empty stdin during the compile phase.
+
+Protocol v4 also requires per-object semantic evidence from the pinned LLVM 20.1.1 producer.
+LLVM bitcode evidence binds successful module verification, the exact WASI target triple/data
+layout, and zero TLS, constructor, destructor, or forbidden C++ ABI findings. Assembly evidence
+binds LLVM object validation, linking metadata version 2, and a symbol table. The browser does not
+pretend to reimplement LLVM's readers: it independently checks the LLVM container envelope and
+Wasm framing, rejects fake/duplicate linking metadata, TLS/init/dynamic-linking metadata, forbidden
+ABI symbols and target features, and then uses raw LLD as the semantic consumer. Both raw LLD and
+Binaryen outputs must compile as WebAssembly, expose `_start` and memory, import only WASI Preview 1
+functions, and contain no relocatable, dynamic-linking, shared-memory, memory64, exception, or
+out-of-profile feature metadata. Because `target_features` is advisory rather than semantic proof,
+both final outputs must retain that producer metadata and the consumer separately decodes bounded
+core type, import, table, global, element, function, export, and instruction streams to reject
+actual SIMD, atomic, exception, GC/reference-type, tail-call, multivalue, multi-memory/table, custom
+page-size, or extended-reference use.
+The remaining LLVM IR/object semantic claims still come from the hash-bound pinned producer evidence;
+raw LLD remains the independent semantic authority for the exact object bytes.
+
+Protocol v2 introduced `go:embed` object publication. Protocol v3 preserves that handoff, accepts
+real upstream `CgoFiles`, and verifies each target `CFile` as Clang ThinLTO bitcode with source and
+header dependency hashes. Protocol v4 adds `CXXFiles` as freestanding C++17 ThinLTO bitcode and
+uppercase `.S` in CGo packages as Clang assembler-with-cpp relocatable WebAssembly objects. It
+still fails closed for libc++/libc++abi, exceptions, RTTI, static lifetime, user `CXXFLAGS`,
+lowercase `.s`, non-CGo or Go/Plan 9 assembly, and custom `#cgo LDFLAGS`. GOROOT assembly stays on
+upstream TinyGo's standard-package intrinsic/replacement path for the pinned root.
+
 ## Shared action model
 
 UI buttons and `window.__wasmTinygoTestHooks` share the same action guard.
@@ -264,3 +311,13 @@ If you change browser action sequencing in `src/runtime.ts` or its demo wiring
 in `src/main.ts`, update the smoke test in the same patch. The browser runtime
 has accumulated enough concurrency rules that code-only changes are easy to
 regress.
+
+## Upstream browser acceptance
+
+`npm run probe:wasm-llvm-upstream-browser -- ...` serves `dist/upstream.js` and the exact
+receipt-bound assets to Chromium. The current acceptance loads 45 upstream packages; compiles real
+CGo plus target C, freestanding C++17, and uppercase `.S`; and matches the Node consumer's program,
+target-C/C++/assembly, and embed objects plus unoptimized/final Wasm byte-for-byte. It runs
+Binaryen 129 and checks exit status, stderr, and exact stdout
+`hello Ada count=2 total=3 cgo=5/20 cxxasm=13\n`. The route does not fall back to
+`runtime.js` or the AST-to-C subset on any failure.

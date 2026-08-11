@@ -175,6 +175,15 @@ export const buildTinyGoCompilerWasm = async () => {
 		process.env.WASM_TINYGO_COMPILER_MANIFEST_PATH ??
 		path.join(outputDir, 'tinygo-compiler.json');
 	const wasmBytes = await readFile(outputPath);
+	const usesWasmIdleBridge =
+		path.resolve(resolvedMainPath) === path.resolve(source.rootPath, 'cmd', 'tinygo-wasi') ||
+		buildMode === 'patched-browser-entry';
+	const implementationKind = usesWasmIdleBridge
+		? 'wasm-idle-go-ast-to-c-subset'
+		: buildMode === 'direct' || buildMode === 'patched-upstream-direct'
+			? 'upstream-tinygo'
+			: 'wasm-idle-porting-probe';
+	const upstreamCompiler = implementationKind === 'upstream-tinygo';
 	await writeFile(
 		manifestPath,
 		`${JSON.stringify(
@@ -188,10 +197,14 @@ export const buildTinyGoCompilerWasm = async () => {
 				patchedDirectFailureReason,
 				patchedEntryFailureReason,
 				blockers,
+				implementationKind,
+				upstreamCompiler,
 				artifactKind:
-					buildMode === 'direct' || buildMode === 'patched-upstream-direct'
+					upstreamCompiler
 						? 'compiler'
-						: 'bootstrap',
+						: usesWasmIdleBridge && buildMode === 'direct'
+							? 'porting-harness'
+							: 'bootstrap',
 				outputPath,
 				wasmBytes: wasmBytes.length
 			},

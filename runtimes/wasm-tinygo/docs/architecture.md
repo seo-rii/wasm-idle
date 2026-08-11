@@ -1,6 +1,8 @@
 # Architecture
 
-`wasm-tinygo` is organized around explicit browser-safe boundaries instead of embedding the full upstream TinyGo compiler directly.
+`wasm-tinygo` keeps its legacy porting harness and its real upstream compiler consumer as separate
+browser entries. The legacy path uses explicit handoff boundaries; the independent upstream path
+loads the source-pinned wasm-llvm compiler and never falls back to that harness.
 
 The current stack has five major pieces:
 
@@ -61,6 +63,34 @@ At this point the front-end still synthesizes the next manifests, but it consume
 
 The backend owns lowered-source generation, lowering/body tables, placeholder signatures, and the final command graph that the browser executes.
 
+## Independent upstream path
+
+`src/upstream-entry.ts` exports a separate end-to-end path with these boundaries:
+
+1. load the compiler, Go 1.24.6 `cmd/go` WASI package provider, reduced root archive, both producer
+   receipts, and raw WASI LLD declared by the upstream asset manifest
+2. verify every byte count and SHA-256 plus the compiler and provider identities
+3. expand the gzip/tar root into a bounded binary VFS while rejecting traversal, links, and
+   unsupported entries
+4. run the fixed offline `go list` request over the mounted workspace and validate the resulting
+   package graph against restricted `/tinygo-root`, `/workspace`, and `/work` mounts
+5. run the real TinyGo builder/compiler with that graph and validate its receipt-selected v1
+   single-object, v2 embed-object, v3 CGo/C, or v4 bounded C++/assembly complete object-set link plan
+6. for v4, require LLVM 20.1.1 module/object validation evidence and independently reject malformed
+   bitcode envelopes, fake relocatable-Wasm metadata, TLS/init ABI use, and out-of-profile metadata;
+   require final `target_features` and decode the actual core Wasm streams for forbidden feature use
+7. run raw LLVM 20 LLD, then compile-check its WASI-only result and the Binaryen 129 asyncify/O1 result
+8. return the final wasm without executing it; a separate API supplies stdin and executes the
+   program
+
+The fixed `wasip1-asyncify-precise-o1` path has passed a 45-package CGo/C/C++/assembly local-module
+fixture in the Node browser-WASI shim and headless Chromium 147, producing byte-identical objects
+and Wasm. Protocol v4 binds CGo/native source and dependency evidence, target-C and
+freestanding-C++17 ThinLTO bitcode, and uppercase CGo-package `.S` assembler-with-cpp objects while
+preserving the v2 TinyGo-generated `go:embed` handoff. Public integration is still blocked on
+hosted C++, general assembly and native/linker flags, offline external dependency availability,
+broader differential coverage, and hard interruption/resource budgets.
+
 ## Package ownership
 
 - `cmd/go-probe`
@@ -88,7 +118,8 @@ The backend owns lowered-source generation, lowering/body tables, placeholder si
 
 The split is intentional.
 
-- Upstream TinyGo is not yet browser-ready as a single WASM payload.
+- The upstream compiler is browser-proven as a verified multi-asset pipeline, not packaged as a
+  single payload or exposed as a general browser TinyGo CLI.
 - Browser execution needs explicit filesystem materialization and tool invocation contracts.
 - Deterministic manifests make each boundary testable in Go, Node, WASI, and Chromium.
 - Ownership stays with the stage that derives the data, instead of copying derived fields forward.

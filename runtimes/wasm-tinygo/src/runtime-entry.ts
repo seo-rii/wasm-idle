@@ -1,6 +1,7 @@
 import { createTinyGoRuntime, type TinyGoRuntimeOptions } from './runtime';
 
 export * from './runtime';
+export * from './upstream-entry.ts';
 
 export const createBundledTinyGoRuntime = (
 	options: Omit<TinyGoRuntimeOptions, 'assetBaseUrl'> = {}

@@ -24,6 +24,8 @@ Implemented now:
 - [x] real-browser TinyGo probes in `wasm-tinygo` and `wasm-idle`
 - [x] TinyGo runtime asset loader support
 - [x] TinyGo runtime pack support (`runtime-pack.index.json` + `runtime-pack.bin`)
+- [x] source-pinned Go 1.24.6 `cmd/go` package discovery for local module workspaces
+- [x] receipt-verified provider → TinyGo → LLD → Binaryen execution in Chromium
 
 Not done yet:
 
@@ -31,9 +33,16 @@ Not done yet:
 - [x] replace the synthetic `frontend-analysis` path with a real TinyGo frontend
 - [x] replace the placeholder backend/lowering path with real TinyGo compiler output
 - [ ] broaden the browser demo from the starter compatibility subset to a stronger compatibility set
+- [x] publish and verify TinyGo-generated `go:embed` objects in compile protocol v2
+- [x] publish and verify target CGo/C sources, dependencies, and objects in compile protocol v3
+- [x] publish and verify freestanding-C++17 and CGo-package uppercase `.S` objects in protocol v4
+- [ ] decide hosted-C++, general assembly, CXXFLAGS, and safe CGo linker-flag policies
+- [ ] isolate synchronous phases in disposable Workers with hard time/resource limits
 
 ### What already works
 
+- an independent upstream path that derives a 45-package CGo/C/C++/assembly local-module graph with pinned
+  `cmd/go` and compiles and executes it entirely in Node or Chromium without a host compile service
 - browser-side emception boot and command execution
 - Go/WASI driver, front-end, and backend stage boundaries
 - normalized manifest chain with host/browser verification
@@ -123,8 +132,11 @@ Status:
 
 ## Immediate next slice
 
-The browser/runtime integration slice is now much further along than the original bridge-only milestone. The reusable runtime entry, `wasm-idle` integration, bridge-owned real frontend/backend execution, static starter-subset execution, and runtime pack support are done. The next slice is no longer "make TinyGo appear in the browser"; it is "expand correctness beyond the current starter compatibility subset" while keeping the existing manifest seam stable:
+The browser/runtime integration slice is now much further along than the original bridge-only milestone. The reusable runtime entry, `wasm-idle` integration, upstream package provider/compiler path, bridge-owned real frontend/backend execution, static starter-subset execution, runtime pack support, generated embed-object handoff, and bounded target CGo/C/C++/assembly handoff are done. The next upstream slice is the remaining native-language policy and bounded execution while the legacy seam stays stable:
 
+- decide and test hosted-C++, general assembly, CXXFLAGS, and safe CGo linker-flag policies
+- isolate package discovery, compiler, and LLD execution in disposable Workers with hard limits
+- add controlled offline dependency/module-cache inputs without enabling implicit network fetches
 - keep the current static browser path green while adding broader program coverage
 - use the host compile seam as the correctness oracle for new browser-facing demo cases
 - keep shrinking the bridge-less synthetic fallback until it is no longer needed for supported demo cases
