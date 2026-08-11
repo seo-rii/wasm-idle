@@ -21,7 +21,7 @@ describe('LLDB browser integration workflow', () => {
 			expect(workflow).toContain(sha256);
 		}
 		expect(workflow).toContain(
-			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/4e5a696be2b44aec3fe9f364956c19c6dda098db/artifacts/runtime-source'
+			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/c5c5385c2c15d95b6bc15429ccfa888c5981a501/artifacts/runtime-source'
 		);
 		const pinnedRuntimeRevision = workflow.match(
 			/wasm-llvm\/([0-9a-f]{40})\/artifacts\/runtime-source/
@@ -32,15 +32,15 @@ describe('LLDB browser integration workflow', () => {
 		for (const [asset, sha256] of [
 			[
 				'runtime-manifest.v2.json',
-				'ca8986926b1789ba09231167aa20854ffd67fe05782b1781a0244b4eb427f7b3'
+				'3a0d0dff4380947102f473fc845524500f40b11b4847d5f5dcb0f6949d8e2623'
 			],
 			[
 				'debug/lldb-web-dap.js',
-				'e459d2588fad29e1d24b992a5acee2d4b3f84d414cf8b517bddeac61c6b92c60'
+				'c6ecfaf08d60af11b003df60435c77a5ed24fc46887d2aa43e19436d5a5eb59d'
 			],
 			[
 				'debug/lldb-web-dap.wasm',
-				'4d355af4301df8955b91e5cd0d78f9845c6d81e6508982e7e9beae4a3f778711'
+				'b12f1fa80b00db4f5d8ed472697cc141f1025988dce704401eb25d90089d7665'
 			],
 			[
 				'debug/lldb-web-dap.pthread.mjs',
@@ -48,15 +48,15 @@ describe('LLDB browser integration workflow', () => {
 			],
 			[
 				'debug/wamr-debug.js',
-				'9948dc4dc7fe7cf575a6480abac6de3b451ad10e3a7b851d4e43f435df0ddcec'
+				'27ae46467c33d7794878f956aadf70f7fb1ac92f3625466d5d066a772ccdf081'
 			],
 			[
 				'debug/wamr-debug.wasm',
-				'e3c848b676cbc65b9014d19a3b36f480f7989309ce2e2385fcbeafa75240d338'
+				'ffdea1b0273c05203cc3fe78138120f9bfd76935374f40d7a0a2778a5439b92b'
 			],
 			[
 				'debug/wamr-debug.worker.mjs',
-				'd42f216c4aac3aff61741537d0507ab86aefbe4525661f8d75e49c274b639f79'
+				'22998261a62469360bb373812566c364a9b97af01622f8479794c1624464beb3'
 			]
 		]) {
 			expect(workflow).toContain(`static/wasm-debug/${asset}`);
@@ -104,6 +104,16 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain('WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES');
 		expect(debugReadme).toContain('WASM_IDLE_DEBUG_RELAUNCH_COUNT=100');
 		expect(debugReadme).toContain('WASM_IDLE_DEBUG_BROWSER_TEST_TIMEOUT_MS=7200000');
+	});
+
+	it('gates the reduced LLDB and WAMR initial-memory profile', async () => {
+		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+		const llvmReadme = await readFile('packages/llvm-core/README.md', 'utf8');
+
+		expect(browserTest).toContain('String(320 * 1024 * 1024)');
+		expect(browserTest).toContain('String(80 * 1024 * 1024)');
+		expect(llvmReadme).toContain('320 MiB for LLDB and 80 MiB for WAMR');
+		expect(llvmReadme).toContain('256 MiB and 64 MiB');
 	});
 
 	it('keeps a missing-asset trace fallback fixture in the browser gate', async () => {

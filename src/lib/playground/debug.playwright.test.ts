@@ -1472,12 +1472,12 @@ describe('native-source browser debugging in Chromium', () => {
 									lldb: Number(
 										process.env
 											.WASM_IDLE_DEBUG_LLDB_LINEAR_MEMORY_LIMIT_BYTES ||
-											String(640 * 1024 * 1024)
+											String(320 * 1024 * 1024)
 									),
 									target: Number(
 										process.env
 											.WASM_IDLE_DEBUG_TARGET_LINEAR_MEMORY_LIMIT_BYTES ||
-											String(320 * 1024 * 1024)
+											String(80 * 1024 * 1024)
 									)
 								};
 								for (const worker of ['lldb', 'target'] as const) {

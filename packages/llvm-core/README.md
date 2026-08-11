@@ -274,11 +274,12 @@ observe the original exception. Exceptions thrown by that error hook are also co
 reporting code cannot terminate the debugger.
 The required product Chromium gate retains the peak reported by each worker during its basic C
 fixture and requires at least one sample from both workers. Its default linear-memory ceilings are
-640 MiB for LLDB and 320 MiB for WAMR, leaving 25% headroom above their pinned 512 MiB and 256 MiB
+320 MiB for LLDB and 80 MiB for WAMR, leaving 25% headroom above their pinned 256 MiB and 64 MiB
 initial memories. Override them with `WASM_IDLE_DEBUG_LLDB_LINEAR_MEMORY_LIMIT_BYTES` and
 `WASM_IDLE_DEBUG_TARGET_LINEAR_MEMORY_LIMIT_BYTES` only when validating an intentional producer
-memory change. The current basic fixture reports one sample at exactly 512 MiB and 256 MiB,
-respectively.
+memory change. The current basic fixture reports one sample at exactly 256 MiB and 64 MiB,
+respectively. These values are the Emscripten linear-memory backing-buffer sizes, not total browser
+RSS; both workers retain bounded memory growth for workloads that exceed the initial allocation.
 
 The debug runtime requires a cross-origin-isolated page with `SharedArrayBuffer`. LLDB and WAMR
 assets are lazy-loaded from the versioned producer manifest and are not included in this npm
@@ -292,7 +293,7 @@ boundary.
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
 Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,
 verifies every pinned SHA-256 receipt, and requires the product LLDB/WAMR binaries published by
-`wasm-llvm` commit `4e5a696be2b44aec3fe9f364956c19c6dda098db` for C, C++, and Rust. The V2
+`wasm-llvm` commit `c5c5385c2c15d95b6bc15429ccfa888c5981a501` for C, C++, and Rust. The V2
 manifest and all six debug assets are downloaded from that immutable revision and verified before
 the browser starts; the test cannot silently fall back to trace debugging. At each C, C++, and Rust
 source pause, the gate also verifies that LLDB scopes remain lazy until their
