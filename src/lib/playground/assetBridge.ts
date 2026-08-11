@@ -415,7 +415,10 @@ export class WorkerAssetBridge {
 		if (asset.endsWith('.gz')) {
 			if (!paired) return this.maxAssetBytes;
 			const deliveryLimit = this.configuredReceiptByteLimit(asset, configured.bytes);
-			const runtimeLimit = this.configuredReceiptByteLimit(asset, configured.uncompressedBytes);
+			const runtimeLimit = this.configuredReceiptByteLimit(
+				asset,
+				configured.uncompressedBytes
+			);
 			return deliveryLimit !== undefined || runtimeLimit !== undefined
 				? Math.max(deliveryLimit ?? 0, runtimeLimit ?? 0)
 				: this.maxAssetBytes;
