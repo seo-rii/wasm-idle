@@ -1,0 +1,31 @@
+{
+	"schemaVersion": 1,
+	"profileId": "dzaima-cbqn-emscripten-3.1.8-wasm-idle-d647850c",
+	"source": {
+		"repository": "https://github.com/dzaima/CBQN",
+		"path": "dist",
+		"revision": "legacy-import-unrecorded;wasm-idle:d647850cd6448b457f778d01c304358aefa5244b"
+	},
+	"build": {
+		"emscripten": "3.1.8",
+		"options": ["ENVIRONMENT=worker", "MODULARIZE=1", "EXPORT_ES6=1", "FORCE_FILESYSTEM=1"]
+	},
+	"license": {
+		"path": "LICENSE-GPLv3.txt",
+		"spdx": "GPL-3.0-or-later",
+		"bytes": 35148,
+		"sha256": "8b1ba204bb69a0ade2bfcf65ef294a920f6bb361b317dba43c7ef29d96332b9b"
+	},
+	"assets": [
+		{
+			"path": "BQN.js",
+			"bytes": 212190,
+			"sha256": "0a5474e6944cc3ce8a8b21874f82341dd1680d7bac056d619adfd49e98123570"
+		},
+		{
+			"path": "BQN.wasm",
+			"bytes": 1175370,
+			"sha256": "a57bd7e67537b0eb977f921dd75898878d4c51865df9c4e35d7a156f7db33632"
+		}
+	]
+}

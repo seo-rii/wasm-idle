@@ -12,6 +12,7 @@ import {
 } from './applicationAssets';
 import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
 import { WASM_BASH_ASSET_VERSION, WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
+import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 import { WASM_ELIXIR_ASSET_RECEIPTS, WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
 import {
@@ -149,6 +150,13 @@ describe('application runtime asset root', () => {
 			manifestFingerprint: WASM_J_ASSET_VERSION,
 			workerReceipt: WASM_J_RUNNER_RECEIPT
 		});
+		expect(assets.bqn).toEqual({
+			baseUrl: '/foo/bar/wasm-bqn/',
+			workerUrl: `/foo/bar/wasm-bqn/runner-worker.js?v=${WASM_BQN_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-bqn/runtime-manifest.v2.json?v=${WASM_BQN_ASSET_VERSION}`,
+			manifestFingerprint: WASM_BQN_ASSET_VERSION,
+			workerReceipt: WASM_BQN_RUNNER_RECEIPT
+		});
 		expect(assets.bash).toEqual({
 			moduleUrl: `/foo/bar/wasm-bash/sdk/index.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`,
 			webcUrl: `/foo/bar/wasm-bash/bash.webc?v=${WASM_BASH_ASSET_VERSION}`,
@@ -281,6 +289,16 @@ describe('application runtime asset root', () => {
 					{
 						sha256: WASM_J_RUNNER_RECEIPT.sha256,
 						bytes: WASM_J_RUNNER_RECEIPT.bytes
+					}
+				]
+			]),
+			bqnManifestFingerprint: WASM_BQN_ASSET_VERSION,
+			bqnWorkerReceipt: JSON.stringify([
+				[
+					'worker',
+					{
+						sha256: WASM_BQN_RUNNER_RECEIPT.sha256,
+						bytes: WASM_BQN_RUNNER_RECEIPT.bytes
 					}
 				]
 			]),

@@ -2,7 +2,7 @@ import type { PlaygroundRuntimeAssets } from './assets';
 import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
 import { WASM_AWK_ASSET_VERSION } from './wasmAwkVersion';
 import { WASM_BASH_ASSET_VERSION, WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
-import { WASM_BQN_ASSET_VERSION } from './wasmBqnVersion';
+import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import { WASM_CLOJURESCRIPT_ASSET_VERSION } from './wasmClojureScriptVersion';
 import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 import { WASM_DOTNET_ASSET_VERSION } from './wasmDotnetVersion';
@@ -149,7 +149,10 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		bqn: {
 			baseUrl: asset('wasm-bqn/'),
-			workerUrl: asset('wasm-bqn/runner-worker.js', WASM_BQN_ASSET_VERSION)
+			workerUrl: asset('wasm-bqn/runner-worker.js', WASM_BQN_RUNNER_RECEIPT.sha256),
+			manifestUrl: asset('wasm-bqn/runtime-manifest.v2.json', WASM_BQN_ASSET_VERSION),
+			manifestFingerprint: WASM_BQN_ASSET_VERSION,
+			workerReceipt: WASM_BQN_RUNNER_RECEIPT
 		},
 		janet: {
 			baseUrl: asset('wasm-janet/'),

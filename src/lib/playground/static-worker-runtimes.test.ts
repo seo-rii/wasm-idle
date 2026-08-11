@@ -107,10 +107,12 @@ import {
 } from './staticStdinRing';
 import { StaticWorkerRuntimeSandbox } from './staticWorkerRuntime';
 import Tcl from './tcl';
+import bqnWorkerSource from '../../../scripts/runtime-workers/wasm-bqn-runner-worker.js?raw';
 import forthWorkerSource from '../../../scripts/runtime-workers/wasm-forth-runner-worker.js?raw';
 import gleamWorkerSource from '../../../scripts/runtime-workers/wasm-gleam-runner-worker.js?raw';
 import jWorkerSource from '../../../scripts/runtime-workers/wasm-j-runner-worker.js?raw';
 import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
+import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 
@@ -218,7 +220,9 @@ describe('static worker backed language sandboxes', () => {
 						? forthWorkerSource
 						: inputUrl.includes('/wasm-j/runner-worker.js')
 							? jWorkerSource
-							: '/* static worker */';
+							: inputUrl.includes('/wasm-bqn/runner-worker.js')
+								? bqnWorkerSource
+								: '/* static worker */';
 				return new Response(source, {
 					status: 200,
 					headers: {
@@ -789,7 +793,8 @@ describe('static worker backed language sandboxes', () => {
 		await sandbox.load({
 			bqn: {
 				baseUrl: '/wasm-bqn/',
-				workerUrl: '/wasm-bqn/runner-worker.js?v=test'
+				workerUrl: '/wasm-bqn/runner-worker.js?v=test',
+				manifestUrl: '/wasm-bqn/runtime-manifest.v2.json'
 			}
 		});
 		await expect(
@@ -798,18 +803,41 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		await expectWorkerBootstrap(
+		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/wasm-bqn/runner-worker.js?v=test'
+			'http://localhost:3000/wasm-bqn/runner-worker.js?v=test',
+			bqnWorkerSource
 		);
 		expect(workerInstances[0].options).toEqual({ type: 'module' });
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-bqn/',
+				manifestUrl: 'http://localhost:3000/wasm-bqn/runtime-manifest.v2.json',
+				manifestFingerprint: WASM_BQN_ASSET_VERSION,
 				stdin: '68\n',
 				activePath: 'main.bqn'
 			})
 		);
+		expect(sandbox.workerReceipt).toEqual(WASM_BQN_RUNNER_RECEIPT);
+	});
+
+	it('rejects a modified BQN runner before creating a worker', async () => {
+		const modifiedSource = `x${bqnWorkerSource.slice(1)}`;
+		vi.mocked(fetch).mockResolvedValueOnce(
+			new Response(modifiedSource, {
+				status: 200,
+				headers: {
+					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
+				}
+			})
+		);
+		const sandbox = new Bqn();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'BQN'
+		});
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('loads Janet runtime urls and forwards stdin to the upstream Janet worker', async () => {

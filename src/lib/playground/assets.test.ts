@@ -97,6 +97,7 @@ import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
 import { TEAVM_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from './wasmFortranExecutionAssets';
 import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
+import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
@@ -1102,7 +1103,10 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(resolveBqnRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-bqn/',
-			workerUrl: 'https://example.com/absproxy/5173/wasm-bqn/runner-worker.js'
+			workerUrl: 'https://example.com/absproxy/5173/wasm-bqn/runner-worker.js',
+			manifestUrl: 'https://example.com/absproxy/5173/wasm-bqn/runtime-manifest.v2.json',
+			manifestFingerprint: WASM_BQN_ASSET_VERSION,
+			workerReceipt: WASM_BQN_RUNNER_RECEIPT
 		});
 		expect(resolveJanetRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
 			{
@@ -1299,12 +1303,23 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(
 			resolveBqnRuntimeAssetConfig(
-				{ bqn: { baseUrl: '/runtime/bqn', workerUrl: '/runtime/bqn/worker.js' } },
+				{
+					bqn: {
+						baseUrl: '/runtime/bqn',
+						workerUrl: '/runtime/bqn/worker.js',
+						manifestUrl: '/runtime/bqn/manifest.json',
+						manifestFingerprint: customFingerprint,
+						workerReceipt: customWorkerReceipt
+					}
+				},
 				'https://example.com/app'
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/bqn/',
-			workerUrl: 'https://example.com/runtime/bqn/worker.js'
+			workerUrl: 'https://example.com/runtime/bqn/worker.js',
+			manifestUrl: 'https://example.com/runtime/bqn/manifest.json',
+			manifestFingerprint: customFingerprint,
+			workerReceipt: customWorkerReceipt
 		});
 		expect(
 			resolveJanetRuntimeAssetConfig(

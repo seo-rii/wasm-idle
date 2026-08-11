@@ -15,6 +15,7 @@ import {
 	WASM_FORTH_ASSET_VERSION,
 	WASM_FORTH_RUNNER_RECEIPT
 } from '$lib/playground/wasmForthVersion';
+import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from '$lib/playground/wasmBqnVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from '$lib/playground/wasmJVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import {
@@ -258,6 +259,9 @@ export interface JRuntimeAssetConfig {
 export interface BqnRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
+	manifestUrl?: string;
+	manifestFingerprint?: string;
+	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
 export interface JanetRuntimeAssetConfig {
@@ -2428,13 +2432,29 @@ export function resolveBqnWorkerUrl(
 	return resolveConfiguredUrl('/wasm-bqn/runner-worker.js', currentUrl);
 }
 
+export function resolveBqnManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl =
+		typeof options === 'object' ? options?.bqn?.manifestUrl : undefined;
+	if (configuredManifestUrl) {
+		return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
+	}
+	return `${resolveBqnBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
+}
+
 export function resolveBqnRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
+	const configured = typeof options === 'object' ? options?.bqn : undefined;
 	return {
 		baseUrl: resolveBqnBaseUrl(options, currentUrl),
-		workerUrl: resolveBqnWorkerUrl(options, currentUrl)
+		workerUrl: resolveBqnWorkerUrl(options, currentUrl),
+		manifestUrl: resolveBqnManifestUrl(options, currentUrl),
+		manifestFingerprint: configured?.manifestFingerprint?.trim() || WASM_BQN_ASSET_VERSION,
+		workerReceipt: configured?.workerReceipt || WASM_BQN_RUNNER_RECEIPT
 	};
 }
 
