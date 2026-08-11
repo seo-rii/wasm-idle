@@ -413,8 +413,11 @@ export class WorkerAssetBridge {
 			configured.uncompressedBytes !== undefined ||
 			configured.uncompressedSha256 !== undefined;
 		if (asset.endsWith('.gz')) {
-			return paired
-				? (this.configuredReceiptByteLimit(asset, configured.bytes) ?? this.maxAssetBytes)
+			if (!paired) return this.maxAssetBytes;
+			const deliveryLimit = this.configuredReceiptByteLimit(asset, configured.bytes);
+			const runtimeLimit = this.configuredReceiptByteLimit(asset, configured.uncompressedBytes);
+			return deliveryLimit !== undefined || runtimeLimit !== undefined
+				? Math.max(deliveryLimit ?? 0, runtimeLimit ?? 0)
 				: this.maxAssetBytes;
 		}
 		const deliveryLimit = this.configuredReceiptByteLimit(asset, configured.bytes);

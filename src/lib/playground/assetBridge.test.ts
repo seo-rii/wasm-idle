@@ -833,6 +833,49 @@ describe('WorkerAssetBridge asset requests', () => {
 		expect(new Uint8Array(response.assetResponse.bytes)).toEqual(runtimeBytes);
 	});
 
+	it('bounds transparently decoded gzip responses by their uncompressed receipt', async () => {
+		const postMessage = vi.fn();
+		const runtimeBytes = new Uint8Array(64 * 1024).fill(65);
+		const deliveryBytes = Uint8Array.from(gzipSync(runtimeBytes));
+		const asset = 'bin/memfs.wasm.gz';
+		expect(runtimeBytes.byteLength).toBeGreaterThan(deliveryBytes.byteLength);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(
+				new Response(runtimeBytes, {
+					headers: {
+						'content-encoding': 'gzip',
+						'content-length': String(runtimeBytes.byteLength),
+						'content-type': 'application/wasm'
+					}
+				})
+			)
+		);
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'clang', {
+			baseUrl: 'https://assets.example.com/clang/',
+			integrity: {
+				[asset]: {
+					bytes: deliveryBytes.byteLength,
+					sha256: createHash('sha256').update(deliveryBytes).digest('hex'),
+					uncompressedBytes: runtimeBytes.byteLength,
+					uncompressedSha256: createHash('sha256').update(runtimeBytes).digest('hex')
+				}
+			},
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 28, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		const response = postMessage.mock.calls[0]?.[0];
+		expect(response, response?.assetResponse?.error).toMatchObject({
+			assetResponse: { id: 28, ok: true }
+		});
+		expect(new Uint8Array(response.assetResponse.bytes)).toEqual(runtimeBytes);
+	});
+
 	it('rejects gzip delivery bytes whose compressed digest does not match', async () => {
 		const postMessage = vi.fn();
 		const runtimeBytes = new Uint8Array([1, 2, 3]);
