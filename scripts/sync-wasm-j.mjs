@@ -66,7 +66,7 @@ function containsPath(parent, candidate) {
 /** @param {string} left @param {string} right */
 const pathsOverlap = (left, right) => containsPath(left, right) || containsPath(right, left);
 
-/** Resolve existing ancestors so symlink spellings cannot bypass publication boundaries. */
+/** @param {string} filePath Resolve existing ancestors so symlink spellings cannot bypass publication boundaries. */
 async function resolveBoundaryPath(filePath) {
 	let cursor = path.resolve(filePath);
 	/** @type {string[]} */
