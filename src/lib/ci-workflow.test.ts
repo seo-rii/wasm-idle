@@ -47,4 +47,12 @@ describe('required CI workflow gates', () => {
 			fullJob.indexOf('- run: pnpm run test:lsp:browser:full')
 		);
 	});
+	it('enforces static asset budgets in the packages job', async () => {
+		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+		const packagesJobStart = workflow.indexOf('    packages:');
+		const nextJobStart = workflow.indexOf('    lsp-browser-smoke:', packagesJobStart);
+		const packagesJob = workflow.slice(packagesJobStart, nextJobStart);
+
+		expect(packagesJob).toContain('- run: pnpm run check:asset-sizes');
+	});
 });

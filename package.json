@@ -103,6 +103,8 @@
 		"compress:static-runtimes": "node scripts/compress-static-runtime-assets.mjs static",
 		"compress:build-runtimes": "node scripts/compress-static-runtime-assets.mjs build",
 		"layer:static-runtimes": "node scripts/build-layered-runtime-assets.mjs static",
+		"asset:sizes": "node scripts/static-asset-sizes.mjs report",
+		"check:asset-sizes": "node scripts/static-asset-sizes.mjs check",
 		"build:page-runtimes": "node scripts/prepare-page-runtimes.mjs",
 		"build:static-runtime-modules": "node scripts/build-static-runtime-modules.mjs",
 		"support:matrix": "node scripts/support-matrix.mjs write",
