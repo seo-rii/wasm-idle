@@ -70,3 +70,36 @@ jobs:
             - run: pnpm run prepare:test-assets -- clangd ocaml
             - run: pnpm run test:lsp:browser:full
             - run: pnpm run test:lsp:browser:gleam:csp
+
+    runtime-browser-full:
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        runs-on: ubuntu-latest
+        timeout-minutes: 120
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - shard: stdin
+                      asset-group: none
+                    - shard: llvm
+                      asset-group: clang
+                    - shard: workers
+                      asset-group: none
+                    - shard: specialized
+                      asset-group: ocaml
+                    - shard: compressed-assets
+                      asset-group: all
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10.30.0
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm exec playwright-core install --with-deps chromium
+            - if: matrix.asset-group != 'none'
+              run: pnpm run prepare:test-assets -- ${{ matrix.asset-group }}
+            - run: node scripts/run-all-language-browser-tests.mjs --shard ${{ matrix.shard }}

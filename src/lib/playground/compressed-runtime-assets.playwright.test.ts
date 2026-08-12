@@ -27,8 +27,7 @@ const compressedRuntimeAssetSamples = [
 	'wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js',
 	'wasm-tinygo/tools/tinygo-compiler.wasm',
 	'wasm-tinygo/vendor/emception/04de61a8a0f85ee15beb.a',
-	'wasm-zig/zig_small.wasm',
-	'webr/5da864032a1d2d4e/R.wasm'
+	'wasm-zig/zig_small.wasm'
 ] as const;
 
 const compressedAssetTestTimeoutMs = Number(
@@ -74,17 +73,17 @@ async function discoverBuildAssetSamples() {
 		)
 	) as { assets?: string[] };
 	const assets = manifest.assets || [];
-	return [
-		/^_app\/immutable\/workers\/assets\/icu-.*\.dat$/,
-		/^_app\/immutable\/workers\/assets\/intl-.*\.so$/,
-		/^_app\/immutable\/workers\/assets\/php_8_5-.*\.wasm$/,
-		/^_app\/immutable\/workers\/assets\/ruby_stdlib-.*\.wasm$/,
-		/^_app\/immutable\/workers\/chunks\/.*\.js$/
-	].map((pattern) => {
-		const asset = assets.find((entry) => pattern.test(entry));
-		if (!asset) throw new Error(`compressed build asset sample not found for ${pattern}`);
-		return asset;
-	});
+	const workerAssets = assets.filter((entry) =>
+		/^_app\/immutable\/workers\/[^/]+\.js$/.test(entry)
+	);
+	if (workerAssets.length === 0) {
+		throw new Error('compressed build manifest does not contain worker assets');
+	}
+	const webRAsset = assets.find((entry) => /^webr\/[^/]+\/R\.wasm$/.test(entry));
+	if (!webRAsset) {
+		throw new Error('compressed build manifest does not contain the webR runtime');
+	}
+	return [...workerAssets, webRAsset];
 }
 
 describe('compressed runtime assets', () => {

@@ -13,14 +13,58 @@ const COMPRESSED_ASSET_TEST_FILE =
 const LSP_TEST_FILE = 'src/routes/monaco-lsp.playwright.test.ts';
 const DEFAULT_PREVIEW_ORIGIN = 'http://127.0.0.1:4573';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const STATIC_WORKER_TEST_FILE = 'src/lib/playground/static-worker-runtimes.playwright.test.ts';
+const SHARED_STDIN_BROWSER_TEST_ENVIRONMENT = 'WASM_IDLE_RUN_REAL_BROWSER_STDIN_SHARED_ONLY';
+const LLVM_BROWSER_TEST_ENVIRONMENTS = new Set([
+	'WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN',
+	'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC',
+	'WASM_IDLE_RUN_REAL_BROWSER_FORTRAN',
+	'WASM_IDLE_RUN_REAL_BROWSER_COBOL'
+]);
 
 /**
- * @param {{ includeCompressedAssets?: boolean; includeLspFull?: boolean }} options
+ * @typedef {'stdin' | 'llvm' | 'workers' | 'specialized' | 'compressed-assets'} BrowserTestShard
+ */
+
+/** @type {BrowserTestShard[]} */
+export const ALL_LANGUAGE_BROWSER_TEST_SHARDS = [
+	'stdin',
+	'llvm',
+	'workers',
+	'specialized',
+	'compressed-assets'
+];
+
+/** @param {typeof import('./support-matrix.mjs').supportMatrixRows[number]} row */
+export function browserTestShardForRow(row) {
+	if (!row.browserTest) return null;
+	if (row.browserTest.env === 'WASM_IDLE_RUN_REAL_BROWSER_STDIN') return 'stdin';
+	if (LLVM_BROWSER_TEST_ENVIRONMENTS.has(row.browserTest.env)) return 'llvm';
+	if (row.browserTest.file === STATIC_WORKER_TEST_FILE) return 'workers';
+	return 'specialized';
+}
+
+/** @param {string} shard @returns {BrowserTestShard} */
+function parseBrowserTestShard(shard) {
+	if (!ALL_LANGUAGE_BROWSER_TEST_SHARDS.includes(/** @type {BrowserTestShard} */ (shard))) {
+		throw new Error(`Unknown browser test shard: ${shard}`);
+	}
+	return /** @type {BrowserTestShard} */ (shard);
+}
+
+/**
+ * @param {{
+ *   includeCompressedAssets?: boolean;
+ *   includeLspFull?: boolean;
+ *   shard?: BrowserTestShard;
+ * }} options
  */
 export function createAllLanguageBrowserTestPlan({
 	includeCompressedAssets = false,
-	includeLspFull = false
+	includeLspFull = false,
+	shard
 } = {}) {
+	if (shard) parseBrowserTestShard(shard);
 	/** @type {Set<string>} */
 	const testFiles = new Set();
 	/** @type {Record<string, string>} */
@@ -28,11 +72,16 @@ export function createAllLanguageBrowserTestPlan({
 
 	for (const row of supportMatrixRows) {
 		if (!row.browserTest) continue;
+		if (shard && browserTestShardForRow(row) !== shard) continue;
 		testFiles.add(row.browserTest.file);
-		env[row.browserTest.env] = '1';
+		if (shard === 'stdin' && row.browserTest.env === 'WASM_IDLE_RUN_REAL_BROWSER_STDIN') {
+			env[SHARED_STDIN_BROWSER_TEST_ENVIRONMENT] = '1';
+		} else {
+			env[row.browserTest.env] = '1';
+		}
 	}
 
-	if (includeCompressedAssets) {
+	if (includeCompressedAssets || shard === 'compressed-assets') {
 		testFiles.add(COMPRESSED_ASSET_TEST_FILE);
 		env.WASM_IDLE_RUN_REAL_BROWSER_COMPRESSED_ASSETS = '1';
 	}
@@ -52,15 +101,18 @@ export function createAllLanguageBrowserTestPlan({
 export function createVitestChildInvocation(plan, browserUrl, baseEnv = process.env) {
 	/** @type {NodeJS.ProcessEnv} */
 	const childEnv = {
-		...baseEnv,
-		...plan.env,
+		...baseEnv
+	};
+	for (const key of Object.keys(childEnv)) {
+		if (key.startsWith('VITEST') || key.startsWith('WASM_IDLE_RUN_REAL_BROWSER_')) {
+			delete childEnv[key];
+		}
+	}
+	Object.assign(childEnv, plan.env, {
 		WASM_IDLE_BROWSER_URL: browserUrl,
 		WASM_IDLE_BROWSER_SERVER_MODE: 'preview',
 		WASM_IDLE_REUSE_LOCAL_PREVIEW: '1'
-	};
-	for (const key of Object.keys(childEnv)) {
-		if (key.startsWith('VITEST')) delete childEnv[key];
-	}
+	});
 	delete childEnv.NODE_ENV;
 	if (plan.env.WASM_IDLE_RUN_REAL_BROWSER_LSP === '1') {
 		delete childEnv.WASM_IDLE_LSP_BROWSER_GROUPS;
@@ -117,7 +169,12 @@ async function startDedicatedPreviewServer(origin) {
 }
 
 /**
- * @param {{ includeCompressedAssets?: boolean; includeLspFull?: boolean; origin?: string }} options
+ * @param {{
+ *   includeCompressedAssets?: boolean;
+ *   includeLspFull?: boolean;
+ *   origin?: string;
+ *   shard?: BrowserTestShard;
+ * }} options
  * @param {{
  *   prepare?: typeof runBrowserPreparationScripts;
  *   spawnProcess?: typeof spawn;
@@ -128,7 +185,8 @@ export async function runAllLanguageBrowserTests(
 	{
 		includeCompressedAssets = false,
 		includeLspFull = false,
-		origin = DEFAULT_PREVIEW_ORIGIN
+		origin = DEFAULT_PREVIEW_ORIGIN,
+		shard
 	} = {},
 	{
 		prepare = runBrowserPreparationScripts,
@@ -138,7 +196,8 @@ export async function runAllLanguageBrowserTests(
 ) {
 	const plan = createAllLanguageBrowserTestPlan({
 		includeCompressedAssets,
-		includeLspFull
+		includeLspFull,
+		shard
 	});
 
 	await prepare(['build:preview', 'compress:build-runtimes'], { timeoutMs: 900_000 });
@@ -158,21 +217,34 @@ export async function runAllLanguageBrowserTests(
 
 /** @param {string[]} args */
 export function parseAllLanguageBrowserTestArgs(args) {
+	/** @type {{
+	 *   includeCompressedAssets: boolean;
+	 *   includeLspFull: boolean;
+	 *   shard?: BrowserTestShard;
+	 * }} */
 	const options = {
 		includeCompressedAssets: false,
-		includeLspFull: false
+		includeLspFull: false,
+		shard: undefined
 	};
 
-	for (const arg of args) {
+	for (let index = 0; index < args.length; index += 1) {
+		const arg = args[index];
 		if (arg === '--include-compressed-assets') {
 			options.includeCompressedAssets = true;
 		} else if (arg === '--include-lsp-full') {
 			options.includeLspFull = true;
+		} else if (arg === '--shard') {
+			const shard = args[index + 1];
+			if (!shard || shard.startsWith('--')) throw new Error('Missing value for --shard');
+			options.shard = parseBrowserTestShard(shard);
+			index += 1;
+		} else if (arg.startsWith('--shard=')) {
+			options.shard = parseBrowserTestShard(arg.slice('--shard='.length));
 		} else {
 			throw new Error(`Unknown option: ${arg}`);
 		}
 	}
-
 	return options;
 }
 

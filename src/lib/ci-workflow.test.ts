@@ -55,4 +55,28 @@ describe('required CI workflow gates', () => {
 
 		expect(packagesJob).toContain('- run: pnpm run check:asset-sizes');
 	});
+	it('runs the complete browser matrix as scheduled isolated shards', async () => {
+		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+		const jobStart = workflow.indexOf('    runtime-browser-full:');
+		const job = workflow.slice(jobStart);
+
+		expect(jobStart).toBeGreaterThanOrEqual(0);
+		expect(job).toContain(
+			"if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+		);
+		for (const [shard, assetGroup] of [
+			['stdin', 'none'],
+			['llvm', 'clang'],
+			['workers', 'none'],
+			['specialized', 'ocaml'],
+			['compressed-assets', 'all']
+		]) {
+			expect(job).toContain(
+				`- shard: ${shard}\n                      asset-group: ${assetGroup}`
+			);
+		}
+		expect(job).toContain(
+			'node scripts/run-all-language-browser-tests.mjs --shard ${{ matrix.shard }}'
+		);
+	});
 });
