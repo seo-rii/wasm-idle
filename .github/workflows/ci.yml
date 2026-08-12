@@ -21,7 +21,14 @@ jobs:
               with:
                   node-version: 24
                   cache: pnpm
+                  cache-dependency-path: |
+                      pnpm-lock.yaml
+                      producers/wasm-php/pnpm-lock.yaml
             - run: pnpm install --frozen-lockfile
+            - run: pnpm --dir producers/wasm-php install --frozen-lockfile
+            - run: pnpm --dir producers/wasm-php build
+            - run: pnpm --dir producers/wasm-php verify
+            - run: pnpm run verify:wasm-php
             - run: pnpm run check
             - run: node scripts/prepare-clang-compiler-assets.mjs
             - run: pnpm test

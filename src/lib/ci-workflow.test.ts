@@ -79,4 +79,22 @@ describe('required CI workflow gates', () => {
 			'node scripts/run-all-language-browser-tests.mjs --shard ${{ matrix.shard }}'
 		);
 	});
+	it('builds and verifies the independent PHP producer in the packages job', async () => {
+		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+		const packagesJobStart = workflow.indexOf('    packages:');
+		const nextJobStart = workflow.indexOf('    lsp-browser-smoke:', packagesJobStart);
+		const packagesJob = workflow.slice(packagesJobStart, nextJobStart);
+		const install = packagesJob.indexOf(
+			'- run: pnpm --dir producers/wasm-php install --frozen-lockfile'
+		);
+		const build = packagesJob.indexOf('- run: pnpm --dir producers/wasm-php build');
+		const producerVerify = packagesJob.indexOf('- run: pnpm --dir producers/wasm-php verify');
+		const consumerVerify = packagesJob.indexOf('- run: pnpm run verify:wasm-php');
+
+		expect(packagesJob).toContain('producers/wasm-php/pnpm-lock.yaml');
+		expect(install).toBeGreaterThanOrEqual(0);
+		expect(build).toBeGreaterThan(install);
+		expect(producerVerify).toBeGreaterThan(build);
+		expect(consumerVerify).toBeGreaterThan(producerVerify);
+	});
 });
