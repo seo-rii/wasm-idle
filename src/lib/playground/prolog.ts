@@ -3,6 +3,7 @@ import {
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
 import { StaticWorkerRuntimeSandbox } from '$lib/playground/staticWorkerRuntime';
+import { RuntimeConfigurationError } from '@wasm-idle/core';
 
 class Prolog extends StaticWorkerRuntimeSandbox {
 	constructor() {
@@ -15,8 +16,19 @@ class Prolog extends StaticWorkerRuntimeSandbox {
 				sourceHintPattern:
 					/\b(read_line_to_string|read_line_to_codes|get_char|get_code|read\s*\(|read_string)\b/
 			},
+			inlineVerifiedWorker: true,
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {
-				return resolvePrologRuntimeAssetConfig(runtimeAssets, currentUrl);
+				const resolved = resolvePrologRuntimeAssetConfig(runtimeAssets, currentUrl);
+				if (
+					!/^[a-f0-9]{64}$/u.test(resolved.manifestFingerprint || '') ||
+					!resolved.workerReceipt
+				) {
+					throw new RuntimeConfigurationError(
+						'Prolog runtime requires a manifest fingerprint and worker receipt.',
+						{ runtimeId: 'PROLOG' }
+					);
+				}
+				return resolved;
 			}
 		});
 	}

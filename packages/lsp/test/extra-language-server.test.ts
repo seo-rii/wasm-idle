@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RUBY_RUNTIME_ASSET_PATH } from '@wasm-idle/core';
+import {
+	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
+	BUNDLED_PROLOG_RUNNER_RECEIPT
+} from '../src/bundledPrologRuntime.js';
 
 const mockState = vi.hoisted(() => {
 	const workers: FakeWorker[] = [];
@@ -586,7 +590,10 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				baseUrl: 'https://static.example.com/repl_20240807/wasm-prolog/',
-				workerUrl: 'https://static.example.com/repl_20240807/wasm-prolog/runner-worker.js'
+				workerUrl: `https://static.example.com/repl_20240807/wasm-prolog/runner-worker.js?v=${BUNDLED_PROLOG_RUNNER_RECEIPT.sha256}`,
+				manifestUrl: `https://static.example.com/repl_20240807/wasm-prolog/runtime-manifest.v2.json?v=${BUNDLED_PROLOG_MANIFEST_FINGERPRINT}`,
+				manifestFingerprint: BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
+				workerReceipt: BUNDLED_PROLOG_RUNNER_RECEIPT
 			}
 		});
 

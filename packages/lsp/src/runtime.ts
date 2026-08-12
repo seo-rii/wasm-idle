@@ -8,6 +8,10 @@ import {
 import { BUNDLED_CLANGD_ASSET_INTEGRITY } from './bundledClangdAssetIntegrity.js';
 import { BUNDLED_ELIXIR_ASSET_VERSION } from './bundledElixirRuntimeIntegrity.js';
 import { BUNDLED_GLEAM_MANIFEST_FINGERPRINT } from './bundledGleamRuntime.js';
+import {
+	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
+	BUNDLED_PROLOG_RUNNER_RECEIPT
+} from './bundledPrologRuntime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from './types.js';
 import { deriveRubyRuntimeWasmUrl } from '@wasm-idle/core';
 
@@ -658,7 +662,7 @@ export function resolvePrologLanguageServerWorkerUrl(
 ) {
 	if (typeof options === 'string') {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-prolog/runner-worker.js`,
+			`${normalizeRootUrl(options) || ''}/wasm-prolog/runner-worker.js?v=${BUNDLED_PROLOG_RUNNER_RECEIPT.sha256}`,
 			currentUrl
 		);
 	}
@@ -667,11 +671,47 @@ export function resolvePrologLanguageServerWorkerUrl(
 	}
 	if (options?.rootUrl) {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-prolog/runner-worker.js`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-prolog/runner-worker.js?v=${BUNDLED_PROLOG_RUNNER_RECEIPT.sha256}`,
 			currentUrl
 		);
 	}
-	return resolveApplicationAssetUrl('/wasm-prolog/runner-worker.js', currentUrl);
+	return resolveApplicationAssetUrl(
+		`/wasm-prolog/runner-worker.js?v=${BUNDLED_PROLOG_RUNNER_RECEIPT.sha256}`,
+		currentUrl
+	);
+}
+
+export function resolvePrologLanguageServerManifestUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'object' && options.prolog?.manifestUrl) {
+		return resolveFileUrl(options.prolog.manifestUrl, currentUrl);
+	}
+	return resolveFileUrl(
+		`${resolvePrologLanguageServerBaseUrl(options, currentUrl)}runtime-manifest.v2.json?v=${BUNDLED_PROLOG_MANIFEST_FINGERPRINT}`,
+		currentUrl
+	);
+}
+
+export function resolvePrologLanguageServerManifestFingerprint(
+	options: EditorLanguageServerOptions | undefined
+) {
+	const configured =
+		typeof options === 'object' ? options.prolog?.manifestFingerprint?.trim() || '' : '';
+	if (!configured) return BUNDLED_PROLOG_MANIFEST_FINGERPRINT;
+	if (/^[a-f0-9]{64}$/u.test(configured)) return configured;
+	throw new LanguageServerAssetConfigurationError(
+		'Prolog LSP',
+		'a 64-character prolog.manifestFingerprint'
+	);
+}
+
+export function resolvePrologLanguageServerWorkerReceipt(
+	options: EditorLanguageServerOptions | undefined
+) {
+	const configured = typeof options === 'object' ? options.prolog?.workerReceipt : undefined;
+	return configured || BUNDLED_PROLOG_RUNNER_RECEIPT;
 }
 
 export function resolveRubyLanguageServerWasmUrl(

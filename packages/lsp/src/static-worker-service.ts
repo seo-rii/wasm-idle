@@ -5,10 +5,12 @@ import {
 	type WorkerLanguageService
 } from './lsp.js';
 import { runRuntimeWorkerDiagnostics } from './runtime-worker.js';
+import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 
 export interface StaticWorkerDiagnosticConfig {
 	baseUrl: string;
 	workerUrl: string;
+	workerReceipt?: RuntimeAssetIntegrityEntry;
 }
 
 export type StaticWorkerDiagnosticRequest<TConfig extends StaticWorkerDiagnosticConfig> =
@@ -56,11 +58,13 @@ export function createStaticWorkerDiagnostics<
 	let config: TConfig | null = null;
 	let lastKey = '';
 	let lastDiagnostics: LspDiagnostic[] = [];
+	const pendingDiagnosticsByKey = new Map<string, Promise<LspDiagnostic[]>>();
 	const runDiagnostics =
 		options.runDiagnostics ||
 		(((request: StaticWorkerDiagnosticRequest<TConfig>) =>
 			runRuntimeWorkerDiagnostics({
 				workerUrl: request.workerUrl,
+				workerReceipt: request.workerReceipt,
 				timeoutMessage: options.timeoutMessage,
 				message: options.createMessage(request)
 			}) as Promise<TResult>) satisfies StaticWorkerDiagnosticRunner<TConfig, TResult>);
@@ -88,17 +92,30 @@ export function createStaticWorkerDiagnostics<
 				document.text
 			].join('\n');
 			if (key === lastKey) return lastDiagnostics;
+			const pendingDiagnostics = pendingDiagnosticsByKey.get(key);
+			if (pendingDiagnostics) return await pendingDiagnostics;
 			if (options.diagnosticsProgressStage) {
 				context.reportProgress(options.diagnosticsProgressStage);
 			}
-			lastKey = key;
-			const result = await runDiagnostics({
-				...config,
-				code: document.text,
-				activePath
-			});
-			lastDiagnostics = options.diagnosticsFromResult(result, document);
-			return lastDiagnostics;
+			const operation = (async () => {
+				const result = await runDiagnostics({
+					...config,
+					code: document.text,
+					activePath
+				});
+				const diagnostics = options.diagnosticsFromResult(result, document);
+				lastKey = key;
+				lastDiagnostics = diagnostics;
+				return diagnostics;
+			})();
+			pendingDiagnosticsByKey.set(key, operation);
+			try {
+				return await operation;
+			} finally {
+				if (pendingDiagnosticsByKey.get(key) === operation) {
+					pendingDiagnosticsByKey.delete(key);
+				}
+			}
 		}
 	};
 }

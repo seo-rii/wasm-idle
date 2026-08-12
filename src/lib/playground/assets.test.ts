@@ -107,6 +107,7 @@ import {
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
+import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
 
 describe('runtime asset config resolution', () => {
 	it.each([
@@ -1062,7 +1063,10 @@ describe('runtime asset config resolution', () => {
 			resolvePrologRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
 		).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-prolog/',
-			workerUrl: 'https://example.com/absproxy/5173/wasm-prolog/runner-worker.js'
+			workerUrl: 'https://example.com/absproxy/5173/wasm-prolog/runner-worker.js',
+			manifestUrl: 'https://example.com/absproxy/5173/wasm-prolog/runtime-manifest.v2.json',
+			manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
+			workerReceipt: WASM_PROLOG_RUNNER_RECEIPT
 		});
 		expect(resolveGleamRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
 			{
@@ -1150,6 +1154,21 @@ describe('runtime asset config resolution', () => {
 		);
 	});
 
+	it('preserves relative default Prolog urls and pins when no current url is available', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = '';
+		publicEnv.PUBLIC_WASM_PROLOG_WORKER_URL = '';
+		const { resolvePrologRuntimeAssetConfig } = await import('./assets');
+
+		expect(resolvePrologRuntimeAssetConfig(undefined)).toEqual({
+			baseUrl: '/wasm-prolog/',
+			workerUrl: '/wasm-prolog/runner-worker.js',
+			manifestUrl: '/wasm-prolog/runtime-manifest.v2.json',
+			manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
+			workerReceipt: WASM_PROLOG_RUNNER_RECEIPT
+		});
+	});
+
 	it('preserves relative default Forth urls when no current url is available', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_FORTH_BASE_URL = '';
@@ -1232,12 +1251,23 @@ describe('runtime asset config resolution', () => {
 
 		expect(
 			resolvePrologRuntimeAssetConfig(
-				{ prolog: { baseUrl: '/runtime/prolog', workerUrl: '/runtime/prolog/worker.js' } },
+				{
+					prolog: {
+						baseUrl: '/runtime/prolog',
+						workerUrl: '/runtime/prolog/worker.js',
+						manifestUrl: '/runtime/prolog/manifest.json',
+						manifestFingerprint: customFingerprint,
+						workerReceipt: customWorkerReceipt
+					}
+				},
 				'https://example.com/app'
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/prolog/',
-			workerUrl: 'https://example.com/runtime/prolog/worker.js'
+			workerUrl: 'https://example.com/runtime/prolog/worker.js',
+			manifestUrl: 'https://example.com/runtime/prolog/manifest.json',
+			manifestFingerprint: customFingerprint,
+			workerReceipt: customWorkerReceipt
 		});
 		expect(
 			resolveGleamRuntimeAssetConfig(

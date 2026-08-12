@@ -112,6 +112,7 @@ import clojureScriptWorkerSource from '../../../scripts/runtime-workers/wasm-clo
 import forthWorkerSource from '../../../scripts/runtime-workers/wasm-forth-runner-worker.js?raw';
 import gleamWorkerSource from '../../../scripts/runtime-workers/wasm-gleam-runner-worker.js?raw';
 import jWorkerSource from '../../../scripts/runtime-workers/wasm-j-runner-worker.js?raw';
+import prologWorkerSource from '../../../scripts/runtime-workers/wasm-prolog-runner-worker.js?raw';
 import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import {
@@ -120,6 +121,7 @@ import {
 } from './wasmClojureScriptVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
+import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
 
 function createStreamingTestSandbox() {
 	return new StaticWorkerRuntimeSandbox({
@@ -219,17 +221,19 @@ describe('static worker backed language sandboxes', () => {
 			'fetch',
 			vi.fn(async (input: RequestInfo | URL) => {
 				const inputUrl = String(input);
-				const source = inputUrl.includes('/wasm-gleam/runner-worker.js')
-					? gleamWorkerSource
-					: inputUrl.includes('/wasm-forth/runner-worker.js')
-						? forthWorkerSource
-						: inputUrl.includes('/wasm-j/runner-worker.js')
-							? jWorkerSource
-							: inputUrl.includes('/wasm-bqn/runner-worker.js')
-								? bqnWorkerSource
-								: inputUrl.includes('/wasm-clojurescript/runner-worker.js')
-									? clojureScriptWorkerSource
-									: '/* static worker */';
+				const source = inputUrl.includes('/wasm-prolog/runner-worker.js')
+					? prologWorkerSource
+					: inputUrl.includes('/wasm-gleam/runner-worker.js')
+						? gleamWorkerSource
+						: inputUrl.includes('/wasm-forth/runner-worker.js')
+							? forthWorkerSource
+							: inputUrl.includes('/wasm-j/runner-worker.js')
+								? jWorkerSource
+								: inputUrl.includes('/wasm-bqn/runner-worker.js')
+									? bqnWorkerSource
+									: inputUrl.includes('/wasm-clojurescript/runner-worker.js')
+										? clojureScriptWorkerSource
+										: '/* static worker */';
 				return new Response(source, {
 					status: 200,
 					headers: {
@@ -406,7 +410,10 @@ describe('static worker backed language sandboxes', () => {
 		await sandbox.load({
 			prolog: {
 				baseUrl: '/wasm-prolog/',
-				workerUrl: '/wasm-prolog/runner-worker.js?v=test'
+				workerUrl: '/wasm-prolog/runner-worker.js?v=test',
+				manifestUrl: '/wasm-prolog/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
+				workerReceipt: WASM_PROLOG_RUNNER_RECEIPT
 			}
 		});
 		await expect(
@@ -416,21 +423,44 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		await expectWorkerBootstrap(
+		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/wasm-prolog/runner-worker.js?v=test'
+			'http://localhost:3000/wasm-prolog/runner-worker.js?v=test',
+			prologWorkerSource
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				runId: expect.stringMatching(/^static-\d+$/),
 				baseUrl: 'http://localhost:3000/wasm-prolog/',
+				manifestUrl: 'http://localhost:3000/wasm-prolog/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
 				code,
 				args: ['demo'],
 				stdin: '27\n',
 				activePath: 'main.prolog'
 			})
 		);
+		expect(sandbox.workerReceipt).toEqual(WASM_PROLOG_RUNNER_RECEIPT);
 		expect(outputs).toContain('factorial_plus_bonus=27\n');
+	});
+
+	it('rejects a modified Prolog runner before creating a worker', async () => {
+		const modifiedSource = `x${prologWorkerSource.slice(1)}`;
+		vi.mocked(fetch).mockResolvedValueOnce(
+			new Response(modifiedSource, {
+				status: 200,
+				headers: {
+					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
+				}
+			})
+		);
+		const sandbox = new Prolog();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'PROLOG'
+		});
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('uses a module worker and reuses it for warm Gleam runs', async () => {
@@ -2378,7 +2408,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(fetch).toHaveBeenCalledWith(
 			'http://localhost:3000/absproxy/5173/wasm-prolog/runner-worker.js',
 			expect.objectContaining({
-				cache: 'force-cache',
+				cache: 'no-store',
 				credentials: 'omit',
 				redirect: 'error',
 				referrerPolicy: 'no-referrer',
@@ -2514,7 +2544,7 @@ describe('static worker backed language sandboxes', () => {
 				headers: { 'content-length': '1024' }
 			})
 		);
-		const sandbox = new Prolog();
+		const sandbox = createStreamingTestSandbox();
 
 		await expect(
 			sandbox.load('/absproxy/5173', '', true, [], {
@@ -2524,7 +2554,7 @@ describe('static worker backed language sandboxes', () => {
 			name: 'AssetTooLargeError',
 			code: 'asset-too-large',
 			phase: 'asset',
-			runtimeId: 'PROLOG',
+			runtimeId: 'STREAMING_STDIN_TEST',
 			actual: 1024,
 			limit: 32
 		});
@@ -2533,7 +2563,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('cancels an unknown-length worker-script stream after its byte limit', async () => {
 		vi.mocked(fetch).mockResolvedValueOnce(new Response(new Uint8Array(64)));
-		const sandbox = new Prolog();
+		const sandbox = createStreamingTestSandbox();
 
 		await expect(
 			sandbox.load('/absproxy/5173', '', true, [], {
@@ -2543,7 +2573,7 @@ describe('static worker backed language sandboxes', () => {
 			name: 'AssetTooLargeError',
 			code: 'asset-too-large',
 			phase: 'asset',
-			runtimeId: 'PROLOG',
+			runtimeId: 'STREAMING_STDIN_TEST',
 			actual: 64,
 			limit: 32
 		});
@@ -2553,9 +2583,10 @@ describe('static worker backed language sandboxes', () => {
 	it('releases a successful static worker response reader', async () => {
 		const cancel = vi.fn(async () => undefined);
 		const releaseLock = vi.fn();
+		const workerBytes = new TextEncoder().encode(prologWorkerSource);
 		const read = vi
 			.fn()
-			.mockResolvedValueOnce({ done: false, value: new Uint8Array([1, 2, 3]) })
+			.mockResolvedValueOnce({ done: false, value: workerBytes })
 			.mockResolvedValueOnce({ done: true, value: undefined });
 		vi.mocked(fetch).mockResolvedValueOnce({
 			ok: true,

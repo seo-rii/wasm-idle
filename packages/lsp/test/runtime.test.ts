@@ -4,6 +4,10 @@ import { BUNDLED_CLANGD_ASSET_INTEGRITY } from '../src/bundledClangdAssetIntegri
 import { BUNDLED_ELIXIR_ASSET_VERSION } from '../src/bundledElixirRuntimeIntegrity.js';
 import { BUNDLED_GLEAM_MANIFEST_FINGERPRINT } from '../src/bundledGleamRuntime.js';
 import {
+	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
+	BUNDLED_PROLOG_RUNNER_RECEIPT
+} from '../src/bundledPrologRuntime.js';
+import {
 	LanguageServerAssetConfigurationError,
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
@@ -39,6 +43,9 @@ import {
 	resolveOcamlLanguageServerModuleUrl,
 	resolveRLanguageServerBaseUrl,
 	resolvePrologLanguageServerBaseUrl,
+	resolvePrologLanguageServerManifestFingerprint,
+	resolvePrologLanguageServerManifestUrl,
+	resolvePrologLanguageServerWorkerReceipt,
 	resolvePrologLanguageServerWorkerUrl,
 	resolveRustLanguageServerCompilerUrl,
 	resolveTclLanguageServerBaseUrl,
@@ -125,6 +132,49 @@ describe('lsp runtime asset resolution', () => {
 		).toBe('a'.repeat(64));
 	});
 
+	it('pins bundled Prolog manifests and diagnostic workers while allowing explicit mirrors', () => {
+		const currentUrl = 'https://app.example.com/editor';
+		const bundledOptions = { rootUrl: '/wasm-idle' };
+
+		expect(resolvePrologLanguageServerManifestFingerprint(bundledOptions)).toBe(
+			BUNDLED_PROLOG_MANIFEST_FINGERPRINT
+		);
+		expect(resolvePrologLanguageServerWorkerReceipt(bundledOptions)).toBe(
+			BUNDLED_PROLOG_RUNNER_RECEIPT
+		);
+		expect(resolvePrologLanguageServerWorkerUrl(bundledOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-prolog/runner-worker.js?v=${BUNDLED_PROLOG_RUNNER_RECEIPT.sha256}`
+		);
+		expect(resolvePrologLanguageServerManifestUrl(bundledOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-prolog/runtime-manifest.v2.json?v=${BUNDLED_PROLOG_MANIFEST_FINGERPRINT}`
+		);
+
+		const customReceipt = { bytes: 321, sha256: 'b'.repeat(64) };
+		const customOptions = {
+			prolog: {
+				baseUrl: 'https://mirror.example.com/prolog/',
+				workerUrl: 'https://mirror.example.com/prolog/runner.js?v=custom',
+				manifestUrl: 'https://mirror.example.com/prolog/manifest.json?v=custom',
+				manifestFingerprint: ` ${'a'.repeat(64)} `,
+				workerReceipt: customReceipt
+			}
+		};
+
+		expect(resolvePrologLanguageServerWorkerUrl(customOptions)).toBe(
+			'https://mirror.example.com/prolog/runner.js?v=custom'
+		);
+		expect(resolvePrologLanguageServerManifestUrl(customOptions)).toBe(
+			'https://mirror.example.com/prolog/manifest.json?v=custom'
+		);
+		expect(resolvePrologLanguageServerManifestFingerprint(customOptions)).toBe('a'.repeat(64));
+		expect(resolvePrologLanguageServerWorkerReceipt(customOptions)).toBe(customReceipt);
+		expect(() =>
+			resolvePrologLanguageServerManifestFingerprint({
+				prolog: { manifestFingerprint: 'not-a-digest' }
+			})
+		).toThrow(LanguageServerAssetConfigurationError);
+	});
+
 	it('requires host context for document-relative asset overrides', () => {
 		const options = { rust: { compilerUrl: './assets/rustc.js' } };
 
@@ -188,7 +238,14 @@ describe('lsp runtime asset resolution', () => {
 			[resolveDuckDbLanguageServerModuleUrl, 'wasm-duckdb/runtime.mjs'],
 			[resolveFortranLanguageServerAnalyzerUrl, 'wasm-fortran/analyzer.js'],
 			[resolvePrologLanguageServerBaseUrl, 'wasm-prolog/'],
-			[resolvePrologLanguageServerWorkerUrl, 'wasm-prolog/runner-worker.js'],
+			[
+				resolvePrologLanguageServerWorkerUrl,
+				`wasm-prolog/runner-worker.js?v=${BUNDLED_PROLOG_RUNNER_RECEIPT.sha256}`
+			],
+			[
+				resolvePrologLanguageServerManifestUrl,
+				`wasm-prolog/runtime-manifest.v2.json?v=${BUNDLED_PROLOG_MANIFEST_FINGERPRINT}`
+			],
 			[resolveRubyLanguageServerModuleUrl, 'wasm-ruby/runtime.mjs'],
 			[resolveRLanguageServerBaseUrl, 'webr/'],
 			[resolveAwkLanguageServerBaseUrl, 'wasm-awk/'],

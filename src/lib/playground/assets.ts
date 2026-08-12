@@ -21,6 +21,10 @@ import {
 	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 } from '$lib/playground/wasmClojureScriptVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from '$lib/playground/wasmJVersion';
+import {
+	WASM_PROLOG_ASSET_VERSION,
+	WASM_PROLOG_RUNNER_RECEIPT
+} from '$lib/playground/wasmPrologVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import {
 	RUBY_RUNTIME_ASSET_RECEIPTS,
@@ -214,6 +218,9 @@ export interface OctaveRuntimeAssetConfig {
 export interface PrologRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
+	manifestUrl?: string;
+	manifestFingerprint?: string;
+	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
 export interface GleamRuntimeAssetConfig {
@@ -1798,13 +1805,27 @@ export function resolvePrologWorkerUrl(
 	return resolveConfiguredUrl('/wasm-prolog/runner-worker.js', currentUrl);
 }
 
+export function resolvePrologManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl =
+		typeof options === 'object' ? options?.prolog?.manifestUrl : undefined;
+	if (configuredManifestUrl) return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
+	return `${resolvePrologBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
+}
+
 export function resolvePrologRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
+	const configured = typeof options === 'object' ? options?.prolog : undefined;
 	return {
 		baseUrl: resolvePrologBaseUrl(options, currentUrl),
-		workerUrl: resolvePrologWorkerUrl(options, currentUrl)
+		workerUrl: resolvePrologWorkerUrl(options, currentUrl),
+		manifestUrl: resolvePrologManifestUrl(options, currentUrl),
+		manifestFingerprint: configured?.manifestFingerprint?.trim() || WASM_PROLOG_ASSET_VERSION,
+		workerReceipt: configured?.workerReceipt || WASM_PROLOG_RUNNER_RECEIPT
 	};
 }
 

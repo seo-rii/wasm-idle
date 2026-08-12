@@ -29,6 +29,7 @@ import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
+import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
 import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
 import { WASM_ZIG_ASSET_RECEIPTS, WASM_ZIG_ASSET_VERSION } from './wasmZigVersion';
@@ -132,6 +133,13 @@ describe('application runtime asset root', () => {
 		expect(assets.go).toEqual({
 			compilerUrl: `/foo/bar/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`,
 			manifestUrl: `/foo/bar/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`
+		});
+		expect(assets.prolog).toEqual({
+			baseUrl: '/foo/bar/wasm-prolog/',
+			workerUrl: `/foo/bar/wasm-prolog/runner-worker.js?v=${WASM_PROLOG_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-prolog/runtime-manifest.v2.json?v=${WASM_PROLOG_ASSET_VERSION}`,
+			manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
+			workerReceipt: WASM_PROLOG_RUNNER_RECEIPT
 		});
 		expect(assets.gleam).toEqual({
 			baseUrl: '/foo/bar/wasm-gleam/',
@@ -273,6 +281,16 @@ describe('application runtime asset root', () => {
 		expect(key).toMatchObject({
 			rustManifestUrl: `/foo/bar/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`,
 			goManifestUrl: `/foo/bar/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`,
+			prologManifestFingerprint: WASM_PROLOG_ASSET_VERSION,
+			prologWorkerReceipt: JSON.stringify([
+				[
+					'worker',
+					{
+						sha256: WASM_PROLOG_RUNNER_RECEIPT.sha256,
+						bytes: WASM_PROLOG_RUNNER_RECEIPT.bytes
+					}
+				]
+			]),
 			gleamManifestFingerprint: WASM_GLEAM_ASSET_VERSION,
 			gleamWorkerReceipt: JSON.stringify([
 				[
@@ -345,6 +363,9 @@ describe('application runtime asset root', () => {
 			dIntegrity: expect.any(String),
 			elixirIntegrity: expect.any(String),
 			erlangIntegrity: expect.any(String),
+			prologManifestUrl: assets.prolog?.manifestUrl,
+			prologManifestFingerprint: assets.prolog?.manifestFingerprint,
+			prologWorkerReceipt: expect.any(String),
 			forthManifestUrl: assets.forth?.manifestUrl,
 			forthManifestFingerprint: assets.forth?.manifestFingerprint,
 			forthWorkerReceipt: expect.any(String),

@@ -100,7 +100,13 @@ export interface RuntimeAssetKeySource {
 	};
 	r?: { baseUrl?: string };
 	octave?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
-	prolog?: { baseUrl?: string; workerUrl?: string };
+	prolog?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	gleam?: {
 		baseUrl?: string;
 		workerUrl?: string;
@@ -539,6 +545,18 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'octave', property: 'manifestUrl', key: 'octaveManifestUrl' },
 	{ runtime: 'prolog', property: 'baseUrl', key: 'prologBaseUrl' },
 	{ runtime: 'prolog', property: 'workerUrl', key: 'prologWorkerUrl' },
+	{ runtime: 'prolog', property: 'manifestUrl', key: 'prologManifestUrl' },
+	{
+		runtime: 'prolog',
+		property: 'manifestFingerprint',
+		key: 'prologManifestFingerprint'
+	},
+	{
+		runtime: 'prolog',
+		property: 'workerReceipt',
+		key: 'prologWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'gleam', property: 'baseUrl', key: 'gleamBaseUrl' },
 	{ runtime: 'gleam', property: 'workerUrl', key: 'gleamWorkerUrl' },
 	{ runtime: 'gleam', property: 'manifestUrl', key: 'gleamManifestUrl' },

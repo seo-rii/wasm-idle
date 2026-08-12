@@ -4,7 +4,7 @@ import type { LanguageToolAssetConfig } from './assets.js';
 import type { DOuterAssetReceipts } from './d/assets.js';
 import type { DocumentLanguageId } from './document/service.js';
 import type { ElixirRuntimeAssetReceipts } from './elixir/assets.js';
-import type { RubyRuntimeAssetReceipts } from '@wasm-idle/core';
+import type { RubyRuntimeAssetReceipts, RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 
 export interface DuckDBBundleConfig {
 	mainModule: string;
@@ -142,6 +142,9 @@ export interface EditorLanguageServerRuntimeOptions {
 	prolog?: {
 		baseUrl?: string;
 		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	ruby?: {
 		moduleUrl?: string;

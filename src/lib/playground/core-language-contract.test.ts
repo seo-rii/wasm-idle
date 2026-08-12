@@ -536,7 +536,10 @@ describe('core language contract', () => {
 			rootUrl: '/repl',
 			prolog: {
 				baseUrl: '/wasm-prolog/',
-				workerUrl: '/wasm-prolog/runner-worker.js?v=test'
+				workerUrl: '/wasm-prolog/runner-worker.js?v=test',
+				manifestUrl: '/wasm-prolog/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: '3'.repeat(64),
+				workerReceipt: { bytes: 3456, sha256: '4'.repeat(64) }
 			},
 			gleam: {
 				baseUrl: '/wasm-gleam/',
@@ -561,6 +564,9 @@ describe('core language contract', () => {
 
 		expect(key).toContain('"prologBaseUrl":"/wasm-prolog/"');
 		expect(key).toContain('"prologWorkerUrl":"/wasm-prolog/runner-worker.js?v=test"');
+		expect(key).toContain('"prologManifestUrl":"/wasm-prolog/runtime-manifest.v2.json?v=test"');
+		expect(key).toContain(`"prologManifestFingerprint":"${'3'.repeat(64)}"`);
+		expect(key).toContain(`"prologWorkerReceipt":"[[\\"worker\\",`);
 		expect(key).toContain('"gleamBaseUrl":"/wasm-gleam/"');
 		expect(key).toContain('"gleamWorkerUrl":"/wasm-gleam/runner-worker.js?v=test"');
 		expect(key).toContain('"gleamManifestUrl":"/wasm-gleam/source-manifest.v2.json?v=test"');

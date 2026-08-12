@@ -33,7 +33,7 @@ import { WASM_OCAML_ASSET_VERSION } from './wasmOcamlVersion';
 import { WASM_OCTAVE_ASSET_VERSION } from './wasmOctaveVersion';
 import { WASM_PASCAL_ASSET_VERSION } from './wasmPascalVersion';
 import { WASM_PERL_ASSET_VERSION } from './wasmPerlVersion';
-import { WASM_PROLOG_ASSET_VERSION } from './wasmPrologVersion';
+import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
 import {
 	RUBY_RUNTIME_ASSET_PATH,
@@ -111,7 +111,10 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		prolog: {
 			baseUrl: asset('wasm-prolog/'),
-			workerUrl: asset('wasm-prolog/runner-worker.js', WASM_PROLOG_ASSET_VERSION)
+			workerUrl: asset('wasm-prolog/runner-worker.js', WASM_PROLOG_RUNNER_RECEIPT.sha256),
+			manifestUrl: asset('wasm-prolog/runtime-manifest.v2.json', WASM_PROLOG_ASSET_VERSION),
+			manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
+			workerReceipt: WASM_PROLOG_RUNNER_RECEIPT
 		},
 		gleam: {
 			baseUrl: asset('wasm-gleam/'),
