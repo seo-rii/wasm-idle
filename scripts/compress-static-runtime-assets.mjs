@@ -10,7 +10,7 @@ const REPO_ROOT = path.resolve(THIS_DIR, '..');
 const STATIC_DIR = path.resolve(REPO_ROOT, 'static');
 const BUILD_DIR = path.resolve(REPO_ROOT, 'build');
 const MANIFEST_FILE_NAME = 'compressed-runtime-assets.v1.json';
-export const STATIC_RUNTIME_MIN_COMPRESS_BYTES = 1_000_000;
+export const STATIC_RUNTIME_MIN_COMPRESS_BYTES = 256 * 1024;
 const COMPRESSIBLE_EXTENSIONS = new Set([
 	'.a',
 	'.avm',
@@ -35,12 +35,17 @@ const PRECOMPRESSED_EXTENSIONS = new Set(['.br', '.brotli', '.gz', '.tgz', '.zip
 const RUNTIME_TOP_LEVEL_DIRS = new Set(['clang', 'clangd', 'pyodide', 'teavm', 'webr']);
 
 /**
- * @typedef {{
- *   compressedPath: string;
- *   compressedSize: number;
- *   originalPath: string;
- *   originalSize: number;
- * }} CompressedRuntimeAsset
+ * @typedef {object} CompressedAsset
+ * @property {string} compressedPath
+ * @property {number} compressedSize
+ * @property {string} originalPath
+ * @property {number} originalSize
+ */
+
+/**
+ * @typedef {object} CompressedManifestEntry
+ * @property {string} assetPath
+ * @property {number} originalSize
  */
 
 /** @param {string | undefined} value */
@@ -111,8 +116,8 @@ function gzipOriginalSize(bytes, filePath) {
 /** @param {string} rootDir @returns {Promise<{ assets?: unknown }>} */
 async function readExistingCompressedAssetManifest(rootDir) {
 	const manifest = await readFile(path.join(rootDir, MANIFEST_FILE_NAME), 'utf8')
-		.then((value) => JSON.parse(value))
-		.catch(() => ({}));
+		.then((value) => /** @type {unknown} */ (JSON.parse(value)))
+		.catch(() => /** @type {unknown} */ ({}));
 	return manifest && typeof manifest === 'object'
 		? /** @type {{ assets?: unknown }} */ (manifest)
 		: {};
@@ -120,22 +125,22 @@ async function readExistingCompressedAssetManifest(rootDir) {
 
 /**
  * @param {string} rootDir
- * @param {CompressedRuntimeAsset[]} compressed
- * @returns {Promise<Array<{ assetPath: string; originalSize: number }>>}
+ * @param {CompressedAsset[]} compressed
+ * @returns {Promise<CompressedManifestEntry[]>}
  */
 async function collectCompressedManifestEntries(rootDir, compressed) {
 	const existingManifest = await readExistingCompressedAssetManifest(rootDir);
-	/** @type {unknown[]} */
-	const existingAssetPaths = Array.isArray(existingManifest.assets)
-		? existingManifest.assets
-		: [];
-	const assetPaths = new Set(
-		existingAssetPaths.filter((assetPath) => typeof assetPath === 'string')
-	);
+	/** @type {Set<string>} */
+	const assetPaths = new Set();
+	if (Array.isArray(existingManifest.assets)) {
+		for (const assetPath of existingManifest.assets) {
+			if (typeof assetPath === 'string') assetPaths.add(assetPath);
+		}
+	}
 	for (const entry of compressed) {
 		assetPaths.add(relativeToRoot(rootDir, entry.originalPath));
 	}
-	/** @type {Array<{ assetPath: string; originalSize: number }>} */
+	/** @type {CompressedManifestEntry[]} */
 	const entries = [];
 	for (const assetPath of [...assetPaths].sort()) {
 		const originalPath = path.resolve(rootDir, assetPath);
@@ -153,12 +158,12 @@ async function collectCompressedManifestEntries(rootDir, compressed) {
 	return entries;
 }
 
-/** @param {NodeJS.ArrayBufferView} bytes */
+/** @param {Buffer} bytes */
 function sha256(bytes) {
 	return createHash('sha256').update(bytes).digest('hex');
 }
 
-/** @param {string} filePath @returns {Promise<CompressedRuntimeAsset>} */
+/** @param {string} filePath @returns {Promise<CompressedAsset>} */
 async function compressFile(filePath) {
 	const sourceBytes = await readFile(filePath);
 	const compressedBytes = gzipSync(sourceBytes, { level: 9 });
@@ -176,7 +181,7 @@ async function compressFile(filePath) {
 	};
 }
 
-/** @param {string} rootDir @param {CompressedRuntimeAsset[]} compressed */
+/** @param {string} rootDir @param {CompressedAsset[]} compressed */
 async function writeCompressedAssetManifest(rootDir, compressed) {
 	const entries = await collectCompressedManifestEntries(rootDir, compressed);
 	const assets = entries.map((entry) => entry.assetPath);
@@ -192,12 +197,14 @@ async function writeCompressedAssetManifest(rootDir, compressed) {
 	return assets;
 }
 
+/** @param {{ rootDir?: string }} [options] */
 export async function compressStaticRuntimeAssets({ rootDir = STATIC_DIR } = {}) {
 	const rootStats = await stat(rootDir).catch(() => null);
 	if (!rootStats?.isDirectory()) {
 		throw new Error(`runtime asset root directory was not found at ${rootDir}`);
 	}
 
+	/** @type {CompressedAsset[]} */
 	const compressed = [];
 	for (const filePath of await collectFiles(rootDir)) {
 		const fileStats = await stat(filePath);

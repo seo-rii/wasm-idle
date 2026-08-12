@@ -3,7 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
-import { compressStaticRuntimeAssets } from '../../scripts/compress-static-runtime-assets.mjs';
+import {
+	compressStaticRuntimeAssets,
+	STATIC_RUNTIME_MIN_COMPRESS_BYTES
+} from '../../scripts/compress-static-runtime-assets.mjs';
 
 const tempDirs: string[] = [];
 
@@ -119,6 +122,29 @@ describe('compressStaticRuntimeAssets', () => {
 		for (const relativePath of compressiblePaths) {
 			expect(manifest.sizes[relativePath]).toBe(1_000_001);
 		}
+	});
+
+	it('compresses assets at the 256 KiB boundary', async () => {
+		const rootDir = await makeTempDir();
+		const compressedPath = await writeAsset(
+			rootDir,
+			'wasm-wat/runtime.wasm',
+			repeatedBytes(STATIC_RUNTIME_MIN_COMPRESS_BYTES, 1)
+		);
+		const retainedPath = await writeAsset(
+			rootDir,
+			'wasm-wat/helper.wasm',
+			repeatedBytes(STATIC_RUNTIME_MIN_COMPRESS_BYTES - 1, 2)
+		);
+
+		const result = await compressStaticRuntimeAssets({ rootDir });
+
+		expect(result.compressed.map((entry) => entry.originalPath)).toEqual([compressedPath]);
+		await expect(stat(compressedPath)).rejects.toThrow();
+		await expect(stat(`${compressedPath}.gz`)).resolves.toBeTruthy();
+		await expect(stat(retainedPath)).resolves.toMatchObject({
+			size: STATIC_RUNTIME_MIN_COMPRESS_BYTES - 1
+		});
 	});
 
 	it('rebuilds complete and accurate sizes for existing gzip-only assets', async () => {
