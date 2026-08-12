@@ -78,7 +78,7 @@ async function listFiles(rootDir) {
 	return files.sort();
 }
 
-/** @param {string} sourceDir @param {string[]} additionalFiles */
+/** @param {string} sourceDir @param {string[]} [additionalFiles] */
 async function computeBundleFingerprint(sourceDir, additionalFiles = []) {
 	const hash = createHash('sha256');
 	for (const filePath of await listFiles(sourceDir)) {
@@ -99,7 +99,7 @@ async function computeBundleFingerprint(sourceDir, additionalFiles = []) {
 /** @param {string} versionModulePath @param {string} fingerprint */
 async function writeVersionModule(versionModulePath, fingerprint) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource = `export const WASM_D_ASSET_VERSION = ${JSON.stringify(fingerprint)};\n`;
+	const moduleSource = `export const WASM_D_ASSET_VERSION = '${fingerprint}';\n`;
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current === moduleSource) return;
 	await writeFile(versionModulePath, moduleSource, 'utf8');
