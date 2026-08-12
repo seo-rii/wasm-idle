@@ -47,7 +47,7 @@ jobs:
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - run: pnpm exec playwright-core install --with-deps chromium
-            - run: node scripts/prepare-clangd-assets.mjs
+            - run: pnpm run prepare:test-assets -- clangd
             - run: pnpm run test:lsp:browser:smoke
             - run: pnpm run test:lsp:browser:gleam:csp
 
@@ -66,7 +66,6 @@ jobs:
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - run: pnpm exec playwright-core install --with-deps chromium
-            - run: node scripts/prepare-clangd-assets.mjs
-            - run: node scripts/prepare-ocaml-lsp-assets.mjs
+            - run: pnpm run prepare:test-assets -- clangd ocaml
             - run: pnpm run test:lsp:browser:full
             - run: pnpm run test:lsp:browser:gleam:csp

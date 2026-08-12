@@ -60,6 +60,7 @@
 		"test:browser:tinygo": "WASM_IDLE_RUN_REAL_BROWSER_TINYGO=1 pnpm exec vitest run src/lib/playground/tinygo.playwright.test.ts",
 		"test:browser:languages:full": "node scripts/run-all-language-browser-tests.mjs",
 		"test:browser:audit:full": "node scripts/run-all-language-browser-tests.mjs --include-compressed-assets --include-lsp-full",
+		"prepare:test-assets": "node scripts/prepare-browser-test-assets.mjs",
 		"sync:runtime": "node scripts/sync-runtime.mjs",
 		"sync:runtimes": "node scripts/sync-runtime.mjs all",
 		"sync:wasm-php": "node scripts/sync-wasm-php.mjs",
