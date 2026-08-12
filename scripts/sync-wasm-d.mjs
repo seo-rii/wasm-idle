@@ -10,6 +10,8 @@ import {
 	validateSharedEmscriptenLldAssets
 } from './llvm-contracts/emscripten-lld.mjs';
 
+/** @typedef {{ bytes: number; sha256: string; uncompressedBytes: number; uncompressedSha256: string }} DAssetReceipt */
+
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
@@ -108,7 +110,11 @@ function sha256Bytes(bytes) {
 	return createHash('sha256').update(bytes).digest('hex');
 }
 
-/** @param {string} filePath @param {'gzip' | undefined} compression */
+/**
+ * @param {string} filePath
+ * @param {'gzip' | undefined} compression
+ * @returns {Promise<Readonly<DAssetReceipt>>}
+ */
 async function pairedReceipt(filePath, compression) {
 	const delivery = await readFile(filePath);
 	if (delivery.byteLength <= 0) {
@@ -152,6 +158,7 @@ async function finalizeInstalledRuntimeReceipts(
 	);
 	const compiler = requireObject(manifest.compiler, 'compiler');
 	const linker = requireObject(compiler.linker, 'compiler.linker');
+	/** @type {Array<[string, Record<string, any>]>} */
 	const assetEntries = [
 		['compiler.ldc2', requireObject(compiler.ldc2, 'compiler.ldc2')],
 		['compiler.toolchain', requireObject(compiler.toolchain, 'compiler.toolchain')],
@@ -220,7 +227,13 @@ async function writeIntegrityModule(targetDir, integrityModulePath, exports) {
 				'runtime/runtime-manifest.v1.json',
 				path.join(targetDir, 'runtime', 'runtime-manifest.v1.json')
 			]
-		].map(async ([asset, filePath]) => [asset, await pairedReceipt(filePath, undefined)])
+		].map(
+			async ([asset, filePath]) =>
+				/** @type {[string, Readonly<DAssetReceipt>]} */ ([
+					asset,
+					await pairedReceipt(filePath, undefined)
+				])
+		)
 	);
 	const receipts = Object.fromEntries(receiptEntries);
 	const fingerprint = sha256Bytes(

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { PathLike } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -577,8 +578,8 @@ describe('syncWasmZigAssets', () => {
 		const lockFilePath = await writeInputLock();
 		await writeFixtureFile(targetDir, 'existing.txt', new TextEncoder().encode('old runtime'));
 		await writeFile(versionModulePath, 'old version', 'utf8');
-		const renamePath = vi.fn(async (source: string, target: string) => {
-			if (target === versionModulePath && source.includes('.next-')) {
+		const renamePath = vi.fn(async (source: PathLike, target: PathLike) => {
+			if (String(target) === versionModulePath && String(source).includes('.next-')) {
 				throw new Error('injected version publication failure');
 			}
 			await rename(source, target);

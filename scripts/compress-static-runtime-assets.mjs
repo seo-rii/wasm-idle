@@ -10,7 +10,7 @@ const REPO_ROOT = path.resolve(THIS_DIR, '..');
 const STATIC_DIR = path.resolve(REPO_ROOT, 'static');
 const BUILD_DIR = path.resolve(REPO_ROOT, 'build');
 const MANIFEST_FILE_NAME = 'compressed-runtime-assets.v1.json';
-const MIN_COMPRESS_BYTES = 1_000_000;
+export const STATIC_RUNTIME_MIN_COMPRESS_BYTES = 1_000_000;
 const COMPRESSIBLE_EXTENSIONS = new Set([
 	'.a',
 	'.avm',
@@ -80,7 +80,7 @@ function isCompressibleFile(rootDir, filePath, fileStats) {
 	if (!isUnderCompressibleRuntime(rootDir, filePath)) return false;
 	if (!hasCompressibleExtension(filePath)) return false;
 	if (path.basename(filePath) === MANIFEST_FILE_NAME) return false;
-	return fileStats.size >= MIN_COMPRESS_BYTES;
+	return fileStats.size >= STATIC_RUNTIME_MIN_COMPRESS_BYTES;
 }
 
 /** @param {string} rootDir @returns {Promise<string[]>} */
