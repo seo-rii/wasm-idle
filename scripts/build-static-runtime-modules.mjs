@@ -4,6 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 
+import { validatePhpRuntimeAssets } from './sync-wasm-php.mjs';
+
 const THIS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
 const STATIC_DIR = path.join(REPO_ROOT, 'static');
@@ -25,12 +27,6 @@ const modules = [
 		entry: 'scripts/runtime-modules/duckdb.ts',
 		packages: ['@duckdb/duckdb-wasm'],
 		licenses: [['node_modules/@duckdb/duckdb-wasm/LICENSE', 'LICENSE.txt']]
-	},
-	{
-		name: 'php',
-		entry: 'scripts/runtime-modules/php.ts',
-		packages: ['@php-wasm/web-8-4', '@php-wasm/universal'],
-		licenses: [['node_modules/@php-wasm/web-8-4/LICENSE', 'LICENSE.txt']]
 	},
 	{
 		name: 'ruby',
@@ -137,7 +133,9 @@ async function buildRuntimeModule(config) {
 	});
 	await copyLicenses(targetDir, config.licenses);
 	await writeManifest(targetDir, config.packages);
-	console.log(`Built static ${config.name} runtime module in ${path.relative(REPO_ROOT, targetDir)}`);
+	console.log(
+		`Built static ${config.name} runtime module in ${path.relative(REPO_ROOT, targetDir)}`
+	);
 	return targetDir;
 }
 
@@ -149,13 +147,27 @@ async function syncWasmerSdk() {
 	for (const fileName of ['index.mjs', 'worker.mjs', 'wasmer_js_bg.wasm']) {
 		await cp(path.join(sourceDir, fileName), path.join(targetDir, fileName));
 	}
-	await cp(path.join(REPO_ROOT, 'node_modules/@wasmer/sdk/LICENSE'), path.join(targetDir, 'LICENSE.txt'));
+	await cp(
+		path.join(REPO_ROOT, 'node_modules/@wasmer/sdk/LICENSE'),
+		path.join(targetDir, 'LICENSE.txt')
+	);
 	await writeManifest(targetDir, ['@wasmer/sdk'], 'index.mjs');
 	console.log(`Synced static Wasmer SDK in ${path.relative(REPO_ROOT, targetDir)}`);
 	return targetDir;
 }
 
-const targetDirs = [];
+const phpTargetDir = path.join(STATIC_DIR, 'wasm-php');
+try {
+	await validatePhpRuntimeAssets(phpTargetDir, { allowCompressed: true });
+} catch (error) {
+	throw new Error(
+		'The checked-in wasm-php assets are missing or invalid. Build producers/wasm-php and run "pnpm run sync:wasm-php" before rebuilding the page.',
+		{ cause: error }
+	);
+}
+console.log(`Validated prebuilt wasm-php assets in ${path.relative(REPO_ROOT, phpTargetDir)}`);
+
+const targetDirs = [phpTargetDir];
 for (const config of modules) targetDirs.push(await buildRuntimeModule(config));
 targetDirs.push(await syncWasmerSdk());
 await writeVersionModule(targetDirs);

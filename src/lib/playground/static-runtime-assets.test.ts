@@ -1,10 +1,15 @@
+import { createHash } from 'node:crypto';
 import { access, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
+import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
+import { validatePhpRuntimeAssets } from '../../../scripts/sync-wasm-php.mjs';
 
 type PackageJson = {
+	private?: boolean;
+	scripts?: Record<string, string>;
 	dependencies?: Record<string, string>;
 	devDependencies?: Record<string, string>;
 	peerDependencies?: Record<string, string>;
@@ -86,9 +91,56 @@ describe('static language runtime assets', () => {
 			expect(lspPackage.dependencies, packageName).not.toHaveProperty(packageName);
 		}
 
-		expect(rootPackage.devDependencies?.['@php-wasm/web-8-4']).toBe('3.1.34');
-		expect(rootPackage.devDependencies?.['@php-wasm/universal']).toBe('3.1.34');
+		expect(rootPackage.devDependencies).not.toHaveProperty('@php-wasm/web-8-4');
+		expect(rootPackage.devDependencies).not.toHaveProperty('@php-wasm/universal');
 		expect(rootPackage.devDependencies).not.toHaveProperty('@php-wasm/web');
+	});
+
+	it('isolates the pinned PHP toolchain in its standalone producer', async () => {
+		const producerPackage = await readJson<PackageJson>('producers/wasm-php/package.json');
+		const pageBuilder = await readFile(
+			path.join(repoRoot, 'scripts/build-static-runtime-modules.mjs'),
+			'utf8'
+		);
+
+		expect(producerPackage.private).toBe(true);
+		expect(producerPackage.dependencies?.['@php-wasm/web-8-4']).toBe('3.1.34');
+		expect(producerPackage.dependencies?.['@php-wasm/universal']).toBe('3.1.34');
+		expect(producerPackage.devDependencies?.vite).toBe('8.0.8');
+		expect(producerPackage.scripts?.build).toBeTruthy();
+		expect(producerPackage.scripts?.verify).toBeTruthy();
+		expect(pageBuilder).not.toContain('scripts/runtime-modules/php.ts');
+		await expect(
+			access(path.join(repoRoot, 'scripts/runtime-modules/php.ts'))
+		).rejects.toThrow();
+	});
+
+	it('validates the checked-in PHP output through its logical gzip asset contract', async () => {
+		await expect(
+			validatePhpRuntimeAssets(path.join(staticRoot, 'wasm-php'), { allowCompressed: true })
+		).resolves.toMatchObject({
+			runtimeModule: 'runtime.mjs',
+			packages: { '@php-wasm/web-8-4': '3.1.34', '@php-wasm/universal': '3.1.34' }
+		});
+	});
+
+	it('keeps the shared static module cache key synchronized with every manifest', async () => {
+		const hash = createHash('sha256');
+		for (const runtimeDirectory of [
+			'wasm-assemblyscript',
+			'wasm-bash/sdk',
+			'wasm-duckdb',
+			'wasm-php',
+			'wasm-ruby',
+			'wasm-sqlite'
+		].sort()) {
+			hash.update(runtimeDirectory);
+			hash.update(
+				await readFile(path.join(staticRoot, runtimeDirectory, 'runtime-manifest.v1.json'))
+			);
+		}
+
+		expect(STATIC_RUNTIME_MODULE_VERSION).toBe(hash.digest('hex').slice(0, 16));
 	});
 
 	it('keeps optional LSP provider engines out of the default install graph', async () => {

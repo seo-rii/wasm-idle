@@ -26,6 +26,11 @@ function readRepoJson(relativePath) {
 }
 
 const rootPackage = readRepoJson('package.json') || {};
+const phpProducerPackage = readRepoJson('producers/wasm-php/package.json') || {};
+const producerPackageVersions = {
+	...phpProducerPackage.dependencies,
+	...phpProducerPackage.devDependencies
+};
 
 /**
  * @param {string} packageName
@@ -57,6 +62,7 @@ function installedPackageVersion(packageName) {
  */
 function packageVersion(packageName) {
 	return (
+		producerPackageVersions[packageName] ||
 		installedPackageVersion(packageName) ||
 		rootPackage.dependencies?.[packageName] ||
 		rootPackage.devDependencies?.[packageName] ||
@@ -1399,7 +1405,8 @@ const runtimeDetailsByLanguage = new Map([
 		'PHP',
 		{
 			packageBase:
-				`static ESM ${code('static/wasm-php/runtime.mjs')} produced from ` +
+				`static ESM ${code('static/wasm-php/runtime.mjs')} prebuilt by the standalone ` +
+				`${code('producers/wasm-php')} producer from ` +
 				`${npmPackage('@php-wasm/web-8-4')} + ${npmPackage('@php-wasm/universal')}`,
 			execution:
 				`fixed PHP ${code('8.4')} php-wasm runtime; injects ${code('$argv')}/${code('$argc')} and ` +

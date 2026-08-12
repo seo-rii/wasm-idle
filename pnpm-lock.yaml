@@ -33,12 +33,6 @@ importers:
       '@live-codes/gleam-precompiled':
         specifier: 0.5.0
         version: 0.5.0
-      '@php-wasm/universal':
-        specifier: 3.1.34
-        version: 3.1.34
-      '@php-wasm/web-8-4':
-        specifier: 3.1.34
-        version: 3.1.34
       '@ruby/3.4-wasm-wasi':
         specifier: 2.9.3-2.9.4
         version: 2.9.3-2.9.4
@@ -1497,29 +1491,6 @@ packages:
   '@oxc-project/types@0.76.0':
     resolution: {integrity: sha512-CH3THIrSViKal8yV/Wh3FK0pFhp40nzW1MUDCik9fNuid2D/7JJXKJnfFOAvMxInGXDlvmgT6ACAzrl47TqzkQ==}
 
-  '@php-wasm/logger@3.1.34':
-    resolution: {integrity: sha512-/B9smYeDOZfx7K6UjJBdgmQ05lsmVsFn3yiAK4wjaVXsGJxtjiGYOPkXlSJsMbnFw06KNsoiLSEVn31QU6PveQ==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
-  '@php-wasm/progress@3.1.34':
-    resolution: {integrity: sha512-wUpYBYGRaqHt+CQcCilRR7vs67DpmgeHAnO8V84CrqdlVXWYBnwPn1UqR4tkLl+B7C4MuOxgeH8pDA19PRQiow==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
-  '@php-wasm/stream-compression@3.1.34':
-    resolution: {integrity: sha512-cH16hONmOD0pTrPoAfNPLFlZSjCPU8/9YOiuC8rzIG+Pjse/WQEsgraedJQN/eRGzMQEZxxWm/jMv3DAZuUUww==}
-
-  '@php-wasm/universal@3.1.34':
-    resolution: {integrity: sha512-6QudhocrSUKtIfmuBMk25C+8P79PVHx8GqxpspJmeBDpFNI9M5qJRtbPKrcksfS6L9yPkBRNok/7ilIv903Q2w==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
-  '@php-wasm/util@3.1.34':
-    resolution: {integrity: sha512-6UCHopajKIO+iHyBFOh8D4cQIO8wFHfWI9TO2hQ6e/QGx2YL1r4ldf5JKUS1iPWviR9Js27trsYbDo3YRuZ9hQ==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
-  '@php-wasm/web-8-4@3.1.34':
-    resolution: {integrity: sha512-DOSuwycYcqpAeA2QLudxYTdbT9SrmGzAVzu3x4B6+AIcw8TbYodAFDZnOFgKL6MuJDScnmss4tehN/aMBz3MHg==}
-    engines: {node: '>=20.10.0', npm: '>=10.2.3'}
-
   '@playwright/test@1.60.0':
     resolution: {integrity: sha512-O71yZIbAh/PxDMNGns37GHBIfrVkEVyn+AXyIa5dOTfb4/xNvRWV+Vv/NMbNCtODB/pO7vLlF2OTmMVLhmr7Ag==}
     engines: {node: '>=18'}
@@ -2640,10 +2611,6 @@ packages:
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
 
-  ini@4.1.2:
-    resolution: {integrity: sha512-AMB1mvwR1pyBFY/nSevUX6y8nJWS63/SzUKD3JyQn97s4xgIdgQPT75IRouIiBAN4yLQBUShNYVW0+UG25daCw==}
-    engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
-
   is-callable@1.2.7:
     resolution: {integrity: sha512-1BC0BVFhS/p0qtw6enp8e+8OD0UrK0oFLztSjNzhcKA3WDuJxxAPXzPuPtKkjEY9UUoEWlX/8fgKeu2S8i9JTA==}
     engines: {node: '>= 0.4'}
@@ -3717,9 +3684,6 @@ packages:
     resolution: {integrity: sha512-0RDEqb+BdOmFUahTTD9MSkckR30fgJlQBMUOJeH6aX19f+byV0dyytJNsv0QzOpbGLh12mFL98voPTIzuMitMA==}
     hasBin: true
 
-  wasm-feature-detect@1.8.0:
-    resolution: {integrity: sha512-zksaLKM2fVlnB5jQQDqKXXwYHLQUVH9es+5TOOHwGOVJOCeRBCiPjwSg+3tN2AdTCzjgli4jijCH290kXb/zWQ==}
-
   wasmoon@1.16.0:
     resolution: {integrity: sha512-FlRLb15WwAOz1A9OQDbf6oOKKSiefi5VK0ZRF2wgH9xk3o5SnU11tNPaOnQuAh1Ucr66cwwvVXaeVRaFdRBt5g==}
     hasBin: true
@@ -4457,31 +4421,6 @@ snapshots:
   '@oxc-project/types@0.124.0': {}
 
   '@oxc-project/types@0.76.0': {}
-
-  '@php-wasm/logger@3.1.34': {}
-
-  '@php-wasm/progress@3.1.34':
-    dependencies:
-      '@php-wasm/logger': 3.1.34
-
-  '@php-wasm/stream-compression@3.1.34':
-    dependencies:
-      '@php-wasm/util': 3.1.34
-
-  '@php-wasm/universal@3.1.34':
-    dependencies:
-      '@php-wasm/logger': 3.1.34
-      '@php-wasm/progress': 3.1.34
-      '@php-wasm/stream-compression': 3.1.34
-      '@php-wasm/util': 3.1.34
-      ini: 4.1.2
-
-  '@php-wasm/util@3.1.34': {}
-
-  '@php-wasm/web-8-4@3.1.34':
-    dependencies:
-      '@php-wasm/universal': 3.1.34
-      wasm-feature-detect: 1.8.0
 
   '@playwright/test@1.60.0':
     dependencies:
@@ -5676,8 +5615,6 @@ snapshots:
 
   inherits@2.0.4: {}
 
-  ini@4.1.2: {}
-
   is-callable@1.2.7: {}
 
   is-extglob@2.1.1: {}
@@ -6782,8 +6719,6 @@ snapshots:
   wabt@1.0.39: {}
 
   waforth@0.20.1: {}
-
-  wasm-feature-detect@1.8.0: {}
 
   wasmoon@1.16.0:
     dependencies:
