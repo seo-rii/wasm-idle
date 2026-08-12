@@ -20,7 +20,9 @@ function createRuntimeFetch() {
             return new Response(await readFile(fileURLToPath(url)));
         }
         catch (error) {
-            const code = error && typeof error === 'object' && 'code' in error ? error.code : '';
+            const code = error && typeof error === 'object' && 'code' in error
+                ? error.code
+                : '';
             return new Response(null, {
                 status: code === 'ENOENT' ? 404 : 500
             });

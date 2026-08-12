@@ -336,9 +336,7 @@ class MirroredBitcodeOpenDirectory extends OpenDirectory {
             };
         }
         const directory = this.installSharedDirectory(pathStr);
-        return directory
-            ? { ret: wasi.ERRNO_SUCCESS, inode_obj: directory }
-            : local;
+        return directory ? { ret: wasi.ERRNO_SUCCESS, inode_obj: directory } : local;
     }
     path_open(dirflags, pathStr, oflags, fsRightsBase, fsRightsInheriting, fdFlags) {
         const local = super.path_lookup(pathStr, dirflags);

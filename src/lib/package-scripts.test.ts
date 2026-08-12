@@ -142,6 +142,19 @@ describe('LLVM runtime package scripts', () => {
 		}
 	});
 
+	it('layers large page assets before applying per-file compression', async () => {
+		const pkg = await readRootPackage();
+		const pageBuild = pkg.scripts?.['page:build'] || '';
+
+		expect(pkg.scripts?.['layer:static-runtimes']).toBe(
+			'node scripts/build-layered-runtime-assets.mjs static'
+		);
+		expect(pageBuild.indexOf('pnpm run layer:static-runtimes')).toBeGreaterThan(-1);
+		expect(pageBuild.indexOf('pnpm run compress:static-runtimes')).toBeGreaterThan(
+			pageBuild.indexOf('pnpm run layer:static-runtimes')
+		);
+	});
+
 	it('checks every public workspace package tarball for static assets', async () => {
 		const verifier = await readPackageVerifier();
 

@@ -110,14 +110,46 @@ function parseRuntimeAssetFileArray(value: unknown, label: string): RuntimeAsset
 	});
 }
 
-function parseRuntimePackReference(value: unknown, label: string): RuntimeAssetPackReference {
+function parseRuntimePackReference(
+	value: unknown,
+	label: string,
+	ancestors = new Set<Record<string, unknown>>()
+): RuntimeAssetPackReference {
 	const object = expectObject(value, label);
-	return {
-		asset: expectString(object.asset, `${label}.asset`),
-		index: expectString(object.index, `${label}.index`),
-		fileCount: expectNonNegativeInteger(object.fileCount, `${label}.fileCount`),
-		totalBytes: expectNonNegativeInteger(object.totalBytes, `${label}.totalBytes`)
-	};
+	if (ancestors.has(object)) {
+		throw new Error(`invalid recursive ${label} in wasm-go runtime manifest`);
+	}
+	ancestors.add(object);
+	try {
+		let delta: RuntimeAssetPackReference['delta'];
+		if (object.delta !== undefined) {
+			const deltaObject = expectObject(object.delta, `${label}.delta`);
+			if (deltaObject.format !== 'copy-literal-v1') {
+				throw new Error(`invalid ${label}.delta.format in wasm-go runtime manifest`);
+			}
+			delta = {
+				format: 'copy-literal-v1',
+				base: parseRuntimePackReference(deltaObject.base, `${label}.delta.base`, ancestors)
+			};
+		}
+		return {
+			asset: expectString(object.asset, `${label}.asset`),
+			index: expectString(object.index, `${label}.index`),
+			fileCount: expectNonNegativeInteger(object.fileCount, `${label}.fileCount`),
+			totalBytes: expectNonNegativeInteger(object.totalBytes, `${label}.totalBytes`),
+			...(object.decodedTotalBytes !== undefined
+				? {
+						decodedTotalBytes: expectNonNegativeInteger(
+							object.decodedTotalBytes,
+							`${label}.decodedTotalBytes`
+						)
+					}
+				: {}),
+			...(delta ? { delta } : {})
+		};
+	} finally {
+		ancestors.delete(object);
+	}
 }
 
 function parseRuntimeStdlibIndexAsset(value: unknown, label: string): RuntimeStdlibIndexAsset {

@@ -16,6 +16,11 @@ export interface RuntimeAssetPackReference {
 	index: string;
 	fileCount: number;
 	totalBytes: number;
+	decodedTotalBytes?: number;
+	delta?: {
+		format: 'copy-literal-v1';
+		base: RuntimeAssetPackReference;
+	};
 }
 
 export interface RuntimeStdlibIndexAsset {
@@ -23,18 +28,35 @@ export interface RuntimeStdlibIndexAsset {
 	packageCount: number;
 }
 
-export interface RuntimePackIndexEntry {
+export interface RuntimeIdentityPackIndexEntry {
 	runtimePath: string;
 	offset: number;
 	length: number;
 }
 
-export interface RuntimePackIndex {
+export interface RuntimeDeltaPackIndexEntry extends RuntimeIdentityPackIndexEntry {
+	decodedLength: number;
+	baseRuntimePath?: string;
+}
+
+export type RuntimePackIndexEntry = RuntimeIdentityPackIndexEntry | RuntimeDeltaPackIndexEntry;
+
+export interface RuntimeIdentityPackIndex {
 	format: 'wasm-go-runtime-pack-index-v1';
 	fileCount: number;
 	totalBytes: number;
-	entries: RuntimePackIndexEntry[];
+	entries: RuntimeIdentityPackIndexEntry[];
 }
+
+export interface RuntimeDeltaPackIndex {
+	format: 'wasm-go-runtime-delta-pack-index-v1';
+	fileCount: number;
+	totalBytes: number;
+	decodedTotalBytes: number;
+	entries: RuntimeDeltaPackIndexEntry[];
+}
+
+export type RuntimePackIndex = RuntimeIdentityPackIndex | RuntimeDeltaPackIndex;
 
 export interface RuntimeStdlibPackageEntry {
 	importPath: string;

@@ -109,6 +109,108 @@ describe('runtime manifest edge cases', () => {
 		).toThrow(/missing legacy link asset fields/);
 	});
 
+	it('parses recursive delta pack references and accepts zero byte counts', () => {
+		const fixture = createRuntimeManifestV3();
+		const zeroByteBasePack = {
+			asset: 'packs/sysroot/base.pack',
+			index: 'packs/sysroot/base.index.json',
+			fileCount: 0,
+			totalBytes: 0
+		};
+		const middlePack = {
+			asset: 'packs/sysroot/middle.delta.pack',
+			index: 'packs/sysroot/middle.delta.index.json',
+			fileCount: 0,
+			totalBytes: 0,
+			decodedTotalBytes: 0,
+			delta: {
+				format: 'copy-literal-v1',
+				base: zeroByteBasePack
+			}
+		};
+		const deltaPack = {
+			asset: 'packs/sysroot/final.delta.pack',
+			index: 'packs/sysroot/final.delta.index.json',
+			fileCount: 0,
+			totalBytes: 0,
+			decodedTotalBytes: 0,
+			delta: {
+				format: 'copy-literal-v1',
+				base: middlePack
+			}
+		};
+
+		const manifest = normalizeRuntimeManifest(
+			parseRuntimeManifest({
+				...fixture,
+				targets: {
+					...fixture.targets,
+					'wasm32-wasip1': {
+						...fixture.targets['wasm32-wasip1'],
+						sysrootPack: deltaPack
+					}
+				}
+			})
+		);
+
+		expect(manifest.targets['wasm32-wasip1']?.sysrootPack).toEqual(deltaPack);
+	});
+
+	it('rejects invalid delta formats and negative nested pack sizes', () => {
+		const fixture = createRuntimeManifestV3();
+		const sysrootPack = fixture.targets['wasm32-wasip1'].sysrootPack;
+		const createManifestWithPack = (pack: object) => ({
+			...fixture,
+			targets: {
+				...fixture.targets,
+				'wasm32-wasip1': {
+					...fixture.targets['wasm32-wasip1'],
+					sysrootPack: pack
+				}
+			}
+		});
+
+		expect(() =>
+			parseRuntimeManifest(
+				createManifestWithPack({
+					...sysrootPack,
+					decodedTotalBytes: 3,
+					delta: { format: 'copy-literal-v2', base: sysrootPack }
+				})
+			)
+		).toThrow(/invalid targets\.wasm32-wasip1\.sysrootPack\.delta\.format/);
+
+		expect(() =>
+			parseRuntimeManifest(
+				createManifestWithPack({
+					...sysrootPack,
+					decodedTotalBytes: 3,
+					delta: {
+						format: 'copy-literal-v1',
+						base: { ...sysrootPack, totalBytes: -1 }
+					}
+				})
+			)
+		).toThrow(/invalid targets\.wasm32-wasip1\.sysrootPack\.delta\.base\.totalBytes/);
+
+		expect(() =>
+			parseRuntimeManifest(
+				createManifestWithPack({
+					...sysrootPack,
+					decodedTotalBytes: 3,
+					delta: {
+						format: 'copy-literal-v1',
+						base: { ...sysrootPack, fileCount: -1 }
+					}
+				})
+			)
+		).toThrow(/invalid targets\.wasm32-wasip1\.sysrootPack\.delta\.base\.fileCount/);
+
+		expect(() =>
+			parseRuntimeManifest(createManifestWithPack({ ...sysrootPack, decodedTotalBytes: -1 }))
+		).toThrow(/invalid targets\.wasm32-wasip1\.sysrootPack\.decodedTotalBytes/);
+	});
+
 	it('accepts integrated rustc targets without split LLVM or link assets', () => {
 		const manifest = normalizeRuntimeManifest(
 			parseRuntimeManifest(createIntegratedRuntimeManifestV3())

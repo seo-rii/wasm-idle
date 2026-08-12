@@ -99,9 +99,7 @@ export function collectGoFileImports(files) {
         if (!file.path.endsWith('.go')) {
             continue;
         }
-        const sanitized = file.contents
-            .replace(/\/\*[\s\S]*?\*\//g, '')
-            .replace(/\/\/.*$/gm, '');
+        const sanitized = file.contents.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
         for (const match of sanitized.matchAll(/(?:^|\n)\s*import\s+"([^"]+)"/g)) {
             if (match[1]) {
                 imports.add(match[1]);

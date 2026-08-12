@@ -34,7 +34,7 @@ export async function compileRust(request, dependencies = {}) {
         typeof Atomics === 'undefined') {
         return makeFailure('wasm-rust requires a cross-origin-isolated worker environment with SharedArrayBuffer support');
     }
-    const maxBrowserAttempts = 2;
+    const maxBrowserAttempts = 1;
     const compileLogs = [];
     const emitCompileLog = (message, level = 'log') => {
         if (!request.log) {
@@ -229,7 +229,6 @@ export async function compileRust(request, dependencies = {}) {
             let workerResultConsumed = false;
             let workerBootstrapError = null;
             let attemptResult = null;
-            let attemptFailureKind = null;
             let pendingHelperThreadFailure = null;
             let pendingHelperThreadFailureObservedAt = 0;
             let deferredWorkerError = null;
@@ -290,7 +289,6 @@ export async function compileRust(request, dependencies = {}) {
                             break;
                         }
                         worker.terminate();
-                        attemptFailureKind = 'helper-thread';
                         attemptResult = makeFailure(pendingHelperThreadFailure);
                         break;
                     }
@@ -362,7 +360,6 @@ export async function compileRust(request, dependencies = {}) {
             if (!attemptResult && workerBootstrapError) {
                 worker.terminate();
                 recordAttemptCompileLog(`[wasm-rust] compile worker bootstrap failed ${workerBootstrapError.message}`, 'debug');
-                attemptFailureKind = classifyRetryableFailureKind(workerBootstrapError.message);
                 attemptResult = makeFailure(workerBootstrapError.message);
             }
             if (!attemptResult && !settledMessage) {
@@ -417,7 +414,6 @@ export async function compileRust(request, dependencies = {}) {
                 }
                 else {
                     recordAttemptCompileLog(`[wasm-rust] compile timed out before mirrored ${mirroredOutputName} appeared`, 'debug');
-                    attemptFailureKind = 'compile-timeout';
                     attemptResult = makeFailure(`browser rustc timed out before producing ${mirroredOutputName}`);
                 }
             }
@@ -477,9 +473,6 @@ export async function compileRust(request, dependencies = {}) {
                         attemptResult = makeFailure(`wasm-rust mirrored output buffer overflowed before ${outputFinalizationName}`, undefined, settledMessage.stdout);
                     }
                     else {
-                        attemptFailureKind =
-                            settledMessage.failureKind ||
-                                classifyRetryableFailureKind([settledMessage.stderr || '', settledMessage.message || ''].join('\n'));
                         attemptResult = makeFailure(settledMessage.stderr || settledMessage.message, settledMessage.diagnostics, settledMessage.stdout);
                     }
                 }
@@ -552,23 +545,8 @@ export async function compileRust(request, dependencies = {}) {
                 attemptResult = makeFailure(`browser rustc failed before emitting ${mirroredOutputName}`);
             }
             lastFailure = attemptResult;
-            const attemptStderr = attemptResult.stderr || '';
-            const derivedRetryableFailureKind = attemptFailureKind || classifyRetryableFailureKind(attemptStderr);
-            const shouldRetry = attempt < maxBrowserAttempts && derivedRetryableFailureKind !== null;
-            if (shouldRetry) {
-                flushAttemptCompileLogs(attemptCompileLogs, false);
-                recordPersistentCompileLog(`[wasm-rust] browser rustc attempt ${attempt}/${maxBrowserAttempts} failed; retrying`, 'warn');
-                emitCompileProgress('retry', Math.min(attempt + 1, maxBrowserAttempts), {
-                    completed: Math.min(attempt + 1, maxBrowserAttempts),
-                    total: maxBrowserAttempts,
-                    message: `retrying browser rustc after attempt ${attempt}/${maxBrowserAttempts} failed`
-                });
-            }
-            else {
-                flushAttemptCompileLogs(attemptCompileLogs);
-                return attachCompileLogs(attemptResult, readCompileLogs(), readCompileLogRecords());
-            }
-            await sleep(Math.min(500 * attempt, 2_000));
+            flushAttemptCompileLogs(attemptCompileLogs);
+            return attachCompileLogs(attemptResult, readCompileLogs(), readCompileLogRecords());
         }
         return attachCompileLogs(lastFailure, readCompileLogs(), readCompileLogRecords());
     }

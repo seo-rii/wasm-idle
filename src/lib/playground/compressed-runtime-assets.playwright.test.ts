@@ -36,9 +36,29 @@ const compressedAssetTestTimeoutMs = Number(
 );
 
 async function expectedAssetMetadata(assetPath: string) {
-	const bytes = gunzipSync(
-		await readFile(new URL(`../../../build/${assetPath}.gz`, import.meta.url))
-	);
+	const compressedBytes = await readFile(
+		new URL(`../../../build/${assetPath}.gz`, import.meta.url)
+	).catch(() => null);
+	let bytes: Uint8Array;
+	if (compressedBytes) {
+		bytes = gunzipSync(compressedBytes);
+	} else {
+		const manifest = JSON.parse(
+			await readFile(
+				new URL('../../../build/layered-runtime-assets.v1.json', import.meta.url),
+				'utf8'
+			)
+		) as {
+			assets?: Record<string, { layer: string; length: number; offset: number }>;
+		};
+		const entry = manifest.assets?.[assetPath];
+		if (!entry)
+			throw new Error(`runtime asset is neither compressed nor layered: ${assetPath}`);
+		const layerBytes = gunzipSync(
+			await readFile(new URL(`../../../build/${entry.layer}`, import.meta.url))
+		);
+		bytes = layerBytes.subarray(entry.offset, entry.offset + entry.length);
+	}
 	return {
 		byteLength: bytes.byteLength,
 		path: assetPath,

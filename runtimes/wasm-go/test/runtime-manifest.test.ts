@@ -124,4 +124,78 @@ describe('runtime manifest', () => {
 			packageCount: 42
 		});
 	});
+
+	it('parses and validates recursive delta pack references', () => {
+		const manifest = normalizeRuntimeManifest(
+			parseRuntimeManifest({
+				...createRuntimeManifest(),
+				targets: {
+					...createRuntimeManifest().targets,
+					'wasip1/wasm': {
+						...createRuntimeManifest().targets['wasip1/wasm'],
+						sysrootPack: {
+							index: 'sysroot/wasip1.delta.index.json.gz',
+							asset: 'sysroot/wasip1.delta.pack.gz',
+							fileCount: 2,
+							totalBytes: 4,
+							decodedTotalBytes: 6,
+							delta: {
+								format: 'copy-literal-v1',
+								base: {
+									index: 'sysroot/base.index.json.gz',
+									asset: 'sysroot/base.pack.gz',
+									fileCount: 2,
+									totalBytes: 6
+								}
+							}
+						}
+					}
+				}
+			})
+		);
+
+		expect(manifest.targets['wasip1/wasm']?.sysrootPack).toEqual({
+			index: 'sysroot/wasip1.delta.index.json.gz',
+			asset: 'sysroot/wasip1.delta.pack.gz',
+			fileCount: 2,
+			totalBytes: 4,
+			decodedTotalBytes: 6,
+			delta: {
+				format: 'copy-literal-v1',
+				base: {
+					index: 'sysroot/base.index.json.gz',
+					asset: 'sysroot/base.pack.gz',
+					fileCount: 2,
+					totalBytes: 6
+				}
+			}
+		});
+
+		expect(() =>
+			parseRuntimeManifest({
+				...createRuntimeManifest(),
+				targets: {
+					...createRuntimeManifest().targets,
+					'wasip1/wasm': {
+						...createRuntimeManifest().targets['wasip1/wasm'],
+						sysrootPack: {
+							index: 'sysroot/wasip1.delta.index.json.gz',
+							asset: 'sysroot/wasip1.delta.pack.gz',
+							fileCount: 2,
+							totalBytes: 4,
+							delta: {
+								format: 'copy-literal-v1',
+								base: {
+									index: 'sysroot/base.index.json.gz',
+									asset: 'sysroot/base.pack.gz',
+									fileCount: 2,
+									totalBytes: -1
+								}
+							}
+						}
+					}
+				}
+			})
+		).toThrow(/invalid root.targets.wasip1\/wasm.sysrootPack.delta.base.totalBytes/);
+	});
 });

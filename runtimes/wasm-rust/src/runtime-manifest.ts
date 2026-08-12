@@ -10,11 +10,18 @@ export interface RuntimeAssetFile {
 	runtimePath: string;
 }
 
+export interface RuntimeAssetPackDeltaReference {
+	format: 'copy-literal-v1';
+	base: RuntimeAssetPackReference;
+}
+
 export interface RuntimeAssetPackReference {
 	asset: string;
 	index: string;
 	fileCount: number;
 	totalBytes: number;
+	decodedTotalBytes?: number;
+	delta?: RuntimeAssetPackDeltaReference;
 }
 
 export interface RuntimeCompilerConfig {
@@ -248,6 +255,13 @@ function expectNumber(value: unknown, label: string): number {
 	return value;
 }
 
+function expectNonNegativeInteger(value: unknown, label: string): number {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+		throw new Error(`invalid ${label} in wasm-rust runtime manifest`);
+	}
+	return value;
+}
+
 function expectStringArray(value: unknown, label: string): string[] {
 	if (
 		!Array.isArray(value) ||
@@ -304,14 +318,43 @@ function expectAssetFileArray(value: unknown, label: string): RuntimeAssetFile[]
 	});
 }
 
-function parseRuntimeAssetPack(value: unknown, label: string): RuntimeAssetPackReference {
+function parseRuntimeAssetPack(
+	value: unknown,
+	label: string,
+	ancestors = new Set<object>()
+): RuntimeAssetPackReference {
 	const object = expectObject(value, label);
-	return {
-		asset: expectString(object.asset, `${label}.asset`),
-		index: expectString(object.index, `${label}.index`),
-		fileCount: expectNumber(object.fileCount, `${label}.fileCount`),
-		totalBytes: expectNumber(object.totalBytes, `${label}.totalBytes`)
-	};
+	if (ancestors.has(object)) {
+		throw new Error(`invalid ${label}: cyclic delta base in wasm-rust runtime manifest`);
+	}
+	ancestors.add(object);
+	try {
+		const decodedTotalBytes =
+			object.decodedTotalBytes === undefined
+				? undefined
+				: expectNonNegativeInteger(object.decodedTotalBytes, `${label}.decodedTotalBytes`);
+		let delta: RuntimeAssetPackDeltaReference | undefined;
+		if (object.delta !== undefined) {
+			const deltaObject = expectObject(object.delta, `${label}.delta`);
+			if (deltaObject.format !== 'copy-literal-v1') {
+				throw new Error(`invalid ${label}.delta.format in wasm-rust runtime manifest`);
+			}
+			delta = {
+				format: 'copy-literal-v1',
+				base: parseRuntimeAssetPack(deltaObject.base, `${label}.delta.base`, ancestors)
+			};
+		}
+		return {
+			asset: expectString(object.asset, `${label}.asset`),
+			index: expectString(object.index, `${label}.index`),
+			fileCount: expectNonNegativeInteger(object.fileCount, `${label}.fileCount`),
+			totalBytes: expectNonNegativeInteger(object.totalBytes, `${label}.totalBytes`),
+			...(decodedTotalBytes === undefined ? {} : { decodedTotalBytes }),
+			...(delta ? { delta } : {})
+		};
+	} finally {
+		ancestors.delete(object);
+	}
 }
 
 function parseRustcMemory(value: unknown, label: string): RuntimeCompilerConfig['rustcMemory'] {

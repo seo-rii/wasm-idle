@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { runInNewContext } from 'node:vm';
@@ -7,15 +8,47 @@ import { describe, expect, it, vi } from 'vitest';
 const serviceWorkerPath = path.resolve('static/worker.js');
 const scope = 'https://example.com/wasm-idle/';
 
-async function createServiceWorkerHarness(payloads: Record<string, Uint8Array>) {
+type LayeredAsset = {
+	layer: string;
+	offset: number;
+	length: number;
+};
+
+type LayerFixture = {
+	bytes: Uint8Array;
+	contentDecoded?: boolean;
+};
+
+type LayeredFixtures = {
+	assets: Record<string, LayeredAsset>;
+	layers: Record<string, LayerFixture>;
+};
+
+async function createServiceWorkerHarness(
+	payloads: Record<string, Uint8Array>,
+	layeredFixtures?: LayeredFixtures
+) {
 	const source = await readFile(serviceWorkerPath, 'utf8');
 	const listeners = new Map<string, Array<(event: any) => void>>();
-	const manifest = {
-		assets: Object.keys(payloads),
-		sizes: Object.fromEntries(
-			Object.entries(payloads).map(([assetPath, bytes]) => [assetPath, bytes.byteLength])
+	let compressedPayloads = payloads;
+	let currentLayeredFixtures = layeredFixtures;
+	const layeredManifest = () => ({
+		schemaVersion: 1,
+		assets: currentLayeredFixtures?.assets ?? {},
+		layers: Object.fromEntries(
+			Object.entries(currentLayeredFixtures?.layers ?? {}).map(([layer, fixture]) => {
+				const compressed = gzipSync(fixture.bytes);
+				return [
+					layer,
+					{
+						length: fixture.bytes.byteLength,
+						compressedLength: compressed.byteLength,
+						sha256: createHash('sha256').update(compressed).digest('hex')
+					}
+				];
+			})
 		)
-	};
+	});
 	const fetchMock = vi.fn(async (input: unknown) => {
 		const url =
 			input instanceof Request
@@ -24,14 +57,47 @@ async function createServiceWorkerHarness(payloads: Record<string, Uint8Array>) 
 					? input
 					: new URL(String(input));
 		if (url.href === `${scope}compressed-runtime-assets.v1.json`) {
+			const manifest = {
+				assets: Object.keys(compressedPayloads),
+				sizes: Object.fromEntries(
+					Object.entries(compressedPayloads).map(([assetPath, bytes]) => [
+						assetPath,
+						bytes.byteLength
+					])
+				)
+			};
 			return new Response(JSON.stringify(manifest), {
 				status: 200,
 				headers: { 'content-type': 'application/json' }
 			});
 		}
+		if (url.href === `${scope}layered-runtime-assets.v1.json`) {
+			return new Response(JSON.stringify(layeredManifest()), {
+				status: 200,
+				headers: { 'content-type': 'application/json' }
+			});
+		}
 		const relativePath = url.pathname.slice(new URL(scope).pathname.length);
+		for (const [layerPath, fixture] of Object.entries(currentLayeredFixtures?.layers ?? {})) {
+			const gzipPath = layerPath.endsWith('.gz') ? layerPath : `${layerPath}.gz`;
+			if (relativePath !== gzipPath) continue;
+			if (fixture.contentDecoded) {
+				return new Response(fixture.bytes.slice().buffer, {
+					status: 200,
+					headers: { 'content-encoding': 'gzip' }
+				});
+			}
+			const compressed = gzipSync(fixture.bytes);
+			return new Response(new Uint8Array(compressed), {
+				status: 200,
+				headers: {
+					'content-length': String(compressed.byteLength),
+					'content-type': 'application/gzip'
+				}
+			});
+		}
 		if (relativePath.endsWith('.gz')) {
-			const payload = payloads[relativePath.slice(0, -'.gz'.length)];
+			const payload = compressedPayloads[relativePath.slice(0, -'.gz'.length)];
 			if (payload) {
 				const compressed = gzipSync(payload);
 				return new Response(new Uint8Array(compressed), {
@@ -56,6 +122,7 @@ async function createServiceWorkerHarness(payloads: Record<string, Uint8Array>) 
 		skipWaiting: vi.fn()
 	};
 	runInNewContext(source, {
+		Date,
 		DecompressionStream,
 		Headers,
 		Request,
@@ -71,6 +138,12 @@ async function createServiceWorkerHarness(payloads: Record<string, Uint8Array>) 
 	if (!fetchListener) throw new Error('service worker did not register a fetch listener');
 	return {
 		fetchMock,
+		setCompressedPayloads(nextPayloads: Record<string, Uint8Array>) {
+			compressedPayloads = nextPayloads;
+		},
+		setLayeredFixtures(nextFixtures: LayeredFixtures) {
+			currentLayeredFixtures = nextFixtures;
+		},
 		async request(relativePath: string, init?: RequestInit) {
 			let responsePromise: Promise<Response> | undefined;
 			fetchListener({
@@ -86,6 +159,31 @@ async function createServiceWorkerHarness(payloads: Record<string, Uint8Array>) 
 }
 
 describe('compressed runtime service worker', () => {
+	it('refreshes a stale manifest when a newly deployed logical asset is requested', async () => {
+		const originalPath = 'wasm-php/assets/php-old.wasm';
+		const nextPath = 'wasm-php/assets/php-next.wasm';
+		const originalBytes = new TextEncoder().encode('old PHP payload');
+		const nextBytes = new TextEncoder().encode('new PHP payload');
+		const harness = await createServiceWorkerHarness({ [originalPath]: originalBytes });
+
+		expect((await harness.request(originalPath)).status).toBe(200);
+		harness.setCompressedPayloads({
+			[originalPath]: originalBytes,
+			[nextPath]: nextBytes
+		});
+
+		const response = await harness.request(nextPath);
+		expect(response.status).toBe(200);
+		expect(Array.from(new Uint8Array(await response.arrayBuffer()))).toEqual(
+			Array.from(nextBytes)
+		);
+		expect(
+			harness.fetchMock.mock.calls.filter(
+				([input]) => String(input) === `${scope}compressed-runtime-assets.v1.json`
+			)
+		).toHaveLength(2);
+	});
+
 	it('resolves manifest-listed logical assets regardless of their extension', async () => {
 		const payloads = {
 			'wasm-bash/bash.webc': new TextEncoder().encode('webc payload'),
@@ -120,6 +218,217 @@ describe('compressed runtime service worker', () => {
 		expect(response.status).toBe(200);
 		expect(response.headers.get('content-length')).toBe(String(payload.byteLength));
 		expect(await response.text()).toBe('');
-		expect(harness.fetchMock).toHaveBeenCalledTimes(1);
+		expect(
+			harness.fetchMock.mock.calls
+				.map(([input]) => String(input))
+				.filter((url) => url.endsWith('.gz'))
+		).toEqual([]);
+	});
+
+	it('serves multiple logical assets from one decompressed layer fetch', async () => {
+		const firstBytes = new TextEncoder().encode('first object');
+		const separator = new TextEncoder().encode('unused');
+		const secondBytes = new TextEncoder().encode('second wasm');
+		const layerBytes = new Uint8Array(
+			firstBytes.byteLength + separator.byteLength + secondBytes.byteLength
+		);
+		layerBytes.set(firstBytes, 0);
+		layerBytes.set(separator, firstBytes.byteLength);
+		layerBytes.set(secondBytes, firstBytes.byteLength + separator.byteLength);
+		const layerPath = '_runtime-layers/shared.bin.gz';
+		const harness = await createServiceWorkerHarness(
+			{},
+			{
+				assets: {
+					'wasm-rust/runtime/first.a': {
+						layer: layerPath,
+						offset: 0,
+						length: firstBytes.byteLength
+					},
+					'wasm-rust/runtime/second.wasm': {
+						layer: layerPath,
+						offset: firstBytes.byteLength + separator.byteLength,
+						length: secondBytes.byteLength
+					}
+				},
+				layers: { [layerPath]: { bytes: layerBytes } }
+			}
+		);
+
+		const firstResponse = await harness.request('wasm-rust/runtime/first.a');
+		const secondResponse = await harness.request('wasm-rust/runtime/second.wasm');
+
+		expect(firstResponse.status).toBe(200);
+		expect(firstResponse.headers.get('content-type')).toBe('application/octet-stream');
+		expect(firstResponse.headers.get('content-length')).toBe(String(firstBytes.byteLength));
+		expect(Array.from(new Uint8Array(await firstResponse.arrayBuffer()))).toEqual(
+			Array.from(firstBytes)
+		);
+		expect(secondResponse.status).toBe(200);
+		expect(secondResponse.headers.get('content-type')).toBe('application/wasm');
+		expect(secondResponse.headers.get('content-length')).toBe(String(secondBytes.byteLength));
+		expect(Array.from(new Uint8Array(await secondResponse.arrayBuffer()))).toEqual(
+			Array.from(secondBytes)
+		);
+		expect(
+			harness.fetchMock.mock.calls
+				.map(([input]) => new URL(String(input)).pathname)
+				.filter((pathname) => pathname === new URL(layerPath, scope).pathname)
+		).toHaveLength(1);
+	});
+
+	it('answers layered HEAD requests from manifest metadata', async () => {
+		const assetPath = 'wasm-runtime/runtime.js';
+		const bytes = new TextEncoder().encode('runtime body');
+		const layerPath = '_runtime-layers/head.bin.gz';
+		const harness = await createServiceWorkerHarness(
+			{},
+			{
+				assets: {
+					[assetPath]: { layer: layerPath, offset: 4, length: bytes.byteLength }
+				},
+				layers: { [layerPath]: { bytes: new Uint8Array(4 + bytes.byteLength) } }
+			}
+		);
+
+		const response = await harness.request(assetPath, { method: 'HEAD' });
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get('accept-ranges')).toBe('bytes');
+		expect(response.headers.get('content-type')).toBe('application/javascript');
+		expect(response.headers.get('content-length')).toBe(String(bytes.byteLength));
+		expect(await response.text()).toBe('');
+		expect(
+			harness.fetchMock.mock.calls.map(([input]) => new URL(String(input)).pathname)
+		).not.toContain(new URL(layerPath, scope).pathname);
+	});
+
+	it('serves a single byte range relative to the logical layered asset', async () => {
+		const prefix = new TextEncoder().encode('layer-prefix');
+		const bytes = new TextEncoder().encode('0123456789');
+		const layerBytes = new Uint8Array(prefix.byteLength + bytes.byteLength);
+		layerBytes.set(prefix);
+		layerBytes.set(bytes, prefix.byteLength);
+		const assetPath = 'wasm-runtime/data.bin';
+		const layerPath = '_runtime-layers/range.bin.gz';
+		const harness = await createServiceWorkerHarness(
+			{},
+			{
+				assets: {
+					[assetPath]: {
+						layer: layerPath,
+						offset: prefix.byteLength,
+						length: bytes.byteLength
+					}
+				},
+				layers: { [layerPath]: { bytes: layerBytes } }
+			}
+		);
+
+		const response = await harness.request(assetPath, {
+			headers: { range: 'bytes=2-5' }
+		});
+
+		expect(response.status).toBe(206);
+		expect(response.headers.get('accept-ranges')).toBe('bytes');
+		expect(response.headers.get('content-range')).toBe(`bytes 2-5/${bytes.byteLength}`);
+		expect(response.headers.get('content-length')).toBe('4');
+		expect(await response.text()).toBe('2345');
+	});
+
+	it('rejects invalid or multiple layered byte ranges without fetching the layer', async () => {
+		const assetPath = 'wasm-runtime/data.bin';
+		const layerPath = '_runtime-layers/invalid-range.bin.gz';
+		const bytes = new TextEncoder().encode('0123456789');
+		const harness = await createServiceWorkerHarness(
+			{},
+			{
+				assets: {
+					[assetPath]: { layer: layerPath, offset: 0, length: bytes.byteLength }
+				},
+				layers: { [layerPath]: { bytes } }
+			}
+		);
+
+		for (const range of ['bytes=12-20', 'bytes=0-1,4-5']) {
+			const response = await harness.request(assetPath, { headers: { range } });
+			expect(response.status).toBe(416);
+			expect(response.headers.get('content-range')).toBe(`bytes */${bytes.byteLength}`);
+			expect(await response.text()).toBe('');
+		}
+		expect(
+			harness.fetchMock.mock.calls.map(([input]) => new URL(String(input)).pathname)
+		).not.toContain(new URL(layerPath, scope).pathname);
+	});
+
+	it('refreshes layered manifests and cache-busts changed layer bytes', async () => {
+		const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(10_000);
+		try {
+			const assetPath = 'wasm-runtime/redeployed.wasm';
+			const layerPath = '_runtime-layers/redeployed.bin.gz';
+			const originalBytes = new TextEncoder().encode('old layer bytes');
+			const nextBytes = new TextEncoder().encode('new layer bytes after deploy');
+			const harness = await createServiceWorkerHarness(
+				{},
+				{
+					assets: {
+						[assetPath]: {
+							layer: layerPath,
+							offset: 0,
+							length: originalBytes.byteLength
+						}
+					},
+					layers: { [layerPath]: { bytes: originalBytes } }
+				}
+			);
+
+			expect(await (await harness.request(assetPath)).text()).toBe('old layer bytes');
+			harness.setLayeredFixtures({
+				assets: {
+					[assetPath]: { layer: layerPath, offset: 0, length: nextBytes.byteLength }
+				},
+				layers: { [layerPath]: { bytes: nextBytes } }
+			});
+			nowSpy.mockReturnValue(16_000);
+
+			expect(await (await harness.request(assetPath)).text()).toBe(
+				'new layer bytes after deploy'
+			);
+			const layerRequests = harness.fetchMock.mock.calls
+				.map(([input]) => new URL(String(input)))
+				.filter((url) => url.pathname === new URL(layerPath, scope).pathname);
+			expect(layerRequests).toHaveLength(2);
+			expect(layerRequests[0]?.searchParams.get('__wasm_idle_layer')).not.toBe(
+				layerRequests[1]?.searchParams.get('__wasm_idle_layer')
+			);
+		} finally {
+			nowSpy.mockRestore();
+		}
+	});
+
+	it('uses layer bodies that fetch has already content-decoded', async () => {
+		const assetPath = 'wasm-runtime/decoded.json';
+		const bytes = new TextEncoder().encode('{"decoded":true}');
+		const layerPath = '_runtime-layers/decoded.bin.gz';
+		const harness = await createServiceWorkerHarness(
+			{},
+			{
+				assets: {
+					[assetPath]: { layer: layerPath, offset: 0, length: bytes.byteLength }
+				},
+				layers: {
+					[layerPath]: {
+						bytes,
+						contentDecoded: true
+					}
+				}
+			}
+		);
+
+		const response = await harness.request(assetPath);
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get('content-type')).toBe('application/json');
+		expect(await response.text()).toBe('{"decoded":true}');
 	});
 });

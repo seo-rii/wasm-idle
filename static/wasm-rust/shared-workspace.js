@@ -24,7 +24,8 @@ const SLOT_KIND_DIRECTORY = 2;
 const HEADER_BYTES = HEADER_WORDS * Int32Array.BYTES_PER_ELEMENT;
 const SLOT_METADATA_BYTES = SLOT_COUNT * SLOT_WORDS * Int32Array.BYTES_PER_ELEMENT;
 const SLOT_NAMES_OFFSET = HEADER_BYTES + SLOT_METADATA_BYTES;
-const DATA_OFFSET = Math.ceil((SLOT_NAMES_OFFSET + SLOT_COUNT * SLOT_NAME_BYTES) / Int32Array.BYTES_PER_ELEMENT) * Int32Array.BYTES_PER_ELEMENT;
+const DATA_OFFSET = Math.ceil((SLOT_NAMES_OFFSET + SLOT_COUNT * SLOT_NAME_BYTES) / Int32Array.BYTES_PER_ELEMENT) *
+    Int32Array.BYTES_PER_ELEMENT;
 function acquireLock(state, index) {
     while (Atomics.compareExchange(state, index, 0, 1) !== 0) {
         Atomics.wait(state, index, 1, 100);
