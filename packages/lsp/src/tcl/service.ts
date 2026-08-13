@@ -9,10 +9,14 @@ import {
 	type StaticWorkerDiagnosticRequest,
 	type StaticWorkerDiagnosticRunner
 } from '../static-worker-service.js';
+import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 
 export interface TclWorkerOptions {
 	baseUrl: string;
 	workerUrl: string;
+	manifestUrl: string;
+	manifestFingerprint: string;
+	workerReceipt: RuntimeAssetIntegrityEntry;
 }
 
 export type TclDiagnosticRunnerRequest = StaticWorkerDiagnosticRequest<TclWorkerOptions>;
@@ -111,10 +115,38 @@ export function createTclWorkerService(runDiagnostics?: RunTclDiagnostics): Work
 		diagnosticsProgressStage: 'tcl-diagnostics',
 		defaultActivePath: 'main.tcl',
 		timeoutMessage: 'Tcl diagnostics timed out',
+		runtime: 'tcl',
 		runDiagnostics,
+		validateConfig: (config) => {
+			if (!config.baseUrl || !config.workerUrl) return null;
+			if (!config.manifestUrl || !/^[a-f0-9]{64}$/u.test(config.manifestFingerprint)) {
+				return 'Tcl language server requires a manifest URL and fingerprint';
+			}
+			if (
+				!config.workerReceipt ||
+				!Number.isSafeInteger(config.workerReceipt.bytes) ||
+				(config.workerReceipt.bytes as number) <= 0 ||
+				typeof config.workerReceipt.sha256 !== 'string' ||
+				!/^[a-f0-9]{64}$/u.test(config.workerReceipt.sha256)
+			) {
+				return 'Tcl language server requires a valid worker receipt';
+			}
+			return null;
+		},
+		cacheKeyParts: (config) => [
+			config.baseUrl,
+			config.workerUrl,
+			config.manifestUrl,
+			config.manifestFingerprint,
+			String(config.workerReceipt.bytes),
+			config.workerReceipt.sha256
+		],
 		createMessage: (request) => ({
 			run: true,
 			baseUrl: request.baseUrl,
+			manifestUrl: request.manifestUrl,
+			manifestFingerprint: request.manifestFingerprint,
+			maxAssetBytes: 32 * 1024 * 1024,
 			code: request.code,
 			args: [],
 			stdin: '',

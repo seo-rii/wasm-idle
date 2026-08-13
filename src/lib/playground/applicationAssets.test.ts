@@ -32,6 +32,7 @@ import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
 import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
+import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
 import { WASM_ZIG_ASSET_RECEIPTS, WASM_ZIG_ASSET_VERSION } from './wasmZigVersion';
 
 describe('application runtime asset root', () => {
@@ -140,6 +141,13 @@ describe('application runtime asset root', () => {
 			manifestUrl: `/foo/bar/wasm-prolog/runtime-manifest.v2.json?v=${WASM_PROLOG_ASSET_VERSION}`,
 			manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
 			workerReceipt: WASM_PROLOG_RUNNER_RECEIPT
+		});
+		expect(assets.tcl).toEqual({
+			baseUrl: '/foo/bar/wasm-tcl/',
+			workerUrl: `/foo/bar/wasm-tcl/runner-worker.js?v=${WASM_TCL_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-tcl/runtime-manifest.v2.json?v=${WASM_TCL_ASSET_VERSION}`,
+			manifestFingerprint: WASM_TCL_ASSET_VERSION,
+			workerReceipt: WASM_TCL_RUNNER_RECEIPT
 		});
 		expect(assets.gleam).toEqual({
 			baseUrl: '/foo/bar/wasm-gleam/',
@@ -291,6 +299,16 @@ describe('application runtime asset root', () => {
 					}
 				]
 			]),
+			tclManifestFingerprint: WASM_TCL_ASSET_VERSION,
+			tclWorkerReceipt: JSON.stringify([
+				[
+					'worker',
+					{
+						sha256: WASM_TCL_RUNNER_RECEIPT.sha256,
+						bytes: WASM_TCL_RUNNER_RECEIPT.bytes
+					}
+				]
+			]),
 			gleamManifestFingerprint: WASM_GLEAM_ASSET_VERSION,
 			gleamWorkerReceipt: JSON.stringify([
 				[
@@ -366,6 +384,9 @@ describe('application runtime asset root', () => {
 			prologManifestUrl: assets.prolog?.manifestUrl,
 			prologManifestFingerprint: assets.prolog?.manifestFingerprint,
 			prologWorkerReceipt: expect.any(String),
+			tclManifestUrl: assets.tcl?.manifestUrl,
+			tclManifestFingerprint: assets.tcl?.manifestFingerprint,
+			tclWorkerReceipt: expect.any(String),
 			forthManifestUrl: assets.forth?.manifestUrl,
 			forthManifestFingerprint: assets.forth?.manifestFingerprint,
 			forthWorkerReceipt: expect.any(String),

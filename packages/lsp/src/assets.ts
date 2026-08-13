@@ -7,7 +7,7 @@ import {
 } from '@wasm-idle/core';
 import { D_OUTER_ASSETS } from './d/assets.js';
 
-export type LanguageToolAssetRuntime = 'clangd' | 'd' | 'prolog' | 'ruby';
+export type LanguageToolAssetRuntime = 'clangd' | 'd' | 'prolog' | 'ruby' | 'tcl';
 
 export interface LanguageToolAssetLoadRequest {
 	runtime: LanguageToolAssetRuntime;
@@ -472,6 +472,9 @@ export async function loadLanguageToolAsset(
 	}
 	if (runtime === 'prolog' && asset !== 'runner-worker.js') {
 		throw new Error(`Unexpected Prolog runtime asset: ${asset}`);
+	}
+	if (runtime === 'tcl' && asset !== 'runner-worker.js') {
+		throw new Error(`Unexpected Tcl runtime asset: ${asset}`);
 	}
 	if (config.integrity && !Object.hasOwn(config.integrity, asset)) {
 		throw new Error(`Runtime asset ${asset} is missing integrity metadata`);

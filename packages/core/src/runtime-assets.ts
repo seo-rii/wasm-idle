@@ -115,7 +115,13 @@ export interface RuntimeAssetKeySource {
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	perl?: { baseUrl?: string; workerUrl?: string };
-	tcl?: { baseUrl?: string; workerUrl?: string };
+	tcl?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	awk?: { baseUrl?: string; workerUrl?: string };
 	pascal?: { baseUrl?: string; workerUrl?: string };
 	forth?: {
@@ -575,6 +581,18 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'perl', property: 'workerUrl', key: 'perlWorkerUrl' },
 	{ runtime: 'tcl', property: 'baseUrl', key: 'tclBaseUrl' },
 	{ runtime: 'tcl', property: 'workerUrl', key: 'tclWorkerUrl' },
+	{ runtime: 'tcl', property: 'manifestUrl', key: 'tclManifestUrl' },
+	{
+		runtime: 'tcl',
+		property: 'manifestFingerprint',
+		key: 'tclManifestFingerprint'
+	},
+	{
+		runtime: 'tcl',
+		property: 'workerReceipt',
+		key: 'tclWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'awk', property: 'baseUrl', key: 'awkBaseUrl' },
 	{ runtime: 'awk', property: 'workerUrl', key: 'awkWorkerUrl' },
 	{ runtime: 'pascal', property: 'baseUrl', key: 'pascalBaseUrl' },

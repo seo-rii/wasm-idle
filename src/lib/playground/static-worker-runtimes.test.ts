@@ -113,6 +113,7 @@ import forthWorkerSource from '../../../scripts/runtime-workers/wasm-forth-runne
 import gleamWorkerSource from '../../../scripts/runtime-workers/wasm-gleam-runner-worker.js?raw';
 import jWorkerSource from '../../../scripts/runtime-workers/wasm-j-runner-worker.js?raw';
 import prologWorkerSource from '../../../scripts/runtime-workers/wasm-prolog-runner-worker.js?raw';
+import tclWorkerSource from '../../../scripts/runtime-workers/wasm-tcl-runner-worker.js?raw';
 import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import {
@@ -122,6 +123,7 @@ import {
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
+import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
 
 function createStreamingTestSandbox() {
 	return new StaticWorkerRuntimeSandbox({
@@ -233,7 +235,9 @@ describe('static worker backed language sandboxes', () => {
 									? bqnWorkerSource
 									: inputUrl.includes('/wasm-clojurescript/runner-worker.js')
 										? clojureScriptWorkerSource
-										: '/* static worker */';
+										: inputUrl.includes('/wasm-tcl/runner-worker.js')
+											? tclWorkerSource
+											: '/* static worker */';
 				return new Response(source, {
 					status: 200,
 					headers: {
@@ -597,7 +601,10 @@ describe('static worker backed language sandboxes', () => {
 		await sandbox.load({
 			tcl: {
 				baseUrl: '/wasm-tcl/',
-				workerUrl: '/wasm-tcl/runner-worker.js?v=test'
+				workerUrl: '/wasm-tcl/runner-worker.js?v=test',
+				manifestUrl: '/wasm-tcl/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: WASM_TCL_ASSET_VERSION,
+				workerReceipt: WASM_TCL_RUNNER_RECEIPT
 			}
 		});
 		await expect(
@@ -606,18 +613,41 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		await expectWorkerBootstrap(
+		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/wasm-tcl/runner-worker.js?v=test'
+			'http://localhost:3000/wasm-tcl/runner-worker.js?v=test',
+			tclWorkerSource
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-tcl/',
+				manifestUrl: 'http://localhost:3000/wasm-tcl/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: WASM_TCL_ASSET_VERSION,
 				args: ['demo'],
 				stdin: 'ok\n',
 				activePath: 'main.tcl'
 			})
 		);
+		expect(sandbox.workerReceipt).toEqual(WASM_TCL_RUNNER_RECEIPT);
+	});
+
+	it('rejects a modified Tcl runner before creating a worker', async () => {
+		const modifiedSource = `x${tclWorkerSource.slice(1)}`;
+		vi.mocked(fetch).mockResolvedValueOnce(
+			new Response(modifiedSource, {
+				status: 200,
+				headers: {
+					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
+				}
+			})
+		);
+		const sandbox = new Tcl();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'TCL'
+		});
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('loads AWK runtime urls and forwards stdin to the GoAWK worker', async () => {

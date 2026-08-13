@@ -12,6 +12,10 @@ import {
 	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from './bundledPrologRuntime.js';
+import {
+	BUNDLED_TCL_MANIFEST_FINGERPRINT,
+	BUNDLED_TCL_RUNNER_RECEIPT
+} from './bundledTclRuntime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from './types.js';
 import { deriveRubyRuntimeWasmUrl } from '@wasm-idle/core';
 
@@ -851,9 +855,10 @@ export function resolveTclLanguageServerWorkerUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''
 ) {
+	const workerReceipt = resolveTclLanguageServerWorkerReceipt(options);
 	if (typeof options === 'string') {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-tcl/runner-worker.js`,
+			`${normalizeRootUrl(options) || ''}/wasm-tcl/runner-worker.js?v=${workerReceipt.sha256}`,
 			currentUrl
 		);
 	}
@@ -862,11 +867,48 @@ export function resolveTclLanguageServerWorkerUrl(
 	}
 	if (options?.rootUrl) {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tcl/runner-worker.js`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tcl/runner-worker.js?v=${workerReceipt.sha256}`,
 			currentUrl
 		);
 	}
-	return resolveApplicationAssetUrl('/wasm-tcl/runner-worker.js', currentUrl);
+	return resolveApplicationAssetUrl(
+		`/wasm-tcl/runner-worker.js?v=${workerReceipt.sha256}`,
+		currentUrl
+	);
+}
+
+export function resolveTclLanguageServerManifestUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'object' && options.tcl?.manifestUrl) {
+		return resolveFileUrl(options.tcl.manifestUrl, currentUrl);
+	}
+	const manifestFingerprint = resolveTclLanguageServerManifestFingerprint(options);
+	return resolveFileUrl(
+		`${resolveTclLanguageServerBaseUrl(options, currentUrl)}runtime-manifest.v2.json?v=${manifestFingerprint}`,
+		currentUrl
+	);
+}
+
+export function resolveTclLanguageServerManifestFingerprint(
+	options: EditorLanguageServerOptions | undefined
+) {
+	const configured =
+		typeof options === 'object' ? options.tcl?.manifestFingerprint?.trim() || '' : '';
+	if (!configured) return BUNDLED_TCL_MANIFEST_FINGERPRINT;
+	if (/^[a-f0-9]{64}$/u.test(configured)) return configured;
+	throw new LanguageServerAssetConfigurationError(
+		'Tcl LSP',
+		'a 64-character tcl.manifestFingerprint'
+	);
+}
+
+export function resolveTclLanguageServerWorkerReceipt(
+	options: EditorLanguageServerOptions | undefined
+) {
+	const configured = typeof options === 'object' ? options.tcl?.workerReceipt : undefined;
+	return configured || BUNDLED_TCL_RUNNER_RECEIPT;
 }
 
 export function resolvePascalLanguageServerBaseUrl(

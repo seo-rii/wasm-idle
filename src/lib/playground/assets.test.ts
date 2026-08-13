@@ -108,6 +108,7 @@ import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
+import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
 
 describe('runtime asset config resolution', () => {
 	it.each([
@@ -1083,7 +1084,10 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(resolveTclRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-tcl/',
-			workerUrl: 'https://example.com/absproxy/5173/wasm-tcl/runner-worker.js'
+			workerUrl: 'https://example.com/absproxy/5173/wasm-tcl/runner-worker.js',
+			manifestUrl: 'https://example.com/absproxy/5173/wasm-tcl/runtime-manifest.v2.json',
+			manifestFingerprint: WASM_TCL_ASSET_VERSION,
+			workerReceipt: WASM_TCL_RUNNER_RECEIPT
 		});
 		expect(resolveAwkRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-awk/',
@@ -1166,6 +1170,21 @@ describe('runtime asset config resolution', () => {
 			manifestUrl: '/wasm-prolog/runtime-manifest.v2.json',
 			manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
 			workerReceipt: WASM_PROLOG_RUNNER_RECEIPT
+		});
+	});
+
+	it('preserves relative default Tcl urls and pins when no current url is available', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TCL_BASE_URL = '';
+		publicEnv.PUBLIC_WASM_TCL_WORKER_URL = '';
+		const { resolveTclRuntimeAssetConfig } = await import('./assets');
+
+		expect(resolveTclRuntimeAssetConfig(undefined)).toEqual({
+			baseUrl: '/wasm-tcl/',
+			workerUrl: '/wasm-tcl/runner-worker.js',
+			manifestUrl: '/wasm-tcl/runtime-manifest.v2.json',
+			manifestFingerprint: WASM_TCL_ASSET_VERSION,
+			workerReceipt: WASM_TCL_RUNNER_RECEIPT
 		});
 	});
 
@@ -1300,12 +1319,23 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(
 			resolveTclRuntimeAssetConfig(
-				{ tcl: { baseUrl: '/runtime/tcl', workerUrl: '/runtime/tcl/worker.js' } },
+				{
+					tcl: {
+						baseUrl: '/runtime/tcl',
+						workerUrl: '/runtime/tcl/worker.js',
+						manifestUrl: '/runtime/tcl/manifest.json',
+						manifestFingerprint: customFingerprint,
+						workerReceipt: customWorkerReceipt
+					}
+				},
 				'https://example.com/app'
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/tcl/',
-			workerUrl: 'https://example.com/runtime/tcl/worker.js'
+			workerUrl: 'https://example.com/runtime/tcl/worker.js',
+			manifestUrl: 'https://example.com/runtime/tcl/manifest.json',
+			manifestFingerprint: customFingerprint,
+			workerReceipt: customWorkerReceipt
 		});
 		expect(
 			resolveAwkRuntimeAssetConfig(

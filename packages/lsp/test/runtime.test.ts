@@ -8,6 +8,10 @@ import {
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from '../src/bundledPrologRuntime.js';
 import {
+	BUNDLED_TCL_MANIFEST_FINGERPRINT,
+	BUNDLED_TCL_RUNNER_RECEIPT
+} from '../src/bundledTclRuntime.js';
+import {
 	LanguageServerAssetConfigurationError,
 	resolveCppLanguageServerBaseUrl,
 	resolveCppLanguageServerRuntimeAssetConfig,
@@ -49,6 +53,9 @@ import {
 	resolvePrologLanguageServerWorkerUrl,
 	resolveRustLanguageServerCompilerUrl,
 	resolveTclLanguageServerBaseUrl,
+	resolveTclLanguageServerManifestFingerprint,
+	resolveTclLanguageServerManifestUrl,
+	resolveTclLanguageServerWorkerReceipt,
 	resolveTclLanguageServerWorkerUrl,
 	resolveZigLanguageServerCompilerUrl,
 	resolveZigLanguageServerStdlibUrl
@@ -175,6 +182,63 @@ describe('lsp runtime asset resolution', () => {
 		).toThrow(LanguageServerAssetConfigurationError);
 	});
 
+	it('pins bundled Tcl manifests and diagnostic workers while allowing explicit mirrors', () => {
+		const currentUrl = 'https://app.example.com/editor';
+		const bundledOptions = { rootUrl: '/wasm-idle' };
+
+		expect(resolveTclLanguageServerManifestFingerprint(bundledOptions)).toBe(
+			BUNDLED_TCL_MANIFEST_FINGERPRINT
+		);
+		expect(resolveTclLanguageServerWorkerReceipt(bundledOptions)).toBe(
+			BUNDLED_TCL_RUNNER_RECEIPT
+		);
+		expect(resolveTclLanguageServerWorkerUrl(bundledOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-tcl/runner-worker.js?v=${BUNDLED_TCL_RUNNER_RECEIPT.sha256}`
+		);
+		expect(resolveTclLanguageServerManifestUrl(bundledOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-tcl/runtime-manifest.v2.json?v=${BUNDLED_TCL_MANIFEST_FINGERPRINT}`
+		);
+
+		const customReceipt = { bytes: 654, sha256: 'd'.repeat(64) };
+		const customOptions = {
+			tcl: {
+				baseUrl: 'https://mirror.example.com/tcl/',
+				workerUrl: 'https://mirror.example.com/tcl/runner.js?v=custom',
+				manifestUrl: 'https://mirror.example.com/tcl/manifest.json?v=custom',
+				manifestFingerprint: ` ${'c'.repeat(64)} `,
+				workerReceipt: customReceipt
+			}
+		};
+
+		expect(resolveTclLanguageServerWorkerUrl(customOptions)).toBe(
+			'https://mirror.example.com/tcl/runner.js?v=custom'
+		);
+		expect(resolveTclLanguageServerManifestUrl(customOptions)).toBe(
+			'https://mirror.example.com/tcl/manifest.json?v=custom'
+		);
+		expect(resolveTclLanguageServerManifestFingerprint(customOptions)).toBe('c'.repeat(64));
+		expect(resolveTclLanguageServerWorkerReceipt(customOptions)).toBe(customReceipt);
+		expect(() =>
+			resolveTclLanguageServerManifestFingerprint({
+				tcl: { manifestFingerprint: 'not-a-digest' }
+			})
+		).toThrow(LanguageServerAssetConfigurationError);
+
+		const pinOnlyOptions = {
+			rootUrl: '/wasm-idle',
+			tcl: {
+				manifestFingerprint: 'e'.repeat(64),
+				workerReceipt: { bytes: 777, sha256: 'f'.repeat(64) }
+			}
+		};
+		expect(resolveTclLanguageServerWorkerUrl(pinOnlyOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-tcl/runner-worker.js?v=${'f'.repeat(64)}`
+		);
+		expect(resolveTclLanguageServerManifestUrl(pinOnlyOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-tcl/runtime-manifest.v2.json?v=${'e'.repeat(64)}`
+		);
+	});
+
 	it('requires host context for document-relative asset overrides', () => {
 		const options = { rust: { compilerUrl: './assets/rustc.js' } };
 
@@ -253,7 +317,14 @@ describe('lsp runtime asset resolution', () => {
 			[resolvePerlLanguageServerBaseUrl, 'wasm-perl/'],
 			[resolvePerlLanguageServerWorkerUrl, 'wasm-perl/runner-worker.js'],
 			[resolveTclLanguageServerBaseUrl, 'wasm-tcl/'],
-			[resolveTclLanguageServerWorkerUrl, 'wasm-tcl/runner-worker.js'],
+			[
+				resolveTclLanguageServerWorkerUrl,
+				`wasm-tcl/runner-worker.js?v=${BUNDLED_TCL_RUNNER_RECEIPT.sha256}`
+			],
+			[
+				resolveTclLanguageServerManifestUrl,
+				`wasm-tcl/runtime-manifest.v2.json?v=${BUNDLED_TCL_MANIFEST_FINGERPRINT}`
+			],
 			[resolvePascalLanguageServerBaseUrl, 'wasm-pascal/'],
 			[resolvePascalLanguageServerWorkerUrl, 'wasm-pascal/runner-worker.js']
 		];
@@ -314,7 +385,9 @@ describe('lsp runtime asset resolution', () => {
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
 			)
-		).toBe('https://static.example.com/repl_20240807/wasm-tcl/runner-worker.js');
+		).toBe(
+			`https://static.example.com/repl_20240807/wasm-tcl/runner-worker.js?v=${BUNDLED_TCL_RUNNER_RECEIPT.sha256}`
+		);
 		expect(
 			resolvePascalLanguageServerBaseUrl(
 				'https://static.example.com/repl_20240807',

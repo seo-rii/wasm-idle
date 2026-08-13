@@ -25,6 +25,7 @@ import {
 	WASM_PROLOG_ASSET_VERSION,
 	WASM_PROLOG_RUNNER_RECEIPT
 } from '$lib/playground/wasmPrologVersion';
+import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from '$lib/playground/wasmTclVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import {
 	RUBY_RUNTIME_ASSET_RECEIPTS,
@@ -239,6 +240,9 @@ export interface PerlRuntimeAssetConfig {
 export interface TclRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
+	manifestUrl?: string;
+	manifestFingerprint?: string;
+	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
 export interface AwkRuntimeAssetConfig {
@@ -2070,13 +2074,27 @@ export function resolveTclWorkerUrl(
 	return resolveConfiguredUrl('/wasm-tcl/runner-worker.js', currentUrl);
 }
 
+export function resolveTclManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl =
+		typeof options === 'object' ? options?.tcl?.manifestUrl : undefined;
+	if (configuredManifestUrl) return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
+	return `${resolveTclBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
+}
+
 export function resolveTclRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
+	const configured = typeof options === 'object' ? options?.tcl : undefined;
 	return {
 		baseUrl: resolveTclBaseUrl(options, currentUrl),
-		workerUrl: resolveTclWorkerUrl(options, currentUrl)
+		workerUrl: resolveTclWorkerUrl(options, currentUrl),
+		manifestUrl: resolveTclManifestUrl(options, currentUrl),
+		manifestFingerprint: configured?.manifestFingerprint?.trim() || WASM_TCL_ASSET_VERSION,
+		workerReceipt: configured?.workerReceipt || WASM_TCL_RUNNER_RECEIPT
 	};
 }
 

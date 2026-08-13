@@ -1,7 +1,8 @@
-import { loadLanguageToolAsset } from './assets.js';
+import { loadLanguageToolAsset, type LanguageToolAssetRuntime } from './assets.js';
 import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 
 export interface RuntimeWorkerDiagnosticRequest {
+	runtime?: LanguageToolAssetRuntime;
 	workerUrl: string;
 	workerReceipt?: RuntimeAssetIntegrityEntry;
 	message: Record<string, unknown>;
@@ -20,6 +21,7 @@ export async function runRuntimeWorkerDiagnostics(
 	let workerUrl = request.workerUrl;
 	let blobUrl = '';
 	if (request.workerReceipt) {
+		const runtime = request.runtime ?? 'prolog';
 		if (
 			!Number.isSafeInteger(request.workerReceipt.bytes) ||
 			(request.workerReceipt.bytes as number) <= 0 ||
@@ -35,7 +37,7 @@ export async function runRuntimeWorkerDiagnostics(
 			throw new Error('Runtime diagnostic worker URL is invalid');
 		}
 		const loaded = await loadLanguageToolAsset(
-			'prolog',
+			runtime,
 			'runner-worker.js',
 			{
 				baseUrl: new URL('.', requestedWorkerUrl).href,

@@ -165,6 +165,9 @@ export interface EditorLanguageServerRuntimeOptions {
 	tcl?: {
 		baseUrl?: string;
 		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	pascal?: {
 		baseUrl?: string;

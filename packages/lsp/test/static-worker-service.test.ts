@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const mocks = vi.hoisted(() => ({
+	runRuntimeWorkerDiagnostics: vi.fn(async () => ({ output: '', error: undefined }))
+}));
+
+vi.mock('../src/runtime-worker.js', () => ({
+	runRuntimeWorkerDiagnostics: mocks.runRuntimeWorkerDiagnostics
+}));
+
 import { createStaticWorkerDiagnostics } from '../src/static-worker-service.js';
 import type { LspDocument, LspDocumentContext } from '../src/index.js';
 
@@ -107,5 +115,44 @@ describe('createStaticWorkerDiagnostics', () => {
 		expect(runDiagnostics).toHaveBeenCalledWith(
 			expect.objectContaining({ activePath: 'main.demo' })
 		);
+	});
+
+	it('forwards the configured runtime identity to verified worker loading', async () => {
+		mocks.runRuntimeWorkerDiagnostics.mockClear();
+		const diagnostics = createStaticWorkerDiagnostics({
+			languageName: 'Tcl',
+			loadProgressStage: 'load-tcl-runtime',
+			defaultActivePath: 'main.tcl',
+			timeoutMessage: 'Tcl diagnostics timed out',
+			runtime: 'tcl',
+			createMessage: (request) => ({ code: request.code }),
+			diagnosticsFromResult: () => []
+		});
+		const document: LspDocument = {
+			uri: 'file:///workspace/main.tcl',
+			languageId: 'tcl',
+			version: 1,
+			text: 'puts ok\n'
+		};
+		const context = contextFor(document);
+		const workerReceipt = { bytes: 123, sha256: 'a'.repeat(64) };
+
+		diagnostics.initialize?.(
+			{
+				baseUrl: '/wasm-tcl/',
+				workerUrl: '/wasm-tcl/runner-worker.js',
+				workerReceipt
+			},
+			context
+		);
+		await diagnostics.diagnostics?.(document, context);
+
+		expect(mocks.runRuntimeWorkerDiagnostics).toHaveBeenCalledWith({
+			runtime: 'tcl',
+			workerUrl: '/wasm-tcl/runner-worker.js',
+			workerReceipt,
+			timeoutMessage: 'Tcl diagnostics timed out',
+			message: { code: document.text }
+		});
 	});
 });

@@ -1,0 +1,70 @@
+{
+  "format": "wasm-tcl-runtime-build-v1",
+  "runtime": "wacl",
+  "profileId": "wacl-pages-045aa904-tcl-8.6.6",
+  "provenanceLevel": "opaque-prebuilt",
+  "artifact": {
+    "kind": "opaque-prebuilt",
+    "path": "wacl/releases/wacl.zip",
+    "repository": "https://github.com/ecky-l/ecky-l.github.io.git",
+    "revision": "045aa904c2073eeded1be803cf5416901f6ce8ee",
+    "sha256": "50d4ecb40c4db0448942332f9562c3cedc8bea38fa89d95ca5e5b9afcc5afb23",
+    "size": 1350907,
+    "url": "https://raw.githubusercontent.com/ecky-l/ecky-l.github.io/045aa904c2073eeded1be803cf5416901f6ce8ee/wacl/releases/wacl.zip"
+  },
+  "components": {
+    "wacl": {
+      "version": "2017-05-29",
+      "repository": "https://github.com/ecky-l/wacl.git",
+      "revision": "9daacabb0102a9986f33263261350edfeebdd83b",
+      "verifiedBuildInput": false
+    },
+    "tcl": {
+      "version": "8.6.6",
+      "revision": "27696b490b9b339a869a8f6fe3113d05ebcbf565",
+      "verifiedBuildInput": false
+    },
+    "tdom": {
+      "version": "0.8.3",
+      "revision": "5a0a14aeb9321e50532af6c18ef4d05e44b158c8",
+      "verifiedBuildInput": false
+    },
+    "rlJson": {
+      "version": "0.9.7",
+      "revision": "89ae2c67fc6023b3e0886ff5d2850dcde127a1c1",
+      "verifiedBuildInput": false
+    },
+    "tcllib": {
+      "version": "1.18",
+      "revision": "700ee122b5c26243929831b242897ea7170c7015",
+      "verifiedBuildInput": false
+    },
+    "requirejs": {
+      "version": "2.3.3",
+      "revision": "f2335026867afd80c394247bfe5278d2bd8f32ee",
+      "verifiedBuildInput": false
+    },
+    "emscripten": {
+      "version": "1.37.9",
+      "revision": "f1222cc8c315e47ba3541a42ab391bd3b1d9be14",
+      "verifiedBuildInput": false
+    }
+  },
+  "patches": [
+    {
+      "id": "inject-verified-wasm"
+    },
+    {
+      "id": "inject-host-module"
+    },
+    {
+      "id": "preserve-host-output"
+    },
+    {
+      "id": "preserve-host-error-output"
+    },
+    {
+      "id": "guard-window-cleanup"
+    }
+  ]
+}

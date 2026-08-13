@@ -42,7 +42,7 @@ import {
 } from '@wasm-idle/core';
 import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
 import { WASM_SWIFT_ASSET_VERSION } from './wasmSwiftVersion';
-import { WASM_TCL_ASSET_VERSION } from './wasmTclVersion';
+import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
 import { WASM_TINYGO_ASSET_VERSION } from './wasmTinyGoVersion';
 import { WASM_TYPESCRIPT_ASSET_VERSION } from './wasmTypeScriptVersion';
 import { WASM_WAT_ASSET_VERSION } from './wasmWatVersion';
@@ -129,7 +129,10 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		tcl: {
 			baseUrl: asset('wasm-tcl/'),
-			workerUrl: asset('wasm-tcl/runner-worker.js', WASM_TCL_ASSET_VERSION)
+			workerUrl: asset('wasm-tcl/runner-worker.js', WASM_TCL_RUNNER_RECEIPT.sha256),
+			manifestUrl: asset('wasm-tcl/runtime-manifest.v2.json', WASM_TCL_ASSET_VERSION),
+			manifestFingerprint: WASM_TCL_ASSET_VERSION,
+			workerReceipt: WASM_TCL_RUNNER_RECEIPT
 		},
 		awk: {
 			baseUrl: asset('wasm-awk/'),

@@ -5,6 +5,7 @@ import {
 	type WorkerLanguageService
 } from './lsp.js';
 import { runRuntimeWorkerDiagnostics } from './runtime-worker.js';
+import type { LanguageToolAssetRuntime } from './assets.js';
 import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 
 export interface StaticWorkerDiagnosticConfig {
@@ -38,6 +39,7 @@ export interface StaticWorkerDiagnosticsOptions<
 	diagnosticsProgressStage?: string;
 	defaultActivePath: string;
 	timeoutMessage: string;
+	runtime?: LanguageToolAssetRuntime;
 	runDiagnostics?: StaticWorkerDiagnosticRunner<TConfig, TResult>;
 	createMessage: (request: StaticWorkerDiagnosticRequest<TConfig>) => Record<string, unknown>;
 	diagnosticsFromResult: (result: TResult, document: LspDocument) => LspDiagnostic[];
@@ -63,6 +65,7 @@ export function createStaticWorkerDiagnostics<
 		options.runDiagnostics ||
 		(((request: StaticWorkerDiagnosticRequest<TConfig>) =>
 			runRuntimeWorkerDiagnostics({
+				...(options.runtime ? { runtime: options.runtime } : {}),
 				workerUrl: request.workerUrl,
 				workerReceipt: request.workerReceipt,
 				timeoutMessage: options.timeoutMessage,

@@ -52,6 +52,9 @@ export {
 	resolveRubyLanguageServerWasmUrl,
 	resolveRustLanguageServerCompilerUrl,
 	resolveTclLanguageServerBaseUrl,
+	resolveTclLanguageServerManifestFingerprint,
+	resolveTclLanguageServerManifestUrl,
+	resolveTclLanguageServerWorkerReceipt,
 	resolveTclLanguageServerWorkerUrl,
 	resolveZigLanguageServerCompilerUrl,
 	resolveZigLanguageServerStdlibUrl

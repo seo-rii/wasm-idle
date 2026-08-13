@@ -39,6 +39,21 @@ describe('language tool asset loading', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	it('rejects assets outside the Tcl diagnostic worker allowlist before fetching', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			loadLanguageToolAsset(
+				'tcl',
+				'../../private',
+				{ baseUrl: 'https://assets.example.com/wasm-tcl/' },
+				vi.fn()
+			)
+		).rejects.toThrow('Unexpected Tcl runtime asset: ../../private');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it('rejects assets outside the Ruby runtime allowlist before fetching', async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal('fetch', fetchMock);

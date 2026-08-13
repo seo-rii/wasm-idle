@@ -5,6 +5,10 @@ import {
 	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from '../src/bundledPrologRuntime.js';
+import {
+	BUNDLED_TCL_MANIFEST_FINGERPRINT,
+	BUNDLED_TCL_RUNNER_RECEIPT
+} from '../src/bundledTclRuntime.js';
 
 const mockState = vi.hoisted(() => {
 	const workers: FakeWorker[] = [];
@@ -317,7 +321,10 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				baseUrl: 'https://static.example.com/repl_20240807/wasm-tcl/',
-				workerUrl: 'https://static.example.com/repl_20240807/wasm-tcl/runner-worker.js'
+				workerUrl: `https://static.example.com/repl_20240807/wasm-tcl/runner-worker.js?v=${BUNDLED_TCL_RUNNER_RECEIPT.sha256}`,
+				manifestUrl: `https://static.example.com/repl_20240807/wasm-tcl/runtime-manifest.v2.json?v=${BUNDLED_TCL_MANIFEST_FINGERPRINT}`,
+				manifestFingerprint: BUNDLED_TCL_MANIFEST_FINGERPRINT,
+				workerReceipt: BUNDLED_TCL_RUNNER_RECEIPT
 			}
 		});
 

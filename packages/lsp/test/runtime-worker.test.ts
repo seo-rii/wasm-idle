@@ -59,6 +59,7 @@ describe('runRuntimeWorkerDiagnostics', () => {
 
 		const message = { code: 'main :- true.', diagnose: true };
 		const result = await runRuntimeWorkerDiagnostics({
+			runtime: 'prolog',
 			workerUrl: 'https://assets.example.com/wasm-prolog/runner-worker.js?v=pinned',
 			workerReceipt: receipt,
 			message,
@@ -95,6 +96,47 @@ describe('runRuntimeWorkerDiagnostics', () => {
 		expect(revokeObjectUrl).toHaveBeenCalledWith('blob:verified-prolog-worker');
 		expect(workers[0]).toMatchObject({ messages: [message], terminated: true });
 		expect(result).toEqual({ error: undefined, output: 'first second' });
+	});
+
+	it('loads a receipt-pinned Tcl worker through the Tcl allowlist', async () => {
+		const workerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
+		const receipt = { bytes: workerBytes.byteLength, sha256: 'c'.repeat(64) };
+		mocks.loadLanguageToolAsset.mockResolvedValue({ bytes: workerBytes });
+		vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:verified-tcl-worker');
+		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+		class FakeWorker {
+			onerror: ((event: ErrorEvent) => void) | null = null;
+			onmessage: ((event: MessageEvent) => void) | null = null;
+
+			postMessage() {
+				this.onmessage?.({ data: { results: true } } as MessageEvent);
+			}
+
+			terminate() {}
+		}
+		vi.stubGlobal('Worker', FakeWorker);
+
+		await expect(
+			runRuntimeWorkerDiagnostics({
+				runtime: 'tcl',
+				workerUrl: 'https://assets.example.com/wasm-tcl/runner-worker.js?v=pinned',
+				workerReceipt: receipt,
+				message: {},
+				timeoutMessage: 'Tcl diagnostics timed out'
+			})
+		).resolves.toEqual({ error: undefined, output: '' });
+
+		expect(mocks.loadLanguageToolAsset).toHaveBeenCalledWith(
+			'tcl',
+			'runner-worker.js',
+			expect.objectContaining({
+				baseUrl: 'https://assets.example.com/wasm-tcl/',
+				integrity: { 'runner-worker.js': receipt },
+				requireExactResponseUrl: true
+			}),
+			expect.any(Function),
+			{ timeoutMs: 5000 }
+		);
 	});
 
 	it('preserves direct URL workers for runtimes without a worker receipt', async () => {
