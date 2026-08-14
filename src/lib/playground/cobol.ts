@@ -6,8 +6,10 @@ import {
 } from '$lib/playground/assets';
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -59,6 +61,13 @@ class Cobol implements Sandbox {
 	assetBridge: WorkerAssetBridge | null = null;
 	activeCobolBaseUrl = '';
 	private activeOperation: CobolOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('COBOL sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'COBOL',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'COBOL',
 		onDispose: (worker) => {
@@ -80,6 +89,12 @@ class Cobol implements Sandbox {
 	});
 
 	private beginOperation(phase: CobolOperation['phase']) {
+		if (this.disposed) {
+			throw new RuntimeConfigurationError('COBOL sandbox is disposed', {
+				phase: 'dispose',
+				runtimeId: 'COBOL'
+			});
+		}
 		if (this.activeOperation) {
 			throw new BusyError('COBOL runtime already has an active operation', {
 				runtimeId: 'COBOL',
@@ -414,12 +429,14 @@ class Cobol implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -677,6 +694,7 @@ class Cobol implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const operation = this.activeOperation;
 		if (operation) {
 			this.cancelOperation(operation, reason);
@@ -690,12 +708,40 @@ class Cobol implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		this.terminate();
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		resetBufferedStdin(this.buffer);
 		await new Promise((resolve) => setTimeout(resolve, 200));
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		const assetBridge = this.assetBridge;
+		delete this.worker;
+		this.assetBridge = null;
+		this.activeCobolBaseUrl = '';
+		this.output = undefined;
+		this.resetExplicitStdinState();
+		try {
+			assetBridge?.dispose();
+		} catch {
+			// Asset cleanup is best effort after host state becomes unreachable.
+		}
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+			this.exit = true;
+		}
+		return this.disposePromise;
 	}
 }
 
