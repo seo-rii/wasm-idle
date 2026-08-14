@@ -27,7 +27,6 @@
 		OcamlWasmBinaryenMode,
 		RustTargetTriple,
 		SandboxExecutionOptions,
-		TinyGoTarget,
 		DebugFrame,
 		DebugSessionEvent,
 		DebugScope,
@@ -89,7 +88,6 @@
 		openTabs: string[];
 		rustTargetTriple: RustTargetTriple;
 		sidebarOpen: boolean;
-		tinygoTarget: TinyGoTarget;
 		version: number;
 		workspaces: Record<PlaygroundLanguage, LanguageWorkspace>;
 	};
@@ -145,7 +143,6 @@
 		argsInput = $state(''),
 		rustTargetTriple = $state<RustTargetTriple>('wasm32-wasip1'),
 		goTarget = $state<GoTarget>('wasip1/wasm'),
-		tinygoTarget = $state<TinyGoTarget>('wasm'),
 		ocamlBackend = $state<OcamlBackend>('wasm'),
 		ocamlWasmBinaryenMode = $state<OcamlWasmBinaryenMode>('fast'),
 		log = $state(true),
@@ -185,7 +182,6 @@
 	> = {
 		RUST: () => ({ rustTargetTriple }),
 		GO: () => ({ goTarget }),
-		TINYGO: () => ({ tinygoTarget }),
 		OCAML: () => ({ ocamlBackend, ocamlWasmBinaryenMode }),
 		ZIG: () => ({ zigTargetTriple: 'wasm64-wasi' })
 	};
@@ -359,7 +355,6 @@
 			ocamlWasmBinaryenMode,
 			rustTargetTriple,
 			sidebarOpen,
-			tinygoTarget,
 			workspaces: workspaceMapForSnapshot()
 		})
 	);
@@ -404,7 +399,6 @@
 	);
 	const knownRustTargetTriples = ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'] as const;
 	const knownGoTargets = ['wasip1/wasm', 'wasip2/wasm', 'wasip3/wasm', 'js/wasm'] as const;
-	const knownTinyGoTargets = ['wasm', 'wasip1', 'wasip2', 'wasip3'] as const;
 	const debugTitle = $derived(
 		activeDebugBackend === 'trace' && lldbDebugLanguages.has(language)
 			? `${languageLabels[language] ?? language} · Trace fallback`
@@ -668,7 +662,6 @@
 			BASH: 'main.sh',
 			CLOJURESCRIPT: 'main.cljs',
 			OCAML: 'main.ml',
-			TINYGO: 'main.go',
 			JAVASCRIPT: 'main.js',
 			TYPESCRIPT: 'main.ts',
 			ASSEMBLYSCRIPT: 'main.as.ts',
@@ -727,7 +720,6 @@
 			BASH: 'bash',
 			CLOJURESCRIPT: 'clojurescript',
 			OCAML: 'ocaml',
-			TINYGO: 'go',
 			JAVASCRIPT: 'javascript',
 			TYPESCRIPT: 'typescript',
 			ASSEMBLYSCRIPT: 'assemblyscript',
@@ -991,7 +983,6 @@
 			openTabs: openTabs.filter((tab) => files.some((file) => file.path === tab)),
 			rustTargetTriple,
 			sidebarOpen,
-			tinygoTarget,
 			version: 5,
 			workspaces: workspaceMapForSnapshot()
 		};
@@ -1038,13 +1029,6 @@
 			value?.goTarget === 'js/wasm'
 		)
 			goTarget = value.goTarget;
-		if (
-			value?.tinygoTarget === 'wasm' ||
-			value?.tinygoTarget === 'wasip1' ||
-			value?.tinygoTarget === 'wasip2' ||
-			value?.tinygoTarget === 'wasip3'
-		)
-			tinygoTarget = value.tinygoTarget;
 		if (value?.ocamlBackend === 'js' || value?.ocamlBackend === 'wasm')
 			ocamlBackend = value.ocamlBackend;
 		if (value?.ocamlWasmBinaryenMode === 'fast' || value?.ocamlWasmBinaryenMode === 'full')
@@ -1303,7 +1287,6 @@
 			clojurescript: 'CLOJURESCRIPT',
 			cljs: 'CLOJURESCRIPT',
 			ocaml: 'OCAML',
-			tinygo: 'TINYGO',
 			javascript: 'JAVASCRIPT',
 			js: 'JAVASCRIPT',
 			typescript: 'TYPESCRIPT',
@@ -1404,7 +1387,6 @@
 			localStorage.setItem('argsInput', argsInput);
 			localStorage.setItem('rustTargetTriple', rustTargetTriple);
 			localStorage.setItem('goTarget', goTarget);
-			localStorage.setItem('tinygoTarget', tinygoTarget);
 			localStorage.setItem('ocamlBackend', ocamlBackend);
 			localStorage.setItem('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode);
 			saveWorkspace();
@@ -1508,7 +1490,6 @@
 			const lang = localStorage.getItem('language');
 			const storedArgs = localStorage.getItem('argsInput');
 			const storedGoTarget = localStorage.getItem('goTarget');
-			const storedTinyGoTarget = localStorage.getItem('tinygoTarget');
 			const storedOcamlBackend = localStorage.getItem('ocamlBackend');
 			const storedOcamlWasmBinaryenMode = localStorage.getItem('ocamlWasmBinaryenMode');
 			const requestedCode =
@@ -1521,7 +1502,6 @@
 			const storedLanguage = normalizeRequestedLanguage(lang);
 			const requestedRustTargetTriple = page.url.searchParams.get('rustTargetTriple');
 			const requestedGoTarget = page.url.searchParams.get('goTarget');
-			const requestedTinyGoTarget = page.url.searchParams.get('tinygoTarget');
 			const requestedOcamlBackend = page.url.searchParams.get('ocamlBackend');
 			const requestedOcamlWasmBinaryenMode =
 				page.url.searchParams.get('ocamlWasmBinaryenMode');
@@ -1548,21 +1528,6 @@
 				storedGoTarget === 'js/wasm'
 			) {
 				goTarget = storedGoTarget;
-			}
-			if (
-				requestedTinyGoTarget === 'wasm' ||
-				requestedTinyGoTarget === 'wasip1' ||
-				requestedTinyGoTarget === 'wasip2' ||
-				requestedTinyGoTarget === 'wasip3'
-			) {
-				tinygoTarget = requestedTinyGoTarget;
-			} else if (
-				storedTinyGoTarget === 'wasm' ||
-				storedTinyGoTarget === 'wasip1' ||
-				storedTinyGoTarget === 'wasip2' ||
-				storedTinyGoTarget === 'wasip3'
-			) {
-				tinygoTarget = storedTinyGoTarget;
 			}
 			if (requestedOcamlBackend === 'js' || requestedOcamlBackend === 'wasm') {
 				ocamlBackend = requestedOcamlBackend;
@@ -2148,16 +2113,6 @@
 						</select>
 					</label>
 				{/if}
-				{#if language === 'TINYGO'}
-					<label class="select-chip">
-						<span class="material-symbols-outlined">conversion_path</span>
-						<select id="tinygo-target" bind:value={tinygoTarget}>
-							{#each knownTinyGoTargets as target (target)}
-								<option value={target}>{target}</option>
-							{/each}
-						</select>
-					</label>
-				{/if}
 				{#if language === 'OCAML'}
 					<label class="select-chip">
 						<span class="material-symbols-outlined">conversion_path</span>
@@ -2382,15 +2337,6 @@
 			<p class="hint">
 				Nim runs through the bundled Nim 2.2.4 WebAssembly compiler, then links generated C
 				with clang/lld WebAssembly assets. Use `readLine(stdin)` for line input.
-			</p>
-		{/if}
-		{#if language === 'TINYGO'}
-			<p class="hint">
-				TinyGo runs through the bundled wasm-tinygo browser pipeline by default, loads its
-				direct runtime module, and runs the resulting WASI artifact in the local playground
-				runtime. `wasip2` and `wasip3` use the wasm-tinygo preview target profiles. Pass CLI
-				args here, type into the terminal below, and use Ctrl+D or the EOF button if the
-				program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'JAVASCRIPT' || language === 'TYPESCRIPT'}

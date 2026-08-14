@@ -3,7 +3,7 @@
 ![wasm-idle](static/image.jpeg)
 
 Executes C, C++, Objective-C, Fortran, COBOL, Python, Java, Rust, Go, D, C#, F#, VB.NET, Elixir, Erlang, Prolog,
-Gleam, Perl, Tcl, AWK, Pascal, Forth, J, BQN, Janet, Julia, Nim, Bash, ClojureScript, TinyGo, OCaml, JavaScript, TypeScript,
+Gleam, Perl, Tcl, AWK, Pascal, Forth, J, BQN, Janet, Julia, Nim, Bash, ClojureScript, OCaml, JavaScript, TypeScript,
 AssemblyScript, WAT, WASM, Lua, Zig, Scheme, Ruby, Haskell, R, Octave, SQLite, DuckDB,
 and PHP code.
 
@@ -56,7 +56,6 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | Nim            | Nim 2.2.4 WASM + clang/lld WASM         | Yes   | syntax               | -     |
 | Bash           | GNU Bash WASIX / Wasmer SDK             | Yes   | syntax               | -     |
 | ClojureScript  | cljs.js self-hosted compiler            | Yes   | syntax               | -     |
-| TinyGo         | wasm-tinygo                             | Yes   | syntax               | -     |
 | OCaml          | wasm-of-js-of-ocaml / js_of_ocaml       | Yes   | syntax               | -     |
 | JavaScript     | wasm-typescript / TypeScript service    | Yes   | TypeScript LSP       | -     |
 | TypeScript     | wasm-typescript / TypeScript service    | Yes   | TypeScript LSP       | -     |
@@ -170,14 +169,13 @@ when they exist.
 | Nim<br>`NIM`                       | Nim 2.2.4 / benagastov Nim-WASM-Compiler with clang/lld WASM                                                                                                                   | static worker compiles Nim to C, then clang/lld to WASM; supports `stdin`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `runtimeAssets.nim.baseUrl`/`runtimeAssets.nim.workerUrl` or `PUBLIC_WASM_NIM_BASE_URL`/`PUBLIC_WASM_NIM_WORKER_URL`; `programArgs`, `activePath`, `workspaceFiles`                                                                                                                                                                              |
 | Bash<br>`BASH`                     | @wasm-idle/runtime-bash@0.1.0 / GNU Bash WASIX + static ESM `static/wasm-bash/sdk/index.mjs` produced from @wasmer/sdk@0.9.0                                                   | runs the pinned `bash.webc` locally through the on-demand Wasmer SDK asset; invokes `bash -c <code> <activePath> ...programArgs` and supports `stdin`, `programArgs`, `activePath`, and `workspaceFiles`                                                                                                                                                                                                                                                                                                                                                                | `runtimeAssets.bash.moduleUrl`/`workerUrl`/`webcUrl` or `rootUrl`; `stdin`, `programArgs`, `activePath`, `workspaceFiles`                                                                                                                                                                                                                        |
 | ClojureScript<br>`CLOJURESCRIPT`   | @wasm-idle/runtime-clojurescript@0.1.0 / ClojureScript 1.12.134                                                                                                                | static worker compiles and evaluates with the official `cljs.js` self-hosted compiler; supports `stdin`, `programArgs`, `activePath`, and `workspaceFiles`                                                                                                                                                                                                                                                                                                                                                                                                              | `runtimeAssets.clojurescript.baseUrl`/`runtimeAssets.clojurescript.workerUrl` or `PUBLIC_WASM_CLOJURESCRIPT_BASE_URL`/`PUBLIC_WASM_CLOJURESCRIPT_WORKER_URL`; `programArgs`, `activePath`, `workspaceFiles`                                                                                                                                      |
-| TinyGo<br>`TINYGO`                 | wasm-tinygo@0.0.0 / TinyGo 0.40.1 browser toolchain                                                                                                                            | default target `wasm`; selectable `wasm`, `wasip1`, `wasip2`, `wasip3`; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `runtimeAssets.tinygo.moduleUrl`/`appUrl`/`assetLoader`/`assetPacks`; `PUBLIC_WASM_TINYGO_*`, `tinygoTarget`, `programArgs`                                                                                                                                                                                                                      |
 | OCaml<br>`OCAML`                   | wasm-of-js-of-ocaml@0.1.0 / js_of_ocaml + wasm_of_ocaml                                                                                                                        | default backend `wasm`; selectable `wasm`, `js`; `ocamlWasmBinaryenMode` `fast`, `full`; supports `stdin`                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `runtimeAssets.ocaml.moduleUrl`/`manifestUrl` or `PUBLIC_WASM_OCAML_*`; `ocamlBackend`                                                                                                                                                                                                                                                           |
-| JavaScript<br>`JAVASCRIPT`         | wasm-typescript@0.1.0 / @swc/wasm-typescript@1.15.33                                                                                                                           | TypeScript service transpiles JS/TS and runs in browser sandbox; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `runtimeAssets.typescript.moduleUrl`/`libUrl` or `PUBLIC_WASM_TYPESCRIPT_MODULE_URL`                                                                                                                                                                                                                                                             |
-| TypeScript<br>`TYPESCRIPT`         | wasm-typescript@0.1.0 / @swc/wasm-typescript@1.15.33                                                                                                                           | TypeScript service transpiles then runs in browser sandbox; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `runtimeAssets.typescript.moduleUrl`/`libUrl` or `PUBLIC_WASM_TYPESCRIPT_MODULE_URL`                                                                                                                                                                                                                                                             |
+| JavaScript<br>`JAVASCRIPT`         | wasm-typescript@0.1.0 / @swc/wasm-typescript@^1.15.33                                                                                                                          | TypeScript service transpiles JS/TS and runs in browser sandbox; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `runtimeAssets.typescript.moduleUrl`/`libUrl` or `PUBLIC_WASM_TYPESCRIPT_MODULE_URL`                                                                                                                                                                                                                                                             |
+| TypeScript<br>`TYPESCRIPT`         | wasm-typescript@0.1.0 / @swc/wasm-typescript@^1.15.33                                                                                                                          | TypeScript service transpiles then runs in browser sandbox; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `runtimeAssets.typescript.moduleUrl`/`libUrl` or `PUBLIC_WASM_TYPESCRIPT_MODULE_URL`                                                                                                                                                                                                                                                             |
 | AssemblyScript<br>`ASSEMBLYSCRIPT` | static ESM `static/wasm-assemblyscript/runtime.mjs` produced from assemblyscript@0.28.17 + @assemblyscript/loader@0.28.17                                                      | `asc <activePath> --outFile module.wasm --runtime incremental --bindings raw --optimize --exportRuntime`; runs the emitted WASM through WASI/browser imports and supports `stdin`                                                                                                                                                                                                                                                                                                                                                                                       | `runtimeAssets.assemblyscript.moduleUrl` or `PUBLIC_WASM_ASSEMBLYSCRIPT_MODULE_URL` or `rootUrl`; `stdin`, `activePath`, `workspaceFiles`                                                                                                                                                                                                        |
-| WAT<br>`WAT`                       | wasm-wat@0.1.0 / wabt@1.0.39                                                                                                                                                   | WABT parses WAT to WASM then runs through WASI shim; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `runtimeAssets.wat.moduleUrl` or `PUBLIC_WASM_WAT_MODULE_URL`; `programArgs`                                                                                                                                                                                                                                                                     |
+| WAT<br>`WAT`                       | wasm-wat@0.1.0 / wabt@^1.0.39                                                                                                                                                  | WABT parses WAT to WASM then runs through WASI shim; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `runtimeAssets.wat.moduleUrl` or `PUBLIC_WASM_WAT_MODULE_URL`; `programArgs`                                                                                                                                                                                                                                                                     |
 | WASM<br>`WASM`                     | Browser WebAssembly + @bjorn3/browser_wasi_shim@0.4.2                                                                                                                          | loads provided WASM bytes and executes with WASI preview1 imports; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `programArgs`, `stdin`, `activePath`                                                                                                                                                                                                                                                                                                             |
-| Lua<br>`LUA`                       | wasm-lua@0.1.0 / wasmoon@1.16.0                                                                                                                                                | Wasmoon Lua VM; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `runtimeAssets.lua.moduleUrl` or `PUBLIC_WASM_LUA_MODULE_URL`; `programArgs`                                                                                                                                                                                                                                                                     |
+| Lua<br>`LUA`                       | wasm-lua@0.1.0 / wasmoon@^1.16.0                                                                                                                                               | Wasmoon Lua VM; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `runtimeAssets.lua.moduleUrl` or `PUBLIC_WASM_LUA_MODULE_URL`; `programArgs`                                                                                                                                                                                                                                                                     |
 | Zig<br>`ZIG`                       | static wasm-zig assets / `zig_small.wasm` + `std.tar.gz`                                                                                                                       | native gzip delivery for the tar standard library; default target `wasm64-wasi`; Zig compile args are appended; supports `stdin`, `compileArgs`, `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                          | `runtimeAssets.zig.compilerUrl`/`stdlibUrl` or `PUBLIC_WASM_ZIG_*`; `zigTargetTriple`, `activePath`, `workspaceFiles`                                                                                                                                                                                                                            |
 | Scheme<br>`LISP`                   | wasm-lisp@0.1.0 / Puppy Scheme WASM component                                                                                                                                  | receipt-verified Puppy Scheme compiler/runtime; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `runtimeAssets.lisp.{moduleUrl,manifestUrl,manifestFingerprint}` or `PUBLIC_WASM_LISP_{MODULE_URL,MANIFEST_URL,MANIFEST_FINGERPRINT}`; `programArgs`                                                                                                                                                                                             |
 | Ruby<br>`RUBY`                     | static ESM `static/wasm-ruby/runtime.mjs` produced from @ruby/3.4-wasm-wasi@2.9.3-2.9.4 + @ruby/wasm-wasi@2.9.3-2.9.4                                                          | CRuby 3.4 WASI runtime loads `ruby+stdlib.wasm` on demand; supports `stdin`, `programArgs`, and workspace files                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `runtimeAssets.ruby.moduleUrl`/`wasmUrl` or `PUBLIC_WASM_RUBY_MODULE_URL`/`PUBLIC_WASM_RUBY_WASM_URL` or `rootUrl`; `stdin`, `programArgs`, `workspaceFiles`                                                                                                                                                                                     |
@@ -196,11 +194,12 @@ These languages are intentionally not part of the execution support matrix yet. 
 out of `supportedLanguages` until the blocker is resolved with a real browser runtime/compiler and
 stdin/stdout coverage.
 
-| Candidate      | Candidate IDs | Current evidence                                                                                                                                                                                         | Blocker                                                                                                                                                                                  | Required follow-up                                                                                                                                                            |
-| -------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Modern Fortran | `F90`, `F95`  | `FORTRAN` now runs through f2c/libf2c, while `static/wasm-fortran` still packages LFortran analyzer assets                                                                                               | LFortran WASM/WAT stdin codegen still aborts and the C backend reports `visit_FileRead() not implemented`; f2c covers Fortran 77-style code but is not a full modern Fortran compiler    | Package a real browser modern Fortran compiler/runtime with stdin-capable codegen before advertising F90/F95 as first-class runtimes                                          |
-| Crystal        | `CRYSTAL`     | No browser Crystal compiler/runtime assets are packaged in this repository                                                                                                                               | Crystal cannot be treated as syntax-only or as a wasm-idle-authored translator/subset                                                                                                    | Find or build a browser-hosted real Crystal compiler/runtime path with stdin/stdout coverage before registering the language                                                  |
-| Swift          | `SWIFT`       | Swift.org documents Wasm support through a native Swift 6.x toolchain plus a Wasm SDK, and SwiftWasm Pad uses a backend compile service; no browser-hosted swiftc/SwiftPM runtime asset is packaged here | Swift cannot be implemented as a wasm-idle-authored parser/runtime subset or as a remote compile service; the playground needs a redistributable browser-hosted real Swift compiler path | Build or source a browser-hosted Swift compiler/SwiftPM runtime bundle, prove stdin/stdout execution for generated WASI modules, then register SWIFT as a first-class runtime |
+| Candidate      | Candidate IDs | Current evidence                                                                                                                                                                                                 | Blocker                                                                                                                                                                                  | Required follow-up                                                                                                                                                            |
+| -------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TinyGo         | `TINYGO`      | `runtimes/wasm-tinygo` keeps its wasm-idle-authored Go AST-to-C subset isolated from a source-pinned upstream TinyGo 0.40.1 path that passed the same 45-package CGo/C/C++/assembly fixture in Node and Chromium | Hosted C++, general assembly, custom native/linker flags, offline external modules, hard synchronous-phase resource limits, and broader differential coverage remain unresolved          | Define the remaining native-language policies, enforce worker resource limits, and expand differential fixtures before restoring TINYGO to the public registry                |
+| Modern Fortran | `F90`, `F95`  | `FORTRAN` now runs through f2c/libf2c, while `static/wasm-fortran` still packages LFortran analyzer assets                                                                                                       | LFortran WASM/WAT stdin codegen still aborts and the C backend reports `visit_FileRead() not implemented`; f2c covers Fortran 77-style code but is not a full modern Fortran compiler    | Package a real browser modern Fortran compiler/runtime with stdin-capable codegen before advertising F90/F95 as first-class runtimes                                          |
+| Crystal        | `CRYSTAL`     | No browser Crystal compiler/runtime assets are packaged in this repository                                                                                                                                       | Crystal cannot be treated as syntax-only or as a wasm-idle-authored translator/subset                                                                                                    | Find or build a browser-hosted real Crystal compiler/runtime path with stdin/stdout coverage before registering the language                                                  |
+| Swift          | `SWIFT`       | Swift.org documents Wasm support through a native Swift 6.x toolchain plus a Wasm SDK, and SwiftWasm Pad uses a backend compile service; no browser-hosted swiftc/SwiftPM runtime asset is packaged here         | Swift cannot be implemented as a wasm-idle-authored parser/runtime subset or as a remote compile service; the playground needs a redistributable browser-hosted real Swift compiler path | Build or source a browser-hosted Swift compiler/SwiftPM runtime bundle, prove stdin/stdout execution for generated WASI modules, then register SWIFT as a first-class runtime |
 
 ## Monorepo layout
 
@@ -227,10 +226,14 @@ toolchains can be consumed from pinned external runtime repositories:
 - `packages/vue`: Vue composables around `@wasm-idle/core`.
 - `packages/node`: Node.js host helpers for Node-capable sandbox loaders.
 - `runtimes/*`: imported runtime/compiler packages such as `wasm-rust`,
-  `wasm-of-js-of-ocaml`, `wasm-go`, `wasm-tinygo`, `wasm-dotnet`, `wasm-typescript`,
+  `wasm-of-js-of-ocaml`, `wasm-go`, `wasm-dotnet`, `wasm-typescript`,
   `wasm-wat`, `wasm-lua`, `wasm-lisp`, `wasm-elixir`, `wasm-tcl`, `wasm-awk`,
   `wasm-forth`, `wasm-j`, `wasm-bqn`, `wasm-janet`,
   `pyodide`, `teavm`, `assemblyscript`, `ruby`, `r`, and `js-sandbox`.
+- `runtimes/wasm-tinygo`: an internal harness containing an explicitly labeled legacy AST-to-C
+  subset and an independent receipt-verified upstream compiler consumer. `TINYGO` remains
+  unregistered pending hosted-C++ and general-assembly policy, offline modules, hard phase limits,
+  and broader differential fixtures.
 - `producers/wasm-php`: standalone, locked producer for the checked-in PHP 8.4 page asset. It is
   outside the root workspace and is never published as an npm package.
 - `static/wasm-zig`, `static/wasm-haskell`, `static/wasm-julia`, and `static/wasm-nim`: bundled browser runtime and
@@ -364,27 +367,48 @@ exposes a target selector when Rust is active, defaults to `wasm32-wasip1`, and 
 in local storage. The compiler module, rustc, sysroot, and component tooling remain unloaded until
 Rust is selected; LSP assets remain unloaded until the LSP toggle is enabled.
 
-## TinyGo browser integration
+## TinyGo porting harness
 
-The demo app can also vendor the workspace `wasm-tinygo` browser build under `static/wasm-tinygo/`
-and load its `runtime.js` entry directly inside the TinyGo playground sandbox. The example page
-uses the bundled browser runtime by default, including on `localhost` during `vite dev` /
-`vite preview`. Refresh the
-bundled runtime assets after rebuilding the workspace project with:
+`runtimes/wasm-tinygo` and its vendored `static/wasm-tinygo/` assets remain available for compiler
+port development. They are not public TinyGo language support. The legacy `runtime.js` path lowers
+a limited Go AST subset to C before running browser clang/lld, while the independent `upstream.js`
+path consumes the real receipt-verified wasm-llvm compiler. New manifests classify the legacy path
+as `wasm-idle-go-ast-to-c-subset`; `buildMode: direct` and `artifactKind: compiler` from an older
+generated bundle are not accepted as upstream identity.
+
+The sibling `wasm-llvm/producer/tinygo-browser` producer now pins upstream TinyGo 0.40.1,
+go-llvm, and TinyGo LLVM 20.1.1 and contains fail-closed LLVM/Clang/LLD and browser-compiler build
+paths. Its current artifacts include a 70,294,650-byte compiler, a 24,266,537-byte reduced root, and
+a 25,870,831-byte Go 1.24.6 `cmd/go` WASI package-graph provider, each bound by strict receipts. The
+independent `upstream.js` entry verifies those assets plus raw LLD, derives the package graph from
+the supplied module workspace, validates the runtime/link plan, and finalizes with pinned Binaryen 129. Node and headless Chromium compiled 45 upstream packages from a multi-package
+CGo/C/freestanding-C++/assembly workspace and ran the maps/slices/struct/method/interface/stdin
+fixture with exact output `hello Ada count=2 total=3 cgo=5/20 cxxasm=13\n`.
+
+`TINYGO` remains absent from `supportedLanguageIds`, direct playground loading, and the example
+page selector. The upstream path now accepts workspace files rather than caller-authored package
+JSON and never falls back to the subset. Harness developers can prepare an asset directory, build
+the stable `runtime.js` and `upstream.js` entries, and sync them with:
 
 ```bash
+pnpm --dir runtimes/wasm-tinygo prepare:wasm-llvm-upstream -- \
+  --compiler /path/to/tinygo-compiler.wasm \
+  --root-archive /path/to/tinygoroot.tar.gz \
+  --producer-receipt /path/to/producer-receipt.json \
+  --package-graph /path/to/tinygo-package-graph.wasm \
+  --package-graph-receipt /path/to/package-graph-provider-receipt.json \
+  --lld /path/to/lld.wasm \
+  --output-dir public/tools/upstream
 pnpm --dir runtimes/wasm-tinygo build
 pnpm run sync:wasm-tinygo
 ```
 
-TinyGo exposes `wasm`, `wasip1`, `wasip2`, and `wasip3` targets through the example page. The
-browser pipeline still lives inside `wasm-tinygo`; `wasm-idle` imports its reusable `runtime.js`
-library entry directly, forwards the selected target into the build request, then runs the emitted
-artifact with browser WASI so terminal stdin/EOF behavior stays consistent with the other runtimes.
-The default bundled browser path loads the vendored TinyGo runtime in `direct` mode, skips the old
-bootstrap-only compile step, and runs runnable WASI artifacts locally. The `wasip2` and `wasip3`
-entries use the preview target profiles shipped by the bundled `wasm-tinygo` runtime, so they may
-produce non-runnable preview artifacts until the matching execution path is available.
+The upstream compiler, package provider, and Chromium acceptance are real TinyGo evidence. Protocol
+v4 verifies CGo/native source and dependency evidence, target-C and freestanding-C++17 ThinLTO,
+uppercase CGo-package `.S`, and existing `go:embed` objects before raw LLD. Public integration
+remains blocked because hosted C++, general assembly and custom native/linker flags stay
+fail-closed, external module downloads are disabled, synchronous phases have no enforceable
+budgets, and broader differential fixtures are still required.
 
 ## C# / F# / VB.NET / .NET browser integration
 
@@ -428,35 +452,24 @@ it prepares both the Clang delivery bundle and the complete OCaml browser compil
 `WASM_IDLE_TEST_ASSET_BASE_URL` and `WASM_IDLE_TEST_BYPASS_COOKIE` can select a compatible mirror
 and its access cookie.
 
-Browser-level Rust and TinyGo checks are reproducible from this repo:
+Browser-level Rust checks are reproducible from this repo:
 
 ```bash
 cd wasm-idle
 pnpm run probe:rust-browser
 pnpm run test:browser:playwright
-pnpm run probe:tinygo-browser
-pnpm run test:browser:tinygo
 
 WASM_IDLE_BROWSER_URL='http://localhost:5173/absproxy/5173/' \
 WASM_IDLE_REUSE_LOCAL_PREVIEW=1 \
 pnpm run probe:rust-browser
 
-WASM_IDLE_BROWSER_URL='http://localhost:5173/absproxy/5173/' \
-WASM_IDLE_REUSE_LOCAL_PREVIEW=1 \
-pnpm run probe:tinygo-browser
-
 WASM_IDLE_RUN_REAL_BROWSER_RUST=1 \
 WASM_IDLE_BROWSER_URL='http://localhost:5173/absproxy/5173/' \
 WASM_IDLE_REUSE_LOCAL_PREVIEW=1 \
 pnpm exec vitest run src/lib/playground/rust.playwright.test.ts
-
-WASM_IDLE_RUN_REAL_BROWSER_TINYGO=1 \
-WASM_IDLE_BROWSER_URL='http://localhost:5173/absproxy/5173/' \
-WASM_IDLE_REUSE_LOCAL_PREVIEW=1 \
-pnpm exec vitest run src/lib/playground/tinygo.playwright.test.ts
 ```
 
-Both runtime probes exercise the real Chromium page path. The default Rust probe now feeds stdin with a
+The runtime probe exercises the real Chromium page path. The default Rust probe now feeds stdin with a
 single line (`5\n`) and expects the page to finish without sending EOF, which keeps the regression
 aligned with the default Rust sample and proves that pressing Enter is enough for line-based stdin.
 Programs that intentionally read stdin until EOF can still be finished with `Ctrl+D` or the toolbar
@@ -464,9 +477,6 @@ Programs that intentionally read stdin until EOF can still be finished with `Ctr
 The browser helper writes stdin through the page-owned `window.__wasmIdleDebug.writeTerminalInput(...)`
 hook instead of trying to click xterm's hidden helper textarea, which proved too flaky for repeatable
 Playwright runs.
-The TinyGo probe follows the same pattern. The browser path should load the vendored runtime in
-`direct` mode and avoid the old bootstrap compile command altogether.
-The TinyGo browser commands currently default to `vite dev`.
 If Rust ever reports `invalid metadata files for crate core` or `Unsupported archive identifier`,
 the browser almost always fetched a stale or wrong `wasm-rust` sysroot asset. Hard refresh the page
 and rebuild then resync `static/wasm-rust/` from `runtimes/wasm-rust/dist/`.
@@ -549,10 +559,8 @@ instrumentation is emitted as the separate `debug-instrumenter.js` static asset 
 only for debug executions. Override it with `runtimeAssets.rust.debugModuleUrl`; otherwise
 wasm-idle resolves it beside the configured compiler module and preserves the compiler URL version
 query.
-TinyGo expects a browser-loadable `wasm-tinygo` runtime module. Point
-`PUBLIC_WASM_TINYGO_MODULE_URL` at a built entry such as `.../wasm-tinygo/dist/runtime.js`, or
-pass `runtimeAssets.tinygo.moduleUrl` at runtime. The older `PUBLIC_WASM_TINYGO_APP_URL` /
-`runtimeAssets.tinygo.appUrl` document path is still accepted and normalized to `runtime.js`.
+The `runtimeAssets.tinygo` and `PUBLIC_WASM_TINYGO_*` fields remain only for the internal porting
+harness. Configuring them does not register `TINYGO` as a supported playground language.
 WAT uses the bundled `static/wasm-wat/` WABT browser module by default. Override it with
 `PUBLIC_WASM_WAT_MODULE_URL`, or pass `runtimeAssets.wat.moduleUrl`.
 WASM executes binary WebAssembly modules directly through the browser WebAssembly API. The editor
@@ -665,9 +673,6 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	dotnet: {
 		moduleUrl: 'https://cdn.example.com/wasm-dotnet/index.js'
 	},
-	tinygo: {
-		moduleUrl: 'https://cdn.example.com/wasm-tinygo/runtime.js'
-	},
 	wat: {
 		moduleUrl: 'https://cdn.example.com/wasm-wat/index.js'
 	},
@@ -706,7 +711,7 @@ file. Mirror its complete sibling asset tree at the same relative paths. Cross-o
 must provide compatible CORS and COEP/CORP headers and cannot rely on wasm-idle's same-origin gzip
 service worker.
 
-Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Clang custom loaders receive `bin/memfs.wasm.gz`, `bin/clang.wasm.gz`, `bin/lld.wasm.gz`, and `bin/sysroot.tar.gz`; COBOL loaders receive `cobc.wasm.gz`, `rootfs.tar.gz`, and `c-sysroot.tar.gz`. The shared loader pipes these gzip response bodies through native `DecompressionStream`. Legacy external manifests that still reference ZIP assets remain supported through the dynamically loaded `fflate` compatibility path. Zig custom loaders receive `zig_small.wasm` and `std.tar.gz`; an explicitly configured legacy `std.zip` URL remains compatible. Clangd custom loaders receive `clangd.js` and `clangd.wasm.gz`, with the worker decompressing the gzip payload before instantiation. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. C#, F#, and VB.NET expect a browser-loadable `wasm-dotnet` module with its language-specific static .NET `browser-wasm` runtime assets. TinyGo expects a browser-loadable runtime module. The browser runtime now ships a direct-mode execution path that can produce and run the bundled TinyGo WASI artifact locally, alongside `tools/go-probe.wasm` and vendored emception assets. TinyGo also accepts a runtime asset loader + pack bundle in `runtimeAssets.tinygo` when you need to serve runtime assets out of a single compressed archive. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
+Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Clang custom loaders receive `bin/memfs.wasm.gz`, `bin/clang.wasm.gz`, `bin/lld.wasm.gz`, and `bin/sysroot.tar.gz`; COBOL loaders receive `cobc.wasm.gz`, `rootfs.tar.gz`, and `c-sysroot.tar.gz`. The shared loader pipes these gzip response bodies through native `DecompressionStream`. Legacy external manifests that still reference ZIP assets remain supported through the dynamically loaded `fflate` compatibility path. Zig custom loaders receive `zig_small.wasm` and `std.tar.gz`; an explicitly configured legacy `std.zip` URL remains compatible. Clangd custom loaders receive `clangd.js` and `clangd.wasm.gz`, with the worker decompressing the gzip payload before instantiation. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. C#, F#, and VB.NET expect a browser-loadable `wasm-dotnet` module with its language-specific static .NET `browser-wasm` runtime assets. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
 
 To reuse the same runtime asset configuration for both `<Terminal>` and direct `playground(...)`
 access, bind it once:
@@ -722,17 +727,6 @@ const wasmIdle = createPlaygroundBinding({
 	},
 	dotnet: {
 		moduleUrl: 'https://cdn.example.com/wasm-dotnet/index.js'
-	},
-	tinygo: {
-		moduleUrl: 'https://cdn.example.com/wasm-tinygo/runtime.js',
-		assetPacks: [
-			{
-				index: 'https://cdn.example.com/wasm-tinygo/runtime-pack/runtime-pack.index.json',
-				asset: 'https://cdn.example.com/wasm-tinygo/runtime-pack/runtime-pack.bin',
-				fileCount: 12,
-				totalBytes: 123456
-			}
-		]
 	}
 });
 
@@ -746,5 +740,5 @@ await sandbox.load('print("hi")', false);
 
 Compiler assets produced by [`wasm-llvm`](https://github.com/seo-rii/wasm-llvm) are deployed to
 external static hosting and loaded by `@wasm-idle/llvm-core`. Also powered by Pyodide, TeaVM, `wasm-rust`,
-`wasm-tinygo`, `wasm-dotnet`, `wasm-of-js-of-ocaml`, `wasm-typescript`, `wasm-lisp`,
+`wasm-dotnet`, `wasm-of-js-of-ocaml`, `wasm-typescript`, `wasm-lisp`,
 `wasm-wat`, `wasm-lua`, `wasm-zig`, CBQN, Janet, AtomVM/Popcorn, and `ghc-in-browser`.

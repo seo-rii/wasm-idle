@@ -468,7 +468,6 @@ describe('Monaco route debug sync', () => {
 				'FSHARP',
 				'VBNET',
 				'OCAML',
-				'TINYGO',
 				'JAVASCRIPT',
 				'TYPESCRIPT',
 				'WAT',
@@ -508,7 +507,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(
 			/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/
 		);
-		expect(pageSource).toMatch(/<select id="tinygo-target" bind:value=\{tinygoTarget\}>/);
+		expect(pageSource).not.toMatch(/<select id="tinygo-target" bind:value=\{tinygoTarget\}>/);
 		expect(pageSource).toMatch(/<select id="ocaml-backend" bind:value=\{ocamlBackend\}>/);
 		expect(pageSource).toMatch(
 			/<select id="ocaml-binaryen-mode" bind:value=\{ocamlWasmBinaryenMode\}>/

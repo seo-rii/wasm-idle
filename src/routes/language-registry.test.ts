@@ -86,6 +86,14 @@ describe('language registry', () => {
 		expect(compilerDiagnosticLanguages.has('SWIFT' as never)).toBe(false);
 	});
 
+	it('keeps TinyGo out of the page language registry while it is a subset harness', () => {
+		expect(supportedLanguageIds).not.toContain('TINYGO');
+		expect(playgroundLanguages).not.toContain('TINYGO');
+		expect('TINYGO' in languageLabels).toBe(false);
+		expect('TINYGO' in editorLanguages).toBe(false);
+		expect(compilerDiagnosticLanguages.has('TINYGO' as never)).toBe(false);
+	});
+
 	it('keeps LSP language routing metadata explicit', () => {
 		expect(debugLspLanguages.has('CPP')).toBe(true);
 		expect(clangdLspLanguages.has('C')).toBe(true);

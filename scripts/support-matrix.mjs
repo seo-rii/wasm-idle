@@ -510,19 +510,6 @@ export const supportMatrixRows = [
 		}
 	},
 	{
-		language: 'TinyGo',
-		ids: ['TINYGO'],
-		runtime: 'wasm-tinygo',
-		stdin: 'Yes',
-		editorSupport: 'syntax',
-		debug: '-',
-		browserTest: {
-			file: 'src/lib/playground/tinygo.playwright.test.ts',
-			env: 'WASM_IDLE_RUN_REAL_BROWSER_TINYGO',
-			marker: 'runTinyGoBrowserProbe'
-		}
-	},
-	{
 		language: 'OCaml',
 		ids: ['OCAML'],
 		runtime: 'wasm-of-js-of-ocaml / js_of_ocaml',
@@ -760,6 +747,17 @@ export const supportMatrixRows = [
 
 /** @type {BlockedCandidateRow[]} */
 export const blockedCandidateRows = [
+	{
+		language: 'TinyGo',
+		candidateIds: ['TINYGO'],
+		currentEvidence:
+			`${code('runtimes/wasm-tinygo')} keeps its wasm-idle-authored Go AST-to-C subset isolated from a ` +
+			'source-pinned upstream TinyGo 0.40.1 path that passed the same 45-package CGo/C/C++/assembly fixture in Node and Chromium',
+		blocker:
+			'Hosted C++, general assembly, custom native/linker flags, offline external modules, hard synchronous-phase resource limits, and broader differential coverage remain unresolved',
+		requiredFollowUp:
+			'Define the remaining native-language policies, enforce worker resource limits, and expand differential fixtures before restoring TINYGO to the public registry'
+	},
 	{
 		language: 'Modern Fortran',
 		candidateIds: ['F90', 'F95'],
@@ -1161,21 +1159,6 @@ const runtimeDetailsByLanguage = new Map([
 				`static worker compiles and evaluates with the official ${code('cljs.js')} self-hosted compiler; ` +
 				`supports ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, and ${code('workspaceFiles')}`,
 			customization: staticWorkerCustomizationFor('clojurescript', 'CLOJURESCRIPT')
-		}
-	],
-	[
-		'TinyGo',
-		{
-			packageBase: `${workspacePackage('runtimes/wasm-tinygo')} / TinyGo 0.40.1 browser toolchain`,
-			execution: `default target ${code('wasm')}; selectable ${codeList([
-				'wasm',
-				'wasip1',
-				'wasip2',
-				'wasip3'
-			])}; supports ${code('stdin')} and ${code('programArgs')}`,
-			customization:
-				`${code('runtimeAssets.tinygo.moduleUrl')}/${code('appUrl')}/${code('assetLoader')}/${code('assetPacks')}; ` +
-				`${code('PUBLIC_WASM_TINYGO_*')}, ${code('tinygoTarget')}, ${code('programArgs')}`
 		}
 	],
 	[

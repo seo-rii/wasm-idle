@@ -223,13 +223,6 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
-	TINYGO: {
-		label: 'TinyGo',
-		editorLanguage: 'go',
-		supportsArgs: true,
-		compilerDiagnostics: true,
-		diagnosticMarkers: true
-	},
 	JAVASCRIPT: {
 		label: 'JavaScript — Browser',
 		editorLanguage: 'javascript',

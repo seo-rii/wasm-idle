@@ -225,7 +225,6 @@ describe('example route debug actions', () => {
 		expectEditorLanguage('PROLOG', 'prolog');
 		expectEditorLanguage('GLEAM', 'gleam');
 		expectEditorLanguage('PERL', 'perl');
-		expectEditorLanguage('TINYGO', 'go');
 		expectEditorLanguage('JAVASCRIPT', 'javascript');
 		expectEditorLanguage('TYPESCRIPT', 'typescript');
 		expectEditorLanguage('ASSEMBLYSCRIPT', 'typescript');
@@ -394,21 +393,11 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/Use\s+Ctrl\+D or the EOF button while running/);
 	});
 
-	it('surfaces TinyGo through the shared language selector, args field, and stdin hint', () => {
+	it('keeps the TinyGo subset out of the shared language selector and execution controls', () => {
 		expect(applicationRuntimeAssets.tinygo?.moduleUrl).toContain('/wasm-tinygo/runtime.js?');
-		expect(source).toMatch(/TinyGoTarget/);
-		expect(source).toMatch(/tinygoTarget = \$state<TinyGoTarget>\('wasm'\),/);
-		expect(source).toMatch(
-			/const knownTinyGoTargets = \['wasm', 'wasip1', 'wasip2', 'wasip3'\] as const;/
-		);
-		expect(source).toMatch(/localStorage\.setItem\('tinygoTarget', tinygoTarget\);/);
-		expect(source).toMatch(
-			/const storedTinyGoTarget = localStorage\.getItem\('tinygoTarget'\);/
-		);
-		expect(source).toMatch(
-			/requestedTinyGoTarget === 'wasip2' \|\|\s+requestedTinyGoTarget === 'wasip3'/s
-		);
-		expect(source).toMatch(/TINYGO: \(\) => \(\{ tinygoTarget \}\)/);
+		expect(playgroundLanguages).not.toContain('TINYGO');
+		expect('TINYGO' in languageLabels).toBe(false);
+		expect(source).not.toMatch(/TinyGoTarget|tinygoTarget|knownTinyGoTargets/);
 		expectPlaygroundLanguage('GO');
 		expectPlaygroundLanguage('D');
 		expectPlaygroundLanguage('CSHARP');
@@ -426,7 +415,6 @@ describe('example route debug actions', () => {
 		expectPlaygroundLanguage('BQN');
 		expectPlaygroundLanguage('JANET');
 		expectPlaygroundLanguage('OCAML');
-		expectPlaygroundLanguage('TINYGO');
 		expectPlaygroundLanguage('JAVASCRIPT');
 		expectPlaygroundLanguage('TYPESCRIPT');
 		expectPlaygroundLanguage('ASSEMBLYSCRIPT');
@@ -454,7 +442,6 @@ describe('example route debug actions', () => {
 			'PERL',
 			'TCL',
 			'AWK',
-			'TINYGO',
 			'JAVASCRIPT',
 			'TYPESCRIPT',
 			'LUA',
@@ -478,18 +465,8 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/availableGoTargets\.includes\('wasip3\/wasm'\)/);
 		expect(source).toMatch(/availableGoTargets\.includes\('js\/wasm'\)/);
 		expect(source).toMatch(/`js\/wasm` runs through the bundled `wasm_exec\.js` browser host/);
-		expect(source).toMatch(/<select id="tinygo-target" bind:value=\{tinygoTarget\}>/);
-		expect(source).toMatch(
-			/\{#each knownTinyGoTargets as target \(target\)\}\s+<option value=\{target\}>\{target\}<\/option>\s+\{\/each\}/s
-		);
-		expect(source).toMatch(
-			/TinyGo runs through the bundled wasm-tinygo browser pipeline by default/
-		);
-		expect(source).not.toContain('host' + ' compile endpoint');
-		expect(source).toMatch(/loads its\s+direct runtime module/);
-		expect(source).toMatch(/`wasip2` and `wasip3` use the wasm-tinygo preview target profiles/);
-		expect(source).toMatch(/resulting WASI artifact in the local playground\s+runtime/);
-		expect(source).toMatch(/reads\s+stdin until EOF/);
+		expect(source).not.toContain('id="tinygo-target"');
+		expect(source).not.toContain("language === 'TINYGO'");
 	});
 
 	it('surfaces D through bundled LDC and Emscripten LLD browser assets', () => {

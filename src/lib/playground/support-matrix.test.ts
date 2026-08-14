@@ -61,4 +61,23 @@ describe('README support matrix', () => {
 		expect(fullSection).toContain('### Blocked candidates');
 		expect(fullSection).toContain('`SWIFT`');
 	});
+
+	it('keeps TinyGo blocked until the upstream compatibility blockers close', () => {
+		const tinyGoSupportRow = supportMatrixRows.find((row) => row.ids.includes('TINYGO'));
+		const tinyGoBlockedRow = blockedCandidateRows.find((row) =>
+			row.candidateIds.includes('TINYGO')
+		);
+		const blockedTable = renderBlockedCandidatesTable();
+
+		expect(tinyGoSupportRow).toBeUndefined();
+		expect(tinyGoBlockedRow).toMatchObject({
+			language: 'TinyGo',
+			candidateIds: ['TINYGO']
+		});
+		expect(tinyGoBlockedRow?.currentEvidence).toContain('Go AST-to-C subset');
+		expect(tinyGoBlockedRow?.currentEvidence).toContain('45-package');
+		expect(tinyGoBlockedRow?.blocker).toContain('Hosted C++');
+		expect(tinyGoBlockedRow?.requiredFollowUp).toContain('worker resource limits');
+		expect(blockedTable).toContain('| TinyGo');
+	});
 });

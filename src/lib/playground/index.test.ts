@@ -553,40 +553,20 @@ describe('playground runtime binding', () => {
 		]);
 	});
 
-	it('routes TinyGo requests through the TinyGo sandbox implementation', async () => {
+	it('rejects TinyGo until a real browser compiler replaces the subset harness', async () => {
 		const binding = createPlaygroundBinding({
 			rootUrl: '/absproxy/5173',
 			tinygo: {
 				moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js?v=test'
 			}
 		});
-		const progress = { set() {} };
-		const sandbox = await binding.load('TINYGO');
 
-		await sandbox.load('package main\nfunc main() {}', true, ['demo'], {}, progress);
-
-		expect(sandbox.runtimeAssets).toEqual({
-			rootUrl: '/absproxy/5173',
-			tinygo: {
-				moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js?v=test'
-			}
-		});
-		expect(sandboxInstances.get('TINYGO')).toHaveLength(1);
-		expect(sandboxInstances.get('TINYGO')?.[0]?.loadCalls).toEqual([
-			[
-				{
-					rootUrl: '/absproxy/5173',
-					tinygo: {
-						moduleUrl: '/absproxy/5173/wasm-tinygo/runtime.js?v=test'
-					}
-				},
-				'package main\nfunc main() {}',
-				true,
-				['demo'],
-				expectedBoundOptions(),
-				progress
-			]
-		]);
+		await expect(playground('TINYGO')).rejects.toThrow('Unsupported language: TINYGO');
+		await expect(binding.load('TINYGO' as never)).rejects.toThrow(
+			'Unsupported language: TINYGO'
+		);
+		expect(moduleLoads).not.toContain('TINYGO');
+		expect(sandboxInstances.get('TINYGO')).toBeUndefined();
 	});
 
 	it('routes Go requests through the dedicated Go sandbox implementation', async () => {

@@ -26,8 +26,10 @@ describe('core language registry', () => {
 	it('distinguishes canonical IDs from accepted aliases', () => {
 		expect(isSupportedLanguageId('CPP')).toBe(true);
 		expect(isSupportedLanguageId('PYPY3')).toBe(false);
+		expect(isSupportedLanguageId('TINYGO')).toBe(false);
 		expect(normalizeLanguageId(' pypy3 ')).toBe('PYTHON3');
 		expect(supportedLanguageIds).not.toContain('PYPY3');
+		expect(supportedLanguageIds).not.toContain('TINYGO');
 	});
 
 	it('keeps alias normalization typed as a canonical language ID', () => {
