@@ -54,7 +54,10 @@ import {
 	snapshotZigExecutionAssetReceipts,
 	type ZigExecutionAssetReceipts
 } from '$lib/playground/zigAssets';
-import type { RuntimeAssetIntegrityEntry as CoreRuntimeAssetIntegrityEntry } from '@wasm-idle/core';
+import type {
+	RuntimeAssetIntegrityEntry as CoreRuntimeAssetIntegrityEntry,
+	RuntimeAssetKeySource
+} from '@wasm-idle/core';
 import type {
 	ObjectiveCAssetIntegrityMap,
 	ObjectiveCAssetName
@@ -365,8 +368,7 @@ export interface PhpRuntimeAssetConfig {
 	moduleUrl?: string;
 }
 
-export interface PlaygroundRuntimeAssets {
-	rootUrl?: string;
+export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	python?: RuntimeAssetConfig;
 	java?: RuntimeAssetConfig;
 	clang?: RuntimeAssetConfig;

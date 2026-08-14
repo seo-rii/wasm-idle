@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
@@ -111,10 +111,11 @@ import {
 	resolveDebugRuntimeUrls,
 	resolveFortranRuntimeAssetConfig,
 	resolveObjectiveCRuntimeAssetConfig,
-	resolveRuntimeAssetConfig
+	resolveRuntimeAssetConfig,
+	type PlaygroundRuntimeAssets
 } from './assets';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
-import { TEAVM_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
+import { TEAVM_RUNTIME_ASSET_RECEIPTS, type RuntimeAssetKeySource } from '@wasm-idle/core';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from './wasmFortranExecutionAssets';
 import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
@@ -133,6 +134,13 @@ import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPro
 import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
 
 describe('runtime asset config resolution', () => {
+	it('keeps application runtime asset keys aligned with the Core contract', () => {
+		expectTypeOf<PlaygroundRuntimeAssets>().toMatchTypeOf<RuntimeAssetKeySource>();
+		expectTypeOf<Exclude<keyof PlaygroundRuntimeAssets, 'debug'>>().toEqualTypeOf<
+			keyof RuntimeAssetKeySource
+		>();
+	});
+
 	it.each([
 		['https://example.com/', 'https://example.com/'],
 		['https://example.com/wasm-idle/', 'https://example.com/wasm-idle/'],
