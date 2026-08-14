@@ -2,7 +2,7 @@
   "format": "wasm-julia-runtime-manifest-v1",
   "runtime": "chriskoch-julia-wasm",
   "package": "@chriskoch/julia-wasm@1.0.4",
-  "fingerprint": "62860089caade448",
+  "fingerprint": "42829744f7843f50",
   "files": [
     "LICENSE.md",
     "julia.data.gz",

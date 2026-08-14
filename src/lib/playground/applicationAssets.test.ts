@@ -29,6 +29,7 @@ import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
+import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
 import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
@@ -192,6 +193,13 @@ describe('application runtime asset root', () => {
 			manifestUrl: `/foo/bar/wasm-janet/runtime-manifest.v2.json?v=${WASM_JANET_ASSET_VERSION}`,
 			manifestFingerprint: WASM_JANET_ASSET_VERSION,
 			workerReceipt: WASM_JANET_RUNNER_RECEIPT
+		});
+		expect(assets.julia).toEqual({
+			baseUrl: '/foo/bar/wasm-julia/',
+			workerUrl: `/foo/bar/wasm-julia/runner-worker.js?v=${WASM_JULIA_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-julia/runtime-manifest.v2.json?v=${WASM_JULIA_ASSET_VERSION}`,
+			manifestFingerprint: WASM_JULIA_ASSET_VERSION,
+			workerReceipt: WASM_JULIA_RUNNER_RECEIPT
 		});
 		expect(assets.clojurescript).toEqual({
 			baseUrl: '/foo/bar/wasm-clojurescript/',
@@ -375,6 +383,16 @@ describe('application runtime asset root', () => {
 					}
 				]
 			]),
+			juliaManifestFingerprint: WASM_JULIA_ASSET_VERSION,
+			juliaWorkerReceipt: JSON.stringify([
+				[
+					'worker',
+					{
+						sha256: WASM_JULIA_RUNNER_RECEIPT.sha256,
+						bytes: WASM_JULIA_RUNNER_RECEIPT.bytes
+					}
+				]
+			]),
 			bashWebcReceipt: JSON.stringify([
 				[
 					'worker',
@@ -425,6 +443,9 @@ describe('application runtime asset root', () => {
 			clojurescriptManifestUrl: assets.clojurescript?.manifestUrl,
 			clojurescriptManifestFingerprint: assets.clojurescript?.manifestFingerprint,
 			clojurescriptWorkerReceipt: expect.any(String),
+			juliaManifestUrl: assets.julia?.manifestUrl,
+			juliaManifestFingerprint: assets.julia?.manifestFingerprint,
+			juliaWorkerReceipt: expect.any(String),
 			typeScriptLibUrl: assets.typescript?.libUrl,
 			fortranBaseUrl: assets.fortran?.baseUrl,
 			fortranF2cWasmUrl: assets.fortran?.f2cWasmUrl,

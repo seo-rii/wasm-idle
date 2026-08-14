@@ -158,7 +158,13 @@ export interface RuntimeAssetKeySource {
 		manifestFingerprint?: string;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
-	julia?: { baseUrl?: string; workerUrl?: string };
+	julia?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	nim?: { baseUrl?: string; workerUrl?: string };
 	bash?: {
 		moduleUrl?: string;
@@ -679,6 +685,18 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	},
 	{ runtime: 'julia', property: 'baseUrl', key: 'juliaBaseUrl' },
 	{ runtime: 'julia', property: 'workerUrl', key: 'juliaWorkerUrl' },
+	{ runtime: 'julia', property: 'manifestUrl', key: 'juliaManifestUrl' },
+	{
+		runtime: 'julia',
+		property: 'manifestFingerprint',
+		key: 'juliaManifestFingerprint'
+	},
+	{
+		runtime: 'julia',
+		property: 'workerReceipt',
+		key: 'juliaWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'nim', property: 'baseUrl', key: 'nimBaseUrl' },
 	{ runtime: 'nim', property: 'workerUrl', key: 'nimWorkerUrl' },
 	{ runtime: 'bash', property: 'moduleUrl', key: 'bashModuleUrl' },

@@ -26,6 +26,10 @@ import {
 	WASM_JANET_RUNNER_RECEIPT
 } from '$lib/playground/wasmJanetVersion';
 import {
+	WASM_JULIA_ASSET_VERSION,
+	WASM_JULIA_RUNNER_RECEIPT
+} from '$lib/playground/wasmJuliaVersion';
+import {
 	WASM_PROLOG_ASSET_VERSION,
 	WASM_PROLOG_RUNNER_RECEIPT
 } from '$lib/playground/wasmPrologVersion';
@@ -298,6 +302,9 @@ export interface JanetRuntimeAssetConfig {
 export interface JuliaRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
+	manifestUrl?: string;
+	manifestFingerprint?: string;
+	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
 export interface NimRuntimeAssetConfig {
@@ -2738,10 +2745,51 @@ export function resolveJuliaRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
+	const configured = typeof options === 'object' ? options?.julia : undefined;
+	const envManifestFingerprint = (publicEnv.PUBLIC_WASM_JULIA_MANIFEST_FINGERPRINT || '').trim();
+	const envWorkerSha256 = (publicEnv.PUBLIC_WASM_JULIA_WORKER_SHA256 || '').trim();
+	const envWorkerBytesSource = (publicEnv.PUBLIC_WASM_JULIA_WORKER_BYTES || '').trim();
+	const envWorkerBytes = /^\d+$/u.test(envWorkerBytesSource)
+		? Number(envWorkerBytesSource)
+		: Number.NaN;
+	const envWorkerReceipt =
+		/^[a-f0-9]{64}$/u.test(envWorkerSha256) &&
+		Number.isSafeInteger(envWorkerBytes) &&
+		envWorkerBytes > 0
+			? { bytes: envWorkerBytes, sha256: envWorkerSha256 }
+			: undefined;
+	const usesCustomUrls = Boolean(
+		configured?.baseUrl ||
+		configured?.workerUrl ||
+		configured?.manifestUrl ||
+		(publicEnv.PUBLIC_WASM_JULIA_BASE_URL || '').trim() ||
+		(publicEnv.PUBLIC_WASM_JULIA_WORKER_URL || '').trim() ||
+		(publicEnv.PUBLIC_WASM_JULIA_MANIFEST_URL || '').trim()
+	);
 	return {
 		baseUrl: resolveJuliaBaseUrl(options, currentUrl),
-		workerUrl: resolveJuliaWorkerUrl(options, currentUrl)
+		workerUrl: resolveJuliaWorkerUrl(options, currentUrl),
+		manifestUrl: resolveJuliaManifestUrl(options, currentUrl),
+		manifestFingerprint:
+			configured?.manifestFingerprint?.trim() ||
+			envManifestFingerprint ||
+			(!usesCustomUrls ? WASM_JULIA_ASSET_VERSION : undefined),
+		workerReceipt:
+			configured?.workerReceipt ||
+			envWorkerReceipt ||
+			(!usesCustomUrls ? WASM_JULIA_RUNNER_RECEIPT : undefined)
 	};
+}
+
+export function resolveJuliaManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl =
+		(typeof options === 'object' && options?.julia?.manifestUrl) ||
+		(publicEnv.PUBLIC_WASM_JULIA_MANIFEST_URL || '').trim();
+	if (configuredManifestUrl) return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
+	return `${resolveJuliaBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
 }
 
 export function resolveNimBaseUrl(

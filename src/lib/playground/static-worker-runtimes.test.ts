@@ -40,6 +40,10 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_JANET_WORKER_BYTES: '',
 		PUBLIC_WASM_JULIA_BASE_URL: '',
 		PUBLIC_WASM_JULIA_WORKER_URL: '',
+		PUBLIC_WASM_JULIA_MANIFEST_URL: '',
+		PUBLIC_WASM_JULIA_MANIFEST_FINGERPRINT: '',
+		PUBLIC_WASM_JULIA_WORKER_SHA256: '',
+		PUBLIC_WASM_JULIA_WORKER_BYTES: '',
 		PUBLIC_WASM_NIM_BASE_URL: '',
 		PUBLIC_WASM_NIM_WORKER_URL: ''
 	}
@@ -121,6 +125,7 @@ import forthWorkerSource from '../../../scripts/runtime-workers/wasm-forth-runne
 import gleamWorkerSource from '../../../scripts/runtime-workers/wasm-gleam-runner-worker.js?raw';
 import jWorkerSource from '../../../scripts/runtime-workers/wasm-j-runner-worker.js?raw';
 import janetWorkerSource from '../../../scripts/runtime-workers/wasm-janet-runner-worker.js?raw';
+import juliaWorkerSource from '../../../scripts/runtime-workers/wasm-julia-runner-worker.js?raw';
 import perlWorkerSource from '../../../scripts/runtime-workers/wasm-perl-runner-worker.js?raw';
 import prologWorkerSource from '../../../scripts/runtime-workers/wasm-prolog-runner-worker.js?raw';
 import tclWorkerSource from '../../../scripts/runtime-workers/wasm-tcl-runner-worker.js?raw';
@@ -133,6 +138,7 @@ import {
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
+import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
 import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
 import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
@@ -249,11 +255,15 @@ describe('static worker backed language sandboxes', () => {
 										? clojureScriptWorkerSource
 										: inputUrl.includes('/wasm-janet/runner-worker.js')
 											? janetWorkerSource
-											: inputUrl.includes('/wasm-perl/runner-worker.js')
-												? perlWorkerSource
-												: inputUrl.includes('/wasm-tcl/runner-worker.js')
-													? tclWorkerSource
-													: '/* static worker */';
+											: inputUrl.includes('/wasm-julia/runner-worker.js')
+												? juliaWorkerSource
+												: inputUrl.includes('/wasm-perl/runner-worker.js')
+													? perlWorkerSource
+													: inputUrl.includes(
+																'/wasm-tcl/runner-worker.js'
+														  )
+														? tclWorkerSource
+														: '/* static worker */';
 				return new Response(source, {
 					status: 200,
 					headers: {
@@ -1014,7 +1024,10 @@ describe('static worker backed language sandboxes', () => {
 		await sandbox.load({
 			julia: {
 				baseUrl: '/wasm-julia/',
-				workerUrl: '/wasm-julia/runner-worker.js?v=test'
+				workerUrl: '/wasm-julia/runner-worker.js?v=test',
+				manifestUrl: '/wasm-julia/runtime-manifest.v2.json',
+				manifestFingerprint: WASM_JULIA_ASSET_VERSION,
+				workerReceipt: WASM_JULIA_RUNNER_RECEIPT
 			}
 		});
 		await expect(
@@ -1023,17 +1036,60 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		await expectWorkerBootstrap(
+		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/wasm-julia/runner-worker.js?v=test'
+			'http://localhost:3000/wasm-julia/runner-worker.js?v=test',
+			juliaWorkerSource
 		);
+		expect(workerInstances[0].options).toBeUndefined();
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-julia/',
+				manifestUrl: 'http://localhost:3000/wasm-julia/runtime-manifest.v2.json',
+				manifestFingerprint: WASM_JULIA_ASSET_VERSION,
 				stdin: 'ok\n',
 				activePath: 'main.jl'
 			})
 		);
+		expect(sandbox.workerReceipt).toEqual(WASM_JULIA_RUNNER_RECEIPT);
+	});
+
+	it('rejects a modified Julia runner before creating a worker', async () => {
+		const modifiedSource = `x${juliaWorkerSource.slice(1)}`;
+		vi.mocked(fetch).mockResolvedValueOnce(
+			new Response(modifiedSource, {
+				status: 200,
+				headers: {
+					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
+				}
+			})
+		);
+		const sandbox = new Julia();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'JULIA'
+		});
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects custom Julia runtime urls without replacement integrity pins', async () => {
+		const sandbox = new Julia();
+
+		await expect(
+			sandbox.load({
+				julia: {
+					baseUrl: 'https://runtime.example.com/julia/',
+					workerUrl: 'https://runtime.example.com/julia/runner.js',
+					manifestUrl: 'https://runtime.example.com/julia/manifest.json'
+				}
+			})
+		).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			runtimeId: 'JULIA'
+		});
+		expect(fetch).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('loads Nim runtime urls and forwards stdin to the Nim wasm compiler worker', async () => {

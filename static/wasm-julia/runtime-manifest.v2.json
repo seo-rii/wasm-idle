@@ -1,0 +1,110 @@
+{
+  "format": "wasm-julia-runtime-manifest-v2",
+  "runtime": "chriskoch-julia-wasm",
+  "profileId": "julia-1.0.4-chriskoch-npm-22a55e0d",
+  "fingerprint": "42829744f7843f50ba108aa72398b816950403fa9047b9e7032312b0948801ca",
+  "licenseExpression": "MIT AND LicenseRef-Julia-Third-Party",
+  "artifact": {
+    "kind": "opaque-npm-prebuilt",
+    "packageName": "@chriskoch/julia-wasm",
+    "packageVersion": "1.0.4",
+    "packageSpec": "@chriskoch/julia-wasm@1.0.4",
+    "registryUrl": "https://registry.npmjs.org/",
+    "tarballUrl": "https://registry.npmjs.org/@chriskoch/julia-wasm/-/julia-wasm-1.0.4.tgz",
+    "publishedAt": "2020-12-05T19:33:59.354Z",
+    "repository": "https://github.com/chris-koch-penn/polylang.git",
+    "sourceRevision": "unrecorded",
+    "importedByCommit": "c9529ad7b7ecfaea8a55c0fe5693c4d07cd0ae26",
+    "npmGitHead": "unrecorded",
+    "verifiedBuildInput": false,
+    "bytes": 12406918,
+    "sha256": "03d0e93196dbeec55946bbe447d4c9b2d244dba15fdd882c750fb33598bf640f",
+    "sha512": "86b957b1b800430c76542eae9959c528f540ad94fbaa34c9edaecc245497216b9cbc353f56aac392db4ddba81aa78a354383a3a11924688b0df40307ce146fc4",
+    "npmIntegrity": "sha512-hrlXsbgAQwx2VC6umVnFKPVArZT7qjTJ7a7MJFSXIWucvDU/VqrDkttN26gap4o1Q4OjoRkkaIsN9AMHzhRvxA==",
+    "npmShasum": "22a55e0d10ad50f2999d059b325abe4d95cf17b3"
+  },
+  "components": {
+    "distribution": {
+      "version": "1.0.4",
+      "repository": "https://github.com/chris-koch-penn/polylang.git",
+      "revision": "unrecorded",
+      "verifiedBuildInput": false,
+      "evidence": "content-locked npm package; source revision and build recipe are not published in package metadata"
+    },
+    "julia": {
+      "version": "1.0.4",
+      "repository": "https://github.com/JuliaLang/julia.git",
+      "revision": "unrecorded",
+      "verifiedBuildInput": false,
+      "evidence": "npm package identity and bundled README claim; binary-to-source attestation is unavailable"
+    },
+    "emscripten": {
+      "version": "unrecorded",
+      "repository": "https://github.com/emscripten-core/emscripten.git",
+      "revision": "unrecorded",
+      "verifiedBuildInput": false,
+      "evidence": "opaque prebuilt Emscripten loader without recorded toolchain revision"
+    }
+  },
+  "license": {
+    "path": "LICENSE.md",
+    "spdx": "MIT AND LicenseRef-Julia-Third-Party",
+    "size": 5205,
+    "sha256": "7c9c691d5ec662a63497d84aeacbe746eca46b6e807b7ef23201d542dfbcd8a8"
+  },
+  "documentation": {
+    "path": "readme.md",
+    "mediaType": "text/markdown",
+    "size": 251,
+    "sha256": "06b3bc962e371a2684cc56c92e1809b1e63467813f0304eb99b06eb8b6bd6fe6"
+  },
+  "metadata": {
+    "path": "runtime-build.json",
+    "mediaType": "application/json",
+    "size": 2342,
+    "sha256": "70a6d553e57e4210e8b24ed7458403a9793eb683ba886d958cbde33ee50ec867"
+  },
+  "assets": [
+    {
+      "path": "julia.js",
+      "mediaType": "text/javascript",
+      "size": 278345,
+      "sha256": "729bebdacd0243b760360c1b9c6c18735db3c85b9047d8cb2ed63d4801a4fb7f"
+    },
+    {
+      "path": "julia.wasm",
+      "mediaType": "application/wasm",
+      "size": 2573366,
+      "sha256": "027467183dff7f2e91574da93dbd1ea82f6875be1636d786212bb3c1b3538d45"
+    },
+    {
+      "path": "julia.data",
+      "mediaType": "application/octet-stream",
+      "size": 42960896,
+      "sha256": "8e9347b29cb8b4301cf40fdc4e1f4bdc51a7f06f3f12958fbd2730fba2ba38b1"
+    }
+  ],
+  "storage": [
+    {
+      "path": "julia.js.gz",
+      "logicalPath": "julia.js",
+      "encoding": "gzip",
+      "size": 57115,
+      "sha256": "fdb4b6d7417c2c02f0becd71ec24d01c11f920e97ec77ace2e3676d1667b9e65"
+    },
+    {
+      "path": "julia.wasm.gz",
+      "logicalPath": "julia.wasm",
+      "encoding": "gzip",
+      "size": 858693,
+      "sha256": "590d2e91f5360ab663b8a640c51007d3112064ad0c79e347eac85d87c010fddf"
+    },
+    {
+      "path": "julia.data.gz",
+      "logicalPath": "julia.data",
+      "encoding": "gzip",
+      "size": 14260930,
+      "sha256": "6c35eea7607974239cb3350273311c9458b890aa7d5c57c879388395b042e6f8"
+    }
+  ]
+}
