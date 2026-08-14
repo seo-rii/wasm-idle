@@ -255,4 +255,144 @@ describe('SQLite worker lifecycle', () => {
 		await expect(sandbox.run('select 2', false)).resolves.toBe(true);
 		expect(worker.terminate).not.toHaveBeenCalled();
 	});
+
+	it('keeps clear reusable but disposes an idle runtime exactly once', async () => {
+		const sandbox = new Sqlite();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/assets');
+		const worker = workerInstances[0];
+
+		await sandbox.clear();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('select 1', false)).resolves.toBe(true);
+
+		let cleanupSnapshot: Record<string, unknown> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		worker.terminate.mockImplementationOnce(() => {
+			cleanupSnapshot = {
+				worker: sandbox.worker,
+				wasmUrl: sandbox.wasmUrl,
+				moduleUrl: sandbox.moduleUrl,
+				output: sandbox.output,
+				diagnostic: sandbox.oncompilerdiagnostic
+			};
+			reentrantLoad = sandbox.load('/reentrant');
+			reentrantDisposal = sandbox.dispose();
+		});
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		const reentrantLoadResult = expect(reentrantLoad!).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'SQLITE'
+		});
+		await firstDisposal;
+		expect(cleanupSnapshot).toEqual({
+			worker: undefined,
+			wasmUrl: '',
+			moduleUrl: '',
+			output: null,
+			diagnostic: undefined
+		});
+		await reentrantLoadResult;
+
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBeNull();
+		expect(worker.onerror).toBeNull();
+		expect(worker.onmessageerror).toBeNull();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.wasmUrl).toBe('');
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.output).toBeNull();
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+
+		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'SQLITE'
+		});
+		await expect(sandbox.run('select 2', false)).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'SQLITE'
+		});
+		sandbox.terminate();
+		await sandbox.clear();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles an active startup with one stable disposal cancellation', async () => {
+		autoResolveLoad = false;
+		const sandbox = new Sqlite();
+		const loading = sandbox.load('/assets');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		const cancellation = await loading.catch((error) => error);
+		await firstDisposal;
+
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'SQLITE',
+			recoverable: false
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBeUndefined();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles an active run and ignores retained messages after disposal', async () => {
+		autoResolveRun = false;
+		const sandbox = new Sqlite();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/assets');
+		const worker = workerInstances[0];
+		const running = sandbox.run('select 1', false);
+		await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledTimes(2));
+		const staleHandler = worker.onmessage;
+		const cancellation = running.catch((error) => error);
+
+		await sandbox.dispose();
+		await expect(cancellation).resolves.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'SQLITE',
+			recoverable: false
+		});
+
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		staleHandler?.({
+			data: {
+				output: 'late output',
+				diagnostic: { lineNumber: 1, severity: 'error', message: 'late diagnostic' },
+				results: 'late result'
+			}
+		} as MessageEvent<any>);
+		await Promise.resolve();
+		expect(output).not.toHaveBeenCalled();
+		expect(diagnostic).not.toHaveBeenCalled();
+		expect(sandbox.output).toBeNull();
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+	});
 });

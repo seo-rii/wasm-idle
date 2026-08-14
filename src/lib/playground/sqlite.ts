@@ -9,9 +9,11 @@ import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -47,6 +49,13 @@ class Sqlite implements Sandbox {
 	moduleUrl = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	private activeOperation: SqliteOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('SQLite sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'SQLITE',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'SQLite',
 		onDispose: (worker) => {
@@ -65,6 +74,12 @@ class Sqlite implements Sandbox {
 	}
 
 	private beginOperation(phase: SqliteOperation['phase']) {
+		if (this.disposed) {
+			throw new RuntimeConfigurationError('SQLite sandbox is disposed', {
+				phase: 'dispose',
+				runtimeId: 'SQLITE'
+			});
+		}
 		this.requireOperationIdle();
 		const operation: SqliteOperation = {
 			token: Symbol(phase),
@@ -539,6 +554,7 @@ class Sqlite implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
@@ -550,6 +566,7 @@ class Sqlite implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		if (this.activeOperation) {
 			this.terminate();
 			return;
@@ -562,6 +579,27 @@ class Sqlite implements Sandbox {
 				// Idle handler cleanup is best effort.
 			}
 		}
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		delete this.worker;
+		this.wasmUrl = '';
+		this.moduleUrl = '';
+		this.output = null;
+		this.oncompilerdiagnostic = undefined;
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+			this.exit = true;
+		}
+		return this.disposePromise;
 	}
 }
 
