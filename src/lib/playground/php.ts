@@ -15,9 +15,11 @@ import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -58,6 +60,13 @@ class Php implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: PhpOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('PHP sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'PHP',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'PHP',
 		onDispose: (worker) => {
@@ -70,6 +79,12 @@ class Php implements Sandbox {
 	});
 
 	private beginOperation(phase: PhpOperation['phase']) {
+		if (this.disposed) {
+			throw new RuntimeConfigurationError('PHP sandbox is disposed', {
+				phase: 'dispose',
+				runtimeId: 'PHP'
+			});
+		}
 		if (this.activeOperation) {
 			throw new BusyError('PHP runtime already has an active operation', {
 				runtimeId: 'PHP',
@@ -391,12 +406,14 @@ class Php implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -639,6 +656,7 @@ class Php implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
@@ -652,6 +670,7 @@ class Php implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		if (this.activeOperation) this.terminate();
 		this.pendingInput = [];
 		this.waitingForInput = false;
@@ -669,6 +688,30 @@ class Php implements Sandbox {
 		} catch {
 			// Buffer cleanup must not replace active-operation cancellation.
 		}
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		delete this.worker;
+		this.moduleUrl = '';
+		this.output = null;
+		this.oncompilerdiagnostic = undefined;
+		this.pendingInput = [];
+		this.waitingForInput = false;
+		this.pendingEof = false;
+		this.resetSharedStdinBuffer();
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+			this.exit = true;
+		}
+		return this.disposePromise;
 	}
 }
 
