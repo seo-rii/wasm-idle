@@ -121,6 +121,13 @@ class Bash implements Sandbox {
 	private loadedConfig: ResolvedBashConfig | null = null;
 	private requestUid = 0;
 	private sessionUid = 0;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('Bash sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'BASH',
+		recoverable: false
+	});
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -130,6 +137,14 @@ class Bash implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	): Promise<void> {
+		if (this.disposed) {
+			return Promise.reject(
+				new RuntimeConfigurationError('Bash sandbox is disposed', {
+					phase: 'dispose',
+					runtimeId: 'BASH'
+				})
+			);
+		}
 		if (this.activeOperation) {
 			return Promise.reject(
 				new BusyError('Bash runtime already has an active operation', {
@@ -288,6 +303,14 @@ class Bash implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (this.disposed) {
+			return Promise.reject(
+				new RuntimeConfigurationError('Bash sandbox is disposed', {
+					phase: 'dispose',
+					runtimeId: 'BASH'
+				})
+			);
+		}
 		if (this.activeOperation) {
 			return Promise.reject(
 				new BusyError('Bash runtime already has an active operation', {
@@ -423,6 +446,7 @@ class Bash implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		const operation = this.activeOperation;
@@ -430,6 +454,7 @@ class Bash implements Sandbox {
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		const operation = this.activeOperation;
 		if (operation?.kind === 'run' && operation.stdinReady) this.flushStdin(operation);
@@ -440,6 +465,7 @@ class Bash implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const operation = this.activeOperation;
 		if (operation) {
 			this.failOperation(operation, reason, true);
@@ -453,6 +479,7 @@ class Bash implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		this.terminate();
 		const readyWorker = this.readyWorker;
 		if (readyWorker) this.retireWorker(readyWorker);
@@ -462,8 +489,24 @@ class Bash implements Sandbox {
 		this.webcUrl = '';
 	}
 
-	async dispose() {
-		await this.clear();
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const operation = this.activeOperation;
+		const readyWorker = this.readyWorker;
+		this.readyWorker = null;
+		this.loadedConfig = null;
+		this.webcUrl = '';
+		this.output = undefined;
+		this.oncompilerdiagnostic = undefined;
+		this.pendingInput = [];
+		this.pendingEof = false;
+		if (operation) this.failOperation(operation, this.disposeCancellation, true);
+		if (readyWorker) this.retireWorker(readyWorker);
+		this.exit = true;
+		return this.disposePromise;
 	}
 
 	private isActive(operation: BashOperation) {

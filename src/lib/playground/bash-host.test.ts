@@ -561,4 +561,167 @@ describe('Bash disposable worker host', () => {
 			'Bash runtime is not loaded'
 		);
 	});
+
+	it('disposes an idle Bash runtime exactly once and rejects reentrant work', async () => {
+		const sandbox = new Bash();
+		const worker = await loadSandbox(sandbox);
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		sandbox.write('queued input\n');
+		sandbox.eof();
+
+		let cleanupSnapshot: Record<string, unknown> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		worker.terminate.mockImplementationOnce(() => {
+			cleanupSnapshot = {
+				readyWorker: Reflect.get(sandbox, 'readyWorker'),
+				loadedConfig: Reflect.get(sandbox, 'loadedConfig'),
+				webcUrl: sandbox.webcUrl,
+				output: sandbox.output,
+				diagnostic: sandbox.oncompilerdiagnostic,
+				pendingInput: [...sandbox.pendingInput],
+				pendingEof: sandbox.pendingEof,
+				onmessage: worker.onmessage,
+				onerror: worker.onerror,
+				onmessageerror: worker.onmessageerror
+			};
+			reentrantLoad = sandbox.load('/reentrant');
+			reentrantDisposal = sandbox.dispose();
+		});
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		const reentrantLoadResult = expect(reentrantLoad!).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'BASH'
+		});
+		await firstDisposal;
+		await reentrantLoadResult;
+
+		expect(cleanupSnapshot).toEqual({
+			readyWorker: null,
+			loadedConfig: null,
+			webcUrl: '',
+			output: undefined,
+			diagnostic: undefined,
+			pendingInput: [],
+			pendingEof: false,
+			onmessage: null,
+			onerror: null,
+			onmessageerror: null
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'BASH'
+		});
+		await expect(sandbox.run('printf unavailable', true)).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'BASH'
+		});
+		sandbox.write('ignored input\n');
+		sandbox.eof();
+		sandbox.terminate();
+		await sandbox.clear();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles active Bash startup with the stable disposal cancellation', async () => {
+		const sandbox = new Bash();
+		const loading = sandbox.load('/assets');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const request = await waitForPosted(worker, 'load');
+		const staleHandler = worker.onmessage;
+		const cancellation = loading.catch((error) => error);
+
+		await sandbox.dispose();
+		await expect(cancellation).resolves.toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(await cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'BASH',
+			recoverable: false
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		staleHandler?.({
+			data: {
+				protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
+				sessionId: request.sessionId,
+				requestId: request.requestId,
+				type: 'loaded'
+			}
+		} as MessageEvent<any>);
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles an active Bash run and ignores retained output after disposal', async () => {
+		const sandbox = new Bash();
+		const worker = await loadSandbox(sandbox);
+		const output = vi.fn();
+		sandbox.output = output;
+		const running = sandbox.run('printf active', false);
+		const request = await waitForPosted(worker, 'run');
+		const staleHandler = worker.onmessage;
+		const cancellation = running.catch((error) => error);
+
+		await sandbox.dispose();
+		await expect(cancellation).resolves.toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(await cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'BASH',
+			recoverable: false
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+
+		staleHandler?.({
+			data: {
+				protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
+				sessionId: request.sessionId,
+				requestId: request.requestId,
+				type: 'output',
+				stream: 'stdout',
+				bytes: new TextEncoder().encode('late output')
+			}
+		} as MessageEvent<any>);
+		await Promise.resolve();
+		expect(output).not.toHaveBeenCalled();
+		expect(sandbox.output).toBeUndefined();
+	});
+
+	it('disposes a replacement candidate and the previously ready Bash worker once', async () => {
+		const sandbox = new Bash();
+		const readyWorker = await loadSandbox(sandbox, '/first');
+		const replacement = sandbox.load('/replacement');
+		const cancellation = replacement.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		const candidate = workerInstances[1];
+		await waitForPosted(candidate, 'load');
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		await firstDisposal;
+		await expect(cancellation).resolves.toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(candidate.terminate).toHaveBeenCalledOnce();
+		expect(readyWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+	});
 });
