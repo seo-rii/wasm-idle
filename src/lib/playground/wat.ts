@@ -1,8 +1,10 @@
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -53,6 +55,13 @@ class Wat implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: WatOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('WAT sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'WAT',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'WAT',
 		onDispose: (worker) => {
@@ -72,6 +81,12 @@ class Wat implements Sandbox {
 	}
 
 	private beginOperation(phase: WatOperation['phase']) {
+		if (this.disposed) {
+			throw new RuntimeConfigurationError('WAT sandbox is disposed', {
+				phase: 'dispose',
+				runtimeId: 'WAT'
+			});
+		}
 		this.requireOperationIdle();
 		const operation: WatOperation = {
 			token: Symbol(phase),
@@ -350,12 +365,14 @@ class Wat implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -597,6 +614,7 @@ class Wat implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
@@ -610,6 +628,7 @@ class Wat implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
@@ -619,6 +638,27 @@ class Wat implements Sandbox {
 			return;
 		}
 		if (this.worker) this.worker.onmessage = null;
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		delete this.worker;
+		this.moduleUrl = '';
+		this.output = null;
+		this.oncompilerdiagnostic = undefined;
+		this.resetExplicitStdinState();
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+			this.exit = true;
+		}
+		return this.disposePromise;
 	}
 }
 
