@@ -1380,4 +1380,177 @@ describe('Zig sandbox', () => {
 		expect(sandbox.worker).toBe(worker);
 		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
 	});
+
+	it('keeps clear reusable but disposes an idle Zig runtime exactly once', async () => {
+		const sandbox = new Zig();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+
+		await sandbox.clear();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('pub fn main() void {}', false)).resolves.toBe(true);
+		sandbox.write('queued input\n');
+		sandbox.eof();
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+
+		let cleanupSnapshot: Record<string, unknown> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		worker.terminate.mockImplementationOnce(() => {
+			cleanupSnapshot = {
+				worker: sandbox.worker,
+				compilerUrl: sandbox.compilerUrl,
+				stdlibUrl: sandbox.stdlibUrl,
+				assetKey: sandbox.assetKey,
+				output: sandbox.output,
+				diagnostic: sandbox.oncompilerdiagnostic,
+				pendingInput: [...sandbox.pendingInput],
+				waitingForInput: sandbox.waitingForInput,
+				pendingEof: sandbox.pendingEof,
+				bufferedInput: readBufferedStdin(sandbox.buffer)
+			};
+			reentrantLoad = sandbox.load('/reentrant');
+			reentrantDisposal = sandbox.dispose();
+		});
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		const reentrantLoadResult = expect(reentrantLoad!).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'ZIG'
+		});
+		await firstDisposal;
+		expect(cleanupSnapshot).toEqual({
+			worker: undefined,
+			compilerUrl: '',
+			stdlibUrl: '',
+			assetKey: '',
+			output: null,
+			diagnostic: undefined,
+			pendingInput: [],
+			waitingForInput: false,
+			pendingEof: false,
+			bufferedInput: ''
+		});
+		await reentrantLoadResult;
+
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBeNull();
+		expect(worker.onerror).toBeNull();
+		expect(worker.onmessageerror).toBeNull();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.compilerUrl).toBe('');
+		expect(sandbox.stdlibUrl).toBe('');
+		expect(sandbox.assetKey).toBe('');
+		expect(sandbox.output).toBeNull();
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+
+		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'ZIG'
+		});
+		await expect(sandbox.run('pub fn main() void {}', false)).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'ZIG'
+		});
+		sandbox.write('ignored input\n');
+		sandbox.eof();
+		sandbox.terminate();
+		await sandbox.clear();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles active Zig startup with one stable disposal cancellation', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Zig();
+		const loading = sandbox.load('/absproxy/5173');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		const cancellation = await loading.catch((error) => error);
+		await firstDisposal;
+
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'ZIG',
+			recoverable: false
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.compilerUrl).toBe('');
+		expect(sandbox.stdlibUrl).toBe('');
+		expect(sandbox.assetKey).toBe('');
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles an active Zig run, clears stdin, and ignores retained messages after disposal', async () => {
+		const sandbox = new Zig();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('pub fn main() void {}', false);
+		const staleHandler = worker.onmessage;
+		const cancellation = running.catch((error) => error);
+		worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+		sandbox.write('active input\n');
+		sandbox.eof();
+		expect(readBufferedStdin(sandbox.buffer)).toBe('active input\n');
+		expect(sandbox.pendingEof).toBe(true);
+
+		await sandbox.dispose();
+		await expect(cancellation).resolves.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'ZIG',
+			recoverable: false
+		});
+
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		staleHandler?.({
+			data: {
+				buffer: true,
+				output: 'late output',
+				diagnostic: { lineNumber: 1, severity: 'error', message: 'late diagnostic' },
+				results: 'late result'
+			}
+		} as MessageEvent<any>);
+		await Promise.resolve();
+		expect(output).not.toHaveBeenCalled();
+		expect(diagnostic).not.toHaveBeenCalled();
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(sandbox.output).toBeNull();
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+	});
 });

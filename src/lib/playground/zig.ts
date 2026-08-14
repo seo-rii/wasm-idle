@@ -13,9 +13,11 @@ import { snapshotZigExecutionAssetReceipts } from '$lib/playground/zigAssets';
 import { WASM_ZIG_ASSET_RECEIPTS } from '$lib/playground/wasmZigVersion';
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -66,6 +68,13 @@ class Zig implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: ZigOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('Zig sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'ZIG',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'Zig',
 		onDispose: (worker) => {
@@ -85,6 +94,12 @@ class Zig implements Sandbox {
 	}
 
 	private beginOperation(phase: ZigOperation['phase']) {
+		if (this.disposed) {
+			throw new RuntimeConfigurationError('Zig sandbox is disposed', {
+				phase: 'dispose',
+				runtimeId: 'ZIG'
+			});
+		}
 		this.requireOperationIdle();
 		const operation: ZigOperation = {
 			token: Symbol(phase),
@@ -415,12 +430,14 @@ class Zig implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -666,6 +683,7 @@ class Zig implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
@@ -679,6 +697,7 @@ class Zig implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
@@ -688,6 +707,29 @@ class Zig implements Sandbox {
 			return;
 		}
 		if (this.worker) this.worker.onmessage = null;
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		delete this.worker;
+		this.compilerUrl = '';
+		this.stdlibUrl = '';
+		this.assetKey = '';
+		this.output = null;
+		this.oncompilerdiagnostic = undefined;
+		this.resetExplicitStdinState();
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+			this.exit = true;
+		}
+		return this.disposePromise;
 	}
 }
 
