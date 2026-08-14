@@ -5,6 +5,8 @@ import {
 import { StaticWorkerRuntimeSandbox } from '$lib/playground/staticWorkerRuntime';
 import { RuntimeConfigurationError } from '@wasm-idle/core';
 
+export const PROLOG_WORKER_IDLE_TIMEOUT_MS = 60_000;
+
 class Prolog extends StaticWorkerRuntimeSandbox {
 	constructor() {
 		super({
@@ -15,6 +17,11 @@ class Prolog extends StaticWorkerRuntimeSandbox {
 				mode: 'streaming',
 				sourceHintPattern:
 					/\b(read_line_to_string|read_line_to_codes|get_char|get_code|read\s*\(|read_string)\b/
+			},
+			workerLifetime: {
+				mode: 'persistent',
+				idleTimeoutMs: PROLOG_WORKER_IDLE_TIMEOUT_MS,
+				evictOnMemoryPressure: true
 			},
 			inlineVerifiedWorker: true,
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {

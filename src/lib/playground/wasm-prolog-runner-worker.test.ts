@@ -198,6 +198,12 @@ globalThis.importScripts = (url) => {
       }
     });
     return {
+	  _PL_cleanup(status) {
+		parentPort.postMessage({ harnessCleanup: status });
+		if (harnessMode === 'cleanup-failure') throw new Error('fixture cleanup failure');
+		if (harnessMode === 'cleanup-canceled') return 0;
+		return 1;
+	  },
       FS: {
         analyzePath: () => ({ exists: true }),
         mkdir: () => {},
@@ -532,6 +538,32 @@ describe('SWI-Prolog runner worker', () => {
 				dataSha256: sha256(fixtureLogicalBytes['swipl-web.data'])
 			}
 		});
+	});
+
+	it('cleans every SWI-Prolog instance while reusing one verified asset generation', async () => {
+		const { messages, terminals } = await runHarnessSequence([
+			integrityRequest({ code: 'main :- writeln(first).' }),
+			integrityRequest({ code: 'main :- writeln(second).' })
+		]);
+
+		expect(terminals).toEqual([{ results: true }, { results: true }]);
+		expect(messages.filter((message) => message.harnessFetch)).toHaveLength(4);
+		expect(messages.filter((message) => message.harnessImported)).toHaveLength(1);
+		expect(messages.filter((message) => message.harnessInjected)).toHaveLength(2);
+		expect(messages.filter((message) => 'harnessCleanup' in message)).toEqual([
+			{ harnessCleanup: 0 },
+			{ harnessCleanup: 0 }
+		]);
+	});
+
+	it.each([
+		['cleanup-failure', 'fixture cleanup failure'],
+		['cleanup-canceled', 'SWI-Prolog cleanup returned status 0 instead of 1.']
+	])('fails the run when %s prevents a clean reset', async (harnessMode, error) => {
+		const messages = await runHarness(integrityRequest({ harnessMode }));
+
+		expect(messages.at(-1)).toEqual({ error });
+		expect(messages).not.toContainEqual({ results: true });
 	});
 
 	it('accepts browser-transparent gzip decoding only after the logical receipt matches', async () => {

@@ -458,13 +458,18 @@ describe('static worker backed language sandboxes', () => {
 				stdin: '27\n'
 			})
 		).resolves.toBe(true);
+		const worker = workerInstances[0];
+		const firstRunId = worker.lastRunId;
+		await expect(
+			sandbox.run('main :- writeln(warm).', false, true, undefined, [], { stdin: '' })
+		).resolves.toBe(true);
 
 		await expectVerifiedWorkerBootstrap(
-			workerInstances[0],
+			worker,
 			'http://localhost:3000/wasm-prolog/runner-worker.js?v=test',
 			prologWorkerSource
 		);
-		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+		expect(worker.postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				runId: expect.stringMatching(/^static-\d+$/),
 				baseUrl: 'http://localhost:3000/wasm-prolog/',
@@ -478,6 +483,10 @@ describe('static worker backed language sandboxes', () => {
 		);
 		expect(sandbox.workerReceipt).toEqual(WASM_PROLOG_RUNNER_RECEIPT);
 		expect(outputs).toContain('factorial_plus_bonus=27\n');
+		expect(workerInstances).toEqual([worker]);
+		expect(worker.lastRunId).not.toBe(firstRunId);
+		await sandbox.dispose();
+		expect(worker.terminate).toHaveBeenCalledOnce();
 	});
 
 	it('rejects a modified Prolog runner before creating a worker', async () => {
@@ -1846,6 +1855,7 @@ describe('static worker backed language sandboxes', () => {
 		onPostMessage = () => {};
 		const sandbox = new Prolog();
 		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
 		const controller = new AbortController();
 		vi.spyOn(controller.signal, 'removeEventListener').mockImplementation(() => {
 			throw new Error('run listener cleanup failed');
@@ -1854,9 +1864,9 @@ describe('static worker backed language sandboxes', () => {
 			stdin: '',
 			signal: controller.signal
 		});
-		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
-		workerInstances[0].onmessage?.({
-			data: { runId: workerInstances[0].lastRunId, results: true }
+		await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledOnce());
+		worker.onmessage?.({
+			data: { runId: worker.lastRunId, results: true }
 		} as MessageEvent<any>);
 		await expect(first).resolves.toBe(true);
 
@@ -1864,17 +1874,18 @@ describe('static worker backed language sandboxes', () => {
 			'main :- read_line_to_string(user_input, Line), writeln(Line).',
 			false
 		);
-		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
 		await Promise.resolve();
 		controller.abort(new Error('late stale abort'));
 		sandbox.write('replacement\n');
 		sandbox.eof();
-		await vi.waitFor(() => expect(workerInstances[1].postMessage).toHaveBeenCalledOnce());
-		workerInstances[1].onmessage?.({
-			data: { runId: workerInstances[1].lastRunId, results: true }
+		await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledTimes(2));
+		worker.onmessage?.({
+			data: { runId: worker.lastRunId, results: true }
 		} as MessageEvent<any>);
 
 		await expect(second).resolves.toBe(true);
+		expect(workerInstances).toEqual([worker]);
+		await sandbox.dispose();
 	});
 
 	it('rejects an overlapping run while the first run waits for stdin', async () => {
@@ -1910,6 +1921,8 @@ describe('static worker backed language sandboxes', () => {
 			data: { runId: workerInstances[0].lastRunId, results: true }
 		} as MessageEvent<any>);
 		await expect(first).resolves.toBe(true);
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+		await sandbox.dispose();
 		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
 	});
 
@@ -2103,7 +2116,9 @@ describe('static worker backed language sandboxes', () => {
 			actual: 5,
 			limit: 4
 		});
-		expect(workerInstances[1].postMessage).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledOnce();
+		await sandbox.dispose();
 	});
 
 	it('releases the active-run slot after kill for an immediate rerun', async () => {
@@ -2154,7 +2169,7 @@ describe('static worker backed language sandboxes', () => {
 		sandbox.write('still forwarded\n');
 		sandbox.eof();
 		await expect(explicitInputWithoutPattern).resolves.toBe(true);
-		expect(workerInstances[1].postMessage).toHaveBeenCalledWith(
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({ stdin: 'still forwarded\n', stdinEof: true })
 		);
 
@@ -2162,9 +2177,11 @@ describe('static worker backed language sandboxes', () => {
 		await expect(sandbox.run(code, false, true, undefined, [], { stdin: '' })).resolves.toBe(
 			true
 		);
-		expect(workerInstances[2].postMessage).toHaveBeenCalledWith(
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({ stdin: '', stdinEof: true })
 		);
+		expect(workerInstances).toHaveLength(1);
+		await sandbox.dispose();
 	});
 
 	it('does not leak stdin queued before or during an explicit-input run', async () => {
@@ -2193,14 +2210,17 @@ describe('static worker backed language sandboxes', () => {
 		await sandbox.load('/absproxy/5173');
 		const nextRun = sandbox.run(code, false);
 		await Promise.resolve();
-		expect(workerInstances[1].postMessage).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledOnce();
 
 		sandbox.write('fresh input\n');
 		sandbox.eof();
 		await expect(nextRun).resolves.toBe(true);
-		expect(workerInstances[1].postMessage).toHaveBeenCalledWith(
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({ stdin: 'fresh input\n', stdinEof: true })
 		);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(2);
+		await sandbox.dispose();
 	});
 
 	it('rejects a pre-cancelled static worker load before fetching', async () => {

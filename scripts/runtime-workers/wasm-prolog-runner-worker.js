@@ -734,6 +734,8 @@ self.onmessage = async (event) => {
 			originalConsole.error(...args);
 		};
 	}
+	let swipl = null;
+	let terminalError = null;
 	try {
 		if (log) {
 			console.log(
@@ -746,7 +748,7 @@ self.onmessage = async (event) => {
 			manifestFingerprint,
 			maxAssetBytes
 		);
-		const swipl = await createSwipl({
+		swipl = await createSwipl({
 			arguments: ['-q'],
 			print(text) {
 				const output = String(text);
@@ -775,16 +777,49 @@ self.onmessage = async (event) => {
 		if (diagnose && /\b(?:error|warning)\b|syntax error/iu.test(diagnosticOutput)) {
 			throw new Error(diagnosticOutput.trim());
 		}
-		if (log) console.log(`[wasm-idle:prolog-worker] ${diagnose ? 'diagnose' : 'run'} settled`);
-		self.postMessage({ results: true });
 	} catch (error) {
-		if (log) console.error('[wasm-idle:prolog-worker] failed', error);
-		self.postMessage({ error: error?.message || String(error) });
+		terminalError = error;
 	} finally {
+		if (swipl) {
+			let cleanupError = null;
+			if (typeof swipl._PL_cleanup !== 'function') {
+				cleanupError = new Error('SWI-Prolog runtime does not expose PL_cleanup().');
+			} else {
+				try {
+					const cleanupStatus = swipl._PL_cleanup(0);
+					if (cleanupStatus !== 1) {
+						cleanupError = new Error(
+							`SWI-Prolog cleanup returned status ${cleanupStatus} instead of 1.`
+						);
+					}
+				} catch (error) {
+					cleanupError = error;
+				}
+			}
+			if (cleanupError) {
+				if (terminalError) {
+					const primaryMessage = terminalError?.message || String(terminalError);
+					const cleanupMessage = cleanupError?.message || String(cleanupError);
+					terminalError = new Error(
+						`${primaryMessage} SWI-Prolog cleanup also failed: ${cleanupMessage}`,
+						{ cause: cleanupError }
+					);
+				} else {
+					terminalError = cleanupError;
+				}
+			}
+		}
 		if (originalConsole) {
 			console.log = originalConsole.log;
 			console.warn = originalConsole.warn;
 			console.error = originalConsole.error;
 		}
 	}
+	if (terminalError) {
+		if (log) console.error('[wasm-idle:prolog-worker] failed', terminalError);
+		self.postMessage({ error: terminalError?.message || String(terminalError) });
+		return;
+	}
+	if (log) console.log(`[wasm-idle:prolog-worker] ${diagnose ? 'diagnose' : 'run'} settled`);
+	self.postMessage({ results: true });
 };
