@@ -29,12 +29,6 @@ const modules = [
 		licenses: [['node_modules/@duckdb/duckdb-wasm/LICENSE', 'LICENSE.txt']]
 	},
 	{
-		name: 'ruby',
-		entry: 'scripts/runtime-modules/ruby.ts',
-		packages: ['@ruby/3.4-wasm-wasi', '@ruby/wasm-wasi'],
-		licenses: []
-	},
-	{
 		name: 'sqlite',
 		entry: 'scripts/runtime-modules/sqlite.ts',
 		packages: ['sql.js'],

@@ -69,6 +69,7 @@ const staticRuntimeModules = [
 	{
 		directory: 'wasm-ruby',
 		packages: {
+			'@bjorn3/browser_wasi_shim': '0.4.2',
 			'@ruby/3.4-wasm-wasi': '2.9.3-2.9.4',
 			'@ruby/wasm-wasi': '2.9.3-2.9.4'
 		}
@@ -124,6 +125,20 @@ describe('static language runtime assets', () => {
 		});
 	});
 
+	it('isolates the locked Ruby runtime in its dedicated producer', async () => {
+		const rootPackage = await readJson<PackageJson>('package.json');
+		const pageBuilder = await readFile(
+			path.join(repoRoot, 'scripts/build-static-runtime-modules.mjs'),
+			'utf8'
+		);
+
+		expect(rootPackage.scripts?.['sync:wasm-ruby']).toBe(
+			'node scripts/sync-runtime.mjs wasm-ruby'
+		);
+		expect(pageBuilder).not.toContain("name: 'ruby'");
+		expect(pageBuilder).not.toContain('scripts/runtime-modules/ruby.ts');
+	});
+
 	it('keeps the shared static module cache key synchronized with every manifest', async () => {
 		const hash = createHash('sha256');
 		for (const runtimeDirectory of [
@@ -131,7 +146,6 @@ describe('static language runtime assets', () => {
 			'wasm-bash/sdk',
 			'wasm-duckdb',
 			'wasm-php',
-			'wasm-ruby',
 			'wasm-sqlite'
 		].sort()) {
 			hash.update(runtimeDirectory);

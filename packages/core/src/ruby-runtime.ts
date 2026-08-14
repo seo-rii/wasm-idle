@@ -1,4 +1,10 @@
-export const RUBY_RUNTIME_ASSET_PATH = 'assets/ruby_stdlib-C40Yu-vu.wasm';
+import {
+	RUBY_RUNTIME_GENERATED_ASSET_PATH,
+	RUBY_RUNTIME_GENERATED_ASSET_RECEIPTS,
+	RUBY_RUNTIME_GENERATED_ASSET_VERSION
+} from './ruby-runtime.generated';
+
+export const RUBY_RUNTIME_ASSET_PATH = RUBY_RUNTIME_GENERATED_ASSET_PATH;
 
 export const RUBY_RUNTIME_ASSET_NAMES = ['runtime.mjs', RUBY_RUNTIME_ASSET_PATH] as const;
 
@@ -11,19 +17,10 @@ export type RubyRuntimeAssetReceipts = Readonly<
 	Record<RubyRuntimeAssetName, Readonly<RubyRuntimeAssetReceipt>>
 >;
 
-export const RUBY_RUNTIME_ASSET_VERSION =
-	'34cc30cd5a0e8b3381460aeb7891165c2b90a4dbb87c9e9a8c7483ae85875dbf';
+export const RUBY_RUNTIME_ASSET_VERSION = RUBY_RUNTIME_GENERATED_ASSET_VERSION;
 
-export const RUBY_RUNTIME_ASSET_RECEIPTS = Object.freeze({
-	'runtime.mjs': Object.freeze({
-		bytes: 54_623,
-		sha256: 'd832ed230a34df7db0a7ed823d4fc974fb532b532e0b0de0ad76033acec05b71'
-	}),
-	[RUBY_RUNTIME_ASSET_PATH]: Object.freeze({
-		bytes: 30_608_059,
-		sha256: '81bc8bbb2130ea34f30826e03d850661bb6cb1c7fe72be598584f12b2810c9de'
-	})
-}) satisfies RubyRuntimeAssetReceipts;
+export const RUBY_RUNTIME_ASSET_RECEIPTS =
+	RUBY_RUNTIME_GENERATED_ASSET_RECEIPTS satisfies RubyRuntimeAssetReceipts;
 
 const snapshotRubyRuntimeAssetReceipt = (
 	asset: RubyRuntimeAssetName,

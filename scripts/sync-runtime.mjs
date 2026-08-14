@@ -98,6 +98,13 @@ export const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-ruby',
+		module: './sync-wasm-ruby.mjs',
+		exportName: 'syncWasmRubyAssets',
+		sourceArg: 'nodeModulesDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-dotnet',
 		module: './sync-wasm-dotnet.mjs',
 		exportName: 'syncWasmDotnetDist',

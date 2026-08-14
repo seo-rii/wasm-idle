@@ -1,0 +1,199 @@
+{
+  "format": "wasm-ruby-runtime-manifest-v2",
+  "runtime": "ruby-wasm-wasi",
+  "profileId": "ruby-3.4.1-ruby-wasm-2.9.3-2.9.4",
+  "provenanceLevel": "npm-attested-source-and-receipted-derived-output",
+  "licenseExpression": "MIT AND (Ruby OR BSD-2-Clause) AND (MIT OR Apache-2.0) AND LicenseRef-Ruby-Wasm-Third-Party-Notices",
+  "artifact": {
+    "kind": "npm-provenance-attested-package-set",
+    "repository": "https://github.com/ruby/ruby.wasm",
+    "revision": "3318796e2c9f0f75c98c669cabdc422cf8218ec2",
+    "workflow": ".github/workflows/release.yml",
+    "workflowRun": "https://github.com/ruby/ruby.wasm/actions/runs/24010231588/attempts/1",
+    "verifiedBuildInput": false,
+    "evidence": "npm provenance identifies the ruby.wasm release source and workflow; it does not prove a byte-reproducible CRuby or wasi-sdk build"
+  },
+  "components": {
+    "ruby": {
+      "version": "3.4.1",
+      "repository": "https://github.com/ruby/ruby",
+      "revision": "48d4efcb85000e1ebae42004e963b5d0cedddcf2",
+      "verifiedBuildInput": false,
+      "evidence": "identity embedded in the distributed Wasm; the complete transitive build recipe is not attested"
+    },
+    "rubyWasm": {
+      "version": "2.9.3-2.9.4",
+      "repository": "https://github.com/ruby/ruby.wasm",
+      "revision": "3318796e2c9f0f75c98c669cabdc422cf8218ec2",
+      "verifiedBuildInput": false,
+      "evidence": "npm provenance-attested release source"
+    },
+    "wasiSdk": {
+      "version": "22.0",
+      "repository": "https://github.com/WebAssembly/wasi-sdk",
+      "revision": "unrecorded",
+      "verifiedBuildInput": false,
+      "evidence": "version identity embedded in the distributed Wasm; source revision is not recorded by the package"
+    }
+  },
+  "packages": [
+    {
+      "name": "@bjorn3/browser_wasi_shim",
+      "version": "0.4.2",
+      "requestedRange": "^0.4.2",
+      "tarballUrl": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz",
+      "tarballBytes": 31373,
+      "tarballSha256": "9c0281520d0e99f027ec7c1c79b4036c0f8168ed9bf98aba19db4737a1333782",
+      "integrity": "sha512-/iHkCVUG3VbcbmEHn5iIUpIrh7a7WPiwZ3sHy4HZKZzBdSadwdddYDZAII2zBvQYV0Lfi8naZngPCN7WPHI/hA==",
+      "attestationUrl": null,
+      "repository": "https://github.com/bjorn3/browser_wasi_shim",
+      "revision": "4a55f2a519d0ddfa7e4609c42e0c9769c37c9ae8",
+      "license": "MIT OR Apache-2.0",
+      "files": 26,
+      "bytes": 114555,
+      "treeSha256": "4454a5e0d68941440b947fdb705f8aa8fca789c5a3d040902bfe2cda8ffde248"
+    },
+    {
+      "name": "@ruby/3.4-wasm-wasi",
+      "version": "2.9.3-2.9.4",
+      "requestedRange": "2.9.3-2.9.4",
+      "tarballUrl": "https://registry.npmjs.org/@ruby/3.4-wasm-wasi/-/3.4-wasm-wasi-2.9.3-2.9.4.tgz",
+      "tarballBytes": 29998123,
+      "tarballSha256": "92c1821dd2f03e20d23a3ca86e1d844571722eab88bc168dd659fff1bc987ad4",
+      "integrity": "sha512-Ze2grGTnyT6meSI1j5NHKIpeadecOsMuKAjPFeyU5K85MSeHJWZdNXS7QLF0a0E1kIwQcYHafU10Gz5fPqECsw==",
+      "attestationUrl": "https://registry.npmjs.org/-/npm/v1/attestations/@ruby%2f3.4-wasm-wasi@2.9.3-2.9.4",
+      "repository": "https://github.com/ruby/ruby.wasm",
+      "revision": "3318796e2c9f0f75c98c669cabdc422cf8218ec2",
+      "license": "MIT",
+      "files": 20,
+      "bytes": 97451582,
+      "treeSha256": "b3e9c5a8939d5fe7b7af968ada4f04020846915536f331a4c87f953778ce3778"
+    },
+    {
+      "name": "@ruby/wasm-wasi",
+      "version": "2.9.3-2.9.4",
+      "requestedRange": "2.9.3-2.9.4",
+      "tarballUrl": "https://registry.npmjs.org/@ruby/wasm-wasi/-/wasm-wasi-2.9.3-2.9.4.tgz",
+      "tarballBytes": 84917,
+      "tarballSha256": "47487299c5be0e32cd6d761b6a11afd63d01b60da8362849fda5e0e007242997",
+      "integrity": "sha512-WxW9wON/TIf+8Ktng8qDJeV/6iH8kw+YwxOsOyXdAdLJgfYDPAXOqpIVd/96y2C9V8VJ2yqZm/IRv6nLeV6EKg==",
+      "attestationUrl": "https://registry.npmjs.org/-/npm/v1/attestations/@ruby%2fwasm-wasi@2.9.3-2.9.4",
+      "repository": "https://github.com/ruby/ruby.wasm",
+      "revision": "3318796e2c9f0f75c98c669cabdc422cf8218ec2",
+      "license": "MIT",
+      "files": 50,
+      "bytes": 472758,
+      "treeSha256": "9971e5cbb59e695715351d31c4c7079de5a678de63de87b814e4ee76b0adddf3"
+    }
+  ],
+  "producer": {
+    "entry": {
+      "path": "scripts/runtime-modules/ruby.ts",
+      "bytes": 257,
+      "sha256": "501625656ed69b9876ddd6320e08f45bf8e0c236d791ba04458c64f3864d9812"
+    },
+    "script": {
+      "path": "scripts/sync-wasm-ruby.mjs",
+      "bytes": 40609,
+      "sha256": "4ff704bbff51a195dbb568db2ea1303039446ba9c439c266a8dddd40bc876e86"
+    },
+    "tool": {
+      "name": "vite",
+      "version": "8.0.8",
+      "requestedRange": "^8.0.8",
+      "tarballUrl": "https://registry.npmjs.org/vite/-/vite-8.0.8.tgz",
+      "integrity": "sha512-dbU7/iLVa8KZALJyLOBOQ88nOXtNG8vxKuOT4I2mD+Ya70KPceF4IAmDsmU0h1Qsn5bPrvsY9HJstCRh3hG6Uw==",
+      "license": "MIT",
+      "files": 47,
+      "bytes": 2190838,
+      "treeSha256": "b3462dd488501c9744a64040f6169ab8afe0d4ec257c5fa822f7ccf5fd779536"
+    },
+    "packageTreeReceiptFormat": "sha256-json-sorted-path-bytes-sha256-v1"
+  },
+  "transformations": [
+    {
+      "id": "vite-8-es2022-single-module-bundle",
+      "input": "scripts/runtime-modules/ruby.ts",
+      "output": "runtime.mjs"
+    },
+    {
+      "id": "node-zlib-gzip-level-9",
+      "input": "assets/ruby_stdlib-C40Yu-vu.wasm",
+      "output": "assets/ruby_stdlib-C40Yu-vu.wasm.gz"
+    }
+  ],
+  "legalFiles": [
+    {
+      "targetPath": "LICENSE",
+      "mediaType": "text/plain",
+      "spdx": "MIT",
+      "size": 1067,
+      "sha256": "90357d3794c968704914d42a52354a83f2d8b10cb43df3b63ef1ca0e5bbc0bf2"
+    },
+    {
+      "targetPath": "NOTICE",
+      "mediaType": "text/markdown",
+      "spdx": "LicenseRef-Ruby-Wasm-Third-Party-Notices",
+      "size": 51134,
+      "sha256": "343c246a6e1f1234e29e51707a54799ea82b50d3a2a41c5221fa12058b2395b2"
+    },
+    {
+      "targetPath": "THIRD_PARTY_NOTICES.md",
+      "mediaType": "text/markdown",
+      "spdx": "LicenseRef-Provenance-Notice",
+      "size": 1248,
+      "sha256": "e3550c79802a5bf13dc140df11843182131a4b3aac069f0e5824e3cc0378fc68"
+    },
+    {
+      "targetPath": "licenses/browser-wasi-shim/LICENSE-MIT",
+      "mediaType": "text/plain",
+      "spdx": "MIT",
+      "size": 1023,
+      "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+    },
+    {
+      "targetPath": "licenses/browser-wasi-shim/LICENSE-APACHE",
+      "mediaType": "text/plain",
+      "spdx": "Apache-2.0",
+      "size": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    }
+  ],
+  "metadata": {
+    "path": "runtime-build.json",
+    "mediaType": "application/json",
+    "size": 7578,
+    "sha256": "ffe995b9384f2946366a6f470aac7454f47217391b9e5dafd259725b15a9bc6b"
+  },
+  "assets": [
+    {
+      "path": "assets/ruby_stdlib-C40Yu-vu.wasm",
+      "mediaType": "application/wasm",
+      "size": 30608059,
+      "sha256": "81bc8bbb2130ea34f30826e03d850661bb6cb1c7fe72be598584f12b2810c9de"
+    },
+    {
+      "path": "runtime.mjs",
+      "mediaType": "text/javascript",
+      "size": 54623,
+      "sha256": "d832ed230a34df7db0a7ed823d4fc974fb532b532e0b0de0ad76033acec05b71"
+    }
+  ],
+  "storage": [
+    {
+      "path": "assets/ruby_stdlib-C40Yu-vu.wasm.gz",
+      "logicalPath": "assets/ruby_stdlib-C40Yu-vu.wasm",
+      "encoding": "gzip",
+      "size": 9051961,
+      "sha256": "4bffd8398d79eed9e5bbe7cd809a88bd3cb861642054a6f3d63b2abfa80f3030"
+    },
+    {
+      "path": "runtime.mjs",
+      "logicalPath": "runtime.mjs",
+      "encoding": "identity",
+      "size": 54623,
+      "sha256": "d832ed230a34df7db0a7ed823d4fc974fb532b532e0b0de0ad76033acec05b71"
+    }
+  ],
+  "fingerprint": "0bac7e15f390f20cccaa1d422a8fd76cb57c0dea3a4ca4e404a4dd529a98906c"
+}

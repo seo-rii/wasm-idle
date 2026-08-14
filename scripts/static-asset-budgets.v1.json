@@ -44,7 +44,7 @@
 		"wasm-perl": { "maxBytes": 4500000, "maxFiles": 10 },
 		"wasm-php": { "maxBytes": 24000000, "maxFiles": 15 },
 		"wasm-prolog": { "maxBytes": 2700000, "maxFiles": 7 },
-		"wasm-ruby": { "maxBytes": 11000000, "maxFiles": 6 },
+		"wasm-ruby": { "maxBytes": 11000000, "maxFiles": 12 },
 		"wasm-rust": { "maxBytes": 68000000, "maxFiles": 85 },
 		"wasm-sqlite": { "maxBytes": 600000, "maxFiles": 7 },
 		"wasm-tcl": { "maxBytes": 1800000, "maxFiles": 12 },
