@@ -6,9 +6,11 @@ import {
 } from '$lib/playground/assets';
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
 	snapshotHaskellRuntimeAssetReceipts,
@@ -82,6 +84,13 @@ class Haskell implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: HaskellOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('Haskell sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'HASKELL',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'Haskell',
 		onDispose: (worker) => {
@@ -101,6 +110,12 @@ class Haskell implements Sandbox {
 	}
 
 	private beginOperation(phase: HaskellOperation['phase']) {
+		if (this.disposed) {
+			throw new RuntimeConfigurationError('Haskell sandbox is disposed', {
+				phase: 'dispose',
+				runtimeId: 'HASKELL'
+			});
+		}
 		this.requireOperationIdle();
 		const operation: HaskellOperation = {
 			token: Symbol(phase),
@@ -421,12 +436,14 @@ class Haskell implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -672,6 +689,7 @@ class Haskell implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
@@ -685,6 +703,7 @@ class Haskell implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
@@ -694,6 +713,27 @@ class Haskell implements Sandbox {
 			return;
 		}
 		if (this.worker) this.worker.onmessage = null;
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		delete this.worker;
+		this.runtimeKey = '';
+		this.output = null;
+		this.oncompilerdiagnostic = undefined;
+		this.resetExplicitStdinState();
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+			this.exit = true;
+		}
+		return this.disposePromise;
 	}
 }
 
