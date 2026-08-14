@@ -1,9 +1,11 @@
 import { resolveLuaModuleUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -57,6 +59,13 @@ class Lua implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: LuaOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('Lua sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'LUA',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'Lua',
 		onDispose: (worker) => {
@@ -76,6 +85,12 @@ class Lua implements Sandbox {
 	}
 
 	private beginOperation(phase: LuaOperation['phase']) {
+		if (this.disposed) {
+			throw new RuntimeConfigurationError('Lua sandbox is disposed', {
+				phase: 'dispose',
+				runtimeId: 'LUA'
+			});
+		}
 		this.requireOperationIdle();
 		const operation: LuaOperation = {
 			token: Symbol(phase),
@@ -357,12 +372,14 @@ class Lua implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -603,6 +620,7 @@ class Lua implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
@@ -616,6 +634,7 @@ class Lua implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
@@ -625,6 +644,27 @@ class Lua implements Sandbox {
 			return;
 		}
 		if (this.worker) this.worker.onmessage = null;
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		delete this.worker;
+		this.moduleUrl = '';
+		this.output = null;
+		this.oncompilerdiagnostic = undefined;
+		this.resetExplicitStdinState();
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+			this.exit = true;
+		}
+		return this.disposePromise;
 	}
 }
 
