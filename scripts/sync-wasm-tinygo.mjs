@@ -27,8 +27,15 @@ function shouldInclude(relativePath) {
 	if (normalized.startsWith('assets/runtime-') && normalized.endsWith('.js')) {
 		return true;
 	}
+	if (normalized.startsWith('assets/upstream-runtime-') && normalized.endsWith('.js')) {
+		return true;
+	}
+	if (normalized.startsWith('tools/upstream/')) {
+		return true;
+	}
 	const exactAllowlist = new Set([
 		'runtime.js',
+		'upstream.js',
 		'tools/go-probe.wasm',
 		'tools/tinygo-compiler.wasm',
 		'tools/tinygo-compiler.json',
@@ -113,6 +120,11 @@ export async function syncWasmTinyGoDist({
 	const runtimeModuleStats = await stat(runtimeModulePath).catch(() => null);
 	if (!runtimeModuleStats?.isFile()) {
 		throw new Error(`wasm-tinygo runtime module was not found at ${runtimeModulePath}.`);
+	}
+	const upstreamModulePath = path.join(sourceDir, 'upstream.js');
+	const upstreamModuleStats = await stat(upstreamModulePath).catch(() => null);
+	if (!upstreamModuleStats?.isFile()) {
+		throw new Error(`wasm-tinygo upstream module was not found at ${upstreamModulePath}.`);
 	}
 
 	await rm(targetDir, { recursive: true, force: true });

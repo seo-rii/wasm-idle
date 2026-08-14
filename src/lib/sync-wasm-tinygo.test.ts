@@ -32,10 +32,21 @@ describe('syncWasmTinyGoDist', () => {
 
 		await writeFixtureFile(sourceDir, 'index.html', '<!doctype html>\n');
 		await writeFixtureFile(sourceDir, 'runtime.js', 'export const runtime = true;\n');
+		await writeFixtureFile(sourceDir, 'upstream.js', 'export const upstream = true;\n');
 		await writeFixtureFile(sourceDir, 'assets/runtime-test.js', 'console.log("runtime");\n');
+		await writeFixtureFile(
+			sourceDir,
+			'assets/upstream-runtime-test.js',
+			'console.log("upstream runtime");\n'
+		);
 		await writeFixtureFile(sourceDir, 'tools/go-probe.wasm', 'wasm');
 		await writeFixtureFile(sourceDir, 'tools/tinygo-compiler.wasm', 'compiler');
 		await writeFixtureFile(sourceDir, 'tools/tinygo-compiler.json', '{"buildMode":"direct"}\n');
+		await writeFixtureFile(
+			sourceDir,
+			'tools/upstream/upstream-toolchain.v1.json',
+			'{"format":"wasm-idle-tinygo-upstream-assets-v1"}\n'
+		);
 		await writeFixtureFile(
 			sourceDir,
 			'vendor/wasm-rust-runtime/runtime-manifest.v3.json',
@@ -51,6 +62,15 @@ describe('syncWasmTinyGoDist', () => {
 		await expect(
 			readFile(path.join(targetDir, 'assets/runtime-test.js'), 'utf8')
 		).resolves.toContain('runtime');
+		await expect(readFile(path.join(targetDir, 'upstream.js'), 'utf8')).resolves.toContain(
+			'upstream = true'
+		);
+		await expect(
+			readFile(path.join(targetDir, 'assets/upstream-runtime-test.js'), 'utf8')
+		).resolves.toContain('upstream runtime');
+		await expect(
+			readFile(path.join(targetDir, 'tools/upstream/upstream-toolchain.v1.json'), 'utf8')
+		).resolves.toContain('wasm-idle-tinygo-upstream-assets-v1');
 		await expect(readFile(path.join(targetDir, 'tools/go-probe.wasm'), 'utf8')).resolves.toBe(
 			'wasm'
 		);
@@ -103,6 +123,7 @@ describe('syncWasmTinyGoDist', () => {
 
 		await writeFixtureFile(sourceDir, 'index.html', '<!doctype html>\n');
 		await writeFixtureFile(sourceDir, 'runtime.js', 'export const runtime = true;\n');
+		await writeFixtureFile(sourceDir, 'upstream.js', 'export const upstream = true;\n');
 		await writeFixtureFile(sourceDir, 'assets/runtime-test.js', 'console.log("runtime");\n');
 		await writeFixtureFile(sourceDir, 'tools/go-probe.wasm', 'wasm');
 		await writeFixtureFile(sourceDir, 'tools/tinygo-compiler.json', '{"buildMode":"direct"}\n');
