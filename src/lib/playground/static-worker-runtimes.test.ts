@@ -3247,27 +3247,83 @@ describe('static worker backed language sandboxes', () => {
 		const invalidScript = new Prolog();
 		const load = invalidScript.load('/absproxy/5173');
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const startupCause = new SyntaxError('Unexpected token');
 		workerInstances[0].onerror?.(
 			new ErrorEvent('error', {
+				error: startupCause,
 				message: 'Unexpected token',
 				filename: '/wasm-prolog/runner-worker.js',
 				lineno: 3,
 				colno: 7
 			})
 		);
-		await expect(load).rejects.toThrow(
-			'Prolog worker script error: Unexpected token (/wasm-prolog/runner-worker.js:3:7)'
-		);
+		await expect(load).rejects.toMatchObject({
+			name: 'WorkerStartupError',
+			code: 'worker-startup',
+			phase: 'startup',
+			runtimeId: 'PROLOG',
+			cause: startupCause,
+			message:
+				'Prolog worker script error: Unexpected token (/wasm-prolog/runner-worker.js:3:7)'
+		});
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('types worker construction failures as startup errors', async () => {
+		const previousWorker = globalThis.Worker;
+		const startupCause = new Error('worker constructor unavailable');
+		class ThrowingWorker {
+			constructor() {
+				throw startupCause;
+			}
+		}
+		vi.stubGlobal('Worker', ThrowingWorker);
+
+		try {
+			const sandbox = new Prolog();
+			await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+				name: 'WorkerStartupError',
+				code: 'worker-startup',
+				phase: 'startup',
+				runtimeId: 'PROLOG',
+				cause: startupCause,
+				message: 'Prolog worker failed to start: worker constructor unavailable'
+			});
+			expect(URL.revokeObjectURL).toHaveBeenCalledOnce();
+		} finally {
+			vi.stubGlobal('Worker', previousWorker);
+		}
+	});
+
+	it('preserves protocol classification for message errors before worker readiness', async () => {
+		autoStartWorkers = false;
+		const sandbox = new Prolog();
+		const load = sandbox.load('/absproxy/5173');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const messageError = new MessageEvent('messageerror', { data: 'invalid bootstrap' });
+
+		workerInstances[0].onmessageerror?.(messageError);
+
+		await expect(load).rejects.toMatchObject({
+			name: 'ProtocolError',
+			code: 'protocol',
+			phase: 'protocol',
+			runtimeId: 'PROLOG',
+			cause: messageError,
+			message: 'Prolog worker message deserialization failed'
+		});
 		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
 	});
 
 	it('rejects the active run when its worker crashes', async () => {
 		const sandbox = new Prolog();
 		await sandbox.load('/absproxy/5173');
+		const executionCause = new WebAssembly.RuntimeError('unreachable');
 		onPostMessage = (worker) => {
 			queueMicrotask(() => {
 				worker.onerror?.(
 					new ErrorEvent('error', {
+						error: executionCause,
 						message: 'runtime crashed',
 						filename: '/wasm-prolog/runner-worker.js',
 						lineno: 9,
@@ -3279,9 +3335,60 @@ describe('static worker backed language sandboxes', () => {
 
 		await expect(
 			sandbox.run('writeln(ok).', false, true, undefined, [], { stdin: '' })
-		).rejects.toBe(
-			'Prolog worker script error: runtime crashed (/wasm-prolog/runner-worker.js:9:2)'
-		);
+		).rejects.toMatchObject({
+			name: 'RuntimeExecutionError',
+			code: 'runtime',
+			phase: 'execute',
+			runtimeId: 'PROLOG',
+			cause: executionCause,
+			message:
+				'Prolog worker script error: runtime crashed (/wasm-prolog/runner-worker.js:9:2)'
+		});
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('types worker message deserialization failures as protocol errors', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const messageError = new MessageEvent('messageerror', { data: 'invalid clone' });
+		onPostMessage = (worker) => {
+			queueMicrotask(() => {
+				worker.onmessageerror?.(messageError);
+			});
+		};
+
+		await expect(
+			sandbox.run('writeln(ok).', false, true, undefined, [], { stdin: '' })
+		).rejects.toMatchObject({
+			name: 'ProtocolError',
+			code: 'protocol',
+			phase: 'protocol',
+			runtimeId: 'PROLOG',
+			cause: messageError,
+			message: 'Prolog worker message deserialization failed'
+		});
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('types synchronous run dispatch failures as protocol errors', async () => {
+		const sandbox = new Prolog();
+		await sandbox.load('/absproxy/5173');
+		const dispatchCause = new DOMException('Value could not be cloned', 'DataCloneError');
+		onPostMessage = () => {
+			throw dispatchCause;
+		};
+
+		const outcome = await sandbox
+			.run('writeln(ok).', false, true, undefined, [], { stdin: '' })
+			.catch((error) => error);
+		expect(outcome).toMatchObject({
+			name: 'ProtocolError',
+			code: 'protocol',
+			phase: 'protocol',
+			runtimeId: 'PROLOG',
+			message: 'Prolog worker run dispatch failed: Value could not be cloned'
+		});
+		expect(outcome.cause).toBe(dispatchCause);
 		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
 	});
 });

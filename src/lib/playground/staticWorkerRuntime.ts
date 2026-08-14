@@ -9,9 +9,11 @@ import {
 	OutputLimitError,
 	ProtocolError,
 	RuntimeConfigurationError,
+	RuntimeExecutionError,
 	RuntimeProgressController,
 	RuntimeWorkerLifetimeController,
 	TimeoutError,
+	WorkerStartupError,
 	isWasmIdleError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace,
@@ -1112,8 +1114,9 @@ self.postMessage = (message, transferOrOptions) => {
 					runtimeId: this.config.languageId
 				});
 			}
-			throw new Error(
-				`${this.config.displayName} worker failed to start: ${this.errorMessage(error)}`
+			throw new WorkerStartupError(
+				`${this.config.displayName} worker failed to start: ${this.errorMessage(error)}`,
+				{ cause: error, runtimeId: this.config.languageId }
 			);
 		}
 		if (this.disposed || generation !== this.workerGeneration) {
@@ -1232,12 +1235,28 @@ self.postMessage = (message, transferOrOptions) => {
 				worker.onerror = (event: ErrorEvent) => {
 					if (generation !== this.workerGeneration || this.worker !== worker) return;
 					event.preventDefault?.();
-					this.handleWorkerFailure(this.formatWorkerError(event));
+					const message = this.formatWorkerError(event);
+					const options = {
+						cause: event.error ?? event,
+						runtimeId: this.config.languageId
+					};
+					this.handleWorkerFailure(
+						this.startupReject
+							? new WorkerStartupError(message, options)
+							: new RuntimeExecutionError(message, options)
+					);
 				};
-				worker.onmessageerror = () => {
+				worker.onmessageerror = (event) => {
 					if (generation !== this.workerGeneration || this.worker !== worker) return;
 					this.handleWorkerFailure(
-						`${this.config.displayName} worker message deserialization failed`
+						new ProtocolError(
+							`${this.config.displayName} worker message deserialization failed`,
+							{
+								cause: event,
+								phase: 'protocol',
+								runtimeId: this.config.languageId
+							}
+						)
 					);
 				};
 				controls.signal?.addEventListener('abort', onAbort, { once: true });
@@ -1332,11 +1351,20 @@ self.postMessage = (message, transferOrOptions) => {
 	}
 
 	private errorMessage(error: unknown) {
-		return error instanceof Error ? error.message : String(error);
+		if (error instanceof Error) return error.message;
+		if (
+			error !== null &&
+			typeof error === 'object' &&
+			'message' in error &&
+			typeof error.message === 'string'
+		) {
+			return error.message;
+		}
+		return String(error);
 	}
 
-	private handleWorkerFailure(reason: string) {
-		this.startupReject?.(new Error(reason));
+	private handleWorkerFailure(reason: unknown) {
+		this.startupReject?.(reason);
 		this.startupReject = null;
 		if (this.activeRun) this.rejectRun(this.activeRun.id, reason);
 		else this.disposeWorker();
@@ -1716,24 +1744,35 @@ self.postMessage = (message, transferOrOptions) => {
 					if (this.disposed || this.activeRun !== activeRun || this.worker !== worker) {
 						return;
 					}
-					worker.postMessage({
-						run: true,
-						runId: id,
-						baseUrl: this.baseUrl,
-						manifestUrl: this.manifestUrl,
-						manifestFingerprint: this.manifestFingerprint,
-						maxAssetBytes: controls.limits.maxAssetBytes,
-						code,
-						args: programArgs,
-						stdin,
-						stdinEof,
-						...(activeRun.stdinRing
-							? { stdinChannel: activeRun.stdinRing.descriptor }
-							: {}),
-						activePath: workspace.activePath,
-						workspaceFiles: workspace.workspaceFiles,
-						log: _log
-					});
+					try {
+						worker.postMessage({
+							run: true,
+							runId: id,
+							baseUrl: this.baseUrl,
+							manifestUrl: this.manifestUrl,
+							manifestFingerprint: this.manifestFingerprint,
+							maxAssetBytes: controls.limits.maxAssetBytes,
+							code,
+							args: programArgs,
+							stdin,
+							stdinEof,
+							...(activeRun.stdinRing
+								? { stdinChannel: activeRun.stdinRing.descriptor }
+								: {}),
+							activePath: workspace.activePath,
+							workspaceFiles: workspace.workspaceFiles,
+							log: _log
+						});
+					} catch (error) {
+						throw new ProtocolError(
+							`${this.config.displayName} worker run dispatch failed: ${this.errorMessage(error)}`,
+							{
+								cause: error,
+								phase: 'protocol',
+								runtimeId: this.config.languageId
+							}
+						);
+					}
 				} catch (error) {
 					const reason = this.preserveDisposeReason(error);
 					this.rejectRun(
