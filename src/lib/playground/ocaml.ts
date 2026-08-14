@@ -20,10 +20,12 @@ import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
 	ProtocolError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	WorkspaceValidationError,
 	resolveExecutionLimits,
@@ -85,6 +87,13 @@ class Ocaml implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: OcamlOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('OCaml sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'OCAML',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'OCaml',
 		onDispose: (worker) => {
@@ -95,7 +104,15 @@ class Ocaml implements Sandbox {
 		}
 	});
 
+	private disposedConfigurationError() {
+		return new RuntimeConfigurationError('OCaml sandbox is disposed', {
+			phase: 'dispose',
+			runtimeId: 'OCAML'
+		});
+	}
+
 	private beginOperation(phase: OcamlOperation['phase']) {
+		if (this.disposed) throw this.disposedConfigurationError();
 		if (this.activeOperation) {
 			throw new BusyError('OCaml runtime already has an active operation', {
 				runtimeId: 'OCAML',
@@ -210,7 +227,8 @@ class Ocaml implements Sandbox {
 	private bindAbortSignal(operation: OcamlOperation, signal?: AbortSignal) {
 		if (!signal || !this.isOperationActive(operation)) return;
 		const onAbort = () => {
-			if (!this.isOperationActive(operation) || operation.abortReasonReading) return;
+			if (this.disposed || !this.isOperationActive(operation) || operation.abortReasonReading)
+				return;
 			operation.abortReasonReading = true;
 			let reason: unknown;
 			try {
@@ -435,6 +453,11 @@ class Ocaml implements Sandbox {
 				}
 				this.worker = worker;
 				this.workerSession.attach(worker);
+				if (!this.isOperationActive(operation) || this.worker !== worker) {
+					if (this.worker === worker) delete this.worker;
+					this.workerSession.release(worker);
+					return;
+				}
 				const handler = (event: MessageEvent<any>) => {
 					if (!this.ownsWorkerOperation(operation, worker, handler)) return;
 					try {
@@ -480,12 +503,14 @@ class Ocaml implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -845,6 +870,7 @@ class Ocaml implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const operation = this.activeOperation;
 		if (operation) {
 			if (operation.sessionActive) this.abortOperation(operation, reason);
@@ -859,6 +885,7 @@ class Ocaml implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
@@ -867,6 +894,36 @@ class Ocaml implements Sandbox {
 		if (this.activeOperation || !this.exit) {
 			this.terminate();
 		}
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const operation = this.activeOperation;
+		const operationBuffer = operation?.buffer;
+		delete this.worker;
+		this.moduleUrl = '';
+		this.manifestUrl = '';
+		this.output = undefined;
+		this.oncompilerdiagnostic = undefined;
+		this.resetExplicitStdinState(this.buffer);
+		if (operationBuffer && operationBuffer !== this.buffer) {
+			try {
+				resetBufferedStdin(operationBuffer);
+			} catch {
+				// A detached operation buffer is already outside the live host state.
+			}
+		}
+		if (operation) {
+			this.abortOperation(operation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+			this.exit = true;
+		}
+		return this.disposePromise;
 	}
 }
 

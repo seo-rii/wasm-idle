@@ -1641,4 +1641,263 @@ describe('OCaml sandbox', () => {
 			expect(workerInstances).toHaveLength(2);
 		}
 	);
+
+	it('keeps clear reusable but disposes an idle OCaml runtime exactly once', async () => {
+		const sandbox = new Ocaml();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+
+		sandbox.write('stale before clear\n');
+		sandbox.eof();
+		await sandbox.clear();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		await expect(sandbox.run('let reusable = true', false)).resolves.toBe(true);
+		sandbox.write('queued input\n');
+		sandbox.eof();
+
+		let cleanupSnapshot: Record<string, unknown> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		worker.terminate.mockImplementationOnce(() => {
+			cleanupSnapshot = {
+				worker: sandbox.worker,
+				moduleUrl: sandbox.moduleUrl,
+				manifestUrl: sandbox.manifestUrl,
+				output: sandbox.output,
+				diagnostic: sandbox.oncompilerdiagnostic,
+				pendingInput: [...sandbox.pendingInput],
+				waitingForInput: sandbox.waitingForInput,
+				pendingEof: sandbox.pendingEof,
+				bufferedInput: readBufferedStdin(sandbox.buffer),
+				onmessage: worker.onmessage,
+				onerror: worker.onerror,
+				onmessageerror: worker.onmessageerror
+			};
+			reentrantLoad = sandbox.load('/reentrant/');
+			reentrantRun = sandbox.run('let reentrant = true', false);
+			void reentrantLoad.catch(() => undefined);
+			void reentrantRun.catch(() => undefined);
+			reentrantDisposal = sandbox.dispose();
+		});
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		await firstDisposal;
+
+		expect(cleanupSnapshot).toEqual({
+			worker: undefined,
+			moduleUrl: '',
+			manifestUrl: '',
+			output: undefined,
+			diagnostic: undefined,
+			pendingInput: [],
+			waitingForInput: false,
+			pendingEof: false,
+			bufferedInput: '',
+			onmessage: null,
+			onerror: null,
+			onmessageerror: null
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'OCAML'
+		});
+		await expect(reentrantRun).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'OCAML'
+		});
+		await expect(sandbox.load('/replacement/')).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'OCAML'
+		});
+		await expect(sandbox.run('let later = true', false)).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'OCAML'
+		});
+		const uidAfterDisposal = sandbox.uid;
+		sandbox.write('ignored input\n');
+		sandbox.eof();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		sandbox.kill();
+		expect(sandbox.uid).toBe(uidAfterDisposal);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		await sandbox.clear();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles pending OCaml startup with one disposal cancellation', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Ocaml();
+		const progress = { set: vi.fn() };
+		const controller = new AbortController();
+		const racingReason = new Error('OCaml external abort raced terminal disposal');
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		const outcome = loading.catch((error) => error);
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+		const progressCallsBeforeDisposal = progress.set.mock.calls.length;
+		worker.terminate.mockImplementationOnce(() => {
+			controller.abort(racingReason);
+			reentrantLoad = sandbox.load('/reentrant/');
+			reentrantRun = sandbox.run('let reentrant = true', false);
+			void reentrantLoad.catch(() => undefined);
+			void reentrantRun.catch(() => undefined);
+			reentrantDisposal = sandbox.dispose();
+		});
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		const cancellation = await outcome;
+		await firstDisposal;
+
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'OCAML',
+			recoverable: false
+		});
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'OCAML'
+		});
+		await expect(reentrantRun).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'OCAML'
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(progress.set).toHaveBeenCalledTimes(progressCallsBeforeDisposal);
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.manifestUrl).toBe('');
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles an active OCaml run, clears stdin, and ignores retained messages', async () => {
+		const sandbox = new Ocaml();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		suppressAutoRunAck = true;
+		const running = sandbox.run('let () = read_line () |> print_endline', false);
+		const outcome = running.catch((error) => error);
+		const staleHandler = worker.onmessage;
+		staleHandler?.({ data: { buffer: true } } as MessageEvent<any>);
+		sandbox.write('42\n');
+		sandbox.eof();
+		expect(readBufferedStdin(sandbox.buffer)).toBe('42\n');
+		expect(sandbox.pendingEof).toBe(true);
+
+		await sandbox.dispose();
+		const cancellation = await outcome;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'OCAML',
+			recoverable: false
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+		staleHandler?.({
+			data: {
+				buffer: true,
+				output: 'late output',
+				diagnostic: { message: 'late diagnostic' },
+				results: true
+			}
+		} as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalled();
+		expect(diagnostic).not.toHaveBeenCalled();
+		expect(sandbox.output).toBeUndefined();
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+		expect(sandbox.worker).toBeUndefined();
+	});
+
+	it('quarantines an OCaml replacement when worker retirement reenters disposal', async () => {
+		const sandbox = new Ocaml();
+		await sandbox.load({
+			ocaml: { moduleUrl: '/first/module.js', manifestUrl: '/first/manifest.json' }
+		});
+		const retiredWorker = workerInstances[0];
+		let reentrantDisposal: Promise<void> | undefined;
+		let reentrantError: unknown;
+		retiredWorker.terminate.mockImplementationOnce(() => {
+			try {
+				reentrantDisposal = sandbox.dispose();
+			} catch (error) {
+				reentrantError = error;
+			}
+		});
+		suppressAutoLoadAck = true;
+
+		const replacement = sandbox.load({
+			ocaml: { moduleUrl: '/second/module.js', manifestUrl: '/second/manifest.json' }
+		});
+		const outcome = replacement.catch((error) => error);
+		await vi.waitFor(() => expect(reentrantDisposal ?? reentrantError).toBeDefined());
+
+		expect(reentrantError).toBeUndefined();
+		const cancellation = await outcome;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(sandbox.dispose()).toBe(reentrantDisposal);
+		await reentrantDisposal;
+		expect(workerInstances).toHaveLength(2);
+		const replacementWorker = workerInstances[1];
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(replacementWorker.postMessage).not.toHaveBeenCalled();
+		expect(replacementWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.manifestUrl).toBe('');
+	});
 });
