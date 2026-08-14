@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readBufferedStdin } from './stdinBuffer';
+import { createWasmIdleSharedBuffer } from './sharedBuffer';
+import { flushQueuedStdin, readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
 const { publicEnv } = vi.hoisted(() => ({
@@ -1222,5 +1223,293 @@ describe('Octave sandbox', () => {
 		expect(runMessages[0].stdin).toBe('injected\n');
 		expect(runMessages[1].stdin).toBe('fresh\n');
 		expect(bufferedValues).toEqual(['', '']);
+	});
+
+	it('keeps clear reusable but disposes an idle Octave runtime exactly once', async () => {
+		const sandbox = new Octave();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('disp("first")', false)).resolves.toBe(true);
+		const firstWorker = workerInstances[0];
+
+		sandbox.write('stale before clear\n');
+		sandbox.eof();
+		await sandbox.clear();
+		expect(firstWorker.terminate).not.toHaveBeenCalled();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('disp("second")', false)).resolves.toBe(true);
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		const worker = workerInstances[1];
+		sandbox.write('queued input\n');
+		sandbox.eof();
+
+		let cleanupSnapshot: Record<string, unknown> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantPrepare: Promise<boolean | string> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		worker.terminate.mockImplementationOnce(() => {
+			cleanupSnapshot = {
+				worker: sandbox.worker,
+				baseUrl: sandbox.baseUrl,
+				workerUrl: sandbox.workerUrl,
+				manifestUrl: sandbox.manifestUrl,
+				output: sandbox.output,
+				diagnostic: sandbox.oncompilerdiagnostic,
+				pendingInput: [...sandbox.pendingInput],
+				waitingForInput: sandbox.waitingForInput,
+				pendingEof: sandbox.pendingEof,
+				stdinWaiters: [...sandbox.stdinWaiters],
+				bufferedInput: readBufferedStdin(sandbox.buffer),
+				onmessage: worker.onmessage,
+				onerror: worker.onerror,
+				onmessageerror: worker.onmessageerror
+			};
+			reentrantLoad = sandbox.load('/reentrant/');
+			reentrantRun = sandbox.run('disp("reentrant")', false);
+			reentrantPrepare = sandbox.run('disp("prepare")', true);
+			void reentrantLoad.catch(() => undefined);
+			void reentrantRun.catch(() => undefined);
+			void reentrantPrepare.catch(() => undefined);
+			reentrantDisposal = sandbox.dispose();
+		});
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		await firstDisposal;
+
+		expect(cleanupSnapshot).toEqual({
+			worker: undefined,
+			baseUrl: '',
+			workerUrl: '',
+			manifestUrl: '',
+			output: undefined,
+			diagnostic: undefined,
+			pendingInput: [],
+			waitingForInput: false,
+			pendingEof: false,
+			stdinWaiters: [],
+			bufferedInput: '',
+			onmessage: null,
+			onerror: null,
+			onmessageerror: null
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		for (const operation of [reentrantLoad, reentrantRun, reentrantPrepare]) {
+			await expect(operation).rejects.toMatchObject({
+				name: 'RuntimeConfigurationError',
+				code: 'runtime-configuration',
+				phase: 'dispose',
+				runtimeId: 'OCTAVE'
+			});
+		}
+		await expect(sandbox.load('/replacement/')).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'OCTAVE'
+		});
+		await expect(sandbox.run('disp("later")', false)).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'OCTAVE'
+		});
+		const uidAfterDisposal = sandbox.uid;
+		sandbox.write('ignored input\n');
+		sandbox.eof();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		sandbox.kill();
+		expect(sandbox.uid).toBe(uidAfterDisposal);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		await sandbox.clear();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('settles Octave startup disposed from progress with one cancellation', async () => {
+		const sandbox = new Octave();
+		const controller = new AbortController();
+		const racingReason = new Error('Octave startup abort raced terminal disposal');
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		let reentrantError: unknown;
+		const loading = sandbox.load(
+			'/absproxy/5173',
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			{
+				set() {
+					try {
+						reentrantDisposal = sandbox.dispose();
+						controller.abort(racingReason);
+						reentrantLoad = sandbox.load('/reentrant/');
+						reentrantRun = sandbox.run('disp("reentrant")', false);
+						void reentrantLoad.catch(() => undefined);
+						void reentrantRun.catch(() => undefined);
+					} catch (error) {
+						reentrantError = error;
+					}
+				}
+			}
+		);
+		const cancellation = await loading.catch((error) => error);
+
+		expect(reentrantError).toBeUndefined();
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'OCTAVE',
+			recoverable: false
+		});
+		expect(sandbox.dispose()).toBe(reentrantDisposal);
+		await reentrantDisposal;
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'OCTAVE'
+		});
+		await expect(reentrantRun).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'OCTAVE'
+		});
+		expect(sandbox.baseUrl).toBe('');
+		expect(sandbox.workerUrl).toBe('');
+		expect(sandbox.manifestUrl).toBe('');
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('settles an stdin-waiting Octave run and releases its waiter on disposal', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/absproxy/5173');
+		const running = sandbox.run('value = input("value: ");', false);
+		const outcome = running.catch((error) => error);
+		await vi.waitFor(() => expect(sandbox.stdinWaiters).toHaveLength(1));
+		const retainedWaiter = sandbox.stdinWaiters[0];
+
+		const firstDisposal = sandbox.dispose();
+		const cancellation = await outcome;
+		await firstDisposal;
+
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'OCTAVE',
+			recoverable: false
+		});
+		expect(sandbox.stdinWaiters).toHaveLength(0);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(workerInstances).toHaveLength(0);
+		retainedWaiter?.();
+		await Promise.resolve();
+		expect(workerInstances).toHaveLength(0);
+		expect(sandbox.worker).toBeUndefined();
+	});
+
+	it('settles an active Octave worker and ignores retained messages after disposal', async () => {
+		const sandbox = new Octave();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/absproxy/5173');
+		onPostMessage = () => undefined;
+		const controller = new AbortController();
+		const racingReason = new Error('Octave active abort raced terminal disposal');
+		const running = sandbox.run('disp("active")', false, true, undefined, [], {
+			signal: controller.signal
+		});
+		const outcome = running.catch((error) => error);
+		const operationBuffer = sandbox.buffer;
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+		staleHandler?.({ data: { buffer: true } } as MessageEvent<any>);
+		sandbox.write('discarded input\n');
+		sandbox.eof();
+		expect(readBufferedStdin(operationBuffer)).toBe('discarded input\n');
+		const replacementBuffer = createWasmIdleSharedBuffer(1024);
+		flushQueuedStdin(['replacement buffer input\n'], replacementBuffer);
+		sandbox.buffer = replacementBuffer;
+		worker.terminate.mockImplementationOnce(() => controller.abort(racingReason));
+
+		await sandbox.dispose();
+		const cancellation = await outcome;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(operationBuffer)).toBe('');
+		expect(readBufferedStdin(replacementBuffer)).toBe('');
+
+		staleHandler?.({
+			data: {
+				buffer: true,
+				progress: { percent: 50 },
+				output: 'late output',
+				results: true
+			}
+		} as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalled();
+		expect(diagnostic).not.toHaveBeenCalled();
+		expect(sandbox.output).toBeUndefined();
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+		expect(sandbox.worker).toBeUndefined();
+	});
+
+	it('does not create an Octave replacement when worker retirement reenters disposal', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/absproxy/5173');
+		await expect(sandbox.run('disp("first")', false)).resolves.toBe(true);
+		const retiredWorker = workerInstances[0];
+		let reentrantDisposal: Promise<void> | undefined;
+		let reentrantError: unknown;
+		retiredWorker.terminate.mockImplementationOnce(() => {
+			try {
+				reentrantDisposal = sandbox.dispose();
+			} catch (error) {
+				reentrantError = error;
+			}
+		});
+		onPostMessage = () => undefined;
+
+		const replacement = sandbox.run('disp("second")', false);
+		const outcome = replacement.catch((error) => error);
+		await vi.waitFor(() => expect(reentrantDisposal ?? reentrantError).toBeDefined());
+
+		expect(reentrantError).toBeUndefined();
+		const cancellation = await outcome;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(sandbox.dispose()).toBe(reentrantDisposal);
+		await reentrantDisposal;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(1);
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.baseUrl).toBe('');
+		expect(sandbox.workerUrl).toBe('');
+		expect(sandbox.manifestUrl).toBe('');
 	});
 });

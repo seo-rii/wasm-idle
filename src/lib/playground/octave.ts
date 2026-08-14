@@ -5,8 +5,10 @@ import {
 import { type CompilerDiagnostic, type SandboxExecutionOptions } from '$lib/playground/options';
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -44,6 +46,7 @@ type OctaveLoadOperation = OctaveOperation & {
 
 type OctaveRunOperation = OctaveOperation & {
 	phase: 'execute';
+	buffer?: ArrayBufferLike;
 	stdinBuffer?: ArrayBufferLike;
 };
 
@@ -67,6 +70,13 @@ class Octave implements Sandbox {
 	stdinWaiters: Array<() => void> = [];
 	private activeLoad: OctaveLoadOperation | null = null;
 	private activeRun: OctaveRunOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('Octave sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'OCTAVE',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'Octave',
 		onDispose: (worker) => {
@@ -76,6 +86,13 @@ class Octave implements Sandbox {
 			this.pendingEof = false;
 		}
 	});
+
+	private disposedConfigurationError() {
+		return new RuntimeConfigurationError('Octave sandbox is disposed', {
+			phase: 'dispose',
+			runtimeId: 'OCTAVE'
+		});
+	}
 
 	private abortReason(signal: AbortSignal, phase: 'startup' | 'execute') {
 		const reason = signal.reason;
@@ -94,6 +111,7 @@ class Octave implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
+		if (this.disposed) return Promise.reject(this.disposedConfigurationError());
 		if (this.activeLoad || this.activeRun) {
 			return Promise.reject(
 				new BusyError('Octave runtime already has an active operation', {
@@ -163,6 +181,7 @@ class Octave implements Sandbox {
 			operation.reject = rejectLoad;
 			onAbort = signal
 				? () => {
+						if (this.disposed || operation.cancelled || !ownsLoad()) return;
 						let reason: unknown;
 						try {
 							reason = this.abortReason(signal, 'startup');
@@ -247,6 +266,7 @@ class Octave implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.resolveStdinWaiters();
@@ -254,6 +274,7 @@ class Octave implements Sandbox {
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.resolveStdinWaiters();
 		this.flushPendingInput();
@@ -261,7 +282,13 @@ class Octave implements Sandbox {
 
 	private resolveStdinWaiters() {
 		const waiters = this.stdinWaiters.splice(0);
-		for (const resolve of waiters) resolve();
+		for (const resolve of waiters) {
+			try {
+				resolve();
+			} catch {
+				// A public waiter cannot prevent lifecycle cleanup.
+			}
+		}
 	}
 
 	private readsOctaveStdin(code: string) {
@@ -285,27 +312,37 @@ class Octave implements Sandbox {
 		return stdin;
 	}
 
-	private flushPendingInput() {
+	private flushPendingInput(buffer = this.activeRun?.buffer ?? this.buffer) {
 		if (!this.waitingForInput) return;
-		if (flushQueuedStdin(this.pendingInput, this.buffer)) {
+		if (flushQueuedStdin(this.pendingInput, buffer)) {
 			this.waitingForInput = false;
 			return;
 		}
 		if (this.pendingEof) {
-			flushBufferedEof(this.buffer);
+			flushBufferedEof(buffer);
 			this.pendingEof = false;
 			this.waitingForInput = false;
 		}
 	}
 
-	private createWorker() {
+	private createWorker(workerUrl: string, ownsRun: () => boolean) {
 		if (this.worker) {
 			this.workerSession.reset();
-			this.exit = false;
 		}
-		const worker = new Worker(this.workerUrl);
+		if (!ownsRun()) return null;
+		this.exit = false;
+		const worker = new Worker(workerUrl);
+		if (!ownsRun()) {
+			worker.terminate();
+			return null;
+		}
 		this.worker = worker;
 		this.workerSession.attach(worker);
+		if (!ownsRun() || this.worker !== worker) {
+			if (this.worker === worker) delete this.worker;
+			this.workerSession.release(worker);
+			return null;
+		}
 		return worker;
 	}
 
@@ -317,6 +354,7 @@ class Octave implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (this.disposed) return Promise.reject(this.disposedConfigurationError());
 		if (this.activeLoad || this.activeRun) {
 			return Promise.reject(
 				new BusyError('Octave runtime already has an active operation', {
@@ -342,6 +380,10 @@ class Octave implements Sandbox {
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let workspace: ReturnType<typeof validateExecutionWorkspace>;
 		let stdinOption: SandboxExecutionOptions['stdin'];
+		let baseUrl: string;
+		let workerUrl: string;
+		let manifestUrl: string;
+		let buffer: ArrayBufferLike;
 		try {
 			signal = options.signal;
 			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
@@ -382,6 +424,15 @@ class Octave implements Sandbox {
 			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
 			stdinOption = options.stdin;
 			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			baseUrl = this.baseUrl;
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			workerUrl = this.workerUrl;
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			manifestUrl = this.manifestUrl;
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			buffer = this.buffer;
+			if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
+			runOperation.buffer = buffer;
 		} catch (error) {
 			if (this.activeRun?.token === runOperation.token) this.activeRun = null;
 			return Promise.reject(runOperation.cancelled ? runOperation.cancellationReason : error);
@@ -389,8 +440,6 @@ class Octave implements Sandbox {
 		const hasExplicitStdin = stdinOption !== undefined;
 		if (hasExplicitStdin) {
 			try {
-				const buffer = this.buffer;
-				if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
 				resetBufferedStdin(buffer);
 				if (!ownsSnapshot()) return Promise.reject(runOperation.cancellationReason);
 				runOperation.stdinBuffer = buffer;
@@ -465,6 +514,7 @@ class Octave implements Sandbox {
 			onAbort = signal
 				? () => {
 						if (
+							this.disposed ||
 							this.activeRun?.token !== runToken ||
 							runOperation.cancelled ||
 							_uid !== this.uid
@@ -581,7 +631,12 @@ class Octave implements Sandbox {
 					) {
 						return;
 					}
-					const worker = this.createWorker();
+					const ownsCreation = () =>
+						this.activeRun?.token === runToken &&
+						!runOperation.cancelled &&
+						_uid === this.uid;
+					const worker = this.createWorker(workerUrl, ownsCreation);
+					if (!worker) return;
 					let handler: (event: MessageEvent<OctaveWorkerMessage>) => void;
 					const ownsRun = () =>
 						this.activeRun?.token === runToken &&
@@ -648,9 +703,9 @@ class Octave implements Sandbox {
 					worker.onmessage = handler;
 					worker.postMessage({
 						run: true,
-						baseUrl: this.baseUrl,
-						manifestUrl: this.manifestUrl,
-						buffer: this.buffer,
+						baseUrl,
+						manifestUrl,
+						buffer,
 						code,
 						args: programArgs,
 						stdin,
@@ -676,7 +731,7 @@ class Octave implements Sandbox {
 		this.terminate();
 	}
 
-	terminate(reason: unknown = 'Process terminated') {
+	private terminateOwned(reason: unknown) {
 		const activeLoad = this.activeLoad;
 		const activeRun = this.activeRun;
 		if (activeLoad) {
@@ -690,8 +745,10 @@ class Octave implements Sandbox {
 		}
 		if (activeRun?.stdinBuffer) {
 			this.pendingInput = [];
+		}
+		if (activeRun?.buffer) {
 			try {
-				resetBufferedStdin(activeRun.stdinBuffer);
+				resetBufferedStdin(activeRun.buffer);
 			} catch {
 				// Stdin cleanup must not replace the termination result.
 			}
@@ -708,7 +765,13 @@ class Octave implements Sandbox {
 		}
 	}
 
+	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
+		this.terminateOwned(reason);
+	}
+
 	async clear() {
+		if (this.disposed) return;
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
@@ -718,6 +781,29 @@ class Octave implements Sandbox {
 		if (!this.exit || this.activeLoad || this.activeRun) {
 			this.terminate();
 		}
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		delete this.worker;
+		this.baseUrl = '';
+		this.workerUrl = '';
+		this.manifestUrl = '';
+		this.output = undefined;
+		this.oncompilerdiagnostic = undefined;
+		this.pendingInput = [];
+		this.waitingForInput = false;
+		this.pendingEof = false;
+		try {
+			resetBufferedStdin(this.buffer);
+		} catch {
+			// The shared stdin buffer is already outside the live host state.
+		}
+		this.terminateOwned(this.disposeCancellation);
+		return this.disposePromise;
 	}
 }
 
