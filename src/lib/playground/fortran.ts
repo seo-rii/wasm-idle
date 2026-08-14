@@ -8,8 +8,10 @@ import {
 import {
 	AssetTooLargeError,
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -75,6 +77,13 @@ class Fortran implements Sandbox {
 	activeFortranAssetsKey = '';
 	private activeOperation: FortranOperation | null = null;
 	private preserveOperationOnWorkerDispose = false;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('Fortran sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'FORTRAN',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'Fortran',
 		onDispose: (worker) => {
@@ -102,7 +111,15 @@ class Fortran implements Sandbox {
 		}
 	});
 
+	private disposedConfigurationError() {
+		return new RuntimeConfigurationError('Fortran sandbox is disposed', {
+			phase: 'dispose',
+			runtimeId: this.language
+		});
+	}
+
 	private requireOperationIdle() {
+		if (this.disposed) throw this.disposedConfigurationError();
 		if (this.activeOperation) {
 			throw new BusyError('Fortran runtime already has an active operation', {
 				runtimeId: this.language,
@@ -209,6 +226,7 @@ class Fortran implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
+		if (this.disposed) return Promise.reject(this.disposedConfigurationError());
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		try {
 			limits = resolveExecutionLimits(options.limits);
@@ -292,6 +310,7 @@ class Fortran implements Sandbox {
 					} finally {
 						this.preserveOperationOnWorkerDispose = false;
 					}
+					if (!this.isOperationActive(operation)) return;
 				}
 				if (!this.worker) {
 					const WorkerConstructor = (
@@ -412,12 +431,14 @@ class Fortran implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -633,6 +654,7 @@ class Fortran implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const operation = this.activeOperation;
 		if (operation) {
 			this.cancelOperation(operation, reason);
@@ -646,12 +668,41 @@ class Fortran implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		this.terminate();
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		resetBufferedStdin(this.buffer);
 		await new Promise((resolve) => setTimeout(resolve, 200));
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		const assetBridge = this.assetBridge;
+		this.preserveOperationOnWorkerDispose = false;
+		delete this.worker;
+		this.assetBridge = null;
+		this.activeFortranAssetsKey = '';
+		this.output = undefined;
+		this.resetExplicitStdinState();
+		try {
+			assetBridge?.dispose();
+		} catch {
+			// Asset cleanup is best effort after host state becomes unreachable.
+		}
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+			this.exit = true;
+		}
+		return this.disposePromise;
 	}
 }
 

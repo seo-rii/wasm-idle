@@ -721,4 +721,273 @@ describe('Fortran worker lifecycle', () => {
 		worker.resolveRun();
 		await expect(bufferedRun).resolves.toBe(true);
 	});
+
+	it('keeps clear reusable but disposes an idle Fortran runtime exactly once', async () => {
+		const sandbox = new Fortran();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/assets');
+		const firstWorker = workerInstances[0];
+
+		await sandbox.clear();
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		await expect(sandbox.load('/assets')).resolves.toBeUndefined();
+		const worker = workerInstances[1];
+		const assetBridge = sandbox.assetBridge!;
+		const disposeAssetBridge = vi.spyOn(assetBridge, 'dispose');
+		sandbox.write('queued input\n');
+		sandbox.eof();
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+
+		let cleanupSnapshot: Record<string, unknown> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		worker.terminate.mockImplementationOnce(() => {
+			cleanupSnapshot = {
+				worker: sandbox.worker,
+				assetBridge: sandbox.assetBridge,
+				assetsKey: sandbox.activeFortranAssetsKey,
+				output: sandbox.output,
+				pendingInput: [...sandbox.pendingInput],
+				waitingForInput: sandbox.waitingForInput,
+				pendingEof: sandbox.pendingEof,
+				bufferedInput: readBufferedStdin(sandbox.buffer),
+				preserveOperation: Reflect.get(sandbox, 'preserveOperationOnWorkerDispose'),
+				onmessage: worker.onmessage,
+				onerror: worker.onerror,
+				onmessageerror: worker.onmessageerror
+			};
+			reentrantLoad = sandbox.load('/reentrant');
+			reentrantRun = sandbox.run('      END', false);
+			reentrantDisposal = sandbox.dispose();
+		});
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		await firstDisposal;
+
+		expect(cleanupSnapshot).toEqual({
+			worker: undefined,
+			assetBridge: null,
+			assetsKey: '',
+			output: undefined,
+			pendingInput: [],
+			waitingForInput: false,
+			pendingEof: false,
+			bufferedInput: '',
+			preserveOperation: false,
+			onmessage: null,
+			onerror: null,
+			onmessageerror: null
+		});
+		expect(disposeAssetBridge).toHaveBeenCalledOnce();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'FORTRAN'
+		});
+		await expect(reentrantRun).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'FORTRAN'
+		});
+		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'FORTRAN'
+		});
+		await expect(sandbox.run('      END', false)).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'FORTRAN'
+		});
+		sandbox.write('ignored input\n');
+		sandbox.eof();
+		sandbox.terminate();
+		await sandbox.clear();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('aborts pending Fortran assets and settles startup with one disposal cancellation', async () => {
+		autoResolveLoad = false;
+		const sandbox = new Fortran();
+		const progress = { set: vi.fn() };
+		let finishLoader: ((value: Uint8Array) => void) | undefined;
+		let loaderSignal: AbortSignal | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		const loader = vi.fn(
+			({ signal }: { signal?: AbortSignal; reportProgress: (loaded: number) => void }) => {
+				loaderSignal = signal;
+				signal?.addEventListener(
+					'abort',
+					() => {
+						reentrantLoad = sandbox.load('/reentrant');
+						reentrantDisposal = sandbox.dispose();
+					},
+					{ once: true }
+				);
+				return new Promise<Uint8Array>((resolve) => {
+					finishLoader = resolve;
+				});
+			}
+		);
+		const loading = sandbox.load({ clang: { loader } }, '', true, [], {}, progress);
+		const outcome = loading.catch((error) => error);
+
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+		worker.onmessage?.({
+			data: { assetRequest: { id: 71, asset: 'bin/clang.wasm.gz' } }
+		} as MessageEvent<any>);
+		await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+		const progressCallsBeforeDisposal = progress.set.mock.calls.length;
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		const cancellation = await outcome;
+		await firstDisposal;
+
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'FORTRAN',
+			recoverable: false
+		});
+		expect(loaderSignal?.aborted).toBe(true);
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'FORTRAN'
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		finishLoader?.(new Uint8Array([1, 2, 3]));
+		await Promise.resolve();
+		await Promise.resolve();
+		staleHandler?.({ data: { progress: 1, load: true } } as MessageEvent<any>);
+		expect(progress.set).toHaveBeenCalledTimes(progressCallsBeforeDisposal);
+		expect(worker.postMessage.mock.calls.some(([message]) => message.assetResponse)).toBe(
+			false
+		);
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+		expect(sandbox.activeFortranAssetsKey).toBe('');
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles an active Fortran run, clears buffered stdin, and ignores retained messages', async () => {
+		autoResolveRun = false;
+		const sandbox = new Fortran();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load('/assets');
+		const worker = workerInstances[0];
+		const running = sandbox.run('      READ *, I', false);
+		const outcome = running.catch((error) => error);
+		await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledTimes(2));
+		const staleHandler = worker.onmessage;
+		worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+		sandbox.write('42\n');
+		sandbox.eof();
+		expect(readBufferedStdin(sandbox.buffer)).toBe('42\n');
+		expect(sandbox.pendingEof).toBe(true);
+
+		await sandbox.dispose();
+		const cancellation = await outcome;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'FORTRAN',
+			recoverable: false
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+		staleHandler?.({
+			data: {
+				assetRequest: { id: 81, asset: 'bin/clang.wasm.gz' },
+				buffer: true,
+				output: 'late output',
+				progress: 1,
+				results: 'late result'
+			}
+		} as MessageEvent<any>);
+		await Promise.resolve();
+		expect(output).not.toHaveBeenCalled();
+		expect(sandbox.output).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+		expect(sandbox.waitingForInput).toBe(false);
+	});
+
+	it('does not create a replacement when trust-root retirement reenters disposal', async () => {
+		const sandbox = new Fortran();
+		let loaderSignal: AbortSignal | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		let reentrantError: unknown;
+		const loader = vi.fn(({ signal }: { signal?: AbortSignal }) => {
+			loaderSignal = signal;
+			signal?.addEventListener(
+				'abort',
+				() => {
+					try {
+						reentrantDisposal = sandbox.dispose();
+					} catch (error) {
+						reentrantError = error;
+					}
+				},
+				{ once: true }
+			);
+			return new Promise<Uint8Array>(() => undefined);
+		});
+		await sandbox.load({ clang: { loader } });
+		const retiredWorker = workerInstances[0];
+		retiredWorker.onmessage?.({
+			data: { assetRequest: { id: 91, asset: 'bin/clang.wasm.gz' } }
+		} as MessageEvent<any>);
+		await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+
+		const replacement = sandbox.load({
+			clang: { loader },
+			fortran: { integrity: fortranReceipts('e') }
+		});
+		const outcome = replacement.catch((error) => error);
+		await vi.waitFor(() => expect(reentrantDisposal ?? reentrantError).toBeDefined());
+
+		expect(reentrantError).toBeUndefined();
+		const cancellation = await outcome;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(sandbox.dispose()).toBe(reentrantDisposal);
+		await reentrantDisposal;
+		expect(loaderSignal?.aborted).toBe(true);
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(Reflect.get(sandbox, 'preserveOperationOnWorkerDispose')).toBe(false);
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+		expect(sandbox.activeFortranAssetsKey).toBe('');
+		expect(workerInstances).toHaveLength(1);
+	});
 });
