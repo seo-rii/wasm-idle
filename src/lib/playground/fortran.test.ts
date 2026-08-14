@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { WASI } from '@bjorn3/browser_wasi_shim';
 import { describe, expect, it } from 'vitest';
 import {
@@ -39,7 +40,9 @@ function readStaticAsset(...segments: string[]) {
 }
 
 async function translateFortranToC() {
-	const f2cModule = await WebAssembly.compile(readStaticAsset('wasm-fortran', 'f2c.wasm'));
+	const f2cModule = await WebAssembly.compile(
+		gunzipSync(readStaticAsset('wasm-fortran', 'f2c.wasm.gz'))
+	);
 	const host = createBrowserWasiHost({
 		args: ['main.f'],
 		env: { TMPDIR: '/tmp' },
@@ -78,7 +81,7 @@ async function compileFortranProgram(cSource: string, clangBaseUrl: string) {
 	});
 	await clang.ready;
 	clang.memfs.addFile('f2c.h', readStaticAsset('wasm-fortran', 'f2c.h').toString('utf8'));
-	clang.memfs.addFile('libf2c.a', readStaticAsset('wasm-fortran', 'libf2c.a'));
+	clang.memfs.addFile('libf2c.a', gunzipSync(readStaticAsset('wasm-fortran', 'libf2c.a.gz')));
 	await clang.compile({
 		input: 'main.c',
 		code: cSource,
