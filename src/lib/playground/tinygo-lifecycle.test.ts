@@ -4,6 +4,7 @@ type RuntimeFixtureState = {
 	bootCalls: number;
 	bootGate: Promise<void>;
 	disposeCalls: number;
+	disposeCallback: (() => void) | null;
 	disposeThrows: boolean;
 	executeCalls: number;
 	executeGate: Promise<void>;
@@ -37,6 +38,7 @@ const createRuntimeFixtureState = (): RuntimeFixtureState => ({
 	bootCalls: 0,
 	bootGate: Promise.resolve(),
 	disposeCalls: 0,
+	disposeCallback: null,
 	disposeThrows: false,
 	executeCalls: 0,
 	executeGate: Promise.resolve(),
@@ -134,6 +136,7 @@ return ({
   dispose() {
     state.disposeCalls += 1;
     record.disposeCalls += 1;
+	state.disposeCallback?.();
     if (gates.disposeThrows) throw new Error('TinyGo runtime cleanup failed');
   }
 });
@@ -192,7 +195,8 @@ vi.mock('$env/dynamic/public', () => ({
 
 import TinyGo from './tinygo';
 import type { SandboxExecutionOptions } from './options';
-import { bufferedSequence } from './stdinBuffer';
+import { createWasmIdleSharedBuffer } from './sharedBuffer';
+import { bufferedSequence, flushQueuedStdin, readBufferedStdin } from './stdinBuffer';
 
 const runtimeAssets = {
 	rootUrl: '/assets',
@@ -1686,5 +1690,256 @@ describe('TinyGo operation lifecycle', () => {
 		expect(sandbox.pendingInput).toEqual([]);
 		expect(sandbox.pendingEof).toBe(false);
 		expect(sandbox.exit).toBe(true);
+	});
+
+	it('keeps clear reusable but disposes an idle TinyGo sandbox exactly once', async () => {
+		const sandbox = new TinyGo();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load(runtimeAssets);
+		await expect(sandbox.run('package main\nfunc main() {}', true)).resolves.toBe(true);
+		const firstWorker = workerInstances[0];
+
+		await sandbox.clear();
+		await sandbox.load(runtimeAssets);
+		await expect(sandbox.run('package main\nfunc main() {}', true)).resolves.toBe(true);
+		expect(firstWorker?.terminate).toHaveBeenCalledOnce();
+		const worker = workerInstances[1];
+		const runtime = runtimeFixtureState.runtimeRecords[1];
+		flushQueuedStdin(['buffered input\n'], sandbox.buffer);
+		sandbox.write('queued input\n');
+		sandbox.eof();
+
+		let cleanupSnapshot: Record<string, unknown> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		worker?.terminate.mockImplementationOnce(() => {
+			cleanupSnapshot = {
+				worker: sandbox.worker,
+				moduleUrl: sandbox.moduleUrl,
+				rustRuntimeBaseUrl: sandbox.rustRuntimeBaseUrl,
+				assetLoader: sandbox.assetLoader,
+				assetPacks: sandbox.assetPacks,
+				runtime: sandbox.runtime,
+				output: sandbox.output,
+				diagnostic: sandbox.oncompilerdiagnostic,
+				pendingInput: [...sandbox.pendingInput],
+				waitingForInput: sandbox.waitingForInput,
+				pendingEof: sandbox.pendingEof,
+				bufferedInput: readBufferedStdin(sandbox.buffer),
+				onmessage: worker.onmessage,
+				onerror: worker.onerror,
+				onmessageerror: worker.onmessageerror
+			};
+			reentrantLoad = sandbox.load(runtimeAssets);
+			reentrantRun = sandbox.run('package main\nfunc main() {}', false);
+			void reentrantLoad.catch(() => undefined);
+			void reentrantRun.catch(() => undefined);
+			reentrantDisposal = sandbox.dispose();
+		});
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		await firstDisposal;
+
+		expect(cleanupSnapshot).toEqual({
+			worker: undefined,
+			moduleUrl: '',
+			rustRuntimeBaseUrl: '',
+			assetLoader: undefined,
+			assetPacks: undefined,
+			runtime: null,
+			output: undefined,
+			diagnostic: undefined,
+			pendingInput: [],
+			waitingForInput: false,
+			pendingEof: false,
+			bufferedInput: '',
+			onmessage: null,
+			onerror: null,
+			onmessageerror: null
+		});
+		expect(worker?.terminate).toHaveBeenCalledOnce();
+		expect(runtime?.disposeCalls).toBe(1);
+		for (const operation of [reentrantLoad, reentrantRun]) {
+			await expect(operation).rejects.toMatchObject({
+				name: 'RuntimeConfigurationError',
+				code: 'runtime-configuration',
+				phase: 'dispose',
+				runtimeId: 'TINYGO'
+			});
+		}
+		await expect(sandbox.load(runtimeAssets)).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'TINYGO'
+		});
+		await expect(sandbox.run('package main\nfunc main() {}', false)).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'TINYGO'
+		});
+		const uidAfterDisposal = sandbox.uid;
+		sandbox.write('ignored input\n');
+		sandbox.eof();
+		sandbox.kill();
+		sandbox.terminate();
+		await sandbox.clear();
+		expect(sandbox.uid).toBe(uidAfterDisposal);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(worker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('settles an active TinyGo run with one terminal cancellation and clears owned buffers', async () => {
+		autoResolveRun = false;
+		const sandbox = new TinyGo();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load(runtimeAssets);
+		const controller = new AbortController();
+		const racingReason = new Error('TinyGo abort raced terminal disposal');
+		const running = sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+			signal: controller.signal
+		});
+
+		const worker = workerInstances[0];
+		await vi.waitFor(() =>
+			expect(worker?.postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({ artifact: expect.any(Uint8Array) })
+			)
+		);
+		const runMessage = worker?.postMessage.mock.calls.find(
+			([message]) => 'artifact' in message
+		)?.[0] as unknown as { buffer: ArrayBufferLike };
+		const operationBuffer = runMessage.buffer;
+		const staleHandler = worker?.onmessage;
+		staleHandler?.({ data: { buffer: true } } as MessageEvent<unknown>);
+		sandbox.write('operation input\n');
+		expect(readBufferedStdin(operationBuffer)).toBe('operation input\n');
+		const replacementBuffer = createWasmIdleSharedBuffer(1024);
+		flushQueuedStdin(['replacement input\n'], replacementBuffer);
+		sandbox.buffer = replacementBuffer;
+		worker?.terminate.mockImplementationOnce(() => controller.abort(racingReason));
+
+		const disposal = sandbox.dispose();
+		const cancellation = await running.catch((error) => error);
+		await disposal;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'TINYGO',
+			recoverable: false
+		});
+		expect(readBufferedStdin(operationBuffer)).toBe('');
+		expect(readBufferedStdin(replacementBuffer)).toBe('');
+		expect(worker?.terminate).toHaveBeenCalledOnce();
+
+		staleHandler?.({
+			data: { buffer: true, output: 'late TinyGo output\n', results: true }
+		} as MessageEvent<unknown>);
+		expect(output).not.toHaveBeenCalledWith('late TinyGo output\n');
+		expect(sandbox.output).toBeUndefined();
+		expect(sandbox.worker).toBeUndefined();
+	});
+
+	it('does not attach a TinyGo replacement when worker retirement reenters disposal', async () => {
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const retiredWorker = workerInstances[0];
+		delete sandbox.worker;
+		let reentrantDisposal: Promise<void> | undefined;
+		retiredWorker?.terminate.mockImplementationOnce(() => {
+			reentrantDisposal = sandbox.dispose();
+		});
+
+		const replacement = sandbox.load(runtimeAssets);
+		const cancellation = await replacement.catch((error) => error);
+
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(sandbox.dispose()).toBe(reentrantDisposal);
+		await reentrantDisposal;
+		expect(retiredWorker?.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1]?.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.runtime).toBeNull();
+	});
+
+	it('does not restore TinyGo configuration when runtime replacement reenters disposal', async () => {
+		const sandbox = new TinyGo();
+		await sandbox.load(runtimeAssets);
+		const oldRuntime = runtimeFixtureState.runtimeRecords[0];
+		let reentrantDisposal: Promise<void> | undefined;
+		runtimeFixtureState.disposeCallback = () => {
+			reentrantDisposal = sandbox.dispose();
+		};
+		const replacementAssets = {
+			rootUrl: '/replacement',
+			tinygo: {
+				assetLoader: vi.fn(),
+				assetPacks: [
+					{
+						index: 'replacement-pack.json',
+						asset: 'replacement-pack.tar.gz',
+						fileCount: 1,
+						totalBytes: 1
+					}
+				],
+				moduleUrl: createRuntimeModuleUrl('replacement-after-dispose')
+			}
+		};
+
+		const replacing = sandbox.load(replacementAssets);
+		const cancellation = await replacing.catch((error) => error);
+
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(sandbox.dispose()).toBe(reentrantDisposal);
+		await reentrantDisposal;
+		expect(oldRuntime?.disposeCalls).toBe(1);
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.rustRuntimeBaseUrl).toBe('');
+		expect(sandbox.assetLoader).toBeUndefined();
+		expect(sandbox.assetPacks).toBeUndefined();
+		expect(sandbox.worker).toBeUndefined();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('disposes TinyGo startup that completes a module import after terminal cancellation', async () => {
+		let releaseImport!: () => void;
+		runtimeFixtureState.importGate = new Promise<void>((resolve) => {
+			releaseImport = resolve;
+		});
+		const sandbox = new TinyGo();
+		const loading = sandbox.load({
+			rootUrl: '/assets',
+			tinygo: { moduleUrl: createRuntimeModuleUrl('pending-terminal-import') }
+		});
+		await vi.waitFor(() => expect(runtimeFixtureState.importCalls).toBe(1));
+		const worker = workerInstances[0];
+
+		const disposal = sandbox.dispose();
+		const cancellation = await loading.catch((error) => error);
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		releaseImport();
+		await disposal;
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		expect(runtimeFixtureState.runtimeRecords).toHaveLength(0);
+		expect(worker?.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.runtime).toBeNull();
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.worker).toBeUndefined();
 	});
 });
