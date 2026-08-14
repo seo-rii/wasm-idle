@@ -110,7 +110,8 @@ const janetStdinSource = `(print "value?")
 (print "main=" (+ n 5))
 `;
 
-const juliaStdinSource = `print("value? ")
+const juliaStdinSource = `println("version=", VERSION)
+print("value? ")
 flush(stdout)
 line = readline()
 n = tryparse(Int, strip(line))
@@ -472,6 +473,7 @@ describe('wasm-idle static worker language browser integrations', () => {
 				expect(summary.activeState.sharedArrayBuffer).toBe(true);
 				expect(summary.activeState.serviceWorkerControlled).toBe(true);
 				expect(summary.pageErrors).toEqual([]);
+				expect(summary.transcript).toContain('version=1.3.0-DEV.560');
 				expect(summary.transcript).toContain('main=73');
 				expect(summary.transcript).toContain('Process finished after');
 			}

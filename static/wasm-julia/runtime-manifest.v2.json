@@ -1,8 +1,8 @@
 {
   "format": "wasm-julia-runtime-manifest-v2",
   "runtime": "chriskoch-julia-wasm",
-  "profileId": "julia-1.0.4-chriskoch-npm-22a55e0d",
-  "fingerprint": "42829744f7843f50ba108aa72398b816950403fa9047b9e7032312b0948801ca",
+  "profileId": "julia-1.3.0-dev.560-chriskoch-npm-1.0.4-22a55e0d",
+  "fingerprint": "c125c69e474491fa731fd6693b3b52a8bc20abfe9bffbd69666fd0985aa3eddb",
   "licenseExpression": "MIT AND LicenseRef-Julia-Third-Party",
   "artifact": {
     "kind": "opaque-npm-prebuilt",
@@ -32,11 +32,11 @@
       "evidence": "content-locked npm package; source revision and build recipe are not published in package metadata"
     },
     "julia": {
-      "version": "1.0.4",
+      "version": "1.3.0-DEV.560",
       "repository": "https://github.com/JuliaLang/julia.git",
       "revision": "unrecorded",
       "verifiedBuildInput": false,
-      "evidence": "npm package identity and bundled README claim; binary-to-source attestation is unavailable"
+      "evidence": "exact VERSION observed in the real Chromium runtime; the binary embeds the matching 1.3.0-DEV family string; binary-to-source attestation is unavailable"
     },
     "emscripten": {
       "version": "unrecorded",
@@ -61,8 +61,8 @@
   "metadata": {
     "path": "runtime-build.json",
     "mediaType": "application/json",
-    "size": 2342,
-    "sha256": "70a6d553e57e4210e8b24ed7458403a9793eb683ba886d958cbde33ee50ec867"
+    "size": 2426,
+    "sha256": "50670b9ecb180109dc875738069abe4db0fae3286c03e36fd73c5aff22c8a4ba"
   },
   "assets": [
     {

@@ -52,7 +52,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | J              | J playground WASM worker                | Yes   | syntax               | -     |
 | BQN            | CBQN WASM worker                        | Yes   | syntax               | -     |
 | Janet          | Janet VM WASM worker                    | Yes   | syntax               | -     |
-| Julia          | Julia 1.0.4 WASM worker                 | Yes   | syntax               | -     |
+| Julia          | Julia 1.3.0-DEV.560 legacy WASM worker  | Yes   | syntax               | -     |
 | Nim            | Nim 2.2.4 WASM + clang/lld WASM         | Yes   | syntax               | -     |
 | Bash           | GNU Bash WASIX / Wasmer SDK             | Yes   | syntax               | -     |
 | ClojureScript  | cljs.js self-hosted compiler            | Yes   | syntax               | -     |
@@ -330,8 +330,10 @@ handwritten wasm-idle subset, but it inherits AtomVM/Popcorn runtime limits and 
 Erlang/OTP ERTS coverage. Some OTP paths that rely on missing NIFs can fail in the current bundle,
 so the browser starter and stdin coverage use `io:get_line`/`io:format` only.
 
-Julia browser execution uses the `@chriskoch/julia-wasm` Julia 1.0.4 asset bundle under
-`static/wasm-julia/`. Refresh the vendored worker/runtime assets with:
+Julia browser execution uses the `@chriskoch/julia-wasm@1.0.4` asset bundle under
+`static/wasm-julia/`. Despite the package and bundled README version, the verified runtime reports
+`VERSION == v"1.3.0-DEV.560"`; wasm-idle therefore labels it as a legacy development runtime.
+Refresh the vendored worker/runtime assets with:
 
 ```bash
 cd wasm-idle

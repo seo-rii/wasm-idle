@@ -208,7 +208,11 @@ export const playgroundLanguageDescriptors: Readonly<
 		runtimeLspCapability: 'janet',
 		diagnosticMarkers: true
 	},
-	JULIA: { label: 'Julia', editorLanguage: 'julia', diagnosticMarkers: true },
+	JULIA: {
+		label: 'Julia 1.3.0-DEV.560 (legacy)',
+		editorLanguage: 'julia',
+		diagnosticMarkers: true
+	},
 	NIM: { label: 'Nim', editorLanguage: 'nim', diagnosticMarkers: true },
 	BASH: { label: 'Bash', editorLanguage: 'shell', supportsArgs: true },
 	CLOJURESCRIPT: { label: 'ClojureScript', editorLanguage: 'clojure', supportsArgs: true },

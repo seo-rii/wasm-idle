@@ -2373,9 +2373,9 @@
 		{/if}
 		{#if language === 'JULIA'}
 			<p class="hint">
-				Julia runs through the bundled Julia 1.0.4 WebAssembly runtime. Use `readline()` for
-				line input; the worker connects terminal stdin with a Julia `IOBuffer` before
-				running the source.
+				Julia runs through the legacy Julia 1.3.0-DEV.560 WebAssembly runtime bundled in
+				`@chriskoch/julia-wasm@1.0.4`. Use `readline()` for line input; the worker connects
+				terminal stdin with a Julia `IOBuffer` before running the source.
 			</p>
 		{/if}
 		{#if language === 'NIM'}

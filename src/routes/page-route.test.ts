@@ -662,7 +662,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.jl': 'JULIA'/);
 		expect(source).toMatch(/JULIA: 'main\.jl'/);
 		expect(source).toMatch(/JULIA: 'julia'/);
-		expect(source).toMatch(/Julia runs through the bundled Julia 1\.0\.4 WebAssembly runtime/);
+		expect(source).toMatch(/legacy Julia 1\.3\.0-DEV\.560 WebAssembly runtime/);
 		expect(source).toMatch(/Use `readline\(\)`/);
 	});
 

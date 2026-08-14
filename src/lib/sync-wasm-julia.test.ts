@@ -139,8 +139,14 @@ describe('syncWasmJuliaAssets', () => {
 		expect(manifest).toMatchObject({
 			format: 'wasm-julia-runtime-manifest-v2',
 			runtime: 'chriskoch-julia-wasm',
+			profileId: 'julia-1.3.0-dev.560-chriskoch-npm-1.0.4-22a55e0d',
 			fingerprint: result.fingerprint,
-			artifact: { kind: 'opaque-npm-prebuilt', verifiedBuildInput: false }
+			artifact: {
+				kind: 'opaque-npm-prebuilt',
+				packageVersion: '1.0.4',
+				verifiedBuildInput: false
+			},
+			components: { julia: { version: '1.3.0-DEV.560', verifiedBuildInput: false } }
 		});
 		expect(computeJuliaRuntimeFingerprint(manifest)).toBe(result.fingerprint);
 		for (const storage of manifest.storage) {

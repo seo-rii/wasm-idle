@@ -460,7 +460,7 @@ export const supportMatrixRows = [
 	{
 		language: 'Julia',
 		ids: ['JULIA'],
-		runtime: 'Julia 1.0.4 WASM worker',
+		runtime: 'Julia 1.3.0-DEV.560 legacy WASM worker',
 		stdin: 'Yes',
 		editorSupport: 'syntax',
 		debug: '-',

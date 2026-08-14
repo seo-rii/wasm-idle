@@ -2,7 +2,7 @@ const textEncoder = new TextEncoder();
 const fatalDecoder = new TextDecoder('utf-8', { fatal: true });
 const manifestFormat = 'wasm-julia-runtime-manifest-v2';
 const fingerprintDomain = 'wasm-idle:julia-runtime-manifest:v2';
-const expectedProfileId = 'julia-1.0.4-chriskoch-npm-22a55e0d';
+const expectedProfileId = 'julia-1.3.0-dev.560-chriskoch-npm-1.0.4-22a55e0d';
 const expectedLicenseExpression = 'MIT AND LicenseRef-Julia-Third-Party';
 const hardMaxAssetBytes = 64 * 1024 * 1024;
 const maxManifestBytes = 128 * 1024;
@@ -36,12 +36,12 @@ const expectedComponents = Object.freeze({
 			'content-locked npm package; source revision and build recipe are not published in package metadata'
 	}),
 	julia: Object.freeze({
-		version: '1.0.4',
+		version: '1.3.0-DEV.560',
 		repository: 'https://github.com/JuliaLang/julia.git',
 		revision: 'unrecorded',
 		verifiedBuildInput: false,
 		evidence:
-			'npm package identity and bundled README claim; binary-to-source attestation is unavailable'
+			'exact VERSION observed in the real Chromium runtime; the binary embeds the matching 1.3.0-DEV family string; binary-to-source attestation is unavailable'
 	}),
 	emscripten: Object.freeze({
 		version: 'unrecorded',
