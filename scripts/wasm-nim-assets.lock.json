@@ -1,0 +1,141 @@
+{
+	"schemaVersion": 1,
+	"profileId": "nim-2.2.4-benagastov-ca3471ae",
+	"licenseExpression": "MIT AND Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND LicenseRef-WASI-Sysroot-Third-Party",
+	"artifact": {
+		"kind": "content-locked-git-archive-prebuilt",
+		"repository": "https://github.com/benagastov/Nim-WASM-Compiler.git",
+		"revision": "ca3471ae124b40b51268da6e202753dfa061731c",
+		"archiveUrl": "https://codeload.github.com/benagastov/Nim-WASM-Compiler/tar.gz/ca3471ae124b40b51268da6e202753dfa061731c",
+		"archiveRoot": "Nim-WASM-Compiler-ca3471ae124b40b51268da6e202753dfa061731c",
+		"verifiedBuildInput": false,
+		"bytes": 45276618,
+		"sha256": "699745b3784ed544988b1524f4d718c16b8eb85de4af4809b48d3c3b299df101"
+	},
+	"components": {
+		"distribution": {
+			"version": "ca3471ae124b40b51268da6e202753dfa061731c",
+			"repository": "https://github.com/benagastov/Nim-WASM-Compiler.git",
+			"revision": "ca3471ae124b40b51268da6e202753dfa061731c",
+			"verifiedBuildInput": false,
+			"evidence": "content-locked repository archive containing opaque prebuilt compiler assets"
+		},
+		"nim": {
+			"version": "2.2.4",
+			"repository": "https://github.com/nim-lang/Nim.git",
+			"revision": "f7145dd26efeeeb6eeae6fff649db244d81b212d",
+			"verifiedBuildInput": false,
+			"evidence": "nimbase.h is byte-exact to the v2.2.4 tag; compiler JavaScript/Wasm binary-to-source attestation is unavailable"
+		},
+		"llvm": {
+			"version": "8.0.1",
+			"repository": "https://github.com/binji/wasm-clang.git",
+			"revision": "8e78cdb9caa80f75ed86d6632cb4e9310b22748c",
+			"archiveUrl": "https://codeload.github.com/binji/wasm-clang/tar.gz/8e78cdb9caa80f75ed86d6632cb4e9310b22748c",
+			"archiveBytes": 19376593,
+			"archiveSha256": "37ab5be0c68d1459a7e3e70d6214300858f7e53628efcbc0058953421f394fca",
+			"verifiedBuildInput": false,
+			"evidence": "clang, lld, memfs, and sysroot blobs are byte-exact to the pinned wasm-clang commit; compiler build inputs remain unattested"
+		},
+		"memfs": {
+			"version": "clang-9.0.0-custom-producers-section",
+			"repository": "https://github.com/llvm/llvm-project.git",
+			"revision": "0399d5a9682b3cef71c653373e38890c63c4c365",
+			"verifiedBuildInput": false,
+			"evidence": "embedded producers-section identity only; binary build recipe is unavailable"
+		},
+		"emscripten": {
+			"version": "unrecorded",
+			"repository": "https://github.com/emscripten-core/emscripten.git",
+			"revision": "unrecorded",
+			"verifiedBuildInput": false,
+			"evidence": "opaque prebuilt Nim compiler loader without a recorded Emscripten revision"
+		}
+	},
+	"license": {
+		"path": "LICENSE",
+		"spdx": "MIT AND Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND LicenseRef-WASI-Sysroot-Third-Party",
+		"sourceBytes": 1448,
+		"sourceSha256": "d3fb87b58842f008152a14605261198967daa4d214179a974912276ad2fa88f1",
+		"bytes": 1559,
+		"sha256": "a3ca09a0c79ee96482f02f7dfb6b5d4afa7a99775134b9c33ab2f27ce7180ffe"
+	},
+	"notices": {
+		"path": "THIRD_PARTY_NOTICES.md",
+		"mediaType": "text/markdown",
+		"bytes": 30316,
+		"sha256": "e1ca3733bc8d44dc6a5f121e0c8177147746c586eeaea91b690e7efceb4ceba9"
+	},
+	"documentation": {
+		"path": "README.md",
+		"mediaType": "text/markdown",
+		"bytes": 4479,
+		"sha256": "46ab8c79d2eeaa7421992917bf2f09c823b5df32d9db4288903c1bdeb0f68e7c"
+	},
+	"assets": [
+		{
+			"path": "nim/nim-bundle.js",
+			"mediaType": "text/javascript",
+			"sourceBytes": 6566418,
+			"sourceSha256": "170a78937e21ac0ec47e7d3f0eccefc261178f336ba92ab43acdb2f73ffd1301",
+			"bytes": 6566418,
+			"sha256": "170a78937e21ac0ec47e7d3f0eccefc261178f336ba92ab43acdb2f73ffd1301"
+		},
+		{
+			"path": "nim/nim.wasm",
+			"mediaType": "application/wasm",
+			"sourceBytes": 4812366,
+			"sourceSha256": "40e8c62fb96ee786fcd91f0ee2306241adeaf38c148bc8ec9788e0cc5cb26567",
+			"bytes": 4812366,
+			"sha256": "40e8c62fb96ee786fcd91f0ee2306241adeaf38c148bc8ec9788e0cc5cb26567"
+		},
+		{
+			"path": "nim/nimbase.h",
+			"mediaType": "text/x-c-header",
+			"sourceBytes": 20734,
+			"sourceSha256": "28491d05916eab446de054370808030b33b63fd5623dcd454212adec27ee934d",
+			"bytes": 20734,
+			"sha256": "28491d05916eab446de054370808030b33b63fd5623dcd454212adec27ee934d"
+		},
+		{
+			"path": "clang/clang.js",
+			"mediaType": "text/javascript",
+			"sourceBytes": 18782,
+			"sourceSha256": "9f364f4bf16ba87e3bd3e2ae230847d7e43f9d07da8fc3b1be0ca23cda229182",
+			"bytes": 19511,
+			"sha256": "06cd96ca1f66204a61133b2cabb0dd97132ddf65931f7fc1586fede9ee01754a"
+		},
+		{
+			"path": "clang/clang.wasm",
+			"mediaType": "application/wasm",
+			"sourceBytes": 31214472,
+			"sourceSha256": "2a466f0e990329d3230b869d04fc20803eae96a7feb3a3f6c93e25a77b8aed1d",
+			"bytes": 31214472,
+			"sha256": "2a466f0e990329d3230b869d04fc20803eae96a7feb3a3f6c93e25a77b8aed1d"
+		},
+		{
+			"path": "clang/lld.wasm",
+			"mediaType": "application/wasm",
+			"sourceBytes": 19490094,
+			"sourceSha256": "36419ed202011765222098d7701218378b67f634d50f0a4625059ae2c9860f48",
+			"bytes": 19490094,
+			"sha256": "36419ed202011765222098d7701218378b67f634d50f0a4625059ae2c9860f48"
+		},
+		{
+			"path": "clang/memfs.wasm",
+			"mediaType": "application/wasm",
+			"sourceBytes": 345442,
+			"sourceSha256": "2c72ee42bd9430029dda8c6bafc9f37143f6fe88d5f1ea950a70259ab748bcfe",
+			"bytes": 345442,
+			"sha256": "2c72ee42bd9430029dda8c6bafc9f37143f6fe88d5f1ea950a70259ab748bcfe"
+		},
+		{
+			"path": "clang/sysroot.tar",
+			"mediaType": "application/x-tar",
+			"sourceBytes": 9297920,
+			"sourceSha256": "2435a7b549af30c2be7ec249c405bc2e911ab0c6003012f0909ec3c131bff867",
+			"bytes": 9297920,
+			"sha256": "2435a7b549af30c2be7ec249c405bc2e911ab0c6003012f0909ec3c131bff867"
+		}
+	]
+}

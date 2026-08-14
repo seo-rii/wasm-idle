@@ -18,6 +18,9 @@ yarn.lock
 # Generated app/runtime assets.
 static/
 
+# Preserve verbatim upstream license text embedded in Nim's notice bundle.
+/scripts/wasm-nim-third-party-notices.md
+
 # Workspace package outputs and toolchain snapshots.
 runtimes/*/dist/
 runtimes/*/node_modules/

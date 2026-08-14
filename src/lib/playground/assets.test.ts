@@ -82,6 +82,10 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_JULIA_WORKER_BYTES: '',
 		PUBLIC_WASM_NIM_BASE_URL: '',
 		PUBLIC_WASM_NIM_WORKER_URL: '',
+		PUBLIC_WASM_NIM_MANIFEST_URL: '',
+		PUBLIC_WASM_NIM_MANIFEST_FINGERPRINT: '',
+		PUBLIC_WASM_NIM_WORKER_SHA256: '',
+		PUBLIC_WASM_NIM_WORKER_BYTES: '',
 		PUBLIC_WASM_CLOJURESCRIPT_BASE_URL: '',
 		PUBLIC_WASM_CLOJURESCRIPT_WORKER_URL: '',
 		PUBLIC_WASM_SWIFT_BASE_URL: '',
@@ -119,6 +123,7 @@ import {
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
 import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
+import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
@@ -1173,7 +1178,10 @@ describe('runtime asset config resolution', () => {
 		);
 		expect(resolveNimRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-nim/',
-			workerUrl: 'https://example.com/absproxy/5173/wasm-nim/runner-worker.js'
+			workerUrl: 'https://example.com/absproxy/5173/wasm-nim/runner-worker.js',
+			manifestUrl: 'https://example.com/absproxy/5173/wasm-nim/runtime-manifest.v2.json',
+			manifestFingerprint: WASM_NIM_ASSET_VERSION,
+			workerReceipt: WASM_NIM_RUNNER_RECEIPT
 		});
 		expect(resolveSwiftRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
 			{
@@ -1514,12 +1522,23 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(
 			resolveNimRuntimeAssetConfig(
-				{ nim: { baseUrl: '/runtime/nim', workerUrl: '/runtime/nim/worker.js' } },
+				{
+					nim: {
+						baseUrl: '/runtime/nim',
+						workerUrl: '/runtime/nim/worker.js',
+						manifestUrl: '/runtime/nim/manifest.json',
+						manifestFingerprint: customFingerprint,
+						workerReceipt: customWorkerReceipt
+					}
+				},
 				'https://example.com/app'
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/nim/',
-			workerUrl: 'https://example.com/runtime/nim/worker.js'
+			workerUrl: 'https://example.com/runtime/nim/worker.js',
+			manifestUrl: 'https://example.com/runtime/nim/manifest.json',
+			manifestFingerprint: customFingerprint,
+			workerReceipt: customWorkerReceipt
 		});
 		expect(
 			resolveSwiftRuntimeAssetConfig(
@@ -1625,6 +1644,35 @@ describe('runtime asset config resolution', () => {
 			publicEnv.PUBLIC_WASM_JULIA_MANIFEST_FINGERPRINT = '';
 			publicEnv.PUBLIC_WASM_JULIA_WORKER_SHA256 = '';
 			publicEnv.PUBLIC_WASM_JULIA_WORKER_BYTES = '';
+		}
+	});
+
+	it('accepts custom Nim URL environment overrides only with complete integrity pins', async () => {
+		const manifestFingerprint = '9'.repeat(64);
+		const workerSha256 = 'a'.repeat(64);
+		publicEnv.PUBLIC_WASM_NIM_BASE_URL = 'https://runtime.example.com/nim/';
+		publicEnv.PUBLIC_WASM_NIM_WORKER_URL = 'https://runtime.example.com/nim/runner.js';
+		publicEnv.PUBLIC_WASM_NIM_MANIFEST_URL = 'https://runtime.example.com/nim/manifest.json';
+		publicEnv.PUBLIC_WASM_NIM_MANIFEST_FINGERPRINT = manifestFingerprint;
+		publicEnv.PUBLIC_WASM_NIM_WORKER_SHA256 = workerSha256;
+		publicEnv.PUBLIC_WASM_NIM_WORKER_BYTES = '7654';
+		vi.resetModules();
+		try {
+			const { resolveNimRuntimeAssetConfig } = await import('./assets');
+			expect(resolveNimRuntimeAssetConfig(undefined, 'https://example.com/app')).toEqual({
+				baseUrl: 'https://runtime.example.com/nim/',
+				workerUrl: 'https://runtime.example.com/nim/runner.js',
+				manifestUrl: 'https://runtime.example.com/nim/manifest.json',
+				manifestFingerprint,
+				workerReceipt: { bytes: 7654, sha256: workerSha256 }
+			});
+		} finally {
+			publicEnv.PUBLIC_WASM_NIM_BASE_URL = '';
+			publicEnv.PUBLIC_WASM_NIM_WORKER_URL = '';
+			publicEnv.PUBLIC_WASM_NIM_MANIFEST_URL = '';
+			publicEnv.PUBLIC_WASM_NIM_MANIFEST_FINGERPRINT = '';
+			publicEnv.PUBLIC_WASM_NIM_WORKER_SHA256 = '';
+			publicEnv.PUBLIC_WASM_NIM_WORKER_BYTES = '';
 		}
 	});
 

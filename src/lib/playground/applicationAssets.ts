@@ -24,7 +24,7 @@ import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanet
 import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from './wasmLispVersion';
 import { WASM_LUA_ASSET_VERSION } from './wasmLuaVersion';
-import { WASM_NIM_ASSET_VERSION } from './wasmNimVersion';
+import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import {
 	WASM_OBJECTIVEC_ASSET_RECEIPTS,
 	WASM_OBJECTIVEC_ASSET_VERSION
@@ -182,7 +182,10 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		nim: {
 			baseUrl: asset('wasm-nim/'),
-			workerUrl: asset('wasm-nim/runner-worker.js', WASM_NIM_ASSET_VERSION)
+			workerUrl: asset('wasm-nim/runner-worker.js', WASM_NIM_RUNNER_RECEIPT.sha256),
+			manifestUrl: asset('wasm-nim/runtime-manifest.v2.json', WASM_NIM_ASSET_VERSION),
+			manifestFingerprint: WASM_NIM_ASSET_VERSION,
+			workerReceipt: WASM_NIM_RUNNER_RECEIPT
 		},
 		bash: {
 			moduleUrl: asset('wasm-bash/sdk/index.mjs', STATIC_RUNTIME_MODULE_VERSION),

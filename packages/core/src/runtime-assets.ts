@@ -165,7 +165,13 @@ export interface RuntimeAssetKeySource {
 		manifestFingerprint?: string;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
-	nim?: { baseUrl?: string; workerUrl?: string };
+	nim?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	bash?: {
 		moduleUrl?: string;
 		webcUrl?: string;
@@ -699,6 +705,18 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	},
 	{ runtime: 'nim', property: 'baseUrl', key: 'nimBaseUrl' },
 	{ runtime: 'nim', property: 'workerUrl', key: 'nimWorkerUrl' },
+	{ runtime: 'nim', property: 'manifestUrl', key: 'nimManifestUrl' },
+	{
+		runtime: 'nim',
+		property: 'manifestFingerprint',
+		key: 'nimManifestFingerprint'
+	},
+	{
+		runtime: 'nim',
+		property: 'workerReceipt',
+		key: 'nimWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'bash', property: 'moduleUrl', key: 'bashModuleUrl' },
 	{ runtime: 'bash', property: 'webcUrl', key: 'bashWebcUrl' },
 	{ runtime: 'bash', property: 'workerUrl', key: 'bashWorkerUrl' },

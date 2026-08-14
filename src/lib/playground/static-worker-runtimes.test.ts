@@ -126,6 +126,7 @@ import gleamWorkerSource from '../../../scripts/runtime-workers/wasm-gleam-runne
 import jWorkerSource from '../../../scripts/runtime-workers/wasm-j-runner-worker.js?raw';
 import janetWorkerSource from '../../../scripts/runtime-workers/wasm-janet-runner-worker.js?raw';
 import juliaWorkerSource from '../../../scripts/runtime-workers/wasm-julia-runner-worker.js?raw';
+import nimWorkerSource from '../../../scripts/runtime-workers/wasm-nim-runner-worker.js?raw';
 import perlWorkerSource from '../../../scripts/runtime-workers/wasm-perl-runner-worker.js?raw';
 import prologWorkerSource from '../../../scripts/runtime-workers/wasm-prolog-runner-worker.js?raw';
 import tclWorkerSource from '../../../scripts/runtime-workers/wasm-tcl-runner-worker.js?raw';
@@ -139,6 +140,7 @@ import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleam
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
 import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
+import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
 import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
 import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
@@ -257,13 +259,17 @@ describe('static worker backed language sandboxes', () => {
 											? janetWorkerSource
 											: inputUrl.includes('/wasm-julia/runner-worker.js')
 												? juliaWorkerSource
-												: inputUrl.includes('/wasm-perl/runner-worker.js')
-													? perlWorkerSource
+												: inputUrl.includes('/wasm-nim/runner-worker.js')
+													? nimWorkerSource
 													: inputUrl.includes(
-																'/wasm-tcl/runner-worker.js'
+																'/wasm-perl/runner-worker.js'
 														  )
-														? tclWorkerSource
-														: '/* static worker */';
+														? perlWorkerSource
+														: inputUrl.includes(
+																	'/wasm-tcl/runner-worker.js'
+															  )
+															? tclWorkerSource
+															: '/* static worker */';
 				return new Response(source, {
 					status: 200,
 					headers: {
@@ -1097,7 +1103,10 @@ describe('static worker backed language sandboxes', () => {
 		await sandbox.load({
 			nim: {
 				baseUrl: '/wasm-nim/',
-				workerUrl: '/wasm-nim/runner-worker.js?v=test'
+				workerUrl: '/wasm-nim/runner-worker.js?v=test',
+				manifestUrl: '/wasm-nim/runtime-manifest.v2.json',
+				manifestFingerprint: WASM_NIM_ASSET_VERSION,
+				workerReceipt: WASM_NIM_RUNNER_RECEIPT
 			}
 		});
 		await expect(
@@ -1106,18 +1115,60 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		await expectWorkerBootstrap(
+		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/wasm-nim/runner-worker.js?v=test'
+			'http://localhost:3000/wasm-nim/runner-worker.js?v=test',
+			nimWorkerSource
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-nim/',
+				manifestUrl: 'http://localhost:3000/wasm-nim/runtime-manifest.v2.json',
+				manifestFingerprint: WASM_NIM_ASSET_VERSION,
 				args: ['demo'],
 				stdin: 'ok\n',
 				activePath: 'main.nim'
 			})
 		);
+		expect(sandbox.workerReceipt).toEqual(WASM_NIM_RUNNER_RECEIPT);
+	});
+
+	it('rejects a modified Nim runner before creating a worker', async () => {
+		const modifiedSource = `x${nimWorkerSource.slice(1)}`;
+		vi.mocked(fetch).mockResolvedValueOnce(
+			new Response(modifiedSource, {
+				status: 200,
+				headers: {
+					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
+				}
+			})
+		);
+		const sandbox = new Nim();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'NIM'
+		});
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects custom Nim runtime urls without replacement integrity pins', async () => {
+		const sandbox = new Nim();
+
+		await expect(
+			sandbox.load({
+				nim: {
+					baseUrl: 'https://runtime.example.com/nim/',
+					workerUrl: 'https://runtime.example.com/nim/runner.js',
+					manifestUrl: 'https://runtime.example.com/nim/manifest.json'
+				}
+			})
+		).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			runtimeId: 'NIM'
+		});
+		expect(fetch).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('resets reused progress sinks and keeps each lifecycle monotonic', async () => {

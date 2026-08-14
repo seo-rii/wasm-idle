@@ -9,10 +9,11 @@
     "nimVersion": "2.2.4",
     "llvmVersion": "8.0.1"
   },
-  "fingerprint": "d0263eb14513088e",
+  "fingerprint": "54d6f66f1e44b020",
   "files": [
     "LICENSE",
     "README.md",
+    "THIRD_PARTY_NOTICES.md",
     "clang/clang.js",
     "clang/clang.wasm.gz",
     "clang/lld.wasm.gz",
