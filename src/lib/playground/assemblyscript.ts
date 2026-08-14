@@ -1,9 +1,11 @@
 import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -57,6 +59,13 @@ class AssemblyScriptSandbox implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: AssemblyScriptOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('AssemblyScript sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'ASSEMBLYSCRIPT',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'AssemblyScript',
 		onDispose: (worker) => {
@@ -115,8 +124,12 @@ class AssemblyScriptSandbox implements Sandbox {
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const nextModuleUrl = resolveAssemblyScriptRuntimeModuleUrl(runtimeAssets, currentUrl);
 			if (!this.isOperationActive(operation)) return;
-			if (this.worker && this.moduleUrl !== nextModuleUrl) this.workerSession.reset();
+			const needsWorkerReset = Boolean(this.worker && this.moduleUrl !== nextModuleUrl);
 			this.moduleUrl = nextModuleUrl;
+			if (needsWorkerReset) {
+				this.workerSession.reset();
+				if (!this.isOperationActive(operation)) return;
+			}
 			if (!this.worker) {
 				const WorkerConstructor = (
 					await import('$lib/playground/worker/assemblyscript?worker')
@@ -187,6 +200,12 @@ class AssemblyScriptSandbox implements Sandbox {
 	}
 
 	private beginOperation(phase: AssemblyScriptOperation['phase']) {
+		if (this.disposed) {
+			throw new RuntimeConfigurationError('AssemblyScript sandbox is disposed', {
+				phase: 'dispose',
+				runtimeId: 'ASSEMBLYSCRIPT'
+			});
+		}
 		if (this.activeOperation) {
 			throw new BusyError('AssemblyScript runtime already has an active operation', {
 				runtimeId: 'ASSEMBLYSCRIPT',
@@ -326,12 +345,14 @@ class AssemblyScriptSandbox implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -597,6 +618,7 @@ class AssemblyScriptSandbox implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const operation = this.activeOperation;
 		if (operation) {
 			this.cancelOperation(operation, reason);
@@ -610,6 +632,7 @@ class AssemblyScriptSandbox implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
@@ -618,6 +641,34 @@ class AssemblyScriptSandbox implements Sandbox {
 		if (this.activeOperation || !this.exit) {
 			this.terminate();
 		}
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		delete this.worker;
+		this.moduleUrl = '';
+		this.output = null;
+		this.oncompilerdiagnostic = undefined;
+		this.pendingInput = [];
+		this.waitingForInput = false;
+		this.pendingEof = false;
+		try {
+			resetBufferedStdin(this.buffer);
+		} catch {
+			// Terminal cleanup is best effort after host state becomes unreachable.
+		}
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+			this.exit = true;
+		}
+		return this.disposePromise;
 	}
 }
 

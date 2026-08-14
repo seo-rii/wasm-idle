@@ -995,4 +995,194 @@ describe('AssemblyScript operation lifecycle', () => {
 		await expect(replacementRun).resolves.toBe(true);
 		expect(output).toHaveBeenCalledWith('replacement output\n');
 	});
+
+	it('keeps clear reusable but disposes an idle runtime exactly once', async () => {
+		const sandbox = new AssemblyScript();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/assets');
+		const worker = workerInstances[0]!;
+
+		await sandbox.clear();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('export function main(): i32 { return 0; }', false)).resolves.toBe(
+			true
+		);
+		sandbox.write('queued input\n');
+		sandbox.eof();
+
+		let cleanupSnapshot: Record<string, unknown> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		worker.terminate.mockImplementationOnce(() => {
+			cleanupSnapshot = {
+				worker: sandbox.worker,
+				moduleUrl: sandbox.moduleUrl,
+				output: sandbox.output,
+				diagnostic: sandbox.oncompilerdiagnostic,
+				pendingInput: [...sandbox.pendingInput],
+				waitingForInput: sandbox.waitingForInput,
+				pendingEof: sandbox.pendingEof,
+				bufferedInput: readBufferedStdin(sandbox.buffer),
+				onmessage: worker.onmessage,
+				onerror: worker.onerror,
+				onmessageerror: worker.onmessageerror
+			};
+			reentrantLoad = sandbox.load('/reentrant');
+			reentrantDisposal = sandbox.dispose();
+		});
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		const reentrantLoadResult = expect(reentrantLoad!).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'ASSEMBLYSCRIPT'
+		});
+		await firstDisposal;
+		await reentrantLoadResult;
+
+		expect(cleanupSnapshot).toEqual({
+			worker: undefined,
+			moduleUrl: '',
+			output: null,
+			diagnostic: undefined,
+			pendingInput: [],
+			waitingForInput: false,
+			pendingEof: false,
+			bufferedInput: '',
+			onmessage: null,
+			onerror: null,
+			onmessageerror: null
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'ASSEMBLYSCRIPT'
+		});
+		await expect(
+			sandbox.run('export function unavailable(): i32 { return 0; }', false)
+		).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'ASSEMBLYSCRIPT'
+		});
+		sandbox.write('ignored input\n');
+		sandbox.eof();
+		sandbox.terminate();
+		await sandbox.clear();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles active startup with one stable disposal cancellation', async () => {
+		autoResolveLoad = false;
+		const sandbox = new AssemblyScript();
+		const loading = sandbox.load('/assets');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0]!;
+		const staleHandler = worker.onmessage;
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		const cancellation = await loading.catch((error) => error);
+		await firstDisposal;
+
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'ASSEMBLYSCRIPT',
+			recoverable: false
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.moduleUrl).toBe('');
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles an active run, clears stdin, and ignores retained messages after disposal', async () => {
+		autoResolveRun = false;
+		const sandbox = new AssemblyScript();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/assets');
+		const worker = workerInstances[0]!;
+		const running = sandbox.run('export function main(): i32 { return 0; }', false);
+		const staleHandler = worker.onmessage;
+		const cancellation = running.catch((error) => error);
+		worker.emit({ buffer: true });
+		sandbox.write('active input\n');
+		sandbox.eof();
+		expect(readBufferedStdin(sandbox.buffer)).toBe('active input\n');
+		expect(sandbox.pendingEof).toBe(true);
+
+		await sandbox.dispose();
+		await expect(cancellation).resolves.toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(await cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'ASSEMBLYSCRIPT',
+			recoverable: false
+		});
+
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		staleHandler?.({
+			data: {
+				buffer: true,
+				output: 'late output',
+				diagnostic: { lineNumber: 1, severity: 'error', message: 'late diagnostic' },
+				results: 'late result'
+			}
+		} as MessageEvent<any>);
+		await Promise.resolve();
+		expect(output).not.toHaveBeenCalled();
+		expect(diagnostic).not.toHaveBeenCalled();
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(sandbox.output).toBeNull();
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+	});
+
+	it('does not resurrect module identity when worker replacement reenters disposal', async () => {
+		const sandbox = new AssemblyScript();
+		await sandbox.load('/assets');
+		const worker = workerInstances[0]!;
+		let reentrantDisposal: Promise<void> | undefined;
+		worker.terminate.mockImplementationOnce(() => {
+			reentrantDisposal = sandbox.dispose();
+		});
+
+		const replacement = sandbox.load('/other-assets');
+		const outcome = replacement.catch((error) => error);
+		await vi.waitFor(() => expect(reentrantDisposal).toBeDefined());
+
+		await expect(outcome).resolves.toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(sandbox.dispose()).toBe(reentrantDisposal);
+		await reentrantDisposal;
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.worker).toBeUndefined();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(1);
+	});
 });
