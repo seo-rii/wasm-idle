@@ -25,6 +25,7 @@ import {
 	WASM_PROLOG_ASSET_VERSION,
 	WASM_PROLOG_RUNNER_RECEIPT
 } from '$lib/playground/wasmPrologVersion';
+import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from '$lib/playground/wasmPerlVersion';
 import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from '$lib/playground/wasmTclVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import {
@@ -235,6 +236,9 @@ export interface GleamRuntimeAssetConfig {
 export interface PerlRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
+	manifestUrl?: string;
+	manifestFingerprint?: string;
+	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
 export interface TclRuntimeAssetConfig {
@@ -2012,13 +2016,54 @@ export function resolvePerlWorkerUrl(
 	return resolveConfiguredUrl('/wasm-perl/runner-worker.js', currentUrl);
 }
 
+export function resolvePerlManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl =
+		(typeof options === 'object' && options?.perl?.manifestUrl) ||
+		(publicEnv.PUBLIC_WASM_PERL_MANIFEST_URL || '').trim();
+	if (configuredManifestUrl) return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
+	return `${resolvePerlBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
+}
+
 export function resolvePerlRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
+	const configured = typeof options === 'object' ? options?.perl : undefined;
+	const envManifestFingerprint = (publicEnv.PUBLIC_WASM_PERL_MANIFEST_FINGERPRINT || '').trim();
+	const envWorkerSha256 = (publicEnv.PUBLIC_WASM_PERL_WORKER_SHA256 || '').trim();
+	const envWorkerBytesSource = (publicEnv.PUBLIC_WASM_PERL_WORKER_BYTES || '').trim();
+	const envWorkerBytes = /^\d+$/u.test(envWorkerBytesSource)
+		? Number(envWorkerBytesSource)
+		: Number.NaN;
+	const envWorkerReceipt =
+		/^[a-f0-9]{64}$/u.test(envWorkerSha256) &&
+		Number.isSafeInteger(envWorkerBytes) &&
+		envWorkerBytes > 0
+			? { bytes: envWorkerBytes, sha256: envWorkerSha256 }
+			: undefined;
+	const usesCustomUrls = Boolean(
+		configured?.baseUrl ||
+		configured?.workerUrl ||
+		configured?.manifestUrl ||
+		(publicEnv.PUBLIC_WASM_PERL_BASE_URL || '').trim() ||
+		(publicEnv.PUBLIC_WASM_PERL_WORKER_URL || '').trim() ||
+		(publicEnv.PUBLIC_WASM_PERL_MANIFEST_URL || '').trim()
+	);
 	return {
 		baseUrl: resolvePerlBaseUrl(options, currentUrl),
-		workerUrl: resolvePerlWorkerUrl(options, currentUrl)
+		workerUrl: resolvePerlWorkerUrl(options, currentUrl),
+		manifestUrl: resolvePerlManifestUrl(options, currentUrl),
+		manifestFingerprint:
+			configured?.manifestFingerprint?.trim() ||
+			envManifestFingerprint ||
+			(!usesCustomUrls ? WASM_PERL_ASSET_VERSION : undefined),
+		workerReceipt:
+			configured?.workerReceipt ||
+			envWorkerReceipt ||
+			(!usesCustomUrls ? WASM_PERL_RUNNER_RECEIPT : undefined)
 	};
 }
 

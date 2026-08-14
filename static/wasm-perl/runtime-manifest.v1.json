@@ -2,8 +2,8 @@
   "format": "wasm-perl-runtime-manifest-v1",
   "version": "v0.09-beta",
   "package": "webperl_prebuilt_v0.09-beta.zip",
-  "packageUrl": "https://github.com/haukex/webperl/releases/download/v0.09-beta/webperl_prebuilt_v0.09-beta.zip",
-  "fingerprint": "e3f91af844b3da0f",
+  "packageUrl": "https://zenodo.org/api/records/2582586/files/webperl_prebuilt_v0.09-beta.zip/content",
+  "fingerprint": "ea1edaf23b9102791ec8f336a6b5b431376289a97876f925919d5e422cd08555",
   "files": [
     "emperl.js",
     "emperl.wasm",

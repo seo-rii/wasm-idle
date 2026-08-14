@@ -13,6 +13,10 @@ import {
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from './bundledPrologRuntime.js';
 import {
+	BUNDLED_PERL_MANIFEST_FINGERPRINT,
+	BUNDLED_PERL_RUNNER_RECEIPT
+} from './bundledPerlRuntime.js';
+import {
 	BUNDLED_TCL_MANIFEST_FINGERPRINT,
 	BUNDLED_TCL_RUNNER_RECEIPT
 } from './bundledTclRuntime.js';
@@ -805,7 +809,7 @@ export function resolvePerlLanguageServerBaseUrl(
 		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-perl/`, currentUrl);
 	}
 	if (options?.perl?.baseUrl) {
-		return resolveFileUrl(options.perl.baseUrl, currentUrl);
+		return normalizeBaseUrl(options.perl.baseUrl, currentUrl);
 	}
 	if (options?.rootUrl) {
 		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-perl/`, currentUrl);
@@ -817,9 +821,10 @@ export function resolvePerlLanguageServerWorkerUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''
 ) {
+	const bundledWorkerVersion = resolvePerlLanguageServerWorkerReceipt(options).sha256;
 	if (typeof options === 'string') {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-perl/runner-worker.js`,
+			`${normalizeRootUrl(options) || ''}/wasm-perl/runner-worker.js?v=${bundledWorkerVersion}`,
 			currentUrl
 		);
 	}
@@ -828,11 +833,58 @@ export function resolvePerlLanguageServerWorkerUrl(
 	}
 	if (options?.rootUrl) {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-perl/runner-worker.js`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-perl/runner-worker.js?v=${bundledWorkerVersion}`,
 			currentUrl
 		);
 	}
-	return resolveApplicationAssetUrl('/wasm-perl/runner-worker.js', currentUrl);
+	return resolveApplicationAssetUrl(
+		`/wasm-perl/runner-worker.js?v=${bundledWorkerVersion}`,
+		currentUrl
+	);
+}
+
+export function resolvePerlLanguageServerManifestUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'object' && options.perl?.manifestUrl) {
+		return resolveFileUrl(options.perl.manifestUrl, currentUrl);
+	}
+	return resolveFileUrl(
+		`${resolvePerlLanguageServerBaseUrl(options, currentUrl)}runtime-manifest.v2.json?v=${resolvePerlLanguageServerManifestFingerprint(options)}`,
+		currentUrl
+	);
+}
+
+const usesCustomPerlRuntimeUrls = (options: EditorLanguageServerOptions | undefined) =>
+	typeof options === 'object' &&
+	Boolean(options.perl?.baseUrl || options.perl?.workerUrl || options.perl?.manifestUrl);
+
+export function resolvePerlLanguageServerManifestFingerprint(
+	options: EditorLanguageServerOptions | undefined
+) {
+	const configured =
+		typeof options === 'object' ? options.perl?.manifestFingerprint?.trim() || '' : '';
+	if (/^[a-f0-9]{64}$/u.test(configured)) return configured;
+	if (!configured && !usesCustomPerlRuntimeUrls(options)) {
+		return BUNDLED_PERL_MANIFEST_FINGERPRINT;
+	}
+	throw new LanguageServerAssetConfigurationError(
+		'Perl LSP',
+		'an explicit 64-character perl.manifestFingerprint for custom runtime URLs'
+	);
+}
+
+export function resolvePerlLanguageServerWorkerReceipt(
+	options: EditorLanguageServerOptions | undefined
+) {
+	const configured = typeof options === 'object' ? options.perl?.workerReceipt : undefined;
+	if (configured) return configured;
+	if (!usesCustomPerlRuntimeUrls(options)) return BUNDLED_PERL_RUNNER_RECEIPT;
+	throw new LanguageServerAssetConfigurationError(
+		'Perl LSP',
+		'an explicit perl.workerReceipt for custom runtime URLs'
+	);
 }
 
 export function resolveTclLanguageServerBaseUrl(

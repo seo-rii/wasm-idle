@@ -9,7 +9,11 @@ vi.mock('../src/runtime-worker.js', () => ({
 }));
 
 import { createStaticWorkerDiagnostics } from '../src/static-worker-service.js';
-import type { LspDocument, LspDocumentContext } from '../src/index.js';
+import {
+	createPerlWorkerService,
+	type LspDocument,
+	type LspDocumentContext
+} from '../src/index.js';
 
 const contextFor = (document: LspDocument): LspDocumentContext => ({
 	documents: new Map([[document.uri, document]]),
@@ -153,6 +157,46 @@ describe('createStaticWorkerDiagnostics', () => {
 			workerReceipt,
 			timeoutMessage: 'Tcl diagnostics timed out',
 			message: { code: document.text }
+		});
+	});
+
+	it('forwards the complete pinned Perl manifest contract to the verified worker', async () => {
+		mocks.runRuntimeWorkerDiagnostics.mockClear();
+		const service = createPerlWorkerService();
+		const document: LspDocument = {
+			uri: 'file:///workspace/main.pl',
+			languageId: 'perl',
+			version: 1,
+			text: 'print "ok\\n";\n'
+		};
+		const context = contextFor(document);
+		const workerReceipt = { bytes: 4567, sha256: 'a'.repeat(64) };
+		const config = {
+			baseUrl: '/wasm-perl/',
+			workerUrl: '/wasm-perl/runner-worker.js?v=worker',
+			manifestUrl: '/wasm-perl/runtime-manifest.v2.json?v=manifest',
+			manifestFingerprint: 'b'.repeat(64),
+			workerReceipt
+		};
+
+		service.initialize?.(config, context);
+		await service.diagnostics?.(document, context);
+
+		expect(mocks.runRuntimeWorkerDiagnostics).toHaveBeenCalledWith({
+			runtime: 'perl',
+			workerUrl: config.workerUrl,
+			workerReceipt,
+			timeoutMessage: 'Perl diagnostics timed out',
+			message: {
+				baseUrl: config.baseUrl,
+				manifestUrl: config.manifestUrl,
+				manifestFingerprint: config.manifestFingerprint,
+				maxAssetBytes: 32 * 1024 * 1024,
+				code: document.text,
+				activePath: 'main.pl',
+				diagnose: true,
+				log: false
+			}
 		});
 	});
 });

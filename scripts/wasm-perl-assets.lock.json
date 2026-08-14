@@ -1,0 +1,91 @@
+{
+	"schemaVersion": 1,
+	"profileId": "webperl-v0.09-beta-perl-5.28.1-emscripten-1.38.28",
+	"licenseExpression": "Artistic-1.0-Perl OR GPL-1.0-or-later",
+	"artifact": {
+		"kind": "opaque-prebuilt",
+		"repository": "https://github.com/haukex/webperl.git",
+		"revision": "6f2173d29a2c2e3536e1de75ff5d291ae96ab348",
+		"tag": "v0.09-beta",
+		"doi": "10.5281/zenodo.2582586",
+		"path": "webperl_prebuilt_v0.09-beta.zip",
+		"url": "https://zenodo.org/api/records/2582586/files/webperl_prebuilt_v0.09-beta.zip/content",
+		"size": 3936557,
+		"sha256": "5f441249217e90ab378c666f473d4206ab4f44907f6bb0aa8d70834bc38c40dc"
+	},
+	"components": {
+		"webperl": {
+			"version": "v0.09-beta",
+			"repository": "https://github.com/haukex/webperl.git",
+			"revision": "6f2173d29a2c2e3536e1de75ff5d291ae96ab348",
+			"verifiedBuildInput": false,
+			"evidence": "release tag and opaque prebuilt archive"
+		},
+		"perl": {
+			"version": "5.28.1",
+			"repository": "https://github.com/haukex/emperl5.git",
+			"revision": "e70d909feb796ec99d5e91de5d1635d4526ec131",
+			"verifiedBuildInput": false,
+			"evidence": "embedded runtime version string and versioned WebPerl build configuration"
+		},
+		"emscripten": {
+			"version": "1.38.28",
+			"repository": "https://github.com/emscripten-core/emscripten.git",
+			"revision": "69ab40586822209758165df170e9fc8b81e05608",
+			"verifiedBuildInput": false,
+			"evidence": "versioned WebPerl build configuration"
+		},
+		"cpanExtensions": {
+			"modules": ["Cpanel::JSON::XS", "Devel::StackTrace", "Future"],
+			"verifiedBuildInput": false,
+			"evidence": "versioned WebPerl build configuration without transitive artifact locks"
+		}
+	},
+	"licenses": [
+		{
+			"id": "webperl-perl-artistic",
+			"path": "licenses/LICENSE_artistic.txt",
+			"archiveEntry": "webperl_prebuilt_v0.09-beta/LICENSE_artistic.txt",
+			"sourceUrl": "https://raw.githubusercontent.com/haukex/webperl/6f2173d29a2c2e3536e1de75ff5d291ae96ab348/LICENSE_artistic.txt",
+			"spdx": "Artistic-1.0-Perl",
+			"bytes": 7587,
+			"sha256": "435a788b2de9aaae9c640e7c0ab7b317b41323522e8641bcda000607892abf1f"
+		},
+		{
+			"id": "webperl-perl-gpl",
+			"path": "licenses/LICENSE_gpl.txt",
+			"archiveEntry": "webperl_prebuilt_v0.09-beta/LICENSE_gpl.txt",
+			"sourceUrl": "https://raw.githubusercontent.com/haukex/webperl/6f2173d29a2c2e3536e1de75ff5d291ae96ab348/LICENSE_gpl.txt",
+			"spdx": "GPL-1.0-or-later",
+			"bytes": 14468,
+			"sha256": "0166b8b8e96a6b153da26ece157ebbd9ffad5423670f611fae80fefacb6da7f5"
+		}
+	],
+	"archiveEntries": [
+		{
+			"path": "webperl_prebuilt_v0.09-beta/emperl.js",
+			"bytes": 303013,
+			"sha256": "b60e3c04874c6ef5278001257b4c8a9f4c7e69ca3d6b268d9639723234844784"
+		},
+		{
+			"path": "webperl_prebuilt_v0.09-beta/emperl.wasm",
+			"bytes": 3734063,
+			"sha256": "f1d49c4514c7332a57992c4a2444fd6a56ae3b5e6651b4fd484852a641e5e4ec"
+		},
+		{
+			"path": "webperl_prebuilt_v0.09-beta/emperl.data",
+			"bytes": 12021691,
+			"sha256": "9529019418cf766a42cf2d25bd3fc97b47c9e689f5666cfc32dc11338d1b1e66"
+		},
+		{
+			"path": "webperl_prebuilt_v0.09-beta/LICENSE_artistic.txt",
+			"bytes": 7587,
+			"sha256": "435a788b2de9aaae9c640e7c0ab7b317b41323522e8641bcda000607892abf1f"
+		},
+		{
+			"path": "webperl_prebuilt_v0.09-beta/LICENSE_gpl.txt",
+			"bytes": 14468,
+			"sha256": "0166b8b8e96a6b153da26ece157ebbd9ffad5423670f611fae80fefacb6da7f5"
+		}
+	]
+}

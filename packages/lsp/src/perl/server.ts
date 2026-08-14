@@ -1,13 +1,20 @@
 import {
 	resolvePerlLanguageServerBaseUrl,
+	resolvePerlLanguageServerManifestFingerprint,
+	resolvePerlLanguageServerManifestUrl,
+	resolvePerlLanguageServerWorkerReceipt,
 	resolvePerlLanguageServerWorkerUrl
 } from '../runtime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
+import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 
 export interface PerlLanguageServerConfig {
 	baseUrl?: string;
 	workerUrl?: string;
+	manifestUrl?: string;
+	manifestFingerprint?: string;
+	workerReceipt?: RuntimeAssetIntegrityEntry;
 }
 
 export interface PerlLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
@@ -27,7 +34,10 @@ export async function getPerlLanguageServer(
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
 			baseUrl: resolvePerlLanguageServerBaseUrl(options, hostOptions?.currentUrl),
-			workerUrl: resolvePerlLanguageServerWorkerUrl(options, hostOptions?.currentUrl)
+			workerUrl: resolvePerlLanguageServerWorkerUrl(options, hostOptions?.currentUrl),
+			manifestUrl: resolvePerlLanguageServerManifestUrl(options, hostOptions?.currentUrl),
+			manifestFingerprint: resolvePerlLanguageServerManifestFingerprint(options),
+			workerReceipt: resolvePerlLanguageServerWorkerReceipt(options)
 		},
 		onStatus: hostOptions?.onStatus,
 		lifecycle: hostOptions

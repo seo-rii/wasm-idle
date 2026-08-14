@@ -6,6 +6,10 @@ import {
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from '../src/bundledPrologRuntime.js';
 import {
+	BUNDLED_PERL_MANIFEST_FINGERPRINT,
+	BUNDLED_PERL_RUNNER_RECEIPT
+} from '../src/bundledPerlRuntime.js';
+import {
 	BUNDLED_TCL_MANIFEST_FINGERPRINT,
 	BUNDLED_TCL_RUNNER_RECEIPT
 } from '../src/bundledTclRuntime.js';
@@ -720,7 +724,10 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				baseUrl: 'https://static.example.com/repl_20240807/wasm-perl/',
-				workerUrl: 'https://static.example.com/repl_20240807/wasm-perl/runner-worker.js'
+				workerUrl: `https://static.example.com/repl_20240807/wasm-perl/runner-worker.js?v=${BUNDLED_PERL_RUNNER_RECEIPT.sha256}`,
+				manifestUrl: `https://static.example.com/repl_20240807/wasm-perl/runtime-manifest.v2.json?v=${BUNDLED_PERL_MANIFEST_FINGERPRINT}`,
+				manifestFingerprint: BUNDLED_PERL_MANIFEST_FINGERPRINT,
+				workerReceipt: BUNDLED_PERL_RUNNER_RECEIPT
 			}
 		});
 

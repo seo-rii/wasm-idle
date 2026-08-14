@@ -14,6 +14,10 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_GLEAM_WORKER_BYTES: '',
 		PUBLIC_WASM_PERL_BASE_URL: '',
 		PUBLIC_WASM_PERL_WORKER_URL: '',
+		PUBLIC_WASM_PERL_MANIFEST_URL: '',
+		PUBLIC_WASM_PERL_MANIFEST_FINGERPRINT: '',
+		PUBLIC_WASM_PERL_WORKER_SHA256: '',
+		PUBLIC_WASM_PERL_WORKER_BYTES: '',
 		PUBLIC_WASM_TCL_BASE_URL: '',
 		PUBLIC_WASM_TCL_WORKER_URL: '',
 		PUBLIC_WASM_AWK_BASE_URL: '',
@@ -112,6 +116,7 @@ import clojureScriptWorkerSource from '../../../scripts/runtime-workers/wasm-clo
 import forthWorkerSource from '../../../scripts/runtime-workers/wasm-forth-runner-worker.js?raw';
 import gleamWorkerSource from '../../../scripts/runtime-workers/wasm-gleam-runner-worker.js?raw';
 import jWorkerSource from '../../../scripts/runtime-workers/wasm-j-runner-worker.js?raw';
+import perlWorkerSource from '../../../scripts/runtime-workers/wasm-perl-runner-worker.js?raw';
 import prologWorkerSource from '../../../scripts/runtime-workers/wasm-prolog-runner-worker.js?raw';
 import tclWorkerSource from '../../../scripts/runtime-workers/wasm-tcl-runner-worker.js?raw';
 import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
@@ -122,6 +127,7 @@ import {
 } from './wasmClojureScriptVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
+import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
 import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
 import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
 
@@ -235,9 +241,11 @@ describe('static worker backed language sandboxes', () => {
 									? bqnWorkerSource
 									: inputUrl.includes('/wasm-clojurescript/runner-worker.js')
 										? clojureScriptWorkerSource
-										: inputUrl.includes('/wasm-tcl/runner-worker.js')
-											? tclWorkerSource
-											: '/* static worker */';
+										: inputUrl.includes('/wasm-perl/runner-worker.js')
+											? perlWorkerSource
+											: inputUrl.includes('/wasm-tcl/runner-worker.js')
+												? tclWorkerSource
+												: '/* static worker */';
 				return new Response(source, {
 					status: 200,
 					headers: {
@@ -574,7 +582,10 @@ describe('static worker backed language sandboxes', () => {
 		await sandbox.load({
 			perl: {
 				baseUrl: '/wasm-perl/',
-				workerUrl: '/wasm-perl/runner-worker.js?v=test'
+				workerUrl: '/wasm-perl/runner-worker.js?v=test',
+				manifestUrl: '/wasm-perl/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: WASM_PERL_ASSET_VERSION,
+				workerReceipt: WASM_PERL_RUNNER_RECEIPT
 			}
 		});
 		await expect(
@@ -583,17 +594,39 @@ describe('static worker backed language sandboxes', () => {
 			})
 		).resolves.toBe(true);
 
-		await expectWorkerBootstrap(
+		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/wasm-perl/runner-worker.js?v=test'
+			'http://localhost:3000/wasm-perl/runner-worker.js?v=test',
+			perlWorkerSource
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-perl/',
+				manifestUrl: 'http://localhost:3000/wasm-perl/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: WASM_PERL_ASSET_VERSION,
 				stdin: 'ok\n',
 				activePath: 'main.pl'
 			})
 		);
+	});
+
+	it('requires explicit integrity pins for custom Perl runtime URLs', async () => {
+		const sandbox = new Perl();
+
+		await expect(
+			sandbox.load({
+				perl: {
+					baseUrl: '/custom-perl/',
+					workerUrl: '/custom-perl/runner-worker.js',
+					manifestUrl: '/custom-perl/runtime-manifest.v2.json'
+				}
+			})
+		).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			runtimeId: 'PERL'
+		});
+		expect(fetch).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('loads Tcl runtime urls and forwards stdin to the Wacl worker', async () => {

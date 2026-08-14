@@ -550,7 +550,10 @@ describe('core language contract', () => {
 			},
 			perl: {
 				baseUrl: '/wasm-perl/',
-				workerUrl: '/wasm-perl/runner-worker.js?v=test'
+				workerUrl: '/wasm-perl/runner-worker.js?v=test',
+				manifestUrl: '/wasm-perl/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: '7'.repeat(64),
+				workerReceipt: { bytes: 5678, sha256: '8'.repeat(64) }
 			},
 			tcl: {
 				baseUrl: '/wasm-tcl/',
@@ -577,6 +580,9 @@ describe('core language contract', () => {
 		expect(key).toContain(`"gleamWorkerReceipt":"[[\\"worker\\",`);
 		expect(key).toContain('"perlBaseUrl":"/wasm-perl/"');
 		expect(key).toContain('"perlWorkerUrl":"/wasm-perl/runner-worker.js?v=test"');
+		expect(key).toContain('"perlManifestUrl":"/wasm-perl/runtime-manifest.v2.json?v=test"');
+		expect(key).toContain(`"perlManifestFingerprint":"${'7'.repeat(64)}"`);
+		expect(key).toContain(`"perlWorkerReceipt":"[[\\"worker\\",`);
 		expect(key).toContain('"tclBaseUrl":"/wasm-tcl/"');
 		expect(key).toContain('"tclWorkerUrl":"/wasm-tcl/runner-worker.js?v=test"');
 		expect(key).toContain('"tclManifestUrl":"/wasm-tcl/runtime-manifest.v2.json?v=test"');

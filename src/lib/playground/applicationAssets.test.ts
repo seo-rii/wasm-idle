@@ -29,6 +29,7 @@ import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
+import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
 import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
 import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
@@ -141,6 +142,13 @@ describe('application runtime asset root', () => {
 			manifestUrl: `/foo/bar/wasm-prolog/runtime-manifest.v2.json?v=${WASM_PROLOG_ASSET_VERSION}`,
 			manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
 			workerReceipt: WASM_PROLOG_RUNNER_RECEIPT
+		});
+		expect(assets.perl).toEqual({
+			baseUrl: '/foo/bar/wasm-perl/',
+			workerUrl: `/foo/bar/wasm-perl/runner-worker.js?v=${WASM_PERL_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-perl/runtime-manifest.v2.json?v=${WASM_PERL_ASSET_VERSION}`,
+			manifestFingerprint: WASM_PERL_ASSET_VERSION,
+			workerReceipt: WASM_PERL_RUNNER_RECEIPT
 		});
 		expect(assets.tcl).toEqual({
 			baseUrl: '/foo/bar/wasm-tcl/',
@@ -299,6 +307,16 @@ describe('application runtime asset root', () => {
 					}
 				]
 			]),
+			perlManifestFingerprint: WASM_PERL_ASSET_VERSION,
+			perlWorkerReceipt: JSON.stringify([
+				[
+					'worker',
+					{
+						sha256: WASM_PERL_RUNNER_RECEIPT.sha256,
+						bytes: WASM_PERL_RUNNER_RECEIPT.bytes
+					}
+				]
+			]),
 			tclManifestFingerprint: WASM_TCL_ASSET_VERSION,
 			tclWorkerReceipt: JSON.stringify([
 				[
@@ -384,6 +402,9 @@ describe('application runtime asset root', () => {
 			prologManifestUrl: assets.prolog?.manifestUrl,
 			prologManifestFingerprint: assets.prolog?.manifestFingerprint,
 			prologWorkerReceipt: expect.any(String),
+			perlManifestUrl: assets.perl?.manifestUrl,
+			perlManifestFingerprint: assets.perl?.manifestFingerprint,
+			perlWorkerReceipt: expect.any(String),
 			tclManifestUrl: assets.tcl?.manifestUrl,
 			tclManifestFingerprint: assets.tcl?.manifestFingerprint,
 			tclWorkerReceipt: expect.any(String),

@@ -9,10 +9,14 @@ import {
 	type StaticWorkerDiagnosticRequest,
 	type StaticWorkerDiagnosticRunner
 } from '../static-worker-service.js';
+import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 
 export interface PerlWorkerOptions {
 	baseUrl: string;
 	workerUrl: string;
+	manifestUrl: string;
+	manifestFingerprint: string;
+	workerReceipt: RuntimeAssetIntegrityEntry;
 }
 
 export type PerlDiagnosticRunnerRequest = StaticWorkerDiagnosticRequest<PerlWorkerOptions>;
@@ -121,9 +125,37 @@ export function createPerlWorkerService(
 		diagnosticsProgressStage: 'perl-diagnostics',
 		defaultActivePath: 'main.pl',
 		timeoutMessage: 'Perl diagnostics timed out',
+		runtime: 'perl',
 		runDiagnostics,
+		validateConfig: (config) => {
+			if (!config.baseUrl || !config.workerUrl) return null;
+			if (!config.manifestUrl || !/^[a-f0-9]{64}$/u.test(config.manifestFingerprint)) {
+				return 'Perl language server requires a manifest URL and fingerprint';
+			}
+			if (
+				!config.workerReceipt ||
+				!Number.isSafeInteger(config.workerReceipt.bytes) ||
+				(config.workerReceipt.bytes as number) <= 0 ||
+				typeof config.workerReceipt.sha256 !== 'string' ||
+				!/^[a-f0-9]{64}$/u.test(config.workerReceipt.sha256)
+			) {
+				return 'Perl language server requires a valid worker receipt';
+			}
+			return null;
+		},
+		cacheKeyParts: (config) => [
+			config.baseUrl,
+			config.workerUrl,
+			config.manifestUrl,
+			config.manifestFingerprint,
+			String(config.workerReceipt.bytes),
+			config.workerReceipt.sha256
+		],
 		createMessage: (request) => ({
 			baseUrl: request.baseUrl,
+			manifestUrl: request.manifestUrl,
+			manifestFingerprint: request.manifestFingerprint,
+			maxAssetBytes: 32 * 1024 * 1024,
 			code: request.code,
 			activePath: request.activePath,
 			diagnose: true,

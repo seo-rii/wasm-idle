@@ -52,6 +52,10 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_GLEAM_WORKER_BYTES: '',
 		PUBLIC_WASM_PERL_BASE_URL: '',
 		PUBLIC_WASM_PERL_WORKER_URL: '',
+		PUBLIC_WASM_PERL_MANIFEST_URL: '',
+		PUBLIC_WASM_PERL_MANIFEST_FINGERPRINT: '',
+		PUBLIC_WASM_PERL_WORKER_SHA256: '',
+		PUBLIC_WASM_PERL_WORKER_BYTES: '',
 		PUBLIC_WASM_TCL_BASE_URL: '',
 		PUBLIC_WASM_TCL_WORKER_URL: '',
 		PUBLIC_WASM_AWK_BASE_URL: '',
@@ -107,6 +111,7 @@ import {
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
+import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
 import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
 import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
 
@@ -1080,7 +1085,10 @@ describe('runtime asset config resolution', () => {
 		);
 		expect(resolvePerlRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-perl/',
-			workerUrl: 'https://example.com/absproxy/5173/wasm-perl/runner-worker.js'
+			workerUrl: 'https://example.com/absproxy/5173/wasm-perl/runner-worker.js',
+			manifestUrl: 'https://example.com/absproxy/5173/wasm-perl/runtime-manifest.v2.json',
+			manifestFingerprint: WASM_PERL_ASSET_VERSION,
+			workerReceipt: WASM_PERL_RUNNER_RECEIPT
 		});
 		expect(resolveTclRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-tcl/',
@@ -1310,12 +1318,23 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(
 			resolvePerlRuntimeAssetConfig(
-				{ perl: { baseUrl: '/runtime/perl', workerUrl: '/runtime/perl/worker.js' } },
+				{
+					perl: {
+						baseUrl: '/runtime/perl',
+						workerUrl: '/runtime/perl/worker.js',
+						manifestUrl: '/runtime/perl/manifest.json',
+						manifestFingerprint: customFingerprint,
+						workerReceipt: customWorkerReceipt
+					}
+				},
 				'https://example.com/app'
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/perl/',
-			workerUrl: 'https://example.com/runtime/perl/worker.js'
+			workerUrl: 'https://example.com/runtime/perl/worker.js',
+			manifestUrl: 'https://example.com/runtime/perl/manifest.json',
+			manifestFingerprint: customFingerprint,
+			workerReceipt: customWorkerReceipt
 		});
 		expect(
 			resolveTclRuntimeAssetConfig(
@@ -1507,6 +1526,35 @@ describe('runtime asset config resolution', () => {
 			publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_FINGERPRINT = '';
 			publicEnv.PUBLIC_WASM_GLEAM_WORKER_SHA256 = '';
 			publicEnv.PUBLIC_WASM_GLEAM_WORKER_BYTES = '';
+		}
+	});
+
+	it('accepts custom Perl URL environment overrides only with complete integrity pins', async () => {
+		const manifestFingerprint = 'e'.repeat(64);
+		const workerSha256 = 'f'.repeat(64);
+		publicEnv.PUBLIC_WASM_PERL_BASE_URL = 'https://runtime.example.com/perl/';
+		publicEnv.PUBLIC_WASM_PERL_WORKER_URL = 'https://runtime.example.com/perl/runner.js';
+		publicEnv.PUBLIC_WASM_PERL_MANIFEST_URL = 'https://runtime.example.com/perl/manifest.json';
+		publicEnv.PUBLIC_WASM_PERL_MANIFEST_FINGERPRINT = manifestFingerprint;
+		publicEnv.PUBLIC_WASM_PERL_WORKER_SHA256 = workerSha256;
+		publicEnv.PUBLIC_WASM_PERL_WORKER_BYTES = '5432';
+		vi.resetModules();
+		try {
+			const { resolvePerlRuntimeAssetConfig } = await import('./assets');
+			expect(resolvePerlRuntimeAssetConfig(undefined, 'https://example.com/app')).toEqual({
+				baseUrl: 'https://runtime.example.com/perl/',
+				workerUrl: 'https://runtime.example.com/perl/runner.js',
+				manifestUrl: 'https://runtime.example.com/perl/manifest.json',
+				manifestFingerprint,
+				workerReceipt: { bytes: 5432, sha256: workerSha256 }
+			});
+		} finally {
+			publicEnv.PUBLIC_WASM_PERL_BASE_URL = '';
+			publicEnv.PUBLIC_WASM_PERL_WORKER_URL = '';
+			publicEnv.PUBLIC_WASM_PERL_MANIFEST_URL = '';
+			publicEnv.PUBLIC_WASM_PERL_MANIFEST_FINGERPRINT = '';
+			publicEnv.PUBLIC_WASM_PERL_WORKER_SHA256 = '';
+			publicEnv.PUBLIC_WASM_PERL_WORKER_BYTES = '';
 		}
 	});
 

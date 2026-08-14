@@ -161,6 +161,9 @@ export interface EditorLanguageServerRuntimeOptions {
 	perl?: {
 		baseUrl?: string;
 		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	tcl?: {
 		baseUrl?: string;

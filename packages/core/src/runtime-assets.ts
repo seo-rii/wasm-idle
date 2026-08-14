@@ -114,7 +114,13 @@ export interface RuntimeAssetKeySource {
 		manifestFingerprint?: string;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
-	perl?: { baseUrl?: string; workerUrl?: string };
+	perl?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	tcl?: {
 		baseUrl?: string;
 		workerUrl?: string;
@@ -579,6 +585,18 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	},
 	{ runtime: 'perl', property: 'baseUrl', key: 'perlBaseUrl' },
 	{ runtime: 'perl', property: 'workerUrl', key: 'perlWorkerUrl' },
+	{ runtime: 'perl', property: 'manifestUrl', key: 'perlManifestUrl' },
+	{
+		runtime: 'perl',
+		property: 'manifestFingerprint',
+		key: 'perlManifestFingerprint'
+	},
+	{
+		runtime: 'perl',
+		property: 'workerReceipt',
+		key: 'perlWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'tcl', property: 'baseUrl', key: 'tclBaseUrl' },
 	{ runtime: 'tcl', property: 'workerUrl', key: 'tclWorkerUrl' },
 	{ runtime: 'tcl', property: 'manifestUrl', key: 'tclManifestUrl' },

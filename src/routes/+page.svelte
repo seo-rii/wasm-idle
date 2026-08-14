@@ -307,6 +307,15 @@
 	const perlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'perl');
 	const perlLspBaseUrl = $derived(perlLspEnabled ? runtimeAssets.perl?.baseUrl : undefined);
 	const perlLspWorkerUrl = $derived(perlLspEnabled ? runtimeAssets.perl?.workerUrl : undefined);
+	const perlLspManifestUrl = $derived(
+		perlLspEnabled ? runtimeAssets.perl?.manifestUrl : undefined
+	);
+	const perlLspManifestFingerprint = $derived(
+		perlLspEnabled ? runtimeAssets.perl?.manifestFingerprint : undefined
+	);
+	const perlLspWorkerReceipt = $derived(
+		perlLspEnabled ? runtimeAssets.perl?.workerReceipt : undefined
+	);
 	const pythonLspBaseUrl = $derived(resolveApplicationAsset('pyodide/'));
 	const typescriptLspLibUrl = $derived(
 		lspEnabled && typescriptLspLanguages.has(language)
@@ -2931,6 +2940,9 @@
 				{perlLspEnabled}
 				{perlLspBaseUrl}
 				{perlLspWorkerUrl}
+				{perlLspManifestUrl}
+				{perlLspManifestFingerprint}
+				{perlLspWorkerReceipt}
 				{pythonLspBaseUrl}
 				{typescriptLspLibUrl}
 				breakpoints={debug.effectiveBreakpoints}

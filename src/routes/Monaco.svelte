@@ -17,6 +17,7 @@
 	import type { EditorLanguageServerHandle, LanguageServerStatus } from '@wasm-idle/lsp';
 	import type { DOuterAssetReceipts } from '$lib/playground/dOuterAssets';
 	import type { ElixirRuntimeAssetReceipts } from '$lib/playground/elixirAssets';
+	import type { RuntimeAssetIntegrityEntry } from '$lib/playground/assets';
 	import { WASM_D_OUTER_ASSET_RECEIPTS } from '$lib/playground/wasmDIntegrity';
 	import { WASM_ELIXIR_ASSET_RECEIPTS } from '$lib/playground/wasmElixirVersion';
 	import type monaco from 'monaco-editor';
@@ -2410,6 +2411,9 @@
 		perlLspEnabled?: boolean;
 		perlLspBaseUrl?: string;
 		perlLspWorkerUrl?: string;
+		perlLspManifestUrl?: string;
+		perlLspManifestFingerprint?: string;
+		perlLspWorkerReceipt?: RuntimeAssetIntegrityEntry;
 		pythonLspBaseUrl?: string;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
@@ -2503,6 +2507,9 @@
 		perlLspEnabled = false,
 		perlLspBaseUrl,
 		perlLspWorkerUrl,
+		perlLspManifestUrl,
+		perlLspManifestFingerprint,
+		perlLspWorkerReceipt,
 		pythonLspBaseUrl,
 		breakpoints = [],
 		debugLocals = [],
@@ -2650,6 +2657,9 @@
 			awkLspEnabled ? awkLspWorkerUrl || '' : '',
 			perlLspEnabled ? perlLspBaseUrl || '' : '',
 			perlLspEnabled ? perlLspWorkerUrl || '' : '',
+			perlLspEnabled ? perlLspManifestUrl || '' : '',
+			perlLspEnabled ? perlLspManifestFingerprint || '' : '',
+			perlLspEnabled ? JSON.stringify(perlLspWorkerReceipt) : '',
 			pythonLspBaseUrl || '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
@@ -3367,7 +3377,13 @@
 		},
 		{
 			languages: ['perl'],
-			isEnabled: () => perlLspEnabled && !!perlLspBaseUrl && !!perlLspWorkerUrl,
+			isEnabled: () =>
+				perlLspEnabled &&
+				!!perlLspBaseUrl &&
+				!!perlLspWorkerUrl &&
+				!!perlLspManifestUrl &&
+				!!perlLspManifestFingerprint &&
+				!!perlLspWorkerReceipt,
 			setStatus: (status) => (perlLspStatus = status),
 			load: async (currentUrl) => {
 				const { getPerlLanguageServer } = await import('@wasm-idle/lsp/perl');
@@ -3375,7 +3391,10 @@
 					currentUrl,
 					perl: {
 						baseUrl: perlLspBaseUrl || '',
-						workerUrl: perlLspWorkerUrl || ''
+						workerUrl: perlLspWorkerUrl || '',
+						manifestUrl: perlLspManifestUrl || '',
+						manifestFingerprint: perlLspManifestFingerprint || '',
+						workerReceipt: perlLspWorkerReceipt
 					},
 					onStatus: (status) => (perlLspStatus = status)
 				});

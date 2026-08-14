@@ -8,6 +8,10 @@ import {
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from '../src/bundledPrologRuntime.js';
 import {
+	BUNDLED_PERL_MANIFEST_FINGERPRINT,
+	BUNDLED_PERL_RUNNER_RECEIPT
+} from '../src/bundledPerlRuntime.js';
+import {
 	BUNDLED_TCL_MANIFEST_FINGERPRINT,
 	BUNDLED_TCL_RUNNER_RECEIPT
 } from '../src/bundledTclRuntime.js';
@@ -35,6 +39,9 @@ import {
 	resolveAwkLanguageServerWorkerUrl,
 	resolvePythonLanguageServerBaseUrl,
 	resolvePerlLanguageServerBaseUrl,
+	resolvePerlLanguageServerManifestFingerprint,
+	resolvePerlLanguageServerManifestUrl,
+	resolvePerlLanguageServerWorkerReceipt,
 	resolvePerlLanguageServerWorkerUrl,
 	resolvePascalLanguageServerBaseUrl,
 	resolvePascalLanguageServerWorkerUrl,
@@ -182,6 +189,85 @@ describe('lsp runtime asset resolution', () => {
 		).toThrow(LanguageServerAssetConfigurationError);
 	});
 
+	it('pins bundled Perl manifests and diagnostic workers and fails closed for custom mirrors', () => {
+		const currentUrl = 'https://app.example.com/editor';
+		const bundledOptions = { rootUrl: '/wasm-idle' };
+
+		expect(resolvePerlLanguageServerManifestFingerprint(bundledOptions)).toBe(
+			BUNDLED_PERL_MANIFEST_FINGERPRINT
+		);
+		expect(resolvePerlLanguageServerWorkerReceipt(bundledOptions)).toBe(
+			BUNDLED_PERL_RUNNER_RECEIPT
+		);
+		expect(resolvePerlLanguageServerWorkerUrl(bundledOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-perl/runner-worker.js?v=${BUNDLED_PERL_RUNNER_RECEIPT.sha256}`
+		);
+		expect(resolvePerlLanguageServerManifestUrl(bundledOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-perl/runtime-manifest.v2.json?v=${BUNDLED_PERL_MANIFEST_FINGERPRINT}`
+		);
+
+		const customReceipt = { bytes: 987, sha256: 'd'.repeat(64) };
+		const customOptions = {
+			perl: {
+				baseUrl: 'https://mirror.example.com/perl/',
+				workerUrl: 'https://mirror.example.com/perl/runner.js?v=custom',
+				manifestUrl: 'https://mirror.example.com/perl/manifest.json?v=custom',
+				manifestFingerprint: ` ${'c'.repeat(64)} `,
+				workerReceipt: customReceipt
+			}
+		};
+
+		expect(resolvePerlLanguageServerWorkerUrl(customOptions)).toBe(
+			'https://mirror.example.com/perl/runner.js?v=custom'
+		);
+		expect(resolvePerlLanguageServerManifestUrl(customOptions)).toBe(
+			'https://mirror.example.com/perl/manifest.json?v=custom'
+		);
+		expect(resolvePerlLanguageServerManifestFingerprint(customOptions)).toBe('c'.repeat(64));
+		expect(resolvePerlLanguageServerWorkerReceipt(customOptions)).toBe(customReceipt);
+		expect(() =>
+			resolvePerlLanguageServerManifestFingerprint({
+				perl: { baseUrl: 'https://mirror.example.com/perl/' }
+			})
+		).toThrow(LanguageServerAssetConfigurationError);
+		expect(() =>
+			resolvePerlLanguageServerWorkerReceipt({
+				perl: {
+					baseUrl: 'https://mirror.example.com/perl/',
+					manifestFingerprint: 'e'.repeat(64)
+				}
+			})
+		).toThrow(LanguageServerAssetConfigurationError);
+
+		const noTrailingSlashOptions = {
+			perl: {
+				baseUrl: 'https://mirror.example.com/perl',
+				manifestFingerprint: 'e'.repeat(64),
+				workerReceipt: { bytes: 765, sha256: 'f'.repeat(64) }
+			}
+		};
+		expect(resolvePerlLanguageServerBaseUrl(noTrailingSlashOptions)).toBe(
+			'https://mirror.example.com/perl/'
+		);
+		expect(resolvePerlLanguageServerManifestUrl(noTrailingSlashOptions)).toBe(
+			`https://mirror.example.com/perl/runtime-manifest.v2.json?v=${'e'.repeat(64)}`
+		);
+
+		const pinOnlyOptions = {
+			rootUrl: '/wasm-idle',
+			perl: {
+				manifestFingerprint: 'e'.repeat(64),
+				workerReceipt: { bytes: 765, sha256: 'f'.repeat(64) }
+			}
+		};
+		expect(resolvePerlLanguageServerWorkerUrl(pinOnlyOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-perl/runner-worker.js?v=${'f'.repeat(64)}`
+		);
+		expect(resolvePerlLanguageServerManifestUrl(pinOnlyOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-perl/runtime-manifest.v2.json?v=${'e'.repeat(64)}`
+		);
+	});
+
 	it('pins bundled Tcl manifests and diagnostic workers while allowing explicit mirrors', () => {
 		const currentUrl = 'https://app.example.com/editor';
 		const bundledOptions = { rootUrl: '/wasm-idle' };
@@ -315,7 +401,14 @@ describe('lsp runtime asset resolution', () => {
 			[resolveAwkLanguageServerBaseUrl, 'wasm-awk/'],
 			[resolveAwkLanguageServerWorkerUrl, 'wasm-awk/runner-worker.js'],
 			[resolvePerlLanguageServerBaseUrl, 'wasm-perl/'],
-			[resolvePerlLanguageServerWorkerUrl, 'wasm-perl/runner-worker.js'],
+			[
+				resolvePerlLanguageServerWorkerUrl,
+				`wasm-perl/runner-worker.js?v=${BUNDLED_PERL_RUNNER_RECEIPT.sha256}`
+			],
+			[
+				resolvePerlLanguageServerManifestUrl,
+				`wasm-perl/runtime-manifest.v2.json?v=${BUNDLED_PERL_MANIFEST_FINGERPRINT}`
+			],
 			[resolveTclLanguageServerBaseUrl, 'wasm-tcl/'],
 			[
 				resolveTclLanguageServerWorkerUrl,
@@ -541,7 +634,17 @@ describe('lsp runtime asset resolution', () => {
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
 			)
-		).toBe('https://static.example.com/repl_20240807/wasm-perl/runner-worker.js');
+		).toBe(
+			`https://static.example.com/repl_20240807/wasm-perl/runner-worker.js?v=${BUNDLED_PERL_RUNNER_RECEIPT.sha256}`
+		);
+		expect(
+			resolvePerlLanguageServerManifestUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe(
+			`https://static.example.com/repl_20240807/wasm-perl/runtime-manifest.v2.json?v=${BUNDLED_PERL_MANIFEST_FINGERPRINT}`
+		);
 		expect(
 			resolveRLanguageServerBaseUrl(
 				'https://static.example.com/repl_20240807',
@@ -627,7 +730,10 @@ describe('lsp runtime asset resolution', () => {
 			},
 			perl: {
 				baseUrl: 'https://perl.example.com/wasm-perl/',
-				workerUrl: 'https://perl.example.com/runner-worker.js?v=20240807'
+				workerUrl: 'https://perl.example.com/runner-worker.js?v=20240807',
+				manifestUrl: 'https://perl.example.com/manifest.json?v=20240807',
+				manifestFingerprint: 'b'.repeat(64),
+				workerReceipt: { bytes: 1234, sha256: 'c'.repeat(64) }
 			},
 			r: {
 				baseUrl: 'https://r.example.com/webr/0.6.0/'
@@ -731,6 +837,14 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolvePerlLanguageServerWorkerUrl(options)).toBe(
 			'https://perl.example.com/runner-worker.js?v=20240807'
 		);
+		expect(resolvePerlLanguageServerManifestUrl(options)).toBe(
+			'https://perl.example.com/manifest.json?v=20240807'
+		);
+		expect(resolvePerlLanguageServerManifestFingerprint(options)).toBe('b'.repeat(64));
+		expect(resolvePerlLanguageServerWorkerReceipt(options)).toEqual({
+			bytes: 1234,
+			sha256: 'c'.repeat(64)
+		});
 		expect(resolveRLanguageServerBaseUrl(options)).toBe('https://r.example.com/webr/0.6.0/');
 	});
 

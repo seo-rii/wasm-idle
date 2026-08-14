@@ -127,11 +127,15 @@ describe('createPerlWorkerService', () => {
 			text: 'sub main {\n  print(\n}\n'
 		};
 		const context = contextFor(document);
+		const workerOptions = {
+			baseUrl: '/wasm-perl/',
+			workerUrl: '/wasm-perl/runner-worker.js',
+			manifestUrl: '/wasm-perl/runtime-manifest.v2.json',
+			manifestFingerprint: 'a'.repeat(64),
+			workerReceipt: { bytes: 1234, sha256: 'b'.repeat(64) }
+		};
 
-		await service.initialize?.(
-			{ baseUrl: '/wasm-perl/', workerUrl: '/wasm-perl/runner-worker.js' },
-			context
-		);
+		await service.initialize?.(workerOptions, context);
 		const diagnostics = await service.diagnostics?.(document, context);
 		const completions = (await service.completion?.(
 			document,
@@ -143,8 +147,7 @@ describe('createPerlWorkerService', () => {
 		}>;
 
 		expect(runDiagnostics).toHaveBeenCalledWith({
-			baseUrl: '/wasm-perl/',
-			workerUrl: '/wasm-perl/runner-worker.js',
+			...workerOptions,
 			code: document.text,
 			activePath: 'main.pl'
 		});
@@ -161,5 +164,52 @@ describe('createPerlWorkerService', () => {
 		expect(completions.items.some((item) => item.label === 'sub')).toBe(true);
 		expect(symbols).toEqual([expect.objectContaining({ name: 'main' })]);
 		expect(context.reportProgress).toHaveBeenCalledWith('load-perl-runtime');
+	});
+
+	it('requires complete trust pins and keys diagnostics by the full Perl runtime identity', async () => {
+		const runDiagnostics = vi.fn(async () => ({}));
+		const service = createPerlWorkerService(runDiagnostics);
+		const document: LspDocument = {
+			uri: 'file:///workspace/main.pl',
+			languageId: 'perl',
+			version: 1,
+			text: 'print "ok\\n";\n'
+		};
+		const context = contextFor(document);
+		const baseConfig = {
+			baseUrl: '/wasm-perl/',
+			workerUrl: '/wasm-perl/runner-worker.js',
+			manifestUrl: '/wasm-perl/runtime-manifest.v2.json',
+			manifestFingerprint: 'c'.repeat(64),
+			workerReceipt: { bytes: 2345, sha256: 'd'.repeat(64) }
+		};
+
+		for (const invalid of [
+			{ ...baseConfig, manifestUrl: '' },
+			{ ...baseConfig, manifestFingerprint: 'C'.repeat(64) },
+			{ ...baseConfig, workerReceipt: { ...baseConfig.workerReceipt, bytes: 0 } },
+			{
+				...baseConfig,
+				workerReceipt: { ...baseConfig.workerReceipt, sha256: 'D'.repeat(64) }
+			}
+		]) {
+			expect(() => service.initialize?.(invalid, context)).toThrow(
+				/Perl language server requires/u
+			);
+		}
+
+		const configurations = [
+			baseConfig,
+			{ ...baseConfig, manifestUrl: '/wasm-perl/runtime-manifest.mirror.json' },
+			{ ...baseConfig, manifestFingerprint: 'e'.repeat(64) },
+			{ ...baseConfig, workerReceipt: { bytes: 3456, sha256: 'f'.repeat(64) } }
+		];
+		for (const config of configurations) {
+			service.initialize?.(config, context);
+			await service.diagnostics?.(document, context);
+			await service.diagnostics?.(document, context);
+		}
+
+		expect(runDiagnostics).toHaveBeenCalledTimes(configurations.length);
 	});
 });
