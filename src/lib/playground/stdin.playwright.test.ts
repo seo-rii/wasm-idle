@@ -554,7 +554,11 @@ describe('wasm-idle browser stdin connection', () => {
 	it(
 		'passes Objective-C Foundation stdin through the browser wasm-clang and GNUstep runtime path',
 		async () => {
-			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_FOUNDATION_INIT !== '1') {
+			if (
+				!runAllStdinBrowserCases &&
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1' &&
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_FOUNDATION_INIT !== '1'
+			) {
 				return;
 			}
 
