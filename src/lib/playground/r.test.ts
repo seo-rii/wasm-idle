@@ -1025,4 +1025,169 @@ describe('R sandbox', () => {
 		expect(sandbox.worker).toBe(worker);
 		await expect(sandbox.run('cat("retry\\n")', false)).resolves.toBe(true);
 	});
+
+	it('keeps clear reusable but disposes an idle R runtime exactly once', async () => {
+		const sandbox = new R();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+		const worker = workerInstances[0];
+
+		await sandbox.clear();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('cat("reusable\\n")', false)).resolves.toBe(true);
+		sandbox.write('queued input\n');
+		sandbox.eof();
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+
+		let cleanupSnapshot: Record<string, unknown> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		worker.terminate.mockImplementationOnce(() => {
+			cleanupSnapshot = {
+				worker: sandbox.worker,
+				baseUrl: sandbox.baseUrl,
+				output: sandbox.output,
+				diagnostic: sandbox.oncompilerdiagnostic,
+				pendingInput: [...sandbox.pendingInput],
+				waitingForInput: sandbox.waitingForInput,
+				pendingEof: sandbox.pendingEof,
+				bufferedInput: readBufferedStdin(sandbox.buffer)
+			};
+			reentrantLoad = sandbox.load({ r: { baseUrl: '/webr/reentrant/' } });
+			reentrantDisposal = sandbox.dispose();
+		});
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		const reentrantLoadResult = expect(reentrantLoad!).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'R'
+		});
+		await firstDisposal;
+		expect(cleanupSnapshot).toEqual({
+			worker: undefined,
+			baseUrl: '',
+			output: null,
+			diagnostic: undefined,
+			pendingInput: [],
+			waitingForInput: false,
+			pendingEof: false,
+			bufferedInput: ''
+		});
+		await reentrantLoadResult;
+
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBeNull();
+		expect(worker.onerror).toBeNull();
+		expect(worker.onmessageerror).toBeNull();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.baseUrl).toBe('');
+		expect(sandbox.output).toBeNull();
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+
+		await expect(sandbox.load({ r: { baseUrl: '/webr/replacement/' } })).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'R'
+		});
+		await expect(sandbox.run('cat("unavailable\\n")', false)).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'R'
+		});
+		sandbox.write('ignored input\n');
+		sandbox.eof();
+		sandbox.terminate();
+		await sandbox.clear();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles active R startup with one stable disposal cancellation', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new R();
+		const loading = sandbox.load({ r: { baseUrl: '/webr/test/' } });
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		const cancellation = await loading.catch((error) => error);
+		await firstDisposal;
+
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'R',
+			recoverable: false
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.baseUrl).toBe('');
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles an active R run, clears stdin, and ignores retained messages after disposal', async () => {
+		const sandbox = new R();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load({ r: { baseUrl: '/webr/test/' } });
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('cat("active\\n")', false);
+		const staleHandler = worker.onmessage;
+		const cancellation = running.catch((error) => error);
+		worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+		sandbox.write('active input\n');
+		sandbox.eof();
+		expect(readBufferedStdin(sandbox.buffer)).toBe('active input\n');
+		expect(sandbox.pendingEof).toBe(true);
+
+		await sandbox.dispose();
+		await expect(cancellation).resolves.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'R',
+			recoverable: false
+		});
+
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		staleHandler?.({
+			data: {
+				buffer: true,
+				output: 'late output',
+				diagnostic: { lineNumber: 1, severity: 'error', message: 'late diagnostic' },
+				results: 'late result'
+			}
+		} as MessageEvent<any>);
+		await Promise.resolve();
+		expect(output).not.toHaveBeenCalled();
+		expect(diagnostic).not.toHaveBeenCalled();
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(sandbox.output).toBeNull();
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+	});
 });

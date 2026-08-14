@@ -1,9 +1,11 @@
 import { resolveRBaseUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -57,6 +59,13 @@ class R implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: ROperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('R sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'R',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'R',
 		onDispose: (worker) => {
@@ -76,6 +85,12 @@ class R implements Sandbox {
 	}
 
 	private beginOperation(phase: ROperation['phase']) {
+		if (this.disposed) {
+			throw new RuntimeConfigurationError('R sandbox is disposed', {
+				phase: 'dispose',
+				runtimeId: 'R'
+			});
+		}
 		this.requireOperationIdle();
 		const operation: ROperation = {
 			token: Symbol(phase),
@@ -360,12 +375,14 @@ class R implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -606,6 +623,7 @@ class R implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
@@ -619,6 +637,7 @@ class R implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
@@ -628,6 +647,27 @@ class R implements Sandbox {
 			return;
 		}
 		if (this.worker) this.worker.onmessage = null;
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		delete this.worker;
+		this.baseUrl = '';
+		this.output = null;
+		this.oncompilerdiagnostic = undefined;
+		this.resetExplicitStdinState();
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+			this.exit = true;
+		}
+		return this.disposePromise;
 	}
 }
 
