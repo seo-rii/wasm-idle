@@ -24,7 +24,7 @@ vi.mock('@wasm-idle/core', async (importOriginal) => ({
 	verifyRuntimeAssetIntegrity
 }));
 
-import Bash from './bash';
+import Bash from './worker/bashRuntime';
 
 const byteStream = (text: string) =>
 	new ReadableStream<Uint8Array>({

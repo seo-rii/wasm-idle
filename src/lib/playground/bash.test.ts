@@ -24,7 +24,7 @@ vi.mock('@wasm-idle/core', async (importOriginal) => ({
 	verifyRuntimeAssetIntegrity
 }));
 
-import Bash from './bash';
+import Bash from './worker/bashRuntime';
 import { WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
 
 function byteStream(text: string) {
@@ -142,6 +142,40 @@ describe('Bash sandbox', () => {
 		expect(commandFree).toHaveBeenCalledOnce();
 		expect(free).not.toHaveBeenCalled();
 		expect(sandbox.stdinWriter).toBeNull();
+	});
+
+	it('keeps the Bash command alive until asynchronous entrypoint startup settles', async () => {
+		let resolveInstance!: (instance: {
+			stdin: undefined;
+			stdout: ReadableStream<Uint8Array>;
+			stderr: ReadableStream<Uint8Array>;
+			wait: () => Promise<{ ok: boolean; code: number }>;
+			free: () => void;
+		}) => void;
+		commandRun.mockReturnValueOnce(
+			new Promise((resolve) => {
+				resolveInstance = resolve;
+			})
+		);
+		const sandbox = new Bash();
+		await sandbox.load();
+
+		const running = sandbox.run('printf ok', false);
+		await Promise.resolve();
+
+		expect(commandRun).toHaveBeenCalledOnce();
+		expect(commandFree).not.toHaveBeenCalled();
+
+		resolveInstance({
+			stdin: undefined,
+			stdout: byteStream('ok\n'),
+			stderr: byteStream(''),
+			wait: vi.fn(async () => ({ ok: true, code: 0 })),
+			free: vi.fn()
+		});
+		await expect(running).resolves.toBe(true);
+
+		expect(commandFree).toHaveBeenCalledOnce();
 	});
 
 	it.each(['throw', 'reject'] as const)(
@@ -1344,7 +1378,7 @@ describe('Bash sandbox', () => {
 
 		try {
 			await vi.waitFor(() => expect(commandRun).toHaveBeenCalledOnce());
-			expect(commandFree).toHaveBeenCalledOnce();
+			expect(commandFree).not.toHaveBeenCalled();
 			controller.abort(reason);
 			await expect(observeSettlement(running)).resolves.toEqual({
 				status: 'rejected',

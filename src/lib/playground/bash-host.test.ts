@@ -1,0 +1,564 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { BASH_WORKER_PROTOCOL_VERSION } from './bashWorkerProtocol';
+import { WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
+
+const workerInstances: MockWorker[] = [];
+let throwOnMessageType = '';
+
+class MockWorker {
+	onmessage: ((event: MessageEvent<any>) => void) | null = null;
+	onerror: ((event: ErrorEvent) => void) | null = null;
+	onmessageerror: ((event: MessageEvent<any>) => void) | null = null;
+	postMessage = vi.fn((message: any) => {
+		if (message.type === throwOnMessageType) {
+			throw new Error(`cannot post ${message.type}`);
+		}
+	});
+	terminate = vi.fn();
+
+	constructor() {
+		workerInstances.push(this);
+	}
+
+	emit(message: Record<string, unknown>) {
+		this.onmessage?.({ data: message } as MessageEvent<any>);
+	}
+
+	emitFor(request: any, message: Record<string, unknown>) {
+		this.emit({
+			protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
+			sessionId: request.sessionId,
+			requestId: request.requestId,
+			...message
+		});
+	}
+}
+
+vi.mock('$lib/playground/worker/bash?worker', () => ({ default: MockWorker }));
+
+import Bash from './bash';
+
+function posted(worker: MockWorker, type: string) {
+	return worker.postMessage.mock.calls
+		.map(([message]) => message)
+		.find((message) => message.type === type);
+}
+
+async function waitForPosted(worker: MockWorker, type: string) {
+	await vi.waitFor(() => expect(posted(worker, type)).toBeDefined());
+	return posted(worker, type);
+}
+
+async function finishLoad(worker: MockWorker) {
+	const request = await waitForPosted(worker, 'load');
+	worker.emitFor(request, { type: 'loaded' });
+	return request;
+}
+
+async function loadSandbox(sandbox: Bash, rootUrl = '/assets') {
+	const previousWorkerCount = workerInstances.length;
+	const loading = sandbox.load(rootUrl);
+	await vi.waitFor(() => expect(workerInstances.length).toBeGreaterThan(previousWorkerCount));
+	const worker = workerInstances.at(-1)!;
+	await finishLoad(worker);
+	await loading;
+	return worker;
+}
+
+describe('Bash disposable worker host', () => {
+	beforeEach(() => {
+		workerInstances.length = 0;
+		throwOnMessageType = '';
+		vi.restoreAllMocks();
+		vi.useRealTimers();
+		history.replaceState({}, '', '/wasm-idle/editor');
+	});
+
+	it('loads the pinned SDK and WEBc package entirely through the outer worker', async () => {
+		const sandbox = new Bash();
+		const progress = { set: vi.fn() };
+		const loading = sandbox.load('/runtime', '', true, [], {}, progress);
+
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const request = await waitForPosted(worker, 'load');
+		expect(request).toMatchObject({
+			type: 'load',
+			protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
+			assets: {
+				sdkModuleUrl: expect.stringMatching(/\/runtime\/wasm-bash\/sdk\/index\.mjs$/),
+				sdkThreadWorkerUrl: expect.stringMatching(
+					/\/runtime\/wasm-bash\/sdk\/worker\.mjs$/
+				),
+				webcUrl: expect.stringMatching(/\/runtime\/wasm-bash\/bash\.webc$/),
+				webcReceipt: WASM_BASH_WEBC_RECEIPT
+			}
+		});
+
+		worker.emitFor(request, { type: 'progress', value: 0.5, stage: 'Loading WEBc' });
+		worker.emitFor(request, { type: 'loaded' });
+		await loading;
+
+		expect(progress.set).toHaveBeenCalledWith(0.5, 'Loading WEBc');
+		expect(progress.set).toHaveBeenLastCalledWith(1, 'Bash runtime ready');
+		expect(worker.terminate).not.toHaveBeenCalled();
+	});
+
+	it('decodes interleaved stdout and stderr independently and keeps a successful worker warm', async () => {
+		const sandbox = new Bash();
+		const worker = await loadSandbox(sandbox);
+		const output = vi.fn();
+		sandbox.output = output;
+
+		const running = sandbox.run('printf "😀"', false);
+		const request = await waitForPosted(worker, 'run');
+		const encoded = new TextEncoder().encode('😀');
+		worker.emitFor(request, {
+			type: 'output',
+			stream: 'stdout',
+			bytes: encoded.slice(0, 2)
+		});
+		worker.emitFor(request, {
+			type: 'output',
+			stream: 'stderr',
+			bytes: new TextEncoder().encode('warning:')
+		});
+		worker.emitFor(request, {
+			type: 'output',
+			stream: 'stdout',
+			bytes: encoded.slice(2)
+		});
+		worker.emitFor(request, { type: 'result', result: true });
+
+		await expect(running).resolves.toBe(true);
+		expect(output.mock.calls.map(([chunk]) => chunk).join('')).toBe('warning:😀');
+		expect(worker.terminate).not.toHaveBeenCalled();
+	});
+
+	it('terminates an aborted run immediately and lazily rehydrates for a clean retry', async () => {
+		const sandbox = new Bash();
+		const firstWorker = await loadSandbox(sandbox);
+		const controller = new AbortController();
+		const reason = new Error('stop infinite Bash');
+
+		const firstRun = sandbox.run('while :; do :; done', false, true, undefined, [], {
+			signal: controller.signal
+		});
+		await waitForPosted(firstWorker, 'run');
+		controller.abort(reason);
+
+		await expect(firstRun).rejects.toBe(reason);
+		expect(firstWorker.terminate).toHaveBeenCalledTimes(1);
+
+		const retry = sandbox.run('printf retry', false);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		const retryWorker = workerInstances[1];
+		await finishLoad(retryWorker);
+		const retryRequest = await waitForPosted(retryWorker, 'run');
+		retryWorker.emitFor(retryRequest, { type: 'result', result: true });
+
+		await expect(retry).resolves.toBe(true);
+		expect(retryWorker.terminate).not.toHaveBeenCalled();
+	});
+
+	it('ignores retained messages from a terminated generation', async () => {
+		const sandbox = new Bash();
+		const firstWorker = await loadSandbox(sandbox);
+		const output = vi.fn();
+		sandbox.output = output;
+		const controller = new AbortController();
+
+		const firstRun = sandbox.run('while :; do printf stale; done', false, true, undefined, [], {
+			signal: controller.signal
+		});
+		const staleRequest = await waitForPosted(firstWorker, 'run');
+		controller.abort(new Error('replace generation'));
+		await expect(firstRun).rejects.toThrow('replace generation');
+
+		const retry = sandbox.run('printf fresh', false);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		const retryWorker = workerInstances[1];
+		await finishLoad(retryWorker);
+		const retryRequest = await waitForPosted(retryWorker, 'run');
+
+		firstWorker.emitFor(staleRequest, {
+			type: 'output',
+			stream: 'stdout',
+			bytes: new TextEncoder().encode('stale')
+		});
+		firstWorker.emitFor(staleRequest, { type: 'result', result: true });
+		expect(output).not.toHaveBeenCalled();
+
+		retryWorker.emitFor(retryRequest, {
+			type: 'output',
+			stream: 'stdout',
+			bytes: new TextEncoder().encode('fresh')
+		});
+		retryWorker.emitFor(retryRequest, { type: 'result', result: true });
+		await expect(retry).resolves.toBe(true);
+		expect(output).toHaveBeenCalledWith('fresh');
+	});
+
+	it('ignores only past request messages from the same live worker generation', async () => {
+		const sandbox = new Bash();
+		const worker = await loadSandbox(sandbox);
+		const loadRequest = posted(worker, 'load');
+		const running = sandbox.run('printf current', false);
+		const runRequest = await waitForPosted(worker, 'run');
+
+		worker.emitFor(loadRequest, { type: 'progress', value: 0.75, stage: 'stale' });
+		expect(worker.terminate).not.toHaveBeenCalled();
+		worker.emitFor(runRequest, { type: 'result', result: true });
+
+		await expect(running).resolves.toBe(true);
+	});
+
+	it('fails fast when a live worker returns a future request identity', async () => {
+		const sandbox = new Bash();
+		const worker = await loadSandbox(sandbox);
+		const running = sandbox.run('printf current', false);
+		const request = await waitForPosted(worker, 'run');
+
+		worker.emit({
+			protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
+			type: 'result',
+			sessionId: request.sessionId,
+			requestId: request.requestId + 1,
+			result: true
+		});
+
+		await expect(running).rejects.toMatchObject({
+			name: 'ProtocolError',
+			code: 'protocol'
+		});
+		expect(worker.terminate).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([0, -1])(
+		'fails fast when a live worker returns invalid request identity %s',
+		async (requestId) => {
+			const sandbox = new Bash();
+			const worker = await loadSandbox(sandbox);
+			const running = sandbox.run('printf current', false);
+			const request = await waitForPosted(worker, 'run');
+
+			worker.emit({
+				protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
+				type: 'result',
+				sessionId: request.sessionId,
+				requestId,
+				result: true
+			});
+
+			await expect(running).rejects.toMatchObject({
+				name: 'ProtocolError',
+				code: 'protocol'
+			});
+			expect(worker.terminate).toHaveBeenCalledTimes(1);
+		}
+	);
+
+	it('preserves the ready worker when a replacement load fails', async () => {
+		const sandbox = new Bash();
+		const readyWorker = await loadSandbox(sandbox, '/first');
+
+		const replacement = sandbox.load('/replacement');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		const candidate = workerInstances[1];
+		const loadRequest = await waitForPosted(candidate, 'load');
+		candidate.emitFor(loadRequest, {
+			type: 'error',
+			phase: 'asset',
+			error: {
+				name: 'AssetIntegrityError',
+				message: 'replacement hash mismatch',
+				code: 'asset-integrity'
+			}
+		});
+
+		await expect(replacement).rejects.toMatchObject({
+			name: 'AssetIntegrityError',
+			code: 'asset-integrity',
+			recoverable: false
+		});
+		expect(candidate.terminate).toHaveBeenCalledTimes(1);
+		expect(readyWorker.terminate).not.toHaveBeenCalled();
+
+		const running = sandbox.run('printf original', false);
+		const runRequest = await waitForPosted(readyWorker, 'run');
+		readyWorker.emitFor(runRequest, { type: 'result', result: true });
+		await expect(running).resolves.toBe(true);
+	});
+
+	it('retires an idle crashed worker and lazily rehydrates before the next run', async () => {
+		const sandbox = new Bash();
+		const crashedWorker = await loadSandbox(sandbox);
+		const onError = crashedWorker.onerror;
+
+		onError?.({ message: 'idle outer worker crashed' } as ErrorEvent);
+
+		expect(crashedWorker.terminate).toHaveBeenCalledTimes(1);
+		const retry = sandbox.run('printf retry', false);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		const retryWorker = workerInstances[1];
+		await finishLoad(retryWorker);
+		const retryRequest = await waitForPosted(retryWorker, 'run');
+		retryWorker.emitFor(retryRequest, { type: 'result', result: true });
+		await expect(retry).resolves.toBe(true);
+	});
+
+	it('enforces the host output ceiling by killing the exact worker', async () => {
+		const sandbox = new Bash();
+		const worker = await loadSandbox(sandbox);
+
+		const running = sandbox.run('printf 1234', false, true, undefined, [], {
+			limits: { maxOutputBytes: 3 }
+		});
+		const request = await waitForPosted(worker, 'run');
+		worker.emitFor(request, {
+			type: 'output',
+			stream: 'stdout',
+			bytes: new TextEncoder().encode('1234')
+		});
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			actual: 4,
+			limit: 3
+		});
+		expect(worker.terminate).toHaveBeenCalledTimes(1);
+	});
+
+	it('kills a timed-out run and releases the operation for retry', async () => {
+		vi.useFakeTimers();
+		const sandbox = new Bash();
+		const loading = sandbox.load('/assets');
+		await vi.advanceTimersByTimeAsync(0);
+		const worker = workerInstances[0];
+		await finishLoad(worker);
+		await loading;
+
+		const running = sandbox.run('sleep forever', false, true, undefined, [], {
+			limits: { compileTimeoutMs: 1, runTimeoutMs: 1 }
+		});
+		const rejection = expect(running).rejects.toMatchObject({
+			name: 'TimeoutError',
+			code: 'timeout',
+			phase: 'execute',
+			timeoutMs: 2
+		});
+		await vi.advanceTimersByTimeAsync(2);
+
+		await rejection;
+		expect(worker.terminate).toHaveBeenCalledTimes(1);
+	});
+
+	it('forwards queued and live streaming stdin only after the worker is ready', async () => {
+		const sandbox = new Bash();
+		const worker = await loadSandbox(sandbox);
+		sandbox.write('queued\n');
+
+		const running = sandbox.run('read first; read second', false);
+		const request = await waitForPosted(worker, 'run');
+		expect(worker.postMessage.mock.calls.map(([message]) => message.type)).not.toContain(
+			'stdin'
+		);
+
+		worker.emitFor(request, { type: 'stdin-ready' });
+		await vi.waitFor(() => expect(posted(worker, 'stdin')).toBeDefined());
+		const firstInput = posted(worker, 'stdin');
+		expect(new TextDecoder().decode(firstInput.bytes)).toBe('queued\n');
+
+		sandbox.write('live\n');
+		sandbox.eof();
+		await vi.waitFor(() => {
+			const types = worker.postMessage.mock.calls.map(([message]) => message.type);
+			expect(types.filter((type) => type === 'stdin')).toHaveLength(2);
+			expect(types).toContain('stdin-eof');
+		});
+		worker.emitFor(request, { type: 'result', result: true });
+		await expect(running).resolves.toBe(true);
+	});
+
+	it('does not leak input queued during an explicit-stdin run into the next execution', async () => {
+		const sandbox = new Bash();
+		const worker = await loadSandbox(sandbox);
+
+		const explicitRun = sandbox.run('read value', false, true, undefined, [], {
+			stdin: 'authoritative\n'
+		});
+		const explicitRequest = await waitForPosted(worker, 'run');
+		sandbox.write('must-not-leak\n');
+		worker.emitFor(explicitRequest, { type: 'result', result: true });
+		await explicitRun;
+
+		worker.postMessage.mockClear();
+		const nextRun = sandbox.run('printf clean', false);
+		const nextRequest = await waitForPosted(worker, 'run');
+		worker.emitFor(nextRequest, { type: 'stdin-ready' });
+		expect(posted(worker, 'stdin')).toBeUndefined();
+		worker.emitFor(nextRequest, { type: 'result', result: true });
+		await nextRun;
+	});
+
+	it('rejects overlapping operations without replacing the first worker', async () => {
+		const sandbox = new Bash();
+		const firstLoad = sandbox.load('/assets');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+
+		await expect(sandbox.load('/other')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'startup'
+		});
+		await expect(sandbox.run('printf overlap', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'startup'
+		});
+		expect(workerInstances).toHaveLength(1);
+
+		await finishLoad(workerInstances[0]);
+		await firstLoad;
+	});
+
+	it('preserves queued input and timing state when run preflight fails', async () => {
+		const sandbox = new Bash();
+		const worker = await loadSandbox(sandbox);
+		sandbox.write('queued\n');
+		sandbox.eof();
+		const begin = sandbox.begin;
+		const elapse = sandbox.elapse;
+
+		await expect(
+			sandbox.run('printf unreachable', false, true, undefined, [], {
+				activePath: '../escape.sh'
+			})
+		).rejects.toMatchObject({ name: 'WorkspaceValidationError' });
+
+		expect(sandbox.pendingInput).toEqual(['queued\n']);
+		expect(sandbox.pendingEof).toBe(true);
+		expect(sandbox.begin).toBe(begin);
+		expect(sandbox.elapse).toBe(elapse);
+		expect(sandbox.exit).toBe(true);
+		expect(posted(worker, 'run')).toBeUndefined();
+	});
+
+	it('types worker startup, protocol, and synchronous dispatch failures', async () => {
+		const startupSandbox = new Bash();
+		const startup = startupSandbox.load('/assets');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		workerInstances[0].onerror?.({ message: 'outer worker crashed' } as ErrorEvent);
+		await expect(startup).rejects.toMatchObject({
+			name: 'WorkerStartupError',
+			code: 'worker-startup',
+			phase: 'startup'
+		});
+
+		const protocolSandbox = new Bash();
+		const protocolWorker = await loadSandbox(protocolSandbox);
+		const running = protocolSandbox.run('printf protocol', false);
+		await waitForPosted(protocolWorker, 'run');
+		protocolWorker.onmessageerror?.({} as MessageEvent);
+		await expect(running).rejects.toMatchObject({
+			name: 'ProtocolError',
+			code: 'protocol'
+		});
+
+		throwOnMessageType = 'load';
+		const dispatchSandbox = new Bash();
+		await expect(dispatchSandbox.load('/dispatch')).rejects.toMatchObject({
+			name: 'ProtocolError',
+			code: 'protocol'
+		});
+	});
+
+	it('preserves typed worker errors and their resource metadata', async () => {
+		const sandbox = new Bash();
+		const worker = await loadSandbox(sandbox);
+		const running = sandbox.run('printf overflow', false);
+		const request = await waitForPosted(worker, 'run');
+		worker.emitFor(request, {
+			type: 'error',
+			phase: 'execute',
+			error: {
+				name: 'OutputLimitError',
+				message: 'inner Bash output exceeded 3 bytes',
+				code: 'output-limit',
+				recoverable: true,
+				actual: 4,
+				limit: 3
+			}
+		});
+
+		await expect(running).rejects.toMatchObject({
+			name: 'OutputLimitError',
+			code: 'output-limit',
+			phase: 'execute',
+			recoverable: true,
+			actual: 4,
+			limit: 3
+		});
+
+		const protocolSandbox = new Bash();
+		const protocolLoading = protocolSandbox.load('/protocol');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		const protocolWorker = workerInstances[1];
+		const protocolRequest = await waitForPosted(protocolWorker, 'load');
+		protocolWorker.emitFor(protocolRequest, {
+			type: 'error',
+			phase: 'protocol',
+			error: {
+				name: 'ProtocolError',
+				message: 'inner Bash protocol failed',
+				code: 'protocol',
+				recoverable: false
+			}
+		});
+		await expect(protocolLoading).rejects.toMatchObject({
+			name: 'ProtocolError',
+			code: 'protocol',
+			phase: 'protocol',
+			recoverable: false
+		});
+	});
+
+	it('clears the worker, remembered configuration, and pending input idempotently', async () => {
+		const sandbox = new Bash();
+		const worker = await loadSandbox(sandbox);
+		sandbox.write('stale');
+
+		await sandbox.clear();
+		await sandbox.clear();
+
+		expect(worker.terminate).toHaveBeenCalledTimes(1);
+		await expect(sandbox.run('printf unavailable', false)).rejects.toThrow(
+			'Bash runtime is not loaded'
+		);
+	});
+
+	it('clears both a replacement candidate and the previously ready worker', async () => {
+		const sandbox = new Bash();
+		const readyWorker = await loadSandbox(sandbox, '/first');
+		const replacement = sandbox.load('/replacement');
+		const rejection = expect(replacement).rejects.toBe('Process terminated');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		const candidate = workerInstances[1];
+		await waitForPosted(candidate, 'load');
+		sandbox.write('stale during load');
+		sandbox.eof();
+
+		await sandbox.clear();
+		await rejection;
+
+		expect(candidate.terminate).toHaveBeenCalledTimes(1);
+		expect(readyWorker.terminate).toHaveBeenCalledTimes(1);
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		await expect(sandbox.run('printf unavailable', false)).rejects.toThrow(
+			'Bash runtime is not loaded'
+		);
+	});
+});
