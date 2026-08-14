@@ -8,6 +8,7 @@ import type { SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	OutputLimitError,
 	RuntimeConfigurationError,
@@ -47,6 +48,9 @@ class Elixir implements Sandbox {
 	pendingEof = false;
 	private activeLoadCleanup: (() => void) | null = null;
 	private activeRunCleanup: (() => void) | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation: CancelledError;
 	private readonly workerSession = new WorkerSession({
 		label: () => (this.language === 'ERLANG' ? 'Erlang' : 'Elixir'),
 		onDispose: (worker) => {
@@ -63,6 +67,20 @@ class Elixir implements Sandbox {
 
 	constructor(language: BeamEvalLanguage = 'ELIXIR') {
 		this.language = language;
+		const runtimeLabel = language === 'ERLANG' ? 'Erlang' : 'Elixir';
+		this.disposeCancellation = new CancelledError(`${runtimeLabel} sandbox disposed`, {
+			phase: 'dispose',
+			runtimeId: language,
+			recoverable: false
+		});
+	}
+
+	private disposedConfigurationError() {
+		const runtimeLabel = this.language === 'ERLANG' ? 'Erlang' : 'Elixir';
+		return new RuntimeConfigurationError(`${runtimeLabel} sandbox is disposed`, {
+			phase: 'dispose',
+			runtimeId: this.language
+		});
 	}
 
 	load(
@@ -73,8 +91,10 @@ class Elixir implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		const signal = options.signal;
 		const runtimeLabel = this.language === 'ERLANG' ? 'Erlang' : 'Elixir';
+		if (this.disposed) return Promise.reject(this.disposedConfigurationError());
+		const signal = options.signal;
+		if (this.disposed) return Promise.reject(this.disposedConfigurationError());
 		if (signal?.aborted) {
 			return Promise.reject(
 				signal.reason ??
@@ -184,6 +204,13 @@ class Elixir implements Sandbox {
 					this.language === 'ERLANG'
 						? resolveErlangBundleUrl(runtimeAssets, currentUrl)
 						: resolveElixirBundleUrl(runtimeAssets, currentUrl);
+				if (
+					this.activeLoadCleanup !== cleanup ||
+					activeUid !== this.uid ||
+					signal?.aborted
+				) {
+					return;
+				}
 				if (!nextBundleUrl) {
 					return rejectLoad(
 						`${runtimeLabel} runtime is not configured. Set ${
@@ -199,10 +226,31 @@ class Elixir implements Sandbox {
 							? runtimeAssets.erlang?.integrity || runtimeAssets.elixir?.integrity
 							: runtimeAssets.elixir?.integrity
 						: undefined;
+				if (
+					this.activeLoadCleanup !== cleanup ||
+					activeUid !== this.uid ||
+					signal?.aborted
+				) {
+					return;
+				}
 				const assetReceipts = snapshotElixirRuntimeAssetReceipts(
 					configuredReceipts || WASM_ELIXIR_ASSET_RECEIPTS
 				);
+				if (
+					this.activeLoadCleanup !== cleanup ||
+					activeUid !== this.uid ||
+					signal?.aborted
+				) {
+					return;
+				}
 				const nextBundleIdentity = JSON.stringify([nextBundleUrl, assetReceipts]);
+				if (
+					this.activeLoadCleanup !== cleanup ||
+					activeUid !== this.uid ||
+					signal?.aborted
+				) {
+					return;
+				}
 
 				const needsWorkerReset = !this.worker || this.bundleIdentity !== nextBundleIdentity;
 				const preservePendingInput = this.prepared && !needsWorkerReset;
@@ -214,6 +262,13 @@ class Elixir implements Sandbox {
 				this.bundleUrl = nextBundleUrl;
 				if (needsWorkerReset && this.worker) {
 					this.workerSession.reset();
+					if (
+						this.activeLoadCleanup !== cleanup ||
+						activeUid !== this.uid ||
+						signal?.aborted
+					) {
+						return;
+					}
 				}
 				this.bundleIdentity = nextBundleIdentity;
 				if (!this.worker) {
@@ -306,12 +361,14 @@ class Elixir implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -349,6 +406,7 @@ class Elixir implements Sandbox {
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
 		const runtimeLabel = this.language === 'ERLANG' ? 'Erlang' : 'Elixir';
+		if (this.disposed) return Promise.reject(this.disposedConfigurationError());
 		if (this.activeLoadCleanup || this.activeRunCleanup) {
 			return Promise.reject(
 				new BusyError(`${runtimeLabel} runtime already has an active operation`, {
@@ -629,6 +687,7 @@ class Elixir implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const loadCleanup = this.activeLoadCleanup;
 		this.activeLoadCleanup = null;
 		const runCleanup = this.activeRunCleanup;
@@ -645,6 +704,7 @@ class Elixir implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
@@ -655,6 +715,37 @@ class Elixir implements Sandbox {
 		if (!this.exit || this.hasExecuted || this.activeLoadCleanup || this.activeRunCleanup) {
 			this.terminate();
 		}
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const loadCleanup = this.activeLoadCleanup;
+		const runCleanup = this.activeRunCleanup;
+		this.activeLoadCleanup = null;
+		this.activeRunCleanup = null;
+		this.uid += 1;
+		delete this.worker;
+		this.bundleUrl = '';
+		this.bundleIdentity = '';
+		this.output = null;
+		this.pendingInput = [];
+		this.pendingEof = false;
+		this.waitingForInput = false;
+		this.prepared = false;
+		this.hasExecuted = false;
+		this.exit = true;
+		try {
+			resetBufferedStdin(this.buffer);
+		} catch {
+			// Terminal cleanup is best effort after host state becomes unreachable.
+		}
+		this.workerSession.terminate(this.disposeCancellation);
+		loadCleanup?.();
+		runCleanup?.();
+		return this.disposePromise;
 	}
 }
 

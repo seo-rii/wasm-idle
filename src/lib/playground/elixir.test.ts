@@ -1480,4 +1480,291 @@ describe('Elixir sandbox', () => {
 
 		expect(readBufferedStdin(runMessage.buffer)).toBeNull();
 	});
+
+	it.each([
+		{
+			name: 'Elixir',
+			language: 'ELIXIR' as const,
+			runtimeAssets: { elixir: { bundleUrl: '/runtime/elixir/bundle.avm' } }
+		},
+		{
+			name: 'Erlang',
+			language: 'ERLANG' as const,
+			runtimeAssets: { erlang: { bundleUrl: '/runtime/erlang/bundle.avm' } }
+		}
+	])('keeps clear reusable but disposes an idle $name runtime exactly once', async (testCase) => {
+		const sandbox = new Elixir(testCase.language);
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load(testCase.runtimeAssets);
+		const worker = workerInstances[0];
+		await expect(sandbox.run('prepared_source', true)).resolves.toBe(true);
+
+		await sandbox.clear();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('prepared_again', true)).resolves.toBe(true);
+		sandbox.write('queued input\n');
+		sandbox.eof();
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+
+		let cleanupSnapshot: Record<string, unknown> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		worker.terminate.mockImplementationOnce(() => {
+			cleanupSnapshot = {
+				worker: sandbox.worker,
+				bundleUrl: sandbox.bundleUrl,
+				bundleIdentity: sandbox.bundleIdentity,
+				output: sandbox.output,
+				prepared: sandbox.prepared,
+				hasExecuted: sandbox.hasExecuted,
+				pendingInput: [...sandbox.pendingInput],
+				waitingForInput: sandbox.waitingForInput,
+				pendingEof: sandbox.pendingEof,
+				bufferedInput: readBufferedStdin(sandbox.buffer),
+				onmessage: worker.onmessage,
+				onerror: worker.onerror,
+				onmessageerror: worker.onmessageerror
+			};
+			reentrantLoad = sandbox.load(testCase.runtimeAssets);
+			reentrantRun = sandbox.run('unavailable', false);
+			reentrantDisposal = sandbox.dispose();
+		});
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		await firstDisposal;
+
+		expect(cleanupSnapshot).toEqual({
+			worker: undefined,
+			bundleUrl: '',
+			bundleIdentity: '',
+			output: null,
+			prepared: false,
+			hasExecuted: false,
+			pendingInput: [],
+			waitingForInput: false,
+			pendingEof: false,
+			bufferedInput: '',
+			onmessage: null,
+			onerror: null,
+			onmessageerror: null
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: testCase.language
+		});
+		await expect(reentrantRun).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: testCase.language
+		});
+		sandbox.write('ignored input\n');
+		sandbox.eof();
+		sandbox.terminate();
+		await sandbox.clear();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles active Erlang startup with one stable disposal cancellation', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Elixir('ERLANG');
+		const loading = sandbox.load({ erlang: { bundleUrl: '/runtime/erlang/bundle.avm' } });
+		const outcome = loading.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		const cancellation = await outcome;
+		await firstDisposal;
+
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'ERLANG',
+			recoverable: false
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.bundleUrl).toBe('');
+		expect(sandbox.bundleIdentity).toBe('');
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles an active Elixir run, clears stdin, and ignores retained messages', async () => {
+		const sandbox = new Elixir();
+		const output = vi.fn();
+		sandbox.output = output;
+		await sandbox.load({ elixir: { bundleUrl: '/runtime/elixir/bundle.avm' } });
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => undefined);
+		const running = sandbox.run('IO.gets("")', false);
+		const outcome = running.catch((error) => error);
+		const staleHandler = worker.onmessage;
+		worker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+		sandbox.write('active input\n');
+		sandbox.eof();
+		expect(readBufferedStdin(sandbox.buffer)).toBe('active input\n');
+		expect(sandbox.pendingEof).toBe(true);
+
+		await sandbox.dispose();
+		const cancellation = await outcome;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'ELIXIR',
+			recoverable: false
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+		staleHandler?.({
+			data: {
+				buffer: true,
+				output: 'late output',
+				results: ':late'
+			}
+		} as MessageEvent<any>);
+		await Promise.resolve();
+		expect(output).not.toHaveBeenCalled();
+		expect(sandbox.output).toBeNull();
+		expect(sandbox.waitingForInput).toBe(false);
+	});
+
+	it('rejects terminal startup when the signal getter reenters disposal', async () => {
+		const sandbox = new Elixir('ERLANG');
+		let reentrantDisposal: Promise<void> | undefined;
+		let loading: Promise<void> | undefined;
+		let loadError: unknown;
+		const options = {
+			get signal() {
+				reentrantDisposal = sandbox.dispose();
+				return undefined;
+			}
+		};
+
+		try {
+			loading = sandbox.load(
+				{ erlang: { bundleUrl: '/runtime/erlang/reentrant.avm' } },
+				'',
+				true,
+				[],
+				options
+			);
+		} catch (error) {
+			loadError = error;
+		}
+
+		expect(loadError).toBeUndefined();
+		await expect(loading).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'ERLANG'
+		});
+		expect(reentrantDisposal).toBe(sandbox.dispose());
+		await reentrantDisposal;
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.bundleUrl).toBe('');
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('does not publish bundle state when an asset getter reenters disposal', async () => {
+		const sandbox = new Elixir();
+		const progress = { set: vi.fn() };
+		let reentrantDisposal: Promise<void> | undefined;
+		const runtimeAssets = {
+			elixir: {
+				get bundleUrl() {
+					reentrantDisposal = sandbox.dispose();
+					return '/runtime/elixir/reentrant.avm';
+				}
+			}
+		};
+
+		const loading = sandbox.load(runtimeAssets, '', true, [], {}, progress);
+		const cancellation = await loading.catch((error) => error);
+
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(reentrantDisposal).toBe(sandbox.dispose());
+		await reentrantDisposal;
+		expect(progress.set).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.bundleUrl).toBe('');
+		expect(sandbox.bundleIdentity).toBe('');
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('does not resurrect bundle identity when worker replacement reenters disposal', async () => {
+		const sandbox = new Elixir();
+		await sandbox.load({ elixir: { bundleUrl: '/runtime/elixir/first.avm' } });
+		const retiredWorker = workerInstances[0];
+		const replacementProgress = { set: vi.fn() };
+		let reentrantDisposal: Promise<void> | undefined;
+		let reentrantError: unknown;
+		retiredWorker.terminate.mockImplementationOnce(() => {
+			try {
+				reentrantDisposal = sandbox.dispose();
+			} catch (error) {
+				reentrantError = error;
+			}
+		});
+
+		const replacement = sandbox.load(
+			{
+				elixir: {
+					bundleUrl: '/runtime/elixir/first.avm',
+					integrity: {
+						...WASM_ELIXIR_ASSET_RECEIPTS,
+						'bundle.avm': {
+							...WASM_ELIXIR_ASSET_RECEIPTS['bundle.avm'],
+							uncompressedSha256: 'd'.repeat(64)
+						}
+					}
+				}
+			},
+			'',
+			true,
+			[],
+			{},
+			replacementProgress
+		);
+		const outcome = replacement.catch((error) => error);
+		await vi.waitFor(() => expect(reentrantDisposal ?? reentrantError).toBeDefined());
+
+		expect(reentrantError).toBeUndefined();
+		const cancellation = await outcome;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(sandbox.dispose()).toBe(reentrantDisposal);
+		await reentrantDisposal;
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(replacementProgress.set).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.bundleUrl).toBe('');
+		expect(sandbox.bundleIdentity).toBe('');
+		expect(workerInstances).toHaveLength(1);
+	});
 });
