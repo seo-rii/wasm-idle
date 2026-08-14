@@ -92,7 +92,7 @@ export interface RuntimeAssetKeySource {
 		libffiUrl?: string;
 		integrity?: RuntimeAssetIntegrityMap;
 	};
-	lisp?: { moduleUrl?: string };
+	lisp?: { moduleUrl?: string; manifestUrl?: string; manifestFingerprint?: string };
 	ruby?: {
 		moduleUrl?: string;
 		wasmUrl?: string;
@@ -561,6 +561,8 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		serialize: serializeIntegrity
 	},
 	{ runtime: 'lisp', property: 'moduleUrl', key: 'lispModuleUrl' },
+	{ runtime: 'lisp', property: 'manifestUrl', key: 'lispManifestUrl' },
+	{ runtime: 'lisp', property: 'manifestFingerprint', key: 'lispManifestFingerprint' },
 	{ runtime: 'ruby', property: 'moduleUrl', key: 'rubyModuleUrl' },
 	{ runtime: 'ruby', property: 'wasmUrl', key: 'rubyWasmUrl' },
 	{

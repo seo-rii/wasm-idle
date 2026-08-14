@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RUBY_RUNTIME_ASSET_PATH } from '@wasm-idle/core';
 import {
@@ -17,6 +20,24 @@ import {
 	BUNDLED_JANET_MANIFEST_FINGERPRINT,
 	BUNDLED_JANET_RUNNER_RECEIPT
 } from '../src/bundledJanetRuntime.js';
+import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from '../src/bundledLispRuntime.js';
+
+const lispStaticDir = path.resolve(
+	path.dirname(fileURLToPath(import.meta.url)),
+	'../../../static/wasm-lisp'
+);
+const lispStorageFiles = [
+	'index.js.gz',
+	'puppyc.core.wasm',
+	'puppyc.core2.wasm.gz',
+	'puppyc.js'
+] as const;
+const lispStaticBytes = Object.fromEntries(
+	['runtime-manifest.v2.json', ...lispStorageFiles].map((file) => [
+		file,
+		readFileSync(path.join(lispStaticDir, file))
+	])
+) as Record<string, Uint8Array>;
 
 const mockState = vi.hoisted(() => {
 	const workers: FakeWorker[] = [];
@@ -378,21 +399,74 @@ describe('additional language server workers', () => {
 		handle.dispose();
 	});
 
-	it('starts Scheme with the wasm-lisp module URL', async () => {
+	it('preloads and starts Scheme with the verified wasm-lisp profile', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL | Request) => {
+				const requestUrl = new URL(
+					typeof input === 'string' || input instanceof URL ? input : input.url
+				);
+				const file = path.basename(requestUrl.pathname);
+				const bytes = lispStaticBytes[file];
+				if (!bytes) throw new Error(`Unexpected Scheme asset request: ${requestUrl.href}`);
+				const response = new Response(bytes, {
+					headers: { 'content-length': String(bytes.byteLength) }
+				});
+				Object.defineProperty(response, 'url', { value: requestUrl.href });
+				return response;
+			})
+		);
 		const handle = await getLispLanguageServer({
 			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
 
-		expect(mockState.workers[0]?.messages[0]).toEqual({
+		expect(mockState.workers[0]?.messages[0]).toMatchObject({
 			type: 'init',
 			options: {
-				moduleUrl: 'https://static.example.com/repl_20240807/wasm-lisp/index.js'
+				manifest: {
+					fingerprint: BUNDLED_LISP_MANIFEST_FINGERPRINT
+				},
+				manifestFingerprint: BUNDLED_LISP_MANIFEST_FINGERPRINT,
+				storageAssets: expect.any(Object)
 			}
 		});
+		expect(
+			Object.keys(mockState.workers[0]?.messages[0]?.options.storageAssets || {}).sort()
+		).toEqual([...lispStorageFiles].sort());
 
 		handle.dispose();
+	});
+
+	it('rejects a corrupted Scheme asset before creating a worker', async () => {
+		const corruptedCompiler = Uint8Array.from(lispStaticBytes['puppyc.js']);
+		corruptedCompiler[0] ^= 0xff;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL | Request) => {
+				const requestUrl = new URL(
+					typeof input === 'string' || input instanceof URL ? input : input.url
+				);
+				const file = path.basename(requestUrl.pathname);
+				const bytes = file === 'puppyc.js' ? corruptedCompiler : lispStaticBytes[file];
+				if (!bytes) throw new Error(`Unexpected Scheme asset request: ${requestUrl.href}`);
+				const response = new Response(Uint8Array.from(bytes).buffer, {
+					headers: { 'content-length': String(bytes.byteLength) }
+				});
+				Object.defineProperty(response, 'url', { value: requestUrl.href });
+				return response;
+			})
+		);
+
+		await expect(
+			getLispLanguageServer({
+				rootUrl: 'https://static.example.com/repl_20240807',
+				currentUrl: 'https://app.example.com/editor',
+				createWorker: () => new mockState.FakeWorker() as unknown as Worker
+			})
+		).rejects.toMatchObject({ name: 'AssetIntegrityError', runtimeId: 'LISP' });
+		expect(mockState.workers).toHaveLength(0);
 	});
 
 	it('starts Octave with browser Octave runtime assets', async () => {

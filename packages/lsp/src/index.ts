@@ -32,6 +32,8 @@ export {
 	resolveJanetLanguageServerManifestUrl,
 	resolveJanetLanguageServerWorkerReceipt,
 	resolveJanetLanguageServerWorkerUrl,
+	resolveLispLanguageServerManifestFingerprint,
+	resolveLispLanguageServerManifestUrl,
 	resolveLispLanguageServerModuleUrl,
 	resolveLuaLanguageServerModuleUrl,
 	resolveOctaveLanguageServerBaseUrl,

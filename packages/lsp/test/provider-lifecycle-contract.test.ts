@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockState = vi.hoisted(() => {
@@ -99,6 +102,19 @@ import type { EditorLanguageServerRuntimeOptions } from '../src/types.js';
 import { RUBY_RUNTIME_ASSET_PATH, type RubyRuntimeAssetReceipts } from '@wasm-idle/core';
 
 const applicationOrigin = 'https://app.example.com';
+const lispStaticDir = path.resolve(
+	path.dirname(fileURLToPath(import.meta.url)),
+	'../../../static/wasm-lisp'
+);
+const lispStaticBytes = Object.fromEntries(
+	[
+		'runtime-manifest.v2.json',
+		'index.js.gz',
+		'puppyc.core.wasm',
+		'puppyc.core2.wasm.gz',
+		'puppyc.js'
+	].map((file) => [file, Uint8Array.from(readFileSync(path.join(lispStaticDir, file)))])
+) as Record<string, Uint8Array>;
 const dAssetBytes = {
 	'index.js': new TextEncoder().encode('export const createDCompiler = () => undefined;'),
 	'runtime/runtime-manifest.v1.json': new TextEncoder().encode('{}')
@@ -174,6 +190,15 @@ const createProviderOptions = (
 });
 
 const collectUrls = (value: unknown, urls: URL[] = []): URL[] => {
+	if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return urls;
+	if (
+		value &&
+		typeof value === 'object' &&
+		'format' in value &&
+		value.format === 'wasm-lisp-runtime-manifest-v2'
+	) {
+		return urls;
+	}
 	if (typeof value === 'string') {
 		if (!value.startsWith('/') && !/^https?:\/\//u.test(value)) return urls;
 		try {
@@ -223,9 +248,16 @@ describe('registered LSP provider lifecycle contract', () => {
 					: requestUrl.pathname.endsWith(`/${RUBY_RUNTIME_ASSET_PATH}`)
 						? RUBY_RUNTIME_ASSET_PATH
 						: undefined;
-				if (!dAsset && !rubyAsset)
+				const lispAsset = lispStaticBytes[path.basename(requestUrl.pathname)]
+					? path.basename(requestUrl.pathname)
+					: undefined;
+				if (!dAsset && !rubyAsset && !lispAsset)
 					throw new Error(`Unexpected lifecycle asset request: ${requestUrl.href}`);
-				const bytes = dAsset ? dAssetBytes[dAsset] : rubyAssetBytes[rubyAsset!];
+				const bytes = dAsset
+					? dAssetBytes[dAsset]
+					: rubyAsset
+						? rubyAssetBytes[rubyAsset]
+						: lispStaticBytes[lispAsset!];
 				const response = new Response(bytes, {
 					headers: { 'content-length': String(bytes.byteLength) }
 				});

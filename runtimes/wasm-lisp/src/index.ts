@@ -65,6 +65,8 @@ export interface BrowserLispCompilerOptions {
 	runtimeBaseUrl?: string | URL;
 	fetch?: typeof fetch;
 	maxAssetBytes?: number;
+	compilerModule?: ComponentModule | PromiseLike<ComponentModule>;
+	compilerCoreModules?: Readonly<Record<string, WebAssembly.Module>>;
 }
 
 export interface BrowserLispExecutionOptions {
@@ -83,7 +85,7 @@ export interface BrowserLispExecutionResult {
 	stderr: string;
 }
 
-type ComponentModule = {
+export type ComponentModule = {
 	instantiate: (
 		getCoreModule: (name: string) => Promise<WebAssembly.Module>,
 		imports: Record<string, unknown>,
@@ -673,31 +675,65 @@ async function instantiateGeneratedComponent(
 export async function createLispCompiler(
 	options: BrowserLispCompilerOptions = {}
 ): Promise<BrowserLispCompiler> {
-	const runtimeBaseUrl = normalizeRuntimeBaseUrl(options.runtimeBaseUrl);
+	const hasInjectedCompilerModule = options.compilerModule !== undefined;
+	const hasInjectedCoreModules = options.compilerCoreModules !== undefined;
+	if (hasInjectedCompilerModule !== hasInjectedCoreModules) {
+		throw new Error(
+			'wasm-lisp verified compiler injection requires both the module and core modules'
+		);
+	}
+	const usesVerifiedInjection = hasInjectedCompilerModule && hasInjectedCoreModules;
+	const runtimeBaseUrl = usesVerifiedInjection
+		? null
+		: normalizeRuntimeBaseUrl(options.runtimeBaseUrl);
 	const fetcher = options.fetch || globalThis.fetch?.bind(globalThis);
 	const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_RUNTIME_ASSET_BYTES;
 	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes < 0) {
 		throw new Error('wasm-lisp maxAssetBytes must be a non-negative safe integer');
 	}
-	if (!fetcher) {
+	if (!usesVerifiedInjection && !fetcher) {
 		throw new Error('wasm-lisp requires fetch to load the Puppy Scheme compiler assets');
 	}
-	const compilerModuleUrl = new URL('puppyc.js', runtimeBaseUrl);
-	const compilerModulePromise = import(
-		/* @vite-ignore */ compilerModuleUrl.href
-	) as Promise<ComponentModule>;
+	const compilerModulePromise = usesVerifiedInjection
+		? Promise.resolve(options.compilerModule!)
+		: (import(
+				/* @vite-ignore */ new URL('puppyc.js', runtimeBaseUrl!).href
+			) as Promise<ComponentModule>);
+	const injectedCoreModules = usesVerifiedInjection
+		? new Map(Object.entries(options.compilerCoreModules!))
+		: null;
+	if (injectedCoreModules) {
+		const expectedNames = ['puppyc.core.wasm', 'puppyc.core2.wasm'];
+		const receivedNames = [...injectedCoreModules.keys()].sort();
+		if (
+			receivedNames.length !== expectedNames.length ||
+			receivedNames.some((name, index) => name !== expectedNames[index]) ||
+			receivedNames.some(
+				(name) => !(injectedCoreModules.get(name) instanceof WebAssembly.Module)
+			)
+		) {
+			throw new Error('wasm-lisp injected compiler core modules are incomplete or invalid');
+		}
+	}
 	const coreModuleCache = new Map<string, WebAssembly.Module>();
 	const coreModuleLoads = new Map<string, Promise<WebAssembly.Module>>();
 
 	async function getCompilerCoreModule(moduleName: string, signal?: AbortSignal) {
 		throwIfAborted(signal);
 		const normalizedName = moduleName.replace(/^[./]+/, '');
-		const moduleUrl = new URL(normalizedName, runtimeBaseUrl);
+		if (injectedCoreModules) {
+			const compiled = injectedCoreModules.get(normalizedName);
+			if (!compiled) {
+				throw new Error(`missing injected Puppy Scheme core module ${normalizedName}`);
+			}
+			return compiled;
+		}
+		const moduleUrl = new URL(normalizedName, runtimeBaseUrl!);
 		const key = moduleUrl.href;
 		const cached = coreModuleCache.get(key);
 		if (cached) return cached;
 		if (signal) {
-			const bytes = await fetchBytes(moduleUrl, fetcher, maxAssetBytes, signal);
+			const bytes = await fetchBytes(moduleUrl, fetcher!, maxAssetBytes, signal);
 			throwIfAborted(signal);
 			const pendingCompile = WebAssembly.compile(bytes);
 			const compiled = await waitForPromiseWithSignal(pendingCompile, signal);
@@ -707,7 +743,7 @@ export async function createLispCompiler(
 		}
 		let pending = coreModuleLoads.get(key);
 		if (!pending) {
-			pending = fetchBytes(moduleUrl, fetcher, maxAssetBytes)
+			pending = fetchBytes(moduleUrl, fetcher!, maxAssetBytes)
 				.then((bytes) => WebAssembly.compile(bytes))
 				.then((compiled) => {
 					coreModuleCache.set(key, compiled);

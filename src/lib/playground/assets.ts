@@ -29,6 +29,7 @@ import {
 	WASM_JULIA_ASSET_VERSION,
 	WASM_JULIA_RUNNER_RECEIPT
 } from '$lib/playground/wasmJuliaVersion';
+import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from '$lib/playground/wasmNimVersion';
 import {
 	WASM_PROLOG_ASSET_VERSION,
@@ -208,6 +209,14 @@ export interface ZigRuntimeAssetConfig {
 
 export interface LispRuntimeAssetConfig {
 	moduleUrl?: string;
+	manifestUrl?: string;
+	manifestFingerprint?: string;
+}
+
+export interface ResolvedLispRuntimeAssetConfig {
+	moduleUrl: string;
+	manifestUrl: string;
+	manifestFingerprint: string;
 }
 
 export interface RubyRuntimeAssetConfig {
@@ -1632,6 +1641,55 @@ export function resolveLispModuleUrl(
 	}
 
 	return '';
+}
+
+function deriveLispManifestUrl(moduleUrl: string, currentUrl: string) {
+	if (!moduleUrl) return '';
+	try {
+		const module = new URL(moduleUrl, currentUrl || undefined);
+		const manifest = new URL('runtime-manifest.v2.json', module);
+		manifest.search = module.search;
+		return manifest.href;
+	} catch {
+		const queryIndex = moduleUrl.indexOf('?');
+		const query = queryIndex >= 0 ? moduleUrl.slice(queryIndex) : '';
+		const path = queryIndex >= 0 ? moduleUrl.slice(0, queryIndex) : moduleUrl;
+		return `${path.replace(/[^/]*$/u, '')}runtime-manifest.v2.json${query}`;
+	}
+}
+
+export function resolveLispRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+): ResolvedLispRuntimeAssetConfig {
+	const configured = typeof options === 'object' ? options?.lisp : undefined;
+	const configuredModuleUrl = configured?.moduleUrl;
+	const publicModuleUrl = (publicEnv.PUBLIC_WASM_LISP_MODULE_URL || '').trim();
+	const rootUrl = typeof options === 'string' ? options : options?.rootUrl;
+	const moduleUrl = configuredModuleUrl
+		? resolveConfiguredUrl(configuredModuleUrl, currentUrl)
+		: publicModuleUrl
+			? resolveConfiguredUrl(publicModuleUrl, currentUrl)
+			: rootUrl !== undefined
+				? resolveConfiguredUrl(
+						`${normalizeRootUrl(rootUrl) || ''}/wasm-lisp/index.js`,
+						currentUrl
+					)
+				: '';
+	const configuredManifestUrl =
+		configured?.manifestUrl || (publicEnv.PUBLIC_WASM_LISP_MANIFEST_URL || '').trim();
+	const configuredFingerprint =
+		configured?.manifestFingerprint?.trim() ||
+		(publicEnv.PUBLIC_WASM_LISP_MANIFEST_FINGERPRINT || '').trim();
+	const usesBundledRoot = !configuredModuleUrl && !publicModuleUrl && rootUrl !== undefined;
+	return {
+		moduleUrl,
+		manifestUrl: configuredManifestUrl
+			? resolveConfiguredUrl(configuredManifestUrl, currentUrl)
+			: deriveLispManifestUrl(moduleUrl, currentUrl),
+		manifestFingerprint:
+			configuredFingerprint || (usesBundledRoot ? WASM_LISP_ASSET_VERSION : '')
+	};
 }
 
 export function resolveRubyWasmUrl(

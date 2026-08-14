@@ -1,73 +1,86 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushQueuedStdin } from '$lib/playground/stdinBuffer';
 
-async function createMockLispRuntimeModule(source: string) {
-	return `data:text/javascript;base64,${Buffer.from(source, 'utf8').toString('base64')}`;
+const mocks = vi.hoisted(() => ({
+	loadVerifiedLispRuntimeAssets: vi.fn()
+}));
+
+vi.mock('$lib/playground/lispAssets', () => ({
+	loadVerifiedLispRuntimeAssets: mocks.loadVerifiedLispRuntimeAssets
+}));
+
+const runtimeConfig = Object.freeze({
+	moduleUrl: 'https://static.example.com/wasm-lisp/index.js',
+	manifestUrl: 'https://static.example.com/wasm-lisp/runtime-manifest.v2.json',
+	manifestFingerprint: 'a'.repeat(64)
+});
+
+function configureRuntime(options: {
+	compile: (options: any) => Promise<any>;
+	execute: (artifact: any, options?: any) => Promise<any>;
+}) {
+	const compilerModule = { instantiate: vi.fn() };
+	const compilerCoreModules = {
+		'puppyc.core.wasm': {} as WebAssembly.Module,
+		'puppyc.core2.wasm': {} as WebAssembly.Module
+	};
+	const createLispCompiler = vi.fn(async (injected) => {
+		(globalThis as any).__lastCompilerInjection = injected;
+		return { compile: options.compile };
+	});
+	mocks.loadVerifiedLispRuntimeAssets.mockResolvedValue({
+		module: {
+			createLispCompiler,
+			executeBrowserLispArtifact: options.execute
+		},
+		compilerModule,
+		compilerCoreModules,
+		manifest: { profileId: 'fixture' }
+	});
+	return { compilerModule, compilerCoreModules, createLispCompiler };
 }
 
 describe('Lisp worker', () => {
 	beforeEach(() => {
 		vi.resetModules();
+		mocks.loadVerifiedLispRuntimeAssets.mockReset();
 		(globalThis as any).self = globalThis as any;
 		(globalThis as any).document = undefined;
 		(globalThis as any).postMessage = vi.fn();
 		(globalThis as any).__lastCompileOptions = undefined;
+		(globalThis as any).__lastCompilerInjection = undefined;
 		(globalThis as any).__lastExecution = undefined;
 		(globalThis as any).__lastStdin = undefined;
 	});
 
-	it('loads a wasm-lisp-style compiler module and runs the returned artifact', async () => {
-		const moduleUrl = await createMockLispRuntimeModule(`
-			export async function createLispCompiler() {
+	it('loads the verified compiler graph and runs the returned artifact', async () => {
+		const injection = configureRuntime({
+			async compile(options) {
+				(globalThis as any).__lastCompileOptions = options;
 				return {
-					async compile(options) {
-						globalThis.__lastCompileOptions = options;
-						return {
-							stdout: 'compile log\\n',
-							success: true,
-							diagnostics: [
-								{
-									fileName: options.fileName,
-									lineNumber: 1,
-									columnNumber: 2,
-									severity: 'warning',
-									message: 'demo warning'
-								}
-							],
-							artifact: {
-								component: new Uint8Array([0, 97, 115, 109]),
-								format: 'component',
-								fileName: options.fileName,
-								source: options.code,
-								compiler: 'puppy-scheme'
-							}
-						};
-					}
+					stdout: 'compile log\n',
+					success: true,
+					diagnostics: [
+						{
+							fileName: options.fileName,
+							lineNumber: 1,
+							columnNumber: 2,
+							severity: 'warning',
+							message: 'demo warning'
+						}
+					],
+					artifact: { fileName: options.fileName, source: options.code }
 				};
-			}
-
-			export async function executeBrowserLispArtifact(artifact, options = {}) {
-				globalThis.__lastExecution = { artifact, options };
-				options.stdout?.('hi\\n');
-				return {
-					exitCode: 0,
-					stdout: 'hi\\n',
-					stderr: ''
-				};
-			}
-
-			export default createLispCompiler;
-		`);
-
-		await import('./lisp');
-		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				moduleUrl
+			},
+			async execute(artifact, options = {}) {
+				(globalThis as any).__lastExecution = { artifact, options };
+				options.stdout?.('hi\n');
+				return { exitCode: 0, stdout: 'hi\n', stderr: '' };
 			}
 		});
-		await Promise.resolve();
 
+		await import('./lisp');
+		await (globalThis as any).self.onmessage({ data: { load: true, runtimeConfig } });
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: '(display "hi")',
@@ -79,8 +92,12 @@ describe('Lisp worker', () => {
 				log: true
 			}
 		});
-		await Promise.resolve();
 
+		expect(mocks.loadVerifiedLispRuntimeAssets).toHaveBeenCalledWith(runtimeConfig);
+		expect((globalThis as any).__lastCompilerInjection).toEqual({
+			compilerModule: injection.compilerModule,
+			compilerCoreModules: injection.compilerCoreModules
+		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			diagnostic: {
@@ -104,56 +121,26 @@ describe('Lisp worker', () => {
 		expect((globalThis as any).__lastExecution.options.env).toEqual({ USER: 'jungol' });
 	});
 
-	it('reads stdin from the shared buffer when executeBrowserLispArtifact requests input', async () => {
-		const moduleUrl = await createMockLispRuntimeModule(`
-			export async function createLispCompiler() {
-				return {
-					async compile(options) {
-						return {
-							success: true,
-							diagnostics: [],
-							artifact: {
-								component: new Uint8Array([0, 97, 115, 109]),
-								format: 'component',
-								fileName: options.fileName,
-								source: options.code,
-								compiler: 'puppy-scheme'
-							}
-						};
-					}
-				};
-			}
-
-			export async function executeBrowserLispArtifact(_artifact, options = {}) {
+	it('reads stdin from the shared buffer when the verified runtime requests input', async () => {
+		configureRuntime({
+			async compile(options) {
+				return { success: true, diagnostics: [], artifact: { source: options.code } };
+			},
+			async execute(_artifact, options = {}) {
 				const chunk = options.stdin?.() || '';
-				globalThis.__lastStdin = chunk;
+				(globalThis as any).__lastStdin = chunk;
 				options.stdout?.(chunk);
-				return {
-					exitCode: 0,
-					stdout: chunk,
-					stderr: ''
-				};
+				return { exitCode: 0, stdout: chunk, stderr: '' };
 			}
-
-			export default createLispCompiler;
-		`);
+		});
 		const buffer = new SharedArrayBuffer(1024);
 		const queuedInput = ['5\n'];
-
 		(globalThis as any).postMessage = vi.fn((message: any) => {
-			if (message?.buffer) {
-				flushQueuedStdin(queuedInput, buffer);
-			}
+			if (message?.buffer) flushQueuedStdin(queuedInput, buffer);
 		});
 
 		await import('./lisp');
-		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				moduleUrl
-			}
-		});
-		await Promise.resolve();
+		await (globalThis as any).self.onmessage({ data: { load: true, runtimeConfig } });
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: '(display (read-char))',
@@ -162,7 +149,6 @@ describe('Lisp worker', () => {
 				activePath: 'main.scm'
 			}
 		});
-		await Promise.resolve();
 
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ buffer: true });
 		expect((globalThis as any).__lastStdin).toBe('5\n');
@@ -170,42 +156,29 @@ describe('Lisp worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 
-	it('reports compiler failures as worker errors after forwarding diagnostics', async () => {
-		const moduleUrl = await createMockLispRuntimeModule(`
-			export async function createLispCompiler() {
+	it('reports compiler failures after forwarding diagnostics', async () => {
+		configureRuntime({
+			async compile() {
 				return {
-					async compile() {
-						return {
-							success: false,
-							stderr: 'error: bad scheme',
-							diagnostics: [
-								{
-									fileName: 'bad.scm',
-									lineNumber: 1,
-									severity: 'error',
-									message: 'bad scheme'
-								}
-							]
-						};
-					}
+					success: false,
+					stderr: 'error: bad scheme',
+					diagnostics: [
+						{
+							fileName: 'bad.scm',
+							lineNumber: 1,
+							severity: 'error',
+							message: 'bad scheme'
+						}
+					]
 				};
-			}
-
-			export async function executeBrowserLispArtifact() {
+			},
+			async execute() {
 				throw new Error('should not execute');
 			}
-
-			export default createLispCompiler;
-		`);
+		});
 
 		await import('./lisp');
-		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				moduleUrl
-			}
-		});
-		await Promise.resolve();
+		await (globalThis as any).self.onmessage({ data: { load: true, runtimeConfig } });
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: '(bad)',
@@ -214,7 +187,6 @@ describe('Lisp worker', () => {
 				activePath: 'bad.scm'
 			}
 		});
-		await Promise.resolve();
 
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			diagnostic: {

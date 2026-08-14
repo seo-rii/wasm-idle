@@ -7,6 +7,7 @@ import {
 	BUNDLED_JANET_MANIFEST_FINGERPRINT,
 	BUNDLED_JANET_RUNNER_RECEIPT
 } from '../src/bundledJanetRuntime.js';
+import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from '../src/bundledLispRuntime.js';
 import {
 	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
 	BUNDLED_PROLOG_RUNNER_RECEIPT
@@ -41,6 +42,8 @@ import {
 	resolveJanetLanguageServerManifestUrl,
 	resolveJanetLanguageServerWorkerReceipt,
 	resolveJanetLanguageServerWorkerUrl,
+	resolveLispLanguageServerManifestFingerprint,
+	resolveLispLanguageServerManifestUrl,
 	resolveLispLanguageServerModuleUrl,
 	resolveAwkLanguageServerBaseUrl,
 	resolveAwkLanguageServerWorkerUrl,
@@ -205,6 +208,25 @@ describe('lsp runtime asset resolution', () => {
 				}
 			})
 		).toThrow(LanguageServerAssetConfigurationError);
+	});
+
+	it('pins bundled Scheme manifests and fails closed for custom module URLs', () => {
+		expect(resolveLispLanguageServerManifestFingerprint({ rootUrl: '/wasm-idle' })).toBe(
+			BUNDLED_LISP_MANIFEST_FINGERPRINT
+		);
+		expect(() =>
+			resolveLispLanguageServerManifestFingerprint({
+				lisp: { moduleUrl: 'https://lisp.example.com/index.js' }
+			})
+		).toThrow(LanguageServerAssetConfigurationError);
+		expect(
+			resolveLispLanguageServerManifestFingerprint({
+				lisp: {
+					moduleUrl: 'https://lisp.example.com/index.js',
+					manifestFingerprint: 'f'.repeat(64)
+				}
+			})
+		).toBe('f'.repeat(64));
 	});
 
 	it('pins bundled Prolog manifests and diagnostic workers while allowing explicit mirrors', () => {
@@ -600,6 +622,12 @@ describe('lsp runtime asset resolution', () => {
 			)
 		).toBe('https://static.example.com/repl_20240807/wasm-lisp/index.js');
 		expect(
+			resolveLispLanguageServerManifestUrl(
+				'https://static.example.com/repl_20240807',
+				'https://app.example.com/editor'
+			)
+		).toBe('https://static.example.com/repl_20240807/wasm-lisp/runtime-manifest.v2.json');
+		expect(
 			resolveOctaveLanguageServerBaseUrl(
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
@@ -768,7 +796,9 @@ describe('lsp runtime asset resolution', () => {
 				workerReceipt: { bytes: 2345, sha256: 'e'.repeat(64) }
 			},
 			lisp: {
-				moduleUrl: 'https://lisp.example.com/wasm-lisp/index.js?v=20240807'
+				moduleUrl: 'https://lisp.example.com/wasm-lisp/index.js?v=20240807',
+				manifestUrl: 'https://lisp.example.com/wasm-lisp/manifest.json?v=20240807',
+				manifestFingerprint: 'f'.repeat(64)
 			},
 			octave: {
 				baseUrl: 'https://octave.example.com/runtime/',
@@ -865,6 +895,10 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolveLispLanguageServerModuleUrl(options)).toBe(
 			'https://lisp.example.com/wasm-lisp/index.js?v=20240807'
 		);
+		expect(resolveLispLanguageServerManifestUrl(options)).toBe(
+			'https://lisp.example.com/wasm-lisp/manifest.json?v=20240807'
+		);
+		expect(resolveLispLanguageServerManifestFingerprint(options)).toBe('f'.repeat(64));
 		expect(resolveOctaveLanguageServerBaseUrl(options)).toBe(
 			'https://octave.example.com/runtime/'
 		);

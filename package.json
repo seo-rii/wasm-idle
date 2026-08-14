@@ -39,6 +39,7 @@
 		"test:browser:go": "WASM_IDLE_RUN_REAL_BROWSER_GO=1 pnpm exec vitest run src/lib/playground/go.playwright.test.ts",
 		"test:browser:d": "WASM_IDLE_RUN_REAL_BROWSER_D=1 pnpm exec vitest run src/lib/playground/d.playwright.test.ts",
 		"test:browser:stdin": "WASM_IDLE_RUN_REAL_BROWSER_STDIN=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
+		"test:browser:lisp": "WASM_IDLE_RUN_REAL_BROWSER_LISP=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
 		"test:browser:ocaml": "WASM_IDLE_RUN_REAL_BROWSER_OCAML=1 pnpm exec vitest run src/lib/playground/ocaml.playwright.test.ts",
 		"test:browser:octave": "WASM_IDLE_RUN_REAL_BROWSER_OCTAVE=1 pnpm exec vitest run src/lib/playground/octave.playwright.test.ts",
 		"test:browser:prolog": "WASM_IDLE_RUN_REAL_BROWSER_PROLOG=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",

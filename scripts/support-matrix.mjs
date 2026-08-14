@@ -1282,9 +1282,9 @@ const runtimeDetailsByLanguage = new Map([
 		'Scheme',
 		{
 			packageBase: `${workspacePackage('runtimes/wasm-lisp')} / Puppy Scheme WASM component`,
-			execution: `Puppy Scheme compiler/runtime; supports ${code('stdin')} and ${code('programArgs')}`,
+			execution: `receipt-verified Puppy Scheme compiler/runtime; supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
-				`${code('runtimeAssets.lisp.moduleUrl')} or ${code('PUBLIC_WASM_LISP_MODULE_URL')}; ` +
+				`${code('runtimeAssets.lisp.{moduleUrl,manifestUrl,manifestFingerprint}')} or ${code('PUBLIC_WASM_LISP_{MODULE_URL,MANIFEST_URL,MANIFEST_FINGERPRINT}')}; ` +
 				`${code('programArgs')}`
 		}
 	],

@@ -229,6 +229,10 @@ stop run.`;
 
 const configuredStdinRunTimeoutMs = Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '0') || 0;
 const browserStdinTestTimeoutMs = Math.max(700_000, configuredStdinRunTimeoutMs + 120_000);
+const runAllStdinBrowserCases = process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN === '1';
+const runLispStdinBrowserCase = process.env.WASM_IDLE_RUN_REAL_BROWSER_LISP === '1';
+const runSharedStdinBrowserCases =
+	runAllStdinBrowserCases || process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN_SHARED_ONLY === '1';
 const sharedStdinBrowserCases = [
 	{
 		language: 'PYTHON',
@@ -401,7 +405,10 @@ describe('wasm-idle browser stdin connection', () => {
 	it.each(sharedStdinBrowserCases)(
 		'passes $language input and output through its real browser runtime path',
 		async ({ defaultRunTimeoutMs, expectedOutput, language, source, stdinText }) => {
-			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1') {
+			if (
+				(!runSharedStdinBrowserCases && !runLispStdinBrowserCase) ||
+				(runLispStdinBrowserCase && !runAllStdinBrowserCases && language !== 'LISP')
+			) {
 				return;
 			}
 
@@ -441,7 +448,7 @@ describe('wasm-idle browser stdin connection', () => {
 	it(
 		'passes C# stdin through a fresh dotnet browser runtime path',
 		async () => {
-			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1') {
+			if (!runSharedStdinBrowserCases) {
 				return;
 			}
 
@@ -466,7 +473,7 @@ describe('wasm-idle browser stdin connection', () => {
 	it(
 		'passes F# stdin through a fresh dotnet browser runtime path',
 		async () => {
-			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1') {
+			if (!runSharedStdinBrowserCases) {
 				return;
 			}
 
@@ -491,7 +498,7 @@ describe('wasm-idle browser stdin connection', () => {
 		'passes $language stdin through the browser wasm-clang runtime path',
 		async ({ language, source }) => {
 			if (
-				process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1' &&
+				!runAllStdinBrowserCases &&
 				process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1'
 			) {
 				return;
@@ -517,7 +524,7 @@ describe('wasm-idle browser stdin connection', () => {
 		'passes Objective-C stdin through the browser wasm-clang and libobjc2 runtime path',
 		async () => {
 			if (
-				process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1' &&
+				!runAllStdinBrowserCases &&
 				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1'
 			) {
 				return;
@@ -572,7 +579,7 @@ describe('wasm-idle browser stdin connection', () => {
 		'passes Objective-C Foundation NSObject stdin through the browser GNUstep runtime path',
 		async () => {
 			if (
-				process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1' &&
+				!runAllStdinBrowserCases &&
 				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1'
 			) {
 				return;
@@ -599,7 +606,7 @@ describe('wasm-idle browser stdin connection', () => {
 		'passes Objective-C Foundation constant NSString stdin through the browser GNUstep runtime path',
 		async () => {
 			if (
-				process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1' &&
+				!runAllStdinBrowserCases &&
 				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1'
 			) {
 				return;
@@ -626,7 +633,7 @@ describe('wasm-idle browser stdin connection', () => {
 		'passes Fortran stdin through the browser f2c and wasm-clang runtime path',
 		async () => {
 			if (
-				process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1' &&
+				!runAllStdinBrowserCases &&
 				process.env.WASM_IDLE_RUN_REAL_BROWSER_FORTRAN !== '1'
 			) {
 				return;
@@ -652,10 +659,7 @@ describe('wasm-idle browser stdin connection', () => {
 	it(
 		'passes COBOL stdin through the browser GnuCOBOL and llvm-core runtime path',
 		async () => {
-			if (
-				process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1' &&
-				process.env.WASM_IDLE_RUN_REAL_BROWSER_COBOL !== '1'
-			) {
+			if (!runAllStdinBrowserCases && process.env.WASM_IDLE_RUN_REAL_BROWSER_COBOL !== '1') {
 				return;
 			}
 
@@ -679,7 +683,7 @@ describe('wasm-idle browser stdin connection', () => {
 	it(
 		'passes VB.NET stdin through a fresh dotnet browser runtime path',
 		async () => {
-			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN !== '1') {
+			if (!runSharedStdinBrowserCases) {
 				return;
 			}
 

@@ -268,6 +268,12 @@
 	);
 	const lispLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'lisp');
 	const lispLspModuleUrl = $derived(lispLspEnabled ? runtimeAssets.lisp?.moduleUrl : undefined);
+	const lispLspManifestUrl = $derived(
+		lispLspEnabled ? runtimeAssets.lisp?.manifestUrl : undefined
+	);
+	const lispLspManifestFingerprint = $derived(
+		lispLspEnabled ? runtimeAssets.lisp?.manifestFingerprint : undefined
+	);
 	const ocamlLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'ocaml');
 	const ocamlLspModuleUrl = $derived(
 		ocamlLspEnabled ? runtimeAssets.ocaml?.moduleUrl : undefined
@@ -2923,6 +2929,8 @@
 				{janetLspWorkerReceipt}
 				{lispLspEnabled}
 				{lispLspModuleUrl}
+				{lispLspManifestUrl}
+				{lispLspManifestFingerprint}
 				{ocamlLspEnabled}
 				{ocamlLspModuleUrl}
 				{ocamlLspManifestUrl}

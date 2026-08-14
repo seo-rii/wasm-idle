@@ -1,12 +1,14 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import { loadVerifiedLispRuntimeAssets } from '$lib/playground/lispAssets';
+import type { ResolvedLispRuntimeAssetConfig } from '$lib/playground/assets';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 
 declare var self: any;
 
 let stdinBufferLisp: Int32Array | null = null;
-let moduleUrl = '';
-let loadedModuleUrl = '';
-let runtimePromise: Promise<{
+let runtimeConfig: ResolvedLispRuntimeAssetConfig | null = null;
+let loadedRuntimeKey = '';
+type LoadedLispRuntime = {
 	compiler: any;
 	executeBrowserLispArtifact: (
 		artifact: any,
@@ -24,24 +26,27 @@ let runtimePromise: Promise<{
 		stdout: string;
 		stderr: string;
 	}>;
-}> | null = null;
+};
+let runtimePromise: Promise<LoadedLispRuntime> | null = null;
 let compiledArtifact: any = null;
 let compiledCacheKey = '';
 
-async function loadRuntime(url: string) {
-	if (!url) {
+async function loadRuntime(config: ResolvedLispRuntimeAssetConfig | null) {
+	if (!config) {
 		throw new Error(
-			'Lisp runtime is not configured. Set PUBLIC_WASM_LISP_MODULE_URL or runtimeAssets.lisp.moduleUrl.'
+			'Lisp runtime is not configured. Provide its module, manifest, and fingerprint.'
 		);
 	}
-	if (loadedModuleUrl === url && runtimePromise) {
+	const runtimeKey = JSON.stringify(config);
+	if (loadedRuntimeKey === runtimeKey && runtimePromise) {
 		return await runtimePromise;
 	}
-	loadedModuleUrl = url;
+	loadedRuntimeKey = runtimeKey;
 	compiledArtifact = null;
 	compiledCacheKey = '';
-	runtimePromise = (async () => {
-		const module = await import(/* @vite-ignore */ url);
+	const nextRuntimePromise: Promise<LoadedLispRuntime> = (async () => {
+		const verified = await loadVerifiedLispRuntimeAssets(config);
+		const module = verified.module;
 		const factory =
 			typeof module.createLispCompiler === 'function'
 				? module.createLispCompiler
@@ -55,11 +60,24 @@ async function loadRuntime(url: string) {
 			throw new Error('wasm-lisp module must export executeBrowserLispArtifact');
 		}
 		return {
-			compiler: await factory(),
-			executeBrowserLispArtifact: module.executeBrowserLispArtifact
+			compiler: (await factory({
+				compilerModule: verified.compilerModule,
+				compilerCoreModules: verified.compilerCoreModules
+			})) as LoadedLispRuntime['compiler'],
+			executeBrowserLispArtifact:
+				module.executeBrowserLispArtifact as LoadedLispRuntime['executeBrowserLispArtifact']
 		};
 	})();
-	return await runtimePromise;
+	runtimePromise = nextRuntimePromise;
+	try {
+		return await nextRuntimePromise;
+	} catch (error) {
+		if (runtimePromise === nextRuntimePromise) {
+			runtimePromise = null;
+			loadedRuntimeKey = '';
+		}
+		throw error;
+	}
 }
 
 function normalizeDiagnostic(diagnostic: any) {
@@ -85,7 +103,7 @@ function normalizeDiagnostic(diagnostic: any) {
 self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
-		moduleUrl: nextModuleUrl,
+		runtimeConfig: nextRuntimeConfig,
 		buffer,
 		code,
 		prepare,
@@ -97,17 +115,19 @@ self.onmessage = async (event: { data: any }) => {
 	} = event.data;
 	try {
 		if (load) {
-			moduleUrl = nextModuleUrl;
+			runtimeConfig = nextRuntimeConfig;
 			if (log) {
-				console.log(`[wasm-idle:lisp-worker] load moduleUrl=${moduleUrl}`);
+				console.log(
+					`[wasm-idle:lisp-worker] load profile=${runtimeConfig?.manifestFingerprint || 'missing'}`
+				);
 			}
-			await loadRuntime(moduleUrl);
+			await loadRuntime(runtimeConfig);
 			postMessage({ load: true });
 			return;
 		}
 
 		stdinBufferLisp = new Int32Array(buffer);
-		const runtime = await loadRuntime(moduleUrl);
+		const runtime = await loadRuntime(runtimeConfig);
 		const compileCacheKey = JSON.stringify({
 			activePath,
 			code,

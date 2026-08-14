@@ -1,4 +1,7 @@
-import { resolveLispModuleUrl, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import {
+	resolveLispRuntimeAssetConfig,
+	type PlaygroundRuntimeAssets
+} from '$lib/playground/assets';
 import {
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
@@ -53,6 +56,7 @@ class Lisp implements Sandbox {
 	uid = 0;
 	exit = true;
 	moduleUrl = '';
+	private runtimeConfigKey = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -286,15 +290,22 @@ class Lisp implements Sandbox {
 				this.waitingForInput = false;
 				this.pendingEof = false;
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-				const nextModuleUrl = resolveLispModuleUrl(runtimeAssets, currentUrl);
+				const nextRuntimeConfig = resolveLispRuntimeAssetConfig(runtimeAssets, currentUrl);
 				if (!this.isOperationActive(activeOperation)) return;
-				if (!nextModuleUrl) {
+				if (
+					!nextRuntimeConfig.moduleUrl ||
+					!nextRuntimeConfig.manifestUrl ||
+					!/^[a-f0-9]{64}$/u.test(nextRuntimeConfig.manifestFingerprint)
+				) {
 					return rejectLoad(
-						'Lisp runtime is not configured. Set PUBLIC_WASM_LISP_MODULE_URL or runtimeAssets.lisp.moduleUrl.'
+						'Lisp runtime is not configured: moduleUrl, manifestUrl, and an explicit 64-character manifestFingerprint are required.'
 					);
 				}
-				const needsWorkerReset = !this.worker || this.moduleUrl !== nextModuleUrl;
-				this.moduleUrl = nextModuleUrl;
+				const nextRuntimeConfigKey = JSON.stringify(nextRuntimeConfig);
+				const needsWorkerReset =
+					!this.worker || this.runtimeConfigKey !== nextRuntimeConfigKey;
+				this.moduleUrl = nextRuntimeConfig.moduleUrl;
+				this.runtimeConfigKey = nextRuntimeConfigKey;
 				if (needsWorkerReset && this.worker) {
 					this.workerSession.reset();
 				}
@@ -335,7 +346,7 @@ class Lisp implements Sandbox {
 					worker.onmessage = handler;
 					worker.postMessage({
 						load: true,
-						moduleUrl: this.moduleUrl
+						runtimeConfig: nextRuntimeConfig
 					});
 				} else {
 					const worker = this.worker;

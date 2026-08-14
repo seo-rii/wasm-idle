@@ -4,7 +4,9 @@ import { readBufferedStdin } from './stdinBuffer';
 const workerInstances: MockWorker[] = [];
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
-		PUBLIC_WASM_LISP_MODULE_URL: ''
+		PUBLIC_WASM_LISP_MODULE_URL: '',
+		PUBLIC_WASM_LISP_MANIFEST_URL: '',
+		PUBLIC_WASM_LISP_MANIFEST_FINGERPRINT: ''
 	}
 }));
 let suppressAutoLoadAck = false;
@@ -64,6 +66,8 @@ describe('Lisp sandbox', () => {
 		vi.useRealTimers();
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_LISP_MODULE_URL = '/wasm-lisp/index.js';
+		publicEnv.PUBLIC_WASM_LISP_MANIFEST_URL = '';
+		publicEnv.PUBLIC_WASM_LISP_MANIFEST_FINGERPRINT = 'a'.repeat(64);
 		suppressAutoLoadAck = false;
 	});
 
@@ -89,7 +93,11 @@ describe('Lisp sandbox', () => {
 			1,
 			expect.objectContaining({
 				load: true,
-				moduleUrl: expect.stringMatching(/\/wasm-lisp\/index\.js$/)
+				runtimeConfig: expect.objectContaining({
+					moduleUrl: expect.stringMatching(/\/wasm-lisp\/index\.js$/),
+					manifestUrl: expect.stringMatching(/\/wasm-lisp\/runtime-manifest\.v2\.json$/),
+					manifestFingerprint: 'a'.repeat(64)
+				})
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
@@ -989,7 +997,12 @@ describe('Lisp sandbox', () => {
 			signal: controller.signal,
 			get limits() {
 				controller.abort(reason);
-				replacement = sandbox.load({ lisp: { moduleUrl: '/replacement/index.js' } });
+				replacement = sandbox.load({
+					lisp: {
+						moduleUrl: '/replacement/index.js',
+						manifestFingerprint: 'b'.repeat(64)
+					}
+				});
 				return undefined;
 			}
 		};
@@ -1042,7 +1055,12 @@ describe('Lisp sandbox', () => {
 			lisp: {
 				get moduleUrl() {
 					sandbox.terminate(reason);
-					replacement = sandbox.load({ lisp: { moduleUrl: '/replacement/index.js' } });
+					replacement = sandbox.load({
+						lisp: {
+							moduleUrl: '/replacement/index.js',
+							manifestFingerprint: 'b'.repeat(64)
+						}
+					});
 					return '/superseded/index.js';
 				}
 			}

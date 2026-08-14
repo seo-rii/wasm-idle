@@ -2385,6 +2385,8 @@
 		janetLspWorkerReceipt?: RuntimeAssetIntegrityEntry;
 		lispLspEnabled?: boolean;
 		lispLspModuleUrl?: string;
+		lispLspManifestUrl?: string;
+		lispLspManifestFingerprint?: string;
 		ocamlLspEnabled?: boolean;
 		ocamlLspModuleUrl?: string;
 		ocamlLspManifestUrl?: string;
@@ -2484,6 +2486,8 @@
 		janetLspWorkerReceipt,
 		lispLspEnabled = false,
 		lispLspModuleUrl,
+		lispLspManifestUrl,
+		lispLspManifestFingerprint,
 		ocamlLspEnabled = false,
 		ocamlLspModuleUrl,
 		ocamlLspManifestUrl,
@@ -2646,6 +2650,8 @@
 			janetLspEnabled ? janetLspManifestFingerprint || '' : '',
 			janetLspEnabled ? JSON.stringify(janetLspWorkerReceipt) : '',
 			lispLspEnabled ? lispLspModuleUrl || '' : '',
+			lispLspEnabled ? lispLspManifestUrl || '' : '',
+			lispLspEnabled ? lispLspManifestFingerprint || '' : '',
 			ocamlLspEnabled ? ocamlLspModuleUrl || '' : '',
 			ocamlLspEnabled ? ocamlLspManifestUrl || '' : '',
 			haskellLspEnabled ? haskellLspModuleUrl || '' : '',
@@ -3201,14 +3207,20 @@
 		},
 		{
 			languages: ['lisp'],
-			isEnabled: () => lispLspEnabled && !!lispLspModuleUrl,
+			isEnabled: () =>
+				lispLspEnabled &&
+				!!lispLspModuleUrl &&
+				!!lispLspManifestUrl &&
+				!!lispLspManifestFingerprint,
 			setStatus: (status) => (lispLspStatus = status),
 			load: async (currentUrl) => {
 				const { getLispLanguageServer } = await import('@wasm-idle/lsp/lisp');
 				return await getLispLanguageServer({
 					currentUrl,
 					lisp: {
-						moduleUrl: lispLspModuleUrl || ''
+						moduleUrl: lispLspModuleUrl || '',
+						manifestUrl: lispLspManifestUrl || '',
+						manifestFingerprint: lispLspManifestFingerprint || ''
 					},
 					onStatus: (status) => (lispLspStatus = status)
 				});

@@ -6,9 +6,12 @@ import {
 	type LspPosition,
 	type WorkerLanguageService
 } from '../lsp.js';
+import { LISP_RUNTIME_ASSET_PATHS, loadVerifiedLispRuntime } from '@wasm-idle/core';
 
 export interface LispWorkerOptions {
-	moduleUrl: string;
+	manifest: unknown;
+	manifestFingerprint: string;
+	storageAssets: Record<string, Uint8Array>;
 }
 
 interface LispCompilerDiagnostic {
@@ -37,7 +40,7 @@ interface LispCompiler {
 	}): Promise<LispCompilerResult>;
 }
 
-export type LoadLispCompiler = (moduleUrl: string) => Promise<LispCompiler>;
+export type LoadLispCompiler = (options: LispWorkerOptions) => Promise<LispCompiler>;
 
 const LISP_KEYWORDS = [
 	'and',
@@ -122,8 +125,26 @@ const diagnosticFor = (diagnostic: LispCompilerDiagnostic): LspDiagnostic => {
 	};
 };
 
-async function loadLispCompiler(moduleUrl: string): Promise<LispCompiler> {
-	const module = await import(/* @vite-ignore */ moduleUrl);
+async function loadLispCompiler(options: LispWorkerOptions): Promise<LispCompiler> {
+	if (
+		!options.storageAssets ||
+		typeof options.storageAssets !== 'object' ||
+		Object.keys(options.storageAssets).length !== LISP_RUNTIME_ASSET_PATHS.length
+	) {
+		throw new TypeError('Scheme language server requires the exact verified storage asset set');
+	}
+	const verified = await loadVerifiedLispRuntime({
+		manifest: options.manifest,
+		expectedFingerprint: options.manifestFingerprint,
+		loadStorageAsset: async (asset) => {
+			const bytes = options.storageAssets[asset.path];
+			if (!(bytes instanceof Uint8Array)) {
+				throw new TypeError(`Scheme language server is missing ${asset.path}`);
+			}
+			return bytes;
+		}
+	});
+	const module = verified.module;
 	const factory =
 		typeof module.createLispCompiler === 'function'
 			? module.createLispCompiler
@@ -133,7 +154,10 @@ async function loadLispCompiler(moduleUrl: string): Promise<LispCompiler> {
 	if (!factory) {
 		throw new Error('wasm-lisp module must export createLispCompiler or a default factory');
 	}
-	return await factory();
+	return (await factory({
+		compilerModule: verified.compilerModule,
+		compilerCoreModules: verified.compilerCoreModules
+	})) as LispCompiler;
 }
 
 const wordAt = (text: string, position: LspPosition) => {
@@ -162,11 +186,14 @@ export function createLispWorkerService(
 		},
 		async initialize(options, context) {
 			const config = (options || {}) as LispWorkerOptions;
-			if (!config.moduleUrl) {
-				throw new Error('Scheme language server requires a wasm-lisp moduleUrl');
+			if (!/^[a-f0-9]{64}$/u.test(config.manifestFingerprint || '')) {
+				throw new Error('Scheme language server requires a verified runtime manifest');
 			}
 			context.reportProgress('load-lisp-compiler');
-			compiler = await loadCompiler(config.moduleUrl);
+			const nextCompiler = await loadCompiler(config);
+			compiler = nextCompiler;
+			lastKey = '';
+			lastDiagnostics = [];
 		},
 		async diagnostics(document: LspDocument, context: LspDocumentContext) {
 			if (!compiler || !document.text.trim()) return [];

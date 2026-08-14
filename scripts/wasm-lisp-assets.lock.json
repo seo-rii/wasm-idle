@@ -1,0 +1,141 @@
+{
+	"schemaVersion": 1,
+	"profileId": "puppy-scheme-0.0.7-jco-1.19.0-preview2-shim-0.17.9",
+	"provenanceLevel": "pinned-release-artifact-and-receipted-derived-output",
+	"licenseExpression": "BSD-3-Clause AND Apache-2.0 WITH LLVM-exception",
+	"artifact": {
+		"kind": "github-release-asset",
+		"repository": "https://github.com/matthewp/puppy-scheme",
+		"release": "v0.0.7",
+		"revision": "315dcebacea3af8dbfa87285598210c71a4dca47",
+		"asset": "puppyc.wasm",
+		"assetUrl": "https://github.com/matthewp/puppy-scheme/releases/download/v0.0.7/puppyc.wasm",
+		"bytes": 568077,
+		"sha256": "5a1429982560c20d808def1c7b546ba846063c780db8c1f7249488a688b7964d",
+		"verifiedBuildInput": false,
+		"evidence": "release asset digest matches GitHub release metadata; binary-to-source attestation is unavailable"
+	},
+	"components": {
+		"jco": {
+			"name": "@bytecodealliance/jco",
+			"version": "1.19.0",
+			"packageManagerIntegrity": "sha512-I57cVbL24/u/zCBwHq7D9PyIMP81hFFYF4hL/pW5biRGVLQAZuwEAUaEmghOouyt77bU2ExqscP2wkLvr3nfDw==",
+			"repository": "https://github.com/bytecodealliance/jco",
+			"verifiedBuildInput": false,
+			"evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
+		},
+		"preview2Shim": {
+			"name": "@bytecodealliance/preview2-shim",
+			"version": "0.17.9",
+			"packageManagerIntegrity": "sha512-i0R3eQBe6PA/o/1EFE3Owe4In2rcccb6QxnjpntM/lPe3/duJ0bRQTVZM2Ufpo99X4eofGeltQUkape1C91FFA==",
+			"repository": "https://github.com/bytecodealliance/jco",
+			"verifiedBuildInput": false,
+			"evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
+		},
+		"typescript": {
+			"name": "typescript",
+			"version": "5.9.3",
+			"packageManagerIntegrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+			"repository": "https://github.com/microsoft/TypeScript",
+			"verifiedBuildInput": false,
+			"evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
+		},
+		"esbuild": {
+			"name": "esbuild",
+			"version": "0.28.0",
+			"packageManagerIntegrity": "sha512-sNR9MHpXSUV/XB4zmsFKN+QgVG82Cc7+/aaxJ8Adi8hyOac+EXptIp45QBPaVyX3N70664wRbTcLTOemCAnyqw==",
+			"repository": "https://github.com/evanw/esbuild",
+			"verifiedBuildInput": false,
+			"evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
+		}
+	},
+	"transformations": [
+		{
+			"id": "jco-transpile-async-browser",
+			"tool": "@bytecodealliance/jco",
+			"version": "1.19.0",
+			"arguments": [
+				"--name=puppyc",
+				"--instantiation=async",
+				"--no-typescript",
+				"--no-nodejs-compat"
+			]
+		},
+		{
+			"id": "bundle-browser-runtime-and-inline-jco-core-modules",
+			"tool": "esbuild",
+			"version": "0.28.0",
+			"arguments": [
+				"bundle",
+				"platform=browser",
+				"format=esm",
+				"minify",
+				"loader:.wasm=binary"
+			]
+		}
+	],
+	"legalInputs": {
+		"puppyScheme": {
+			"path": "LICENSE",
+			"spdx": "BSD-3-Clause",
+			"bytes": 1503,
+			"sha256": "b49405295eaaa10e64a639611bbde1f5549233efbcb26dfac7ef773a8cb08139"
+		},
+		"bytecodeAlliance": {
+			"path": "@bytecodealliance/preview2-shim/LICENSE",
+			"spdx": "Apache-2.0 WITH LLVM-exception",
+			"bytes": 12243,
+			"sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5"
+		}
+	},
+	"license": {
+		"path": "LICENSE",
+		"spdx": "BSD-3-Clause",
+		"bytes": 1503,
+		"sha256": "b49405295eaaa10e64a639611bbde1f5549233efbcb26dfac7ef773a8cb08139"
+	},
+	"notices": {
+		"path": "THIRD_PARTY_NOTICES.md",
+		"mediaType": "text/markdown",
+		"bytes": 14600,
+		"sha256": "9befeefcb4b194ec60e22d947dc5a61398e6399c73ba483a1fef51634bf0402c"
+	},
+	"metadata": {
+		"path": "runtime-build.json",
+		"mediaType": "application/json",
+		"bytes": 3735,
+		"sha256": "1169d672e013ad27fdcbd0bd135363d68daa8b7a937a81f69366bc00286a37d3"
+	},
+	"declaration": {
+		"path": "index.d.ts",
+		"mediaType": "text/typescript",
+		"bytes": 2336,
+		"sha256": "2bbec145d6e08cb7be4cff2a32551d312972700d8446d54e6850a28754b035eb"
+	},
+	"assets": [
+		{
+			"path": "index.js",
+			"mediaType": "text/javascript",
+			"bytes": 10549130,
+			"sha256": "9210ae726c227033f8df7d89f2e100d56aec63ed50c5e64d7dc8469788a7d973"
+		},
+		{
+			"path": "puppyc.core.wasm",
+			"mediaType": "application/wasm",
+			"bytes": 130,
+			"sha256": "1ca14713fa3bfc9f040b8f3eb501bbc5e689c1d38bacb4bf2f904cdc7c7d5a4f"
+		},
+		{
+			"path": "puppyc.core2.wasm",
+			"mediaType": "application/wasm",
+			"bytes": 565397,
+			"sha256": "43577ba9adba36ba5f331671daf13e8a3bac4f46bb45a637ca46794a9c7067e1"
+		},
+		{
+			"path": "puppyc.js",
+			"mediaType": "text/javascript",
+			"bytes": 189271,
+			"sha256": "6740934e72f7d98d2accab5559a792f1a861ca0702895fc02d939c166da9b8a6"
+		}
+	]
+}

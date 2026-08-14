@@ -203,6 +203,28 @@ export {
 	type RuntimeModuleAssetSpecifierRewriteRequest
 } from './module-asset-rewrite.js';
 export {
+	LISP_RUNTIME_ASSET_PATHS,
+	LISP_RUNTIME_EXECUTABLE_ASSET_PATHS,
+	LISP_RUNTIME_FINGERPRINT_DOMAIN,
+	LISP_RUNTIME_ID,
+	LISP_RUNTIME_MANIFEST_FORMAT,
+	loadVerifiedLispRuntime,
+	normalizeLispRuntimeManifest,
+	verifyLispRuntimeAssets,
+	type LispRuntimeAssetPath,
+	type LispRuntimeAssetRole,
+	type LispRuntimeComponentModule,
+	type LispRuntimeLogicalAsset,
+	type LispRuntimeManifest,
+	type LispRuntimeModuleEnvironment,
+	type LispRuntimeRootModule,
+	type LispRuntimeStorageAsset,
+	type LoadVerifiedLispRuntimeRequest,
+	type VerifiedLispRuntime,
+	type VerifiedLispRuntimeAssets,
+	type VerifyLispRuntimeAssetsRequest
+} from './lisp-runtime.js';
+export {
 	RuntimeResourceBudget,
 	type RuntimeResourceBudgetOptions,
 	type RuntimeResourceBudgetSnapshot,

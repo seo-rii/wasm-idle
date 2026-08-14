@@ -8,6 +8,7 @@ import {
 import { BUNDLED_CLANGD_ASSET_INTEGRITY } from './bundledClangdAssetIntegrity.js';
 import { BUNDLED_ELIXIR_ASSET_VERSION } from './bundledElixirRuntimeIntegrity.js';
 import { BUNDLED_GLEAM_MANIFEST_FINGERPRINT } from './bundledGleamRuntime.js';
+import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from './bundledLispRuntime.js';
 import {
 	BUNDLED_JANET_MANIFEST_FINGERPRINT,
 	BUNDLED_JANET_RUNNER_RECEIPT
@@ -498,6 +499,42 @@ export function resolveLispLanguageServerModuleUrl(
 		);
 	}
 	return resolveApplicationAssetUrl('/wasm-lisp/index.js', currentUrl);
+}
+
+export function resolveLispLanguageServerManifestUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'object' && options.lisp?.manifestUrl) {
+		return resolveFileUrl(options.lisp.manifestUrl, currentUrl);
+	}
+	const moduleUrl = resolveLispLanguageServerModuleUrl(options, currentUrl);
+	try {
+		const module = new URL(moduleUrl, currentUrl || undefined);
+		const manifest = new URL('runtime-manifest.v2.json', module);
+		manifest.search = module.search;
+		return manifest.href;
+	} catch {
+		return moduleUrl.replace(/index\.js(?:\?.*)?$/u, 'runtime-manifest.v2.json');
+	}
+}
+
+const usesCustomLispRuntimeUrls = (options: EditorLanguageServerOptions | undefined) =>
+	typeof options === 'object' && Boolean(options.lisp?.moduleUrl || options.lisp?.manifestUrl);
+
+export function resolveLispLanguageServerManifestFingerprint(
+	options: EditorLanguageServerOptions | undefined
+) {
+	const configured =
+		typeof options === 'object' ? options.lisp?.manifestFingerprint?.trim() || '' : '';
+	if (/^[a-f0-9]{64}$/u.test(configured)) return configured;
+	if (!configured && !usesCustomLispRuntimeUrls(options)) {
+		return BUNDLED_LISP_MANIFEST_FINGERPRINT;
+	}
+	throw new LanguageServerAssetConfigurationError(
+		'Scheme LSP',
+		'an explicit 64-character lisp.manifestFingerprint for custom runtime URLs'
+	);
 }
 
 export function resolveOctaveLanguageServerBaseUrl(

@@ -19,7 +19,7 @@ const compressedRuntimeAssetSamples = [
 	'wasm-dotnet/runtime/fsharp/FSharp.Compiler.Service.wasm',
 	'wasm-dotnet/runtime/vbnet/Microsoft.CodeAnalysis.VisualBasic.wasm',
 	'wasm-elixir/bundle.avm',
-	'wasm-lisp/vendor/jco/obj/js-component-bindgen-component.core.wasm',
+	'wasm-lisp/index.js',
 	'wasm-objectivec/foundation-headers.json',
 	'wasm-objectivec/libgnustep-base.a',
 	'wasm-objectivec/libgnustep-base.o',

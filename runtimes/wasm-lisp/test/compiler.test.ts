@@ -53,6 +53,49 @@ async function createCompilerWithFetch(fetchImpl: typeof fetch, maxAssetBytes: n
 }
 
 describe('wasm-lisp Puppy Scheme runtime', () => {
+	it('runs only from an injected compiler module and exact core module map', async () => {
+		const runtime = await loadRuntime();
+		const [compilerModule, coreModule, compilerCoreModule] = await Promise.all([
+			import(pathToFileURL(path.join(runtimeRoot, 'puppyc.js')).href),
+			WebAssembly.compile(await readFile(path.join(runtimeRoot, 'puppyc.core.wasm'))),
+			WebAssembly.compile(await readFile(path.join(runtimeRoot, 'puppyc.core2.wasm')))
+		]);
+		const fetchImpl = vi.fn(async () => {
+			throw new Error('verified injection must not fetch compiler assets');
+		});
+		const compiler = await runtime.createLispCompiler({
+			compilerModule,
+			compilerCoreModules: {
+				'puppyc.core.wasm': coreModule,
+				'puppyc.core2.wasm': compilerCoreModule
+			},
+			fetch: fetchImpl
+		});
+
+		const result = await compiler.compile({ code: '(display "verified") (newline)' });
+
+		expect(result.success).toBe(true);
+		expect(result.artifact?.component.byteLength).toBeGreaterThan(0);
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('rejects an incomplete injected compiler core module map', async () => {
+		const runtime = await loadRuntime();
+		const compilerModule = await import(
+			pathToFileURL(path.join(runtimeRoot, 'puppyc.js')).href
+		);
+		const coreModule = await WebAssembly.compile(
+			await readFile(path.join(runtimeRoot, 'puppyc.core.wasm'))
+		);
+
+		await expect(
+			runtime.createLispCompiler({
+				compilerModule,
+				compilerCoreModules: { 'puppyc.core.wasm': coreModule }
+			})
+		).rejects.toThrow('incomplete or invalid');
+	});
+
 	it('rejects a pre-aborted compile without fetching a core module', async () => {
 		const fetchImpl = vi.fn(async () => {
 			throw new Error('unexpected core-module fetch');

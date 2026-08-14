@@ -698,6 +698,10 @@ describe('example route debug actions', () => {
 
 	it('surfaces Lisp through the Puppy Scheme wasm compiler contract', () => {
 		expect(applicationRuntimeAssets.lisp?.moduleUrl).toContain('/wasm-lisp/index.js?');
+		expect(applicationRuntimeAssets.lisp?.manifestUrl).toContain(
+			'/wasm-lisp/runtime-manifest.v2.json?'
+		);
+		expect(applicationRuntimeAssets.lisp?.manifestFingerprint).toMatch(/^[a-f0-9]{64}$/u);
 		expectPlaygroundLanguage('LISP');
 		expect(source).toMatch(/lisp: 'LISP'/);
 		expect(source).toMatch(/scheme: 'LISP'/);

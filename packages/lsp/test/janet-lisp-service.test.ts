@@ -81,6 +81,12 @@ describe('createJanetWorkerService', () => {
 });
 
 describe('createLispWorkerService', () => {
+	const verifiedRuntime = {
+		manifest: { format: 'fixture' },
+		manifestFingerprint: 'a'.repeat(64),
+		storageAssets: {}
+	};
+
 	it('uses the wasm-lisp compiler for diagnostics, completion, hover, and symbols', async () => {
 		const compile = vi.fn(async () => ({
 			success: false,
@@ -103,12 +109,7 @@ describe('createLispWorkerService', () => {
 		};
 		const context = contextFor(document);
 
-		await service.initialize?.(
-			{
-				moduleUrl: 'https://static.example.com/wasm-lisp/index.js'
-			},
-			context
-		);
+		await service.initialize?.(verifiedRuntime, context);
 
 		const diagnostics = await service.diagnostics?.(document, context);
 		const completions = await service.completion?.(
@@ -159,7 +160,7 @@ describe('createLispWorkerService', () => {
 		};
 		const context = contextFor(document);
 
-		await service.initialize?.({ moduleUrl: '/wasm-lisp/index.js' }, context);
+		await service.initialize?.(verifiedRuntime, context);
 		const diagnostics = await service.diagnostics?.(document, context);
 
 		expect(diagnostics).toEqual([

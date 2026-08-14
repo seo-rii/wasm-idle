@@ -108,6 +108,8 @@ export interface EditorLanguageServerRuntimeOptions {
 	};
 	lisp?: {
 		moduleUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
 	};
 	octave?: {
 		baseUrl?: string;

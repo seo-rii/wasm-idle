@@ -20,6 +20,8 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_ZIG_COMPILER_URL: '',
 		PUBLIC_WASM_ZIG_STDLIB_URL: '',
 		PUBLIC_WASM_LISP_MODULE_URL: '',
+		PUBLIC_WASM_LISP_MANIFEST_URL: '',
+		PUBLIC_WASM_LISP_MANIFEST_FINGERPRINT: '',
 		PUBLIC_WASM_HASKELL_MODULE_URL: '',
 		PUBLIC_WASM_HASKELL_ROOTFS_URL: '',
 		PUBLIC_WASM_HASKELL_BSDTAR_URL: '',
@@ -929,6 +931,38 @@ describe('runtime asset config resolution', () => {
 		expect(resolveLispModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
 			'https://example.com/absproxy/5173/wasm-lisp/index.js'
 		);
+	});
+
+	it('pins bundled Lisp module and manifest URLs to one fingerprint', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_LISP_MODULE_URL = '';
+		const [{ resolveLispRuntimeAssetConfig }, { WASM_LISP_ASSET_VERSION }] = await Promise.all([
+			import('./assets'),
+			import('./wasmLispVersion')
+		]);
+
+		expect(resolveLispRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
+			moduleUrl: 'https://example.com/absproxy/5173/wasm-lisp/index.js',
+			manifestUrl: 'https://example.com/absproxy/5173/wasm-lisp/runtime-manifest.v2.json',
+			manifestFingerprint: WASM_LISP_ASSET_VERSION
+		});
+	});
+
+	it('does not trust a custom Lisp module without an explicit fingerprint', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_LISP_MODULE_URL = '';
+		const { resolveLispRuntimeAssetConfig } = await import('./assets');
+
+		expect(
+			resolveLispRuntimeAssetConfig(
+				{ lisp: { moduleUrl: '/custom/index.js?v=profile' } },
+				'https://example.com/app'
+			)
+		).toEqual({
+			moduleUrl: 'https://example.com/custom/index.js?v=profile',
+			manifestUrl: 'https://example.com/custom/runtime-manifest.v2.json?v=profile',
+			manifestFingerprint: ''
+		});
 	});
 
 	it('prefers an explicit Ruby wasm url over the public env override', async () => {

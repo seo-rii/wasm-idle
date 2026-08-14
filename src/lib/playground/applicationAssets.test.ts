@@ -30,6 +30,7 @@ import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleam
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
 import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
+import { WASM_LISP_ASSET_VERSION } from './wasmLispVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
@@ -138,6 +139,11 @@ describe('application runtime asset root', () => {
 		expect(assets.go).toEqual({
 			compilerUrl: `/foo/bar/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`,
 			manifestUrl: `/foo/bar/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`
+		});
+		expect(assets.lisp).toEqual({
+			moduleUrl: `/foo/bar/wasm-lisp/index.js?v=${WASM_LISP_ASSET_VERSION}`,
+			manifestUrl: `/foo/bar/wasm-lisp/runtime-manifest.v2.json?v=${WASM_LISP_ASSET_VERSION}`,
+			manifestFingerprint: WASM_LISP_ASSET_VERSION
 		});
 		expect(assets.prolog).toEqual({
 			baseUrl: '/foo/bar/wasm-prolog/',
@@ -443,6 +449,9 @@ describe('application runtime asset root', () => {
 			dIntegrity: expect.any(String),
 			elixirIntegrity: expect.any(String),
 			erlangIntegrity: expect.any(String),
+			lispModuleUrl: assets.lisp?.moduleUrl,
+			lispManifestUrl: assets.lisp?.manifestUrl,
+			lispManifestFingerprint: assets.lisp?.manifestFingerprint,
 			prologManifestUrl: assets.prolog?.manifestUrl,
 			prologManifestFingerprint: assets.prolog?.manifestFingerprint,
 			prologWorkerReceipt: expect.any(String),

@@ -1,5 +1,5 @@
 {
-  "format": "wasm-lisp-runtime-build-v2",
+  "format": "wasm-lisp-runtime-manifest-v2",
   "runtime": "puppy-scheme",
   "profileId": "puppy-scheme-0.0.7-jco-1.19.0-preview2-shim-0.17.9",
   "provenanceLevel": "pinned-release-artifact-and-receipted-derived-output",
@@ -75,18 +75,83 @@
       ]
     }
   ],
-  "legalInputs": {
-    "puppyScheme": {
-      "path": "LICENSE",
-      "spdx": "BSD-3-Clause",
-      "bytes": 1503,
-      "sha256": "b49405295eaaa10e64a639611bbde1f5549233efbcb26dfac7ef773a8cb08139"
+  "license": {
+    "path": "LICENSE",
+    "spdx": "BSD-3-Clause",
+    "size": 1503,
+    "sha256": "b49405295eaaa10e64a639611bbde1f5549233efbcb26dfac7ef773a8cb08139"
+  },
+  "notices": {
+    "path": "THIRD_PARTY_NOTICES.md",
+    "mediaType": "text/markdown",
+    "size": 14600,
+    "sha256": "9befeefcb4b194ec60e22d947dc5a61398e6399c73ba483a1fef51634bf0402c"
+  },
+  "metadata": {
+    "path": "runtime-build.json",
+    "mediaType": "application/json",
+    "size": 3735,
+    "sha256": "1169d672e013ad27fdcbd0bd135363d68daa8b7a937a81f69366bc00286a37d3"
+  },
+  "assets": [
+    {
+      "path": "index.js",
+      "mediaType": "text/javascript",
+      "role": "runtime",
+      "size": 10549130,
+      "sha256": "9210ae726c227033f8df7d89f2e100d56aec63ed50c5e64d7dc8469788a7d973"
     },
-    "bytecodeAlliance": {
-      "path": "@bytecodealliance/preview2-shim/LICENSE",
-      "spdx": "Apache-2.0 WITH LLVM-exception",
-      "bytes": 12243,
-      "sha256": "268872b9816f90fd8e85db5a28d33f8150ebb8dd016653fb39ef1f94f2686bc5"
+    {
+      "path": "puppyc.core.wasm",
+      "mediaType": "application/wasm",
+      "role": "runtime",
+      "size": 130,
+      "sha256": "1ca14713fa3bfc9f040b8f3eb501bbc5e689c1d38bacb4bf2f904cdc7c7d5a4f"
+    },
+    {
+      "path": "puppyc.core2.wasm",
+      "mediaType": "application/wasm",
+      "role": "runtime",
+      "size": 565397,
+      "sha256": "43577ba9adba36ba5f331671daf13e8a3bac4f46bb45a637ca46794a9c7067e1"
+    },
+    {
+      "path": "puppyc.js",
+      "mediaType": "text/javascript",
+      "role": "runtime",
+      "size": 189271,
+      "sha256": "6740934e72f7d98d2accab5559a792f1a861ca0702895fc02d939c166da9b8a6"
     }
-  }
+  ],
+  "storage": [
+    {
+      "path": "index.js.gz",
+      "logicalPath": "index.js",
+      "encoding": "gzip",
+      "size": 3406480,
+      "sha256": "08dd4b1e3ca4af0e59ceba617a58d9bdee06045cf5fe32e5c4fb91fdd0479144"
+    },
+    {
+      "path": "puppyc.core.wasm",
+      "logicalPath": "puppyc.core.wasm",
+      "encoding": "identity",
+      "size": 130,
+      "sha256": "1ca14713fa3bfc9f040b8f3eb501bbc5e689c1d38bacb4bf2f904cdc7c7d5a4f"
+    },
+    {
+      "path": "puppyc.core2.wasm.gz",
+      "logicalPath": "puppyc.core2.wasm",
+      "encoding": "gzip",
+      "size": 79941,
+      "sha256": "5844269ccd9593813df9c1288e9b0388962e24e07c5aebe332307ec3c19d5e71"
+    },
+    {
+      "path": "puppyc.js",
+      "logicalPath": "puppyc.js",
+      "encoding": "identity",
+      "size": 189271,
+      "sha256": "6740934e72f7d98d2accab5559a792f1a861ca0702895fc02d939c166da9b8a6"
+    }
+  ],
+  "fingerprint": "ed597352c039a002b900c402ac9c63efb6e375ce90438c202fde6838f1c4b0b4"
 }

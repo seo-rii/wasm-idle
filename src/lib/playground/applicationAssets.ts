@@ -240,7 +240,9 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			integrity: WASM_ZIG_ASSET_RECEIPTS
 		},
 		lisp: {
-			moduleUrl: asset('wasm-lisp/index.js', WASM_LISP_ASSET_VERSION)
+			moduleUrl: asset('wasm-lisp/index.js', WASM_LISP_ASSET_VERSION),
+			manifestUrl: asset('wasm-lisp/runtime-manifest.v2.json', WASM_LISP_ASSET_VERSION),
+			manifestFingerprint: WASM_LISP_ASSET_VERSION
 		},
 		ruby: {
 			moduleUrl: asset('wasm-ruby/runtime.mjs', RUBY_RUNTIME_ASSET_VERSION),
