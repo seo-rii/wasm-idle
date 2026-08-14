@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { HASKELL_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
 
 import {
 	createHaskellWorkerService,
@@ -105,5 +106,61 @@ describe('createHaskellWorkerService', () => {
 				message: 'Variable not in scope: missing'
 			}
 		]);
+	});
+
+	it('preserves the active compiler, arguments, and diagnostics cache after failed reinitialization', async () => {
+		const compile = vi.fn(async () => ({
+			success: true,
+			diagnostics: []
+		}));
+		const loadCompiler = vi
+			.fn()
+			.mockResolvedValueOnce({ compile })
+			.mockRejectedValueOnce(new Error('replacement integrity failure'));
+		const service = createHaskellWorkerService(loadCompiler);
+		const context: LspDocumentContext = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		const document: LspDocument = {
+			uri: 'file:///workspace/main.hs',
+			languageId: 'haskell',
+			version: 1,
+			text: 'main = pure ()\n'
+		};
+
+		await service.initialize?.(
+			{
+				moduleUrl: 'https://static.example.com/wasm-haskell/dyld.mjs',
+				rootfsUrl: 'https://static.example.com/wasm-haskell/rootfs.tar.zst',
+				bsdtarUrl: 'https://static.example.com/wasm-haskell/bsdtar.wasm',
+				integrity: HASKELL_RUNTIME_ASSET_RECEIPTS,
+				ghcArgs: '-Wall'
+			},
+			context
+		);
+		await service.diagnostics?.(document, context);
+
+		await expect(
+			service.initialize?.(
+				{
+					moduleUrl: 'https://replacement.example.com/dyld.mjs',
+					rootfsUrl: 'https://replacement.example.com/rootfs.tar.zst',
+					bsdtarUrl: 'https://replacement.example.com/bsdtar.wasm',
+					integrity: HASKELL_RUNTIME_ASSET_RECEIPTS,
+					ghcArgs: '-Werror'
+				},
+				context
+			)
+		).rejects.toThrow('replacement integrity failure');
+
+		await service.diagnostics?.(document, context);
+		expect(compile).toHaveBeenCalledOnce();
+
+		const changedDocument = { ...document, version: 2, text: 'main = print 1\n' };
+		await service.diagnostics?.(changedDocument, context);
+		expect(compile).toHaveBeenCalledTimes(2);
+		expect(compile.mock.calls[1][0].ghcArgs).toBe('-Wall');
 	});
 });

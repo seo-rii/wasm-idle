@@ -291,6 +291,9 @@
 	const haskellLspBsdtarUrl = $derived(
 		haskellLspEnabled ? runtimeAssets.haskell?.bsdtarUrl : undefined
 	);
+	const haskellLspIntegrity = $derived(
+		haskellLspEnabled ? runtimeAssets.haskell?.integrity : undefined
+	);
 	const fortranLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'fortran');
 	const fortranLspAnalyzerUrl = $derived(
 		fortranLspEnabled ? runtimeAssets.fortran?.analyzerUrl : undefined
@@ -2938,6 +2941,7 @@
 				{haskellLspModuleUrl}
 				{haskellLspRootfsUrl}
 				{haskellLspBsdtarUrl}
+				{haskellLspIntegrity}
 				{fortranLspAnalyzerUrl}
 				{assemblyScriptLspModuleUrl}
 				{duckDbLspModuleUrl}

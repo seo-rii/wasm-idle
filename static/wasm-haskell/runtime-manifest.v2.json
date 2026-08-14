@@ -1,0 +1,203 @@
+{
+  "format": "wasm-haskell-runtime-manifest-v2",
+  "runtime": "ghc-in-browser",
+  "profileId": "ghc-in-browser-9.14.0.20251031",
+  "provenanceLevel": "commit-and-receipt-pinned-unattested-binaries",
+  "licenseExpression": "NOASSERTION AND BSD-2-Clause AND (MIT OR Apache-2.0)",
+  "upstream": {
+    "ghcInBrowser": {
+      "repository": "https://github.com/haskell-wasm/ghc-in-browser",
+      "revision": "c57d8b6e37737d662aed05cab88f867918307053",
+      "artifactCommit": "https://github.com/haskell-wasm/ghc-in-browser/commit/c57d8b6e37737d662aed05cab88f867918307053",
+      "verifiedBuildInput": false,
+      "evidence": "orphan GitHub Pages artifact commit with byte receipts but no source revision, license inventory, SBOM, or reproducible build recipe",
+      "assets": [
+        {
+          "path": "dyld.mjs",
+          "url": "https://raw.githubusercontent.com/haskell-wasm/ghc-in-browser/c57d8b6e37737d662aed05cab88f867918307053/dyld.mjs",
+          "mediaType": "text/javascript",
+          "bytes": 47332,
+          "sha256": "f84b006738629bd222cb79f30b3995e0a82a63bada0a0fac6a9964e6096fdc5c"
+        },
+        {
+          "path": "post-link.mjs",
+          "url": "https://raw.githubusercontent.com/haskell-wasm/ghc-in-browser/c57d8b6e37737d662aed05cab88f867918307053/post-link.mjs",
+          "mediaType": "text/javascript",
+          "bytes": 5703,
+          "sha256": "7189504ba5946eaaafd0154b95b220e8acd851865e59c32766029d63a64a7d2f"
+        },
+        {
+          "path": "prelude.mjs",
+          "url": "https://raw.githubusercontent.com/haskell-wasm/ghc-in-browser/c57d8b6e37737d662aed05cab88f867918307053/prelude.mjs",
+          "mediaType": "text/javascript",
+          "bytes": 2805,
+          "sha256": "6858d915bc1850264ffe558aef9da2e3a0e569416439ee7dcf19932befd550e3"
+        },
+        {
+          "path": "rootfs.tar.zst",
+          "url": "https://raw.githubusercontent.com/haskell-wasm/ghc-in-browser/c57d8b6e37737d662aed05cab88f867918307053/rootfs.tar.zst",
+          "mediaType": "application/zstd",
+          "bytes": 49091550,
+          "sha256": "35f68f56fdb72111f150ba05ad31efed2f6fc77ee7026fb4b197ae7901a67adf"
+        }
+      ]
+    },
+    "bsdtar": {
+      "repository": "https://github.com/haskell-wasm/bsdtar-wasm",
+      "revision": "012117de366c13285036f37b4fcd9a59d1a06fbb",
+      "workflowRun": "https://github.com/haskell-wasm/bsdtar-wasm/actions/runs/26876114744",
+      "artifactApiUrl": "https://api.github.com/repos/haskell-wasm/bsdtar-wasm/actions/artifacts/7380828130/zip",
+      "downloadUrl": "https://haskell-wasm.github.io/bsdtar-wasm/bsdtar.wasm",
+      "verifiedBuildInput": false,
+      "evidence": "successful Pages artifact sha256:aae28968f2c666d90a743fc1d3814971123ea1f76fa344974eab79103927a177; workflow fetches mutable dependency branches and provides no binary-to-source reproducibility attestation",
+      "asset": {
+        "path": "bsdtar.wasm",
+        "url": "https://haskell-wasm.github.io/bsdtar-wasm/bsdtar.wasm",
+        "mediaType": "application/wasm",
+        "bytes": 1240004,
+        "sha256": "e13ebb15ca0971f6629a6313bc043c532dd9be3a0e6bb0b7f8a395de835ad0c0"
+      }
+    }
+  },
+  "packages": [
+    {
+      "name": "@bjorn3/browser_wasi_shim",
+      "version": "0.4.2",
+      "requestedRange": "^0.4.2",
+      "tarballUrl": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz",
+      "integrity": "sha512-/iHkCVUG3VbcbmEHn5iIUpIrh7a7WPiwZ3sHy4HZKZzBdSadwdddYDZAII2zBvQYV0Lfi8naZngPCN7WPHI/hA==",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/bjorn3/browser_wasi_shim",
+      "revision": "4a55f2a519d0ddfa7e4609c42e0c9769c37c9ae8",
+      "files": 26,
+      "bytes": 114555,
+      "treeSha256": "4454a5e0d68941440b947fdb705f8aa8fca789c5a3d040902bfe2cda8ffde248"
+    },
+    {
+      "name": "vite",
+      "version": "8.0.8",
+      "requestedRange": "^8.0.8",
+      "tarballUrl": "https://registry.npmjs.org/vite/-/vite-8.0.8.tgz",
+      "integrity": "sha512-dbU7/iLVa8KZALJyLOBOQ88nOXtNG8vxKuOT4I2mD+Ya70KPceF4IAmDsmU0h1Qsn5bPrvsY9HJstCRh3hG6Uw==",
+      "license": "MIT",
+      "repository": "https://github.com/vitejs/vite",
+      "revision": "v8.0.8",
+      "files": 42,
+      "bytes": 2185148,
+      "treeSha256": "63becb5aef9c86b925810f4298df7c05905aa0ff74e6b8ee3b98991ca6a25a25"
+    }
+  ],
+  "producer": {
+    "script": {
+      "path": "scripts/sync-wasm-haskell.mjs",
+      "bytes": 48742,
+      "sha256": "db104ec376e1cffb9f5d05273c6659756432e1defc2adf37e50346074eef6021"
+    }
+  },
+  "transformations": [
+    {
+      "id": "wasm-idle-exact-five-seam-dyld-browser-stdin-patch",
+      "input": "dyld.mjs",
+      "output": "dyld.mjs"
+    },
+    {
+      "id": "vite-8-es2022-single-module-bundle-fixed-browser-filename-stable-regions",
+      "inputs": [
+        "dyld.mjs",
+        "prelude.mjs",
+        "post-link.mjs",
+        "@bjorn3/browser_wasi_shim/dist/*.js"
+      ],
+      "output": "dyld.mjs"
+    },
+    {
+      "id": "node-zlib-gzip-level-9",
+      "input": "bsdtar.wasm",
+      "output": "bsdtar.wasm.gz"
+    }
+  ],
+  "legalFiles": [
+    {
+      "sourcePath": "scripts/wasm-haskell-third-party-notices.md",
+      "targetPath": "THIRD_PARTY_NOTICES.md",
+      "mediaType": "text/markdown",
+      "spdx": "LicenseRef-Provenance-Notice",
+      "bytes": 1849,
+      "sha256": "5f953326b3237b12ff5e572372b18e26a7e4402bd56c55eb38ea3cc2a8eae1e1"
+    },
+    {
+      "sourcePath": "scripts/wasm-haskell-bsdtar-license.txt",
+      "targetPath": "licenses/bsdtar-wasm/LICENSE",
+      "mediaType": "text/plain",
+      "spdx": "BSD-2-Clause",
+      "bytes": 1283,
+      "sha256": "3a6cacc35c8632a9676fb003f720571b60ff3267636acd4fe822667ad8d0659f"
+    },
+    {
+      "sourcePath": "node_modules/@bjorn3/browser_wasi_shim/LICENSE-APACHE",
+      "targetPath": "licenses/browser-wasi-shim/LICENSE-APACHE",
+      "mediaType": "text/plain",
+      "spdx": "Apache-2.0",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "sourcePath": "node_modules/@bjorn3/browser_wasi_shim/LICENSE-MIT",
+      "targetPath": "licenses/browser-wasi-shim/LICENSE-MIT",
+      "mediaType": "text/plain",
+      "spdx": "MIT",
+      "bytes": 1023,
+      "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+    }
+  ],
+  "metadata": {
+    "path": "runtime-build.json",
+    "mediaType": "application/json",
+    "size": 8136,
+    "sha256": "e0a6ed90052a61c89c04796fc6cbd067836e093da80a3a3fe15eddba455ae7d7"
+  },
+  "assets": [
+    {
+      "path": "dyld.mjs",
+      "mediaType": "text/javascript",
+      "size": 82322,
+      "sha256": "cc1835b8530f71e29727a71648b635a5cf28f46ed84451f2de17b194d60033d4"
+    },
+    {
+      "path": "rootfs.tar.zst",
+      "mediaType": "application/zstd",
+      "size": 49091550,
+      "sha256": "35f68f56fdb72111f150ba05ad31efed2f6fc77ee7026fb4b197ae7901a67adf"
+    },
+    {
+      "path": "bsdtar.wasm",
+      "mediaType": "application/wasm",
+      "size": 1240004,
+      "sha256": "e13ebb15ca0971f6629a6313bc043c532dd9be3a0e6bb0b7f8a395de835ad0c0"
+    }
+  ],
+  "storage": [
+    {
+      "path": "dyld.mjs",
+      "logicalPath": "dyld.mjs",
+      "encoding": "identity",
+      "size": 82322,
+      "sha256": "cc1835b8530f71e29727a71648b635a5cf28f46ed84451f2de17b194d60033d4"
+    },
+    {
+      "path": "rootfs.tar.zst",
+      "logicalPath": "rootfs.tar.zst",
+      "encoding": "identity",
+      "size": 49091550,
+      "sha256": "35f68f56fdb72111f150ba05ad31efed2f6fc77ee7026fb4b197ae7901a67adf"
+    },
+    {
+      "path": "bsdtar.wasm.gz",
+      "logicalPath": "bsdtar.wasm",
+      "encoding": "gzip",
+      "size": 417731,
+      "sha256": "1f33a412ff4a5af22a9bcf66021c0b090cb9fb229f599ae5e9aa35c7bfc3bb7a"
+    }
+  ],
+  "fingerprint": "ad4051158177810dbfedd9293ff0fd62ec898399f5f558d0fc420a94ff0ba6cb"
+}

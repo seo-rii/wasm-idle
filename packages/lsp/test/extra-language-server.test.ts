@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RUBY_RUNTIME_ASSET_PATH } from '@wasm-idle/core';
+import { HASKELL_RUNTIME_ASSET_RECEIPTS, RUBY_RUNTIME_ASSET_PATH } from '@wasm-idle/core';
 import {
 	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
 	BUNDLED_PROLOG_RUNNER_RECEIPT
@@ -529,6 +529,7 @@ describe('additional language server workers', () => {
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-haskell/dyld.mjs',
 				rootfsUrl: 'https://static.example.com/repl_20240807/wasm-haskell/rootfs.tar.zst',
 				bsdtarUrl: 'https://static.example.com/repl_20240807/wasm-haskell/bsdtar.wasm',
+				integrity: HASKELL_RUNTIME_ASSET_RECEIPTS,
 				mainSoPath: undefined,
 				searchDirs: undefined,
 				ghcArgs: '-fno-code -Wall -Wcompat'

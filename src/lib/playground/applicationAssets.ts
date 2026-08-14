@@ -36,6 +36,7 @@ import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVer
 import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
 import {
+	HASKELL_RUNTIME_ASSET_RECEIPTS,
 	RUBY_RUNTIME_ASSET_PATH,
 	RUBY_RUNTIME_ASSET_RECEIPTS,
 	RUBY_RUNTIME_ASSET_VERSION
@@ -252,7 +253,8 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		haskell: {
 			moduleUrl: asset('wasm-haskell/dyld.mjs', WASM_HASKELL_ASSET_VERSION),
 			rootfsUrl: asset('wasm-haskell/rootfs.tar.zst', WASM_HASKELL_ASSET_VERSION),
-			bsdtarUrl: asset('wasm-haskell/bsdtar.wasm', WASM_HASKELL_ASSET_VERSION)
+			bsdtarUrl: asset('wasm-haskell/bsdtar.wasm', WASM_HASKELL_ASSET_VERSION),
+			integrity: HASKELL_RUNTIME_ASSET_RECEIPTS
 		},
 		fortran: {
 			baseUrl: asset('wasm-fortran/'),

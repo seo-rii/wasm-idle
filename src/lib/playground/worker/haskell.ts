@@ -7,9 +7,13 @@ import {
 	wasi
 } from '@bjorn3/browser_wasi_shim';
 import { installWasiExtractionQuota } from '@wasm-idle/llvm-core';
+import {
+	loadVerifiedHaskellRuntimeAssets,
+	snapshotHaskellRuntimeAssetConfig,
+	type HaskellRuntimeAssetReceipts
+} from '$lib/playground/haskellAssets';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
-import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
 
 declare const self: any;
 
@@ -22,6 +26,8 @@ type HaskellRuntime = {
 let moduleUrl = '';
 let rootfsUrl = '';
 let bsdtarUrl = '';
+let integrity: HaskellRuntimeAssetReceipts | null = null;
+let maxAssetBytes = 128 * 1024 * 1024;
 let mainSoPath = '/tmp/libplayground001.so';
 let searchDirs = ['/tmp/clib', '/tmp/hslib/lib/wasm32-wasi-ghc-9.14.0.20251031-inplace'];
 let loadedAssetKey = '';
@@ -139,20 +145,6 @@ function formatError(error: unknown) {
 	return error instanceof Error ? error.message : String(error);
 }
 
-async function fetchBytes(url: string, label: string, progressStart: number, progressEnd: number) {
-	const data = await fetchRuntimeAssetBytes({
-		url,
-		label,
-		onProgress: ({ loaded, total }) => {
-			if (total && total > 0) {
-				postProgress(progressStart + ((progressEnd - progressStart) * loaded) / total);
-			}
-		}
-	});
-	postProgress(progressEnd);
-	return data;
-}
-
 function instantiateResult(
 	result: WebAssembly.Instance | WebAssembly.WebAssemblyInstantiatedSource
 ) {
@@ -202,8 +194,7 @@ function materializeRootfsSymlinks(rootfs: PreopenDirectory, pendingSymlinks: Pe
 	}
 }
 
-async function unpackRootfs() {
-	postProgress(5);
+async function unpackRootfs(bsdtarBytes: Uint8Array, rootfsBytes: Uint8Array) {
 	const rootfs = new PreopenDirectory('/', new Map());
 	const pendingSymlinks: PendingSymlink[] = [];
 	let tarOutput = '';
@@ -225,10 +216,6 @@ async function unpackRootfs() {
 		{ debug: false }
 	);
 	installRootfsExtractionWasiPatches(tarWasi, pendingSymlinks);
-	const [bsdtarBytes, rootfsBytes] = await Promise.all([
-		fetchBytes(bsdtarUrl, 'Haskell rootfs extractor', 5, 15),
-		fetchBytes(rootfsUrl, 'Haskell GHC rootfs', 15, 70)
-	]);
 	postProgress(75);
 	const tarInstance = instantiateResult(
 		await WebAssembly.instantiate(bsdtarBytes, {
@@ -246,7 +233,7 @@ async function unpackRootfs() {
 }
 
 async function createRuntime() {
-	if (!moduleUrl || !rootfsUrl || !bsdtarUrl) {
+	if (!moduleUrl || !rootfsUrl || !bsdtarUrl || !integrity) {
 		throw new Error(
 			'Haskell runtime is not configured. Set PUBLIC_WASM_HASKELL_MODULE_URL, PUBLIC_WASM_HASKELL_ROOTFS_URL, and PUBLIC_WASM_HASKELL_BSDTAR_URL, or runtimeAssets.haskell.'
 		);
@@ -255,16 +242,47 @@ async function createRuntime() {
 		moduleUrl,
 		rootfsUrl,
 		bsdtarUrl,
+		integrity,
+		maxAssetBytes,
 		mainSoPath,
 		searchDirs
 	});
 	if (loadedAssetKey === assetKey && runtimePromise) {
 		return await runtimePromise;
 	}
-	loadedAssetKey = assetKey;
-	runtimePromise = (async () => {
-		const rootfs = await unpackRootfs();
-		const dyldModule = await import(/* @vite-ignore */ moduleUrl);
+	const pendingRuntime = (async () => {
+		postProgress(5);
+		const verified = await loadVerifiedHaskellRuntimeAssets(
+			{
+				moduleUrl,
+				rootfsUrl,
+				bsdtarUrl,
+				integrity,
+				maxAssetBytes
+			},
+			{
+				onProgress({ asset, loaded, total }) {
+					if (!total || total <= 0) return;
+					const [start, end] =
+						asset === 'dyld.mjs'
+							? [5, 15]
+							: asset === 'bsdtar.wasm'
+								? [15, 25]
+								: [25, 70];
+					postProgress(start + ((end - start) * loaded) / total);
+				}
+			}
+		);
+		const rootfs = await unpackRootfs(verified.bsdtarBytes, verified.rootfsBytes);
+		const verifiedModuleUrl = URL.createObjectURL(
+			new Blob([verified.moduleSource], { type: 'text/javascript' })
+		);
+		let dyldModule: Record<string, any>;
+		try {
+			dyldModule = await import(/* @vite-ignore */ verifiedModuleUrl);
+		} finally {
+			URL.revokeObjectURL(verifiedModuleUrl);
+		}
 		if (
 			typeof dyldModule.main !== 'function' ||
 			typeof dyldModule.DyLDBrowserHost !== 'function'
@@ -299,7 +317,17 @@ async function createRuntime() {
 		postProgress(100);
 		return { mainFunc, rootfs, stdin };
 	})();
-	return await runtimePromise;
+	loadedAssetKey = assetKey;
+	runtimePromise = pendingRuntime;
+	try {
+		return await pendingRuntime;
+	} catch (error) {
+		if (runtimePromise === pendingRuntime) {
+			runtimePromise = null;
+			loadedAssetKey = '';
+		}
+		throw error;
+	}
 }
 
 export function parseHaskellDiagnostics(output: string) {
@@ -343,6 +371,8 @@ self.onmessage = async (event: { data: any }) => {
 		moduleUrl: nextModuleUrl,
 		rootfsUrl: nextRootfsUrl,
 		bsdtarUrl: nextBsdtarUrl,
+		integrity: nextIntegrity,
+		maxAssetBytes: nextMaxAssetBytes,
 		mainSoPath: nextMainSoPath,
 		searchDirs: nextSearchDirs,
 		code,
@@ -356,9 +386,18 @@ self.onmessage = async (event: { data: any }) => {
 	} = event.data;
 	try {
 		if (load) {
-			moduleUrl = nextModuleUrl;
-			rootfsUrl = nextRootfsUrl;
-			bsdtarUrl = nextBsdtarUrl;
+			const nextConfig = snapshotHaskellRuntimeAssetConfig({
+				moduleUrl: nextModuleUrl,
+				rootfsUrl: nextRootfsUrl,
+				bsdtarUrl: nextBsdtarUrl,
+				integrity: nextIntegrity,
+				maxAssetBytes: nextMaxAssetBytes
+			});
+			moduleUrl = nextConfig.moduleUrl;
+			rootfsUrl = nextConfig.rootfsUrl;
+			bsdtarUrl = nextConfig.bsdtarUrl;
+			integrity = nextConfig.integrity;
+			maxAssetBytes = nextConfig.maxAssetBytes;
 			mainSoPath = nextMainSoPath || mainSoPath;
 			searchDirs =
 				Array.isArray(nextSearchDirs) && nextSearchDirs.length

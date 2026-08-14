@@ -11,6 +11,8 @@ import {
 	OutputLimitError,
 	TimeoutError,
 	resolveExecutionLimits,
+	snapshotHaskellRuntimeAssetReceipts,
+	type HaskellRuntimeAssetReceipts,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
 import {
@@ -38,6 +40,8 @@ type HaskellRuntimeSnapshot = {
 	moduleUrl: string;
 	rootfsUrl: string;
 	bsdtarUrl: string;
+	integrity: HaskellRuntimeAssetReceipts;
+	maxAssetBytes: number;
 	mainSoPath: string;
 	searchDirs: string[];
 };
@@ -327,6 +331,7 @@ class Haskell implements Sandbox {
 				const moduleUrl = resolveHaskellModuleUrl(resolverAssets, currentUrl);
 				const rootfsUrl = resolveHaskellRootfsUrl(resolverAssets, currentUrl);
 				const bsdtarUrl = resolveHaskellBsdtarUrl(resolverAssets, currentUrl);
+				const integrity = snapshotHaskellRuntimeAssetReceipts(runtimeConfig?.integrity);
 				if (!this.isOperationActive(activeOperation)) return;
 				if (!moduleUrl || !rootfsUrl || !bsdtarUrl) {
 					return rejectLoad(
@@ -341,6 +346,8 @@ class Haskell implements Sandbox {
 					moduleUrl,
 					rootfsUrl,
 					bsdtarUrl,
+					integrity,
+					maxAssetBytes: limits.maxAssetBytes,
 					mainSoPath,
 					searchDirs
 				};

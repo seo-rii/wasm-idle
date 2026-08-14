@@ -15,6 +15,7 @@
 		IMonacoSetting
 	} from '@seorii/monaco';
 	import type { EditorLanguageServerHandle, LanguageServerStatus } from '@wasm-idle/lsp';
+	import type { HaskellRuntimeAssetReceipts } from '@wasm-idle/core';
 	import type { DOuterAssetReceipts } from '$lib/playground/dOuterAssets';
 	import type { ElixirRuntimeAssetReceipts } from '$lib/playground/elixirAssets';
 	import type { RuntimeAssetIntegrityEntry } from '$lib/playground/assets';
@@ -2394,6 +2395,7 @@
 		haskellLspModuleUrl?: string;
 		haskellLspRootfsUrl?: string;
 		haskellLspBsdtarUrl?: string;
+		haskellLspIntegrity?: HaskellRuntimeAssetReceipts;
 		fortranLspAnalyzerUrl?: string;
 		assemblyScriptLspModuleUrl?: string;
 		duckDbLspModuleUrl?: string;
@@ -2495,6 +2497,7 @@
 		haskellLspModuleUrl,
 		haskellLspRootfsUrl,
 		haskellLspBsdtarUrl,
+		haskellLspIntegrity,
 		fortranLspAnalyzerUrl,
 		assemblyScriptLspModuleUrl,
 		duckDbLspModuleUrl,
@@ -2657,6 +2660,7 @@
 			haskellLspEnabled ? haskellLspModuleUrl || '' : '',
 			haskellLspEnabled ? haskellLspRootfsUrl || '' : '',
 			haskellLspEnabled ? haskellLspBsdtarUrl || '' : '',
+			haskellLspEnabled ? JSON.stringify(haskellLspIntegrity) : '',
 			fortranLspAnalyzerUrl || '',
 			assemblyScriptLspModuleUrl || '',
 			duckDbLspModuleUrl || '',
@@ -3257,7 +3261,8 @@
 					haskell: {
 						moduleUrl: haskellLspModuleUrl || '',
 						rootfsUrl: haskellLspRootfsUrl || '',
-						bsdtarUrl: haskellLspBsdtarUrl || ''
+						bsdtarUrl: haskellLspBsdtarUrl || '',
+						integrity: haskellLspIntegrity
 					},
 					onStatus: (status) => (haskellLspStatus = status)
 				});

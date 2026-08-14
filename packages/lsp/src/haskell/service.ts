@@ -8,6 +8,16 @@ import {
 } from '@bjorn3/browser_wasi_shim';
 import { installWasiExtractionQuota } from '@wasm-idle/llvm-core';
 import {
+	HASKELL_RUNTIME_ASSET_NAMES,
+	snapshotHaskellRuntimeAssetReceipts,
+	verifyRuntimeAssetIntegrity,
+	type HaskellRuntimeAssetName,
+	type HaskellRuntimeAssetReceipt,
+	type HaskellRuntimeAssetReceipts
+} from '@wasm-idle/core';
+
+const HASKELL_LSP_MAX_ASSET_BYTES = 64 * 1024 * 1024;
+import {
 	positionAt,
 	uriToPath,
 	type LspDiagnostic,
@@ -29,6 +39,7 @@ export interface HaskellWorkerOptions {
 	moduleUrl: string;
 	rootfsUrl: string;
 	bsdtarUrl: string;
+	integrity: HaskellRuntimeAssetReceipts;
 	mainSoPath?: string;
 	searchDirs?: string[];
 	ghcArgs?: string;
@@ -236,15 +247,21 @@ export function parseHaskellDiagnostics(output: string): HaskellCompilerDiagnost
 }
 
 async function fetchBytes(
+	asset: HaskellRuntimeAssetName,
 	url: string,
+	receipt: HaskellRuntimeAssetReceipt,
 	stage: string,
 	reportProgress: LspDocumentContext['reportProgress'],
 	progressStart = 0,
-	progressEnd = 100
+	progressEnd = 100,
+	signal?: AbortSignal
 ) {
 	const data = await fetchBoundedExternalAsset({
 		url,
 		label: stage,
+		cache: 'no-store',
+		maxBytes: receipt.bytes,
+		signal,
 		reportProgress(loaded, total) {
 			const progress =
 				total && total > 0
@@ -253,6 +270,18 @@ async function fetchBytes(
 			reportProgress(stage, progress, total ? 100 : undefined);
 		}
 	});
+	if (signal?.aborted) {
+		throw signal.reason ?? new DOMException(`${stage} was aborted`, 'AbortError');
+	}
+	await verifyRuntimeAssetIntegrity({
+		asset,
+		bytes: data,
+		expected: receipt,
+		runtimeId: 'HASKELL'
+	});
+	if (signal?.aborted) {
+		throw signal.reason ?? new DOMException(`${stage} was aborted`, 'AbortError');
+	}
 	reportProgress(stage, progressEnd, 100);
 	return data;
 }
@@ -305,7 +334,8 @@ function materializeRootfsSymlinks(rootfs: PreopenDirectory, pendingSymlinks: Pe
 }
 
 async function unpackRootfs(
-	options: HaskellWorkerOptions,
+	bsdtarBytes: Uint8Array,
+	rootfsBytes: Uint8Array,
 	context: LspDocumentContext
 ): Promise<PreopenDirectory> {
 	const rootfs = new PreopenDirectory('/', new Map());
@@ -329,16 +359,6 @@ async function unpackRootfs(
 		{ debug: false }
 	);
 	installRootfsExtractionWasiPatches(tarWasi, pendingSymlinks);
-	const [bsdtarBytes, rootfsBytes] = await Promise.all([
-		fetchBytes(
-			options.bsdtarUrl,
-			'load-haskell-rootfs-extractor',
-			context.reportProgress,
-			5,
-			15
-		),
-		fetchBytes(options.rootfsUrl, 'load-haskell-rootfs', context.reportProgress, 15, 70)
-	]);
 	context.reportProgress('extract-haskell-rootfs', 75, 100);
 	const tarInstance = instantiateResult(
 		await WebAssembly.instantiate(bsdtarBytes, {
@@ -355,7 +375,7 @@ async function unpackRootfs(
 	return rootfs;
 }
 
-async function loadDefaultHaskellCompilerHost(
+export async function loadDefaultHaskellCompilerHost(
 	options: HaskellWorkerOptions,
 	context: LspDocumentContext
 ): Promise<HaskellCompilerHost> {
@@ -363,10 +383,71 @@ async function loadDefaultHaskellCompilerHost(
 	let activeStderrCollector: ((line: string) => void) | null = null;
 
 	context.reportProgress('load-haskell-runtime');
-	const rootfs = await unpackRootfs(options, context);
-	const dyldModule = (await import(
-		/* @vite-ignore */ options.moduleUrl
-	)) as Partial<HaskellRuntimeModule>;
+	const integrity = snapshotHaskellRuntimeAssetReceipts(options.integrity);
+	for (const asset of HASKELL_RUNTIME_ASSET_NAMES) {
+		if (integrity[asset].bytes > HASKELL_LSP_MAX_ASSET_BYTES) {
+			throw new TypeError(`Haskell LSP receipt exceeds the 64 MiB safety limit for ${asset}`);
+		}
+	}
+	const controller = new AbortController();
+	let moduleBytes: Uint8Array;
+	let rootfsBytes: Uint8Array;
+	let bsdtarBytes: Uint8Array;
+	try {
+		[moduleBytes, rootfsBytes, bsdtarBytes] = await Promise.all([
+			fetchBytes(
+				'dyld.mjs',
+				options.moduleUrl,
+				integrity['dyld.mjs'],
+				'load-haskell-runtime-module',
+				context.reportProgress,
+				5,
+				15,
+				controller.signal
+			),
+			fetchBytes(
+				'rootfs.tar.zst',
+				options.rootfsUrl,
+				integrity['rootfs.tar.zst'],
+				'load-haskell-rootfs',
+				context.reportProgress,
+				25,
+				70,
+				controller.signal
+			),
+			fetchBytes(
+				'bsdtar.wasm',
+				options.bsdtarUrl,
+				integrity['bsdtar.wasm'],
+				'load-haskell-rootfs-extractor',
+				context.reportProgress,
+				15,
+				25,
+				controller.signal
+			)
+		]);
+	} catch (error) {
+		controller.abort(error);
+		throw error;
+	}
+	const rootfs = await unpackRootfs(bsdtarBytes, rootfsBytes, context);
+	let moduleSource: string;
+	try {
+		moduleSource = new TextDecoder('utf-8', { fatal: true }).decode(moduleBytes);
+	} catch (error) {
+		throw new TypeError('Haskell runtime module is not valid UTF-8', { cause: error });
+	}
+	const verifiedModuleUrl = URL.createObjectURL(
+		new Blob([moduleSource], { type: 'text/javascript' })
+	);
+	let dyldModule: Partial<HaskellRuntimeModule>;
+	try {
+		dyldModule = (await import(
+			/* @vite-ignore */ verifiedModuleUrl
+		)) as Partial<HaskellRuntimeModule>;
+	} finally {
+		URL.revokeObjectURL(verifiedModuleUrl);
+	}
 	if (typeof dyldModule.main !== 'function' || typeof dyldModule.DyLDBrowserHost !== 'function') {
 		throw new Error('wasm-haskell module must export main and DyLDBrowserHost');
 	}
@@ -493,19 +574,33 @@ export function createHaskellWorkerService(
 		},
 		async initialize(options, context) {
 			const config = (options || {}) as HaskellWorkerOptions;
-			if (!config.moduleUrl || !config.rootfsUrl || !config.bsdtarUrl) {
+			const moduleUrl = config.moduleUrl;
+			const rootfsUrl = config.rootfsUrl;
+			const bsdtarUrl = config.bsdtarUrl;
+			const integrity = snapshotHaskellRuntimeAssetReceipts(config.integrity);
+			const mainSoPath = config.mainSoPath;
+			const configuredSearchDirs = config.searchDirs;
+			const configuredGhcArgs = config.ghcArgs;
+			if (!moduleUrl || !rootfsUrl || !bsdtarUrl) {
 				throw new Error(
 					'Haskell language server requires moduleUrl, rootfsUrl, and bsdtarUrl'
 				);
 			}
-			ghcArgs = config.ghcArgs || ghcArgs;
-			compiler = await loadCompilerHost(
-				{
-					...config,
-					ghcArgs
-				},
-				context
-			);
+			const nextGhcArgs = configuredGhcArgs || ghcArgs;
+			const nextConfig = Object.freeze({
+				moduleUrl,
+				rootfsUrl,
+				bsdtarUrl,
+				integrity,
+				mainSoPath,
+				searchDirs: configuredSearchDirs ? [...configuredSearchDirs] : undefined,
+				ghcArgs: nextGhcArgs
+			});
+			const nextCompiler = await loadCompilerHost(nextConfig, context);
+			compiler = nextCompiler;
+			ghcArgs = nextGhcArgs;
+			lastKey = '';
+			lastDiagnostics = [];
 		},
 		async diagnostics(document, context) {
 			if (!compiler || !document.text.trim()) return [];

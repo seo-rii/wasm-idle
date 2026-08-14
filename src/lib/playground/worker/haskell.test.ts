@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const shim = vi.hoisted(() => {
@@ -133,8 +134,32 @@ function responseFor(data: Uint8Array, url: string) {
 	};
 }
 
+const rootfsBytes = new Uint8Array([0x28, 0xb5, 0x2f, 0xfd]);
+const bsdtarBytes = new Uint8Array([0, 97, 115, 109]);
+const moduleAssets = new Map<string, Uint8Array>();
+let activeModuleBytes: Uint8Array | undefined;
+const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+
 function createMockDyldModule(source: string) {
-	return `data:text/javascript;base64,${Buffer.from(source, 'utf8').toString('base64')}`;
+	const url = `https://assets.example.test/wasm-haskell/dyld-${moduleAssets.size}.mjs`;
+	moduleAssets.set(url, new TextEncoder().encode(source));
+	return url;
+}
+
+function haskellLoadConfig(moduleUrl: string) {
+	const moduleBytes = moduleAssets.get(moduleUrl);
+	if (!moduleBytes) throw new Error(`missing Haskell module fixture for ${moduleUrl}`);
+	return {
+		moduleUrl,
+		rootfsUrl: 'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
+		bsdtarUrl: 'https://assets.example.test/wasm-haskell/bsdtar.wasm',
+		integrity: {
+			'dyld.mjs': { bytes: moduleBytes.byteLength, sha256: sha256(moduleBytes) },
+			'rootfs.tar.zst': { bytes: rootfsBytes.byteLength, sha256: sha256(rootfsBytes) },
+			'bsdtar.wasm': { bytes: bsdtarBytes.byteLength, sha256: sha256(bsdtarBytes) }
+		},
+		maxAssetBytes: 1024 * 1024
+	};
 }
 
 describe('Haskell worker', () => {
@@ -146,13 +171,22 @@ describe('Haskell worker', () => {
 		(globalThis as any).__lastDyldOptions = undefined;
 		(globalThis as any).__lastHostOptions = undefined;
 		(globalThis as any).__lastMainCall = undefined;
+		moduleAssets.clear();
+		activeModuleBytes = undefined;
 		(globalThis as any).fetch = vi.fn(async (url: string) => {
-			if (url.endsWith('bsdtar.wasm'))
-				return responseFor(new Uint8Array([0, 97, 115, 109]), url);
-			if (url.endsWith('rootfs.tar.zst'))
-				return responseFor(new Uint8Array([0x28, 0xb5, 0x2f, 0xfd]), url);
+			if (moduleAssets.has(url)) {
+				activeModuleBytes = moduleAssets.get(url)!;
+				return responseFor(activeModuleBytes, url);
+			}
+			if (url.endsWith('bsdtar.wasm')) return responseFor(bsdtarBytes, url);
+			if (url.endsWith('rootfs.tar.zst')) return responseFor(rootfsBytes, url);
 			return { ok: false, status: 404, headers: { get: () => null } };
 		});
+		vi.spyOn(URL, 'createObjectURL').mockImplementation(() => {
+			if (!activeModuleBytes) throw new Error('Haskell module fixture was not fetched');
+			return `data:text/javascript;base64,${Buffer.from(activeModuleBytes).toString('base64')}`;
+		});
+		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
 		vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({
 			instance: {
 				exports: {
@@ -198,9 +232,7 @@ describe('Haskell worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				load: true,
-				moduleUrl,
-				rootfsUrl: 'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
-				bsdtarUrl: 'https://assets.example.test/wasm-haskell/bsdtar.wasm',
+				...haskellLoadConfig(moduleUrl),
 				mainSoPath: '/tmp/libplayground001.so',
 				searchDirs: ['/tmp/clib', '/tmp/hslib/lib/wasm32-wasi-ghc'],
 				log: false
@@ -221,19 +253,23 @@ describe('Haskell worker', () => {
 
 		expect((globalThis as any).fetch).toHaveBeenCalledWith(
 			'https://assets.example.test/wasm-haskell/bsdtar.wasm',
-			{
+			expect.objectContaining({
+				cache: 'no-store',
 				credentials: 'omit',
 				redirect: 'error',
-				referrerPolicy: 'no-referrer'
-			}
+				referrerPolicy: 'no-referrer',
+				signal: expect.any(AbortSignal)
+			})
 		);
 		expect((globalThis as any).fetch).toHaveBeenCalledWith(
 			'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
-			{
+			expect.objectContaining({
+				cache: 'no-store',
 				credentials: 'omit',
 				redirect: 'error',
-				referrerPolicy: 'no-referrer'
-			}
+				referrerPolicy: 'no-referrer',
+				signal: expect.any(AbortSignal)
+			})
 		);
 		expect(shim.state.constructed[0].args).toEqual(['bsdtar.wasm', '-x']);
 		expect(shim.state.extractCount).toBe(1);
@@ -289,9 +325,7 @@ describe('Haskell worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				load: true,
-				moduleUrl,
-				rootfsUrl: 'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
-				bsdtarUrl: 'https://assets.example.test/wasm-haskell/bsdtar.wasm'
+				...haskellLoadConfig(moduleUrl)
 			}
 		});
 		await Promise.resolve();
@@ -335,9 +369,7 @@ describe('Haskell worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				load: true,
-				moduleUrl,
-				rootfsUrl: 'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
-				bsdtarUrl: 'https://assets.example.test/wasm-haskell/bsdtar.wasm'
+				...haskellLoadConfig(moduleUrl)
 			}
 		});
 		await Promise.resolve();
@@ -359,14 +391,15 @@ describe('Haskell worker', () => {
 			target: '../../escape',
 			path: 'tmp/link'
 		};
+		const moduleUrl = createMockDyldModule(
+			'export class DyLDBrowserHost {}\nexport function main() {}\n'
+		);
 
 		await import('./haskell');
 		await (globalThis as any).self.onmessage({
 			data: {
 				load: true,
-				moduleUrl: 'data:text/javascript,',
-				rootfsUrl: 'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
-				bsdtarUrl: 'https://assets.example.test/wasm-haskell/bsdtar.wasm'
+				...haskellLoadConfig(moduleUrl)
 			}
 		});
 		await Promise.resolve();
@@ -376,6 +409,39 @@ describe('Haskell worker', () => {
 		});
 		expect(shim.state.pathLinks).toEqual([]);
 		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({ load: true });
+	});
+
+	it('does not initialize from corrupt bytes and permits a clean verified retry', async () => {
+		const moduleUrl = createMockDyldModule(`
+			export class DyLDBrowserHost {
+				constructor(options) { this.options = options; }
+			}
+			export async function main() {
+				return { exportFuncs: { async myMain() { return async () => {}; } } };
+			}
+		`);
+		const corruptConfig = haskellLoadConfig(moduleUrl);
+		corruptConfig.integrity['dyld.mjs'].sha256 = '0'.repeat(64);
+
+		await import('./haskell');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, ...corruptConfig }
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: expect.stringContaining('Runtime asset dyld.mjs compressed SHA-256 mismatch')
+		});
+		expect(shim.state.extractCount).toBe(0);
+		expect(URL.createObjectURL).not.toHaveBeenCalled();
+
+		(globalThis as any).postMessage.mockClear();
+		await (globalThis as any).self.onmessage({
+			data: { load: true, ...haskellLoadConfig(moduleUrl) }
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
+		expect(shim.state.extractCount).toBe(1);
+		expect(URL.createObjectURL).toHaveBeenCalledOnce();
 	});
 
 	it('treats prepare as a load-only success and caches the rootfs runtime', async () => {
@@ -397,9 +463,7 @@ describe('Haskell worker', () => {
 		await import('./haskell');
 		const loadMessage = {
 			load: true,
-			moduleUrl,
-			rootfsUrl: 'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
-			bsdtarUrl: 'https://assets.example.test/wasm-haskell/bsdtar.wasm',
+			...haskellLoadConfig(moduleUrl),
 			mainSoPath: '/tmp/libplayground001.so',
 			searchDirs: ['/tmp/clib']
 		};
@@ -449,9 +513,7 @@ describe('Haskell worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				load: true,
-				moduleUrl,
-				rootfsUrl: 'https://assets.example.test/wasm-haskell/rootfs.tar.zst',
-				bsdtarUrl: 'https://assets.example.test/wasm-haskell/bsdtar.wasm'
+				...haskellLoadConfig(moduleUrl)
 			}
 		});
 		await (globalThis as any).self.onmessage({

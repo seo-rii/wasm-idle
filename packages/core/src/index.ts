@@ -152,6 +152,15 @@ export {
 	type RubyRuntimeAssetReceipts
 } from './ruby-runtime.js';
 export {
+	HASKELL_RUNTIME_ASSET_NAMES,
+	HASKELL_RUNTIME_ASSET_RECEIPTS,
+	HASKELL_RUNTIME_ASSET_VERSION,
+	snapshotHaskellRuntimeAssetReceipts,
+	type HaskellRuntimeAssetName,
+	type HaskellRuntimeAssetReceipt,
+	type HaskellRuntimeAssetReceipts
+} from './haskell-runtime.js';
+export {
 	TEAVM_RUNTIME_ASSET_NAMES,
 	TEAVM_RUNTIME_ASSET_RECEIPTS,
 	TEAVM_RUNTIME_ASSET_VERSION,

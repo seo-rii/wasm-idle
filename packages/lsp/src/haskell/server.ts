@@ -5,11 +5,16 @@ import {
 } from '../runtime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
+import {
+	snapshotHaskellRuntimeAssetReceipts,
+	type HaskellRuntimeAssetReceipts
+} from '@wasm-idle/core';
 
 export interface HaskellLanguageServerConfig {
 	moduleUrl?: string;
 	rootfsUrl?: string;
 	bsdtarUrl?: string;
+	integrity?: HaskellRuntimeAssetReceipts;
 	mainSoPath?: string;
 	searchDirs?: string[];
 	ghcArgs?: string;
@@ -32,12 +37,14 @@ export async function getHaskellLanguageServer(
 	const hostOptions =
 		typeof options === 'object' ? (options as HaskellLanguageServerOptions) : undefined;
 	const config = resolveConfig(options);
+	const integrity = snapshotHaskellRuntimeAssetReceipts(config.integrity);
 	return await createWorkerLanguageServerClient({
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
 			moduleUrl: resolveHaskellLanguageServerModuleUrl(options, hostOptions?.currentUrl),
 			rootfsUrl: resolveHaskellLanguageServerRootfsUrl(options, hostOptions?.currentUrl),
 			bsdtarUrl: resolveHaskellLanguageServerBsdtarUrl(options, hostOptions?.currentUrl),
+			integrity,
 			mainSoPath: config.mainSoPath,
 			searchDirs: config.searchDirs,
 			ghcArgs: config.ghcArgs

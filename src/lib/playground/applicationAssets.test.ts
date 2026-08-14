@@ -1,4 +1,5 @@
 import {
+	HASKELL_RUNTIME_ASSET_RECEIPTS,
 	RUBY_RUNTIME_ASSET_PATH,
 	RUBY_RUNTIME_ASSET_RECEIPTS,
 	RUBY_RUNTIME_ASSET_VERSION,
@@ -27,6 +28,7 @@ import { WASM_FORTRAN_ASSET_VERSION } from './wasmFortranVersion';
 import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
 import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
+import { WASM_HASKELL_ASSET_VERSION } from './wasmHaskellVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
 import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
@@ -262,6 +264,12 @@ describe('application runtime asset root', () => {
 			wasmUrl: `/foo/bar/wasm-ruby/${RUBY_RUNTIME_ASSET_PATH}?v=${RUBY_RUNTIME_ASSET_VERSION}`,
 			integrity: RUBY_RUNTIME_ASSET_RECEIPTS
 		});
+		expect(assets.haskell).toEqual({
+			moduleUrl: `/foo/bar/wasm-haskell/dyld.mjs?v=${WASM_HASKELL_ASSET_VERSION}`,
+			rootfsUrl: `/foo/bar/wasm-haskell/rootfs.tar.zst?v=${WASM_HASKELL_ASSET_VERSION}`,
+			bsdtarUrl: `/foo/bar/wasm-haskell/bsdtar.wasm?v=${WASM_HASKELL_ASSET_VERSION}`,
+			integrity: HASKELL_RUNTIME_ASSET_RECEIPTS
+		});
 
 		for (const [runtime, config] of Object.entries(assets)) {
 			if (runtime === 'rootUrl' || typeof config !== 'object' || !config) continue;
@@ -320,6 +328,11 @@ describe('application runtime asset root', () => {
 		);
 		const serializedRubyIntegrity = JSON.stringify(
 			Object.entries(RUBY_RUNTIME_ASSET_RECEIPTS)
+				.sort(([left], [right]) => left.localeCompare(right))
+				.map(([asset, entry]) => [asset, { sha256: entry.sha256, bytes: entry.bytes }])
+		);
+		const serializedHaskellIntegrity = JSON.stringify(
+			Object.entries(HASKELL_RUNTIME_ASSET_RECEIPTS)
 				.sort(([left], [right]) => left.localeCompare(right))
 				.map(([asset, entry]) => [asset, { sha256: entry.sha256, bytes: entry.bytes }])
 		);
@@ -430,6 +443,7 @@ describe('application runtime asset root', () => {
 			erlangIntegrity: serializedElixirIntegrity,
 			fortranIntegrity: serializedFortranIntegrity,
 			zigIntegrity: serializedZigIntegrity,
+			haskellIntegrity: serializedHaskellIntegrity,
 			rubyIntegrity: serializedRubyIntegrity,
 			objectiveCIntegrity: JSON.stringify(
 				Object.entries(WASM_OBJECTIVEC_ASSET_RECEIPTS)
@@ -476,6 +490,10 @@ describe('application runtime asset root', () => {
 			nimManifestUrl: assets.nim?.manifestUrl,
 			nimManifestFingerprint: assets.nim?.manifestFingerprint,
 			nimWorkerReceipt: expect.any(String),
+			haskellModuleUrl: assets.haskell?.moduleUrl,
+			haskellRootfsUrl: assets.haskell?.rootfsUrl,
+			haskellBsdtarUrl: assets.haskell?.bsdtarUrl,
+			haskellIntegrity: expect.any(String),
 			typeScriptLibUrl: assets.typescript?.libUrl,
 			fortranBaseUrl: assets.fortran?.baseUrl,
 			fortranF2cWasmUrl: assets.fortran?.f2cWasmUrl,

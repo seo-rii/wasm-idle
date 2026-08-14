@@ -44,6 +44,7 @@ import {
 	TEAVM_RUNTIME_ASSET_RECEIPTS,
 	deriveRubyRuntimeWasmUrl,
 	snapshotTeaVmRuntimeAssetReceipts,
+	type HaskellRuntimeAssetReceipts,
 	type RubyRuntimeAssetReceipts
 } from '@wasm-idle/core';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from '$lib/playground/wasmFortranExecutionAssets';
@@ -173,6 +174,7 @@ export interface HaskellRuntimeAssetConfig {
 	moduleUrl?: string;
 	rootfsUrl?: string;
 	bsdtarUrl?: string;
+	integrity?: HaskellRuntimeAssetReceipts;
 	mainSoPath?: string;
 	searchDirs?: string[];
 }

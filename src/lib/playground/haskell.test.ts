@@ -1130,6 +1130,8 @@ describe('Haskell sandbox', () => {
 			moduleUrl: loadMessage.moduleUrl,
 			rootfsUrl: loadMessage.rootfsUrl,
 			bsdtarUrl: loadMessage.bsdtarUrl,
+			integrity: loadMessage.integrity,
+			maxAssetBytes: loadMessage.maxAssetBytes,
 			mainSoPath: loadMessage.mainSoPath,
 			searchDirs: loadMessage.searchDirs
 		};

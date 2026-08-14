@@ -66,6 +66,7 @@ export interface RuntimeAssetKeySource {
 		moduleUrl?: string;
 		rootfsUrl?: string;
 		bsdtarUrl?: string;
+		integrity?: RuntimeAssetIntegrityMap;
 		mainSoPath?: string;
 		searchDirs?: string[];
 	};
@@ -509,6 +510,12 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'haskell', property: 'moduleUrl', key: 'haskellModuleUrl' },
 	{ runtime: 'haskell', property: 'rootfsUrl', key: 'haskellRootfsUrl' },
 	{ runtime: 'haskell', property: 'bsdtarUrl', key: 'haskellBsdtarUrl' },
+	{
+		runtime: 'haskell',
+		property: 'integrity',
+		key: 'haskellIntegrity',
+		serialize: serializeIntegrity
+	},
 	{ runtime: 'haskell', property: 'mainSoPath', key: 'haskellMainSoPath' },
 	{
 		runtime: 'haskell',

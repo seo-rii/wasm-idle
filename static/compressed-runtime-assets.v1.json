@@ -146,7 +146,7 @@
     "wasm-go/runtime/sysroot/wasip1.stdlib-index.json": 99450,
     "wasm-go/runtime/tools/compile.wasm": 49046581,
     "wasm-go/runtime/tools/link.wasm": 11163140,
-    "wasm-haskell/bsdtar.wasm": 1236715,
+    "wasm-haskell/bsdtar.wasm": 1240004,
     "wasm-j/jamalgam.wasm": 4832581,
     "wasm-janet/janet.wasm": 829432,
     "wasm-julia/julia.data": 42960896,
