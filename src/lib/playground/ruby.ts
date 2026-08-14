@@ -21,6 +21,7 @@ import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
@@ -68,6 +69,13 @@ class Ruby implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: RubyOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('Ruby sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'RUBY',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'Ruby',
 		onDispose: (worker) => {
@@ -80,6 +88,12 @@ class Ruby implements Sandbox {
 	});
 
 	private beginOperation(phase: RubyOperation['phase']) {
+		if (this.disposed) {
+			throw new RuntimeConfigurationError('Ruby sandbox is disposed', {
+				phase: 'dispose',
+				runtimeId: 'RUBY'
+			});
+		}
 		if (this.activeOperation) {
 			throw new BusyError('Ruby runtime already has an active operation', {
 				runtimeId: 'RUBY',
@@ -439,12 +453,14 @@ class Ruby implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -697,6 +713,7 @@ class Ruby implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
@@ -710,6 +727,7 @@ class Ruby implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		if (this.activeOperation) this.terminate();
 		this.pendingInput = [];
 		this.waitingForInput = false;
@@ -723,6 +741,32 @@ class Ruby implements Sandbox {
 			}
 		}
 		this.resetSharedStdinBuffer();
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		delete this.worker;
+		this.wasmUrl = '';
+		this.moduleUrl = '';
+		this.runtimeAssetKey = '';
+		this.output = null;
+		this.oncompilerdiagnostic = undefined;
+		this.pendingInput = [];
+		this.waitingForInput = false;
+		this.pendingEof = false;
+		this.resetSharedStdinBuffer();
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+			this.exit = true;
+		}
+		return this.disposePromise;
 	}
 }
 
