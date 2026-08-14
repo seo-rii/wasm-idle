@@ -2,9 +2,11 @@ import { resolveTypeScriptModuleUrl, type PlaygroundRuntimeAssets } from '$lib/p
 import {
 	AssetTooLargeError,
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace,
@@ -75,6 +77,9 @@ class TypeScriptSandbox implements Sandbox {
 	waitingForInput = false;
 	pendingEof = false;
 	private activeOperation: TypeScriptOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation: CancelledError;
 	private readonly workerSession = new WorkerSession({
 		label: () => this.languageLabel,
 		onDispose: (worker) => {
@@ -86,7 +91,13 @@ class TypeScriptSandbox implements Sandbox {
 		}
 	});
 
-	constructor(private readonly language: TypeScriptSandboxLanguage = 'TYPESCRIPT') {}
+	constructor(private readonly language: TypeScriptSandboxLanguage = 'TYPESCRIPT') {
+		this.disposeCancellation = new CancelledError(`${this.languageLabel} sandbox disposed`, {
+			phase: 'dispose',
+			runtimeId: this.language,
+			recoverable: false
+		});
+	}
 
 	private get compileLanguage() {
 		return this.language === 'JAVASCRIPT' ? 'javascript' : 'typescript';
@@ -96,7 +107,15 @@ class TypeScriptSandbox implements Sandbox {
 		return this.language === 'JAVASCRIPT' ? 'JavaScript' : 'TypeScript';
 	}
 
+	private disposedConfigurationError() {
+		return new RuntimeConfigurationError(`${this.languageLabel} sandbox is disposed`, {
+			phase: 'dispose',
+			runtimeId: this.language
+		});
+	}
+
 	private requireOperationIdle() {
+		if (this.disposed) throw this.disposedConfigurationError();
 		if (!this.activeOperation) return;
 		throw new BusyError(`${this.languageLabel} runtime already has an active operation`, {
 			runtimeId: this.language,
@@ -295,6 +314,18 @@ class TypeScriptSandbox implements Sandbox {
 		}
 	}
 
+	private resetOwnedBuffers(operationBuffer?: WasmIdleSharedBuffer) {
+		const buffers = new Set<WasmIdleSharedBuffer>([this.buffer]);
+		if (operationBuffer) buffers.add(operationBuffer);
+		for (const buffer of buffers) {
+			try {
+				resetBufferedStdin(buffer);
+			} catch {
+				// Stdin cleanup must not replace the lifecycle result.
+			}
+		}
+	}
+
 	private finishExplicitStdin(operation: TypeScriptOperation) {
 		if (!operation.explicitStdin) return;
 		operation.explicitStdin = false;
@@ -413,6 +444,7 @@ class TypeScriptSandbox implements Sandbox {
 				this.moduleUrl = nextModuleUrl;
 				if (needsWorkerReset && this.worker) {
 					this.workerSession.reset();
+					if (!this.isOperationActive(activeOperation)) return;
 				}
 				if (!this.worker) {
 					const WorkerConstructor = (
@@ -426,6 +458,14 @@ class TypeScriptSandbox implements Sandbox {
 					}
 					this.worker = worker;
 					this.workerSession.attach(worker);
+					if (!this.isOperationActive(activeOperation) || this.worker !== worker) {
+						this.workerSession.terminate(
+							activeOperation.cancelled
+								? activeOperation.cancellationReason
+								: `${this.languageLabel} runtime startup cancelled`
+						);
+						return;
+					}
 					let handler: (event: MessageEvent<any>) => void;
 					const ownsLoad = () =>
 						this.isOperationActive(activeOperation) &&
@@ -463,9 +503,17 @@ class TypeScriptSandbox implements Sandbox {
 						}
 					};
 					worker.onmessage = handler;
+					if (!ownsLoad()) {
+						this.workerSession.terminate(
+							activeOperation.cancelled
+								? activeOperation.cancellationReason
+								: `${this.languageLabel} runtime startup cancelled`
+						);
+						return;
+					}
 					worker.postMessage({
 						load: true,
-						moduleUrl: this.moduleUrl,
+						moduleUrl: nextModuleUrl,
 						moduleReceipt: { ...WASM_TYPESCRIPT_MODULE_RECEIPT },
 						maxAssetBytes: limits.maxAssetBytes
 					});
@@ -492,12 +540,14 @@ class TypeScriptSandbox implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -669,6 +719,14 @@ class TypeScriptSandbox implements Sandbox {
 			let diagnosticCount = 0;
 			let outputBytes = 0;
 			const operation = this.workerSession.beginRun(worker, reject);
+			if (!this.isOperationActive(activeOperation) || this.worker !== worker) {
+				this.workerSession.terminate(
+					activeOperation.cancelled
+						? activeOperation.cancellationReason
+						: `${this.languageLabel} execution cancelled`
+				);
+				return;
+			}
 			const timeoutMs = Math.min(
 				MAX_TIMER_DELAY_MS,
 				limits.compileTimeoutMs + limits.runTimeoutMs
@@ -870,6 +928,7 @@ class TypeScriptSandbox implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
@@ -883,14 +942,39 @@ class TypeScriptSandbox implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
 		if (this.worker) this.worker.onmessage = null;
-		resetBufferedStdin(this.buffer);
+		this.resetOwnedBuffers(this.activeOperation?.buffer);
 		if (!this.exit || this.activeOperation) {
 			this.terminate();
 		}
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		delete this.worker;
+		this.moduleUrl = '';
+		this.output = undefined;
+		this.oncompilerdiagnostic = undefined;
+		this.pendingInput = [];
+		this.waitingForInput = false;
+		this.pendingEof = false;
+		this.resetOwnedBuffers(activeOperation?.buffer);
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.exit = true;
+			this.workerSession.terminate(this.disposeCancellation);
+		}
+		return this.disposePromise;
 	}
 }
 
