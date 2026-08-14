@@ -1817,4 +1817,295 @@ public class Main {
 		expect(sandbox.worker).toBeUndefined();
 		expect(sandbox.assetBridge).toBeNull();
 	});
+
+	it('keeps clear reusable but disposes an idle Java runtime exactly once', async () => {
+		const sandbox = new Java();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+
+		await sandbox.clear();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('public class Reusable {}', false)).resolves.toBe(true);
+		const assetBridge = sandbox.assetBridge!;
+		const disposeAssetBridge = vi.spyOn(assetBridge, 'dispose');
+		sandbox.write('queued input\n');
+		sandbox.eof();
+
+		let cleanupSnapshot: Record<string, unknown> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		worker.terminate.mockImplementationOnce(() => {
+			cleanupSnapshot = {
+				worker: sandbox.worker,
+				assetBridge: sandbox.assetBridge,
+				baseUrl: sandbox.baseUrl,
+				output: sandbox.output,
+				diagnostic: sandbox.oncompilerdiagnostic,
+				pendingInput: [...sandbox.pendingInput],
+				waitingForInput: sandbox.waitingForInput,
+				pendingEof: sandbox.pendingEof,
+				bufferedInput: readBufferedStdin(sandbox.buffer),
+				onmessage: worker.onmessage,
+				onerror: worker.onerror,
+				onmessageerror: worker.onmessageerror
+			};
+			reentrantLoad = sandbox.load('/reentrant/');
+			reentrantRun = sandbox.run('public class Reentrant {}', false);
+			reentrantDisposal = sandbox.dispose();
+		});
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		await firstDisposal;
+
+		expect(cleanupSnapshot).toEqual({
+			worker: undefined,
+			assetBridge: null,
+			baseUrl: '',
+			output: undefined,
+			diagnostic: undefined,
+			pendingInput: [],
+			waitingForInput: false,
+			pendingEof: false,
+			bufferedInput: '',
+			onmessage: null,
+			onerror: null,
+			onmessageerror: null
+		});
+		expect(disposeAssetBridge).toHaveBeenCalledOnce();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'JAVA'
+		});
+		await expect(reentrantRun).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'JAVA'
+		});
+		await expect(sandbox.load('/replacement/')).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'JAVA'
+		});
+		await expect(sandbox.run('public class Later {}', false)).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'JAVA'
+		});
+		const uidAfterDisposal = sandbox.uid;
+		sandbox.write('ignored input\n');
+		sandbox.eof();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		sandbox.kill();
+		expect(sandbox.uid).toBe(uidAfterDisposal);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		await sandbox.clear();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('aborts pending Java assets and settles startup with one disposal cancellation', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Java();
+		const progress = { set: vi.fn() };
+		let finishLoader: ((value: Uint8Array) => void) | undefined;
+		let loaderSignal: AbortSignal | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		const controller = new AbortController();
+		const racingReason = new Error('Java external abort raced terminal disposal');
+		const loader = vi.fn(({ signal }: { signal?: AbortSignal }) => {
+			loaderSignal = signal;
+			signal?.addEventListener(
+				'abort',
+				() => {
+					controller.abort(racingReason);
+					reentrantLoad = sandbox.load('/reentrant/');
+					reentrantRun = sandbox.run('public class Reentrant {}', false);
+					void reentrantLoad.catch(() => undefined);
+					void reentrantRun.catch(() => undefined);
+					reentrantDisposal = sandbox.dispose();
+				},
+				{ once: true }
+			);
+			return new Promise<Uint8Array>((resolve) => {
+				finishLoader = resolve;
+			});
+		});
+		const loading = sandbox.load(
+			{ java: { loader } },
+			'',
+			true,
+			[],
+			{ signal: controller.signal },
+			progress
+		);
+		const outcome = loading.catch((error) => error);
+
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+		worker.onmessage?.({
+			data: { assetRequest: { id: 71, asset: 'compiler.wasm' } }
+		} as MessageEvent<any>);
+		await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+		const progressCallsBeforeDisposal = progress.set.mock.calls.length;
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		const cancellation = await outcome;
+		await firstDisposal;
+
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'JAVA',
+			recoverable: false
+		});
+		expect(loaderSignal?.aborted).toBe(true);
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'JAVA'
+		});
+		await expect(reentrantRun).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'JAVA'
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		finishLoader?.(new Uint8Array([1, 2, 3]));
+		await Promise.resolve();
+		await Promise.resolve();
+		staleHandler?.({ data: { progress: 1, load: true } } as MessageEvent<any>);
+		expect(progress.set).toHaveBeenCalledTimes(progressCallsBeforeDisposal);
+		expect(worker.postMessage.mock.calls.some(([message]) => message.assetResponse)).toBe(
+			false
+		);
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+		expect(sandbox.baseUrl).toBe('');
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles an active Java run, clears stdin, and ignores retained messages', async () => {
+		const sandbox = new Java();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		onPostMessage = () => undefined;
+		const running = sandbox.run('public class Main {}', false);
+		const outcome = running.catch((error) => error);
+		const staleHandler = worker.onmessage;
+		staleHandler?.({ data: { buffer: true } } as MessageEvent<any>);
+		sandbox.write('42\n');
+		sandbox.eof();
+		expect(readBufferedStdin(sandbox.buffer)).toBe('42\n');
+		expect(sandbox.pendingEof).toBe(true);
+
+		await sandbox.dispose();
+		const cancellation = await outcome;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'JAVA',
+			recoverable: false
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.waitingForInput).toBe(false);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(readBufferedStdin(sandbox.buffer)).toBe('');
+
+		staleHandler?.({
+			data: {
+				assetRequest: { id: 81, asset: 'compiler.wasm' },
+				buffer: true,
+				output: 'late output',
+				diagnostic: { message: 'late diagnostic' },
+				results: true
+			}
+		} as MessageEvent<any>);
+		await Promise.resolve();
+		expect(output).not.toHaveBeenCalled();
+		expect(diagnostic).not.toHaveBeenCalled();
+		expect(sandbox.output).toBeUndefined();
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+		expect(sandbox.waitingForInput).toBe(false);
+	});
+
+	it('does not create a Java replacement when trust-root retirement reenters disposal', async () => {
+		const sandbox = new Java();
+		let loaderSignal: AbortSignal | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		let reentrantError: unknown;
+		const loader = vi.fn(({ signal }: { signal?: AbortSignal }) => {
+			loaderSignal = signal;
+			signal?.addEventListener(
+				'abort',
+				() => {
+					try {
+						reentrantDisposal = sandbox.dispose();
+					} catch (error) {
+						reentrantError = error;
+					}
+				},
+				{ once: true }
+			);
+			return new Promise<Uint8Array>(() => undefined);
+		});
+		await sandbox.load({ java: { baseUrl: '/first/', loader } });
+		const retiredWorker = workerInstances[0];
+		retiredWorker.onmessage?.({
+			data: { assetRequest: { id: 91, asset: 'compiler.wasm' } }
+		} as MessageEvent<any>);
+		await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+
+		const replacement = sandbox.load({ java: { baseUrl: '/second/', loader } });
+		const outcome = replacement.catch((error) => error);
+		await vi.waitFor(() => expect(reentrantDisposal ?? reentrantError).toBeDefined());
+
+		expect(reentrantError).toBeUndefined();
+		const cancellation = await outcome;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(sandbox.dispose()).toBe(reentrantDisposal);
+		await reentrantDisposal;
+		expect(loaderSignal?.aborted).toBe(true);
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+		expect(sandbox.baseUrl).toBe('');
+		expect(workerInstances).toHaveLength(1);
+	});
 });

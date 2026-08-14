@@ -13,9 +13,11 @@ import {
 import {
 	AssetTooLargeError,
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	RuntimeConfigurationError,
 	TEAVM_RUNTIME_ASSET_NAMES,
 	TimeoutError,
 	resolveExecutionLimits,
@@ -66,6 +68,13 @@ class Java implements Sandbox {
 	pendingEof = false;
 	assetBridge: WorkerAssetBridge | null = null;
 	private activeOperation: JavaOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation = new CancelledError('Java sandbox disposed', {
+		phase: 'dispose',
+		runtimeId: 'JAVA',
+		recoverable: false
+	});
 	private readonly workerSession = new WorkerSession({
 		label: 'Java',
 		onDispose: (worker) => {
@@ -85,7 +94,15 @@ class Java implements Sandbox {
 		}
 	});
 
+	private disposedConfigurationError() {
+		return new RuntimeConfigurationError('Java sandbox is disposed', {
+			phase: 'dispose',
+			runtimeId: 'JAVA'
+		});
+	}
+
 	private requireOperationIdle() {
+		if (this.disposed) throw this.disposedConfigurationError();
 		if (!this.activeOperation) return;
 		throw new BusyError('Java runtime already has an active operation', {
 			runtimeId: 'JAVA',
@@ -147,7 +164,7 @@ class Java implements Sandbox {
 			if (registered) signal.removeEventListener('abort', onAbort);
 		};
 		const onAbort = () => {
-			if (!this.isOperationActive(operation)) return;
+			if (this.disposed || !this.isOperationActive(operation)) return;
 			let reason: unknown;
 			try {
 				reason = abortReason(signal, operation.phase);
@@ -179,7 +196,7 @@ class Java implements Sandbox {
 		if (!signal || !this.isOperationActive(operation)) return;
 		let registered = false;
 		const onAbort = () => {
-			if (!this.isOperationActive(operation)) return;
+			if (this.disposed || !this.isOperationActive(operation)) return;
 			let reason: unknown;
 			try {
 				reason = abortReason(signal, operation.phase);
@@ -486,12 +503,14 @@ class Java implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.flushPendingInput();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.flushPendingInput();
 	}
@@ -740,6 +759,7 @@ class Java implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const activeOperation = this.activeOperation;
 		if (activeOperation) {
 			this.cancelOperation(activeOperation, reason);
@@ -753,6 +773,7 @@ class Java implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		this.pendingInput = [];
 		this.waitingForInput = false;
 		this.pendingEof = false;
@@ -762,6 +783,34 @@ class Java implements Sandbox {
 			return;
 		}
 		if (this.worker) this.worker.onmessage = null;
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		const assetBridge = this.assetBridge;
+		delete this.worker;
+		this.assetBridge = null;
+		this.baseUrl = '';
+		this.output = undefined;
+		this.oncompilerdiagnostic = undefined;
+		this.resetExplicitStdinState();
+		try {
+			assetBridge?.dispose();
+		} catch {
+			// Asset cleanup is best effort after host state becomes unreachable.
+		}
+		if (activeOperation) {
+			this.cancelOperation(activeOperation, this.disposeCancellation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+			this.exit = true;
+		}
+		return this.disposePromise;
 	}
 }
 
