@@ -2380,6 +2380,9 @@
 		janetLspEnabled?: boolean;
 		janetLspBaseUrl?: string;
 		janetLspWorkerUrl?: string;
+		janetLspManifestUrl?: string;
+		janetLspManifestFingerprint?: string;
+		janetLspWorkerReceipt?: RuntimeAssetIntegrityEntry;
 		lispLspEnabled?: boolean;
 		lispLspModuleUrl?: string;
 		ocamlLspEnabled?: boolean;
@@ -2476,6 +2479,9 @@
 		janetLspEnabled = false,
 		janetLspBaseUrl,
 		janetLspWorkerUrl,
+		janetLspManifestUrl,
+		janetLspManifestFingerprint,
+		janetLspWorkerReceipt,
 		lispLspEnabled = false,
 		lispLspModuleUrl,
 		ocamlLspEnabled = false,
@@ -2636,6 +2642,9 @@
 			luaLspEnabled ? luaLspModuleUrl || '' : '',
 			janetLspEnabled ? janetLspBaseUrl || '' : '',
 			janetLspEnabled ? janetLspWorkerUrl || '' : '',
+			janetLspEnabled ? janetLspManifestUrl || '' : '',
+			janetLspEnabled ? janetLspManifestFingerprint || '' : '',
+			janetLspEnabled ? JSON.stringify(janetLspWorkerReceipt) : '',
 			lispLspEnabled ? lispLspModuleUrl || '' : '',
 			ocamlLspEnabled ? ocamlLspModuleUrl || '' : '',
 			ocamlLspEnabled ? ocamlLspManifestUrl || '' : '',
@@ -3167,7 +3176,13 @@
 		},
 		{
 			languages: ['janet'],
-			isEnabled: () => janetLspEnabled && !!janetLspBaseUrl && !!janetLspWorkerUrl,
+			isEnabled: () =>
+				janetLspEnabled &&
+				!!janetLspBaseUrl &&
+				!!janetLspWorkerUrl &&
+				!!janetLspManifestUrl &&
+				!!janetLspManifestFingerprint &&
+				!!janetLspWorkerReceipt,
 			setStatus: (status) => (janetLspStatus = status),
 			load: async (currentUrl) => {
 				const { getJanetLanguageServer } = await import('@wasm-idle/lsp/janet');
@@ -3175,7 +3190,10 @@
 					currentUrl,
 					janet: {
 						baseUrl: janetLspBaseUrl || '',
-						workerUrl: janetLspWorkerUrl || ''
+						workerUrl: janetLspWorkerUrl || '',
+						manifestUrl: janetLspManifestUrl || '',
+						manifestFingerprint: janetLspManifestFingerprint || '',
+						workerReceipt: janetLspWorkerReceipt
 					},
 					onStatus: (status) => (janetLspStatus = status)
 				});

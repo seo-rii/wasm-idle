@@ -9,6 +9,10 @@ import { BUNDLED_CLANGD_ASSET_INTEGRITY } from './bundledClangdAssetIntegrity.js
 import { BUNDLED_ELIXIR_ASSET_VERSION } from './bundledElixirRuntimeIntegrity.js';
 import { BUNDLED_GLEAM_MANIFEST_FINGERPRINT } from './bundledGleamRuntime.js';
 import {
+	BUNDLED_JANET_MANIFEST_FINGERPRINT,
+	BUNDLED_JANET_RUNNER_RECEIPT
+} from './bundledJanetRuntime.js';
+import {
 	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from './bundledPrologRuntime.js';
@@ -399,7 +403,7 @@ export function resolveJanetLanguageServerBaseUrl(
 		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-janet/`, currentUrl);
 	}
 	if (options?.janet?.baseUrl) {
-		return resolveFileUrl(options.janet.baseUrl, currentUrl);
+		return normalizeBaseUrl(options.janet.baseUrl, currentUrl);
 	}
 	if (options?.rootUrl) {
 		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-janet/`, currentUrl);
@@ -411,9 +415,10 @@ export function resolveJanetLanguageServerWorkerUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''
 ) {
+	const bundledWorkerVersion = resolveJanetLanguageServerWorkerReceipt(options).sha256;
 	if (typeof options === 'string') {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-janet/runner-worker.js`,
+			`${normalizeRootUrl(options) || ''}/wasm-janet/runner-worker.js?v=${bundledWorkerVersion}`,
 			currentUrl
 		);
 	}
@@ -422,11 +427,58 @@ export function resolveJanetLanguageServerWorkerUrl(
 	}
 	if (options?.rootUrl) {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-janet/runner-worker.js`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-janet/runner-worker.js?v=${bundledWorkerVersion}`,
 			currentUrl
 		);
 	}
-	return resolveApplicationAssetUrl('/wasm-janet/runner-worker.js', currentUrl);
+	return resolveApplicationAssetUrl(
+		`/wasm-janet/runner-worker.js?v=${bundledWorkerVersion}`,
+		currentUrl
+	);
+}
+
+export function resolveJanetLanguageServerManifestUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'object' && options.janet?.manifestUrl) {
+		return resolveFileUrl(options.janet.manifestUrl, currentUrl);
+	}
+	return resolveFileUrl(
+		`${resolveJanetLanguageServerBaseUrl(options, currentUrl)}runtime-manifest.v2.json?v=${resolveJanetLanguageServerManifestFingerprint(options)}`,
+		currentUrl
+	);
+}
+
+const usesCustomJanetRuntimeUrls = (options: EditorLanguageServerOptions | undefined) =>
+	typeof options === 'object' &&
+	Boolean(options.janet?.baseUrl || options.janet?.workerUrl || options.janet?.manifestUrl);
+
+export function resolveJanetLanguageServerManifestFingerprint(
+	options: EditorLanguageServerOptions | undefined
+) {
+	const configured =
+		typeof options === 'object' ? options.janet?.manifestFingerprint?.trim() || '' : '';
+	if (/^[a-f0-9]{64}$/u.test(configured)) return configured;
+	if (!configured && !usesCustomJanetRuntimeUrls(options)) {
+		return BUNDLED_JANET_MANIFEST_FINGERPRINT;
+	}
+	throw new LanguageServerAssetConfigurationError(
+		'Janet LSP',
+		'an explicit 64-character janet.manifestFingerprint for custom runtime URLs'
+	);
+}
+
+export function resolveJanetLanguageServerWorkerReceipt(
+	options: EditorLanguageServerOptions | undefined
+) {
+	const configured = typeof options === 'object' ? options.janet?.workerReceipt : undefined;
+	if (configured) return configured;
+	if (!usesCustomJanetRuntimeUrls(options)) return BUNDLED_JANET_RUNNER_RECEIPT;
+	throw new LanguageServerAssetConfigurationError(
+		'Janet LSP',
+		'an explicit janet.workerReceipt for custom runtime URLs'
+	);
 }
 
 export function resolveLispLanguageServerModuleUrl(

@@ -13,6 +13,10 @@ import {
 	BUNDLED_TCL_MANIFEST_FINGERPRINT,
 	BUNDLED_TCL_RUNNER_RECEIPT
 } from '../src/bundledTclRuntime.js';
+import {
+	BUNDLED_JANET_MANIFEST_FINGERPRINT,
+	BUNDLED_JANET_RUNNER_RECEIPT
+} from '../src/bundledJanetRuntime.js';
 
 const mockState = vi.hoisted(() => {
 	const workers: FakeWorker[] = [];
@@ -364,7 +368,10 @@ describe('additional language server workers', () => {
 			type: 'init',
 			options: {
 				baseUrl: 'https://static.example.com/repl_20240807/wasm-janet/',
-				workerUrl: 'https://static.example.com/repl_20240807/wasm-janet/runner-worker.js'
+				workerUrl: `https://static.example.com/repl_20240807/wasm-janet/runner-worker.js?v=${BUNDLED_JANET_RUNNER_RECEIPT.sha256}`,
+				manifestUrl: `https://static.example.com/repl_20240807/wasm-janet/runtime-manifest.v2.json?v=${BUNDLED_JANET_MANIFEST_FINGERPRINT}`,
+				manifestFingerprint: BUNDLED_JANET_MANIFEST_FINGERPRINT,
+				workerReceipt: BUNDLED_JANET_RUNNER_RECEIPT
 			}
 		});
 

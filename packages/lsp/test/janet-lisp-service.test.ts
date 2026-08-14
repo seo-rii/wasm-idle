@@ -30,7 +30,10 @@ describe('createJanetWorkerService', () => {
 		await service.initialize?.(
 			{
 				baseUrl: 'https://static.example.com/wasm-janet/',
-				workerUrl: 'https://static.example.com/wasm-janet/runner-worker.js'
+				workerUrl: 'https://static.example.com/wasm-janet/runner-worker.js',
+				manifestUrl: 'https://static.example.com/wasm-janet/runtime-manifest.v2.json',
+				manifestFingerprint: 'a'.repeat(64),
+				workerReceipt: { bytes: 1234, sha256: 'b'.repeat(64) }
 			},
 			context
 		);
@@ -47,6 +50,9 @@ describe('createJanetWorkerService', () => {
 		expect(runDiagnostics).toHaveBeenCalledWith({
 			baseUrl: 'https://static.example.com/wasm-janet/',
 			workerUrl: 'https://static.example.com/wasm-janet/runner-worker.js',
+			manifestUrl: 'https://static.example.com/wasm-janet/runtime-manifest.v2.json',
+			manifestFingerprint: 'a'.repeat(64),
+			workerReceipt: { bytes: 1234, sha256: 'b'.repeat(64) },
 			code: document.text,
 			activePath: 'main.janet'
 		});

@@ -70,6 +70,10 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_BQN_WORKER_URL: '',
 		PUBLIC_WASM_JANET_BASE_URL: '',
 		PUBLIC_WASM_JANET_WORKER_URL: '',
+		PUBLIC_WASM_JANET_MANIFEST_URL: '',
+		PUBLIC_WASM_JANET_MANIFEST_FINGERPRINT: '',
+		PUBLIC_WASM_JANET_WORKER_SHA256: '',
+		PUBLIC_WASM_JANET_WORKER_BYTES: '',
 		PUBLIC_WASM_JULIA_BASE_URL: '',
 		PUBLIC_WASM_JULIA_WORKER_URL: '',
 		PUBLIC_WASM_NIM_BASE_URL: '',
@@ -109,6 +113,7 @@ import {
 	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 } from './wasmClojureScriptVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
+import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
@@ -1144,7 +1149,11 @@ describe('runtime asset config resolution', () => {
 		expect(resolveJanetRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
 			{
 				baseUrl: 'https://example.com/absproxy/5173/wasm-janet/',
-				workerUrl: 'https://example.com/absproxy/5173/wasm-janet/runner-worker.js'
+				workerUrl: 'https://example.com/absproxy/5173/wasm-janet/runner-worker.js',
+				manifestUrl:
+					'https://example.com/absproxy/5173/wasm-janet/runtime-manifest.v2.json',
+				manifestFingerprint: WASM_JANET_ASSET_VERSION,
+				workerReceipt: WASM_JANET_RUNNER_RECEIPT
 			}
 		);
 		expect(resolveJuliaRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
@@ -1456,12 +1465,23 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(
 			resolveJanetRuntimeAssetConfig(
-				{ janet: { baseUrl: '/runtime/janet', workerUrl: '/runtime/janet/worker.js' } },
+				{
+					janet: {
+						baseUrl: '/runtime/janet',
+						workerUrl: '/runtime/janet/worker.js',
+						manifestUrl: '/runtime/janet/manifest.json',
+						manifestFingerprint: customFingerprint,
+						workerReceipt: customWorkerReceipt
+					}
+				},
 				'https://example.com/app'
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/janet/',
-			workerUrl: 'https://example.com/runtime/janet/worker.js'
+			workerUrl: 'https://example.com/runtime/janet/worker.js',
+			manifestUrl: 'https://example.com/runtime/janet/manifest.json',
+			manifestFingerprint: customFingerprint,
+			workerReceipt: customWorkerReceipt
 		});
 		expect(
 			resolveJuliaRuntimeAssetConfig(

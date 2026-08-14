@@ -22,6 +22,10 @@ import {
 } from '$lib/playground/wasmClojureScriptVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from '$lib/playground/wasmJVersion';
 import {
+	WASM_JANET_ASSET_VERSION,
+	WASM_JANET_RUNNER_RECEIPT
+} from '$lib/playground/wasmJanetVersion';
+import {
 	WASM_PROLOG_ASSET_VERSION,
 	WASM_PROLOG_RUNNER_RECEIPT
 } from '$lib/playground/wasmPrologVersion';
@@ -286,6 +290,9 @@ export interface BqnRuntimeAssetConfig {
 export interface JanetRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
+	manifestUrl?: string;
+	manifestFingerprint?: string;
+	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
 export interface JuliaRuntimeAssetConfig {
@@ -2621,13 +2628,54 @@ export function resolveJanetWorkerUrl(
 	return resolveConfiguredUrl('/wasm-janet/runner-worker.js', currentUrl);
 }
 
+export function resolveJanetManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl =
+		(typeof options === 'object' && options?.janet?.manifestUrl) ||
+		(publicEnv.PUBLIC_WASM_JANET_MANIFEST_URL || '').trim();
+	if (configuredManifestUrl) return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
+	return `${resolveJanetBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
+}
+
 export function resolveJanetRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
+	const configured = typeof options === 'object' ? options?.janet : undefined;
+	const envManifestFingerprint = (publicEnv.PUBLIC_WASM_JANET_MANIFEST_FINGERPRINT || '').trim();
+	const envWorkerSha256 = (publicEnv.PUBLIC_WASM_JANET_WORKER_SHA256 || '').trim();
+	const envWorkerBytesSource = (publicEnv.PUBLIC_WASM_JANET_WORKER_BYTES || '').trim();
+	const envWorkerBytes = /^\d+$/u.test(envWorkerBytesSource)
+		? Number(envWorkerBytesSource)
+		: Number.NaN;
+	const envWorkerReceipt =
+		/^[a-f0-9]{64}$/u.test(envWorkerSha256) &&
+		Number.isSafeInteger(envWorkerBytes) &&
+		envWorkerBytes > 0
+			? { bytes: envWorkerBytes, sha256: envWorkerSha256 }
+			: undefined;
+	const usesCustomUrls = Boolean(
+		configured?.baseUrl ||
+		configured?.workerUrl ||
+		configured?.manifestUrl ||
+		(publicEnv.PUBLIC_WASM_JANET_BASE_URL || '').trim() ||
+		(publicEnv.PUBLIC_WASM_JANET_WORKER_URL || '').trim() ||
+		(publicEnv.PUBLIC_WASM_JANET_MANIFEST_URL || '').trim()
+	);
 	return {
 		baseUrl: resolveJanetBaseUrl(options, currentUrl),
-		workerUrl: resolveJanetWorkerUrl(options, currentUrl)
+		workerUrl: resolveJanetWorkerUrl(options, currentUrl),
+		manifestUrl: resolveJanetManifestUrl(options, currentUrl),
+		manifestFingerprint:
+			configured?.manifestFingerprint?.trim() ||
+			envManifestFingerprint ||
+			(!usesCustomUrls ? WASM_JANET_ASSET_VERSION : undefined),
+		workerReceipt:
+			configured?.workerReceipt ||
+			envWorkerReceipt ||
+			(!usesCustomUrls ? WASM_JANET_RUNNER_RECEIPT : undefined)
 	};
 }
 

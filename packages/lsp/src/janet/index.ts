@@ -1,4 +1,8 @@
-export { getJanetLanguageServer, type JanetLanguageServerOptions } from './server.js';
+export {
+	getJanetLanguageServer,
+	type JanetLanguageServerConfig,
+	type JanetLanguageServerOptions
+} from './server.js';
 export {
 	createJanetWorkerService,
 	type JanetDiagnosticRunnerRequest,

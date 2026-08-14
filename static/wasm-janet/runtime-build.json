@@ -1,0 +1,47 @@
+{
+  "format": "wasm-janet-runtime-build-v1",
+  "runtime": "janet-lang-janet",
+  "profileId": "janet-1.41.3-dev-emscripten-3.1.8-wasm-idle-d647850c",
+  "provenanceLevel": "opaque-vendored",
+  "artifact": {
+    "kind": "opaque-vendored",
+    "repository": "https://github.com/seo-rii/wasm-idle.git",
+    "revision": "d647850cd6448b457f778d01c304358aefa5244b",
+    "path": "static/wasm-janet",
+    "provenance": "legacy-import-unrecorded",
+    "verifiedBuildInput": false
+  },
+  "components": {
+    "janet": {
+      "version": "1.41.3-dev",
+      "repository": "https://github.com/janet-lang/janet.git",
+      "revision": "unrecorded",
+      "verifiedBuildInput": false,
+      "evidence": "embedded runtime version string"
+    },
+    "emscripten": {
+      "version": "3.1.8",
+      "repository": "https://github.com/emscripten-core/emscripten.git",
+      "revision": "unrecorded",
+      "verifiedBuildInput": false,
+      "evidence": "unverified metadata copied from the initial vendored runtime manifest"
+    }
+  },
+  "build": {
+    "options": [
+      "ENVIRONMENT=worker",
+      "MODULARIZE=1",
+      "EXPORT_ES6=1",
+      "FORCE_FILESYSTEM=1",
+      "INVOKE_RUN=0",
+      "EXIT_RUNTIME=1",
+      "JANET_REDUCED_OS"
+    ],
+    "runner": {
+      "path": "scripts/runtime-build/wasm-janet-runner.c",
+      "verifiedBuildInput": false,
+      "bytes": 1378,
+      "sha256": "1a2f357f16e250ed64260a77bd11435837ae033647fb23166eb924a42b4036ee"
+    }
+  }
+}

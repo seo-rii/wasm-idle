@@ -151,7 +151,13 @@ export interface RuntimeAssetKeySource {
 		manifestFingerprint?: string;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
-	janet?: { baseUrl?: string; workerUrl?: string };
+	janet?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	julia?: { baseUrl?: string; workerUrl?: string };
 	nim?: { baseUrl?: string; workerUrl?: string };
 	bash?: {
@@ -659,6 +665,18 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	},
 	{ runtime: 'janet', property: 'baseUrl', key: 'janetBaseUrl' },
 	{ runtime: 'janet', property: 'workerUrl', key: 'janetWorkerUrl' },
+	{ runtime: 'janet', property: 'manifestUrl', key: 'janetManifestUrl' },
+	{
+		runtime: 'janet',
+		property: 'manifestFingerprint',
+		key: 'janetManifestFingerprint'
+	},
+	{
+		runtime: 'janet',
+		property: 'workerReceipt',
+		key: 'janetWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'julia', property: 'baseUrl', key: 'juliaBaseUrl' },
 	{ runtime: 'julia', property: 'workerUrl', key: 'juliaWorkerUrl' },
 	{ runtime: 'nim', property: 'baseUrl', key: 'nimBaseUrl' },

@@ -28,6 +28,7 @@ import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForth
 import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
+import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
 import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
@@ -184,6 +185,13 @@ describe('application runtime asset root', () => {
 			manifestUrl: `/foo/bar/wasm-bqn/runtime-manifest.v2.json?v=${WASM_BQN_ASSET_VERSION}`,
 			manifestFingerprint: WASM_BQN_ASSET_VERSION,
 			workerReceipt: WASM_BQN_RUNNER_RECEIPT
+		});
+		expect(assets.janet).toEqual({
+			baseUrl: '/foo/bar/wasm-janet/',
+			workerUrl: `/foo/bar/wasm-janet/runner-worker.js?v=${WASM_JANET_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-janet/runtime-manifest.v2.json?v=${WASM_JANET_ASSET_VERSION}`,
+			manifestFingerprint: WASM_JANET_ASSET_VERSION,
+			workerReceipt: WASM_JANET_RUNNER_RECEIPT
 		});
 		expect(assets.clojurescript).toEqual({
 			baseUrl: '/foo/bar/wasm-clojurescript/',

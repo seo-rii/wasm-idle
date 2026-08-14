@@ -4,6 +4,10 @@ import { BUNDLED_CLANGD_ASSET_INTEGRITY } from '../src/bundledClangdAssetIntegri
 import { BUNDLED_ELIXIR_ASSET_VERSION } from '../src/bundledElixirRuntimeIntegrity.js';
 import { BUNDLED_GLEAM_MANIFEST_FINGERPRINT } from '../src/bundledGleamRuntime.js';
 import {
+	BUNDLED_JANET_MANIFEST_FINGERPRINT,
+	BUNDLED_JANET_RUNNER_RECEIPT
+} from '../src/bundledJanetRuntime.js';
+import {
 	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from '../src/bundledPrologRuntime.js';
@@ -33,6 +37,9 @@ import {
 	resolveHaskellLanguageServerModuleUrl,
 	resolveHaskellLanguageServerRootfsUrl,
 	resolveJanetLanguageServerBaseUrl,
+	resolveJanetLanguageServerManifestFingerprint,
+	resolveJanetLanguageServerManifestUrl,
+	resolveJanetLanguageServerWorkerReceipt,
 	resolveJanetLanguageServerWorkerUrl,
 	resolveLispLanguageServerModuleUrl,
 	resolveAwkLanguageServerBaseUrl,
@@ -144,6 +151,60 @@ describe('lsp runtime asset resolution', () => {
 				gleam: { manifestFingerprint: 'a'.repeat(64) }
 			})
 		).toBe('a'.repeat(64));
+	});
+
+	it('pins bundled Janet manifests and diagnostic workers and fails closed for mirrors', () => {
+		const currentUrl = 'https://app.example.com/editor';
+		const bundledOptions = { rootUrl: '/wasm-idle' };
+
+		expect(resolveJanetLanguageServerManifestFingerprint(bundledOptions)).toBe(
+			BUNDLED_JANET_MANIFEST_FINGERPRINT
+		);
+		expect(resolveJanetLanguageServerWorkerReceipt(bundledOptions)).toBe(
+			BUNDLED_JANET_RUNNER_RECEIPT
+		);
+		expect(resolveJanetLanguageServerWorkerUrl(bundledOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-janet/runner-worker.js?v=${BUNDLED_JANET_RUNNER_RECEIPT.sha256}`
+		);
+		expect(resolveJanetLanguageServerManifestUrl(bundledOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-janet/runtime-manifest.v2.json?v=${BUNDLED_JANET_MANIFEST_FINGERPRINT}`
+		);
+
+		const customReceipt = { bytes: 543, sha256: 'b'.repeat(64) };
+		const customOptions = {
+			janet: {
+				baseUrl: 'https://mirror.example.com/janet',
+				workerUrl: 'https://mirror.example.com/janet/runner.js?v=custom',
+				manifestUrl: 'https://mirror.example.com/janet/manifest.json?v=custom',
+				manifestFingerprint: ` ${'a'.repeat(64)} `,
+				workerReceipt: customReceipt
+			}
+		};
+
+		expect(resolveJanetLanguageServerBaseUrl(customOptions)).toBe(
+			'https://mirror.example.com/janet/'
+		);
+		expect(resolveJanetLanguageServerWorkerUrl(customOptions)).toBe(
+			'https://mirror.example.com/janet/runner.js?v=custom'
+		);
+		expect(resolveJanetLanguageServerManifestUrl(customOptions)).toBe(
+			'https://mirror.example.com/janet/manifest.json?v=custom'
+		);
+		expect(resolveJanetLanguageServerManifestFingerprint(customOptions)).toBe('a'.repeat(64));
+		expect(resolveJanetLanguageServerWorkerReceipt(customOptions)).toBe(customReceipt);
+		expect(() =>
+			resolveJanetLanguageServerManifestFingerprint({
+				janet: { baseUrl: 'https://mirror.example.com/janet/' }
+			})
+		).toThrow(LanguageServerAssetConfigurationError);
+		expect(() =>
+			resolveJanetLanguageServerWorkerReceipt({
+				janet: {
+					baseUrl: 'https://mirror.example.com/janet/',
+					manifestFingerprint: 'c'.repeat(64)
+				}
+			})
+		).toThrow(LanguageServerAssetConfigurationError);
 	});
 
 	it('pins bundled Prolog manifests and diagnostic workers while allowing explicit mirrors', () => {
@@ -365,7 +426,14 @@ describe('lsp runtime asset resolution', () => {
 			[resolveZigLanguageServerStdlibUrl, 'wasm-zig/std.tar.gz'],
 			[resolveLuaLanguageServerModuleUrl, 'wasm-lua/index.js'],
 			[resolveJanetLanguageServerBaseUrl, 'wasm-janet/'],
-			[resolveJanetLanguageServerWorkerUrl, 'wasm-janet/runner-worker.js'],
+			[
+				resolveJanetLanguageServerWorkerUrl,
+				`wasm-janet/runner-worker.js?v=${BUNDLED_JANET_RUNNER_RECEIPT.sha256}`
+			],
+			[
+				resolveJanetLanguageServerManifestUrl,
+				`wasm-janet/runtime-manifest.v2.json?v=${BUNDLED_JANET_MANIFEST_FINGERPRINT}`
+			],
 			[resolveLispLanguageServerModuleUrl, 'wasm-lisp/index.js'],
 			[resolveOctaveLanguageServerBaseUrl, 'wasm-octave/runtime/'],
 			[resolveOctaveLanguageServerWorkerUrl, 'wasm-octave/runner-worker.js'],
@@ -522,7 +590,9 @@ describe('lsp runtime asset resolution', () => {
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
 			)
-		).toBe('https://static.example.com/repl_20240807/wasm-janet/runner-worker.js');
+		).toBe(
+			`https://static.example.com/repl_20240807/wasm-janet/runner-worker.js?v=${BUNDLED_JANET_RUNNER_RECEIPT.sha256}`
+		);
 		expect(
 			resolveLispLanguageServerModuleUrl(
 				'https://static.example.com/repl_20240807',
@@ -692,7 +762,10 @@ describe('lsp runtime asset resolution', () => {
 			},
 			janet: {
 				baseUrl: 'https://janet.example.com/wasm-janet/',
-				workerUrl: 'https://janet.example.com/runner-worker.js?v=20240807'
+				workerUrl: 'https://janet.example.com/runner-worker.js?v=20240807',
+				manifestUrl: 'https://janet.example.com/manifest.json?v=20240807',
+				manifestFingerprint: 'd'.repeat(64),
+				workerReceipt: { bytes: 2345, sha256: 'e'.repeat(64) }
 			},
 			lisp: {
 				moduleUrl: 'https://lisp.example.com/wasm-lisp/index.js?v=20240807'
@@ -781,6 +854,14 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolveJanetLanguageServerWorkerUrl(options)).toBe(
 			'https://janet.example.com/runner-worker.js?v=20240807'
 		);
+		expect(resolveJanetLanguageServerManifestUrl(options)).toBe(
+			'https://janet.example.com/manifest.json?v=20240807'
+		);
+		expect(resolveJanetLanguageServerManifestFingerprint(options)).toBe('d'.repeat(64));
+		expect(resolveJanetLanguageServerWorkerReceipt(options)).toEqual({
+			bytes: 2345,
+			sha256: 'e'.repeat(64)
+		});
 		expect(resolveLispLanguageServerModuleUrl(options)).toBe(
 			'https://lisp.example.com/wasm-lisp/index.js?v=20240807'
 		);

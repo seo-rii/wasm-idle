@@ -69,6 +69,21 @@ describe('language tool asset loading', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	it('rejects assets outside the Janet diagnostic worker allowlist before fetching', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			loadLanguageToolAsset(
+				'janet',
+				'unexpected.js',
+				{ baseUrl: 'https://assets.example.com/wasm-janet/' },
+				vi.fn()
+			)
+		).rejects.toThrow('Unexpected Janet runtime asset: unexpected.js');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it('rejects assets outside the Ruby runtime allowlist before fetching', async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal('fetch', fetchMock);

@@ -28,6 +28,9 @@ export {
 	resolveHaskellLanguageServerModuleUrl,
 	resolveHaskellLanguageServerRootfsUrl,
 	resolveJanetLanguageServerBaseUrl,
+	resolveJanetLanguageServerManifestFingerprint,
+	resolveJanetLanguageServerManifestUrl,
+	resolveJanetLanguageServerWorkerReceipt,
 	resolveJanetLanguageServerWorkerUrl,
 	resolveLispLanguageServerModuleUrl,
 	resolveLuaLanguageServerModuleUrl,
@@ -244,6 +247,7 @@ export {
 	getJanetLanguageServer,
 	type JanetDiagnosticRunnerRequest,
 	type JanetDiagnosticRunnerResult,
+	type JanetLanguageServerConfig,
 	type JanetLanguageServerOptions,
 	type JanetWorkerOptions,
 	type RunJanetDiagnostics

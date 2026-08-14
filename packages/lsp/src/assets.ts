@@ -7,7 +7,14 @@ import {
 } from '@wasm-idle/core';
 import { D_OUTER_ASSETS } from './d/assets.js';
 
-export type LanguageToolAssetRuntime = 'clangd' | 'd' | 'perl' | 'prolog' | 'ruby' | 'tcl';
+export type LanguageToolAssetRuntime =
+	| 'clangd'
+	| 'd'
+	| 'janet'
+	| 'perl'
+	| 'prolog'
+	| 'ruby'
+	| 'tcl';
 
 export interface LanguageToolAssetLoadRequest {
 	runtime: LanguageToolAssetRuntime;
@@ -475,6 +482,9 @@ export async function loadLanguageToolAsset(
 	}
 	if (runtime === 'perl' && asset !== 'runner-worker.js') {
 		throw new Error(`Unexpected Perl runtime asset: ${asset}`);
+	}
+	if (runtime === 'janet' && asset !== 'runner-worker.js') {
+		throw new Error(`Unexpected Janet runtime asset: ${asset}`);
 	}
 	if (runtime === 'tcl' && asset !== 'runner-worker.js') {
 		throw new Error(`Unexpected Tcl runtime asset: ${asset}`);

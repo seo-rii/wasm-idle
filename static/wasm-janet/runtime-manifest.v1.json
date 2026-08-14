@@ -14,7 +14,7 @@
     ],
     "runner": "scripts/runtime-build/wasm-janet-runner.c"
   },
-  "fingerprint": "0add7f2785051101",
+  "fingerprint": "5005378dcd6a520e",
   "files": [
     "LICENSE.txt",
     "janet.js",

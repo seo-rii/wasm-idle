@@ -414,7 +414,10 @@ describe('core language contract', () => {
 			},
 			janet: {
 				baseUrl: '/wasm-janet/',
-				workerUrl: '/wasm-janet/runner-worker.js?v=test'
+				workerUrl: '/wasm-janet/runner-worker.js?v=test',
+				manifestUrl: '/wasm-janet/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: '3'.repeat(64),
+				workerReceipt: { bytes: 3456, sha256: '4'.repeat(64) }
 			},
 			julia: {
 				baseUrl: '/wasm-julia/',
@@ -445,6 +448,9 @@ describe('core language contract', () => {
 		expect(key).toContain('"bqnWorkerReceipt":');
 		expect(key).toContain('"janetBaseUrl":"/wasm-janet/"');
 		expect(key).toContain('"janetWorkerUrl":"/wasm-janet/runner-worker.js?v=test"');
+		expect(key).toContain('"janetManifestUrl":"/wasm-janet/runtime-manifest.v2.json?v=test"');
+		expect(key).toContain(`"janetManifestFingerprint":"${'3'.repeat(64)}"`);
+		expect(key).toContain('"janetWorkerReceipt":');
 		expect(key).toContain('"juliaBaseUrl":"/wasm-julia/"');
 		expect(key).toContain('"juliaWorkerUrl":"/wasm-julia/runner-worker.js?v=test"');
 		expect(key).toContain('"nimBaseUrl":"/wasm-nim/"');

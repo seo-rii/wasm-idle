@@ -102,6 +102,9 @@ export interface EditorLanguageServerRuntimeOptions {
 	janet?: {
 		baseUrl?: string;
 		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	lisp?: {
 		moduleUrl?: string;
