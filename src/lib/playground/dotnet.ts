@@ -5,6 +5,7 @@ import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
+	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
@@ -129,6 +130,9 @@ class Dotnet implements Sandbox {
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	private activeExplicitStdinCleanup: (() => void) | null = null;
 	private activeOperation: DotnetOperation | null = null;
+	private disposed = false;
+	private disposePromise: Promise<void> | null = null;
+	private readonly disposeCancellation: CancelledError;
 	private readonly workerSession = new WorkerSession({
 		label: () => this.languageLabel,
 		onDispose: (worker) => {
@@ -138,7 +142,13 @@ class Dotnet implements Sandbox {
 		}
 	});
 
-	constructor(private readonly language: DotnetSandboxLanguage = 'FSHARP') {}
+	constructor(private readonly language: DotnetSandboxLanguage = 'FSHARP') {
+		this.disposeCancellation = new CancelledError(`${this.languageLabel} sandbox disposed`, {
+			phase: 'dispose',
+			runtimeId: this.language,
+			recoverable: false
+		});
+	}
 
 	private get compileLanguage(): DotnetCompileLanguage {
 		return this.language === 'CSHARP'
@@ -153,6 +163,12 @@ class Dotnet implements Sandbox {
 	}
 
 	private beginOperation(phase: DotnetOperation['phase']) {
+		if (this.disposed) {
+			throw new RuntimeConfigurationError(`${this.languageLabel} sandbox is disposed`, {
+				phase: 'dispose',
+				runtimeId: this.language
+			});
+		}
 		if (this.activeOperation) {
 			throw new BusyError(`${this.languageLabel} runtime already has an active operation`, {
 				runtimeId: this.language,
@@ -541,6 +557,10 @@ class Dotnet implements Sandbox {
 					}
 					this.worker = worker;
 					this.workerSession.attach(worker);
+					if (!this.isOperationActive(operation) || this.worker !== worker) {
+						this.workerSession.release(worker);
+						return;
+					}
 					worker.onmessage = (event: MessageEvent<any>) => {
 						if (!this.isOperationActive(operation) || this.worker !== worker) return;
 						try {
@@ -588,12 +608,14 @@ class Dotnet implements Sandbox {
 	}
 
 	write(input: string) {
+		if (this.disposed) return;
 		this.pendingInput.push(input);
 		this.pendingEof = false;
 		this.resolveStdinWaiters();
 	}
 
 	eof() {
+		if (this.disposed) return;
 		this.pendingEof = true;
 		this.resolveStdinWaiters();
 	}
@@ -1312,6 +1334,7 @@ class Dotnet implements Sandbox {
 	}
 
 	terminate(reason: unknown = 'Process terminated') {
+		if (this.disposed) return;
 		const operation = this.activeOperation;
 		const rejectDeferred = operation?.signal ? operation.deferredReject : undefined;
 		if (operation) {
@@ -1334,11 +1357,47 @@ class Dotnet implements Sandbox {
 	}
 
 	async clear() {
+		if (this.disposed) return;
 		if (this.worker) this.worker.onmessage = null;
 		this.resetStdinState();
 		if (this.activeOperation) {
 			this.terminate();
 		}
+	}
+
+	dispose() {
+		if (this.disposePromise) return this.disposePromise;
+		this.disposed = true;
+		this.disposePromise = Promise.resolve();
+
+		const activeOperation = this.activeOperation;
+		const stdinWaiters = this.stdinWaiters.splice(0);
+		delete this.worker;
+		this.runtimeModule = null;
+		this.compiler = null;
+		this.moduleUrl = '';
+		this.clearCompiledArtifact();
+		this.output = null;
+		this.oncompilerdiagnostic = undefined;
+		this.activeExplicitStdinCleanup = null;
+		this.pendingInput = [];
+		this.pendingEof = false;
+		this.exit = true;
+		for (const resolve of stdinWaiters) {
+			try {
+				resolve();
+			} catch {
+				// Waiter cleanup is best effort after host state becomes unreachable.
+			}
+		}
+		if (activeOperation) {
+			this.abortOperation(activeOperation, this.disposeCancellation);
+			this.completeOperation(activeOperation);
+		} else {
+			this.uid += 1;
+			this.workerSession.terminate(this.disposeCancellation);
+		}
+		return this.disposePromise;
 	}
 }
 

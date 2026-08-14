@@ -3053,4 +3053,297 @@ export async function executeBrowserDotnetArtifact() {
 			'F# worker script error: worker script error (/worker/dotnet.js:88:24)'
 		);
 	});
+
+	it('keeps clear reusable but disposes an idle dotnet worker exactly once', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+
+		await sandbox.clear();
+		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('Console.WriteLine("reusable");', false)).resolves.toBe(true);
+		output.mockClear();
+		sandbox.write('queued input\n');
+		sandbox.eof();
+		expect(sandbox.pendingInput).toEqual(['queued input\n']);
+		expect(sandbox.pendingEof).toBe(true);
+		const throwingWaiter = vi.fn(() => {
+			throw new Error('synthetic dotnet stdin waiter cleanup failure');
+		});
+		sandbox.stdinWaiters.push(throwingWaiter);
+
+		let cleanupSnapshot: Record<string, unknown> | undefined;
+		let reentrantLoad: Promise<void> | undefined;
+		let reentrantRun: Promise<boolean | string> | undefined;
+		let reentrantDisposal: Promise<void> | undefined;
+		worker.terminate.mockImplementationOnce(() => {
+			cleanupSnapshot = {
+				worker: sandbox.worker,
+				runtimeModule: sandbox.runtimeModule,
+				compiler: sandbox.compiler,
+				moduleUrl: sandbox.moduleUrl,
+				output: sandbox.output,
+				diagnostic: sandbox.oncompilerdiagnostic,
+				pendingInput: [...sandbox.pendingInput],
+				pendingEof: sandbox.pendingEof,
+				stdinWaiters: [...sandbox.stdinWaiters],
+				compiledArtifact: sandbox.compiledArtifact,
+				compiledCacheKey: sandbox.compiledCacheKey,
+				onmessage: worker.onmessage,
+				onerror: worker.onerror,
+				onmessageerror: worker.onmessageerror
+			};
+			reentrantLoad = sandbox.load('/reentrant');
+			reentrantRun = sandbox.run('Console.WriteLine("reentrant");', false);
+			reentrantDisposal = sandbox.dispose();
+		});
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		expect(reentrantDisposal).toBe(firstDisposal);
+		await firstDisposal;
+
+		expect(cleanupSnapshot).toEqual({
+			worker: undefined,
+			runtimeModule: null,
+			compiler: null,
+			moduleUrl: '',
+			output: null,
+			diagnostic: undefined,
+			pendingInput: [],
+			pendingEof: false,
+			stdinWaiters: [],
+			compiledArtifact: null,
+			compiledCacheKey: '',
+			onmessage: null,
+			onerror: null,
+			onmessageerror: null
+		});
+		expect(throwingWaiter).toHaveBeenCalledOnce();
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		await expect(reentrantLoad).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'CSHARP'
+		});
+		await expect(reentrantRun).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'CSHARP'
+		});
+		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'dispose',
+			runtimeId: 'CSHARP'
+		});
+		await expect(sandbox.run('Console.WriteLine("unavailable");', false)).rejects.toMatchObject(
+			{
+				name: 'RuntimeConfigurationError',
+				code: 'runtime-configuration',
+				phase: 'dispose',
+				runtimeId: 'CSHARP'
+			}
+		);
+		sandbox.write('ignored input\n');
+		sandbox.eof();
+		sandbox.terminate();
+		await sandbox.clear();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles active dotnet startup with one stable disposal cancellation', async () => {
+		suppressAutoLoadAck = true;
+		const sandbox = new Dotnet('VBNET');
+		const loading = sandbox.load('/absproxy/5173');
+		const outcome = loading.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const staleHandler = worker.onmessage;
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		const cancellation = await outcome;
+		await firstDisposal;
+
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'VBNET',
+			recoverable: false
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.runtimeModule).toBeNull();
+		expect(sandbox.compiler).toBeNull();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('settles an active dotnet worker run, clears stdin, and ignores retained messages', async () => {
+		suppressAutoRunAck = true;
+		const sandbox = new Dotnet();
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const running = sandbox.run('printfn "active"', false, true, undefined, [], {
+			stdin: ''
+		});
+		const outcome = running.catch((error) => error);
+		await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledTimes(2));
+		const staleHandler = worker.onmessage;
+		sandbox.write('queued during explicit stdin\n');
+		sandbox.eof();
+		expect(sandbox.pendingInput).toEqual(['queued during explicit stdin\n']);
+		expect(sandbox.pendingEof).toBe(true);
+
+		await sandbox.dispose();
+		const cancellation = await outcome;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'FSHARP',
+			recoverable: false
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(sandbox.stdinWaiters).toEqual([]);
+		expect(Reflect.get(sandbox, 'activeExplicitStdinCleanup')).toBeNull();
+
+		staleHandler?.({
+			data: {
+				output: 'late output',
+				diagnostic: { severity: 'error', message: 'late diagnostic' },
+				progress: 1,
+				results: 'late result'
+			}
+		} as MessageEvent<any>);
+		await Promise.resolve();
+		expect(output).not.toHaveBeenCalled();
+		expect(diagnostic).not.toHaveBeenCalled();
+		expect(sandbox.output).toBeNull();
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+	});
+
+	it('cancels a main-thread compile and prevents late cache resurrection after disposal', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		let markCompileStarted!: () => void;
+		const compileStarted = new Promise<void>((resolve) => {
+			markCompileStarted = resolve;
+		});
+		let releaseCompile!: () => void;
+		const compileGate = new Promise<void>((resolve) => {
+			releaseCompile = resolve;
+		});
+		let compileRequest:
+			| { onProgress?: (progress: { percent?: number; stage?: string }) => void }
+			| undefined;
+		const compile = vi.fn(async (request: typeof compileRequest) => {
+			compileRequest = request;
+			markCompileStarted();
+			await compileGate;
+			return { success: true, artifact: { id: 'late artifact' } };
+		});
+		const execute = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+		sandbox.runtimeModule = {
+			createDotnetCompiler: () => ({ compile }),
+			executeBrowserDotnetArtifact: execute
+		};
+		sandbox.compiler = { compile };
+		sandbox.moduleUrl = '/main-thread/dotnet.js';
+		const output = vi.fn();
+		const diagnostic = vi.fn();
+		const progress = { set: vi.fn() };
+		sandbox.output = output;
+		sandbox.oncompilerdiagnostic = diagnostic;
+		const running = sandbox.run('Console.WriteLine("late");', true, true, progress);
+		const outcome = running.catch((error) => error);
+		await compileStarted;
+
+		const firstDisposal = sandbox.dispose();
+		const secondDisposal = sandbox.dispose();
+		expect(secondDisposal).toBe(firstDisposal);
+		const cancellation = await outcome;
+		await firstDisposal;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(cancellation).toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'dispose',
+			runtimeId: 'CSHARP',
+			recoverable: false
+		});
+		expect(sandbox.runtimeModule).toBeNull();
+		expect(sandbox.compiler).toBeNull();
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.compiledArtifact).toBeNull();
+		expect(sandbox.compiledCacheKey).toBe('');
+		expect(sandbox.output).toBeNull();
+		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
+
+		compileRequest?.onProgress?.({ percent: 100, stage: 'late' });
+		releaseCompile();
+		await vi.waitFor(() => expect(Reflect.get(sandbox, 'activeOperation')).toBeNull());
+		expect(progress.set).not.toHaveBeenCalled();
+		expect(output).not.toHaveBeenCalled();
+		expect(diagnostic).not.toHaveBeenCalled();
+		expect(sandbox.compiledArtifact).toBeNull();
+		expect(sandbox.compiledCacheKey).toBe('');
+		expect(execute).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('quarantines a replacement worker when retiring the old worker reenters disposal', async () => {
+		const sandbox = new Dotnet();
+		await sandbox.load({ dotnet: { moduleUrl: '/first-runtime.js' } });
+		const retiredWorker = workerInstances[0];
+		let reentrantDisposal: Promise<void> | undefined;
+		let reentrantError: unknown;
+		retiredWorker.terminate.mockImplementationOnce(() => {
+			try {
+				reentrantDisposal = sandbox.dispose();
+			} catch (error) {
+				reentrantError = error;
+			}
+		});
+
+		const replacement = sandbox.load({ dotnet: { moduleUrl: '/replacement-runtime.js' } });
+		const outcome = replacement.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+		await vi.waitFor(() => expect(reentrantDisposal ?? reentrantError).toBeDefined());
+
+		expect(reentrantError).toBeUndefined();
+		const cancellation = await outcome;
+		expect(cancellation).toBe(Reflect.get(sandbox, 'disposeCancellation'));
+		expect(reentrantDisposal).toBe(sandbox.dispose());
+		await reentrantDisposal;
+		const replacementWorker = workerInstances[1];
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+		expect(replacementWorker.terminate).toHaveBeenCalledOnce();
+		expect(replacementWorker.postMessage).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.moduleUrl).toBe('');
+		expect(sandbox.runtimeModule).toBeNull();
+		expect(sandbox.compiler).toBeNull();
+	});
 });
