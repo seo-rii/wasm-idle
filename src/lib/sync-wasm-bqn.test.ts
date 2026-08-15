@@ -163,6 +163,7 @@ describe('syncWasmBqnAssets', () => {
 		expect((await readdir(targetDir)).sort()).toEqual([
 			'BQN.js',
 			'BQN.wasm.gz',
+			'BQN.wasm.gz.bin',
 			'LICENSE-GPLv3.txt',
 			'runner-worker.js',
 			'runtime-manifest.v1.json',
@@ -170,14 +171,18 @@ describe('syncWasmBqnAssets', () => {
 		]);
 		expect(await readFile(path.join(targetDir, 'BQN.js'))).toEqual(moduleBytes);
 		const installedGzip = await readFile(path.join(targetDir, 'BQN.wasm.gz'));
+		const installedVerifiedGzip = await readFile(path.join(targetDir, 'BQN.wasm.gz.bin'));
 		expect(gunzipSync(installedGzip)).toEqual(wasmBytes);
 		expect(installedGzip).toEqual(gzipSync(wasmBytes, { level: 9 }));
+		expect(installedVerifiedGzip).toEqual(installedGzip);
 		expect(await readFile(path.join(targetDir, 'LICENSE-GPLv3.txt'))).toEqual(licenseBytes);
 		expect(await readFile(path.join(targetDir, 'runner-worker.js'))).toEqual(workerBytes);
 
-		const manifest = JSON.parse(
-			await readFile(path.join(targetDir, 'runtime-manifest.v2.json'), 'utf8')
+		const manifestSource = await readFile(
+			path.join(targetDir, 'runtime-manifest.v2.json'),
+			'utf8'
 		);
+		const manifest = JSON.parse(manifestSource);
 		expect(manifest).toMatchObject({
 			format: BQN_MANIFEST_FORMAT,
 			runtime: 'dzaima-cbqn',
@@ -210,7 +215,7 @@ describe('syncWasmBqnAssets', () => {
 					sha256: sha256(moduleBytes)
 				},
 				{
-					path: 'BQN.wasm.gz',
+					path: 'BQN.wasm.gz.bin',
 					encoding: 'gzip',
 					size: installedGzip.byteLength,
 					sha256: sha256(installedGzip)
@@ -219,9 +224,9 @@ describe('syncWasmBqnAssets', () => {
 		});
 		expect(computeBqnRuntimeFingerprint(manifest)).toBe(result.fingerprint);
 		const versionModule = await readFile(versionModulePath, 'utf8');
-		expect(versionModule).toContain(result.fingerprint);
-		expect(versionModule).toContain(`bytes: ${workerBytes.byteLength}`);
-		expect(versionModule).toContain(`sha256: '${sha256(workerBytes)}'`);
+		expect(versionModule).toBe(
+			`export const WASM_BQN_RUNTIME_PROFILE = {\n\tprofileId: 'dzaima-cbqn-test',\n\tsourceRevision: 'fixture',\n\tmanifestFingerprint: '${result.fingerprint}',\n\tmanifestReceipt: {\n\t\tbytes: ${Buffer.byteLength(manifestSource)},\n\t\tsha256: '${sha256(Buffer.from(manifestSource))}'\n\t},\n\tmoduleReceipt: {\n\t\tbytes: ${moduleBytes.byteLength},\n\t\tsha256: '${sha256(moduleBytes)}'\n\t},\n\twasmReceipt: {\n\t\tbytes: ${installedGzip.byteLength},\n\t\tsha256: '${sha256(installedGzip)}',\n\t\tuncompressedBytes: ${wasmBytes.byteLength},\n\t\tuncompressedSha256: '${sha256(wasmBytes)}'\n\t}\n} as const;\nexport const WASM_BQN_ASSET_VERSION = WASM_BQN_RUNTIME_PROFILE.manifestFingerprint;\nexport const WASM_BQN_RUNNER_RECEIPT = {\n\tbytes: ${workerBytes.byteLength},\n\tsha256: '${sha256(workerBytes)}'\n} as const;\n`
+		);
 	});
 
 	it('revalidates and republishes an existing gzip-only vendored target', async () => {

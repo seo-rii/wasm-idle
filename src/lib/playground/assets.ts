@@ -16,7 +16,11 @@ import {
 	WASM_FORTH_RUNTIME_PROFILE,
 	WASM_FORTH_RUNNER_RECEIPT
 } from '$lib/playground/wasmForthVersion';
-import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from '$lib/playground/wasmBqnVersion';
+import {
+	WASM_BQN_ASSET_VERSION,
+	WASM_BQN_RUNTIME_PROFILE,
+	WASM_BQN_RUNNER_RECEIPT
+} from '$lib/playground/wasmBqnVersion';
 import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
 	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
@@ -339,7 +343,26 @@ export interface BqnRuntimeAssetConfig {
 	workerUrl?: string;
 	manifestUrl?: string;
 	manifestFingerprint?: string;
+	profileId?: string;
+	sourceRevision?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	moduleReceipt?: RuntimeAssetIntegrityEntry;
+	wasmReceipt?: RuntimeAssetIntegrityEntry;
 	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
+}
+
+export interface BqnRuntimePreflightProfile {
+	readonly profileId: string;
+	readonly sourceRevision: string;
+	readonly manifestFingerprint: string;
+	readonly manifestReceipt?: Readonly<{ bytes?: number; sha256: string }>;
+	readonly moduleReceipt?: Readonly<{ bytes?: number; sha256: string }>;
+	readonly wasmReceipt?: Readonly<{
+		bytes?: number;
+		sha256: string;
+		uncompressedBytes?: number;
+		uncompressedSha256?: string;
+	}>;
 }
 
 export interface JanetRuntimeAssetConfig {
@@ -2735,11 +2758,48 @@ export function resolveBqnRuntimeAssetConfig(
 	currentUrl = ''
 ) {
 	const configured = typeof options === 'object' ? options?.bqn : undefined;
+	const manifestFingerprint = configured?.manifestFingerprint?.trim() || WASM_BQN_ASSET_VERSION;
+	const usesBundledProfile = manifestFingerprint === WASM_BQN_ASSET_VERSION;
+	const receipt = (
+		configuredReceipt: RuntimeAssetIntegrityEntry | undefined,
+		bundledReceipt: RuntimeAssetIntegrityEntry
+	) => {
+		const selected = configuredReceipt || (usesBundledProfile ? bundledReceipt : undefined);
+		return selected
+			? Object.freeze({
+					bytes: selected.bytes,
+					sha256: selected.sha256,
+					...(selected.uncompressedBytes === undefined
+						? {}
+						: { uncompressedBytes: selected.uncompressedBytes }),
+					...(selected.uncompressedSha256 === undefined
+						? {}
+						: { uncompressedSha256: selected.uncompressedSha256 })
+				})
+			: undefined;
+	};
+	const preflightProfile: BqnRuntimePreflightProfile = Object.freeze({
+		profileId:
+			configured?.profileId?.trim() ||
+			(usesBundledProfile ? WASM_BQN_RUNTIME_PROFILE.profileId : ''),
+		sourceRevision:
+			configured?.sourceRevision?.trim() ||
+			(usesBundledProfile ? WASM_BQN_RUNTIME_PROFILE.sourceRevision : ''),
+		manifestFingerprint,
+		manifestReceipt: receipt(
+			configured?.manifestReceipt,
+			WASM_BQN_RUNTIME_PROFILE.manifestReceipt
+		),
+		moduleReceipt: receipt(configured?.moduleReceipt, WASM_BQN_RUNTIME_PROFILE.moduleReceipt),
+		wasmReceipt: receipt(configured?.wasmReceipt, WASM_BQN_RUNTIME_PROFILE.wasmReceipt)
+	});
 	return {
 		baseUrl: resolveBqnBaseUrl(options, currentUrl),
 		workerUrl: resolveBqnWorkerUrl(options, currentUrl),
 		manifestUrl: resolveBqnManifestUrl(options, currentUrl),
-		manifestFingerprint: configured?.manifestFingerprint?.trim() || WASM_BQN_ASSET_VERSION,
+		manifestFingerprint,
+		preflightKey: JSON.stringify(preflightProfile),
+		preflightProfile,
 		workerReceipt: configured?.workerReceipt || WASM_BQN_RUNNER_RECEIPT
 	};
 }

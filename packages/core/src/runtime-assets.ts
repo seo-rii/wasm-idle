@@ -159,6 +159,11 @@ export interface RuntimeAssetKeySource {
 		workerUrl?: string;
 		manifestUrl?: string;
 		manifestFingerprint?: string;
+		profileId?: string;
+		sourceRevision?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		moduleReceipt?: RuntimeAssetIntegrityEntry;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	janet?: {
@@ -724,6 +729,26 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		runtime: 'bqn',
 		property: 'manifestFingerprint',
 		key: 'bqnManifestFingerprint'
+	},
+	{ runtime: 'bqn', property: 'profileId', key: 'bqnProfileId' },
+	{ runtime: 'bqn', property: 'sourceRevision', key: 'bqnSourceRevision' },
+	{
+		runtime: 'bqn',
+		property: 'manifestReceipt',
+		key: 'bqnManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'bqn',
+		property: 'moduleReceipt',
+		key: 'bqnModuleReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'bqn',
+		property: 'wasmReceipt',
+		key: 'bqnWasmReceipt',
+		serialize: serializeIntegrityEntry
 	},
 	{
 		runtime: 'bqn',

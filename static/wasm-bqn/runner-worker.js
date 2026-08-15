@@ -1,152 +1,13 @@
+const preflightProtocol = 'wasm-idle-bqn-preflight';
+const preflightProtocolVersion = 1;
 const manifestFormat = 'wasm-bqn-runtime-manifest-v2';
 const fingerprintDomain = 'wasm-idle:bqn-runtime-manifest:v2';
 const hardMaxAssetBytes = 128 * 1024 * 1024;
 const maxManifestBytes = 64 * 1024;
+const verifiedWasmStoragePath = 'BQN.wasm.gz.bin';
 const buildOptions = ['ENVIRONMENT=worker', 'MODULARIZE=1', 'EXPORT_ES6=1', 'FORCE_FILESYSTEM=1'];
 const fatalTextDecoder = new TextDecoder('utf-8', { fatal: true });
 const textEncoder = new TextEncoder();
-
-function assetUrl(baseUrl, path) {
-	return new URL(path, baseUrl).href;
-}
-
-function versionedAssetUrl(baseUrl, path, fingerprint) {
-	const url = new URL(path, baseUrl);
-	url.searchParams.set('v', fingerprint);
-	return url.href;
-}
-
-function requireHttpUrl(value, label) {
-	let url;
-	try {
-		url = new URL(value);
-	} catch {
-		throw new Error(`${label} URL is invalid.`);
-	}
-	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error(`${label} URL must use HTTP(S).`);
-	}
-	if (url.username || url.password || url.hash) {
-		throw new Error(`${label} URL must not include credentials or a fragment.`);
-	}
-	return url;
-}
-
-function cancelResponseBody(response, reason) {
-	try {
-		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
-	} catch {
-		// Preserve the trust-boundary failure that caused cancellation.
-	}
-}
-
-async function fetchBoundedBytes(urlValue, label, maxBytes, expectedBytes, cache) {
-	if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
-		throw new Error(`${label} byte limit is invalid.`);
-	}
-	if (
-		expectedBytes !== undefined &&
-		(!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || expectedBytes > maxBytes)
-	) {
-		throw new Error(`${label} expected byte size is invalid.`);
-	}
-	const requestUrl = requireHttpUrl(urlValue, label);
-	const response = await fetch(requestUrl.href, {
-		...(cache ? { cache } : {}),
-		credentials: 'omit',
-		redirect: 'error',
-		referrerPolicy: 'no-referrer'
-	});
-	try {
-		if (!response.url) throw new Error(`${label} response URL is missing.`);
-		let responseUrl;
-		try {
-			responseUrl = new URL(response.url);
-		} catch {
-			throw new Error(`${label} response URL is invalid.`);
-		}
-		if (responseUrl.href !== requestUrl.href) {
-			throw new Error(`${label} response URL does not match the requested asset.`);
-		}
-		if (!response.ok) {
-			throw new Error(`${label} request failed with status ${response.status}.`);
-		}
-		const contentLength = response.headers.get('content-length');
-		if (contentLength !== null) {
-			const normalized = contentLength.trim();
-			const parsed = Number(normalized);
-			if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(parsed)) {
-				throw new Error(`${label} has an invalid Content-Length.`);
-			}
-			if (expectedBytes !== undefined && parsed !== expectedBytes) {
-				throw new Error(`${label} Content-Length does not match its receipt.`);
-			}
-			if (parsed > maxBytes) throw new Error(`${label} exceeds its byte limit.`);
-		}
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	if (!response.body) {
-		const error = new Error(`${label} response does not provide a byte stream.`);
-		cancelResponseBody(response, error);
-		throw error;
-	}
-
-	let reader;
-	try {
-		reader = response.body.getReader();
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	const output = expectedBytes === undefined ? null : new Uint8Array(expectedBytes);
-	const chunks = output ? null : [];
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error(`${label} returned an invalid byte stream.`);
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (expectedBytes !== undefined && nextLoaded > expectedBytes) {
-				throw new Error(`${label} exceeds its receipt size.`);
-			}
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > maxBytes) {
-				throw new Error(`${label} exceeds its byte limit.`);
-			}
-			if (output) output.set(value, loaded);
-			else chunks.push(value.slice());
-			loaded = nextLoaded;
-		}
-		if (expectedBytes !== undefined && loaded !== expectedBytes) {
-			throw new Error(`${label} is truncated.`);
-		}
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the stream or quota failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the primary load result.
-		}
-	}
-	if (output) return output;
-	const bytes = new Uint8Array(loaded);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return bytes;
-}
 
 async function sha256Hex(bytes) {
 	if (!globalThis.crypto?.subtle?.digest) {
@@ -252,7 +113,13 @@ function normalizeLicense(candidate, maxAssetBytes) {
 	};
 }
 
-async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
+async function normalizeManifest(
+	value,
+	expectedFingerprint,
+	expectedProfileId,
+	expectedSourceRevision,
+	maxAssetBytes
+) {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error('CBQN runtime manifest must be an object.');
 	}
@@ -262,6 +129,7 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 	if (
 		typeof value.profileId !== 'string' ||
 		!/^dzaima-cbqn-[A-Za-z0-9._-]+$/u.test(value.profileId) ||
+		value.profileId !== expectedProfileId ||
 		!value.source ||
 		typeof value.source !== 'object' ||
 		Array.isArray(value.source) ||
@@ -269,6 +137,7 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 		value.source.path !== 'dist' ||
 		typeof value.source.revision !== 'string' ||
 		!/^[A-Za-z0-9:;._-]+$/u.test(value.source.revision) ||
+		value.source.revision !== expectedSourceRevision ||
 		!value.build ||
 		typeof value.build !== 'object' ||
 		Array.isArray(value.build) ||
@@ -276,7 +145,9 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 		!Array.isArray(value.build.options) ||
 		JSON.stringify(value.build.options) !== JSON.stringify(buildOptions)
 	) {
-		throw new Error('CBQN runtime manifest profile, source, or build metadata is invalid.');
+		throw new Error(
+			'CBQN runtime manifest profile, source, or build metadata is invalid or mismatched.'
+		);
 	}
 	if (typeof expectedFingerprint !== 'string' || !/^[a-f0-9]{64}$/u.test(expectedFingerprint)) {
 		throw new Error('CBQN runtime expected fingerprint is invalid.');
@@ -310,8 +181,12 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 			maxAssetBytes
 		),
 		normalizeStorageReceipt(
-			value.storage.find((asset) => asset?.path === 'BQN.wasm.gz'),
-			{ path: 'BQN.wasm.gz', logicalPath: 'BQN.wasm', encoding: 'gzip' },
+			value.storage.find((asset) => asset?.path === verifiedWasmStoragePath),
+			{
+				path: verifiedWasmStoragePath,
+				logicalPath: 'BQN.wasm',
+				encoding: 'gzip'
+			},
 			maxAssetBytes
 		)
 	];
@@ -428,9 +303,8 @@ function createBqnRunner(module) {
 }
 
 async function createBqnRuntime(
-	baseUrl,
-	manifestUrl,
-	manifestFingerprint,
+	runtimePreflight,
+	expectedFingerprint,
 	requestedMaxAssetBytes,
 	stdin,
 	stdinChannel,
@@ -442,46 +316,82 @@ async function createBqnRuntime(
 		throw new Error('CBQN runtime asset byte limit is invalid.');
 	}
 	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
-	const resolvedManifestUrl = manifestUrl || assetUrl(baseUrl, 'runtime-manifest.v2.json');
-	const manifestBytes = await fetchBoundedBytes(
-		resolvedManifestUrl,
-		'CBQN runtime manifest',
-		Math.min(maxManifestBytes, maxAssetBytes),
-		undefined,
-		'no-store'
-	);
+	const expectedKeys = [
+		'manifestBytes',
+		'manifestFingerprint',
+		'moduleBytes',
+		'profileId',
+		'protocol',
+		'protocolVersion',
+		'sourceRevision',
+		'wasmBytes'
+	];
+	const actualKeys =
+		runtimePreflight && typeof runtimePreflight === 'object' && !Array.isArray(runtimePreflight)
+			? Object.keys(runtimePreflight).sort()
+			: [];
+	if (
+		!runtimePreflight ||
+		typeof runtimePreflight !== 'object' ||
+		Array.isArray(runtimePreflight) ||
+		actualKeys.length !== expectedKeys.length ||
+		actualKeys.some((key, index) => key !== expectedKeys[index]) ||
+		runtimePreflight.protocol !== preflightProtocol ||
+		runtimePreflight.protocolVersion !== preflightProtocolVersion ||
+		typeof runtimePreflight.profileId !== 'string' ||
+		!/^dzaima-cbqn-[A-Za-z0-9._-]+$/u.test(runtimePreflight.profileId) ||
+		typeof runtimePreflight.sourceRevision !== 'string' ||
+		!/^[A-Za-z0-9:;._-]+$/u.test(runtimePreflight.sourceRevision) ||
+		runtimePreflight.manifestFingerprint !== expectedFingerprint ||
+		Object.prototype.toString.call(runtimePreflight.manifestBytes) !== '[object Uint8Array]' ||
+		Object.prototype.toString.call(runtimePreflight.moduleBytes) !== '[object Uint8Array]' ||
+		Object.prototype.toString.call(runtimePreflight.wasmBytes) !== '[object Uint8Array]'
+	) {
+		throw new Error('CBQN runtime requires a valid host-preflighted asset payload.');
+	}
+	if (
+		runtimePreflight.manifestBytes.byteLength <= 0 ||
+		runtimePreflight.manifestBytes.byteLength > Math.min(maxManifestBytes, maxAssetBytes) ||
+		runtimePreflight.moduleBytes.byteLength <= 0 ||
+		runtimePreflight.moduleBytes.byteLength > maxAssetBytes ||
+		runtimePreflight.wasmBytes.byteLength <= 0 ||
+		runtimePreflight.wasmBytes.byteLength > maxAssetBytes
+	) {
+		throw new Error('CBQN host-preflighted assets exceed their active byte limits.');
+	}
+
 	let parsed;
 	try {
-		parsed = JSON.parse(fatalTextDecoder.decode(manifestBytes));
+		parsed = JSON.parse(fatalTextDecoder.decode(runtimePreflight.manifestBytes));
 	} catch {
 		throw new Error('CBQN runtime manifest is not valid UTF-8 JSON.');
 	}
-	const manifest = await normalizeManifest(parsed, manifestFingerprint, maxAssetBytes);
-	const runtimeBytes = {};
-	for (const receipt of manifest.assets) {
-		const bytes = await fetchBoundedBytes(
-			versionedAssetUrl(baseUrl, receipt.path, manifestFingerprint),
-			`CBQN runtime asset ${receipt.path}`,
-			receipt.size,
-			receipt.size
-		);
-		await verifyReceiptBytes(receipt, bytes);
-		runtimeBytes[receipt.path] = bytes;
-	}
-	const runtimeModule = await importVerifiedRuntime(runtimeBytes['BQN.js']);
+	const manifest = await normalizeManifest(
+		parsed,
+		runtimePreflight.manifestFingerprint,
+		runtimePreflight.profileId,
+		runtimePreflight.sourceRevision,
+		maxAssetBytes
+	);
+	await verifyReceiptBytes(manifest.assets[0], runtimePreflight.moduleBytes);
+	await verifyReceiptBytes(manifest.assets[1], runtimePreflight.wasmBytes);
+
+	const runtimeModule = await importVerifiedRuntime(runtimePreflight.moduleBytes);
 	const createModule = runtimeModule.default || runtimeModule;
 	if (typeof createModule !== 'function') {
 		throw new Error('CBQN runtime module did not export an Emscripten module factory.');
 	}
 	const module = await createModule({
-		locateFile: (path) => {
-			if (path !== 'BQN.wasm') throw new Error(`CBQN requested an undeclared asset: ${path}`);
-			return assetUrl(baseUrl, path);
+		locateFile(path) {
+			if (path !== 'BQN.wasm') {
+				throw new Error(`CBQN runtime requested an unexpected local asset: ${path}`);
+			}
+			return 'wasm-idle-preflight://bqn/BQN.wasm';
 		},
 		print: (message) => onStdout(String(message)),
 		printErr: (message) => stderr.push(String(message)),
 		stdin: inputReader,
-		wasmBinary: runtimeBytes['BQN.wasm']
+		wasmBinary: runtimePreflight.wasmBytes
 	});
 	return createBqnRunner(module);
 }
@@ -492,33 +402,22 @@ function postOutput(lines) {
 }
 
 self.onmessage = async (event) => {
-	const {
-		baseUrl,
-		manifestUrl,
-		manifestFingerprint,
-		maxAssetBytes,
-		code,
-		stdin,
-		stdinChannel,
-		log
-	} = event.data || {};
+	const { runtimePreflight, manifestFingerprint, maxAssetBytes, code, stdin, stdinChannel, log } =
+		event.data || {};
 	const stderr = [];
 	try {
-		if (log) console.log(`[wasm-idle:bqn-worker] run start baseUrl=${baseUrl}`);
+		if (log) console.log('[wasm-idle:bqn-worker] run start with host-preflighted assets');
 		const source = String(code || '');
-		if (source.trim()) {
-			const runBqn = await createBqnRuntime(
-				baseUrl,
-				manifestUrl,
-				manifestFingerprint,
-				maxAssetBytes,
-				stdin,
-				stdinChannel,
-				(message) => postOutput([message]),
-				stderr
-			);
-			runBqn(source);
-		}
+		const runBqn = await createBqnRuntime(
+			runtimePreflight,
+			manifestFingerprint,
+			maxAssetBytes,
+			stdin,
+			stdinChannel,
+			(message) => postOutput([message]),
+			stderr
+		);
+		if (source.trim()) runBqn(source);
 		if (stderr.length > 0) throw new Error(stderr.join('\n'));
 		if (log) console.log('[wasm-idle:bqn-worker] run settled');
 		self.postMessage({ results: true });

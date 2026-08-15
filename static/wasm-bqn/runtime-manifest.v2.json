@@ -2,7 +2,7 @@
   "format": "wasm-bqn-runtime-manifest-v2",
   "runtime": "dzaima-cbqn",
   "profileId": "dzaima-cbqn-emscripten-3.1.8-wasm-idle-d647850c",
-  "fingerprint": "98dac4d7388919f8e28127aef0a097c9e1a328955787822c15598453436b609e",
+  "fingerprint": "82cd4627902071d9f9adc2da18e9df647c9223ea6b19cf030a1cf68848c12fce",
   "source": {
     "repository": "https://github.com/dzaima/CBQN",
     "path": "dist",
@@ -46,7 +46,7 @@
       "sha256": "0a5474e6944cc3ce8a8b21874f82341dd1680d7bac056d619adfd49e98123570"
     },
     {
-      "path": "BQN.wasm.gz",
+      "path": "BQN.wasm.gz.bin",
       "logicalPath": "BQN.wasm",
       "encoding": "gzip",
       "size": 324306,

@@ -10,7 +10,7 @@
       "FORCE_FILESYSTEM=1"
     ]
   },
-  "fingerprint": "98dac4d7388919f8",
+  "fingerprint": "82cd4627902071d9",
   "files": [
     "BQN.js",
     "BQN.wasm.gz",

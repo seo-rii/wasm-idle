@@ -122,7 +122,11 @@ import {
 	WASM_FORTH_RUNTIME_PROFILE,
 	WASM_FORTH_RUNNER_RECEIPT
 } from './wasmForthVersion';
-import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
+import {
+	WASM_BQN_ASSET_VERSION,
+	WASM_BQN_RUNNER_RECEIPT,
+	WASM_BQN_RUNTIME_PROFILE
+} from './wasmBqnVersion';
 import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
 	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
@@ -1198,6 +1202,8 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/absproxy/5173/wasm-bqn/runner-worker.js',
 			manifestUrl: 'https://example.com/absproxy/5173/wasm-bqn/runtime-manifest.v2.json',
 			manifestFingerprint: WASM_BQN_ASSET_VERSION,
+			preflightKey: JSON.stringify(WASM_BQN_RUNTIME_PROFILE),
+			preflightProfile: WASM_BQN_RUNTIME_PROFILE,
 			workerReceipt: WASM_BQN_RUNNER_RECEIPT
 		});
 		expect(
@@ -1554,6 +1560,11 @@ describe('runtime asset config resolution', () => {
 						workerUrl: '/runtime/bqn/worker.js',
 						manifestUrl: '/runtime/bqn/manifest.json',
 						manifestFingerprint: customFingerprint,
+						profileId: 'dzaima-cbqn-custom',
+						sourceRevision: 'custom',
+						manifestReceipt: customManifestReceipt,
+						moduleReceipt: customModuleReceipt,
+						wasmReceipt: customWasmReceipt,
 						workerReceipt: customWorkerReceipt
 					}
 				},
@@ -1564,6 +1575,22 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/runtime/bqn/worker.js',
 			manifestUrl: 'https://example.com/runtime/bqn/manifest.json',
 			manifestFingerprint: customFingerprint,
+			preflightKey: JSON.stringify({
+				profileId: 'dzaima-cbqn-custom',
+				sourceRevision: 'custom',
+				manifestFingerprint: customFingerprint,
+				manifestReceipt: customManifestReceipt,
+				moduleReceipt: customModuleReceipt,
+				wasmReceipt: customWasmReceipt
+			}),
+			preflightProfile: {
+				profileId: 'dzaima-cbqn-custom',
+				sourceRevision: 'custom',
+				manifestFingerprint: customFingerprint,
+				manifestReceipt: customManifestReceipt,
+				moduleReceipt: customModuleReceipt,
+				wasmReceipt: customWasmReceipt
+			},
 			workerReceipt: customWorkerReceipt
 		});
 		expect(

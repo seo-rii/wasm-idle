@@ -139,7 +139,7 @@ import {
 	WASM_FORTH_RUNNER_RECEIPT,
 	WASM_FORTH_RUNTIME_PROFILE
 } from './wasmForthVersion';
-import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
+import { WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
 	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
@@ -197,6 +197,50 @@ function jTestRuntimeAssets(workerUrl = '/wasm-j/runner-worker.js?v=test') {
 	};
 }
 
+const bqnTestManifestSource = '{"runtime":"fixture"}\n';
+const bqnTestModuleSource = 'export default function fixtureBqn() {}\n';
+const bqnTestWasmBytes = Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0]);
+const bqnTestWasmGzipBytes = Uint8Array.from([
+	31, 139, 8, 0, 0, 0, 0, 0, 2, 3, 99, 72, 44, 206, 101, 100, 96, 96, 0, 0, 206, 51, 75, 28, 8, 0,
+	0, 0
+]);
+const bqnTestProfile = {
+	profileId: 'dzaima-cbqn-test',
+	sourceRevision: 'fixture',
+	manifestFingerprint: 'b'.repeat(64),
+	manifestReceipt: {
+		bytes: 22,
+		sha256: '679daab93e272c0cb1dc00c569ed771259fbf49bdeb266bd5a479d4da1411bd9'
+	},
+	moduleReceipt: {
+		bytes: 40,
+		sha256: '76bdff8ee61521bde21302957334f85cf15c36f5876ba5bb6327e0bf5ee987e0'
+	},
+	wasmReceipt: {
+		bytes: 28,
+		sha256: '2740982b148627999cd4ad3ae62440ed0c2878da70a6ea6e41f00ae06537324a',
+		uncompressedBytes: 8,
+		uncompressedSha256: '93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476'
+	}
+} as const;
+
+function bqnTestRuntimeAssets(workerUrl = '/wasm-bqn/runner-worker.js?v=test') {
+	return {
+		bqn: {
+			baseUrl: '/wasm-bqn/',
+			workerUrl,
+			manifestUrl: '/wasm-bqn/runtime-manifest.v2.json',
+			manifestFingerprint: bqnTestProfile.manifestFingerprint,
+			profileId: bqnTestProfile.profileId,
+			sourceRevision: bqnTestProfile.sourceRevision,
+			manifestReceipt: bqnTestProfile.manifestReceipt,
+			moduleReceipt: bqnTestProfile.moduleReceipt,
+			wasmReceipt: bqnTestProfile.wasmReceipt,
+			workerReceipt: WASM_BQN_RUNNER_RECEIPT
+		}
+	};
+}
+
 function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 	const inputUrl = String(input);
 	runtimeLifecycleEvents.push(`fetch:${inputUrl}`);
@@ -241,6 +285,35 @@ function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 			status: 200,
 			headers: {
 				'content-length': String(jTestWasmGzipBytes.byteLength),
+				'content-type': 'application/gzip'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-bqn/runtime-manifest.v2.json')) {
+		return new Response(bqnTestManifestSource, {
+			status: 200,
+			headers: {
+				'content-length': String(
+					new TextEncoder().encode(bqnTestManifestSource).byteLength
+				),
+				'content-type': 'application/json'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-bqn/BQN.js')) {
+		return new Response(bqnTestModuleSource, {
+			status: 200,
+			headers: {
+				'content-length': String(new TextEncoder().encode(bqnTestModuleSource).byteLength),
+				'content-type': 'application/javascript'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-bqn/BQN.wasm.gz.bin')) {
+		return new Response(Uint8Array.from(bqnTestWasmGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(bqnTestWasmGzipBytes.byteLength),
 				'content-type': 'application/gzip'
 			}
 		});
@@ -1155,13 +1228,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('loads BQN runtime urls and forwards stdin to the CBQN worker', async () => {
 		const sandbox = new Bqn();
-		await sandbox.load({
-			bqn: {
-				baseUrl: '/wasm-bqn/',
-				workerUrl: '/wasm-bqn/runner-worker.js?v=test',
-				manifestUrl: '/wasm-bqn/runtime-manifest.v2.json'
-			}
-		});
+		await sandbox.load(bqnTestRuntimeAssets());
 		await expect(
 			sandbox.run('5+•ParseFloat •GetLine @', false, true, undefined, [], {
 				stdin: '68\n'
@@ -1178,32 +1245,177 @@ describe('static worker backed language sandboxes', () => {
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-bqn/',
 				manifestUrl: 'http://localhost:3000/wasm-bqn/runtime-manifest.v2.json',
-				manifestFingerprint: WASM_BQN_ASSET_VERSION,
+				manifestFingerprint: bqnTestProfile.manifestFingerprint,
 				stdin: '68\n',
-				activePath: 'main.bqn'
+				activePath: 'main.bqn',
+				runtimePreflight: expect.objectContaining({
+					protocol: 'wasm-idle-bqn-preflight',
+					protocolVersion: 1,
+					profileId: bqnTestProfile.profileId,
+					sourceRevision: bqnTestProfile.sourceRevision,
+					manifestFingerprint: bqnTestProfile.manifestFingerprint
+				})
 			})
 		);
+		const runMessage = workerInstances[0].postMessage.mock.calls[0]?.[0];
+		expect(runMessage.runtimePreflight.manifestBytes).toBeInstanceOf(Uint8Array);
+		expect(runMessage.runtimePreflight.moduleBytes).toBeInstanceOf(Uint8Array);
+		expect(runMessage.runtimePreflight.wasmBytes).toBeInstanceOf(Uint8Array);
+		expect(new TextDecoder().decode(runMessage.runtimePreflight.manifestBytes)).toBe(
+			bqnTestManifestSource
+		);
+		expect(new TextDecoder().decode(runMessage.runtimePreflight.moduleBytes)).toBe(
+			bqnTestModuleSource
+		);
+		expect(runMessage.runtimePreflight.wasmBytes).toEqual(bqnTestWasmBytes);
 		expect(sandbox.workerReceipt).toEqual(WASM_BQN_RUNNER_RECEIPT);
+		const workerStartIndex = runtimeLifecycleEvents.findIndex((event) =>
+			event.startsWith('worker:')
+		);
+		for (const assetPath of ['runtime-manifest.v2.json', 'BQN.js', 'BQN.wasm.gz.bin']) {
+			const fetchIndex = runtimeLifecycleEvents.findIndex((event) =>
+				event.includes(assetPath)
+			);
+			expect(fetchIndex).toBeGreaterThanOrEqual(0);
+			expect(fetchIndex).toBeLessThan(workerStartIndex);
+		}
 	});
 
 	it('rejects a modified BQN runner before creating a worker', async () => {
 		const modifiedSource = `x${bqnWorkerSource.slice(1)}`;
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(modifiedSource, {
+		vi.mocked(fetch).mockImplementation(async (input) => {
+			const inputUrl = String(input);
+			if (!inputUrl.includes('/wasm-bqn/runner-worker.js')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			runtimeLifecycleEvents.push(`fetch:${inputUrl}`);
+			return new Response(modifiedSource, {
 				status: 200,
 				headers: {
 					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
 				}
-			})
-		);
+			});
+		});
 		const sandbox = new Bqn();
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(sandbox.load(bqnTestRuntimeAssets())).rejects.toMatchObject({
 			code: 'asset-integrity',
 			runtimeId: 'BQN'
 		});
 		expect(workerInstances).toHaveLength(0);
 	});
+
+	it('rejects corrupted BQN Wasm storage before fetching or creating its worker', async () => {
+		const corruptedGzip = Uint8Array.from(bqnTestWasmGzipBytes);
+		corruptedGzip[corruptedGzip.byteLength - 1] ^= 1;
+		vi.mocked(fetch).mockImplementation(async (input) => {
+			const inputUrl = String(input);
+			if (!inputUrl.includes('/wasm-bqn/BQN.wasm.gz.bin')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			runtimeLifecycleEvents.push(`fetch:${inputUrl}`);
+			return new Response(corruptedGzip, {
+				status: 200,
+				headers: {
+					'content-length': String(corruptedGzip.byteLength),
+					'content-type': 'application/gzip'
+				}
+			});
+		});
+		const sandbox = new Bqn();
+
+		await expect(sandbox.load(bqnTestRuntimeAssets())).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'BQN'
+		});
+		expect(workerInstances).toHaveLength(0);
+		expect(
+			vi
+				.mocked(fetch)
+				.mock.calls.map(([input]) => String(input))
+				.some((url) => url.includes('/wasm-bqn/runner-worker.js'))
+		).toBe(false);
+	});
+
+	it.each([
+		['caller cancellation', 'cancelled'],
+		['asset timeout', 'timeout']
+	] as const)(
+		'rejects a pending BQN logical digest on %s before creating its worker',
+		async (_label, expectedCode) => {
+			const originalDigest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle);
+			let rejectLogicalDigest: ((reason: unknown) => void) | undefined;
+			const digest = vi
+				.spyOn(globalThis.crypto.subtle, 'digest')
+				.mockImplementation((algorithm, data) => {
+					const bytes = ArrayBuffer.isView(data)
+						? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+						: new Uint8Array(data);
+					if (
+						bytes.byteLength === bqnTestWasmBytes.byteLength &&
+						bytes.every((value, index) => value === bqnTestWasmBytes[index])
+					) {
+						return new Promise<ArrayBuffer>((_resolve, reject) => {
+							rejectLogicalDigest = reject;
+						});
+					}
+					return originalDigest(algorithm, data);
+				});
+			const controller = new AbortController();
+			const reason = new Error('cancel pending BQN logical digest');
+			const sandbox = new Bqn();
+			const load = sandbox.load(
+				bqnTestRuntimeAssets(),
+				'',
+				true,
+				[],
+				expectedCode === 'cancelled'
+					? { signal: controller.signal }
+					: { limits: { assetTimeoutMs: 250 } }
+			);
+			const outcome = load.then(
+				(value) => ({ status: 'resolved' as const, value }),
+				(error) => ({ status: 'rejected' as const, reason: error as unknown })
+			);
+			let guard: ReturnType<typeof setTimeout> | undefined;
+
+			try {
+				await vi.waitFor(() => expect(rejectLogicalDigest).toBeTypeOf('function'));
+				if (expectedCode === 'cancelled') controller.abort(reason);
+				const result = await Promise.race([
+					outcome,
+					new Promise<{ status: 'pending' }>((resolve) => {
+						guard = setTimeout(() => resolve({ status: 'pending' }), 1_000);
+					})
+				]);
+
+				expect(result.status).toBe('rejected');
+				expect('reason' in result ? result.reason : undefined).toMatchObject({
+					code: expectedCode,
+					phase: 'asset',
+					runtimeId: 'BQN',
+					...(expectedCode === 'cancelled' ? { cause: reason } : {})
+				});
+				expect(workerInstances).toHaveLength(0);
+				expect(
+					vi
+						.mocked(fetch)
+						.mock.calls.map(([input]) => String(input))
+						.some((url) => url.includes('/wasm-bqn/runner-worker.js'))
+				).toBe(false);
+
+				rejectLogicalDigest?.(new Error('late BQN logical digest failure'));
+				await new Promise((resolve) => setTimeout(resolve, 0));
+			} finally {
+				if (guard) clearTimeout(guard);
+				controller.abort(reason);
+				rejectLogicalDigest?.(new Error('release BQN logical digest'));
+				await load.catch(() => {});
+				digest.mockRestore();
+			}
+		},
+		15_000
+	);
 
 	it('loads Janet runtime urls and forwards stdin to the upstream Janet worker', async () => {
 		const sandbox = new Janet();

@@ -420,6 +420,16 @@ describe('core language contract', () => {
 				workerUrl: '/wasm-bqn/runner-worker.js?v=test',
 				manifestUrl: '/wasm-bqn/runtime-manifest.v2.json?v=test',
 				manifestFingerprint: '1'.repeat(64),
+				profileId: 'dzaima-cbqn-test',
+				sourceRevision: 'test',
+				manifestReceipt: { bytes: 555, sha256: 'b'.repeat(64) },
+				moduleReceipt: { bytes: 666, sha256: 'c'.repeat(64) },
+				wasmReceipt: {
+					bytes: 777,
+					sha256: 'd'.repeat(64),
+					uncompressedBytes: 888,
+					uncompressedSha256: 'e'.repeat(64)
+				},
 				workerReceipt: { bytes: 7890, sha256: '2'.repeat(64) }
 			},
 			janet: {
@@ -463,6 +473,11 @@ describe('core language contract', () => {
 		expect(key).toContain('"bqnWorkerUrl":"/wasm-bqn/runner-worker.js?v=test"');
 		expect(key).toContain('"bqnManifestUrl":"/wasm-bqn/runtime-manifest.v2.json?v=test"');
 		expect(key).toContain(`"bqnManifestFingerprint":"${'1'.repeat(64)}"`);
+		expect(key).toContain('"bqnProfileId":"dzaima-cbqn-test"');
+		expect(key).toContain('"bqnSourceRevision":"test"');
+		expect(key).toContain('"bqnManifestReceipt":');
+		expect(key).toContain('"bqnModuleReceipt":');
+		expect(key).toContain('"bqnWasmReceipt":');
 		expect(key).toContain('"bqnWorkerReceipt":');
 		expect(key).toContain('"janetBaseUrl":"/wasm-janet/"');
 		expect(key).toContain('"janetWorkerUrl":"/wasm-janet/runner-worker.js?v=test"');
