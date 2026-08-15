@@ -172,12 +172,15 @@ describe('syncWasmClojureScriptAssets', () => {
 		expect((await readdir(targetDir)).sort()).toEqual([
 			'LICENSE.txt',
 			'compiler.js.gz',
+			'compiler.js.gz.bin',
 			'runner-worker.js',
 			'runtime-build.json',
 			'runtime-manifest.v1.json',
 			'runtime-manifest.v2.json'
 		]);
-		const installedGzip = await readFile(path.join(targetDir, 'compiler.js.gz'));
+		const installedLegacyGzip = await readFile(path.join(targetDir, 'compiler.js.gz'));
+		const installedGzip = await readFile(path.join(targetDir, 'compiler.js.gz.bin'));
+		expect(installedLegacyGzip).toEqual(installedGzip);
 		expect(gunzipSync(installedGzip)).toEqual(compiler);
 		expect(installedGzip).toEqual(gzipSync(compiler, { level: 9 }));
 		expect(await readFile(path.join(targetDir, 'runtime-build.json'))).toEqual(metadata);
@@ -213,7 +216,7 @@ describe('syncWasmClojureScriptAssets', () => {
 			],
 			storage: [
 				{
-					path: 'compiler.js.gz',
+					path: 'compiler.js.gz.bin',
 					logicalPath: 'compiler.js',
 					encoding: 'gzip',
 					size: installedGzip.byteLength,
@@ -222,8 +225,20 @@ describe('syncWasmClojureScriptAssets', () => {
 			]
 		});
 		expect(computeClojureScriptRuntimeFingerprint(manifest)).toBe(result.fingerprint);
+		const manifestBytes = await readFile(path.join(targetDir, 'runtime-manifest.v2.json'));
+		expect(result.manifestReceipt).toEqual({
+			bytes: manifestBytes.byteLength,
+			sha256: sha256(manifestBytes)
+		});
 		const versionModule = await readFile(versionModulePath, 'utf8');
+		expect(versionModule).toContain('WASM_CLOJURESCRIPT_RUNTIME_PROFILE');
+		expect(versionModule).toContain("sourceRevision: 'r1.12.134'");
+		expect(versionModule).toContain(`integrationRevision: '${'f'.repeat(40)}'`);
 		expect(versionModule).toContain(result.fingerprint);
+		expect(versionModule).toContain(`bytes: ${manifestBytes.byteLength}`);
+		expect(versionModule).toContain(`sha256: '${sha256(manifestBytes)}'`);
+		expect(versionModule).toContain(`uncompressedBytes: ${compiler.byteLength}`);
+		expect(versionModule).toContain(`uncompressedSha256: '${sha256(compiler)}'`);
 		expect(versionModule).toContain(`bytes: ${worker.byteLength}`);
 		expect(versionModule).toContain(`sha256: '${sha256(worker)}'`);
 	});

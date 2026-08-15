@@ -140,10 +140,7 @@ import {
 	WASM_FORTH_RUNTIME_PROFILE
 } from './wasmForthVersion';
 import { WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
-import {
-	WASM_CLOJURESCRIPT_ASSET_VERSION,
-	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
-} from './wasmClojureScriptVersion';
+import { WASM_CLOJURESCRIPT_RUNNER_RECEIPT } from './wasmClojureScriptVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
@@ -241,6 +238,43 @@ function bqnTestRuntimeAssets(workerUrl = '/wasm-bqn/runner-worker.js?v=test') {
 	};
 }
 
+const clojureScriptTestManifestSource = '{"runtime":"fixture"}\n';
+const clojureScriptTestCompilerBytes = Uint8Array.from(jTestWasmBytes);
+const clojureScriptTestCompilerGzipBytes = Uint8Array.from(jTestWasmGzipBytes);
+const clojureScriptTestProfile = {
+	profileId: 'clojurescript-1.12.134-test',
+	sourceRevision: 'r1.12.134',
+	integrationRevision: 'c'.repeat(40),
+	manifestFingerprint: 'd'.repeat(64),
+	manifestReceipt: {
+		bytes: 22,
+		sha256: '679daab93e272c0cb1dc00c569ed771259fbf49bdeb266bd5a479d4da1411bd9'
+	},
+	compilerReceipt: {
+		bytes: 28,
+		sha256: '2740982b148627999cd4ad3ae62440ed0c2878da70a6ea6e41f00ae06537324a',
+		uncompressedBytes: 8,
+		uncompressedSha256: '93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476'
+	}
+} as const;
+
+function clojureScriptTestRuntimeAssets(workerUrl = '/wasm-clojurescript/runner-worker.js?v=test') {
+	return {
+		clojurescript: {
+			baseUrl: '/wasm-clojurescript/',
+			workerUrl,
+			manifestUrl: '/wasm-clojurescript/runtime-manifest.v2.json',
+			manifestFingerprint: clojureScriptTestProfile.manifestFingerprint,
+			profileId: clojureScriptTestProfile.profileId,
+			sourceRevision: clojureScriptTestProfile.sourceRevision,
+			integrationRevision: clojureScriptTestProfile.integrationRevision,
+			manifestReceipt: clojureScriptTestProfile.manifestReceipt,
+			compilerReceipt: clojureScriptTestProfile.compilerReceipt,
+			workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
+		}
+	};
+}
+
 function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 	const inputUrl = String(input);
 	runtimeLifecycleEvents.push(`fetch:${inputUrl}`);
@@ -315,6 +349,26 @@ function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 			headers: {
 				'content-length': String(bqnTestWasmGzipBytes.byteLength),
 				'content-type': 'application/gzip'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-clojurescript/runtime-manifest.v2.json')) {
+		return new Response(clojureScriptTestManifestSource, {
+			status: 200,
+			headers: {
+				'content-length': String(
+					new TextEncoder().encode(clojureScriptTestManifestSource).byteLength
+				),
+				'content-type': 'application/json'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-clojurescript/compiler.js.gz.bin')) {
+		return new Response(Uint8Array.from(clojureScriptTestCompilerGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(clojureScriptTestCompilerGzipBytes.byteLength),
+				'content-type': 'application/octet-stream'
 			}
 		});
 	}
@@ -952,15 +1006,7 @@ describe('static worker backed language sandboxes', () => {
 		const sandbox = new ClojureScript();
 		const code = `(ns wasm-idle.main (:require [wasm-idle.runtime :as runtime]))
 (println (runtime/read-line))`;
-		await sandbox.load({
-			clojurescript: {
-				baseUrl: '/wasm-clojurescript/',
-				workerUrl: '/wasm-clojurescript/runner-worker.js?v=test',
-				manifestUrl: '/wasm-clojurescript/runtime-manifest.v2.json?v=test',
-				manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
-				workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
-			}
-		});
+		await sandbox.load(clojureScriptTestRuntimeAssets());
 		await expect(
 			sandbox.run(code, false, true, undefined, ['demo'], {
 				activePath: 'src/wasm_idle/main.cljs',
@@ -978,17 +1024,155 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-clojurescript/',
-				manifestUrl:
-					'http://localhost:3000/wasm-clojurescript/runtime-manifest.v2.json?v=test',
-				manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
+				manifestUrl: 'http://localhost:3000/wasm-clojurescript/runtime-manifest.v2.json',
+				manifestFingerprint: clojureScriptTestProfile.manifestFingerprint,
 				code,
 				args: ['demo'],
 				stdin: '68\n',
 				activePath: 'src/wasm_idle/main.cljs',
-				workspaceFiles: [{ path: 'src/demo.cljs', content: '(ns demo)' }]
+				workspaceFiles: [{ path: 'src/demo.cljs', content: '(ns demo)' }],
+				runtimePreflight: expect.objectContaining({
+					protocol: 'wasm-idle-clojurescript-preflight',
+					protocolVersion: 1,
+					profileId: clojureScriptTestProfile.profileId,
+					sourceRevision: clojureScriptTestProfile.sourceRevision,
+					integrationRevision: clojureScriptTestProfile.integrationRevision,
+					manifestFingerprint: clojureScriptTestProfile.manifestFingerprint
+				})
 			})
 		);
+		const runMessage = workerInstances[0].postMessage.mock.calls[0]?.[0];
+		expect(runMessage.runtimePreflight.manifestBytes).toBeInstanceOf(Uint8Array);
+		expect(runMessage.runtimePreflight.compilerBytes).toBeInstanceOf(Uint8Array);
+		expect(new TextDecoder().decode(runMessage.runtimePreflight.manifestBytes)).toBe(
+			clojureScriptTestManifestSource
+		);
+		expect(runMessage.runtimePreflight.compilerBytes).toEqual(clojureScriptTestCompilerBytes);
+		const workerStartIndex = runtimeLifecycleEvents.findIndex((event) =>
+			event.startsWith('worker:')
+		);
+		for (const assetPath of ['runtime-manifest.v2.json', 'compiler.js.gz.bin']) {
+			const fetchIndex = runtimeLifecycleEvents.findIndex((event) =>
+				event.includes(assetPath)
+			);
+			expect(fetchIndex).toBeGreaterThanOrEqual(0);
+			expect(fetchIndex).toBeLessThan(workerStartIndex);
+		}
 	});
+
+	it('rejects corrupted ClojureScript compiler storage before fetching or creating its worker', async () => {
+		const corruptedGzip = Uint8Array.from(clojureScriptTestCompilerGzipBytes);
+		corruptedGzip[corruptedGzip.byteLength - 1] ^= 1;
+		vi.mocked(fetch).mockImplementation(async (input) => {
+			const inputUrl = String(input);
+			if (!inputUrl.includes('/wasm-clojurescript/compiler.js.gz.bin')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			runtimeLifecycleEvents.push(`fetch:${inputUrl}`);
+			return new Response(corruptedGzip, {
+				status: 200,
+				headers: {
+					'content-length': String(corruptedGzip.byteLength),
+					'content-type': 'application/octet-stream'
+				}
+			});
+		});
+		const sandbox = new ClojureScript();
+
+		await expect(sandbox.load(clojureScriptTestRuntimeAssets())).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'CLOJURESCRIPT'
+		});
+		expect(workerInstances).toHaveLength(0);
+		expect(
+			vi
+				.mocked(fetch)
+				.mock.calls.map(([input]) => String(input))
+				.some((url) => url.includes('/wasm-clojurescript/runner-worker.js'))
+		).toBe(false);
+	});
+
+	it.each([
+		['caller cancellation', 'cancelled'],
+		['asset timeout', 'timeout']
+	] as const)(
+		'rejects a pending ClojureScript logical digest on %s before creating its worker',
+		async (_label, expectedCode) => {
+			const originalDigest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle);
+			let rejectLogicalDigest: ((reason: unknown) => void) | undefined;
+			const digest = vi
+				.spyOn(globalThis.crypto.subtle, 'digest')
+				.mockImplementation((algorithm, data) => {
+					const bytes = ArrayBuffer.isView(data)
+						? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+						: new Uint8Array(data);
+					if (
+						bytes.byteLength === clojureScriptTestCompilerBytes.byteLength &&
+						bytes.every(
+							(value, index) => value === clojureScriptTestCompilerBytes[index]
+						)
+					) {
+						return new Promise<ArrayBuffer>((_resolve, reject) => {
+							rejectLogicalDigest = reject;
+						});
+					}
+					return originalDigest(algorithm, data);
+				});
+			const controller = new AbortController();
+			const reason = new Error('cancel pending ClojureScript logical digest');
+			const sandbox = new ClojureScript();
+			const load = sandbox.load(
+				clojureScriptTestRuntimeAssets(),
+				'',
+				true,
+				[],
+				expectedCode === 'cancelled'
+					? { signal: controller.signal }
+					: { limits: { assetTimeoutMs: 250 } }
+			);
+			const outcome = load.then(
+				(value) => ({ status: 'resolved' as const, value }),
+				(error) => ({ status: 'rejected' as const, reason: error as unknown })
+			);
+			let guard: ReturnType<typeof setTimeout> | undefined;
+
+			try {
+				await vi.waitFor(() => expect(rejectLogicalDigest).toBeTypeOf('function'));
+				if (expectedCode === 'cancelled') controller.abort(reason);
+				const result = await Promise.race([
+					outcome,
+					new Promise<{ status: 'pending' }>((resolve) => {
+						guard = setTimeout(() => resolve({ status: 'pending' }), 1_000);
+					})
+				]);
+
+				expect(result.status).toBe('rejected');
+				expect('reason' in result ? result.reason : undefined).toMatchObject({
+					code: expectedCode,
+					phase: 'asset',
+					runtimeId: 'CLOJURESCRIPT',
+					...(expectedCode === 'cancelled' ? { cause: reason } : {})
+				});
+				expect(workerInstances).toHaveLength(0);
+				expect(
+					vi
+						.mocked(fetch)
+						.mock.calls.map(([input]) => String(input))
+						.some((url) => url.includes('/wasm-clojurescript/runner-worker.js'))
+				).toBe(false);
+
+				rejectLogicalDigest?.(new Error('late ClojureScript logical digest failure'));
+				await new Promise((resolve) => setTimeout(resolve, 0));
+			} finally {
+				if (guard) clearTimeout(guard);
+				controller.abort(reason);
+				rejectLogicalDigest?.(new Error('release ClojureScript logical digest'));
+				await load.catch(() => {});
+				digest.mockRestore();
+			}
+		},
+		15_000
+	);
 
 	it('loads Forth runtime urls and forwards stdin to the WAForth worker', async () => {
 		const sandbox = new Forth();

@@ -23,7 +23,8 @@ import {
 } from '$lib/playground/wasmBqnVersion';
 import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
-	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
+	WASM_CLOJURESCRIPT_RUNNER_RECEIPT,
+	WASM_CLOJURESCRIPT_RUNTIME_PROFILE
 } from '$lib/playground/wasmClojureScriptVersion';
 import {
 	WASM_J_ASSET_VERSION,
@@ -401,7 +402,26 @@ export interface ClojureScriptRuntimeAssetConfig {
 	workerUrl?: string;
 	manifestUrl?: string;
 	manifestFingerprint?: string;
+	profileId?: string;
+	sourceRevision?: string;
+	integrationRevision?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	compilerReceipt?: RuntimeAssetIntegrityEntry;
 	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
+}
+
+export interface ClojureScriptRuntimePreflightProfile {
+	readonly profileId: string;
+	readonly sourceRevision: string;
+	readonly integrationRevision: string;
+	readonly manifestFingerprint: string;
+	readonly manifestReceipt?: Readonly<{ bytes?: number; sha256: string }>;
+	readonly compilerReceipt?: Readonly<{
+		bytes?: number;
+		sha256: string;
+		uncompressedBytes?: number;
+		uncompressedSha256?: string;
+	}>;
 }
 
 export interface SwiftRuntimeAssetConfig {
@@ -2474,12 +2494,54 @@ export function resolveClojureScriptRuntimeAssetConfig(
 	currentUrl = ''
 ) {
 	const configured = typeof options === 'object' ? options?.clojurescript : undefined;
+	const manifestFingerprint =
+		configured?.manifestFingerprint?.trim() || WASM_CLOJURESCRIPT_ASSET_VERSION;
+	const usesBundledProfile = manifestFingerprint === WASM_CLOJURESCRIPT_ASSET_VERSION;
+	const receipt = (
+		configuredReceipt: RuntimeAssetIntegrityEntry | undefined,
+		bundledReceipt: RuntimeAssetIntegrityEntry
+	) => {
+		const selected = configuredReceipt || (usesBundledProfile ? bundledReceipt : undefined);
+		return selected
+			? Object.freeze({
+					bytes: selected.bytes,
+					sha256: selected.sha256,
+					...(selected.uncompressedBytes === undefined
+						? {}
+						: { uncompressedBytes: selected.uncompressedBytes }),
+					...(selected.uncompressedSha256 === undefined
+						? {}
+						: { uncompressedSha256: selected.uncompressedSha256 })
+				})
+			: undefined;
+	};
+	const preflightProfile: ClojureScriptRuntimePreflightProfile = Object.freeze({
+		profileId:
+			configured?.profileId?.trim() ||
+			(usesBundledProfile ? WASM_CLOJURESCRIPT_RUNTIME_PROFILE.profileId : ''),
+		sourceRevision:
+			configured?.sourceRevision?.trim() ||
+			(usesBundledProfile ? WASM_CLOJURESCRIPT_RUNTIME_PROFILE.sourceRevision : ''),
+		integrationRevision:
+			configured?.integrationRevision?.trim() ||
+			(usesBundledProfile ? WASM_CLOJURESCRIPT_RUNTIME_PROFILE.integrationRevision : ''),
+		manifestFingerprint,
+		manifestReceipt: receipt(
+			configured?.manifestReceipt,
+			WASM_CLOJURESCRIPT_RUNTIME_PROFILE.manifestReceipt
+		),
+		compilerReceipt: receipt(
+			configured?.compilerReceipt,
+			WASM_CLOJURESCRIPT_RUNTIME_PROFILE.compilerReceipt
+		)
+	});
 	return {
 		baseUrl: resolveClojureScriptBaseUrl(options, currentUrl),
 		workerUrl: resolveClojureScriptWorkerUrl(options, currentUrl),
 		manifestUrl: resolveClojureScriptManifestUrl(options, currentUrl),
-		manifestFingerprint:
-			configured?.manifestFingerprint?.trim() || WASM_CLOJURESCRIPT_ASSET_VERSION,
+		manifestFingerprint,
+		preflightKey: JSON.stringify(preflightProfile),
+		preflightProfile,
 		workerReceipt: configured?.workerReceipt || WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 	};
 }

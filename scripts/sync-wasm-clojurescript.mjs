@@ -28,9 +28,11 @@ const BUILD_METADATA_FILE = 'runtime-build.json';
 const LEGACY_MANIFEST_FILE = 'runtime-manifest.v1.json';
 const MANIFEST_FILE = 'runtime-manifest.v2.json';
 const LOGICAL_ASSET = 'compiler.js';
-const STORAGE_ASSET = 'compiler.js.gz';
+const LEGACY_STORAGE_ASSET = 'compiler.js.gz';
+const STORAGE_ASSET = 'compiler.js.gz.bin';
 const PUBLISHED_FILES = [
 	LICENSE_FILE,
+	LEGACY_STORAGE_ASSET,
 	STORAGE_ASSET,
 	'runner-worker.js',
 	BUILD_METADATA_FILE,
@@ -479,9 +481,14 @@ export async function syncWasmClojureScriptAssets(options = {}) {
 		clojureScriptVersion: lock.build.clojureScriptVersion,
 		compilerSha256: assets[0].sha256,
 		fingerprint: fingerprint.slice(0, 16),
-		files: [LICENSE_FILE, STORAGE_ASSET, 'runner-worker.js', BUILD_METADATA_FILE]
+		files: [LICENSE_FILE, LEGACY_STORAGE_ASSET, 'runner-worker.js', BUILD_METADATA_FILE]
 	};
-	const versionModuleSource = `export const WASM_CLOJURESCRIPT_ASSET_VERSION =\n\t'${fingerprint}';\nexport const WASM_CLOJURESCRIPT_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
+	const manifestSource = `${JSON.stringify(manifest, null, 2)}\n`;
+	const manifestReceipt = Object.freeze({
+		bytes: Buffer.byteLength(manifestSource),
+		sha256: sha256(Buffer.from(manifestSource))
+	});
+	const versionModuleSource = `export const WASM_CLOJURESCRIPT_RUNTIME_PROFILE = {\n\tprofileId: '${lock.profileId}',\n\tsourceRevision: '${lock.source.revision}',\n\tintegrationRevision: '${lock.source.integrationRevision}',\n\tmanifestFingerprint: '${fingerprint}',\n\tmanifestReceipt: {\n\t\tbytes: ${manifestReceipt.bytes},\n\t\tsha256: '${manifestReceipt.sha256}'\n\t},\n\tcompilerReceipt: {\n\t\tbytes: ${storage[0].size},\n\t\tsha256: '${storage[0].sha256}',\n\t\tuncompressedBytes: ${assets[0].size},\n\t\tuncompressedSha256: '${assets[0].sha256}'\n\t}\n} as const;\nexport const WASM_CLOJURESCRIPT_ASSET_VERSION =\n\tWASM_CLOJURESCRIPT_RUNTIME_PROFILE.manifestFingerprint;\nexport const WASM_CLOJURESCRIPT_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
 
 	await mkdir(path.dirname(targetDir), { recursive: true });
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
@@ -506,6 +513,7 @@ export async function syncWasmClojureScriptAssets(options = {}) {
 	await mkdir(temporaryTarget, { recursive: true });
 	try {
 		await Promise.all([
+			writeFile(path.join(temporaryTarget, LEGACY_STORAGE_ASSET), compressedCompilerBytes),
 			writeFile(path.join(temporaryTarget, STORAGE_ASSET), compressedCompilerBytes),
 			writeFile(path.join(temporaryTarget, LICENSE_FILE), licenseBytes),
 			writeFile(path.join(temporaryTarget, BUILD_METADATA_FILE), metadataBytes),
@@ -515,21 +523,19 @@ export async function syncWasmClojureScriptAssets(options = {}) {
 				`${JSON.stringify(legacyManifest, null, 2)}\n`,
 				'utf8'
 			),
-			writeFile(
-				path.join(temporaryTarget, MANIFEST_FILE),
-				`${JSON.stringify(manifest, null, 2)}\n`,
-				'utf8'
-			),
+			writeFile(path.join(temporaryTarget, MANIFEST_FILE), manifestSource, 'utf8'),
 			writeFile(temporaryVersion, versionModuleSource, 'utf8')
 		]);
 		await assertExactPublishedFiles(temporaryTarget);
 		const [
+			installedLegacyGzip,
 			installedGzip,
 			installedLicense,
 			installedMetadata,
 			installedWorker,
 			installedManifest
 		] = await Promise.all([
+			readFile(path.join(temporaryTarget, LEGACY_STORAGE_ASSET)),
 			readFile(path.join(temporaryTarget, STORAGE_ASSET)),
 			readFile(path.join(temporaryTarget, LICENSE_FILE)),
 			readFile(path.join(temporaryTarget, BUILD_METADATA_FILE)),
@@ -537,6 +543,7 @@ export async function syncWasmClojureScriptAssets(options = {}) {
 			readFile(path.join(temporaryTarget, MANIFEST_FILE), 'utf8')
 		]);
 		if (
+			!installedLegacyGzip.equals(installedGzip) ||
 			sha256(installedGzip) !== storage[0].sha256 ||
 			sha256(gunzipSync(installedGzip)) !== assets[0].sha256 ||
 			sha256(installedLicense) !== license.sha256 ||
@@ -605,7 +612,14 @@ export async function syncWasmClojureScriptAssets(options = {}) {
 		await rm(temporaryVersion, { force: true });
 	}
 
-	return { sourceDir, targetDir, fingerprint, versionModulePath, workerReceipt };
+	return {
+		sourceDir,
+		targetDir,
+		fingerprint,
+		versionModulePath,
+		manifestReceipt,
+		workerReceipt
+	};
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {

@@ -1,9 +1,12 @@
 const textEncoder = new TextEncoder();
 const fatalTextDecoder = new TextDecoder('utf-8', { fatal: true });
+const preflightProtocol = 'wasm-idle-clojurescript-preflight';
+const preflightProtocolVersion = 1;
 const manifestFormat = 'wasm-clojurescript-runtime-manifest-v2';
 const fingerprintDomain = 'wasm-idle:clojurescript-runtime-manifest:v2';
 const hardMaxAssetBytes = 16 * 1024 * 1024;
 const maxManifestBytes = 64 * 1024;
+const verifiedCompilerStoragePath = 'compiler.js.gz.bin';
 const expectedBuild = Object.freeze({
 	clojureScriptVersion: '1.12.134',
 	clojureToolsArchiveSha256: '13769da6d63a98deb2024378ae1a64e4ee211ac1035340dfca7a6944c41cde21',
@@ -13,145 +16,6 @@ const expectedBuild = Object.freeze({
 	optimizations: 'simple',
 	target: 'webworker'
 });
-
-function requireHttpUrl(value, label) {
-	let url;
-	try {
-		url = new URL(value);
-	} catch {
-		throw new Error(`${label} URL is invalid.`);
-	}
-	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error(`${label} URL must use HTTP(S).`);
-	}
-	if (url.username || url.password || url.hash) {
-		throw new Error(`${label} URL must not include credentials or a fragment.`);
-	}
-	return url;
-}
-
-function assetUrl(baseUrl, path, fingerprint) {
-	const base = requireHttpUrl(baseUrl, 'ClojureScript runtime base');
-	const url = new URL(path, base);
-	if (fingerprint) url.searchParams.set('v', fingerprint);
-	return url.href;
-}
-
-function cancelResponseBody(response, reason) {
-	try {
-		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
-	} catch {
-		// Preserve the trust-boundary failure that caused cancellation.
-	}
-}
-
-async function fetchBoundedBytes(urlValue, label, maxBytes, expectedBytes, cache) {
-	if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
-		throw new Error(`${label} byte limit is invalid.`);
-	}
-	if (
-		expectedBytes !== undefined &&
-		(!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || expectedBytes > maxBytes)
-	) {
-		throw new Error(`${label} expected byte size is invalid.`);
-	}
-	const requestUrl = requireHttpUrl(urlValue, label);
-	const response = await fetch(requestUrl.href, {
-		...(cache ? { cache } : {}),
-		credentials: 'omit',
-		redirect: 'error',
-		referrerPolicy: 'no-referrer'
-	});
-	try {
-		if (!response.url) throw new Error(`${label} response URL is missing.`);
-		let responseUrl;
-		try {
-			responseUrl = new URL(response.url);
-		} catch {
-			throw new Error(`${label} response URL is invalid.`);
-		}
-		if (responseUrl.href !== requestUrl.href) {
-			throw new Error(`${label} response URL does not match the requested asset.`);
-		}
-		if (!response.ok) {
-			throw new Error(`${label} request failed with status ${response.status}.`);
-		}
-		const contentLength = response.headers.get('content-length');
-		if (contentLength !== null) {
-			const normalized = contentLength.trim();
-			const parsed = Number(normalized);
-			if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(parsed)) {
-				throw new Error(`${label} has an invalid Content-Length.`);
-			}
-			if (expectedBytes !== undefined && parsed !== expectedBytes) {
-				throw new Error(`${label} Content-Length does not match its receipt.`);
-			}
-			if (parsed > maxBytes) throw new Error(`${label} exceeds its byte limit.`);
-		}
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	if (!response.body) {
-		const error = new Error(`${label} response does not provide a byte stream.`);
-		cancelResponseBody(response, error);
-		throw error;
-	}
-
-	let reader;
-	try {
-		reader = response.body.getReader();
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	const output = expectedBytes === undefined ? null : new Uint8Array(expectedBytes);
-	const chunks = output ? null : [];
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error(`${label} returned an invalid byte stream.`);
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (expectedBytes !== undefined && nextLoaded > expectedBytes) {
-				throw new Error(`${label} exceeds its receipt size.`);
-			}
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > maxBytes) {
-				throw new Error(`${label} exceeds its byte limit.`);
-			}
-			if (output) output.set(value, loaded);
-			else chunks.push(value.slice());
-			loaded = nextLoaded;
-		}
-		if (expectedBytes !== undefined && loaded !== expectedBytes) {
-			throw new Error(`${label} is truncated.`);
-		}
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the stream or quota failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the primary load result.
-		}
-	}
-	if (output) return output;
-	const bytes = new Uint8Array(loaded);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return bytes;
-}
 
 async function sha256Hex(bytes) {
 	if (!globalThis.crypto?.subtle?.digest) {
@@ -212,7 +76,7 @@ function normalizeStorageReceipt(candidate, maxAssetBytes) {
 		!candidate ||
 		typeof candidate !== 'object' ||
 		Array.isArray(candidate) ||
-		candidate.path !== 'compiler.js.gz' ||
+		candidate.path !== verifiedCompilerStoragePath ||
 		candidate.logicalPath !== 'compiler.js' ||
 		candidate.encoding !== 'gzip' ||
 		!Number.isSafeInteger(candidate.size) ||
@@ -226,7 +90,7 @@ function normalizeStorageReceipt(candidate, maxAssetBytes) {
 		);
 	}
 	return {
-		path: 'compiler.js.gz',
+		path: verifiedCompilerStoragePath,
 		logicalPath: 'compiler.js',
 		encoding: 'gzip',
 		size: candidate.size,
@@ -257,7 +121,14 @@ function normalizeLicense(candidate, maxAssetBytes) {
 	};
 }
 
-async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
+async function normalizeManifest(
+	value,
+	expectedFingerprint,
+	expectedProfileId,
+	expectedSourceRevision,
+	expectedIntegrationRevision,
+	maxAssetBytes
+) {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error('ClojureScript runtime manifest must be an object.');
 	}
@@ -267,14 +138,16 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 	if (
 		typeof value.profileId !== 'string' ||
 		!/^clojurescript-[A-Za-z0-9._+-]+$/u.test(value.profileId) ||
+		value.profileId !== expectedProfileId ||
 		!value.source ||
 		typeof value.source !== 'object' ||
 		Array.isArray(value.source) ||
 		value.source.repository !== 'https://github.com/clojure/clojurescript' ||
-		value.source.revision !== 'r1.12.134' ||
+		value.source.revision !== expectedSourceRevision ||
 		value.source.integrationRepository !== 'https://github.com/seo-rii/wasm-idle' ||
 		typeof value.source.integrationRevision !== 'string' ||
 		!/^[a-f0-9]{40}$/u.test(value.source.integrationRevision) ||
+		value.source.integrationRevision !== expectedIntegrationRevision ||
 		!value.build ||
 		typeof value.build !== 'object' ||
 		Array.isArray(value.build) ||
@@ -283,7 +156,7 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 		Object.entries(expectedBuild).some(([name, expected]) => value.build[name] !== expected)
 	) {
 		throw new Error(
-			'ClojureScript runtime manifest profile, source, or build metadata is invalid.'
+			'ClojureScript runtime manifest profile, source, or build metadata is invalid or mismatched.'
 		);
 	}
 	if (typeof expectedFingerprint !== 'string' || !/^[a-f0-9]{64}$/u.test(expectedFingerprint)) {
@@ -348,56 +221,6 @@ async function verifyReceiptBytes(receipt, bytes, label) {
 	}
 }
 
-async function decompressGzipBounded(compressedBytes, expectedBytes, maxBytes) {
-	if (typeof DecompressionStream !== 'function') {
-		throw new Error('ClojureScript runtime gzip decompression is unavailable.');
-	}
-	if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || expectedBytes > maxBytes) {
-		throw new Error('ClojureScript compiler logical byte size is invalid.');
-	}
-	let reader;
-	try {
-		reader = new Blob([compressedBytes])
-			.stream()
-			.pipeThrough(new DecompressionStream('gzip'))
-			.getReader();
-	} catch {
-		throw new Error('ClojureScript compiler gzip stream could not be opened.');
-	}
-	const output = new Uint8Array(expectedBytes);
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error('ClojureScript compiler gzip returned an invalid byte stream.');
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > expectedBytes) {
-				throw new Error('ClojureScript compiler gzip exceeds its logical receipt size.');
-			}
-			output.set(value, loaded);
-			loaded = nextLoaded;
-		}
-		if (loaded !== expectedBytes) throw new Error('ClojureScript compiler gzip is truncated.');
-		return output;
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the decompression failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the decompression result.
-		}
-	}
-}
-
 function importVerifiedRuntimeScript(bytes) {
 	try {
 		fatalTextDecoder.decode(bytes);
@@ -428,51 +251,74 @@ function postOutput(text) {
 	if (text) self.postMessage({ output: text });
 }
 
-async function loadCompiler(baseUrl, manifestUrl, manifestFingerprint, requestedMaxAssetBytes) {
-	if (typeof globalThis.wasm_idle?.runner?.execute !== 'function') {
-		if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
-			throw new Error('ClojureScript runtime asset byte limit is invalid.');
-		}
-		const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
-		const resolvedManifestUrl =
-			manifestUrl || assetUrl(baseUrl, 'runtime-manifest.v2.json', manifestFingerprint);
-		const manifestBytes = await fetchBoundedBytes(
-			resolvedManifestUrl,
-			'ClojureScript runtime manifest',
-			Math.min(maxManifestBytes, maxAssetBytes),
-			undefined,
-			'no-store'
-		);
-		let parsed;
-		try {
-			parsed = JSON.parse(fatalTextDecoder.decode(manifestBytes));
-		} catch {
-			throw new Error('ClojureScript runtime manifest is not valid UTF-8 JSON.');
-		}
-		const manifest = await normalizeManifest(parsed, manifestFingerprint, maxAssetBytes);
-		const compressedBytes = await fetchBoundedBytes(
-			assetUrl(baseUrl, manifest.storage.path, manifestFingerprint),
-			'ClojureScript runtime storage compiler.js.gz',
-			manifest.storage.size,
-			manifest.storage.size
-		);
-		await verifyReceiptBytes(
-			manifest.storage,
-			compressedBytes,
-			'ClojureScript runtime storage compiler.js.gz'
-		);
-		const compilerBytes = await decompressGzipBounded(
-			compressedBytes,
-			manifest.asset.size,
-			maxAssetBytes
-		);
-		await verifyReceiptBytes(
-			manifest.asset,
-			compilerBytes,
-			'ClojureScript runtime asset compiler.js'
-		);
-		importVerifiedRuntimeScript(compilerBytes);
+async function loadCompiler(runtimePreflight, manifestFingerprint, requestedMaxAssetBytes) {
+	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
+		throw new Error('ClojureScript runtime asset byte limit is invalid.');
 	}
+	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
+	const expectedKeys = [
+		'compilerBytes',
+		'integrationRevision',
+		'manifestBytes',
+		'manifestFingerprint',
+		'profileId',
+		'protocol',
+		'protocolVersion',
+		'sourceRevision'
+	];
+	const actualKeys =
+		runtimePreflight && typeof runtimePreflight === 'object' && !Array.isArray(runtimePreflight)
+			? Object.keys(runtimePreflight).sort()
+			: [];
+	if (
+		!runtimePreflight ||
+		typeof runtimePreflight !== 'object' ||
+		Array.isArray(runtimePreflight) ||
+		actualKeys.length !== expectedKeys.length ||
+		actualKeys.some((key, index) => key !== expectedKeys[index]) ||
+		runtimePreflight.protocol !== preflightProtocol ||
+		runtimePreflight.protocolVersion !== preflightProtocolVersion ||
+		typeof runtimePreflight.profileId !== 'string' ||
+		!/^clojurescript-[A-Za-z0-9._+-]+$/u.test(runtimePreflight.profileId) ||
+		typeof runtimePreflight.sourceRevision !== 'string' ||
+		runtimePreflight.sourceRevision !== 'r1.12.134' ||
+		typeof runtimePreflight.integrationRevision !== 'string' ||
+		!/^[a-f0-9]{40}$/u.test(runtimePreflight.integrationRevision) ||
+		runtimePreflight.manifestFingerprint !== manifestFingerprint ||
+		Object.prototype.toString.call(runtimePreflight.manifestBytes) !== '[object Uint8Array]' ||
+		Object.prototype.toString.call(runtimePreflight.compilerBytes) !== '[object Uint8Array]'
+	) {
+		throw new Error('ClojureScript runtime requires a valid host-preflighted asset payload.');
+	}
+	if (
+		runtimePreflight.manifestBytes.byteLength <= 0 ||
+		runtimePreflight.manifestBytes.byteLength > Math.min(maxManifestBytes, maxAssetBytes) ||
+		runtimePreflight.compilerBytes.byteLength <= 0 ||
+		runtimePreflight.compilerBytes.byteLength > maxAssetBytes
+	) {
+		throw new Error('ClojureScript host-preflighted assets exceed their active byte limits.');
+	}
+
+	let parsed;
+	try {
+		parsed = JSON.parse(fatalTextDecoder.decode(runtimePreflight.manifestBytes));
+	} catch {
+		throw new Error('ClojureScript runtime manifest is not valid UTF-8 JSON.');
+	}
+	const manifest = await normalizeManifest(
+		parsed,
+		runtimePreflight.manifestFingerprint,
+		runtimePreflight.profileId,
+		runtimePreflight.sourceRevision,
+		runtimePreflight.integrationRevision,
+		maxAssetBytes
+	);
+	await verifyReceiptBytes(
+		manifest.asset,
+		runtimePreflight.compilerBytes,
+		'ClojureScript runtime asset compiler.js'
+	);
+	importVerifiedRuntimeScript(runtimePreflight.compilerBytes);
 	const execute = globalThis.wasm_idle?.runner?.execute;
 	if (typeof execute !== 'function') {
 		throw new Error('ClojureScript compiler runtime did not initialize.');
@@ -615,8 +461,7 @@ function executeSource(execute, source, filename, context) {
 
 self.onmessage = async (event) => {
 	const {
-		baseUrl,
-		manifestUrl,
+		runtimePreflight,
 		manifestFingerprint,
 		maxAssetBytes,
 		code,
@@ -643,14 +488,11 @@ self.onmessage = async (event) => {
 		};
 		context.args = Array.isArray(args) ? args.map(String) : [];
 		context.files = buildWorkspaceFiles(code, activePath, workspaceFiles);
-		if (log) console.log(`[wasm-idle:clojurescript-worker] run start baseUrl=${baseUrl}`);
+		if (log) {
+			console.log('[wasm-idle:clojurescript-worker] run start with host-preflighted assets');
+		}
 		self.postMessage({ progress: { percent: 5, stage: 'Loading ClojureScript compiler' } });
-		const execute = await loadCompiler(
-			baseUrl,
-			manifestUrl,
-			manifestFingerprint,
-			maxAssetBytes
-		);
+		const execute = await loadCompiler(runtimePreflight, manifestFingerprint, maxAssetBytes);
 		self.postMessage({ progress: { percent: 35, stage: 'Compiling ClojureScript' } });
 		const result = await executeSource(execute, String(code || ''), activePath, context);
 		postBufferedRemainder(result?.stdout, streamedStdout);

@@ -329,6 +329,16 @@ describe('core language contract', () => {
 				workerUrl: '/wasm-clojurescript/runner-worker.js?v=test',
 				manifestUrl: '/wasm-clojurescript/runtime-manifest.v2.json?v=test',
 				manifestFingerprint: 'a'.repeat(64),
+				profileId: 'clojurescript-1.12.134-test',
+				sourceRevision: 'r1.12.134',
+				integrationRevision: 'c'.repeat(40),
+				manifestReceipt: { bytes: 2345, sha256: 'd'.repeat(64) },
+				compilerReceipt: {
+					bytes: 3456,
+					sha256: 'e'.repeat(64),
+					uncompressedBytes: 4567,
+					uncompressedSha256: 'f'.repeat(64)
+				},
 				workerReceipt: { bytes: 1234, sha256: 'b'.repeat(64) }
 			}
 		});
@@ -340,7 +350,30 @@ describe('core language contract', () => {
 			'"clojurescriptManifestUrl":"/wasm-clojurescript/runtime-manifest.v2.json?v=test"'
 		);
 		expect(key).toContain('"clojurescriptManifestFingerprint":');
+		expect(key).toContain('"clojurescriptProfileId":"clojurescript-1.12.134-test"');
+		expect(key).toContain('"clojurescriptSourceRevision":"r1.12.134"');
+		expect(key).toContain('"clojurescriptIntegrationRevision":');
+		expect(key).toContain('"clojurescriptManifestReceipt":');
+		expect(key).toContain('"clojurescriptCompilerReceipt":');
 		expect(key).toContain('"clojurescriptWorkerReceipt":');
+		expect(key).not.toBe(
+			createRuntimeAssetsKey({
+				clojurescript: {
+					manifestFingerprint: 'a'.repeat(64),
+					profileId: 'clojurescript-1.12.134-test',
+					sourceRevision: 'r1.12.134',
+					integrationRevision: 'c'.repeat(40),
+					manifestReceipt: { bytes: 2345, sha256: 'd'.repeat(64) },
+					compilerReceipt: {
+						bytes: 3456,
+						sha256: '0'.repeat(64),
+						uncompressedBytes: 4567,
+						uncompressedSha256: 'f'.repeat(64)
+					},
+					workerReceipt: { bytes: 1234, sha256: 'b'.repeat(64) }
+				}
+			})
+		);
 	});
 
 	it('exposes COBOL aliases as a deferred browser runtime language', () => {

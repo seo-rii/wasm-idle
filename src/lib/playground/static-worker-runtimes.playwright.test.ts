@@ -350,6 +350,30 @@ describe('wasm-idle static worker language browser integrations', () => {
 				expect(summary.pageErrors).toEqual([]);
 				expect(summary.transcript).toContain('main=73');
 				expect(summary.transcript).toContain('Process finished after');
+				const runtimePaths = summary.runtimeRequests.map(
+					(requestUrl) => new URL(requestUrl).pathname
+				);
+				expect(
+					runtimePaths.some((path) =>
+						path.endsWith('/wasm-clojurescript/runtime-manifest.v2.json')
+					)
+				).toBe(true);
+				expect(
+					runtimePaths.some((path) =>
+						path.endsWith('/wasm-clojurescript/compiler.js.gz.bin')
+					)
+				).toBe(true);
+				expect(
+					runtimePaths.some((path) =>
+						path.endsWith('/wasm-clojurescript/runner-worker.js')
+					)
+				).toBe(true);
+				expect(
+					runtimePaths.some((path) => path.endsWith('/wasm-clojurescript/compiler.js.gz'))
+				).toBe(false);
+				expect(
+					runtimePaths.some((path) => path.endsWith('/wasm-clojurescript/compiler.js'))
+				).toBe(false);
 			}
 		);
 	}, 960_000);

@@ -129,7 +129,8 @@ import {
 } from './wasmBqnVersion';
 import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
-	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
+	WASM_CLOJURESCRIPT_RUNNER_RECEIPT,
+	WASM_CLOJURESCRIPT_RUNTIME_PROFILE
 } from './wasmClojureScriptVersion';
 import {
 	WASM_J_ASSET_VERSION,
@@ -1214,6 +1215,8 @@ describe('runtime asset config resolution', () => {
 			manifestUrl:
 				'https://example.com/absproxy/5173/wasm-clojurescript/runtime-manifest.v2.json',
 			manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
+			preflightKey: JSON.stringify(WASM_CLOJURESCRIPT_RUNTIME_PROFILE),
+			preflightProfile: WASM_CLOJURESCRIPT_RUNTIME_PROFILE,
 			workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 		});
 		expect(resolveJanetRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
@@ -1327,6 +1330,8 @@ describe('runtime asset config resolution', () => {
 			workerUrl: '/wasm-clojurescript/runner-worker.js',
 			manifestUrl: '/wasm-clojurescript/runtime-manifest.v2.json',
 			manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
+			preflightKey: JSON.stringify(WASM_CLOJURESCRIPT_RUNTIME_PROFILE),
+			preflightProfile: WASM_CLOJURESCRIPT_RUNTIME_PROFILE,
 			workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 		});
 	});
@@ -1601,6 +1606,11 @@ describe('runtime asset config resolution', () => {
 						workerUrl: '/runtime/clojurescript/worker.js',
 						manifestUrl: '/runtime/clojurescript/manifest.json',
 						manifestFingerprint: customFingerprint,
+						profileId: 'clojurescript-1.12.134-custom',
+						sourceRevision: 'r1.12.134',
+						integrationRevision: '2'.repeat(40),
+						manifestReceipt: customManifestReceipt,
+						compilerReceipt: customWasmReceipt,
 						workerReceipt: customWorkerReceipt
 					}
 				},
@@ -1611,6 +1621,22 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/runtime/clojurescript/worker.js',
 			manifestUrl: 'https://example.com/runtime/clojurescript/manifest.json',
 			manifestFingerprint: customFingerprint,
+			preflightKey: JSON.stringify({
+				profileId: 'clojurescript-1.12.134-custom',
+				sourceRevision: 'r1.12.134',
+				integrationRevision: '2'.repeat(40),
+				manifestFingerprint: customFingerprint,
+				manifestReceipt: customManifestReceipt,
+				compilerReceipt: customWasmReceipt
+			}),
+			preflightProfile: {
+				profileId: 'clojurescript-1.12.134-custom',
+				sourceRevision: 'r1.12.134',
+				integrationRevision: '2'.repeat(40),
+				manifestFingerprint: customFingerprint,
+				manifestReceipt: customManifestReceipt,
+				compilerReceipt: customWasmReceipt
+			},
 			workerReceipt: customWorkerReceipt
 		});
 		expect(

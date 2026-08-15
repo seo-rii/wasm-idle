@@ -2,7 +2,7 @@
   "format": "wasm-clojurescript-runtime-manifest-v2",
   "runtime": "cljs.js",
   "profileId": "clojurescript-1.12.134-cljs-js-wasm-idle-e8083f4f",
-  "fingerprint": "4b1844264d073ff41c886081510a961ae11f37a7fcf8281f4167fad25d49e3c4",
+  "fingerprint": "177dfd8dc4e67a33d2096143b3d27af96703bef002006ac9e42bd4a2609e9492",
   "source": {
     "repository": "https://github.com/clojure/clojurescript",
     "revision": "r1.12.134",
@@ -40,7 +40,7 @@
   ],
   "storage": [
     {
-      "path": "compiler.js.gz",
+      "path": "compiler.js.gz.bin",
       "logicalPath": "compiler.js",
       "encoding": "gzip",
       "size": 614204,

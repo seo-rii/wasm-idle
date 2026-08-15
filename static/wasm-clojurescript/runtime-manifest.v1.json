@@ -3,7 +3,7 @@
   "runtime": "cljs.js",
   "clojureScriptVersion": "1.12.134",
   "compilerSha256": "8b055dd50f8c8736db9680924209782ba5027718ab84b6a0a3eb40a913d05b17",
-  "fingerprint": "4b1844264d073ff4",
+  "fingerprint": "177dfd8dc4e67a33",
   "files": [
     "LICENSE.txt",
     "compiler.js.gz",

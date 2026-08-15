@@ -198,6 +198,11 @@ export interface RuntimeAssetKeySource {
 		workerUrl?: string;
 		manifestUrl?: string;
 		manifestFingerprint?: string;
+		profileId?: string;
+		sourceRevision?: string;
+		integrationRevision?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		compilerReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	cobol?: { baseUrl?: string };
@@ -814,6 +819,29 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		runtime: 'clojurescript',
 		property: 'manifestFingerprint',
 		key: 'clojurescriptManifestFingerprint'
+	},
+	{ runtime: 'clojurescript', property: 'profileId', key: 'clojurescriptProfileId' },
+	{
+		runtime: 'clojurescript',
+		property: 'sourceRevision',
+		key: 'clojurescriptSourceRevision'
+	},
+	{
+		runtime: 'clojurescript',
+		property: 'integrationRevision',
+		key: 'clojurescriptIntegrationRevision'
+	},
+	{
+		runtime: 'clojurescript',
+		property: 'manifestReceipt',
+		key: 'clojurescriptManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'clojurescript',
+		property: 'compilerReceipt',
+		key: 'clojurescriptCompilerReceipt',
+		serialize: serializeIntegrityEntry
 	},
 	{
 		runtime: 'clojurescript',
