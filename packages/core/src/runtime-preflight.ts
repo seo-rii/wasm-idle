@@ -30,6 +30,7 @@ export interface RuntimeAssetPreflightRequest {
 	readonly manifest: RuntimeRegistryManifest;
 	readonly runtimeId: string;
 	readonly rootUrl: string | URL;
+	readonly assetUrls?: Readonly<Record<string, string | URL>>;
 	readonly fetch?: typeof globalThis.fetch;
 	readonly signal?: AbortSignal;
 	readonly limits?: Partial<ExecutionLimits>;
@@ -129,7 +130,8 @@ function requireConfinedUrl(
 	asset: RuntimeRegistryAsset,
 	runtimeId: string,
 	profileId: string,
-	allowRelative: boolean
+	allowRelative: boolean,
+	allowQuery: boolean
 ): URL {
 	const expectedUrl = new URL(asset.path, assetRootUrl);
 	let url: URL;
@@ -149,9 +151,11 @@ function requireConfinedUrl(
 			profileId
 		});
 	}
-	if (url.username || url.password || url.search || url.hash) {
+	if (url.username || url.password || (!allowQuery && url.search) || url.hash) {
 		throw new RuntimeConfigurationError(
-			`Runtime asset ${asset.key} URL must not include credentials, a query, or a fragment`,
+			`Runtime asset ${asset.key} URL must not include credentials${
+				allowQuery ? '' : ', a query'
+			}, or a fragment`,
 			{ phase: 'asset', runtimeId, profileId }
 		);
 	}
@@ -161,7 +165,7 @@ function requireConfinedUrl(
 			{ phase: 'asset', runtimeId, profileId }
 		);
 	}
-	if (url.href !== expectedUrl.href) {
+	if (url.origin !== expectedUrl.origin || url.pathname !== expectedUrl.pathname) {
 		throw new RuntimeConfigurationError(
 			`Runtime asset ${asset.key} URL does not match its declared path`,
 			{ phase: 'asset', runtimeId, profileId }
@@ -351,6 +355,7 @@ async function readBoundedResponse(
 async function preflightAsset(
 	asset: RuntimeRegistryAsset,
 	assetRootUrl: URL,
+	requestUrlOverride: string | URL | undefined,
 	fetchImpl: typeof globalThis.fetch,
 	signal: AbortSignal,
 	maxAssetBytes: number,
@@ -370,12 +375,13 @@ async function preflightAsset(
 		);
 	}
 	const requestUrl = requireConfinedUrl(
-		asset.path,
+		requestUrlOverride ?? asset.path,
 		assetRootUrl,
 		asset,
 		runtimeId,
 		profileId,
-		true
+		true,
+		requestUrlOverride !== undefined
 	);
 	let response: Response;
 	try {
@@ -415,8 +421,15 @@ async function preflightAsset(
 			asset,
 			runtimeId,
 			profileId,
-			false
+			false,
+			requestUrlOverride !== undefined
 		);
+		if (responseUrl.href !== requestUrl.href) {
+			throw new RuntimeConfigurationError(
+				`Runtime asset ${asset.key} response URL does not match its requested URL`,
+				{ phase: 'asset', runtimeId, profileId }
+			);
+		}
 	} catch (error) {
 		cancelResponseBody(response, error);
 		throw error;
@@ -561,6 +574,31 @@ export async function preflightRuntimeAssets(
 			cause: request.signal.reason
 		});
 	}
+	if (
+		request.assetUrls !== undefined &&
+		(!request.assetUrls ||
+			typeof request.assetUrls !== 'object' ||
+			Array.isArray(request.assetUrls))
+	) {
+		throw new RuntimeConfigurationError('Runtime asset URL overrides must be an object', {
+			phase: 'asset',
+			runtimeId: runtime.runtimeId,
+			profileId: runtime.identity.profile.profileId
+		});
+	}
+	const declaredAssetKeys = new Set(runtime.assets.map((asset) => asset.key));
+	for (const assetKey of Object.keys(request.assetUrls ?? {})) {
+		if (!declaredAssetKeys.has(assetKey)) {
+			throw new RuntimeConfigurationError(
+				`Runtime asset URL override references undeclared asset ${assetKey}`,
+				{
+					phase: 'asset',
+					runtimeId: runtime.runtimeId,
+					profileId: runtime.identity.profile.profileId
+				}
+			);
+		}
+	}
 
 	const controller = new AbortController();
 	let timedOut = false;
@@ -583,6 +621,9 @@ export async function preflightRuntimeAssets(
 						const preflighted = await preflightAsset(
 							asset,
 							assetRootUrl!,
+							Object.prototype.hasOwnProperty.call(request.assetUrls ?? {}, asset.key)
+								? request.assetUrls![asset.key]
+								: undefined,
 							fetchImpl!,
 							controller.signal,
 							limits.maxAssetBytes,

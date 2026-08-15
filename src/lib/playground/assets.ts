@@ -13,6 +13,7 @@ import {
 } from '$lib/playground/wasmGleamVersion';
 import {
 	WASM_FORTH_ASSET_VERSION,
+	WASM_FORTH_RUNTIME_PROFILE,
 	WASM_FORTH_RUNNER_RECEIPT
 } from '$lib/playground/wasmForthVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from '$lib/playground/wasmBqnVersion';
@@ -287,7 +288,19 @@ export interface ForthRuntimeAssetConfig {
 	workerUrl?: string;
 	manifestUrl?: string;
 	manifestFingerprint?: string;
+	profileId?: string;
+	implementationVersion?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	runtimeReceipt?: RuntimeAssetIntegrityEntry;
 	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
+}
+
+export interface ForthRuntimePreflightProfile {
+	readonly profileId: string;
+	readonly implementationVersion: string;
+	readonly manifestFingerprint: string;
+	readonly manifestReceipt?: Readonly<{ bytes?: number; sha256: string }>;
+	readonly runtimeReceipt?: Readonly<{ bytes?: number; sha256: string }>;
 }
 
 export interface JRuntimeAssetConfig {
@@ -2482,11 +2495,36 @@ export function resolveForthRuntimeAssetConfig(
 	currentUrl = ''
 ) {
 	const configured = typeof options === 'object' ? options?.forth : undefined;
+	const manifestFingerprint = configured?.manifestFingerprint?.trim() || WASM_FORTH_ASSET_VERSION;
+	const usesBundledProfile = manifestFingerprint === WASM_FORTH_ASSET_VERSION;
+	const manifestReceipt =
+		configured?.manifestReceipt ||
+		(usesBundledProfile ? WASM_FORTH_RUNTIME_PROFILE.manifestReceipt : undefined);
+	const runtimeReceipt =
+		configured?.runtimeReceipt ||
+		(usesBundledProfile ? WASM_FORTH_RUNTIME_PROFILE.runtimeReceipt : undefined);
+	const preflightProfile: ForthRuntimePreflightProfile = Object.freeze({
+		profileId:
+			configured?.profileId?.trim() ||
+			(usesBundledProfile ? WASM_FORTH_RUNTIME_PROFILE.profileId : ''),
+		implementationVersion:
+			configured?.implementationVersion?.trim() ||
+			(usesBundledProfile ? WASM_FORTH_RUNTIME_PROFILE.implementationVersion : ''),
+		manifestFingerprint,
+		manifestReceipt: manifestReceipt
+			? Object.freeze({ bytes: manifestReceipt.bytes, sha256: manifestReceipt.sha256 })
+			: undefined,
+		runtimeReceipt: runtimeReceipt
+			? Object.freeze({ bytes: runtimeReceipt.bytes, sha256: runtimeReceipt.sha256 })
+			: undefined
+	});
 	return {
 		baseUrl: resolveForthBaseUrl(options, currentUrl),
 		workerUrl: resolveForthWorkerUrl(options, currentUrl),
 		manifestUrl: resolveForthManifestUrl(options, currentUrl),
-		manifestFingerprint: configured?.manifestFingerprint?.trim() || WASM_FORTH_ASSET_VERSION,
+		manifestFingerprint,
+		preflightKey: JSON.stringify(preflightProfile),
+		preflightProfile,
 		workerReceipt: configured?.workerReceipt || WASM_FORTH_RUNNER_RECEIPT
 	};
 }

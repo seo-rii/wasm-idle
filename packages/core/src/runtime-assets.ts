@@ -136,6 +136,10 @@ export interface RuntimeAssetKeySource {
 		workerUrl?: string;
 		manifestUrl?: string;
 		manifestFingerprint?: string;
+		profileId?: string;
+		implementationVersion?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		runtimeReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	j?: {
@@ -649,6 +653,24 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		runtime: 'forth',
 		property: 'manifestFingerprint',
 		key: 'forthManifestFingerprint'
+	},
+	{ runtime: 'forth', property: 'profileId', key: 'forthProfileId' },
+	{
+		runtime: 'forth',
+		property: 'implementationVersion',
+		key: 'forthImplementationVersion'
+	},
+	{
+		runtime: 'forth',
+		property: 'manifestReceipt',
+		key: 'forthManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'forth',
+		property: 'runtimeReceipt',
+		key: 'forthRuntimeReceipt',
+		serialize: serializeIntegrityEntry
 	},
 	{
 		runtime: 'forth',

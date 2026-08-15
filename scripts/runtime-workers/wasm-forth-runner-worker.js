@@ -1,155 +1,14 @@
 let runtimeIdentity = '';
 let runtimePromise = null;
 
+const preflightProtocol = 'wasm-idle-forth-preflight';
+const preflightProtocolVersion = 1;
 const manifestFormat = 'wasm-forth-runtime-manifest-v2';
 const fingerprintDomain = 'wasm-idle:forth-runtime-manifest:v2';
 const hardMaxAssetBytes = 128 * 1024 * 1024;
 const maxManifestBytes = 64 * 1024;
 const textEncoder = new TextEncoder();
 const fatalTextDecoder = new TextDecoder('utf-8', { fatal: true });
-
-function assetUrl(baseUrl, path) {
-	return new URL(path, baseUrl).href;
-}
-
-function versionedAssetUrl(baseUrl, path, fingerprint) {
-	const url = new URL(path, baseUrl);
-	url.searchParams.set('v', fingerprint);
-	return url.href;
-}
-
-function requireHttpUrl(value, label) {
-	let url;
-	try {
-		url = new URL(value);
-	} catch {
-		throw new Error(`${label} URL is invalid.`);
-	}
-	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error(`${label} URL must use HTTP(S).`);
-	}
-	if (url.username || url.password || url.hash) {
-		throw new Error(`${label} URL must not include credentials or a fragment.`);
-	}
-	return url;
-}
-
-function cancelResponseBody(response, reason) {
-	try {
-		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
-	} catch {
-		// Preserve the trust-boundary failure that caused cancellation.
-	}
-}
-
-async function fetchBoundedBytes(urlValue, label, maxBytes, expectedBytes, cache) {
-	if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
-		throw new Error(`${label} byte limit is invalid.`);
-	}
-	if (
-		expectedBytes !== undefined &&
-		(!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || expectedBytes > maxBytes)
-	) {
-		throw new Error(`${label} expected byte size is invalid.`);
-	}
-	const requestUrl = requireHttpUrl(urlValue, label);
-	const response = await fetch(requestUrl.href, {
-		...(cache ? { cache } : {}),
-		credentials: 'omit',
-		redirect: 'error',
-		referrerPolicy: 'no-referrer'
-	});
-	try {
-		if (!response.url) throw new Error(`${label} response URL is missing.`);
-		let responseUrl;
-		try {
-			responseUrl = new URL(response.url);
-		} catch {
-			throw new Error(`${label} response URL is invalid.`);
-		}
-		if (responseUrl.href !== requestUrl.href) {
-			throw new Error(`${label} response URL does not match the requested asset.`);
-		}
-		if (!response.ok) {
-			throw new Error(`${label} request failed with status ${response.status}.`);
-		}
-		const contentLength = response.headers.get('content-length');
-		if (contentLength !== null) {
-			const normalized = contentLength.trim();
-			const parsed = Number(normalized);
-			if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(parsed)) {
-				throw new Error(`${label} has an invalid Content-Length.`);
-			}
-			if (expectedBytes !== undefined && parsed !== expectedBytes) {
-				throw new Error(`${label} Content-Length does not match its receipt.`);
-			}
-			if (parsed > maxBytes) throw new Error(`${label} exceeds its byte limit.`);
-		}
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-
-	if (!response.body) {
-		const error = new Error(`${label} response does not provide a byte stream.`);
-		cancelResponseBody(response, error);
-		throw error;
-	}
-
-	let reader;
-	try {
-		reader = response.body.getReader();
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	const output = expectedBytes === undefined ? null : new Uint8Array(expectedBytes);
-	const chunks = output ? null : [];
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error(`${label} returned an invalid byte stream.`);
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (expectedBytes !== undefined && nextLoaded > expectedBytes) {
-				throw new Error(`${label} exceeds its receipt size.`);
-			}
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > maxBytes) {
-				throw new Error(`${label} exceeds its byte limit.`);
-			}
-			if (output) output.set(value, loaded);
-			else chunks.push(value.slice());
-			loaded = nextLoaded;
-		}
-		if (expectedBytes !== undefined && loaded !== expectedBytes) {
-			throw new Error(`${label} is truncated.`);
-		}
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the stream or quota failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the primary load result.
-		}
-	}
-	if (output) return output;
-	const bytes = new Uint8Array(loaded);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return bytes;
-}
 
 async function sha256Hex(bytes) {
 	if (!globalThis.crypto?.subtle?.digest) {
@@ -164,7 +23,13 @@ async function computeFingerprint(profileId, waforthVersion, receipt) {
 	return await sha256Hex(textEncoder.encode(canonical));
 }
 
-async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
+async function normalizeManifest(
+	value,
+	expectedFingerprint,
+	expectedProfileId,
+	expectedVersion,
+	maxAssetBytes
+) {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error('WAForth runtime manifest must be an object.');
 	}
@@ -176,9 +41,11 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 		!/^waforth-[A-Za-z0-9._-]+$/u.test(value.profileId) ||
 		typeof value.waforthVersion !== 'string' ||
 		!/^[A-Za-z0-9._-]+$/u.test(value.waforthVersion) ||
-		value.profileId !== `waforth-${value.waforthVersion}`
+		value.profileId !== `waforth-${value.waforthVersion}` ||
+		value.profileId !== expectedProfileId ||
+		value.waforthVersion !== expectedVersion
 	) {
-		throw new Error('WAForth runtime manifest profile is invalid.');
+		throw new Error('WAForth runtime manifest profile is invalid or does not match preflight.');
 	}
 	if (typeof expectedFingerprint !== 'string' || !/^[a-f0-9]{64}$/u.test(expectedFingerprint)) {
 		throw new Error('WAForth runtime expected fingerprint is invalid.');
@@ -263,16 +130,53 @@ async function evaluateRuntime(bytes) {
 	return { runtimePackage, WAForth };
 }
 
-async function loadWaforth(baseUrl, manifestUrl, manifestFingerprint, requestedMaxAssetBytes) {
+async function loadWaforth(runtimePreflight, expectedFingerprint, requestedMaxAssetBytes) {
 	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
 		throw new Error('WAForth runtime asset byte limit is invalid.');
 	}
 	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
-	const resolvedManifestUrl = manifestUrl || assetUrl(baseUrl, 'runtime-manifest.v2.json');
+	const expectedKeys = [
+		'implementationVersion',
+		'manifestBytes',
+		'manifestFingerprint',
+		'profileId',
+		'protocol',
+		'protocolVersion',
+		'runtimeBytes'
+	];
+	if (
+		!runtimePreflight ||
+		typeof runtimePreflight !== 'object' ||
+		Array.isArray(runtimePreflight) ||
+		Object.keys(runtimePreflight)
+			.sort()
+			.some((key, index) => key !== expectedKeys[index]) ||
+		Object.keys(runtimePreflight).length !== expectedKeys.length ||
+		runtimePreflight.protocol !== preflightProtocol ||
+		runtimePreflight.protocolVersion !== preflightProtocolVersion ||
+		typeof runtimePreflight.profileId !== 'string' ||
+		!/^waforth-[A-Za-z0-9._-]+$/u.test(runtimePreflight.profileId) ||
+		typeof runtimePreflight.implementationVersion !== 'string' ||
+		!/^[A-Za-z0-9._-]+$/u.test(runtimePreflight.implementationVersion) ||
+		runtimePreflight.profileId !== `waforth-${runtimePreflight.implementationVersion}` ||
+		runtimePreflight.manifestFingerprint !== expectedFingerprint ||
+		Object.prototype.toString.call(runtimePreflight.manifestBytes) !== '[object Uint8Array]' ||
+		Object.prototype.toString.call(runtimePreflight.runtimeBytes) !== '[object Uint8Array]'
+	) {
+		throw new Error('WAForth runtime requires a valid host-preflighted asset payload.');
+	}
+	if (
+		runtimePreflight.manifestBytes.byteLength <= 0 ||
+		runtimePreflight.manifestBytes.byteLength > Math.min(maxManifestBytes, maxAssetBytes) ||
+		runtimePreflight.runtimeBytes.byteLength <= 0 ||
+		runtimePreflight.runtimeBytes.byteLength > maxAssetBytes
+	) {
+		throw new Error('WAForth host-preflighted assets exceed their active byte limits.');
+	}
 	const identity = JSON.stringify([
-		baseUrl,
-		resolvedManifestUrl,
-		manifestFingerprint,
+		runtimePreflight.profileId,
+		runtimePreflight.implementationVersion,
+		runtimePreflight.manifestFingerprint,
 		maxAssetBytes
 	]);
 	if (runtimeIdentity === identity && runtimePromise) return await runtimePromise;
@@ -281,29 +185,22 @@ async function loadWaforth(baseUrl, manifestUrl, manifestFingerprint, requestedM
 	}
 	runtimeIdentity = identity;
 	const pending = (async () => {
-		const manifestBytes = await fetchBoundedBytes(
-			resolvedManifestUrl,
-			'WAForth runtime manifest',
-			Math.min(maxManifestBytes, maxAssetBytes),
-			undefined,
-			'no-store'
-		);
 		let parsed;
 		try {
-			parsed = JSON.parse(fatalTextDecoder.decode(manifestBytes));
+			parsed = JSON.parse(fatalTextDecoder.decode(runtimePreflight.manifestBytes));
 		} catch {
 			throw new Error('WAForth runtime manifest is not valid UTF-8 JSON.');
 		}
-		const manifest = await normalizeManifest(parsed, manifestFingerprint, maxAssetBytes);
-		const receipt = manifest.assets[0];
-		const runtimeBytes = await fetchBoundedBytes(
-			versionedAssetUrl(baseUrl, receipt.path, manifestFingerprint),
-			'WAForth runtime asset waforth.js',
-			receipt.size,
-			receipt.size
+		const manifest = await normalizeManifest(
+			parsed,
+			runtimePreflight.manifestFingerprint,
+			runtimePreflight.profileId,
+			runtimePreflight.implementationVersion,
+			maxAssetBytes
 		);
-		await verifyReceiptBytes(receipt, runtimeBytes);
-		return await evaluateRuntime(runtimeBytes);
+		const receipt = manifest.assets[0];
+		await verifyReceiptBytes(receipt, runtimePreflight.runtimeBytes);
+		return await evaluateRuntime(runtimePreflight.runtimeBytes);
 	})();
 	runtimePromise = pending;
 	try {
@@ -380,8 +277,8 @@ function createKeyReader(stdin, channel) {
 self.onmessage = async (event) => {
 	const {
 		baseUrl,
-		manifestUrl,
 		manifestFingerprint,
+		runtimePreflight,
 		maxAssetBytes,
 		code,
 		stdin,
@@ -393,8 +290,7 @@ self.onmessage = async (event) => {
 		const key = createKeyReader(stdin, stdinChannel);
 		if (log) console.log(`[wasm-idle:forth-worker] run start baseUrl=${baseUrl}`);
 		const { runtimePackage, WAForth } = await loadWaforth(
-			baseUrl,
-			manifestUrl,
+			runtimePreflight,
 			manifestFingerprint,
 			maxAssetBytes
 		);

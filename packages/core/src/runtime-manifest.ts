@@ -290,9 +290,10 @@ export function defineRuntimeRegistryManifest(
 				runtime.assetRoot.includes('\0') ||
 				runtime.assetRoot.includes('?') ||
 				runtime.assetRoot.includes('#') ||
-				runtime.assetRoot
-					.split('/')
-					.some((segment) => !segment || segment === '.' || segment === '..'))
+				(runtime.assetRoot !== '.' &&
+					runtime.assetRoot
+						.split('/')
+						.some((segment) => !segment || segment === '.' || segment === '..')))
 		) {
 			throw new TypeError(
 				`Runtime asset root must be a normalized relative path: ${runtime.assetRoot}`

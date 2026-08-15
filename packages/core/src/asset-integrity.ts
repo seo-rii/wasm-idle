@@ -1,6 +1,8 @@
 import { AssetIntegrityError } from './errors.js';
 import type { RuntimeAssetIntegrityEntry } from './runtime-assets.js';
 
+const JAVASCRIPT_MEDIA_TYPES = new Set(['application/javascript', 'text/javascript']);
+
 export type RuntimeAssetIntegrityStage = 'compressed' | 'uncompressed';
 
 export interface RuntimeAssetIntegrityVerificationRequest {
@@ -133,7 +135,13 @@ export async function verifyRuntimeAssetIntegrity(
 		const actualMediaType =
 			request.mimeType?.split(';', 1)[0]?.trim().toLowerCase() || 'missing';
 		const normalizedExpectedMediaType = expectedMediaType.trim().toLowerCase();
-		if (actualMediaType !== normalizedExpectedMediaType) {
+		if (
+			actualMediaType !== normalizedExpectedMediaType &&
+			!(
+				JAVASCRIPT_MEDIA_TYPES.has(actualMediaType) &&
+				JAVASCRIPT_MEDIA_TYPES.has(normalizedExpectedMediaType)
+			)
+		) {
 			throw new AssetIntegrityError(
 				`Runtime asset ${request.asset} MIME type mismatch: expected ${normalizedExpectedMediaType}, received ${actualMediaType}`,
 				context

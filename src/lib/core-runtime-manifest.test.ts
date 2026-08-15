@@ -96,6 +96,24 @@ describe('runtime registry manifest', () => {
 		expect(Object.isFrozen(manifest.runtimes[0]?.assets[0])).toBe(true);
 	});
 
+	it('allows an explicit current-directory asset root without permitting traversal', () => {
+		const manifest = createManifest();
+		const runtime = manifest.runtimes[0]!;
+
+		expect(
+			defineRuntimeRegistryManifest({
+				...manifest,
+				runtimes: [{ ...runtime, assetRoot: '.' }]
+			}).runtimes[0]?.assetRoot
+		).toBe('.');
+		expect(() =>
+			defineRuntimeRegistryManifest({
+				...manifest,
+				runtimes: [{ ...runtime, assetRoot: './runtime' }]
+			})
+		).toThrow('Runtime asset root must be a normalized relative path');
+	});
+
 	it('validates persistent and pooled worker lifetime bounds', () => {
 		const manifest = createManifest();
 		const runtime = manifest.runtimes[0]!;

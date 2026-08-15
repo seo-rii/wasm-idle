@@ -117,7 +117,11 @@ import {
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
 import { TEAVM_RUNTIME_ASSET_RECEIPTS, type RuntimeAssetKeySource } from '@wasm-idle/core';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from './wasmFortranExecutionAssets';
-import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
+import {
+	WASM_FORTH_ASSET_VERSION,
+	WASM_FORTH_RUNTIME_PROFILE,
+	WASM_FORTH_RUNNER_RECEIPT
+} from './wasmForthVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
@@ -1171,6 +1175,8 @@ describe('runtime asset config resolution', () => {
 				manifestUrl:
 					'https://example.com/absproxy/5173/wasm-forth/runtime-manifest.v2.json',
 				manifestFingerprint: WASM_FORTH_ASSET_VERSION,
+				preflightKey: JSON.stringify(WASM_FORTH_RUNTIME_PROFILE),
+				preflightProfile: WASM_FORTH_RUNTIME_PROFILE,
 				workerReceipt: WASM_FORTH_RUNNER_RECEIPT
 			}
 		);
@@ -1275,6 +1281,8 @@ describe('runtime asset config resolution', () => {
 			workerUrl: '/wasm-forth/runner-worker.js',
 			manifestUrl: '/wasm-forth/runtime-manifest.v2.json',
 			manifestFingerprint: WASM_FORTH_ASSET_VERSION,
+			preflightKey: JSON.stringify(WASM_FORTH_RUNTIME_PROFILE),
+			preflightProfile: WASM_FORTH_RUNTIME_PROFILE,
 			workerReceipt: WASM_FORTH_RUNNER_RECEIPT
 		});
 	});
@@ -1312,6 +1320,8 @@ describe('runtime asset config resolution', () => {
 	it('prefers explicit static worker runtime urls over public env overrides', async () => {
 		const customFingerprint = 'a'.repeat(64);
 		const customWorkerReceipt = { bytes: 1234, sha256: 'b'.repeat(64) };
+		const customManifestReceipt = { bytes: 2345, sha256: 'c'.repeat(64) };
+		const customRuntimeReceipt = { bytes: 3456, sha256: 'd'.repeat(64) };
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = 'https://env.example.com/prolog/';
 		publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = 'https://env.example.com/gleam/';
@@ -1450,6 +1460,10 @@ describe('runtime asset config resolution', () => {
 						workerUrl: '/runtime/forth/worker.js',
 						manifestUrl: '/runtime/forth/manifest.json',
 						manifestFingerprint: customFingerprint,
+						profileId: 'waforth-custom',
+						implementationVersion: 'custom',
+						manifestReceipt: customManifestReceipt,
+						runtimeReceipt: customRuntimeReceipt,
 						workerReceipt: customWorkerReceipt
 					}
 				},
@@ -1460,6 +1474,20 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/runtime/forth/worker.js',
 			manifestUrl: 'https://example.com/runtime/forth/manifest.json',
 			manifestFingerprint: customFingerprint,
+			preflightKey: JSON.stringify({
+				profileId: 'waforth-custom',
+				implementationVersion: 'custom',
+				manifestFingerprint: customFingerprint,
+				manifestReceipt: customManifestReceipt,
+				runtimeReceipt: customRuntimeReceipt
+			}),
+			preflightProfile: {
+				profileId: 'waforth-custom',
+				implementationVersion: 'custom',
+				manifestFingerprint: customFingerprint,
+				manifestReceipt: customManifestReceipt,
+				runtimeReceipt: customRuntimeReceipt
+			},
 			workerReceipt: customWorkerReceipt
 		});
 		expect(

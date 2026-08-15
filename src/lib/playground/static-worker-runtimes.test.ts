@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const workerInstances: MockWorker[] = [];
 const workerBootstrapBlobs = new Map<string, Blob>();
+const runtimeLifecycleEvents: string[] = [];
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
 		PUBLIC_WASM_PROLOG_BASE_URL: '',
@@ -83,6 +84,7 @@ class MockWorker {
 		public url: string,
 		public options?: WorkerOptions
 	) {
+		runtimeLifecycleEvents.push(`worker:${url}`);
 		workerInstances.push(this);
 		queueMicrotask(() => {
 			if (!autoStartWorkers) return;
@@ -130,7 +132,13 @@ import nimWorkerSource from '../../../scripts/runtime-workers/wasm-nim-runner-wo
 import perlWorkerSource from '../../../scripts/runtime-workers/wasm-perl-runner-worker.js?raw';
 import prologWorkerSource from '../../../scripts/runtime-workers/wasm-prolog-runner-worker.js?raw';
 import tclWorkerSource from '../../../scripts/runtime-workers/wasm-tcl-runner-worker.js?raw';
-import { WASM_FORTH_ASSET_VERSION, WASM_FORTH_RUNNER_RECEIPT } from './wasmForthVersion';
+import forthManifestSource from '../../../static/wasm-forth/runtime-manifest.v2.json?raw';
+import forthRuntimeSource from '../../../static/wasm-forth/waforth.js?raw';
+import {
+	WASM_FORTH_ASSET_VERSION,
+	WASM_FORTH_RUNNER_RECEIPT,
+	WASM_FORTH_RUNTIME_PROFILE
+} from './wasmForthVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
@@ -144,6 +152,58 @@ import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersio
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
 import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
 import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
+
+function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
+	const inputUrl = String(input);
+	runtimeLifecycleEvents.push(`fetch:${inputUrl}`);
+	if (inputUrl.includes('/wasm-forth/runtime-manifest.v2.json')) {
+		return new Response(forthManifestSource, {
+			status: 200,
+			headers: {
+				'content-length': String(new TextEncoder().encode(forthManifestSource).byteLength),
+				'content-type': 'application/json'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-forth/waforth.js')) {
+		return new Response(forthRuntimeSource, {
+			status: 200,
+			headers: {
+				'content-length': String(new TextEncoder().encode(forthRuntimeSource).byteLength),
+				'content-type': 'text/javascript'
+			}
+		});
+	}
+	const source = inputUrl.includes('/wasm-prolog/runner-worker.js')
+		? prologWorkerSource
+		: inputUrl.includes('/wasm-gleam/runner-worker.js')
+			? gleamWorkerSource
+			: inputUrl.includes('/wasm-forth/runner-worker.js')
+				? forthWorkerSource
+				: inputUrl.includes('/wasm-j/runner-worker.js')
+					? jWorkerSource
+					: inputUrl.includes('/wasm-bqn/runner-worker.js')
+						? bqnWorkerSource
+						: inputUrl.includes('/wasm-clojurescript/runner-worker.js')
+							? clojureScriptWorkerSource
+							: inputUrl.includes('/wasm-janet/runner-worker.js')
+								? janetWorkerSource
+								: inputUrl.includes('/wasm-julia/runner-worker.js')
+									? juliaWorkerSource
+									: inputUrl.includes('/wasm-nim/runner-worker.js')
+										? nimWorkerSource
+										: inputUrl.includes('/wasm-perl/runner-worker.js')
+											? perlWorkerSource
+											: inputUrl.includes('/wasm-tcl/runner-worker.js')
+												? tclWorkerSource
+												: '/* static worker */';
+	return new Response(source, {
+		status: 200,
+		headers: {
+			'content-length': String(new TextEncoder().encode(source).byteLength)
+		}
+	});
+}
 
 function createStreamingTestSandbox() {
 	return new StaticWorkerRuntimeSandbox({
@@ -236,47 +296,13 @@ describe('static worker backed language sandboxes', () => {
 		});
 		workerInstances.length = 0;
 		workerBootstrapBlobs.clear();
+		runtimeLifecycleEvents.length = 0;
 		onPostMessage = null;
 		autoStartWorkers = true;
 		workerBootstrapId = 0;
 		vi.stubGlobal(
 			'fetch',
-			vi.fn(async (input: RequestInfo | URL) => {
-				const inputUrl = String(input);
-				const source = inputUrl.includes('/wasm-prolog/runner-worker.js')
-					? prologWorkerSource
-					: inputUrl.includes('/wasm-gleam/runner-worker.js')
-						? gleamWorkerSource
-						: inputUrl.includes('/wasm-forth/runner-worker.js')
-							? forthWorkerSource
-							: inputUrl.includes('/wasm-j/runner-worker.js')
-								? jWorkerSource
-								: inputUrl.includes('/wasm-bqn/runner-worker.js')
-									? bqnWorkerSource
-									: inputUrl.includes('/wasm-clojurescript/runner-worker.js')
-										? clojureScriptWorkerSource
-										: inputUrl.includes('/wasm-janet/runner-worker.js')
-											? janetWorkerSource
-											: inputUrl.includes('/wasm-julia/runner-worker.js')
-												? juliaWorkerSource
-												: inputUrl.includes('/wasm-nim/runner-worker.js')
-													? nimWorkerSource
-													: inputUrl.includes(
-																'/wasm-perl/runner-worker.js'
-														  )
-														? perlWorkerSource
-														: inputUrl.includes(
-																	'/wasm-tcl/runner-worker.js'
-															  )
-															? tclWorkerSource
-															: '/* static worker */';
-				return new Response(source, {
-					status: 200,
-					headers: {
-						'content-length': String(new TextEncoder().encode(source).byteLength)
-					}
-				});
-			})
+			vi.fn(async (input: RequestInfo | URL) => createStaticWorkerFetchResponse(input))
 		);
 		vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
 			const url = `blob:wasm-idle-worker-${workerBootstrapId++}`;
@@ -840,6 +866,7 @@ describe('static worker backed language sandboxes', () => {
 			'http://localhost:3000/wasm-forth/runner-worker.js?v=test',
 			forthWorkerSource
 		);
+		const runMessage = workerInstances[0].postMessage.mock.calls[0]?.[0];
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-forth/',
@@ -847,26 +874,59 @@ describe('static worker backed language sandboxes', () => {
 				manifestFingerprint: WASM_FORTH_ASSET_VERSION,
 				maxAssetBytes: 64_000,
 				stdin: 'ok\n',
-				activePath: 'main.fth'
+				activePath: 'main.fth',
+				runtimePreflight: expect.objectContaining({
+					protocol: 'wasm-idle-forth-preflight',
+					protocolVersion: 1,
+					profileId: WASM_FORTH_RUNTIME_PROFILE.profileId,
+					implementationVersion: WASM_FORTH_RUNTIME_PROFILE.implementationVersion,
+					manifestFingerprint: WASM_FORTH_ASSET_VERSION
+				})
 			})
+		);
+		expect(runMessage.runtimePreflight.manifestBytes).toBeInstanceOf(Uint8Array);
+		expect(runMessage.runtimePreflight.runtimeBytes).toBeInstanceOf(Uint8Array);
+		expect(new TextDecoder().decode(runMessage.runtimePreflight.manifestBytes)).toBe(
+			forthManifestSource
+		);
+		expect(new TextDecoder().decode(runMessage.runtimePreflight.runtimeBytes)).toBe(
+			forthRuntimeSource
 		);
 		expect(sandbox.workerReceipt).toEqual(WASM_FORTH_RUNNER_RECEIPT);
 		expect(fetch).toHaveBeenCalledWith(
 			'http://localhost:3000/wasm-forth/runner-worker.js?v=test',
 			expect.objectContaining({ cache: 'no-store' })
 		);
+		const workerStartIndex = runtimeLifecycleEvents.findIndex((event) =>
+			event.startsWith('worker:')
+		);
+		const manifestFetchIndex = runtimeLifecycleEvents.indexOf(
+			`fetch:http://localhost:3000/wasm-forth/runtime-manifest.v2.json?v=${WASM_FORTH_ASSET_VERSION}`
+		);
+		const runtimeFetchIndex = runtimeLifecycleEvents.indexOf(
+			`fetch:http://localhost:3000/wasm-forth/waforth.js?v=${WASM_FORTH_RUNTIME_PROFILE.runtimeReceipt.sha256}`
+		);
+		expect(manifestFetchIndex).toBeGreaterThanOrEqual(0);
+		expect(runtimeFetchIndex).toBeGreaterThanOrEqual(0);
+		expect(manifestFetchIndex).toBeLessThan(workerStartIndex);
+		expect(runtimeFetchIndex).toBeLessThan(workerStartIndex);
 	});
 
 	it('rejects a modified Forth runner before creating a worker', async () => {
 		const modifiedSource = `x${forthWorkerSource.slice(1)}`;
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(modifiedSource, {
+		vi.mocked(fetch).mockImplementation(async (input) => {
+			const inputUrl = String(input);
+			if (!inputUrl.includes('/wasm-forth/runner-worker.js')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			runtimeLifecycleEvents.push(`fetch:${inputUrl}`);
+			return new Response(modifiedSource, {
 				status: 200,
 				headers: {
 					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
 				}
-			})
-		);
+			});
+		});
 		const sandbox = new Forth();
 
 		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
@@ -874,6 +934,37 @@ describe('static worker backed language sandboxes', () => {
 			runtimeId: 'FORTH'
 		});
 		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects a corrupted Forth runtime before fetching or creating its worker', async () => {
+		const corruptedRuntime = `${forthRuntimeSource}\n/* corrupt */`;
+		vi.mocked(fetch).mockImplementation(async (input) => {
+			const inputUrl = String(input);
+			if (!inputUrl.includes('/wasm-forth/waforth.js')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			runtimeLifecycleEvents.push(`fetch:${inputUrl}`);
+			return new Response(corruptedRuntime, {
+				status: 200,
+				headers: {
+					'content-length': String(new TextEncoder().encode(corruptedRuntime).byteLength),
+					'content-type': 'text/javascript'
+				}
+			});
+		});
+		const sandbox = new Forth();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'FORTH'
+		});
+		expect(workerInstances).toHaveLength(0);
+		expect(
+			vi
+				.mocked(fetch)
+				.mock.calls.map(([input]) => String(input))
+				.some((url) => url.includes('/wasm-forth/runner-worker.js'))
+		).toBe(false);
 	});
 
 	it('loads J runtime urls and forwards stdin to the official J wasm worker', async () => {

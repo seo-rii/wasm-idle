@@ -12,7 +12,6 @@ const workerSourceUrl = new URL(
 	import.meta.url
 );
 const fixtureBaseUrl = 'https://runtime.example/wasm-forth/';
-const fixtureManifestUrl = `${fixtureBaseUrl}runtime-manifest.v2.json?v=fixture`;
 const fixtureProfileId = 'waforth-test';
 const fixtureVersion = 'test';
 const fingerprintDomain = 'wasm-idle:forth-runtime-manifest:v2';
@@ -72,7 +71,6 @@ Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: tr
 self.postMessage = (message) => parentPort.postMessage(message);
 const runtimeBytes = Buffer.from(${JSON.stringify(runtimeBytes.toString('base64'))}, 'base64');
 const manifestTemplate = ${JSON.stringify(fixtureManifest)};
-let harnessMode = '';
 let blobCounter = 0;
 const blobSources = new Map();
 globalThis.Blob = class HarnessBlob {
@@ -97,90 +95,40 @@ globalThis.importScripts = (url) => {
   parentPort.postMessage({ harnessEvaluated: true });
   (0, eval)(source);
 };
-globalThis.fetch = async (url, init = {}) => {
-  const requestedUrl = String(url);
-  const isManifest = requestedUrl.includes('runtime-manifest.v2.json');
-  parentPort.postMessage({
-    harnessFetch: requestedUrl,
-    harnessFetchOptions: {
-      cache: init.cache,
-      credentials: init.credentials,
-      redirect: init.redirect,
-      referrerPolicy: init.referrerPolicy
-    }
-  });
-  const manifest = JSON.parse(JSON.stringify(manifestTemplate));
-  if (harnessMode === 'manifest-fingerprint') manifest.fingerprint = '0'.repeat(64);
-  if (harnessMode === 'oversized-receipt') manifest.assets[0].size = 2_000_000;
-  let bytes = isManifest ? Buffer.from(JSON.stringify(manifest)) : Buffer.from(runtimeBytes);
-  if (!isManifest && harnessMode === 'corrupt-runtime') {
-    bytes = Buffer.from(bytes);
-    bytes[bytes.length - 1] ^= 1;
-  }
-  if (!isManifest && harnessMode === 'redirect-runtime') {
-    return {
-      ok: true,
-      status: 200,
-      url: 'https://untrusted.example/waforth.js',
-      headers: new Headers({ 'content-length': String(bytes.byteLength) }),
-      body: {
-        cancel() {
-          parentPort.postMessage({ harnessCancelled: true });
-        }
-      }
-    };
-  }
-  if (!isManifest && harnessMode === 'reader-failure') {
-    return {
-      ok: true,
-      status: 200,
-      url: requestedUrl,
-      headers: new Headers(),
-      body: {
-        getReader() {
-          throw new Error('fixture reader failure');
-        },
-        cancel() {
-          parentPort.postMessage({ harnessCancelled: true });
-        }
-      }
-    };
-  }
-  if (!isManifest && (harnessMode === 'truncated-runtime' || harnessMode === 'overflow-runtime')) {
-    const streamedBytes = harnessMode === 'truncated-runtime'
-      ? bytes.subarray(0, bytes.byteLength - 1)
-      : Buffer.concat([bytes, Buffer.of(0)]);
-    return {
-      ok: true,
-      status: 200,
-      url: requestedUrl,
-      headers: new Headers(),
-      body: new ReadableStream({
-        start(controller) {
-          controller.enqueue(streamedBytes);
-          controller.close();
-        },
-        cancel() {
-          parentPort.postMessage({ harnessCancelled: true });
-        }
-      })
-    };
-  }
-  const contentLength =
-    !isManifest && harnessMode === 'wrong-content-length'
-      ? bytes.byteLength + 1
-      : bytes.byteLength;
-  const response = new Response(bytes, {
-    status: 200,
-    headers: { 'content-length': String(contentLength) }
-  });
-  Object.defineProperty(response, 'url', { value: requestedUrl });
-  return response;
+globalThis.fetch = () => {
+  parentPort.postMessage({ harnessFetch: true });
+  throw new Error('WAForth worker must not fetch runtime assets');
 };
 (0, eval)(${JSON.stringify(workerSource)});
 parentPort.on('message', (data) => {
-  harnessMode = data.harnessMode || '';
-  self.onmessage({ data });
+  const request = {
+    ...data,
+    runtimePreflight: data.runtimePreflight
+      ? { ...data.runtimePreflight }
+      : data.runtimePreflight
+  };
+  if (data.harnessMode === 'missing-preflight') request.runtimePreflight = undefined;
+  if (data.harnessMode === 'unexpected-key') request.runtimePreflight.unexpected = true;
+  if (data.harnessMode === 'corrupt-runtime') {
+    const bytes = Buffer.from(request.runtimePreflight.runtimeBytes);
+    bytes[bytes.length - 1] ^= 1;
+    request.runtimePreflight.runtimeBytes = bytes;
+  }
+  if (
+    data.harnessMode === 'manifest-fingerprint' ||
+    data.harnessMode === 'oversized-receipt' ||
+    data.harnessMode === 'profile-mismatch'
+  ) {
+    const manifest = JSON.parse(JSON.stringify(manifestTemplate));
+    if (data.harnessMode === 'manifest-fingerprint') manifest.fingerprint = '0'.repeat(64);
+    if (data.harnessMode === 'oversized-receipt') manifest.assets[0].size = 2_000_000;
+    if (data.harnessMode === 'profile-mismatch') {
+      manifest.profileId = 'waforth-other';
+      manifest.waforthVersion = 'other';
+    }
+    request.runtimePreflight.manifestBytes = Buffer.from(JSON.stringify(manifest));
+  }
+  self.onmessage({ data: request });
 });
 `;
 	return new NodeWorker(harness, { eval: true });
@@ -189,8 +137,16 @@ parentPort.on('message', (data) => {
 function runtimeRequest(overrides: Record<string, unknown> = {}) {
 	return {
 		baseUrl: fixtureBaseUrl,
-		manifestUrl: fixtureManifestUrl,
 		manifestFingerprint: fixtureFingerprint,
+		runtimePreflight: {
+			protocol: 'wasm-idle-forth-preflight',
+			protocolVersion: 1,
+			profileId: fixtureProfileId,
+			implementationVersion: fixtureVersion,
+			manifestFingerprint: fixtureFingerprint,
+			manifestBytes: Buffer.from(JSON.stringify(fixtureManifest)),
+			runtimeBytes: Buffer.from(runtimeBytes)
+		},
 		maxAssetBytes: 1_000_000,
 		code: 'KEY',
 		stdin: '68\n',
@@ -236,7 +192,7 @@ async function runHarness(
 }
 
 describe('WAForth runner worker', () => {
-	it('streams a prompt before reading verified shared-ring input', async () => {
+	it('streams a prompt from host-preflighted bytes before reading shared-ring input', async () => {
 		const stdin = new StaticStdinRingHost({ capacity: 16, maxBufferedBytes: 32 });
 		let suppliedInput = false;
 		let transcript = '';
@@ -258,20 +214,11 @@ describe('WAForth runner worker', () => {
 		expect(output.indexOf('value?')).toBeLessThan(output.indexOf('main=73'));
 		expect(output).toContain('main=73');
 		expect(messages.at(-1)).toEqual({ results: true });
-		expect(messages.filter((message) => message.harnessFetch)).toHaveLength(2);
+		expect(messages.some((message) => message.harnessFetch)).toBe(false);
 		expect(messages).toContainEqual({ harnessEvaluated: true });
-		expect(messages).toContainEqual(
-			expect.objectContaining({
-				harnessFetchOptions: expect.objectContaining({
-					credentials: 'omit',
-					redirect: 'error',
-					referrerPolicy: 'no-referrer'
-				})
-			})
-		);
 	});
 
-	it('fails malformed stdin before any runtime fetch', async () => {
+	it('fails malformed stdin before evaluating host-preflighted assets', async () => {
 		const messages = await runHarness([
 			runtimeRequest({
 				stdinChannel: {
@@ -287,24 +234,18 @@ describe('WAForth runner worker', () => {
 		expect(messages).toEqual([{ error: 'Invalid WAForth streaming stdin channel.' }]);
 	});
 
-	it('rejects a mismatched manifest fingerprint before fetching or evaluating the runtime', async () => {
-		const messages = await runHarness([
-			runtimeRequest({ harnessMode: 'manifest-fingerprint' })
-		]);
+	it.each([
+		['missing-preflight', 'requires a valid host-preflighted asset payload'],
+		['unexpected-key', 'requires a valid host-preflighted asset payload'],
+		['manifest-fingerprint', 'manifest fingerprint does not match the pinned runtime'],
+		['oversized-receipt', 'receipt is invalid or exceeds its byte limit'],
+		['profile-mismatch', 'manifest profile is invalid or does not match preflight']
+	])('rejects %s payloads before runtime evaluation', async (harnessMode, message) => {
+		const messages = await runHarness([runtimeRequest({ harnessMode })]);
 
-		expect(messages.filter((message) => message.harnessFetch)).toHaveLength(1);
-		expect(messages.some((message) => message.harnessEvaluated)).toBe(false);
-		expect(messages.at(-1)?.error).toContain(
-			'manifest fingerprint does not match the pinned runtime'
-		);
-	});
-
-	it('rejects a receipt over the active limit before fetching the runtime asset', async () => {
-		const messages = await runHarness([runtimeRequest({ harnessMode: 'oversized-receipt' })]);
-
-		expect(messages.filter((message) => message.harnessFetch)).toHaveLength(1);
-		expect(messages.some((message) => message.harnessEvaluated)).toBe(false);
-		expect(messages.at(-1)?.error).toContain('receipt is invalid or exceeds its byte limit');
+		expect(messages.some((entry) => entry.harnessEvaluated)).toBe(false);
+		expect(messages.some((entry) => entry.harnessFetch)).toBe(false);
+		expect(messages.at(-1)?.error).toContain(message);
 	});
 
 	it('blocks same-length corruption and retries cleanly without cache poisoning', async () => {
@@ -319,41 +260,15 @@ describe('WAForth runner worker', () => {
 		expect(terminal[0]?.error).toContain('failed SHA-256 verification');
 		expect(terminal[1]).toEqual({ results: true });
 		expect(messages.filter((message) => message.harnessEvaluated)).toHaveLength(1);
-		expect(messages.filter((message) => message.harnessFetch)).toHaveLength(4);
+		expect(messages.some((message) => message.harnessFetch)).toBe(false);
 	});
 
-	it('rejects substituted final URLs and cancels the rejected body', async () => {
-		const messages = await runHarness([runtimeRequest({ harnessMode: 'redirect-runtime' })]);
-
-		expect(messages.some((message) => message.harnessEvaluated)).toBe(false);
-		expect(messages).toContainEqual({ harnessCancelled: true });
-		expect(messages.at(-1)?.error).toContain('response URL does not match the requested asset');
-	});
-
-	it('rejects a declared runtime size that differs from its receipt', async () => {
+	it('enforces the active byte limit on preflighted runtime bytes', async () => {
 		const messages = await runHarness([
-			runtimeRequest({ harnessMode: 'wrong-content-length' })
+			runtimeRequest({ maxAssetBytes: runtimeBytes.byteLength - 1 })
 		]);
 
-		expect(messages.some((message) => message.harnessEvaluated)).toBe(false);
-		expect(messages.at(-1)?.error).toContain('Content-Length does not match its receipt');
-	});
-
-	it.each([
-		['truncated-runtime', 'is truncated'],
-		['overflow-runtime', 'exceeds its receipt size']
-	])('enforces the receipt size while streaming in %s mode', async (harnessMode, message) => {
-		const messages = await runHarness([runtimeRequest({ harnessMode })]);
-
 		expect(messages.some((entry) => entry.harnessEvaluated)).toBe(false);
-		expect(messages.at(-1)?.error).toContain(message);
-	});
-
-	it('cancels the response if its byte stream cannot be acquired', async () => {
-		const messages = await runHarness([runtimeRequest({ harnessMode: 'reader-failure' })]);
-
-		expect(messages.some((message) => message.harnessEvaluated)).toBe(false);
-		expect(messages).toContainEqual({ harnessCancelled: true });
-		expect(messages.at(-1)?.error).toContain('fixture reader failure');
+		expect(messages.at(-1)?.error).toContain('exceed their active byte limits');
 	});
 });

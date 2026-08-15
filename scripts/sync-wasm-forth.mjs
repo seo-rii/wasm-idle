@@ -219,9 +219,15 @@ function renderManifest(lock, assets) {
 	)}\n`;
 }
 
-/** @param {string} fingerprint @param {Readonly<ForthAssetReceipt>} workerReceipt */
-function renderVersionModule(fingerprint, workerReceipt) {
-	return `export const WASM_FORTH_ASSET_VERSION =\n\t'${fingerprint}';\nexport const WASM_FORTH_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
+/**
+ * @param {ForthInputLock} lock
+ * @param {string} fingerprint
+ * @param {Readonly<ForthAssetReceipt>} manifestReceipt
+ * @param {Readonly<ForthAssetReceipt>} runtimeReceipt
+ * @param {Readonly<ForthAssetReceipt>} workerReceipt
+ */
+function renderVersionModule(lock, fingerprint, manifestReceipt, runtimeReceipt, workerReceipt) {
+	return `export const WASM_FORTH_RUNTIME_PROFILE = {\n\tprofileId: '${lock.profileId}',\n\timplementationVersion: '${lock.upstream.packageVersion}',\n\tmanifestFingerprint: '${fingerprint}',\n\tmanifestReceipt: {\n\t\tbytes: ${manifestReceipt.bytes},\n\t\tsha256: '${manifestReceipt.sha256}'\n\t},\n\truntimeReceipt: {\n\t\tbytes: ${runtimeReceipt.bytes},\n\t\tsha256: '${runtimeReceipt.sha256}'\n\t}\n} as const;\nexport const WASM_FORTH_ASSET_VERSION =\n\tWASM_FORTH_RUNTIME_PROFILE.manifestFingerprint;\nexport const WASM_FORTH_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
 }
 
 /** @param {Uint8Array} bytes @param {Readonly<ForthAssetReceipt>} receipt @param {string} label */
@@ -900,8 +906,18 @@ export async function syncWasmForthAssets(options = {}) {
 		]);
 		const fingerprint = computeFingerprint(lock, assets);
 		const manifestSource = renderManifest(lock, assets);
-		const versionSource = renderVersionModule(fingerprint, workerReceipt);
 		const manifestBytes = Buffer.from(manifestSource, 'utf8');
+		const manifestReceipt = Object.freeze({
+			bytes: manifestBytes.byteLength,
+			sha256: sha256(manifestBytes)
+		});
+		const versionSource = renderVersionModule(
+			lock,
+			fingerprint,
+			manifestReceipt,
+			waforthReceipt,
+			workerReceipt
+		);
 		const versionBytes = Buffer.from(versionSource, 'utf8');
 		const expectedPublication = Object.freeze({
 			fingerprint,

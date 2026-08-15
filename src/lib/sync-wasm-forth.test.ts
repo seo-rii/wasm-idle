@@ -218,9 +218,11 @@ void import(${JSON.stringify(syncModuleUrl)}).then(async ({ syncWasmForthAssets 
 		expect(waforthBytes.toString('utf8')).toContain('self.WAForthPackage = module.exports;');
 		expect(workerBytes.toString('utf8')).toBe(workerText);
 
-		const manifest = JSON.parse(
-			await readFile(path.join(targetDir, 'runtime-manifest.v2.json'), 'utf8')
-		) as {
+		const manifestSource = await readFile(
+			path.join(targetDir, 'runtime-manifest.v2.json'),
+			'utf8'
+		);
+		const manifest = JSON.parse(manifestSource) as {
 			format: string;
 			profileId: string;
 			waforthVersion: string;
@@ -245,7 +247,7 @@ void import(${JSON.stringify(syncModuleUrl)}).then(async ({ syncWasmForthAssets 
 			sha256: sha256(workerBytes)
 		});
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toBe(
-			`export const WASM_FORTH_ASSET_VERSION =\n\t'${result.fingerprint}';\nexport const WASM_FORTH_RUNNER_RECEIPT = {\n\tbytes: ${workerBytes.byteLength},\n\tsha256: '${sha256(workerBytes)}'\n} as const;\n`
+			`export const WASM_FORTH_RUNTIME_PROFILE = {\n\tprofileId: 'waforth-1.2.3',\n\timplementationVersion: '1.2.3',\n\tmanifestFingerprint: '${result.fingerprint}',\n\tmanifestReceipt: {\n\t\tbytes: ${Buffer.byteLength(manifestSource)},\n\t\tsha256: '${sha256(manifestSource)}'\n\t},\n\truntimeReceipt: {\n\t\tbytes: ${waforthBytes.byteLength},\n\t\tsha256: '${sha256(waforthBytes)}'\n\t}\n} as const;\nexport const WASM_FORTH_ASSET_VERSION =\n\tWASM_FORTH_RUNTIME_PROFILE.manifestFingerprint;\nexport const WASM_FORTH_RUNNER_RECEIPT = {\n\tbytes: ${workerBytes.byteLength},\n\tsha256: '${sha256(workerBytes)}'\n} as const;\n`
 		);
 	});
 

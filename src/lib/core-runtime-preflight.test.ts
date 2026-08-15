@@ -137,6 +137,56 @@ describe('runtime registry asset preflight', () => {
 		expect(Object.isFrozen(result.assets)).toBe(true);
 	});
 
+	it('supports a cache-busted URL only for the same declared asset path', async () => {
+		const requestUrl = `https://example.test/runtime/loader.js?v=${sha256(loaderBytes)}`;
+		const fetch = vi.fn(async (input: RequestInfo | URL) => {
+			const response = responseFor('https://example.test/runtime/loader.js');
+			Object.defineProperty(response, 'url', { value: String(input) });
+			return response;
+		});
+
+		const result = await preflightRuntimeAssets({
+			manifest: createManifest([assets[0]!]),
+			runtimeId: 'fortran/preflight-test',
+			rootUrl: 'https://example.test/',
+			assetUrls: { loader: requestUrl },
+			fetch
+		});
+
+		expect(fetch).toHaveBeenCalledWith(requestUrl, expect.any(Object));
+		expect(result.assets.loader?.url).toBe(requestUrl);
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				assetUrls: {
+					loader: 'https://example.test/runtime/alternate.js?v=pinned'
+				},
+				fetch
+			})
+		).rejects.toThrow('does not match its declared path');
+	});
+
+	it('rejects an unpinned final URL for a cache-busted asset', async () => {
+		const response = responseFor('https://example.test/runtime/loader.js');
+		Object.defineProperty(response, 'url', {
+			value: 'https://example.test/runtime/loader.js?v=unexpected'
+		});
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				assetUrls: {
+					loader: 'https://example.test/runtime/loader.js?v=pinned'
+				},
+				fetch: async () => response
+			})
+		).rejects.toThrow('response URL does not match its requested URL');
+	});
+
 	it('releases a successful streamed response reader without cancelling it', async () => {
 		const cancel = vi.fn(async () => {});
 		const releaseLock = vi.fn();

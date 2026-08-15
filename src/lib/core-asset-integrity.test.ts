@@ -104,6 +104,36 @@ describe('runtime asset integrity', () => {
 		);
 	});
 
+	it('accepts the standard JavaScript MIME aliases used by supported static hosts', async () => {
+		const bytes = encoder.encode('export default 1;');
+		const digest = createHash('sha256').update(bytes).digest('hex');
+
+		await expect(
+			verifyRuntimeAssetIntegrity({
+				asset: 'runtime.js',
+				bytes,
+				expected: {
+					sha256: digest,
+					bytes: bytes.byteLength,
+					mediaType: 'application/javascript'
+				},
+				mimeType: 'text/javascript; charset=utf-8'
+			})
+		).resolves.toMatchObject({ mediaType: 'text/javascript' });
+		await expect(
+			verifyRuntimeAssetIntegrity({
+				asset: 'runtime.js',
+				bytes,
+				expected: {
+					sha256: digest,
+					bytes: bytes.byteLength,
+					mediaType: 'text/javascript'
+				},
+				mimeType: 'application/javascript; charset=utf-8'
+			})
+		).resolves.toMatchObject({ mediaType: 'application/javascript' });
+	});
+
 	it('rejects decompression expansion that violates the declared logical size', async () => {
 		const compressed = encoder.encode('compressed');
 		const uncompressed = encoder.encode('expanded payload');

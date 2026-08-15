@@ -39,7 +39,15 @@ export interface StaticWorkerRuntimeUrls {
 	workerUrl: string;
 	manifestUrl?: string;
 	manifestFingerprint?: string;
+	preflightKey?: string;
+	preflightProfile?: unknown;
 	workerReceipt?: StaticWorkerReceipt;
+}
+
+export interface StaticWorkerRuntimePreflightContext {
+	readonly limits: ExecutionLimits;
+	readonly signal?: AbortSignal;
+	readonly reportProgress: (value: number, stage?: string) => void;
 }
 
 export type StaticWorkerRuntimeStdin =
@@ -67,6 +75,10 @@ export interface StaticWorkerRuntimeConfig {
 		runtimeAssets: string | PlaygroundRuntimeAssets,
 		currentUrl: string
 	) => StaticWorkerRuntimeUrls;
+	preflightRuntimeAssets?: (
+		urls: StaticWorkerRuntimeUrls,
+		context: StaticWorkerRuntimePreflightContext
+	) => unknown | Promise<unknown>;
 }
 
 type StaticWorkerMessage = {
@@ -136,6 +148,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	workerUrl = '';
 	manifestUrl = '';
 	manifestFingerprint = '';
+	preflightKey = '';
 	workerReceipt: StaticWorkerReceipt | null = null;
 	activeReject: ((reason: unknown) => void) | null = null;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
@@ -160,6 +173,8 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	private workerStartAbortController: AbortController | null = null;
 	private workerGeneration = 0;
 	private workerStartPromise: Promise<Worker> | null = null;
+	private resolvedRuntimeUrls: StaticWorkerRuntimeUrls | null = null;
+	private readonly workerRuntimePreflight = new WeakMap<Worker, unknown>();
 
 	constructor(private readonly config: StaticWorkerRuntimeConfig) {
 		this.workerLifetimeController = new RuntimeWorkerLifetimeController<
@@ -243,6 +258,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			this.assertOperationNotDisposed();
 			const nextManifestUrl = urls.manifestUrl || '';
 			const nextManifestFingerprint = urls.manifestFingerprint || '';
+			const nextPreflightKey = urls.preflightKey || '';
 			const nextWorkerReceipt = urls.workerReceipt
 				? Object.freeze({
 						bytes: urls.workerReceipt.bytes,
@@ -266,6 +282,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				this.workerUrl !== urls.workerUrl ||
 				this.manifestUrl !== nextManifestUrl ||
 				this.manifestFingerprint !== nextManifestFingerprint ||
+				this.preflightKey !== nextPreflightKey ||
 				this.workerReceipt?.bytes !== nextWorkerReceipt?.bytes ||
 				this.workerReceipt?.sha256 !== nextWorkerReceipt?.sha256;
 
@@ -283,6 +300,8 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			this.workerUrl = urls.workerUrl;
 			this.manifestUrl = nextManifestUrl;
 			this.manifestFingerprint = nextManifestFingerprint;
+			this.preflightKey = nextPreflightKey;
+			this.resolvedRuntimeUrls = urls;
 			this.workerReceipt = nextWorkerReceipt;
 
 			if (!this.baseUrl || !this.workerUrl) {
@@ -1070,6 +1089,40 @@ self.postMessage = (message, transferOrOptions) => {
 		progress: SandboxProgress | undefined,
 		controls: StaticWorkerExecutionControls
 	) {
+		let runtimePreflight: unknown;
+		if (this.config.preflightRuntimeAssets) {
+			const urls = this.resolvedRuntimeUrls;
+			if (!urls) {
+				throw new RuntimeConfigurationError(
+					`${this.config.displayName} runtime preflight configuration is unavailable.`,
+					{ phase: 'asset', runtimeId: this.config.languageId }
+				);
+			}
+			this.reportProgress(progress, 0.03, `Preflighting ${this.config.displayName} runtime`);
+			runtimePreflight = await this.config.preflightRuntimeAssets(urls, {
+				limits: controls.limits,
+				signal: controls.signal,
+				reportProgress: (value, stage) => this.reportProgress(progress, value, stage)
+			});
+			if (runtimePreflight === undefined || runtimePreflight === null) {
+				throw new RuntimeConfigurationError(
+					`${this.config.displayName} runtime preflight returned no verified assets.`,
+					{ phase: 'asset', runtimeId: this.config.languageId }
+				);
+			}
+			this.reportProgress(
+				progress,
+				0.18,
+				`${this.config.displayName} runtime preflight complete`
+			);
+		}
+		if (this.disposed) throw this.getDisposeReason();
+		if (generation !== this.workerGeneration) {
+			throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
+				phase: 'startup',
+				runtimeId: this.config.languageId
+			});
+		}
 		const verifiedWorkerBytes = await this.preloadWorkerScript(progress, controls);
 		if (this.disposed) throw this.getDisposeReason();
 		if (generation !== this.workerGeneration) {
@@ -1118,6 +1171,9 @@ self.postMessage = (message, transferOrOptions) => {
 				`${this.config.displayName} worker failed to start: ${this.errorMessage(error)}`,
 				{ cause: error, runtimeId: this.config.languageId }
 			);
+		}
+		if (runtimePreflight !== undefined) {
+			this.workerRuntimePreflight.set(worker, runtimePreflight);
 		}
 		if (this.disposed || generation !== this.workerGeneration) {
 			this.detachAndTerminateWorker(worker);
@@ -1745,12 +1801,14 @@ self.postMessage = (message, transferOrOptions) => {
 						return;
 					}
 					try {
+						const runtimePreflight = this.workerRuntimePreflight.get(worker);
 						worker.postMessage({
 							run: true,
 							runId: id,
 							baseUrl: this.baseUrl,
 							manifestUrl: this.manifestUrl,
 							manifestFingerprint: this.manifestFingerprint,
+							...(runtimePreflight === undefined ? {} : { runtimePreflight }),
 							maxAssetBytes: controls.limits.maxAssetBytes,
 							code,
 							args: programArgs,
@@ -1839,6 +1897,8 @@ self.postMessage = (message, transferOrOptions) => {
 		this.workerUrl = '';
 		this.manifestUrl = '';
 		this.manifestFingerprint = '';
+		this.preflightKey = '';
+		this.resolvedRuntimeUrls = null;
 		this.workerReceipt = null;
 		return this.disposePromise;
 	}
