@@ -198,6 +198,25 @@ describe('wasm-idle static worker language browser integrations', () => {
 				expect(summary.pageErrors).toEqual([]);
 				expect(summary.transcript).toContain('main=73');
 				expect(summary.transcript).toContain('Process finished after');
+				const runtimePaths = summary.runtimeRequests.map(
+					(requestUrl) => new URL(requestUrl).pathname
+				);
+				for (const assetPath of [
+					'runtime-manifest.v2.json',
+					'runner-worker.js',
+					'swipl-web.data.gz.bin',
+					'swipl-web.js',
+					'swipl-web.wasm.gz.bin'
+				]) {
+					expect(
+						runtimePaths.some((path) => path.endsWith(`/wasm-prolog/${assetPath}`))
+					).toBe(true);
+				}
+				for (const legacyPath of ['swipl-web.data.gz', 'swipl-web.wasm.gz']) {
+					expect(
+						runtimePaths.some((path) => path.endsWith(`/wasm-prolog/${legacyPath}`))
+					).toBe(false);
+				}
 			}
 		);
 	}, 960_000);

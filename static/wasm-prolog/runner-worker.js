@@ -28,9 +28,9 @@ const expectedAssets = Object.freeze({
 	'swipl-web.wasm': Object.freeze({ mediaType: 'application/wasm' })
 });
 const expectedStorage = Object.freeze({
-	'swipl-web.data.gz': Object.freeze({ logicalPath: 'swipl-web.data', encoding: 'gzip' }),
+	'swipl-web.data.gz.bin': Object.freeze({ logicalPath: 'swipl-web.data', encoding: 'gzip' }),
 	'swipl-web.js': Object.freeze({ logicalPath: 'swipl-web.js', encoding: 'identity' }),
-	'swipl-web.wasm.gz': Object.freeze({ logicalPath: 'swipl-web.wasm', encoding: 'gzip' })
+	'swipl-web.wasm.gz.bin': Object.freeze({ logicalPath: 'swipl-web.wasm', encoding: 'gzip' })
 });
 
 let verifiedRuntimePromise = null;

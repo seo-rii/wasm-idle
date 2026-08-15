@@ -8,7 +8,11 @@ import { describe, expect, it } from 'vitest';
 
 import { computePrologRuntimeFingerprint } from '../../../scripts/sync-wasm-prolog.mjs';
 import { StaticStdinRingHost } from './staticStdinRing';
-import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
+import {
+	WASM_PROLOG_ASSET_VERSION,
+	WASM_PROLOG_RUNNER_RECEIPT,
+	WASM_PROLOG_RUNTIME_PROFILE
+} from './wasmPrologVersion';
 
 const workerSourceUrl = new URL(
 	'../../../scripts/runtime-workers/wasm-prolog-runner-worker.js',
@@ -59,14 +63,14 @@ const fixtureMediaTypes = {
 	'swipl-web.wasm': 'application/wasm'
 };
 const fixtureStorageBytes = {
-	'swipl-web.data.gz': gzipSync(fixtureLogicalBytes['swipl-web.data'], { level: 9 }),
+	'swipl-web.data.gz.bin': gzipSync(fixtureLogicalBytes['swipl-web.data'], { level: 9 }),
 	'swipl-web.js': fixtureLogicalBytes['swipl-web.js'],
-	'swipl-web.wasm.gz': gzipSync(fixtureLogicalBytes['swipl-web.wasm'], { level: 9 })
+	'swipl-web.wasm.gz.bin': gzipSync(fixtureLogicalBytes['swipl-web.wasm'], { level: 9 })
 };
 const fixtureStorageMetadata = {
-	'swipl-web.data.gz': { logicalPath: 'swipl-web.data', encoding: 'gzip' as const },
+	'swipl-web.data.gz.bin': { logicalPath: 'swipl-web.data', encoding: 'gzip' as const },
 	'swipl-web.js': { logicalPath: 'swipl-web.js', encoding: 'identity' as const },
-	'swipl-web.wasm.gz': { logicalPath: 'swipl-web.wasm', encoding: 'gzip' as const }
+	'swipl-web.wasm.gz.bin': { logicalPath: 'swipl-web.wasm', encoding: 'gzip' as const }
 };
 const sha256 = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
 const fixtureAssets = Object.entries(fixtureLogicalBytes).map(([path, bytes]) => ({
@@ -106,7 +110,7 @@ const fixtureManifest = {
 const overflowDataBytes = Buffer.concat([fixtureLogicalBytes['swipl-web.data'], Buffer.of(0)]);
 const overflowStorageBytes = gzipSync(overflowDataBytes, { level: 9 });
 const overflowStorage = fixtureStorage.map((receipt) =>
-	receipt.path === 'swipl-web.data.gz'
+	receipt.path === 'swipl-web.data.gz.bin'
 		? {
 				...receipt,
 				size: overflowStorageBytes.byteLength,
@@ -261,14 +265,14 @@ globalThis.fetch = async (url, init = {}) => {
     ? Buffer.from(harnessMode === 'invalid-manifest-json' ? '{' : JSON.stringify(manifest))
     : storageName
       ? Buffer.from(
-          harnessMode === 'gzip-overflow' && storageName === 'swipl-web.data.gz'
+          harnessMode === 'gzip-overflow' && storageName === 'swipl-web.data.gz.bin'
             ? overflowStorageBytes
             : storageBytes[storageName]
         )
       : Buffer.alloc(0);
-  const targetedStorage = storageName === 'swipl-web.wasm.gz';
+  const targetedStorage = storageName === 'swipl-web.wasm.gz.bin';
   const transportDecoded =
-    storageName?.endsWith('.gz') &&
+    storageName?.endsWith('.gz.bin') &&
     (harnessMode === 'transport-decoded' || harnessMode === 'corrupt-decoded');
   if (transportDecoded) bytes = Buffer.from(logicalBytes[storageLogicalPaths[storageName]]);
   if (harnessMode === 'corrupt-storage' && targetedStorage) bytes[bytes.length - 1] ^= 1;
@@ -443,13 +447,14 @@ describe('SWI-Prolog runner worker', () => {
 			'runtime-build.json',
 			'runtime-manifest.v2.json',
 			'swipl-web.data.gz',
+			'swipl-web.data.gz.bin',
 			'swipl-web.js',
-			'swipl-web.wasm.gz'
+			'swipl-web.wasm.gz',
+			'swipl-web.wasm.gz.bin'
 		]);
 
-		const manifest = JSON.parse(
-			await readFile(new URL('runtime-manifest.v2.json', staticRuntimeUrl), 'utf8')
-		);
+		const manifestBytes = await readFile(new URL('runtime-manifest.v2.json', staticRuntimeUrl));
+		const manifest = JSON.parse(manifestBytes.toString('utf8'));
 		const inputLock = JSON.parse(
 			await readFile(
 				new URL('../../../scripts/wasm-prolog-assets.lock.json', import.meta.url),
@@ -466,6 +471,38 @@ describe('SWI-Prolog runner worker', () => {
 		expect(runtimeBuild.toolchain).toEqual(inputLock.toolchain);
 		expect(manifest.fingerprint).toBe(WASM_PROLOG_ASSET_VERSION);
 		expect(computePrologRuntimeFingerprint(manifest)).toBe(WASM_PROLOG_ASSET_VERSION);
+		const assetByPath = new Map(
+			manifest.assets.map((asset: { path: string }) => [asset.path, asset])
+		);
+		const storageByLogicalPath = new Map(
+			manifest.storage.map((asset: { logicalPath: string }) => [asset.logicalPath, asset])
+		);
+		expect(WASM_PROLOG_RUNTIME_PROFILE).toEqual({
+			profileId: manifest.profileId,
+			packageRevision: manifest.package.revision,
+			swiplRevision: manifest.toolchain.swiplRevision,
+			manifestFingerprint: manifest.fingerprint,
+			manifestReceipt: {
+				bytes: manifestBytes.byteLength,
+				sha256: sha256(manifestBytes)
+			},
+			javascriptReceipt: {
+				bytes: assetByPath.get('swipl-web.js').size,
+				sha256: assetByPath.get('swipl-web.js').sha256
+			},
+			wasmReceipt: {
+				bytes: storageByLogicalPath.get('swipl-web.wasm').size,
+				sha256: storageByLogicalPath.get('swipl-web.wasm').sha256,
+				uncompressedBytes: assetByPath.get('swipl-web.wasm').size,
+				uncompressedSha256: assetByPath.get('swipl-web.wasm').sha256
+			},
+			dataReceipt: {
+				bytes: storageByLogicalPath.get('swipl-web.data').size,
+				sha256: storageByLogicalPath.get('swipl-web.data').sha256,
+				uncompressedBytes: assetByPath.get('swipl-web.data').size,
+				uncompressedSha256: assetByPath.get('swipl-web.data').sha256
+			}
+		});
 
 		for (const receipt of [manifest.license, manifest.metadata]) {
 			const bytes = await readFile(new URL(receipt.path, staticRuntimeUrl));
@@ -481,6 +518,12 @@ describe('SWI-Prolog runner worker', () => {
 		});
 		for (const storageReceipt of manifest.storage) {
 			const stored = await readFile(new URL(storageReceipt.path, staticRuntimeUrl));
+			if (storageReceipt.path.endsWith('.gz.bin')) {
+				const legacy = await readFile(
+					new URL(storageReceipt.path.slice(0, -4), staticRuntimeUrl)
+				);
+				expect(legacy).toEqual(stored);
+			}
 			expect(stored.byteLength).toBe(storageReceipt.size);
 			expect(sha256(stored)).toBe(storageReceipt.sha256);
 			const logical = storageReceipt.encoding === 'gzip' ? gunzipSync(stored) : stored;
@@ -497,7 +540,7 @@ describe('SWI-Prolog runner worker', () => {
 				})
 			);
 		}
-	});
+	}, 15_000);
 
 	it('loads only declared storage and injects verified Wasm and data into Blob-evaluated glue', async () => {
 		const messages = await runHarness(integrityRequest());
@@ -508,9 +551,9 @@ describe('SWI-Prolog runner worker', () => {
 		expect(fetches).toHaveLength(4);
 		expect(fetches.map((message) => new URL(message.harnessFetch).pathname)).toEqual([
 			'/wasm-prolog/runtime-manifest.v2.json',
-			'/wasm-prolog/swipl-web.data.gz',
+			'/wasm-prolog/swipl-web.data.gz.bin',
 			'/wasm-prolog/swipl-web.js',
-			'/wasm-prolog/swipl-web.wasm.gz'
+			'/wasm-prolog/swipl-web.wasm.gz.bin'
 		]);
 		for (const message of fetches) {
 			expect(message.harnessFetchOptions).toMatchObject({

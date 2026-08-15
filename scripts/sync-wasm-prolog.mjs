@@ -37,11 +37,19 @@ const BUILD_METADATA_FILE = 'runtime-build.json';
 const MANIFEST_FILE = 'runtime-manifest.v2.json';
 const RUNNER_FILE = 'runner-worker.js';
 const LOGICAL_ASSETS = ['swipl-web.js', 'swipl-web.wasm', 'swipl-web.data'];
-/** @type {Readonly<Record<string, Readonly<{ path: string; encoding: 'identity' | 'gzip' }>>>} */
+/** @type {Readonly<Record<string, Readonly<{ path: string; legacyPath?: string; encoding: 'identity' | 'gzip' }>>>} */
 const STORAGE_BY_LOGICAL = Object.freeze({
 	'swipl-web.js': Object.freeze({ path: 'swipl-web.js', encoding: 'identity' }),
-	'swipl-web.wasm': Object.freeze({ path: 'swipl-web.wasm.gz', encoding: 'gzip' }),
-	'swipl-web.data': Object.freeze({ path: 'swipl-web.data.gz', encoding: 'gzip' })
+	'swipl-web.wasm': Object.freeze({
+		path: 'swipl-web.wasm.gz.bin',
+		legacyPath: 'swipl-web.wasm.gz',
+		encoding: 'gzip'
+	}),
+	'swipl-web.data': Object.freeze({
+		path: 'swipl-web.data.gz.bin',
+		legacyPath: 'swipl-web.data.gz',
+		encoding: 'gzip'
+	})
 });
 /** @type {Readonly<Record<string, string>>} */
 const MEDIA_TYPE_BY_LOGICAL = Object.freeze({
@@ -54,7 +62,9 @@ const PUBLISHED_FILES = [
 	BUILD_METADATA_FILE,
 	MANIFEST_FILE,
 	RUNNER_FILE,
-	...Object.values(STORAGE_BY_LOGICAL).map((entry) => entry.path)
+	...Object.values(STORAGE_BY_LOGICAL).flatMap((entry) =>
+		entry.legacyPath ? [entry.path, entry.legacyPath] : [entry.path]
+	)
 ].sort();
 
 export const PROLOG_MANIFEST_FORMAT = 'wasm-prolog-runtime-manifest-v2';
@@ -445,6 +455,7 @@ export async function syncWasmPrologAssets(options = {}) {
 				? gzipSync(logicalBytes.get(logicalPath), { level: 9 })
 				: logicalBytes.get(logicalPath);
 		storedBytes.set(mapping.path, bytes);
+		if (mapping.legacyPath) storedBytes.set(mapping.legacyPath, bytes);
 		return {
 			path: mapping.path,
 			logicalPath,
@@ -480,8 +491,22 @@ export async function syncWasmPrologAssets(options = {}) {
 		assets,
 		storage
 	};
-	const versionModuleSource = `export const WASM_PROLOG_ASSET_VERSION =\n\t'${fingerprint}';\nexport const WASM_PROLOG_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
-	const lspVersionModuleSource = `export const BUNDLED_PROLOG_MANIFEST_FINGERPRINT =\n\t'${fingerprint}';\nexport const BUNDLED_PROLOG_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
+	const manifestSource = `${JSON.stringify(manifest, null, 2)}\n`;
+	const manifestBytes = Buffer.from(manifestSource, 'utf8');
+	const manifestReceipt = Object.freeze({
+		bytes: manifestBytes.byteLength,
+		sha256: sha256(manifestBytes)
+	});
+	const assetByPath = new Map(assets.map((asset) => [asset.path, asset]));
+	const storageByLogicalPath = new Map(storage.map((asset) => [asset.logicalPath, asset]));
+	const javascriptReceipt = assetByPath.get('swipl-web.js');
+	const wasmAsset = assetByPath.get('swipl-web.wasm');
+	const wasmStorage = storageByLogicalPath.get('swipl-web.wasm');
+	const dataAsset = assetByPath.get('swipl-web.data');
+	const dataStorage = storageByLogicalPath.get('swipl-web.data');
+	const runtimeProfileLiteral = `{\n\tprofileId: '${lock.profileId}',\n\tpackageRevision: '${lock.package.revision}',\n\tswiplRevision: '${lock.toolchain.swiplRevision}',\n\tmanifestFingerprint: '${fingerprint}',\n\tmanifestReceipt: {\n\t\tbytes: ${manifestReceipt.bytes},\n\t\tsha256: '${manifestReceipt.sha256}'\n\t},\n\tjavascriptReceipt: {\n\t\tbytes: ${javascriptReceipt.size},\n\t\tsha256: '${javascriptReceipt.sha256}'\n\t},\n\twasmReceipt: {\n\t\tbytes: ${wasmStorage.size},\n\t\tsha256: '${wasmStorage.sha256}',\n\t\tuncompressedBytes: ${wasmAsset.size},\n\t\tuncompressedSha256: '${wasmAsset.sha256}'\n\t},\n\tdataReceipt: {\n\t\tbytes: ${dataStorage.size},\n\t\tsha256: '${dataStorage.sha256}',\n\t\tuncompressedBytes: ${dataAsset.size},\n\t\tuncompressedSha256: '${dataAsset.sha256}'\n\t}\n} as const`;
+	const versionModuleSource = `export const WASM_PROLOG_RUNTIME_PROFILE = ${runtimeProfileLiteral};\nexport const WASM_PROLOG_ASSET_VERSION = WASM_PROLOG_RUNTIME_PROFILE.manifestFingerprint;\nexport const WASM_PROLOG_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
+	const lspVersionModuleSource = `export const BUNDLED_PROLOG_RUNTIME_PROFILE = ${runtimeProfileLiteral};\nexport const BUNDLED_PROLOG_MANIFEST_FINGERPRINT =\n\tBUNDLED_PROLOG_RUNTIME_PROFILE.manifestFingerprint;\nexport const BUNDLED_PROLOG_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
 
 	await Promise.all([
 		mkdir(path.dirname(targetDir), { recursive: true }),
@@ -549,20 +574,19 @@ export async function syncWasmPrologAssets(options = {}) {
 			writeFile(path.join(publications[0].temporary, LICENSE_FILE), licenseBytes),
 			writeFile(path.join(publications[0].temporary, BUILD_METADATA_FILE), metadataBytes),
 			writeFile(path.join(publications[0].temporary, RUNNER_FILE), workerBytes),
-			writeFile(
-				path.join(publications[0].temporary, MANIFEST_FILE),
-				`${JSON.stringify(manifest, null, 2)}\n`,
-				'utf8'
-			),
+			writeFile(path.join(publications[0].temporary, MANIFEST_FILE), manifestSource, 'utf8'),
 			writeFile(publications[1].temporary, versionModuleSource, 'utf8'),
 			writeFile(publications[2].temporary, lspVersionModuleSource, 'utf8')
 		]);
 		await assertExactPublishedFiles(publications[0].temporary);
-		const installedManifest = JSON.parse(
-			await readFile(path.join(publications[0].temporary, MANIFEST_FILE), 'utf8')
+		const installedManifestSource = await readFile(
+			path.join(publications[0].temporary, MANIFEST_FILE),
+			'utf8'
 		);
+		const installedManifest = JSON.parse(installedManifestSource);
 		if (
 			JSON.stringify(installedManifest) !== JSON.stringify(manifest) ||
+			installedManifestSource !== manifestSource ||
 			computePrologRuntimeFingerprint(installedManifest) !== fingerprint ||
 			sha256(await readFile(path.join(publications[0].temporary, LICENSE_FILE))) !==
 				license.sha256 ||
@@ -574,11 +598,19 @@ export async function syncWasmPrologAssets(options = {}) {
 			throw new Error('wasm-prolog temporary installation failed receipt verification');
 		}
 		for (const logicalPath of LOGICAL_ASSETS) {
-			const stored = await readFile(
-				path.join(publications[0].temporary, STORAGE_BY_LOGICAL[logicalPath].path)
-			);
-			const logical =
-				STORAGE_BY_LOGICAL[logicalPath].encoding === 'gzip' ? gunzipSync(stored) : stored;
+			const mapping = STORAGE_BY_LOGICAL[logicalPath];
+			const stored = await readFile(path.join(publications[0].temporary, mapping.path));
+			if (mapping.legacyPath) {
+				const legacyStored = await readFile(
+					path.join(publications[0].temporary, mapping.legacyPath)
+				);
+				if (!legacyStored.equals(stored)) {
+					throw new Error(
+						'wasm-prolog temporary installation has mismatched storage aliases'
+					);
+				}
+			}
+			const logical = mapping.encoding === 'gzip' ? gunzipSync(stored) : stored;
 			if (sha256(logical) !== lock.receipts.get(logicalPath).sha256) {
 				throw new Error(
 					'wasm-prolog temporary installation failed logical receipt verification'
@@ -644,6 +676,7 @@ export async function syncWasmPrologAssets(options = {}) {
 		fingerprint,
 		versionModulePath,
 		lspVersionModulePath,
+		manifestReceipt,
 		workerReceipt
 	};
 }

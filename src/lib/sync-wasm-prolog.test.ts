@@ -143,27 +143,60 @@ describe('syncWasmPrologAssets', () => {
 			'runtime-build.json',
 			'runtime-manifest.v2.json',
 			'swipl-web.data.gz',
+			'swipl-web.data.gz.bin',
 			'swipl-web.js',
-			'swipl-web.wasm.gz'
+			'swipl-web.wasm.gz',
+			'swipl-web.wasm.gz.bin'
 		]);
-		const manifest = JSON.parse(
-			await readFile(path.join(fixture.targetDir, 'runtime-manifest.v2.json'), 'utf8')
+		const manifestBytes = await readFile(
+			path.join(fixture.targetDir, 'runtime-manifest.v2.json')
 		);
+		const manifest = JSON.parse(manifestBytes.toString('utf8'));
 		expect(manifest.fingerprint).toBe(first.fingerprint);
 		expect(computePrologRuntimeFingerprint(manifest)).toBe(first.fingerprint);
-		expect(
-			gunzipSync(await readFile(path.join(fixture.targetDir, 'swipl-web.wasm.gz')))
-		).toEqual(Buffer.from(fixture.assets['swipl-web.wasm']));
-		expect(
-			gunzipSync(await readFile(path.join(fixture.targetDir, 'swipl-web.data.gz')))
-		).toEqual(Buffer.from(fixture.assets['swipl-web.data']));
+		expect(first.manifestReceipt).toEqual({
+			bytes: manifestBytes.byteLength,
+			sha256: sha256(manifestBytes)
+		});
+		const wasmStorage = await readFile(path.join(fixture.targetDir, 'swipl-web.wasm.gz.bin'));
+		const dataStorage = await readFile(path.join(fixture.targetDir, 'swipl-web.data.gz.bin'));
+		expect(wasmStorage).toEqual(
+			await readFile(path.join(fixture.targetDir, 'swipl-web.wasm.gz'))
+		);
+		expect(dataStorage).toEqual(
+			await readFile(path.join(fixture.targetDir, 'swipl-web.data.gz'))
+		);
+		expect(gunzipSync(wasmStorage)).toEqual(Buffer.from(fixture.assets['swipl-web.wasm']));
+		expect(gunzipSync(dataStorage)).toEqual(Buffer.from(fixture.assets['swipl-web.data']));
+		expect(manifest.storage).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					path: 'swipl-web.wasm.gz.bin',
+					logicalPath: 'swipl-web.wasm'
+				}),
+				expect.objectContaining({
+					path: 'swipl-web.data.gz.bin',
+					logicalPath: 'swipl-web.data'
+				})
+			])
+		);
 		expect(await readFile(path.join(fixture.targetDir, 'LICENSE.txt'), 'utf8')).toBe(
 			'fixture BSD-2-Clause license\n'
 		);
 		const appPin = await readFile(fixture.versionModulePath, 'utf8');
 		const lspPin = await readFile(fixture.lspVersionModulePath, 'utf8');
+		expect(appPin).toContain('WASM_PROLOG_RUNTIME_PROFILE');
+		expect(lspPin).toContain('BUNDLED_PROLOG_RUNTIME_PROFILE');
 		expect(appPin).toContain(first.fingerprint);
 		expect(lspPin).toContain(first.fingerprint);
+		expect(appPin).toContain(`bytes: ${manifestBytes.byteLength}`);
+		expect(lspPin).toContain(`sha256: '${sha256(manifestBytes)}'`);
+		expect(appPin).toContain(
+			`uncompressedBytes: ${fixture.assets['swipl-web.wasm'].byteLength}`
+		);
+		expect(lspPin).toContain(
+			`uncompressedBytes: ${fixture.assets['swipl-web.data'].byteLength}`
+		);
 		expect(appPin).toContain(first.workerReceipt.sha256);
 		expect(lspPin).toContain(first.workerReceipt.sha256);
 

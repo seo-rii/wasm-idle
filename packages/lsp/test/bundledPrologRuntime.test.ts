@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
+	BUNDLED_PROLOG_RUNTIME_PROFILE,
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from '../src/bundledPrologRuntime.js';
 
@@ -43,12 +44,10 @@ interface PrologRuntimeManifest {
 
 describe('bundled Prolog runtime identity', () => {
 	it('pins the canonical manifest graph and diagnostic worker bytes', async () => {
-		const manifest = JSON.parse(
-			await readFile(
-				new URL('../../../static/wasm-prolog/runtime-manifest.v2.json', import.meta.url),
-				'utf8'
-			)
-		) as PrologRuntimeManifest;
+		const manifestBytes = await readFile(
+			new URL('../../../static/wasm-prolog/runtime-manifest.v2.json', import.meta.url)
+		);
+		const manifest = JSON.parse(manifestBytes.toString('utf8')) as PrologRuntimeManifest;
 		const hash = createHash('sha256');
 		hash.update('wasm-idle:prolog-runtime-manifest:v2\n');
 		hash.update('format\0wasm-prolog-runtime-manifest-v2\n');
@@ -95,6 +94,36 @@ describe('bundled Prolog runtime identity', () => {
 			fingerprint: BUNDLED_PROLOG_MANIFEST_FINGERPRINT
 		});
 		expect(hash.digest('hex')).toBe(BUNDLED_PROLOG_MANIFEST_FINGERPRINT);
+		const assetByPath = new Map(manifest.assets.map((asset) => [asset.path, asset]));
+		const storageByLogicalPath = new Map(
+			manifest.storage.map((asset) => [asset.logicalPath, asset])
+		);
+		expect(BUNDLED_PROLOG_RUNTIME_PROFILE).toEqual({
+			profileId: manifest.profileId,
+			packageRevision: manifest.package.revision,
+			swiplRevision: manifest.toolchain.swiplRevision,
+			manifestFingerprint: manifest.fingerprint,
+			manifestReceipt: {
+				bytes: manifestBytes.byteLength,
+				sha256: createHash('sha256').update(manifestBytes).digest('hex')
+			},
+			javascriptReceipt: {
+				bytes: assetByPath.get('swipl-web.js')?.size,
+				sha256: assetByPath.get('swipl-web.js')?.sha256
+			},
+			wasmReceipt: {
+				bytes: storageByLogicalPath.get('swipl-web.wasm')?.size,
+				sha256: storageByLogicalPath.get('swipl-web.wasm')?.sha256,
+				uncompressedBytes: assetByPath.get('swipl-web.wasm')?.size,
+				uncompressedSha256: assetByPath.get('swipl-web.wasm')?.sha256
+			},
+			dataReceipt: {
+				bytes: storageByLogicalPath.get('swipl-web.data')?.size,
+				sha256: storageByLogicalPath.get('swipl-web.data')?.sha256,
+				uncompressedBytes: assetByPath.get('swipl-web.data')?.size,
+				uncompressedSha256: assetByPath.get('swipl-web.data')?.sha256
+			}
+		});
 		expect(BUNDLED_PROLOG_RUNNER_RECEIPT).toEqual({
 			bytes: runnerBytes.byteLength,
 			sha256: createHash('sha256').update(runnerBytes).digest('hex')
