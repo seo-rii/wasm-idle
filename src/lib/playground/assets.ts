@@ -21,7 +21,11 @@ import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
 	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 } from '$lib/playground/wasmClojureScriptVersion';
-import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from '$lib/playground/wasmJVersion';
+import {
+	WASM_J_ASSET_VERSION,
+	WASM_J_RUNNER_RECEIPT,
+	WASM_J_RUNTIME_PROFILE
+} from '$lib/playground/wasmJVersion';
 import {
 	WASM_JANET_ASSET_VERSION,
 	WASM_JANET_RUNNER_RECEIPT
@@ -308,7 +312,26 @@ export interface JRuntimeAssetConfig {
 	workerUrl?: string;
 	manifestUrl?: string;
 	manifestFingerprint?: string;
+	profileId?: string;
+	sourceRevision?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	moduleReceipt?: RuntimeAssetIntegrityEntry;
+	wasmReceipt?: RuntimeAssetIntegrityEntry;
 	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
+}
+
+export interface JRuntimePreflightProfile {
+	readonly profileId: string;
+	readonly sourceRevision: string;
+	readonly manifestFingerprint: string;
+	readonly manifestReceipt?: Readonly<{ bytes?: number; sha256: string }>;
+	readonly moduleReceipt?: Readonly<{ bytes?: number; sha256: string }>;
+	readonly wasmReceipt?: Readonly<{
+		bytes?: number;
+		sha256: string;
+		uncompressedBytes?: number;
+		uncompressedSha256?: string;
+	}>;
 }
 
 export interface BqnRuntimeAssetConfig {
@@ -2597,11 +2620,48 @@ export function resolveJRuntimeAssetConfig(
 	currentUrl = ''
 ) {
 	const configured = typeof options === 'object' ? options?.j : undefined;
+	const manifestFingerprint = configured?.manifestFingerprint?.trim() || WASM_J_ASSET_VERSION;
+	const usesBundledProfile = manifestFingerprint === WASM_J_ASSET_VERSION;
+	const receipt = (
+		configuredReceipt: RuntimeAssetIntegrityEntry | undefined,
+		bundledReceipt: RuntimeAssetIntegrityEntry
+	) => {
+		const selected = configuredReceipt || (usesBundledProfile ? bundledReceipt : undefined);
+		return selected
+			? Object.freeze({
+					bytes: selected.bytes,
+					sha256: selected.sha256,
+					...(selected.uncompressedBytes === undefined
+						? {}
+						: { uncompressedBytes: selected.uncompressedBytes }),
+					...(selected.uncompressedSha256 === undefined
+						? {}
+						: { uncompressedSha256: selected.uncompressedSha256 })
+				})
+			: undefined;
+	};
+	const preflightProfile: JRuntimePreflightProfile = Object.freeze({
+		profileId:
+			configured?.profileId?.trim() ||
+			(usesBundledProfile ? WASM_J_RUNTIME_PROFILE.profileId : ''),
+		sourceRevision:
+			configured?.sourceRevision?.trim() ||
+			(usesBundledProfile ? WASM_J_RUNTIME_PROFILE.sourceRevision : ''),
+		manifestFingerprint,
+		manifestReceipt: receipt(
+			configured?.manifestReceipt,
+			WASM_J_RUNTIME_PROFILE.manifestReceipt
+		),
+		moduleReceipt: receipt(configured?.moduleReceipt, WASM_J_RUNTIME_PROFILE.moduleReceipt),
+		wasmReceipt: receipt(configured?.wasmReceipt, WASM_J_RUNTIME_PROFILE.wasmReceipt)
+	});
 	return {
 		baseUrl: resolveJBaseUrl(options, currentUrl),
 		workerUrl: resolveJWorkerUrl(options, currentUrl),
 		manifestUrl: resolveJManifestUrl(options, currentUrl),
-		manifestFingerprint: configured?.manifestFingerprint?.trim() || WASM_J_ASSET_VERSION,
+		manifestFingerprint,
+		preflightKey: JSON.stringify(preflightProfile),
+		preflightProfile,
 		workerReceipt: configured?.workerReceipt || WASM_J_RUNNER_RECEIPT
 	};
 }

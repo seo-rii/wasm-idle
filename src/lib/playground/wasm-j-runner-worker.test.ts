@@ -3,12 +3,16 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { Worker as NodeWorker } from 'node:worker_threads';
-import { gunzipSync, gzipSync } from 'node:zlib';
+import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 
 import { computeJRuntimeFingerprint } from '../../../scripts/sync-wasm-j.mjs';
 import { StaticStdinRingHost } from './staticStdinRing';
-import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
+import {
+	WASM_J_ASSET_VERSION,
+	WASM_J_RUNNER_RECEIPT,
+	WASM_J_RUNTIME_PROFILE
+} from './wasmJVersion';
 
 const workerSourceUrl = new URL(
 	'../../../scripts/runtime-workers/wasm-j-runner-worker.js',
@@ -16,11 +20,8 @@ const workerSourceUrl = new URL(
 );
 const staticWorkerUrl = new URL('../../../static/wasm-j/runner-worker.js', import.meta.url);
 const staticRuntimeUrl = new URL('../../../static/wasm-j/', import.meta.url);
-const fixtureBaseUrl = 'https://runtime.example/wasm-j/';
-const fixtureManifestUrl = `${fixtureBaseUrl}runtime-manifest.v2.json?v=fixture`;
 const moduleBytes = Buffer.from('export default function fixtureJModule() {}\n', 'utf8');
 const wasmBytes = Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
-const compressedWasmBytes = gzipSync(wasmBytes, { level: 9 });
 const fixtureSource = {
 	repository: 'https://github.com/jsoftware/j-playground',
 	path: 'bin/html2',
@@ -49,11 +50,11 @@ const fixtureStorage = [
 		sha256: createHash('sha256').update(moduleBytes).digest('hex')
 	},
 	{
-		path: 'jamalgam.wasm.gz',
+		path: 'jamalgam.wasm.gz.bin',
 		logicalPath: 'jamalgam.wasm',
 		encoding: 'gzip' as const,
-		size: compressedWasmBytes.byteLength,
-		sha256: createHash('sha256').update(compressedWasmBytes).digest('hex')
+		size: 32,
+		sha256: 'c'.repeat(64)
 	}
 ];
 const fixtureProfileId = 'jsoftware-j-playground-test';
@@ -77,6 +78,19 @@ async function readWorkerSource() {
 	return readFile(workerSourceUrl, 'utf8');
 }
 
+function runtimePreflight() {
+	return {
+		protocol: 'wasm-idle-j-preflight',
+		protocolVersion: 1,
+		profileId: fixtureProfileId,
+		sourceRevision: fixtureSource.revision,
+		manifestFingerprint: fixtureFingerprint,
+		manifestBytes: Uint8Array.from(Buffer.from(JSON.stringify(fixtureManifest))),
+		moduleBytes: Uint8Array.from(moduleBytes),
+		wasmBytes: Uint8Array.from(wasmBytes)
+	};
+}
+
 async function createHarnessWorker() {
 	const workerSource = await readWorkerSource();
 	const importStatement = 'return await import(moduleUrl);';
@@ -93,7 +107,10 @@ const { webcrypto } = require('node:crypto');
 globalThis.self = globalThis;
 Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: true });
 self.postMessage = (message) => parentPort.postMessage(message);
-let harnessMode = '';
+globalThis.fetch = (...args) => {
+  parentPort.postMessage({ harnessFetch: args.map(String) });
+  throw new Error('J worker attempted an unexpected network request');
+};
 let blobCounter = 0;
 URL.createObjectURL = () => {
   const url = 'blob:wasm-j-fixture-' + ++blobCounter;
@@ -101,11 +118,11 @@ URL.createObjectURL = () => {
   return url;
 };
 URL.revokeObjectURL = (url) => parentPort.postMessage({ harnessBlobRevoked: url });
-const moduleBytes = Buffer.from(${JSON.stringify(moduleBytes.toString('base64'))}, 'base64');
-const wasmBytes = Buffer.from(${JSON.stringify(wasmBytes.toString('base64'))}, 'base64');
-const manifestTemplate = ${JSON.stringify(fixtureManifest)};
 globalThis.__createJModule = async (options) => {
-  parentPort.postMessage({ harnessModuleWasmBytes: options.wasmBinary.byteLength });
+  parentPort.postMessage({
+    harnessModuleWasmBytes: options.wasmBinary.byteLength,
+    harnessLocateFile: options.locateFile('jamalgam.wasm')
+  });
   let parsed = 0;
   return {
     cwrap: (name) => {
@@ -130,121 +147,38 @@ globalThis.__createJModule = async (options) => {
     }
   };
 };
-globalThis.fetch = async (url, init = {}) => {
-  const requestedUrl = String(url);
-  const pathname = new URL(requestedUrl).pathname;
-  const isManifest = pathname.endsWith('/runtime-manifest.v2.json');
-  const isModule = pathname.endsWith('/jamalgam.js');
-  const isWasm = pathname.endsWith('/jamalgam.wasm');
-  parentPort.postMessage({
-    harnessFetch: requestedUrl,
-    harnessFetchOptions: {
-      cache: init.cache,
-      credentials: init.credentials,
-      redirect: init.redirect,
-      referrerPolicy: init.referrerPolicy
-    }
-  });
-  const manifest = JSON.parse(JSON.stringify(manifestTemplate));
-  if (harnessMode === 'manifest-fingerprint') manifest.fingerprint = '0'.repeat(64);
-  if (harnessMode === 'unknown-asset') {
-    manifest.assets.push({
-      path: 'unexpected.js', mediaType: 'text/javascript', size: 1, sha256: 'a'.repeat(64)
-    });
-  }
-  if (harnessMode === 'duplicate-asset') manifest.assets[1] = { ...manifest.assets[0] };
-  if (harnessMode === 'oversized-receipt') manifest.assets[0].size = 2_000_000;
-  let bytes = isManifest
-    ? Buffer.from(JSON.stringify(manifest))
-    : isModule
-      ? Buffer.from(moduleBytes)
-      : isWasm
-        ? Buffer.from(wasmBytes)
-        : Buffer.alloc(0);
-  if (harnessMode === 'corrupt-module' && isModule) bytes[bytes.length - 1] ^= 1;
-  if (harnessMode === 'corrupt-wasm' && isWasm) bytes[bytes.length - 1] ^= 1;
-  if (harnessMode === 'redirect-module' && isModule) {
-    return {
-      ok: true,
-      status: 200,
-      url: 'https://untrusted.example/jamalgam.js',
-      headers: new Headers({ 'content-length': String(bytes.byteLength) }),
-      body: { cancel: () => parentPort.postMessage({ harnessCancelled: 'response' }) }
-    };
-  }
-  if (harnessMode === 'reader-failure' && isModule) {
-    return {
-      ok: true,
-      status: 200,
-      url: requestedUrl,
-      headers: new Headers(),
-      body: {
-        getReader() { throw new Error('fixture reader failure'); },
-        cancel: () => parentPort.postMessage({ harnessCancelled: 'response' })
-      }
-    };
-  }
-  if ((harnessMode === 'truncated-module' || harnessMode === 'overflow-module') && isModule) {
-    const streamedBytes = harnessMode === 'truncated-module'
-      ? bytes.subarray(0, bytes.byteLength - 1)
-      : Buffer.concat([bytes, Buffer.of(0)]);
-    let cancelled = false;
-    return {
-      ok: true,
-      status: 200,
-      url: requestedUrl,
-      headers: new Headers(),
-      body: {
-        getReader() {
-          let sent = false;
-          return {
-            async read() {
-              if (sent) return { done: true };
-              sent = true;
-              return { done: false, value: streamedBytes };
-            },
-            cancel() {
-              cancelled = true;
-              parentPort.postMessage({ harnessCancelled: 'reader' });
-            },
-            releaseLock() {
-              parentPort.postMessage({ harnessReleased: true, harnessWasCancelled: cancelled });
-            }
-          };
-        }
-      }
-    };
-  }
-  if (
-    isModule &&
-    (harnessMode === 'wrong-content-length' || harnessMode === 'invalid-content-length')
-  ) {
-    return {
-      ok: true,
-      status: 200,
-      url: requestedUrl,
-      headers: new Headers({
-        'content-length':
-          harnessMode === 'invalid-content-length' ? '1e2' : String(bytes.byteLength + 1)
-      }),
-      body: { cancel: () => parentPort.postMessage({ harnessCancelled: 'response' }) }
-    };
-  }
-  const contentLength =
-    bytes.byteLength;
-  const response = new Response(bytes, {
-    status: 200,
-    headers: {
-	  'content-length': String(contentLength)
-    }
-  });
-  Object.defineProperty(response, 'url', { value: requestedUrl });
-  return response;
-};
 (0, eval)(${JSON.stringify(harnessSource)});
 parentPort.on('message', (data) => {
-  harnessMode = data.harnessMode || '';
-  self.onmessage({ data });
+  const request = structuredClone(data);
+  const mode = request.harnessMode || '';
+  delete request.harnessMode;
+  const payload = request.runtimePreflight;
+  if (mode === 'missing-preflight') delete request.runtimePreflight;
+  if (mode === 'extra-payload') payload.unexpected = true;
+  if (mode === 'protocol') payload.protocolVersion = 2;
+  if (mode === 'payload-fingerprint') payload.manifestFingerprint = '0'.repeat(64);
+  if (mode === 'profile') payload.profileId = 'jsoftware-j-playground-other';
+  if (mode === 'source') payload.sourceRevision = 'other';
+  if (mode === 'malformed-manifest') payload.manifestBytes = Uint8Array.from([0xff]);
+  if (
+    mode === 'manifest-fingerprint' || mode === 'unknown-asset' ||
+    mode === 'duplicate-asset' || mode === 'oversized-receipt' || mode === 'storage-graph'
+  ) {
+    const manifest = JSON.parse(Buffer.from(payload.manifestBytes).toString('utf8'));
+    if (mode === 'manifest-fingerprint') manifest.fingerprint = '0'.repeat(64);
+    if (mode === 'unknown-asset') {
+      manifest.assets.push({
+        path: 'unexpected.js', mediaType: 'text/javascript', size: 1, sha256: 'a'.repeat(64)
+      });
+    }
+    if (mode === 'duplicate-asset') manifest.assets[1] = { ...manifest.assets[0] };
+    if (mode === 'oversized-receipt') manifest.assets[0].size = 2_000_000;
+    if (mode === 'storage-graph') manifest.storage[1].sha256 = 'd'.repeat(64);
+    payload.manifestBytes = Uint8Array.from(Buffer.from(JSON.stringify(manifest)));
+  }
+  if (mode === 'corrupt-module') payload.moduleBytes[payload.moduleBytes.length - 1] ^= 1;
+  if (mode === 'corrupt-wasm') payload.wasmBytes[payload.wasmBytes.length - 1] ^= 1;
+  self.onmessage({ data: request });
 });
 `;
 	return new NodeWorker(harness, { eval: true });
@@ -252,12 +186,11 @@ parentPort.on('message', (data) => {
 
 function runtimeRequest(overrides: Record<string, unknown> = {}) {
 	return {
-		baseUrl: fixtureBaseUrl,
-		manifestUrl: fixtureManifestUrl,
 		manifestFingerprint: fixtureFingerprint,
 		maxAssetBytes: 1_000_000,
 		code: "smoutput 'ok'",
 		stdin: '',
+		runtimePreflight: runtimePreflight(),
 		...overrides
 	};
 }
@@ -290,8 +223,9 @@ async function runHarness(request: Record<string, unknown>, onMessage?: (message
 }
 
 describe('J runner worker', () => {
-	it('keeps the input lock, deployed receipts, runner pin, and fingerprints current', async () => {
+	it('keeps input locks, generated profile receipts, runner pin, and fingerprints current', async () => {
 		const source = await readWorkerSource();
+		expect(source).not.toMatch(/\bfetch\s*\(/u);
 		expect(await readFile(staticWorkerUrl, 'utf8')).toBe(source);
 		expect(Buffer.byteLength(source)).toBe(WASM_J_RUNNER_RECEIPT.bytes);
 		expect(createHash('sha256').update(source).digest('hex')).toBe(
@@ -300,14 +234,17 @@ describe('J runner worker', () => {
 		expect((await readdir(staticRuntimeUrl)).sort()).toEqual([
 			'jamalgam.js',
 			'jamalgam.wasm.gz',
+			'jamalgam.wasm.gz.bin',
 			'runner-worker.js',
 			'runtime-manifest.v1.json',
 			'runtime-manifest.v2.json'
 		]);
 
-		const manifest = JSON.parse(
-			await readFile(new URL('runtime-manifest.v2.json', staticRuntimeUrl), 'utf8')
+		const manifestSource = await readFile(
+			new URL('runtime-manifest.v2.json', staticRuntimeUrl),
+			'utf8'
 		);
+		const manifest = JSON.parse(manifestSource);
 		const inputLock = JSON.parse(
 			await readFile(
 				new URL('../../../scripts/wasm-j-assets.lock.json', import.meta.url),
@@ -317,9 +254,12 @@ describe('J runner worker', () => {
 		const logicalBytes = {
 			'jamalgam.js': await readFile(new URL('jamalgam.js', staticRuntimeUrl)),
 			'jamalgam.wasm': gunzipSync(
-				await readFile(new URL('jamalgam.wasm.gz', staticRuntimeUrl))
+				await readFile(new URL('jamalgam.wasm.gz.bin', staticRuntimeUrl))
 			)
 		};
+		expect(await readFile(new URL('jamalgam.wasm.gz', staticRuntimeUrl))).toEqual(
+			await readFile(new URL('jamalgam.wasm.gz.bin', staticRuntimeUrl))
+		);
 		for (const receipt of manifest.assets) {
 			const bytes = logicalBytes[receipt.path as keyof typeof logicalBytes];
 			expect(bytes.byteLength).toBe(receipt.size);
@@ -338,13 +278,32 @@ describe('J runner worker', () => {
 		expect(manifest.source).toEqual(inputLock.source);
 		expect(computeJRuntimeFingerprint(manifest)).toBe(WASM_J_ASSET_VERSION);
 		expect(manifest.fingerprint).toBe(WASM_J_ASSET_VERSION);
+		expect(WASM_J_RUNTIME_PROFILE).toMatchObject({
+			profileId: manifest.profileId,
+			sourceRevision: manifest.source.revision,
+			manifestFingerprint: manifest.fingerprint,
+			manifestReceipt: {
+				bytes: Buffer.byteLength(manifestSource),
+				sha256: createHash('sha256').update(manifestSource).digest('hex')
+			},
+			moduleReceipt: {
+				bytes: manifest.assets[0].size,
+				sha256: manifest.assets[0].sha256
+			},
+			wasmReceipt: {
+				bytes: manifest.storage[1].size,
+				sha256: manifest.storage[1].sha256,
+				uncompressedBytes: manifest.assets[1].size,
+				uncompressedSha256: manifest.assets[1].sha256
+			}
+		});
 		const legacyManifest = JSON.parse(
 			await readFile(new URL('runtime-manifest.v1.json', staticRuntimeUrl), 'utf8')
 		);
 		expect(legacyManifest.fingerprint).toBe(WASM_J_ASSET_VERSION.slice(0, 16));
-	});
+	}, 15_000);
 
-	it('verifies the manifest, module, and Wasm before streaming stdin', async () => {
+	it('revalidates host-preflighted assets without network access before streaming stdin', async () => {
 		const stdin = new StaticStdinRingHost({ capacity: 16, maxBufferedBytes: 32 });
 		let suppliedInput = false;
 		const messages = await runHarness(
@@ -367,24 +326,20 @@ describe('J runner worker', () => {
 		const output = messages.map((message) => message.output || '').join('');
 		expect(output.indexOf('value?')).toBeLessThan(output.indexOf('main=73'));
 		expect(messages.at(-1)).toEqual({ results: true });
-		expect(messages.filter((message) => message.harnessFetch)).toHaveLength(3);
-		expect(messages).toContainEqual({ harnessModuleWasmBytes: wasmBytes.byteLength });
+		expect(messages.some((message) => message.harnessFetch)).toBe(false);
+		expect(messages).toContainEqual({
+			harnessModuleWasmBytes: wasmBytes.byteLength,
+			harnessLocateFile: 'wasm-idle-preflight://j/jamalgam.wasm'
+		});
 		expect(messages).toContainEqual(
 			expect.objectContaining({ harnessBlobCreated: expect.stringMatching(/^blob:wasm-j-/u) })
 		);
 		expect(messages).toContainEqual(
 			expect.objectContaining({ harnessBlobRevoked: expect.stringMatching(/^blob:wasm-j-/u) })
 		);
-		for (const message of messages.filter((candidate) => candidate.harnessFetch)) {
-			expect(message.harnessFetchOptions).toMatchObject({
-				credentials: 'omit',
-				redirect: 'error',
-				referrerPolicy: 'no-referrer'
-			});
-		}
 	});
 
-	it('fails malformed streaming stdin before any asset fetch', async () => {
+	it('fails malformed streaming stdin before evaluating a runtime module', async () => {
 		const messages = await runHarness(
 			runtimeRequest({
 				stdinChannel: {
@@ -401,10 +356,18 @@ describe('J runner worker', () => {
 	});
 
 	it.each([
+		['missing-preflight', 'valid host-preflighted asset payload'],
+		['extra-payload', 'valid host-preflighted asset payload'],
+		['protocol', 'valid host-preflighted asset payload'],
+		['payload-fingerprint', 'valid host-preflighted asset payload'],
+		['profile', 'profile or source metadata is invalid or mismatched'],
+		['source', 'profile or source metadata is invalid or mismatched'],
+		['malformed-manifest', 'not valid UTF-8 JSON'],
 		['manifest-fingerprint', 'fingerprint does not match'],
 		['unknown-asset', 'exactly two logical assets'],
 		['duplicate-asset', 'receipt jamalgam.wasm is invalid'],
 		['oversized-receipt', 'invalid or exceeds its byte limit'],
+		['storage-graph', 'receipt graph failed fingerprint verification'],
 		['corrupt-module', 'jamalgam.js failed SHA-256 verification'],
 		['corrupt-wasm', 'jamalgam.wasm failed SHA-256 verification']
 	])('rejects %s before evaluating a runtime module', async (harnessMode, error) => {
@@ -412,24 +375,6 @@ describe('J runner worker', () => {
 
 		expect(messages.at(-1)).toEqual({ error: expect.stringContaining(error) });
 		expect(messages.some((message) => message.harnessBlobCreated)).toBe(false);
-	});
-
-	it.each([
-		['redirect-module', 'response URL does not match', 'response'],
-		['reader-failure', 'fixture reader failure', 'response'],
-		['wrong-content-length', 'Content-Length does not match', 'response'],
-		['invalid-content-length', 'invalid Content-Length', 'response'],
-		['truncated-module', 'is truncated', undefined],
-		['overflow-module', 'exceeds its receipt size', 'reader']
-	])('rejects %s with bounded cleanup', async (harnessMode, error, expectedCancellation) => {
-		const messages = await runHarness(runtimeRequest({ harnessMode }));
-
-		expect(messages.at(-1)).toEqual({ error: expect.stringContaining(error) });
-		if (expectedCancellation) {
-			expect(messages).toContainEqual({ harnessCancelled: expectedCancellation });
-		}
-		if (expectedCancellation === 'reader') {
-			expect(messages).toContainEqual({ harnessReleased: true, harnessWasCancelled: true });
-		}
+		expect(messages.some((message) => message.harnessFetch)).toBe(false);
 	});
 });

@@ -44,18 +44,19 @@ describe('static asset size budgets', () => {
 	it('measures runtime directories and precompressed bytes', async () => {
 		const rootDir = await makeTestRoot('static-asset-sizes');
 		await writeAsset(rootDir, 'wasm-rust/rustc.wasm.gz', 300);
+		await writeAsset(rootDir, 'wasm-rust/runtime.wasm.gz.bin', 50);
 		await writeAsset(rootDir, 'wasm-rust/index.js', 100);
 		await writeAsset(rootDir, 'robots.txt', 20);
 
 		const measurement = await measureStaticAssets(rootDir);
 
-		expect(measurement.total).toEqual({ bytes: 420, compressedBytes: 300, files: 3 });
+		expect(measurement.total).toEqual({ bytes: 470, compressedBytes: 350, files: 4 });
 		expect(measurement.directories['wasm-rust']).toEqual({
-			bytes: 400,
-			compressedBytes: 300,
-			files: 2
+			bytes: 450,
+			compressedBytes: 350,
+			files: 3
 		});
-		expect(formatStaticAssetReport(measurement)).toContain('wasm-rust: 0.00 MiB, 2 files');
+		expect(formatStaticAssetReport(measurement)).toContain('wasm-rust: 0.00 MiB, 3 files');
 		expect(checkStaticAssetBudgets(measurement, budgets())).toEqual([]);
 	});
 

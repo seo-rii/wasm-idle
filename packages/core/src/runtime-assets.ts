@@ -147,6 +147,11 @@ export interface RuntimeAssetKeySource {
 		workerUrl?: string;
 		manifestUrl?: string;
 		manifestFingerprint?: string;
+		profileId?: string;
+		sourceRevision?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		moduleReceipt?: RuntimeAssetIntegrityEntry;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	bqn?: {
@@ -685,6 +690,26 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		runtime: 'j',
 		property: 'manifestFingerprint',
 		key: 'jManifestFingerprint'
+	},
+	{ runtime: 'j', property: 'profileId', key: 'jProfileId' },
+	{ runtime: 'j', property: 'sourceRevision', key: 'jSourceRevision' },
+	{
+		runtime: 'j',
+		property: 'manifestReceipt',
+		key: 'jManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'j',
+		property: 'moduleReceipt',
+		key: 'jModuleReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'j',
+		property: 'wasmReceipt',
+		key: 'jWasmReceipt',
+		serialize: serializeIntegrityEntry
 	},
 	{
 		runtime: 'j',

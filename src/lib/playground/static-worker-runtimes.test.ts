@@ -145,13 +145,57 @@ import {
 	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 } from './wasmClojureScriptVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
-import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
+import { WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
 import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
 import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
 import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
+
+const jTestManifestSource = '{"runtime":"fixture"}\n';
+const jTestModuleSource = 'export default function fixtureJ() {}\n';
+const jTestWasmBytes = Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0]);
+const jTestWasmGzipBytes = Uint8Array.from([
+	31, 139, 8, 0, 0, 0, 0, 0, 2, 3, 99, 72, 44, 206, 101, 100, 96, 96, 0, 0, 206, 51, 75, 28, 8, 0,
+	0, 0
+]);
+const jTestProfile = {
+	profileId: 'jsoftware-j-playground-test',
+	sourceRevision: 'fixture',
+	manifestFingerprint: 'a'.repeat(64),
+	manifestReceipt: {
+		bytes: 22,
+		sha256: '679daab93e272c0cb1dc00c569ed771259fbf49bdeb266bd5a479d4da1411bd9'
+	},
+	moduleReceipt: {
+		bytes: 38,
+		sha256: '45284c9638722e1b1b9dc73163689f8ef0a02e88c19db77b7dfee8fe2e363b85'
+	},
+	wasmReceipt: {
+		bytes: 28,
+		sha256: '2740982b148627999cd4ad3ae62440ed0c2878da70a6ea6e41f00ae06537324a',
+		uncompressedBytes: 8,
+		uncompressedSha256: '93a44bbb96c751218e4c00d479e4c14358122a389acca16205b1e4d0dc5f9476'
+	}
+} as const;
+
+function jTestRuntimeAssets(workerUrl = '/wasm-j/runner-worker.js?v=test') {
+	return {
+		j: {
+			baseUrl: '/wasm-j/',
+			workerUrl,
+			manifestUrl: '/wasm-j/runtime-manifest.v2.json',
+			manifestFingerprint: jTestProfile.manifestFingerprint,
+			profileId: jTestProfile.profileId,
+			sourceRevision: jTestProfile.sourceRevision,
+			manifestReceipt: jTestProfile.manifestReceipt,
+			moduleReceipt: jTestProfile.moduleReceipt,
+			wasmReceipt: jTestProfile.wasmReceipt,
+			workerReceipt: WASM_J_RUNNER_RECEIPT
+		}
+	};
+}
 
 function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 	const inputUrl = String(input);
@@ -171,6 +215,33 @@ function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 			headers: {
 				'content-length': String(new TextEncoder().encode(forthRuntimeSource).byteLength),
 				'content-type': 'text/javascript'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-j/runtime-manifest.v2.json')) {
+		return new Response(jTestManifestSource, {
+			status: 200,
+			headers: {
+				'content-length': String(new TextEncoder().encode(jTestManifestSource).byteLength),
+				'content-type': 'application/json'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-j/jamalgam.js')) {
+		return new Response(jTestModuleSource, {
+			status: 200,
+			headers: {
+				'content-length': String(new TextEncoder().encode(jTestModuleSource).byteLength),
+				'content-type': 'application/javascript'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-j/jamalgam.wasm.gz.bin')) {
+		return new Response(Uint8Array.from(jTestWasmGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(jTestWasmGzipBytes.byteLength),
+				'content-type': 'application/gzip'
 			}
 		});
 	}
@@ -969,13 +1040,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('loads J runtime urls and forwards stdin to the official J wasm worker', async () => {
 		const sandbox = new J();
-		await sandbox.load({
-			j: {
-				baseUrl: '/wasm-j/',
-				workerUrl: '/wasm-j/runner-worker.js?v=test',
-				manifestUrl: '/wasm-j/runtime-manifest.v2.json'
-			}
-		});
+		await sandbox.load(jTestRuntimeAssets());
 		await expect(
 			sandbox.run('input =: 1!:1 [ 1', false, true, undefined, [], {
 				stdin: 'ok\n'
@@ -992,31 +1057,100 @@ describe('static worker backed language sandboxes', () => {
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-j/',
 				manifestUrl: 'http://localhost:3000/wasm-j/runtime-manifest.v2.json',
-				manifestFingerprint: WASM_J_ASSET_VERSION,
+				manifestFingerprint: jTestProfile.manifestFingerprint,
 				stdin: 'ok\n',
-				activePath: 'main.ijs'
+				activePath: 'main.ijs',
+				runtimePreflight: expect.objectContaining({
+					protocol: 'wasm-idle-j-preflight',
+					protocolVersion: 1,
+					profileId: jTestProfile.profileId,
+					sourceRevision: jTestProfile.sourceRevision,
+					manifestFingerprint: jTestProfile.manifestFingerprint
+				})
 			})
 		);
+		const runMessage = workerInstances[0].postMessage.mock.calls[0]?.[0];
+		expect(runMessage.runtimePreflight.manifestBytes).toBeInstanceOf(Uint8Array);
+		expect(runMessage.runtimePreflight.moduleBytes).toBeInstanceOf(Uint8Array);
+		expect(runMessage.runtimePreflight.wasmBytes).toBeInstanceOf(Uint8Array);
+		expect(new TextDecoder().decode(runMessage.runtimePreflight.manifestBytes)).toBe(
+			jTestManifestSource
+		);
+		expect(new TextDecoder().decode(runMessage.runtimePreflight.moduleBytes)).toBe(
+			jTestModuleSource
+		);
+		expect(runMessage.runtimePreflight.wasmBytes).toEqual(jTestWasmBytes);
 		expect(sandbox.workerReceipt).toEqual(WASM_J_RUNNER_RECEIPT);
+		const workerStartIndex = runtimeLifecycleEvents.findIndex((event) =>
+			event.startsWith('worker:')
+		);
+		for (const assetPath of [
+			'runtime-manifest.v2.json',
+			'jamalgam.js',
+			'jamalgam.wasm.gz.bin'
+		]) {
+			const fetchIndex = runtimeLifecycleEvents.findIndex((event) =>
+				event.includes(assetPath)
+			);
+			expect(fetchIndex).toBeGreaterThanOrEqual(0);
+			expect(fetchIndex).toBeLessThan(workerStartIndex);
+		}
 	});
 
 	it('rejects a modified J runner before creating a worker', async () => {
 		const modifiedSource = `x${jWorkerSource.slice(1)}`;
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(modifiedSource, {
+		vi.mocked(fetch).mockImplementation(async (input) => {
+			const inputUrl = String(input);
+			if (!inputUrl.includes('/wasm-j/runner-worker.js')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			runtimeLifecycleEvents.push(`fetch:${inputUrl}`);
+			return new Response(modifiedSource, {
 				status: 200,
 				headers: {
 					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
 				}
-			})
-		);
+			});
+		});
 		const sandbox = new J();
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(sandbox.load(jTestRuntimeAssets())).rejects.toMatchObject({
 			code: 'asset-integrity',
 			runtimeId: 'J'
 		});
 		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects corrupted J Wasm storage before fetching or creating its worker', async () => {
+		const corruptedGzip = Uint8Array.from(jTestWasmGzipBytes);
+		corruptedGzip[corruptedGzip.byteLength - 1] ^= 1;
+		vi.mocked(fetch).mockImplementation(async (input) => {
+			const inputUrl = String(input);
+			if (!inputUrl.includes('/wasm-j/jamalgam.wasm.gz.bin')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			runtimeLifecycleEvents.push(`fetch:${inputUrl}`);
+			return new Response(corruptedGzip, {
+				status: 200,
+				headers: {
+					'content-length': String(corruptedGzip.byteLength),
+					'content-type': 'application/gzip'
+				}
+			});
+		});
+		const sandbox = new J();
+
+		await expect(sandbox.load(jTestRuntimeAssets())).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'J'
+		});
+		expect(workerInstances).toHaveLength(0);
+		expect(
+			vi
+				.mocked(fetch)
+				.mock.calls.map(([input]) => String(input))
+				.some((url) => url.includes('/wasm-j/runner-worker.js'))
+		).toBe(false);
 	});
 
 	it('loads BQN runtime urls and forwards stdin to the CBQN worker', async () => {

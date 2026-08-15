@@ -7,6 +7,7 @@ const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
 const DEFAULT_ROOT = path.join(REPO_ROOT, 'static');
 const DEFAULT_BUDGET_FILE = path.join(REPO_ROOT, 'scripts/static-asset-budgets.v1.json');
 const PRECOMPRESSED_EXTENSIONS = new Set(['.br', '.brotli', '.gz', '.tgz', '.zip', '.zst']);
+const PRECOMPRESSED_SUFFIXES = ['.gz.bin'];
 const RUNTIME_DIRECTORIES = new Set([
 	'clang',
 	'clangd',
@@ -22,6 +23,8 @@ const RUNTIME_DIRECTORIES = new Set([
 
 /** @param {string} filePath */
 function isPrecompressed(filePath) {
+	const normalizedPath = filePath.toLowerCase();
+	if (PRECOMPRESSED_SUFFIXES.some((suffix) => normalizedPath.endsWith(suffix))) return true;
 	return PRECOMPRESSED_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 }
 

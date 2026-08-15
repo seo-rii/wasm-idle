@@ -39,6 +39,7 @@ describe('compressStaticRuntimeAssets', () => {
 		await writeAsset(rootDir, 'wasm-swift/swiftc.wasm', repeatedBytes(1_000_001, 0));
 		await writeAsset(rootDir, 'wasm-swift/swiftpm.wasm', repeatedBytes(1_000_001, 1));
 		await writeAsset(rootDir, 'wasm-swift/sdk.tar.gz', repeatedBytes(1_000_001, 2));
+		await writeAsset(rootDir, 'wasm-j/jamalgam.wasm.gz.bin', repeatedBytes(1_000_001, 4));
 		await writeAsset(rootDir, 'not-a-runtime/tool.wasm', repeatedBytes(1_000_001, 3));
 
 		const result = await compressStaticRuntimeAssets({ rootDir });
@@ -54,6 +55,9 @@ describe('compressStaticRuntimeAssets', () => {
 		await expect(stat(path.join(rootDir, 'wasm-swift', 'sdk.tar.gz'))).resolves.toMatchObject({
 			size: 1_000_001
 		});
+		await expect(
+			stat(path.join(rootDir, 'wasm-j', 'jamalgam.wasm.gz.bin'))
+		).resolves.toMatchObject({ size: 1_000_001 });
 		await expect(stat(path.join(rootDir, 'not-a-runtime', 'tool.wasm'))).resolves.toMatchObject(
 			{
 				size: 1_000_001
@@ -73,6 +77,7 @@ describe('compressStaticRuntimeAssets', () => {
 		expect(manifest.assets).toContain('wasm-swift/swiftc.wasm');
 		expect(manifest.assets).toContain('wasm-swift/swiftpm.wasm');
 		expect(manifest.assets).not.toContain('wasm-swift/sdk.tar.gz');
+		expect(manifest.assets).not.toContain('wasm-j/jamalgam.wasm.gz.bin');
 		expect(manifest.assets).not.toContain('not-a-runtime/tool.wasm');
 		expect(manifest.sizes['wasm-swift/swiftc.wasm']).toBe(1_000_001);
 		expect(manifest.sizes['wasm-swift/swiftpm.wasm']).toBe(1_000_001);

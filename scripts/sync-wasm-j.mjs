@@ -25,6 +25,7 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
 const DEFAULT_LOCK_FILE_PATH = path.resolve(THIS_DIR, 'wasm-j-assets.lock.json');
 const LEGACY_MANIFEST_FILE = 'runtime-manifest.v1.json';
 const MANIFEST_FILE = 'runtime-manifest.v2.json';
+const VERIFIED_WASM_STORAGE_FILE = 'jamalgam.wasm.gz.bin';
 const LOGICAL_ASSET_PATHS = ['jamalgam.js', 'jamalgam.wasm'];
 export const J_MANIFEST_FORMAT = 'wasm-j-runtime-manifest-v2';
 export const J_FINGERPRINT_DOMAIN = 'wasm-idle:j-runtime-manifest:v2';
@@ -324,7 +325,7 @@ export async function syncWasmJAssets(options = {}) {
 			sha256: sha256(moduleBytes)
 		},
 		{
-			path: 'jamalgam.wasm.gz',
+			path: VERIFIED_WASM_STORAGE_FILE,
 			logicalPath: 'jamalgam.wasm',
 			encoding: 'gzip',
 			size: compressedWasmBytes.byteLength,
@@ -350,13 +351,29 @@ export async function syncWasmJAssets(options = {}) {
 		assets,
 		storage
 	};
+	const manifestSource = `${JSON.stringify(manifest, null, 2)}\n`;
+	const manifestBytes = Buffer.from(manifestSource, 'utf8');
+	const manifestReceipt = Object.freeze({
+		bytes: manifestBytes.byteLength,
+		sha256: sha256(manifestBytes)
+	});
+	const moduleReceipt = Object.freeze({
+		bytes: assets[0].size,
+		sha256: assets[0].sha256
+	});
+	const wasmReceipt = Object.freeze({
+		bytes: storage[1].size,
+		sha256: storage[1].sha256,
+		uncompressedBytes: assets[1].size,
+		uncompressedSha256: assets[1].sha256
+	});
 	const legacyManifest = {
 		format: 'wasm-j-runtime-manifest-v1',
 		runtime: 'jsoftware-j-playground',
 		fingerprint: fingerprint.slice(0, 16),
 		files: ['jamalgam.js', 'jamalgam.wasm.gz']
 	};
-	const versionModuleSource = `export const WASM_J_ASSET_VERSION =\n\t'${fingerprint}';\nexport const WASM_J_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
+	const versionModuleSource = `export const WASM_J_RUNTIME_PROFILE = {\n\tprofileId: '${lock.profileId}',\n\tsourceRevision: '${lock.source.revision}',\n\tmanifestFingerprint: '${fingerprint}',\n\tmanifestReceipt: {\n\t\tbytes: ${manifestReceipt.bytes},\n\t\tsha256: '${manifestReceipt.sha256}'\n\t},\n\tmoduleReceipt: {\n\t\tbytes: ${moduleReceipt.bytes},\n\t\tsha256: '${moduleReceipt.sha256}'\n\t},\n\twasmReceipt: {\n\t\tbytes: ${wasmReceipt.bytes},\n\t\tsha256: '${wasmReceipt.sha256}',\n\t\tuncompressedBytes: ${wasmReceipt.uncompressedBytes},\n\t\tuncompressedSha256: '${wasmReceipt.uncompressedSha256}'\n\t}\n} as const;\nexport const WASM_J_ASSET_VERSION = WASM_J_RUNTIME_PROFILE.manifestFingerprint;\nexport const WASM_J_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
 
 	await mkdir(path.dirname(targetDir), { recursive: true });
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
@@ -383,32 +400,36 @@ export async function syncWasmJAssets(options = {}) {
 		await Promise.all([
 			writeFile(path.join(temporaryTarget, 'jamalgam.js'), moduleBytes),
 			writeFile(path.join(temporaryTarget, 'jamalgam.wasm.gz'), compressedWasmBytes),
+			writeFile(path.join(temporaryTarget, VERIFIED_WASM_STORAGE_FILE), compressedWasmBytes),
 			writeFile(path.join(temporaryTarget, 'runner-worker.js'), workerBytes),
 			writeFile(
 				path.join(temporaryTarget, LEGACY_MANIFEST_FILE),
 				`${JSON.stringify(legacyManifest, null, 2)}\n`,
 				'utf8'
 			),
-			writeFile(
-				path.join(temporaryTarget, MANIFEST_FILE),
-				`${JSON.stringify(manifest, null, 2)}\n`,
-				'utf8'
-			),
+			writeFile(path.join(temporaryTarget, MANIFEST_FILE), manifestSource, 'utf8'),
 			writeFile(temporaryVersion, versionModuleSource, 'utf8')
 		]);
-		const [installedModule, installedWasmGzip, installedWorker, installedManifest] =
-			await Promise.all([
-				readFile(path.join(temporaryTarget, 'jamalgam.js')),
-				readFile(path.join(temporaryTarget, 'jamalgam.wasm.gz')),
-				readFile(path.join(temporaryTarget, 'runner-worker.js')),
-				readFile(path.join(temporaryTarget, MANIFEST_FILE), 'utf8')
-			]);
+		const [
+			installedModule,
+			installedLegacyWasmGzip,
+			installedVerifiedWasmGzip,
+			installedWorker,
+			installedManifest
+		] = await Promise.all([
+			readFile(path.join(temporaryTarget, 'jamalgam.js')),
+			readFile(path.join(temporaryTarget, 'jamalgam.wasm.gz')),
+			readFile(path.join(temporaryTarget, VERIFIED_WASM_STORAGE_FILE)),
+			readFile(path.join(temporaryTarget, 'runner-worker.js')),
+			readFile(path.join(temporaryTarget, MANIFEST_FILE), 'utf8')
+		]);
 		if (
 			sha256(installedModule) !== assets[0].sha256 ||
-			sha256(installedWasmGzip) !== storage[1].sha256 ||
-			sha256(gunzipSync(installedWasmGzip)) !== assets[1].sha256 ||
+			!installedLegacyWasmGzip.equals(installedVerifiedWasmGzip) ||
+			sha256(installedVerifiedWasmGzip) !== storage[1].sha256 ||
+			sha256(gunzipSync(installedVerifiedWasmGzip)) !== assets[1].sha256 ||
 			sha256(installedWorker) !== workerReceipt.sha256 ||
-			JSON.stringify(JSON.parse(installedManifest)) !== JSON.stringify(manifest)
+			installedManifest !== manifestSource
 		) {
 			throw new Error('wasm-j temporary installation failed receipt verification');
 		}

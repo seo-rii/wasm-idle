@@ -122,19 +122,24 @@ describe('syncWasmJAssets', () => {
 		expect((await readdir(targetDir)).sort()).toEqual([
 			'jamalgam.js',
 			'jamalgam.wasm.gz',
+			'jamalgam.wasm.gz.bin',
 			'runner-worker.js',
 			'runtime-manifest.v1.json',
 			'runtime-manifest.v2.json'
 		]);
 		expect(await readFile(path.join(targetDir, 'jamalgam.js'))).toEqual(moduleBytes);
 		const installedGzip = await readFile(path.join(targetDir, 'jamalgam.wasm.gz'));
+		const installedVerifiedGzip = await readFile(path.join(targetDir, 'jamalgam.wasm.gz.bin'));
 		expect(gunzipSync(installedGzip)).toEqual(wasmBytes);
 		expect(installedGzip).toEqual(gzipSync(wasmBytes, { level: 9 }));
+		expect(installedVerifiedGzip).toEqual(installedGzip);
 		expect(await readFile(path.join(targetDir, 'runner-worker.js'))).toEqual(workerBytes);
 
-		const manifest = JSON.parse(
-			await readFile(path.join(targetDir, 'runtime-manifest.v2.json'), 'utf8')
+		const manifestSource = await readFile(
+			path.join(targetDir, 'runtime-manifest.v2.json'),
+			'utf8'
 		);
+		const manifest = JSON.parse(manifestSource);
 		expect(manifest).toMatchObject({
 			format: J_MANIFEST_FORMAT,
 			runtime: 'jsoftware-j-playground',
@@ -160,7 +165,7 @@ describe('syncWasmJAssets', () => {
 					sha256: sha256(moduleBytes)
 				},
 				{
-					path: 'jamalgam.wasm.gz',
+					path: 'jamalgam.wasm.gz.bin',
 					encoding: 'gzip',
 					size: installedGzip.byteLength,
 					sha256: sha256(installedGzip)
@@ -169,9 +174,9 @@ describe('syncWasmJAssets', () => {
 		});
 		expect(computeJRuntimeFingerprint(manifest)).toBe(result.fingerprint);
 		const versionModule = await readFile(versionModulePath, 'utf8');
-		expect(versionModule).toContain(result.fingerprint);
-		expect(versionModule).toContain(`bytes: ${workerBytes.byteLength}`);
-		expect(versionModule).toContain(`sha256: '${sha256(workerBytes)}'`);
+		expect(versionModule).toBe(
+			`export const WASM_J_RUNTIME_PROFILE = {\n\tprofileId: 'jsoftware-j-playground-test',\n\tsourceRevision: 'fixture',\n\tmanifestFingerprint: '${result.fingerprint}',\n\tmanifestReceipt: {\n\t\tbytes: ${Buffer.byteLength(manifestSource)},\n\t\tsha256: '${sha256(Buffer.from(manifestSource))}'\n\t},\n\tmoduleReceipt: {\n\t\tbytes: ${moduleBytes.byteLength},\n\t\tsha256: '${sha256(moduleBytes)}'\n\t},\n\twasmReceipt: {\n\t\tbytes: ${installedGzip.byteLength},\n\t\tsha256: '${sha256(installedGzip)}',\n\t\tuncompressedBytes: ${wasmBytes.byteLength},\n\t\tuncompressedSha256: '${sha256(wasmBytes)}'\n\t}\n} as const;\nexport const WASM_J_ASSET_VERSION = WASM_J_RUNTIME_PROFILE.manifestFingerprint;\nexport const WASM_J_RUNNER_RECEIPT = {\n\tbytes: ${workerBytes.byteLength},\n\tsha256: '${sha256(workerBytes)}'\n} as const;\n`
+		);
 	});
 
 	it('revalidates and republishes an existing gzip-only vendored target', async () => {

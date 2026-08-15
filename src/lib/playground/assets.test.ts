@@ -127,7 +127,11 @@ import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
 	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 } from './wasmClojureScriptVersion';
-import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
+import {
+	WASM_J_ASSET_VERSION,
+	WASM_J_RUNNER_RECEIPT,
+	WASM_J_RUNTIME_PROFILE
+} from './wasmJVersion';
 import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
 import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
@@ -1185,6 +1189,8 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/absproxy/5173/wasm-j/runner-worker.js',
 			manifestUrl: 'https://example.com/absproxy/5173/wasm-j/runtime-manifest.v2.json',
 			manifestFingerprint: WASM_J_ASSET_VERSION,
+			preflightKey: JSON.stringify(WASM_J_RUNTIME_PROFILE),
+			preflightProfile: WASM_J_RUNTIME_PROFILE,
 			workerReceipt: WASM_J_RUNNER_RECEIPT
 		});
 		expect(resolveBqnRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
@@ -1298,6 +1304,8 @@ describe('runtime asset config resolution', () => {
 			workerUrl: '/wasm-j/runner-worker.js',
 			manifestUrl: '/wasm-j/runtime-manifest.v2.json',
 			manifestFingerprint: WASM_J_ASSET_VERSION,
+			preflightKey: JSON.stringify(WASM_J_RUNTIME_PROFILE),
+			preflightProfile: WASM_J_RUNTIME_PROFILE,
 			workerReceipt: WASM_J_RUNNER_RECEIPT
 		});
 	});
@@ -1322,6 +1330,13 @@ describe('runtime asset config resolution', () => {
 		const customWorkerReceipt = { bytes: 1234, sha256: 'b'.repeat(64) };
 		const customManifestReceipt = { bytes: 2345, sha256: 'c'.repeat(64) };
 		const customRuntimeReceipt = { bytes: 3456, sha256: 'd'.repeat(64) };
+		const customModuleReceipt = { bytes: 4567, sha256: 'e'.repeat(64) };
+		const customWasmReceipt = {
+			bytes: 5678,
+			sha256: 'f'.repeat(64),
+			uncompressedBytes: 6789,
+			uncompressedSha256: '1'.repeat(64)
+		};
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = 'https://env.example.com/prolog/';
 		publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = 'https://env.example.com/gleam/';
@@ -1498,6 +1513,11 @@ describe('runtime asset config resolution', () => {
 						workerUrl: '/runtime/j/worker.js',
 						manifestUrl: '/runtime/j/manifest.json',
 						manifestFingerprint: customFingerprint,
+						profileId: 'jsoftware-j-playground-custom',
+						sourceRevision: 'custom',
+						manifestReceipt: customManifestReceipt,
+						moduleReceipt: customModuleReceipt,
+						wasmReceipt: customWasmReceipt,
 						workerReceipt: customWorkerReceipt
 					}
 				},
@@ -1508,6 +1528,22 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/runtime/j/worker.js',
 			manifestUrl: 'https://example.com/runtime/j/manifest.json',
 			manifestFingerprint: customFingerprint,
+			preflightKey: JSON.stringify({
+				profileId: 'jsoftware-j-playground-custom',
+				sourceRevision: 'custom',
+				manifestFingerprint: customFingerprint,
+				manifestReceipt: customManifestReceipt,
+				moduleReceipt: customModuleReceipt,
+				wasmReceipt: customWasmReceipt
+			}),
+			preflightProfile: {
+				profileId: 'jsoftware-j-playground-custom',
+				sourceRevision: 'custom',
+				manifestFingerprint: customFingerprint,
+				manifestReceipt: customManifestReceipt,
+				moduleReceipt: customModuleReceipt,
+				wasmReceipt: customWasmReceipt
+			},
 			workerReceipt: customWorkerReceipt
 		});
 		expect(

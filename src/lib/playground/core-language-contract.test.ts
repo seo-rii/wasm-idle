@@ -403,6 +403,16 @@ describe('core language contract', () => {
 				workerUrl: '/wasm-j/runner-worker.js?v=test',
 				manifestUrl: '/wasm-j/runtime-manifest.v2.json?v=test',
 				manifestFingerprint: 'e'.repeat(64),
+				profileId: 'jsoftware-j-playground-test',
+				sourceRevision: 'test',
+				manifestReceipt: { bytes: 111, sha256: '7'.repeat(64) },
+				moduleReceipt: { bytes: 222, sha256: '8'.repeat(64) },
+				wasmReceipt: {
+					bytes: 333,
+					sha256: '9'.repeat(64),
+					uncompressedBytes: 444,
+					uncompressedSha256: 'a'.repeat(64)
+				},
 				workerReceipt: { bytes: 6789, sha256: 'f'.repeat(64) }
 			},
 			bqn: {
@@ -443,6 +453,11 @@ describe('core language contract', () => {
 		expect(key).toContain('"jWorkerUrl":"/wasm-j/runner-worker.js?v=test"');
 		expect(key).toContain('"jManifestUrl":"/wasm-j/runtime-manifest.v2.json?v=test"');
 		expect(key).toContain(`"jManifestFingerprint":"${'e'.repeat(64)}"`);
+		expect(key).toContain('"jProfileId":"jsoftware-j-playground-test"');
+		expect(key).toContain('"jSourceRevision":"test"');
+		expect(key).toContain('"jManifestReceipt":');
+		expect(key).toContain('"jModuleReceipt":');
+		expect(key).toContain('"jWasmReceipt":');
 		expect(key).toContain('"jWorkerReceipt":');
 		expect(key).toContain('"bqnBaseUrl":"/wasm-bqn/"');
 		expect(key).toContain('"bqnWorkerUrl":"/wasm-bqn/runner-worker.js?v=test"');

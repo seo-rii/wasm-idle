@@ -27,7 +27,7 @@
 		"wasm-gleam": { "maxBytes": 2100000, "maxFiles": 60 },
 		"wasm-go": { "maxBytes": 50000000, "maxFiles": 60 },
 		"wasm-haskell": { "maxBytes": 54000000, "maxFiles": 18 },
-		"wasm-j": { "maxBytes": 2000000, "maxFiles": 8 },
+		"wasm-j": { "maxBytes": 3200000, "maxFiles": 8 },
 		"wasm-janet": { "maxBytes": 600000, "maxFiles": 8 },
 		"wasm-julia": { "maxBytes": 17000000, "maxFiles": 10 },
 		"wasm-lisp": { "maxBytes": 5000000, "maxFiles": 50 },

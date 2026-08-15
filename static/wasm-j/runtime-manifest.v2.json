@@ -2,7 +2,7 @@
   "format": "wasm-j-runtime-manifest-v2",
   "runtime": "jsoftware-j-playground",
   "profileId": "jsoftware-j-playground-wasm-idle-d647850c",
-  "fingerprint": "a2691b6f10750accda91f6341a2ac2fe909e99596626aceccef94d5ca267d26d",
+  "fingerprint": "ffa037148a6785c5ca7295ca34f00ac28f5057d7354be391d588868c218bab07",
   "source": {
     "repository": "https://github.com/jsoftware/j-playground",
     "path": "bin/html2",
@@ -31,7 +31,7 @@
       "sha256": "a4abe92ddf874d06d01d6873e151b641837b79d4075529fa17541b576eeb92e3"
     },
     {
-      "path": "jamalgam.wasm.gz",
+      "path": "jamalgam.wasm.gz.bin",
       "logicalPath": "jamalgam.wasm",
       "encoding": "gzip",
       "size": 1418554,
