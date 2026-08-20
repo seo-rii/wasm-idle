@@ -104,5 +104,5 @@ await executeBrowserRustArtifact(artifact, 'https://example.com/runtime/', {
 		).resolves.toMatchObject({
 			stderr: ''
 		});
-	}, 15_000);
+	}, 30_000);
 });

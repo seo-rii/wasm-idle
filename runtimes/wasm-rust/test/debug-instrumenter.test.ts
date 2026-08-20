@@ -57,7 +57,7 @@ fn main() { add(1); }
 
 describe('debug instrumenter browser asset', () => {
 	beforeAll(async () => {
-		await execFileAsync('pnpm', ['run', 'build:js'], {
+		await execFileAsync('node', ['./scripts/build-debug-instrumenter.mjs'], {
 			cwd: projectRoot,
 			timeout: 30_000
 		});

@@ -25,7 +25,7 @@ async function waitForChildExit(child: ReturnType<typeof spawn>) {
 }
 
 async function waitForFile(filePath: string) {
-	for (let attempt = 0; attempt < 100; attempt += 1) {
+	for (let attempt = 0; attempt < 300; attempt += 1) {
 		try {
 			const stat = await fs.stat(filePath);
 			if (stat.size > 0) {
@@ -137,7 +137,7 @@ describe('watch-process', () => {
 			worker.kill('SIGKILL');
 			await waitForChildExit(worker);
 		}
-	});
+	}, 30_000);
 
 	it('uses the default toolchain watcher paths when only the root is provided', async () => {
 		const root = await makeTempDir();

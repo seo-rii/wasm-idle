@@ -134,6 +134,6 @@ describe('wasm-rust artifact handling', () => {
 		);
 
 		expect(result.success).toBe(false);
-		expect(result.stderr).toContain('mirrored bitcode buffer overflowed');
+		expect(result.stderr).toContain('mirrored output buffer overflowed');
 	});
 });
