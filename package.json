@@ -113,7 +113,7 @@
 		"check:support-matrix": "node scripts/support-matrix.mjs check",
 		"sync:page-runtimes": "pnpm run sync:pyodide && pnpm run sync:webr && pnpm run sync:wasm-of-js-of-ocaml && pnpm run sync:wasm-typescript && pnpm run sync:wasm-octave && pnpm run sync:wasm-prolog && pnpm run sync:wasm-gleam && pnpm run sync:wasm-perl && pnpm run sync:wasm-tcl && pnpm run sync:wasm-awk && pnpm run sync:wasm-pascal && pnpm run sync:wasm-forth && pnpm run sync:wasm-j && pnpm run sync:wasm-bqn && pnpm run sync:wasm-janet && pnpm run sync:wasm-julia && pnpm run sync:wasm-nim && pnpm run sync:wasm-ruby && pnpm run sync:wasm-bash && pnpm run sync:wasm-clojurescript",
 		"page:build": "pnpm run build:page-runtimes && pnpm run sync:page-runtimes && pnpm run build:static-runtime-modules && pnpm run layer:static-runtimes && pnpm run compress:static-runtimes && pnpm run build && pnpm run compress:build-runtimes",
-		"package:root": "svelte-kit sync && node scripts/clean-package-output.mjs && svelte-package && publint",
+		"package:root": "svelte-kit sync && node scripts/clean-package-output.mjs && svelte-package --tsconfig ./tsconfig.package.json && publint",
 		"package": "pnpm run build:publish-deps && pnpm run package:root",
 		"prepack": "pnpm run package",
 		"verify:package": "node scripts/verify-package.mjs",
