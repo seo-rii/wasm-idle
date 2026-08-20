@@ -118,7 +118,7 @@
     "teavm/compiler.wasm": 4299273,
     "teavm/runtime-classlib-teavm.bin": 2394175,
     "wasm-assemblyscript/chunks/asc-B7u7ie6k.mjs": 13489859,
-    "wasm-awk/goawk.wasm": 4697103,
+    "wasm-awk/goawk.wasm": 4697052,
     "wasm-bash/bash.webc": 1808682,
     "wasm-bash/sdk/wasmer_js_bg.wasm": 5701868,
     "wasm-bqn/BQN.wasm": 1175370,

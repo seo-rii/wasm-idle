@@ -52,6 +52,7 @@ export async function buildWasmAwkRuntime({ distDir = DEFAULT_DIST_DIR } = {}) {
 		'go',
 		[
 			'build',
+			'-buildvcs=false',
 			'-trimpath',
 			'-ldflags=-s -w -buildid=',
 			'-o',
