@@ -29,9 +29,7 @@ describe('mirrored bitcode file', () => {
 		const helperWorkDirectory = helperRuntime.fds[5] as any;
 		const objectBytes = new Uint8Array([0x7f, 0x45, 0x4c, 0x46]);
 
-		expect(mainWorkDirectory.path_create_directory('rmeta-test')).toBe(
-			wasi.ERRNO_SUCCESS
-		);
+		expect(mainWorkDirectory.path_create_directory('rmeta-test')).toBe(wasi.ERRNO_SUCCESS);
 		const precreatedObject = mainWorkDirectory.path_open(
 			0,
 			'main.rcgu.o',
@@ -41,9 +39,7 @@ describe('mirrored bitcode file', () => {
 			0
 		);
 		expect(precreatedObject.ret).toBe(wasi.ERRNO_SUCCESS);
-		expect(helperWorkDirectory.path_filestat_get(0, 'main.rcgu.o').ret).toBe(
-			wasi.ERRNO_NOENT
-		);
+		expect(helperWorkDirectory.path_filestat_get(0, 'main.rcgu.o').ret).toBe(wasi.ERRNO_NOENT);
 		const helperFile = helperWorkDirectory.path_open(
 			0,
 			'rmeta-test/full.rmeta',

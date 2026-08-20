@@ -70,7 +70,9 @@ async function main() {
 		});
 		page.on('pageerror', (error) => {
 			if (liveLog) {
-				process.stderr.write(`[browser:pageerror] ${String(error.stack || error.message || error)}\n`);
+				process.stderr.write(
+					`[browser:pageerror] ${String(error.stack || error.message || error)}\n`
+				);
 			}
 			pageErrors.push(String(error.stack || error.message || error));
 		});

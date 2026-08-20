@@ -144,10 +144,7 @@ async function maybePrecompressAssetFile(assetPath, scope) {
 }
 
 async function maybePrecompressRuntimeAsset(assetPath, scope) {
-	return relativeAssetPath(
-		runtimeRoot,
-		await maybePrecompressAssetFile(assetPath, scope)
-	);
+	return relativeAssetPath(runtimeRoot, await maybePrecompressAssetFile(assetPath, scope));
 }
 
 function relativeAssetPath(root, fullPath) {
@@ -498,21 +495,16 @@ async function copyBrowserVendorAssets() {
 		const source = await fs.readFile(filePath, 'utf8');
 		const compileStreaming = '  return fetch(url).then(WebAssembly.compileStreaming);';
 		if (!source.includes(compileStreaming)) {
-			throw new Error(`JCO browser module no longer has the expected core Wasm loader: ${filePath}`);
+			throw new Error(
+				`JCO browser module no longer has the expected core Wasm loader: ${filePath}`
+			);
 		}
-		const runtimeAssetImport = toImportPath(
-			filePath,
-			path.join(distRoot, 'runtime-asset.js')
-		);
-		const rewrittenSource =
-			`import { fetchRuntimeAssetBytes } from '${runtimeAssetImport}';\n${source.replace(
-				compileStreaming,
-				`  const assetUrl = new URL(url);\n  if (assetUrl.pathname.endsWith('.core.wasm')) assetUrl.pathname += '.gz';\n  return WebAssembly.compile(await fetchRuntimeAssetBytes(assetUrl, 'JCO core Wasm', fetch, false));`
-			)}`;
-		await fs.writeFile(
-			filePath,
-			rewrittenSource.replace(/[ \t]+$/gm, '')
-		);
+		const runtimeAssetImport = toImportPath(filePath, path.join(distRoot, 'runtime-asset.js'));
+		const rewrittenSource = `import { fetchRuntimeAssetBytes } from '${runtimeAssetImport}';\n${source.replace(
+			compileStreaming,
+			`  const assetUrl = new URL(url);\n  if (assetUrl.pathname.endsWith('.core.wasm')) assetUrl.pathname += '.gz';\n  return WebAssembly.compile(await fetchRuntimeAssetBytes(assetUrl, 'JCO core Wasm', fetch, false));`
+		)}`;
+		await fs.writeFile(filePath, rewrittenSource.replace(/[ \t]+$/gm, ''));
 	}
 
 	const distFiles = await listFiles(distRoot);
@@ -580,10 +572,7 @@ async function copyBrowserVendorAssets() {
 		}
 	}
 
-	for (const fileName of [
-		'js-component-bindgen-component.core.wasm',
-		'wasm-tools.core.wasm'
-	]) {
+	for (const fileName of ['js-component-bindgen-component.core.wasm', 'wasm-tools.core.wasm']) {
 		await maybePrecompressAssetFile(path.join(jcoVendorRoot, 'obj', fileName), 'vendor');
 	}
 }

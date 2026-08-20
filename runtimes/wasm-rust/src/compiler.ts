@@ -18,10 +18,7 @@ import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
 import { isIntegratedCompilerOutput, loadRuntimeManifest } from './runtime-manifest.js';
 import { readMirroredBitcode } from './rustc-runtime.js';
 import { readWorkerFailure, WORKER_STATUS_BUFFER_BYTES } from './worker-status.js';
-import type {
-	CompileWorkerMessage,
-	CompileWorkerRequest
-} from './worker-protocol.js';
+import type { CompileWorkerMessage, CompileWorkerRequest } from './worker-protocol.js';
 import type {
 	BrowserRustArtifact,
 	BrowserRustCompileProgress,
@@ -271,9 +268,7 @@ export async function compileRust(
 			1_000,
 			Math.min(4_000, manifest.compiler.artifactIdleMs * 2)
 		);
-		let lastFailure = makeFailure(
-			`browser rustc failed before emitting ${mirroredOutputName}`
-		);
+		let lastFailure = makeFailure(`browser rustc failed before emitting ${mirroredOutputName}`);
 		const { onProgress: _ignoredOnProgress, ...workerRequest } = request;
 
 		for (let attempt = 1; attempt <= maxBrowserAttempts; attempt += 1) {

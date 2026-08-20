@@ -661,8 +661,7 @@ builtBrowserBundle('built browser bundle', () => {
 
 		for (const [targetTriple, targetConfig] of Object.entries(manifest.targets)) {
 			const linkPack = targetConfig.compile.link?.pack;
-			const assetBytes =
-				targetConfig.sysrootPack.totalBytes + (linkPack?.totalBytes || 0);
+			const assetBytes = targetConfig.sysrootPack.totalBytes + (linkPack?.totalBytes || 0);
 			const requestAssets = new Set([
 				targetConfig.sysrootPack.asset,
 				targetConfig.sysrootPack.index,
