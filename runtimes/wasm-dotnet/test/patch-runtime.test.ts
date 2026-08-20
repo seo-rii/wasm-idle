@@ -12,9 +12,9 @@ const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
 	await Promise.all(
-		temporaryDirectories.splice(0).map((directory) =>
-			rm(directory, { recursive: true, force: true })
-		)
+		temporaryDirectories
+			.splice(0)
+			.map((directory) => rm(directory, { recursive: true, force: true }))
 	);
 });
 
@@ -54,11 +54,7 @@ describe('patchRuntime', () => {
 		const runtimeDir = await mkdtemp(join(tmpdir(), 'wasm-dotnet-runtime-'));
 		temporaryDirectories.push(runtimeDir);
 		await mkdir(runtimeDir, { recursive: true });
-		await writeFile(
-			join(runtimeDir, 'dotnet.runtime.js'),
-			'upstream-runtime',
-			'utf8'
-		);
+		await writeFile(join(runtimeDir, 'dotnet.runtime.js'), 'upstream-runtime', 'utf8');
 		await writeFile(join(runtimeDir, 'dotnet.native.worker.mjs'), 'upstream-worker', 'utf8');
 		await writeFile(join(runtimeDir, 'dotnet.native.worker.polyfill.mjs'), 'stale', 'utf8');
 		await writeFile(
@@ -89,16 +85,14 @@ describe('patchRuntime', () => {
 		expect(boot.resources.jsModuleWorker).toEqual({
 			'dotnet.native.worker.mjs': 'worker'
 		});
-		expect(boot.resources.coreAssembly['FSharp.Compiler.Service.wasm']).toBe(
-			'fsharp-service'
-		);
-		expect(boot.resources.coreAssembly['Microsoft.CodeAnalysis.wasm']).toBe(
-			'code-analysis'
-		);
+		expect(boot.resources.coreAssembly['FSharp.Compiler.Service.wasm']).toBe('fsharp-service');
+		expect(boot.resources.coreAssembly['Microsoft.CodeAnalysis.wasm']).toBe('code-analysis');
 		expect(boot.resources.lazyAssembly).toBeUndefined();
 		expect(boot.pthreadPoolInitialSize).toBe(8);
 		expect(boot.pthreadPoolUnusedSize).toBe(8);
-		await expect(readFile(join(runtimeDir, 'dotnet.native.worker.polyfill.mjs'))).rejects.toThrow();
+		await expect(
+			readFile(join(runtimeDir, 'dotnet.native.worker.polyfill.mjs'))
+		).rejects.toThrow();
 	});
 
 	it('leaves a single-threaded runtime intact while keeping compilers eager', async () => {
@@ -133,6 +127,8 @@ describe('patchRuntime', () => {
 		expect(boot.resources.lazyAssembly).toBeUndefined();
 		expect(boot.pthreadPoolInitialSize).toBeUndefined();
 		expect(boot.pthreadPoolUnusedSize).toBeUndefined();
-		await expect(readFile(join(runtimeDir, 'dotnet.native.worker.polyfill.mjs'))).rejects.toThrow();
+		await expect(
+			readFile(join(runtimeDir, 'dotnet.native.worker.polyfill.mjs'))
+		).rejects.toThrow();
 	});
 });

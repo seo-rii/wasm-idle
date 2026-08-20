@@ -22,16 +22,16 @@ describe('compileDotnet', () => {
 				loadRuntime: async (language) => {
 					runtimeLanguages.push(language);
 					return {
-					async compile(request) {
-						requests.push(request);
-						return {
-							success: true,
-							assemblyId: 'asm-fsharp'
-						};
-					},
-					async run() {
-						return { exitCode: 0 };
-					}
+						async compile(request) {
+							requests.push(request);
+							return {
+								success: true,
+								assemblyId: 'asm-fsharp'
+							};
+						},
+						async run() {
+							return { exitCode: 0 };
+						}
 					};
 				}
 			}

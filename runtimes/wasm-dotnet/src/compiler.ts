@@ -125,10 +125,7 @@ function failure(message: string, stderr?: string): BrowserDotnetCompilerResult 
 	};
 }
 
-function resolveReferenceBaseUrl(
-	options: CreateDotnetCompilerOptions,
-	language: DotnetLanguage
-) {
+function resolveReferenceBaseUrl(options: CreateDotnetCompilerOptions, language: DotnetLanguage) {
 	const runtimeBaseUrl = resolveDotnetRuntimeBaseUrl({ ...options, language });
 	return new URL(
 		options.referenceBaseUrl || (options.runtimeBaseUrl ? 'ref/' : '../ref/'),

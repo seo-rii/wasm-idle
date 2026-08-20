@@ -19,10 +19,7 @@ const referenceTarget = resolve(runtimeTarget, 'ref');
 const languages = [
 	{
 		id: 'csharp',
-		compilerAssemblies: [
-			'Microsoft.CodeAnalysis.wasm',
-			'Microsoft.CodeAnalysis.CSharp.wasm'
-		]
+		compilerAssemblies: ['Microsoft.CodeAnalysis.wasm', 'Microsoft.CodeAnalysis.CSharp.wasm']
 	},
 	{
 		id: 'fsharp',
@@ -69,13 +66,7 @@ async function resolvePackageCompileAssembly(packageId, assemblyName) {
 function publishRuntime(language) {
 	const result = spawnSync(
 		dotnetExecutable,
-		[
-			'publish',
-			project,
-			'-c',
-			'Release',
-			`-p:WasmDotnetLanguage=${language}`
-		],
+		['publish', project, '-c', 'Release', `-p:WasmDotnetLanguage=${language}`],
 		{
 			cwd: root,
 			stdio: 'inherit'
@@ -165,4 +156,6 @@ await writeFile(
 		2
 	)}\n`
 );
-console.log(`Copied ${referenceAssemblies.length} shared reference assemblies to ${referenceTarget}`);
+console.log(
+	`Copied ${referenceAssemblies.length} shared reference assemblies to ${referenceTarget}`
+);
