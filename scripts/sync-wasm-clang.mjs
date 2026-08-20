@@ -282,7 +282,7 @@ async function validateBundle(bundleDir, layout) {
 	}
 }
 
-/** @param {NodeJS.ArrayBufferView} bytes */
+/** @param {Buffer} bytes */
 function sha256(bytes) {
 	return createHash('sha256').update(bytes).digest('hex');
 }

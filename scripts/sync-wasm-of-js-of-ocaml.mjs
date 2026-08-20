@@ -131,6 +131,16 @@ async function validateBrowserNativeWorker(nativeWorkerPath) {
 	}
 }
 
+/**
+ * @typedef {object} SyncWasmOfJsOfOcamlOptions
+ * @property {string} [sourceBrowserDistDir]
+ * @property {string} [sourceBundleDir]
+ * @property {string} [targetBrowserDistDir]
+ * @property {string} [targetBundleDir]
+ * @property {string} [versionModulePath]
+ */
+
+/** @param {SyncWasmOfJsOfOcamlOptions} [options] */
 export async function syncWasmOfJsOfOcamlDist({
 	sourceBrowserDistDir = DEFAULT_SOURCE_BROWSER_DIST_DIR,
 	sourceBundleDir = DEFAULT_SOURCE_BUNDLE_DIR,

@@ -98,7 +98,7 @@ describe('syncWasmGoDist', () => {
 			readFile(path.join(targetDir, 'vendor/tsconfig.tsbuildinfo'), 'utf8')
 		).rejects.toThrow();
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
-			`export const WASM_GO_ASSET_VERSION = ${JSON.stringify(result.fingerprint)};`
+			`export const WASM_GO_ASSET_VERSION = '${result.fingerprint}';`
 		);
 	});
 

@@ -74,7 +74,7 @@ async function computeFingerprint(sourceDir, assetFiles) {
 
 async function writeVersionModule(versionModulePath, fingerprint) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource = `export const WASM_R_ASSET_VERSION = ${JSON.stringify(fingerprint)};\n`;
+	const moduleSource = `export const WASM_R_ASSET_VERSION = '${fingerprint}';\n`;
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current === moduleSource) return;
 	await writeFile(versionModulePath, moduleSource, 'utf8');

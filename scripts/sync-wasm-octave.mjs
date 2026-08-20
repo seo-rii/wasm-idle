@@ -50,7 +50,7 @@ async function directoryExists(filePath) {
 	return !!fileStats?.isDirectory();
 }
 
-/** @param {string} rootDir @param {string} relativeDir @returns {Promise<string[]>} */
+/** @param {string} rootDir @param {string} [relativeDir] @returns {Promise<string[]>} */
 async function listFiles(rootDir, relativeDir = '') {
 	const entries = await readdir(path.join(rootDir, relativeDir), { withFileTypes: true });
 	/** @type {string[]} */
@@ -116,7 +116,7 @@ function isRuntimeFile(relativePath) {
 	);
 }
 
-/** @param {string} sourceDir @returns {Promise<string[]>} */
+/** @param {string} sourceDir */
 async function collectRuntimeFiles(sourceDir) {
 	for (const fileName of REQUIRED_RUNTIME_FILES) {
 		if (!(await fileExists(path.join(sourceDir, fileName)))) {
@@ -132,7 +132,7 @@ async function collectRuntimeFiles(sourceDir) {
 	return (await listFiles(sourceDir)).filter(isRuntimeFile);
 }
 
-/** @param {string} sourceFileName @returns {string[]} */
+/** @param {string} sourceFileName */
 function targetRuntimeFileNames(sourceFileName) {
 	if (sourceFileName === ENTRY_SOURCE_FILE) return [ENTRY_SOURCE_FILE, ENTRY_SCRIPT_FILE];
 	return [sourceFileName];
@@ -174,6 +174,7 @@ async function computeFingerprint(targetDir, files, runnerWorkerPath) {
 
 /** @param {string} targetDir @param {string[]} files @param {string} fingerprint */
 async function writeRuntimeManifest(targetDir, files, fingerprint) {
+	/** @type {Array<{ path: string, size: number, sha256: string }>} */
 	const manifestFiles = [];
 	for (const fileName of files) {
 		const targetPath = path.join(targetDir, fileName);
@@ -232,6 +233,7 @@ export async function syncWasmOctaveAssets(options = {}) {
 	const sourceRuntimeFiles = await collectRuntimeFiles(resolvedSourceDir);
 	await rm(targetDir, { recursive: true, force: true });
 	await mkdir(targetDir, { recursive: true });
+	/** @type {string[]} */
 	const runtimeFiles = [];
 	for (const fileName of sourceRuntimeFiles) {
 		for (const targetFileName of targetRuntimeFileNames(fileName)) {
