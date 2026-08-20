@@ -63,9 +63,11 @@ async function withPatchedFetch(run) {
 }
 
 async function importBrowserClang() {
-	const modulePath = pathToFileURL(path.join(repoRoot, 'dist', 'clang', 'index.js')).href;
+	const modulePath = pathToFileURL(
+		path.join(repoRoot, 'packages', 'llvm-core', 'dist', 'clang', 'src', 'index.js')
+	).href;
 	const mod = await import(modulePath);
-	return mod.default;
+	return mod.BrowserClangRuntime;
 }
 
 async function prepareRustArtifacts(workDir) {
@@ -249,17 +251,13 @@ async function main() {
 				stdin: () => '',
 				stdout: (chunk) => outputLog.push(chunk),
 				progress: () => {},
-				path: 'http://wasm-idle.local'
+				runtimeBaseUrl: 'http://wasm-idle.local/clang/'
 			});
 			await instance.ready;
 			return instance;
 		});
-		const clangModule = await withPatchedFetch(() =>
-			clang.getModule('http://wasm-idle.local/clang/bin/clang.zip')
-		);
-		const lldModule = await withPatchedFetch(() =>
-			clang.getModule('http://wasm-idle.local/clang/bin/lld.zip')
-		);
+		const clangModule = await withPatchedFetch(() => clang.getModule(clang.assetUrls.clang));
+		const lldModule = await withPatchedFetch(() => clang.getModule(clang.assetUrls.lld));
 
 		const llvmIrMemfsPath = 'work/main.ll';
 		const bitcodeMemfsPath = 'work/main.no-opt.bc';
@@ -331,7 +329,15 @@ async function main() {
 			);
 		}
 		translatedLinkArgs[outputIndex + 1] = linkedWasmMemfsPath;
-		await clang.run(lldModule, true, 'wasm-ld', ...translatedLinkArgs.slice(1));
+		try {
+			await clang.run(lldModule, true, 'wasm-ld', ...translatedLinkArgs.slice(1));
+		} catch (error) {
+			throw new Error(
+				`Failed to link Rust 1.79 artifacts with browser wasm-ld: ${
+					error?.message || String(error)
+				}`
+			);
+		}
 
 		const linkedWasm = Uint8Array.from(clang.memfs.getFileContents(linkedWasmMemfsPath));
 		const wasmPath = path.join(tempRoot, 'main.browser.wasm');

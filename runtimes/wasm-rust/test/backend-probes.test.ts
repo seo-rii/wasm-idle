@@ -79,7 +79,7 @@ function parseJsonOutput(stdout: string, stderr = '') {
 }
 
 describe('real-rust backend probes', () => {
-	it('records the current wasm-idle clang incompatibility with Rust 1.79 LLVM IR', async () => {
+	it('records the current wasm-idle browser LLVM incompatibility with Rust 1.79 artifacts', async () => {
 		const probeError = (await runNode(
 			[
 				'--loader',
@@ -97,7 +97,7 @@ describe('real-rust backend probes', () => {
 		}
 		const output = probeError.stderr?.trim() || probeError.stdout?.trim() || '';
 		expect(output).toContain('"success": false');
-		expect(output).toContain('Failed to lower Rust LLVM IR with browser clang');
+		expect(output).toContain('Failed to link Rust 1.79 artifacts with browser wasm-ld');
 	}, 30_000);
 
 	it('links Rust 1.79 textual LLVM IR through llvm-wasm llc/lld when available', async () => {
