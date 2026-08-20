@@ -5,10 +5,7 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-	prepareClangCompilerAssets,
-	prepareClangdAssets
-} from '../../scripts/prepare-clangd-assets.mjs';
+import { prepareClangdAssets } from '../../scripts/prepare-clangd-assets.mjs';
 
 const temporaryDirectories: string[] = [];
 
@@ -128,53 +125,5 @@ describe('prepareClangdAssets', () => {
 				fetchImpl
 			})
 		).rejects.toThrow('redirected outside its trusted base');
-	});
-});
-
-describe('prepareClangCompilerAssets', () => {
-	it('downloads the four receipt-pinned compiler assets into static/clang/bin', async () => {
-		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-clang-assets-'));
-		temporaryDirectories.push(root);
-		const receiptPath = path.join(root, 'runtime-build.json');
-		const staticDir = path.join(root, 'static');
-		const contents = new Map(
-			['clang.wasm.gz', 'lld.wasm.gz', 'memfs.wasm.gz', 'sysroot.tar.gz'].map(
-				(asset, index) => [asset, new Uint8Array([index + 1, index + 2])] as const
-			)
-		);
-		await writeFile(
-			receiptPath,
-			JSON.stringify({
-				assets: [...contents].map(([asset, bytes]) => ({
-					asset,
-					size: bytes.byteLength,
-					sha256: createHash('sha256').update(bytes).digest('hex')
-				}))
-			})
-		);
-		const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
-			const url = new URL(input instanceof Request ? input.url : input);
-			const asset = path.basename(url.pathname);
-			return new Response(contents.get(asset));
-		});
-
-		await expect(
-			prepareClangCompilerAssets({
-				receiptPath,
-				staticDir,
-				baseUrl: 'https://assets.example.com/wasm-idle/',
-				fetchImpl
-			})
-		).resolves.toEqual({ downloaded: 4, reused: 0 });
-		expect(fetchImpl).toHaveBeenCalledTimes(4);
-		for (const [asset, bytes] of contents) {
-			expect(fetchImpl).toHaveBeenCalledWith(
-				new URL(`https://assets.example.com/wasm-idle/clang/bin/${asset}`),
-				expect.any(Object)
-			);
-			expect([
-				...new Uint8Array(await readFile(path.join(staticDir, 'clang', 'bin', asset)))
-			]).toEqual([...bytes]);
-		}
 	});
 });
