@@ -1,14 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-	cp,
-	mkdir,
-	readFile,
-	rename,
-	rm,
-	stat,
-	writeFile
-} from 'node:fs/promises';
+import { cp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -68,7 +60,9 @@ async function assertFile(filePath, expectedSha256, expectedBytes, label) {
 	const fileStats = await stat(filePath).catch(() => null);
 	if (!fileStats?.isFile()) throw new Error(`${label} was not found at ${filePath}`);
 	if (expectedBytes !== undefined && fileStats.size !== expectedBytes) {
-		throw new Error(`${label} size mismatch: expected ${expectedBytes}, received ${fileStats.size}`);
+		throw new Error(
+			`${label} size mismatch: expected ${expectedBytes}, received ${fileStats.size}`
+		);
 	}
 	const actualSha256 = await sha256File(filePath);
 	if (actualSha256 !== expectedSha256) {
@@ -274,7 +268,9 @@ runner = "wasi@unstable_"
 		abi: 'wasix_32v1',
 		license: 'GPL-3.0-or-later',
 		licenseSha256: EXPECTED.licenseSha256,
-		limitations: ['Only Bash builtins are bundled; external coreutils commands are unavailable.']
+		limitations: [
+			'Only Bash builtins are bundled; external coreutils commands are unavailable.'
+		]
 	};
 	await writeFile(
 		path.join(nextDist, 'runtime-build.json'),
