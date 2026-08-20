@@ -1,7 +1,7 @@
 import {
 	HASKELL_RUNTIME_GENERATED_ASSET_RECEIPTS,
 	HASKELL_RUNTIME_GENERATED_ASSET_VERSION
-} from './haskell-runtime.generated';
+} from './haskell-runtime.generated.js';
 
 export const HASKELL_RUNTIME_ASSET_NAMES = ['dyld.mjs', 'rootfs.tar.zst', 'bsdtar.wasm'] as const;
 

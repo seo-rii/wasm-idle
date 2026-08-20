@@ -2,7 +2,7 @@ import {
 	RUBY_RUNTIME_GENERATED_ASSET_PATH,
 	RUBY_RUNTIME_GENERATED_ASSET_RECEIPTS,
 	RUBY_RUNTIME_GENERATED_ASSET_VERSION
-} from './ruby-runtime.generated';
+} from './ruby-runtime.generated.js';
 
 export const RUBY_RUNTIME_ASSET_PATH = RUBY_RUNTIME_GENERATED_ASSET_PATH;
 
