@@ -100,6 +100,7 @@ import { editorLanguageServerProviders } from '../src/registry.js';
 import type { DOuterAssetReceipts } from '../src/d/assets.js';
 import type { EditorLanguageServerRuntimeOptions } from '../src/types.js';
 import { RUBY_RUNTIME_ASSET_PATH, type RubyRuntimeAssetReceipts } from '@wasm-idle/core';
+import { createPrologTestAssetResponse } from './prolog-fixture.js';
 
 const applicationOrigin = 'https://app.example.com';
 const lispStaticDir = path.resolve(
@@ -238,6 +239,10 @@ describe('registered LSP provider lifecycle contract', () => {
 				const requestUrl = new URL(
 					typeof input === 'string' || input instanceof URL ? input : input.url
 				);
+				if (requestUrl.pathname.includes('/wasm-prolog/')) {
+					const response = createPrologTestAssetResponse(requestUrl);
+					if (response) return response;
+				}
 				const dAsset = requestUrl.pathname.endsWith('/runtime/runtime-manifest.v1.json')
 					? 'runtime/runtime-manifest.v1.json'
 					: requestUrl.pathname.endsWith('/index.js')

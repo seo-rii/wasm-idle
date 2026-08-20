@@ -143,7 +143,11 @@ import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersio
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
-import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
+import {
+	WASM_PROLOG_ASSET_VERSION,
+	WASM_PROLOG_RUNNER_RECEIPT,
+	WASM_PROLOG_RUNTIME_PROFILE
+} from './wasmPrologVersion';
 import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
 
 describe('runtime asset config resolution', () => {
@@ -1142,6 +1146,8 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/absproxy/5173/wasm-prolog/runner-worker.js',
 			manifestUrl: 'https://example.com/absproxy/5173/wasm-prolog/runtime-manifest.v2.json',
 			manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
+			preflightKey: JSON.stringify(WASM_PROLOG_RUNTIME_PROFILE),
+			preflightProfile: WASM_PROLOG_RUNTIME_PROFILE,
 			workerReceipt: WASM_PROLOG_RUNNER_RECEIPT
 		});
 		expect(resolveGleamRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
@@ -1266,8 +1272,24 @@ describe('runtime asset config resolution', () => {
 			workerUrl: '/wasm-prolog/runner-worker.js',
 			manifestUrl: '/wasm-prolog/runtime-manifest.v2.json',
 			manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
+			preflightKey: JSON.stringify(WASM_PROLOG_RUNTIME_PROFILE),
+			preflightProfile: WASM_PROLOG_RUNTIME_PROFILE,
 			workerReceipt: WASM_PROLOG_RUNNER_RECEIPT
 		});
+	});
+
+	it('rejects a custom Prolog fingerprint without a complete matching profile', async () => {
+		vi.resetModules();
+		const { resolvePrologRuntimeAssetConfig } = await import('./assets');
+
+		expect(() =>
+			resolvePrologRuntimeAssetConfig({
+				prolog: {
+					manifestFingerprint: 'a'.repeat(64),
+					manifestReceipt: { bytes: 1, sha256: 'b'.repeat(64) }
+				}
+			})
+		).toThrow('Prolog runtime preflight identity is invalid');
 	});
 
 	it('preserves relative default Tcl urls and pins when no current url is available', async () => {
@@ -1348,6 +1370,21 @@ describe('runtime asset config resolution', () => {
 			uncompressedBytes: 6789,
 			uncompressedSha256: '1'.repeat(64)
 		};
+		const customPrologProfile = {
+			profileId: 'swipl-wasm-custom',
+			packageRevision: '2'.repeat(40),
+			swiplRevision: '3'.repeat(40),
+			manifestFingerprint: customFingerprint,
+			manifestReceipt: customManifestReceipt,
+			javascriptReceipt: customRuntimeReceipt,
+			wasmReceipt: customWasmReceipt,
+			dataReceipt: {
+				bytes: 7890,
+				sha256: '4'.repeat(64),
+				uncompressedBytes: 8901,
+				uncompressedSha256: '5'.repeat(64)
+			}
+		};
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = 'https://env.example.com/prolog/';
 		publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = 'https://env.example.com/gleam/';
@@ -1387,7 +1424,7 @@ describe('runtime asset config resolution', () => {
 						baseUrl: '/runtime/prolog',
 						workerUrl: '/runtime/prolog/worker.js',
 						manifestUrl: '/runtime/prolog/manifest.json',
-						manifestFingerprint: customFingerprint,
+						...customPrologProfile,
 						workerReceipt: customWorkerReceipt
 					}
 				},
@@ -1398,6 +1435,8 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/runtime/prolog/worker.js',
 			manifestUrl: 'https://example.com/runtime/prolog/manifest.json',
 			manifestFingerprint: customFingerprint,
+			preflightKey: JSON.stringify(customPrologProfile),
+			preflightProfile: customPrologProfile,
 			workerReceipt: customWorkerReceipt
 		});
 		expect(

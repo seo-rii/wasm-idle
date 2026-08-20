@@ -106,6 +106,13 @@ export interface RuntimeAssetKeySource {
 		workerUrl?: string;
 		manifestUrl?: string;
 		manifestFingerprint?: string;
+		profileId?: string;
+		packageRevision?: string;
+		swiplRevision?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		javascriptReceipt?: RuntimeAssetIntegrityEntry;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
+		dataReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	gleam?: {
@@ -608,6 +615,33 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		runtime: 'prolog',
 		property: 'manifestFingerprint',
 		key: 'prologManifestFingerprint'
+	},
+	{ runtime: 'prolog', property: 'profileId', key: 'prologProfileId' },
+	{ runtime: 'prolog', property: 'packageRevision', key: 'prologPackageRevision' },
+	{ runtime: 'prolog', property: 'swiplRevision', key: 'prologSwiplRevision' },
+	{
+		runtime: 'prolog',
+		property: 'manifestReceipt',
+		key: 'prologManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'prolog',
+		property: 'javascriptReceipt',
+		key: 'prologJavaScriptReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'prolog',
+		property: 'wasmReceipt',
+		key: 'prologWasmReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'prolog',
+		property: 'dataReceipt',
+		key: 'prologDataReceipt',
+		serialize: serializeIntegrityEntry
 	},
 	{
 		runtime: 'prolog',

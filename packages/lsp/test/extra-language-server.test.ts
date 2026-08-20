@@ -3,9 +3,14 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HASKELL_RUNTIME_ASSET_RECEIPTS, RUBY_RUNTIME_ASSET_PATH } from '@wasm-idle/core';
+import {
+	HASKELL_RUNTIME_ASSET_RECEIPTS,
+	PROLOG_MAX_ASSET_BYTES,
+	RUBY_RUNTIME_ASSET_PATH
+} from '@wasm-idle/core';
 import {
 	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
+	BUNDLED_PROLOG_RUNTIME_PROFILE,
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from '../src/bundledPrologRuntime.js';
 import {
@@ -21,6 +26,7 @@ import {
 	BUNDLED_JANET_RUNNER_RECEIPT
 } from '../src/bundledJanetRuntime.js';
 import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from '../src/bundledLispRuntime.js';
+import { createPrologTestAssetResponse } from './prolog-fixture.js';
 
 const lispStaticDir = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -673,6 +679,13 @@ describe('additional language server workers', () => {
 	});
 
 	it('starts Prolog with folder-backed SWI-Prolog worker assets', async () => {
+		const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+			const requestUrl = new URL(input.toString());
+			const response = createPrologTestAssetResponse(requestUrl);
+			if (!response) throw new Error(`Unexpected Prolog asset request: ${requestUrl.href}`);
+			return response;
+		});
+		vi.stubGlobal('fetch', fetchMock);
 		const handle = await getPrologLanguageServer({
 			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
@@ -682,13 +695,20 @@ describe('additional language server workers', () => {
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
 			options: {
-				baseUrl: 'https://static.example.com/repl_20240807/wasm-prolog/',
-				workerUrl: `https://static.example.com/repl_20240807/wasm-prolog/runner-worker.js?v=${BUNDLED_PROLOG_RUNNER_RECEIPT.sha256}`,
-				manifestUrl: `https://static.example.com/repl_20240807/wasm-prolog/runtime-manifest.v2.json?v=${BUNDLED_PROLOG_MANIFEST_FINGERPRINT}`,
-				manifestFingerprint: BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
-				workerReceipt: BUNDLED_PROLOG_RUNNER_RECEIPT
+				workerReceipt: BUNDLED_PROLOG_RUNNER_RECEIPT,
+				runnerWorkerBytes: expect.any(Uint8Array),
+				runtimePreflight: expect.objectContaining({
+					profileId: BUNDLED_PROLOG_RUNTIME_PROFILE.profileId,
+					manifestFingerprint: BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
+					manifestBytes: expect.any(Uint8Array),
+					javascriptBytes: expect.any(Uint8Array),
+					wasmBytes: expect.any(Uint8Array),
+					dataBytes: expect.any(Uint8Array)
+				}),
+				maxAssetBytes: PROLOG_MAX_ASSET_BYTES
 			}
 		});
+		expect(fetchMock).toHaveBeenCalledTimes(5);
 
 		handle.dispose();
 	});

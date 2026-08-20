@@ -34,6 +34,7 @@ export interface RuntimeAssetPreflightRequest {
 	readonly fetch?: typeof globalThis.fetch;
 	readonly signal?: AbortSignal;
 	readonly limits?: Partial<ExecutionLimits>;
+	readonly redirect?: RequestRedirect;
 	readonly maxConcurrentDownloads?: number;
 	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
 }
@@ -359,6 +360,7 @@ async function preflightAsset(
 	fetchImpl: typeof globalThis.fetch,
 	signal: AbortSignal,
 	maxAssetBytes: number,
+	redirect: RequestRedirect,
 	reportProgress: (loadedBytes: number) => void,
 	runtimeId: string,
 	profileId: string
@@ -391,7 +393,7 @@ async function preflightAsset(
 		const pendingResponse = Promise.resolve(
 			fetchImpl(requestUrl.href, {
 				credentials: 'omit',
-				redirect: 'follow',
+				redirect,
 				referrerPolicy: 'no-referrer',
 				signal
 			})
@@ -559,6 +561,14 @@ export async function preflightRuntimeAssets(
 			}
 		);
 	}
+	const redirect = request.redirect ?? 'follow';
+	if (!['error', 'follow', 'manual'].includes(redirect)) {
+		throw new RuntimeConfigurationError('Runtime asset redirect policy is invalid', {
+			phase: 'asset',
+			runtimeId: runtime.runtimeId,
+			profileId: runtime.identity.profile.profileId
+		});
+	}
 	const fetchImpl = request.fetch ?? globalThis.fetch;
 	if (runtime.assets.length > 0 && typeof fetchImpl !== 'function') {
 		throw new AssetNotFoundError('fetch is unavailable for runtime asset preflight', {
@@ -627,6 +637,7 @@ export async function preflightRuntimeAssets(
 							fetchImpl!,
 							controller.signal,
 							limits.maxAssetBytes,
+							redirect,
 							(loadedBytes) =>
 								request.reportProgress?.({
 									runtimeId: runtime.runtimeId,

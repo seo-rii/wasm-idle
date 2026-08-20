@@ -4,14 +4,18 @@ import {
 	type StaticWorkerDiagnosticRequest,
 	type StaticWorkerDiagnosticRunner
 } from '../static-worker-service.js';
-import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
+import {
+	PROLOG_MAX_ASSET_BYTES,
+	requirePrologRuntimePreflightPayload,
+	type PrologRuntimePreflightPayload,
+	type RuntimeAssetIntegrityEntry
+} from '@wasm-idle/core';
 
 export interface PrologWorkerOptions {
-	baseUrl: string;
-	workerUrl: string;
-	manifestUrl: string;
-	manifestFingerprint: string;
 	workerReceipt: RuntimeAssetIntegrityEntry;
+	runnerWorkerBytes: Uint8Array;
+	runtimePreflight: PrologRuntimePreflightPayload;
+	maxAssetBytes: number;
 }
 
 export type PrologDiagnosticRunnerRequest = StaticWorkerDiagnosticRequest<PrologWorkerOptions>;
@@ -59,6 +63,69 @@ const PROLOG_HOVER: Record<string, string> = {
 	writeln: 'Writes a term followed by a newline.'
 };
 
+const PROLOG_CONFIG_KEYS = [
+	'maxAssetBytes',
+	'runnerWorkerBytes',
+	'runtimePreflight',
+	'workerReceipt'
+] as const;
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+	!!value && typeof value === 'object' && !Array.isArray(value);
+
+const isUint8Array = (value: unknown): value is Uint8Array =>
+	ArrayBuffer.isView(value) && Object.prototype.toString.call(value) === '[object Uint8Array]';
+
+function validatePrologWorkerConfig(config: PrologWorkerOptions): string | null {
+	if (
+		!isPlainRecord(config) ||
+		Object.keys(config).sort().join('\n') !== PROLOG_CONFIG_KEYS.join('\n')
+	) {
+		return 'Prolog language server requires an exact verified runtime configuration';
+	}
+	if (
+		!Number.isSafeInteger(config.maxAssetBytes) ||
+		config.maxAssetBytes <= 0 ||
+		config.maxAssetBytes > PROLOG_MAX_ASSET_BYTES
+	) {
+		return 'Prolog language server requires a valid maxAssetBytes limit';
+	}
+	if (
+		!isPlainRecord(config.workerReceipt) ||
+		Object.keys(config.workerReceipt).sort().join('\n') !== 'bytes\nsha256' ||
+		!Number.isSafeInteger(config.workerReceipt.bytes) ||
+		(config.workerReceipt.bytes as number) <= 0 ||
+		typeof config.workerReceipt.sha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(config.workerReceipt.sha256)
+	) {
+		return 'Prolog language server requires a valid runner receipt';
+	}
+	if (
+		!isUint8Array(config.runnerWorkerBytes) ||
+		config.runnerWorkerBytes.byteLength !== config.workerReceipt.bytes ||
+		config.runnerWorkerBytes.byteLength > config.maxAssetBytes
+	) {
+		return 'Prolog language server requires receipt-sized runner bytes';
+	}
+	let payload: PrologRuntimePreflightPayload;
+	try {
+		payload = requirePrologRuntimePreflightPayload(config.runtimePreflight);
+	} catch {
+		return 'Prolog language server requires a strict runtime preflight payload';
+	}
+	for (const bytes of [
+		payload.manifestBytes,
+		payload.javascriptBytes,
+		payload.wasmBytes,
+		payload.dataBytes
+	]) {
+		if (bytes.byteLength <= 0 || bytes.byteLength > config.maxAssetBytes) {
+			return 'Prolog language server runtime preflight exceeds maxAssetBytes';
+		}
+	}
+	return null;
+}
+
 const wordAt = (text: string, position: LspPosition) => {
 	const line = text.split('\n')[position.line] || '';
 	const character = Math.max(0, Math.min(position.character, line.length));
@@ -95,35 +162,25 @@ export function createPrologWorkerService(
 		defaultActivePath: 'main.prolog',
 		timeoutMessage: 'Prolog diagnostics timed out',
 		runDiagnostics,
-		validateConfig: (config) => {
-			if (!config.baseUrl || !config.workerUrl) return null;
-			if (!config.manifestUrl || !/^[a-f0-9]{64}$/u.test(config.manifestFingerprint)) {
-				return 'Prolog language server requires a manifest URL and fingerprint';
-			}
-			if (
-				!config.workerReceipt ||
-				!Number.isSafeInteger(config.workerReceipt.bytes) ||
-				(config.workerReceipt.bytes as number) <= 0 ||
-				typeof config.workerReceipt.sha256 !== 'string' ||
-				!/^[a-f0-9]{64}$/u.test(config.workerReceipt.sha256)
-			) {
-				return 'Prolog language server requires a valid worker receipt';
-			}
-			return null;
-		},
+		validateConfig: validatePrologWorkerConfig,
 		cacheKeyParts: (config) => [
-			config.baseUrl,
-			config.workerUrl,
-			config.manifestUrl,
-			config.manifestFingerprint,
+			config.runtimePreflight.protocol,
+			String(config.runtimePreflight.protocolVersion),
+			config.runtimePreflight.profileId,
+			config.runtimePreflight.packageRevision,
+			config.runtimePreflight.swiplRevision,
+			config.runtimePreflight.manifestFingerprint,
+			String(config.runtimePreflight.manifestBytes.byteLength),
+			String(config.runtimePreflight.javascriptBytes.byteLength),
+			String(config.runtimePreflight.wasmBytes.byteLength),
+			String(config.runtimePreflight.dataBytes.byteLength),
 			String(config.workerReceipt.bytes),
-			config.workerReceipt.sha256
+			config.workerReceipt.sha256,
+			String(config.maxAssetBytes)
 		],
 		createMessage: (request) => ({
-			baseUrl: request.baseUrl,
-			manifestUrl: request.manifestUrl,
-			manifestFingerprint: request.manifestFingerprint,
-			maxAssetBytes: 32 * 1024 * 1024,
+			runtimePreflight: request.runtimePreflight,
+			maxAssetBytes: request.maxAssetBytes,
 			code: request.code,
 			activePath: request.activePath,
 			diagnose: true,

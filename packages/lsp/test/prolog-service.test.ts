@@ -1,20 +1,47 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+	PROLOG_MAX_ASSET_BYTES,
+	PROLOG_PREFLIGHT_PROTOCOL,
+	PROLOG_PREFLIGHT_PROTOCOL_VERSION,
+	type PrologRuntimePreflightPayload
+} from '@wasm-idle/core';
+import {
 	createPrologWorkerService,
 	type LspDocument,
-	type LspDocumentContext
+	type LspDocumentContext,
+	type PrologWorkerOptions
 } from '../src/index.js';
 
-const manifestFingerprint = 'a'.repeat(64);
-const workerReceipt = { bytes: 123, sha256: 'b'.repeat(64) };
-const workerOptions = {
-	baseUrl: '/wasm-prolog/',
-	workerUrl: '/wasm-prolog/runner-worker.js',
-	manifestUrl: '/wasm-prolog/runtime-manifest.v2.json',
-	manifestFingerprint,
-	workerReceipt
-};
+const runnerWorkerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
+const workerReceipt = { bytes: runnerWorkerBytes.byteLength, sha256: 'b'.repeat(64) };
+
+const createRuntimePreflight = (
+	overrides: Partial<PrologRuntimePreflightPayload> = {}
+): PrologRuntimePreflightPayload => ({
+	protocol: PROLOG_PREFLIGHT_PROTOCOL,
+	protocolVersion: PROLOG_PREFLIGHT_PROTOCOL_VERSION,
+	profileId: 'swipl-wasm-test',
+	packageRevision: '1'.repeat(40),
+	swiplRevision: '2'.repeat(40),
+	manifestFingerprint: 'a'.repeat(64),
+	manifestBytes: Uint8Array.of(1),
+	javascriptBytes: Uint8Array.of(2),
+	wasmBytes: Uint8Array.of(3),
+	dataBytes: Uint8Array.of(4),
+	...overrides
+});
+
+const createWorkerOptions = (
+	overrides: Partial<PrologWorkerOptions> = {}
+): PrologWorkerOptions => ({
+	workerReceipt,
+	runnerWorkerBytes,
+	runtimePreflight: createRuntimePreflight(),
+	maxAssetBytes: PROLOG_MAX_ASSET_BYTES,
+	...overrides
+});
+
 const document: LspDocument = {
 	uri: 'file:///workspace/main.prolog',
 	languageId: 'prolog',
@@ -28,12 +55,13 @@ const contextFor = (): LspDocumentContext => ({
 });
 
 describe('createPrologWorkerService', () => {
-	it('consults through the configured SWI-Prolog worker and returns diagnostics', async () => {
+	it('forwards only verified bytes and the strict preflight payload to diagnostics', async () => {
 		const runDiagnostics = vi.fn(async () => ({
 			error: 'ERROR: /main.prolog:2:3: Syntax error: Operator expected'
 		}));
 		const service = createPrologWorkerService(runDiagnostics);
 		const context = contextFor();
+		const workerOptions = createWorkerOptions();
 
 		await service.initialize?.(workerOptions, context);
 		const diagnostics = await service.diagnostics?.(document, context);
@@ -58,25 +86,46 @@ describe('createPrologWorkerService', () => {
 		expect(context.reportProgress).toHaveBeenCalledWith('load-prolog-runtime');
 	});
 
-	it('requires a pinned manifest and a valid worker receipt', () => {
-		const service = createPrologWorkerService(vi.fn(async () => ({})));
+	it('strictly rejects missing, extra, malformed, and over-limit initialization data', () => {
 		const context = contextFor();
+		const initialize = (value: unknown) =>
+			createPrologWorkerService(vi.fn(async () => ({}))).initialize?.(value, context);
+		const workerOptions = createWorkerOptions();
 
+		expect(() => initialize({ ...workerOptions, unexpected: true })).toThrow(
+			'exact verified runtime configuration'
+		);
 		expect(() =>
-			service.initialize?.({ ...workerOptions, manifestFingerprint: 'not-a-digest' }, context)
-		).toThrow('Prolog language server requires a manifest URL and fingerprint');
+			initialize({ ...workerOptions, workerReceipt: { bytes: 0, sha256: 'B'.repeat(64) } })
+		).toThrow('valid runner receipt');
+		expect(() => initialize({ ...workerOptions, runnerWorkerBytes: Uint8Array.of(1) })).toThrow(
+			'receipt-sized runner bytes'
+		);
 		expect(() =>
-			service.initialize?.(
-				{ ...workerOptions, workerReceipt: { bytes: 0, sha256: 'B'.repeat(64) } },
-				context
-			)
-		).toThrow('Prolog language server requires a valid worker receipt');
+			initialize({
+				...workerOptions,
+				runtimePreflight: { ...workerOptions.runtimePreflight, unexpected: true }
+			})
+		).toThrow('strict runtime preflight payload');
+		expect(() => initialize({ ...workerOptions, maxAssetBytes: 0 })).toThrow(
+			'valid maxAssetBytes limit'
+		);
+		expect(() =>
+			initialize({
+				...workerOptions,
+				maxAssetBytes: 1,
+				workerReceipt: { bytes: 1, sha256: 'c'.repeat(64) },
+				runnerWorkerBytes: Uint8Array.of(1),
+				runtimePreflight: createRuntimePreflight({ javascriptBytes: Uint8Array.of(1, 2) })
+			})
+		).toThrow('runtime preflight exceeds maxAssetBytes');
 	});
 
-	it('invalidates cached diagnostics when either trust pin changes', async () => {
+	it('invalidates cached diagnostics when compact profile or runner identity changes', async () => {
 		const runDiagnostics = vi.fn(async () => ({}));
 		const service = createPrologWorkerService(runDiagnostics);
 		const context = contextFor();
+		const workerOptions = createWorkerOptions();
 
 		await service.initialize?.(workerOptions, context);
 		await service.diagnostics?.(document, context);
@@ -84,25 +133,26 @@ describe('createPrologWorkerService', () => {
 		expect(runDiagnostics).toHaveBeenCalledTimes(1);
 
 		await service.initialize?.(
-			{ ...workerOptions, manifestFingerprint: 'c'.repeat(64) },
+			createWorkerOptions({
+				runtimePreflight: createRuntimePreflight({ manifestFingerprint: 'c'.repeat(64) })
+			}),
 			context
 		);
 		await service.diagnostics?.(document, context);
 		expect(runDiagnostics).toHaveBeenCalledTimes(2);
 
 		await service.initialize?.(
-			{
-				...workerOptions,
-				manifestFingerprint: 'c'.repeat(64),
-				workerReceipt: { bytes: 456, sha256: 'd'.repeat(64) }
-			},
+			createWorkerOptions({
+				runtimePreflight: createRuntimePreflight({ manifestFingerprint: 'c'.repeat(64) }),
+				workerReceipt: { ...workerReceipt, sha256: 'd'.repeat(64) }
+			}),
 			context
 		);
 		await service.diagnostics?.(document, context);
 		expect(runDiagnostics).toHaveBeenCalledTimes(3);
 	});
 
-	it('retries a failed integrity load and caches only the successful diagnostics', async () => {
+	it('retries a failed verified run and caches only successful diagnostics', async () => {
 		const runDiagnostics = vi
 			.fn()
 			.mockRejectedValueOnce(new Error('worker integrity verification failed'))
@@ -110,7 +160,7 @@ describe('createPrologWorkerService', () => {
 		const service = createPrologWorkerService(runDiagnostics);
 		const context = contextFor();
 
-		await service.initialize?.(workerOptions, context);
+		await service.initialize?.(createWorkerOptions(), context);
 		await expect(service.diagnostics?.(document, context)).rejects.toThrow(
 			'worker integrity verification failed'
 		);
@@ -131,7 +181,7 @@ describe('createPrologWorkerService', () => {
 		const service = createPrologWorkerService(runDiagnostics);
 		const context = contextFor();
 
-		await service.initialize?.(workerOptions, context);
+		await service.initialize?.(createWorkerOptions(), context);
 		const first = service.diagnostics?.(document, context);
 		const second = service.diagnostics?.(document, context);
 		expect(runDiagnostics).toHaveBeenCalledTimes(1);

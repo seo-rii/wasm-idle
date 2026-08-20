@@ -43,7 +43,8 @@ import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from '$lib/playground/wasmNimVersion';
 import {
 	WASM_PROLOG_ASSET_VERSION,
-	WASM_PROLOG_RUNNER_RECEIPT
+	WASM_PROLOG_RUNNER_RECEIPT,
+	WASM_PROLOG_RUNTIME_PROFILE
 } from '$lib/playground/wasmPrologVersion';
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from '$lib/playground/wasmPerlVersion';
 import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from '$lib/playground/wasmTclVersion';
@@ -53,6 +54,7 @@ import {
 	TEAVM_RUNTIME_ASSET_NAMES,
 	TEAVM_RUNTIME_ASSET_RECEIPTS,
 	deriveRubyRuntimeWasmUrl,
+	snapshotPrologRuntimePreflightProfile,
 	snapshotTeaVmRuntimeAssetReceipts,
 	type HaskellRuntimeAssetReceipts,
 	type RubyRuntimeAssetReceipts
@@ -255,6 +257,13 @@ export interface PrologRuntimeAssetConfig {
 	workerUrl?: string;
 	manifestUrl?: string;
 	manifestFingerprint?: string;
+	profileId?: string;
+	packageRevision?: string;
+	swiplRevision?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	javascriptReceipt?: RuntimeAssetIntegrityEntry;
+	wasmReceipt?: RuntimeAssetIntegrityEntry;
+	dataReceipt?: RuntimeAssetIntegrityEntry;
 	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
@@ -1987,11 +1996,56 @@ export function resolvePrologRuntimeAssetConfig(
 	currentUrl = ''
 ) {
 	const configured = typeof options === 'object' ? options?.prolog : undefined;
+	const manifestFingerprint =
+		configured?.manifestFingerprint?.trim() || WASM_PROLOG_ASSET_VERSION;
+	const usesBundledProfile = manifestFingerprint === WASM_PROLOG_ASSET_VERSION;
+	const receipt = (
+		configuredReceipt: RuntimeAssetIntegrityEntry | undefined,
+		bundledReceipt: RuntimeAssetIntegrityEntry
+	) => {
+		const selected = configuredReceipt || (usesBundledProfile ? bundledReceipt : undefined);
+		return selected
+			? Object.freeze({
+					bytes: selected.bytes,
+					sha256: selected.sha256,
+					...(selected.uncompressedBytes === undefined
+						? {}
+						: { uncompressedBytes: selected.uncompressedBytes }),
+					...(selected.uncompressedSha256 === undefined
+						? {}
+						: { uncompressedSha256: selected.uncompressedSha256 })
+				})
+			: undefined;
+	};
+	const preflightProfile = snapshotPrologRuntimePreflightProfile({
+		profileId:
+			configured?.profileId?.trim() ||
+			(usesBundledProfile ? WASM_PROLOG_RUNTIME_PROFILE.profileId : ''),
+		packageRevision:
+			configured?.packageRevision?.trim() ||
+			(usesBundledProfile ? WASM_PROLOG_RUNTIME_PROFILE.packageRevision : ''),
+		swiplRevision:
+			configured?.swiplRevision?.trim() ||
+			(usesBundledProfile ? WASM_PROLOG_RUNTIME_PROFILE.swiplRevision : ''),
+		manifestFingerprint,
+		manifestReceipt: receipt(
+			configured?.manifestReceipt,
+			WASM_PROLOG_RUNTIME_PROFILE.manifestReceipt
+		),
+		javascriptReceipt: receipt(
+			configured?.javascriptReceipt,
+			WASM_PROLOG_RUNTIME_PROFILE.javascriptReceipt
+		),
+		wasmReceipt: receipt(configured?.wasmReceipt, WASM_PROLOG_RUNTIME_PROFILE.wasmReceipt),
+		dataReceipt: receipt(configured?.dataReceipt, WASM_PROLOG_RUNTIME_PROFILE.dataReceipt)
+	});
 	return {
 		baseUrl: resolvePrologBaseUrl(options, currentUrl),
 		workerUrl: resolvePrologWorkerUrl(options, currentUrl),
 		manifestUrl: resolvePrologManifestUrl(options, currentUrl),
-		manifestFingerprint: configured?.manifestFingerprint?.trim() || WASM_PROLOG_ASSET_VERSION,
+		manifestFingerprint,
+		preflightKey: JSON.stringify(preflightProfile),
+		preflightProfile,
 		workerReceipt: configured?.workerReceipt || WASM_PROLOG_RUNNER_RECEIPT
 	};
 }

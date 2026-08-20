@@ -20,8 +20,6 @@ const workerSourceUrl = new URL(
 );
 const staticWorkerUrl = new URL('../../../static/wasm-prolog/runner-worker.js', import.meta.url);
 const staticRuntimeUrl = new URL('../../../static/wasm-prolog/', import.meta.url);
-const fixtureBaseUrl = 'https://runtime.example/wasm-prolog/';
-const fixtureManifestUrl = `${fixtureBaseUrl}runtime-manifest.v2.json?v=fixture`;
 const fixturePackage = {
 	integrity:
 		'sha512-tP3bSRaMboFRWGD5cfBAGIzu2HH80yqRG+i/YL8BEgQ7xasvJAycwgx0DW16vqqRhUHyFOOPbzX4aXuy9s+b1g==',
@@ -107,31 +105,41 @@ const fixtureManifest = {
 	assets: fixtureAssets,
 	storage: fixtureStorage
 };
-const overflowDataBytes = Buffer.concat([fixtureLogicalBytes['swipl-web.data'], Buffer.of(0)]);
-const overflowStorageBytes = gzipSync(overflowDataBytes, { level: 9 });
-const overflowStorage = fixtureStorage.map((receipt) =>
-	receipt.path === 'swipl-web.data.gz.bin'
-		? {
-				...receipt,
-				size: overflowStorageBytes.byteLength,
-				sha256: sha256(overflowStorageBytes)
-			}
-		: receipt
-);
-const overflowFingerprint = computePrologRuntimeFingerprint({
-	profileId: fixtureProfileId,
-	package: fixturePackage,
-	toolchain: fixtureToolchain,
-	license: fixtureLicense,
-	metadata: fixtureMetadata,
-	assets: fixtureAssets,
-	storage: overflowStorage
-});
-const overflowManifest = {
-	...fixtureManifest,
-	fingerprint: overflowFingerprint,
-	storage: overflowStorage
-};
+
+function runtimePreflight(
+	overrides: Partial<{
+		protocol: string;
+		protocolVersion: number;
+		profileId: string;
+		packageRevision: string;
+		swiplRevision: string;
+		manifestFingerprint: string;
+		manifestBytes: Uint8Array;
+		javascriptBytes: Uint8Array;
+		wasmBytes: Uint8Array;
+		dataBytes: Uint8Array;
+	}> = {}
+) {
+	return {
+		protocol: 'wasm-idle-prolog-preflight',
+		protocolVersion: 1,
+		profileId: fixtureProfileId,
+		packageRevision: fixturePackage.revision,
+		swiplRevision: fixtureToolchain.swiplRevision,
+		manifestFingerprint: fixtureFingerprint,
+		manifestBytes: Uint8Array.from(Buffer.from(JSON.stringify(fixtureManifest))),
+		javascriptBytes: Uint8Array.from(fixtureLogicalBytes['swipl-web.js']),
+		wasmBytes: Uint8Array.from(fixtureLogicalBytes['swipl-web.wasm']),
+		dataBytes: Uint8Array.from(fixtureLogicalBytes['swipl-web.data']),
+		...overrides
+	};
+}
+
+function mutatedManifestBytes(mutate: (manifest: any) => void) {
+	const manifest = JSON.parse(JSON.stringify(fixtureManifest));
+	mutate(manifest);
+	return Uint8Array.from(Buffer.from(JSON.stringify(manifest)));
+}
 
 async function readWorkerSource() {
 	return readFile(workerSourceUrl, 'utf8');
@@ -139,9 +147,6 @@ async function readWorkerSource() {
 
 async function createIntegrityHarnessWorker() {
 	const workerSource = await readWorkerSource();
-	const encodedStorage = Object.fromEntries(
-		Object.entries(fixtureStorageBytes).map(([path, bytes]) => [path, bytes.toString('base64')])
-	);
 	const harness = `
 const { parentPort } = require('node:worker_threads');
 const { webcrypto } = require('node:crypto');
@@ -166,22 +171,14 @@ const logicalBytes = Object.fromEntries(
 		)
   )}).map(([path, base64]) => [path, Buffer.from(base64, 'base64')])
 );
-const storageBytes = Object.fromEntries(
-  Object.entries(${JSON.stringify(encodedStorage)}).map(([path, base64]) => [path, Buffer.from(base64, 'base64')])
-);
-const storageLogicalPaths = ${JSON.stringify(
-		Object.fromEntries(
-			Object.entries(fixtureStorageMetadata).map(([path, metadata]) => [
-				path,
-				metadata.logicalPath
-			])
-		)
-	)};
-const overflowStorageBytes = Buffer.from(${JSON.stringify(overflowStorageBytes.toString('base64'))}, 'base64');
-const manifestTemplate = ${JSON.stringify(fixtureManifest)};
-const overflowManifestTemplate = ${JSON.stringify(overflowManifest)};
 globalThis.importScripts = (url) => {
   parentPort.postMessage({ harnessImported: url });
+  parentPort.postMessage({ harnessFactoryBeforeImport: typeof globalThis.SWIPL });
+  if (harnessMode === 'stale-global-no-factory') return;
+  if (harnessMode === 'import-failure') {
+    globalThis.SWIPL = () => Promise.reject(new Error('partial fixture factory'));
+    throw new Error('fixture import failure');
+  }
   globalThis.SWIPL = async (options) => {
     const wasmPath = options.locateFile('swipl-web.wasm');
     const dataPath = options.locateFile('swipl-web.data');
@@ -232,134 +229,25 @@ globalThis.importScripts = (url) => {
     };
   };
 };
-globalThis.fetch = async (url, init = {}) => {
-  const requestedUrl = String(url);
-  const pathname = new URL(requestedUrl).pathname;
-  const isManifest = pathname.endsWith('/runtime-manifest.v2.json');
-  const storageName = Object.keys(storageBytes).find((name) => pathname.endsWith('/' + name));
-  parentPort.postMessage({
-    harnessFetch: requestedUrl,
-    harnessFetchOptions: {
-      cache: init.cache,
-      credentials: init.credentials,
-      redirect: init.redirect,
-      referrerPolicy: init.referrerPolicy
-    }
-  });
-  const manifest = JSON.parse(JSON.stringify(
-    harnessMode === 'gzip-overflow' ? overflowManifestTemplate : manifestTemplate
-  ));
-  if (harnessMode === 'manifest-fingerprint') manifest.fingerprint = '0'.repeat(64);
-  if (harnessMode === 'unknown-asset') {
-    manifest.assets.push({
-      path: 'unexpected.bin', mediaType: 'application/octet-stream', size: 1, sha256: 'c'.repeat(64)
-    });
-  }
-  if (harnessMode === 'duplicate-asset') manifest.assets[2] = { ...manifest.assets[0] };
-  if (harnessMode === 'missing-storage') manifest.storage.pop();
-  if (harnessMode === 'package-metadata') manifest.package.revision = '0'.repeat(40);
-  if (harnessMode === 'license-receipt') manifest.license.sha256 = 'd'.repeat(64);
-  if (harnessMode === 'metadata-receipt') manifest.metadata.sha256 = 'e'.repeat(64);
-  if (harnessMode === 'storage-receipt') manifest.storage[0].sha256 = 'f'.repeat(64);
-  let bytes = isManifest
-    ? Buffer.from(harnessMode === 'invalid-manifest-json' ? '{' : JSON.stringify(manifest))
-    : storageName
-      ? Buffer.from(
-          harnessMode === 'gzip-overflow' && storageName === 'swipl-web.data.gz.bin'
-            ? overflowStorageBytes
-            : storageBytes[storageName]
-        )
-      : Buffer.alloc(0);
-  const targetedStorage = storageName === 'swipl-web.wasm.gz.bin';
-  const transportDecoded =
-    storageName?.endsWith('.gz.bin') &&
-    (harnessMode === 'transport-decoded' || harnessMode === 'corrupt-decoded');
-  if (transportDecoded) bytes = Buffer.from(logicalBytes[storageLogicalPaths[storageName]]);
-  if (harnessMode === 'corrupt-storage' && targetedStorage) bytes[bytes.length - 1] ^= 1;
-  if (harnessMode === 'corrupt-decoded' && targetedStorage) bytes[bytes.length - 1] ^= 1;
-  if (harnessMode === 'redirect-storage' && targetedStorage) {
-    return {
-      ok: true,
-      status: 200,
-      url: 'https://untrusted.example/swipl-web.wasm.gz',
-      headers: new Headers({ 'content-length': String(bytes.byteLength) }),
-      body: { cancel: () => parentPort.postMessage({ harnessCancelled: 'response' }) }
-    };
-  }
-  if (harnessMode === 'reader-failure' && targetedStorage) {
-    return {
-      ok: true,
-      status: 200,
-      url: requestedUrl,
-      headers: new Headers(),
-      body: {
-        getReader() { throw new Error('fixture reader failure'); },
-        cancel: () => parentPort.postMessage({ harnessCancelled: 'response' })
-      }
-    };
-  }
-  if ((harnessMode === 'truncated-storage' || harnessMode === 'overflow-storage') && targetedStorage) {
-    const streamedBytes = harnessMode === 'truncated-storage'
-      ? bytes.subarray(0, bytes.byteLength - 1)
-      : Buffer.concat([bytes, Buffer.of(0)]);
-    let cancelled = false;
-    return {
-      ok: true,
-      status: 200,
-      url: requestedUrl,
-      headers: new Headers(),
-      body: {
-        getReader() {
-          let sent = false;
-          return {
-            async read() {
-              if (sent) return { done: true };
-              sent = true;
-              return { done: false, value: streamedBytes };
-            },
-            cancel() {
-              cancelled = true;
-              parentPort.postMessage({ harnessCancelled: 'reader' });
-            },
-            releaseLock() {
-              parentPort.postMessage({ harnessReleased: true, harnessWasCancelled: cancelled });
-            }
-          };
-        }
-      }
-    };
-  }
-  if (
-    targetedStorage &&
-    (harnessMode === 'wrong-content-length' || harnessMode === 'invalid-content-length')
-  ) {
-    return {
-      ok: true,
-      status: 200,
-      url: requestedUrl,
-      headers: new Headers({
-        'content-length':
-          harnessMode === 'invalid-content-length' ? '1e2' : String(bytes.byteLength + 1)
-      }),
-      body: { cancel: () => parentPort.postMessage({ harnessCancelled: 'response' }) }
-    };
-  }
-  const responseHeaders = {
-    'content-length': String(
-      transportDecoded ? storageBytes[storageName].byteLength : bytes.byteLength
-    )
-  };
-  if (transportDecoded) responseHeaders['content-encoding'] = 'gzip';
-  const response = new Response(bytes, {
-    status: 200,
-    headers: responseHeaders
-  });
-  Object.defineProperty(response, 'url', { value: requestedUrl });
-  return response;
+globalThis.fetch = async (...args) => {
+  parentPort.postMessage({ harnessFetch: args.map(String) });
+  throw new Error('runner worker attempted a forbidden fetch');
 };
 (0, eval)(${JSON.stringify(workerSource)});
 parentPort.on('message', (data) => {
   harnessMode = data.harnessMode || '';
+  if (harnessMode === 'stale-global-no-factory') {
+    globalThis.SWIPL = async () => {
+      parentPort.postMessage({ harnessStaleFactoryCalled: true });
+      throw new Error('stale global SWIPL factory was called');
+    };
+  }
+  if (harnessMode === 'mutate-global-factory') {
+    globalThis.SWIPL = async () => {
+      parentPort.postMessage({ harnessMutatedFactoryCalled: true });
+      throw new Error('mutated global SWIPL factory was called');
+    };
+  }
   self.onmessage({ data });
 });
 `;
@@ -425,9 +313,7 @@ async function runHarnessSequence(requests: Record<string, unknown>[]) {
 
 function integrityRequest(overrides: Record<string, unknown> = {}) {
 	return {
-		baseUrl: fixtureBaseUrl,
-		manifestUrl: fixtureManifestUrl,
-		manifestFingerprint: fixtureFingerprint,
+		runtimePreflight: runtimePreflight(),
 		maxAssetBytes: 1_000_000,
 		code: 'main :- true.',
 		stdin: '68\n',
@@ -439,6 +325,9 @@ describe('SWI-Prolog runner worker', () => {
 	it('keeps the input lock, deployed receipts, runner pin, and fingerprint current', async () => {
 		const source = await readWorkerSource();
 		expect(await readFile(staticWorkerUrl, 'utf8')).toBe(source);
+		expect(source).not.toMatch(/\bfetch\s*\(/u);
+		expect(source).not.toContain('DecompressionStream');
+		expect(source).not.toContain('new URL(');
 		expect(Buffer.byteLength(source)).toBe(WASM_PROLOG_RUNNER_RECEIPT.bytes);
 		expect(sha256(source)).toBe(WASM_PROLOG_RUNNER_RECEIPT.sha256);
 		expect((await readdir(staticRuntimeUrl)).sort()).toEqual([
@@ -471,12 +360,26 @@ describe('SWI-Prolog runner worker', () => {
 		expect(runtimeBuild.toolchain).toEqual(inputLock.toolchain);
 		expect(manifest.fingerprint).toBe(WASM_PROLOG_ASSET_VERSION);
 		expect(computePrologRuntimeFingerprint(manifest)).toBe(WASM_PROLOG_ASSET_VERSION);
-		const assetByPath = new Map(
-			manifest.assets.map((asset: { path: string }) => [asset.path, asset])
+		const assetByPath = new Map<string, { path: string; size: number; sha256: string }>(
+			manifest.assets.map(
+				(asset: { path: string; size: number; sha256: string }) =>
+					[asset.path, asset] as const
+			)
 		);
-		const storageByLogicalPath = new Map(
-			manifest.storage.map((asset: { logicalPath: string }) => [asset.logicalPath, asset])
+		const storageByLogicalPath = new Map<
+			string,
+			{ logicalPath: string; size: number; sha256: string }
+		>(
+			manifest.storage.map(
+				(asset: { logicalPath: string; size: number; sha256: string }) =>
+					[asset.logicalPath, asset] as const
+			)
 		);
+		const javascriptReceipt = assetByPath.get('swipl-web.js')!;
+		const wasmAssetReceipt = assetByPath.get('swipl-web.wasm')!;
+		const wasmStorageReceipt = storageByLogicalPath.get('swipl-web.wasm')!;
+		const dataAssetReceipt = assetByPath.get('swipl-web.data')!;
+		const dataStorageReceipt = storageByLogicalPath.get('swipl-web.data')!;
 		expect(WASM_PROLOG_RUNTIME_PROFILE).toEqual({
 			profileId: manifest.profileId,
 			packageRevision: manifest.package.revision,
@@ -487,20 +390,20 @@ describe('SWI-Prolog runner worker', () => {
 				sha256: sha256(manifestBytes)
 			},
 			javascriptReceipt: {
-				bytes: assetByPath.get('swipl-web.js').size,
-				sha256: assetByPath.get('swipl-web.js').sha256
+				bytes: javascriptReceipt.size,
+				sha256: javascriptReceipt.sha256
 			},
 			wasmReceipt: {
-				bytes: storageByLogicalPath.get('swipl-web.wasm').size,
-				sha256: storageByLogicalPath.get('swipl-web.wasm').sha256,
-				uncompressedBytes: assetByPath.get('swipl-web.wasm').size,
-				uncompressedSha256: assetByPath.get('swipl-web.wasm').sha256
+				bytes: wasmStorageReceipt.size,
+				sha256: wasmStorageReceipt.sha256,
+				uncompressedBytes: wasmAssetReceipt.size,
+				uncompressedSha256: wasmAssetReceipt.sha256
 			},
 			dataReceipt: {
-				bytes: storageByLogicalPath.get('swipl-web.data').size,
-				sha256: storageByLogicalPath.get('swipl-web.data').sha256,
-				uncompressedBytes: assetByPath.get('swipl-web.data').size,
-				uncompressedSha256: assetByPath.get('swipl-web.data').sha256
+				bytes: dataStorageReceipt.size,
+				sha256: dataStorageReceipt.sha256,
+				uncompressedBytes: dataAssetReceipt.size,
+				uncompressedSha256: dataAssetReceipt.sha256
 			}
 		});
 
@@ -540,28 +443,14 @@ describe('SWI-Prolog runner worker', () => {
 				})
 			);
 		}
-	}, 15_000);
+	}, 60_000);
 
-	it('loads only declared storage and injects verified Wasm and data into Blob-evaluated glue', async () => {
+	it('accepts only host-preflighted logical bytes and never fetches or decompresses assets', async () => {
 		const messages = await runHarness(integrityRequest());
 
 		expect(messages.at(-1)).toEqual({ results: true });
 		expect(messages.map((message) => message.output || '').join('')).toContain('received=68');
-		const fetches = messages.filter((message) => message.harnessFetch);
-		expect(fetches).toHaveLength(4);
-		expect(fetches.map((message) => new URL(message.harnessFetch).pathname)).toEqual([
-			'/wasm-prolog/runtime-manifest.v2.json',
-			'/wasm-prolog/swipl-web.data.gz.bin',
-			'/wasm-prolog/swipl-web.js',
-			'/wasm-prolog/swipl-web.wasm.gz.bin'
-		]);
-		for (const message of fetches) {
-			expect(message.harnessFetchOptions).toMatchObject({
-				credentials: 'omit',
-				redirect: 'error',
-				referrerPolicy: 'no-referrer'
-			});
-		}
+		expect(messages.some((message) => message.harnessFetch)).toBe(false);
 		expect(messages).toContainEqual(
 			expect.objectContaining({
 				harnessImported: expect.stringMatching(/^blob:wasm-prolog-/u)
@@ -583,17 +472,169 @@ describe('SWI-Prolog runner worker', () => {
 		});
 	});
 
-	it('cleans every SWI-Prolog instance while reusing one verified asset generation', async () => {
+	it('rejects missing, extra, or version-mismatched preflight fields before evaluation', async () => {
+		const missing = runtimePreflight() as Record<string, unknown>;
+		delete missing.dataBytes;
+		for (const [payload, error] of [
+			[missing, 'invalid shape'],
+			[{ ...runtimePreflight(), unexpected: true }, 'invalid shape'],
+			[runtimePreflight({ protocol: 'wasm-idle-prolog-preflight-v2' }), 'payload is invalid'],
+			[runtimePreflight({ protocolVersion: 2 }), 'payload is invalid']
+		] as const) {
+			const messages = await runHarness(integrityRequest({ runtimePreflight: payload }));
+			expect(messages.at(-1)).toEqual({ error: expect.stringContaining(error) });
+			expect(messages.some((message) => message.harnessImported)).toBe(false);
+			expect(messages.some((message) => message.harnessFetch)).toBe(false);
+		}
+	});
+
+	it.each([
+		[
+			'extra top-level manifest field',
+			mutatedManifestBytes((manifest) => {
+				manifest.unexpected = true;
+			}),
+			'manifest format is unsupported'
+		],
+		[
+			'manifest identity',
+			mutatedManifestBytes((manifest) => {
+				manifest.fingerprint = '0'.repeat(64);
+			}),
+			'manifest identity is invalid'
+		],
+		[
+			'unknown logical asset',
+			mutatedManifestBytes((manifest) => {
+				manifest.assets[2].path = 'unexpected.bin';
+			}),
+			'unexpected or duplicate logical asset'
+		],
+		[
+			'duplicate logical asset',
+			mutatedManifestBytes((manifest) => {
+				manifest.assets[2] = { ...manifest.assets[0] };
+			}),
+			'unexpected or duplicate logical asset'
+		],
+		[
+			'missing storage asset',
+			mutatedManifestBytes((manifest) => {
+				manifest.storage.pop();
+			}),
+			'exactly three storage assets'
+		],
+		[
+			'package provenance',
+			mutatedManifestBytes((manifest) => {
+				manifest.package.revision = '0'.repeat(40);
+			}),
+			'package metadata is invalid'
+		],
+		[
+			'extra license receipt field',
+			mutatedManifestBytes((manifest) => {
+				manifest.license.unexpected = true;
+			}),
+			'license receipt is invalid'
+		],
+		[
+			'metadata receipt graph',
+			mutatedManifestBytes((manifest) => {
+				manifest.metadata.sha256 = 'e'.repeat(64);
+			}),
+			'receipt graph failed fingerprint verification'
+		],
+		[
+			'storage receipt graph',
+			mutatedManifestBytes((manifest) => {
+				manifest.storage[0].sha256 = 'f'.repeat(64);
+			}),
+			'receipt graph failed fingerprint verification'
+		]
+	])('rejects %s before evaluating the runtime glue', async (_label, manifestBytes, error) => {
+		const messages = await runHarness(
+			integrityRequest({ runtimePreflight: runtimePreflight({ manifestBytes }) })
+		);
+
+		expect(messages.at(-1)).toEqual({ error: expect.stringContaining(error) });
+		expect(messages.some((message) => message.harnessImported)).toBe(false);
+	});
+
+	it.each([
+		['JavaScript', 'javascriptBytes', fixtureLogicalBytes['swipl-web.js']],
+		['Wasm', 'wasmBytes', fixtureLogicalBytes['swipl-web.wasm']],
+		['data', 'dataBytes', fixtureLogicalBytes['swipl-web.data']]
+	])('rejects corrupted logical %s bytes before evaluation', async (_label, key, source) => {
+		const bytes = Uint8Array.from(source);
+		bytes[bytes.byteLength - 1] ^= 1;
+		const messages = await runHarness(
+			integrityRequest({ runtimePreflight: runtimePreflight({ [key]: bytes }) })
+		);
+
+		expect(messages.at(-1)).toEqual({
+			error: expect.stringContaining('failed SHA-256 verification')
+		});
+		expect(messages.some((message) => message.harnessImported)).toBe(false);
+	});
+
+	it('rejects invalid manifest bytes and validates caps without reconsuming warm payload bytes', async () => {
+		const invalidManifest = await runHarness(
+			integrityRequest({
+				runtimePreflight: runtimePreflight({ manifestBytes: Uint8Array.from([0xff]) })
+			})
+		);
+		expect(invalidManifest.at(-1)).toEqual({
+			error: 'SWI-Prolog runtime manifest is not valid UTF-8 JSON.'
+		});
+
+		const payload = runtimePreflight();
+		const ignoredWarmWasmBytes = Uint8Array.from(fixtureLogicalBytes['swipl-web.wasm']);
+		ignoredWarmWasmBytes[ignoredWarmWasmBytes.byteLength - 1] ^= 1;
 		const { messages, terminals } = await runHarnessSequence([
-			integrityRequest({ code: 'main :- writeln(first).' }),
-			integrityRequest({ code: 'main :- writeln(second).' })
+			integrityRequest({ runtimePreflight: payload }),
+			integrityRequest({
+				runtimePreflight: runtimePreflight({ wasmBytes: ignoredWarmWasmBytes }),
+				maxAssetBytes: payload.manifestBytes.byteLength
+			}),
+			integrityRequest({ runtimePreflight: runtimePreflight(), maxAssetBytes: 1 })
+		]);
+		expect(terminals).toEqual([
+			{ results: true },
+			{ results: true },
+			{ error: 'SWI-Prolog runtime manifest exceeds its byte limit.' }
+		]);
+		expect(messages.filter((message) => message.harnessImported)).toHaveLength(1);
+		expect(messages.filter((message) => message.harnessInjected)).toEqual([
+			expect.objectContaining({
+				harnessInjected: expect.objectContaining({
+					wasmSha256: sha256(fixtureLogicalBytes['swipl-web.wasm'])
+				})
+			}),
+			expect.objectContaining({
+				harnessInjected: expect.objectContaining({
+					wasmSha256: sha256(fixtureLogicalBytes['swipl-web.wasm'])
+				})
+			})
+		]);
+	});
+
+	it('verifies an empty source before running and cleans each warm SWI-Prolog instance', async () => {
+		const { messages, terminals } = await runHarnessSequence([
+			integrityRequest({ code: '' }),
+			integrityRequest({
+				code: 'main :- writeln(second).',
+				harnessMode: 'mutate-global-factory'
+			}),
+			integrityRequest({ code: 'main :- writeln(third).' })
 		]);
 
-		expect(terminals).toEqual([{ results: true }, { results: true }]);
-		expect(messages.filter((message) => message.harnessFetch)).toHaveLength(4);
+		expect(terminals).toEqual([{ results: true }, { results: true }, { results: true }]);
 		expect(messages.filter((message) => message.harnessImported)).toHaveLength(1);
-		expect(messages.filter((message) => message.harnessInjected)).toHaveLength(2);
+		expect(messages.filter((message) => message.harnessInjected)).toHaveLength(3);
+		expect(messages.some((message) => message.harnessMutatedFactoryCalled)).toBe(false);
 		expect(messages.filter((message) => 'harnessCleanup' in message)).toEqual([
+			{ harnessCleanup: 0 },
 			{ harnessCleanup: 0 },
 			{ harnessCleanup: 0 }
 		]);
@@ -609,99 +650,55 @@ describe('SWI-Prolog runner worker', () => {
 		expect(messages).not.toContainEqual({ results: true });
 	});
 
-	it('accepts browser-transparent gzip decoding only after the logical receipt matches', async () => {
-		const messages = await runHarness(integrityRequest({ harnessMode: 'transport-decoded' }));
-
-		expect(messages.at(-1)).toEqual({ results: true });
-		expect(messages).toContainEqual(
-			expect.objectContaining({
-				harnessImported: expect.stringMatching(/^blob:wasm-prolog-/u)
-			})
-		);
-		expect(messages).toContainEqual(
-			expect.objectContaining({
-				harnessInjected: expect.objectContaining({
-					wasmSha256: sha256(fixtureLogicalBytes['swipl-web.wasm']),
-					dataSha256: sha256(fixtureLogicalBytes['swipl-web.data'])
-				})
-			})
-		);
-	});
-
-	it.each([
-		['manifest-fingerprint', 'fingerprint does not match'],
-		['invalid-manifest-json', 'not valid UTF-8 JSON'],
-		['unknown-asset', 'exactly three logical assets'],
-		['duplicate-asset', 'unexpected or duplicate logical asset'],
-		['missing-storage', 'exactly three storage assets'],
-		['package-metadata', 'package metadata is invalid'],
-		['license-receipt', 'receipt graph failed fingerprint verification'],
-		['metadata-receipt', 'receipt graph failed fingerprint verification'],
-		['storage-receipt', 'receipt graph failed fingerprint verification'],
-		['corrupt-storage', 'failed SHA-256 verification'],
-		['corrupt-decoded', 'failed SHA-256 verification']
-	])('rejects %s before evaluating the runtime glue', async (harnessMode, error) => {
-		const messages = await runHarness(integrityRequest({ harnessMode }));
-
-		expect(messages.at(-1)).toEqual({ error: expect.stringContaining(error) });
-		expect(messages.some((message) => message.harnessImported)).toBe(false);
-	});
-
-	it.each([
-		['redirect-storage', 'response URL does not match', 'response'],
-		['reader-failure', 'fixture reader failure', 'response'],
-		['wrong-content-length', 'Content-Length does not match', 'response'],
-		['invalid-content-length', 'invalid Content-Length', 'response'],
-		['truncated-storage', 'is truncated', undefined],
-		['overflow-storage', 'exceeds its receipt size', 'reader']
-	])('rejects %s with bounded stream cleanup', async (harnessMode, error, cancellation) => {
-		const messages = await runHarness(integrityRequest({ harnessMode }));
-
-		expect(messages.at(-1)).toEqual({ error: expect.stringContaining(error) });
-		if (cancellation) expect(messages).toContainEqual({ harnessCancelled: cancellation });
-		if (cancellation === 'reader') {
-			expect(messages).toContainEqual({ harnessReleased: true, harnessWasCancelled: true });
-		}
-	});
-
-	it('rejects gzip expansion beyond the logical receipt before evaluating the runtime', async () => {
-		const messages = await runHarness(
-			integrityRequest({
-				harnessMode: 'gzip-overflow',
-				manifestFingerprint: overflowFingerprint
-			})
-		);
-
-		expect(messages.at(-1)).toEqual({
-			error: expect.stringContaining('gzip exceeds its logical receipt size')
-		});
-		expect(messages.some((message) => message.harnessImported)).toBe(false);
-	});
-
-	it('clears a failed verification generation so the same worker can retry cleanly', async () => {
+	it('clears a failed initialization generation and partial global factory before retry', async () => {
 		const { messages, terminals } = await runHarnessSequence([
-			integrityRequest({ harnessMode: 'corrupt-storage' }),
+			integrityRequest({ harnessMode: 'import-failure' }),
+			integrityRequest()
+		]);
+
+		expect(terminals).toEqual([{ error: 'fixture import failure' }, { results: true }]);
+		expect(messages.filter((message) => message.harnessImported)).toHaveLength(2);
+		expect(messages.filter((message) => message.harnessFactoryBeforeImport)).toEqual([
+			{ harnessFactoryBeforeImport: 'undefined' },
+			{ harnessFactoryBeforeImport: 'undefined' }
+		]);
+		expect(messages.filter((message) => message.harnessBlobRevoked)).toHaveLength(2);
+	});
+
+	it('requires evaluated JavaScript to publish a fresh factory instead of capturing a stale global', async () => {
+		const { messages, terminals } = await runHarnessSequence([
+			integrityRequest({ harnessMode: 'stale-global-no-factory' }),
 			integrityRequest()
 		]);
 
 		expect(terminals).toEqual([
-			{ error: expect.stringContaining('failed SHA-256 verification') },
+			{ error: 'SWI-Prolog runtime JavaScript did not initialize.' },
 			{ results: true }
 		]);
-		expect(messages.filter((message) => message.harnessImported)).toHaveLength(1);
+		expect(messages.some((message) => message.harnessStaleFactoryCalled)).toBe(false);
+		expect(messages.filter((message) => message.harnessFactoryBeforeImport)).toEqual([
+			{ harnessFactoryBeforeImport: 'undefined' },
+			{ harnessFactoryBeforeImport: 'undefined' }
+		]);
+		expect(messages.filter((message) => message.harnessImported)).toHaveLength(2);
 	});
 
-	it('refuses to replace a verified runtime profile in a warm worker', async () => {
+	it('rejects a warm identity mismatch without discarding the verified profile', async () => {
 		const { messages, terminals } = await runHarnessSequence([
 			integrityRequest(),
-			integrityRequest({ baseUrl: 'https://runtime.example/other-prolog/' })
+			integrityRequest({
+				runtimePreflight: runtimePreflight({ profileId: 'swipl-wasm-other-profile' })
+			}),
+			integrityRequest()
 		]);
 
 		expect(terminals).toEqual([
 			{ results: true },
-			{ error: 'SWI-Prolog worker cannot replace an initialized runtime profile.' }
+			{ error: 'SWI-Prolog worker cannot replace an initialized runtime profile.' },
+			{ results: true }
 		]);
-		expect(messages.filter((message) => message.harnessFetch)).toHaveLength(4);
+		expect(messages.filter((message) => message.harnessImported)).toHaveLength(1);
+		expect(messages.filter((message) => message.harnessInjected)).toHaveLength(2);
 	});
 
 	it('prints a prompt before consuming live shared-ring input', async () => {

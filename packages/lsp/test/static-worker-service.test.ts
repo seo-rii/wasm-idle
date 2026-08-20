@@ -10,10 +10,16 @@ vi.mock('../src/runtime-worker.js', () => ({
 
 import { createStaticWorkerDiagnostics } from '../src/static-worker-service.js';
 import {
+	createPrologWorkerService,
 	createPerlWorkerService,
 	type LspDocument,
 	type LspDocumentContext
 } from '../src/index.js';
+import {
+	PROLOG_MAX_ASSET_BYTES,
+	PROLOG_PREFLIGHT_PROTOCOL,
+	PROLOG_PREFLIGHT_PROTOCOL_VERSION
+} from '@wasm-idle/core';
 
 const contextFor = (document: LspDocument): LspDocumentContext => ({
 	documents: new Map([[document.uri, document]]),
@@ -194,6 +200,61 @@ describe('createStaticWorkerDiagnostics', () => {
 				maxAssetBytes: 32 * 1024 * 1024,
 				code: document.text,
 				activePath: 'main.pl',
+				diagnose: true,
+				log: false
+			}
+		});
+	});
+
+	it('forwards Prolog runner bytes directly with the strict runtime payload', async () => {
+		mocks.runRuntimeWorkerDiagnostics.mockClear();
+		const service = createPrologWorkerService();
+		const document: LspDocument = {
+			uri: 'file:///workspace/main.prolog',
+			languageId: 'prolog',
+			version: 1,
+			text: 'main :- true.\n'
+		};
+		const context = contextFor(document);
+		const runnerWorkerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
+		const workerReceipt = {
+			bytes: runnerWorkerBytes.byteLength,
+			sha256: 'a'.repeat(64)
+		};
+		const runtimePreflight = {
+			protocol: PROLOG_PREFLIGHT_PROTOCOL,
+			protocolVersion: PROLOG_PREFLIGHT_PROTOCOL_VERSION,
+			profileId: 'swipl-wasm-test',
+			packageRevision: '1'.repeat(40),
+			swiplRevision: '2'.repeat(40),
+			manifestFingerprint: '3'.repeat(64),
+			manifestBytes: Uint8Array.of(1),
+			javascriptBytes: Uint8Array.of(2),
+			wasmBytes: Uint8Array.of(3),
+			dataBytes: Uint8Array.of(4)
+		};
+
+		service.initialize?.(
+			{
+				workerReceipt,
+				runnerWorkerBytes,
+				runtimePreflight,
+				maxAssetBytes: PROLOG_MAX_ASSET_BYTES
+			},
+			context
+		);
+		await service.diagnostics?.(document, context);
+
+		expect(mocks.runRuntimeWorkerDiagnostics).toHaveBeenCalledWith({
+			workerUrl: undefined,
+			workerReceipt,
+			workerBytes: runnerWorkerBytes,
+			timeoutMessage: 'Prolog diagnostics timed out',
+			message: {
+				runtimePreflight,
+				maxAssetBytes: PROLOG_MAX_ASSET_BYTES,
+				code: document.text,
+				activePath: 'main.prolog',
 				diagnose: true,
 				log: false
 			}

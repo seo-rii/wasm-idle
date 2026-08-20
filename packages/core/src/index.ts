@@ -202,6 +202,20 @@ export {
 	type RuntimeAssetPreflightResult
 } from './runtime-preflight.js';
 export {
+	PROLOG_PREFLIGHT_PROTOCOL,
+	PROLOG_PREFLIGHT_PROTOCOL_VERSION,
+	PROLOG_PREFLIGHT_RUNTIME_ID,
+	PROLOG_MAX_ASSET_BYTES,
+	clonePrologRuntimePreflightPayload,
+	preflightPrologRuntimeAssets,
+	requirePrologRuntimePreflightPayload,
+	snapshotPrologRuntimePreflightProfile,
+	verifyPrologRuntimePreflightPayload,
+	type PrologRuntimePreflightPayload,
+	type PrologRuntimePreflightProfile,
+	type PrologRuntimePreflightRequest
+} from './prolog-runtime.js';
+export {
 	activatePreflightedRuntimeProfile,
 	type ActivatePreflightedRuntimeProfileRequest,
 	type RuntimeAssetDecodeRequest,

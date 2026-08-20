@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const workerInstances: MockWorker[] = [];
@@ -121,6 +123,7 @@ import {
 } from './staticStdinRing';
 import { StaticWorkerRuntimeSandbox } from './staticWorkerRuntime';
 import Tcl from './tcl';
+import { resolvePrologRuntimeAssetConfig } from './assets';
 import bqnWorkerSource from '../../../scripts/runtime-workers/wasm-bqn-runner-worker.js?raw';
 import clojureScriptWorkerSource from '../../../scripts/runtime-workers/wasm-clojurescript-runner-worker.js?raw';
 import forthWorkerSource from '../../../scripts/runtime-workers/wasm-forth-runner-worker.js?raw';
@@ -147,7 +150,11 @@ import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanet
 import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
-import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
+import {
+	WASM_PROLOG_ASSET_VERSION,
+	WASM_PROLOG_RUNNER_RECEIPT,
+	WASM_PROLOG_RUNTIME_PROFILE
+} from './wasmPrologVersion';
 import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
 
 const jTestManifestSource = '{"runtime":"fixture"}\n';
@@ -241,6 +248,21 @@ function bqnTestRuntimeAssets(workerUrl = '/wasm-bqn/runner-worker.js?v=test') {
 const clojureScriptTestManifestSource = '{"runtime":"fixture"}\n';
 const clojureScriptTestCompilerBytes = Uint8Array.from(jTestWasmBytes);
 const clojureScriptTestCompilerGzipBytes = Uint8Array.from(jTestWasmGzipBytes);
+
+const prologManifestSource = readFileSync(
+	resolve(process.cwd(), 'static/wasm-prolog/runtime-manifest.v2.json'),
+	'utf8'
+);
+const prologRuntimeJavaScriptSource = readFileSync(
+	resolve(process.cwd(), 'static/wasm-prolog/swipl-web.js'),
+	'utf8'
+);
+const prologRuntimeWasmGzipBytes = Uint8Array.from(
+	readFileSync(resolve(process.cwd(), 'static/wasm-prolog/swipl-web.wasm.gz.bin'))
+);
+const prologRuntimeDataGzipBytes = Uint8Array.from(
+	readFileSync(resolve(process.cwd(), 'static/wasm-prolog/swipl-web.data.gz.bin'))
+);
 const clojureScriptTestProfile = {
 	profileId: 'clojurescript-1.12.134-test',
 	sourceRevision: 'r1.12.134',
@@ -278,6 +300,44 @@ function clojureScriptTestRuntimeAssets(workerUrl = '/wasm-clojurescript/runner-
 function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 	const inputUrl = String(input);
 	runtimeLifecycleEvents.push(`fetch:${inputUrl}`);
+	if (inputUrl.includes('/wasm-prolog/runtime-manifest.v2.json')) {
+		return new Response(prologManifestSource, {
+			status: 200,
+			headers: {
+				'content-length': String(new TextEncoder().encode(prologManifestSource).byteLength),
+				'content-type': 'application/json'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-prolog/swipl-web.js')) {
+		return new Response(prologRuntimeJavaScriptSource, {
+			status: 200,
+			headers: {
+				'content-length': String(
+					new TextEncoder().encode(prologRuntimeJavaScriptSource).byteLength
+				),
+				'content-type': 'text/javascript'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-prolog/swipl-web.wasm.gz.bin')) {
+		return new Response(Uint8Array.from(prologRuntimeWasmGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(prologRuntimeWasmGzipBytes.byteLength),
+				'content-type': 'application/octet-stream'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-prolog/swipl-web.data.gz.bin')) {
+		return new Response(Uint8Array.from(prologRuntimeDataGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(prologRuntimeDataGzipBytes.byteLength),
+				'content-type': 'application/octet-stream'
+			}
+		});
+	}
 	if (inputUrl.includes('/wasm-forth/runtime-manifest.v2.json')) {
 		return new Response(forthManifestSource, {
 			status: 200,
@@ -433,6 +493,26 @@ function createPersistentTestSandbox() {
 			baseUrl: `${String(runtimeAssets || '/persistent-test').replace(/\/$/u, '')}/`,
 			workerUrl: `${String(runtimeAssets || '/persistent-test').replace(/\/$/u, '')}/worker.js`
 		})
+	});
+}
+
+function createPrologLifecycleTestSandbox() {
+	return new StaticWorkerRuntimeSandbox({
+		languageId: 'PROLOG',
+		displayName: 'Prolog',
+		defaultActivePath: 'main.prolog',
+		stdin: {
+			mode: 'streaming',
+			sourceHintPattern:
+				/\b(read_line_to_string|read_line_to_codes|get_char|get_code|read\s*\(|read_string)\b/
+		},
+		workerLifetime: {
+			mode: 'persistent',
+			idleTimeoutMs: 60_000,
+			evictOnMemoryPressure: true
+		},
+		inlineVerifiedWorker: true,
+		resolveRuntimeAssets: resolvePrologRuntimeAssetConfig
 	});
 }
 
@@ -661,7 +741,7 @@ describe('static worker backed language sandboxes', () => {
 		});
 	});
 
-	it('loads Prolog runtime urls and forwards stdin to the SWI-Prolog worker', async () => {
+	it('preflights Prolog runtime bytes before worker creation and reuses them for warm runs', async () => {
 		const sandbox = new Prolog();
 		const outputs: string[] = [];
 		const code = 'main :- read_line_to_string(user_input, Line), format("~w~n", [Line]).';
@@ -670,9 +750,9 @@ describe('static worker backed language sandboxes', () => {
 		await sandbox.load({
 			prolog: {
 				baseUrl: '/wasm-prolog/',
-				workerUrl: '/wasm-prolog/runner-worker.js?v=test',
-				manifestUrl: '/wasm-prolog/runtime-manifest.v2.json?v=test',
-				manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
+				workerUrl: `/wasm-prolog/runner-worker.js?v=${WASM_PROLOG_RUNNER_RECEIPT.sha256}`,
+				manifestUrl: `/wasm-prolog/runtime-manifest.v2.json?v=${WASM_PROLOG_ASSET_VERSION}`,
+				...WASM_PROLOG_RUNTIME_PROFILE,
 				workerReceipt: WASM_PROLOG_RUNNER_RECEIPT
 			}
 		});
@@ -690,21 +770,57 @@ describe('static worker backed language sandboxes', () => {
 
 		await expectVerifiedWorkerBootstrap(
 			worker,
-			'http://localhost:3000/wasm-prolog/runner-worker.js?v=test',
+			`http://localhost:3000/wasm-prolog/runner-worker.js?v=${WASM_PROLOG_RUNNER_RECEIPT.sha256}`,
 			prologWorkerSource
 		);
-		expect(worker.postMessage).toHaveBeenCalledWith(
+		const runMessages = worker.postMessage.mock.calls.map(([message]) => message);
+		expect(runMessages).toHaveLength(2);
+		expect(runMessages[0]).toEqual(
 			expect.objectContaining({
 				runId: expect.stringMatching(/^static-\d+$/),
-				baseUrl: 'http://localhost:3000/wasm-prolog/',
-				manifestUrl: 'http://localhost:3000/wasm-prolog/runtime-manifest.v2.json?v=test',
 				manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
+				runtimePreflight: expect.objectContaining({
+					protocol: 'wasm-idle-prolog-preflight',
+					protocolVersion: 1,
+					profileId: WASM_PROLOG_RUNTIME_PROFILE.profileId,
+					packageRevision: WASM_PROLOG_RUNTIME_PROFILE.packageRevision,
+					swiplRevision: WASM_PROLOG_RUNTIME_PROFILE.swiplRevision,
+					manifestFingerprint: WASM_PROLOG_ASSET_VERSION
+				}),
 				code,
 				args: ['demo'],
 				stdin: '27\n',
 				activePath: 'main.prolog'
 			})
 		);
+		expect(runMessages[0].runtimePreflight.wasmBytes).toHaveLength(
+			WASM_PROLOG_RUNTIME_PROFILE.wasmReceipt.uncompressedBytes
+		);
+		expect(runMessages[0].runtimePreflight.dataBytes).toHaveLength(
+			WASM_PROLOG_RUNTIME_PROFILE.dataReceipt.uncompressedBytes
+		);
+		expect(runMessages[1].runtimePreflight).toBe(runMessages[0].runtimePreflight);
+		const workerEventIndex = runtimeLifecycleEvents.findIndex((event) =>
+			event.startsWith('worker:')
+		);
+		for (const assetPath of [
+			'runtime-manifest.v2.json',
+			'swipl-web.js',
+			'swipl-web.wasm.gz.bin',
+			'swipl-web.data.gz.bin',
+			'runner-worker.js'
+		]) {
+			const fetchEventIndex = runtimeLifecycleEvents.findIndex(
+				(event) => event.startsWith('fetch:') && event.includes(assetPath)
+			);
+			expect(fetchEventIndex).toBeGreaterThanOrEqual(0);
+			expect(fetchEventIndex).toBeLessThan(workerEventIndex);
+		}
+		expect(
+			runtimeLifecycleEvents.filter(
+				(event) => event.startsWith('fetch:') && event.includes('/wasm-prolog/')
+			)
+		).toHaveLength(5);
 		expect(sandbox.workerReceipt).toEqual(WASM_PROLOG_RUNNER_RECEIPT);
 		expect(outputs).toContain('factorial_plus_bonus=27\n');
 		expect(workerInstances).toEqual([worker]);
@@ -715,20 +831,49 @@ describe('static worker backed language sandboxes', () => {
 
 	it('rejects a modified Prolog runner before creating a worker', async () => {
 		const modifiedSource = `x${prologWorkerSource.slice(1)}`;
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(modifiedSource, {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-prolog/runner-worker.js')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			return new Response(modifiedSource, {
 				status: 200,
 				headers: {
 					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
 				}
-			})
-		);
+			});
+		});
 		const sandbox = new Prolog();
 
 		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
 			code: 'asset-integrity',
 			runtimeId: 'PROLOG'
 		});
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects a corrupt Prolog runtime asset before loading the runner or creating a worker', async () => {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-prolog/swipl-web.data.gz.bin')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			return new Response(Uint8Array.from([...prologRuntimeDataGzipBytes, 0]), {
+				status: 200,
+				headers: { 'content-type': 'application/octet-stream' }
+			});
+		});
+		const sandbox = new Prolog();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'PROLOG'
+		});
+		expect(
+			vi
+				.mocked(fetch)
+				.mock.calls.some(([input]) =>
+					String(input).includes('/wasm-prolog/runner-worker.js')
+				)
+		).toBe(false);
 		expect(workerInstances).toHaveLength(0);
 	});
 
@@ -1973,7 +2118,7 @@ describe('static worker backed language sandboxes', () => {
 				if (throwOnReady && stage === 'Prolog worker ready') throw callbackError;
 			})
 		};
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const load = sandbox.load(
 			'/absproxy/5173',
 			'',
@@ -2016,7 +2161,7 @@ describe('static worker backed language sandboxes', () => {
 	it('settles successful worker startup when caller-owned signal cleanup throws', async () => {
 		autoStartWorkers = false;
 		const controller = new AbortController();
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const load = sandbox.load('/absproxy/5173', '', true, [], {
 			signal: controller.signal
 		});
@@ -2035,7 +2180,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('reserves run ownership before the initial progress callback can reenter', async () => {
 		onPostMessage = () => {};
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		let nested: Promise<boolean | string> | undefined;
 		let reenter = true;
@@ -2075,7 +2220,7 @@ describe('static worker backed language sandboxes', () => {
 				throw callbackError;
 			})
 		};
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		let failed: Promise<boolean | string> | undefined;
 
@@ -2090,7 +2235,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('preserves disposal when initial run progress disposes and then throws', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const worker = workerInstances[0];
 		const callbackError = new Error('initial run progress failed after disposal');
@@ -2115,7 +2260,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('does not dispatch a run after progress reentrantly disposes its worker', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const worker = workerInstances[0];
 		const progress = {
@@ -2137,7 +2282,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('classifies reentrant termination of a prepare-only run as startup cancellation', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		let terminateOnPrepare = true;
 		const progress = {
@@ -2158,7 +2303,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('rejects a prepare run asynchronously when signal registration throws and permits retry', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		sandbox.terminate();
 		const callbackError = new Error('signal registration failed');
@@ -2183,7 +2328,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('cancels an immediately terminated prepare startup without recreating its worker', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		sandbox.terminate();
 		const retiredWorker = workerInstances[0];
@@ -2201,7 +2346,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('cancels an immediately terminated warm prepare', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const worker = workerInstances[0];
 
@@ -2219,7 +2364,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('preserves disposal when warm prepare progress disposes and then throws', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const worker = workerInstances[0];
 		const callbackError = new Error('warm prepare progress failed after disposal');
@@ -2241,7 +2386,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('cancels warm prepare when ready progress reentrantly terminates it', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const worker = workerInstances[0];
 		const progress = {
@@ -2282,7 +2427,7 @@ describe('static worker backed language sandboxes', () => {
 			const diagnosticSink = vi.fn(() => {
 				if (throwCallback && callbackKind === 'diagnostic') throw callbackError;
 			});
-			const sandbox = new Prolog();
+			const sandbox = createPrologLifecycleTestSandbox();
 			sandbox.output = output;
 			sandbox.oncompilerdiagnostic = diagnosticSink;
 			await sandbox.load('/absproxy/5173');
@@ -2330,7 +2475,7 @@ describe('static worker backed language sandboxes', () => {
 				if (stage === 'Prolog run complete') throw callbackError;
 			})
 		};
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const run = sandbox.run('writeln(complete).', false, true, progress, [], { stdin: '' });
 		const outcome = run.catch((error) => error);
@@ -2359,7 +2504,7 @@ describe('static worker backed language sandboxes', () => {
 	it('preserves a replacement run when completion progress terminates and then throws', async () => {
 		onPostMessage = () => {};
 		const callbackError = new Error('stale completion callback failed');
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		let replacement: Promise<boolean | string> | undefined;
 		let replaceOnCompletion = true;
 		const progress = {
@@ -2409,7 +2554,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('rejects an overlapping run while worker startup is pending', async () => {
 		autoStartWorkers = false;
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const load = sandbox.load('/absproxy/5173');
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
 
@@ -2440,7 +2585,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('settles a shared pending startup when its active run is cancelled', async () => {
 		autoStartWorkers = false;
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const loadOutcome = sandbox.load('/absproxy/5173').catch((error) => error);
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
 		const retiredWorker = workerInstances[0];
@@ -2474,7 +2619,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('ignores a stale abort listener when cleanup fails and a replacement awaits stdin', async () => {
 		onPostMessage = () => {};
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const worker = workerInstances[0];
 		const controller = new AbortController();
@@ -2510,7 +2655,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('rejects an overlapping run while the first run waits for stdin', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const code = 'main :- read_line_to_string(user_input, Line), writeln(Line).';
 		const first = sandbox.run(code, false);
@@ -2529,7 +2674,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('rejects an overlapping run while the worker is executing', async () => {
 		onPostMessage = () => {};
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const first = sandbox.run('writeln(first).', false, true, undefined, [], { stdin: '' });
 		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
@@ -2549,7 +2694,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('ignores uncorrelated and stale messages until the active run responds', async () => {
 		onPostMessage = () => {};
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const output = vi.fn();
 		sandbox.output = output;
 		await sandbox.load('/absproxy/5173');
@@ -2586,7 +2731,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('cancels a static run while it is waiting for stdin', async () => {
 		const controller = new AbortController();
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const code = 'main :- read_line_to_string(user_input, Line), writeln(Line).';
 		const run = sandbox.run(code, false, true, undefined, [], {
@@ -2608,7 +2753,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('terminates a static run at its aggregate execution deadline', async () => {
 		onPostMessage = () => {};
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const run = sandbox.run('writeln(slow).', false, true, undefined, [], {
 			stdin: '',
@@ -2629,7 +2774,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('terminates a static run before emitting output beyond its UTF-8 byte limit', async () => {
 		onPostMessage = () => {};
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const output = vi.fn();
 		sandbox.output = output;
 		await sandbox.load('/absproxy/5173');
@@ -2657,7 +2802,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('terminates a static run when its diagnostic count exceeds the limit', async () => {
 		onPostMessage = () => {};
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const oncompilerdiagnostic = vi.fn();
 		sandbox.oncompilerdiagnostic = oncompilerdiagnostic;
 		await sandbox.load('/absproxy/5173');
@@ -2693,7 +2838,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('rejects unsafe static workspace paths before dispatch', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 
 		await expect(
@@ -2711,7 +2856,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('normalizes static workspace paths and enforces the aggregate byte limit', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		await expect(
 			sandbox.run('writeln(ok).', false, true, undefined, [], {
@@ -2744,7 +2889,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('releases the active-run slot after kill for an immediate rerun', async () => {
 		onPostMessage = () => {};
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const first = sandbox.run('writeln(first).', false, true, undefined, [], { stdin: '' });
 		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
@@ -2766,7 +2911,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('buffers every stdin chunk until EOF and preserves explicit empty stdin', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const code = 'main :- read_line_to_string(user_input, Line), writeln(Line).';
 		await sandbox.load('/absproxy/5173');
 
@@ -2807,7 +2952,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('does not leak stdin queued before or during an explicit-input run', async () => {
 		onPostMessage = () => {};
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const code = 'main :- read_line_to_string(user_input, Line), writeln(Line).';
 		await sandbox.load('/absproxy/5173');
 		sandbox.write('queued before the run\n');
@@ -2847,7 +2992,7 @@ describe('static worker backed language sandboxes', () => {
 	it('rejects a pre-cancelled static worker load before fetching', async () => {
 		const controller = new AbortController();
 		controller.abort(new Error('cancel before load'));
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 
 		await expect(
 			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
@@ -2916,7 +3061,7 @@ describe('static worker backed language sandboxes', () => {
 				);
 			});
 		});
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 
 		await expect(
 			sandbox.load('/absproxy/5173', '', true, [], {
@@ -2988,7 +3133,7 @@ describe('static worker backed language sandboxes', () => {
 			body: { cancel, getReader }
 		} as unknown as Response;
 		const progress = { set: vi.fn() };
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const loading = sandbox.load(
 			'/absproxy/5173',
 			'',
@@ -3075,7 +3220,7 @@ describe('static worker backed language sandboxes', () => {
 		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const progress = { set: vi.fn() };
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const loading = sandbox.load(
 			'/absproxy/5173',
 			'',
@@ -3185,7 +3330,7 @@ describe('static worker backed language sandboxes', () => {
 		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const progress = { set: vi.fn() };
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const loading = sandbox.load(
 			'/absproxy/5173',
 			'',
@@ -3246,7 +3391,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('preloads static worker scripts with least-authority request options', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 
 		await sandbox.load('/absproxy/5173');
 
@@ -3279,7 +3424,7 @@ describe('static worker backed language sandboxes', () => {
 				body: { cancel, getReader },
 				arrayBuffer
 			} as unknown as Response);
-			const sandbox = new Prolog();
+			const sandbox = createPrologLifecycleTestSandbox();
 
 			await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
 				name: 'ProtocolError',
@@ -3319,7 +3464,7 @@ describe('static worker backed language sandboxes', () => {
 				headers: new Headers(),
 				body: { cancel }
 			} as unknown as Response);
-			const sandbox = new Prolog();
+			const sandbox = createPrologLifecycleTestSandbox();
 			const loading = sandbox.load('/absproxy/5173');
 			let timeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -3368,7 +3513,7 @@ describe('static worker backed language sandboxes', () => {
 				body: { cancel, getReader },
 				arrayBuffer
 			} as unknown as Response);
-			const sandbox = new Prolog();
+			const sandbox = createPrologLifecycleTestSandbox();
 
 			await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
 				name: 'ProtocolError',
@@ -3440,7 +3585,7 @@ describe('static worker backed language sandboxes', () => {
 			headers: new Headers(),
 			body: { getReader: () => ({ cancel, read, releaseLock }) }
 		} as unknown as Response);
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 
 		await sandbox.load('/absproxy/5173');
 
@@ -3460,7 +3605,7 @@ describe('static worker backed language sandboxes', () => {
 			headers: new Headers(),
 			body: { getReader: () => ({ cancel, read, releaseLock }) }
 		} as unknown as Response);
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 
 		await expect(sandbox.load('/absproxy/5173')).rejects.toThrow(
 			'Prolog worker script failed to load: worker stream failed'
@@ -3471,7 +3616,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('preserves disposal when initial load progress disposes and then throws', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const callbackError = new Error('initial load progress failed');
 		const progress = {
 			set: vi.fn((value: number, stage?: string) => {
@@ -3498,7 +3643,7 @@ describe('static worker backed language sandboxes', () => {
 		async (disposeAt) => {
 			const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
 			const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
-			const sandbox = new Prolog();
+			const sandbox = createPrologLifecycleTestSandbox();
 			const callbackError = new Error(`load progress ${disposeAt} failed`);
 			const progress = {
 				set: vi.fn((value: number) => {
@@ -3535,7 +3680,7 @@ describe('static worker backed language sandboxes', () => {
 	);
 
 	it('does not start a fetch when signal registration reentrantly disposes the sandbox', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const removeEventListener = vi.fn();
 		const signal = {
 			aborted: false,
@@ -3575,7 +3720,7 @@ describe('static worker backed language sandboxes', () => {
 		vi.stubGlobal('Worker', ReentrantWorker);
 
 		try {
-			sandbox = new Prolog();
+			sandbox = createPrologLifecycleTestSandbox();
 			await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
 				name: 'CancelledError',
 				code: 'cancelled',
@@ -3604,7 +3749,7 @@ describe('static worker backed language sandboxes', () => {
 		vi.stubGlobal('Worker', ReentrantThrowingWorker);
 
 		try {
-			sandbox = new Prolog();
+			sandbox = createPrologLifecycleTestSandbox();
 			await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
 				name: 'CancelledError',
 				code: 'cancelled',
@@ -3638,7 +3783,7 @@ describe('static worker backed language sandboxes', () => {
 		const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
 
 		try {
-			const sandbox = new Prolog();
+			const sandbox = createPrologLifecycleTestSandbox();
 			await expect(
 				sandbox.load('/absproxy/5173', '', true, [], {
 					limits: { startupTimeoutMs: 23_456 }
@@ -3669,7 +3814,7 @@ describe('static worker backed language sandboxes', () => {
 					});
 				})
 		);
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const load = sandbox.load('/absproxy/5173');
 		await vi.waitFor(() => expect(fetchSignal).toBeDefined());
 
@@ -3708,7 +3853,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('detaches a pending worker bootstrap exactly once when disposed', async () => {
 		autoStartWorkers = false;
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const output = vi.fn();
 		const diagnostic = vi.fn();
 		sandbox.output = output;
@@ -3823,7 +3968,7 @@ describe('static worker backed language sandboxes', () => {
 	it('terminates a pending worker startup when its signal is aborted', async () => {
 		autoStartWorkers = false;
 		const controller = new AbortController();
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const load = sandbox.load('/absproxy/5173', '', true, [], {
 			signal: controller.signal
 		});
@@ -3842,7 +3987,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('reports manual termination of pending startup as typed cancellation', async () => {
 		autoStartWorkers = false;
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const outcome = sandbox.load('/absproxy/5173').catch((error) => error);
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
 
@@ -3859,7 +4004,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('terminates a static worker that misses its startup deadline', async () => {
 		autoStartWorkers = false;
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const load = sandbox.load('/absproxy/5173', '', true, [], {
 			limits: { startupTimeoutMs: 5 }
 		});
@@ -3878,14 +4023,14 @@ describe('static worker backed language sandboxes', () => {
 
 	it('rejects worker script download and bootstrap import failures', async () => {
 		vi.mocked(fetch).mockResolvedValueOnce(new Response('', { status: 404 }));
-		const missingScript = new Prolog();
+		const missingScript = createPrologLifecycleTestSandbox();
 		await expect(missingScript.load('/absproxy/5173')).rejects.toThrow(
 			'Prolog worker script failed to load: HTTP 404'
 		);
 		expect(workerInstances).toHaveLength(0);
 
 		autoStartWorkers = false;
-		const invalidScript = new Prolog();
+		const invalidScript = createPrologLifecycleTestSandbox();
 		const load = invalidScript.load('/absproxy/5173');
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
 		const startupCause = new SyntaxError('Unexpected token');
@@ -3921,7 +4066,7 @@ describe('static worker backed language sandboxes', () => {
 		vi.stubGlobal('Worker', ThrowingWorker);
 
 		try {
-			const sandbox = new Prolog();
+			const sandbox = createPrologLifecycleTestSandbox();
 			await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
 				name: 'WorkerStartupError',
 				code: 'worker-startup',
@@ -3938,7 +4083,7 @@ describe('static worker backed language sandboxes', () => {
 
 	it('preserves protocol classification for message errors before worker readiness', async () => {
 		autoStartWorkers = false;
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		const load = sandbox.load('/absproxy/5173');
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
 		const messageError = new MessageEvent('messageerror', { data: 'invalid bootstrap' });
@@ -3957,7 +4102,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('rejects the active run when its worker crashes', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const executionCause = new WebAssembly.RuntimeError('unreachable');
 		onPostMessage = (worker) => {
@@ -3989,7 +4134,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('types worker message deserialization failures as protocol errors', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const messageError = new MessageEvent('messageerror', { data: 'invalid clone' });
 		onPostMessage = (worker) => {
@@ -4012,7 +4157,7 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	it('types synchronous run dispatch failures as protocol errors', async () => {
-		const sandbox = new Prolog();
+		const sandbox = createPrologLifecycleTestSandbox();
 		await sandbox.load('/absproxy/5173');
 		const dispatchCause = new DOMException('Value could not be cloned', 'DataCloneError');
 		onPostMessage = () => {

@@ -15,6 +15,7 @@ import {
 } from './bundledJanetRuntime.js';
 import {
 	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
+	BUNDLED_PROLOG_RUNTIME_PROFILE,
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from './bundledPrologRuntime.js';
 import {
@@ -26,7 +27,11 @@ import {
 	BUNDLED_TCL_RUNNER_RECEIPT
 } from './bundledTclRuntime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from './types.js';
-import { deriveRubyRuntimeWasmUrl } from '@wasm-idle/core';
+import {
+	deriveRubyRuntimeWasmUrl,
+	snapshotPrologRuntimePreflightProfile,
+	type PrologRuntimePreflightProfile
+} from '@wasm-idle/core';
 
 export class LanguageServerAssetConfigurationError extends Error {
 	readonly provider: string;
@@ -785,8 +790,9 @@ export function resolvePrologLanguageServerManifestUrl(
 	if (typeof options === 'object' && options.prolog?.manifestUrl) {
 		return resolveFileUrl(options.prolog.manifestUrl, currentUrl);
 	}
+	const manifestFingerprint = resolvePrologLanguageServerManifestFingerprint(options);
 	return resolveFileUrl(
-		`${resolvePrologLanguageServerBaseUrl(options, currentUrl)}runtime-manifest.v2.json?v=${BUNDLED_PROLOG_MANIFEST_FINGERPRINT}`,
+		`${resolvePrologLanguageServerBaseUrl(options, currentUrl)}runtime-manifest.v2.json?v=${manifestFingerprint}`,
 		currentUrl
 	);
 }
@@ -809,6 +815,52 @@ export function resolvePrologLanguageServerWorkerReceipt(
 ) {
 	const configured = typeof options === 'object' ? options.prolog?.workerReceipt : undefined;
 	return configured || BUNDLED_PROLOG_RUNNER_RECEIPT;
+}
+
+export function resolvePrologLanguageServerPreflightProfile(
+	options: EditorLanguageServerOptions | undefined
+): PrologRuntimePreflightProfile {
+	const configured = typeof options === 'object' ? options.prolog : undefined;
+	const manifestFingerprint = resolvePrologLanguageServerManifestFingerprint(options);
+	const hasConfiguredProfile =
+		!!configured &&
+		[
+			configured.profileId,
+			configured.packageRevision,
+			configured.swiplRevision,
+			configured.manifestReceipt,
+			configured.javascriptReceipt,
+			configured.wasmReceipt,
+			configured.dataReceipt
+		].some((value) => value !== undefined);
+
+	if (!hasConfiguredProfile) {
+		if (manifestFingerprint !== BUNDLED_PROLOG_MANIFEST_FINGERPRINT) {
+			throw new LanguageServerAssetConfigurationError(
+				'Prolog LSP',
+				'a complete runtime profile and receipts for a custom manifest fingerprint'
+			);
+		}
+		return snapshotPrologRuntimePreflightProfile(BUNDLED_PROLOG_RUNTIME_PROFILE);
+	}
+
+	try {
+		return snapshotPrologRuntimePreflightProfile({
+			profileId: configured?.profileId?.trim(),
+			packageRevision: configured?.packageRevision?.trim(),
+			swiplRevision: configured?.swiplRevision?.trim(),
+			manifestFingerprint,
+			manifestReceipt: configured?.manifestReceipt,
+			javascriptReceipt: configured?.javascriptReceipt,
+			wasmReceipt: configured?.wasmReceipt,
+			dataReceipt: configured?.dataReceipt
+		});
+	} catch {
+		throw new LanguageServerAssetConfigurationError(
+			'Prolog LSP',
+			'a complete valid runtime preflight profile and receipts'
+		);
+	}
 }
 
 export function resolveRubyLanguageServerWasmUrl(

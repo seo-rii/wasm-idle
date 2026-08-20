@@ -69,6 +69,7 @@ describe('createWorkerLanguageServerClient', () => {
 
 		await vi.advanceTimersByTimeAsync(25);
 		await rejection;
+		expect(worker.postMessage).toHaveBeenCalledWith({ type: 'init', options: undefined });
 		expect(worker.terminate).toHaveBeenCalledOnce();
 		expect(statuses.at(-1)).toEqual({
 			state: 'error',
@@ -88,5 +89,47 @@ describe('createWorkerLanguageServerClient', () => {
 			})
 		).rejects.toThrow('startup cancelled');
 		expect(createWorker).not.toHaveBeenCalled();
+	});
+
+	it('transfers preflight buffers with the initialization message', async () => {
+		const messageListeners = new Set<(event: MessageEvent<unknown>) => void>();
+		const errorListeners = new Set<(event: ErrorEvent) => void>();
+		const postMessage = vi.fn(() => {
+			for (const listener of errorListeners) {
+				listener({ error: new Error('stop after init transfer') } as ErrorEvent);
+			}
+		});
+		const worker = {
+			addEventListener: vi.fn((type: string, listener: EventListener) => {
+				if (type === 'message') {
+					messageListeners.add(listener as (event: MessageEvent<unknown>) => void);
+				} else if (type === 'error') {
+					errorListeners.add(listener as (event: ErrorEvent) => void);
+				}
+			}),
+			removeEventListener: vi.fn((type: string, listener: EventListener) => {
+				if (type === 'message') {
+					messageListeners.delete(listener as (event: MessageEvent<unknown>) => void);
+				} else if (type === 'error') {
+					errorListeners.delete(listener as (event: ErrorEvent) => void);
+				}
+			}),
+			postMessage,
+			terminate: vi.fn()
+		} as unknown as Worker;
+		const buffer = new ArrayBuffer(8);
+
+		await expect(
+			createWorkerLanguageServerClient({
+				createWorker: () => worker,
+				initOptions: { payload: new Uint8Array(buffer) },
+				initTransfer: [buffer]
+			})
+		).rejects.toThrow('stop after init transfer');
+
+		expect(postMessage).toHaveBeenCalledWith(
+			{ type: 'init', options: { payload: expect.any(Uint8Array) } },
+			[buffer]
+		);
 	});
 });

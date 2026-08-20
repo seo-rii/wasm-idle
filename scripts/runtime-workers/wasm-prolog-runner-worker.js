@@ -1,9 +1,35 @@
 const encoder = new TextEncoder();
 const fatalDecoder = new TextDecoder('utf-8', { fatal: true });
+const preflightProtocol = 'wasm-idle-prolog-preflight';
+const preflightProtocolVersion = 1;
 const manifestFormat = 'wasm-prolog-runtime-manifest-v2';
 const fingerprintDomain = 'wasm-idle:prolog-runtime-manifest:v2';
 const hardMaxAssetBytes = 32 * 1024 * 1024;
 const maxManifestBytes = 64 * 1024;
+const preflightKeys = Object.freeze([
+	'dataBytes',
+	'javascriptBytes',
+	'manifestBytes',
+	'manifestFingerprint',
+	'packageRevision',
+	'profileId',
+	'protocol',
+	'protocolVersion',
+	'swiplRevision',
+	'wasmBytes'
+]);
+const manifestKeys = Object.freeze([
+	'assets',
+	'fingerprint',
+	'format',
+	'license',
+	'metadata',
+	'package',
+	'profileId',
+	'runtime',
+	'storage',
+	'toolchain'
+]);
 const expectedPackage = Object.freeze({
 	integrity:
 		'sha512-tP3bSRaMboFRWGD5cfBAGIzu2HH80yqRG+i/YL8BEgQ7xasvJAycwgx0DW16vqqRhUHyFOOPbzX4aXuy9s+b1g==',
@@ -36,153 +62,68 @@ const expectedStorage = Object.freeze({
 let verifiedRuntimePromise = null;
 let verifiedRuntimeIdentity = '';
 
-function requireHttpUrl(value, label) {
-	let url;
-	try {
-		url = new URL(value);
-	} catch {
-		throw new Error(`${label} URL is invalid.`);
-	}
-	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error(`${label} URL must use HTTP(S).`);
-	}
-	if (url.username || url.password || url.hash) {
-		throw new Error(`${label} URL must not include credentials or a fragment.`);
-	}
-	return url;
+function hasExactKeys(value, expectedKeys) {
+	const keys = Object.keys(value).sort();
+	return (
+		keys.length === expectedKeys.length &&
+		keys.every((key, index) => key === expectedKeys[index])
+	);
 }
 
-function assetUrl(baseUrl, path, fingerprint) {
-	const base = requireHttpUrl(baseUrl, 'SWI-Prolog runtime base');
-	const url = new URL(path, base);
-	if (fingerprint) url.searchParams.set('v', fingerprint);
-	return url.href;
+function isUint8Array(value) {
+	return (
+		ArrayBuffer.isView(value) &&
+		value.buffer instanceof ArrayBuffer &&
+		Object.prototype.toString.call(value) === '[object Uint8Array]'
+	);
 }
 
-function cancelResponseBody(response, reason) {
-	try {
-		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
-	} catch {
-		// Preserve the trust-boundary failure that caused cancellation.
+function requireRuntimePreflight(runtimePreflight, requestedMaxAssetBytes) {
+	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
+		throw new Error('SWI-Prolog runtime asset byte limit is invalid.');
 	}
-}
-
-async function fetchBoundedBytes(
-	urlValue,
-	label,
-	maxBytes,
-	expectedBytes,
-	cache,
-	alternateExpectedBytes
-) {
-	if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
-		throw new Error(`${label} byte limit is invalid.`);
+	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
+	if (
+		!runtimePreflight ||
+		typeof runtimePreflight !== 'object' ||
+		Array.isArray(runtimePreflight) ||
+		!hasExactKeys(runtimePreflight, preflightKeys)
+	) {
+		throw new Error('SWI-Prolog runtime preflight payload has an invalid shape.');
 	}
-	const expectedByteSizes = [];
-	for (const candidate of [expectedBytes, alternateExpectedBytes]) {
-		if (candidate === undefined) continue;
-		if (!Number.isSafeInteger(candidate) || candidate <= 0 || candidate > maxBytes) {
-			throw new Error(`${label} expected byte size is invalid.`);
-		}
-		if (!expectedByteSizes.includes(candidate)) expectedByteSizes.push(candidate);
+	if (
+		runtimePreflight.protocol !== preflightProtocol ||
+		runtimePreflight.protocolVersion !== preflightProtocolVersion ||
+		typeof runtimePreflight.profileId !== 'string' ||
+		!/^swipl-wasm-[A-Za-z0-9._+-]+$/u.test(runtimePreflight.profileId) ||
+		typeof runtimePreflight.packageRevision !== 'string' ||
+		!/^[a-f0-9]{40}$/u.test(runtimePreflight.packageRevision) ||
+		typeof runtimePreflight.swiplRevision !== 'string' ||
+		!/^[a-f0-9]{40}$/u.test(runtimePreflight.swiplRevision) ||
+		typeof runtimePreflight.manifestFingerprint !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(runtimePreflight.manifestFingerprint) ||
+		!isUint8Array(runtimePreflight.manifestBytes) ||
+		!isUint8Array(runtimePreflight.javascriptBytes) ||
+		!isUint8Array(runtimePreflight.wasmBytes) ||
+		!isUint8Array(runtimePreflight.dataBytes)
+	) {
+		throw new Error('SWI-Prolog runtime preflight payload is invalid.');
 	}
-	const maximumExpectedBytes = expectedByteSizes.length
-		? Math.max(...expectedByteSizes)
-		: undefined;
-	const requestUrl = requireHttpUrl(urlValue, label);
-	const response = await fetch(requestUrl.href, {
-		...(cache ? { cache } : {}),
-		credentials: 'omit',
-		redirect: 'error',
-		referrerPolicy: 'no-referrer'
-	});
-	try {
-		if (!response.url) throw new Error(`${label} response URL is missing.`);
-		let responseUrl;
-		try {
-			responseUrl = new URL(response.url);
-		} catch {
-			throw new Error(`${label} response URL is invalid.`);
-		}
-		if (responseUrl.href !== requestUrl.href) {
-			throw new Error(`${label} response URL does not match the requested asset.`);
-		}
-		if (!response.ok)
-			throw new Error(`${label} request failed with status ${response.status}.`);
-		const contentLength = response.headers.get('content-length');
-		if (contentLength !== null) {
-			const normalized = contentLength.trim();
-			const parsed = Number(normalized);
-			if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(parsed)) {
-				throw new Error(`${label} has an invalid Content-Length.`);
-			}
-			if (expectedByteSizes.length && !expectedByteSizes.includes(parsed)) {
-				throw new Error(`${label} Content-Length does not match its receipt.`);
-			}
-			if (parsed > maxBytes) throw new Error(`${label} exceeds its byte limit.`);
-		}
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	if (!response.body) {
-		const error = new Error(`${label} response does not provide a byte stream.`);
-		cancelResponseBody(response, error);
-		throw error;
-	}
-
-	let reader;
-	try {
-		reader = response.body.getReader();
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	const output = maximumExpectedBytes === undefined ? null : new Uint8Array(maximumExpectedBytes);
-	const chunks = output ? null : [];
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array))
-				throw new Error(`${label} returned an invalid byte stream.`);
-			const nextLoaded = loaded + value.byteLength;
-			if (maximumExpectedBytes !== undefined && nextLoaded > maximumExpectedBytes) {
-				throw new Error(`${label} exceeds its receipt size.`);
-			}
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > maxBytes) {
-				throw new Error(`${label} exceeds its byte limit.`);
-			}
-			if (output) output.set(value, loaded);
-			else chunks.push(value.slice());
-			loaded = nextLoaded;
-		}
-		if (expectedByteSizes.length && !expectedByteSizes.includes(loaded)) {
-			throw new Error(`${label} is truncated or has an unexpected decoded size.`);
-		}
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the stream or quota failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the primary load result.
+	for (const [label, bytes, limit] of [
+		[
+			'SWI-Prolog runtime manifest',
+			runtimePreflight.manifestBytes,
+			Math.min(maxManifestBytes, maxAssetBytes)
+		],
+		['SWI-Prolog runtime JavaScript', runtimePreflight.javascriptBytes, maxAssetBytes],
+		['SWI-Prolog runtime Wasm', runtimePreflight.wasmBytes, maxAssetBytes],
+		['SWI-Prolog runtime data', runtimePreflight.dataBytes, maxAssetBytes]
+	]) {
+		if (bytes.byteLength <= 0 || bytes.byteLength > limit) {
+			throw new Error(`${label} exceeds its byte limit.`);
 		}
 	}
-	if (output) return loaded === output.byteLength ? output : output.slice(0, loaded);
-	const bytes = new Uint8Array(loaded);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return bytes;
+	return { runtimePreflight, maxAssetBytes };
 }
 
 async function sha256Hex(bytes) {
@@ -233,6 +174,7 @@ function normalizeReceipt(candidate, expected, maxAssetBytes, label) {
 		!candidate ||
 		typeof candidate !== 'object' ||
 		Array.isArray(candidate) ||
+		!hasExactKeys(candidate, ['mediaType', 'path', 'sha256', 'size']) ||
 		candidate.path !== expected.path ||
 		candidate.mediaType !== expected.mediaType ||
 		!Number.isSafeInteger(candidate.size) ||
@@ -256,6 +198,7 @@ function normalizeStorageReceipt(candidate, expected, maxAssetBytes) {
 		!candidate ||
 		typeof candidate !== 'object' ||
 		Array.isArray(candidate) ||
+		!hasExactKeys(candidate, ['encoding', 'logicalPath', 'path', 'sha256', 'size']) ||
 		candidate.path !== expected.path ||
 		candidate.logicalPath !== expected.logicalPath ||
 		candidate.encoding !== expected.encoding ||
@@ -290,32 +233,36 @@ function normalizeProvenanceObject(candidate, expected, label) {
 	return { ...candidate };
 }
 
-async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
+async function normalizeManifest(value, runtimePreflight, maxAssetBytes) {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error('SWI-Prolog runtime manifest must be an object.');
 	}
-	if (value.format !== manifestFormat || value.runtime !== 'swipl-wasm') {
+	if (
+		!hasExactKeys(value, manifestKeys) ||
+		value.format !== manifestFormat ||
+		value.runtime !== 'swipl-wasm'
+	) {
 		throw new Error('SWI-Prolog runtime manifest format is unsupported.');
 	}
 	if (
-		typeof value.profileId !== 'string' ||
-		!/^swipl-wasm-[A-Za-z0-9._+-]+$/u.test(value.profileId) ||
-		typeof expectedFingerprint !== 'string' ||
-		!/^[a-f0-9]{64}$/u.test(expectedFingerprint)
+		value.profileId !== runtimePreflight.profileId ||
+		value.fingerprint !== runtimePreflight.manifestFingerprint
 	) {
-		throw new Error('SWI-Prolog runtime profile or expected fingerprint is invalid.');
-	}
-	if (value.fingerprint !== expectedFingerprint) {
-		throw new Error(
-			'SWI-Prolog runtime manifest fingerprint does not match the pinned runtime.'
-		);
+		throw new Error('SWI-Prolog runtime manifest identity is invalid.');
 	}
 	const packageMetadata = normalizeProvenanceObject(value.package, expectedPackage, 'package');
 	const toolchain = normalizeProvenanceObject(value.toolchain, expectedToolchain, 'toolchain');
 	if (
+		packageMetadata.revision !== runtimePreflight.packageRevision ||
+		toolchain.swiplRevision !== runtimePreflight.swiplRevision
+	) {
+		throw new Error('SWI-Prolog runtime provenance identity is invalid.');
+	}
+	if (
 		!value.license ||
 		typeof value.license !== 'object' ||
 		Array.isArray(value.license) ||
+		!hasExactKeys(value.license, ['path', 'sha256', 'size', 'spdx']) ||
 		value.license.path !== 'LICENSE.txt' ||
 		value.license.spdx !== 'BSD-2-Clause' ||
 		!Number.isSafeInteger(value.license.size) ||
@@ -392,7 +339,7 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 			metadata,
 			assets,
 			storage
-		)) !== expectedFingerprint
+		)) !== runtimePreflight.manifestFingerprint
 	) {
 		throw new Error('SWI-Prolog runtime receipt graph failed fingerprint verification.');
 	}
@@ -403,59 +350,6 @@ async function verifyReceiptBytes(receipt, bytes, label) {
 	if (bytes.byteLength !== receipt.size) throw new Error(`${label} has an unexpected byte size.`);
 	if ((await sha256Hex(bytes)) !== receipt.sha256) {
 		throw new Error(`${label} failed SHA-256 verification.`);
-	}
-}
-
-async function receiptMatchesBytes(receipt, bytes) {
-	return bytes.byteLength === receipt.size && (await sha256Hex(bytes)) === receipt.sha256;
-}
-
-async function decompressGzipBounded(compressedBytes, expectedBytes, maxBytes, label) {
-	if (typeof DecompressionStream !== 'function') {
-		throw new Error('SWI-Prolog runtime gzip decompression is unavailable.');
-	}
-	if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || expectedBytes > maxBytes) {
-		throw new Error(`${label} logical byte size is invalid.`);
-	}
-	let reader;
-	try {
-		reader = new Blob([compressedBytes])
-			.stream()
-			.pipeThrough(new DecompressionStream('gzip'))
-			.getReader();
-	} catch {
-		throw new Error(`${label} gzip stream could not be opened.`);
-	}
-	const output = new Uint8Array(expectedBytes);
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array))
-				throw new Error(`${label} gzip returned an invalid byte stream.`);
-			const nextLoaded = loaded + value.byteLength;
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > expectedBytes) {
-				throw new Error(`${label} gzip exceeds its logical receipt size.`);
-			}
-			output.set(value, loaded);
-			loaded = nextLoaded;
-		}
-		if (loaded !== expectedBytes) throw new Error(`${label} gzip is truncated.`);
-		return output;
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the decompression failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the decompression result.
-		}
 	}
 }
 
@@ -474,8 +368,10 @@ function importVerifiedRuntimeScript(bytes) {
 		throw new Error('SWI-Prolog verified runtime evaluation is unavailable.');
 	}
 	const scriptUrl = URL.createObjectURL(new Blob([bytes], { type: 'text/javascript' }));
+	let swiplFactory;
 	try {
 		importScripts(scriptUrl);
+		swiplFactory = globalThis.SWIPL;
 	} finally {
 		try {
 			URL.revokeObjectURL(scriptUrl);
@@ -483,19 +379,22 @@ function importVerifiedRuntimeScript(bytes) {
 			// Blob cleanup must not replace the verified evaluation outcome.
 		}
 	}
+	return swiplFactory;
 }
 
-async function createVerifiedSwiplFactory(
-	baseUrl,
-	manifestUrl,
-	manifestFingerprint,
-	requestedMaxAssetBytes
-) {
-	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
-		throw new Error('SWI-Prolog runtime asset byte limit is invalid.');
-	}
-	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
-	const identity = `${baseUrl}\n${manifestUrl}\n${manifestFingerprint}\n${maxAssetBytes}`;
+async function createVerifiedSwiplFactory(runtimePreflightValue, requestedMaxAssetBytes) {
+	const { runtimePreflight, maxAssetBytes } = requireRuntimePreflight(
+		runtimePreflightValue,
+		requestedMaxAssetBytes
+	);
+	const identity = [
+		runtimePreflight.protocol,
+		runtimePreflight.protocolVersion,
+		runtimePreflight.profileId,
+		runtimePreflight.packageRevision,
+		runtimePreflight.swiplRevision,
+		runtimePreflight.manifestFingerprint
+	].join('\n');
 	if (verifiedRuntimePromise) {
 		if (verifiedRuntimeIdentity !== identity) {
 			throw new Error('SWI-Prolog worker cannot replace an initialized runtime profile.');
@@ -504,75 +403,50 @@ async function createVerifiedSwiplFactory(
 	}
 	verifiedRuntimeIdentity = identity;
 	verifiedRuntimePromise = (async () => {
-		const resolvedManifestUrl =
-			manifestUrl || assetUrl(baseUrl, 'runtime-manifest.v2.json', manifestFingerprint);
-		const manifestBytes = await fetchBoundedBytes(
-			resolvedManifestUrl,
-			'SWI-Prolog runtime manifest',
-			Math.min(maxManifestBytes, maxAssetBytes),
-			undefined,
-			'no-store'
-		);
 		let parsed;
 		try {
-			parsed = JSON.parse(fatalDecoder.decode(manifestBytes));
+			parsed = JSON.parse(fatalDecoder.decode(runtimePreflight.manifestBytes));
 		} catch {
 			throw new Error('SWI-Prolog runtime manifest is not valid UTF-8 JSON.');
 		}
-		const manifest = await normalizeManifest(parsed, manifestFingerprint, maxAssetBytes);
-		const logicalBytesByPath = new Map();
-		for (const storagePath of Object.keys(expectedStorage).sort()) {
-			const storageReceipt = manifest.storageByPath.get(storagePath);
-			const logicalReceipt = manifest.assetByPath.get(storageReceipt.logicalPath);
-			const transportedBytes = await fetchBoundedBytes(
-				assetUrl(baseUrl, storagePath, manifestFingerprint),
-				`SWI-Prolog runtime storage ${storagePath}`,
-				Math.max(storageReceipt.size, logicalReceipt.size),
-				storageReceipt.size,
-				undefined,
-				storageReceipt.encoding === 'gzip' ? logicalReceipt.size : undefined
-			);
-			let logicalBytes;
-			if (await receiptMatchesBytes(storageReceipt, transportedBytes)) {
-				logicalBytes =
-					storageReceipt.encoding === 'gzip'
-						? await decompressGzipBounded(
-								transportedBytes,
-								logicalReceipt.size,
-								maxAssetBytes,
-								`SWI-Prolog runtime asset ${logicalReceipt.path}`
-							)
-						: transportedBytes;
-			} else if (
-				storageReceipt.encoding === 'gzip' &&
-				(await receiptMatchesBytes(logicalReceipt, transportedBytes))
-			) {
-				// Fetch transparently decodes HTTP Content-Encoding. The pinned logical
-				// receipt remains the executable trust boundary in that transport mode.
-				logicalBytes = transportedBytes;
-			} else {
-				throw new Error(
-					`SWI-Prolog runtime storage ${storagePath} failed SHA-256 verification.`
-				);
-			}
+		const manifest = await normalizeManifest(parsed, runtimePreflight, maxAssetBytes);
+		for (const [path, bytes] of [
+			['swipl-web.js', runtimePreflight.javascriptBytes],
+			['swipl-web.wasm', runtimePreflight.wasmBytes],
+			['swipl-web.data', runtimePreflight.dataBytes]
+		]) {
+			const logicalReceipt = manifest.assetByPath.get(path);
 			await verifyReceiptBytes(
 				logicalReceipt,
-				logicalBytes,
+				bytes,
 				`SWI-Prolog runtime asset ${logicalReceipt.path}`
 			);
-			logicalBytesByPath.set(logicalReceipt.path, logicalBytes);
 		}
-		const javascriptBytes = logicalBytesByPath.get('swipl-web.js');
-		const wasmBytes = logicalBytesByPath.get('swipl-web.wasm');
-		const dataBytes = logicalBytesByPath.get('swipl-web.data');
-		importVerifiedRuntimeScript(javascriptBytes);
-		if (typeof globalThis.SWIPL !== 'function') {
-			throw new Error('SWI-Prolog runtime JavaScript did not initialize.');
+		const previousSwiplFactory = globalThis.SWIPL;
+		let swiplFactory;
+		try {
+			globalThis.SWIPL = undefined;
+			if (globalThis.SWIPL !== undefined) {
+				throw new Error('SWI-Prolog runtime factory global could not be cleared.');
+			}
+			swiplFactory = importVerifiedRuntimeScript(runtimePreflight.javascriptBytes);
+			if (typeof swiplFactory !== 'function') {
+				throw new Error('SWI-Prolog runtime JavaScript did not initialize.');
+			}
+		} catch (error) {
+			if (previousSwiplFactory === undefined) delete globalThis.SWIPL;
+			else globalThis.SWIPL = previousSwiplFactory;
+			throw error;
 		}
+		const dataBytes = runtimePreflight.dataBytes;
+		const dataBuffer =
+			dataBytes.byteOffset === 0 && dataBytes.byteLength === dataBytes.buffer.byteLength
+				? dataBytes.buffer
+				: dataBytes.slice().buffer;
 		return (options) =>
-			globalThis.SWIPL({
+			swiplFactory({
 				...options,
-				wasmBinary: wasmBytes,
+				wasmBinary: runtimePreflight.wasmBytes,
 				locateFile(path) {
 					if (path !== 'swipl-web.wasm' && path !== 'swipl-web.data') {
 						throw new Error(
@@ -588,7 +462,7 @@ async function createVerifiedSwiplFactory(
 					) {
 						throw new Error('SWI-Prolog requested an unexpected preloaded package.');
 					}
-					return dataBytes.buffer;
+					return dataBuffer;
 				}
 			});
 	})();
@@ -693,9 +567,7 @@ function writeWorkspaceFile(fs, path, content) {
 
 self.onmessage = async (event) => {
 	const {
-		baseUrl,
-		manifestUrl,
-		manifestFingerprint,
+		runtimePreflight,
 		maxAssetBytes,
 		code,
 		stdin,
@@ -738,16 +610,9 @@ self.onmessage = async (event) => {
 	let terminalError = null;
 	try {
 		if (log) {
-			console.log(
-				`[wasm-idle:prolog-worker] ${diagnose ? 'diagnose' : 'run'} start baseUrl=${baseUrl}`
-			);
+			console.log(`[wasm-idle:prolog-worker] ${diagnose ? 'diagnose' : 'run'} start`);
 		}
-		const createSwipl = await createVerifiedSwiplFactory(
-			baseUrl,
-			manifestUrl,
-			manifestFingerprint,
-			maxAssetBytes
-		);
+		const createSwipl = await createVerifiedSwiplFactory(runtimePreflight, maxAssetBytes);
 		swipl = await createSwipl({
 			arguments: ['-q'],
 			print(text) {

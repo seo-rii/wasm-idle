@@ -10,6 +10,7 @@ import {
 import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from '../src/bundledLispRuntime.js';
 import {
 	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
+	BUNDLED_PROLOG_RUNTIME_PROFILE,
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from '../src/bundledPrologRuntime.js';
 import {
@@ -80,6 +81,7 @@ import {
 import {
 	resolveAssemblyScriptLanguageServerModuleUrl,
 	resolveDuckDbLanguageServerModuleUrl,
+	resolvePrologLanguageServerPreflightProfile,
 	resolveRubyLanguageServerModuleUrl,
 	resolveSqliteLanguageServerModuleUrl
 } from '../src/runtime.js';
@@ -270,6 +272,54 @@ describe('lsp runtime asset resolution', () => {
 				prolog: { manifestFingerprint: 'not-a-digest' }
 			})
 		).toThrow(LanguageServerAssetConfigurationError);
+	});
+
+	it('resolves one complete Prolog preflight profile and rejects partial custom trust roots', () => {
+		expect(resolvePrologLanguageServerPreflightProfile({ rootUrl: '/wasm-idle' })).toEqual(
+			BUNDLED_PROLOG_RUNTIME_PROFILE
+		);
+		expect(
+			resolvePrologLanguageServerPreflightProfile({
+				prolog: {
+					baseUrl: 'https://mirror.example.com/prolog/',
+					manifestUrl: `https://mirror.example.com/prolog/runtime-manifest.v2.json?v=${BUNDLED_PROLOG_MANIFEST_FINGERPRINT}`
+				}
+			})
+		).toEqual(BUNDLED_PROLOG_RUNTIME_PROFILE);
+		expect(() =>
+			resolvePrologLanguageServerPreflightProfile({
+				prolog: { manifestFingerprint: 'a'.repeat(64) }
+			})
+		).toThrow('complete runtime profile and receipts');
+
+		const customProfile = {
+			profileId: 'swipl-wasm-custom',
+			packageRevision: '1'.repeat(40),
+			swiplRevision: '2'.repeat(40),
+			manifestFingerprint: '3'.repeat(64),
+			manifestReceipt: { bytes: 10, sha256: '4'.repeat(64) },
+			javascriptReceipt: { bytes: 20, sha256: '5'.repeat(64) },
+			wasmReceipt: {
+				bytes: 30,
+				sha256: '6'.repeat(64),
+				uncompressedBytes: 40,
+				uncompressedSha256: '7'.repeat(64)
+			},
+			dataReceipt: {
+				bytes: 50,
+				sha256: '8'.repeat(64),
+				uncompressedBytes: 60,
+				uncompressedSha256: '9'.repeat(64)
+			}
+		};
+		expect(resolvePrologLanguageServerPreflightProfile({ prolog: customProfile })).toEqual(
+			customProfile
+		);
+		expect(() =>
+			resolvePrologLanguageServerPreflightProfile({
+				prolog: { ...customProfile, dataReceipt: undefined }
+			})
+		).toThrow('complete valid runtime preflight profile and receipts');
 	});
 
 	it('pins bundled Perl manifests and diagnostic workers and fails closed for custom mirrors', () => {

@@ -1,10 +1,11 @@
 import { loadLanguageToolAsset, type LanguageToolAssetRuntime } from './assets.js';
-import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
+import { verifyRuntimeAssetIntegrity, type RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 
 export interface RuntimeWorkerDiagnosticRequest {
 	runtime?: LanguageToolAssetRuntime;
-	workerUrl: string;
+	workerUrl?: string;
 	workerReceipt?: RuntimeAssetIntegrityEntry;
+	workerBytes?: Uint8Array;
 	message: Record<string, unknown>;
 	timeoutMs?: number;
 	timeoutMessage: string;
@@ -18,8 +19,11 @@ export interface RuntimeWorkerDiagnosticResult {
 export async function runRuntimeWorkerDiagnostics(
 	request: RuntimeWorkerDiagnosticRequest
 ): Promise<RuntimeWorkerDiagnosticResult> {
-	let workerUrl = request.workerUrl;
+	let workerUrl = request.workerUrl || '';
 	let blobUrl = '';
+	if (request.workerBytes && !request.workerReceipt) {
+		throw new Error('Runtime diagnostic worker bytes require an integrity receipt');
+	}
 	if (request.workerReceipt) {
 		const runtime = request.runtime ?? 'prolog';
 		if (
@@ -30,28 +34,50 @@ export async function runRuntimeWorkerDiagnostics(
 		) {
 			throw new Error('Runtime diagnostic worker receipt is invalid');
 		}
-		let requestedWorkerUrl: URL;
-		try {
-			requestedWorkerUrl = new URL(request.workerUrl, globalThis.location?.href);
-		} catch {
-			throw new Error('Runtime diagnostic worker URL is invalid');
+		let loadedBytes: Uint8Array;
+		if (request.workerBytes) {
+			if (
+				!ArrayBuffer.isView(request.workerBytes) ||
+				Object.prototype.toString.call(request.workerBytes) !== '[object Uint8Array]'
+			) {
+				throw new Error('Runtime diagnostic worker bytes are invalid');
+			}
+			await verifyRuntimeAssetIntegrity({
+				asset: 'runner-worker.js',
+				bytes: request.workerBytes,
+				expected: request.workerReceipt,
+				stage: 'compressed',
+				runtimeId: runtime
+			});
+			loadedBytes = request.workerBytes;
+		} else {
+			if (!request.workerUrl) {
+				throw new Error('Runtime diagnostic worker URL is required');
+			}
+			let requestedWorkerUrl: URL;
+			try {
+				requestedWorkerUrl = new URL(request.workerUrl, globalThis.location?.href);
+			} catch {
+				throw new Error('Runtime diagnostic worker URL is invalid');
+			}
+			const loaded = await loadLanguageToolAsset(
+				runtime,
+				'runner-worker.js',
+				{
+					baseUrl: new URL('.', requestedWorkerUrl).href,
+					loader: () => requestedWorkerUrl,
+					integrity: { 'runner-worker.js': request.workerReceipt },
+					cache: 'no-store',
+					redirect: 'error',
+					requireExactResponseUrl: true
+				},
+				() => undefined,
+				{ timeoutMs: request.timeoutMs ?? 5000 }
+			);
+			loadedBytes = loaded.bytes;
 		}
-		const loaded = await loadLanguageToolAsset(
-			runtime,
-			'runner-worker.js',
-			{
-				baseUrl: new URL('.', requestedWorkerUrl).href,
-				loader: () => requestedWorkerUrl,
-				integrity: { 'runner-worker.js': request.workerReceipt },
-				cache: 'no-store',
-				redirect: 'error',
-				requireExactResponseUrl: true
-			},
-			() => undefined,
-			{ timeoutMs: request.timeoutMs ?? 5000 }
-		);
 		try {
-			new TextDecoder('utf-8', { fatal: true }).decode(loaded.bytes);
+			new TextDecoder('utf-8', { fatal: true }).decode(loadedBytes);
 		} catch {
 			throw new Error('Runtime diagnostic worker is not valid UTF-8 JavaScript');
 		}
@@ -62,10 +88,12 @@ export async function runRuntimeWorkerDiagnostics(
 		) {
 			throw new Error('Verified runtime diagnostic worker bootstrap is unavailable');
 		}
-		const workerBytes = new Uint8Array(loaded.bytes.byteLength);
-		workerBytes.set(loaded.bytes);
+		const workerBytes = Uint8Array.from(loadedBytes);
 		blobUrl = URL.createObjectURL(new Blob([workerBytes.buffer], { type: 'text/javascript' }));
 		workerUrl = blobUrl;
+	}
+	if (!workerUrl) {
+		throw new Error('Runtime diagnostic worker URL or verified bytes are required');
 	}
 
 	let worker: Worker;

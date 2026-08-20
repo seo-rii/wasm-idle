@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -19,8 +20,10 @@ describe('runRuntimeWorkerDiagnostics', () => {
 
 	it('executes only receipt-verified worker bytes through a Blob URL', async () => {
 		const workerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
-		const receipt = { bytes: workerBytes.byteLength, sha256: 'a'.repeat(64) };
-		mocks.loadLanguageToolAsset.mockResolvedValue({ bytes: workerBytes });
+		const receipt = {
+			bytes: workerBytes.byteLength,
+			sha256: createHash('sha256').update(workerBytes).digest('hex')
+		};
 		let workerBlob: Blob | undefined;
 		const createObjectUrl = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
 			workerBlob = blob;
@@ -60,32 +63,14 @@ describe('runRuntimeWorkerDiagnostics', () => {
 		const message = { code: 'main :- true.', diagnose: true };
 		const result = await runRuntimeWorkerDiagnostics({
 			runtime: 'prolog',
-			workerUrl: 'https://assets.example.com/wasm-prolog/runner-worker.js?v=pinned',
 			workerReceipt: receipt,
+			workerBytes,
 			message,
 			timeoutMs: 1234,
 			timeoutMessage: 'Prolog diagnostics timed out'
 		});
 
-		expect(mocks.loadLanguageToolAsset).toHaveBeenCalledOnce();
-		const [runtime, asset, config, reportProgress, loadOptions] =
-			mocks.loadLanguageToolAsset.mock.calls[0];
-		expect({ runtime, asset, config, loadOptions }).toMatchObject({
-			runtime: 'prolog',
-			asset: 'runner-worker.js',
-			config: {
-				baseUrl: 'https://assets.example.com/wasm-prolog/',
-				integrity: { 'runner-worker.js': receipt },
-				cache: 'no-store',
-				redirect: 'error',
-				requireExactResponseUrl: true
-			},
-			loadOptions: { timeoutMs: 1234 }
-		});
-		expect(config.loader()).toEqual(
-			new URL('https://assets.example.com/wasm-prolog/runner-worker.js?v=pinned')
-		);
-		expect(reportProgress).toEqual(expect.any(Function));
+		expect(mocks.loadLanguageToolAsset).not.toHaveBeenCalled();
 		expect(createObjectUrl).toHaveBeenCalledOnce();
 		expect(workerBlob?.type).toBe('text/javascript');
 		expect(new Uint8Array(await workerBlob?.arrayBuffer())).toEqual(workerBytes);
@@ -190,29 +175,59 @@ describe('runRuntimeWorkerDiagnostics', () => {
 		expect(Worker).not.toHaveBeenCalled();
 	});
 
+	it('requires a receipt for direct bytes and a URL for the receipt-only fallback', async () => {
+		const workerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
+		const receipt = {
+			bytes: workerBytes.byteLength,
+			sha256: createHash('sha256').update(workerBytes).digest('hex')
+		};
+		const Worker = vi.fn();
+		vi.stubGlobal('Worker', Worker);
+
+		await expect(
+			runRuntimeWorkerDiagnostics({
+				workerBytes,
+				message: {},
+				timeoutMessage: 'Prolog diagnostics timed out'
+			})
+		).rejects.toThrow('worker bytes require an integrity receipt');
+		await expect(
+			runRuntimeWorkerDiagnostics({
+				workerReceipt: receipt,
+				message: {},
+				timeoutMessage: 'Prolog diagnostics timed out'
+			})
+		).rejects.toThrow('worker URL is required');
+
+		expect(mocks.loadLanguageToolAsset).not.toHaveBeenCalled();
+		expect(Worker).not.toHaveBeenCalled();
+	});
+
 	it('rejects non-UTF-8 worker bytes before creating executable content', async () => {
-		mocks.loadLanguageToolAsset.mockResolvedValue({ bytes: Uint8Array.of(0xc3, 0x28) });
+		const workerBytes = Uint8Array.of(0xc3, 0x28);
 		const createObjectUrl = vi.spyOn(URL, 'createObjectURL');
 		const Worker = vi.fn();
 		vi.stubGlobal('Worker', Worker);
 
 		await expect(
 			runRuntimeWorkerDiagnostics({
-				workerUrl: 'https://assets.example.com/wasm-prolog/runner-worker.js',
-				workerReceipt: { bytes: 2, sha256: 'a'.repeat(64) },
+				workerReceipt: {
+					bytes: workerBytes.byteLength,
+					sha256: createHash('sha256').update(workerBytes).digest('hex')
+				},
+				workerBytes,
 				message: {},
 				timeoutMessage: 'Prolog diagnostics timed out'
 			})
 		).rejects.toThrow('Runtime diagnostic worker is not valid UTF-8 JavaScript');
 
+		expect(mocks.loadLanguageToolAsset).not.toHaveBeenCalled();
 		expect(createObjectUrl).not.toHaveBeenCalled();
 		expect(Worker).not.toHaveBeenCalled();
 	});
 
 	it('revokes verified Blob URLs when worker construction fails', async () => {
-		mocks.loadLanguageToolAsset.mockResolvedValue({
-			bytes: new TextEncoder().encode('self.onmessage = () => undefined;')
-		});
+		const workerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
 		vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:verified-prolog-worker');
 		const revokeObjectUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
 		class ThrowingWorker {
@@ -224,13 +239,37 @@ describe('runRuntimeWorkerDiagnostics', () => {
 
 		await expect(
 			runRuntimeWorkerDiagnostics({
-				workerUrl: 'https://assets.example.com/wasm-prolog/runner-worker.js',
-				workerReceipt: { bytes: 35, sha256: 'a'.repeat(64) },
+				workerReceipt: {
+					bytes: workerBytes.byteLength,
+					sha256: createHash('sha256').update(workerBytes).digest('hex')
+				},
+				workerBytes,
 				message: {},
 				timeoutMessage: 'Prolog diagnostics timed out'
 			})
 		).rejects.toThrow('worker construction failed');
 
 		expect(revokeObjectUrl).toHaveBeenCalledWith('blob:verified-prolog-worker');
+		expect(mocks.loadLanguageToolAsset).not.toHaveBeenCalled();
+	});
+
+	it('rejects direct worker byte integrity mismatches without fetching or creating a Blob', async () => {
+		const workerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
+		const createObjectUrl = vi.spyOn(URL, 'createObjectURL');
+		const Worker = vi.fn();
+		vi.stubGlobal('Worker', Worker);
+
+		await expect(
+			runRuntimeWorkerDiagnostics({
+				workerReceipt: { bytes: workerBytes.byteLength, sha256: '0'.repeat(64) },
+				workerBytes,
+				message: {},
+				timeoutMessage: 'Prolog diagnostics timed out'
+			})
+		).rejects.toThrow('runner-worker.js compressed SHA-256 mismatch');
+
+		expect(mocks.loadLanguageToolAsset).not.toHaveBeenCalled();
+		expect(createObjectUrl).not.toHaveBeenCalled();
+		expect(Worker).not.toHaveBeenCalled();
 	});
 });

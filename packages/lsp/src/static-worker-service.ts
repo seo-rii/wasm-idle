@@ -9,9 +9,10 @@ import type { LanguageToolAssetRuntime } from './assets.js';
 import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 
 export interface StaticWorkerDiagnosticConfig {
-	baseUrl: string;
-	workerUrl: string;
+	baseUrl?: string;
+	workerUrl?: string;
 	workerReceipt?: RuntimeAssetIntegrityEntry;
+	runnerWorkerBytes?: Uint8Array;
 }
 
 export type StaticWorkerDiagnosticRequest<TConfig extends StaticWorkerDiagnosticConfig> =
@@ -68,6 +69,7 @@ export function createStaticWorkerDiagnostics<
 				...(options.runtime ? { runtime: options.runtime } : {}),
 				workerUrl: request.workerUrl,
 				workerReceipt: request.workerReceipt,
+				workerBytes: request.runnerWorkerBytes,
 				timeoutMessage: options.timeoutMessage,
 				message: options.createMessage(request)
 			}) as Promise<TResult>) satisfies StaticWorkerDiagnosticRunner<TConfig, TResult>);
@@ -75,9 +77,10 @@ export function createStaticWorkerDiagnostics<
 	return {
 		initialize(workerOptions: unknown, context: LspDocumentContext) {
 			const nextConfig = (workerOptions || {}) as TConfig;
+			const hasDirectWorker = nextConfig.runnerWorkerBytes instanceof Uint8Array;
 			const errorMessage =
 				options.validateConfig?.(nextConfig) ||
-				(!nextConfig.baseUrl || !nextConfig.workerUrl
+				(!hasDirectWorker && (!nextConfig.baseUrl || !nextConfig.workerUrl)
 					? `${options.languageName} language server requires baseUrl and workerUrl`
 					: null);
 			if (errorMessage) throw new Error(errorMessage);
@@ -90,7 +93,10 @@ export function createStaticWorkerDiagnostics<
 				options.activePathFromDocument?.(document) ||
 				defaultActivePathFromDocument(document, options.defaultActivePath);
 			const key = [
-				...(options.cacheKeyParts?.(config) || [config.baseUrl, config.workerUrl]),
+				...(options.cacheKeyParts?.(config) || [
+					config.baseUrl || '',
+					config.workerUrl || ''
+				]),
 				activePath,
 				document.text
 			].join('\n');

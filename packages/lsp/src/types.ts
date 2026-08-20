@@ -6,6 +6,7 @@ import type { DocumentLanguageId } from './document/service.js';
 import type { ElixirRuntimeAssetReceipts } from './elixir/assets.js';
 import type {
 	HaskellRuntimeAssetReceipts,
+	PrologRuntimePreflightProfile,
 	RubyRuntimeAssetReceipts,
 	RuntimeAssetIntegrityEntry
 } from '@wasm-idle/core';
@@ -39,6 +40,7 @@ export interface EditorLanguageServerRuntimeOptions {
 	rootUrl?: string;
 	signal?: AbortSignal;
 	assetTimeoutMs?: number;
+	maxAssetBytes?: number;
 	startupTimeoutMs?: number;
 	cpp?: LanguageToolAssetConfig;
 	python?: {
@@ -154,6 +156,13 @@ export interface EditorLanguageServerRuntimeOptions {
 		workerUrl?: string;
 		manifestUrl?: string;
 		manifestFingerprint?: string;
+		profileId?: PrologRuntimePreflightProfile['profileId'];
+		packageRevision?: PrologRuntimePreflightProfile['packageRevision'];
+		swiplRevision?: PrologRuntimePreflightProfile['swiplRevision'];
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		javascriptReceipt?: RuntimeAssetIntegrityEntry;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
+		dataReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	ruby?: {

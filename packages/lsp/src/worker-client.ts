@@ -19,6 +19,7 @@ export interface LanguageServerProgressUpdate {
 export interface WorkerLanguageServerClientOptions {
 	createWorker: () => Worker;
 	initOptions?: unknown;
+	initTransfer?: readonly Transferable[];
 	onStatus?: (status: LanguageServerStatus) => void;
 	lifecycle?: Pick<EditorLanguageServerRuntimeOptions, 'signal' | 'startupTimeoutMs'>;
 }
@@ -116,7 +117,12 @@ export async function createWorkerLanguageServerClient(
 					};
 					activeWorker.addEventListener('message', handleMessage);
 					activeWorker.addEventListener('error', handleError);
-					activeWorker.postMessage({ type: 'init', options: options.initOptions });
+					const initMessage = { type: 'init', options: options.initOptions };
+					if (options.initTransfer?.length) {
+						activeWorker.postMessage(initMessage, [...options.initTransfer]);
+					} else {
+						activeWorker.postMessage(initMessage);
+					}
 				}),
 			{
 				signal: options.lifecycle?.signal,

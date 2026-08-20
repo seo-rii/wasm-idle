@@ -504,6 +504,9 @@ export async function syncWasmPrologAssets(options = {}) {
 	const wasmStorage = storageByLogicalPath.get('swipl-web.wasm');
 	const dataAsset = assetByPath.get('swipl-web.data');
 	const dataStorage = storageByLogicalPath.get('swipl-web.data');
+	if (!javascriptReceipt || !wasmAsset || !wasmStorage || !dataAsset || !dataStorage) {
+		throw new Error('Generated SWI-Prolog receipts are incomplete.');
+	}
 	const runtimeProfileLiteral = `{\n\tprofileId: '${lock.profileId}',\n\tpackageRevision: '${lock.package.revision}',\n\tswiplRevision: '${lock.toolchain.swiplRevision}',\n\tmanifestFingerprint: '${fingerprint}',\n\tmanifestReceipt: {\n\t\tbytes: ${manifestReceipt.bytes},\n\t\tsha256: '${manifestReceipt.sha256}'\n\t},\n\tjavascriptReceipt: {\n\t\tbytes: ${javascriptReceipt.size},\n\t\tsha256: '${javascriptReceipt.sha256}'\n\t},\n\twasmReceipt: {\n\t\tbytes: ${wasmStorage.size},\n\t\tsha256: '${wasmStorage.sha256}',\n\t\tuncompressedBytes: ${wasmAsset.size},\n\t\tuncompressedSha256: '${wasmAsset.sha256}'\n\t},\n\tdataReceipt: {\n\t\tbytes: ${dataStorage.size},\n\t\tsha256: '${dataStorage.sha256}',\n\t\tuncompressedBytes: ${dataAsset.size},\n\t\tuncompressedSha256: '${dataAsset.sha256}'\n\t}\n} as const`;
 	const versionModuleSource = `export const WASM_PROLOG_RUNTIME_PROFILE = ${runtimeProfileLiteral};\nexport const WASM_PROLOG_ASSET_VERSION = WASM_PROLOG_RUNTIME_PROFILE.manifestFingerprint;\nexport const WASM_PROLOG_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
 	const lspVersionModuleSource = `export const BUNDLED_PROLOG_RUNTIME_PROFILE = ${runtimeProfileLiteral};\nexport const BUNDLED_PROLOG_MANIFEST_FINGERPRINT =\n\tBUNDLED_PROLOG_RUNTIME_PROFILE.manifestFingerprint;\nexport const BUNDLED_PROLOG_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;

@@ -36,7 +36,11 @@ import { WASM_LISP_ASSET_VERSION } from './wasmLispVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
-import { WASM_PROLOG_ASSET_VERSION, WASM_PROLOG_RUNNER_RECEIPT } from './wasmPrologVersion';
+import {
+	WASM_PROLOG_ASSET_VERSION,
+	WASM_PROLOG_RUNNER_RECEIPT,
+	WASM_PROLOG_RUNTIME_PROFILE
+} from './wasmPrologVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
 import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
 import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
@@ -151,7 +155,7 @@ describe('application runtime asset root', () => {
 			baseUrl: '/foo/bar/wasm-prolog/',
 			workerUrl: `/foo/bar/wasm-prolog/runner-worker.js?v=${WASM_PROLOG_RUNNER_RECEIPT.sha256}`,
 			manifestUrl: `/foo/bar/wasm-prolog/runtime-manifest.v2.json?v=${WASM_PROLOG_ASSET_VERSION}`,
-			manifestFingerprint: WASM_PROLOG_ASSET_VERSION,
+			...WASM_PROLOG_RUNTIME_PROFILE,
 			workerReceipt: WASM_PROLOG_RUNNER_RECEIPT
 		});
 		expect(assets.perl).toEqual({
@@ -341,6 +345,13 @@ describe('application runtime asset root', () => {
 			rustManifestUrl: `/foo/bar/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`,
 			goManifestUrl: `/foo/bar/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`,
 			prologManifestFingerprint: WASM_PROLOG_ASSET_VERSION,
+			prologProfileId: WASM_PROLOG_RUNTIME_PROFILE.profileId,
+			prologPackageRevision: WASM_PROLOG_RUNTIME_PROFILE.packageRevision,
+			prologSwiplRevision: WASM_PROLOG_RUNTIME_PROFILE.swiplRevision,
+			prologManifestReceipt: expect.any(String),
+			prologJavaScriptReceipt: expect.any(String),
+			prologWasmReceipt: expect.any(String),
+			prologDataReceipt: expect.any(String),
 			prologWorkerReceipt: JSON.stringify([
 				[
 					'worker',
@@ -468,6 +479,13 @@ describe('application runtime asset root', () => {
 			lispManifestFingerprint: assets.lisp?.manifestFingerprint,
 			prologManifestUrl: assets.prolog?.manifestUrl,
 			prologManifestFingerprint: assets.prolog?.manifestFingerprint,
+			prologProfileId: assets.prolog?.profileId,
+			prologPackageRevision: assets.prolog?.packageRevision,
+			prologSwiplRevision: assets.prolog?.swiplRevision,
+			prologManifestReceipt: expect.any(String),
+			prologJavaScriptReceipt: expect.any(String),
+			prologWasmReceipt: expect.any(String),
+			prologDataReceipt: expect.any(String),
 			prologWorkerReceipt: expect.any(String),
 			perlManifestUrl: assets.perl?.manifestUrl,
 			perlManifestFingerprint: assets.perl?.manifestFingerprint,
@@ -513,6 +531,31 @@ describe('application runtime asset root', () => {
 			objectiveCLibffiUrl: assets.objectivec?.libffiUrl,
 			objectiveCIntegrity: expect.any(String)
 		});
+	});
+
+	it('changes the runtime cache identity for every Prolog profile receipt field', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const originalKey = createRuntimeAssetsKey(assets);
+		const prolog = assets.prolog!;
+		const replacements = [
+			{ profileId: `${prolog.profileId}-custom` },
+			{ packageRevision: 'a'.repeat(40) },
+			{ swiplRevision: 'b'.repeat(40) },
+			{ manifestFingerprint: 'c'.repeat(64) },
+			{ manifestReceipt: { ...prolog.manifestReceipt!, sha256: 'd'.repeat(64) } },
+			{ javascriptReceipt: { ...prolog.javascriptReceipt!, sha256: 'e'.repeat(64) } },
+			{ wasmReceipt: { ...prolog.wasmReceipt!, uncompressedSha256: 'f'.repeat(64) } },
+			{ dataReceipt: { ...prolog.dataReceipt!, uncompressedBytes: 123 } }
+		];
+
+		for (const replacement of replacements) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					prolog: { ...prolog, ...replacement }
+				})
+			).not.toBe(originalKey);
+		}
 	});
 
 	it('pins both D outer trust roots to one generated integrity version', () => {
