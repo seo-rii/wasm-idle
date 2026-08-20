@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/lsp",
-	"version": "0.1.0",
+	"version": "1.0.0-next.1",
 	"description": "Framework-neutral browser LSP hosts for wasm-idle language tools",
 	"license": "MIT",
 	"type": "module",
@@ -204,6 +204,10 @@
 	"files": [
 		"dist"
 	],
+	"publishConfig": {
+		"access": "public",
+		"tag": "next"
+	},
 	"scripts": {
 		"build": "rm -rf dist && tsc -p tsconfig.json && node scripts/build.mjs",
 		"check": "tsc -p tsconfig.json --noEmit",

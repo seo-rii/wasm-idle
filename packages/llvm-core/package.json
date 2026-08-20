@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/llvm-core",
-	"version": "0.1.0",
+	"version": "1.0.0-next.1",
 	"description": "Browser LLVM runtime hosts for wasm-idle",
 	"license": "MIT",
 	"type": "module",
@@ -48,6 +48,10 @@
 		"!dist/**/*.{wasm,zip,tar,gz,tgz,data,zst,br,a,o,so,bc,pack}",
 		"README.md"
 	],
+	"publishConfig": {
+		"access": "public",
+		"tag": "next"
+	},
 	"scripts": {
 		"build": "rm -rf dist && tsc -p tsconfig.json",
 		"check": "tsc -p tsconfig.json --noEmit",

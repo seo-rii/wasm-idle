@@ -1,6 +1,6 @@
 {
 	"name": "wasm-idle",
-	"version": "0.7.2",
+	"version": "1.0.0-next.1",
 	"description": "A simple web app to run code in the browser",
 	"license": "MIT",
 	"type": "module",
@@ -193,6 +193,9 @@
 		"!dist/**/*.test.*",
 		"!dist/**/*.spec.*"
 	],
+	"publishConfig": {
+		"tag": "next"
+	},
 	"exports": {
 		".": {
 			"types": "./dist/index.d.ts",

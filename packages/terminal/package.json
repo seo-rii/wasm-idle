@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/terminal",
-	"version": "0.1.0",
+	"version": "1.0.0-next.1",
 	"description": "Svelte terminal component for wasm-idle playground bindings",
 	"license": "MIT",
 	"type": "module",
@@ -18,10 +18,11 @@
 		"dist"
 	],
 	"publishConfig": {
-		"access": "public"
+		"access": "public",
+		"tag": "next"
 	},
 	"peerDependencies": {
-		"@wasm-idle/core": "0.1.0",
+		"@wasm-idle/core": "1.0.0-next.1",
 		"svelte": "^5.0.0"
 	},
 	"dependencies": {
