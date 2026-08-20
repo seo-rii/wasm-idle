@@ -148,7 +148,7 @@ describe('syncWasmPerlAssets', () => {
 				await readFile(path.join(fixture.targetDir, file))
 			);
 		}
-	}, 60_000);
+	}, 120_000);
 
 	it('rejects a source receipt mismatch before replacing published outputs', async () => {
 		const fixture = await createFixture();

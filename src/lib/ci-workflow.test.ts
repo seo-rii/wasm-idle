@@ -18,8 +18,12 @@ describe('required CI workflow gates', () => {
 		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
 		const smokeJobStart = workflow.indexOf('    lsp-browser-smoke:');
 		const fullJobStart = workflow.indexOf('    lsp-browser-full:');
+		const nextJobStart = workflow.indexOf('    runtime-browser-full:', fullJobStart);
 		const smokeJob = workflow.slice(smokeJobStart, fullJobStart);
-		const fullJob = workflow.slice(fullJobStart);
+		const fullJob = workflow.slice(
+			fullJobStart,
+			nextJobStart >= 0 ? nextJobStart : workflow.length
+		);
 
 		expect(smokeJob.indexOf('- run: pnpm run prepare:test-assets -- clangd')).toBeLessThan(
 			smokeJob.indexOf('- run: pnpm run test:lsp:browser:smoke')
@@ -28,6 +32,7 @@ describe('required CI workflow gates', () => {
 			fullJob.indexOf('- run: pnpm run test:lsp:browser:full')
 		);
 	});
+
 	it('enforces static asset budgets in the packages job', async () => {
 		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
 		const packagesJobStart = workflow.indexOf('    packages:');
@@ -36,6 +41,7 @@ describe('required CI workflow gates', () => {
 
 		expect(packagesJob).toContain('- run: pnpm run check:asset-sizes');
 	});
+
 	it('runs the complete browser matrix as scheduled isolated shards', async () => {
 		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
 		const jobStart = workflow.indexOf('    runtime-browser-full:');
@@ -60,6 +66,7 @@ describe('required CI workflow gates', () => {
 			'node scripts/run-all-language-browser-tests.mjs --shard ${{ matrix.shard }}'
 		);
 	});
+
 	it('builds and verifies the independent PHP producer in the packages job', async () => {
 		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
 		const packagesJobStart = workflow.indexOf('    packages:');
@@ -78,6 +85,7 @@ describe('required CI workflow gates', () => {
 		expect(producerVerify).toBeGreaterThan(build);
 		expect(consumerVerify).toBeGreaterThan(producerVerify);
 	});
+
 	it('regenerates layered assets and runs their runtime-specific tests', async () => {
 		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
 		const packagesJobStart = workflow.indexOf('    packages:');

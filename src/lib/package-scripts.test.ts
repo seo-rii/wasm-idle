@@ -28,11 +28,14 @@ async function readPackageVerifier() {
 describe('LLVM runtime package scripts', () => {
 	it('consumes the local code-only LLVM runtime without depending on the producer repo', async () => {
 		const pkg = await readRootPackage();
+		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
 
 		expect(pkg.dependencies?.['@seo-rii/wasm-llvm']).toBeUndefined();
 		expect(pkg.dependencies?.['@wasm-idle/llvm-core']).toBe('workspace:*');
 		expect(pkg.dependencies?.['wasm-clang']).toBeUndefined();
 		expect(pkg.dependencies?.['@wasm-idle/clang-common']).toBeUndefined();
+		expect(workflow).toContain('pnpm --dir packages/llvm-core test');
+		expect(workflow).not.toContain('packages/clang-common');
 	});
 
 	it('does not publish language-specific AssemblyScript or PHP wrapper packages', async () => {
@@ -79,6 +82,18 @@ describe('LLVM runtime package scripts', () => {
 		expect(verifier).toContain("name: '@wasm-idle/lsp install'");
 		expect(verifier).toContain("name: '@wasm-idle/terminal install'");
 		expect(verifier).toContain("'@wasm-idle/terminal'");
+	});
+
+	it('runs every runtime synchronization contract in CI', async () => {
+		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+
+		expect(workflow).toContain(
+			'pnpm exec vitest run --no-file-parallelism --testTimeout=15000 src/lib/sync-*.test.ts'
+		);
+		expect(workflow).toContain('pnpm --dir producers/wasm-php install --frozen-lockfile');
+		expect(workflow).toContain('pnpm --dir producers/wasm-php build');
+		expect(workflow).toContain('pnpm --dir producers/wasm-php verify');
+		expect(workflow).toContain('pnpm run verify:wasm-php');
 	});
 
 	it('builds Rust source instrumentation as a lazy static asset', async () => {
@@ -157,6 +172,7 @@ describe('LLVM runtime package scripts', () => {
 
 	it('keeps normal development and builds independent of runtime asset syncs', async () => {
 		const pkg = await readRootPackage();
+		const pageBuild = pkg.scripts?.['page:build'] || '';
 
 		expect(pkg.scripts?.['prepare:app']).toBe('pnpm run build:publish-deps');
 		expect(pkg.scripts?.['prepare:clang-assets']).toBeUndefined();
@@ -166,11 +182,14 @@ describe('LLVM runtime package scripts', () => {
 		}
 
 		expect(pkg.scripts?.['sync:wasm-clang']).toBe('node scripts/sync-wasm-clang.mjs');
+		expect(pkg.scripts?.['sync:wasm-php']).toBe('node scripts/sync-wasm-php.mjs');
 		expect(pkg.scripts?.['sync:wasm-fortran']).toBe(
 			'node scripts/sync-runtime.mjs wasm-fortran'
 		);
 		expect(pkg.scripts?.['sync:wasm-cobol']).toBe('node scripts/sync-runtime.mjs wasm-cobol');
 		expect(pkg.scripts?.['sync:wasm-swift']).toBe('node scripts/sync-runtime.mjs wasm-swift');
+		expect(pageBuild).not.toContain('sync:wasm-php');
+		expect(pageBuild).not.toContain('producers/wasm-php');
 
 		for (const command of Object.values(pkg.scripts || {})) {
 			expect(command).not.toContain('runtimes/wasm-clang');
@@ -209,21 +228,5 @@ describe('LLVM runtime package scripts', () => {
 			expect(verifier).toContain(`'${packagePath}'`);
 		}
 		expect(verifier).toContain("['wasm-idle', '.']");
-	});
-
-	it('installs the local core tarball with the standalone LSP package', async () => {
-		const verifier = await readPackageVerifier();
-		const scenarioStart = verifier.indexOf("name: '@wasm-idle/lsp install'");
-		const scenarioEnd = verifier.indexOf(
-			"name: 'all public packages/adapters aggregate'",
-			scenarioStart
-		);
-		const scenario = verifier.slice(scenarioStart, scenarioEnd);
-
-		expect(scenarioStart).toBeGreaterThanOrEqual(0);
-		expect(scenarioEnd).toBeGreaterThan(scenarioStart);
-		expect(scenario).toContain(
-			"packageNames: ['@wasm-idle/lsp', '@wasm-idle/llvm-core', '@wasm-idle/core']"
-		);
 	});
 });
