@@ -407,18 +407,18 @@ describe('WebPerl runner worker', () => {
 		].sort()) {
 			hash.update(fileName);
 			hash.update('\0');
-			const compressed = fileName === 'emperl.data' || fileName === 'emperl.wasm';
-			expect(typeof compressed).toBe('boolean');
+			const compressed = fileName !== 'runner-worker.js';
 			const logicalReceipt = deployedManifest.assets.find(
 				(candidate: { path: string }) => candidate.path === fileName
 			);
 			const storedReceipt = deployedManifest.storage.find(
 				(candidate: { logicalPath: string }) => candidate.logicalPath === fileName
 			);
-			const bytes =
-				fileName === 'runner-worker.js'
-					? await readFile(staticWorkerUrl)
-					: gunzipSync(await readFile(new URL(storedReceipt.path, staticRuntimeUrl)));
+			expect(Boolean(logicalReceipt)).toBe(compressed);
+			expect(Boolean(storedReceipt)).toBe(compressed);
+			const bytes = compressed
+				? gunzipSync(await readFile(new URL(storedReceipt.path, staticRuntimeUrl)))
+				: await readFile(staticWorkerUrl);
 			if (logicalReceipt) {
 				expect(bytes.byteLength).toBe(logicalReceipt.size);
 				expect(sha256(bytes)).toBe(logicalReceipt.sha256);
