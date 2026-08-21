@@ -1,0 +1,96 @@
+{
+  "format": "wasm-pascal-runtime-manifest-v2",
+  "runtime": "pas2js",
+  "profileId": "pascal-pas2js-3.2.1-legacy-2c1edc2d",
+  "fingerprint": "fa138a92a9092c8b3f756fa05d489b690d708a746aa50d9eeab4258099ccf3de",
+  "licenseExpression": "LGPL-2.1-only WITH Independent-modules-exception",
+  "artifact": {
+    "kind": "opaque-vendored",
+    "repository": "https://github.com/seo-rii/wasm-idle.git",
+    "revision": "2c1edc2d47a221498d6086f62431796012e2f3ca",
+    "path": "static/wasm-pascal",
+    "provenance": "legacy-import",
+    "verifiedBuildInput": false
+  },
+  "components": {
+    "pas2js": {
+      "version": "3.2.1",
+      "repository": "https://gitlab.com/freepascal.org/fpc/pas2js.git",
+      "revision": "9ac46614dc82",
+      "revisionKind": "recorded-abbreviated",
+      "verifiedBuildInput": false,
+      "evidence": "runtime-build.json; full upstream commit was not recorded"
+    }
+  },
+  "build": {
+    "target": "browser",
+    "compiler": "native pas2js",
+    "entrypoint": "runtimes/wasm-pascal/src/wasm_idle_pascal_compiler.pas",
+    "integrationSources": [
+      "runtimes/wasm-pascal/src/system.pas",
+      "runtimes/wasm-pascal/src/wasm_idle_pascal_compiler.pas",
+      "runtimes/wasm-pascal/src/webfilecache.pp"
+    ],
+    "transformations": [
+      "strip trailing horizontal whitespace and normalize final newline",
+      "gzip compiler.js with Node zlib level 9"
+    ],
+    "verifiedBuildInput": false
+  },
+  "license": {
+    "spdx": "LGPL-2.1-only WITH Independent-modules-exception",
+    "sourceUrl": "https://gitlab.com/freepascal.org/fpc/pas2js/-/raw/release_3_2_0/COPYING.txt",
+    "exceptionSourceUrl": "https://gitlab.com/freepascal.org/fpc/pas2js/-/raw/release_3_2_0/LICENSE",
+    "verifiedBuildInput": false,
+    "evidence": "upstream license URLs recorded; texts were not vendored with the legacy generation"
+  },
+  "metadata": {
+    "path": "runtime-build.json",
+    "mediaType": "application/json",
+    "size": 132,
+    "sha256": "bcf88f90a94181e4f1d183314500d1fce386933500b42d4ba176a337cdde80f5"
+  },
+  "assets": [
+    {
+      "path": "compiler.js",
+      "mediaType": "text/javascript",
+      "size": 3332860,
+      "sha256": "b35968e4acaff893ab9e712815cf83f4d9b3ae4ca23a307b83ec37c65c4a6756"
+    },
+    {
+      "path": "rtl.js",
+      "mediaType": "text/javascript",
+      "size": 49020,
+      "sha256": "26fb07d209ca42654ada5c13357abdd630a0693fbb5a7806d32fa089adab026c"
+    },
+    {
+      "path": "system.pas",
+      "mediaType": "text/plain",
+      "size": 31650,
+      "sha256": "524c5cbd1b8c23c284943fa7c76e3cc42ac0be099072a6f0ea84418cfc08fb39"
+    }
+  ],
+  "storage": [
+    {
+      "path": "compiler.js.gz.bin",
+      "logicalPath": "compiler.js",
+      "encoding": "gzip",
+      "size": 495779,
+      "sha256": "603829fbb9b9663f243a9adb30a59a0c0d0251bae2a869dd4f2402ed7c554a2a"
+    },
+    {
+      "path": "rtl.js.bin",
+      "logicalPath": "rtl.js",
+      "encoding": "identity",
+      "size": 49020,
+      "sha256": "26fb07d209ca42654ada5c13357abdd630a0693fbb5a7806d32fa089adab026c"
+    },
+    {
+      "path": "system.pas.bin",
+      "logicalPath": "system.pas",
+      "encoding": "identity",
+      "size": 31650,
+      "sha256": "524c5cbd1b8c23c284943fa7c76e3cc42ac0be099072a6f0ea84418cfc08fb39"
+    }
+  ]
+}

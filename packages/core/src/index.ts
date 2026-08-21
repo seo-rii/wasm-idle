@@ -294,6 +294,23 @@ export {
 	type BashRuntimePreflightRequest
 } from './bash-runtime.js';
 export {
+	PASCAL_PREFLIGHT_PROTOCOL,
+	PASCAL_PREFLIGHT_PROTOCOL_VERSION,
+	PASCAL_PREFLIGHT_RUNTIME_ID,
+	PASCAL_MAX_MANIFEST_BYTES,
+	PASCAL_MAX_ASSET_BYTES,
+	PASCAL_MAX_DELIVERY_BYTES,
+	PASCAL_MAX_LOGICAL_BYTES,
+	clonePascalRuntimePreflightPayload,
+	preflightPascalRuntimeAssets,
+	requirePascalRuntimePreflightPayload,
+	snapshotPascalRuntimePreflightProfile,
+	verifyPascalRuntimePreflightPayload,
+	type PascalRuntimePreflightPayload,
+	type PascalRuntimePreflightProfile,
+	type PascalRuntimePreflightRequest
+} from './pascal-runtime.js';
+export {
 	TCL_PREFLIGHT_PROTOCOL,
 	TCL_PREFLIGHT_PROTOCOL_VERSION,
 	TCL_PREFLIGHT_RUNTIME_ID,

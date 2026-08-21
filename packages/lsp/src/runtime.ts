@@ -23,6 +23,10 @@ import {
 	BUNDLED_PERL_RUNTIME_BUNDLE
 } from './bundledPerlRuntime.js';
 import {
+	BUNDLED_PASCAL_MANIFEST_FINGERPRINT,
+	BUNDLED_PASCAL_RUNTIME_BUNDLE
+} from './bundledPascalRuntime.js';
+import {
 	BUNDLED_TCL_MANIFEST_FINGERPRINT,
 	BUNDLED_TCL_RUNTIME_BUNDLE
 } from './bundledTclRuntime.js';
@@ -30,10 +34,12 @@ import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } 
 import {
 	deriveRubyRuntimeWasmUrl,
 	snapshotJanetRuntimePreflightProfile,
+	snapshotPascalRuntimePreflightProfile,
 	snapshotPerlRuntimePreflightProfile,
 	snapshotPrologRuntimePreflightProfile,
 	snapshotTclRuntimePreflightProfile,
 	type JanetRuntimePreflightProfile,
+	type PascalRuntimePreflightProfile,
 	type PerlRuntimePreflightProfile,
 	type PrologRuntimePreflightProfile,
 	type TclRuntimePreflightProfile
@@ -1355,9 +1361,10 @@ export function resolvePascalLanguageServerWorkerUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''
 ) {
+	const bundledWorkerVersion = resolvePascalLanguageServerWorkerReceipt(options).sha256;
 	if (typeof options === 'string') {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-pascal/runner-worker.js`,
+			`${normalizeRootUrl(options) || ''}/wasm-pascal/runner-worker.js?v=${bundledWorkerVersion}`,
 			currentUrl
 		);
 	}
@@ -1366,11 +1373,154 @@ export function resolvePascalLanguageServerWorkerUrl(
 	}
 	if (options?.rootUrl) {
 		return resolveFileUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-pascal/runner-worker.js`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-pascal/runner-worker.js?v=${bundledWorkerVersion}`,
 			currentUrl
 		);
 	}
-	return resolveApplicationAssetUrl('/wasm-pascal/runner-worker.js', currentUrl);
+	return resolveApplicationAssetUrl(
+		`/wasm-pascal/runner-worker.js?v=${bundledWorkerVersion}`,
+		currentUrl
+	);
+}
+
+export function resolvePascalLanguageServerManifestUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	if (typeof options === 'object' && options.pascal?.manifestUrl) {
+		return resolveFileUrl(options.pascal.manifestUrl, currentUrl);
+	}
+	return resolveFileUrl(
+		`${resolvePascalLanguageServerBaseUrl(options, currentUrl)}runtime-manifest.v2.json?v=${resolvePascalLanguageServerManifestFingerprint(options)}`,
+		currentUrl
+	);
+}
+
+const usesCustomPascalRuntimeUrls = (options: EditorLanguageServerOptions | undefined) =>
+	typeof options === 'object' &&
+	Boolean(
+		options.pascal?.baseUrl ||
+		options.pascal?.workerUrl ||
+		options.pascal?.manifestUrl ||
+		options.pascal?.compilerJavaScriptUrl ||
+		options.pascal?.rtlJavaScriptUrl ||
+		options.pascal?.systemPascalUrl
+	);
+
+function hasConfiguredPascalTrust(options: EditorLanguageServerOptions | undefined): boolean {
+	const configured = typeof options === 'object' ? options.pascal : undefined;
+	return (
+		!!configured &&
+		[
+			configured.manifestFingerprint,
+			configured.profileId,
+			configured.artifactRevision,
+			configured.pas2jsVersion,
+			configured.pas2jsRevision,
+			configured.manifestReceipt,
+			configured.compilerJavaScriptReceipt,
+			configured.rtlJavaScriptReceipt,
+			configured.systemPascalReceipt,
+			configured.workerReceipt
+		].some((value) => value !== undefined)
+	);
+}
+
+export function resolvePascalLanguageServerManifestFingerprint(
+	options: EditorLanguageServerOptions | undefined
+) {
+	const configured =
+		typeof options === 'object' ? options.pascal?.manifestFingerprint?.trim() || '' : '';
+	if (/^[a-f0-9]{64}$/u.test(configured)) return configured;
+	if (!configured && !usesCustomPascalRuntimeUrls(options)) {
+		return BUNDLED_PASCAL_MANIFEST_FINGERPRINT;
+	}
+	throw new LanguageServerAssetConfigurationError(
+		'Pascal LSP',
+		'an explicit 64-character pascal.manifestFingerprint for custom runtime URLs'
+	);
+}
+
+export function resolvePascalLanguageServerWorkerReceipt(
+	options: EditorLanguageServerOptions | undefined
+) {
+	const configured = typeof options === 'object' ? options.pascal?.workerReceipt : undefined;
+	if (configured) return configured;
+	if (!usesCustomPascalRuntimeUrls(options) && !hasConfiguredPascalTrust(options)) {
+		return BUNDLED_PASCAL_RUNTIME_BUNDLE.workerReceipt;
+	}
+	throw new LanguageServerAssetConfigurationError(
+		'Pascal LSP',
+		'a complete runtime profile and runner receipt bundle'
+	);
+}
+
+export function resolvePascalLanguageServerPreflightProfile(
+	options: EditorLanguageServerOptions | undefined
+): PascalRuntimePreflightProfile {
+	const configured = typeof options === 'object' ? options.pascal : undefined;
+	const manifestFingerprint = resolvePascalLanguageServerManifestFingerprint(options);
+	const hasConfiguredProfile = hasConfiguredPascalTrust(options);
+
+	if (!hasConfiguredProfile) {
+		if (usesCustomPascalRuntimeUrls(options)) {
+			throw new LanguageServerAssetConfigurationError(
+				'Pascal LSP',
+				'a complete runtime profile and receipts for custom runtime URLs'
+			);
+		}
+		return snapshotPascalRuntimePreflightProfile(BUNDLED_PASCAL_RUNTIME_BUNDLE.profile);
+	}
+
+	try {
+		return snapshotPascalRuntimePreflightProfile({
+			profileId: configured?.profileId?.trim(),
+			artifactRevision: configured?.artifactRevision?.trim(),
+			pas2jsVersion: configured?.pas2jsVersion?.trim(),
+			pas2jsRevision: configured?.pas2jsRevision?.trim(),
+			manifestFingerprint,
+			manifestReceipt: configured?.manifestReceipt,
+			compilerJavaScriptReceipt: configured?.compilerJavaScriptReceipt,
+			rtlJavaScriptReceipt: configured?.rtlJavaScriptReceipt,
+			systemPascalReceipt: configured?.systemPascalReceipt
+		});
+	} catch {
+		throw new LanguageServerAssetConfigurationError(
+			'Pascal LSP',
+			'a complete valid runtime preflight profile and receipts'
+		);
+	}
+}
+
+export function resolvePascalLanguageServerAssetConfig(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	const configured = typeof options === 'object' ? options.pascal : undefined;
+	const profile = resolvePascalLanguageServerPreflightProfile(options);
+	const workerReceipt = resolvePascalLanguageServerWorkerReceipt(options);
+	return Object.freeze({
+		baseUrl: resolvePascalLanguageServerBaseUrl(options, currentUrl),
+		workerUrl: resolvePascalLanguageServerWorkerUrl(options, currentUrl),
+		manifestUrl: resolvePascalLanguageServerManifestUrl(options, currentUrl),
+		...(configured?.compilerJavaScriptUrl
+			? {
+					compilerJavaScriptUrl: resolveFileUrl(
+						configured.compilerJavaScriptUrl,
+						currentUrl
+					)
+				}
+			: {}),
+		...(configured?.rtlJavaScriptUrl
+			? { rtlJavaScriptUrl: resolveFileUrl(configured.rtlJavaScriptUrl, currentUrl) }
+			: {}),
+		...(configured?.systemPascalUrl
+			? { systemPascalUrl: resolveFileUrl(configured.systemPascalUrl, currentUrl) }
+			: {}),
+		manifestFingerprint: profile.manifestFingerprint,
+		profile,
+		workerReceipt
+	});
 }
 
 export type { EditorLanguageServerRuntimeOptions };

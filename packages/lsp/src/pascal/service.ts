@@ -10,10 +10,20 @@ import {
 	type StaticWorkerDiagnosticRequest,
 	type StaticWorkerDiagnosticRunner
 } from '../static-worker-service.js';
+import {
+	PASCAL_MAX_ASSET_BYTES,
+	PASCAL_MAX_LOGICAL_BYTES,
+	PASCAL_MAX_MANIFEST_BYTES,
+	requirePascalRuntimePreflightPayload,
+	type PascalRuntimePreflightPayload,
+	type RuntimeAssetIntegrityEntry
+} from '@wasm-idle/core';
 
 export interface PascalWorkerOptions {
-	baseUrl: string;
-	workerUrl: string;
+	runnerWorkerBytes: Uint8Array;
+	runtimePreflight: PascalRuntimePreflightPayload;
+	workerReceipt: RuntimeAssetIntegrityEntry;
+	maxAssetBytes: number;
 }
 
 export type PascalDiagnosticRunnerRequest = StaticWorkerDiagnosticRequest<PascalWorkerOptions>;
@@ -27,6 +37,93 @@ export type RunPascalDiagnostics = StaticWorkerDiagnosticRunner<
 	PascalWorkerOptions,
 	PascalDiagnosticRunnerResult
 >;
+
+const PASCAL_CONFIG_KEYS = [
+	'maxAssetBytes',
+	'runnerWorkerBytes',
+	'runtimePreflight',
+	'workerReceipt'
+] as const;
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+	!!value && typeof value === 'object' && !Array.isArray(value);
+
+const isOwnedUint8Array = (value: unknown): value is Uint8Array =>
+	ArrayBuffer.isView(value) &&
+	Object.prototype.toString.call(value) === '[object Uint8Array]' &&
+	value.buffer instanceof ArrayBuffer &&
+	value.byteOffset === 0 &&
+	value.byteLength === value.buffer.byteLength;
+
+function validatePascalWorkerConfig(config: PascalWorkerOptions): string | null {
+	if (
+		!isPlainRecord(config) ||
+		Object.keys(config).sort().join('\n') !== PASCAL_CONFIG_KEYS.join('\n')
+	) {
+		return 'Pascal language server requires an exact verified runtime configuration';
+	}
+	if (
+		!Number.isSafeInteger(config.maxAssetBytes) ||
+		config.maxAssetBytes <= 0 ||
+		config.maxAssetBytes > PASCAL_MAX_ASSET_BYTES
+	) {
+		return 'Pascal language server requires a valid maxAssetBytes limit';
+	}
+	if (
+		!isPlainRecord(config.workerReceipt) ||
+		Object.keys(config.workerReceipt).sort().join('\n') !== 'bytes\nsha256' ||
+		!Number.isSafeInteger(config.workerReceipt.bytes) ||
+		(config.workerReceipt.bytes as number) <= 0 ||
+		typeof config.workerReceipt.sha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(config.workerReceipt.sha256)
+	) {
+		return 'Pascal language server requires a valid runner receipt';
+	}
+	if (
+		!isOwnedUint8Array(config.runnerWorkerBytes) ||
+		config.runnerWorkerBytes.byteLength !== config.workerReceipt.bytes ||
+		config.runnerWorkerBytes.byteLength > config.maxAssetBytes
+	) {
+		return 'Pascal language server requires receipt-sized runner bytes';
+	}
+	let payload: PascalRuntimePreflightPayload;
+	try {
+		payload = requirePascalRuntimePreflightPayload(config.runtimePreflight);
+	} catch {
+		return 'Pascal language server requires a strict runtime preflight payload';
+	}
+	const runtimeBuffers = [
+		payload.manifestBytes,
+		payload.compilerJavaScriptBytes,
+		payload.rtlJavaScriptBytes,
+		payload.systemPascalBytes
+	];
+	for (const bytes of runtimeBuffers) {
+		if (!isOwnedUint8Array(bytes)) {
+			return 'Pascal language server requires owned runtime preflight bytes';
+		}
+		if (bytes.byteLength <= 0 || bytes.byteLength > config.maxAssetBytes) {
+			return 'Pascal language server runtime preflight exceeds maxAssetBytes';
+		}
+	}
+	if (payload.manifestBytes.byteLength > PASCAL_MAX_MANIFEST_BYTES) {
+		return 'Pascal language server manifest exceeds the manifest limit';
+	}
+	if (
+		new Set([config.runnerWorkerBytes.buffer, ...runtimeBuffers.map((bytes) => bytes.buffer)])
+			.size !== 5
+	) {
+		return 'Pascal language server requires unique owned preflight buffers';
+	}
+	const logicalBytes =
+		payload.compilerJavaScriptBytes.byteLength +
+		payload.rtlJavaScriptBytes.byteLength +
+		payload.systemPascalBytes.byteLength;
+	if (!Number.isSafeInteger(logicalBytes) || logicalBytes > PASCAL_MAX_LOGICAL_BYTES) {
+		return 'Pascal language server logical payload exceeds the aggregate limit';
+	}
+	return null;
+}
 
 const PASCAL_KEYWORDS = [
 	'and',
@@ -110,9 +207,28 @@ export function createPascalWorkerService(
 		diagnosticsProgressStage: 'pascal-diagnostics',
 		defaultActivePath: 'main.pas',
 		timeoutMessage: 'Pascal diagnostics timed out',
+		runtime: 'pascal',
 		runDiagnostics,
+		validateConfig: validatePascalWorkerConfig,
+		cacheKeyParts: (config) => [
+			config.runtimePreflight.protocol,
+			String(config.runtimePreflight.protocolVersion),
+			config.runtimePreflight.profileId,
+			config.runtimePreflight.artifactRevision,
+			config.runtimePreflight.pas2jsVersion,
+			config.runtimePreflight.pas2jsRevision,
+			config.runtimePreflight.manifestFingerprint,
+			String(config.runtimePreflight.manifestBytes.byteLength),
+			String(config.runtimePreflight.compilerJavaScriptBytes.byteLength),
+			String(config.runtimePreflight.rtlJavaScriptBytes.byteLength),
+			String(config.runtimePreflight.systemPascalBytes.byteLength),
+			String(config.workerReceipt.bytes),
+			config.workerReceipt.sha256,
+			String(config.maxAssetBytes)
+		],
 		createMessage: (request) => ({
-			baseUrl: request.baseUrl,
+			runtimePreflight: request.runtimePreflight,
+			maxAssetBytes: request.maxAssetBytes,
 			code: request.code,
 			args: [],
 			stdin: '',

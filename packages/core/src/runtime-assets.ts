@@ -158,7 +158,24 @@ export interface RuntimeAssetKeySource {
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	awk?: { baseUrl?: string; workerUrl?: string };
-	pascal?: { baseUrl?: string; workerUrl?: string };
+	pascal?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		compilerJavaScriptUrl?: string;
+		rtlJavaScriptUrl?: string;
+		systemPascalUrl?: string;
+		manifestFingerprint?: string;
+		profileId?: string;
+		artifactRevision?: string;
+		pas2jsVersion?: string;
+		pas2jsRevision?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		compilerJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
+		rtlJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
+		systemPascalReceipt?: RuntimeAssetIntegrityEntry;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	forth?: {
 		baseUrl?: string;
 		workerUrl?: string;
@@ -830,6 +847,53 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'awk', property: 'workerUrl', key: 'awkWorkerUrl' },
 	{ runtime: 'pascal', property: 'baseUrl', key: 'pascalBaseUrl' },
 	{ runtime: 'pascal', property: 'workerUrl', key: 'pascalWorkerUrl' },
+	{ runtime: 'pascal', property: 'manifestUrl', key: 'pascalManifestUrl' },
+	{
+		runtime: 'pascal',
+		property: 'compilerJavaScriptUrl',
+		key: 'pascalCompilerJavaScriptUrl'
+	},
+	{ runtime: 'pascal', property: 'rtlJavaScriptUrl', key: 'pascalRtlJavaScriptUrl' },
+	{ runtime: 'pascal', property: 'systemPascalUrl', key: 'pascalSystemPascalUrl' },
+	{
+		runtime: 'pascal',
+		property: 'manifestFingerprint',
+		key: 'pascalManifestFingerprint'
+	},
+	{ runtime: 'pascal', property: 'profileId', key: 'pascalProfileId' },
+	{ runtime: 'pascal', property: 'artifactRevision', key: 'pascalArtifactRevision' },
+	{ runtime: 'pascal', property: 'pas2jsVersion', key: 'pascalPas2jsVersion' },
+	{ runtime: 'pascal', property: 'pas2jsRevision', key: 'pascalPas2jsRevision' },
+	{
+		runtime: 'pascal',
+		property: 'manifestReceipt',
+		key: 'pascalManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'pascal',
+		property: 'compilerJavaScriptReceipt',
+		key: 'pascalCompilerJavaScriptReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'pascal',
+		property: 'rtlJavaScriptReceipt',
+		key: 'pascalRtlJavaScriptReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'pascal',
+		property: 'systemPascalReceipt',
+		key: 'pascalSystemPascalReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'pascal',
+		property: 'workerReceipt',
+		key: 'pascalWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'forth', property: 'baseUrl', key: 'forthBaseUrl' },
 	{ runtime: 'forth', property: 'workerUrl', key: 'forthWorkerUrl' },
 	{ runtime: 'forth', property: 'manifestUrl', key: 'forthManifestUrl' },

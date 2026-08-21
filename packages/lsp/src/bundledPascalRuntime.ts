@@ -1,4 +1,4 @@
-export const WASM_PASCAL_RUNTIME_PROFILE = {
+export const BUNDLED_PASCAL_RUNTIME_PROFILE = {
 	profileId: 'pascal-pas2js-3.2.1-legacy-2c1edc2d',
 	artifactRevision: '2c1edc2d47a221498d6086f62431796012e2f3ca',
 	pas2jsVersion: '3.2.1',
@@ -23,12 +23,13 @@ export const WASM_PASCAL_RUNTIME_PROFILE = {
 		sha256: '524c5cbd1b8c23c284943fa7c76e3cc42ac0be099072a6f0ea84418cfc08fb39'
 	}
 } as const;
-export const WASM_PASCAL_RUNTIME_BUNDLE = Object.freeze({
-	profile: WASM_PASCAL_RUNTIME_PROFILE,
+export const BUNDLED_PASCAL_RUNTIME_BUNDLE = Object.freeze({
+	profile: BUNDLED_PASCAL_RUNTIME_PROFILE,
 	workerReceipt: {
 		bytes: 20309,
 		sha256: '1067c3d36b7cf7d56b2679b43a18105dfac7c4a6f234f68e5bce11e15dc3ff12'
 	}
 });
-export const WASM_PASCAL_ASSET_VERSION = WASM_PASCAL_RUNTIME_PROFILE.manifestFingerprint;
-export const WASM_PASCAL_RUNNER_RECEIPT = WASM_PASCAL_RUNTIME_BUNDLE.workerReceipt;
+export const BUNDLED_PASCAL_MANIFEST_FINGERPRINT =
+	BUNDLED_PASCAL_RUNTIME_PROFILE.manifestFingerprint;
+export const BUNDLED_PASCAL_RUNNER_RECEIPT = BUNDLED_PASCAL_RUNTIME_BUNDLE.workerReceipt;

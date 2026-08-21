@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	HASKELL_RUNTIME_ASSET_RECEIPTS,
 	JANET_MAX_ASSET_BYTES,
+	PASCAL_MAX_ASSET_BYTES,
 	PERL_MAX_ASSET_BYTES,
 	PROLOG_MAX_ASSET_BYTES,
 	RUBY_RUNTIME_ASSET_PATH,
@@ -30,11 +31,16 @@ import {
 	BUNDLED_JANET_RUNTIME_PROFILE,
 	BUNDLED_JANET_RUNNER_RECEIPT
 } from '../src/bundledJanetRuntime.js';
+import {
+	BUNDLED_PASCAL_RUNTIME_PROFILE,
+	BUNDLED_PASCAL_RUNNER_RECEIPT
+} from '../src/bundledPascalRuntime.js';
 import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from '../src/bundledLispRuntime.js';
 import { createPrologTestAssetResponse } from './prolog-fixture.js';
 import { createPerlTestAssetResponse, perlTestAssetBytes } from './perl-fixture.js';
 import { createTclTestAssetResponse, tclTestAssetBytes } from './tcl-fixture.js';
 import { createJanetTestAssetResponse, janetTestAssetBytes } from './janet-fixture.js';
+import { createPascalTestAssetResponse } from './pascal-fixture.js';
 
 const lispStaticDir = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -425,17 +431,34 @@ describe('additional language server workers', () => {
 	});
 
 	it('starts Pascal with pas2js worker assets', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL | Request) => {
+				const requestUrl = new URL(
+					typeof input === 'string' || input instanceof URL ? input : input.url
+				);
+				const response = createPascalTestAssetResponse(requestUrl);
+				if (!response)
+					throw new Error(`Unexpected Pascal asset request: ${requestUrl.href}`);
+				return response;
+			})
+		);
 		const handle = await getPascalLanguageServer({
 			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
 
-		expect(mockState.workers[0]?.messages[0]).toEqual({
+		expect(mockState.workers[0]?.messages[0]).toMatchObject({
 			type: 'init',
 			options: {
-				baseUrl: 'https://static.example.com/repl_20240807/wasm-pascal/',
-				workerUrl: 'https://static.example.com/repl_20240807/wasm-pascal/runner-worker.js'
+				maxAssetBytes: PASCAL_MAX_ASSET_BYTES,
+				workerReceipt: BUNDLED_PASCAL_RUNNER_RECEIPT,
+				runtimePreflight: {
+					protocol: 'wasm-idle-pascal-preflight',
+					protocolVersion: 1,
+					manifestFingerprint: BUNDLED_PASCAL_RUNTIME_PROFILE.manifestFingerprint
+				}
 			}
 		});
 

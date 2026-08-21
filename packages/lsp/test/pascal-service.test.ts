@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { PASCAL_MAX_ASSET_BYTES, type PascalRuntimePreflightPayload } from '@wasm-idle/core';
+import { BUNDLED_PASCAL_RUNTIME_PROFILE } from '../src/bundledPascalRuntime.js';
 
 import {
 	createPascalWorkerService,
@@ -25,11 +27,31 @@ describe('createPascalWorkerService', () => {
 			text: 'program Demo;\nfunction DoubleIt(Value: Integer): Integer;\nbegin\n  UnknownThing;\nend;\nbegin\n  WriteLn(DoubleIt(21));\nend.\n'
 		};
 		const context = contextFor(document);
+		const runnerWorkerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
+		const workerReceipt = {
+			bytes: runnerWorkerBytes.byteLength,
+			sha256: 'b'.repeat(64)
+		};
+		const runtimePreflight: PascalRuntimePreflightPayload = {
+			protocol: 'wasm-idle-pascal-preflight',
+			protocolVersion: 1,
+			profileId: BUNDLED_PASCAL_RUNTIME_PROFILE.profileId,
+			artifactRevision: BUNDLED_PASCAL_RUNTIME_PROFILE.artifactRevision,
+			pas2jsVersion: BUNDLED_PASCAL_RUNTIME_PROFILE.pas2jsVersion,
+			pas2jsRevision: BUNDLED_PASCAL_RUNTIME_PROFILE.pas2jsRevision,
+			manifestFingerprint: BUNDLED_PASCAL_RUNTIME_PROFILE.manifestFingerprint,
+			manifestBytes: Uint8Array.of(1),
+			compilerJavaScriptBytes: Uint8Array.of(2),
+			rtlJavaScriptBytes: Uint8Array.of(3),
+			systemPascalBytes: Uint8Array.of(4)
+		};
 
 		await service.initialize?.(
 			{
-				baseUrl: 'https://static.example.com/wasm-pascal/',
-				workerUrl: 'https://static.example.com/wasm-pascal/runner-worker.js'
+				workerReceipt,
+				runnerWorkerBytes,
+				runtimePreflight,
+				maxAssetBytes: PASCAL_MAX_ASSET_BYTES
 			},
 			context
 		);
@@ -44,8 +66,10 @@ describe('createPascalWorkerService', () => {
 		const symbols = await service.documentSymbols?.(document, context);
 
 		expect(runDiagnostics).toHaveBeenCalledWith({
-			baseUrl: 'https://static.example.com/wasm-pascal/',
-			workerUrl: 'https://static.example.com/wasm-pascal/runner-worker.js',
+			workerReceipt,
+			runnerWorkerBytes,
+			runtimePreflight,
+			maxAssetBytes: PASCAL_MAX_ASSET_BYTES,
 			code: document.text,
 			activePath: 'main.pas'
 		});

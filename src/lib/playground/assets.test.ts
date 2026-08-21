@@ -153,6 +153,11 @@ import {
 	WASM_NIM_RUNTIME_PROFILE
 } from './wasmNimVersion';
 import { WASM_BASH_RUNTIME_PROFILE } from './wasmBashVersion';
+import {
+	WASM_PASCAL_ASSET_VERSION,
+	WASM_PASCAL_RUNNER_RECEIPT,
+	WASM_PASCAL_RUNTIME_PROFILE
+} from './wasmPascalVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import {
@@ -1206,7 +1211,15 @@ describe('runtime asset config resolution', () => {
 			resolvePascalRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
 		).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-pascal/',
-			workerUrl: 'https://example.com/absproxy/5173/wasm-pascal/runner-worker.js'
+			workerUrl: `https://example.com/absproxy/5173/wasm-pascal/runner-worker.js?v=${WASM_PASCAL_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `https://example.com/absproxy/5173/wasm-pascal/runtime-manifest.v2.json?v=${WASM_PASCAL_ASSET_VERSION}`,
+			compilerJavaScriptUrl: `https://example.com/absproxy/5173/wasm-pascal/compiler.js.gz.bin?v=${WASM_PASCAL_RUNTIME_PROFILE.compilerJavaScriptReceipt.sha256}`,
+			rtlJavaScriptUrl: `https://example.com/absproxy/5173/wasm-pascal/rtl.js.bin?v=${WASM_PASCAL_RUNTIME_PROFILE.rtlJavaScriptReceipt.sha256}`,
+			systemPascalUrl: `https://example.com/absproxy/5173/wasm-pascal/system.pas.bin?v=${WASM_PASCAL_RUNTIME_PROFILE.systemPascalReceipt.sha256}`,
+			manifestFingerprint: WASM_PASCAL_ASSET_VERSION,
+			preflightKey: expect.any(String),
+			preflightProfile: WASM_PASCAL_RUNTIME_PROFILE,
+			workerReceipt: WASM_PASCAL_RUNNER_RECEIPT
 		});
 		expect(resolveForthRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
 			{
@@ -1331,6 +1344,62 @@ describe('runtime asset config resolution', () => {
 				'https://example.com/app'
 			)
 		).toThrow(/workerUrl.*no longer supported/iu);
+	});
+
+	it('resolves one complete query-pinned Pascal bundle and rejects partial overrides', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_PASCAL_BASE_URL = '';
+		publicEnv.PUBLIC_WASM_PASCAL_WORKER_URL = '';
+		const { resolvePascalRuntimeAssetConfig } = await import('./assets');
+		const baseUrl = 'https://example.com/absproxy/5173/wasm-pascal/';
+		const workerUrl = `${baseUrl}runner-worker.js?v=${WASM_PASCAL_RUNNER_RECEIPT.sha256}`;
+		const manifestUrl = `${baseUrl}runtime-manifest.v2.json?v=${WASM_PASCAL_ASSET_VERSION}`;
+		const compilerJavaScriptUrl = `${baseUrl}compiler.js.gz.bin?v=${WASM_PASCAL_RUNTIME_PROFILE.compilerJavaScriptReceipt.sha256}`;
+		const rtlJavaScriptUrl = `${baseUrl}rtl.js.bin?v=${WASM_PASCAL_RUNTIME_PROFILE.rtlJavaScriptReceipt.sha256}`;
+		const systemPascalUrl = `${baseUrl}system.pas.bin?v=${WASM_PASCAL_RUNTIME_PROFILE.systemPascalReceipt.sha256}`;
+		const expectedIdentity = {
+			baseUrl,
+			workerUrl,
+			manifestUrl,
+			compilerJavaScriptUrl,
+			rtlJavaScriptUrl,
+			systemPascalUrl,
+			profile: WASM_PASCAL_RUNTIME_PROFILE,
+			workerReceipt: WASM_PASCAL_RUNNER_RECEIPT
+		};
+
+		expect(
+			resolvePascalRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
+		).toEqual({
+			baseUrl,
+			workerUrl,
+			manifestUrl,
+			compilerJavaScriptUrl,
+			rtlJavaScriptUrl,
+			systemPascalUrl,
+			manifestFingerprint: WASM_PASCAL_ASSET_VERSION,
+			preflightKey: JSON.stringify(expectedIdentity),
+			preflightProfile: WASM_PASCAL_RUNTIME_PROFILE,
+			workerReceipt: WASM_PASCAL_RUNNER_RECEIPT
+		});
+		expect(() =>
+			resolvePascalRuntimeAssetConfig(
+				{ pascal: { baseUrl: 'https://runtime.example.test/wasm-pascal/' } },
+				'https://example.com/app'
+			)
+		).toThrow(/complete profile/iu);
+		expect(() =>
+			resolvePascalRuntimeAssetConfig(
+				{
+					pascal: {
+						...WASM_PASCAL_RUNTIME_PROFILE,
+						workerReceipt: WASM_PASCAL_RUNNER_RECEIPT,
+						manifestUrl: `${baseUrl}other.json`
+					}
+				},
+				'https://example.com/app'
+			)
+		).toThrow(/canonical|manifest/iu);
 	});
 
 	it('preserves relative default Prolog urls and pins when no current url is available', async () => {
@@ -1508,6 +1577,10 @@ describe('runtime asset config resolution', () => {
 			...WASM_NIM_RUNTIME_PROFILE,
 			manifestFingerprint: customFingerprint
 		};
+		const customPascalProfile = {
+			...WASM_PASCAL_RUNTIME_PROFILE,
+			manifestFingerprint: customFingerprint
+		};
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = 'https://env.example.com/prolog/';
 		publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = 'https://env.example.com/gleam/';
@@ -1637,12 +1710,31 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(
 			resolvePascalRuntimeAssetConfig(
-				{ pascal: { baseUrl: '/runtime/pascal', workerUrl: '/runtime/pascal/worker.js' } },
+				{
+					pascal: {
+						baseUrl: '/runtime/pascal',
+						workerUrl: `/runtime/pascal/runner-worker.js?v=${customWorkerReceipt.sha256}`,
+						manifestUrl: `/runtime/pascal/runtime-manifest.v2.json?v=${customFingerprint}`,
+						compilerJavaScriptUrl: `/runtime/pascal/compiler.js.gz.bin?v=${customPascalProfile.compilerJavaScriptReceipt.sha256}`,
+						rtlJavaScriptUrl: `/runtime/pascal/rtl.js.bin?v=${customPascalProfile.rtlJavaScriptReceipt.sha256}`,
+						systemPascalUrl: `/runtime/pascal/system.pas.bin?v=${customPascalProfile.systemPascalReceipt.sha256}`,
+						...customPascalProfile,
+						workerReceipt: customWorkerReceipt
+					}
+				},
 				'https://example.com/app'
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/pascal/',
-			workerUrl: 'https://example.com/runtime/pascal/worker.js'
+			workerUrl: `https://example.com/runtime/pascal/runner-worker.js?v=${customWorkerReceipt.sha256}`,
+			manifestUrl: `https://example.com/runtime/pascal/runtime-manifest.v2.json?v=${customFingerprint}`,
+			compilerJavaScriptUrl: `https://example.com/runtime/pascal/compiler.js.gz.bin?v=${customPascalProfile.compilerJavaScriptReceipt.sha256}`,
+			rtlJavaScriptUrl: `https://example.com/runtime/pascal/rtl.js.bin?v=${customPascalProfile.rtlJavaScriptReceipt.sha256}`,
+			systemPascalUrl: `https://example.com/runtime/pascal/system.pas.bin?v=${customPascalProfile.systemPascalReceipt.sha256}`,
+			manifestFingerprint: customFingerprint,
+			preflightKey: expect.any(String),
+			preflightProfile: customPascalProfile,
+			workerReceipt: customWorkerReceipt
 		});
 		expect(
 			resolveForthRuntimeAssetConfig(

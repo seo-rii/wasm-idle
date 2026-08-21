@@ -101,6 +101,7 @@ import type { DOuterAssetReceipts } from '../src/d/assets.js';
 import type { EditorLanguageServerRuntimeOptions } from '../src/types.js';
 import { RUBY_RUNTIME_ASSET_PATH, type RubyRuntimeAssetReceipts } from '@wasm-idle/core';
 import { createJanetTestAssetResponse } from './janet-fixture.js';
+import { createPascalTestAssetResponse } from './pascal-fixture.js';
 import { createPerlTestAssetResponse } from './perl-fixture.js';
 import { createPrologTestAssetResponse } from './prolog-fixture.js';
 import { createTclTestAssetResponse } from './tcl-fixture.js';
@@ -256,6 +257,10 @@ describe('registered LSP provider lifecycle contract', () => {
 				}
 				if (requestUrl.pathname.includes('/wasm-perl/')) {
 					const response = createPerlTestAssetResponse(requestUrl);
+					if (response) return response;
+				}
+				if (requestUrl.pathname.includes('/wasm-pascal/')) {
+					const response = createPascalTestAssetResponse(requestUrl);
 					if (response) return response;
 				}
 				const dAsset = requestUrl.pathname.endsWith('/runtime/runtime-manifest.v1.json')

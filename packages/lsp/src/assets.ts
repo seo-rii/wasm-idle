@@ -11,6 +11,7 @@ export type LanguageToolAssetRuntime =
 	| 'clangd'
 	| 'd'
 	| 'janet'
+	| 'pascal'
 	| 'perl'
 	| 'prolog'
 	| 'ruby'

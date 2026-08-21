@@ -233,10 +233,7 @@
 	const tclLspBaseUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.baseUrl : undefined);
 	const tclLspWorkerUrl = $derived(tclLspEnabled ? runtimeAssets.tcl?.workerUrl : undefined);
 	const pascalLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'pascal');
-	const pascalLspBaseUrl = $derived(pascalLspEnabled ? runtimeAssets.pascal?.baseUrl : undefined);
-	const pascalLspWorkerUrl = $derived(
-		pascalLspEnabled ? runtimeAssets.pascal?.workerUrl : undefined
-	);
+	const pascalLspRuntime = $derived(pascalLspEnabled ? runtimeAssets.pascal : undefined);
 	const goLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'go');
 	const goLspCompilerUrl = $derived(goLspEnabled ? runtimeAssets.go?.compilerUrl : undefined);
 	const rustLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'rust');
@@ -2849,8 +2846,7 @@
 				{tclLspBaseUrl}
 				{tclLspWorkerUrl}
 				{pascalLspEnabled}
-				{pascalLspBaseUrl}
-				{pascalLspWorkerUrl}
+				{pascalLspRuntime}
 				{goLspEnabled}
 				{goLspCompilerUrl}
 				{rustLspEnabled}

@@ -7,6 +7,7 @@ import type { ElixirRuntimeAssetReceipts } from './elixir/assets.js';
 import type {
 	HaskellRuntimeAssetReceipts,
 	JanetRuntimePreflightProfile,
+	PascalRuntimePreflightProfile,
 	PerlRuntimePreflightProfile,
 	PrologRuntimePreflightProfile,
 	RubyRuntimeAssetReceipts,
@@ -225,6 +226,20 @@ export interface EditorLanguageServerRuntimeOptions {
 	pascal?: {
 		baseUrl?: string;
 		workerUrl?: string;
+		manifestUrl?: string;
+		compilerJavaScriptUrl?: string;
+		rtlJavaScriptUrl?: string;
+		systemPascalUrl?: string;
+		manifestFingerprint?: string;
+		profileId?: PascalRuntimePreflightProfile['profileId'];
+		artifactRevision?: PascalRuntimePreflightProfile['artifactRevision'];
+		pas2jsVersion?: PascalRuntimePreflightProfile['pas2jsVersion'];
+		pas2jsRevision?: PascalRuntimePreflightProfile['pas2jsRevision'];
+		manifestReceipt?: PascalRuntimePreflightProfile['manifestReceipt'];
+		compilerJavaScriptReceipt?: PascalRuntimePreflightProfile['compilerJavaScriptReceipt'];
+		rtlJavaScriptReceipt?: PascalRuntimePreflightProfile['rtlJavaScriptReceipt'];
+		systemPascalReceipt?: PascalRuntimePreflightProfile['systemPascalReceipt'];
+		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	document?: {
 		language?: DocumentLanguageId;

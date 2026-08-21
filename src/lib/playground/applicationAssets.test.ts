@@ -48,6 +48,11 @@ import {
 } from './wasmNimVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import {
+	WASM_PASCAL_ASSET_VERSION,
+	WASM_PASCAL_RUNNER_RECEIPT,
+	WASM_PASCAL_RUNTIME_PROFILE
+} from './wasmPascalVersion';
+import {
 	WASM_PERL_ASSET_VERSION,
 	WASM_PERL_RUNNER_RECEIPT,
 	WASM_PERL_RUNTIME_PROFILE
@@ -165,6 +170,16 @@ describe('application runtime asset root', () => {
 		expect(assets.go).toEqual({
 			compilerUrl: `/foo/bar/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`,
 			manifestUrl: `/foo/bar/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`
+		});
+		expect(assets.pascal).toEqual({
+			baseUrl: '/foo/bar/wasm-pascal/',
+			workerUrl: `/foo/bar/wasm-pascal/runner-worker.js?v=${WASM_PASCAL_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-pascal/runtime-manifest.v2.json?v=${WASM_PASCAL_ASSET_VERSION}`,
+			compilerJavaScriptUrl: `/foo/bar/wasm-pascal/compiler.js.gz.bin?v=${WASM_PASCAL_RUNTIME_PROFILE.compilerJavaScriptReceipt.sha256}`,
+			rtlJavaScriptUrl: `/foo/bar/wasm-pascal/rtl.js.bin?v=${WASM_PASCAL_RUNTIME_PROFILE.rtlJavaScriptReceipt.sha256}`,
+			systemPascalUrl: `/foo/bar/wasm-pascal/system.pas.bin?v=${WASM_PASCAL_RUNTIME_PROFILE.systemPascalReceipt.sha256}`,
+			...WASM_PASCAL_RUNTIME_PROFILE,
+			workerReceipt: WASM_PASCAL_RUNNER_RECEIPT
 		});
 		expect(assets.lisp).toEqual({
 			moduleUrl: `/foo/bar/wasm-lisp/index.js?v=${WASM_LISP_ASSET_VERSION}`,
@@ -424,6 +439,22 @@ describe('application runtime asset root', () => {
 					}
 				]
 			]),
+			pascalBaseUrl: '/foo/bar/wasm-pascal/',
+			pascalWorkerUrl: `/foo/bar/wasm-pascal/runner-worker.js?v=${WASM_PASCAL_RUNNER_RECEIPT.sha256}`,
+			pascalManifestUrl: `/foo/bar/wasm-pascal/runtime-manifest.v2.json?v=${WASM_PASCAL_ASSET_VERSION}`,
+			pascalCompilerJavaScriptUrl: `/foo/bar/wasm-pascal/compiler.js.gz.bin?v=${WASM_PASCAL_RUNTIME_PROFILE.compilerJavaScriptReceipt.sha256}`,
+			pascalRtlJavaScriptUrl: `/foo/bar/wasm-pascal/rtl.js.bin?v=${WASM_PASCAL_RUNTIME_PROFILE.rtlJavaScriptReceipt.sha256}`,
+			pascalSystemPascalUrl: `/foo/bar/wasm-pascal/system.pas.bin?v=${WASM_PASCAL_RUNTIME_PROFILE.systemPascalReceipt.sha256}`,
+			pascalManifestFingerprint: WASM_PASCAL_ASSET_VERSION,
+			pascalProfileId: WASM_PASCAL_RUNTIME_PROFILE.profileId,
+			pascalArtifactRevision: WASM_PASCAL_RUNTIME_PROFILE.artifactRevision,
+			pascalPas2jsVersion: WASM_PASCAL_RUNTIME_PROFILE.pas2jsVersion,
+			pascalPas2jsRevision: WASM_PASCAL_RUNTIME_PROFILE.pas2jsRevision,
+			pascalManifestReceipt: expect.any(String),
+			pascalCompilerJavaScriptReceipt: expect.any(String),
+			pascalRtlJavaScriptReceipt: expect.any(String),
+			pascalSystemPascalReceipt: expect.any(String),
+			pascalWorkerReceipt: expect.any(String),
 			gleamManifestFingerprint: WASM_GLEAM_ASSET_VERSION,
 			gleamWorkerReceipt: JSON.stringify([
 				[
@@ -765,6 +796,44 @@ describe('application runtime asset root', () => {
 				createRuntimeAssetsKey({
 					...assets,
 					bash: { ...bash, ...replacement }
+				})
+			).not.toBe(originalKey);
+		}
+	});
+
+	it('changes the runtime cache identity for every Pascal URL, profile, and receipt field', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const originalKey = createRuntimeAssetsKey(assets);
+		const pascal = assets.pascal!;
+		const replacements = [
+			{ baseUrl: '/custom/wasm-pascal/' },
+			{ workerUrl: '/custom/wasm-pascal/runner-worker.js?v=custom' },
+			{ manifestUrl: '/custom/wasm-pascal/runtime-manifest.v2.json?v=custom' },
+			{ compilerJavaScriptUrl: '/custom/wasm-pascal/compiler.js.gz.bin?v=custom' },
+			{ rtlJavaScriptUrl: '/custom/wasm-pascal/rtl.js.bin?v=custom' },
+			{ systemPascalUrl: '/custom/wasm-pascal/system.pas.bin?v=custom' },
+			{ profileId: `${pascal.profileId}-custom` },
+			{ artifactRevision: 'a'.repeat(40) },
+			{ pas2jsVersion: `${pascal.pas2jsVersion}-custom` },
+			{ pas2jsRevision: 'b'.repeat(12) },
+			{ manifestFingerprint: 'c'.repeat(64) },
+			{ manifestReceipt: { ...pascal.manifestReceipt!, sha256: 'd'.repeat(64) } },
+			{
+				compilerJavaScriptReceipt: {
+					...pascal.compilerJavaScriptReceipt!,
+					uncompressedSha256: 'e'.repeat(64)
+				}
+			},
+			{ rtlJavaScriptReceipt: { ...pascal.rtlJavaScriptReceipt!, bytes: 123 } },
+			{ systemPascalReceipt: { ...pascal.systemPascalReceipt!, sha256: 'f'.repeat(64) } },
+			{ workerReceipt: { ...pascal.workerReceipt!, bytes: 456 } }
+		];
+
+		for (const replacement of replacements) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					pascal: { ...pascal, ...replacement }
 				})
 			).not.toBe(originalKey);
 		}

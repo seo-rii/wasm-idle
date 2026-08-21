@@ -22,6 +22,10 @@ interface LspBrowserCase {
 	expectDiagnostics?: boolean;
 	expectedResponses?: Array<string | RegExp>;
 	assertNoPreEnableRequests?: Array<string | RegExp>;
+	expectedRequestPathnames?: string[];
+	forbiddenRequestPathnames?: string[];
+	requestPathMarker?: string;
+	requireSha256RequestPins?: boolean;
 	timeoutMs?: number;
 }
 
@@ -234,6 +238,29 @@ const lspBrowserCases: LspBrowserCase[] = [
 		fileName: 'main.pas',
 		source: 'program Demo;\nbegin\n  UnknownThing;\nend.\n',
 		aliases: ['pas', 'fpc'],
+		expectedResponses: [
+			'/wasm-pascal/runtime-manifest.v2.json?',
+			'/wasm-pascal/compiler.js.gz.bin?',
+			'/wasm-pascal/rtl.js.bin?',
+			'/wasm-pascal/system.pas.bin?',
+			'/wasm-pascal/runner-worker.js?'
+		],
+		assertNoPreEnableRequests: ['/wasm-pascal/'],
+		expectedRequestPathnames: [
+			'/wasm-pascal/runtime-manifest.v2.json',
+			'/wasm-pascal/compiler.js.gz.bin',
+			'/wasm-pascal/rtl.js.bin',
+			'/wasm-pascal/system.pas.bin',
+			'/wasm-pascal/runner-worker.js'
+		],
+		forbiddenRequestPathnames: [
+			'/wasm-pascal/compiler.js',
+			'/wasm-pascal/compiler.js.gz',
+			'/wasm-pascal/rtl.js',
+			'/wasm-pascal/system.pas'
+		],
+		requestPathMarker: '/wasm-pascal/',
+		requireSha256RequestPins: true,
 		timeoutMs: 180_000
 	},
 	{
@@ -951,6 +978,24 @@ async function runLspCase(
 
 	for (const response of await Promise.all(expectedResponses)) {
 		if (response instanceof Error) throw response;
+	}
+	if (testCase.expectedRequestPathnames) {
+		const requestUrls = lspRequests
+			.filter((entry) => entry.startsWith('> '))
+			.map((entry) => new URL(entry.slice(entry.indexOf(' ', 2) + 1)))
+			.filter((url) => url.pathname.includes(testCase.requestPathMarker || ''));
+		expect(requestUrls).toHaveLength(testCase.expectedRequestPathnames.length);
+		for (const pathname of testCase.expectedRequestPathnames) {
+			expect(requestUrls.filter((url) => url.pathname.endsWith(pathname))).toHaveLength(1);
+		}
+		for (const pathname of testCase.forbiddenRequestPathnames || []) {
+			expect(requestUrls.some((url) => url.pathname.endsWith(pathname))).toBe(false);
+		}
+		if (testCase.requireSha256RequestPins) {
+			for (const url of requestUrls) {
+				expect(url.searchParams.get('v')).toMatch(/^[a-f0-9]{64}$/u);
+			}
+		}
 	}
 
 	if (testCase.expectDiagnostics !== false) {

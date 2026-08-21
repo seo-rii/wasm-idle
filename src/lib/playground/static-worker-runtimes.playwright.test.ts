@@ -10,6 +10,7 @@ import {
 } from '../../../scripts/browser-preview-server.mjs';
 import { runStdinBrowserProbe as runBaseStdinBrowserProbe } from '../../../scripts/stdin-browser-probe-lib.mjs';
 import { WASM_NIM_RUNTIME_BUNDLE } from './wasmNimVersion';
+import { WASM_PASCAL_RUNTIME_BUNDLE } from './wasmPascalVersion';
 
 const prologStdinSource = `:- use_module(library(readutil)).
 
@@ -379,6 +380,48 @@ describe('wasm-idle static worker language browser integrations', () => {
 				expect(summary.pageErrors).toEqual([]);
 				expect(summary.transcript).toContain('main=73');
 				expect(summary.transcript).toContain('Process finished after');
+				const pascalRequests = summary.runtimeRequests
+					.map((requestUrl) => new URL(requestUrl))
+					.filter(({ pathname }) => pathname.includes('/wasm-pascal/'));
+				expect(pascalRequests).toHaveLength(5);
+				const requestByPath = new Map(
+					pascalRequests.map((url) => [
+						url.pathname.slice(url.pathname.indexOf('/wasm-pascal/')),
+						url
+					])
+				);
+				expect(new Set(requestByPath.keys())).toEqual(
+					new Set([
+						'/wasm-pascal/runtime-manifest.v2.json',
+						'/wasm-pascal/compiler.js.gz.bin',
+						'/wasm-pascal/rtl.js.bin',
+						'/wasm-pascal/system.pas.bin',
+						'/wasm-pascal/runner-worker.js'
+					])
+				);
+				expect(
+					Object.fromEntries(
+						[...requestByPath].map(([path, url]) => [path, url.searchParams.get('v')])
+					)
+				).toEqual({
+					'/wasm-pascal/runtime-manifest.v2.json':
+						WASM_PASCAL_RUNTIME_BUNDLE.profile.manifestFingerprint,
+					'/wasm-pascal/compiler.js.gz.bin':
+						WASM_PASCAL_RUNTIME_BUNDLE.profile.compilerJavaScriptReceipt.sha256,
+					'/wasm-pascal/rtl.js.bin':
+						WASM_PASCAL_RUNTIME_BUNDLE.profile.rtlJavaScriptReceipt.sha256,
+					'/wasm-pascal/system.pas.bin':
+						WASM_PASCAL_RUNTIME_BUNDLE.profile.systemPascalReceipt.sha256,
+					'/wasm-pascal/runner-worker.js': WASM_PASCAL_RUNTIME_BUNDLE.workerReceipt.sha256
+				});
+				for (const forbiddenPath of [
+					'/wasm-pascal/compiler.js',
+					'/wasm-pascal/compiler.js.gz',
+					'/wasm-pascal/rtl.js',
+					'/wasm-pascal/system.pas'
+				]) {
+					expect(requestByPath.has(forbiddenPath)).toBe(false);
+				}
 			}
 		);
 	}, 960_000);

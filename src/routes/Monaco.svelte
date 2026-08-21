@@ -64,6 +64,7 @@
 	}
 	type PerlLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['perl']>;
 	type JanetLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['janet']>;
+	type PascalLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['pascal']>;
 
 	const monacoTestHooksEnabled = () => {
 		try {
@@ -2372,8 +2373,7 @@
 		tclLspBaseUrl?: string;
 		tclLspWorkerUrl?: string;
 		pascalLspEnabled?: boolean;
-		pascalLspBaseUrl?: string;
-		pascalLspWorkerUrl?: string;
+		pascalLspRuntime?: PascalLspRuntimeConfig;
 		goLspEnabled?: boolean;
 		goLspCompilerUrl?: string;
 		rustLspEnabled?: boolean;
@@ -2466,8 +2466,7 @@
 		tclLspBaseUrl,
 		tclLspWorkerUrl,
 		pascalLspEnabled = false,
-		pascalLspBaseUrl,
-		pascalLspWorkerUrl,
+		pascalLspRuntime,
 		goLspEnabled = false,
 		goLspCompilerUrl,
 		rustLspEnabled = false,
@@ -2628,8 +2627,7 @@
 			dLspEnabled ? dLspIntegrity['runtime/runtime-manifest.v1.json'].sha256 : '',
 			tclLspEnabled ? tclLspBaseUrl || '' : '',
 			tclLspEnabled ? tclLspWorkerUrl || '' : '',
-			pascalLspEnabled ? pascalLspBaseUrl || '' : '',
-			pascalLspEnabled ? pascalLspWorkerUrl || '' : '',
+			pascalLspEnabled ? JSON.stringify(pascalLspRuntime) : '',
 			goLspEnabled ? goLspCompilerUrl || '' : '',
 			goTarget,
 			rustLspEnabled ? rustLspCompilerUrl || '' : '',
@@ -3030,16 +3028,15 @@
 		},
 		{
 			languages: ['pascal'],
-			isEnabled: () => pascalLspEnabled && !!pascalLspBaseUrl && !!pascalLspWorkerUrl,
+			isEnabled: () => pascalLspEnabled && !!pascalLspRuntime,
 			setStatus: (status) => (pascalLspStatus = status),
 			load: async (currentUrl) => {
+				const runtime = pascalLspRuntime;
+				if (!runtime) throw new Error('Pascal LSP runtime assets are unavailable');
 				const { getPascalLanguageServer } = await import('@wasm-idle/lsp/pascal');
 				return await getPascalLanguageServer({
 					currentUrl,
-					pascal: {
-						baseUrl: pascalLspBaseUrl || '',
-						workerUrl: pascalLspWorkerUrl || ''
-					},
+					pascal: runtime,
 					onStatus: (status) => (pascalLspStatus = status)
 				});
 			}

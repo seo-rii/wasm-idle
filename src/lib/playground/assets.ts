@@ -36,6 +36,7 @@ import { WASM_JANET_RUNTIME_BUNDLE } from '$lib/playground/wasmJanetVersion';
 import { WASM_JULIA_RUNTIME_BUNDLE } from '$lib/playground/wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 import { WASM_NIM_RUNTIME_BUNDLE } from '$lib/playground/wasmNimVersion';
+import { WASM_PASCAL_RUNTIME_BUNDLE } from '$lib/playground/wasmPascalVersion';
 import {
 	WASM_PROLOG_ASSET_VERSION,
 	WASM_PROLOG_RUNNER_RECEIPT,
@@ -54,6 +55,7 @@ import {
 	snapshotJanetRuntimePreflightProfile,
 	snapshotJuliaRuntimePreflightProfile,
 	snapshotNimRuntimePreflightProfile,
+	snapshotPascalRuntimePreflightProfile,
 	snapshotPerlRuntimePreflightProfile,
 	snapshotPrologRuntimePreflightProfile,
 	snapshotTclRuntimePreflightProfile,
@@ -322,6 +324,20 @@ export interface AwkRuntimeAssetConfig {
 export interface PascalRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
+	manifestUrl?: string;
+	compilerJavaScriptUrl?: string;
+	rtlJavaScriptUrl?: string;
+	systemPascalUrl?: string;
+	manifestFingerprint?: string;
+	profileId?: string;
+	artifactRevision?: string;
+	pas2jsVersion?: string;
+	pas2jsRevision?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	compilerJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
+	rtlJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
+	systemPascalReceipt?: RuntimeAssetIntegrityEntry;
+	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
 export interface ForthRuntimeAssetConfig {
@@ -2614,9 +2630,133 @@ export function resolvePascalRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
+	const configured = typeof options === 'object' ? options?.pascal : undefined;
+	const usesCustomTrustBoundary = Boolean(
+		(configured && Object.values(configured).some((value) => value !== undefined)) ||
+		(publicEnv.PUBLIC_WASM_PASCAL_BASE_URL || '').trim() ||
+		(publicEnv.PUBLIC_WASM_PASCAL_WORKER_URL || '').trim()
+	);
+	let preflightProfile;
+	try {
+		preflightProfile = snapshotPascalRuntimePreflightProfile(
+			usesCustomTrustBoundary
+				? {
+						profileId: configured?.profileId?.trim(),
+						artifactRevision: configured?.artifactRevision?.trim(),
+						pas2jsVersion: configured?.pas2jsVersion?.trim(),
+						pas2jsRevision: configured?.pas2jsRevision?.trim(),
+						manifestFingerprint: configured?.manifestFingerprint?.trim(),
+						manifestReceipt: configured?.manifestReceipt,
+						compilerJavaScriptReceipt: configured?.compilerJavaScriptReceipt,
+						rtlJavaScriptReceipt: configured?.rtlJavaScriptReceipt,
+						systemPascalReceipt: configured?.systemPascalReceipt
+					}
+				: WASM_PASCAL_RUNTIME_BUNDLE.profile
+		);
+	} catch (cause) {
+		throw new RuntimeConfigurationError(
+			'Pascal runtime custom assets require one complete profile and receipt bundle.',
+			{ cause, runtimeId: 'PASCAL' }
+		);
+	}
+	const workerReceipt = usesCustomTrustBoundary
+		? configured?.workerReceipt
+		: WASM_PASCAL_RUNTIME_BUNDLE.workerReceipt;
+	if (
+		!workerReceipt ||
+		Object.keys(workerReceipt).sort().join(',') !== 'bytes,sha256' ||
+		!Number.isSafeInteger(workerReceipt.bytes) ||
+		workerReceipt.bytes <= 0 ||
+		typeof workerReceipt.sha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(workerReceipt.sha256)
+	) {
+		throw new RuntimeConfigurationError(
+			'Pascal runtime custom assets require one complete profile and runner receipt bundle.',
+			{ runtimeId: 'PASCAL' }
+		);
+	}
+	const baseUrl = resolvePascalBaseUrl(options, currentUrl);
+	const resolvePinnedUrl = (configuredUrl: string | undefined, path: string, pin: string) => {
+		const sentinelOrigin = 'https://wasm-idle.invalid';
+		const candidate = resolveConfiguredUrl(configuredUrl || `${baseUrl}${path}`, currentUrl);
+		let url: URL;
+		let expected: URL;
+		try {
+			url = new URL(candidate, currentUrl || sentinelOrigin);
+			expected = new URL(`${baseUrl}${path}`, currentUrl || sentinelOrigin);
+		} catch (cause) {
+			throw new RuntimeConfigurationError(`Pascal runtime ${path} URL is invalid.`, {
+				cause,
+				runtimeId: 'PASCAL'
+			});
+		}
+		if (
+			(url.protocol !== 'http:' && url.protocol !== 'https:') ||
+			url.username ||
+			url.password ||
+			url.hash ||
+			url.origin !== expected.origin ||
+			url.pathname !== expected.pathname ||
+			(url.search && url.search !== `?v=${pin}`)
+		) {
+			throw new RuntimeConfigurationError(
+				`Pascal runtime ${path} URL must use its canonical query-pinned path.`,
+				{ runtimeId: 'PASCAL' }
+			);
+		}
+		if (!url.search) url.searchParams.set('v', pin);
+		return currentUrl || candidate.startsWith('http://') || candidate.startsWith('https://')
+			? url.href
+			: `${url.pathname}${url.search}`;
+	};
+	const workerUrl = resolvePinnedUrl(
+		configured?.workerUrl ||
+			(publicEnv.PUBLIC_WASM_PASCAL_WORKER_URL || '').trim() ||
+			resolvePascalWorkerUrl(options, currentUrl),
+		'runner-worker.js',
+		workerReceipt.sha256
+	);
+	const manifestUrl = resolvePinnedUrl(
+		configured?.manifestUrl,
+		'runtime-manifest.v2.json',
+		preflightProfile.manifestFingerprint
+	);
+	const compilerJavaScriptUrl = resolvePinnedUrl(
+		configured?.compilerJavaScriptUrl,
+		'compiler.js.gz.bin',
+		preflightProfile.compilerJavaScriptReceipt.sha256
+	);
+	const rtlJavaScriptUrl = resolvePinnedUrl(
+		configured?.rtlJavaScriptUrl,
+		'rtl.js.bin',
+		preflightProfile.rtlJavaScriptReceipt.sha256
+	);
+	const systemPascalUrl = resolvePinnedUrl(
+		configured?.systemPascalUrl,
+		'system.pas.bin',
+		preflightProfile.systemPascalReceipt.sha256
+	);
+	const identity = {
+		baseUrl,
+		workerUrl,
+		manifestUrl,
+		compilerJavaScriptUrl,
+		rtlJavaScriptUrl,
+		systemPascalUrl,
+		profile: preflightProfile,
+		workerReceipt
+	};
 	return {
-		baseUrl: resolvePascalBaseUrl(options, currentUrl),
-		workerUrl: resolvePascalWorkerUrl(options, currentUrl)
+		baseUrl,
+		workerUrl,
+		manifestUrl,
+		compilerJavaScriptUrl,
+		rtlJavaScriptUrl,
+		systemPascalUrl,
+		manifestFingerprint: preflightProfile.manifestFingerprint,
+		preflightKey: JSON.stringify(identity),
+		preflightProfile,
+		workerReceipt
 	};
 }
 

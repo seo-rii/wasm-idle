@@ -20,6 +20,11 @@ import {
 	BUNDLED_PERL_RUNNER_RECEIPT
 } from '../src/bundledPerlRuntime.js';
 import {
+	BUNDLED_PASCAL_MANIFEST_FINGERPRINT,
+	BUNDLED_PASCAL_RUNTIME_PROFILE,
+	BUNDLED_PASCAL_RUNNER_RECEIPT
+} from '../src/bundledPascalRuntime.js';
+import {
 	BUNDLED_TCL_MANIFEST_FINGERPRINT,
 	BUNDLED_TCL_RUNTIME_PROFILE,
 	BUNDLED_TCL_RUNNER_RECEIPT
@@ -61,7 +66,12 @@ import {
 	resolvePerlLanguageServerPreflightProfile,
 	resolvePerlLanguageServerWorkerReceipt,
 	resolvePerlLanguageServerWorkerUrl,
+	resolvePascalLanguageServerAssetConfig,
 	resolvePascalLanguageServerBaseUrl,
+	resolvePascalLanguageServerManifestFingerprint,
+	resolvePascalLanguageServerManifestUrl,
+	resolvePascalLanguageServerPreflightProfile,
+	resolvePascalLanguageServerWorkerReceipt,
 	resolvePascalLanguageServerWorkerUrl,
 	resolveDotnetLanguageServerModuleUrl,
 	resolveLuaLanguageServerModuleUrl,
@@ -231,6 +241,82 @@ describe('lsp runtime asset resolution', () => {
 			resolveJanetLanguageServerWorkerReceipt({
 				janet: {
 					baseUrl: 'https://mirror.example.com/janet/',
+					manifestFingerprint: 'c'.repeat(64)
+				}
+			})
+		).toThrow(LanguageServerAssetConfigurationError);
+	});
+
+	it('pins bundled Pascal manifests and diagnostic workers and fails closed for mirrors', () => {
+		const currentUrl = 'https://app.example.com/editor';
+		const bundledOptions = { rootUrl: '/wasm-idle' };
+		const customFingerprint = 'a'.repeat(64);
+
+		expect(resolvePascalLanguageServerManifestFingerprint(bundledOptions)).toBe(
+			BUNDLED_PASCAL_MANIFEST_FINGERPRINT
+		);
+		expect(resolvePascalLanguageServerWorkerReceipt(bundledOptions)).toBe(
+			BUNDLED_PASCAL_RUNNER_RECEIPT
+		);
+		expect(resolvePascalLanguageServerPreflightProfile(bundledOptions)).toEqual(
+			BUNDLED_PASCAL_RUNTIME_PROFILE
+		);
+		expect(resolvePascalLanguageServerWorkerUrl(bundledOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-pascal/runner-worker.js?v=${BUNDLED_PASCAL_RUNNER_RECEIPT.sha256}`
+		);
+		expect(resolvePascalLanguageServerManifestUrl(bundledOptions, currentUrl)).toBe(
+			`https://app.example.com/wasm-idle/wasm-pascal/runtime-manifest.v2.json?v=${BUNDLED_PASCAL_MANIFEST_FINGERPRINT}`
+		);
+
+		const customReceipt = { bytes: 543, sha256: 'b'.repeat(64) };
+		const customProfile = {
+			...BUNDLED_PASCAL_RUNTIME_PROFILE,
+			manifestFingerprint: customFingerprint
+		};
+		const customOptions = {
+			pascal: {
+				...customProfile,
+				baseUrl: 'https://mirror.example.com/pascal',
+				workerUrl: 'https://mirror.example.com/pascal/runner.js?v=custom',
+				manifestUrl: `https://mirror.example.com/pascal/runtime-manifest.v2.json?v=${customFingerprint}`,
+				compilerJavaScriptUrl: `https://mirror.example.com/pascal/compiler.js.gz.bin?v=${customProfile.compilerJavaScriptReceipt.sha256}`,
+				rtlJavaScriptUrl: `https://mirror.example.com/pascal/rtl.js.bin?v=${customProfile.rtlJavaScriptReceipt.sha256}`,
+				systemPascalUrl: `https://mirror.example.com/pascal/system.pas.bin?v=${customProfile.systemPascalReceipt.sha256}`,
+				manifestFingerprint: ` ${customFingerprint} `,
+				workerReceipt: customReceipt
+			}
+		};
+
+		expect(resolvePascalLanguageServerBaseUrl(customOptions)).toBe(
+			'https://mirror.example.com/pascal/'
+		);
+		expect(resolvePascalLanguageServerWorkerUrl(customOptions)).toBe(
+			'https://mirror.example.com/pascal/runner.js?v=custom'
+		);
+		expect(resolvePascalLanguageServerManifestUrl(customOptions)).toBe(
+			`https://mirror.example.com/pascal/runtime-manifest.v2.json?v=${customFingerprint}`
+		);
+		expect(resolvePascalLanguageServerManifestFingerprint(customOptions)).toBe(
+			customFingerprint
+		);
+		expect(resolvePascalLanguageServerWorkerReceipt(customOptions)).toBe(customReceipt);
+		expect(resolvePascalLanguageServerPreflightProfile(customOptions)).toEqual(customProfile);
+		expect(resolvePascalLanguageServerAssetConfig(customOptions)).toMatchObject({
+			compilerJavaScriptUrl: customOptions.pascal.compilerJavaScriptUrl,
+			rtlJavaScriptUrl: customOptions.pascal.rtlJavaScriptUrl,
+			systemPascalUrl: customOptions.pascal.systemPascalUrl,
+			profile: customProfile,
+			workerReceipt: customReceipt
+		});
+		expect(() =>
+			resolvePascalLanguageServerManifestFingerprint({
+				pascal: { baseUrl: 'https://mirror.example.com/pascal/' }
+			})
+		).toThrow(LanguageServerAssetConfigurationError);
+		expect(() =>
+			resolvePascalLanguageServerWorkerReceipt({
+				pascal: {
+					baseUrl: 'https://mirror.example.com/pascal/',
 					manifestFingerprint: 'c'.repeat(64)
 				}
 			})
@@ -622,7 +708,14 @@ describe('lsp runtime asset resolution', () => {
 				`wasm-tcl/runtime-manifest.v2.json?v=${BUNDLED_TCL_MANIFEST_FINGERPRINT}`
 			],
 			[resolvePascalLanguageServerBaseUrl, 'wasm-pascal/'],
-			[resolvePascalLanguageServerWorkerUrl, 'wasm-pascal/runner-worker.js']
+			[
+				resolvePascalLanguageServerWorkerUrl,
+				`wasm-pascal/runner-worker.js?v=${BUNDLED_PASCAL_RUNNER_RECEIPT.sha256}`
+			],
+			[
+				resolvePascalLanguageServerManifestUrl,
+				`wasm-pascal/runtime-manifest.v2.json?v=${BUNDLED_PASCAL_MANIFEST_FINGERPRINT}`
+			]
 		];
 
 		for (const [resolve, path] of cases) {
@@ -695,7 +788,9 @@ describe('lsp runtime asset resolution', () => {
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
 			)
-		).toBe('https://static.example.com/repl_20240807/wasm-pascal/runner-worker.js');
+		).toBe(
+			`https://static.example.com/repl_20240807/wasm-pascal/runner-worker.js?v=${BUNDLED_PASCAL_RUNNER_RECEIPT.sha256}`
+		);
 		expect(
 			resolveZigLanguageServerCompilerUrl(
 				'https://static.example.com/repl_20240807',
@@ -891,8 +986,11 @@ describe('lsp runtime asset resolution', () => {
 				workerUrl: 'https://tcl.example.com/runner-worker.js?v=20240807'
 			},
 			pascal: {
+				...BUNDLED_PASCAL_RUNTIME_PROFILE,
 				baseUrl: 'https://pascal.example.com/wasm-pascal/',
-				workerUrl: 'https://pascal.example.com/runner-worker.js?v=20240807'
+				workerUrl: 'https://pascal.example.com/runner-worker.js?v=20240807',
+				manifestUrl: 'https://pascal.example.com/manifest.json?v=20240807',
+				workerReceipt: BUNDLED_PASCAL_RUNNER_RECEIPT
 			},
 			zig: {
 				compilerUrl: 'https://zig.example.com/zig_small.wasm?v=20240807',
@@ -981,6 +1079,9 @@ describe('lsp runtime asset resolution', () => {
 		);
 		expect(resolvePascalLanguageServerWorkerUrl(options)).toBe(
 			'https://pascal.example.com/runner-worker.js?v=20240807'
+		);
+		expect(resolvePascalLanguageServerManifestUrl(options)).toBe(
+			'https://pascal.example.com/manifest.json?v=20240807'
 		);
 		expect(resolveZigLanguageServerCompilerUrl(options)).toBe(
 			'https://zig.example.com/zig_small.wasm?v=20240807'

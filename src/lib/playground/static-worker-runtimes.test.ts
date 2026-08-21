@@ -175,6 +175,11 @@ import {
 	WASM_TCL_RUNNER_RECEIPT,
 	WASM_TCL_RUNTIME_PROFILE
 } from './wasmTclVersion';
+import {
+	WASM_PASCAL_ASSET_VERSION,
+	WASM_PASCAL_RUNNER_RECEIPT,
+	WASM_PASCAL_RUNTIME_PROFILE
+} from './wasmPascalVersion';
 
 const jTestManifestSource = '{"runtime":"fixture"}\n';
 const jTestModuleSource = 'export default function fixtureJ() {}\n';
@@ -299,6 +304,23 @@ const tclLibraryDataGzipBytes = Uint8Array.from(
 const tclGlueSource = readFileSync(resolve(process.cwd(), 'static/wasm-tcl/tcl/wacl.js'), 'utf8');
 const tclWasmGzipBytes = Uint8Array.from(
 	readFileSync(resolve(process.cwd(), 'static/wasm-tcl/tcl/wacl.wasm.gz.bin'))
+);
+const pascalManifestSource = readFileSync(
+	resolve(process.cwd(), 'static/wasm-pascal/runtime-manifest.v2.json'),
+	'utf8'
+);
+const pascalWorkerSource = readFileSync(
+	resolve(process.cwd(), 'static/wasm-pascal/runner-worker.js'),
+	'utf8'
+);
+const pascalCompilerGzipBytes = Uint8Array.from(
+	readFileSync(resolve(process.cwd(), 'static/wasm-pascal/compiler.js.gz.bin'))
+);
+const pascalRtlBytes = Uint8Array.from(
+	readFileSync(resolve(process.cwd(), 'static/wasm-pascal/rtl.js.bin'))
+);
+const pascalSystemBytes = Uint8Array.from(
+	readFileSync(resolve(process.cwd(), 'static/wasm-pascal/system.pas.bin'))
 );
 const perlTestSha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const perlTestArtifactRevision = '6f2173d29a2c2e3536e1de75ff5d291ae96ab348';
@@ -1072,6 +1094,30 @@ function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 			}
 		});
 	}
+	if (inputUrl.includes('/wasm-pascal/runtime-manifest.v2.json')) {
+		return new Response(pascalManifestSource, {
+			status: 200,
+			headers: {
+				'content-length': String(new TextEncoder().encode(pascalManifestSource).byteLength),
+				'content-type': 'application/json'
+			}
+		});
+	}
+	for (const [path, bytes] of [
+		['compiler.js.gz.bin', pascalCompilerGzipBytes],
+		['rtl.js.bin', pascalRtlBytes],
+		['system.pas.bin', pascalSystemBytes]
+	] as const) {
+		if (inputUrl.includes(`/wasm-pascal/${path}`)) {
+			return new Response(Uint8Array.from(bytes), {
+				status: 200,
+				headers: {
+					'content-length': String(bytes.byteLength),
+					'content-type': 'application/octet-stream'
+				}
+			});
+		}
+	}
 	if (inputUrl.includes('/wasm-forth/runtime-manifest.v2.json')) {
 		return new Response(forthManifestSource, {
 			status: 200,
@@ -1188,7 +1234,9 @@ function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 											? perlWorkerSource
 											: inputUrl.includes('/wasm-tcl/runner-worker.js')
 												? tclWorkerSource
-												: '/* static worker */';
+												: inputUrl.includes('/wasm-pascal/runner-worker.js')
+													? pascalWorkerSource
+													: '/* static worker */';
 	return new Response(source, {
 		status: 200,
 		headers: {
@@ -1579,6 +1627,9 @@ describe('static worker backed language sandboxes', () => {
 		const workerEventIndex = runtimeLifecycleEvents.findIndex((event) =>
 			event.startsWith('worker:')
 		);
+		const runnerFetchIndex = runtimeLifecycleEvents.findIndex(
+			(event) => event.startsWith('fetch:') && event.includes('runner-worker.js')
+		);
 		for (const assetPath of [
 			'runtime-manifest.v2.json',
 			'swipl-web.js',
@@ -1591,6 +1642,9 @@ describe('static worker backed language sandboxes', () => {
 			);
 			expect(fetchEventIndex).toBeGreaterThanOrEqual(0);
 			expect(fetchEventIndex).toBeLessThan(workerEventIndex);
+			if (assetPath !== 'runner-worker.js') {
+				expect(fetchEventIndex).toBeLessThan(runnerFetchIndex);
+			}
 		}
 		expect(
 			runtimeLifecycleEvents.filter(
@@ -1651,6 +1705,11 @@ describe('static worker backed language sandboxes', () => {
 				)
 		).toBe(false);
 		expect(workerInstances).toHaveLength(0);
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) =>
+			createStaticWorkerFetchResponse(input)
+		);
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(1);
 	});
 
 	it('uses a module worker and reuses it for warm Gleam runs', async () => {
@@ -2056,14 +2115,12 @@ describe('static worker backed language sandboxes', () => {
 		);
 	});
 
-	it('loads Pascal runtime urls and forwards stdin to the pas2js worker', async () => {
+	it('preflights Pascal assets before its runner and transfers one verified payload', async () => {
 		const sandbox = new Pascal();
-		await sandbox.load({
-			pascal: {
-				baseUrl: '/wasm-pascal/',
-				workerUrl: '/wasm-pascal/runner-worker.js?v=test'
-			}
-		});
+		await sandbox.load('/absproxy/5173');
+		const warmFetchCount = vi.mocked(fetch).mock.calls.length;
+		await sandbox.load('/absproxy/5173');
+		expect(fetch).toHaveBeenCalledTimes(warmFetchCount);
 		await expect(
 			sandbox.run(
 				'program main; var n: integer; begin ReadLn(n); WriteLn(n); end.',
@@ -2077,17 +2134,106 @@ describe('static worker backed language sandboxes', () => {
 			)
 		).resolves.toBe(true);
 
-		await expectWorkerBootstrap(
+		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/wasm-pascal/runner-worker.js?v=test'
+			`http://localhost:3000/absproxy/5173/wasm-pascal/runner-worker.js?v=${WASM_PASCAL_RUNNER_RECEIPT.sha256}`,
+			pascalWorkerSource
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
-				baseUrl: 'http://localhost:3000/wasm-pascal/',
+				baseUrl: 'http://localhost:3000/absproxy/5173/wasm-pascal/',
+				manifestUrl: `http://localhost:3000/absproxy/5173/wasm-pascal/runtime-manifest.v2.json?v=${WASM_PASCAL_ASSET_VERSION}`,
+				manifestFingerprint: WASM_PASCAL_ASSET_VERSION,
+				runtimePreflight: expect.objectContaining({
+					protocol: 'wasm-idle-pascal-preflight',
+					protocolVersion: 1,
+					profileId: WASM_PASCAL_RUNTIME_PROFILE.profileId,
+					artifactRevision: WASM_PASCAL_RUNTIME_PROFILE.artifactRevision,
+					pas2jsVersion: WASM_PASCAL_RUNTIME_PROFILE.pas2jsVersion,
+					pas2jsRevision: WASM_PASCAL_RUNTIME_PROFILE.pas2jsRevision,
+					manifestFingerprint: WASM_PASCAL_ASSET_VERSION
+				}),
 				stdin: 'ok\n',
 				activePath: 'main.pas'
-			})
+			}),
+			expect.any(Array)
 		);
+		const runMessage = workerInstances[0].lastMessage;
+		expect(runMessage.runtimePreflight.manifestBytes).toHaveLength(
+			WASM_PASCAL_RUNTIME_PROFILE.manifestReceipt.bytes
+		);
+		expect(runMessage.runtimePreflight.compilerJavaScriptBytes).toHaveLength(
+			WASM_PASCAL_RUNTIME_PROFILE.compilerJavaScriptReceipt.uncompressedBytes
+		);
+		expect(runMessage.runtimePreflight.rtlJavaScriptBytes).toHaveLength(
+			WASM_PASCAL_RUNTIME_PROFILE.rtlJavaScriptReceipt.bytes
+		);
+		expect(runMessage.runtimePreflight.systemPascalBytes).toHaveLength(
+			WASM_PASCAL_RUNTIME_PROFILE.systemPascalReceipt.bytes
+		);
+		expect(workerInstances[0].lastTransferList).toHaveLength(4);
+		expect(new Set(workerInstances[0].lastTransferList).size).toBe(4);
+		const workerEventIndex = runtimeLifecycleEvents.findIndex((event) =>
+			event.startsWith('worker:')
+		);
+		for (const assetPath of [
+			'runtime-manifest.v2.json',
+			'compiler.js.gz.bin',
+			'rtl.js.bin',
+			'system.pas.bin',
+			'runner-worker.js'
+		]) {
+			const fetchEventIndex = runtimeLifecycleEvents.findIndex(
+				(event) => event.startsWith('fetch:') && event.includes(assetPath)
+			);
+			expect(fetchEventIndex).toBeGreaterThanOrEqual(0);
+			expect(fetchEventIndex).toBeLessThan(workerEventIndex);
+		}
+		const runtimeFetchPaths = runtimeLifecycleEvents
+			.filter((event) => event.startsWith('fetch:') && event.includes('/wasm-pascal/'))
+			.map((event) => new URL(event.slice('fetch:'.length)).pathname);
+		expect(runtimeFetchPaths).toHaveLength(5);
+		for (const legacyPath of [
+			'/wasm-pascal/compiler.js',
+			'/wasm-pascal/compiler.js.gz',
+			'/wasm-pascal/rtl.js',
+			'/wasm-pascal/system.pas'
+		]) {
+			expect(runtimeFetchPaths).not.toContain(`/absproxy/5173${legacyPath}`);
+		}
+		expect(workerInstances).toHaveLength(1);
+		expect(sandbox.workerReceipt).toEqual(WASM_PASCAL_RUNNER_RECEIPT);
+	});
+
+	it('rejects corrupt Pascal compiler storage before fetching the runner or creating a worker', async () => {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-pascal/compiler.js.gz.bin')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			return new Response(
+				Uint8Array.from(pascalCompilerGzipBytes, (byte, index) =>
+					index === 10 ? byte ^ 1 : byte
+				),
+				{
+					status: 200,
+					headers: { 'content-type': 'application/octet-stream' }
+				}
+			);
+		});
+		const sandbox = new Pascal();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'PASCAL'
+		});
+		expect(
+			vi
+				.mocked(fetch)
+				.mock.calls.some(([input]) =>
+					String(input).includes('/wasm-pascal/runner-worker.js')
+				)
+		).toBe(false);
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('loads ClojureScript runtime urls and forwards stdin, args, and workspace files', async () => {

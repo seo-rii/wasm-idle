@@ -31,7 +31,7 @@ import {
 } from './wasmObjectiveCVersion';
 import { WASM_OCAML_ASSET_VERSION } from './wasmOcamlVersion';
 import { WASM_OCTAVE_ASSET_VERSION } from './wasmOctaveVersion';
-import { WASM_PASCAL_ASSET_VERSION } from './wasmPascalVersion';
+import { WASM_PASCAL_RUNTIME_BUNDLE } from './wasmPascalVersion';
 import {
 	WASM_PERL_ASSET_VERSION,
 	WASM_PERL_RUNNER_RECEIPT,
@@ -156,7 +156,28 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		pascal: {
 			baseUrl: asset('wasm-pascal/'),
-			workerUrl: asset('wasm-pascal/runner-worker.js', WASM_PASCAL_ASSET_VERSION)
+			workerUrl: asset(
+				'wasm-pascal/runner-worker.js',
+				WASM_PASCAL_RUNTIME_BUNDLE.workerReceipt.sha256
+			),
+			manifestUrl: asset(
+				'wasm-pascal/runtime-manifest.v2.json',
+				WASM_PASCAL_RUNTIME_BUNDLE.profile.manifestFingerprint
+			),
+			compilerJavaScriptUrl: asset(
+				'wasm-pascal/compiler.js.gz.bin',
+				WASM_PASCAL_RUNTIME_BUNDLE.profile.compilerJavaScriptReceipt.sha256
+			),
+			rtlJavaScriptUrl: asset(
+				'wasm-pascal/rtl.js.bin',
+				WASM_PASCAL_RUNTIME_BUNDLE.profile.rtlJavaScriptReceipt.sha256
+			),
+			systemPascalUrl: asset(
+				'wasm-pascal/system.pas.bin',
+				WASM_PASCAL_RUNTIME_BUNDLE.profile.systemPascalReceipt.sha256
+			),
+			...WASM_PASCAL_RUNTIME_BUNDLE.profile,
+			workerReceipt: WASM_PASCAL_RUNTIME_BUNDLE.workerReceipt
 		},
 		forth: {
 			baseUrl: asset('wasm-forth/'),
