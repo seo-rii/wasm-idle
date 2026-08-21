@@ -122,6 +122,55 @@ export const createBundledTinyGoRuntime = (options = {}) => {
 
 const runtimeModuleUrl = `data:text/javascript;base64,${Buffer.from(runtimeModuleSource, 'utf8').toString('base64')}`;
 
+const createUpstreamFixtureState = () => ({
+	loadCalls: 0,
+	loadFailures: 0,
+	compileCalls: 0,
+	loadOptions: null as Record<string, unknown> | null,
+	compileRequest: null as { workspaceFiles?: Record<string, string> } | null,
+	compileOptions: null as { maxWasmMemoryBytes?: number } | null
+});
+
+const upstreamFixtureState =
+	(
+		globalThis as typeof globalThis & {
+			__wasmIdleTinyGoUpstreamFixtureState?: ReturnType<typeof createUpstreamFixtureState>;
+		}
+	).__wasmIdleTinyGoUpstreamFixtureState ||
+	((
+		globalThis as typeof globalThis & {
+			__wasmIdleTinyGoUpstreamFixtureState?: ReturnType<typeof createUpstreamFixtureState>;
+		}
+	).__wasmIdleTinyGoUpstreamFixtureState = createUpstreamFixtureState());
+
+const upstreamModuleSource = `
+const state = globalThis.__wasmIdleTinyGoUpstreamFixtureState;
+export async function loadTinyGoUpstreamToolchainAssets(options) {
+  state.loadCalls += 1;
+  state.loadOptions = options;
+  if (state.loadFailures > 0) {
+    state.loadFailures -= 1;
+    throw new Error('fixture upstream asset load failed');
+  }
+  options.onProgress?.({ assetPath: 'tools/upstream/tinygo-compiler.wasm', assetUrl: 'https://example.invalid/tinygo-compiler.wasm', label: 'upstream TinyGo compiler', loaded: 4, total: 4 });
+  return { fixture: 'receipt-verified-assets' };
+}
+export async function compileTinyGoInDisposableWorker(_assets, request, options) {
+  state.compileCalls += 1;
+  state.compileRequest = request;
+  state.compileOptions = options;
+  options.onPhase?.('prepare');
+  options.onPhase?.('graph');
+  options.onPhase?.('validate');
+  options.onPhase?.('compile');
+  options.onPhase?.('link');
+  options.onPhase?.('optimize');
+  return { wasm: new Uint8Array([0, 97, 115, 109]) };
+}
+`;
+
+const upstreamModuleUrl = `data:text/javascript;base64,${Buffer.from(upstreamModuleSource, 'utf8').toString('base64')}`;
+
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
 	onerror: ((event: ErrorEvent) => void) | null = null;
@@ -163,6 +212,74 @@ describe('TinyGo sandbox', () => {
 		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
 		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
 		Object.assign(runtimeFixtureState, createRuntimeFixtureState());
+		Object.assign(upstreamFixtureState, createUpstreamFixtureState());
+	});
+
+	it('compiles public TinyGo with receipt-verified upstream assets in the disposable worker', async () => {
+		const sandbox = new TinyGo();
+		const outputs: string[] = [];
+		const code = 'package main\nfunc main() {}\n';
+		sandbox.output = (chunk: string) => outputs.push(chunk);
+
+		await sandbox.load({
+			rootUrl: '/absproxy/5173',
+			tinygo: { moduleUrl: upstreamModuleUrl }
+		});
+		await expect(
+			sandbox.run(code, true, true, undefined, [], {
+				tinygoTarget: 'wasip1',
+				limits: { maxWasmMemoryBytes: 65_536 }
+			})
+		).resolves.toBe(true);
+		await expect(
+			sandbox.run(code, true, true, undefined, [], {
+				tinygoTarget: 'wasip1',
+				limits: { maxWasmMemoryBytes: 131_072 }
+			})
+		).resolves.toBe(true);
+
+		expect(upstreamFixtureState.loadCalls).toBe(1);
+		expect(upstreamFixtureState.compileCalls).toBe(2);
+		expect(upstreamFixtureState.compileRequest?.workspaceFiles).toEqual({
+			'go.mod': 'module wasm-idle.local/main\n\ngo 1.24.0\n',
+			'main.go': code
+		});
+		expect(upstreamFixtureState.compileOptions?.maxWasmMemoryBytes).toBe(131_072);
+		expect(outputs.join('')).toContain('upstream TinyGo phase: compile');
+		expect(outputs.join('')).toContain('upstream TinyGo artifact ready');
+	});
+
+	it('retries upstream asset loading after a transient verified-asset failure', async () => {
+		const sandbox = new TinyGo();
+		const code = 'package main\nfunc main() {}\n';
+		upstreamFixtureState.loadFailures = 1;
+
+		await sandbox.load({ tinygo: { moduleUrl: upstreamModuleUrl } });
+		await expect(sandbox.run(code)).rejects.toThrow('fixture upstream asset load failed');
+		await expect(sandbox.run(code)).resolves.toBe(true);
+
+		expect(upstreamFixtureState.loadCalls).toBe(2);
+		expect(upstreamFixtureState.compileCalls).toBe(1);
+	});
+
+	it('reloads upstream assets when the per-asset quota changes', async () => {
+		const sandbox = new TinyGo();
+		const code = 'package main\nfunc main() {}\n';
+
+		await sandbox.load({ tinygo: { moduleUrl: upstreamModuleUrl } });
+		await expect(
+			sandbox.run(code, true, true, undefined, [], {
+				limits: { maxAssetBytes: 1_000_000 }
+			})
+		).resolves.toBe(true);
+		await expect(
+			sandbox.run(code, true, true, undefined, [], {
+				limits: { maxAssetBytes: 2_000_000 }
+			})
+		).resolves.toBe(true);
+
+		expect(upstreamFixtureState.loadCalls).toBe(2);
+		expect(upstreamFixtureState.compileCalls).toBe(2);
 	});
 
 	it('loads the TinyGo runtime module, compiles once during prepare, and runs the cached artifact', async () => {

@@ -8,6 +8,12 @@ import {
 } from '@wasm-idle/core';
 
 describe('core language contract', () => {
+	it('exposes TinyGo as a deferred browser runtime language', () => {
+		expect(supportedLanguageIds).toContain('TINYGO');
+		expect(normalizeLanguageId('tinygo')).toBe('TINYGO');
+		expect(isDeferredProgressLanguage('tinygo')).toBe(true);
+	});
+
 	it('exposes Haskell as a deferred browser runtime language', () => {
 		expect(supportedLanguageIds).toContain('HASKELL');
 		expect(normalizeLanguageId('haskell')).toBe('HASKELL');

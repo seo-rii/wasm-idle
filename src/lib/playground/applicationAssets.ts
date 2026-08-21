@@ -247,7 +247,7 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			)
 		},
 		tinygo: {
-			moduleUrl: asset('wasm-tinygo/runtime.js', WASM_TINYGO_ASSET_VERSION)
+			moduleUrl: asset('wasm-tinygo/upstream.js', WASM_TINYGO_ASSET_VERSION)
 		},
 		typescript: {
 			moduleUrl: asset('wasm-typescript/index.js', WASM_TYPESCRIPT_ASSET_VERSION),

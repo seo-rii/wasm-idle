@@ -324,6 +324,13 @@ export const playgroundLanguageDescriptors: Readonly<
 		supportsArgs: true,
 		diagnosticMarkers: true
 	},
+	TINYGO: {
+		label: 'TinyGo',
+		editorLanguage: 'go',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	GRAPHQL: { label: 'GraphQL', editorLanguage: 'graphql' },
 	DUCKDB: { label: 'SQL — DuckDB', editorLanguage: 'sql', lspLanguageOverride: 'duckdb' },
 	SQLITE: {

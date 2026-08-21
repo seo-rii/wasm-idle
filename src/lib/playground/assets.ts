@@ -1051,11 +1051,11 @@ function deriveTinyGoModuleUrlFromAppUrl(appUrl: string, currentUrl = '') {
 	const [withoutQuery, query = ''] = withoutHash.split('?', 2);
 	let moduleUrlPath = withoutQuery;
 	if (moduleUrlPath.endsWith('/index.html')) {
-		moduleUrlPath = `${moduleUrlPath.slice(0, -'index.html'.length)}runtime.js`;
+		moduleUrlPath = `${moduleUrlPath.slice(0, -'index.html'.length)}upstream.js`;
 	} else if (moduleUrlPath.endsWith('/')) {
-		moduleUrlPath = `${moduleUrlPath}runtime.js`;
+		moduleUrlPath = `${moduleUrlPath}upstream.js`;
 	} else {
-		moduleUrlPath = `${moduleUrlPath.replace(/\/$/, '')}/runtime.js`;
+		moduleUrlPath = `${moduleUrlPath.replace(/\/$/, '')}/upstream.js`;
 	}
 	return `${moduleUrlPath}${query ? `?${query}` : ''}${hash ? `#${hash}` : ''}`;
 }
@@ -1082,14 +1082,14 @@ export function resolveTinyGoModuleUrl(
 
 	if (typeof options === 'string') {
 		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-tinygo/runtime.js`,
+			`${normalizeRootUrl(options) || ''}/wasm-tinygo/upstream.js`,
 			currentUrl
 		);
 	}
 
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tinygo/runtime.js`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tinygo/upstream.js`,
 			currentUrl
 		);
 	}

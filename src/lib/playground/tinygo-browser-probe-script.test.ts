@@ -50,7 +50,8 @@ describe('probe-tinygo-browser script', () => {
 		]);
 		expect(runTinyGoBrowserProbe).toHaveBeenCalledWith(
 			expect.objectContaining({
-				browserUrl: 'http://127.0.0.1:4173/wasm-idle/'
+				browserUrl: 'http://127.0.0.1:4173/wasm-idle/',
+				expectedOutput: 'fibonacci=11'
 			})
 		);
 		expect(consoleLog).toHaveBeenCalled();

@@ -639,6 +639,7 @@
 			NIM: 'main.nim',
 			BASH: 'main.sh',
 			CLOJURESCRIPT: 'main.cljs',
+			TINYGO: 'main.go',
 			OCAML: 'main.ml',
 			JAVASCRIPT: 'main.js',
 			TYPESCRIPT: 'main.ts',
@@ -697,6 +698,7 @@
 			NIM: 'nim',
 			BASH: 'bash',
 			CLOJURESCRIPT: 'clojurescript',
+			TINYGO: 'go',
 			OCAML: 'ocaml',
 			JAVASCRIPT: 'javascript',
 			TYPESCRIPT: 'typescript',
@@ -1294,6 +1296,7 @@
 			cob: 'COBOL',
 			cbl: 'COBOL',
 			gnucobol: 'COBOL',
+			tinygo: 'TINYGO',
 			graphql: 'GRAPHQL',
 			gql: 'GRAPHQL',
 			duckdb: 'DUCKDB',
@@ -2178,6 +2181,14 @@
 				{/if}
 				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button while
 				running if the program reads stdin until EOF.
+			</p>
+		{/if}
+		{#if language === 'TINYGO'}
+			<p class="hint">
+				TinyGo 0.40.1 compiles locally through the receipt-verified upstream toolchain for
+				`wasip1`. Compilation, package discovery, linking, and optimization run in a disposable
+				worker with phase and WebAssembly memory limits. Add `vendor/modules.txt` to use offline
+				vendored modules; network module downloads remain disabled.
 			</p>
 		{/if}
 		{#if language === 'D'}

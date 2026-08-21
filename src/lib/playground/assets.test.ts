@@ -785,7 +785,7 @@ describe('runtime asset config resolution', () => {
 		const { resolveTinyGoModuleUrl } = await import('./assets');
 
 		expect(resolveTinyGoModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/absproxy/5173/wasm-tinygo/runtime.js'
+			'https://example.com/absproxy/5173/wasm-tinygo/upstream.js'
 		);
 	});
 
@@ -797,7 +797,7 @@ describe('runtime asset config resolution', () => {
 		const { resolveTinyGoModuleUrl } = await import('./assets');
 
 		expect(resolveTinyGoModuleUrl(undefined, 'https://example.com/app')).toBe(
-			'https://env.example.com/wasm-tinygo/runtime.js?v=42'
+			'https://env.example.com/wasm-tinygo/upstream.js?v=42'
 		);
 	});
 

@@ -49,6 +49,7 @@ type TinyGoRuntimeHooks = {
 	} | null;
 	setBuildRequestOverrides?(overrides: { target?: TinyGoTarget } | null): void;
 	setMaxAssetBytes?(maxAssetBytes: number): void;
+	setMaxWasmMemoryBytes?(maxWasmMemoryBytes: number): void;
 	setWorkspaceFiles(files: Record<string, string> | null): void;
 	dispose?(): void;
 };
@@ -75,6 +76,22 @@ type TinyGoRuntimeDiagnostic = {
 };
 
 type TinyGoRuntimeModule = {
+	loadTinyGoUpstreamToolchainAssets?: (options: {
+		assetBaseUrl: string;
+		loader?: TinyGoRuntimeAssetLoader;
+		onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
+		signal?: AbortSignal;
+		maxAssetBytes?: number;
+	}) => Promise<unknown>;
+	compileTinyGoInDisposableWorker?: (
+		assets: unknown,
+		request: { workspaceFiles: Record<string, string>; package?: string },
+		options: {
+			signal?: AbortSignal;
+			maxWasmMemoryBytes?: number;
+			onPhase?: (phase: string) => void;
+		}
+	) => Promise<{ wasm: Uint8Array }>;
 	createBundledTinyGoRuntime?: (options?: {
 		assetLoader?: TinyGoRuntimeAssetLoader;
 		assetPacks?: TinyGoRuntimeAssetPackReference[];
@@ -797,7 +814,7 @@ class TinyGo implements Sandbox {
 						}
 						this.emitCompilerDiagnostic(activeOperation, diagnostic);
 					},
-					onLogAppended: () => {
+					onLogAppended: (_entry?: TinyGoRuntimeLogEntry) => {
 						const owner = this.runtimeProgressOwner;
 						const activeOperation = this.activeOperation;
 						const runtime = this.runtime;
@@ -817,7 +834,119 @@ class TinyGo implements Sandbox {
 					onProgress: (progress: TinyGoRuntimeAssetProgress) =>
 						this.reportRuntimeProgress(runtimeToken, progress)
 				};
-				if (typeof runtimeModule.createBundledTinyGoRuntime === 'function') {
+				if (
+					typeof runtimeModule.loadTinyGoUpstreamToolchainAssets === 'function' &&
+					typeof runtimeModule.compileTinyGoInDisposableWorker === 'function'
+				) {
+					let activityLog = '';
+					let artifact: ReturnType<TinyGoRuntimeHooks['readBuildArtifact']> = null;
+					let workspaceFiles: Record<string, string> | null = null;
+					let target: TinyGoTarget = 'wasip1';
+					let assetLimit = maxAssetBytes;
+					let wasmMemoryLimit = DEFAULT_EXECUTION_LIMITS.maxWasmMemoryBytes;
+					let controller: AbortController | null = null;
+					let assetsPromise: Promise<unknown> | null = null;
+					const loadUpstreamAssets = runtimeModule.loadTinyGoUpstreamToolchainAssets;
+					const compileUpstream = runtimeModule.compileTinyGoInDisposableWorker;
+					const appendLog = (line: string) => {
+						activityLog += `[${new Date().toTimeString().slice(0, 8)}] ${line}\n`;
+						commonOptions.onLogAppended({ line });
+					};
+					nextRuntime = {
+						async boot() {
+							if (!assetsPromise) {
+								controller = new AbortController();
+								let assetBaseUrl: string;
+								try {
+									assetBaseUrl = new URL('./', moduleUrl).toString();
+								} catch {
+									assetBaseUrl = new URL('./', window.location.href).toString();
+								}
+								assetsPromise = loadUpstreamAssets({
+									assetBaseUrl,
+									...(assetLoader ? { loader: assetLoader } : {}),
+									onProgress: commonOptions.onProgress,
+									signal: controller.signal,
+									maxAssetBytes: assetLimit
+								});
+							}
+							const pendingAssets = assetsPromise;
+							try {
+								await pendingAssets;
+							} catch (error) {
+								if (assetsPromise === pendingAssets) assetsPromise = null;
+								throw error;
+							}
+							appendLog('upstream TinyGo toolchain assets loaded');
+						},
+						async plan() {
+							if (!assetsPromise) throw new Error('upstream TinyGo assets are not loaded');
+							appendLog('upstream TinyGo receipt validation scheduled in compiler worker');
+							return { target: 'wasip1', implementation: 'upstream-tinygo-0.40.1' };
+						},
+						async execute() {
+							if (target !== 'wasip1') {
+								throw new Error('The upstream TinyGo browser compiler supports only wasip1');
+							}
+							if (!workspaceFiles) throw new Error('TinyGo workspace is not configured');
+							const assets = await assetsPromise;
+							if (!assets) throw new Error('upstream TinyGo assets are not loaded');
+							controller = new AbortController();
+							const compileFiles = { ...workspaceFiles };
+							if (!Object.prototype.hasOwnProperty.call(compileFiles, 'go.mod')) {
+								compileFiles['go.mod'] = 'module wasm-idle.local/main\n\ngo 1.24.0\n';
+							}
+							const result = await compileUpstream(
+								assets,
+								{ workspaceFiles: compileFiles, package: '.' },
+								{
+									signal: controller.signal,
+									maxWasmMemoryBytes: wasmMemoryLimit,
+									onPhase: (phase) => appendLog(`upstream TinyGo phase: ${phase}`)
+								}
+							);
+							artifact = {
+								path: '/work/program.wasm',
+								bytes: Uint8Array.from(result.wasm),
+								artifactKind: 'execution',
+								runnable: true,
+								entrypoint: '_start'
+							};
+							appendLog(`upstream TinyGo artifact ready: ${artifact.path}`);
+						},
+						reset() {
+							controller?.abort(new Error('TinyGo runtime reset'));
+							controller = null;
+							artifact = null;
+							activityLog = '';
+						},
+						readActivityLog: () => activityLog,
+						readBuildArtifact: () => artifact,
+						setBuildRequestOverrides(overrides) {
+							target = overrides?.target ?? 'wasip1';
+						},
+						setMaxAssetBytes(value) {
+							if (assetLimit !== value) {
+								controller?.abort(new Error('TinyGo asset quota changed'));
+								controller = null;
+								assetsPromise = null;
+							}
+							assetLimit = value;
+						},
+						setMaxWasmMemoryBytes(value) {
+							wasmMemoryLimit = value;
+						},
+						setWorkspaceFiles(files) {
+							workspaceFiles = files ? { ...files } : null;
+						},
+						dispose() {
+							controller?.abort(new Error('TinyGo runtime disposed'));
+							controller = null;
+							workspaceFiles = null;
+							artifact = null;
+						}
+					};
+				} else if (typeof runtimeModule.createBundledTinyGoRuntime === 'function') {
 					nextRuntime = runtimeModule.createBundledTinyGoRuntime(commonOptions);
 				} else if (typeof runtimeModule.createTinyGoRuntime === 'function') {
 					nextRuntime = runtimeModule.createTinyGoRuntime({
@@ -900,6 +1029,8 @@ class TinyGo implements Sandbox {
 			moduleUrl: this.moduleUrl,
 			maxAssetBytes:
 				operation.limits?.maxAssetBytes ?? DEFAULT_EXECUTION_LIMITS.maxAssetBytes,
+			maxWasmMemoryBytes:
+				operation.limits?.maxWasmMemoryBytes ?? DEFAULT_EXECUTION_LIMITS.maxWasmMemoryBytes,
 			target,
 			workspaceFiles
 		});
@@ -914,6 +1045,9 @@ class TinyGo implements Sandbox {
 		}
 		this.requireRuntimeAssetLimitSetter(runtime)(
 			operation.limits?.maxAssetBytes ?? DEFAULT_EXECUTION_LIMITS.maxAssetBytes
+		);
+		runtime.setMaxWasmMemoryBytes?.(
+			operation.limits?.maxWasmMemoryBytes ?? DEFAULT_EXECUTION_LIMITS.maxWasmMemoryBytes
 		);
 		this.assertOperation(operation);
 		runtime.reset();
@@ -1137,7 +1271,7 @@ class TinyGo implements Sandbox {
 				}
 				const configuredTarget = options.tinygoTarget;
 				this.assertOperation(operation);
-				const target = configuredTarget ?? 'wasm';
+				const target = configuredTarget ?? 'wasip1';
 				if (!TINYGO_TARGETS.has(target)) {
 					throw new TypeError('TinyGo target must be wasm, wasip1, wasip2, or wasip3');
 				}

@@ -28,6 +28,7 @@ const canonicalLanguageIds = [
 	'CLOJURESCRIPT',
 	'FORTRAN',
 	'COBOL',
+	'TINYGO',
 	'OCAML',
 	'JAVASCRIPT',
 	'TYPESCRIPT',

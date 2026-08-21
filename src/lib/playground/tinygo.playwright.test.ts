@@ -62,11 +62,10 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 					expect(summary.activeState.serviceWorkerControlled).toBe(true);
 					expect(summary.pageErrors).toEqual([]);
 					expect(summary.transcript).not.toContain('artifact probe failed:');
-					expect(summary.transcript).toContain(
-						'tinygo compiler module loaded from tools/tinygo-compiler.wasm (mode=direct)'
-					);
-					expect(summary.transcript).toContain('execution artifact ready:');
-					expect(summary.transcript).toContain('factorial_plus_bonus=123');
+					expect(summary.transcript).toContain('upstream TinyGo toolchain assets loaded');
+					expect(summary.transcript).toContain('upstream TinyGo phase: compile');
+					expect(summary.transcript).toContain('upstream TinyGo artifact ready:');
+					expect(summary.transcript).toContain('fibonacci=11');
 					expect(summary.transcript).toContain('Process finished after');
 					expect(
 						summary.consoleTail.some((entry: string) =>

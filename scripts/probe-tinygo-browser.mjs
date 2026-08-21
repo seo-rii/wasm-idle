@@ -12,7 +12,7 @@ const browserUrl =
 const runTimeoutMs = Number(process.env.WASM_IDLE_TINYGO_RUN_TIMEOUT_MS || '300000');
 const chromiumExecutable = process.env.WASM_IDLE_CHROMIUM_EXECUTABLE || '';
 const stdinText = process.env.WASM_IDLE_TINYGO_STDIN || '5\n';
-const expectedOutput = process.env.WASM_IDLE_TINYGO_EXPECTED_OUTPUT || 'factorial_plus_bonus=123';
+const expectedOutput = process.env.WASM_IDLE_TINYGO_EXPECTED_OUTPUT || 'fibonacci=11';
 const serverMode = process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 
 await runWithBrowserProbeSessionLock(async () => {

@@ -393,12 +393,13 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/Use\s+Ctrl\+D or the EOF button while running/);
 	});
 
-	it('keeps the TinyGo subset out of the shared language selector and execution controls', () => {
-		expect(applicationRuntimeAssets.tinygo?.moduleUrl).toContain('/wasm-tinygo/runtime.js?');
-		expect(playgroundLanguages).not.toContain('TINYGO');
-		expect('TINYGO' in languageLabels).toBe(false);
+	it('publishes upstream TinyGo without exposing unsupported target controls', () => {
+		expect(applicationRuntimeAssets.tinygo?.moduleUrl).toContain('/wasm-tinygo/upstream.js?');
+		expect(playgroundLanguages).toContain('TINYGO');
+		expect(languageLabels.TINYGO).toBe('TinyGo');
 		expect(source).not.toMatch(/TinyGoTarget|tinygoTarget|knownTinyGoTargets/);
 		expectPlaygroundLanguage('GO');
+		expectPlaygroundLanguage('TINYGO');
 		expectPlaygroundLanguage('D');
 		expectPlaygroundLanguage('CSHARP');
 		expectPlaygroundLanguage('FSHARP');
@@ -433,6 +434,7 @@ describe('example route debug actions', () => {
 			'JAVA',
 			'RUST',
 			'GO',
+			'TINYGO',
 			'D',
 			'CSHARP',
 			'FSHARP',
@@ -466,7 +468,8 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/availableGoTargets\.includes\('js\/wasm'\)/);
 		expect(source).toMatch(/`js\/wasm` runs through the bundled `wasm_exec\.js` browser host/);
 		expect(source).not.toContain('id="tinygo-target"');
-		expect(source).not.toContain("language === 'TINYGO'");
+		expect(source).toContain("language === 'TINYGO'");
+		expect(source).toMatch(/receipt-verified upstream toolchain for\s+`wasip1`/);
 	});
 
 	it('surfaces D through bundled LDC and Emscripten LLD browser assets', () => {

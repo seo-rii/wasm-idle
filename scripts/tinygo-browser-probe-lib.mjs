@@ -62,7 +62,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 export async function runTinyGoBrowserProbe({
 	browserUrl,
 	chromiumExecutable = '',
-	expectedOutput = 'factorial_plus_bonus=123',
+	expectedOutput = 'fibonacci=11',
 	runTimeoutMs = 300_000,
 	stdinText = '5\n'
 }) {
@@ -167,7 +167,7 @@ export async function runTinyGoBrowserProbe({
 						return false;
 					}
 					return (
-						text.includes('tinygo artifact ready:') ||
+						text.includes('upstream TinyGo artifact ready:') ||
 						text.includes('TinyGo compilation failed') ||
 						text.includes('Process finished after')
 					);

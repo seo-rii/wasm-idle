@@ -222,6 +222,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'TINYGO',
+		load: async () => {
+			const { default: TinyGo } = await import('$lib/playground/tinygo');
+			return new TinyGo();
+		}
+	},
+	{
 		languageId: 'OCAML',
 		load: async () => {
 			const { default: Ocaml } = await import('$lib/playground/ocaml');
