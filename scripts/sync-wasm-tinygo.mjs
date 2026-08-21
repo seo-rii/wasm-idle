@@ -21,33 +21,13 @@ const DEFAULT_VERSION_MODULE_PATH = path.resolve(
  */
 function shouldInclude(relativePath) {
 	const normalized = relativePath.split(path.sep).join('/');
-	if (normalized.startsWith('vendor/emception/')) {
-		return true;
-	}
-	if (normalized.startsWith('assets/runtime-') && normalized.endsWith('.js')) {
-		return true;
-	}
-	if (normalized.startsWith('assets/upstream-runtime-') && normalized.endsWith('.js')) {
-		return true;
-	}
 	if (normalized.startsWith('assets/upstream-compile-worker-') && normalized.endsWith('.js')) {
 		return true;
 	}
 	if (normalized.startsWith('tools/upstream/')) {
 		return true;
 	}
-	const exactAllowlist = new Set([
-		'runtime.js',
-		'upstream.js',
-		'tools/go-probe.wasm',
-		'tools/tinygo-compiler.wasm',
-		'tools/tinygo-compiler.json',
-		'tools/tinygo-upstream-probe.wasm',
-		'tools/tinygo-upstream-probe.json',
-		'tools/tinygo-upstream-frontend-probe.wasm',
-		'tools/tinygo-upstream-frontend-probe.json'
-	]);
-	return exactAllowlist.has(normalized);
+	return normalized === 'upstream.js';
 }
 
 /**
@@ -110,19 +90,8 @@ export async function syncWasmTinyGoDist({
 	const sourceStats = await stat(sourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {
 		throw new Error(
-			`wasm-tinygo dist directory was not found at ${sourceDir}. Build wasm-tinygo first with "pnpm --dir runtimes/wasm-tinygo build".`
+			`wasm-tinygo dist directory was not found at ${sourceDir}. Build the public runtime first with "pnpm --dir runtimes/wasm-tinygo build:upstream".`
 		);
-	}
-
-	const entryHtmlPath = path.join(sourceDir, 'index.html');
-	const entryHtmlStats = await stat(entryHtmlPath).catch(() => null);
-	if (!entryHtmlStats?.isFile()) {
-		throw new Error(`wasm-tinygo dist entry was not found at ${entryHtmlPath}.`);
-	}
-	const runtimeModulePath = path.join(sourceDir, 'runtime.js');
-	const runtimeModuleStats = await stat(runtimeModulePath).catch(() => null);
-	if (!runtimeModuleStats?.isFile()) {
-		throw new Error(`wasm-tinygo runtime module was not found at ${runtimeModulePath}.`);
 	}
 	const upstreamModulePath = path.join(sourceDir, 'upstream.js');
 	const upstreamModuleStats = await stat(upstreamModulePath).catch(() => null);
