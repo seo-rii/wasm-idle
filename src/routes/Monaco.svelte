@@ -26,6 +26,7 @@
 	import { WASM_ELIXIR_ASSET_RECEIPTS } from '$lib/playground/wasmElixirVersion';
 	import type monaco from 'monaco-editor';
 	import { onMount, untrack } from 'svelte';
+	import { SvelteURL } from 'svelte/reactivity';
 	import {
 		isEditorDefaultSource,
 		isLegacyEditorDefaultSource,
@@ -2997,8 +2998,8 @@
 				const { getDLanguageServer } = await import('@wasm-idle/lsp/d');
 				const moduleUrl = new URL(dLspModuleUrl || '', currentUrl);
 				const manifestUrl = dLspManifestUrl
-					? new URL(dLspManifestUrl, currentUrl)
-					: new URL('runtime/runtime-manifest.v1.json', moduleUrl);
+					? new SvelteURL(dLspManifestUrl, currentUrl)
+					: new SvelteURL('runtime/runtime-manifest.v1.json', moduleUrl);
 				if (!dLspManifestUrl) manifestUrl.search = moduleUrl.search;
 				return await getDLanguageServer({
 					currentUrl,
