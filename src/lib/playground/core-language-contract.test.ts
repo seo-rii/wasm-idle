@@ -715,11 +715,15 @@ describe('core language contract', () => {
 		const key = createRuntimeAssetsKey({
 			rootUrl: '/repl',
 			lisp: {
-				moduleUrl: '/wasm-lisp/index.js?v=test'
+				moduleUrl: '/wasm-lisp/index.js?v=test',
+				manifestUrl: '/wasm-lisp/runtime-manifest.v2.json?v=test',
+				manifestFingerprint: 'a'.repeat(64)
 			}
 		});
 
 		expect(key).toContain('"lispModuleUrl":"/wasm-lisp/index.js?v=test"');
+		expect(key).toContain('"lispManifestUrl":"/wasm-lisp/runtime-manifest.v2.json?v=test"');
+		expect(key).toContain(`"lispManifestFingerprint":"${'a'.repeat(64)}"`);
 	});
 
 	it('includes Ruby runtime urls and receipts in runtime asset cache keys', () => {
