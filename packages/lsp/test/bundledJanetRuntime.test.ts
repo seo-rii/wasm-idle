@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	BUNDLED_JANET_MANIFEST_FINGERPRINT,
+	BUNDLED_JANET_RUNTIME_BUNDLE,
+	BUNDLED_JANET_RUNTIME_PROFILE,
 	BUNDLED_JANET_RUNNER_RECEIPT
 } from '../src/bundledJanetRuntime.js';
 
@@ -89,9 +91,33 @@ describe('bundled Janet runtime identity', () => {
 			fingerprint: BUNDLED_JANET_MANIFEST_FINGERPRINT
 		});
 		expect(computeFingerprint(manifest)).toBe(BUNDLED_JANET_MANIFEST_FINGERPRINT);
+		expect(BUNDLED_JANET_RUNTIME_PROFILE).toMatchObject({
+			profileId: manifest.profileId,
+			artifactRevision: manifest.artifact.revision,
+			janetVersion: (manifest.components.janet as { version: string }).version,
+			emscriptenVersion: (manifest.components.emscripten as { version: string }).version,
+			manifestFingerprint: manifest.fingerprint,
+			manifestReceipt: {
+				bytes: Buffer.byteLength(JSON.stringify(manifest, null, 2) + '\n')
+			},
+			javascriptReceipt: {
+				bytes: manifest.assets.find((asset) => asset.path === 'janet.js')?.size,
+				sha256: manifest.assets.find((asset) => asset.path === 'janet.js')?.sha256
+			},
+			wasmReceipt: {
+				uncompressedBytes: manifest.assets.find((asset) => asset.path === 'janet.wasm')
+					?.size,
+				uncompressedSha256: manifest.assets.find((asset) => asset.path === 'janet.wasm')
+					?.sha256
+			}
+		});
 		expect(BUNDLED_JANET_RUNNER_RECEIPT).toEqual({
 			bytes: runnerBytes.byteLength,
 			sha256: createHash('sha256').update(runnerBytes).digest('hex')
+		});
+		expect(BUNDLED_JANET_RUNTIME_BUNDLE).toEqual({
+			profile: BUNDLED_JANET_RUNTIME_PROFILE,
+			workerReceipt: BUNDLED_JANET_RUNNER_RECEIPT
 		});
 	});
 });

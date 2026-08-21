@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { JANET_MAX_ASSET_BYTES, type JanetRuntimePreflightPayload } from '@wasm-idle/core';
+import { BUNDLED_JANET_RUNTIME_PROFILE } from '../src/bundledJanetRuntime.js';
+
 import {
 	createJanetWorkerService,
 	createLispWorkerService,
@@ -12,6 +15,26 @@ const contextFor = (document: LspDocument): LspDocumentContext => ({
 	publishDiagnostics: vi.fn(),
 	reportProgress: vi.fn()
 });
+
+const janetRunnerWorkerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
+const janetRuntimePreflight: JanetRuntimePreflightPayload = {
+	protocol: 'wasm-idle-janet-preflight',
+	protocolVersion: 1,
+	profileId: BUNDLED_JANET_RUNTIME_PROFILE.profileId,
+	artifactRevision: BUNDLED_JANET_RUNTIME_PROFILE.artifactRevision,
+	janetVersion: BUNDLED_JANET_RUNTIME_PROFILE.janetVersion,
+	emscriptenVersion: BUNDLED_JANET_RUNTIME_PROFILE.emscriptenVersion,
+	manifestFingerprint: BUNDLED_JANET_RUNTIME_PROFILE.manifestFingerprint,
+	manifestBytes: Uint8Array.of(1),
+	javascriptBytes: Uint8Array.of(2),
+	wasmBytes: Uint8Array.of(3)
+};
+const janetWorkerConfig = {
+	workerReceipt: { bytes: janetRunnerWorkerBytes.byteLength, sha256: 'b'.repeat(64) },
+	runnerWorkerBytes: janetRunnerWorkerBytes,
+	runtimePreflight: janetRuntimePreflight,
+	maxAssetBytes: JANET_MAX_ASSET_BYTES
+};
 
 describe('createJanetWorkerService', () => {
 	it('uses the Janet worker for diagnostics, completion, hover, and symbols', async () => {
@@ -27,16 +50,7 @@ describe('createJanetWorkerService', () => {
 		};
 		const context = contextFor(document);
 
-		await service.initialize?.(
-			{
-				baseUrl: 'https://static.example.com/wasm-janet/',
-				workerUrl: 'https://static.example.com/wasm-janet/runner-worker.js',
-				manifestUrl: 'https://static.example.com/wasm-janet/runtime-manifest.v2.json',
-				manifestFingerprint: 'a'.repeat(64),
-				workerReceipt: { bytes: 1234, sha256: 'b'.repeat(64) }
-			},
-			context
-		);
+		await service.initialize?.(janetWorkerConfig, context);
 
 		const diagnostics = await service.diagnostics?.(document, context);
 		const completions = await service.completion?.(
@@ -48,11 +62,7 @@ describe('createJanetWorkerService', () => {
 		const symbols = await service.documentSymbols?.(document, context);
 
 		expect(runDiagnostics).toHaveBeenCalledWith({
-			baseUrl: 'https://static.example.com/wasm-janet/',
-			workerUrl: 'https://static.example.com/wasm-janet/runner-worker.js',
-			manifestUrl: 'https://static.example.com/wasm-janet/runtime-manifest.v2.json',
-			manifestFingerprint: 'a'.repeat(64),
-			workerReceipt: { bytes: 1234, sha256: 'b'.repeat(64) },
+			...janetWorkerConfig,
 			code: document.text,
 			activePath: 'main.janet'
 		});

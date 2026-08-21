@@ -5,6 +5,7 @@ import { BUNDLED_ELIXIR_ASSET_VERSION } from '../src/bundledElixirRuntimeIntegri
 import { BUNDLED_GLEAM_MANIFEST_FINGERPRINT } from '../src/bundledGleamRuntime.js';
 import {
 	BUNDLED_JANET_MANIFEST_FINGERPRINT,
+	BUNDLED_JANET_RUNTIME_PROFILE,
 	BUNDLED_JANET_RUNNER_RECEIPT
 } from '../src/bundledJanetRuntime.js';
 import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from '../src/bundledLispRuntime.js';
@@ -40,9 +41,11 @@ import {
 	resolveHaskellLanguageServerBsdtarUrl,
 	resolveHaskellLanguageServerModuleUrl,
 	resolveHaskellLanguageServerRootfsUrl,
+	resolveJanetLanguageServerAssetConfig,
 	resolveJanetLanguageServerBaseUrl,
 	resolveJanetLanguageServerManifestFingerprint,
 	resolveJanetLanguageServerManifestUrl,
+	resolveJanetLanguageServerPreflightProfile,
 	resolveJanetLanguageServerWorkerReceipt,
 	resolveJanetLanguageServerWorkerUrl,
 	resolveLispLanguageServerManifestFingerprint,
@@ -167,12 +170,16 @@ describe('lsp runtime asset resolution', () => {
 	it('pins bundled Janet manifests and diagnostic workers and fails closed for mirrors', () => {
 		const currentUrl = 'https://app.example.com/editor';
 		const bundledOptions = { rootUrl: '/wasm-idle' };
+		const customFingerprint = 'a'.repeat(64);
 
 		expect(resolveJanetLanguageServerManifestFingerprint(bundledOptions)).toBe(
 			BUNDLED_JANET_MANIFEST_FINGERPRINT
 		);
 		expect(resolveJanetLanguageServerWorkerReceipt(bundledOptions)).toBe(
 			BUNDLED_JANET_RUNNER_RECEIPT
+		);
+		expect(resolveJanetLanguageServerPreflightProfile(bundledOptions)).toEqual(
+			BUNDLED_JANET_RUNTIME_PROFILE
 		);
 		expect(resolveJanetLanguageServerWorkerUrl(bundledOptions, currentUrl)).toBe(
 			`https://app.example.com/wasm-idle/wasm-janet/runner-worker.js?v=${BUNDLED_JANET_RUNNER_RECEIPT.sha256}`
@@ -182,12 +189,17 @@ describe('lsp runtime asset resolution', () => {
 		);
 
 		const customReceipt = { bytes: 543, sha256: 'b'.repeat(64) };
+		const customProfile = {
+			...BUNDLED_JANET_RUNTIME_PROFILE,
+			manifestFingerprint: customFingerprint
+		};
 		const customOptions = {
 			janet: {
+				...customProfile,
 				baseUrl: 'https://mirror.example.com/janet',
 				workerUrl: 'https://mirror.example.com/janet/runner.js?v=custom',
-				manifestUrl: 'https://mirror.example.com/janet/manifest.json?v=custom',
-				manifestFingerprint: ` ${'a'.repeat(64)} `,
+				manifestUrl: `https://mirror.example.com/janet/manifest.json?v=${customFingerprint}`,
+				manifestFingerprint: ` ${customFingerprint} `,
 				workerReceipt: customReceipt
 			}
 		};
@@ -199,10 +211,17 @@ describe('lsp runtime asset resolution', () => {
 			'https://mirror.example.com/janet/runner.js?v=custom'
 		);
 		expect(resolveJanetLanguageServerManifestUrl(customOptions)).toBe(
-			'https://mirror.example.com/janet/manifest.json?v=custom'
+			`https://mirror.example.com/janet/manifest.json?v=${customFingerprint}`
 		);
-		expect(resolveJanetLanguageServerManifestFingerprint(customOptions)).toBe('a'.repeat(64));
+		expect(resolveJanetLanguageServerManifestFingerprint(customOptions)).toBe(
+			customFingerprint
+		);
 		expect(resolveJanetLanguageServerWorkerReceipt(customOptions)).toBe(customReceipt);
+		expect(resolveJanetLanguageServerPreflightProfile(customOptions)).toEqual(customProfile);
+		expect(resolveJanetLanguageServerAssetConfig(customOptions)).toMatchObject({
+			profile: customProfile,
+			workerReceipt: customReceipt
+		});
 		expect(() =>
 			resolveJanetLanguageServerManifestFingerprint({
 				janet: { baseUrl: 'https://mirror.example.com/janet/' }

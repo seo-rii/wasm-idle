@@ -361,6 +361,13 @@ const lspBrowserCases: LspBrowserCase[] = [
 		label: 'Janet',
 		fileName: 'main.janet',
 		source: '(defn main []\n  (print 1)\n',
+		expectedResponses: [
+			'/wasm-janet/runtime-manifest.v2.json?',
+			'/wasm-janet/janet.js?',
+			'/wasm-janet/janet.wasm.gz.bin?',
+			'/wasm-janet/runner-worker.js?'
+		],
+		assertNoPreEnableRequests: ['/wasm-janet/'],
 		timeoutMs: 180_000
 	},
 	{
@@ -451,7 +458,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|lua|of-js-of-ocaml|pascal|prolog|rust|typescript|wat|zig))\//u.test(
+	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -968,6 +975,26 @@ async function runLspCase(
 				lspRequests.some((request) => request.includes(`/wasm-dotnet/runtime/${language}/`))
 			).toBe(false);
 		}
+	}
+	if (testCase.language === 'JANET') {
+		const janetRequestUrls = lspRequests
+			.filter((request) => request.startsWith('> GET ') && request.includes('/wasm-janet/'))
+			.map((request) => request.slice('> GET '.length));
+		const requestedPaths = janetRequestUrls.map((request) => {
+			const pathname = new URL(request).pathname;
+			return pathname.slice(pathname.lastIndexOf('/wasm-janet/'));
+		});
+		expect(janetRequestUrls).toHaveLength(4);
+		expect(new Set(requestedPaths)).toEqual(
+			new Set([
+				'/wasm-janet/runtime-manifest.v2.json',
+				'/wasm-janet/janet.js',
+				'/wasm-janet/janet.wasm.gz.bin',
+				'/wasm-janet/runner-worker.js'
+			])
+		);
+		expect(requestedPaths).not.toContain('/wasm-janet/janet.wasm.gz');
+		expect(requestedPaths).not.toContain('/wasm-janet/janet.wasm');
 	}
 }
 

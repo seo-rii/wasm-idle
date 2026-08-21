@@ -6,6 +6,7 @@ import type { DocumentLanguageId } from './document/service.js';
 import type { ElixirRuntimeAssetReceipts } from './elixir/assets.js';
 import type {
 	HaskellRuntimeAssetReceipts,
+	JanetRuntimePreflightProfile,
 	PerlRuntimePreflightProfile,
 	PrologRuntimePreflightProfile,
 	RubyRuntimeAssetReceipts,
@@ -112,6 +113,13 @@ export interface EditorLanguageServerRuntimeOptions {
 		workerUrl?: string;
 		manifestUrl?: string;
 		manifestFingerprint?: string;
+		profileId?: JanetRuntimePreflightProfile['profileId'];
+		artifactRevision?: JanetRuntimePreflightProfile['artifactRevision'];
+		janetVersion?: JanetRuntimePreflightProfile['janetVersion'];
+		emscriptenVersion?: JanetRuntimePreflightProfile['emscriptenVersion'];
+		manifestReceipt?: JanetRuntimePreflightProfile['manifestReceipt'];
+		javascriptReceipt?: JanetRuntimePreflightProfile['javascriptReceipt'];
+		wasmReceipt?: JanetRuntimePreflightProfile['wasmReceipt'];
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	lisp?: {

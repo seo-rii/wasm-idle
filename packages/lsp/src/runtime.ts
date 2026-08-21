@@ -11,7 +11,7 @@ import { BUNDLED_GLEAM_MANIFEST_FINGERPRINT } from './bundledGleamRuntime.js';
 import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from './bundledLispRuntime.js';
 import {
 	BUNDLED_JANET_MANIFEST_FINGERPRINT,
-	BUNDLED_JANET_RUNNER_RECEIPT
+	BUNDLED_JANET_RUNTIME_BUNDLE
 } from './bundledJanetRuntime.js';
 import {
 	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
@@ -29,9 +29,11 @@ import {
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from './types.js';
 import {
 	deriveRubyRuntimeWasmUrl,
+	snapshotJanetRuntimePreflightProfile,
 	snapshotPerlRuntimePreflightProfile,
 	snapshotPrologRuntimePreflightProfile,
 	snapshotTclRuntimePreflightProfile,
+	type JanetRuntimePreflightProfile,
 	type PerlRuntimePreflightProfile,
 	type PrologRuntimePreflightProfile,
 	type TclRuntimePreflightProfile
@@ -484,11 +486,83 @@ export function resolveJanetLanguageServerWorkerReceipt(
 ) {
 	const configured = typeof options === 'object' ? options.janet?.workerReceipt : undefined;
 	if (configured) return configured;
-	if (!usesCustomJanetRuntimeUrls(options)) return BUNDLED_JANET_RUNNER_RECEIPT;
+	if (!usesCustomJanetRuntimeUrls(options) && !hasConfiguredJanetTrust(options)) {
+		return BUNDLED_JANET_RUNTIME_BUNDLE.workerReceipt;
+	}
 	throw new LanguageServerAssetConfigurationError(
 		'Janet LSP',
-		'an explicit janet.workerReceipt for custom runtime URLs'
+		'a complete runtime profile and runner receipt bundle'
 	);
+}
+
+function hasConfiguredJanetTrust(options: EditorLanguageServerOptions | undefined): boolean {
+	const configured = typeof options === 'object' ? options.janet : undefined;
+	return (
+		!!configured &&
+		[
+			configured.manifestFingerprint,
+			configured.profileId,
+			configured.artifactRevision,
+			configured.janetVersion,
+			configured.emscriptenVersion,
+			configured.manifestReceipt,
+			configured.javascriptReceipt,
+			configured.wasmReceipt,
+			configured.workerReceipt
+		].some((value) => value !== undefined)
+	);
+}
+
+export function resolveJanetLanguageServerPreflightProfile(
+	options: EditorLanguageServerOptions | undefined
+): JanetRuntimePreflightProfile {
+	const configured = typeof options === 'object' ? options.janet : undefined;
+	const manifestFingerprint = resolveJanetLanguageServerManifestFingerprint(options);
+	const hasConfiguredProfile = hasConfiguredJanetTrust(options);
+
+	if (!hasConfiguredProfile) {
+		if (usesCustomJanetRuntimeUrls(options)) {
+			throw new LanguageServerAssetConfigurationError(
+				'Janet LSP',
+				'a complete runtime profile and receipts for custom runtime URLs'
+			);
+		}
+		return snapshotJanetRuntimePreflightProfile(BUNDLED_JANET_RUNTIME_BUNDLE.profile);
+	}
+
+	try {
+		return snapshotJanetRuntimePreflightProfile({
+			profileId: configured?.profileId?.trim(),
+			artifactRevision: configured?.artifactRevision?.trim(),
+			janetVersion: configured?.janetVersion?.trim(),
+			emscriptenVersion: configured?.emscriptenVersion?.trim(),
+			manifestFingerprint,
+			manifestReceipt: configured?.manifestReceipt,
+			javascriptReceipt: configured?.javascriptReceipt,
+			wasmReceipt: configured?.wasmReceipt
+		});
+	} catch {
+		throw new LanguageServerAssetConfigurationError(
+			'Janet LSP',
+			'a complete valid runtime preflight profile and receipts'
+		);
+	}
+}
+
+export function resolveJanetLanguageServerAssetConfig(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	const profile = resolveJanetLanguageServerPreflightProfile(options);
+	const workerReceipt = resolveJanetLanguageServerWorkerReceipt(options);
+	return Object.freeze({
+		baseUrl: resolveJanetLanguageServerBaseUrl(options, currentUrl),
+		workerUrl: resolveJanetLanguageServerWorkerUrl(options, currentUrl),
+		manifestUrl: resolveJanetLanguageServerManifestUrl(options, currentUrl),
+		manifestFingerprint: profile.manifestFingerprint,
+		profile,
+		workerReceipt
+	});
 }
 
 export function resolveLispLanguageServerModuleUrl(

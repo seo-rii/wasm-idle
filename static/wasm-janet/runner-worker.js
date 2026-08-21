@@ -1,29 +1,38 @@
 const encoder = new TextEncoder();
 const fatalDecoder = new TextDecoder('utf-8', { fatal: true });
+const preflightProtocol = 'wasm-idle-janet-preflight';
+const preflightProtocolVersion = 1;
 const manifestFormat = 'wasm-janet-runtime-manifest-v2';
 const fingerprintDomain = 'wasm-idle:janet-runtime-manifest:v2';
-const expectedProfileId = 'janet-1.41.3-dev-emscripten-3.1.8-wasm-idle-d647850c';
-const expectedLicenseExpression = 'MIT';
 const hardMaxAssetBytes = 8 * 1024 * 1024;
-const maxManifestBytes = 128 * 1024;
+const hardMaxTotalLogicalBytes = 16 * 1024 * 1024;
+const maxManifestBytes = 64 * 1024;
+const expectedIdentity = Object.freeze({
+	profileId: 'janet-1.41.3-dev-emscripten-3.1.8-wasm-idle-d647850c',
+	artifactRevision: 'd647850cd6448b457f778d01c304358aefa5244b',
+	janetVersion: '1.41.3-dev',
+	emscriptenVersion: '3.1.8',
+	manifestFingerprint: 'a7d89c155be6d2acc930f2d4fc535ce4a67857e3bd32bb42cb005aafcc6c014f'
+});
+const expectedLicenseExpression = 'MIT';
 const expectedArtifact = Object.freeze({
 	kind: 'opaque-vendored',
 	repository: 'https://github.com/seo-rii/wasm-idle.git',
-	revision: 'd647850cd6448b457f778d01c304358aefa5244b',
+	revision: expectedIdentity.artifactRevision,
 	path: 'static/wasm-janet',
 	provenance: 'legacy-import-unrecorded',
 	verifiedBuildInput: false
 });
 const expectedComponents = Object.freeze({
 	janet: Object.freeze({
-		version: '1.41.3-dev',
+		version: expectedIdentity.janetVersion,
 		repository: 'https://github.com/janet-lang/janet.git',
 		revision: 'unrecorded',
 		verifiedBuildInput: false,
 		evidence: 'embedded runtime version string'
 	}),
 	emscripten: Object.freeze({
-		version: '3.1.8',
+		version: expectedIdentity.emscriptenVersion,
 		repository: 'https://github.com/emscripten-core/emscripten.git',
 		revision: 'unrecorded',
 		verifiedBuildInput: false,
@@ -53,8 +62,22 @@ const expectedAssets = Object.freeze({
 });
 const expectedStorage = Object.freeze({
 	'janet.js': Object.freeze({ logicalPath: 'janet.js', encoding: 'identity' }),
-	'janet.wasm.gz': Object.freeze({ logicalPath: 'janet.wasm', encoding: 'gzip' })
+	'janet.wasm.gz.bin': Object.freeze({ logicalPath: 'janet.wasm', encoding: 'gzip' })
 });
+const preflightKeys = Object.freeze(
+	[
+		'artifactRevision',
+		'emscriptenVersion',
+		'janetVersion',
+		'javascriptBytes',
+		'manifestBytes',
+		'manifestFingerprint',
+		'profileId',
+		'protocol',
+		'protocolVersion',
+		'wasmBytes'
+	].sort()
+);
 const expectedManifestKeys = Object.freeze(
 	[
 		'artifact',
@@ -81,19 +104,81 @@ const expectedStorageReceiptKeys = Object.freeze([
 ]);
 const expectedLicenseReceiptKeys = Object.freeze(['path', 'sha256', 'size', 'spdx']);
 
-let verifiedRuntimePromise = null;
-let verifiedRuntimeIdentity = '';
-let runtimeEvaluationStarted = false;
+let requestConsumed = false;
 
 function isObject(value) {
 	return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function hasExactKeys(value, expectedKeys) {
+	const keys = Object.keys(value).sort();
 	return (
-		isObject(value) &&
-		JSON.stringify(Object.keys(value).sort()) === JSON.stringify(expectedKeys)
+		keys.length === expectedKeys.length &&
+		keys.every((key, index) => key === expectedKeys[index])
 	);
+}
+
+function isUint8Array(value) {
+	return (
+		ArrayBuffer.isView(value) &&
+		value.buffer instanceof ArrayBuffer &&
+		Object.prototype.toString.call(value) === '[object Uint8Array]'
+	);
+}
+
+function errorMessage(error) {
+	return error?.message || String(error);
+}
+
+function requireRuntimePreflight(runtimePreflight, requestedMaxAssetBytes) {
+	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
+		throw new Error('Janet runtime asset byte limit is invalid.');
+	}
+	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
+	if (!isObject(runtimePreflight) || !hasExactKeys(runtimePreflight, preflightKeys)) {
+		throw new Error('Janet runtime preflight payload has an invalid shape.');
+	}
+	if (
+		runtimePreflight.protocol !== preflightProtocol ||
+		runtimePreflight.protocolVersion !== preflightProtocolVersion ||
+		runtimePreflight.profileId !== expectedIdentity.profileId ||
+		runtimePreflight.artifactRevision !== expectedIdentity.artifactRevision ||
+		runtimePreflight.janetVersion !== expectedIdentity.janetVersion ||
+		runtimePreflight.emscriptenVersion !== expectedIdentity.emscriptenVersion ||
+		runtimePreflight.manifestFingerprint !== expectedIdentity.manifestFingerprint ||
+		!isUint8Array(runtimePreflight.manifestBytes) ||
+		!isUint8Array(runtimePreflight.javascriptBytes) ||
+		!isUint8Array(runtimePreflight.wasmBytes)
+	) {
+		throw new Error('Janet runtime preflight payload is invalid.');
+	}
+	for (const [label, bytes, limit] of [
+		[
+			'Janet runtime manifest',
+			runtimePreflight.manifestBytes,
+			Math.min(maxManifestBytes, maxAssetBytes)
+		],
+		['Janet runtime JavaScript', runtimePreflight.javascriptBytes, maxAssetBytes],
+		['Janet runtime Wasm', runtimePreflight.wasmBytes, maxAssetBytes]
+	]) {
+		if (bytes.byteLength <= 0 || bytes.byteLength > limit) {
+			throw new Error(`${label} exceeds its byte limit.`);
+		}
+	}
+	const totalLogicalBytes =
+		runtimePreflight.javascriptBytes.byteLength + runtimePreflight.wasmBytes.byteLength;
+	if (!Number.isSafeInteger(totalLogicalBytes) || totalLogicalBytes > hardMaxTotalLogicalBytes) {
+		throw new Error('Janet runtime logical payload exceeds its aggregate byte limit.');
+	}
+	return { runtimePreflight, maxAssetBytes };
+}
+
+async function sha256Hex(bytes) {
+	if (!globalThis.crypto?.subtle?.digest) {
+		throw new Error('Janet runtime integrity verification requires Web Crypto.');
+	}
+	const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
+	return [...digest].map((value) => value.toString(16).padStart(2, '0')).join('');
 }
 
 function canonicalJson(value) {
@@ -107,164 +192,6 @@ function canonicalJson(value) {
 	const primitive = JSON.stringify(value);
 	if (primitive === undefined) throw new Error('Janet manifest contains a non-JSON value.');
 	return primitive;
-}
-
-function requireHttpUrl(value, label) {
-	let url;
-	try {
-		url = new URL(value);
-	} catch {
-		throw new Error(`${label} URL is invalid.`);
-	}
-	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error(`${label} URL must use HTTP(S).`);
-	}
-	if (url.username || url.password || url.hash) {
-		throw new Error(`${label} URL must not include credentials or a fragment.`);
-	}
-	return url;
-}
-
-function assetUrl(baseUrl, path, fingerprint) {
-	const base = requireHttpUrl(baseUrl, 'Janet runtime base');
-	const url = new URL(path, base);
-	if (fingerprint) url.searchParams.set('v', fingerprint);
-	return url.href;
-}
-
-function cancelResponseBody(response, reason) {
-	try {
-		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
-	} catch {
-		// Preserve the trust-boundary failure that caused cancellation.
-	}
-}
-
-async function fetchBoundedBytes(
-	urlValue,
-	label,
-	maxBytes,
-	expectedBytes,
-	cache,
-	alternateExpectedBytes
-) {
-	if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
-		throw new Error(`${label} byte limit is invalid.`);
-	}
-	const expectedByteSizes = [];
-	for (const candidate of [expectedBytes, alternateExpectedBytes]) {
-		if (candidate === undefined) continue;
-		if (!Number.isSafeInteger(candidate) || candidate <= 0 || candidate > maxBytes) {
-			throw new Error(`${label} expected byte size is invalid.`);
-		}
-		if (!expectedByteSizes.includes(candidate)) expectedByteSizes.push(candidate);
-	}
-	const maximumExpectedBytes = expectedByteSizes.length
-		? Math.max(...expectedByteSizes)
-		: undefined;
-	const requestUrl = requireHttpUrl(urlValue, label);
-	const response = await fetch(requestUrl.href, {
-		...(cache ? { cache } : {}),
-		credentials: 'omit',
-		redirect: 'error',
-		referrerPolicy: 'no-referrer'
-	});
-	try {
-		if (!response.url) throw new Error(`${label} response URL is missing.`);
-		let responseUrl;
-		try {
-			responseUrl = new URL(response.url);
-		} catch {
-			throw new Error(`${label} response URL is invalid.`);
-		}
-		if (responseUrl.href !== requestUrl.href) {
-			throw new Error(`${label} response URL does not match the requested asset.`);
-		}
-		if (!response.ok)
-			throw new Error(`${label} request failed with status ${response.status}.`);
-		const contentLength = response.headers.get('content-length');
-		if (contentLength !== null) {
-			const normalized = contentLength.trim();
-			const parsed = Number(normalized);
-			if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(parsed)) {
-				throw new Error(`${label} has an invalid Content-Length.`);
-			}
-			if (expectedByteSizes.length && !expectedByteSizes.includes(parsed)) {
-				throw new Error(`${label} Content-Length does not match its receipt.`);
-			}
-			if (parsed > maxBytes) throw new Error(`${label} exceeds its byte limit.`);
-		}
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	if (!response.body) {
-		const error = new Error(`${label} response does not provide a byte stream.`);
-		cancelResponseBody(response, error);
-		throw error;
-	}
-
-	let reader;
-	try {
-		reader = response.body.getReader();
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	const output = maximumExpectedBytes === undefined ? null : new Uint8Array(maximumExpectedBytes);
-	const chunks = output ? null : [];
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error(`${label} returned an invalid byte stream.`);
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (maximumExpectedBytes !== undefined && nextLoaded > maximumExpectedBytes) {
-				throw new Error(`${label} exceeds its receipt size.`);
-			}
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > maxBytes) {
-				throw new Error(`${label} exceeds its byte limit.`);
-			}
-			if (output) output.set(value, loaded);
-			else chunks.push(value.slice());
-			loaded = nextLoaded;
-		}
-		if (expectedByteSizes.length && !expectedByteSizes.includes(loaded)) {
-			throw new Error(`${label} is truncated or has an unexpected decoded size.`);
-		}
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the stream or quota failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the primary load result.
-		}
-	}
-	if (output) return loaded === output.byteLength ? output : output.slice(0, loaded);
-	const bytes = new Uint8Array(loaded);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return bytes;
-}
-
-async function sha256Hex(bytes) {
-	if (!globalThis.crypto?.subtle?.digest) {
-		throw new Error('Janet runtime integrity verification requires Web Crypto.');
-	}
-	const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
-	return [...digest].map((value) => value.toString(16).padStart(2, '0')).join('');
 }
 
 async function computeFingerprint(
@@ -302,11 +229,12 @@ function normalizeProvenanceObject(candidate, expected, label) {
 	if (!isObject(candidate) || canonicalJson(candidate) !== canonicalJson(expected)) {
 		throw new Error(`Janet runtime ${label} metadata is invalid.`);
 	}
-	return candidate;
+	return { ...candidate };
 }
 
 function normalizeReceipt(candidate, expected, maxAssetBytes, label) {
 	if (
+		!isObject(candidate) ||
 		!hasExactKeys(candidate, expectedReceiptKeys) ||
 		candidate.path !== expected.path ||
 		candidate.mediaType !== expected.mediaType ||
@@ -328,6 +256,7 @@ function normalizeReceipt(candidate, expected, maxAssetBytes, label) {
 
 function normalizeStorageReceipt(candidate, expected, maxAssetBytes) {
 	if (
+		!isObject(candidate) ||
 		!hasExactKeys(candidate, expectedStorageReceiptKeys) ||
 		candidate.path !== expected.path ||
 		candidate.logicalPath !== expected.logicalPath ||
@@ -349,7 +278,7 @@ function normalizeStorageReceipt(candidate, expected, maxAssetBytes) {
 	};
 }
 
-async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
+async function normalizeManifest(value, runtimePreflight, maxAssetBytes) {
 	if (!isObject(value)) throw new Error('Janet runtime manifest must be an object.');
 	if (!hasExactKeys(value, expectedManifestKeys)) {
 		throw new Error('Janet runtime manifest schema is invalid.');
@@ -358,20 +287,24 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 		throw new Error('Janet runtime manifest format is unsupported.');
 	}
 	if (
-		value.profileId !== expectedProfileId ||
-		value.licenseExpression !== expectedLicenseExpression ||
-		typeof expectedFingerprint !== 'string' ||
-		!/^[a-f0-9]{64}$/u.test(expectedFingerprint)
+		value.profileId !== runtimePreflight.profileId ||
+		value.fingerprint !== runtimePreflight.manifestFingerprint ||
+		value.licenseExpression !== expectedLicenseExpression
 	) {
-		throw new Error('Janet runtime profile or expected fingerprint is invalid.');
-	}
-	if (value.fingerprint !== expectedFingerprint) {
-		throw new Error('Janet runtime manifest fingerprint does not match the pinned runtime.');
+		throw new Error('Janet runtime manifest identity is invalid.');
 	}
 	const artifact = normalizeProvenanceObject(value.artifact, expectedArtifact, 'artifact');
 	const components = normalizeProvenanceObject(value.components, expectedComponents, 'component');
 	const build = normalizeProvenanceObject(value.build, expectedBuild, 'build');
 	if (
+		artifact.revision !== runtimePreflight.artifactRevision ||
+		components.janet.version !== runtimePreflight.janetVersion ||
+		components.emscripten.version !== runtimePreflight.emscriptenVersion
+	) {
+		throw new Error('Janet runtime provenance identity is invalid.');
+	}
+	if (
+		!isObject(value.license) ||
 		!hasExactKeys(value.license, expectedLicenseReceiptKeys) ||
 		value.license.path !== 'LICENSE.txt' ||
 		value.license.spdx !== 'MIT' ||
@@ -447,80 +380,85 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 			metadata,
 			assets,
 			storage
-		)) !== expectedFingerprint
+		)) !== runtimePreflight.manifestFingerprint
 	) {
 		throw new Error('Janet runtime receipt graph failed fingerprint verification.');
 	}
-	return { assetByPath, storageByPath };
+	return { assetByPath };
 }
 
 async function verifyReceiptBytes(receipt, bytes, label) {
-	if (bytes.byteLength !== receipt.size) throw new Error(`${label} has an unexpected byte size.`);
+	if (bytes.byteLength !== receipt.size) {
+		throw new Error(`${label} has an unexpected byte size.`);
+	}
 	if ((await sha256Hex(bytes)) !== receipt.sha256) {
 		throw new Error(`${label} failed SHA-256 verification.`);
 	}
 }
 
-async function receiptMatchesBytes(receipt, bytes) {
-	return bytes.byteLength === receipt.size && (await sha256Hex(bytes)) === receipt.sha256;
-}
-
-async function decompressGzipBounded(compressedBytes, expectedBytes, maxBytes, label) {
-	if (typeof DecompressionStream !== 'function') {
-		throw new Error('Janet runtime gzip decompression is unavailable.');
-	}
-	if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || expectedBytes > maxBytes) {
-		throw new Error(`${label} logical byte size is invalid.`);
-	}
-	let reader;
+function validateUtf8JavaScript(bytes) {
+	let source;
 	try {
-		reader = new Blob([compressedBytes])
-			.stream()
-			.pipeThrough(new DecompressionStream('gzip'))
-			.getReader();
-	} catch {
-		throw new Error(`${label} gzip stream could not be opened.`);
-	}
-	const output = new Uint8Array(expectedBytes);
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error(`${label} gzip returned an invalid byte stream.`);
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > expectedBytes) {
-				throw new Error(`${label} gzip exceeds its logical receipt size.`);
-			}
-			output.set(value, loaded);
-			loaded = nextLoaded;
-		}
-		if (loaded !== expectedBytes) throw new Error(`${label} gzip is truncated.`);
-		return output;
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the decompression failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the decompression result.
-		}
-	}
-}
-
-async function importVerifiedRuntimeModule(bytes) {
-	try {
-		fatalDecoder.decode(bytes);
+		source = fatalDecoder.decode(bytes);
 	} catch {
 		throw new Error('Janet runtime JavaScript is not valid UTF-8.');
 	}
+	if (
+		!source.includes('export default Module') ||
+		!source.includes('callMain') ||
+		!source.includes('FS.init') ||
+		!source.includes('Module["wasmBinary"]')
+	) {
+		throw new Error('Janet runtime JavaScript is missing its verified module contract.');
+	}
+	return source;
+}
+
+function validateWasmHeader(bytes) {
+	if (
+		bytes.byteLength < 8 ||
+		bytes[0] !== 0 ||
+		bytes[1] !== 0x61 ||
+		bytes[2] !== 0x73 ||
+		bytes[3] !== 0x6d ||
+		bytes[4] !== 1 ||
+		bytes[5] !== 0 ||
+		bytes[6] !== 0 ||
+		bytes[7] !== 0
+	) {
+		throw new Error('Janet runtime Wasm header is invalid.');
+	}
+}
+
+async function verifyRuntimePreflight(runtimePreflightValue, requestedMaxAssetBytes) {
+	const { runtimePreflight, maxAssetBytes } = requireRuntimePreflight(
+		runtimePreflightValue,
+		requestedMaxAssetBytes
+	);
+	let parsed;
+	try {
+		parsed = JSON.parse(fatalDecoder.decode(runtimePreflight.manifestBytes));
+	} catch {
+		throw new Error('Janet runtime manifest is not valid UTF-8 JSON.');
+	}
+	const manifest = await normalizeManifest(parsed, runtimePreflight, maxAssetBytes);
+	for (const [path, bytes] of [
+		['janet.js', runtimePreflight.javascriptBytes],
+		['janet.wasm', runtimePreflight.wasmBytes]
+	]) {
+		await verifyReceiptBytes(
+			manifest.assetByPath.get(path),
+			bytes,
+			`Janet runtime asset ${path}`
+		);
+	}
+	validateUtf8JavaScript(runtimePreflight.javascriptBytes);
+	validateWasmHeader(runtimePreflight.wasmBytes);
+	return runtimePreflight;
+}
+
+async function importVerifiedRuntimeModule(bytes) {
+	validateUtf8JavaScript(bytes);
 	if (
 		typeof Blob !== 'function' ||
 		typeof URL.createObjectURL !== 'function' ||
@@ -528,7 +466,10 @@ async function importVerifiedRuntimeModule(bytes) {
 	) {
 		throw new Error('Janet verified runtime module evaluation is unavailable.');
 	}
-	const moduleUrl = URL.createObjectURL(new Blob([bytes], { type: 'text/javascript' }));
+	const scriptBytes = Uint8Array.from(bytes);
+	const moduleUrl = URL.createObjectURL(
+		new Blob([scriptBytes.buffer], { type: 'text/javascript' })
+	);
 	try {
 		return await import(moduleUrl);
 	} finally {
@@ -540,93 +481,44 @@ async function importVerifiedRuntimeModule(bytes) {
 	}
 }
 
-async function loadVerifiedJanetBytes(
-	baseUrl,
-	manifestUrl,
-	manifestFingerprint,
-	requestedMaxAssetBytes
-) {
-	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
-		throw new Error('Janet runtime asset byte limit is invalid.');
-	}
-	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
-	const identity = `${baseUrl}\n${manifestUrl}\n${manifestFingerprint}\n${maxAssetBytes}`;
-	if (verifiedRuntimePromise) {
-		if (verifiedRuntimeIdentity !== identity) {
-			throw new Error('Janet worker cannot replace an initialized runtime profile.');
-		}
-		return await verifiedRuntimePromise;
-	}
-	verifiedRuntimeIdentity = identity;
-	verifiedRuntimePromise = (async () => {
-		const resolvedManifestUrl =
-			manifestUrl || assetUrl(baseUrl, 'runtime-manifest.v2.json', manifestFingerprint);
-		const manifestBytes = await fetchBoundedBytes(
-			resolvedManifestUrl,
-			'Janet runtime manifest',
-			Math.min(maxManifestBytes, maxAssetBytes),
-			undefined,
-			'no-store'
-		);
-		let parsed;
-		try {
-			parsed = JSON.parse(fatalDecoder.decode(manifestBytes));
-		} catch {
-			throw new Error('Janet runtime manifest is not valid UTF-8 JSON.');
-		}
-		const manifest = await normalizeManifest(parsed, manifestFingerprint, maxAssetBytes);
-		const logicalBytesByPath = new Map();
-		for (const storagePath of Object.keys(expectedStorage).sort()) {
-			const storageReceipt = manifest.storageByPath.get(storagePath);
-			const logicalReceipt = manifest.assetByPath.get(storageReceipt.logicalPath);
-			const transportedBytes = await fetchBoundedBytes(
-				assetUrl(baseUrl, storagePath, manifestFingerprint),
-				`Janet runtime storage ${storagePath}`,
-				Math.max(storageReceipt.size, logicalReceipt.size),
-				storageReceipt.size,
-				undefined,
-				storageReceipt.encoding === 'gzip' ? logicalReceipt.size : undefined
-			);
-			let logicalBytes;
-			if (await receiptMatchesBytes(storageReceipt, transportedBytes)) {
-				logicalBytes =
-					storageReceipt.encoding === 'gzip'
-						? await decompressGzipBounded(
-								transportedBytes,
-								logicalReceipt.size,
-								maxAssetBytes,
-								`Janet runtime asset ${logicalReceipt.path}`
-							)
-						: transportedBytes;
-			} else if (
-				storageReceipt.encoding === 'gzip' &&
-				(await receiptMatchesBytes(logicalReceipt, transportedBytes))
-			) {
-				// Browsers may transparently decode a gzip Content-Encoding response.
-				logicalBytes = transportedBytes;
-			} else {
-				throw new Error(
-					`Janet runtime storage ${storagePath} failed SHA-256 verification.`
-				);
-			}
-			await verifyReceiptBytes(
-				logicalReceipt,
-				logicalBytes,
-				`Janet runtime asset ${logicalReceipt.path}`
-			);
-			logicalBytesByPath.set(logicalReceipt.path, logicalBytes);
-		}
-		return Object.freeze({
-			javascriptBytes: logicalBytesByPath.get('janet.js'),
-			wasmBytes: logicalBytesByPath.get('janet.wasm')
-		});
-	})();
+function snapshotModuleGlobal() {
+	return {
+		hadOwn: Object.prototype.hasOwnProperty.call(globalThis, 'Module'),
+		value: globalThis.Module
+	};
+}
+
+function assignModule(value, label) {
 	try {
-		return await verifiedRuntimePromise;
+		globalThis.Module = value;
 	} catch (error) {
-		verifiedRuntimePromise = null;
-		verifiedRuntimeIdentity = '';
-		throw error;
+		throw new Error(`${label}: ${errorMessage(error)}`);
+	}
+	if (globalThis.Module !== value) throw new Error(label);
+}
+
+function clearModuleGlobal() {
+	assignModule(undefined, 'Janet runtime Module global could not be cleared');
+}
+
+function requireClearModuleGlobal() {
+	if (globalThis.Module !== undefined) {
+		throw new Error('Janet runtime Module changed during verified ESM evaluation.');
+	}
+}
+
+function restoreModuleGlobal(snapshot) {
+	if (snapshot.hadOwn) {
+		assignModule(snapshot.value, 'Janet runtime Module global could not be restored');
+		return;
+	}
+	try {
+		delete globalThis.Module;
+	} catch {
+		// Preserve the verified execution result if the host made the binding non-configurable.
+	}
+	if (globalThis.Module !== undefined) {
+		assignModule(undefined, 'Janet runtime Module global could not be reset');
 	}
 }
 
@@ -645,7 +537,6 @@ function createSharedInputReader(channel) {
 	) {
 		throw new Error('Invalid Janet streaming stdin channel.');
 	}
-
 	const control = new Int32Array(channel.buffer, 0, 4);
 	const bytes = new Uint8Array(channel.buffer, channel.controlBytes, channel.capacity);
 	return () => {
@@ -698,37 +589,21 @@ function postOutput(lines) {
 	if (output) self.postMessage({ output: output.endsWith('\n') ? output : `${output}\n` });
 }
 
-self.onmessage = async (event) => {
-	const {
-		baseUrl,
-		manifestUrl,
-		manifestFingerprint,
-		maxAssetBytes,
-		code,
-		stdin,
-		stdinChannel,
-		activePath,
-		log
-	} = event.data || {};
-	const stderr = [];
+async function executeJanetRequest(data, stderr) {
+	const { runtimePreflight, maxAssetBytes, code, stdin, stdinChannel, activePath, log } =
+		data || {};
+	const readStdin = createInputReader(stdin, stdinChannel);
+	if (log) console.log('[wasm-idle:janet-worker] run start');
+	const verified = await verifyRuntimePreflight(runtimePreflight, maxAssetBytes);
+	const moduleSnapshot = snapshotModuleGlobal();
 	try {
-		if (log) console.log(`[wasm-idle:janet-worker] run start baseUrl=${baseUrl}`);
-		const verified = await loadVerifiedJanetBytes(
-			baseUrl,
-			manifestUrl,
-			manifestFingerprint,
-			maxAssetBytes
-		);
-		if (runtimeEvaluationStarted) {
-			throw new Error('Janet worker cannot execute more than one runtime instance.');
-		}
-		runtimeEvaluationStarted = true;
+		clearModuleGlobal();
 		const runtimeModule = await importVerifiedRuntimeModule(verified.javascriptBytes);
-		const createModule = runtimeModule.default || runtimeModule;
+		requireClearModuleGlobal();
+		const createModule = runtimeModule?.default;
 		if (typeof createModule !== 'function') {
-			throw new Error('Janet runtime module did not export an Emscripten module factory.');
+			throw new Error('Janet runtime module did not export its verified default factory.');
 		}
-		const readStdin = createInputReader(stdin, stdinChannel);
 		const writeStdout = createCharOutput((message) => postOutput([message]));
 		const writeStderr = createCharOutput((message) => stderr.push(message));
 		const module = await createModule({
@@ -742,8 +617,9 @@ self.onmessage = async (event) => {
 			printErr: (message) => stderr.push(String(message)),
 			preRun: [(runtime) => runtime.FS.init(readStdin, writeStdout, writeStderr)],
 			stdin: readStdin,
-			wasmBinary: verified.wasmBytes
+			wasmBinary: Uint8Array.from(verified.wasmBytes)
 		});
+		requireClearModuleGlobal();
 		const sourcePath = `/${activePath || 'main.janet'}`;
 		module.FS.writeFile(sourcePath, String(code || ''));
 		const status = module.callMain([sourcePath]);
@@ -751,10 +627,31 @@ self.onmessage = async (event) => {
 			throw new Error(stderr.join('\n') || `Janet exited with status ${status}.`);
 		}
 		if (log) console.log('[wasm-idle:janet-worker] run settled');
+	} finally {
+		restoreModuleGlobal(moduleSnapshot);
+	}
+}
+
+self.onmessage = async (event) => {
+	if (requestConsumed) {
+		self.postMessage({ error: 'Janet runner accepts exactly one run request.' });
+		return;
+	}
+	requestConsumed = true;
+	const stderr = [];
+	const log = event.data?.log;
+	try {
+		await executeJanetRequest(event.data, stderr);
 		self.postMessage({ results: true });
 	} catch (error) {
-		const message = stderr.length > 0 ? stderr.join('\n') : error?.message || String(error);
+		const message = stderr.length > 0 ? stderr.join('\n') : errorMessage(error);
 		if (log) console.error('[wasm-idle:janet-worker] failed', error);
 		self.postMessage({ error: message });
+	} finally {
+		try {
+			self.close();
+		} catch {
+			// The terminal result has already been delivered.
+		}
 	}
 };

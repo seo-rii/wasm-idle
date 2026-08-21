@@ -30,7 +30,11 @@ import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_HASKELL_ASSET_VERSION } from './wasmHaskellVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
-import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
+import {
+	WASM_JANET_ASSET_VERSION,
+	WASM_JANET_RUNNER_RECEIPT,
+	WASM_JANET_RUNTIME_PROFILE
+} from './wasmJanetVersion';
 import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from './wasmLispVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
@@ -212,7 +216,7 @@ describe('application runtime asset root', () => {
 			baseUrl: '/foo/bar/wasm-janet/',
 			workerUrl: `/foo/bar/wasm-janet/runner-worker.js?v=${WASM_JANET_RUNNER_RECEIPT.sha256}`,
 			manifestUrl: `/foo/bar/wasm-janet/runtime-manifest.v2.json?v=${WASM_JANET_ASSET_VERSION}`,
-			manifestFingerprint: WASM_JANET_ASSET_VERSION,
+			...WASM_JANET_RUNTIME_PROFILE,
 			workerReceipt: WASM_JANET_RUNNER_RECEIPT
 		});
 		expect(assets.julia).toEqual({
@@ -450,6 +454,23 @@ describe('application runtime asset root', () => {
 					}
 				]
 			]),
+			janetManifestFingerprint: WASM_JANET_ASSET_VERSION,
+			janetProfileId: WASM_JANET_RUNTIME_PROFILE.profileId,
+			janetArtifactRevision: WASM_JANET_RUNTIME_PROFILE.artifactRevision,
+			janetJanetVersion: WASM_JANET_RUNTIME_PROFILE.janetVersion,
+			janetEmscriptenVersion: WASM_JANET_RUNTIME_PROFILE.emscriptenVersion,
+			janetManifestReceipt: expect.any(String),
+			janetJavaScriptReceipt: expect.any(String),
+			janetWasmReceipt: expect.any(String),
+			janetWorkerReceipt: JSON.stringify([
+				[
+					'worker',
+					{
+						sha256: WASM_JANET_RUNNER_RECEIPT.sha256,
+						bytes: WASM_JANET_RUNNER_RECEIPT.bytes
+					}
+				]
+			]),
 			juliaManifestFingerprint: WASM_JULIA_ASSET_VERSION,
 			juliaWorkerReceipt: JSON.stringify([
 				[
@@ -552,6 +573,16 @@ describe('application runtime asset root', () => {
 			clojurescriptManifestUrl: assets.clojurescript?.manifestUrl,
 			clojurescriptManifestFingerprint: assets.clojurescript?.manifestFingerprint,
 			clojurescriptWorkerReceipt: expect.any(String),
+			janetManifestUrl: assets.janet?.manifestUrl,
+			janetManifestFingerprint: assets.janet?.manifestFingerprint,
+			janetProfileId: assets.janet?.profileId,
+			janetArtifactRevision: assets.janet?.artifactRevision,
+			janetJanetVersion: assets.janet?.janetVersion,
+			janetEmscriptenVersion: assets.janet?.emscriptenVersion,
+			janetManifestReceipt: expect.any(String),
+			janetJavaScriptReceipt: expect.any(String),
+			janetWasmReceipt: expect.any(String),
+			janetWorkerReceipt: expect.any(String),
 			juliaManifestUrl: assets.julia?.manifestUrl,
 			juliaManifestFingerprint: assets.julia?.manifestFingerprint,
 			juliaWorkerReceipt: expect.any(String),
@@ -636,6 +667,32 @@ describe('application runtime asset root', () => {
 				createRuntimeAssetsKey({
 					...assets,
 					perl: { ...perl, ...replacement }
+				})
+			).not.toBe(originalKey);
+		}
+	});
+
+	it('changes the runtime cache identity for every Janet profile and receipt field', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const originalKey = createRuntimeAssetsKey(assets);
+		const janet = assets.janet!;
+		const replacements = [
+			{ profileId: `${janet.profileId}-custom` },
+			{ artifactRevision: 'a'.repeat(40) },
+			{ janetVersion: `${janet.janetVersion}-custom` },
+			{ emscriptenVersion: `${janet.emscriptenVersion}-custom` },
+			{ manifestFingerprint: 'b'.repeat(64) },
+			{ manifestReceipt: { ...janet.manifestReceipt!, sha256: 'c'.repeat(64) } },
+			{ javascriptReceipt: { ...janet.javascriptReceipt!, bytes: 123 } },
+			{ wasmReceipt: { ...janet.wasmReceipt!, uncompressedSha256: 'd'.repeat(64) } },
+			{ workerReceipt: { ...janet.workerReceipt!, sha256: 'e'.repeat(64) } }
+		];
+
+		for (const replacement of replacements) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					janet: { ...janet, ...replacement }
 				})
 			).not.toBe(originalKey);
 		}

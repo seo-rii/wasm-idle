@@ -22,7 +22,6 @@
 	import type { HaskellRuntimeAssetReceipts } from '@wasm-idle/core';
 	import type { DOuterAssetReceipts } from '$lib/playground/dOuterAssets';
 	import type { ElixirRuntimeAssetReceipts } from '$lib/playground/elixirAssets';
-	import type { RuntimeAssetIntegrityEntry } from '$lib/playground/assets';
 	import { WASM_D_OUTER_ASSET_RECEIPTS } from '$lib/playground/wasmDIntegrity';
 	import { WASM_ELIXIR_ASSET_RECEIPTS } from '$lib/playground/wasmElixirVersion';
 	import type monaco from 'monaco-editor';
@@ -63,6 +62,7 @@
 		load: (currentUrl: string) => Promise<EditorLanguageServerHandle>;
 	}
 	type PerlLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['perl']>;
+	type JanetLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['janet']>;
 
 	const monacoTestHooksEnabled = () => {
 		try {
@@ -2384,11 +2384,7 @@
 		luaLspEnabled?: boolean;
 		luaLspModuleUrl?: string;
 		janetLspEnabled?: boolean;
-		janetLspBaseUrl?: string;
-		janetLspWorkerUrl?: string;
-		janetLspManifestUrl?: string;
-		janetLspManifestFingerprint?: string;
-		janetLspWorkerReceipt?: RuntimeAssetIntegrityEntry;
+		janetLspRuntime?: JanetLspRuntimeConfig;
 		lispLspEnabled?: boolean;
 		lispLspModuleUrl?: string;
 		lispLspManifestUrl?: string;
@@ -2482,11 +2478,7 @@
 		luaLspEnabled = false,
 		luaLspModuleUrl,
 		janetLspEnabled = false,
-		janetLspBaseUrl,
-		janetLspWorkerUrl,
-		janetLspManifestUrl,
-		janetLspManifestFingerprint,
-		janetLspWorkerReceipt,
+		janetLspRuntime,
 		lispLspEnabled = false,
 		lispLspModuleUrl,
 		lispLspManifestUrl,
@@ -2644,11 +2636,7 @@
 			zigLspEnabled ? zigLspCompilerUrl || '' : '',
 			zigLspEnabled ? zigLspStdlibUrl || '' : '',
 			luaLspEnabled ? luaLspModuleUrl || '' : '',
-			janetLspEnabled ? janetLspBaseUrl || '' : '',
-			janetLspEnabled ? janetLspWorkerUrl || '' : '',
-			janetLspEnabled ? janetLspManifestUrl || '' : '',
-			janetLspEnabled ? janetLspManifestFingerprint || '' : '',
-			janetLspEnabled ? JSON.stringify(janetLspWorkerReceipt) : '',
+			janetLspEnabled ? JSON.stringify(janetLspRuntime) : '',
 			lispLspEnabled ? lispLspModuleUrl || '' : '',
 			lispLspEnabled ? lispLspManifestUrl || '' : '',
 			lispLspEnabled ? lispLspManifestFingerprint || '' : '',
@@ -3179,25 +3167,15 @@
 		},
 		{
 			languages: ['janet'],
-			isEnabled: () =>
-				janetLspEnabled &&
-				!!janetLspBaseUrl &&
-				!!janetLspWorkerUrl &&
-				!!janetLspManifestUrl &&
-				!!janetLspManifestFingerprint &&
-				!!janetLspWorkerReceipt,
+			isEnabled: () => janetLspEnabled && !!janetLspRuntime,
 			setStatus: (status) => (janetLspStatus = status),
 			load: async (currentUrl) => {
+				const runtime = janetLspRuntime;
+				if (!runtime) throw new Error('Janet LSP runtime assets are unavailable');
 				const { getJanetLanguageServer } = await import('@wasm-idle/lsp/janet');
 				return await getJanetLanguageServer({
 					currentUrl,
-					janet: {
-						baseUrl: janetLspBaseUrl || '',
-						workerUrl: janetLspWorkerUrl || '',
-						manifestUrl: janetLspManifestUrl || '',
-						manifestFingerprint: janetLspManifestFingerprint || '',
-						workerReceipt: janetLspWorkerReceipt
-					},
+					janet: runtime,
 					onStatus: (status) => (janetLspStatus = status)
 				});
 			}

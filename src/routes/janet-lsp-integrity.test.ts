@@ -1,19 +1,38 @@
 import { describe, expect, it } from 'vitest';
 
+import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
+import { resolveJanetLanguageServerPreflightProfile } from '@wasm-idle/lsp';
 import pageSource from './+page.svelte?raw';
 import monacoSource from './Monaco.svelte?raw';
 
 describe('Janet LSP integrity wiring', () => {
-	it('passes the application manifest and worker pins through Monaco to the LSP host', () => {
-		for (const field of ['manifestUrl', 'manifestFingerprint', 'workerReceipt']) {
-			const prop = `janetLsp${field[0].toUpperCase()}${field.slice(1)}`;
-			expect(pageSource).toContain(`runtimeAssets.janet?.${field}`);
-			expect(pageSource).toContain(`{${prop}}`);
-			expect(monacoSource).toContain(`${prop}?:`);
-			expect(monacoSource).toContain(`${field}: ${prop}`);
+	it('passes one complete application trust bundle through Monaco without field projection', () => {
+		expect(pageSource).toContain('$derived(janetLspEnabled ? runtimeAssets.janet : undefined)');
+		expect(pageSource).toContain('{janetLspRuntime}');
+		expect(monacoSource).toContain('type JanetLspRuntimeConfig = NonNullable<');
+		expect(monacoSource).toContain('janetLspRuntime?: JanetLspRuntimeConfig');
+		expect(monacoSource).toContain('JSON.stringify(janetLspRuntime)');
+		expect(monacoSource).toContain('const runtime = janetLspRuntime');
+		expect(monacoSource).toContain('janet: runtime');
+		for (const legacyProjection of [
+			'janetLspManifestFingerprint',
+			'janetLspWorkerReceipt',
+			'janetLspManifestUrl'
+		]) {
+			expect(pageSource).not.toContain(legacyProjection);
+			expect(monacoSource).not.toContain(legacyProjection);
 		}
-		expect(monacoSource).toContain('JSON.stringify(janetLspWorkerReceipt)');
-		expect(monacoSource).toContain('!!janetLspManifestFingerprint');
-		expect(monacoSource).toContain('!!janetLspWorkerReceipt');
+	});
+
+	it('keeps the generated application profile valid at the public LSP boundary', () => {
+		const runtime = createApplicationRuntimeAssets('/wasm-idle').janet;
+		expect(runtime).toBeDefined();
+		expect(resolveJanetLanguageServerPreflightProfile({ janet: runtime })).toMatchObject({
+			profileId: runtime?.profileId,
+			artifactRevision: runtime?.artifactRevision,
+			janetVersion: runtime?.janetVersion,
+			emscriptenVersion: runtime?.emscriptenVersion,
+			manifestFingerprint: runtime?.manifestFingerprint
+		});
 	});
 });

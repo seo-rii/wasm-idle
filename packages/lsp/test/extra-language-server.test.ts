@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	HASKELL_RUNTIME_ASSET_RECEIPTS,
+	JANET_MAX_ASSET_BYTES,
 	PERL_MAX_ASSET_BYTES,
 	PROLOG_MAX_ASSET_BYTES,
 	RUBY_RUNTIME_ASSET_PATH,
@@ -26,12 +27,14 @@ import {
 } from '../src/bundledTclRuntime.js';
 import {
 	BUNDLED_JANET_MANIFEST_FINGERPRINT,
+	BUNDLED_JANET_RUNTIME_PROFILE,
 	BUNDLED_JANET_RUNNER_RECEIPT
 } from '../src/bundledJanetRuntime.js';
 import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from '../src/bundledLispRuntime.js';
 import { createPrologTestAssetResponse } from './prolog-fixture.js';
 import { createPerlTestAssetResponse, perlTestAssetBytes } from './perl-fixture.js';
 import { createTclTestAssetResponse, tclTestAssetBytes } from './tcl-fixture.js';
+import { createJanetTestAssetResponse, janetTestAssetBytes } from './janet-fixture.js';
 
 const lispStaticDir = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -439,6 +442,18 @@ describe('additional language server workers', () => {
 	});
 
 	it('starts Janet with folder-backed Janet worker assets', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL | Request) => {
+				const requestUrl = new URL(
+					typeof input === 'string' || input instanceof URL ? input : input.url
+				);
+				const response = createJanetTestAssetResponse(requestUrl);
+				if (!response)
+					throw new Error(`Unexpected Janet asset request: ${requestUrl.href}`);
+				return response;
+			})
+		);
 		const handle = await getJanetLanguageServer({
 			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
@@ -448,11 +463,15 @@ describe('additional language server workers', () => {
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
 			options: {
-				baseUrl: 'https://static.example.com/repl_20240807/wasm-janet/',
-				workerUrl: `https://static.example.com/repl_20240807/wasm-janet/runner-worker.js?v=${BUNDLED_JANET_RUNNER_RECEIPT.sha256}`,
-				manifestUrl: `https://static.example.com/repl_20240807/wasm-janet/runtime-manifest.v2.json?v=${BUNDLED_JANET_MANIFEST_FINGERPRINT}`,
-				manifestFingerprint: BUNDLED_JANET_MANIFEST_FINGERPRINT,
-				workerReceipt: BUNDLED_JANET_RUNNER_RECEIPT
+				maxAssetBytes: JANET_MAX_ASSET_BYTES,
+				workerReceipt: BUNDLED_JANET_RUNNER_RECEIPT,
+				runnerWorkerBytes: janetTestAssetBytes['runner-worker.js'],
+				runtimePreflight: expect.objectContaining({
+					protocol: 'wasm-idle-janet-preflight',
+					protocolVersion: 1,
+					profileId: BUNDLED_JANET_RUNTIME_PROFILE.profileId,
+					manifestFingerprint: BUNDLED_JANET_MANIFEST_FINGERPRINT
+				})
 			}
 		});
 

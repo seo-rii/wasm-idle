@@ -110,6 +110,7 @@ describe('syncWasmJanetAssets', () => {
 			'LICENSE.txt',
 			'janet.js',
 			'janet.wasm.gz',
+			'janet.wasm.gz.bin',
 			'runner-worker.js',
 			'runtime-build.json',
 			'runtime-manifest.v1.json',
@@ -125,6 +126,10 @@ describe('syncWasmJanetAssets', () => {
 			artifact: { kind: 'opaque-vendored', verifiedBuildInput: false }
 		});
 		expect(computeJanetRuntimeFingerprint(manifest)).toBe(result.fingerprint);
+		expect(manifest.storage.map((entry: { path: string }) => entry.path)).toEqual([
+			'janet.js',
+			'janet.wasm.gz.bin'
+		]);
 		for (const storage of manifest.storage) {
 			const stored = await readFile(path.join(fixture.targetDir, storage.path));
 			expect(stored.byteLength).toBe(storage.size);
@@ -135,16 +140,81 @@ describe('syncWasmJanetAssets', () => {
 			);
 			expect(logical.byteLength).toBe(receipt.size);
 			expect(sha256(logical)).toBe(receipt.sha256);
+			if (storage.path.endsWith('.gz.bin')) {
+				expect(
+					await readFile(
+						path.join(fixture.targetDir, storage.path.replace(/\.bin$/u, ''))
+					)
+				).toEqual(stored);
+			}
 		}
 		const worker = await readFile(path.join(fixture.targetDir, 'runner-worker.js'));
 		expect(result.workerReceipt).toEqual({
 			bytes: worker.byteLength,
 			sha256: sha256(worker)
 		});
-		for (const modulePath of [fixture.versionModulePath, fixture.lspVersionModulePath]) {
-			const source = await readFile(modulePath, 'utf8');
+		const workerSource = worker.toString('utf8');
+		for (const [key, value] of Object.entries({
+			profileId: result.runtimeProfile.profileId,
+			artifactRevision: result.runtimeProfile.artifactRevision,
+			janetVersion: result.runtimeProfile.janetVersion,
+			emscriptenVersion: result.runtimeProfile.emscriptenVersion,
+			manifestFingerprint: result.runtimeProfile.manifestFingerprint
+		})) {
+			const pin = `${key}: '${value}'`;
+			expect(workerSource.split(pin)).toHaveLength(2);
+		}
+		for (const placeholder of [
+			'__WASM_IDLE_JANET_PROFILE_ID__',
+			'__WASM_IDLE_JANET_ARTIFACT_REVISION__',
+			'__WASM_IDLE_JANET_VERSION__',
+			'__WASM_IDLE_JANET_EMSCRIPTEN_VERSION__',
+			'__WASM_IDLE_JANET_MANIFEST_FINGERPRINT__'
+		]) {
+			expect(workerSource).not.toContain(placeholder);
+		}
+		const manifestBytes = await readFile(
+			path.join(fixture.targetDir, 'runtime-manifest.v2.json')
+		);
+		expect(result.runtimeProfile.manifestReceipt).toEqual({
+			bytes: manifestBytes.byteLength,
+			sha256: sha256(manifestBytes)
+		});
+		const javascriptStorage = manifest.storage.find(
+			(candidate: { logicalPath: string }) => candidate.logicalPath === 'janet.js'
+		);
+		expect(result.runtimeProfile.javascriptReceipt).toEqual({
+			bytes: javascriptStorage.size,
+			sha256: javascriptStorage.sha256
+		});
+		const wasmLogical = manifest.assets.find(
+			(candidate: { path: string }) => candidate.path === 'janet.wasm'
+		);
+		const wasmStorage = manifest.storage.find(
+			(candidate: { logicalPath: string }) => candidate.logicalPath === 'janet.wasm'
+		);
+		expect(result.runtimeProfile.wasmReceipt).toEqual({
+			bytes: wasmStorage.size,
+			sha256: wasmStorage.sha256,
+			uncompressedBytes: wasmLogical.size,
+			uncompressedSha256: wasmLogical.sha256
+		});
+		const appModuleSource = await readFile(fixture.versionModulePath, 'utf8');
+		expect(appModuleSource).toContain('export const WASM_JANET_RUNTIME_PROFILE =');
+		expect(appModuleSource).toContain('export const WASM_JANET_RUNTIME_BUNDLE =');
+		expect(appModuleSource).toContain(
+			'export const WASM_JANET_ASSET_VERSION = WASM_JANET_RUNTIME_PROFILE.manifestFingerprint;'
+		);
+		const lspModuleSource = await readFile(fixture.lspVersionModulePath, 'utf8');
+		expect(lspModuleSource).toContain('export const BUNDLED_JANET_RUNTIME_PROFILE =');
+		expect(lspModuleSource).toContain('export const BUNDLED_JANET_RUNTIME_BUNDLE =');
+		expect(lspModuleSource).toContain('BUNDLED_JANET_RUNTIME_PROFILE.manifestFingerprint');
+		for (const source of [appModuleSource, lspModuleSource]) {
 			expect(source).toContain(result.fingerprint);
 			expect(source).toContain(result.workerReceipt.sha256);
+			expect(source).toContain(result.runtimeProfile.artifactRevision);
+			expect(source).toContain(result.runtimeProfile.janetVersion);
+			expect(source).toContain(result.runtimeProfile.emscriptenVersion);
 		}
 
 		const second = await createFixture();
@@ -162,7 +232,7 @@ describe('syncWasmJanetAssets', () => {
 				await readFile(path.join(fixture.targetDir, file))
 			);
 		}
-	});
+	}, 120_000);
 
 	it('rejects a source receipt mismatch before replacing published outputs', async () => {
 		const fixture = await createFixture();

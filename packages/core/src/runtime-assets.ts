@@ -199,6 +199,13 @@ export interface RuntimeAssetKeySource {
 		workerUrl?: string;
 		manifestUrl?: string;
 		manifestFingerprint?: string;
+		profileId?: string;
+		artifactRevision?: string;
+		janetVersion?: string;
+		emscriptenVersion?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		javascriptReceipt?: RuntimeAssetIntegrityEntry;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	julia?: {
@@ -894,6 +901,28 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		runtime: 'janet',
 		property: 'manifestFingerprint',
 		key: 'janetManifestFingerprint'
+	},
+	{ runtime: 'janet', property: 'profileId', key: 'janetProfileId' },
+	{ runtime: 'janet', property: 'artifactRevision', key: 'janetArtifactRevision' },
+	{ runtime: 'janet', property: 'janetVersion', key: 'janetJanetVersion' },
+	{ runtime: 'janet', property: 'emscriptenVersion', key: 'janetEmscriptenVersion' },
+	{
+		runtime: 'janet',
+		property: 'manifestReceipt',
+		key: 'janetManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'janet',
+		property: 'javascriptReceipt',
+		key: 'janetJavaScriptReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'janet',
+		property: 'wasmReceipt',
+		key: 'janetWasmReceipt',
+		serialize: serializeIntegrityEntry
 	},
 	{
 		runtime: 'janet',

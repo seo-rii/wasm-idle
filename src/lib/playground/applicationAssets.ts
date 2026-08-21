@@ -20,7 +20,7 @@ import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleam
 import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_HASKELL_ASSET_VERSION } from './wasmHaskellVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
-import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
+import { WASM_JANET_RUNTIME_BUNDLE } from './wasmJanetVersion';
 import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from './wasmLispVersion';
 import { WASM_LUA_ASSET_VERSION } from './wasmLuaVersion';
@@ -181,10 +181,16 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		janet: {
 			baseUrl: asset('wasm-janet/'),
-			workerUrl: asset('wasm-janet/runner-worker.js', WASM_JANET_RUNNER_RECEIPT.sha256),
-			manifestUrl: asset('wasm-janet/runtime-manifest.v2.json', WASM_JANET_ASSET_VERSION),
-			manifestFingerprint: WASM_JANET_ASSET_VERSION,
-			workerReceipt: WASM_JANET_RUNNER_RECEIPT
+			workerUrl: asset(
+				'wasm-janet/runner-worker.js',
+				WASM_JANET_RUNTIME_BUNDLE.workerReceipt.sha256
+			),
+			manifestUrl: asset(
+				'wasm-janet/runtime-manifest.v2.json',
+				WASM_JANET_RUNTIME_BUNDLE.profile.manifestFingerprint
+			),
+			...WASM_JANET_RUNTIME_BUNDLE.profile,
+			workerReceipt: WASM_JANET_RUNTIME_BUNDLE.workerReceipt
 		},
 		julia: {
 			baseUrl: asset('wasm-julia/'),

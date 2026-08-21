@@ -137,7 +137,11 @@ import {
 	WASM_J_RUNNER_RECEIPT,
 	WASM_J_RUNTIME_PROFILE
 } from './wasmJVersion';
-import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
+import {
+	WASM_JANET_ASSET_VERSION,
+	WASM_JANET_RUNNER_RECEIPT,
+	WASM_JANET_RUNTIME_PROFILE
+} from './wasmJanetVersion';
 import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
@@ -1244,6 +1248,8 @@ describe('runtime asset config resolution', () => {
 				manifestUrl:
 					'https://example.com/absproxy/5173/wasm-janet/runtime-manifest.v2.json',
 				manifestFingerprint: WASM_JANET_ASSET_VERSION,
+				preflightKey: JSON.stringify(WASM_JANET_RUNTIME_PROFILE),
+				preflightProfile: WASM_JANET_RUNTIME_PROFILE,
 				workerReceipt: WASM_JANET_RUNNER_RECEIPT
 			}
 		);
@@ -1429,6 +1435,16 @@ describe('runtime asset config resolution', () => {
 		const customPerlProfile = {
 			...WASM_PERL_RUNTIME_PROFILE,
 			manifestFingerprint: customFingerprint
+		};
+		const customJanetProfile = {
+			profileId: 'janet-custom-emscripten-custom-wasm-idle-22222222',
+			artifactRevision: '2'.repeat(40),
+			janetVersion: 'custom',
+			emscriptenVersion: 'custom',
+			manifestFingerprint: customFingerprint,
+			manifestReceipt: customManifestReceipt,
+			javascriptReceipt: customModuleReceipt,
+			wasmReceipt: customWasmReceipt
 		};
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = 'https://env.example.com/prolog/';
@@ -1734,7 +1750,7 @@ describe('runtime asset config resolution', () => {
 						baseUrl: '/runtime/janet',
 						workerUrl: '/runtime/janet/worker.js',
 						manifestUrl: '/runtime/janet/manifest.json',
-						manifestFingerprint: customFingerprint,
+						...customJanetProfile,
 						workerReceipt: customWorkerReceipt
 					}
 				},
@@ -1745,6 +1761,8 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/runtime/janet/worker.js',
 			manifestUrl: 'https://example.com/runtime/janet/manifest.json',
 			manifestFingerprint: customFingerprint,
+			preflightKey: JSON.stringify(customJanetProfile),
+			preflightProfile: customJanetProfile,
 			workerReceipt: customWorkerReceipt
 		});
 		expect(
@@ -1857,6 +1875,30 @@ describe('runtime asset config resolution', () => {
 			publicEnv.PUBLIC_WASM_PERL_MANIFEST_FINGERPRINT = '';
 			publicEnv.PUBLIC_WASM_PERL_WORKER_SHA256 = '';
 			publicEnv.PUBLIC_WASM_PERL_WORKER_BYTES = '';
+		}
+	});
+
+	it('rejects custom Janet URL environment overrides without a complete profile bundle', async () => {
+		publicEnv.PUBLIC_WASM_JANET_BASE_URL = 'https://runtime.example.com/janet/';
+		publicEnv.PUBLIC_WASM_JANET_WORKER_URL = 'https://runtime.example.com/janet/runner.js';
+		publicEnv.PUBLIC_WASM_JANET_MANIFEST_URL =
+			'https://runtime.example.com/janet/manifest.json';
+		publicEnv.PUBLIC_WASM_JANET_MANIFEST_FINGERPRINT = 'e'.repeat(64);
+		publicEnv.PUBLIC_WASM_JANET_WORKER_SHA256 = 'f'.repeat(64);
+		publicEnv.PUBLIC_WASM_JANET_WORKER_BYTES = '5432';
+		vi.resetModules();
+		try {
+			const { resolveJanetRuntimeAssetConfig } = await import('./assets');
+			expect(() =>
+				resolveJanetRuntimeAssetConfig(undefined, 'https://example.com/app')
+			).toThrow('Janet runtime preflight identity is invalid');
+		} finally {
+			publicEnv.PUBLIC_WASM_JANET_BASE_URL = '';
+			publicEnv.PUBLIC_WASM_JANET_WORKER_URL = '';
+			publicEnv.PUBLIC_WASM_JANET_MANIFEST_URL = '';
+			publicEnv.PUBLIC_WASM_JANET_MANIFEST_FINGERPRINT = '';
+			publicEnv.PUBLIC_WASM_JANET_WORKER_SHA256 = '';
+			publicEnv.PUBLIC_WASM_JANET_WORKER_BYTES = '';
 		}
 	});
 

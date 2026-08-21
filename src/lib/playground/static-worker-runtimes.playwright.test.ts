@@ -529,6 +529,20 @@ describe('wasm-idle static worker language browser integrations', () => {
 				expect(summary.pageErrors).toEqual([]);
 				expect(summary.transcript).toContain('main=73');
 				expect(summary.transcript).toContain('Process finished after');
+				const janetRuntimePaths = summary.runtimeRequests
+					.map((requestUrl) => new URL(requestUrl).pathname)
+					.filter((pathname) => pathname.includes('/wasm-janet/'))
+					.map((pathname) => pathname.slice(pathname.indexOf('/wasm-janet/')));
+				expect(new Set(janetRuntimePaths)).toEqual(
+					new Set([
+						'/wasm-janet/janet.js',
+						'/wasm-janet/janet.wasm.gz.bin',
+						'/wasm-janet/runner-worker.js',
+						'/wasm-janet/runtime-manifest.v2.json'
+					])
+				);
+				expect(janetRuntimePaths).not.toContain('/wasm-janet/janet.wasm.gz');
+				expect(janetRuntimePaths).not.toContain('/wasm-janet/janet.wasm');
 			}
 		);
 	}, 960_000);

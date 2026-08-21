@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { computeJanetRuntimeFingerprint } from '../../../scripts/sync-wasm-janet.mjs';
 import { computePerlRuntimeFingerprint } from '../../../scripts/sync-wasm-perl.mjs';
 
 const workerInstances: MockWorker[] = [];
@@ -149,7 +150,6 @@ import { WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import { WASM_CLOJURESCRIPT_RUNNER_RECEIPT } from './wasmClojureScriptVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
-import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
 import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
@@ -447,6 +447,147 @@ const perlTestProfile = {
 		uncompressedSha256: perlTestSha256(perlTestDataBytes)
 	}
 } as const;
+const janetTestSha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+const janetTestArtifactRevision = 'd647850cd6448b457f778d01c304358aefa5244b';
+const janetTestVersion = '1.41.3-dev';
+const janetTestEmscriptenVersion = '3.1.8';
+const janetTestJavaScriptBytes = new TextEncoder().encode(
+	'const Module = {}; Module["wasmBinary"]; Module.FS.init; Module.callMain; export default Module;'
+);
+const janetTestWasmBytes = Uint8Array.from([
+	0,
+	97,
+	115,
+	109,
+	1,
+	0,
+	0,
+	0,
+	...new TextEncoder().encode(janetTestVersion)
+]);
+const janetTestWasmGzipBytes = Uint8Array.from(gzipSync(janetTestWasmBytes));
+const janetTestManifestWithoutFingerprint = {
+	format: 'wasm-janet-runtime-manifest-v2',
+	runtime: 'janet-lang-janet',
+	profileId: 'janet-1.41.3-dev-emscripten-3.1.8-wasm-idle-d647850c',
+	licenseExpression: 'MIT',
+	artifact: {
+		kind: 'opaque-vendored',
+		repository: 'https://github.com/seo-rii/wasm-idle.git',
+		revision: janetTestArtifactRevision,
+		path: 'static/wasm-janet',
+		provenance: 'legacy-import-unrecorded',
+		verifiedBuildInput: false
+	},
+	components: {
+		janet: {
+			version: janetTestVersion,
+			repository: 'https://github.com/janet-lang/janet.git',
+			revision: 'unrecorded',
+			verifiedBuildInput: false,
+			evidence: 'embedded runtime version string'
+		},
+		emscripten: {
+			version: janetTestEmscriptenVersion,
+			repository: 'https://github.com/emscripten-core/emscripten.git',
+			revision: 'unrecorded',
+			verifiedBuildInput: false,
+			evidence: 'unverified metadata copied from the initial vendored runtime manifest'
+		}
+	},
+	build: {
+		options: [
+			'ENVIRONMENT=worker',
+			'MODULARIZE=1',
+			'EXPORT_ES6=1',
+			'FORCE_FILESYSTEM=1',
+			'INVOKE_RUN=0',
+			'EXIT_RUNTIME=1',
+			'JANET_REDUCED_OS'
+		],
+		runner: {
+			path: 'scripts/runtime-build/wasm-janet-runner.c',
+			verifiedBuildInput: false,
+			bytes: 1378,
+			sha256: '1a2f357f16e250ed64260a77bd11435837ae033647fb23166eb924a42b4036ee'
+		}
+	},
+	license: {
+		path: 'LICENSE.txt',
+		spdx: 'MIT',
+		size: 1,
+		sha256: janetTestSha256(new TextEncoder().encode('l'))
+	},
+	metadata: {
+		path: 'runtime-build.json',
+		mediaType: 'application/json',
+		size: 2,
+		sha256: janetTestSha256(new TextEncoder().encode('{}'))
+	},
+	assets: [
+		{
+			path: 'janet.js',
+			mediaType: 'text/javascript',
+			size: janetTestJavaScriptBytes.byteLength,
+			sha256: janetTestSha256(janetTestJavaScriptBytes)
+		},
+		{
+			path: 'janet.wasm',
+			mediaType: 'application/wasm',
+			size: janetTestWasmBytes.byteLength,
+			sha256: janetTestSha256(janetTestWasmBytes)
+		}
+	],
+	storage: [
+		{
+			path: 'janet.js',
+			logicalPath: 'janet.js',
+			encoding: 'identity' as const,
+			size: janetTestJavaScriptBytes.byteLength,
+			sha256: janetTestSha256(janetTestJavaScriptBytes)
+		},
+		{
+			path: 'janet.wasm.gz.bin',
+			logicalPath: 'janet.wasm',
+			encoding: 'gzip' as const,
+			size: janetTestWasmGzipBytes.byteLength,
+			sha256: janetTestSha256(janetTestWasmGzipBytes)
+		}
+	]
+};
+const janetTestManifestFingerprint = computeJanetRuntimeFingerprint(
+	janetTestManifestWithoutFingerprint
+);
+const janetTestManifestSource = JSON.stringify({
+	...janetTestManifestWithoutFingerprint,
+	fingerprint: janetTestManifestFingerprint
+});
+const janetTestManifestBytes = new TextEncoder().encode(janetTestManifestSource);
+const janetTestProfile = {
+	profileId: janetTestManifestWithoutFingerprint.profileId,
+	artifactRevision: janetTestArtifactRevision,
+	janetVersion: janetTestVersion,
+	emscriptenVersion: janetTestEmscriptenVersion,
+	manifestFingerprint: janetTestManifestFingerprint,
+	manifestReceipt: {
+		bytes: janetTestManifestBytes.byteLength,
+		sha256: janetTestSha256(janetTestManifestBytes)
+	},
+	javascriptReceipt: {
+		bytes: janetTestJavaScriptBytes.byteLength,
+		sha256: janetTestSha256(janetTestJavaScriptBytes)
+	},
+	wasmReceipt: {
+		bytes: janetTestWasmGzipBytes.byteLength,
+		sha256: janetTestSha256(janetTestWasmGzipBytes),
+		uncompressedBytes: janetTestWasmBytes.byteLength,
+		uncompressedSha256: janetTestSha256(janetTestWasmBytes)
+	}
+} as const;
+const janetTestWorkerReceipt = {
+	bytes: new TextEncoder().encode(janetWorkerSource).byteLength,
+	sha256: janetTestSha256(new TextEncoder().encode(janetWorkerSource))
+} as const;
 const clojureScriptTestProfile = {
 	profileId: 'clojurescript-1.12.134-test',
 	sourceRevision: 'r1.12.134',
@@ -516,6 +657,33 @@ function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 			status: 200,
 			headers: {
 				'content-length': String(perlTestDataGzipBytes.byteLength),
+				'content-type': 'application/octet-stream'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-janet/runtime-manifest.v2.json')) {
+		return new Response(janetTestManifestSource, {
+			status: 200,
+			headers: {
+				'content-length': String(janetTestManifestBytes.byteLength),
+				'content-type': 'application/json'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-janet/janet.js')) {
+		return new Response(Uint8Array.from(janetTestJavaScriptBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(janetTestJavaScriptBytes.byteLength),
+				'content-type': 'text/javascript'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-janet/janet.wasm.gz.bin')) {
+		return new Response(Uint8Array.from(janetTestWasmGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(janetTestWasmGzipBytes.byteLength),
 				'content-type': 'application/octet-stream'
 			}
 		});
@@ -2187,17 +2355,21 @@ describe('static worker backed language sandboxes', () => {
 		15_000
 	);
 
-	it('loads Janet runtime urls and forwards stdin to the upstream Janet worker', async () => {
+	it('preflights all Janet executable bytes before worker creation and reuses a prepared worker', async () => {
 		const sandbox = new Janet();
-		await sandbox.load({
+		const runtimeAssets = {
 			janet: {
 				baseUrl: '/wasm-janet/',
-				workerUrl: '/wasm-janet/runner-worker.js?v=test',
-				manifestUrl: '/wasm-janet/runtime-manifest.v2.json',
-				manifestFingerprint: WASM_JANET_ASSET_VERSION,
-				workerReceipt: WASM_JANET_RUNNER_RECEIPT
+				workerUrl: `/wasm-janet/runner-worker.js?v=${janetTestWorkerReceipt.sha256}`,
+				manifestUrl: `/wasm-janet/runtime-manifest.v2.json?v=${janetTestManifestFingerprint}`,
+				...janetTestProfile,
+				workerReceipt: janetTestWorkerReceipt
 			}
-		});
+		};
+		await sandbox.load(runtimeAssets);
+		const warmFetchCount = vi.mocked(fetch).mock.calls.length;
+		await sandbox.load(runtimeAssets);
+		expect(fetch).toHaveBeenCalledTimes(warmFetchCount);
 		await expect(
 			sandbox.run('(print (getline))', false, true, undefined, [], {
 				stdin: 'ok\n'
@@ -2206,38 +2378,155 @@ describe('static worker backed language sandboxes', () => {
 
 		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/wasm-janet/runner-worker.js?v=test',
+			`http://localhost:3000/wasm-janet/runner-worker.js?v=${janetTestWorkerReceipt.sha256}`,
 			janetWorkerSource
 		);
 		expect(workerInstances[0].options).toEqual({ type: 'module' });
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-janet/',
-				manifestUrl: 'http://localhost:3000/wasm-janet/runtime-manifest.v2.json',
-				manifestFingerprint: WASM_JANET_ASSET_VERSION,
+				manifestUrl: `http://localhost:3000/wasm-janet/runtime-manifest.v2.json?v=${janetTestManifestFingerprint}`,
+				manifestFingerprint: janetTestManifestFingerprint,
+				runtimePreflight: expect.objectContaining({
+					protocol: 'wasm-idle-janet-preflight',
+					protocolVersion: 1,
+					profileId: janetTestProfile.profileId,
+					artifactRevision: janetTestProfile.artifactRevision,
+					janetVersion: janetTestProfile.janetVersion,
+					emscriptenVersion: janetTestProfile.emscriptenVersion,
+					manifestFingerprint: janetTestManifestFingerprint
+				}),
 				stdin: 'ok\n',
 				activePath: 'main.janet'
 			})
 		);
-		expect(sandbox.workerReceipt).toEqual(WASM_JANET_RUNNER_RECEIPT);
+		const runMessage = workerInstances[0].postMessage.mock.calls[0][0];
+		expect(Array.from(runMessage.runtimePreflight.manifestBytes)).toEqual(
+			Array.from(janetTestManifestBytes)
+		);
+		expect(Array.from(runMessage.runtimePreflight.javascriptBytes)).toEqual(
+			Array.from(janetTestJavaScriptBytes)
+		);
+		expect(Array.from(runMessage.runtimePreflight.wasmBytes)).toEqual(
+			Array.from(janetTestWasmBytes)
+		);
+		const workerEventIndex = runtimeLifecycleEvents.findIndex((event) =>
+			event.startsWith('worker:')
+		);
+		for (const assetPath of [
+			'runtime-manifest.v2.json',
+			'janet.js',
+			'janet.wasm.gz.bin',
+			'runner-worker.js'
+		]) {
+			const fetchEventIndex = runtimeLifecycleEvents.findIndex(
+				(event) => event.startsWith('fetch:') && event.includes(assetPath)
+			);
+			expect(fetchEventIndex).toBeGreaterThanOrEqual(0);
+			expect(fetchEventIndex).toBeLessThan(workerEventIndex);
+		}
+		const janetRuntimePaths = runtimeLifecycleEvents
+			.filter((event) => event.startsWith('fetch:') && event.includes('/wasm-janet/'))
+			.map((event) => new URL(event.slice('fetch:'.length)).pathname);
+		expect(janetRuntimePaths).toHaveLength(4);
+		expect(janetRuntimePaths).not.toContain('/wasm-janet/janet.wasm.gz');
+		expect(janetRuntimePaths).not.toContain('/wasm-janet/janet.wasm');
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+
+		await expect(
+			sandbox.run('(print "second")', false, true, undefined, [], { stdin: '' })
+		).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				runtimePreflight: expect.objectContaining({
+					manifestFingerprint: janetTestManifestFingerprint
+				})
+			})
+		);
+		expect(workerInstances[1].terminate).toHaveBeenCalledOnce();
+		expect(sandbox.workerReceipt).toEqual(janetTestWorkerReceipt);
+	});
+
+	it('requires a complete profile and runner receipt for custom Janet runtime URLs', async () => {
+		const sandbox = new Janet();
+
+		await expect(
+			sandbox.load({
+				janet: {
+					baseUrl: '/custom-janet/',
+					workerUrl: '/custom-janet/runner-worker.js',
+					manifestUrl: '/custom-janet/runtime-manifest.v2.json'
+				}
+			})
+		).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			runtimeId: 'JANET'
+		});
+		expect(fetch).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects corrupt Janet Wasm storage before loading the runner or creating a worker', async () => {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-janet/janet.wasm.gz.bin')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			return new Response(Uint8Array.from([...janetTestWasmGzipBytes, 0]), {
+				status: 200,
+				headers: { 'content-type': 'application/octet-stream' }
+			});
+		});
+		const sandbox = new Janet();
+
+		await expect(
+			sandbox.load({
+				janet: {
+					baseUrl: '/wasm-janet/',
+					workerUrl: `/wasm-janet/runner-worker.js?v=${janetTestWorkerReceipt.sha256}`,
+					manifestUrl: `/wasm-janet/runtime-manifest.v2.json?v=${janetTestManifestFingerprint}`,
+					...janetTestProfile,
+					workerReceipt: janetTestWorkerReceipt
+				}
+			})
+		).rejects.toMatchObject({ code: 'asset-integrity', runtimeId: 'JANET' });
+		expect(
+			vi
+				.mocked(fetch)
+				.mock.calls.some(([input]) =>
+					String(input).includes('/wasm-janet/runner-worker.js')
+				)
+		).toBe(false);
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('rejects a modified Janet runner before creating a worker', async () => {
 		const modifiedSource = `x${janetWorkerSource.slice(1)}`;
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(modifiedSource, {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-janet/runner-worker.js')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			return new Response(modifiedSource, {
 				status: 200,
 				headers: {
 					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
 				}
-			})
-		);
+			});
+		});
 		const sandbox = new Janet();
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
-			code: 'asset-integrity',
-			runtimeId: 'JANET'
-		});
+		await expect(
+			sandbox.load({
+				janet: {
+					baseUrl: '/wasm-janet/',
+					workerUrl: `/wasm-janet/runner-worker.js?v=${janetTestWorkerReceipt.sha256}`,
+					manifestUrl: `/wasm-janet/runtime-manifest.v2.json?v=${janetTestManifestFingerprint}`,
+					...janetTestProfile,
+					workerReceipt: janetTestWorkerReceipt
+				}
+			})
+		).rejects.toMatchObject({ code: 'asset-integrity', runtimeId: 'JANET' });
 		expect(workerInstances).toHaveLength(0);
 	});
 

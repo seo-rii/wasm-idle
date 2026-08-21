@@ -31,10 +31,7 @@ import {
 	WASM_J_RUNNER_RECEIPT,
 	WASM_J_RUNTIME_PROFILE
 } from '$lib/playground/wasmJVersion';
-import {
-	WASM_JANET_ASSET_VERSION,
-	WASM_JANET_RUNNER_RECEIPT
-} from '$lib/playground/wasmJanetVersion';
+import { WASM_JANET_RUNTIME_BUNDLE } from '$lib/playground/wasmJanetVersion';
 import {
 	WASM_JULIA_ASSET_VERSION,
 	WASM_JULIA_RUNNER_RECEIPT
@@ -55,6 +52,7 @@ import {
 	TEAVM_RUNTIME_ASSET_RECEIPTS,
 	RuntimeConfigurationError,
 	deriveRubyRuntimeWasmUrl,
+	snapshotJanetRuntimePreflightProfile,
 	snapshotPerlRuntimePreflightProfile,
 	snapshotPrologRuntimePreflightProfile,
 	snapshotTclRuntimePreflightProfile,
@@ -404,6 +402,13 @@ export interface JanetRuntimeAssetConfig {
 	workerUrl?: string;
 	manifestUrl?: string;
 	manifestFingerprint?: string;
+	profileId?: string;
+	artifactRevision?: string;
+	janetVersion?: string;
+	emscriptenVersion?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	javascriptReceipt?: RuntimeAssetIntegrityEntry;
+	wasmReceipt?: RuntimeAssetIntegrityEntry;
 	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
@@ -3089,15 +3094,6 @@ export function resolveJanetRuntimeAssetConfig(
 	const envManifestFingerprint = (publicEnv.PUBLIC_WASM_JANET_MANIFEST_FINGERPRINT || '').trim();
 	const envWorkerSha256 = (publicEnv.PUBLIC_WASM_JANET_WORKER_SHA256 || '').trim();
 	const envWorkerBytesSource = (publicEnv.PUBLIC_WASM_JANET_WORKER_BYTES || '').trim();
-	const envWorkerBytes = /^\d+$/u.test(envWorkerBytesSource)
-		? Number(envWorkerBytesSource)
-		: Number.NaN;
-	const envWorkerReceipt =
-		/^[a-f0-9]{64}$/u.test(envWorkerSha256) &&
-		Number.isSafeInteger(envWorkerBytes) &&
-		envWorkerBytes > 0
-			? { bytes: envWorkerBytes, sha256: envWorkerSha256 }
-			: undefined;
 	const usesCustomUrls = Boolean(
 		configured?.baseUrl ||
 		configured?.workerUrl ||
@@ -3106,18 +3102,53 @@ export function resolveJanetRuntimeAssetConfig(
 		(publicEnv.PUBLIC_WASM_JANET_WORKER_URL || '').trim() ||
 		(publicEnv.PUBLIC_WASM_JANET_MANIFEST_URL || '').trim()
 	);
+	const hasConfiguredTrust =
+		!!configured &&
+		[
+			configured.manifestFingerprint,
+			configured.profileId,
+			configured.artifactRevision,
+			configured.janetVersion,
+			configured.emscriptenVersion,
+			configured.manifestReceipt,
+			configured.javascriptReceipt,
+			configured.wasmReceipt,
+			configured.workerReceipt
+		].some((value) => value !== undefined);
+	const usesCustomTrustBoundary =
+		usesCustomUrls ||
+		hasConfiguredTrust ||
+		Boolean(envManifestFingerprint || envWorkerSha256 || envWorkerBytesSource);
+	const selectedProfile = usesCustomTrustBoundary
+		? {
+				profileId: configured?.profileId?.trim(),
+				artifactRevision: configured?.artifactRevision?.trim(),
+				janetVersion: configured?.janetVersion?.trim(),
+				emscriptenVersion: configured?.emscriptenVersion?.trim(),
+				manifestFingerprint: configured?.manifestFingerprint?.trim(),
+				manifestReceipt: configured?.manifestReceipt,
+				javascriptReceipt: configured?.javascriptReceipt,
+				wasmReceipt: configured?.wasmReceipt
+			}
+		: WASM_JANET_RUNTIME_BUNDLE.profile;
+	const preflightProfile = snapshotJanetRuntimePreflightProfile(selectedProfile);
+	const workerReceipt = usesCustomTrustBoundary
+		? configured?.workerReceipt
+		: WASM_JANET_RUNTIME_BUNDLE.workerReceipt;
+	if (!workerReceipt) {
+		throw new RuntimeConfigurationError(
+			'Janet runtime requires one complete profile and runner receipt bundle.',
+			{ runtimeId: 'JANET' }
+		);
+	}
 	return {
 		baseUrl: resolveJanetBaseUrl(options, currentUrl),
 		workerUrl: resolveJanetWorkerUrl(options, currentUrl),
 		manifestUrl: resolveJanetManifestUrl(options, currentUrl),
-		manifestFingerprint:
-			configured?.manifestFingerprint?.trim() ||
-			envManifestFingerprint ||
-			(!usesCustomUrls ? WASM_JANET_ASSET_VERSION : undefined),
-		workerReceipt:
-			configured?.workerReceipt ||
-			envWorkerReceipt ||
-			(!usesCustomUrls ? WASM_JANET_RUNNER_RECEIPT : undefined)
+		manifestFingerprint: preflightProfile.manifestFingerprint,
+		preflightKey: JSON.stringify(preflightProfile),
+		preflightProfile,
+		workerReceipt
 	};
 }
 

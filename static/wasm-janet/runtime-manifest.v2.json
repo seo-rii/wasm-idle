@@ -2,7 +2,7 @@
   "format": "wasm-janet-runtime-manifest-v2",
   "runtime": "janet-lang-janet",
   "profileId": "janet-1.41.3-dev-emscripten-3.1.8-wasm-idle-d647850c",
-  "fingerprint": "5005378dcd6a520eac0c0ad7e08b7a568a075e7ff034f02434a7dcc45c33990a",
+  "fingerprint": "a7d89c155be6d2acc930f2d4fc535ce4a67857e3bd32bb42cb005aafcc6c014f",
   "licenseExpression": "MIT",
   "artifact": {
     "kind": "opaque-vendored",
@@ -80,7 +80,7 @@
       "sha256": "4c8a59b012fee0e785cbcdfa57cddb2a04e2f963d91897a1bbd8d7f45b240555"
     },
     {
-      "path": "janet.wasm.gz",
+      "path": "janet.wasm.gz.bin",
       "logicalPath": "janet.wasm",
       "encoding": "gzip",
       "size": 316923,

@@ -230,6 +230,20 @@ export {
 	type PerlRuntimePreflightRequest
 } from './perl-runtime.js';
 export {
+	JANET_PREFLIGHT_PROTOCOL,
+	JANET_PREFLIGHT_PROTOCOL_VERSION,
+	JANET_PREFLIGHT_RUNTIME_ID,
+	JANET_MAX_ASSET_BYTES,
+	cloneJanetRuntimePreflightPayload,
+	preflightJanetRuntimeAssets,
+	requireJanetRuntimePreflightPayload,
+	snapshotJanetRuntimePreflightProfile,
+	verifyJanetRuntimePreflightPayload,
+	type JanetRuntimePreflightPayload,
+	type JanetRuntimePreflightProfile,
+	type JanetRuntimePreflightRequest
+} from './janet-runtime.js';
+export {
 	TCL_PREFLIGHT_PROTOCOL,
 	TCL_PREFLIGHT_PROTOCOL_VERSION,
 	TCL_PREFLIGHT_RUNTIME_ID,

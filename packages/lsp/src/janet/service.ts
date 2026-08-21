@@ -9,14 +9,18 @@ import {
 	type StaticWorkerDiagnosticRequest,
 	type StaticWorkerDiagnosticRunner
 } from '../static-worker-service.js';
-import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
+import {
+	JANET_MAX_ASSET_BYTES,
+	requireJanetRuntimePreflightPayload,
+	type JanetRuntimePreflightPayload,
+	type RuntimeAssetIntegrityEntry
+} from '@wasm-idle/core';
 
 export interface JanetWorkerOptions {
-	baseUrl: string;
-	workerUrl: string;
-	manifestUrl: string;
-	manifestFingerprint: string;
+	runnerWorkerBytes: Uint8Array;
+	runtimePreflight: JanetRuntimePreflightPayload;
 	workerReceipt: RuntimeAssetIntegrityEntry;
+	maxAssetBytes: number;
 }
 
 export type JanetDiagnosticRunnerRequest = StaticWorkerDiagnosticRequest<JanetWorkerOptions>;
@@ -82,6 +86,71 @@ const JANET_HOVER: Record<string, string> = {
 	'file/read': 'Reads a file or stream into memory.'
 };
 
+const JANET_CONFIG_KEYS = [
+	'maxAssetBytes',
+	'runnerWorkerBytes',
+	'runtimePreflight',
+	'workerReceipt'
+] as const;
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+	!!value && typeof value === 'object' && !Array.isArray(value);
+
+const isOwnedUint8Array = (value: unknown): value is Uint8Array =>
+	ArrayBuffer.isView(value) &&
+	Object.prototype.toString.call(value) === '[object Uint8Array]' &&
+	value.buffer instanceof ArrayBuffer &&
+	value.byteOffset === 0 &&
+	value.byteLength === value.buffer.byteLength;
+
+function validateJanetWorkerConfig(config: JanetWorkerOptions): string | null {
+	if (
+		!isPlainRecord(config) ||
+		Object.keys(config).sort().join('\n') !== JANET_CONFIG_KEYS.join('\n')
+	) {
+		return 'Janet language server requires an exact verified runtime configuration';
+	}
+	if (
+		!Number.isSafeInteger(config.maxAssetBytes) ||
+		config.maxAssetBytes <= 0 ||
+		config.maxAssetBytes > JANET_MAX_ASSET_BYTES
+	) {
+		return 'Janet language server requires a valid maxAssetBytes limit';
+	}
+	if (
+		!isPlainRecord(config.workerReceipt) ||
+		Object.keys(config.workerReceipt).sort().join('\n') !== 'bytes\nsha256' ||
+		!Number.isSafeInteger(config.workerReceipt.bytes) ||
+		(config.workerReceipt.bytes as number) <= 0 ||
+		typeof config.workerReceipt.sha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(config.workerReceipt.sha256)
+	) {
+		return 'Janet language server requires a valid runner receipt';
+	}
+	if (
+		!isOwnedUint8Array(config.runnerWorkerBytes) ||
+		config.runnerWorkerBytes.byteLength !== config.workerReceipt.bytes ||
+		config.runnerWorkerBytes.byteLength > config.maxAssetBytes
+	) {
+		return 'Janet language server requires receipt-sized runner bytes';
+	}
+	let payload: JanetRuntimePreflightPayload;
+	try {
+		payload = requireJanetRuntimePreflightPayload(config.runtimePreflight);
+	} catch {
+		return 'Janet language server requires a strict runtime preflight payload';
+	}
+	for (const bytes of [payload.manifestBytes, payload.javascriptBytes, payload.wasmBytes]) {
+		if (!isOwnedUint8Array(bytes)) {
+			return 'Janet language server requires owned runtime preflight bytes';
+		}
+		if (bytes.byteLength <= 0 || bytes.byteLength > config.maxAssetBytes) {
+			return 'Janet language server runtime preflight exceeds maxAssetBytes';
+		}
+	}
+	return null;
+}
+
 const wordAt = (text: string, position: LspPosition) => {
 	const line = text.split('\n')[position.line] || '';
 	const character = Math.max(0, Math.min(position.character, line.length));
@@ -134,35 +203,25 @@ export function createJanetWorkerService(
 		timeoutMessage: 'Janet diagnostics timed out',
 		runtime: 'janet',
 		runDiagnostics,
-		validateConfig: (config) => {
-			if (!config.baseUrl || !config.workerUrl) return null;
-			if (!config.manifestUrl || !/^[a-f0-9]{64}$/u.test(config.manifestFingerprint)) {
-				return 'Janet language server requires a manifest URL and fingerprint';
-			}
-			if (
-				!config.workerReceipt ||
-				!Number.isSafeInteger(config.workerReceipt.bytes) ||
-				(config.workerReceipt.bytes as number) <= 0 ||
-				typeof config.workerReceipt.sha256 !== 'string' ||
-				!/^[a-f0-9]{64}$/u.test(config.workerReceipt.sha256)
-			) {
-				return 'Janet language server requires a valid worker receipt';
-			}
-			return null;
-		},
+		validateConfig: validateJanetWorkerConfig,
 		cacheKeyParts: (config) => [
-			config.baseUrl,
-			config.workerUrl,
-			config.manifestUrl,
-			config.manifestFingerprint,
+			config.runtimePreflight.protocol,
+			String(config.runtimePreflight.protocolVersion),
+			config.runtimePreflight.profileId,
+			config.runtimePreflight.artifactRevision,
+			config.runtimePreflight.janetVersion,
+			config.runtimePreflight.emscriptenVersion,
+			config.runtimePreflight.manifestFingerprint,
+			String(config.runtimePreflight.manifestBytes.byteLength),
+			String(config.runtimePreflight.javascriptBytes.byteLength),
+			String(config.runtimePreflight.wasmBytes.byteLength),
 			String(config.workerReceipt.bytes),
-			config.workerReceipt.sha256
+			config.workerReceipt.sha256,
+			String(config.maxAssetBytes)
 		],
 		createMessage: (request) => ({
-			baseUrl: request.baseUrl,
-			manifestUrl: request.manifestUrl,
-			manifestFingerprint: request.manifestFingerprint,
-			maxAssetBytes: 8 * 1024 * 1024,
+			runtimePreflight: request.runtimePreflight,
+			maxAssetBytes: request.maxAssetBytes,
 			code: request.code,
 			activePath: request.activePath,
 			args: [],

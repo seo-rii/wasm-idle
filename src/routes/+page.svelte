@@ -249,19 +249,7 @@
 	const luaLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'lua');
 	const luaLspModuleUrl = $derived(luaLspEnabled ? runtimeAssets.lua?.moduleUrl : undefined);
 	const janetLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'janet');
-	const janetLspBaseUrl = $derived(janetLspEnabled ? runtimeAssets.janet?.baseUrl : undefined);
-	const janetLspWorkerUrl = $derived(
-		janetLspEnabled ? runtimeAssets.janet?.workerUrl : undefined
-	);
-	const janetLspManifestUrl = $derived(
-		janetLspEnabled ? runtimeAssets.janet?.manifestUrl : undefined
-	);
-	const janetLspManifestFingerprint = $derived(
-		janetLspEnabled ? runtimeAssets.janet?.manifestFingerprint : undefined
-	);
-	const janetLspWorkerReceipt = $derived(
-		janetLspEnabled ? runtimeAssets.janet?.workerReceipt : undefined
-	);
+	const janetLspRuntime = $derived(janetLspEnabled ? runtimeAssets.janet : undefined);
 	const lispLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'lisp');
 	const lispLspModuleUrl = $derived(lispLspEnabled ? runtimeAssets.lisp?.moduleUrl : undefined);
 	const lispLspManifestUrl = $derived(
@@ -2861,11 +2849,7 @@
 				{luaLspEnabled}
 				{luaLspModuleUrl}
 				{janetLspEnabled}
-				{janetLspBaseUrl}
-				{janetLspWorkerUrl}
-				{janetLspManifestUrl}
-				{janetLspManifestFingerprint}
-				{janetLspWorkerReceipt}
+				{janetLspRuntime}
 				{lispLspEnabled}
 				{lispLspModuleUrl}
 				{lispLspManifestUrl}

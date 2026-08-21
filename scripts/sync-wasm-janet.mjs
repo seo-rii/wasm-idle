@@ -44,6 +44,13 @@ const MANIFEST_FILE = 'runtime-manifest.v2.json';
 const BUILD_METADATA_FILE = 'runtime-build.json';
 const WORKER_FILE = 'runner-worker.js';
 const LICENSE_FILE = 'LICENSE.txt';
+const WORKER_IDENTITY_PLACEHOLDERS = new Map([
+	['profileId', '__WASM_IDLE_JANET_PROFILE_ID__'],
+	['artifactRevision', '__WASM_IDLE_JANET_ARTIFACT_REVISION__'],
+	['janetVersion', '__WASM_IDLE_JANET_VERSION__'],
+	['emscriptenVersion', '__WASM_IDLE_JANET_EMSCRIPTEN_VERSION__'],
+	['manifestFingerprint', '__WASM_IDLE_JANET_MANIFEST_FINGERPRINT__']
+]);
 /** @type {readonly ('janet.js' | 'janet.wasm')[]} */
 const LOGICAL_ASSETS = ['janet.js', 'janet.wasm'];
 const BUILD_OPTIONS = [
@@ -321,6 +328,7 @@ async function resolveSourceDir(sourceDir, targetDir) {
 	if (
 		(await isRegularFile(path.join(targetDir, 'janet.js'))) &&
 		((await isRegularFile(path.join(targetDir, 'janet.wasm'))) ||
+			(await isRegularFile(path.join(targetDir, 'janet.wasm.gz.bin'))) ||
 			(await isRegularFile(path.join(targetDir, 'janet.wasm.gz'))))
 	) {
 		return null;
@@ -419,11 +427,15 @@ export async function syncWasmJanetAssets(options = {}) {
 	const sourceBase = resolvedSourceDir || targetDir;
 	const modulePath = path.join(sourceBase, 'janet.js');
 	const rawWasmPath = path.join(sourceBase, 'janet.wasm');
-	const gzipWasmPath = path.join(sourceBase, 'janet.wasm.gz');
+	const canonicalGzipWasmPath = path.join(sourceBase, 'janet.wasm.gz.bin');
+	const legacyGzipWasmPath = path.join(sourceBase, 'janet.wasm.gz');
 	if (!(await isRegularFile(modulePath))) {
 		throw new Error(`Janet runtime module must be a regular file: ${modulePath}`);
 	}
 	const hasRawWasm = await isRegularFile(rawWasmPath);
+	const gzipWasmPath = (await isRegularFile(canonicalGzipWasmPath))
+		? canonicalGzipWasmPath
+		: legacyGzipWasmPath;
 	if (!hasRawWasm && !(await isRegularFile(gzipWasmPath))) {
 		throw new Error(`Janet runtime Wasm must be a regular file: ${rawWasmPath}`);
 	}
@@ -539,7 +551,7 @@ export async function syncWasmJanetAssets(options = {}) {
 			sha256: sha256(moduleBytes)
 		},
 		{
-			path: 'janet.wasm.gz',
+			path: 'janet.wasm.gz.bin',
 			logicalPath: 'janet.wasm',
 			encoding: 'gzip',
 			size: storedWasm.byteLength,
@@ -579,9 +591,38 @@ export async function syncWasmJanetAssets(options = {}) {
 		assets,
 		storage
 	});
+	let publishedWorkerSource;
+	try {
+		publishedWorkerSource = new TextDecoder('utf-8', { fatal: true }).decode(workerBytes);
+	} catch {
+		throw new Error('wasm-janet runner worker is not valid UTF-8 JavaScript');
+	}
+	const workerIdentity = Object.freeze({
+		profileId: lock.profileId,
+		artifactRevision: lock.artifact.revision,
+		janetVersion: lock.components.janet.version,
+		emscriptenVersion: lock.components.emscripten.version,
+		manifestFingerprint: fingerprint
+	});
+	for (const [key, expectedValue] of Object.entries(workerIdentity)) {
+		const expected = `${key}: '${expectedValue}'`;
+		const placeholderValue = WORKER_IDENTITY_PLACEHOLDERS.get(key);
+		if (!placeholderValue) throw new Error(`wasm-janet runner identity key is unknown: ${key}`);
+		const placeholder = `${key}: '${placeholderValue}'`;
+		const expectedCount = publishedWorkerSource.split(expected).length - 1;
+		const placeholderCount = publishedWorkerSource.split(placeholder).length - 1;
+		if (expectedCount === 1 && placeholderCount === 0) continue;
+		if (expectedCount !== 0 || placeholderCount !== 1) {
+			throw new Error(
+				`wasm-janet runner must pin exactly one generated ${key} identity value`
+			);
+		}
+		publishedWorkerSource = publishedWorkerSource.replace(placeholder, expected);
+	}
+	const publishedWorkerBytes = Buffer.from(publishedWorkerSource, 'utf8');
 	const workerReceipt = Object.freeze({
-		bytes: workerBytes.byteLength,
-		sha256: sha256(workerBytes)
+		bytes: publishedWorkerBytes.byteLength,
+		sha256: sha256(publishedWorkerBytes)
 	});
 	const manifest = {
 		format: JANET_MANIFEST_FORMAT,
@@ -597,6 +638,39 @@ export async function syncWasmJanetAssets(options = {}) {
 		assets,
 		storage
 	};
+	const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+	const manifestReceipt = Object.freeze({
+		bytes: manifestBytes.byteLength,
+		sha256: sha256(manifestBytes)
+	});
+	const logicalReceiptByPath = new Map(assets.map((asset) => [asset.path, asset]));
+	const storageReceiptByLogicalPath = new Map(storage.map((asset) => [asset.logicalPath, asset]));
+	/** @param {string} logicalPath */
+	const runtimeReceipt = (logicalPath) => {
+		const logical = logicalReceiptByPath.get(logicalPath);
+		const stored = storageReceiptByLogicalPath.get(logicalPath);
+		if (!logical || !stored) {
+			throw new Error(`wasm-janet runtime receipt is missing for ${logicalPath}`);
+		}
+		if (stored.encoding === 'identity') {
+			return Object.freeze({
+				bytes: stored.size,
+				sha256: stored.sha256
+			});
+		}
+		return Object.freeze({
+			bytes: stored.size,
+			sha256: stored.sha256,
+			uncompressedBytes: logical.size,
+			uncompressedSha256: logical.sha256
+		});
+	};
+	const runtimeProfile = Object.freeze({
+		...workerIdentity,
+		manifestReceipt,
+		javascriptReceipt: runtimeReceipt('janet.js'),
+		wasmReceipt: runtimeReceipt('janet.wasm')
+	});
 	const legacyManifest = {
 		format: 'wasm-janet-runtime-manifest-v1',
 		runtime: 'janet-lang-janet',
@@ -604,12 +678,16 @@ export async function syncWasmJanetAssets(options = {}) {
 		fingerprint: fingerprint.slice(0, 16),
 		files: [LICENSE_FILE, 'janet.js', 'janet.wasm.gz']
 	};
-	const versionModuleSource = `export const WASM_JANET_ASSET_VERSION =\n\t'${fingerprint}';\nexport const WASM_JANET_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
-	const lspVersionModuleSource = `export const BUNDLED_JANET_MANIFEST_FINGERPRINT =\n\t'${fingerprint}';\nexport const BUNDLED_JANET_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
+	const serializedRuntimeProfile = JSON.stringify(runtimeProfile, null, '\t')
+		.replaceAll('"', "'")
+		.replace(/^(\s*)'([A-Za-z_$][A-Za-z0-9_$]*)':/gmu, '$1$2:');
+	const versionModuleSource = `export const WASM_JANET_RUNTIME_PROFILE = ${serializedRuntimeProfile} as const;\nexport const WASM_JANET_RUNTIME_BUNDLE = Object.freeze({\n\tprofile: WASM_JANET_RUNTIME_PROFILE,\n\tworkerReceipt: {\n\t\tbytes: ${workerReceipt.bytes},\n\t\tsha256: '${workerReceipt.sha256}'\n\t}\n});\nexport const WASM_JANET_ASSET_VERSION = WASM_JANET_RUNTIME_PROFILE.manifestFingerprint;\nexport const WASM_JANET_RUNNER_RECEIPT = WASM_JANET_RUNTIME_BUNDLE.workerReceipt;\n`;
+	const lspVersionModuleSource = `export const BUNDLED_JANET_RUNTIME_PROFILE = ${serializedRuntimeProfile} as const;\nexport const BUNDLED_JANET_RUNTIME_BUNDLE = Object.freeze({\n\tprofile: BUNDLED_JANET_RUNTIME_PROFILE,\n\tworkerReceipt: {\n\t\tbytes: ${workerReceipt.bytes},\n\t\tsha256: '${workerReceipt.sha256}'\n\t}\n});\nexport const BUNDLED_JANET_MANIFEST_FINGERPRINT = BUNDLED_JANET_RUNTIME_PROFILE.manifestFingerprint;\nexport const BUNDLED_JANET_RUNNER_RECEIPT = BUNDLED_JANET_RUNTIME_BUNDLE.workerReceipt;\n`;
 	const expectedFiles = [
 		LICENSE_FILE,
 		'janet.js',
 		'janet.wasm.gz',
+		'janet.wasm.gz.bin',
 		BUILD_METADATA_FILE,
 		LEGACY_MANIFEST_FILE,
 		MANIFEST_FILE,
@@ -645,19 +723,16 @@ export async function syncWasmJanetAssets(options = {}) {
 		await Promise.all([
 			writeFile(path.join(publications[0].temporary, 'janet.js'), moduleBytes),
 			writeFile(path.join(publications[0].temporary, 'janet.wasm.gz'), storedWasm),
+			writeFile(path.join(publications[0].temporary, 'janet.wasm.gz.bin'), storedWasm),
 			writeFile(path.join(publications[0].temporary, LICENSE_FILE), licenseBytes),
-			writeFile(path.join(publications[0].temporary, WORKER_FILE), workerBytes),
+			writeFile(path.join(publications[0].temporary, WORKER_FILE), publishedWorkerBytes),
 			writeFile(path.join(publications[0].temporary, BUILD_METADATA_FILE), metadataBytes),
 			writeFile(
 				path.join(publications[0].temporary, LEGACY_MANIFEST_FILE),
 				`${JSON.stringify(legacyManifest, null, 2)}\n`,
 				'utf8'
 			),
-			writeFile(
-				path.join(publications[0].temporary, MANIFEST_FILE),
-				`${JSON.stringify(manifest, null, 2)}\n`,
-				'utf8'
-			),
+			writeFile(path.join(publications[0].temporary, MANIFEST_FILE), manifestBytes),
 			writeFile(publications[1].temporary, versionModuleSource, 'utf8'),
 			writeFile(publications[2].temporary, lspVersionModuleSource, 'utf8')
 		]);
@@ -679,6 +754,9 @@ export async function syncWasmJanetAssets(options = {}) {
 			path.join(publications[0].temporary, 'janet.js')
 		);
 		const installedStoredWasmBytes = await readFile(
+			path.join(publications[0].temporary, 'janet.wasm.gz.bin')
+		);
+		const installedLegacyStoredWasmBytes = await readFile(
 			path.join(publications[0].temporary, 'janet.wasm.gz')
 		);
 		const installedLogicalWasmBytes = gunzipSync(installedStoredWasmBytes);
@@ -704,6 +782,7 @@ export async function syncWasmJanetAssets(options = {}) {
 			sha256(installedModuleBytes) !== storage[0].sha256 ||
 			installedStoredWasmBytes.byteLength !== storage[1].size ||
 			sha256(installedStoredWasmBytes) !== storage[1].sha256 ||
+			!installedLegacyStoredWasmBytes.equals(installedStoredWasmBytes) ||
 			installedLogicalWasmBytes.byteLength !== assets[1].size ||
 			sha256(installedLogicalWasmBytes) !== assets[1].sha256 ||
 			installedLicenseBytes.byteLength !== license.size ||
@@ -774,7 +853,8 @@ export async function syncWasmJanetAssets(options = {}) {
 		fingerprint,
 		versionModulePath,
 		lspVersionModulePath,
-		workerReceipt
+		workerReceipt,
+		runtimeProfile
 	};
 }
 
