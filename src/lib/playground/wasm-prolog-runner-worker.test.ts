@@ -701,21 +701,15 @@ describe('SWI-Prolog runner worker', () => {
 		expect(messages.filter((message) => message.harnessInjected)).toHaveLength(2);
 	});
 
-	it('prints a prompt before consuming live shared-ring input', async () => {
+	it('prints a prompt before consuming shared-ring input', async () => {
 		const stdin = new StaticStdinRingHost({ capacity: 16, maxBufferedBytes: 32 });
-		let suppliedInput = false;
+		const supplyInput = setTimeout(() => {
+			stdin.enqueue('안녕\n');
+			stdin.close();
+		}, 10);
 		const messages = await runHarness(
-			integrityRequest({ stdin: undefined, stdinChannel: stdin.descriptor }),
-			(message) => {
-				if (message?.output?.includes('prompt>') && !suppliedInput) {
-					suppliedInput = true;
-					setTimeout(() => {
-						stdin.enqueue('안녕\n');
-						stdin.close();
-					}, 10);
-				}
-			}
-		);
+			integrityRequest({ stdin: undefined, stdinChannel: stdin.descriptor })
+		).finally(() => clearTimeout(supplyInput));
 
 		expect(messages.findIndex((message) => message?.output?.includes('prompt>'))).toBeLessThan(
 			messages.findIndex((message) => message?.output?.includes('received=안녕'))
