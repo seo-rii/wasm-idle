@@ -311,6 +311,7 @@ describe('additional language server workers', () => {
 	it('rejects corrupt D bootstrap assets before creating the language worker', async () => {
 		const moduleBytes = Uint8Array.of(1);
 		const manifestBytes = Uint8Array.of(2);
+		const manifestSha256 = createHash('sha256').update(manifestBytes).digest('hex');
 		const onStatus = vi.fn();
 		vi.stubGlobal(
 			'fetch',
@@ -336,9 +337,9 @@ describe('additional language server workers', () => {
 						},
 						'runtime/runtime-manifest.v1.json': {
 							bytes: 1,
-							sha256: '0'.repeat(64),
+							sha256: manifestSha256,
 							uncompressedBytes: 1,
-							uncompressedSha256: '0'.repeat(64)
+							uncompressedSha256: manifestSha256
 						}
 					}
 				},
