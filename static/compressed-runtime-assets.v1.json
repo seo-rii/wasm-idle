@@ -187,10 +187,10 @@
     "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.bin": 24453239,
     "wasm-of-js-of-ocaml/browser-native-bundle/tools/js_of_ocaml.bc.browser.js": 4783689,
     "wasm-of-js-of-ocaml/browser-native-bundle/tools/ocamlc.byte.browser.js": 2328856,
-    "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js": 6250420,
     "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js": 9560005,
     "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js": 9599667,
     "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js": 10601940,
+    "wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js": 6250420,
     "wasm-pascal/compiler.js": 3332860,
     "wasm-perl/emperl.data": 12021691,
     "wasm-perl/emperl.js": 303013,
@@ -222,8 +222,8 @@
     "wasm-typescript/index.js": 3766162,
     "wasm-wat/index.js": 920134,
     "wasm-zig/zig_small.wasm": 5018805,
-    "webr/000bd2c7d2f13441/libRlapack.so": 1769888,
     "webr/000bd2c7d2f13441/R.js": 785875,
-    "webr/000bd2c7d2f13441/R.wasm": 18062845
+    "webr/000bd2c7d2f13441/R.wasm": 18062845,
+    "webr/000bd2c7d2f13441/libRlapack.so": 1769888
   }
 }
