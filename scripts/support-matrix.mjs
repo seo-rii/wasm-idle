@@ -1136,8 +1136,13 @@ const runtimeDetailsByLanguage = new Map([
 		'Julia',
 		{
 			packageBase: manifestValue('static/wasm-julia/runtime-manifest.v1.json', ['package']),
-			execution: `Julia WASM worker; supports ${code('stdin')} and ${code('programArgs')}`,
-			customization: staticWorkerCustomizationFor('julia')
+			execution:
+				`host-verifies the manifest, stored assets, logical hashes, and profile-bound one-shot runner ` +
+				`before executing the legacy Julia VM; supports ${code('stdin')} and ${code('activePath')}`,
+			customization:
+				`explicit ${code('runtimeAssets.julia.baseUrl')}/${code('workerUrl')}/${code('manifestUrl')} overrides ` +
+				`require one complete profile-and-runner receipt bundle; URL-only ${code('PUBLIC_WASM_JULIA_*')} ` +
+				`overrides fail closed; ${code('activePath')}`
 		}
 	],
 	[

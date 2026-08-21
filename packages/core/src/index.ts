@@ -244,6 +244,21 @@ export {
 	type JanetRuntimePreflightRequest
 } from './janet-runtime.js';
 export {
+	JULIA_PREFLIGHT_PROTOCOL,
+	JULIA_PREFLIGHT_PROTOCOL_VERSION,
+	JULIA_PREFLIGHT_RUNTIME_ID,
+	JULIA_MAX_ASSET_BYTES,
+	JULIA_RUNTIME_PREFLIGHT_CAPABILITIES,
+	cloneJuliaRuntimePreflightPayload,
+	preflightJuliaRuntimeAssets,
+	requireJuliaRuntimePreflightPayload,
+	snapshotJuliaRuntimePreflightProfile,
+	verifyJuliaRuntimePreflightPayload,
+	type JuliaRuntimePreflightPayload,
+	type JuliaRuntimePreflightProfile,
+	type JuliaRuntimePreflightRequest
+} from './julia-runtime.js';
+export {
 	TCL_PREFLIGHT_PROTOCOL,
 	TCL_PREFLIGHT_PROTOCOL_VERSION,
 	TCL_PREFLIGHT_RUNTIME_ID,

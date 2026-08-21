@@ -49,6 +49,21 @@ const DOCUMENTATION_FILE = 'readme.md';
 const LOGICAL_ASSETS = ['julia.js', 'julia.wasm', 'julia.data'];
 const EXPECTED_PROFILE_ID = 'julia-1.3.0-dev.560-chriskoch-npm-1.0.4-22a55e0d';
 const EXPECTED_LICENSE_EXPRESSION = 'MIT AND LicenseRef-Julia-Third-Party';
+const WORKER_IDENTITY_PLACEHOLDERS = /** @type {Readonly<Record<string, string>>} */ (
+	Object.freeze({
+		profileId: '__WASM_IDLE_JULIA_PROFILE_ID__',
+		packageRevision: '__WASM_IDLE_JULIA_PACKAGE_REVISION__',
+		importedByCommit: '__WASM_IDLE_JULIA_IMPORTED_BY_COMMIT__',
+		juliaVersion: '__WASM_IDLE_JULIA_VERSION__',
+		emscriptenVersion: '__WASM_IDLE_JULIA_EMSCRIPTEN_VERSION__',
+		manifestFingerprint: '__WASM_IDLE_JULIA_MANIFEST_FINGERPRINT__'
+	})
+);
+const LEGACY_STORAGE_ALIASES = Object.freeze({
+	'julia.js.gz.bin': 'julia.js.gz',
+	'julia.wasm.gz.bin': 'julia.wasm.gz',
+	'julia.data.gz.bin': 'julia.data.gz'
+});
 const MAX_SOURCE_ASSET_BYTES = 64 * 1024 * 1024;
 const MAX_METADATA_BYTES = 1024 * 1024;
 const MAX_WORKER_BYTES = 8 * 1024 * 1024;
@@ -628,9 +643,12 @@ function validatePackageJson(source) {
 	}
 }
 
-/** @param {string} fingerprint @param {Readonly<Receipt>} workerReceipt */
-function renderVersionModule(fingerprint, workerReceipt) {
-	return `export const WASM_JULIA_ASSET_VERSION =\n\t'${fingerprint}';\nexport const WASM_JULIA_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
+/** @param {Record<string, unknown>} runtimeProfile @param {Readonly<Receipt>} workerReceipt */
+function renderVersionModule(runtimeProfile, workerReceipt) {
+	const serializedRuntimeProfile = JSON.stringify(runtimeProfile, null, '\t')
+		.replaceAll('"', "'")
+		.replace(/^(\s*)'([A-Za-z_$][A-Za-z0-9_$]*)':/gmu, '$1$2:');
+	return `export const WASM_JULIA_RUNTIME_PROFILE = ${serializedRuntimeProfile} as const;\nexport const WASM_JULIA_RUNTIME_BUNDLE = Object.freeze({\n\tprofile: WASM_JULIA_RUNTIME_PROFILE,\n\tworkerReceipt: {\n\t\tbytes: ${workerReceipt.bytes},\n\t\tsha256: '${workerReceipt.sha256}'\n\t}\n});\nexport const WASM_JULIA_ASSET_VERSION = WASM_JULIA_RUNTIME_PROFILE.manifestFingerprint;\nexport const WASM_JULIA_RUNNER_RECEIPT = WASM_JULIA_RUNTIME_BUNDLE.workerReceipt;\n`;
 }
 
 /** @param {SyncWasmJuliaOptions} [options] */
@@ -775,7 +793,10 @@ export async function syncWasmJuliaAssets(options = {}) {
 		if (
 			!workerSource.includes('self.onmessage') ||
 			!workerSource.includes(JULIA_MANIFEST_FORMAT) ||
-			!workerSource.includes(EXPECTED_PROFILE_ID)
+			!workerSource.includes('wasm-idle-julia-preflight') ||
+			Object.values(WORKER_IDENTITY_PLACEHOLDERS).some(
+				(placeholder) => !workerSource.includes(placeholder)
+			)
 		) {
 			throw new Error('Julia worker source does not implement the pinned runtime protocol');
 		}
@@ -798,7 +819,7 @@ export async function syncWasmJuliaAssets(options = {}) {
 			const logical = logicalBytes.get(asset.path);
 			if (!logical) throw new Error(`Julia runtime source ${asset.path} is missing`);
 			const compressed = gzipSync(logical, { level: 9 });
-			const storagePath = `${asset.path}.gz`;
+			const storagePath = `${asset.path}.gz.bin`;
 			storageBytes.set(storagePath, compressed);
 			return {
 				path: storagePath,
@@ -808,6 +829,13 @@ export async function syncWasmJuliaAssets(options = {}) {
 				sha256: sha256(compressed)
 			};
 		});
+		const publishedStorageBytes = new Map(storageBytes);
+		for (const [canonicalPath, legacyPath] of Object.entries(LEGACY_STORAGE_ALIASES)) {
+			const bytes = storageBytes.get(canonicalPath);
+			if (!bytes)
+				throw new Error(`wasm-julia canonical storage is missing: ${canonicalPath}`);
+			publishedStorageBytes.set(legacyPath, bytes);
+		}
 		const license = {
 			path: lock.license.path,
 			spdx: lock.license.spdx,
@@ -852,9 +880,32 @@ export async function syncWasmJuliaAssets(options = {}) {
 			assets,
 			storage
 		});
+		const runtimeIdentity = Object.freeze({
+			profileId: lock.profileId,
+			packageRevision: lock.artifact.npmShasum,
+			importedByCommit: lock.artifact.importedByCommit,
+			juliaVersion: lock.components.julia.version,
+			emscriptenVersion: lock.components.emscripten.version,
+			manifestFingerprint: fingerprint
+		});
+		let publishedWorkerSource = workerSource;
+		for (const [key, value] of Object.entries(runtimeIdentity)) {
+			const placeholderValue = WORKER_IDENTITY_PLACEHOLDERS[key];
+			if (!placeholderValue) {
+				throw new Error(`wasm-julia runner identity key is unknown: ${key}`);
+			}
+			const placeholder = `${key}: '${placeholderValue}'`;
+			const expected = `${key}: '${value}'`;
+			const placeholderCount = publishedWorkerSource.split(placeholder).length - 1;
+			if (placeholderCount !== 1) {
+				throw new Error(`wasm-julia runner must pin exactly one generated ${key} identity`);
+			}
+			publishedWorkerSource = publishedWorkerSource.replace(placeholder, expected);
+		}
+		const publishedWorkerBytes = Buffer.from(publishedWorkerSource, 'utf8');
 		const workerReceipt = Object.freeze({
-			bytes: workerBytes.byteLength,
-			sha256: sha256(workerBytes)
+			bytes: publishedWorkerBytes.byteLength,
+			sha256: sha256(publishedWorkerBytes)
 		});
 		const manifest = {
 			format: JULIA_MANIFEST_FORMAT,
@@ -870,18 +921,52 @@ export async function syncWasmJuliaAssets(options = {}) {
 			assets,
 			storage
 		};
+		const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+		const manifestReceipt = Object.freeze({
+			bytes: manifestBytes.byteLength,
+			sha256: sha256(manifestBytes)
+		});
+		const logicalReceiptByPath = new Map(assets.map((asset) => [asset.path, asset]));
+		const storageReceiptByLogicalPath = new Map(
+			storage.map((asset) => [asset.logicalPath, asset])
+		);
+		/** @param {string} logicalPath */
+		const runtimeReceipt = (logicalPath) => {
+			const logical = logicalReceiptByPath.get(logicalPath);
+			const stored = storageReceiptByLogicalPath.get(logicalPath);
+			if (!logical || !stored) {
+				throw new Error(`wasm-julia runtime receipt is missing for ${logicalPath}`);
+			}
+			return Object.freeze({
+				bytes: stored.size,
+				sha256: stored.sha256,
+				uncompressedBytes: logical.size,
+				uncompressedSha256: logical.sha256
+			});
+		};
+		const runtimeProfile = Object.freeze({
+			...runtimeIdentity,
+			manifestReceipt,
+			javascriptReceipt: runtimeReceipt('julia.js'),
+			wasmReceipt: runtimeReceipt('julia.wasm'),
+			dataReceipt: runtimeReceipt('julia.data')
+		});
 		const legacyManifest = {
 			format: 'wasm-julia-runtime-manifest-v1',
 			runtime: 'chriskoch-julia-wasm',
 			package: lock.artifact.packageSpec,
 			fingerprint: fingerprint.slice(0, 16),
-			files: [LICENSE_FILE, DOCUMENTATION_FILE, ...storage.map((asset) => asset.path)].sort()
+			files: [
+				LICENSE_FILE,
+				DOCUMENTATION_FILE,
+				...Object.values(LEGACY_STORAGE_ALIASES)
+			].sort()
 		};
-		const versionModuleSource = renderVersionModule(fingerprint, workerReceipt);
+		const versionModuleSource = renderVersionModule(runtimeProfile, workerReceipt);
 		const expectedFiles = [
 			LICENSE_FILE,
 			DOCUMENTATION_FILE,
-			...storage.map((asset) => asset.path),
+			...publishedStorageBytes.keys(),
 			BUILD_METADATA_FILE,
 			LEGACY_MANIFEST_FILE,
 			MANIFEST_FILE,
@@ -914,28 +999,22 @@ export async function syncWasmJuliaAssets(options = {}) {
 		await mkdir(publications[0].temporary, { recursive: true });
 		try {
 			await Promise.all([
-				...storage.map((asset) => {
-					const bytes = storageBytes.get(asset.path);
-					if (!bytes) throw new Error(`Julia storage ${asset.path} is missing`);
-					return writeFile(path.join(publications[0].temporary, asset.path), bytes);
+				...[...publishedStorageBytes].map(([assetPath, bytes]) => {
+					return writeFile(path.join(publications[0].temporary, assetPath), bytes);
 				}),
 				writeFile(path.join(publications[0].temporary, LICENSE_FILE), licenseBytes),
 				writeFile(
 					path.join(publications[0].temporary, DOCUMENTATION_FILE),
 					documentationBytes
 				),
-				writeFile(path.join(publications[0].temporary, WORKER_FILE), workerBytes),
+				writeFile(path.join(publications[0].temporary, WORKER_FILE), publishedWorkerBytes),
 				writeFile(path.join(publications[0].temporary, BUILD_METADATA_FILE), metadataBytes),
 				writeFile(
 					path.join(publications[0].temporary, LEGACY_MANIFEST_FILE),
 					`${JSON.stringify(legacyManifest, null, 2)}\n`,
 					'utf8'
 				),
-				writeFile(
-					path.join(publications[0].temporary, MANIFEST_FILE),
-					`${JSON.stringify(manifest, null, 2)}\n`,
-					'utf8'
-				),
+				writeFile(path.join(publications[0].temporary, MANIFEST_FILE), manifestBytes),
 				writeFile(publications[1].temporary, versionModuleSource, 'utf8')
 			]);
 			const installedEntries = await readdir(publications[0].temporary, {
@@ -979,6 +1058,17 @@ export async function syncWasmJuliaAssets(options = {}) {
 					);
 				}
 			}
+			for (const [canonicalPath, legacyPath] of Object.entries(LEGACY_STORAGE_ALIASES)) {
+				const [canonicalBytes, legacyBytes] = await Promise.all([
+					readFile(path.join(publications[0].temporary, canonicalPath)),
+					readFile(path.join(publications[0].temporary, legacyPath))
+				]);
+				if (!canonicalBytes.equals(legacyBytes)) {
+					throw new Error(
+						`wasm-julia legacy storage alias drifted from ${canonicalPath}`
+					);
+				}
+			}
 			const receiptFiles = [
 				{
 					fileName: LICENSE_FILE,
@@ -1000,7 +1090,7 @@ export async function syncWasmJuliaAssets(options = {}) {
 				},
 				{
 					fileName: WORKER_FILE,
-					bytes: workerBytes,
+					bytes: publishedWorkerBytes,
 					expectedBytes: workerReceipt.bytes,
 					expectedSha256: workerReceipt.sha256
 				}
@@ -1088,7 +1178,8 @@ export async function syncWasmJuliaAssets(options = {}) {
 			fingerprint,
 			profileId: lock.profileId,
 			versionModulePath,
-			workerReceipt
+			workerReceipt,
+			runtimeProfile
 		};
 	} finally {
 		if (source.temporaryRoot) {

@@ -1,11 +1,21 @@
 const textEncoder = new TextEncoder();
 const fatalDecoder = new TextDecoder('utf-8', { fatal: true });
+const preflightProtocol = 'wasm-idle-julia-preflight';
+const preflightProtocolVersion = 1;
 const manifestFormat = 'wasm-julia-runtime-manifest-v2';
 const fingerprintDomain = 'wasm-idle:julia-runtime-manifest:v2';
-const expectedProfileId = 'julia-1.3.0-dev.560-chriskoch-npm-1.0.4-22a55e0d';
-const expectedLicenseExpression = 'MIT AND LicenseRef-Julia-Third-Party';
 const hardMaxAssetBytes = 64 * 1024 * 1024;
-const maxManifestBytes = 128 * 1024;
+const hardMaxTotalLogicalBytes = 64 * 1024 * 1024;
+const maxManifestBytes = 64 * 1024;
+const expectedIdentity = Object.freeze({
+	profileId: 'julia-1.3.0-dev.560-chriskoch-npm-1.0.4-22a55e0d',
+	packageRevision: '22a55e0d10ad50f2999d059b325abe4d95cf17b3',
+	importedByCommit: 'c9529ad7b7ecfaea8a55c0fe5693c4d07cd0ae26',
+	juliaVersion: '1.3.0-DEV.560',
+	emscriptenVersion: 'unrecorded',
+	manifestFingerprint: 'e6cb5693f34efa56e8ec16dd34484deae1a870ad33ba38ecac4073a28f079d9a'
+});
+const expectedLicenseExpression = 'MIT AND LicenseRef-Julia-Third-Party';
 const expectedArtifact = Object.freeze({
 	kind: 'opaque-npm-prebuilt',
 	packageName: '@chriskoch/julia-wasm',
@@ -65,10 +75,26 @@ const expectedAssets = Object.freeze({
 	'julia.wasm': Object.freeze({ mediaType: 'application/wasm' })
 });
 const expectedStorage = Object.freeze({
-	'julia.data.gz': Object.freeze({ logicalPath: 'julia.data', encoding: 'gzip' }),
-	'julia.js.gz': Object.freeze({ logicalPath: 'julia.js', encoding: 'gzip' }),
-	'julia.wasm.gz': Object.freeze({ logicalPath: 'julia.wasm', encoding: 'gzip' })
+	'julia.data.gz.bin': Object.freeze({ logicalPath: 'julia.data', encoding: 'gzip' }),
+	'julia.js.gz.bin': Object.freeze({ logicalPath: 'julia.js', encoding: 'gzip' }),
+	'julia.wasm.gz.bin': Object.freeze({ logicalPath: 'julia.wasm', encoding: 'gzip' })
 });
+const preflightKeys = Object.freeze(
+	[
+		'dataBytes',
+		'emscriptenVersion',
+		'importedByCommit',
+		'javascriptBytes',
+		'juliaVersion',
+		'manifestBytes',
+		'manifestFingerprint',
+		'packageRevision',
+		'profileId',
+		'protocol',
+		'protocolVersion',
+		'wasmBytes'
+	].sort()
+);
 const expectedManifestKeys = Object.freeze(
 	[
 		'artifact',
@@ -95,19 +121,30 @@ const expectedStorageReceiptKeys = Object.freeze([
 ]);
 const expectedLicenseReceiptKeys = Object.freeze(['path', 'sha256', 'size', 'spdx']);
 
-let verifiedRuntimePromise = null;
-let verifiedRuntimeIdentity = '';
-let runtimeEvaluationStarted = false;
+let requestConsumed = false;
 
 function isObject(value) {
 	return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function hasExactKeys(value, expectedKeys) {
+	const keys = Object.keys(value).sort();
 	return (
-		isObject(value) &&
-		JSON.stringify(Object.keys(value).sort()) === JSON.stringify(expectedKeys)
+		keys.length === expectedKeys.length &&
+		keys.every((key, index) => key === expectedKeys[index])
 	);
+}
+
+function isUint8Array(value) {
+	return (
+		ArrayBuffer.isView(value) &&
+		value.buffer instanceof ArrayBuffer &&
+		Object.prototype.toString.call(value) === '[object Uint8Array]'
+	);
+}
+
+function errorMessage(error) {
+	return error?.message || String(error);
 }
 
 function canonicalJson(value) {
@@ -123,155 +160,53 @@ function canonicalJson(value) {
 	return primitive;
 }
 
-function requireHttpUrl(value, label) {
-	let url;
-	try {
-		url = new URL(value);
-	} catch {
-		throw new Error(`${label} URL is invalid.`);
+function requireRuntimePreflight(runtimePreflight, requestedMaxAssetBytes) {
+	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
+		throw new Error('Julia runtime asset byte limit is invalid.');
 	}
-	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error(`${label} URL must use HTTP(S).`);
+	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
+	if (!isObject(runtimePreflight) || !hasExactKeys(runtimePreflight, preflightKeys)) {
+		throw new Error('Julia runtime preflight payload has an invalid shape.');
 	}
-	if (url.username || url.password || url.hash) {
-		throw new Error(`${label} URL must not include credentials or a fragment.`);
+	if (
+		runtimePreflight.protocol !== preflightProtocol ||
+		runtimePreflight.protocolVersion !== preflightProtocolVersion ||
+		runtimePreflight.profileId !== expectedIdentity.profileId ||
+		runtimePreflight.packageRevision !== expectedIdentity.packageRevision ||
+		runtimePreflight.importedByCommit !== expectedIdentity.importedByCommit ||
+		runtimePreflight.juliaVersion !== expectedIdentity.juliaVersion ||
+		runtimePreflight.emscriptenVersion !== expectedIdentity.emscriptenVersion ||
+		runtimePreflight.manifestFingerprint !== expectedIdentity.manifestFingerprint ||
+		!isUint8Array(runtimePreflight.manifestBytes) ||
+		!isUint8Array(runtimePreflight.javascriptBytes) ||
+		!isUint8Array(runtimePreflight.wasmBytes) ||
+		!isUint8Array(runtimePreflight.dataBytes)
+	) {
+		throw new Error('Julia runtime preflight payload is invalid.');
 	}
-	return url;
-}
-
-function assetUrl(baseUrl, path, fingerprint) {
-	const base = requireHttpUrl(baseUrl, 'Julia runtime base');
-	const url = new URL(path, base);
-	if (fingerprint) url.searchParams.set('v', fingerprint);
-	return url.href;
-}
-
-function cancelResponseBody(response, reason) {
-	try {
-		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
-	} catch {
-		// Preserve the trust-boundary failure that caused cancellation.
-	}
-}
-
-async function fetchBoundedBytes(
-	urlValue,
-	label,
-	maxBytes,
-	expectedBytes,
-	cache,
-	alternateExpectedBytes
-) {
-	if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
-		throw new Error(`${label} byte limit is invalid.`);
-	}
-	const expectedByteSizes = [];
-	for (const candidate of [expectedBytes, alternateExpectedBytes]) {
-		if (candidate === undefined) continue;
-		if (!Number.isSafeInteger(candidate) || candidate <= 0 || candidate > maxBytes) {
-			throw new Error(`${label} expected byte size is invalid.`);
-		}
-		if (!expectedByteSizes.includes(candidate)) expectedByteSizes.push(candidate);
-	}
-	const maximumExpectedBytes = expectedByteSizes.length
-		? Math.max(...expectedByteSizes)
-		: undefined;
-	const requestUrl = requireHttpUrl(urlValue, label);
-	const response = await fetch(requestUrl.href, {
-		...(cache ? { cache } : {}),
-		credentials: 'omit',
-		redirect: 'error',
-		referrerPolicy: 'no-referrer'
-	});
-	try {
-		if (!response.url) throw new Error(`${label} response URL is missing.`);
-		let responseUrl;
-		try {
-			responseUrl = new URL(response.url);
-		} catch {
-			throw new Error(`${label} response URL is invalid.`);
-		}
-		if (responseUrl.href !== requestUrl.href) {
-			throw new Error(`${label} response URL does not match the requested asset.`);
-		}
-		if (!response.ok) {
-			throw new Error(`${label} request failed with status ${response.status}.`);
-		}
-		const contentLength = response.headers.get('content-length');
-		if (contentLength !== null) {
-			const normalized = contentLength.trim();
-			const parsed = Number(normalized);
-			if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(parsed)) {
-				throw new Error(`${label} has an invalid Content-Length.`);
-			}
-			if (expectedByteSizes.length && !expectedByteSizes.includes(parsed)) {
-				throw new Error(`${label} Content-Length does not match its receipt.`);
-			}
-			if (parsed > maxBytes) throw new Error(`${label} exceeds its byte limit.`);
-		}
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	if (!response.body) {
-		const error = new Error(`${label} response does not provide a byte stream.`);
-		cancelResponseBody(response, error);
-		throw error;
-	}
-
-	let reader;
-	try {
-		reader = response.body.getReader();
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	const output = maximumExpectedBytes === undefined ? null : new Uint8Array(maximumExpectedBytes);
-	const chunks = output ? null : [];
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error(`${label} returned an invalid byte stream.`);
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (maximumExpectedBytes !== undefined && nextLoaded > maximumExpectedBytes) {
-				throw new Error(`${label} exceeds its receipt size.`);
-			}
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > maxBytes) {
-				throw new Error(`${label} exceeds its byte limit.`);
-			}
-			if (output) output.set(value, loaded);
-			else chunks.push(value.slice());
-			loaded = nextLoaded;
-		}
-		if (expectedByteSizes.length && !expectedByteSizes.includes(loaded)) {
-			throw new Error(`${label} is truncated or has an unexpected decoded size.`);
-		}
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the stream or quota failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the primary load result.
+	for (const [label, bytes, limit] of [
+		[
+			'Julia runtime manifest',
+			runtimePreflight.manifestBytes,
+			Math.min(maxManifestBytes, maxAssetBytes)
+		],
+		['Julia runtime JavaScript', runtimePreflight.javascriptBytes, maxAssetBytes],
+		['Julia runtime Wasm', runtimePreflight.wasmBytes, maxAssetBytes],
+		['Julia runtime data', runtimePreflight.dataBytes, maxAssetBytes]
+	]) {
+		if (bytes.byteLength <= 0 || bytes.byteLength > limit) {
+			throw new Error(`${label} exceeds its byte limit.`);
 		}
 	}
-	if (output) return loaded === output.byteLength ? output : output.slice(0, loaded);
-	const bytes = new Uint8Array(loaded);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
+	const totalLogicalBytes = [
+		runtimePreflight.javascriptBytes,
+		runtimePreflight.wasmBytes,
+		runtimePreflight.dataBytes
+	].reduce((total, bytes) => total + bytes.byteLength, 0);
+	if (totalLogicalBytes > hardMaxTotalLogicalBytes) {
+		throw new Error('Julia runtime logical payload exceeds its aggregate byte limit.');
 	}
-	return bytes;
+	return { runtimePreflight, maxAssetBytes };
 }
 
 async function sha256Hex(bytes) {
@@ -364,7 +299,7 @@ function normalizeStorageReceipt(candidate, expected, maxAssetBytes) {
 	};
 }
 
-async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
+async function normalizeManifest(value, runtimePreflight, maxAssetBytes) {
 	if (!isObject(value)) throw new Error('Julia runtime manifest must be an object.');
 	if (!hasExactKeys(value, expectedManifestKeys)) {
 		throw new Error('Julia runtime manifest schema is invalid.');
@@ -373,18 +308,23 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 		throw new Error('Julia runtime manifest format is unsupported.');
 	}
 	if (
-		value.profileId !== expectedProfileId ||
+		value.profileId !== expectedIdentity.profileId ||
+		value.profileId !== runtimePreflight.profileId ||
 		value.licenseExpression !== expectedLicenseExpression ||
-		typeof expectedFingerprint !== 'string' ||
-		!/^[a-f0-9]{64}$/u.test(expectedFingerprint)
+		value.fingerprint !== runtimePreflight.manifestFingerprint
 	) {
-		throw new Error('Julia runtime profile or expected fingerprint is invalid.');
-	}
-	if (value.fingerprint !== expectedFingerprint) {
-		throw new Error('Julia runtime manifest fingerprint does not match the pinned runtime.');
+		throw new Error('Julia runtime profile or manifest fingerprint is invalid.');
 	}
 	const artifact = normalizeProvenanceObject(value.artifact, expectedArtifact, 'artifact');
 	const components = normalizeProvenanceObject(value.components, expectedComponents, 'component');
+	if (
+		artifact.npmShasum !== runtimePreflight.packageRevision ||
+		artifact.importedByCommit !== runtimePreflight.importedByCommit ||
+		components.julia.version !== runtimePreflight.juliaVersion ||
+		components.emscripten.version !== runtimePreflight.emscriptenVersion
+	) {
+		throw new Error('Julia runtime manifest identity is incoherent.');
+	}
 	if (
 		!hasExactKeys(value.license, expectedLicenseReceiptKeys) ||
 		value.license.path !== expectedLicense.path ||
@@ -467,80 +407,85 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 			metadata,
 			assets,
 			storage
-		)) !== expectedFingerprint
+		)) !== runtimePreflight.manifestFingerprint
 	) {
 		throw new Error('Julia runtime receipt graph failed fingerprint verification.');
 	}
-	return { assetByPath, storageByPath };
+	return { assetByPath };
 }
 
 async function verifyReceiptBytes(receipt, bytes, label) {
-	if (bytes.byteLength !== receipt.size) throw new Error(`${label} has an unexpected byte size.`);
+	if (bytes.byteLength !== receipt.size) {
+		throw new Error(`${label} has an unexpected byte size.`);
+	}
 	if ((await sha256Hex(bytes)) !== receipt.sha256) {
 		throw new Error(`${label} failed SHA-256 verification.`);
 	}
 }
 
-async function receiptMatchesBytes(receipt, bytes) {
-	return bytes.byteLength === receipt.size && (await sha256Hex(bytes)) === receipt.sha256;
-}
-
-async function decompressGzipBounded(compressedBytes, expectedBytes, maxBytes, label) {
-	if (typeof DecompressionStream !== 'function') {
-		throw new Error('Julia runtime gzip decompression is unavailable.');
-	}
-	if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || expectedBytes > maxBytes) {
-		throw new Error(`${label} logical byte size is invalid.`);
-	}
-	let reader;
+function validateUtf8JavaScript(bytes) {
+	let source;
 	try {
-		reader = new Blob([compressedBytes])
-			.stream()
-			.pipeThrough(new DecompressionStream('gzip'))
-			.getReader();
-	} catch {
-		throw new Error(`${label} gzip stream could not be opened.`);
-	}
-	const output = new Uint8Array(expectedBytes);
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error(`${label} gzip returned an invalid byte stream.`);
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > expectedBytes) {
-				throw new Error(`${label} gzip exceeds its logical receipt size.`);
-			}
-			output.set(value, loaded);
-			loaded = nextLoaded;
-		}
-		if (loaded !== expectedBytes) throw new Error(`${label} gzip is truncated.`);
-		return output;
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the decompression failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the decompression result.
-		}
-	}
-}
-
-function importVerifiedRuntimeScript(bytes) {
-	try {
-		fatalDecoder.decode(bytes);
+		source = fatalDecoder.decode(bytes);
 	} catch {
 		throw new Error('Julia runtime JavaScript is not valid UTF-8.');
 	}
+	if (
+		!source.includes('_jl_eval_string') ||
+		!source.includes('WebAssembly.instantiate') ||
+		!source.includes('getPreloadedPackage') ||
+		!source.includes('julia-wasm/julia.wasm') ||
+		!source.includes('/npm/@chriskoch/julia-wasm/julia.data')
+	) {
+		throw new Error(
+			'Julia runtime JavaScript is missing its verified asset injection contract.'
+		);
+	}
+	return source;
+}
+
+function validateWasmHeader(bytes) {
+	if (
+		bytes.byteLength < 8 ||
+		bytes[0] !== 0 ||
+		bytes[1] !== 0x61 ||
+		bytes[2] !== 0x73 ||
+		bytes[3] !== 0x6d
+	) {
+		throw new Error('Julia runtime Wasm header is invalid.');
+	}
+}
+
+async function verifyRuntimePreflight(runtimePreflightValue, requestedMaxAssetBytes) {
+	const { runtimePreflight, maxAssetBytes } = requireRuntimePreflight(
+		runtimePreflightValue,
+		requestedMaxAssetBytes
+	);
+	let parsed;
+	try {
+		parsed = JSON.parse(fatalDecoder.decode(runtimePreflight.manifestBytes));
+	} catch {
+		throw new Error('Julia runtime manifest is not valid UTF-8 JSON.');
+	}
+	const manifest = await normalizeManifest(parsed, runtimePreflight, maxAssetBytes);
+	for (const [path, bytes] of [
+		['julia.js', runtimePreflight.javascriptBytes],
+		['julia.wasm', runtimePreflight.wasmBytes],
+		['julia.data', runtimePreflight.dataBytes]
+	]) {
+		await verifyReceiptBytes(
+			manifest.assetByPath.get(path),
+			bytes,
+			`Julia runtime asset ${path}`
+		);
+	}
+	validateUtf8JavaScript(runtimePreflight.javascriptBytes);
+	validateWasmHeader(runtimePreflight.wasmBytes);
+	return runtimePreflight;
+}
+
+function importVerifiedRuntimeScript(bytes) {
+	validateUtf8JavaScript(bytes);
 	if (
 		typeof Blob !== 'function' ||
 		typeof URL.createObjectURL !== 'function' ||
@@ -549,7 +494,10 @@ function importVerifiedRuntimeScript(bytes) {
 	) {
 		throw new Error('Julia verified runtime evaluation is unavailable.');
 	}
-	const scriptUrl = URL.createObjectURL(new Blob([bytes], { type: 'text/javascript' }));
+	const scriptBytes = Uint8Array.from(bytes);
+	const scriptUrl = URL.createObjectURL(
+		new Blob([scriptBytes.buffer], { type: 'text/javascript' })
+	);
 	try {
 		importScripts(scriptUrl);
 	} finally {
@@ -561,88 +509,60 @@ function importVerifiedRuntimeScript(bytes) {
 	}
 }
 
-async function loadVerifiedJuliaBytes(
-	baseUrl,
-	manifestUrl,
-	manifestFingerprint,
-	requestedMaxAssetBytes
-) {
-	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
-		throw new Error('Julia runtime asset byte limit is invalid.');
-	}
-	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
-	const identity = `${baseUrl}\n${manifestUrl}\n${manifestFingerprint}\n${maxAssetBytes}`;
-	if (verifiedRuntimePromise) {
-		if (verifiedRuntimeIdentity !== identity) {
-			throw new Error('Julia worker cannot replace an initialized runtime profile.');
-		}
-		return await verifiedRuntimePromise;
-	}
-	verifiedRuntimeIdentity = identity;
-	verifiedRuntimePromise = (async () => {
-		const resolvedManifestUrl =
-			manifestUrl || assetUrl(baseUrl, 'runtime-manifest.v2.json', manifestFingerprint);
-		const manifestBytes = await fetchBoundedBytes(
-			resolvedManifestUrl,
-			'Julia runtime manifest',
-			Math.min(maxManifestBytes, maxAssetBytes),
-			undefined,
-			'no-store'
-		);
-		let parsed;
-		try {
-			parsed = JSON.parse(fatalDecoder.decode(manifestBytes));
-		} catch {
-			throw new Error('Julia runtime manifest is not valid UTF-8 JSON.');
-		}
-		const manifest = await normalizeManifest(parsed, manifestFingerprint, maxAssetBytes);
-		const logicalBytesByPath = new Map();
-		for (const storagePath of Object.keys(expectedStorage).sort()) {
-			const storageReceipt = manifest.storageByPath.get(storagePath);
-			const logicalReceipt = manifest.assetByPath.get(storageReceipt.logicalPath);
-			const transportedBytes = await fetchBoundedBytes(
-				assetUrl(baseUrl, storagePath, manifestFingerprint),
-				`Julia runtime storage ${storagePath}`,
-				Math.max(storageReceipt.size, logicalReceipt.size),
-				storageReceipt.size,
-				undefined,
-				logicalReceipt.size
-			);
-			let logicalBytes;
-			if (await receiptMatchesBytes(storageReceipt, transportedBytes)) {
-				logicalBytes = await decompressGzipBounded(
-					transportedBytes,
-					logicalReceipt.size,
-					maxAssetBytes,
-					`Julia runtime asset ${logicalReceipt.path}`
-				);
-			} else if (await receiptMatchesBytes(logicalReceipt, transportedBytes)) {
-				// Browsers may transparently decode a gzip Content-Encoding response.
-				logicalBytes = transportedBytes;
-			} else {
-				throw new Error(
-					`Julia runtime storage ${storagePath} failed SHA-256 verification.`
-				);
-			}
-			await verifyReceiptBytes(
-				logicalReceipt,
-				logicalBytes,
-				`Julia runtime asset ${logicalReceipt.path}`
-			);
-			logicalBytesByPath.set(logicalReceipt.path, logicalBytes);
-		}
-		return Object.freeze({
-			javascriptBytes: logicalBytesByPath.get('julia.js'),
-			wasmBytes: logicalBytesByPath.get('julia.wasm'),
-			dataBytes: logicalBytesByPath.get('julia.data')
-		});
-	})();
+function snapshotModuleGlobal() {
+	return {
+		hadOwn: Object.prototype.hasOwnProperty.call(globalThis, 'Module'),
+		descriptor: Object.getOwnPropertyDescriptor(globalThis, 'Module')
+	};
+}
+
+function assignModule(value, label) {
 	try {
-		return await verifiedRuntimePromise;
+		globalThis.Module = value;
 	} catch (error) {
-		verifiedRuntimePromise = null;
-		verifiedRuntimeIdentity = '';
-		throw error;
+		throw new Error(`${label}: ${errorMessage(error)}`);
+	}
+	if (globalThis.Module !== value) throw new Error(label);
+}
+
+function clearModuleGlobal() {
+	const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'Module');
+	if (descriptor?.configurable) {
+		try {
+			delete globalThis.Module;
+		} catch {
+			// The assignment below performs the final fail-closed check.
+		}
+	}
+	assignModule(undefined, 'Julia runtime Module global could not be cleared');
+}
+
+function restoreModuleGlobal(snapshot) {
+	const current = Object.getOwnPropertyDescriptor(globalThis, 'Module');
+	if (current?.configurable) {
+		try {
+			delete globalThis.Module;
+		} catch {
+			// The descriptor restoration below performs the final check.
+		}
+	}
+	if (snapshot.hadOwn && snapshot.descriptor) {
+		try {
+			Object.defineProperty(globalThis, 'Module', snapshot.descriptor);
+		} catch (error) {
+			throw new Error(
+				`Julia runtime Module global could not be restored: ${errorMessage(error)}`
+			);
+		}
+		return;
+	}
+	try {
+		delete globalThis.Module;
+	} catch {
+		// importScripts var bindings may prevent deletion; reset them below.
+	}
+	if (Object.prototype.hasOwnProperty.call(globalThis, 'Module')) {
+		assignModule(undefined, 'Julia runtime Module global could not be reset');
 	}
 }
 
@@ -741,10 +661,10 @@ function createCharOutput(lines, onChunk = () => {}) {
 }
 
 function cString(module, text) {
-	const bytes = new TextEncoder().encode(`${text}\0`);
-	const ptr = module._malloc(bytes.length);
-	module.HEAPU8.set(bytes, ptr);
-	return ptr;
+	const bytes = textEncoder.encode(`${text}\0`);
+	const pointer = module._malloc(bytes.length);
+	module.HEAPU8.set(bytes, pointer);
+	return pointer;
 }
 
 function juliaString(text) {
@@ -774,7 +694,7 @@ catch error
 end`;
 }
 
-async function loadJuliaRuntime(verified, stdinReader, stdout, stderr) {
+async function initializeJuliaRuntime(verified, stdinReader, stdout, stderr) {
 	const stdoutDevice = createCharOutput(stdout, postOutputChunk);
 	const stderrDevice = createCharOutput(stderr);
 	const verifiedWasmPath = 'wasm-idle-verified:julia.wasm';
@@ -813,18 +733,27 @@ async function loadJuliaRuntime(verified, stdinReader, stdout, stderr) {
 		stdout: stdoutDevice,
 		stderr: stderrDevice
 	};
-	globalThis.Module = module;
+	assignModule(module, 'Julia host Module could not be installed');
 	const initializedModule = await new Promise((resolve, reject) => {
+		let evaluationComplete = false;
+		let runtimeInitialized = false;
 		module.onRuntimeInitialized = () => {
 			try {
 				module._jl_initialize();
-				resolve(module);
+				runtimeInitialized = true;
+				if (evaluationComplete) resolve(module);
 			} catch (error) {
 				reject(error);
 			}
 		};
+		module.onAbort = (reason) => reject(new Error(String(reason || 'Julia runtime aborted')));
 		try {
 			importVerifiedRuntimeScript(verified.javascriptBytes);
+			if (globalThis.Module !== module) {
+				throw new Error('Julia runtime Module changed during verified evaluation.');
+			}
+			evaluationComplete = true;
+			if (runtimeInitialized) resolve(module);
 		} catch (error) {
 			reject(error);
 		}
@@ -838,48 +767,30 @@ async function loadJuliaRuntime(verified, stdinReader, stdout, stderr) {
 	};
 }
 
-self.onmessage = async (event) => {
-	const {
-		baseUrl,
-		manifestUrl,
-		manifestFingerprint,
-		maxAssetBytes,
-		code,
-		stdin,
-		stdinChannel,
-		activePath,
-		log
-	} = event.data || {};
-	const stdout = [];
-	const stderr = [];
+async function runVerifiedJulia(
+	verified,
+	code,
+	stdin,
+	stdinChannel,
+	activePath,
+	stdinReader,
+	stdout,
+	stderr
+) {
+	const previousModule = snapshotModuleGlobal();
 	let finishOutput = () => {};
+	let failure;
 	try {
-		if (log) console.log(`[wasm-idle:julia-worker] run start baseUrl=${baseUrl}`);
-		const stdinReader = createStdinReader(stdin || '', stdinChannel);
-		const verified = await loadVerifiedJuliaBytes(
-			baseUrl,
-			manifestUrl,
-			manifestFingerprint,
-			maxAssetBytes
-		);
-		if (runtimeEvaluationStarted) {
-			throw new Error('Julia worker cannot execute more than one runtime instance.');
-		}
-		runtimeEvaluationStarted = true;
-		const runtime = await loadJuliaRuntime(verified, stdinReader, stdout, stderr);
+		clearModuleGlobal();
+		const runtime = await initializeJuliaRuntime(verified, stdinReader, stdout, stderr);
 		const { module } = runtime;
 		finishOutput = runtime.finishOutput;
-		const runnerSource = buildRunnerSource(
-			code || '',
-			stdin || '',
-			activePath,
-			stdinChannel !== undefined
-		);
-		const sourcePtr = cString(module, runnerSource);
+		const runnerSource = buildRunnerSource(code, stdin, activePath, stdinChannel !== undefined);
+		const sourcePointer = cString(module, runnerSource);
 		try {
-			module._jl_eval_string(sourcePtr);
+			module._jl_eval_string(sourcePointer);
 		} finally {
-			module._free(sourcePtr);
+			module._free(sourcePointer);
 		}
 		finishOutput();
 		const exception =
@@ -894,13 +805,68 @@ self.onmessage = async (event) => {
 		);
 		if (filteredStderr.length > 0) throw new Error(filteredStderr.join('\n'));
 		if (exception) throw new Error('Julia execution failed.');
+	} catch (error) {
+		failure = error;
+	}
+	try {
+		finishOutput();
+		restoreModuleGlobal(previousModule);
+	} catch (cleanupError) {
+		throw new AggregateError(
+			failure ? [failure, cleanupError] : [cleanupError],
+			failure
+				? `${errorMessage(failure)}; Julia runtime Module cleanup failed.`
+				: 'Julia runtime Module cleanup failed.'
+		);
+	}
+	if (failure) throw failure;
+}
+
+self.onmessage = async (event) => {
+	if (requestConsumed) {
+		self.postMessage({ error: 'Julia worker accepts exactly one run.' });
+		return;
+	}
+	requestConsumed = true;
+	const {
+		runtimePreflight,
+		maxAssetBytes,
+		code,
+		stdin,
+		stdinChannel,
+		activePath = 'main.jl',
+		log
+	} = event.data || {};
+	const stdout = [];
+	const stderr = [];
+	try {
+		if (
+			typeof code !== 'string' ||
+			typeof activePath !== 'string' ||
+			(stdin !== undefined && typeof stdin !== 'string')
+		) {
+			throw new Error('Julia code, run path, and buffered stdin are invalid.');
+		}
+		if (log) console.log('[wasm-idle:julia-worker] run start');
+		const stdinReader = createStdinReader(stdin, stdinChannel);
+		const verified = await verifyRuntimePreflight(runtimePreflight, maxAssetBytes);
+		await runVerifiedJulia(
+			verified,
+			code,
+			stdin || '',
+			stdinChannel,
+			activePath,
+			stdinReader,
+			stdout,
+			stderr
+		);
 		if (log) console.log('[wasm-idle:julia-worker] run settled');
 		self.postMessage({ results: true });
 	} catch (error) {
-		const message = stderr.length > 0 ? stderr.join('\n') : error?.message || String(error);
+		const message = stderr.length > 0 ? stderr.join('\n') : errorMessage(error);
 		if (log) console.error('[wasm-idle:julia-worker] failed', error);
 		self.postMessage({ error: message });
 	} finally {
-		finishOutput();
+		self.close();
 	}
 };

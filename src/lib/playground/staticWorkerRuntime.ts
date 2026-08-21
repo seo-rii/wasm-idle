@@ -79,6 +79,14 @@ export interface StaticWorkerRuntimeConfig {
 		urls: StaticWorkerRuntimeUrls,
 		context: StaticWorkerRuntimePreflightContext
 	) => unknown | Promise<unknown>;
+	/**
+	 * Consumes transferables from a per-run runtime preflight payload.
+	 *
+	 * This hook is only valid for per-run workers. Every returned value must be a full buffer
+	 * exclusively owned by the payload. Once invoked, neither the payload nor its worker may be
+	 * reused, regardless of whether dispatch succeeds or fails.
+	 */
+	consumeRuntimePreflightTransferables?: (runtimePreflight: unknown) => readonly Transferable[];
 }
 
 type StaticWorkerMessage = {
@@ -177,11 +185,24 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	private readonly workerRuntimePreflight = new WeakMap<Worker, unknown>();
 
 	constructor(private readonly config: StaticWorkerRuntimeConfig) {
+		const workerLifetime = config.workerLifetime ?? { mode: 'per-run' as const };
+		if (config.consumeRuntimePreflightTransferables && !config.preflightRuntimeAssets) {
+			throw new RuntimeConfigurationError(
+				`${config.displayName} runtime preflight transfer lists require a runtime preflight callback.`,
+				{ phase: 'startup', runtimeId: config.languageId }
+			);
+		}
+		if (config.consumeRuntimePreflightTransferables && workerLifetime.mode !== 'per-run') {
+			throw new RuntimeConfigurationError(
+				`${config.displayName} runtime preflight transfer lists require per-run workers.`,
+				{ phase: 'startup', runtimeId: config.languageId }
+			);
+		}
 		this.workerLifetimeController = new RuntimeWorkerLifetimeController<
 			Worker,
 			StaticWorkerCreationContext
 		>({
-			policy: config.workerLifetime ?? { mode: 'per-run' },
+			policy: workerLifetime,
 			runtimeId: config.languageId,
 			createWorker: (context) => {
 				context.generation = ++this.workerGeneration;
@@ -907,7 +928,12 @@ const __wasmIdleExecutionKeys = ['output', 'results', 'error', 'diagnostic', 'pr
 self.addEventListener('message', (event) => {
   const message = event.data;
   const runId = message?.runId;
-  if (message?.run === true && typeof runId === 'string') __wasmIdleRunId = runId;
+  if (message?.run !== true || typeof runId !== 'string') return;
+  if (__wasmIdleRunId !== null) {
+    event.stopImmediatePropagation();
+    return;
+  }
+  __wasmIdleRunId = runId;
 }, { capture: true });
 self.postMessage = (message, transferOrOptions) => {
   const executionMessage = __wasmIdleRunId !== null &&
@@ -1512,6 +1538,7 @@ self.postMessage = (message, transferOrOptions) => {
 	}
 
 	private detachAndTerminateWorker(worker: Worker) {
+		this.workerRuntimePreflight.delete(worker);
 		try {
 			worker.onmessage = null;
 		} catch {
@@ -1802,7 +1829,7 @@ self.postMessage = (message, transferOrOptions) => {
 					}
 					try {
 						const runtimePreflight = this.workerRuntimePreflight.get(worker);
-						worker.postMessage({
+						const message = {
 							run: true,
 							runId: id,
 							baseUrl: this.baseUrl,
@@ -1820,7 +1847,24 @@ self.postMessage = (message, transferOrOptions) => {
 							activePath: workspace.activePath,
 							workspaceFiles: workspace.workspaceFiles,
 							log: _log
-						});
+						};
+						if (
+							runtimePreflight !== undefined &&
+							this.config.consumeRuntimePreflightTransferables
+						) {
+							try {
+								const transferList = [
+									...this.config.consumeRuntimePreflightTransferables(
+										runtimePreflight
+									)
+								];
+								worker.postMessage(message, transferList);
+							} finally {
+								this.workerRuntimePreflight.delete(worker);
+							}
+						} else {
+							worker.postMessage(message);
+						}
 					} catch (error) {
 						throw new ProtocolError(
 							`${this.config.displayName} worker run dispatch failed: ${this.errorMessage(error)}`,

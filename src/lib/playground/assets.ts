@@ -32,10 +32,7 @@ import {
 	WASM_J_RUNTIME_PROFILE
 } from '$lib/playground/wasmJVersion';
 import { WASM_JANET_RUNTIME_BUNDLE } from '$lib/playground/wasmJanetVersion';
-import {
-	WASM_JULIA_ASSET_VERSION,
-	WASM_JULIA_RUNNER_RECEIPT
-} from '$lib/playground/wasmJuliaVersion';
+import { WASM_JULIA_RUNTIME_BUNDLE } from '$lib/playground/wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from '$lib/playground/wasmNimVersion';
 import {
@@ -53,6 +50,7 @@ import {
 	RuntimeConfigurationError,
 	deriveRubyRuntimeWasmUrl,
 	snapshotJanetRuntimePreflightProfile,
+	snapshotJuliaRuntimePreflightProfile,
 	snapshotPerlRuntimePreflightProfile,
 	snapshotPrologRuntimePreflightProfile,
 	snapshotTclRuntimePreflightProfile,
@@ -417,6 +415,15 @@ export interface JuliaRuntimeAssetConfig {
 	workerUrl?: string;
 	manifestUrl?: string;
 	manifestFingerprint?: string;
+	profileId?: string;
+	packageRevision?: string;
+	importedByCommit?: string;
+	juliaVersion?: string;
+	emscriptenVersion?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	javascriptReceipt?: RuntimeAssetIntegrityEntry;
+	wasmReceipt?: RuntimeAssetIntegrityEntry;
+	dataReceipt?: RuntimeAssetIntegrityEntry;
 	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
@@ -3215,15 +3222,6 @@ export function resolveJuliaRuntimeAssetConfig(
 	const envManifestFingerprint = (publicEnv.PUBLIC_WASM_JULIA_MANIFEST_FINGERPRINT || '').trim();
 	const envWorkerSha256 = (publicEnv.PUBLIC_WASM_JULIA_WORKER_SHA256 || '').trim();
 	const envWorkerBytesSource = (publicEnv.PUBLIC_WASM_JULIA_WORKER_BYTES || '').trim();
-	const envWorkerBytes = /^\d+$/u.test(envWorkerBytesSource)
-		? Number(envWorkerBytesSource)
-		: Number.NaN;
-	const envWorkerReceipt =
-		/^[a-f0-9]{64}$/u.test(envWorkerSha256) &&
-		Number.isSafeInteger(envWorkerBytes) &&
-		envWorkerBytes > 0
-			? { bytes: envWorkerBytes, sha256: envWorkerSha256 }
-			: undefined;
 	const usesCustomUrls = Boolean(
 		configured?.baseUrl ||
 		configured?.workerUrl ||
@@ -3232,18 +3230,57 @@ export function resolveJuliaRuntimeAssetConfig(
 		(publicEnv.PUBLIC_WASM_JULIA_WORKER_URL || '').trim() ||
 		(publicEnv.PUBLIC_WASM_JULIA_MANIFEST_URL || '').trim()
 	);
+	const hasConfiguredTrust =
+		!!configured &&
+		[
+			configured.manifestFingerprint,
+			configured.profileId,
+			configured.packageRevision,
+			configured.importedByCommit,
+			configured.juliaVersion,
+			configured.emscriptenVersion,
+			configured.manifestReceipt,
+			configured.javascriptReceipt,
+			configured.wasmReceipt,
+			configured.dataReceipt,
+			configured.workerReceipt
+		].some((value) => value !== undefined);
+	const usesCustomTrustBoundary =
+		usesCustomUrls ||
+		hasConfiguredTrust ||
+		Boolean(envManifestFingerprint || envWorkerSha256 || envWorkerBytesSource);
+	const selectedProfile = usesCustomTrustBoundary
+		? {
+				profileId: configured?.profileId?.trim(),
+				packageRevision: configured?.packageRevision?.trim(),
+				importedByCommit: configured?.importedByCommit?.trim(),
+				juliaVersion: configured?.juliaVersion?.trim(),
+				emscriptenVersion: configured?.emscriptenVersion?.trim(),
+				manifestFingerprint: configured?.manifestFingerprint?.trim(),
+				manifestReceipt: configured?.manifestReceipt,
+				javascriptReceipt: configured?.javascriptReceipt,
+				wasmReceipt: configured?.wasmReceipt,
+				dataReceipt: configured?.dataReceipt
+			}
+		: WASM_JULIA_RUNTIME_BUNDLE.profile;
+	const preflightProfile = snapshotJuliaRuntimePreflightProfile(selectedProfile);
+	const workerReceipt = usesCustomTrustBoundary
+		? configured?.workerReceipt
+		: WASM_JULIA_RUNTIME_BUNDLE.workerReceipt;
+	if (!workerReceipt) {
+		throw new RuntimeConfigurationError(
+			'Julia runtime requires one complete profile and runner receipt bundle.',
+			{ runtimeId: 'JULIA' }
+		);
+	}
 	return {
 		baseUrl: resolveJuliaBaseUrl(options, currentUrl),
 		workerUrl: resolveJuliaWorkerUrl(options, currentUrl),
 		manifestUrl: resolveJuliaManifestUrl(options, currentUrl),
-		manifestFingerprint:
-			configured?.manifestFingerprint?.trim() ||
-			envManifestFingerprint ||
-			(!usesCustomUrls ? WASM_JULIA_ASSET_VERSION : undefined),
-		workerReceipt:
-			configured?.workerReceipt ||
-			envWorkerReceipt ||
-			(!usesCustomUrls ? WASM_JULIA_RUNNER_RECEIPT : undefined)
+		manifestFingerprint: preflightProfile.manifestFingerprint,
+		preflightKey: JSON.stringify(preflightProfile),
+		preflightProfile,
+		workerReceipt
 	};
 }
 

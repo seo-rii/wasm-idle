@@ -569,6 +569,30 @@ describe('wasm-idle static worker language browser integrations', () => {
 				expect(summary.transcript).toContain('version=1.3.0-DEV.560');
 				expect(summary.transcript).toContain('main=73');
 				expect(summary.transcript).toContain('Process finished after');
+				const juliaRuntimePaths = summary.runtimeRequests
+					.map((requestUrl) => new URL(requestUrl).pathname)
+					.filter((pathname) => pathname.includes('/wasm-julia/'))
+					.map((pathname) => pathname.slice(pathname.indexOf('/wasm-julia/')));
+				expect(juliaRuntimePaths).toHaveLength(5);
+				expect(new Set(juliaRuntimePaths)).toEqual(
+					new Set([
+						'/wasm-julia/julia.data.gz.bin',
+						'/wasm-julia/julia.js.gz.bin',
+						'/wasm-julia/julia.wasm.gz.bin',
+						'/wasm-julia/runner-worker.js',
+						'/wasm-julia/runtime-manifest.v2.json'
+					])
+				);
+				for (const legacyPath of [
+					'/wasm-julia/julia.data.gz',
+					'/wasm-julia/julia.js.gz',
+					'/wasm-julia/julia.wasm.gz',
+					'/wasm-julia/julia.data',
+					'/wasm-julia/julia.js',
+					'/wasm-julia/julia.wasm'
+				]) {
+					expect(juliaRuntimePaths).not.toContain(legacyPath);
+				}
 			}
 		);
 	}, 960_000);

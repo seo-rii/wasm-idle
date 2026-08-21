@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeJanetRuntimeFingerprint } from '../../../scripts/sync-wasm-janet.mjs';
+import { computeJuliaRuntimeFingerprint } from '../../../scripts/sync-wasm-julia.mjs';
 import { computePerlRuntimeFingerprint } from '../../../scripts/sync-wasm-perl.mjs';
 
 const workerInstances: MockWorker[] = [];
@@ -68,10 +69,17 @@ class MockWorker {
 	onerror: ((event: ErrorEvent) => void) | null = null;
 	onmessageerror: ((event: MessageEvent<any>) => void) | null = null;
 	lastRunId: string | undefined;
-	postMessage = vi.fn((message: any) => {
-		this.lastRunId = message?.runId;
+	lastMessage: any;
+	lastTransferList: Transferable[] | undefined;
+	postMessage = vi.fn((message: any, transferList?: Transferable[]) => {
+		this.lastTransferList = transferList;
+		const deliveredMessage = transferList?.length
+			? structuredClone(message, { transfer: transferList })
+			: message;
+		this.lastMessage = deliveredMessage;
+		this.lastRunId = deliveredMessage?.runId;
 		if (onPostMessage) {
-			onPostMessage(this, message);
+			onPostMessage(this, deliveredMessage);
 			return;
 		}
 		queueMicrotask(() =>
@@ -141,6 +149,7 @@ import prologWorkerSource from '../../../scripts/runtime-workers/wasm-prolog-run
 import tclWorkerSource from '../../../scripts/runtime-workers/wasm-tcl-runner-worker.js?raw';
 import forthManifestSource from '../../../static/wasm-forth/runtime-manifest.v2.json?raw';
 import forthRuntimeSource from '../../../static/wasm-forth/waforth.js?raw';
+import juliaManifestTemplateSource from '../../../static/wasm-julia/runtime-manifest.v2.json?raw';
 import {
 	WASM_FORTH_ASSET_VERSION,
 	WASM_FORTH_RUNNER_RECEIPT,
@@ -150,7 +159,6 @@ import { WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import { WASM_CLOJURESCRIPT_RUNNER_RECEIPT } from './wasmClojureScriptVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
-import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
 import {
@@ -588,6 +596,116 @@ const janetTestWorkerReceipt = {
 	bytes: new TextEncoder().encode(janetWorkerSource).byteLength,
 	sha256: janetTestSha256(new TextEncoder().encode(janetWorkerSource))
 } as const;
+const juliaTestSha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+const juliaTestManifestTemplate = JSON.parse(juliaManifestTemplateSource);
+const juliaTestJavaScriptBytes = new TextEncoder().encode(
+	'WebAssembly.instantiate; getPreloadedPackage; "julia-wasm/julia.wasm"; "/npm/@chriskoch/julia-wasm/julia.data"; _jl_eval_string;'
+);
+const juliaTestWasmBytes = Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0]);
+const juliaTestDataBytes = new TextEncoder().encode('verified julia data fixture');
+const juliaTestJavaScriptGzipBytes = Uint8Array.from(gzipSync(juliaTestJavaScriptBytes));
+const juliaTestWasmGzipBytes = Uint8Array.from(gzipSync(juliaTestWasmBytes));
+const juliaTestDataGzipBytes = Uint8Array.from(gzipSync(juliaTestDataBytes));
+const juliaTestManifestWithoutFingerprint = {
+	...juliaTestManifestTemplate,
+	assets: [
+		{
+			path: 'julia.data',
+			mediaType: 'application/octet-stream',
+			size: juliaTestDataBytes.byteLength,
+			sha256: juliaTestSha256(juliaTestDataBytes)
+		},
+		{
+			path: 'julia.js',
+			mediaType: 'text/javascript',
+			size: juliaTestJavaScriptBytes.byteLength,
+			sha256: juliaTestSha256(juliaTestJavaScriptBytes)
+		},
+		{
+			path: 'julia.wasm',
+			mediaType: 'application/wasm',
+			size: juliaTestWasmBytes.byteLength,
+			sha256: juliaTestSha256(juliaTestWasmBytes)
+		}
+	],
+	storage: [
+		{
+			path: 'julia.data.gz.bin',
+			logicalPath: 'julia.data',
+			encoding: 'gzip',
+			size: juliaTestDataGzipBytes.byteLength,
+			sha256: juliaTestSha256(juliaTestDataGzipBytes)
+		},
+		{
+			path: 'julia.js.gz.bin',
+			logicalPath: 'julia.js',
+			encoding: 'gzip',
+			size: juliaTestJavaScriptGzipBytes.byteLength,
+			sha256: juliaTestSha256(juliaTestJavaScriptGzipBytes)
+		},
+		{
+			path: 'julia.wasm.gz.bin',
+			logicalPath: 'julia.wasm',
+			encoding: 'gzip',
+			size: juliaTestWasmGzipBytes.byteLength,
+			sha256: juliaTestSha256(juliaTestWasmGzipBytes)
+		}
+	]
+};
+const juliaTestManifestFingerprint = computeJuliaRuntimeFingerprint(
+	juliaTestManifestWithoutFingerprint
+);
+const juliaTestManifestSource = JSON.stringify({
+	...juliaTestManifestWithoutFingerprint,
+	fingerprint: juliaTestManifestFingerprint
+});
+const juliaTestManifestBytes = new TextEncoder().encode(juliaTestManifestSource);
+const juliaTestProfile = {
+	profileId: juliaTestManifestWithoutFingerprint.profileId,
+	packageRevision: juliaTestManifestWithoutFingerprint.artifact.npmShasum,
+	importedByCommit: juliaTestManifestWithoutFingerprint.artifact.importedByCommit,
+	juliaVersion: juliaTestManifestWithoutFingerprint.components.julia.version,
+	emscriptenVersion: juliaTestManifestWithoutFingerprint.components.emscripten.version,
+	manifestFingerprint: juliaTestManifestFingerprint,
+	manifestReceipt: {
+		bytes: juliaTestManifestBytes.byteLength,
+		sha256: juliaTestSha256(juliaTestManifestBytes)
+	},
+	javascriptReceipt: {
+		bytes: juliaTestJavaScriptGzipBytes.byteLength,
+		sha256: juliaTestSha256(juliaTestJavaScriptGzipBytes),
+		uncompressedBytes: juliaTestJavaScriptBytes.byteLength,
+		uncompressedSha256: juliaTestSha256(juliaTestJavaScriptBytes)
+	},
+	wasmReceipt: {
+		bytes: juliaTestWasmGzipBytes.byteLength,
+		sha256: juliaTestSha256(juliaTestWasmGzipBytes),
+		uncompressedBytes: juliaTestWasmBytes.byteLength,
+		uncompressedSha256: juliaTestSha256(juliaTestWasmBytes)
+	},
+	dataReceipt: {
+		bytes: juliaTestDataGzipBytes.byteLength,
+		sha256: juliaTestSha256(juliaTestDataGzipBytes),
+		uncompressedBytes: juliaTestDataBytes.byteLength,
+		uncompressedSha256: juliaTestSha256(juliaTestDataBytes)
+	}
+} as const;
+const juliaTestWorkerReceipt = {
+	bytes: new TextEncoder().encode(juliaWorkerSource).byteLength,
+	sha256: juliaTestSha256(new TextEncoder().encode(juliaWorkerSource))
+} as const;
+
+function juliaTestRuntimeAssets(workerUrl = '/wasm-julia/runner-worker.js?v=test') {
+	return {
+		julia: {
+			baseUrl: '/wasm-julia/',
+			workerUrl,
+			manifestUrl: `/wasm-julia/runtime-manifest.v2.json?v=${juliaTestManifestFingerprint}`,
+			...juliaTestProfile,
+			workerReceipt: juliaTestWorkerReceipt
+		}
+	};
+}
 const clojureScriptTestProfile = {
 	profileId: 'clojurescript-1.12.134-test',
 	sourceRevision: 'r1.12.134',
@@ -684,6 +802,42 @@ function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 			status: 200,
 			headers: {
 				'content-length': String(janetTestWasmGzipBytes.byteLength),
+				'content-type': 'application/octet-stream'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-julia/runtime-manifest.v2.json')) {
+		return new Response(juliaTestManifestSource, {
+			status: 200,
+			headers: {
+				'content-length': String(juliaTestManifestBytes.byteLength),
+				'content-type': 'application/json'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-julia/julia.js.gz.bin')) {
+		return new Response(Uint8Array.from(juliaTestJavaScriptGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(juliaTestJavaScriptGzipBytes.byteLength),
+				'content-type': 'application/octet-stream'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-julia/julia.wasm.gz.bin')) {
+		return new Response(Uint8Array.from(juliaTestWasmGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(juliaTestWasmGzipBytes.byteLength),
+				'content-type': 'application/octet-stream'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-julia/julia.data.gz.bin')) {
+		return new Response(Uint8Array.from(juliaTestDataGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(juliaTestDataGzipBytes.byteLength),
 				'content-type': 'application/octet-stream'
 			}
 		});
@@ -956,6 +1110,17 @@ function createPrologLifecycleTestSandbox() {
 		inlineVerifiedWorker: true,
 		resolveRuntimeAssets: resolvePrologRuntimeAssetConfig
 	});
+}
+
+function hasRuntimePreflightForWorker(
+	sandbox: StaticWorkerRuntimeSandbox,
+	worker: MockWorker
+): boolean {
+	return (
+		sandbox as unknown as {
+			workerRuntimePreflight: WeakMap<Worker, unknown>;
+		}
+	).workerRuntimePreflight.has(worker as unknown as Worker);
 }
 
 async function withCrossOriginIsolation(value: boolean, callback: () => Promise<void>) {
@@ -2530,17 +2695,11 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('loads Julia runtime urls and forwards stdin to the Julia wasm worker', async () => {
+	it('preflights Julia assets before the runner and transfers logical bytes exactly once', async () => {
 		const sandbox = new Julia();
-		await sandbox.load({
-			julia: {
-				baseUrl: '/wasm-julia/',
-				workerUrl: '/wasm-julia/runner-worker.js?v=test',
-				manifestUrl: '/wasm-julia/runtime-manifest.v2.json',
-				manifestFingerprint: WASM_JULIA_ASSET_VERSION,
-				workerReceipt: WASM_JULIA_RUNNER_RECEIPT
-			}
-		});
+		const runtimeAssets = juliaTestRuntimeAssets();
+		await sandbox.load(runtimeAssets);
+		await sandbox.load(runtimeAssets);
 		await expect(
 			sandbox.run('println(readline())', false, true, undefined, [], {
 				stdin: 'ok\n'
@@ -2553,34 +2712,300 @@ describe('static worker backed language sandboxes', () => {
 			juliaWorkerSource
 		);
 		expect(workerInstances[0].options).toBeUndefined();
-		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
-			expect.objectContaining({
-				baseUrl: 'http://localhost:3000/wasm-julia/',
-				manifestUrl: 'http://localhost:3000/wasm-julia/runtime-manifest.v2.json',
-				manifestFingerprint: WASM_JULIA_ASSET_VERSION,
-				stdin: 'ok\n',
-				activePath: 'main.jl'
+		expect(workerInstances[0].lastMessage).toMatchObject({
+			baseUrl: 'http://localhost:3000/wasm-julia/',
+			manifestUrl: `http://localhost:3000/wasm-julia/runtime-manifest.v2.json?v=${juliaTestManifestFingerprint}`,
+			manifestFingerprint: juliaTestManifestFingerprint,
+			stdin: 'ok\n',
+			activePath: 'main.jl',
+			runtimePreflight: expect.objectContaining({
+				protocol: 'wasm-idle-julia-preflight',
+				protocolVersion: 1,
+				profileId: juliaTestProfile.profileId,
+				packageRevision: juliaTestProfile.packageRevision,
+				importedByCommit: juliaTestProfile.importedByCommit,
+				juliaVersion: juliaTestProfile.juliaVersion,
+				emscriptenVersion: juliaTestProfile.emscriptenVersion,
+				manifestFingerprint: juliaTestManifestFingerprint
 			})
+		});
+		const runtimePreflight = workerInstances[0].lastMessage.runtimePreflight;
+		expect(Array.from(runtimePreflight.manifestBytes)).toEqual(
+			Array.from(juliaTestManifestBytes)
 		);
-		expect(sandbox.workerReceipt).toEqual(WASM_JULIA_RUNNER_RECEIPT);
+		expect(Array.from(runtimePreflight.javascriptBytes)).toEqual(
+			Array.from(juliaTestJavaScriptBytes)
+		);
+		expect(Array.from(runtimePreflight.wasmBytes)).toEqual(Array.from(juliaTestWasmBytes));
+		expect(Array.from(runtimePreflight.dataBytes)).toEqual(Array.from(juliaTestDataBytes));
+		expect(workerInstances[0].lastTransferList).toHaveLength(4);
+		expect(new Set(workerInstances[0].lastTransferList).size).toBe(4);
+		expect(
+			workerInstances[0].lastTransferList?.every(
+				(transferable) =>
+					transferable instanceof ArrayBuffer && transferable.byteLength === 0
+			)
+		).toBe(true);
+		const juliaRequests = vi
+			.mocked(fetch)
+			.mock.calls.map(([input]) => String(input))
+			.filter((url) => url.includes('/wasm-julia/'));
+		const expectedJuliaRequests = [
+			`http://localhost:3000/wasm-julia/runtime-manifest.v2.json?v=${juliaTestManifestFingerprint}`,
+			`http://localhost:3000/wasm-julia/julia.js.gz.bin?v=${juliaTestProfile.javascriptReceipt.sha256}`,
+			`http://localhost:3000/wasm-julia/julia.wasm.gz.bin?v=${juliaTestProfile.wasmReceipt.sha256}`,
+			`http://localhost:3000/wasm-julia/julia.data.gz.bin?v=${juliaTestProfile.dataReceipt.sha256}`,
+			'http://localhost:3000/wasm-julia/runner-worker.js?v=test'
+		];
+		expect(juliaRequests).toHaveLength(expectedJuliaRequests.length);
+		expect(new Set(juliaRequests)).toEqual(new Set(expectedJuliaRequests));
+		expect(juliaRequests.some((url) => /julia\.(?:js|wasm|data)\.gz(?:\?|$)/u.test(url))).toBe(
+			false
+		);
+		expect(sandbox.workerReceipt).toEqual(juliaTestWorkerReceipt);
+		const runnerFetchIndex = runtimeLifecycleEvents.indexOf(
+			`fetch:${expectedJuliaRequests[4]}`
+		);
+		for (const runtimeAssetUrl of expectedJuliaRequests.slice(0, 4)) {
+			expect(runtimeLifecycleEvents.indexOf(`fetch:${runtimeAssetUrl}`)).toBeLessThan(
+				runnerFetchIndex
+			);
+		}
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('retires a Julia worker after a transferred dispatch failure and retries with fresh bytes', async () => {
+		const sandbox = new Julia();
+		await sandbox.load(juliaTestRuntimeAssets());
+		const dispatchCause = new DOMException('Value could not be cloned', 'DataCloneError');
+		let dispatches = 0;
+		onPostMessage = (worker) => {
+			dispatches += 1;
+			if (dispatches === 1) throw dispatchCause;
+			queueMicrotask(() =>
+				worker.onmessage?.({
+					data: { runId: worker.lastRunId, results: true }
+				} as MessageEvent<any>)
+			);
+		};
+
+		await expect(
+			sandbox.run('println(1)', false, true, undefined, [], { stdin: '' })
+		).rejects.toMatchObject({
+			code: 'protocol',
+			runtimeId: 'JULIA',
+			cause: dispatchCause
+		});
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+		expect(hasRuntimePreflightForWorker(sandbox, workerInstances[0])).toBe(false);
+		const firstTransferList = workerInstances[0].lastTransferList!;
+		expect(firstTransferList.every((value) => (value as ArrayBuffer).byteLength === 0)).toBe(
+			true
+		);
+
+		await expect(
+			sandbox.run('println(2)', false, true, undefined, [], { stdin: '' })
+		).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].lastTransferList).toHaveLength(4);
+		expect(workerInstances[1].lastTransferList).not.toBe(firstTransferList);
+		expect(Array.from(workerInstances[1].lastMessage.runtimePreflight.dataBytes)).toEqual(
+			Array.from(juliaTestDataBytes)
+		);
+		const manifestRequests = vi
+			.mocked(fetch)
+			.mock.calls.filter(([input]) => String(input).includes('runtime-manifest.v2.json'));
+		expect(manifestRequests).toHaveLength(2);
+	});
+
+	it('retires a timed-out Julia worker and re-preflights before the next run', async () => {
+		onPostMessage = () => {};
+		const sandbox = new Julia();
+		await sandbox.load(juliaTestRuntimeAssets());
+
+		await expect(
+			sandbox.run('println(1)', false, true, undefined, [], {
+				stdin: '',
+				limits: { compileTimeoutMs: 5, runTimeoutMs: 5 }
+			})
+		).rejects.toMatchObject({ code: 'timeout', runtimeId: 'JULIA' });
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+		expect(hasRuntimePreflightForWorker(sandbox, workerInstances[0])).toBe(false);
+		onPostMessage = null;
+
+		await expect(
+			sandbox.run('println(2)', false, true, undefined, [], { stdin: '' })
+		).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		const manifestRequests = vi
+			.mocked(fetch)
+			.mock.calls.filter(([input]) => String(input).includes('runtime-manifest.v2.json'));
+		expect(manifestRequests).toHaveLength(2);
+	});
+
+	it('clears an unconsumed Julia preflight when its worker is terminated', async () => {
+		const sandbox = new Julia();
+		await sandbox.load(juliaTestRuntimeAssets());
+		const worker = workerInstances[0];
+		expect(hasRuntimePreflightForWorker(sandbox, worker)).toBe(true);
+
+		sandbox.terminate();
+
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(hasRuntimePreflightForWorker(sandbox, worker)).toBe(false);
+	});
+
+	it('retires an aborted Julia worker after transfer and retries with fresh bytes', async () => {
+		onPostMessage = () => {};
+		const sandbox = new Julia();
+		const controller = new AbortController();
+		await sandbox.load(juliaTestRuntimeAssets());
+		const run = sandbox.run('println(1)', false, true, undefined, [], {
+			stdin: '',
+			signal: controller.signal
+		});
+		const outcome = run.catch((error) => error);
+		await vi.waitFor(() => expect(workerInstances[0].lastTransferList).toHaveLength(4));
+
+		controller.abort(new Error('cancel transferred Julia run'));
+		await expect(outcome).resolves.toMatchObject({
+			code: 'cancelled',
+			phase: 'execute',
+			runtimeId: 'JULIA'
+		});
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+		onPostMessage = null;
+
+		await expect(
+			sandbox.run('println(2)', false, true, undefined, [], { stdin: '' })
+		).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].lastTransferList).toHaveLength(4);
+		const manifestRequests = vi
+			.mocked(fetch)
+			.mock.calls.filter(([input]) => String(input).includes('runtime-manifest.v2.json'));
+		expect(manifestRequests).toHaveLength(2);
+	});
+
+	it('rejects a transferable runtime preflight hook for persistent workers', () => {
+		expect(
+			() =>
+				new StaticWorkerRuntimeSandbox({
+					languageId: 'INVALID_TRANSFER_TEST',
+					displayName: 'Invalid transfer test',
+					defaultActivePath: 'main.txt',
+					stdin: { mode: 'none' },
+					workerLifetime: { mode: 'persistent', idleTimeoutMs: 1_000 },
+					resolveRuntimeAssets: () => ({
+						baseUrl: '/invalid-transfer-test/',
+						workerUrl: '/invalid-transfer-test/worker.js'
+					}),
+					preflightRuntimeAssets: () => ({ bytes: new Uint8Array(1) }),
+					consumeRuntimePreflightTransferables: () => []
+				})
+		).toThrow('runtime preflight transfer lists require per-run workers');
+	});
+
+	it('rejects a transfer hook without a runtime preflight callback', () => {
+		expect(
+			() =>
+				new StaticWorkerRuntimeSandbox({
+					languageId: 'MISSING_PREFLIGHT_TEST',
+					displayName: 'Missing preflight test',
+					defaultActivePath: 'main.txt',
+					stdin: { mode: 'none' },
+					workerLifetime: { mode: 'per-run' },
+					resolveRuntimeAssets: () => ({
+						baseUrl: '/missing-preflight-test/',
+						workerUrl: '/missing-preflight-test/worker.js'
+					}),
+					consumeRuntimePreflightTransferables: () => []
+				})
+		).toThrow('runtime preflight transfer lists require a runtime preflight callback');
+	});
+
+	it('ignores a second bootstrap run correlation until the active run terminates', async () => {
+		const sandbox = createPersistentTestSandbox();
+		await sandbox.load('/persistent-test');
+		const bootstrap = workerBootstrapBlobs.get(workerInstances[0].url);
+		expect(bootstrap).toBeDefined();
+		const source = await bootstrap!.text();
+		const nativePostMessage = vi.fn();
+		const workerScope = new EventTarget() as EventTarget & {
+			postMessage: (message: unknown, transferOrOptions?: unknown) => void;
+		};
+		workerScope.postMessage = nativePostMessage;
+		const runHandler = vi.fn();
+		const importScripts = vi.fn(() => workerScope.addEventListener('message', runHandler));
+		new Function('self', 'importScripts', source)(workerScope, importScripts);
+
+		workerScope.dispatchEvent(
+			new MessageEvent('message', { data: { run: true, runId: 'run-1' } })
+		);
+		workerScope.dispatchEvent(
+			new MessageEvent('message', { data: { run: true, runId: 'run-2' } })
+		);
+		expect(runHandler).toHaveBeenCalledTimes(1);
+		expect(runHandler.mock.calls[0]?.[0]).toMatchObject({ data: { runId: 'run-1' } });
+
+		workerScope.postMessage({ results: true });
+		expect(nativePostMessage).toHaveBeenLastCalledWith({ results: true, runId: 'run-1' });
+		workerScope.dispatchEvent(
+			new MessageEvent('message', { data: { run: true, runId: 'run-3' } })
+		);
+		expect(runHandler).toHaveBeenCalledTimes(2);
+		expect(runHandler.mock.calls[1]?.[0]).toMatchObject({ data: { runId: 'run-3' } });
+		workerScope.postMessage({ error: 'done' });
+		expect(nativePostMessage).toHaveBeenLastCalledWith({ error: 'done', runId: 'run-3' });
+		await sandbox.dispose();
 	});
 
 	it('rejects a modified Julia runner before creating a worker', async () => {
 		const modifiedSource = `x${juliaWorkerSource.slice(1)}`;
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(modifiedSource, {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-julia/runner-worker.js')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			return new Response(modifiedSource, {
 				status: 200,
 				headers: {
 					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
 				}
-			})
-		);
+			});
+		});
 		const sandbox = new Julia();
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(sandbox.load(juliaTestRuntimeAssets())).rejects.toMatchObject({
 			code: 'asset-integrity',
 			runtimeId: 'JULIA'
 		});
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects corrupt Julia runtime storage before fetching the runner', async () => {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-julia/julia.data.gz.bin')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			return new Response(Uint8Array.from([...juliaTestDataGzipBytes, 0]), {
+				status: 200,
+				headers: {
+					'content-length': String(juliaTestDataGzipBytes.byteLength + 1),
+					'content-type': 'application/octet-stream'
+				}
+			});
+		});
+		const sandbox = new Julia();
+
+		await expect(sandbox.load(juliaTestRuntimeAssets())).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'JULIA'
+		});
+		expect(
+			vi
+				.mocked(fetch)
+				.mock.calls.some(([input]) => String(input).includes('/runner-worker.js'))
+		).toBe(false);
 		expect(workerInstances).toHaveLength(0);
 	});
 

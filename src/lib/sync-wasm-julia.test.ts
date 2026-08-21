@@ -125,8 +125,11 @@ describe('syncWasmJuliaAssets', () => {
 		expect(await listFiles(fixture.targetDir)).toEqual([
 			'LICENSE.md',
 			'julia.data.gz',
+			'julia.data.gz.bin',
 			'julia.js.gz',
+			'julia.js.gz.bin',
 			'julia.wasm.gz',
+			'julia.wasm.gz.bin',
 			'readme.md',
 			'runner-worker.js',
 			'runtime-build.json',
@@ -149,6 +152,11 @@ describe('syncWasmJuliaAssets', () => {
 			components: { julia: { version: '1.3.0-DEV.560', verifiedBuildInput: false } }
 		});
 		expect(computeJuliaRuntimeFingerprint(manifest)).toBe(result.fingerprint);
+		expect(manifest.storage.map((entry: { path: string }) => entry.path).sort()).toEqual([
+			'julia.data.gz.bin',
+			'julia.js.gz.bin',
+			'julia.wasm.gz.bin'
+		]);
 		for (const storage of manifest.storage) {
 			const stored = await readFile(path.join(fixture.targetDir, storage.path));
 			expect(stored.byteLength).toBe(storage.size);
@@ -159,15 +167,78 @@ describe('syncWasmJuliaAssets', () => {
 			);
 			expect(logical.byteLength).toBe(receipt.size);
 			expect(sha256(logical)).toBe(receipt.sha256);
+			expect(
+				await readFile(path.join(fixture.targetDir, storage.path.replace(/\.bin$/u, '')))
+			).toEqual(stored);
 		}
 		const worker = await readFile(path.join(fixture.targetDir, 'runner-worker.js'));
 		expect(result.workerReceipt).toEqual({
 			bytes: worker.byteLength,
 			sha256: sha256(worker)
 		});
+		const workerSource = worker.toString('utf8');
+		for (const [key, value] of Object.entries({
+			profileId: result.runtimeProfile.profileId,
+			packageRevision: result.runtimeProfile.packageRevision,
+			importedByCommit: result.runtimeProfile.importedByCommit,
+			juliaVersion: result.runtimeProfile.juliaVersion,
+			emscriptenVersion: result.runtimeProfile.emscriptenVersion,
+			manifestFingerprint: result.runtimeProfile.manifestFingerprint
+		})) {
+			const pin = `${key}: '${value}'`;
+			expect(workerSource).toContain(pin);
+		}
+		for (const placeholder of [
+			'__WASM_IDLE_JULIA_PROFILE_ID__',
+			'__WASM_IDLE_JULIA_PACKAGE_REVISION__',
+			'__WASM_IDLE_JULIA_IMPORTED_BY_COMMIT__',
+			'__WASM_IDLE_JULIA_VERSION__',
+			'__WASM_IDLE_JULIA_EMSCRIPTEN_VERSION__',
+			'__WASM_IDLE_JULIA_MANIFEST_FINGERPRINT__'
+		]) {
+			expect(workerSource).not.toContain(placeholder);
+		}
+		const manifestBytes = await readFile(
+			path.join(fixture.targetDir, 'runtime-manifest.v2.json')
+		);
+		expect(result.runtimeProfile.manifestReceipt).toEqual({
+			bytes: manifestBytes.byteLength,
+			sha256: sha256(manifestBytes)
+		});
+		for (const [logicalPath, receiptName] of [
+			['julia.js', 'javascriptReceipt'],
+			['julia.wasm', 'wasmReceipt'],
+			['julia.data', 'dataReceipt']
+		] as const) {
+			const logicalReceipt = manifest.assets.find(
+				(candidate: { path: string }) => candidate.path === logicalPath
+			);
+			const storageReceipt = manifest.storage.find(
+				(candidate: { logicalPath: string }) => candidate.logicalPath === logicalPath
+			);
+			expect(result.runtimeProfile[receiptName]).toEqual({
+				bytes: storageReceipt.size,
+				sha256: storageReceipt.sha256,
+				uncompressedBytes: logicalReceipt.size,
+				uncompressedSha256: logicalReceipt.sha256
+			});
+		}
 		const versionModule = await readFile(fixture.versionModulePath, 'utf8');
-		expect(versionModule).toContain(result.fingerprint);
-		expect(versionModule).toContain(result.workerReceipt.sha256);
+		expect(versionModule).toContain('export const WASM_JULIA_RUNTIME_PROFILE =');
+		expect(versionModule).toContain('export const WASM_JULIA_RUNTIME_BUNDLE =');
+		expect(versionModule).toContain(
+			'export const WASM_JULIA_ASSET_VERSION = WASM_JULIA_RUNTIME_PROFILE.manifestFingerprint;'
+		);
+		for (const value of [
+			result.fingerprint,
+			result.workerReceipt.sha256,
+			result.runtimeProfile.packageRevision,
+			result.runtimeProfile.importedByCommit,
+			result.runtimeProfile.juliaVersion,
+			result.runtimeProfile.emscriptenVersion
+		]) {
+			expect(versionModule).toContain(value);
+		}
 
 		const second = await createFixture();
 		await publishFixture(second);
@@ -255,7 +326,7 @@ describe('syncWasmJuliaAssets', () => {
 			}
 		});
 
-		expect(gunzipSync(await readFile(path.join(fixture.targetDir, 'julia.js.gz')))).toEqual(
+		expect(gunzipSync(await readFile(path.join(fixture.targetDir, 'julia.js.gz.bin')))).toEqual(
 			original
 		);
 	});

@@ -142,7 +142,11 @@ import {
 	WASM_JANET_RUNNER_RECEIPT,
 	WASM_JANET_RUNTIME_PROFILE
 } from './wasmJanetVersion';
-import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
+import {
+	WASM_JULIA_ASSET_VERSION,
+	WASM_JULIA_RUNNER_RECEIPT,
+	WASM_JULIA_RUNTIME_PROFILE
+} from './wasmJuliaVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
@@ -1260,6 +1264,8 @@ describe('runtime asset config resolution', () => {
 				manifestUrl:
 					'https://example.com/absproxy/5173/wasm-julia/runtime-manifest.v2.json',
 				manifestFingerprint: WASM_JULIA_ASSET_VERSION,
+				preflightKey: JSON.stringify(WASM_JULIA_RUNTIME_PROFILE),
+				preflightProfile: WASM_JULIA_RUNTIME_PROFILE,
 				workerReceipt: WASM_JULIA_RUNNER_RECEIPT
 			}
 		);
@@ -1445,6 +1451,10 @@ describe('runtime asset config resolution', () => {
 			manifestReceipt: customManifestReceipt,
 			javascriptReceipt: customModuleReceipt,
 			wasmReceipt: customWasmReceipt
+		};
+		const customJuliaProfile = {
+			...WASM_JULIA_RUNTIME_PROFILE,
+			manifestFingerprint: customFingerprint
 		};
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = 'https://env.example.com/prolog/';
@@ -1772,7 +1782,7 @@ describe('runtime asset config resolution', () => {
 						baseUrl: '/runtime/julia',
 						workerUrl: '/runtime/julia/worker.js',
 						manifestUrl: '/runtime/julia/manifest.json',
-						manifestFingerprint: customFingerprint,
+						...customJuliaProfile,
 						workerReceipt: customWorkerReceipt
 					}
 				},
@@ -1783,6 +1793,8 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/runtime/julia/worker.js',
 			manifestUrl: 'https://example.com/runtime/julia/manifest.json',
 			manifestFingerprint: customFingerprint,
+			preflightKey: JSON.stringify(customJuliaProfile),
+			preflightProfile: customJuliaProfile,
 			workerReceipt: customWorkerReceipt
 		});
 		expect(
@@ -1902,7 +1914,7 @@ describe('runtime asset config resolution', () => {
 		}
 	});
 
-	it('accepts custom Julia URL environment overrides only with complete integrity pins', async () => {
+	it('rejects custom Julia URL environment overrides without a complete profile bundle', async () => {
 		const manifestFingerprint = '7'.repeat(64);
 		const workerSha256 = '8'.repeat(64);
 		publicEnv.PUBLIC_WASM_JULIA_BASE_URL = 'https://runtime.example.com/julia/';
@@ -1915,13 +1927,9 @@ describe('runtime asset config resolution', () => {
 		vi.resetModules();
 		try {
 			const { resolveJuliaRuntimeAssetConfig } = await import('./assets');
-			expect(resolveJuliaRuntimeAssetConfig(undefined, 'https://example.com/app')).toEqual({
-				baseUrl: 'https://runtime.example.com/julia/',
-				workerUrl: 'https://runtime.example.com/julia/runner.js',
-				manifestUrl: 'https://runtime.example.com/julia/manifest.json',
-				manifestFingerprint,
-				workerReceipt: { bytes: 6543, sha256: workerSha256 }
-			});
+			expect(() =>
+				resolveJuliaRuntimeAssetConfig(undefined, 'https://example.com/app')
+			).toThrow('Julia runtime preflight identity is invalid');
 		} finally {
 			publicEnv.PUBLIC_WASM_JULIA_BASE_URL = '';
 			publicEnv.PUBLIC_WASM_JULIA_WORKER_URL = '';

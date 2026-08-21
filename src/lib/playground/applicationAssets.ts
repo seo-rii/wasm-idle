@@ -21,7 +21,7 @@ import { WASM_GO_ASSET_VERSION } from './wasmGoVersion';
 import { WASM_HASKELL_ASSET_VERSION } from './wasmHaskellVersion';
 import { WASM_J_ASSET_VERSION, WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_JANET_RUNTIME_BUNDLE } from './wasmJanetVersion';
-import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
+import { WASM_JULIA_RUNTIME_BUNDLE } from './wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from './wasmLispVersion';
 import { WASM_LUA_ASSET_VERSION } from './wasmLuaVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
@@ -194,10 +194,16 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		julia: {
 			baseUrl: asset('wasm-julia/'),
-			workerUrl: asset('wasm-julia/runner-worker.js', WASM_JULIA_RUNNER_RECEIPT.sha256),
-			manifestUrl: asset('wasm-julia/runtime-manifest.v2.json', WASM_JULIA_ASSET_VERSION),
-			manifestFingerprint: WASM_JULIA_ASSET_VERSION,
-			workerReceipt: WASM_JULIA_RUNNER_RECEIPT
+			workerUrl: asset(
+				'wasm-julia/runner-worker.js',
+				WASM_JULIA_RUNTIME_BUNDLE.workerReceipt.sha256
+			),
+			manifestUrl: asset(
+				'wasm-julia/runtime-manifest.v2.json',
+				WASM_JULIA_RUNTIME_BUNDLE.profile.manifestFingerprint
+			),
+			...WASM_JULIA_RUNTIME_BUNDLE.profile,
+			workerReceipt: WASM_JULIA_RUNTIME_BUNDLE.workerReceipt
 		},
 		nim: {
 			baseUrl: asset('wasm-nim/'),

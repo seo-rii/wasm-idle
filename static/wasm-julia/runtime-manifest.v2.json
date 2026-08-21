@@ -2,7 +2,7 @@
   "format": "wasm-julia-runtime-manifest-v2",
   "runtime": "chriskoch-julia-wasm",
   "profileId": "julia-1.3.0-dev.560-chriskoch-npm-1.0.4-22a55e0d",
-  "fingerprint": "c125c69e474491fa731fd6693b3b52a8bc20abfe9bffbd69666fd0985aa3eddb",
+  "fingerprint": "e6cb5693f34efa56e8ec16dd34484deae1a870ad33ba38ecac4073a28f079d9a",
   "licenseExpression": "MIT AND LicenseRef-Julia-Third-Party",
   "artifact": {
     "kind": "opaque-npm-prebuilt",
@@ -86,21 +86,21 @@
   ],
   "storage": [
     {
-      "path": "julia.js.gz",
+      "path": "julia.js.gz.bin",
       "logicalPath": "julia.js",
       "encoding": "gzip",
       "size": 57115,
       "sha256": "fdb4b6d7417c2c02f0becd71ec24d01c11f920e97ec77ace2e3676d1667b9e65"
     },
     {
-      "path": "julia.wasm.gz",
+      "path": "julia.wasm.gz.bin",
       "logicalPath": "julia.wasm",
       "encoding": "gzip",
       "size": 858693,
       "sha256": "590d2e91f5360ab663b8a640c51007d3112064ad0c79e347eac85d87c010fddf"
     },
     {
-      "path": "julia.data.gz",
+      "path": "julia.data.gz.bin",
       "logicalPath": "julia.data",
       "encoding": "gzip",
       "size": 14260930,

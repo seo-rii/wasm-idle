@@ -35,7 +35,11 @@ import {
 	WASM_JANET_RUNNER_RECEIPT,
 	WASM_JANET_RUNTIME_PROFILE
 } from './wasmJanetVersion';
-import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
+import {
+	WASM_JULIA_ASSET_VERSION,
+	WASM_JULIA_RUNNER_RECEIPT,
+	WASM_JULIA_RUNTIME_PROFILE
+} from './wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from './wasmLispVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
@@ -223,7 +227,7 @@ describe('application runtime asset root', () => {
 			baseUrl: '/foo/bar/wasm-julia/',
 			workerUrl: `/foo/bar/wasm-julia/runner-worker.js?v=${WASM_JULIA_RUNNER_RECEIPT.sha256}`,
 			manifestUrl: `/foo/bar/wasm-julia/runtime-manifest.v2.json?v=${WASM_JULIA_ASSET_VERSION}`,
-			manifestFingerprint: WASM_JULIA_ASSET_VERSION,
+			...WASM_JULIA_RUNTIME_PROFILE,
 			workerReceipt: WASM_JULIA_RUNNER_RECEIPT
 		});
 		expect(assets.nim).toEqual({
@@ -472,6 +476,15 @@ describe('application runtime asset root', () => {
 				]
 			]),
 			juliaManifestFingerprint: WASM_JULIA_ASSET_VERSION,
+			juliaProfileId: WASM_JULIA_RUNTIME_PROFILE.profileId,
+			juliaPackageRevision: WASM_JULIA_RUNTIME_PROFILE.packageRevision,
+			juliaImportedByCommit: WASM_JULIA_RUNTIME_PROFILE.importedByCommit,
+			juliaJuliaVersion: WASM_JULIA_RUNTIME_PROFILE.juliaVersion,
+			juliaEmscriptenVersion: WASM_JULIA_RUNTIME_PROFILE.emscriptenVersion,
+			juliaManifestReceipt: expect.any(String),
+			juliaJavaScriptReceipt: expect.any(String),
+			juliaWasmReceipt: expect.any(String),
+			juliaDataReceipt: expect.any(String),
 			juliaWorkerReceipt: JSON.stringify([
 				[
 					'worker',
@@ -585,6 +598,15 @@ describe('application runtime asset root', () => {
 			janetWorkerReceipt: expect.any(String),
 			juliaManifestUrl: assets.julia?.manifestUrl,
 			juliaManifestFingerprint: assets.julia?.manifestFingerprint,
+			juliaProfileId: assets.julia?.profileId,
+			juliaPackageRevision: assets.julia?.packageRevision,
+			juliaImportedByCommit: assets.julia?.importedByCommit,
+			juliaJuliaVersion: assets.julia?.juliaVersion,
+			juliaEmscriptenVersion: assets.julia?.emscriptenVersion,
+			juliaManifestReceipt: expect.any(String),
+			juliaJavaScriptReceipt: expect.any(String),
+			juliaWasmReceipt: expect.any(String),
+			juliaDataReceipt: expect.any(String),
 			juliaWorkerReceipt: expect.any(String),
 			nimManifestUrl: assets.nim?.manifestUrl,
 			nimManifestFingerprint: assets.nim?.manifestFingerprint,
@@ -693,6 +715,34 @@ describe('application runtime asset root', () => {
 				createRuntimeAssetsKey({
 					...assets,
 					janet: { ...janet, ...replacement }
+				})
+			).not.toBe(originalKey);
+		}
+	});
+
+	it('changes the runtime cache identity for every Julia profile and receipt field', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const originalKey = createRuntimeAssetsKey(assets);
+		const julia = assets.julia!;
+		const replacements = [
+			{ profileId: `${julia.profileId}-custom` },
+			{ packageRevision: 'a'.repeat(40) },
+			{ importedByCommit: 'b'.repeat(40) },
+			{ juliaVersion: `${julia.juliaVersion}-custom` },
+			{ emscriptenVersion: `${julia.emscriptenVersion}-custom` },
+			{ manifestFingerprint: 'c'.repeat(64) },
+			{ manifestReceipt: { ...julia.manifestReceipt!, sha256: 'd'.repeat(64) } },
+			{ javascriptReceipt: { ...julia.javascriptReceipt!, bytes: 123 } },
+			{ wasmReceipt: { ...julia.wasmReceipt!, uncompressedSha256: 'e'.repeat(64) } },
+			{ dataReceipt: { ...julia.dataReceipt!, uncompressedBytes: 456 } },
+			{ workerReceipt: { ...julia.workerReceipt!, sha256: 'f'.repeat(64) } }
+		];
+
+		for (const replacement of replacements) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					julia: { ...julia, ...replacement }
 				})
 			).not.toBe(originalKey);
 		}

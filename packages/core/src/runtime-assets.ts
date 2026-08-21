@@ -213,6 +213,15 @@ export interface RuntimeAssetKeySource {
 		workerUrl?: string;
 		manifestUrl?: string;
 		manifestFingerprint?: string;
+		profileId?: string;
+		packageRevision?: string;
+		importedByCommit?: string;
+		juliaVersion?: string;
+		emscriptenVersion?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		javascriptReceipt?: RuntimeAssetIntegrityEntry;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
+		dataReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	nim?: {
@@ -937,6 +946,35 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		runtime: 'julia',
 		property: 'manifestFingerprint',
 		key: 'juliaManifestFingerprint'
+	},
+	{ runtime: 'julia', property: 'profileId', key: 'juliaProfileId' },
+	{ runtime: 'julia', property: 'packageRevision', key: 'juliaPackageRevision' },
+	{ runtime: 'julia', property: 'importedByCommit', key: 'juliaImportedByCommit' },
+	{ runtime: 'julia', property: 'juliaVersion', key: 'juliaJuliaVersion' },
+	{ runtime: 'julia', property: 'emscriptenVersion', key: 'juliaEmscriptenVersion' },
+	{
+		runtime: 'julia',
+		property: 'manifestReceipt',
+		key: 'juliaManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'julia',
+		property: 'javascriptReceipt',
+		key: 'juliaJavaScriptReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'julia',
+		property: 'wasmReceipt',
+		key: 'juliaWasmReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'julia',
+		property: 'dataReceipt',
+		key: 'juliaDataReceipt',
+		serialize: serializeIntegrityEntry
 	},
 	{
 		runtime: 'julia',
