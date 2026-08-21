@@ -180,7 +180,7 @@ describe('Monaco route debug sync', () => {
 		);
 		expect(source).toMatch(/debugActionBindings\?\.dispose\(\);/);
 		expect(source).toMatch(
-			/import type \{ EditorLanguageServerHandle, LanguageServerStatus \} from '@wasm-idle\/lsp';/
+			/import type \{\s+EditorLanguageServerHandle,\s+EditorLanguageServerRuntimeOptions,\s+LanguageServerStatus\s+\} from '@wasm-idle\/lsp';/s
 		);
 		expect(source).not.toMatch(/^\s*import \{[^\n]*\} from '@wasm-idle\/lsp';/m);
 		expect(source).toMatch(/type MonacoLspStatusView = \{/);
@@ -583,8 +583,7 @@ describe('Monaco route debug sync', () => {
 			'zigLspCompilerUrl',
 			'zigLspStdlibUrl',
 			'luaLspModuleUrl',
-			'janetLspBaseUrl',
-			'janetLspWorkerUrl',
+			'janetLspRuntime',
 			'lispLspModuleUrl',
 			'ocamlLspModuleUrl',
 			'ocamlLspManifestUrl',
