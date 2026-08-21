@@ -618,6 +618,17 @@ function createWorkspace(files: Record<string, string | Uint8Array>) {
 	return workspace;
 }
 
+export function selectTinyGoOfflineModuleMode(
+	workspace: TinyGoWasiDirectoryContents
+): 'readonly' | 'vendor' {
+	const hasVendorDirectory = hasTinyGoVfsPath(workspace, 'vendor', 'directory');
+	const hasVendorManifest = hasTinyGoVfsPath(workspace, 'vendor/modules.txt', 'file');
+	if (hasVendorDirectory && !hasVendorManifest) {
+		throw new Error('TinyGo offline vendor directory requires vendor/modules.txt');
+	}
+	return hasVendorManifest ? 'vendor' : 'readonly';
+}
+
 function createWorkDirectory() {
 	const work: TinyGoWasiDirectoryContents = new Map();
 	for (const directory of ['output', 'tmp', 'cache', 'home', 'gopath', 'modcache']) {
@@ -1851,6 +1862,7 @@ export async function compileUpstreamTinyGo(
 	if (packageName !== '.') {
 		throw new Error('package-graph protocol v1 requires the module-root package "."');
 	}
+	const moduleMode = selectTinyGoOfflineModuleMode(workspace);
 	const work = createWorkDirectory();
 	const encoder = new TextEncoder();
 
@@ -1864,7 +1876,7 @@ export async function compileUpstreamTinyGo(
 			`-json=${TINYGO_UPSTREAM_PACKAGE_GRAPH_FIELDS.join(',')}`,
 			'-deps',
 			'-e',
-			'-mod=readonly',
+			`-mod=${moduleMode}`,
 			`-tags=${TINYGO_UPSTREAM_PACKAGE_GRAPH_TAGS.join(' ')}`,
 			'.'
 		],

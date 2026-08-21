@@ -22,6 +22,7 @@ import {
 } from '../src/upstream-contract.ts';
 import {
 	createBinaryenTinyGoOptimizer,
+	selectTinyGoOfflineModuleMode,
 	validateTinyGoLinkPlan,
 	validateTinyGoLinkPlanV2,
 	validateTinyGoLinkPlanV3,
@@ -1160,6 +1161,23 @@ test('extracts binary ustar files and rejects traversal entries', () => {
 	);
 });
 
+test('selects a fail-closed offline module mode from the mounted workspace', () => {
+	const workspace: TinyGoWasiDirectoryContents = new Map();
+	addTinyGoVfsFile(workspace, 'go.mod', new TextEncoder().encode('module example.com/app\n'));
+	assert.equal(selectTinyGoOfflineModuleMode(workspace), 'readonly');
+	addTinyGoVfsFile(workspace, 'vendor/example.com/dep/dep.go', new Uint8Array([1]));
+	assert.throws(
+		() => selectTinyGoOfflineModuleMode(workspace),
+		/vendor directory requires vendor\/modules\.txt/u
+	);
+	addTinyGoVfsFile(
+		workspace,
+		'vendor/modules.txt',
+		new TextEncoder().encode('# example.com/dep v1.0.0\n')
+	);
+	assert.equal(selectTinyGoOfflineModuleMode(workspace), 'vendor');
+});
+
 test('normalizes go list JSON paths and validates the exact mounted package graph', () => {
 	const hostRoot = '/producer/root';
 	const hostWorkspace = '/producer/fixture';
@@ -1464,7 +1482,7 @@ test('binds compiler, root, LLD, and the passed upstream producer receipt by SHA
 	const producerReceipt = new TextEncoder().encode(JSON.stringify(receiptValue));
 	const packageGraphReceiptValue = {
 		schemaVersion: 1,
-		format: 'wasm-llvm-tinygo-package-graph-provider-v1',
+		format: 'wasm-llvm-tinygo-package-graph-provider-v2',
 		producerId: 'wasm-llvm/tinygo-browser/package-graph',
 		status: 'passed',
 		upstream: {
@@ -1483,6 +1501,25 @@ test('binds compiler, root, LLD, and the passed upstream producer receipt by SHA
 				`-tags=${TINYGO_UPSTREAM_PACKAGE_GRAPH_TAGS.join(' ')}`,
 				'.'
 			],
+			argumentsByModuleMode: {
+				readonly: [
+					`-json=${TINYGO_UPSTREAM_PACKAGE_GRAPH_FIELDS.join(',')}`,
+					'-deps',
+					'-e',
+					'-mod=readonly',
+					`-tags=${TINYGO_UPSTREAM_PACKAGE_GRAPH_TAGS.join(' ')}`,
+					'.'
+				],
+				vendor: [
+					`-json=${TINYGO_UPSTREAM_PACKAGE_GRAPH_FIELDS.join(',')}`,
+					'-deps',
+					'-e',
+					'-mod=vendor',
+					`-tags=${TINYGO_UPSTREAM_PACKAGE_GRAPH_TAGS.join(' ')}`,
+					'.'
+				]
+			},
+			moduleModes: ['readonly', 'vendor'],
 			environment: {
 				GOOS: 'wasip1',
 				GOARCH: 'wasm',

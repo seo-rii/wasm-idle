@@ -104,10 +104,17 @@ for (const producer of [
 				]
 			};
 			const packageGraphReceipt = {
-				format: 'wasm-llvm-tinygo-package-graph-provider-v1',
+				format: 'wasm-llvm-tinygo-package-graph-provider-v2',
 				producerId: 'wasm-llvm/tinygo-browser/package-graph',
 				status: 'passed',
 				upstream: { entrypoint: 'cmd/go' },
+				protocol: {
+					moduleModes: ['readonly', 'vendor'],
+					argumentsByModuleMode: {
+						readonly: ['-mod=readonly'],
+						vendor: ['-mod=vendor']
+					}
+				},
 				acceptance: {
 					status: 'passed',
 					comparison: 'same-pinned-native-cmd-go-exact-json'

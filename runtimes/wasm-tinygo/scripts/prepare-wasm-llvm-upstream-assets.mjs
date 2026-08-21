@@ -129,7 +129,8 @@ function assertProducerReceipt(receipt, compilerEvidence, rootEvidence) {
 
 function assertPackageGraphReceipt(receipt, packageGraphEvidence) {
 	if (
-		receipt?.format !== 'wasm-llvm-tinygo-package-graph-provider-v1' ||
+		(receipt?.format !== 'wasm-llvm-tinygo-package-graph-provider-v1' &&
+			receipt?.format !== 'wasm-llvm-tinygo-package-graph-provider-v2') ||
 		receipt?.producerId !== 'wasm-llvm/tinygo-browser/package-graph' ||
 		receipt?.status !== 'passed' ||
 		receipt?.upstream?.entrypoint !== 'cmd/go' ||
@@ -137,6 +138,14 @@ function assertPackageGraphReceipt(receipt, packageGraphEvidence) {
 		receipt?.acceptance?.comparison !== 'same-pinned-native-cmd-go-exact-json'
 	) {
 		throw new Error('package-graph receipt is not a passed upstream cmd/go provider receipt');
+	}
+	if (
+		receipt.format === 'wasm-llvm-tinygo-package-graph-provider-v2' &&
+		(JSON.stringify(receipt?.protocol?.moduleModes) !== JSON.stringify(['readonly', 'vendor']) ||
+			!receipt?.protocol?.argumentsByModuleMode?.readonly?.includes('-mod=readonly') ||
+			!receipt?.protocol?.argumentsByModuleMode?.vendor?.includes('-mod=vendor'))
+	) {
+		throw new Error('package-graph receipt does not bind offline vendor mode');
 	}
 	const actual = receipt.assets?.find((asset) => asset?.path === packageGraphEvidence.path);
 	if (

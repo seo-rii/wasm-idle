@@ -14,8 +14,10 @@ export const TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V5 =
 	'wasm-llvm-tinygo-browser-compiler-v5' as const;
 export const TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V6 =
 	'wasm-llvm-tinygo-browser-compiler-v6' as const;
-export const TINYGO_UPSTREAM_PACKAGE_GRAPH_RECEIPT_FORMAT =
+export const TINYGO_UPSTREAM_PACKAGE_GRAPH_RECEIPT_FORMAT_V1 =
 	'wasm-llvm-tinygo-package-graph-provider-v1' as const;
+export const TINYGO_UPSTREAM_PACKAGE_GRAPH_RECEIPT_FORMAT =
+	'wasm-llvm-tinygo-package-graph-provider-v2' as const;
 export const TINYGO_RUNTIME_CLOSURE_FORMAT_V1 =
 	'wasm-llvm-tinygo-runtime-closure-v1' as const;
 export const TINYGO_RUNTIME_CLOSURE_FORMAT = 'wasm-llvm-tinygo-runtime-closure-v2' as const;
@@ -460,7 +462,8 @@ export async function verifyTinyGoUpstreamAssetSet(options: {
 		'TinyGo package-graph producer receipt'
 	);
 	if (
-		packageGraphReceipt.format !== TINYGO_UPSTREAM_PACKAGE_GRAPH_RECEIPT_FORMAT ||
+		(packageGraphReceipt.format !== TINYGO_UPSTREAM_PACKAGE_GRAPH_RECEIPT_FORMAT &&
+			packageGraphReceipt.format !== TINYGO_UPSTREAM_PACKAGE_GRAPH_RECEIPT_FORMAT_V1) ||
 		packageGraphReceipt.producerId !== 'wasm-llvm/tinygo-browser/package-graph' ||
 		packageGraphReceipt.status !== 'passed'
 	) {
@@ -492,6 +495,9 @@ export async function verifyTinyGoUpstreamAssetSet(options: {
 		`-tags=${TINYGO_UPSTREAM_PACKAGE_GRAPH_TAGS.join(' ')}`,
 		'.'
 	];
+	const expectedVendorArguments = expectedGraphArguments.map((argument) =>
+		argument === '-mod=readonly' ? '-mod=vendor' : argument
+	);
 	const graphArguments = graphProtocol.arguments;
 	if (
 		graphProtocol.command !== 'list' ||
@@ -502,6 +508,20 @@ export async function verifyTinyGoUpstreamAssetSet(options: {
 		graphProtocol.maxPackages !== MAX_PACKAGE_COUNT
 	) {
 		throw new Error('TinyGo package-graph receipt protocol differs from browser protocol v1');
+	}
+	if (packageGraphReceipt.format === TINYGO_UPSTREAM_PACKAGE_GRAPH_RECEIPT_FORMAT) {
+		const argumentsByModuleMode = expectObject(
+			graphProtocol.argumentsByModuleMode,
+			'TinyGo package-graph producer receipt.protocol.argumentsByModuleMode'
+		);
+		if (
+			JSON.stringify(graphProtocol.moduleModes) !== JSON.stringify(['readonly', 'vendor']) ||
+			JSON.stringify(argumentsByModuleMode.readonly) !==
+				JSON.stringify(expectedGraphArguments) ||
+			JSON.stringify(argumentsByModuleMode.vendor) !== JSON.stringify(expectedVendorArguments)
+		) {
+			throw new Error('TinyGo package-graph receipt does not bind offline vendor mode');
+		}
 	}
 	const graphEnvironment = expectObject(
 		graphProtocol.environment,
