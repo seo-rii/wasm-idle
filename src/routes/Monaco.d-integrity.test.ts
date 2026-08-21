@@ -8,7 +8,7 @@ describe('Monaco D language server trust roots', () => {
 		const pageSource = await readFile(path.resolve('src/routes/+page.svelte'), 'utf8');
 
 		expect(source).toContain("from '$lib/playground/wasmDIntegrity'");
-		expect(source).toContain("new URL('runtime/runtime-manifest.v1.json', moduleUrl)");
+		expect(source).toContain("new SvelteURL('runtime/runtime-manifest.v1.json', moduleUrl)");
 		expect(source).toContain('if (!dLspManifestUrl) manifestUrl.search = moduleUrl.search');
 		expect(source).toContain('integrity: dLspIntegrity');
 		expect(pageSource).toContain(

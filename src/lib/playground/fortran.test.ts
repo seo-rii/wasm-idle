@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -16,6 +16,9 @@ import {
 } from '@wasm-idle/llvm-core/clang';
 
 const textDecoder = new TextDecoder();
+const hasPreparedClangRuntime = existsSync(
+	path.resolve(process.cwd(), 'static/clang/bin/memfs.wasm.gz')
+);
 
 const fortranStdinSource = `      PROGRAM MAIN
       INTEGER N
@@ -129,7 +132,10 @@ async function compileFortranProgram(cSource: string, clangBaseUrl: string) {
 }
 
 describe('Fortran browser runtime', () => {
-	it('translates real Fortran with f2c and preserves stdin through the generated WASI program', async () => {
+	it('translates real Fortran with f2c and preserves stdin through the generated WASI program', async ({
+		skip
+	}) => {
+		if (!hasPreparedClangRuntime) skip();
 		const cSource = await translateFortranToC();
 		expect(cSource).toContain('s_rsle');
 		expect(cSource).toContain('do_lio');

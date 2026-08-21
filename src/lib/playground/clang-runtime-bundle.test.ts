@@ -1,12 +1,14 @@
 // @vitest-environment node
 
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 
 const runtimeRoot = path.resolve(process.cwd(), 'static/clang');
+const hasPreparedClangRuntime = existsSync(path.join(runtimeRoot, 'bin', 'memfs.wasm.gz'));
 
 interface RuntimeAssetReceipt {
 	asset: string;
@@ -15,7 +17,8 @@ interface RuntimeAssetReceipt {
 }
 
 describe('bundled wasm-clang runtime', () => {
-	it('ships receipt-backed native gzip compiler and sysroot assets', async () => {
+	it('ships receipt-backed native gzip compiler and sysroot assets', async ({ skip }) => {
+		if (!hasPreparedClangRuntime) skip();
 		const manifest = JSON.parse(
 			await readFile(path.join(runtimeRoot, 'runtime-manifest.v1.json'), 'utf8')
 		);

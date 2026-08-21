@@ -2895,7 +2895,11 @@ describe('static worker backed language sandboxes', () => {
 					displayName: 'Invalid transfer test',
 					defaultActivePath: 'main.txt',
 					stdin: { mode: 'none' },
-					workerLifetime: { mode: 'persistent', idleTimeoutMs: 1_000 },
+					workerLifetime: {
+						mode: 'persistent',
+						idleTimeoutMs: 1_000,
+						evictOnMemoryPressure: false
+					},
 					resolveRuntimeAssets: () => ({
 						baseUrl: '/invalid-transfer-test/',
 						workerUrl: '/invalid-transfer-test/worker.js'

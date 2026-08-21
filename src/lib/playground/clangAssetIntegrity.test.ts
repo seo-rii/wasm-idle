@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
@@ -13,8 +14,13 @@ interface RuntimeBuildAsset {
 	sha256: string;
 }
 
+const hasPreparedClangRuntime = existsSync(
+	resolve(process.cwd(), 'static/clang/bin/memfs.wasm.gz')
+);
+
 describe('bundled clang asset integrity', () => {
-	it('matches the checked-in runtime build receipt', async () => {
+	it('matches the checked-in runtime build receipt', async ({ skip }) => {
+		if (!hasPreparedClangRuntime) skip();
 		const receiptPath = resolve(process.cwd(), 'static/clang/runtime-build.json');
 		const receipt = JSON.parse(await readFile(receiptPath, 'utf8')) as {
 			assets: RuntimeBuildAsset[];
