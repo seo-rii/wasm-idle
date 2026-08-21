@@ -111,15 +111,15 @@ describe('LLVM runtime package scripts', () => {
 
 		expect(debug.name).toBe('@wasm-idle/debug');
 		expect(debug.dependencies?.['@wasm-idle/core']).toBe('workspace:*');
-		expect(debug.peerDependencies?.['@wasm-idle/core']).toBe('1.0.0-next.1');
+		expect(debug.peerDependencies?.['@wasm-idle/core']).toBe('1.0.0');
 		expect(debug.peerDependencies?.svelte).toBe('^5.0.0');
 		expect(debug.peerDependencies?.['monaco-editor']).toBe('^0.55.0');
 		expect(debug.peerDependenciesMeta?.['monaco-editor']?.optional).toBe(true);
 		expect(debug.dependencies?.['monaco-editor']).toBeUndefined();
 	});
 
-	it('keeps all public packages aligned for the next prerelease', async () => {
-		const releaseVersion = '1.0.0-next.1';
+	it('keeps all public packages aligned for the stable v1 release', async () => {
+		const releaseVersion = '1.0.0';
 		const root = await readRootPackage();
 		const packagePaths = [
 			'packages/core',
@@ -135,12 +135,12 @@ describe('LLVM runtime package scripts', () => {
 		const packages = await Promise.all(packagePaths.map(readPackageManifest));
 
 		expect(root.version).toBe(releaseVersion);
-		expect(root.publishConfig).toEqual({ tag: 'next' });
+		expect(root.publishConfig).toEqual({ tag: 'latest' });
 		for (const manifest of packages) {
 			expect(manifest.version, manifest.name).toBe(releaseVersion);
 			expect(manifest.publishConfig, manifest.name).toEqual({
 				access: 'public',
-				tag: 'next'
+				tag: 'latest'
 			});
 		}
 

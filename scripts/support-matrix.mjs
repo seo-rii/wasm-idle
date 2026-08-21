@@ -1566,6 +1566,19 @@ using [\`producer/lldb-browser\`](../wasm-llvm/producer/lldb-browser) and
 [\`producer/wamr-browser\`](../wasm-llvm/producer/wamr-browser), then assemble them with the Clang
 release:
 
+Stable v1 is release-qualified on 64-bit desktop Chromium on Linux. It supports one active debug
+session for \`wasm32-wasi\` Preview 1 C/C++ and \`wasm32-wasip1\` Rust artifacts produced by the
+pinned toolchains at \`-O0\` with embedded DWARF. Debug starts a new, single-threaded WAMR classic
+interpreter instance; it does not attach to a browser-engine run or preserve that run's live state,
+and runtime-specific behavior can differ. Trace fallback is selected only before an LLDB session is
+established; an LLDB or WAMR failure ends that session instead of silently changing debugger
+semantics.
+
+Full expression evaluation, conditional/log/data breakpoints, variable mutation, restart,
+standalone terminate, optimized-debug guarantees, C++ exception support, STL pretty-printers,
+\`wasm64\`, guest threads, reverse debugging, SIMD, multi-module guests, and Rust WASI Preview 2/3
+debugging are outside the v1 support boundary.
+
 \`\`\`sh
 cd ../wasm-llvm
 WASM_LLVM_LLDB_ARTIFACT_DIR=/path/to/lldb-artifacts \\
