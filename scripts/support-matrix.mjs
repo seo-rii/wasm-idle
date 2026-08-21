@@ -510,6 +510,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'TinyGo',
+		ids: ['TINYGO'],
+		runtime: 'wasm-tinygo',
+		stdin: 'Yes',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/tinygo.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_TINYGO',
+			marker: 'runTinyGoBrowserProbe'
+		}
+	},
+	{
 		language: 'OCaml',
 		ids: ['OCAML'],
 		runtime: 'wasm-of-js-of-ocaml / js_of_ocaml',
@@ -747,17 +760,6 @@ export const supportMatrixRows = [
 
 /** @type {BlockedCandidateRow[]} */
 export const blockedCandidateRows = [
-	{
-		language: 'TinyGo',
-		candidateIds: ['TINYGO'],
-		currentEvidence:
-			`${code('runtimes/wasm-tinygo')} keeps its wasm-idle-authored Go AST-to-C subset isolated from a ` +
-			'source-pinned upstream TinyGo 0.40.1 path that passed the same 45-package CGo/C/C++/assembly fixture in Node and Chromium',
-		blocker:
-			'Hosted C++, general assembly, custom native/linker flags, offline external modules, hard synchronous-phase resource limits, and broader differential coverage remain unresolved',
-		requiredFollowUp:
-			'Define the remaining native-language policies, enforce worker resource limits, and expand differential fixtures before restoring TINYGO to the public registry'
-	},
 	{
 		language: 'Modern Fortran',
 		candidateIds: ['F90', 'F95'],
@@ -1187,6 +1189,19 @@ const runtimeDetailsByLanguage = new Map([
 				`static worker compiles and evaluates with the official ${code('cljs.js')} self-hosted compiler; ` +
 				`supports ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, and ${code('workspaceFiles')}`,
 			customization: staticWorkerCustomizationFor('clojurescript', 'CLOJURESCRIPT')
+		}
+	],
+	[
+		'TinyGo',
+		{
+			packageBase: `${workspacePackage('runtimes/wasm-tinygo')} / upstream TinyGo 0.40.1 browser toolchain`,
+			execution:
+				`receipt-verifies and runs upstream ${code('cmd/go')} plus TinyGo in a disposable capped Worker; ` +
+				`targets ${code('wasip1')}; supports ${code('stdin')}, ${code('programArgs')}, ${code('workspaceFiles')}, ` +
+				`hosted C++ without exceptions/RTTI, and offline ${code('vendor/modules.txt')}`,
+			customization:
+				`${code('runtimeAssets.tinygo.moduleUrl')}/${code('assetLoader')}; ` +
+				`${code('PUBLIC_WASM_TINYGO_MODULE_URL')}, execution/workspace resource limits, ${code('programArgs')}`
 		}
 	],
 	[
