@@ -10,9 +10,13 @@ export const TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V3 =
 	'wasm-llvm-tinygo-browser-compiler-v3' as const;
 export const TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V4 =
 	'wasm-llvm-tinygo-browser-compiler-v4' as const;
+export const TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V5 =
+	'wasm-llvm-tinygo-browser-compiler-v5' as const;
 export const TINYGO_UPSTREAM_PACKAGE_GRAPH_RECEIPT_FORMAT =
 	'wasm-llvm-tinygo-package-graph-provider-v1' as const;
-export const TINYGO_RUNTIME_CLOSURE_FORMAT = 'wasm-llvm-tinygo-runtime-closure-v1' as const;
+export const TINYGO_RUNTIME_CLOSURE_FORMAT_V1 =
+	'wasm-llvm-tinygo-runtime-closure-v1' as const;
+export const TINYGO_RUNTIME_CLOSURE_FORMAT = 'wasm-llvm-tinygo-runtime-closure-v2' as const;
 export const TINYGO_RUNTIME_PROFILE_ID = 'wasip1-asyncify-precise-o1' as const;
 export const TINYGO_ROOT_PATH = '/tinygo-root' as const;
 export const TINYGO_WORKSPACE_PATH = '/workspace' as const;
@@ -85,7 +89,7 @@ const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
 
 type JsonObject = Record<string, unknown>;
 
-export type TinyGoCompileProtocolVersion = 1 | 2 | 3 | 4;
+export type TinyGoCompileProtocolVersion = 1 | 2 | 3 | 4 | 5;
 
 export interface TinyGoUpstreamAssetEvidence {
 	path: string;
@@ -116,7 +120,7 @@ export interface TinyGoRuntimeClosureAsset extends TinyGoUpstreamAssetEvidence {
 
 export interface TinyGoRuntimeClosure {
 	schemaVersion: 1;
-	format: typeof TINYGO_RUNTIME_CLOSURE_FORMAT;
+	format: typeof TINYGO_RUNTIME_CLOSURE_FORMAT | typeof TINYGO_RUNTIME_CLOSURE_FORMAT_V1;
 	compilerSha256: string;
 	profile: {
 		id: typeof TINYGO_RUNTIME_PROFILE_ID;
@@ -130,6 +134,8 @@ export interface TinyGoRuntimeClosure {
 	};
 	compilerRT: TinyGoRuntimeClosureAsset;
 	wasiLibc: TinyGoRuntimeClosureAsset;
+	libCxx?: TinyGoRuntimeClosureAsset;
+	libCxxAbi?: TinyGoRuntimeClosureAsset;
 	extraFiles: Record<string, TinyGoRuntimeClosureAsset>;
 }
 
@@ -300,6 +306,11 @@ export async function verifyTinyGoUpstreamAssetSet(options: {
 		receipt.format === TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V4
 	) {
 		compileProtocolVersion = 4;
+	} else if (
+		receipt.schemaVersion === 5 &&
+		receipt.format === TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V5
+	) {
+		compileProtocolVersion = 5;
 	} else {
 		throw new Error('unexpected TinyGo producer receipt format');
 	}
@@ -329,12 +340,19 @@ export async function verifyTinyGoUpstreamAssetSet(options: {
 				? ['go-embed-objects']
 				: compileProtocolVersion === 3
 					? ['go-embed-objects', 'target-cgo-c']
-					: [
+					: compileProtocolVersion === 4
+						? [
 							'go-embed-objects',
 							'target-cgo-c',
 							'target-cxx-freestanding',
 							'target-clang-assembly'
-						];
+							]
+						: [
+								'go-embed-objects',
+								'target-cgo-c',
+								'target-cxx-hosted-noeh',
+								'target-clang-assembly'
+							];
 		if (
 			compileProtocol.version !== compileProtocolVersion ||
 			compileProtocol.format !== `wasm-llvm-tinygo-link-plan-v${compileProtocolVersion}` ||
@@ -344,6 +362,15 @@ export async function verifyTinyGoUpstreamAssetSet(options: {
 			throw new Error(
 				`TinyGo producer receipt compile protocol differs from v${compileProtocolVersion}`
 			);
+		}
+		if (compileProtocolVersion === 5) {
+			const rootArchive = expectObject(
+				build.rootArchive,
+				'TinyGo producer receipt.build.rootArchive'
+			);
+			if (rootArchive.runtimeClosureFormat !== TINYGO_RUNTIME_CLOSURE_FORMAT) {
+				throw new Error('TinyGo producer receipt does not bind runtime closure v2');
+			}
 		}
 	}
 	if (
@@ -769,7 +796,11 @@ export function parseTinyGoRuntimeClosure(
 	compilerSha256: string
 ): TinyGoRuntimeClosure {
 	const root = expectObject(value, 'TinyGo runtime closure');
-	if (root.schemaVersion !== 1 || root.format !== TINYGO_RUNTIME_CLOSURE_FORMAT) {
+	if (
+		root.schemaVersion !== 1 ||
+		(root.format !== TINYGO_RUNTIME_CLOSURE_FORMAT &&
+			root.format !== TINYGO_RUNTIME_CLOSURE_FORMAT_V1)
+	) {
 		throw new Error('unexpected TinyGo runtime closure format');
 	}
 	if (root.compilerSha256 !== compilerSha256) {
@@ -798,9 +829,25 @@ export function parseTinyGoRuntimeClosure(
 	if (Object.keys(extraFiles).length !== 3) {
 		throw new Error('TinyGo runtime closure must contain exactly three extra files');
 	}
+	const hostedCxx = root.format === TINYGO_RUNTIME_CLOSURE_FORMAT;
+	const libCxx = hostedCxx
+		? parseRuntimeAsset(root.libCxx, 'TinyGo runtime closure.libCxx')
+		: undefined;
+	const libCxxAbi = hostedCxx
+		? parseRuntimeAsset(root.libCxxAbi, 'TinyGo runtime closure.libCxxAbi')
+		: undefined;
+	if (
+		hostedCxx &&
+		(libCxx?.id !== 'libcxx' ||
+			libCxx.format !== 'static-archive' ||
+			libCxxAbi?.id !== 'libcxxabi' ||
+			libCxxAbi.format !== 'static-archive')
+	) {
+		throw new Error('TinyGo runtime closure hosted C++ archives are invalid');
+	}
 	return {
 		schemaVersion: 1,
-		format: TINYGO_RUNTIME_CLOSURE_FORMAT,
+		format: root.format as TinyGoRuntimeClosure['format'],
 		compilerSha256,
 		profile: {
 			id: TINYGO_RUNTIME_PROFILE_ID,
@@ -814,6 +861,7 @@ export function parseTinyGoRuntimeClosure(
 		},
 		compilerRT: parseRuntimeAsset(root.compilerRT, 'TinyGo runtime closure.compilerRT'),
 		wasiLibc: parseRuntimeAsset(root.wasiLibc, 'TinyGo runtime closure.wasiLibc'),
+		...(libCxx && libCxxAbi ? { libCxx, libCxxAbi } : {}),
 		extraFiles
 	};
 }

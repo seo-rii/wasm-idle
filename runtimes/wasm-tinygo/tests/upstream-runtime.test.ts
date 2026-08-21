@@ -26,6 +26,7 @@ import {
 	validateTinyGoLinkPlanV2,
 	validateTinyGoLinkPlanV3,
 	validateTinyGoLinkPlanV4,
+	validateTinyGoLinkPlanV5,
 	type TinyGoBinaryenLike
 } from '../src/upstream-runtime.ts';
 import {
@@ -422,6 +423,16 @@ function runtimeClosure(): TinyGoRuntimeClosure {
 			`runtime/${TINYGO_RUNTIME_PROFILE_ID}/wasi-libc.a`,
 			'static-archive'
 		),
+		libCxx: asset(
+			'libcxx',
+			`runtime/${TINYGO_RUNTIME_PROFILE_ID}/libcxx.a`,
+			'static-archive'
+		),
+		libCxxAbi: asset(
+			'libcxxabi',
+			`runtime/${TINYGO_RUNTIME_PROFILE_ID}/libcxxabi.a`,
+			'static-archive'
+		),
 		extraFiles: Object.fromEntries(
 			[
 				['src/runtime/asm_tinygowasm.S', 'extra-0.o', 'wasm-object'],
@@ -708,6 +719,42 @@ function validLinkPlanV4(
 			'-mllvm',
 			'-mattr=+bulk-memory,+bulk-memory-opt,+call-indirect-overlong,+mutable-globals,+nontrapping-fptoint,+sign-ext,-multivalue,-reference-types',
 			'--lto-O1'
+		]
+	};
+}
+
+function validLinkPlanV5(
+	runtime: TinyGoRuntimeClosure,
+	options: Parameters<typeof validLinkPlanV4>[1]
+) {
+	const v4 = validLinkPlanV4(runtime, options);
+	const libcxx = {
+		kind: 'libcxx',
+		path: `${TINYGO_ROOT_PATH}/${runtime.libCxx!.path}`
+	};
+	const libcxxabi = {
+		kind: 'libcxxabi',
+		path: `${TINYGO_ROOT_PATH}/${runtime.libCxxAbi!.path}`
+	};
+	const wasiIndex = v4.arguments.indexOf(`${TINYGO_ROOT_PATH}/${runtime.wasiLibc.path}`);
+	const linkArguments = [...v4.arguments];
+	linkArguments.splice(wasiIndex, 0, libcxx.path, libcxxabi.path);
+	return {
+		...v4,
+		schemaVersion: 5 as const,
+		format: 'wasm-llvm-tinygo-link-plan-v5' as const,
+		capabilities: [
+			'go-embed-objects',
+			'target-cgo-c',
+			'target-cxx-hosted-noeh',
+			'target-clang-assembly'
+		] as const,
+		arguments: linkArguments,
+		runtimeInputs: [
+			...v4.runtimeInputs.slice(0, -1),
+			libcxx,
+			libcxxabi,
+			v4.runtimeInputs.at(-1)!
 		]
 	};
 }
@@ -1523,6 +1570,37 @@ test('binds compiler, root, LLD, and the passed upstream producer receipt by SHA
 		lld
 	});
 	assert.equal(verifiedV4.compileProtocolVersion, 4);
+	const v5ReceiptValue = structuredClone(receiptValue);
+	v5ReceiptValue.schemaVersion = 5;
+	v5ReceiptValue.format = 'wasm-llvm-tinygo-browser-compiler-v5';
+	Object.assign(v5ReceiptValue.build, {
+		compileProtocol: {
+			version: 5,
+			format: 'wasm-llvm-tinygo-link-plan-v5',
+			capabilities: [
+				'go-embed-objects',
+				'target-cgo-c',
+				'target-cxx-hosted-noeh',
+				'target-clang-assembly'
+			]
+		},
+		compileOutputs: ['objects', 'link-plan.json'],
+		rootArchive: { runtimeClosureFormat: TINYGO_RUNTIME_CLOSURE_FORMAT }
+	});
+	const v5ProducerReceipt = new TextEncoder().encode(JSON.stringify(v5ReceiptValue));
+	const verifiedV5 = await verifyTinyGoUpstreamAssetSet({
+		manifest: {
+			...manifest,
+			producerReceipt: await evidence('producer-receipt.json', v5ProducerReceipt)
+		},
+		producerReceipt: v5ProducerReceipt,
+		packageGraphReceipt,
+		compiler,
+		packageGraph,
+		rootArchive,
+		lld
+	});
+	assert.equal(verifiedV5.compileProtocolVersion, 5);
 	const wrongV4Capabilities = structuredClone(v4ReceiptValue);
 	wrongV4Capabilities.build.compileProtocol.capabilities = ['go-embed-objects', 'target-cgo-c'];
 	const wrongV4Receipt = new TextEncoder().encode(JSON.stringify(wrongV4Capabilities));
@@ -1843,6 +1921,44 @@ test('binds compile protocol v4 C++, Clang assembly, dependencies, formats, and 
 	await assert.rejects(
 		validateTinyGoLinkPlanV4(tamperedDependency, runtime, validationOptions),
 		/dependency differs from workspace:native\.h/u
+	);
+
+	const hostedPlan = validLinkPlanV5(runtime, {
+		cgoSha256,
+		cSha256,
+		cxxSha256,
+		assemblySha256,
+		dependencySha256
+	});
+	assert.equal(
+		(await validateTinyGoLinkPlanV5(hostedPlan, runtime, validationOptions)).objects.length,
+		5
+	);
+	const missingLibCxxAbi = structuredClone(hostedPlan);
+	missingLibCxxAbi.runtimeInputs = missingLibCxxAbi.runtimeInputs.filter(
+		(input) => input.kind !== 'libcxxabi'
+	);
+	await assert.rejects(
+		validateTinyGoLinkPlanV5(missingLibCxxAbi, runtime, validationOptions),
+		/runtimeInputs do not match the runtime closure/u
+	);
+	const reorderedHostedRuntime = structuredClone(hostedPlan);
+	const libcxxIndex = reorderedHostedRuntime.arguments.indexOf(
+		`${TINYGO_ROOT_PATH}/${runtime.libCxx!.path}`
+	);
+	const libcxxabiIndex = reorderedHostedRuntime.arguments.indexOf(
+		`${TINYGO_ROOT_PATH}/${runtime.libCxxAbi!.path}`
+	);
+	[
+		reorderedHostedRuntime.arguments[libcxxIndex],
+		reorderedHostedRuntime.arguments[libcxxabiIndex]
+	] = [
+		reorderedHostedRuntime.arguments[libcxxabiIndex],
+		reorderedHostedRuntime.arguments[libcxxIndex]
+	];
+	await assert.rejects(
+		validateTinyGoLinkPlanV5(reorderedHostedRuntime, runtime, validationOptions),
+		/arguments differ from compile protocol v5/u
 	);
 });
 

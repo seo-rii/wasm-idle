@@ -311,11 +311,37 @@ export interface TinyGoLinkPlanV4 {
 	};
 }
 
+export interface TinyGoLinkPlanV5 {
+	schemaVersion: 5;
+	format: 'wasm-llvm-tinygo-link-plan-v5';
+	compilerSha256: string;
+	capabilities: [
+		'go-embed-objects',
+		'target-cgo-c',
+		'target-cxx-hosted-noeh',
+		'target-clang-assembly'
+	];
+	compilerPackages: string[];
+	linker: 'wasm-ld';
+	objects: TinyGoLinkPlanObject[];
+	output: 'program.unoptimized.wasm';
+	arguments: string[];
+	runtimeInputs: Array<{ kind: string; source?: string; path: string }>;
+	cgoInputs: TinyGoLinkPlanCGoInput[];
+	optimizer: {
+		tool: 'wasm-opt';
+		input: 'program.unoptimized.wasm';
+		output: 'program.wasm';
+		arguments: string[];
+	};
+}
+
 export type TinyGoLinkPlan =
 	| TinyGoLinkPlanV1
 	| TinyGoLinkPlanV2
 	| TinyGoLinkPlanV3
-	| TinyGoLinkPlanV4;
+	| TinyGoLinkPlanV4
+	| TinyGoLinkPlanV5;
 
 export interface TinyGoExpectedEmbedObject {
 	importPath: string;
@@ -470,6 +496,8 @@ async function verifyRuntimeClosureAssets(
 	for (const asset of [
 		runtime.compilerRT,
 		runtime.wasiLibc,
+		...(runtime.libCxx ? [runtime.libCxx] : []),
+		...(runtime.libCxxAbi ? [runtime.libCxxAbi] : []),
 		...Object.values(runtime.extraFiles)
 	]) {
 		const bytes = readTinyGoVfsFile(root, asset.path);
@@ -1283,9 +1311,10 @@ async function validateTinyGoLinkPlanDependencies(
 	}
 }
 
-export async function validateTinyGoLinkPlanV4(
+async function validateTinyGoLinkPlanV4OrV5(
 	value: unknown,
 	runtime: TinyGoRuntimeClosure,
+	protocolVersion: 4 | 5,
 	options: {
 		compilerSha256: string;
 		expectedEmbedObjects: readonly TinyGoExpectedEmbedObject[];
@@ -1294,26 +1323,34 @@ export async function validateTinyGoLinkPlanV4(
 		root: TinyGoWasiDirectoryContents;
 		workspace: TinyGoWasiDirectoryContents;
 	}
-): Promise<TinyGoLinkPlanV4> {
+): Promise<TinyGoLinkPlanV4 | TinyGoLinkPlanV5> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error('TinyGo link plan must be an object');
 	}
-	const plan = value as Partial<TinyGoLinkPlanV4>;
+	const plan = value as Partial<TinyGoLinkPlanV4 | TinyGoLinkPlanV5>;
+	const expectedCapabilities =
+		protocolVersion === 4
+			? [
+					'go-embed-objects',
+					'target-cgo-c',
+					'target-cxx-freestanding',
+					'target-clang-assembly'
+				]
+			: [
+					'go-embed-objects',
+					'target-cgo-c',
+					'target-cxx-hosted-noeh',
+					'target-clang-assembly'
+				];
 	if (
-		plan.schemaVersion !== 4 ||
-		plan.format !== 'wasm-llvm-tinygo-link-plan-v4' ||
+		plan.schemaVersion !== protocolVersion ||
+		plan.format !== `wasm-llvm-tinygo-link-plan-v${protocolVersion}` ||
 		plan.compilerSha256 !== options.compilerSha256 ||
-		JSON.stringify(plan.capabilities) !==
-			JSON.stringify([
-				'go-embed-objects',
-				'target-cgo-c',
-				'target-cxx-freestanding',
-				'target-clang-assembly'
-			]) ||
+		JSON.stringify(plan.capabilities) !== JSON.stringify(expectedCapabilities) ||
 		plan.linker !== 'wasm-ld' ||
 		plan.output !== 'program.unoptimized.wasm'
 	) {
-		throw new Error('TinyGo link plan identity differs from compile protocol v4');
+		throw new Error(`TinyGo link plan identity differs from compile protocol v${protocolVersion}`);
 	}
 	if (
 		!Array.isArray(plan.compilerPackages) ||
@@ -1488,15 +1525,30 @@ export async function validateTinyGoLinkPlanV4(
 			workspace: options.workspace
 		});
 	}
-	const runtimeInputs = [
+	const baseRuntimeInputs = [
 		{ kind: 'compiler-rt', path: `${TINYGO_ROOT_PATH}/${runtime.compilerRT.path}` },
 		...EXPECTED_EXTRA_SOURCES.map((source) => ({
 			kind: 'extra-file',
 			source,
 			path: `${TINYGO_ROOT_PATH}/${runtime.extraFiles[source]?.path}`
-		})),
-		{ kind: 'wasi-libc', path: `${TINYGO_ROOT_PATH}/${runtime.wasiLibc.path}` }
+		}))
 	];
+	if (protocolVersion === 5 && (!runtime.libCxx || !runtime.libCxxAbi)) {
+		throw new Error('TinyGo runtime closure lacks hosted C++ libraries');
+	}
+	const hasHostedCxx = plan.objects.some((object) => object.kind === 'target-cxx');
+	const hostedCxxInputs =
+		protocolVersion === 5 && hasHostedCxx
+			? [
+					{ kind: 'libcxx', path: `${TINYGO_ROOT_PATH}/${runtime.libCxx!.path}` },
+					{ kind: 'libcxxabi', path: `${TINYGO_ROOT_PATH}/${runtime.libCxxAbi!.path}` }
+				]
+			: [];
+	const wasiLibcInput = {
+		kind: 'wasi-libc',
+		path: `${TINYGO_ROOT_PATH}/${runtime.wasiLibc.path}`
+	};
+	const runtimeInputs = [...baseRuntimeInputs, ...hostedCxxInputs, wasiLibcInput];
 	if (JSON.stringify(plan.runtimeInputs) !== JSON.stringify(runtimeInputs)) {
 		throw new Error('TinyGo link plan runtimeInputs do not match the runtime closure');
 	}
@@ -1521,9 +1573,10 @@ export async function validateTinyGoLinkPlanV4(
 		'--strip-debug',
 		'--compress-relocations',
 		'objects/0000-program.o',
-		...runtimeInputs.slice(0, -1).map((input) => input.path),
+		...baseRuntimeInputs.map((input) => input.path),
 		...nativePaths,
-		runtimeInputs.at(-1)!.path,
+		...hostedCxxInputs.map((input) => input.path),
+		wasiLibcInput.path,
 		...embedPaths,
 		'-mllvm',
 		'-mcpu=generic',
@@ -1536,7 +1589,7 @@ export async function validateTinyGoLinkPlanV4(
 		plan.arguments.length !== expectedArguments.length ||
 		expectedArguments.some((argument, index) => plan.arguments?.[index] !== argument)
 	) {
-		throw new Error('TinyGo link plan arguments differ from compile protocol v4');
+		throw new Error(`TinyGo link plan arguments differ from compile protocol v${protocolVersion}`);
 	}
 	if (
 		plan.arguments.some((argument) => /(?:^|[=,])--thinlto-cache-dir(?:$|[=,])/u.test(argument))
@@ -1557,15 +1610,39 @@ export async function validateTinyGoLinkPlanV4(
 		]
 	};
 	if (JSON.stringify(plan.optimizer) !== JSON.stringify(expectedOptimizer)) {
-		throw new Error('TinyGo optimizer plan differs from asyncify -O1 compile protocol v4');
+		throw new Error(
+			`TinyGo optimizer plan differs from asyncify -O1 compile protocol v${protocolVersion}`
+		);
 	}
-	return plan as TinyGoLinkPlanV4;
+	return plan as TinyGoLinkPlanV4 | TinyGoLinkPlanV5;
+}
+
+export async function validateTinyGoLinkPlanV4(
+	value: unknown,
+	runtime: TinyGoRuntimeClosure,
+	options: Parameters<typeof validateTinyGoLinkPlanV4OrV5>[3]
+): Promise<TinyGoLinkPlanV4> {
+	return (await validateTinyGoLinkPlanV4OrV5(value, runtime, 4, options)) as TinyGoLinkPlanV4;
+}
+
+export async function validateTinyGoLinkPlanV5(
+	value: unknown,
+	runtime: TinyGoRuntimeClosure,
+	options: Parameters<typeof validateTinyGoLinkPlanV4OrV5>[3]
+): Promise<TinyGoLinkPlanV5> {
+	return (await validateTinyGoLinkPlanV4OrV5(value, runtime, 5, options)) as TinyGoLinkPlanV5;
 }
 
 function runtimeRequest(runtime: TinyGoRuntimeClosure) {
 	return {
 		compilerRT: `${TINYGO_ROOT_PATH}/${runtime.compilerRT.path}`,
 		wasiLibc: `${TINYGO_ROOT_PATH}/${runtime.wasiLibc.path}`,
+		...(runtime.libCxx && runtime.libCxxAbi
+			? {
+					libCxx: `${TINYGO_ROOT_PATH}/${runtime.libCxx.path}`,
+					libCxxAbi: `${TINYGO_ROOT_PATH}/${runtime.libCxxAbi.path}`
+				}
+			: {}),
 		extraFiles: Object.fromEntries(
 			Object.entries(runtime.extraFiles).map(([source, asset]) => [
 				source,
@@ -1746,7 +1823,7 @@ export async function compileUpstreamTinyGo(
 		expectedCObjects.length > MAX_NATIVE_INPUT_COUNT ||
 		expectedCXXObjects.length > MAX_NATIVE_INPUT_COUNT ||
 		expectedAssemblyObjects.length > MAX_NATIVE_INPUT_COUNT ||
-		(toolchain.compileProtocolVersion === 4 &&
+		(toolchain.compileProtocolVersion >= 4 &&
 			expectedCGoInputs.length +
 				expectedCObjects.length +
 				expectedCXXObjects.length +
@@ -1865,8 +1942,17 @@ export async function compileUpstreamTinyGo(
 			root: toolchain.root,
 			workspace
 		});
-	} else {
+	} else if (toolchain.compileProtocolVersion === 4) {
 		linkPlan = await validateTinyGoLinkPlanV4(linkPlanValue, toolchain.runtime, {
+			compilerSha256: toolchain.compilerSha256,
+			expectedEmbedObjects,
+			expectedCGoInputs,
+			expectedNativeObjects: expectedNativeObjectsV4,
+			root: toolchain.root,
+			workspace
+		});
+	} else {
+		linkPlan = await validateTinyGoLinkPlanV5(linkPlanValue, toolchain.runtime, {
 			compilerSha256: toolchain.compilerSha256,
 			expectedEmbedObjects,
 			expectedCGoInputs,
