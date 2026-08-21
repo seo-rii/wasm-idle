@@ -9,13 +9,17 @@ import {
 	type StaticWorkerDiagnosticRequest,
 	type StaticWorkerDiagnosticRunner
 } from '../static-worker-service.js';
-import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
+import {
+	PERL_MAX_ASSET_BYTES,
+	requirePerlRuntimePreflightPayload,
+	type PerlRuntimePreflightPayload,
+	type RuntimeAssetIntegrityEntry
+} from '@wasm-idle/core';
 
 export interface PerlWorkerOptions {
-	baseUrl: string;
-	workerUrl: string;
-	manifestUrl: string;
-	manifestFingerprint: string;
+	runnerWorkerBytes: Uint8Array;
+	runtimePreflight: PerlRuntimePreflightPayload;
+	maxAssetBytes: number;
 	workerReceipt: RuntimeAssetIntegrityEntry;
 }
 
@@ -86,6 +90,76 @@ const PERL_HOVER: Record<string, string> = {
 	split: 'Splits a string into a list.'
 };
 
+const PERL_CONFIG_KEYS = [
+	'maxAssetBytes',
+	'runnerWorkerBytes',
+	'runtimePreflight',
+	'workerReceipt'
+] as const;
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+	!!value && typeof value === 'object' && !Array.isArray(value);
+
+const isOwnedUint8Array = (value: unknown): value is Uint8Array =>
+	ArrayBuffer.isView(value) &&
+	Object.prototype.toString.call(value) === '[object Uint8Array]' &&
+	value.buffer instanceof ArrayBuffer &&
+	value.byteOffset === 0 &&
+	value.byteLength === value.buffer.byteLength;
+
+function validatePerlWorkerConfig(config: PerlWorkerOptions): string | null {
+	if (
+		!isPlainRecord(config) ||
+		Object.keys(config).sort().join('\n') !== PERL_CONFIG_KEYS.join('\n')
+	) {
+		return 'Perl language server requires an exact verified runtime configuration';
+	}
+	if (
+		!Number.isSafeInteger(config.maxAssetBytes) ||
+		config.maxAssetBytes <= 0 ||
+		config.maxAssetBytes > PERL_MAX_ASSET_BYTES
+	) {
+		return 'Perl language server requires a valid maxAssetBytes limit';
+	}
+	if (
+		!isPlainRecord(config.workerReceipt) ||
+		Object.keys(config.workerReceipt).sort().join('\n') !== 'bytes\nsha256' ||
+		!Number.isSafeInteger(config.workerReceipt.bytes) ||
+		(config.workerReceipt.bytes as number) <= 0 ||
+		typeof config.workerReceipt.sha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(config.workerReceipt.sha256)
+	) {
+		return 'Perl language server requires a valid runner receipt';
+	}
+	if (
+		!isOwnedUint8Array(config.runnerWorkerBytes) ||
+		config.runnerWorkerBytes.byteLength !== config.workerReceipt.bytes ||
+		config.runnerWorkerBytes.byteLength > config.maxAssetBytes
+	) {
+		return 'Perl language server requires receipt-sized runner bytes';
+	}
+	let payload: PerlRuntimePreflightPayload;
+	try {
+		payload = requirePerlRuntimePreflightPayload(config.runtimePreflight);
+	} catch {
+		return 'Perl language server requires a strict runtime preflight payload';
+	}
+	for (const bytes of [
+		payload.manifestBytes,
+		payload.javascriptBytes,
+		payload.wasmBytes,
+		payload.dataBytes
+	]) {
+		if (!isOwnedUint8Array(bytes)) {
+			return 'Perl language server requires owned runtime preflight bytes';
+		}
+		if (bytes.byteLength <= 0 || bytes.byteLength > config.maxAssetBytes) {
+			return 'Perl language server runtime preflight exceeds maxAssetBytes';
+		}
+	}
+	return null;
+}
+
 const wordAt = (text: string, position: LspPosition) => {
 	const line = text.split('\n')[position.line] || '';
 	const character = Math.max(0, Math.min(position.character, line.length));
@@ -127,36 +201,30 @@ export function createPerlWorkerService(
 		timeoutMessage: 'Perl diagnostics timed out',
 		runtime: 'perl',
 		runDiagnostics,
-		validateConfig: (config) => {
-			if (!config.baseUrl || !config.workerUrl) return null;
-			if (!config.manifestUrl || !/^[a-f0-9]{64}$/u.test(config.manifestFingerprint)) {
-				return 'Perl language server requires a manifest URL and fingerprint';
-			}
-			if (
-				!config.workerReceipt ||
-				!Number.isSafeInteger(config.workerReceipt.bytes) ||
-				(config.workerReceipt.bytes as number) <= 0 ||
-				typeof config.workerReceipt.sha256 !== 'string' ||
-				!/^[a-f0-9]{64}$/u.test(config.workerReceipt.sha256)
-			) {
-				return 'Perl language server requires a valid worker receipt';
-			}
-			return null;
-		},
+		validateConfig: validatePerlWorkerConfig,
 		cacheKeyParts: (config) => [
-			config.baseUrl,
-			config.workerUrl,
-			config.manifestUrl,
-			config.manifestFingerprint,
+			config.runtimePreflight.protocol,
+			String(config.runtimePreflight.protocolVersion),
+			config.runtimePreflight.profileId,
+			config.runtimePreflight.artifactRevision,
+			config.runtimePreflight.webperlRevision,
+			config.runtimePreflight.perlRevision,
+			config.runtimePreflight.emscriptenRevision,
+			config.runtimePreflight.manifestFingerprint,
+			String(config.runtimePreflight.manifestBytes.byteLength),
+			String(config.runtimePreflight.javascriptBytes.byteLength),
+			String(config.runtimePreflight.wasmBytes.byteLength),
+			String(config.runtimePreflight.dataBytes.byteLength),
 			String(config.workerReceipt.bytes),
-			config.workerReceipt.sha256
+			config.workerReceipt.sha256,
+			String(config.maxAssetBytes)
 		],
 		createMessage: (request) => ({
-			baseUrl: request.baseUrl,
-			manifestUrl: request.manifestUrl,
-			manifestFingerprint: request.manifestFingerprint,
-			maxAssetBytes: 32 * 1024 * 1024,
+			runtimePreflight: request.runtimePreflight,
+			maxAssetBytes: request.maxAssetBytes,
 			code: request.code,
+			args: [],
+			stdin: '',
 			activePath: request.activePath,
 			diagnose: true,
 			log: false

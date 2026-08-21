@@ -34,12 +34,14 @@ describe('runRuntimeWorkerDiagnostics', () => {
 		const workers: Array<{
 			url: string | URL;
 			messages: unknown[];
+			messageArgumentCounts: number[];
 			terminated: boolean;
 		}> = [];
 		class FakeWorker {
 			onerror: ((event: ErrorEvent) => void) | null = null;
 			onmessage: ((event: MessageEvent) => void) | null = null;
 			messages: unknown[] = [];
+			messageArgumentCounts: number[] = [];
 			terminated = false;
 
 			constructor(readonly url: string | URL) {
@@ -47,8 +49,9 @@ describe('runRuntimeWorkerDiagnostics', () => {
 				workers.push(this);
 			}
 
-			postMessage(message: unknown) {
+			postMessage(message: unknown, ...additional: unknown[]) {
 				this.messages.push(message);
+				this.messageArgumentCounts.push(1 + additional.length);
 				this.onmessage?.({ data: { output: 'first ' } } as MessageEvent);
 				this.onmessage?.({ data: { output: 'second' } } as MessageEvent);
 				this.onmessage?.({ data: { results: true } } as MessageEvent);
@@ -60,7 +63,8 @@ describe('runRuntimeWorkerDiagnostics', () => {
 		}
 		vi.stubGlobal('Worker', FakeWorker);
 
-		const message = { code: 'main :- true.', diagnose: true };
+		const runtimeBytes = Uint8Array.of(1, 2, 3);
+		const message = { code: 'main :- true.', diagnose: true, runtimeBytes };
 		const result = await runRuntimeWorkerDiagnostics({
 			runtime: 'prolog',
 			workerReceipt: receipt,
@@ -79,7 +83,13 @@ describe('runRuntimeWorkerDiagnostics', () => {
 			revokeObjectUrl.mock.invocationCallOrder[0]
 		);
 		expect(revokeObjectUrl).toHaveBeenCalledWith('blob:verified-prolog-worker');
-		expect(workers[0]).toMatchObject({ messages: [message], terminated: true });
+		expect(workers[0]).toMatchObject({
+			messages: [message],
+			messageArgumentCounts: [1],
+			terminated: true
+		});
+		expect(runtimeBytes).toEqual(Uint8Array.of(1, 2, 3));
+		expect(runtimeBytes.buffer.byteLength).toBe(3);
 		expect(result).toEqual({ error: undefined, output: 'first second' });
 	});
 

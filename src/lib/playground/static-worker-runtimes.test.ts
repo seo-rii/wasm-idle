@@ -1,6 +1,9 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { computePerlRuntimeFingerprint } from '../../../scripts/sync-wasm-perl.mjs';
 
 const workerInstances: MockWorker[] = [];
 const workerBootstrapBlobs = new Map<string, Blob>();
@@ -149,7 +152,7 @@ import { WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
 import { WASM_JANET_ASSET_VERSION, WASM_JANET_RUNNER_RECEIPT } from './wasmJanetVersion';
 import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJuliaVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
-import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
+import { WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
 import {
 	WASM_PROLOG_ASSET_VERSION,
 	WASM_PROLOG_RUNNER_RECEIPT,
@@ -285,6 +288,165 @@ const tclGlueSource = readFileSync(resolve(process.cwd(), 'static/wasm-tcl/tcl/w
 const tclWasmGzipBytes = Uint8Array.from(
 	readFileSync(resolve(process.cwd(), 'static/wasm-tcl/tcl/wacl.wasm.gz.bin'))
 );
+const perlTestSha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+const perlTestArtifactRevision = '6f2173d29a2c2e3536e1de75ff5d291ae96ab348';
+const perlTestWebperlRevision = perlTestArtifactRevision;
+const perlTestPerlRevision = 'e70d909feb796ec99d5e91de5d1635d4526ec131';
+const perlTestEmscriptenRevision = '69ab40586822209758165df170e9fc8b81e05608';
+const perlTestJavaScriptBytes = new TextEncoder().encode(
+	'var Module=typeof Module!=="undefined"?Module:{};Module["getPreloadedPackage"];Module["wasmBinary"];'
+);
+const perlTestWasmBytes = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
+const perlTestDataBytes = new TextEncoder().encode('fixture WebPerl data');
+const perlTestJavaScriptGzipBytes = Uint8Array.from(gzipSync(perlTestJavaScriptBytes));
+const perlTestWasmGzipBytes = Uint8Array.from(gzipSync(perlTestWasmBytes));
+const perlTestDataGzipBytes = Uint8Array.from(gzipSync(perlTestDataBytes));
+const perlTestManifestWithoutFingerprint = {
+	format: 'wasm-perl-runtime-manifest-v2',
+	runtime: 'webperl',
+	profileId: 'webperl-v0.09-beta-perl-5.28.1-emscripten-1.38.28',
+	licenseExpression: 'Artistic-1.0-Perl OR GPL-1.0-or-later',
+	artifact: {
+		kind: 'opaque-prebuilt',
+		repository: 'https://github.com/haukex/webperl.git',
+		revision: perlTestArtifactRevision,
+		tag: 'v0.09-beta',
+		doi: '10.5281/zenodo.2582586',
+		path: 'webperl_prebuilt_v0.09-beta.zip',
+		url: 'https://zenodo.org/api/records/2582586/files/webperl_prebuilt_v0.09-beta.zip/content',
+		size: 3_936_557,
+		sha256: '5f441249217e90ab378c666f473d4206ab4f44907f6bb0aa8d70834bc38c40dc'
+	},
+	components: {
+		webperl: {
+			version: 'v0.09-beta',
+			repository: 'https://github.com/haukex/webperl.git',
+			revision: perlTestWebperlRevision,
+			verifiedBuildInput: false,
+			evidence: 'release tag and opaque prebuilt archive'
+		},
+		perl: {
+			version: '5.28.1',
+			repository: 'https://github.com/haukex/emperl5.git',
+			revision: perlTestPerlRevision,
+			verifiedBuildInput: false,
+			evidence: 'embedded runtime version string and versioned WebPerl build configuration'
+		},
+		emscripten: {
+			version: '1.38.28',
+			repository: 'https://github.com/emscripten-core/emscripten.git',
+			revision: perlTestEmscriptenRevision,
+			verifiedBuildInput: false,
+			evidence: 'versioned WebPerl build configuration'
+		},
+		cpanExtensions: {
+			modules: ['Cpanel::JSON::XS', 'Devel::StackTrace', 'Future'],
+			verifiedBuildInput: false,
+			evidence: 'versioned WebPerl build configuration without transitive artifact locks'
+		}
+	},
+	licenses: [
+		{
+			path: 'licenses/LICENSE_artistic.txt',
+			spdx: 'Artistic-1.0-Perl',
+			size: 1,
+			sha256: perlTestSha256(new TextEncoder().encode('a'))
+		},
+		{
+			path: 'licenses/LICENSE_gpl.txt',
+			spdx: 'GPL-1.0-or-later',
+			size: 1,
+			sha256: perlTestSha256(new TextEncoder().encode('g'))
+		}
+	],
+	metadata: {
+		path: 'runtime-build.json',
+		mediaType: 'application/json',
+		size: 2,
+		sha256: perlTestSha256(new TextEncoder().encode('{}'))
+	},
+	assets: [
+		{
+			path: 'emperl.js',
+			mediaType: 'text/javascript',
+			size: perlTestJavaScriptBytes.byteLength,
+			sha256: perlTestSha256(perlTestJavaScriptBytes)
+		},
+		{
+			path: 'emperl.wasm',
+			mediaType: 'application/wasm',
+			size: perlTestWasmBytes.byteLength,
+			sha256: perlTestSha256(perlTestWasmBytes)
+		},
+		{
+			path: 'emperl.data',
+			mediaType: 'application/octet-stream',
+			size: perlTestDataBytes.byteLength,
+			sha256: perlTestSha256(perlTestDataBytes)
+		}
+	],
+	storage: [
+		{
+			path: 'emperl.js.gz.bin',
+			logicalPath: 'emperl.js',
+			encoding: 'gzip' as const,
+			size: perlTestJavaScriptGzipBytes.byteLength,
+			sha256: perlTestSha256(perlTestJavaScriptGzipBytes)
+		},
+		{
+			path: 'emperl.wasm.gz.bin',
+			logicalPath: 'emperl.wasm',
+			encoding: 'gzip' as const,
+			size: perlTestWasmGzipBytes.byteLength,
+			sha256: perlTestSha256(perlTestWasmGzipBytes)
+		},
+		{
+			path: 'emperl.data.gz.bin',
+			logicalPath: 'emperl.data',
+			encoding: 'gzip' as const,
+			size: perlTestDataGzipBytes.byteLength,
+			sha256: perlTestSha256(perlTestDataGzipBytes)
+		}
+	]
+};
+const perlTestManifestFingerprint = computePerlRuntimeFingerprint(
+	perlTestManifestWithoutFingerprint
+);
+const perlTestManifestSource = JSON.stringify({
+	...perlTestManifestWithoutFingerprint,
+	fingerprint: perlTestManifestFingerprint
+});
+const perlTestManifestBytes = new TextEncoder().encode(perlTestManifestSource);
+const perlTestProfile = {
+	profileId: perlTestManifestWithoutFingerprint.profileId,
+	artifactRevision: perlTestArtifactRevision,
+	webperlRevision: perlTestWebperlRevision,
+	perlRevision: perlTestPerlRevision,
+	emscriptenRevision: perlTestEmscriptenRevision,
+	manifestFingerprint: perlTestManifestFingerprint,
+	manifestReceipt: {
+		bytes: perlTestManifestBytes.byteLength,
+		sha256: perlTestSha256(perlTestManifestBytes)
+	},
+	javascriptReceipt: {
+		bytes: perlTestJavaScriptGzipBytes.byteLength,
+		sha256: perlTestSha256(perlTestJavaScriptGzipBytes),
+		uncompressedBytes: perlTestJavaScriptBytes.byteLength,
+		uncompressedSha256: perlTestSha256(perlTestJavaScriptBytes)
+	},
+	wasmReceipt: {
+		bytes: perlTestWasmGzipBytes.byteLength,
+		sha256: perlTestSha256(perlTestWasmGzipBytes),
+		uncompressedBytes: perlTestWasmBytes.byteLength,
+		uncompressedSha256: perlTestSha256(perlTestWasmBytes)
+	},
+	dataReceipt: {
+		bytes: perlTestDataGzipBytes.byteLength,
+		sha256: perlTestSha256(perlTestDataGzipBytes),
+		uncompressedBytes: perlTestDataBytes.byteLength,
+		uncompressedSha256: perlTestSha256(perlTestDataBytes)
+	}
+} as const;
 const clojureScriptTestProfile = {
 	profileId: 'clojurescript-1.12.134-test',
 	sourceRevision: 'r1.12.134',
@@ -322,6 +484,42 @@ function clojureScriptTestRuntimeAssets(workerUrl = '/wasm-clojurescript/runner-
 function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 	const inputUrl = String(input);
 	runtimeLifecycleEvents.push(`fetch:${inputUrl}`);
+	if (inputUrl.includes('/wasm-perl/runtime-manifest.v2.json')) {
+		return new Response(perlTestManifestSource, {
+			status: 200,
+			headers: {
+				'content-length': String(perlTestManifestBytes.byteLength),
+				'content-type': 'application/json'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-perl/emperl.js.gz.bin')) {
+		return new Response(Uint8Array.from(perlTestJavaScriptGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(perlTestJavaScriptGzipBytes.byteLength),
+				'content-type': 'application/octet-stream'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-perl/emperl.wasm.gz.bin')) {
+		return new Response(Uint8Array.from(perlTestWasmGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(perlTestWasmGzipBytes.byteLength),
+				'content-type': 'application/octet-stream'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-perl/emperl.data.gz.bin')) {
+		return new Response(Uint8Array.from(perlTestDataGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(perlTestDataGzipBytes.byteLength),
+				'content-type': 'application/octet-stream'
+			}
+		});
+	}
 	if (inputUrl.includes('/wasm-prolog/runtime-manifest.v2.json')) {
 		return new Response(prologManifestSource, {
 			status: 200,
@@ -1055,17 +1253,21 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('loads Perl runtime urls and forwards stdin to the WebPerl worker', async () => {
+	it('preflights all WebPerl executable bytes before worker creation and reuses a prepared worker', async () => {
 		const sandbox = new Perl();
-		await sandbox.load({
+		const runtimeAssets = {
 			perl: {
 				baseUrl: '/wasm-perl/',
-				workerUrl: '/wasm-perl/runner-worker.js?v=test',
-				manifestUrl: '/wasm-perl/runtime-manifest.v2.json?v=test',
-				manifestFingerprint: WASM_PERL_ASSET_VERSION,
+				workerUrl: `/wasm-perl/runner-worker.js?v=${WASM_PERL_RUNNER_RECEIPT.sha256}`,
+				manifestUrl: `/wasm-perl/runtime-manifest.v2.json?v=${perlTestManifestFingerprint}`,
+				...perlTestProfile,
 				workerReceipt: WASM_PERL_RUNNER_RECEIPT
 			}
-		});
+		};
+		await sandbox.load(runtimeAssets);
+		const warmFetchCount = vi.mocked(fetch).mock.calls.length;
+		await sandbox.load(runtimeAssets);
+		expect(fetch).toHaveBeenCalledTimes(warmFetchCount);
 		await expect(
 			sandbox.run('my $line = <STDIN>; print $line;', false, true, undefined, [], {
 				stdin: 'ok\n'
@@ -1074,18 +1276,70 @@ describe('static worker backed language sandboxes', () => {
 
 		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/wasm-perl/runner-worker.js?v=test',
+			`http://localhost:3000/wasm-perl/runner-worker.js?v=${WASM_PERL_RUNNER_RECEIPT.sha256}`,
 			perlWorkerSource
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-perl/',
-				manifestUrl: 'http://localhost:3000/wasm-perl/runtime-manifest.v2.json?v=test',
-				manifestFingerprint: WASM_PERL_ASSET_VERSION,
+				manifestUrl: `http://localhost:3000/wasm-perl/runtime-manifest.v2.json?v=${perlTestManifestFingerprint}`,
+				manifestFingerprint: perlTestManifestFingerprint,
+				runtimePreflight: expect.objectContaining({
+					protocol: 'wasm-idle-perl-preflight',
+					protocolVersion: 1,
+					profileId: perlTestProfile.profileId,
+					artifactRevision: perlTestProfile.artifactRevision,
+					webperlRevision: perlTestProfile.webperlRevision,
+					perlRevision: perlTestProfile.perlRevision,
+					emscriptenRevision: perlTestProfile.emscriptenRevision,
+					manifestFingerprint: perlTestManifestFingerprint
+				}),
 				stdin: 'ok\n',
 				activePath: 'main.pl'
 			})
 		);
+		const runMessage = workerInstances[0].postMessage.mock.calls[0][0];
+		expect(Array.from(runMessage.runtimePreflight.javascriptBytes)).toEqual(
+			Array.from(perlTestJavaScriptBytes)
+		);
+		expect(Array.from(runMessage.runtimePreflight.wasmBytes)).toEqual(
+			Array.from(perlTestWasmBytes)
+		);
+		expect(Array.from(runMessage.runtimePreflight.dataBytes)).toEqual(
+			Array.from(perlTestDataBytes)
+		);
+		const workerEventIndex = runtimeLifecycleEvents.findIndex((event) =>
+			event.startsWith('worker:')
+		);
+		for (const assetPath of [
+			'runtime-manifest.v2.json',
+			'emperl.js.gz.bin',
+			'emperl.wasm.gz.bin',
+			'emperl.data.gz.bin',
+			'runner-worker.js'
+		]) {
+			const fetchEventIndex = runtimeLifecycleEvents.findIndex(
+				(event) => event.startsWith('fetch:') && event.includes(assetPath)
+			);
+			expect(fetchEventIndex).toBeGreaterThanOrEqual(0);
+			expect(fetchEventIndex).toBeLessThan(workerEventIndex);
+		}
+		expect(
+			runtimeLifecycleEvents.some(
+				(event) =>
+					event.startsWith('fetch:') &&
+					['emperl.js.gz', 'emperl.wasm.gz', 'emperl.data.gz'].some((legacyPath) =>
+						new URL(event.slice('fetch:'.length)).pathname.endsWith(`/${legacyPath}`)
+					)
+			)
+		).toBe(false);
+		expect(
+			runtimeLifecycleEvents.filter(
+				(event) => event.startsWith('fetch:') && event.includes('/wasm-perl/')
+			)
+		).toHaveLength(5);
+		expect(workerInstances).toHaveLength(1);
+		expect(sandbox.workerReceipt).toEqual(WASM_PERL_RUNNER_RECEIPT);
 	});
 
 	it('requires explicit integrity pins for custom Perl runtime URLs', async () => {
@@ -1104,6 +1358,37 @@ describe('static worker backed language sandboxes', () => {
 			runtimeId: 'PERL'
 		});
 		expect(fetch).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects a corrupt WebPerl runtime asset before loading the runner or creating a worker', async () => {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-perl/emperl.data.gz.bin')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			return new Response(Uint8Array.from([...perlTestDataGzipBytes, 0]), {
+				status: 200,
+				headers: { 'content-type': 'application/octet-stream' }
+			});
+		});
+		const sandbox = new Perl();
+
+		await expect(
+			sandbox.load({
+				perl: {
+					baseUrl: '/wasm-perl/',
+					workerUrl: `/wasm-perl/runner-worker.js?v=${WASM_PERL_RUNNER_RECEIPT.sha256}`,
+					manifestUrl: `/wasm-perl/runtime-manifest.v2.json?v=${perlTestManifestFingerprint}`,
+					...perlTestProfile,
+					workerReceipt: WASM_PERL_RUNNER_RECEIPT
+				}
+			})
+		).rejects.toMatchObject({ code: 'asset-integrity', runtimeId: 'PERL' });
+		expect(
+			vi
+				.mocked(fetch)
+				.mock.calls.some(([input]) => String(input).includes('/wasm-perl/runner-worker.js'))
+		).toBe(false);
 		expect(workerInstances).toHaveLength(0);
 	});
 

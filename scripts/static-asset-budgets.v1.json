@@ -1,7 +1,7 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 740000000,
+		"maxBytes": 746000000,
 		"maxFiles": 1850
 	},
 	"directories": {
@@ -41,7 +41,7 @@
 			"optional": true
 		},
 		"wasm-pascal": { "maxBytes": 800000, "maxFiles": 10 },
-		"wasm-perl": { "maxBytes": 4500000, "maxFiles": 10 },
+		"wasm-perl": { "maxBytes": 8000000, "maxFiles": 12 },
 		"wasm-php": { "maxBytes": 24000000, "maxFiles": 15 },
 		"wasm-prolog": { "maxBytes": 5000000, "maxFiles": 10 },
 		"wasm-ruby": { "maxBytes": 11000000, "maxFiles": 12 },

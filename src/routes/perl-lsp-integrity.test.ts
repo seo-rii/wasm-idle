@@ -4,16 +4,21 @@ import pageSource from './+page.svelte?raw';
 import monacoSource from './Monaco.svelte?raw';
 
 describe('Perl LSP integrity wiring', () => {
-	it('passes the application manifest and worker pins through Monaco to the LSP host', () => {
-		for (const field of ['manifestUrl', 'manifestFingerprint', 'workerReceipt']) {
-			const prop = `perlLsp${field[0].toUpperCase()}${field.slice(1)}`;
-			expect(pageSource).toContain(`runtimeAssets.perl?.${field}`);
-			expect(pageSource).toContain(`{${prop}}`);
-			expect(monacoSource).toContain(`${prop}?:`);
-			expect(monacoSource).toContain(`${field}: ${prop}`);
+	it('passes one complete application trust bundle through Monaco without field projection', () => {
+		expect(pageSource).toContain('$derived(perlLspEnabled ? runtimeAssets.perl : undefined)');
+		expect(pageSource).toContain('{perlLspRuntime}');
+		expect(monacoSource).toContain('type PerlLspRuntimeConfig = NonNullable<');
+		expect(monacoSource).toContain('perlLspRuntime?: PerlLspRuntimeConfig');
+		expect(monacoSource).toContain('JSON.stringify(perlLspRuntime)');
+		expect(monacoSource).toContain('const runtime = perlLspRuntime');
+		expect(monacoSource).toContain('perl: runtime');
+		for (const legacyProjection of [
+			'perlLspManifestFingerprint',
+			'perlLspWorkerReceipt',
+			'perlLspManifestUrl'
+		]) {
+			expect(pageSource).not.toContain(legacyProjection);
+			expect(monacoSource).not.toContain(legacyProjection);
 		}
-		expect(monacoSource).toContain('JSON.stringify(perlLspWorkerReceipt)');
-		expect(monacoSource).toContain('!!perlLspManifestFingerprint');
-		expect(monacoSource).toContain('!!perlLspWorkerReceipt');
 	});
 });

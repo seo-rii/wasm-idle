@@ -142,7 +142,11 @@ import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJulia
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
-import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
+import {
+	WASM_PERL_ASSET_VERSION,
+	WASM_PERL_RUNNER_RECEIPT,
+	WASM_PERL_RUNTIME_PROFILE
+} from './wasmPerlVersion';
 import {
 	WASM_PROLOG_ASSET_VERSION,
 	WASM_PROLOG_RUNNER_RECEIPT,
@@ -1168,6 +1172,8 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/absproxy/5173/wasm-perl/runner-worker.js',
 			manifestUrl: 'https://example.com/absproxy/5173/wasm-perl/runtime-manifest.v2.json',
 			manifestFingerprint: WASM_PERL_ASSET_VERSION,
+			preflightKey: JSON.stringify(WASM_PERL_RUNTIME_PROFILE),
+			preflightProfile: WASM_PERL_RUNTIME_PROFILE,
 			workerReceipt: WASM_PERL_RUNNER_RECEIPT
 		});
 		expect(resolveTclRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
@@ -1420,6 +1426,10 @@ describe('runtime asset config resolution', () => {
 			...WASM_TCL_RUNTIME_PROFILE,
 			manifestFingerprint: customFingerprint
 		};
+		const customPerlProfile = {
+			...WASM_PERL_RUNTIME_PROFILE,
+			manifestFingerprint: customFingerprint
+		};
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = 'https://env.example.com/prolog/';
 		publicEnv.PUBLIC_WASM_GLEAM_BASE_URL = 'https://env.example.com/gleam/';
@@ -1501,7 +1511,7 @@ describe('runtime asset config resolution', () => {
 						baseUrl: '/runtime/perl',
 						workerUrl: '/runtime/perl/worker.js',
 						manifestUrl: '/runtime/perl/manifest.json',
-						manifestFingerprint: customFingerprint,
+						...customPerlProfile,
 						workerReceipt: customWorkerReceipt
 					}
 				},
@@ -1512,6 +1522,8 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/runtime/perl/worker.js',
 			manifestUrl: 'https://example.com/runtime/perl/manifest.json',
 			manifestFingerprint: customFingerprint,
+			preflightKey: JSON.stringify(customPerlProfile),
+			preflightProfile: customPerlProfile,
 			workerReceipt: customWorkerReceipt
 		});
 		expect(
@@ -1823,7 +1835,7 @@ describe('runtime asset config resolution', () => {
 		}
 	});
 
-	it('accepts custom Perl URL environment overrides only with complete integrity pins', async () => {
+	it('rejects custom Perl URL environment overrides without a complete profile bundle', async () => {
 		const manifestFingerprint = 'e'.repeat(64);
 		const workerSha256 = 'f'.repeat(64);
 		publicEnv.PUBLIC_WASM_PERL_BASE_URL = 'https://runtime.example.com/perl/';
@@ -1835,13 +1847,9 @@ describe('runtime asset config resolution', () => {
 		vi.resetModules();
 		try {
 			const { resolvePerlRuntimeAssetConfig } = await import('./assets');
-			expect(resolvePerlRuntimeAssetConfig(undefined, 'https://example.com/app')).toEqual({
-				baseUrl: 'https://runtime.example.com/perl/',
-				workerUrl: 'https://runtime.example.com/perl/runner.js',
-				manifestUrl: 'https://runtime.example.com/perl/manifest.json',
-				manifestFingerprint,
-				workerReceipt: { bytes: 5432, sha256: workerSha256 }
-			});
+			expect(() =>
+				resolvePerlRuntimeAssetConfig(undefined, 'https://example.com/app')
+			).toThrow('WebPerl runtime preflight identity is invalid');
 		} finally {
 			publicEnv.PUBLIC_WASM_PERL_BASE_URL = '';
 			publicEnv.PUBLIC_WASM_PERL_WORKER_URL = '';

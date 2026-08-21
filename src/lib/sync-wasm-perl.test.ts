@@ -93,8 +93,11 @@ describe('syncWasmPerlAssets', () => {
 
 		expect(await listFiles(fixture.targetDir)).toEqual([
 			'emperl.data.gz',
+			'emperl.data.gz.bin',
 			'emperl.js.gz',
+			'emperl.js.gz.bin',
 			'emperl.wasm.gz',
+			'emperl.wasm.gz.bin',
 			'licenses/LICENSE_artistic.txt',
 			'licenses/LICENSE_gpl.txt',
 			'runner-worker.js',
@@ -112,6 +115,11 @@ describe('syncWasmPerlAssets', () => {
 			artifact: { kind: 'opaque-prebuilt', doi: '10.5281/zenodo.2582586' }
 		});
 		expect(computePerlRuntimeFingerprint(manifest)).toBe(result.fingerprint);
+		expect(manifest.storage.map((entry: { path: string }) => entry.path).sort()).toEqual([
+			'emperl.data.gz.bin',
+			'emperl.js.gz.bin',
+			'emperl.wasm.gz.bin'
+		]);
 		for (const storage of manifest.storage) {
 			const stored = await readFile(path.join(fixture.targetDir, storage.path));
 			expect(stored.byteLength).toBe(storage.size);
@@ -122,16 +130,59 @@ describe('syncWasmPerlAssets', () => {
 			);
 			expect(logical.byteLength).toBe(receipt.size);
 			expect(sha256(logical)).toBe(receipt.sha256);
+			const legacyPath = storage.path.replace(/\.bin$/u, '');
+			expect(await readFile(path.join(fixture.targetDir, legacyPath))).toEqual(stored);
 		}
 		const worker = await readFile(path.join(fixture.targetDir, 'runner-worker.js'));
 		expect(result.workerReceipt).toEqual({
 			bytes: worker.byteLength,
 			sha256: sha256(worker)
 		});
-		for (const modulePath of [fixture.versionModulePath, fixture.lspVersionModulePath]) {
-			const source = await readFile(modulePath, 'utf8');
+		const workerSource = worker.toString('utf8');
+		expect(workerSource).toContain(`manifestFingerprint: '${result.fingerprint}'`);
+		expect(workerSource).not.toContain('__WASM_IDLE_PERL_MANIFEST_FINGERPRINT__');
+		const manifestBytes = await readFile(
+			path.join(fixture.targetDir, 'runtime-manifest.v2.json')
+		);
+		expect(result.runtimeProfile.manifestReceipt).toEqual({
+			bytes: manifestBytes.byteLength,
+			sha256: sha256(manifestBytes)
+		});
+		for (const [logicalPath, receiptName] of [
+			['emperl.js', 'javascriptReceipt'],
+			['emperl.wasm', 'wasmReceipt'],
+			['emperl.data', 'dataReceipt']
+		] as const) {
+			const logicalReceipt = manifest.assets.find(
+				(candidate: { path: string }) => candidate.path === logicalPath
+			);
+			const storageReceipt = manifest.storage.find(
+				(candidate: { logicalPath: string }) => candidate.logicalPath === logicalPath
+			);
+			expect(result.runtimeProfile[receiptName]).toEqual({
+				bytes: storageReceipt.size,
+				sha256: storageReceipt.sha256,
+				uncompressedBytes: logicalReceipt.size,
+				uncompressedSha256: logicalReceipt.sha256
+			});
+		}
+		const appModuleSource = await readFile(fixture.versionModulePath, 'utf8');
+		expect(appModuleSource).toContain('export const WASM_PERL_RUNTIME_PROFILE =');
+		expect(appModuleSource).toContain('export const WASM_PERL_RUNTIME_BUNDLE =');
+		expect(appModuleSource).toContain(
+			'export const WASM_PERL_ASSET_VERSION = WASM_PERL_RUNTIME_PROFILE.manifestFingerprint;'
+		);
+		const lspModuleSource = await readFile(fixture.lspVersionModulePath, 'utf8');
+		expect(lspModuleSource).toContain('export const BUNDLED_PERL_RUNTIME_PROFILE =');
+		expect(lspModuleSource).toContain('export const BUNDLED_PERL_RUNTIME_BUNDLE =');
+		expect(lspModuleSource).toContain('BUNDLED_PERL_RUNTIME_PROFILE.manifestFingerprint');
+		for (const source of [appModuleSource, lspModuleSource]) {
 			expect(source).toContain(result.fingerprint);
 			expect(source).toContain(result.workerReceipt.sha256);
+			expect(source).toContain(result.runtimeProfile.artifactRevision);
+			expect(source).toContain(result.runtimeProfile.webperlRevision);
+			expect(source).toContain(result.runtimeProfile.perlRevision);
+			expect(source).toContain(result.runtimeProfile.emscriptenRevision);
 		}
 
 		const second = await createFixture();
@@ -186,6 +237,13 @@ describe('syncWasmPerlAssets', () => {
 			'license mapping drift',
 			(lock) =>
 				(lock.licenses[0].archiveEntry = `${'webperl_prebuilt_v0.09-beta'}/emperl.js`),
+			'license metadata'
+		],
+		[
+			'license source URL drift',
+			(lock) =>
+				(lock.licenses[0].sourceUrl =
+					'https://raw.githubusercontent.com/haukex/webperl/main/LICENSE_artistic.txt'),
 			'license metadata'
 		]
 	])('rejects %s in the input lock', async (_label, mutate, error) => {
@@ -251,9 +309,9 @@ describe('syncWasmPerlAssets', () => {
 			}
 		});
 
-		expect(gunzipSync(await readFile(path.join(fixture.targetDir, 'emperl.js.gz')))).toEqual(
-			original
-		);
+		expect(
+			gunzipSync(await readFile(path.join(fixture.targetDir, 'emperl.js.gz.bin')))
+		).toEqual(original);
 	});
 
 	it('restores all previous outputs when the final publication fails', async () => {

@@ -6,9 +6,17 @@ import { Worker as NodeWorker } from 'node:worker_threads';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 
-import { computePerlRuntimeFingerprint } from '../../../scripts/sync-wasm-perl.mjs';
+import {
+	computePerlRuntimeFingerprint,
+	PERL_FINGERPRINT_DOMAIN,
+	PERL_MANIFEST_FORMAT
+} from '../../../scripts/sync-wasm-perl.mjs';
 import { StaticStdinRingHost } from './staticStdinRing';
-import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
+import {
+	WASM_PERL_ASSET_VERSION,
+	WASM_PERL_RUNNER_RECEIPT,
+	WASM_PERL_RUNTIME_PROFILE
+} from './wasmPerlVersion';
 
 const workerSourceUrl = new URL(
 	'../../../scripts/runtime-workers/wasm-perl-runner-worker.js',
@@ -16,14 +24,16 @@ const workerSourceUrl = new URL(
 );
 const staticWorkerUrl = new URL('../../../static/wasm-perl/runner-worker.js', import.meta.url);
 const staticRuntimeUrl = new URL('../../../static/wasm-perl/', import.meta.url);
-const deployedManifest = JSON.parse(
-	await readFile(new URL('runtime-manifest.v2.json', staticRuntimeUrl), 'utf8')
-);
-const fixtureBaseUrl = 'https://runtime.example/wasm-perl/';
-const fixtureManifestUrl = `${fixtureBaseUrl}runtime-manifest.v2.json?v=fixture`;
+const deployedManifestBytes = await readFile(new URL('runtime-manifest.v2.json', staticRuntimeUrl));
+const deployedManifest = JSON.parse(deployedManifestBytes.toString('utf8'));
+const sha256 = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
+
 const fixtureLogicalBytes = {
 	'emperl.data': Buffer.from('fixture WebPerl data\n', 'utf8'),
-	'emperl.js': Buffer.from('/* fixture WebPerl glue */\n', 'utf8'),
+	'emperl.js': Buffer.from(
+		'/* var Module=typeof Module!=="undefined"?Module:{}; Module["getPreloadedPackage"]; Module["wasmBinary"]; */\n',
+		'utf8'
+	),
 	'emperl.wasm': Buffer.from([0, 97, 115, 109, 1, 0, 0, 0])
 };
 const fixtureMediaTypes = {
@@ -31,17 +41,19 @@ const fixtureMediaTypes = {
 	'emperl.js': 'text/javascript',
 	'emperl.wasm': 'application/wasm'
 };
-const fixtureStorageBytes = {
-	'emperl.data.gz': gzipSync(fixtureLogicalBytes['emperl.data'], { level: 9 }),
-	'emperl.js.gz': gzipSync(fixtureLogicalBytes['emperl.js'], { level: 9 }),
-	'emperl.wasm.gz': gzipSync(fixtureLogicalBytes['emperl.wasm'], { level: 9 })
-};
 const fixtureStorageMetadata = {
-	'emperl.data.gz': { logicalPath: 'emperl.data', encoding: 'gzip' as const },
-	'emperl.js.gz': { logicalPath: 'emperl.js', encoding: 'gzip' as const },
-	'emperl.wasm.gz': { logicalPath: 'emperl.wasm', encoding: 'gzip' as const }
-};
-const sha256 = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
+	'emperl.data.gz.bin': { logicalPath: 'emperl.data', encoding: 'gzip' },
+	'emperl.js.gz.bin': { logicalPath: 'emperl.js', encoding: 'gzip' },
+	'emperl.wasm.gz.bin': { logicalPath: 'emperl.wasm', encoding: 'gzip' }
+} as const;
+const fixtureStorageBytes = Object.fromEntries(
+	Object.entries(fixtureStorageMetadata).map(([storagePath, metadata]) => [
+		storagePath,
+		gzipSync(fixtureLogicalBytes[metadata.logicalPath as keyof typeof fixtureLogicalBytes], {
+			level: 9
+		})
+	])
+);
 const fixtureAssets = Object.entries(fixtureLogicalBytes).map(([path, bytes]) => ({
 	path,
 	mediaType: fixtureMediaTypes[path as keyof typeof fixtureMediaTypes],
@@ -70,253 +82,155 @@ const fixtureManifest = {
 	assets: fixtureAssets,
 	storage: fixtureStorage
 };
-const overflowDataBytes = Buffer.concat([fixtureLogicalBytes['emperl.data'], Buffer.of(0)]);
-const overflowStorageBytes = gzipSync(overflowDataBytes, { level: 9 });
-const overflowStorage = fixtureStorage.map((receipt) =>
-	receipt.path === 'emperl.data.gz'
-		? {
-				...receipt,
-				size: overflowStorageBytes.byteLength,
-				sha256: sha256(overflowStorageBytes)
-			}
-		: receipt
-);
-const overflowFingerprint = computePerlRuntimeFingerprint({
-	profileId: deployedManifest.profileId,
-	licenseExpression: deployedManifest.licenseExpression,
-	artifact: deployedManifest.artifact,
-	components: deployedManifest.components,
-	licenses: deployedManifest.licenses,
-	metadata: deployedManifest.metadata,
-	assets: fixtureAssets,
-	storage: overflowStorage
-});
-const overflowManifest = {
-	...fixtureManifest,
-	fingerprint: overflowFingerprint,
-	storage: overflowStorage
-};
 
-async function readWorkerSource() {
-	return readFile(workerSourceUrl, 'utf8');
+function createRuntimePreflight(
+	overrides: Record<string, unknown> = {},
+	manifest: Record<string, unknown> = fixtureManifest
+) {
+	return {
+		protocol: 'wasm-idle-perl-preflight',
+		protocolVersion: 1,
+		profileId: WASM_PERL_RUNTIME_PROFILE.profileId,
+		artifactRevision: WASM_PERL_RUNTIME_PROFILE.artifactRevision,
+		webperlRevision: WASM_PERL_RUNTIME_PROFILE.webperlRevision,
+		perlRevision: WASM_PERL_RUNTIME_PROFILE.perlRevision,
+		emscriptenRevision: WASM_PERL_RUNTIME_PROFILE.emscriptenRevision,
+		manifestFingerprint: fixtureFingerprint,
+		manifestBytes: Uint8Array.from(Buffer.from(JSON.stringify(manifest), 'utf8')),
+		javascriptBytes: Uint8Array.from(fixtureLogicalBytes['emperl.js']),
+		wasmBytes: Uint8Array.from(fixtureLogicalBytes['emperl.wasm']),
+		dataBytes: Uint8Array.from(fixtureLogicalBytes['emperl.data']),
+		...overrides
+	};
 }
 
-async function createHarnessWorker() {
-	const workerSource = await readWorkerSource();
-	const encodedLogical = Object.fromEntries(
-		Object.entries(fixtureLogicalBytes).map(([path, bytes]) => [path, bytes.toString('base64')])
-	);
-	const encodedStorage = Object.fromEntries(
-		Object.entries(fixtureStorageBytes).map(([path, bytes]) => [path, bytes.toString('base64')])
-	);
+async function readWorkerSource(manifestFingerprint: string = WASM_PERL_ASSET_VERSION) {
+	const source = await readFile(workerSourceUrl, 'utf8');
+	if (manifestFingerprint === WASM_PERL_ASSET_VERSION) return source;
+	const bundledIdentity = `manifestFingerprint: '${WASM_PERL_ASSET_VERSION}'`;
+	if (
+		source.indexOf(bundledIdentity) < 0 ||
+		source.indexOf(bundledIdentity) !== source.lastIndexOf(bundledIdentity)
+	) {
+		throw new Error('Perl runner must contain exactly one bundled manifest fingerprint');
+	}
+	return source.replace(bundledIdentity, `manifestFingerprint: '${manifestFingerprint}'`);
+}
+
+async function createHarnessWorker(manifestFingerprint = fixtureFingerprint) {
+	const workerSource = await readWorkerSource(manifestFingerprint);
 	const harness = `
 const { parentPort } = require('node:worker_threads');
 const { webcrypto } = require('node:crypto');
 globalThis.self = globalThis;
 Object.defineProperty(globalThis, 'crypto', { value: webcrypto, configurable: true });
-self.postMessage = (message) => parentPort.postMessage(message);
 let harnessMode = '';
 let blobCounter = 0;
-URL.createObjectURL = () => {
-  const url = 'blob:wasm-perl-fixture-' + ++blobCounter;
-  parentPort.postMessage({ harnessBlobCreated: url });
-  return url;
+let staleInstalled = false;
+const staleModule = { stale: 'module' };
+self.postMessage = (message) => {
+  if (staleInstalled && message && (message.results !== undefined || message.error !== undefined)) {
+    parentPort.postMessage({ harnessModuleRestored: globalThis.Module === staleModule });
+  }
+  parentPort.postMessage(message);
 };
-URL.revokeObjectURL = (url) => parentPort.postMessage({ harnessBlobRevoked: url });
-const logicalBytes = Object.fromEntries(
-  Object.entries(${JSON.stringify(encodedLogical)}).map(([path, base64]) => [path, Buffer.from(base64, 'base64')])
-);
-const storageBytes = Object.fromEntries(
-  Object.entries(${JSON.stringify(encodedStorage)}).map(([path, base64]) => [path, Buffer.from(base64, 'base64')])
-);
-const storageLogicalPaths = ${JSON.stringify(
-		Object.fromEntries(
-			Object.entries(fixtureStorageMetadata).map(([path, metadata]) => [
-				path,
-				metadata.logicalPath
-			])
-		)
-	)};
-const manifestTemplate = ${JSON.stringify(fixtureManifest)};
-const overflowManifestTemplate = ${JSON.stringify(overflowManifest)};
-const overflowStorageBytes = Buffer.from(${JSON.stringify(overflowStorageBytes.toString('base64'))}, 'base64');
-globalThis.importScripts = async (url) => {
-  parentPort.postMessage({ harnessImported: url });
-  const wasmPath = globalThis.Module.locateFile('emperl.wasm');
-  const dataPath = globalThis.Module.locateFile('emperl.data');
-  let undeclaredRejected = false;
-  try { globalThis.Module.locateFile('undeclared.bin'); } catch { undeclaredRejected = true; }
-  const data = Buffer.from(
-    globalThis.Module.getPreloadedPackage(dataPath, logicalBytes['emperl.data'].byteLength)
-  );
+self.close = () => parentPort.postMessage({ harnessClosed: true });
+URL.createObjectURL = () => {
+  const value = 'blob:wasm-perl-fixture-' + ++blobCounter;
+  parentPort.postMessage({ harnessBlobCreated: value });
+  return value;
+};
+URL.revokeObjectURL = (value) => parentPort.postMessage({ harnessBlobRevoked: value });
+globalThis.importScripts = (value) => {
+  const hostModule = globalThis.Module;
   parentPort.postMessage({
+    harnessImported: String(value),
+    harnessFreshModule: hostModule !== staleModule && hostModule &&
+      hostModule.wasmBinary instanceof Uint8Array
+  });
+  if (harnessMode === 'import-failure') throw new Error('fixture import failure');
+  if (harnessMode === 'module-replacement') {
+    globalThis.Module = { replaced: true };
+    return;
+  }
+  const wasmPath = hostModule.locateFile('emperl.wasm');
+  const dataPath = hostModule.locateFile('emperl.data');
+  let undeclaredRejected = false;
+  let wrongPackageRejected = false;
+  try { hostModule.locateFile('undeclared.bin'); } catch { undeclaredRejected = true; }
+  try { hostModule.getPreloadedPackage(dataPath, ${fixtureLogicalBytes['emperl.data'].byteLength + 1}); }
+  catch { wrongPackageRejected = true; }
+  const data = Buffer.from(
+    hostModule.getPreloadedPackage(dataPath, ${fixtureLogicalBytes['emperl.data'].byteLength})
+  );
+	const injectionReady = Promise.all([
+    webcrypto.subtle.digest('SHA-256', hostModule.wasmBinary),
+    webcrypto.subtle.digest('SHA-256', data)
+  ]).then(([wasmHash, dataHash]) => parentPort.postMessage({
     harnessInjected: {
       wasmPath,
       dataPath,
       undeclaredRejected,
-      wasmSha256: await webcrypto.subtle.digest('SHA-256', globalThis.Module.wasmBinary).then(
-        (value) => Buffer.from(value).toString('hex')
-      ),
-      dataSha256: await webcrypto.subtle.digest('SHA-256', data).then(
-        (value) => Buffer.from(value).toString('hex')
-      )
+      wrongPackageRejected,
+      wasmSha256: Buffer.from(wasmHash).toString('hex'),
+      dataSha256: Buffer.from(dataHash).toString('hex')
     }
-  });
-  globalThis.Module.FS_createPath = () => {};
-  globalThis.Module.FS_createDataFile = () => {};
-  globalThis.Module.callMain = () => {
-    globalThis.Module.print('value?');
+  }));
+  hostModule.FS_createPath = () => {};
+  hostModule.FS_createDataFile = () => {};
+  hostModule.callMain = () => {
+    hostModule.print('value?');
     const input = [];
     while (true) {
-      const value = globalThis.Module.stdin();
-      if (value === null) break;
-      input.push(value);
+      const byte = hostModule.stdin();
+      if (byte === null) break;
+      input.push(byte);
     }
-    globalThis.Module.print('main=' + Buffer.from(input).toString('utf8').trim());
+    hostModule.print('main=' + (Number(Buffer.from(input).toString('utf8').trim()) + 5));
     return 0;
   };
-  globalThis.Module.onRuntimeInitialized();
-};
-globalThis.fetch = async (url, init = {}) => {
-  const requestedUrl = String(url);
-  const pathname = new URL(requestedUrl).pathname;
-  const isManifest = pathname.endsWith('/runtime-manifest.v2.json');
-  const storageName = Object.keys(storageBytes).find((name) => pathname.endsWith('/' + name));
-  parentPort.postMessage({
-    harnessFetch: requestedUrl,
-    harnessFetchOptions: {
-      cache: init.cache,
-      credentials: init.credentials,
-      redirect: init.redirect,
-      referrerPolicy: init.referrerPolicy
-    }
-  });
-  const manifest = JSON.parse(JSON.stringify(
-    harnessMode === 'gzip-overflow' ? overflowManifestTemplate : manifestTemplate
-  ));
-  if (harnessMode === 'manifest-fingerprint') manifest.fingerprint = '0'.repeat(64);
-  if (harnessMode === 'unexpected-manifest-field') manifest.unexpected = true;
-  if (harnessMode === 'unknown-asset') {
-    manifest.assets.push({
-      path: 'unexpected.bin', mediaType: 'application/octet-stream', size: 1, sha256: 'c'.repeat(64)
-    });
-  }
-  if (harnessMode === 'duplicate-asset') manifest.assets[2] = { ...manifest.assets[0] };
-  if (harnessMode === 'missing-storage') manifest.storage.pop();
-  if (harnessMode === 'component-metadata') manifest.components.perl.revision = '0'.repeat(40);
-  if (harnessMode === 'license-receipt') manifest.licenses[0].sha256 = 'd'.repeat(64);
-  if (harnessMode === 'metadata-receipt') manifest.metadata.sha256 = 'e'.repeat(64);
-  if (harnessMode === 'storage-receipt') manifest.storage[0].sha256 = 'f'.repeat(64);
-  if (harnessMode === 'unexpected-license-field') manifest.licenses[0].unexpected = true;
-  if (harnessMode === 'unexpected-metadata-field') manifest.metadata.unexpected = true;
-  if (harnessMode === 'unexpected-asset-field') manifest.assets[0].unexpected = true;
-  if (harnessMode === 'unexpected-storage-field') manifest.storage[0].unexpected = true;
-  let bytes = isManifest
-    ? Buffer.from(harnessMode === 'invalid-manifest-json' ? '{' : JSON.stringify(manifest))
-    : storageName
-      ? Buffer.from(
-          harnessMode === 'gzip-overflow' && storageName === 'emperl.data.gz'
-            ? overflowStorageBytes
-            : storageBytes[storageName]
-        )
-      : Buffer.alloc(0);
-  const targetedStorage = storageName === 'emperl.wasm.gz';
-  const transportDecoded = storageName?.endsWith('.gz') &&
-    (harnessMode === 'transport-decoded' || harnessMode === 'corrupt-decoded');
-  if (transportDecoded) bytes = Buffer.from(logicalBytes[storageLogicalPaths[storageName]]);
-  if (harnessMode === 'corrupt-storage' && targetedStorage) bytes[bytes.length - 1] ^= 1;
-  if (harnessMode === 'corrupt-decoded' && targetedStorage) bytes[bytes.length - 1] ^= 1;
-  if (harnessMode === 'redirect-storage' && targetedStorage) {
-    return {
-      ok: true,
-      status: 200,
-      url: 'https://untrusted.example/emperl.wasm.gz',
-      headers: new Headers({ 'content-length': String(bytes.byteLength) }),
-      body: { cancel: () => parentPort.postMessage({ harnessCancelled: 'response' }) }
-    };
-  }
-  if (harnessMode === 'reader-failure' && targetedStorage) {
-    return {
-      ok: true,
-      status: 200,
-      url: requestedUrl,
-      headers: new Headers(),
-      body: {
-        getReader() { throw new Error('fixture reader failure'); },
-        cancel: () => parentPort.postMessage({ harnessCancelled: 'response' })
-      }
-    };
-  }
-  if ((harnessMode === 'truncated-storage' || harnessMode === 'overflow-storage') && targetedStorage) {
-    const streamedBytes = harnessMode === 'truncated-storage'
-      ? bytes.subarray(0, bytes.byteLength - 1)
-      : Buffer.concat([bytes, Buffer.of(0)]);
-    let cancelled = false;
-    return {
-      ok: true,
-      status: 200,
-      url: requestedUrl,
-      headers: new Headers(),
-      body: {
-        getReader() {
-          let sent = false;
-          return {
-            async read() {
-              if (sent) return { done: true };
-              sent = true;
-              return { done: false, value: streamedBytes };
-            },
-            cancel() {
-              cancelled = true;
-              parentPort.postMessage({ harnessCancelled: 'reader' });
-            },
-            releaseLock() {
-              parentPort.postMessage({ harnessReleased: true, harnessWasCancelled: cancelled });
-            }
-          };
-        }
-      }
-    };
-  }
-  if (
-    targetedStorage &&
-    (harnessMode === 'wrong-content-length' || harnessMode === 'invalid-content-length')
-  ) {
-    return {
-      ok: true,
-      status: 200,
-      url: requestedUrl,
-      headers: new Headers({
-        'content-length': harnessMode === 'invalid-content-length' ? '1e2' : String(bytes.byteLength + 1)
-      }),
-      body: { cancel: () => parentPort.postMessage({ harnessCancelled: 'response' }) }
-    };
-  }
-  const response = new Response(bytes, {
-    status: 200,
-    headers: {
-      'content-length': String(
-        transportDecoded ? storageBytes[storageName].byteLength : bytes.byteLength
-      )
-    }
-  });
-  Object.defineProperty(response, 'url', { value: requestedUrl });
-  return response;
+	const initialize = () => void injectionReady.then(() => hostModule.onRuntimeInitialized());
+  if (harnessMode === 'delayed-initialize') setTimeout(initialize, 50);
+  else initialize();
 };
 (0, eval)(${JSON.stringify(workerSource)});
 parentPort.on('message', (data) => {
   harnessMode = data.harnessMode || '';
+  if (harnessMode === 'stale-module' || harnessMode === 'import-failure' ||
+      harnessMode === 'module-replacement') {
+    globalThis.Module = staleModule;
+    staleInstalled = true;
+  }
   self.onmessage({ data });
 });
 `;
 	return new NodeWorker(harness, { eval: true });
 }
 
-async function runHarness(request: Record<string, unknown>, onMessage?: (message: any) => void) {
-	const worker = await createHarnessWorker();
+function executionRequest(overrides: Record<string, unknown> = {}) {
+	return {
+		runtimePreflight: createRuntimePreflight(),
+		maxAssetBytes: 16 * 1024 * 1024,
+		code: 'my $value = <STDIN>; print $value + 5;',
+		stdin: '68\n',
+		...overrides
+	};
+}
+
+const isTerminal = (message: any) => message?.results !== undefined || message?.error !== undefined;
+const terminalMessage = (messages: any[]) => messages.findLast(isTerminal);
+
+async function runHarness(
+	request: Record<string, unknown>,
+	onMessage?: (message: any) => void,
+	manifestFingerprint = fixtureFingerprint
+) {
+	const worker = await createHarnessWorker(manifestFingerprint);
 	const messages: any[] = [];
 	try {
 		await new Promise<void>((resolve, reject) => {
+			let terminal = false;
+			let closed = false;
 			worker.on('message', (message) => {
 				messages.push(message);
 				try {
@@ -325,12 +239,11 @@ async function runHarness(request: Record<string, unknown>, onMessage?: (message
 					reject(error);
 					return;
 				}
-				if (message?.results !== undefined || message?.error !== undefined) resolve();
+				if (isTerminal(message)) terminal = true;
+				if (message?.harnessClosed) closed = true;
+				if (terminal && closed) resolve();
 			});
 			worker.once('error', reject);
-			worker.once('exit', (code) => {
-				if (code !== 0) reject(new Error(`WebPerl harness exited with code ${code}`));
-			});
 			worker.postMessage(request);
 		});
 		return messages;
@@ -339,277 +252,393 @@ async function runHarness(request: Record<string, unknown>, onMessage?: (message
 	}
 }
 
-async function runHarnessSequence(requests: Record<string, unknown>[]) {
+async function runSequence(requests: Record<string, unknown>[]) {
 	const worker = await createHarnessWorker();
-	const messages: any[] = [];
 	const terminals: any[] = [];
 	try {
 		await new Promise<void>((resolve, reject) => {
-			let requestIndex = 0;
 			worker.on('message', (message) => {
-				messages.push(message);
-				if (message?.results === undefined && message?.error === undefined) return;
+				if (!isTerminal(message)) return;
 				terminals.push(message);
-				requestIndex += 1;
-				if (requestIndex === requests.length) {
+				if (terminals.length === requests.length) {
 					resolve();
 					return;
 				}
-				worker.postMessage(requests[requestIndex]);
+				worker.postMessage(requests[terminals.length]);
 			});
 			worker.once('error', reject);
-			worker.once('exit', (code) => {
-				if (code !== 0) reject(new Error(`WebPerl harness exited with code ${code}`));
-			});
 			worker.postMessage(requests[0]);
 		});
-		return { messages, terminals };
+		return terminals;
 	} finally {
 		await worker.terminate();
 	}
 }
 
-function integrityRequest(overrides: Record<string, unknown> = {}) {
-	return {
-		baseUrl: fixtureBaseUrl,
-		manifestUrl: fixtureManifestUrl,
-		manifestFingerprint: fixtureFingerprint,
-		maxAssetBytes: 32 * 1024 * 1024,
-		code: 'my $line = <STDIN>;',
-		stdin: '68\n',
-		...overrides
-	};
+async function runConcurrent(requests: Record<string, unknown>[]) {
+	const worker = await createHarnessWorker();
+	const messages: any[] = [];
+	try {
+		await new Promise<void>((resolve, reject) => {
+			let closed = false;
+			worker.on('message', (message) => {
+				messages.push(message);
+				if (message?.harnessClosed) closed = true;
+				if (messages.filter(isTerminal).length === requests.length && closed) resolve();
+			});
+			worker.once('error', reject);
+			for (const request of requests) worker.postMessage(request);
+		});
+		return messages;
+	} finally {
+		await worker.terminate();
+	}
 }
 
-describe('WebPerl runner worker', () => {
-	it('keeps the input lock, deployed receipts, runner pin, and fingerprint current', async () => {
+describe('WebPerl runner worker', { timeout: 60_000 }, () => {
+	it('keeps the canonical graph, aliases, full generated profile, and runner pin current', async () => {
 		const source = await readWorkerSource();
-		expect(await readFile(staticWorkerUrl, 'utf8')).toBe(source);
+		const staticSource = await readFile(staticWorkerUrl, 'utf8');
+		const manifestBytes = await readFile(new URL('runtime-manifest.v2.json', staticRuntimeUrl));
+		const manifest = JSON.parse(manifestBytes.toString('utf8'));
+
+		expect(staticSource).toBe(source);
 		expect(Buffer.byteLength(source)).toBe(WASM_PERL_RUNNER_RECEIPT.bytes);
 		expect(sha256(source)).toBe(WASM_PERL_RUNNER_RECEIPT.sha256);
+		expect(source).toContain(`manifestFingerprint: '${WASM_PERL_ASSET_VERSION}'`);
 		expect((await readdir(staticRuntimeUrl)).sort()).toEqual([
 			'emperl.data.gz',
+			'emperl.data.gz.bin',
 			'emperl.js.gz',
+			'emperl.js.gz.bin',
 			'emperl.wasm.gz',
+			'emperl.wasm.gz.bin',
 			'licenses',
 			'runner-worker.js',
 			'runtime-build.json',
 			'runtime-manifest.v1.json',
 			'runtime-manifest.v2.json'
 		]);
+		expect(PERL_MANIFEST_FORMAT).toBe('wasm-perl-runtime-manifest-v2');
+		expect(PERL_FINGERPRINT_DOMAIN).toBe('wasm-idle:perl-runtime-manifest:v2');
+		expect(manifest.fingerprint).toBe(WASM_PERL_ASSET_VERSION);
+		expect(computePerlRuntimeFingerprint(manifest)).toBe(WASM_PERL_ASSET_VERSION);
+		expect(manifest.storage.map((receipt: { path: string }) => receipt.path)).toEqual([
+			'emperl.js.gz.bin',
+			'emperl.wasm.gz.bin',
+			'emperl.data.gz.bin'
+		]);
+		expect(manifestBytes.byteLength).toBe(WASM_PERL_RUNTIME_PROFILE.manifestReceipt.bytes);
+		expect(sha256(manifestBytes)).toBe(WASM_PERL_RUNTIME_PROFILE.manifestReceipt.sha256);
 
-		const hash = createHash('sha256');
-		for (const fileName of [
-			'emperl.data',
-			'emperl.js',
-			'emperl.wasm',
-			'runner-worker.js'
-		].sort()) {
-			hash.update(fileName);
-			hash.update('\0');
-			const compressed = fileName !== 'runner-worker.js';
-			const logicalReceipt = deployedManifest.assets.find(
-				(candidate: { path: string }) => candidate.path === fileName
+		const profileReceipts = {
+			'emperl.js': WASM_PERL_RUNTIME_PROFILE.javascriptReceipt,
+			'emperl.wasm': WASM_PERL_RUNTIME_PROFILE.wasmReceipt,
+			'emperl.data': WASM_PERL_RUNTIME_PROFILE.dataReceipt
+		};
+		for (const storageReceipt of manifest.storage) {
+			const stored = await readFile(new URL(storageReceipt.path, staticRuntimeUrl));
+			const logical = gunzipSync(stored);
+			const logicalReceipt = manifest.assets.find(
+				(candidate: { path: string }) => candidate.path === storageReceipt.logicalPath
 			);
-			const storedReceipt = deployedManifest.storage.find(
-				(candidate: { logicalPath: string }) => candidate.logicalPath === fileName
-			);
-			expect(Boolean(logicalReceipt)).toBe(compressed);
-			expect(Boolean(storedReceipt)).toBe(compressed);
-			const bytes = compressed
-				? gunzipSync(await readFile(new URL(storedReceipt.path, staticRuntimeUrl)))
-				: await readFile(staticWorkerUrl);
-			if (logicalReceipt) {
-				expect(bytes.byteLength).toBe(logicalReceipt.size);
-				expect(sha256(bytes)).toBe(logicalReceipt.sha256);
-			}
-			hash.update(bytes);
-			hash.update('\n');
-		}
-		expect(hash.digest('hex')).toMatch(/^[a-f0-9]{64}$/u);
-		expect(deployedManifest.fingerprint).toBe(WASM_PERL_ASSET_VERSION);
-		expect(computePerlRuntimeFingerprint(deployedManifest)).toBe(WASM_PERL_ASSET_VERSION);
-		for (const receipt of [...deployedManifest.licenses, deployedManifest.metadata]) {
-			const bytes = await readFile(new URL(receipt.path, staticRuntimeUrl));
-			expect(bytes.byteLength).toBe(receipt.size);
-			expect(sha256(bytes)).toBe(receipt.sha256);
+			expect(stored.byteLength).toBe(storageReceipt.size);
+			expect(sha256(stored)).toBe(storageReceipt.sha256);
+			expect(logical.byteLength).toBe(logicalReceipt.size);
+			expect(sha256(logical)).toBe(logicalReceipt.sha256);
+			expect(
+				profileReceipts[storageReceipt.logicalPath as keyof typeof profileReceipts]
+			).toEqual({
+				bytes: storageReceipt.size,
+				sha256: storageReceipt.sha256,
+				uncompressedBytes: logicalReceipt.size,
+				uncompressedSha256: logicalReceipt.sha256
+			});
+			const legacyPath = storageReceipt.path.replace(/\.bin$/u, '');
+			expect(await readFile(new URL(legacyPath, staticRuntimeUrl))).toEqual(stored);
 		}
 	});
 
-	it('loads only declared storage and injects verified Wasm and data into Blob-evaluated glue', async () => {
-		const messages = await runHarness(integrityRequest());
+	it('contains no runtime fetch, URL parsing, or decompression path', async () => {
+		const source = await readWorkerSource();
+		expect(source).not.toMatch(/\bfetch\s*\(/u);
+		expect(source).not.toContain('new URL(');
+		expect(source).not.toContain('DecompressionStream');
+		expect(source).not.toContain('manifestUrl');
+		expect(source).not.toContain('baseUrl');
+	});
 
-		expect(messages.at(-1)).toEqual({ results: true });
-		expect(messages.map((message) => message.output || '').join('')).toContain('main=68');
-		const fetches = messages.filter((message) => message.harnessFetch);
-		expect(fetches).toHaveLength(4);
-		expect(fetches.map((message) => new URL(message.harnessFetch).pathname)).toEqual([
-			'/wasm-perl/runtime-manifest.v2.json',
-			'/wasm-perl/emperl.data.gz',
-			'/wasm-perl/emperl.js.gz',
-			'/wasm-perl/emperl.wasm.gz'
-		]);
-		for (const message of fetches) {
-			expect(message.harnessFetchOptions).toMatchObject({
-				credentials: 'omit',
-				redirect: 'error',
-				referrerPolicy: 'no-referrer'
-			});
-		}
-		expect(messages).toContainEqual(
-			expect.objectContaining({ harnessImported: expect.stringMatching(/^blob:wasm-perl-/u) })
-		);
-		expect(messages).toContainEqual(
-			expect.objectContaining({
-				harnessBlobRevoked: expect.stringMatching(/^blob:wasm-perl-/u)
-			})
-		);
+	it('verifies the payload before injecting local Wasm and data references', async () => {
+		const messages = await runHarness(executionRequest());
+
+		expect(terminalMessage(messages)).toEqual({ results: true });
+		expect(messages).toContainEqual({ harnessClosed: true });
+		expect(messages.filter((message) => message.harnessImported)).toHaveLength(1);
+		expect(messages.filter((message) => message.harnessBlobRevoked)).toHaveLength(1);
 		expect(messages).toContainEqual({
 			harnessInjected: {
 				wasmPath: 'wasm-idle-verified:emperl.wasm',
 				dataPath: 'wasm-idle-verified:emperl.data',
 				undeclaredRejected: true,
+				wrongPackageRejected: true,
 				wasmSha256: sha256(fixtureLogicalBytes['emperl.wasm']),
 				dataSha256: sha256(fixtureLogicalBytes['emperl.data'])
 			}
 		});
+		expect(messages.map((message) => message.output || '').join('')).toContain('main=73');
 	});
 
-	it('accepts browser-transparent gzip decoding only after the logical receipt matches', async () => {
-		const messages = await runHarness(integrityRequest({ harnessMode: 'transport-decoded' }));
+	it.each([
+		[
+			'extra preflight field',
+			() => createRuntimePreflight({ untrusted: true }),
+			'invalid shape'
+		],
+		[
+			'profile revision drift',
+			() => createRuntimePreflight({ perlRevision: '0'.repeat(40) }),
+			'payload is invalid'
+		],
+		[
+			'invalid manifest JSON',
+			() => createRuntimePreflight({ manifestBytes: Uint8Array.from(Buffer.from('{')) }),
+			'not valid UTF-8 JSON'
+		],
+		[
+			'extra manifest field',
+			() => createRuntimePreflight({}, { ...fixtureManifest, untrusted: true }),
+			'schema is invalid'
+		],
+		[
+			'artifact drift',
+			() =>
+				createRuntimePreflight(
+					{},
+					{
+						...fixtureManifest,
+						artifact: { ...fixtureManifest.artifact, revision: '0'.repeat(40) }
+					}
+				),
+			'artifact metadata is invalid'
+		],
+		[
+			'component drift',
+			() =>
+				createRuntimePreflight(
+					{},
+					{
+						...fixtureManifest,
+						components: {
+							...fixtureManifest.components,
+							perl: { ...fixtureManifest.components.perl, revision: '0'.repeat(40) }
+						}
+					}
+				),
+			'component metadata is invalid'
+		],
+		[
+			'license receipt drift',
+			() =>
+				createRuntimePreflight(
+					{},
+					{
+						...fixtureManifest,
+						licenses: fixtureManifest.licenses.map((license: any, index: number) =>
+							index === 0 ? { ...license, sha256: '0'.repeat(64) } : license
+						)
+					}
+				),
+			'receipt graph failed fingerprint verification'
+		],
+		[
+			'legacy canonical storage path',
+			() =>
+				createRuntimePreflight(
+					{},
+					{
+						...fixtureManifest,
+						storage: fixtureManifest.storage.map((storage: any, index: number) =>
+							index === 0
+								? { ...storage, path: storage.path.replace(/\.bin$/u, '') }
+								: storage
+						)
+					}
+				),
+			'unexpected or duplicate storage asset'
+		],
+		[
+			'logical JavaScript corruption',
+			() => {
+				const bytes = Uint8Array.from(fixtureLogicalBytes['emperl.js']);
+				bytes[bytes.byteLength - 1] ^= 1;
+				return createRuntimePreflight({ javascriptBytes: bytes });
+			},
+			'failed SHA-256 verification'
+		]
+	] as const)('rejects %s before evaluation', async (_label, buildPayload, error) => {
+		const messages = await runHarness(executionRequest({ runtimePreflight: buildPayload() }));
 
-		expect(messages.at(-1)).toEqual({ results: true });
-		expect(messages).toContainEqual(
-			expect.objectContaining({ harnessImported: expect.stringMatching(/^blob:wasm-perl-/u) })
+		expect(terminalMessage(messages)?.error).toContain(error);
+		expect(messages.some((message) => message.harnessImported)).toBe(false);
+		expect(messages).toContainEqual({ harnessClosed: true });
+	});
+
+	it('rejects a self-consistent executable replacement against the embedded fingerprint pin', async () => {
+		const javascriptBytes = Buffer.from('/* replacement WebPerl executable */\n', 'utf8');
+		const replacementAssets = fixtureAssets.map((receipt) =>
+			receipt.path === 'emperl.js'
+				? { ...receipt, size: javascriptBytes.byteLength, sha256: sha256(javascriptBytes) }
+				: receipt
 		);
-	});
-
-	it.each([
-		['manifest-fingerprint', 'fingerprint does not match'],
-		['invalid-manifest-json', 'not valid UTF-8 JSON'],
-		['unknown-asset', 'exactly three logical assets'],
-		['duplicate-asset', 'unexpected or duplicate logical asset'],
-		['missing-storage', 'exactly three storage assets'],
-		['component-metadata', 'component metadata is invalid'],
-		['license-receipt', 'receipt graph failed fingerprint verification'],
-		['metadata-receipt', 'receipt graph failed fingerprint verification'],
-		['storage-receipt', 'receipt graph failed fingerprint verification'],
-		['corrupt-storage', 'failed SHA-256 verification'],
-		['corrupt-decoded', 'failed SHA-256 verification']
-	])('rejects %s before evaluating the runtime glue', async (harnessMode, error) => {
-		const messages = await runHarness(integrityRequest({ harnessMode }));
-
-		expect(messages.at(-1)).toEqual({ error: expect.stringContaining(error) });
-		expect(messages.some((message) => message.harnessImported)).toBe(false);
-	});
-
-	it.each([
-		['unexpected-manifest-field', 'manifest schema is invalid'],
-		['unexpected-license-field', 'license receipt is invalid'],
-		['unexpected-metadata-field', 'metadata receipt is invalid'],
-		['unexpected-asset-field', 'asset emperl.data receipt is invalid'],
-		['unexpected-storage-field', 'storage receipt is invalid']
-	])('rejects unpinned schema extension %s', async (harnessMode, error) => {
-		const messages = await runHarness(integrityRequest({ harnessMode }));
-
-		expect(messages.at(-1)).toEqual({ error: expect.stringContaining(error) });
-		expect(messages.some((message) => message.harnessImported)).toBe(false);
-	});
-
-	it.each([
-		['redirect-storage', 'response URL does not match', 'response'],
-		['reader-failure', 'fixture reader failure', 'response'],
-		['wrong-content-length', 'Content-Length does not match', 'response'],
-		['invalid-content-length', 'invalid Content-Length', 'response'],
-		['truncated-storage', 'is truncated', undefined],
-		['overflow-storage', 'exceeds its receipt size', 'reader']
-	])('rejects %s with bounded stream cleanup', async (harnessMode, error, cancellation) => {
-		const messages = await runHarness(integrityRequest({ harnessMode }));
-
-		expect(messages.at(-1)).toEqual({ error: expect.stringContaining(error) });
-		if (cancellation) expect(messages).toContainEqual({ harnessCancelled: cancellation });
-		if (cancellation === 'reader') {
-			expect(messages).toContainEqual({ harnessReleased: true, harnessWasCancelled: true });
-		}
-	});
-
-	it('rejects gzip expansion beyond the logical receipt before evaluating the runtime', async () => {
+		const replacementStorage = fixtureStorage.map((receipt) => {
+			if (receipt.logicalPath !== 'emperl.js') return receipt;
+			const stored = gzipSync(javascriptBytes, { level: 9 });
+			return { ...receipt, size: stored.byteLength, sha256: sha256(stored) };
+		});
+		const replacementFingerprint = computePerlRuntimeFingerprint({
+			profileId: fixtureManifest.profileId,
+			licenseExpression: fixtureManifest.licenseExpression,
+			artifact: fixtureManifest.artifact,
+			components: fixtureManifest.components,
+			licenses: fixtureManifest.licenses,
+			metadata: fixtureManifest.metadata,
+			assets: replacementAssets,
+			storage: replacementStorage
+		});
+		const replacementManifest = {
+			...fixtureManifest,
+			fingerprint: replacementFingerprint,
+			assets: replacementAssets,
+			storage: replacementStorage
+		};
 		const messages = await runHarness(
-			integrityRequest({
-				harnessMode: 'gzip-overflow',
-				manifestFingerprint: overflowFingerprint
+			executionRequest({
+				runtimePreflight: createRuntimePreflight(
+					{
+						manifestFingerprint: replacementFingerprint,
+						javascriptBytes: Uint8Array.from(javascriptBytes)
+					},
+					replacementManifest
+				)
 			})
 		);
 
-		expect(messages.at(-1)).toEqual({
-			error: expect.stringContaining('gzip exceeds its logical receipt size')
-		});
+		expect(terminalMessage(messages)?.error).toContain('payload is invalid');
 		expect(messages.some((message) => message.harnessImported)).toBe(false);
 	});
 
-	it('clears a failed verification generation so the same worker can retry cleanly', async () => {
-		const { messages, terminals } = await runHarnessSequence([
-			integrityRequest({ harnessMode: 'corrupt-storage' }),
-			integrityRequest()
-		]);
+	it('enforces the hard per-asset and aggregate logical byte limits', async () => {
+		const perAsset = await runHarness(
+			executionRequest({
+				runtimePreflight: createRuntimePreflight({
+					javascriptBytes: new Uint8Array(16 * 1024 * 1024 + 1)
+				})
+			})
+		);
+		expect(terminalMessage(perAsset)?.error).toContain('exceeds its byte limit');
 
-		expect(terminals).toEqual([
-			{ error: expect.stringContaining('failed SHA-256 verification') },
-			{ results: true }
-		]);
-		expect(messages.filter((message) => message.harnessImported)).toHaveLength(1);
+		const aggregateSize = 11 * 1024 * 1024;
+		const aggregate = await runHarness(
+			executionRequest({
+				runtimePreflight: createRuntimePreflight({
+					javascriptBytes: new Uint8Array(aggregateSize),
+					wasmBytes: new Uint8Array(aggregateSize),
+					dataBytes: new Uint8Array(aggregateSize)
+				})
+			})
+		);
+		expect(terminalMessage(aggregate)?.error).toContain('aggregate byte limit');
 	});
 
-	it('refuses to replace a verified runtime profile in a warm worker', async () => {
-		const { messages, terminals } = await runHarnessSequence([
-			integrityRequest(),
-			integrityRequest({ baseUrl: 'https://runtime.example/other-perl/' })
-		]);
+	it('clears a stale Module, captures the verified Module, and restores the prior value', async () => {
+		const messages = await runHarness(executionRequest({ harnessMode: 'stale-module' }));
 
-		expect(terminals).toEqual([
-			{ results: true },
-			{ error: 'WebPerl worker cannot replace an initialized runtime profile.' }
-		]);
-		expect(messages.filter((message) => message.harnessFetch)).toHaveLength(4);
+		expect(terminalMessage(messages)).toEqual({ results: true });
+		expect(messages).toContainEqual({
+			harnessImported: expect.any(String),
+			harnessFreshModule: true
+		});
+		expect(messages).toContainEqual({ harnessModuleRestored: true });
 	});
 
-	it('prints a prompt before reading live shared-ring input', async () => {
-		const stdin = new StaticStdinRingHost({ capacity: 16, maxBufferedBytes: 32 });
-		let suppliedInput = false;
+	it.each(['import-failure', 'module-replacement'])(
+		'revokes evaluated scripts, restores Module, and closes after %s',
+		async (harnessMode) => {
+			const messages = await runHarness(executionRequest({ harnessMode }));
+
+			expect(terminalMessage(messages)?.error).toMatch(
+				/fixture import failure|Module changed/u
+			);
+			expect(messages.filter((message) => message.harnessBlobRevoked)).toHaveLength(1);
+			expect(messages).toContainEqual({ harnessModuleRestored: true });
+			expect(messages).toContainEqual({ harnessClosed: true });
+		}
+	);
+
+	it('reserves the one-shot request before awaiting verification', async () => {
+		const terminals = await runSequence([
+			executionRequest({
+				runtimePreflight: createRuntimePreflight({
+					manifestBytes: Uint8Array.from(Buffer.from('{'))
+				})
+			}),
+			executionRequest()
+		]);
+
+		expect(terminals[0].error).toContain('not valid UTF-8 JSON');
+		expect(terminals[1].error).toContain('accepts exactly one run');
+	});
+
+	it('rejects overlapping execution before shared state can be replaced', async () => {
+		const messages = await runConcurrent([
+			executionRequest({ harnessMode: 'delayed-initialize' }),
+			executionRequest({ stdin: '99\n' })
+		]);
+		const terminals = messages.filter(isTerminal);
+
+		expect(terminals).toContainEqual({ results: true });
+		expect(
+			terminals.some((message) => message.error?.includes('accepts exactly one run'))
+		).toBe(true);
+		expect(messages.map((message) => message.output || '').join('')).toContain('main=73');
+	});
+
+	it('prints a prompt before consuming live shared-ring input', async () => {
+		const stdin = new StaticStdinRingHost({ capacity: 64, maxBufferedBytes: 64 });
+		let prompted = false;
 		const messages = await runHarness(
-			integrityRequest({ stdin: undefined, stdinChannel: stdin.descriptor }),
+			executionRequest({ stdin: undefined, stdinChannel: stdin.descriptor }),
 			(message) => {
-				if (message?.output?.includes('value?') && !suppliedInput) {
-					suppliedInput = true;
-					setTimeout(() => {
-						stdin.enqueue('73\n');
-						stdin.close();
-					}, 10);
-				}
+				if (message.output?.includes('value?')) prompted = true;
+				if (message.type !== 'stdin-request') return;
+				expect(prompted).toBe(true);
+				stdin.enqueue('68\n');
+				stdin.close();
 			}
 		);
 
-		expect(messages.findIndex((message) => message?.output?.includes('value?'))).toBeLessThan(
-			messages.findIndex((message) => message?.output?.includes('main=73'))
-		);
-		expect(messages.some((message) => message?.output?.includes('main=73'))).toBe(true);
-		expect(messages.at(-1)).toEqual({ results: true });
-	}, 15_000);
+		expect(terminalMessage(messages)).toEqual({ results: true });
+		expect(messages.map((message) => message.output || '').join('')).toContain('main=73');
+	});
 
-	it('fails closed on a malformed shared stdin descriptor after verification', async () => {
+	it('fails closed on malformed shared stdin before runtime evaluation', async () => {
 		const messages = await runHarness(
-			integrityRequest({
+			executionRequest({
 				stdin: undefined,
 				stdinChannel: {
 					protocol: 'wasm-idle-static-stdin-ring',
 					protocolVersion: 1,
-					buffer: new SharedArrayBuffer(32),
-					capacity: 16,
-					controlBytes: 8
+					controlBytes: 16,
+					capacity: 32,
+					buffer: new SharedArrayBuffer(24)
 				}
 			})
 		);
 
-		expect(messages.at(-1)).toEqual({ error: 'Invalid WebPerl streaming stdin channel.' });
+		expect(terminalMessage(messages)?.error).toContain(
+			'Invalid WebPerl streaming stdin channel'
+		);
+		expect(messages.some((message) => message.harnessImported)).toBe(false);
+		expect(messages).toContainEqual({ harnessClosed: true });
 	});
 });

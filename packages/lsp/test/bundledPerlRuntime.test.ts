@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	BUNDLED_PERL_MANIFEST_FINGERPRINT,
+	BUNDLED_PERL_RUNTIME_BUNDLE,
+	BUNDLED_PERL_RUNTIME_PROFILE,
 	BUNDLED_PERL_RUNNER_RECEIPT
 } from '../src/bundledPerlRuntime.js';
 
@@ -75,12 +77,12 @@ const computeFingerprint = (manifest: PerlRuntimeManifest) => {
 
 describe('bundled Perl runtime identity', () => {
 	it('pins the canonical WebPerl manifest graph and diagnostic worker bytes', async () => {
-		const manifest = JSON.parse(
-			await readFile(
-				new URL('../../../static/wasm-perl/runtime-manifest.v2.json', import.meta.url),
-				'utf8'
-			)
-		) as PerlRuntimeManifest;
+		const manifestUrl = new URL(
+			'../../../static/wasm-perl/runtime-manifest.v2.json',
+			import.meta.url
+		);
+		const manifestBytes = await readFile(manifestUrl);
+		const manifest = JSON.parse(manifestBytes.toString('utf8')) as PerlRuntimeManifest;
 		const runnerBytes = await readFile(
 			new URL('../../../static/wasm-perl/runner-worker.js', import.meta.url)
 		);
@@ -91,9 +93,48 @@ describe('bundled Perl runtime identity', () => {
 			fingerprint: BUNDLED_PERL_MANIFEST_FINGERPRINT
 		});
 		expect(computeFingerprint(manifest)).toBe(BUNDLED_PERL_MANIFEST_FINGERPRINT);
+		expect(manifest.storage.map((asset) => asset.path).sort()).toEqual([
+			'emperl.data.gz.bin',
+			'emperl.js.gz.bin',
+			'emperl.wasm.gz.bin'
+		]);
+		const receiptFor = async (logicalPath: string) => {
+			const logical = manifest.assets.find((asset) => asset.path === logicalPath);
+			const storage = manifest.storage.find((asset) => asset.logicalPath === logicalPath);
+			if (!logical || !storage) throw new Error(`Missing WebPerl asset ${logicalPath}`);
+			const storageBytes = await readFile(
+				new URL(`../../../static/wasm-perl/${storage.path}`, import.meta.url)
+			);
+			return {
+				bytes: storageBytes.byteLength,
+				sha256: createHash('sha256').update(storageBytes).digest('hex'),
+				uncompressedBytes: logical.size,
+				uncompressedSha256: logical.sha256
+			};
+		};
+		expect(BUNDLED_PERL_RUNTIME_PROFILE).toEqual({
+			profileId: manifest.profileId,
+			artifactRevision: manifest.artifact.revision,
+			webperlRevision: (manifest.components.webperl as Record<string, unknown>).revision,
+			perlRevision: (manifest.components.perl as Record<string, unknown>).revision,
+			emscriptenRevision: (manifest.components.emscripten as Record<string, unknown>)
+				.revision,
+			manifestFingerprint: manifest.fingerprint,
+			manifestReceipt: {
+				bytes: manifestBytes.byteLength,
+				sha256: createHash('sha256').update(manifestBytes).digest('hex')
+			},
+			javascriptReceipt: await receiptFor('emperl.js'),
+			wasmReceipt: await receiptFor('emperl.wasm'),
+			dataReceipt: await receiptFor('emperl.data')
+		});
 		expect(BUNDLED_PERL_RUNNER_RECEIPT).toEqual({
 			bytes: runnerBytes.byteLength,
 			sha256: createHash('sha256').update(runnerBytes).digest('hex')
+		});
+		expect(BUNDLED_PERL_RUNTIME_BUNDLE).toEqual({
+			profile: BUNDLED_PERL_RUNTIME_PROFILE,
+			workerReceipt: BUNDLED_PERL_RUNNER_RECEIPT
 		});
 	});
 });

@@ -5,8 +5,10 @@ import {
 	createPerlWorkerService,
 	createRWorkerService,
 	type LspDocument,
-	type LspDocumentContext
+	type LspDocumentContext,
+	type PerlWorkerOptions
 } from '../src/index.js';
+import { PERL_MAX_ASSET_BYTES, type PerlRuntimePreflightPayload } from '@wasm-idle/core';
 
 const contextFor = (document: LspDocument): LspDocumentContext => ({
 	documents: new Map([[document.uri, document]]),
@@ -114,6 +116,35 @@ describe('createAwkWorkerService', () => {
 });
 
 describe('createPerlWorkerService', () => {
+	const runnerWorkerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
+	const workerReceipt = { bytes: runnerWorkerBytes.byteLength, sha256: 'b'.repeat(64) };
+	const createRuntimePreflight = (
+		overrides: Partial<PerlRuntimePreflightPayload> = {}
+	): PerlRuntimePreflightPayload => ({
+		protocol: 'wasm-idle-perl-preflight',
+		protocolVersion: 1,
+		profileId: 'webperl-v0.09-beta-perl-5.28.1-emscripten-1.38.28',
+		artifactRevision: '1'.repeat(40),
+		webperlRevision: '2'.repeat(40),
+		perlRevision: '3'.repeat(40),
+		emscriptenRevision: '4'.repeat(40),
+		manifestFingerprint: 'a'.repeat(64),
+		manifestBytes: Uint8Array.of(1),
+		javascriptBytes: Uint8Array.of(2),
+		wasmBytes: Uint8Array.of(3),
+		dataBytes: Uint8Array.of(4),
+		...overrides
+	});
+	const createWorkerOptions = (
+		overrides: Partial<PerlWorkerOptions> = {}
+	): PerlWorkerOptions => ({
+		workerReceipt,
+		runnerWorkerBytes,
+		runtimePreflight: createRuntimePreflight(),
+		maxAssetBytes: PERL_MAX_ASSET_BYTES,
+		...overrides
+	});
+
 	it('checks syntax through the configured WebPerl worker and exposes Perl symbols', async () => {
 		const runDiagnostics = vi.fn(async () => ({
 			error: 'Perl exited with status 255.',
@@ -127,13 +158,7 @@ describe('createPerlWorkerService', () => {
 			text: 'sub main {\n  print(\n}\n'
 		};
 		const context = contextFor(document);
-		const workerOptions = {
-			baseUrl: '/wasm-perl/',
-			workerUrl: '/wasm-perl/runner-worker.js',
-			manifestUrl: '/wasm-perl/runtime-manifest.v2.json',
-			manifestFingerprint: 'a'.repeat(64),
-			workerReceipt: { bytes: 1234, sha256: 'b'.repeat(64) }
-		};
+		const workerOptions = createWorkerOptions();
 
 		await service.initialize?.(workerOptions, context);
 		const diagnostics = await service.diagnostics?.(document, context);
@@ -166,7 +191,57 @@ describe('createPerlWorkerService', () => {
 		expect(context.reportProgress).toHaveBeenCalledWith('load-perl-runtime');
 	});
 
-	it('requires complete trust pins and keys diagnostics by the full Perl runtime identity', async () => {
+	it('strictly rejects malformed or over-limit verified initialization data', () => {
+		const service = createPerlWorkerService(vi.fn(async () => ({})));
+		const document: LspDocument = {
+			uri: 'file:///workspace/main.pl',
+			languageId: 'perl',
+			version: 1,
+			text: 'print "ok\\n";\n'
+		};
+		const context = contextFor(document);
+		const workerOptions = createWorkerOptions();
+		const initialize = (value: unknown) => service.initialize?.(value, context);
+
+		expect(() => initialize({ ...workerOptions, unexpected: true })).toThrow(
+			'exact verified runtime configuration'
+		);
+		expect(() =>
+			initialize({ ...workerOptions, workerReceipt: { bytes: 0, sha256: 'B'.repeat(64) } })
+		).toThrow('valid runner receipt');
+		expect(() => initialize({ ...workerOptions, runnerWorkerBytes: Uint8Array.of(1) })).toThrow(
+			'receipt-sized runner bytes'
+		);
+		expect(() =>
+			initialize({
+				...workerOptions,
+				runtimePreflight: { ...workerOptions.runtimePreflight, unexpected: true }
+			})
+		).toThrow('strict runtime preflight payload');
+		const sharedBytes = Uint8Array.of(0, 1, 2);
+		expect(() =>
+			initialize({
+				...workerOptions,
+				runtimePreflight: createRuntimePreflight({
+					javascriptBytes: sharedBytes.subarray(1)
+				})
+			})
+		).toThrow('owned runtime preflight bytes');
+		expect(() => initialize({ ...workerOptions, maxAssetBytes: 0 })).toThrow(
+			'valid maxAssetBytes limit'
+		);
+		expect(() =>
+			initialize({
+				...workerOptions,
+				maxAssetBytes: 1,
+				workerReceipt: { bytes: 1, sha256: 'c'.repeat(64) },
+				runnerWorkerBytes: Uint8Array.of(1),
+				runtimePreflight: createRuntimePreflight({ javascriptBytes: Uint8Array.of(1, 2) })
+			})
+		).toThrow('runtime preflight exceeds maxAssetBytes');
+	});
+
+	it('keys successful diagnostics by the complete content identity', async () => {
 		const runDiagnostics = vi.fn(async () => ({}));
 		const service = createPerlWorkerService(runDiagnostics);
 		const document: LspDocument = {
@@ -176,33 +251,18 @@ describe('createPerlWorkerService', () => {
 			text: 'print "ok\\n";\n'
 		};
 		const context = contextFor(document);
-		const baseConfig = {
-			baseUrl: '/wasm-perl/',
-			workerUrl: '/wasm-perl/runner-worker.js',
-			manifestUrl: '/wasm-perl/runtime-manifest.v2.json',
-			manifestFingerprint: 'c'.repeat(64),
-			workerReceipt: { bytes: 2345, sha256: 'd'.repeat(64) }
-		};
-
-		for (const invalid of [
-			{ ...baseConfig, manifestUrl: '' },
-			{ ...baseConfig, manifestFingerprint: 'C'.repeat(64) },
-			{ ...baseConfig, workerReceipt: { ...baseConfig.workerReceipt, bytes: 0 } },
-			{
-				...baseConfig,
-				workerReceipt: { ...baseConfig.workerReceipt, sha256: 'D'.repeat(64) }
-			}
-		]) {
-			expect(() => service.initialize?.(invalid, context)).toThrow(
-				/Perl language server requires/u
-			);
-		}
-
 		const configurations = [
-			baseConfig,
-			{ ...baseConfig, manifestUrl: '/wasm-perl/runtime-manifest.mirror.json' },
-			{ ...baseConfig, manifestFingerprint: 'e'.repeat(64) },
-			{ ...baseConfig, workerReceipt: { bytes: 3456, sha256: 'f'.repeat(64) } }
+			createWorkerOptions(),
+			createWorkerOptions({
+				runtimePreflight: createRuntimePreflight({ manifestFingerprint: 'e'.repeat(64) })
+			}),
+			createWorkerOptions({
+				runtimePreflight: createRuntimePreflight({ webperlRevision: '5'.repeat(40) })
+			}),
+			createWorkerOptions({
+				workerReceipt: { bytes: runnerWorkerBytes.byteLength, sha256: 'f'.repeat(64) }
+			}),
+			createWorkerOptions({ maxAssetBytes: PERL_MAX_ASSET_BYTES - 1 })
 		];
 		for (const config of configurations) {
 			service.initialize?.(config, context);
@@ -211,5 +271,38 @@ describe('createPerlWorkerService', () => {
 		}
 
 		expect(runDiagnostics).toHaveBeenCalledTimes(configurations.length);
+	});
+
+	it('retries a failed verified run and shares only pending successful work', async () => {
+		let releaseRun!: (value: { error?: string }) => void;
+		const runDiagnostics = vi
+			.fn()
+			.mockRejectedValueOnce(new Error('runner integrity verification failed'))
+			.mockImplementationOnce(
+				() =>
+					new Promise<{ error?: string }>((resolve) => {
+						releaseRun = resolve;
+					})
+			);
+		const service = createPerlWorkerService(runDiagnostics);
+		const document: LspDocument = {
+			uri: 'file:///workspace/main.pl',
+			languageId: 'perl',
+			version: 1,
+			text: 'print "ok\\n";\n'
+		};
+		const context = contextFor(document);
+
+		await service.initialize?.(createWorkerOptions(), context);
+		await expect(service.diagnostics?.(document, context)).rejects.toThrow(
+			'runner integrity verification failed'
+		);
+		const first = service.diagnostics?.(document, context);
+		const second = service.diagnostics?.(document, context);
+		expect(runDiagnostics).toHaveBeenCalledTimes(2);
+		releaseRun({});
+		await expect(Promise.all([first, second])).resolves.toEqual([[], []]);
+		await expect(service.diagnostics?.(document, context)).resolves.toEqual([]);
+		expect(runDiagnostics).toHaveBeenCalledTimes(2);
 	});
 });

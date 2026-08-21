@@ -3,7 +3,7 @@
   "version": "v0.09-beta",
   "package": "webperl_prebuilt_v0.09-beta.zip",
   "packageUrl": "https://zenodo.org/api/records/2582586/files/webperl_prebuilt_v0.09-beta.zip/content",
-  "fingerprint": "ea1edaf23b9102791ec8f336a6b5b431376289a97876f925919d5e422cd08555",
+  "fingerprint": "fd0dede426ef3ff3264e71e9d3583530eccd9529fe08632dc1574d9e13a7be3b",
   "files": [
     "emperl.js",
     "emperl.wasm",

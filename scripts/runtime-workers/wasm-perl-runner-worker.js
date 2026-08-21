@@ -1,17 +1,27 @@
 const encoder = new TextEncoder();
 const fatalDecoder = new TextDecoder('utf-8', { fatal: true });
+const preflightProtocol = 'wasm-idle-perl-preflight';
+const preflightProtocolVersion = 1;
 const manifestFormat = 'wasm-perl-runtime-manifest-v2';
 const fingerprintDomain = 'wasm-idle:perl-runtime-manifest:v2';
-const expectedProfileId = 'webperl-v0.09-beta-perl-5.28.1-emscripten-1.38.28';
+const hardMaxAssetBytes = 16 * 1024 * 1024;
+const hardMaxTotalLogicalBytes = 32 * 1024 * 1024;
+const maxManifestBytes = 64 * 1024;
+const expectedIdentity = Object.freeze({
+	profileId: 'webperl-v0.09-beta-perl-5.28.1-emscripten-1.38.28',
+	artifactRevision: '6f2173d29a2c2e3536e1de75ff5d291ae96ab348',
+	webperlRevision: '6f2173d29a2c2e3536e1de75ff5d291ae96ab348',
+	perlRevision: 'e70d909feb796ec99d5e91de5d1635d4526ec131',
+	emscriptenRevision: '69ab40586822209758165df170e9fc8b81e05608',
+	manifestFingerprint: 'fd0dede426ef3ff3264e71e9d3583530eccd9529fe08632dc1574d9e13a7be3b'
+});
 const expectedLicenseExpression = 'Artistic-1.0-Perl OR GPL-1.0-or-later';
-const hardMaxAssetBytes = 32 * 1024 * 1024;
-const maxManifestBytes = 128 * 1024;
 const expectedArtifact = Object.freeze({
 	doi: '10.5281/zenodo.2582586',
 	kind: 'opaque-prebuilt',
 	path: 'webperl_prebuilt_v0.09-beta.zip',
 	repository: 'https://github.com/haukex/webperl.git',
-	revision: '6f2173d29a2c2e3536e1de75ff5d291ae96ab348',
+	revision: expectedIdentity.artifactRevision,
 	sha256: '5f441249217e90ab378c666f473d4206ab4f44907f6bb0aa8d70834bc38c40dc',
 	size: 3936557,
 	tag: 'v0.09-beta',
@@ -26,21 +36,21 @@ const expectedComponents = Object.freeze({
 	emscripten: Object.freeze({
 		evidence: 'versioned WebPerl build configuration',
 		repository: 'https://github.com/emscripten-core/emscripten.git',
-		revision: '69ab40586822209758165df170e9fc8b81e05608',
+		revision: expectedIdentity.emscriptenRevision,
 		verifiedBuildInput: false,
 		version: '1.38.28'
 	}),
 	perl: Object.freeze({
 		evidence: 'embedded runtime version string and versioned WebPerl build configuration',
 		repository: 'https://github.com/haukex/emperl5.git',
-		revision: 'e70d909feb796ec99d5e91de5d1635d4526ec131',
+		revision: expectedIdentity.perlRevision,
 		verifiedBuildInput: false,
 		version: '5.28.1'
 	}),
 	webperl: Object.freeze({
 		evidence: 'release tag and opaque prebuilt archive',
 		repository: 'https://github.com/haukex/webperl.git',
-		revision: '6f2173d29a2c2e3536e1de75ff5d291ae96ab348',
+		revision: expectedIdentity.webperlRevision,
 		verifiedBuildInput: false,
 		version: 'v0.09-beta'
 	})
@@ -55,10 +65,26 @@ const expectedAssets = Object.freeze({
 	'emperl.wasm': Object.freeze({ mediaType: 'application/wasm' })
 });
 const expectedStorage = Object.freeze({
-	'emperl.data.gz': Object.freeze({ logicalPath: 'emperl.data', encoding: 'gzip' }),
-	'emperl.js.gz': Object.freeze({ logicalPath: 'emperl.js', encoding: 'gzip' }),
-	'emperl.wasm.gz': Object.freeze({ logicalPath: 'emperl.wasm', encoding: 'gzip' })
+	'emperl.data.gz.bin': Object.freeze({ logicalPath: 'emperl.data', encoding: 'gzip' }),
+	'emperl.js.gz.bin': Object.freeze({ logicalPath: 'emperl.js', encoding: 'gzip' }),
+	'emperl.wasm.gz.bin': Object.freeze({ logicalPath: 'emperl.wasm', encoding: 'gzip' })
 });
+const preflightKeys = Object.freeze(
+	[
+		'artifactRevision',
+		'dataBytes',
+		'emscriptenRevision',
+		'javascriptBytes',
+		'manifestBytes',
+		'manifestFingerprint',
+		'perlRevision',
+		'profileId',
+		'protocol',
+		'protocolVersion',
+		'wasmBytes',
+		'webperlRevision'
+	].sort()
+);
 const expectedManifestKeys = Object.freeze(
 	[
 		'artifact',
@@ -84,169 +110,79 @@ const expectedStorageReceiptKeys = Object.freeze([
 ]);
 const expectedLicenseReceiptKeys = Object.freeze(['path', 'sha256', 'size', 'spdx']);
 
-let verifiedRuntimePromise = null;
-let verifiedRuntimeIdentity = '';
-let runtimeEvaluationStarted = false;
+let requestConsumed = false;
 
 function isObject(value) {
 	return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function hasExactKeys(value, expectedKeys) {
+	const keys = Object.keys(value).sort();
 	return (
-		isObject(value) &&
-		JSON.stringify(Object.keys(value).sort()) === JSON.stringify(expectedKeys)
+		keys.length === expectedKeys.length &&
+		keys.every((key, index) => key === expectedKeys[index])
 	);
 }
 
-function requireHttpUrl(value, label) {
-	let url;
-	try {
-		url = new URL(value);
-	} catch {
-		throw new Error(`${label} URL is invalid.`);
-	}
-	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error(`${label} URL must use HTTP(S).`);
-	}
-	if (url.username || url.password || url.hash) {
-		throw new Error(`${label} URL must not include credentials or a fragment.`);
-	}
-	return url;
+function isUint8Array(value) {
+	return (
+		ArrayBuffer.isView(value) &&
+		value.buffer instanceof ArrayBuffer &&
+		Object.prototype.toString.call(value) === '[object Uint8Array]'
+	);
 }
 
-function assetUrl(baseUrl, path, fingerprint) {
-	const base = requireHttpUrl(baseUrl, 'WebPerl runtime base');
-	const url = new URL(path, base);
-	if (fingerprint) url.searchParams.set('v', fingerprint);
-	return url.href;
+function errorMessage(error) {
+	return error?.message || String(error);
 }
 
-function cancelResponseBody(response, reason) {
-	try {
-		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
-	} catch {
-		// Preserve the trust-boundary failure that caused cancellation.
+function requireRuntimePreflight(runtimePreflight, requestedMaxAssetBytes) {
+	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
+		throw new Error('WebPerl runtime asset byte limit is invalid.');
 	}
-}
-
-async function fetchBoundedBytes(
-	urlValue,
-	label,
-	maxBytes,
-	expectedBytes,
-	cache,
-	alternateExpectedBytes
-) {
-	if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
-		throw new Error(`${label} byte limit is invalid.`);
+	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
+	if (!isObject(runtimePreflight) || !hasExactKeys(runtimePreflight, preflightKeys)) {
+		throw new Error('WebPerl runtime preflight payload has an invalid shape.');
 	}
-	const expectedByteSizes = [];
-	for (const candidate of [expectedBytes, alternateExpectedBytes]) {
-		if (candidate === undefined) continue;
-		if (!Number.isSafeInteger(candidate) || candidate <= 0 || candidate > maxBytes) {
-			throw new Error(`${label} expected byte size is invalid.`);
-		}
-		if (!expectedByteSizes.includes(candidate)) expectedByteSizes.push(candidate);
+	if (
+		runtimePreflight.protocol !== preflightProtocol ||
+		runtimePreflight.protocolVersion !== preflightProtocolVersion ||
+		runtimePreflight.profileId !== expectedIdentity.profileId ||
+		runtimePreflight.artifactRevision !== expectedIdentity.artifactRevision ||
+		runtimePreflight.webperlRevision !== expectedIdentity.webperlRevision ||
+		runtimePreflight.perlRevision !== expectedIdentity.perlRevision ||
+		runtimePreflight.emscriptenRevision !== expectedIdentity.emscriptenRevision ||
+		runtimePreflight.manifestFingerprint !== expectedIdentity.manifestFingerprint ||
+		!isUint8Array(runtimePreflight.manifestBytes) ||
+		!isUint8Array(runtimePreflight.javascriptBytes) ||
+		!isUint8Array(runtimePreflight.wasmBytes) ||
+		!isUint8Array(runtimePreflight.dataBytes)
+	) {
+		throw new Error('WebPerl runtime preflight payload is invalid.');
 	}
-	const maximumExpectedBytes = expectedByteSizes.length
-		? Math.max(...expectedByteSizes)
-		: undefined;
-	const requestUrl = requireHttpUrl(urlValue, label);
-	const response = await fetch(requestUrl.href, {
-		...(cache ? { cache } : {}),
-		credentials: 'omit',
-		redirect: 'error',
-		referrerPolicy: 'no-referrer'
-	});
-	try {
-		if (!response.url) throw new Error(`${label} response URL is missing.`);
-		let responseUrl;
-		try {
-			responseUrl = new URL(response.url);
-		} catch {
-			throw new Error(`${label} response URL is invalid.`);
-		}
-		if (responseUrl.href !== requestUrl.href) {
-			throw new Error(`${label} response URL does not match the requested asset.`);
-		}
-		if (!response.ok)
-			throw new Error(`${label} request failed with status ${response.status}.`);
-		const contentLength = response.headers.get('content-length');
-		if (contentLength !== null) {
-			const normalized = contentLength.trim();
-			const parsed = Number(normalized);
-			if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(parsed)) {
-				throw new Error(`${label} has an invalid Content-Length.`);
-			}
-			if (expectedByteSizes.length && !expectedByteSizes.includes(parsed)) {
-				throw new Error(`${label} Content-Length does not match its receipt.`);
-			}
-			if (parsed > maxBytes) throw new Error(`${label} exceeds its byte limit.`);
-		}
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	if (!response.body) {
-		const error = new Error(`${label} response does not provide a byte stream.`);
-		cancelResponseBody(response, error);
-		throw error;
-	}
-
-	let reader;
-	try {
-		reader = response.body.getReader();
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	const output = maximumExpectedBytes === undefined ? null : new Uint8Array(maximumExpectedBytes);
-	const chunks = output ? null : [];
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error(`${label} returned an invalid byte stream.`);
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (maximumExpectedBytes !== undefined && nextLoaded > maximumExpectedBytes) {
-				throw new Error(`${label} exceeds its receipt size.`);
-			}
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > maxBytes) {
-				throw new Error(`${label} exceeds its byte limit.`);
-			}
-			if (output) output.set(value, loaded);
-			else chunks.push(value.slice());
-			loaded = nextLoaded;
-		}
-		if (expectedByteSizes.length && !expectedByteSizes.includes(loaded)) {
-			throw new Error(`${label} is truncated or has an unexpected decoded size.`);
-		}
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the stream or quota failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the primary load result.
+	for (const [label, bytes, limit] of [
+		[
+			'WebPerl runtime manifest',
+			runtimePreflight.manifestBytes,
+			Math.min(maxManifestBytes, maxAssetBytes)
+		],
+		['WebPerl runtime JavaScript', runtimePreflight.javascriptBytes, maxAssetBytes],
+		['WebPerl runtime Wasm', runtimePreflight.wasmBytes, maxAssetBytes],
+		['WebPerl runtime data', runtimePreflight.dataBytes, maxAssetBytes]
+	]) {
+		if (bytes.byteLength <= 0 || bytes.byteLength > limit) {
+			throw new Error(`${label} exceeds its byte limit.`);
 		}
 	}
-	if (output) return loaded === output.byteLength ? output : output.slice(0, loaded);
-	const bytes = new Uint8Array(loaded);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
+	const totalLogicalBytes = [
+		runtimePreflight.javascriptBytes,
+		runtimePreflight.wasmBytes,
+		runtimePreflight.dataBytes
+	].reduce((total, bytes) => total + bytes.byteLength, 0);
+	if (totalLogicalBytes > hardMaxTotalLogicalBytes) {
+		throw new Error('WebPerl runtime logical payload exceeds its aggregate byte limit.');
 	}
-	return bytes;
+	return { runtimePreflight, maxAssetBytes };
 }
 
 async function sha256Hex(bytes) {
@@ -305,11 +241,12 @@ function normalizeProvenanceObject(candidate, expected, label) {
 	if (!isObject(candidate) || canonicalJson(candidate) !== canonicalJson(expected)) {
 		throw new Error(`WebPerl runtime ${label} metadata is invalid.`);
 	}
-	return candidate;
+	return { ...candidate };
 }
 
 function normalizeReceipt(candidate, expected, maxAssetBytes, label) {
 	if (
+		!isObject(candidate) ||
 		!hasExactKeys(candidate, expectedReceiptKeys) ||
 		candidate.path !== expected.path ||
 		candidate.mediaType !== expected.mediaType ||
@@ -331,6 +268,7 @@ function normalizeReceipt(candidate, expected, maxAssetBytes, label) {
 
 function normalizeStorageReceipt(candidate, expected, maxAssetBytes) {
 	if (
+		!isObject(candidate) ||
 		!hasExactKeys(candidate, expectedStorageReceiptKeys) ||
 		candidate.path !== expected.path ||
 		candidate.logicalPath !== expected.logicalPath ||
@@ -352,7 +290,38 @@ function normalizeStorageReceipt(candidate, expected, maxAssetBytes) {
 	};
 }
 
-async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
+function normalizeLicenses(candidate, maxAssetBytes) {
+	if (!Array.isArray(candidate) || candidate.length !== Object.keys(expectedLicenses).length) {
+		throw new Error('WebPerl runtime must declare exactly two license receipts.');
+	}
+	const paths = new Set();
+	return candidate.map((entry) => {
+		const expected = expectedLicenses[entry?.path];
+		if (
+			!isObject(entry) ||
+			!expected ||
+			!hasExactKeys(entry, expectedLicenseReceiptKeys) ||
+			paths.has(entry.path) ||
+			entry.spdx !== expected.spdx ||
+			!Number.isSafeInteger(entry.size) ||
+			entry.size <= 0 ||
+			entry.size > maxAssetBytes ||
+			typeof entry.sha256 !== 'string' ||
+			!/^[a-f0-9]{64}$/u.test(entry.sha256)
+		) {
+			throw new Error('WebPerl runtime license receipt is invalid.');
+		}
+		paths.add(entry.path);
+		return {
+			path: entry.path,
+			spdx: entry.spdx,
+			size: entry.size,
+			sha256: entry.sha256
+		};
+	});
+}
+
+async function normalizeManifest(value, runtimePreflight, maxAssetBytes) {
 	if (!isObject(value)) throw new Error('WebPerl runtime manifest must be an object.');
 	if (!hasExactKeys(value, expectedManifestKeys)) {
 		throw new Error('WebPerl runtime manifest schema is invalid.');
@@ -361,46 +330,23 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 		throw new Error('WebPerl runtime manifest format is unsupported.');
 	}
 	if (
-		value.profileId !== expectedProfileId ||
-		value.licenseExpression !== expectedLicenseExpression ||
-		typeof expectedFingerprint !== 'string' ||
-		!/^[a-f0-9]{64}$/u.test(expectedFingerprint)
+		value.profileId !== runtimePreflight.profileId ||
+		value.fingerprint !== runtimePreflight.manifestFingerprint ||
+		value.licenseExpression !== expectedLicenseExpression
 	) {
-		throw new Error('WebPerl runtime profile or expected fingerprint is invalid.');
-	}
-	if (value.fingerprint !== expectedFingerprint) {
-		throw new Error('WebPerl runtime manifest fingerprint does not match the pinned runtime.');
+		throw new Error('WebPerl runtime manifest identity is invalid.');
 	}
 	const artifact = normalizeProvenanceObject(value.artifact, expectedArtifact, 'artifact');
 	const components = normalizeProvenanceObject(value.components, expectedComponents, 'component');
-	if (!Array.isArray(value.licenses) || value.licenses.length !== 2) {
-		throw new Error('WebPerl runtime manifest must declare exactly two license receipts.');
+	if (
+		artifact.revision !== runtimePreflight.artifactRevision ||
+		components.webperl.revision !== runtimePreflight.webperlRevision ||
+		components.perl.revision !== runtimePreflight.perlRevision ||
+		components.emscripten.revision !== runtimePreflight.emscriptenRevision
+	) {
+		throw new Error('WebPerl runtime provenance identity is invalid.');
 	}
-	const licenses = [];
-	const licensePaths = new Set();
-	for (const candidate of value.licenses) {
-		const expected = expectedLicenses[candidate?.path];
-		if (
-			!expected ||
-			!hasExactKeys(candidate, expectedLicenseReceiptKeys) ||
-			licensePaths.has(candidate.path) ||
-			candidate.spdx !== expected.spdx ||
-			!Number.isSafeInteger(candidate.size) ||
-			candidate.size <= 0 ||
-			candidate.size > maxAssetBytes ||
-			typeof candidate.sha256 !== 'string' ||
-			!/^[a-f0-9]{64}$/u.test(candidate.sha256)
-		) {
-			throw new Error('WebPerl runtime license receipt is invalid.');
-		}
-		licensePaths.add(candidate.path);
-		licenses.push({
-			path: candidate.path,
-			spdx: expected.spdx,
-			size: candidate.size,
-			sha256: candidate.sha256
-		});
-	}
+	const licenses = normalizeLicenses(value.licenses, maxAssetBytes);
 	const metadata = normalizeReceipt(
 		value.metadata,
 		{ path: 'runtime-build.json', mediaType: 'application/json' },
@@ -445,11 +391,10 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 		);
 	}
 	if (
-		Object.keys(expectedLicenses).some((path) => !licensePaths.has(path)) ||
 		Object.keys(expectedAssets).some((path) => !assetByPath.has(path)) ||
 		Object.keys(expectedStorage).some((path) => !storageByPath.has(path))
 	) {
-		throw new Error('WebPerl runtime manifest is missing a required receipt.');
+		throw new Error('WebPerl runtime manifest is missing a required asset.');
 	}
 	const assets = [...assetByPath.values()];
 	const storage = [...storageByPath.values()];
@@ -463,80 +408,83 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 			metadata,
 			assets,
 			storage
-		)) !== expectedFingerprint
+		)) !== runtimePreflight.manifestFingerprint
 	) {
 		throw new Error('WebPerl runtime receipt graph failed fingerprint verification.');
 	}
-	return { assetByPath, storageByPath };
+	return { assetByPath };
 }
 
 async function verifyReceiptBytes(receipt, bytes, label) {
-	if (bytes.byteLength !== receipt.size) throw new Error(`${label} has an unexpected byte size.`);
+	if (bytes.byteLength !== receipt.size) {
+		throw new Error(`${label} has an unexpected byte size.`);
+	}
 	if ((await sha256Hex(bytes)) !== receipt.sha256) {
 		throw new Error(`${label} failed SHA-256 verification.`);
 	}
 }
 
-async function receiptMatchesBytes(receipt, bytes) {
-	return bytes.byteLength === receipt.size && (await sha256Hex(bytes)) === receipt.sha256;
-}
-
-async function decompressGzipBounded(compressedBytes, expectedBytes, maxBytes, label) {
-	if (typeof DecompressionStream !== 'function') {
-		throw new Error('WebPerl runtime gzip decompression is unavailable.');
-	}
-	if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || expectedBytes > maxBytes) {
-		throw new Error(`${label} logical byte size is invalid.`);
-	}
-	let reader;
+function validateUtf8JavaScript(bytes) {
+	let source;
 	try {
-		reader = new Blob([compressedBytes])
-			.stream()
-			.pipeThrough(new DecompressionStream('gzip'))
-			.getReader();
-	} catch {
-		throw new Error(`${label} gzip stream could not be opened.`);
-	}
-	const output = new Uint8Array(expectedBytes);
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error(`${label} gzip returned an invalid byte stream.`);
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > expectedBytes) {
-				throw new Error(`${label} gzip exceeds its logical receipt size.`);
-			}
-			output.set(value, loaded);
-			loaded = nextLoaded;
-		}
-		if (loaded !== expectedBytes) throw new Error(`${label} gzip is truncated.`);
-		return output;
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the decompression failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the decompression result.
-		}
-	}
-}
-
-function importVerifiedRuntimeScript(bytes) {
-	try {
-		fatalDecoder.decode(bytes);
+		source = fatalDecoder.decode(bytes);
 	} catch {
 		throw new Error('WebPerl runtime JavaScript is not valid UTF-8.');
 	}
+	if (
+		!source.includes('Module["getPreloadedPackage"]') ||
+		!source.includes('Module["wasmBinary"]') ||
+		!source.includes('var Module=typeof Module!=="undefined"?Module:{}')
+	) {
+		throw new Error(
+			'WebPerl runtime JavaScript is missing its verified asset injection contract.'
+		);
+	}
+	return source;
+}
+
+function validateWasmHeader(bytes) {
+	if (
+		bytes.byteLength < 8 ||
+		bytes[0] !== 0 ||
+		bytes[1] !== 0x61 ||
+		bytes[2] !== 0x73 ||
+		bytes[3] !== 0x6d
+	) {
+		throw new Error('WebPerl runtime Wasm header is invalid.');
+	}
+}
+
+async function verifyRuntimePreflight(runtimePreflightValue, requestedMaxAssetBytes) {
+	const { runtimePreflight, maxAssetBytes } = requireRuntimePreflight(
+		runtimePreflightValue,
+		requestedMaxAssetBytes
+	);
+	let parsed;
+	try {
+		parsed = JSON.parse(fatalDecoder.decode(runtimePreflight.manifestBytes));
+	} catch {
+		throw new Error('WebPerl runtime manifest is not valid UTF-8 JSON.');
+	}
+	const manifest = await normalizeManifest(parsed, runtimePreflight, maxAssetBytes);
+	for (const [path, bytes] of [
+		['emperl.js', runtimePreflight.javascriptBytes],
+		['emperl.wasm', runtimePreflight.wasmBytes],
+		['emperl.data', runtimePreflight.dataBytes]
+	]) {
+		await verifyReceiptBytes(
+			manifest.assetByPath.get(path),
+			bytes,
+			`WebPerl runtime asset ${path}`
+		);
+	}
+	validateUtf8JavaScript(runtimePreflight.javascriptBytes);
+	validateWasmHeader(runtimePreflight.wasmBytes);
+	return runtimePreflight;
+}
+
+function importVerifiedRuntimeScript(bytes) {
+	validateUtf8JavaScript(bytes);
 	if (
 		typeof Blob !== 'function' ||
 		typeof URL.createObjectURL !== 'function' ||
@@ -545,7 +493,10 @@ function importVerifiedRuntimeScript(bytes) {
 	) {
 		throw new Error('WebPerl verified runtime evaluation is unavailable.');
 	}
-	const scriptUrl = URL.createObjectURL(new Blob([bytes], { type: 'text/javascript' }));
+	const scriptBytes = Uint8Array.from(bytes);
+	const scriptUrl = URL.createObjectURL(
+		new Blob([scriptBytes.buffer], { type: 'text/javascript' })
+	);
 	try {
 		importScripts(scriptUrl);
 	} finally {
@@ -557,88 +508,38 @@ function importVerifiedRuntimeScript(bytes) {
 	}
 }
 
-async function loadVerifiedWebPerlBytes(
-	baseUrl,
-	manifestUrl,
-	manifestFingerprint,
-	requestedMaxAssetBytes
-) {
-	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
-		throw new Error('WebPerl runtime asset byte limit is invalid.');
-	}
-	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
-	const identity = `${baseUrl}\n${manifestUrl}\n${manifestFingerprint}\n${maxAssetBytes}`;
-	if (verifiedRuntimePromise) {
-		if (verifiedRuntimeIdentity !== identity) {
-			throw new Error('WebPerl worker cannot replace an initialized runtime profile.');
-		}
-		return await verifiedRuntimePromise;
-	}
-	verifiedRuntimeIdentity = identity;
-	verifiedRuntimePromise = (async () => {
-		const resolvedManifestUrl =
-			manifestUrl || assetUrl(baseUrl, 'runtime-manifest.v2.json', manifestFingerprint);
-		const manifestBytes = await fetchBoundedBytes(
-			resolvedManifestUrl,
-			'WebPerl runtime manifest',
-			Math.min(maxManifestBytes, maxAssetBytes),
-			undefined,
-			'no-store'
-		);
-		let parsed;
-		try {
-			parsed = JSON.parse(fatalDecoder.decode(manifestBytes));
-		} catch {
-			throw new Error('WebPerl runtime manifest is not valid UTF-8 JSON.');
-		}
-		const manifest = await normalizeManifest(parsed, manifestFingerprint, maxAssetBytes);
-		const logicalBytesByPath = new Map();
-		for (const storagePath of Object.keys(expectedStorage).sort()) {
-			const storageReceipt = manifest.storageByPath.get(storagePath);
-			const logicalReceipt = manifest.assetByPath.get(storageReceipt.logicalPath);
-			const transportedBytes = await fetchBoundedBytes(
-				assetUrl(baseUrl, storagePath, manifestFingerprint),
-				`WebPerl runtime storage ${storagePath}`,
-				Math.max(storageReceipt.size, logicalReceipt.size),
-				storageReceipt.size,
-				undefined,
-				logicalReceipt.size
-			);
-			let logicalBytes;
-			if (await receiptMatchesBytes(storageReceipt, transportedBytes)) {
-				logicalBytes = await decompressGzipBounded(
-					transportedBytes,
-					logicalReceipt.size,
-					maxAssetBytes,
-					`WebPerl runtime asset ${logicalReceipt.path}`
-				);
-			} else if (await receiptMatchesBytes(logicalReceipt, transportedBytes)) {
-				// Browsers may transparently decode a gzip Content-Encoding response.
-				logicalBytes = transportedBytes;
-			} else {
-				throw new Error(
-					`WebPerl runtime storage ${storagePath} failed SHA-256 verification.`
-				);
-			}
-			await verifyReceiptBytes(
-				logicalReceipt,
-				logicalBytes,
-				`WebPerl runtime asset ${logicalReceipt.path}`
-			);
-			logicalBytesByPath.set(logicalReceipt.path, logicalBytes);
-		}
-		return Object.freeze({
-			javascriptBytes: logicalBytesByPath.get('emperl.js'),
-			wasmBytes: logicalBytesByPath.get('emperl.wasm'),
-			dataBytes: logicalBytesByPath.get('emperl.data')
-		});
-	})();
+function snapshotModuleGlobal() {
+	return {
+		hadOwn: Object.prototype.hasOwnProperty.call(globalThis, 'Module'),
+		value: globalThis.Module
+	};
+}
+
+function assignModule(value, label) {
 	try {
-		return await verifiedRuntimePromise;
+		globalThis.Module = value;
 	} catch (error) {
-		verifiedRuntimePromise = null;
-		verifiedRuntimeIdentity = '';
-		throw error;
+		throw new Error(`${label}: ${errorMessage(error)}`);
+	}
+	if (globalThis.Module !== value) throw new Error(label);
+}
+
+function clearModuleGlobal() {
+	assignModule(undefined, 'WebPerl runtime Module global could not be cleared');
+}
+
+function restoreModuleGlobal(snapshot) {
+	if (snapshot.hadOwn) {
+		assignModule(snapshot.value, 'WebPerl runtime Module global could not be restored');
+		return;
+	}
+	try {
+		delete globalThis.Module;
+	} catch {
+		// importScripts top-level var bindings may be non-configurable.
+	}
+	if (globalThis.Module !== undefined) {
+		assignModule(undefined, 'WebPerl runtime Module global could not be reset');
 	}
 }
 
@@ -685,20 +586,154 @@ function createSharedStdinReader(channel) {
 function createStdinReader(stdin, channel) {
 	const sharedReader = createSharedStdinReader(channel);
 	if (sharedReader) return sharedReader;
-	const bytes = encoder.encode(typeof stdin === 'string' ? stdin : '');
+	const bytes = encoder.encode(stdin || '');
 	let offset = 0;
 	return () => (offset >= bytes.byteLength ? null : bytes[offset++]);
+}
+
+function normalizeOutput(text) {
+	if (!text) return '';
+	return text.endsWith('\n') ? text : `${text}\n`;
 }
 
 function postOutput(text) {
 	if (text) self.postMessage({ output: text });
 }
 
+function createHostModule(runtimePreflight, code, args, stdinReader, activePath, settle) {
+	let stdoutBuffer = '';
+	let stderrBuffer = '';
+	const flushStdout = () => {
+		if (!stdoutBuffer) return;
+		postOutput(stdoutBuffer);
+		stdoutBuffer = '';
+	};
+	const flushStderr = () => {
+		if (!stderrBuffer) return;
+		postOutput(stderrBuffer);
+		stderrBuffer = '';
+	};
+	const dataBuffer = runtimePreflight.dataBytes.slice().buffer;
+	const module = {
+		noInitialRun: true,
+		noExitRuntime: false,
+		wasmBinary: runtimePreflight.wasmBytes,
+		locateFile(path) {
+			if (path !== 'emperl.wasm' && path !== 'emperl.data') {
+				throw new Error(`WebPerl requested an undeclared runtime asset: ${path}`);
+			}
+			return `wasm-idle-verified:${path}`;
+		},
+		getPreloadedPackage(packageName, packageSize) {
+			if (
+				packageName !== 'wasm-idle-verified:emperl.data' ||
+				packageSize !== runtimePreflight.dataBytes.byteLength
+			) {
+				throw new Error('WebPerl requested an unexpected preloaded package.');
+			}
+			return dataBuffer;
+		},
+		print(text) {
+			postOutput(normalizeOutput(String(text)));
+		},
+		printErr(text) {
+			postOutput(normalizeOutput(String(text)));
+		},
+		stdin: stdinReader,
+		stdout(codePoint) {
+			if (codePoint === null || codePoint === 10) {
+				if (codePoint === 10) stdoutBuffer += '\n';
+				flushStdout();
+				return;
+			}
+			stdoutBuffer += String.fromCharCode(codePoint);
+		},
+		stderr(codePoint) {
+			if (codePoint === null || codePoint === 10) {
+				if (codePoint === 10) stderrBuffer += '\n';
+				flushStderr();
+				return;
+			}
+			stderrBuffer += String.fromCharCode(codePoint);
+		},
+		onAbort(reason) {
+			settle.reject(new Error(String(reason || 'Perl runtime aborted')));
+		},
+		onRuntimeInitialized() {
+			try {
+				const fileBaseName = activePath.split('/').pop() || 'main.pl';
+				const fileName = `/tmp/${fileBaseName}`;
+				try {
+					module.FS_createPath('/', 'tmp', true, true);
+				} catch {
+					// Some WebPerl builds create /tmp during startup.
+				}
+				module.FS_createDataFile('/tmp', fileBaseName, encoder.encode(code), true, true);
+				const status = module.callMain([fileName, ...args]);
+				flushStdout();
+				flushStderr();
+				if (typeof status === 'number' && status !== 0) {
+					settle.reject(new Error(`Perl exited with status ${status}.`));
+					return;
+				}
+				settle.resolve();
+			} catch (error) {
+				flushStdout();
+				flushStderr();
+				settle.reject(error);
+			}
+		}
+	};
+	return module;
+}
+
+async function runVerifiedWebPerl(runtimePreflight, code, args, stdinReader, activePath) {
+	const previousModule = snapshotModuleGlobal();
+	let failure;
+	try {
+		clearModuleGlobal();
+		let settle;
+		const completion = new Promise((resolve, reject) => {
+			settle = { resolve, reject };
+		});
+		const module = createHostModule(
+			runtimePreflight,
+			code,
+			args,
+			stdinReader,
+			activePath,
+			settle
+		);
+		assignModule(module, 'WebPerl host Module could not be installed');
+		importVerifiedRuntimeScript(runtimePreflight.javascriptBytes);
+		if (globalThis.Module !== module) {
+			throw new Error('WebPerl runtime Module changed during verified evaluation.');
+		}
+		await completion;
+	} catch (error) {
+		failure = error;
+	}
+	try {
+		restoreModuleGlobal(previousModule);
+	} catch (cleanupError) {
+		throw new AggregateError(
+			failure ? [failure, cleanupError] : [cleanupError],
+			failure
+				? `${errorMessage(failure)}; WebPerl runtime Module cleanup failed.`
+				: 'WebPerl runtime Module cleanup failed.'
+		);
+	}
+	if (failure) throw failure;
+}
+
 self.onmessage = async (event) => {
+	if (requestConsumed) {
+		self.postMessage({ error: 'WebPerl worker accepts exactly one run.' });
+		return;
+	}
+	requestConsumed = true;
 	const {
-		baseUrl,
-		manifestUrl,
-		manifestFingerprint,
+		runtimePreflight,
 		maxAssetBytes,
 		code,
 		args = [],
@@ -708,116 +743,25 @@ self.onmessage = async (event) => {
 		log
 	} = event.data || {};
 	try {
-		if (log) console.log(`[wasm-idle:perl-worker] run start baseUrl=${baseUrl}`);
-		const verified = await loadVerifiedWebPerlBytes(
-			baseUrl,
-			manifestUrl,
-			manifestFingerprint,
-			maxAssetBytes
-		);
-		if (runtimeEvaluationStarted) {
-			throw new Error('WebPerl worker cannot execute more than one runtime instance.');
+		if (log) console.log('[wasm-idle:perl-worker] run start');
+		if (
+			typeof code !== 'string' ||
+			typeof activePath !== 'string' ||
+			!Array.isArray(args) ||
+			args.some((argument) => typeof argument !== 'string') ||
+			(stdin !== undefined && typeof stdin !== 'string')
+		) {
+			throw new Error('WebPerl code, run path, arguments, and buffered stdin are invalid.');
 		}
-		runtimeEvaluationStarted = true;
-		await new Promise((resolve, reject) => {
-			let stdoutBuffer = '';
-			let stderrBuffer = '';
-			const flushStdout = () => {
-				if (!stdoutBuffer) return;
-				postOutput(stdoutBuffer);
-				stdoutBuffer = '';
-			};
-			const flushStderr = () => {
-				if (!stderrBuffer) return;
-				postOutput(stderrBuffer);
-				stderrBuffer = '';
-			};
-			globalThis.Module = {
-				noInitialRun: true,
-				noExitRuntime: false,
-				wasmBinary: verified.wasmBytes,
-				locateFile(path) {
-					if (path !== 'emperl.wasm' && path !== 'emperl.data') {
-						throw new Error(`WebPerl requested an undeclared runtime asset: ${path}`);
-					}
-					return `wasm-idle-verified:${path}`;
-				},
-				getPreloadedPackage(packageName, packageSize) {
-					if (
-						packageName !== 'wasm-idle-verified:emperl.data' ||
-						packageSize !== verified.dataBytes.byteLength
-					) {
-						throw new Error('WebPerl requested an unexpected preloaded package.');
-					}
-					return verified.dataBytes.buffer;
-				},
-				print(text) {
-					postOutput(`${text}\n`);
-				},
-				printErr(text) {
-					postOutput(`${text}\n`);
-				},
-				stdin: createStdinReader(stdin, stdinChannel),
-				stdout(codePoint) {
-					if (codePoint === null || codePoint === 10) {
-						if (codePoint === 10) stdoutBuffer += '\n';
-						flushStdout();
-						return;
-					}
-					stdoutBuffer += String.fromCharCode(codePoint);
-				},
-				stderr(codePoint) {
-					if (codePoint === null || codePoint === 10) {
-						if (codePoint === 10) stderrBuffer += '\n';
-						flushStderr();
-						return;
-					}
-					stderrBuffer += String.fromCharCode(codePoint);
-				},
-				onAbort(reason) {
-					reject(new Error(String(reason || 'Perl runtime aborted')));
-				},
-				onRuntimeInitialized() {
-					try {
-						const fileBaseName = String(activePath).split('/').pop() || 'main.pl';
-						const fileName = `/tmp/${fileBaseName}`;
-						try {
-							globalThis.Module.FS_createPath('/', 'tmp', true, true);
-						} catch {
-							// Some WebPerl builds create /tmp during startup.
-						}
-						globalThis.Module.FS_createDataFile(
-							'/tmp',
-							fileBaseName,
-							encoder.encode(code),
-							true,
-							true
-						);
-						const status = globalThis.Module.callMain([fileName, ...args.map(String)]);
-						flushStdout();
-						flushStderr();
-						if (typeof status === 'number' && status !== 0) {
-							reject(new Error(`Perl exited with status ${status}.`));
-							return;
-						}
-						resolve();
-					} catch (error) {
-						flushStdout();
-						flushStderr();
-						reject(error);
-					}
-				}
-			};
-			try {
-				importVerifiedRuntimeScript(verified.javascriptBytes);
-			} catch (error) {
-				reject(error);
-			}
-		});
+		const stdinReader = createStdinReader(stdin, stdinChannel);
+		const verified = await verifyRuntimePreflight(runtimePreflight, maxAssetBytes);
+		await runVerifiedWebPerl(verified, code, args, stdinReader, activePath);
 		if (log) console.log('[wasm-idle:perl-worker] run settled');
 		self.postMessage({ results: true });
 	} catch (error) {
 		if (log) console.error('[wasm-idle:perl-worker] failed', error);
-		self.postMessage({ error: error?.message || String(error) });
+		self.postMessage({ error: errorMessage(error) });
+	} finally {
+		self.close();
 	}
 };

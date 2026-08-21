@@ -15,6 +15,7 @@ import {
 } from '../src/bundledPrologRuntime.js';
 import {
 	BUNDLED_PERL_MANIFEST_FINGERPRINT,
+	BUNDLED_PERL_RUNTIME_PROFILE,
 	BUNDLED_PERL_RUNNER_RECEIPT
 } from '../src/bundledPerlRuntime.js';
 import {
@@ -51,8 +52,10 @@ import {
 	resolveAwkLanguageServerWorkerUrl,
 	resolvePythonLanguageServerBaseUrl,
 	resolvePerlLanguageServerBaseUrl,
+	resolvePerlLanguageServerAssetConfig,
 	resolvePerlLanguageServerManifestFingerprint,
 	resolvePerlLanguageServerManifestUrl,
+	resolvePerlLanguageServerPreflightProfile,
 	resolvePerlLanguageServerWorkerReceipt,
 	resolvePerlLanguageServerWorkerUrl,
 	resolvePascalLanguageServerBaseUrl,
@@ -325,7 +328,7 @@ describe('lsp runtime asset resolution', () => {
 		).toThrow('complete valid runtime preflight profile and receipts');
 	});
 
-	it('pins bundled Perl manifests and diagnostic workers and fails closed for custom mirrors', () => {
+	it('pins one bundled Perl trust bundle while allowing explicit mirrors', () => {
 		const currentUrl = 'https://app.example.com/editor';
 		const bundledOptions = { rootUrl: '/wasm-idle' };
 
@@ -341,14 +344,26 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolvePerlLanguageServerManifestUrl(bundledOptions, currentUrl)).toBe(
 			`https://app.example.com/wasm-idle/wasm-perl/runtime-manifest.v2.json?v=${BUNDLED_PERL_MANIFEST_FINGERPRINT}`
 		);
+		expect(resolvePerlLanguageServerPreflightProfile(bundledOptions)).toEqual(
+			BUNDLED_PERL_RUNTIME_PROFILE
+		);
 
 		const customReceipt = { bytes: 987, sha256: 'd'.repeat(64) };
+		const customProfile = {
+			...BUNDLED_PERL_RUNTIME_PROFILE,
+			manifestFingerprint: 'c'.repeat(64),
+			manifestReceipt: {
+				...BUNDLED_PERL_RUNTIME_PROFILE.manifestReceipt,
+				sha256: 'e'.repeat(64)
+			}
+		};
 		const customOptions = {
 			perl: {
 				baseUrl: 'https://mirror.example.com/perl/',
 				workerUrl: 'https://mirror.example.com/perl/runner.js?v=custom',
-				manifestUrl: 'https://mirror.example.com/perl/manifest.json?v=custom',
-				manifestFingerprint: ` ${'c'.repeat(64)} `,
+				manifestUrl: `https://mirror.example.com/perl/manifest.json?v=${customProfile.manifestFingerprint}`,
+				...customProfile,
+				manifestFingerprint: ` ${customProfile.manifestFingerprint} `,
 				workerReceipt: customReceipt
 			}
 		};
@@ -357,36 +372,37 @@ describe('lsp runtime asset resolution', () => {
 			'https://mirror.example.com/perl/runner.js?v=custom'
 		);
 		expect(resolvePerlLanguageServerManifestUrl(customOptions)).toBe(
-			'https://mirror.example.com/perl/manifest.json?v=custom'
+			`https://mirror.example.com/perl/manifest.json?v=${customProfile.manifestFingerprint}`
 		);
 		expect(resolvePerlLanguageServerManifestFingerprint(customOptions)).toBe('c'.repeat(64));
+		expect(resolvePerlLanguageServerPreflightProfile(customOptions)).toEqual(customProfile);
 		expect(resolvePerlLanguageServerWorkerReceipt(customOptions)).toBe(customReceipt);
+		expect(resolvePerlLanguageServerAssetConfig(customOptions)).toMatchObject({
+			manifestFingerprint: customProfile.manifestFingerprint,
+			profile: customProfile,
+			workerReceipt: customReceipt
+		});
 		expect(() =>
 			resolvePerlLanguageServerManifestFingerprint({
-				perl: { baseUrl: 'https://mirror.example.com/perl/' }
+				perl: { manifestFingerprint: 'not-a-digest' }
 			})
 		).toThrow(LanguageServerAssetConfigurationError);
 		expect(() =>
-			resolvePerlLanguageServerWorkerReceipt({
-				perl: {
-					baseUrl: 'https://mirror.example.com/perl/',
-					manifestFingerprint: 'e'.repeat(64)
-				}
+			resolvePerlLanguageServerPreflightProfile({
+				perl: { manifestFingerprint: 'e'.repeat(64) }
 			})
-		).toThrow(LanguageServerAssetConfigurationError);
+		).toThrow('complete valid runtime preflight profile and receipts');
 
 		const noTrailingSlashOptions = {
 			perl: {
-				baseUrl: 'https://mirror.example.com/perl',
-				manifestFingerprint: 'e'.repeat(64),
-				workerReceipt: { bytes: 765, sha256: 'f'.repeat(64) }
+				baseUrl: 'https://mirror.example.com/perl'
 			}
 		};
 		expect(resolvePerlLanguageServerBaseUrl(noTrailingSlashOptions)).toBe(
 			'https://mirror.example.com/perl/'
 		);
 		expect(resolvePerlLanguageServerManifestUrl(noTrailingSlashOptions)).toBe(
-			`https://mirror.example.com/perl/runtime-manifest.v2.json?v=${'e'.repeat(64)}`
+			`https://mirror.example.com/perl/runtime-manifest.v2.json?v=${BUNDLED_PERL_MANIFEST_FINGERPRINT}`
 		);
 
 		const pinOnlyOptions = {
@@ -401,6 +417,9 @@ describe('lsp runtime asset resolution', () => {
 		);
 		expect(resolvePerlLanguageServerManifestUrl(pinOnlyOptions, currentUrl)).toBe(
 			`https://app.example.com/wasm-idle/wasm-perl/runtime-manifest.v2.json?v=${'e'.repeat(64)}`
+		);
+		expect(() => resolvePerlLanguageServerAssetConfig(pinOnlyOptions, currentUrl)).toThrow(
+			'complete valid runtime preflight profile and receipts'
 		);
 	});
 

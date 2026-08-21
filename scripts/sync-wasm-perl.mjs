@@ -44,6 +44,7 @@ const MANIFEST_FILE = 'runtime-manifest.v2.json';
 const LEGACY_MANIFEST_FILE = 'runtime-manifest.v1.json';
 const BUILD_METADATA_FILE = 'runtime-build.json';
 const RUNNER_FILE = 'runner-worker.js';
+const WORKER_FINGERPRINT_PLACEHOLDER = '__WASM_IDLE_PERL_MANIFEST_FINGERPRINT__';
 const MAX_ARCHIVE_BYTES = 4 * 1024 * 1024;
 const ARCHIVE_TIMEOUT_MS = 30_000;
 const ARCHIVE_ENTRIES = [
@@ -77,9 +78,14 @@ const SOURCE_TO_LOGICAL = Object.freeze({
 });
 const LOGICAL_ASSETS = Object.values(SOURCE_TO_LOGICAL);
 const STORAGE_BY_LOGICAL = Object.freeze({
-	'emperl.js': Object.freeze({ path: 'emperl.js.gz', encoding: 'gzip' }),
-	'emperl.wasm': Object.freeze({ path: 'emperl.wasm.gz', encoding: 'gzip' }),
-	'emperl.data': Object.freeze({ path: 'emperl.data.gz', encoding: 'gzip' })
+	'emperl.js': Object.freeze({ path: 'emperl.js.gz.bin', encoding: 'gzip' }),
+	'emperl.wasm': Object.freeze({ path: 'emperl.wasm.gz.bin', encoding: 'gzip' }),
+	'emperl.data': Object.freeze({ path: 'emperl.data.gz.bin', encoding: 'gzip' })
+});
+const LEGACY_STORAGE_ALIASES = Object.freeze({
+	'emperl.js.gz.bin': 'emperl.js.gz',
+	'emperl.wasm.gz.bin': 'emperl.wasm.gz',
+	'emperl.data.gz.bin': 'emperl.data.gz'
 });
 const MEDIA_TYPE_BY_LOGICAL = Object.freeze({
 	'emperl.js': 'text/javascript',
@@ -127,6 +133,7 @@ const EXPECTED_COMPONENTS = Object.freeze({
 		evidence: 'versioned WebPerl build configuration without transitive artifact locks'
 	})
 });
+/** @type {Readonly<Record<string, Readonly<{ path: string; archiveEntry: string; sourceUrl: string; spdx: string }>>>} */
 const EXPECTED_LICENSES = Object.freeze({
 	'webperl-perl-artistic': Object.freeze({
 		path: 'licenses/LICENSE_artistic.txt',
@@ -289,7 +296,10 @@ async function readInputLock(lockFilePath) {
 	const licenses = [];
 	const licensePaths = new Set();
 	for (const candidate of value.licenses) {
-		const expected = isObject(candidate) ? EXPECTED_LICENSES[candidate.id] : undefined;
+		const expected =
+			isObject(candidate) && typeof candidate.id === 'string'
+				? EXPECTED_LICENSES[candidate.id]
+				: undefined;
 		if (
 			!hasExactKeys(candidate, EXPECTED_LICENSE_KEYS) ||
 			!expected ||
@@ -684,10 +694,6 @@ export async function syncWasmPerlAssets(options = {}) {
 		throw new Error('WebPerl glue is missing the verified asset injection contract');
 	}
 	const workerBytes = await readFile(workerSourcePath);
-	const workerReceipt = Object.freeze({
-		bytes: workerBytes.byteLength,
-		sha256: sha256(workerBytes)
-	});
 	const licenseBytes = new Map();
 	const licenses = lock.licenses.map((license) => {
 		const bytes = Buffer.from(archiveEntries.get(license.archiveEntry));
@@ -738,6 +744,12 @@ export async function syncWasmPerlAssets(options = {}) {
 			sha256: sha256(bytes)
 		};
 	});
+	const publishedStorageBytes = new Map(storedBytes);
+	for (const [canonicalPath, legacyPath] of Object.entries(LEGACY_STORAGE_ALIASES)) {
+		const bytes = storedBytes.get(canonicalPath);
+		if (!bytes) throw new Error(`wasm-perl canonical storage is missing: ${canonicalPath}`);
+		publishedStorageBytes.set(legacyPath, bytes);
+	}
 	const fingerprint = computePerlRuntimeFingerprint({
 		profileId: lock.profileId,
 		licenseExpression: lock.licenseExpression,
@@ -747,6 +759,34 @@ export async function syncWasmPerlAssets(options = {}) {
 		metadata,
 		assets,
 		storage
+	});
+	const workerSource = new TextDecoder('utf-8', { fatal: true }).decode(workerBytes);
+	const expectedWorkerFingerprint = `manifestFingerprint: '${fingerprint}'`;
+	const fingerprintPlaceholder = `manifestFingerprint: '${WORKER_FINGERPRINT_PLACEHOLDER}'`;
+	let publishedWorkerSource = workerSource;
+	if (
+		workerSource.indexOf(expectedWorkerFingerprint) < 0 ||
+		workerSource.indexOf(expectedWorkerFingerprint) !==
+			workerSource.lastIndexOf(expectedWorkerFingerprint)
+	) {
+		if (
+			workerSource.indexOf(fingerprintPlaceholder) < 0 ||
+			workerSource.indexOf(fingerprintPlaceholder) !==
+				workerSource.lastIndexOf(fingerprintPlaceholder)
+		) {
+			throw new Error(
+				'wasm-perl runner must pin exactly the generated runtime manifest fingerprint'
+			);
+		}
+		publishedWorkerSource = workerSource.replace(
+			fingerprintPlaceholder,
+			expectedWorkerFingerprint
+		);
+	}
+	const publishedWorkerBytes = Buffer.from(publishedWorkerSource, 'utf8');
+	const workerReceipt = Object.freeze({
+		bytes: publishedWorkerBytes.byteLength,
+		sha256: sha256(publishedWorkerBytes)
 	});
 	const manifest = {
 		format: PERL_MANIFEST_FORMAT,
@@ -761,6 +801,39 @@ export async function syncWasmPerlAssets(options = {}) {
 		assets,
 		storage
 	};
+	const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+	const manifestReceipt = Object.freeze({
+		bytes: manifestBytes.byteLength,
+		sha256: sha256(manifestBytes)
+	});
+	const logicalReceiptByPath = new Map(assets.map((asset) => [asset.path, asset]));
+	const storageReceiptByLogicalPath = new Map(storage.map((asset) => [asset.logicalPath, asset]));
+	/** @param {string} logicalPath */
+	const runtimeReceipt = (logicalPath) => {
+		const logical = logicalReceiptByPath.get(logicalPath);
+		const stored = storageReceiptByLogicalPath.get(logicalPath);
+		if (!logical || !stored) {
+			throw new Error(`wasm-perl runtime receipt is missing for ${logicalPath}`);
+		}
+		return Object.freeze({
+			bytes: stored.size,
+			sha256: stored.sha256,
+			uncompressedBytes: logical.size,
+			uncompressedSha256: logical.sha256
+		});
+	};
+	const runtimeProfile = Object.freeze({
+		profileId: lock.profileId,
+		artifactRevision: lock.artifact.revision,
+		webperlRevision: lock.components.webperl.revision,
+		perlRevision: lock.components.perl.revision,
+		emscriptenRevision: lock.components.emscripten.revision,
+		manifestFingerprint: fingerprint,
+		manifestReceipt,
+		javascriptReceipt: runtimeReceipt('emperl.js'),
+		wasmReceipt: runtimeReceipt('emperl.wasm'),
+		dataReceipt: runtimeReceipt('emperl.data')
+	});
 	const legacyManifest = {
 		format: 'wasm-perl-runtime-manifest-v1',
 		version: WEBPERL_VERSION,
@@ -769,10 +842,13 @@ export async function syncWasmPerlAssets(options = {}) {
 		fingerprint,
 		files: LOGICAL_ASSETS
 	};
-	const versionModuleSource = `export const WASM_PERL_ASSET_VERSION =\n\t'${fingerprint}';\nexport const WASM_PERL_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
-	const lspVersionModuleSource = `export const BUNDLED_PERL_MANIFEST_FINGERPRINT =\n\t'${fingerprint}';\nexport const BUNDLED_PERL_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
+	const serializedRuntimeProfile = JSON.stringify(runtimeProfile, null, '\t')
+		.replaceAll('"', "'")
+		.replace(/^(\s*)'([A-Za-z_$][A-Za-z0-9_$]*)':/gmu, '$1$2:');
+	const versionModuleSource = `export const WASM_PERL_RUNTIME_PROFILE = ${serializedRuntimeProfile} as const;\nexport const WASM_PERL_RUNTIME_BUNDLE = Object.freeze({\n\tprofile: WASM_PERL_RUNTIME_PROFILE,\n\tworkerReceipt: {\n\t\tbytes: ${workerReceipt.bytes},\n\t\tsha256: '${workerReceipt.sha256}'\n\t}\n});\nexport const WASM_PERL_ASSET_VERSION = WASM_PERL_RUNTIME_PROFILE.manifestFingerprint;\nexport const WASM_PERL_RUNNER_RECEIPT = WASM_PERL_RUNTIME_BUNDLE.workerReceipt;\n`;
+	const lspVersionModuleSource = `export const BUNDLED_PERL_RUNTIME_PROFILE = ${serializedRuntimeProfile} as const;\nexport const BUNDLED_PERL_RUNTIME_BUNDLE = Object.freeze({\n\tprofile: BUNDLED_PERL_RUNTIME_PROFILE,\n\tworkerReceipt: {\n\t\tbytes: ${workerReceipt.bytes},\n\t\tsha256: '${workerReceipt.sha256}'\n\t}\n});\nexport const BUNDLED_PERL_MANIFEST_FINGERPRINT = BUNDLED_PERL_RUNTIME_PROFILE.manifestFingerprint;\nexport const BUNDLED_PERL_RUNNER_RECEIPT = BUNDLED_PERL_RUNTIME_BUNDLE.workerReceipt;\n`;
 	const expectedFiles = [
-		...storedBytes.keys(),
+		...publishedStorageBytes.keys(),
 		...licenseBytes.keys(),
 		BUILD_METADATA_FILE,
 		LEGACY_MANIFEST_FILE,
@@ -811,19 +887,15 @@ export async function syncWasmPerlAssets(options = {}) {
 	}
 	await mkdir(publications[0].temporary, { recursive: true });
 	try {
-		for (const [relativePath, bytes] of [...storedBytes, ...licenseBytes]) {
+		for (const [relativePath, bytes] of [...publishedStorageBytes, ...licenseBytes]) {
 			const targetPath = path.join(publications[0].temporary, relativePath);
 			await mkdir(path.dirname(targetPath), { recursive: true });
 			await writeFile(targetPath, bytes);
 		}
 		await Promise.all([
 			writeFile(path.join(publications[0].temporary, BUILD_METADATA_FILE), metadataBytes),
-			writeFile(path.join(publications[0].temporary, RUNNER_FILE), workerBytes),
-			writeFile(
-				path.join(publications[0].temporary, MANIFEST_FILE),
-				`${JSON.stringify(manifest, null, 2)}\n`,
-				'utf8'
-			),
+			writeFile(path.join(publications[0].temporary, RUNNER_FILE), publishedWorkerBytes),
+			writeFile(path.join(publications[0].temporary, MANIFEST_FILE), manifestBytes),
 			writeFile(
 				path.join(publications[0].temporary, LEGACY_MANIFEST_FILE),
 				`${JSON.stringify(legacyManifest, null, 2)}\n`,
@@ -853,6 +925,15 @@ export async function syncWasmPerlAssets(options = {}) {
 				throw new Error(
 					'wasm-perl temporary installation failed logical receipt verification'
 				);
+			}
+		}
+		for (const [canonicalPath, legacyPath] of Object.entries(LEGACY_STORAGE_ALIASES)) {
+			const [canonicalBytes, legacyBytes] = await Promise.all([
+				readFile(path.join(publications[0].temporary, canonicalPath)),
+				readFile(path.join(publications[0].temporary, legacyPath))
+			]);
+			if (!canonicalBytes.equals(legacyBytes)) {
+				throw new Error(`wasm-perl legacy storage alias drifted from ${canonicalPath}`);
 			}
 		}
 
@@ -908,6 +989,7 @@ export async function syncWasmPerlAssets(options = {}) {
 		sourceDir: resolvedSource,
 		targetDir,
 		fingerprint,
+		runtimeProfile,
 		versionModulePath,
 		lspVersionModulePath,
 		workerReceipt

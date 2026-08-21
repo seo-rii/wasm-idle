@@ -32,7 +32,11 @@ import {
 import { WASM_OCAML_ASSET_VERSION } from './wasmOcamlVersion';
 import { WASM_OCTAVE_ASSET_VERSION } from './wasmOctaveVersion';
 import { WASM_PASCAL_ASSET_VERSION } from './wasmPascalVersion';
-import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
+import {
+	WASM_PERL_ASSET_VERSION,
+	WASM_PERL_RUNNER_RECEIPT,
+	WASM_PERL_RUNTIME_PROFILE
+} from './wasmPerlVersion';
 import {
 	WASM_PROLOG_ASSET_VERSION,
 	WASM_PROLOG_RUNNER_RECEIPT,
@@ -136,7 +140,7 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			baseUrl: asset('wasm-perl/'),
 			workerUrl: asset('wasm-perl/runner-worker.js', WASM_PERL_RUNNER_RECEIPT.sha256),
 			manifestUrl: asset('wasm-perl/runtime-manifest.v2.json', WASM_PERL_ASSET_VERSION),
-			manifestFingerprint: WASM_PERL_ASSET_VERSION,
+			...WASM_PERL_RUNTIME_PROFILE,
 			workerReceipt: WASM_PERL_RUNNER_RECEIPT
 		},
 		tcl: {

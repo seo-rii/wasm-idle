@@ -14,7 +14,11 @@
 		IMonacoLspProviderResult,
 		IMonacoSetting
 	} from '@seorii/monaco';
-	import type { EditorLanguageServerHandle, LanguageServerStatus } from '@wasm-idle/lsp';
+	import type {
+		EditorLanguageServerHandle,
+		EditorLanguageServerRuntimeOptions,
+		LanguageServerStatus
+	} from '@wasm-idle/lsp';
 	import type { HaskellRuntimeAssetReceipts } from '@wasm-idle/core';
 	import type { DOuterAssetReceipts } from '$lib/playground/dOuterAssets';
 	import type { ElixirRuntimeAssetReceipts } from '$lib/playground/elixirAssets';
@@ -58,6 +62,7 @@
 		setStatus: (status: LanguageServerStatus) => void;
 		load: (currentUrl: string) => Promise<EditorLanguageServerHandle>;
 	}
+	type PerlLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['perl']>;
 
 	const monacoTestHooksEnabled = () => {
 		try {
@@ -2416,11 +2421,7 @@
 		awkLspBaseUrl?: string;
 		awkLspWorkerUrl?: string;
 		perlLspEnabled?: boolean;
-		perlLspBaseUrl?: string;
-		perlLspWorkerUrl?: string;
-		perlLspManifestUrl?: string;
-		perlLspManifestFingerprint?: string;
-		perlLspWorkerReceipt?: RuntimeAssetIntegrityEntry;
+		perlLspRuntime?: PerlLspRuntimeConfig;
 		pythonLspBaseUrl?: string;
 		breakpoints?: number[];
 		debugLocals?: DebugVariable[];
@@ -2518,11 +2519,7 @@
 		awkLspBaseUrl,
 		awkLspWorkerUrl,
 		perlLspEnabled = false,
-		perlLspBaseUrl,
-		perlLspWorkerUrl,
-		perlLspManifestUrl,
-		perlLspManifestFingerprint,
-		perlLspWorkerReceipt,
+		perlLspRuntime,
 		pythonLspBaseUrl,
 		breakpoints = [],
 		debugLocals = [],
@@ -2674,11 +2671,7 @@
 			octaveLspEnabled ? octaveLspManifestUrl || '' : '',
 			awkLspEnabled ? awkLspBaseUrl || '' : '',
 			awkLspEnabled ? awkLspWorkerUrl || '' : '',
-			perlLspEnabled ? perlLspBaseUrl || '' : '',
-			perlLspEnabled ? perlLspWorkerUrl || '' : '',
-			perlLspEnabled ? perlLspManifestUrl || '' : '',
-			perlLspEnabled ? perlLspManifestFingerprint || '' : '',
-			perlLspEnabled ? JSON.stringify(perlLspWorkerReceipt) : '',
+			perlLspEnabled ? JSON.stringify(perlLspRuntime) : '',
 			pythonLspBaseUrl || '',
 			activeLspLanguage,
 			lspEnabled ? 'lsp-on' : 'lsp-off',
@@ -3412,25 +3405,15 @@
 		},
 		{
 			languages: ['perl'],
-			isEnabled: () =>
-				perlLspEnabled &&
-				!!perlLspBaseUrl &&
-				!!perlLspWorkerUrl &&
-				!!perlLspManifestUrl &&
-				!!perlLspManifestFingerprint &&
-				!!perlLspWorkerReceipt,
+			isEnabled: () => perlLspEnabled && !!perlLspRuntime,
 			setStatus: (status) => (perlLspStatus = status),
 			load: async (currentUrl) => {
+				const runtime = perlLspRuntime;
+				if (!runtime) throw new Error('Perl LSP runtime configuration is unavailable');
 				const { getPerlLanguageServer } = await import('@wasm-idle/lsp/perl');
 				return await getPerlLanguageServer({
 					currentUrl,
-					perl: {
-						baseUrl: perlLspBaseUrl || '',
-						workerUrl: perlLspWorkerUrl || '',
-						manifestUrl: perlLspManifestUrl || '',
-						manifestFingerprint: perlLspManifestFingerprint || '',
-						workerReceipt: perlLspWorkerReceipt
-					},
+					perl: runtime,
 					onStatus: (status) => (perlLspStatus = status)
 				});
 			}

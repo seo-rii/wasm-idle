@@ -267,6 +267,26 @@ describe('wasm-idle static worker language browser integrations', () => {
 				expect(summary.pageErrors).toEqual([]);
 				expect(summary.transcript).toContain('main=73');
 				expect(summary.transcript).toContain('Process finished after');
+				const perlRuntimePaths = summary.runtimeRequests
+					.map((requestUrl) => new URL(requestUrl).pathname)
+					.filter((pathname) => pathname.includes('/wasm-perl/'))
+					.map((pathname) => pathname.slice(pathname.indexOf('/wasm-perl/')));
+				expect(new Set(perlRuntimePaths)).toEqual(
+					new Set([
+						'/wasm-perl/emperl.data.gz.bin',
+						'/wasm-perl/emperl.js.gz.bin',
+						'/wasm-perl/emperl.wasm.gz.bin',
+						'/wasm-perl/runner-worker.js',
+						'/wasm-perl/runtime-manifest.v2.json'
+					])
+				);
+				for (const legacyPath of [
+					'/wasm-perl/emperl.data.gz',
+					'/wasm-perl/emperl.js.gz',
+					'/wasm-perl/emperl.wasm.gz'
+				]) {
+					expect(perlRuntimePaths).not.toContain(legacyPath);
+				}
 			}
 		);
 	}, 960_000);

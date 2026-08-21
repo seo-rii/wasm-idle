@@ -2,7 +2,7 @@
   "format": "wasm-perl-runtime-manifest-v2",
   "runtime": "webperl",
   "profileId": "webperl-v0.09-beta-perl-5.28.1-emscripten-1.38.28",
-  "fingerprint": "ea1edaf23b9102791ec8f336a6b5b431376289a97876f925919d5e422cd08555",
+  "fingerprint": "fd0dede426ef3ff3264e71e9d3583530eccd9529fe08632dc1574d9e13a7be3b",
   "licenseExpression": "Artistic-1.0-Perl OR GPL-1.0-or-later",
   "artifact": {
     "kind": "opaque-prebuilt",
@@ -89,21 +89,21 @@
   ],
   "storage": [
     {
-      "path": "emperl.js.gz",
+      "path": "emperl.js.gz.bin",
       "logicalPath": "emperl.js",
       "encoding": "gzip",
       "size": 61304,
       "sha256": "2a8b07227cb363ee57d8a5679c751044e191b4979862ff54709ea8773c236ce0"
     },
     {
-      "path": "emperl.wasm.gz",
+      "path": "emperl.wasm.gz.bin",
       "logicalPath": "emperl.wasm",
       "encoding": "gzip",
       "size": 1186908,
       "sha256": "1375fdda3204cbcb9f21d182a0706bf8bac7acc1267366e87bccf9ac29310ca0"
     },
     {
-      "path": "emperl.data.gz",
+      "path": "emperl.data.gz.bin",
       "logicalPath": "emperl.data",
       "encoding": "gzip",
       "size": 2603581,

@@ -216,6 +216,20 @@ export {
 	type PrologRuntimePreflightRequest
 } from './prolog-runtime.js';
 export {
+	PERL_PREFLIGHT_PROTOCOL,
+	PERL_PREFLIGHT_PROTOCOL_VERSION,
+	PERL_PREFLIGHT_RUNTIME_ID,
+	PERL_MAX_ASSET_BYTES,
+	clonePerlRuntimePreflightPayload,
+	preflightPerlRuntimeAssets,
+	requirePerlRuntimePreflightPayload,
+	snapshotPerlRuntimePreflightProfile,
+	verifyPerlRuntimePreflightPayload,
+	type PerlRuntimePreflightPayload,
+	type PerlRuntimePreflightProfile,
+	type PerlRuntimePreflightRequest
+} from './perl-runtime.js';
+export {
 	TCL_PREFLIGHT_PROTOCOL,
 	TCL_PREFLIGHT_PROTOCOL_VERSION,
 	TCL_PREFLIGHT_RUNTIME_ID,

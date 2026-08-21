@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	HASKELL_RUNTIME_ASSET_RECEIPTS,
+	PERL_MAX_ASSET_BYTES,
 	PROLOG_MAX_ASSET_BYTES,
 	RUBY_RUNTIME_ASSET_PATH,
 	TCL_MAX_ASSET_BYTES
@@ -15,7 +16,7 @@ import {
 	BUNDLED_PROLOG_RUNNER_RECEIPT
 } from '../src/bundledPrologRuntime.js';
 import {
-	BUNDLED_PERL_MANIFEST_FINGERPRINT,
+	BUNDLED_PERL_RUNTIME_PROFILE,
 	BUNDLED_PERL_RUNNER_RECEIPT
 } from '../src/bundledPerlRuntime.js';
 import {
@@ -29,6 +30,7 @@ import {
 } from '../src/bundledJanetRuntime.js';
 import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from '../src/bundledLispRuntime.js';
 import { createPrologTestAssetResponse } from './prolog-fixture.js';
+import { createPerlTestAssetResponse, perlTestAssetBytes } from './perl-fixture.js';
 import { createTclTestAssetResponse, tclTestAssetBytes } from './tcl-fixture.js';
 
 const lispStaticDir = path.resolve(
@@ -868,22 +870,34 @@ describe('additional language server workers', () => {
 	});
 
 	it('starts Perl with WebPerl worker assets', async () => {
+		const fetchMock = vi.fn(async (input: string | URL | Request) => {
+			const requestUrl = new URL(
+				typeof input === 'string' || input instanceof URL ? input : input.url
+			);
+			const response = createPerlTestAssetResponse(requestUrl);
+			if (!response) throw new Error(`Unexpected Perl asset request: ${requestUrl.href}`);
+			return response;
+		});
+		vi.stubGlobal('fetch', fetchMock);
 		const handle = await getPerlLanguageServer({
 			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
 
-		expect(mockState.workers[0]?.messages[0]).toEqual({
+		expect(mockState.workers[0]?.messages[0]).toMatchObject({
 			type: 'init',
 			options: {
-				baseUrl: 'https://static.example.com/repl_20240807/wasm-perl/',
-				workerUrl: `https://static.example.com/repl_20240807/wasm-perl/runner-worker.js?v=${BUNDLED_PERL_RUNNER_RECEIPT.sha256}`,
-				manifestUrl: `https://static.example.com/repl_20240807/wasm-perl/runtime-manifest.v2.json?v=${BUNDLED_PERL_MANIFEST_FINGERPRINT}`,
-				manifestFingerprint: BUNDLED_PERL_MANIFEST_FINGERPRINT,
-				workerReceipt: BUNDLED_PERL_RUNNER_RECEIPT
+				maxAssetBytes: PERL_MAX_ASSET_BYTES,
+				workerReceipt: BUNDLED_PERL_RUNNER_RECEIPT,
+				runnerWorkerBytes: perlTestAssetBytes['runner-worker.js'],
+				runtimePreflight: {
+					profileId: BUNDLED_PERL_RUNTIME_PROFILE.profileId,
+					manifestFingerprint: BUNDLED_PERL_RUNTIME_PROFILE.manifestFingerprint
+				}
 			}
 		});
+		expect(fetchMock).toHaveBeenCalledTimes(5);
 
 		handle.dispose();
 	});

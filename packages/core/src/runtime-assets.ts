@@ -127,6 +127,15 @@ export interface RuntimeAssetKeySource {
 		workerUrl?: string;
 		manifestUrl?: string;
 		manifestFingerprint?: string;
+		profileId?: string;
+		artifactRevision?: string;
+		webperlRevision?: string;
+		perlRevision?: string;
+		emscriptenRevision?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		javascriptReceipt?: RuntimeAssetIntegrityEntry;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
+		dataReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	tcl?: {
@@ -682,6 +691,35 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		runtime: 'perl',
 		property: 'manifestFingerprint',
 		key: 'perlManifestFingerprint'
+	},
+	{ runtime: 'perl', property: 'profileId', key: 'perlProfileId' },
+	{ runtime: 'perl', property: 'artifactRevision', key: 'perlArtifactRevision' },
+	{ runtime: 'perl', property: 'webperlRevision', key: 'perlWebperlRevision' },
+	{ runtime: 'perl', property: 'perlRevision', key: 'perlPerlRevision' },
+	{ runtime: 'perl', property: 'emscriptenRevision', key: 'perlEmscriptenRevision' },
+	{
+		runtime: 'perl',
+		property: 'manifestReceipt',
+		key: 'perlManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'perl',
+		property: 'javascriptReceipt',
+		key: 'perlJavaScriptReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'perl',
+		property: 'wasmReceipt',
+		key: 'perlWasmReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'perl',
+		property: 'dataReceipt',
+		key: 'perlDataReceipt',
+		serialize: serializeIntegrityEntry
 	},
 	{
 		runtime: 'perl',

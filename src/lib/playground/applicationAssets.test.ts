@@ -35,7 +35,11 @@ import { WASM_JULIA_ASSET_VERSION, WASM_JULIA_RUNNER_RECEIPT } from './wasmJulia
 import { WASM_LISP_ASSET_VERSION } from './wasmLispVersion';
 import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
-import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
+import {
+	WASM_PERL_ASSET_VERSION,
+	WASM_PERL_RUNNER_RECEIPT,
+	WASM_PERL_RUNTIME_PROFILE
+} from './wasmPerlVersion';
 import {
 	WASM_PROLOG_ASSET_VERSION,
 	WASM_PROLOG_RUNNER_RECEIPT,
@@ -166,7 +170,7 @@ describe('application runtime asset root', () => {
 			baseUrl: '/foo/bar/wasm-perl/',
 			workerUrl: `/foo/bar/wasm-perl/runner-worker.js?v=${WASM_PERL_RUNNER_RECEIPT.sha256}`,
 			manifestUrl: `/foo/bar/wasm-perl/runtime-manifest.v2.json?v=${WASM_PERL_ASSET_VERSION}`,
-			manifestFingerprint: WASM_PERL_ASSET_VERSION,
+			...WASM_PERL_RUNTIME_PROFILE,
 			workerReceipt: WASM_PERL_RUNNER_RECEIPT
 		});
 		expect(assets.tcl).toEqual({
@@ -366,6 +370,15 @@ describe('application runtime asset root', () => {
 				]
 			]),
 			perlManifestFingerprint: WASM_PERL_ASSET_VERSION,
+			perlProfileId: WASM_PERL_RUNTIME_PROFILE.profileId,
+			perlArtifactRevision: WASM_PERL_RUNTIME_PROFILE.artifactRevision,
+			perlWebperlRevision: WASM_PERL_RUNTIME_PROFILE.webperlRevision,
+			perlPerlRevision: WASM_PERL_RUNTIME_PROFILE.perlRevision,
+			perlEmscriptenRevision: WASM_PERL_RUNTIME_PROFILE.emscriptenRevision,
+			perlManifestReceipt: expect.any(String),
+			perlJavaScriptReceipt: expect.any(String),
+			perlWasmReceipt: expect.any(String),
+			perlDataReceipt: expect.any(String),
 			perlWorkerReceipt: JSON.stringify([
 				[
 					'worker',
@@ -505,6 +518,15 @@ describe('application runtime asset root', () => {
 			prologWorkerReceipt: expect.any(String),
 			perlManifestUrl: assets.perl?.manifestUrl,
 			perlManifestFingerprint: assets.perl?.manifestFingerprint,
+			perlProfileId: assets.perl?.profileId,
+			perlArtifactRevision: assets.perl?.artifactRevision,
+			perlWebperlRevision: assets.perl?.webperlRevision,
+			perlPerlRevision: assets.perl?.perlRevision,
+			perlEmscriptenRevision: assets.perl?.emscriptenRevision,
+			perlManifestReceipt: expect.any(String),
+			perlJavaScriptReceipt: expect.any(String),
+			perlWasmReceipt: expect.any(String),
+			perlDataReceipt: expect.any(String),
 			perlWorkerReceipt: expect.any(String),
 			tclManifestUrl: assets.tcl?.manifestUrl,
 			tclManifestFingerprint: assets.tcl?.manifestFingerprint,
@@ -581,6 +603,39 @@ describe('application runtime asset root', () => {
 				createRuntimeAssetsKey({
 					...assets,
 					prolog: { ...prolog, ...replacement }
+				})
+			).not.toBe(originalKey);
+		}
+	});
+
+	it('changes the runtime cache identity for every WebPerl profile and receipt field', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const originalKey = createRuntimeAssetsKey(assets);
+		const perl = assets.perl!;
+		const replacements = [
+			{ profileId: `${perl.profileId}-custom` },
+			{ artifactRevision: 'a'.repeat(40) },
+			{ webperlRevision: 'b'.repeat(40) },
+			{ perlRevision: 'c'.repeat(40) },
+			{ emscriptenRevision: 'd'.repeat(40) },
+			{ manifestFingerprint: 'e'.repeat(64) },
+			{ manifestReceipt: { ...perl.manifestReceipt!, sha256: 'f'.repeat(64) } },
+			{
+				javascriptReceipt: {
+					...perl.javascriptReceipt!,
+					uncompressedSha256: '1'.repeat(64)
+				}
+			},
+			{ wasmReceipt: { ...perl.wasmReceipt!, uncompressedBytes: 123 } },
+			{ dataReceipt: { ...perl.dataReceipt!, sha256: '2'.repeat(64) } },
+			{ workerReceipt: { ...perl.workerReceipt!, sha256: '3'.repeat(64) } }
+		];
+
+		for (const replacement of replacements) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					perl: { ...perl, ...replacement }
 				})
 			).not.toBe(originalKey);
 		}
