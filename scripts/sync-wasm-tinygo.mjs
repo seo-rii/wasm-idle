@@ -30,6 +30,9 @@ function shouldInclude(relativePath) {
 	if (normalized.startsWith('assets/upstream-runtime-') && normalized.endsWith('.js')) {
 		return true;
 	}
+	if (normalized.startsWith('assets/upstream-compile-worker-') && normalized.endsWith('.js')) {
+		return true;
+	}
 	if (normalized.startsWith('tools/upstream/')) {
 		return true;
 	}

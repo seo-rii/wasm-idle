@@ -9,6 +9,15 @@ const __dirname = path.dirname(__filename);
 
 export default defineConfig({
 	plugins: [createTinyGoHostCompilePlugin()],
+	worker: {
+		format: 'es',
+		rollupOptions: {
+			output: {
+				entryFileNames: 'assets/upstream-compile-worker-[hash].js',
+				chunkFileNames: 'assets/upstream-compile-worker-[hash].js'
+			}
+		}
+	},
 	build: {
 		rollupOptions: {
 			preserveEntrySignatures: 'strict',

@@ -39,6 +39,11 @@ describe('syncWasmTinyGoDist', () => {
 			'assets/upstream-runtime-test.js',
 			'console.log("upstream runtime");\n'
 		);
+		await writeFixtureFile(
+			sourceDir,
+			'assets/upstream-compile-worker-test.js',
+			'console.log("upstream worker");\n'
+		);
 		await writeFixtureFile(sourceDir, 'tools/go-probe.wasm', 'wasm');
 		await writeFixtureFile(sourceDir, 'tools/tinygo-compiler.wasm', 'compiler');
 		await writeFixtureFile(sourceDir, 'tools/tinygo-compiler.json', '{"buildMode":"direct"}\n');
@@ -68,6 +73,9 @@ describe('syncWasmTinyGoDist', () => {
 		await expect(
 			readFile(path.join(targetDir, 'assets/upstream-runtime-test.js'), 'utf8')
 		).resolves.toContain('upstream runtime');
+		await expect(
+			readFile(path.join(targetDir, 'assets/upstream-compile-worker-test.js'), 'utf8')
+		).resolves.toContain('upstream worker');
 		await expect(
 			readFile(path.join(targetDir, 'tools/upstream/upstream-toolchain.v1.json'), 'utf8')
 		).resolves.toContain('wasm-idle-tinygo-upstream-assets-v1');

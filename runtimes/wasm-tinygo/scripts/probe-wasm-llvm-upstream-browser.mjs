@@ -4,7 +4,6 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright-core';
 
@@ -57,7 +56,6 @@ function contentType(filePath) {
 
 async function main() {
 	const options = parseArgs(process.argv.slice(2));
-	const binaryenPath = fileURLToPath(import.meta.resolve('binaryen'));
 	const workspaceFiles = {};
 	const visitWorkspace = async (directory, prefix = '') => {
 		for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -78,8 +76,7 @@ async function main() {
 		packageGraphReceipt,
 		lld,
 		stdin,
-		expectedStdout,
-		binaryenSource
+		expectedStdout
 	] = await Promise.all([
 		readFile(options.compilerPath),
 		readFile(options.packageGraphPath),
@@ -88,8 +85,7 @@ async function main() {
 		readFile(options.packageGraphReceiptPath),
 		readFile(options.lldPath),
 		readFile(options.stdinPath),
-		readFile(options.expectedStdoutPath),
-		readFile(binaryenPath)
+		readFile(options.expectedStdoutPath)
 	]);
 	const assetManifest = {
 		schemaVersion: 2,
@@ -113,7 +109,6 @@ async function main() {
 		['/workspace.json', Buffer.from(JSON.stringify(workspaceFiles))],
 		['/stdin.txt', stdin],
 		['/expected-stdout.txt', expectedStdout],
-		['/binaryen.js', binaryenSource],
 		['/asset-manifest.json', Buffer.from(JSON.stringify(assetManifest))]
 	]);
 	const harness = `<!doctype html>
@@ -121,7 +116,6 @@ async function main() {
 <title>upstream TinyGo browser acceptance</title>
 <script type="module">
 import * as tinygo from '/upstream.js';
-import binaryen from '/binaryen.js';
 
 const loadBytes = async (url) => {
   const response = await fetch(url);
@@ -143,15 +137,19 @@ try {
     loadBytes('/expected-stdout.txt')
   ]);
   window.__tinygoProbe.phase = 'prepare';
-	  const toolchain = await tinygo.prepareTinyGoUpstreamToolchain({ manifest, producerReceipt, packageGraphReceipt, compiler, packageGraph, rootArchive, lld });
 	  const workspaceFiles = Object.fromEntries(Object.entries(workspaceValue).map(([name, encoded]) => {
 	    const binary = atob(encoded);
 	    return [name, Uint8Array.from(binary, (character) => character.charCodeAt(0))];
 	  }));
-	  const result = await tinygo.compileUpstreamTinyGo(toolchain, {
-	    workspaceFiles,
-    onPhase: (phase) => { window.__tinygoProbe.phase = phase; }
-  }, tinygo.createBinaryenTinyGoOptimizer(binaryen));
+	  const result = await tinygo.compileTinyGoInDisposableWorker(
+	    { manifest, producerReceipt, packageGraphReceipt, compiler, packageGraph, rootArchive, lld },
+	    { workspaceFiles },
+	    {
+	      maxWasmMemoryBytes: 768 * 1024 * 1024,
+	      phaseTimeoutMs: { prepare: 120000, graph: 60000, validate: 30000, compile: 240000, link: 120000, optimize: 120000 },
+        onPhase: (phase) => { window.__tinygoProbe.phase = phase; }
+	    }
+	  );
   window.__tinygoProbe.phase = 'execute';
   const execution = await tinygo.executeUpstreamTinyGoWasm({ wasm: result.wasm, stdin });
   const expected = new Uint8Array(expectedStdout);
@@ -162,7 +160,7 @@ try {
 	  window.__tinygoProbe = {
 	    status: 'passed',
 	    phase: 'done',
-	    compileProtocolVersion: toolchain.compileProtocolVersion,
+	    compileProtocolVersion: result.linkPlan.schemaVersion,
 	    packageCount: tinygo.parseConcatenatedTinyGoPackageJSON(result.packageJSON).length,
 	    object: { bytes: result.object.byteLength, sha256: await tinygo.sha256TinyGoBytes(result.object) },
 	    objects: await Promise.all(result.objects.map(async (object, index) => ({

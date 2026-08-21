@@ -38,6 +38,7 @@ import {
 	assertTinyGoLLVMBitcodeEnvelope,
 	assertTinyGoRelocatableWasmObject
 } from './upstream-binary.ts';
+import { capTinyGoWasmMemory } from './upstream-worker.ts';
 
 const RUNTIME_MANIFEST_PATH = `runtime/${TINYGO_RUNTIME_PROFILE_ID}/manifest.json`;
 const MAX_DIAGNOSTIC_BYTES = 1024 * 1024;
@@ -551,7 +552,7 @@ async function verifyRuntimeClosureAssets(
 
 export async function prepareTinyGoUpstreamToolchain(
 	assets: TinyGoUpstreamToolchainAssets,
-	options: { maxRootBytes?: number; maxRootFiles?: number } = {}
+	options: { maxRootBytes?: number; maxRootFiles?: number; maxWasmMemoryBytes?: number } = {}
 ): Promise<PreparedTinyGoUpstreamToolchain> {
 	const verified = await verifyTinyGoUpstreamAssetSet(assets);
 	const root = await extractTinyGoRootArchive(assets.rootArchive, {
@@ -585,10 +586,30 @@ export async function prepareTinyGoUpstreamToolchain(
 		verified.manifest.assets.compiler.sha256
 	);
 	await verifyRuntimeClosureAssets(root, runtime);
+	const compilerBytes =
+		options.maxWasmMemoryBytes === undefined
+			? assets.compiler
+			: capTinyGoWasmMemory(
+					assets.compiler,
+					options.maxWasmMemoryBytes,
+					'upstream TinyGo compiler'
+				);
+	const packageGraphBytes =
+		options.maxWasmMemoryBytes === undefined
+			? assets.packageGraph
+			: capTinyGoWasmMemory(
+					assets.packageGraph,
+					options.maxWasmMemoryBytes,
+					'upstream Go package-graph provider'
+				);
+	const lldBytes =
+		options.maxWasmMemoryBytes === undefined
+			? assets.lld
+			: capTinyGoWasmMemory(assets.lld, options.maxWasmMemoryBytes, 'raw WASI LLD');
 	const [compiler, packageGraph, lld] = await Promise.all([
-		compileWasiModule(assets.compiler, 'upstream TinyGo compiler'),
-		compileWasiModule(assets.packageGraph, 'upstream Go package-graph provider'),
-		compileWasiModule(assets.lld, 'raw WASI LLD')
+		compileWasiModule(compilerBytes, 'upstream TinyGo compiler'),
+		compileWasiModule(packageGraphBytes, 'upstream Go package-graph provider'),
+		compileWasiModule(lldBytes, 'raw WASI LLD')
 	]);
 	return {
 		compiler,
