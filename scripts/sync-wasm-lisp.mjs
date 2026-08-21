@@ -109,7 +109,7 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 const isObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
 
-/** @param {unknown} value @param {readonly string[]} expectedKeys */
+/** @param {unknown} value @param {readonly string[]} expectedKeys @returns {value is Record<string, unknown>} */
 const hasExactKeys = (value, expectedKeys) =>
 	isObject(value) && JSON.stringify(Object.keys(value).sort()) === JSON.stringify(expectedKeys);
 
@@ -167,10 +167,10 @@ async function resolveBoundaryPath(filePath) {
 
 /** @param {unknown} value @param {string} label @param {number} maxBytes */
 function validateByteSize(value, label, maxBytes) {
-	if (!Number.isSafeInteger(value) || /** @type {number} */ (value) <= 0 || value > maxBytes) {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0 || value > maxBytes) {
 		throw new Error(`${label} has an invalid byte size`);
 	}
-	return /** @type {number} */ (value);
+	return value;
 }
 
 /** @param {unknown} value @param {string} label */
@@ -258,7 +258,10 @@ async function readInputLock(lockFilePath) {
 		) {
 			throw new Error('wasm-lisp input lock has an invalid or duplicate asset');
 		}
-		const contract = LOGICAL_ASSET_CONTRACT[candidate.path];
+		const contract =
+			LOGICAL_ASSET_CONTRACT[
+				/** @type {keyof typeof LOGICAL_ASSET_CONTRACT} */ (candidate.path)
+			];
 		if (candidate.mediaType !== contract.mediaType) {
 			throw new Error(`wasm-lisp input lock contract drifted for ${candidate.path}`);
 		}
@@ -421,12 +424,12 @@ function validateModuleGraph(logicalBytes) {
 			throw new Error(`index.js contains forbidden external dependency ${forbidden}`);
 		}
 	}
-	for (const [needle, count] of [
+	for (const [needle, count] of /** @type {Array<[string, number]>} */ ([
 		['compilerCoreModules', 2],
 		['compilerModule', 2],
 		['as createLispCompiler', 1],
 		['as executeBrowserLispArtifact', 1]
-	]) {
+	])) {
 		if (countText(root, needle) !== count) {
 			throw new Error(`index.js does not match the verified ${needle} contract`);
 		}
@@ -539,14 +542,20 @@ export async function syncWasmLispDist(options = {}) {
 	}
 	requireWasm(compilerInput, 'puppyc.wasm compiler input');
 	for (const assetPath of LOGICAL_ASSETS.filter((asset) => asset.endsWith('.wasm'))) {
-		requireWasm(sourceBytes.get(assetPath), assetPath);
+		const bytes = sourceBytes.get(assetPath);
+		if (!bytes) throw new Error(`wasm-lisp dist ${assetPath} is missing`);
+		requireWasm(bytes, assetPath);
 	}
 	validateModuleGraph(sourceBytes);
 
+	const buildMetadataBytes = sourceBytes.get(BUILD_METADATA_FILE);
+	if (!buildMetadataBytes) {
+		throw new Error(`wasm-lisp dist ${BUILD_METADATA_FILE} is missing`);
+	}
 	let buildMetadata;
 	try {
 		buildMetadata = JSON.parse(
-			new TextDecoder('utf-8', { fatal: true }).decode(sourceBytes.get(BUILD_METADATA_FILE))
+			new TextDecoder('utf-8', { fatal: true }).decode(buildMetadataBytes)
 		);
 	} catch {
 		throw new Error('wasm-lisp runtime-build.json is not valid UTF-8 JSON');
@@ -582,6 +591,7 @@ export async function syncWasmLispDist(options = {}) {
 	/** @type {LispStorageAsset[]} */
 	const storage = assets.map((asset) => {
 		const logical = sourceBytes.get(asset.path);
+		if (!logical) throw new Error(`wasm-lisp dist ${asset.path} is missing`);
 		const encoding = COMPRESSED_ASSETS.has(asset.path) ? 'gzip' : 'identity';
 		const stored = encoding === 'gzip' ? gzipSync(logical, { level: 9 }) : logical;
 		const storagePath = encoding === 'gzip' ? `${asset.path}.gz` : asset.path;
@@ -643,11 +653,17 @@ export async function syncWasmLispDist(options = {}) {
 	};
 	const versionModuleSource = `export const WASM_LISP_ASSET_VERSION =\n\t'${fingerprint}';\n`;
 	const lspVersionModuleSource = `export const BUNDLED_LISP_MANIFEST_FINGERPRINT =\n\t'${fingerprint}';\n`;
+	const licenseBytes = sourceBytes.get(LICENSE_FILE);
+	const noticesBytes = sourceBytes.get(NOTICES_FILE);
+	if (!licenseBytes || !noticesBytes) {
+		throw new Error('wasm-lisp dist is missing required legal files');
+	}
+	/** @type {Map<string, Uint8Array>} */
 	const staticFileBytes = new Map([
 		...storageBytes,
-		[LICENSE_FILE, sourceBytes.get(LICENSE_FILE)],
-		[NOTICES_FILE, sourceBytes.get(NOTICES_FILE)],
-		[BUILD_METADATA_FILE, sourceBytes.get(BUILD_METADATA_FILE)],
+		[LICENSE_FILE, licenseBytes],
+		[NOTICES_FILE, noticesBytes],
+		[BUILD_METADATA_FILE, buildMetadataBytes],
 		[LEGACY_MANIFEST_FILE, Buffer.from(`${JSON.stringify(legacyManifest, null, 2)}\n`)],
 		[MANIFEST_FILE, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`)]
 	]);
@@ -694,6 +710,7 @@ export async function syncWasmLispDist(options = {}) {
 		}
 		for (const asset of assets) {
 			const stored = storage.find((candidate) => candidate.logicalPath === asset.path);
+			if (!stored) throw new Error(`wasm-lisp storage for ${asset.path} is missing`);
 			const installed = await readFile(path.join(publications[0].temporary, stored.path));
 			if (installed.byteLength !== stored.size || sha256(installed) !== stored.sha256) {
 				throw new Error(`wasm-lisp temporary storage receipt failed for ${stored.path}`);

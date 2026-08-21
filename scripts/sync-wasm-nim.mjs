@@ -175,7 +175,7 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 const isObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
 
-/** @param {unknown} value @param {readonly string[]} expectedKeys */
+/** @param {unknown} value @param {readonly string[]} expectedKeys @returns {value is Record<string, unknown>} */
 const hasExactKeys = (value, expectedKeys) =>
 	isObject(value) && JSON.stringify(Object.keys(value).sort()) === JSON.stringify(expectedKeys);
 
@@ -268,6 +268,7 @@ async function readInputLock(lockFilePath) {
 		value.schemaVersion !== 1 ||
 		value.profileId !== EXPECTED_PROFILE_ID ||
 		value.licenseExpression !== EXPECTED_LICENSE_EXPRESSION ||
+		!isObject(value.artifact) ||
 		canonicalJson(value.artifact) !== canonicalJson(EXPECTED_ARTIFACT) ||
 		canonicalJson(value.components) !== canonicalJson(EXPECTED_COMPONENTS) ||
 		!hasExactKeys(value.license, EXPECTED_LICENSE_KEYS) ||
@@ -290,9 +291,13 @@ async function readInputLock(lockFilePath) {
 			!hasExactKeys(candidate, EXPECTED_ASSET_KEYS) ||
 			typeof candidate.path !== 'string' ||
 			!Object.hasOwn(EXPECTED_ASSETS, candidate.path) ||
-			receipts.has(candidate.path) ||
-			candidate.mediaType !== EXPECTED_ASSETS[candidate.path].mediaType
+			receipts.has(candidate.path)
 		) {
+			throw new Error('wasm-nim input lock has an invalid or duplicate asset');
+		}
+		const expectedAsset =
+			EXPECTED_ASSETS[/** @type {keyof typeof EXPECTED_ASSETS} */ (candidate.path)];
+		if (candidate.mediaType !== expectedAsset.mediaType) {
 			throw new Error('wasm-nim input lock has an invalid or duplicate asset');
 		}
 		receipts.set(
@@ -953,7 +958,9 @@ export async function syncWasmNimAssets(options = {}) {
 			'clang/lld.wasm',
 			'clang/memfs.wasm'
 		]) {
-			requireWasm(logicalBytes.get(assetPath), assetPath);
+			const bytes = logicalBytes.get(assetPath);
+			if (!bytes) throw new Error(`Nim runtime ${assetPath} is missing`);
+			requireWasm(bytes, assetPath);
 		}
 		const sysroot = logicalBytes.get('clang/sysroot.tar');
 		if (
@@ -970,7 +977,8 @@ export async function syncWasmNimAssets(options = {}) {
 			if (!bytes) throw new Error(`Nim runtime ${assetPath} is missing`);
 			return {
 				path: assetPath,
-				mediaType: EXPECTED_ASSETS[assetPath].mediaType,
+				mediaType:
+					EXPECTED_ASSETS[/** @type {keyof typeof EXPECTED_ASSETS} */ (assetPath)].mediaType,
 				size: bytes.byteLength,
 				sha256: sha256(bytes)
 			};
@@ -1147,12 +1155,11 @@ export async function syncWasmNimAssets(options = {}) {
 				});
 			}
 			await Promise.all([
-				...storage.map((asset) =>
-					writeFile(
-						path.join(publications[0].temporary, asset.path),
-						storageBytes.get(asset.path)
-					)
-				),
+				...storage.map((asset) => {
+					const bytes = storageBytes.get(asset.path);
+					if (!bytes) throw new Error(`Nim runtime storage ${asset.path} is missing`);
+					return writeFile(path.join(publications[0].temporary, asset.path), bytes);
+				}),
 				writeFile(path.join(publications[0].temporary, LICENSE_FILE), licenseBytes),
 				writeFile(path.join(publications[0].temporary, NOTICES_FILE), noticeBytes),
 				writeFile(
@@ -1178,6 +1185,7 @@ export async function syncWasmNimAssets(options = {}) {
 			const pendingDirectories = [publications[0].temporary];
 			while (pendingDirectories.length) {
 				const directory = pendingDirectories.pop();
+				if (!directory) throw new Error('wasm-nim temporary directory queue is empty');
 				for (const entry of await readdir(directory, { withFileTypes: true })) {
 					const entryPath = path.join(directory, entry.name);
 					if (entry.isDirectory()) pendingDirectories.push(entryPath);

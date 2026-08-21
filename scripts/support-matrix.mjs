@@ -1630,8 +1630,7 @@ function extractStringArrayFromExportedConst(source, fileName, exportName) {
 	const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
 	/** @type {Map<string, import('typescript').Expression>} */
 	const initializers = new Map();
-	/** @type {import('typescript').Expression | null} */
-	let exportedInitializer = null;
+	const exportedNames = new Set();
 	/** @param {import('typescript').Node} node */
 	function visit(node) {
 		if (ts.isVariableStatement(node)) {
@@ -1641,20 +1640,18 @@ function extractStringArrayFromExportedConst(source, fileName, exportName) {
 			for (const declaration of node.declarationList.declarations) {
 				if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
 				initializers.set(declaration.name.text, declaration.initializer);
-				if (exported && declaration.name.text === exportName) {
-					exportedInitializer = declaration.initializer;
-				}
+				if (exported) exportedNames.add(declaration.name.text);
 			}
 		}
 		ts.forEachChild(node, visit);
 	}
 	visit(sourceFile);
-	if (!exportedInitializer) {
+	if (!exportedNames.has(exportName)) {
 		throw new Error(`Could not find exported const ${exportName} in ${fileName}`);
 	}
 
 	const seenIdentifiers = new Set();
-	let initializer = exportedInitializer;
+	let initializer = initializers.get(exportName);
 	while (initializer) {
 		while (
 			ts.isAsExpression(initializer) ||
