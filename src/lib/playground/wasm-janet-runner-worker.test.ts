@@ -694,20 +694,15 @@ describe('Janet runner worker', { timeout: 60_000 }, () => {
 		expect(messages.map((message) => message.output || '').join('')).toContain('main=73');
 	});
 
-	it('prints a prompt before consuming live shared-ring input', async () => {
+	it('prints a prompt before consuming shared-ring input', async () => {
 		const stdin = new StaticStdinRingHost({ capacity: 64, maxBufferedBytes: 64 });
-		let suppliedInput = false;
+		const supplyInput = setTimeout(() => {
+			stdin.enqueue('68\n');
+			stdin.close();
+		}, 10);
 		const messages = await runHarness(
-			executionRequest({ stdin: undefined, stdinChannel: stdin.descriptor }),
-			(message) => {
-				if (!message.output?.includes('value?') || suppliedInput) return;
-				suppliedInput = true;
-				setTimeout(() => {
-					stdin.enqueue('68\n');
-					stdin.close();
-				}, 10);
-			}
-		);
+			executionRequest({ stdin: undefined, stdinChannel: stdin.descriptor })
+		).finally(() => clearTimeout(supplyInput));
 
 		expect(messages.findIndex((message) => message.output?.includes('value?'))).toBeLessThan(
 			messages.findIndex((message) => message.output?.includes('main=73'))
