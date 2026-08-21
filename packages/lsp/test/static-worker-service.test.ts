@@ -16,10 +16,14 @@ import {
 	type LspDocumentContext
 } from '../src/index.js';
 import {
+	PERL_MAX_ASSET_BYTES,
+	PERL_PREFLIGHT_PROTOCOL,
+	PERL_PREFLIGHT_PROTOCOL_VERSION,
 	PROLOG_MAX_ASSET_BYTES,
 	PROLOG_PREFLIGHT_PROTOCOL,
 	PROLOG_PREFLIGHT_PROTOCOL_VERSION
 } from '@wasm-idle/core';
+import { BUNDLED_PERL_RUNTIME_PROFILE } from '../src/bundledPerlRuntime.js';
 
 const contextFor = (document: LspDocument): LspDocumentContext => ({
 	documents: new Map([[document.uri, document]]),
@@ -176,12 +180,29 @@ describe('createStaticWorkerDiagnostics', () => {
 			text: 'print "ok\\n";\n'
 		};
 		const context = contextFor(document);
-		const workerReceipt = { bytes: 4567, sha256: 'a'.repeat(64) };
+		const runnerWorkerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
+		const workerReceipt = {
+			bytes: runnerWorkerBytes.byteLength,
+			sha256: 'a'.repeat(64)
+		};
+		const runtimePreflight = {
+			protocol: PERL_PREFLIGHT_PROTOCOL,
+			protocolVersion: PERL_PREFLIGHT_PROTOCOL_VERSION,
+			profileId: BUNDLED_PERL_RUNTIME_PROFILE.profileId,
+			artifactRevision: BUNDLED_PERL_RUNTIME_PROFILE.artifactRevision,
+			webperlRevision: BUNDLED_PERL_RUNTIME_PROFILE.webperlRevision,
+			perlRevision: BUNDLED_PERL_RUNTIME_PROFILE.perlRevision,
+			emscriptenRevision: BUNDLED_PERL_RUNTIME_PROFILE.emscriptenRevision,
+			manifestFingerprint: BUNDLED_PERL_RUNTIME_PROFILE.manifestFingerprint,
+			manifestBytes: Uint8Array.of(1),
+			javascriptBytes: Uint8Array.of(2),
+			wasmBytes: Uint8Array.of(3),
+			dataBytes: Uint8Array.of(4)
+		};
 		const config = {
-			baseUrl: '/wasm-perl/',
-			workerUrl: '/wasm-perl/runner-worker.js?v=worker',
-			manifestUrl: '/wasm-perl/runtime-manifest.v2.json?v=manifest',
-			manifestFingerprint: 'b'.repeat(64),
+			runnerWorkerBytes,
+			runtimePreflight,
+			maxAssetBytes: PERL_MAX_ASSET_BYTES,
 			workerReceipt
 		};
 
@@ -190,16 +211,17 @@ describe('createStaticWorkerDiagnostics', () => {
 
 		expect(mocks.runRuntimeWorkerDiagnostics).toHaveBeenCalledWith({
 			runtime: 'perl',
-			workerUrl: config.workerUrl,
+			workerUrl: undefined,
 			workerReceipt,
+			workerBytes: runnerWorkerBytes,
 			timeoutMessage: 'Perl diagnostics timed out',
 			message: {
-				baseUrl: config.baseUrl,
-				manifestUrl: config.manifestUrl,
-				manifestFingerprint: config.manifestFingerprint,
-				maxAssetBytes: 32 * 1024 * 1024,
+				runtimePreflight,
+				maxAssetBytes: PERL_MAX_ASSET_BYTES,
 				code: document.text,
 				activePath: 'main.pl',
+				args: [],
+				stdin: '',
 				diagnose: true,
 				log: false
 			}
