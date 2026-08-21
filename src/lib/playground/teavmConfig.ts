@@ -6,11 +6,7 @@ const normalizePathPrefix = (pathPrefix: string) => {
 	return pathPrefix.endsWith('/') ? pathPrefix.slice(0, -1) : pathPrefix;
 };
 
-export const resolveTeaVmBaseUrl = (
-	pathPrefix = '',
-	currentUrl = '',
-	configuredBaseUrl = ''
-) => {
+export const resolveTeaVmBaseUrl = (pathPrefix = '', currentUrl = '', configuredBaseUrl = '') => {
 	configuredBaseUrl = configuredBaseUrl.trim();
 	const baseUrl = configuredBaseUrl
 		? normalizeTeaVmBaseUrl(configuredBaseUrl)

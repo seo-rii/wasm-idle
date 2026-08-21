@@ -70,7 +70,8 @@ async function runLanguage(
 		await page.waitForFunction(
 			(output) => {
 				const transcript =
-					document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
+					document.querySelector('[data-testid="terminal-debug-output"]')?.textContent ||
+					'';
 				return transcript.includes(output) && transcript.includes('Process finished after');
 			},
 			expectedOutput,
@@ -80,9 +81,7 @@ async function runLanguage(
 		const state = await page.evaluate(() => ({
 			language: (document.querySelector('select') as HTMLSelectElement | null)?.value,
 			runButton: document.querySelector('button.action-button--run')?.textContent?.trim(),
-			stopButton: document
-				.querySelector('button.action-button--stop')
-				?.textContent?.trim(),
+			stopButton: document.querySelector('button.action-button--stop')?.textContent?.trim(),
 			transcript:
 				document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || ''
 		}));
@@ -102,7 +101,10 @@ describe('dotnet language switching', () => {
 				const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
 				const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
 				if (!reuseProvidedBrowserUrl) {
-					await runBrowserPreparationScripts(['build:preview', 'compress:build-runtimes']);
+					await runBrowserPreparationScripts([
+						'build:preview',
+						'compress:build-runtimes'
+					]);
 				}
 				const previewServer = reuseProvidedBrowserUrl
 					? {
@@ -142,7 +144,9 @@ describe('dotnet language switching', () => {
 
 				try {
 					for (let attempt = 0; attempt < 4; attempt += 1) {
-						await page.goto(previewServer.browserUrl, { waitUntil: 'domcontentloaded' });
+						await page.goto(previewServer.browserUrl, {
+							waitUntil: 'domcontentloaded'
+						});
 						await page.waitForTimeout(1_500);
 						const ready = await page.evaluate(
 							() =>
@@ -162,7 +166,8 @@ describe('dotnet language switching', () => {
 							crossOriginIsolated &&
 							typeof SharedArrayBuffer !== 'undefined' &&
 							!!navigator.serviceWorker?.controller &&
-							typeof (globalThis as any).__wasmIdleDebug?.setEditorValue === 'function',
+							typeof (globalThis as any).__wasmIdleDebug?.setEditorValue ===
+								'function',
 						undefined,
 						{ timeout: runTimeoutMs }
 					);

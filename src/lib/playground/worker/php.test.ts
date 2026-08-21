@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const {
-	phpInstances,
-	createPhp84Mock,
-	runResponses,
-	MockPhp
-} = vi.hoisted(() => {
+const { phpInstances, createPhp84Mock, runResponses, MockPhp } = vi.hoisted(() => {
 	const runResponses: Array<{ text: string; errors: string; exitCode: number }> = [];
 	const phpInstances: any[] = [];
 

@@ -81,10 +81,10 @@ describe('AssemblyScript sandbox', () => {
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			1,
-				expect.objectContaining({
-					load: true,
-					moduleUrl: expect.stringMatching(/\/wasm-assemblyscript\/runtime\.mjs$/),
-					log: true
+			expect.objectContaining({
+				load: true,
+				moduleUrl: expect.stringMatching(/\/wasm-assemblyscript\/runtime\.mjs$/),
+				log: true
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(

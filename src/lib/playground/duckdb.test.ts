@@ -66,9 +66,9 @@ describe('DuckDB sandbox', () => {
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			1,
-				expect.objectContaining({
-					load: true,
-					moduleUrl: expect.stringMatching(/\/wasm-duckdb\/runtime\.mjs$/)
+			expect.objectContaining({
+				load: true,
+				moduleUrl: expect.stringMatching(/\/wasm-duckdb\/runtime\.mjs$/)
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(

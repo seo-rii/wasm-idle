@@ -737,7 +737,8 @@ async function installLspProgressProbe(page: Page) {
 			const rawValue = progress?.getAttribute('aria-valuenow');
 			const entry: MonacoLspProgressEntry = {
 				progressVisible: Boolean(progress),
-				progressValue: rawValue === null || rawValue === undefined ? null : Number(rawValue),
+				progressValue:
+					rawValue === null || rawValue === undefined ? null : Number(rawValue),
 				state: status.dataset.lspState || '',
 				text: status.textContent?.trim() || ''
 			};
@@ -928,7 +929,8 @@ async function runLspCase(
 	const progressTrace = await readAndStopLspProgressProbe(page);
 	expect(
 		progressTrace.some(
-			(entry) => entry.state === 'loading' && entry.progressVisible && entry.text.includes('LSP')
+			(entry) =>
+				entry.state === 'loading' && entry.progressVisible && entry.text.includes('LSP')
 		)
 	).toBe(true);
 	expect(progressTrace.some((entry) => entry.state === 'ready')).toBe(true);
@@ -963,9 +965,7 @@ async function runLspCase(
 		for (const language of ['csharp', 'fsharp', 'vbnet'] as const) {
 			if (language === selectedDotnetRuntime) continue;
 			expect(
-				lspRequests.some((request) =>
-					request.includes(`/wasm-dotnet/runtime/${language}/`)
-				)
+				lspRequests.some((request) => request.includes(`/wasm-dotnet/runtime/${language}/`))
 			).toBe(false);
 		}
 	}

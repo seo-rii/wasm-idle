@@ -9,9 +9,9 @@ describe('TeaVM config', () => {
 	});
 
 	it('resolves a relative configured base URL against the current page', () => {
-		expect(
-			resolveTeaVmBaseUrl('/ignored', 'https://example.com/base/page', '/teavm/')
-		).toBe('https://example.com/teavm/');
+		expect(resolveTeaVmBaseUrl('/ignored', 'https://example.com/base/page', '/teavm/')).toBe(
+			'https://example.com/teavm/'
+		);
 		expect(resolveTeaVmAssetUrl('https://example.com/teavm/', 'worker.js')).toBe(
 			'https://example.com/teavm/worker.js'
 		);

@@ -153,7 +153,10 @@ function insertWorkspaceFile(tree: WorkspaceTree, path: string, content: string)
 	insertWorkspaceFile(child, rest.join('/'), content);
 }
 
-function materializeWorkspaceTree(runtime: RubyRuntimeModule, tree: WorkspaceTree): Map<string, any> {
+function materializeWorkspaceTree(
+	runtime: RubyRuntimeModule,
+	tree: WorkspaceTree
+): Map<string, any> {
 	const { Directory, File } = runtime.wasiShim;
 	const contents = new Map<string, any>();
 	for (const [name, entry] of tree) {

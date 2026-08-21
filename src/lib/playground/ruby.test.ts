@@ -4,9 +4,9 @@ import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
 const { publicEnv } = vi.hoisted(() => ({
-		publicEnv: {
-			PUBLIC_WASM_RUBY_MODULE_URL: '',
-			PUBLIC_WASM_RUBY_WASM_URL: ''
+	publicEnv: {
+		PUBLIC_WASM_RUBY_MODULE_URL: '',
+		PUBLIC_WASM_RUBY_WASM_URL: ''
 	}
 }));
 let suppressAutoLoadAck = false;
@@ -90,14 +90,14 @@ describe('Ruby sandbox', () => {
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			1,
-				expect.objectContaining({
-					load: true,
-					moduleUrl: expect.stringMatching(/\/wasm-ruby\/runtime\.mjs$/),
-					wasmUrl: expect.stringMatching(
-						new RegExp(`/wasm-ruby/${RUBY_RUNTIME_ASSET_PATH.replace('.', '\\.')}$`)
-					),
-					integrity: RUBY_RUNTIME_ASSET_RECEIPTS,
-					maxAssetBytes: 128 * 1024 * 1024
+			expect.objectContaining({
+				load: true,
+				moduleUrl: expect.stringMatching(/\/wasm-ruby\/runtime\.mjs$/),
+				wasmUrl: expect.stringMatching(
+					new RegExp(`/wasm-ruby/${RUBY_RUNTIME_ASSET_PATH.replace('.', '\\.')}$`)
+				),
+				integrity: RUBY_RUNTIME_ASSET_RECEIPTS,
+				maxAssetBytes: 128 * 1024 * 1024
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(

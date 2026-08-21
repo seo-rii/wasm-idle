@@ -64,10 +64,10 @@ describe('PHP sandbox', () => {
 		).resolves.toBe(true);
 
 		expect(workerInstances).toHaveLength(1);
-			expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(1, {
-				load: true,
-				moduleUrl: 'http://localhost:3000/absproxy/5173/wasm-php/runtime.mjs',
-				log: true
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(1, {
+			load: true,
+			moduleUrl: 'http://localhost:3000/absproxy/5173/wasm-php/runtime.mjs',
+			log: true
 		});
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			2,
