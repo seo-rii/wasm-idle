@@ -27,6 +27,7 @@ import {
 	validateTinyGoLinkPlanV3,
 	validateTinyGoLinkPlanV4,
 	validateTinyGoLinkPlanV5,
+	validateTinyGoLinkPlanV6,
 	type TinyGoBinaryenLike
 } from '../src/upstream-runtime.ts';
 import {
@@ -759,6 +760,33 @@ function validLinkPlanV5(
 	};
 }
 
+function validLinkPlanV6(
+	runtime: TinyGoRuntimeClosure,
+	options: Parameters<typeof validLinkPlanV4>[1]
+) {
+	const v5 = validLinkPlanV5(runtime, options);
+	const objects = structuredClone(v5.objects);
+	objects[2]!.compilerFlags = ['-DCPP_VALUE=7'];
+	const linkArguments = [...v5.arguments];
+	linkArguments.splice(linkArguments.indexOf('-o'), 0, '-lexample');
+	return {
+		...v5,
+		schemaVersion: 6 as const,
+		format: 'wasm-llvm-tinygo-link-plan-v6' as const,
+		capabilities: [
+			'go-embed-objects',
+			'target-cgo-c',
+			'target-cxx-hosted-noeh',
+			'target-clang-assembly',
+			'target-cgo-cxxflags',
+			'target-cgo-linker-flags'
+		] as const,
+		objects,
+		arguments: linkArguments,
+		cgoLinkerFlags: ['-lexample']
+	};
+}
+
 test('reports memory-file descriptor rights required by wasi-libc and Clang', () => {
 	const readonly = new OpenFile(new File([], { readonly: true })).fd_fdstat_get().fdstat;
 	const writable = new OpenFile(new File([])).fd_fdstat_get().fdstat;
@@ -1221,6 +1249,28 @@ test('normalizes go list JSON paths and validates the exact mounted package grap
 			compileProtocolVersion: 4
 		})
 	);
+	const cxxFlags = cxx.replace(
+		'"CXXFiles":["helper.cc"]',
+		'"CXXFiles":["helper.cc"],"CgoCXXFLAGS":["-DCPP_VALUE=7"],"CgoLDFLAGS":["-lexample"]'
+	);
+	assert.throws(
+		() =>
+			validateTinyGoPackageJSON({
+				packageJSON: cxxFlags,
+				root,
+				workspace,
+				compileProtocolVersion: 5
+			}),
+		/CXXFLAGS.*compile protocol v6/u
+	);
+	assert.doesNotThrow(() =>
+		validateTinyGoPackageJSON({
+			packageJSON: cxxFlags,
+			root,
+			workspace,
+			compileProtocolVersion: 6
+		})
+	);
 	const embedded = normalized.replace(
 		'"GoFiles":["main.go"]',
 		'"GoFiles":["main.go"],"EmbedFiles":["main.go"]'
@@ -1601,6 +1651,35 @@ test('binds compiler, root, LLD, and the passed upstream producer receipt by SHA
 		lld
 	});
 	assert.equal(verifiedV5.compileProtocolVersion, 5);
+	const v6ReceiptValue = structuredClone(v5ReceiptValue);
+	v6ReceiptValue.schemaVersion = 6;
+	v6ReceiptValue.format = 'wasm-llvm-tinygo-browser-compiler-v6';
+	v6ReceiptValue.build.compileProtocol = {
+		version: 6,
+		format: 'wasm-llvm-tinygo-link-plan-v6',
+		capabilities: [
+			'go-embed-objects',
+			'target-cgo-c',
+			'target-cxx-hosted-noeh',
+			'target-clang-assembly',
+			'target-cgo-cxxflags',
+			'target-cgo-linker-flags'
+		]
+	};
+	const v6ProducerReceipt = new TextEncoder().encode(JSON.stringify(v6ReceiptValue));
+	const verifiedV6 = await verifyTinyGoUpstreamAssetSet({
+		manifest: {
+			...manifest,
+			producerReceipt: await evidence('producer-receipt.json', v6ProducerReceipt)
+		},
+		producerReceipt: v6ProducerReceipt,
+		packageGraphReceipt,
+		compiler,
+		packageGraph,
+		rootArchive,
+		lld
+	});
+	assert.equal(verifiedV6.compileProtocolVersion, 6);
 	const wrongV4Capabilities = structuredClone(v4ReceiptValue);
 	wrongV4Capabilities.build.compileProtocol.capabilities = ['go-embed-objects', 'target-cgo-c'];
 	const wrongV4Receipt = new TextEncoder().encode(JSON.stringify(wrongV4Capabilities));
@@ -1959,6 +2038,35 @@ test('binds compile protocol v4 C++, Clang assembly, dependencies, formats, and 
 	await assert.rejects(
 		validateTinyGoLinkPlanV5(reorderedHostedRuntime, runtime, validationOptions),
 		/arguments differ from compile protocol v5/u
+	);
+
+	const flaggedPlan = validLinkPlanV6(runtime, {
+		cgoSha256,
+		cSha256,
+		cxxSha256,
+		assemblySha256,
+		dependencySha256
+	});
+	assert.equal(
+		(
+			await validateTinyGoLinkPlanV6(flaggedPlan, runtime, {
+				...validationOptions,
+				expectedCXXFlags: new Map([['example.com/app\0helper.cc', ['-DCPP_VALUE=7']]]),
+				expectedCGoLinkerFlags: ['-lexample']
+			})
+		).schemaVersion,
+		6
+	);
+	const unsafeLinkerFlag = structuredClone(flaggedPlan);
+	unsafeLinkerFlag.cgoLinkerFlags = ['--export-all'];
+	unsafeLinkerFlag.arguments[unsafeLinkerFlag.arguments.indexOf('-lexample')] = '--export-all';
+	await assert.rejects(
+		validateTinyGoLinkPlanV6(unsafeLinkerFlag, runtime, {
+			...validationOptions,
+			expectedCXXFlags: new Map([['example.com/app\0helper.cc', ['-DCPP_VALUE=7']]]),
+			expectedCGoLinkerFlags: ['--export-all']
+		}),
+		/outside the browser library-link policy/u
 	);
 });
 

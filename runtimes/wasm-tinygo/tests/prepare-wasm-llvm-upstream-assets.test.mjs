@@ -18,7 +18,9 @@ for (const producer of [
 	{ schemaVersion: 1, format: 'wasm-llvm-tinygo-browser-compiler-v1' },
 	{ schemaVersion: 2, format: 'wasm-llvm-tinygo-browser-compiler-v2' },
 	{ schemaVersion: 3, format: 'wasm-llvm-tinygo-browser-compiler-v3' },
-	{ schemaVersion: 4, format: 'wasm-llvm-tinygo-browser-compiler-v4' }
+	{ schemaVersion: 4, format: 'wasm-llvm-tinygo-browser-compiler-v4' },
+	{ schemaVersion: 5, format: 'wasm-llvm-tinygo-browser-compiler-v5' },
+	{ schemaVersion: 6, format: 'wasm-llvm-tinygo-browser-compiler-v6' }
 ]) {
 	test(`prepares a hash-bound ${producer.format} asset directory without replacing an existing one`, async () => {
 		const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'wasm-tinygo-upstream-assets-'));
@@ -49,14 +51,37 @@ for (const producer of [
 											? ['go-embed-objects']
 											: producer.schemaVersion === 3
 												? ['go-embed-objects', 'target-cgo-c']
-												: [
+												: producer.schemaVersion === 4
+													? [
 														'go-embed-objects',
 														'target-cgo-c',
 														'target-cxx-freestanding',
 														'target-clang-assembly'
-													]
+														]
+													: producer.schemaVersion === 5
+														? [
+																'go-embed-objects',
+																'target-cgo-c',
+																'target-cxx-hosted-noeh',
+																'target-clang-assembly'
+															]
+														: [
+																'go-embed-objects',
+																'target-cgo-c',
+																'target-cxx-hosted-noeh',
+																'target-clang-assembly',
+																'target-cgo-cxxflags',
+																'target-cgo-linker-flags'
+															]
 								},
-								compileOutputs: ['objects', 'link-plan.json']
+								compileOutputs: ['objects', 'link-plan.json'],
+								...(producer.schemaVersion >= 5
+									? {
+											rootArchive: {
+												runtimeClosureFormat: 'wasm-llvm-tinygo-runtime-closure-v2'
+											}
+										}
+									: {})
 							}
 						}
 					: {}),
@@ -144,7 +169,7 @@ for (const producer of [
 					/not a passed upstream TinyGo browser compiler receipt/
 				);
 			}
-			if (producer.schemaVersion === 4) {
+			if (producer.schemaVersion >= 4) {
 				const wrongCapabilitiesPath = path.join(
 					temporaryRoot,
 					'wrong-capabilities-receipt.json'
@@ -173,7 +198,7 @@ for (const producer of [
 					wrongCapabilitiesOutput;
 				await assert.rejects(
 					execFileAsync(process.execPath, [scriptPath, ...wrongCapabilitiesArgs]),
-					/does not bind TinyGo compile protocol v4/
+					new RegExp(`does not bind TinyGo compile protocol v${producer.schemaVersion}`)
 				);
 			}
 			await assert.rejects(

@@ -12,6 +12,8 @@ export const TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V4 =
 	'wasm-llvm-tinygo-browser-compiler-v4' as const;
 export const TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V5 =
 	'wasm-llvm-tinygo-browser-compiler-v5' as const;
+export const TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V6 =
+	'wasm-llvm-tinygo-browser-compiler-v6' as const;
 export const TINYGO_UPSTREAM_PACKAGE_GRAPH_RECEIPT_FORMAT =
 	'wasm-llvm-tinygo-package-graph-provider-v1' as const;
 export const TINYGO_RUNTIME_CLOSURE_FORMAT_V1 =
@@ -56,6 +58,8 @@ export const TINYGO_UPSTREAM_PACKAGE_GRAPH_FIELDS = [
 	'CFiles',
 	'CXXFiles',
 	'SFiles',
+	'CgoCXXFLAGS',
+	'CgoLDFLAGS',
 	'EmbedFiles',
 	'Imports',
 	'ImportMap',
@@ -83,13 +87,14 @@ const SOURCE_FILE_FIELDS = [
 	'SFiles',
 	'EmbedFiles'
 ] as const;
+const PACKAGE_FLAG_FIELDS = ['CgoCXXFLAGS', 'CgoLDFLAGS'] as const;
 const MAX_PACKAGE_JSON_BYTES = 64 * 1024 * 1024;
 const MAX_PACKAGE_COUNT = 16_384;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
 
 type JsonObject = Record<string, unknown>;
 
-export type TinyGoCompileProtocolVersion = 1 | 2 | 3 | 4 | 5;
+export type TinyGoCompileProtocolVersion = 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface TinyGoUpstreamAssetEvidence {
 	path: string;
@@ -311,6 +316,11 @@ export async function verifyTinyGoUpstreamAssetSet(options: {
 		receipt.format === TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V5
 	) {
 		compileProtocolVersion = 5;
+	} else if (
+		receipt.schemaVersion === 6 &&
+		receipt.format === TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V6
+	) {
+		compileProtocolVersion = 6;
 	} else {
 		throw new Error('unexpected TinyGo producer receipt format');
 	}
@@ -347,12 +357,21 @@ export async function verifyTinyGoUpstreamAssetSet(options: {
 							'target-cxx-freestanding',
 							'target-clang-assembly'
 							]
-						: [
+						: compileProtocolVersion === 5
+							? [
 								'go-embed-objects',
 								'target-cgo-c',
 								'target-cxx-hosted-noeh',
 								'target-clang-assembly'
-							];
+								]
+							: [
+									'go-embed-objects',
+									'target-cgo-c',
+									'target-cxx-hosted-noeh',
+									'target-clang-assembly',
+									'target-cgo-cxxflags',
+									'target-cgo-linker-flags'
+								];
 		if (
 			compileProtocol.version !== compileProtocolVersion ||
 			compileProtocol.format !== `wasm-llvm-tinygo-link-plan-v${compileProtocolVersion}` ||
@@ -363,7 +382,7 @@ export async function verifyTinyGoUpstreamAssetSet(options: {
 				`TinyGo producer receipt compile protocol differs from v${compileProtocolVersion}`
 			);
 		}
-		if (compileProtocolVersion === 5) {
+		if (compileProtocolVersion >= 5) {
 			const rootArchive = expectObject(
 				build.rootArchive,
 				'TinyGo producer receipt.build.rootArchive'
@@ -698,6 +717,27 @@ export function validateTinyGoPackageJSON(options: {
 			throw new Error(`TinyGo package ${importPath}.Imports must be a string array`);
 		}
 		packageImports.set(importPath, imports as string[]);
+		for (const field of PACKAGE_FLAG_FIELDS) {
+			const flagValues = pkg[field] ?? [];
+			if (
+				!Array.isArray(flagValues) ||
+				flagValues.length > 256 ||
+				flagValues.some(
+					(flag) =>
+						typeof flag !== 'string' ||
+						flag.length === 0 ||
+						flag.length > 4096 ||
+						flag.includes('\0')
+				)
+			) {
+				throw new Error(`TinyGo package ${importPath}.${field} must be a bounded string array`);
+			}
+			if (flagValues.length > 0 && compileProtocolVersion < 6) {
+				throw new Error(
+					`TinyGo package ${importPath} uses ${field.replace('Cgo', '')}, unsupported until compile protocol v6`
+				);
+			}
+		}
 		for (const field of SOURCE_FILE_FIELDS) {
 			const fileValues = pkg[field] ?? [];
 			if (

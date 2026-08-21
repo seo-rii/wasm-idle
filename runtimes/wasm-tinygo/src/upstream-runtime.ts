@@ -211,6 +211,7 @@ export interface TinyGoLinkPlanObject {
 	sourceSha256?: string;
 	embeddedFileHash?: string;
 	dependencies?: TinyGoLinkPlanDependency[];
+	compilerFlags?: string[];
 	llvmValidation?: TinyGoLLVMValidation;
 	wasmValidation?: TinyGoWasmObjectValidation;
 }
@@ -336,12 +337,41 @@ export interface TinyGoLinkPlanV5 {
 	};
 }
 
+export interface TinyGoLinkPlanV6 {
+	schemaVersion: 6;
+	format: 'wasm-llvm-tinygo-link-plan-v6';
+	compilerSha256: string;
+	capabilities: [
+		'go-embed-objects',
+		'target-cgo-c',
+		'target-cxx-hosted-noeh',
+		'target-clang-assembly',
+		'target-cgo-cxxflags',
+		'target-cgo-linker-flags'
+	];
+	compilerPackages: string[];
+	linker: 'wasm-ld';
+	objects: TinyGoLinkPlanObject[];
+	output: 'program.unoptimized.wasm';
+	arguments: string[];
+	runtimeInputs: Array<{ kind: string; source?: string; path: string }>;
+	cgoInputs: TinyGoLinkPlanCGoInput[];
+	cgoLinkerFlags: string[];
+	optimizer: {
+		tool: 'wasm-opt';
+		input: 'program.unoptimized.wasm';
+		output: 'program.wasm';
+		arguments: string[];
+	};
+}
+
 export type TinyGoLinkPlan =
 	| TinyGoLinkPlanV1
 	| TinyGoLinkPlanV2
 	| TinyGoLinkPlanV3
 	| TinyGoLinkPlanV4
-	| TinyGoLinkPlanV5;
+	| TinyGoLinkPlanV5
+	| TinyGoLinkPlanV6;
 
 export interface TinyGoExpectedEmbedObject {
 	importPath: string;
@@ -1311,10 +1341,120 @@ async function validateTinyGoLinkPlanDependencies(
 	}
 }
 
-async function validateTinyGoLinkPlanV4OrV5(
+function validateTinyGoCXXFlags(flags: unknown, expected: readonly string[], label: string) {
+	if (
+		!Array.isArray(flags) ||
+		flags.length !== expected.length ||
+		expected.some((flag, index) => flags[index] !== flag)
+	) {
+		throw new Error(`${label} CXXFLAGS differ from the package graph`);
+	}
+	for (const flag of flags) {
+		if (typeof flag !== 'string' || flag.length === 0 || flag.length > 4096 || flag.includes('\0')) {
+			throw new Error(`${label} contains invalid CXXFLAGS`);
+		}
+		for (const forbidden of [
+			'@',
+			'-o',
+			'-x',
+			'-target',
+			'--target',
+			'-stdlib',
+			'-std=',
+			'-flto',
+			'-fno-lto',
+			'-fexceptions',
+			'-frtti',
+			'-pthread',
+			'-Xclang',
+			'-mllvm'
+		]) {
+			if (flag === forbidden || flag.startsWith(`${forbidden}=`)) {
+				throw new Error(`${label} CXXFLAGS override the browser C++ policy`);
+			}
+		}
+	}
+}
+
+function tinyGoLinkerLibraryName(name: string) {
+	return name !== '' && name !== '.' && name !== '..' && /^[A-Za-z0-9_.-]+$/u.test(name);
+}
+
+function validateTinyGoLinkerPath(
+	path: string,
+	directory: boolean,
+	root: TinyGoWasiDirectoryContents,
+	workspace: TinyGoWasiDirectoryContents
+) {
+	let vfsRoot: TinyGoWasiDirectoryContents;
+	let relativePath: string;
+	if (path === TINYGO_ROOT_PATH || path.startsWith(`${TINYGO_ROOT_PATH}/`)) {
+		vfsRoot = root;
+		relativePath = path === TINYGO_ROOT_PATH ? '' : path.slice(TINYGO_ROOT_PATH.length + 1);
+	} else if (path === TINYGO_WORKSPACE_PATH || path.startsWith(`${TINYGO_WORKSPACE_PATH}/`)) {
+		vfsRoot = workspace;
+		relativePath =
+			path === TINYGO_WORKSPACE_PATH ? '' : path.slice(TINYGO_WORKSPACE_PATH.length + 1);
+	} else {
+		throw new Error(`TinyGo CGo linker path escapes the mounted roots: ${path}`);
+	}
+	if (!hasTinyGoVfsPath(vfsRoot, relativePath, directory ? 'directory' : 'file')) {
+		throw new Error(`TinyGo CGo linker path is missing or has the wrong type: ${path}`);
+	}
+}
+
+function validateTinyGoCGoLinkerFlags(
+	value: unknown,
+	expected: readonly string[],
+	root: TinyGoWasiDirectoryContents,
+	workspace: TinyGoWasiDirectoryContents
+) {
+	if (!Array.isArray(value) || value.length > 256 || value.some((flag) => typeof flag !== 'string')) {
+		throw new Error('TinyGo CGo linker flags must be a bounded string array');
+	}
+	const flags = value as string[];
+	if (
+		[...flags].sort().join('\0') !== [...expected].sort().join('\0')
+	) {
+		throw new Error('TinyGo CGo linker flags differ from the package graph');
+	}
+	for (let index = 0; index < flags.length; index += 1) {
+		const flag = flags[index]!;
+		if (flag.length === 0 || flag.length > 4096 || flag.includes('\0')) {
+			throw new Error('TinyGo CGo linker flags contain an invalid argument');
+		}
+		if (flag === '-L') {
+			const path = flags[++index];
+			if (!path) throw new Error('TinyGo CGo linker flag -L requires a directory');
+			validateTinyGoLinkerPath(path, true, root, workspace);
+			continue;
+		}
+		if (flag.startsWith('-L') && flag.length > 2) {
+			validateTinyGoLinkerPath(flag.slice(2), true, root, workspace);
+			continue;
+		}
+		if (flag.startsWith('-l') && tinyGoLinkerLibraryName(flag.slice(2))) continue;
+		if (
+			['--start-group', '--end-group', '--whole-archive', '--no-whole-archive', '-Bstatic', '-Bdynamic', '-static'].includes(flag)
+		) {
+			continue;
+		}
+		if (
+			(flag.endsWith('.a') || flag.endsWith('.o')) &&
+			(flag.startsWith(`${TINYGO_ROOT_PATH}/`) || flag.startsWith(`${TINYGO_WORKSPACE_PATH}/`))
+		) {
+			validateTinyGoLinkerPath(flag, false, root, workspace);
+			continue;
+		}
+		throw new Error(`TinyGo CGo linker flag ${JSON.stringify(flag)} is outside the browser library-link policy`);
+	}
+	return flags;
+}
+
+async function validateTinyGoLinkPlanV4ToV6(
 	value: unknown,
 	runtime: TinyGoRuntimeClosure,
-	protocolVersion: 4 | 5,
+	protocolVersion: 4 | 5 | 6,
 	options: {
 		compilerSha256: string;
 		expectedEmbedObjects: readonly TinyGoExpectedEmbedObject[];
@@ -1322,12 +1462,14 @@ async function validateTinyGoLinkPlanV4OrV5(
 		expectedNativeObjects: readonly TinyGoExpectedNativeSourceV4[];
 		root: TinyGoWasiDirectoryContents;
 		workspace: TinyGoWasiDirectoryContents;
+		expectedCXXFlags?: ReadonlyMap<string, readonly string[]>;
+		expectedCGoLinkerFlags?: readonly string[];
 	}
-): Promise<TinyGoLinkPlanV4 | TinyGoLinkPlanV5> {
+): Promise<TinyGoLinkPlanV4 | TinyGoLinkPlanV5 | TinyGoLinkPlanV6> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error('TinyGo link plan must be an object');
 	}
-	const plan = value as Partial<TinyGoLinkPlanV4 | TinyGoLinkPlanV5>;
+	const plan = value as Partial<TinyGoLinkPlanV4 | TinyGoLinkPlanV5 | TinyGoLinkPlanV6>;
 	const expectedCapabilities =
 		protocolVersion === 4
 			? [
@@ -1336,12 +1478,21 @@ async function validateTinyGoLinkPlanV4OrV5(
 					'target-cxx-freestanding',
 					'target-clang-assembly'
 				]
-			: [
+			: protocolVersion === 5
+				? [
 					'go-embed-objects',
 					'target-cgo-c',
 					'target-cxx-hosted-noeh',
 					'target-clang-assembly'
-				];
+					]
+				: [
+						'go-embed-objects',
+						'target-cgo-c',
+						'target-cxx-hosted-noeh',
+						'target-clang-assembly',
+						'target-cgo-cxxflags',
+						'target-cgo-linker-flags'
+					];
 	if (
 		plan.schemaVersion !== protocolVersion ||
 		plan.format !== `wasm-llvm-tinygo-link-plan-v${protocolVersion}` ||
@@ -1449,6 +1600,7 @@ async function validateTinyGoLinkPlanV4OrV5(
 				object.sourceSha256 !== undefined ||
 				object.embeddedFileHash !== undefined ||
 				object.dependencies !== undefined ||
+				object.compilerFlags !== undefined ||
 				object.llvmValidation !== undefined ||
 				object.wasmValidation !== undefined
 			) {
@@ -1466,6 +1618,7 @@ async function validateTinyGoLinkPlanV4OrV5(
 				object.sourceSha256 !== expectedEmbed.sourceSha256 ||
 				object.embeddedFileHash !== expectedEmbed.embeddedFileHash ||
 				object.dependencies !== undefined ||
+				object.compilerFlags !== undefined ||
 				object.llvmValidation !== undefined ||
 				object.wasmValidation !== undefined
 			) {
@@ -1519,6 +1672,15 @@ async function validateTinyGoLinkPlanV4OrV5(
 				throw new Error(`TinyGo native object ${index} lacks exact Wasm validation evidence`);
 			}
 		}
+		if (protocolVersion === 6 && expectedKind === 'target-cxx') {
+			validateTinyGoCXXFlags(
+				object.compilerFlags,
+				options.expectedCXXFlags?.get(`${expectedNative.importPath}\0${expectedNative.sourcePath}`) ?? [],
+				`TinyGo native object ${index}`
+			);
+		} else if (object.compilerFlags !== undefined) {
+			throw new Error(`TinyGo native object ${index} has unexpected compiler flags`);
+		}
 		await validateTinyGoLinkPlanDependencies(object.dependencies, {
 			label: `TinyGo native object ${index}`,
 			root: options.root,
@@ -1533,12 +1695,12 @@ async function validateTinyGoLinkPlanV4OrV5(
 			path: `${TINYGO_ROOT_PATH}/${runtime.extraFiles[source]?.path}`
 		}))
 	];
-	if (protocolVersion === 5 && (!runtime.libCxx || !runtime.libCxxAbi)) {
+	if (protocolVersion >= 5 && (!runtime.libCxx || !runtime.libCxxAbi)) {
 		throw new Error('TinyGo runtime closure lacks hosted C++ libraries');
 	}
 	const hasHostedCxx = plan.objects.some((object) => object.kind === 'target-cxx');
 	const hostedCxxInputs =
-		protocolVersion === 5 && hasHostedCxx
+		protocolVersion >= 5 && hasHostedCxx
 			? [
 					{ kind: 'libcxx', path: `${TINYGO_ROOT_PATH}/${runtime.libCxx!.path}` },
 					{ kind: 'libcxxabi', path: `${TINYGO_ROOT_PATH}/${runtime.libCxxAbi!.path}` }
@@ -1563,11 +1725,24 @@ async function validateTinyGoLinkPlanV4OrV5(
 	const embedPaths = plan.objects
 		.filter((object) => object.kind === 'embed')
 		.map((object) => object.path);
+	const cgoLinkerFlags =
+		protocolVersion === 6
+			? validateTinyGoCGoLinkerFlags(
+					(plan as Partial<TinyGoLinkPlanV6>).cgoLinkerFlags,
+					options.expectedCGoLinkerFlags ?? [],
+					options.root,
+					options.workspace
+				)
+			: [];
+	if (protocolVersion !== 6 && 'cgoLinkerFlags' in plan) {
+		throw new Error(`TinyGo link plan has unexpected CGo linker flags in protocol v${protocolVersion}`);
+	}
 	const expectedArguments = [
 		'--stack-first',
 		'--no-demangle',
 		'-L',
 		TINYGO_ROOT_PATH,
+		...cgoLinkerFlags,
 		'-o',
 		'program.unoptimized.wasm',
 		'--strip-debug',
@@ -1614,23 +1789,31 @@ async function validateTinyGoLinkPlanV4OrV5(
 			`TinyGo optimizer plan differs from asyncify -O1 compile protocol v${protocolVersion}`
 		);
 	}
-	return plan as TinyGoLinkPlanV4 | TinyGoLinkPlanV5;
+	return plan as TinyGoLinkPlanV4 | TinyGoLinkPlanV5 | TinyGoLinkPlanV6;
 }
 
 export async function validateTinyGoLinkPlanV4(
 	value: unknown,
 	runtime: TinyGoRuntimeClosure,
-	options: Parameters<typeof validateTinyGoLinkPlanV4OrV5>[3]
+	options: Parameters<typeof validateTinyGoLinkPlanV4ToV6>[3]
 ): Promise<TinyGoLinkPlanV4> {
-	return (await validateTinyGoLinkPlanV4OrV5(value, runtime, 4, options)) as TinyGoLinkPlanV4;
+	return (await validateTinyGoLinkPlanV4ToV6(value, runtime, 4, options)) as TinyGoLinkPlanV4;
 }
 
 export async function validateTinyGoLinkPlanV5(
 	value: unknown,
 	runtime: TinyGoRuntimeClosure,
-	options: Parameters<typeof validateTinyGoLinkPlanV4OrV5>[3]
+	options: Parameters<typeof validateTinyGoLinkPlanV4ToV6>[3]
 ): Promise<TinyGoLinkPlanV5> {
-	return (await validateTinyGoLinkPlanV4OrV5(value, runtime, 5, options)) as TinyGoLinkPlanV5;
+	return (await validateTinyGoLinkPlanV4ToV6(value, runtime, 5, options)) as TinyGoLinkPlanV5;
+}
+
+export async function validateTinyGoLinkPlanV6(
+	value: unknown,
+	runtime: TinyGoRuntimeClosure,
+	options: Parameters<typeof validateTinyGoLinkPlanV4ToV6>[3]
+): Promise<TinyGoLinkPlanV6> {
+	return (await validateTinyGoLinkPlanV4ToV6(value, runtime, 6, options)) as TinyGoLinkPlanV6;
 }
 
 function runtimeRequest(runtime: TinyGoRuntimeClosure) {
@@ -1732,6 +1915,8 @@ export async function compileUpstreamTinyGo(
 	const expectedCObjects: TinyGoExpectedNativeSource[] = [];
 	const expectedCXXObjects: TinyGoExpectedNativeSource[] = [];
 	const expectedAssemblyObjects: TinyGoExpectedNativeSource[] = [];
+	const expectedCXXFlags = new Map<string, readonly string[]>();
+	const expectedCGoLinkerFlags: string[] = [];
 	for (const pkg of packages) {
 		const importPath = pkg.ImportPath as string;
 		const directory = pkg.Dir as string;
@@ -1741,6 +1926,7 @@ export async function compileUpstreamTinyGo(
 		const vfsRoot = inRoot ? toolchain.root : workspace;
 		const packageDirectory =
 			directory === directoryRoot ? '' : directory.slice(directoryRoot.length + 1);
+		expectedCGoLinkerFlags.push(...((pkg.CgoLDFLAGS ?? []) as string[]));
 		for (const sourcePath of (pkg.EmbedFiles ?? []) as string[]) {
 			const relativePath = packageDirectory
 				? `${packageDirectory}/${sourcePath}`
@@ -1797,6 +1983,10 @@ export async function compileUpstreamTinyGo(
 				bytes: sourceBytes.byteLength,
 				sha256: await sha256TinyGoBytes(sourceBytes)
 			});
+			expectedCXXFlags.set(
+				`${importPath}\0${sourcePath}`,
+				[...((pkg.CgoCXXFLAGS ?? []) as string[])]
+			);
 		}
 		if (!inRoot) {
 			for (const sourcePath of (pkg.SFiles ?? []) as string[]) {
@@ -1951,12 +2141,23 @@ export async function compileUpstreamTinyGo(
 			root: toolchain.root,
 			workspace
 		});
-	} else {
+	} else if (toolchain.compileProtocolVersion === 5) {
 		linkPlan = await validateTinyGoLinkPlanV5(linkPlanValue, toolchain.runtime, {
 			compilerSha256: toolchain.compilerSha256,
 			expectedEmbedObjects,
 			expectedCGoInputs,
 			expectedNativeObjects: expectedNativeObjectsV4,
+			root: toolchain.root,
+			workspace
+		});
+	} else {
+		linkPlan = await validateTinyGoLinkPlanV6(linkPlanValue, toolchain.runtime, {
+			compilerSha256: toolchain.compilerSha256,
+			expectedEmbedObjects,
+			expectedCGoInputs,
+			expectedNativeObjects: expectedNativeObjectsV4,
+			expectedCXXFlags,
+			expectedCGoLinkerFlags,
 			root: toolchain.root,
 			workspace
 		});

@@ -53,7 +53,13 @@ function assertProducerReceipt(receipt, compilerEvidence, rootEvidence) {
 					: receipt?.schemaVersion === 4 &&
 						  receipt?.format === 'wasm-llvm-tinygo-browser-compiler-v4'
 						? 4
-						: null;
+						: receipt?.schemaVersion === 5 &&
+							  receipt?.format === 'wasm-llvm-tinygo-browser-compiler-v5'
+							? 5
+							: receipt?.schemaVersion === 6 &&
+								  receipt?.format === 'wasm-llvm-tinygo-browser-compiler-v6'
+								? 6
+								: null;
 	if (
 		compileProtocolVersion === null ||
 		receipt?.producerId !== 'wasm-llvm/tinygo-browser' ||
@@ -76,12 +82,28 @@ function assertProducerReceipt(receipt, compilerEvidence, rootEvidence) {
 						? ['go-embed-objects']
 						: compileProtocolVersion === 3
 							? ['go-embed-objects', 'target-cgo-c']
-							: [
+							: compileProtocolVersion === 4
+								? [
 									'go-embed-objects',
 									'target-cgo-c',
 									'target-cxx-freestanding',
 									'target-clang-assembly'
-								]
+									]
+								: compileProtocolVersion === 5
+									? [
+											'go-embed-objects',
+											'target-cgo-c',
+											'target-cxx-hosted-noeh',
+											'target-clang-assembly'
+										]
+									: [
+											'go-embed-objects',
+											'target-cgo-c',
+											'target-cxx-hosted-noeh',
+											'target-clang-assembly',
+											'target-cgo-cxxflags',
+											'target-cgo-linker-flags'
+										]
 				) ||
 			JSON.stringify(receipt?.build?.compileOutputs) !==
 				JSON.stringify(['objects', 'link-plan.json']))
@@ -89,6 +111,13 @@ function assertProducerReceipt(receipt, compilerEvidence, rootEvidence) {
 		throw new Error(
 			`producer receipt does not bind TinyGo compile protocol v${compileProtocolVersion}`
 		);
+	}
+	if (
+		compileProtocolVersion >= 5 &&
+		receipt?.build?.rootArchive?.runtimeClosureFormat !==
+			'wasm-llvm-tinygo-runtime-closure-v2'
+	) {
+		throw new Error('producer receipt does not bind TinyGo runtime closure v2');
 	}
 	for (const expected of [compilerEvidence, rootEvidence]) {
 		const actual = receipt.assets?.find((asset) => asset?.path === expected.path);
