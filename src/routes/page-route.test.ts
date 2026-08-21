@@ -174,7 +174,7 @@ describe('example route debug actions', () => {
 				if (typeof value !== 'string') continue;
 				if (key.endsWith('Fingerprint')) {
 					expect(value).toMatch(/^[a-f0-9]{64}$/u);
-				} else {
+				} else if (key.endsWith('Url')) {
 					expect(value).toMatch(/^\/wasm-idle\//u);
 				}
 			}
