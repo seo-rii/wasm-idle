@@ -255,8 +255,8 @@ describe('TinyGo sandbox', () => {
 		upstreamFixtureState.loadFailures = 1;
 
 		await sandbox.load({ tinygo: { moduleUrl: upstreamModuleUrl } });
-		await expect(sandbox.run(code)).rejects.toThrow('fixture upstream asset load failed');
-		await expect(sandbox.run(code)).resolves.toBe(true);
+		await expect(sandbox.run(code, true)).rejects.toThrow('fixture upstream asset load failed');
+		await expect(sandbox.run(code, true)).resolves.toBe(true);
 
 		expect(upstreamFixtureState.loadCalls).toBe(2);
 		expect(upstreamFixtureState.compileCalls).toBe(1);
