@@ -40,22 +40,22 @@ const logicalFixture = Object.freeze({
 });
 
 type Fixture = ReturnType<typeof createFixture>;
+type NimFixtureManifest = Parameters<typeof computeNimRuntimeFingerprint>[0] & {
+	fingerprint: string;
+	assets: Array<{ path: keyof typeof logicalFixture; size: number; sha256: string }>;
+	storage: Array<{
+		encoding: 'gzip' | 'identity';
+		logicalPath: keyof typeof logicalFixture;
+		path: string;
+		size: number;
+		sha256: string;
+	}>;
+};
 
 function createFixture() {
 	const manifest = JSON.parse(
 		readFileSync('static/wasm-nim/runtime-manifest.v2.json', 'utf8')
-	) as {
-		fingerprint: string;
-		assets: Array<{ path: keyof typeof logicalFixture; size: number; sha256: string }>;
-		storage: Array<{
-			encoding: 'gzip' | 'identity';
-			logicalPath: keyof typeof logicalFixture;
-			path: string;
-			size: number;
-			sha256: string;
-		}>;
-		[key: string]: unknown;
-	};
+	) as NimFixtureManifest;
 	const storageBytes = new Map<string, Uint8Array>();
 	for (const asset of manifest.assets) {
 		const bytes = logicalFixture[asset.path];
@@ -66,7 +66,7 @@ function createFixture() {
 		const logicalBytes = logicalFixture[storage.logicalPath];
 		const bytes =
 			storage.encoding === 'gzip'
-				? Uint8Array.from(gzipSync(logicalBytes, { mtime: 0 }))
+				? Uint8Array.from(gzipSync(logicalBytes))
 				: Uint8Array.from(logicalBytes);
 		storage.size = bytes.byteLength;
 		storage.sha256 = sha256(bytes);

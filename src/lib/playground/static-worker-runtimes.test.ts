@@ -763,7 +763,10 @@ const nimTestManifestSource = JSON.stringify({
 	fingerprint: nimTestManifestFingerprint
 });
 const nimTestManifestBytes = new TextEncoder().encode(nimTestManifestSource);
-const nimTestStorageByLogicalPath = new Map(
+const nimTestStorageByLogicalPath = new Map<
+	string,
+	{ encoding: string; logicalPath: string; path: string }
+>(
 	nimTestManifestWithoutFingerprint.storage.map(
 		(storage: { encoding: string; logicalPath: string; path: string }) => [
 			storage.logicalPath,

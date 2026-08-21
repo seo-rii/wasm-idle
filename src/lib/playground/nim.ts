@@ -49,7 +49,7 @@ class Nim extends StaticWorkerRuntimeSandbox {
 					profile.lldWasmReceipt.bytes,
 					profile.memfsWasmReceipt.bytes,
 					profile.sysrootReceipt.bytes
-				].reduce((total, bytes) => total + (bytes ?? 0), 0);
+				].reduce<number>((total, bytes) => total + (bytes ?? 0), 0);
 				const totalDecompressedBytes = [
 					profile.nimJavaScriptReceipt.uncompressedBytes,
 					profile.nimWasmReceipt.uncompressedBytes,
@@ -57,7 +57,7 @@ class Nim extends StaticWorkerRuntimeSandbox {
 					profile.lldWasmReceipt.uncompressedBytes,
 					profile.memfsWasmReceipt.uncompressedBytes,
 					profile.sysrootReceipt.uncompressedBytes
-				].reduce((total, bytes) => total + (bytes ?? 0), 0);
+				].reduce<number>((total, bytes) => total + (bytes ?? 0), 0);
 				const payload = await preflightNimRuntimeAssets({
 					baseUrl: urls.baseUrl,
 					manifestUrl: urls.manifestUrl || '',
