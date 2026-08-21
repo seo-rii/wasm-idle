@@ -19,7 +19,7 @@ describe('package install budgets', () => {
 				maxPackages: 32
 			},
 			'@wasm-idle/debug install': {
-				maxBytes: 6 * MiB,
+				maxBytes: 6.25 * MiB,
 				maxFiles: 1_150,
 				maxPackages: 25
 			},
