@@ -1,14 +1,25 @@
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const fatalDecoder = new TextDecoder('utf-8', { fatal: true });
+const preflightProtocol = 'wasm-idle-nim-preflight';
+const preflightProtocolVersion = 1;
 const manifestFormat = 'wasm-nim-runtime-manifest-v2';
 const fingerprintDomain = 'wasm-idle:nim-runtime-manifest:v2';
 const expectedRuntime = 'benagastov-nim-wasm-compiler';
-const expectedProfileId = 'nim-2.2.4-benagastov-ca3471ae';
+const hardMaxAssetBytes = 40 * 1024 * 1024;
+const hardMaxTotalLogicalBytes = 96 * 1024 * 1024;
+const maxManifestBytes = 64 * 1024;
+const expectedIdentity = Object.freeze({
+	profileId: 'nim-2.2.4-benagastov-ca3471ae',
+	artifactRevision: 'ca3471ae124b40b51268da6e202753dfa061731c',
+	nimRevision: 'f7145dd26efeeeb6eeae6fff649db244d81b212d',
+	llvmRevision: '8e78cdb9caa80f75ed86d6632cb4e9310b22748c',
+	memfsRevision: '0399d5a9682b3cef71c653373e38890c63c4c365',
+	emscriptenRevision: 'unrecorded',
+	manifestFingerprint: 'ee0d08a6d723d4a1afe2ce909bfed2f4d01eb71ddd330898c85c543218b6d2cf'
+});
 const expectedLicenseExpression =
 	'MIT AND Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND LicenseRef-WASI-Sysroot-Third-Party';
-const hardMaxAssetBytes = 40 * 1024 * 1024;
-const maxManifestBytes = 128 * 1024;
 const expectedArtifact = Object.freeze({
 	kind: 'content-locked-git-archive-prebuilt',
 	repository: 'https://github.com/benagastov/Nim-WASM-Compiler.git',
@@ -86,30 +97,61 @@ const expectedAssets = Object.freeze({
 	'nim/nimbase.h': Object.freeze({ mediaType: 'text/x-c-header' })
 });
 const expectedStorage = Object.freeze({
-	'clang/clang.js': Object.freeze({
+	'clang/clang.js.bin': Object.freeze({
 		logicalPath: 'clang/clang.js',
 		encoding: 'identity'
 	}),
-	'clang/clang.wasm.gz': Object.freeze({
+	'clang/clang.wasm.gz.bin': Object.freeze({
 		logicalPath: 'clang/clang.wasm',
 		encoding: 'gzip'
 	}),
-	'clang/lld.wasm.gz': Object.freeze({ logicalPath: 'clang/lld.wasm', encoding: 'gzip' }),
-	'clang/memfs.wasm.gz': Object.freeze({
+	'clang/lld.wasm.gz.bin': Object.freeze({
+		logicalPath: 'clang/lld.wasm',
+		encoding: 'gzip'
+	}),
+	'clang/memfs.wasm.gz.bin': Object.freeze({
 		logicalPath: 'clang/memfs.wasm',
 		encoding: 'gzip'
 	}),
-	'clang/sysroot.tar.gz': Object.freeze({
+	'clang/sysroot.tar.gz.bin': Object.freeze({
 		logicalPath: 'clang/sysroot.tar',
 		encoding: 'gzip'
 	}),
-	'nim/nim-bundle.js.gz': Object.freeze({
+	'nim/nim-bundle.js.gz.bin': Object.freeze({
 		logicalPath: 'nim/nim-bundle.js',
 		encoding: 'gzip'
 	}),
-	'nim/nim.wasm.gz': Object.freeze({ logicalPath: 'nim/nim.wasm', encoding: 'gzip' }),
-	'nim/nimbase.h': Object.freeze({ logicalPath: 'nim/nimbase.h', encoding: 'identity' })
+	'nim/nim.wasm.gz.bin': Object.freeze({
+		logicalPath: 'nim/nim.wasm',
+		encoding: 'gzip'
+	}),
+	'nim/nimbase.h.bin': Object.freeze({
+		logicalPath: 'nim/nimbase.h',
+		encoding: 'identity'
+	})
 });
+const preflightKeys = Object.freeze(
+	[
+		'artifactRevision',
+		'clangJavaScriptBytes',
+		'clangWasmBytes',
+		'emscriptenRevision',
+		'lldWasmBytes',
+		'manifestBytes',
+		'manifestFingerprint',
+		'memfsRevision',
+		'memfsWasmBytes',
+		'nimJavaScriptBytes',
+		'nimRevision',
+		'nimWasmBytes',
+		'nimbaseBytes',
+		'profileId',
+		'protocol',
+		'protocolVersion',
+		'sysrootBytes',
+		'llvmRevision'
+	].sort()
+);
 const expectedManifestKeys = Object.freeze(
 	[
 		'artifact',
@@ -137,9 +179,7 @@ const expectedStorageReceiptKeys = Object.freeze([
 ]);
 const expectedLicenseReceiptKeys = Object.freeze(['path', 'sha256', 'size', 'spdx']);
 
-let verifiedRuntimePromise = null;
-let verifiedRuntimeIdentity = '';
-let runtimeEvaluationStarted = false;
+let requestConsumed = false;
 
 function isObject(value) {
 	return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -165,155 +205,81 @@ function canonicalJson(value) {
 	return primitive;
 }
 
-function requireHttpUrl(value, label) {
-	let url;
-	try {
-		url = new URL(value);
-	} catch {
-		throw new Error(`${label} URL is invalid.`);
-	}
-	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error(`${label} URL must use HTTP(S).`);
-	}
-	if (url.username || url.password || url.hash) {
-		throw new Error(`${label} URL must not include credentials or a fragment.`);
-	}
-	return url;
+function isUint8Array(value) {
+	return (
+		ArrayBuffer.isView(value) &&
+		value.buffer instanceof ArrayBuffer &&
+		Object.prototype.toString.call(value) === '[object Uint8Array]'
+	);
 }
 
-function assetUrl(baseUrl, path, fingerprint) {
-	const base = requireHttpUrl(baseUrl, 'Nim runtime base');
-	if (base.search) throw new Error('Nim runtime base URL must not include a query.');
-	const url = new URL(path, base);
-	if (fingerprint) url.searchParams.set('v', fingerprint);
-	return url.href;
+function errorMessage(error) {
+	return error?.message || String(error);
 }
 
-function cancelResponseBody(response, reason) {
-	try {
-		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
-	} catch {
-		// Preserve the trust-boundary failure that caused cancellation.
+function requireRuntimePreflight(runtimePreflight, requestedMaxAssetBytes) {
+	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
+		throw new Error('Nim runtime asset byte limit is invalid.');
 	}
-}
-
-async function fetchBoundedBytes(
-	urlValue,
-	label,
-	maxBytes,
-	expectedBytes,
-	cache,
-	alternateExpectedBytes
-) {
-	if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
-		throw new Error(`${label} byte limit is invalid.`);
+	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
+	if (!isObject(runtimePreflight) || !hasExactKeys(runtimePreflight, preflightKeys)) {
+		throw new Error('Nim runtime preflight payload has an invalid shape.');
 	}
-	const expectedByteSizes = [];
-	for (const candidate of [expectedBytes, alternateExpectedBytes]) {
-		if (candidate === undefined) continue;
-		if (!Number.isSafeInteger(candidate) || candidate <= 0 || candidate > maxBytes) {
-			throw new Error(`${label} expected byte size is invalid.`);
-		}
-		if (!expectedByteSizes.includes(candidate)) expectedByteSizes.push(candidate);
+	if (
+		runtimePreflight.protocol !== preflightProtocol ||
+		runtimePreflight.protocolVersion !== preflightProtocolVersion ||
+		runtimePreflight.profileId !== expectedIdentity.profileId ||
+		runtimePreflight.artifactRevision !== expectedIdentity.artifactRevision ||
+		runtimePreflight.nimRevision !== expectedIdentity.nimRevision ||
+		runtimePreflight.llvmRevision !== expectedIdentity.llvmRevision ||
+		runtimePreflight.memfsRevision !== expectedIdentity.memfsRevision ||
+		runtimePreflight.emscriptenRevision !== expectedIdentity.emscriptenRevision ||
+		runtimePreflight.manifestFingerprint !== expectedIdentity.manifestFingerprint ||
+		!isUint8Array(runtimePreflight.manifestBytes) ||
+		!isUint8Array(runtimePreflight.nimJavaScriptBytes) ||
+		!isUint8Array(runtimePreflight.nimWasmBytes) ||
+		!isUint8Array(runtimePreflight.nimbaseBytes) ||
+		!isUint8Array(runtimePreflight.clangJavaScriptBytes) ||
+		!isUint8Array(runtimePreflight.clangWasmBytes) ||
+		!isUint8Array(runtimePreflight.lldWasmBytes) ||
+		!isUint8Array(runtimePreflight.memfsWasmBytes) ||
+		!isUint8Array(runtimePreflight.sysrootBytes)
+	) {
+		throw new Error('Nim runtime preflight payload is invalid.');
 	}
-	const maximumExpectedBytes = expectedByteSizes.length
-		? Math.max(...expectedByteSizes)
-		: undefined;
-	const requestUrl = requireHttpUrl(urlValue, label);
-	const response = await fetch(requestUrl.href, {
-		...(cache ? { cache } : {}),
-		credentials: 'omit',
-		redirect: 'error',
-		referrerPolicy: 'no-referrer'
-	});
-	try {
-		if (!response.url) throw new Error(`${label} response URL is missing.`);
-		let responseUrl;
-		try {
-			responseUrl = new URL(response.url);
-		} catch {
-			throw new Error(`${label} response URL is invalid.`);
-		}
-		if (responseUrl.href !== requestUrl.href) {
-			throw new Error(`${label} response URL does not match the requested asset.`);
-		}
-		if (!response.ok)
-			throw new Error(`${label} request failed with status ${response.status}.`);
-		const contentLength = response.headers.get('content-length');
-		if (contentLength !== null) {
-			const normalized = contentLength.trim();
-			const parsed = Number(normalized);
-			if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(parsed)) {
-				throw new Error(`${label} has an invalid Content-Length.`);
-			}
-			if (expectedByteSizes.length && !expectedByteSizes.includes(parsed)) {
-				throw new Error(`${label} Content-Length does not match its receipt.`);
-			}
-			if (parsed > maxBytes) throw new Error(`${label} exceeds its byte limit.`);
-		}
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	if (!response.body) {
-		const error = new Error(`${label} response does not provide a byte stream.`);
-		cancelResponseBody(response, error);
-		throw error;
-	}
-
-	let reader;
-	try {
-		reader = response.body.getReader();
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	const output = maximumExpectedBytes === undefined ? null : new Uint8Array(maximumExpectedBytes);
-	const chunks = output ? null : [];
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error(`${label} returned an invalid byte stream.`);
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (maximumExpectedBytes !== undefined && nextLoaded > maximumExpectedBytes) {
-				throw new Error(`${label} exceeds its receipt size.`);
-			}
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > maxBytes) {
-				throw new Error(`${label} exceeds its byte limit.`);
-			}
-			if (output) output.set(value, loaded);
-			else chunks.push(value.slice());
-			loaded = nextLoaded;
-		}
-		if (expectedByteSizes.length && !expectedByteSizes.includes(loaded)) {
-			throw new Error(`${label} is truncated or has an unexpected decoded size.`);
-		}
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the stream or quota failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the primary load result.
+	for (const [label, bytes, limit] of [
+		[
+			'Nim runtime manifest',
+			runtimePreflight.manifestBytes,
+			Math.min(maxManifestBytes, maxAssetBytes)
+		],
+		['Nim runtime JavaScript', runtimePreflight.nimJavaScriptBytes, maxAssetBytes],
+		['Nim runtime Wasm', runtimePreflight.nimWasmBytes, maxAssetBytes],
+		['Nim runtime header', runtimePreflight.nimbaseBytes, maxAssetBytes],
+		['Nim clang JavaScript', runtimePreflight.clangJavaScriptBytes, maxAssetBytes],
+		['Nim clang Wasm', runtimePreflight.clangWasmBytes, maxAssetBytes],
+		['Nim lld Wasm', runtimePreflight.lldWasmBytes, maxAssetBytes],
+		['Nim memfs Wasm', runtimePreflight.memfsWasmBytes, maxAssetBytes],
+		['Nim sysroot', runtimePreflight.sysrootBytes, maxAssetBytes]
+	]) {
+		if (bytes.byteLength <= 0 || bytes.byteLength > limit) {
+			throw new Error(`${label} exceeds its byte limit.`);
 		}
 	}
-	if (output) return loaded === output.byteLength ? output : output.slice(0, loaded);
-	const bytes = new Uint8Array(loaded);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
+	const totalLogicalBytes = [
+		runtimePreflight.nimJavaScriptBytes,
+		runtimePreflight.nimWasmBytes,
+		runtimePreflight.nimbaseBytes,
+		runtimePreflight.clangJavaScriptBytes,
+		runtimePreflight.clangWasmBytes,
+		runtimePreflight.lldWasmBytes,
+		runtimePreflight.memfsWasmBytes,
+		runtimePreflight.sysrootBytes
+	].reduce((total, bytes) => total + bytes.byteLength, 0);
+	if (totalLogicalBytes > hardMaxTotalLogicalBytes) {
+		throw new Error('Nim runtime logical payload exceeds its aggregate byte limit.');
 	}
-	return bytes;
+	return { runtimePreflight, maxAssetBytes };
 }
 
 async function sha256Hex(bytes) {
@@ -408,7 +374,7 @@ function normalizeStorageReceipt(candidate, expected, maxAssetBytes) {
 	};
 }
 
-async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
+async function normalizeManifest(value, runtimePreflight, maxAssetBytes) {
 	if (!isObject(value)) throw new Error('Nim runtime manifest must be an object.');
 	if (!hasExactKeys(value, expectedManifestKeys)) {
 		throw new Error('Nim runtime manifest schema is invalid.');
@@ -417,18 +383,26 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 		throw new Error('Nim runtime manifest format is unsupported.');
 	}
 	if (
-		value.profileId !== expectedProfileId ||
+		value.profileId !== expectedIdentity.profileId ||
+		value.profileId !== runtimePreflight.profileId ||
 		value.licenseExpression !== expectedLicenseExpression ||
-		typeof expectedFingerprint !== 'string' ||
-		!/^[a-f0-9]{64}$/u.test(expectedFingerprint)
+		value.fingerprint !== expectedIdentity.manifestFingerprint ||
+		value.fingerprint !== runtimePreflight.manifestFingerprint
 	) {
-		throw new Error('Nim runtime profile or expected fingerprint is invalid.');
-	}
-	if (value.fingerprint !== expectedFingerprint) {
-		throw new Error('Nim runtime manifest fingerprint does not match the pinned runtime.');
+		throw new Error('Nim runtime profile or manifest fingerprint is invalid.');
 	}
 	const artifact = normalizeProvenanceObject(value.artifact, expectedArtifact, 'artifact');
 	const components = normalizeProvenanceObject(value.components, expectedComponents, 'component');
+	if (
+		artifact.revision !== runtimePreflight.artifactRevision ||
+		components.distribution.revision !== runtimePreflight.artifactRevision ||
+		components.nim.revision !== runtimePreflight.nimRevision ||
+		components.llvm.revision !== runtimePreflight.llvmRevision ||
+		components.memfs.revision !== runtimePreflight.memfsRevision ||
+		components.emscripten.revision !== runtimePreflight.emscriptenRevision
+	) {
+		throw new Error('Nim runtime manifest identity is incoherent.');
+	}
 	if (
 		!hasExactKeys(value.license, expectedLicenseReceiptKeys) ||
 		value.license.path !== expectedLicense.path ||
@@ -526,11 +500,11 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 			metadata,
 			assets,
 			storage
-		)) !== expectedFingerprint
+		)) !== runtimePreflight.manifestFingerprint
 	) {
 		throw new Error('Nim runtime receipt graph failed fingerprint verification.');
 	}
-	return { assetByPath, storageByLogicalPath };
+	return { assetByPath };
 }
 
 async function verifyReceiptBytes(receipt, bytes, label) {
@@ -540,161 +514,79 @@ async function verifyReceiptBytes(receipt, bytes, label) {
 	}
 }
 
-async function receiptMatchesBytes(receipt, bytes) {
-	return bytes.byteLength === receipt.size && (await sha256Hex(bytes)) === receipt.sha256;
-}
-
-async function decompressGzipBounded(compressedBytes, expectedBytes, maxBytes, label) {
-	if (typeof DecompressionStream !== 'function') {
-		throw new Error('Nim runtime gzip decompression is unavailable.');
-	}
-	if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || expectedBytes > maxBytes) {
-		throw new Error(`${label} logical byte size is invalid.`);
-	}
-	let reader;
+function validateUtf8(bytes, label) {
 	try {
-		reader = new Blob([compressedBytes])
-			.stream()
-			.pipeThrough(new DecompressionStream('gzip'))
-			.getReader();
+		return fatalDecoder.decode(bytes);
 	} catch {
-		throw new Error(`${label} gzip stream could not be opened.`);
-	}
-	const output = new Uint8Array(expectedBytes);
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error(`${label} gzip returned an invalid byte stream.`);
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > expectedBytes) {
-				throw new Error(`${label} gzip exceeds its logical receipt size.`);
-			}
-			output.set(value, loaded);
-			loaded = nextLoaded;
-		}
-		if (loaded !== expectedBytes) throw new Error(`${label} gzip is truncated.`);
-		return output;
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the decompression failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the decompression result.
-		}
+		throw new Error(`${label} is not valid UTF-8.`);
 	}
 }
 
-async function loadVerifiedNimRuntime(
-	baseUrl,
-	manifestUrl,
-	manifestFingerprint,
-	requestedMaxAssetBytes
-) {
-	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
-		throw new Error('Nim runtime asset byte limit is invalid.');
+function validateWasmHeader(bytes, label) {
+	if (
+		bytes.byteLength < 8 ||
+		bytes[0] !== 0 ||
+		bytes[1] !== 0x61 ||
+		bytes[2] !== 0x73 ||
+		bytes[3] !== 0x6d
+	) {
+		throw new Error(`${label} header is invalid.`);
 	}
-	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
-	const identity = `${baseUrl}\n${manifestUrl}\n${manifestFingerprint}\n${maxAssetBytes}`;
-	if (verifiedRuntimePromise) {
-		if (verifiedRuntimeIdentity !== identity) {
-			throw new Error('Nim worker cannot replace an initialized runtime profile.');
-		}
-		return await verifiedRuntimePromise;
-	}
-	verifiedRuntimeIdentity = identity;
-	verifiedRuntimePromise = (async () => {
-		const resolvedManifestUrl =
-			manifestUrl || assetUrl(baseUrl, 'runtime-manifest.v2.json', manifestFingerprint);
-		const manifestBytes = await fetchBoundedBytes(
-			resolvedManifestUrl,
-			'Nim runtime manifest',
-			Math.min(maxManifestBytes, maxAssetBytes),
-			undefined,
-			'no-store'
-		);
-		let parsed;
-		try {
-			parsed = JSON.parse(fatalDecoder.decode(manifestBytes));
-		} catch {
-			throw new Error('Nim runtime manifest is not valid UTF-8 JSON.');
-		}
-		const manifest = await normalizeManifest(parsed, manifestFingerprint, maxAssetBytes);
-		const inFlight = new Map();
-		return Object.freeze({
-			async take(assetPath) {
-				if (!Object.hasOwn(expectedAssets, assetPath)) {
-					throw new Error(`Nim requested an undeclared runtime asset: ${assetPath}`);
-				}
-				if (inFlight.has(assetPath)) return await inFlight.get(assetPath);
-				const pending = (async () => {
-					const logicalReceipt = manifest.assetByPath.get(assetPath);
-					const storageReceipt = manifest.storageByLogicalPath.get(assetPath);
-					if (!logicalReceipt || !storageReceipt) {
-						throw new Error(`Nim receipt graph is missing ${assetPath}.`);
-					}
-					const transportedBytes = await fetchBoundedBytes(
-						assetUrl(baseUrl, storageReceipt.path, manifestFingerprint),
-						`Nim runtime storage ${storageReceipt.path}`,
-						Math.max(storageReceipt.size, logicalReceipt.size),
-						storageReceipt.size,
-						undefined,
-						storageReceipt.encoding === 'gzip' ? logicalReceipt.size : undefined
-					);
-					let logicalBytes;
-					if (await receiptMatchesBytes(storageReceipt, transportedBytes)) {
-						logicalBytes =
-							storageReceipt.encoding === 'gzip'
-								? await decompressGzipBounded(
-										transportedBytes,
-										logicalReceipt.size,
-										maxAssetBytes,
-										`Nim runtime asset ${logicalReceipt.path}`
-									)
-								: transportedBytes;
-					} else if (
-						storageReceipt.encoding === 'gzip' &&
-						(await receiptMatchesBytes(logicalReceipt, transportedBytes))
-					) {
-						// Browsers may transparently decode a gzip Content-Encoding response.
-						logicalBytes = transportedBytes;
-					} else {
-						throw new Error(
-							`Nim runtime storage ${storageReceipt.path} failed SHA-256 verification.`
-						);
-					}
-					await verifyReceiptBytes(
-						logicalReceipt,
-						logicalBytes,
-						`Nim runtime asset ${logicalReceipt.path}`
-					);
-					return logicalBytes;
-				})();
-				inFlight.set(assetPath, pending);
-				try {
-					return await pending;
-				} finally {
-					inFlight.delete(assetPath);
-				}
-			}
-		});
-	})();
+}
+
+async function verifyRuntimePreflight(runtimePreflightValue, requestedMaxAssetBytes) {
+	const { runtimePreflight, maxAssetBytes } = requireRuntimePreflight(
+		runtimePreflightValue,
+		requestedMaxAssetBytes
+	);
+	let parsed;
 	try {
-		return await verifiedRuntimePromise;
-	} catch (error) {
-		verifiedRuntimePromise = null;
-		verifiedRuntimeIdentity = '';
-		throw error;
+		parsed = JSON.parse(fatalDecoder.decode(runtimePreflight.manifestBytes));
+	} catch {
+		throw new Error('Nim runtime manifest is not valid UTF-8 JSON.');
 	}
+	const manifest = await normalizeManifest(parsed, runtimePreflight, maxAssetBytes);
+	const logicalBytes = new Map([
+		['nim/nim-bundle.js', runtimePreflight.nimJavaScriptBytes],
+		['nim/nim.wasm', runtimePreflight.nimWasmBytes],
+		['nim/nimbase.h', runtimePreflight.nimbaseBytes],
+		['clang/clang.js', runtimePreflight.clangJavaScriptBytes],
+		['clang/clang.wasm', runtimePreflight.clangWasmBytes],
+		['clang/lld.wasm', runtimePreflight.lldWasmBytes],
+		['clang/memfs.wasm', runtimePreflight.memfsWasmBytes],
+		['clang/sysroot.tar', runtimePreflight.sysrootBytes]
+	]);
+	for (const [path, bytes] of logicalBytes) {
+		await verifyReceiptBytes(
+			manifest.assetByPath.get(path),
+			bytes,
+			`Nim runtime asset ${path}`
+		);
+	}
+	validateUtf8(runtimePreflight.nimJavaScriptBytes, 'Nim runtime JavaScript');
+	validateUtf8(runtimePreflight.nimbaseBytes, 'Nim runtime nimbase.h');
+	validateUtf8(runtimePreflight.clangJavaScriptBytes, 'Nim runtime clang/clang.js');
+	for (const [label, bytes] of [
+		['Nim runtime Wasm', runtimePreflight.nimWasmBytes],
+		['Nim clang Wasm', runtimePreflight.clangWasmBytes],
+		['Nim lld Wasm', runtimePreflight.lldWasmBytes],
+		['Nim memfs Wasm', runtimePreflight.memfsWasmBytes]
+	]) {
+		validateWasmHeader(bytes, label);
+	}
+	const consumed = new Set();
+	return Object.freeze({
+		take(assetPath) {
+			if (!logicalBytes.has(assetPath)) {
+				throw new Error(`Nim requested an undeclared runtime asset: ${assetPath}`);
+			}
+			if (consumed.has(assetPath)) {
+				throw new Error(`Nim runtime asset was already consumed: ${assetPath}`);
+			}
+			consumed.add(assetPath);
+			return logicalBytes.get(assetPath);
+		}
+	});
 }
 
 function importVerifiedRuntimeScript(bytes) {
@@ -740,6 +632,82 @@ function splitLines(text) {
 		.split('\n')
 		.map((line) => line.trimEnd())
 		.filter(Boolean);
+}
+
+const runtimeGlobalNames = Object.freeze([
+	'Nim',
+	'Module',
+	'FS',
+	'callMain',
+	'print',
+	'printErr',
+	'__NIM_USER_CODE__',
+	'__NIM_USER_CODE_PENDING__',
+	'__NIM_USER_PATH__',
+	'__NIM_USER_CODE_WRITTEN__'
+]);
+
+function snapshotRuntimeGlobals() {
+	return runtimeGlobalNames.map((name) => ({
+		name,
+		hadOwn: Object.prototype.hasOwnProperty.call(globalThis, name),
+		descriptor: Object.getOwnPropertyDescriptor(globalThis, name)
+	}));
+}
+
+function clearRuntimeGlobal(name, label) {
+	const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+	if (!descriptor) return;
+	if (descriptor.configurable) {
+		delete globalThis[name];
+	} else if ('writable' in descriptor && descriptor.writable) {
+		globalThis[name] = undefined;
+	} else {
+		throw new Error(label);
+	}
+	if (globalThis[name] !== undefined) throw new Error(label);
+}
+
+function clearRuntimeGlobals() {
+	for (const name of runtimeGlobalNames) {
+		clearRuntimeGlobal(name, `Nim runtime global ${name} could not be cleared.`);
+	}
+}
+
+function restoreRuntimeGlobals(snapshot) {
+	const failures = [];
+	for (const item of snapshot) {
+		try {
+			const current = Object.getOwnPropertyDescriptor(globalThis, item.name);
+			if (current?.configurable) delete globalThis[item.name];
+			else if (current && 'writable' in current && current.writable) {
+				globalThis[item.name] = undefined;
+			}
+			if (item.hadOwn && item.descriptor) {
+				const remaining = Object.getOwnPropertyDescriptor(globalThis, item.name);
+				if (!remaining) Object.defineProperty(globalThis, item.name, item.descriptor);
+				else if (
+					'value' in item.descriptor &&
+					'writable' in remaining &&
+					remaining.writable
+				) {
+					globalThis[item.name] = item.descriptor.value;
+				} else {
+					throw new Error('descriptor is not restorable');
+				}
+			} else {
+				clearRuntimeGlobal(
+					item.name,
+					`Nim runtime global ${item.name} could not be reset.`
+				);
+			}
+		} catch (error) {
+			failures.push(error);
+		}
+	}
+	if (failures.length) {
+		throw new AggregateError(failures, 'Nim runtime global cleanup failed.');
+	}
 }
 
 async function installNimCompiler(verifiedRuntime, stdout, stderr) {
@@ -1260,48 +1228,91 @@ function createWasiRunner({
 	return { run };
 }
 
+async function runVerifiedNim({
+	verifiedRuntime,
+	code,
+	stdinReader,
+	args,
+	activePath,
+	compilerStdout,
+	compilerStderr
+}) {
+	const snapshot = snapshotRuntimeGlobals();
+	let failure;
+	let result;
+	try {
+		clearRuntimeGlobals();
+		const wasmBytes = await buildWasm({
+			verifiedRuntime,
+			code,
+			stdout: compilerStdout,
+			stderr: compilerStderr
+		});
+		postProgress(85, 'Running Nim program');
+		result = await createWasiRunner({
+			stdinReader,
+			args,
+			activePath,
+			onStdout: (output) => self.postMessage({ output }),
+			onStderr: (output) => self.postMessage({ output })
+		}).run(wasmBytes);
+	} catch (error) {
+		failure = error;
+	}
+	try {
+		restoreRuntimeGlobals(snapshot);
+	} catch (cleanupError) {
+		throw new AggregateError(
+			failure ? [failure, cleanupError] : [cleanupError],
+			failure
+				? `${errorMessage(failure)}; Nim runtime global cleanup failed.`
+				: 'Nim runtime global cleanup failed.'
+		);
+	}
+	if (failure) throw failure;
+	return result;
+}
+
 self.onmessage = async (event) => {
+	if (requestConsumed) {
+		self.postMessage({ error: 'Nim worker accepts exactly one run.' });
+		return;
+	}
+	requestConsumed = true;
 	const {
-		baseUrl,
-		manifestUrl,
-		manifestFingerprint,
+		runtimePreflight,
 		maxAssetBytes,
 		code,
 		stdin,
 		stdinChannel,
 		args,
-		activePath,
+		activePath = 'main.nim',
 		log
 	} = event.data || {};
 	const compilerStdout = [];
 	const compilerStderr = [];
 	try {
-		const stdinReader = createStdinReader(stdin || '', stdinChannel);
-		if (log) console.log(`[wasm-idle:nim-worker] run start baseUrl=${baseUrl}`);
-		const verifiedRuntime = await loadVerifiedNimRuntime(
-			baseUrl,
-			manifestUrl,
-			manifestFingerprint,
-			maxAssetBytes
-		);
-		if (runtimeEvaluationStarted) {
-			throw new Error('Nim worker cannot execute more than one runtime instance.');
+		if (
+			typeof code !== 'string' ||
+			typeof activePath !== 'string' ||
+			(stdin !== undefined && typeof stdin !== 'string') ||
+			(args !== undefined &&
+				(!Array.isArray(args) || args.some((argument) => typeof argument !== 'string')))
+		) {
+			throw new Error('Nim code, run path, arguments, and buffered stdin are invalid.');
 		}
-		runtimeEvaluationStarted = true;
-		const wasmBytes = await buildWasm({
+		const stdinReader = createStdinReader(stdin || '', stdinChannel);
+		if (log) console.log('[wasm-idle:nim-worker] run start');
+		const verifiedRuntime = await verifyRuntimePreflight(runtimePreflight, maxAssetBytes);
+		const result = await runVerifiedNim({
 			verifiedRuntime,
-			code: code || '',
-			stdout: compilerStdout,
-			stderr: compilerStderr
-		});
-		postProgress(85, 'Running Nim program');
-		const result = await createWasiRunner({
+			code,
 			stdinReader,
-			args: Array.isArray(args) ? args : [],
-			activePath: activePath || 'main.nim',
-			onStdout: (output) => self.postMessage({ output }),
-			onStderr: (output) => self.postMessage({ output })
-		}).run(wasmBytes);
+			args: args || [],
+			activePath,
+			compilerStdout,
+			compilerStderr
+		});
 		if (result.code !== 0) {
 			throw new Error(`Nim program exited with status ${result.code}.`);
 		}
@@ -1315,8 +1326,10 @@ self.onmessage = async (event) => {
 		]
 			.slice(-60)
 			.join('\n');
-		const message = `${error?.message || error}${compilerOutput ? `\n${compilerOutput}` : ''}`;
+		const message = `${errorMessage(error)}${compilerOutput ? `\n${compilerOutput}` : ''}`;
 		if (log) console.error('[wasm-idle:nim-worker] failed', error);
 		self.postMessage({ error: message });
+	} finally {
+		self.close();
 	}
 };

@@ -41,7 +41,11 @@ import {
 	WASM_JULIA_RUNTIME_PROFILE
 } from './wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from './wasmLispVersion';
-import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
+import {
+	WASM_NIM_ASSET_VERSION,
+	WASM_NIM_RUNNER_RECEIPT,
+	WASM_NIM_RUNTIME_PROFILE
+} from './wasmNimVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import {
 	WASM_PERL_ASSET_VERSION,
@@ -234,7 +238,7 @@ describe('application runtime asset root', () => {
 			baseUrl: '/foo/bar/wasm-nim/',
 			workerUrl: `/foo/bar/wasm-nim/runner-worker.js?v=${WASM_NIM_RUNNER_RECEIPT.sha256}`,
 			manifestUrl: `/foo/bar/wasm-nim/runtime-manifest.v2.json?v=${WASM_NIM_ASSET_VERSION}`,
-			manifestFingerprint: WASM_NIM_ASSET_VERSION,
+			...WASM_NIM_RUNTIME_PROFILE,
 			workerReceipt: WASM_NIM_RUNNER_RECEIPT
 		});
 		expect(assets.clojurescript).toEqual({
@@ -495,6 +499,21 @@ describe('application runtime asset root', () => {
 				]
 			]),
 			nimManifestFingerprint: WASM_NIM_ASSET_VERSION,
+			nimProfileId: WASM_NIM_RUNTIME_PROFILE.profileId,
+			nimArtifactRevision: WASM_NIM_RUNTIME_PROFILE.artifactRevision,
+			nimNimRevision: WASM_NIM_RUNTIME_PROFILE.nimRevision,
+			nimLlvmRevision: WASM_NIM_RUNTIME_PROFILE.llvmRevision,
+			nimMemfsRevision: WASM_NIM_RUNTIME_PROFILE.memfsRevision,
+			nimEmscriptenRevision: WASM_NIM_RUNTIME_PROFILE.emscriptenRevision,
+			nimManifestReceipt: expect.any(String),
+			nimJavaScriptReceipt: expect.any(String),
+			nimWasmReceipt: expect.any(String),
+			nimNimbaseReceipt: expect.any(String),
+			nimClangJavaScriptReceipt: expect.any(String),
+			nimClangWasmReceipt: expect.any(String),
+			nimLldWasmReceipt: expect.any(String),
+			nimMemfsWasmReceipt: expect.any(String),
+			nimSysrootReceipt: expect.any(String),
 			nimWorkerReceipt: JSON.stringify([
 				[
 					'worker',
@@ -743,6 +762,40 @@ describe('application runtime asset root', () => {
 				createRuntimeAssetsKey({
 					...assets,
 					julia: { ...julia, ...replacement }
+				})
+			).not.toBe(originalKey);
+		}
+	});
+
+	it('changes the runtime cache identity for every Nim profile and receipt field', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const originalKey = createRuntimeAssetsKey(assets);
+		const nim = assets.nim!;
+		const replacements = [
+			{ profileId: `${nim.profileId}-custom` },
+			{ artifactRevision: '1'.repeat(40) },
+			{ nimRevision: '2'.repeat(40) },
+			{ llvmRevision: '3'.repeat(40) },
+			{ memfsRevision: '4'.repeat(40) },
+			{ emscriptenRevision: `${nim.emscriptenRevision}-custom` },
+			{ manifestFingerprint: '5'.repeat(64) },
+			{ manifestReceipt: { ...nim.manifestReceipt!, sha256: '6'.repeat(64) } },
+			{ nimJavaScriptReceipt: { ...nim.nimJavaScriptReceipt!, bytes: 123 } },
+			{ nimWasmReceipt: { ...nim.nimWasmReceipt!, uncompressedBytes: 456 } },
+			{ nimbaseReceipt: { ...nim.nimbaseReceipt!, sha256: '7'.repeat(64) } },
+			{ clangJavaScriptReceipt: { ...nim.clangJavaScriptReceipt!, bytes: 789 } },
+			{ clangWasmReceipt: { ...nim.clangWasmReceipt!, uncompressedSha256: '8'.repeat(64) } },
+			{ lldWasmReceipt: { ...nim.lldWasmReceipt!, sha256: '9'.repeat(64) } },
+			{ memfsWasmReceipt: { ...nim.memfsWasmReceipt!, uncompressedBytes: 321 } },
+			{ sysrootReceipt: { ...nim.sysrootReceipt!, bytes: 654 } },
+			{ workerReceipt: { ...nim.workerReceipt!, sha256: 'a'.repeat(64) } }
+		];
+
+		for (const replacement of replacements) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					nim: { ...nim, ...replacement }
 				})
 			).not.toBe(originalKey);
 		}

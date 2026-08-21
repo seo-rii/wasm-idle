@@ -36,6 +36,7 @@ export interface RuntimeAssetPreflightRequest {
 	readonly limits?: Partial<ExecutionLimits>;
 	readonly redirect?: RequestRedirect;
 	readonly maxConcurrentDownloads?: number;
+	readonly maxTotalDeliveryBytes?: number;
 	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
 }
 
@@ -210,7 +211,8 @@ async function readBoundedResponse(
 	signal: AbortSignal,
 	reportProgress: (loadedBytes: number) => void,
 	runtimeId: string,
-	profileId: string
+	profileId: string,
+	accountDeliveryBytes?: (bytes: number) => void
 ): Promise<Uint8Array> {
 	let declaredLength: number | undefined;
 	try {
@@ -252,6 +254,7 @@ async function readBoundedResponse(
 				}
 			);
 		}
+		accountDeliveryBytes?.(bytes.byteLength);
 		reportProgress(bytes.byteLength);
 		return bytes;
 	}
@@ -300,6 +303,7 @@ async function readBoundedResponse(
 			}
 			if (done) break;
 			if (!value) continue;
+			accountDeliveryBytes?.(value.byteLength);
 			const nextLength = receivedLength + value.byteLength;
 			if (nextLength > maxAssetBytes) {
 				const error = new AssetTooLargeError(
@@ -363,7 +367,8 @@ async function preflightAsset(
 	redirect: RequestRedirect,
 	reportProgress: (loadedBytes: number) => void,
 	runtimeId: string,
-	profileId: string
+	profileId: string,
+	accountDeliveryBytes?: (bytes: number) => void
 ): Promise<PreflightedRuntimeAsset> {
 	if (asset.compressedBytes > maxAssetBytes || asset.uncompressedBytes > maxAssetBytes) {
 		throw new AssetTooLargeError(
@@ -463,11 +468,12 @@ async function preflightAsset(
 	const bytes = await readBoundedResponse(
 		response,
 		asset,
-		maxAssetBytes,
+		accountDeliveryBytes ? Math.min(maxAssetBytes, asset.compressedBytes) : maxAssetBytes,
 		signal,
 		reportProgress,
 		runtimeId,
-		profileId
+		profileId,
+		accountDeliveryBytes
 	);
 	const expected = {
 		sha256: asset.compressedSha256,
@@ -550,6 +556,40 @@ export async function preflightRuntimeAssets(
 		});
 	}
 	const limits = resolveExecutionLimits(request.limits);
+	const maxTotalDeliveryBytes = request.maxTotalDeliveryBytes;
+	if (
+		maxTotalDeliveryBytes !== undefined &&
+		(!Number.isSafeInteger(maxTotalDeliveryBytes) || maxTotalDeliveryBytes <= 0)
+	) {
+		throw new RuntimeConfigurationError(
+			'Runtime asset aggregate delivery limit must be a positive safe integer',
+			{
+				phase: 'asset',
+				runtimeId: runtime.runtimeId,
+				profileId: runtime.identity.profile.profileId
+			}
+		);
+	}
+	const declaredDeliveryBytes = runtime.assets.reduce(
+		(total, asset) => total + asset.compressedBytes,
+		0
+	);
+	if (
+		maxTotalDeliveryBytes !== undefined &&
+		(!Number.isSafeInteger(declaredDeliveryBytes) ||
+			declaredDeliveryBytes > maxTotalDeliveryBytes)
+	) {
+		throw new AssetTooLargeError(
+			`Runtime asset graph exceeds the ${maxTotalDeliveryBytes} byte aggregate delivery limit`,
+			{
+				limit: maxTotalDeliveryBytes,
+				actual: declaredDeliveryBytes,
+				phase: 'asset',
+				runtimeId: runtime.runtimeId,
+				profileId: runtime.identity.profile.profileId
+			}
+		);
+	}
 	const concurrency = request.maxConcurrentDownloads ?? DEFAULT_MAX_CONCURRENT_DOWNLOADS;
 	if (!Number.isSafeInteger(concurrency) || concurrency <= 0 || concurrency > 32) {
 		throw new RuntimeConfigurationError(
@@ -621,6 +661,26 @@ export async function preflightRuntimeAssets(
 	try {
 		const loaded = new Array<readonly [string, PreflightedRuntimeAsset]>(runtime.assets.length);
 		let nextIndex = 0;
+		let deliveredBytes = 0;
+		const accountDeliveryBytes =
+			maxTotalDeliveryBytes === undefined
+				? undefined
+				: (bytes: number) => {
+						const nextTotal = deliveredBytes + bytes;
+						if (!Number.isSafeInteger(nextTotal) || nextTotal > maxTotalDeliveryBytes) {
+							throw new AssetTooLargeError(
+								`Runtime asset delivery exceeds the ${maxTotalDeliveryBytes} byte aggregate limit`,
+								{
+									limit: maxTotalDeliveryBytes,
+									actual: nextTotal,
+									phase: 'asset',
+									runtimeId: runtime.runtimeId,
+									profileId: runtime.identity.profile.profileId
+								}
+							);
+						}
+						deliveredBytes = nextTotal;
+					};
 		const workers = Array.from(
 			{ length: Math.min(concurrency, runtime.assets.length) },
 			async () => {
@@ -646,7 +706,8 @@ export async function preflightRuntimeAssets(
 									totalBytes: asset.compressedBytes
 								}),
 							runtime.runtimeId,
-							runtime.identity.profile.profileId
+							runtime.identity.profile.profileId,
+							accountDeliveryBytes
 						);
 						loaded[index] = [asset.key, preflighted];
 					} catch (error) {

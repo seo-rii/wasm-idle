@@ -5,6 +5,7 @@ import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeJanetRuntimeFingerprint } from '../../../scripts/sync-wasm-janet.mjs';
 import { computeJuliaRuntimeFingerprint } from '../../../scripts/sync-wasm-julia.mjs';
+import { computeNimRuntimeFingerprint } from '../../../scripts/sync-wasm-nim.mjs';
 import { computePerlRuntimeFingerprint } from '../../../scripts/sync-wasm-perl.mjs';
 
 const workerInstances: MockWorker[] = [];
@@ -153,6 +154,7 @@ import tclWorkerSource from '../../../scripts/runtime-workers/wasm-tcl-runner-wo
 import forthManifestSource from '../../../static/wasm-forth/runtime-manifest.v2.json?raw';
 import forthRuntimeSource from '../../../static/wasm-forth/waforth.js?raw';
 import juliaManifestTemplateSource from '../../../static/wasm-julia/runtime-manifest.v2.json?raw';
+import nimManifestTemplateSource from '../../../static/wasm-nim/runtime-manifest.v2.json?raw';
 import {
 	WASM_FORTH_ASSET_VERSION,
 	WASM_FORTH_RUNNER_RECEIPT,
@@ -162,7 +164,6 @@ import { WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import { WASM_CLOJURESCRIPT_RUNNER_RECEIPT } from './wasmClojureScriptVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_J_RUNNER_RECEIPT } from './wasmJVersion';
-import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
 import { WASM_PERL_RUNNER_RECEIPT } from './wasmPerlVersion';
 import {
 	WASM_PROLOG_ASSET_VERSION,
@@ -709,6 +710,117 @@ function juliaTestRuntimeAssets(workerUrl = '/wasm-julia/runner-worker.js?v=test
 		}
 	};
 }
+const nimTestSha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+const nimTestManifestTemplate = JSON.parse(nimManifestTemplateSource);
+const nimTestWasmBytes = Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0]);
+const nimTestSysrootBytes = new Uint8Array(512);
+nimTestSysrootBytes.set(new TextEncoder().encode('ustar'), 257);
+const nimTestLogicalBytes: Readonly<Record<string, Uint8Array>> = Object.freeze({
+	'nim/nim-bundle.js': new TextEncoder().encode('__NIM_USER_CODE__; callMain();\n'),
+	'nim/nim.wasm': nimTestWasmBytes,
+	'nim/nimbase.h': new TextEncoder().encode('#define NIM_INTBITS 32\n'),
+	'clang/clang.js': new TextEncoder().encode(
+		'const fixture="payload:{port:c,assets:l} async function p({assets:l}) compile-each-link-done";\n'
+	),
+	'clang/clang.wasm': nimTestWasmBytes,
+	'clang/lld.wasm': nimTestWasmBytes,
+	'clang/memfs.wasm': nimTestWasmBytes,
+	'clang/sysroot.tar': nimTestSysrootBytes
+});
+const nimTestStorageBytes: Readonly<Record<string, Uint8Array>> = Object.freeze(
+	Object.fromEntries(
+		nimTestManifestTemplate.storage.map(
+			(storage: { encoding: string; logicalPath: string; path: string }) => {
+				const logicalBytes = nimTestLogicalBytes[storage.logicalPath]!;
+				return [
+					storage.path,
+					storage.encoding === 'gzip'
+						? Uint8Array.from(gzipSync(logicalBytes))
+						: Uint8Array.from(logicalBytes)
+				];
+			}
+		)
+	)
+);
+const nimTestManifestWithoutFingerprint = {
+	...nimTestManifestTemplate,
+	assets: nimTestManifestTemplate.assets.map((asset: { mediaType: string; path: string }) => ({
+		...asset,
+		size: nimTestLogicalBytes[asset.path]!.byteLength,
+		sha256: nimTestSha256(nimTestLogicalBytes[asset.path]!)
+	})),
+	storage: nimTestManifestTemplate.storage.map(
+		(storage: { encoding: string; logicalPath: string; path: string }) => ({
+			...storage,
+			size: nimTestStorageBytes[storage.path]!.byteLength,
+			sha256: nimTestSha256(nimTestStorageBytes[storage.path]!)
+		})
+	)
+};
+const nimTestManifestFingerprint = computeNimRuntimeFingerprint(nimTestManifestWithoutFingerprint);
+const nimTestManifestSource = JSON.stringify({
+	...nimTestManifestWithoutFingerprint,
+	fingerprint: nimTestManifestFingerprint
+});
+const nimTestManifestBytes = new TextEncoder().encode(nimTestManifestSource);
+const nimTestStorageByLogicalPath = new Map(
+	nimTestManifestWithoutFingerprint.storage.map(
+		(storage: { encoding: string; logicalPath: string; path: string }) => [
+			storage.logicalPath,
+			storage
+		]
+	)
+);
+const nimTestReceipt = (logicalPath: string) => {
+	const logicalBytes = nimTestLogicalBytes[logicalPath]!;
+	const storage = nimTestStorageByLogicalPath.get(logicalPath)!;
+	const deliveryBytes = nimTestStorageBytes[storage.path]!;
+	return storage.encoding === 'gzip'
+		? {
+				bytes: deliveryBytes.byteLength,
+				sha256: nimTestSha256(deliveryBytes),
+				uncompressedBytes: logicalBytes.byteLength,
+				uncompressedSha256: nimTestSha256(logicalBytes)
+			}
+		: { bytes: deliveryBytes.byteLength, sha256: nimTestSha256(deliveryBytes) };
+};
+const nimTestProfile = {
+	profileId: nimTestManifestWithoutFingerprint.profileId,
+	artifactRevision: nimTestManifestWithoutFingerprint.artifact.revision,
+	nimRevision: nimTestManifestWithoutFingerprint.components.nim.revision,
+	llvmRevision: nimTestManifestWithoutFingerprint.components.llvm.revision,
+	memfsRevision: nimTestManifestWithoutFingerprint.components.memfs.revision,
+	emscriptenRevision: nimTestManifestWithoutFingerprint.components.emscripten.revision,
+	manifestFingerprint: nimTestManifestFingerprint,
+	manifestReceipt: {
+		bytes: nimTestManifestBytes.byteLength,
+		sha256: nimTestSha256(nimTestManifestBytes)
+	},
+	nimJavaScriptReceipt: nimTestReceipt('nim/nim-bundle.js'),
+	nimWasmReceipt: nimTestReceipt('nim/nim.wasm'),
+	nimbaseReceipt: nimTestReceipt('nim/nimbase.h'),
+	clangJavaScriptReceipt: nimTestReceipt('clang/clang.js'),
+	clangWasmReceipt: nimTestReceipt('clang/clang.wasm'),
+	lldWasmReceipt: nimTestReceipt('clang/lld.wasm'),
+	memfsWasmReceipt: nimTestReceipt('clang/memfs.wasm'),
+	sysrootReceipt: nimTestReceipt('clang/sysroot.tar')
+} as const;
+const nimTestWorkerReceipt = {
+	bytes: new TextEncoder().encode(nimWorkerSource).byteLength,
+	sha256: nimTestSha256(new TextEncoder().encode(nimWorkerSource))
+} as const;
+
+function nimTestRuntimeAssets(workerUrl = '/wasm-nim/runner-worker.js?v=test') {
+	return {
+		nim: {
+			baseUrl: '/wasm-nim/',
+			workerUrl,
+			manifestUrl: `/wasm-nim/runtime-manifest.v2.json?v=${nimTestManifestFingerprint}`,
+			...nimTestProfile,
+			workerReceipt: nimTestWorkerReceipt
+		}
+	};
+}
 const clojureScriptTestProfile = {
 	profileId: 'clojurescript-1.12.134-test',
 	sourceRevision: 'r1.12.134',
@@ -844,6 +956,26 @@ function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 				'content-type': 'application/octet-stream'
 			}
 		});
+	}
+	if (inputUrl.includes('/wasm-nim/runtime-manifest.v2.json')) {
+		return new Response(nimTestManifestSource, {
+			status: 200,
+			headers: {
+				'content-length': String(nimTestManifestBytes.byteLength),
+				'content-type': 'application/json'
+			}
+		});
+	}
+	for (const [path, bytes] of Object.entries(nimTestStorageBytes)) {
+		if (inputUrl.includes(`/wasm-nim/${path}`)) {
+			return new Response(Uint8Array.from(bytes), {
+				status: 200,
+				headers: {
+					'content-length': String(bytes.byteLength),
+					'content-type': 'application/octet-stream'
+				}
+			});
+		}
 	}
 	if (inputUrl.includes('/wasm-prolog/runtime-manifest.v2.json')) {
 		return new Response(prologManifestSource, {
@@ -3288,17 +3420,11 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('loads Nim runtime urls and forwards stdin to the Nim wasm compiler worker', async () => {
+	it('preflights every Nim asset before the runner and transfers nine logical buffers once', async () => {
 		const sandbox = new Nim();
-		await sandbox.load({
-			nim: {
-				baseUrl: '/wasm-nim/',
-				workerUrl: '/wasm-nim/runner-worker.js?v=test',
-				manifestUrl: '/wasm-nim/runtime-manifest.v2.json',
-				manifestFingerprint: WASM_NIM_ASSET_VERSION,
-				workerReceipt: WASM_NIM_RUNNER_RECEIPT
-			}
-		});
+		const runtimeAssets = nimTestRuntimeAssets();
+		await sandbox.load(runtimeAssets);
+		await sandbox.load(runtimeAssets);
 		await expect(
 			sandbox.run('echo stdin.readLine()', false, true, undefined, ['demo'], {
 				stdin: 'ok\n'
@@ -3310,36 +3436,175 @@ describe('static worker backed language sandboxes', () => {
 			'http://localhost:3000/wasm-nim/runner-worker.js?v=test',
 			nimWorkerSource
 		);
-		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
-			expect.objectContaining({
-				baseUrl: 'http://localhost:3000/wasm-nim/',
-				manifestUrl: 'http://localhost:3000/wasm-nim/runtime-manifest.v2.json',
-				manifestFingerprint: WASM_NIM_ASSET_VERSION,
-				args: ['demo'],
-				stdin: 'ok\n',
-				activePath: 'main.nim'
+		expect(workerInstances[0].lastMessage).toMatchObject({
+			baseUrl: 'http://localhost:3000/wasm-nim/',
+			manifestUrl: `http://localhost:3000/wasm-nim/runtime-manifest.v2.json?v=${nimTestManifestFingerprint}`,
+			manifestFingerprint: nimTestManifestFingerprint,
+			args: ['demo'],
+			stdin: 'ok\n',
+			activePath: 'main.nim',
+			runtimePreflight: expect.objectContaining({
+				protocol: 'wasm-idle-nim-preflight',
+				protocolVersion: 1,
+				profileId: nimTestProfile.profileId,
+				artifactRevision: nimTestProfile.artifactRevision,
+				nimRevision: nimTestProfile.nimRevision,
+				llvmRevision: nimTestProfile.llvmRevision,
+				memfsRevision: nimTestProfile.memfsRevision,
+				emscriptenRevision: nimTestProfile.emscriptenRevision,
+				manifestFingerprint: nimTestManifestFingerprint
 			})
+		});
+		const runtimePreflight = workerInstances[0].lastMessage.runtimePreflight;
+		expect(Array.from(runtimePreflight.manifestBytes)).toEqual(
+			Array.from(nimTestManifestBytes)
 		);
-		expect(sandbox.workerReceipt).toEqual(WASM_NIM_RUNNER_RECEIPT);
+		for (const [property, logicalPath] of [
+			['nimJavaScriptBytes', 'nim/nim-bundle.js'],
+			['nimWasmBytes', 'nim/nim.wasm'],
+			['nimbaseBytes', 'nim/nimbase.h'],
+			['clangJavaScriptBytes', 'clang/clang.js'],
+			['clangWasmBytes', 'clang/clang.wasm'],
+			['lldWasmBytes', 'clang/lld.wasm'],
+			['memfsWasmBytes', 'clang/memfs.wasm'],
+			['sysrootBytes', 'clang/sysroot.tar']
+		] as const) {
+			expect(Array.from(runtimePreflight[property])).toEqual(
+				Array.from(nimTestLogicalBytes[logicalPath]!)
+			);
+		}
+		expect(workerInstances[0].lastTransferList).toHaveLength(9);
+		expect(new Set(workerInstances[0].lastTransferList).size).toBe(9);
+		expect(
+			workerInstances[0].lastTransferList?.every(
+				(transferable) =>
+					transferable instanceof ArrayBuffer && transferable.byteLength === 0
+			)
+		).toBe(true);
+		const expectedNimRequests = [
+			`http://localhost:3000/wasm-nim/runtime-manifest.v2.json?v=${nimTestManifestFingerprint}`,
+			...Object.entries(nimTestStorageBytes).map(([path]) => {
+				const logicalPath = nimTestManifestWithoutFingerprint.storage.find(
+					(storage: { path: string }) => storage.path === path
+				)!.logicalPath;
+				return `http://localhost:3000/wasm-nim/${path}?v=${nimTestReceipt(logicalPath).sha256}`;
+			}),
+			'http://localhost:3000/wasm-nim/runner-worker.js?v=test'
+		];
+		const nimRequests = vi
+			.mocked(fetch)
+			.mock.calls.map(([input]) => String(input))
+			.filter((url) => url.includes('/wasm-nim/'));
+		expect(nimRequests).toHaveLength(10);
+		expect(new Set(nimRequests)).toEqual(new Set(expectedNimRequests));
+		expect(
+			nimRequests.some((url) =>
+				/(?:\.gz|\/nimbase\.h|\/clang\.js)(?:\?|$)/u.test(new URL(url).pathname)
+			)
+		).toBe(false);
+		const runnerFetchIndex = runtimeLifecycleEvents.indexOf(`fetch:${expectedNimRequests[9]}`);
+		for (const runtimeAssetUrl of expectedNimRequests.slice(0, 9)) {
+			expect(runtimeLifecycleEvents.indexOf(`fetch:${runtimeAssetUrl}`)).toBeLessThan(
+				runnerFetchIndex
+			);
+		}
+		expect(runnerFetchIndex).toBeLessThan(
+			runtimeLifecycleEvents.findIndex((event) => event.startsWith('worker:'))
+		);
+		expect(sandbox.workerReceipt).toEqual(nimTestWorkerReceipt);
+		expect(workerInstances).toHaveLength(1);
 	});
 
 	it('rejects a modified Nim runner before creating a worker', async () => {
 		const modifiedSource = `x${nimWorkerSource.slice(1)}`;
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(modifiedSource, {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-nim/runner-worker.js')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			return new Response(modifiedSource, {
 				status: 200,
 				headers: {
 					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
 				}
-			})
-		);
+			});
+		});
 		const sandbox = new Nim();
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(sandbox.load(nimTestRuntimeAssets())).rejects.toMatchObject({
 			code: 'asset-integrity',
 			runtimeId: 'NIM'
 		});
 		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects corrupt Nim storage before loading the runner or creating a worker', async () => {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-nim/clang/sysroot.tar.gz.bin')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			const corrupted = Uint8Array.from([
+				...nimTestStorageBytes['clang/sysroot.tar.gz.bin']!,
+				0
+			]);
+			return new Response(corrupted, {
+				status: 200,
+				headers: {
+					'content-length': String(corrupted.byteLength),
+					'content-type': 'application/octet-stream'
+				}
+			});
+		});
+		const sandbox = new Nim();
+
+		await expect(sandbox.load(nimTestRuntimeAssets())).rejects.toMatchObject({
+			code: 'asset-too-large',
+			runtimeId: 'NIM'
+		});
+		expect(
+			vi
+				.mocked(fetch)
+				.mock.calls.some(([input]) => String(input).includes('/runner-worker.js'))
+		).toBe(false);
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('retires a Nim worker after transferred dispatch failure and preflights fresh bytes', async () => {
+		const sandbox = new Nim();
+		await sandbox.load(nimTestRuntimeAssets());
+		const dispatchCause = new DOMException('Value could not be cloned', 'DataCloneError');
+		let dispatches = 0;
+		onPostMessage = (worker) => {
+			dispatches += 1;
+			if (dispatches === 1) throw dispatchCause;
+			queueMicrotask(() =>
+				worker.onmessage?.({
+					data: { runId: worker.lastRunId, results: true }
+				} as MessageEvent<any>)
+			);
+		};
+
+		await expect(
+			sandbox.run('echo 1', false, true, undefined, [], { stdin: '' })
+		).rejects.toMatchObject({ code: 'protocol', runtimeId: 'NIM', cause: dispatchCause });
+		expect(workerInstances[0].lastTransferList).toHaveLength(9);
+		expect(
+			workerInstances[0].lastTransferList?.every(
+				(value) => (value as ArrayBuffer).byteLength === 0
+			)
+		).toBe(true);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+		expect(hasRuntimePreflightForWorker(sandbox, workerInstances[0])).toBe(false);
+
+		await expect(
+			sandbox.run('echo 2', false, true, undefined, [], { stdin: '' })
+		).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].lastTransferList).toHaveLength(9);
+		expect(workerInstances[1].lastTransferList).not.toBe(workerInstances[0].lastTransferList);
+		const manifestRequests = vi
+			.mocked(fetch)
+			.mock.calls.filter(([input]) => String(input).includes('runtime-manifest.v2.json'));
+		expect(manifestRequests).toHaveLength(2);
 	});
 
 	it('rejects custom Nim runtime urls without replacement integrity pins', async () => {
@@ -3383,7 +3648,8 @@ describe('static worker backed language sandboxes', () => {
 		};
 		const progress = { set: vi.fn() };
 		const sandbox = new Nim();
-		await sandbox.load('/absproxy/5173', '', true, [], {}, progress);
+		const runtimeAssets = nimTestRuntimeAssets();
+		await sandbox.load(runtimeAssets, '', true, [], {}, progress);
 		const loadCalls = progress.set.mock.calls.slice();
 		expect(loadCalls[0]).toEqual([0, 'Resolving Nim runtime']);
 		const loadValues = loadCalls.map(([value]) => value as number);
@@ -3399,7 +3665,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(prepareValues.at(-1)).toBe(0.25);
 		expect(workerInstances).toHaveLength(1);
 		const repeatedLoadProgress = { set: vi.fn() };
-		await sandbox.load('/absproxy/5173', '', true, [], {}, repeatedLoadProgress);
+		await sandbox.load(runtimeAssets, '', true, [], {}, repeatedLoadProgress);
 		expect(repeatedLoadProgress.set).not.toHaveBeenCalled();
 
 		const firstRunStart = progress.set.mock.calls.length;
@@ -3421,7 +3687,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(secondRunCalls[0]).toEqual([0, 'Starting Nim run']);
 		const secondRunValues = secondRunCalls.map(([value]) => value as number);
 		expect(secondRunValues).toEqual([...secondRunValues].sort((left, right) => left - right));
-		expect(secondRunValues).toContain(0.05);
+		expect(secondRunValues.some((value) => value > 0 && value < 1)).toBe(true);
 		expect(secondRunValues.at(-1)).toBe(1);
 		expect(workerInstances).toHaveLength(2);
 	});

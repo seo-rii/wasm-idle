@@ -9,6 +9,7 @@ import {
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
 import { runStdinBrowserProbe as runBaseStdinBrowserProbe } from '../../../scripts/stdin-browser-probe-lib.mjs';
+import { WASM_NIM_RUNTIME_BUNDLE } from './wasmNimVersion';
 
 const prologStdinSource = `:- use_module(library(readutil)).
 
@@ -618,6 +619,95 @@ describe('wasm-idle static worker language browser integrations', () => {
 				expect(summary.pageErrors).toEqual([]);
 				expect(summary.transcript).toContain('main=73');
 				expect(summary.transcript).toContain('Process finished after');
+				const nimRuntimePaths = summary.runtimeRequests
+					.map((requestUrl) => new URL(requestUrl).pathname)
+					.filter((pathname) => pathname.includes('/wasm-nim/'))
+					.map((pathname) => pathname.slice(pathname.indexOf('/wasm-nim/')));
+				const expectedNimRuntimePaths = [
+					'/wasm-nim/runtime-manifest.v2.json',
+					'/wasm-nim/nim/nim-bundle.js.gz.bin',
+					'/wasm-nim/nim/nim.wasm.gz.bin',
+					'/wasm-nim/nim/nimbase.h.bin',
+					'/wasm-nim/clang/clang.js.bin',
+					'/wasm-nim/clang/clang.wasm.gz.bin',
+					'/wasm-nim/clang/lld.wasm.gz.bin',
+					'/wasm-nim/clang/memfs.wasm.gz.bin',
+					'/wasm-nim/clang/sysroot.tar.gz.bin',
+					'/wasm-nim/runner-worker.js'
+				];
+				expect(nimRuntimePaths).toHaveLength(10);
+				expect(new Set(nimRuntimePaths)).toEqual(new Set(expectedNimRuntimePaths));
+				const expectedVersionByPath = new Map([
+					[
+						'/wasm-nim/runtime-manifest.v2.json',
+						WASM_NIM_RUNTIME_BUNDLE.profile.manifestFingerprint
+					],
+					[
+						'/wasm-nim/nim/nim-bundle.js.gz.bin',
+						WASM_NIM_RUNTIME_BUNDLE.profile.nimJavaScriptReceipt.sha256
+					],
+					[
+						'/wasm-nim/nim/nim.wasm.gz.bin',
+						WASM_NIM_RUNTIME_BUNDLE.profile.nimWasmReceipt.sha256
+					],
+					[
+						'/wasm-nim/nim/nimbase.h.bin',
+						WASM_NIM_RUNTIME_BUNDLE.profile.nimbaseReceipt.sha256
+					],
+					[
+						'/wasm-nim/clang/clang.js.bin',
+						WASM_NIM_RUNTIME_BUNDLE.profile.clangJavaScriptReceipt.sha256
+					],
+					[
+						'/wasm-nim/clang/clang.wasm.gz.bin',
+						WASM_NIM_RUNTIME_BUNDLE.profile.clangWasmReceipt.sha256
+					],
+					[
+						'/wasm-nim/clang/lld.wasm.gz.bin',
+						WASM_NIM_RUNTIME_BUNDLE.profile.lldWasmReceipt.sha256
+					],
+					[
+						'/wasm-nim/clang/memfs.wasm.gz.bin',
+						WASM_NIM_RUNTIME_BUNDLE.profile.memfsWasmReceipt.sha256
+					],
+					[
+						'/wasm-nim/clang/sysroot.tar.gz.bin',
+						WASM_NIM_RUNTIME_BUNDLE.profile.sysrootReceipt.sha256
+					],
+					['/wasm-nim/runner-worker.js', WASM_NIM_RUNTIME_BUNDLE.workerReceipt.sha256]
+				]);
+				for (const requestUrl of summary.runtimeRequests) {
+					const url = new URL(requestUrl);
+					const runtimePath = url.pathname.slice(url.pathname.indexOf('/wasm-nim/'));
+					const expectedVersion = expectedVersionByPath.get(runtimePath);
+					if (!expectedVersion) continue;
+					expect([...url.searchParams.keys()]).toEqual(['v']);
+					expect(url.searchParams.get('v')).toBe(expectedVersion);
+				}
+				const runnerRequestIndex = nimRuntimePaths.indexOf('/wasm-nim/runner-worker.js');
+				for (const runtimeAssetPath of expectedNimRuntimePaths.slice(0, 9)) {
+					expect(nimRuntimePaths.indexOf(runtimeAssetPath)).toBeLessThan(
+						runnerRequestIndex
+					);
+				}
+				for (const legacyOrLogicalPath of [
+					'/wasm-nim/nim/nim-bundle.js.gz',
+					'/wasm-nim/nim/nim.wasm.gz',
+					'/wasm-nim/nim/nimbase.h',
+					'/wasm-nim/clang/clang.js',
+					'/wasm-nim/clang/clang.wasm.gz',
+					'/wasm-nim/clang/lld.wasm.gz',
+					'/wasm-nim/clang/memfs.wasm.gz',
+					'/wasm-nim/clang/sysroot.tar.gz',
+					'/wasm-nim/nim/nim-bundle.js',
+					'/wasm-nim/nim/nim.wasm',
+					'/wasm-nim/clang/clang.wasm',
+					'/wasm-nim/clang/lld.wasm',
+					'/wasm-nim/clang/memfs.wasm',
+					'/wasm-nim/clang/sysroot.tar'
+				]) {
+					expect(nimRuntimePaths).not.toContain(legacyOrLogicalPath);
+				}
 			}
 		);
 	}, 960_000);

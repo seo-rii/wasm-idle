@@ -130,6 +130,49 @@ const COMPRESSED_ASSETS = new Set([
 	'clang/memfs.wasm',
 	'clang/sysroot.tar'
 ]);
+const STORAGE_PATHS = Object.freeze({
+	'nim/nim-bundle.js': Object.freeze({
+		path: 'nim/nim-bundle.js.gz.bin',
+		encoding: 'gzip'
+	}),
+	'nim/nim.wasm': Object.freeze({ path: 'nim/nim.wasm.gz.bin', encoding: 'gzip' }),
+	'nim/nimbase.h': Object.freeze({ path: 'nim/nimbase.h.bin', encoding: 'identity' }),
+	'clang/clang.js': Object.freeze({ path: 'clang/clang.js.bin', encoding: 'identity' }),
+	'clang/clang.wasm': Object.freeze({
+		path: 'clang/clang.wasm.gz.bin',
+		encoding: 'gzip'
+	}),
+	'clang/lld.wasm': Object.freeze({ path: 'clang/lld.wasm.gz.bin', encoding: 'gzip' }),
+	'clang/memfs.wasm': Object.freeze({
+		path: 'clang/memfs.wasm.gz.bin',
+		encoding: 'gzip'
+	}),
+	'clang/sysroot.tar': Object.freeze({
+		path: 'clang/sysroot.tar.gz.bin',
+		encoding: 'gzip'
+	})
+});
+const LEGACY_STORAGE_ALIASES = Object.freeze({
+	'nim/nim-bundle.js.gz.bin': 'nim/nim-bundle.js.gz',
+	'nim/nim.wasm.gz.bin': 'nim/nim.wasm.gz',
+	'nim/nimbase.h.bin': 'nim/nimbase.h',
+	'clang/clang.js.bin': 'clang/clang.js',
+	'clang/clang.wasm.gz.bin': 'clang/clang.wasm.gz',
+	'clang/lld.wasm.gz.bin': 'clang/lld.wasm.gz',
+	'clang/memfs.wasm.gz.bin': 'clang/memfs.wasm.gz',
+	'clang/sysroot.tar.gz.bin': 'clang/sysroot.tar.gz'
+});
+const WORKER_IDENTITY_PLACEHOLDERS = /** @type {Readonly<Record<string, string>>} */ (
+	Object.freeze({
+		profileId: '__WASM_IDLE_NIM_PROFILE_ID__',
+		artifactRevision: '__WASM_IDLE_NIM_ARTIFACT_REVISION__',
+		nimRevision: '__WASM_IDLE_NIM_NIM_REVISION__',
+		llvmRevision: '__WASM_IDLE_NIM_LLVM_REVISION__',
+		memfsRevision: '__WASM_IDLE_NIM_MEMFS_REVISION__',
+		emscriptenRevision: '__WASM_IDLE_NIM_EMSCRIPTEN_REVISION__',
+		manifestFingerprint: '__WASM_IDLE_NIM_MANIFEST_FINGERPRINT__'
+	})
+);
 const EXPECTED_LOCK_KEYS = Object.freeze(
 	[
 		'artifact',
@@ -713,6 +756,14 @@ function requireWasm(bytes, label) {
 	}
 }
 
+/** @param {Record<string, unknown>} runtimeProfile @param {Readonly<Receipt>} workerReceipt */
+function renderVersionModule(runtimeProfile, workerReceipt) {
+	const serializedRuntimeProfile = JSON.stringify(runtimeProfile, null, '\t')
+		.replace(/"([^"\\]+)":/gu, '$1:')
+		.replace(/"/gu, "'");
+	return `export const WASM_NIM_RUNTIME_PROFILE = ${serializedRuntimeProfile} as const;\nexport const WASM_NIM_RUNTIME_BUNDLE = Object.freeze({\n\tprofile: WASM_NIM_RUNTIME_PROFILE,\n\tworkerReceipt: {\n\t\tbytes: ${workerReceipt.bytes},\n\t\tsha256: '${workerReceipt.sha256}'\n\t}\n});\nexport const WASM_NIM_ASSET_VERSION = WASM_NIM_RUNTIME_PROFILE.manifestFingerprint;\nexport const WASM_NIM_RUNNER_RECEIPT = WASM_NIM_RUNTIME_BUNDLE.workerReceipt;\n`;
+}
+
 /** @param {SyncWasmNimOptions} [options] */
 export async function syncWasmNimAssets(options = {}) {
 	const targetDir = path.resolve(options.targetDir || DEFAULT_TARGET_DIR);
@@ -947,8 +998,13 @@ export async function syncWasmNimAssets(options = {}) {
 			!noticeSource.includes('LicenseRef-WASI-Sysroot-Third-Party') ||
 			!documentationSource.includes('Compile and run **Nim 2.2.4**') ||
 			!workerSource.includes(NIM_MANIFEST_FORMAT) ||
-			!workerSource.includes(EXPECTED_PROFILE_ID) ||
-			!workerSource.includes('self.onmessage')
+			!workerSource.includes('wasm-idle-nim-preflight') ||
+			!workerSource.includes('self.onmessage') ||
+			Object.values(WORKER_IDENTITY_PLACEHOLDERS).some(
+				(placeholder) => !workerSource.includes(placeholder)
+			) ||
+			/\bfetch\s*\(/u.test(workerSource) ||
+			workerSource.includes('DecompressionStream')
 		) {
 			throw new Error('Nim runtime source does not expose the pinned runtime contract');
 		}
@@ -978,7 +1034,8 @@ export async function syncWasmNimAssets(options = {}) {
 			return {
 				path: assetPath,
 				mediaType:
-					EXPECTED_ASSETS[/** @type {keyof typeof EXPECTED_ASSETS} */ (assetPath)].mediaType,
+					EXPECTED_ASSETS[/** @type {keyof typeof EXPECTED_ASSETS} */ (assetPath)]
+						.mediaType,
 				size: bytes.byteLength,
 				sha256: sha256(bytes)
 			};
@@ -989,18 +1046,30 @@ export async function syncWasmNimAssets(options = {}) {
 		const storage = assets.map((asset) => {
 			const logical = logicalBytes.get(asset.path);
 			if (!logical) throw new Error(`Nim runtime ${asset.path} is missing`);
-			const compressed = COMPRESSED_ASSETS.has(asset.path);
-			const stored = compressed ? gzipSync(logical, { level: 9 }) : logical;
-			const storagePath = compressed ? `${asset.path}.gz` : asset.path;
-			storageBytes.set(storagePath, stored);
+			const storageConfig =
+				STORAGE_PATHS[/** @type {keyof typeof STORAGE_PATHS} */ (asset.path)];
+			if (!storageConfig) {
+				throw new Error(`Nim runtime storage mapping is missing for ${asset.path}`);
+			}
+			const stored =
+				storageConfig.encoding === 'gzip' ? gzipSync(logical, { level: 9 }) : logical;
+			storageBytes.set(storageConfig.path, stored);
 			return {
-				path: storagePath,
+				path: storageConfig.path,
 				logicalPath: asset.path,
-				encoding: compressed ? 'gzip' : 'identity',
+				encoding: storageConfig.encoding,
 				size: stored.byteLength,
 				sha256: sha256(stored)
 			};
 		});
+		const publishedStorageBytes = new Map(storageBytes);
+		for (const [canonicalPath, legacyPath] of Object.entries(LEGACY_STORAGE_ALIASES)) {
+			const bytes = storageBytes.get(canonicalPath);
+			if (!bytes) {
+				throw new Error(`wasm-nim canonical storage is missing: ${canonicalPath}`);
+			}
+			publishedStorageBytes.set(legacyPath, bytes);
+		}
 		const license = {
 			path: lock.license.path,
 			spdx: lock.license.spdx,
@@ -1074,9 +1143,33 @@ export async function syncWasmNimAssets(options = {}) {
 			assets,
 			storage
 		});
+		const runtimeIdentity = Object.freeze({
+			profileId: lock.profileId,
+			artifactRevision: lock.artifact.revision,
+			nimRevision: lock.components.nim.revision,
+			llvmRevision: lock.components.llvm.revision,
+			memfsRevision: lock.components.memfs.revision,
+			emscriptenRevision: lock.components.emscripten.revision,
+			manifestFingerprint: fingerprint
+		});
+		let publishedWorkerSource = workerSource;
+		for (const [key, value] of Object.entries(runtimeIdentity)) {
+			const placeholderValue = WORKER_IDENTITY_PLACEHOLDERS[key];
+			if (!placeholderValue) {
+				throw new Error(`wasm-nim runner identity key is unknown: ${key}`);
+			}
+			const placeholder = `${key}: '${placeholderValue}'`;
+			const expected = `${key}: '${value}'`;
+			const placeholderCount = publishedWorkerSource.split(placeholder).length - 1;
+			if (placeholderCount !== 1) {
+				throw new Error(`wasm-nim runner must pin exactly one generated ${key} identity`);
+			}
+			publishedWorkerSource = publishedWorkerSource.replace(placeholder, expected);
+		}
+		const publishedWorkerBytes = Buffer.from(publishedWorkerSource, 'utf8');
 		const workerReceipt = Object.freeze({
-			bytes: workerBytes.byteLength,
-			sha256: sha256(workerBytes)
+			bytes: publishedWorkerBytes.byteLength,
+			sha256: sha256(publishedWorkerBytes)
 		});
 		const manifest = {
 			format: NIM_MANIFEST_FORMAT,
@@ -1093,6 +1186,44 @@ export async function syncWasmNimAssets(options = {}) {
 			assets,
 			storage
 		};
+		const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+		const manifestReceipt = Object.freeze({
+			bytes: manifestBytes.byteLength,
+			sha256: sha256(manifestBytes)
+		});
+		const logicalReceiptByPath = new Map(assets.map((asset) => [asset.path, asset]));
+		const storageReceiptByLogicalPath = new Map(
+			storage.map((asset) => [asset.logicalPath, asset])
+		);
+		/** @param {string} logicalPath */
+		const runtimeReceipt = (logicalPath) => {
+			const logical = logicalReceiptByPath.get(logicalPath);
+			const stored = storageReceiptByLogicalPath.get(logicalPath);
+			if (!logical || !stored) {
+				throw new Error(`wasm-nim runtime receipt is missing for ${logicalPath}`);
+			}
+			if (stored.encoding === 'identity') {
+				return Object.freeze({ bytes: logical.size, sha256: logical.sha256 });
+			}
+			return Object.freeze({
+				bytes: stored.size,
+				sha256: stored.sha256,
+				uncompressedBytes: logical.size,
+				uncompressedSha256: logical.sha256
+			});
+		};
+		const runtimeProfile = Object.freeze({
+			...runtimeIdentity,
+			manifestReceipt,
+			nimJavaScriptReceipt: runtimeReceipt('nim/nim-bundle.js'),
+			nimWasmReceipt: runtimeReceipt('nim/nim.wasm'),
+			nimbaseReceipt: runtimeReceipt('nim/nimbase.h'),
+			clangJavaScriptReceipt: runtimeReceipt('clang/clang.js'),
+			clangWasmReceipt: runtimeReceipt('clang/clang.wasm'),
+			lldWasmReceipt: runtimeReceipt('clang/lld.wasm'),
+			memfsWasmReceipt: runtimeReceipt('clang/memfs.wasm'),
+			sysrootReceipt: runtimeReceipt('clang/sysroot.tar')
+		});
 		const legacyManifest = {
 			format: 'wasm-nim-runtime-manifest-v1',
 			runtime: RUNTIME,
@@ -1109,10 +1240,10 @@ export async function syncWasmNimAssets(options = {}) {
 				LICENSE_FILE,
 				NOTICES_FILE,
 				DOCUMENTATION_FILE,
-				...storage.map((asset) => asset.path)
+				...Object.values(LEGACY_STORAGE_ALIASES)
 			].sort()
 		};
-		const versionModuleSource = `export const WASM_NIM_ASSET_VERSION =\n\t'${fingerprint}';\nexport const WASM_NIM_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
+		const versionModuleSource = renderVersionModule(runtimeProfile, workerReceipt);
 		const expectedFiles = [
 			LICENSE_FILE,
 			NOTICES_FILE,
@@ -1121,7 +1252,7 @@ export async function syncWasmNimAssets(options = {}) {
 			LEGACY_MANIFEST_FILE,
 			MANIFEST_FILE,
 			WORKER_FILE,
-			...storage.map((asset) => asset.path)
+			...publishedStorageBytes.keys()
 		].sort();
 
 		await Promise.all([
@@ -1155,10 +1286,8 @@ export async function syncWasmNimAssets(options = {}) {
 				});
 			}
 			await Promise.all([
-				...storage.map((asset) => {
-					const bytes = storageBytes.get(asset.path);
-					if (!bytes) throw new Error(`Nim runtime storage ${asset.path} is missing`);
-					return writeFile(path.join(publications[0].temporary, asset.path), bytes);
+				...publishedStorageBytes.entries().map(([storagePath, bytes]) => {
+					return writeFile(path.join(publications[0].temporary, storagePath), bytes);
 				}),
 				writeFile(path.join(publications[0].temporary, LICENSE_FILE), licenseBytes),
 				writeFile(path.join(publications[0].temporary, NOTICES_FILE), noticeBytes),
@@ -1166,18 +1295,14 @@ export async function syncWasmNimAssets(options = {}) {
 					path.join(publications[0].temporary, DOCUMENTATION_FILE),
 					documentationBytes
 				),
-				writeFile(path.join(publications[0].temporary, WORKER_FILE), workerBytes),
+				writeFile(path.join(publications[0].temporary, WORKER_FILE), publishedWorkerBytes),
 				writeFile(path.join(publications[0].temporary, BUILD_METADATA_FILE), metadataBytes),
 				writeFile(
 					path.join(publications[0].temporary, LEGACY_MANIFEST_FILE),
 					`${JSON.stringify(legacyManifest, null, 2)}\n`,
 					'utf8'
 				),
-				writeFile(
-					path.join(publications[0].temporary, MANIFEST_FILE),
-					`${JSON.stringify(manifest, null, 2)}\n`,
-					'utf8'
-				),
+				writeFile(path.join(publications[0].temporary, MANIFEST_FILE), manifestBytes),
 				writeFile(publications[1].temporary, versionModuleSource, 'utf8')
 			]);
 
@@ -1208,8 +1333,14 @@ export async function syncWasmNimAssets(options = {}) {
 			const installedManifest = JSON.parse(
 				await readFile(path.join(publications[0].temporary, MANIFEST_FILE), 'utf8')
 			);
+			const installedManifestBytes = await readFile(
+				path.join(publications[0].temporary, MANIFEST_FILE)
+			);
 			if (
 				JSON.stringify(installedManifest) !== JSON.stringify(manifest) ||
+				!installedManifestBytes.equals(manifestBytes) ||
+				installedManifestBytes.byteLength !== manifestReceipt.bytes ||
+				sha256(installedManifestBytes) !== manifestReceipt.sha256 ||
 				computeNimRuntimeFingerprint(installedManifest) !== fingerprint ||
 				(await readFile(publications[1].temporary, 'utf8')) !== versionModuleSource
 			) {
@@ -1244,12 +1375,21 @@ export async function syncWasmNimAssets(options = {}) {
 					);
 				}
 			}
+			for (const [canonicalPath, legacyPath] of Object.entries(LEGACY_STORAGE_ALIASES)) {
+				const [canonicalBytes, legacyBytes] = await Promise.all([
+					readFile(path.join(publications[0].temporary, canonicalPath)),
+					readFile(path.join(publications[0].temporary, legacyPath))
+				]);
+				if (!canonicalBytes.equals(legacyBytes)) {
+					throw new Error(`wasm-nim legacy storage alias drifted from ${canonicalPath}`);
+				}
+			}
 			for (const receiptFile of [
 				{ path: LICENSE_FILE, bytes: licenseBytes, receipt: license },
 				{ path: NOTICES_FILE, bytes: noticeBytes, receipt: notices },
 				{ path: DOCUMENTATION_FILE, bytes: documentationBytes, receipt: documentation },
 				{ path: BUILD_METADATA_FILE, bytes: metadataBytes, receipt: metadata },
-				{ path: WORKER_FILE, bytes: workerBytes, receipt: workerReceipt }
+				{ path: WORKER_FILE, bytes: publishedWorkerBytes, receipt: workerReceipt }
 			]) {
 				const installed = await readFile(
 					path.join(publications[0].temporary, receiptFile.path)
@@ -1327,7 +1467,8 @@ export async function syncWasmNimAssets(options = {}) {
 			fingerprint,
 			profileId: lock.profileId,
 			versionModulePath,
-			workerReceipt
+			workerReceipt,
+			runtimeProfile
 		};
 	} finally {
 		if (source.temporaryRoot) {

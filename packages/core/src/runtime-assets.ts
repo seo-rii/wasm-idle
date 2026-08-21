@@ -229,6 +229,21 @@ export interface RuntimeAssetKeySource {
 		workerUrl?: string;
 		manifestUrl?: string;
 		manifestFingerprint?: string;
+		profileId?: string;
+		artifactRevision?: string;
+		nimRevision?: string;
+		llvmRevision?: string;
+		memfsRevision?: string;
+		emscriptenRevision?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		nimJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
+		nimWasmReceipt?: RuntimeAssetIntegrityEntry;
+		nimbaseReceipt?: RuntimeAssetIntegrityEntry;
+		clangJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
+		clangWasmReceipt?: RuntimeAssetIntegrityEntry;
+		lldWasmReceipt?: RuntimeAssetIntegrityEntry;
+		memfsWasmReceipt?: RuntimeAssetIntegrityEntry;
+		sysrootReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	bash?: {
@@ -989,6 +1004,66 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		runtime: 'nim',
 		property: 'manifestFingerprint',
 		key: 'nimManifestFingerprint'
+	},
+	{ runtime: 'nim', property: 'profileId', key: 'nimProfileId' },
+	{ runtime: 'nim', property: 'artifactRevision', key: 'nimArtifactRevision' },
+	{ runtime: 'nim', property: 'nimRevision', key: 'nimNimRevision' },
+	{ runtime: 'nim', property: 'llvmRevision', key: 'nimLlvmRevision' },
+	{ runtime: 'nim', property: 'memfsRevision', key: 'nimMemfsRevision' },
+	{ runtime: 'nim', property: 'emscriptenRevision', key: 'nimEmscriptenRevision' },
+	{
+		runtime: 'nim',
+		property: 'manifestReceipt',
+		key: 'nimManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'nim',
+		property: 'nimJavaScriptReceipt',
+		key: 'nimJavaScriptReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'nim',
+		property: 'nimWasmReceipt',
+		key: 'nimWasmReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'nim',
+		property: 'nimbaseReceipt',
+		key: 'nimNimbaseReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'nim',
+		property: 'clangJavaScriptReceipt',
+		key: 'nimClangJavaScriptReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'nim',
+		property: 'clangWasmReceipt',
+		key: 'nimClangWasmReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'nim',
+		property: 'lldWasmReceipt',
+		key: 'nimLldWasmReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'nim',
+		property: 'memfsWasmReceipt',
+		key: 'nimMemfsWasmReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'nim',
+		property: 'sysrootReceipt',
+		key: 'nimSysrootReceipt',
+		serialize: serializeIntegrityEntry
 	},
 	{
 		runtime: 'nim',

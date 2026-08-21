@@ -2,7 +2,7 @@
   "format": "wasm-nim-runtime-manifest-v2",
   "runtime": "benagastov-nim-wasm-compiler",
   "profileId": "nim-2.2.4-benagastov-ca3471ae",
-  "fingerprint": "54d6f66f1e44b02094fa19c26e545020e7f9503ae59ea844abdc5b3a38edbcf6",
+  "fingerprint": "ee0d08a6d723d4a1afe2ce909bfed2f4d01eb71ddd330898c85c543218b6d2cf",
   "licenseExpression": "MIT AND Apache-2.0 AND Apache-2.0 WITH LLVM-exception AND LicenseRef-WASI-Sysroot-Third-Party",
   "artifact": {
     "kind": "content-locked-git-archive-prebuilt",
@@ -130,56 +130,56 @@
   ],
   "storage": [
     {
-      "path": "nim/nim-bundle.js.gz",
+      "path": "nim/nim-bundle.js.gz.bin",
       "logicalPath": "nim/nim-bundle.js",
       "encoding": "gzip",
       "size": 1873825,
       "sha256": "3b2ba2c1975bc8663ad21e2bd38f4c32b0ae109b3464312163dcc9c5e246ceec"
     },
     {
-      "path": "nim/nim.wasm.gz",
+      "path": "nim/nim.wasm.gz.bin",
       "logicalPath": "nim/nim.wasm",
       "encoding": "gzip",
       "size": 1558514,
       "sha256": "48f519c32c4f202c1685c0509ad593612e289845549e824fdf95823f36f18f67"
     },
     {
-      "path": "nim/nimbase.h",
+      "path": "nim/nimbase.h.bin",
       "logicalPath": "nim/nimbase.h",
       "encoding": "identity",
       "size": 20734,
       "sha256": "28491d05916eab446de054370808030b33b63fd5623dcd454212adec27ee934d"
     },
     {
-      "path": "clang/clang.js",
+      "path": "clang/clang.js.bin",
       "logicalPath": "clang/clang.js",
       "encoding": "identity",
       "size": 19511,
       "sha256": "06cd96ca1f66204a61133b2cabb0dd97132ddf65931f7fc1586fede9ee01754a"
     },
     {
-      "path": "clang/clang.wasm.gz",
+      "path": "clang/clang.wasm.gz.bin",
       "logicalPath": "clang/clang.wasm",
       "encoding": "gzip",
       "size": 10620308,
       "sha256": "4b454f6b421ae8d28d14d69c1957aaf8516049c02d1f93f29193af84502c8778"
     },
     {
-      "path": "clang/lld.wasm.gz",
+      "path": "clang/lld.wasm.gz.bin",
       "logicalPath": "clang/lld.wasm",
       "encoding": "gzip",
       "size": 6769787,
       "sha256": "e1da2a0166cf6fe4ed8b18fb46de565d07dd7f252176ecf1948bbca3eef83340"
     },
     {
-      "path": "clang/memfs.wasm.gz",
+      "path": "clang/memfs.wasm.gz.bin",
       "logicalPath": "clang/memfs.wasm",
       "encoding": "gzip",
       "size": 18974,
       "sha256": "d86f141eacd58a93511fbfb7c4e81d498eb7106a8a57df1bea7d33df3ce1f403"
     },
     {
-      "path": "clang/sysroot.tar.gz",
+      "path": "clang/sysroot.tar.gz.bin",
       "logicalPath": "clang/sysroot.tar",
       "encoding": "gzip",
       "size": 1829599,

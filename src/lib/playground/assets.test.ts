@@ -147,7 +147,11 @@ import {
 	WASM_JULIA_RUNNER_RECEIPT,
 	WASM_JULIA_RUNTIME_PROFILE
 } from './wasmJuliaVersion';
-import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from './wasmNimVersion';
+import {
+	WASM_NIM_ASSET_VERSION,
+	WASM_NIM_RUNNER_RECEIPT,
+	WASM_NIM_RUNTIME_PROFILE
+} from './wasmNimVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import {
@@ -1272,8 +1276,10 @@ describe('runtime asset config resolution', () => {
 		expect(resolveNimRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-nim/',
 			workerUrl: 'https://example.com/absproxy/5173/wasm-nim/runner-worker.js',
-			manifestUrl: 'https://example.com/absproxy/5173/wasm-nim/runtime-manifest.v2.json',
+			manifestUrl: `https://example.com/absproxy/5173/wasm-nim/runtime-manifest.v2.json?v=${WASM_NIM_ASSET_VERSION}`,
 			manifestFingerprint: WASM_NIM_ASSET_VERSION,
+			preflightKey: JSON.stringify(WASM_NIM_RUNTIME_PROFILE),
+			preflightProfile: WASM_NIM_RUNTIME_PROFILE,
 			workerReceipt: WASM_NIM_RUNNER_RECEIPT
 		});
 		expect(resolveSwiftRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual(
@@ -1454,6 +1460,10 @@ describe('runtime asset config resolution', () => {
 		};
 		const customJuliaProfile = {
 			...WASM_JULIA_RUNTIME_PROFILE,
+			manifestFingerprint: customFingerprint
+		};
+		const customNimProfile = {
+			...WASM_NIM_RUNTIME_PROFILE,
 			manifestFingerprint: customFingerprint
 		};
 		vi.resetModules();
@@ -1803,8 +1813,8 @@ describe('runtime asset config resolution', () => {
 					nim: {
 						baseUrl: '/runtime/nim',
 						workerUrl: '/runtime/nim/worker.js',
-						manifestUrl: '/runtime/nim/manifest.json',
-						manifestFingerprint: customFingerprint,
+						manifestUrl: `/runtime/nim/runtime-manifest.v2.json?v=${customFingerprint}`,
+						...customNimProfile,
 						workerReceipt: customWorkerReceipt
 					}
 				},
@@ -1813,8 +1823,10 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/nim/',
 			workerUrl: 'https://example.com/runtime/nim/worker.js',
-			manifestUrl: 'https://example.com/runtime/nim/manifest.json',
+			manifestUrl: `https://example.com/runtime/nim/runtime-manifest.v2.json?v=${customFingerprint}`,
 			manifestFingerprint: customFingerprint,
+			preflightKey: JSON.stringify(customNimProfile),
+			preflightProfile: customNimProfile,
 			workerReceipt: customWorkerReceipt
 		});
 		expect(
@@ -1940,7 +1952,7 @@ describe('runtime asset config resolution', () => {
 		}
 	});
 
-	it('accepts custom Nim URL environment overrides only with complete integrity pins', async () => {
+	it('rejects custom Nim URL environment overrides without a complete profile bundle', async () => {
 		const manifestFingerprint = '9'.repeat(64);
 		const workerSha256 = 'a'.repeat(64);
 		publicEnv.PUBLIC_WASM_NIM_BASE_URL = 'https://runtime.example.com/nim/';
@@ -1952,13 +1964,9 @@ describe('runtime asset config resolution', () => {
 		vi.resetModules();
 		try {
 			const { resolveNimRuntimeAssetConfig } = await import('./assets');
-			expect(resolveNimRuntimeAssetConfig(undefined, 'https://example.com/app')).toEqual({
-				baseUrl: 'https://runtime.example.com/nim/',
-				workerUrl: 'https://runtime.example.com/nim/runner.js',
-				manifestUrl: 'https://runtime.example.com/nim/manifest.json',
-				manifestFingerprint,
-				workerReceipt: { bytes: 7654, sha256: workerSha256 }
-			});
+			expect(() =>
+				resolveNimRuntimeAssetConfig(undefined, 'https://example.com/app')
+			).toThrow('Nim runtime profile ID');
 		} finally {
 			publicEnv.PUBLIC_WASM_NIM_BASE_URL = '';
 			publicEnv.PUBLIC_WASM_NIM_WORKER_URL = '';
@@ -1967,6 +1975,26 @@ describe('runtime asset config resolution', () => {
 			publicEnv.PUBLIC_WASM_NIM_WORKER_SHA256 = '';
 			publicEnv.PUBLIC_WASM_NIM_WORKER_BYTES = '';
 		}
+	});
+
+	it('rejects a complete custom Nim profile paired with a noncanonical manifest URL', async () => {
+		vi.resetModules();
+		const { resolveNimRuntimeAssetConfig } = await import('./assets');
+
+		expect(() =>
+			resolveNimRuntimeAssetConfig(
+				{
+					nim: {
+						baseUrl: 'https://runtime.example.com/nim/',
+						workerUrl: 'https://runtime.example.com/nim/runner-worker.js',
+						manifestUrl: 'https://runtime.example.com/nim/manifest.json',
+						...WASM_NIM_RUNTIME_PROFILE,
+						workerReceipt: WASM_NIM_RUNNER_RECEIPT
+					}
+				},
+				'https://example.com/app'
+			)
+		).toThrow('canonical query-pinned v2 manifest');
 	});
 
 	it('derives Swift worker and manifest urls from an explicit Swift base url', async () => {

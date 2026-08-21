@@ -259,6 +259,24 @@ export {
 	type JuliaRuntimePreflightRequest
 } from './julia-runtime.js';
 export {
+	NIM_PREFLIGHT_PROTOCOL,
+	NIM_PREFLIGHT_PROTOCOL_VERSION,
+	NIM_PREFLIGHT_RUNTIME_ID,
+	NIM_MAX_MANIFEST_BYTES,
+	NIM_MAX_ASSET_BYTES,
+	NIM_MAX_DELIVERY_BYTES,
+	NIM_MAX_LOGICAL_BYTES,
+	NIM_RUNTIME_PREFLIGHT_CAPABILITIES,
+	cloneNimRuntimePreflightPayload,
+	preflightNimRuntimeAssets,
+	requireNimRuntimePreflightPayload,
+	snapshotNimRuntimePreflightProfile,
+	verifyNimRuntimePreflightPayload,
+	type NimRuntimePreflightPayload,
+	type NimRuntimePreflightProfile,
+	type NimRuntimePreflightRequest
+} from './nim-runtime.js';
+export {
 	TCL_PREFLIGHT_PROTOCOL,
 	TCL_PREFLIGHT_PROTOCOL_VERSION,
 	TCL_PREFLIGHT_RUNTIME_ID,

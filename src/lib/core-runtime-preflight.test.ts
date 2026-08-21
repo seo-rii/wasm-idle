@@ -1036,6 +1036,98 @@ describe('runtime registry asset preflight', () => {
 		});
 	});
 
+	it('enforces an aggregate delivery cap across chunked siblings and permits a clean retry', async () => {
+		const firstBytes = Uint8Array.from([1, 2, 3, 4]);
+		const secondBytes = Uint8Array.from([5, 6, 7, 8]);
+		const aggregateAssets: readonly RuntimeRegistryAsset[] = [
+			{
+				key: 'first',
+				path: 'first.bin',
+				compressedSha256: sha256(firstBytes),
+				uncompressedSha256: sha256(firstBytes),
+				compressedBytes: firstBytes.byteLength,
+				uncompressedBytes: firstBytes.byteLength,
+				mediaType: 'application/octet-stream',
+				encoding: 'identity'
+			},
+			{
+				key: 'second',
+				path: 'second.bin',
+				compressedSha256: sha256(secondBytes),
+				uncompressedSha256: sha256(secondBytes),
+				compressedBytes: secondBytes.byteLength,
+				uncompressedBytes: secondBytes.byteLength,
+				mediaType: 'application/octet-stream',
+				encoding: 'identity'
+			}
+		];
+		let started = 0;
+		let releaseFirst!: () => void;
+		const bothStarted = new Promise<void>((resolve) => {
+			releaseFirst = resolve;
+		});
+		const firstCancel = vi.fn(async () => {});
+		const secondCancel = vi.fn(async () => {});
+		const chunkedFetch = vi.fn(async (input: RequestInfo | URL) => {
+			started += 1;
+			if (started === 2) releaseFirst();
+			const isFirst = String(input).endsWith('/first.bin');
+			let delivered = false;
+			return {
+				url: '',
+				ok: true,
+				status: 200,
+				headers: new Headers({ 'content-type': 'application/octet-stream' }),
+				body: {
+					getReader: () => ({
+						async read() {
+							if (!isFirst) return await new Promise<never>(() => {});
+							await bothStarted;
+							if (delivered) return { done: true, value: undefined };
+							delivered = true;
+							return { done: false, value: new Uint8Array(9) };
+						},
+						cancel: isFirst ? firstCancel : secondCancel,
+						releaseLock: vi.fn()
+					})
+				}
+			} as unknown as Response;
+		});
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest(aggregateAssets),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: chunkedFetch,
+				maxTotalDeliveryBytes: 8
+			})
+		).rejects.toMatchObject({
+			name: 'AssetTooLargeError',
+			code: 'asset-too-large',
+			limit: 8,
+			actual: 9
+		});
+		await vi.waitFor(() => expect(secondCancel).toHaveBeenCalledOnce());
+		expect(firstCancel).toHaveBeenCalledOnce();
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest(aggregateAssets),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async (input) =>
+					new Response(String(input).endsWith('/first.bin') ? firstBytes : secondBytes, {
+						status: 200,
+						headers: { 'content-type': 'application/octet-stream' }
+					}),
+				maxTotalDeliveryBytes: 8
+			})
+		).resolves.toMatchObject({
+			assets: { first: { bytes: firstBytes }, second: { bytes: secondBytes } }
+		});
+	});
+
 	it('returns typed timeout and pre-abort failures', async () => {
 		vi.useFakeTimers();
 		const fetch = vi.fn<typeof globalThis.fetch>(

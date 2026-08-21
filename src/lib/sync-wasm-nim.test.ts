@@ -175,13 +175,21 @@ describe('syncWasmNimAssets', () => {
 			'README.md',
 			'THIRD_PARTY_NOTICES.md',
 			'clang/clang.js',
+			'clang/clang.js.bin',
 			'clang/clang.wasm.gz',
+			'clang/clang.wasm.gz.bin',
 			'clang/lld.wasm.gz',
+			'clang/lld.wasm.gz.bin',
 			'clang/memfs.wasm.gz',
+			'clang/memfs.wasm.gz.bin',
 			'clang/sysroot.tar.gz',
+			'clang/sysroot.tar.gz.bin',
 			'nim/nim-bundle.js.gz',
+			'nim/nim-bundle.js.gz.bin',
 			'nim/nim.wasm.gz',
+			'nim/nim.wasm.gz.bin',
 			'nim/nimbase.h',
+			'nim/nimbase.h.bin',
 			'runner-worker.js',
 			'runtime-build.json',
 			'runtime-manifest.v1.json',
@@ -198,6 +206,16 @@ describe('syncWasmNimAssets', () => {
 		});
 		expect(manifest.assets).toHaveLength(8);
 		expect(manifest.storage).toHaveLength(8);
+		expect(manifest.storage.map((asset: { path: string }) => asset.path).sort()).toEqual([
+			'clang/clang.js.bin',
+			'clang/clang.wasm.gz.bin',
+			'clang/lld.wasm.gz.bin',
+			'clang/memfs.wasm.gz.bin',
+			'clang/sysroot.tar.gz.bin',
+			'nim/nim-bundle.js.gz.bin',
+			'nim/nim.wasm.gz.bin',
+			'nim/nimbase.h.bin'
+		]);
 		expect(computeNimRuntimeFingerprint(manifest)).toBe(result.fingerprint);
 		const installedLicense = await readFile(path.join(fixture.targetDir, 'LICENSE'), 'utf8');
 		expect(installedLicense).toContain('binji/wasm-clang');
@@ -225,8 +243,12 @@ describe('syncWasmNimAssets', () => {
 		);
 		for (const storage of manifest.storage) {
 			const stored = await readFile(path.join(fixture.targetDir, storage.path));
+			const legacy = await readFile(
+				path.join(fixture.targetDir, storage.path.replace(/\.bin$/u, ''))
+			);
 			expect(stored.byteLength).toBe(storage.size);
 			expect(sha256(stored)).toBe(storage.sha256);
+			expect(legacy).toEqual(stored);
 			const logical = storage.encoding === 'gzip' ? gunzipSync(stored) : stored;
 			const receipt = manifest.assets.find(
 				(candidate: { path: string }) => candidate.path === storage.logicalPath
@@ -239,7 +261,37 @@ describe('syncWasmNimAssets', () => {
 			bytes: worker.byteLength,
 			sha256: sha256(worker)
 		});
+		const sourceWorker = await readFile(workerSourcePath, 'utf8');
+		const publishedWorker = worker.toString('utf8');
+		for (const [key, value] of Object.entries({
+			profileId: result.runtimeProfile.profileId,
+			artifactRevision: result.runtimeProfile.artifactRevision,
+			nimRevision: result.runtimeProfile.nimRevision,
+			llvmRevision: result.runtimeProfile.llvmRevision,
+			memfsRevision: result.runtimeProfile.memfsRevision,
+			emscriptenRevision: result.runtimeProfile.emscriptenRevision,
+			manifestFingerprint: result.runtimeProfile.manifestFingerprint
+		})) {
+			expect(publishedWorker).toContain(`${key}: '${value}'`);
+		}
+		expect(sourceWorker).toContain('__WASM_IDLE_NIM_MANIFEST_FINGERPRINT__');
+		expect(publishedWorker).not.toContain('__WASM_IDLE_NIM_MANIFEST_FINGERPRINT__');
+		const manifestBytes = await readFile(
+			path.join(fixture.targetDir, 'runtime-manifest.v2.json')
+		);
+		expect(result.runtimeProfile.manifestReceipt).toEqual({
+			bytes: manifestBytes.byteLength,
+			sha256: sha256(manifestBytes)
+		});
 		const versionModule = await readFile(fixture.versionModulePath, 'utf8');
+		expect(versionModule).toContain('WASM_NIM_RUNTIME_PROFILE');
+		expect(versionModule).toContain('WASM_NIM_RUNTIME_BUNDLE');
+		expect(versionModule).toContain(
+			'WASM_NIM_ASSET_VERSION = WASM_NIM_RUNTIME_PROFILE.manifestFingerprint'
+		);
+		expect(versionModule).toContain(
+			'WASM_NIM_RUNNER_RECEIPT = WASM_NIM_RUNTIME_BUNDLE.workerReceipt'
+		);
 		expect(versionModule).toContain(result.fingerprint);
 		expect(versionModule).toContain(result.workerReceipt.sha256);
 

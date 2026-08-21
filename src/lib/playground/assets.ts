@@ -34,7 +34,7 @@ import {
 import { WASM_JANET_RUNTIME_BUNDLE } from '$lib/playground/wasmJanetVersion';
 import { WASM_JULIA_RUNTIME_BUNDLE } from '$lib/playground/wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
-import { WASM_NIM_ASSET_VERSION, WASM_NIM_RUNNER_RECEIPT } from '$lib/playground/wasmNimVersion';
+import { WASM_NIM_RUNTIME_BUNDLE } from '$lib/playground/wasmNimVersion';
 import {
 	WASM_PROLOG_ASSET_VERSION,
 	WASM_PROLOG_RUNNER_RECEIPT,
@@ -51,6 +51,7 @@ import {
 	deriveRubyRuntimeWasmUrl,
 	snapshotJanetRuntimePreflightProfile,
 	snapshotJuliaRuntimePreflightProfile,
+	snapshotNimRuntimePreflightProfile,
 	snapshotPerlRuntimePreflightProfile,
 	snapshotPrologRuntimePreflightProfile,
 	snapshotTclRuntimePreflightProfile,
@@ -432,6 +433,21 @@ export interface NimRuntimeAssetConfig {
 	workerUrl?: string;
 	manifestUrl?: string;
 	manifestFingerprint?: string;
+	profileId?: string;
+	artifactRevision?: string;
+	nimRevision?: string;
+	llvmRevision?: string;
+	memfsRevision?: string;
+	emscriptenRevision?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	nimJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
+	nimWasmReceipt?: RuntimeAssetIntegrityEntry;
+	nimbaseReceipt?: RuntimeAssetIntegrityEntry;
+	clangJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
+	clangWasmReceipt?: RuntimeAssetIntegrityEntry;
+	lldWasmReceipt?: RuntimeAssetIntegrityEntry;
+	memfsWasmReceipt?: RuntimeAssetIntegrityEntry;
+	sysrootReceipt?: RuntimeAssetIntegrityEntry;
 	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
@@ -3372,18 +3388,96 @@ export function resolveNimRuntimeAssetConfig(
 		(publicEnv.PUBLIC_WASM_NIM_WORKER_URL || '').trim() ||
 		(publicEnv.PUBLIC_WASM_NIM_MANIFEST_URL || '').trim()
 	);
+	const hasConfiguredTrust =
+		!!configured &&
+		[
+			configured.manifestFingerprint,
+			configured.profileId,
+			configured.artifactRevision,
+			configured.nimRevision,
+			configured.llvmRevision,
+			configured.memfsRevision,
+			configured.emscriptenRevision,
+			configured.manifestReceipt,
+			configured.nimJavaScriptReceipt,
+			configured.nimWasmReceipt,
+			configured.nimbaseReceipt,
+			configured.clangJavaScriptReceipt,
+			configured.clangWasmReceipt,
+			configured.lldWasmReceipt,
+			configured.memfsWasmReceipt,
+			configured.sysrootReceipt,
+			configured.workerReceipt
+		].some((value) => value !== undefined);
+	const usesCustomTrustBoundary =
+		usesCustomUrls ||
+		hasConfiguredTrust ||
+		Boolean(envManifestFingerprint || envWorkerSha256 || envWorkerBytesSource);
+	const selectedProfile = usesCustomTrustBoundary
+		? {
+				profileId: configured?.profileId?.trim(),
+				artifactRevision: configured?.artifactRevision?.trim(),
+				nimRevision: configured?.nimRevision?.trim(),
+				llvmRevision: configured?.llvmRevision?.trim(),
+				memfsRevision: configured?.memfsRevision?.trim(),
+				emscriptenRevision: configured?.emscriptenRevision?.trim(),
+				manifestFingerprint:
+					configured?.manifestFingerprint?.trim() || envManifestFingerprint,
+				manifestReceipt: configured?.manifestReceipt,
+				nimJavaScriptReceipt: configured?.nimJavaScriptReceipt,
+				nimWasmReceipt: configured?.nimWasmReceipt,
+				nimbaseReceipt: configured?.nimbaseReceipt,
+				clangJavaScriptReceipt: configured?.clangJavaScriptReceipt,
+				clangWasmReceipt: configured?.clangWasmReceipt,
+				lldWasmReceipt: configured?.lldWasmReceipt,
+				memfsWasmReceipt: configured?.memfsWasmReceipt,
+				sysrootReceipt: configured?.sysrootReceipt
+			}
+		: WASM_NIM_RUNTIME_BUNDLE.profile;
+	const preflightProfile = snapshotNimRuntimePreflightProfile(selectedProfile);
+	const workerReceipt = usesCustomTrustBoundary
+		? configured?.workerReceipt || envWorkerReceipt
+		: WASM_NIM_RUNTIME_BUNDLE.workerReceipt;
+	if (
+		!workerReceipt ||
+		!Number.isSafeInteger(workerReceipt.bytes) ||
+		workerReceipt.bytes <= 0 ||
+		!/^[a-f0-9]{64}$/u.test(workerReceipt.sha256)
+	) {
+		throw new RuntimeConfigurationError(
+			'Nim runtime requires one complete profile and runner receipt bundle.',
+			{ runtimeId: 'NIM' }
+		);
+	}
+	const hasConfiguredManifestUrl = Boolean(
+		configured?.manifestUrl || (publicEnv.PUBLIC_WASM_NIM_MANIFEST_URL || '').trim()
+	);
+	const baseUrl = resolveNimBaseUrl(options, currentUrl);
+	const resolvedManifestUrl = resolveNimManifestUrl(options, currentUrl);
+	const manifestUrl = hasConfiguredManifestUrl
+		? resolvedManifestUrl
+		: `${resolvedManifestUrl}?v=${preflightProfile.manifestFingerprint}`;
+	try {
+		const comparisonBaseUrl = new URL(baseUrl, 'https://wasm-idle.invalid/');
+		const expectedManifestUrl = new URL('runtime-manifest.v2.json', comparisonBaseUrl);
+		expectedManifestUrl.search = `?v=${preflightProfile.manifestFingerprint}`;
+		if (new URL(manifestUrl, comparisonBaseUrl).href !== expectedManifestUrl.href) {
+			throw new Error('manifest URL mismatch');
+		}
+	} catch (error) {
+		throw new RuntimeConfigurationError(
+			'Nim runtime manifest URL must be the canonical query-pinned v2 manifest.',
+			{ cause: error, runtimeId: 'NIM' }
+		);
+	}
 	return {
-		baseUrl: resolveNimBaseUrl(options, currentUrl),
+		baseUrl,
 		workerUrl: resolveNimWorkerUrl(options, currentUrl),
-		manifestUrl: resolveNimManifestUrl(options, currentUrl),
-		manifestFingerprint:
-			configured?.manifestFingerprint?.trim() ||
-			envManifestFingerprint ||
-			(!usesCustomUrls ? WASM_NIM_ASSET_VERSION : undefined),
-		workerReceipt:
-			configured?.workerReceipt ||
-			envWorkerReceipt ||
-			(!usesCustomUrls ? WASM_NIM_RUNNER_RECEIPT : undefined)
+		manifestUrl,
+		manifestFingerprint: preflightProfile.manifestFingerprint,
+		preflightKey: JSON.stringify(preflightProfile),
+		preflightProfile,
+		workerReceipt
 	};
 }
 

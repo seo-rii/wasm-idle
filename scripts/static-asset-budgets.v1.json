@@ -1,7 +1,7 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 762000000,
+		"maxBytes": 785000000,
 		"maxFiles": 1850
 	},
 	"directories": {
@@ -32,7 +32,7 @@
 		"wasm-julia": { "maxBytes": 32000000, "maxFiles": 13 },
 		"wasm-lisp": { "maxBytes": 5000000, "maxFiles": 50 },
 		"wasm-lua": { "maxBytes": 400000, "maxFiles": 5 },
-		"wasm-nim": { "maxBytes": 25000000, "maxFiles": 16 },
+		"wasm-nim": { "maxBytes": 48000000, "maxFiles": 24 },
 		"wasm-objectivec": { "maxBytes": 11000000, "maxFiles": 10 },
 		"wasm-octave": { "maxBytes": 70000000, "maxFiles": 1250 },
 		"wasm-of-js-of-ocaml": {

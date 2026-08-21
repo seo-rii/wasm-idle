@@ -1149,8 +1149,14 @@ const runtimeDetailsByLanguage = new Map([
 		'Nim',
 		{
 			packageBase: `Nim 2.2.4 / benagastov Nim-WASM-Compiler with clang/lld WASM`,
-			execution: `static worker compiles Nim to C, then clang/lld to WASM; supports ${code('stdin')}`,
-			customization: staticWorkerCustomizationFor('nim')
+			execution:
+				`host-verifies the manifest, eight stored assets, logical hashes, and profile-bound one-shot runner ` +
+				`before compiling Nim to C and linking with clang/lld WASM in a disposable worker; supports ` +
+				`${code('stdin')}, ${code('programArgs')}, and ${code('activePath')}`,
+			customization:
+				`explicit ${code('runtimeAssets.nim.baseUrl')}/${code('workerUrl')}/${code('manifestUrl')} overrides ` +
+				`require one complete profile-and-runner receipt bundle; URL-only ${code('PUBLIC_WASM_NIM_*')} ` +
+				`overrides fail closed; ${code('programArgs')}, ${code('activePath')}`
 		}
 	],
 	[
