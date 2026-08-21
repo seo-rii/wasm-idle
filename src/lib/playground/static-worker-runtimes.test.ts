@@ -133,7 +133,10 @@ import {
 	STATIC_STDIN_RING_CONTROL_SLOTS,
 	STATIC_STDIN_RING_WRITE_INDEX
 } from './staticStdinRing';
-import { StaticWorkerRuntimeSandbox } from './staticWorkerRuntime';
+import {
+	StaticWorkerRuntimeSandbox,
+	type StaticWorkerRuntimePreflightContext
+} from './staticWorkerRuntime';
 import Tcl from './tcl';
 import { resolvePrologRuntimeAssetConfig } from './assets';
 import bqnWorkerSource from '../../../scripts/runtime-workers/wasm-bqn-runner-worker.js?raw';
@@ -1089,6 +1092,37 @@ function createPersistentTestSandbox() {
 			baseUrl: `${String(runtimeAssets || '/persistent-test').replace(/\/$/u, '')}/`,
 			workerUrl: `${String(runtimeAssets || '/persistent-test').replace(/\/$/u, '')}/worker.js`
 		})
+	});
+}
+
+function createOwnedPreflightTestSandbox(
+	preflight: (context: StaticWorkerRuntimePreflightContext) => unknown | Promise<unknown>,
+	options: { readonly languageId?: string; readonly preflightKey?: string } = {}
+) {
+	const languageId = options.languageId ?? 'OWNED_PREFLIGHT_TEST';
+	const preflightKey = options.preflightKey ?? 'owned-preflight-test-v1';
+	return new StaticWorkerRuntimeSandbox({
+		languageId,
+		displayName: languageId,
+		defaultActivePath: 'main.txt',
+		stdin: { mode: 'none' },
+		workerLifetime: { mode: 'per-run' },
+		runtimePreflightDelivery: 'transfer-owned',
+		resolveRuntimeAssets: () => ({
+			baseUrl: '/owned-preflight-test/',
+			workerUrl: '/owned-preflight-test/worker.js',
+			preflightKey
+		}),
+		preflightRuntimeAssets: (_urls, context) => preflight(context)
+	});
+}
+
+function createOwnedPreflightTestPayload() {
+	return Object.freeze({
+		protocol: 'owned-preflight-test',
+		protocolVersion: 1,
+		manifestBytes: Uint8Array.from([1, 2, 3]),
+		wasmBytes: Uint8Array.from([0, 97, 115, 109])
 	});
 }
 
@@ -2887,7 +2921,228 @@ describe('static worker backed language sandboxes', () => {
 		expect(manifestRequests).toHaveLength(2);
 	});
 
-	it('rejects a transferable runtime preflight hook for persistent workers', () => {
+	it('adopts every owned preflight buffer without copying and consumes the ticket once', async () => {
+		const payloads: ReturnType<typeof createOwnedPreflightTestPayload>[] = [];
+		const sandbox = createOwnedPreflightTestSandbox((context) => {
+			const payload = createOwnedPreflightTestPayload();
+			payloads.push(payload);
+			return context.createOwnedDelivery(payload);
+		});
+
+		await sandbox.load('/owned-preflight-test');
+		const payload = payloads[0];
+		const manifestBuffer = payload.manifestBytes.buffer;
+		const wasmBuffer = payload.wasmBytes.buffer;
+		await expect(sandbox.run('run', false, true, undefined, [])).resolves.toBe(true);
+
+		expect(workerInstances[0].lastTransferList).toEqual([manifestBuffer, wasmBuffer]);
+		expect(workerInstances[0].lastTransferList?.[0]).toBe(manifestBuffer);
+		expect(workerInstances[0].lastTransferList?.[1]).toBe(wasmBuffer);
+		expect(payload.manifestBytes.byteLength).toBe(0);
+		expect(payload.wasmBytes.byteLength).toBe(0);
+		expect(hasRuntimePreflightForWorker(sandbox, workerInstances[0])).toBe(false);
+	});
+
+	it('rejects invalid owned preflight payload roots and binary ownership', async () => {
+		const duplicateBuffer = new ArrayBuffer(4);
+		const accessor = vi.fn(() => Uint8Array.from([1]));
+		const accessorPayload = Object.freeze(
+			Object.defineProperty({ protocol: 'fixture' }, 'bytes', {
+				enumerable: true,
+				get: accessor
+			})
+		);
+		const symbolKey = Symbol('unexpected');
+		const invalidPayloads: [string, unknown][] = [
+			['unfrozen root', { bytes: Uint8Array.from([1]) }],
+			['empty bytes', Object.freeze({ bytes: new Uint8Array(0) })],
+			['partial view', Object.freeze({ bytes: new Uint8Array(new ArrayBuffer(4), 1, 2) })],
+			[
+				'duplicate buffer',
+				Object.freeze({
+					firstBytes: new Uint8Array(duplicateBuffer),
+					secondBytes: new Uint8Array(duplicateBuffer)
+				})
+			],
+			['direct buffer', Object.freeze({ bytes: new ArrayBuffer(1) })],
+			['other view', Object.freeze({ bytes: new DataView(new ArrayBuffer(1)) })],
+			['nested object', Object.freeze({ bytes: Uint8Array.from([1]), nested: {} })],
+			['accessor', accessorPayload],
+			[
+				'symbol key',
+				Object.freeze({ bytes: Uint8Array.from([1]), [symbolKey]: 'unexpected' })
+			],
+			['no binary values', Object.freeze({ protocol: 'fixture' })]
+		];
+		if (typeof SharedArrayBuffer === 'function') {
+			invalidPayloads.push([
+				'shared buffer',
+				Object.freeze({ bytes: new Uint8Array(new SharedArrayBuffer(1)) })
+			]);
+		}
+
+		for (const [label, payload] of invalidPayloads) {
+			const sandbox = createOwnedPreflightTestSandbox((context) =>
+				context.createOwnedDelivery(payload)
+			);
+			await expect(sandbox.load('/owned-preflight-test'), label).rejects.toMatchObject({
+				code: 'runtime-configuration',
+				runtimeId: 'OWNED_PREFLIGHT_TEST'
+			});
+		}
+		expect(accessor).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
+		expect(fetch).not.toHaveBeenCalled();
+	});
+
+	it('invalidates the first owned delivery when a preflight context claims twice', async () => {
+		const sandbox = createOwnedPreflightTestSandbox((context) => {
+			const first = context.createOwnedDelivery(createOwnedPreflightTestPayload());
+			expect(() => context.createOwnedDelivery(createOwnedPreflightTestPayload())).toThrow();
+			return first;
+		});
+
+		await expect(sandbox.load('/owned-preflight-test')).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			runtimeId: 'OWNED_PREFLIGHT_TEST'
+		});
+		expect(fetch).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects raw payloads in transfer-owned mode and owned tickets in clone mode', async () => {
+		const rawSandbox = createOwnedPreflightTestSandbox(() => createOwnedPreflightTestPayload());
+		await expect(rawSandbox.load('/owned-preflight-test')).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			runtimeId: 'OWNED_PREFLIGHT_TEST'
+		});
+
+		const cloneSandbox = new StaticWorkerRuntimeSandbox({
+			languageId: 'CLONE_PREFLIGHT_TEST',
+			displayName: 'Clone preflight test',
+			defaultActivePath: 'main.txt',
+			stdin: { mode: 'none' },
+			resolveRuntimeAssets: () => ({
+				baseUrl: '/clone-preflight-test/',
+				workerUrl: '/clone-preflight-test/worker.js',
+				preflightKey: 'clone-preflight-test-v1'
+			}),
+			preflightRuntimeAssets: (_urls, context) =>
+				context.createOwnedDelivery(createOwnedPreflightTestPayload())
+		});
+		await expect(cloneSandbox.load('/clone-preflight-test')).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			runtimeId: 'CLONE_PREFLIGHT_TEST'
+		});
+		expect(fetch).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('retires a claimed ticket when its callback throws or returns a plain payload', async () => {
+		for (const outcome of ['throw', 'plain'] as const) {
+			let retiredTicket: unknown;
+			const sandbox = createOwnedPreflightTestSandbox((context) => {
+				const payload = createOwnedPreflightTestPayload();
+				retiredTicket = context.createOwnedDelivery(payload);
+				if (outcome === 'throw') throw new Error('fixture preflight failure');
+				return payload;
+			});
+			await expect(sandbox.load('/owned-preflight-test')).rejects.toBeDefined();
+
+			const retry = createOwnedPreflightTestSandbox(() => retiredTicket);
+			await expect(retry.load('/owned-preflight-test')).rejects.toMatchObject({
+				code: 'runtime-configuration',
+				runtimeId: 'OWNED_PREFLIGHT_TEST'
+			});
+		}
+		expect(fetch).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('invalidates a preflight context factory when its worker generation is retired', async () => {
+		let preflightContext: StaticWorkerRuntimePreflightContext | undefined;
+		let releasePreflight!: () => void;
+		const preflightGate = new Promise<void>((resolve) => {
+			releasePreflight = resolve;
+		});
+		const sandbox = createOwnedPreflightTestSandbox(async (context) => {
+			preflightContext = context;
+			await preflightGate;
+			return context.createOwnedDelivery(createOwnedPreflightTestPayload());
+		});
+		const load = sandbox.load('/owned-preflight-test');
+		const outcome = load.catch((error) => error);
+		await vi.waitFor(() => expect(preflightContext).toBeDefined());
+
+		sandbox.terminate();
+		expect(() =>
+			preflightContext!.createOwnedDelivery(createOwnedPreflightTestPayload())
+		).toThrow('runtime preflight delivery operation is stale');
+		releasePreflight();
+		await expect(outcome).resolves.toBeDefined();
+		expect(fetch).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('preserves one-argument postMessage for structured-clone preflight payloads', async () => {
+		const sandbox = new StaticWorkerRuntimeSandbox({
+			languageId: 'CLONE_PREFLIGHT_DISPATCH_TEST',
+			displayName: 'Clone preflight dispatch test',
+			defaultActivePath: 'main.txt',
+			stdin: { mode: 'none' },
+			resolveRuntimeAssets: () => ({
+				baseUrl: '/clone-preflight-dispatch-test/',
+				workerUrl: '/clone-preflight-dispatch-test/worker.js'
+			}),
+			preflightRuntimeAssets: () => Object.freeze({ bytes: Uint8Array.from([1, 2, 3]) })
+		});
+		await sandbox.load('/clone-preflight-dispatch-test');
+		await expect(sandbox.run('run', false, true, undefined, [])).resolves.toBe(true);
+
+		expect(workerInstances[0].postMessage).toHaveBeenCalledOnce();
+		expect(workerInstances[0].postMessage.mock.calls[0]).toHaveLength(1);
+		expect(workerInstances[0].lastTransferList).toBeUndefined();
+	});
+
+	it('rejects an owned ticket created for another runtime operation', async () => {
+		let foreignTicket: unknown;
+		const first = createOwnedPreflightTestSandbox(
+			(context) => {
+				foreignTicket = context.createOwnedDelivery(createOwnedPreflightTestPayload());
+				return foreignTicket;
+			},
+			{ languageId: 'OWNED_PREFLIGHT_FIRST', preflightKey: 'first-profile' }
+		);
+		await first.load('/owned-preflight-first');
+
+		const second = createOwnedPreflightTestSandbox(() => foreignTicket, {
+			languageId: 'OWNED_PREFLIGHT_SECOND',
+			preflightKey: 'second-profile'
+		});
+		await expect(second.load('/owned-preflight-second')).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			runtimeId: 'OWNED_PREFLIGHT_SECOND'
+		});
+		first.terminate();
+	});
+
+	it('rejects an owned ticket after its first dispatch consumed it', async () => {
+		let consumedTicket: unknown;
+		const first = createOwnedPreflightTestSandbox((context) => {
+			consumedTicket = context.createOwnedDelivery(createOwnedPreflightTestPayload());
+			return consumedTicket;
+		});
+		await first.load('/owned-preflight-test');
+		await expect(first.run('run', false, true, undefined, [])).resolves.toBe(true);
+
+		const second = createOwnedPreflightTestSandbox(() => consumedTicket);
+		await expect(second.load('/owned-preflight-test')).rejects.toMatchObject({
+			code: 'runtime-configuration',
+			runtimeId: 'OWNED_PREFLIGHT_TEST'
+		});
+	});
+
+	it('rejects transfer-owned delivery for persistent workers', () => {
 		expect(
 			() =>
 				new StaticWorkerRuntimeSandbox({
@@ -2904,13 +3159,14 @@ describe('static worker backed language sandboxes', () => {
 						baseUrl: '/invalid-transfer-test/',
 						workerUrl: '/invalid-transfer-test/worker.js'
 					}),
-					preflightRuntimeAssets: () => ({ bytes: new Uint8Array(1) }),
-					consumeRuntimePreflightTransferables: () => []
+					preflightRuntimeAssets: (_urls, context) =>
+						context.createOwnedDelivery(Object.freeze({ bytes: Uint8Array.from([1]) })),
+					runtimePreflightDelivery: 'transfer-owned'
 				})
-		).toThrow('runtime preflight transfer lists require per-run workers');
+		).toThrow('transfer-owned runtime preflight requires per-run workers');
 	});
 
-	it('rejects a transfer hook without a runtime preflight callback', () => {
+	it('rejects transfer-owned delivery without a runtime preflight callback', () => {
 		expect(
 			() =>
 				new StaticWorkerRuntimeSandbox({
@@ -2923,9 +3179,9 @@ describe('static worker backed language sandboxes', () => {
 						baseUrl: '/missing-preflight-test/',
 						workerUrl: '/missing-preflight-test/worker.js'
 					}),
-					consumeRuntimePreflightTransferables: () => []
+					runtimePreflightDelivery: 'transfer-owned'
 				})
-		).toThrow('runtime preflight transfer lists require a runtime preflight callback');
+		).toThrow('transfer-owned runtime preflight requires a runtime preflight callback');
 	});
 
 	it('ignores a second bootstrap run correlation until the active run terminates', async () => {

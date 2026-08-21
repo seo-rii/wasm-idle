@@ -48,6 +48,21 @@ export interface StaticWorkerRuntimePreflightContext {
 	readonly limits: ExecutionLimits;
 	readonly signal?: AbortSignal;
 	readonly reportProgress: (value: number, stage?: string) => void;
+	/**
+	 * Relinquishes a verified payload to this one worker-start operation.
+	 *
+	 * The frozen payload must be a plain object whose binary fields are non-empty Uint8Arrays
+	 * spanning distinct, exclusively owned ArrayBuffers. Every top-level Uint8Array is adopted;
+	 * callers cannot select or omit transferables. The returned ticket is opaque, operation-bound,
+	 * and may be returned only from this preflight callback.
+	 */
+	readonly createOwnedDelivery: (payload: unknown) => StaticWorkerRuntimeOwnedDelivery;
+}
+
+declare const staticWorkerRuntimeOwnedDeliveryBrand: unique symbol;
+
+export interface StaticWorkerRuntimeOwnedDelivery {
+	readonly [staticWorkerRuntimeOwnedDeliveryBrand]: true;
 }
 
 export type StaticWorkerRuntimeStdin =
@@ -79,15 +94,29 @@ export interface StaticWorkerRuntimeConfig {
 		urls: StaticWorkerRuntimeUrls,
 		context: StaticWorkerRuntimePreflightContext
 	) => unknown | Promise<unknown>;
-	/**
-	 * Consumes transferables from a per-run runtime preflight payload.
-	 *
-	 * This hook is only valid for per-run workers. Every returned value must be a full buffer
-	 * exclusively owned by the payload. Once invoked, neither the payload nor its worker may be
-	 * reused, regardless of whether dispatch succeeds or fails.
-	 */
-	consumeRuntimePreflightTransferables?: (runtimePreflight: unknown) => readonly Transferable[];
+	runtimePreflightDelivery?: 'structured-clone' | 'transfer-owned';
 }
+
+type OwnedDeliveryOperation = {
+	active: boolean;
+	claimedTicket: StaticWorkerRuntimeOwnedDelivery | null;
+	generation: number;
+	owner: StaticWorkerRuntimeSandbox;
+	preflightKey: string;
+	runtimeId: string;
+};
+
+type OwnedDeliveryState = {
+	operation: OwnedDeliveryOperation;
+	payload: Readonly<Record<string, unknown>> | null;
+	status: 'available' | 'consumed' | 'retired';
+	transferables: ArrayBuffer[] | null;
+};
+
+const ownedDeliveryStateByTicket = new WeakMap<
+	StaticWorkerRuntimeOwnedDelivery,
+	OwnedDeliveryState
+>();
 
 type StaticWorkerMessage = {
 	__wasmIdleStaticWorkerReady?: boolean;
@@ -186,15 +215,21 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 
 	constructor(private readonly config: StaticWorkerRuntimeConfig) {
 		const workerLifetime = config.workerLifetime ?? { mode: 'per-run' as const };
-		if (config.consumeRuntimePreflightTransferables && !config.preflightRuntimeAssets) {
+		if (
+			config.runtimePreflightDelivery === 'transfer-owned' &&
+			!config.preflightRuntimeAssets
+		) {
 			throw new RuntimeConfigurationError(
-				`${config.displayName} runtime preflight transfer lists require a runtime preflight callback.`,
+				`${config.displayName} transfer-owned runtime preflight requires a runtime preflight callback.`,
 				{ phase: 'startup', runtimeId: config.languageId }
 			);
 		}
-		if (config.consumeRuntimePreflightTransferables && workerLifetime.mode !== 'per-run') {
+		if (
+			config.runtimePreflightDelivery === 'transfer-owned' &&
+			workerLifetime.mode !== 'per-run'
+		) {
 			throw new RuntimeConfigurationError(
-				`${config.displayName} runtime preflight transfer lists require per-run workers.`,
+				`${config.displayName} transfer-owned runtime preflight requires per-run workers.`,
 				{ phase: 'startup', runtimeId: config.languageId }
 			);
 		}
@@ -1124,68 +1159,200 @@ self.postMessage = (message, transferOrOptions) => {
 					{ phase: 'asset', runtimeId: this.config.languageId }
 				);
 			}
+			const preflightKey = urls.preflightKey || urls.manifestFingerprint || '';
+			if (
+				this.config.runtimePreflightDelivery === 'transfer-owned' &&
+				preflightKey.length === 0
+			) {
+				throw new RuntimeConfigurationError(
+					`${this.config.displayName} transfer-owned runtime preflight requires a stable preflight key.`,
+					{ phase: 'asset', runtimeId: this.config.languageId }
+				);
+			}
+			const operation: OwnedDeliveryOperation = {
+				active: true,
+				claimedTicket: null,
+				generation,
+				owner: this,
+				preflightKey,
+				runtimeId: this.config.languageId
+			};
 			this.reportProgress(progress, 0.03, `Preflighting ${this.config.displayName} runtime`);
-			runtimePreflight = await this.config.preflightRuntimeAssets(urls, {
-				limits: controls.limits,
-				signal: controls.signal,
-				reportProgress: (value, stage) => this.reportProgress(progress, value, stage)
-			});
+			try {
+				runtimePreflight = await this.config.preflightRuntimeAssets(urls, {
+					limits: controls.limits,
+					signal: controls.signal,
+					reportProgress: (value, stage) => this.reportProgress(progress, value, stage),
+					createOwnedDelivery: (payload) => {
+						const currentUrls = this.resolvedRuntimeUrls;
+						const currentPreflightKey =
+							currentUrls?.preflightKey || currentUrls?.manifestFingerprint || '';
+						if (
+							!operation.active ||
+							this.disposed ||
+							controls.signal?.aborted ||
+							generation !== this.workerGeneration ||
+							currentPreflightKey !== operation.preflightKey
+						) {
+							throw new RuntimeConfigurationError(
+								`${this.config.displayName} runtime preflight delivery operation is stale.`,
+								{ phase: 'asset', runtimeId: this.config.languageId }
+							);
+						}
+						if (operation.claimedTicket) {
+							this.retireRuntimePreflight(operation.claimedTicket);
+							throw new RuntimeConfigurationError(
+								`${this.config.displayName} runtime preflight may create only one owned delivery.`,
+								{ phase: 'asset', runtimeId: this.config.languageId }
+							);
+						}
+						const prototype =
+							payload !== null && typeof payload === 'object'
+								? Object.getPrototypeOf(payload)
+								: undefined;
+						if (
+							payload === null ||
+							typeof payload !== 'object' ||
+							Array.isArray(payload) ||
+							(prototype !== Object.prototype && prototype !== null) ||
+							!Object.isFrozen(payload)
+						) {
+							throw new RuntimeConfigurationError(
+								`${this.config.displayName} owned runtime preflight payload must be a frozen plain object.`,
+								{ phase: 'asset', runtimeId: this.config.languageId }
+							);
+						}
+						const transferables: ArrayBuffer[] = [];
+						const seenBuffers = new Set<ArrayBuffer>();
+						for (const key of Reflect.ownKeys(payload)) {
+							if (typeof key !== 'string') {
+								throw new RuntimeConfigurationError(
+									`${this.config.displayName} owned runtime preflight payload cannot contain symbol keys.`,
+									{ phase: 'asset', runtimeId: this.config.languageId }
+								);
+							}
+							const descriptor = Object.getOwnPropertyDescriptor(payload, key);
+							if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+								throw new RuntimeConfigurationError(
+									`${this.config.displayName} owned runtime preflight payload properties must be enumerable data properties.`,
+									{ phase: 'asset', runtimeId: this.config.languageId }
+								);
+							}
+							const value = descriptor.value;
+							if (value instanceof Uint8Array) {
+								if (
+									!(value.buffer instanceof ArrayBuffer) ||
+									value.byteLength === 0 ||
+									value.byteOffset !== 0 ||
+									value.byteLength !== value.buffer.byteLength
+								) {
+									throw new RuntimeConfigurationError(
+										`${this.config.displayName} owned runtime preflight bytes must span non-empty whole ArrayBuffers.`,
+										{ phase: 'asset', runtimeId: this.config.languageId }
+									);
+								}
+								if (seenBuffers.has(value.buffer)) {
+									throw new RuntimeConfigurationError(
+										`${this.config.displayName} owned runtime preflight ArrayBuffers must be unique.`,
+										{ phase: 'asset', runtimeId: this.config.languageId }
+									);
+								}
+								seenBuffers.add(value.buffer);
+								transferables.push(value.buffer);
+								continue;
+							}
+							if (
+								value !== null &&
+								(typeof value === 'object' ||
+									typeof value === 'function' ||
+									typeof value === 'symbol')
+							) {
+								throw new RuntimeConfigurationError(
+									`${this.config.displayName} owned runtime preflight payload accepts only primitive scalars and Uint8Arrays.`,
+									{ phase: 'asset', runtimeId: this.config.languageId }
+								);
+							}
+						}
+						if (transferables.length === 0) {
+							throw new RuntimeConfigurationError(
+								`${this.config.displayName} owned runtime preflight payload contains no transferable bytes.`,
+								{ phase: 'asset', runtimeId: this.config.languageId }
+							);
+						}
+						const ticket = Object.freeze({}) as StaticWorkerRuntimeOwnedDelivery;
+						ownedDeliveryStateByTicket.set(ticket, {
+							operation,
+							payload: payload as Readonly<Record<string, unknown>>,
+							status: 'available',
+							transferables
+						});
+						operation.claimedTicket = ticket;
+						return ticket;
+					}
+				});
+			} catch (error) {
+				operation.active = false;
+				if (operation.claimedTicket) {
+					this.retireRuntimePreflight(operation.claimedTicket);
+				}
+				throw error;
+			}
+			operation.active = false;
+			const returnedDelivery =
+				runtimePreflight !== null && typeof runtimePreflight === 'object'
+					? ownedDeliveryStateByTicket.get(
+							runtimePreflight as StaticWorkerRuntimeOwnedDelivery
+						)
+					: undefined;
+			if (this.config.runtimePreflightDelivery === 'transfer-owned') {
+				const currentUrls = this.resolvedRuntimeUrls;
+				const currentPreflightKey =
+					currentUrls?.preflightKey || currentUrls?.manifestFingerprint || '';
+				if (
+					!returnedDelivery ||
+					returnedDelivery.operation !== operation ||
+					returnedDelivery.status !== 'available' ||
+					operation.claimedTicket !== runtimePreflight ||
+					generation !== this.workerGeneration ||
+					currentPreflightKey !== operation.preflightKey
+				) {
+					if (operation.claimedTicket) {
+						this.retireRuntimePreflight(operation.claimedTicket);
+					}
+					throw new RuntimeConfigurationError(
+						`${this.config.displayName} transfer-owned runtime preflight must return this operation's owned delivery ticket.`,
+						{ phase: 'asset', runtimeId: this.config.languageId }
+					);
+				}
+			} else if (operation.claimedTicket || returnedDelivery) {
+				if (operation.claimedTicket) {
+					this.retireRuntimePreflight(operation.claimedTicket);
+				}
+				throw new RuntimeConfigurationError(
+					`${this.config.displayName} structured-clone runtime preflight cannot return an owned delivery ticket.`,
+					{ phase: 'asset', runtimeId: this.config.languageId }
+				);
+			}
 			if (runtimePreflight === undefined || runtimePreflight === null) {
 				throw new RuntimeConfigurationError(
 					`${this.config.displayName} runtime preflight returned no verified assets.`,
 					{ phase: 'asset', runtimeId: this.config.languageId }
 				);
 			}
-			this.reportProgress(
-				progress,
-				0.18,
-				`${this.config.displayName} runtime preflight complete`
-			);
+			try {
+				this.reportProgress(
+					progress,
+					0.18,
+					`${this.config.displayName} runtime preflight complete`
+				);
+			} catch (error) {
+				this.retireRuntimePreflight(runtimePreflight);
+				throw error;
+			}
 		}
-		if (this.disposed) throw this.getDisposeReason();
-		if (generation !== this.workerGeneration) {
-			throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
-				phase: 'startup',
-				runtimeId: this.config.languageId
-			});
-		}
-		const verifiedWorkerBytes = await this.preloadWorkerScript(progress, controls);
-		if (this.disposed) throw this.getDisposeReason();
-		if (generation !== this.workerGeneration) {
-			throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
-				phase: 'startup',
-				runtimeId: this.config.languageId
-			});
-		}
-
+		let worker!: Worker;
+		let workerCreated = false;
 		try {
-			this.reportProgress(progress, 0.22, `Starting ${this.config.displayName} worker`);
-		} catch (error) {
-			throw this.preserveDisposeReason(error);
-		}
-		if (this.disposed) throw this.getDisposeReason();
-		if (generation !== this.workerGeneration) {
-			throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
-				phase: 'startup',
-				runtimeId: this.config.languageId
-			});
-		}
-		this.bootstrapUrl = this.createBootstrapUrl(verifiedWorkerBytes);
-		if (this.disposed || generation !== this.workerGeneration) {
-			this.revokeBootstrapUrl();
-			if (this.disposed) throw this.getDisposeReason();
-			throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
-				phase: 'startup',
-				runtimeId: this.config.languageId
-			});
-		}
-		let worker: Worker;
-		try {
-			worker = this.config.moduleWorker
-				? new Worker(this.bootstrapUrl, { type: 'module' })
-				: new Worker(this.bootstrapUrl);
-		} catch (error) {
-			this.revokeBootstrapUrl();
 			if (this.disposed) throw this.getDisposeReason();
 			if (generation !== this.workerGeneration) {
 				throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
@@ -1193,13 +1360,65 @@ self.postMessage = (message, transferOrOptions) => {
 					runtimeId: this.config.languageId
 				});
 			}
-			throw new WorkerStartupError(
-				`${this.config.displayName} worker failed to start: ${this.errorMessage(error)}`,
-				{ cause: error, runtimeId: this.config.languageId }
-			);
-		}
-		if (runtimePreflight !== undefined) {
-			this.workerRuntimePreflight.set(worker, runtimePreflight);
+			const verifiedWorkerBytes = await this.preloadWorkerScript(progress, controls);
+			if (this.disposed) throw this.getDisposeReason();
+			if (generation !== this.workerGeneration) {
+				throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
+					phase: 'startup',
+					runtimeId: this.config.languageId
+				});
+			}
+
+			try {
+				this.reportProgress(progress, 0.22, `Starting ${this.config.displayName} worker`);
+			} catch (error) {
+				throw this.preserveDisposeReason(error);
+			}
+			if (this.disposed) throw this.getDisposeReason();
+			if (generation !== this.workerGeneration) {
+				throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
+					phase: 'startup',
+					runtimeId: this.config.languageId
+				});
+			}
+			this.bootstrapUrl = this.createBootstrapUrl(verifiedWorkerBytes);
+			if (this.disposed || generation !== this.workerGeneration) {
+				this.revokeBootstrapUrl();
+				if (this.disposed) throw this.getDisposeReason();
+				throw new CancelledError(`${this.config.displayName} worker startup terminated`, {
+					phase: 'startup',
+					runtimeId: this.config.languageId
+				});
+			}
+			try {
+				worker = this.config.moduleWorker
+					? new Worker(this.bootstrapUrl, { type: 'module' })
+					: new Worker(this.bootstrapUrl);
+				workerCreated = true;
+			} catch (error) {
+				this.revokeBootstrapUrl();
+				if (this.disposed) throw this.getDisposeReason();
+				if (generation !== this.workerGeneration) {
+					throw new CancelledError(
+						`${this.config.displayName} worker startup terminated`,
+						{
+							phase: 'startup',
+							runtimeId: this.config.languageId
+						}
+					);
+				}
+				throw new WorkerStartupError(
+					`${this.config.displayName} worker failed to start: ${this.errorMessage(error)}`,
+					{ cause: error, runtimeId: this.config.languageId }
+				);
+			}
+			if (runtimePreflight !== undefined) {
+				this.workerRuntimePreflight.set(worker, runtimePreflight);
+			}
+		} catch (error) {
+			if (workerCreated) this.detachAndTerminateWorker(worker);
+			this.retireRuntimePreflight(runtimePreflight);
+			throw error;
 		}
 		if (this.disposed || generation !== this.workerGeneration) {
 			this.detachAndTerminateWorker(worker);
@@ -1537,7 +1756,19 @@ self.postMessage = (message, transferOrOptions) => {
 		this.detachAndTerminateWorker(worker);
 	}
 
+	private retireRuntimePreflight(runtimePreflight: unknown) {
+		if (runtimePreflight === null || typeof runtimePreflight !== 'object') return;
+		const state = ownedDeliveryStateByTicket.get(
+			runtimePreflight as StaticWorkerRuntimeOwnedDelivery
+		);
+		if (!state || state.operation.owner !== this || state.status === 'retired') return;
+		state.status = 'retired';
+		state.payload = null;
+		state.transferables = null;
+	}
+
 	private detachAndTerminateWorker(worker: Worker) {
+		this.retireRuntimePreflight(this.workerRuntimePreflight.get(worker));
 		this.workerRuntimePreflight.delete(worker);
 		try {
 			worker.onmessage = null;
@@ -1828,42 +2059,81 @@ self.postMessage = (message, transferOrOptions) => {
 						return;
 					}
 					try {
-						const runtimePreflight = this.workerRuntimePreflight.get(worker);
-						const message = {
-							run: true,
-							runId: id,
-							baseUrl: this.baseUrl,
-							manifestUrl: this.manifestUrl,
-							manifestFingerprint: this.manifestFingerprint,
-							...(runtimePreflight === undefined ? {} : { runtimePreflight }),
-							maxAssetBytes: controls.limits.maxAssetBytes,
-							code,
-							args: programArgs,
-							stdin,
-							stdinEof,
-							...(activeRun.stdinRing
-								? { stdinChannel: activeRun.stdinRing.descriptor }
-								: {}),
-							activePath: workspace.activePath,
-							workspaceFiles: workspace.workspaceFiles,
-							log: _log
-						};
-						if (
-							runtimePreflight !== undefined &&
-							this.config.consumeRuntimePreflightTransferables
-						) {
-							try {
-								const transferList = [
-									...this.config.consumeRuntimePreflightTransferables(
-										runtimePreflight
-									)
-								];
-								worker.postMessage(message, transferList);
-							} finally {
-								this.workerRuntimePreflight.delete(worker);
+						const storedRuntimePreflight = this.workerRuntimePreflight.get(worker);
+						let runtimePreflight = storedRuntimePreflight;
+						let transferList: ArrayBuffer[] | undefined;
+						try {
+							if (this.config.runtimePreflightDelivery === 'transfer-owned') {
+								const state =
+									storedRuntimePreflight !== null &&
+									typeof storedRuntimePreflight === 'object'
+										? ownedDeliveryStateByTicket.get(
+												storedRuntimePreflight as StaticWorkerRuntimeOwnedDelivery
+											)
+										: undefined;
+								const currentUrls = this.resolvedRuntimeUrls;
+								const currentPreflightKey =
+									currentUrls?.preflightKey ||
+									currentUrls?.manifestFingerprint ||
+									'';
+								if (
+									!state ||
+									state.operation.owner !== this ||
+									state.operation.runtimeId !== this.config.languageId ||
+									state.operation.generation !== this.workerGeneration ||
+									state.operation.preflightKey !== currentPreflightKey ||
+									state.status !== 'available' ||
+									!state.payload ||
+									!state.transferables
+								) {
+									throw new RuntimeConfigurationError(
+										`${this.config.displayName} runtime preflight owned delivery is unavailable or stale.`,
+										{ phase: 'protocol', runtimeId: this.config.languageId }
+									);
+								}
+								runtimePreflight = state.payload;
+								transferList = state.transferables;
+								state.status = 'consumed';
+								state.payload = null;
+								state.transferables = null;
+							} else if (
+								storedRuntimePreflight !== null &&
+								typeof storedRuntimePreflight === 'object' &&
+								ownedDeliveryStateByTicket.has(
+									storedRuntimePreflight as StaticWorkerRuntimeOwnedDelivery
+								)
+							) {
+								throw new RuntimeConfigurationError(
+									`${this.config.displayName} structured-clone runtime preflight cannot dispatch an owned delivery ticket.`,
+									{ phase: 'protocol', runtimeId: this.config.languageId }
+								);
 							}
-						} else {
-							worker.postMessage(message);
+							const message = {
+								run: true,
+								runId: id,
+								baseUrl: this.baseUrl,
+								manifestUrl: this.manifestUrl,
+								manifestFingerprint: this.manifestFingerprint,
+								...(runtimePreflight === undefined ? {} : { runtimePreflight }),
+								maxAssetBytes: controls.limits.maxAssetBytes,
+								code,
+								args: programArgs,
+								stdin,
+								stdinEof,
+								...(activeRun.stdinRing
+									? { stdinChannel: activeRun.stdinRing.descriptor }
+									: {}),
+								activePath: workspace.activePath,
+								workspaceFiles: workspace.workspaceFiles,
+								log: _log
+							};
+							if (transferList) worker.postMessage(message, transferList);
+							else worker.postMessage(message);
+						} finally {
+							if (this.config.runtimePreflightDelivery === 'transfer-owned') {
+								this.workerRuntimePreflight.delete(worker);
+								this.retireRuntimePreflight(storedRuntimePreflight);
+							}
 						}
 					} catch (error) {
 						throw new ProtocolError(

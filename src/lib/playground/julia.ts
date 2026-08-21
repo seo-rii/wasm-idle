@@ -6,7 +6,6 @@ import { StaticWorkerRuntimeSandbox } from '$lib/playground/staticWorkerRuntime'
 import {
 	RuntimeConfigurationError,
 	preflightJuliaRuntimeAssets,
-	requireJuliaRuntimePreflightPayload,
 	snapshotJuliaRuntimePreflightProfile,
 	type JuliaRuntimePreflightProfile
 } from '@wasm-idle/core';
@@ -18,6 +17,7 @@ class Julia extends StaticWorkerRuntimeSandbox {
 			languageId: 'JULIA',
 			defaultActivePath: 'main.jl',
 			workerLifetime: { mode: 'per-run' },
+			runtimePreflightDelivery: 'transfer-owned',
 			stdin: {
 				mode: 'streaming',
 				sourceHintPattern: /\b(?:readline|readlines|read|eachline|stdin)\b/i
@@ -51,7 +51,7 @@ class Julia extends StaticWorkerRuntimeSandbox {
 					(profile.javascriptReceipt.uncompressedBytes ?? 0) +
 					(profile.wasmReceipt.uncompressedBytes ?? 0) +
 					(profile.dataReceipt.uncompressedBytes ?? 0);
-				return await preflightJuliaRuntimeAssets({
+				const payload = await preflightJuliaRuntimeAssets({
 					baseUrl: urls.baseUrl,
 					manifestUrl: urls.manifestUrl || '',
 					profile,
@@ -86,34 +86,7 @@ class Julia extends StaticWorkerRuntimeSandbox {
 						);
 					}
 				});
-			},
-			consumeRuntimePreflightTransferables(runtimePreflight) {
-				const payload = requireJuliaRuntimePreflightPayload(runtimePreflight);
-				const buffers = [
-					payload.manifestBytes,
-					payload.javascriptBytes,
-					payload.wasmBytes,
-					payload.dataBytes
-				].map((bytes) => {
-					if (
-						!(bytes.buffer instanceof ArrayBuffer) ||
-						bytes.byteOffset !== 0 ||
-						bytes.byteLength !== bytes.buffer.byteLength
-					) {
-						throw new RuntimeConfigurationError(
-							'Julia runtime preflight transfer requires owned whole ArrayBuffers.',
-							{ phase: 'protocol', runtimeId: 'JULIA' }
-						);
-					}
-					return bytes.buffer;
-				});
-				if (new Set(buffers).size !== buffers.length) {
-					throw new RuntimeConfigurationError(
-						'Julia runtime preflight transfer buffers must be unique.',
-						{ phase: 'protocol', runtimeId: 'JULIA' }
-					);
-				}
-				return buffers;
+				return context.createOwnedDelivery(payload);
 			}
 		});
 	}
