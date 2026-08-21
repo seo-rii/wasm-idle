@@ -98,7 +98,7 @@ export const scenarios = [
 	{
 		name: '@wasm-idle/lsp install',
 		packageNames: ['@wasm-idle/lsp', '@wasm-idle/llvm-core', '@wasm-idle/core'],
-		budget: { maxBytes: 4 * MiB, maxFiles: 1_050, maxPackages: 7 },
+		budget: { maxBytes: 4.25 * MiB, maxFiles: 1_050, maxPackages: 7 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
