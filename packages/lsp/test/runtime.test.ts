@@ -19,6 +19,7 @@ import {
 } from '../src/bundledPerlRuntime.js';
 import {
 	BUNDLED_TCL_MANIFEST_FINGERPRINT,
+	BUNDLED_TCL_RUNTIME_PROFILE,
 	BUNDLED_TCL_RUNNER_RECEIPT
 } from '../src/bundledTclRuntime.js';
 import {
@@ -70,9 +71,11 @@ import {
 	resolvePrologLanguageServerWorkerReceipt,
 	resolvePrologLanguageServerWorkerUrl,
 	resolveRustLanguageServerCompilerUrl,
+	resolveTclLanguageServerAssetConfig,
 	resolveTclLanguageServerBaseUrl,
 	resolveTclLanguageServerManifestFingerprint,
 	resolveTclLanguageServerManifestUrl,
+	resolveTclLanguageServerPreflightProfile,
 	resolveTclLanguageServerWorkerReceipt,
 	resolveTclLanguageServerWorkerUrl,
 	resolveZigLanguageServerCompilerUrl,
@@ -290,7 +293,7 @@ describe('lsp runtime asset resolution', () => {
 			resolvePrologLanguageServerPreflightProfile({
 				prolog: { manifestFingerprint: 'a'.repeat(64) }
 			})
-		).toThrow('complete runtime profile and receipts');
+		).toThrow('complete runtime profile and receipts for a custom manifest fingerprint');
 
 		const customProfile = {
 			profileId: 'swipl-wasm-custom',
@@ -417,14 +420,22 @@ describe('lsp runtime asset resolution', () => {
 		expect(resolveTclLanguageServerManifestUrl(bundledOptions, currentUrl)).toBe(
 			`https://app.example.com/wasm-idle/wasm-tcl/runtime-manifest.v2.json?v=${BUNDLED_TCL_MANIFEST_FINGERPRINT}`
 		);
+		expect(resolveTclLanguageServerPreflightProfile(bundledOptions)).toEqual(
+			BUNDLED_TCL_RUNTIME_PROFILE
+		);
 
 		const customReceipt = { bytes: 654, sha256: 'd'.repeat(64) };
+		const customProfile = {
+			...BUNDLED_TCL_RUNTIME_PROFILE,
+			manifestFingerprint: 'c'.repeat(64)
+		};
 		const customOptions = {
 			tcl: {
 				baseUrl: 'https://mirror.example.com/tcl/',
 				workerUrl: 'https://mirror.example.com/tcl/runner.js?v=custom',
 				manifestUrl: 'https://mirror.example.com/tcl/manifest.json?v=custom',
-				manifestFingerprint: ` ${'c'.repeat(64)} `,
+				...customProfile,
+				manifestFingerprint: ` ${customProfile.manifestFingerprint} `,
 				workerReceipt: customReceipt
 			}
 		};
@@ -436,12 +447,23 @@ describe('lsp runtime asset resolution', () => {
 			'https://mirror.example.com/tcl/manifest.json?v=custom'
 		);
 		expect(resolveTclLanguageServerManifestFingerprint(customOptions)).toBe('c'.repeat(64));
+		expect(resolveTclLanguageServerPreflightProfile(customOptions)).toEqual(customProfile);
 		expect(resolveTclLanguageServerWorkerReceipt(customOptions)).toBe(customReceipt);
+		expect(resolveTclLanguageServerAssetConfig(customOptions)).toMatchObject({
+			manifestFingerprint: customProfile.manifestFingerprint,
+			profile: customProfile,
+			workerReceipt: customReceipt
+		});
 		expect(() =>
 			resolveTclLanguageServerManifestFingerprint({
 				tcl: { manifestFingerprint: 'not-a-digest' }
 			})
 		).toThrow(LanguageServerAssetConfigurationError);
+		expect(() =>
+			resolveTclLanguageServerPreflightProfile({
+				tcl: { manifestFingerprint: 'e'.repeat(64) }
+			})
+		).toThrow('complete valid runtime preflight profile and receipts');
 
 		const pinOnlyOptions = {
 			rootUrl: '/wasm-idle',
@@ -455,6 +477,9 @@ describe('lsp runtime asset resolution', () => {
 		);
 		expect(resolveTclLanguageServerManifestUrl(pinOnlyOptions, currentUrl)).toBe(
 			`https://app.example.com/wasm-idle/wasm-tcl/runtime-manifest.v2.json?v=${'e'.repeat(64)}`
+		);
+		expect(() => resolveTclLanguageServerAssetConfig(pinOnlyOptions, currentUrl)).toThrow(
+			'complete valid runtime preflight profile and receipts'
 		);
 	});
 

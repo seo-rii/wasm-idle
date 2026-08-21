@@ -1,27 +1,39 @@
 const encoder = new TextEncoder();
 const fatalDecoder = new TextDecoder('utf-8', { fatal: true });
+const preflightProtocol = 'wasm-idle-tcl-preflight';
+const preflightProtocolVersion = 1;
 const manifestFormat = 'wasm-tcl-runtime-manifest-v2';
 const fingerprintDomain = 'wasm-idle:tcl-runtime-manifest:v2';
 const hardMaxAssetBytes = 16 * 1024 * 1024;
+const hardMaxTotalLogicalBytes = 32 * 1024 * 1024;
 const maxManifestBytes = 64 * 1024;
-const expectedProfileId = 'wacl-pages-045aa904-tcl-8.6.6';
+const verifiedRequireBaseUrl = 'wasm-idle-verified:tcl/';
+const expectedIdentity = Object.freeze({
+	profileId: 'wacl-pages-045aa904-tcl-8.6.6',
+	artifactRevision: '045aa904c2073eeded1be803cf5416901f6ce8ee',
+	waclRevision: '9daacabb0102a9986f33263261350edfeebdd83b',
+	tclRevision: '27696b490b9b339a869a8f6fe3113d05ebcbf565',
+	requireJsRevision: 'f2335026867afd80c394247bfe5278d2bd8f32ee',
+	emscriptenRevision: 'f1222cc8c315e47ba3541a42ab391bd3b1d9be14',
+	manifestFingerprint: '4687ad97c5bb5e96d4354a24e9faffeb9dc9eb1ee7e8c9b0c0ea289c5d9a2baa'
+});
 const expectedArtifact = Object.freeze({
 	kind: 'opaque-prebuilt',
 	path: 'wacl/releases/wacl.zip',
 	repository: 'https://github.com/ecky-l/ecky-l.github.io.git',
-	revision: '045aa904c2073eeded1be803cf5416901f6ce8ee',
+	revision: expectedIdentity.artifactRevision,
 	sha256: '50d4ecb40c4db0448942332f9562c3cedc8bea38fa89d95ca5e5b9afcc5afb23',
 	size: 1350907,
 	url: 'https://raw.githubusercontent.com/ecky-l/ecky-l.github.io/045aa904c2073eeded1be803cf5416901f6ce8ee/wacl/releases/wacl.zip'
 });
 const expectedComponents = Object.freeze({
 	emscripten: Object.freeze({
-		revision: 'f1222cc8c315e47ba3541a42ab391bd3b1d9be14',
+		revision: expectedIdentity.emscriptenRevision,
 		verifiedBuildInput: false,
 		version: '1.37.9'
 	}),
 	requirejs: Object.freeze({
-		revision: 'f2335026867afd80c394247bfe5278d2bd8f32ee',
+		revision: expectedIdentity.requireJsRevision,
 		verifiedBuildInput: false,
 		version: '2.3.3'
 	}),
@@ -31,7 +43,7 @@ const expectedComponents = Object.freeze({
 		version: '0.9.7'
 	}),
 	tcl: Object.freeze({
-		revision: '27696b490b9b339a869a8f6fe3113d05ebcbf565',
+		revision: expectedIdentity.tclRevision,
 		verifiedBuildInput: false,
 		version: '8.6.6'
 	}),
@@ -47,7 +59,7 @@ const expectedComponents = Object.freeze({
 	}),
 	wacl: Object.freeze({
 		repository: 'https://github.com/ecky-l/wacl.git',
-		revision: '9daacabb0102a9986f33263261350edfeebdd83b',
+		revision: expectedIdentity.waclRevision,
 		verifiedBuildInput: false,
 		version: '2017-05-29'
 	})
@@ -60,16 +72,52 @@ const expectedPatches = Object.freeze([
 	Object.freeze({ id: 'guard-window-cleanup' })
 ]);
 const expectedLicenseMetadata = Object.freeze({
-	'licenses/REQUIREJS.txt': Object.freeze({
-		spdx: 'MIT'
+	'licenses/REQUIREJS.txt': Object.freeze({ spdx: 'MIT' }),
+	'licenses/TCL.txt': Object.freeze({ spdx: 'TCL' }),
+	'licenses/WACL.txt': Object.freeze({ spdx: 'BSD-3-Clause' })
+});
+const expectedAssets = Object.freeze({
+	'require.js': Object.freeze({ mediaType: 'text/javascript' }),
+	'tcl/wacl-custom.data': Object.freeze({ mediaType: 'application/octet-stream' }),
+	'tcl/wacl-library.data': Object.freeze({ mediaType: 'application/octet-stream' }),
+	'tcl/wacl.js': Object.freeze({ mediaType: 'text/javascript' }),
+	'tcl/wacl.wasm': Object.freeze({ mediaType: 'application/wasm' })
+});
+const expectedStorage = Object.freeze({
+	'require.js': Object.freeze({ logicalPath: 'require.js', encoding: 'identity' }),
+	'tcl/wacl-custom.data.bin': Object.freeze({
+		logicalPath: 'tcl/wacl-custom.data',
+		encoding: 'identity'
 	}),
-	'licenses/TCL.txt': Object.freeze({
-		spdx: 'TCL'
+	'tcl/wacl-library.data.gz.bin': Object.freeze({
+		logicalPath: 'tcl/wacl-library.data',
+		encoding: 'gzip'
 	}),
-	'licenses/WACL.txt': Object.freeze({
-		spdx: 'BSD-3-Clause'
+	'tcl/wacl.js': Object.freeze({ logicalPath: 'tcl/wacl.js', encoding: 'identity' }),
+	'tcl/wacl.wasm.gz.bin': Object.freeze({
+		logicalPath: 'tcl/wacl.wasm',
+		encoding: 'gzip'
 	})
 });
+const preflightKeys = Object.freeze(
+	[
+		'artifactRevision',
+		'customDataBytes',
+		'emscriptenRevision',
+		'glueBytes',
+		'libraryDataBytes',
+		'manifestBytes',
+		'manifestFingerprint',
+		'profileId',
+		'protocol',
+		'protocolVersion',
+		'requireJsBytes',
+		'requireJsRevision',
+		'tclRevision',
+		'waclRevision',
+		'wasmBytes'
+	].sort()
+);
 const expectedManifestKeys = Object.freeze(
 	[
 		'artifact',
@@ -93,182 +141,96 @@ const expectedStorageReceiptKeys = Object.freeze([
 	'sha256',
 	'size'
 ]);
-const expectedAssets = Object.freeze({
-	'require.js': Object.freeze({ mediaType: 'text/javascript' }),
-	'tcl/wacl-custom.data': Object.freeze({ mediaType: 'application/octet-stream' }),
-	'tcl/wacl-library.data': Object.freeze({ mediaType: 'application/octet-stream' }),
-	'tcl/wacl.js': Object.freeze({ mediaType: 'text/javascript' }),
-	'tcl/wacl.wasm': Object.freeze({ mediaType: 'application/wasm' })
-});
-const expectedStorage = Object.freeze({
-	'require.js': Object.freeze({ logicalPath: 'require.js', encoding: 'identity' }),
-	'tcl/wacl-custom.data': Object.freeze({
-		logicalPath: 'tcl/wacl-custom.data',
-		encoding: 'identity'
-	}),
-	'tcl/wacl-library.data.gz': Object.freeze({
-		logicalPath: 'tcl/wacl-library.data',
-		encoding: 'gzip'
-	}),
-	'tcl/wacl.js': Object.freeze({ logicalPath: 'tcl/wacl.js', encoding: 'identity' }),
-	'tcl/wacl.wasm.gz': Object.freeze({ logicalPath: 'tcl/wacl.wasm', encoding: 'gzip' })
-});
+const managedGlobalNames = Object.freeze(['Module', 'define', 'require', 'requirejs']);
 const verifiedWasmGluePatch =
 	'var _wasmbly=Promise.resolve(typeof self!=="undefined"&&self.Module&&self.Module["wasmBinary"]||(function(){throw new Error("Verified Wacl Wasm was not provided.")})());';
 
 let verifiedRuntimePromise = null;
 let verifiedRuntimeIdentity = '';
+let runtimePoisoned = false;
+let requestConsumed = false;
 let activeStdinReader = () => null;
 let activeOutputWriter = () => undefined;
 
-function requireHttpUrl(value, label) {
-	let url;
-	try {
-		url = new URL(value);
-	} catch {
-		throw new Error(`${label} URL is invalid.`);
-	}
-	if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-		throw new Error(`${label} URL must use HTTP(S).`);
-	}
-	if (url.username || url.password || url.hash) {
-		throw new Error(`${label} URL must not include credentials or a fragment.`);
-	}
-	return url;
+function hasExactKeys(value, expectedKeys) {
+	const keys = Object.keys(value).sort();
+	return (
+		keys.length === expectedKeys.length &&
+		keys.every((key, index) => key === expectedKeys[index])
+	);
 }
 
-function assetUrl(baseUrl, path, fingerprint) {
-	const base = requireHttpUrl(baseUrl, 'Wacl Tcl runtime base');
-	const url = new URL(path, base);
-	if (fingerprint) url.searchParams.set('v', fingerprint);
-	return url.href;
+function isUint8Array(value) {
+	return (
+		ArrayBuffer.isView(value) &&
+		value.buffer instanceof ArrayBuffer &&
+		Object.prototype.toString.call(value) === '[object Uint8Array]'
+	);
 }
 
-function cancelResponseBody(response, reason) {
-	try {
-		void Promise.resolve(response.body?.cancel(reason)).catch(() => undefined);
-	} catch {
-		// Preserve the trust-boundary failure that caused cancellation.
-	}
+function errorMessage(error) {
+	return error?.message || String(error);
 }
 
-async function fetchBoundedBytes(
-	urlValue,
-	label,
-	maxBytes,
-	expectedBytes,
-	cache,
-	alternateExpectedBytes
-) {
-	if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
-		throw new Error(`${label} byte limit is invalid.`);
+function requireRuntimePreflight(runtimePreflight, requestedMaxAssetBytes) {
+	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
+		throw new Error('Wacl Tcl runtime asset byte limit is invalid.');
 	}
-	const expectedByteSizes = [];
-	for (const candidate of [expectedBytes, alternateExpectedBytes]) {
-		if (candidate === undefined) continue;
-		if (!Number.isSafeInteger(candidate) || candidate <= 0 || candidate > maxBytes) {
-			throw new Error(`${label} expected byte size is invalid.`);
-		}
-		if (!expectedByteSizes.includes(candidate)) expectedByteSizes.push(candidate);
+	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
+	if (
+		!runtimePreflight ||
+		typeof runtimePreflight !== 'object' ||
+		Array.isArray(runtimePreflight) ||
+		!hasExactKeys(runtimePreflight, preflightKeys)
+	) {
+		throw new Error('Wacl Tcl runtime preflight payload has an invalid shape.');
 	}
-	const maximumExpectedBytes = expectedByteSizes.length
-		? Math.max(...expectedByteSizes)
-		: undefined;
-	const requestUrl = requireHttpUrl(urlValue, label);
-	const response = await fetch(requestUrl.href, {
-		...(cache ? { cache } : {}),
-		credentials: 'omit',
-		redirect: 'error',
-		referrerPolicy: 'no-referrer'
-	});
-	try {
-		if (!response.url) throw new Error(`${label} response URL is missing.`);
-		let responseUrl;
-		try {
-			responseUrl = new URL(response.url);
-		} catch {
-			throw new Error(`${label} response URL is invalid.`);
-		}
-		if (responseUrl.href !== requestUrl.href) {
-			throw new Error(`${label} response URL does not match the requested asset.`);
-		}
-		if (!response.ok)
-			throw new Error(`${label} request failed with status ${response.status}.`);
-		const contentLength = response.headers.get('content-length');
-		if (contentLength !== null) {
-			const normalized = contentLength.trim();
-			const parsed = Number(normalized);
-			if (!/^\d+$/u.test(normalized) || !Number.isSafeInteger(parsed)) {
-				throw new Error(`${label} has an invalid Content-Length.`);
-			}
-			if (expectedByteSizes.length && !expectedByteSizes.includes(parsed)) {
-				throw new Error(`${label} Content-Length does not match its receipt.`);
-			}
-			if (parsed > maxBytes) throw new Error(`${label} exceeds its byte limit.`);
-		}
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
+	if (
+		runtimePreflight.protocol !== preflightProtocol ||
+		runtimePreflight.protocolVersion !== preflightProtocolVersion ||
+		runtimePreflight.profileId !== expectedIdentity.profileId ||
+		runtimePreflight.artifactRevision !== expectedIdentity.artifactRevision ||
+		runtimePreflight.waclRevision !== expectedIdentity.waclRevision ||
+		runtimePreflight.tclRevision !== expectedIdentity.tclRevision ||
+		runtimePreflight.requireJsRevision !== expectedIdentity.requireJsRevision ||
+		runtimePreflight.emscriptenRevision !== expectedIdentity.emscriptenRevision ||
+		runtimePreflight.manifestFingerprint !== expectedIdentity.manifestFingerprint ||
+		!isUint8Array(runtimePreflight.manifestBytes) ||
+		!isUint8Array(runtimePreflight.requireJsBytes) ||
+		!isUint8Array(runtimePreflight.customDataBytes) ||
+		!isUint8Array(runtimePreflight.libraryDataBytes) ||
+		!isUint8Array(runtimePreflight.glueBytes) ||
+		!isUint8Array(runtimePreflight.wasmBytes)
+	) {
+		throw new Error('Wacl Tcl runtime preflight payload is invalid.');
 	}
-	if (!response.body) {
-		const error = new Error(`${label} response does not provide a byte stream.`);
-		cancelResponseBody(response, error);
-		throw error;
-	}
-
-	let reader;
-	try {
-		reader = response.body.getReader();
-	} catch (error) {
-		cancelResponseBody(response, error);
-		throw error;
-	}
-	const output = maximumExpectedBytes === undefined ? null : new Uint8Array(maximumExpectedBytes);
-	const chunks = output ? null : [];
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error(`${label} returned an invalid byte stream.`);
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (maximumExpectedBytes !== undefined && nextLoaded > maximumExpectedBytes) {
-				throw new Error(`${label} exceeds its receipt size.`);
-			}
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > maxBytes) {
-				throw new Error(`${label} exceeds its byte limit.`);
-			}
-			if (output) output.set(value, loaded);
-			else chunks.push(value.slice());
-			loaded = nextLoaded;
-		}
-		if (expectedByteSizes.length && !expectedByteSizes.includes(loaded)) {
-			throw new Error(`${label} is truncated or has an unexpected decoded size.`);
-		}
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the stream or quota failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the primary load result.
+	for (const [label, bytes, limit] of [
+		[
+			'Wacl Tcl runtime manifest',
+			runtimePreflight.manifestBytes,
+			Math.min(maxManifestBytes, maxAssetBytes)
+		],
+		['Wacl Tcl RequireJS', runtimePreflight.requireJsBytes, maxAssetBytes],
+		['Wacl Tcl custom data', runtimePreflight.customDataBytes, maxAssetBytes],
+		['Wacl Tcl library data', runtimePreflight.libraryDataBytes, maxAssetBytes],
+		['Wacl Tcl runtime glue', runtimePreflight.glueBytes, maxAssetBytes],
+		['Wacl Tcl Wasm', runtimePreflight.wasmBytes, maxAssetBytes]
+	]) {
+		if (bytes.byteLength <= 0 || bytes.byteLength > limit) {
+			throw new Error(`${label} exceeds its byte limit.`);
 		}
 	}
-	if (output) return loaded === output.byteLength ? output : output.slice(0, loaded);
-	const bytes = new Uint8Array(loaded);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
+	const totalLogicalBytes = [
+		runtimePreflight.requireJsBytes,
+		runtimePreflight.customDataBytes,
+		runtimePreflight.libraryDataBytes,
+		runtimePreflight.glueBytes,
+		runtimePreflight.wasmBytes
+	].reduce((total, bytes) => total + bytes.byteLength, 0);
+	if (totalLogicalBytes > hardMaxTotalLogicalBytes) {
+		throw new Error('Wacl Tcl runtime logical payload exceeds its aggregate byte limit.');
 	}
-	return bytes;
+	return { runtimePreflight, maxAssetBytes };
 }
 
 async function sha256Hex(bytes) {
@@ -282,7 +244,11 @@ async function sha256Hex(bytes) {
 function canonicalValue(kind, value) {
 	if (Array.isArray(value)) {
 		return [...value]
-			.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))
+			.sort((left, right) => {
+				const leftValue = JSON.stringify(left);
+				const rightValue = JSON.stringify(right);
+				return leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
+			})
 			.map((entry) => `${kind}\0${JSON.stringify(entry)}\n`)
 			.join('');
 	}
@@ -330,8 +296,7 @@ function normalizeExactObject(candidate, expected, label) {
 		!candidate ||
 		typeof candidate !== 'object' ||
 		Array.isArray(candidate) ||
-		JSON.stringify(Object.keys(candidate).sort()) !==
-			JSON.stringify(Object.keys(expected).sort()) ||
+		!hasExactKeys(candidate, Object.keys(expected).sort()) ||
 		Object.entries(expected).some(([name, value]) => candidate[name] !== value)
 	) {
 		throw new Error(`Wacl Tcl runtime ${label} metadata is invalid.`);
@@ -344,8 +309,7 @@ function normalizeComponents(candidate) {
 		!candidate ||
 		typeof candidate !== 'object' ||
 		Array.isArray(candidate) ||
-		JSON.stringify(Object.keys(candidate).sort()) !==
-			JSON.stringify(Object.keys(expectedComponents).sort())
+		!hasExactKeys(candidate, Object.keys(expectedComponents).sort())
 	) {
 		throw new Error('Wacl Tcl runtime component metadata is invalid.');
 	}
@@ -365,12 +329,12 @@ function normalizePatches(candidate) {
 				!entry ||
 				typeof entry !== 'object' ||
 				Array.isArray(entry) ||
-				Object.keys(entry).length !== 1 ||
+				!hasExactKeys(entry, ['id']) ||
 				typeof entry.id !== 'string'
 		) ||
-		JSON.stringify([...candidate].sort((left, right) => left.id.localeCompare(right.id))) !==
+		JSON.stringify([...candidate].sort((left, right) => (left.id < right.id ? -1 : 1))) !==
 			JSON.stringify(
-				[...expectedPatches].sort((left, right) => left.id.localeCompare(right.id))
+				[...expectedPatches].sort((left, right) => (left.id < right.id ? -1 : 1))
 			)
 	) {
 		throw new Error('Wacl Tcl runtime patch metadata is invalid.');
@@ -383,7 +347,7 @@ function normalizeReceipt(candidate, expected, maxAssetBytes, label) {
 		!candidate ||
 		typeof candidate !== 'object' ||
 		Array.isArray(candidate) ||
-		JSON.stringify(Object.keys(candidate).sort()) !== JSON.stringify(expectedReceiptKeys) ||
+		!hasExactKeys(candidate, expectedReceiptKeys) ||
 		candidate.path !== expected.path ||
 		candidate.mediaType !== expected.mediaType ||
 		!Number.isSafeInteger(candidate.size) ||
@@ -407,8 +371,7 @@ function normalizeStorageReceipt(candidate, expected, maxAssetBytes) {
 		!candidate ||
 		typeof candidate !== 'object' ||
 		Array.isArray(candidate) ||
-		JSON.stringify(Object.keys(candidate).sort()) !==
-			JSON.stringify(expectedStorageReceiptKeys) ||
+		!hasExactKeys(candidate, expectedStorageReceiptKeys) ||
 		candidate.path !== expected.path ||
 		candidate.logicalPath !== expected.logicalPath ||
 		candidate.encoding !== expected.encoding ||
@@ -444,8 +407,7 @@ function normalizeLicenses(candidate, maxAssetBytes) {
 			typeof entry !== 'object' ||
 			Array.isArray(entry) ||
 			!expected ||
-			JSON.stringify(Object.keys(entry).sort()) !==
-				JSON.stringify(['path', 'sha256', 'size', 'spdx']) ||
+			!hasExactKeys(entry, ['path', 'sha256', 'size', 'spdx']) ||
 			paths.has(entry.path) ||
 			entry.spdx !== expected.spdx ||
 			!Number.isSafeInteger(entry.size) ||
@@ -466,25 +428,21 @@ function normalizeLicenses(candidate, maxAssetBytes) {
 	});
 }
 
-async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
+async function normalizeManifest(value, runtimePreflight, maxAssetBytes) {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
 		throw new Error('Wacl Tcl runtime manifest must be an object.');
 	}
 	if (value.format !== manifestFormat || value.runtime !== 'wacl') {
 		throw new Error('Wacl Tcl runtime manifest format is unsupported.');
 	}
-	if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(expectedManifestKeys)) {
+	if (!hasExactKeys(value, expectedManifestKeys)) {
 		throw new Error('Wacl Tcl runtime manifest schema is invalid.');
 	}
 	if (
-		value.profileId !== expectedProfileId ||
-		typeof expectedFingerprint !== 'string' ||
-		!/^[a-f0-9]{64}$/u.test(expectedFingerprint)
+		value.profileId !== runtimePreflight.profileId ||
+		value.fingerprint !== runtimePreflight.manifestFingerprint
 	) {
-		throw new Error('Wacl Tcl runtime profile or expected fingerprint is invalid.');
-	}
-	if (value.fingerprint !== expectedFingerprint) {
-		throw new Error('Wacl Tcl runtime manifest fingerprint does not match the pinned runtime.');
+		throw new Error('Wacl Tcl runtime manifest identity does not match its preflight payload.');
 	}
 	const artifact = normalizeExactObject(value.artifact, expectedArtifact, 'artifact');
 	const components = normalizeComponents(value.components);
@@ -539,6 +497,17 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 	) {
 		throw new Error('Wacl Tcl runtime manifest is missing a required asset.');
 	}
+	for (const receipt of storageByPath.values()) {
+		const logicalReceipt = assetByPath.get(receipt.logicalPath);
+		if (
+			receipt.encoding === 'identity' &&
+			(receipt.size !== logicalReceipt.size || receipt.sha256 !== logicalReceipt.sha256)
+		) {
+			throw new Error(
+				`Wacl Tcl runtime identity storage receipt does not match ${receipt.logicalPath}.`
+			);
+		}
+	}
 	const assets = [...assetByPath.values()];
 	const storage = [...storageByPath.values()];
 	if (
@@ -551,81 +520,32 @@ async function normalizeManifest(value, expectedFingerprint, maxAssetBytes) {
 			metadata,
 			assets,
 			storage
-		)) !== expectedFingerprint
+		)) !== runtimePreflight.manifestFingerprint
 	) {
 		throw new Error('Wacl Tcl runtime receipt graph failed fingerprint verification.');
 	}
-	return { assetByPath, storageByPath };
+	return { assetByPath };
 }
 
 async function verifyReceiptBytes(receipt, bytes, label) {
-	if (bytes.byteLength !== receipt.size) throw new Error(`${label} has an unexpected byte size.`);
+	if (bytes.byteLength !== receipt.size) {
+		throw new Error(`${label} has an unexpected byte size.`);
+	}
 	if ((await sha256Hex(bytes)) !== receipt.sha256) {
 		throw new Error(`${label} failed SHA-256 verification.`);
 	}
 }
 
-async function receiptMatchesBytes(receipt, bytes) {
-	return bytes.byteLength === receipt.size && (await sha256Hex(bytes)) === receipt.sha256;
-}
-
-async function decompressGzipBounded(compressedBytes, expectedBytes, maxBytes, label) {
-	if (typeof DecompressionStream !== 'function') {
-		throw new Error('Wacl Tcl runtime gzip decompression is unavailable.');
-	}
-	if (!Number.isSafeInteger(expectedBytes) || expectedBytes <= 0 || expectedBytes > maxBytes) {
-		throw new Error(`${label} logical byte size is invalid.`);
-	}
-	let reader;
+function validateUtf8JavaScript(bytes, label) {
 	try {
-		reader = new Blob([compressedBytes])
-			.stream()
-			.pipeThrough(new DecompressionStream('gzip'))
-			.getReader();
+		return fatalDecoder.decode(bytes);
 	} catch {
-		throw new Error(`${label} gzip stream could not be opened.`);
-	}
-	const output = new Uint8Array(expectedBytes);
-	let loaded = 0;
-	try {
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!(value instanceof Uint8Array)) {
-				throw new Error(`${label} gzip returned an invalid byte stream.`);
-			}
-			const nextLoaded = loaded + value.byteLength;
-			if (!Number.isSafeInteger(nextLoaded) || nextLoaded > expectedBytes) {
-				throw new Error(`${label} gzip exceeds its logical receipt size.`);
-			}
-			output.set(value, loaded);
-			loaded = nextLoaded;
-		}
-		if (loaded !== expectedBytes) throw new Error(`${label} gzip is truncated.`);
-		return output;
-	} catch (error) {
-		try {
-			void Promise.resolve(reader.cancel(error)).catch(() => undefined);
-		} catch {
-			// Preserve the decompression failure.
-		}
-		throw error;
-	} finally {
-		try {
-			reader.releaseLock();
-		} catch {
-			// Preserve the decompression result.
-		}
+		throw new Error(`${label} is not valid UTF-8 JavaScript.`);
 	}
 }
 
 function importVerifiedScript(bytes, label) {
-	let source;
-	try {
-		source = fatalDecoder.decode(bytes);
-	} catch {
-		throw new Error(`${label} is not valid UTF-8 JavaScript.`);
-	}
+	validateUtf8JavaScript(bytes, label);
 	if (
 		typeof Blob !== 'function' ||
 		typeof URL.createObjectURL !== 'function' ||
@@ -634,7 +554,10 @@ function importVerifiedScript(bytes, label) {
 	) {
 		throw new Error('Wacl Tcl verified runtime evaluation is unavailable.');
 	}
-	const scriptUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+	const scriptBytes = Uint8Array.from(bytes);
+	const scriptUrl = URL.createObjectURL(
+		new Blob([scriptBytes.buffer], { type: 'text/javascript' })
+	);
 	try {
 		importScripts(scriptUrl);
 	} finally {
@@ -646,21 +569,277 @@ function importVerifiedScript(bytes, label) {
 	}
 }
 
-function createRequireModule(moduleName) {
-	return new Promise((resolve, reject) => {
-		const requirejs = self.requirejs || self.require;
-		if (!requirejs) {
-			reject(new Error('Verified RequireJS did not initialize.'));
-			return;
+function snapshotManagedGlobals() {
+	return managedGlobalNames.map((name) => ({
+		name,
+		hadOwn: Object.prototype.hasOwnProperty.call(globalThis, name),
+		value: globalThis[name]
+	}));
+}
+
+function assignGlobal(name, value, label) {
+	try {
+		globalThis[name] = value;
+	} catch (error) {
+		throw new Error(`${label}: ${errorMessage(error)}`);
+	}
+	if (globalThis[name] !== value) throw new Error(label);
+}
+
+function clearManagedGlobals(snapshot) {
+	for (const state of snapshot) {
+		assignGlobal(
+			state.name,
+			undefined,
+			`Wacl Tcl runtime global ${state.name} could not be cleared`
+		);
+	}
+}
+
+function restoreManagedGlobals(snapshot) {
+	const failures = [];
+	for (const state of snapshot) {
+		try {
+			if (state.hadOwn) {
+				assignGlobal(
+					state.name,
+					state.value,
+					`Wacl Tcl runtime global ${state.name} could not be restored`
+				);
+				continue;
+			}
+			try {
+				delete globalThis[state.name];
+			} catch {
+				// importScripts top-level var bindings may be non-configurable.
+			}
+			if (globalThis[state.name] !== undefined) {
+				assignGlobal(
+					state.name,
+					undefined,
+					`Wacl Tcl runtime global ${state.name} could not be reset`
+				);
+			}
+		} catch (error) {
+			failures.push(error);
 		}
-		requirejs([moduleName], resolve, reject);
+	}
+	return failures;
+}
+
+function captureVerifiedAmd() {
+	const requireJs = globalThis.requirejs;
+	const requireFunction = globalThis.require;
+	const defineFunction = globalThis.define;
+	if (
+		typeof requireJs !== 'function' ||
+		typeof requireJs.config !== 'function' ||
+		typeof requireFunction !== 'function' ||
+		typeof requireFunction.toUrl !== 'function' ||
+		typeof defineFunction !== 'function' ||
+		!defineFunction.amd ||
+		typeof defineFunction.amd !== 'object'
+	) {
+		throw new Error('Verified RequireJS did not initialize its AMD globals.');
+	}
+	return Object.freeze({ requireJs, requireFunction, defineFunction });
+}
+
+function createRequireModule(requireJs, moduleName) {
+	return new Promise((resolve, reject) => {
+		try {
+			requireJs([moduleName], resolve, reject);
+		} catch (error) {
+			reject(error);
+		}
 	});
 }
 
 function waitForWacl(wacl) {
+	if (!wacl || typeof wacl.onReady !== 'function') {
+		throw new Error('Verified Wacl AMD module did not initialize.');
+	}
 	return new Promise((resolve) => {
 		wacl.onReady((interp) => resolve(interp));
 	});
+}
+
+function createHostModule(runtimePreflight, initialArguments) {
+	const packageBytes = new Map([
+		['wacl-custom.data', runtimePreflight.customDataBytes],
+		['wacl-library.data', runtimePreflight.libraryDataBytes]
+	]);
+	return {
+		arguments: [...initialArguments],
+		noExitRuntime: true,
+		wasmBinary: runtimePreflight.wasmBytes,
+		stdin() {
+			return activeStdinReader();
+		},
+		stdout(codePoint) {
+			activeOutputWriter(codePoint);
+		},
+		stderr(codePoint) {
+			activeOutputWriter(codePoint);
+		},
+		print(text) {
+			postOutput(normalizeOutput(String(text)));
+		},
+		printErr(text) {
+			postOutput(normalizeOutput(String(text)));
+		},
+		locateFile(path) {
+			if (!packageBytes.has(path)) {
+				throw new Error(`Wacl Tcl requested an undeclared runtime asset: ${path}`);
+			}
+			return `wasm-idle-verified:tcl/${path}`;
+		},
+		getPreloadedPackage(packageName, packageSize) {
+			const prefix = 'wasm-idle-verified:tcl/';
+			const path =
+				typeof packageName === 'string' && packageName.startsWith(prefix)
+					? packageName.slice(prefix.length)
+					: '';
+			const bytes = packageBytes.get(path);
+			if (!bytes || packageSize !== bytes.byteLength) {
+				throw new Error('Wacl Tcl requested an unexpected preloaded package.');
+			}
+			return bytes.slice().buffer;
+		}
+	};
+}
+
+async function initializeVerifiedWaclRuntime(
+	runtimePreflight,
+	initialArguments,
+	markEvaluationStarted
+) {
+	const glueSource = validateUtf8JavaScript(runtimePreflight.glueBytes, 'Wacl Tcl runtime glue');
+	validateUtf8JavaScript(runtimePreflight.requireJsBytes, 'Wacl Tcl RequireJS');
+	if (
+		!glueSource.startsWith('define("tcl/wacl",') ||
+		!glueSource.includes(verifiedWasmGluePatch)
+	) {
+		throw new Error('Wacl Tcl runtime glue is missing the verified Wasm bootstrap patch.');
+	}
+	if (
+		runtimePreflight.wasmBytes.byteLength < 8 ||
+		runtimePreflight.wasmBytes[0] !== 0 ||
+		runtimePreflight.wasmBytes[1] !== 0x61 ||
+		runtimePreflight.wasmBytes[2] !== 0x73 ||
+		runtimePreflight.wasmBytes[3] !== 0x6d
+	) {
+		throw new Error('Wacl Tcl runtime Wasm header is invalid.');
+	}
+
+	const previousGlobals = snapshotManagedGlobals();
+	let result;
+	let failure;
+	try {
+		clearManagedGlobals(previousGlobals);
+		markEvaluationStarted();
+		importVerifiedScript(runtimePreflight.requireJsBytes, 'Wacl Tcl RequireJS');
+		const amd = captureVerifiedAmd();
+		amd.requireJs.config({ baseUrl: verifiedRequireBaseUrl, enforceDefine: true });
+		amd.requireJs.load = () => {
+			throw new Error('Wacl Tcl runtime refused an undeclared RequireJS module load.');
+		};
+		const module = createHostModule(runtimePreflight, initialArguments);
+		assignGlobal('Module', module, 'Wacl Tcl host Module could not be installed');
+		assignGlobal('requirejs', amd.requireJs, 'Wacl Tcl RequireJS global changed unexpectedly');
+		assignGlobal(
+			'require',
+			amd.requireFunction,
+			'Wacl Tcl require global changed unexpectedly'
+		);
+		assignGlobal('define', amd.defineFunction, 'Wacl Tcl define global changed unexpectedly');
+		importVerifiedScript(runtimePreflight.glueBytes, 'Wacl Tcl runtime glue');
+		const wacl = await createRequireModule(amd.requireJs, 'tcl/wacl');
+		const interp = await waitForWacl(wacl);
+		if (!interp || typeof interp.Eval !== 'function') {
+			throw new Error('Verified Wacl interpreter did not initialize.');
+		}
+		result = Object.freeze({ interp, module });
+	} catch (error) {
+		failure = error;
+	}
+	const cleanupFailures = restoreManagedGlobals(previousGlobals);
+	if (cleanupFailures.length) {
+		throw new AggregateError(
+			failure ? [failure, ...cleanupFailures] : cleanupFailures,
+			failure
+				? `${errorMessage(failure)}; Wacl Tcl runtime global cleanup failed.`
+				: 'Wacl Tcl runtime global cleanup failed.'
+		);
+	}
+	if (failure) throw failure;
+	return result;
+}
+
+async function createVerifiedWaclRuntime(
+	runtimePreflightValue,
+	requestedMaxAssetBytes,
+	initialArguments
+) {
+	if (runtimePoisoned) {
+		throw new Error('Wacl Tcl worker must be recreated after a failed runtime evaluation.');
+	}
+	const { runtimePreflight, maxAssetBytes } = requireRuntimePreflight(
+		runtimePreflightValue,
+		requestedMaxAssetBytes
+	);
+	const identity = [
+		runtimePreflight.protocol,
+		runtimePreflight.protocolVersion,
+		runtimePreflight.profileId,
+		runtimePreflight.artifactRevision,
+		runtimePreflight.waclRevision,
+		runtimePreflight.tclRevision,
+		runtimePreflight.requireJsRevision,
+		runtimePreflight.emscriptenRevision,
+		runtimePreflight.manifestFingerprint
+	].join('\n');
+	if (verifiedRuntimePromise) {
+		if (verifiedRuntimeIdentity !== identity) {
+			throw new Error('Wacl Tcl worker cannot replace an initialized runtime profile.');
+		}
+		return await verifiedRuntimePromise;
+	}
+	verifiedRuntimeIdentity = identity;
+	let evaluationStarted = false;
+	verifiedRuntimePromise = (async () => {
+		let parsed;
+		try {
+			parsed = JSON.parse(fatalDecoder.decode(runtimePreflight.manifestBytes));
+		} catch {
+			throw new Error('Wacl Tcl runtime manifest is not valid UTF-8 JSON.');
+		}
+		const manifest = await normalizeManifest(parsed, runtimePreflight, maxAssetBytes);
+		for (const [path, bytes] of [
+			['require.js', runtimePreflight.requireJsBytes],
+			['tcl/wacl-custom.data', runtimePreflight.customDataBytes],
+			['tcl/wacl-library.data', runtimePreflight.libraryDataBytes],
+			['tcl/wacl.js', runtimePreflight.glueBytes],
+			['tcl/wacl.wasm', runtimePreflight.wasmBytes]
+		]) {
+			await verifyReceiptBytes(
+				manifest.assetByPath.get(path),
+				bytes,
+				`Wacl Tcl runtime asset ${path}`
+			);
+		}
+		return await initializeVerifiedWaclRuntime(runtimePreflight, initialArguments, () => {
+			evaluationStarted = true;
+		});
+	})();
+	try {
+		return await verifiedRuntimePromise;
+	} catch (error) {
+		verifiedRuntimePromise = null;
+		verifiedRuntimeIdentity = '';
+		if (evaluationStarted) runtimePoisoned = true;
+		throw error;
+	}
 }
 
 function tclUtf8Expression(value) {
@@ -674,163 +853,6 @@ function configureTclArguments(interp, activePath, args) {
 	interp.Eval(
 		`::set ::argv0 ${tclUtf8Expression(activePath)}; ::set ::argc ${args.length}; ::set ::argv [::list${argv.length ? ` ${argv.join(' ')}` : ''}]`
 	);
-}
-
-async function createVerifiedWaclRuntime(
-	baseUrl,
-	manifestUrl,
-	manifestFingerprint,
-	requestedMaxAssetBytes,
-	initialArguments
-) {
-	if (!Number.isSafeInteger(requestedMaxAssetBytes) || requestedMaxAssetBytes <= 0) {
-		throw new Error('Wacl Tcl runtime asset byte limit is invalid.');
-	}
-	const maxAssetBytes = Math.min(requestedMaxAssetBytes, hardMaxAssetBytes);
-	const identity = `${baseUrl}\n${manifestUrl}\n${manifestFingerprint}\n${maxAssetBytes}`;
-	if (verifiedRuntimePromise) {
-		if (verifiedRuntimeIdentity !== identity) {
-			throw new Error('Wacl Tcl worker cannot replace an initialized runtime profile.');
-		}
-		return await verifiedRuntimePromise;
-	}
-	verifiedRuntimeIdentity = identity;
-	verifiedRuntimePromise = (async () => {
-		const resolvedManifestUrl =
-			manifestUrl || assetUrl(baseUrl, 'runtime-manifest.v2.json', manifestFingerprint);
-		const manifestBytes = await fetchBoundedBytes(
-			resolvedManifestUrl,
-			'Wacl Tcl runtime manifest',
-			Math.min(maxManifestBytes, maxAssetBytes),
-			undefined,
-			'no-store'
-		);
-		let parsed;
-		try {
-			parsed = JSON.parse(fatalDecoder.decode(manifestBytes));
-		} catch {
-			throw new Error('Wacl Tcl runtime manifest is not valid UTF-8 JSON.');
-		}
-		const manifest = await normalizeManifest(parsed, manifestFingerprint, maxAssetBytes);
-		const logicalBytesByPath = new Map();
-		for (const storagePath of Object.keys(expectedStorage).sort()) {
-			const storageReceipt = manifest.storageByPath.get(storagePath);
-			const logicalReceipt = manifest.assetByPath.get(storageReceipt.logicalPath);
-			const transportedBytes = await fetchBoundedBytes(
-				assetUrl(baseUrl, storagePath, manifestFingerprint),
-				`Wacl Tcl runtime storage ${storagePath}`,
-				Math.max(storageReceipt.size, logicalReceipt.size),
-				storageReceipt.size,
-				undefined,
-				storageReceipt.encoding === 'gzip' ? logicalReceipt.size : undefined
-			);
-			let logicalBytes;
-			if (await receiptMatchesBytes(storageReceipt, transportedBytes)) {
-				logicalBytes =
-					storageReceipt.encoding === 'gzip'
-						? await decompressGzipBounded(
-								transportedBytes,
-								logicalReceipt.size,
-								maxAssetBytes,
-								`Wacl Tcl runtime asset ${logicalReceipt.path}`
-							)
-						: transportedBytes;
-			} else if (
-				storageReceipt.encoding === 'gzip' &&
-				(await receiptMatchesBytes(logicalReceipt, transportedBytes))
-			) {
-				// Fetch transparently decodes HTTP Content-Encoding. The pinned logical
-				// receipt remains the executable trust boundary in that transport mode.
-				logicalBytes = transportedBytes;
-			} else {
-				throw new Error(
-					`Wacl Tcl runtime storage ${storagePath} failed SHA-256 verification.`
-				);
-			}
-			await verifyReceiptBytes(
-				logicalReceipt,
-				logicalBytes,
-				`Wacl Tcl runtime asset ${logicalReceipt.path}`
-			);
-			logicalBytesByPath.set(logicalReceipt.path, logicalBytes);
-		}
-
-		const requireBytes = logicalBytesByPath.get('require.js');
-		const glueBytes = logicalBytesByPath.get('tcl/wacl.js');
-		let glueSource;
-		try {
-			glueSource = fatalDecoder.decode(glueBytes);
-		} catch {
-			throw new Error('Wacl Tcl runtime glue is not valid UTF-8 JavaScript.');
-		}
-		if (
-			!glueSource.startsWith('define("tcl/wacl",') ||
-			!glueSource.includes(verifiedWasmGluePatch)
-		) {
-			throw new Error('Wacl Tcl runtime glue is missing the verified Wasm bootstrap patch.');
-		}
-		const packageBytes = new Map([
-			['wacl-custom.data', logicalBytesByPath.get('tcl/wacl-custom.data')],
-			['wacl-library.data', logicalBytesByPath.get('tcl/wacl-library.data')]
-		]);
-		globalThis.Module = {
-			arguments: [...initialArguments],
-			noExitRuntime: true,
-			wasmBinary: logicalBytesByPath.get('tcl/wacl.wasm'),
-			stdin() {
-				return activeStdinReader();
-			},
-			stdout(codePoint) {
-				activeOutputWriter(codePoint);
-			},
-			stderr(codePoint) {
-				activeOutputWriter(codePoint);
-			},
-			print(text) {
-				postOutput(normalizeOutput(String(text)));
-			},
-			printErr(text) {
-				postOutput(normalizeOutput(String(text)));
-			},
-			locateFile(path) {
-				if (!packageBytes.has(path)) {
-					throw new Error(`Wacl Tcl requested an undeclared runtime asset: ${path}`);
-				}
-				return `wasm-idle-verified:tcl/${path}`;
-			},
-			getPreloadedPackage(packageName, packageSize) {
-				const prefix = 'wasm-idle-verified:tcl/';
-				const path =
-					typeof packageName === 'string' && packageName.startsWith(prefix)
-						? packageName.slice(prefix.length)
-						: '';
-				const bytes = packageBytes.get(path);
-				if (!bytes || packageSize !== bytes.byteLength) {
-					throw new Error('Wacl Tcl requested an unexpected preloaded package.');
-				}
-				return bytes.slice().buffer;
-			}
-		};
-		importVerifiedScript(requireBytes, 'Wacl Tcl RequireJS');
-		const requirejs = self.requirejs || self.require;
-		if (!requirejs || typeof requirejs.config !== 'function') {
-			throw new Error('Verified RequireJS did not expose its configuration API.');
-		}
-		requirejs.config({ baseUrl, enforceDefine: true });
-		requirejs.load = () => {
-			throw new Error('Wacl Tcl runtime refused an undeclared RequireJS module load.');
-		};
-		importVerifiedScript(glueBytes, 'Wacl Tcl runtime glue');
-		const wacl = await createRequireModule('tcl/wacl');
-		return await waitForWacl(wacl);
-	})();
-	try {
-		return await verifiedRuntimePromise;
-	} catch (error) {
-		verifiedRuntimePromise = null;
-		verifiedRuntimeIdentity = '';
-		throw error;
-	}
 }
 
 function createSharedStdinReader(channel) {
@@ -912,10 +934,13 @@ function postOutput(text) {
 }
 
 self.onmessage = async (event) => {
+	if (requestConsumed) {
+		self.postMessage({ error: 'Wacl Tcl worker accepts exactly one run.' });
+		return;
+	}
+	requestConsumed = true;
 	const {
-		baseUrl,
-		manifestUrl,
-		manifestFingerprint,
+		runtimePreflight,
 		maxAssetBytes,
 		code,
 		args = [],
@@ -926,41 +951,40 @@ self.onmessage = async (event) => {
 	} = event.data || {};
 	const output = (text) => postOutput(text);
 	try {
-		if (log) console.log(`[wasm-idle:tcl-worker] run start baseUrl=${baseUrl}`);
+		if (log) console.log('[wasm-idle:tcl-worker] run start');
 		if (
+			typeof code !== 'string' ||
 			typeof activePath !== 'string' ||
 			!Array.isArray(args) ||
 			args.some((argument) => typeof argument !== 'string')
 		) {
-			throw new Error('Wacl Tcl run path and arguments must be strings.');
+			throw new Error('Wacl Tcl code, run path, and arguments must be strings.');
 		}
 		activeStdinReader = createStdinReader(stdin, stdinChannel);
 		activeOutputWriter = createOutputWriter(output);
-		const interp = await createVerifiedWaclRuntime(
-			baseUrl,
-			manifestUrl,
-			manifestFingerprint,
-			maxAssetBytes,
-			[activePath, ...args]
-		);
-		globalThis.Module.arguments = [activePath, ...args];
-		configureTclArguments(interp, activePath, args);
-		interp.stdout = (text) => output(normalizeOutput(String(text)));
-		interp.stderr = (text) => output(normalizeOutput(String(text)));
+		const runtime = await createVerifiedWaclRuntime(runtimePreflight, maxAssetBytes, [
+			activePath,
+			...args
+		]);
+		runtime.module.arguments = [activePath, ...args];
+		configureTclArguments(runtime.interp, activePath, args);
+		runtime.interp.stdout = (text) => output(normalizeOutput(String(text)));
+		runtime.interp.stderr = (text) => output(normalizeOutput(String(text)));
 		try {
-			const result = interp.Eval(code);
+			const result = runtime.interp.Eval(code);
 			if (result) output(normalizeOutput(String(result)));
 		} catch (error) {
-			const tclMessage = error?.errorInfo || error?.message || String(error);
+			const tclMessage = error?.errorInfo || errorMessage(error);
 			throw new Error(tclMessage);
 		}
 		if (log) console.log('[wasm-idle:tcl-worker] run settled');
 		self.postMessage({ results: true });
 	} catch (error) {
 		if (log) console.error('[wasm-idle:tcl-worker] failed', error);
-		self.postMessage({ error: error?.message || String(error) });
+		self.postMessage({ error: errorMessage(error) });
 	} finally {
 		activeStdinReader = () => null;
 		activeOutputWriter = () => undefined;
+		self.close();
 	}
 };

@@ -216,6 +216,20 @@ export {
 	type PrologRuntimePreflightRequest
 } from './prolog-runtime.js';
 export {
+	TCL_PREFLIGHT_PROTOCOL,
+	TCL_PREFLIGHT_PROTOCOL_VERSION,
+	TCL_PREFLIGHT_RUNTIME_ID,
+	TCL_MAX_ASSET_BYTES,
+	cloneTclRuntimePreflightPayload,
+	preflightTclRuntimeAssets,
+	requireTclRuntimePreflightPayload,
+	snapshotTclRuntimePreflightProfile,
+	verifyTclRuntimePreflightPayload,
+	type TclRuntimePreflightPayload,
+	type TclRuntimePreflightProfile,
+	type TclRuntimePreflightRequest
+} from './tcl-runtime.js';
+export {
 	activatePreflightedRuntimeProfile,
 	type ActivatePreflightedRuntimeProfileRequest,
 	type RuntimeAssetDecodeRequest,

@@ -148,7 +148,11 @@ import {
 	WASM_PROLOG_RUNNER_RECEIPT,
 	WASM_PROLOG_RUNTIME_PROFILE
 } from './wasmPrologVersion';
-import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
+import {
+	WASM_TCL_ASSET_VERSION,
+	WASM_TCL_RUNNER_RECEIPT,
+	WASM_TCL_RUNTIME_PROFILE
+} from './wasmTclVersion';
 
 describe('runtime asset config resolution', () => {
 	it('keeps application runtime asset keys aligned with the Core contract', () => {
@@ -1171,6 +1175,8 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/absproxy/5173/wasm-tcl/runner-worker.js',
 			manifestUrl: 'https://example.com/absproxy/5173/wasm-tcl/runtime-manifest.v2.json',
 			manifestFingerprint: WASM_TCL_ASSET_VERSION,
+			preflightKey: JSON.stringify(WASM_TCL_RUNTIME_PROFILE),
+			preflightProfile: WASM_TCL_RUNTIME_PROFILE,
 			workerReceipt: WASM_TCL_RUNNER_RECEIPT
 		});
 		expect(resolveAwkRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
@@ -1303,8 +1309,33 @@ describe('runtime asset config resolution', () => {
 			workerUrl: '/wasm-tcl/runner-worker.js',
 			manifestUrl: '/wasm-tcl/runtime-manifest.v2.json',
 			manifestFingerprint: WASM_TCL_ASSET_VERSION,
+			preflightKey: JSON.stringify(WASM_TCL_RUNTIME_PROFILE),
+			preflightProfile: WASM_TCL_RUNTIME_PROFILE,
 			workerReceipt: WASM_TCL_RUNNER_RECEIPT
 		});
+	});
+
+	it('rejects a custom Tcl fingerprint without a complete matching profile', async () => {
+		vi.resetModules();
+		const { resolveTclRuntimeAssetConfig } = await import('./assets');
+
+		expect(() =>
+			resolveTclRuntimeAssetConfig({
+				tcl: {
+					manifestFingerprint: 'a'.repeat(64),
+					manifestReceipt: { bytes: 1, sha256: 'b'.repeat(64) }
+				}
+			})
+		).toThrow('Tcl runtime preflight identity is invalid');
+
+		expect(() =>
+			resolveTclRuntimeAssetConfig({
+				tcl: {
+					...WASM_TCL_RUNTIME_PROFILE,
+					manifestFingerprint: 'a'.repeat(64)
+				}
+			})
+		).toThrow('complete profile and runner receipt bundle');
 	});
 
 	it('preserves relative default Forth urls when no current url is available', async () => {
@@ -1384,6 +1415,10 @@ describe('runtime asset config resolution', () => {
 				uncompressedBytes: 8901,
 				uncompressedSha256: '5'.repeat(64)
 			}
+		};
+		const customTclProfile = {
+			...WASM_TCL_RUNTIME_PROFILE,
+			manifestFingerprint: customFingerprint
 		};
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_PROLOG_BASE_URL = 'https://env.example.com/prolog/';
@@ -1486,7 +1521,7 @@ describe('runtime asset config resolution', () => {
 						baseUrl: '/runtime/tcl',
 						workerUrl: '/runtime/tcl/worker.js',
 						manifestUrl: '/runtime/tcl/manifest.json',
-						manifestFingerprint: customFingerprint,
+						...customTclProfile,
 						workerReceipt: customWorkerReceipt
 					}
 				},
@@ -1497,6 +1532,8 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/runtime/tcl/worker.js',
 			manifestUrl: 'https://example.com/runtime/tcl/manifest.json',
 			manifestFingerprint: customFingerprint,
+			preflightKey: JSON.stringify(customTclProfile),
+			preflightProfile: customTclProfile,
 			workerReceipt: customWorkerReceipt
 		});
 		expect(

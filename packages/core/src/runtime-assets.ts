@@ -134,6 +134,18 @@ export interface RuntimeAssetKeySource {
 		workerUrl?: string;
 		manifestUrl?: string;
 		manifestFingerprint?: string;
+		profileId?: string;
+		artifactRevision?: string;
+		waclRevision?: string;
+		tclRevision?: string;
+		requireJsRevision?: string;
+		emscriptenRevision?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		requireJsReceipt?: RuntimeAssetIntegrityEntry;
+		customDataReceipt?: RuntimeAssetIntegrityEntry;
+		libraryDataReceipt?: RuntimeAssetIntegrityEntry;
+		glueReceipt?: RuntimeAssetIntegrityEntry;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	awk?: { baseUrl?: string; workerUrl?: string };
@@ -684,6 +696,48 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		runtime: 'tcl',
 		property: 'manifestFingerprint',
 		key: 'tclManifestFingerprint'
+	},
+	{ runtime: 'tcl', property: 'profileId', key: 'tclProfileId' },
+	{ runtime: 'tcl', property: 'artifactRevision', key: 'tclArtifactRevision' },
+	{ runtime: 'tcl', property: 'waclRevision', key: 'tclWaclRevision' },
+	{ runtime: 'tcl', property: 'tclRevision', key: 'tclTclRevision' },
+	{ runtime: 'tcl', property: 'requireJsRevision', key: 'tclRequireJsRevision' },
+	{ runtime: 'tcl', property: 'emscriptenRevision', key: 'tclEmscriptenRevision' },
+	{
+		runtime: 'tcl',
+		property: 'manifestReceipt',
+		key: 'tclManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'tcl',
+		property: 'requireJsReceipt',
+		key: 'tclRequireJsReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'tcl',
+		property: 'customDataReceipt',
+		key: 'tclCustomDataReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'tcl',
+		property: 'libraryDataReceipt',
+		key: 'tclLibraryDataReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'tcl',
+		property: 'glueReceipt',
+		key: 'tclGlueReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'tcl',
+		property: 'wasmReceipt',
+		key: 'tclWasmReceipt',
+		serialize: serializeIntegrityEntry
 	},
 	{
 		runtime: 'tcl',

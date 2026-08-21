@@ -8,7 +8,8 @@ import type {
 	HaskellRuntimeAssetReceipts,
 	PrologRuntimePreflightProfile,
 	RubyRuntimeAssetReceipts,
-	RuntimeAssetIntegrityEntry
+	RuntimeAssetIntegrityEntry,
+	TclRuntimePreflightProfile
 } from '@wasm-idle/core';
 
 export interface DuckDBBundleConfig {
@@ -189,6 +190,18 @@ export interface EditorLanguageServerRuntimeOptions {
 		workerUrl?: string;
 		manifestUrl?: string;
 		manifestFingerprint?: string;
+		profileId?: TclRuntimePreflightProfile['profileId'];
+		artifactRevision?: TclRuntimePreflightProfile['artifactRevision'];
+		waclRevision?: TclRuntimePreflightProfile['waclRevision'];
+		tclRevision?: TclRuntimePreflightProfile['tclRevision'];
+		requireJsRevision?: TclRuntimePreflightProfile['requireJsRevision'];
+		emscriptenRevision?: TclRuntimePreflightProfile['emscriptenRevision'];
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		requireJsReceipt?: RuntimeAssetIntegrityEntry;
+		customDataReceipt?: RuntimeAssetIntegrityEntry;
+		libraryDataReceipt?: RuntimeAssetIntegrityEntry;
+		glueReceipt?: RuntimeAssetIntegrityEntry;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	pascal?: {

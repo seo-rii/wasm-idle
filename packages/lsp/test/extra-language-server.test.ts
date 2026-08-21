@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	HASKELL_RUNTIME_ASSET_RECEIPTS,
 	PROLOG_MAX_ASSET_BYTES,
-	RUBY_RUNTIME_ASSET_PATH
+	RUBY_RUNTIME_ASSET_PATH,
+	TCL_MAX_ASSET_BYTES
 } from '@wasm-idle/core';
 import {
 	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
@@ -19,6 +20,7 @@ import {
 } from '../src/bundledPerlRuntime.js';
 import {
 	BUNDLED_TCL_MANIFEST_FINGERPRINT,
+	BUNDLED_TCL_RUNTIME_PROFILE,
 	BUNDLED_TCL_RUNNER_RECEIPT
 } from '../src/bundledTclRuntime.js';
 import {
@@ -27,6 +29,7 @@ import {
 } from '../src/bundledJanetRuntime.js';
 import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from '../src/bundledLispRuntime.js';
 import { createPrologTestAssetResponse } from './prolog-fixture.js';
+import { createTclTestAssetResponse, tclTestAssetBytes } from './tcl-fixture.js';
 
 const lispStaticDir = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -346,6 +349,13 @@ describe('additional language server workers', () => {
 	});
 
 	it('starts Tcl with Wacl worker assets', async () => {
+		const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+			const requestUrl = new URL(input.toString());
+			const response = createTclTestAssetResponse(requestUrl);
+			if (!response) throw new Error(`Unexpected Tcl asset request: ${requestUrl.href}`);
+			return response;
+		});
+		vi.stubGlobal('fetch', fetchMock);
 		const handle = await getTclLanguageServer({
 			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
@@ -355,15 +365,57 @@ describe('additional language server workers', () => {
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
 			options: {
-				baseUrl: 'https://static.example.com/repl_20240807/wasm-tcl/',
-				workerUrl: `https://static.example.com/repl_20240807/wasm-tcl/runner-worker.js?v=${BUNDLED_TCL_RUNNER_RECEIPT.sha256}`,
-				manifestUrl: `https://static.example.com/repl_20240807/wasm-tcl/runtime-manifest.v2.json?v=${BUNDLED_TCL_MANIFEST_FINGERPRINT}`,
-				manifestFingerprint: BUNDLED_TCL_MANIFEST_FINGERPRINT,
-				workerReceipt: BUNDLED_TCL_RUNNER_RECEIPT
+				workerReceipt: BUNDLED_TCL_RUNNER_RECEIPT,
+				runnerWorkerBytes: expect.any(Uint8Array),
+				runtimePreflight: expect.objectContaining({
+					profileId: BUNDLED_TCL_RUNTIME_PROFILE.profileId,
+					manifestFingerprint: BUNDLED_TCL_MANIFEST_FINGERPRINT,
+					manifestBytes: expect.any(Uint8Array),
+					requireJsBytes: expect.any(Uint8Array),
+					customDataBytes: expect.any(Uint8Array),
+					libraryDataBytes: expect.any(Uint8Array),
+					glueBytes: expect.any(Uint8Array),
+					wasmBytes: expect.any(Uint8Array)
+				}),
+				maxAssetBytes: TCL_MAX_ASSET_BYTES
 			}
 		});
+		expect(fetchMock).toHaveBeenCalledTimes(7);
+		for (const [input, init] of fetchMock.mock.calls) {
+			expect(input.toString()).not.toMatch(/\.gz(?:\?|$)/u);
+			expect(init).toMatchObject({
+				credentials: 'omit',
+				redirect: 'error',
+				referrerPolicy: 'no-referrer'
+			});
+		}
 
 		handle.dispose();
+	});
+
+	it('rejects corrupted Tcl runtime bytes before creating the language worker', async () => {
+		const corruptedWasm = Uint8Array.from(tclTestAssetBytes['tcl/wacl.wasm.gz.bin']);
+		corruptedWasm[0] ^= 0xff;
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: RequestInfo | URL) => {
+				const requestUrl = new URL(input.toString());
+				const response = createTclTestAssetResponse(requestUrl, {
+					'tcl/wacl.wasm.gz.bin': corruptedWasm
+				});
+				if (!response) throw new Error(`Unexpected Tcl asset request: ${requestUrl.href}`);
+				return response;
+			})
+		);
+
+		await expect(
+			getTclLanguageServer({
+				rootUrl: 'https://static.example.com/repl_20240807',
+				currentUrl: 'https://app.example.com/editor',
+				createWorker: () => new mockState.FakeWorker() as unknown as Worker
+			})
+		).rejects.toMatchObject({ name: 'AssetIntegrityError', runtimeId: 'TCL' });
+		expect(mockState.workers).toHaveLength(0);
 	});
 
 	it('starts Pascal with pas2js worker assets', async () => {

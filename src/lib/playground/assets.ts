@@ -47,14 +47,16 @@ import {
 	WASM_PROLOG_RUNTIME_PROFILE
 } from '$lib/playground/wasmPrologVersion';
 import { WASM_PERL_ASSET_VERSION, WASM_PERL_RUNNER_RECEIPT } from '$lib/playground/wasmPerlVersion';
-import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from '$lib/playground/wasmTclVersion';
+import { WASM_TCL_RUNTIME_BUNDLE } from '$lib/playground/wasmTclVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import {
 	RUBY_RUNTIME_ASSET_RECEIPTS,
 	TEAVM_RUNTIME_ASSET_NAMES,
 	TEAVM_RUNTIME_ASSET_RECEIPTS,
+	RuntimeConfigurationError,
 	deriveRubyRuntimeWasmUrl,
 	snapshotPrologRuntimePreflightProfile,
+	snapshotTclRuntimePreflightProfile,
 	snapshotTeaVmRuntimeAssetReceipts,
 	type HaskellRuntimeAssetReceipts,
 	type RubyRuntimeAssetReceipts
@@ -288,6 +290,18 @@ export interface TclRuntimeAssetConfig {
 	workerUrl?: string;
 	manifestUrl?: string;
 	manifestFingerprint?: string;
+	profileId?: string;
+	artifactRevision?: string;
+	waclRevision?: string;
+	tclRevision?: string;
+	requireJsRevision?: string;
+	emscriptenRevision?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	requireJsReceipt?: RuntimeAssetIntegrityEntry;
+	customDataReceipt?: RuntimeAssetIntegrityEntry;
+	libraryDataReceipt?: RuntimeAssetIntegrityEntry;
+	glueReceipt?: RuntimeAssetIntegrityEntry;
+	wasmReceipt?: RuntimeAssetIntegrityEntry;
 	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
 }
 
@@ -2347,12 +2361,59 @@ export function resolveTclRuntimeAssetConfig(
 	currentUrl = ''
 ) {
 	const configured = typeof options === 'object' ? options?.tcl : undefined;
+	const hasConfiguredTrust =
+		!!configured &&
+		[
+			configured.manifestFingerprint,
+			configured.profileId,
+			configured.artifactRevision,
+			configured.waclRevision,
+			configured.tclRevision,
+			configured.requireJsRevision,
+			configured.emscriptenRevision,
+			configured.manifestReceipt,
+			configured.requireJsReceipt,
+			configured.customDataReceipt,
+			configured.libraryDataReceipt,
+			configured.glueReceipt,
+			configured.wasmReceipt,
+			configured.workerReceipt
+		].some((value) => value !== undefined);
+	const selectedProfile = hasConfiguredTrust
+		? {
+				profileId: configured?.profileId?.trim(),
+				artifactRevision: configured?.artifactRevision?.trim(),
+				waclRevision: configured?.waclRevision?.trim(),
+				tclRevision: configured?.tclRevision?.trim(),
+				requireJsRevision: configured?.requireJsRevision?.trim(),
+				emscriptenRevision: configured?.emscriptenRevision?.trim(),
+				manifestFingerprint: configured?.manifestFingerprint?.trim(),
+				manifestReceipt: configured?.manifestReceipt,
+				requireJsReceipt: configured?.requireJsReceipt,
+				customDataReceipt: configured?.customDataReceipt,
+				libraryDataReceipt: configured?.libraryDataReceipt,
+				glueReceipt: configured?.glueReceipt,
+				wasmReceipt: configured?.wasmReceipt
+			}
+		: WASM_TCL_RUNTIME_BUNDLE.profile;
+	const preflightProfile = snapshotTclRuntimePreflightProfile(selectedProfile);
+	const workerReceipt = hasConfiguredTrust
+		? configured?.workerReceipt
+		: WASM_TCL_RUNTIME_BUNDLE.workerReceipt;
+	if (!workerReceipt) {
+		throw new RuntimeConfigurationError(
+			'Tcl runtime requires one complete profile and runner receipt bundle.',
+			{ runtimeId: 'TCL' }
+		);
+	}
 	return {
 		baseUrl: resolveTclBaseUrl(options, currentUrl),
 		workerUrl: resolveTclWorkerUrl(options, currentUrl),
 		manifestUrl: resolveTclManifestUrl(options, currentUrl),
-		manifestFingerprint: configured?.manifestFingerprint?.trim() || WASM_TCL_ASSET_VERSION,
-		workerReceipt: configured?.workerReceipt || WASM_TCL_RUNNER_RECEIPT
+		manifestFingerprint: preflightProfile.manifestFingerprint,
+		preflightKey: JSON.stringify(preflightProfile),
+		preflightProfile,
+		workerReceipt
 	};
 }
 

@@ -44,6 +44,7 @@ const MANIFEST_FILE = 'runtime-manifest.v2.json';
 const LEGACY_MANIFEST_FILE = 'runtime-manifest.v1.json';
 const BUILD_METADATA_FILE = 'runtime-build.json';
 const RUNNER_FILE = 'runner-worker.js';
+const WORKER_FINGERPRINT_PLACEHOLDER = '__WASM_IDLE_TCL_MANIFEST_FINGERPRINT__';
 const MAX_ARCHIVE_BYTES = 4 * 1024 * 1024;
 const ARCHIVE_TIMEOUT_MS = 30_000;
 const ARCHIVE_ENTRIES = [
@@ -71,15 +72,20 @@ const LOGICAL_ASSETS = Object.values(SOURCE_TO_LOGICAL);
 const STORAGE_BY_LOGICAL = Object.freeze({
 	'require.js': Object.freeze({ path: 'require.js', encoding: 'identity' }),
 	'tcl/wacl-custom.data': Object.freeze({
-		path: 'tcl/wacl-custom.data',
+		path: 'tcl/wacl-custom.data.bin',
 		encoding: 'identity'
 	}),
 	'tcl/wacl-library.data': Object.freeze({
-		path: 'tcl/wacl-library.data.gz',
+		path: 'tcl/wacl-library.data.gz.bin',
 		encoding: 'gzip'
 	}),
 	'tcl/wacl.js': Object.freeze({ path: 'tcl/wacl.js', encoding: 'identity' }),
-	'tcl/wacl.wasm': Object.freeze({ path: 'tcl/wacl.wasm.gz', encoding: 'gzip' })
+	'tcl/wacl.wasm': Object.freeze({ path: 'tcl/wacl.wasm.gz.bin', encoding: 'gzip' })
+});
+const LEGACY_STORAGE_ALIASES = Object.freeze({
+	'tcl/wacl-custom.data.bin': 'tcl/wacl-custom.data',
+	'tcl/wacl-library.data.gz.bin': 'tcl/wacl-library.data.gz',
+	'tcl/wacl.wasm.gz.bin': 'tcl/wacl.wasm.gz'
 });
 const MEDIA_TYPE_BY_LOGICAL = Object.freeze({
 	'require.js': 'text/javascript',
@@ -120,6 +126,82 @@ const PATCH_DEFINITIONS = Object.freeze([
 		replacement: 'if(typeof window!=="undefined")delete window.Module;'
 	})
 ]);
+const EXPECTED_LOCK_KEYS = Object.freeze(
+	[
+		'archiveEntries',
+		'artifact',
+		'components',
+		'licenses',
+		'patches',
+		'profileId',
+		'schemaVersion'
+	].sort()
+);
+const EXPECTED_ARTIFACT_KEYS = Object.freeze(
+	['kind', 'path', 'repository', 'revision', 'sha256', 'size', 'url'].sort()
+);
+const EXPECTED_COMPONENTS = Object.freeze({
+	wacl: Object.freeze({
+		version: WACL_VERSION,
+		repository: 'https://github.com/ecky-l/wacl.git',
+		revision: '9daacabb0102a9986f33263261350edfeebdd83b',
+		verifiedBuildInput: false
+	}),
+	tcl: Object.freeze({
+		version: '8.6.6',
+		revision: '27696b490b9b339a869a8f6fe3113d05ebcbf565',
+		verifiedBuildInput: false
+	}),
+	tdom: Object.freeze({
+		version: '0.8.3',
+		revision: '5a0a14aeb9321e50532af6c18ef4d05e44b158c8',
+		verifiedBuildInput: false
+	}),
+	rlJson: Object.freeze({
+		version: '0.9.7',
+		revision: '89ae2c67fc6023b3e0886ff5d2850dcde127a1c1',
+		verifiedBuildInput: false
+	}),
+	tcllib: Object.freeze({
+		version: '1.18',
+		revision: '700ee122b5c26243929831b242897ea7170c7015',
+		verifiedBuildInput: false
+	}),
+	requirejs: Object.freeze({
+		version: '2.3.3',
+		revision: 'f2335026867afd80c394247bfe5278d2bd8f32ee',
+		verifiedBuildInput: false
+	}),
+	emscripten: Object.freeze({
+		version: '1.37.9',
+		revision: 'f1222cc8c315e47ba3541a42ab391bd3b1d9be14',
+		verifiedBuildInput: false
+	})
+});
+const EXPECTED_LICENSES = Object.freeze({
+	wacl: Object.freeze({
+		path: 'licenses/WACL.txt',
+		spdx: 'BSD-3-Clause',
+		sourceUrl:
+			'https://raw.githubusercontent.com/ecky-l/wacl/9daacabb0102a9986f33263261350edfeebdd83b/LICENSE'
+	}),
+	tcl: Object.freeze({
+		path: 'licenses/TCL.txt',
+		spdx: 'TCL',
+		sourceUrl:
+			'https://raw.githubusercontent.com/ecky-l/wacl/9daacabb0102a9986f33263261350edfeebdd83b/license.terms'
+	}),
+	requirejs: Object.freeze({
+		path: 'licenses/REQUIREJS.txt',
+		spdx: 'MIT',
+		sourceUrl:
+			'https://raw.githubusercontent.com/requirejs/requirejs/f2335026867afd80c394247bfe5278d2bd8f32ee/LICENSE'
+	})
+});
+const EXPECTED_LICENSE_KEYS = Object.freeze(
+	['bytes', 'id', 'path', 'sha256', 'sourceUrl', 'spdx'].sort()
+);
+const EXPECTED_ARCHIVE_ENTRY_KEYS = Object.freeze(['bytes', 'path', 'sha256'].sort());
 
 /** @typedef {{ bytes: number; sha256: string }} Receipt */
 /** @typedef {{ path: string; mediaType: string; size: number; sha256: string }} LogicalAsset */
@@ -131,6 +213,24 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 const isObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+
+/** @param {Record<string, unknown>} value @param {readonly string[]} expectedKeys */
+function hasExactKeys(value, expectedKeys) {
+	const keys = Object.keys(value).sort();
+	return (
+		keys.length === expectedKeys.length &&
+		keys.every((key, index) => key === expectedKeys[index])
+	);
+}
+
+/** @param {unknown} candidate @param {Readonly<Record<string, unknown>>} expected */
+function matchesExactObject(candidate, expected) {
+	return (
+		isObject(candidate) &&
+		hasExactKeys(candidate, Object.keys(expected).sort()) &&
+		Object.entries(expected).every(([key, value]) => candidate[key] === value)
+	);
+}
 
 /** @param {string} filePath */
 async function isRegularFile(filePath) {
@@ -198,21 +298,28 @@ async function readInputLock(lockFilePath) {
 	}
 	if (
 		!isObject(value) ||
+		!hasExactKeys(value, EXPECTED_LOCK_KEYS) ||
 		value.schemaVersion !== 1 ||
-		typeof value.profileId !== 'string' ||
-		!/^wacl-[A-Za-z0-9._+-]+$/u.test(value.profileId) ||
+		value.profileId !== 'wacl-pages-045aa904-tcl-8.6.6' ||
 		!isObject(value.artifact) ||
+		!hasExactKeys(value.artifact, EXPECTED_ARTIFACT_KEYS) ||
 		value.artifact.kind !== 'opaque-prebuilt' ||
-		typeof value.artifact.repository !== 'string' ||
-		typeof value.artifact.revision !== 'string' ||
-		!/^[a-f0-9]{40}$/u.test(value.artifact.revision) ||
-		typeof value.artifact.path !== 'string' ||
-		typeof value.artifact.url !== 'string' ||
+		value.artifact.repository !== 'https://github.com/ecky-l/ecky-l.github.io.git' ||
+		value.artifact.revision !== '045aa904c2073eeded1be803cf5416901f6ce8ee' ||
+		value.artifact.path !== 'wacl/releases/wacl.zip' ||
+		value.artifact.url !== WACL_PACKAGE_URL ||
 		!isObject(value.components) ||
-		!Object.keys(value.components).length ||
+		!hasExactKeys(value.components, Object.keys(EXPECTED_COMPONENTS).sort()) ||
+		Object.entries(EXPECTED_COMPONENTS).some(
+			([name, expected]) =>
+				!matchesExactObject(
+					/** @type {Record<string, unknown>} */ (value.components)[name],
+					expected
+				)
+		) ||
 		!Array.isArray(value.patches) ||
 		!Array.isArray(value.licenses) ||
-		value.licenses.length < 2 ||
+		value.licenses.length !== Object.keys(EXPECTED_LICENSES).length ||
 		!Array.isArray(value.archiveEntries) ||
 		value.archiveEntries.length !== LOGICAL_ASSETS.length
 	) {
@@ -243,6 +350,7 @@ async function readInputLock(lockFilePath) {
 	for (const candidate of value.archiveEntries) {
 		if (
 			!isObject(candidate) ||
+			!hasExactKeys(candidate, EXPECTED_ARCHIVE_ENTRY_KEYS) ||
 			typeof candidate.path !== 'string' ||
 			!Object.hasOwn(SOURCE_TO_LOGICAL, candidate.path) ||
 			entryReceipts.has(candidate.path)
@@ -258,20 +366,48 @@ async function readInputLock(lockFilePath) {
 		throw new Error('wasm-tcl input lock is missing an archive entry');
 	}
 	const licenses = [];
+	const licenseIds = new Set();
 	const licensePaths = new Set();
 	for (const candidate of value.licenses) {
+		const expected =
+			isObject(candidate) && typeof candidate.id === 'string'
+				? /** @type {Record<string, Readonly<{ path: string; spdx: string; sourceUrl: string }>>} */ (
+						EXPECTED_LICENSES
+					)[candidate.id]
+				: undefined;
 		if (
 			!isObject(candidate) ||
+			!hasExactKeys(candidate, EXPECTED_LICENSE_KEYS) ||
+			!expected ||
 			typeof candidate.id !== 'string' ||
 			typeof candidate.path !== 'string' ||
-			!/^licenses\/[A-Za-z0-9._-]+$/u.test(candidate.path) ||
-			licensePaths.has(candidate.path) ||
 			typeof candidate.spdx !== 'string' ||
-			!candidate.spdx ||
+			licenseIds.has(candidate.id) ||
+			licensePaths.has(candidate.path) ||
+			candidate.path !== expected.path ||
+			candidate.spdx !== expected.spdx ||
 			typeof candidate.sourceUrl !== 'string'
 		) {
 			throw new Error('wasm-tcl input lock has invalid license metadata');
 		}
+		let sourceUrl;
+		try {
+			sourceUrl = new URL(candidate.sourceUrl);
+		} catch {
+			throw new Error('wasm-tcl input lock has invalid license source URL metadata');
+		}
+		if (
+			sourceUrl.protocol !== 'https:' ||
+			sourceUrl.username ||
+			sourceUrl.password ||
+			sourceUrl.hash
+		) {
+			throw new Error('wasm-tcl input lock has invalid license source URL metadata');
+		}
+		if (candidate.sourceUrl !== expected.sourceUrl) {
+			throw new Error('wasm-tcl input lock has invalid license metadata');
+		}
+		licenseIds.add(candidate.id);
 		licensePaths.add(candidate.path);
 		licenses.push(
 			Object.freeze({
@@ -282,6 +418,9 @@ async function readInputLock(lockFilePath) {
 				...validateReceipt(candidate, `wasm-tcl license ${candidate.id}`)
 			})
 		);
+	}
+	if (Object.keys(EXPECTED_LICENSES).some((id) => !licenseIds.has(id))) {
+		throw new Error('wasm-tcl input lock is missing a pinned component license');
 	}
 	const patchIds = [...new Set(value.patches)];
 	if (
@@ -303,7 +442,7 @@ async function readInputLock(lockFilePath) {
 			size: artifactReceipt.bytes,
 			url: artifactUrl.href
 		}),
-		components: Object.freeze(value.components),
+		components: Object.freeze(/** @type {typeof EXPECTED_COMPONENTS} */ (value.components)),
 		patches: Object.freeze(PATCH_DEFINITIONS.map(({ id }) => Object.freeze({ id }))),
 		licenses: Object.freeze(licenses),
 		entryReceipts
@@ -314,7 +453,11 @@ async function readInputLock(lockFilePath) {
 function canonicalValue(kind, value) {
 	if (Array.isArray(value)) {
 		return [...value]
-			.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)))
+			.sort((left, right) => {
+				const leftValue = JSON.stringify(left);
+				const rightValue = JSON.stringify(right);
+				return leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
+			})
 			.map((entry) => `${kind}\0${JSON.stringify(entry)}\n`)
 			.join('');
 	}
@@ -665,10 +808,6 @@ export async function syncWasmTclAssets(options = {}) {
 		);
 	}
 	const workerBytes = await readFile(workerSourcePath);
-	const workerReceipt = Object.freeze({
-		bytes: workerBytes.byteLength,
-		sha256: sha256(workerBytes)
-	});
 	const licenseBytes = new Map();
 	const licenses = [];
 	for (const license of lock.licenses) {
@@ -727,6 +866,12 @@ export async function syncWasmTclAssets(options = {}) {
 			sha256: sha256(bytes)
 		};
 	});
+	const publishedStorageBytes = new Map(storedBytes);
+	for (const [canonicalPath, legacyPath] of Object.entries(LEGACY_STORAGE_ALIASES)) {
+		const bytes = storedBytes.get(canonicalPath);
+		if (!bytes) throw new Error(`wasm-tcl canonical storage is missing: ${canonicalPath}`);
+		publishedStorageBytes.set(legacyPath, bytes);
+	}
 	const fingerprint = computeTclRuntimeFingerprint({
 		profileId: lock.profileId,
 		artifact: lock.artifact,
@@ -736,6 +881,34 @@ export async function syncWasmTclAssets(options = {}) {
 		metadata,
 		assets,
 		storage
+	});
+	const workerSource = new TextDecoder('utf-8', { fatal: true }).decode(workerBytes);
+	const expectedWorkerFingerprint = `manifestFingerprint: '${fingerprint}'`;
+	const fingerprintPlaceholder = `manifestFingerprint: '${WORKER_FINGERPRINT_PLACEHOLDER}'`;
+	let publishedWorkerSource = workerSource;
+	if (
+		workerSource.indexOf(expectedWorkerFingerprint) < 0 ||
+		workerSource.indexOf(expectedWorkerFingerprint) !==
+			workerSource.lastIndexOf(expectedWorkerFingerprint)
+	) {
+		if (
+			workerSource.indexOf(fingerprintPlaceholder) < 0 ||
+			workerSource.indexOf(fingerprintPlaceholder) !==
+				workerSource.lastIndexOf(fingerprintPlaceholder)
+		) {
+			throw new Error(
+				'wasm-tcl runner must pin exactly the generated runtime manifest fingerprint'
+			);
+		}
+		publishedWorkerSource = workerSource.replace(
+			fingerprintPlaceholder,
+			expectedWorkerFingerprint
+		);
+	}
+	const publishedWorkerBytes = Buffer.from(publishedWorkerSource, 'utf8');
+	const workerReceipt = Object.freeze({
+		bytes: publishedWorkerBytes.byteLength,
+		sha256: sha256(publishedWorkerBytes)
 	});
 	const manifest = {
 		format: TCL_MANIFEST_FORMAT,
@@ -750,6 +923,46 @@ export async function syncWasmTclAssets(options = {}) {
 		assets,
 		storage
 	};
+	const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+	const manifestReceipt = Object.freeze({
+		bytes: manifestBytes.byteLength,
+		sha256: sha256(manifestBytes)
+	});
+	const logicalReceiptByPath = new Map(assets.map((asset) => [asset.path, asset]));
+	const storageReceiptByLogicalPath = new Map(storage.map((asset) => [asset.logicalPath, asset]));
+	/** @param {string} logicalPath */
+	const runtimeReceipt = (logicalPath) => {
+		const logical = logicalReceiptByPath.get(logicalPath);
+		const stored = storageReceiptByLogicalPath.get(logicalPath);
+		if (!logical || !stored) {
+			throw new Error(`wasm-tcl runtime receipt is missing for ${logicalPath}`);
+		}
+		return Object.freeze({
+			bytes: stored.size,
+			sha256: stored.sha256,
+			...(stored.encoding === 'gzip'
+				? {
+						uncompressedBytes: logical.size,
+						uncompressedSha256: logical.sha256
+					}
+				: {})
+		});
+	};
+	const runtimeProfile = Object.freeze({
+		profileId: lock.profileId,
+		artifactRevision: lock.artifact.revision,
+		waclRevision: lock.components.wacl.revision,
+		tclRevision: lock.components.tcl.revision,
+		requireJsRevision: lock.components.requirejs.revision,
+		emscriptenRevision: lock.components.emscripten.revision,
+		manifestFingerprint: fingerprint,
+		manifestReceipt,
+		requireJsReceipt: runtimeReceipt('require.js'),
+		customDataReceipt: runtimeReceipt('tcl/wacl-custom.data'),
+		libraryDataReceipt: runtimeReceipt('tcl/wacl-library.data'),
+		glueReceipt: runtimeReceipt('tcl/wacl.js'),
+		wasmReceipt: runtimeReceipt('tcl/wacl.wasm')
+	});
 	const legacyManifest = {
 		format: 'wasm-tcl-runtime-manifest-v1',
 		version: WACL_VERSION,
@@ -758,10 +971,13 @@ export async function syncWasmTclAssets(options = {}) {
 		fingerprint,
 		files: LOGICAL_ASSETS
 	};
-	const versionModuleSource = `export const WASM_TCL_ASSET_VERSION =\n\t'${fingerprint}';\nexport const WASM_TCL_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
-	const lspVersionModuleSource = `export const BUNDLED_TCL_MANIFEST_FINGERPRINT =\n\t'${fingerprint}';\nexport const BUNDLED_TCL_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\n`;
+	const serializedRuntimeProfile = JSON.stringify(runtimeProfile, null, '\t')
+		.replaceAll('"', "'")
+		.replace(/^(\s*)'([A-Za-z_$][A-Za-z0-9_$]*)':/gmu, '$1$2:');
+	const versionModuleSource = `export const WASM_TCL_RUNTIME_PROFILE = ${serializedRuntimeProfile} as const;\nexport const WASM_TCL_ASSET_VERSION = WASM_TCL_RUNTIME_PROFILE.manifestFingerprint;\nexport const WASM_TCL_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\nexport const WASM_TCL_RUNTIME_BUNDLE = Object.freeze({\n\tprofile: WASM_TCL_RUNTIME_PROFILE,\n\tworkerReceipt: WASM_TCL_RUNNER_RECEIPT\n});\n`;
+	const lspVersionModuleSource = `export const BUNDLED_TCL_RUNTIME_PROFILE = ${serializedRuntimeProfile} as const;\nexport const BUNDLED_TCL_MANIFEST_FINGERPRINT = BUNDLED_TCL_RUNTIME_PROFILE.manifestFingerprint;\nexport const BUNDLED_TCL_RUNNER_RECEIPT = {\n\tbytes: ${workerReceipt.bytes},\n\tsha256: '${workerReceipt.sha256}'\n} as const;\nexport const BUNDLED_TCL_RUNTIME_BUNDLE = Object.freeze({\n\tprofile: BUNDLED_TCL_RUNTIME_PROFILE,\n\tworkerReceipt: BUNDLED_TCL_RUNNER_RECEIPT\n});\n`;
 	const expectedFiles = [
-		...storedBytes.keys(),
+		...publishedStorageBytes.keys(),
 		...licenseBytes.keys(),
 		BUILD_METADATA_FILE,
 		LEGACY_MANIFEST_FILE,
@@ -800,7 +1016,7 @@ export async function syncWasmTclAssets(options = {}) {
 	}
 	await mkdir(publications[0].temporary, { recursive: true });
 	try {
-		for (const [relativePath, bytes] of storedBytes) {
+		for (const [relativePath, bytes] of publishedStorageBytes) {
 			const targetPath = path.join(publications[0].temporary, relativePath);
 			await mkdir(path.dirname(targetPath), { recursive: true });
 			await writeFile(targetPath, bytes);
@@ -812,12 +1028,8 @@ export async function syncWasmTclAssets(options = {}) {
 		}
 		await Promise.all([
 			writeFile(path.join(publications[0].temporary, BUILD_METADATA_FILE), metadataBytes),
-			writeFile(path.join(publications[0].temporary, RUNNER_FILE), workerBytes),
-			writeFile(
-				path.join(publications[0].temporary, MANIFEST_FILE),
-				`${JSON.stringify(manifest, null, 2)}\n`,
-				'utf8'
-			),
+			writeFile(path.join(publications[0].temporary, RUNNER_FILE), publishedWorkerBytes),
+			writeFile(path.join(publications[0].temporary, MANIFEST_FILE), manifestBytes),
 			writeFile(
 				path.join(publications[0].temporary, LEGACY_MANIFEST_FILE),
 				`${JSON.stringify(legacyManifest, null, 2)}\n`,
@@ -846,6 +1058,15 @@ export async function syncWasmTclAssets(options = {}) {
 				throw new Error(
 					'wasm-tcl temporary installation failed logical receipt verification'
 				);
+			}
+		}
+		for (const [canonicalPath, legacyPath] of Object.entries(LEGACY_STORAGE_ALIASES)) {
+			const [canonicalBytes, legacyBytes] = await Promise.all([
+				readFile(path.join(publications[0].temporary, canonicalPath)),
+				readFile(path.join(publications[0].temporary, legacyPath))
+			]);
+			if (!canonicalBytes.equals(legacyBytes)) {
+				throw new Error(`wasm-tcl legacy storage alias drifted from ${canonicalPath}`);
 			}
 		}
 
@@ -903,7 +1124,8 @@ export async function syncWasmTclAssets(options = {}) {
 		fingerprint,
 		versionModulePath,
 		lspVersionModulePath,
-		workerReceipt
+		workerReceipt,
+		runtimeProfile
 	};
 }
 

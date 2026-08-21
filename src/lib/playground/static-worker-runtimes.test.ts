@@ -155,7 +155,11 @@ import {
 	WASM_PROLOG_RUNNER_RECEIPT,
 	WASM_PROLOG_RUNTIME_PROFILE
 } from './wasmPrologVersion';
-import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
+import {
+	WASM_TCL_ASSET_VERSION,
+	WASM_TCL_RUNNER_RECEIPT,
+	WASM_TCL_RUNTIME_PROFILE
+} from './wasmTclVersion';
 
 const jTestManifestSource = '{"runtime":"fixture"}\n';
 const jTestModuleSource = 'export default function fixtureJ() {}\n';
@@ -263,6 +267,24 @@ const prologRuntimeWasmGzipBytes = Uint8Array.from(
 const prologRuntimeDataGzipBytes = Uint8Array.from(
 	readFileSync(resolve(process.cwd(), 'static/wasm-prolog/swipl-web.data.gz.bin'))
 );
+const tclManifestSource = readFileSync(
+	resolve(process.cwd(), 'static/wasm-tcl/runtime-manifest.v2.json'),
+	'utf8'
+);
+const tclRequireJsSource = readFileSync(
+	resolve(process.cwd(), 'static/wasm-tcl/require.js'),
+	'utf8'
+);
+const tclCustomDataBytes = Uint8Array.from(
+	readFileSync(resolve(process.cwd(), 'static/wasm-tcl/tcl/wacl-custom.data.bin'))
+);
+const tclLibraryDataGzipBytes = Uint8Array.from(
+	readFileSync(resolve(process.cwd(), 'static/wasm-tcl/tcl/wacl-library.data.gz.bin'))
+);
+const tclGlueSource = readFileSync(resolve(process.cwd(), 'static/wasm-tcl/tcl/wacl.js'), 'utf8');
+const tclWasmGzipBytes = Uint8Array.from(
+	readFileSync(resolve(process.cwd(), 'static/wasm-tcl/tcl/wacl.wasm.gz.bin'))
+);
 const clojureScriptTestProfile = {
 	profileId: 'clojurescript-1.12.134-test',
 	sourceRevision: 'r1.12.134',
@@ -334,6 +356,60 @@ function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 			status: 200,
 			headers: {
 				'content-length': String(prologRuntimeDataGzipBytes.byteLength),
+				'content-type': 'application/octet-stream'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-tcl/runtime-manifest.v2.json')) {
+		return new Response(tclManifestSource, {
+			status: 200,
+			headers: {
+				'content-length': String(new TextEncoder().encode(tclManifestSource).byteLength),
+				'content-type': 'application/json'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-tcl/require.js')) {
+		return new Response(tclRequireJsSource, {
+			status: 200,
+			headers: {
+				'content-length': String(new TextEncoder().encode(tclRequireJsSource).byteLength),
+				'content-type': 'text/javascript'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-tcl/tcl/wacl-custom.data.bin')) {
+		return new Response(Uint8Array.from(tclCustomDataBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(tclCustomDataBytes.byteLength),
+				'content-type': 'application/octet-stream'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-tcl/tcl/wacl-library.data.gz.bin')) {
+		return new Response(Uint8Array.from(tclLibraryDataGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(tclLibraryDataGzipBytes.byteLength),
+				'content-type': 'application/octet-stream'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-tcl/tcl/wacl.js')) {
+		return new Response(tclGlueSource, {
+			status: 200,
+			headers: {
+				'content-length': String(new TextEncoder().encode(tclGlueSource).byteLength),
+				'content-type': 'text/javascript'
+			}
+		});
+	}
+	if (inputUrl.includes('/wasm-tcl/tcl/wacl.wasm.gz.bin')) {
+		return new Response(Uint8Array.from(tclWasmGzipBytes), {
+			status: 200,
+			headers: {
+				'content-length': String(tclWasmGzipBytes.byteLength),
 				'content-type': 'application/octet-stream'
 			}
 		});
@@ -1031,17 +1107,21 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('loads Tcl runtime urls and forwards stdin to the Wacl worker', async () => {
+	it('preflights all Tcl executable bytes before worker creation and reuses a warm worker', async () => {
 		const sandbox = new Tcl();
-		await sandbox.load({
+		const runtimeAssets = {
 			tcl: {
 				baseUrl: '/wasm-tcl/',
-				workerUrl: '/wasm-tcl/runner-worker.js?v=test',
-				manifestUrl: '/wasm-tcl/runtime-manifest.v2.json?v=test',
-				manifestFingerprint: WASM_TCL_ASSET_VERSION,
+				workerUrl: `/wasm-tcl/runner-worker.js?v=${WASM_TCL_RUNNER_RECEIPT.sha256}`,
+				manifestUrl: `/wasm-tcl/runtime-manifest.v2.json?v=${WASM_TCL_ASSET_VERSION}`,
+				...WASM_TCL_RUNTIME_PROFILE,
 				workerReceipt: WASM_TCL_RUNNER_RECEIPT
 			}
-		});
+		};
+		await sandbox.load(runtimeAssets);
+		const warmFetchCount = vi.mocked(fetch).mock.calls.length;
+		await sandbox.load(runtimeAssets);
+		expect(fetch).toHaveBeenCalledTimes(warmFetchCount);
 		await expect(
 			sandbox.run('gets stdin line; puts $line', false, true, undefined, ['demo'], {
 				stdin: 'ok\n'
@@ -1050,38 +1130,114 @@ describe('static worker backed language sandboxes', () => {
 
 		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/wasm-tcl/runner-worker.js?v=test',
+			`http://localhost:3000/wasm-tcl/runner-worker.js?v=${WASM_TCL_RUNNER_RECEIPT.sha256}`,
 			tclWorkerSource
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-tcl/',
-				manifestUrl: 'http://localhost:3000/wasm-tcl/runtime-manifest.v2.json?v=test',
+				manifestUrl: `http://localhost:3000/wasm-tcl/runtime-manifest.v2.json?v=${WASM_TCL_ASSET_VERSION}`,
 				manifestFingerprint: WASM_TCL_ASSET_VERSION,
+				runtimePreflight: expect.objectContaining({
+					protocol: 'wasm-idle-tcl-preflight',
+					protocolVersion: 1,
+					profileId: WASM_TCL_RUNTIME_PROFILE.profileId,
+					artifactRevision: WASM_TCL_RUNTIME_PROFILE.artifactRevision,
+					waclRevision: WASM_TCL_RUNTIME_PROFILE.waclRevision,
+					tclRevision: WASM_TCL_RUNTIME_PROFILE.tclRevision,
+					requireJsRevision: WASM_TCL_RUNTIME_PROFILE.requireJsRevision,
+					emscriptenRevision: WASM_TCL_RUNTIME_PROFILE.emscriptenRevision,
+					manifestFingerprint: WASM_TCL_ASSET_VERSION
+				}),
 				args: ['demo'],
 				stdin: 'ok\n',
 				activePath: 'main.tcl'
 			})
 		);
+		const runMessage = workerInstances[0].postMessage.mock.calls[0][0];
+		expect(runMessage.runtimePreflight.libraryDataBytes).toHaveLength(
+			WASM_TCL_RUNTIME_PROFILE.libraryDataReceipt.uncompressedBytes
+		);
+		expect(runMessage.runtimePreflight.wasmBytes).toHaveLength(
+			WASM_TCL_RUNTIME_PROFILE.wasmReceipt.uncompressedBytes
+		);
+		const workerEventIndex = runtimeLifecycleEvents.findIndex((event) =>
+			event.startsWith('worker:')
+		);
+		for (const assetPath of [
+			'runtime-manifest.v2.json',
+			'require.js',
+			'wacl-custom.data.bin',
+			'wacl-library.data.gz.bin',
+			'wacl.js',
+			'wacl.wasm.gz.bin',
+			'runner-worker.js'
+		]) {
+			const fetchEventIndex = runtimeLifecycleEvents.findIndex(
+				(event) => event.startsWith('fetch:') && event.includes(assetPath)
+			);
+			expect(fetchEventIndex).toBeGreaterThanOrEqual(0);
+			expect(fetchEventIndex).toBeLessThan(workerEventIndex);
+		}
+		expect(
+			runtimeLifecycleEvents.some(
+				(event) =>
+					event.startsWith('fetch:') &&
+					new URL(event.slice('fetch:'.length)).pathname.endsWith('/wacl-custom.data')
+			)
+		).toBe(false);
+		expect(
+			runtimeLifecycleEvents.filter(
+				(event) => event.startsWith('fetch:') && event.includes('/wasm-tcl/')
+			)
+		).toHaveLength(7);
+		expect(workerInstances).toHaveLength(1);
 		expect(sandbox.workerReceipt).toEqual(WASM_TCL_RUNNER_RECEIPT);
 	});
 
 	it('rejects a modified Tcl runner before creating a worker', async () => {
 		const modifiedSource = `x${tclWorkerSource.slice(1)}`;
-		vi.mocked(fetch).mockResolvedValueOnce(
-			new Response(modifiedSource, {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-tcl/runner-worker.js')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			return new Response(modifiedSource, {
 				status: 200,
 				headers: {
 					'content-length': String(new TextEncoder().encode(modifiedSource).byteLength)
 				}
-			})
-		);
+			});
+		});
 		const sandbox = new Tcl();
 
 		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
 			code: 'asset-integrity',
 			runtimeId: 'TCL'
 		});
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects a corrupt Tcl runtime asset before loading the runner or creating a worker', async () => {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-tcl/tcl/wacl.wasm.gz.bin')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			return new Response(Uint8Array.from([...tclWasmGzipBytes, 0]), {
+				status: 200,
+				headers: { 'content-type': 'application/octet-stream' }
+			});
+		});
+		const sandbox = new Tcl();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'TCL'
+		});
+		expect(
+			vi
+				.mocked(fetch)
+				.mock.calls.some(([input]) => String(input).includes('/wasm-tcl/runner-worker.js'))
+		).toBe(false);
 		expect(workerInstances).toHaveLength(0);
 	});
 

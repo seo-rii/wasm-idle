@@ -292,6 +292,22 @@ describe('wasm-idle static worker language browser integrations', () => {
 				expect(summary.pageErrors).toEqual([]);
 				expect(summary.transcript).toContain('main=73');
 				expect(summary.transcript).toContain('Process finished after');
+				const tclRuntimePaths = summary.runtimeRequests
+					.map((requestUrl) => new URL(requestUrl).pathname)
+					.filter((pathname) => pathname.includes('/wasm-tcl/'))
+					.map((pathname) => pathname.slice(pathname.indexOf('/wasm-tcl/')));
+				expect(new Set(tclRuntimePaths)).toEqual(
+					new Set([
+						'/wasm-tcl/require.js',
+						'/wasm-tcl/runner-worker.js',
+						'/wasm-tcl/runtime-manifest.v2.json',
+						'/wasm-tcl/tcl/wacl-custom.data.bin',
+						'/wasm-tcl/tcl/wacl-library.data.gz.bin',
+						'/wasm-tcl/tcl/wacl.js',
+						'/wasm-tcl/tcl/wacl.wasm.gz.bin'
+					])
+				);
+				expect(tclRuntimePaths).not.toContain('/wasm-tcl/tcl/wacl-custom.data');
 			}
 		);
 	}, 960_000);

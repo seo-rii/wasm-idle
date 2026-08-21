@@ -61,7 +61,10 @@ async function createFixture(): Promise<Fixture> {
 		await writeFile(target, bytes);
 	}
 	await mkdir(path.dirname(workerSourcePath), { recursive: true });
-	await writeFile(workerSourcePath, 'self.onmessage = () => undefined;\n');
+	await writeFile(
+		workerSourcePath,
+		"const expectedIdentity = { manifestFingerprint: '__WASM_IDLE_TCL_MANIFEST_FINGERPRINT__' };\nself.onmessage = () => expectedIdentity;\n"
+	);
 	await mkdir(provenanceDir, { recursive: true });
 	const licenseSources = [
 		{
@@ -99,7 +102,8 @@ async function createFixture(): Promise<Fixture> {
 			id: license.id,
 			path: `licenses/${license.file}`,
 			spdx: license.spdx,
-			sourceUrl: `https://example.test/${license.file}`,
+			sourceUrl: officialLock.licenses.find((candidate) => candidate.id === license.id)
+				?.sourceUrl,
 			bytes: license.bytes.byteLength,
 			sha256: sha256(license.bytes)
 		})),
@@ -144,9 +148,12 @@ describe('syncWasmTclAssets', () => {
 				await readFile(path.join(fixture.targetDir, assetPath))
 			])
 		);
+		const firstAppPin = await readFile(fixture.versionModulePath, 'utf8');
+		const firstLspPin = await readFile(fixture.lspVersionModulePath, 'utf8');
 
 		const second = await syncWasmTclAssets(options);
 		expect(second.fingerprint).toBe(first.fingerprint);
+		expect(second.runtimeProfile).toEqual(first.runtimeProfile);
 		expect(await readFile(path.join(fixture.targetDir, 'runtime-manifest.v2.json'))).toEqual(
 			firstManifestBytes
 		);
@@ -160,18 +167,87 @@ describe('syncWasmTclAssets', () => {
 		expect(firstManifest.assets).toHaveLength(5);
 		expect(firstManifest.storage).toHaveLength(5);
 		expect(firstManifest.licenses).toHaveLength(3);
-		expect(
-			gunzipSync(await readFile(path.join(fixture.targetDir, 'tcl/wacl-library.data.gz')))
-		).toEqual(await readFile(path.join(fixture.sourceDir, 'js/tcl/wacl-library.data')));
-		expect(await readFile(path.join(fixture.targetDir, 'tcl/wacl-custom.data'))).toEqual(
+		const libraryCanonical = await readFile(
+			path.join(fixture.targetDir, 'tcl/wacl-library.data.gz.bin')
+		);
+		const wasmCanonical = await readFile(path.join(fixture.targetDir, 'tcl/wacl.wasm.gz.bin'));
+		const customCanonical = await readFile(
+			path.join(fixture.targetDir, 'tcl/wacl-custom.data.bin')
+		);
+		expect(gunzipSync(libraryCanonical)).toEqual(
+			await readFile(path.join(fixture.sourceDir, 'js/tcl/wacl-library.data'))
+		);
+		expect(gunzipSync(wasmCanonical)).toEqual(
+			await readFile(path.join(fixture.sourceDir, 'js/tcl/wacl.wasm'))
+		);
+		expect(await readFile(path.join(fixture.targetDir, 'tcl/wacl-library.data.gz'))).toEqual(
+			libraryCanonical
+		);
+		expect(await readFile(path.join(fixture.targetDir, 'tcl/wacl.wasm.gz'))).toEqual(
+			wasmCanonical
+		);
+		expect(customCanonical).toEqual(
 			await readFile(path.join(fixture.sourceDir, 'js/tcl/wacl-custom.data'))
+		);
+		expect(await readFile(path.join(fixture.targetDir, 'tcl/wacl-custom.data'))).toEqual(
+			customCanonical
 		);
 		const appPin = await readFile(fixture.versionModulePath, 'utf8');
 		const lspPin = await readFile(fixture.lspVersionModulePath, 'utf8');
+		expect(appPin).toBe(firstAppPin);
+		expect(lspPin).toBe(firstLspPin);
+		expect(appPin).toContain('export const WASM_TCL_RUNTIME_PROFILE =');
+		expect(appPin).toContain('WASM_TCL_RUNTIME_PROFILE.manifestFingerprint');
+		expect(lspPin).toContain('export const BUNDLED_TCL_RUNTIME_PROFILE =');
+		expect(lspPin).toContain('BUNDLED_TCL_RUNTIME_PROFILE.manifestFingerprint');
 		expect(appPin).toContain(first.fingerprint);
 		expect(lspPin).toContain(first.fingerprint);
 		expect(appPin).toContain(first.workerReceipt.sha256);
 		expect(lspPin).toContain(first.workerReceipt.sha256);
+		expect(appPin).toContain('export const WASM_TCL_RUNTIME_BUNDLE =');
+		expect(lspPin).toContain('export const BUNDLED_TCL_RUNTIME_BUNDLE =');
+		expect(await readFile(path.join(fixture.targetDir, 'runner-worker.js'), 'utf8')).toContain(
+			`manifestFingerprint: '${first.fingerprint}'`
+		);
+		const logicalReceipt = (logicalPath: string) =>
+			firstManifest.assets.find((receipt: { path: string }) => receipt.path === logicalPath)!;
+		expect(first.runtimeProfile).toEqual({
+			profileId: firstManifest.profileId,
+			artifactRevision: firstManifest.artifact.revision,
+			waclRevision: firstManifest.components.wacl.revision,
+			tclRevision: firstManifest.components.tcl.revision,
+			requireJsRevision: firstManifest.components.requirejs.revision,
+			emscriptenRevision: firstManifest.components.emscripten.revision,
+			manifestFingerprint: first.fingerprint,
+			manifestReceipt: {
+				bytes: firstManifestBytes.byteLength,
+				sha256: sha256(firstManifestBytes)
+			},
+			requireJsReceipt: {
+				bytes: logicalReceipt('require.js').size,
+				sha256: logicalReceipt('require.js').sha256
+			},
+			customDataReceipt: {
+				bytes: logicalReceipt('tcl/wacl-custom.data').size,
+				sha256: logicalReceipt('tcl/wacl-custom.data').sha256
+			},
+			libraryDataReceipt: {
+				bytes: libraryCanonical.byteLength,
+				sha256: sha256(libraryCanonical),
+				uncompressedBytes: gunzipSync(libraryCanonical).byteLength,
+				uncompressedSha256: sha256(gunzipSync(libraryCanonical))
+			},
+			glueReceipt: {
+				bytes: logicalReceipt('tcl/wacl.js').size,
+				sha256: logicalReceipt('tcl/wacl.js').sha256
+			},
+			wasmReceipt: {
+				bytes: wasmCanonical.byteLength,
+				sha256: sha256(wasmCanonical),
+				uncompressedBytes: gunzipSync(wasmCanonical).byteLength,
+				uncompressedSha256: sha256(gunzipSync(wasmCanonical))
+			}
+		});
 		expect((await readdir(fixture.targetDir)).sort()).toEqual([
 			'licenses',
 			'require.js',
@@ -181,6 +257,95 @@ describe('syncWasmTclAssets', () => {
 			'runtime-manifest.v2.json',
 			'tcl'
 		]);
+		expect((await readdir(path.join(fixture.targetDir, 'tcl'))).sort()).toEqual([
+			'wacl-custom.data',
+			'wacl-custom.data.bin',
+			'wacl-library.data.gz',
+			'wacl-library.data.gz.bin',
+			'wacl.js',
+			'wacl.wasm.gz',
+			'wacl.wasm.gz.bin'
+		]);
+		expect(firstManifest.storage.map((receipt: { path: string }) => receipt.path)).toEqual([
+			'require.js',
+			'tcl/wacl-custom.data.bin',
+			'tcl/wacl-library.data.gz.bin',
+			'tcl/wacl.js',
+			'tcl/wacl.wasm.gz.bin'
+		]);
+	});
+
+	it.each([
+		[
+			'an extra root key',
+			(lock: any) => {
+				lock.untrusted = true;
+			},
+			'invalid provenance metadata'
+		],
+		[
+			'an extra artifact key',
+			(lock: any) => {
+				lock.artifact.untrusted = true;
+			},
+			'invalid provenance metadata'
+		],
+		[
+			'a missing component',
+			(lock: any) => {
+				delete lock.components.tcl;
+			},
+			'invalid provenance metadata'
+		],
+		[
+			'an extra component key',
+			(lock: any) => {
+				lock.components.wacl.untrusted = true;
+			},
+			'invalid provenance metadata'
+		],
+		[
+			'an incomplete patch set',
+			(lock: any) => {
+				lock.patches.pop();
+			},
+			'complete glue patch set'
+		],
+		[
+			'a duplicate component license',
+			(lock: any) => {
+				lock.licenses[1].id = lock.licenses[0].id;
+			},
+			'invalid license metadata'
+		],
+		[
+			'a non-HTTPS license source',
+			(lock: any) => {
+				lock.licenses[0].sourceUrl = 'http://example.test/license';
+			},
+			'invalid license source URL metadata'
+		],
+		[
+			'an unpinned HTTPS license source',
+			(lock: any) => {
+				lock.licenses[0].sourceUrl = 'https://example.test/license';
+			},
+			'invalid license metadata'
+		],
+		[
+			'an extra archive receipt key',
+			(lock: any) => {
+				lock.archiveEntries[0].untrusted = true;
+			},
+			'invalid or duplicate archive entry'
+		]
+	] as const)('rejects %s in the exact producer lock schema', async (_label, mutate, error) => {
+		const fixture = await createFixture();
+		const lock = JSON.parse(await readFile(fixture.lockFilePath, 'utf8'));
+		mutate(lock);
+		await writeFile(fixture.lockFilePath, `${JSON.stringify(lock, null, 2)}\n`);
+
+		await expect(syncWasmTclAssets(fixture)).rejects.toThrow(error);
 	});
 
 	it('rejects source drift without replacing the published generation', async () => {

@@ -2,7 +2,7 @@
   "format": "wasm-tcl-runtime-manifest-v2",
   "runtime": "wacl",
   "profileId": "wacl-pages-045aa904-tcl-8.6.6",
-  "fingerprint": "c609f202ff8756ed65d15a4dfbc0785673145f301a02af6aa5c8c0ad696c4254",
+  "fingerprint": "4687ad97c5bb5e96d4354a24e9faffeb9dc9eb1ee7e8c9b0c0ea289c5d9a2baa",
   "artifact": {
     "kind": "opaque-prebuilt",
     "path": "wacl/releases/wacl.zip",
@@ -134,14 +134,14 @@
       "sha256": "0ca49b7de8f5e006ba5eb976937a3f9fb96b05ebfbb11d685c0b21ead94aacaf"
     },
     {
-      "path": "tcl/wacl-custom.data",
+      "path": "tcl/wacl-custom.data.bin",
       "logicalPath": "tcl/wacl-custom.data",
       "encoding": "identity",
       "size": 976,
       "sha256": "46874b6dfe04b9c693815fe904a52e3583260323857dee46ac7373c484e3b2f8"
     },
     {
-      "path": "tcl/wacl-library.data.gz",
+      "path": "tcl/wacl-library.data.gz.bin",
       "logicalPath": "tcl/wacl-library.data",
       "encoding": "gzip",
       "size": 593060,
@@ -155,7 +155,7 @@
       "sha256": "c3377f974386190f1e465ffd66b528b0e33ea7a66bcde3b8c1695d4d720276af"
     },
     {
-      "path": "tcl/wacl.wasm.gz",
+      "path": "tcl/wacl.wasm.gz.bin",
       "logicalPath": "tcl/wacl.wasm",
       "encoding": "gzip",
       "size": 640669,

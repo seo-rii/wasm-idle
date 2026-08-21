@@ -43,7 +43,11 @@ import {
 } from './wasmPrologVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
 import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
-import { WASM_TCL_ASSET_VERSION, WASM_TCL_RUNNER_RECEIPT } from './wasmTclVersion';
+import {
+	WASM_TCL_ASSET_VERSION,
+	WASM_TCL_RUNNER_RECEIPT,
+	WASM_TCL_RUNTIME_PROFILE
+} from './wasmTclVersion';
 import { WASM_ZIG_ASSET_RECEIPTS, WASM_ZIG_ASSET_VERSION } from './wasmZigVersion';
 
 describe('application runtime asset root', () => {
@@ -169,7 +173,7 @@ describe('application runtime asset root', () => {
 			baseUrl: '/foo/bar/wasm-tcl/',
 			workerUrl: `/foo/bar/wasm-tcl/runner-worker.js?v=${WASM_TCL_RUNNER_RECEIPT.sha256}`,
 			manifestUrl: `/foo/bar/wasm-tcl/runtime-manifest.v2.json?v=${WASM_TCL_ASSET_VERSION}`,
-			manifestFingerprint: WASM_TCL_ASSET_VERSION,
+			...WASM_TCL_RUNTIME_PROFILE,
 			workerReceipt: WASM_TCL_RUNNER_RECEIPT
 		});
 		expect(assets.gleam).toEqual({
@@ -372,6 +376,18 @@ describe('application runtime asset root', () => {
 				]
 			]),
 			tclManifestFingerprint: WASM_TCL_ASSET_VERSION,
+			tclProfileId: WASM_TCL_RUNTIME_PROFILE.profileId,
+			tclArtifactRevision: WASM_TCL_RUNTIME_PROFILE.artifactRevision,
+			tclWaclRevision: WASM_TCL_RUNTIME_PROFILE.waclRevision,
+			tclTclRevision: WASM_TCL_RUNTIME_PROFILE.tclRevision,
+			tclRequireJsRevision: WASM_TCL_RUNTIME_PROFILE.requireJsRevision,
+			tclEmscriptenRevision: WASM_TCL_RUNTIME_PROFILE.emscriptenRevision,
+			tclManifestReceipt: expect.any(String),
+			tclRequireJsReceipt: expect.any(String),
+			tclCustomDataReceipt: expect.any(String),
+			tclLibraryDataReceipt: expect.any(String),
+			tclGlueReceipt: expect.any(String),
+			tclWasmReceipt: expect.any(String),
 			tclWorkerReceipt: JSON.stringify([
 				[
 					'worker',
@@ -492,6 +508,18 @@ describe('application runtime asset root', () => {
 			perlWorkerReceipt: expect.any(String),
 			tclManifestUrl: assets.tcl?.manifestUrl,
 			tclManifestFingerprint: assets.tcl?.manifestFingerprint,
+			tclProfileId: assets.tcl?.profileId,
+			tclArtifactRevision: assets.tcl?.artifactRevision,
+			tclWaclRevision: assets.tcl?.waclRevision,
+			tclTclRevision: assets.tcl?.tclRevision,
+			tclRequireJsRevision: assets.tcl?.requireJsRevision,
+			tclEmscriptenRevision: assets.tcl?.emscriptenRevision,
+			tclManifestReceipt: expect.any(String),
+			tclRequireJsReceipt: expect.any(String),
+			tclCustomDataReceipt: expect.any(String),
+			tclLibraryDataReceipt: expect.any(String),
+			tclGlueReceipt: expect.any(String),
+			tclWasmReceipt: expect.any(String),
 			tclWorkerReceipt: expect.any(String),
 			forthManifestUrl: assets.forth?.manifestUrl,
 			forthManifestFingerprint: assets.forth?.manifestFingerprint,
@@ -553,6 +581,36 @@ describe('application runtime asset root', () => {
 				createRuntimeAssetsKey({
 					...assets,
 					prolog: { ...prolog, ...replacement }
+				})
+			).not.toBe(originalKey);
+		}
+	});
+
+	it('changes the runtime cache identity for every Tcl profile receipt field', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const originalKey = createRuntimeAssetsKey(assets);
+		const tcl = assets.tcl!;
+		const replacements = [
+			{ profileId: `${tcl.profileId}-custom` },
+			{ artifactRevision: 'a'.repeat(40) },
+			{ waclRevision: 'b'.repeat(40) },
+			{ tclRevision: 'c'.repeat(40) },
+			{ requireJsRevision: 'd'.repeat(40) },
+			{ emscriptenRevision: 'e'.repeat(40) },
+			{ manifestFingerprint: 'f'.repeat(64) },
+			{ manifestReceipt: { ...tcl.manifestReceipt!, sha256: '1'.repeat(64) } },
+			{ requireJsReceipt: { ...tcl.requireJsReceipt!, sha256: '2'.repeat(64) } },
+			{ customDataReceipt: { ...tcl.customDataReceipt!, bytes: 123 } },
+			{ libraryDataReceipt: { ...tcl.libraryDataReceipt!, uncompressedBytes: 456 } },
+			{ glueReceipt: { ...tcl.glueReceipt!, sha256: '3'.repeat(64) } },
+			{ wasmReceipt: { ...tcl.wasmReceipt!, uncompressedSha256: '4'.repeat(64) } }
+		];
+
+		for (const replacement of replacements) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					tcl: { ...tcl, ...replacement }
 				})
 			).not.toBe(originalKey);
 		}

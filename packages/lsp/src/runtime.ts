@@ -24,13 +24,15 @@ import {
 } from './bundledPerlRuntime.js';
 import {
 	BUNDLED_TCL_MANIFEST_FINGERPRINT,
-	BUNDLED_TCL_RUNNER_RECEIPT
+	BUNDLED_TCL_RUNTIME_BUNDLE
 } from './bundledTclRuntime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from './types.js';
 import {
 	deriveRubyRuntimeWasmUrl,
 	snapshotPrologRuntimePreflightProfile,
-	type PrologRuntimePreflightProfile
+	snapshotTclRuntimePreflightProfile,
+	type PrologRuntimePreflightProfile,
+	type TclRuntimePreflightProfile
 } from '@wasm-idle/core';
 
 export class LanguageServerAssetConfigurationError extends Error {
@@ -1097,11 +1099,96 @@ export function resolveTclLanguageServerManifestFingerprint(
 	);
 }
 
+function hasConfiguredTclTrust(options: EditorLanguageServerOptions | undefined): boolean {
+	const configured = typeof options === 'object' ? options.tcl : undefined;
+	return (
+		!!configured &&
+		[
+			configured.manifestFingerprint,
+			configured.profileId,
+			configured.artifactRevision,
+			configured.waclRevision,
+			configured.tclRevision,
+			configured.requireJsRevision,
+			configured.emscriptenRevision,
+			configured.manifestReceipt,
+			configured.requireJsReceipt,
+			configured.customDataReceipt,
+			configured.libraryDataReceipt,
+			configured.glueReceipt,
+			configured.wasmReceipt,
+			configured.workerReceipt
+		].some((value) => value !== undefined)
+	);
+}
+
 export function resolveTclLanguageServerWorkerReceipt(
 	options: EditorLanguageServerOptions | undefined
 ) {
 	const configured = typeof options === 'object' ? options.tcl?.workerReceipt : undefined;
-	return configured || BUNDLED_TCL_RUNNER_RECEIPT;
+	if (configured) return configured;
+	if (!hasConfiguredTclTrust(options)) return BUNDLED_TCL_RUNTIME_BUNDLE.workerReceipt;
+	throw new LanguageServerAssetConfigurationError(
+		'Tcl LSP',
+		'a complete runtime profile and runner receipt bundle'
+	);
+}
+
+export function resolveTclLanguageServerPreflightProfile(
+	options: EditorLanguageServerOptions | undefined
+): TclRuntimePreflightProfile {
+	const configured = typeof options === 'object' ? options.tcl : undefined;
+	const manifestFingerprint = resolveTclLanguageServerManifestFingerprint(options);
+	const hasConfiguredProfile = hasConfiguredTclTrust(options);
+
+	if (!hasConfiguredProfile) {
+		if (manifestFingerprint !== BUNDLED_TCL_MANIFEST_FINGERPRINT) {
+			throw new LanguageServerAssetConfigurationError(
+				'Tcl LSP',
+				'a complete runtime profile and receipts for a custom manifest fingerprint'
+			);
+		}
+		return snapshotTclRuntimePreflightProfile(BUNDLED_TCL_RUNTIME_BUNDLE.profile);
+	}
+
+	try {
+		return snapshotTclRuntimePreflightProfile({
+			profileId: configured?.profileId?.trim(),
+			artifactRevision: configured?.artifactRevision?.trim(),
+			waclRevision: configured?.waclRevision?.trim(),
+			tclRevision: configured?.tclRevision?.trim(),
+			requireJsRevision: configured?.requireJsRevision?.trim(),
+			emscriptenRevision: configured?.emscriptenRevision?.trim(),
+			manifestFingerprint,
+			manifestReceipt: configured?.manifestReceipt,
+			requireJsReceipt: configured?.requireJsReceipt,
+			customDataReceipt: configured?.customDataReceipt,
+			libraryDataReceipt: configured?.libraryDataReceipt,
+			glueReceipt: configured?.glueReceipt,
+			wasmReceipt: configured?.wasmReceipt
+		});
+	} catch {
+		throw new LanguageServerAssetConfigurationError(
+			'Tcl LSP',
+			'a complete valid runtime preflight profile and receipts'
+		);
+	}
+}
+
+export function resolveTclLanguageServerAssetConfig(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	const profile = resolveTclLanguageServerPreflightProfile(options);
+	const workerReceipt = resolveTclLanguageServerWorkerReceipt(options);
+	return Object.freeze({
+		baseUrl: resolveTclLanguageServerBaseUrl(options, currentUrl),
+		workerUrl: resolveTclLanguageServerWorkerUrl(options, currentUrl),
+		manifestUrl: resolveTclLanguageServerManifestUrl(options, currentUrl),
+		manifestFingerprint: profile.manifestFingerprint,
+		profile,
+		workerReceipt
+	});
 }
 
 export function resolvePascalLanguageServerBaseUrl(
