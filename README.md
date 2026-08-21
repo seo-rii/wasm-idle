@@ -714,14 +714,6 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 		rootfsUrl: 'https://cdn.example.com/wasm-haskell/rootfs.tar.zst',
 		bsdtarUrl: 'https://cdn.example.com/wasm-haskell/bsdtar.wasm'
 	},
-	janet: {
-		baseUrl: 'https://cdn.example.com/wasm-janet/',
-		workerUrl: 'https://cdn.example.com/wasm-janet/runner-worker.js'
-	},
-	julia: {
-		baseUrl: 'https://cdn.example.com/wasm-julia/',
-		workerUrl: 'https://cdn.example.com/wasm-julia/runner-worker.js'
-	},
 	nim: {
 		baseUrl: 'https://cdn.example.com/wasm-nim/',
 		workerUrl: 'https://cdn.example.com/wasm-nim/runner-worker.js'
@@ -733,6 +725,11 @@ Static module overrides such as PHP's `moduleUrl` identify an entry module, not 
 file. Mirror its complete sibling asset tree at the same relative paths. Cross-origin asset hosts
 must provide compatible CORS and COEP/CORP headers and cannot rely on wasm-idle's same-origin gzip
 service worker.
+
+Verified static runtimes such as Janet and Julia intentionally omit URL-only examples: a custom
+`baseUrl`, `manifestUrl`, or `workerUrl` must be accompanied by every identity and asset-receipt
+field declared by that runtime's asset config, including the matching `workerReceipt`. Partial
+trust bundles fail closed instead of borrowing receipts from bundled executable bytes.
 
 Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Clang custom loaders receive `bin/memfs.wasm.gz`, `bin/clang.wasm.gz`, `bin/lld.wasm.gz`, and `bin/sysroot.tar.gz`; COBOL loaders receive `cobc.wasm.gz`, `rootfs.tar.gz`, and `c-sysroot.tar.gz`. The shared loader pipes these gzip response bodies through native `DecompressionStream`. Legacy external manifests that still reference ZIP assets remain supported through the dynamically loaded `fflate` compatibility path. Zig custom loaders receive `zig_small.wasm` and `std.tar.gz`; an explicitly configured legacy `std.zip` URL remains compatible. Clangd custom loaders receive `clangd.js` and `clangd.wasm.gz`, with the worker decompressing the gzip payload before instantiation. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. C#, F#, and VB.NET expect a browser-loadable `wasm-dotnet` module with its language-specific static .NET `browser-wasm` runtime assets. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
 
