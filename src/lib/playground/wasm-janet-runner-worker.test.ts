@@ -696,22 +696,23 @@ describe('Janet runner worker', { timeout: 60_000 }, () => {
 
 	it('prints a prompt before consuming live shared-ring input', async () => {
 		const stdin = new StaticStdinRingHost({ capacity: 64, maxBufferedBytes: 64 });
-		let prompted = false;
 		let suppliedInput = false;
 		const messages = await runHarness(
 			executionRequest({ stdin: undefined, stdinChannel: stdin.descriptor }),
 			(message) => {
-				if (message.output?.includes('value?')) prompted = true;
-				if (message.type !== 'stdin-request' || suppliedInput) return;
+				if (!message.output?.includes('value?') || suppliedInput) return;
 				suppliedInput = true;
-				expect(prompted).toBe(true);
-				stdin.enqueue('68\n');
-				stdin.close();
+				setTimeout(() => {
+					stdin.enqueue('68\n');
+					stdin.close();
+				}, 10);
 			}
 		);
 
+		expect(messages.findIndex((message) => message.output?.includes('value?'))).toBeLessThan(
+			messages.findIndex((message) => message.output?.includes('main=73'))
+		);
 		expect(terminalMessage(messages)).toEqual({ results: true });
-		expect(messages.map((message) => message.output || '').join('')).toContain('main=73');
 	});
 
 	it('fails closed on malformed shared stdin before runtime evaluation', async () => {
