@@ -62,6 +62,7 @@ jobs:
             - run: pnpm install --frozen-lockfile
             - run: pnpm exec playwright-core install --with-deps chromium
             - run: pnpm run prepare:test-assets -- clangd
+            - run: pnpm --dir packages/lsp exec vitest run test/bundledClangdAssetIntegrity.test.ts
             - run: pnpm run test:lsp:browser:smoke
             - run: pnpm run test:lsp:browser:gleam:csp
 

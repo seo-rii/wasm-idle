@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
@@ -13,8 +14,12 @@ interface RuntimeBuildAsset {
 	sha256: string;
 }
 
+const clangdRoot = resolve(process.cwd(), '../../static/clangd');
+const hasPreparedClangdRuntime = existsSync(resolve(clangdRoot, 'clangd.js'));
+
 describe('bundled clangd asset integrity', () => {
-	it('matches the checked-in runtime build receipt', async () => {
+	it('matches the checked-in runtime build receipt', async ({ skip }) => {
+		if (!hasPreparedClangdRuntime) skip();
 		const receiptPath = resolve(process.cwd(), '../../static/clang/runtime-build.json');
 		const receipt = JSON.parse(await readFile(receiptPath, 'utf8')) as {
 			assets: RuntimeBuildAsset[];
@@ -24,9 +29,7 @@ describe('bundled clangd asset integrity', () => {
 		for (const asset of ['clangd.js', 'clangd.wasm.gz'] as const) {
 			const record = receiptByAsset.get(`clangd/${asset}`);
 			expect(record, `clangd/${asset} is missing from runtime-build.json`).toBeDefined();
-			const deliveryBytes = await readFile(
-				resolve(process.cwd(), `../../static/clangd/${asset}`)
-			);
+			const deliveryBytes = await readFile(resolve(clangdRoot, asset));
 			const runtimeBytes = asset.endsWith('.gz') ? gunzipSync(deliveryBytes) : deliveryBytes;
 			expect(BUNDLED_CLANGD_ASSET_INTEGRITY[asset]).toEqual({
 				bytes: record?.size,

@@ -94,6 +94,9 @@ describe('LLVM runtime package scripts', () => {
 		expect(workflow).toContain('pnpm --dir producers/wasm-php build');
 		expect(workflow).toContain('pnpm --dir producers/wasm-php verify');
 		expect(workflow).toContain('pnpm run verify:wasm-php');
+		expect(workflow).toContain(
+			'pnpm --dir packages/lsp exec vitest run test/bundledClangdAssetIntegrity.test.ts'
+		);
 	});
 
 	it('builds Rust source instrumentation as a lazy static asset', async () => {
