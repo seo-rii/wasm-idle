@@ -41,10 +41,12 @@ export default [
 	{
 		ignores: [
 			'.DS_Store',
+			'.codex/',
 			'node_modules/',
 			'.cache/',
 			'build/',
 			'.svelte-kit/',
+			'**/.svelte-kit/',
 			'package/',
 			'dist/',
 			'**/dist/',
@@ -58,6 +60,9 @@ export default [
 			'static/',
 			'runtimes/*/dist/',
 			'runtimes/*/node_modules/',
+			'runtimes/*/.cache/',
+			'runtimes/*/artifacts/',
+			'runtimes/*/public/tools/',
 			'runtimes/wasm-dotnet/dotnet/**/bin/',
 			'runtimes/wasm-dotnet/dotnet/**/obj/',
 			'runtimes/wasm-elixir/assets/',

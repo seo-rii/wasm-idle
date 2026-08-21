@@ -9,6 +9,7 @@ node_modules
 !.env.example
 dist
 coverage
+.codex/
 
 # Ignore files for PNPM, NPM and YARN
 pnpm-lock.yaml
@@ -24,7 +25,10 @@ static/
 # Workspace package outputs and toolchain snapshots.
 runtimes/*/dist/
 runtimes/*/node_modules/
-runtimes/wasm-clang/artifacts/
+runtimes/*/.cache/
+runtimes/*/.svelte-kit/
+runtimes/*/artifacts/
+runtimes/*/public/tools/
 runtimes/wasm-dotnet/dotnet/**/bin/
 runtimes/wasm-dotnet/dotnet/**/obj/
 runtimes/wasm-elixir/assets/
