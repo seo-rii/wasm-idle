@@ -1,7 +1,7 @@
 import type { PlaygroundRuntimeAssets } from './assets';
 import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
 import { WASM_AWK_ASSET_VERSION } from './wasmAwkVersion';
-import { WASM_BASH_ASSET_VERSION, WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
+import { WASM_BASH_RUNTIME_PROFILE } from './wasmBashVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
@@ -219,10 +219,24 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			workerReceipt: WASM_NIM_RUNTIME_BUNDLE.workerReceipt
 		},
 		bash: {
-			moduleUrl: asset('wasm-bash/sdk/index.mjs', STATIC_RUNTIME_MODULE_VERSION),
-			webcUrl: asset('wasm-bash/bash.webc', WASM_BASH_ASSET_VERSION),
-			workerUrl: asset('wasm-bash/sdk/worker.mjs', STATIC_RUNTIME_MODULE_VERSION),
-			webcReceipt: WASM_BASH_WEBC_RECEIPT
+			baseUrl: asset('wasm-bash/'),
+			manifestUrl: asset(
+				'wasm-bash/runtime-manifest.v2.json',
+				WASM_BASH_RUNTIME_PROFILE.manifestFingerprint
+			),
+			moduleUrl: asset(
+				'wasm-bash/sdk/index.mjs.bin',
+				WASM_BASH_RUNTIME_PROFILE.sdkJavaScriptReceipt.sha256
+			),
+			wasmerWasmUrl: asset(
+				'wasm-bash/sdk/wasmer_js_bg.wasm.gz.bin',
+				WASM_BASH_RUNTIME_PROFILE.wasmerWasmReceipt.sha256
+			),
+			webcUrl: asset(
+				'wasm-bash/bash.webc.gz.bin',
+				WASM_BASH_RUNTIME_PROFILE.webcReceipt.sha256
+			),
+			...WASM_BASH_RUNTIME_PROFILE
 		},
 		clojurescript: {
 			baseUrl: asset('wasm-clojurescript/'),

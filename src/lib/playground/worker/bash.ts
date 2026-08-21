@@ -1,4 +1,3 @@
-import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import {
 	BASH_WORKER_PROTOCOL_VERSION,
 	isBashHostToWorkerMessage,
@@ -194,23 +193,10 @@ async function handleLoad(message: BashWorkerLoadMessage) {
 		sessionId: message.sessionId,
 		requestId: message.requestId
 	};
-	const runtimeAssets: PlaygroundRuntimeAssets = {
-		bash: {
-			moduleUrl: message.assets.sdkModuleUrl,
-			workerUrl: message.assets.sdkThreadWorkerUrl,
-			webcUrl: message.assets.webcUrl,
-			webcReceipt: {
-				bytes: message.assets.webcReceipt.bytes,
-				sha256: message.assets.webcReceipt.sha256
-			}
-		}
-	};
 	try {
-		await runtime.load(
-			runtimeAssets,
-			'',
+		await runtime.loadVerified(
+			message.runtimePreflight,
 			message.log ?? false,
-			[],
 			{ limits: { ...message.limits } },
 			{
 				set(value, stage) {

@@ -1,4 +1,7 @@
-import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
+import {
+	resolveBashRuntimeAssetConfig,
+	type PlaygroundRuntimeAssets
+} from '$lib/playground/assets';
 import type { CompilerDiagnostic, SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
@@ -6,10 +9,8 @@ import {
 	isBashWorkerToHostMessage,
 	type BashHostToWorkerMessage,
 	type BashSerializedError,
-	type BashWorkerAssetConfig,
 	type BashWorkerToHostMessage
 } from '$lib/playground/bashWorkerProtocol';
-import { WASM_BASH_WEBC_RECEIPT } from '$lib/playground/wasmBashVersion';
 import {
 	AssetTooLargeError,
 	AssetIntegrityError,
@@ -29,27 +30,33 @@ import {
 	UnsupportedLanguageError,
 	WasmIdleError,
 	WorkerStartupError,
+	preflightBashRuntimeAssets,
 	resolveExecutionLimits,
 	validateExecutionWorkspace,
+	type BashRuntimePreflightPayload,
 	type ExecutionLimits,
-	type RuntimeAssetIntegrityEntry,
 	type RuntimePhase,
 	type WorkspaceLimits
 } from '@wasm-idle/core';
 
-type BashRuntimeAssetConfig = PlaygroundRuntimeAssets & {
-	bash?: {
-		moduleUrl?: string;
-		webcUrl?: string;
-		workerUrl?: string;
-		webcReceipt?: RuntimeAssetIntegrityEntry;
-	};
-};
-
 type ResolvedBashConfig = {
-	assets: BashWorkerAssetConfig;
+	baseUrl: string;
+	manifestUrl: string;
+	moduleUrl: string;
+	wasmerWasmUrl: string;
+	webcUrl: string;
+	preflightKey: string;
+	preflightProfile: ReturnType<typeof resolveBashRuntimeAssetConfig>['preflightProfile'];
 	identity: string;
 	limits: ExecutionLimits;
+};
+
+type BashOwnedDelivery = {
+	identity: string;
+	payload: BashRuntimePreflightPayload | null;
+	sessionId: number;
+	state: 'available' | 'consumed' | 'retired';
+	transferables: ArrayBuffer[];
 };
 
 type BashWorkerHandle = {
@@ -72,7 +79,7 @@ type BashRunRequest = {
 };
 
 type BashOperation = {
-	config: ResolvedBashConfig;
+	config: ResolvedBashConfig | null;
 	decoders: Readonly<{
 		stderr: TextDecoder;
 		stdout: TextDecoder;
@@ -80,6 +87,8 @@ type BashOperation = {
 	handle: BashWorkerHandle | null;
 	kind: 'load' | 'run';
 	onAbort?: () => void;
+	preflightController?: AbortController;
+	delivery?: BashOwnedDelivery;
 	outputBytes: number;
 	progress?: SandboxProgress;
 	reject: (reason?: unknown) => void;
@@ -105,6 +114,17 @@ const abortReason = (signal: AbortSignal, phase: BashOperation['stage']) =>
 				phase === 'startup' ? 'Bash runtime startup aborted' : 'Bash execution aborted',
 				'AbortError'
 			);
+
+const createBashConfigIdentity = (preflightKey: string, limits: ExecutionLimits) =>
+	JSON.stringify([
+		preflightKey,
+		{
+			maxAssetBytes: limits.maxAssetBytes,
+			maxWasmMemoryBytes: limits.maxWasmMemoryBytes,
+			maxWorkers: limits.maxWorkers,
+			maxThreads: limits.maxThreads
+		}
+	]);
 
 class Bash implements Sandbox {
 	output?: (data: string) => void;
@@ -160,18 +180,8 @@ class Bash implements Sandbox {
 			resolvePromise = resolve;
 			rejectPromise = reject;
 		});
-		const provisionalConfig = {
-			assets: {
-				sdkModuleUrl: '',
-				sdkThreadWorkerUrl: '',
-				webcUrl: '',
-				webcReceipt: WASM_BASH_WEBC_RECEIPT
-			},
-			identity: '',
-			limits: resolveExecutionLimits()
-		} satisfies ResolvedBashConfig;
 		const operation: BashOperation = {
-			config: provisionalConfig,
+			config: null,
 			decoders: { stderr: new TextDecoder(), stdout: new TextDecoder() },
 			handle: null,
 			kind: 'load',
@@ -195,70 +205,12 @@ class Bash implements Sandbox {
 			const limits = resolveExecutionLimits(options.limits);
 			this.requireActive(operation);
 
-			let configuredWebcUrl: string | undefined;
-			let configuredSdkUrl: string | undefined;
-			let configuredWorkerUrl: string | undefined;
-			let configuredWebcReceipt: RuntimeAssetIntegrityEntry | undefined;
-			let rootUrl = '';
-			if (runtimeAssets && typeof runtimeAssets === 'object') {
-				const bashAssets = (runtimeAssets as BashRuntimeAssetConfig).bash;
-				this.requireActive(operation);
-				if (bashAssets) {
-					configuredWebcUrl = bashAssets.webcUrl;
-					configuredSdkUrl = bashAssets.moduleUrl;
-					configuredWorkerUrl = bashAssets.workerUrl;
-					configuredWebcReceipt = bashAssets.webcReceipt;
-					this.requireActive(operation);
-				}
-				if (!configuredWebcUrl || !configuredSdkUrl || !configuredWorkerUrl) {
-					rootUrl = (runtimeAssets as BashRuntimeAssetConfig).rootUrl || '';
-					this.requireActive(operation);
-				}
-			} else {
-				rootUrl = typeof runtimeAssets === 'string' ? runtimeAssets : '';
-			}
-			const normalizedRoot = rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const resolveUrl = (value: string) =>
-				currentUrl ? new URL(value, currentUrl).href : value;
-			const receipt = configuredWebcReceipt ?? WASM_BASH_WEBC_RECEIPT;
-			const receiptBytes = receipt.bytes;
-			const receiptSha256 = receipt.sha256;
-			if (
-				receiptBytes === undefined ||
-				!Number.isSafeInteger(receiptBytes) ||
-				receiptBytes <= 0 ||
-				typeof receiptSha256 !== 'string' ||
-				!/^[a-f0-9]{64}$/u.test(receiptSha256)
-			) {
-				throw new RuntimeConfigurationError(
-					'Bash WEBc receipt must provide a positive byte size and lowercase SHA-256 digest',
-					{ phase: 'asset', runtimeId: 'BASH' }
-				);
-			}
-			if (receiptBytes > limits.maxAssetBytes) {
-				throw new AssetTooLargeError(
-					`Bash WEBc receipt exceeds the ${limits.maxAssetBytes} byte limit`,
-					{
-						actual: receiptBytes,
-						limit: limits.maxAssetBytes,
-						runtimeId: 'BASH'
-					}
-				);
-			}
-			const assets: BashWorkerAssetConfig = Object.freeze({
-				sdkModuleUrl: resolveUrl(
-					configuredSdkUrl || `${normalizedRoot}/wasm-bash/sdk/index.mjs`
-				),
-				sdkThreadWorkerUrl: resolveUrl(
-					configuredWorkerUrl || `${normalizedRoot}/wasm-bash/sdk/worker.mjs`
-				),
-				webcUrl: resolveUrl(configuredWebcUrl || `${normalizedRoot}/wasm-bash/bash.webc`),
-				webcReceipt: Object.freeze({ bytes: receiptBytes, sha256: receiptSha256 })
-			});
+			const resolved = resolveBashRuntimeAssetConfig(runtimeAssets, currentUrl);
+			this.requireActive(operation);
 			const config: ResolvedBashConfig = {
-				assets,
-				identity: JSON.stringify([assets, limits.maxAssetBytes]),
+				...resolved,
+				identity: createBashConfigIdentity(resolved.preflightKey, limits),
 				limits
 			};
 			operation.config = config;
@@ -270,7 +222,7 @@ class Bash implements Sandbox {
 				progress?.set?.(1, 'Bash runtime ready');
 				this.requireActive(operation);
 				this.loadedConfig = config;
-				this.webcUrl = config.assets.webcUrl;
+				this.webcUrl = config.webcUrl;
 				this.finishOperation(operation);
 				return promise;
 			}
@@ -352,6 +304,35 @@ class Bash implements Sandbox {
 			if (signal?.aborted) throw abortReason(signal, operation.stage);
 			const limits = resolveExecutionLimits(options.limits);
 			this.requireActive(operation);
+			if (!this.readyWorker) {
+				const loadedConfig = this.requireConfig(operation);
+				const startupLimits: ExecutionLimits = {
+					...limits,
+					assetTimeoutMs: Math.min(
+						loadedConfig.limits.assetTimeoutMs,
+						limits.assetTimeoutMs
+					),
+					maxAssetBytes: Math.min(
+						loadedConfig.limits.maxAssetBytes,
+						limits.maxAssetBytes
+					),
+					maxThreads: Math.min(loadedConfig.limits.maxThreads, limits.maxThreads),
+					maxWasmMemoryBytes: Math.min(
+						loadedConfig.limits.maxWasmMemoryBytes,
+						limits.maxWasmMemoryBytes
+					),
+					maxWorkers: Math.min(loadedConfig.limits.maxWorkers, limits.maxWorkers),
+					startupTimeoutMs: Math.min(
+						loadedConfig.limits.startupTimeoutMs,
+						limits.startupTimeoutMs
+					)
+				};
+				operation.config = {
+					...loadedConfig,
+					identity: createBashConfigIdentity(loadedConfig.preflightKey, startupLimits),
+					limits: startupLimits
+				};
+			}
 			const programArgsSource = options.programArgs ?? args;
 			if (!Array.isArray(programArgsSource)) {
 				throw new TypeError('Bash program arguments must be an array');
@@ -405,13 +386,14 @@ class Bash implements Sandbox {
 			this.bindAbort(operation);
 			this.requireActive(operation);
 			const needsStartup = !this.readyWorker;
+			const startupConfig = this.requireConfig(operation);
 			const timeoutMs = Math.min(
 				MAX_TIMER_DELAY_MS,
 				limits.compileTimeoutMs +
 					limits.runTimeoutMs +
 					(needsStartup
-						? operation.config.limits.assetTimeoutMs +
-							operation.config.limits.startupTimeoutMs
+						? startupConfig.limits.assetTimeoutMs +
+							startupConfig.limits.startupTimeoutMs
 						: 0)
 			);
 			this.bindTimeout(operation, timeoutMs);
@@ -517,6 +499,25 @@ class Bash implements Sandbox {
 		if (!this.isActive(operation)) throw new Error('Bash operation was superseded');
 	}
 
+	private requireConfig(operation: BashOperation) {
+		if (!operation.config) {
+			throw new RuntimeConfigurationError('Bash operation has no runtime configuration', {
+				phase: 'startup',
+				runtimeId: 'BASH'
+			});
+		}
+		return operation.config;
+	}
+
+	private retireDelivery(operation: BashOperation) {
+		const delivery = operation.delivery;
+		if (!delivery || delivery.state === 'retired') return;
+		delivery.state = 'retired';
+		delivery.payload = null;
+		delivery.transferables.length = 0;
+		operation.delivery = undefined;
+	}
+
 	private bindAbort(operation: BashOperation) {
 		const signal = operation.signal;
 		if (!signal) return;
@@ -583,6 +584,8 @@ class Bash implements Sandbox {
 		operation.settled = true;
 		this.activeOperation = null;
 		this.cleanupOperation(operation);
+		operation.preflightController = undefined;
+		this.retireDelivery(operation);
 		if (operation.kind === 'run') {
 			if (operation.runRequest?.stdin !== undefined) {
 				this.pendingInput = [];
@@ -599,6 +602,13 @@ class Bash implements Sandbox {
 		operation.settled = true;
 		this.activeOperation = null;
 		this.cleanupOperation(operation);
+		try {
+			operation.preflightController?.abort(reason);
+		} catch {
+			// Preserve the original failure.
+		}
+		operation.preflightController = undefined;
+		this.retireDelivery(operation);
 		if (retireHandle && operation.handle) this.retireWorker(operation.handle);
 		if (operation.kind === 'run' && operation.started) {
 			this.pendingInput = [];
@@ -610,6 +620,52 @@ class Bash implements Sandbox {
 	}
 
 	private async createWorker(operation: BashOperation) {
+		const config = this.requireConfig(operation);
+		const preflightController = new AbortController();
+		operation.preflightController = preflightController;
+		const loadedByAsset = new Map<string, number>();
+		const deliveryTotal =
+			config.preflightProfile.manifestReceipt.bytes! +
+			config.preflightProfile.sdkJavaScriptReceipt.bytes! +
+			config.preflightProfile.wasmerWasmReceipt.bytes! +
+			config.preflightProfile.webcReceipt.bytes!;
+		let payload: BashRuntimePreflightPayload | null = null;
+		try {
+			payload = await preflightBashRuntimeAssets({
+				baseUrl: config.baseUrl,
+				manifestUrl: config.manifestUrl,
+				sdkJavaScriptUrl: config.moduleUrl,
+				wasmerWasmUrl: config.wasmerWasmUrl,
+				webcUrl: config.webcUrl,
+				profile: config.preflightProfile,
+				limits: config.limits,
+				signal: preflightController.signal,
+				reportProgress: ({ assetKey, loadedBytes }) => {
+					loadedByAsset.set(assetKey, loadedBytes);
+					let totalLoaded = 0;
+					for (const loaded of loadedByAsset.values()) totalLoaded += loaded;
+					operation.progress?.set?.(
+						Math.min(0.75, (totalLoaded / deliveryTotal) * 0.75),
+						`Verifying Bash ${assetKey}`
+					);
+				},
+				reportDecompressionProgress: (asset, loadedBytes, totalBytes) => {
+					operation.progress?.set?.(
+						0.75 + Math.min(0.2, (loadedBytes / totalBytes) * 0.2),
+						`Decompressing Bash ${asset}`
+					);
+				}
+			});
+		} catch (error) {
+			this.failOperation(operation, error, false);
+			throw error;
+		} finally {
+			operation.preflightController = undefined;
+		}
+		if (!this.isActive(operation)) {
+			payload = null;
+			throw new Error('Bash operation was cancelled');
+		}
 		let WorkerConstructor: new () => Worker;
 		try {
 			WorkerConstructor = (await import('$lib/playground/worker/bash?worker')).default;
@@ -619,9 +675,13 @@ class Bash implements Sandbox {
 				runtimeId: 'BASH'
 			});
 			this.failOperation(operation, error, false);
+			payload = null;
 			throw error;
 		}
-		if (!this.isActive(operation)) throw new Error('Bash operation was cancelled');
+		if (!this.isActive(operation)) {
+			payload = null;
+			throw new Error('Bash operation was cancelled');
+		}
 
 		let worker: Worker;
 		try {
@@ -632,16 +692,72 @@ class Bash implements Sandbox {
 				runtimeId: 'BASH'
 			});
 			this.failOperation(operation, error, false);
+			payload = null;
 			throw error;
 		}
+		const sessionId = ++this.sessionUid;
+		if (!Object.isFrozen(payload)) {
+			try {
+				worker.terminate();
+			} catch {
+				// Preserve the ownership contract failure.
+			}
+			const error = new ProtocolError('Bash preflight payload must be frozen', {
+				runtimeId: 'BASH'
+			});
+			this.failOperation(operation, error, false);
+			payload = null;
+			throw error;
+		}
+		const transferables: ArrayBuffer[] = [];
+		const uniqueBuffers = new Set<ArrayBuffer>();
+		for (const bytes of [
+			payload.manifestBytes,
+			payload.sdkJavaScriptBytes,
+			payload.wasmerWasmBytes,
+			payload.webcBytes
+		]) {
+			const buffer = bytes.buffer;
+			if (
+				bytes.byteLength <= 0 ||
+				bytes.byteOffset !== 0 ||
+				bytes.byteLength !== buffer.byteLength ||
+				Object.prototype.toString.call(buffer) !== '[object ArrayBuffer]' ||
+				(typeof SharedArrayBuffer === 'function' && buffer instanceof SharedArrayBuffer) ||
+				uniqueBuffers.has(buffer as ArrayBuffer)
+			) {
+				try {
+					worker.terminate();
+				} catch {
+					// Preserve the ownership contract failure.
+				}
+				const error = new ProtocolError(
+					'Bash preflight payload must own four unique whole ArrayBuffers',
+					{ runtimeId: 'BASH' }
+				);
+				this.failOperation(operation, error, false);
+				payload = null;
+				throw error;
+			}
+			uniqueBuffers.add(buffer as ArrayBuffer);
+			transferables.push(buffer as ArrayBuffer);
+		}
 		const handle: BashWorkerHandle = {
-			identity: operation.config.identity,
+			identity: config.identity,
 			ready: false,
 			retired: false,
-			sessionId: ++this.sessionUid,
+			sessionId,
 			worker
 		};
 		operation.handle = handle;
+		operation.delivery = {
+			identity: config.identity,
+			payload,
+			sessionId,
+			state: 'available',
+			transferables
+		};
+		payload = null;
 		worker.onmessage = (event: MessageEvent<unknown>) => {
 			this.handleWorkerMessage(handle, event.data);
 		};
@@ -656,18 +772,45 @@ class Bash implements Sandbox {
 
 	private dispatchLoad(operation: BashOperation, handle: BashWorkerHandle, log: boolean) {
 		if (!this.isActive(operation) || operation.handle !== handle) return;
+		const config = this.requireConfig(operation);
+		const delivery = operation.delivery;
+		if (
+			!delivery ||
+			delivery.state !== 'available' ||
+			delivery.identity !== config.identity ||
+			delivery.sessionId !== handle.sessionId ||
+			!delivery.payload ||
+			delivery.transferables.length !== 4
+		) {
+			this.failOperation(
+				operation,
+				new ProtocolError('Bash preflight delivery is unavailable or stale', {
+					runtimeId: 'BASH'
+				}),
+				true
+			);
+			return;
+		}
 		operation.stage = 'startup';
 		operation.requestId = ++this.requestUid;
+		const runtimePreflight = delivery.payload;
+		const transferables = delivery.transferables.splice(0);
+		delivery.payload = null;
+		delivery.state = 'consumed';
 		const message: BashHostToWorkerMessage = {
 			type: 'load',
 			protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
 			sessionId: handle.sessionId,
 			requestId: operation.requestId,
-			assets: operation.config.assets,
-			limits: operation.config.limits,
+			runtimePreflight,
+			limits: config.limits,
 			log
 		};
-		this.postMessage(operation, handle, message);
+		try {
+			this.postMessage(operation, handle, message, transferables);
+		} finally {
+			this.retireDelivery(operation);
+		}
 	}
 
 	private dispatchRun(operation: BashOperation, handle: BashWorkerHandle) {
@@ -790,11 +933,12 @@ class Bash implements Sandbox {
 					return;
 				}
 				if (!this.isActive(operation)) return;
+				const config = this.requireConfig(operation);
 				const previousWorker = this.readyWorker;
 				handle.ready = true;
 				this.readyWorker = handle;
-				this.loadedConfig = operation.config;
-				this.webcUrl = operation.config.assets.webcUrl;
+				this.loadedConfig = config;
+				this.webcUrl = config.webcUrl;
 				this.finishOperation(operation);
 				if (previousWorker && previousWorker !== handle) this.retireWorker(previousWorker);
 				return;

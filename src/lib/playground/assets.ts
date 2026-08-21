@@ -21,6 +21,7 @@ import {
 	WASM_BQN_RUNTIME_PROFILE,
 	WASM_BQN_RUNNER_RECEIPT
 } from '$lib/playground/wasmBqnVersion';
+import { WASM_BASH_RUNTIME_BUNDLE } from '$lib/playground/wasmBashVersion';
 import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
 	WASM_CLOJURESCRIPT_RUNNER_RECEIPT,
@@ -49,6 +50,7 @@ import {
 	TEAVM_RUNTIME_ASSET_RECEIPTS,
 	RuntimeConfigurationError,
 	deriveRubyRuntimeWasmUrl,
+	snapshotBashRuntimePreflightProfile,
 	snapshotJanetRuntimePreflightProfile,
 	snapshotJuliaRuntimePreflightProfile,
 	snapshotNimRuntimePreflightProfile,
@@ -452,9 +454,21 @@ export interface NimRuntimeAssetConfig {
 }
 
 export interface BashRuntimeAssetConfig {
+	baseUrl?: string;
+	manifestUrl?: string;
 	moduleUrl?: string;
+	wasmerWasmUrl?: string;
 	webcUrl?: string;
 	workerUrl?: string;
+	manifestFingerprint?: string;
+	profileId?: string;
+	bashPackageVersion?: string;
+	bashSourceRevision?: string;
+	wasmerSdkVersion?: string;
+	wasmerSdkPackageIntegrity?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	sdkJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
+	wasmerWasmReceipt?: RuntimeAssetIntegrityEntry;
 	webcReceipt?: RuntimeAssetIntegrityEntry;
 }
 
@@ -3490,6 +3504,95 @@ export function resolveNimManifestUrl(
 		(publicEnv.PUBLIC_WASM_NIM_MANIFEST_URL || '').trim();
 	if (configuredManifestUrl) return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
 	return `${resolveNimBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
+}
+
+export function resolveBashBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl = typeof options === 'object' ? options?.bash?.baseUrl : undefined;
+	if (configuredBaseUrl) return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-bash/`, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-bash/`,
+			currentUrl
+		);
+	}
+	return normalizeBaseUrl('/wasm-bash/', currentUrl);
+}
+
+export function resolveBashRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configured = typeof options === 'object' ? options?.bash : undefined;
+	if (configured?.workerUrl !== undefined) {
+		throw new RuntimeConfigurationError(
+			'Bash runtime workerUrl overrides are no longer supported; use the fixed verified bootstrap.',
+			{ runtimeId: 'BASH' }
+		);
+	}
+	const usesCustomTrustBoundary = Boolean(
+		configured && Object.values(configured).some((value) => value !== undefined)
+	);
+	let preflightProfile;
+	try {
+		preflightProfile = snapshotBashRuntimePreflightProfile(
+			usesCustomTrustBoundary
+				? {
+						profileId: configured?.profileId?.trim(),
+						bashPackageVersion: configured?.bashPackageVersion?.trim(),
+						bashSourceRevision: configured?.bashSourceRevision?.trim(),
+						wasmerSdkVersion: configured?.wasmerSdkVersion?.trim(),
+						wasmerSdkPackageIntegrity: configured?.wasmerSdkPackageIntegrity?.trim(),
+						manifestFingerprint: configured?.manifestFingerprint?.trim(),
+						manifestReceipt: configured?.manifestReceipt,
+						sdkJavaScriptReceipt: configured?.sdkJavaScriptReceipt,
+						wasmerWasmReceipt: configured?.wasmerWasmReceipt,
+						webcReceipt: configured?.webcReceipt
+					}
+				: WASM_BASH_RUNTIME_BUNDLE.profile
+		);
+	} catch (cause) {
+		throw new RuntimeConfigurationError(
+			'Bash runtime custom assets require one complete profile and receipt bundle.',
+			{ cause, runtimeId: 'BASH' }
+		);
+	}
+	const baseUrl = resolveBashBaseUrl(options, currentUrl);
+	const manifestUrl = configured?.manifestUrl
+		? resolveConfiguredUrl(configured.manifestUrl, currentUrl)
+		: `${baseUrl}runtime-manifest.v2.json?v=${preflightProfile.manifestFingerprint}`;
+	const moduleUrl = configured?.moduleUrl
+		? resolveConfiguredUrl(configured.moduleUrl, currentUrl)
+		: `${baseUrl}sdk/index.mjs.bin?v=${preflightProfile.sdkJavaScriptReceipt.sha256}`;
+	const wasmerWasmUrl = configured?.wasmerWasmUrl
+		? resolveConfiguredUrl(configured.wasmerWasmUrl, currentUrl)
+		: `${baseUrl}sdk/wasmer_js_bg.wasm.gz.bin?v=${preflightProfile.wasmerWasmReceipt.sha256}`;
+	const webcUrl = configured?.webcUrl
+		? resolveConfiguredUrl(configured.webcUrl, currentUrl)
+		: `${baseUrl}bash.webc.gz.bin?v=${preflightProfile.webcReceipt.sha256}`;
+	const identity = {
+		baseUrl,
+		manifestUrl,
+		moduleUrl,
+		wasmerWasmUrl,
+		webcUrl,
+		profile: preflightProfile
+	};
+	return {
+		baseUrl,
+		manifestUrl,
+		moduleUrl,
+		wasmerWasmUrl,
+		webcUrl,
+		manifestFingerprint: preflightProfile.manifestFingerprint,
+		preflightKey: JSON.stringify(identity),
+		preflightProfile
+	};
 }
 
 export function resolveSwiftBaseUrl(

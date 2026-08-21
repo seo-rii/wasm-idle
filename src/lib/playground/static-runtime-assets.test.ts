@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { access, readFile, stat } from 'node:fs/promises';
+import { gunzipSync } from 'node:zlib';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -20,7 +21,7 @@ type RuntimeManifest = {
 	formatVersion: number;
 	runtimeModule: string;
 	packages: Record<string, string>;
-	files: Array<{ path: string; bytes: number }>;
+	files: Array<{ path: string; bytes: number; sha256: string }>;
 };
 
 const repoRoot = process.cwd();
@@ -139,6 +140,17 @@ describe('static language runtime assets', () => {
 		expect(pageBuilder).not.toContain('scripts/runtime-modules/ruby.ts');
 	});
 
+	it('delegates the Bash SDK tree to the provenance-bound Bash producer', async () => {
+		const pageBuilder = await readFile(
+			path.join(repoRoot, 'scripts/build-static-runtime-modules.mjs'),
+			'utf8'
+		);
+
+		expect(pageBuilder).toContain("import { syncWasmBashAssets } from './sync-wasm-bash.mjs';");
+		expect(pageBuilder).not.toContain('async function syncWasmerSdk()');
+		expect(pageBuilder).toContain('await syncWasmBashAssets()');
+	});
+
 	it('keeps the shared static module cache key synchronized with every manifest', async () => {
 		const hash = createHash('sha256');
 		for (const runtimeDirectory of [
@@ -179,6 +191,24 @@ describe('static language runtime assets', () => {
 			expect(
 				(await stat(path.join(staticRoot, runtime.directory, manifest.runtimeModule))).size
 			).toBeGreaterThan(0);
+		}
+	});
+
+	it('keeps every legacy Wasmer SDK receipt byte-exact to the unified producer output', async () => {
+		const manifest = await readJson<RuntimeManifest>(
+			'static/wasm-bash/sdk/runtime-manifest.v1.json'
+		);
+		for (const receipt of manifest.files) {
+			const storedPath = path.join(staticRoot, 'wasm-bash/sdk', receipt.path);
+			const storedBytes = await readFile(
+				receipt.path === 'wasmer_js_bg.wasm' ? `${storedPath}.gz` : storedPath
+			);
+			const logicalBytes =
+				receipt.path === 'wasmer_js_bg.wasm' ? gunzipSync(storedBytes) : storedBytes;
+			expect({
+				bytes: logicalBytes.byteLength,
+				sha256: createHash('sha256').update(logicalBytes).digest('hex')
+			}).toEqual({ bytes: receipt.bytes, sha256: receipt.sha256 });
 		}
 	});
 

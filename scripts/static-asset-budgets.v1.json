@@ -13,7 +13,7 @@
 		"teavm": { "maxBytes": 5000000, "maxFiles": 6 },
 		"wasm-assemblyscript": { "maxBytes": 3500000, "maxFiles": 10 },
 		"wasm-awk": { "maxBytes": 1600000, "maxFiles": 8 },
-		"wasm-bash": { "maxBytes": 3300000, "maxFiles": 12 },
+		"wasm-bash": { "maxBytes": 6500000, "maxFiles": 16 },
 		"wasm-bqn": { "maxBytes": 1100000, "maxFiles": 8 },
 		"wasm-clojurescript": { "maxBytes": 1500000, "maxFiles": 8 },
 		"wasm-cobol": { "maxBytes": 2700000, "maxFiles": 8 },

@@ -11,6 +11,7 @@ import {
 } from '../../../scripts/browser-preview-server.mjs';
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
 import { runStdinBrowserProbe } from '../../../scripts/stdin-browser-probe-lib.mjs';
+import { WASM_BASH_RUNTIME_PROFILE } from './wasmBashVersion';
 
 const workerRetireTimeoutMs = 5_000;
 const bashStdinSource = `IFS= read -r value
@@ -32,7 +33,7 @@ async function readDedicatedWorkerTargets(cdp: CDPSession): Promise<WorkerTarget
 }
 
 function isNestedBashWorker(target: WorkerTarget) {
-	return /\/wasm-bash\/sdk\/worker\.mjs(?:[?#]|$)/u.test(target.url);
+	return target.url.startsWith('blob:');
 }
 
 function isBundledBashWorker(target: WorkerTarget) {
@@ -41,6 +42,79 @@ function isBundledBashWorker(target: WorkerTarget) {
 		/\/src\/lib\/playground\/worker\/bash\.ts(?:[?#]|$)/u.test(target.url) ||
 		/\/@fs\/[^?#]*\/src\/lib\/playground\/worker\/bash\.ts(?:[?#]|$)/u.test(target.url)
 	);
+}
+
+function createBashOuterWorkerOrderingTracker(readFinishedCanonicalRequestCount: () => number) {
+	const finishedCountAtWorkerCreation = new Map<string, number>();
+	let finishedCountBeforeFirstOuter: number | undefined;
+	const recordRecognizedOuter = (target: WorkerTarget, capture: boolean) => {
+		if (
+			!capture ||
+			target.type !== 'worker' ||
+			!isBundledBashWorker(target) ||
+			finishedCountBeforeFirstOuter !== undefined
+		) {
+			return;
+		}
+		finishedCountBeforeFirstOuter =
+			finishedCountAtWorkerCreation.get(target.targetId) ??
+			readFinishedCanonicalRequestCount();
+	};
+
+	return {
+		targetCreated(target: WorkerTarget, capture: boolean) {
+			if (capture && target.type === 'worker') {
+				finishedCountAtWorkerCreation.set(
+					target.targetId,
+					readFinishedCanonicalRequestCount()
+				);
+			}
+			recordRecognizedOuter(target, capture);
+		},
+		targetInfoChanged(target: WorkerTarget, capture: boolean) {
+			recordRecognizedOuter(target, capture);
+		},
+		targetDestroyed(targetId: string) {
+			finishedCountAtWorkerCreation.delete(targetId);
+		},
+		finishedCountBeforeFirstOuter() {
+			return finishedCountBeforeFirstOuter;
+		}
+	};
+}
+
+const bashCanonicalRequests = [
+	{
+		path: '/wasm-bash/runtime-manifest.v2.json',
+		version: WASM_BASH_RUNTIME_PROFILE.manifestFingerprint
+	},
+	{
+		path: '/wasm-bash/sdk/index.mjs.bin',
+		version: WASM_BASH_RUNTIME_PROFILE.sdkJavaScriptReceipt.sha256
+	},
+	{
+		path: '/wasm-bash/sdk/wasmer_js_bg.wasm.gz.bin',
+		version: WASM_BASH_RUNTIME_PROFILE.wasmerWasmReceipt.sha256
+	},
+	{
+		path: '/wasm-bash/bash.webc.gz.bin',
+		version: WASM_BASH_RUNTIME_PROFILE.webcReceipt.sha256
+	}
+] as const;
+
+function matchCanonicalBashRequest(url: string) {
+	const parsed = new URL(url);
+	return bashCanonicalRequests.find(({ path }) => parsed.pathname.endsWith(path));
+}
+
+function expectCanonicalBashRequestBatch(urls: readonly string[]) {
+	expect(urls).toHaveLength(bashCanonicalRequests.length);
+	for (const expected of bashCanonicalRequests) {
+		const matches = urls.filter((url) => new URL(url).pathname.endsWith(expected.path));
+		expect(matches).toHaveLength(1);
+		const parsed = new URL(matches[0]!);
+		expect([...parsed.searchParams.entries()]).toEqual([['v', expected.version]]);
+	}
 }
 
 async function waitForBashWorkerGeneration(
@@ -164,7 +238,65 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 	const page = await context.newPage();
 	page.setDefaultTimeout(runTimeoutMs);
 	const pageErrors: string[] = [];
+	const browserOrigin = new URL(browserUrl).origin;
+	const runtimeRequests: string[] = [];
+	const runtimeAssetRequests: string[] = [];
+	const finishedRuntimeAssetRequests: string[] = [];
+	const runtimeResponseContentTypes = new Map<string, string>();
+	const runtimeWebSockets: string[] = [];
+	let captureRuntimeNetwork = false;
+	const outerWorkerOrdering = createBashOuterWorkerOrderingTracker(
+		() => finishedRuntimeAssetRequests.length
+	);
 	page.on('pageerror', (error) => pageErrors.push(error.stack || error.message));
+	page.on('request', (request) => {
+		if (!captureRuntimeNetwork) return;
+		const url = request.url();
+		runtimeRequests.push(url);
+		if (new URL(url).pathname.includes('/wasm-bash/')) runtimeAssetRequests.push(url);
+	});
+	page.on('requestfinished', (request) => {
+		if (!captureRuntimeNetwork) return;
+		const url = request.url();
+		if (matchCanonicalBashRequest(url)) finishedRuntimeAssetRequests.push(url);
+	});
+	page.on('response', (response) => {
+		if (!captureRuntimeNetwork) return;
+		const url = response.url();
+		if (!matchCanonicalBashRequest(url)) return;
+		runtimeResponseContentTypes.set(
+			url,
+			response.headers()['content-type']?.split(';', 1)[0]?.trim().toLowerCase() || ''
+		);
+	});
+	page.on('websocket', (socket) => {
+		if (captureRuntimeNetwork) runtimeWebSockets.push(socket.url());
+	});
+	cdp.on('Target.targetCreated', ({ targetInfo }) => {
+		outerWorkerOrdering.targetCreated(
+			{
+				targetId: targetInfo.targetId,
+				title: targetInfo.title,
+				type: targetInfo.type,
+				url: targetInfo.url
+			},
+			captureRuntimeNetwork
+		);
+	});
+	cdp.on('Target.targetInfoChanged', ({ targetInfo }) => {
+		outerWorkerOrdering.targetInfoChanged(
+			{
+				targetId: targetInfo.targetId,
+				title: targetInfo.title,
+				type: targetInfo.type,
+				url: targetInfo.url
+			},
+			captureRuntimeNetwork
+		);
+	});
+	cdp.on('Target.targetDestroyed', ({ targetId }) => {
+		outerWorkerOrdering.targetDestroyed(targetId);
+	});
 
 	try {
 		await waitForControlledBashPage(page, browserUrl, runTimeoutMs);
@@ -192,9 +324,11 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 			{ timeout: runTimeoutMs }
 		);
 		await page.locator('button.action-button--run').waitFor({ state: 'visible' });
+		captureRuntimeNetwork = true;
 
 		const retiredTargetIds = new Set<string>();
 		for (let cycle = 1; cycle <= 3; cycle += 1) {
+			const assetRequestStart = runtimeAssetRequests.length;
 			const marker = `bash-cancel-${cycle}-ready`;
 			await setEditorSource(
 				page,
@@ -246,6 +380,12 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 				baselineTargetIds,
 				workerRetireTimeoutMs
 			);
+			expectCanonicalBashRequestBatch(runtimeAssetRequests.slice(assetRequestStart));
+			if (cycle === 1) {
+				expect(outerWorkerOrdering.finishedCountBeforeFirstOuter()).toBe(
+					bashCanonicalRequests.length
+				);
+			}
 			const generationTargetIds = new Set(
 				[...generation.outer, ...generation.nested].map(({ targetId }) => targetId)
 			);
@@ -264,6 +404,7 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 		}
 
 		const retryMarker = 'bash-cancel-retry-ok';
+		const retryAssetRequestStart = runtimeAssetRequests.length;
 		await setEditorSource(page, `printf '${retryMarker}\\n'\n`, runTimeoutMs);
 		const retryInitialTranscript =
 			(await page.locator('[data-testid="terminal-debug-output"]').textContent()) || '';
@@ -281,6 +422,57 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 			{ initial: retryInitialTranscript, expectedMarker: retryMarker },
 			{ polling: 50, timeout: runTimeoutMs }
 		);
+		expectCanonicalBashRequestBatch(runtimeAssetRequests.slice(retryAssetRequestStart));
+
+		const warmAssetRequestCount = runtimeAssetRequests.length;
+		const warmMarker = 'bash-warm-generation-ok';
+		await setEditorSource(page, `printf '${warmMarker}\\n'\n`, runTimeoutMs);
+		const warmInitialTranscript =
+			(await page.locator('[data-testid="terminal-debug-output"]').textContent()) || '';
+		await page.locator('button.action-button--run').click();
+		await page.waitForFunction(
+			({ initial, expectedMarker }) => {
+				const transcript =
+					document.querySelector('[data-testid="terminal-debug-output"]')?.textContent ||
+					'';
+				const delta = transcript.startsWith(initial)
+					? transcript.slice(initial.length)
+					: transcript;
+				return delta.includes(expectedMarker) && delta.includes('Process finished after');
+			},
+			{ initial: warmInitialTranscript, expectedMarker: warmMarker },
+			{ polling: 50, timeout: runTimeoutMs }
+		);
+		expect(runtimeAssetRequests).toHaveLength(warmAssetRequestCount);
+
+		const sdkJavaScriptResponse = [...runtimeResponseContentTypes.entries()].find(([url]) =>
+			new URL(url).pathname.endsWith('/wasm-bash/sdk/index.mjs.bin')
+		);
+		expect(sdkJavaScriptResponse?.[1]).toBe('application/octet-stream');
+		expect(runtimeWebSockets).toEqual([]);
+		const forbiddenRuntimeRequests = runtimeRequests.filter((url) => {
+			const parsed = new URL(url);
+			return (
+				parsed.pathname.includes('/__wasm_idle/bash-sdk/') ||
+				parsed.pathname.endsWith('/wasm-bash/sdk/index.mjs') ||
+				parsed.pathname.endsWith('/wasm-bash/sdk/worker.mjs') ||
+				parsed.pathname.endsWith('/wasm-bash/sdk/wasmer_js_bg.wasm') ||
+				parsed.pathname.endsWith('/wasm-bash/sdk/wasmer_js_bg.wasm.gz') ||
+				parsed.pathname.endsWith('/wasm-bash/bash.webc') ||
+				parsed.pathname.endsWith('/wasm-bash/bash.webc.gz') ||
+				/\/(?:registry|gateway)(?:[/?#]|$)/u.test(parsed.pathname)
+			);
+		});
+		expect(forbiddenRuntimeRequests).toEqual([]);
+		expect(
+			runtimeRequests.filter((url) => {
+				const parsed = new URL(url);
+				return (
+					(parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+					parsed.origin !== browserOrigin
+				);
+			})
+		).toEqual([]);
 		expect(pageErrors).toEqual([]);
 	} finally {
 		await page.close().catch(() => {});
@@ -289,6 +481,31 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 		await browser.close().catch(() => {});
 	}
 }
+
+describe('Bash outer-worker ordering instrumentation', () => {
+	it('attributes a later target URL update to the original blank worker creation point', () => {
+		let finishedCanonicalRequests = 3;
+		const tracker = createBashOuterWorkerOrderingTracker(() => finishedCanonicalRequests);
+		const blankTarget: WorkerTarget = {
+			targetId: 'outer-1',
+			title: '',
+			type: 'worker',
+			url: ''
+		};
+
+		tracker.targetCreated(blankTarget, true);
+		finishedCanonicalRequests = bashCanonicalRequests.length;
+		tracker.targetInfoChanged(
+			{
+				...blankTarget,
+				url: 'http://localhost:5173/src/lib/playground/worker/bash.ts'
+			},
+			true
+		);
+
+		expect(tracker.finishedCountBeforeFirstOuter()).toBe(3);
+	});
+});
 
 describe('wasm-idle Bash browser playwright integration', () => {
 	it('runs stdin and repeatedly cancels and retries the real GNU Bash WASIX runtime', async () => {

@@ -1,7 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BASH_WORKER_PROTOCOL_VERSION } from './bashWorkerProtocol';
-import { WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
+import {
+	BASH_PREFLIGHT_PROTOCOL,
+	BASH_PREFLIGHT_PROTOCOL_VERSION,
+	AssetTooLargeError,
+	type BashRuntimePreflightPayload
+} from '@wasm-idle/core';
+import { WASM_BASH_RUNTIME_PROFILE } from './wasmBashVersion';
+
+const { preflightBashRuntimeAssets } = vi.hoisted(() => ({
+	preflightBashRuntimeAssets: vi.fn()
+}));
+
+vi.mock('@wasm-idle/core', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@wasm-idle/core')>()),
+	preflightBashRuntimeAssets
+}));
+vi.mock('$env/dynamic/public', () => ({ env: {} }));
 
 const workerInstances: MockWorker[] = [];
 let throwOnMessageType = '';
@@ -10,10 +26,12 @@ class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
 	onerror: ((event: ErrorEvent) => void) | null = null;
 	onmessageerror: ((event: MessageEvent<any>) => void) | null = null;
-	postMessage = vi.fn((message: any) => {
+	readonly messages: any[] = [];
+	postMessage = vi.fn((message: any, transfer: Transferable[] = []) => {
 		if (message.type === throwOnMessageType) {
 			throw new Error(`cannot post ${message.type}`);
 		}
+		this.messages.push(structuredClone(message, { transfer }));
 	});
 	terminate = vi.fn();
 
@@ -40,9 +58,24 @@ vi.mock('$lib/playground/worker/bash?worker', () => ({ default: MockWorker }));
 import Bash from './bash';
 
 function posted(worker: MockWorker, type: string) {
-	return worker.postMessage.mock.calls
-		.map(([message]) => message)
-		.find((message) => message.type === type);
+	return worker.messages.find((message) => message.type === type);
+}
+
+function createRuntimePreflight(): BashRuntimePreflightPayload {
+	return Object.freeze({
+		protocol: BASH_PREFLIGHT_PROTOCOL,
+		protocolVersion: BASH_PREFLIGHT_PROTOCOL_VERSION,
+		profileId: WASM_BASH_RUNTIME_PROFILE.profileId,
+		bashPackageVersion: WASM_BASH_RUNTIME_PROFILE.bashPackageVersion,
+		bashSourceRevision: WASM_BASH_RUNTIME_PROFILE.bashSourceRevision,
+		wasmerSdkVersion: WASM_BASH_RUNTIME_PROFILE.wasmerSdkVersion,
+		wasmerSdkPackageIntegrity: WASM_BASH_RUNTIME_PROFILE.wasmerSdkPackageIntegrity,
+		manifestFingerprint: WASM_BASH_RUNTIME_PROFILE.manifestFingerprint,
+		manifestBytes: new Uint8Array([1]),
+		sdkJavaScriptBytes: new Uint8Array([2]),
+		wasmerWasmBytes: new Uint8Array([3]),
+		webcBytes: new Uint8Array([4])
+	});
 }
 
 async function waitForPosted(worker: MockWorker, type: string) {
@@ -71,11 +104,58 @@ describe('Bash disposable worker host', () => {
 		workerInstances.length = 0;
 		throwOnMessageType = '';
 		vi.restoreAllMocks();
+		preflightBashRuntimeAssets.mockReset();
+		preflightBashRuntimeAssets.mockImplementation(async () => createRuntimePreflight());
 		vi.useRealTimers();
 		history.replaceState({}, '', '/wasm-idle/editor');
 	});
 
-	it('loads the pinned SDK and WEBc package entirely through the outer worker', async () => {
+	it('preflights four pinned runtime assets before importing the outer worker', async () => {
+		let resolvePreflight!: (payload: BashRuntimePreflightPayload) => void;
+		preflightBashRuntimeAssets.mockReturnValueOnce(
+			new Promise((resolve) => {
+				resolvePreflight = resolve;
+			})
+		);
+		const payload = createRuntimePreflight();
+		const sandbox = new Bash();
+		const loading = sandbox.load('/runtime');
+
+		await Promise.resolve();
+		expect(workerInstances).toHaveLength(0);
+		resolvePreflight(payload);
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const request = await waitForPosted(worker, 'load');
+		const transfer = worker.postMessage.mock.calls[0]?.[1] as Transferable[];
+
+		expect(preflightBashRuntimeAssets).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseUrl: 'http://localhost:3000/runtime/wasm-bash/',
+				manifestUrl: expect.stringMatching(/runtime-manifest\.v2\.json\?v=/u),
+				sdkJavaScriptUrl: expect.stringMatching(/sdk\/index\.mjs\.bin\?v=/u),
+				wasmerWasmUrl: expect.stringMatching(/wasmer_js_bg\.wasm\.gz\.bin\?v=/u),
+				webcUrl: expect.stringMatching(/bash\.webc\.gz\.bin\?v=/u)
+			})
+		);
+		expect(request.runtimePreflight).toMatchObject({
+			protocol: BASH_PREFLIGHT_PROTOCOL,
+			manifestFingerprint: WASM_BASH_RUNTIME_PROFILE.manifestFingerprint
+		});
+		expect(transfer).toHaveLength(4);
+		expect(new Set(transfer).size).toBe(4);
+		expect([
+			payload.manifestBytes.byteLength,
+			payload.sdkJavaScriptBytes.byteLength,
+			payload.wasmerWasmBytes.byteLength,
+			payload.webcBytes.byteLength
+		]).toEqual([0, 0, 0, 0]);
+
+		worker.emitFor(request, { type: 'loaded' });
+		await loading;
+	});
+
+	it('keeps a verified generation warm without refetching or retransferring payload bytes', async () => {
 		const sandbox = new Bash();
 		const progress = { set: vi.fn() };
 		const loading = sandbox.load('/runtime', '', true, [], {}, progress);
@@ -86,13 +166,9 @@ describe('Bash disposable worker host', () => {
 		expect(request).toMatchObject({
 			type: 'load',
 			protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
-			assets: {
-				sdkModuleUrl: expect.stringMatching(/\/runtime\/wasm-bash\/sdk\/index\.mjs$/),
-				sdkThreadWorkerUrl: expect.stringMatching(
-					/\/runtime\/wasm-bash\/sdk\/worker\.mjs$/
-				),
-				webcUrl: expect.stringMatching(/\/runtime\/wasm-bash\/bash\.webc$/),
-				webcReceipt: WASM_BASH_WEBC_RECEIPT
+			runtimePreflight: {
+				protocol: BASH_PREFLIGHT_PROTOCOL,
+				manifestFingerprint: WASM_BASH_RUNTIME_PROFILE.manifestFingerprint
 			}
 		});
 
@@ -103,7 +179,54 @@ describe('Bash disposable worker host', () => {
 		expect(progress.set).toHaveBeenCalledWith(0.5, 'Loading WEBc');
 		expect(progress.set).toHaveBeenLastCalledWith(1, 'Bash runtime ready');
 		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.load('/runtime')).resolves.toBeUndefined();
+		expect(preflightBashRuntimeAssets).toHaveBeenCalledOnce();
+		expect(worker.postMessage).toHaveBeenCalledOnce();
 	});
+
+	it('does not warm-reuse a generation when its effective startup resource limits change', async () => {
+		const sandbox = new Bash();
+		const readyWorker = await loadSandbox(sandbox, '/runtime');
+		preflightBashRuntimeAssets.mockRejectedValueOnce(
+			new AssetTooLargeError('Bash SDK receipt exceeds the stricter limit', {
+				actual: 2,
+				limit: 1,
+				runtimeId: 'BASH'
+			})
+		);
+
+		await expect(
+			sandbox.load('/runtime', '', true, [], { limits: { maxAssetBytes: 1 } })
+		).rejects.toMatchObject({ code: 'asset-too-large', limit: 1 });
+
+		expect(preflightBashRuntimeAssets).toHaveBeenCalledTimes(2);
+		expect(workerInstances).toHaveLength(1);
+		expect(readyWorker.terminate).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		['maxWasmMemoryBytes', 256 * 1024 * 1024],
+		['maxWorkers', 2],
+		['maxThreads', 2]
+	] as const)(
+		'rebinds the warm generation when effective %s changes',
+		async (limitName, value) => {
+			const sandbox = new Bash();
+			const readyWorker = await loadSandbox(sandbox, '/runtime');
+			const loading = sandbox.load('/runtime', '', true, [], {
+				limits: { [limitName]: value }
+			});
+
+			await vi.waitFor(() => expect(workerInstances).toHaveLength(2));
+			const replacementWorker = workerInstances[1];
+			await finishLoad(replacementWorker);
+			await loading;
+
+			expect(preflightBashRuntimeAssets).toHaveBeenCalledTimes(2);
+			expect(readyWorker.terminate).toHaveBeenCalledOnce();
+			expect(replacementWorker.terminate).not.toHaveBeenCalled();
+		}
+	);
 
 	it('decodes interleaved stdout and stderr independently and keeps a successful worker warm', async () => {
 		const sandbox = new Bash();
@@ -160,6 +283,41 @@ describe('Bash disposable worker host', () => {
 
 		await expect(retry).resolves.toBe(true);
 		expect(retryWorker.terminate).not.toHaveBeenCalled();
+	});
+
+	it('applies stricter run startup limits when lazily rehydrating a retired generation', async () => {
+		const sandbox = new Bash();
+		const firstWorker = await loadSandbox(sandbox);
+		sandbox.terminate();
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+
+		preflightBashRuntimeAssets.mockRejectedValueOnce(
+			new AssetTooLargeError('Bash SDK receipt exceeds the stricter run limit', {
+				actual: 2,
+				limit: 1,
+				runtimeId: 'BASH'
+			})
+		);
+
+		await expect(
+			sandbox.run('printf blocked', false, true, undefined, [], {
+				limits: {
+					assetTimeoutMs: 2,
+					maxAssetBytes: 1,
+					startupTimeoutMs: 3
+				}
+			})
+		).rejects.toMatchObject({ code: 'asset-too-large', limit: 1 });
+
+		expect(preflightBashRuntimeAssets).toHaveBeenCalledTimes(2);
+		expect(preflightBashRuntimeAssets.mock.calls[1]?.[0]).toMatchObject({
+			limits: {
+				assetTimeoutMs: 2,
+				maxAssetBytes: 1,
+				startupTimeoutMs: 3
+			}
+		});
+		expect(workerInstances).toHaveLength(1);
 	});
 
 	it('ignores retained messages from a terminated generation', async () => {
@@ -395,6 +553,7 @@ describe('Bash disposable worker host', () => {
 		await explicitRun;
 
 		worker.postMessage.mockClear();
+		worker.messages.length = 0;
 		const nextRun = sandbox.run('printf clean', false);
 		const nextRequest = await waitForPosted(worker, 'run');
 		worker.emitFor(nextRequest, { type: 'stdin-ready' });
@@ -473,6 +632,16 @@ describe('Bash disposable worker host', () => {
 			name: 'ProtocolError',
 			code: 'protocol'
 		});
+		const failedPayload = await preflightBashRuntimeAssets.mock.results.at(-1)?.value;
+		throwOnMessageType = '';
+		const retry = dispatchSandbox.load('/dispatch');
+		await vi.waitFor(() => expect(workerInstances.length).toBeGreaterThan(3));
+		const retryWorker = workerInstances.at(-1)!;
+		const retryRequest = await finishLoad(retryWorker);
+		await retry;
+		const retryPayload = retryRequest.runtimePreflight as BashRuntimePreflightPayload;
+		expect(retryPayload).not.toBe(failedPayload);
+		expect(retryPayload.manifestBytes.byteLength).toBe(1);
 	});
 
 	it('preserves typed worker errors and their resource metadata', async () => {

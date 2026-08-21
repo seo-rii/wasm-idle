@@ -1,0 +1,133 @@
+{
+  "format": "wasm-bash-runtime-manifest-v2",
+  "runtime": "wasmer-bash-wasix",
+  "profileId": "bash-1.0.25-wasmer-sdk-0.9.0-fc809648",
+  "licenseExpression": "GPL-3.0-or-later AND MIT",
+  "artifact": {
+    "kind": "wasmer-package-webc",
+    "package": "wasmer/bash",
+    "packageVersion": "1.0.25",
+    "repository": "https://github.com/wasix-org/bash",
+    "revision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
+    "sourceArchiveUrl": "https://github.com/wasix-org/bash/archive/fc8096485478055f4fcf31402004fdd8ff6b72b7.tar.gz",
+    "sourceArchiveSha256": "8dc67f0d1dd04fed7f0e2a976b24ca4e915c2ea8216e1742705546780f03db41",
+    "verifiedBuildInput": true
+  },
+  "components": {
+    "bash": {
+      "version": "1.0.25",
+      "repository": "https://github.com/wasix-org/bash",
+      "revision": "fc8096485478055f4fcf31402004fdd8ff6b72b7",
+      "verifiedBuildInput": true,
+      "evidence": "runtime-build.json and locked source receipts"
+    },
+    "wasmerSdk": {
+      "version": "0.9.0",
+      "package": "@wasmer/sdk",
+      "packageIntegrity": "sha512-k/CY19NfeLCjA9ZpX69JAoZKiuMT3hKjDFJYWdRGkCdfig9NtC9Op7Gpg2LeezuuQKd4WaSSq8bpSMdHw1BMgg==",
+      "repository": "https://github.com/wasmerio/wasmer-js",
+      "verifiedBuildInput": true,
+      "evidence": "pnpm package integrity and locked npm source receipts"
+    }
+  },
+  "build": {
+    "target": "shell",
+    "abi": "wasix_32v1",
+    "toolchain": {
+      "name": "WASI SDK 20.0 (LLVM 16.0.0)",
+      "archiveUrl": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-20/wasi-sdk-20.0-linux.tar.gz",
+      "archiveSha256": "7030139d495a19fbeccb9449150c2b1531e15d8fb74419872a719a7580aad0f9"
+    },
+    "sysroot": {
+      "release": "v2024-07-08.1",
+      "archiveUrl": "https://github.com/wasix-org/wasix-libc/releases/download/v2024-07-08.1/sysroot.tar.gz",
+      "archiveSha256": "ab48114f09d6092eeab6752e50feaa34da8fe33112e02aadc81ea7e664ec7bd9"
+    },
+    "binaryen": {
+      "version": "108",
+      "archiveUrl": "https://github.com/WebAssembly/binaryen/releases/download/version_108/binaryen-version_108-x86_64-linux.tar.gz",
+      "archiveSha256": "7bb8a2d97214f40bf34abc31d49b34aa5deab10b25d6d13c5f72cb395cf142fb"
+    },
+    "packager": {
+      "name": "wasmer",
+      "version": "7.2.0",
+      "archiveUrl": "https://github.com/wasmerio/wasmer/releases/download/v7.2.0/wasmer-linux-amd64.tar.gz",
+      "archiveSha256": "fce71a4b0d504b9925e2461d1368b24cce60001111edb3fa871df8187a8a40f2"
+    },
+    "postprocessArgs": [
+      "--strip-debug"
+    ],
+    "wasmFeatures": [
+      "threads",
+      "mutable-globals",
+      "bulk-memory",
+      "sign-ext"
+    ]
+  },
+  "license": {
+    "bash": {
+      "path": "LICENSE.txt",
+      "sourceUrl": "https://github.com/wasix-org/bash/blob/fc8096485478055f4fcf31402004fdd8ff6b72b7/COPYING",
+      "spdx": "GPL-3.0-or-later",
+      "size": 35147,
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    "wasmerSdk": {
+      "path": "sdk/LICENSE.txt",
+      "sourceUrl": "https://registry.npmjs.org/@wasmer/sdk/-/sdk-0.9.0.tgz#package/LICENSE",
+      "spdx": "MIT",
+      "size": 1097,
+      "sha256": "76dc7d305458d07478bc62669fe53dbfd3b94b95c5e00fbb45af1f492cbd7284"
+    }
+  },
+  "metadata": {
+    "path": "runtime-build.json",
+    "mediaType": "application/json",
+    "size": 2055,
+    "sha256": "ac1a2f4d1286744d19c8b19fa4cdb23729727daf1701551b03796b2ea832c9ac"
+  },
+  "assets": [
+    {
+      "path": "sdk/index.mjs",
+      "mediaType": "text/javascript",
+      "size": 49233,
+      "sha256": "c7e42dbbdf7d5ddbf2692bae24d732f14f09a879f8db1bc4cf23bef086a86b6a"
+    },
+    {
+      "path": "sdk/wasmer_js_bg.wasm",
+      "mediaType": "application/wasm",
+      "size": 5701868,
+      "sha256": "10b42451b1be2cd25543ee14e1f87adf6019f64aa3e6cb74c296aecd15787509"
+    },
+    {
+      "path": "bash.webc",
+      "mediaType": "application/octet-stream",
+      "size": 1808682,
+      "sha256": "73e34672254faf20f54fa0e7f8ffa8a6117017e8779aaa75c80682c00e6d8468"
+    }
+  ],
+  "storage": [
+    {
+      "path": "sdk/index.mjs.bin",
+      "logicalPath": "sdk/index.mjs",
+      "encoding": "identity",
+      "size": 49233,
+      "sha256": "c7e42dbbdf7d5ddbf2692bae24d732f14f09a879f8db1bc4cf23bef086a86b6a"
+    },
+    {
+      "path": "sdk/wasmer_js_bg.wasm.gz.bin",
+      "logicalPath": "sdk/wasmer_js_bg.wasm",
+      "encoding": "gzip",
+      "size": 2133033,
+      "sha256": "9fcf1430c0ba5233a2434ccf88248ae45a465f8f749c6efb13f9be125e039e4e"
+    },
+    {
+      "path": "bash.webc.gz.bin",
+      "logicalPath": "bash.webc",
+      "encoding": "gzip",
+      "size": 648807,
+      "sha256": "6f5be27b3c2e685e3ee823a6ff7380c5143e9c7e353975e39e4dbf297a3ea577"
+    }
+  ],
+  "fingerprint": "71a9b5962e7ec1517464c03e4f6ef3aff66dd97adb6807448bc15677e85d069b"
+}

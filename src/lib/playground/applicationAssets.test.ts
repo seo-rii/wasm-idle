@@ -12,7 +12,7 @@ import {
 	normalizeApplicationAssetRootUrl
 } from './applicationAssets';
 import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
-import { WASM_BASH_ASSET_VERSION, WASM_BASH_WEBC_RECEIPT } from './wasmBashVersion';
+import { WASM_BASH_RUNTIME_PROFILE } from './wasmBashVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
@@ -249,10 +249,12 @@ describe('application runtime asset root', () => {
 			workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 		});
 		expect(assets.bash).toEqual({
-			moduleUrl: `/foo/bar/wasm-bash/sdk/index.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`,
-			webcUrl: `/foo/bar/wasm-bash/bash.webc?v=${WASM_BASH_ASSET_VERSION}`,
-			workerUrl: `/foo/bar/wasm-bash/sdk/worker.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`,
-			webcReceipt: WASM_BASH_WEBC_RECEIPT
+			baseUrl: '/foo/bar/wasm-bash/',
+			manifestUrl: `/foo/bar/wasm-bash/runtime-manifest.v2.json?v=${WASM_BASH_RUNTIME_PROFILE.manifestFingerprint}`,
+			moduleUrl: `/foo/bar/wasm-bash/sdk/index.mjs.bin?v=${WASM_BASH_RUNTIME_PROFILE.sdkJavaScriptReceipt.sha256}`,
+			wasmerWasmUrl: `/foo/bar/wasm-bash/sdk/wasmer_js_bg.wasm.gz.bin?v=${WASM_BASH_RUNTIME_PROFILE.wasmerWasmReceipt.sha256}`,
+			webcUrl: `/foo/bar/wasm-bash/bash.webc.gz.bin?v=${WASM_BASH_RUNTIME_PROFILE.webcReceipt.sha256}`,
+			...WASM_BASH_RUNTIME_PROFILE
 		});
 		expect(assets.elixir).toEqual({
 			bundleUrl: `/foo/bar/wasm-elixir/bundle.avm?v=${WASM_ELIXIR_ASSET_VERSION}`,
@@ -523,15 +525,17 @@ describe('application runtime asset root', () => {
 					}
 				]
 			]),
-			bashWebcReceipt: JSON.stringify([
-				[
-					'worker',
-					{
-						sha256: WASM_BASH_WEBC_RECEIPT.sha256,
-						bytes: WASM_BASH_WEBC_RECEIPT.bytes
-					}
-				]
-			]),
+			bashBaseUrl: '/foo/bar/wasm-bash/',
+			bashManifestFingerprint: WASM_BASH_RUNTIME_PROFILE.manifestFingerprint,
+			bashProfileId: WASM_BASH_RUNTIME_PROFILE.profileId,
+			bashPackageVersion: WASM_BASH_RUNTIME_PROFILE.bashPackageVersion,
+			bashSourceRevision: WASM_BASH_RUNTIME_PROFILE.bashSourceRevision,
+			bashWasmerSdkVersion: WASM_BASH_RUNTIME_PROFILE.wasmerSdkVersion,
+			bashWasmerSdkPackageIntegrity: WASM_BASH_RUNTIME_PROFILE.wasmerSdkPackageIntegrity,
+			bashManifestReceipt: expect.any(String),
+			bashSdkJavaScriptReceipt: expect.any(String),
+			bashWasmerWasmReceipt: expect.any(String),
+			bashWebcReceipt: expect.any(String),
 			elixirIntegrity: serializedElixirIntegrity,
 			erlangIntegrity: serializedElixirIntegrity,
 			fortranIntegrity: serializedFortranIntegrity,
@@ -581,6 +585,21 @@ describe('application runtime asset root', () => {
 			perlWasmReceipt: expect.any(String),
 			perlDataReceipt: expect.any(String),
 			perlWorkerReceipt: expect.any(String),
+			bashBaseUrl: assets.bash?.baseUrl,
+			bashManifestUrl: assets.bash?.manifestUrl,
+			bashModuleUrl: assets.bash?.moduleUrl,
+			bashWasmerWasmUrl: assets.bash?.wasmerWasmUrl,
+			bashWebcUrl: assets.bash?.webcUrl,
+			bashManifestFingerprint: assets.bash?.manifestFingerprint,
+			bashProfileId: assets.bash?.profileId,
+			bashPackageVersion: assets.bash?.bashPackageVersion,
+			bashSourceRevision: assets.bash?.bashSourceRevision,
+			bashWasmerSdkVersion: assets.bash?.wasmerSdkVersion,
+			bashWasmerSdkPackageIntegrity: assets.bash?.wasmerSdkPackageIntegrity,
+			bashManifestReceipt: expect.any(String),
+			bashSdkJavaScriptReceipt: expect.any(String),
+			bashWasmerWasmReceipt: expect.any(String),
+			bashWebcReceipt: expect.any(String),
 			tclManifestUrl: assets.tcl?.manifestUrl,
 			tclManifestFingerprint: assets.tcl?.manifestFingerprint,
 			tclProfileId: assets.tcl?.profileId,
@@ -708,6 +727,44 @@ describe('application runtime asset root', () => {
 				createRuntimeAssetsKey({
 					...assets,
 					perl: { ...perl, ...replacement }
+				})
+			).not.toBe(originalKey);
+		}
+	});
+
+	it('changes the runtime cache identity for every Bash URL, profile, and receipt field', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const originalKey = createRuntimeAssetsKey(assets);
+		const bash = assets.bash!;
+		const replacements = [
+			{ baseUrl: '/custom/wasm-bash/' },
+			{ manifestUrl: '/custom/wasm-bash/runtime-manifest.v2.json?v=custom' },
+			{ moduleUrl: '/custom/wasm-bash/sdk/index.mjs.bin?v=custom' },
+			{ wasmerWasmUrl: '/custom/wasm-bash/sdk/wasmer_js_bg.wasm.gz.bin?v=custom' },
+			{ webcUrl: '/custom/wasm-bash/bash.webc.gz.bin?v=custom' },
+			{ workerUrl: '/custom/legacy-worker.mjs' },
+			{ profileId: `${bash.profileId}-custom` },
+			{ bashPackageVersion: `${bash.bashPackageVersion}-custom` },
+			{ bashSourceRevision: 'a'.repeat(40) },
+			{ wasmerSdkVersion: `${bash.wasmerSdkVersion}-custom` },
+			{ wasmerSdkPackageIntegrity: 'sha512-custom' },
+			{ manifestFingerprint: 'b'.repeat(64) },
+			{ manifestReceipt: { ...bash.manifestReceipt!, sha256: 'c'.repeat(64) } },
+			{ sdkJavaScriptReceipt: { ...bash.sdkJavaScriptReceipt!, bytes: 123 } },
+			{
+				wasmerWasmReceipt: {
+					...bash.wasmerWasmReceipt!,
+					uncompressedSha256: 'd'.repeat(64)
+				}
+			},
+			{ webcReceipt: { ...bash.webcReceipt!, bytes: 456 } }
+		];
+
+		for (const replacement of replacements) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					bash: { ...bash, ...replacement }
 				})
 			).not.toBe(originalKey);
 		}

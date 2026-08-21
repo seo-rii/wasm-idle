@@ -1,30 +1,44 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const {
-	commandFree,
-	commandRun,
-	fromFile,
-	importRuntimeModule,
-	init,
-	packageFree,
-	verifyRuntimeAssetIntegrity
-} = vi.hoisted(() => ({
-	commandFree: vi.fn(),
-	commandRun: vi.fn(),
-	fromFile: vi.fn(),
-	importRuntimeModule: vi.fn(),
-	init: vi.fn(async () => {}),
-	packageFree: vi.fn(),
-	verifyRuntimeAssetIntegrity: vi.fn()
-}));
+const { commandFree, commandRun, fromFile, init, packageFree, verifyBashRuntimePreflightPayload } =
+	vi.hoisted(() => ({
+		commandFree: vi.fn(),
+		commandRun: vi.fn(),
+		fromFile: vi.fn(),
+		init: vi.fn(async () => {}),
+		packageFree: vi.fn(),
+		verifyBashRuntimePreflightPayload: vi.fn()
+	}));
 
-vi.mock('$lib/playground/runtimeModule', () => ({ importRuntimeModule }));
 vi.mock('@wasm-idle/core', async (importOriginal) => ({
 	...(await importOriginal<typeof import('@wasm-idle/core')>()),
-	verifyRuntimeAssetIntegrity
+	verifyBashRuntimePreflightPayload
 }));
 
+import {
+	BASH_PREFLIGHT_PROTOCOL,
+	BASH_PREFLIGHT_PROTOCOL_VERSION,
+	type BashRuntimePreflightPayload
+} from '@wasm-idle/core';
 import Bash from './worker/bashRuntime';
+import { WASM_BASH_RUNTIME_PROFILE } from './wasmBashVersion';
+
+function createRuntimePreflight(): BashRuntimePreflightPayload {
+	return Object.freeze({
+		protocol: BASH_PREFLIGHT_PROTOCOL,
+		protocolVersion: BASH_PREFLIGHT_PROTOCOL_VERSION,
+		profileId: WASM_BASH_RUNTIME_PROFILE.profileId,
+		bashPackageVersion: WASM_BASH_RUNTIME_PROFILE.bashPackageVersion,
+		bashSourceRevision: WASM_BASH_RUNTIME_PROFILE.bashSourceRevision,
+		wasmerSdkVersion: WASM_BASH_RUNTIME_PROFILE.wasmerSdkVersion,
+		wasmerSdkPackageIntegrity: WASM_BASH_RUNTIME_PROFILE.wasmerSdkPackageIntegrity,
+		manifestFingerprint: WASM_BASH_RUNTIME_PROFILE.manifestFingerprint,
+		manifestBytes: new Uint8Array([1]),
+		sdkJavaScriptBytes: new Uint8Array([2]),
+		wasmerWasmBytes: new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]),
+		webcBytes: new Uint8Array([0, 119, 101, 98, 99, 48, 48, 51])
+	});
+}
 
 const byteStream = (text: string) =>
 	new ReadableStream<Uint8Array>({
@@ -38,16 +52,16 @@ describe('Bash execution output limits', () => {
 	beforeEach(() => {
 		vi.resetAllMocks();
 		init.mockResolvedValue(undefined);
-		verifyRuntimeAssetIntegrity.mockResolvedValue(undefined);
-		importRuntimeModule.mockResolvedValue({ init, Wasmer: { fromFile } });
+		verifyBashRuntimePreflightPayload.mockImplementation(async (value) => value);
 		fromFile.mockResolvedValue({
 			entrypoint: { run: commandRun, free: commandFree },
 			free: packageFree
 		});
-		vi.stubGlobal(
-			'fetch',
-			vi.fn(async () => new Response(new Uint8Array([0, 97, 115, 109])))
+		let objectUrlId = 0;
+		vi.spyOn(URL, 'createObjectURL').mockImplementation(
+			() => `blob:http://localhost:3000/bash-limits-${++objectUrlId}`
 		);
+		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
 	});
 
 	afterEach(() => {
@@ -91,10 +105,15 @@ describe('Bash execution output limits', () => {
 				wait: vi.fn(async () => ({ ok: true, code: 0 })),
 				free: vi.fn()
 			});
-		const sandbox = new Bash();
+		const Runtime = vi.fn(function Runtime() {
+			return { free: vi.fn() };
+		});
+		const sandbox = new Bash({
+			importVerifiedSdkModule: async () => ({ init, Runtime, Wasmer: { fromFile } })
+		});
 		const output = vi.fn();
 		sandbox.output = output;
-		await sandbox.load('/assets');
+		await sandbox.loadVerified(createRuntimePreflight());
 		let replacement: Promise<boolean | string> | undefined;
 		let listenerRemovals = 0;
 		const signal = {

@@ -1,16 +1,12 @@
-import type { ExecutionLimits, RuntimeResourceKind, WorkspaceLimits } from '@wasm-idle/core';
+import {
+	requireBashRuntimePreflightPayload,
+	type BashRuntimePreflightPayload,
+	type ExecutionLimits,
+	type RuntimeResourceKind,
+	type WorkspaceLimits
+} from '@wasm-idle/core';
 
 export const BASH_WORKER_PROTOCOL_VERSION = 1 as const;
-
-export interface BashWorkerAssetConfig {
-	readonly sdkModuleUrl: string;
-	readonly sdkThreadWorkerUrl: string;
-	readonly webcUrl: string;
-	readonly webcReceipt: Readonly<{
-		bytes: number;
-		sha256: string;
-	}>;
-}
 
 export interface BashSerializedError {
 	readonly name: string;
@@ -37,7 +33,7 @@ interface BashWorkerEnvelope {
 
 export interface BashWorkerLoadMessage extends BashWorkerEnvelope {
 	readonly type: 'load';
-	readonly assets: BashWorkerAssetConfig;
+	readonly runtimePreflight: BashRuntimePreflightPayload;
 	readonly limits: ExecutionLimits;
 	readonly log?: boolean;
 }
@@ -170,17 +166,13 @@ function hasResolvedWorkspaceLimits(value: unknown): value is WorkspaceLimits {
 	);
 }
 
-function hasAssetConfig(value: unknown): value is BashWorkerAssetConfig {
-	if (!isRecord(value) || !isRecord(value.webcReceipt)) return false;
-	return (
-		typeof value.sdkModuleUrl === 'string' &&
-		typeof value.sdkThreadWorkerUrl === 'string' &&
-		typeof value.webcUrl === 'string' &&
-		Number.isSafeInteger(value.webcReceipt.bytes) &&
-		(value.webcReceipt.bytes as number) > 0 &&
-		typeof value.webcReceipt.sha256 === 'string' &&
-		/^[a-f0-9]{64}$/u.test(value.webcReceipt.sha256)
-	);
+function hasRuntimePreflight(value: unknown): value is BashRuntimePreflightPayload {
+	try {
+		requireBashRuntimePreflightPayload(value);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 function hasWorkspaceFiles(value: unknown): value is BashWorkerRunMessage['workspaceFiles'] {
@@ -202,7 +194,7 @@ export function isBashHostToWorkerMessage(value: unknown): value is BashHostToWo
 	switch (value.type) {
 		case 'load':
 			return (
-				hasAssetConfig(value.assets) &&
+				hasRuntimePreflight(value.runtimePreflight) &&
 				hasResolvedExecutionLimits(value.limits) &&
 				(value.log === undefined || typeof value.log === 'boolean')
 			);

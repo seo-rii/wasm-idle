@@ -277,6 +277,23 @@ export {
 	type NimRuntimePreflightRequest
 } from './nim-runtime.js';
 export {
+	BASH_PREFLIGHT_PROTOCOL,
+	BASH_PREFLIGHT_PROTOCOL_VERSION,
+	BASH_PREFLIGHT_RUNTIME_ID,
+	BASH_MAX_MANIFEST_BYTES,
+	BASH_MAX_ASSET_BYTES,
+	BASH_MAX_DELIVERY_BYTES,
+	BASH_MAX_LOGICAL_BYTES,
+	cloneBashRuntimePreflightPayload,
+	preflightBashRuntimeAssets,
+	requireBashRuntimePreflightPayload,
+	snapshotBashRuntimePreflightProfile,
+	verifyBashRuntimePreflightPayload,
+	type BashRuntimePreflightPayload,
+	type BashRuntimePreflightProfile,
+	type BashRuntimePreflightRequest
+} from './bash-runtime.js';
+export {
 	TCL_PREFLIGHT_PROTOCOL,
 	TCL_PREFLIGHT_PROTOCOL_VERSION,
 	TCL_PREFLIGHT_RUNTIME_ID,

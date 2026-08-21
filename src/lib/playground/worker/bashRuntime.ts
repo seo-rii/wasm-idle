@@ -1,31 +1,18 @@
-import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import { type CompilerDiagnostic, type SandboxExecutionOptions } from '$lib/playground/options';
-import { importRuntimeModule } from '$lib/playground/runtimeModule';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
-import { WASM_BASH_WEBC_RECEIPT } from '$lib/playground/wasmBashVersion';
-import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch';
+import { createBashNestedBootstrapSource } from '$lib/playground/worker/bashNestedBootstrap';
 import {
-	AssetTooLargeError,
 	BusyError,
 	DEFAULT_WORKSPACE_LIMITS,
 	OutputLimitError,
 	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
-	verifyRuntimeAssetIntegrity,
+	verifyBashRuntimePreflightPayload,
+	type BashRuntimePreflightPayload,
 	type ExecutionLimits,
-	type RuntimeAssetIntegrityEntry,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
-
-type BashRuntimeAssetConfig = PlaygroundRuntimeAssets & {
-	bash?: {
-		moduleUrl?: string;
-		webcUrl?: string;
-		workerUrl?: string;
-		webcReceipt?: RuntimeAssetIntegrityEntry;
-	};
-};
 
 interface WasixInstance {
 	stdin?: WritableStream<Uint8Array>;
@@ -45,13 +32,25 @@ interface WasmerPackage {
 	free(): void;
 }
 
-interface WasmerSdk {
-	init(options: { sdkUrl: string; workerUrl: string }): Promise<unknown>;
-	Wasmer: { fromFile(bytes: Uint8Array): Promise<WasmerPackage> };
+interface WasmerRuntime {
+	free?(): void;
 }
 
-let sdkPromise: Promise<WasmerSdk> | undefined;
-let sdkCacheKey = '';
+interface WasmerSdk {
+	init(options: {
+		module: Uint8Array | WebAssembly.Module;
+		sdkUrl: string;
+		workerUrl: string;
+	}): Promise<unknown>;
+	Runtime: new (options: { registry: null }) => WasmerRuntime;
+	Wasmer: {
+		fromFile(bytes: Uint8Array, runtime: WasmerRuntime): Promise<WasmerPackage>;
+	};
+}
+
+export interface BashWorkerRuntimeDependencies {
+	readonly importVerifiedSdkModule?: (url: string) => Promise<WasmerSdk>;
+}
 
 type BashOperation = {
 	token: symbol;
@@ -101,6 +100,10 @@ class BashWorkerRuntime implements Sandbox {
 	activeLoadReject: ((reason: unknown) => void) | null = null;
 	activeLoadCleanup: (() => void) | null = null;
 	private loadGeneration = 0;
+	private sdkModule: WasmerSdk | null = null;
+	private sdkRuntime: WasmerRuntime | null = null;
+	private sdkBlobUrl = '';
+	private nestedWorkerBlobUrl = '';
 	activeReject: ((reason: unknown) => void) | null = null;
 	activeRunCleanup: (() => void) | null = null;
 	begin = 0;
@@ -108,6 +111,13 @@ class BashWorkerRuntime implements Sandbox {
 	uid = 0;
 	exit = true;
 	private activeOperation: BashOperation | null = null;
+	private readonly importVerifiedSdkModule: (url: string) => Promise<WasmerSdk>;
+
+	constructor(dependencies: BashWorkerRuntimeDependencies = {}) {
+		this.importVerifiedSdkModule =
+			dependencies.importVerifiedSdkModule ??
+			((url) => import(/* @vite-ignore */ url) as Promise<WasmerSdk>);
+	}
 
 	private beginOperation(phase: BashOperation['phase']) {
 		if (this.activeOperation) {
@@ -270,10 +280,24 @@ class BashWorkerRuntime implements Sandbox {
 	}
 
 	load(
-		runtimeAssets: string | PlaygroundRuntimeAssets = '',
+		_runtimeAssets = '',
 		_code = '',
 		_log = true,
 		_args: string[] = [],
+		_options: SandboxExecutionOptions = {},
+		_progress?: SandboxProgress
+	): Promise<void> {
+		return Promise.reject(
+			new RuntimeConfigurationError(
+				'Bash worker runtime requires a verified page-host preflight payload',
+				{ phase: 'startup', runtimeId: 'BASH' }
+			)
+		);
+	}
+
+	loadVerified(
+		runtimePreflight: BashRuntimePreflightPayload,
+		_log = true,
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
@@ -285,10 +309,6 @@ class BashWorkerRuntime implements Sandbox {
 		}
 		let signal: AbortSignal | undefined;
 		let limits: ReturnType<typeof resolveExecutionLimits>;
-		let resolvedWebcUrl: string;
-		let resolvedSdkUrl: string;
-		let resolvedThreadWorkerUrl: string;
-		let webcReceipt: Readonly<{ bytes: number; sha256: string }>;
 		let unbindPreSessionAbort: () => void = () => undefined;
 		try {
 			signal = options.signal;
@@ -297,73 +317,6 @@ class BashWorkerRuntime implements Sandbox {
 			const limitSource = options.limits;
 			this.requireOperationActive(activeOperation);
 			limits = this.snapshotExecutionLimits(activeOperation, limitSource);
-			let configuredWebcUrl: string | undefined;
-			let configuredSdkUrl: string | undefined;
-			let configuredWorkerUrl: string | undefined;
-			let configuredWebcReceipt: RuntimeAssetIntegrityEntry | undefined;
-			let rootUrl = '';
-			if (runtimeAssets && typeof runtimeAssets === 'object') {
-				const bashAssets = (runtimeAssets as BashRuntimeAssetConfig).bash;
-				this.requireOperationActive(activeOperation);
-				if (bashAssets) {
-					configuredWebcUrl = bashAssets.webcUrl;
-					this.requireOperationActive(activeOperation);
-					configuredSdkUrl = bashAssets.moduleUrl;
-					this.requireOperationActive(activeOperation);
-					configuredWorkerUrl = bashAssets.workerUrl;
-					this.requireOperationActive(activeOperation);
-					configuredWebcReceipt = bashAssets.webcReceipt;
-					this.requireOperationActive(activeOperation);
-				}
-				if (!configuredWebcUrl || !configuredSdkUrl || !configuredWorkerUrl) {
-					rootUrl = (runtimeAssets as BashRuntimeAssetConfig).rootUrl || '';
-					this.requireOperationActive(activeOperation);
-				}
-			} else {
-				rootUrl = typeof runtimeAssets === 'string' ? runtimeAssets : '';
-			}
-			const normalizedRoot = rootUrl.endsWith('/') ? rootUrl.slice(0, -1) : rootUrl;
-			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const nextWebcUrl = configuredWebcUrl || `${normalizedRoot}/wasm-bash/bash.webc`;
-			const sdkModuleUrl = configuredSdkUrl || `${normalizedRoot}/wasm-bash/sdk/index.mjs`;
-			const sdkWorkerUrl =
-				configuredWorkerUrl || `${normalizedRoot}/wasm-bash/sdk/worker.mjs`;
-			resolvedWebcUrl = currentUrl ? new URL(nextWebcUrl, currentUrl).href : nextWebcUrl;
-			this.requireOperationActive(activeOperation);
-			resolvedSdkUrl = currentUrl ? new URL(sdkModuleUrl, currentUrl).href : sdkModuleUrl;
-			this.requireOperationActive(activeOperation);
-			resolvedThreadWorkerUrl = currentUrl
-				? new URL(sdkWorkerUrl, currentUrl).href
-				: sdkWorkerUrl;
-			this.requireOperationActive(activeOperation);
-			const receiptSource = configuredWebcReceipt ?? WASM_BASH_WEBC_RECEIPT;
-			const receiptBytes = receiptSource.bytes;
-			this.requireOperationActive(activeOperation);
-			const receiptSha256 = receiptSource.sha256;
-			this.requireOperationActive(activeOperation);
-			if (
-				receiptBytes === undefined ||
-				!Number.isSafeInteger(receiptBytes) ||
-				receiptBytes <= 0 ||
-				typeof receiptSha256 !== 'string' ||
-				!/^[a-f0-9]{64}$/u.test(receiptSha256)
-			) {
-				throw new RuntimeConfigurationError(
-					'Bash WEBc receipt must provide a positive byte size and lowercase SHA-256 digest',
-					{ phase: 'asset', runtimeId: 'BASH' }
-				);
-			}
-			if (receiptBytes > limits.maxAssetBytes) {
-				throw new AssetTooLargeError(
-					`Bash WEBc receipt exceeds the ${limits.maxAssetBytes} byte limit`,
-					{
-						actual: receiptBytes,
-						limit: limits.maxAssetBytes,
-						runtimeId: 'BASH'
-					}
-				);
-			}
-			webcReceipt = Object.freeze({ bytes: receiptBytes, sha256: receiptSha256 });
 			unbindPreSessionAbort();
 			this.requireOperationActive(activeOperation);
 		} catch (error) {
@@ -440,6 +393,23 @@ class BashWorkerRuntime implements Sandbox {
 			if (!this.isOperationActive(activeOperation)) return;
 			void (async () => {
 				let nextPackage: WasmerPackage | null = null;
+				let nextSdk: WasmerSdk | null = null;
+				let nextSdkRuntime: WasmerRuntime | null = null;
+				let nextSdkBlobUrl = '';
+				let nextNestedWorkerBlobUrl = '';
+				let adopted = false;
+				const revokeCandidateUrls = () => {
+					for (const url of [nextNestedWorkerBlobUrl, nextSdkBlobUrl]) {
+						if (!url) continue;
+						try {
+							URL.revokeObjectURL(url);
+						} catch {
+							// Preserve startup ownership and failure semantics.
+						}
+					}
+					nextNestedWorkerBlobUrl = '';
+					nextSdkBlobUrl = '';
+				};
 				try {
 					if (
 						!this.isOperationActive(activeOperation) ||
@@ -449,54 +419,49 @@ class BashWorkerRuntime implements Sandbox {
 					}
 					this.pendingInput = [];
 					this.pendingEof = false;
-					const nextSdkCacheKey = `${resolvedSdkUrl}\n${resolvedThreadWorkerUrl}`;
 
-					progress?.set?.(0.1, 'Loading Bash runtime');
+					progress?.set?.(0.1, 'Verifying Bash runtime payload');
 					if (
 						!this.isOperationActive(activeOperation) ||
 						loadGeneration !== this.loadGeneration
 					) {
 						return;
 					}
-					if (!sdkPromise || sdkCacheKey !== nextSdkCacheKey) {
-						sdkCacheKey = nextSdkCacheKey;
-						const createdSdkPromise = Promise.resolve()
-							.then(() => importRuntimeModule<WasmerSdk>(resolvedSdkUrl))
-							.then(async (sdk) => {
-								await sdk.init({
-									sdkUrl: resolvedSdkUrl,
-									workerUrl: resolvedThreadWorkerUrl
-								});
-								return sdk;
-							});
-						sdkPromise = createdSdkPromise;
-						void createdSdkPromise.catch(() => {
-							if (
-								sdkPromise === createdSdkPromise &&
-								sdkCacheKey === nextSdkCacheKey
-							) {
-								sdkPromise = undefined;
-								sdkCacheKey = '';
-							}
-						});
+					const verified = await verifyBashRuntimePreflightPayload(runtimePreflight, {
+						maxAssetBytes: limits.maxAssetBytes,
+						signal: activeOperation.abortController.signal
+					});
+					this.requireOperationActive(activeOperation);
+					const realmUrl =
+						typeof globalThis.location?.href === 'string'
+							? globalThis.location.href
+							: 'https://wasm-idle.invalid/bash-outer-worker.js';
+					const sdkSentinelUrl = new URL(
+						`/__wasm_idle/bash-sdk/${verified.manifestFingerprint}/index.mjs`,
+						realmUrl
+					).href;
+					nextSdkBlobUrl = URL.createObjectURL(
+						new Blob([verified.sdkJavaScriptBytes.buffer], { type: 'text/javascript' })
+					);
+					const nestedBootstrapSource = createBashNestedBootstrapSource({
+						sdkModuleUrl: nextSdkBlobUrl,
+						sentinelUrl: sdkSentinelUrl,
+						realmUrl
+					});
+					nextNestedWorkerBlobUrl = URL.createObjectURL(
+						new Blob([nestedBootstrapSource], { type: 'text/javascript' })
+					);
+					nextSdk = await this.importVerifiedSdkModule(nextSdkBlobUrl);
+					if (
+						!this.isOperationActive(activeOperation) ||
+						loadGeneration !== this.loadGeneration
+					) {
+						return;
 					}
-					const loadSdkPromise = sdkPromise;
-					if (!loadSdkPromise) throw new Error('Bash SDK startup was not scheduled');
-					const [webcBytes, sdk] = await Promise.all([
-						fetchRuntimeAssetBytes({
-							url: resolvedWebcUrl,
-							label: 'Bash WEBc package',
-							maxAssetBytes: webcReceipt.bytes,
-							signal: activeOperation.abortController.signal
-						}),
-						loadSdkPromise
-					]);
-					await verifyRuntimeAssetIntegrity({
-						asset: 'bash.webc',
-						bytes: webcBytes,
-						expected: webcReceipt,
-						profileId: 'wasmer/bash@1.0.25',
-						runtimeId: 'BASH'
+					await nextSdk.init({
+						module: verified.wasmerWasmBytes,
+						sdkUrl: sdkSentinelUrl,
+						workerUrl: nextNestedWorkerBlobUrl
 					});
 					if (
 						!this.isOperationActive(activeOperation) ||
@@ -504,7 +469,14 @@ class BashWorkerRuntime implements Sandbox {
 					) {
 						return;
 					}
-					nextPackage = await sdk.Wasmer.fromFile(webcBytes);
+					nextSdkRuntime = new nextSdk.Runtime({ registry: null });
+					if (
+						!this.isOperationActive(activeOperation) ||
+						loadGeneration !== this.loadGeneration
+					) {
+						return;
+					}
+					nextPackage = await nextSdk.Wasmer.fromFile(verified.webcBytes, nextSdkRuntime);
 					if (
 						!this.isOperationActive(activeOperation) ||
 						loadGeneration !== this.loadGeneration
@@ -533,24 +505,42 @@ class BashWorkerRuntime implements Sandbox {
 						return;
 					}
 					const previousPackage = this.runtimePackage;
+					const previousSdkRuntime = this.sdkRuntime;
+					const previousSdkBlobUrl = this.sdkBlobUrl;
+					const previousNestedWorkerBlobUrl = this.nestedWorkerBlobUrl;
 					this.runtimePackage = nextPackage;
 					nextPackage = null;
-					this.webcUrl = resolvedWebcUrl;
+					this.sdkModule = nextSdk;
+					nextSdk = null;
+					this.sdkRuntime = nextSdkRuntime;
+					nextSdkRuntime = null;
+					this.sdkBlobUrl = nextSdkBlobUrl;
+					nextSdkBlobUrl = '';
+					this.nestedWorkerBlobUrl = nextNestedWorkerBlobUrl;
+					nextNestedWorkerBlobUrl = '';
+					this.webcUrl = `verified:${verified.profileId}:bash.webc`;
+					adopted = true;
 					try {
 						previousPackage?.free();
 					} catch {
 						// Releasing the previous package must not replace startup success.
 					}
+					try {
+						previousSdkRuntime?.free?.();
+					} catch {
+						// Releasing the previous isolated SDK runtime remains best effort.
+					}
+					for (const url of [previousNestedWorkerBlobUrl, previousSdkBlobUrl]) {
+						if (!url) continue;
+						try {
+							URL.revokeObjectURL(url);
+						} catch {
+							// Blob URL cleanup remains best effort after activation.
+						}
+					}
 					cleanup();
 					resolve();
 				} catch (error) {
-					const failedPackage = nextPackage;
-					nextPackage = null;
-					try {
-						failedPackage?.free();
-					} catch {
-						// Preserve the startup failure.
-					}
 					if (
 						!this.isOperationActive(activeOperation) ||
 						loadGeneration !== this.loadGeneration
@@ -558,6 +548,24 @@ class BashWorkerRuntime implements Sandbox {
 						return;
 					}
 					rejectLoad(error);
+				} finally {
+					if (!adopted) {
+						const failedPackage = nextPackage;
+						nextPackage = null;
+						try {
+							failedPackage?.free();
+						} catch {
+							// Preserve the startup result.
+						}
+						const failedRuntime = nextSdkRuntime;
+						nextSdkRuntime = null;
+						try {
+							failedRuntime?.free?.();
+						} catch {
+							// Preserve the startup result.
+						}
+						revokeCandidateUrls();
+					}
 				}
 			})();
 		});
@@ -1029,11 +1037,31 @@ class BashWorkerRuntime implements Sandbox {
 	async clear() {
 		this.terminate();
 		const runtimePackage = this.runtimePackage;
+		const sdkRuntime = this.sdkRuntime;
+		const urls = [this.nestedWorkerBlobUrl, this.sdkBlobUrl];
 		this.runtimePackage = null;
+		this.sdkRuntime = null;
+		this.sdkModule = null;
+		this.nestedWorkerBlobUrl = '';
+		this.sdkBlobUrl = '';
+		this.webcUrl = '';
 		try {
 			runtimePackage?.free();
 		} catch {
 			// The sandbox is cleared even when the SDK cleanup hook fails.
+		}
+		try {
+			sdkRuntime?.free?.();
+		} catch {
+			// The sandbox is cleared even when the isolated runtime cleanup fails.
+		}
+		for (const url of urls) {
+			if (!url) continue;
+			try {
+				URL.revokeObjectURL(url);
+			} catch {
+				// Blob URL cleanup is best effort during realm teardown.
+			}
 		}
 	}
 }

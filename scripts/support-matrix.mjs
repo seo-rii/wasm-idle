@@ -1165,16 +1165,19 @@ const runtimeDetailsByLanguage = new Map([
 		'Bash',
 		{
 			packageBase:
-				`${workspacePackage('runtimes/wasm-bash')} / GNU Bash WASIX + static ESM ` +
-				`${code('static/wasm-bash/sdk/index.mjs')} produced from ${npmPackage('@wasmer/sdk')}`,
+				`${workspacePackage('runtimes/wasm-bash')} / GNU Bash WASIX + receipt-pinned ` +
+				`${npmPackage('@wasmer/sdk')} profile`,
 			execution:
-				`runs the pinned ${code('bash.webc')} locally through the on-demand Wasmer SDK asset; invokes ` +
+				`host-verifies one profile manifest, the stored SDK JavaScript, Wasmer Wasm, and WEBc ` +
+				`before starting a fixed worker generation with no runtime-asset fetches; invokes ` +
 				`${code('bash -c <code> <activePath> ...programArgs')} and supports ` +
 				`${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, and ${code('workspaceFiles')}`,
 			customization:
-				`${code('runtimeAssets.bash.moduleUrl')}/${code('workerUrl')}/${code('webcUrl')} or ` +
-				`${code('rootUrl')}; ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ` +
-				`${code('workspaceFiles')}`
+				`${code('rootUrl')} mirrors reuse the bundled profile; explicit ` +
+				`${code('runtimeAssets.bash.baseUrl')}/${code('manifestUrl')}/${code('moduleUrl')}/` +
+				`${code('wasmerWasmUrl')}/${code('webcUrl')} overrides require one complete profile; ` +
+				`${code('workerUrl')} is rejected; ${code('stdin')}, ${code('programArgs')}, ` +
+				`${code('activePath')}, ${code('workspaceFiles')}`
 		}
 	],
 	[

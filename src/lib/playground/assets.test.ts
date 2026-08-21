@@ -152,6 +152,7 @@ import {
 	WASM_NIM_RUNNER_RECEIPT,
 	WASM_NIM_RUNTIME_PROFILE
 } from './wasmNimVersion';
+import { WASM_BASH_RUNTIME_PROFILE } from './wasmBashVersion';
 import { WASM_GLEAM_ASSET_VERSION, WASM_GLEAM_RUNNER_RECEIPT } from './wasmGleamVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 import {
@@ -1289,6 +1290,47 @@ describe('runtime asset config resolution', () => {
 				manifestUrl: 'https://example.com/absproxy/5173/wasm-swift/runtime-manifest.v1.json'
 			}
 		);
+	});
+
+	it('resolves one complete query-pinned Bash preflight bundle and rejects partial overrides', async () => {
+		vi.resetModules();
+		const { resolveBashRuntimeAssetConfig } = await import('./assets');
+		const baseUrl = 'https://example.com/absproxy/5173/wasm-bash/';
+		const manifestUrl = `${baseUrl}runtime-manifest.v2.json?v=${WASM_BASH_RUNTIME_PROFILE.manifestFingerprint}`;
+		const moduleUrl = `${baseUrl}sdk/index.mjs.bin?v=${WASM_BASH_RUNTIME_PROFILE.sdkJavaScriptReceipt.sha256}`;
+		const wasmerWasmUrl = `${baseUrl}sdk/wasmer_js_bg.wasm.gz.bin?v=${WASM_BASH_RUNTIME_PROFILE.wasmerWasmReceipt.sha256}`;
+		const webcUrl = `${baseUrl}bash.webc.gz.bin?v=${WASM_BASH_RUNTIME_PROFILE.webcReceipt.sha256}`;
+		const expectedIdentity = {
+			baseUrl,
+			manifestUrl,
+			moduleUrl,
+			wasmerWasmUrl,
+			webcUrl,
+			profile: WASM_BASH_RUNTIME_PROFILE
+		};
+
+		expect(resolveBashRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
+			baseUrl,
+			manifestUrl,
+			moduleUrl,
+			wasmerWasmUrl,
+			webcUrl,
+			manifestFingerprint: WASM_BASH_RUNTIME_PROFILE.manifestFingerprint,
+			preflightKey: JSON.stringify(expectedIdentity),
+			preflightProfile: WASM_BASH_RUNTIME_PROFILE
+		});
+		expect(() =>
+			resolveBashRuntimeAssetConfig(
+				{ bash: { moduleUrl: 'https://runtime.example.test/wasm-bash/sdk/index.mjs.bin' } },
+				'https://example.com/app'
+			)
+		).toThrow(/complete profile/iu);
+		expect(() =>
+			resolveBashRuntimeAssetConfig(
+				{ bash: { workerUrl: 'https://runtime.example.test/arbitrary-worker.js' } },
+				'https://example.com/app'
+			)
+		).toThrow(/workerUrl.*no longer supported/iu);
 	});
 
 	it('preserves relative default Prolog urls and pins when no current url is available', async () => {

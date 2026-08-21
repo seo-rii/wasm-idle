@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 
+import { syncWasmBashAssets } from './sync-wasm-bash.mjs';
 import { validatePhpRuntimeAssets } from './sync-wasm-php.mjs';
 
 const THIS_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -133,23 +134,6 @@ async function buildRuntimeModule(config) {
 	return targetDir;
 }
 
-async function syncWasmerSdk() {
-	const sourceDir = path.join(REPO_ROOT, 'node_modules', '@wasmer', 'sdk', 'dist');
-	const targetDir = path.join(STATIC_DIR, 'wasm-bash', 'sdk');
-	await rm(targetDir, { recursive: true, force: true });
-	await mkdir(targetDir, { recursive: true });
-	for (const fileName of ['index.mjs', 'worker.mjs', 'wasmer_js_bg.wasm']) {
-		await cp(path.join(sourceDir, fileName), path.join(targetDir, fileName));
-	}
-	await cp(
-		path.join(REPO_ROOT, 'node_modules/@wasmer/sdk/LICENSE'),
-		path.join(targetDir, 'LICENSE.txt')
-	);
-	await writeManifest(targetDir, ['@wasmer/sdk'], 'index.mjs');
-	console.log(`Synced static Wasmer SDK in ${path.relative(REPO_ROOT, targetDir)}`);
-	return targetDir;
-}
-
 const phpTargetDir = path.join(STATIC_DIR, 'wasm-php');
 try {
 	await validatePhpRuntimeAssets(phpTargetDir, { allowCompressed: true });
@@ -163,5 +147,6 @@ console.log(`Validated prebuilt wasm-php assets in ${path.relative(REPO_ROOT, ph
 
 const targetDirs = [phpTargetDir];
 for (const config of modules) targetDirs.push(await buildRuntimeModule(config));
-targetDirs.push(await syncWasmerSdk());
+const bashResult = await syncWasmBashAssets();
+targetDirs.push(path.join(bashResult.targetDir, 'sdk'));
 await writeVersionModule(targetDirs);

@@ -7,7 +7,14 @@ import {
 	type BashWorkerRunMessage,
 	type BashWorkerToHostMessage
 } from '$lib/playground/bashWorkerProtocol';
-import { OutputLimitError, type ExecutionLimits, type WorkspaceLimits } from '@wasm-idle/core';
+import {
+	BASH_PREFLIGHT_PROTOCOL,
+	BASH_PREFLIGHT_PROTOCOL_VERSION,
+	OutputLimitError,
+	type ExecutionLimits,
+	type WorkspaceLimits
+} from '@wasm-idle/core';
+import { WASM_BASH_RUNTIME_PROFILE } from '$lib/playground/wasmBashVersion';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const runtimeMocks = vi.hoisted(() => {
@@ -15,12 +22,10 @@ const runtimeMocks = vi.hoisted(() => {
 
 	class MockBashWorkerRuntime {
 		outputBytes?: (stream: 'stdout' | 'stderr', data: Uint8Array) => void;
-		load = vi.fn(
+		loadVerified = vi.fn(
 			async (
-				_runtimeAssets: unknown,
-				_code: string,
+				_runtimePreflight: unknown,
 				_log: boolean,
-				_args: string[],
 				_options: unknown,
 				progress?: { set?: (value: number, stage?: string) => void }
 			) => {
@@ -71,14 +76,19 @@ const loadMessage = Object.freeze({
 	type: 'load',
 	sessionId: 7,
 	requestId: 11,
-	assets: {
-		sdkModuleUrl: 'https://assets.example.test/wasm-bash/sdk/index.mjs',
-		sdkThreadWorkerUrl: 'https://assets.example.test/wasm-bash/sdk/worker.mjs',
-		webcUrl: 'https://assets.example.test/wasm-bash/bash.webc',
-		webcReceipt: {
-			bytes: 6_144,
-			sha256: 'a'.repeat(64)
-		}
+	runtimePreflight: {
+		protocol: BASH_PREFLIGHT_PROTOCOL,
+		protocolVersion: BASH_PREFLIGHT_PROTOCOL_VERSION,
+		profileId: WASM_BASH_RUNTIME_PROFILE.profileId,
+		bashPackageVersion: WASM_BASH_RUNTIME_PROFILE.bashPackageVersion,
+		bashSourceRevision: WASM_BASH_RUNTIME_PROFILE.bashSourceRevision,
+		wasmerSdkVersion: WASM_BASH_RUNTIME_PROFILE.wasmerSdkVersion,
+		wasmerSdkPackageIntegrity: WASM_BASH_RUNTIME_PROFILE.wasmerSdkPackageIntegrity,
+		manifestFingerprint: WASM_BASH_RUNTIME_PROFILE.manifestFingerprint,
+		manifestBytes: new Uint8Array([1]),
+		sdkJavaScriptBytes: new Uint8Array([2]),
+		wasmerWasmBytes: new Uint8Array([3]),
+		webcBytes: new Uint8Array([4])
 	},
 	limits,
 	log: true
@@ -127,24 +137,15 @@ describe('Bash outer worker bridge', () => {
 		(globalThis as { onmessage?: unknown }).onmessage = undefined;
 	});
 
-	it('forwards resolved assets and limits while preserving load progress identity', async () => {
+	it('forwards only the verified payload and limits while preserving load progress identity', async () => {
 		const runtime = await importWorker();
 
 		await send(loadMessage);
 
-		expect(runtime.load).toHaveBeenCalledOnce();
-		expect(runtime.load).toHaveBeenCalledWith(
-			{
-				bash: {
-					moduleUrl: loadMessage.assets.sdkModuleUrl,
-					workerUrl: loadMessage.assets.sdkThreadWorkerUrl,
-					webcUrl: loadMessage.assets.webcUrl,
-					webcReceipt: loadMessage.assets.webcReceipt
-				}
-			},
-			'',
+		expect(runtime.loadVerified).toHaveBeenCalledOnce();
+		expect(runtime.loadVerified).toHaveBeenCalledWith(
+			loadMessage.runtimePreflight,
 			true,
-			[],
 			{ limits },
 			expect.objectContaining({ set: expect.any(Function) })
 		);
@@ -306,7 +307,7 @@ describe('Bash outer worker bridge', () => {
 			phase: 'asset',
 			nonCloneable: () => undefined
 		});
-		runtime.load.mockRejectedValueOnce(failure);
+		runtime.loadVerified.mockRejectedValueOnce(failure);
 
 		await send(loadMessage);
 
@@ -369,7 +370,7 @@ describe('Bash outer worker bridge', () => {
 
 		await send({ ...loadMessage, protocolVersion: 2 });
 
-		expect(runtime.load).not.toHaveBeenCalled();
+		expect(runtime.loadVerified).not.toHaveBeenCalled();
 		expect(postedMessages()).toEqual([
 			{
 				protocolVersion: BASH_WORKER_PROTOCOL_VERSION,

@@ -247,9 +247,21 @@ export interface RuntimeAssetKeySource {
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	bash?: {
+		baseUrl?: string;
+		manifestUrl?: string;
 		moduleUrl?: string;
+		wasmerWasmUrl?: string;
 		webcUrl?: string;
 		workerUrl?: string;
+		manifestFingerprint?: string;
+		profileId?: string;
+		bashPackageVersion?: string;
+		bashSourceRevision?: string;
+		wasmerSdkVersion?: string;
+		wasmerSdkPackageIntegrity?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		sdkJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
+		wasmerWasmReceipt?: RuntimeAssetIntegrityEntry;
 		webcReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	clojurescript?: {
@@ -1071,9 +1083,40 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		key: 'nimWorkerReceipt',
 		serialize: serializeIntegrityEntry
 	},
+	{ runtime: 'bash', property: 'baseUrl', key: 'bashBaseUrl' },
+	{ runtime: 'bash', property: 'manifestUrl', key: 'bashManifestUrl' },
 	{ runtime: 'bash', property: 'moduleUrl', key: 'bashModuleUrl' },
+	{ runtime: 'bash', property: 'wasmerWasmUrl', key: 'bashWasmerWasmUrl' },
 	{ runtime: 'bash', property: 'webcUrl', key: 'bashWebcUrl' },
 	{ runtime: 'bash', property: 'workerUrl', key: 'bashWorkerUrl' },
+	{ runtime: 'bash', property: 'manifestFingerprint', key: 'bashManifestFingerprint' },
+	{ runtime: 'bash', property: 'profileId', key: 'bashProfileId' },
+	{ runtime: 'bash', property: 'bashPackageVersion', key: 'bashPackageVersion' },
+	{ runtime: 'bash', property: 'bashSourceRevision', key: 'bashSourceRevision' },
+	{ runtime: 'bash', property: 'wasmerSdkVersion', key: 'bashWasmerSdkVersion' },
+	{
+		runtime: 'bash',
+		property: 'wasmerSdkPackageIntegrity',
+		key: 'bashWasmerSdkPackageIntegrity'
+	},
+	{
+		runtime: 'bash',
+		property: 'manifestReceipt',
+		key: 'bashManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'bash',
+		property: 'sdkJavaScriptReceipt',
+		key: 'bashSdkJavaScriptReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'bash',
+		property: 'wasmerWasmReceipt',
+		key: 'bashWasmerWasmReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{
 		runtime: 'bash',
 		property: 'webcReceipt',
