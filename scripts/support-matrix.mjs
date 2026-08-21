@@ -1042,8 +1042,13 @@ const runtimeDetailsByLanguage = new Map([
 			packageBase:
 				`WebPerl ${manifestValue('static/wasm-perl/runtime-manifest.v1.json', ['version'])} ` +
 				`(${manifestValue('static/wasm-perl/runtime-manifest.v1.json', ['package'])})`,
-			execution: `static worker runs ${code('emperl')}; supports ${code('stdin')} and ${code('programArgs')}`,
-			customization: staticWorkerCustomizationFor('perl')
+			execution:
+				`host-verifies the manifest, stored assets, logical hashes, and profile-bound one-shot runner ` +
+				`before executing ${code('emperl')}; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`explicit ${code('runtimeAssets.perl.baseUrl')}/${code('workerUrl')}/${code('manifestUrl')} overrides ` +
+				`require one complete profile-and-runner receipt bundle; URL-only ${code('PUBLIC_WASM_PERL_*')} ` +
+				`overrides fail closed; ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}`
 		}
 	],
 	[
@@ -1052,8 +1057,14 @@ const runtimeDetailsByLanguage = new Map([
 			packageBase:
 				`Wacl Tcl ${manifestValue('static/wasm-tcl/runtime-manifest.v1.json', ['version'])} ` +
 				`(${manifestValue('static/wasm-tcl/runtime-manifest.v1.json', ['package'])})`,
-			execution: `static worker runs Wacl Tcl; supports ${code('stdin')} and ${code('programArgs')}`,
-			customization: staticWorkerCustomizationFor('tcl', 'TCL')
+			execution:
+				`host-verifies the manifest, stored assets, logical hashes, and profile-bound one-shot runner ` +
+				`before executing Wacl Tcl; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`bundled mirrors may set ${code('runtimeAssets.tcl.baseUrl')}/${code('workerUrl')}/${code('manifestUrl')} or ` +
+				`${code('PUBLIC_WASM_TCL_BASE_URL')}/${code('PUBLIC_WASM_TCL_WORKER_URL')}; custom executable bytes ` +
+				`require one complete profile-and-runner receipt bundle; ${code('programArgs')}, ${code('activePath')}, ` +
+				`${code('workspaceFiles')}`
 		}
 	],
 	[
@@ -1106,13 +1117,19 @@ const runtimeDetailsByLanguage = new Map([
 		'Janet',
 		{
 			packageBase:
-				`Janet static worker / Emscripten ` +
-				manifestValue('static/wasm-janet/runtime-manifest.v1.json', [
-					'build',
-					'emscripten'
-				]),
-			execution: `Janet VM worker; supports ${code('stdin')} and ${code('programArgs')}`,
-			customization: staticWorkerCustomizationFor('janet')
+				`Janet ${manifestValue('static/wasm-janet/runtime-manifest.v2.json', ['components', 'janet', 'version'])} / ` +
+				`Emscripten ${manifestValue('static/wasm-janet/runtime-manifest.v2.json', [
+					'components',
+					'emscripten',
+					'version'
+				])} opaque vendored bundle`,
+			execution:
+				`host-verifies the manifest, stored assets, logical hashes, and profile-bound one-shot runner ` +
+				`before executing the Janet VM; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`explicit ${code('runtimeAssets.janet.baseUrl')}/${code('workerUrl')}/${code('manifestUrl')} overrides ` +
+				`require one complete profile-and-runner receipt bundle; URL-only ${code('PUBLIC_WASM_JANET_*')} ` +
+				`overrides fail closed; ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}`
 		}
 	],
 	[
