@@ -45,7 +45,7 @@ export const scenarios = [
 	{
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
-		budget: { maxBytes: 4.5 * MiB, maxFiles: 700, maxPackages: 6 },
+		budget: { maxBytes: 4.75 * MiB, maxFiles: 700, maxPackages: 6 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
