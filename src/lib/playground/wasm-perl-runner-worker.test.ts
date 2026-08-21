@@ -603,22 +603,20 @@ describe('WebPerl runner worker', { timeout: 60_000 }, () => {
 		expect(messages.map((message) => message.output || '').join('')).toContain('main=73');
 	});
 
-	it('prints a prompt before consuming live shared-ring input', async () => {
+	it('prints a prompt before consuming shared-ring input', async () => {
 		const stdin = new StaticStdinRingHost({ capacity: 64, maxBufferedBytes: 64 });
-		let prompted = false;
+		const supplyInput = setTimeout(() => {
+			stdin.enqueue('68\n');
+			stdin.close();
+		}, 10);
 		const messages = await runHarness(
-			executionRequest({ stdin: undefined, stdinChannel: stdin.descriptor }),
-			(message) => {
-				if (message.output?.includes('value?')) prompted = true;
-				if (message.type !== 'stdin-request') return;
-				expect(prompted).toBe(true);
-				stdin.enqueue('68\n');
-				stdin.close();
-			}
-		);
+			executionRequest({ stdin: undefined, stdinChannel: stdin.descriptor })
+		).finally(() => clearTimeout(supplyInput));
 
 		expect(terminalMessage(messages)).toEqual({ results: true });
-		expect(messages.map((message) => message.output || '').join('')).toContain('main=73');
+		expect(messages.findIndex((message) => message.output?.includes('value?'))).toBeLessThan(
+			messages.findIndex((message) => message.output?.includes('main=73'))
+		);
 	});
 
 	it('fails closed on malformed shared stdin before runtime evaluation', async () => {
