@@ -19,8 +19,13 @@ function wasmU32(value: number) {
 	return bytes;
 }
 
-function memoryModule(minimumPages = 1) {
-	const memory = [1, 0, ...wasmU32(minimumPages)];
+function memoryModule(minimumPages = 1, maximumPages?: number) {
+	const memory = [
+		1,
+		maximumPages === undefined ? 0 : 1,
+		...wasmU32(minimumPages),
+		...(maximumPages === undefined ? [] : wasmU32(maximumPages))
+	];
 	const exports = [1, 6, 109, 101, 109, 111, 114, 121, 2, 0];
 	return new Uint8Array([
 		0, 97, 115, 109, 1, 0, 0, 0,
@@ -52,6 +57,26 @@ test('caps a defined Wasm memory at an engine-enforced maximum', async () => {
 		() => capTinyGoWasmMemory(memoryModule(2), 65_536, 'fixture'),
 		/minimum memory/u
 	);
+});
+
+test('caps Wasm memory without cloning every unchanged section', () => {
+	assert.doesNotMatch(capTinyGoWasmMemory.toString(), /bytes\.slice/u);
+	const alreadyCapped = memoryModule(1, 2);
+	assert.equal(capTinyGoWasmMemory(alreadyCapped, 2 * 65_536, 'fixture'), alreadyCapped);
+});
+
+test('compiles prepared WASI modules without another complete input copy', async () => {
+	const source = await readFile(new URL('../src/upstream-runtime.ts', import.meta.url), 'utf8');
+	assert.match(source, /bytes\.buffer instanceof ArrayBuffer/u);
+	assert.match(source, /WebAssembly\.compile\(compileBytes\)/u);
+	assert.doesNotMatch(source, /WebAssembly\.compile\(Uint8Array\.from\(bytes\)\)/u);
+});
+
+test('decompresses an ArrayBuffer-backed root archive without a preliminary clone', async () => {
+	const source = await readFile(new URL('../src/upstream-vfs.ts', import.meta.url), 'utf8');
+	assert.match(source, /archive\.buffer instanceof ArrayBuffer/u);
+	assert.match(source, /new Blob\(\[blobBytes\]\)/u);
+	assert.doesNotMatch(source, /const copiedArchive = Uint8Array\.from\(archive\)/u);
 });
 
 test('loads Binaryen only when the optimizer phase runs', async () => {

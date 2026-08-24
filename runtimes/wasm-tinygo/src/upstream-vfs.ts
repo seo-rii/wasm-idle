@@ -223,8 +223,11 @@ export async function decompressTinyGoRootArchive(
 	if (typeof DecompressionStream !== 'function') {
 		throw new Error("upstream TinyGo root extraction requires DecompressionStream('gzip')");
 	}
-	const copiedArchive = Uint8Array.from(archive);
-	const body = new Blob([copiedArchive.buffer])
+	const blobBytes =
+		archive.buffer instanceof ArrayBuffer
+			? (archive as Uint8Array<ArrayBuffer>)
+			: Uint8Array.from(archive);
+	const body = new Blob([blobBytes])
 		.stream()
 		.pipeThrough(new DecompressionStream('gzip'));
 	const reader = body.getReader();

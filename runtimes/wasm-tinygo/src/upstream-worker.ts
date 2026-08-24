@@ -117,6 +117,7 @@ function assertNoImportedMemory(payload: Uint8Array, label: string) {
 function capMemorySection(payload: Uint8Array, maxPages: number, label: string) {
 	const count = readU32(payload, 0, label);
 	let offset = count.offset;
+	let changed = false;
 	const output: number[] = [...writeU32(count.value)];
 	for (let index = 0; index < count.value; index += 1) {
 		const flags = readU32(payload, offset, label);
@@ -134,13 +135,14 @@ function capMemorySection(payload: Uint8Array, maxPages: number, label: string) 
 		if ((flags.value & 0x01) !== 0) {
 			const declaredMaximum = readU32(payload, next, label);
 			maximum = Math.min(maximum, declaredMaximum.value);
+			changed ||= declaredMaximum.value > maxPages;
 			next = declaredMaximum.offset;
-		}
+		} else changed = true;
 		output.push(...writeU32(flags.value | 0x01), ...writeU32(minimum.value), ...writeU32(maximum));
 		offset = next;
 	}
 	if (offset !== payload.length) throw new Error(`${label} memory section has trailing bytes`);
-	return new Uint8Array(output);
+	return changed ? new Uint8Array(output) : payload;
 }
 
 export function capTinyGoWasmMemory(bytes: Uint8Array, maxBytes: number, label: string) {
@@ -159,7 +161,8 @@ export function capTinyGoWasmMemory(bytes: Uint8Array, maxBytes: number, label: 
 		throw new Error(`${label} does not have a WebAssembly header`);
 	}
 	const maxPages = maxBytes / WASM_PAGE_BYTES;
-	const chunks: Uint8Array[] = [bytes.slice(0, WASM_HEADER.length)];
+	const chunks: Uint8Array[] = [bytes.subarray(0, WASM_HEADER.length)];
+	let changed = false;
 	let offset: number = WASM_HEADER.length;
 	while (offset < bytes.length) {
 		const sectionStart = offset;
@@ -172,12 +175,17 @@ export function capTinyGoWasmMemory(bytes: Uint8Array, maxBytes: number, label: 
 		if (id === 2) assertNoImportedMemory(payload, label);
 		if (id === 5) {
 			const capped = capMemorySection(payload, maxPages, label);
-			chunks.push(new Uint8Array([id, ...writeU32(capped.byteLength), ...capped]));
+			if (capped === payload) chunks.push(bytes.subarray(sectionStart, payloadEnd));
+			else {
+				changed = true;
+				chunks.push(new Uint8Array([id, ...writeU32(capped.byteLength), ...capped]));
+			}
 		} else {
-			chunks.push(bytes.slice(sectionStart, payloadEnd));
+			chunks.push(bytes.subarray(sectionStart, payloadEnd));
 		}
 		offset = payloadEnd;
 	}
+	if (!changed) return bytes;
 	const output = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.byteLength, 0));
 	let outputOffset = 0;
 	for (const chunk of chunks) {

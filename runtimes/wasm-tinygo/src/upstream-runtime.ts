@@ -426,7 +426,11 @@ function assertWasm(bytes: Uint8Array, label: string) {
 
 async function compileWasiModule(bytes: Uint8Array, label: string) {
 	assertWasm(bytes, label);
-	const module = await WebAssembly.compile(Uint8Array.from(bytes));
+	const compileBytes =
+		bytes.buffer instanceof ArrayBuffer
+			? (bytes as Uint8Array<ArrayBuffer>)
+			: Uint8Array.from(bytes);
+	const module = await WebAssembly.compile(compileBytes);
 	const unsupported = WebAssembly.Module.imports(module).filter(
 		(entry) => entry.module !== 'wasi_snapshot_preview1'
 	);
