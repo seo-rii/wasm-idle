@@ -1,3 +1,13 @@
+import {
+	TEAVM_RUNTIME_ASSET_RECEIPTS,
+	TEAVM_RUNTIME_ASSET_VERSION
+} from './teavm-runtime.generated.js';
+
+export {
+	TEAVM_RUNTIME_ASSET_RECEIPTS,
+	TEAVM_RUNTIME_ASSET_VERSION
+} from './teavm-runtime.generated.js';
+
 export const TEAVM_RUNTIME_ASSET_NAMES = [
 	'compiler.wasm-runtime.js',
 	'compiler.wasm',
@@ -15,28 +25,6 @@ export interface TeaVmRuntimeAssetReceipt {
 export type TeaVmRuntimeAssetReceipts = Readonly<
 	Record<TeaVmRuntimeAssetName, Readonly<TeaVmRuntimeAssetReceipt>>
 >;
-
-export const TEAVM_RUNTIME_ASSET_VERSION =
-	'2ccdddaf88a24761835c97047dccda500fdfb450e8ab1fcacd479e5a394df546';
-
-export const TEAVM_RUNTIME_ASSET_RECEIPTS = Object.freeze({
-	'compiler.wasm-runtime.js': Object.freeze({
-		bytes: 13_936,
-		sha256: 'bd103f277be99fd2f3ffc0248b3558e6c2c85a44902bfeef042c6bedcf0b2c63'
-	}),
-	'compiler.wasm': Object.freeze({
-		bytes: 4_299_273,
-		sha256: '9eb047426613c3ed3006838daae49e29929ad0d560ec6b1f8b50e15e2c3865d6'
-	}),
-	'compile-classlib-teavm.bin': Object.freeze({
-		bytes: 200_621,
-		sha256: '71746dc82ddad5ad8be829f461c235a747bdaf121d1b7abd16dbbbbe6a17f53d'
-	}),
-	'runtime-classlib-teavm.bin': Object.freeze({
-		bytes: 2_394_175,
-		sha256: 'f0c9c8c0426e310d08751e57cc88fdfd63ea2f428e4d6cb1b7e59a3dc20844ad'
-	})
-}) satisfies TeaVmRuntimeAssetReceipts;
 
 const snapshotTeaVmRuntimeAssetReceipt = (
 	asset: TeaVmRuntimeAssetName,

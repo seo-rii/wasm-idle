@@ -84,6 +84,7 @@
 		"sync:wasm-zig": "node scripts/sync-runtime.mjs wasm-zig",
 		"sync:wasm-lisp": "node scripts/sync-runtime.mjs wasm-lisp",
 		"sync:wasm-ruby": "node scripts/sync-runtime.mjs wasm-ruby",
+		"sync:wasm-teavm": "node scripts/sync-wasm-teavm.mjs",
 		"sync:wasm-tinygo": "node scripts/sync-runtime.mjs wasm-tinygo",
 		"sync:wasm-swift": "node scripts/sync-runtime.mjs wasm-swift",
 		"sync:wasm-elixir": "node scripts/sync-runtime.mjs wasm-elixir",

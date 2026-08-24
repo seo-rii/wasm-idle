@@ -45,6 +45,21 @@ describe('sync-runtime registry', () => {
 		expect(runtimeListLine(fortranRuntime!)).toBe('wasm-fortran\tmanual\tsource-required');
 	});
 
+	it('registers the source-built TeaVM producer as manual', () => {
+		const teavmRuntime = RUNTIMES.find((runtime) => runtime.name === 'wasm-teavm');
+
+		expect(teavmRuntime).toMatchObject({
+			name: 'wasm-teavm',
+			module: './sync-wasm-teavm.mjs',
+			exportName: 'produceWasmTeaVmAssets',
+			sourceArg: 'sourceDir',
+			targetArg: 'targetDir',
+			manual: true,
+			sourceRequired: true
+		});
+		expect(runtimeListLine(teavmRuntime!)).toBe('wasm-teavm\tmanual\tsource-required');
+	});
+
 	it('excludes manual runtimes from all-sync unless explicitly requested', () => {
 		const automaticRuntimeNames = runtimesForAll().map((runtime) => runtime.name);
 
@@ -59,6 +74,9 @@ describe('sync-runtime registry', () => {
 		expect(
 			runtimesForAll({ includeManual: true }).map((runtime) => runtime.name)
 		).not.toContain('wasm-fortran');
+		expect(
+			runtimesForAll({ includeManual: true }).map((runtime) => runtime.name)
+		).not.toContain('wasm-teavm');
 		for (const runtime of RUNTIMES.filter((candidate) => candidate.manual)) {
 			expect(automaticRuntimeNames).not.toContain(runtime.name);
 		}
@@ -123,6 +141,8 @@ describe('sync-runtime registry', () => {
 			expect(result.stdout).not.toContain('wasm-swift\n');
 			expect(result.stdout).toContain('wasm-fortran\tmanual\tsource-required');
 			expect(result.stdout).not.toContain('wasm-fortran\n');
+			expect(result.stdout).toContain('wasm-teavm\tmanual\tsource-required');
+			expect(result.stdout).not.toContain('wasm-teavm\n');
 			expect(result.stderr).toBe('');
 		}
 	});

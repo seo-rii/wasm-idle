@@ -1,0 +1,300 @@
+{
+	"schemaVersion": 1,
+	"profileId": "teavm-javac-0.13.1-7e4a44c-overlay-v1",
+	"provenanceLevel": "source-build-and-compatibility-overlay-reproduced",
+	"licenseExpression": "Apache-2.0 AND GPL-2.0-only WITH Classpath-exception-2.0 AND BSD-3-Clause AND Unicode-3.0",
+	"source": {
+		"repository": "https://github.com/konsoletyper/teavm-javac.git",
+		"revision": "7e4a44cf521694a4e326e33850dd8aec165eb5c9",
+		"archive": {
+			"url": "https://github.com/konsoletyper/teavm-javac/archive/7e4a44cf521694a4e326e33850dd8aec165eb5c9.tar.gz",
+			"bytes": 88734,
+			"sha256": "29bfb6e2b6c1669972846794af4285d913faf720af74f2c8fcac758a5433c61c"
+		},
+		"buildInputs": [
+			{
+				"path": "gradle.properties",
+				"bytes": 648,
+				"sha256": "aae9c987f94ac4a9fe4c92c82520cc69ca4f61e773e1e4e9adcc06f1e65848f7"
+			},
+			{
+				"path": "gradle/libs.versions.toml",
+				"bytes": 1082,
+				"sha256": "134bbfe1cf45739309c10b376364503f9f5ce0d6c4b098980d4babbed4fe6e87"
+			},
+			{
+				"path": "gradle/wrapper/gradle-wrapper.jar",
+				"bytes": 45457,
+				"sha256": "76805e32c009c0cf0dd5d206bddc9fb22ea42e84db904b764f3047de095493f3"
+			},
+			{
+				"path": "gradle/wrapper/gradle-wrapper.properties",
+				"bytes": 252,
+				"sha256": "6009cea91ce8dbcc62cb2ea6dec6ddd4c87b65fc326872f5abfc7e77fd24aa36"
+			},
+			{
+				"path": "gradlew",
+				"bytes": 8728,
+				"sha256": "3238afb2aed5cb16eb7d6718077e7138059108f007b54179e9cc157c5a6e0e89"
+			},
+			{
+				"path": "settings.gradle",
+				"bytes": 2026,
+				"sha256": "fec0a4fc11c75b9c473c3540cf1eef7c2e7328c759f224347d0977c0f201eeb5"
+			},
+			{
+				"path": "compiler/build.gradle",
+				"bytes": 4648,
+				"sha256": "684175dafc1717af618368b83a8d5f400b3c903cb309e061a40201588e05c3c2"
+			},
+			{
+				"path": "javac/build.gradle",
+				"bytes": 4455,
+				"sha256": "a67a130b91760176b7afaebe73e89e3c55556be622cac632bbfb94854b073777"
+			},
+			{
+				"path": "compiler/src/main/java/org/teavm/javac/ArchiveBuilder.java",
+				"bytes": 2326,
+				"sha256": "f944a72dba30c1105b2695b766d2ad384c1e5d42914f0618314653881770ed05"
+			}
+		]
+	},
+	"components": {
+		"teavm": {
+			"version": "0.13.1",
+			"repository": "https://github.com/konsoletyper/teavm.git",
+			"revision": "b3a245b7d9034ff35cdfab2def057a3d4f256efb",
+			"artifacts": [
+				{
+					"name": "teavm-classlib-0.13.1-sources.jar",
+					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-classlib/0.13.1/teavm-classlib-0.13.1-sources.jar",
+					"bytes": 1819937,
+					"sha256": "c816953b045aa1e6aaf4dd38006951884abbc8cd069b7bae32767d4fe12d68d3"
+				}
+			]
+		},
+		"openjdk": {
+			"repository": "https://github.com/openjdk/jdk25u.git",
+			"revision": "6c48f4ed707bf0b15f9b6098de30db8aae6fa40f",
+			"archive": {
+				"url": "https://github.com/openjdk/jdk25u/archive/6c48f4ed707bf0b15f9b6098de30db8aae6fa40f.zip",
+				"bytes": 201208868,
+				"sha256": "4f3d4746948c90682ece32e4fc1b40a7828d1e68e9abd2e68316ab8076792458"
+			}
+		}
+	},
+	"build": {
+		"host": {
+			"os": "linux",
+			"arch": "x64"
+		},
+		"jdk": {
+			"distribution": "Eclipse Temurin",
+			"version": "25.0.3+9",
+			"archive": {
+				"url": "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.3%2B9/OpenJDK25U-jdk_x64_linux_hotspot_25.0.3_9.tar.gz",
+				"bytes": 141282180,
+				"sha256": "69264a7a211bf5029830d07bc3370f879769d62ebc5b5488e90c9343a2da0e1f"
+			},
+			"release": {
+				"IMPLEMENTOR_VERSION": "Temurin-25.0.3+9",
+				"JAVA_VERSION": "25.0.3",
+				"JAVA_RUNTIME_VERSION": "25.0.3+9-LTS",
+				"OS_ARCH": "x86_64",
+				"OS_NAME": "Linux"
+			}
+		},
+		"gradle": {
+			"version": "9.1.0",
+			"distributionUrl": "https://services.gradle.org/distributions/gradle-9.1.0-bin.zip",
+			"distributionBytes": 134528013,
+			"distributionSha256": "a17ddd85a26b6a7f5ddb71ff8b05fc5104c0202c6e64782429790c933686c806",
+			"verificationMetadata": {
+				"path": "scripts/teavm/gradle-verification-metadata.xml",
+				"bytes": 87353,
+				"sha256": "d6a95d9ecec6e4d222d42b1fafc85819456e778350c27ec978e896f26dbab86c"
+			}
+		},
+		"node": {
+			"version": "24.1.0",
+			"zlib": "1.3.0.1-motley-780819f",
+			"archive": {
+				"url": "https://nodejs.org/dist/v24.1.0/node-v24.1.0-linux-x64.tar.xz",
+				"bytes": 31647444,
+				"sha256": "76b77c43f97a7c4cf60917e24c5e212faaf8ca664e433759ef98d12f268b6b49"
+			}
+		},
+		"commands": [
+			"./gradlew --no-daemon clean :javac:downloadJDK",
+			"./gradlew --no-daemon :compiler:createDist",
+			"javac --release 17 <locked-classpath> TByteBuffer.java",
+			"java ApplyRuntimeClasslibOverlay <canonical-runtime> <overlay-class>"
+		],
+		"upstreamOutputs": [
+			{
+				"path": "compiler.wasm-runtime.js",
+				"bytes": 13936,
+				"sha256": "bd103f277be99fd2f3ffc0248b3558e6c2c85a44902bfeef042c6bedcf0b2c63"
+			},
+			{
+				"path": "compiler.wasm",
+				"bytes": 4299273,
+				"sha256": "9eb047426613c3ed3006838daae49e29929ad0d560ec6b1f8b50e15e2c3865d6"
+			},
+			{
+				"path": "compile-classlib-teavm.bin",
+				"bytes": 200621,
+				"sha256": "71746dc82ddad5ad8be829f461c235a747bdaf121d1b7abd16dbbbbe6a17f53d"
+			},
+			{
+				"path": "runtime-classlib-teavm.bin",
+				"bytes": 2394943,
+				"sha256": "107abaf95d66fe1b616914ad07ad07772197c164413b149df85a2d6dd3fca8ca"
+			}
+		],
+		"overlay": {
+			"sourcePath": "scripts/teavm/TByteBuffer.java",
+			"sourceBytes": 12916,
+			"sourceSha256": "5a7c6baa28d638f357fa47489908682de3d5be22b33b5c96ec531ac0edb1f962",
+			"upstreamSourceEntry": "org/teavm/classlib/java/nio/TByteBuffer.java",
+			"upstreamSourceBytes": 12908,
+			"upstreamSourceSha256": "fe910ed3405fe17b776547a11ed464b572a74e90f4aadfb4cf36039a36c8af94",
+			"transform": {
+				"from": "Int8Array.fromJavaArray",
+				"to": "Int8Array.copyFromJavaArray",
+				"expectedOccurrences": 2
+			},
+			"utilityPath": "scripts/teavm/ApplyRuntimeClasslibOverlay.java",
+			"utilityBytes": 4602,
+			"utilitySha256": "e3dd50483ae54b40d4a5f831260d0cd8794b98faab1d9d755d4e482a57191932",
+			"release": 17,
+			"targetEntry": "org/teavm/classlib/java/nio/TByteBuffer.class",
+			"archiveEntryCount": 2141,
+			"canonicalClassBytes": 11977,
+			"canonicalClassSha256": "cbc18da714d13533cebdb1faa6c6111d3267529924b00ff2754b6880b4c5d901",
+			"classBytes": 10166,
+			"classSha256": "4049841193133ad9e36fd8b0f8f8cd3c6ddf57c091def6c3fa592b2d801b956a",
+			"canonicalRuntime": {
+				"bytes": 2394943,
+				"sha256": "107abaf95d66fe1b616914ad07ad07772197c164413b149df85a2d6dd3fca8ca"
+			},
+			"classpath": [
+				{
+					"name": "teavm-classlib",
+					"version": "0.13.1",
+					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-classlib/0.13.1/teavm-classlib-0.13.1.jar",
+					"bytes": 17768641,
+					"sha256": "a250f7baf877767af72634cd3f19d30f2a6b8a3fb16bd3931b99fde1b17cd12d"
+				},
+				{
+					"name": "teavm-core",
+					"version": "0.13.1",
+					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-core/0.13.1/teavm-core-0.13.1.jar",
+					"bytes": 2950160,
+					"sha256": "b9fe1b008512c8f11ff3efbd9cf2f0565b4bfa76943a9f23910befc0812f7ebf"
+				},
+				{
+					"name": "teavm-jso-apis",
+					"version": "0.13.1",
+					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-jso-apis/0.13.1/teavm-jso-apis-0.13.1.jar",
+					"bytes": 177707,
+					"sha256": "7a7c211dd03dfbca4445ea5e01b70091226d9e52ce7425d675294ef47a76586b"
+				},
+				{
+					"name": "teavm-jso",
+					"version": "0.13.1",
+					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-jso/0.13.1/teavm-jso-0.13.1.jar",
+					"bytes": 8391,
+					"sha256": "421b848c79d161c34e9f178d3d37b35e8efaadada487056c3fd3d4d3de1c172c"
+				},
+				{
+					"name": "teavm-interop",
+					"version": "0.13.1",
+					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-interop/0.13.1/teavm-interop-0.13.1.jar",
+					"bytes": 13753,
+					"sha256": "f00f983b986d367799570ab482fee89502915213fe347d361e5bcf1e23a8fa04"
+				},
+				{
+					"name": "teavm-platform",
+					"version": "0.13.1",
+					"url": "https://repo.maven.apache.org/maven2/org/teavm/teavm-platform/0.13.1/teavm-platform-0.13.1.jar",
+					"bytes": 131492,
+					"sha256": "ca725f27d0be52d1ddc95e11b63bad8cfe0f66dac9977a46d4089c6282ee1f8e"
+				}
+			]
+		}
+	},
+	"producer": {
+		"files": [
+			{
+				"path": "scripts/sync-wasm-teavm.mjs",
+				"bytes": 35202,
+				"sha256": "32fc20772e52249039c5043efb02c35389b2584e5643d188db28714404b9e21e"
+			},
+			{
+				"path": "scripts/sync-wasm-teavm.d.mts",
+				"bytes": 1153,
+				"sha256": "db7e8bb15fda949fcda8558e911ad32f7b65b8193fcce00f157e58916934cfb0"
+			}
+		]
+	},
+	"legalFiles": [
+		{
+			"sourcePath": "scripts/teavm/THIRD_PARTY_NOTICES.md",
+			"targetPath": "THIRD_PARTY_NOTICES.md",
+			"mediaType": "text/markdown",
+			"bytes": 39338,
+			"sha256": "d57c307d062575182185f5c14048f9c67f322396209bc6293c84ab5c8731c5a7"
+		}
+	],
+	"outputs": [
+		{
+			"path": "compiler.wasm-runtime.js",
+			"mediaType": "text/javascript",
+			"bytes": 13936,
+			"sha256": "bd103f277be99fd2f3ffc0248b3558e6c2c85a44902bfeef042c6bedcf0b2c63",
+			"storage": {
+				"path": "compiler.wasm-runtime.js",
+				"encoding": "identity",
+				"bytes": 13936,
+				"sha256": "bd103f277be99fd2f3ffc0248b3558e6c2c85a44902bfeef042c6bedcf0b2c63"
+			}
+		},
+		{
+			"path": "compiler.wasm",
+			"mediaType": "application/wasm",
+			"bytes": 4299273,
+			"sha256": "9eb047426613c3ed3006838daae49e29929ad0d560ec6b1f8b50e15e2c3865d6",
+			"storage": {
+				"path": "compiler.wasm.gz",
+				"encoding": "gzip",
+				"bytes": 1678507,
+				"sha256": "5f46653e00fb5832e0bb2daba4fe49bf3e7bce369a3d16fcb30025fb7ed96bf2"
+			}
+		},
+		{
+			"path": "compile-classlib-teavm.bin",
+			"mediaType": "application/octet-stream",
+			"bytes": 200621,
+			"sha256": "71746dc82ddad5ad8be829f461c235a747bdaf121d1b7abd16dbbbbe6a17f53d",
+			"storage": {
+				"path": "compile-classlib-teavm.bin",
+				"encoding": "identity",
+				"bytes": 200621,
+				"sha256": "71746dc82ddad5ad8be829f461c235a747bdaf121d1b7abd16dbbbbe6a17f53d"
+			}
+		},
+		{
+			"path": "runtime-classlib-teavm.bin",
+			"mediaType": "application/octet-stream",
+			"bytes": 2394175,
+			"sha256": "f0c9c8c0426e310d08751e57cc88fdfd63ea2f428e4d6cb1b7e59a3dc20844ad",
+			"storage": {
+				"path": "runtime-classlib-teavm.bin.gz",
+				"encoding": "gzip",
+				"bytes": 2358693,
+				"sha256": "bf0d0ba86f2e35c4360e54151a171b2e2729a2c5e6cb9cfbdc7ecefae8ced4c4"
+			}
+		}
+	]
+}

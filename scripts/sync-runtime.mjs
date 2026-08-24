@@ -103,6 +103,15 @@ export const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-teavm',
+		module: './sync-wasm-teavm.mjs',
+		exportName: 'produceWasmTeaVmAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true,
+		sourceRequired: true
+	},
+	{
 		name: 'wasm-dotnet',
 		module: './sync-wasm-dotnet.mjs',
 		exportName: 'syncWasmDotnetDist',
