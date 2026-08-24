@@ -121,6 +121,7 @@ type TinyGoOperation = {
 	diagnosticCount: number;
 	outputBytes: number;
 	limits?: ExecutionLimits;
+	hasExplicitWasmMemoryLimit: boolean;
 	reason?: unknown;
 	reject?: (reason: unknown) => void;
 };
@@ -140,6 +141,7 @@ type TinyGoRunRequest = {
 
 const ACTIVITY_PREFIX_PATTERN = /^\[\d{2}:\d{2}:\d{2}\]\s?/gm;
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const TINYGO_BROWSER_COMPILER_DEFAULT_MAX_WASM_MEMORY_BYTES = 2 * 1024 * 1024 * 1024;
 const EXECUTION_LIMIT_KEYS = Object.keys(DEFAULT_EXECUTION_LIMITS) as Array<keyof ExecutionLimits>;
 const OUTPUT_ENCODER = new TextEncoder();
 const TINYGO_TARGETS = new Set<TinyGoTarget>(['wasm', 'wasip1', 'wasip2', 'wasip3']);
@@ -291,7 +293,8 @@ class TinyGo implements Sandbox {
 			phase,
 			cancelled: false,
 			diagnosticCount: 0,
-			outputBytes: 0
+			outputBytes: 0,
+			hasExplicitWasmMemoryLimit: false
 		} satisfies TinyGoOperation;
 		this.activeOperation = operation;
 		return operation;
@@ -329,6 +332,10 @@ class TinyGo implements Sandbox {
 				if (value !== undefined) snapshot[key] = value;
 			}
 		}
+		operation.hasExplicitWasmMemoryLimit = Object.prototype.hasOwnProperty.call(
+			snapshot,
+			'maxWasmMemoryBytes'
+		);
 		const limits = resolveExecutionLimits(snapshot);
 		this.assertOperation(operation);
 		return limits;
@@ -1025,12 +1032,14 @@ class TinyGo implements Sandbox {
 		prog?: SandboxProgress
 	) {
 		this.assertOperation(operation);
+		const maxWasmMemoryBytes = operation.hasExplicitWasmMemoryLimit
+			? (operation.limits?.maxWasmMemoryBytes ?? DEFAULT_EXECUTION_LIMITS.maxWasmMemoryBytes)
+			: TINYGO_BROWSER_COMPILER_DEFAULT_MAX_WASM_MEMORY_BYTES;
 		const compileCacheKey = JSON.stringify({
 			moduleUrl: this.moduleUrl,
 			maxAssetBytes:
 				operation.limits?.maxAssetBytes ?? DEFAULT_EXECUTION_LIMITS.maxAssetBytes,
-			maxWasmMemoryBytes:
-				operation.limits?.maxWasmMemoryBytes ?? DEFAULT_EXECUTION_LIMITS.maxWasmMemoryBytes,
+			maxWasmMemoryBytes,
 			target,
 			workspaceFiles
 		});
@@ -1046,9 +1055,7 @@ class TinyGo implements Sandbox {
 		this.requireRuntimeAssetLimitSetter(runtime)(
 			operation.limits?.maxAssetBytes ?? DEFAULT_EXECUTION_LIMITS.maxAssetBytes
 		);
-		runtime.setMaxWasmMemoryBytes?.(
-			operation.limits?.maxWasmMemoryBytes ?? DEFAULT_EXECUTION_LIMITS.maxWasmMemoryBytes
-		);
+		runtime.setMaxWasmMemoryBytes?.(maxWasmMemoryBytes);
 		this.assertOperation(operation);
 		runtime.reset();
 		this.assertOperation(operation);

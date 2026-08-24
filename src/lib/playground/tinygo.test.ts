@@ -249,6 +249,18 @@ describe('TinyGo sandbox', () => {
 		expect(outputs.join('')).toContain('upstream TinyGo artifact ready');
 	});
 
+	it('uses the verified upstream compiler memory default when the caller omits a limit', async () => {
+		const sandbox = new TinyGo();
+		const code = 'package main\nfunc main() {}\n';
+
+		await sandbox.load({ tinygo: { moduleUrl: upstreamModuleUrl } });
+		await expect(sandbox.run(code, true)).resolves.toBe(true);
+
+		expect(upstreamFixtureState.compileOptions?.maxWasmMemoryBytes).toBe(
+			2 * 1024 * 1024 * 1024
+		);
+	});
+
 	it('retries upstream asset loading after a transient verified-asset failure', async () => {
 		const sandbox = new TinyGo();
 		const code = 'package main\nfunc main() {}\n';

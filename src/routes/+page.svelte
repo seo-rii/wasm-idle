@@ -182,6 +182,7 @@
 	> = {
 		RUST: () => ({ rustTargetTriple }),
 		GO: () => ({ goTarget }),
+		TINYGO: () => ({ limits: { maxWasmMemoryBytes: 2 * 1024 * 1024 * 1024 } }),
 		OCAML: () => ({ ocamlBackend, ocamlWasmBinaryenMode }),
 		ZIG: () => ({ zigTargetTriple: 'wasm64-wasi' })
 	};
