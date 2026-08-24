@@ -169,6 +169,8 @@ export async function runTinyGoBrowserProbe({
 					return (
 						text.includes('upstream TinyGo artifact ready:') ||
 						text.includes('TinyGo compilation failed') ||
+						text.includes('RuntimeError:') ||
+						text.includes('Error:') ||
 						text.includes('Process finished after')
 					);
 				},
@@ -191,6 +193,12 @@ export async function runTinyGoBrowserProbe({
 				.catch(() => '')) || '';
 		const prepareFinishedCount = (prepareTranscript.match(/Process finished after/g) || [])
 			.length;
+		const prepareFailure = prepareTranscript.match(/(?:RuntimeError|Error):[^\r\n]*/u)?.[0];
+		if (prepareFailure) {
+			throw new Error(
+				`TinyGo prepare failed: ${prepareFailure}\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, resolvedBrowserUrl.toString()), null, 2)}`
+			);
+		}
 		await page.waitForFunction(
 			() =>
 				typeof (/** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput) ===
