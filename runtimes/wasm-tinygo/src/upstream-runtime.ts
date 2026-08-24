@@ -1430,6 +1430,10 @@ function validateTinyGoLinkerPath(
 	} else {
 		throw new Error(`TinyGo CGo linker path escapes the mounted roots: ${path}`);
 	}
+	if (relativePath === '') {
+		if (directory) return;
+		throw new Error(`TinyGo CGo linker path is missing or has the wrong type: ${path}`);
+	}
 	if (!hasTinyGoVfsPath(vfsRoot, relativePath, directory ? 'directory' : 'file')) {
 		throw new Error(`TinyGo CGo linker path is missing or has the wrong type: ${path}`);
 	}

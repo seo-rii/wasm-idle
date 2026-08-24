@@ -2094,6 +2094,20 @@ test('binds compile protocol v4 C++, Clang assembly, dependencies, formats, and 
 		).schemaVersion,
 		6
 	);
+	const workspaceRootLibraryPlan = structuredClone(flaggedPlan);
+	workspaceRootLibraryPlan.cgoLinkerFlags = ['-L/workspace'];
+	workspaceRootLibraryPlan.arguments[workspaceRootLibraryPlan.arguments.indexOf('-lexample')] =
+		'-L/workspace';
+	assert.equal(
+		(
+			await validateTinyGoLinkPlanV6(workspaceRootLibraryPlan, runtime, {
+				...validationOptions,
+				expectedCXXFlags: new Map([['example.com/app\0helper.cc', ['-DCPP_VALUE=7']]]),
+				expectedCGoLinkerFlags: ['-L/workspace']
+			})
+		).schemaVersion,
+		6
+	);
 	const unsafeLinkerFlag = structuredClone(flaggedPlan);
 	unsafeLinkerFlag.cgoLinkerFlags = ['--export-all'];
 	unsafeLinkerFlag.arguments[unsafeLinkerFlag.arguments.indexOf('-lexample')] = '--export-all';
