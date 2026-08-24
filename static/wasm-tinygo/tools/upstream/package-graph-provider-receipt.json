@@ -1,0 +1,356 @@
+{
+  "schemaVersion": 1,
+  "format": "wasm-llvm-tinygo-package-graph-provider-v2",
+  "producerId": "wasm-llvm/tinygo-browser/package-graph",
+  "status": "passed",
+  "upstream": {
+    "sourceLock": "package-graph.lock.json",
+    "module": "golang.org/toolchain",
+    "version": "go1.24.6",
+    "archiveFilename": "v0.0.1-go1.24.6.linux-amd64.zip",
+    "archiveBytes": 82904480,
+    "archiveSha256": "e7f0fd16d1b06c716162a0938744bb7ebf7edbc3248d42432271a1b5c1fde1ce",
+    "entrypoint": "cmd/go",
+    "identityPackages": [
+      "go/build",
+      "go/build/constraint",
+      "cmd/go/internal/list",
+      "cmd/go/internal/load",
+      "cmd/go/internal/modload"
+    ],
+    "identitySources": [
+      {
+        "path": "src/go/build/build.go",
+        "bytes": 63892,
+        "sha256": "e2c9d4056a147bce2b170cce9c9dff26ca9ef9ca8aa0af85c2ead342a3277bb8"
+      },
+      {
+        "path": "src/go/build/constraint/expr.go",
+        "bytes": 15207,
+        "sha256": "850924f7ed53ce4bf1342cc6978afaaf902f6263420d63fc8c82e3485e497d9b"
+      },
+      {
+        "path": "src/cmd/go/internal/list/list.go",
+        "bytes": 34151,
+        "sha256": "f0dd7ee9cd045c796072a2edbdbfd178e859f1fa6f42a792e0711e9d0e2f361b"
+      },
+      {
+        "path": "src/cmd/go/internal/load/pkg.go",
+        "bytes": 126012,
+        "sha256": "7080541914db2ac8ec9b0a4926d55efde949786d86816efb138c444037484a6e"
+      },
+      {
+        "path": "src/cmd/go/internal/modload/load.go",
+        "bytes": 86531,
+        "sha256": "233085e67f0758e34b75501d979d966876281ac3518d1d112924769f1f129747"
+      },
+      {
+        "path": "src/cmd/go/internal/lockedfile/lockedfile_filelock.go",
+        "bytes": 1767,
+        "sha256": "c7946ebe8ced54cc3caeb461ccbee7eac37b6a8ea41052d3777e908055158529"
+      }
+    ],
+    "patch": {
+      "path": "patches/go-toolchain-wasip1-lockedfile.patch",
+      "bytes": 1172,
+      "sha256": "4497603167ec8fdf40e1c7dbfad312b4f2ae72d0292df6413f0cf5247e1063d0",
+      "status": "applied"
+    }
+  },
+  "build": {
+    "host": "linux-amd64",
+    "target": "wasip1/wasm",
+    "cgoEnabled": false,
+    "trimpath": true,
+    "buildVCS": false,
+    "buildID": "",
+    "imports": [
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "sched_yield",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "proc_exit",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "args_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "args_sizes_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "clock_time_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "environ_sizes_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_write",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "random_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "poll_oneoff",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_close",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_set_size",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_pread",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_pwrite",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_read",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_readdir",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_seek",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_filestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_write",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_sync",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_create_directory",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_filestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_filestat_set_times",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_readlink",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_remove_directory",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_rename",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_symlink",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_unlink_file",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "path_open",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "random_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_fdstat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_fdstat_set_flags",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_prestat_get",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "fd_prestat_dir_name",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "sock_accept",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "sock_shutdown",
+        "kind": "function"
+      },
+      {
+        "module": "wasi_snapshot_preview1",
+        "name": "proc_exit",
+        "kind": "function"
+      }
+    ]
+  },
+  "protocol": {
+    "command": "list",
+    "arguments": [
+      "-json=Dir,ImportPath,Name,Root,Module,Goroot,Standard,DepOnly,GoFiles,CgoFiles,CFiles,CXXFiles,SFiles,CgoCXXFLAGS,CgoLDFLAGS,EmbedFiles,Imports,ImportMap,Error",
+      "-deps",
+      "-e",
+      "-mod=readonly",
+      "-tags=tinygo.wasm tinygo purego osusergo math_big_pure_go gc.precise scheduler.asyncify serial.none tinygo.unicore go1.1 go1.2 go1.3 go1.4 go1.5 go1.6 go1.7 go1.8 go1.9 go1.10 go1.11 go1.12 go1.13 go1.14 go1.15 go1.16 go1.17 go1.18 go1.19 go1.20 go1.21 go1.22 go1.23 go1.24",
+      "."
+    ],
+    "argumentsByModuleMode": {
+      "readonly": [
+        "-json=Dir,ImportPath,Name,Root,Module,Goroot,Standard,DepOnly,GoFiles,CgoFiles,CFiles,CXXFiles,SFiles,CgoCXXFLAGS,CgoLDFLAGS,EmbedFiles,Imports,ImportMap,Error",
+        "-deps",
+        "-e",
+        "-mod=readonly",
+        "-tags=tinygo.wasm tinygo purego osusergo math_big_pure_go gc.precise scheduler.asyncify serial.none tinygo.unicore go1.1 go1.2 go1.3 go1.4 go1.5 go1.6 go1.7 go1.8 go1.9 go1.10 go1.11 go1.12 go1.13 go1.14 go1.15 go1.16 go1.17 go1.18 go1.19 go1.20 go1.21 go1.22 go1.23 go1.24",
+        "."
+      ],
+      "vendor": [
+        "-json=Dir,ImportPath,Name,Root,Module,Goroot,Standard,DepOnly,GoFiles,CgoFiles,CFiles,CXXFiles,SFiles,CgoCXXFLAGS,CgoLDFLAGS,EmbedFiles,Imports,ImportMap,Error",
+        "-deps",
+        "-e",
+        "-mod=vendor",
+        "-tags=tinygo.wasm tinygo purego osusergo math_big_pure_go gc.precise scheduler.asyncify serial.none tinygo.unicore go1.1 go1.2 go1.3 go1.4 go1.5 go1.6 go1.7 go1.8 go1.9 go1.10 go1.11 go1.12 go1.13 go1.14 go1.15 go1.16 go1.17 go1.18 go1.19 go1.20 go1.21 go1.22 go1.23 go1.24",
+        "."
+      ]
+    },
+    "moduleModes": [
+      "readonly",
+      "vendor"
+    ],
+    "environment": {
+      "GOOS": "wasip1",
+      "GOARCH": "wasm",
+      "CGO_ENABLED": "1",
+      "GOTOOLCHAIN": "local",
+      "GOPROXY": "off",
+      "GOSUMDB": "off",
+      "GOVCS": "off",
+      "GOENV": "off"
+    },
+    "stdout": "concatenated-go-list-json",
+    "maxBytes": 67108864,
+    "maxPackages": 16384
+  },
+  "acceptance": {
+    "status": "passed",
+    "fixture": "fixtures/package-graph-module",
+    "comparison": "same-pinned-native-cmd-go-exact-json",
+    "packageCount": 43,
+    "packageJSON": {
+      "path": "acceptance/package-list.json",
+      "bytes": 15274,
+      "sha256": "8f87e64a8f2a54660832f37eb3a88e2141888e2ebe49c94a9c5ae74416968811"
+    },
+    "fixtureSources": [
+      {
+        "path": "go.mod",
+        "bytes": 58,
+        "sha256": "3da294efb3efe4e9ae2b14eaba6a036c0715a8507edfba5c211e65c0561f20e1"
+      },
+      {
+        "path": "greeting.txt",
+        "bytes": 6,
+        "sha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03"
+      },
+      {
+        "path": "main.go",
+        "bytes": 218,
+        "sha256": "6e446fa985301e4129f942a42a32f73df10b8469cbe61d92980cfb43ff4aa0dc"
+      },
+      {
+        "path": "message/message.go",
+        "bytes": 61,
+        "sha256": "0cb604e20c61f06e48d7fa71a8b1f08f938483fbc54ea3f7f1dfc6b4b78ac46e"
+      },
+      {
+        "path": "message/platform_other.go",
+        "bytes": 67,
+        "sha256": "d73e4e7c394d120bc5781546bc05920cfefd66d4091c2952b22236a1169638ea"
+      },
+      {
+        "path": "message/platform_tinygo.go",
+        "bytes": 72,
+        "sha256": "0f0d16c790cf744728c421c89ead9a648ae13ba1aae368f2a8e1dc39870722df"
+      }
+    ],
+    "requiredFeatures": [
+      "local-module-package",
+      "tinygo.wasm-build-tag",
+      "go:embed"
+    ]
+  },
+  "assets": [
+    {
+      "path": "tinygo-package-graph.wasm",
+      "bytes": 25870831,
+      "sha256": "b7b28719bf97d5c5e140c3ec6f8f40a40fc7d02216e0160e460a34b79f61cb14"
+    }
+  ]
+}

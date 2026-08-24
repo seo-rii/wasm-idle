@@ -1,7 +1,7 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 785000000,
+		"maxBytes": 829000000,
 		"maxFiles": 1850
 	},
 	"directories": {
@@ -48,7 +48,7 @@
 		"wasm-rust": { "maxBytes": 68000000, "maxFiles": 85 },
 		"wasm-sqlite": { "maxBytes": 600000, "maxFiles": 7 },
 		"wasm-tcl": { "maxBytes": 3200000, "maxFiles": 16 },
-		"wasm-tinygo": { "maxBytes": 132000000, "maxFiles": 45 },
+		"wasm-tinygo": { "maxBytes": 165000000, "maxFiles": 45 },
 		"wasm-typescript": { "maxBytes": 1700000, "maxFiles": 4 },
 		"wasm-wat": { "maxBytes": 400000, "maxFiles": 4 },
 		"wasm-zig": { "maxBytes": 5000000, "maxFiles": 5 },

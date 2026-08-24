@@ -1,48 +1,44 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const checkoutRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const assetsDir = path.join(checkoutRoot, 'static', 'wasm-tinygo', 'assets');
-const toolsDir = path.join(checkoutRoot, 'static', 'wasm-tinygo', 'tools');
+const runtimeDir = path.join(checkoutRoot, 'static', 'wasm-tinygo');
+const assetsDir = path.join(runtimeDir, 'assets');
+const toolsDir = path.join(runtimeDir, 'tools');
+const upstreamToolsDir = path.join(toolsDir, 'upstream');
 
 describe('bundled wasm-tinygo runtime', () => {
-	it('keeps the legacy direct-mode artifact classified as a porting harness, not upstream TinyGo', () => {
-		const runtimeChunk = readdirSync(assetsDir).find(
-			(entry) => entry.startsWith('runtime-') && entry.endsWith('.js')
-		);
-		expect(runtimeChunk).toBeTruthy();
-		const runtimeChunkSource = readFileSync(path.join(assetsDir, runtimeChunk!), 'utf8');
-		const compilerManifest = JSON.parse(
-			readFileSync(path.join(toolsDir, 'tinygo-compiler.json'), 'utf8')
-		) as {
-			buildMode?: string;
-			artifactKind?: string;
-			format?: string;
-			producerId?: string;
-			upstreamCompiler?: boolean;
-			implementationKind?: string;
-		};
+	it('publishes only the receipt-verified upstream TinyGo compiler path', () => {
+		expect(existsSync(path.join(runtimeDir, 'upstream.js'))).toBe(true);
+		expect(existsSync(path.join(runtimeDir, 'runtime.js'))).toBe(false);
+		expect(existsSync(path.join(toolsDir, 'tinygo-compiler.wasm'))).toBe(false);
 
-		expect(compilerManifest.buildMode).toBe('direct');
-		// Older generated bundles predate implementationKind. These two generic fields are not
-		// accepted as evidence of upstream TinyGo identity.
-		expect(['compiler', 'porting-harness']).toContain(compilerManifest.artifactKind);
-		if (compilerManifest.implementationKind !== undefined) {
-			expect(compilerManifest.implementationKind).toBe('wasm-idle-go-ast-to-c-subset');
-		}
-		expect(compilerManifest.format).not.toBe('wasm-llvm-tinygo-browser-compiler-v1');
-		expect(compilerManifest.producerId).not.toBe('wasm-llvm/tinygo-browser');
-		expect(compilerManifest.upstreamCompiler).not.toBe(true);
-		expect(runtimeChunkSource).toContain('assetPath:');
-		expect(runtimeChunkSource).toContain('onProgress:e.onProgress');
-		expect(runtimeChunkSource).toMatch(/loaded:e,total:[a-z]/);
-		expect(runtimeChunkSource).toContain(
-			'tinygo compiler module loaded from tools/tinygo-compiler.wasm'
+		const assetEntries = readdirSync(assetsDir);
+		expect(assetEntries.some((entry) => /^upstream-entry-.+\.js$/u.test(entry))).toBe(false);
+		expect(assetEntries.some((entry) => /^upstream-compile-worker-.+\.js$/u.test(entry))).toBe(
+			true
 		);
-		expect(runtimeChunkSource).toContain(
-			'frontend bootstrap tool plan skipped: backend lowering is active'
-		);
+		expect(assetEntries.some((entry) => /^runtime-.+\.js$/u.test(entry))).toBe(false);
+
+		const upstreamEntry = readFileSync(path.join(runtimeDir, 'upstream.js'), 'utf8');
+		expect(upstreamEntry).not.toMatch(/\.\/assets\/upstream-entry-.+\.js/u);
+		expect(upstreamEntry).toMatch(/upstream-compile-worker-.+\.js/u);
+
+		const manifest = JSON.parse(
+			readFileSync(path.join(upstreamToolsDir, 'upstream-toolchain.v2.json'), 'utf8')
+		) as {
+			schemaVersion?: number;
+			format?: string;
+			assets?: { rootArchive?: { path?: string } };
+		};
+		expect(manifest).toMatchObject({
+			schemaVersion: 2,
+			format: 'wasm-idle-tinygo-upstream-assets-v2',
+			assets: { rootArchive: { path: 'tinygoroot.tar.gz.bin' } }
+		});
+		expect(existsSync(path.join(upstreamToolsDir, 'tinygoroot.tar.gz.bin'))).toBe(true);
+		expect(existsSync(path.join(upstreamToolsDir, 'tinygoroot.tar.gz'))).toBe(false);
 	});
 });
