@@ -158,7 +158,16 @@ for (const producer of [
 			assert.equal(manifest.format, 'wasm-idle-tinygo-upstream-assets-v2');
 			assert.equal(manifest.assets.compiler.sha256, sha256(compiler));
 			assert.equal(manifest.assets.packageGraph.sha256, sha256(packageGraph));
+			assert.equal(manifest.assets.rootArchive.path, 'tinygoroot.tar.gz.bin');
 			assert.equal(manifest.assets.rootArchive.sha256, sha256(rootArchive));
+			assert.deepEqual(
+				await readFile(path.join(outputPath, 'tinygoroot.tar.gz.bin')),
+				rootArchive
+			);
+			await assert.rejects(
+				readFile(path.join(outputPath, 'tinygoroot.tar.gz')),
+				(error) => error?.code === 'ENOENT'
+			);
 			assert.equal(manifest.assets.lld.sha256, sha256(lld));
 			if (producer.schemaVersion >= 2) {
 				const mismatchedReceiptPath = path.join(temporaryRoot, 'mismatched-receipt.json');

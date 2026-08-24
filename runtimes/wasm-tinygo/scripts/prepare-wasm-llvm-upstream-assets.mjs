@@ -187,8 +187,9 @@ async function main() {
 	}
 	const compilerEvidence = evidence('tinygo-compiler.wasm', compiler);
 	const packageGraphEvidence = evidence('tinygo-package-graph.wasm', packageGraph);
-	const rootEvidence = evidence('tinygoroot.tar.gz', rootArchive);
-	assertProducerReceipt(receipt, compilerEvidence, rootEvidence);
+	const rootReceiptEvidence = evidence('tinygoroot.tar.gz', rootArchive);
+	const rootEvidence = evidence('tinygoroot.tar.gz.bin', rootArchive);
+	assertProducerReceipt(receipt, compilerEvidence, rootReceiptEvidence);
 	assertPackageGraphReceipt(graphReceipt, packageGraphEvidence);
 	const manifest = {
 		schemaVersion: 2,
@@ -210,7 +211,7 @@ async function main() {
 		await Promise.all([
 			writeFile(path.join(temporaryDirectory, 'tinygo-compiler.wasm'), compiler),
 			writeFile(path.join(temporaryDirectory, 'tinygo-package-graph.wasm'), packageGraph),
-			writeFile(path.join(temporaryDirectory, 'tinygoroot.tar.gz'), rootArchive),
+			writeFile(path.join(temporaryDirectory, 'tinygoroot.tar.gz.bin'), rootArchive),
 			writeFile(path.join(temporaryDirectory, 'producer-receipt.json'), producerReceipt),
 			writeFile(
 				path.join(temporaryDirectory, 'package-graph-provider-receipt.json'),
