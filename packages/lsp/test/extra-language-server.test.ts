@@ -9,7 +9,7 @@ import {
 	PASCAL_MAX_ASSET_BYTES,
 	PERL_MAX_ASSET_BYTES,
 	PROLOG_MAX_ASSET_BYTES,
-	RUBY_RUNTIME_ASSET_PATH,
+	RUBY_RUNTIME_PROFILE,
 	TCL_MAX_ASSET_BYTES
 } from '@wasm-idle/core';
 import {
@@ -115,6 +115,29 @@ vi.mock('../src/jsonrpc.js', () => ({
 	BrowserMessageWriter: mockState.MockWriter
 }));
 
+const rubyRuntimeMocks = vi.hoisted(() => ({
+	preflightRubyRuntimeAssets: vi.fn(async () => ({
+		protocol: 'wasm-idle-ruby-preflight',
+		protocolVersion: 1,
+		profileId: 'ruby-3.4.1-ruby-wasm-2.9.3-2.9.4',
+		artifactRevision: 'a'.repeat(40),
+		rubyVersion: '3.4.1',
+		rubyRevision: 'b'.repeat(40),
+		rubyWasmVersion: '2.9.3-2.9.4',
+		rubyWasmRevision: 'a'.repeat(40),
+		wasiSdkVersion: '22.0',
+		manifestFingerprint: 'c'.repeat(64),
+		manifestBytes: Uint8Array.of(1),
+		moduleJavaScriptBytes: Uint8Array.of(2),
+		wasmBytes: Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)
+	}))
+}));
+
+vi.mock('@wasm-idle/core', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@wasm-idle/core')>()),
+	preflightRubyRuntimeAssets: rubyRuntimeMocks.preflightRubyRuntimeAssets
+}));
+
 import {
 	BUNDLED_ELIXIR_ASSET_RECEIPTS,
 	getAssemblyScriptLanguageServer,
@@ -152,6 +175,7 @@ import {
 describe('additional language server workers', () => {
 	beforeEach(() => {
 		mockState.workers.splice(0, mockState.workers.length);
+		rubyRuntimeMocks.preflightRubyRuntimeAssets.mockClear();
 	});
 
 	afterEach(() => {
@@ -823,55 +847,41 @@ describe('additional language server workers', () => {
 		handle.dispose();
 	});
 
-	it('starts Ruby with an explicitly provided Ruby WASM URL', async () => {
-		const moduleBytes = new TextEncoder().encode(
-			`new URL(${JSON.stringify(RUBY_RUNTIME_ASSET_PATH)}, import.meta.url);`
-		);
-		const wasmBytes = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
-		const receipt = (bytes: Uint8Array) => ({
-			bytes: bytes.byteLength,
-			sha256: createHash('sha256').update(bytes).digest('hex')
-		});
-		const integrity = {
-			'runtime.mjs': receipt(moduleBytes),
-			[RUBY_RUNTIME_ASSET_PATH]: receipt(wasmBytes)
-		};
-		const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-			const url = input.toString();
-			const bytes = url.endsWith('/assets/ruby+stdlib.wasm') ? wasmBytes : moduleBytes;
-			const response = new Response(bytes, {
-				headers: { 'Content-Length': String(bytes.byteLength) }
-			});
-			Object.defineProperty(response, 'url', { value: url });
-			return response;
-		});
-		vi.stubGlobal('fetch', fetchMock);
+	it('starts Ruby only after a complete custom runtime preflight', async () => {
 		const handle = await getRubyLanguageServer({
-			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
-			ruby: { wasmUrl: '/assets/ruby+stdlib.wasm', integrity },
+			ruby: {
+				...RUBY_RUNTIME_PROFILE,
+				baseUrl: 'https://static.example.com/custom-ruby/',
+				manifestUrl: 'https://static.example.com/custom-ruby/runtime-manifest.v2.json',
+				moduleUrl: 'https://static.example.com/custom-ruby/runtime.mjs.bin',
+				wasmUrl:
+					'https://static.example.com/custom-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin'
+			},
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
 
-		expect(mockState.workers[0]?.messages[0]).toEqual({
+		expect(rubyRuntimeMocks.preflightRubyRuntimeAssets).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseUrl: 'https://static.example.com/custom-ruby/',
+				manifestUrl: `https://static.example.com/custom-ruby/runtime-manifest.v2.json?v=${RUBY_RUNTIME_PROFILE.manifestFingerprint}`,
+				moduleUrl: `https://static.example.com/custom-ruby/runtime.mjs.bin?v=${RUBY_RUNTIME_PROFILE.moduleJavaScriptReceipt.sha256}`,
+				wasmUrl: `https://static.example.com/custom-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin?v=${RUBY_RUNTIME_PROFILE.wasmReceipt.sha256}`,
+				profile: RUBY_RUNTIME_PROFILE
+			})
+		);
+		expect(mockState.workers[0]?.messages[0]).toMatchObject({
 			type: 'init',
 			options: {
-				moduleUrl: 'https://static.example.com/repl_20240807/wasm-ruby/runtime.mjs',
-				wasmUrl: 'https://app.example.com/assets/ruby+stdlib.wasm',
-				integrity,
-				moduleBytes,
-				wasmBytes
+				runtimePreflight: {
+					protocol: 'wasm-idle-ruby-preflight',
+					profileId: 'ruby-3.4.1-ruby-wasm-2.9.3-2.9.4'
+				}
 			}
 		});
-		expect(fetchMock).toHaveBeenCalledTimes(2);
-		for (const [, init] of fetchMock.mock.calls) {
-			expect(init).toMatchObject({
-				cache: 'no-store',
-				credentials: 'omit',
-				redirect: 'error',
-				referrerPolicy: 'no-referrer'
-			});
-		}
+		expect(Object.keys(mockState.workers[0]?.messages[0].options)).toEqual([
+			'runtimePreflight'
+		]);
 
 		handle.dispose();
 	});

@@ -45,9 +45,10 @@ import {
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
 import {
 	HASKELL_RUNTIME_ASSET_RECEIPTS,
-	RUBY_RUNTIME_ASSET_PATH,
-	RUBY_RUNTIME_ASSET_RECEIPTS,
-	RUBY_RUNTIME_ASSET_VERSION
+	RUBY_RUNTIME_BUNDLE,
+	RUBY_RUNTIME_MANIFEST_PATH,
+	RUBY_RUNTIME_MODULE_STORAGE_PATH,
+	RUBY_RUNTIME_WASM_STORAGE_PATH
 } from '@wasm-idle/core';
 import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
 import { WASM_SWIFT_ASSET_VERSION } from './wasmSwiftVersion';
@@ -311,9 +312,20 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			manifestFingerprint: WASM_LISP_ASSET_VERSION
 		},
 		ruby: {
-			moduleUrl: asset('wasm-ruby/runtime.mjs', RUBY_RUNTIME_ASSET_VERSION),
-			wasmUrl: asset(`wasm-ruby/${RUBY_RUNTIME_ASSET_PATH}`, RUBY_RUNTIME_ASSET_VERSION),
-			integrity: RUBY_RUNTIME_ASSET_RECEIPTS
+			baseUrl: asset('wasm-ruby/'),
+			manifestUrl: asset(
+				`wasm-ruby/${RUBY_RUNTIME_MANIFEST_PATH}`,
+				RUBY_RUNTIME_BUNDLE.profile.manifestFingerprint
+			),
+			moduleUrl: asset(
+				`wasm-ruby/${RUBY_RUNTIME_MODULE_STORAGE_PATH}`,
+				RUBY_RUNTIME_BUNDLE.profile.moduleJavaScriptReceipt.sha256
+			),
+			wasmUrl: asset(
+				`wasm-ruby/${RUBY_RUNTIME_WASM_STORAGE_PATH}`,
+				RUBY_RUNTIME_BUNDLE.profile.wasmReceipt.sha256
+			),
+			...RUBY_RUNTIME_BUNDLE.profile
 		},
 		haskell: {
 			moduleUrl: asset('wasm-haskell/dyld.mjs', WASM_HASKELL_ASSET_VERSION),

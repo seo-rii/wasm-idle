@@ -94,8 +94,8 @@
     },
     "script": {
       "path": "scripts/sync-wasm-ruby.mjs",
-      "bytes": 40609,
-      "sha256": "4ff704bbff51a195dbb568db2ea1303039446ba9c439c266a8dddd40bc876e86"
+      "bytes": 46491,
+      "sha256": "85c0470fd9d903350761fb6996580f38b6178f8119d4aae25eb2b7cb9c216b3b"
     },
     "tool": {
       "name": "vite",
@@ -119,7 +119,7 @@
     {
       "id": "node-zlib-gzip-level-9",
       "input": "assets/ruby_stdlib-C40Yu-vu.wasm",
-      "output": "assets/ruby_stdlib-C40Yu-vu.wasm.gz"
+      "output": "assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin"
     }
   ],
   "legalFiles": [
@@ -167,8 +167,8 @@
     },
     {
       "path": "scripts/sync-wasm-ruby.mjs",
-      "bytes": 40609,
-      "sha256": "4ff704bbff51a195dbb568db2ea1303039446ba9c439c266a8dddd40bc876e86"
+      "bytes": 46491,
+      "sha256": "85c0470fd9d903350761fb6996580f38b6178f8119d4aae25eb2b7cb9c216b3b"
     },
     {
       "path": "node_modules/@ruby/3.4-wasm-wasi/dist/ruby+stdlib.wasm",

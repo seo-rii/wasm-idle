@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { RUBY_RUNTIME_PROFILE } from '@wasm-idle/core';
 
 import { BUNDLED_CLANGD_ASSET_INTEGRITY } from '../src/bundledClangdAssetIntegrity.js';
 import { BUNDLED_ELIXIR_ASSET_VERSION } from '../src/bundledElixirRuntimeIntegrity.js';
@@ -81,6 +82,7 @@ import {
 	resolveOcamlLanguageServerManifestUrl,
 	resolveOcamlLanguageServerModuleUrl,
 	resolveRLanguageServerBaseUrl,
+	resolveRubyLanguageServerAssetConfig,
 	resolvePrologLanguageServerBaseUrl,
 	resolvePrologLanguageServerManifestFingerprint,
 	resolvePrologLanguageServerManifestUrl,
@@ -106,6 +108,48 @@ import {
 } from '../src/runtime.js';
 
 describe('lsp runtime asset resolution', () => {
+	it('snapshots Ruby runtime configuration once before deriving trust and URLs', () => {
+		const source = {
+			...RUBY_RUNTIME_PROFILE,
+			baseUrl: 'https://static.example.com/custom-ruby/',
+			manifestUrl: 'https://static.example.com/custom-ruby/runtime-manifest.v2.json',
+			moduleUrl: 'https://static.example.com/custom-ruby/runtime.mjs.bin',
+			wasmUrl:
+				'https://static.example.com/custom-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin'
+		};
+		const propertyReads = new Map<PropertyKey, number>();
+		const ruby = new Proxy(source, {
+			get(target, property, receiver) {
+				const reads = (propertyReads.get(property) ?? 0) + 1;
+				propertyReads.set(property, reads);
+				if (reads > 1) throw new Error(`${String(property)} was read more than once`);
+				return Reflect.get(target, property, receiver);
+			}
+		});
+		let rubyReads = 0;
+		const options = {
+			get ruby() {
+				rubyReads += 1;
+				return ruby;
+			}
+		};
+
+		const resolved = resolveRubyLanguageServerAssetConfig(
+			options,
+			'https://app.example.com/editor'
+		);
+
+		expect(resolved).toMatchObject({
+			baseUrl: source.baseUrl,
+			manifestUrl: `${source.manifestUrl}?v=${RUBY_RUNTIME_PROFILE.manifestFingerprint}`,
+			moduleUrl: `${source.moduleUrl}?v=${RUBY_RUNTIME_PROFILE.moduleJavaScriptReceipt.sha256}`,
+			wasmUrl: `${source.wasmUrl}?v=${RUBY_RUNTIME_PROFILE.wasmReceipt.sha256}`,
+			profile: RUBY_RUNTIME_PROFILE
+		});
+		expect(rubyReads).toBe(1);
+		for (const property of Object.keys(source)) expect(propertyReads.get(property)).toBe(1);
+	});
+
 	it('pins bundled clangd assets in the default runtime config', () => {
 		expect(
 			resolveCppLanguageServerRuntimeAssetConfig(
@@ -685,7 +729,10 @@ describe('lsp runtime asset resolution', () => {
 				resolvePrologLanguageServerManifestUrl,
 				`wasm-prolog/runtime-manifest.v2.json?v=${BUNDLED_PROLOG_MANIFEST_FINGERPRINT}`
 			],
-			[resolveRubyLanguageServerModuleUrl, 'wasm-ruby/runtime.mjs'],
+			[
+				resolveRubyLanguageServerModuleUrl,
+				`wasm-ruby/runtime.mjs.bin?v=${RUBY_RUNTIME_PROFILE.moduleJavaScriptReceipt.sha256}`
+			],
 			[resolveRLanguageServerBaseUrl, 'webr/'],
 			[resolveAwkLanguageServerBaseUrl, 'wasm-awk/'],
 			[resolveAwkLanguageServerWorkerUrl, 'wasm-awk/runner-worker.js'],

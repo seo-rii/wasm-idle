@@ -34,6 +34,7 @@ export interface RuntimeAssetPreflightRequest {
 	readonly fetch?: typeof globalThis.fetch;
 	readonly signal?: AbortSignal;
 	readonly limits?: Partial<ExecutionLimits>;
+	readonly cache?: RequestCache;
 	readonly redirect?: RequestRedirect;
 	readonly maxConcurrentDownloads?: number;
 	readonly maxTotalDeliveryBytes?: number;
@@ -364,6 +365,7 @@ async function preflightAsset(
 	fetchImpl: typeof globalThis.fetch,
 	signal: AbortSignal,
 	maxAssetBytes: number,
+	cache: RequestCache | undefined,
 	redirect: RequestRedirect,
 	reportProgress: (loadedBytes: number) => void,
 	runtimeId: string,
@@ -395,14 +397,14 @@ async function preflightAsset(
 		if (signal.aborted) {
 			throw signal.reason ?? new Error('Runtime asset preflight was aborted');
 		}
-		const pendingResponse = Promise.resolve(
-			fetchImpl(requestUrl.href, {
-				credentials: 'omit',
-				redirect,
-				referrerPolicy: 'no-referrer',
-				signal
-			})
-		);
+		const requestInit: RequestInit = {
+			credentials: 'omit',
+			redirect,
+			referrerPolicy: 'no-referrer',
+			signal
+		};
+		if (cache !== undefined) requestInit.cache = cache;
+		const pendingResponse = Promise.resolve(fetchImpl(requestUrl.href, requestInit));
 		response = await waitForAbortable(pendingResponse, signal, (lateResponse, reason) => {
 			cancelResponseBody(lateResponse, reason);
 		});
@@ -697,6 +699,7 @@ export async function preflightRuntimeAssets(
 							fetchImpl!,
 							controller.signal,
 							limits.maxAssetBytes,
+							request.cache,
 							redirect,
 							(loadedBytes) =>
 								request.reportProgress?.({

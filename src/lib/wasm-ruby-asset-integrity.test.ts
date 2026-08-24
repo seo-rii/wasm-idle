@@ -2,11 +2,12 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
+import { RUBY_RUNTIME_ASSET_PATH, RUBY_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
 import {
-	RUBY_RUNTIME_ASSET_PATH,
-	RUBY_RUNTIME_ASSET_RECEIPTS,
-	RUBY_RUNTIME_ASSET_VERSION
-} from '@wasm-idle/core';
+	RUBY_RUNTIME_GENERATED_ASSET_VERSION,
+	RUBY_RUNTIME_GENERATED_BUNDLE,
+	RUBY_RUNTIME_GENERATED_PROFILE
+} from '../../packages/core/src/ruby-runtime.generated';
 import { describe, expect, it } from 'vitest';
 import { computeRubyRuntimeFingerprint } from '../../scripts/sync-wasm-ruby.mjs';
 
@@ -49,19 +50,27 @@ describe('checked-in Ruby runtime trust root', () => {
 			'NOTICE',
 			'THIRD_PARTY_NOTICES.md',
 			`${RUBY_RUNTIME_ASSET_PATH}.gz`,
+			`${RUBY_RUNTIME_ASSET_PATH}.gz.bin`,
 			'licenses/browser-wasi-shim/LICENSE-APACHE',
 			'licenses/browser-wasi-shim/LICENSE-MIT',
 			'runtime-build.json',
 			'runtime-manifest.v1.json',
 			'runtime-manifest.v2.json',
-			'runtime.mjs'
+			'runtime.mjs',
+			'runtime.mjs.bin'
 		]);
 
 		const manifest = JSON.parse(
 			await readFile(path.join(runtimeRoot, 'runtime-manifest.v2.json'), 'utf8')
 		);
-		expect(manifest.fingerprint).toBe(RUBY_RUNTIME_ASSET_VERSION);
-		expect(computeRubyRuntimeFingerprint(manifest)).toBe(RUBY_RUNTIME_ASSET_VERSION);
+		expect(manifest.fingerprint).toBe(RUBY_RUNTIME_GENERATED_ASSET_VERSION);
+		expect(RUBY_RUNTIME_GENERATED_PROFILE.manifestFingerprint).toBe(
+			RUBY_RUNTIME_GENERATED_ASSET_VERSION
+		);
+		expect(RUBY_RUNTIME_GENERATED_BUNDLE).toEqual({
+			profile: RUBY_RUNTIME_GENERATED_PROFILE
+		});
+		expect(computeRubyRuntimeFingerprint(manifest)).toBe(RUBY_RUNTIME_GENERATED_ASSET_VERSION);
 		expect(() => computeRubyRuntimeFingerprint({ ...manifest, format: 'tampered' })).toThrow(
 			'manifest format or runtime is invalid'
 		);
@@ -85,6 +94,22 @@ describe('checked-in Ruby runtime trust root', () => {
 				sha256: RUBY_RUNTIME_ASSET_RECEIPTS['runtime.mjs'].sha256
 			}
 		]);
+		expect(manifest.storage).toEqual([
+			{
+				path: `${RUBY_RUNTIME_ASSET_PATH}.gz.bin`,
+				logicalPath: RUBY_RUNTIME_ASSET_PATH,
+				encoding: 'gzip',
+				size: RUBY_RUNTIME_GENERATED_PROFILE.wasmReceipt.bytes,
+				sha256: RUBY_RUNTIME_GENERATED_PROFILE.wasmReceipt.sha256
+			},
+			{
+				path: 'runtime.mjs.bin',
+				logicalPath: 'runtime.mjs',
+				encoding: 'identity',
+				size: RUBY_RUNTIME_GENERATED_PROFILE.moduleJavaScriptReceipt.bytes,
+				sha256: RUBY_RUNTIME_GENERATED_PROFILE.moduleJavaScriptReceipt.sha256
+			}
+		]);
 
 		for (const stored of manifest.storage as StorageAsset[]) {
 			const storedBytes = await readFile(path.join(runtimeRoot, stored.path));
@@ -102,6 +127,23 @@ describe('checked-in Ruby runtime trust root', () => {
 				sha256: expected?.sha256
 			});
 		}
+		expect(await receipt(path.join(runtimeRoot, 'runtime-manifest.v2.json'))).toEqual(
+			RUBY_RUNTIME_GENERATED_PROFILE.manifestReceipt
+		);
+		expect(RUBY_RUNTIME_GENERATED_PROFILE.wasmReceipt).toEqual({
+			bytes: manifest.storage[0].size,
+			sha256: manifest.storage[0].sha256,
+			uncompressedBytes: RUBY_RUNTIME_ASSET_RECEIPTS[RUBY_RUNTIME_ASSET_PATH].bytes,
+			uncompressedSha256: RUBY_RUNTIME_ASSET_RECEIPTS[RUBY_RUNTIME_ASSET_PATH].sha256
+		});
+		const canonicalModule = await readFile(path.join(runtimeRoot, 'runtime.mjs.bin'));
+		const legacyModule = await readFile(path.join(runtimeRoot, 'runtime.mjs'));
+		const canonicalWasm = await readFile(
+			path.join(runtimeRoot, `${RUBY_RUNTIME_ASSET_PATH}.gz.bin`)
+		);
+		const legacyWasm = await readFile(path.join(runtimeRoot, `${RUBY_RUNTIME_ASSET_PATH}.gz`));
+		expect(legacyModule.equals(canonicalModule)).toBe(true);
+		expect(legacyWasm.equals(canonicalWasm)).toBe(true);
 	});
 
 	it('keeps the input lock, build receipt, legacy manifest, and legal receipts aligned', async () => {

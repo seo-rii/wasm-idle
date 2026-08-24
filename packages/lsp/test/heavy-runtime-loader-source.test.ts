@@ -12,8 +12,8 @@ describe('heavy LSP static runtime loaders', () => {
 			expect(source).toContain('/* @vite-ignore */ options.moduleUrl');
 		}
 		expect(rubyServiceSource).toContain('/* @vite-ignore */ moduleUrl');
-		expect(rubyServiceSource).toContain('rewriteRuntimeModuleAssetSpecifier');
-		expect(rubyServiceSource).toContain('verifyRuntimeAssetIntegrity');
+		expect(rubyServiceSource).toContain('rewriteVerifiedRubyRuntimeModule');
+		expect(rubyServiceSource).toContain('verifyRubyRuntimePreflightPayload');
 	});
 
 	it('does not import heavy runtime packages from LSP source', () => {

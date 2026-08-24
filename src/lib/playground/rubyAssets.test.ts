@@ -1,177 +1,122 @@
-import { createHash } from 'node:crypto';
-import { RUBY_RUNTIME_ASSET_PATH, type RubyRuntimeAssetReceipts } from '@wasm-idle/core';
+import {
+	RUBY_PREFLIGHT_PROTOCOL,
+	RUBY_PREFLIGHT_PROTOCOL_VERSION,
+	RUBY_RUNTIME_PROFILE
+} from '@wasm-idle/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const mocks = vi.hoisted(() => ({ preflightRubyRuntimeAssets: vi.fn() }));
+
+vi.mock('@wasm-idle/core', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@wasm-idle/core')>()),
+	preflightRubyRuntimeAssets: mocks.preflightRubyRuntimeAssets
+}));
+
+vi.mock('$env/dynamic/public', () => ({ env: {} }));
+
+import { resolveRubyRuntimeAssetConfig } from './assets';
 import {
-	loadVerifiedRubyRuntimeAssets,
-	snapshotRubyRuntimeAssetConfig,
-	type RubyRuntimeAssetConfig
+	createRubyRuntimeOwnedPreflightDelivery,
+	preflightVerifiedRubyRuntimeAssets
 } from './rubyAssets';
 
-const MODULE_URL = 'https://runtime.example/ruby/runtime.mjs?v=profile';
-const WASM_URL = `https://runtime.example/ruby/${RUBY_RUNTIME_ASSET_PATH}?v=profile`;
-const encoder = new TextEncoder();
-const moduleBytes = encoder.encode(
-	`const note=${JSON.stringify(RUBY_RUNTIME_ASSET_PATH)};export const rubyStdlibWasmUrl=new URL(${JSON.stringify(RUBY_RUNTIME_ASSET_PATH)},import.meta.url).href;`
-);
-const wasmBytes = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
-const receipt = (bytes: Uint8Array) => ({
-	bytes: bytes.byteLength,
-	sha256: createHash('sha256').update(bytes).digest('hex')
-});
-const integrity = {
-	'runtime.mjs': receipt(moduleBytes),
-	[RUBY_RUNTIME_ASSET_PATH]: receipt(wasmBytes)
-} satisfies RubyRuntimeAssetReceipts;
-
-const config = (overrides: Partial<RubyRuntimeAssetConfig> = {}): RubyRuntimeAssetConfig => ({
-	moduleUrl: MODULE_URL,
-	wasmUrl: WASM_URL,
-	integrity,
-	maxAssetBytes: 1_024,
-	...overrides
-});
-
-const responseFor = (bytes: Uint8Array, url: string) => {
-	const response = new Response(Uint8Array.from(bytes).buffer, {
-		headers: { 'Content-Length': String(bytes.byteLength) }
+function createPayload() {
+	return Object.freeze({
+		protocol: RUBY_PREFLIGHT_PROTOCOL,
+		protocolVersion: RUBY_PREFLIGHT_PROTOCOL_VERSION,
+		profileId: RUBY_RUNTIME_PROFILE.profileId,
+		artifactRevision: RUBY_RUNTIME_PROFILE.artifactRevision,
+		rubyVersion: RUBY_RUNTIME_PROFILE.rubyVersion,
+		rubyRevision: RUBY_RUNTIME_PROFILE.rubyRevision,
+		rubyWasmVersion: RUBY_RUNTIME_PROFILE.rubyWasmVersion,
+		rubyWasmRevision: RUBY_RUNTIME_PROFILE.rubyWasmRevision,
+		wasiSdkVersion: RUBY_RUNTIME_PROFILE.wasiSdkVersion,
+		manifestFingerprint: RUBY_RUNTIME_PROFILE.manifestFingerprint,
+		manifestBytes: Uint8Array.from([1]),
+		moduleJavaScriptBytes: Uint8Array.from([2]),
+		wasmBytes: Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0])
 	});
-	Object.defineProperty(response, 'url', { value: url });
-	return response;
-};
+}
 
 afterEach(() => {
 	vi.restoreAllMocks();
-	vi.unstubAllGlobals();
+	mocks.preflightRubyRuntimeAssets.mockReset();
 });
 
-describe('Ruby runtime asset verification', () => {
-	it('snapshots exact receipts, URLs, and limits away from caller-owned objects', () => {
-		const callerIntegrity = structuredClone(integrity);
-		const snapshot = snapshotRubyRuntimeAssetConfig(
-			config({
-				moduleUrl: 'https://runtime.example/ruby/./runtime.mjs?v=profile',
-				integrity: callerIntegrity
+describe('Ruby page-host preflight adapter', () => {
+	it('forwards the exact canonical config, profile, signal, and limits to Core', async () => {
+		const config = resolveRubyRuntimeAssetConfig(
+			{ rootUrl: '/app' },
+			'https://app.example/app/'
+		);
+		const payload = createPayload();
+		const controller = new AbortController();
+		const progress = vi.fn();
+		mocks.preflightRubyRuntimeAssets.mockResolvedValue(payload);
+
+		await expect(
+			preflightVerifiedRubyRuntimeAssets(config, {
+				limits: { maxAssetBytes: 1024 },
+				signal: controller.signal,
+				reportProgress: progress
+			})
+		).resolves.toBe(payload);
+		expect(mocks.preflightRubyRuntimeAssets).toHaveBeenCalledWith(
+			expect.objectContaining({
+				baseUrl: config.baseUrl,
+				manifestUrl: config.manifestUrl,
+				moduleUrl: config.moduleUrl,
+				wasmUrl: config.wasmUrl,
+				profile: config.preflightProfile,
+				signal: controller.signal,
+				reportProgress: progress
 			})
 		);
-		callerIntegrity['runtime.mjs'].bytes = 1;
-
-		expect(snapshot).toEqual(config());
-		expect(snapshot.integrity).not.toBe(callerIntegrity);
-		expect(snapshot.integrity['runtime.mjs']).not.toBe(callerIntegrity['runtime.mjs']);
-		expect(Object.isFrozen(snapshot)).toBe(true);
-		expect(Object.isFrozen(snapshot.integrity)).toBe(true);
-		expect(Object.isFrozen(snapshot.integrity['runtime.mjs'])).toBe(true);
 	});
 
-	it('captures the caller-owned asset limit exactly once', () => {
-		let reads = 0;
-		const candidate = {
-			moduleUrl: MODULE_URL,
-			wasmUrl: WASM_URL,
-			integrity,
-			get maxAssetBytes() {
-				reads += 1;
-				return 1_024;
-			}
-		};
+	it('automatically adopts all three unique whole buffers and consumes exactly once', () => {
+		const payload = createPayload();
+		const delivery = createRubyRuntimeOwnedPreflightDelivery(payload);
 
-		expect(snapshotRubyRuntimeAssetConfig(candidate).maxAssetBytes).toBe(1_024);
-		expect(reads).toBe(1);
+		expect(delivery.payload).toBe(payload);
+		expect(delivery.state).toBe('available');
+		expect(delivery.consume()).toEqual([
+			payload.manifestBytes.buffer,
+			payload.moduleJavaScriptBytes.buffer,
+			payload.wasmBytes.buffer
+		]);
+		expect(delivery.state).toBe('consumed');
+		expect(() => delivery.consume()).toThrow('no longer available');
+		delivery.retire();
+		expect(delivery.state).toBe('consumed');
 	});
 
-	it.each([
-		[
-			'extra receipt',
-			config({
-				integrity: { ...integrity, unexpected: receipt(Uint8Array.of(1)) } as never
-			})
-		],
-		['oversized receipt', config({ maxAssetBytes: moduleBytes.byteLength - 1 })],
-		[
-			'credential URL',
-			config({ moduleUrl: 'https://user:secret@runtime.example/runtime.mjs' })
-		],
-		[
-			'encoded separator URL',
-			config({ wasmUrl: 'https://runtime.example/ruby/%2fsecret.wasm' })
-		],
-		['invalid limit', config({ maxAssetBytes: 0 })]
-	])('rejects %s before downloading', (_label, candidate) => {
-		expect(() => snapshotRubyRuntimeAssetConfig(candidate)).toThrow();
-	});
+	it('retires an available delivery and rejects partial, shared, or unfrozen ownership', () => {
+		const delivery = createRubyRuntimeOwnedPreflightDelivery(createPayload());
+		delivery.retire();
+		expect(delivery.state).toBe('retired');
+		expect(() => delivery.consume()).toThrow('no longer available');
 
-	it('fetches and verifies exactly two assets before rewriting the module graph', async () => {
-		const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
-			const url = input.toString();
-			return responseFor(url === MODULE_URL ? moduleBytes : wasmBytes, url);
-		});
-		vi.stubGlobal('fetch', fetchMock);
-
-		const loaded = await loadVerifiedRubyRuntimeAssets(config());
-
-		expect(loaded.config).toEqual(config());
-		expect(loaded.wasmBytes).toEqual(wasmBytes);
-		expect(loaded.moduleSource).toContain(
-			`new URL(${JSON.stringify(WASM_URL)},import.meta.url)`
+		const payload = createPayload();
+		expect(() => createRubyRuntimeOwnedPreflightDelivery({ ...payload })).toThrow(
+			'frozen plain payload'
 		);
-		expect(loaded.moduleSource).toContain(
-			`const note=${JSON.stringify(RUBY_RUNTIME_ASSET_PATH)}`
-		);
-		expect(fetchMock).toHaveBeenCalledTimes(2);
-		expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([MODULE_URL, WASM_URL]);
-		for (const [, init] of fetchMock.mock.calls) {
-			expect(init).toMatchObject({
-				cache: 'no-store',
-				credentials: 'omit',
-				redirect: 'error',
-				referrerPolicy: 'no-referrer',
-				signal: expect.any(AbortSignal)
-			});
-		}
-	});
-
-	it.each(['runtime.mjs', RUBY_RUNTIME_ASSET_PATH] as const)(
-		'rejects corrupt %s bytes without returning executable material',
-		async (corruptAsset) => {
-			vi.stubGlobal(
-				'fetch',
-				vi.fn(async (input: RequestInfo | URL) => {
-					const url = input.toString();
-					const asset = url === MODULE_URL ? 'runtime.mjs' : RUBY_RUNTIME_ASSET_PATH;
-					const expected = asset === 'runtime.mjs' ? moduleBytes : wasmBytes;
-					const bytes =
-						asset === corruptAsset
-							? Uint8Array.from(expected, (value) => value ^ 1)
-							: expected;
-					return responseFor(bytes, url);
+		const backing = new Uint8Array([1, 2]);
+		expect(() =>
+			createRubyRuntimeOwnedPreflightDelivery(
+				Object.freeze({
+					...payload,
+					manifestBytes: backing.subarray(0, 1)
 				})
-			);
-
-			await expect(loadVerifiedRubyRuntimeAssets(config())).rejects.toMatchObject({
-				code: 'asset-integrity',
-				runtimeId: 'RUBY'
-			});
-		}
-	);
-
-	it('aborts the sibling download after the first asset fails verification', async () => {
-		let wasmSignal: AbortSignal | undefined;
-		vi.stubGlobal(
-			'fetch',
-			vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-				const url = input.toString();
-				if (url === MODULE_URL) {
-					return Promise.resolve(responseFor(Uint8Array.of(1), url));
-				}
-				wasmSignal = init?.signal || undefined;
-				return new Promise<Response>(() => undefined);
-			})
-		);
-
-		await expect(loadVerifiedRubyRuntimeAssets(config())).rejects.toMatchObject({
-			code: 'asset-integrity'
-		});
-		expect(wasmSignal?.aborted).toBe(true);
+			)
+		).toThrow('exclusively own');
+		expect(() =>
+			createRubyRuntimeOwnedPreflightDelivery(
+				Object.freeze({
+					...payload,
+					moduleJavaScriptBytes: payload.manifestBytes
+				})
+			)
+		).toThrow('unique ownership');
 	});
 });

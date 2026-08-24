@@ -1,4 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { RUBY_RUNTIME_PROFILE } from '@wasm-idle/core';
+import { createRubyRuntimeTestPreflightPayload } from './rubyTestPreflight';
+
+const preflightMocks = vi.hoisted(() => ({
+	preflightVerifiedRubyRuntimeAssets: vi.fn()
+}));
+
+vi.mock('$lib/playground/rubyAssets', async (importOriginal) => ({
+	...(await importOriginal<typeof import('./rubyAssets')>()),
+	preflightVerifiedRubyRuntimeAssets: preflightMocks.preflightVerifiedRubyRuntimeAssets
+}));
 
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
 
@@ -30,6 +41,9 @@ import Ruby from './ruby';
 
 describe('Ruby execution message limits', () => {
 	beforeEach(() => {
+		preflightMocks.preflightVerifiedRubyRuntimeAssets
+			.mockReset()
+			.mockImplementation(async () => createRubyRuntimeTestPreflightPayload());
 		workerInstances.length = 0;
 	});
 
@@ -123,8 +137,8 @@ describe('Ruby execution message limits', () => {
 				if (listenerRemovals === 2) {
 					replacement = sandbox.load({
 						ruby: {
-							moduleUrl: '/replacement/ruby.mjs',
-							wasmUrl: '/replacement/ruby.wasm'
+							...RUBY_RUNTIME_PROFILE,
+							baseUrl: '/replacement/'
 						}
 					});
 				}
@@ -156,9 +170,19 @@ describe('Ruby execution message limits', () => {
 		expect(replacementWorker.postMessage).toHaveBeenCalledWith(
 			expect.objectContaining({
 				load: true,
-				moduleUrl: 'http://localhost:3000/replacement/ruby.mjs',
-				wasmUrl: 'http://localhost:3000/replacement/ruby.wasm'
-			})
+				runtimePreflight: expect.any(Object)
+			}),
+			expect.any(Array)
+		);
+		expect(preflightMocks.preflightVerifiedRubyRuntimeAssets).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				baseUrl: 'http://localhost:3000/replacement/',
+				moduleUrl: expect.stringMatching(/\/replacement\/runtime\.mjs\.bin\?v=/),
+				wasmUrl: expect.stringMatching(
+					/\/replacement\/assets\/ruby_stdlib-C40Yu-vu\.wasm\.gz\.bin\?v=/
+				)
+			}),
+			expect.any(Object)
 		);
 
 		const retry = sandbox.run('puts "retry"', false);

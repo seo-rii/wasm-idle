@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { RUBY_RUNTIME_PROFILE } from '@wasm-idle/core';
 
 import {
 	LanguageServerAssetConfigurationError,
@@ -23,7 +24,7 @@ describe('heavy LSP runtime module resolution', () => {
 			'https://static.example.com/repl_20240807/wasm-duckdb/runtime.mjs'
 		);
 		expect(resolveRubyLanguageServerModuleUrl(rootUrl, currentUrl)).toBe(
-			'https://static.example.com/repl_20240807/wasm-ruby/runtime.mjs'
+			`https://static.example.com/repl_20240807/wasm-ruby/runtime.mjs.bin?v=${RUBY_RUNTIME_PROFILE.moduleJavaScriptReceipt.sha256}`
 		);
 	});
 
@@ -50,10 +51,24 @@ describe('heavy LSP runtime module resolution', () => {
 		).toBe('https://app.example.com/editor/duckdb-runtime.mjs');
 		expect(
 			resolveRubyLanguageServerModuleUrl(
-				{ ruby: { moduleUrl: './ruby-runtime.mjs' } },
+				{
+					ruby: {
+						...RUBY_RUNTIME_PROFILE,
+						baseUrl: 'https://app.example.com/editor/ruby/',
+						moduleUrl: './ruby/runtime.mjs.bin'
+					}
+				},
 				currentUrl
 			)
-		).toBe('https://app.example.com/editor/ruby-runtime.mjs');
+		).toBe(
+			`https://app.example.com/editor/ruby/runtime.mjs.bin?v=${RUBY_RUNTIME_PROFILE.moduleJavaScriptReceipt.sha256}`
+		);
+		expect(() =>
+			resolveRubyLanguageServerModuleUrl(
+				{ ruby: { moduleUrl: './untrusted-ruby-runtime.mjs.bin' } },
+				currentUrl
+			)
+		).toThrow('complete runtime profile');
 	});
 
 	it('rejects document-relative runtime module fallbacks', () => {

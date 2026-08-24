@@ -32,16 +32,21 @@ import {
 } from './bundledTclRuntime.js';
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from './types.js';
 import {
-	deriveRubyRuntimeWasmUrl,
+	RUBY_RUNTIME_MANIFEST_PATH,
+	RUBY_RUNTIME_MODULE_STORAGE_PATH,
+	RUBY_RUNTIME_PROFILE,
+	RUBY_RUNTIME_WASM_STORAGE_PATH,
 	snapshotJanetRuntimePreflightProfile,
 	snapshotPascalRuntimePreflightProfile,
 	snapshotPerlRuntimePreflightProfile,
 	snapshotPrologRuntimePreflightProfile,
+	snapshotRubyRuntimePreflightProfile,
 	snapshotTclRuntimePreflightProfile,
 	type JanetRuntimePreflightProfile,
 	type PascalRuntimePreflightProfile,
 	type PerlRuntimePreflightProfile,
 	type PrologRuntimePreflightProfile,
+	type RubyRuntimePreflightProfile,
 	type TclRuntimePreflightProfile
 } from '@wasm-idle/core';
 
@@ -947,16 +952,198 @@ export function resolvePrologLanguageServerPreflightProfile(
 	}
 }
 
-export function resolveRubyLanguageServerWasmUrl(
+type RubyLanguageServerRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['ruby']>;
+
+const RUBY_LANGUAGE_SERVER_CONFIG_KEYS = [
+	'baseUrl',
+	'manifestUrl',
+	'moduleUrl',
+	'wasmUrl',
+	'profileId',
+	'artifactRevision',
+	'rubyVersion',
+	'rubyRevision',
+	'rubyWasmVersion',
+	'rubyWasmRevision',
+	'wasiSdkVersion',
+	'manifestFingerprint',
+	'manifestReceipt',
+	'moduleJavaScriptReceipt',
+	'wasmReceipt'
+] as const satisfies readonly (keyof RubyLanguageServerRuntimeConfig)[];
+
+function snapshotRubyLanguageServerOptions(
+	options: EditorLanguageServerOptions | undefined
+): EditorLanguageServerOptions | undefined {
+	if (!options || typeof options !== 'object') return options;
+	const source = options.ruby;
+	const rootUrl = options.rootUrl;
+	if (!source) return Object.freeze({ rootUrl });
+	const ruby: Record<string, unknown> = {};
+	for (const key of RUBY_LANGUAGE_SERVER_CONFIG_KEYS) ruby[key] = source[key];
+	return Object.freeze({
+		rootUrl,
+		ruby: Object.freeze(ruby) as Readonly<RubyLanguageServerRuntimeConfig>
+	});
+}
+
+const usesCustomRubyRuntimeUrls = (
+	configured: Readonly<RubyLanguageServerRuntimeConfig> | undefined
+) =>
+	Boolean(
+		configured?.baseUrl ||
+		configured?.manifestUrl ||
+		configured?.moduleUrl ||
+		configured?.wasmUrl
+	);
+
+function hasConfiguredRubyTrust(
+	configured: Readonly<RubyLanguageServerRuntimeConfig> | undefined
+): boolean {
+	return (
+		!!configured &&
+		[
+			configured.profileId,
+			configured.artifactRevision,
+			configured.rubyVersion,
+			configured.rubyRevision,
+			configured.rubyWasmVersion,
+			configured.rubyWasmRevision,
+			configured.wasiSdkVersion,
+			configured.manifestFingerprint,
+			configured.manifestReceipt,
+			configured.moduleJavaScriptReceipt,
+			configured.wasmReceipt
+		].some((value) => value !== undefined)
+	);
+}
+
+function resolveRubyLanguageServerPreflightProfileFromSnapshot(
+	options: EditorLanguageServerOptions | undefined
+): RubyRuntimePreflightProfile {
+	const configured = typeof options === 'object' ? options.ruby : undefined;
+	const hasConfiguredProfile = hasConfiguredRubyTrust(configured);
+
+	if (!hasConfiguredProfile) {
+		if (usesCustomRubyRuntimeUrls(configured)) {
+			throw new LanguageServerAssetConfigurationError(
+				'Ruby LSP',
+				'a complete runtime profile and receipts for custom runtime URLs'
+			);
+		}
+		return snapshotRubyRuntimePreflightProfile(RUBY_RUNTIME_PROFILE);
+	}
+
+	try {
+		return snapshotRubyRuntimePreflightProfile({
+			profileId: configured?.profileId?.trim(),
+			artifactRevision: configured?.artifactRevision?.trim(),
+			rubyVersion: configured?.rubyVersion?.trim(),
+			rubyRevision: configured?.rubyRevision?.trim(),
+			rubyWasmVersion: configured?.rubyWasmVersion?.trim(),
+			rubyWasmRevision: configured?.rubyWasmRevision?.trim(),
+			wasiSdkVersion: configured?.wasiSdkVersion?.trim(),
+			manifestFingerprint: configured?.manifestFingerprint?.trim(),
+			manifestReceipt: configured?.manifestReceipt,
+			moduleJavaScriptReceipt: configured?.moduleJavaScriptReceipt,
+			wasmReceipt: configured?.wasmReceipt
+		});
+	} catch {
+		throw new LanguageServerAssetConfigurationError(
+			'Ruby LSP',
+			'a complete valid runtime preflight profile and receipts'
+		);
+	}
+}
+
+function resolveRubyLanguageServerBaseUrlFromSnapshot(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''
 ) {
-	if (typeof options === 'object' && options.ruby?.wasmUrl) {
-		return resolveFileUrl(options.ruby.wasmUrl, currentUrl);
+	if (typeof options === 'string') {
+		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-ruby/`, currentUrl);
 	}
-	return deriveRubyRuntimeWasmUrl(
-		resolveRubyLanguageServerModuleUrl(options, currentUrl),
+	if (options?.ruby?.baseUrl) {
+		resolveRubyLanguageServerPreflightProfileFromSnapshot(options);
+		return normalizeBaseUrl(options.ruby.baseUrl, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-ruby/`, currentUrl);
+	}
+	return resolveApplicationAssetUrl('/wasm-ruby/', currentUrl);
+}
+
+export function resolveRubyLanguageServerBaseUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	return resolveRubyLanguageServerBaseUrlFromSnapshot(
+		snapshotRubyLanguageServerOptions(options),
 		currentUrl
+	);
+}
+
+export function resolveRubyLanguageServerPreflightProfile(
+	options: EditorLanguageServerOptions | undefined
+): RubyRuntimePreflightProfile {
+	return resolveRubyLanguageServerPreflightProfileFromSnapshot(
+		snapshotRubyLanguageServerOptions(options)
+	);
+}
+
+function resolveRubyLanguageServerPinnedAssetUrl(
+	baseUrl: string,
+	currentUrl: string,
+	configuredUrl: string | undefined,
+	path: string,
+	pin: string
+) {
+	const sentinelOrigin = 'https://wasm-idle.invalid';
+	const candidate = resolveFileUrl(configuredUrl || `${baseUrl}${path}`, currentUrl);
+	let url: URL;
+	let expected: URL;
+	try {
+		url = new URL(candidate, currentUrl || sentinelOrigin);
+		expected = new URL(path, new URL(baseUrl, currentUrl || sentinelOrigin));
+	} catch {
+		throw new LanguageServerAssetConfigurationError(
+			'Ruby LSP',
+			`${path} to use its canonical query-pinned path under ruby.baseUrl`
+		);
+	}
+	if (
+		(url.protocol !== 'http:' && url.protocol !== 'https:') ||
+		url.username ||
+		url.password ||
+		url.hash ||
+		url.origin !== expected.origin ||
+		url.pathname !== expected.pathname ||
+		(url.search && url.search !== `?v=${pin}`)
+	) {
+		throw new LanguageServerAssetConfigurationError(
+			'Ruby LSP',
+			`${path} to use its canonical query-pinned path under ruby.baseUrl`
+		);
+	}
+	if (!url.search) url.searchParams.set('v', pin);
+	return currentUrl || candidate.startsWith('http://') || candidate.startsWith('https://')
+		? url.href
+		: `${url.pathname}${url.search}`;
+}
+
+export function resolveRubyLanguageServerManifestUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	const snapshot = snapshotRubyLanguageServerOptions(options);
+	const configured = typeof snapshot === 'object' ? snapshot.ruby : undefined;
+	const profile = resolveRubyLanguageServerPreflightProfileFromSnapshot(snapshot);
+	return resolveRubyLanguageServerPinnedAssetUrl(
+		resolveRubyLanguageServerBaseUrlFromSnapshot(snapshot, currentUrl),
+		currentUrl,
+		configured?.manifestUrl,
+		RUBY_RUNTIME_MANIFEST_PATH,
+		profile.manifestFingerprint
 	);
 }
 
@@ -964,12 +1151,67 @@ export function resolveRubyLanguageServerModuleUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''
 ) {
-	return resolveStaticRuntimeModuleUrl(
-		options,
-		typeof options === 'object' ? options.ruby?.moduleUrl : undefined,
-		'/wasm-ruby/runtime.mjs',
-		currentUrl
+	const snapshot = snapshotRubyLanguageServerOptions(options);
+	const configured = typeof snapshot === 'object' ? snapshot.ruby : undefined;
+	const profile = resolveRubyLanguageServerPreflightProfileFromSnapshot(snapshot);
+	return resolveRubyLanguageServerPinnedAssetUrl(
+		resolveRubyLanguageServerBaseUrlFromSnapshot(snapshot, currentUrl),
+		currentUrl,
+		configured?.moduleUrl,
+		RUBY_RUNTIME_MODULE_STORAGE_PATH,
+		profile.moduleJavaScriptReceipt.sha256
 	);
+}
+
+export function resolveRubyLanguageServerWasmUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	const snapshot = snapshotRubyLanguageServerOptions(options);
+	const configured = typeof snapshot === 'object' ? snapshot.ruby : undefined;
+	const profile = resolveRubyLanguageServerPreflightProfileFromSnapshot(snapshot);
+	return resolveRubyLanguageServerPinnedAssetUrl(
+		resolveRubyLanguageServerBaseUrlFromSnapshot(snapshot, currentUrl),
+		currentUrl,
+		configured?.wasmUrl,
+		RUBY_RUNTIME_WASM_STORAGE_PATH,
+		profile.wasmReceipt.sha256
+	);
+}
+
+export function resolveRubyLanguageServerAssetConfig(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	const snapshot = snapshotRubyLanguageServerOptions(options);
+	const configured = typeof snapshot === 'object' ? snapshot.ruby : undefined;
+	const profile = resolveRubyLanguageServerPreflightProfileFromSnapshot(snapshot);
+	const baseUrl = resolveRubyLanguageServerBaseUrlFromSnapshot(snapshot, currentUrl);
+	return Object.freeze({
+		baseUrl,
+		manifestUrl: resolveRubyLanguageServerPinnedAssetUrl(
+			baseUrl,
+			currentUrl,
+			configured?.manifestUrl,
+			RUBY_RUNTIME_MANIFEST_PATH,
+			profile.manifestFingerprint
+		),
+		moduleUrl: resolveRubyLanguageServerPinnedAssetUrl(
+			baseUrl,
+			currentUrl,
+			configured?.moduleUrl,
+			RUBY_RUNTIME_MODULE_STORAGE_PATH,
+			profile.moduleJavaScriptReceipt.sha256
+		),
+		wasmUrl: resolveRubyLanguageServerPinnedAssetUrl(
+			baseUrl,
+			currentUrl,
+			configured?.wasmUrl,
+			RUBY_RUNTIME_WASM_STORAGE_PATH,
+			profile.wasmReceipt.sha256
+		),
+		profile
+	});
 }
 
 export function resolveRLanguageServerBaseUrl(

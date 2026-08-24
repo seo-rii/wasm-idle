@@ -1,10 +1,11 @@
 import {
-	resolveRubyRuntimeModuleUrl,
-	resolveRubyRuntimeAssetIntegrity,
-	resolveRubyWasmUrl,
+	resolveRubyRuntimeAssetConfig,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
-import { snapshotRubyRuntimeAssetConfig } from '$lib/playground/rubyAssets';
+import {
+	createRubyRuntimeOwnedPreflightDelivery,
+	preflightVerifiedRubyRuntimeAssets
+} from '$lib/playground/rubyAssets';
 import {
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -21,13 +22,16 @@ import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
+	AssetTooLargeError,
 	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
 	DiagnosticLimitError,
 	OutputLimitError,
+	RUBY_MAX_ASSET_BYTES,
+	RUBY_MAX_MANIFEST_BYTES,
+	RUBY_MAX_MODULE_BYTES,
 	RuntimeConfigurationError,
 	TimeoutError,
-	createRuntimeAssetsKey,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
@@ -55,7 +59,7 @@ const abortReason = (signal: AbortSignal, phase: RubyOperation['phase']) =>
 
 class Ruby implements Sandbox {
 	output: any = null;
-	worker?: Worker = <any>null;
+	worker?: Worker;
 	buffer = createWasmIdleSharedBuffer(1024);
 	pendingInput: string[] = [];
 	begin = 0;
@@ -290,7 +294,7 @@ class Ruby implements Sandbox {
 			return Promise.reject(error);
 		}
 		let limits: ReturnType<typeof resolveExecutionLimits>;
-		let nextConfig: ReturnType<typeof snapshotRubyRuntimeAssetConfig>;
+		let nextConfig: ReturnType<typeof resolveRubyRuntimeAssetConfig>;
 		let nextAssetKey: string;
 		let signal: AbortSignal | undefined;
 		let unbindPreSessionAbort: () => void = () => undefined;
@@ -309,50 +313,49 @@ class Ruby implements Sandbox {
 				);
 			}
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
-			const nextModuleUrl = resolveRubyRuntimeModuleUrl(runtimeAssets, currentUrl);
-			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
-				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
-				);
-			}
-			const nextWasmUrl = resolveRubyWasmUrl(runtimeAssets, currentUrl);
-			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
-				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
-				);
-			}
-			const nextIntegrity = resolveRubyRuntimeAssetIntegrity(runtimeAssets);
-			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
-				return Promise.reject(
-					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
-				);
-			}
-			nextConfig = snapshotRubyRuntimeAssetConfig({
-				moduleUrl: nextModuleUrl,
-				wasmUrl: nextWasmUrl,
-				integrity: nextIntegrity,
-				maxAssetBytes: limits.maxAssetBytes
-			});
-			const resolvedAssetKey = createRuntimeAssetsKey({
-				ruby: {
-					moduleUrl: nextConfig.moduleUrl,
-					wasmUrl: nextConfig.wasmUrl,
-					integrity: nextConfig.integrity
+			nextConfig = resolveRubyRuntimeAssetConfig(runtimeAssets, currentUrl);
+			const effectiveMaxAssetBytes = Math.min(limits.maxAssetBytes, RUBY_MAX_ASSET_BYTES);
+			for (const [label, bytes, limit] of [
+				[
+					'manifest',
+					nextConfig.preflightProfile.manifestReceipt.bytes,
+					Math.min(effectiveMaxAssetBytes, RUBY_MAX_MANIFEST_BYTES)
+				],
+				[
+					'module JavaScript',
+					nextConfig.preflightProfile.moduleJavaScriptReceipt.bytes,
+					Math.min(effectiveMaxAssetBytes, RUBY_MAX_MODULE_BYTES)
+				],
+				[
+					'Wasm storage',
+					nextConfig.preflightProfile.wasmReceipt.bytes,
+					effectiveMaxAssetBytes
+				],
+				[
+					'Wasm logical',
+					nextConfig.preflightProfile.wasmReceipt.uncompressedBytes,
+					effectiveMaxAssetBytes
+				]
+			] as const) {
+				if ((bytes ?? 0) > limit) {
+					throw new AssetTooLargeError(
+						`Ruby runtime ${label} exceeds the ${limit} byte limit`,
+						{
+							actual: bytes,
+							limit,
+							phase: 'asset',
+							profileId: nextConfig.preflightProfile.profileId,
+							runtimeId: 'RUBY'
+						}
+					);
 				}
-			});
-			if (!resolvedAssetKey) {
-				throw new RuntimeConfigurationError('Ruby runtime asset key could not be created', {
-					phase: 'startup',
-					runtimeId: 'RUBY'
-				});
 			}
-			nextAssetKey = resolvedAssetKey;
+			nextAssetKey = JSON.stringify([nextConfig.preflightKey, effectiveMaxAssetBytes]);
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
 				);
 			}
-			unbindPreSessionAbort();
 		} catch (error) {
 			return Promise.reject(this.releaseBeforeSession(activeOperation, error));
 		}
@@ -361,6 +364,7 @@ class Ruby implements Sandbox {
 				this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
 			);
 		}
+		unbindPreSessionAbort();
 		const loading = this.workerSession.load(async (resolve, reject) => {
 			const resolveOperation = () => {
 				if (!this.releaseOperation(activeOperation)) return;
@@ -375,69 +379,101 @@ class Ruby implements Sandbox {
 			try {
 				if (!this.isOperationActive(activeOperation)) return;
 				const needsWorkerReset = !this.worker || this.runtimeAssetKey !== nextAssetKey;
-				if (needsWorkerReset && this.worker) this.workerSession.reset();
-				if (!this.isOperationActive(activeOperation)) return;
-				this.wasmUrl = nextConfig.wasmUrl;
-				this.moduleUrl = nextConfig.moduleUrl;
-				this.runtimeAssetKey = nextAssetKey;
-				this.pendingInput = [];
-				this.waitingForInput = false;
-				this.pendingEof = false;
-				if (!this.worker) {
-					const WorkerConstructor = (await import('$lib/playground/worker/ruby?worker'))
-						.default;
-					if (!this.isOperationActive(activeOperation)) return;
-					const worker = new WorkerConstructor();
-					if (!this.isOperationActive(activeOperation)) {
-						try {
-							worker.terminate();
-						} catch {
-							// The unattached worker is already detached.
-						}
-						return;
-					}
-					this.worker = worker;
-					this.workerSession.attach(worker);
-					let handler: (event: MessageEvent<any>) => void;
-					handler = (event) => {
-						if (
-							!this.isOperationActive(activeOperation) ||
-							this.worker !== worker ||
-							worker.onmessage !== handler
-						) {
-							return;
-						}
-						try {
-							if (event.data?.load) {
-								progress?.set?.(1);
-								if (
-									!this.isOperationActive(activeOperation) ||
-									this.worker !== worker ||
-									worker.onmessage !== handler
-								) {
-									return;
-								}
-								resolveOperation();
-								return;
-							}
-							if (event.data?.error !== undefined) rejectOperation(event.data.error);
-						} catch (error) {
-							rejectOperation(error);
-						}
-					};
-					worker.onmessage = handler;
-					worker.postMessage({
-						load: true,
-						moduleUrl: nextConfig.moduleUrl,
-						wasmUrl: nextConfig.wasmUrl,
-						integrity: nextConfig.integrity,
-						maxAssetBytes: nextConfig.maxAssetBytes
-					});
-				} else {
+				if (!needsWorkerReset) {
 					const worker = this.worker;
 					progress?.set?.(1);
 					if (!this.isOperationActive(activeOperation) || this.worker !== worker) return;
 					resolveOperation();
+					return;
+				}
+				const preflightController = new AbortController();
+				activeOperation.cleanups.push(() => {
+					if (preflightController.signal.aborted) return;
+					preflightController.abort(
+						activeOperation.cancellationReason ??
+							signal?.reason ??
+							new DOMException('Ruby runtime preflight retired', 'AbortError')
+					);
+				});
+				const payload = await preflightVerifiedRubyRuntimeAssets(nextConfig, {
+					limits,
+					signal: preflightController.signal,
+					reportProgress: ({ loadedBytes, totalBytes }) => {
+						progress?.set?.(
+							totalBytes > 0 ? Math.min(0.9, (loadedBytes / totalBytes) * 0.9) : 0
+						);
+					}
+				});
+				if (!this.isOperationActive(activeOperation) || signal?.aborted) return;
+				const delivery = createRubyRuntimeOwnedPreflightDelivery(payload);
+				let candidateAdopted = false;
+				let candidate: Worker | undefined;
+				activeOperation.cleanups.push(() => {
+					delivery.retire();
+					if (candidateAdopted || !candidate) return;
+					try {
+						candidate.onmessage = null;
+						candidate.onerror = null;
+						candidate.onmessageerror = null;
+						candidate.terminate();
+					} catch {
+						// Candidate retirement is best effort.
+					}
+				});
+				const WorkerConstructor = (await import('$lib/playground/worker/ruby?worker'))
+					.default;
+				if (!this.isOperationActive(activeOperation) || signal?.aborted) return;
+				candidate = new WorkerConstructor();
+				if (!this.isOperationActive(activeOperation) || signal?.aborted) return;
+				const worker = candidate;
+				let handler: (event: MessageEvent<any>) => void;
+				handler = (event) => {
+					if (!this.isOperationActive(activeOperation) || worker.onmessage !== handler)
+						return;
+					try {
+						if (event.data?.load) {
+							this.worker = worker;
+							this.workerSession.attach(worker);
+							candidateAdopted = true;
+							this.wasmUrl = nextConfig.wasmUrl;
+							this.moduleUrl = nextConfig.moduleUrl;
+							this.runtimeAssetKey = nextAssetKey;
+							this.pendingInput = [];
+							this.waitingForInput = false;
+							this.pendingEof = false;
+							progress?.set?.(1);
+							resolveOperation();
+							return;
+						}
+						if (event.data?.error !== undefined) rejectOperation(event.data.error);
+					} catch (error) {
+						rejectOperation(error);
+					}
+				};
+				worker.onmessage = handler;
+				worker.onerror = (event) => {
+					const location =
+						event.filename && event.lineno
+							? ` (${event.filename}:${event.lineno}:${event.colno})`
+							: '';
+					rejectOperation(
+						`Ruby worker script error: ${event.message || 'unknown error'}${location}`
+					);
+				};
+				worker.onmessageerror = () =>
+					rejectOperation('Ruby worker message deserialization failed');
+				const transferables = delivery.consume();
+				try {
+					worker.postMessage(
+						{
+							load: true,
+							runtimePreflight: delivery.payload,
+							maxAssetBytes: Math.min(limits.maxAssetBytes, RUBY_MAX_ASSET_BYTES)
+						},
+						[...transferables]
+					);
+				} finally {
+					delivery.retire();
 				}
 			} catch (error) {
 				rejectOperation(error);

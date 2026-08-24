@@ -46,11 +46,13 @@ import { WASM_PERL_RUNTIME_BUNDLE } from '$lib/playground/wasmPerlVersion';
 import { WASM_TCL_RUNTIME_BUNDLE } from '$lib/playground/wasmTclVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import {
-	RUBY_RUNTIME_ASSET_RECEIPTS,
+	RUBY_RUNTIME_BUNDLE,
+	RUBY_RUNTIME_MANIFEST_PATH,
+	RUBY_RUNTIME_MODULE_STORAGE_PATH,
+	RUBY_RUNTIME_WASM_STORAGE_PATH,
 	TEAVM_RUNTIME_ASSET_NAMES,
 	TEAVM_RUNTIME_ASSET_RECEIPTS,
 	RuntimeConfigurationError,
-	deriveRubyRuntimeWasmUrl,
 	snapshotBashRuntimePreflightProfile,
 	snapshotJanetRuntimePreflightProfile,
 	snapshotJuliaRuntimePreflightProfile,
@@ -58,10 +60,11 @@ import {
 	snapshotPascalRuntimePreflightProfile,
 	snapshotPerlRuntimePreflightProfile,
 	snapshotPrologRuntimePreflightProfile,
+	snapshotRubyRuntimePreflightProfile,
 	snapshotTclRuntimePreflightProfile,
 	snapshotTeaVmRuntimeAssetReceipts,
 	type HaskellRuntimeAssetReceipts,
-	type RubyRuntimeAssetReceipts
+	type RubyRuntimePreflightProfile
 } from '@wasm-idle/core';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from '$lib/playground/wasmFortranExecutionAssets';
 import { WASM_D_OUTER_ASSET_RECEIPTS } from '$lib/playground/wasmDIntegrity';
@@ -241,9 +244,30 @@ export interface ResolvedLispRuntimeAssetConfig {
 }
 
 export interface RubyRuntimeAssetConfig {
+	baseUrl?: string;
+	manifestUrl?: string;
 	moduleUrl?: string;
 	wasmUrl?: string;
-	integrity?: RubyRuntimeAssetReceipts;
+	profileId?: string;
+	artifactRevision?: string;
+	rubyVersion?: string;
+	rubyRevision?: string;
+	rubyWasmVersion?: string;
+	rubyWasmRevision?: string;
+	wasiSdkVersion?: string;
+	manifestFingerprint?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	moduleJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
+	wasmReceipt?: RuntimeAssetIntegrityEntry;
+}
+
+export interface ResolvedRubyRuntimeAssetConfig {
+	baseUrl: string;
+	manifestUrl: string;
+	moduleUrl: string;
+	wasmUrl: string;
+	preflightKey: string;
+	preflightProfile: Readonly<Required<RubyRuntimePreflightProfile>>;
 }
 
 export interface RRuntimeAssetConfig {
@@ -1866,25 +1890,171 @@ export function resolveLispRuntimeAssetConfig(
 	};
 }
 
+const RUBY_RUNTIME_CONFIG_KEYS = [
+	'baseUrl',
+	'manifestUrl',
+	'moduleUrl',
+	'wasmUrl',
+	'profileId',
+	'artifactRevision',
+	'rubyVersion',
+	'rubyRevision',
+	'rubyWasmVersion',
+	'rubyWasmRevision',
+	'wasiSdkVersion',
+	'manifestFingerprint',
+	'manifestReceipt',
+	'moduleJavaScriptReceipt',
+	'wasmReceipt'
+] as const satisfies readonly (keyof RubyRuntimeAssetConfig)[];
+
+function snapshotRubyRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined
+): Readonly<RubyRuntimeAssetConfig> | undefined {
+	const source = typeof options === 'object' ? options?.ruby : undefined;
+	if (!source) return undefined;
+	const snapshot: Record<string, unknown> = {};
+	for (const key of RUBY_RUNTIME_CONFIG_KEYS) snapshot[key] = source[key];
+	return Object.freeze(snapshot) as Readonly<RubyRuntimeAssetConfig>;
+}
+
+function resolveRubyBaseUrlFromSnapshot(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	configured: Readonly<RubyRuntimeAssetConfig> | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl = configured?.baseUrl;
+	if (configuredBaseUrl) return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-ruby/`, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-ruby/`,
+			currentUrl
+		);
+	}
+	return normalizeBaseUrl('/wasm-ruby/', currentUrl);
+}
+
+export function resolveRubyBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveRubyBaseUrlFromSnapshot(
+		options,
+		snapshotRubyRuntimeAssetConfig(options),
+		currentUrl
+	);
+}
+
+export function resolveRubyRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+): ResolvedRubyRuntimeAssetConfig {
+	const configured = snapshotRubyRuntimeAssetConfig(options);
+	const publicModuleUrl = (publicEnv.PUBLIC_WASM_RUBY_MODULE_URL || '').trim();
+	const publicWasmUrl = (publicEnv.PUBLIC_WASM_RUBY_WASM_URL || '').trim();
+	const usesCustomTrustBoundary = Boolean(
+		(configured && RUBY_RUNTIME_CONFIG_KEYS.some((key) => configured[key] !== undefined)) ||
+		publicModuleUrl ||
+		publicWasmUrl
+	);
+	let preflightProfile: Readonly<Required<RubyRuntimePreflightProfile>>;
+	try {
+		preflightProfile = snapshotRubyRuntimePreflightProfile(
+			usesCustomTrustBoundary
+				? {
+						profileId: configured?.profileId?.trim(),
+						artifactRevision: configured?.artifactRevision?.trim(),
+						rubyVersion: configured?.rubyVersion?.trim(),
+						rubyRevision: configured?.rubyRevision?.trim(),
+						rubyWasmVersion: configured?.rubyWasmVersion?.trim(),
+						rubyWasmRevision: configured?.rubyWasmRevision?.trim(),
+						wasiSdkVersion: configured?.wasiSdkVersion?.trim(),
+						manifestFingerprint: configured?.manifestFingerprint?.trim(),
+						manifestReceipt: configured?.manifestReceipt,
+						moduleJavaScriptReceipt: configured?.moduleJavaScriptReceipt,
+						wasmReceipt: configured?.wasmReceipt
+					}
+				: RUBY_RUNTIME_BUNDLE.profile
+		);
+	} catch (cause) {
+		throw new RuntimeConfigurationError(
+			'Ruby runtime custom assets require one complete profile and receipt bundle.',
+			{ cause, runtimeId: 'RUBY' }
+		);
+	}
+	const baseUrl = resolveRubyBaseUrlFromSnapshot(options, configured, currentUrl);
+	const resolvePinnedUrl = (configuredUrl: string | undefined, path: string, pin: string) => {
+		const sentinelOrigin = 'https://wasm-idle.invalid';
+		const candidate = resolveConfiguredUrl(configuredUrl || `${baseUrl}${path}`, currentUrl);
+		let url: URL;
+		let expected: URL;
+		try {
+			url = new URL(candidate, currentUrl || sentinelOrigin);
+			expected = new URL(`${baseUrl}${path}`, currentUrl || sentinelOrigin);
+		} catch (cause) {
+			throw new RuntimeConfigurationError(`Ruby runtime ${path} URL is invalid.`, {
+				cause,
+				runtimeId: 'RUBY'
+			});
+		}
+		if (
+			(url.protocol !== 'http:' && url.protocol !== 'https:') ||
+			url.username ||
+			url.password ||
+			url.hash ||
+			url.origin !== expected.origin ||
+			url.pathname !== expected.pathname ||
+			(url.search && url.search !== `?v=${pin}`)
+		) {
+			throw new RuntimeConfigurationError(
+				`Ruby runtime ${path} URL must use its canonical query-pinned path.`,
+				{ runtimeId: 'RUBY' }
+			);
+		}
+		if (!url.search) url.searchParams.set('v', pin);
+		return currentUrl || candidate.startsWith('http://') || candidate.startsWith('https://')
+			? url.href
+			: `${url.pathname}${url.search}`;
+	};
+	const manifestUrl = resolvePinnedUrl(
+		configured?.manifestUrl,
+		RUBY_RUNTIME_MANIFEST_PATH,
+		preflightProfile.manifestFingerprint
+	);
+	const moduleUrl = resolvePinnedUrl(
+		configured?.moduleUrl || publicModuleUrl,
+		RUBY_RUNTIME_MODULE_STORAGE_PATH,
+		preflightProfile.moduleJavaScriptReceipt.sha256
+	);
+	const wasmUrl = resolvePinnedUrl(
+		configured?.wasmUrl || publicWasmUrl,
+		RUBY_RUNTIME_WASM_STORAGE_PATH,
+		preflightProfile.wasmReceipt.sha256
+	);
+	return {
+		baseUrl,
+		manifestUrl,
+		moduleUrl,
+		wasmUrl,
+		preflightKey: JSON.stringify({
+			baseUrl,
+			manifestUrl,
+			moduleUrl,
+			wasmUrl,
+			profile: preflightProfile
+		}),
+		preflightProfile
+	};
+}
+
 export function resolveRubyWasmUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredWasmUrl =
-		(typeof options === 'object' && options?.ruby?.wasmUrl) ||
-		(publicEnv.PUBLIC_WASM_RUBY_WASM_URL || '').trim();
-
-	if (configuredWasmUrl) {
-		return resolveConfiguredUrl(configuredWasmUrl, currentUrl);
-	}
-	return deriveRubyRuntimeWasmUrl(resolveRubyRuntimeModuleUrl(options, currentUrl), currentUrl);
-}
-
-export function resolveRubyRuntimeAssetIntegrity(
-	options: string | PlaygroundRuntimeAssets | undefined
-) {
-	const configured = typeof options === 'object' ? options?.ruby?.integrity : undefined;
-	return configured === undefined ? RUBY_RUNTIME_ASSET_RECEIPTS : configured;
+	return resolveRubyRuntimeAssetConfig(options, currentUrl).wasmUrl;
 }
 
 export function resolveRBaseUrl(
@@ -3924,13 +4094,7 @@ export function resolveRubyRuntimeModuleUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	return resolveStaticRuntimeModuleUrl(
-		options,
-		typeof options === 'object' ? options?.ruby?.moduleUrl : undefined,
-		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL || '',
-		'wasm-ruby',
-		currentUrl
-	);
+	return resolveRubyRuntimeAssetConfig(options, currentUrl).moduleUrl;
 }
 
 export function resolveSqliteRuntimeModuleUrl(

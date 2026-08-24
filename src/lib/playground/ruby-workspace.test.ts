@@ -1,4 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRubyRuntimeTestPreflightPayload } from './rubyTestPreflight';
+
+const preflightMocks = vi.hoisted(() => ({
+	preflightVerifiedRubyRuntimeAssets: vi.fn()
+}));
+
+vi.mock('$lib/playground/rubyAssets', async (importOriginal) => ({
+	...(await importOriginal<typeof import('./rubyAssets')>()),
+	preflightVerifiedRubyRuntimeAssets: preflightMocks.preflightVerifiedRubyRuntimeAssets
+}));
 
 vi.mock('$env/dynamic/public', () => ({
 	env: {}
@@ -35,6 +45,9 @@ import Ruby from './ruby';
 
 describe('Ruby workspace boundary', () => {
 	beforeEach(() => {
+		preflightMocks.preflightVerifiedRubyRuntimeAssets
+			.mockReset()
+			.mockImplementation(async () => createRubyRuntimeTestPreflightPayload());
 		workerInstances.length = 0;
 	});
 

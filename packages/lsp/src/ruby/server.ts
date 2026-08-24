@@ -1,30 +1,18 @@
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
-import {
-	loadLanguageToolAsset,
-	type LanguageToolAssetIntegrityMap,
-	type ResolvedLanguageToolAssetConfig
-} from '../assets.js';
-import { RUBY_RUNTIME_ASSET_PATH, RUBY_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
-import {
-	resolveRubyLanguageServerModuleUrl,
-	resolveRubyLanguageServerWasmUrl
-} from '../runtime.js';
+import { DEFAULT_LANGUAGE_TOOL_ASSET_TIMEOUT_MS } from '../assets.js';
+import { resolveRubyLanguageServerAssetConfig } from '../runtime.js';
 import {
 	createLanguageServerProgressReporter,
 	createWorkerLanguageServerClient,
 	type LanguageServerStatus
 } from '../worker-client.js';
 import {
-	RUBY_RUNTIME_ASSETS,
-	snapshotRubyRuntimeAssetReceipts,
-	type RubyRuntimeAssetReceipts
-} from './assets.js';
+	RUBY_MAX_ASSET_BYTES,
+	preflightRubyRuntimeAssets,
+	type RubyRuntimePreflightPayload
+} from '@wasm-idle/core';
 
-export interface RubyLanguageServerConfig {
-	moduleUrl?: string;
-	wasmUrl?: string;
-	integrity?: RubyRuntimeAssetReceipts;
-}
+export type RubyLanguageServerConfig = NonNullable<EditorLanguageServerRuntimeOptions['ruby']>;
 
 export interface RubyLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
 	createWorker?: () => Worker;
@@ -34,116 +22,89 @@ export interface RubyLanguageServerOptions extends EditorLanguageServerRuntimeOp
 const createDefaultWorker = () =>
 	new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
 
-const requireAbsoluteAssetUrl = (value: string, label: string, currentUrl: string) => {
-	let url: URL;
-	try {
-		url = currentUrl ? new URL(value, currentUrl) : new URL(value);
-	} catch {
-		throw new TypeError(`${label} must resolve to an absolute URL`);
-	}
+function abortReason(signal: AbortSignal): unknown {
+	return (
+		signal.reason ?? new DOMException('Ruby language server startup cancelled', 'AbortError')
+	);
+}
+
+function ownedTransferBuffer(bytes: Uint8Array, label: string): ArrayBuffer {
 	if (
-		(url.protocol !== 'https:' && url.protocol !== 'http:') ||
-		url.username ||
-		url.password ||
-		url.hash ||
-		/%2f|%5c/iu.test(url.pathname)
+		!ArrayBuffer.isView(bytes) ||
+		Object.prototype.toString.call(bytes) !== '[object Uint8Array]' ||
+		!(bytes.buffer instanceof ArrayBuffer) ||
+		bytes.byteOffset !== 0 ||
+		bytes.byteLength !== bytes.buffer.byteLength
 	) {
-		throw new TypeError(`${label} is unsafe`);
+		throw new TypeError(`Ruby language server ${label} bytes are not exclusively owned`);
 	}
-	return url.href;
-};
+	return bytes.buffer;
+}
 
 export async function getRubyLanguageServer(
 	options?: EditorLanguageServerOptions | RubyLanguageServerOptions
 ) {
 	const hostOptions =
 		typeof options === 'object' ? (options as RubyLanguageServerOptions) : undefined;
-	const config = typeof options === 'object' ? options.ruby || {} : {};
 	const currentUrl = hostOptions?.currentUrl || globalThis.location?.href || '';
-	const configuredIntegrity = config.integrity;
-	const integrity = snapshotRubyRuntimeAssetReceipts(
-		configuredIntegrity === undefined ? RUBY_RUNTIME_ASSET_RECEIPTS : configuredIntegrity
-	);
-	const moduleUrl = requireAbsoluteAssetUrl(
-		resolveRubyLanguageServerModuleUrl(options, currentUrl),
-		'Ruby language server module URL',
-		currentUrl
-	);
-	const wasmUrl = requireAbsoluteAssetUrl(
-		resolveRubyLanguageServerWasmUrl(options, currentUrl),
-		'Ruby language server Wasm URL',
-		currentUrl
-	);
-	const moduleBaseUrl = new URL('./', moduleUrl).href;
-	const wasmBaseUrl = new URL('./', wasmUrl).href;
-	const loaderIntegrity: LanguageToolAssetIntegrityMap = {
-		'runtime.mjs': integrity['runtime.mjs'],
-		[RUBY_RUNTIME_ASSET_PATH]: integrity[RUBY_RUNTIME_ASSET_PATH]
-	};
-	const assetConfig: ResolvedLanguageToolAssetConfig = {
-		baseUrl: moduleBaseUrl,
-		allowedBaseUrls: [wasmBaseUrl],
-		integrity: loaderIntegrity,
-		cache: 'no-store',
-		redirect: 'error',
-		requireExactResponseUrl: true,
-		loader: ({ asset }) => ({
-			url: asset === 'runtime.mjs' ? moduleUrl : wasmUrl
-		})
-	};
+	const resolved = resolveRubyLanguageServerAssetConfig(options, currentUrl);
+	const configuredMaxAssetBytes = hostOptions?.maxAssetBytes ?? RUBY_MAX_ASSET_BYTES;
+	if (!Number.isSafeInteger(configuredMaxAssetBytes) || configuredMaxAssetBytes <= 0) {
+		throw new TypeError('Ruby language server maxAssetBytes must be a positive safe integer');
+	}
+	const maxAssetBytes = Math.min(configuredMaxAssetBytes, RUBY_MAX_ASSET_BYTES);
+	const assetTimeoutMs = hostOptions?.assetTimeoutMs ?? DEFAULT_LANGUAGE_TOOL_ASSET_TIMEOUT_MS;
 	const status = createLanguageServerProgressReporter(hostOptions?.onStatus);
 	status.loading('ruby-assets');
-	const fractions = new Map(RUBY_RUNTIME_ASSETS.map((asset) => [asset, 0]));
-	let loadedAssets: Awaited<ReturnType<typeof loadLanguageToolAsset>>[];
 	const controller = new AbortController();
-	let reportAssetProgress = true;
-	const abortFromHost = () => controller.abort(hostOptions?.signal?.reason);
-	if (hostOptions?.signal?.aborted) abortFromHost();
-	else hostOptions?.signal?.addEventListener('abort', abortFromHost, { once: true });
+	const abortFromCaller = () =>
+		controller.abort(hostOptions?.signal ? abortReason(hostOptions.signal) : undefined);
+	hostOptions?.signal?.addEventListener('abort', abortFromCaller, { once: true });
+	if (hostOptions?.signal?.aborted) abortFromCaller();
+	let reportProgress = true;
+	let runtimePreflight: RubyRuntimePreflightPayload;
+	let transfer: ArrayBuffer[];
 	try {
-		loadedAssets = await Promise.all(
-			RUBY_RUNTIME_ASSETS.map((asset) =>
-				loadLanguageToolAsset(
-					'ruby',
-					asset,
-					assetConfig,
-					(loaded, total) => {
-						if (!reportAssetProgress) return;
-						fractions.set(
-							asset,
-							total && total > 0 ? Math.min(loaded / total, 1) : loaded > 0 ? 1 : 0
-						);
-						status.progress({
-							stage: 'ruby-assets',
-							loaded: [...fractions.values()].reduce((sum, value) => sum + value, 0),
-							total: RUBY_RUNTIME_ASSETS.length
-						});
-					},
-					{
-						signal: controller.signal,
-						timeoutMs: hostOptions?.assetTimeoutMs
-					}
-				)
-			)
-		);
+		runtimePreflight = await preflightRubyRuntimeAssets({
+			baseUrl: resolved.baseUrl,
+			manifestUrl: resolved.manifestUrl,
+			moduleUrl: resolved.moduleUrl,
+			wasmUrl: resolved.wasmUrl,
+			profile: resolved.profile,
+			signal: controller.signal,
+			timeoutMs: assetTimeoutMs,
+			maxAssetBytes,
+			progress(progress) {
+				if (!reportProgress) return;
+				status.progress({
+					stage: `preflight-ruby-${progress.assetKey}`,
+					loaded: progress.loadedBytes,
+					total: progress.totalBytes
+				});
+			}
+		});
+		transfer = [
+			ownedTransferBuffer(runtimePreflight.manifestBytes, 'manifest'),
+			ownedTransferBuffer(runtimePreflight.moduleJavaScriptBytes, 'module JavaScript'),
+			ownedTransferBuffer(runtimePreflight.wasmBytes, 'Wasm')
+		];
+		if (new Set(transfer).size !== transfer.length) {
+			throw new TypeError('Ruby language server preflight buffers are not uniquely owned');
+		}
 	} catch (error) {
-		reportAssetProgress = false;
-		controller.abort(error);
-		status.error(error instanceof Error ? error.message : String(error));
-		throw error;
+		reportProgress = false;
+		const rejection = hostOptions?.signal?.aborted ? abortReason(hostOptions.signal) : error;
+		controller.abort(rejection);
+		status.error(rejection instanceof Error ? rejection.message : String(rejection));
+		throw rejection;
 	} finally {
-		hostOptions?.signal?.removeEventListener('abort', abortFromHost);
+		hostOptions?.signal?.removeEventListener('abort', abortFromCaller);
 	}
-	const [moduleAsset, wasmAsset] = loadedAssets;
+	reportProgress = false;
 	return await createWorkerLanguageServerClient({
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
-		initOptions: {
-			moduleUrl,
-			wasmUrl,
-			integrity,
-			moduleBytes: moduleAsset.bytes,
-			wasmBytes: wasmAsset.bytes
-		},
+		initOptions: { runtimePreflight },
+		initTransfer: transfer,
 		onStatus: hostOptions?.onStatus,
 		lifecycle: hostOptions
 	});

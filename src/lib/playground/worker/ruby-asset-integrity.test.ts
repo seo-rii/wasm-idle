@@ -1,44 +1,41 @@
-import { createHash } from 'node:crypto';
-import { RUBY_RUNTIME_ASSET_PATH, type RubyRuntimeAssetReceipts } from '@wasm-idle/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-	loadVerifiedRubyRuntimeAssets: vi.fn(),
+	verifyRubyRuntimePreflightPayload: vi.fn(),
+	rewriteVerifiedRubyRuntimeModule: vi.fn(),
 	importRuntimeModule: vi.fn()
 }));
 
-vi.mock('$lib/playground/rubyAssets', async (importOriginal) => ({
-	...(await importOriginal<typeof import('$lib/playground/rubyAssets')>()),
-	loadVerifiedRubyRuntimeAssets: mocks.loadVerifiedRubyRuntimeAssets
+vi.mock('@wasm-idle/core', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@wasm-idle/core')>()),
+	verifyRubyRuntimePreflightPayload: mocks.verifyRubyRuntimePreflightPayload,
+	rewriteVerifiedRubyRuntimeModule: mocks.rewriteVerifiedRubyRuntimeModule
 }));
 
 vi.mock('$lib/playground/runtimeModule', () => ({
 	importRuntimeModule: mocks.importRuntimeModule
 }));
 
-const encoder = new TextEncoder();
-const moduleSource = 'export const verified = true;';
-const moduleBytes = encoder.encode(
-	`new URL(${JSON.stringify(RUBY_RUNTIME_ASSET_PATH)}, import.meta.url);`
-);
-const wasmBytes = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
-const receipt = (bytes: Uint8Array) => ({
-	bytes: bytes.byteLength,
-	sha256: createHash('sha256').update(bytes).digest('hex')
+const payload = Object.freeze({
+	protocol: 'wasm-idle-ruby-preflight',
+	protocolVersion: 1,
+	profileId: 'ruby-3.4.1-ruby-wasm-2.9.3-2.9.4',
+	artifactRevision: '3'.repeat(40),
+	rubyVersion: '3.4.1',
+	rubyRevision: '4'.repeat(40),
+	rubyWasmVersion: '2.9.3-2.9.4',
+	rubyWasmRevision: '3'.repeat(40),
+	wasiSdkVersion: '22.0',
+	manifestFingerprint: '5'.repeat(64),
+	manifestBytes: new Uint8Array([1]),
+	moduleJavaScriptBytes: new Uint8Array([2]),
+	wasmBytes: Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)
 });
-const integrity = {
-	'runtime.mjs': receipt(moduleBytes),
-	[RUBY_RUNTIME_ASSET_PATH]: receipt(wasmBytes)
-} satisfies RubyRuntimeAssetReceipts;
-const runtimeConfig = {
-	moduleUrl: 'https://runtime.example/ruby/runtime.mjs?v=verified',
-	wasmUrl: `https://runtime.example/ruby/${RUBY_RUNTIME_ASSET_PATH}?v=verified`,
-	integrity,
-	maxAssetBytes: 1_024
-};
+const moduleSource = 'export const verified = true;';
 const runtimeModule = {
 	RubyVM: {},
 	consolePrinter() {},
+	rubyStdlibWasmUrl: 'wasm-idle-verified:ruby/assets/ruby-stdlib.wasm',
 	wasiShim: {}
 };
 
@@ -47,23 +44,24 @@ const loadWorker = async () => {
 	return (globalThis as any).self.onmessage as (event: { data: any }) => Promise<void>;
 };
 
-describe('Ruby execution worker asset boundary', () => {
+describe('Ruby execution worker verified-payload boundary', () => {
 	beforeEach(() => {
 		vi.resetModules();
 		vi.restoreAllMocks();
-		mocks.loadVerifiedRubyRuntimeAssets.mockReset();
+		mocks.verifyRubyRuntimePreflightPayload.mockReset();
+		mocks.rewriteVerifiedRubyRuntimeModule.mockReset();
 		mocks.importRuntimeModule.mockReset();
 		(globalThis as any).self = globalThis as any;
 		(globalThis as any).postMessage = vi.fn();
-		mocks.loadVerifiedRubyRuntimeAssets.mockResolvedValue({
-			config: runtimeConfig,
-			moduleSource,
-			wasmBytes
+		(globalThis as any).fetch = vi.fn(() => {
+			throw new Error('Ruby execution worker must not fetch runtime assets');
 		});
+		mocks.verifyRubyRuntimePreflightPayload.mockResolvedValue(payload);
+		mocks.rewriteVerifiedRubyRuntimeModule.mockReturnValue(moduleSource);
 		mocks.importRuntimeModule.mockResolvedValue(runtimeModule);
 	});
 
-	it('imports only the verified Blob source and compiles only verified Wasm bytes', async () => {
+	it('reverifies the exact payload, imports only its Blob module, and compiles only explicit bytes', async () => {
 		let importedBlob: Blob | undefined;
 		const blobUrl = 'blob:https://runtime.example/verified-ruby';
 		vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
@@ -75,51 +73,118 @@ describe('Ruby execution worker asset boundary', () => {
 		const compile = vi.spyOn(WebAssembly, 'compile').mockResolvedValue(compiled);
 		const onmessage = await loadWorker();
 
-		await onmessage({ data: { load: true, ...runtimeConfig, log: false } });
+		await onmessage({ data: { load: true, runtimePreflight: payload, maxAssetBytes: 1024 } });
 
-		expect(mocks.loadVerifiedRubyRuntimeAssets).toHaveBeenCalledOnce();
-		expect(mocks.loadVerifiedRubyRuntimeAssets).toHaveBeenCalledWith(
-			expect.objectContaining(runtimeConfig)
-		);
+		expect(mocks.verifyRubyRuntimePreflightPayload).toHaveBeenCalledWith(payload, {
+			maxAssetBytes: 1024
+		});
+		expect(mocks.rewriteVerifiedRubyRuntimeModule).toHaveBeenCalledWith(payload);
 		expect(await importedBlob?.text()).toBe(moduleSource);
 		expect(mocks.importRuntimeModule).toHaveBeenCalledWith(blobUrl);
-		expect(compile).toHaveBeenCalledWith(wasmBytes);
+		expect(compile).toHaveBeenCalledWith(payload.wasmBytes);
 		expect(revokeObjectUrl).toHaveBeenCalledWith(blobUrl);
+		expect((globalThis as any).fetch).not.toHaveBeenCalled();
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 	});
 
-	it('clears a failed verification promise so the same profile can retry cleanly', async () => {
-		const failure = new Error('Ruby runtime module integrity failed');
-		mocks.loadVerifiedRubyRuntimeAssets
-			.mockRejectedValueOnce(failure)
-			.mockResolvedValueOnce({ config: runtimeConfig, moduleSource, wasmBytes });
+	it('rejects duplicate load while ready and never reimports or recompiles the runtime', async () => {
 		vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:verified-ruby');
 		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
 		vi.spyOn(WebAssembly, 'compile').mockResolvedValue({} as WebAssembly.Module);
 		const onmessage = await loadWorker();
 
-		await onmessage({ data: { load: true, ...runtimeConfig, log: false } });
-		await onmessage({ data: { load: true, ...runtimeConfig, log: false } });
+		await onmessage({ data: { load: true, runtimePreflight: payload, maxAssetBytes: 1024 } });
+		await onmessage({ data: { load: true, runtimePreflight: payload, maxAssetBytes: 1024 } });
 
-		expect(mocks.loadVerifiedRubyRuntimeAssets).toHaveBeenCalledTimes(2);
-		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
-			error: failure.message
-		});
-		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
-	});
-
-	it('reuses verified bytes when only a looser host byte limit changes', async () => {
-		vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:verified-ruby');
-		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-		vi.spyOn(WebAssembly, 'compile').mockResolvedValue({} as WebAssembly.Module);
-		const onmessage = await loadWorker();
-
-		await onmessage({ data: { load: true, ...runtimeConfig, log: false } });
-		await onmessage({
-			data: { load: true, ...runtimeConfig, maxAssetBytes: 2_048, log: false }
-		});
-
-		expect(mocks.loadVerifiedRubyRuntimeAssets).toHaveBeenCalledOnce();
+		expect(mocks.verifyRubyRuntimePreflightPayload).toHaveBeenCalledOnce();
+		expect(mocks.importRuntimeModule).toHaveBeenCalledOnce();
 		expect(WebAssembly.compile).toHaveBeenCalledOnce();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'Ruby runtime is already loaded.'
+		});
+	});
+
+	it('clears a failed load state so a fresh verified payload can retry', async () => {
+		mocks.verifyRubyRuntimePreflightPayload
+			.mockRejectedValueOnce(new Error('payload rejected'))
+			.mockResolvedValueOnce(payload);
+		vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:verified-ruby');
+		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+		vi.spyOn(WebAssembly, 'compile').mockResolvedValue({} as WebAssembly.Module);
+		const onmessage = await loadWorker();
+
+		await onmessage({ data: { load: true, runtimePreflight: payload, maxAssetBytes: 1024 } });
+		await onmessage({ data: { load: true, runtimePreflight: payload, maxAssetBytes: 1024 } });
+
+		expect(mocks.verifyRubyRuntimePreflightPayload).toHaveBeenCalledTimes(2);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ error: 'payload rejected' });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
+	});
+
+	it.each([
+		{ load: true, runtimePreflight: payload, maxAssetBytes: 0 },
+		{ load: false, runtimePreflight: payload, maxAssetBytes: 1024 },
+		{
+			load: true,
+			runtimePreflight: payload,
+			maxAssetBytes: 1024,
+			moduleUrl: 'https://legacy.example/runtime.mjs'
+		},
+		{
+			load: true,
+			runtimePreflight: payload,
+			maxAssetBytes: 1024,
+			integrity: {}
+		}
+	])('rejects widened or legacy load envelopes without verification', async (message) => {
+		const onmessage = await loadWorker();
+
+		await onmessage({ data: message });
+
+		expect(mocks.verifyRubyRuntimePreflightPayload).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'Ruby runtime load message has an invalid shape.'
+		});
+	});
+
+	it.each([
+		{
+			name: 'partial manifest view',
+			createPayload: () => {
+				const backing = Uint8Array.of(1, 2);
+				return Object.freeze({ ...payload, manifestBytes: backing.subarray(0, 1) });
+			}
+		},
+		{
+			name: 'shared backing buffer',
+			createPayload: () =>
+				Object.freeze({
+					...payload,
+					manifestBytes: new Uint8Array(new SharedArrayBuffer(1))
+				})
+		},
+		{
+			name: 'duplicate byte ownership',
+			createPayload: () =>
+				Object.freeze({ ...payload, moduleJavaScriptBytes: payload.manifestBytes })
+		}
+	])('rejects $name before module import or Wasm compilation', async ({ createPayload }) => {
+		const candidate = createPayload();
+		mocks.verifyRubyRuntimePreflightPayload.mockResolvedValueOnce(candidate);
+		const compile = vi
+			.spyOn(WebAssembly, 'compile')
+			.mockResolvedValue({} as WebAssembly.Module);
+		const onmessage = await loadWorker();
+
+		await onmessage({
+			data: { load: true, runtimePreflight: candidate, maxAssetBytes: 1024 }
+		});
+
+		expect(mocks.rewriteVerifiedRubyRuntimeModule).not.toHaveBeenCalled();
+		expect(mocks.importRuntimeModule).not.toHaveBeenCalled();
+		expect(compile).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: expect.stringContaining('owned runtime preflight bytes')
+		});
 	});
 });

@@ -290,7 +290,7 @@
 		prologLspEnabled ? runtimeAssets.prolog?.workerUrl : undefined
 	);
 	const rubyLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'ruby');
-	const rubyLspModuleUrl = $derived(rubyLspEnabled ? runtimeAssets.ruby?.moduleUrl : undefined);
+	const rubyLspRuntime = $derived(rubyLspEnabled ? runtimeAssets.ruby : undefined);
 	const rLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'r');
 	const rLspBaseUrl = $derived(rLspEnabled ? runtimeAssets.r?.baseUrl : undefined);
 	const octaveLspEnabled = $derived(lspEnabled && activeRuntimeLspCapability === 'octave');
@@ -2370,7 +2370,8 @@
 		{/if}
 		{#if language === 'RUBY'}
 			<p class="hint">
-				Ruby runs through bundled CRuby WebAssembly assets from `ruby.wasm`. Pass CLI args
+				Ruby runs through a receipt-verified CRuby WebAssembly profile. Its manifest,
+				module, and compressed Wasm are verified before the worker starts. Pass CLI args
 				here, type into the terminal below, and use Ctrl+D or the EOF button if the program
 				reads stdin until EOF.
 			</p>
@@ -2880,7 +2881,7 @@
 				{prologLspBaseUrl}
 				{prologLspWorkerUrl}
 				{rubyLspEnabled}
-				{rubyLspModuleUrl}
+				{rubyLspRuntime}
 				{rLspEnabled}
 				{rLspBaseUrl}
 				{octaveLspEnabled}

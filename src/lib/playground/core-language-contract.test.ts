@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-	RUBY_RUNTIME_ASSET_PATH,
+	RUBY_RUNTIME_PROFILE,
 	createRuntimeAssetsKey,
 	isDeferredProgressLanguage,
 	normalizeLanguageId,
@@ -732,27 +732,43 @@ describe('core language contract', () => {
 		expect(key).toContain(`"lispManifestFingerprint":"${'a'.repeat(64)}"`);
 	});
 
-	it('includes Ruby runtime urls and receipts in runtime asset cache keys', () => {
-		const integrity = {
-			'runtime.mjs': { bytes: 1, sha256: 'a'.repeat(64) },
-			[RUBY_RUNTIME_ASSET_PATH]: { bytes: 2, sha256: 'b'.repeat(64) }
-		};
+	it('includes the complete Ruby preflight identity and receipts in runtime asset cache keys', () => {
 		const key = createRuntimeAssetsKey({
 			rootUrl: '/repl',
 			ruby: {
-				moduleUrl: '/wasm-ruby/runtime.mjs?v=test',
-				wasmUrl: '/ruby/ruby+stdlib.wasm?v=test',
-				integrity
+				baseUrl: '/wasm-ruby/',
+				manifestUrl: '/wasm-ruby/runtime-manifest.v2.json?v=test',
+				moduleUrl: '/wasm-ruby/runtime.mjs.bin?v=test',
+				wasmUrl: '/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin?v=test',
+				...RUBY_RUNTIME_PROFILE
 			}
 		});
 
-		expect(key).toContain('"rubyModuleUrl":"/wasm-ruby/runtime.mjs?v=test"');
-		expect(key).toContain('"rubyWasmUrl":"/ruby/ruby+stdlib.wasm?v=test"');
-		const serialized = JSON.parse(key || '{}') as { rubyIntegrity: string };
-		expect(JSON.parse(serialized.rubyIntegrity)).toEqual([
-			[RUBY_RUNTIME_ASSET_PATH, integrity[RUBY_RUNTIME_ASSET_PATH]],
-			['runtime.mjs', integrity['runtime.mjs']]
-		]);
+		const serialized = JSON.parse(key || '{}') as Record<string, string>;
+		expect(serialized).toMatchObject({
+			rubyBaseUrl: '/wasm-ruby/',
+			rubyManifestUrl: '/wasm-ruby/runtime-manifest.v2.json?v=test',
+			rubyModuleUrl: '/wasm-ruby/runtime.mjs.bin?v=test',
+			rubyWasmUrl: '/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin?v=test',
+			rubyProfileId: RUBY_RUNTIME_PROFILE.profileId,
+			rubyArtifactRevision: RUBY_RUNTIME_PROFILE.artifactRevision,
+			rubyVersion: RUBY_RUNTIME_PROFILE.rubyVersion,
+			rubyRevision: RUBY_RUNTIME_PROFILE.rubyRevision,
+			rubyWasmVersion: RUBY_RUNTIME_PROFILE.rubyWasmVersion,
+			rubyWasmRevision: RUBY_RUNTIME_PROFILE.rubyWasmRevision,
+			rubyWasiSdkVersion: RUBY_RUNTIME_PROFILE.wasiSdkVersion,
+			rubyManifestFingerprint: RUBY_RUNTIME_PROFILE.manifestFingerprint
+		});
+		expect(serialized.rubyManifestReceipt).toContain(
+			RUBY_RUNTIME_PROFILE.manifestReceipt.sha256
+		);
+		expect(serialized.rubyModuleJavaScriptReceipt).toContain(
+			RUBY_RUNTIME_PROFILE.moduleJavaScriptReceipt.sha256
+		);
+		expect(serialized.rubyWasmReceipt).toContain(RUBY_RUNTIME_PROFILE.wasmReceipt.sha256);
+		expect(serialized.rubyWasmReceipt).toContain(
+			RUBY_RUNTIME_PROFILE.wasmReceipt.uncompressedSha256 || ''
+		);
 	});
 
 	it('includes external runtime module urls in runtime asset cache keys', () => {

@@ -5,19 +5,18 @@ import {
 	type WorkerLanguageService
 } from '../lsp.js';
 import {
-	RUBY_RUNTIME_ASSET_PATH,
-	rewriteRuntimeModuleAssetSpecifier,
-	snapshotRubyRuntimeAssetReceipts,
-	verifyRuntimeAssetIntegrity,
-	type RubyRuntimeAssetReceipts
+	RUBY_MAX_ASSET_BYTES,
+	RUBY_MAX_LOGICAL_BYTES,
+	RUBY_MAX_MANIFEST_BYTES,
+	RUBY_MAX_MODULE_BYTES,
+	requireRubyRuntimePreflightPayload,
+	rewriteVerifiedRubyRuntimeModule,
+	verifyRubyRuntimePreflightPayload,
+	type RubyRuntimePreflightPayload
 } from '@wasm-idle/core';
 
 export interface RubyWorkerOptions {
-	readonly moduleUrl: string;
-	readonly wasmUrl: string;
-	readonly integrity: RubyRuntimeAssetReceipts;
-	readonly moduleBytes: Uint8Array<ArrayBuffer>;
-	readonly wasmBytes: Uint8Array<ArrayBuffer>;
+	readonly runtimePreflight: RubyRuntimePreflightPayload;
 }
 
 interface RubyVirtualMachine {
@@ -130,77 +129,65 @@ const wordAt = (text: string, position: LspPosition) => {
 	);
 };
 
-const requireSafeRuntimeUrl = (value: unknown, label: string) => {
-	if (typeof value !== 'string' || !value || value.length > 8_192 || value.includes('\0')) {
-		throw new TypeError(`Ruby language server requires a safe ${label} URL`);
-	}
-	let url: URL;
-	try {
-		url = new URL(value);
-	} catch {
-		throw new TypeError(`Ruby language server requires an absolute ${label} URL`);
-	}
-	if (
-		(url.protocol !== 'http:' && url.protocol !== 'https:') ||
-		url.username ||
-		url.password ||
-		url.hash ||
-		/%2f|%5c/iu.test(url.pathname)
-	) {
-		throw new TypeError(`Ruby language server ${label} URL is unsafe`);
-	}
-	return url.href;
-};
+const RUBY_CONFIG_KEYS = ['runtimePreflight'] as const;
 
-const snapshotAssetBytes = (value: unknown, label: string): Uint8Array<ArrayBuffer> => {
-	if (
-		!ArrayBuffer.isView(value) ||
-		Object.prototype.toString.call(value) !== '[object Uint8Array]'
-	) {
-		throw new TypeError(`Ruby language server requires ${label} bytes`);
-	}
-	return Uint8Array.from(value as Uint8Array);
-};
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+	!!value && typeof value === 'object' && !Array.isArray(value);
+
+const isOwnedUint8Array = (value: unknown): value is Uint8Array<ArrayBuffer> =>
+	ArrayBuffer.isView(value) &&
+	Object.prototype.toString.call(value) === '[object Uint8Array]' &&
+	value.buffer instanceof ArrayBuffer &&
+	value.byteOffset === 0 &&
+	value.byteLength === value.buffer.byteLength;
 
 const snapshotRubyWorkerOptions = (value: unknown): RubyWorkerOptions => {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
-		throw new TypeError('Ruby language server requires verified runtime assets');
+	if (
+		!isPlainRecord(value) ||
+		Object.keys(value).sort().join('\n') !== RUBY_CONFIG_KEYS.join('\n')
+	) {
+		throw new TypeError(
+			'Ruby language server requires an exact verified runtime configuration'
+		);
 	}
-	const options = value as Partial<RubyWorkerOptions>;
-	return Object.freeze({
-		moduleUrl: requireSafeRuntimeUrl(options.moduleUrl, 'runtime module'),
-		wasmUrl: requireSafeRuntimeUrl(options.wasmUrl, 'runtime Wasm'),
-		integrity: snapshotRubyRuntimeAssetReceipts(options.integrity),
-		moduleBytes: snapshotAssetBytes(options.moduleBytes, 'runtime module'),
-		wasmBytes: snapshotAssetBytes(options.wasmBytes, 'runtime Wasm')
-	});
+	const payload = requireRubyRuntimePreflightPayload(value.runtimePreflight);
+	const buffers = [payload.manifestBytes, payload.moduleJavaScriptBytes, payload.wasmBytes];
+	if (buffers.some((bytes) => !isOwnedUint8Array(bytes))) {
+		throw new TypeError('Ruby language server requires owned runtime preflight bytes');
+	}
+	if (new Set(buffers.map((bytes) => bytes.buffer)).size !== buffers.length) {
+		throw new TypeError('Ruby language server requires unique owned preflight buffers');
+	}
+	if (
+		payload.manifestBytes.byteLength <= 0 ||
+		payload.manifestBytes.byteLength > RUBY_MAX_MANIFEST_BYTES
+	) {
+		throw new TypeError('Ruby language server manifest exceeds the manifest limit');
+	}
+	if (
+		payload.moduleJavaScriptBytes.byteLength <= 0 ||
+		payload.moduleJavaScriptBytes.byteLength > RUBY_MAX_MODULE_BYTES
+	) {
+		throw new TypeError('Ruby language server module exceeds the module limit');
+	}
+	if (payload.wasmBytes.byteLength <= 0 || payload.wasmBytes.byteLength > RUBY_MAX_ASSET_BYTES) {
+		throw new TypeError('Ruby language server Wasm exceeds the asset limit');
+	}
+	const logicalBytes = payload.moduleJavaScriptBytes.byteLength + payload.wasmBytes.byteLength;
+	if (!Number.isSafeInteger(logicalBytes) || logicalBytes > RUBY_MAX_LOGICAL_BYTES) {
+		throw new TypeError('Ruby language server payload exceeds the logical aggregate limit');
+	}
+	return Object.freeze({ runtimePreflight: payload });
 };
 
 const verifyRubyWorkerAssets = async (options: RubyWorkerOptions) => {
-	await Promise.all([
-		verifyRuntimeAssetIntegrity({
-			asset: 'runtime.mjs',
-			bytes: options.moduleBytes,
-			expected: options.integrity['runtime.mjs'],
-			runtimeId: 'ruby-lsp'
-		}),
-		verifyRuntimeAssetIntegrity({
-			asset: RUBY_RUNTIME_ASSET_PATH,
-			bytes: options.wasmBytes,
-			expected: options.integrity[RUBY_RUNTIME_ASSET_PATH],
-			runtimeId: 'ruby-lsp'
-		})
-	]);
+	await verifyRubyRuntimePreflightPayload(options.runtimePreflight);
 };
 
 async function loadRubyWasmChecker(options: RubyWorkerOptions): Promise<RubySyntaxChecker> {
-	const moduleSource = rewriteRuntimeModuleAssetSpecifier({
-		bytes: options.moduleBytes,
-		assetPath: RUBY_RUNTIME_ASSET_PATH,
-		assetUrl: options.wasmUrl,
-		label: 'Ruby language server runtime module'
-	});
-	const module = await WebAssembly.compile(options.wasmBytes);
+	const payload = options.runtimePreflight;
+	const moduleSource = rewriteVerifiedRubyRuntimeModule(payload);
+	const module = await WebAssembly.compile(payload.wasmBytes as Uint8Array<ArrayBuffer>);
 	if (
 		typeof URL.createObjectURL !== 'function' ||
 		typeof URL.revokeObjectURL !== 'function' ||

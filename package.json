@@ -55,6 +55,7 @@
 		"test:browser:julia": "WASM_IDLE_RUN_REAL_BROWSER_JULIA=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
 		"test:browser:nim": "WASM_IDLE_RUN_REAL_BROWSER_NIM=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
 		"test:browser:bash": "WASM_IDLE_RUN_REAL_BROWSER_BASH=1 pnpm exec vitest run src/lib/playground/bash.playwright.test.ts",
+		"test:browser:ruby": "WASM_IDLE_RUN_REAL_BROWSER_RUBY=1 pnpm exec vitest run src/lib/playground/ruby.playwright.test.ts",
 		"test:browser:clojurescript": "WASM_IDLE_RUN_REAL_BROWSER_CLOJURESCRIPT=1 pnpm exec vitest run src/lib/playground/static-worker-runtimes.playwright.test.ts",
 		"test:unit:swift": "pnpm exec vitest run src/lib/playground/swift.test.ts",
 		"test:browser:playwright": "WASM_IDLE_RUN_REAL_BROWSER_RUST=1 pnpm exec vitest run src/lib/playground/rust.playwright.test.ts",

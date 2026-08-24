@@ -647,8 +647,8 @@ export const supportMatrixRows = [
 		editorSupport: 'syntax',
 		debug: '-',
 		browserTest: {
-			file: 'src/lib/playground/stdin.playwright.test.ts',
-			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
+			file: 'src/lib/playground/ruby.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_RUBY',
 			language: 'RUBY'
 		}
 	},
@@ -1321,15 +1321,17 @@ const runtimeDetailsByLanguage = new Map([
 		'Ruby',
 		{
 			packageBase:
-				`static ESM ${code('static/wasm-ruby/runtime.mjs')} produced from ` +
+				`receipt-pinned ${code('static/wasm-ruby')} profile produced from ` +
 				`${npmPackage('@ruby/3.4-wasm-wasi')} + ${npmPackage('@ruby/wasm-wasi')}`,
 			execution:
-				`CRuby 3.4 WASI runtime loads ${code('ruby+stdlib.wasm')} on demand; supports ` +
+				`host-verifies the manifest, canonical stored module and gzip bytes, and logical WASM before ` +
+				`transferring three owned buffers to a no-fetch CRuby 3.4 worker; supports ` +
 				`${code('stdin')}, ${code('programArgs')}, and workspace files`,
 			customization:
-				`${code('runtimeAssets.ruby.moduleUrl')}/${code('wasmUrl')} or ` +
-				`${code('PUBLIC_WASM_RUBY_MODULE_URL')}/${code('PUBLIC_WASM_RUBY_WASM_URL')} or ` +
-				`${code('rootUrl')}; ${code('stdin')}, ${code('programArgs')}, ${code('workspaceFiles')}`
+				`${code('rootUrl')} mirrors reuse the bundled profile; explicit ${code('runtimeAssets.ruby')} ` +
+				`overrides require one complete profile and same-origin canonical paths; URL-only ` +
+				`${code('PUBLIC_WASM_RUBY_*')} overrides fail closed; ${code('stdin')}, ` +
+				`${code('programArgs')}, ${code('workspaceFiles')}`
 		}
 	],
 	[

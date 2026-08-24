@@ -10,7 +10,7 @@ import type {
 	PascalRuntimePreflightProfile,
 	PerlRuntimePreflightProfile,
 	PrologRuntimePreflightProfile,
-	RubyRuntimeAssetReceipts,
+	RubyRuntimePreflightProfile,
 	RuntimeAssetIntegrityEntry,
 	TclRuntimePreflightProfile
 } from '@wasm-idle/core';
@@ -177,9 +177,21 @@ export interface EditorLanguageServerRuntimeOptions {
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	ruby?: {
+		baseUrl?: string;
+		manifestUrl?: string;
 		moduleUrl?: string;
 		wasmUrl?: string;
-		integrity?: RubyRuntimeAssetReceipts;
+		profileId?: RubyRuntimePreflightProfile['profileId'];
+		artifactRevision?: RubyRuntimePreflightProfile['artifactRevision'];
+		rubyVersion?: RubyRuntimePreflightProfile['rubyVersion'];
+		rubyRevision?: RubyRuntimePreflightProfile['rubyRevision'];
+		rubyWasmVersion?: RubyRuntimePreflightProfile['rubyWasmVersion'];
+		rubyWasmRevision?: RubyRuntimePreflightProfile['rubyWasmRevision'];
+		wasiSdkVersion?: RubyRuntimePreflightProfile['wasiSdkVersion'];
+		manifestFingerprint?: RubyRuntimePreflightProfile['manifestFingerprint'];
+		manifestReceipt?: RubyRuntimePreflightProfile['manifestReceipt'];
+		moduleJavaScriptReceipt?: RubyRuntimePreflightProfile['moduleJavaScriptReceipt'];
+		wasmReceipt?: RubyRuntimePreflightProfile['wasmReceipt'];
 	};
 	r?: {
 		baseUrl?: string;

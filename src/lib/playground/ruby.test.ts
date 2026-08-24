@@ -1,6 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { RUBY_RUNTIME_ASSET_PATH, RUBY_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
+import { RUBY_MAX_ASSET_BYTES, RUBY_RUNTIME_PROFILE } from '@wasm-idle/core';
 import { readBufferedStdin } from './stdinBuffer';
+import { createRubyRuntimeTestPreflightPayload } from './rubyTestPreflight';
+
+const preflightMocks = vi.hoisted(() => ({
+	preflightVerifiedRubyRuntimeAssets: vi.fn()
+}));
+
+vi.mock('$lib/playground/rubyAssets', async (importOriginal) => ({
+	...(await importOriginal<typeof import('./rubyAssets')>()),
+	preflightVerifiedRubyRuntimeAssets: preflightMocks.preflightVerifiedRubyRuntimeAssets
+}));
 
 const workerInstances: MockWorker[] = [];
 const { publicEnv } = vi.hoisted(() => ({
@@ -15,7 +25,7 @@ class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
 	onerror: ((event: ErrorEvent) => void) | null = null;
 	onmessageerror: ((event: MessageEvent<any>) => void) | null = null;
-	postMessage = vi.fn((message: any) => {
+	postMessage = vi.fn((message: any, _transfer?: Transferable[]) => {
 		if (message.load) {
 			if (suppressAutoLoadAck) return;
 			queueMicrotask(() => this.onmessage?.({ data: { load: true } } as MessageEvent<any>));
@@ -63,6 +73,9 @@ import Ruby from './ruby';
 
 describe('Ruby sandbox', () => {
 	beforeEach(() => {
+		preflightMocks.preflightVerifiedRubyRuntimeAssets
+			.mockReset()
+			.mockImplementation(async () => createRubyRuntimeTestPreflightPayload());
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
 		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL = '';
@@ -88,18 +101,24 @@ describe('Ruby sandbox', () => {
 		).resolves.toBe(true);
 
 		expect(workerInstances).toHaveLength(1);
-		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
-			1,
-			expect.objectContaining({
-				load: true,
-				moduleUrl: expect.stringMatching(/\/wasm-ruby\/runtime\.mjs$/),
-				wasmUrl: expect.stringMatching(
-					new RegExp(`/wasm-ruby/${RUBY_RUNTIME_ASSET_PATH.replace('.', '\\.')}$`)
-				),
-				integrity: RUBY_RUNTIME_ASSET_RECEIPTS,
-				maxAssetBytes: 128 * 1024 * 1024
-			})
-		);
+		const [loadMessage, transfer] = workerInstances[0].postMessage.mock.calls[0];
+		expect(Object.keys(loadMessage).sort()).toEqual([
+			'load',
+			'maxAssetBytes',
+			'runtimePreflight'
+		]);
+		expect(loadMessage).toEqual({
+			load: true,
+			runtimePreflight: expect.any(Object),
+			maxAssetBytes: RUBY_MAX_ASSET_BYTES
+		});
+		expect(transfer).toEqual([
+			loadMessage.runtimePreflight.manifestBytes.buffer,
+			loadMessage.runtimePreflight.moduleJavaScriptBytes.buffer,
+			loadMessage.runtimePreflight.wasmBytes.buffer
+		]);
+		expect(new Set(transfer).size).toBe(3);
+		expect(preflightMocks.preflightVerifiedRubyRuntimeAssets).toHaveBeenCalledOnce();
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			2,
 			expect.objectContaining({
@@ -132,22 +151,44 @@ describe('Ruby sandbox', () => {
 		]);
 	});
 
-	it('passes an explicit Ruby wasm asset url to the worker', async () => {
+	it('preflights a complete custom profile without exposing asset URLs to the worker', async () => {
 		const sandbox = new Ruby();
 
 		await sandbox.load({
 			ruby: {
-				wasmUrl: '/runtime/ruby+stdlib.wasm'
+				...RUBY_RUNTIME_PROFILE,
+				baseUrl: '/runtime/'
 			}
 		});
 
-		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
-			1,
+		expect(preflightMocks.preflightVerifiedRubyRuntimeAssets).toHaveBeenCalledWith(
 			expect.objectContaining({
-				load: true,
-				wasmUrl: 'http://localhost:3000/runtime/ruby+stdlib.wasm'
-			})
+				baseUrl: 'http://localhost:3000/runtime/',
+				moduleUrl: expect.stringMatching(/\/runtime\/runtime\.mjs\.bin\?v=/),
+				wasmUrl: expect.stringMatching(
+					/\/runtime\/assets\/ruby_stdlib-C40Yu-vu\.wasm\.gz\.bin\?v=/
+				)
+			}),
+			expect.any(Object)
 		);
+		const [loadMessage] = workerInstances[0].postMessage.mock.calls[0];
+		expect(loadMessage).not.toHaveProperty('moduleUrl');
+		expect(loadMessage).not.toHaveProperty('wasmUrl');
+		expect(loadMessage).not.toHaveProperty('integrity');
+	});
+
+	it('reuses one verified warm worker without another preflight or transfer', async () => {
+		const sandbox = new Ruby();
+
+		await sandbox.load('/assets');
+		const worker = workerInstances[0];
+		const firstLoadCall = worker.postMessage.mock.calls[0];
+		await sandbox.load('/assets');
+
+		expect(preflightMocks.preflightVerifiedRubyRuntimeAssets).toHaveBeenCalledOnce();
+		expect(workerInstances).toEqual([worker]);
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+		expect(worker.postMessage.mock.calls[0]).toBe(firstLoadCall);
 	});
 
 	it('rejects load when the Ruby worker script fails before posting load', async () => {

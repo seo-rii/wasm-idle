@@ -2,19 +2,18 @@ import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
 import {
-	loadVerifiedRubyRuntimeAssets,
-	snapshotRubyRuntimeAssetConfig,
-	type RubyRuntimeAssetConfig
-} from '$lib/playground/rubyAssets';
+	RUBY_RUNTIME_VERIFIED_WASM_URL,
+	rewriteVerifiedRubyRuntimeModule,
+	verifyRubyRuntimePreflightPayload
+} from '@wasm-idle/core';
 
 declare var self: any;
 
 const encoder = new TextEncoder();
 
 let stdinBufferRuby: Int32Array | null = null;
-let runtimeConfig: RubyRuntimeAssetConfig | null = null;
-let loadedRuntimeIdentity = '';
-let runtimePromise: Promise<LoadedRubyRuntime> | null = null;
+let runtimeState: 'uninitialized' | 'loading' | 'ready' | 'running' = 'uninitialized';
+let loadedRuntime: LoadedRubyRuntime | null = null;
 
 interface RubyRuntimeModule {
 	RubyVM: any;
@@ -28,21 +27,33 @@ interface LoadedRubyRuntime {
 	runtime: RubyRuntimeModule;
 }
 
-const runtimeIdentity = (config: RubyRuntimeAssetConfig) =>
-	JSON.stringify([
-		config.moduleUrl,
-		config.wasmUrl,
-		Object.entries(config.integrity).sort(([left], [right]) =>
-			left < right ? -1 : left > right ? 1 : 0
-		)
-	]);
-
-async function loadRubyModule(config: RubyRuntimeAssetConfig) {
-	const snapshot = snapshotRubyRuntimeAssetConfig(config);
-	const identity = runtimeIdentity(snapshot);
-	if (loadedRuntimeIdentity === identity && runtimePromise) return await runtimePromise;
-	const pending = (async (): Promise<LoadedRubyRuntime> => {
-		const { moduleSource, wasmBytes } = await loadVerifiedRubyRuntimeAssets(snapshot);
+async function loadRubyModule(runtimePreflight: unknown, maxAssetBytes: number) {
+	if (runtimeState !== 'uninitialized') {
+		throw new Error('Ruby runtime is already loaded.');
+	}
+	runtimeState = 'loading';
+	try {
+		const payload = await verifyRubyRuntimePreflightPayload(runtimePreflight, {
+			maxAssetBytes
+		});
+		const buffers = [payload.manifestBytes, payload.moduleJavaScriptBytes, payload.wasmBytes];
+		if (
+			buffers.some(
+				(bytes) =>
+					!ArrayBuffer.isView(bytes) ||
+					Object.prototype.toString.call(bytes) !== '[object Uint8Array]' ||
+					!(bytes.buffer instanceof ArrayBuffer) ||
+					bytes.byteOffset !== 0 ||
+					bytes.byteLength !== bytes.buffer.byteLength
+			) ||
+			new Set(buffers.map((bytes) => bytes.buffer)).size !== buffers.length
+		) {
+			throw new TypeError(
+				'Ruby execution worker requires unique owned runtime preflight bytes'
+			);
+		}
+		const wasmBytes = payload.wasmBytes as Uint8Array<ArrayBuffer>;
+		const moduleSource = rewriteVerifiedRubyRuntimeModule(payload);
 		if (
 			typeof Blob !== 'function' ||
 			typeof URL.createObjectURL !== 'function' ||
@@ -67,20 +78,22 @@ async function loadRubyModule(config: RubyRuntimeAssetConfig) {
 				// Blob URL cleanup must not replace import or compilation outcomes.
 			}
 		}
-		if (!runtime.RubyVM || !runtime.consolePrinter || !runtime.wasiShim) {
-			throw new Error('Ruby runtime module is missing required Ruby or WASI exports.');
+		if (
+			!runtime.RubyVM ||
+			!runtime.consolePrinter ||
+			!runtime.wasiShim ||
+			runtime.rubyStdlibWasmUrl !== RUBY_RUNTIME_VERIFIED_WASM_URL
+		) {
+			throw new Error(
+				'Ruby runtime module is missing required verified Ruby or WASI exports.'
+			);
 		}
-		return { module, runtime };
-	})();
-	loadedRuntimeIdentity = identity;
-	runtimePromise = pending;
-	try {
-		return await pending;
+		loadedRuntime = { module, runtime };
+		runtimeState = 'ready';
+		return loadedRuntime;
 	} catch (error) {
-		if (runtimePromise === pending && loadedRuntimeIdentity === identity) {
-			runtimePromise = null;
-			loadedRuntimeIdentity = '';
-		}
+		loadedRuntime = null;
+		runtimeState = 'uninitialized';
 		throw error;
 	}
 }
@@ -181,11 +194,10 @@ function workspaceContents(runtime: RubyRuntimeModule, workspaceFiles: SandboxWo
 }
 
 self.onmessage = async (event: { data: any }) => {
+	const message = event.data;
 	const {
 		load,
-		moduleUrl,
-		wasmUrl,
-		integrity,
+		runtimePreflight,
 		maxAssetBytes,
 		buffer,
 		code,
@@ -195,31 +207,37 @@ self.onmessage = async (event: { data: any }) => {
 		activePath = 'main.rb',
 		workspaceFiles = [],
 		log
-	} = event.data;
+	} = message;
 	try {
-		if (load) {
-			runtimeConfig = snapshotRubyRuntimeAssetConfig({
-				moduleUrl,
-				wasmUrl,
-				integrity,
-				maxAssetBytes
-			});
-			postMessage({ progress: { percent: 5, stage: 'Loading Ruby runtime' } });
-			await loadRubyModule(runtimeConfig);
-			if (log) {
-				console.log(`[wasm-idle:ruby-worker] load moduleUrl=${runtimeConfig.moduleUrl}`);
+		if (Object.prototype.hasOwnProperty.call(message, 'load')) {
+			const actualKeys = Object.keys(message).sort();
+			const expectedKeys = ['load', 'maxAssetBytes', 'runtimePreflight'];
+			if (
+				load !== true ||
+				actualKeys.length !== expectedKeys.length ||
+				actualKeys.some((key, index) => key !== expectedKeys[index]) ||
+				!Number.isSafeInteger(maxAssetBytes) ||
+				maxAssetBytes <= 0
+			) {
+				throw new Error('Ruby runtime load message has an invalid shape.');
 			}
+			postMessage({ progress: { percent: 5, stage: 'Loading Ruby runtime' } });
+			await loadRubyModule(runtimePreflight, maxAssetBytes);
 			postMessage({ progress: { percent: 100, stage: 'Ruby runtime ready' } });
 			postMessage({ load: true });
 			return;
 		}
 
 		stdinBufferRuby = new Int32Array(buffer);
-		if (!runtimeConfig) throw new Error('Ruby runtime has not been loaded.');
-		const { module: rubyModule, runtime } = await loadRubyModule(runtimeConfig);
+		if (runtimeState !== 'ready' || !loadedRuntime) {
+			throw new Error('Ruby runtime is not ready.');
+		}
+		runtimeState = 'running';
+		const { module: rubyModule, runtime } = loadedRuntime;
 
 		if (prepare) {
 			postMessage({ results: true });
+			runtimeState = 'ready';
 			return;
 		}
 
@@ -287,5 +305,7 @@ self.onmessage = async (event: { data: any }) => {
 			console.error('[wasm-idle:ruby-worker] failed', error);
 		}
 		postMessage({ error: error?.message || String(error) });
+	} finally {
+		if (runtimeState === 'running') runtimeState = 'ready';
 	}
 };

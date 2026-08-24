@@ -1,106 +1,102 @@
+import type { ResolvedRubyRuntimeAssetConfig } from '$lib/playground/assets';
 import {
-	rewriteRuntimeModuleAssetSpecifier,
-	RUBY_RUNTIME_ASSET_PATH,
-	RUBY_RUNTIME_ASSET_NAMES,
-	snapshotRubyRuntimeAssetReceipts,
-	verifyRuntimeAssetIntegrity,
-	type RubyRuntimeAssetReceipts,
-	type RubyRuntimeAssetReceipt
+	preflightRubyRuntimeAssets,
+	requireRubyRuntimePreflightPayload,
+	type ExecutionLimits,
+	type RubyRuntimePreflightPayload,
+	type RuntimeAssetPreflightProgress
 } from '@wasm-idle/core';
 
-import { fetchRuntimeAssetBytes, resolveRuntimeAssetUrl } from './worker/runtimeAssetFetch';
-
-export type RubyRuntimeAssetName = (typeof RUBY_RUNTIME_ASSET_NAMES)[number];
-export type { RubyRuntimeAssetReceipt, RubyRuntimeAssetReceipts };
-
-export interface RubyRuntimeAssetConfig {
-	moduleUrl: string;
-	wasmUrl: string;
-	integrity: RubyRuntimeAssetReceipts;
-	maxAssetBytes: number;
+export interface RubyRuntimePreflightOptions {
+	readonly limits?: Partial<ExecutionLimits>;
+	readonly signal?: AbortSignal;
+	readonly fetch?: typeof globalThis.fetch;
+	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
+	readonly reportDecompressionProgress?: (loadedBytes: number, totalBytes: number) => void;
 }
 
-export function snapshotRubyRuntimeAssetConfig(
-	config: RubyRuntimeAssetConfig
-): RubyRuntimeAssetConfig {
-	if (!config || typeof config !== 'object') {
-		throw new TypeError('Ruby runtime asset configuration is required');
+export type RubyRuntimePreflightDeliveryState = 'available' | 'consumed' | 'retired';
+
+export interface RubyRuntimeOwnedPreflightDelivery {
+	readonly payload: RubyRuntimePreflightPayload;
+	readonly state: RubyRuntimePreflightDeliveryState;
+	consume(): readonly [ArrayBuffer, ArrayBuffer, ArrayBuffer];
+	retire(): void;
+}
+
+function isPlainFrozenRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+	if (!value || typeof value !== 'object' || Array.isArray(value) || !Object.isFrozen(value)) {
+		return false;
 	}
-	const maxAssetBytes = config.maxAssetBytes;
-	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes <= 0) {
-		throw new TypeError('Ruby runtime maxAssetBytes must be a positive safe integer');
+	const prototype = Object.getPrototypeOf(value);
+	return prototype === Object.prototype || prototype === null;
+}
+
+function requireOwnedWholeBuffer(value: Uint8Array, label: string): ArrayBuffer {
+	if (
+		value.byteLength <= 0 ||
+		!(value.buffer instanceof ArrayBuffer) ||
+		value.byteOffset !== 0 ||
+		value.byteLength !== value.buffer.byteLength
+	) {
+		throw new TypeError(`Ruby runtime ${label} must exclusively own one nonempty whole buffer`);
 	}
-	const integrity = snapshotRubyRuntimeAssetReceipts(config.integrity);
-	for (const asset of RUBY_RUNTIME_ASSET_NAMES) {
-		if (integrity[asset].bytes > maxAssetBytes) {
-			throw new TypeError(`Ruby runtime receipt exceeds its limit for ${asset}`);
-		}
+	return value.buffer;
+}
+
+/**
+ * Adopts a freshly preflighted Ruby payload for exactly one Worker load dispatch.
+ * The caller relinquishes every payload byte view after consume(), regardless of
+ * whether postMessage succeeds; a consumed or retired delivery cannot be reused.
+ */
+export function createRubyRuntimeOwnedPreflightDelivery(
+	value: unknown
+): RubyRuntimeOwnedPreflightDelivery {
+	if (!isPlainFrozenRecord(value)) {
+		throw new TypeError('Ruby runtime preflight delivery requires one frozen plain payload');
 	}
-	const moduleUrl = resolveRuntimeAssetUrl(config.moduleUrl, 'Ruby runtime module').href;
-	const wasmUrl = resolveRuntimeAssetUrl(config.wasmUrl, 'Ruby WASM asset').href;
+	const payload = requireRubyRuntimePreflightPayload(value);
+	const transferables = [
+		requireOwnedWholeBuffer(payload.manifestBytes, 'manifest bytes'),
+		requireOwnedWholeBuffer(payload.moduleJavaScriptBytes, 'module JavaScript bytes'),
+		requireOwnedWholeBuffer(payload.wasmBytes, 'Wasm bytes')
+	] as const;
+	if (new Set(transferables).size !== transferables.length) {
+		throw new TypeError('Ruby runtime preflight byte buffers must have unique ownership');
+	}
+	let state: RubyRuntimePreflightDeliveryState = 'available';
 	return Object.freeze({
-		moduleUrl,
-		wasmUrl,
-		maxAssetBytes,
-		integrity
+		payload,
+		get state() {
+			return state;
+		},
+		consume() {
+			if (state !== 'available') {
+				throw new TypeError('Ruby runtime preflight delivery is no longer available');
+			}
+			state = 'consumed';
+			return transferables;
+		},
+		retire() {
+			if (state === 'available') state = 'retired';
+		}
 	});
 }
 
-const fetchVerifiedAsset = async (
-	asset: RubyRuntimeAssetName,
-	url: string,
-	receipt: RubyRuntimeAssetReceipt,
-	signal: AbortSignal
-) => {
-	const bytes = await fetchRuntimeAssetBytes({
-		url,
-		label: asset === 'runtime.mjs' ? 'Ruby runtime module' : 'Ruby WASM asset',
-		cache: 'no-store',
-		maxAssetBytes: receipt.bytes,
-		signal
+export async function preflightVerifiedRubyRuntimeAssets(
+	config: ResolvedRubyRuntimeAssetConfig,
+	options: RubyRuntimePreflightOptions = {}
+): Promise<RubyRuntimePreflightPayload> {
+	return await preflightRubyRuntimeAssets({
+		baseUrl: config.baseUrl,
+		manifestUrl: config.manifestUrl,
+		moduleUrl: config.moduleUrl,
+		wasmUrl: config.wasmUrl,
+		profile: config.preflightProfile,
+		limits: options.limits,
+		signal: options.signal,
+		fetch: options.fetch,
+		reportProgress: options.reportProgress,
+		reportDecompressionProgress: options.reportDecompressionProgress
 	});
-	await verifyRuntimeAssetIntegrity({
-		asset,
-		bytes,
-		expected: receipt,
-		runtimeId: 'RUBY'
-	});
-	return bytes;
-};
-
-export async function loadVerifiedRubyRuntimeAssets(config: RubyRuntimeAssetConfig) {
-	const snapshot = snapshotRubyRuntimeAssetConfig(config);
-	const controller = new AbortController();
-	let moduleBytes: Uint8Array;
-	let wasmBytes: Uint8Array;
-	try {
-		[moduleBytes, wasmBytes] = await Promise.all([
-			fetchVerifiedAsset(
-				'runtime.mjs',
-				snapshot.moduleUrl,
-				snapshot.integrity['runtime.mjs'],
-				controller.signal
-			),
-			fetchVerifiedAsset(
-				RUBY_RUNTIME_ASSET_PATH,
-				snapshot.wasmUrl,
-				snapshot.integrity[RUBY_RUNTIME_ASSET_PATH],
-				controller.signal
-			)
-		]);
-	} catch (error) {
-		controller.abort(error);
-		throw error;
-	}
-	const moduleSource = rewriteRuntimeModuleAssetSpecifier({
-		bytes: moduleBytes,
-		assetPath: RUBY_RUNTIME_ASSET_PATH,
-		assetUrl: snapshot.wasmUrl,
-		label: 'Ruby runtime module'
-	});
-	return {
-		config: snapshot,
-		moduleSource,
-		wasmBytes: wasmBytes as Uint8Array<ArrayBuffer>
-	};
 }

@@ -1,4 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRubyRuntimeTestPreflightPayload } from './rubyTestPreflight';
+
+const preflightMocks = vi.hoisted(() => ({
+	preflightVerifiedRubyRuntimeAssets: vi.fn()
+}));
+
+vi.mock('$lib/playground/rubyAssets', async (importOriginal) => ({
+	...(await importOriginal<typeof import('./rubyAssets')>()),
+	preflightVerifiedRubyRuntimeAssets: preflightMocks.preflightVerifiedRubyRuntimeAssets
+}));
 
 vi.mock('$env/dynamic/public', () => ({
 	env: {}
@@ -50,6 +60,9 @@ import Ruby from './ruby';
 describe('Ruby cancellation and timeout contract', () => {
 	beforeEach(() => {
 		vi.useRealTimers();
+		preflightMocks.preflightVerifiedRubyRuntimeAssets
+			.mockReset()
+			.mockImplementation(async () => createRubyRuntimeTestPreflightPayload());
 		workerInstances.length = 0;
 		autoResolveLoad = true;
 		autoResolveRun = true;
@@ -139,6 +152,88 @@ describe('Ruby cancellation and timeout contract', () => {
 		await expect(sandbox.load('/assets')).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
+	});
+
+	it('aborts a pending preflight before worker construction and requires a fresh retry', async () => {
+		const sandbox = new Ruby();
+		const controller = new AbortController();
+		const reason = new Error('cancel Ruby asset preflight');
+		let preflightSignal: AbortSignal | undefined;
+		preflightMocks.preflightVerifiedRubyRuntimeAssets.mockImplementationOnce(
+			async (_config, options) =>
+				await new Promise((_, reject) => {
+					preflightSignal = options.signal;
+					options.signal?.addEventListener(
+						'abort',
+						() => reject(options.signal?.reason),
+						{
+							once: true
+						}
+					);
+				})
+		);
+
+		const loading = sandbox.load('/assets', '', true, [], { signal: controller.signal });
+		await vi.waitFor(() =>
+			expect(preflightMocks.preflightVerifiedRubyRuntimeAssets).toHaveBeenCalledOnce()
+		);
+		expect(workerInstances).toHaveLength(0);
+
+		controller.abort(reason);
+		await expect(loading).rejects.toBe(reason);
+		expect(preflightSignal?.aborted).toBe(true);
+		expect(preflightSignal?.reason).toBe(reason);
+		expect(workerInstances).toHaveLength(0);
+
+		await expect(sandbox.load('/assets')).resolves.toBeUndefined();
+		expect(preflightMocks.preflightVerifiedRubyRuntimeAssets).toHaveBeenCalledTimes(2);
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('clear aborts pending preflight siblings and leaves a clean retry path', async () => {
+		const sandbox = new Ruby();
+		let preflightSignal: AbortSignal | undefined;
+		preflightMocks.preflightVerifiedRubyRuntimeAssets.mockImplementationOnce(
+			async (_config, options) =>
+				await new Promise((_, reject) => {
+					preflightSignal = options.signal;
+					options.signal?.addEventListener(
+						'abort',
+						() => reject(options.signal?.reason),
+						{
+							once: true
+						}
+					);
+				})
+		);
+
+		const loading = sandbox.load('/assets');
+		await vi.waitFor(() =>
+			expect(preflightMocks.preflightVerifiedRubyRuntimeAssets).toHaveBeenCalledOnce()
+		);
+		await sandbox.clear();
+
+		await expect(loading).rejects.toBe('Process terminated');
+		expect(preflightSignal?.aborted).toBe(true);
+		expect(preflightSignal?.reason).toBe('Process terminated');
+		expect(workerInstances).toHaveLength(0);
+
+		await expect(sandbox.load('/assets')).resolves.toBeUndefined();
+		expect(preflightMocks.preflightVerifiedRubyRuntimeAssets).toHaveBeenCalledTimes(2);
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('rejects failed preflight with zero workers and retries from fresh bytes', async () => {
+		const sandbox = new Ruby();
+		const integrityError = new Error('Ruby preflight integrity rejected');
+		preflightMocks.preflightVerifiedRubyRuntimeAssets.mockRejectedValueOnce(integrityError);
+
+		await expect(sandbox.load('/assets')).rejects.toBe(integrityError);
+		expect(workerInstances).toHaveLength(0);
+
+		await expect(sandbox.load('/assets')).resolves.toBeUndefined();
+		expect(preflightMocks.preflightVerifiedRubyRuntimeAssets).toHaveBeenCalledTimes(2);
+		expect(workerInstances).toHaveLength(1);
 	});
 
 	it('times out startup at the aggregate asset and startup deadline', async () => {

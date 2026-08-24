@@ -94,8 +94,8 @@
     },
     "script": {
       "path": "scripts/sync-wasm-ruby.mjs",
-      "bytes": 40609,
-      "sha256": "4ff704bbff51a195dbb568db2ea1303039446ba9c439c266a8dddd40bc876e86"
+      "bytes": 46491,
+      "sha256": "85c0470fd9d903350761fb6996580f38b6178f8119d4aae25eb2b7cb9c216b3b"
     },
     "tool": {
       "name": "vite",
@@ -119,7 +119,7 @@
     {
       "id": "node-zlib-gzip-level-9",
       "input": "assets/ruby_stdlib-C40Yu-vu.wasm",
-      "output": "assets/ruby_stdlib-C40Yu-vu.wasm.gz"
+      "output": "assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin"
     }
   ],
   "legalFiles": [
@@ -162,8 +162,8 @@
   "metadata": {
     "path": "runtime-build.json",
     "mediaType": "application/json",
-    "size": 7578,
-    "sha256": "ffe995b9384f2946366a6f470aac7454f47217391b9e5dafd259725b15a9bc6b"
+    "size": 7582,
+    "sha256": "4fc4996aa666d5b6c58c5184c29f56df80f71e3db81b4d95f4809d659b86e63f"
   },
   "assets": [
     {
@@ -181,19 +181,19 @@
   ],
   "storage": [
     {
-      "path": "assets/ruby_stdlib-C40Yu-vu.wasm.gz",
+      "path": "assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin",
       "logicalPath": "assets/ruby_stdlib-C40Yu-vu.wasm",
       "encoding": "gzip",
       "size": 9051961,
       "sha256": "4bffd8398d79eed9e5bbe7cd809a88bd3cb861642054a6f3d63b2abfa80f3030"
     },
     {
-      "path": "runtime.mjs",
+      "path": "runtime.mjs.bin",
       "logicalPath": "runtime.mjs",
       "encoding": "identity",
       "size": 54623,
       "sha256": "d832ed230a34df7db0a7ed823d4fc974fb532b532e0b0de0ad76033acec05b71"
     }
   ],
-  "fingerprint": "0bac7e15f390f20cccaa1d422a8fd76cb57c0dea3a4ca4e404a4dd529a98906c"
+  "fingerprint": "5584f97b962de660bcff8b2144e289bd1814420bdae887f62edbd1f573e39263"
 }

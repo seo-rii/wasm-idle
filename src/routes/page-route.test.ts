@@ -692,7 +692,13 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Ruby through the CRuby WebAssembly runtime contract', () => {
-		expect(applicationRuntimeAssets.ruby?.moduleUrl).toContain('/wasm-ruby/runtime.mjs?');
+		expect(applicationRuntimeAssets.ruby?.manifestUrl).toContain(
+			'/wasm-ruby/runtime-manifest.v2.json?'
+		);
+		expect(applicationRuntimeAssets.ruby?.moduleUrl).toContain('/wasm-ruby/runtime.mjs.bin?');
+		expect(applicationRuntimeAssets.ruby?.wasmUrl).toContain(
+			'/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin?'
+		);
 		expectPlaygroundLanguage('RUBY');
 		expect(source).toMatch(/ruby: 'RUBY'/);
 		expect(source).toMatch(/rb: 'RUBY'/);
@@ -700,8 +706,10 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.rb': 'RUBY'/);
 		expect(source).toMatch(/RUBY: 'main\.rb'/);
 		expect(source).toMatch(/RUBY: 'ruby'/);
-		expect(source).toMatch(/Ruby runs through bundled CRuby WebAssembly assets/);
-		expect(source).toMatch(/from `ruby\.wasm`/);
+		expect(source).toMatch(/Ruby runs through a receipt-verified CRuby WebAssembly profile/);
+		expect(source).toMatch(
+			/manifest,\s+module, and compressed Wasm are verified before the worker starts/
+		);
 		expect(source).toMatch(/reads stdin until EOF/);
 	});
 

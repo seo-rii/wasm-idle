@@ -351,6 +351,24 @@ const lspBrowserCases: LspBrowserCase[] = [
 		fileName: 'main.rb',
 		source: 'def main\n  puts(\n',
 		aliases: ['rb'],
+		expectedResponses: [
+			'/wasm-ruby/runtime-manifest.v2.json?',
+			'/wasm-ruby/runtime.mjs.bin?',
+			'/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin?'
+		],
+		assertNoPreEnableRequests: ['/wasm-ruby/'],
+		expectedRequestPathnames: [
+			'/wasm-ruby/runtime-manifest.v2.json',
+			'/wasm-ruby/runtime.mjs.bin',
+			'/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin'
+		],
+		forbiddenRequestPathnames: [
+			'/wasm-ruby/runtime.mjs',
+			'/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm',
+			'/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz'
+		],
+		requestPathMarker: '/wasm-ruby/',
+		requireSha256RequestPins: true,
 		timeoutMs: 240_000
 	},
 	{
@@ -485,7 +503,7 @@ const urlMatches = (url: string, pattern: string | RegExp) =>
 	typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url);
 
 const requestLooksLspRelated = (url: string) =>
-	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|rust|typescript|wat|zig))\//u.test(
+	/\/(?:lsp|pyodide|wasm-(?:dotnet|fortran|gleam|go|haskell|janet|lua|of-js-of-ocaml|pascal|prolog|ruby|rust|typescript|wat|zig))\//u.test(
 		url
 	);
 
@@ -1120,6 +1138,7 @@ describe('Monaco LSP browser integration', () => {
 
 			process.env.WASM_IDLE_LSP_BROWSER_GROUPS = 'runtime-small';
 			expect(selectedCases().map((testCase) => testCase.language)).toContain('PASCAL');
+			expect(selectedCases().map((testCase) => testCase.language)).toContain('RUBY');
 
 			process.env.WASM_IDLE_LSP_BROWSER_GROUPS = 'runtime-heavy';
 			expect(selectedCases().map((testCase) => testCase.language)).toEqual([

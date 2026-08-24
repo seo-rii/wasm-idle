@@ -95,9 +95,21 @@ export interface RuntimeAssetKeySource {
 	};
 	lisp?: { moduleUrl?: string; manifestUrl?: string; manifestFingerprint?: string };
 	ruby?: {
+		baseUrl?: string;
+		manifestUrl?: string;
 		moduleUrl?: string;
 		wasmUrl?: string;
-		integrity?: RuntimeAssetIntegrityMap;
+		profileId?: string;
+		artifactRevision?: string;
+		rubyVersion?: string;
+		rubyRevision?: string;
+		rubyWasmVersion?: string;
+		rubyWasmRevision?: string;
+		wasiSdkVersion?: string;
+		manifestFingerprint?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		moduleJavaScriptReceipt?: RuntimeAssetIntegrityEntry;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	r?: { baseUrl?: string };
 	octave?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
@@ -677,13 +689,39 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'lisp', property: 'moduleUrl', key: 'lispModuleUrl' },
 	{ runtime: 'lisp', property: 'manifestUrl', key: 'lispManifestUrl' },
 	{ runtime: 'lisp', property: 'manifestFingerprint', key: 'lispManifestFingerprint' },
+	{ runtime: 'ruby', property: 'baseUrl', key: 'rubyBaseUrl' },
+	{ runtime: 'ruby', property: 'manifestUrl', key: 'rubyManifestUrl' },
 	{ runtime: 'ruby', property: 'moduleUrl', key: 'rubyModuleUrl' },
 	{ runtime: 'ruby', property: 'wasmUrl', key: 'rubyWasmUrl' },
+	{ runtime: 'ruby', property: 'profileId', key: 'rubyProfileId' },
+	{ runtime: 'ruby', property: 'artifactRevision', key: 'rubyArtifactRevision' },
+	{ runtime: 'ruby', property: 'rubyVersion', key: 'rubyVersion' },
+	{ runtime: 'ruby', property: 'rubyRevision', key: 'rubyRevision' },
+	{ runtime: 'ruby', property: 'rubyWasmVersion', key: 'rubyWasmVersion' },
+	{ runtime: 'ruby', property: 'rubyWasmRevision', key: 'rubyWasmRevision' },
+	{ runtime: 'ruby', property: 'wasiSdkVersion', key: 'rubyWasiSdkVersion' },
 	{
 		runtime: 'ruby',
-		property: 'integrity',
-		key: 'rubyIntegrity',
-		serialize: serializeIntegrity
+		property: 'manifestFingerprint',
+		key: 'rubyManifestFingerprint'
+	},
+	{
+		runtime: 'ruby',
+		property: 'manifestReceipt',
+		key: 'rubyManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'ruby',
+		property: 'moduleJavaScriptReceipt',
+		key: 'rubyModuleJavaScriptReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'ruby',
+		property: 'wasmReceipt',
+		key: 'rubyWasmReceipt',
+		serialize: serializeIntegrityEntry
 	},
 	{ runtime: 'r', property: 'baseUrl', key: 'rBaseUrl' },
 	{ runtime: 'octave', property: 'baseUrl', key: 'octaveBaseUrl' },

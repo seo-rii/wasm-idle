@@ -11,6 +11,11 @@ export {
 	type RubyWorkerOptions
 } from './service.js';
 export {
+	resolveRubyLanguageServerAssetConfig,
+	resolveRubyLanguageServerBaseUrl,
+	resolveRubyLanguageServerManifestUrl,
 	resolveRubyLanguageServerModuleUrl,
+	resolveRubyLanguageServerPreflightProfile,
 	resolveRubyLanguageServerWasmUrl
 } from '../runtime.js';
+export type { RubyRuntimePreflightPayload, RubyRuntimePreflightProfile } from '@wasm-idle/core';

@@ -286,7 +286,7 @@ async function createFixture() {
 		`${JSON.stringify(
 			{
 				schemaVersion: 1,
-				profileId: 'ruby-fixture-1.0.0',
+				profileId: 'ruby-fixture-ruby-wasm-1.0.0',
 				provenanceLevel,
 				licenseExpression,
 				artifact: {
@@ -298,10 +298,43 @@ async function createFixture() {
 					verifiedBuildInput: false,
 					evidence: 'fixture evidence'
 				},
-				components: { ruby: { version: 'fixture' } },
+				components: {
+					ruby: {
+						version: 'fixture',
+						repository: 'https://github.com/ruby/ruby',
+						revision,
+						verifiedBuildInput: false,
+						evidence: 'fixture Ruby evidence'
+					},
+					rubyWasm: {
+						version: '1.0.0',
+						repository: 'https://github.com/ruby/ruby.wasm',
+						revision,
+						verifiedBuildInput: false,
+						evidence: 'fixture ruby.wasm evidence'
+					},
+					wasiSdk: {
+						version: '22.0',
+						repository: 'https://github.com/WebAssembly/wasi-sdk',
+						revision: 'unrecorded',
+						verifiedBuildInput: false,
+						evidence: 'fixture wasi-sdk evidence'
+					}
+				},
 				packages,
 				producer: { entry, script, tool },
-				transformations: [],
+				transformations: [
+					{
+						id: 'vite-8-es2022-single-module-bundle',
+						input: 'scripts/runtime-modules/ruby.ts',
+						output: 'runtime.mjs'
+					},
+					{
+						id: 'node-zlib-gzip-level-9',
+						input: wasmPath,
+						output: `${wasmPath}.gz.bin`
+					}
+				],
 				outputs,
 				legalFiles
 			},
@@ -342,17 +375,23 @@ describe('syncWasmRubyAssets', () => {
 			'NOTICE',
 			'THIRD_PARTY_NOTICES.md',
 			`${wasmPath}.gz`,
+			`${wasmPath}.gz.bin`,
 			'licenses/browser-wasi-shim/LICENSE-APACHE',
 			'licenses/browser-wasi-shim/LICENSE-MIT',
 			'runtime-build.json',
 			'runtime-manifest.v1.json',
 			'runtime-manifest.v2.json',
-			'runtime.mjs'
+			'runtime.mjs',
+			'runtime.mjs.bin'
 		]);
 		await expect(readFile(path.join(fixture.targetDir, wasmPath))).rejects.toThrow();
-		expect(gunzipSync(await readFile(path.join(fixture.targetDir, `${wasmPath}.gz`)))).toEqual(
-			Buffer.from(wasmHeader)
-		);
+		const canonicalModule = await readFile(path.join(fixture.targetDir, 'runtime.mjs.bin'));
+		const legacyModule = await readFile(path.join(fixture.targetDir, 'runtime.mjs'));
+		const canonicalWasm = await readFile(path.join(fixture.targetDir, `${wasmPath}.gz.bin`));
+		const legacyWasm = await readFile(path.join(fixture.targetDir, `${wasmPath}.gz`));
+		expect(legacyModule).toEqual(canonicalModule);
+		expect(legacyWasm).toEqual(canonicalWasm);
+		expect(gunzipSync(canonicalWasm)).toEqual(Buffer.from(wasmHeader));
 		const manifest = JSON.parse(
 			await readFile(path.join(fixture.targetDir, 'runtime-manifest.v2.json'), 'utf8')
 		);
@@ -366,8 +405,29 @@ describe('syncWasmRubyAssets', () => {
 			'@ruby/3.4-wasm-wasi',
 			'@ruby/wasm-wasi'
 		]);
-		await expect(readFile(fixture.generatedModulePath, 'utf8')).resolves.toContain(
-			result.fingerprint
+		expect(manifest.storage).toEqual([
+			expect.objectContaining({
+				path: `${wasmPath}.gz.bin`,
+				logicalPath: wasmPath,
+				encoding: 'gzip'
+			}),
+			expect.objectContaining({
+				path: 'runtime.mjs.bin',
+				logicalPath: 'runtime.mjs',
+				encoding: 'identity'
+			})
+		]);
+		const generated = await readFile(fixture.generatedModulePath, 'utf8');
+		expect(generated).toContain('export const RUBY_RUNTIME_GENERATED_PROFILE');
+		expect(generated).toContain('export const RUBY_RUNTIME_GENERATED_BUNDLE');
+		expect(generated).toContain('manifestFingerprint:');
+		expect(generated).toContain(`'${result.fingerprint}' as const`);
+		expect(generated).toContain('manifestReceipt: Object.freeze({');
+		expect(generated).toContain('moduleJavaScriptReceipt: Object.freeze({');
+		expect(generated).toContain('wasmReceipt: Object.freeze({');
+		expect(generated).toContain('profile: RUBY_RUNTIME_GENERATED_PROFILE');
+		expect(generated).toContain(
+			'RUBY_RUNTIME_GENERATED_ASSET_VERSION =\n\tRUBY_RUNTIME_GENERATED_PROFILE.manifestFingerprint;'
 		);
 	});
 
@@ -416,6 +476,29 @@ describe('syncWasmRubyAssets', () => {
 		);
 		await expect(syncWasmRubyAssets(fixture)).rejects.toThrow(
 			'pnpm integrity does not match the input lock'
+		);
+	});
+
+	it('rejects component identity drift and legacy-only transformation outputs', async () => {
+		const componentDrift = await createFixture();
+		const componentLock = JSON.parse(await readFile(componentDrift.lockFilePath, 'utf8'));
+		componentLock.components.rubyWasm.revision = '2'.repeat(40);
+		await writeFile(componentDrift.lockFilePath, `${JSON.stringify(componentLock, null, 2)}\n`);
+		await expect(syncWasmRubyAssets(componentDrift)).rejects.toThrow(
+			'invalid rubyWasm provenance'
+		);
+
+		const transformationDrift = await createFixture();
+		const transformationLock = JSON.parse(
+			await readFile(transformationDrift.lockFilePath, 'utf8')
+		);
+		transformationLock.transformations[1].output = `${wasmPath}.gz`;
+		await writeFile(
+			transformationDrift.lockFilePath,
+			`${JSON.stringify(transformationLock, null, 2)}\n`
+		);
+		await expect(syncWasmRubyAssets(transformationDrift)).rejects.toThrow(
+			'invalid profile or transformation graph'
 		);
 	});
 

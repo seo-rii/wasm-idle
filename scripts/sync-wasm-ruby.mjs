@@ -39,10 +39,17 @@ const MANIFEST_FILE = 'runtime-manifest.v2.json';
 const LEGACY_MANIFEST_FILE = 'runtime-manifest.v1.json';
 const BUILD_METADATA_FILE = 'runtime-build.json';
 const MAX_PACKAGE_BYTES = 160 * 1024 * 1024;
-const MAX_ASSET_BYTES = 64 * 1024 * 1024;
+const MAX_ASSET_BYTES = 40 * 1024 * 1024;
+const MAX_LOGICAL_BYTES = 40 * 1024 * 1024;
+const MAX_DELIVERY_BYTES = 16 * 1024 * 1024;
+const MAX_MANIFEST_BYTES = 64 * 1024;
+const MAX_MODULE_BYTES = 1024 * 1024;
 const MAX_METADATA_BYTES = 2 * 1024 * 1024;
 const WASM_ASSET_PATH = 'assets/ruby_stdlib-C40Yu-vu.wasm';
 const RUNTIME_MODULE_PATH = 'runtime.mjs';
+const WASM_STORAGE_PATH = `${WASM_ASSET_PATH}.gz.bin`;
+const RUNTIME_MODULE_STORAGE_PATH = `${RUNTIME_MODULE_PATH}.bin`;
+const LEGACY_WASM_STORAGE_PATH = `${WASM_ASSET_PATH}.gz`;
 const PACKAGE_NAMES = Object.freeze([
 	'@bjorn3/browser_wasi_shim',
 	'@ruby/3.4-wasm-wasi',
@@ -82,6 +89,10 @@ const EXPECTED_ARTIFACT_KEYS = Object.freeze(
 		'workflowRun'
 	].sort()
 );
+const EXPECTED_COMPONENT_KEYS = Object.freeze(
+	['evidence', 'repository', 'revision', 'verifiedBuildInput', 'version'].sort()
+);
+const EXPECTED_COMPONENT_NAMES = Object.freeze(['ruby', 'rubyWasm', 'wasiSdk'].sort());
 const EXPECTED_PACKAGE_KEYS = Object.freeze(
 	[
 		'attestationUrl',
@@ -139,6 +150,18 @@ const EXPECTED_MANIFEST_BODY_KEYS = Object.freeze(
 const EXPECTED_MANIFEST_KEYS = Object.freeze(
 	[...EXPECTED_MANIFEST_BODY_KEYS, 'fingerprint'].sort()
 );
+const EXPECTED_TRANSFORMATIONS = Object.freeze([
+	Object.freeze({
+		id: 'vite-8-es2022-single-module-bundle',
+		input: 'scripts/runtime-modules/ruby.ts',
+		output: RUNTIME_MODULE_PATH
+	}),
+	Object.freeze({
+		id: 'node-zlib-gzip-level-9',
+		input: WASM_ASSET_PATH,
+		output: WASM_STORAGE_PATH
+	})
+]);
 
 /** @typedef {{ path: string; mediaType: string; size: number; sha256: string }} LogicalAsset */
 /** @typedef {{ path: string; logicalPath: string; encoding: 'gzip' | 'identity'; size: number; sha256: string }} StorageAsset */
@@ -408,7 +431,7 @@ async function readInputLock(lockFilePath) {
 		!value.artifact.workflowRun.startsWith('https://github.com/ruby/ruby.wasm/actions/runs/') ||
 		value.artifact.verifiedBuildInput !== false ||
 		typeof value.artifact.evidence !== 'string' ||
-		!isObject(value.components) ||
+		!hasExactKeys(value.components, EXPECTED_COMPONENT_NAMES) ||
 		!Array.isArray(value.transformations) ||
 		!Array.isArray(value.packages) ||
 		value.packages.length !== PACKAGE_NAMES.length ||
@@ -422,8 +445,36 @@ async function readInputLock(lockFilePath) {
 	) {
 		throw new Error('wasm-ruby input lock has invalid provenance metadata');
 	}
-	canonicalJson(value.components);
-	canonicalJson(value.transformations);
+	const components = value.components;
+	for (const [name, repository, revision] of [
+		['ruby', 'https://github.com/ruby/ruby', 'sha'],
+		['rubyWasm', 'https://github.com/ruby/ruby.wasm', value.artifact.revision],
+		['wasiSdk', 'https://github.com/WebAssembly/wasi-sdk', 'unrecorded']
+	]) {
+		const component = components[name];
+		if (
+			!hasExactKeys(component, EXPECTED_COMPONENT_KEYS) ||
+			typeof component.version !== 'string' ||
+			!/^[0-9A-Za-z][0-9A-Za-z._+-]*$/u.test(component.version) ||
+			component.repository !== repository ||
+			(revision === 'sha'
+				? typeof component.revision !== 'string' ||
+					!/^[a-f0-9]{40}$/u.test(component.revision)
+				: component.revision !== revision) ||
+			component.verifiedBuildInput !== false ||
+			typeof component.evidence !== 'string' ||
+			!component.evidence
+		) {
+			throw new Error(`wasm-ruby input lock has invalid ${name} provenance`);
+		}
+	}
+	if (
+		value.profileId !==
+			`ruby-${components.ruby.version}-ruby-wasm-${components.rubyWasm.version}` ||
+		canonicalJson(value.transformations) !== canonicalJson(EXPECTED_TRANSFORMATIONS)
+	) {
+		throw new Error('wasm-ruby input lock has an invalid profile or transformation graph');
+	}
 
 	const packages = new Map();
 	for (const candidate of value.packages) {
@@ -438,6 +489,15 @@ async function readInputLock(lockFilePath) {
 	}
 	if (PACKAGE_NAMES.some((name) => !packages.has(name))) {
 		throw new Error('wasm-ruby input lock is missing a required package');
+	}
+	for (const name of ['@ruby/3.4-wasm-wasi', '@ruby/wasm-wasi']) {
+		const descriptor = packages.get(name);
+		if (
+			descriptor.version !== components.rubyWasm.version ||
+			descriptor.revision !== value.artifact.revision
+		) {
+			throw new Error(`wasm-ruby ${name} identity does not match the runtime profile`);
+		}
 	}
 
 	const entry = {
@@ -887,14 +947,19 @@ export async function syncWasmRubyAssets(options = {}) {
 		});
 		/** @type {Map<string, Uint8Array>} */
 		const storageBytes = new Map();
+		/** @type {Map<string, Uint8Array>} */
+		const legacyStorageBytes = new Map();
 		/** @type {StorageAsset[]} */
 		const storage = assets.map((asset) => {
 			const logical = logicalBytes.get(asset.path);
 			if (!logical) throw new Error(`wasm-ruby build omitted ${asset.path}`);
 			const encoding = asset.path.endsWith('.wasm') ? 'gzip' : 'identity';
 			const stored = encoding === 'gzip' ? gzipSync(logical, { level: 9 }) : logical;
-			const storagePath = encoding === 'gzip' ? `${asset.path}.gz` : asset.path;
+			const storagePath =
+				encoding === 'gzip' ? WASM_STORAGE_PATH : RUNTIME_MODULE_STORAGE_PATH;
+			const legacyPath = encoding === 'gzip' ? LEGACY_WASM_STORAGE_PATH : RUNTIME_MODULE_PATH;
 			storageBytes.set(storagePath, stored);
+			legacyStorageBytes.set(legacyPath, stored);
 			return {
 				path: storagePath,
 				logicalPath: asset.path,
@@ -903,6 +968,18 @@ export async function syncWasmRubyAssets(options = {}) {
 				sha256: sha256(stored)
 			};
 		});
+		const logicalBytesTotal = assets.reduce((total, asset) => total + asset.size, 0);
+		const deliveryBytesTotal = storage.reduce((total, asset) => total + asset.size, 0);
+		const moduleAsset = assets.find((asset) => asset.path === RUNTIME_MODULE_PATH);
+		if (!moduleAsset || moduleAsset.size > MAX_MODULE_BYTES) {
+			throw new Error(`wasm-ruby runtime module exceeds ${MAX_MODULE_BYTES} bytes`);
+		}
+		if (logicalBytesTotal > MAX_LOGICAL_BYTES) {
+			throw new Error(`wasm-ruby logical graph exceeds ${MAX_LOGICAL_BYTES} bytes`);
+		}
+		if (deliveryBytesTotal > MAX_DELIVERY_BYTES) {
+			throw new Error(`wasm-ruby delivery graph exceeds ${MAX_DELIVERY_BYTES} bytes`);
+		}
 		const packages = [...lock.packages.values()].sort((left, right) =>
 			lexicalCompare(left.name, right.name)
 		);
@@ -978,29 +1055,77 @@ export async function syncWasmRubyAssets(options = {}) {
 				sha256: asset.sha256
 			}))
 		};
+		const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+		if (manifestBytes.byteLength > MAX_MANIFEST_BYTES) {
+			throw new Error(`wasm-ruby manifest exceeds ${MAX_MANIFEST_BYTES} bytes`);
+		}
+		if (deliveryBytesTotal + manifestBytes.byteLength > MAX_DELIVERY_BYTES) {
+			throw new Error(
+				`wasm-ruby manifest and delivery graph exceed ${MAX_DELIVERY_BYTES} bytes`
+			);
+		}
+		const moduleStorage = storage.find(
+			(candidate) => candidate.logicalPath === RUNTIME_MODULE_PATH
+		);
+		const wasmStorage = storage.find((candidate) => candidate.logicalPath === WASM_ASSET_PATH);
+		const wasmAsset = assets.find((candidate) => candidate.path === WASM_ASSET_PATH);
+		if (!moduleStorage || !wasmStorage || !wasmAsset) {
+			throw new Error('wasm-ruby profile graph is incomplete');
+		}
+		const manifestReceipt = {
+			bytes: manifestBytes.byteLength,
+			sha256: sha256(manifestBytes)
+		};
 		const generatedModuleSource = [
 			'// Generated by scripts/sync-wasm-ruby.mjs. Do not edit.',
+			'export const RUBY_RUNTIME_GENERATED_PROFILE = Object.freeze({',
+			`\tprofileId: '${lock.profileId}' as const,`,
+			`\tartifactRevision: '${lock.artifact.revision}' as const,`,
+			`\trubyVersion: '${lock.components.ruby.version}' as const,`,
+			`\trubyRevision: '${lock.components.ruby.revision}' as const,`,
+			`\trubyWasmVersion: '${lock.components.rubyWasm.version}' as const,`,
+			`\trubyWasmRevision: '${lock.components.rubyWasm.revision}' as const,`,
+			`\twasiSdkVersion: '${lock.components.wasiSdk.version}' as const,`,
+			'\tmanifestFingerprint:',
+			`\t\t'${fingerprint}' as const,`,
+			'\tmanifestReceipt: Object.freeze({',
+			`\t\tbytes: ${manifestReceipt.bytes},`,
+			`\t\tsha256: '${manifestReceipt.sha256}' as const`,
+			'\t}),',
+			'\tmoduleJavaScriptReceipt: Object.freeze({',
+			`\t\tbytes: ${moduleStorage.size},`,
+			`\t\tsha256: '${moduleStorage.sha256}' as const`,
+			'\t}),',
+			'\twasmReceipt: Object.freeze({',
+			`\t\tbytes: ${wasmStorage.size},`,
+			`\t\tsha256: '${wasmStorage.sha256}' as const,`,
+			`\t\tuncompressedBytes: ${wasmAsset.size},`,
+			'\t\tuncompressedSha256:',
+			`\t\t\t'${wasmAsset.sha256}' as const`,
+			'\t})',
+			'});',
+			'export const RUBY_RUNTIME_GENERATED_BUNDLE = Object.freeze({',
+			'\tprofile: RUBY_RUNTIME_GENERATED_PROFILE',
+			'});',
 			`export const RUBY_RUNTIME_GENERATED_ASSET_PATH = '${wasmPath}' as const;`,
 			'export const RUBY_RUNTIME_GENERATED_ASSET_VERSION =',
-			`\t'${fingerprint}' as const;`,
+			'\tRUBY_RUNTIME_GENERATED_PROFILE.manifestFingerprint;',
 			'export const RUBY_RUNTIME_GENERATED_ASSET_RECEIPTS = Object.freeze({',
-			`\t'${modulePath}': Object.freeze({`,
-			`\t\tbytes: ${lock.outputs.get(modulePath).bytes},`,
-			`\t\tsha256: '${lock.outputs.get(modulePath).sha256}' as const`,
-			'\t}),',
+			`\t'${modulePath}': RUBY_RUNTIME_GENERATED_PROFILE.moduleJavaScriptReceipt,`,
 			'\t[RUBY_RUNTIME_GENERATED_ASSET_PATH]: Object.freeze({',
-			`\t\tbytes: ${lock.outputs.get(wasmPath).bytes},`,
-			`\t\tsha256: '${lock.outputs.get(wasmPath).sha256}' as const`,
+			'\t\tbytes: RUBY_RUNTIME_GENERATED_PROFILE.wasmReceipt.uncompressedBytes,',
+			'\t\tsha256: RUBY_RUNTIME_GENERATED_PROFILE.wasmReceipt.uncompressedSha256',
 			'\t})',
 			'});',
 			''
 		].join('\n');
 		const staticFileBytes = new Map([
 			...storageBytes,
+			...legacyStorageBytes,
 			...verifiedAgain.legalBytes,
 			[BUILD_METADATA_FILE, buildMetadataBytes],
 			[LEGACY_MANIFEST_FILE, Buffer.from(`${JSON.stringify(legacyManifest, null, 2)}\n`)],
-			[MANIFEST_FILE, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`)]
+			[MANIFEST_FILE, manifestBytes]
 		]);
 
 		await Promise.all(
@@ -1052,6 +1177,18 @@ export async function syncWasmRubyAssets(options = {}) {
 				const logical = stored.encoding === 'gzip' ? gunzipSync(installed) : installed;
 				if (logical.byteLength !== asset.size || sha256(logical) !== asset.sha256) {
 					throw new Error(`wasm-ruby temporary logical receipt failed for ${asset.path}`);
+				}
+			}
+			for (const [canonicalPath, legacyPath] of [
+				[RUNTIME_MODULE_STORAGE_PATH, RUNTIME_MODULE_PATH],
+				[WASM_STORAGE_PATH, LEGACY_WASM_STORAGE_PATH]
+			]) {
+				const canonical = await readFile(
+					path.join(publications[0].temporary, canonicalPath)
+				);
+				const legacy = await readFile(path.join(publications[0].temporary, legacyPath));
+				if (!canonical.equals(legacy)) {
+					throw new Error(`wasm-ruby legacy storage alias differs from ${canonicalPath}`);
 				}
 			}
 			const installedManifest = JSON.parse(

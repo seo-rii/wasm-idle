@@ -17,9 +17,12 @@ In particular:
 
 - TypeScript and JavaScript require `typescript.libUrl` or `javascript.libUrl` unless the host
   supplies `libFiles` directly.
-- AssemblyScript, SQLite, DuckDB, and Ruby load page-owned runtime modules from their respective
+- AssemblyScript, SQLite, and DuckDB load page-owned runtime modules from their respective
   `moduleUrl` option. The modules provide the package glue and default WASM or worker asset URLs.
-  Hosts may still override `sql.wasmUrl`, `sql.duckdbBundles`, or `ruby.wasmUrl`.
+  Hosts may still override `sql.wasmUrl` or `sql.duckdbBundles`.
+- Ruby requires one complete runtime profile: identity, manifest/module/Wasm receipts, and canonical
+  URLs. The page host verifies and transfers all three assets before its worker starts; incomplete
+  URL-only overrides fail closed.
 - Python and R load their externally deployed Pyodide and WebR trees from `python.baseUrl` and
   `r.baseUrl`.
 - Clangd and other compiler-backed language servers use their corresponding runtime asset config.

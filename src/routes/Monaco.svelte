@@ -60,11 +60,12 @@
 		languages: readonly string[];
 		isEnabled: () => boolean;
 		setStatus: (status: LanguageServerStatus) => void;
-		load: (currentUrl: string) => Promise<EditorLanguageServerHandle>;
+		load: (currentUrl: string, signal?: AbortSignal) => Promise<EditorLanguageServerHandle>;
 	}
 	type PerlLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['perl']>;
 	type JanetLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['janet']>;
 	type PascalLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['pascal']>;
+	type RubyLspRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['ruby']>;
 
 	const monacoTestHooksEnabled = () => {
 		try {
@@ -2407,7 +2408,7 @@
 		prologLspBaseUrl?: string;
 		prologLspWorkerUrl?: string;
 		rubyLspEnabled?: boolean;
-		rubyLspModuleUrl?: string;
+		rubyLspRuntime?: RubyLspRuntimeConfig;
 		rLspEnabled?: boolean;
 		rLspBaseUrl?: string;
 		octaveLspEnabled?: boolean;
@@ -2500,7 +2501,7 @@
 		prologLspBaseUrl,
 		prologLspWorkerUrl,
 		rubyLspEnabled = false,
-		rubyLspModuleUrl,
+		rubyLspRuntime,
 		rLspEnabled = false,
 		rLspBaseUrl,
 		octaveLspEnabled = false,
@@ -2651,7 +2652,7 @@
 			sqlLspEnabled ? sqlLspModuleUrl || '' : '',
 			prologLspEnabled ? prologLspBaseUrl || '' : '',
 			prologLspEnabled ? prologLspWorkerUrl || '' : '',
-			rubyLspEnabled ? rubyLspModuleUrl || '' : '',
+			rubyLspEnabled ? JSON.stringify(rubyLspRuntime) : '',
 			rLspEnabled ? rLspBaseUrl || '' : '',
 			octaveLspEnabled ? octaveLspBaseUrl || '' : '',
 			octaveLspEnabled ? octaveLspWorkerUrl || '' : '',
@@ -3314,15 +3315,16 @@
 		},
 		{
 			languages: ['ruby'],
-			isEnabled: () => rubyLspEnabled && !!rubyLspModuleUrl,
+			isEnabled: () => rubyLspEnabled && !!rubyLspRuntime,
 			setStatus: (status) => (rubyLspStatus = status),
-			load: async (currentUrl) => {
+			load: async (currentUrl, signal) => {
 				const { getRubyLanguageServer } = await import('@wasm-idle/lsp/ruby');
+				const runtime = rubyLspRuntime;
+				if (!runtime) throw new Error('Ruby LSP runtime assets are not configured');
 				return await getRubyLanguageServer({
 					currentUrl,
-					ruby: {
-						moduleUrl: rubyLspModuleUrl || ''
-					},
+					signal,
+					ruby: runtime,
 					onStatus: (status) => (rubyLspStatus = status)
 				});
 			}
@@ -3446,7 +3448,7 @@
 			}
 			try {
 				route.setStatus({ state: 'loading', stage: 'startup', loaded: 0, total: 1 });
-				const connection = await route.load(currentUrl);
+				const connection = await route.load(currentUrl, context?.signal);
 				if (context?.signal?.aborted || key !== lspConnectionKey) {
 					connection.dispose();
 					return null;

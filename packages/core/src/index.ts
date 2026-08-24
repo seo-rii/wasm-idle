@@ -141,15 +141,39 @@ export {
 	type RuntimeAssetProfileKeySource
 } from './runtime-assets.js';
 export {
+	RUBY_MAX_ASSET_BYTES,
+	RUBY_MAX_DELIVERY_BYTES,
+	RUBY_MAX_LOGICAL_BYTES,
+	RUBY_MAX_MANIFEST_BYTES,
+	RUBY_MAX_MODULE_BYTES,
+	RUBY_PREFLIGHT_PROTOCOL,
+	RUBY_PREFLIGHT_PROTOCOL_VERSION,
+	RUBY_PREFLIGHT_RUNTIME_ID,
 	RUBY_RUNTIME_ASSET_PATH,
 	RUBY_RUNTIME_ASSET_NAMES,
 	RUBY_RUNTIME_ASSET_RECEIPTS,
 	RUBY_RUNTIME_ASSET_VERSION,
+	RUBY_RUNTIME_BUNDLE,
+	RUBY_RUNTIME_MANIFEST_PATH,
+	RUBY_RUNTIME_MODULE_PATH,
+	RUBY_RUNTIME_MODULE_STORAGE_PATH,
+	RUBY_RUNTIME_PROFILE,
+	RUBY_RUNTIME_VERIFIED_WASM_URL,
+	RUBY_RUNTIME_WASM_STORAGE_PATH,
+	cloneRubyRuntimePreflightPayload,
 	deriveRubyRuntimeWasmUrl,
+	preflightRubyRuntimeAssets,
+	requireRubyRuntimePreflightPayload,
+	rewriteVerifiedRubyRuntimeModule,
 	snapshotRubyRuntimeAssetReceipts,
+	snapshotRubyRuntimePreflightProfile,
+	verifyRubyRuntimePreflightPayload,
 	type RubyRuntimeAssetName,
 	type RubyRuntimeAssetReceipt,
-	type RubyRuntimeAssetReceipts
+	type RubyRuntimeAssetReceipts,
+	type RubyRuntimePreflightPayload,
+	type RubyRuntimePreflightProfile,
+	type RubyRuntimePreflightRequest
 } from './ruby-runtime.js';
 export {
 	HASKELL_RUNTIME_ASSET_NAMES,

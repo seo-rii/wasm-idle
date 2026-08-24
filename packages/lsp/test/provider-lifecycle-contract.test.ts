@@ -96,10 +96,35 @@ vi.mock('../src/jsonrpc.js', () => ({
 	BrowserMessageWriter: mockState.MockWriter
 }));
 
+const rubyRuntimeMocks = vi.hoisted(() => ({
+	preflightRubyRuntimeAssets: vi.fn((request: { signal?: AbortSignal }) => {
+		if (request.signal?.aborted) return Promise.reject(request.signal.reason);
+		return Promise.resolve({
+			protocol: 'wasm-idle-ruby-preflight',
+			protocolVersion: 1,
+			profileId: 'ruby-3.4.1-ruby-wasm-2.9.3-2.9.4',
+			artifactRevision: 'a'.repeat(40),
+			rubyVersion: '3.4.1',
+			rubyRevision: 'b'.repeat(40),
+			rubyWasmVersion: '2.9.3-2.9.4',
+			rubyWasmRevision: 'a'.repeat(40),
+			wasiSdkVersion: '22.0',
+			manifestFingerprint: 'c'.repeat(64),
+			manifestBytes: Uint8Array.of(1),
+			moduleJavaScriptBytes: Uint8Array.of(2),
+			wasmBytes: Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)
+		});
+	})
+}));
+
+vi.mock('@wasm-idle/core', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@wasm-idle/core')>()),
+	preflightRubyRuntimeAssets: rubyRuntimeMocks.preflightRubyRuntimeAssets
+}));
+
 import { editorLanguageServerProviders } from '../src/registry.js';
 import type { DOuterAssetReceipts } from '../src/d/assets.js';
 import type { EditorLanguageServerRuntimeOptions } from '../src/types.js';
-import { RUBY_RUNTIME_ASSET_PATH, type RubyRuntimeAssetReceipts } from '@wasm-idle/core';
 import { createJanetTestAssetResponse } from './janet-fixture.js';
 import { createPascalTestAssetResponse } from './pascal-fixture.js';
 import { createPerlTestAssetResponse } from './perl-fixture.js';
@@ -139,21 +164,6 @@ const dAssetIntegrity = {
 		dAssetBytes['runtime/runtime-manifest.v1.json']
 	)
 } satisfies DOuterAssetReceipts;
-const rubyAssetBytes = {
-	'runtime.mjs': new TextEncoder().encode(
-		`new URL(${JSON.stringify(RUBY_RUNTIME_ASSET_PATH)}, import.meta.url);`
-	),
-	[RUBY_RUNTIME_ASSET_PATH]: Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)
-} as const;
-const rubyAssetIntegrity = Object.fromEntries(
-	Object.entries(rubyAssetBytes).map(([asset, bytes]) => [
-		asset,
-		{
-			bytes: bytes.byteLength,
-			sha256: createHash('sha256').update(bytes).digest('hex')
-		}
-	])
-) as RubyRuntimeAssetReceipts;
 const deploymentBases = [
 	{ label: 'root', rootUrl: '/', currentUrl: `${applicationOrigin}/` },
 	{
@@ -188,9 +198,6 @@ const createProviderOptions = (
 	},
 	d: {
 		integrity: dAssetIntegrity
-	},
-	ruby: {
-		integrity: rubyAssetIntegrity
 	}
 });
 
@@ -268,21 +275,12 @@ describe('registered LSP provider lifecycle contract', () => {
 					: requestUrl.pathname.endsWith('/index.js')
 						? 'index.js'
 						: undefined;
-				const rubyAsset = requestUrl.pathname.endsWith('/runtime.mjs')
-					? 'runtime.mjs'
-					: requestUrl.pathname.endsWith(`/${RUBY_RUNTIME_ASSET_PATH}`)
-						? RUBY_RUNTIME_ASSET_PATH
-						: undefined;
 				const lispAsset = lispStaticBytes[path.basename(requestUrl.pathname)]
 					? path.basename(requestUrl.pathname)
 					: undefined;
-				if (!dAsset && !rubyAsset && !lispAsset)
+				if (!dAsset && !lispAsset)
 					throw new Error(`Unexpected lifecycle asset request: ${requestUrl.href}`);
-				const bytes = dAsset
-					? dAssetBytes[dAsset]
-					: rubyAsset
-						? rubyAssetBytes[rubyAsset]
-						: lispStaticBytes[lispAsset!];
+				const bytes = dAsset ? dAssetBytes[dAsset] : lispStaticBytes[lispAsset!];
 				const response = new Response(bytes, {
 					headers: { 'content-length': String(bytes.byteLength) }
 				});

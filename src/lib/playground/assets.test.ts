@@ -1016,55 +1016,154 @@ describe('runtime asset config resolution', () => {
 		});
 	});
 
-	it('prefers an explicit Ruby wasm url over the public env override', async () => {
+	it('fails closed when any explicit Ruby URL omits the complete trust profile', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = 'https://env.example.com/ruby+stdlib.wasm';
-		const { resolveRubyWasmUrl } = await import('./assets');
+		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
+		const { resolveRubyRuntimeAssetConfig } = await import('./assets');
 
-		expect(
-			resolveRubyWasmUrl(
+		expect(() =>
+			resolveRubyRuntimeAssetConfig(
 				{
 					ruby: {
-						wasmUrl: '/runtime/ruby+stdlib.wasm'
+						wasmUrl: '/runtime/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin'
 					}
 				},
 				'https://example.com/app'
 			)
-		).toBe('https://example.com/runtime/ruby+stdlib.wasm');
+		).toThrow('complete profile and receipt bundle');
 	});
 
-	it('falls back to PUBLIC_WASM_RUBY_WASM_URL when no Ruby runtime config is provided', async () => {
+	it('fails closed on legacy public Ruby URL overrides without a trust profile', async () => {
 		vi.resetModules();
-		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '/ruby/ruby+stdlib.wasm';
-		const { resolveRubyWasmUrl } = await import('./assets');
+		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '/ruby/ruby_stdlib.wasm.gz.bin';
+		const { resolveRubyRuntimeAssetConfig } = await import('./assets');
 
-		expect(resolveRubyWasmUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/ruby/ruby+stdlib.wasm'
-		);
+		expect(() =>
+			resolveRubyRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
+		).toThrow('complete profile and receipt bundle');
+		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
 	});
 
-	it('uses the bundled Ruby wasm asset when no Ruby asset url is configured', async () => {
+	it('uses the bundled canonical Ruby profile and query-pinned storage paths', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
-		const { resolveRubyWasmUrl } = await import('./assets');
+		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL = '';
+		const [{ resolveRubyRuntimeAssetConfig }, core] = await Promise.all([
+			import('./assets'),
+			import('@wasm-idle/core')
+		]);
 
-		expect(resolveRubyWasmUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/absproxy/5173/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm'
-		);
+		expect(
+			resolveRubyRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
+		).toMatchObject({
+			baseUrl: 'https://example.com/absproxy/5173/wasm-ruby/',
+			manifestUrl: `https://example.com/absproxy/5173/wasm-ruby/${core.RUBY_RUNTIME_MANIFEST_PATH}?v=${core.RUBY_RUNTIME_PROFILE.manifestFingerprint}`,
+			moduleUrl: `https://example.com/absproxy/5173/wasm-ruby/${core.RUBY_RUNTIME_MODULE_STORAGE_PATH}?v=${core.RUBY_RUNTIME_PROFILE.moduleJavaScriptReceipt.sha256}`,
+			wasmUrl: `https://example.com/absproxy/5173/wasm-ruby/${core.RUBY_RUNTIME_WASM_STORAGE_PATH}?v=${core.RUBY_RUNTIME_PROFILE.wasmReceipt.sha256}`,
+			preflightProfile: core.RUBY_RUNTIME_PROFILE
+		});
 	});
 
-	it('preserves the verified module query when deriving the Ruby wasm sibling', async () => {
+	it('accepts one complete custom Ruby mirror profile and pins every URL independently', async () => {
 		vi.resetModules();
 		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL = '';
 		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
-		const { resolveRubyWasmUrl } = await import('./assets');
+		const [{ resolveRubyRuntimeAssetConfig }, { RUBY_RUNTIME_PROFILE }] = await Promise.all([
+			import('./assets'),
+			import('@wasm-idle/core')
+		]);
 
 		expect(
-			resolveRubyWasmUrl(
-				{ ruby: { moduleUrl: '/runtime/runtime.mjs?v=verified-profile' } },
+			resolveRubyRuntimeAssetConfig(
+				{
+					ruby: {
+						baseUrl: '/runtime/ruby/',
+						...RUBY_RUNTIME_PROFILE
+					}
+				},
 				'https://example.com/app'
 			)
-		).toBe('https://example.com/runtime/assets/ruby_stdlib-C40Yu-vu.wasm?v=verified-profile');
+		).toMatchObject({
+			baseUrl: 'https://example.com/runtime/ruby/',
+			manifestUrl: expect.stringContaining(
+				`runtime-manifest.v2.json?v=${RUBY_RUNTIME_PROFILE.manifestFingerprint}`
+			),
+			moduleUrl: expect.stringContaining(
+				`runtime.mjs.bin?v=${RUBY_RUNTIME_PROFILE.moduleJavaScriptReceipt.sha256}`
+			),
+			wasmUrl: expect.stringContaining(
+				`.wasm.gz.bin?v=${RUBY_RUNTIME_PROFILE.wasmReceipt.sha256}`
+			)
+		});
+	});
+
+	it('snapshots explicit Ruby configuration once before choosing its trust boundary', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
+		const [{ resolveRubyRuntimeAssetConfig }, { RUBY_RUNTIME_PROFILE }] = await Promise.all([
+			import('./assets'),
+			import('@wasm-idle/core')
+		]);
+		let baseUrlReads = 0;
+		const ruby = Object.defineProperty({}, 'baseUrl', {
+			enumerable: true,
+			get() {
+				baseUrlReads += 1;
+				return baseUrlReads === 1 ? undefined : '/untrusted-mirror/';
+			}
+		});
+
+		const resolved = resolveRubyRuntimeAssetConfig(
+			{ ruby } as never,
+			'https://example.com/app'
+		);
+
+		expect(baseUrlReads).toBe(1);
+		expect(resolved.baseUrl).toBe('https://example.com/wasm-ruby/');
+		expect(resolved.preflightProfile).toEqual(RUBY_RUNTIME_PROFILE);
+	});
+
+	it.each([
+		{
+			name: 'cross-origin manifest',
+			override: {
+				manifestUrl: 'https://cdn.example/runtime-manifest.v2.json'
+			}
+		},
+		{
+			name: 'noncanonical logical module path',
+			override: {
+				moduleUrl: '/runtime/ruby/runtime.mjs'
+			}
+		},
+		{
+			name: 'incorrect Wasm receipt pin',
+			override: {
+				wasmUrl: `/runtime/ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin?v=${'0'.repeat(64)}`
+			}
+		}
+	])('rejects a complete Ruby profile with $name before preflight', async ({ override }) => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_RUBY_MODULE_URL = '';
+		publicEnv.PUBLIC_WASM_RUBY_WASM_URL = '';
+		const [{ resolveRubyRuntimeAssetConfig }, { RUBY_RUNTIME_PROFILE }] = await Promise.all([
+			import('./assets'),
+			import('@wasm-idle/core')
+		]);
+
+		expect(() =>
+			resolveRubyRuntimeAssetConfig(
+				{
+					ruby: {
+						...RUBY_RUNTIME_PROFILE,
+						baseUrl: '/runtime/ruby/',
+						...override
+					}
+				},
+				'https://example.com/app'
+			)
+		).toThrow('must use its canonical query-pinned path');
 	});
 
 	it('prefers an explicit R base url over the public env override', async () => {
@@ -2209,8 +2308,8 @@ describe('runtime asset config resolution', () => {
 		expect(resolvePhpRuntimeModuleUrl('/app', 'https://example.com/')).toBe(
 			'https://example.com/app/wasm-php/runtime.mjs'
 		);
-		expect(resolveRubyRuntimeModuleUrl('/app', 'https://example.com/')).toBe(
-			'https://example.com/app/wasm-ruby/runtime.mjs'
+		expect(resolveRubyRuntimeModuleUrl('/app', 'https://example.com/')).toMatch(
+			/^https:\/\/example\.com\/app\/wasm-ruby\/runtime\.mjs\.bin\?v=[a-f0-9]{64}$/u
 		);
 		expect(resolveSqliteRuntimeModuleUrl('/app', 'https://example.com/')).toBe(
 			'https://example.com/app/wasm-sqlite/runtime.mjs'

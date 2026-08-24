@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { RUBY_RUNTIME_ASSET_RECEIPTS } from '@wasm-idle/core';
+import { RUBY_RUNTIME_PROFILE } from '@wasm-idle/core';
+import { createRubyRuntimeTestPreflightPayload } from './rubyTestPreflight';
+
+const preflightMocks = vi.hoisted(() => ({
+	preflightVerifiedRubyRuntimeAssets: vi.fn()
+}));
+
+vi.mock('$lib/playground/rubyAssets', async (importOriginal) => ({
+	...(await importOriginal<typeof import('./rubyAssets')>()),
+	preflightVerifiedRubyRuntimeAssets: preflightMocks.preflightVerifiedRubyRuntimeAssets
+}));
 
 vi.mock('$env/dynamic/public', () => ({
 	env: {}
@@ -55,6 +65,9 @@ import { readBufferedStdin } from './stdinBuffer';
 
 describe('Ruby worker lifecycle', () => {
 	beforeEach(() => {
+		preflightMocks.preflightVerifiedRubyRuntimeAssets
+			.mockReset()
+			.mockImplementation(async () => createRubyRuntimeTestPreflightPayload());
 		workerInstances.length = 0;
 		autoResolveLoad = true;
 		autoResolveRun = true;
@@ -160,18 +173,17 @@ describe('Ruby worker lifecycle', () => {
 		await expect(
 			sandbox.load({
 				ruby: {
-					moduleUrl: '/replacement/runtime.mjs',
-					wasmUrl: '/replacement/runtime.wasm',
-					integrity: {
-						...RUBY_RUNTIME_ASSET_RECEIPTS,
-						'runtime.mjs': {
-							...RUBY_RUNTIME_ASSET_RECEIPTS['runtime.mjs'],
-							bytes: 0
-						}
+					...RUBY_RUNTIME_PROFILE,
+					baseUrl: '/replacement/',
+					moduleJavaScriptReceipt: {
+						...RUBY_RUNTIME_PROFILE.moduleJavaScriptReceipt,
+						bytes: 0
 					}
 				}
 			})
-		).rejects.toThrow('Ruby runtime receipt is invalid for runtime.mjs');
+		).rejects.toThrow(
+			'Ruby runtime custom assets require one complete profile and receipt bundle.'
+		);
 
 		expect(workerInstances).toHaveLength(1);
 		expect(warmWorker.terminate).not.toHaveBeenCalled();

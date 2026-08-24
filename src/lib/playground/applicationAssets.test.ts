@@ -1,8 +1,9 @@
 import {
 	HASKELL_RUNTIME_ASSET_RECEIPTS,
-	RUBY_RUNTIME_ASSET_PATH,
-	RUBY_RUNTIME_ASSET_RECEIPTS,
-	RUBY_RUNTIME_ASSET_VERSION,
+	RUBY_RUNTIME_BUNDLE,
+	RUBY_RUNTIME_MANIFEST_PATH,
+	RUBY_RUNTIME_MODULE_STORAGE_PATH,
+	RUBY_RUNTIME_WASM_STORAGE_PATH,
 	createRuntimeAssetsKey
 } from '@wasm-idle/core';
 import { describe, expect, it } from 'vitest';
@@ -301,9 +302,11 @@ describe('application runtime asset root', () => {
 			`/foo/bar/wasm-sqlite/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
 		);
 		expect(assets.ruby).toEqual({
-			moduleUrl: `/foo/bar/wasm-ruby/runtime.mjs?v=${RUBY_RUNTIME_ASSET_VERSION}`,
-			wasmUrl: `/foo/bar/wasm-ruby/${RUBY_RUNTIME_ASSET_PATH}?v=${RUBY_RUNTIME_ASSET_VERSION}`,
-			integrity: RUBY_RUNTIME_ASSET_RECEIPTS
+			baseUrl: '/foo/bar/wasm-ruby/',
+			manifestUrl: `/foo/bar/wasm-ruby/${RUBY_RUNTIME_MANIFEST_PATH}?v=${RUBY_RUNTIME_BUNDLE.profile.manifestFingerprint}`,
+			moduleUrl: `/foo/bar/wasm-ruby/${RUBY_RUNTIME_MODULE_STORAGE_PATH}?v=${RUBY_RUNTIME_BUNDLE.profile.moduleJavaScriptReceipt.sha256}`,
+			wasmUrl: `/foo/bar/wasm-ruby/${RUBY_RUNTIME_WASM_STORAGE_PATH}?v=${RUBY_RUNTIME_BUNDLE.profile.wasmReceipt.sha256}`,
+			...RUBY_RUNTIME_BUNDLE.profile
 		});
 		expect(assets.haskell).toEqual({
 			moduleUrl: `/foo/bar/wasm-haskell/dyld.mjs?v=${WASM_HASKELL_ASSET_VERSION}`,
@@ -366,11 +369,6 @@ describe('application runtime asset root', () => {
 							: {})
 					}
 				])
-		);
-		const serializedRubyIntegrity = JSON.stringify(
-			Object.entries(RUBY_RUNTIME_ASSET_RECEIPTS)
-				.sort(([left], [right]) => left.localeCompare(right))
-				.map(([asset, entry]) => [asset, { sha256: entry.sha256, bytes: entry.bytes }])
 		);
 		const serializedHaskellIntegrity = JSON.stringify(
 			Object.entries(HASKELL_RUNTIME_ASSET_RECEIPTS)
@@ -572,7 +570,21 @@ describe('application runtime asset root', () => {
 			fortranIntegrity: serializedFortranIntegrity,
 			zigIntegrity: serializedZigIntegrity,
 			haskellIntegrity: serializedHaskellIntegrity,
-			rubyIntegrity: serializedRubyIntegrity,
+			rubyBaseUrl: '/foo/bar/wasm-ruby/',
+			rubyManifestUrl: `/foo/bar/wasm-ruby/${RUBY_RUNTIME_MANIFEST_PATH}?v=${RUBY_RUNTIME_BUNDLE.profile.manifestFingerprint}`,
+			rubyModuleUrl: `/foo/bar/wasm-ruby/${RUBY_RUNTIME_MODULE_STORAGE_PATH}?v=${RUBY_RUNTIME_BUNDLE.profile.moduleJavaScriptReceipt.sha256}`,
+			rubyWasmUrl: `/foo/bar/wasm-ruby/${RUBY_RUNTIME_WASM_STORAGE_PATH}?v=${RUBY_RUNTIME_BUNDLE.profile.wasmReceipt.sha256}`,
+			rubyProfileId: RUBY_RUNTIME_BUNDLE.profile.profileId,
+			rubyArtifactRevision: RUBY_RUNTIME_BUNDLE.profile.artifactRevision,
+			rubyVersion: RUBY_RUNTIME_BUNDLE.profile.rubyVersion,
+			rubyRevision: RUBY_RUNTIME_BUNDLE.profile.rubyRevision,
+			rubyWasmVersion: RUBY_RUNTIME_BUNDLE.profile.rubyWasmVersion,
+			rubyWasmRevision: RUBY_RUNTIME_BUNDLE.profile.rubyWasmRevision,
+			rubyWasiSdkVersion: RUBY_RUNTIME_BUNDLE.profile.wasiSdkVersion,
+			rubyManifestFingerprint: RUBY_RUNTIME_BUNDLE.profile.manifestFingerprint,
+			rubyManifestReceipt: expect.any(String),
+			rubyModuleJavaScriptReceipt: expect.any(String),
+			rubyWasmReceipt: expect.any(String),
 			objectiveCIntegrity: JSON.stringify(
 				Object.entries(WASM_OBJECTIVEC_ASSET_RECEIPTS)
 					.sort(([left], [right]) => left.localeCompare(right))
@@ -680,6 +692,21 @@ describe('application runtime asset root', () => {
 			nimManifestUrl: assets.nim?.manifestUrl,
 			nimManifestFingerprint: assets.nim?.manifestFingerprint,
 			nimWorkerReceipt: expect.any(String),
+			rubyBaseUrl: assets.ruby?.baseUrl,
+			rubyManifestUrl: assets.ruby?.manifestUrl,
+			rubyModuleUrl: assets.ruby?.moduleUrl,
+			rubyWasmUrl: assets.ruby?.wasmUrl,
+			rubyProfileId: assets.ruby?.profileId,
+			rubyArtifactRevision: assets.ruby?.artifactRevision,
+			rubyVersion: assets.ruby?.rubyVersion,
+			rubyRevision: assets.ruby?.rubyRevision,
+			rubyWasmVersion: assets.ruby?.rubyWasmVersion,
+			rubyWasmRevision: assets.ruby?.rubyWasmRevision,
+			rubyWasiSdkVersion: assets.ruby?.wasiSdkVersion,
+			rubyManifestFingerprint: assets.ruby?.manifestFingerprint,
+			rubyManifestReceipt: expect.any(String),
+			rubyModuleJavaScriptReceipt: expect.any(String),
+			rubyWasmReceipt: expect.any(String),
 			haskellModuleUrl: assets.haskell?.moduleUrl,
 			haskellRootfsUrl: assets.haskell?.rootfsUrl,
 			haskellBsdtarUrl: assets.haskell?.bsdtarUrl,
@@ -703,6 +730,48 @@ describe('application runtime asset root', () => {
 			objectiveCLibffiUrl: assets.objectivec?.libffiUrl,
 			objectiveCIntegrity: expect.any(String)
 		});
+	});
+
+	it('includes every Ruby URL, identity field, and receipt in cache identity', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const ruby = assets.ruby!;
+		const baseline = createRuntimeAssetsKey(assets);
+		for (const field of [
+			'baseUrl',
+			'manifestUrl',
+			'moduleUrl',
+			'wasmUrl',
+			'profileId',
+			'artifactRevision',
+			'rubyVersion',
+			'rubyRevision',
+			'rubyWasmVersion',
+			'rubyWasmRevision',
+			'wasiSdkVersion',
+			'manifestFingerprint'
+		] as const) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					ruby: { ...ruby, [field]: `${ruby[field]}-changed` }
+				})
+			).not.toBe(baseline);
+		}
+		for (const field of [
+			'manifestReceipt',
+			'moduleJavaScriptReceipt',
+			'wasmReceipt'
+		] as const) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					ruby: {
+						...ruby,
+						[field]: { ...ruby[field]!, sha256: 'f'.repeat(64) }
+					}
+				})
+			).not.toBe(baseline);
+		}
 	});
 
 	it('changes the runtime cache identity for every Prolog profile receipt field', () => {

@@ -1,18 +1,32 @@
-import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { RUBY_RUNTIME_ASSET_PATH, type RubyRuntimeAssetReceipts } from '@wasm-idle/core';
+const coreMocks = vi.hoisted(() => ({
+	requireRubyRuntimePreflightPayload: vi.fn((value: unknown) => value),
+	verifyRubyRuntimePreflightPayload: vi.fn(async () => {})
+}));
+
+vi.mock('@wasm-idle/core', async (importOriginal) => ({
+	...(await importOriginal<typeof import('@wasm-idle/core')>()),
+	RUBY_MAX_ASSET_BYTES: 40 * 1024 * 1024,
+	RUBY_MAX_LOGICAL_BYTES: 40 * 1024 * 1024,
+	RUBY_MAX_MANIFEST_BYTES: 64 * 1024,
+	RUBY_MAX_MODULE_BYTES: 1024 * 1024,
+	requireRubyRuntimePreflightPayload: coreMocks.requireRubyRuntimePreflightPayload,
+	verifyRubyRuntimePreflightPayload: coreMocks.verifyRubyRuntimePreflightPayload
+}));
+
+import { RUBY_RUNTIME_ASSET_PATH, RUBY_RUNTIME_VERIFIED_WASM_URL } from '@wasm-idle/core';
 import {
 	createRubyWorkerService,
 	type LspDocument,
 	type LspDocumentContext,
+	type RubyRuntimePreflightPayload,
 	type RubySyntaxChecker,
 	type RubyWorkerOptions
 } from '../src/index.js';
 
 const RUNTIME_STATE_KEY = '__wasmIdleRubyLspRuntimeState';
-const MODULE_URL = 'https://static.example.com/wasm-ruby/runtime.mjs?v=profile';
-const WASM_URL = 'https://static.example.com/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm?v=profile';
+const VERIFIED_WASM_SENTINEL = RUBY_RUNTIME_VERIFIED_WASM_URL;
 
 const runtimeModuleSource = (tag: string) => `
 const rubyStdlibWasmUrl = new URL(${JSON.stringify(RUBY_RUNTIME_ASSET_PATH)}, import.meta.url).href;
@@ -40,26 +54,25 @@ class WASI {
 export const wasiShim = { File, OpenFile, WASI };
 `;
 
-const receiptFor = (bytes: Uint8Array) => ({
-	bytes: bytes.byteLength,
-	sha256: createHash('sha256').update(bytes).digest('hex')
+const createPayload = (tag = 'fixture'): RubyRuntimePreflightPayload => ({
+	protocol: 'wasm-idle-ruby-preflight',
+	protocolVersion: 1,
+	profileId: 'ruby-3.4.1-ruby-wasm-2.9.3-2.9.4',
+	artifactRevision: 'a'.repeat(40),
+	rubyVersion: '3.4.1',
+	rubyRevision: 'b'.repeat(40),
+	rubyWasmVersion: '2.9.3-2.9.4',
+	rubyWasmRevision: 'a'.repeat(40),
+	wasiSdkVersion: '22.0',
+	manifestFingerprint: 'd'.repeat(64),
+	manifestBytes: new TextEncoder().encode('{"schemaVersion":2}'),
+	moduleJavaScriptBytes: new TextEncoder().encode(runtimeModuleSource(tag)),
+	wasmBytes: Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)
 });
 
-const fixture = (tag = 'fixture'): RubyWorkerOptions => {
-	const moduleBytes = new TextEncoder().encode(runtimeModuleSource(tag));
-	const wasmBytes = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
-	const integrity: RubyRuntimeAssetReceipts = {
-		'runtime.mjs': receiptFor(moduleBytes),
-		[RUBY_RUNTIME_ASSET_PATH]: receiptFor(wasmBytes)
-	};
-	return {
-		moduleUrl: MODULE_URL,
-		wasmUrl: WASM_URL,
-		integrity,
-		moduleBytes,
-		wasmBytes
-	};
-};
+const fixture = (tag = 'fixture'): RubyWorkerOptions => ({
+	runtimePreflight: createPayload(tag)
+});
 
 const document: LspDocument = {
 	uri: 'file:///workspace/main.rb',
@@ -74,43 +87,33 @@ const context = (): LspDocumentContext => ({
 	reportProgress: vi.fn()
 });
 
-const rewrittenModuleSource = (source: string, wasmUrl = WASM_URL) =>
+const rewrittenModuleSource = (source: string) =>
 	source.replace(
 		`new URL(${JSON.stringify(RUBY_RUNTIME_ASSET_PATH)}, import.meta.url)`,
-		`new URL(${JSON.stringify(wasmUrl)}, import.meta.url)`
+		`new URL(${JSON.stringify(VERIFIED_WASM_SENTINEL)}, import.meta.url)`
 	);
 
 afterEach(() => {
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
 	Reflect.deleteProperty(globalThis, RUNTIME_STATE_KEY);
+	coreMocks.requireRubyRuntimePreflightPayload.mockReset();
+	coreMocks.requireRubyRuntimePreflightPayload.mockImplementation((value: unknown) => value);
+	coreMocks.verifyRubyRuntimePreflightPayload.mockReset();
+	coreMocks.verifyRubyRuntimePreflightPayload.mockResolvedValue(undefined);
 });
 
 describe('createRubyWorkerService', () => {
-	it('copies and re-verifies host bytes before importing a rewritten Blob module', async () => {
+	it('re-verifies transferred bytes and imports only a fixed-sentinel Blob module without fetching', async () => {
 		const config = fixture('verified-runtime');
-		const originalModuleBytes = Uint8Array.from(config.moduleBytes);
-		const originalWasmBytes = Uint8Array.from(config.wasmBytes);
+		const payload = config.runtimePreflight;
 		const state: Record<string, unknown> = {};
 		(globalThis as unknown as Record<string, unknown>)[RUNTIME_STATE_KEY] = state;
 
-		const originalDigest = globalThis.crypto.subtle.digest.bind(globalThis.crypto.subtle);
-		let releaseDigest!: () => void;
-		const digestGate = new Promise<void>((resolve) => {
-			releaseDigest = resolve;
-		});
-		let markDigestStarted!: () => void;
-		const digestStarted = new Promise<void>((resolve) => {
-			markDigestStarted = resolve;
-		});
-		vi.spyOn(globalThis.crypto.subtle, 'digest').mockImplementation(async (algorithm, data) => {
-			markDigestStarted();
-			await digestGate;
-			return await originalDigest(algorithm, data);
-		});
-
 		let importedBlob: Blob | undefined;
-		const importedSource = rewrittenModuleSource(new TextDecoder().decode(originalModuleBytes));
+		const importedSource = rewrittenModuleSource(
+			new TextDecoder().decode(payload.moduleJavaScriptBytes)
+		);
 		const importedUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(importedSource)}`;
 		vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
 			importedBlob = blob;
@@ -125,18 +128,13 @@ describe('createRubyWorkerService', () => {
 		vi.stubGlobal('fetch', fetchMock);
 
 		const service = createRubyWorkerService();
-		const initializing = service.initialize?.(config, context());
-		await digestStarted;
-		config.moduleBytes.fill(0);
-		config.wasmBytes.fill(0);
-		releaseDigest();
-		await expect(initializing).resolves.toBeUndefined();
+		await expect(service.initialize?.(config, context())).resolves.toBeUndefined();
 
+		expect(coreMocks.requireRubyRuntimePreflightPayload).toHaveBeenCalledWith(payload);
+		expect(coreMocks.verifyRubyRuntimePreflightPayload).toHaveBeenCalledWith(payload);
 		expect(compile).toHaveBeenCalledOnce();
-		expect(Array.from(compile.mock.calls[0][0] as Uint8Array)).toEqual(
-			Array.from(originalWasmBytes)
-		);
-		expect(await importedBlob?.text()).toContain(JSON.stringify(WASM_URL));
+		expect(compile.mock.calls[0][0]).toBe(payload.wasmBytes);
+		expect(await importedBlob?.text()).toContain(JSON.stringify(VERIFIED_WASM_SENTINEL));
 		expect(await importedBlob?.text()).not.toContain(
 			`new URL(${JSON.stringify(RUBY_RUNTIME_ASSET_PATH)}, import.meta.url)`
 		);
@@ -145,67 +143,68 @@ describe('createRubyWorkerService', () => {
 
 		expect(await service.diagnostics?.(document, context())).toEqual([]);
 		expect(state).toMatchObject({
-			rewrittenUrl: WASM_URL,
+			rewrittenUrl: VERIFIED_WASM_SENTINEL,
 			tag: 'verified-runtime',
 			compiledModule
 		});
 		expect(state.evaluated).toContain('RubyVM::InstructionSequence.compile');
 	});
 
-	it.each(['moduleBytes', 'wasmBytes'] as const)(
-		'rejects modified %s before compiling or evaluating runtime code',
-		async (asset) => {
-			const config = fixture(`corrupt-${asset}`);
-			config[asset][0] ^= 1;
-			const createObjectUrl = vi.spyOn(URL, 'createObjectURL');
-			const compile = vi.spyOn(WebAssembly, 'compile');
-			const fetchMock = vi.fn();
-			vi.stubGlobal('fetch', fetchMock);
+	it('rejects invalid preflight bytes before compiling or evaluating runtime code', async () => {
+		const config = fixture('corrupt');
+		const failure = Object.assign(new Error('Ruby runtime asset hash mismatch'), {
+			code: 'asset-integrity',
+			runtimeId: 'ruby-lsp'
+		});
+		coreMocks.verifyRubyRuntimePreflightPayload.mockRejectedValueOnce(failure);
+		const createObjectUrl = vi.spyOn(URL, 'createObjectURL');
+		const compile = vi.spyOn(WebAssembly, 'compile');
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
 
-			await expect(
-				createRubyWorkerService().initialize?.(config, context())
-			).rejects.toMatchObject({ code: 'asset-integrity', runtimeId: 'ruby-lsp' });
+		await expect(createRubyWorkerService().initialize?.(config, context())).rejects.toBe(
+			failure
+		);
 
-			expect(createObjectUrl).not.toHaveBeenCalled();
-			expect(compile).not.toHaveBeenCalled();
-			expect(fetchMock).not.toHaveBeenCalled();
-		}
-	);
+		expect(createObjectUrl).not.toHaveBeenCalled();
+		expect(compile).not.toHaveBeenCalled();
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
 
-	it('rejects unsafe URLs, malformed receipts, and non-byte views before loading a checker', async () => {
+	it('requires one exact config key and owned, unique, whole preflight buffers', async () => {
 		const loadChecker = vi.fn<() => Promise<RubySyntaxChecker>>();
 		const service = createRubyWorkerService(loadChecker);
 
 		await expect(
 			service.initialize?.(
-				{ ...fixture(), moduleUrl: 'data:text/javascript,export default 1' },
+				{ ...fixture(), moduleUrl: 'https://unexpected.invalid/' },
 				context()
 			)
-		).rejects.toThrow('runtime module URL is unsafe');
-		await expect(
-			service.initialize?.(
-				{ ...fixture(), wasmUrl: 'https://static.example.com/%2fsecret.wasm' },
-				context()
-			)
-		).rejects.toThrow('runtime Wasm URL is unsafe');
-		await expect(
-			service.initialize?.(
-				{
-					...fixture(),
-					integrity: {
-						...fixture().integrity,
-						unexpected: receiptFor(Uint8Array.of(1))
-					} as never
-				},
-				context()
-			)
-		).rejects.toThrow('must describe exactly two assets');
-		await expect(
-			service.initialize?.(
-				{ ...fixture(), moduleBytes: new DataView(new ArrayBuffer(8)) } as never,
-				context()
-			)
-		).rejects.toThrow('requires runtime module bytes');
+		).rejects.toThrow('exact verified runtime configuration');
+		await expect(service.initialize?.({}, context())).rejects.toThrow(
+			'exact verified runtime configuration'
+		);
+
+		const partialView = fixture('partial');
+		const backing = new Uint8Array(
+			partialView.runtimePreflight.moduleJavaScriptBytes.length + 1
+		);
+		backing.set(partialView.runtimePreflight.moduleJavaScriptBytes, 1);
+		(
+			partialView.runtimePreflight as { moduleJavaScriptBytes: Uint8Array }
+		).moduleJavaScriptBytes = backing.subarray(1);
+		await expect(service.initialize?.(partialView, context())).rejects.toThrow(
+			'owned runtime preflight bytes'
+		);
+
+		const aliased = fixture('aliased');
+		const shared = Uint8Array.of(1, 2, 3);
+		(aliased.runtimePreflight as { manifestBytes: Uint8Array }).manifestBytes = shared;
+		(aliased.runtimePreflight as { moduleJavaScriptBytes: Uint8Array }).moduleJavaScriptBytes =
+			shared;
+		await expect(service.initialize?.(aliased, context())).rejects.toThrow(
+			'unique owned preflight buffers'
+		);
 
 		expect(loadChecker).not.toHaveBeenCalled();
 	});
@@ -226,29 +225,21 @@ describe('createRubyWorkerService', () => {
 			.mockRejectedValueOnce(new Error('replacement failed'))
 			.mockResolvedValueOnce(secondChecker);
 		const service = createRubyWorkerService(loadChecker);
-		const firstConfig = fixture('first');
 
-		await service.initialize?.(firstConfig, context());
-		expect(loadChecker.mock.calls[0][0].moduleBytes).not.toBe(firstConfig.moduleBytes);
+		await service.initialize?.(fixture('first'), context());
 		expect(await service.diagnostics?.(document, context())).toEqual([
 			expect.objectContaining({ message: 'first checker' })
 		]);
-		await expect(
-			service.initialize?.(
-				{ ...fixture('failed'), moduleUrl: `${MODULE_URL}&attempt=failed` },
-				context()
-			)
-		).rejects.toThrow('replacement failed');
+		await expect(service.initialize?.(fixture('failed'), context())).rejects.toThrow(
+			'replacement failed'
+		);
 		expect(await service.diagnostics?.(document, context())).toEqual([
 			expect.objectContaining({ message: 'first checker' })
 		]);
 		expect(firstCheck).toHaveBeenCalledOnce();
 		expect(firstDispose).not.toHaveBeenCalled();
 
-		await service.initialize?.(
-			{ ...fixture('second'), moduleUrl: `${MODULE_URL}&attempt=second` },
-			context()
-		);
+		await service.initialize?.(fixture('second'), context());
 		expect(firstDispose).toHaveBeenCalledOnce();
 		expect(await service.diagnostics?.(document, context())).toEqual([
 			expect.objectContaining({ message: 'second checker' })
@@ -258,7 +249,9 @@ describe('createRubyWorkerService', () => {
 
 	it('revokes failed Blob imports and can retry initialization cleanly', async () => {
 		const config = fixture('retry');
-		const source = rewrittenModuleSource(new TextDecoder().decode(config.moduleBytes));
+		const source = rewrittenModuleSource(
+			new TextDecoder().decode(config.runtimePreflight.moduleJavaScriptBytes)
+		);
 		const goodModuleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`;
 		const badModuleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(
 			'throw new Error("import failed")'
