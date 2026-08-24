@@ -305,8 +305,8 @@
     "packageCount": 43,
     "packageJSON": {
       "path": "acceptance/package-list.json",
-      "bytes": 15274,
-      "sha256": "8f87e64a8f2a54660832f37eb3a88e2141888e2ebe49c94a9c5ae74416968811"
+      "bytes": 15317,
+      "sha256": "9a2bfddc3246bea07f9cf687d79b9eaef3c732819d4ce8ed38c031c639875c32"
     },
     "fixtureSources": [
       {

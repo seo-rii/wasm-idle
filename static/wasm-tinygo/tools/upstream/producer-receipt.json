@@ -3,9 +3,9 @@
   "format": "wasm-llvm-tinygo-browser-compiler-v6",
   "producerId": "wasm-llvm/tinygo-browser",
   "inputs": {
-    "manifestSha256": "09a60754e81ceb5abcbd28a10f1546bd5672559f71bab7d8148881c41d174ce4",
-    "sourcesLockSha256": "31cfff9596cf952e294a643d5034a181cdf2b523eb106aecaa36cc64880d7d46",
-    "sourceReceiptSha256": "28b3d929596e6f2bf02cab39908d502938bcda7e752fb67bcdfd3f90b9d2ee7a"
+    "manifestSha256": "0f10e6b929e0fe004920066ffc6f02c1c68724b66fe8d22052023a385275e671",
+    "sourcesLockSha256": "12e4e1cfb070af4faa96cd83633227881b9de774fcb5799683d6352a01b7660f",
+    "sourceReceiptSha256": "635ad0181fdb8ae9c38d5b98201ef513e3ddb61239004101ba14e98e59732ad7"
   },
   "source": {
     "tinygoCommit": "db9f1182f5f2a64ea496752899626578d2b313a7",
@@ -173,7 +173,7 @@
         "linkPlan": {
           "path": "link-plan.json",
           "bytes": 8354,
-          "sha256": "5962b86f6a1e7b4d96c9d5079af40b8e7daca25b3f7d8cb115c20360ad784184"
+          "sha256": "4dae0573424f4f9658746a1dbbb032a5804f487ac750c31b2cf72eb817507de4"
         },
         "finalWasmSha256": "63c7a3b6beb7df11d6b0af9131d74394f4ba1eaa256ea604fda1d1453483bba9"
       },
@@ -187,13 +187,13 @@
   "assets": [
     {
       "path": "tinygo-compiler.wasm",
-      "bytes": 70288208,
-      "sha256": "8cef7783f7c998606a86e72d78fc7b22d030a95c29bc5530d0b70f31f3c7ae22"
+      "bytes": 70288217,
+      "sha256": "a5f6cb6cbfff45e6c5ee6ab8f3bca37c5dabd19d443107707ad1de330ecb8db2"
     },
     {
       "path": "tinygoroot.tar.gz",
-      "bytes": 28919804,
-      "sha256": "a1d9e2e00699b2de96fab87deb104a57c2bdc714163f9e6f129d19e20f2cd665"
+      "bytes": 28919860,
+      "sha256": "e9e8314b406e57a512b49d9716455665bfac36e24694763bdecf86f4b0c2fae3"
     }
   ]
 }
