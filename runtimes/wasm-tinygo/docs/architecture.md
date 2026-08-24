@@ -74,22 +74,23 @@ The backend owns lowered-source generation, lowering/body tables, placeholder si
    unsupported entries
 4. run the fixed offline `go list` request over the mounted workspace and validate the resulting
    package graph against restricted `/tinygo-root`, `/workspace`, and `/work` mounts
-5. run the real TinyGo builder/compiler with that graph and validate its receipt-selected v1
-   single-object, v2 embed-object, v3 CGo/C, or v4 bounded C++/assembly complete object-set link plan
-6. for v4, require LLVM 20.1.1 module/object validation evidence and independently reject malformed
-   bitcode envelopes, fake relocatable-Wasm metadata, TLS/init ABI use, and out-of-profile metadata;
-   require final `target_features` and decode the actual core Wasm streams for forbidden feature use
+5. run the real TinyGo builder/compiler with that graph and validate its receipt-selected v1-v6
+   complete object-set link plan
+6. for v4-v6, require LLVM 20.1.1 module/object validation evidence and independently reject
+   malformed bitcode envelopes, fake relocatable-Wasm metadata, TLS/init ABI use, and
+   out-of-profile metadata; v5 binds hosted libc++/libc++abi and v6 binds native flags plus offline
+   vendoring; require final `target_features` and decode the actual core Wasm streams for forbidden
+   feature use
 7. run raw LLVM 20 LLD, then compile-check its WASI-only result and the Binaryen 129 asyncify/O1 result
 8. return the final wasm without executing it; a separate API supplies stdin and executes the
    program
 
-The fixed `wasip1-asyncify-precise-o1` path has passed a 45-package CGo/C/C++/assembly local-module
-fixture in the Node browser-WASI shim and headless Chromium 147, producing byte-identical objects
-and Wasm. Protocol v4 binds CGo/native source and dependency evidence, target-C and
-freestanding-C++17 ThinLTO bitcode, and uppercase CGo-package `.S` assembler-with-cpp objects while
-preserving the v2 TinyGo-generated `go:embed` handoff. Public integration is still blocked on
-hosted C++, general assembly and native/linker flags, offline external dependency availability,
-broader differential coverage, and hard interruption/resource budgets.
+The fixed `wasip1-asyncify-precise-o1` path uses separate producer and consumer fixtures spanning
+ordinary TinyGo semantics, CGo/C, hosted C++17, Clang assembly, native/linker flags, and offline
+vendoring. Public compilation executes in a disposable Worker; the host terminates it when a phase
+deadline, abort, or crash occurs and rewrites defined wasm32 memories to a verified maximum before
+instantiation. `TINYGO` is public for this receipt-bound profile and never falls back to the legacy
+AST-to-C path.
 
 ## Package ownership
 

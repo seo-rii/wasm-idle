@@ -9,15 +9,17 @@
   running a source-pinned Go 1.24.6 `cmd/go` WASI package provider, the real TinyGo
   builder/compiler pipeline, raw WASI LLD, and Binaryen 129.
 
-The upstream path derives its own graph from workspace files and passed a 45-package local-module
-fixture with real CGo, C, freestanding C++17, and uppercase preprocessed `.S` in Node and headless
-Chromium, including build-tag selection, maps, slices, a struct, a method, an interface, and
-stdin/stdout. Compile protocol v4 preserves the generated `go:embed` and CGo/C handoffs while
-binding the new C++ ThinLTO and Clang assembly objects. `TINYGO` nevertheless remains absent from
-wasm-idle's public language registry: libc++/libc++abi, exceptions, RTTI, static lifetime,
-Go/Plan 9 and non-CGo assembly, user C++ flags, and custom `#cgo LDFLAGS` remain fail-closed; module
-downloads are disabled, synchronous phases lack hard resource limits, and broader differential
-fixtures are still required. The upstream path never silently falls back to the legacy subset.
+The upstream path derives its own graph from workspace files and exercises a multi-package module
+with real CGo, C, hosted C++17, uppercase preprocessed `.S`, `go:embed`, generics, package
+initializers, goroutines, channels, build-tag selection, stdin, and exact stdout. Compile protocol
+v6 binds hosted libc++/libc++abi without exceptions, RTTI, or global constructors/destructors;
+ordered C/C++/Clang-assembly and embed objects; exact receipt-allowed `CXXFLAGS`; restricted
+`#cgo LDFLAGS`; and offline `vendor/modules.txt` resolution. Each compile runs in a one-shot Worker
+with phase deadlines and a capped WebAssembly memory declaration. `TINYGO` is registered publicly
+for `wasip1`, and the published static bundle contains only `upstream.js` plus its receipt-verified
+toolchain—not the legacy subset. Go/Plan 9 assembly remains an upstream TinyGo loader limitation,
+network module downloads remain disabled, and the path is not a general browser replacement for
+the TinyGo CLI.
 
 The repository also retains a repo-local host probe that downloads the official TinyGo release,
 runs `tinygo build -target wasip1`, executes the resulting wasm artifact under a WASI shim, and
@@ -47,21 +49,22 @@ Detailed compatibility and verification notes live in [COMPATIBILITY.md](./COMPA
 - A repo-local TinyGo release can be fetched and used to compile and run a real `wasip1` sample on the host.
 - A normalized `tinygo-driver-bridge.json` manifest can now verify that native `go-probe` driver metadata matches the real host-side TinyGo probe for the same request, and it also records how the synthetic frontend compile-unit handoff lines up with the real entry package facts, package graph, package files, direct imports, and promoted bridge coverage summary fields such as `compileUnitCount`, `compileUnitFileCount`, `graphPackageCount`, `bridgePackageCount`, `bridgeFileCount`, `coveredPackageCount`, `coveredFileCount`, `depOnlyPackageCount`, `standardPackageCount`, `localPackageCount`, and `programImportAlias`.
 - The browser smoke path can now consume the same bridge vocabulary, verify a synthetic frontend compile-unit manifest against normalized TinyGo host facts, and check the emitted `frontend bridge coverage ...` log line.
-- The independent upstream path verifies the source-pinned compiler and protocol-v4 producer
+- The independent upstream path verifies the source-pinned compiler and protocol-v6 producer
   receipt, package provider, reduced TinyGo/Go root, both producer receipts, and raw WASI LLD before
   making any compiler call.
 - The package provider's local-module/build-tag/`go:embed` graph exactly matches the same pinned
   native `cmd/go` graph.
-- The upstream provider, compiler, LLD, and Binaryen finalizer passed a 45-package
-  CGo/C/C++/assembly fixture in Node and Chromium; both runs emitted byte-identical object and Wasm
-  artifacts and exact stdout `hello Ada count=2 total=3 cgo=5/20 cxxasm=13\n`.
-- Compile protocol v4 verifies the compiler-bound ordered object set, including CGo/native source
-  and dependency hashes, target-C and freestanding-C++17 ThinLTO bitcode, Clang
-  assembler-with-cpp objects, and TinyGo-generated `go:embed` objects, before exposing fresh copies
-  to raw LLD.
-- General hosted C++, Go/Plan 9 and non-CGo assembly, custom native/linker flags, offline dependency
-  availability, broader differential coverage, and hard interruption/resource budgets remain
-  release blockers.
+- The upstream provider, compiler, LLD, and Binaryen finalizer cover separate producer and consumer
+  fixtures with CGo/C/hosted-C++/assembly plus ordinary TinyGo language semantics and exact stdout.
+- Compile protocol v6 verifies the compiler-bound ordered object set, including CGo/native source
+  and dependency hashes, target-C and hosted-C++17 ThinLTO bitcode, Clang assembler-with-cpp
+  objects, TinyGo-generated `go:embed` objects, exact C++ flags, and restricted linker flags before
+  exposing fresh copies to raw LLD.
+- Compile and package-graph phases execute in disposable Workers with fail-closed deadlines. The
+  public adapter uses the acceptance-verified 2 GiB wasm32 memory ceiling; direct callers may
+  provide an explicit lower ceiling when their workload permits it.
+- Offline external modules are accepted only through a complete, internally consistent
+  `vendor/modules.txt` tree. Network proxy fallback is intentionally unavailable.
 
 ## What this repository demonstrates
 
@@ -124,14 +127,15 @@ npm run dev
 ### Production build
 
 ```sh
-npm run build
+npm run build:upstream
 ```
 
-The production build now uses a relative Vite base so the resulting `dist/` bundle can be embedded
-under nested paths such as `wasm-idle/static/wasm-tinygo/` without rewriting asset URLs. It also
-emits stable `dist/runtime.js` and `dist/upstream.js` entries. Host apps can import either the
-legacy harness or the independent upstream compiler consumer without embedding the demo page in an
-iframe.
+The public build uses a relative Vite base so the resulting `dist/` bundle can be embedded under
+nested paths such as `wasm-idle/static/wasm-tinygo/` without rewriting asset URLs. It emits the
+stable `dist/upstream.js` entry and its one-shot Worker chunks. The legacy `npm run build` still
+emits both `runtime.js` and `upstream.js` for local port development, while the root
+`sync:wasm-tinygo` command publishes only the independent upstream compiler consumer and its
+receipt-bound assets.
 
 ## Commands
 
@@ -142,7 +146,10 @@ iframe.
 - `npm run dev`
   Prepares assets and starts the Vite dev server.
 - `npm run build`
-  Prepares assets and builds the production bundle.
+  Prepares the legacy porting assets and builds the local development bundle.
+- `npm run build:upstream`
+  Builds only the public `upstream.js` entry and disposable Worker chunks, then copies the already
+  verified `public/tools/upstream/` tree into `dist/`. It never prepares or copies legacy assets.
 - `npm run check`
   Runs TypeScript checking.
 - `npm run probe:tinygo-host`
@@ -190,8 +197,8 @@ The real TinyGo host bridge also writes temporary `tinygo-host-probe.json` and `
 
 ## Scope
 
-This repository ships an independent upstream compiler consumer and acceptance path, but it is not
-a drop-in browser replacement for the TinyGo CLI or a public wasm-idle language integration.
+This repository ships the independent upstream compiler consumer used by wasm-idle's public
+`TINYGO` language integration. It is not a drop-in browser replacement for the TinyGo CLI.
 
 Today it focuses on:
 
@@ -200,9 +207,8 @@ Today it focuses on:
 - lowering and artifact verification
 - repeatable host/WASI/browser tests
 
-It does not yet ship:
+It intentionally does not ship:
 
-- hosted C++ runtime/library features, general Go/Plan 9 or non-CGo assembly, or custom native/linker flags
-- network module downloads or a prepopulated external module cache
-- hard interruption and resource budgets for synchronous compiler phases
-- full TinyGo target compatibility or a general-purpose browser TinyGo CLI
+- exceptions, RTTI, global C++ constructors/destructors, or Go/Plan 9 assembly
+- network module downloads or a prepopulated external module cache (offline vendoring is supported)
+- targets other than `wasip1`, or a general-purpose browser TinyGo CLI

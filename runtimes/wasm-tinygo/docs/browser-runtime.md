@@ -188,11 +188,13 @@ raw LLD remains the independent semantic authority for the exact object bytes.
 
 Protocol v2 introduced `go:embed` object publication. Protocol v3 preserves that handoff, accepts
 real upstream `CgoFiles`, and verifies each target `CFile` as Clang ThinLTO bitcode with source and
-header dependency hashes. Protocol v4 adds `CXXFiles` as freestanding C++17 ThinLTO bitcode and
-uppercase `.S` in CGo packages as Clang assembler-with-cpp relocatable WebAssembly objects. It
-still fails closed for libc++/libc++abi, exceptions, RTTI, static lifetime, user `CXXFLAGS`,
-lowercase `.s`, non-CGo or Go/Plan 9 assembly, and custom `#cgo LDFLAGS`. GOROOT assembly stays on
-upstream TinyGo's standard-package intrinsic/replacement path for the pinned root.
+header dependency hashes. Protocol v4 adds `CXXFiles` and uppercase `.S` as ordered Clang-produced
+objects. Protocol v5 binds hosted libc++/libc++abi C++17 without exceptions, RTTI, or global
+constructors/destructors. Protocol v6 additionally binds exact allowed `CXXFLAGS`, restricted
+`#cgo LDFLAGS`, and a complete offline `vendor/modules.txt` tree. Go/Plan 9 assembly remains an
+upstream TinyGo 0.40.1 loader limitation; the browser does not translate it through a custom
+subset. GOROOT assembly stays on upstream TinyGo's standard-package intrinsic/replacement path for
+the pinned root.
 
 ## Shared action model
 
@@ -315,9 +317,8 @@ regress.
 ## Upstream browser acceptance
 
 `npm run probe:wasm-llvm-upstream-browser -- ...` serves `dist/upstream.js` and the exact
-receipt-bound assets to Chromium. The current acceptance loads 45 upstream packages; compiles real
-CGo plus target C, freestanding C++17, and uppercase `.S`; and matches the Node consumer's program,
-target-C/C++/assembly, and embed objects plus unoptimized/final Wasm byte-for-byte. It runs
-Binaryen 129 and checks exit status, stderr, and exact stdout
-`hello Ada count=2 total=3 cgo=5/20 cxxasm=13\n`. The route does not fall back to
-`runtime.js` or the AST-to-C subset on any failure.
+receipt-bound assets to Chromium. The acceptance compiles a multi-package workspace with generics,
+package initialization, goroutines/channels, CGo, target C, hosted C++17, uppercase `.S`, exact
+C++/linker flags, and stdin. It runs Binaryen 129 and compares exit status, stderr, stdout, and the
+compiler/linker artifacts with the Node consumer. The route does not fall back to `runtime.js` or
+the AST-to-C subset on any failure.

@@ -1,19 +1,18 @@
 # Compatibility
 
-This document describes the compatibility level of `wasm-tinygo` as of 2026-08-09.
+This document describes the compatibility level of `wasm-tinygo` as of 2026-08-24.
 
 The legacy `runtime.js` implementation is a **browser-side bootstrap/subset driver**, not a full
 TinyGo port. The separate `upstream.js` entry runs a source-pinned TinyGo 0.40.1 compiler and Go
 1.24.6 `cmd/go` package provider and never falls back to the legacy path.
 
-The upstream entry accepts an in-memory local module workspace, derives its package graph with the
-same upstream code as native Go, and has passed a 45-package CGo/C/freestanding-C++/Clang-assembly
-Node/Chromium compile-and-run fixture. Compile protocol v4 verifies native source/dependency
-evidence, target-C and freestanding-C++17 ThinLTO bitcode, uppercase `.S` assembler-with-cpp
-objects, and the separately generated `go:embed` objects. The path remains non-public because
-hosted C++, general assembly, and custom native/linker flags are unsupported, external module
-downloads are disabled, synchronous phases lack hard resource limits, and broader differential
-fixtures are still needed.
+The upstream entry accepts an in-memory module workspace, derives its package graph with the same
+upstream code as native Go, and is the public `TINYGO` implementation for `wasip1`. Compile
+protocol v6 verifies native source/dependency evidence, target-C and hosted-C++17 ThinLTO bitcode,
+uppercase `.S` assembler-with-cpp objects, separately generated `go:embed` objects, exact allowed
+`CXXFLAGS`, restricted `#cgo LDFLAGS`, and offline vendored-module selection. The browser host runs
+package discovery and compilation in a disposable Worker with phase deadlines and a capped
+WebAssembly memory declaration. It never falls back to the legacy subset.
 
 ## Overall status
 
@@ -218,18 +217,19 @@ The app may work outside Chromium-family browsers, but this has not been verifie
 
 - source-pinned Go/TinyGo package selection for local module workspaces and TinyGo build tags
 - exact package-graph parity with the same pinned native `cmd/go`, including `go:embed` discovery
-- real TinyGo compiler, protocol-v4 CGo/C/C++/assembly and generated embed-object handoff, raw LLD, Binaryen
+- real TinyGo compiler, protocol-v6 CGo/C/hosted-C++/assembly and generated embed-object handoff, raw LLD, Binaryen
   asyncify/O1, and separate WASI execution
-- byte-identical program, target-C/C++/assembly, and embed objects plus unoptimized/final Wasm for a
-  45-package workspace in the Node browser-WASI shim and headless Chromium 147
+- separate producer and consumer workspaces covering ordinary TinyGo semantics, CGo/C,
+  hosted-C++/assembly, native/linker flags, and embed objects in the Node browser-WASI shim and
+  headless Chromium
 
 ### Fail-closed or unavailable
 
-- hosted C++ features: libc++/libc++abi, standard-library headers, exceptions, RTTI, static lifetime,
-  or user `CXXFLAGS`
-- lowercase `.s`, Go/Plan 9 assembly, assembly outside a CGo package, or custom `#cgo LDFLAGS`
-- network module downloads or an implicit external module cache
-- hard interruption of an in-progress synchronous Wasm phase
+- C++ exceptions, RTTI, and global constructors/destructors
+- Go/Plan 9 assembly, which upstream TinyGo 0.40.1 does not load for this target
+- unrestricted linker arguments; only the protocol-v6 allowlist is accepted
+- network module downloads or an implicit external module cache; complete offline vendor trees are supported
+- targets other than `wasip1`
 
 ## Test coverage backing this document
 
@@ -325,9 +325,9 @@ If you want to know whether `wasm-tinygo` is already “TinyGo in the browser”
 entries:
 
 - **legacy `runtime.js`:** no; its bridge-less path is a wasm-idle-authored AST-to-C subset
-- **independent `upstream.js`:** yes for the receipt-bound TinyGo 0.40.1 fixed profile, including
-  real CGo, C, freestanding C++17, and CGo-package uppercase `.S`, but not yet as unrestricted
-  public language support
+- **independent `upstream.js`:** yes; this is the public receipt-bound TinyGo 0.40.1 `wasip1`
+  profile, including real CGo, C, hosted C++17, Clang assembly, offline vendoring, phase deadlines,
+  and a WebAssembly memory ceiling
 
 Future compatibility work should extend and bound the real upstream path. The legacy subset must
 remain explicitly labeled and must never be used as a fallback for upstream compilation.

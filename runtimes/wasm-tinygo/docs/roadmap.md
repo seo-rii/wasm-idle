@@ -1,6 +1,8 @@
 # Roadmap
 
-This roadmap tracks the shortest path from the current bootstrap pipeline to the first convincing TinyGo-in-browser demo.
+This roadmap tracks both the public upstream TinyGo browser path and the isolated legacy porting
+harness. Public milestones refer to `upstream.js`; `runtime.js` milestones describe only the
+legacy wasm-idle-authored bootstrap/subset path.
 
 ## Goal
 
@@ -17,10 +19,10 @@ The first demo means:
 
 Implemented now:
 
-- [x] reusable `runtime.js` library entry for browser consumers
-- [x] direct `wasm-idle` integration without the old hidden iframe wrapper
-- [x] host-assisted TinyGo compile path for browser consumers
-- [x] static browser execution for the current TinyGo starter compatibility subset
+- [x] reusable `runtime.js` library entry for legacy porting-harness consumers
+- [x] public `upstream.js` integration in `wasm-idle` without a hidden iframe or subset fallback
+- [x] host-assisted TinyGo compile path for legacy bridge consumers
+- [x] static browser execution for the legacy TinyGo starter compatibility subset
 - [x] real-browser TinyGo probes in `wasm-tinygo` and `wasm-idle`
 - [x] TinyGo runtime asset loader support
 - [x] TinyGo runtime pack support (`runtime-pack.index.json` + `runtime-pack.bin`)
@@ -32,24 +34,27 @@ Not done yet:
 - [ ] guarantee runnable pure-browser TinyGo output for arbitrary user programs
 - [x] replace the synthetic `frontend-analysis` path with a real TinyGo frontend
 - [x] replace the placeholder backend/lowering path with real TinyGo compiler output
-- [ ] broaden the browser demo from the starter compatibility subset to a stronger compatibility set
+- [x] add independent producer/consumer fixtures for generics, init, goroutines/channels, CGo, C++, and assembly
 - [x] publish and verify TinyGo-generated `go:embed` objects in compile protocol v2
 - [x] publish and verify target CGo/C sources, dependencies, and objects in compile protocol v3
 - [x] publish and verify freestanding-C++17 and CGo-package uppercase `.S` objects in protocol v4
-- [ ] decide hosted-C++, general assembly, CXXFLAGS, and safe CGo linker-flag policies
-- [ ] isolate synchronous phases in disposable Workers with hard time/resource limits
+- [x] bind hosted libc++/libc++abi without exceptions/RTTI/global constructors in protocol v5
+- [x] bind exact CXXFLAGS and restricted CGo linker flags in protocol v6
+- [x] accept complete offline `vendor/modules.txt` workspaces without a network fallback
+- [x] isolate package discovery and compilation in disposable Workers with phase and wasm-memory limits
 
 ### What already works
 
-- an independent upstream path that derives a 45-package CGo/C/C++/assembly local-module graph with pinned
-  `cmd/go` and compiles and executes it entirely in Node or Chromium without a host compile service
+- an independent upstream path that derives source-pinned package graphs and compiles separate
+  producer and consumer fixtures with TinyGo semantics, CGo/C/hosted-C++/assembly, native flags,
+  and vendored modules entirely in Node or Chromium without a host compile service
 - browser-side emception boot and command execution
 - Go/WASI driver, front-end, and backend stage boundaries
 - normalized manifest chain with host/browser verification
 - bootstrap wasm artifact generation
 - lowered wasm artifact generation and probe verification
 - repo-local host TinyGo execution through the pinned upstream release
-- pure-browser execution for the current starter compatibility subset in Chromium-based browser smoke and `wasm-idle` static probes
+- pure-browser execution for the legacy starter compatibility subset in Chromium-based porting-harness smoke tests
 - the static subset now covers `fmt.Print`/`fmt.Println`, multi-placeholder `fmt.Printf` for `%s`/`%d`, integer/string/boolean constants, scalar package variables, local scalar `var`/`const` declarations, integer expressions and compound integer assignments, string `len(...)`, string equality/inequality, logical conditions, recursion, main-package integer or string helper functions, simple loops with `break`/`continue`, conditionals with simple init statements, simple integer/string/expressionless `switch` statements with optional simple init statements, and local imported packages that expose integer or string helper functions plus package-level scalar state
 - normalized `tinygo-driver-bridge.json` generation that compares native driver metadata with the real host-side TinyGo probe for the same request and records how the synthetic frontend handoff lines up with the real entry package facts, package graph facts, direct imports, and promoted bridge coverage summary fields
 - the bridge manifest now exposes the package-focused adapter result as canonical `frontendRealAdapter` while keeping `realFrontendAnalysis` as a compatibility-only alias for older consumers
@@ -65,11 +70,14 @@ Not done yet:
 - browser/runtime execution now promotes lowered-IR-backed unsupported-feature summaries for bridge-less static fallback failures, and browser smoke also asserts that invalid target overrides surface as explicit planner failures in the UI/test-hook path
 - runtime asset indirection now supports both per-asset loaders and compressed runtime packs so host apps can ship TinyGo assets as a bundle instead of exposing every nested file individually
 
-### What is still synthetic in the bridge-less fallback
+### What is still synthetic in the legacy bridge-less fallback
 
-- the pure-browser fallback still derives compile units and downstream manifests from normalized package-graph state when no real TinyGo bridge manifest is available
-- the pure-browser fallback still lowers through the synthetic backend path when no bridge-owned `hostArtifact` is available
-- the pure-browser path only guarantees the current starter compatibility subset; arbitrary TinyGo programs still need a host compile service for a reliable runnable artifact
+- `runtime.js` still derives compile units and downstream manifests from normalized package-graph
+  state when no real TinyGo bridge manifest is available
+- `runtime.js` still lowers through the synthetic backend path when no bridge-owned `hostArtifact`
+  is available
+- the legacy path only guarantees its starter subset. The public `upstream.js` path instead runs
+  the receipt-verified upstream compiler and never enters this fallback.
 
 ## Execution order
 
@@ -132,12 +140,15 @@ Status:
 
 ## Immediate next slice
 
-The browser/runtime integration slice is now much further along than the original bridge-only milestone. The reusable runtime entry, `wasm-idle` integration, upstream package provider/compiler path, bridge-owned real frontend/backend execution, static starter-subset execution, runtime pack support, generated embed-object handoff, and bounded target CGo/C/C++/assembly handoff are done. The next upstream slice is the remaining native-language policy and bounded execution while the legacy seam stays stable:
+The reusable runtime entry, public `wasm-idle` integration, upstream package provider/compiler
+path, hosted C++, Clang assembly, native flags, offline vendoring, disposable Worker limits, and
+differential fixtures are done for the receipt-bound `wasip1` profile. The next upstream slice is
+compatibility breadth while the legacy seam stays isolated:
 
-- decide and test hosted-C++, general assembly, CXXFLAGS, and safe CGo linker-flag policies
-- isolate package discovery, compiler, and LLD execution in disposable Workers with hard limits
-- add controlled offline dependency/module-cache inputs without enabling implicit network fetches
-- keep the current static browser path green while adding broader program coverage
+- track upstream TinyGo support for Go/Plan 9 assembly instead of translating it locally
+- expand libc++ header/library coverage while keeping exceptions, RTTI, and global constructors fail-closed
+- add more vendored-module and weak/strong native symbol differential fixtures
+- keep the public upstream browser path green while adding broader program coverage
 - use the host compile seam as the correctness oracle for new browser-facing demo cases
 - keep shrinking the bridge-less synthetic fallback until it is no longer needed for supported demo cases
 - keep `frontend-real-adapter` as the package-focused normalization boundary so newer TinyGo-owned facts can keep replacing fallback-only synthetic state without changing the browser/bridge vocabulary
