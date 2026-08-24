@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 import {
@@ -51,6 +52,15 @@ test('caps a defined Wasm memory at an engine-enforced maximum', async () => {
 		() => capTinyGoWasmMemory(memoryModule(2), 65_536, 'fixture'),
 		/minimum memory/u
 	);
+});
+
+test('loads Binaryen only when the optimizer phase runs', async () => {
+	const source = await readFile(
+		new URL('../src/upstream-compile-worker.ts', import.meta.url),
+		'utf8'
+	);
+	assert.doesNotMatch(source, /^import binaryen from 'binaryen';$/mu);
+	assert.match(source, /const \{ default: binaryen \} = await import\('binaryen'\);/u);
 });
 
 test('terminates the disposable compiler worker when one phase exceeds its deadline', async () => {

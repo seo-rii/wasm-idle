@@ -1,7 +1,5 @@
 /// <reference lib="webworker" />
 
-import binaryen from 'binaryen';
-
 import {
 	compileUpstreamTinyGo,
 	createBinaryenTinyGoOptimizer,
@@ -39,24 +37,27 @@ self.onmessage = async (event: MessageEvent<CompileMessage>) => {
 				...event.data.request,
 				onPhase: postPhase
 			},
-			createBinaryenTinyGoOptimizer({
-				readBinary(bytes) {
-					const module = binaryen.readBinary(bytes);
-					return {
-						runPasses: (passes) => module.runPasses(passes),
-						optimize: () => module.optimize(),
-						validate: () => Boolean(module.validate()),
-						emitBinary: () => Uint8Array.from(module.emitBinary()),
-						dispose: () => module.dispose()
-					};
-				},
-				getOptimizeLevel: () => binaryen.getOptimizeLevel(),
-				setOptimizeLevel: (level) => binaryen.setOptimizeLevel(level),
-				getShrinkLevel: () => binaryen.getShrinkLevel(),
-				setShrinkLevel: (level) => binaryen.setShrinkLevel(level),
-				getDebugInfo: () => binaryen.getDebugInfo(),
-				setDebugInfo: (enabled) => binaryen.setDebugInfo(enabled)
-			})
+			async (request) => {
+				const { default: binaryen } = await import('binaryen');
+				return createBinaryenTinyGoOptimizer({
+					readBinary(bytes) {
+						const module = binaryen.readBinary(bytes);
+						return {
+							runPasses: (passes) => module.runPasses(passes),
+							optimize: () => module.optimize(),
+							validate: () => Boolean(module.validate()),
+							emitBinary: () => Uint8Array.from(module.emitBinary()),
+							dispose: () => module.dispose()
+						};
+					},
+					getOptimizeLevel: () => binaryen.getOptimizeLevel(),
+					setOptimizeLevel: (level) => binaryen.setOptimizeLevel(level),
+					getShrinkLevel: () => binaryen.getShrinkLevel(),
+					setShrinkLevel: (level) => binaryen.setShrinkLevel(level),
+					getDebugInfo: () => binaryen.getDebugInfo(),
+					setDebugInfo: (enabled) => binaryen.setDebugInfo(enabled)
+				})(request);
+			}
 		);
 		const buffers = new Set<ArrayBuffer>();
 		for (const bytes of [

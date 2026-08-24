@@ -145,8 +145,8 @@ try {
 	    { manifest, producerReceipt, packageGraphReceipt, compiler, packageGraph, rootArchive, lld },
 	    { workspaceFiles },
 	    {
-	      maxWasmMemoryBytes: 768 * 1024 * 1024,
-	      phaseTimeoutMs: { prepare: 120000, graph: 60000, validate: 30000, compile: 240000, link: 120000, optimize: 120000 },
+	      maxWasmMemoryBytes: 2 * 1024 * 1024 * 1024,
+	      phaseTimeoutMs: { prepare: 300000, graph: 60000, validate: 30000, compile: 240000, link: 120000, optimize: 120000 },
         onPhase: (phase) => { window.__tinygoProbe.phase = phase; }
 	    }
 	  );
@@ -254,7 +254,7 @@ try {
 		});
 		await page.goto(url, { waitUntil: 'load', timeout: 120_000 });
 		let lastPhase = '';
-		const deadline = Date.now() + 600_000;
+		const deadline = Date.now() + 900_000;
 		while (Date.now() < deadline) {
 			const state = await page.evaluate(() => window.__tinygoProbe);
 			if (state?.phase && state.phase !== lastPhase) {

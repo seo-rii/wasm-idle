@@ -31,14 +31,14 @@ export interface TinyGoDisposableCompileOptions {
 }
 
 const DEFAULT_PHASE_TIMEOUT_MS: Record<TinyGoWorkerPhase, number> = {
-	prepare: 120_000,
+	prepare: 300_000,
 	graph: 60_000,
 	validate: 30_000,
 	compile: 240_000,
 	link: 120_000,
 	optimize: 120_000
 };
-const DEFAULT_MAX_WASM_MEMORY_BYTES = 768 * 1024 * 1024;
+const DEFAULT_MAX_WASM_MEMORY_BYTES = 2 * 1024 * 1024 * 1024;
 
 function readU32(bytes: Uint8Array, offset: number, label: string) {
 	let value = 0;
