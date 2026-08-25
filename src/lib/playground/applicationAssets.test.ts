@@ -70,6 +70,7 @@ import {
 	WASM_TCL_RUNNER_RECEIPT,
 	WASM_TCL_RUNTIME_PROFILE
 } from './wasmTclVersion';
+import { WASM_TINYGO_ASSET_VERSION, WASM_TINYGO_RUNTIME_PROFILE } from './wasmTinyGoVersion';
 import { WASM_ZIG_ASSET_RECEIPTS, WASM_ZIG_ASSET_VERSION } from './wasmZigVersion';
 
 describe('application runtime asset root', () => {
@@ -1036,47 +1037,65 @@ describe('application runtime asset root', () => {
 		});
 	});
 
-	it('keys TinyGo asset packs and custom loader identity', () => {
+	it('keys TinyGo custom loader identity', () => {
 		const firstLoader = () => undefined;
 		const secondLoader = () => undefined;
-		const assetPacks = [
-			{ index: 'stdlib.index.json', asset: 'stdlib.tar.gz', fileCount: 12, totalBytes: 3456 }
-		];
 		const firstKey = createRuntimeAssetsKey({
-			tinygo: { assetLoader: firstLoader, assetPacks }
+			tinygo: { assetLoader: firstLoader }
 		});
 		const secondKey = createRuntimeAssetsKey({
-			tinygo: { assetLoader: secondLoader, assetPacks }
+			tinygo: { assetLoader: secondLoader }
 		});
 
-		expect(firstKey).toBe(
-			createRuntimeAssetsKey({ tinygo: { assetLoader: firstLoader, assetPacks } })
-		);
+		expect(firstKey).toBe(createRuntimeAssetsKey({ tinygo: { assetLoader: firstLoader } }));
 		expect(firstKey).not.toBe(secondKey);
 		expect(
 			createRuntimeAssetsKey({
 				tinygo: {
 					assetLoader: firstLoader,
-					assetLoaderKey: 'tinygo-pack-loader-v1',
-					assetPacks
+					assetLoaderKey: 'tinygo-loader-v1'
 				}
 			})
 		).toBe(
 			createRuntimeAssetsKey({
 				tinygo: {
 					assetLoader: secondLoader,
-					assetLoaderKey: 'tinygo-pack-loader-v1',
-					assetPacks
+					assetLoaderKey: 'tinygo-loader-v1'
 				}
 			})
 		);
-		expect(firstKey).not.toBe(
-			createRuntimeAssetsKey({
-				tinygo: {
-					assetLoader: firstLoader,
-					assetPacks: [{ ...assetPacks[0], totalBytes: 3457 }]
+	});
+
+	it('pins every TinyGo toolchain profile receipt in runtime cache identity', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		expect(assets.tinygo).toEqual({
+			moduleUrl: `/foo/bar/wasm-tinygo/upstream.js?v=${WASM_TINYGO_ASSET_VERSION}`,
+			...WASM_TINYGO_RUNTIME_PROFILE
+		});
+		const originalKey = createRuntimeAssetsKey(assets);
+		const tinygo = assets.tinygo!;
+		const firstAsset = Object.keys(tinygo.assetReceipts!)[0]!;
+		const replacements = [
+			{ profileId: `${tinygo.profileId}-replacement` },
+			{ protocolVersion: 5 },
+			{ manifestPath: 'tools/upstream/replacement.json' },
+			{ manifestFingerprint: 'f'.repeat(64) },
+			{ manifestReceipt: { ...tinygo.manifestReceipt!, sha256: '1'.repeat(64) } },
+			{
+				assetReceipts: {
+					...tinygo.assetReceipts,
+					[firstAsset]: { ...tinygo.assetReceipts![firstAsset], sha256: '2'.repeat(64) }
 				}
-			})
-		);
+			}
+		];
+		for (const replacement of replacements) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					tinygo: { ...tinygo, ...replacement }
+				}),
+				`TinyGo cache identity did not include ${Object.keys(replacement)[0]}`
+			).not.toBe(originalKey);
+		}
 	});
 });

@@ -1722,7 +1722,7 @@ describe('TinyGo operation lifecycle', () => {
 				moduleUrl: sandbox.moduleUrl,
 				rustRuntimeBaseUrl: sandbox.rustRuntimeBaseUrl,
 				assetLoader: sandbox.assetLoader,
-				assetPacks: sandbox.assetPacks,
+				runtimeProfile: sandbox.runtimeProfile,
 				runtime: sandbox.runtime,
 				output: sandbox.output,
 				diagnostic: sandbox.oncompilerdiagnostic,
@@ -1752,7 +1752,7 @@ describe('TinyGo operation lifecycle', () => {
 			moduleUrl: '',
 			rustRuntimeBaseUrl: '',
 			assetLoader: undefined,
-			assetPacks: undefined,
+			runtimeProfile: undefined,
 			runtime: null,
 			output: undefined,
 			diagnostic: undefined,
@@ -1889,14 +1889,6 @@ describe('TinyGo operation lifecycle', () => {
 			rootUrl: '/replacement',
 			tinygo: {
 				assetLoader: vi.fn(),
-				assetPacks: [
-					{
-						index: 'replacement-pack.json',
-						asset: 'replacement-pack.tar.gz',
-						fileCount: 1,
-						totalBytes: 1
-					}
-				],
 				moduleUrl: createRuntimeModuleUrl('replacement-after-dispose')
 			}
 		};
@@ -1911,7 +1903,6 @@ describe('TinyGo operation lifecycle', () => {
 		expect(sandbox.moduleUrl).toBe('');
 		expect(sandbox.rustRuntimeBaseUrl).toBe('');
 		expect(sandbox.assetLoader).toBeUndefined();
-		expect(sandbox.assetPacks).toBeUndefined();
 		expect(sandbox.worker).toBeUndefined();
 		expect(workerInstances).toHaveLength(1);
 	});

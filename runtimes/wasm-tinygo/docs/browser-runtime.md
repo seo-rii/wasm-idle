@@ -111,7 +111,8 @@ This keeps a later run from reusing stale runtime state or stale bridge inputs.
 
 ## Runtime asset loading
 
-The browser runtime can load its assets in three ways:
+This section describes the legacy `runtime.js` porting harness, not the public
+`wasm-idle` TinyGo product path. The harness can load its assets in three ways:
 
 - direct fetch from `assetBaseUrl`
 - a caller-provided `assetLoader`
@@ -149,13 +150,18 @@ two files:
 
 The runtime uses `assetPacks` to resolve runtime assets before falling back to
 direct fetch or loader URLs. This mirrors the wasm-rust runtime pack flow.
+`wasm-idle` does not expose this receipt-free pack reference in its public
+runtime configuration and publishes no legacy pack files.
 
 ### Upstream toolchain assets
 
-`loadTinyGoUpstreamToolchainAssets(...)` starts from
-`tools/upstream/upstream-toolchain.v2.json`. It uses the same browser asset-loader and progress
-contract, but loads only the compiler, package-graph provider, reduced root archive, their producer
-receipts, and raw LLD declared by that manifest. `prepareTinyGoUpstreamToolchain(...)` then verifies
+`loadTinyGoUpstreamToolchainAssets(...)` requires a complete host-pinned runtime profile before it
+loads `tools/upstream/upstream-toolchain.v2.json`. The profile binds the manifest plus the logical
+and deterministic deployment-storage receipts for the compiler, package-graph provider, reduced
+root archive, their producer receipts, and raw LLD. Custom bases and loaders are mirrors unless a
+complete replacement profile is supplied. The loader verifies the manifest before JSON parsing,
+cross-checks its exact asset graph against the profile, and verifies every logical asset before any
+compiler Worker can consume it. `prepareTinyGoUpstreamToolchain(...)` then independently re-verifies
 byte counts and SHA-256 digests, checks both producer identities, safely expands the bounded root
 archive, validates its runtime closure, and accepts only WASI Preview 1 imports.
 

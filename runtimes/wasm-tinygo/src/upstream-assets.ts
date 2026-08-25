@@ -5,7 +5,9 @@ import {
 	type TinyGoRuntimeAssetProgressCallback
 } from './runtime-assets.ts';
 import {
-	parseTinyGoUpstreamAssetManifest,
+	parseTinyGoUpstreamRuntimeProfile,
+	verifyTinyGoUpstreamRuntimeProfile,
+	type TinyGoUpstreamRuntimeProfile,
 	type TinyGoUpstreamAssetEvidence
 } from './upstream-contract.ts';
 import type { TinyGoUpstreamToolchainAssets } from './upstream-runtime.ts';
@@ -26,7 +28,7 @@ function resolveRelativeAssetPath(manifestPath: string, evidence: TinyGoUpstream
 
 export async function loadTinyGoUpstreamToolchainAssets(options: {
 	assetBaseUrl: string;
-	manifestPath?: string;
+	profile: TinyGoUpstreamRuntimeProfile;
 	fetchImpl?: typeof fetch;
 	loader?: TinyGoRuntimeAssetLoader;
 	onProgress?: TinyGoRuntimeAssetProgressCallback;
@@ -34,7 +36,8 @@ export async function loadTinyGoUpstreamToolchainAssets(options: {
 	maxAssetBytes?: number;
 }): Promise<TinyGoUpstreamToolchainAssets> {
 	const assetBaseUrl = normalizeBaseUrl(options.assetBaseUrl);
-	const manifestPath = options.manifestPath ?? DEFAULT_TINYGO_UPSTREAM_MANIFEST_PATH;
+	const profile = parseTinyGoUpstreamRuntimeProfile(options.profile);
+	const manifestPath = profile.manifestPath;
 	const manifestUrl = new URL(manifestPath, assetBaseUrl).toString();
 	const manifestBytes = await loadRuntimeAssetBytes({
 		assetPath: manifestPath,
@@ -44,7 +47,8 @@ export async function loadTinyGoUpstreamToolchainAssets(options: {
 		...(options.loader ? { loader: options.loader } : {}),
 		...(options.onProgress ? { onProgress: options.onProgress } : {}),
 		...(options.signal ? { signal: options.signal } : {}),
-		maxAssetBytes: MAX_UPSTREAM_MANIFEST_BYTES
+		maxAssetBytes: Math.min(MAX_UPSTREAM_MANIFEST_BYTES, profile.manifestReceipt.bytes),
+		receipt: profile.manifestReceipt
 	});
 	let manifestValue: unknown;
 	try {
@@ -52,10 +56,16 @@ export async function loadTinyGoUpstreamToolchainAssets(options: {
 	} catch (error) {
 		throw new Error('upstream TinyGo toolchain manifest is not valid JSON', { cause: error });
 	}
-	const manifest = parseTinyGoUpstreamAssetManifest(manifestValue);
+	const { manifest } = await verifyTinyGoUpstreamRuntimeProfile({
+		profile,
+		manifestBytes,
+		manifest: manifestValue
+	});
 	const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_TINYGO_ASSET_BYTES;
 	const load = async (label: string, evidence: TinyGoUpstreamAssetEvidence) => {
 		const assetPath = resolveRelativeAssetPath(manifestPath, evidence);
+		const receipt = profile.assetReceipts[assetPath];
+		if (!receipt) throw new Error(`TinyGo runtime profile does not declare ${assetPath}`);
 		return await loadRuntimeAssetBytes({
 			assetPath,
 			assetUrl: new URL(evidence.path, manifestUrl).toString(),
@@ -64,7 +74,8 @@ export async function loadTinyGoUpstreamToolchainAssets(options: {
 			...(options.loader ? { loader: options.loader } : {}),
 			...(options.onProgress ? { onProgress: options.onProgress } : {}),
 			...(options.signal ? { signal: options.signal } : {}),
-			maxAssetBytes
+			maxAssetBytes: Math.min(maxAssetBytes, receipt.uncompressedBytes ?? receipt.bytes),
+			receipt
 		});
 	};
 	const [producerReceipt, packageGraphReceipt, compiler, packageGraph, rootArchive, lld] =

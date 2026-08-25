@@ -28,7 +28,7 @@ const createRuntimeFixtureState = () => ({
 	planCalls: 0,
 	executeCalls: 0,
 	disposeCalls: 0,
-	lastRuntimeOptions: null as { assetLoader?: unknown; assetPacks?: unknown } | null,
+	lastRuntimeOptions: null as { assetLoader?: unknown } | null,
 	nextExecutionFailureLine: null as string | null,
 	skipArtifact: false
 });
@@ -239,6 +239,12 @@ describe('TinyGo sandbox', () => {
 		).resolves.toBe(true);
 
 		expect(upstreamFixtureState.loadCalls).toBe(1);
+		expect(upstreamFixtureState.loadOptions?.profile).toMatchObject({
+			profileId: 'tinygo-0.40.1-wasip1-protocol-v6',
+			protocolVersion: 6,
+			manifestPath: 'tools/upstream/upstream-toolchain.v2.json',
+			manifestFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/u)
+		});
 		expect(upstreamFixtureState.compileCalls).toBe(2);
 		expect(upstreamFixtureState.compileRequest?.workspaceFiles).toEqual({
 			'go.mod': 'module wasm-idle.local/main\n\ngo 1.24.0\n',
@@ -247,6 +253,25 @@ describe('TinyGo sandbox', () => {
 		expect(upstreamFixtureState.compileOptions?.maxWasmMemoryBytes).toBe(131_072);
 		expect(outputs.join('')).toContain('upstream TinyGo phase: compile');
 		expect(outputs.join('')).toContain('upstream TinyGo artifact ready');
+	});
+
+	it('rejects an incomplete TinyGo trust-profile override before worker creation', async () => {
+		const sandbox = new TinyGo();
+
+		await expect(
+			sandbox.load({
+				tinygo: {
+					moduleUrl: upstreamModuleUrl,
+					profileId: 'partial-profile'
+				}
+			})
+		).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			runtimeId: 'TINYGO'
+		});
+		expect(workerInstances).toHaveLength(0);
+		expect(upstreamFixtureState.loadCalls).toBe(0);
 	});
 
 	it('uses the verified upstream compiler memory default when the caller omits a limit', async () => {
@@ -420,30 +445,20 @@ describe('TinyGo sandbox', () => {
 		);
 	});
 
-	it('passes TinyGo runtime asset loader and pack references into the runtime module', async () => {
+	it('passes the TinyGo runtime asset loader into the runtime module', async () => {
 		const sandbox = new TinyGo();
 		const loader = vi.fn(async () => null);
-		const packs = [
-			{
-				index: 'https://assets.invalid/runtime-pack.index.json',
-				asset: 'https://assets.invalid/runtime-pack.bin',
-				fileCount: 2,
-				totalBytes: 42
-			}
-		];
 
 		await sandbox.load({
 			tinygo: {
 				moduleUrl: runtimeModuleUrl,
-				assetLoader: loader,
-				assetPacks: packs
+				assetLoader: loader
 			}
 		});
 
 		expect(runtimeFixtureState.lastRuntimeOptions).toEqual(
 			expect.objectContaining({
 				assetLoader: loader,
-				assetPacks: packs,
 				onProgress: expect.any(Function)
 			})
 		);

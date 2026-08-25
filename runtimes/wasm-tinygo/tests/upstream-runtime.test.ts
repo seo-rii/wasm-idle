@@ -14,6 +14,7 @@ import {
 	TINYGO_UPSTREAM_PACKAGE_GRAPH_PACKAGES,
 	TINYGO_UPSTREAM_PACKAGE_GRAPH_TAGS,
 	TINYGO_WORKSPACE_PATH,
+	computeTinyGoRuntimeProfileFingerprint,
 	normalizeTinyGoPackageJSON,
 	sha256TinyGoBytes,
 	validateTinyGoPackageJSON,
@@ -94,8 +95,7 @@ const llvmValidation = {
 	toolchain: 'llvm-20.1.1' as const,
 	moduleVerified: true as const,
 	targetTriple: 'wasm32-unknown-wasi' as const,
-	dataLayout:
-		'e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-i128:128-n32:64-S128-ni:1:10:20' as const,
+	dataLayout: 'e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-i128:128-n32:64-S128-ni:1:10:20' as const,
 	threadLocalGlobals: 0 as const,
 	globalConstructors: 0 as const,
 	globalDestructors: 0 as const,
@@ -129,17 +129,7 @@ function wasmCustomSection(name: string, payload: readonly number[]) {
 }
 
 function wasmModule(...sections: readonly number[][]) {
-	return new Uint8Array([
-		0x00,
-		0x61,
-		0x73,
-		0x6d,
-		0x01,
-		0x00,
-		0x00,
-		0x00,
-		...sections.flat()
-	]);
+	return new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, ...sections.flat()]);
 }
 
 function relocatableWasmObject(
@@ -177,10 +167,7 @@ function relocatableWasmObject(
 	const programExports = options.programExports;
 	if (!programExports) return wasmModule(wasmCustomSection('linking', linkingPayload));
 	const typePayload = [1, 0x60, 0, 0];
-	const functionPayload = [
-		...wasmU32(programExports.length),
-		...programExports.map(() => 0)
-	];
+	const functionPayload = [...wasmU32(programExports.length), ...programExports.map(() => 0)];
 	const exportPayload = [
 		...wasmU32(programExports.length),
 		...programExports.flatMap((name, index) => [...wasmName(name), 0, ...wasmU32(index)])
@@ -199,7 +186,10 @@ function relocatableWasmObject(
 }
 
 function relocatableWasmObjectWithRelocation(type: number, referencedIndex = 0) {
-	const target = wasmCustomSection('payload', Array.from({ length: 16 }, () => 0));
+	const target = wasmCustomSection(
+		'payload',
+		Array.from({ length: 16 }, () => 0)
+	);
 	const symbolTable = [1, 0, 0, 0, ...wasmName('ok')];
 	const linking = wasmCustomSection('linking', [
 		2,
@@ -213,9 +203,7 @@ function relocatableWasmObjectWithRelocation(type: number, referencedIndex = 0) 
 		type,
 		0,
 		...wasmU32(referencedIndex),
-		...([3, 4, 5, 8, 9, 11, 14, 15, 16, 17, 21, 22, 23, 25].includes(type)
-			? [0]
-			: [])
+		...([3, 4, 5, 8, 9, 11, 14, 15, 16, 17, 21, 22, 23, 25].includes(type) ? [0] : [])
 	]);
 	return wasmModule(target, linking, relocation);
 }
@@ -246,24 +234,23 @@ function executableWasmModule(
 	];
 	const imports =
 		options.imports ??
-		(options.importModule === undefined ? [] : [{ module: options.importModule, name: 'entry' }]);
-	const importSection = imports.length > 0
-		? [
-				...wasmU32(imports.length),
-				...imports.flatMap((entry) => [
-					...wasmName(entry.module),
-					...wasmName(entry.name),
-					0,
-					0
-				])
-			]
-		: undefined;
+		(options.importModule === undefined
+			? []
+			: [{ module: options.importModule, name: 'entry' }]);
+	const importSection =
+		imports.length > 0
+			? [
+					...wasmU32(imports.length),
+					...imports.flatMap((entry) => [
+						...wasmName(entry.module),
+						...wasmName(entry.name),
+						0,
+						0
+					])
+				]
+			: undefined;
 	const functionCount = options.extraV128Function ? 2 : 1;
-	const functions = [
-		functionCount,
-		0,
-		...(options.extraV128Function ? [1] : [])
-	];
+	const functions = [functionCount, 0, ...(options.extraV128Function ? [1] : [])];
 	const memory = [1, 0, 1];
 	const exports = [
 		...wasmU32(2),
@@ -274,11 +261,7 @@ function executableWasmModule(
 		2,
 		0
 	];
-	const startBody = [
-		0,
-		...Array.from({ length: startResults }, () => [0x41, 0]).flat(),
-		0x0b
-	];
+	const startBody = [0, ...Array.from({ length: startResults }, () => [0x41, 0]).flat(), 0x0b];
 	const code = [
 		functionCount,
 		...wasmU32(startBody.length),
@@ -290,9 +273,9 @@ function executableWasmModule(
 	const featureSection = options.omitTargetFeatures
 		? undefined
 		: wasmCustomSection('target_features', [
-			...wasmU32(targetFeatures.length),
-			...targetFeatures.flatMap((feature) => [0x2b, ...wasmName(feature)])
-		]);
+				...wasmU32(targetFeatures.length),
+				...targetFeatures.flatMap((feature) => [0x2b, ...wasmName(feature)])
+			]);
 	return wasmModule(
 		[1, ...wasmU32(type.length), ...type],
 		...(importSection ? [[2, ...wasmU32(importSection.length), ...importSection]] : []),
@@ -316,7 +299,8 @@ function executableWasmWithBody(
 	} = {}
 ) {
 	const type = [1, 0x60, 0, 0];
-	const importCount = Number(options.importedTable ?? false) + Number(options.importedMemory ?? false);
+	const importCount =
+		Number(options.importedTable ?? false) + Number(options.importedMemory ?? false);
 	const imports = [
 		...wasmU32(importCount),
 		...(options.importedTable
@@ -344,15 +328,7 @@ function executableWasmWithBody(
 		...wasmU32(memoryCount),
 		...Array.from({ length: memoryCount }, () => memoryType).flat()
 	];
-	const exports = [
-		...wasmU32(2),
-		...wasmName('_start'),
-		0,
-		0,
-		...wasmName('memory'),
-		2,
-		0
-	];
+	const exports = [...wasmU32(2), ...wasmName('_start'), 0, 0, ...wasmName('memory'), 2, 0];
 	const body = [0, ...instructions, 0x0b];
 	const code = [1, ...wasmU32(body.length), ...body];
 	return wasmModule(
@@ -425,11 +401,7 @@ function runtimeClosure(): TinyGoRuntimeClosure {
 			`runtime/${TINYGO_RUNTIME_PROFILE_ID}/wasi-libc.a`,
 			'static-archive'
 		),
-		libCxx: asset(
-			'libcxx',
-			`runtime/${TINYGO_RUNTIME_PROFILE_ID}/libcxx.a`,
-			'static-archive'
-		),
+		libCxx: asset('libcxx', `runtime/${TINYGO_RUNTIME_PROFILE_ID}/libcxx.a`, 'static-archive'),
 		libCxxAbi: asset(
 			'libcxxabi',
 			`runtime/${TINYGO_RUNTIME_PROFILE_ID}/libcxxabi.a`,
@@ -860,7 +832,9 @@ test('validates LLVM envelopes, relocatable Wasm metadata, and final WASI module
 	assert.throws(
 		() =>
 			assertTinyGoRelocatableWasmObject(
-				relocatableWasmObject({ programExports: [...upstreamProgramExports, 'unexpected'] }),
+				relocatableWasmObject({
+					programExports: [...upstreamProgramExports, 'unexpected']
+				}),
 				'program object',
 				{ profile: 'upstream-program' }
 			),
@@ -883,39 +857,22 @@ test('validates LLVM envelopes, relocatable Wasm metadata, and final WASI module
 		/forbidden thread-local storage metadata/u
 	);
 	assert.throws(
-		() =>
-			assertTinyGoRelocatableWasmObject(
-				relocatableWasmObjectWithRelocation(14),
-				'object'
-			),
+		() => assertTinyGoRelocatableWasmObject(relocatableWasmObjectWithRelocation(14), 'object'),
 		/forbidden memory64 or table64 relocation/u
 	);
 	assert.throws(
-		() =>
-			assertTinyGoRelocatableWasmObject(
-				relocatableWasmObjectWithRelocation(10),
-				'object'
-			),
+		() => assertTinyGoRelocatableWasmObject(relocatableWasmObjectWithRelocation(10), 'object'),
 		/forbidden exception event relocation/u
 	);
 	assert.doesNotThrow(() =>
-		assertTinyGoRelocatableWasmObject(
-			relocatableWasmObjectWithRelocation(6, 99),
-			'object'
-		)
+		assertTinyGoRelocatableWasmObject(relocatableWasmObjectWithRelocation(6, 99), 'object')
 	);
 	assert.doesNotThrow(() =>
-		assertTinyGoRelocatableWasmObject(
-			relocatableWasmObjectWithRelocation(26, 99),
-			'object'
-		)
+		assertTinyGoRelocatableWasmObject(relocatableWasmObjectWithRelocation(26, 99), 'object')
 	);
 	assert.throws(
 		() =>
-			assertTinyGoRelocatableWasmObject(
-				relocatableWasmObject({ symbolFlags: 0 }),
-				'object'
-			),
+			assertTinyGoRelocatableWasmObject(relocatableWasmObject({ symbolFlags: 0 }), 'object'),
 		/forbidden native ABI symbol __cxa_throw/u
 	);
 	assert.throws(
@@ -975,10 +932,7 @@ test('validates LLVM envelopes, relocatable Wasm metadata, and final WASI module
 	]) {
 		assert.throws(
 			() =>
-				assertTinyGoRelocatableWasmObject(
-					relocatableWasmObject({ segmentName }),
-					'object'
-				),
+				assertTinyGoRelocatableWasmObject(relocatableWasmObject({ segmentName }), 'object'),
 			/forbidden native lifetime segment/u
 		);
 	}
@@ -986,19 +940,13 @@ test('validates LLVM envelopes, relocatable Wasm metadata, and final WASI module
 		assertTinyGoRelocatableWasmObject(relocatableWasmObject({ comdatKind: 4 }), 'object')
 	);
 	assert.throws(
-		() =>
-			assertTinyGoRelocatableWasmObject(
-				relocatableWasmObject({ comdatKind: 3 }),
-				'object'
-			),
+		() => assertTinyGoRelocatableWasmObject(relocatableWasmObject({ comdatKind: 3 }), 'object'),
 		/COMDAT .* invalid symbol kind/u
 	);
 	assert.throws(
 		() =>
 			assertTinyGoRelocatableWasmObject(
-				wasmModule(
-					...Array.from({ length: 4097 }, () => wasmCustomSection('x', []))
-				),
+				wasmModule(...Array.from({ length: 4097 }, () => wasmCustomSection('x', []))),
 				'object'
 			),
 		/section-count limit/u
@@ -1035,24 +983,15 @@ test('validates LLVM envelopes, relocatable Wasm metadata, and final WASI module
 		/missing required asyncify import/u
 	);
 	await assert.rejects(
-		assertTinyGoFinalWasmModule(
-			executableWasmModule({ importModule: 'env' }),
-			'final'
-		),
+		assertTinyGoFinalWasmModule(executableWasmModule({ importModule: 'env' }), 'final'),
 		/imports outside the WASI function boundary/u
 	);
 	await assert.rejects(
-		assertTinyGoFinalWasmModule(
-			executableWasmModule({ targetFeature: 'simd128' }),
-			'final'
-		),
+		assertTinyGoFinalWasmModule(executableWasmModule({ targetFeature: 'simd128' }), 'final'),
 		/forbidden target feature simd128/u
 	);
 	await assert.rejects(
-		assertTinyGoFinalWasmModule(
-			executableWasmModule({ omitTargetFeatures: true }),
-			'final'
-		),
+		assertTinyGoFinalWasmModule(executableWasmModule({ omitTargetFeatures: true }), 'final'),
 		/no target_features metadata/u
 	);
 	await assert.rejects(
@@ -1060,17 +999,11 @@ test('validates LLVM envelopes, relocatable Wasm metadata, and final WASI module
 		/forbidden core start section/u
 	);
 	await assert.rejects(
-		assertTinyGoFinalWasmModule(
-			executableWasmModule({ startParameters: 1 }),
-			'final'
-		),
+		assertTinyGoFinalWasmModule(executableWasmModule({ startParameters: 1 }), 'final'),
 		/_start must be a defined \(\) -> \(\) function/u
 	);
 	await assert.rejects(
-		assertTinyGoFinalWasmModule(
-			executableWasmModule({ extraV128Function: true }),
-			'final'
-		),
+		assertTinyGoFinalWasmModule(executableWasmModule({ extraV128Function: true }), 'final'),
 		/forbidden v128 value types/u
 	);
 	await assert.rejects(
@@ -1082,10 +1015,7 @@ test('validates LLVM envelopes, relocatable Wasm metadata, and final WASI module
 	);
 	await assert.rejects(
 		assertTinyGoFinalWasmModule(
-			executableWasmWithBody(
-				[0x41, 0, 0x41, 0, 0x41, 0, 0xfc, 14, 0, 0],
-				{ tableCount: 1 }
-			),
+			executableWasmWithBody([0x41, 0, 0x41, 0, 0x41, 0, 0xfc, 14, 0, 0], { tableCount: 1 }),
 			'final'
 		),
 		/forbidden reference-type prefixed instructions/u
@@ -1399,28 +1329,52 @@ test('loads only manifest-declared upstream assets through the existing browser 
 		'tinygoroot.tar.gz': new Uint8Array([3]),
 		'lld.wasm': new Uint8Array([4])
 	};
-	const evidence = (path: keyof typeof values) => ({
+	const evidence = async (path: keyof typeof values) => ({
 		path,
 		bytes: values[path].byteLength,
-		sha256: sha
+		sha256: await sha256TinyGoBytes(values[path])
 	});
 	const manifest = new TextEncoder().encode(
 		JSON.stringify({
 			schemaVersion: 2,
 			format: TINYGO_UPSTREAM_ASSET_MANIFEST_FORMAT,
-			producerReceipt: evidence('producer-receipt.json'),
-			packageGraphReceipt: evidence('package-graph-provider-receipt.json'),
+			producerReceipt: await evidence('producer-receipt.json'),
+			packageGraphReceipt: await evidence('package-graph-provider-receipt.json'),
 			assets: {
-				compiler: evidence('tinygo-compiler.wasm'),
-				packageGraph: evidence('tinygo-package-graph.wasm'),
-				rootArchive: evidence('tinygoroot.tar.gz'),
-				lld: evidence('lld.wasm')
+				compiler: await evidence('tinygo-compiler.wasm'),
+				packageGraph: await evidence('tinygo-package-graph.wasm'),
+				rootArchive: await evidence('tinygoroot.tar.gz'),
+				lld: await evidence('lld.wasm')
 			}
 		})
 	);
+	const assetReceipts = Object.fromEntries(
+		await Promise.all(
+			Object.entries(values).map(async ([assetPath, bytes]) => [
+				`tools/upstream/${assetPath}`,
+				{ bytes: bytes.byteLength, sha256: await sha256TinyGoBytes(bytes) }
+			])
+		)
+	);
+	const profileBase = {
+		profileId: 'tinygo-test-wasip1-v6',
+		protocolVersion: 6 as const,
+		manifestPath: 'tools/upstream/upstream-toolchain.v2.json',
+		manifestFingerprint: '0'.repeat(64),
+		manifestReceipt: {
+			bytes: manifest.byteLength,
+			sha256: await sha256TinyGoBytes(manifest)
+		},
+		assetReceipts
+	};
+	const profile = {
+		...profileBase,
+		manifestFingerprint: await computeTinyGoRuntimeProfileFingerprint(profileBase)
+	};
 	const requested: string[] = [];
 	const loaded = await loadTinyGoUpstreamToolchainAssets({
 		assetBaseUrl: 'https://example.invalid/runtime/',
+		profile,
 		loader: ({ assetPath }) => {
 			requested.push(assetPath);
 			if (assetPath.endsWith('upstream-toolchain.v2.json')) return manifest;
@@ -1439,6 +1393,45 @@ test('loads only manifest-declared upstream assets through the existing browser 
 		'tools/upstream/tinygoroot.tar.gz',
 		'tools/upstream/lld.wasm'
 	]);
+
+	const forgedManifest = Uint8Array.from(manifest);
+	forgedManifest[0] ^= 1;
+	const forgedRequests: string[] = [];
+	await assert.rejects(
+		loadTinyGoUpstreamToolchainAssets({
+			assetBaseUrl: 'https://mirror.invalid/runtime/',
+			profile,
+			loader: ({ assetPath }) => {
+				forgedRequests.push(assetPath);
+				return forgedManifest;
+			}
+		}),
+		/upstream TinyGo toolchain manifest logical SHA-256 differs from its runtime profile/u
+	);
+	assert.deepEqual(forgedRequests, ['tools/upstream/upstream-toolchain.v2.json']);
+
+	await assert.rejects(
+		loadTinyGoUpstreamToolchainAssets({
+			assetBaseUrl: 'https://mirror.invalid/runtime/',
+			profile,
+			loader: ({ assetPath }) => {
+				if (assetPath.endsWith('upstream-toolchain.v2.json')) return manifest;
+				const name = assetPath.split('/').at(-1) as keyof typeof values;
+				return name === 'tinygo-compiler.wasm' ? new Uint8Array([99]) : values[name];
+			}
+		}),
+		/upstream TinyGo compiler logical SHA-256 differs from its runtime profile/u
+	);
+});
+
+test('hashes TinyGo bytes consistently without requiring an ArrayBuffer-backed input', async () => {
+	const expected = '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81';
+	assert.equal(await sha256TinyGoBytes(new Uint8Array([1, 2, 3])), expected);
+	if (typeof SharedArrayBuffer === 'function') {
+		const shared = new Uint8Array(new SharedArrayBuffer(3));
+		shared.set([1, 2, 3]);
+		assert.equal(await sha256TinyGoBytes(shared), expected);
+	}
 });
 
 test('binds compiler, root, LLD, and the passed upstream producer receipt by SHA-256', async () => {

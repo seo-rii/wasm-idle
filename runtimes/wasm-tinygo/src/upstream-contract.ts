@@ -2,6 +2,7 @@ import type { TinyGoWasiDirectoryContents } from './upstream-vfs.ts';
 import { hasTinyGoVfsPath } from './upstream-vfs.ts';
 
 export const TINYGO_UPSTREAM_ASSET_MANIFEST_FORMAT = 'wasm-idle-tinygo-upstream-assets-v2' as const;
+export const TINYGO_RUNTIME_PROFILE_FORMAT = 'wasm-idle-tinygo-runtime-profile-v1' as const;
 export const TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V1 =
 	'wasm-llvm-tinygo-browser-compiler-v1' as const;
 export const TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V2 =
@@ -18,8 +19,7 @@ export const TINYGO_UPSTREAM_PACKAGE_GRAPH_RECEIPT_FORMAT_V1 =
 	'wasm-llvm-tinygo-package-graph-provider-v1' as const;
 export const TINYGO_UPSTREAM_PACKAGE_GRAPH_RECEIPT_FORMAT =
 	'wasm-llvm-tinygo-package-graph-provider-v2' as const;
-export const TINYGO_RUNTIME_CLOSURE_FORMAT_V1 =
-	'wasm-llvm-tinygo-runtime-closure-v1' as const;
+export const TINYGO_RUNTIME_CLOSURE_FORMAT_V1 = 'wasm-llvm-tinygo-runtime-closure-v1' as const;
 export const TINYGO_RUNTIME_CLOSURE_FORMAT = 'wasm-llvm-tinygo-runtime-closure-v2' as const;
 export const TINYGO_RUNTIME_PROFILE_ID = 'wasip1-asyncify-precise-o1' as const;
 export const TINYGO_ROOT_PATH = '/tinygo-root' as const;
@@ -119,6 +119,22 @@ export interface TinyGoUpstreamAssetManifest {
 	};
 }
 
+export interface TinyGoRuntimeAssetReceipt {
+	bytes: number;
+	sha256: string;
+	uncompressedBytes?: number;
+	uncompressedSha256?: string;
+}
+
+export interface TinyGoUpstreamRuntimeProfile {
+	profileId: string;
+	protocolVersion: TinyGoCompileProtocolVersion;
+	manifestPath: string;
+	manifestFingerprint: string;
+	manifestReceipt: TinyGoRuntimeAssetReceipt;
+	assetReceipts: Readonly<Record<string, TinyGoRuntimeAssetReceipt>>;
+}
+
 export interface TinyGoRuntimeClosureAsset extends TinyGoUpstreamAssetEvidence {
 	id: string;
 	format: string;
@@ -173,6 +189,202 @@ function expectBytes(value: unknown, label: string) {
 	return value;
 }
 
+function expectExactKeys(value: JsonObject, expected: readonly string[], label: string) {
+	const actual = Object.keys(value).sort();
+	const sortedExpected = [...expected].sort();
+	if (
+		actual.length !== sortedExpected.length ||
+		actual.some((key, index) => key !== sortedExpected[index])
+	) {
+		throw new Error(`${label} must contain exactly ${sortedExpected.join(', ')}`);
+	}
+}
+
+function parseRuntimeAssetReceipt(value: unknown, label: string): TinyGoRuntimeAssetReceipt {
+	const receipt = expectObject(value, label);
+	const hasUncompressedBytes = receipt.uncompressedBytes !== undefined;
+	const hasUncompressedSha256 = receipt.uncompressedSha256 !== undefined;
+	if (hasUncompressedBytes !== hasUncompressedSha256) {
+		throw new Error(`${label} requires both uncompressedBytes and uncompressedSha256`);
+	}
+	expectExactKeys(
+		receipt,
+		hasUncompressedBytes
+			? ['bytes', 'sha256', 'uncompressedBytes', 'uncompressedSha256']
+			: ['bytes', 'sha256'],
+		label
+	);
+	return {
+		bytes: expectBytes(receipt.bytes, `${label}.bytes`),
+		sha256: expectSha256(receipt.sha256, `${label}.sha256`),
+		...(hasUncompressedBytes
+			? {
+					uncompressedBytes: expectBytes(
+						receipt.uncompressedBytes,
+						`${label}.uncompressedBytes`
+					),
+					uncompressedSha256: expectSha256(
+						receipt.uncompressedSha256,
+						`${label}.uncompressedSha256`
+					)
+				}
+			: {})
+	};
+}
+
+export function parseTinyGoUpstreamRuntimeProfile(value: unknown): TinyGoUpstreamRuntimeProfile {
+	const profile = expectObject(value, 'TinyGo upstream runtime profile');
+	expectExactKeys(
+		profile,
+		[
+			'profileId',
+			'protocolVersion',
+			'manifestPath',
+			'manifestFingerprint',
+			'manifestReceipt',
+			'assetReceipts'
+		],
+		'TinyGo upstream runtime profile'
+	);
+	const profileId = expectString(profile.profileId, 'TinyGo upstream runtime profile.profileId');
+	if (!/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/u.test(profileId)) {
+		throw new Error('TinyGo upstream runtime profile.profileId is invalid');
+	}
+	const protocolVersion = profile.protocolVersion;
+	if (
+		typeof protocolVersion !== 'number' ||
+		!Number.isInteger(protocolVersion) ||
+		protocolVersion < 1 ||
+		protocolVersion > 6
+	) {
+		throw new Error('TinyGo upstream runtime profile.protocolVersion is unsupported');
+	}
+	const manifestPath = parseAssetEvidence(
+		{
+			path: profile.manifestPath,
+			bytes: 0,
+			sha256: '0'.repeat(64)
+		},
+		'TinyGo upstream runtime profile.manifest'
+	).path;
+	const assetReceiptsValue = expectObject(
+		profile.assetReceipts,
+		'TinyGo upstream runtime profile.assetReceipts'
+	);
+	const assetReceipts: Record<string, TinyGoRuntimeAssetReceipt> = {};
+	for (const [assetPath, receiptValue] of Object.entries(assetReceiptsValue)) {
+		const safePath = parseAssetEvidence(
+			{ path: assetPath, bytes: 0, sha256: '0'.repeat(64) },
+			`TinyGo upstream runtime profile.assetReceipts[${assetPath}]`
+		).path;
+		assetReceipts[safePath] = Object.freeze(
+			parseRuntimeAssetReceipt(
+				receiptValue,
+				`TinyGo upstream runtime profile.assetReceipts[${assetPath}]`
+			)
+		);
+	}
+	if (Object.keys(assetReceipts).length === 0) {
+		throw new Error('TinyGo upstream runtime profile.assetReceipts must not be empty');
+	}
+	return Object.freeze({
+		profileId,
+		protocolVersion: protocolVersion as TinyGoCompileProtocolVersion,
+		manifestPath,
+		manifestFingerprint: expectSha256(
+			profile.manifestFingerprint,
+			'TinyGo upstream runtime profile.manifestFingerprint'
+		),
+		manifestReceipt: Object.freeze(
+			parseRuntimeAssetReceipt(
+				profile.manifestReceipt,
+				'TinyGo upstream runtime profile.manifestReceipt'
+			)
+		),
+		assetReceipts: Object.freeze(assetReceipts)
+	});
+}
+
+function runtimeProfileCanonicalBytes(profile: TinyGoUpstreamRuntimeProfile) {
+	let canonical = `${TINYGO_RUNTIME_PROFILE_FORMAT}\n`;
+	canonical += `profile\0${profile.profileId}\0${profile.protocolVersion}\n`;
+	canonical += `manifest\0${profile.manifestPath}\0${profile.manifestReceipt.bytes}\0${profile.manifestReceipt.sha256}\n`;
+	for (const assetPath of Object.keys(profile.assetReceipts).sort()) {
+		const receipt = profile.assetReceipts[assetPath];
+		const logicalBytes = receipt.uncompressedBytes ?? receipt.bytes;
+		const logicalSha256 = receipt.uncompressedSha256 ?? receipt.sha256;
+		const storagePath = receipt.uncompressedSha256 ? `${assetPath}.gz` : assetPath;
+		canonical += `asset\0${assetPath}\0${storagePath}\0${receipt.bytes}\0${receipt.sha256}\0${logicalBytes}\0${logicalSha256}\n`;
+	}
+	return new TextEncoder().encode(canonical);
+}
+
+export async function computeTinyGoRuntimeProfileFingerprint(profile: unknown) {
+	return await sha256TinyGoBytes(
+		runtimeProfileCanonicalBytes(parseTinyGoUpstreamRuntimeProfile(profile))
+	);
+}
+
+function resolveManifestEvidencePath(manifestPath: string, evidencePath: string) {
+	const separator = manifestPath.lastIndexOf('/');
+	const directory = separator === -1 ? '' : manifestPath.slice(0, separator + 1);
+	return `${directory}${evidencePath}`;
+}
+
+export async function verifyTinyGoUpstreamRuntimeProfile(options: {
+	profile: unknown;
+	manifestBytes: Uint8Array;
+	manifest: unknown;
+}) {
+	const profile = parseTinyGoUpstreamRuntimeProfile(options.profile);
+	if (options.manifestBytes.byteLength !== profile.manifestReceipt.bytes) {
+		throw new Error('TinyGo upstream manifest byte length differs from its runtime profile');
+	}
+	if ((await sha256TinyGoBytes(options.manifestBytes)) !== profile.manifestReceipt.sha256) {
+		throw new Error('TinyGo upstream manifest SHA-256 differs from its runtime profile');
+	}
+	if ((await computeTinyGoRuntimeProfileFingerprint(profile)) !== profile.manifestFingerprint) {
+		throw new Error('TinyGo upstream runtime profile fingerprint differs from its receipts');
+	}
+	const manifest = parseTinyGoUpstreamAssetManifest(options.manifest);
+	const evidence = [
+		manifest.producerReceipt,
+		manifest.packageGraphReceipt,
+		manifest.assets.compiler,
+		manifest.assets.packageGraph,
+		manifest.assets.rootArchive,
+		manifest.assets.lld
+	];
+	const expectedPaths = new Set<string>();
+	for (const entry of evidence) {
+		const assetPath = resolveManifestEvidencePath(profile.manifestPath, entry.path);
+		if (expectedPaths.has(assetPath)) {
+			throw new Error(`TinyGo upstream manifest repeats ${assetPath}`);
+		}
+		expectedPaths.add(assetPath);
+		const receipt = profile.assetReceipts[assetPath];
+		if (!receipt) {
+			throw new Error(`TinyGo upstream runtime profile does not declare ${assetPath}`);
+		}
+		if (
+			(receipt.uncompressedBytes ?? receipt.bytes) !== entry.bytes ||
+			(receipt.uncompressedSha256 ?? receipt.sha256) !== entry.sha256
+		) {
+			throw new Error(
+				`TinyGo upstream runtime profile differs from the manifest for ${assetPath}`
+			);
+		}
+	}
+	for (const assetPath of Object.keys(profile.assetReceipts)) {
+		if (!expectedPaths.has(assetPath)) {
+			throw new Error(
+				`TinyGo upstream runtime profile contains unexpected asset ${assetPath}`
+			);
+		}
+	}
+	return { profile, manifest };
+}
+
 function parseAssetEvidence(value: unknown, label: string): TinyGoUpstreamAssetEvidence {
 	const object = expectObject(value, label);
 	const assetPath = expectString(object.path, `${label}.path`);
@@ -194,8 +406,11 @@ function parseAssetEvidence(value: unknown, label: string): TinyGoUpstreamAssetE
 export async function sha256TinyGoBytes(bytes: Uint8Array) {
 	if (!globalThis.crypto?.subtle)
 		throw new Error('upstream TinyGo verification requires Web Crypto');
-	const copied = Uint8Array.from(bytes);
-	const digest = await globalThis.crypto.subtle.digest('SHA-256', copied.buffer);
+	const digestInput =
+		bytes.buffer instanceof ArrayBuffer
+			? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+			: Uint8Array.from(bytes);
+	const digest = await globalThis.crypto.subtle.digest('SHA-256', digestInput);
 	return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
 }
 
@@ -354,17 +569,17 @@ export async function verifyTinyGoUpstreamAssetSet(options: {
 					? ['go-embed-objects', 'target-cgo-c']
 					: compileProtocolVersion === 4
 						? [
-							'go-embed-objects',
-							'target-cgo-c',
-							'target-cxx-freestanding',
-							'target-clang-assembly'
+								'go-embed-objects',
+								'target-cgo-c',
+								'target-cxx-freestanding',
+								'target-clang-assembly'
 							]
 						: compileProtocolVersion === 5
 							? [
-								'go-embed-objects',
-								'target-cgo-c',
-								'target-cxx-hosted-noeh',
-								'target-clang-assembly'
+									'go-embed-objects',
+									'target-cgo-c',
+									'target-cxx-hosted-noeh',
+									'target-clang-assembly'
 								]
 							: [
 									'go-embed-objects',
@@ -750,7 +965,9 @@ export function validateTinyGoPackageJSON(options: {
 						flag.includes('\0')
 				)
 			) {
-				throw new Error(`TinyGo package ${importPath}.${field} must be a bounded string array`);
+				throw new Error(
+					`TinyGo package ${importPath}.${field} must be a bounded string array`
+				);
 			}
 			if (flagValues.length > 0 && compileProtocolVersion < 6) {
 				throw new Error(

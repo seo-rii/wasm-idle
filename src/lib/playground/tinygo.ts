@@ -2,9 +2,10 @@ import {
 	resolveRustCompilerUrl,
 	resolveTinyGoModuleUrl,
 	type PlaygroundRuntimeAssets,
-	type TinyGoRuntimeAssetLoader,
-	type TinyGoRuntimeAssetPackReference
+	type RuntimeAssetIntegrityEntry,
+	type TinyGoRuntimeAssetLoader
 } from '$lib/playground/assets';
+import { WASM_TINYGO_RUNTIME_PROFILE } from '$lib/playground/wasmTinyGoVersion';
 import type {
 	CompilerDiagnostic,
 	SandboxExecutionOptions,
@@ -78,6 +79,7 @@ type TinyGoRuntimeDiagnostic = {
 type TinyGoRuntimeModule = {
 	loadTinyGoUpstreamToolchainAssets?: (options: {
 		assetBaseUrl: string;
+		profile: TinyGoUpstreamRuntimeProfile;
 		loader?: TinyGoRuntimeAssetLoader;
 		onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 		signal?: AbortSignal;
@@ -94,7 +96,6 @@ type TinyGoRuntimeModule = {
 	) => Promise<{ wasm: Uint8Array }>;
 	createBundledTinyGoRuntime?: (options?: {
 		assetLoader?: TinyGoRuntimeAssetLoader;
-		assetPacks?: TinyGoRuntimeAssetPackReference[];
 		maxAssetBytes?: number;
 		rustRuntimeBaseUrl?: string;
 		onCompilerDiagnostic?: (diagnostic: TinyGoRuntimeDiagnostic) => void;
@@ -104,13 +105,21 @@ type TinyGoRuntimeModule = {
 	createTinyGoRuntime?: (options: {
 		assetBaseUrl: string;
 		assetLoader?: TinyGoRuntimeAssetLoader;
-		assetPacks?: TinyGoRuntimeAssetPackReference[];
 		maxAssetBytes?: number;
 		rustRuntimeBaseUrl?: string;
 		onCompilerDiagnostic?: (diagnostic: TinyGoRuntimeDiagnostic) => void;
 		onLogAppended?: (entry: TinyGoRuntimeLogEntry) => void;
 		onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 	}) => TinyGoRuntimeHooks;
+};
+
+type TinyGoUpstreamRuntimeProfile = {
+	profileId: string;
+	protocolVersion: number;
+	manifestPath: string;
+	manifestFingerprint: string;
+	manifestReceipt: RuntimeAssetIntegrityEntry;
+	assetReceipts: Readonly<Record<string, RuntimeAssetIntegrityEntry>>;
 };
 
 type TinyGoOperation = {
@@ -146,6 +155,49 @@ const EXECUTION_LIMIT_KEYS = Object.keys(DEFAULT_EXECUTION_LIMITS) as Array<keyo
 const OUTPUT_ENCODER = new TextEncoder();
 const TINYGO_TARGETS = new Set<TinyGoTarget>(['wasm', 'wasip1', 'wasip2', 'wasip3']);
 
+function snapshotTinyGoRuntimeProfile(
+	config: PlaygroundRuntimeAssets['tinygo']
+): TinyGoUpstreamRuntimeProfile {
+	const profileFields = [
+		'profileId',
+		'protocolVersion',
+		'manifestPath',
+		'manifestFingerprint',
+		'manifestReceipt',
+		'assetReceipts'
+	] as const;
+	const hasOverride = profileFields.some((field) => config?.[field] !== undefined);
+	const source = hasOverride ? config : WASM_TINYGO_RUNTIME_PROFILE;
+	if (
+		!source ||
+		typeof source.profileId !== 'string' ||
+		typeof source.protocolVersion !== 'number' ||
+		typeof source.manifestPath !== 'string' ||
+		typeof source.manifestFingerprint !== 'string' ||
+		!source.manifestReceipt ||
+		!source.assetReceipts
+	) {
+		throw new RuntimeConfigurationError(
+			'TinyGo runtime profile overrides must provide the complete profile and receipt set',
+			{ runtimeId: 'TINYGO' }
+		);
+	}
+	const assetReceipts = Object.fromEntries(
+		Object.entries(source.assetReceipts).map(([assetPath, receipt]) => [
+			assetPath,
+			Object.freeze(typeof receipt === 'string' ? { sha256: receipt } : { ...receipt })
+		])
+	);
+	return Object.freeze({
+		profileId: source.profileId,
+		protocolVersion: source.protocolVersion,
+		manifestPath: source.manifestPath,
+		manifestFingerprint: source.manifestFingerprint,
+		manifestReceipt: Object.freeze({ ...source.manifestReceipt }),
+		assetReceipts: Object.freeze(assetReceipts)
+	});
+}
+
 const abortReason = (signal: AbortSignal, phase: TinyGoOperation['phase']) => {
 	const reason = signal.reason;
 	return reason !== undefined
@@ -169,7 +221,7 @@ class TinyGo implements Sandbox {
 	rustRuntimeBaseUrl = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	assetLoader: TinyGoRuntimeAssetLoader | undefined = undefined;
-	assetPacks: TinyGoRuntimeAssetPackReference[] | undefined = undefined;
+	runtimeProfile: TinyGoUpstreamRuntimeProfile | undefined = undefined;
 	runtime: TinyGoRuntimeHooks | null = null;
 	runtimeToken: symbol | null = null;
 	runtimePromise: Promise<TinyGoRuntimeHooks> | null = null;
@@ -234,17 +286,15 @@ class TinyGo implements Sandbox {
 					: '';
 				this.assertOperation(operation);
 				let nextAssetLoader: TinyGoRuntimeAssetLoader | undefined;
-				let nextAssetPacks: TinyGoRuntimeAssetPackReference[] | undefined;
+				let tinyGoAssets: PlaygroundRuntimeAssets['tinygo'];
 				if (typeof runtimeAssets === 'object' && runtimeAssets !== null) {
-					const tinyGoAssets = runtimeAssets.tinygo;
+					tinyGoAssets = runtimeAssets.tinygo;
 					this.assertOperation(operation);
 					nextAssetLoader = tinyGoAssets?.assetLoader;
 					this.assertOperation(operation);
-					const assetPacks = tinyGoAssets?.assetPacks;
-					this.assertOperation(operation);
-					nextAssetPacks = assetPacks?.map((pack) => ({ ...pack }));
-					this.assertOperation(operation);
 				}
+				const nextRuntimeProfile = snapshotTinyGoRuntimeProfile(tinyGoAssets);
+				this.assertOperation(operation);
 				if (!nextModuleUrl) {
 					throw new Error(
 						'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL or runtimeAssets.tinygo.moduleUrl.'
@@ -252,7 +302,10 @@ class TinyGo implements Sandbox {
 				}
 				if (
 					(this.moduleUrl && this.moduleUrl !== nextModuleUrl) ||
-					this.rustRuntimeBaseUrl !== nextRustRuntimeBaseUrl
+					this.rustRuntimeBaseUrl !== nextRustRuntimeBaseUrl ||
+					this.assetLoader !== nextAssetLoader ||
+					this.runtimeProfile?.manifestFingerprint !==
+						nextRuntimeProfile.manifestFingerprint
 				) {
 					this.disposeRuntime();
 					this.assertOperation(operation);
@@ -261,7 +314,7 @@ class TinyGo implements Sandbox {
 					this.compiledCacheKey = '';
 				}
 				this.assetLoader = nextAssetLoader;
-				this.assetPacks = nextAssetPacks;
+				this.runtimeProfile = nextRuntimeProfile;
 				this.moduleUrl = nextModuleUrl;
 				this.rustRuntimeBaseUrl = nextRustRuntimeBaseUrl;
 				progress?.set?.(0.25);
@@ -788,20 +841,27 @@ class TinyGo implements Sandbox {
 		const runtimePromiseToken = Symbol('runtime-startup');
 		this.runtimePromiseToken = runtimePromiseToken;
 		const assetLoader = this.assetLoader;
-		const assetPacks = this.assetPacks;
+		const runtimeProfile = this.runtimeProfile;
 		const rustRuntimeBaseUrl = this.rustRuntimeBaseUrl;
 		const maxAssetBytes =
 			operation.limits?.maxAssetBytes ?? DEFAULT_EXECUTION_LIMITS.maxAssetBytes;
 		let nextRuntime: TinyGoRuntimeHooks | null = null;
 		const runtimePromise = (async () => {
 			try {
+				if (!runtimeProfile) {
+					throw new RuntimeConfigurationError(
+						'TinyGo runtime profile is not configured',
+						{
+							runtimeId: 'TINYGO'
+						}
+					);
+				}
 				const runtimeModule = (await import(
 					/* @vite-ignore */ moduleUrl
 				)) as TinyGoRuntimeModule;
 				this.assertOperation(operation);
 				const commonOptions = {
 					assetLoader,
-					assetPacks,
 					maxAssetBytes,
 					rustRuntimeBaseUrl: rustRuntimeBaseUrl || undefined,
 					onCompilerDiagnostic: (diagnostic: TinyGoRuntimeDiagnostic) => {
@@ -871,6 +931,7 @@ class TinyGo implements Sandbox {
 								}
 								assetsPromise = loadUpstreamAssets({
 									assetBaseUrl,
+									profile: runtimeProfile,
 									...(assetLoader ? { loader: assetLoader } : {}),
 									onProgress: commonOptions.onProgress,
 									signal: controller.signal,
@@ -887,21 +948,28 @@ class TinyGo implements Sandbox {
 							appendLog('upstream TinyGo toolchain assets loaded');
 						},
 						async plan() {
-							if (!assetsPromise) throw new Error('upstream TinyGo assets are not loaded');
-							appendLog('upstream TinyGo receipt validation scheduled in compiler worker');
+							if (!assetsPromise)
+								throw new Error('upstream TinyGo assets are not loaded');
+							appendLog(
+								'upstream TinyGo receipt validation scheduled in compiler worker'
+							);
 							return { target: 'wasip1', implementation: 'upstream-tinygo-0.40.1' };
 						},
 						async execute() {
 							if (target !== 'wasip1') {
-								throw new Error('The upstream TinyGo browser compiler supports only wasip1');
+								throw new Error(
+									'The upstream TinyGo browser compiler supports only wasip1'
+								);
 							}
-							if (!workspaceFiles) throw new Error('TinyGo workspace is not configured');
+							if (!workspaceFiles)
+								throw new Error('TinyGo workspace is not configured');
 							const assets = await assetsPromise;
 							if (!assets) throw new Error('upstream TinyGo assets are not loaded');
 							controller = new AbortController();
 							const compileFiles = { ...workspaceFiles };
 							if (!Object.prototype.hasOwnProperty.call(compileFiles, 'go.mod')) {
-								compileFiles['go.mod'] = 'module wasm-idle.local/main\n\ngo 1.24.0\n';
+								compileFiles['go.mod'] =
+									'module wasm-idle.local/main\n\ngo 1.24.0\n';
 							}
 							const result = await compileUpstream(
 								assets,
@@ -1506,7 +1574,7 @@ class TinyGo implements Sandbox {
 		this.moduleUrl = '';
 		this.rustRuntimeBaseUrl = '';
 		this.assetLoader = undefined;
-		this.assetPacks = undefined;
+		this.runtimeProfile = undefined;
 		this.output = undefined;
 		this.oncompilerdiagnostic = undefined;
 		this.loadPromise = null;

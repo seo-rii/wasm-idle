@@ -166,7 +166,12 @@ export interface TinyGoRuntimeAssetConfig {
 	appUrl?: string;
 	assetLoader?: TinyGoRuntimeAssetLoader;
 	assetLoaderKey?: string;
-	assetPacks?: TinyGoRuntimeAssetPackReference[];
+	profileId?: string;
+	protocolVersion?: number;
+	manifestPath?: string;
+	manifestFingerprint?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	assetReceipts?: RuntimeAssetIntegrityMap;
 }
 
 export interface ElixirRuntimeAssetConfig {
@@ -613,13 +618,6 @@ export interface TinyGoRuntimeAssetLoaderRequest {
 	assetPath: string;
 	assetUrl: string;
 	label: string;
-}
-
-export interface TinyGoRuntimeAssetPackReference {
-	index: string;
-	asset: string;
-	fileCount: number;
-	totalBytes: number;
 }
 
 export type TinyGoRuntimeAssetLoaderResult =

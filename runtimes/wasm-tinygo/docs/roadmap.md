@@ -25,7 +25,8 @@ Implemented now:
 - [x] static browser execution for the legacy TinyGo starter compatibility subset
 - [x] real-browser TinyGo probes in `wasm-tinygo` and `wasm-idle`
 - [x] TinyGo runtime asset loader support
-- [x] TinyGo runtime pack support (`runtime-pack.index.json` + `runtime-pack.bin`)
+- [x] legacy porting-harness runtime pack support (`runtime-pack.index.json` + `runtime-pack.bin`),
+      intentionally absent from the public upstream product contract
 - [x] source-pinned Go 1.24.6 `cmd/go` package discovery for local module workspaces
 - [x] receipt-verified provider → TinyGo → LLD → Binaryen execution in Chromium
 
@@ -68,7 +69,9 @@ Not done yet:
 - browser/runtime execution now consumes that bridge-owned `hostArtifact` directly when present, which moves the host-assisted browser path off the synthetic backend/lowering stage while keeping the existing manifest seam and verification flow intact
 - browser smoke now keeps stable demo coverage for both the host-assisted bridge path and the bridge-less static starter-subset path, including a local imported-package demo instead of only a single-file happy path
 - browser/runtime execution now promotes lowered-IR-backed unsupported-feature summaries for bridge-less static fallback failures, and browser smoke also asserts that invalid target overrides surface as explicit planner failures in the UI/test-hook path
-- runtime asset indirection now supports both per-asset loaders and compressed runtime packs so host apps can ship TinyGo assets as a bundle instead of exposing every nested file individually
+- the legacy porting harness supports per-asset loaders and compressed runtime packs; the public
+  upstream product instead requires one complete host-pinned profile containing the manifest and
+  every logical/deployment-storage receipt, and does not expose receipt-free pack references
 
 ### What is still synthetic in the legacy bridge-less fallback
 

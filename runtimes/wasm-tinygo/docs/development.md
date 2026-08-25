@@ -26,8 +26,9 @@ The dev and build flows prepare browser-side assets automatically before startin
   Produces a production build after preparing assets.
 - `npm run build:runtime-pack`
   Builds a compact runtime pack (`runtime-pack.index.json` + `runtime-pack.bin`)
-  under `public/runtime-pack/`. Use this when you want to serve TinyGo runtime
-  assets as a single compressed bundle. Set `WASM_TINYGO_RUNTIME_PACK_MANIFEST`
+  under `public/runtime-pack/` for the isolated legacy porting harness. The public
+  `wasm-idle` upstream path does not publish or accept these receipt-free packs.
+  Set `WASM_TINYGO_RUNTIME_PACK_MANIFEST`
   to a JSON array of `{ runtimePath, filePath }` entries if you want to pack a
   custom file list instead of the default emception + go-probe assets. You can
   also supply a JSON object:

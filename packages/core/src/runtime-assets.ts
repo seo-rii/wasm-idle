@@ -25,13 +25,6 @@ export interface RuntimeAssetLoaderKeySource {
 	allowedBaseUrls?: string[];
 }
 
-export interface RuntimeAssetPackKeySource {
-	index: string;
-	asset: string;
-	fileCount: number;
-	totalBytes: number;
-}
-
 export interface RuntimeAssetKeySource {
 	rootUrl?: string;
 	runtimeProfiles?: Readonly<Record<string, RuntimeAssetProfileKeySource>>;
@@ -57,7 +50,12 @@ export interface RuntimeAssetKeySource {
 		moduleUrl?: string;
 		assetLoader?: unknown;
 		assetLoaderKey?: string;
-		assetPacks?: readonly RuntimeAssetPackKeySource[];
+		profileId?: string;
+		protocolVersion?: number;
+		manifestPath?: string;
+		manifestFingerprint?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		assetReceipts?: RuntimeAssetIntegrityMap;
 	};
 	typescript?: { moduleUrl?: string; libUrl?: string };
 	wat?: { moduleUrl?: string };
@@ -364,35 +362,12 @@ const joinStringList = (value: unknown) => (Array.isArray(value) ? value.join('\
 const joinSortedStringList = (value: unknown) =>
 	Array.isArray(value) ? [...value].sort().join('\0') : '';
 
-const serializeRuntimeAssetPacks = (value: unknown) => {
+const serializeSafeInteger = (value: unknown) => {
 	if (value === undefined) return '';
-	if (!Array.isArray(value)) throw new TypeError('Runtime asset packs must be an array');
-	return JSON.stringify(
-		value.map((entry, position) => {
-			if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-				throw new TypeError(`Runtime asset pack ${position} must be an object`);
-			}
-			const pack = entry as Record<string, unknown>;
-			if (typeof pack.index !== 'string' || !pack.index) {
-				throw new TypeError(`Runtime asset pack ${position} requires an index`);
-			}
-			if (typeof pack.asset !== 'string' || !pack.asset) {
-				throw new TypeError(`Runtime asset pack ${position} requires an asset`);
-			}
-			if (!Number.isSafeInteger(pack.fileCount) || (pack.fileCount as number) < 0) {
-				throw new TypeError(`Runtime asset pack ${position} has an invalid file count`);
-			}
-			if (!Number.isSafeInteger(pack.totalBytes) || (pack.totalBytes as number) < 0) {
-				throw new TypeError(`Runtime asset pack ${position} has an invalid byte size`);
-			}
-			return {
-				index: pack.index,
-				asset: pack.asset,
-				fileCount: pack.fileCount,
-				totalBytes: pack.totalBytes
-			};
-		})
-	);
+	if (!Number.isSafeInteger(value) || (value as number) < 0) {
+		throw new TypeError('Runtime asset integer identity must be a non-negative safe integer');
+	}
+	return String(value);
 };
 
 const serializeIntegrity = (value: unknown) => {
@@ -610,17 +585,36 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'ocaml', property: 'manifestUrl', key: 'ocamlManifestUrl' },
 	{ runtime: 'tinygo', property: 'appUrl', key: 'tinygoAppUrl' },
 	{ runtime: 'tinygo', property: 'moduleUrl', key: 'tinygoModuleUrl' },
+	{ runtime: 'tinygo', property: 'profileId', key: 'tinygoProfileId' },
+	{
+		runtime: 'tinygo',
+		property: 'protocolVersion',
+		key: 'tinygoProtocolVersion',
+		serialize: serializeSafeInteger
+	},
+	{ runtime: 'tinygo', property: 'manifestPath', key: 'tinygoManifestPath' },
+	{
+		runtime: 'tinygo',
+		property: 'manifestFingerprint',
+		key: 'tinygoManifestFingerprint'
+	},
+	{
+		runtime: 'tinygo',
+		property: 'manifestReceipt',
+		key: 'tinygoManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'tinygo',
+		property: 'assetReceipts',
+		key: 'tinygoAssetReceipts',
+		serialize: serializeIntegrity
+	},
 	{
 		runtime: 'tinygo',
 		property: 'assetLoader',
 		key: 'hasTinyGoAssetLoader',
 		serialize: hasValue
-	},
-	{
-		runtime: 'tinygo',
-		property: 'assetPacks',
-		key: 'tinygoAssetPacks',
-		serialize: serializeRuntimeAssetPacks
 	},
 	{ runtime: 'typescript', property: 'moduleUrl', key: 'typeScriptModuleUrl' },
 	{ runtime: 'typescript', property: 'libUrl', key: 'typeScriptLibUrl' },
