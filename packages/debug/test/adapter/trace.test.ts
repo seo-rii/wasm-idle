@@ -73,6 +73,12 @@ describe('TraceDebugAdapter', () => {
 		await expect(adapter.readMemory('memory', 0, 1)).rejects.toBeInstanceOf(
 			UnsupportedDebugOperationError
 		);
+		await expect(
+			adapter.dataBreakpointInfo({ name: 'counter', variablesReference: 1 })
+		).rejects.toBeInstanceOf(UnsupportedDebugOperationError);
+		await expect(adapter.setDataBreakpoints([])).rejects.toBeInstanceOf(
+			UnsupportedDebugOperationError
+		);
 	});
 
 	it('marks breakpoints in a second source as unverified without replacing trace breakpoints', async () => {

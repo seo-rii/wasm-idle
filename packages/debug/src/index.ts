@@ -27,6 +27,10 @@ export type {
 	DebugAdapterEvent,
 	DebugAdapterKind,
 	DebugCapabilities,
+	DebugDataBreakpoint,
+	DebugDataBreakpointAccessType,
+	DebugDataBreakpointInfo,
+	DebugDataBreakpointInfoArguments,
 	DebugDisconnectOptions,
 	DebugEvaluateResult,
 	DebugLaunchConfig,
@@ -40,6 +44,7 @@ export type {
 	DebugWriteMemoryResult,
 	LldbDapAdapterOptions,
 	ResolvedBreakpoint,
+	ResolvedDataBreakpoint,
 	TraceDebugAdapterOptions,
 	TraceDebugControl
 } from './adapter/index.js';

@@ -5,6 +5,9 @@ import {
 	type DebugAdapter,
 	type DebugAdapterEvent,
 	type DebugCapabilities,
+	type DebugDataBreakpoint,
+	type DebugDataBreakpointInfo,
+	type DebugDataBreakpointInfoArguments,
 	type DebugDisconnectOptions,
 	type DebugEvaluateResult,
 	type DebugLaunchConfig,
@@ -15,6 +18,7 @@ import {
 	type DebugThread,
 	type DebugVariable,
 	type DebugWriteMemoryResult,
+	type ResolvedDataBreakpoint,
 	type ResolvedBreakpoint
 } from '../src/index.js';
 
@@ -99,6 +103,12 @@ class FakeDebugAdapter implements DebugAdapter {
 		_data: Uint8Array,
 		_allowPartial?: boolean
 	): Promise<DebugWriteMemoryResult> => ({ bytesWritten: 0 });
+	dataBreakpointInfoHandler = async (
+		_arguments: DebugDataBreakpointInfoArguments
+	): Promise<DebugDataBreakpointInfo> => ({ description: 'unavailable' });
+	setDataBreakpointsHandler = async (
+		_breakpoints: DebugDataBreakpoint[]
+	): Promise<ResolvedDataBreakpoint[]> => [];
 	evaluateHandler = async (
 		expression: string,
 		_frameId?: number
@@ -190,6 +200,18 @@ class FakeDebugAdapter implements DebugAdapter {
 			`writeMemory:${memoryReference}:${offset}:${Array.from(data).join(',')}:${allowPartial === true}`
 		);
 		return this.writeMemoryHandler(memoryReference, offset, data, allowPartial);
+	}
+
+	async dataBreakpointInfo(arguments_: DebugDataBreakpointInfoArguments) {
+		this.transcript.push(`dataBreakpointInfo:${arguments_.name}`);
+		return this.dataBreakpointInfoHandler(arguments_);
+	}
+
+	async setDataBreakpoints(breakpoints: DebugDataBreakpoint[]) {
+		this.transcript.push(
+			`setDataBreakpoints:${breakpoints.map(({ dataId, accessType }) => `${dataId}:${accessType ?? ''}`).join(',')}`
+		);
+		return this.setDataBreakpointsHandler(breakpoints);
 	}
 
 	async evaluate(expression: string, frameId?: number) {
@@ -478,6 +500,12 @@ describe('createAdapterDebugSessionController', () => {
 			unreadableBytes: 0
 		});
 		adapter.writeMemoryHandler = async () => ({ offset: 4, bytesWritten: 2 });
+		adapter.dataBreakpointInfoHandler = async () => ({
+			dataId: '10/2',
+			description: '2 bytes at 10',
+			accessTypes: ['read', 'write', 'readWrite']
+		});
+		adapter.setDataBreakpointsHandler = async () => [{ id: 3, verified: true }];
 		const controller = createAdapterDebugSessionController(adapter);
 
 		adapter.emit({ type: 'stopped', reason: 'entry', threadId: 2 });
@@ -502,16 +530,28 @@ describe('createAdapterDebugSessionController', () => {
 		await expect(
 			controller.writeMemory('memory', 4, Uint8Array.of(9, 10), true)
 		).resolves.toEqual({ offset: 4, bytesWritten: 2 });
+		await expect(
+			controller.dataBreakpointInfo({ name: '0x10', asAddress: true, bytes: 2 })
+		).resolves.toEqual({
+			dataId: '10/2',
+			description: '2 bytes at 10',
+			accessTypes: ['read', 'write', 'readWrite']
+		});
+		await expect(
+			controller.setDataBreakpoints([{ dataId: '10/2', accessType: 'write' }])
+		).resolves.toEqual([{ id: 3, verified: true }]);
 
 		await controller.pause();
 		await controller.next();
 		await controller.stepIn();
 		await controller.stepOut();
 		await controller.continue();
-		expect(adapter.transcript.slice(-8)).toEqual([
+		expect(adapter.transcript.slice(-10)).toEqual([
 			'evaluate:counter:11',
 			'readMemory:memory:4:2',
 			'writeMemory:memory:4:9,10:true',
+			'dataBreakpointInfo:0x10',
+			'setDataBreakpoints:10/2:write',
 			'pause:1',
 			'next:1',
 			'stepIn:1',

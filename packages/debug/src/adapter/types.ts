@@ -142,6 +142,36 @@ export interface DebugWriteMemoryResult {
 	bytesWritten: number;
 }
 
+export type DebugDataBreakpointAccessType = 'read' | 'write' | 'readWrite';
+
+export interface DebugDataBreakpointInfoArguments {
+	name: string;
+	variablesReference?: number;
+	frameId?: number;
+	/** Treat `name` as a numeric address. This is an LLDB DAP extension. */
+	asAddress?: boolean;
+	/** Number of bytes to watch when `asAddress` is true. This is an LLDB DAP extension. */
+	bytes?: number;
+}
+
+export interface DebugDataBreakpointInfo {
+	dataId?: string;
+	description: string;
+	accessTypes?: DebugDataBreakpointAccessType[];
+	canPersist?: boolean;
+}
+
+export interface DebugDataBreakpoint {
+	dataId: string;
+	accessType?: DebugDataBreakpointAccessType;
+}
+
+export interface ResolvedDataBreakpoint {
+	id?: number;
+	verified: boolean;
+	message?: string;
+}
+
 export interface DebugEvaluateResult {
 	result: string;
 	type?: string;
@@ -226,6 +256,12 @@ export interface DebugAdapter {
 		data: Uint8Array,
 		allowPartial?: boolean
 	): Promise<DebugWriteMemoryResult>;
+	dataBreakpointInfo(
+		arguments_: DebugDataBreakpointInfoArguments
+	): Promise<DebugDataBreakpointInfo>;
+	setDataBreakpoints(
+		breakpoints: DebugDataBreakpoint[]
+	): Promise<ResolvedDataBreakpoint[]>;
 	evaluate(expression: string, frameId?: number): Promise<DebugEvaluateResult>;
 
 	onEvent(listener: (event: DebugAdapterEvent) => void): () => void;

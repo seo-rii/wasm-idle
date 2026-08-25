@@ -13,6 +13,10 @@ import {
 	type DebugAdapter,
 	type DebugAdapterEvent,
 	type DebugCapabilities,
+	type DebugDataBreakpoint,
+	type DebugDataBreakpointAccessType,
+	type DebugDataBreakpointInfo,
+	type DebugDataBreakpointInfoArguments,
 	type DebugDisconnectOptions,
 	type DebugEvaluateResult,
 	type DebugLaunchConfig,
@@ -24,6 +28,7 @@ import {
 	type DebugVariable,
 	type DebugVariablePresentationHint,
 	type DebugWriteMemoryResult,
+	type ResolvedDataBreakpoint,
 	type ResolvedBreakpoint
 } from './types.js';
 
@@ -37,6 +42,8 @@ export interface LldbDapAdapterOptions {
 		evaluate?: boolean;
 		/** Enable raw guest-memory writes only for a manifest-qualified runtime. */
 		writeMemory?: boolean;
+		/** Enable watchpoints only for a manifest-qualified LLDB/WAMR pair. */
+		dataBreakpoints?: boolean;
 	};
 }
 
@@ -299,6 +306,9 @@ function mapCapabilities(
 	const supportsWriteMemory =
 		options.featureSupport?.writeMemory === true &&
 		capabilities.supportsWriteMemoryRequest === true;
+	const supportsDataBreakpoints =
+		options.featureSupport?.dataBreakpoints === true &&
+		capabilities.supportsDataBreakpoints === true;
 
 	return Object.freeze({
 		supportsConfigurationDone: capabilities.supportsConfigurationDoneRequest === true,
@@ -319,7 +329,7 @@ function mapCapabilities(
 			supportsEvaluate && capabilities.supportsEvaluateForHovers === true,
 		supportsReadMemory: capabilities.supportsReadMemoryRequest === true,
 		supportsWriteMemory,
-		supportsDataBreakpoints: false,
+		supportsDataBreakpoints,
 		supportsSetVariable: false,
 		supportsRestart: false,
 		supportsTerminate: false
@@ -807,6 +817,112 @@ export class LldbDapAdapter implements DebugAdapter {
 		} satisfies DebugWriteMemoryResult;
 	}
 
+	async dataBreakpointInfo(arguments_: DebugDataBreakpointInfoArguments) {
+		this.#requireCapability('supportsDataBreakpoints', 'data breakpoints');
+		if (typeof arguments_.name !== 'string' || arguments_.name.length === 0) {
+			throw new TypeError('name must be a non-empty string.');
+		}
+		if (arguments_.variablesReference !== undefined) {
+			assertNonNegativeSafeInteger(arguments_.variablesReference, 'variablesReference');
+		}
+		if (arguments_.frameId !== undefined) {
+			assertPositiveSafeInteger(arguments_.frameId, 'frameId');
+		}
+		if (arguments_.bytes !== undefined) {
+			assertPositiveSafeInteger(arguments_.bytes, 'bytes');
+		}
+		const response = await this.#session.request<unknown>('dataBreakpointInfo', {
+			name: arguments_.name,
+			...(arguments_.variablesReference === undefined
+				? {}
+				: { variablesReference: arguments_.variablesReference }),
+			...(arguments_.frameId === undefined ? {} : { frameId: arguments_.frameId }),
+			...(arguments_.asAddress === undefined ? {} : { asAddress: arguments_.asAddress }),
+			...(arguments_.bytes === undefined ? {} : { bytes: arguments_.bytes })
+		});
+		assertDapRecord(response, 'dataBreakpointInfo', 'body');
+		assertDapString(response.description, 'dataBreakpointInfo', 'description');
+		let dataId: string | undefined;
+		if (response.dataId !== undefined && response.dataId !== null) {
+			assertDapString(response.dataId, 'dataBreakpointInfo', 'dataId');
+			dataId = response.dataId;
+		}
+		let accessTypes: DebugDataBreakpointAccessType[] | undefined;
+		if (response.accessTypes !== undefined) {
+			if (!Array.isArray(response.accessTypes)) {
+				invalidDapResponse('dataBreakpointInfo', 'accessTypes', 'expected an array');
+			}
+			accessTypes = response.accessTypes.map((accessType, index) => {
+				assertDapStringEnum(
+					accessType,
+					['read', 'write', 'readWrite'],
+					'dataBreakpointInfo',
+					`accessTypes[${index}]`
+				);
+				return accessType;
+			});
+		}
+		const canPersist = dapOptionalBoolean(response, 'canPersist', 'dataBreakpointInfo', '');
+		return {
+			...(dataId === undefined ? {} : { dataId }),
+			description: response.description,
+			...(accessTypes === undefined ? {} : { accessTypes }),
+			...(canPersist === undefined ? {} : { canPersist })
+		} satisfies DebugDataBreakpointInfo;
+	}
+
+	async setDataBreakpoints(breakpoints: DebugDataBreakpoint[]) {
+		this.#requireCapability('supportsDataBreakpoints', 'data breakpoints');
+		const requestBreakpoints = breakpoints.map((breakpoint, index) => {
+			if (typeof breakpoint.dataId !== 'string' || breakpoint.dataId.length === 0) {
+				throw new TypeError(`breakpoints[${index}].dataId must be a non-empty string.`);
+			}
+			if (
+				breakpoint.accessType !== undefined &&
+				!(['read', 'write', 'readWrite'] as const).includes(breakpoint.accessType)
+			) {
+				throw new TypeError(
+					`breakpoints[${index}].accessType must be read, write, or readWrite.`
+				);
+			}
+			return {
+				dataId: breakpoint.dataId,
+				...(breakpoint.accessType === undefined ? {} : { accessType: breakpoint.accessType })
+			};
+		});
+		const response = await this.#session.request<unknown>('setDataBreakpoints', {
+			breakpoints: requestBreakpoints
+		});
+		return dapResponseCollection(response, 'setDataBreakpoints', 'breakpoints').map(
+			(breakpoint, index) => {
+				const path = `breakpoints[${index}]`;
+				assertDapRecord(breakpoint, 'setDataBreakpoints', path);
+				assertDapBoolean(
+					breakpoint.verified,
+					'setDataBreakpoints',
+					`${path}.verified`
+				);
+				const id = dapOptionalNonNegativeSafeInteger(
+					breakpoint,
+					'id',
+					'setDataBreakpoints',
+					path
+				);
+				const message = dapOptionalString(
+					breakpoint,
+					'message',
+					'setDataBreakpoints',
+					path
+				);
+				return {
+					...(id === undefined ? {} : { id }),
+					verified: breakpoint.verified,
+					...(message === undefined ? {} : { message })
+				} satisfies ResolvedDataBreakpoint;
+			}
+		);
+	}
+
 	onEvent(listener: (event: DebugAdapterEvent) => void) {
 		return this.#events.subscribe(listener);
 	}
@@ -825,7 +941,11 @@ export class LldbDapAdapter implements DebugAdapter {
 	}
 
 	#requireCapability(
-		capability: 'supportsEvaluate' | 'supportsReadMemory' | 'supportsWriteMemory',
+		capability:
+			| 'supportsDataBreakpoints'
+			| 'supportsEvaluate'
+			| 'supportsReadMemory'
+			| 'supportsWriteMemory',
 		operation: string
 	) {
 		const capabilities = this.#requireInitialized();

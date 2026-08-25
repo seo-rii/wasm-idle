@@ -50,7 +50,7 @@ describe('LldbDapAdapter', () => {
 		type FeatureSupport = NonNullable<LldbDapAdapterOptions['featureSupport']>;
 
 		expectTypeOf<
-			Exclude<keyof FeatureSupport, 'evaluate' | 'writeMemory'>
+			Exclude<keyof FeatureSupport, 'dataBreakpoints' | 'evaluate' | 'writeMemory'>
 		>().toEqualTypeOf<never>();
 	});
 
@@ -803,6 +803,124 @@ describe('LldbDapAdapter', () => {
 				}
 			}
 		]);
+	});
+
+	it('gates, maps, and replaces LLDB data breakpoints', async () => {
+		const unsupportedSession = new FakeDapSession();
+		unsupportedSession.setResponse('initialize', { supportsDataBreakpoints: true });
+		const unsupported = createLldbDapAdapter(unsupportedSession);
+		await unsupported.initialize();
+
+		await expect(
+			unsupported.dataBreakpointInfo({
+				name: '0x1000',
+				asAddress: true,
+				bytes: 4
+			})
+		).rejects.toBeInstanceOf(UnsupportedDebugOperationError);
+		await expect(unsupported.setDataBreakpoints([])).rejects.toBeInstanceOf(
+			UnsupportedDebugOperationError
+		);
+		expect(unsupportedSession.requests).toHaveLength(1);
+
+		const session = new FakeDapSession();
+		session.setResponse('initialize', { supportsDataBreakpoints: true });
+		session.setResponse('dataBreakpointInfo', {
+			dataId: '1000/4',
+			description: '4 bytes at 1000',
+			accessTypes: ['read', 'write', 'readWrite'],
+			canPersist: false
+		});
+		session.setResponse('setDataBreakpoints', {
+			breakpoints: [{ id: 9, verified: true }, { verified: false, message: 'no slot' }]
+		});
+		const adapter = createLldbDapAdapter(session, {
+			featureSupport: { dataBreakpoints: true }
+		});
+
+		await expect(adapter.initialize()).resolves.toMatchObject({
+			supportsDataBreakpoints: true
+		});
+		await expect(
+			adapter.dataBreakpointInfo({
+				name: '0x1000',
+				frameId: 7,
+				variablesReference: 0,
+				asAddress: true,
+				bytes: 4
+			})
+		).resolves.toEqual({
+			dataId: '1000/4',
+			description: '4 bytes at 1000',
+			accessTypes: ['read', 'write', 'readWrite'],
+			canPersist: false
+		});
+		await expect(
+			adapter.setDataBreakpoints([
+				{ dataId: '1000/4', accessType: 'write' },
+				{ dataId: '2000/8', accessType: 'readWrite' }
+			])
+		).resolves.toEqual([
+			{ id: 9, verified: true },
+			{ verified: false, message: 'no slot' }
+		]);
+		expect(session.requests.slice(-2)).toEqual([
+			{
+				command: 'dataBreakpointInfo',
+				requestArguments: {
+					name: '0x1000',
+					frameId: 7,
+					variablesReference: 0,
+					asAddress: true,
+					bytes: 4
+				}
+			},
+			{
+				command: 'setDataBreakpoints',
+				requestArguments: {
+					breakpoints: [
+						{ dataId: '1000/4', accessType: 'write' },
+						{ dataId: '2000/8', accessType: 'readWrite' }
+					]
+				}
+			}
+		]);
+	});
+
+	it.each([
+		{
+			command: 'dataBreakpointInfo',
+			response: { dataId: '1000/4' },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.dataBreakpointInfo({ name: 'counter', variablesReference: 1 }),
+			path: 'description'
+		},
+		{
+			command: 'dataBreakpointInfo',
+			response: { description: 'counter', accessTypes: ['execute'] },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.dataBreakpointInfo({ name: 'counter', variablesReference: 1 }),
+			path: 'accessTypes[0]'
+		},
+		{
+			command: 'setDataBreakpoints',
+			response: { breakpoints: [{ verified: 'yes' }] },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.setDataBreakpoints([{ dataId: '1000/4', accessType: 'write' }]),
+			path: 'breakpoints[0].verified'
+		}
+	])('rejects malformed $command data breakpoint responses', async ({ command, response, invoke, path }) => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', { supportsDataBreakpoints: true });
+		session.setResponse(command, response);
+		const adapter = createLldbDapAdapter(session, {
+			featureSupport: { dataBreakpoints: true }
+		});
+		await adapter.initialize();
+
+		const result = invoke(adapter);
+		await expect(result).rejects.toBeInstanceOf(DebugAdapterProtocolError);
+		await expect(result).rejects.toMatchObject({ command, path });
 	});
 
 	it.each([

@@ -17,11 +17,11 @@ Debug execution is exposed through one adapter contract:
 - `LldbDapAdapter` maps standard DAP threads, frames, scopes, lazy variables, breakpoints, stepping,
   memory reads, output, and process lifecycle events.
 
-`LldbDapAdapter` does not infer conditional-breakpoint, logpoint, or data-breakpoint support from
-LLDB's generic DAP advertisement. These capabilities remain false because the public adapter
-contract cannot carry breakpoint conditions or log messages and does not expose data-breakpoint
-operations. Add the adapter methods and their product-path tests before enabling them; the current
-browser WAMR product also lacks the required target-side expression evaluation and watchpoints.
+`LldbDapAdapter` does not infer conditional-breakpoint or logpoint support from LLDB's generic DAP
+advertisement. Those capabilities remain false because the public adapter contract cannot carry
+conditions or log messages. Data breakpoints are enabled only when both the pinned runtime manifest
+and LLDB's initialize response advertise them. The adapter exposes `dataBreakpointInfo()` and the
+replace-all `setDataBreakpoints()` operation for read, write, and combined read/write access.
 
 When the runtime reports expression evaluation as unavailable, the playground controller resolves a
 bounded variable path from lazy DAP variables. Exact locals and arguments, nested fields such as
@@ -62,7 +62,8 @@ Supply an LLDB DAP session from `@wasm-idle/llvm-core/debug`. Runtime assets rem
 
 LLDB response bodies are validated again at the adapter boundary even though the lower-level DAP
 client already validates message envelopes. `threads`, `stackTrace`, `scopes`, `variables`,
-`readMemory`, `writeMemory`, and `evaluate` must contain their required collections and fields plus well-formed
+`readMemory`, `writeMemory`, `dataBreakpointInfo`, `setDataBreakpoints`, and `evaluate` must contain
+their required collections and fields plus well-formed
 identifiers, source descriptors, counts, and presentation data. Memory data must decode as Base64
 and cannot exceed the requested byte count. A malformed body rejects with
 `DebugAdapterProtocolError`, whose `command` and `path` identify the failed field; hosts should treat
@@ -78,6 +79,10 @@ For `writeMemory`, the LLDB manifest and DAP initialize response must both adver
 the adapter sends a request. Input bytes cross DAP as Base64, and a successful response cannot
 claim more bytes than the caller supplied. This is raw target-memory mutation only; it does not
 advertise `setVariable` or general C/C++/Rust expression assignment.
+Data-breakpoint discovery can address a stopped variable by `variablesReference` and `name`, or use
+LLDB's `asAddress` plus `bytes` extension for a bounded raw memory range. Returned identifiers are
+opaque and scoped to the current target session. `setDataBreakpoints()` always replaces the complete
+watchpoint set; pass an empty array to clear it. A trace session rejects both operations explicitly.
 Recognized DAP events receive the same field validation. A malformed event is emitted only as a raw
 `dap` event, so it cannot move the selected thread/frame, append non-string output, change process
 state, or mutate the tracked breakpoint cache.

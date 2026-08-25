@@ -7,6 +7,9 @@ import {
 	type DebugAdapter,
 	type DebugAdapterEvent,
 	type DebugCapabilities,
+	type DebugDataBreakpoint,
+	type DebugDataBreakpointInfo,
+	type DebugDataBreakpointInfoArguments,
 	type DebugDisconnectOptions,
 	type DebugEvaluateResult,
 	type DebugLaunchConfig,
@@ -17,6 +20,7 @@ import {
 	type DebugThread,
 	type DebugVariable,
 	type DebugWriteMemoryResult,
+	type ResolvedDataBreakpoint,
 	type ResolvedBreakpoint
 } from './types.js';
 
@@ -225,6 +229,18 @@ export class TraceDebugAdapter implements DebugAdapter {
 		_allowPartial = false
 	): Promise<DebugWriteMemoryResult> {
 		throw new UnsupportedDebugOperationError('write memory');
+	}
+
+	async dataBreakpointInfo(
+		_arguments: DebugDataBreakpointInfoArguments
+	): Promise<DebugDataBreakpointInfo> {
+		throw new UnsupportedDebugOperationError('data breakpoints');
+	}
+
+	async setDataBreakpoints(
+		_breakpoints: DebugDataBreakpoint[]
+	): Promise<ResolvedDataBreakpoint[]> {
+		throw new UnsupportedDebugOperationError('data breakpoints');
 	}
 
 	async evaluate(expression: string, frameId?: number): Promise<DebugEvaluateResult> {

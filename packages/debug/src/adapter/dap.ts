@@ -39,6 +39,8 @@ export interface DapCapabilities {
 	supportsReadMemoryRequest?: boolean;
 	supportsWriteMemoryRequest?: boolean;
 	supportsDataBreakpoints?: boolean;
+	/** LLDB extension: dataBreakpointInfo accepts `bytes` with `asAddress`. */
+	supportsDataBreakpointBytes?: boolean;
 	supportsSetVariable?: boolean;
 	supportsRestartRequest?: boolean;
 	supportsTerminateRequest?: boolean;

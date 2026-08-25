@@ -5,6 +5,9 @@ import {
 	type DebugAdapter,
 	type DebugAdapterEvent,
 	type DebugCapabilities,
+	type DebugDataBreakpoint,
+	type DebugDataBreakpointInfo,
+	type DebugDataBreakpointInfoArguments,
 	type DebugDisconnectOptions,
 	type DebugEvaluateResult,
 	type DebugLaunchConfig,
@@ -15,6 +18,7 @@ import {
 	type DebugThread,
 	type DebugVariable,
 	type DebugWriteMemoryResult,
+	type ResolvedDataBreakpoint,
 	type ResolvedBreakpoint
 } from './adapter/index.js';
 
@@ -500,6 +504,32 @@ export function createAdapterDebugSessionController(adapter: DebugAdapter) {
 		}
 	}
 
+	async function dataBreakpointInfo(
+		arguments_: DebugDataBreakpointInfoArguments
+	): Promise<DebugDataBreakpointInfo> {
+		const sessionToken = sessionGeneration;
+		const stopToken = stoppedGeneration;
+		try {
+			return await adapter.dataBreakpointInfo(arguments_);
+		} catch (error) {
+			if (isCurrentStop(sessionToken, stopToken)) recordError(error);
+			throw error;
+		}
+	}
+
+	async function setDataBreakpoints(
+		breakpoints: DebugDataBreakpoint[]
+	): Promise<ResolvedDataBreakpoint[]> {
+		const sessionToken = sessionGeneration;
+		const stopToken = stoppedGeneration;
+		try {
+			return await adapter.setDataBreakpoints(breakpoints);
+		} catch (error) {
+			if (isCurrentStop(sessionToken, stopToken)) recordError(error);
+			throw error;
+		}
+	}
+
 	async function disconnect(options?: DebugDisconnectOptions) {
 		const sessionToken = ++sessionGeneration;
 		stoppedGeneration += 1;
@@ -580,6 +610,8 @@ export function createAdapterDebugSessionController(adapter: DebugAdapter) {
 		evaluate,
 		readMemory,
 		writeMemory,
+		dataBreakpointInfo,
+		setDataBreakpoints,
 		disconnect,
 		clearOutput,
 		dispose
