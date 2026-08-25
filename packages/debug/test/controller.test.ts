@@ -683,6 +683,49 @@ describe('createDebugSessionController', () => {
 		expect(debugWriteMemory).toHaveBeenCalledWith('0x20', 4, Uint8Array.of(0x2a, 0x00), true);
 	});
 
+	it('manages LLDB data breakpoints only through a paused terminal session', async () => {
+		const debugDataBreakpointInfo = vi.fn(async () => ({
+			dataId: '20/2',
+			description: '2 bytes at 20',
+			accessTypes: ['read', 'write', 'readWrite'] as const
+		}));
+		const debugSetDataBreakpoints = vi.fn(async () => [{ id: 4, verified: true }]);
+		const controller = createDebugSessionController({
+			terminal: {
+				debugCommand: vi.fn(async () => undefined),
+				debugDataBreakpointInfo,
+				debugSetDataBreakpoints
+			} as never
+		});
+
+		await expect(
+			controller.dataBreakpointInfo({ name: '0x20', asAddress: true, bytes: 2 })
+		).resolves.toBeNull();
+		await expect(controller.setDataBreakpoints([])).resolves.toEqual([]);
+
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 3,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: []
+		});
+
+		await expect(
+			controller.dataBreakpointInfo({ name: '0x20', asAddress: true, bytes: 2 })
+		).resolves.toEqual({
+			dataId: '20/2',
+			description: '2 bytes at 20',
+			accessTypes: ['read', 'write', 'readWrite']
+		});
+		await expect(
+			controller.setDataBreakpoints([{ dataId: '20/2', accessType: 'write' }])
+		).resolves.toEqual([{ id: 4, verified: true }]);
+		expect(debugDataBreakpointInfo).toHaveBeenCalledOnce();
+		expect(debugSetDataBreakpoints).toHaveBeenCalledOnce();
+	});
+
 	it('keeps breakpoints and resolved locations isolated by source path', () => {
 		const setBreakpoints = vi.fn(async () => undefined);
 		const controller = createDebugSessionController({

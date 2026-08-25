@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const runtimeState = vi.hoisted(() => ({
 	session: null as FakeRuntimeSession | null,
 	options: null as Record<string, unknown> | null,
+	initializeCapabilities: {} as Record<string, unknown>,
 	initializeGate: null as Promise<void> | null,
 	continueGate: null as Promise<void> | null,
 	pauseGate: null as Promise<void> | null,
@@ -43,7 +44,7 @@ class FakeRuntimeSession {
 
 	async initialize() {
 		await runtimeState.initializeGate;
-		return {};
+		return runtimeState.initializeCapabilities;
 	}
 
 	getResolvedBreakpoints(sourcePath: string) {
@@ -122,6 +123,17 @@ class FakeRuntimeSession {
 		}
 		if (command === 'writeMemory') {
 			return { offset: 4, bytesWritten: 3 } as T;
+		}
+		if (command === 'dataBreakpointInfo') {
+			return {
+				dataId: '1000/4',
+				description: '4 bytes at 1000',
+				accessTypes: ['read', 'write', 'readWrite'],
+				canPersist: false
+			} as T;
+		}
+		if (command === 'setDataBreakpoints') {
+			return { breakpoints: [{ id: 5, verified: true }] } as T;
 		}
 		if (command === 'evaluate') return { result: '42', variablesReference: 0 } as T;
 		return {} as T;
@@ -202,6 +214,7 @@ describe('LldbSandboxSession', () => {
 	beforeEach(() => {
 		runtimeState.session = null;
 		runtimeState.options = null;
+		runtimeState.initializeCapabilities = {};
 		runtimeState.initializeGate = null;
 		runtimeState.continueGate = null;
 		runtimeState.pauseGate = null;
@@ -1481,6 +1494,93 @@ describe('LldbSandboxSession', () => {
 				data: 'AP8B'
 			}
 		});
+
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('discovers and replaces manifest-qualified LLDB data breakpoints', async () => {
+		runtimeState.initializeCapabilities = { supportsDataBreakpoints: true };
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { dataBreakpoints: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await expect(
+			controller.dataBreakpointInfo({ name: '0x1000', asAddress: true, bytes: 4 })
+		).resolves.toEqual({
+			dataId: '1000/4',
+			description: '4 bytes at 1000',
+			accessTypes: ['read', 'write', 'readWrite'],
+			canPersist: false
+		});
+		await expect(
+			controller.setDataBreakpoints([{ dataId: '1000/4', accessType: 'write' }])
+		).resolves.toEqual([{ id: 5, verified: true }]);
+		expect(runtimeState.session?.requests.slice(-2)).toEqual([
+			{
+				command: 'dataBreakpointInfo',
+				args: { name: '0x1000', asAddress: true, bytes: 4 }
+			},
+			{
+				command: 'setDataBreakpoints',
+				args: { breakpoints: [{ dataId: '1000/4', accessType: 'write' }] }
+			}
+		]);
+
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('requires both the runtime manifest and DAP capability for data breakpoints', async () => {
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { dataBreakpoints: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await expect(
+			controller.dataBreakpointInfo({ name: '0x1000', asAddress: true, bytes: 4 })
+		).resolves.toBeNull();
+		await expect(controller.setDataBreakpoints([])).resolves.toEqual([]);
+		expect(runtimeState.session?.requests).not.toContainEqual(
+			expect.objectContaining({ command: 'dataBreakpointInfo' })
+		);
 
 		await controller.disconnect();
 		await expect(completion).resolves.toBe(true);

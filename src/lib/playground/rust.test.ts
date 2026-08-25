@@ -197,6 +197,30 @@ describe('Rust sandbox', () => {
 		expect(writeMemory).toHaveBeenCalledWith('0x40', 1, Uint8Array.of(4, 2), false);
 	});
 
+	it('forwards data breakpoints to the active LLDB session', async () => {
+		const sandbox = new Rust();
+		const dataBreakpointInfo = vi.fn(async () => ({
+			dataId: '40/4',
+			description: '4 bytes at 40'
+		}));
+		const setDataBreakpoints = vi.fn(async () => [{ id: 3, verified: true }]);
+		(
+			sandbox as unknown as {
+				lldbSession: {
+					dataBreakpointInfo: typeof dataBreakpointInfo;
+					setDataBreakpoints: typeof setDataBreakpoints;
+				};
+			}
+		).lldbSession = { dataBreakpointInfo, setDataBreakpoints };
+
+		await expect(
+			sandbox.debugDataBreakpointInfo({ name: '0x40', asAddress: true, bytes: 4 })
+		).resolves.toEqual({ dataId: '40/4', description: '4 bytes at 40' });
+		await expect(
+			sandbox.debugSetDataBreakpoints([{ dataId: '40/4', accessType: 'readWrite' }])
+		).resolves.toEqual([{ id: 3, verified: true }]);
+	});
+
 	it('forwards frame scope requests to the active LLDB session', async () => {
 		const sandbox = new Rust();
 		const scopes = vi.fn(async (_frameId: number) => [

@@ -1,8 +1,12 @@
 import type {
 	DebugCommand,
+	DebugDataBreakpoint,
+	DebugDataBreakpointInfo,
+	DebugDataBreakpointInfoArguments,
 	DebugFrame,
 	DebugMemory,
 	DebugResolvedBreakpoint,
+	DebugResolvedDataBreakpoint,
 	DebugScope,
 	DebugSessionEvent,
 	DebugSourceBreakpoints,
@@ -29,6 +33,8 @@ export type DebugTerminalControl = Pick<
 	| 'debugScopes'
 	| 'debugReadMemory'
 	| 'debugWriteMemory'
+	| 'debugDataBreakpointInfo'
+	| 'debugSetDataBreakpoints'
 	| 'stop'
 >;
 
@@ -708,6 +714,22 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		);
 	}
 
+	async function dataBreakpointInfo(
+		arguments_: DebugDataBreakpointInfoArguments
+	): Promise<DebugDataBreakpointInfo | null> {
+		if (!get(pausedStore)) return null;
+		const terminal = get(terminalStore);
+		return (await terminal?.debugDataBreakpointInfo?.(arguments_)) ?? null;
+	}
+
+	async function setDataBreakpoints(
+		breakpoints: DebugDataBreakpoint[]
+	): Promise<DebugResolvedDataBreakpoint[]> {
+		if (!get(pausedStore)) return [];
+		const terminal = get(terminalStore);
+		return (await terminal?.debugSetDataBreakpoints?.(breakpoints)) ?? [];
+	}
+
 	return {
 		get active() {
 			return activeState.current;
@@ -811,7 +833,9 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		loadVariableChildren,
 		selectFrame,
 		readMemory,
-		writeMemory
+		writeMemory,
+		dataBreakpointInfo,
+		setDataBreakpoints
 	};
 }
 

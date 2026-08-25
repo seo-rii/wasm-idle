@@ -1,5 +1,7 @@
 import type {
 	DebugCommand,
+	DebugDataBreakpoint,
+	DebugDataBreakpointInfoArguments,
 	DebugSessionEvent,
 	SandboxExecutionOptions
 } from '$lib/playground/options';
@@ -421,6 +423,14 @@ class Clang implements Sandbox {
 			this.lldbSession?.writeMemory(memoryReference, offset, data, allowPartial) ??
 			Promise.resolve(null)
 		);
+	}
+
+	debugDataBreakpointInfo(arguments_: DebugDataBreakpointInfoArguments) {
+		return this.lldbSession?.dataBreakpointInfo(arguments_) ?? Promise.resolve(null);
+	}
+
+	debugSetDataBreakpoints(breakpoints: DebugDataBreakpoint[]) {
+		return this.lldbSession?.setDataBreakpoints(breakpoints) ?? Promise.resolve([]);
 	}
 
 	kill() {

@@ -1,10 +1,14 @@
 import type {
 	DebugCommand,
+	DebugDataBreakpoint,
+	DebugDataBreakpointInfo,
+	DebugDataBreakpointInfoArguments,
 	DebugFrame,
 	DebugMemory,
 	DebugPauseReason,
 	DebugScope,
 	DebugSessionEvent,
+	DebugResolvedDataBreakpoint,
 	DebugVariable
 } from '$lib/playground/options';
 import { ProtocolError } from '@wasm-idle/core';
@@ -69,6 +73,7 @@ interface DapStackFrame {
 
 function pauseReason(reason: string, command: DebugCommand | null): DebugPauseReason {
 	if (reason === 'breakpoint') return 'breakpoint';
+	if (reason === 'data breakpoint') return 'dataBreakpoint';
 	if (reason === 'entry') return 'entry';
 	if (reason === 'pause') return 'pause';
 	if (command === 'nextLine') return 'nextLine';
@@ -187,6 +192,7 @@ export class LldbSandboxSession {
 	private supportsEvaluateExpressions = false;
 	private supportsReadMemory = false;
 	private supportsWriteMemory = false;
+	private supportsDataBreakpoints = false;
 	private breakpointVersion = 0;
 	private scopeRequestVersion = 0;
 	private dapExitCode: number | null = null;
@@ -228,6 +234,8 @@ export class LldbSandboxSession {
 			manifest.debugger?.capabilities?.evaluateExpressions === true;
 		this.supportsReadMemory = manifest.debugger?.capabilities?.readMemory === true;
 		this.supportsWriteMemory = manifest.debugger?.capabilities?.writeMemory === true;
+		const manifestSupportsDataBreakpoints =
+			manifest.debugger?.capabilities?.dataBreakpoints === true;
 		if (lifecycleVersion !== this.lifecycleVersion) return completion;
 		const artifactCompiler = this.options.artifact.descriptor?.compiler;
 		if (
@@ -298,11 +306,13 @@ export class LldbSandboxSession {
 			}
 		});
 		try {
-			await session.initialize();
+			const capabilities = await session.initialize();
 			if (lifecycleVersion !== this.lifecycleVersion || this.session !== session) {
 				await session.dispose();
 				return completion;
 			}
+			this.supportsDataBreakpoints =
+				manifestSupportsDataBreakpoints && capabilities.supportsDataBreakpoints === true;
 			this.initialized = true;
 			if (configuredBreakpointVersion === this.breakpointVersion) {
 				for (const { sourcePath, lines } of sourceBreakpoints) {
@@ -685,6 +695,155 @@ export class LldbSandboxSession {
 		}
 	}
 
+	async dataBreakpointInfo(
+		arguments_: DebugDataBreakpointInfoArguments
+	): Promise<DebugDataBreakpointInfo | null> {
+		if (!this.supportsDataBreakpoints) return null;
+		if (typeof arguments_.name !== 'string' || arguments_.name.length === 0) {
+			throw new TypeError('name must be a non-empty string.');
+		}
+		if (arguments_.variablesReference !== undefined) {
+			assertNonNegativeSafeIntegerArgument(
+				arguments_.variablesReference,
+				'variablesReference'
+			);
+		}
+		if (arguments_.frameId !== undefined) {
+			assertPositiveSafeIntegerArgument(arguments_.frameId, 'frameId');
+		}
+		if (arguments_.bytes !== undefined) {
+			assertPositiveSafeIntegerArgument(arguments_.bytes, 'bytes');
+		}
+		const session = this.requireSession();
+		const stateVersion = this.stateVersion;
+		try {
+			const response = await session.request<unknown>('dataBreakpointInfo', {
+				name: arguments_.name,
+				...(arguments_.variablesReference === undefined
+					? {}
+					: { variablesReference: arguments_.variablesReference }),
+				...(arguments_.frameId === undefined ? {} : { frameId: arguments_.frameId }),
+				...(arguments_.asAddress === undefined ? {} : { asAddress: arguments_.asAddress }),
+				...(arguments_.bytes === undefined ? {} : { bytes: arguments_.bytes })
+			});
+			if (!this.isCurrentValueRequest(session, stateVersion)) return null;
+			assertDapRecord(response, 'dataBreakpointInfo', 'body');
+			assertDapString(response.description, 'dataBreakpointInfo', 'description');
+			let dataId: string | undefined;
+			if (response.dataId !== undefined && response.dataId !== null) {
+				assertDapString(response.dataId, 'dataBreakpointInfo', 'dataId');
+				dataId = response.dataId;
+			}
+			let accessTypes: Array<'read' | 'write' | 'readWrite'> | undefined;
+			if (response.accessTypes !== undefined) {
+				if (!Array.isArray(response.accessTypes)) {
+					invalidDapResponse('dataBreakpointInfo', 'accessTypes', 'expected an array');
+				}
+				accessTypes = response.accessTypes.map((accessType, index) => {
+					if (
+						accessType !== 'read' &&
+						accessType !== 'write' &&
+						accessType !== 'readWrite'
+					) {
+						invalidDapResponse(
+							'dataBreakpointInfo',
+							`accessTypes[${index}]`,
+							'expected read, write, or readWrite'
+						);
+					}
+					return accessType;
+				});
+			}
+			let canPersist: boolean | undefined;
+			if (response.canPersist !== undefined) {
+				assertDapBoolean(response.canPersist, 'dataBreakpointInfo', 'canPersist');
+				canPersist = response.canPersist;
+			}
+			return {
+				...(dataId === undefined ? {} : { dataId }),
+				description: response.description,
+				...(accessTypes === undefined ? {} : { accessTypes }),
+				...(canPersist === undefined ? {} : { canPersist })
+			};
+		} catch (error) {
+			if (!this.isCurrentValueRequest(session, stateVersion)) return null;
+			this.rethrowProtocolError(error);
+			throw error;
+		}
+	}
+
+	async setDataBreakpoints(
+		breakpoints: DebugDataBreakpoint[]
+	): Promise<DebugResolvedDataBreakpoint[]> {
+		if (!this.supportsDataBreakpoints) return [];
+		const requestBreakpoints = breakpoints.map((breakpoint, index) => {
+			if (typeof breakpoint.dataId !== 'string' || breakpoint.dataId.length === 0) {
+				throw new TypeError(`breakpoints[${index}].dataId must be a non-empty string.`);
+			}
+			if (
+				breakpoint.accessType !== undefined &&
+				breakpoint.accessType !== 'read' &&
+				breakpoint.accessType !== 'write' &&
+				breakpoint.accessType !== 'readWrite'
+			) {
+				throw new TypeError(
+					`breakpoints[${index}].accessType must be read, write, or readWrite.`
+				);
+			}
+			return {
+				dataId: breakpoint.dataId,
+				...(breakpoint.accessType === undefined
+					? {}
+					: { accessType: breakpoint.accessType })
+			};
+		});
+		const session = this.requireSession();
+		const stateVersion = this.stateVersion;
+		try {
+			const response = await session.request<unknown>('setDataBreakpoints', {
+				breakpoints: requestBreakpoints
+			});
+			if (!this.isCurrentValueRequest(session, stateVersion)) return [];
+			const responseBreakpoints = dapResponseCollection(
+				response,
+				'setDataBreakpoints',
+				'breakpoints'
+			);
+			if (responseBreakpoints.length !== requestBreakpoints.length) {
+				invalidDapResponse(
+					'setDataBreakpoints',
+					'breakpoints',
+					`expected ${requestBreakpoints.length} entries`
+				);
+			}
+			return responseBreakpoints.map((breakpoint, index) => {
+				const path = `breakpoints[${index}]`;
+				assertDapRecord(breakpoint, 'setDataBreakpoints', path);
+				assertDapBoolean(breakpoint.verified, 'setDataBreakpoints', `${path}.verified`);
+				const id = dapOptionalNonNegativeSafeInteger(
+					breakpoint,
+					'id',
+					'setDataBreakpoints',
+					path
+				);
+				let message: string | undefined;
+				if (breakpoint.message !== undefined) {
+					assertDapString(breakpoint.message, 'setDataBreakpoints', `${path}.message`);
+					message = breakpoint.message;
+				}
+				return {
+					...(id === undefined ? {} : { id }),
+					verified: breakpoint.verified,
+					...(message === undefined ? {} : { message })
+				};
+			});
+		} catch (error) {
+			if (!this.isCurrentValueRequest(session, stateVersion)) return [];
+			this.rethrowProtocolError(error);
+			throw error;
+		}
+	}
+
 	async disconnect() {
 		this.lifecycleVersion += 1;
 		this.stateVersion += 1;
@@ -693,6 +852,7 @@ export class LldbSandboxSession {
 		this.supportsEvaluateExpressions = false;
 		this.supportsReadMemory = false;
 		this.supportsWriteMemory = false;
+		this.supportsDataBreakpoints = false;
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;
@@ -970,6 +1130,7 @@ export class LldbSandboxSession {
 		this.supportsEvaluateExpressions = false;
 		this.supportsReadMemory = false;
 		this.supportsWriteMemory = false;
+		this.supportsDataBreakpoints = false;
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;
@@ -1002,6 +1163,7 @@ export class LldbSandboxSession {
 		this.supportsEvaluateExpressions = false;
 		this.supportsReadMemory = false;
 		this.supportsWriteMemory = false;
+		this.supportsDataBreakpoints = false;
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;

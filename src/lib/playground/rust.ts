@@ -7,6 +7,8 @@ import {
 import { LldbSandboxSession, type LldbArtifactPayload } from '$lib/playground/lldbSession';
 import {
 	type DebugCommand,
+	type DebugDataBreakpoint,
+	type DebugDataBreakpointInfoArguments,
 	type DebugSessionEvent,
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -435,6 +437,14 @@ class Rust implements Sandbox {
 			this.lldbSession?.writeMemory(memoryReference, offset, data, allowPartial) ??
 			Promise.resolve(null)
 		);
+	}
+
+	debugDataBreakpointInfo(arguments_: DebugDataBreakpointInfoArguments) {
+		return this.lldbSession?.dataBreakpointInfo(arguments_) ?? Promise.resolve(null);
+	}
+
+	debugSetDataBreakpoints(breakpoints: DebugDataBreakpoint[]) {
+		return this.lldbSession?.setDataBreakpoints(breakpoints) ?? Promise.resolve([]);
 	}
 
 	kill() {

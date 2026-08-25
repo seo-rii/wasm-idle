@@ -5,6 +5,8 @@
 		phaseProgress,
 		progressBandsForLanguage,
 		type DebugCommand,
+		type DebugDataBreakpoint,
+		type DebugDataBreakpointInfoArguments,
 		type DebugSessionEvent,
 		type ProgressLike
 	} from '@wasm-idle/core';
@@ -423,6 +425,14 @@
 				(await sandbox.debugWriteMemory?.(memoryReference, offset, data, allowPartial)) ??
 				null
 			);
+		},
+		async debugDataBreakpointInfo(arguments_: DebugDataBreakpointInfoArguments) {
+			await wait();
+			return (await sandbox.debugDataBreakpointInfo?.(arguments_)) ?? null;
+		},
+		async debugSetDataBreakpoints(breakpoints: DebugDataBreakpoint[]) {
+			await wait();
+			return (await sandbox.debugSetDataBreakpoints?.(breakpoints)) ?? [];
 		},
 		async waitForInput() {
 			await waitForInput();

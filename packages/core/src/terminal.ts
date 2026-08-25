@@ -1,6 +1,10 @@
 import type {
 	DebugCommand,
+	DebugDataBreakpoint,
+	DebugDataBreakpointInfo,
+	DebugDataBreakpointInfoArguments,
 	DebugMemory,
+	DebugResolvedDataBreakpoint,
 	DebugScope,
 	DebugVariable,
 	DebugWriteMemoryResult
@@ -50,6 +54,12 @@ export interface TerminalControl {
 		data: Uint8Array,
 		allowPartial?: boolean
 	) => Promise<DebugWriteMemoryResult | null>;
+	debugDataBreakpointInfo?: (
+		arguments_: DebugDataBreakpointInfoArguments
+	) => Promise<DebugDataBreakpointInfo | null>;
+	debugSetDataBreakpoints?: (
+		breakpoints: DebugDataBreakpoint[]
+	) => Promise<DebugResolvedDataBreakpoint[]>;
 	waitForInput?: () => Promise<void>;
 	write: (input: string) => Promise<void>;
 	eof?: () => Promise<void>;

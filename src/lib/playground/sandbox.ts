@@ -1,7 +1,11 @@
 import type {
 	CompilerDiagnostic,
 	DebugCommand,
+	DebugDataBreakpoint,
+	DebugDataBreakpointInfo,
+	DebugDataBreakpointInfoArguments,
 	DebugMemory,
+	DebugResolvedDataBreakpoint,
 	DebugSessionEvent,
 	DebugWriteMemoryResult,
 	SandboxExecutionOptions
@@ -55,6 +59,12 @@ export interface Sandbox {
 		data: Uint8Array,
 		allowPartial?: boolean
 	) => Promise<DebugWriteMemoryResult | null>;
+	debugDataBreakpointInfo?: (
+		arguments_: DebugDataBreakpointInfoArguments
+	) => Promise<DebugDataBreakpointInfo | null>;
+	debugSetDataBreakpoints?: (
+		breakpoints: DebugDataBreakpoint[]
+	) => Promise<DebugResolvedDataBreakpoint[]>;
 	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	elapse?: number;
 }

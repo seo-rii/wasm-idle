@@ -77,6 +77,12 @@ describe('Terminal source', () => {
 			/async debugWriteMemory\([\s\S]*?await wait\(\);[\s\S]*?sandbox\.debugWriteMemory\?\.\(memoryReference, offset, data, allowPartial\)/
 		);
 		expect(source).toMatch(
+			/async debugDataBreakpointInfo\(arguments_: DebugDataBreakpointInfoArguments\) \{\s+await wait\(\);\s+return \(await sandbox\.debugDataBreakpointInfo\?\.\(arguments_\)\) \?\? null;\s+\}/s
+		);
+		expect(source).toMatch(
+			/async debugSetDataBreakpoints\(breakpoints: DebugDataBreakpoint\[\]\) \{\s+await wait\(\);\s+return \(await sandbox\.debugSetDataBreakpoints\?\.\(breakpoints\)\) \?\? \[\];\s+\}/s
+		);
+		expect(source).toMatch(
 			/async debugScopes\(frameId: number\) \{\s+await wait\(\);\s+return \(await sandbox\.debugScopes\?\.\(frameId\)\) \?\? \[\];\s+\}/s
 		);
 	});
