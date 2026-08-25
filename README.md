@@ -119,6 +119,12 @@ and runtime-specific behavior can differ. Trace fallback is selected only before
 established; an LLDB or WAMR failure ends that session instead of silently changing debugger
 semantics.
 
+The v2 inspection preview adds bounded variable-path watches and a paused-target memory inspector.
+Watch fallback accepts identifiers, nested fields, and non-negative indexes without enabling general
+expression evaluation. The memory panel can select a variable's DAP `memoryReference`, reads at most
+256 bytes per request, pages by the selected byte count, renders hexadecimal/ASCII data and unreadable
+bytes as `??`, and discards a response when the target resumes or the selected frame changes.
+
 Full expression evaluation, conditional/log/data breakpoints, variable mutation, restart,
 standalone terminate, optimized-debug guarantees, C++ exception support, STL pretty-printers,
 `wasm64`, guest threads, reverse debugging, SIMD, multi-module guests, and Rust WASI Preview 2/3

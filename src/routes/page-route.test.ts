@@ -124,9 +124,34 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<span class="material-symbols-outlined">play_circle<\/span>/);
 	});
 
+	it('provides a bounded LLDB memory inspector with stale-request invalidation', () => {
+		expect(source).toContain('const MAX_DEBUG_MEMORY_BYTES = 256;');
+		expect(source).toContain('let memoryResult = $state.raw<DebugMemoryView | null>(null);');
+		expect(source).toContain('let memoryRows = $state.raw<DebugMemoryRow[]>([]);');
+		expect(source).toContain("let memoryCountInput = $state('4');");
+		expect(source).not.toContain('const memoryRows = $derived.by');
+		expect(source).toContain('async function readDebugMemoryPage(pageDelta = 0)');
+		expect(source).toContain('memoryRequestVersion += 1;');
+		expect(source).toContain("event.type === 'resume' || event.type === 'stop'");
+		expect(source).not.toContain(
+			"event.type === 'pause' || event.type === 'resume' || event.type === 'stop'"
+		);
+		expect(source).toMatch(
+			/if \(\s*requestVersion !== memoryRequestVersion \|\|\s*!debug\.paused \|\|\s*debug\.frameId !== frameId\s*\)\s*return;/s
+		);
+		expect(source).toContain("activeDebugBackend === 'lldb' && debug.paused");
+		expect(source).toContain('aria-label="Memory reference"');
+		expect(source).toContain('aria-label="Memory offset"');
+		expect(source).toContain('aria-label="Memory byte count"');
+		expect(source).toContain('class="debug-memory-byte debug-memory-byte--unreadable"');
+		expect(source).toContain('aria-label={`Inspect memory for ${variable.name}`}');
+		expect(source).toContain('readDebugMemoryPage(-1)');
+		expect(source).toContain('readDebugMemoryPage(1)');
+	});
+
 	it('navigates the workspace editor when an LLDB frame belongs to another source', () => {
 		expect(source).toMatch(
-			/async function selectDebugFrame\(frame: DebugFrame\) \{\s+if \(!frame\.id \|\| !\(await debug\.selectFrame\(frame\.id\)\)\) return;\s+const workspacePath = normalizePath\(\s*frame\.sourcePath\?\.replace\(\/\^\\\/workspace\\\/\/u, ''\) \|\| ''\s*\);\s+if \(!workspacePath \|\| !files\.some\(\(file\) => file\.path === workspacePath\)\) return;\s+selectFile\(workspacePath\);\s+debug\.setSourcePath\(`\/workspace\/\$\{workspacePath\}`\);\s+\}/s
+			/async function selectDebugFrame\(frame: DebugFrame\) \{\s+invalidateMemoryInspector\(\);\s+if \(!frame\.id \|\| !\(await debug\.selectFrame\(frame\.id\)\)\) return;\s+const workspacePath = normalizePath\(\s*frame\.sourcePath\?\.replace\(\/\^\\\/workspace\\\/\/u, ''\) \|\| ''\s*\);\s+if \(!workspacePath \|\| !files\.some\(\(file\) => file\.path === workspacePath\)\) return;\s+selectFile\(workspacePath\);\s+debug\.setSourcePath\(`\/workspace\/\$\{workspacePath\}`\);\s+\}/s
 		);
 		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
 	});

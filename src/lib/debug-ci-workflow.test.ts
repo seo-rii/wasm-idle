@@ -165,4 +165,13 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain(".locator('.debug-entry--watch')");
 		expect(page).toContain('placeholder="pair.first or items[2]"');
 	});
+
+	it('keeps the bounded memory inspector in the C browser gate', async () => {
+		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+
+		expect(browserTest).toContain("expectedMemoryInspector: { count: 4, variable: 'value' }");
+		expect(browserTest).toContain("document.querySelectorAll('.debug-memory-byte')");
+		expect(browserTest).toContain("button.textContent?.trim() === 'Next'");
+		expect(browserTest).toContain("button.textContent?.trim() === 'Previous'");
+	});
 });

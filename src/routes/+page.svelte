@@ -98,9 +98,21 @@
 		title: string;
 		progressPercent: number | null;
 	};
+	type DebugMemoryView = {
+		address?: string;
+		memoryReference: string;
+		offset: number;
+		unreadableBytes: number;
+	};
+	type DebugMemoryRow = {
+		ascii: string;
+		bytes: Array<number | null>;
+		offset: number;
+	};
 
 	const WORKSPACE_STORAGE_KEY = 'wasm-idle:example-workspace:v3';
 	const SHARE_PREFIX = 'workspace=';
+	const MAX_DEBUG_MEMORY_BYTES = 256;
 	const lldbDebugLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST']);
 	const debugLanguageAdapters: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>> = {
 		C: cppDebugLanguageAdapter,
@@ -361,6 +373,14 @@
 	const debug = createDebugSessionController({
 		syncBreakpointsWhile: () => runningMode === 'debug'
 	});
+	let memoryReference = $state('0x0');
+	let memoryOffsetInput = $state('0');
+	let memoryCountInput = $state('4');
+	let memoryResult = $state.raw<DebugMemoryView | null>(null);
+	let memoryRows = $state.raw<DebugMemoryRow[]>([]);
+	let memoryError = $state('');
+	let memoryLoading = $state(false);
+	let memoryRequestVersion = 0;
 	const debugStatusLabel = $derived(
 		debug.paused
 			? 'Paused'
@@ -1328,6 +1348,9 @@
 	}
 
 	function onDebugEvent(event: DebugSessionEvent) {
+		if (event.type === 'resume' || event.type === 'stop') {
+			invalidateMemoryInspector();
+		}
 		if (event.type === 'pause') {
 			const sourcePath = event.sourcePath || event.callStack[0]?.sourcePath;
 			const workspacePath = normalizePath(sourcePath?.replace(/^\/workspace\//u, '') || '');
@@ -1340,11 +1363,112 @@
 	}
 
 	async function selectDebugFrame(frame: DebugFrame) {
+		invalidateMemoryInspector();
 		if (!frame.id || !(await debug.selectFrame(frame.id))) return;
 		const workspacePath = normalizePath(frame.sourcePath?.replace(/^\/workspace\//u, '') || '');
 		if (!workspacePath || !files.some((file) => file.path === workspacePath)) return;
 		selectFile(workspacePath);
 		debug.setSourcePath(`/workspace/${workspacePath}`);
+	}
+
+	function invalidateMemoryInspector() {
+		memoryRequestVersion += 1;
+		memoryResult = null;
+		memoryRows = [];
+		memoryError = '';
+		memoryLoading = false;
+	}
+
+	function inspectDebugVariable(variable: DebugVariable) {
+		if (!variable.memoryReference) return;
+		invalidateMemoryInspector();
+		memoryReference = variable.memoryReference;
+		memoryOffsetInput = '0';
+	}
+
+	async function readDebugMemoryPage(pageDelta = 0) {
+		const requestedReference = memoryReference.trim();
+		const offsetText = memoryOffsetInput.trim();
+		const countText = memoryCountInput.trim();
+		const offsetPattern = /^-?(?:0[xX][0-9a-fA-F]+|(?:0|[1-9][0-9]*))$/u;
+		const countPattern = /^(?:[1-9][0-9]*)$/u;
+		const requestedOffset = offsetPattern.test(offsetText) ? Number(offsetText) : Number.NaN;
+		const count = countPattern.test(countText) ? Number(countText) : Number.NaN;
+
+		if (!requestedReference) {
+			memoryError = 'Enter a memory reference.';
+			return;
+		}
+		if (!Number.isSafeInteger(requestedOffset)) {
+			memoryError = 'Offset must be a safe decimal or hexadecimal integer.';
+			return;
+		}
+		if (!Number.isSafeInteger(count) || count < 1 || count > MAX_DEBUG_MEMORY_BYTES) {
+			memoryError = `Byte count must be between 1 and ${MAX_DEBUG_MEMORY_BYTES}.`;
+			return;
+		}
+		const offset = requestedOffset + pageDelta * count;
+		if (!Number.isSafeInteger(offset)) {
+			memoryError = 'The requested page exceeds the safe offset range.';
+			return;
+		}
+		if (activeDebugBackend !== 'lldb' || !debug.paused) {
+			memoryError = 'Pause an LLDB debug session before reading memory.';
+			return;
+		}
+
+		memoryOffsetInput = String(offset);
+		memoryError = '';
+		memoryResult = null;
+		memoryLoading = true;
+		const requestVersion = ++memoryRequestVersion;
+		const frameId = debug.frameId;
+		try {
+			const memory = await debug.readMemory(requestedReference, offset, count);
+			if (
+				requestVersion !== memoryRequestVersion ||
+				!debug.paused ||
+				debug.frameId !== frameId
+			)
+				return;
+			if (!memory) {
+				memoryError = 'Memory reading is unavailable for this session.';
+				return;
+			}
+			const bytes: Array<number | null> = [
+				...memory.data,
+				...Array.from({ length: memory.unreadableBytes }, () => null)
+			];
+			const rows: DebugMemoryRow[] = [];
+			for (let rowOffset = 0; rowOffset < bytes.length; rowOffset += 16) {
+				const rowBytes = bytes.slice(rowOffset, rowOffset + 16);
+				rows.push({
+					ascii: rowBytes
+						.map((byte) =>
+							byte === null
+								? '·'
+								: byte >= 32 && byte <= 126
+									? String.fromCharCode(byte)
+									: '.'
+						)
+						.join(''),
+					bytes: rowBytes,
+					offset: rowOffset
+				});
+			}
+			memoryResult = {
+				address: memory.address,
+				memoryReference: requestedReference,
+				offset,
+				unreadableBytes: memory.unreadableBytes
+			};
+			memoryRows = rows;
+		} catch (error) {
+			if (requestVersion !== memoryRequestVersion || !debug.paused) return;
+			memoryError = error instanceof Error ? error.message : String(error);
+		} finally {
+			if (requestVersion === memoryRequestVersion) memoryLoading = false;
+		}
 	}
 
 	async function exec(enableDebug = false) {
@@ -1361,6 +1485,7 @@
 		activeDebugBackend = enableDebug ? selectedDebugMode : null;
 		if (enableDebug && debugLspLanguages.has(language)) clangdRequested = true;
 		if (enableDebug) {
+			invalidateMemoryInspector();
 			debug.begin();
 		} else {
 			debug.reset();
@@ -2456,6 +2581,15 @@
 							>{/if}
 					</div>
 					<code class="debug-value">{variable.value}</code>
+					{#if activeDebugBackend === 'lldb' && debug.paused && variable.memoryReference}
+						<button
+							class="debug-memory-inspect"
+							onclick={() => inspectDebugVariable(variable)}
+							aria-label={`Inspect memory for ${variable.name}`}
+						>
+							<span class="material-symbols-outlined">memory</span>
+						</button>
+					{/if}
 					{#if reference > 0}
 						<button
 							class="debug-expand"
@@ -2609,6 +2743,102 @@
 							</p>
 						{/if}
 					</section>
+					{#if activeDebugBackend === 'lldb' && debug.paused}
+						<section class="debug-panel debug-memory-panel">
+							<header class="debug-panel__header">
+								<div class="debug-panel__title">
+									<span class="material-symbols-outlined">memory</span>
+									<div class="debug-panel__copy">
+										<h3>Memory</h3>
+									</div>
+								</div>
+								<span class="debug-count">max {MAX_DEBUG_MEMORY_BYTES} B</span>
+							</header>
+							<div class="debug-memory-controls">
+								<label>
+									<span>Reference</span>
+									<input
+										bind:value={memoryReference}
+										aria-label="Memory reference"
+									/>
+								</label>
+								<label>
+									<span>Offset</span>
+									<input
+										bind:value={memoryOffsetInput}
+										aria-label="Memory offset"
+									/>
+								</label>
+								<label>
+									<span>Bytes</span>
+									<input
+										bind:value={memoryCountInput}
+										inputmode="numeric"
+										aria-label="Memory byte count"
+									/>
+								</label>
+								<button
+									class="debug-memory-read"
+									onclick={() => void readDebugMemoryPage()}
+									disabled={memoryLoading}
+								>
+									{memoryLoading ? 'Reading…' : 'Read'}
+								</button>
+							</div>
+							{#if memoryError}
+								<p class="debug-memory-error" role="alert">{memoryError}</p>
+							{/if}
+							{#if memoryResult}
+								<div class="debug-memory-toolbar">
+									<button onclick={() => void readDebugMemoryPage(-1)}
+										>Previous</button
+									>
+									<code
+										>{memoryResult.address ??
+											memoryResult.memoryReference}</code
+									>
+									<button onclick={() => void readDebugMemoryPage(1)}>Next</button
+									>
+								</div>
+								<div
+									class="debug-memory-table"
+									role="table"
+									aria-label="Memory contents"
+								>
+									{#each memoryRows as row (row.offset)}
+										<div class="debug-memory-row" role="row">
+											<code class="debug-memory-address">
+												{memoryResult.address ??
+													memoryResult.memoryReference}
+												{#if row.offset > 0}+0x{row.offset.toString(
+														16
+													)}{/if}
+											</code>
+											<div class="debug-memory-hex" role="cell">
+												{#each row.bytes as byte, index (index)}
+													{#if byte === null}
+														<code
+															class="debug-memory-byte debug-memory-byte--unreadable"
+															>??</code
+														>
+													{:else}
+														<code class="debug-memory-byte"
+															>{byte
+																.toString(16)
+																.padStart(2, '0')}</code
+														>
+													{/if}
+												{/each}
+											</div>
+											<div role="cell">
+												<code class="debug-memory-ascii">{row.ascii}</code>
+											</div>
+										</div>
+									{/each}
+								</div>
+							{/if}
+						</section>
+					{/if}
 					<section class="debug-panel">
 						<header class="debug-panel__header">
 							<div class="debug-panel__title">
@@ -3902,6 +4132,138 @@
 		color: #64748b;
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 		font-size: 10px;
+	}
+
+	.debug-memory-inspect {
+		display: inline-grid;
+		width: 24px;
+		height: 24px;
+		flex: 0 0 auto;
+		place-items: center;
+		border: 0;
+		border-radius: 8px;
+		background: rgba(14, 116, 144, 0.09);
+		color: #0e7490;
+		cursor: pointer;
+	}
+
+	.debug-memory-inspect .material-symbols-outlined {
+		font-size: 16px;
+	}
+
+	.debug-memory-controls {
+		display: grid;
+		grid-template-columns: minmax(120px, 2fr) minmax(72px, 1fr) minmax(64px, 0.7fr) auto;
+		gap: 8px;
+		align-items: end;
+	}
+
+	.debug-memory-controls label {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 4px;
+		color: #64748b;
+		font-size: 10px;
+		font-weight: 650;
+	}
+
+	.debug-memory-controls input {
+		min-width: 0;
+		height: 34px;
+		box-sizing: border-box;
+		border: 1px solid rgba(148, 163, 184, 0.35);
+		border-radius: 9px;
+		background: rgba(255, 255, 255, 0.94);
+		padding: 0 9px;
+		color: #0f172a;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 11px;
+	}
+
+	.debug-memory-read,
+	.debug-memory-toolbar button {
+		height: 34px;
+		border: 0;
+		border-radius: 9px;
+		background: rgba(14, 116, 144, 0.1);
+		padding: 0 11px;
+		color: #0e7490;
+		font: inherit;
+		font-size: 11px;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.debug-memory-read:disabled {
+		cursor: wait;
+		opacity: 0.65;
+	}
+
+	.debug-memory-error {
+		margin: 0;
+		border-radius: 9px;
+		background: rgba(239, 68, 68, 0.08);
+		padding: 8px 10px;
+		color: #b91c1c;
+		font-size: 11px;
+	}
+
+	.debug-memory-toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+
+	.debug-memory-toolbar code {
+		min-width: 0;
+		overflow-wrap: anywhere;
+		color: #475569;
+		font-size: 10px;
+	}
+
+	.debug-memory-table {
+		display: flex;
+		max-width: 100%;
+		flex-direction: column;
+		gap: 4px;
+		overflow-x: auto;
+		padding-bottom: 2px;
+	}
+
+	.debug-memory-row {
+		display: grid;
+		min-width: max-content;
+		grid-template-columns: minmax(72px, auto) auto minmax(16ch, auto);
+		gap: 10px;
+		align-items: center;
+	}
+
+	.debug-memory-address,
+	.debug-memory-ascii {
+		color: #64748b;
+		font-size: 10px;
+	}
+
+	.debug-memory-hex {
+		display: grid;
+		grid-template-columns: repeat(16, 2ch);
+		gap: 4px;
+	}
+
+	.debug-memory-byte {
+		color: #0f172a;
+		font-size: 10px;
+		text-align: center;
+	}
+
+	.debug-memory-byte--unreadable {
+		color: #dc2626;
+	}
+
+	.debug-memory-ascii {
+		white-space: pre;
 	}
 
 	.debug-expand {

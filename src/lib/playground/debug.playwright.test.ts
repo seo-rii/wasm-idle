@@ -36,6 +36,7 @@ int main(void) {
 		backend: 'lldb',
 		breakpointLine: 5,
 		expectedLocal: { name: 'value', value: '70' },
+		expectedMemoryInspector: { count: 4, variable: 'value' },
 		expectedMemoryWrite: {
 			data: [100, 0, 0, 0],
 			variable: 'value'
@@ -1506,6 +1507,99 @@ describe('native-source browser debugging in Chromium', () => {
 								(window as any).__wasmIdleDebug.getDebugState()
 							);
 							expect(loadedState.variablesByReference.length).toBeGreaterThan(0);
+							if ('expectedMemoryInspector' in testCase) {
+								const referenceInput = page.getByLabel('Memory reference');
+								const offsetInput = page.getByLabel('Memory offset');
+								const countInput = page.getByLabel('Memory byte count');
+								expect(await referenceInput.inputValue()).toBe('0x0');
+								expect(await offsetInput.inputValue()).toBe('0');
+								expect(await countInput.inputValue()).toBe(
+									String(testCase.expectedMemoryInspector.count)
+								);
+								await page
+									.locator('.debug-memory-read')
+									.evaluate((button: HTMLButtonElement) => button.click());
+								const cdpSession = await context.newCDPSession(page);
+								await new Promise((resolve) => setTimeout(resolve, 2_000));
+								const firstPageResponse = await cdpSession.send(
+									'Runtime.evaluate',
+									{
+										expression: `({
+										error: document.querySelector('.debug-memory-error')?.textContent?.trim() ?? '',
+										bytes: Array.from(document.querySelectorAll('.debug-memory-byte'), (node) => node.textContent?.trim() ?? '')
+									})`,
+										returnByValue: true
+									}
+								);
+								const firstPage = firstPageResponse.result.value as {
+									bytes: string[];
+									error: string;
+								};
+								expect(
+									firstPage,
+									JSON.stringify({
+										consoleTail: consoleMessages.slice(-80),
+										pageErrors
+									})
+								).toMatchObject({
+									error: '',
+									bytes: expect.any(Array)
+								});
+								const displayedBytes = firstPage.bytes;
+								expect(displayedBytes).toHaveLength(
+									testCase.expectedMemoryInspector.count
+								);
+								for (const byte of displayedBytes) {
+									expect(byte.trim()).toMatch(/^[0-9a-f]{2}$/u);
+								}
+								await cdpSession.send('Runtime.evaluate', {
+									expression: `Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Next')?.click()`
+								});
+								await new Promise((resolve) => setTimeout(resolve, 2_000));
+								const nextOffsetResponse = await cdpSession.send(
+									'Runtime.evaluate',
+									{
+										expression: `document.querySelector('[aria-label="Memory offset"]')?.value`,
+										returnByValue: true
+									}
+								);
+								expect(nextOffsetResponse.result.value).toBe(
+									String(testCase.expectedMemoryInspector.count)
+								);
+								await cdpSession.send('Runtime.evaluate', {
+									expression: `Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Previous')?.click()`
+								});
+								await new Promise((resolve) => setTimeout(resolve, 2_000));
+								const previousOffsetResponse = await cdpSession.send(
+									'Runtime.evaluate',
+									{
+										expression: `document.querySelector('[aria-label="Memory offset"]')?.value`,
+										returnByValue: true
+									}
+								);
+								expect(previousOffsetResponse.result.value).toBe('0');
+								const inspectLabel = `Inspect memory for ${testCase.expectedMemoryInspector.variable}`;
+								await cdpSession.send('Runtime.evaluate', {
+									expression: `Array.from(document.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === ${JSON.stringify(inspectLabel)})?.click()`
+								});
+								const selectedInputsResponse = await cdpSession.send(
+									'Runtime.evaluate',
+									{
+										expression: `({
+											reference: document.querySelector('[aria-label="Memory reference"]')?.value,
+											offset: document.querySelector('[aria-label="Memory offset"]')?.value
+										})`,
+										returnByValue: true
+									}
+								);
+								const selectedInputs = selectedInputsResponse.result.value as {
+									offset: string;
+									reference: string;
+								};
+								expect(selectedInputs.reference).not.toBe('');
+								expect(selectedInputs.reference).not.toBe('0x0');
+								expect(selectedInputs.offset).toBe('0');
+							}
 							const memory = await page.evaluate(() =>
 								(window as any).__wasmIdleDebug.readDebugMemory('0x0', 0, 4)
 							);

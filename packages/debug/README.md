@@ -84,6 +84,11 @@ The playground-facing controller also exposes `readMemory(memoryReference, offse
 cross the framework-neutral Sandbox and Terminal contracts as `Uint8Array`; browser automation and
 other serialization boundaries should explicitly convert them to plain byte values instead of
 relying on implicit typed-array serialization.
+The playground memory inspector is visible only while an LLDB target is paused. It accepts decimal
+or hexadecimal safe-integer offsets, limits each read to 256 bytes, pages by the chosen byte count,
+and renders readable bytes in hexadecimal and ASCII while marking unreadable bytes as `??`. A
+variable with a DAP `memoryReference` can populate the inspector directly. Pause/resume/stop and
+frame-selection boundaries clear the current page and invalidate any in-flight response.
 
 LLDB pause, frame, and breakpoint events carry the SHA-256 of the compiled source when the artifact
 provides it. Hosts should call `markSourceRevisionStale(sourcePath)` when an editor model changes
