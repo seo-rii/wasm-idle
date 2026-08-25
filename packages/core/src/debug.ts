@@ -58,6 +58,11 @@ export interface DebugMemory {
 	unreadableBytes: number;
 }
 
+export interface DebugWriteMemoryResult {
+	offset?: number;
+	bytesWritten: number;
+}
+
 export interface DebugResolvedBreakpoint {
 	requestedLine: number;
 	line: number;

@@ -14,6 +14,7 @@ import {
 	type DebugStackFrame,
 	type DebugThread,
 	type DebugVariable,
+	type DebugWriteMemoryResult,
 	type ResolvedBreakpoint
 } from '../src/index.js';
 
@@ -44,6 +45,7 @@ const capabilities: DebugCapabilities = {
 	supportsEvaluate: true,
 	supportsEvaluateForHovers: false,
 	supportsReadMemory: true,
+	supportsWriteMemory: true,
 	supportsDataBreakpoints: false,
 	supportsSetVariable: false,
 	supportsRestart: false,
@@ -91,6 +93,12 @@ class FakeDebugAdapter implements DebugAdapter {
 		_offset: number,
 		_count: number
 	): Promise<DebugMemory> => ({ data: new Uint8Array(), unreadableBytes: 0 });
+	writeMemoryHandler = async (
+		_memoryReference: string,
+		_offset: number,
+		_data: Uint8Array,
+		_allowPartial?: boolean
+	): Promise<DebugWriteMemoryResult> => ({ bytesWritten: 0 });
 	evaluateHandler = async (
 		expression: string,
 		_frameId?: number
@@ -170,6 +178,18 @@ class FakeDebugAdapter implements DebugAdapter {
 	async readMemory(memoryReference: string, offset: number, count: number) {
 		this.transcript.push(`readMemory:${memoryReference}:${offset}:${count}`);
 		return this.readMemoryHandler(memoryReference, offset, count);
+	}
+
+	async writeMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial?: boolean
+	) {
+		this.transcript.push(
+			`writeMemory:${memoryReference}:${offset}:${Array.from(data).join(',')}:${allowPartial === true}`
+		);
+		return this.writeMemoryHandler(memoryReference, offset, data, allowPartial);
 	}
 
 	async evaluate(expression: string, frameId?: number) {
@@ -457,6 +477,7 @@ describe('createAdapterDebugSessionController', () => {
 			data: new Uint8Array([1, 2]),
 			unreadableBytes: 0
 		});
+		adapter.writeMemoryHandler = async () => ({ offset: 4, bytesWritten: 2 });
 		const controller = createAdapterDebugSessionController(adapter);
 
 		adapter.emit({ type: 'stopped', reason: 'entry', threadId: 2 });
@@ -478,15 +499,19 @@ describe('createAdapterDebugSessionController', () => {
 			data: new Uint8Array([1, 2]),
 			unreadableBytes: 0
 		});
+		await expect(
+			controller.writeMemory('memory', 4, Uint8Array.of(9, 10), true)
+		).resolves.toEqual({ offset: 4, bytesWritten: 2 });
 
 		await controller.pause();
 		await controller.next();
 		await controller.stepIn();
 		await controller.stepOut();
 		await controller.continue();
-		expect(adapter.transcript.slice(-7)).toEqual([
+		expect(adapter.transcript.slice(-8)).toEqual([
 			'evaluate:counter:11',
 			'readMemory:memory:4:2',
+			'writeMemory:memory:4:9,10:true',
 			'pause:1',
 			'next:1',
 			'stepIn:1',

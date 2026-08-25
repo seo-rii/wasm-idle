@@ -13,7 +13,8 @@ export type {
 	DebugStructFieldMetadata,
 	DebugVariable,
 	DebugVariableKind,
-	DebugVariableMetadata
+	DebugVariableMetadata,
+	DebugWriteMemoryResult
 } from '@wasm-idle/core';
 
 export type CompilerDiagnosticSeverity = 'error' | 'warning' | 'other';

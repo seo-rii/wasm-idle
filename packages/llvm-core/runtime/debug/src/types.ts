@@ -154,6 +154,7 @@ export interface RuntimeDebugCapabilities {
 	locals: boolean;
 	globals: boolean;
 	readMemory: boolean;
+	writeMemory: boolean;
 	evaluateExpressions: boolean;
 	dataBreakpoints: boolean;
 	wasmThreads: boolean;

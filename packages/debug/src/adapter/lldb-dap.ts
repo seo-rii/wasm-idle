@@ -23,6 +23,7 @@ import {
 	type DebugThread,
 	type DebugVariable,
 	type DebugVariablePresentationHint,
+	type DebugWriteMemoryResult,
 	type ResolvedBreakpoint
 } from './types.js';
 
@@ -34,6 +35,8 @@ export interface LldbDapAdapterOptions {
 		 * transport exists. Set this only when the linked LLDB build supports it.
 		 */
 		evaluate?: boolean;
+		/** Enable raw guest-memory writes only for a manifest-qualified runtime. */
+		writeMemory?: boolean;
 	};
 }
 
@@ -293,6 +296,9 @@ function mapCapabilities(
 	options: LldbDapAdapterOptions
 ): DebugCapabilities {
 	const supportsEvaluate = options.featureSupport?.evaluate === true;
+	const supportsWriteMemory =
+		options.featureSupport?.writeMemory === true &&
+		capabilities.supportsWriteMemoryRequest === true;
 
 	return Object.freeze({
 		supportsConfigurationDone: capabilities.supportsConfigurationDoneRequest === true,
@@ -312,6 +318,7 @@ function mapCapabilities(
 		supportsEvaluateForHovers:
 			supportsEvaluate && capabilities.supportsEvaluateForHovers === true,
 		supportsReadMemory: capabilities.supportsReadMemoryRequest === true,
+		supportsWriteMemory,
 		supportsDataBreakpoints: false,
 		supportsSetVariable: false,
 		supportsRestart: false,
@@ -766,6 +773,40 @@ export class LldbDapAdapter implements DebugAdapter {
 		} satisfies DebugEvaluateResult;
 	}
 
+	async writeMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial = false
+	) {
+		this.#requireCapability('supportsWriteMemory', 'write memory');
+		if (!Number.isSafeInteger(offset)) throw new RangeError('offset must be a safe integer.');
+		const chunks: string[] = [];
+		for (let start = 0; start < data.byteLength; start += 0x8000) {
+			chunks.push(String.fromCharCode(...data.subarray(start, start + 0x8000)));
+		}
+		const response = await this.#session.request<unknown>('writeMemory', {
+			memoryReference,
+			offset,
+			allowPartial,
+			data: globalThis.btoa(chunks.join(''))
+		});
+		assertDapRecord(response, 'writeMemory', 'body');
+		assertDapNonNegativeSafeInteger(response.bytesWritten, 'writeMemory', 'bytesWritten');
+		if (response.bytesWritten > data.byteLength) {
+			invalidDapResponse(
+				'writeMemory',
+				'bytesWritten',
+				`reported ${response.bytesWritten} bytes written for ${data.byteLength} input bytes`
+			);
+		}
+		const responseOffset = dapOptionalSafeInteger(response, 'offset', 'writeMemory', '');
+		return {
+			...(responseOffset === undefined ? {} : { offset: responseOffset }),
+			bytesWritten: response.bytesWritten
+		} satisfies DebugWriteMemoryResult;
+	}
+
 	onEvent(listener: (event: DebugAdapterEvent) => void) {
 		return this.#events.subscribe(listener);
 	}
@@ -783,7 +824,10 @@ export class LldbDapAdapter implements DebugAdapter {
 		return this.#capabilities;
 	}
 
-	#requireCapability(capability: 'supportsEvaluate' | 'supportsReadMemory', operation: string) {
+	#requireCapability(
+		capability: 'supportsEvaluate' | 'supportsReadMemory' | 'supportsWriteMemory',
+		operation: string
+	) {
 		const capabilities = this.#requireInitialized();
 		if (!capabilities[capability]) throw new UnsupportedDebugOperationError(operation);
 	}

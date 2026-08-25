@@ -7,6 +7,7 @@ import type {
 	DebugSessionEvent,
 	DebugSourceBreakpoints,
 	DebugVariable,
+	DebugWriteMemoryResult,
 	TerminalControl
 } from '@wasm-idle/core';
 import { fromStore, get, writable } from 'svelte/store';
@@ -27,6 +28,7 @@ export type DebugTerminalControl = Pick<
 	| 'debugVariables'
 	| 'debugScopes'
 	| 'debugReadMemory'
+	| 'debugWriteMemory'
 	| 'stop'
 >;
 
@@ -591,6 +593,27 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		return (await terminal?.debugReadMemory?.(memoryReference, offset, count)) ?? null;
 	}
 
+	async function writeMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial?: boolean
+	): Promise<DebugWriteMemoryResult | null> {
+		if (
+			!get(pausedStore) ||
+			!memoryReference ||
+			!Number.isSafeInteger(offset) ||
+			!(data instanceof Uint8Array)
+		) {
+			return null;
+		}
+		const terminal = get(terminalStore);
+		return (
+			(await terminal?.debugWriteMemory?.(memoryReference, offset, data, allowPartial)) ??
+			null
+		);
+	}
+
 	return {
 		get active() {
 			return activeState.current;
@@ -693,7 +716,8 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		clearWatches,
 		loadVariableChildren,
 		selectFrame,
-		readMemory
+		readMemory,
+		writeMemory
 	};
 }
 

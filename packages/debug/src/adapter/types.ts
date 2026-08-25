@@ -19,6 +19,7 @@ export interface DebugCapabilities {
 	readonly supportsEvaluate: boolean;
 	readonly supportsEvaluateForHovers: boolean;
 	readonly supportsReadMemory: boolean;
+	readonly supportsWriteMemory: boolean;
 	readonly supportsDataBreakpoints: boolean;
 	readonly supportsSetVariable: boolean;
 	readonly supportsRestart: boolean;
@@ -136,6 +137,11 @@ export interface DebugVariable {
 
 export type DebugMemory = CoreDebugMemory;
 
+export interface DebugWriteMemoryResult {
+	offset?: number;
+	bytesWritten: number;
+}
+
 export interface DebugEvaluateResult {
 	result: string;
 	type?: string;
@@ -214,6 +220,12 @@ export interface DebugAdapter {
 	variables(variablesReference: number, start?: number, count?: number): Promise<DebugVariable[]>;
 
 	readMemory(memoryReference: string, offset: number, count: number): Promise<DebugMemory>;
+	writeMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial?: boolean
+	): Promise<DebugWriteMemoryResult>;
 	evaluate(expression: string, frameId?: number): Promise<DebugEvaluateResult>;
 
 	onEvent(listener: (event: DebugAdapterEvent) => void): () => void;

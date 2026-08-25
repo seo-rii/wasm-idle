@@ -412,6 +412,18 @@
 			await wait();
 			return (await sandbox.debugReadMemory?.(memoryReference, offset, count)) ?? null;
 		},
+		async debugWriteMemory(
+			memoryReference: string,
+			offset: number,
+			data: Uint8Array,
+			allowPartial?: boolean
+		) {
+			await wait();
+			return (
+				(await sandbox.debugWriteMemory?.(memoryReference, offset, data, allowPartial)) ??
+				null
+			);
+		},
 		async waitForInput() {
 			await waitForInput();
 		},

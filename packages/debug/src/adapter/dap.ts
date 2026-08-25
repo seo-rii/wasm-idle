@@ -37,6 +37,7 @@ export interface DapCapabilities {
 	supportsLogPoints?: boolean;
 	supportsEvaluateForHovers?: boolean;
 	supportsReadMemoryRequest?: boolean;
+	supportsWriteMemoryRequest?: boolean;
 	supportsDataBreakpoints?: boolean;
 	supportsSetVariable?: boolean;
 	supportsRestartRequest?: boolean;

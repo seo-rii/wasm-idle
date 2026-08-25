@@ -120,6 +120,9 @@ class FakeRuntimeSession {
 				unreadableBytes: 2
 			} as T;
 		}
+		if (command === 'writeMemory') {
+			return { offset: 4, bytesWritten: 3 } as T;
+		}
 		if (command === 'evaluate') return { result: '42', variablesReference: 0 } as T;
 		return {} as T;
 	}
@@ -1435,6 +1438,48 @@ describe('LldbSandboxSession', () => {
 		expect(runtimeState.session?.requests).toContainEqual({
 			command: 'readMemory',
 			args: { memoryReference: '0x1000', offset: 4, count: 6 }
+		});
+
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('writes target memory through DAP with an exact Base64 payload', async () => {
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { writeMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		await expect(
+			controller.writeMemory('0x1000', 4, Uint8Array.of(0, 0xff, 1), true)
+		).resolves.toEqual({ offset: 4, bytesWritten: 3 });
+		expect(runtimeState.session?.requests).toContainEqual({
+			command: 'writeMemory',
+			args: {
+				memoryReference: '0x1000',
+				offset: 4,
+				allowPartial: true,
+				data: 'AP8B'
+			}
 		});
 
 		await controller.disconnect();

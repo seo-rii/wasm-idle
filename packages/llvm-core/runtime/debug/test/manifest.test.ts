@@ -64,6 +64,7 @@ function manifest() {
 				locals: true,
 				globals: true,
 				readMemory: true,
+				writeMemory: true,
 				evaluateExpressions: false,
 				dataBreakpoints: false,
 				wasmThreads: false
@@ -77,6 +78,7 @@ describe('debug runtime manifest', () => {
 		const parsed = parseDebugRuntimeManifest(manifest());
 		expect(parsed.debugger.lldb.llvmVersion).toBe('22.1.8');
 		expect(parsed.debugger.targetRuntime.name).toBe('wamr');
+		expect(parsed.debugger.capabilities.writeMemory).toBe(true);
 		expect(parsed.debugger.capabilities.evaluateExpressions).toBe(false);
 		expect(resolveDebugRuntimeAssets(parsed, 'https://cdn.example/runtime')).toEqual({
 			lldb: {
@@ -104,6 +106,10 @@ describe('debug runtime manifest', () => {
 		const mismatchedRevision = manifest();
 		mismatchedRevision.compiler.provenance.revision = 'different';
 		expect(() => parseDebugRuntimeManifest(mismatchedRevision)).toThrow(/must match/u);
+
+		const missingWriteMemory = manifest();
+		delete (missingWriteMemory.debugger.capabilities as Record<string, unknown>).writeMemory;
+		expect(() => parseDebugRuntimeManifest(missingWriteMemory)).toThrow(/writeMemory/u);
 	});
 
 	it('rejects debug assets that escape the configured runtime root', () => {

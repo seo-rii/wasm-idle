@@ -170,6 +170,33 @@ describe('Rust sandbox', () => {
 		expect(readMemory).toHaveBeenCalledWith('0x40', 0, 2);
 	});
 
+	it('forwards target memory writes to the active LLDB session', async () => {
+		const sandbox = new Rust();
+		const writeMemory = vi.fn(
+			async (
+				_memoryReference: string,
+				_offset: number,
+				_data: Uint8Array,
+				_allowPartial?: boolean
+			) => ({ offset: 1, bytesWritten: 2 })
+		);
+		(
+			sandbox as unknown as {
+				lldbSession: { writeMemory: typeof writeMemory };
+			}
+		).lldbSession = { writeMemory };
+
+		await expect(
+			(sandbox as unknown as { debugWriteMemory: typeof writeMemory }).debugWriteMemory(
+				'0x40',
+				1,
+				Uint8Array.of(4, 2),
+				false
+			)
+		).resolves.toEqual({ offset: 1, bytesWritten: 2 });
+		expect(writeMemory).toHaveBeenCalledWith('0x40', 1, Uint8Array.of(4, 2), false);
+	});
+
 	it('forwards frame scope requests to the active LLDB session', async () => {
 		const sandbox = new Rust();
 		const scopes = vi.fn(async (_frameId: number) => [

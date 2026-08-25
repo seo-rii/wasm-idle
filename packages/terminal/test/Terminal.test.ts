@@ -74,6 +74,9 @@ describe('Terminal source', () => {
 			/async debugReadMemory\(memoryReference: string, offset: number, count: number\) \{\s+await wait\(\);\s+return \(await sandbox\.debugReadMemory\?\.\(memoryReference, offset, count\)\) \?\? null;\s+\}/s
 		);
 		expect(source).toMatch(
+			/async debugWriteMemory\([\s\S]*?await wait\(\);[\s\S]*?sandbox\.debugWriteMemory\?\.\(memoryReference, offset, data, allowPartial\)/
+		);
+		expect(source).toMatch(
 			/async debugScopes\(frameId: number\) \{\s+await wait\(\);\s+return \(await sandbox\.debugScopes\?\.\(frameId\)\) \?\? \[\];\s+\}/s
 		);
 	});

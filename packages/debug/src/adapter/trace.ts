@@ -16,6 +16,7 @@ import {
 	type DebugStackFrame,
 	type DebugThread,
 	type DebugVariable,
+	type DebugWriteMemoryResult,
 	type ResolvedBreakpoint
 } from './types.js';
 
@@ -93,6 +94,7 @@ export class TraceDebugAdapter implements DebugAdapter {
 			supportsEvaluate: typeof options.control.debugEvaluate === 'function',
 			supportsEvaluateForHovers: false,
 			supportsReadMemory: false,
+			supportsWriteMemory: false,
 			supportsDataBreakpoints: false,
 			supportsSetVariable: false,
 			supportsRestart: false,
@@ -214,6 +216,15 @@ export class TraceDebugAdapter implements DebugAdapter {
 		_count: number
 	): Promise<DebugMemory> {
 		throw new UnsupportedDebugOperationError('read memory');
+	}
+
+	async writeMemory(
+		_memoryReference: string,
+		_offset: number,
+		_data: Uint8Array,
+		_allowPartial = false
+	): Promise<DebugWriteMemoryResult> {
+		throw new UnsupportedDebugOperationError('write memory');
 	}
 
 	async evaluate(expression: string, frameId?: number): Promise<DebugEvaluateResult> {

@@ -28,5 +28,6 @@ export type {
 	DebugThread,
 	DebugVariable,
 	DebugVariablePresentationHint,
+	DebugWriteMemoryResult,
 	ResolvedBreakpoint
 } from './types.js';

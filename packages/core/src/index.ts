@@ -121,7 +121,8 @@ export type {
 	DebugStructFieldMetadata,
 	DebugVariable,
 	DebugVariableKind,
-	DebugVariableMetadata
+	DebugVariableMetadata,
+	DebugWriteMemoryResult
 } from './debug.js';
 export {
 	RuntimeProgressController,

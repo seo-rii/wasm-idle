@@ -49,7 +49,9 @@ describe('LldbDapAdapter', () => {
 	it('does not expose opt-ins for operations absent from the adapter contract', () => {
 		type FeatureSupport = NonNullable<LldbDapAdapterOptions['featureSupport']>;
 
-		expectTypeOf<Exclude<keyof FeatureSupport, 'evaluate'>>().toEqualTypeOf<never>();
+		expectTypeOf<
+			Exclude<keyof FeatureSupport, 'evaluate' | 'writeMemory'>
+		>().toEqualTypeOf<never>();
 	});
 
 	it('initializes once and conservatively maps optional DAP capabilities', async () => {
@@ -733,6 +735,9 @@ describe('LldbDapAdapter', () => {
 		await expect(unsupported.readMemory('memory', 0, 4)).rejects.toBeInstanceOf(
 			UnsupportedDebugOperationError
 		);
+		await expect(unsupported.writeMemory('memory', 0, Uint8Array.of(1))).rejects.toBeInstanceOf(
+			UnsupportedDebugOperationError
+		);
 		await expect(unsupported.evaluate('counter')).rejects.toBeInstanceOf(
 			UnsupportedDebugOperationError
 		);
@@ -741,6 +746,7 @@ describe('LldbDapAdapter', () => {
 		const session = new FakeDapSession();
 		session.setResponse('initialize', {
 			supportsReadMemoryRequest: true,
+			supportsWriteMemoryRequest: true,
 			supportsEvaluateForHovers: false
 		});
 		session.setResponse('readMemory', {
@@ -754,8 +760,12 @@ describe('LldbDapAdapter', () => {
 			variablesReference: 17,
 			namedVariables: 1
 		});
+		session.setResponse('writeMemory', {
+			offset: 4,
+			bytesWritten: 3
+		});
 		const adapter = createLldbDapAdapter(session, {
-			featureSupport: { evaluate: true }
+			featureSupport: { evaluate: true, writeMemory: true }
 		});
 		await adapter.initialize();
 
@@ -771,7 +781,10 @@ describe('LldbDapAdapter', () => {
 			variablesReference: 17,
 			namedVariables: 1
 		});
-		expect(session.requests.slice(-2)).toEqual([
+		await expect(
+			adapter.writeMemory('memory', 4, Uint8Array.of(0, 0xff, 1), true)
+		).resolves.toEqual({ offset: 4, bytesWritten: 3 });
+		expect(session.requests.slice(-3)).toEqual([
 			{
 				command: 'readMemory',
 				requestArguments: { memoryReference: 'memory', offset: 4, count: 6 }
@@ -779,6 +792,15 @@ describe('LldbDapAdapter', () => {
 			{
 				command: 'evaluate',
 				requestArguments: { expression: 'counter', context: 'watch', frameId: 70 }
+			},
+			{
+				command: 'writeMemory',
+				requestArguments: {
+					memoryReference: 'memory',
+					offset: 4,
+					allowPartial: true,
+					data: 'AP8B'
+				}
 			}
 		]);
 	});

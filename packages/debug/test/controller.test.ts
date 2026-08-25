@@ -536,6 +536,35 @@ describe('createDebugSessionController', () => {
 		expect(debugReadMemory).toHaveBeenCalledWith('0x20', 0, 2);
 	});
 
+	it('writes LLDB memory only through a paused terminal session', async () => {
+		const debugWriteMemory = vi.fn(async () => ({ offset: 4, bytesWritten: 2 }));
+		const controller = createDebugSessionController({
+			terminal: {
+				debugCommand: vi.fn(async () => undefined),
+				debugWriteMemory
+			} as never
+		});
+
+		await expect(
+			controller.writeMemory('0x20', 4, Uint8Array.of(0x2a, 0x00), true)
+		).resolves.toBeNull();
+
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 3,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: []
+		});
+
+		await expect(
+			controller.writeMemory('0x20', 4, Uint8Array.of(0x2a, 0x00), true)
+		).resolves.toEqual({ offset: 4, bytesWritten: 2 });
+		expect(debugWriteMemory).toHaveBeenCalledTimes(1);
+		expect(debugWriteMemory).toHaveBeenCalledWith('0x20', 4, Uint8Array.of(0x2a, 0x00), true);
+	});
+
 	it('keeps breakpoints and resolved locations isolated by source path', () => {
 		const setBreakpoints = vi.fn(async () => undefined);
 		const controller = createDebugSessionController({

@@ -14,6 +14,7 @@ import {
 	type DebugStackFrame,
 	type DebugThread,
 	type DebugVariable,
+	type DebugWriteMemoryResult,
 	type ResolvedBreakpoint
 } from './adapter/index.js';
 
@@ -483,6 +484,22 @@ export function createAdapterDebugSessionController(adapter: DebugAdapter) {
 		}
 	}
 
+	async function writeMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial?: boolean
+	): Promise<DebugWriteMemoryResult> {
+		const sessionToken = sessionGeneration;
+		const stopToken = stoppedGeneration;
+		try {
+			return await adapter.writeMemory(memoryReference, offset, data, allowPartial);
+		} catch (error) {
+			if (isCurrentStop(sessionToken, stopToken)) recordError(error);
+			throw error;
+		}
+	}
+
 	async function disconnect(options?: DebugDisconnectOptions) {
 		const sessionToken = ++sessionGeneration;
 		stoppedGeneration += 1;
@@ -562,6 +579,7 @@ export function createAdapterDebugSessionController(adapter: DebugAdapter) {
 		stepOut,
 		evaluate,
 		readMemory,
+		writeMemory,
 		disconnect,
 		clearOutput,
 		dispose

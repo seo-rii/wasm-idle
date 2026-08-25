@@ -4,7 +4,8 @@ import type {
 	DebugScope,
 	DebugSessionEvent,
 	DebugSourceBreakpoints,
-	DebugVariable
+	DebugVariable,
+	DebugWriteMemoryResult
 } from './debug.js';
 import {
 	defineRuntimeTrustProfile,
@@ -127,6 +128,12 @@ export interface Sandbox {
 		offset: number,
 		count: number
 	) => Promise<DebugMemory | null>;
+	debugWriteMemory?: (
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial?: boolean
+	) => Promise<DebugWriteMemoryResult | null>;
 	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	elapse?: number;
 }

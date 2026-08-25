@@ -411,6 +411,18 @@ class Clang implements Sandbox {
 		);
 	}
 
+	debugWriteMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial = false
+	) {
+		return (
+			this.lldbSession?.writeMemory(memoryReference, offset, data, allowPartial) ??
+			Promise.resolve(null)
+		);
+	}
+
 	kill() {
 		return this.terminate();
 	}

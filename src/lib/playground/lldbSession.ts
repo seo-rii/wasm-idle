@@ -186,6 +186,7 @@ export class LldbSandboxSession {
 	private initialized = false;
 	private supportsEvaluateExpressions = false;
 	private supportsReadMemory = false;
+	private supportsWriteMemory = false;
 	private breakpointVersion = 0;
 	private scopeRequestVersion = 0;
 	private dapExitCode: number | null = null;
@@ -226,6 +227,7 @@ export class LldbSandboxSession {
 		this.supportsEvaluateExpressions =
 			manifest.debugger?.capabilities?.evaluateExpressions === true;
 		this.supportsReadMemory = manifest.debugger?.capabilities?.readMemory === true;
+		this.supportsWriteMemory = manifest.debugger?.capabilities?.writeMemory === true;
 		if (lifecycleVersion !== this.lifecycleVersion) return completion;
 		const artifactCompiler = this.options.artifact.descriptor?.compiler;
 		if (
@@ -632,6 +634,57 @@ export class LldbSandboxSession {
 		}
 	}
 
+	async writeMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial = false
+	): Promise<{ offset?: number; bytesWritten: number } | null> {
+		if (!this.supportsWriteMemory) return null;
+		if (!Number.isSafeInteger(offset)) {
+			throw new RangeError('offset must be a safe integer.');
+		}
+		const chunks: string[] = [];
+		for (let start = 0; start < data.byteLength; start += 0x8000) {
+			chunks.push(String.fromCharCode(...data.subarray(start, start + 0x8000)));
+		}
+		const session = this.requireSession();
+		const stateVersion = this.stateVersion;
+		try {
+			const response = await session.request<unknown>('writeMemory', {
+				memoryReference,
+				offset,
+				allowPartial,
+				data: globalThis.btoa(chunks.join(''))
+			});
+			if (!this.isCurrentValueRequest(session, stateVersion)) return null;
+			assertDapRecord(response, 'writeMemory', 'body');
+			assertDapNonNegativeSafeInteger(response.bytesWritten, 'writeMemory', 'bytesWritten');
+			if (response.bytesWritten > data.byteLength) {
+				invalidDapResponse(
+					'writeMemory',
+					'bytesWritten',
+					`reported ${response.bytesWritten} bytes written for ${data.byteLength} input bytes`
+				);
+			}
+			const responseOffset = response.offset;
+			if (
+				responseOffset !== undefined &&
+				(typeof responseOffset !== 'number' || !Number.isSafeInteger(responseOffset))
+			) {
+				invalidDapResponse('writeMemory', 'offset', 'expected a safe integer');
+			}
+			return {
+				...(responseOffset === undefined ? {} : { offset: responseOffset }),
+				bytesWritten: response.bytesWritten
+			};
+		} catch (error) {
+			if (!this.isCurrentValueRequest(session, stateVersion)) return null;
+			this.rethrowProtocolError(error);
+			throw error;
+		}
+	}
+
 	async disconnect() {
 		this.lifecycleVersion += 1;
 		this.stateVersion += 1;
@@ -639,6 +692,7 @@ export class LldbSandboxSession {
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
 		this.supportsReadMemory = false;
+		this.supportsWriteMemory = false;
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;
@@ -915,6 +969,7 @@ export class LldbSandboxSession {
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
 		this.supportsReadMemory = false;
+		this.supportsWriteMemory = false;
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;
@@ -946,6 +1001,7 @@ export class LldbSandboxSession {
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
 		this.supportsReadMemory = false;
+		this.supportsWriteMemory = false;
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;

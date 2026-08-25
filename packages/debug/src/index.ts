@@ -37,6 +37,7 @@ export type {
 	DebugThread,
 	DebugVariable,
 	DebugVariablePresentationHint,
+	DebugWriteMemoryResult,
 	LldbDapAdapterOptions,
 	ResolvedBreakpoint,
 	TraceDebugAdapterOptions,

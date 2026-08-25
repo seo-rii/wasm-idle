@@ -95,6 +95,10 @@ function parseCapabilities(value: unknown): RuntimeDebugCapabilities {
 		locals: expectBoolean(capabilities.locals, 'root.debugger.capabilities.locals'),
 		globals: expectBoolean(capabilities.globals, 'root.debugger.capabilities.globals'),
 		readMemory: expectBoolean(capabilities.readMemory, 'root.debugger.capabilities.readMemory'),
+		writeMemory: expectBoolean(
+			capabilities.writeMemory,
+			'root.debugger.capabilities.writeMemory'
+		),
 		evaluateExpressions: expectBoolean(
 			capabilities.evaluateExpressions,
 			'root.debugger.capabilities.evaluateExpressions'
