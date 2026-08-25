@@ -2,6 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createDebugSessionController } from '../src/controller.js';
 
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((resolvePromise) => {
+		resolve = resolvePromise;
+	});
+	return { promise, resolve };
+}
+
 describe('createDebugSessionController', () => {
 	it('pauses an active LLDB terminal without requiring an existing stopped frame', async () => {
 		const debugPause = vi.fn(async () => undefined);
@@ -109,6 +117,116 @@ describe('createDebugSessionController', () => {
 		);
 		expect(debugEvaluate).toHaveBeenCalledWith('answer');
 		expect(debugEvaluate).toHaveBeenCalledWith('answer + 1');
+	});
+
+	it('resolves safe nested LLDB variable paths with indexed paging', async () => {
+		const debugEvaluate = vi.fn(async () => '?');
+		const debugVariables = vi.fn(
+			async (variablesReference: number, start?: number, count?: number) => {
+				if (variablesReference === 10) {
+					return [
+						{ name: 'pair', value: '{...}', variablesReference: 20 },
+						{ name: 'items', value: '[...]', variablesReference: 30 }
+					];
+				}
+				if (variablesReference === 20) {
+					return [
+						{ name: 'first', value: '35', variablesReference: 0 },
+						{ name: 'second', value: '38', variablesReference: 0 }
+					];
+				}
+				if (variablesReference === 30 && start === 2 && count === 1) {
+					return [{ name: '[2]', value: '73', variablesReference: 0 }];
+				}
+				return [];
+			}
+		);
+		const controller = createDebugSessionController({
+			terminal: { debugEvaluate, debugVariables } as never
+		});
+		controller.addWatchExpression('pair.first');
+		controller.addWatchExpression('items[2]');
+		controller.handleEvent({
+			type: 'pause',
+			line: 5,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: [{ functionName: 'main', line: 5 }],
+			scopes: [
+				{
+					name: 'Locals',
+					variablesReference: 10,
+					expensive: false,
+					variables: []
+				}
+			]
+		});
+
+		await vi.waitFor(() =>
+			expect(controller.watchValues).toEqual([
+				{ expression: 'pair.first', value: '35' },
+				{ expression: 'items[2]', value: '73' }
+			])
+		);
+		expect(debugVariables).toHaveBeenCalledWith(10);
+		expect(debugVariables).toHaveBeenCalledWith(20);
+		expect(debugVariables).toHaveBeenCalledWith(30, 2, 1);
+	});
+
+	it('does not traverse arbitrary watch expressions when LLDB evaluation is unavailable', async () => {
+		const debugVariables = vi.fn(async () => []);
+		const controller = createDebugSessionController({
+			terminal: {
+				debugEvaluate: vi.fn(async () => '?'),
+				debugVariables
+			} as never
+		});
+		controller.handleEvent({
+			type: 'pause',
+			line: 5,
+			reason: 'breakpoint',
+			locals: [{ name: 'pair', value: '{...}', variablesReference: 20 }],
+			callStack: [{ functionName: 'main', line: 5 }]
+		});
+		controller.addWatchExpression('pair.first + 1');
+		controller.addWatchExpression('pair.first()');
+
+		await vi.waitFor(() =>
+			expect(controller.watchValues).toEqual([
+				{ expression: 'pair.first + 1', value: '?' },
+				{ expression: 'pair.first()', value: '?' }
+			])
+		);
+		expect(debugVariables).not.toHaveBeenCalled();
+	});
+
+	it('discards a nested watch result that resolves after resume', async () => {
+		const children =
+			deferred<Array<{ name: string; value: string; variablesReference: number }>>();
+		const controller = createDebugSessionController({
+			terminal: {
+				debugEvaluate: vi.fn(async () => '?'),
+				debugVariables: vi.fn(() => children.promise)
+			} as never
+		});
+		controller.handleEvent({
+			type: 'pause',
+			line: 5,
+			reason: 'breakpoint',
+			locals: [{ name: 'pair', value: '{...}', variablesReference: 20 }],
+			callStack: [{ functionName: 'main', line: 5 }]
+		});
+		controller.addWatchExpression('pair.first');
+		await vi.waitFor(() =>
+			expect(controller.watchValues).toEqual([{ expression: 'pair.first', value: '...' }])
+		);
+
+		controller.handleEvent({ type: 'resume', command: 'continue' });
+		children.resolve([{ name: 'first', value: '35', variablesReference: 0 }]);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(controller.watchValues).toEqual([{ expression: 'pair.first', value: 'error' }]);
 	});
 
 	it('falls back to adapter evaluation, syncs breakpoints, and clears pause state on stop', () => {

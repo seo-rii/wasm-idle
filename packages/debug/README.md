@@ -23,10 +23,13 @@ contract cannot carry breakpoint conditions or log messages and does not expose 
 operations. Add the adapter methods and their product-path tests before enabling them; the current
 browser WAMR product also lacks the required target-side expression evaluation and watchpoints.
 
-The playground controller still supports an exact local or argument name as a watch after its lazy
-top-level scope has been loaded. When the runtime reports expression evaluation as unavailable, a
-watch such as `answer` resolves from the matching variable entry, while `answer + 1`, field paths,
-and other expressions remain `?`. This fallback does not advertise LLDB expression evaluation.
+When the runtime reports expression evaluation as unavailable, the playground controller resolves a
+bounded variable path from lazy DAP variables. Exact locals and arguments, nested fields such as
+`pair.first`, and zero-based non-negative indexes such as `items[2]` are supported. Indexed access
+requests only the selected child with DAP `start`/`count`; field traversal caches each fetched child
+page for the current stop. Arithmetic, calls, dereferences, negative indexes, and other expressions
+remain `?`. Resume, disconnect, or frame selection invalidates in-flight traversal so a stale result
+cannot repopulate the UI. This fallback does not advertise LLDB expression evaluation.
 Adapter initialization snapshots its request arguments and explicit feature opt-ins before awaiting
 the DAP response. Mutating a caller-owned options object in flight therefore cannot enable
 WebAssembly expression evaluation after the conservative capability decision has begun.

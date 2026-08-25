@@ -156,4 +156,13 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toMatch(/expectScopesAtStop: false,[\s\S]{0,200}testId: 'rust-panic'/);
 		expect(browserTest).toMatch(/expectedStoppedLine: null,[\s\S]{0,240}testId: 'rust-panic'/);
 	});
+
+	it('keeps a nested variable-path watch in the C++ browser gate', async () => {
+		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+		const page = await readFile('src/routes/+page.svelte', 'utf8');
+
+		expect(browserTest).toContain("expectedWatch: { expression: 'pair.first', value: '35' }");
+		expect(browserTest).toContain(".locator('.debug-entry--watch')");
+		expect(page).toContain('placeholder="pair.first or items[2]"');
+	});
 });

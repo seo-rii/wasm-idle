@@ -177,17 +177,111 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			watchValuesStore.set(expressions.map((expression) => ({ expression, value: '...' })));
 			(async () => {
 				const resolved: DebugWatchValue[] = [];
+				let resolvedVariables = [...localVariables];
+				const resolvedReferences = new Map(get(variablesByReferenceStore));
 				for (const expression of expressions) {
 					const runtimeValue = await terminal.debugEvaluate!(expression);
-					const exactVariable = localVariables.find(
-						(variable) => variable.name === expression
-					);
+					if (version !== watchRequestVersion || !get(pausedStore)) return;
+					if (runtimeValue !== '?') {
+						resolved.push({ expression, value: runtimeValue });
+						continue;
+					}
+
+					const root = expression.match(/^[A-Za-z_][A-Za-z0-9_]*/u)?.[0];
+					const segments: Array<{ name: string } | { index: number }> = [];
+					let cursor = root?.length ?? 0;
+					let safePath = !!root;
+					while (safePath && cursor < expression.length) {
+						if (expression[cursor] === '.') {
+							const field = expression
+								.slice(cursor + 1)
+								.match(/^[A-Za-z_][A-Za-z0-9_]*/u)?.[0];
+							if (!field) {
+								safePath = false;
+								break;
+							}
+							segments.push({ name: field });
+							cursor += field.length + 1;
+							continue;
+						}
+						if (expression[cursor] === '[') {
+							const indexMatch = expression
+								.slice(cursor)
+								.match(/^\[(0|[1-9][0-9]*)\]/u);
+							const index = indexMatch ? Number(indexMatch[1]) : -1;
+							if (!indexMatch || !Number.isSafeInteger(index)) {
+								safePath = false;
+								break;
+							}
+							segments.push({ index });
+							cursor += indexMatch[0].length;
+							continue;
+						}
+						safePath = false;
+					}
+					if (!safePath || cursor !== expression.length) {
+						resolved.push({ expression, value: '?' });
+						continue;
+					}
+
+					let variable = resolvedVariables.find((candidate) => candidate.name === root);
+					if (!variable && terminal.debugVariables) {
+						for (const scope of get(scopesStore)) {
+							if (scope.variablesReference <= 0) continue;
+							let scopeVariables = resolvedReferences.get(scope.variablesReference);
+							if (!scopeVariables) {
+								scopeVariables = await terminal.debugVariables(
+									scope.variablesReference
+								);
+								if (version !== watchRequestVersion || !get(pausedStore)) return;
+								resolvedReferences.set(scope.variablesReference, scopeVariables);
+								variablesByReferenceStore.update((current) => {
+									const next = new Map(current);
+									next.set(scope.variablesReference, [...scopeVariables!]);
+									return next;
+								});
+							}
+							resolvedVariables = [...resolvedVariables, ...scopeVariables];
+							variable = resolvedVariables.find(
+								(candidate) => candidate.name === root
+							);
+							if (variable) break;
+						}
+						localsStore.set([...resolvedVariables]);
+					}
+
+					for (const segment of segments) {
+						const variablesReference = variable?.variablesReference ?? 0;
+						if (!variable || variablesReference <= 0 || !terminal.debugVariables) {
+							variable = undefined;
+							break;
+						}
+						if ('index' in segment) {
+							const children = await terminal.debugVariables(
+								variablesReference,
+								segment.index,
+								1
+							);
+							if (version !== watchRequestVersion || !get(pausedStore)) return;
+							variable = children[0];
+							continue;
+						}
+						let children = resolvedReferences.get(variablesReference);
+						if (!children) {
+							children = await terminal.debugVariables(variablesReference);
+							if (version !== watchRequestVersion || !get(pausedStore)) return;
+							resolvedReferences.set(variablesReference, children);
+							variablesByReferenceStore.update((current) => {
+								const next = new Map(current);
+								next.set(variablesReference, [...children!]);
+								return next;
+							});
+						}
+						variable = children.find((candidate) => candidate.name === segment.name);
+					}
 					resolved.push({
 						expression,
-						value:
-							runtimeValue === '?' && exactVariable
-								? exactVariable.value
-								: runtimeValue
+						value: variable?.value ?? '?'
 					});
 				}
 				if (version === watchRequestVersion) watchValuesStore.set(resolved);

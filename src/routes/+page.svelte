@@ -2622,7 +2622,7 @@
 						<div class="watch-row">
 							<input
 								bind:value={debug.watchInput}
-								placeholder="a == b"
+								placeholder="pair.first or items[2]"
 								onkeydown={(event) =>
 									event.key === 'Enter' && debug.addWatchExpression()}
 							/>

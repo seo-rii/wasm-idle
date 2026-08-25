@@ -150,6 +150,7 @@ int main(void) {
 		activePath: 'main.cpp',
 		backend: 'lldb',
 		breakpointLine: 16,
+		expectedWatch: { expression: 'pair.first', value: '35' },
 		expectedVariableTrees: [
 			{
 				parent: 'pair',
@@ -187,9 +188,10 @@ int main() {
     Pair pair{35, 38};
     Pair *pair_ptr = &pair;
     int result = calculate(pair_ptr->first);
-    std::printf("lldb-cpp=%d\\n", result);
-    return 0;
-}`
+		std::printf("lldb-cpp=%d\\n", result);
+		return 0;
+}`,
+		testId: 'cpp-composite'
 	},
 	{
 		activePath: 'recursive.c',
@@ -1439,6 +1441,28 @@ describe('native-source browser debugging in Chromium', () => {
 									expect.objectContaining(testCase.expectedLocal)
 								])
 							);
+							if ('expectedWatch' in testCase) {
+								await page
+									.locator('.watch-row input')
+									.fill(testCase.expectedWatch.expression);
+								await page.locator('.watch-add').click();
+								const watchEntry = page.locator('.debug-entry--watch').filter({
+									has: page.locator('.debug-expression', {
+										hasText: testCase.expectedWatch.expression
+									})
+								});
+								await expect
+									.poll(
+										async () =>
+											(
+												await watchEntry
+													.locator('.debug-value')
+													.textContent()
+											)?.trim(),
+										{ timeout: 30_000 }
+									)
+									.toBe(testCase.expectedWatch.value);
+							}
 							if ('expectedVariableTrees' in testCase) {
 								for (const expectedTree of testCase.expectedVariableTrees) {
 									const parent = loadedVariables.find(
