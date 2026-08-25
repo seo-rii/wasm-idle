@@ -43,7 +43,11 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<span>Stop Running<\/span>/);
 		expect(source).toMatch(/await terminal\.stop\?\.\(\);/);
 		expect(source).toMatch(
-			/\{#if runningMode === 'debug'\}\s+<button class="action-button action-button--stop" onclick=\{stopExecution\}>/s
+			/\{#if runningMode === 'debug'\}\s+<button\s+class="action-button action-button--debug-restart"/s
+		);
+		expect(source).toContain('aria-label="Restart Debug"');
+		expect(source).toContain(
+			'<button class="action-button action-button--stop" onclick={stopExecution}>'
 		);
 		expect(source).toMatch(/<span>Stop Debug<\/span>/);
 		expect(source).toMatch(/disabled=\{runningMode === 'debug' \|\| !executionAvailable\}/);
@@ -147,6 +151,23 @@ describe('example route debug actions', () => {
 		expect(source).toContain('aria-label={`Inspect memory for ${variable.name}`}');
 		expect(source).toContain('readDebugMemoryPage(-1)');
 		expect(source).toContain('readDebugMemoryPage(1)');
+	});
+
+	it('restarts LLDB debugging through a fully disposed fresh execution', () => {
+		expect(source).toContain('let restartDebugPending = $state(false);');
+		expect(source).toContain('let executionGeneration = 0;');
+		expect(source).toContain('async function restartDebugExecution()');
+		expect(source).toContain('const previousExecution = activeExecution;');
+		expect(source).toContain('restartRequestGeneration += 1;');
+		expect(source).toContain('if (restartRequestGeneration !== requestGeneration) return;');
+		expect(source).toContain('await debug.stop();');
+		expect(source).toContain('await previousExecution;');
+		expect(source).toContain('await exec(true);');
+		expect(source).toContain('aria-label="Restart Debug"');
+		expect(source).toContain('disabled={restartDebugPending}');
+		expect(source).toMatch(
+			/if \(executionGeneration === generation\) \{[\s\S]*?runningMode = null;\s+activeExecution = null;/
+		);
 	});
 
 	it('navigates the workspace editor when an LLDB frame belongs to another source', () => {
@@ -862,7 +883,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/const executionAvailable = \$derived\(!editorOnlyLanguages\.has\(language\)\);/
 		);
-		expect(source).toMatch(/if \(!executionAvailable\) return;/);
+		expect(source).toMatch(/if \(!executionAvailable\) return Promise\.resolve\(\);/);
 		expect(source).toMatch(/fortran: 'FORTRAN'/);
 		expect(source).toMatch(/graphql: 'GRAPHQL'/);
 		expect(source).toMatch(/json: 'JSON'/);

@@ -101,7 +101,11 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain('WASM_IDLE_DEBUG_RELAUNCH_COUNT');
 		expect(vitestConfig).toContain('WASM_IDLE_DEBUG_BROWSER_TEST_TIMEOUT_MS');
 		expect(browserTest).toContain('__wasmIdleWorkerMetrics');
+		expect(browserTest).toContain("getByRole('button', { name: 'Restart Debug' })");
+		expect(browserTest).toContain('peakActive');
 		expect(browserTest).toContain('WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES');
+		expect(debugReadme).toContain('The required browser gate uses **Restart Debug**');
+		expect(debugReadme).toContain('more than one LLDB/target Worker pair is live');
 		expect(debugReadme).toContain('WASM_IDLE_DEBUG_RELAUNCH_COUNT=100');
 		expect(debugReadme).toContain('WASM_IDLE_DEBUG_BROWSER_TEST_TIMEOUT_MS=7200000');
 	});

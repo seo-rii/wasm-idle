@@ -34,9 +34,12 @@ Adapter initialization snapshots its request arguments and explicit feature opt-
 the DAP response. Mutating a caller-owned options object in flight therefore cannot enable
 WebAssembly expression evaluation after the conservative capability decision has begun.
 
-Variable mutation, restart, and standalone terminate requests also remain false even when a generic
-DAP server advertises them, because the `DebugAdapter` contract does not expose those operations.
-Add the adapter method and its product-path tests before enabling the corresponding capability.
+Variable mutation, DAP in-session restart, and standalone terminate requests also remain false even
+when a generic DAP server advertises them, because the `DebugAdapter` contract does not expose those
+operations. The playground's **Restart Debug** action is deliberately a higher-level operation: it
+fully stops the current execution, awaits both debugger Workers' disposal, and launches a new
+LLDB/WAMR session from the current workspace. It does not preserve target state or claim the DAP
+`restart` capability.
 
 `createAdapterDebugSessionController()` provides the shared view model. Variable children remain
 lazy through `variablesReference`; consumers should not serialize an entire LLDB variable tree.
@@ -129,8 +132,9 @@ within five seconds, and permit a fresh session to launch without stale events. 
 session runs to normal output, proving that failure cleanup does not poison later DAP or RSP
 generations.
 
-The required browser gate runs three launch/disconnect cycles and checks worker cleanup plus
-JavaScript heap growth. Run the opt-in long soak with 100 cycles using:
+The required browser gate uses **Restart Debug** for three fresh-session launches, verifies that no
+more than one LLDB/target Worker pair is live, then performs a final disconnect and checks JavaScript
+heap growth. Run the opt-in long soak with 100 sessions using:
 
 ```bash
 WASM_IDLE_DEBUG_BROWSER_CASES=c-relaunch \
@@ -139,8 +143,8 @@ WASM_IDLE_DEBUG_BROWSER_TEST_TIMEOUT_MS=7200000 \
 pnpm run test:browser:debug:lldb
 ```
 
-`WASM_IDLE_DEBUG_RELAUNCH_COUNT` must be an integer of at least three. The same worker-count and
-heap-growth limits are enforced on every cycle. The example gives Vitest two hours for the
+`WASM_IDLE_DEBUG_RELAUNCH_COUNT` must be an integer of at least three. The same Worker disposal,
+two-debug-Worker peak, and heap-growth limits are enforced across the sequence. The example gives Vitest two hours for the
 opt-in soak; adjust the existing
 `WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES` only when recording an intentional budget change.
 

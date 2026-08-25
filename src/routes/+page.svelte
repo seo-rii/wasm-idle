@@ -172,6 +172,10 @@
 		examplePaneWidth = $state(0),
 		terminalPaneWidth = $state<number | null>(null),
 		resizingPane = $state(false);
+	let restartDebugPending = $state(false);
+	let executionGeneration = 0;
+	let restartRequestGeneration = 0;
+	let activeExecution: Promise<void> | null = null;
 
 	const initialWorkspace = createDefaultWorkspace('CPP');
 	let languageWorkspaces = $state<Record<PlaygroundLanguage, LanguageWorkspace>>({
@@ -1210,11 +1214,29 @@
 
 	async function stopExecution() {
 		if (!terminal || !runningMode) return;
+		restartRequestGeneration += 1;
+		restartDebugPending = false;
 		if (runningMode === 'debug') {
 			await debug.stop();
 			return;
 		}
 		await terminal.stop?.();
+	}
+
+	async function restartDebugExecution() {
+		if (!terminal || runningMode !== 'debug' || restartDebugPending) return;
+		const requestGeneration = ++restartRequestGeneration;
+		const previousExecution = activeExecution;
+		restartDebugPending = true;
+		try {
+			await debug.stop();
+			await previousExecution;
+			if (restartRequestGeneration !== requestGeneration) return;
+			restartDebugPending = false;
+			await exec(true);
+		} finally {
+			if (restartRequestGeneration === requestGeneration) restartDebugPending = false;
+		}
 	}
 
 	async function sendTerminalEof() {
@@ -1471,109 +1493,117 @@
 		}
 	}
 
-	async function exec(enableDebug = false) {
-		if (!editor || !terminal || !activeFile) return;
-		if (!executionAvailable) return;
-		if (enableDebug && !debugLanguage) return;
-		if (enableDebug && !sharedBufferAvailable) return;
-		if (enableDebug && !debugTargetAvailable) return;
-		if (runningMode) return;
-		let executionDebugMode: NonNullable<SandboxExecutionOptions['debugMode']> = enableDebug
-			? selectedDebugMode
-			: 'none';
-		runningMode = enableDebug ? 'debug' : 'run';
-		activeDebugBackend = enableDebug ? selectedDebugMode : null;
-		if (enableDebug && debugLspLanguages.has(language)) clangdRequested = true;
-		if (enableDebug) {
-			invalidateMemoryInspector();
-			debug.begin();
-		} else {
-			debug.reset();
-		}
-		compilerDiagnostics = [];
-		const codeToRun = activeFile.content;
-		const args = parseArgs(argsInput);
-		if (browser) {
-			localStorage.setItem('code', codeToRun);
-			localStorage.setItem('language', language);
-			localStorage.setItem('argsInput', argsInput);
-			localStorage.setItem('rustTargetTriple', rustTargetTriple);
-			localStorage.setItem('goTarget', goTarget);
-			localStorage.setItem('ocamlBackend', ocamlBackend);
-			localStorage.setItem('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode);
-			saveWorkspace();
-		}
-		try {
-			loadingProgress.start(`Loading ${language} runtime`);
-			if (executionDebugMode === 'lldb') {
-				try {
-					loadingProgress.set(0, 'Checking LLDB debug runtime');
-					const manifestUrl = runtimeAssets.debug?.manifestUrl;
-					if (!manifestUrl)
-						throw new Error('LLDB runtime manifest URL is not configured.');
-					const response = await fetch(manifestUrl, { cache: 'no-store' });
-					if (!response.ok) {
-						throw new Error(`LLDB runtime manifest returned ${response.status}.`);
+	function exec(enableDebug = false): Promise<void> {
+		if (!editor || !terminal || !activeFile) return Promise.resolve();
+		if (!executionAvailable) return Promise.resolve();
+		if (enableDebug && !debugLanguage) return Promise.resolve();
+		if (enableDebug && !sharedBufferAvailable) return Promise.resolve();
+		if (enableDebug && !debugTargetAvailable) return Promise.resolve();
+		if (runningMode) return Promise.resolve();
+		const generation = ++executionGeneration;
+		const execution = (async () => {
+			let executionDebugMode: NonNullable<SandboxExecutionOptions['debugMode']> = enableDebug
+				? selectedDebugMode
+				: 'none';
+			runningMode = enableDebug ? 'debug' : 'run';
+			activeDebugBackend = enableDebug ? selectedDebugMode : null;
+			if (enableDebug && debugLspLanguages.has(language)) clangdRequested = true;
+			if (enableDebug) {
+				invalidateMemoryInspector();
+				debug.begin();
+			} else {
+				debug.reset();
+			}
+			compilerDiagnostics = [];
+			const codeToRun = activeFile.content;
+			const args = parseArgs(argsInput);
+			if (browser) {
+				localStorage.setItem('code', codeToRun);
+				localStorage.setItem('language', language);
+				localStorage.setItem('argsInput', argsInput);
+				localStorage.setItem('rustTargetTriple', rustTargetTriple);
+				localStorage.setItem('goTarget', goTarget);
+				localStorage.setItem('ocamlBackend', ocamlBackend);
+				localStorage.setItem('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode);
+				saveWorkspace();
+			}
+			try {
+				loadingProgress.start(`Loading ${language} runtime`);
+				if (executionDebugMode === 'lldb') {
+					try {
+						loadingProgress.set(0, 'Checking LLDB debug runtime');
+						const manifestUrl = runtimeAssets.debug?.manifestUrl;
+						if (!manifestUrl)
+							throw new Error('LLDB runtime manifest URL is not configured.');
+						const response = await fetch(manifestUrl, { cache: 'no-store' });
+						if (!response.ok) {
+							throw new Error(`LLDB runtime manifest returned ${response.status}.`);
+						}
+						const { parseDebugRuntimeManifest, preflightDebugRuntimeAssets } =
+							await import('@wasm-idle/llvm-core/debug');
+						const manifest = parseDebugRuntimeManifest(await response.json());
+						const capabilities = manifest.debugger.capabilities;
+						if (
+							!capabilities.breakpoints ||
+							!capabilities.stepping ||
+							!capabilities.stackTrace ||
+							!capabilities.locals
+						) {
+							throw new Error('LLDB runtime is missing required debug capabilities.');
+						}
+						await preflightDebugRuntimeAssets(
+							manifest,
+							new URL(runtimeAssets.debug.baseUrl, globalThis.location.href)
+						);
+						activeDebugBackend = 'lldb';
+					} catch (error) {
+						executionDebugMode = 'trace';
+						activeDebugBackend = 'trace';
+						console.warn(
+							'LLDB debug runtime is unavailable; using trace debugging for this run.',
+							error
+						);
 					}
-					const { parseDebugRuntimeManifest, preflightDebugRuntimeAssets } =
-						await import('@wasm-idle/llvm-core/debug');
-					const manifest = parseDebugRuntimeManifest(await response.json());
-					const capabilities = manifest.debugger.capabilities;
-					if (
-						!capabilities.breakpoints ||
-						!capabilities.stepping ||
-						!capabilities.stackTrace ||
-						!capabilities.locals
-					) {
-						throw new Error('LLDB runtime is missing required debug capabilities.');
+				}
+				const preloadedStdin =
+					sharedBufferAvailable && language !== 'BASH' ? undefined : stdinInput;
+				await executeTerminalRun({
+					terminal,
+					language,
+					code: codeToRun,
+					log,
+					progress: progressRef,
+					args,
+					options: {
+						debugMode: executionDebugMode,
+						debug: enableDebug,
+						breakpoints: [...debug.effectiveBreakpoints],
+						sourceBreakpoints: debug.sourceBreakpoints.filter(({ sourcePath }) =>
+							files.some(
+								(file) => `/workspace/${normalizePath(file.path)}` === sourcePath
+							)
+						),
+						activePath,
+						workspaceFiles: files.map((file) => ({
+							path: file.path,
+							content: file.path === activePath ? codeToRun : file.content
+						})),
+						pauseOnEntry: enableDebug,
+						...languageExecutionOptions,
+						stdin: preloadedStdin
 					}
-					await preflightDebugRuntimeAssets(
-						manifest,
-						new URL(runtimeAssets.debug.baseUrl, globalThis.location.href)
-					);
-					activeDebugBackend = 'lldb';
-				} catch (error) {
-					executionDebugMode = 'trace';
-					activeDebugBackend = 'trace';
-					console.warn(
-						'LLDB debug runtime is unavailable; using trace debugging for this run.',
-						error
-					);
+				});
+			} finally {
+				if (executionGeneration === generation) {
+					loadingProgress.reset();
+					runningMode = null;
+					activeExecution = null;
+					if (!debug.paused) debug.reset();
 				}
 			}
-			const preloadedStdin =
-				sharedBufferAvailable && language !== 'BASH' ? undefined : stdinInput;
-			await executeTerminalRun({
-				terminal,
-				language,
-				code: codeToRun,
-				log,
-				progress: progressRef,
-				args,
-				options: {
-					debugMode: executionDebugMode,
-					debug: enableDebug,
-					breakpoints: [...debug.effectiveBreakpoints],
-					sourceBreakpoints: debug.sourceBreakpoints.filter(({ sourcePath }) =>
-						files.some(
-							(file) => `/workspace/${normalizePath(file.path)}` === sourcePath
-						)
-					),
-					activePath,
-					workspaceFiles: files.map((file) => ({
-						path: file.path,
-						content: file.path === activePath ? codeToRun : file.content
-					})),
-					pauseOnEntry: enableDebug,
-					...languageExecutionOptions,
-					stdin: preloadedStdin
-				}
-			});
-		} finally {
-			loadingProgress.reset();
-			runningMode = null;
-			if (!debug.paused) debug.reset();
-		}
+		})();
+		activeExecution = execution;
+		return execution;
 	}
 
 	$effect(() => {
@@ -2067,6 +2097,15 @@
 						</button>
 					{/if}
 					{#if runningMode === 'debug'}
+						<button
+							class="action-button action-button--debug-restart"
+							onclick={restartDebugExecution}
+							disabled={restartDebugPending}
+							aria-label="Restart Debug"
+						>
+							<span class="material-symbols-outlined">restart_alt</span>
+							<span>{restartDebugPending ? 'Restarting…' : 'Restart Debug'}</span>
+						</button>
 						<button class="action-button action-button--stop" onclick={stopExecution}>
 							<span class="material-symbols-outlined">stop_circle</span>
 							<span>Stop Debug</span>

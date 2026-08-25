@@ -124,8 +124,11 @@ Watch fallback accepts identifiers, nested fields, and non-negative indexes with
 expression evaluation. The memory panel can select a variable's DAP `memoryReference`, reads at most
 256 bytes per request, pages by the selected byte count, renders hexadecimal/ASCII data and unreadable
 bytes as `??`, and discards a response when the target resumes or the selected frame changes.
+The v2 **Restart Debug** action fully disposes the active LLDB and WAMR Workers, waits for the old
+execution to settle, and launches a fresh debug execution from the current workspace. It does not
+preserve target state or advertise the DAP `restart` capability.
 
-Full expression evaluation, conditional/log/data breakpoints, variable mutation, restart,
+Full expression evaluation, conditional/log/data breakpoints, variable mutation, DAP in-session restart,
 standalone terminate, optimized-debug guarantees, C++ exception support, STL pretty-printers,
 `wasm64`, guest threads, reverse debugging, SIMD, multi-module guests, and Rust WASI Preview 2/3
 debugging are outside the v1 support boundary.

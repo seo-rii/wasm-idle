@@ -641,18 +641,22 @@ async function readBrowserLifecycleMetrics(page: Page) {
 			globalThis as typeof globalThis & {
 				__wasmIdleWorkerMetrics?: () => {
 					active: number;
+					activeDebug: number;
 					created: number;
 					linearMemory: Record<'lldb' | 'target', { peakBytes: number; samples: number }>;
+					peakActive: number;
 					terminated: number;
 				};
 			}
 		).__wasmIdleWorkerMetrics?.() ?? {
 			active: 0,
+			activeDebug: 0,
 			created: 0,
 			linearMemory: {
 				lldb: { peakBytes: 0, samples: 0 },
 				target: { peakBytes: 0, samples: 0 }
 			},
+			peakActive: 0,
 			terminated: 0
 		};
 		const memory = (
@@ -712,6 +716,8 @@ describe('native-source browser debugging in Chromium', () => {
 				if (typeof NativeWorker !== 'function') return;
 				let active = 0;
 				let created = 0;
+				let activeDebug = 0;
+				let peakActive = 0;
 				let terminated = 0;
 				const liveWorkers = new WeakSet<Worker>();
 				const debugWorkers = new Map<'lldb' | 'target', Worker>();
@@ -738,6 +744,8 @@ describe('native-source browser debugging in Chromium', () => {
 							debugWorkerKind = 'target';
 						}
 						if (debugWorkerKind) {
+							activeDebug += 1;
+							peakActive = Math.max(peakActive, activeDebug);
 							debugWorkers.set(debugWorkerKind, this);
 							this.addEventListener('message', (event) => {
 								const data: unknown = event.data;
@@ -799,6 +807,7 @@ describe('native-source browser debugging in Chromium', () => {
 						for (const [kind, worker] of debugWorkers) {
 							if (worker !== this) continue;
 							debugWorkers.delete(kind);
+							activeDebug -= 1;
 							if (kind === 'target') targetQueues.clear();
 						}
 						super.terminate();
@@ -813,11 +822,13 @@ describe('native-source browser debugging in Chromium', () => {
 					configurable: true,
 					value: () => ({
 						active,
+						activeDebug,
 						created,
 						linearMemory: {
 							lldb: { ...linearMemory.lldb },
 							target: { ...linearMemory.target }
 						},
+						peakActive,
 						terminated
 					})
 				});
@@ -2031,8 +2042,7 @@ describe('native-source browser debugging in Chromium', () => {
 						}
 						if (
 							'afterContinue' in testCase &&
-							(testCase.afterContinue === 'disconnect' ||
-								testCase.afterContinue === 'relaunch')
+							testCase.afterContinue === 'disconnect'
 						) {
 							await page
 								.locator('.debug-status-pill--active')
@@ -2045,82 +2055,71 @@ describe('native-source browser debugging in Chromium', () => {
 									process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS || '5000'
 								)
 							});
-							if (testCase.afterContinue === 'relaunch') {
-								await page.evaluate(() =>
-									(window as any).__wasmIdleDebug.setBreakpoints([])
-								);
-								const repeatCount = Number(
-									process.env.WASM_IDLE_DEBUG_RELAUNCH_COUNT ||
-										testCase.repeatCount
-								);
-								if (
-									!Number.isSafeInteger(repeatCount) ||
-									repeatCount < testCase.repeatCount
-								) {
-									throw new Error(
-										`WASM_IDLE_DEBUG_RELAUNCH_COUNT must be an integer greater than or equal to ${testCase.repeatCount}`
-									);
-								}
-								await page.requestGC();
-								const baselineMetrics = await readBrowserLifecycleMetrics(page);
-								expect(baselineMetrics.usedJsHeapSize).toBeGreaterThan(0);
-								const heapGrowthLimit = Number(
-									process.env.WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES ||
-										String(64 * 1024 * 1024)
-								);
-								let latestMetrics = baselineMetrics;
-								const lifecycleMetrics = [baselineMetrics];
-								for (let run = 1; run < repeatCount; run += 1) {
-									await debugButton.click();
-									await page
-										.getByRole('button', { name: 'Stop Debug' })
-										.waitFor({ state: 'visible' });
-									await page
-										.locator('.debug-status-pill--paused')
-										.waitFor({ state: 'visible' });
-									await page.locator('button[aria-label="Continue"]').click();
-									await page
-										.locator('.debug-status-pill--active')
-										.waitFor({ state: 'visible' });
-									await page.waitForTimeout(250);
-									await page.getByRole('button', { name: 'Stop Debug' }).click();
-									await debugButton.waitFor({
-										state: 'visible',
-										timeout: Number(
-											process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS ||
-												'5000'
-										)
-									});
-									await page.waitForTimeout(250);
-									const debugState = await page.evaluate(() =>
-										(window as any).__wasmIdleDebug.getDebugState()
-									);
-									expect(debugState.paused).toBe(false);
-									await page.requestGC();
-									latestMetrics = await readBrowserLifecycleMetrics(page);
-									lifecycleMetrics.push(latestMetrics);
-									expect(latestMetrics.active).toBeLessThanOrEqual(
-										baselineMetrics.active
-									);
-									expect(
-										latestMetrics.usedJsHeapSize -
-											baselineMetrics.usedJsHeapSize
-									).toBeLessThanOrEqual(heapGrowthLimit);
-								}
-								const repeatedRuns = repeatCount - 1;
-								expect(
-									latestMetrics.created - baselineMetrics.created
-								).toBeGreaterThanOrEqual(repeatedRuns * 2);
-								expect(
-									latestMetrics.terminated - baselineMetrics.terminated
-								).toBeGreaterThanOrEqual(repeatedRuns * 2);
-								console.info(
-									`[wasm-idle:lldb-lifecycle] ${JSON.stringify({
-										heapGrowthLimit,
-										runs: lifecycleMetrics
-									})}`
+						} else if (
+							'afterContinue' in testCase &&
+							testCase.afterContinue === 'relaunch'
+						) {
+							await page
+								.locator('.debug-status-pill--active')
+								.waitFor({ state: 'visible' });
+							const repeatCount = Number(
+								process.env.WASM_IDLE_DEBUG_RELAUNCH_COUNT || testCase.repeatCount
+							);
+							if (
+								!Number.isSafeInteger(repeatCount) ||
+								repeatCount < testCase.repeatCount
+							) {
+								throw new Error(
+									`WASM_IDLE_DEBUG_RELAUNCH_COUNT must be an integer greater than or equal to ${testCase.repeatCount}`
 								);
 							}
+							await page.requestGC();
+							const baselineMetrics = await readBrowserLifecycleMetrics(page);
+							expect(baselineMetrics.activeDebug).toBe(2);
+							expect(baselineMetrics.usedJsHeapSize).toBeGreaterThan(0);
+							const heapGrowthLimit = Number(
+								process.env.WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES ||
+									String(64 * 1024 * 1024)
+							);
+							let latestMetrics = baselineMetrics;
+							const lifecycleMetrics = [baselineMetrics];
+							for (let run = 1; run < repeatCount; run += 1) {
+								const pausedStatus = page.locator('.debug-status-pill--paused');
+								await page.getByRole('button', { name: 'Restart Debug' }).click();
+								await pausedStatus.waitFor({ state: 'hidden' });
+								await pausedStatus.waitFor({ state: 'visible', timeout: 120_000 });
+								latestMetrics = await readBrowserLifecycleMetrics(page);
+								lifecycleMetrics.push(latestMetrics);
+								expect(latestMetrics.activeDebug).toBe(2);
+								expect(latestMetrics.peakActive).toBeLessThanOrEqual(2);
+								expect(
+									latestMetrics.created - baselineMetrics.created
+								).toBeGreaterThanOrEqual(run * 2);
+								expect(
+									latestMetrics.terminated - baselineMetrics.terminated
+								).toBeGreaterThanOrEqual(run * 2);
+							}
+							await page.getByRole('button', { name: 'Stop Debug' }).click();
+							await debugButton.waitFor({
+								state: 'visible',
+								timeout: Number(
+									process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS || '5000'
+								)
+							});
+							await page.requestGC();
+							latestMetrics = await readBrowserLifecycleMetrics(page);
+							lifecycleMetrics.push(latestMetrics);
+							expect(latestMetrics.activeDebug).toBe(0);
+							expect(latestMetrics.peakActive).toBeLessThanOrEqual(2);
+							expect(
+								latestMetrics.usedJsHeapSize - baselineMetrics.usedJsHeapSize
+							).toBeLessThanOrEqual(heapGrowthLimit);
+							console.info(
+								`[wasm-idle:lldb-lifecycle] ${JSON.stringify({
+									heapGrowthLimit,
+									runs: lifecycleMetrics
+								})}`
+							);
 						} else if ('expectedStoppedReason' in testCase) {
 							if ('afterContinue' in testCase && testCase.afterContinue === 'pause') {
 								const pauseButton = page.locator('button[aria-label="Pause"]');
