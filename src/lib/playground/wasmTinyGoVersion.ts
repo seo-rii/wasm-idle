@@ -42,4 +42,4 @@ export const WASM_TINYGO_RUNTIME_PROFILE = Object.freeze({
 });
 
 export const WASM_TINYGO_ASSET_VERSION =
-	'b10a970c6f9348ecf2db0ffbfc08a49a7d2bbe100724e5e0c486ece45098b9cf';
+	'5ff593680ea205ac06ce66afd181d811f46933a5358113a11206b6b89d95707f';

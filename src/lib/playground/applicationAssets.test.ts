@@ -1075,6 +1075,10 @@ describe('application runtime asset root', () => {
 		const originalKey = createRuntimeAssetsKey(assets);
 		const tinygo = assets.tinygo!;
 		const firstAsset = Object.keys(tinygo.assetReceipts!)[0]!;
+		const firstReceipt = tinygo.assetReceipts![firstAsset];
+		if (!firstReceipt || typeof firstReceipt === 'string') {
+			throw new Error('bundled TinyGo asset receipts must include size metadata');
+		}
 		const replacements = [
 			{ profileId: `${tinygo.profileId}-replacement` },
 			{ protocolVersion: 5 },
@@ -1084,7 +1088,7 @@ describe('application runtime asset root', () => {
 			{
 				assetReceipts: {
 					...tinygo.assetReceipts,
-					[firstAsset]: { ...tinygo.assetReceipts![firstAsset], sha256: '2'.repeat(64) }
+					[firstAsset]: { ...firstReceipt, sha256: '2'.repeat(64) }
 				}
 			}
 		];

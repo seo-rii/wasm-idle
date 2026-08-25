@@ -1,4 +1,9 @@
-import { sha256TinyGoBytes, type TinyGoRuntimeAssetReceipt } from './upstream-contract.ts';
+interface TinyGoRuntimeAssetReceipt {
+	bytes: number;
+	sha256: string;
+	uncompressedBytes?: number;
+	uncompressedSha256?: string;
+}
 
 export type TinyGoRuntimeAssetLoaderResult =
 	| string
@@ -126,7 +131,18 @@ async function verifyRuntimeAssetReceipt<Buffer extends ArrayBufferLike>(
 	if (bytes.byteLength !== expectedBytes) {
 		throw new Error(`${assetLabel} ${stage} byte length differs from its runtime profile`);
 	}
-	if ((await sha256TinyGoBytes(bytes)) !== expectedSha256) {
+	if (!globalThis.crypto?.subtle) {
+		throw new Error('wasm-tinygo runtime asset verification requires Web Crypto');
+	}
+	const digestInput =
+		bytes.buffer instanceof ArrayBuffer
+			? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+			: Uint8Array.from(bytes);
+	const digest = await globalThis.crypto.subtle.digest('SHA-256', digestInput);
+	const actualSha256 = [...new Uint8Array(digest)]
+		.map((value) => value.toString(16).padStart(2, '0'))
+		.join('');
+	if (actualSha256 !== expectedSha256) {
 		throw new Error(`${assetLabel} ${stage} SHA-256 differs from its runtime profile`);
 	}
 	return bytes;

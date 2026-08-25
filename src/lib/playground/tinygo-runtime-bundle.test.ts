@@ -47,6 +47,7 @@ describe('bundled wasm-tinygo runtime', () => {
 	});
 
 	it('recomputes every generated TinyGo logical and deployment-storage receipt', () => {
+		type TinyGoAssetPath = keyof typeof WASM_TINYGO_RUNTIME_PROFILE.assetReceipts;
 		const expectedPaths = [
 			'tools/upstream/lld.wasm',
 			'tools/upstream/package-graph-provider-receipt.json',
@@ -54,7 +55,7 @@ describe('bundled wasm-tinygo runtime', () => {
 			'tools/upstream/tinygo-compiler.wasm',
 			'tools/upstream/tinygo-package-graph.wasm',
 			'tools/upstream/tinygoroot.tar.gz.bin'
-		];
+		] satisfies TinyGoAssetPath[];
 		expect(Object.keys(WASM_TINYGO_RUNTIME_PROFILE.assetReceipts).sort()).toEqual(
 			expectedPaths
 		);
