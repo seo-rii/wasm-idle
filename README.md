@@ -124,14 +124,21 @@ Watch fallback accepts identifiers, nested fields, and non-negative indexes with
 expression evaluation. The memory panel can select a variable's DAP `memoryReference`, reads at most
 256 bytes per request, pages by the selected byte count, renders hexadecimal/ASCII data and unreadable
 bytes as `??`, and discards a response when the target resumes or the selected frame changes.
+While paused, the same panel can install one session-scoped LLDB data breakpoint over a 1–256 byte
+memory range. Read, write, and read-or-write access modes are qualified in real Chromium sessions
+with `wasm32-wasi` C/C++ and `wasm32-wasip1` Rust programs. Setting a new data breakpoint replaces
+the previous set, and **Clear** sends an empty replacement set to the target. Its opaque DAP data ID
+is never persisted across restart or a new debug execution. Because WAMR reports a completed memory
+access, the stopped source location can be the next executable line after the watched instruction.
+Trace fallback does not advertise or emulate data breakpoints.
 The v2 **Restart Debug** action fully disposes the active LLDB and WAMR Workers, waits for the old
 execution to settle, and launches a fresh debug execution from the current workspace. It does not
 preserve target state or advertise the DAP `restart` capability.
 
-Full expression evaluation, conditional/log/data breakpoints, variable mutation, DAP in-session restart,
+Full expression evaluation, conditional/log breakpoints, variable mutation, DAP in-session restart,
 standalone terminate, optimized-debug guarantees, C++ exception support, STL pretty-printers,
 `wasm64`, guest threads, reverse debugging, SIMD, multi-module guests, and Rust WASI Preview 2/3
-debugging are outside the v1 support boundary.
+debugging remain outside the supported boundary.
 
 ```sh
 cd ../wasm-llvm

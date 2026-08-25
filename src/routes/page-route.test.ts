@@ -153,6 +153,26 @@ describe('example route debug actions', () => {
 		expect(source).toContain('readDebugMemoryPage(1)');
 	});
 
+	it('sets one session-scoped LLDB memory data breakpoint from the inspector', () => {
+		expect(source).toContain(
+			"let dataBreakpointAccessType = $state<DebugDataBreakpointAccessType>('write');"
+		);
+		expect(source).toContain(
+			'let activeDataBreakpoint = $state.raw<ActiveDebugDataBreakpoint | null>(null);'
+		);
+		expect(source).toContain('async function setMemoryDataBreakpoint()');
+		expect(source).toContain('async function clearMemoryDataBreakpoint()');
+		expect(source).toContain('debug.dataBreakpointInfo({');
+		expect(source).toMatch(/debug\.setDataBreakpoints\(\[\s+\{/s);
+		expect(source).toContain("event.type === 'stop'");
+		expect(source).toContain('aria-label="Data breakpoint access"');
+		expect(source).toContain('aria-label="Set data breakpoint"');
+		expect(source).toContain('aria-label="Clear data breakpoint"');
+		expect(source).toContain('class="debug-data-breakpoint-status"');
+		expect(source).toContain('dataBreakpointInfo: (');
+		expect(source).toContain('setDataBreakpoints: (');
+	});
+
 	it('restarts LLDB debugging through a fully disposed fresh execution', () => {
 		expect(source).toContain('let restartDebugPending = $state(false);');
 		expect(source).toContain('let executionGeneration = 0;');

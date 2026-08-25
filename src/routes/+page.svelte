@@ -22,6 +22,11 @@
 	import { createLoadingProgressController } from '$lib/playground/loadingProgress';
 	import type {
 		CompilerDiagnostic,
+		DebugDataBreakpoint,
+		DebugDataBreakpointAccessType,
+		DebugDataBreakpointInfo,
+		DebugDataBreakpointInfoArguments,
+		DebugResolvedDataBreakpoint,
 		GoTarget,
 		OcamlBackend,
 		OcamlWasmBinaryenMode,
@@ -108,6 +113,14 @@
 		ascii: string;
 		bytes: Array<number | null>;
 		offset: number;
+	};
+	type ActiveDebugDataBreakpoint = {
+		accessType: DebugDataBreakpointAccessType;
+		address: string;
+		bytes: number;
+		dataId: string;
+		description: string;
+		id?: number;
 	};
 
 	const WORKSPACE_STORAGE_KEY = 'wasm-idle:example-workspace:v3';
@@ -385,6 +398,11 @@
 	let memoryError = $state('');
 	let memoryLoading = $state(false);
 	let memoryRequestVersion = 0;
+	let dataBreakpointAccessType = $state<DebugDataBreakpointAccessType>('write');
+	let activeDataBreakpoint = $state.raw<ActiveDebugDataBreakpoint | null>(null);
+	let dataBreakpointError = $state('');
+	let dataBreakpointLoading = $state(false);
+	let dataBreakpointRequestVersion = 0;
 	const debugStatusLabel = $derived(
 		debug.paused
 			? 'Paused'
@@ -477,6 +495,12 @@
 			data: number[],
 			allowPartial?: boolean
 		) => Promise<{ offset?: number; bytesWritten: number } | null>;
+		dataBreakpointInfo: (
+			arguments_: DebugDataBreakpointInfoArguments
+		) => Promise<DebugDataBreakpointInfo | null>;
+		setDataBreakpoints: (
+			breakpoints: DebugDataBreakpoint[]
+		) => Promise<DebugResolvedDataBreakpoint[]>;
 	};
 	let browserDebugHookVersion = 0;
 	type WasmRustRuntimeModule = {
@@ -1373,6 +1397,17 @@
 		if (event.type === 'resume' || event.type === 'stop') {
 			invalidateMemoryInspector();
 		}
+		if (event.type === 'resume') {
+			dataBreakpointRequestVersion += 1;
+			dataBreakpointError = '';
+			dataBreakpointLoading = false;
+		}
+		if (event.type === 'stop') {
+			dataBreakpointRequestVersion += 1;
+			activeDataBreakpoint = null;
+			dataBreakpointError = '';
+			dataBreakpointLoading = false;
+		}
 		if (event.type === 'pause') {
 			const sourcePath = event.sourcePath || event.callStack[0]?.sourcePath;
 			const workspacePath = normalizePath(sourcePath?.replace(/^\/workspace\//u, '') || '');
@@ -1490,6 +1525,114 @@
 			memoryError = error instanceof Error ? error.message : String(error);
 		} finally {
 			if (requestVersion === memoryRequestVersion) memoryLoading = false;
+		}
+	}
+
+	async function setMemoryDataBreakpoint() {
+		const requestedReference = memoryReference.trim();
+		const offsetText = memoryOffsetInput.trim();
+		const countText = memoryCountInput.trim();
+		const offsetPattern = /^-?(?:0[xX][0-9a-fA-F]+|(?:0|[1-9][0-9]*))$/u;
+		const countPattern = /^(?:[1-9][0-9]*)$/u;
+		const offset = offsetPattern.test(offsetText) ? Number(offsetText) : Number.NaN;
+		const bytes = countPattern.test(countText) ? Number(countText) : Number.NaN;
+		if (!requestedReference) {
+			dataBreakpointError = 'Enter a memory reference.';
+			return;
+		}
+		if (!Number.isSafeInteger(offset)) {
+			dataBreakpointError = 'Offset must be a safe decimal or hexadecimal integer.';
+			return;
+		}
+		if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > MAX_DEBUG_MEMORY_BYTES) {
+			dataBreakpointError = `Byte count must be between 1 and ${MAX_DEBUG_MEMORY_BYTES}.`;
+			return;
+		}
+		if (activeDebugBackend !== 'lldb' || !debug.paused) {
+			dataBreakpointError = 'Pause an LLDB debug session before setting a data breakpoint.';
+			return;
+		}
+		let address: string;
+		try {
+			const resolvedAddress = BigInt(requestedReference) + BigInt(offset);
+			if (resolvedAddress < 0n) throw new RangeError('negative address');
+			address = `0x${resolvedAddress.toString(16)}`;
+		} catch {
+			dataBreakpointError = 'Reference must be a decimal or hexadecimal address.';
+			return;
+		}
+
+		dataBreakpointError = '';
+		dataBreakpointLoading = true;
+		const requestVersion = ++dataBreakpointRequestVersion;
+		const frameId = debug.frameId;
+		try {
+			const info = await debug.dataBreakpointInfo({
+				name: address,
+				asAddress: true,
+				bytes
+			});
+			if (
+				requestVersion !== dataBreakpointRequestVersion ||
+				!debug.paused ||
+				debug.frameId !== frameId
+			)
+				return;
+			if (!info?.dataId) {
+				dataBreakpointError =
+					info?.description || 'Data breakpoints are unavailable for this memory range.';
+				return;
+			}
+			if (info.accessTypes && !info.accessTypes.includes(dataBreakpointAccessType)) {
+				dataBreakpointError = `${dataBreakpointAccessType} access is unavailable for this memory range.`;
+				return;
+			}
+			const resolved = await debug.setDataBreakpoints([
+				{ dataId: info.dataId, accessType: dataBreakpointAccessType }
+			]);
+			if (
+				requestVersion !== dataBreakpointRequestVersion ||
+				!debug.paused ||
+				debug.frameId !== frameId
+			)
+				return;
+			const breakpoint = resolved[0];
+			if (!breakpoint?.verified) {
+				dataBreakpointError =
+					breakpoint?.message || 'LLDB could not set the data breakpoint.';
+				return;
+			}
+			activeDataBreakpoint = {
+				accessType: dataBreakpointAccessType,
+				address,
+				bytes,
+				dataId: info.dataId,
+				description: info.description,
+				...(breakpoint.id === undefined ? {} : { id: breakpoint.id })
+			};
+		} catch (error) {
+			if (requestVersion !== dataBreakpointRequestVersion || !debug.paused) return;
+			dataBreakpointError = error instanceof Error ? error.message : String(error);
+		} finally {
+			if (requestVersion === dataBreakpointRequestVersion) dataBreakpointLoading = false;
+		}
+	}
+
+	async function clearMemoryDataBreakpoint() {
+		if (activeDebugBackend !== 'lldb' || !debug.paused) return;
+		dataBreakpointError = '';
+		dataBreakpointLoading = true;
+		const requestVersion = ++dataBreakpointRequestVersion;
+		try {
+			await debug.setDataBreakpoints([]);
+			if (requestVersion === dataBreakpointRequestVersion && debug.paused) {
+				activeDataBreakpoint = null;
+			}
+		} catch (error) {
+			if (requestVersion !== dataBreakpointRequestVersion || !debug.paused) return;
+			dataBreakpointError = error instanceof Error ? error.message : String(error);
+		} finally {
+			if (requestVersion === dataBreakpointRequestVersion) dataBreakpointLoading = false;
 		}
 	}
 
@@ -1984,6 +2127,12 @@
 					Uint8Array.from(data),
 					allowPartial
 				);
+			},
+			dataBreakpointInfo(arguments_: DebugDataBreakpointInfoArguments) {
+				return debug.dataBreakpointInfo(arguments_);
+			},
+			setDataBreakpoints(breakpoints: DebugDataBreakpoint[]) {
+				return debug.setDataBreakpoints(breakpoints);
 			},
 			setPreloadedStdin(text: string) {
 				stdinInput = text;
@@ -2824,6 +2973,48 @@
 									{memoryLoading ? 'Reading…' : 'Read'}
 								</button>
 							</div>
+							<div class="debug-memory-watch-controls">
+								<label>
+									<span>Break on</span>
+									<select
+										bind:value={dataBreakpointAccessType}
+										aria-label="Data breakpoint access"
+									>
+										<option value="write">Write</option>
+										<option value="read">Read</option>
+										<option value="readWrite">Read or write</option>
+									</select>
+								</label>
+								<button
+									class="debug-data-breakpoint-set"
+									onclick={() => void setMemoryDataBreakpoint()}
+									disabled={dataBreakpointLoading}
+									aria-label="Set data breakpoint"
+								>
+									{dataBreakpointLoading && !activeDataBreakpoint
+										? 'Setting…'
+										: 'Set data breakpoint'}
+								</button>
+								{#if activeDataBreakpoint}
+									<button
+										class="debug-data-breakpoint-clear"
+										onclick={() => void clearMemoryDataBreakpoint()}
+										disabled={dataBreakpointLoading}
+										aria-label="Clear data breakpoint"
+									>
+										Clear
+									</button>
+								{/if}
+							</div>
+							{#if activeDataBreakpoint}
+								<p class="debug-data-breakpoint-status">
+									<strong>{activeDataBreakpoint.accessType}</strong>
+									<span>{activeDataBreakpoint.description}</span>
+								</p>
+							{/if}
+							{#if dataBreakpointError}
+								<p class="debug-memory-error" role="alert">{dataBreakpointError}</p>
+							{/if}
 							{#if memoryError}
 								<p class="debug-memory-error" role="alert">{memoryError}</p>
 							{/if}
@@ -4217,6 +4408,67 @@
 		padding: 0 9px;
 		color: #0f172a;
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 11px;
+	}
+
+	.debug-memory-watch-controls {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: end;
+		gap: 8px;
+	}
+
+	.debug-memory-watch-controls label {
+		display: flex;
+		min-width: 120px;
+		flex-direction: column;
+		gap: 4px;
+		color: #64748b;
+		font-size: 10px;
+		font-weight: 650;
+	}
+
+	.debug-memory-watch-controls select,
+	.debug-data-breakpoint-set,
+	.debug-data-breakpoint-clear {
+		height: 34px;
+		box-sizing: border-box;
+		border: 1px solid rgba(99, 102, 241, 0.24);
+		border-radius: 9px;
+		background: rgba(99, 102, 241, 0.08);
+		padding: 0 11px;
+		color: #4338ca;
+		font: inherit;
+		font-size: 11px;
+		font-weight: 700;
+	}
+
+	.debug-data-breakpoint-set,
+	.debug-data-breakpoint-clear {
+		cursor: pointer;
+	}
+
+	.debug-data-breakpoint-clear {
+		border-color: rgba(239, 68, 68, 0.2);
+		background: rgba(239, 68, 68, 0.08);
+		color: #b91c1c;
+	}
+
+	.debug-data-breakpoint-set:disabled,
+	.debug-data-breakpoint-clear:disabled {
+		cursor: wait;
+		opacity: 0.65;
+	}
+
+	.debug-data-breakpoint-status {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin: 0;
+		border-radius: 9px;
+		background: rgba(99, 102, 241, 0.08);
+		padding: 8px 10px;
+		color: #4338ca;
 		font-size: 11px;
 	}
 

@@ -77,6 +77,33 @@ int main(void) {
 		testId: 'c-stale-generation'
 	},
 	{
+		activePath: 'data-breakpoint.c',
+		backend: 'lldb',
+		breakpointLine: 5,
+		expectedDataBreakpoint: {
+			accessType: 'write',
+			data: [73, 0, 0, 0],
+			variable: 'value'
+		},
+		expectedLocal: { name: 'value', value: '70' },
+		expectedOutput: 'lldb-data-breakpoint=73',
+		expectedStoppedLine: 7,
+		expectedStoppedReason: 'data breakpoint',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int value = 70;
+    volatile int ready = value;
+    value += 3;
+    printf("lldb-data-breakpoint=%d\\n", value);
+    return ready == 70 ? 0 : 2;
+}`,
+		testId: 'c-data-breakpoint'
+	},
+	{
 		activePath: 'worker-crash.c',
 		backend: 'lldb',
 		breakpointLine: 4,
@@ -193,6 +220,33 @@ int main() {
 		return 0;
 }`,
 		testId: 'cpp-composite'
+	},
+	{
+		activePath: 'data-breakpoint.cpp',
+		backend: 'lldb',
+		breakpointLine: 5,
+		expectedDataBreakpoint: {
+			accessType: 'readWrite',
+			data: [73, 0, 0, 0],
+			variable: 'value'
+		},
+		expectedLocal: { name: 'value', value: '70' },
+		expectedOutput: 'lldb-cpp-data-breakpoint=73',
+		expectedStoppedLine: 7,
+		expectedStoppedReason: 'data breakpoint',
+		expectedTitle: 'C++ · LLDB / WAMR',
+		language: 'CPP',
+		programArgs: [],
+		source: `#include <cstdio>
+
+int main() {
+    int value = 70;
+    volatile int ready = value;
+    value = 73;
+    std::printf("lldb-cpp-data-breakpoint=%d\\n", value);
+    return ready == 70 ? 0 : 2;
+}`,
+		testId: 'cpp-data-breakpoint'
 	},
 	{
 		activePath: 'recursive.c',
@@ -424,6 +478,31 @@ int main(void) {
     println!("lldb-rust={value}:{argument}");
 }`,
 		testId: 'rust-basic'
+	},
+	{
+		activePath: 'data-breakpoint.rs',
+		backend: 'lldb',
+		breakpointLine: 3,
+		expectedDataBreakpoint: {
+			accessType: 'read',
+			data: [70, 0, 0, 0],
+			variable: 'value'
+		},
+		expectedLocal: { name: 'value', value: '70' },
+		expectedOutput: 'lldb-rust-data-breakpoint=73',
+		expectedStoppedLine: 4,
+		expectedStoppedReason: 'data breakpoint',
+		expectedTitle: 'Rust · LLDB / WAMR',
+		language: 'RUST',
+		programArgs: [],
+		source: `fn main() {
+    let mut value: i32 = 70;
+    let ready = value;
+    value += 3;
+    println!("lldb-rust-data-breakpoint={value}");
+    assert_eq!(ready, 70);
+}`,
+		testId: 'rust-data-breakpoint'
 	},
 	{
 		activePath: 'composite.rs',
@@ -1658,6 +1737,38 @@ describe('native-source browser debugging in Chromium', () => {
 									unreadableBytes: 0
 								});
 							}
+							if ('expectedDataBreakpoint' in testCase) {
+								const variable = loadedVariables.find(
+									(candidate) =>
+										candidate.name === testCase.expectedDataBreakpoint.variable
+								);
+								expect(variable?.memoryReference).toBeTypeOf('string');
+								if (!variable?.memoryReference) {
+									throw new Error(
+										`${testCase.language} did not expose a memory reference for ${testCase.expectedDataBreakpoint.variable}`
+									);
+								}
+								await page
+									.getByLabel('Memory reference')
+									.fill(variable.memoryReference);
+								await page.getByLabel('Memory offset').fill('0');
+								await page.getByLabel('Memory byte count').fill('4');
+								await page
+									.getByLabel('Data breakpoint access')
+									.selectOption(testCase.expectedDataBreakpoint.accessType);
+								await page.getByLabel('Set data breakpoint').click();
+								await expect
+									.poll(
+										async () =>
+											(
+												await page
+													.locator('.debug-data-breakpoint-status')
+													.textContent()
+											)?.trim() || '',
+										{ timeout: 30_000 }
+									)
+									.toContain(testCase.expectedDataBreakpoint.accessType);
+							}
 							if ('testId' in testCase && testCase.testId === 'c-basic') {
 								const workerMetrics = await readBrowserLifecycleMetrics(page);
 								const linearMemoryLimits = {
@@ -2199,7 +2310,10 @@ describe('native-source browser debugging in Chromium', () => {
 							} else {
 								expect(stoppedState.scopes.length).toBeGreaterThan(0);
 							}
-							if ('expectedOutput' in testCase) {
+							if (
+								'expectedOutput' in testCase &&
+								!('expectedDataBreakpoint' in testCase)
+							) {
 								await page.waitForFunction(
 									(expectedOutput) =>
 										document
@@ -2220,7 +2334,36 @@ describe('native-source browser debugging in Chromium', () => {
 							} else {
 								expect(stoppedLine).toBe('L3');
 							}
-							await page.getByRole('button', { name: 'Stop Debug' }).click();
+							if ('expectedDataBreakpoint' in testCase) {
+								const memoryReference = await page
+									.getByLabel('Memory reference')
+									.inputValue();
+								const watchedMemory = await page.evaluate(
+									(memoryReference) =>
+										(window as any).__wasmIdleDebug.readDebugMemory(
+											memoryReference,
+											0,
+											4
+										),
+									memoryReference
+								);
+								expect(watchedMemory).toMatchObject({
+									data: testCase.expectedDataBreakpoint.data,
+									unreadableBytes: 0
+								});
+								await page.getByLabel('Clear data breakpoint').click();
+								await page.locator('button[aria-label="Continue"]').click();
+								await page.waitForFunction(
+									(expectedOutput) =>
+										document
+											.querySelector('[data-testid="terminal-debug-output"]')
+											?.textContent?.includes(expectedOutput),
+									testCase.expectedOutput
+								);
+								await debugButton.waitFor({ state: 'visible' });
+							} else {
+								await page.getByRole('button', { name: 'Stop Debug' }).click();
+							}
 						} else {
 							try {
 								await page.waitForFunction(
