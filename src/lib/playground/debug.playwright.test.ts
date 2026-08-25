@@ -249,6 +249,30 @@ int main() {
 		testId: 'cpp-data-breakpoint'
 	},
 	{
+		activePath: 'memory-write.cpp',
+		backend: 'lldb',
+		breakpointLine: 5,
+		expectedLocal: { name: 'value', value: '70' },
+		expectedMemoryWrite: {
+			data: [100, 0, 0, 0],
+			variable: 'value'
+		},
+		expectedOutput: 'lldb-cpp-memory-write=103',
+		expectedTitle: 'C++ · LLDB / WAMR',
+		language: 'CPP',
+		programArgs: [],
+		source: `#include <cstdio>
+
+int main() {
+    int value = 70;
+    volatile int ready = value;
+    value += 3;
+    std::printf("lldb-cpp-memory-write=%d\\n", value);
+    return ready == 70 ? 0 : 2;
+}`,
+		testId: 'cpp-memory-write'
+	},
+	{
 		activePath: 'recursive.c',
 		backend: 'lldb',
 		breakpointLine: 6,
@@ -503,6 +527,28 @@ int main(void) {
     assert_eq!(ready, 70);
 }`,
 		testId: 'rust-data-breakpoint'
+	},
+	{
+		activePath: 'memory-write.rs',
+		backend: 'lldb',
+		breakpointLine: 3,
+		expectedLocal: { name: 'value', value: '70' },
+		expectedMemoryWrite: {
+			data: [100, 0, 0, 0],
+			variable: 'value'
+		},
+		expectedOutput: 'lldb-rust-memory-write=103',
+		expectedTitle: 'Rust · LLDB / WAMR',
+		language: 'RUST',
+		programArgs: [],
+		source: `fn main() {
+    let mut value: i32 = 70;
+    let ready = value;
+    value += 3;
+    println!("lldb-rust-memory-write={value}");
+    assert!(ready >= 0);
+}`,
+		testId: 'rust-memory-write'
 	},
 	{
 		activePath: 'composite.rs',
