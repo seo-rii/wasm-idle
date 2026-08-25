@@ -1709,20 +1709,29 @@ describe('native-source browser debugging in Chromium', () => {
 										`${testCase.language} did not expose a memory reference for ${testCase.expectedMemoryWrite.variable}`
 									);
 								}
-								const writeResult = await page.evaluate(
-									({ data, memoryReference }) =>
-										(window as any).__wasmIdleDebug.writeDebugMemory(
-											memoryReference,
-											0,
-											data,
-											false
-										),
-									{
-										data: testCase.expectedMemoryWrite.data,
-										memoryReference: variable.memoryReference
-									}
-								);
-								expect(writeResult).toEqual({ bytesWritten: 4 });
+								await page
+									.getByLabel('Memory reference')
+									.fill(variable.memoryReference);
+								await page.getByLabel('Memory offset').fill('0');
+								await page
+									.getByLabel('Memory write bytes')
+									.fill(
+										testCase.expectedMemoryWrite.data
+											.map((byte) => byte.toString(16).padStart(2, '0'))
+											.join(' ')
+									);
+								await page.getByLabel('Write memory').click();
+								await expect
+									.poll(
+										async () =>
+											(
+												await page
+													.locator('.debug-memory-write-status')
+													.textContent()
+											)?.trim() || '',
+										{ timeout: 30_000 }
+									)
+									.toContain('4 bytes written');
 								const writtenMemory = await page.evaluate(
 									(memoryReference) =>
 										(window as any).__wasmIdleDebug.readDebugMemory(

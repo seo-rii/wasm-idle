@@ -95,8 +95,11 @@ relying on implicit typed-array serialization.
 The playground memory inspector is visible only while an LLDB target is paused. It accepts decimal
 or hexadecimal safe-integer offsets, limits each read to 256 bytes, pages by the chosen byte count,
 and renders readable bytes in hexadecimal and ASCII while marking unreadable bytes as `??`. A
-variable with a DAP `memoryReference` can populate the inspector directly. Pause/resume/stop and
-frame-selection boundaries clear the current page and invalidate any in-flight response.
+variable with a DAP `memoryReference` can populate the inspector directly. Its write field accepts
+1–256 two-digit hexadecimal bytes separated by whitespace or commas, always requests a complete raw
+memory write, reports the actual byte count, and rereads the written range. Pause/resume/stop and
+frame-selection boundaries clear the current page and invalidate any in-flight read or write
+response. Raw memory editing does not claim typed `setVariable` support.
 
 LLDB pause, frame, and breakpoint events carry the SHA-256 of the compiled source when the artifact
 provides it. Hosts should call `markSourceRevisionStale(sourcePath)` when an editor model changes

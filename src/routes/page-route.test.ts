@@ -173,6 +173,18 @@ describe('example route debug actions', () => {
 		expect(source).toContain('setDataBreakpoints: (');
 	});
 
+	it('writes bounded hexadecimal bytes through the paused LLDB memory inspector', () => {
+		expect(source).toContain("let memoryWriteInput = $state('');");
+		expect(source).toContain('let memoryWriteStatus = $state.raw<');
+		expect(source).toContain('async function writeDebugMemoryPage()');
+		expect(source).toMatch(
+			/debug\.writeMemory\(\s*requestedReference,\s*offset,\s*Uint8Array\.from\(bytes\),\s*false\s*\)/s
+		);
+		expect(source).toContain('aria-label="Memory write bytes"');
+		expect(source).toContain('aria-label="Write memory"');
+		expect(source).toContain('class="debug-memory-write-status"');
+	});
+
 	it('restarts LLDB debugging through a fully disposed fresh execution', () => {
 		expect(source).toContain('let restartDebugPending = $state(false);');
 		expect(source).toContain('let executionGeneration = 0;');

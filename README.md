@@ -123,7 +123,11 @@ The v2 inspection preview adds bounded variable-path watches and a paused-target
 Watch fallback accepts identifiers, nested fields, and non-negative indexes without enabling general
 expression evaluation. The memory panel can select a variable's DAP `memoryReference`, reads at most
 256 bytes per request, pages by the selected byte count, renders hexadecimal/ASCII data and unreadable
-bytes as `??`, and discards a response when the target resumes or the selected frame changes.
+bytes as `??`, and discards a response when the target resumes or the selected frame changes. While
+paused, it also accepts 1–256 two-digit hexadecimal bytes for a raw target-memory write and refreshes
+the displayed range after a successful write. This edits memory only; it does not provide typed
+`setVariable` semantics, validate that a value is safe for the guest, or preserve the mutation after
+restart.
 While paused, the same panel can install one session-scoped LLDB data breakpoint over a 1–256 byte
 memory range. Read, write, and read-or-write access modes are qualified in real Chromium sessions
 with `wasm32-wasi` C/C++ and `wasm32-wasip1` Rust programs. Setting a new data breakpoint replaces

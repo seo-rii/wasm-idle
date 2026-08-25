@@ -398,6 +398,11 @@
 	let memoryError = $state('');
 	let memoryLoading = $state(false);
 	let memoryRequestVersion = 0;
+	let memoryWriteInput = $state('');
+	let memoryWriteStatus = $state.raw<{
+		bytesWritten: number;
+		requestedBytes: number;
+	} | null>(null);
 	let dataBreakpointAccessType = $state<DebugDataBreakpointAccessType>('write');
 	let activeDataBreakpoint = $state.raw<ActiveDebugDataBreakpoint | null>(null);
 	let dataBreakpointError = $state('');
@@ -1434,6 +1439,7 @@
 		memoryRows = [];
 		memoryError = '';
 		memoryLoading = false;
+		memoryWriteStatus = null;
 	}
 
 	function inspectDebugVariable(variable: DebugVariable) {
@@ -1526,6 +1532,74 @@
 		} finally {
 			if (requestVersion === memoryRequestVersion) memoryLoading = false;
 		}
+	}
+
+	async function writeDebugMemoryPage() {
+		const requestedReference = memoryReference.trim();
+		const offsetText = memoryOffsetInput.trim();
+		const offsetPattern = /^-?(?:0[xX][0-9a-fA-F]+|(?:0|[1-9][0-9]*))$/u;
+		const offset = offsetPattern.test(offsetText) ? Number(offsetText) : Number.NaN;
+		const byteText = memoryWriteInput.trim();
+		const byteTokens = byteText ? byteText.split(/[\s,]+/u) : [];
+
+		if (!requestedReference) {
+			memoryError = 'Enter a memory reference.';
+			return;
+		}
+		if (!Number.isSafeInteger(offset)) {
+			memoryError = 'Offset must be a safe decimal or hexadecimal integer.';
+			return;
+		}
+		if (
+			byteTokens.length < 1 ||
+			byteTokens.length > MAX_DEBUG_MEMORY_BYTES ||
+			byteTokens.some((token) => !/^(?:[0-9a-fA-F]{2}|0[xX][0-9a-fA-F]{2})$/u.test(token))
+		) {
+			memoryError = `Enter 1–${MAX_DEBUG_MEMORY_BYTES} two-digit hexadecimal bytes separated by spaces or commas.`;
+			return;
+		}
+		if (activeDebugBackend !== 'lldb' || !debug.paused) {
+			memoryError = 'Pause an LLDB debug session before writing memory.';
+			return;
+		}
+
+		const bytes = byteTokens.map((token) => Number.parseInt(token.replace(/^0[xX]/u, ''), 16));
+		memoryError = '';
+		memoryWriteStatus = null;
+		memoryLoading = true;
+		const requestVersion = ++memoryRequestVersion;
+		const frameId = debug.frameId;
+		let refresh = false;
+		try {
+			const result = await debug.writeMemory(
+				requestedReference,
+				offset,
+				Uint8Array.from(bytes),
+				false
+			);
+			if (
+				requestVersion !== memoryRequestVersion ||
+				!debug.paused ||
+				debug.frameId !== frameId
+			)
+				return;
+			if (!result) {
+				memoryError = 'Memory writing is unavailable for this session.';
+				return;
+			}
+			memoryWriteStatus = {
+				bytesWritten: result.bytesWritten,
+				requestedBytes: bytes.length
+			};
+			memoryCountInput = String(bytes.length);
+			refresh = result.bytesWritten > 0;
+		} catch (error) {
+			if (requestVersion !== memoryRequestVersion || !debug.paused) return;
+			memoryError = error instanceof Error ? error.message : String(error);
+		} finally {
+			if (requestVersion === memoryRequestVersion) memoryLoading = false;
+		}
+		if (refresh) await readDebugMemoryPage();
 	}
 
 	async function setMemoryDataBreakpoint() {
@@ -2973,6 +3047,32 @@
 									{memoryLoading ? 'Reading…' : 'Read'}
 								</button>
 							</div>
+							<div class="debug-memory-watch-controls">
+								<label class="debug-memory-write-field">
+									<span>Write hex bytes</span>
+									<input
+										bind:value={memoryWriteInput}
+										placeholder="64 00 00 00"
+										aria-label="Memory write bytes"
+									/>
+								</label>
+								<button
+									class="debug-memory-write"
+									onclick={() => void writeDebugMemoryPage()}
+									disabled={memoryLoading}
+									aria-label="Write memory"
+								>
+									{memoryLoading ? 'Writing…' : 'Write memory'}
+								</button>
+							</div>
+							{#if memoryWriteStatus}
+								<p class="debug-memory-write-status">
+									<strong>{memoryWriteStatus.bytesWritten} bytes written</strong>
+									{#if memoryWriteStatus.bytesWritten < memoryWriteStatus.requestedBytes}
+										<span>of {memoryWriteStatus.requestedBytes} requested</span>
+									{/if}
+								</p>
+							{/if}
 							<div class="debug-memory-watch-controls">
 								<label>
 									<span>Break on</span>
@@ -4429,6 +4529,8 @@
 	}
 
 	.debug-memory-watch-controls select,
+	.debug-memory-write-field input,
+	.debug-memory-write,
 	.debug-data-breakpoint-set,
 	.debug-data-breakpoint-clear {
 		height: 34px;
@@ -4444,8 +4546,20 @@
 	}
 
 	.debug-data-breakpoint-set,
+	.debug-memory-write,
 	.debug-data-breakpoint-clear {
 		cursor: pointer;
+	}
+
+	.debug-memory-write-field {
+		flex: 1 1 180px;
+	}
+
+	.debug-memory-write-field input {
+		min-width: 0;
+		width: 100%;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-weight: 500;
 	}
 
 	.debug-data-breakpoint-clear {
@@ -4455,6 +4569,7 @@
 	}
 
 	.debug-data-breakpoint-set:disabled,
+	.debug-memory-write:disabled,
 	.debug-data-breakpoint-clear:disabled {
 		cursor: wait;
 		opacity: 0.65;
@@ -4469,6 +4584,18 @@
 		background: rgba(99, 102, 241, 0.08);
 		padding: 8px 10px;
 		color: #4338ca;
+		font-size: 11px;
+	}
+
+	.debug-memory-write-status {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin: 0;
+		border-radius: 9px;
+		background: rgba(14, 116, 144, 0.08);
+		padding: 8px 10px;
+		color: #0e7490;
 		font-size: 11px;
 	}
 
