@@ -175,7 +175,7 @@ workers, so invalid or concurrently changed timer settings cannot produce immedi
 browser timers. Per-request DAP response timeout overrides follow the same numeric rule and are
 rejected before the request is sent; `null` is the explicit opt-out for execution requests whose
 response arrives only after the target stops.
-Product `scopes`, `variables`, and `readMemory` calls validate frame IDs, variable references,
+Product `scopes`, `variables`, `readMemory`, and `writeMemory` calls validate frame IDs, variable references,
 pagination offsets/counts, and memory offsets/counts as safe integers before sending DAP. Invalid
 caller input rejects with `RangeError` without changing the selected frame, stopping the session,
 or creating a Worker request.
@@ -206,7 +206,7 @@ Receiving one fails and closes the DAP stream explicitly, instead of silently le
 for a response that the browser host cannot provide. Reverse-request commands are validated before
 the unsupported-operation error is reported.
 The live playground session also validates the command-specific bodies it consumes after envelope
-parsing. Malformed `scopes`, `variables`, `readMemory`, or `evaluate` data raises a `ProtocolError`,
+parsing. Malformed `scopes`, `variables`, `readMemory`, `writeMemory`, or `evaluate` data raises a `ProtocolError`,
 stops the debug view, and disposes both workers. In particular, memory data must be valid Base64 and
 the readable-plus-unreadable total cannot exceed the requested byte count; expression fallback to
 `?` applies only to ordinary LLDB evaluation failures, not to a malformed successful response.
@@ -293,7 +293,7 @@ boundary.
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
 Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,
 verifies every pinned SHA-256 receipt, and requires the product LLDB/WAMR binaries published by
-`wasm-llvm` commit `c5c5385c2c15d95b6bc15429ccfa888c5981a501` for C, C++, and Rust. The V2
+`wasm-llvm` commit `74b583b338aac5730b87eb6c6f9b51edacc95398` for C, C++, and Rust. The V2
 manifest and all six debug assets are downloaded from that immutable revision and verified before
 the browser starts; the test cannot silently fall back to trace debugging. At each C, C++, and Rust
 source pause, the gate also verifies that LLDB scopes remain lazy until their
@@ -361,6 +361,12 @@ bytes of Wasm linear memory through the complete Sandbox and Terminal control pa
 that the response is readable before resuming. The hexadecimal form matters because LLDB-DAP
 treats memory references as opaque strings and accepts addresses emitted by its own
 `memoryReference` encoder.
+A dedicated C memory-write fixture stops before an addition, resolves the local `value` variable's
+LLDB `memoryReference`, writes the little-endian bytes for `100`, reads the same four bytes back,
+and resumes to require `lldb-memory-write=103`. Set
+`WASM_IDLE_DEBUG_BROWSER_CASES=c-memory-write` to run only this fixture locally. The capability is
+fail-closed across the producer manifest and DAP initialize response, and does not imply variable
+assignment or expression evaluation support.
 This pinned LLDB build registers the inert no-script interpreter required by native formatter
 matching, so the first lazy `variables` request cannot fall through a missing plugin callback. Its
 call-depth frame identities also keep caller frames stable while a callee is pushed, allowing the

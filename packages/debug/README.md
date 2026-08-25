@@ -56,7 +56,7 @@ Supply an LLDB DAP session from `@wasm-idle/llvm-core/debug`. Runtime assets rem
 
 LLDB response bodies are validated again at the adapter boundary even though the lower-level DAP
 client already validates message envelopes. `threads`, `stackTrace`, `scopes`, `variables`,
-`readMemory`, and `evaluate` must contain their required collections and fields plus well-formed
+`readMemory`, `writeMemory`, and `evaluate` must contain their required collections and fields plus well-formed
 identifiers, source descriptors, counts, and presentation data. Memory data must decode as Base64
 and cannot exceed the requested byte count. A malformed body rejects with
 `DebugAdapterProtocolError`, whose `command` and `path` identify the failed field; hosts should treat
@@ -68,14 +68,19 @@ number precision loss at the LLDB boundary.
 For `readMemory`, both the decoded data and `unreadableBytes` share the requested byte budget. A
 response cannot claim more readable-plus-unreadable bytes than the request count, including when
 the adapter omits the optional `data` field because the entire range is unreadable.
+For `writeMemory`, the LLDB manifest and DAP initialize response must both advertise support before
+the adapter sends a request. Input bytes cross DAP as Base64, and a successful response cannot
+claim more bytes than the caller supplied. This is raw target-memory mutation only; it does not
+advertise `setVariable` or general C/C++/Rust expression assignment.
 Recognized DAP events receive the same field validation. A malformed event is emitted only as a raw
 `dap` event, so it cannot move the selected thread/frame, append non-string output, change process
 state, or mutate the tracked breakpoint cache.
 
-The playground-facing controller also exposes `readMemory(memoryReference, offset, count)` while
-the target is paused. `DebugMemory` crosses the framework-neutral Sandbox and Terminal contracts
-as a `Uint8Array`; browser automation and other serialization boundaries should explicitly convert
-that array to plain byte values instead of relying on implicit typed-array serialization.
+The playground-facing controller also exposes `readMemory(memoryReference, offset, count)` and
+`writeMemory(memoryReference, offset, data, allowPartial)` while the target is paused. Memory bytes
+cross the framework-neutral Sandbox and Terminal contracts as `Uint8Array`; browser automation and
+other serialization boundaries should explicitly convert them to plain byte values instead of
+relying on implicit typed-array serialization.
 
 LLDB pause, frame, and breakpoint events carry the SHA-256 of the compiled source when the artifact
 provides it. Hosts should call `markSourceRevisionStale(sourcePath)` when an editor model changes

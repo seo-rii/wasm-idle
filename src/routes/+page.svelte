@@ -446,6 +446,14 @@
 		} | null>;
 		setPreloadedStdin: (text: string) => void;
 	};
+	type WasmIdleDebugTestApi = WasmIdleDebugApi & {
+		writeDebugMemory: (
+			memoryReference: string,
+			offset: number,
+			data: number[],
+			allowPartial?: boolean
+		) => Promise<{ offset?: number; bytesWritten: number } | null>;
+	};
 	let browserDebugHookVersion = 0;
 	type WasmRustRuntimeModule = {
 		preloadBrowserRustRuntime?: (options?: {
@@ -1718,9 +1726,9 @@
 	$effect(() => {
 		if (!browser) return;
 		const target = window as Window &
-			typeof globalThis & { __wasmIdleDebug?: WasmIdleDebugApi };
+			typeof globalThis & { __wasmIdleDebug?: WasmIdleDebugTestApi };
 		const debugHookVersion = ++browserDebugHookVersion;
-		const debugApi: WasmIdleDebugApi = {
+		const debugApi: WasmIdleDebugTestApi = {
 			async writeTerminalInput(text: string, eof = false) {
 				if (!terminal) return;
 				await terminal.waitForInput?.();
@@ -1808,6 +1816,19 @@
 			async readDebugMemory(memoryReference: string, offset: number, count: number) {
 				const memory = await debug.readMemory(memoryReference, offset, count);
 				return memory ? { ...memory, data: Array.from(memory.data) } : null;
+			},
+			writeDebugMemory(
+				memoryReference: string,
+				offset: number,
+				data: number[],
+				allowPartial?: boolean
+			) {
+				return debug.writeMemory(
+					memoryReference,
+					offset,
+					Uint8Array.from(data),
+					allowPartial
+				);
 			},
 			setPreloadedStdin(text: string) {
 				stdinInput = text;
@@ -2184,9 +2205,9 @@
 		{#if language === 'TINYGO'}
 			<p class="hint">
 				TinyGo 0.40.1 compiles locally through the receipt-verified upstream toolchain for
-				`wasip1`. Compilation, package discovery, linking, and optimization run in a disposable
-				worker with phase and WebAssembly memory limits. Add `vendor/modules.txt` to use offline
-				vendored modules; network module downloads remain disabled.
+				`wasip1`. Compilation, package discovery, linking, and optimization run in a
+				disposable worker with phase and WebAssembly memory limits. Add `vendor/modules.txt`
+				to use offline vendored modules; network module downloads remain disabled.
 			</p>
 		{/if}
 		{#if language === 'D'}

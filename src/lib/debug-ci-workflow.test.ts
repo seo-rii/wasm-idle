@@ -21,7 +21,7 @@ describe('LLDB browser integration workflow', () => {
 			expect(workflow).toContain(sha256);
 		}
 		expect(workflow).toContain(
-			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/c5c5385c2c15d95b6bc15429ccfa888c5981a501/artifacts/runtime-source'
+			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/74b583b338aac5730b87eb6c6f9b51edacc95398/artifacts/runtime-source'
 		);
 		const pinnedRuntimeRevision = workflow.match(
 			/wasm-llvm\/([0-9a-f]{40})\/artifacts\/runtime-source/
@@ -32,7 +32,7 @@ describe('LLDB browser integration workflow', () => {
 		for (const [asset, sha256] of [
 			[
 				'runtime-manifest.v2.json',
-				'3a0d0dff4380947102f473fc845524500f40b11b4847d5f5dcb0f6949d8e2623'
+				'ec9d4208e2961a2d6692145ef80401f31d3c0bb38cc9caaffc0b81f789310081'
 			],
 			[
 				'debug/lldb-web-dap.js',
@@ -114,6 +114,14 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain('String(80 * 1024 * 1024)');
 		expect(llvmReadme).toContain('320 MiB for LLDB and 80 MiB for WAMR');
 		expect(llvmReadme).toContain('256 MiB and 64 MiB');
+	});
+
+	it('keeps a real target-memory write fixture in the required browser gate', async () => {
+		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+
+		expect(browserTest).toContain("testId: 'c-memory-write'");
+		expect(browserTest).toContain('__wasmIdleDebug.writeDebugMemory');
+		expect(browserTest).toContain("expectedOutput: 'lldb-memory-write=103'");
 	});
 
 	it('keeps a missing-asset trace fallback fixture in the browser gate', async () => {

@@ -337,6 +337,10 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/async readDebugMemory\(memoryReference: string, offset: number, count: number\) \{\s+const memory = await debug\.readMemory\(memoryReference, offset, count\);\s+return memory \? \{ \.\.\.memory, data: Array\.from\(memory\.data\) \} : null;\s+\}/s
 		);
+		expect(source).toContain('writeDebugMemory: (');
+		expect(source).toMatch(
+			/return debug\.writeMemory\([\s\S]{0,160}Uint8Array\.from\(data\)[\s\S]{0,80}allowPartial/
+		);
 		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
 		expect(source).toMatch(/debug\.frameId === frame\.id && 'debug-entry--current'/);
 	});

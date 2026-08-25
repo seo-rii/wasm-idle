@@ -32,6 +32,30 @@ int main(void) {
 		testId: 'c-basic'
 	},
 	{
+		activePath: 'memory-write.c',
+		backend: 'lldb',
+		breakpointLine: 5,
+		expectedLocal: { name: 'value', value: '70' },
+		expectedMemoryWrite: {
+			data: [100, 0, 0, 0],
+			variable: 'value'
+		},
+		expectedOutput: 'lldb-memory-write=103',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int value = 70;
+    volatile int ready = value;
+    value += 3;
+    printf("lldb-memory-write=%d\\n", value);
+    return ready == 70 ? 0 : 2;
+}`,
+		testId: 'c-memory-write'
+	},
+	{
 		activePath: 'stale-generation.c',
 		backend: 'lldb',
 		breakpointLine: 4,
@@ -1466,6 +1490,45 @@ describe('native-source browser debugging in Chromium', () => {
 								unreadableBytes: 0
 							});
 							expect(memory.data).toHaveLength(4);
+							if ('expectedMemoryWrite' in testCase) {
+								const variable = loadedVariables.find(
+									(candidate) =>
+										candidate.name === testCase.expectedMemoryWrite.variable
+								);
+								expect(variable?.memoryReference).toBeTypeOf('string');
+								if (!variable?.memoryReference) {
+									throw new Error(
+										`${testCase.language} did not expose a memory reference for ${testCase.expectedMemoryWrite.variable}`
+									);
+								}
+								const writeResult = await page.evaluate(
+									({ data, memoryReference }) =>
+										(window as any).__wasmIdleDebug.writeDebugMemory(
+											memoryReference,
+											0,
+											data,
+											false
+										),
+									{
+										data: testCase.expectedMemoryWrite.data,
+										memoryReference: variable.memoryReference
+									}
+								);
+								expect(writeResult).toEqual({ bytesWritten: 4 });
+								const writtenMemory = await page.evaluate(
+									(memoryReference) =>
+										(window as any).__wasmIdleDebug.readDebugMemory(
+											memoryReference,
+											0,
+											4
+										),
+									variable.memoryReference
+								);
+								expect(writtenMemory).toMatchObject({
+									data: testCase.expectedMemoryWrite.data,
+									unreadableBytes: 0
+								});
+							}
 							if ('testId' in testCase && testCase.testId === 'c-basic') {
 								const workerMetrics = await readBrowserLifecycleMetrics(page);
 								const linearMemoryLimits = {
