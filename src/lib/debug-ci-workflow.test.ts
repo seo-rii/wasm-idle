@@ -2,6 +2,14 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 describe('LLDB browser integration workflow', () => {
+	it('runs every package unit-test suite in general CI', async () => {
+		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+
+		for (const packageName of ['debug', 'llvm-core', 'lsp', 'terminal']) {
+			expect(workflow).toContain(`pnpm --dir packages/${packageName} test`);
+		}
+	});
+
 	it('gates pull requests and main pushes with the product LLDB/WAMR Chromium test', async () => {
 		const workflow = await readFile('.github/workflows/debug-browser.yml', 'utf8');
 		const debugReadme = await readFile('packages/llvm-core/README.md', 'utf8');
