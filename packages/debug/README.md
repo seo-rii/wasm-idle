@@ -87,6 +87,11 @@ Data-breakpoint discovery can address a stopped variable by `variablesReference`
 LLDB's `asAddress` plus `bytes` extension for a bounded raw memory range. Returned identifiers are
 opaque and scoped to the current target session. `setDataBreakpoints()` always replaces the complete
 watchpoint set; pass an empty array to clear it. A trace session rejects both operations explicitly.
+The v2 playground exposes one active memory data breakpoint at a time. It snapshots the requested
+access mode, serializes replace-all updates through one UI owner, disables resume, stepping, frame
+selection, and access-mode changes until that update settles, and invalidates late display results
+when the target resumes or the selected frame changes. The old displayed breakpoint is cleared
+before a replace-all request, so a rejected or malformed response cannot restore stale UI state.
 Recognized DAP events receive the same field validation. A malformed event is emitted only as a raw
 `dap` event, so it cannot move the selected thread/frame, append non-string output, change process
 state, or mutate the tracked breakpoint cache.

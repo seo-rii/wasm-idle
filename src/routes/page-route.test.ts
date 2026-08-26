@@ -114,7 +114,7 @@ describe('example route debug actions', () => {
 			/aria-label=\{debug\.cursorLine\s+\?\s+`Run to Cursor \(L\$\{debug\.cursorLine\}\)`\s+:\s+'Run to Cursor'\}/
 		);
 		expect(source).toMatch(/onclick=\{\(\) => debug\.runToCursor\(\)\}/);
-		expect(source).toMatch(/disabled=\{!debug\.canRunToCursor\}/);
+		expect(source).toMatch(/disabled=\{!debug\.canRunToCursor \|\| dataBreakpointLoading\}/);
 		expect(source).toMatch(/onclick=\{\(\) => debug\.sendCommand\('continue'\)\}/);
 		expect(source).toMatch(/ondebug=\{onDebugEvent\}/);
 		expect(source).toMatch(/bind:value=\{debug\.watchInput\}/);
@@ -166,7 +166,7 @@ describe('example route debug actions', () => {
 		expect(source).toContain('async function setMemoryDataBreakpoint()');
 		expect(source).toContain('async function clearMemoryDataBreakpoint()');
 		expect(source).toContain('debug.dataBreakpointInfo({');
-		expect(source).toMatch(/debug\.setDataBreakpoints\(\[\s+\{/s);
+		expect(source).toMatch(/debug\.setDataBreakpoints\(\[\s*\{/s);
 		expect(source).toContain("event.type === 'stop'");
 		expect(source).toContain('aria-label="Data breakpoint access"');
 		expect(source).toContain('aria-label="Set data breakpoint"');
@@ -174,6 +174,25 @@ describe('example route debug actions', () => {
 		expect(source).toContain('class="debug-data-breakpoint-status"');
 		expect(source).toContain('dataBreakpointInfo: (');
 		expect(source).toContain('setDataBreakpoints: (');
+		expect(source).toContain('let dataBreakpointLoadingOwner: number | null = null;');
+		expect(source).toMatch(
+			/async function setMemoryDataBreakpoint\(\) \{[\s\S]*?if \(dataBreakpointLoadingOwner !== null\) return;[\s\S]*?const accessType = dataBreakpointAccessType;[\s\S]*?info\.accessTypes\.includes\(accessType\)[\s\S]*?activeDataBreakpoint = null;[\s\S]*?await debug\.setDataBreakpoints\(\[[\s\S]*?accessType[\s\S]*?\]\)/
+		);
+		expect(source).toMatch(
+			/async function clearMemoryDataBreakpoint\(\) \{[\s\S]*?if \(dataBreakpointLoadingOwner !== null\) return;[\s\S]*?activeDataBreakpoint = null;[\s\S]*?await debug\.setDataBreakpoints\(\[\]\)/
+		);
+		expect(source).toMatch(
+			/finally \{\s+if \(dataBreakpointLoadingOwner === requestVersion\) \{\s+dataBreakpointLoadingOwner = null;\s+dataBreakpointLoading = false;\s+\}\s+\}/
+		);
+		expect(source).toMatch(
+			/bind:value=\{dataBreakpointAccessType\}\s+disabled=\{dataBreakpointLoading\}/
+		);
+		expect(source).toMatch(
+			/onclick=\{\(\) => debug\.sendCommand\('continue'\)\}\s+disabled=\{!debug\.paused \|\| dataBreakpointLoading\}/
+		);
+		expect(source).toMatch(
+			/class="debug-frame-select"\s+disabled=\{!frame\.id \|\| dataBreakpointLoading\}/
+		);
 	});
 
 	it('writes bounded hexadecimal bytes through the paused LLDB memory inspector', () => {
@@ -206,8 +225,11 @@ describe('example route debug actions', () => {
 	});
 
 	it('navigates the workspace editor when an LLDB frame belongs to another source', () => {
+		expect(source).toContain(
+			'async function selectDebugFrame(frame: DebugFrame) {\n\t\tdataBreakpointRequestVersion += 1;'
+		);
 		expect(source).toMatch(
-			/async function selectDebugFrame\(frame: DebugFrame\) \{\s+invalidateMemoryInspector\(\);\s+if \(!frame\.id \|\| !\(await debug\.selectFrame\(frame\.id\)\)\) return;\s+const workspacePath = normalizePath\(\s*frame\.sourcePath\?\.replace\(\/\^\\\/workspace\\\/\/u, ''\) \|\| ''\s*\);\s+if \(!workspacePath \|\| !files\.some\(\(file\) => file\.path === workspacePath\)\) return;\s+selectFile\(workspacePath\);\s+debug\.setSourcePath\(`\/workspace\/\$\{workspacePath\}`\);\s+\}/s
+			/async function selectDebugFrame\(frame: DebugFrame\) \{\s+dataBreakpointRequestVersion \+= 1;\s+invalidateMemoryInspector\(\);\s+if \(!frame\.id \|\| !\(await debug\.selectFrame\(frame\.id\)\)\) return;\s+const workspacePath = normalizePath\(\s*frame\.sourcePath\?\.replace\(\/\^\\\/workspace\\\/\/u, ''\) \|\| ''\s*\);\s+if \(!workspacePath \|\| !files\.some\(\(file\) => file\.path === workspacePath\)\) return;\s+selectFile\(workspacePath\);\s+debug\.setSourcePath\(`\/workspace\/\$\{workspacePath\}`\);\s+\}/s
 		);
 		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
 	});

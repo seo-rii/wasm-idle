@@ -408,6 +408,7 @@
 	let dataBreakpointError = $state('');
 	let dataBreakpointLoading = $state(false);
 	let dataBreakpointRequestVersion = 0;
+	let dataBreakpointLoadingOwner: number | null = null;
 	const debugStatusLabel = $derived(
 		debug.paused
 			? 'Paused'
@@ -1405,10 +1406,10 @@
 		if (event.type === 'resume') {
 			dataBreakpointRequestVersion += 1;
 			dataBreakpointError = '';
-			dataBreakpointLoading = false;
 		}
 		if (event.type === 'stop') {
 			dataBreakpointRequestVersion += 1;
+			dataBreakpointLoadingOwner = null;
 			activeDataBreakpoint = null;
 			dataBreakpointError = '';
 			dataBreakpointLoading = false;
@@ -1425,6 +1426,7 @@
 	}
 
 	async function selectDebugFrame(frame: DebugFrame) {
+		dataBreakpointRequestVersion += 1;
 		invalidateMemoryInspector();
 		if (!frame.id || !(await debug.selectFrame(frame.id))) return;
 		const workspacePath = normalizePath(frame.sourcePath?.replace(/^\/workspace\//u, '') || '');
@@ -1603,6 +1605,7 @@
 	}
 
 	async function setMemoryDataBreakpoint() {
+		if (dataBreakpointLoadingOwner !== null) return;
 		const requestedReference = memoryReference.trim();
 		const offsetText = memoryOffsetInput.trim();
 		const countText = memoryCountInput.trim();
@@ -1637,8 +1640,10 @@
 		}
 
 		dataBreakpointError = '';
-		dataBreakpointLoading = true;
+		const accessType = dataBreakpointAccessType;
 		const requestVersion = ++dataBreakpointRequestVersion;
+		dataBreakpointLoadingOwner = requestVersion;
+		dataBreakpointLoading = true;
 		const frameId = debug.frameId;
 		try {
 			const info = await debug.dataBreakpointInfo({
@@ -1657,13 +1662,12 @@
 					info?.description || 'Data breakpoints are unavailable for this memory range.';
 				return;
 			}
-			if (info.accessTypes && !info.accessTypes.includes(dataBreakpointAccessType)) {
-				dataBreakpointError = `${dataBreakpointAccessType} access is unavailable for this memory range.`;
+			if (info.accessTypes && !info.accessTypes.includes(accessType)) {
+				dataBreakpointError = `${accessType} access is unavailable for this memory range.`;
 				return;
 			}
-			const resolved = await debug.setDataBreakpoints([
-				{ dataId: info.dataId, accessType: dataBreakpointAccessType }
-			]);
+			activeDataBreakpoint = null;
+			const resolved = await debug.setDataBreakpoints([{ dataId: info.dataId, accessType }]);
 			if (
 				requestVersion !== dataBreakpointRequestVersion ||
 				!debug.paused ||
@@ -1677,7 +1681,7 @@
 				return;
 			}
 			activeDataBreakpoint = {
-				accessType: dataBreakpointAccessType,
+				accessType,
 				address,
 				bytes,
 				dataId: info.dataId,
@@ -1688,25 +1692,31 @@
 			if (requestVersion !== dataBreakpointRequestVersion || !debug.paused) return;
 			dataBreakpointError = error instanceof Error ? error.message : String(error);
 		} finally {
-			if (requestVersion === dataBreakpointRequestVersion) dataBreakpointLoading = false;
+			if (dataBreakpointLoadingOwner === requestVersion) {
+				dataBreakpointLoadingOwner = null;
+				dataBreakpointLoading = false;
+			}
 		}
 	}
 
 	async function clearMemoryDataBreakpoint() {
+		if (dataBreakpointLoadingOwner !== null) return;
 		if (activeDebugBackend !== 'lldb' || !debug.paused) return;
 		dataBreakpointError = '';
-		dataBreakpointLoading = true;
 		const requestVersion = ++dataBreakpointRequestVersion;
+		dataBreakpointLoadingOwner = requestVersion;
+		dataBreakpointLoading = true;
+		activeDataBreakpoint = null;
 		try {
 			await debug.setDataBreakpoints([]);
-			if (requestVersion === dataBreakpointRequestVersion && debug.paused) {
-				activeDataBreakpoint = null;
-			}
 		} catch (error) {
 			if (requestVersion !== dataBreakpointRequestVersion || !debug.paused) return;
 			dataBreakpointError = error instanceof Error ? error.message : String(error);
 		} finally {
-			if (requestVersion === dataBreakpointRequestVersion) dataBreakpointLoading = false;
+			if (dataBreakpointLoadingOwner === requestVersion) {
+				dataBreakpointLoadingOwner = null;
+				dataBreakpointLoading = false;
+			}
 		}
 	}
 
@@ -2368,7 +2378,7 @@
 					<button
 						class="action-button action-button--icon"
 						onclick={() => debug.sendCommand('continue')}
-						disabled={!debug.paused}
+						disabled={!debug.paused || dataBreakpointLoading}
 						title="Continue"
 						aria-label="Continue"
 					>
@@ -2377,7 +2387,7 @@
 					<button
 						class="action-button action-button--icon"
 						onclick={() => debug.runToCursor()}
-						disabled={!debug.canRunToCursor}
+						disabled={!debug.canRunToCursor || dataBreakpointLoading}
 						title={debug.cursorLine
 							? `Run to Cursor (L${debug.cursorLine})`
 							: 'Run to Cursor'}
@@ -2390,7 +2400,7 @@
 					<button
 						class="action-button action-button--icon"
 						onclick={() => debug.sendCommand('stepInto')}
-						disabled={!debug.paused}
+						disabled={!debug.paused || dataBreakpointLoading}
 						title="Step Into"
 						aria-label="Step Into"
 					>
@@ -2399,7 +2409,7 @@
 					<button
 						class="action-button action-button--icon"
 						onclick={() => debug.sendCommand('nextLine')}
-						disabled={!debug.paused}
+						disabled={!debug.paused || dataBreakpointLoading}
 						title="Next Line"
 						aria-label="Next Line"
 					>
@@ -2408,7 +2418,7 @@
 					<button
 						class="action-button action-button--icon"
 						onclick={() => debug.sendCommand('stepOut')}
-						disabled={!debug.paused}
+						disabled={!debug.paused || dataBreakpointLoading}
 						title="Step Out"
 						aria-label="Step Out"
 					>
@@ -2843,12 +2853,7 @@
 							>{/if}
 					</div>
 					<code class="debug-value">{variable.value}</code>
-					{#if activeDebugBackend === 'lldb' &&
-						debug.paused &&
-						variable.memoryReference &&
-						(debug.capabilities.readMemory ||
-							debug.capabilities.writeMemory ||
-							debug.capabilities.dataBreakpoints)}
+					{#if activeDebugBackend === 'lldb' && debug.paused && variable.memoryReference && (debug.capabilities.readMemory || debug.capabilities.writeMemory || debug.capabilities.dataBreakpoints)}
 						<button
 							class="debug-memory-inspect"
 							onclick={() => inspectDebugVariable(variable)}
@@ -3010,11 +3015,7 @@
 							</p>
 						{/if}
 					</section>
-					{#if activeDebugBackend === 'lldb' &&
-						debug.paused &&
-						(debug.capabilities.readMemory ||
-							debug.capabilities.writeMemory ||
-							debug.capabilities.dataBreakpoints)}
+					{#if activeDebugBackend === 'lldb' && debug.paused && (debug.capabilities.readMemory || debug.capabilities.writeMemory || debug.capabilities.dataBreakpoints)}
 						<section class="debug-panel debug-memory-panel">
 							<header class="debug-panel__header">
 								<div class="debug-panel__title">
@@ -3088,37 +3089,38 @@
 							{/if}
 							{#if debug.capabilities.dataBreakpoints}
 								<div class="debug-memory-watch-controls">
-								<label>
-									<span>Break on</span>
-									<select
-										bind:value={dataBreakpointAccessType}
-										aria-label="Data breakpoint access"
-									>
-										<option value="write">Write</option>
-										<option value="read">Read</option>
-										<option value="readWrite">Read or write</option>
-									</select>
-								</label>
-								<button
-									class="debug-data-breakpoint-set"
-									onclick={() => void setMemoryDataBreakpoint()}
-									disabled={dataBreakpointLoading}
-									aria-label="Set data breakpoint"
-								>
-									{dataBreakpointLoading && !activeDataBreakpoint
-										? 'Setting…'
-										: 'Set data breakpoint'}
-								</button>
-								{#if activeDataBreakpoint}
+									<label>
+										<span>Break on</span>
+										<select
+											bind:value={dataBreakpointAccessType}
+											disabled={dataBreakpointLoading}
+											aria-label="Data breakpoint access"
+										>
+											<option value="write">Write</option>
+											<option value="read">Read</option>
+											<option value="readWrite">Read or write</option>
+										</select>
+									</label>
 									<button
-										class="debug-data-breakpoint-clear"
-										onclick={() => void clearMemoryDataBreakpoint()}
+										class="debug-data-breakpoint-set"
+										onclick={() => void setMemoryDataBreakpoint()}
 										disabled={dataBreakpointLoading}
-										aria-label="Clear data breakpoint"
+										aria-label="Set data breakpoint"
 									>
-										Clear
+										{dataBreakpointLoading && !activeDataBreakpoint
+											? 'Setting…'
+											: 'Set data breakpoint'}
 									</button>
-								{/if}
+									{#if activeDataBreakpoint}
+										<button
+											class="debug-data-breakpoint-clear"
+											onclick={() => void clearMemoryDataBreakpoint()}
+											disabled={dataBreakpointLoading}
+											aria-label="Clear data breakpoint"
+										>
+											Clear
+										</button>
+									{/if}
 								</div>
 							{/if}
 							{#if debug.capabilities.dataBreakpoints && activeDataBreakpoint}
@@ -3254,7 +3256,7 @@
 									>
 										<button
 											class="debug-frame-select"
-											disabled={!frame.id}
+											disabled={!frame.id || dataBreakpointLoading}
 											onclick={() => selectDebugFrame(frame)}
 										>
 											<div class="stack-meta">
