@@ -69,6 +69,7 @@ const manifest: RuntimeManifestV2 = {
 			locals: true,
 			globals: true,
 			readMemory: true,
+			writeMemory: true,
 			evaluateExpressions: false,
 			dataBreakpoints: false,
 			wasmThreads: false
@@ -95,7 +96,8 @@ class FakeWorker implements WorkerLike {
 		private readonly suppressedResponses = new Set<string>(),
 		private readonly initializeBody: unknown = {
 			supportsConfigurationDoneRequest: true,
-			supportsReadMemoryRequest: true
+			supportsReadMemoryRequest: true,
+			supportsWriteMemoryRequest: true
 		}
 	) {}
 
@@ -319,7 +321,8 @@ describe('BrowserLldbSession', () => {
 	it.each([
 		['null body', null],
 		['array body', []],
-		['non-boolean capability', { supportsReadMemoryRequest: 'yes' }]
+		['non-boolean read capability', { supportsReadMemoryRequest: 'yes' }],
+		['non-boolean write capability', { supportsWriteMemoryRequest: 'yes' }]
 	])('rejects an invalid DAP initialize capability %s', async (_label, initializeBody) => {
 		const workers: FakeWorker[] = [];
 		const session = new BrowserLldbSession({
@@ -379,7 +382,8 @@ describe('BrowserLldbSession', () => {
 
 		await expect(session.initialize()).resolves.toMatchObject({
 			supportsConfigurationDoneRequest: true,
-			supportsReadMemoryRequest: true
+			supportsReadMemoryRequest: true,
+			supportsWriteMemoryRequest: true
 		});
 		expect(commands).toEqual(['initialize', 'attach', 'setBreakpoints', 'configurationDone']);
 		expect(memory).toEqual(['target:256', 'lldb:512']);

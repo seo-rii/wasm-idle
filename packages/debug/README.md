@@ -75,10 +75,11 @@ number precision loss at the LLDB boundary.
 For `readMemory`, both the decoded data and `unreadableBytes` share the requested byte budget. A
 response cannot claim more readable-plus-unreadable bytes than the request count, including when
 the adapter omits the optional `data` field because the entire range is unreadable.
-For `writeMemory`, the LLDB manifest and DAP initialize response must both advertise support before
-the adapter sends a request. Input bytes cross DAP as Base64, and a successful response cannot
-claim more bytes than the caller supplied. This is raw target-memory mutation only; it does not
-advertise `setVariable` or general C/C++/Rust expression assignment.
+For `readMemory` and `writeMemory`, the product session requires both the LLDB runtime manifest and
+the DAP initialize response to advertise the corresponding request before it sends one. Input
+bytes cross DAP as Base64, and a successful write response cannot claim more bytes than the caller
+supplied. This is raw target-memory mutation only; it does not advertise `setVariable` or general
+C/C++/Rust expression assignment.
 Data-breakpoint discovery can address a stopped variable by `variablesReference` and `name`, or use
 LLDB's `asAddress` plus `bytes` extension for a bounded raw memory range. Returned identifiers are
 opaque and scoped to the current target session. `setDataBreakpoints()` always replaces the complete

@@ -214,7 +214,10 @@ describe('LldbSandboxSession', () => {
 	beforeEach(() => {
 		runtimeState.session = null;
 		runtimeState.options = null;
-		runtimeState.initializeCapabilities = {};
+		runtimeState.initializeCapabilities = {
+			supportsReadMemoryRequest: true,
+			supportsWriteMemoryRequest: true
+		};
 		runtimeState.initializeGate = null;
 		runtimeState.continueGate = null;
 		runtimeState.pauseGate = null;
@@ -1419,6 +1422,7 @@ describe('LldbSandboxSession', () => {
 	});
 
 	it('reads target memory through DAP and decodes the returned bytes', async () => {
+		runtimeState.initializeCapabilities = { supportsReadMemoryRequest: true };
 		const controller = new LldbSandboxSession({
 			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
 			runtimeBaseUrl: 'https://example.com/debug/',
@@ -1458,6 +1462,7 @@ describe('LldbSandboxSession', () => {
 	});
 
 	it('writes target memory through DAP with an exact Base64 payload', async () => {
+		runtimeState.initializeCapabilities = { supportsWriteMemoryRequest: true };
 		const controller = new LldbSandboxSession({
 			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
 			runtimeBaseUrl: 'https://example.com/debug/',
@@ -1494,6 +1499,50 @@ describe('LldbSandboxSession', () => {
 				data: 'AP8B'
 			}
 		});
+
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('does not access memory unless LLDB initialize advertises the requests', async () => {
+		runtimeState.initializeCapabilities = {
+			supportsReadMemoryRequest: false,
+			supportsWriteMemoryRequest: false
+		};
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { readMemory: true, writeMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		await expect(controller.readMemory('0x1000', 0, 4)).resolves.toBeNull();
+		await expect(
+			controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2, 3, 4))
+		).resolves.toBeNull();
+		expect(runtimeState.session?.requests).not.toContainEqual(
+			expect.objectContaining({ command: 'readMemory' })
+		);
+		expect(runtimeState.session?.requests).not.toContainEqual(
+			expect.objectContaining({ command: 'writeMemory' })
+		);
 
 		await controller.disconnect();
 		await expect(completion).resolves.toBe(true);

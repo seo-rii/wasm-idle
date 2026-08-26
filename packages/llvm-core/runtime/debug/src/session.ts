@@ -21,6 +21,7 @@ const WORKER_SHUTDOWN_GRACE_MS = 25;
 const DAP_BOOLEAN_CAPABILITY_KEYS = [
 	'supportsConfigurationDoneRequest',
 	'supportsReadMemoryRequest',
+	'supportsWriteMemoryRequest',
 	'supportsEvaluateForHovers',
 	'supportsConditionalBreakpoints',
 	'supportsLogPoints',

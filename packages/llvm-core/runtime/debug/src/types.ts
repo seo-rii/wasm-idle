@@ -78,6 +78,7 @@ export interface DebugEvaluateResult {
 export interface DebugCapabilities {
 	supportsConfigurationDoneRequest?: boolean;
 	supportsReadMemoryRequest?: boolean;
+	supportsWriteMemoryRequest?: boolean;
 	supportsEvaluateForHovers?: boolean;
 	supportsConditionalBreakpoints?: boolean;
 	supportsLogPoints?: boolean;

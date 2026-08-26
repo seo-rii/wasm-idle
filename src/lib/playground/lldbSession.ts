@@ -232,8 +232,12 @@ export class LldbSandboxSession {
 		);
 		this.supportsEvaluateExpressions =
 			manifest.debugger?.capabilities?.evaluateExpressions === true;
-		this.supportsReadMemory = manifest.debugger?.capabilities?.readMemory === true;
-		this.supportsWriteMemory = manifest.debugger?.capabilities?.writeMemory === true;
+		const manifestSupportsReadMemory =
+			manifest.debugger?.capabilities?.readMemory === true;
+		const manifestSupportsWriteMemory =
+			manifest.debugger?.capabilities?.writeMemory === true;
+		this.supportsReadMemory = false;
+		this.supportsWriteMemory = false;
 		const manifestSupportsDataBreakpoints =
 			manifest.debugger?.capabilities?.dataBreakpoints === true;
 		if (lifecycleVersion !== this.lifecycleVersion) return completion;
@@ -311,6 +315,10 @@ export class LldbSandboxSession {
 				await session.dispose();
 				return completion;
 			}
+			this.supportsReadMemory =
+				manifestSupportsReadMemory && capabilities.supportsReadMemoryRequest === true;
+			this.supportsWriteMemory =
+				manifestSupportsWriteMemory && capabilities.supportsWriteMemoryRequest === true;
 			this.supportsDataBreakpoints =
 				manifestSupportsDataBreakpoints && capabilities.supportsDataBreakpoints === true;
 			this.initialized = true;
