@@ -1,5 +1,5 @@
 import { type CompilerDiagnostic, type SandboxExecutionOptions } from '$lib/playground/options';
-import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
+import type { Sandbox, SandboxProgress, SandboxRuntimeAssets } from '$lib/playground/sandbox';
 import { createBashNestedBootstrapSource } from '$lib/playground/worker/bashNestedBootstrap';
 import {
 	BusyError,
@@ -280,7 +280,7 @@ class BashWorkerRuntime implements Sandbox {
 	}
 
 	load(
-		_runtimeAssets = '',
+		_runtimeAssets: SandboxRuntimeAssets = '',
 		_code = '',
 		_log = true,
 		_args: string[] = [],
@@ -441,7 +441,9 @@ class BashWorkerRuntime implements Sandbox {
 						realmUrl
 					).href;
 					nextSdkBlobUrl = URL.createObjectURL(
-						new Blob([verified.sdkJavaScriptBytes.buffer], { type: 'text/javascript' })
+						new Blob([Uint8Array.from(verified.sdkJavaScriptBytes).buffer], {
+							type: 'text/javascript'
+						})
 					);
 					const nestedBootstrapSource = createBashNestedBootstrapSource({
 						sdkModuleUrl: nextSdkBlobUrl,
