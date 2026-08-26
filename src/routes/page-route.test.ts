@@ -113,7 +113,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/aria-label=\{debug\.cursorLine\s+\?\s+`Run to Cursor \(L\$\{debug\.cursorLine\}\)`\s+:\s+'Run to Cursor'\}/
 		);
-		expect(source).toMatch(/onclick=\{\(\) => debug\.runToCursor\(\)\}/);
+		expect(source).toMatch(/onclick=\{\(\) => runToCursorWhileDataBreakpointIdle\(\)\}/);
 		expect(source).toMatch(/disabled=\{!debug\.canRunToCursor \|\| dataBreakpointLoading\}/);
 		expect(source).toMatch(/onclick=\{\(\) => debug\.sendCommand\('continue'\)\}/);
 		expect(source).toMatch(/ondebug=\{onDebugEvent\}/);
@@ -124,7 +124,7 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(/debugLocals=\{debug\.locals\}/);
 		expect(source).toMatch(/pausedLine=\{debug\.pausedLine\}/);
-		expect(source).toMatch(/onRunToCursor=\{debug\.runToCursor\}/);
+		expect(source).toMatch(/onRunToCursor=\{runToCursorWhileDataBreakpointIdle\}/);
 		expect(source).toMatch(/<span class="material-symbols-outlined">play_circle<\/span>/);
 	});
 
@@ -175,6 +175,9 @@ describe('example route debug actions', () => {
 		expect(source).toContain('dataBreakpointInfo: (');
 		expect(source).toContain('setDataBreakpoints: (');
 		expect(source).toContain('let dataBreakpointLoadingOwner: number | null = null;');
+		expect(source).toMatch(
+			/function runToCursorWhileDataBreakpointIdle\(targetLine\?: number \| null\) \{\s+if \(dataBreakpointLoadingOwner !== null\) return Promise\.resolve\(false\);\s+return debug\.runToCursor\(targetLine\);\s+\}/
+		);
 		expect(source).toMatch(
 			/async function setMemoryDataBreakpoint\(\) \{[\s\S]*?if \(dataBreakpointLoadingOwner !== null\) return;[\s\S]*?const accessType = dataBreakpointAccessType;[\s\S]*?info\.accessTypes\.includes\(accessType\)[\s\S]*?activeDataBreakpoint = null;[\s\S]*?await debug\.setDataBreakpoints\(\[[\s\S]*?accessType[\s\S]*?\]\)/
 		);
@@ -1122,7 +1125,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/breakpoints=\{debug\.effectiveBreakpoints\}/);
 		expect(source).toMatch(/onCursorLineChange=\{debug\.setCursorLine\}/);
 		expect(source).toMatch(/onBreakpointsChange=\{debug\.setBreakpoints\}/);
-		expect(source).toMatch(/onRunToCursor=\{debug\.runToCursor\}/);
+		expect(source).toMatch(/onRunToCursor=\{runToCursorWhileDataBreakpointIdle\}/);
 		expect(layoutSource).toMatch(
 			/:global\(html\),\s+:global\(body\) \{\s+margin: 0;\s+min-height: 100%;\s+\}/s
 		);

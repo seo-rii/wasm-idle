@@ -790,6 +790,47 @@ describe('createDebugSessionController', () => {
 		expect(debugSetDataBreakpoints).not.toHaveBeenCalled();
 	});
 
+	it('serializes a data-breakpoint replacement against run to cursor', async () => {
+		const replacement = deferred<Array<{ id: number; verified: boolean }>>();
+		const debugSetDataBreakpoints = vi.fn(() => replacement.promise);
+		const debugCommand = vi.fn(async () => undefined);
+		const setBreakpoints = vi.fn(async () => undefined);
+		const controller = createDebugSessionController({
+			terminal: {
+				debugCommand,
+				debugSetDataBreakpoints,
+				setBreakpoints
+			} as never,
+			breakpoints: [4],
+			cursorLine: 8
+		});
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 5,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: [],
+			capabilities: { dataBreakpoints: true }
+		});
+		setBreakpoints.mockClear();
+
+		const replacing = controller.setDataBreakpoints([
+			{ dataId: '1000/1', accessType: 'write' }
+		]);
+		await vi.waitFor(() => expect(debugSetDataBreakpoints).toHaveBeenCalledOnce());
+
+		await expect(controller.runToCursor()).resolves.toBe(false);
+		expect(setBreakpoints).not.toHaveBeenCalled();
+		expect(debugCommand).not.toHaveBeenCalled();
+
+		replacement.resolve([{ id: 1, verified: true }]);
+		await expect(replacing).resolves.toEqual([{ id: 1, verified: true }]);
+		await expect(controller.runToCursor()).resolves.toBe(true);
+		expect(setBreakpoints).toHaveBeenLastCalledWith([4, 8]);
+		expect(debugCommand).toHaveBeenLastCalledWith('continue');
+	});
+
 	it('gates paused memory operations with effective LLDB capabilities', async () => {
 		const debugReadMemory = vi.fn(async () => ({ data: Uint8Array.of(1), unreadableBytes: 0 }));
 		const debugWriteMemory = vi.fn(async () => ({ bytesWritten: 1 }));

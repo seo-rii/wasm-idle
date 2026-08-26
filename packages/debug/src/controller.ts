@@ -772,6 +772,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		breakpoints: DebugDataBreakpoint[]
 	): Promise<DebugResolvedDataBreakpoint[]> {
 		if (
+			commandInFlight ||
 			!get(pausedStore) ||
 			!get(capabilitiesStore).dataBreakpoints ||
 			!Array.isArray(breakpoints) ||
@@ -791,7 +792,13 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			return [];
 		}
 		const terminal = get(terminalStore);
-		return (await terminal?.debugSetDataBreakpoints?.(breakpoints)) ?? [];
+		if (!terminal?.debugSetDataBreakpoints) return [];
+		const version = beginCommandRequest();
+		try {
+			return await terminal.debugSetDataBreakpoints(breakpoints);
+		} finally {
+			finishCommandRequest(version);
+		}
 	}
 
 	return {

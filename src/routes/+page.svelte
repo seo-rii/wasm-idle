@@ -1720,6 +1720,11 @@
 		}
 	}
 
+	function runToCursorWhileDataBreakpointIdle(targetLine?: number | null) {
+		if (dataBreakpointLoadingOwner !== null) return Promise.resolve(false);
+		return debug.runToCursor(targetLine);
+	}
+
 	function exec(enableDebug = false): Promise<void> {
 		if (!editor || !terminal || !activeFile) return Promise.resolve();
 		if (!executionAvailable) return Promise.resolve();
@@ -2386,7 +2391,7 @@
 					</button>
 					<button
 						class="action-button action-button--icon"
-						onclick={() => debug.runToCursor()}
+						onclick={() => runToCursorWhileDataBreakpointIdle()}
 						disabled={!debug.canRunToCursor || dataBreakpointLoading}
 						title={debug.cursorLine
 							? `Run to Cursor (L${debug.cursorLine})`
@@ -3500,7 +3505,7 @@
 				pausedLine={debug.pausedLine}
 				bind:lspStatus={editorLspStatus}
 				onCursorLineChange={debug.setCursorLine}
-				onRunToCursor={debug.runToCursor}
+				onRunToCursor={runToCursorWhileDataBreakpointIdle}
 				onBreakpointsChange={debug.setBreakpoints}
 			/>
 		{/key}
