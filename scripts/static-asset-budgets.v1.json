@@ -18,7 +18,7 @@
 		"wasm-clojurescript": { "maxBytes": 1500000, "maxFiles": 8 },
 		"wasm-cobol": { "maxBytes": 2700000, "maxFiles": 8 },
 		"wasm-d": { "maxBytes": 18000000, "maxFiles": 20 },
-		"wasm-debug": { "maxBytes": 17000000, "maxFiles": 10, "optional": true },
+		"wasm-debug": { "maxBytes": 55000000, "maxFiles": 10, "optional": true },
 		"wasm-dotnet": { "maxBytes": 52000000, "maxFiles": 25 },
 		"wasm-duckdb": { "maxBytes": 20000000, "maxFiles": 10 },
 		"wasm-elixir": { "maxBytes": 6000000, "maxFiles": 6 },

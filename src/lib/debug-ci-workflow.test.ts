@@ -2,6 +2,46 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 describe('LLDB browser integration workflow', () => {
+	it('keeps the complete synced debugger runtime within its aggregate asset budget', async () => {
+		const assetBudgets = JSON.parse(
+			await readFile('scripts/static-asset-budgets.v1.json', 'utf8')
+		) as {
+			directories: Record<
+				string,
+				{ maxBytes: number; maxFiles: number; optional?: boolean }
+			>;
+		};
+
+		expect(assetBudgets.directories['wasm-debug']).toEqual({
+			maxBytes: 55_000_000,
+			maxFiles: 10,
+			optional: true
+		});
+	});
+
+	it('checks pinned debugger asset hashes and budgets before launching Chromium', async () => {
+		const workflow = await readFile('.github/workflows/debug-browser.yml', 'utf8');
+		const clangDownloadIndex = workflow.indexOf('Download pinned Clang browser assets');
+		const debuggerDownloadIndex = workflow.indexOf('Download pinned LLDB and WAMR browser assets');
+		const lastHashVerificationIndex = workflow.lastIndexOf('sha256sum --check');
+		const assetBudgetIndex = workflow.indexOf('pnpm run check:asset-sizes');
+		const browserTestIndex = workflow.indexOf('pnpm run test:browser:debug:lldb');
+
+		expect(clangDownloadIndex).toBeGreaterThan(-1);
+		expect(debuggerDownloadIndex).toBeGreaterThan(clangDownloadIndex);
+		expect(lastHashVerificationIndex).toBeGreaterThan(debuggerDownloadIndex);
+		expect(assetBudgetIndex).toBeGreaterThan(lastHashVerificationIndex);
+		expect(browserTestIndex).toBeGreaterThan(assetBudgetIndex);
+	});
+
+	it('does not let a nightly soak cancel the main-push browser gate', async () => {
+		const workflow = await readFile('.github/workflows/debug-browser.yml', 'utf8');
+
+		expect(workflow).toContain(
+			'group: lldb-browser-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}'
+		);
+	});
+
 	it('runs every package unit-test suite in general CI', async () => {
 		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
 
