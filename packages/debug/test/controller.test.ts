@@ -200,6 +200,65 @@ describe('createDebugSessionController', () => {
 		expect(debugVariables).not.toHaveBeenCalled();
 	});
 
+	it('rejects oversized and over-deep watch expressions before invoking the runtime', () => {
+		const debugEvaluate = vi.fn(async () => '?');
+		const debugVariables = vi.fn(async () => []);
+		const controller = createDebugSessionController({
+			terminal: { debugEvaluate, debugVariables } as never
+		});
+		controller.handleEvent({
+			type: 'pause',
+			line: 5,
+			reason: 'breakpoint',
+			locals: [{ name: 'root', value: '{...}', variablesReference: 20 }],
+			callStack: [{ functionName: 'main', line: 5 }]
+		});
+
+		const oversized = `${'x'.repeat(4_096)}y`;
+		const overDeep = [
+			'root',
+			...Array.from({ length: 64 }, (_, index) => `field${index}`)
+		].join('.');
+
+		expect(controller.addWatchExpression(oversized)).toBe(false);
+		expect(controller.addWatchExpression(overDeep)).toBe(false);
+		expect(controller.watchExpressions).toEqual([]);
+		expect(controller.watchValues).toEqual([]);
+		expect(debugEvaluate).not.toHaveBeenCalled();
+		expect(debugVariables).not.toHaveBeenCalled();
+	});
+
+	it('accepts the exact watch expression and variable-path limits', () => {
+		const controller = createDebugSessionController();
+		const exactCodeUnits = 'x'.repeat(4_096);
+		const exactSegments = [
+			'root',
+			...Array.from({ length: 63 }, (_, index) => `field${index}`)
+		].join('.');
+
+		expect(controller.addWatchExpression(exactCodeUnits)).toBe(true);
+		expect(controller.addWatchExpression(exactSegments)).toBe(true);
+		expect(controller.watchExpressions).toEqual([exactCodeUnits, exactSegments]);
+	});
+
+	it('limits active watches without evaluating a rejected entry', () => {
+		const controller = createDebugSessionController();
+		for (let index = 0; index < 64; index += 1) {
+			expect(controller.addWatchExpression(`watch${index}`)).toBe(true);
+		}
+		const evaluateExpression = vi.fn(() => 'value');
+		controller.setAdapter({
+			id: 'cpp',
+			evaluateExpression,
+			selectInlineLocals: vi.fn(() => [])
+		} as never);
+		const callsAtLimit = evaluateExpression.mock.calls.length;
+
+		expect(controller.addWatchExpression('watch64')).toBe(false);
+		expect(controller.watchExpressions).toHaveLength(64);
+		expect(evaluateExpression).toHaveBeenCalledTimes(callsAtLimit);
+	});
+
 	it('discards a nested watch result that resolves after resume', async () => {
 		const children =
 			deferred<Array<{ name: string; value: string; variablesReference: number }>>();

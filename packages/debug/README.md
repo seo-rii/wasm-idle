@@ -30,6 +30,11 @@ requests only the selected child with DAP `start`/`count`; field traversal cache
 page for the current stop. Arithmetic, calls, dereferences, negative indexes, and other expressions
 remain `?`. Resume, disconnect, or frame selection invalidates in-flight traversal so a stale result
 cannot repopulate the UI. This fallback does not advertise LLDB expression evaluation.
+The controller accepts at most 64 active watches. Each submitted expression is limited to 4,096
+UTF-16 code units, and a fallback variable path is limited to 64 total segments including its root.
+Expressions that exceed either bound and additions beyond the active-watch limit are rejected before
+calling the runtime evaluator or requesting lazy DAP variables. The playground input applies the same
+4,096-code-unit limit.
 Adapter initialization snapshots its request arguments and explicit feature opt-ins before awaiting
 the DAP response. Mutating a caller-owned options object in flight therefore cannot enable
 WebAssembly expression evaluation after the conservative capability decision has begun.

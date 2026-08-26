@@ -3204,6 +3204,7 @@
 						<div class="watch-row">
 							<input
 								bind:value={debug.watchInput}
+								maxlength={4096}
 								placeholder="pair.first or items[2]"
 								onkeydown={(event) =>
 									event.key === 'Enter' && debug.addWatchExpression()}

@@ -22,6 +22,53 @@ import type { DebugLanguageAdapter } from './language/index.js';
 const MAX_MEMORY_TRANSFER_BYTES = 256;
 const MAX_DEBUG_PROTOCOL_STRING_CODE_UNITS = 4096;
 const MAX_DATA_BREAKPOINTS = 256;
+const MAX_WATCH_EXPRESSION_CODE_UNITS = 4096;
+const MAX_WATCH_EXPRESSIONS = 64;
+const MAX_WATCH_VARIABLE_PATH_SEGMENTS = 64;
+
+type WatchVariablePathSegment = { name: string } | { index: number };
+type WatchVariablePathParseResult =
+	| { kind: 'path'; root: string; segments: WatchVariablePathSegment[] }
+	| { kind: 'other' }
+	| { kind: 'too-deep' };
+
+function parseWatchVariablePath(expression: string): WatchVariablePathParseResult {
+	const root = expression.match(/^[A-Za-z_][A-Za-z0-9_]*/u)?.[0];
+	if (!root) return { kind: 'other' };
+
+	const segments: WatchVariablePathSegment[] = [];
+	let cursor = root.length;
+	let segmentCount = 1;
+	let tooDeep = false;
+	while (cursor < expression.length) {
+		let segment: WatchVariablePathSegment;
+		let consumed: number;
+		if (expression[cursor] === '.') {
+			const field = expression.slice(cursor + 1).match(/^[A-Za-z_][A-Za-z0-9_]*/u)?.[0];
+			if (!field) return { kind: 'other' };
+			segment = { name: field };
+			consumed = field.length + 1;
+		} else if (expression[cursor] === '[') {
+			const indexMatch = expression.slice(cursor).match(/^\[(0|[1-9][0-9]*)\]/u);
+			const index = indexMatch ? Number(indexMatch[1]) : -1;
+			if (!indexMatch || !Number.isSafeInteger(index)) return { kind: 'other' };
+			segment = { index };
+			consumed = indexMatch[0].length;
+		} else {
+			return { kind: 'other' };
+		}
+
+		segmentCount += 1;
+		if (segmentCount > MAX_WATCH_VARIABLE_PATH_SEGMENTS) {
+			tooDeep = true;
+		} else {
+			segments.push(segment);
+		}
+		cursor += consumed;
+	}
+
+	return tooDeep ? { kind: 'too-deep' } : { kind: 'path', root, segments };
+}
 
 function isBoundedNonEmptyString(value: unknown): value is string {
 	return (
@@ -215,6 +262,15 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 				let resolvedVariables = [...localVariables];
 				const resolvedReferences = new Map(get(variablesByReferenceStore));
 				for (const expression of expressions) {
+					if (expression.length > MAX_WATCH_EXPRESSION_CODE_UNITS) {
+						resolved.push({ expression, value: '?' });
+						continue;
+					}
+					const variablePath = parseWatchVariablePath(expression);
+					if (variablePath.kind === 'too-deep') {
+						resolved.push({ expression, value: '?' });
+						continue;
+					}
 					const runtimeValue = await terminal.debugEvaluate!(expression);
 					if (version !== watchRequestVersion || !get(pausedStore)) return;
 					if (runtimeValue !== '?') {
@@ -222,42 +278,11 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 						continue;
 					}
 
-					const root = expression.match(/^[A-Za-z_][A-Za-z0-9_]*/u)?.[0];
-					const segments: Array<{ name: string } | { index: number }> = [];
-					let cursor = root?.length ?? 0;
-					let safePath = !!root;
-					while (safePath && cursor < expression.length) {
-						if (expression[cursor] === '.') {
-							const field = expression
-								.slice(cursor + 1)
-								.match(/^[A-Za-z_][A-Za-z0-9_]*/u)?.[0];
-							if (!field) {
-								safePath = false;
-								break;
-							}
-							segments.push({ name: field });
-							cursor += field.length + 1;
-							continue;
-						}
-						if (expression[cursor] === '[') {
-							const indexMatch = expression
-								.slice(cursor)
-								.match(/^\[(0|[1-9][0-9]*)\]/u);
-							const index = indexMatch ? Number(indexMatch[1]) : -1;
-							if (!indexMatch || !Number.isSafeInteger(index)) {
-								safePath = false;
-								break;
-							}
-							segments.push({ index });
-							cursor += indexMatch[0].length;
-							continue;
-						}
-						safePath = false;
-					}
-					if (!safePath || cursor !== expression.length) {
+					if (variablePath.kind !== 'path') {
 						resolved.push({ expression, value: '?' });
 						continue;
 					}
+					const { root, segments } = variablePath;
 
 					let variable = resolvedVariables.find((candidate) => candidate.name === root);
 					if (!variable && terminal.debugVariables) {
@@ -544,8 +569,16 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	function addWatchExpression(expression?: string) {
 		const watchInput = get(watchInputStore);
 		const watchExpressions = get(watchExpressionsStore);
-		const nextExpression = (expression || watchInput).trim();
-		if (!nextExpression || watchExpressions.includes(nextExpression)) return false;
+		const candidate = expression || watchInput;
+		if (candidate.length > MAX_WATCH_EXPRESSION_CODE_UNITS) return false;
+		const nextExpression = candidate.trim();
+		if (
+			!nextExpression ||
+			watchExpressions.includes(nextExpression) ||
+			watchExpressions.length >= MAX_WATCH_EXPRESSIONS ||
+			parseWatchVariablePath(nextExpression).kind === 'too-deep'
+		)
+			return false;
 		watchExpressionsStore.set([...watchExpressions, nextExpression]);
 		watchInputStore.set('');
 		refreshWatchValues();
@@ -880,7 +913,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			return watchInputState.current;
 		},
 		set watchInput(value: string) {
-			watchInputStore.set(value);
+			if (value.length <= MAX_WATCH_EXPRESSION_CODE_UNITS) watchInputStore.set(value);
 		},
 		get watchExpressions() {
 			return watchExpressionsState.current;

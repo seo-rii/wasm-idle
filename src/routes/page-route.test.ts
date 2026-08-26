@@ -118,6 +118,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/onclick=\{\(\) => debug\.sendCommand\('continue'\)\}/);
 		expect(source).toMatch(/ondebug=\{onDebugEvent\}/);
 		expect(source).toMatch(/bind:value=\{debug\.watchInput\}/);
+		expect(source).toMatch(/bind:value=\{debug\.watchInput\}\s+maxlength=\{4096\}/);
 		expect(source).toMatch(/onclick=\{\(\) => debug\.addWatchExpression\(\)\}/);
 		expect(source).toMatch(
 			/onclick=\{\(\) =>\s+debug\.removeWatchExpression\(watch\.expression\)\}/
