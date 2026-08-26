@@ -893,7 +893,19 @@ export class LldbDapAdapter implements DebugAdapter {
 		const response = await this.#session.request<unknown>('setDataBreakpoints', {
 			breakpoints: requestBreakpoints
 		});
-		return dapResponseCollection(response, 'setDataBreakpoints', 'breakpoints').map(
+		const responseBreakpoints = dapResponseCollection(
+			response,
+			'setDataBreakpoints',
+			'breakpoints'
+		);
+		if (responseBreakpoints.length !== requestBreakpoints.length) {
+			invalidDapResponse(
+				'setDataBreakpoints',
+				'breakpoints',
+				`expected ${requestBreakpoints.length} entries but received ${responseBreakpoints.length}`
+			);
+		}
+		return responseBreakpoints.map(
 			(breakpoint, index) => {
 				const path = `breakpoints[${index}]`;
 				assertDapRecord(breakpoint, 'setDataBreakpoints', path);

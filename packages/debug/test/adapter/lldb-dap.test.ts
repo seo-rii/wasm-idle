@@ -888,6 +888,39 @@ describe('LldbDapAdapter', () => {
 	});
 
 	it.each([
+		{ responseBreakpoints: [], label: 'fewer' },
+		{
+			responseBreakpoints: [
+				{ id: 9, verified: true },
+				{ id: 10, verified: true }
+			],
+			label: 'more'
+		}
+	])(
+		'rejects setDataBreakpoints responses with $label breakpoints than requested',
+		async ({ responseBreakpoints }) => {
+			const session = new FakeDapSession();
+			session.setResponse('initialize', { supportsDataBreakpoints: true });
+			session.setResponse('setDataBreakpoints', {
+				breakpoints: responseBreakpoints
+			});
+			const adapter = createLldbDapAdapter(session, {
+				featureSupport: { dataBreakpoints: true }
+			});
+			await adapter.initialize();
+
+			const result = adapter.setDataBreakpoints([
+				{ dataId: '1000/4', accessType: 'write' }
+			]);
+			await expect(result).rejects.toBeInstanceOf(DebugAdapterProtocolError);
+			await expect(result).rejects.toMatchObject({
+				command: 'setDataBreakpoints',
+				path: 'breakpoints'
+			});
+		}
+	);
+
+	it.each([
 		{
 			command: 'dataBreakpointInfo',
 			response: { dataId: '1000/4' },
