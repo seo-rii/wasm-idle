@@ -21,7 +21,7 @@ describe('LLDB browser integration workflow', () => {
 			expect(workflow).toContain(sha256);
 		}
 		expect(workflow).toContain(
-			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/74b583b338aac5730b87eb6c6f9b51edacc95398/artifacts/runtime-source'
+			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/682ab86a070ae57b628f89043eb50ce936e2a98e/artifacts/runtime-source'
 		);
 		const pinnedRuntimeRevision = workflow.match(
 			/wasm-llvm\/([0-9a-f]{40})\/artifacts\/runtime-source/
@@ -32,7 +32,7 @@ describe('LLDB browser integration workflow', () => {
 		for (const [asset, sha256] of [
 			[
 				'runtime-manifest.v2.json',
-				'ec9d4208e2961a2d6692145ef80401f31d3c0bb38cc9caaffc0b81f789310081'
+				'2409cb55851d6d5abd74e21d6c425183af3c5bc637a786059bddd7e8257543fa'
 			],
 			[
 				'debug/lldb-web-dap.js',
@@ -52,7 +52,7 @@ describe('LLDB browser integration workflow', () => {
 			],
 			[
 				'debug/wamr-debug.wasm',
-				'ffdea1b0273c05203cc3fe78138120f9bfd76935374f40d7a0a2778a5439b92b'
+				'7fd786bb6ff427a304c0f3d4b2be2bbf5c0cadfa51710a06a3322f6f68acb70b'
 			],
 			[
 				'debug/wamr-debug.worker.mjs',
@@ -123,9 +123,30 @@ describe('LLDB browser integration workflow', () => {
 	it('keeps a real target-memory write fixture in the required browser gate', async () => {
 		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
 
-		expect(browserTest).toContain("testId: 'c-memory-write'");
-		expect(browserTest).toContain('__wasmIdleDebug.writeDebugMemory');
+		for (const testId of ['c-memory-write', 'cpp-memory-write', 'rust-memory-write']) {
+			expect(browserTest).toContain(`testId: '${testId}'`);
+		}
+		expect(browserTest).toContain("getByLabel('Memory write bytes')");
+		expect(browserTest).toContain("getByLabel('Write memory')");
 		expect(browserTest).toContain("expectedOutput: 'lldb-memory-write=103'");
+	});
+
+	it('keeps read, write, and read/write data breakpoints in the required browser gate', async () => {
+		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+
+		for (const [testId, accessType] of [
+			['c-data-breakpoint', 'write'],
+			['cpp-data-breakpoint', 'readWrite'],
+			['rust-data-breakpoint', 'read']
+		]) {
+			expect(browserTest).toContain(`testId: '${testId}'`);
+			expect(browserTest).toMatch(
+				new RegExp(`accessType: '${accessType}'[\\s\\S]{0,1200}testId: '${testId}'`)
+			);
+		}
+		expect(browserTest).toContain("getByLabel('Set data breakpoint')");
+		expect(browserTest).toContain("getByLabel('Clear data breakpoint')");
+		expect(browserTest).toContain("expectedStoppedReason: 'data breakpoint'");
 	});
 
 	it('keeps a missing-asset trace fallback fixture in the browser gate', async () => {
