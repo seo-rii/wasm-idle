@@ -118,7 +118,7 @@ int main(void) {
 		},
 		expectedLocal: { name: 'ready', value: '255' },
 		expectedOutput: 'lldb-data-breakpoint-indexed-overlap=256',
-		expectedStoppedLine: 8,
+		expectedStoppedLine: 9,
 		expectedStoppedReason: 'data breakpoint',
 		expectedTitle: 'C · LLDB / WAMR',
 		language: 'C',
@@ -129,6 +129,7 @@ int main(void) {
     int items[3] = {11, 255, 22};
     volatile int ready = items[1];
     volatile int armed = ready;
+    items[1] = ready;
     items[1] += 1;
     printf("lldb-data-breakpoint-indexed-overlap=%d\\n", items[1]);
     return ready == 255 && armed == 255 ? 0 : 2;
@@ -728,6 +729,17 @@ const requestedDebugCases = new Set(
 		.map((value) => value.trim())
 		.filter(Boolean)
 );
+const knownDebugCaseIds = new Set<string>(
+	debugCases.flatMap((testCase) => ('testId' in testCase ? [testCase.testId] : []))
+);
+const unknownRequestedDebugCases = [...requestedDebugCases].filter(
+	(testId) => !knownDebugCaseIds.has(testId)
+);
+if (unknownRequestedDebugCases.length) {
+	throw new Error(
+		`Unknown WASM_IDLE_DEBUG_BROWSER_CASES selection: ${unknownRequestedDebugCases.join(', ')}`
+	);
+}
 const activeDebugCases = debugCases.filter(
 	(testCase) =>
 		(!requestedDebugLanguages.size || requestedDebugLanguages.has(testCase.language)) &&

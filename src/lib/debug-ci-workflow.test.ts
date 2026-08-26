@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
@@ -6,10 +7,7 @@ describe('LLDB browser integration workflow', () => {
 		const assetBudgets = JSON.parse(
 			await readFile('scripts/static-asset-budgets.v1.json', 'utf8')
 		) as {
-			directories: Record<
-				string,
-				{ maxBytes: number; maxFiles: number; optional?: boolean }
-			>;
+			directories: Record<string, { maxBytes: number; maxFiles: number; optional?: boolean }>;
 		};
 
 		expect(assetBudgets.directories['wasm-debug']).toEqual({
@@ -22,7 +20,9 @@ describe('LLDB browser integration workflow', () => {
 	it('checks pinned debugger asset hashes and budgets before launching Chromium', async () => {
 		const workflow = await readFile('.github/workflows/debug-browser.yml', 'utf8');
 		const clangDownloadIndex = workflow.indexOf('Download pinned Clang browser assets');
-		const debuggerDownloadIndex = workflow.indexOf('Download pinned LLDB and WAMR browser assets');
+		const debuggerDownloadIndex = workflow.indexOf(
+			'Download pinned LLDB and WAMR browser assets'
+		);
 		const lastHashVerificationIndex = workflow.lastIndexOf('sha256sum --check');
 		const assetBudgetIndex = workflow.indexOf('pnpm run check:asset-sizes');
 		const browserTestIndex = workflow.indexOf('pnpm run test:browser:debug:lldb');
@@ -122,6 +122,33 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain('WASM_IDLE_DEBUG_BROWSER_CASES');
 	});
 
+	it('rejects unknown browser fixture selections instead of passing an empty run', () => {
+		const result = spawnSync(
+			process.execPath,
+			[
+				'node_modules/vitest/vitest.mjs',
+				'run',
+				'src/lib/playground/debug.playwright.test.ts'
+			],
+			{
+				cwd: process.cwd(),
+				encoding: 'utf8',
+				env: {
+					...process.env,
+					WASM_IDLE_DEBUG_BROWSER_CASES: 'not-a-real-debug-fixture',
+					WASM_IDLE_DEBUG_BROWSER_LANGUAGES: '',
+					WASM_IDLE_RUN_REAL_BROWSER_DEBUG: '0'
+				},
+				timeout: 30_000
+			}
+		);
+
+		expect(result.status).not.toBe(0);
+		expect(`${result.stdout}\n${result.stderr}`).toContain(
+			'Unknown WASM_IDLE_DEBUG_BROWSER_CASES selection: not-a-real-debug-fixture'
+		);
+	}, 30_000);
+
 	it('keeps a running-target WAMR interrupt fixture in the required browser gate', async () => {
 		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
 
@@ -205,6 +232,9 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain("expectedStoppedReason: 'data breakpoint'");
 		expect(browserTest).toMatch(
 			/expectedDataBreakpoint:\s*\{[\s\S]*?bytes: 1,[\s\S]*?initialData: \[255, 0, 0, 0\],[\s\S]*?offset: 5,[\s\S]*?readOffset: 4,[\s\S]*?testId: 'c-data-breakpoint-indexed-overlap'/
+		);
+		expect(browserTest).toMatch(
+			/expectedStoppedLine: 9,[\s\S]*?source: `[^`]*items\[1\] = ready;[^`]*items\[1\] \+= 1;[^`]*`,[\s\S]{0,100}testId: 'c-data-breakpoint-indexed-overlap'/
 		);
 	});
 
