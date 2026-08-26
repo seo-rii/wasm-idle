@@ -31,6 +31,14 @@ describe('README support matrix', () => {
 			'write data breakpoint stops when at least one watched byte changes'
 		);
 		expect(section).toContain('DAP is an internal product protocol boundary');
+		expect(section).toContain('LLDB-designated browser fixtures reject trace fallback');
+		expect(section).toMatch(
+			/a separate missing-asset\s+fixture qualifies the pre-session trace alternative/
+		);
+		expect(section).toMatch(
+			/`wasm32-wasi` C write, C\+\+ read\/write, and\s+`wasm32-wasip1` Rust read access/
+		);
+		expect(section).toMatch(/typed variable mutation through DAP\s+`setVariable`/);
 	});
 
 	it('keeps every execution language tied to real browser coverage', () => {

@@ -106,7 +106,8 @@ Debugging requires `SharedArrayBuffer` and a cross-origin-isolated deployment. T
 assets are not downloaded until a supported debug session starts. If the LLDB manifest is absent,
 invalid, or does not advertise the required breakpoint/step/stack/local capabilities, the
 playground labels that run as a trace fallback and keeps the existing instrumentation debugger
-available. Build and verify both producers
+available. LLDB-designated browser fixtures reject trace fallback, while a separate missing-asset
+fixture qualifies the pre-session trace alternative. Build and verify both producers
 using [`producer/lldb-browser`](../wasm-llvm/producer/lldb-browser) and
 [`producer/wamr-browser`](../wasm-llvm/producer/wamr-browser), then assemble them with the Clang
 release:
@@ -137,11 +138,11 @@ the displayed range after a successful write. This edits memory only; it does no
 restart. The complete UI write path is qualified in real Chromium with `wasm32-wasi` C/C++ and
 `wasm32-wasip1` Rust programs.
 While paused, the same panel can install one session-scoped LLDB data breakpoint over a 1–256 byte
-memory range. Read, write, and read-or-write access modes are qualified in real Chromium sessions
-with `wasm32-wasi` C/C++ and `wasm32-wasip1` Rust programs. Setting a new data breakpoint replaces
-the previous set, and **Clear** sends an empty replacement set to the target. Its opaque DAP data ID
-is never persisted across restart or a new debug execution. Because WAMR reports a completed memory
-access, the stopped source location can be the next executable line after the watched instruction.
+memory range. The browser gate qualifies `wasm32-wasi` C write, C++ read/write, and
+`wasm32-wasip1` Rust read access. Setting a new data breakpoint replaces the previous set, and
+**Clear** sends an empty replacement set to the target. Its opaque DAP data ID is never persisted
+across restart or a new debug execution. Because WAMR reports a completed memory access, the stopped
+source location can be the next executable line after the watched instruction.
 The Chromium qualification includes an indexed one-byte watched subrange that overlaps a four-byte scalar store.
 LLDB uses modify semantics for write mode: a write data breakpoint stops when at least one watched byte changes;
 a same-value store is reported by WAMR but automatically resumed by LLDB.
@@ -153,10 +154,10 @@ The v2 **Restart Debug** action fully disposes the active LLDB and WAMR Workers,
 execution to settle, and launches a fresh debug execution from the current workspace. It does not
 preserve target state or advertise the DAP `restart` capability.
 
-Full expression evaluation, conditional/log breakpoints, variable mutation, DAP in-session restart,
-standalone terminate, optimized-debug guarantees, C++ exception support, STL pretty-printers,
-`wasm64`, guest threads, reverse debugging, SIMD, multi-module guests, and Rust WASI Preview 2/3
-debugging remain outside the supported boundary.
+Full expression evaluation, conditional/log breakpoints, typed variable mutation through DAP
+`setVariable`, DAP in-session restart, standalone terminate, optimized-debug guarantees, C++
+exception support, STL pretty-printers, `wasm64`, guest threads, reverse debugging, SIMD,
+multi-module guests, and Rust WASI Preview 2/3 debugging remain outside the supported boundary.
 
 ```sh
 cd ../wasm-llvm
