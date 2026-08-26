@@ -104,6 +104,38 @@ int main(void) {
 		testId: 'c-data-breakpoint'
 	},
 	{
+		activePath: 'data-breakpoint-indexed-overlap.c',
+		backend: 'lldb',
+		breakpointLine: 6,
+		expectedDataBreakpoint: {
+			accessType: 'write',
+			bytes: 1,
+			data: [0, 1, 0, 0],
+			initialData: [255, 0, 0, 0],
+			offset: 5,
+			readOffset: 4,
+			variable: 'items'
+		},
+		expectedLocal: { name: 'ready', value: '255' },
+		expectedOutput: 'lldb-data-breakpoint-indexed-overlap=256',
+		expectedStoppedLine: 8,
+		expectedStoppedReason: 'data breakpoint',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int items[3] = {11, 255, 22};
+    volatile int ready = items[1];
+    volatile int armed = ready;
+    items[1] += 1;
+    printf("lldb-data-breakpoint-indexed-overlap=%d\\n", items[1]);
+    return ready == 255 && armed == 255 ? 0 : 2;
+}`,
+		testId: 'c-data-breakpoint-indexed-overlap'
+	},
+	{
 		activePath: 'worker-crash.c',
 		backend: 'lldb',
 		breakpointLine: 4,
@@ -1806,8 +1838,16 @@ describe('native-source browser debugging in Chromium', () => {
 								await page
 									.getByLabel('Memory reference')
 									.fill(variable.memoryReference);
-								await page.getByLabel('Memory offset').fill('0');
-								await page.getByLabel('Memory byte count').fill('4');
+								const watchOffset =
+									'offset' in testCase.expectedDataBreakpoint
+										? testCase.expectedDataBreakpoint.offset
+										: 0;
+								const watchBytes =
+									'bytes' in testCase.expectedDataBreakpoint
+										? testCase.expectedDataBreakpoint.bytes
+										: 4;
+								await page.getByLabel('Memory offset').fill(String(watchOffset));
+								await page.getByLabel('Memory byte count').fill(String(watchBytes));
 								await page
 									.getByLabel('Data breakpoint access')
 									.selectOption(testCase.expectedDataBreakpoint.accessType);
@@ -1823,6 +1863,30 @@ describe('native-source browser debugging in Chromium', () => {
 										{ timeout: 30_000 }
 									)
 									.toContain(testCase.expectedDataBreakpoint.accessType);
+								if ('initialData' in testCase.expectedDataBreakpoint) {
+									const readOffset =
+										'readOffset' in testCase.expectedDataBreakpoint
+											? testCase.expectedDataBreakpoint.readOffset
+											: 0;
+									const initialMemory = await page.evaluate(
+										({ count, memoryReference, offset }) =>
+											(window as any).__wasmIdleDebug.readDebugMemory(
+												memoryReference,
+												offset,
+												count
+											),
+										{
+											count: testCase.expectedDataBreakpoint.initialData
+												.length,
+											memoryReference: variable.memoryReference,
+											offset: readOffset
+										}
+									);
+									expect(initialMemory).toMatchObject({
+										data: testCase.expectedDataBreakpoint.initialData,
+										unreadableBytes: 0
+									});
+								}
 							}
 							if ('testId' in testCase && testCase.testId === 'c-basic') {
 								const workerMetrics = await readBrowserLifecycleMetrics(page);
@@ -2393,14 +2457,22 @@ describe('native-source browser debugging in Chromium', () => {
 								const memoryReference = await page
 									.getByLabel('Memory reference')
 									.inputValue();
+								const readOffset =
+									'readOffset' in testCase.expectedDataBreakpoint
+										? testCase.expectedDataBreakpoint.readOffset
+										: 0;
 								const watchedMemory = await page.evaluate(
-									(memoryReference) =>
+									({ count, memoryReference, offset }) =>
 										(window as any).__wasmIdleDebug.readDebugMemory(
 											memoryReference,
-											0,
-											4
+											offset,
+											count
 										),
-									memoryReference
+									{
+										count: testCase.expectedDataBreakpoint.data.length,
+										memoryReference,
+										offset: readOffset
+									}
 								);
 								expect(watchedMemory).toMatchObject({
 									data: testCase.expectedDataBreakpoint.data,

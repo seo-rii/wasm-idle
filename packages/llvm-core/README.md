@@ -293,7 +293,7 @@ boundary.
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
 Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,
 verifies every pinned SHA-256 receipt, and requires the product LLDB/WAMR binaries published by
-`wasm-llvm` commit `682ab86a070ae57b628f89043eb50ce936e2a98e` for C, C++, and Rust. The V2
+`wasm-llvm` commit `aea9928755d2b66cd1a0e43e9cbfc5a9e5ccf05e` for C, C++, and Rust. The V2
 manifest and all six debug assets are downloaded from that immutable revision and verified before
 the browser starts; the test cannot silently fall back to trace debugging. At each C, C++, and Rust
 source pause, the gate also verifies that LLDB scopes remain lazy until their
@@ -343,6 +343,9 @@ and verifies that the active worker count returns to the first-run baseline afte
 It also requests garbage collection and limits renderer JS heap growth to 64 MiB by default; set
 `WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES` to tune that budget for constrained CI environments. Set
 `WASM_IDLE_DEBUG_BROWSER_CASES=c-relaunch` to run only this fixture locally.
+The nightly schedule runs the relaunch fixture 100 times with a two-hour browser-test budget. Pull
+requests and `main` pushes continue to run the complete LLDB C, C++, and Rust fixture matrix instead
+of substituting the soak-only shard.
 A companion fixture force-terminates the real target Worker and LLDB Worker after separate source
 pauses. It dispatches the browser worker-error boundary, requires both workers from each failed
 session to terminate within five seconds, and launches a final clean session that must print

@@ -29,7 +29,7 @@ describe('LLDB browser integration workflow', () => {
 			expect(workflow).toContain(sha256);
 		}
 		expect(workflow).toContain(
-			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/682ab86a070ae57b628f89043eb50ce936e2a98e/artifacts/runtime-source'
+			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/aea9928755d2b66cd1a0e43e9cbfc5a9e5ccf05e/artifacts/runtime-source'
 		);
 		const pinnedRuntimeRevision = workflow.match(
 			/wasm-llvm\/([0-9a-f]{40})\/artifacts\/runtime-source/
@@ -40,7 +40,7 @@ describe('LLDB browser integration workflow', () => {
 		for (const [asset, sha256] of [
 			[
 				'runtime-manifest.v2.json',
-				'2409cb55851d6d5abd74e21d6c425183af3c5bc637a786059bddd7e8257543fa'
+				'74f5f1f8e7d831f58533ea3362061f133cd3d14ad56ae2eb3f1d11f666816a26'
 			],
 			[
 				'debug/lldb-web-dap.js',
@@ -60,7 +60,7 @@ describe('LLDB browser integration workflow', () => {
 			],
 			[
 				'debug/wamr-debug.wasm',
-				'7fd786bb6ff427a304c0f3d4b2be2bbf5c0cadfa51710a06a3322f6f68acb70b'
+				'652518a5c03d4b855ab5e661a313cb698f66ae462971d18e1a4ddac78160694f'
 			],
 			[
 				'debug/wamr-debug.worker.mjs',
@@ -101,6 +101,8 @@ describe('LLDB browser integration workflow', () => {
 	it('measures repeated LLDB/WAMR session cleanup in the required browser gate', async () => {
 		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
 		const debugReadme = await readFile('packages/debug/README.md', 'utf8');
+		const llvmCoreReadme = await readFile('packages/llvm-core/README.md', 'utf8');
+		const workflow = await readFile('.github/workflows/debug-browser.yml', 'utf8');
 		const vitestConfig = await readFile('vitest.config.ts', 'utf8');
 
 		expect(browserTest).toContain("testId: 'c-relaunch'");
@@ -116,6 +118,11 @@ describe('LLDB browser integration workflow', () => {
 		expect(debugReadme).toContain('more than one LLDB/target Worker pair is live');
 		expect(debugReadme).toContain('WASM_IDLE_DEBUG_RELAUNCH_COUNT=100');
 		expect(debugReadme).toContain('WASM_IDLE_DEBUG_BROWSER_TEST_TIMEOUT_MS=7200000');
+		expect(workflow).toContain("cron: '29 19 * * *'");
+		expect(workflow).toContain('WASM_IDLE_DEBUG_BROWSER_CASES: c-relaunch');
+		expect(workflow).toContain('WASM_IDLE_DEBUG_RELAUNCH_COUNT: 100');
+		expect(workflow).toContain('WASM_IDLE_DEBUG_BROWSER_TEST_TIMEOUT_MS: 7200000');
+		expect(llvmCoreReadme).toContain('nightly schedule runs the relaunch fixture 100 times');
 	});
 
 	it('gates the reduced LLDB and WAMR initial-memory profile', async () => {
@@ -144,6 +151,7 @@ describe('LLDB browser integration workflow', () => {
 
 		for (const [testId, accessType] of [
 			['c-data-breakpoint', 'write'],
+			['c-data-breakpoint-indexed-overlap', 'write'],
 			['cpp-data-breakpoint', 'readWrite'],
 			['rust-data-breakpoint', 'read']
 		]) {
@@ -155,6 +163,9 @@ describe('LLDB browser integration workflow', () => {
 		expect(browserTest).toContain("getByLabel('Set data breakpoint')");
 		expect(browserTest).toContain("getByLabel('Clear data breakpoint')");
 		expect(browserTest).toContain("expectedStoppedReason: 'data breakpoint'");
+		expect(browserTest).toMatch(
+			/expectedDataBreakpoint:\s*\{[\s\S]*?bytes: 1,[\s\S]*?initialData: \[255, 0, 0, 0\],[\s\S]*?offset: 5,[\s\S]*?readOffset: 4,[\s\S]*?testId: 'c-data-breakpoint-indexed-overlap'/
+		);
 	});
 
 	it('keeps a missing-asset trace fallback fixture in the browser gate', async () => {
