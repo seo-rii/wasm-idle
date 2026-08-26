@@ -729,6 +729,67 @@ describe('createDebugSessionController', () => {
 		expect(debugSetDataBreakpoints).toHaveBeenCalledOnce();
 	});
 
+	it('rejects bounded memory and data-breakpoint inputs before calling the terminal', async () => {
+		const debugReadMemory = vi.fn(async () => ({
+			address: '0x0',
+			data: new Uint8Array(),
+			unreadableBytes: 0
+		}));
+		const debugWriteMemory = vi.fn(async () => ({ bytesWritten: 0 }));
+		const debugDataBreakpointInfo = vi.fn(async () => ({ description: 'byte' }));
+		const debugSetDataBreakpoints = vi.fn(async () => []);
+		const controller = createDebugSessionController({
+			terminal: {
+				debugReadMemory,
+				debugWriteMemory,
+				debugDataBreakpointInfo,
+				debugSetDataBreakpoints
+			} as never
+		});
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 1,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: [],
+			capabilities: { readMemory: true, writeMemory: true, dataBreakpoints: true }
+		});
+
+		await expect(controller.readMemory('m'.repeat(4097), 0, 1)).resolves.toBeNull();
+		await expect(controller.readMemory('memory', 0, 257)).resolves.toBeNull();
+		await expect(
+			controller.writeMemory('m'.repeat(4097), 0, Uint8Array.of(1))
+		).resolves.toBeNull();
+		await expect(controller.writeMemory('memory', 0, new Uint8Array(257))).resolves.toBeNull();
+		await expect(
+			controller.writeMemory('memory', 0, Uint8Array.of(1), 'yes' as never)
+		).resolves.toBeNull();
+		await expect(controller.dataBreakpointInfo({ name: '' })).resolves.toBeNull();
+		await expect(controller.dataBreakpointInfo({ name: 'n'.repeat(4097) })).resolves.toBeNull();
+		await expect(
+			controller.dataBreakpointInfo({ name: 'counter', bytes: 257 })
+		).resolves.toBeNull();
+		await expect(
+			controller.dataBreakpointInfo({ name: 'counter', asAddress: 'yes' as never })
+		).resolves.toBeNull();
+		await expect(controller.setDataBreakpoints({ length: 0 } as never)).resolves.toEqual([]);
+		await expect(
+			controller.setDataBreakpoints(
+				Array.from({ length: 257 }, (_, index) => ({ dataId: `${index}/1` }))
+			)
+		).resolves.toEqual([]);
+		await expect(controller.setDataBreakpoints([{ dataId: '' }])).resolves.toEqual([]);
+		await expect(
+			controller.setDataBreakpoints([{ dataId: 'd'.repeat(4097) }])
+		).resolves.toEqual([]);
+
+		expect(debugReadMemory).not.toHaveBeenCalled();
+		expect(debugWriteMemory).not.toHaveBeenCalled();
+		expect(debugDataBreakpointInfo).not.toHaveBeenCalled();
+		expect(debugSetDataBreakpoints).not.toHaveBeenCalled();
+	});
+
 	it('gates paused memory operations with effective LLDB capabilities', async () => {
 		const debugReadMemory = vi.fn(async () => ({ data: Uint8Array.of(1), unreadableBytes: 0 }));
 		const debugWriteMemory = vi.fn(async () => ({ bytesWritten: 1 }));

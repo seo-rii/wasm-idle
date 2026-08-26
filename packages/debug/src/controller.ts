@@ -19,6 +19,27 @@ import { fromStore, get, writable } from 'svelte/store';
 
 import type { DebugLanguageAdapter } from './language/index.js';
 
+const MAX_MEMORY_TRANSFER_BYTES = 256;
+const MAX_DEBUG_PROTOCOL_STRING_CODE_UNITS = 4096;
+const MAX_DATA_BREAKPOINTS = 256;
+
+function isBoundedNonEmptyString(value: unknown): value is string {
+	return (
+		typeof value === 'string' &&
+		value.length > 0 &&
+		value.length <= MAX_DEBUG_PROTOCOL_STRING_CODE_UNITS
+	);
+}
+
+function isBoundedMemoryByteCount(value: unknown, allowZero: boolean): value is number {
+	return (
+		typeof value === 'number' &&
+		Number.isSafeInteger(value) &&
+		value >= (allowZero ? 0 : 1) &&
+		value <= MAX_MEMORY_TRANSFER_BYTES
+	);
+}
+
 export type DebugWatchValue = {
 	expression: string;
 	value: string;
@@ -694,10 +715,9 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		if (
 			!get(pausedStore) ||
 			!get(capabilitiesStore).readMemory ||
-			!memoryReference ||
-			!Number.isInteger(offset) ||
-			!Number.isInteger(count) ||
-			count < 0
+			!isBoundedNonEmptyString(memoryReference) ||
+			!Number.isSafeInteger(offset) ||
+			!isBoundedMemoryByteCount(count, true)
 		) {
 			return null;
 		}
@@ -714,9 +734,11 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		if (
 			!get(pausedStore) ||
 			!get(capabilitiesStore).writeMemory ||
-			!memoryReference ||
+			!isBoundedNonEmptyString(memoryReference) ||
 			!Number.isSafeInteger(offset) ||
-			!(data instanceof Uint8Array)
+			!(data instanceof Uint8Array) ||
+			data.byteLength > MAX_MEMORY_TRANSFER_BYTES ||
+			(allowPartial !== undefined && typeof allowPartial !== 'boolean')
 		) {
 			return null;
 		}
@@ -730,7 +752,18 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	async function dataBreakpointInfo(
 		arguments_: DebugDataBreakpointInfoArguments
 	): Promise<DebugDataBreakpointInfo | null> {
-		if (!get(pausedStore) || !get(capabilitiesStore).dataBreakpoints) return null;
+		if (
+			!get(pausedStore) ||
+			!get(capabilitiesStore).dataBreakpoints ||
+			!arguments_ ||
+			typeof arguments_ !== 'object' ||
+			!isBoundedNonEmptyString(arguments_.name) ||
+			(arguments_.bytes !== undefined &&
+				!isBoundedMemoryByteCount(arguments_.bytes, false)) ||
+			(arguments_.asAddress !== undefined && typeof arguments_.asAddress !== 'boolean')
+		) {
+			return null;
+		}
 		const terminal = get(terminalStore);
 		return (await terminal?.debugDataBreakpointInfo?.(arguments_)) ?? null;
 	}
@@ -738,7 +771,25 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	async function setDataBreakpoints(
 		breakpoints: DebugDataBreakpoint[]
 	): Promise<DebugResolvedDataBreakpoint[]> {
-		if (!get(pausedStore) || !get(capabilitiesStore).dataBreakpoints) return [];
+		if (
+			!get(pausedStore) ||
+			!get(capabilitiesStore).dataBreakpoints ||
+			!Array.isArray(breakpoints) ||
+			breakpoints.length > MAX_DATA_BREAKPOINTS ||
+			!breakpoints.every(
+				(breakpoint) =>
+					breakpoint !== null &&
+					typeof breakpoint === 'object' &&
+					!Array.isArray(breakpoint) &&
+					isBoundedNonEmptyString(breakpoint.dataId) &&
+					(breakpoint.accessType === undefined ||
+						breakpoint.accessType === 'read' ||
+						breakpoint.accessType === 'write' ||
+						breakpoint.accessType === 'readWrite')
+			)
+		) {
+			return [];
+		}
 		const terminal = get(terminalStore);
 		return (await terminal?.debugSetDataBreakpoints?.(breakpoints)) ?? [];
 	}

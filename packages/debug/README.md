@@ -72,9 +72,17 @@ be zero, matching DAP's representation for an unavailable source location.
 Numeric request identifiers, pagination bounds, memory offsets, and byte counts must be JavaScript
 safe integers. Invalid values reject with `RangeError` before a DAP request is sent, avoiding JSON
 number precision loss at the LLDB boundary.
+Public memory reads, memory writes, and data-breakpoint ranges are limited to 256 bytes per request.
+Memory references, data-breakpoint names, and data identifiers must be non-empty and no longer than
+4,096 UTF-16 code units. A `setDataBreakpoints` replacement contains at most 256 entries; an empty
+replacement remains valid and clears the watchpoint set. Runtime callers are also checked for array
+shape and boolean `allowPartial`/`asAddress` values before the adapter allocates or sends DAP data.
 For `readMemory`, both the decoded data and `unreadableBytes` share the requested byte budget. A
 response cannot claim more readable-plus-unreadable bytes than the request count, including when
 the adapter omits the optional `data` field because the entire range is unreadable.
+The encoded Base64 length is checked against that byte budget before decoding. Data-breakpoint
+responses may report a null or omitted identifier when a value is unavailable, but present
+identifiers obey the same string bound and advertised access types must be unique valid values.
 For `readMemory` and `writeMemory`, the product session requires both the LLDB runtime manifest and
 the DAP initialize response to advertise the corresponding request before it sends one. Input
 bytes cross DAP as Base64, and a successful write response cannot claim more bytes than the caller

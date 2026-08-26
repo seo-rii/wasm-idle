@@ -63,8 +63,34 @@ const defaultInitializeArguments: DapInitializeRequestArguments = {
 	supportsMemoryEvent: false
 };
 
+const MAX_MEMORY_TRANSFER_BYTES = 256;
+const MAX_DEBUG_PROTOCOL_STRING_CODE_UNITS = 4096;
+const MAX_DATA_BREAKPOINTS = 256;
+
 function isObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null;
+}
+
+function assertBoundedNonEmptyString(value: unknown, name: string): asserts value is string {
+	if (typeof value !== 'string' || value.length === 0) {
+		throw new TypeError(`${name} must be a non-empty string.`);
+	}
+	if (value.length > MAX_DEBUG_PROTOCOL_STRING_CODE_UNITS) {
+		throw new RangeError(
+			`${name} must not exceed ${MAX_DEBUG_PROTOCOL_STRING_CODE_UNITS} UTF-16 code units.`
+		);
+	}
+}
+
+function assertBoundedMemoryByteCount(value: unknown, name: string, allowZero: boolean) {
+	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < (allowZero ? 0 : 1)) {
+		throw new RangeError(
+			`${name} must be a ${allowZero ? 'non-negative' : 'positive'} safe integer.`
+		);
+	}
+	if (value > MAX_MEMORY_TRANSFER_BYTES) {
+		throw new RangeError(`${name} must not exceed ${MAX_MEMORY_TRANSFER_BYTES}.`);
+	}
 }
 
 function invalidDapResponse(command: string, path: string, expectation: string): never {
@@ -688,8 +714,9 @@ export class LldbDapAdapter implements DebugAdapter {
 
 	async readMemory(memoryReference: string, offset: number, count: number) {
 		this.#requireCapability('supportsReadMemory', 'read memory');
+		assertBoundedNonEmptyString(memoryReference, 'memoryReference');
 		if (!Number.isSafeInteger(offset)) throw new RangeError('offset must be a safe integer.');
-		assertNonNegativeSafeInteger(count, 'count');
+		assertBoundedMemoryByteCount(count, 'count', true);
 
 		const response = await this.#session.request<unknown>('readMemory', {
 			memoryReference,
@@ -703,6 +730,14 @@ export class LldbDapAdapter implements DebugAdapter {
 			dapOptionalNonNegativeSafeInteger(response, 'unreadableBytes', 'readMemory', '') ?? 0;
 		let data = new Uint8Array();
 		if (encodedData !== undefined) {
+			const maximumEncodedLength = Math.ceil(count / 3) * 4;
+			if (encodedData.length > maximumEncodedLength) {
+				invalidDapResponse(
+					'readMemory',
+					'data',
+					`encoded data exceeds the ${maximumEncodedLength}-character limit for a ${count}-byte request`
+				);
+			}
 			let binary: string;
 			try {
 				binary = globalThis.atob(encodedData);
@@ -790,7 +825,15 @@ export class LldbDapAdapter implements DebugAdapter {
 		allowPartial = false
 	) {
 		this.#requireCapability('supportsWriteMemory', 'write memory');
+		assertBoundedNonEmptyString(memoryReference, 'memoryReference');
 		if (!Number.isSafeInteger(offset)) throw new RangeError('offset must be a safe integer.');
+		if (!(data instanceof Uint8Array)) throw new TypeError('data must be a Uint8Array.');
+		if (data.byteLength > MAX_MEMORY_TRANSFER_BYTES) {
+			throw new RangeError(`data must not exceed ${MAX_MEMORY_TRANSFER_BYTES} bytes.`);
+		}
+		if (typeof allowPartial !== 'boolean') {
+			throw new TypeError('allowPartial must be a boolean.');
+		}
 		const chunks: string[] = [];
 		for (let start = 0; start < data.byteLength; start += 0x8000) {
 			chunks.push(String.fromCharCode(...data.subarray(start, start + 0x8000)));
@@ -819,9 +862,7 @@ export class LldbDapAdapter implements DebugAdapter {
 
 	async dataBreakpointInfo(arguments_: DebugDataBreakpointInfoArguments) {
 		this.#requireCapability('supportsDataBreakpoints', 'data breakpoints');
-		if (typeof arguments_.name !== 'string' || arguments_.name.length === 0) {
-			throw new TypeError('name must be a non-empty string.');
-		}
+		assertBoundedNonEmptyString(arguments_.name, 'name');
 		if (arguments_.variablesReference !== undefined) {
 			assertNonNegativeSafeInteger(arguments_.variablesReference, 'variablesReference');
 		}
@@ -829,7 +870,10 @@ export class LldbDapAdapter implements DebugAdapter {
 			assertPositiveSafeInteger(arguments_.frameId, 'frameId');
 		}
 		if (arguments_.bytes !== undefined) {
-			assertPositiveSafeInteger(arguments_.bytes, 'bytes');
+			assertBoundedMemoryByteCount(arguments_.bytes, 'bytes', false);
+		}
+		if (arguments_.asAddress !== undefined && typeof arguments_.asAddress !== 'boolean') {
+			throw new TypeError('asAddress must be a boolean.');
 		}
 		const response = await this.#session.request<unknown>('dataBreakpointInfo', {
 			name: arguments_.name,
@@ -845,6 +889,16 @@ export class LldbDapAdapter implements DebugAdapter {
 		let dataId: string | undefined;
 		if (response.dataId !== undefined && response.dataId !== null) {
 			assertDapString(response.dataId, 'dataBreakpointInfo', 'dataId');
+			if (response.dataId.length === 0) {
+				invalidDapResponse('dataBreakpointInfo', 'dataId', 'expected a non-empty string');
+			}
+			if (response.dataId.length > MAX_DEBUG_PROTOCOL_STRING_CODE_UNITS) {
+				invalidDapResponse(
+					'dataBreakpointInfo',
+					'dataId',
+					`expected at most ${MAX_DEBUG_PROTOCOL_STRING_CODE_UNITS} UTF-16 code units`
+				);
+			}
 			dataId = response.dataId;
 		}
 		let accessTypes: DebugDataBreakpointAccessType[] | undefined;
@@ -852,6 +906,14 @@ export class LldbDapAdapter implements DebugAdapter {
 			if (!Array.isArray(response.accessTypes)) {
 				invalidDapResponse('dataBreakpointInfo', 'accessTypes', 'expected an array');
 			}
+			if (response.accessTypes.length > 3) {
+				invalidDapResponse(
+					'dataBreakpointInfo',
+					'accessTypes',
+					'expected at most 3 entries'
+				);
+			}
+			const seenAccessTypes = new Set<DebugDataBreakpointAccessType>();
 			accessTypes = response.accessTypes.map((accessType, index) => {
 				assertDapStringEnum(
 					accessType,
@@ -859,6 +921,14 @@ export class LldbDapAdapter implements DebugAdapter {
 					'dataBreakpointInfo',
 					`accessTypes[${index}]`
 				);
+				if (seenAccessTypes.has(accessType)) {
+					invalidDapResponse(
+						'dataBreakpointInfo',
+						`accessTypes[${index}]`,
+						'expected a unique access type'
+					);
+				}
+				seenAccessTypes.add(accessType);
 				return accessType;
 			});
 		}
@@ -873,10 +943,18 @@ export class LldbDapAdapter implements DebugAdapter {
 
 	async setDataBreakpoints(breakpoints: DebugDataBreakpoint[]) {
 		this.#requireCapability('supportsDataBreakpoints', 'data breakpoints');
-		const requestBreakpoints = breakpoints.map((breakpoint, index) => {
-			if (typeof breakpoint.dataId !== 'string' || breakpoint.dataId.length === 0) {
-				throw new TypeError(`breakpoints[${index}].dataId must be a non-empty string.`);
+		if (!Array.isArray(breakpoints)) throw new TypeError('breakpoints must be an array.');
+		if (breakpoints.length > MAX_DATA_BREAKPOINTS) {
+			throw new RangeError(
+				`breakpoints must not contain more than ${MAX_DATA_BREAKPOINTS} entries.`
+			);
+		}
+		for (let index = 0; index < breakpoints.length; index += 1) {
+			const breakpoint = breakpoints[index];
+			if (!isObject(breakpoint) || Array.isArray(breakpoint)) {
+				throw new TypeError(`breakpoints[${index}] must be an object.`);
 			}
+			assertBoundedNonEmptyString(breakpoint.dataId, `breakpoints[${index}].dataId`);
 			if (
 				breakpoint.accessType !== undefined &&
 				!(['read', 'write', 'readWrite'] as const).includes(breakpoint.accessType)
@@ -885,9 +963,13 @@ export class LldbDapAdapter implements DebugAdapter {
 					`breakpoints[${index}].accessType must be read, write, or readWrite.`
 				);
 			}
+		}
+		const requestBreakpoints = breakpoints.map((breakpoint) => {
 			return {
 				dataId: breakpoint.dataId,
-				...(breakpoint.accessType === undefined ? {} : { accessType: breakpoint.accessType })
+				...(breakpoint.accessType === undefined
+					? {}
+					: { accessType: breakpoint.accessType })
 			};
 		});
 		const response = await this.#session.request<unknown>('setDataBreakpoints', {
@@ -905,34 +987,23 @@ export class LldbDapAdapter implements DebugAdapter {
 				`expected ${requestBreakpoints.length} entries but received ${responseBreakpoints.length}`
 			);
 		}
-		return responseBreakpoints.map(
-			(breakpoint, index) => {
-				const path = `breakpoints[${index}]`;
-				assertDapRecord(breakpoint, 'setDataBreakpoints', path);
-				assertDapBoolean(
-					breakpoint.verified,
-					'setDataBreakpoints',
-					`${path}.verified`
-				);
-				const id = dapOptionalNonNegativeSafeInteger(
-					breakpoint,
-					'id',
-					'setDataBreakpoints',
-					path
-				);
-				const message = dapOptionalString(
-					breakpoint,
-					'message',
-					'setDataBreakpoints',
-					path
-				);
-				return {
-					...(id === undefined ? {} : { id }),
-					verified: breakpoint.verified,
-					...(message === undefined ? {} : { message })
-				} satisfies ResolvedDataBreakpoint;
-			}
-		);
+		return responseBreakpoints.map((breakpoint, index) => {
+			const path = `breakpoints[${index}]`;
+			assertDapRecord(breakpoint, 'setDataBreakpoints', path);
+			assertDapBoolean(breakpoint.verified, 'setDataBreakpoints', `${path}.verified`);
+			const id = dapOptionalNonNegativeSafeInteger(
+				breakpoint,
+				'id',
+				'setDataBreakpoints',
+				path
+			);
+			const message = dapOptionalString(breakpoint, 'message', 'setDataBreakpoints', path);
+			return {
+				...(id === undefined ? {} : { id }),
+				verified: breakpoint.verified,
+				...(message === undefined ? {} : { message })
+			} satisfies ResolvedDataBreakpoint;
+		});
 	}
 
 	onEvent(listener: (event: DebugAdapterEvent) => void) {

@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import {
 	DebugAdapterProtocolError,
@@ -204,6 +204,118 @@ describe('LldbDapAdapter', () => {
 		await adapter.initialize();
 
 		await expect(invoke(adapter)).rejects.toBeInstanceOf(RangeError);
+		expect(session.requests).toHaveLength(1);
+	});
+
+	it.each([
+		{
+			label: 'empty read-memory reference',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.readMemory('', 0, 1),
+			error: TypeError
+		},
+		{
+			label: 'overlong read-memory reference',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.readMemory('m'.repeat(4097), 0, 1),
+			error: RangeError
+		},
+		{
+			label: 'oversized read-memory byte count',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.readMemory('memory', 0, 257),
+			error: RangeError
+		},
+		{
+			label: 'empty write-memory reference',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.writeMemory('', 0, Uint8Array.of(1)),
+			error: TypeError
+		},
+		{
+			label: 'overlong write-memory reference',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.writeMemory('m'.repeat(4097), 0, Uint8Array.of(1)),
+			error: RangeError
+		},
+		{
+			label: 'oversized write-memory byte count',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.writeMemory('memory', 0, new Uint8Array(257)),
+			error: RangeError
+		},
+		{
+			label: 'non-boolean write-memory allowPartial',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.writeMemory('memory', 0, Uint8Array.of(1), 'yes' as never),
+			error: TypeError
+		},
+		{
+			label: 'empty data-breakpoint name',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.dataBreakpointInfo({ name: '' }),
+			error: TypeError
+		},
+		{
+			label: 'overlong data-breakpoint name',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.dataBreakpointInfo({ name: 'n'.repeat(4097) }),
+			error: RangeError
+		},
+		{
+			label: 'oversized data-breakpoint byte count',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.dataBreakpointInfo({ name: 'counter', bytes: 257 }),
+			error: RangeError
+		},
+		{
+			label: 'non-boolean data-breakpoint asAddress',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.dataBreakpointInfo({ name: 'counter', asAddress: 'yes' as never }),
+			error: TypeError
+		},
+		{
+			label: 'non-array data-breakpoint collection',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.setDataBreakpoints({ length: 0 } as never),
+			error: TypeError,
+			message: 'breakpoints must be an array.'
+		},
+		{
+			label: 'oversized data-breakpoint collection',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.setDataBreakpoints(
+					Array.from({ length: 257 }, (_, index) => ({ dataId: `${index}/1` }))
+				),
+			error: RangeError
+		},
+		{
+			label: 'empty data-breakpoint identifier',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.setDataBreakpoints([{ dataId: '' }]),
+			error: TypeError
+		},
+		{
+			label: 'overlong data-breakpoint identifier',
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.setDataBreakpoints([{ dataId: 'd'.repeat(4097) }]),
+			error: RangeError
+		}
+	])('rejects a bounded $label before sending DAP', async ({ invoke, error, message }) => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', {
+			supportsReadMemoryRequest: true,
+			supportsWriteMemoryRequest: true,
+			supportsDataBreakpoints: true
+		});
+		const adapter = createLldbDapAdapter(session, {
+			featureSupport: { writeMemory: true, dataBreakpoints: true }
+		});
+		await adapter.initialize();
+
+		const result = invoke(adapter);
+		await expect(result).rejects.toBeInstanceOf(error);
+		if (message) await expect(result).rejects.toThrow(message);
 		expect(session.requests).toHaveLength(1);
 	});
 
@@ -832,7 +944,10 @@ describe('LldbDapAdapter', () => {
 			canPersist: false
 		});
 		session.setResponse('setDataBreakpoints', {
-			breakpoints: [{ id: 9, verified: true }, { verified: false, message: 'no slot' }]
+			breakpoints: [
+				{ id: 9, verified: true },
+				{ verified: false, message: 'no slot' }
+			]
 		});
 		const adapter = createLldbDapAdapter(session, {
 			featureSupport: { dataBreakpoints: true }
@@ -887,6 +1002,26 @@ describe('LldbDapAdapter', () => {
 		]);
 	});
 
+	it.each([{ dataId: null }, {}])(
+		'maps an unavailable LLDB data-breakpoint identifier from $dataId',
+		async (responseData) => {
+			const session = new FakeDapSession();
+			session.setResponse('initialize', { supportsDataBreakpoints: true });
+			session.setResponse('dataBreakpointInfo', {
+				description: 'not addressable',
+				...responseData
+			});
+			const adapter = createLldbDapAdapter(session, {
+				featureSupport: { dataBreakpoints: true }
+			});
+			await adapter.initialize();
+
+			await expect(adapter.dataBreakpointInfo({ name: 'optimizedOut' })).resolves.toEqual({
+				description: 'not addressable'
+			});
+		}
+	);
+
 	it.each([
 		{ responseBreakpoints: [], label: 'fewer' },
 		{
@@ -909,9 +1044,7 @@ describe('LldbDapAdapter', () => {
 			});
 			await adapter.initialize();
 
-			const result = adapter.setDataBreakpoints([
-				{ dataId: '1000/4', accessType: 'write' }
-			]);
+			const result = adapter.setDataBreakpoints([{ dataId: '1000/4', accessType: 'write' }]);
 			await expect(result).rejects.toBeInstanceOf(DebugAdapterProtocolError);
 			await expect(result).rejects.toMatchObject({
 				command: 'setDataBreakpoints',
@@ -936,24 +1069,89 @@ describe('LldbDapAdapter', () => {
 			path: 'accessTypes[0]'
 		},
 		{
+			command: 'dataBreakpointInfo',
+			response: { description: 'counter', dataId: '' },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.dataBreakpointInfo({ name: 'counter', variablesReference: 1 }),
+			path: 'dataId'
+		},
+		{
+			command: 'dataBreakpointInfo',
+			response: { description: 'counter', dataId: 'd'.repeat(4097) },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.dataBreakpointInfo({ name: 'counter', variablesReference: 1 }),
+			path: 'dataId'
+		},
+		{
+			command: 'dataBreakpointInfo',
+			response: {
+				description: 'counter',
+				accessTypes: ['read', 'write', 'readWrite', 'read']
+			},
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.dataBreakpointInfo({ name: 'counter', variablesReference: 1 }),
+			path: 'accessTypes'
+		},
+		{
+			command: 'dataBreakpointInfo',
+			response: { description: 'counter', accessTypes: ['read', 'read'] },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.dataBreakpointInfo({ name: 'counter', variablesReference: 1 }),
+			path: 'accessTypes[1]'
+		},
+		{
+			command: 'dataBreakpointInfo',
+			response: { description: 'counter', canPersist: 'yes' },
+			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
+				adapter.dataBreakpointInfo({ name: 'counter', variablesReference: 1 }),
+			path: 'canPersist'
+		},
+		{
 			command: 'setDataBreakpoints',
 			response: { breakpoints: [{ verified: 'yes' }] },
 			invoke: (adapter: ReturnType<typeof createLldbDapAdapter>) =>
 				adapter.setDataBreakpoints([{ dataId: '1000/4', accessType: 'write' }]),
 			path: 'breakpoints[0].verified'
 		}
-	])('rejects malformed $command data breakpoint responses', async ({ command, response, invoke, path }) => {
-		const session = new FakeDapSession();
-		session.setResponse('initialize', { supportsDataBreakpoints: true });
-		session.setResponse(command, response);
-		const adapter = createLldbDapAdapter(session, {
-			featureSupport: { dataBreakpoints: true }
-		});
-		await adapter.initialize();
+	])(
+		'rejects malformed $command data breakpoint responses',
+		async ({ command, response, invoke, path }) => {
+			const session = new FakeDapSession();
+			session.setResponse('initialize', { supportsDataBreakpoints: true });
+			session.setResponse(command, response);
+			const adapter = createLldbDapAdapter(session, {
+				featureSupport: { dataBreakpoints: true }
+			});
+			await adapter.initialize();
 
-		const result = invoke(adapter);
-		await expect(result).rejects.toBeInstanceOf(DebugAdapterProtocolError);
-		await expect(result).rejects.toMatchObject({ command, path });
+			const result = invoke(adapter);
+			await expect(result).rejects.toBeInstanceOf(DebugAdapterProtocolError);
+			await expect(result).rejects.toMatchObject({ command, path });
+		}
+	);
+
+	it('rejects an oversized encoded readMemory body before Base64 decoding', async () => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', { supportsReadMemoryRequest: true });
+		session.setResponse('readMemory', {
+			address: '0x1000',
+			data: 'AAAAA'
+		});
+		const adapter = createLldbDapAdapter(session);
+		await adapter.initialize();
+		const atob = vi.spyOn(globalThis, 'atob');
+
+		try {
+			const result = adapter.readMemory('memory', 0, 1);
+			await expect(result).rejects.toBeInstanceOf(DebugAdapterProtocolError);
+			await expect(result).rejects.toMatchObject({
+				command: 'readMemory',
+				path: 'data'
+			});
+			expect(atob).not.toHaveBeenCalled();
+		} finally {
+			atob.mockRestore();
+		}
 	});
 
 	it.each([
