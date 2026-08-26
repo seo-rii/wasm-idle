@@ -17,7 +17,20 @@ describe('README support matrix', () => {
 		expect(renderSupportMatrixSection()).toContain('| Scheme');
 		expect(renderSupportMatrixSection()).toContain('@php-wasm/web-8-4@3.1.34');
 		expect(renderSupportMatrixSection()).not.toContain('@php-wasm/web-8-4@unknown');
-		expect(renderSupportMatrixSection()).toContain('## Browser LLDB debug runtime');
+		const section = renderSupportMatrixSection();
+		expect(section).toContain('## Browser LLDB debug runtime');
+		expect(section).toContain('Stable v2 inherits that exact release boundary');
+		expect(section).not.toContain('v2 inspection preview');
+		expect(section).toContain(
+			'one-byte watched subrange that overlaps a four-byte scalar store'
+		);
+		expect(section).toContain(
+			'Bulk-memory operations and host-side memory writes do not trigger'
+		);
+		expect(section).toContain(
+			'write data breakpoint stops when at least one watched byte changes'
+		);
+		expect(section).toContain('DAP is an internal product protocol boundary');
 	});
 
 	it('keeps every execution language tied to real browser coverage', () => {

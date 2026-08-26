@@ -1605,7 +1605,14 @@ and runtime-specific behavior can differ. Trace fallback is selected only before
 established; an LLDB or WAMR failure ends that session instead of silently changing debugger
 semantics.
 
-The v2 inspection preview adds bounded variable-path watches and a paused-target memory inspector.
+Stable v2 inherits that exact release boundary: 64-bit desktop Chromium on Linux, a
+cross-origin-isolated deployment, one active session, pinned C/C++ and \`wasm32-wasip1\` Rust
+producer artifacts at \`-O0\` with embedded DWARF, and a new WAMR debug execution rather than an
+attachment to an existing browser-engine run. DAP is an internal product protocol boundary; v2
+does not claim compatibility with arbitrary third-party DAP clients or arbitrary externally
+produced Wasm/DWARF artifacts.
+
+Stable v2 adds bounded variable-path watches and a paused-target memory inspector.
 Watch fallback accepts identifiers, nested fields, and non-negative indexes without enabling general
 expression evaluation. The memory panel can select a variable's DAP \`memoryReference\`, reads at most
 256 bytes per request, pages by the selected byte count, renders hexadecimal/ASCII data and unreadable
@@ -1621,7 +1628,13 @@ with \`wasm32-wasi\` C/C++ and \`wasm32-wasip1\` Rust programs. Setting a new da
 the previous set, and **Clear** sends an empty replacement set to the target. Its opaque DAP data ID
 is never persisted across restart or a new debug execution. Because WAMR reports a completed memory
 access, the stopped source location can be the next executable line after the watched instruction.
-Trace fallback does not advertise or emulate data breakpoints.
+The Chromium qualification includes an indexed one-byte watched subrange that overlaps a four-byte scalar store.
+LLDB uses modify semantics for write mode: a write data breakpoint stops when at least one watched byte changes;
+a same-value store is reported by WAMR but automatically resumed by LLDB.
+Data breakpoints cover scalar classic-interpreter loads and stores only.
+Bulk-memory operations and host-side memory writes do not trigger data breakpoints; guest threads
+and memories outside the supported linear-memory configuration remain out of scope. Trace fallback
+does not advertise or emulate data breakpoints.
 The v2 **Restart Debug** action fully disposes the active LLDB and WAMR Workers, waits for the old
 execution to settle, and launches a fresh debug execution from the current workspace. It does not
 preserve target state or advertise the DAP \`restart\` capability.
