@@ -21,6 +21,10 @@ import {
 	type RuntimeManifestV2
 } from '@wasm-idle/llvm-core/debug';
 
+const MAX_DEBUG_MEMORY_BYTES = 256;
+const MAX_DEBUG_IDENTIFIER_CODE_UNITS = 4096;
+const MAX_DEBUG_DATA_BREAKPOINTS = 256;
+
 export interface LldbArtifactPayload {
 	bytes: Uint8Array | ArrayBuffer;
 	descriptor?: {
@@ -173,6 +177,26 @@ function assertNonNegativeSafeIntegerArgument(value: number, name: string) {
 	}
 }
 
+function assertBoundedNonEmptyStringArgument(
+	value: unknown,
+	name: string
+): asserts value is string {
+	if (typeof value !== 'string' || value.length === 0) {
+		throw new TypeError(`${name} must be a non-empty string.`);
+	}
+	if (value.length > MAX_DEBUG_IDENTIFIER_CODE_UNITS) {
+		throw new RangeError(
+			`${name} must not exceed ${MAX_DEBUG_IDENTIFIER_CODE_UNITS} UTF-16 code units.`
+		);
+	}
+}
+
+function assertOptionalBooleanArgument(value: unknown, name: string) {
+	if (value !== undefined && typeof value !== 'boolean') {
+		throw new TypeError(`${name} must be a boolean.`);
+	}
+}
+
 export class LldbSandboxSession {
 	private session?: BrowserLldbSession;
 	private activeThreadId = 1;
@@ -232,10 +256,8 @@ export class LldbSandboxSession {
 		);
 		this.supportsEvaluateExpressions =
 			manifest.debugger?.capabilities?.evaluateExpressions === true;
-		const manifestSupportsReadMemory =
-			manifest.debugger?.capabilities?.readMemory === true;
-		const manifestSupportsWriteMemory =
-			manifest.debugger?.capabilities?.writeMemory === true;
+		const manifestSupportsReadMemory = manifest.debugger?.capabilities?.readMemory === true;
+		const manifestSupportsWriteMemory = manifest.debugger?.capabilities?.writeMemory === true;
 		this.supportsReadMemory = false;
 		this.supportsWriteMemory = false;
 		const manifestSupportsDataBreakpoints =
@@ -595,10 +617,14 @@ export class LldbSandboxSession {
 		count: number
 	): Promise<DebugMemory | null> {
 		if (!this.supportsReadMemory) return null;
+		assertBoundedNonEmptyStringArgument(memoryReference, 'memoryReference');
 		if (!Number.isSafeInteger(offset)) {
 			throw new RangeError('offset must be a safe integer.');
 		}
 		assertNonNegativeSafeIntegerArgument(count, 'count');
+		if (count > MAX_DEBUG_MEMORY_BYTES) {
+			throw new RangeError(`count must not exceed ${MAX_DEBUG_MEMORY_BYTES}.`);
+		}
 		const session = this.requireSession();
 		const stateVersion = this.stateVersion;
 		try {
@@ -615,6 +641,14 @@ export class LldbSandboxSession {
 			const unreadableBytes = response.unreadableBytes;
 			if (unreadableBytes !== undefined) {
 				assertDapNonNegativeSafeInteger(unreadableBytes, 'readMemory', 'unreadableBytes');
+			}
+			const maximumEncodedDataLength = Math.ceil(count / 3) * 4;
+			if (encodedData !== undefined && encodedData.length > maximumEncodedDataLength) {
+				invalidDapResponse(
+					'readMemory',
+					'data',
+					`encoded data exceeds the ${maximumEncodedDataLength}-character limit for a ${count}-byte request`
+				);
 			}
 			let binary: string;
 			try {
@@ -659,9 +693,17 @@ export class LldbSandboxSession {
 		allowPartial = false
 	): Promise<{ offset?: number; bytesWritten: number } | null> {
 		if (!this.supportsWriteMemory) return null;
+		assertBoundedNonEmptyStringArgument(memoryReference, 'memoryReference');
 		if (!Number.isSafeInteger(offset)) {
 			throw new RangeError('offset must be a safe integer.');
 		}
+		if (!(data instanceof Uint8Array)) {
+			throw new TypeError('data must be a Uint8Array.');
+		}
+		if (data.byteLength > MAX_DEBUG_MEMORY_BYTES) {
+			throw new RangeError(`data must not exceed ${MAX_DEBUG_MEMORY_BYTES} bytes.`);
+		}
+		assertOptionalBooleanArgument(allowPartial, 'allowPartial');
 		const chunks: string[] = [];
 		for (let start = 0; start < data.byteLength; start += 0x8000) {
 			chunks.push(String.fromCharCode(...data.subarray(start, start + 0x8000)));
@@ -707,9 +749,10 @@ export class LldbSandboxSession {
 		arguments_: DebugDataBreakpointInfoArguments
 	): Promise<DebugDataBreakpointInfo | null> {
 		if (!this.supportsDataBreakpoints) return null;
-		if (typeof arguments_.name !== 'string' || arguments_.name.length === 0) {
-			throw new TypeError('name must be a non-empty string.');
+		if (typeof arguments_ !== 'object' || arguments_ === null || Array.isArray(arguments_)) {
+			throw new TypeError('arguments must be an object.');
 		}
+		assertBoundedNonEmptyStringArgument(arguments_.name, 'name');
 		if (arguments_.variablesReference !== undefined) {
 			assertNonNegativeSafeIntegerArgument(
 				arguments_.variablesReference,
@@ -721,7 +764,11 @@ export class LldbSandboxSession {
 		}
 		if (arguments_.bytes !== undefined) {
 			assertPositiveSafeIntegerArgument(arguments_.bytes, 'bytes');
+			if (arguments_.bytes > MAX_DEBUG_MEMORY_BYTES) {
+				throw new RangeError(`bytes must not exceed ${MAX_DEBUG_MEMORY_BYTES}.`);
+			}
 		}
+		assertOptionalBooleanArgument(arguments_.asAddress, 'asAddress');
 		const session = this.requireSession();
 		const stateVersion = this.stateVersion;
 		try {
@@ -740,6 +787,20 @@ export class LldbSandboxSession {
 			let dataId: string | undefined;
 			if (response.dataId !== undefined && response.dataId !== null) {
 				assertDapString(response.dataId, 'dataBreakpointInfo', 'dataId');
+				if (response.dataId.length === 0) {
+					invalidDapResponse(
+						'dataBreakpointInfo',
+						'dataId',
+						'expected a non-empty string'
+					);
+				}
+				if (response.dataId.length > MAX_DEBUG_IDENTIFIER_CODE_UNITS) {
+					invalidDapResponse(
+						'dataBreakpointInfo',
+						'dataId',
+						`expected at most ${MAX_DEBUG_IDENTIFIER_CODE_UNITS} UTF-16 code units`
+					);
+				}
 				dataId = response.dataId;
 			}
 			let accessTypes: Array<'read' | 'write' | 'readWrite'> | undefined;
@@ -747,6 +808,14 @@ export class LldbSandboxSession {
 				if (!Array.isArray(response.accessTypes)) {
 					invalidDapResponse('dataBreakpointInfo', 'accessTypes', 'expected an array');
 				}
+				if (response.accessTypes.length > 3) {
+					invalidDapResponse(
+						'dataBreakpointInfo',
+						'accessTypes',
+						'expected at most 3 entries'
+					);
+				}
+				const seenAccessTypes = new Set<unknown>();
 				accessTypes = response.accessTypes.map((accessType, index) => {
 					if (
 						accessType !== 'read' &&
@@ -759,6 +828,14 @@ export class LldbSandboxSession {
 							'expected read, write, or readWrite'
 						);
 					}
+					if (seenAccessTypes.has(accessType)) {
+						invalidDapResponse(
+							'dataBreakpointInfo',
+							`accessTypes[${index}]`,
+							'expected a unique access type'
+						);
+					}
+					seenAccessTypes.add(accessType);
 					return accessType;
 				});
 			}
@@ -784,9 +861,30 @@ export class LldbSandboxSession {
 		breakpoints: DebugDataBreakpoint[]
 	): Promise<DebugResolvedDataBreakpoint[]> {
 		if (!this.supportsDataBreakpoints) return [];
-		const requestBreakpoints = breakpoints.map((breakpoint, index) => {
+		if (!Array.isArray(breakpoints)) {
+			throw new TypeError('breakpoints must be an array.');
+		}
+		if (breakpoints.length > MAX_DEBUG_DATA_BREAKPOINTS) {
+			throw new RangeError(
+				`breakpoints must not contain more than ${MAX_DEBUG_DATA_BREAKPOINTS} entries.`
+			);
+		}
+		for (let index = 0; index < breakpoints.length; index += 1) {
+			const breakpoint = breakpoints[index];
+			if (
+				typeof breakpoint !== 'object' ||
+				breakpoint === null ||
+				Array.isArray(breakpoint)
+			) {
+				throw new TypeError(`breakpoints[${index}] must be an object.`);
+			}
 			if (typeof breakpoint.dataId !== 'string' || breakpoint.dataId.length === 0) {
 				throw new TypeError(`breakpoints[${index}].dataId must be a non-empty string.`);
+			}
+			if (breakpoint.dataId.length > MAX_DEBUG_IDENTIFIER_CODE_UNITS) {
+				throw new RangeError(
+					`breakpoints[${index}].dataId must not exceed ${MAX_DEBUG_IDENTIFIER_CODE_UNITS} UTF-16 code units.`
+				);
 			}
 			if (
 				breakpoint.accessType !== undefined &&
@@ -798,6 +896,8 @@ export class LldbSandboxSession {
 					`breakpoints[${index}].accessType must be read, write, or readWrite.`
 				);
 			}
+		}
+		const requestBreakpoints = breakpoints.map((breakpoint) => {
 			return {
 				dataId: breakpoint.dataId,
 				...(breakpoint.accessType === undefined

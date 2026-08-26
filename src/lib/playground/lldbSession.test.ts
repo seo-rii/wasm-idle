@@ -353,14 +353,14 @@ describe('LldbSandboxSession', () => {
 		});
 		await vi.waitFor(() =>
 			expect(events).toContainEqual(
-					expect.objectContaining({
-						type: 'pause',
-						capabilities: {
-							readMemory: true,
-							writeMemory: true,
-							dataBreakpoints: false
-						},
-						line: 6,
+				expect.objectContaining({
+					type: 'pause',
+					capabilities: {
+						readMemory: true,
+						writeMemory: true,
+						dataBreakpoints: false
+					},
+					line: 6,
 					sourcePath: '/workspace/main.cpp',
 					sourceContentSha256: 'main-source-sha',
 					threadId: 7,
@@ -1433,6 +1433,190 @@ describe('LldbSandboxSession', () => {
 		expect(completionError).toBeNull();
 	});
 
+	it.each([
+		{
+			caseName: 'empty memory reference',
+			command: 'readMemory',
+			message: 'memoryReference must be a non-empty string.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) => controller.readMemory('', 0, 1)
+		},
+		{
+			caseName: 'oversized memory reference',
+			command: 'readMemory',
+			message: 'memoryReference must not exceed 4096 UTF-16 code units.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.readMemory('x'.repeat(4097), 0, 1)
+		},
+		{
+			caseName: 'oversized memory read',
+			command: 'readMemory',
+			message: 'count must not exceed 256.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) => controller.readMemory('0x0', 0, 257)
+		},
+		{
+			caseName: 'non-byte memory write',
+			command: 'writeMemory',
+			message: 'data must be a Uint8Array.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.writeMemory('0x0', 0, {} as Uint8Array)
+		},
+		{
+			caseName: 'empty memory-write reference',
+			command: 'writeMemory',
+			message: 'memoryReference must be a non-empty string.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.writeMemory('', 0, Uint8Array.of(1))
+		},
+		{
+			caseName: 'oversized memory write',
+			command: 'writeMemory',
+			message: 'data must not exceed 256 bytes.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.writeMemory('0x0', 0, new Uint8Array(257))
+		},
+		{
+			caseName: 'non-boolean partial-write flag',
+			command: 'writeMemory',
+			message: 'allowPartial must be a boolean.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.writeMemory('0x0', 0, Uint8Array.of(1), 'yes' as unknown as boolean)
+		},
+		{
+			caseName: 'oversized data-breakpoint name',
+			command: 'dataBreakpointInfo',
+			message: 'name must not exceed 4096 UTF-16 code units.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({ name: 'x'.repeat(4097) })
+		},
+		{
+			caseName: 'non-object data-breakpoint discovery arguments',
+			command: 'dataBreakpointInfo',
+			message: 'arguments must be an object.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) => controller.dataBreakpointInfo(null as never)
+		},
+		{
+			caseName: 'oversized data-breakpoint byte range',
+			command: 'dataBreakpointInfo',
+			message: 'bytes must not exceed 256.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({ name: '0x0', asAddress: true, bytes: 257 })
+		},
+		{
+			caseName: 'non-boolean address flag',
+			command: 'dataBreakpointInfo',
+			message: 'asAddress must be a boolean.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({
+					name: '0x0',
+					asAddress: 1 as unknown as boolean,
+					bytes: 1
+				})
+		},
+		{
+			caseName: 'non-array data-breakpoint collection',
+			command: 'setDataBreakpoints',
+			message: 'breakpoints must be an array.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) => controller.setDataBreakpoints(null as never)
+		},
+		{
+			caseName: 'oversized data-breakpoint collection',
+			command: 'setDataBreakpoints',
+			message: 'breakpoints must not contain more than 256 entries.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.setDataBreakpoints(
+					Array.from({ length: 257 }, (_, index) => ({ dataId: `id-${index}` }))
+				)
+		},
+		{
+			caseName: 'non-object data-breakpoint entry',
+			command: 'setDataBreakpoints',
+			message: 'breakpoints[0] must be an object.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.setDataBreakpoints([null] as never)
+		},
+		{
+			caseName: 'oversized data-breakpoint identifier',
+			command: 'setDataBreakpoints',
+			message: 'breakpoints[0].dataId must not exceed 4096 UTF-16 code units.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.setDataBreakpoints([{ dataId: 'x'.repeat(4097), accessType: 'write' }])
+		}
+	])(
+		'rejects an invalid $caseName before allocating or sending DAP',
+		async ({ command, message, errorType, invoke }) => {
+			runtimeState.initializeCapabilities = {
+				supportsReadMemoryRequest: true,
+				supportsWriteMemoryRequest: true,
+				supportsDataBreakpoints: true
+			};
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: () => undefined,
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({
+						manifestVersion: 2,
+						debugger: {
+							capabilities: {
+								readMemory: true,
+								writeMemory: true,
+								dataBreakpoints: true
+							}
+						}
+					})
+				})) as unknown as typeof fetch
+			});
+			const completion = controller.start().then(
+				() => null,
+				(error: unknown) => error
+			);
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			const requestCount = runtimeState.session!.requests.filter(
+				(request) => request.command === command
+			).length;
+
+			const callError = await invoke(controller).then(
+				() => null,
+				(error: unknown) => error
+			);
+			const disposeCountBeforeCleanup = runtimeState.session!.disposeCount;
+			if (disposeCountBeforeCleanup === 0) await controller.disconnect();
+			const completionError = await completion;
+
+			expect(callError).toBeInstanceOf(errorType);
+			expect((callError as Error).message).toBe(message);
+			expect(
+				runtimeState.session!.requests.filter((request) => request.command === command)
+			).toHaveLength(requestCount);
+			expect(disposeCountBeforeCleanup).toBe(0);
+			expect(completionError).toBeNull();
+		}
+	);
+
 	it('reads target memory through DAP and decodes the returned bytes', async () => {
 		runtimeState.initializeCapabilities = { supportsReadMemoryRequest: true };
 		const controller = new LldbSandboxSession({
@@ -1471,6 +1655,50 @@ describe('LldbSandboxSession', () => {
 
 		await controller.disconnect();
 		await expect(completion).resolves.toBe(true);
+	});
+
+	it('rejects an oversized encoded memory response before Base64 decoding', async () => {
+		runtimeState.initializeCapabilities = { supportsReadMemoryRequest: true };
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { readMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		const completionError = completion.then(
+			() => null,
+			(error: unknown) => error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		runtimeState.responseOverrides.set('readMemory', {
+			address: '0x1000',
+			data: 'AAAAAAAA'
+		});
+		const originalAtob = globalThis.atob;
+		const atobSpy = vi
+			.spyOn(globalThis, 'atob')
+			.mockImplementation((value) => originalAtob(value));
+
+		await expect(controller.readMemory('0x1000', 0, 1)).rejects.toBeInstanceOf(ProtocolError);
+		expect(atobSpy).not.toHaveBeenCalled();
+		await expect(completionError).resolves.toBeInstanceOf(ProtocolError);
+		await vi.waitFor(() => expect(runtimeState.session!.disposeCount).toBe(1));
+		atobSpy.mockRestore();
 	});
 
 	it('writes target memory through DAP with an exact Base64 payload', async () => {
@@ -1606,6 +1834,56 @@ describe('LldbSandboxSession', () => {
 				args: { breakpoints: [{ dataId: '1000/4', accessType: 'write' }] }
 			}
 		]);
+
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('treats null or omitted data IDs as unavailable and allows clearing all data breakpoints', async () => {
+		runtimeState.initializeCapabilities = { supportsDataBreakpoints: true };
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { dataBreakpoints: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		runtimeState.responseOverrides.set('dataBreakpointInfo', {
+			dataId: null,
+			description: 'not available'
+		});
+		await expect(controller.dataBreakpointInfo({ name: 'counter' })).resolves.toEqual({
+			description: 'not available'
+		});
+		runtimeState.responseOverrides.set('dataBreakpointInfo', {
+			description: 'still not available'
+		});
+		await expect(controller.dataBreakpointInfo({ name: 'counter' })).resolves.toEqual({
+			description: 'still not available'
+		});
+
+		runtimeState.responseOverrides.set('setDataBreakpoints', { breakpoints: [] });
+		await expect(controller.setDataBreakpoints([])).resolves.toEqual([]);
+		expect(runtimeState.session?.requests.at(-1)).toEqual({
+			command: 'setDataBreakpoints',
+			args: { breakpoints: [] }
+		});
 
 		await controller.disconnect();
 		await expect(completion).resolves.toBe(true);
@@ -1787,6 +2065,33 @@ describe('LldbSandboxSession', () => {
 			invoke: (controller: LldbSandboxSession) => controller.readMemory('0x1000', 0, 6)
 		},
 		{
+			command: 'dataBreakpointInfo',
+			response: { dataId: '', description: 'empty identifier' },
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({ name: 'counter' })
+		},
+		{
+			command: 'dataBreakpointInfo',
+			response: { dataId: 'x'.repeat(4097), description: 'oversized identifier' },
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({ name: 'counter' })
+		},
+		{
+			command: 'dataBreakpointInfo',
+			response: { description: 'duplicate access', accessTypes: ['read', 'read'] },
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({ name: 'counter' })
+		},
+		{
+			command: 'dataBreakpointInfo',
+			response: {
+				description: 'too many access modes',
+				accessTypes: ['read', 'write', 'readWrite', 'read']
+			},
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({ name: 'counter' })
+		},
+		{
 			command: 'evaluate',
 			response: { variablesReference: 0 },
 			invoke: async (controller: LldbSandboxSession) => {
@@ -1797,6 +2102,12 @@ describe('LldbSandboxSession', () => {
 	])(
 		'fails and disposes the live session for a malformed $command response',
 		async ({ command, response, invoke }) => {
+			if (command === 'dataBreakpointInfo') {
+				runtimeState.initializeCapabilities = {
+					...runtimeState.initializeCapabilities,
+					supportsDataBreakpoints: true
+				};
+			}
 			const events: Array<{ type: string }> = [];
 			const controller = new LldbSandboxSession({
 				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
@@ -1815,7 +2126,11 @@ describe('LldbSandboxSession', () => {
 					json: async () => ({
 						manifestVersion: 2,
 						debugger: {
-							capabilities: { evaluateExpressions: true, readMemory: true }
+							capabilities: {
+								evaluateExpressions: true,
+								readMemory: true,
+								dataBreakpoints: true
+							}
 						}
 					})
 				})) as unknown as typeof fetch
