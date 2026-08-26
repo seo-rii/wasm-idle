@@ -1,5 +1,5 @@
 import { componentizeCoreWasmToPreview2Component } from './browser-component-tools.js';
-import { fetchRuntimeAssetBytes } from './runtime-asset.js';
+import { createRuntimeAssetCacheKey, fetchRuntimeAssetBytes } from './runtime-asset.js';
 import { clearRuntimeAssetPackCache, loadRuntimePackEntries } from './runtime-asset-store.js';
 import {
 	isIntegratedCompilerOutput,
@@ -120,7 +120,8 @@ export async function linkBitcodeWithLlvmWasm(
 	}
 	const llcWasmAsset = target.compile.llvm.llcWasm || 'llvm/llc.wasm';
 	const llcWasmUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, llcWasmAsset);
-	let cachedLlcWasm = linkAssetCache.get(llcWasmUrl);
+	const llcWasmCacheKey = createRuntimeAssetCacheKey(llcWasmUrl, fetchImpl);
+	let cachedLlcWasm = linkAssetCache.get(llcWasmCacheKey);
 	if (!cachedLlcWasm) {
 		cachedLlcWasm = fetchRuntimeAssetBytes(
 			llcWasmUrl,
@@ -137,10 +138,10 @@ export async function linkBitcodeWithLlvmWasm(
 					progress.total
 				)
 		);
-		linkAssetCache.set(llcWasmUrl, cachedLlcWasm);
+		linkAssetCache.set(llcWasmCacheKey, cachedLlcWasm);
 		cachedLlcWasm.catch(() => {
-			if (linkAssetCache.get(llcWasmUrl) === cachedLlcWasm) {
-				linkAssetCache.delete(llcWasmUrl);
+			if (linkAssetCache.get(llcWasmCacheKey) === cachedLlcWasm) {
+				linkAssetCache.delete(llcWasmCacheKey);
 			}
 		});
 	}
@@ -179,7 +180,8 @@ export async function linkBitcodeWithLlvmWasm(
 	});
 	const lldWasmAsset = target.compile.llvm.lldWasm || 'llvm/lld.wasm';
 	const lldWasmUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, lldWasmAsset);
-	let cachedLldWasm = linkAssetCache.get(lldWasmUrl);
+	const lldWasmCacheKey = createRuntimeAssetCacheKey(lldWasmUrl, fetchImpl);
+	let cachedLldWasm = linkAssetCache.get(lldWasmCacheKey);
 	if (!cachedLldWasm) {
 		cachedLldWasm = fetchRuntimeAssetBytes(
 			lldWasmUrl,
@@ -196,16 +198,17 @@ export async function linkBitcodeWithLlvmWasm(
 					progress.total
 				)
 		);
-		linkAssetCache.set(lldWasmUrl, cachedLldWasm);
+		linkAssetCache.set(lldWasmCacheKey, cachedLldWasm);
 		cachedLldWasm.catch(() => {
-			if (linkAssetCache.get(lldWasmUrl) === cachedLldWasm) {
-				linkAssetCache.delete(lldWasmUrl);
+			if (linkAssetCache.get(lldWasmCacheKey) === cachedLldWasm) {
+				linkAssetCache.delete(lldWasmCacheKey);
 			}
 		});
 	}
 	const lldDataAsset = target.compile.llvm.lldData || 'llvm/lld.data';
 	const lldDataUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, lldDataAsset);
-	let cachedLldData = linkAssetCache.get(lldDataUrl);
+	const lldDataCacheKey = createRuntimeAssetCacheKey(lldDataUrl, fetchImpl);
+	let cachedLldData = linkAssetCache.get(lldDataCacheKey);
 	if (!cachedLldData) {
 		cachedLldData = fetchRuntimeAssetBytes(
 			lldDataUrl,
@@ -222,10 +225,10 @@ export async function linkBitcodeWithLlvmWasm(
 					progress.total
 				)
 		);
-		linkAssetCache.set(lldDataUrl, cachedLldData);
+		linkAssetCache.set(lldDataCacheKey, cachedLldData);
 		cachedLldData.catch(() => {
-			if (linkAssetCache.get(lldDataUrl) === cachedLldData) {
-				linkAssetCache.delete(lldDataUrl);
+			if (linkAssetCache.get(lldDataCacheKey) === cachedLldData) {
+				linkAssetCache.delete(lldDataCacheKey);
 			}
 		});
 	}
@@ -282,7 +285,8 @@ export async function linkBitcodeWithLlvmWasm(
 				assetPath,
 				(async () => {
 					const assetUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, assetPath);
-					let cachedAsset = linkAssetCache.get(assetUrl);
+					const cacheKey = createRuntimeAssetCacheKey(assetUrl, fetchImpl);
+					let cachedAsset = linkAssetCache.get(cacheKey);
 					if (!cachedAsset) {
 						cachedAsset = fetchRuntimeAssetBytes(
 							assetUrl,
@@ -299,10 +303,10 @@ export async function linkBitcodeWithLlvmWasm(
 									progress.total
 								)
 						);
-						linkAssetCache.set(assetUrl, cachedAsset);
+						linkAssetCache.set(cacheKey, cachedAsset);
 						cachedAsset.catch(() => {
-							if (linkAssetCache.get(assetUrl) === cachedAsset) {
-								linkAssetCache.delete(assetUrl);
+							if (linkAssetCache.get(cacheKey) === cachedAsset) {
+								linkAssetCache.delete(cacheKey);
 							}
 						});
 					}
@@ -377,17 +381,18 @@ export async function linkBitcodeWithLlvmWasm(
 			return;
 		}
 		const assetUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, assetPath);
-		let cachedAsset = linkAssetCache.get(assetUrl);
+		const cacheKey = createRuntimeAssetCacheKey(assetUrl, fetchImpl);
+		let cachedAsset = linkAssetCache.get(cacheKey);
 		if (!cachedAsset) {
 			cachedAsset = fetchRuntimeAssetBytes(
 				assetUrl,
 				`wasm-rust link asset ${assetPath}`,
 				fetchImpl
 			);
-			linkAssetCache.set(assetUrl, cachedAsset);
+			linkAssetCache.set(cacheKey, cachedAsset);
 			cachedAsset.catch(() => {
-				if (linkAssetCache.get(assetUrl) === cachedAsset) {
-					linkAssetCache.delete(assetUrl);
+				if (linkAssetCache.get(cacheKey) === cachedAsset) {
+					linkAssetCache.delete(cacheKey);
 				}
 			});
 		}

@@ -1,5 +1,9 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
-import { fetchRuntimeAssetBytes, fetchRuntimeAssetJson } from './runtime-asset.js';
+import {
+	createRuntimeAssetCacheKey,
+	fetchRuntimeAssetBytes,
+	fetchRuntimeAssetJson
+} from './runtime-asset.js';
 import type { RuntimeAssetPackReference } from './runtime-manifest.js';
 
 export interface RuntimePackIndexEntry {
@@ -40,6 +44,17 @@ export interface RuntimePackAssetEntry {
 
 const runtimePackBytesCache = new Map<string, Promise<Uint8Array>>();
 const runtimePackIndexCache = new Map<string, Promise<RuntimePackIndex>>();
+
+function runtimePackCacheIdentity(pack: RuntimeAssetPackReference): string {
+	return JSON.stringify([
+		pack.asset,
+		pack.index,
+		pack.fileCount,
+		pack.totalBytes,
+		pack.decodedTotalBytes ?? null,
+		pack.delta ? [pack.delta.format, runtimePackCacheIdentity(pack.delta.base)] : null
+	]);
+}
 
 function expectObject(value: unknown, label: string): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -174,7 +189,8 @@ async function loadRuntimePackBytes(
 	onProgress?: (progress: { loaded: number; total?: number }) => void
 ) {
 	const assetUrl = resolveVersionedAssetUrl(runtimeBaseUrl, pack.asset).toString();
-	let cachedBytes = runtimePackBytesCache.get(assetUrl);
+	const cacheKey = `${createRuntimeAssetCacheKey(assetUrl, fetchImpl)}\0${runtimePackCacheIdentity(pack)}`;
+	let cachedBytes = runtimePackBytesCache.get(cacheKey);
 	if (!cachedBytes) {
 		cachedBytes = fetchRuntimeAssetBytes(
 			assetUrl,
@@ -183,10 +199,10 @@ async function loadRuntimePackBytes(
 			true,
 			onProgress
 		);
-		runtimePackBytesCache.set(assetUrl, cachedBytes);
+		runtimePackBytesCache.set(cacheKey, cachedBytes);
 		cachedBytes.catch(() => {
-			if (runtimePackBytesCache.get(assetUrl) === cachedBytes) {
-				runtimePackBytesCache.delete(assetUrl);
+			if (runtimePackBytesCache.get(cacheKey) === cachedBytes) {
+				runtimePackBytesCache.delete(cacheKey);
 			}
 		});
 	}
@@ -199,17 +215,18 @@ async function loadRuntimePackIndex(
 	fetchImpl: typeof fetch
 ) {
 	const indexUrl = resolveVersionedAssetUrl(runtimeBaseUrl, pack.index).toString();
-	let cachedIndex = runtimePackIndexCache.get(indexUrl);
+	const cacheKey = `${createRuntimeAssetCacheKey(indexUrl, fetchImpl)}\0${runtimePackCacheIdentity(pack)}`;
+	let cachedIndex = runtimePackIndexCache.get(cacheKey);
 	if (!cachedIndex) {
 		cachedIndex = fetchRuntimeAssetJson<unknown>(
 			indexUrl,
 			`wasm-rust runtime pack index ${pack.index}`,
 			fetchImpl
 		).then((value) => parseRuntimePackIndex(value));
-		runtimePackIndexCache.set(indexUrl, cachedIndex);
+		runtimePackIndexCache.set(cacheKey, cachedIndex);
 		cachedIndex.catch(() => {
-			if (runtimePackIndexCache.get(indexUrl) === cachedIndex) {
-				runtimePackIndexCache.delete(indexUrl);
+			if (runtimePackIndexCache.get(cacheKey) === cachedIndex) {
+				runtimePackIndexCache.delete(cacheKey);
 			}
 		});
 	}

@@ -1,13 +1,28 @@
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import {
+	cp,
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	rename,
+	rm,
+	stat,
+	writeFile
+} from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
+import { format } from 'prettier';
 import {
 	rewriteSharedEmscriptenLldAssets,
 	syncCanonicalEmscriptenLldAssets,
 	validateSharedEmscriptenLldAssets
 } from './llvm-contracts/emscripten-lld.mjs';
-import { validateRustRuntimeProfile } from './llvm-contracts/rust.mjs';
+import {
+	assertCanonicalRustRuntimeAssetPath,
+	validateRustRuntimeProfile
+} from './llvm-contracts/rust.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
@@ -160,19 +175,172 @@ async function computeBundleFingerprint(sourceDir, additionalFiles = []) {
 		hash.update(await readFile(filePath));
 		hash.update('\n');
 	}
-	return hash.digest('hex').slice(0, 16);
+	return hash.digest('hex');
+}
+
+const COMPONENT_BINARY_ASSET_PATHS = [
+	'wasm-rust/vendor/jco/lib/wasi_snapshot_preview1.command.wasm',
+	'wasm-rust/vendor/jco/obj/wasm-tools.core.wasm.gz',
+	'wasm-rust/vendor/jco/obj/wasm-tools.core2.wasm',
+	'wasm-rust/vendor/jco/obj/js-component-bindgen-component.core.wasm.gz',
+	'wasm-rust/vendor/jco/obj/js-component-bindgen-component.core2.wasm'
+];
+
+function runtimeReceiptPath(assetPath) {
+	const sharedLldPrefix = '../../shared/emscripten-lld/';
+	assertCanonicalRustRuntimeAssetPath(assetPath, true);
+	const relativePath = assetPath.startsWith(sharedLldPrefix)
+		? assetPath.slice(sharedLldPrefix.length)
+		: assetPath;
+	if (assetPath.startsWith(sharedLldPrefix)) {
+		return `shared/emscripten-lld/${relativePath}`;
+	}
+	return `wasm-rust/runtime/${assetPath}`;
+}
+
+function collectPackAssetPaths(pack, assetPaths) {
+	if (!pack || typeof pack !== 'object') return;
+	if (typeof pack.asset === 'string') assetPaths.add(runtimeReceiptPath(pack.asset));
+	if (typeof pack.index === 'string') assetPaths.add(runtimeReceiptPath(pack.index));
+	collectPackAssetPaths(pack.delta?.base, assetPaths);
+}
+
+function collectRuntimeManifestAssetPaths(manifest) {
+	const assetPaths = new Set();
+	if (typeof manifest.compiler?.rustcWasm === 'string') {
+		assetPaths.add(runtimeReceiptPath(manifest.compiler.rustcWasm));
+	}
+	let needsComponentAssets = false;
+	for (const target of Object.values(manifest.targets || {})) {
+		if (!target || typeof target !== 'object') continue;
+		collectPackAssetPaths(target.sysrootPack, assetPaths);
+		for (const entry of target.sysrootFiles || []) {
+			if (typeof entry?.asset === 'string') assetPaths.add(runtimeReceiptPath(entry.asset));
+		}
+		const compile = target.compile;
+		if (
+			compile &&
+			typeof compile === 'object' &&
+			!String(compile.kind).startsWith('integrated-rustc')
+		) {
+			assetPaths.add(runtimeReceiptPath(compile.llvm?.llcWasm || 'llvm/llc.wasm'));
+			assetPaths.add(runtimeReceiptPath(compile.llvm?.lldWasm || 'llvm/lld.wasm'));
+			assetPaths.add(runtimeReceiptPath(compile.llvm?.lldData || 'llvm/lld.data'));
+			collectPackAssetPaths(compile.link?.pack, assetPaths);
+			if (typeof compile.link?.allocatorObjectAsset === 'string') {
+				assetPaths.add(runtimeReceiptPath(compile.link.allocatorObjectAsset));
+			}
+			for (const entry of compile.link?.files || []) {
+				if (typeof entry?.asset === 'string')
+					assetPaths.add(runtimeReceiptPath(entry.asset));
+			}
+		}
+		needsComponentAssets ||=
+			target.artifactFormat === 'component' ||
+			target.execution?.kind === 'preview2-component' ||
+			String(target.compile?.kind || '').endsWith('+component-encoder');
+	}
+	if (needsComponentAssets) {
+		for (const assetPath of COMPONENT_BINARY_ASSET_PATHS) assetPaths.add(assetPath);
+	}
+	return [...assetPaths].sort();
+}
+
+function receiptForBytes(storageBytes) {
+	const storageSha256 = createHash('sha256').update(storageBytes).digest('hex');
+	if (storageBytes[0] !== 0x1f || storageBytes[1] !== 0x8b) {
+		return { bytes: storageBytes.byteLength, sha256: storageSha256 };
+	}
+	const logicalBytes = gunzipSync(storageBytes);
+	return {
+		bytes: storageBytes.byteLength,
+		sha256: storageSha256,
+		uncompressedBytes: logicalBytes.byteLength,
+		uncompressedSha256: createHash('sha256').update(logicalBytes).digest('hex')
+	};
+}
+
+async function writeRuntimeAssetReceipts(targetDir, sharedLldDir) {
+	const runtimeDir = path.join(targetDir, 'runtime');
+	const manifestPath = path.join(runtimeDir, 'runtime-manifest.v3.json');
+	const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+	delete manifest.assetReceipts;
+	const assetReceipts = {};
+	for (const assetPath of collectRuntimeManifestAssetPaths(manifest)) {
+		const isSharedLldAsset = assetPath.startsWith('shared/emscripten-lld/');
+		const assetRootDir = path.resolve(isSharedLldAsset ? sharedLldDir : targetDir);
+		const relativePath = isSharedLldAsset
+			? assetPath.slice('shared/emscripten-lld/'.length)
+			: assetPath.slice('wasm-rust/'.length);
+		const filePath = path.resolve(assetRootDir, relativePath);
+		const relativeFilePath = path.relative(assetRootDir, filePath);
+		if (
+			relativeFilePath === '..' ||
+			relativeFilePath.startsWith(`..${path.sep}`) ||
+			path.isAbsolute(relativeFilePath)
+		) {
+			throw new Error(`wasm-rust runtime receipt asset escapes its root: ${assetPath}`);
+		}
+		const storageBytes = await readFile(filePath).catch(() => null);
+		if (!storageBytes) {
+			throw new Error(`wasm-rust runtime receipt asset was not found: ${assetPath}`);
+		}
+		assetReceipts[assetPath] = receiptForBytes(storageBytes);
+	}
+	manifest.assetReceipts = assetReceipts;
+	const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+	await writeFile(manifestPath, manifestBytes);
+	return {
+		assetReceipts,
+		manifestReceipt: {
+			bytes: manifestBytes.byteLength,
+			sha256: createHash('sha256').update(manifestBytes).digest('hex')
+		}
+	};
 }
 
 /**
  * @param {string} versionModulePath
  * @param {string} fingerprint
  */
-async function writeVersionModule(versionModulePath, fingerprint) {
+async function writeVersionModule(versionModulePath, fingerprint, runtimeProfile) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource = `export const WASM_RUST_ASSET_VERSION = '${fingerprint}';\n`;
+	const unformattedModuleSource = `export const WASM_RUST_RUNTIME_PROFILE = Object.freeze(${JSON.stringify(
+		{
+			profileId: `wasm-rust-${fingerprint}`,
+			protocolVersion: 1,
+			manifestPath: 'runtime/runtime-manifest.v3.json',
+			manifestFingerprint: fingerprint,
+			manifestReceipt: runtimeProfile.manifestReceipt,
+			assetReceipts: runtimeProfile.assetReceipts
+		},
+		null,
+		2
+	)} as const);\n\nexport const WASM_RUST_ASSET_VERSION = WASM_RUST_RUNTIME_PROFILE.manifestFingerprint;\n`;
+	const moduleSource = await format(unformattedModuleSource, {
+		parser: 'typescript',
+		printWidth: 100,
+		singleQuote: true,
+		tabWidth: 4,
+		trailingComma: 'none',
+		useTabs: true
+	});
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current === moduleSource) return;
 	await writeFile(versionModulePath, moduleSource, 'utf8');
+}
+
+export async function refreshWasmRustRuntimeProfile(options = {}) {
+	const {
+		targetDir = DEFAULT_TARGET_DIR,
+		versionModulePath = DEFAULT_VERSION_MODULE_PATH,
+		sharedLldDir = DEFAULT_SHARED_LLD_DIR,
+		additionalFingerprintFiles = []
+	} = options;
+	const runtimeProfile = await writeRuntimeAssetReceipts(targetDir, sharedLldDir);
+	const fingerprint = await computeBundleFingerprint(targetDir, additionalFingerprintFiles);
+	await writeVersionModule(versionModulePath, fingerprint, runtimeProfile);
+	return { fingerprint, runtimeProfile, versionModulePath };
 }
 
 /**
@@ -224,35 +392,77 @@ export async function syncWasmRustDist(options = {}) {
 		}
 	}
 
-	await rm(targetDir, { recursive: true, force: true });
-	await mkdir(targetDir, { recursive: true });
-	await copyDirectory(sourceDir, targetDir);
-	await rewriteBrowserWasiShimImports(targetDir);
-	if (hasSharedLldAssets) {
-		await rewriteSharedEmscriptenLldAssets({
-			targetAssetDir: path.join(targetDir, 'runtime', 'llvm'),
-			manifestPath: path.join(targetDir, 'runtime', 'runtime-manifest.v3.json'),
-			localJsAsset: 'llvm/lld.js',
-			localWasmAsset: 'llvm/lld.wasm.gz',
-			localDataAsset: 'llvm/lld.data.gz'
-		});
+	const targetParentDir = path.dirname(targetDir);
+	await mkdir(targetParentDir, { recursive: true });
+	const stagingDir = await mkdtemp(path.join(targetParentDir, '.wasm-rust-sync-'));
+	const backupDir = `${stagingDir}.backup`;
+	let fingerprint;
+	let runtimeProfile;
+	let targetMovedToBackup = false;
+	let stagingMovedToTarget = false;
+	const previousVersionModule = await readFile(versionModulePath).catch(() => null);
+	try {
+		await copyDirectory(sourceDir, stagingDir);
+		await rewriteBrowserWasiShimImports(stagingDir);
+		if (hasSharedLldAssets) {
+			await rewriteSharedEmscriptenLldAssets({
+				targetAssetDir: path.join(stagingDir, 'runtime', 'llvm'),
+				manifestPath: path.join(stagingDir, 'runtime', 'runtime-manifest.v3.json'),
+				localJsAsset: 'llvm/lld.js',
+				localWasmAsset: 'llvm/lld.wasm.gz',
+				localDataAsset: 'llvm/lld.data.gz'
+			});
+		}
+		runtimeProfile = await writeRuntimeAssetReceipts(stagingDir, sharedLldDir);
+		fingerprint = await computeBundleFingerprint(
+			stagingDir,
+			hasSharedLldAssets
+				? [
+						path.join(sharedLldDir, 'lld.js'),
+						path.join(sharedLldDir, 'lld.wasm.gz'),
+						path.join(sharedLldDir, 'lld.data.gz')
+					]
+				: []
+		);
+
+		if ((await stat(targetDir).catch(() => null))?.isDirectory()) {
+			await rename(targetDir, backupDir);
+			targetMovedToBackup = true;
+		}
+		try {
+			await rename(stagingDir, targetDir);
+			stagingMovedToTarget = true;
+			await writeVersionModule(versionModulePath, fingerprint, runtimeProfile);
+		} catch (error) {
+			if (stagingMovedToTarget) {
+				await rm(targetDir, { recursive: true, force: true });
+			}
+			if (targetMovedToBackup) {
+				await rename(backupDir, targetDir);
+				targetMovedToBackup = false;
+			}
+			if (previousVersionModule) {
+				await writeFile(versionModulePath, previousVersionModule);
+			} else {
+				await rm(versionModulePath, { force: true });
+			}
+			throw error;
+		}
+		if (targetMovedToBackup) {
+			await rm(backupDir, { recursive: true, force: true });
+			targetMovedToBackup = false;
+		}
+	} finally {
+		if (!stagingMovedToTarget) {
+			await rm(stagingDir, { recursive: true, force: true });
+		}
 	}
-	const fingerprint = await computeBundleFingerprint(
-		targetDir,
-		hasSharedLldAssets
-			? [
-					path.join(sharedLldDir, 'lld.js'),
-					path.join(sharedLldDir, 'lld.wasm.gz'),
-					path.join(sharedLldDir, 'lld.data.gz')
-				]
-			: []
-	);
-	await writeVersionModule(versionModulePath, fingerprint);
 
 	return {
 		sourceDir,
 		targetDir,
 		fingerprint,
+		runtimeProfile,
 		versionModulePath
 	};
 }

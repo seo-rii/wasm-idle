@@ -32,7 +32,17 @@ export interface RuntimeAssetKeySource {
 	java?: RuntimeAssetLoaderKeySource;
 	clang?: RuntimeAssetLoaderKeySource;
 	clangd?: RuntimeAssetLoaderKeySource;
-	rust?: { compilerUrl?: string; manifestUrl?: string; debugModuleUrl?: string };
+	rust?: {
+		compilerUrl?: string;
+		manifestUrl?: string;
+		debugModuleUrl?: string;
+		profileId?: string;
+		protocolVersion?: number;
+		manifestPath?: string;
+		manifestFingerprint?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		assetReceipts?: RuntimeAssetIntegrityMap;
+	};
 	go?: { compilerUrl?: string; manifestUrl?: string };
 	assemblyscript?: { moduleUrl?: string };
 	duckdb?: { moduleUrl?: string };
@@ -554,6 +564,27 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'rust', property: 'compilerUrl', key: 'rustCompilerUrl' },
 	{ runtime: 'rust', property: 'manifestUrl', key: 'rustManifestUrl' },
 	{ runtime: 'rust', property: 'debugModuleUrl', key: 'rustDebugModuleUrl' },
+	{ runtime: 'rust', property: 'profileId', key: 'rustProfileId' },
+	{
+		runtime: 'rust',
+		property: 'protocolVersion',
+		key: 'rustProtocolVersion',
+		serialize: serializeSafeInteger
+	},
+	{ runtime: 'rust', property: 'manifestPath', key: 'rustManifestPath' },
+	{ runtime: 'rust', property: 'manifestFingerprint', key: 'rustManifestFingerprint' },
+	{
+		runtime: 'rust',
+		property: 'manifestReceipt',
+		key: 'rustManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'rust',
+		property: 'assetReceipts',
+		key: 'rustAssetReceipts',
+		serialize: serializeIntegrity
+	},
 	{ runtime: 'go', property: 'compilerUrl', key: 'goCompilerUrl' },
 	{ runtime: 'go', property: 'manifestUrl', key: 'goManifestUrl' },
 	{ runtime: 'assemblyscript', property: 'moduleUrl', key: 'assemblyScriptModuleUrl' },

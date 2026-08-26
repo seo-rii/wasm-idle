@@ -9,7 +9,11 @@ import type {
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
 import { resolveBrowserRustDebugMode } from './compiler-support.js';
-import { isIntegratedCompilerOutput, resolveTargetManifest } from './runtime-manifest.js';
+import {
+	isIntegratedCompilerOutput,
+	registerRuntimeManifestAssetReceipts,
+	resolveTargetManifest
+} from './runtime-manifest.js';
 import { buildPreopenedDirectories, instantiateRustcInstance } from './rustc-runtime.js';
 import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot } from './thread-startup.js';
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
@@ -96,6 +100,9 @@ function emitCompileWorkerProgress(
 }
 
 async function compileRustInWorker(request: CompileWorkerRequest) {
+	if (request.manifest.assetReceipts) {
+		registerRuntimeManifestAssetReceipts(request.runtimeBaseUrl, request.manifest);
+	}
 	const target = resolveTargetManifest(request.manifest, request.request.targetTriple);
 	const threadPoolSize = 4;
 	emitCompileWorkerLog(

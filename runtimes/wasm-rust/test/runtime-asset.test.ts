@@ -1,14 +1,229 @@
 import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+	clearRegisteredRuntimeAssetReceipts,
 	DEFAULT_MAX_RUNTIME_ASSET_BYTES,
 	fetchRuntimeAssetBytes,
-	fetchRuntimeAssetJson
+	fetchRuntimeAssetJson,
+	hasRegisteredRuntimeAssetReceipt,
+	registerRuntimeAssetReceipts
 } from '../src/runtime-asset.js';
 
+const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+
 describe('runtime asset fetch fallback', () => {
+	it('verifies registered storage and logical receipts before returning gzip bytes', async () => {
+		clearRegisteredRuntimeAssetReceipts();
+		const runtimeBaseUrl = 'https://example.test/runtime/?v=profile';
+		const logicalBytes = new TextEncoder().encode('verified rust runtime');
+		const storageBytes = gzipSync(logicalBytes);
+		registerRuntimeAssetReceipts(runtimeBaseUrl, {
+			'packs/runtime.pack.gz': {
+				bytes: storageBytes.byteLength,
+				sha256: sha256(storageBytes),
+				uncompressedBytes: logicalBytes.byteLength,
+				uncompressedSha256: sha256(logicalBytes)
+			}
+		});
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/packs/runtime.pack.gz?v=profile',
+				'runtime pack',
+				async () => new Response(storageBytes),
+				false
+			)
+		).resolves.toEqual(logicalBytes);
+	});
+
+	it('rejects same-length corruption against a registered receipt', async () => {
+		clearRegisteredRuntimeAssetReceipts();
+		const assetUrl = 'https://example.test/runtime/rustc.wasm?v=profile';
+		const expected = new Uint8Array([0, 97, 115, 109]);
+		registerRuntimeAssetReceipts('https://example.test/runtime/?v=profile', {
+			'rustc.wasm': { bytes: expected.byteLength, sha256: sha256(expected) }
+		});
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				assetUrl,
+				'rustc.wasm',
+				async () => new Response(new Uint8Array([0, 97, 115, 110])),
+				false
+			)
+		).rejects.toThrow(/storage SHA-256 differs/);
+	});
+
+	it('accepts transparently decoded gzip only when its logical receipt matches', async () => {
+		clearRegisteredRuntimeAssetReceipts();
+		const logicalBytes = new Uint8Array([0, 97, 115, 109]);
+		const storageBytes = gzipSync(logicalBytes);
+		registerRuntimeAssetReceipts('https://example.test/runtime/?v=profile', {
+			'rustc.wasm.gz': {
+				bytes: storageBytes.byteLength,
+				sha256: sha256(storageBytes),
+				uncompressedBytes: logicalBytes.byteLength,
+				uncompressedSha256: sha256(logicalBytes)
+			}
+		});
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/rustc.wasm.gz?v=profile',
+				'rustc.wasm',
+				async () => new Response(logicalBytes),
+				false
+			)
+		).resolves.toEqual(logicalBytes);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/rustc.wasm.gz?v=profile',
+				'rustc.wasm',
+				async () => new Response(new Uint8Array([0, 97, 115, 110])),
+				false
+			)
+		).rejects.toThrow(/logical SHA-256 differs/);
+	});
+
+	it.each([
+		['a missing response', new Response(null, { status: 404 })],
+		['an HTML response', new Response('<!doctype html><html></html>')]
+	])('never attempts a gzip fallback for a pinned asset with %s', async (_case, response) => {
+		clearRegisteredRuntimeAssetReceipts();
+		const assetUrl = 'https://example.test/runtime/rustc.wasm?v=profile';
+		registerRuntimeAssetReceipts('https://example.test/runtime/?v=profile', {
+			'rustc.wasm': { bytes: 4, sha256: sha256(Uint8Array.of(0, 97, 115, 109)) }
+		});
+		const requests: string[] = [];
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				assetUrl,
+				'rustc.wasm',
+				async (input) => {
+					requests.push(String(input));
+					return response.clone();
+				},
+				true
+			)
+		).rejects.toThrow();
+		expect(requests).toEqual([assetUrl]);
+	});
+
+	it('classifies pinned storage encoding from the receipt instead of the URL suffix', async () => {
+		clearRegisteredRuntimeAssetReceipts();
+		const logicalBytes = Uint8Array.of(0, 97, 115, 109);
+		const storageBytes = gzipSync(logicalBytes);
+		const receipt = {
+			bytes: storageBytes.byteLength,
+			sha256: sha256(storageBytes),
+			uncompressedBytes: logicalBytes.byteLength,
+			uncompressedSha256: sha256(logicalBytes)
+		};
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/rustc.wasm?v=profile',
+				'rustc.wasm',
+				async () => new Response(storageBytes),
+				false,
+				undefined,
+				{ receipt }
+			)
+		).resolves.toEqual(logicalBytes);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/identity.gz?v=profile',
+				'identity.gz',
+				async () => new Response(storageBytes),
+				false,
+				undefined,
+				{ receipt: { bytes: storageBytes.byteLength, sha256: sha256(storageBytes) } }
+			)
+		).resolves.toEqual(Uint8Array.from(storageBytes));
+	});
+
+	it('accepts transparent logical bytes that themselves begin with gzip magic', async () => {
+		const logicalBytes = Uint8Array.of(0x1f, 0x8b, 0x00, 0x01);
+		const storageBytes = gzipSync(logicalBytes);
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin.gz?v=profile',
+				'data.bin',
+				async () => new Response(logicalBytes),
+				false,
+				undefined,
+				{
+					receipt: {
+						bytes: storageBytes.byteLength,
+						sha256: sha256(storageBytes),
+						uncompressedBytes: logicalBytes.byteLength,
+						uncompressedSha256: sha256(logicalBytes)
+					}
+				}
+			)
+		).resolves.toEqual(logicalBytes);
+	});
+
+	it('fails closed across conflicting receipt generations and registers atomically', () => {
+		clearRegisteredRuntimeAssetReceipts();
+		const receiptA = { bytes: 1, sha256: sha256(Uint8Array.of(1)) };
+		const receiptB = { bytes: 1, sha256: sha256(Uint8Array.of(2)) };
+		registerRuntimeAssetReceipts('https://example.test/runtime/?v=a', {
+			'asset.wasm': receiptA
+		});
+		registerRuntimeAssetReceipts('https://example.test/runtime/?v=b', {
+			'asset.wasm': receiptA
+		});
+		expect(
+			hasRegisteredRuntimeAssetReceipt('https://example.test/runtime/asset.wasm?v=a')
+		).toBe(true);
+		expect(
+			hasRegisteredRuntimeAssetReceipt('https://example.test/runtime/asset.wasm?v=b')
+		).toBe(true);
+		expect(hasRegisteredRuntimeAssetReceipt('https://example.test/runtime/asset.wasm')).toBe(
+			true
+		);
+		expect(() =>
+			registerRuntimeAssetReceipts('https://example.test/runtime/?v=c', {
+				'asset.wasm': receiptB
+			})
+		).toThrow(/conflicting receipts/);
+		expect(
+			hasRegisteredRuntimeAssetReceipt('https://example.test/runtime/asset.wasm?v=c')
+		).toBe(false);
+
+		expect(() =>
+			registerRuntimeAssetReceipts('https://example.test/runtime/?v=a', {
+				'new.wasm': receiptA,
+				'asset.wasm': receiptB
+			})
+		).toThrow(/conflicting receipts/);
+		expect(hasRegisteredRuntimeAssetReceipt('https://example.test/runtime/new.wasm?v=a')).toBe(
+			false
+		);
+	});
+
+	it('rejects promptly when a fetch implementation ignores its abort signal', async () => {
+		const controller = new AbortController();
+		const reason = new Error('cancelled stalled fetch');
+		const loading = fetchRuntimeAssetBytes(
+			'https://example.test/runtime/data.bin',
+			'data.bin',
+			() => new Promise<Response>(() => {}),
+			false,
+			undefined,
+			{ signal: controller.signal }
+		);
+		controller.abort(reason);
+		await expect(loading).rejects.toBe(reason);
+	});
+
 	it('uses least-authority fetch options and accepts an exact final URL', async () => {
 		const assetUrl = 'https://example.test/runtime/data.bin';
 		const response = new Response(new Uint8Array([1, 2, 3]));
@@ -506,11 +721,10 @@ describe('runtime asset fetch fallback', () => {
 				const abortRegistrations = addEventListener.mock.calls.filter(
 					([type]) => type === 'abort'
 				);
-				expect(abortRegistrations).toHaveLength(1);
-				expect(removeEventListener).toHaveBeenCalledWith(
-					'abort',
-					abortRegistrations[0]?.[1]
-				);
+				expect(abortRegistrations).toHaveLength(2);
+				for (const registration of abortRegistrations) {
+					expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+				}
 				expect(onProgress).not.toHaveBeenCalled();
 
 				resolveCancel();

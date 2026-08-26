@@ -1,16 +1,22 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
-import { isMissingRuntimeManifestError, loadRuntimeManifest, normalizeRuntimeManifest, resolveTargetManifest } from './runtime-manifest.js';
-export async function loadBundledRuntimeContext(loadManifest = loadRuntimeManifest, targetTriple) {
-    const runtimeBaseUrl = resolveVersionedAssetUrl(import.meta.url, './runtime/');
+import { isMissingRuntimeManifestError, loadRuntimeManifest, normalizeRuntimeManifest, registerRuntimeManifestAssetReceipts, resolveTargetManifest } from './runtime-manifest.js';
+export async function loadBundledRuntimeContext(manifestLoader = loadRuntimeManifest, targetTriple, runtimeProfile) {
+    if (!runtimeProfile && manifestLoader === loadRuntimeManifest) {
+        throw new Error('wasm-rust runtime receipt profile is required');
+    }
+    const effectiveManifestLoader = runtimeProfile ? loadRuntimeManifest : manifestLoader;
+    const moduleBaseUrl = runtimeProfile
+        ? new URL(runtimeProfile.moduleUrl)
+        : new URL(import.meta.url);
+    const runtimeBaseUrl = resolveVersionedAssetUrl(moduleBaseUrl, './runtime/');
     let loadedManifest;
     let lastMissingManifestError = null;
-    for (const manifestFileName of [
-        'runtime-manifest.v3.json',
-        'runtime-manifest.v2.json',
-        'runtime-manifest.json'
-    ]) {
+    const manifestFileNames = runtimeProfile
+        ? [runtimeProfile.manifestPath.replace(/^runtime\//u, '')]
+        : ['runtime-manifest.v3.json', 'runtime-manifest.v2.json', 'runtime-manifest.json'];
+    for (const manifestFileName of manifestFileNames) {
         try {
-            loadedManifest = await loadManifest(resolveVersionedAssetUrl(runtimeBaseUrl, manifestFileName));
+            loadedManifest = await effectiveManifestLoader(resolveVersionedAssetUrl(runtimeBaseUrl, manifestFileName), fetch, runtimeProfile ? { receipt: runtimeProfile.manifestReceipt } : {});
             break;
         }
         catch (error) {
@@ -26,9 +32,20 @@ export async function loadBundledRuntimeContext(loadManifest = loadRuntimeManife
             : new Error('failed to load a bundled wasm-rust runtime manifest');
     }
     const manifest = normalizeRuntimeManifest(loadedManifest);
+    if (runtimeProfile) {
+        registerRuntimeManifestAssetReceipts(runtimeBaseUrl, manifest);
+    }
+    else if (manifest.assetReceipts) {
+        registerRuntimeManifestAssetReceipts(runtimeBaseUrl, manifest);
+    }
     const targetConfig = resolveTargetManifest(manifest, targetTriple);
-    const versionedModuleBaseUrl = new URL(import.meta.url);
-    versionedModuleBaseUrl.searchParams.set('v', manifest.version);
+    const versionedModuleBaseUrl = new URL(moduleBaseUrl);
+    if (runtimeProfile) {
+        versionedModuleBaseUrl.searchParams.set('v', runtimeProfile.manifestFingerprint);
+    }
+    else {
+        versionedModuleBaseUrl.searchParams.set('v', manifest.version);
+    }
     const versionedRuntimeBaseUrl = resolveVersionedAssetUrl(versionedModuleBaseUrl, './runtime/');
     return {
         manifest,

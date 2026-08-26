@@ -130,7 +130,7 @@ export async function compileRust(request, dependencies = {}) {
         message: 'loading runtime manifest'
     });
     try {
-        const { manifest, targetConfig, versionedModuleBaseUrl, versionedRuntimeBaseUrl } = await loadBundledRuntimeContext(dependencies.loadManifest, request.targetTriple);
+        const { manifest, targetConfig, versionedModuleBaseUrl, versionedRuntimeBaseUrl } = await loadBundledRuntimeContext(dependencies.loadManifest, request.targetTriple, dependencies.runtimeProfile);
         let dwarfDebugDescriptorBase = null;
         if (debugMode === 'lldb') {
             if (!globalThis.crypto?.subtle) {

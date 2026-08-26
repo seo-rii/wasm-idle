@@ -225,20 +225,37 @@ describe('syncWasmRustDist', () => {
 			readFile(path.join(targetDir, 'vendor/browser_wasi_shim/tsconfig.tsbuildinfo'), 'utf8')
 		).rejects.toThrow();
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
-			`export const WASM_RUST_ASSET_VERSION = '${result.fingerprint}';`
+			'export const WASM_RUST_RUNTIME_PROFILE = Object.freeze('
 		);
+		expect(result.fingerprint).toMatch(/^[a-f0-9]{64}$/u);
+		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
+			'export const WASM_RUST_ASSET_VERSION = WASM_RUST_RUNTIME_PROFILE.manifestFingerprint;'
+		);
+		const syncedManifest = JSON.parse(
+			await readFile(path.join(targetDir, 'runtime/runtime-manifest.v3.json'), 'utf8')
+		);
+		expect(Object.keys(syncedManifest.assetReceipts).sort()).toEqual([
+			'shared/emscripten-lld/lld.data.gz',
+			'shared/emscripten-lld/lld.wasm.gz',
+			'wasm-rust/runtime/llvm/llc.wasm.gz',
+			'wasm-rust/runtime/rustc/rustc.wasm.gz'
+		]);
 	});
 
 	it('clears stale files from the previous synced bundle', async () => {
 		const sourceDir = await makeTempDir();
 		const targetDir = await makeTempDir();
 		const versionModulePath = path.join(await makeTempDir(), 'wasmRustVersion.ts');
+		const sharedLldDir = await makeTempDir();
 
 		await writeFixtureFile(sourceDir, 'index.js', 'export default 1;\n');
-		await writeRustLlvmProfileFixture(sourceDir);
+		await writeRustLlvmProfileFixture(sourceDir, true);
+		await writeFixtureFile(sharedLldDir, 'lld.js', 'lld-js');
+		await writeFixtureFile(sharedLldDir, 'lld.wasm.gz', 'gzip-lld-wasm');
+		await writeFixtureFile(sharedLldDir, 'lld.data.gz', 'gzip-lld-data');
 		await writeFixtureFile(targetDir, 'stale.txt', 'remove me');
 
-		await syncWasmRustDist({ sourceDir, targetDir, versionModulePath });
+		await syncWasmRustDist({ sourceDir, targetDir, versionModulePath, sharedLldDir });
 
 		await expect(readFile(path.join(targetDir, 'index.js'), 'utf8')).resolves.toContain(
 			'export default 1'
@@ -300,6 +317,53 @@ describe('syncWasmRustDist', () => {
 		await expect(readFile(path.join(sharedLldDir, 'lld.js'), 'utf8')).rejects.toThrow();
 	});
 
+	it('rejects non-canonical runtime asset paths without replacing the installed bundle', async () => {
+		const sourceDir = await makeTempDir();
+		const targetDir = await makeTempDir();
+		const versionModulePath = path.join(await makeTempDir(), 'wasmRustVersion.ts');
+
+		await writeFixtureFile(sourceDir, 'index.js', 'export default "integrated";\n');
+		await writeFixtureFile(
+			sourceDir,
+			'runtime/runtime-manifest.v3.json',
+			JSON.stringify({
+				manifestVersion: 3,
+				version: 'rust-1.99.0-browser-integrated-v1',
+				producer: {
+					id: '@seo-rii/wasm-llvm/rust-browser',
+					manifestSha256: 'a'.repeat(64),
+					runner: 'container'
+				},
+				compiler: { rustcWasm: 'rustc/rustc.wasm.gz' },
+				targets: {
+					'wasm32-wasip1': {
+						sysrootPack: {
+							asset: '../escaped.pack',
+							index: 'packs/sysroot/wasm32-wasip1.index.json.gz'
+						},
+						compile: { kind: 'integrated-rustc' }
+					}
+				}
+			})
+		);
+		await writeFixtureFile(sourceDir, 'runtime/rustc/rustc.wasm.gz', 'rustc');
+		await writeFixtureFile(
+			sourceDir,
+			'runtime/packs/sysroot/wasm32-wasip1.index.json.gz',
+			'index'
+		);
+		await writeFixtureFile(targetDir, 'keep.txt', 'existing-runtime');
+		await writeFile(versionModulePath, 'old-version');
+
+		await expect(syncWasmRustDist({ sourceDir, targetDir, versionModulePath })).rejects.toThrow(
+			'non-canonical path'
+		);
+		await expect(readFile(path.join(targetDir, 'keep.txt'), 'utf8')).resolves.toBe(
+			'existing-runtime'
+		);
+		await expect(readFile(versionModulePath, 'utf8')).resolves.toBe('old-version');
+	});
+
 	it('fails with a build hint when the wasm-rust dist directory does not exist', async () => {
 		const targetDir = await makeTempDir();
 		const sourceDir = path.join(await makeTempDir(), 'missing-dist');
@@ -322,9 +386,19 @@ describe('syncWasmRustDist', () => {
 		);
 		await writeFixtureFile(sourceDir, 'index.js', 'export default 1;\n');
 		await writeRustLlvmProfileFixture(sourceDir);
+		await writeFixtureFile(targetDir, 'keep.txt', 'existing-runtime');
+		await writeFixtureFile(
+			path.dirname(versionModulePath),
+			path.basename(versionModulePath),
+			'old-version'
+		);
 
 		await expect(syncWasmRustDist({ sourceDir, targetDir, versionModulePath })).rejects.toThrow(
 			'vendored browser_wasi_shim'
 		);
+		await expect(readFile(path.join(targetDir, 'keep.txt'), 'utf8')).resolves.toBe(
+			'existing-runtime'
+		);
+		await expect(readFile(versionModulePath, 'utf8')).resolves.toBe('old-version');
 	});
 });

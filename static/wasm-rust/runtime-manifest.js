@@ -1,4 +1,5 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
+import { fetchRuntimeAssetBytes, registerRuntimeAssetReceipts } from './runtime-asset.js';
 export function isIntegratedCompilerOutput(compile) {
     return (compile.kind === 'integrated-rustc' || compile.kind === 'integrated-rustc+component-encoder');
 }
@@ -45,10 +46,11 @@ function isNormalizedRuntimeManifest(value) {
     }
     return true;
 }
-function parseCompilerProvenance(value, runtimeVersion, hostTriple) {
+function parseCompilerProvenance(value, runtimeVersion, hostTriple, strict = false) {
     if (value === undefined)
         return undefined;
     const provenance = expectObject(value, 'compilerProvenance');
+    expectOnlyKeys(provenance, 'compilerProvenance', ['name', 'version', 'revision', 'llvmVersion', 'llvmRevision'], strict);
     if (provenance.name !== 'rustc') {
         throw new Error('compilerProvenance.name must be rustc');
     }
@@ -74,6 +76,15 @@ function expectObject(value, label) {
     }
     return value;
 }
+function expectOnlyKeys(object, label, allowedKeys, strict) {
+    if (!strict)
+        return;
+    const allowed = new Set(allowedKeys);
+    const unknownKeys = Object.keys(object).filter((key) => !allowed.has(key));
+    if (unknownKeys.length) {
+        throw new Error(`invalid ${label} in wasm-rust runtime manifest: unknown fields ${unknownKeys.join(', ')}`);
+    }
+}
 function expectString(value, label) {
     if (typeof value !== 'string' || value.length === 0) {
         throw new Error(`invalid ${label} in wasm-rust runtime manifest`);
@@ -81,7 +92,7 @@ function expectString(value, label) {
     return value;
 }
 function expectNumber(value, label) {
-    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
         throw new Error(`invalid ${label} in wasm-rust runtime manifest`);
     }
     return value;
@@ -98,6 +109,90 @@ function expectStringArray(value, label) {
         throw new Error(`invalid ${label} in wasm-rust runtime manifest`);
     }
     return value;
+}
+function expectCanonicalPath(value, label, allowSharedLld = false) {
+    const sourcePath = expectString(value, label);
+    const path = allowSharedLld && sourcePath.startsWith('../../shared/emscripten-lld/')
+        ? sourcePath.slice('../../shared/emscripten-lld/'.length)
+        : sourcePath;
+    if ((path !== sourcePath && path.length === 0) ||
+        path.startsWith('/') ||
+        path.endsWith('/') ||
+        path.includes('\\') ||
+        path.includes(':') ||
+        path.includes('%') ||
+        path.includes('?') ||
+        path.includes('#') ||
+        /[\u0000-\u001f\u007f]/u.test(path) ||
+        path.split('/').some((segment) => !segment || segment === '.' || segment === '..') ||
+        (sourcePath.startsWith('../') && path === sourcePath)) {
+        throw new Error(`invalid ${label} in wasm-rust runtime manifest: non-canonical path`);
+    }
+    return sourcePath;
+}
+function expectRuntimePath(value, label) {
+    const runtimePath = expectString(value, label);
+    if (!runtimePath.startsWith('/') ||
+        runtimePath.length === 1 ||
+        runtimePath.endsWith('/') ||
+        runtimePath.includes('\\') ||
+        /[\u0000-\u001f\u007f]/u.test(runtimePath) ||
+        runtimePath
+            .slice(1)
+            .split('/')
+            .some((segment) => !segment || segment === '.' || segment === '..')) {
+        throw new Error(`invalid ${label} in wasm-rust runtime manifest: non-canonical path`);
+    }
+    return runtimePath;
+}
+function parseRuntimeManifestProducer(value, strict) {
+    if (value === undefined)
+        return undefined;
+    const producer = expectObject(value, 'producer');
+    expectOnlyKeys(producer, 'producer', ['id', 'manifestSha256', 'runner', 'sourceDateEpoch'], strict);
+    const manifestSha256 = expectString(producer.manifestSha256, 'producer.manifestSha256');
+    if (!/^[a-f0-9]{64}$/u.test(manifestSha256)) {
+        throw new Error('invalid producer.manifestSha256 in wasm-rust runtime manifest');
+    }
+    return Object.freeze({
+        id: expectString(producer.id, 'producer.id'),
+        manifestSha256,
+        runner: expectString(producer.runner, 'producer.runner'),
+        sourceDateEpoch: expectNonNegativeInteger(producer.sourceDateEpoch, 'producer.sourceDateEpoch')
+    });
+}
+function parseRuntimeAssetReceipt(value, label) {
+    const object = expectObject(value, label);
+    expectOnlyKeys(object, label, ['bytes', 'sha256', 'uncompressedBytes', 'uncompressedSha256'], true);
+    const bytes = expectNonNegativeInteger(object.bytes, `${label}.bytes`);
+    const sha256 = expectString(object.sha256, `${label}.sha256`);
+    const hasLogicalBytes = object.uncompressedBytes !== undefined;
+    const hasLogicalSha256 = object.uncompressedSha256 !== undefined;
+    if (!/^[a-f0-9]{64}$/u.test(sha256) || hasLogicalBytes !== hasLogicalSha256) {
+        throw new Error(`invalid ${label} in wasm-rust runtime manifest`);
+    }
+    if (!hasLogicalBytes)
+        return Object.freeze({ bytes, sha256 });
+    const uncompressedBytes = expectNonNegativeInteger(object.uncompressedBytes, `${label}.uncompressedBytes`);
+    const uncompressedSha256 = expectString(object.uncompressedSha256, `${label}.uncompressedSha256`);
+    if (!/^[a-f0-9]{64}$/u.test(uncompressedSha256)) {
+        throw new Error(`invalid ${label}.uncompressedSha256 in wasm-rust runtime manifest`);
+    }
+    return Object.freeze({ bytes, sha256, uncompressedBytes, uncompressedSha256 });
+}
+function parseRuntimeAssetReceipts(value) {
+    if (value === undefined)
+        return undefined;
+    const object = expectObject(value, 'assetReceipts');
+    if (Object.keys(object).length > 4096) {
+        throw new Error('invalid assetReceipts in wasm-rust runtime manifest: too many entries');
+    }
+    const receipts = Object.create(null);
+    for (const assetPath of Object.keys(object).sort()) {
+        expectCanonicalPath(assetPath, `assetReceipts path ${assetPath}`);
+        receipts[assetPath] = parseRuntimeAssetReceipt(object[assetPath], `assetReceipts.${assetPath}`);
+    }
+    return Object.freeze(receipts);
 }
 function expectTargetTriple(value, label) {
     if (value !== 'wasm32-wasip1' && value !== 'wasm32-wasip2' && value !== 'wasm32-wasip3') {
@@ -126,24 +221,47 @@ function expectExecutionKind(value, label) {
     }
     return value;
 }
-function expectAssetFileArray(value, label) {
+function expectAssetFileArray(value, label, strict = false) {
     if (!Array.isArray(value)) {
         throw new Error(`invalid ${label} in wasm-rust runtime manifest`);
     }
+    if (strict && value.length > 4096) {
+        throw new Error(`invalid ${label} in wasm-rust runtime manifest: too many entries`);
+    }
     return value.map((entry, index) => {
         const object = expectObject(entry, `${label}[${index}]`);
+        expectOnlyKeys(object, `${label}[${index}]`, ['asset', 'runtimePath'], strict);
         return {
-            asset: expectString(object.asset, `${label}[${index}].asset`),
-            runtimePath: expectString(object.runtimePath, `${label}[${index}].runtimePath`)
+            asset: strict
+                ? expectCanonicalPath(object.asset, `${label}[${index}].asset`, true)
+                : expectString(object.asset, `${label}[${index}].asset`),
+            runtimePath: strict
+                ? expectRuntimePath(object.runtimePath, `${label}[${index}].runtimePath`)
+                : expectString(object.runtimePath, `${label}[${index}].runtimePath`)
         };
     });
 }
-function parseRuntimeAssetPack(value, label, ancestors = new Set()) {
+function parseRuntimeAssetPack(value, label, strict = false, ancestors = new Set(), ancestorAssets = new Set(), depth = 0) {
     const object = expectObject(value, label);
+    expectOnlyKeys(object, label, ['asset', 'index', 'fileCount', 'totalBytes', 'decodedTotalBytes', 'delta'], strict);
+    if (strict && depth > 8) {
+        throw new Error(`invalid ${label}: delta chain is too deep in wasm-rust runtime manifest`);
+    }
     if (ancestors.has(object)) {
         throw new Error(`invalid ${label}: cyclic delta base in wasm-rust runtime manifest`);
     }
+    const asset = strict
+        ? expectCanonicalPath(object.asset, `${label}.asset`, true)
+        : expectString(object.asset, `${label}.asset`);
+    const index = strict
+        ? expectCanonicalPath(object.index, `${label}.index`, true)
+        : expectString(object.index, `${label}.index`);
+    const assetIdentity = index;
+    if (strict && ancestorAssets.has(assetIdentity)) {
+        throw new Error(`invalid ${label}: cyclic delta asset pair in wasm-rust runtime manifest`);
+    }
     ancestors.add(object);
+    ancestorAssets.add(assetIdentity);
     try {
         const decodedTotalBytes = object.decodedTotalBytes === undefined
             ? undefined
@@ -151,17 +269,18 @@ function parseRuntimeAssetPack(value, label, ancestors = new Set()) {
         let delta;
         if (object.delta !== undefined) {
             const deltaObject = expectObject(object.delta, `${label}.delta`);
+            expectOnlyKeys(deltaObject, `${label}.delta`, ['format', 'base'], strict);
             if (deltaObject.format !== 'copy-literal-v1') {
                 throw new Error(`invalid ${label}.delta.format in wasm-rust runtime manifest`);
             }
             delta = {
                 format: 'copy-literal-v1',
-                base: parseRuntimeAssetPack(deltaObject.base, `${label}.delta.base`, ancestors)
+                base: parseRuntimeAssetPack(deltaObject.base, `${label}.delta.base`, strict, ancestors, ancestorAssets, depth + 1)
             };
         }
         return {
-            asset: expectString(object.asset, `${label}.asset`),
-            index: expectString(object.index, `${label}.index`),
+            asset,
+            index,
             fileCount: expectNonNegativeInteger(object.fileCount, `${label}.fileCount`),
             totalBytes: expectNonNegativeInteger(object.totalBytes, `${label}.totalBytes`),
             ...(decodedTotalBytes === undefined ? {} : { decodedTotalBytes }),
@@ -170,19 +289,34 @@ function parseRuntimeAssetPack(value, label, ancestors = new Set()) {
     }
     finally {
         ancestors.delete(object);
+        ancestorAssets.delete(assetIdentity);
     }
 }
-function parseRustcMemory(value, label) {
+function parseRustcMemory(value, label, strict = false) {
     const object = expectObject(value, label);
-    return {
-        initialPages: expectNumber(object.initialPages, `${label}.initialPages`),
-        maximumPages: expectNumber(object.maximumPages, `${label}.maximumPages`)
-    };
+    expectOnlyKeys(object, label, ['initialPages', 'maximumPages'], strict);
+    const initialPages = expectNumber(object.initialPages, `${label}.initialPages`);
+    const maximumPages = expectNumber(object.maximumPages, `${label}.maximumPages`);
+    if (initialPages > maximumPages) {
+        throw new Error(`invalid ${label} in wasm-rust runtime manifest: initial exceeds maximum`);
+    }
+    return { initialPages, maximumPages };
 }
-function parseCompilerConfig(value, label) {
+function parseCompilerConfig(value, label, strict = false) {
     const object = expectObject(value, label);
+    expectOnlyKeys(object, label, [
+        'rustcWasm',
+        'workerBitcodeFile',
+        'workerSharedOutputBytes',
+        'workerSharedWorkspaceBytes',
+        'compileTimeoutMs',
+        'artifactIdleMs',
+        'rustcMemory'
+    ], strict);
     return {
-        rustcWasm: expectString(object.rustcWasm, `${label}.rustcWasm`),
+        rustcWasm: strict
+            ? expectCanonicalPath(object.rustcWasm, `${label}.rustcWasm`, true)
+            : expectString(object.rustcWasm, `${label}.rustcWasm`),
         workerBitcodeFile: expectString(object.workerBitcodeFile, `${label}.workerBitcodeFile`),
         workerSharedOutputBytes: expectNumber(object.workerSharedOutputBytes, `${label}.workerSharedOutputBytes`),
         workerSharedWorkspaceBytes: object.workerSharedWorkspaceBytes === undefined
@@ -190,7 +324,7 @@ function parseCompilerConfig(value, label) {
             : expectNumber(object.workerSharedWorkspaceBytes, `${label}.workerSharedWorkspaceBytes`),
         compileTimeoutMs: expectNumber(object.compileTimeoutMs, `${label}.compileTimeoutMs`),
         artifactIdleMs: expectNumber(object.artifactIdleMs, `${label}.artifactIdleMs`),
-        rustcMemory: parseRustcMemory(object.rustcMemory, `${label}.rustcMemory`)
+        rustcMemory: parseRustcMemory(object.rustcMemory, `${label}.rustcMemory`, strict)
     };
 }
 function normalizeRuntimeLlvmConfig(llvm) {
@@ -202,18 +336,28 @@ function normalizeRuntimeLlvmConfig(llvm) {
         lldData: llvm.lldData || 'llvm/lld.data'
     };
 }
-function parseLinkConfig(value, label) {
+function parseLinkConfig(value, label, strict = false) {
     const object = expectObject(value, label);
-    const pack = object.pack === undefined ? undefined : parseRuntimeAssetPack(object.pack, `${label}.pack`);
+    expectOnlyKeys(object, label, ['args', 'allocatorObjectRuntimePath', 'allocatorObjectAsset', 'files', 'pack'], strict);
+    const pack = object.pack === undefined
+        ? undefined
+        : parseRuntimeAssetPack(object.pack, `${label}.pack`, strict);
     const files = object.files === undefined
         ? undefined
-        : expectAssetFileArray(object.files, `${label}.files`);
+        : expectAssetFileArray(object.files, `${label}.files`, strict);
     const allocatorObjectRuntimePath = object.allocatorObjectRuntimePath === undefined
         ? undefined
-        : expectString(object.allocatorObjectRuntimePath, `${label}.allocatorObjectRuntimePath`);
+        : strict
+            ? expectRuntimePath(object.allocatorObjectRuntimePath, `${label}.allocatorObjectRuntimePath`)
+            : expectString(object.allocatorObjectRuntimePath, `${label}.allocatorObjectRuntimePath`);
     const allocatorObjectAsset = object.allocatorObjectAsset === undefined
         ? undefined
-        : expectString(object.allocatorObjectAsset, `${label}.allocatorObjectAsset`);
+        : strict
+            ? expectCanonicalPath(object.allocatorObjectAsset, `${label}.allocatorObjectAsset`, true)
+            : expectString(object.allocatorObjectAsset, `${label}.allocatorObjectAsset`);
+    if (strict && pack && (files || allocatorObjectAsset || allocatorObjectRuntimePath)) {
+        throw new Error(`invalid ${label}: pack and legacy link fields are mutually exclusive in wasm-rust runtime manifest`);
+    }
     if (!pack && (!allocatorObjectRuntimePath || !allocatorObjectAsset || !files)) {
         throw new Error(`invalid ${label}: missing legacy link asset fields in wasm-rust runtime manifest`);
     }
@@ -241,49 +385,67 @@ function parseLinkConfig(value, label) {
             : {})
     };
 }
-function parseRuntimeTargetConfig(value, label, targetTriple) {
+function parseRuntimeTargetConfig(value, label, targetTriple, strict = false) {
     const object = expectObject(value, label);
+    expectOnlyKeys(object, label, ['artifactFormat', 'sysrootFiles', 'sysrootPack', 'compile', 'execution'], strict);
     const compile = expectObject(object.compile, `${label}.compile`);
     const compileKind = expectCompileKind(compile.kind, `${label}.compile.kind`);
     const execution = expectObject(object.execution, `${label}.execution`);
+    expectOnlyKeys(execution, `${label}.execution`, ['kind'], strict);
     const sysrootFiles = object.sysrootFiles === undefined
         ? undefined
-        : expectAssetFileArray(object.sysrootFiles, `${label}.sysrootFiles`);
+        : expectAssetFileArray(object.sysrootFiles, `${label}.sysrootFiles`, strict);
     const sysrootPack = object.sysrootPack === undefined
         ? undefined
-        : parseRuntimeAssetPack(object.sysrootPack, `${label}.sysrootPack`);
+        : parseRuntimeAssetPack(object.sysrootPack, `${label}.sysrootPack`, strict);
     if (!sysrootFiles && !sysrootPack) {
         throw new Error(`invalid ${label}: missing sysroot assets in wasm-rust runtime manifest`);
+    }
+    if (strict && sysrootFiles && sysrootPack) {
+        throw new Error(`invalid ${label}: sysrootFiles and sysrootPack are mutually exclusive in wasm-rust runtime manifest`);
     }
     let parsedCompile;
     if (compileKind === 'integrated-rustc' ||
         compileKind === 'integrated-rustc+component-encoder') {
+        expectOnlyKeys(compile, `${label}.compile`, ['kind'], strict);
         parsedCompile = { kind: compileKind };
     }
     else {
+        expectOnlyKeys(compile, `${label}.compile`, ['kind', 'llvm', 'link'], strict);
         const llvm = expectObject(compile.llvm, `${label}.compile.llvm`);
+        expectOnlyKeys(llvm, `${label}.compile.llvm`, ['llc', 'llcWasm', 'lld', 'lldWasm', 'lldData'], strict);
         parsedCompile = {
             kind: compileKind,
             llvm: {
-                llc: expectString(llvm.llc, `${label}.compile.llvm.llc`),
+                llc: strict
+                    ? expectCanonicalPath(llvm.llc, `${label}.compile.llvm.llc`, true)
+                    : expectString(llvm.llc, `${label}.compile.llvm.llc`),
                 ...(llvm.llcWasm === undefined
                     ? {}
                     : {
-                        llcWasm: expectString(llvm.llcWasm, `${label}.compile.llvm.llcWasm`)
+                        llcWasm: strict
+                            ? expectCanonicalPath(llvm.llcWasm, `${label}.compile.llvm.llcWasm`, true)
+                            : expectString(llvm.llcWasm, `${label}.compile.llvm.llcWasm`)
                     }),
-                lld: expectString(llvm.lld, `${label}.compile.llvm.lld`),
+                lld: strict
+                    ? expectCanonicalPath(llvm.lld, `${label}.compile.llvm.lld`, true)
+                    : expectString(llvm.lld, `${label}.compile.llvm.lld`),
                 ...(llvm.lldWasm === undefined
                     ? {}
                     : {
-                        lldWasm: expectString(llvm.lldWasm, `${label}.compile.llvm.lldWasm`)
+                        lldWasm: strict
+                            ? expectCanonicalPath(llvm.lldWasm, `${label}.compile.llvm.lldWasm`, true)
+                            : expectString(llvm.lldWasm, `${label}.compile.llvm.lldWasm`)
                     }),
                 ...(llvm.lldData === undefined
                     ? {}
                     : {
-                        lldData: expectString(llvm.lldData, `${label}.compile.llvm.lldData`)
+                        lldData: strict
+                            ? expectCanonicalPath(llvm.lldData, `${label}.compile.llvm.lldData`, true)
+                            : expectString(llvm.lldData, `${label}.compile.llvm.lldData`)
                     })
             },
-            link: parseLinkConfig(compile.link, `${label}.compile.link`)
+            link: parseLinkConfig(compile.link, `${label}.compile.link`, strict)
         };
     }
     return {
@@ -305,15 +467,16 @@ function parseRuntimeTargetConfig(value, label, targetTriple) {
         }
     };
 }
-function parseVersionedTargets(root) {
+function parseVersionedTargets(root, strict = false) {
     const targets = expectObject(root.targets, 'targets');
+    expectOnlyKeys(targets, 'targets', ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'], strict);
     const parsedTargets = {};
     for (const targetTriple of ['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3']) {
         const targetValue = targets[targetTriple];
         if (targetValue === undefined) {
             continue;
         }
-        const parsedTarget = parseRuntimeTargetConfig(targetValue, `targets.${targetTriple}`, targetTriple);
+        const parsedTarget = parseRuntimeTargetConfig(targetValue, `targets.${targetTriple}`, targetTriple, strict);
         parsedTargets[targetTriple] = {
             artifactFormat: parsedTarget.artifactFormat,
             ...(parsedTarget.sysrootFiles
@@ -335,17 +498,37 @@ function parseVersionedTargets(root) {
 export function parseRuntimeManifest(value) {
     const root = expectObject(value, 'root');
     if (root.manifestVersion === 3) {
+        expectOnlyKeys(root, 'root', [
+            'manifestVersion',
+            'version',
+            'hostTriple',
+            'defaultTargetTriple',
+            'producer',
+            'compilerProvenance',
+            'compiler',
+            'targets',
+            'assetReceipts'
+        ], true);
         const version = expectString(root.version, 'version');
         const hostTriple = expectString(root.hostTriple, 'hostTriple');
-        const compilerProvenance = parseCompilerProvenance(root.compilerProvenance, version, hostTriple);
+        const producer = parseRuntimeManifestProducer(root.producer, true);
+        const compilerProvenance = parseCompilerProvenance(root.compilerProvenance, version, hostTriple, true);
+        const assetReceipts = parseRuntimeAssetReceipts(root.assetReceipts);
+        const defaultTargetTriple = expectTargetTriple(root.defaultTargetTriple, 'defaultTargetTriple');
+        const targets = parseVersionedTargets(root, true);
+        if (!targets[defaultTargetTriple]) {
+            throw new Error(`invalid defaultTargetTriple in wasm-rust runtime manifest: target ${defaultTargetTriple} is missing`);
+        }
         return {
             manifestVersion: 3,
             version,
             hostTriple,
-            defaultTargetTriple: expectTargetTriple(root.defaultTargetTriple, 'defaultTargetTriple'),
-            compiler: parseCompilerConfig(root.compiler, 'compiler'),
+            defaultTargetTriple,
+            compiler: parseCompilerConfig(root.compiler, 'compiler', true),
+            ...(producer ? { producer } : {}),
             ...(compilerProvenance ? { compilerProvenance } : {}),
-            targets: parseVersionedTargets(root)
+            targets,
+            ...(assetReceipts ? { assetReceipts } : {})
         };
     }
     if (root.manifestVersion === 2) {
@@ -420,8 +603,10 @@ export function normalizeRuntimeManifest(value) {
         }
         return {
             ...value,
+            ...(value.producer ? { producer: value.producer } : {}),
             ...(compilerProvenance ? { compilerProvenance } : {}),
-            targets
+            targets,
+            ...(value.assetReceipts ? { assetReceipts: value.assetReceipts } : {})
         };
     }
     if (isRuntimeManifestV2(value) || isRuntimeManifestV3(value)) {
@@ -459,8 +644,12 @@ export function normalizeRuntimeManifest(value) {
             hostTriple: value.hostTriple,
             defaultTargetTriple: value.defaultTargetTriple,
             compiler: value.compiler,
+            ...(isRuntimeManifestV3(value) && value.producer ? { producer: value.producer } : {}),
             ...(compilerProvenance ? { compilerProvenance } : {}),
-            targets
+            targets,
+            ...(isRuntimeManifestV3(value) && value.assetReceipts
+                ? { assetReceipts: value.assetReceipts }
+                : {})
         };
     }
     const compilerProvenance = parseCompilerProvenance(value.compilerProvenance, value.version, value.hostTriple);
@@ -503,7 +692,288 @@ export function resolveTargetManifest(manifest, targetTriple = manifest.defaultT
     }
     return target;
 }
-export async function loadRuntimeManifest(manifestUrl, fetchImpl = fetch) {
+const COMPONENT_BINARY_ASSET_PATHS = [
+    'wasm-rust/vendor/jco/lib/wasi_snapshot_preview1.command.wasm',
+    'wasm-rust/vendor/jco/obj/wasm-tools.core.wasm.gz',
+    'wasm-rust/vendor/jco/obj/wasm-tools.core2.wasm',
+    'wasm-rust/vendor/jco/obj/js-component-bindgen-component.core.wasm.gz',
+    'wasm-rust/vendor/jco/obj/js-component-bindgen-component.core2.wasm'
+];
+function runtimeReceiptPath(assetPath) {
+    if (assetPath.startsWith('../../shared/emscripten-lld/')) {
+        return `shared/emscripten-lld/${assetPath.slice('../../shared/emscripten-lld/'.length)}`;
+    }
+    return `wasm-rust/runtime/${assetPath}`;
+}
+function collectRuntimePackAssetPaths(pack, paths) {
+    paths.add(runtimeReceiptPath(pack.asset));
+    paths.add(runtimeReceiptPath(pack.index));
+    if (pack.delta)
+        collectRuntimePackAssetPaths(pack.delta.base, paths);
+}
+export function collectRuntimeManifestAssetPaths(manifest) {
+    const paths = new Set([runtimeReceiptPath(manifest.compiler.rustcWasm)]);
+    let needsComponentAssets = false;
+    for (const target of Object.values(manifest.targets)) {
+        if (!target)
+            continue;
+        if (target.sysrootPack) {
+            collectRuntimePackAssetPaths(target.sysrootPack, paths);
+        }
+        else {
+            for (const entry of target.sysrootFiles || []) {
+                paths.add(runtimeReceiptPath(entry.asset));
+            }
+        }
+        if (!isIntegratedCompilerOutput(target.compile)) {
+            paths.add(runtimeReceiptPath(target.compile.llvm.llcWasm || 'llvm/llc.wasm'));
+            paths.add(runtimeReceiptPath(target.compile.llvm.lldWasm || 'llvm/lld.wasm'));
+            paths.add(runtimeReceiptPath(target.compile.llvm.lldData || 'llvm/lld.data'));
+            if (target.compile.link.pack) {
+                collectRuntimePackAssetPaths(target.compile.link.pack, paths);
+            }
+            else {
+                if (target.compile.link.allocatorObjectAsset) {
+                    paths.add(runtimeReceiptPath(target.compile.link.allocatorObjectAsset));
+                }
+                for (const entry of target.compile.link.files || []) {
+                    paths.add(runtimeReceiptPath(entry.asset));
+                }
+            }
+        }
+        needsComponentAssets ||=
+            target.artifactFormat === 'component' ||
+                target.execution.kind === 'preview2-component' ||
+                target.compile.kind.endsWith('+component-encoder');
+    }
+    if (needsComponentAssets) {
+        for (const assetPath of COMPONENT_BINARY_ASSET_PATHS)
+            paths.add(assetPath);
+    }
+    return [...paths].sort();
+}
+export function verifyRuntimeManifestAssetReceipts(manifest) {
+    if (!manifest.assetReceipts) {
+        throw new Error('wasm-rust runtime manifest is missing its asset receipt graph');
+    }
+    const expectedPaths = collectRuntimeManifestAssetPaths(manifest);
+    const actualPaths = Object.keys(manifest.assetReceipts).sort();
+    const missingPaths = expectedPaths.filter((assetPath) => !manifest.assetReceipts[assetPath]);
+    const extraPaths = actualPaths.filter((assetPath) => !expectedPaths.includes(assetPath));
+    if (missingPaths.length || extraPaths.length) {
+        throw new Error(`wasm-rust runtime manifest receipt graph mismatch: missing=${missingPaths.join(',') || 'none'} extra=${extraPaths.join(',') || 'none'}`);
+    }
+    const validatePack = (pack) => {
+        const receipt = manifest.assetReceipts[runtimeReceiptPath(pack.asset)];
+        const logicalBytes = receipt.uncompressedBytes ?? receipt.bytes;
+        if (logicalBytes !== pack.totalBytes) {
+            throw new Error(`wasm-rust runtime pack ${pack.asset} logical receipt does not match totalBytes`);
+        }
+        if (pack.delta)
+            validatePack(pack.delta.base);
+    };
+    for (const target of Object.values(manifest.targets)) {
+        if (!target)
+            continue;
+        if (target.sysrootPack)
+            validatePack(target.sysrootPack);
+        if (!isIntegratedCompilerOutput(target.compile) && target.compile.link.pack) {
+            validatePack(target.compile.link.pack);
+        }
+    }
+    return manifest.assetReceipts;
+}
+function rejectDuplicateRuntimeManifestJsonKeys(source) {
+    let index = 0;
+    let valueCount = 0;
+    const fail = (message) => {
+        throw new Error(`invalid wasm-rust runtime manifest JSON: ${message}`);
+    };
+    const skipWhitespace = () => {
+        while (index < source.length && /[\u0009\u000a\u000d\u0020]/u.test(source[index])) {
+            index += 1;
+        }
+    };
+    const parseStringToken = () => {
+        if (source[index] !== '"')
+            fail('expected a string');
+        const start = index;
+        index += 1;
+        while (index < source.length) {
+            const character = source[index];
+            if (character === '"') {
+                index += 1;
+                try {
+                    return JSON.parse(source.slice(start, index));
+                }
+                catch {
+                    return fail('invalid string escape');
+                }
+            }
+            if (character === '\\') {
+                index += 1;
+                if (index >= source.length)
+                    fail('unterminated string escape');
+                if (source[index] === 'u') {
+                    if (!/^[a-f0-9]{4}$/iu.test(source.slice(index + 1, index + 5))) {
+                        fail('invalid Unicode escape');
+                    }
+                    index += 5;
+                }
+                else {
+                    index += 1;
+                }
+                continue;
+            }
+            if (character.charCodeAt(0) < 0x20)
+                fail('unescaped control character');
+            index += 1;
+        }
+        return fail('unterminated string');
+    };
+    const parseValue = (depth) => {
+        valueCount += 1;
+        if (valueCount > 100_000)
+            fail('too many values');
+        if (depth > 64)
+            fail('nesting is too deep');
+        skipWhitespace();
+        const character = source[index];
+        if (character === '{') {
+            index += 1;
+            const keys = new Set();
+            skipWhitespace();
+            if (source[index] === '}') {
+                index += 1;
+                return;
+            }
+            while (index < source.length) {
+                skipWhitespace();
+                const key = parseStringToken();
+                if (keys.has(key))
+                    fail(`duplicate object key ${JSON.stringify(key)}`);
+                keys.add(key);
+                skipWhitespace();
+                if (source[index] !== ':')
+                    fail('expected a colon');
+                index += 1;
+                parseValue(depth + 1);
+                skipWhitespace();
+                if (source[index] === '}') {
+                    index += 1;
+                    return;
+                }
+                if (source[index] !== ',')
+                    fail('expected a comma');
+                index += 1;
+            }
+            fail('unterminated object');
+        }
+        if (character === '[') {
+            index += 1;
+            skipWhitespace();
+            if (source[index] === ']') {
+                index += 1;
+                return;
+            }
+            while (index < source.length) {
+                parseValue(depth + 1);
+                skipWhitespace();
+                if (source[index] === ']') {
+                    index += 1;
+                    return;
+                }
+                if (source[index] !== ',')
+                    fail('expected a comma');
+                index += 1;
+            }
+            fail('unterminated array');
+        }
+        if (character === '"') {
+            parseStringToken();
+            return;
+        }
+        for (const literal of ['true', 'false', 'null']) {
+            if (source.startsWith(literal, index)) {
+                index += literal.length;
+                return;
+            }
+        }
+        const number = source
+            .slice(index)
+            .match(/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:e[+-]?\d+)?/iu)?.[0];
+        if (!number)
+            fail('expected a JSON value');
+        index += number.length;
+    };
+    parseValue(0);
+    skipWhitespace();
+    if (index !== source.length)
+        fail('unexpected trailing data');
+}
+function decodePinnedRuntimeManifest(bytes) {
+    let source;
+    try {
+        source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    }
+    catch {
+        throw new Error('invalid wasm-rust runtime manifest UTF-8');
+    }
+    rejectDuplicateRuntimeManifestJsonKeys(source);
+    try {
+        return JSON.parse(source);
+    }
+    catch (error) {
+        throw new Error(`invalid wasm-rust runtime manifest JSON: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+export function parseWasmRustRuntimeProfileFromModuleUrl(moduleUrl) {
+    const url = new URL(moduleUrl.toString());
+    const fingerprintValues = url.searchParams.getAll('v');
+    const manifestBytesValues = url.searchParams.getAll('rustManifestBytes');
+    const manifestSha256Values = url.searchParams.getAll('rustManifestSha256');
+    if (fingerprintValues.length === 0 &&
+        manifestBytesValues.length === 0 &&
+        manifestSha256Values.length === 0) {
+        return undefined;
+    }
+    if (fingerprintValues.length !== 1 ||
+        manifestBytesValues.length !== 1 ||
+        manifestSha256Values.length !== 1) {
+        throw new Error('wasm-rust runtime module has an invalid receipt profile: ambiguous fields');
+    }
+    const fingerprint = fingerprintValues[0];
+    const manifestBytesValue = manifestBytesValues[0];
+    const manifestSha256 = manifestSha256Values[0];
+    const manifestBytes = Number(manifestBytesValue);
+    if (!/^[a-f0-9]{64}$/u.test(fingerprint || '') ||
+        !/^[a-f0-9]{64}$/u.test(manifestSha256 || '') ||
+        !/^\d+$/u.test(manifestBytesValue || '') ||
+        !Number.isSafeInteger(manifestBytes) ||
+        manifestBytes <= 0) {
+        throw new Error('wasm-rust runtime module has an invalid receipt profile');
+    }
+    return Object.freeze({
+        profileId: `wasm-rust-${fingerprint}`,
+        protocolVersion: 1,
+        manifestPath: 'runtime/runtime-manifest.v3.json',
+        manifestFingerprint: fingerprint,
+        manifestReceipt: Object.freeze({ bytes: manifestBytes, sha256: manifestSha256 }),
+        moduleUrl: url.href
+    });
+}
+export async function loadRuntimeManifest(manifestUrl, fetchImpl = fetch, options = {}) {
+    if (options.receipt) {
+        const bytes = await fetchRuntimeAssetBytes(manifestUrl, 'wasm-rust runtime manifest', fetchImpl, false, undefined, {
+            maxAssetBytes: Math.max(options.receipt.bytes, 1),
+            receipt: options.receipt
+        });
+        const manifest = parseRuntimeManifest(decodePinnedRuntimeManifest(bytes));
+        if (!isRuntimeManifestV3(manifest) || !manifest.assetReceipts) {
+            throw new Error('wasm-rust runtime manifest receipt profile requires a v3 asset receipt graph');
+        }
+        return manifest;
+    }
     const response = await fetchImpl(manifestUrl.toString());
     if (!response.ok) {
         throw new RuntimeManifestLoadError(manifestUrl.toString(), {
@@ -512,6 +982,27 @@ export async function loadRuntimeManifest(manifestUrl, fetchImpl = fetch) {
         });
     }
     return parseRuntimeManifest(await response.json());
+}
+export function registerRuntimeManifestAssetReceipts(runtimeBaseUrl, manifest) {
+    const canonicalReceipts = verifyRuntimeManifestAssetReceipts(manifest);
+    const resolvedReceipts = Object.create(null);
+    for (const [canonicalPath, receipt] of Object.entries(canonicalReceipts)) {
+        let relativePath;
+        if (canonicalPath.startsWith('wasm-rust/runtime/')) {
+            relativePath = canonicalPath.slice('wasm-rust/runtime/'.length);
+        }
+        else if (canonicalPath.startsWith('wasm-rust/vendor/')) {
+            relativePath = `../vendor/${canonicalPath.slice('wasm-rust/vendor/'.length)}`;
+        }
+        else if (canonicalPath.startsWith('shared/emscripten-lld/')) {
+            relativePath = `../../shared/emscripten-lld/${canonicalPath.slice('shared/emscripten-lld/'.length)}`;
+        }
+        else {
+            throw new Error(`wasm-rust runtime manifest has an unsupported receipt path: ${canonicalPath}`);
+        }
+        resolvedReceipts[resolveVersionedAssetUrl(runtimeBaseUrl, relativePath).href] = receipt;
+    }
+    registerRuntimeAssetReceipts(runtimeBaseUrl, resolvedReceipts);
 }
 export function resolveRuntimeAssetUrl(baseUrl, assetPath) {
     return resolveVersionedAssetUrl(baseUrl, assetPath).toString();

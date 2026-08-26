@@ -64,7 +64,7 @@ import {
 	WASM_PROLOG_RUNTIME_PROFILE
 } from './wasmPrologVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
-import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
+import { WASM_RUST_ASSET_VERSION, WASM_RUST_RUNTIME_PROFILE } from './wasmRustVersion';
 import {
 	WASM_TCL_ASSET_VERSION,
 	WASM_TCL_RUNNER_RECEIPT,
@@ -166,8 +166,9 @@ describe('application runtime asset root', () => {
 		expect(assets.rootUrl).toBe('/foo/bar');
 		expect(assets.debug).toBeUndefined();
 		expect(assets.rust).toEqual({
-			compilerUrl: `/foo/bar/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`,
-			manifestUrl: `/foo/bar/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`
+			compilerUrl: `/foo/bar/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}&rustManifestBytes=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.bytes}&rustManifestSha256=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.sha256}`,
+			manifestUrl: `/foo/bar/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`,
+			...WASM_RUST_RUNTIME_PROFILE
 		});
 		expect(assets.go).toEqual({
 			compilerUrl: `/foo/bar/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`,
@@ -731,6 +732,38 @@ describe('application runtime asset root', () => {
 			objectiveCLibffiUrl: assets.objectivec?.libffiUrl,
 			objectiveCIntegrity: expect.any(String)
 		});
+	});
+
+	it('changes the runtime cache identity for every Rust trust profile field', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const rust = assets.rust!;
+		const baseline = createRuntimeAssetsKey(assets);
+		const firstAsset = Object.keys(rust.assetReceipts!)[0]!;
+		const firstReceipt = rust.assetReceipts![firstAsset]!;
+		const replacements = [
+			{ compilerUrl: `${rust.compilerUrl}&custom=1` },
+			{ manifestUrl: `${rust.manifestUrl}&custom=1` },
+			{ profileId: `${rust.profileId}-custom` },
+			{ protocolVersion: rust.protocolVersion! + 1 },
+			{ manifestPath: `custom/${rust.manifestPath}` },
+			{ manifestFingerprint: 'a'.repeat(64) },
+			{ manifestReceipt: { ...rust.manifestReceipt!, sha256: 'b'.repeat(64) } },
+			{
+				assetReceipts: {
+					...rust.assetReceipts,
+					[firstAsset]: { ...firstReceipt, sha256: 'c'.repeat(64) }
+				}
+			}
+		];
+
+		for (const replacement of replacements) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					rust: { ...rust, ...replacement }
+				})
+			).not.toBe(baseline);
+		}
 	});
 
 	it('includes every Ruby URL, identity field, and receipt in cache identity', () => {

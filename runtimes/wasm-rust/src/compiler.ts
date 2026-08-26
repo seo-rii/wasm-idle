@@ -15,7 +15,11 @@ import {
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
-import { isIntegratedCompilerOutput, loadRuntimeManifest } from './runtime-manifest.js';
+import {
+	isIntegratedCompilerOutput,
+	loadRuntimeManifest,
+	type WasmRustRuntimeProfile
+} from './runtime-manifest.js';
 import { readMirroredBitcode } from './rustc-runtime.js';
 import { readWorkerFailure, WORKER_STATUS_BUFFER_BYTES } from './worker-status.js';
 import type { CompileWorkerMessage, CompileWorkerRequest } from './worker-protocol.js';
@@ -70,6 +74,7 @@ interface WorkerLike {
 
 export interface CompileRustDependencies {
 	loadManifest?: typeof loadRuntimeManifest;
+	runtimeProfile?: WasmRustRuntimeProfile;
 	createWorker?: (url: URL) => WorkerLike;
 	linkBitcode?: typeof linkBitcodeWithLlvmWasm;
 	now?: () => number;
@@ -216,7 +221,11 @@ export async function compileRust(
 	});
 	try {
 		const { manifest, targetConfig, versionedModuleBaseUrl, versionedRuntimeBaseUrl } =
-			await loadBundledRuntimeContext(dependencies.loadManifest, request.targetTriple);
+			await loadBundledRuntimeContext(
+				dependencies.loadManifest,
+				request.targetTriple,
+				dependencies.runtimeProfile
+			);
 		let dwarfDebugDescriptorBase: Omit<DwarfDebugDescriptor, 'moduleSha256'> | null = null;
 		if (debugMode === 'lldb') {
 			if (!globalThis.crypto?.subtle) {
