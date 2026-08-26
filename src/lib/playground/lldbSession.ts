@@ -1051,6 +1051,11 @@ export class LldbSandboxSession {
 		);
 		this.options.onDebugEvent({
 			type: 'pause',
+			capabilities: {
+				readMemory: this.supportsReadMemory,
+				writeMemory: this.supportsWriteMemory,
+				dataBreakpoints: this.supportsDataBreakpoints
+			},
 			line: selectedFrame.line,
 			sourcePath: selectedFrame.source?.path,
 			...(sourceContentSha256 ? { sourceContentSha256 } : {}),

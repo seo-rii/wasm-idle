@@ -643,7 +643,8 @@ describe('createDebugSessionController', () => {
 			line: 3,
 			reason: 'breakpoint',
 			locals: [],
-			callStack: []
+			callStack: [],
+			capabilities: { readMemory: true, writeMemory: false, dataBreakpoints: false }
 		});
 
 		await expect(controller.readMemory('0x20', 0, 2)).resolves.toEqual({
@@ -673,7 +674,8 @@ describe('createDebugSessionController', () => {
 			line: 3,
 			reason: 'breakpoint',
 			locals: [],
-			callStack: []
+			callStack: [],
+			capabilities: { readMemory: false, writeMemory: true, dataBreakpoints: false }
 		});
 
 		await expect(
@@ -709,7 +711,8 @@ describe('createDebugSessionController', () => {
 			line: 3,
 			reason: 'breakpoint',
 			locals: [],
-			callStack: []
+			callStack: [],
+			capabilities: { readMemory: false, writeMemory: false, dataBreakpoints: true }
 		});
 
 		await expect(
@@ -724,6 +727,52 @@ describe('createDebugSessionController', () => {
 		).resolves.toEqual([{ id: 4, verified: true }]);
 		expect(debugDataBreakpointInfo).toHaveBeenCalledOnce();
 		expect(debugSetDataBreakpoints).toHaveBeenCalledOnce();
+	});
+
+	it('gates paused memory operations with effective LLDB capabilities', async () => {
+		const debugReadMemory = vi.fn(async () => ({ data: Uint8Array.of(1), unreadableBytes: 0 }));
+		const debugWriteMemory = vi.fn(async () => ({ bytesWritten: 1 }));
+		const debugDataBreakpointInfo = vi.fn(async () => ({ description: 'byte' }));
+		const debugSetDataBreakpoints = vi.fn(async () => [{ verified: true }]);
+		const controller = createDebugSessionController({
+			terminal: {
+				debugReadMemory,
+				debugWriteMemory,
+				debugDataBreakpointInfo,
+				debugSetDataBreakpoints
+			} as never
+		});
+
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 1,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: [],
+			capabilities: { readMemory: false, writeMemory: false, dataBreakpoints: false }
+		});
+
+		expect(controller.capabilities).toEqual({
+			readMemory: false,
+			writeMemory: false,
+			dataBreakpoints: false
+		});
+		await expect(controller.readMemory('0x0', 0, 1)).resolves.toBeNull();
+		await expect(controller.writeMemory('0x0', 0, Uint8Array.of(1))).resolves.toBeNull();
+		await expect(controller.dataBreakpointInfo({ name: '0x0' })).resolves.toBeNull();
+		await expect(controller.setDataBreakpoints([])).resolves.toEqual([]);
+		expect(debugReadMemory).not.toHaveBeenCalled();
+		expect(debugWriteMemory).not.toHaveBeenCalled();
+		expect(debugDataBreakpointInfo).not.toHaveBeenCalled();
+		expect(debugSetDataBreakpoints).not.toHaveBeenCalled();
+
+		controller.handleEvent({ type: 'resume', command: 'continue' });
+		expect(controller.capabilities).toEqual({
+			readMemory: false,
+			writeMemory: false,
+			dataBreakpoints: false
+		});
 	});
 
 	it('keeps breakpoints and resolved locations isolated by source path', () => {

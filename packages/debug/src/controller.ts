@@ -8,6 +8,7 @@ import type {
 	DebugResolvedBreakpoint,
 	DebugResolvedDataBreakpoint,
 	DebugScope,
+	DebugSessionCapabilities,
 	DebugSessionEvent,
 	DebugSourceBreakpoints,
 	DebugVariable,
@@ -49,6 +50,11 @@ export type DebugSessionControllerOptions = {
 };
 
 export function createDebugSessionController(options: DebugSessionControllerOptions = {}) {
+	const disabledCapabilities: DebugSessionCapabilities = {
+		readMemory: false,
+		writeMemory: false,
+		dataBreakpoints: false
+	};
 	const activeStore = writable(false);
 	const pausedStore = writable(false);
 	const pausedLineStore = writable<number | null>(null);
@@ -56,6 +62,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const callStackStore = writable<DebugFrame[]>([]);
 	const scopesStore = writable<DebugScope[]>([]);
 	const variablesByReferenceStore = writable<ReadonlyMap<number, DebugVariable[]>>(new Map());
+	const capabilitiesStore = writable<DebugSessionCapabilities>({ ...disabledCapabilities });
 	const threadIdStore = writable<number | null>(null);
 	const frameIdStore = writable<number | null>(null);
 	const stoppedReasonStore = writable<string | null>(null);
@@ -105,6 +112,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const callStackState = fromStore(callStackStore);
 	const scopesState = fromStore(scopesStore);
 	const variablesByReferenceState = fromStore(variablesByReferenceStore);
+	const capabilitiesState = fromStore(capabilitiesStore);
 	const threadIdState = fromStore(threadIdStore);
 	const frameIdState = fromStore(frameIdStore);
 	const stoppedReasonState = fromStore(stoppedReasonStore);
@@ -349,6 +357,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		callStackStore.set([]);
 		scopesStore.set([]);
 		variablesByReferenceStore.set(new Map());
+		capabilitiesStore.set({ ...disabledCapabilities });
 		threadIdStore.set(null);
 		frameIdStore.set(null);
 		stoppedReasonStore.set(null);
@@ -391,6 +400,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			releaseCommandRequest();
 			frameRequestVersion += 1;
 			activeStore.set(true);
+			capabilitiesStore.set({ ...(event.capabilities ?? disabledCapabilities) });
 			const restoreBreakpoints = get(runToCursorLineStore) !== null;
 			runToCursorLineStore.set(null);
 			if (restoreBreakpoints) {
@@ -438,6 +448,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			return;
 		}
 		if (event.type === 'resume') {
+			capabilitiesStore.set({ ...disabledCapabilities });
 			pausedStore.set(false);
 			pausedLineStore.set(null);
 			localsStore.set([]);
@@ -682,6 +693,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	): Promise<DebugMemory | null> {
 		if (
 			!get(pausedStore) ||
+			!get(capabilitiesStore).readMemory ||
 			!memoryReference ||
 			!Number.isInteger(offset) ||
 			!Number.isInteger(count) ||
@@ -701,6 +713,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	): Promise<DebugWriteMemoryResult | null> {
 		if (
 			!get(pausedStore) ||
+			!get(capabilitiesStore).writeMemory ||
 			!memoryReference ||
 			!Number.isSafeInteger(offset) ||
 			!(data instanceof Uint8Array)
@@ -717,7 +730,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	async function dataBreakpointInfo(
 		arguments_: DebugDataBreakpointInfoArguments
 	): Promise<DebugDataBreakpointInfo | null> {
-		if (!get(pausedStore)) return null;
+		if (!get(pausedStore) || !get(capabilitiesStore).dataBreakpoints) return null;
 		const terminal = get(terminalStore);
 		return (await terminal?.debugDataBreakpointInfo?.(arguments_)) ?? null;
 	}
@@ -725,7 +738,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	async function setDataBreakpoints(
 		breakpoints: DebugDataBreakpoint[]
 	): Promise<DebugResolvedDataBreakpoint[]> {
-		if (!get(pausedStore)) return [];
+		if (!get(pausedStore) || !get(capabilitiesStore).dataBreakpoints) return [];
 		const terminal = get(terminalStore);
 		return (await terminal?.debugSetDataBreakpoints?.(breakpoints)) ?? [];
 	}
@@ -751,6 +764,9 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		},
 		get variablesByReference() {
 			return variablesByReferenceState.current;
+		},
+		get capabilities() {
+			return capabilitiesState.current;
 		},
 		get threadId() {
 			return threadIdState.current;

@@ -286,7 +286,14 @@ describe('LldbSandboxSession', () => {
 				ok: true,
 				json: async () => ({
 					manifestVersion: 2,
-					debugger: { capabilities: { evaluateExpressions: true } }
+					debugger: {
+						capabilities: {
+							evaluateExpressions: true,
+							readMemory: true,
+							writeMemory: true,
+							dataBreakpoints: true
+						}
+					}
 				})
 			})) as unknown as typeof fetch
 		});
@@ -346,9 +353,14 @@ describe('LldbSandboxSession', () => {
 		});
 		await vi.waitFor(() =>
 			expect(events).toContainEqual(
-				expect.objectContaining({
-					type: 'pause',
-					line: 6,
+					expect.objectContaining({
+						type: 'pause',
+						capabilities: {
+							readMemory: true,
+							writeMemory: true,
+							dataBreakpoints: false
+						},
+						line: 6,
 					sourcePath: '/workspace/main.cpp',
 					sourceContentSha256: 'main-source-sha',
 					threadId: 7,

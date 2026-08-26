@@ -105,6 +105,12 @@ export interface DebugResolvedBreakpoint {
 	message?: string;
 }
 
+export interface DebugSessionCapabilities {
+	readMemory: boolean;
+	writeMemory: boolean;
+	dataBreakpoints: boolean;
+}
+
 export interface DebugSourceBreakpoints {
 	sourcePath: string;
 	lines: number[];
@@ -124,6 +130,7 @@ export type DebugSessionEvent =
 			sourcePath?: string;
 			sourceContentSha256?: string;
 			sourceRevisionStale?: boolean;
+			capabilities?: DebugSessionCapabilities;
 	  }
 	| { type: 'resume'; command: DebugCommand }
 	| {

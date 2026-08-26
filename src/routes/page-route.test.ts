@@ -143,7 +143,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/if \(\s*requestVersion !== memoryRequestVersion \|\|\s*!debug\.paused \|\|\s*debug\.frameId !== frameId\s*\)\s*return;/s
 		);
-		expect(source).toContain("activeDebugBackend === 'lldb' && debug.paused");
+		expect(source).toMatch(/activeDebugBackend === 'lldb' &&\s*debug\.paused/s);
 		expect(source).toContain('aria-label="Memory reference"');
 		expect(source).toContain('aria-label="Memory offset"');
 		expect(source).toContain('aria-label="Memory byte count"');
@@ -151,6 +151,9 @@ describe('example route debug actions', () => {
 		expect(source).toContain('aria-label={`Inspect memory for ${variable.name}`}');
 		expect(source).toContain('readDebugMemoryPage(-1)');
 		expect(source).toContain('readDebugMemoryPage(1)');
+		expect(source).toContain('debug.capabilities.readMemory');
+		expect(source).toContain('debug.capabilities.writeMemory');
+		expect(source).toContain('debug.capabilities.dataBreakpoints');
 	});
 
 	it('sets one session-scoped LLDB memory data breakpoint from the inspector', () => {

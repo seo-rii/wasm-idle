@@ -12,6 +12,7 @@ export type {
 	DebugPauseReason,
 	DebugResolvedBreakpoint,
 	DebugResolvedDataBreakpoint,
+	DebugSessionCapabilities,
 	DebugSessionEvent,
 	DebugScope,
 	DebugSourceBreakpoints,

@@ -1599,7 +1599,7 @@
 		} finally {
 			if (requestVersion === memoryRequestVersion) memoryLoading = false;
 		}
-		if (refresh) await readDebugMemoryPage();
+		if (refresh && debug.capabilities.readMemory) await readDebugMemoryPage();
 	}
 
 	async function setMemoryDataBreakpoint() {
@@ -2843,7 +2843,12 @@
 							>{/if}
 					</div>
 					<code class="debug-value">{variable.value}</code>
-					{#if activeDebugBackend === 'lldb' && debug.paused && variable.memoryReference}
+					{#if activeDebugBackend === 'lldb' &&
+						debug.paused &&
+						variable.memoryReference &&
+						(debug.capabilities.readMemory ||
+							debug.capabilities.writeMemory ||
+							debug.capabilities.dataBreakpoints)}
 						<button
 							class="debug-memory-inspect"
 							onclick={() => inspectDebugVariable(variable)}
@@ -3005,7 +3010,11 @@
 							</p>
 						{/if}
 					</section>
-					{#if activeDebugBackend === 'lldb' && debug.paused}
+					{#if activeDebugBackend === 'lldb' &&
+						debug.paused &&
+						(debug.capabilities.readMemory ||
+							debug.capabilities.writeMemory ||
+							debug.capabilities.dataBreakpoints)}
 						<section class="debug-panel debug-memory-panel">
 							<header class="debug-panel__header">
 								<div class="debug-panel__title">
@@ -3039,33 +3048,37 @@
 										aria-label="Memory byte count"
 									/>
 								</label>
-								<button
-									class="debug-memory-read"
-									onclick={() => void readDebugMemoryPage()}
-									disabled={memoryLoading}
-								>
-									{memoryLoading ? 'Reading…' : 'Read'}
-								</button>
+								{#if debug.capabilities.readMemory}
+									<button
+										class="debug-memory-read"
+										onclick={() => void readDebugMemoryPage()}
+										disabled={memoryLoading}
+									>
+										{memoryLoading ? 'Reading…' : 'Read'}
+									</button>
+								{/if}
 							</div>
-							<div class="debug-memory-watch-controls">
-								<label class="debug-memory-write-field">
-									<span>Write hex bytes</span>
-									<input
-										bind:value={memoryWriteInput}
-										placeholder="64 00 00 00"
-										aria-label="Memory write bytes"
-									/>
-								</label>
-								<button
-									class="debug-memory-write"
-									onclick={() => void writeDebugMemoryPage()}
-									disabled={memoryLoading}
-									aria-label="Write memory"
-								>
-									{memoryLoading ? 'Writing…' : 'Write memory'}
-								</button>
-							</div>
-							{#if memoryWriteStatus}
+							{#if debug.capabilities.writeMemory}
+								<div class="debug-memory-watch-controls">
+									<label class="debug-memory-write-field">
+										<span>Write hex bytes</span>
+										<input
+											bind:value={memoryWriteInput}
+											placeholder="64 00 00 00"
+											aria-label="Memory write bytes"
+										/>
+									</label>
+									<button
+										class="debug-memory-write"
+										onclick={() => void writeDebugMemoryPage()}
+										disabled={memoryLoading}
+										aria-label="Write memory"
+									>
+										{memoryLoading ? 'Writing…' : 'Write memory'}
+									</button>
+								</div>
+							{/if}
+							{#if debug.capabilities.writeMemory && memoryWriteStatus}
 								<p class="debug-memory-write-status">
 									<strong>{memoryWriteStatus.bytesWritten} bytes written</strong>
 									{#if memoryWriteStatus.bytesWritten < memoryWriteStatus.requestedBytes}
@@ -3073,7 +3086,8 @@
 									{/if}
 								</p>
 							{/if}
-							<div class="debug-memory-watch-controls">
+							{#if debug.capabilities.dataBreakpoints}
+								<div class="debug-memory-watch-controls">
 								<label>
 									<span>Break on</span>
 									<select
@@ -3105,20 +3119,21 @@
 										Clear
 									</button>
 								{/if}
-							</div>
-							{#if activeDataBreakpoint}
+								</div>
+							{/if}
+							{#if debug.capabilities.dataBreakpoints && activeDataBreakpoint}
 								<p class="debug-data-breakpoint-status">
 									<strong>{activeDataBreakpoint.accessType}</strong>
 									<span>{activeDataBreakpoint.description}</span>
 								</p>
 							{/if}
-							{#if dataBreakpointError}
+							{#if debug.capabilities.dataBreakpoints && dataBreakpointError}
 								<p class="debug-memory-error" role="alert">{dataBreakpointError}</p>
 							{/if}
 							{#if memoryError}
 								<p class="debug-memory-error" role="alert">{memoryError}</p>
 							{/if}
-							{#if memoryResult}
+							{#if debug.capabilities.readMemory && memoryResult}
 								<div class="debug-memory-toolbar">
 									<button onclick={() => void readDebugMemoryPage(-1)}
 										>Previous</button

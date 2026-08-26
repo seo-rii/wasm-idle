@@ -80,6 +80,9 @@ the DAP initialize response to advertise the corresponding request before it sen
 bytes cross DAP as Base64, and a successful write response cannot claim more bytes than the caller
 supplied. This is raw target-memory mutation only; it does not advertise `setVariable` or general
 C/C++/Rust expression assignment.
+Each pause event carries these effective session capabilities to the controller. The controller
+rejects unsupported memory and data-breakpoint operations locally, and the playground renders only
+the controls supported by that specific LLDB/WAMR session.
 Data-breakpoint discovery can address a stopped variable by `variablesReference` and `name`, or use
 LLDB's `asAddress` plus `bytes` extension for a bounded raw memory range. Returned identifiers are
 opaque and scoped to the current target session. `setDataBreakpoints()` always replaces the complete

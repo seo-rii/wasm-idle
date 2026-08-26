@@ -121,6 +121,7 @@ export type {
 	DebugResolvedBreakpoint,
 	DebugResolvedDataBreakpoint,
 	DebugScope,
+	DebugSessionCapabilities,
 	DebugSessionEvent,
 	DebugSourceBreakpoints,
 	DebugStructFieldMetadata,
