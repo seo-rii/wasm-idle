@@ -84,6 +84,7 @@ class FakeWorker implements WorkerLike {
 	readonly received: DebugWorkerInboundMessage[] = [];
 	readonly transferLists: Transferable[][] = [];
 	readonly requests: DapRequest[] = [];
+	readonly responseDelayMs = new Map<string, number>();
 	private readonly listeners = new Set<
 		(event: MessageEvent<DebugWorkerOutboundMessage>) => void
 	>();
@@ -286,6 +287,10 @@ class FakeWorker implements WorkerLike {
 					continue;
 				}
 				if (this.suppressedResponses.has(request.command)) continue;
+				const responseDelayMs = this.responseDelayMs.get(request.command);
+				if (responseDelayMs !== undefined) {
+					await new Promise((resolve) => setTimeout(resolve, responseDelayMs));
+				}
 				const response: DapResponse = {
 					seq: this.commands.length + 100,
 					type: 'response',
@@ -814,6 +819,49 @@ describe('BrowserLldbSession', () => {
 
 		await session.disconnect();
 		expect(commands).toContain('disconnect');
+	});
+
+	it('allows attach to outlive the request timeout while initial breakpoints are configured', async () => {
+		const commands: string[] = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources: [
+				{ path: '/workspace/main.cpp', content: 'int main() { return 0; }' },
+				{ path: '/workspace/first.cpp', content: 'void first() {}' },
+				{ path: '/workspace/second.cpp', content: 'void second() {}' }
+			],
+			breakpoints: [
+				{ source: { path: '/workspace/main.cpp' }, lines: [1] },
+				{ source: { path: '/workspace/first.cpp' }, lines: [1] },
+				{ source: { path: '/workspace/second.cpp' }, lines: [1] }
+			],
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, commands);
+				if (kind === 'lldb') worker.responseDelayMs.set('setBreakpoints', 200);
+				return worker;
+			},
+			fetchImpl: async () => new Response('debug-asset'),
+			requestTimeoutMs: 500,
+			readyTimeoutMs: 1_000
+		});
+
+		try {
+			await expect(session.initialize()).resolves.toMatchObject({
+				supportsConfigurationDoneRequest: true
+			});
+			expect(commands).toEqual([
+				'initialize',
+				'attach',
+				'setBreakpoints',
+				'setBreakpoints',
+				'setBreakpoints',
+				'configurationDone'
+			]);
+		} finally {
+			await session.disconnect();
+		}
 	});
 
 	it('transfers owned verified asset bytes to workers without retaining runtime URLs', async () => {

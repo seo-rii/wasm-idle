@@ -666,16 +666,20 @@ export class BrowserLldbSession {
 				}
 			}
 			const capabilities = { ...capabilityRecord } as DebugCapabilities;
-			const attachResponse = this.dap.request('attach', {
-				program: launch?.program ?? '/workspace/program.wasm',
-				stopOnEntry: launch?.stopOnEntry ?? false,
-				args: launch?.args ?? [],
-				env: launch?.env ?? {},
-				cwd: launch?.cwd ?? '/workspace',
-				attachCommands: [
-					`process connect --plugin wasm wasm-messageport://${this.generation}`
-				]
-			});
+			const attachResponse = this.dap.request(
+				'attach',
+				{
+					program: launch?.program ?? '/workspace/program.wasm',
+					stopOnEntry: launch?.stopOnEntry ?? false,
+					args: launch?.args ?? [],
+					env: launch?.env ?? {},
+					cwd: launch?.cwd ?? '/workspace',
+					attachCommands: [
+						`process connect --plugin wasm wasm-messageport://${this.generation}`
+					]
+				},
+				{ responseTimeoutMs: null }
+			);
 			const attachFailure = attachResponse.then<never>(
 				() => new Promise<never>(() => undefined),
 				(error: unknown) => Promise.reject(error)
