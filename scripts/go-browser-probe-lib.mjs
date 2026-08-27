@@ -8,6 +8,8 @@ import {
 } from './browser-progress-probe.mjs';
 import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
 
+export const defaultGoBrowserExpectedOutput = 'fibonacci=11';
+
 /**
  * @typedef {{ type: string; text: string }} BrowserConsoleMessage
  */
@@ -122,7 +124,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 export async function runGoBrowserProbe({
 	browserUrl,
 	chromiumExecutable = '',
-	expectedOutput = 'factorial_plus_bonus=123',
+	expectedOutput = defaultGoBrowserExpectedOutput,
 	runTimeoutMs = 300_000,
 	stdinText = '5\n',
 	target = 'wasip1/wasm',

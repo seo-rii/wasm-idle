@@ -4,13 +4,13 @@ import {
 	shouldReuseProvidedBrowserUrl,
 	startBrowserPreviewServer
 } from './browser-preview-server.mjs';
-import { runGoBrowserProbe } from './go-browser-probe-lib.mjs';
+import { defaultGoBrowserExpectedOutput, runGoBrowserProbe } from './go-browser-probe-lib.mjs';
 
 const browserUrl = process.env.WASM_IDLE_BROWSER_URL || 'http://127.0.0.1:4173/absproxy/5173/';
 const runTimeoutMs = Number(process.env.WASM_IDLE_GO_RUN_TIMEOUT_MS || '300000');
 const chromiumExecutable = process.env.WASM_IDLE_CHROMIUM_EXECUTABLE || '';
 const stdinText = process.env.WASM_IDLE_GO_STDIN || '5\n';
-const expectedOutput = process.env.WASM_IDLE_GO_EXPECTED_OUTPUT || 'factorial_plus_bonus=123';
+const expectedOutput = process.env.WASM_IDLE_GO_EXPECTED_OUTPUT || defaultGoBrowserExpectedOutput;
 const target = process.env.WASM_IDLE_GO_TARGET || 'wasip1/wasm';
 const serverMode = process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 
