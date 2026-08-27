@@ -48,6 +48,8 @@ if (typeof globalThis.document === 'undefined') {
 
 const defaultClangResourceDir = '/lib/clang/8.0.1';
 const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
+const internalBuildRoot = '__wasm_idle_build';
+const workspaceTranslationUnitPattern = /\.(?:c|cc|cpp|cxx)$/;
 
 const defaultCppStandardArg = '-std=gnu++2a';
 const defaultCStandardArg = '-std=gnu11';
@@ -1364,9 +1366,11 @@ class Clang {
 		const code = toUtf8(source);
 
 		await this.ready;
-		this.addWorkspaceFiles(options.workspaceFiles, input);
-		this.addWorkspaceDirectories(input);
-		this.memfs.addFile(input, code);
+		if (!options.sourceAlreadyMounted) {
+			this.addWorkspaceFiles(options.workspaceFiles, input);
+			this.addWorkspaceDirectories(input);
+			this.memfs.addFile(input, code);
+		}
 		this.memfs.addFile(obj, new Uint8Array(0));
 		const clang = await this.getModule(this.assetUrls.clang);
 		const clangResourceDir = this.compilerConfig?.resourceDir || defaultClangResourceDir;
@@ -1441,10 +1445,17 @@ class Clang {
 	}
 
 	async link(
-		obj: string,
+		obj: string | readonly string[],
 		wasm: string,
 		debugModeOrLegacyDebug: BrowserClangDebugMode | boolean = 'none'
 	) {
+		const objects = typeof obj === 'string' ? [obj] : [...obj];
+		if (
+			objects.length === 0 ||
+			objects.some((object) => typeof object !== 'string' || object.length === 0)
+		) {
+			throw new TypeError('At least one nonempty object file is required for linking');
+		}
 		const debugMode =
 			typeof debugModeOrLegacyDebug === 'boolean'
 				? resolveDebugMode({ debug: debugModeOrLegacyDebug })
@@ -1456,7 +1467,7 @@ class Clang {
 		const crt1 = `${libdir}/crt1.o`;
 		await this.ready;
 		const lld = await this.getModule(this.assetUrls.lld);
-		this.trace(`link ${obj} -> ${wasm}`);
+		this.trace(`link ${objects.join(', ')} -> ${wasm}`);
 		return await this.run(
 			lld,
 			this.log,
@@ -1468,7 +1479,7 @@ class Clang {
 			`-L${libdir}/noeh`,
 			`-L${libdir}`,
 			crt1,
-			obj,
+			...objects,
 			'-lc',
 			'-lc++',
 			'-lc++abi',
@@ -1558,21 +1569,43 @@ class Clang {
 			watchResultBuffer
 		} = options;
 		const debugMode = resolveDebugMode({ debugMode: requestedDebugMode, debug });
-		const normalizedWorkspaceFiles =
-			debugMode === 'lldb'
-				? workspaceFiles.map((file) => ({
-						...file,
-						path: normalizeDwarfWorkspacePath(file.path)
-					}))
-				: workspaceFiles;
 		const normalizeRequestedPath =
 			debugMode === 'lldb' ? normalizeDwarfWorkspacePath : normalizeWorkspacePath;
+		const normalizedWorkspaceFiles = workspaceFiles.map((file) => ({
+			...file,
+			path: normalizeRequestedPath(file.path)
+		}));
 		const requestedInput =
 			normalizeRequestedPath(activePath || '') ||
 			normalizeRequestedPath(fileName || '') ||
 			undefined;
 		const { input, obj, wasm } = resolveBuildArtifactNames(language, requestedInput);
+		const workspaceByPath = new Map<string, { path: string; content: string }>();
+		for (const file of normalizedWorkspaceFiles) {
+			if (!file.path) continue;
+			if (file.path === internalBuildRoot || file.path.startsWith(`${internalBuildRoot}/`)) {
+				throw new Error(
+					`Workspace path uses reserved build namespace ${JSON.stringify(internalBuildRoot)}`
+				);
+			}
+			workspaceByPath.set(file.path, file);
+		}
+		if (input === internalBuildRoot || input.startsWith(`${internalBuildRoot}/`)) {
+			throw new Error(
+				`Active source path uses reserved build namespace ${JSON.stringify(internalBuildRoot)}`
+			);
+		}
+		workspaceByPath.set(input, { path: input, content: code });
+		const workspaceSnapshot = [...workspaceByPath.values()].sort((left, right) =>
+			left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+		);
+		const translationUnits = workspaceSnapshot.filter(
+			(file) => file.path === input || workspaceTranslationUnitPattern.test(file.path)
+		);
 		const traceDebug = debugMode === 'trace';
+		if (traceDebug && translationUnits.length > 1) {
+			throw new Error('Trace debug mode does not support multiple C/C++ translation units');
+		}
 		this.beginTrace(traceDebug);
 		this.debugBreakpoints = new Set(traceDebug ? breakpoints : []);
 		this.debugPauseOnEntry = traceDebug && pauseOnEntry;
@@ -1587,7 +1620,7 @@ class Clang {
 			wasm,
 			language,
 			compileArgs,
-			workspaceFiles: normalizedWorkspaceFiles,
+			workspaceFiles: workspaceSnapshot,
 			cppVersion,
 			cVersion,
 			debugMode
@@ -1596,18 +1629,44 @@ class Clang {
 			this.trace(`reuse ${wasm}`);
 			return this.wasm;
 		}
-		await this.compile({
-			input,
-			code,
-			obj,
-			language,
-			compileArgs,
-			workspaceFiles: normalizedWorkspaceFiles,
-			cppVersion,
-			cVersion,
-			debugMode
-		});
-		await this.link(obj, wasm, debugMode);
+		if (translationUnits.length === 1) {
+			await this.compile({
+				input,
+				code,
+				obj,
+				language,
+				compileArgs,
+				workspaceFiles: normalizedWorkspaceFiles,
+				cppVersion,
+				cVersion,
+				debugMode
+			});
+			await this.link(obj, wasm, debugMode);
+		} else {
+			await this.ready;
+			this.addWorkspaceFiles(workspaceSnapshot);
+			this.memfs.addDirectory(internalBuildRoot);
+			this.memfs.addDirectory(`${internalBuildRoot}/objects`);
+			const objects: string[] = [];
+			for (const [index, unit] of translationUnits.entries()) {
+				const unitObject = `${internalBuildRoot}/objects/${index.toString().padStart(4, '0')}.o`;
+				objects.push(unitObject);
+				await this.compile({
+					input: unit.path,
+					code: unit.content,
+					obj: unitObject,
+					language:
+						unit.path === input ? language : unit.path.endsWith('.c') ? 'C' : 'CPP',
+					compileArgs,
+					workspaceFiles: [],
+					cppVersion,
+					cVersion,
+					debugMode,
+					sourceAlreadyMounted: true
+				});
+			}
+			await this.link(objects, wasm, debugMode);
+		}
 
 		this.lastBuildKey = buildKey;
 		const wasmBytes = Uint8Array.from(this.memfs.getFileContents(wasm));

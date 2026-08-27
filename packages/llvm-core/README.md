@@ -116,6 +116,11 @@ on the same line.
 
 Compile C/C++ LLDB artifacts with `compileArtifact(..., { debugMode: 'lldb' })`. They contain
 untouched source, embedded DWARF, stable `/workspace/...` paths, and exact Clang provenance.
+Lowercase `.c`, `.cc`, `.cpp`, and `.cxx` workspace siblings are compiled as independent
+translation units in canonical path order and linked through collision-free internal object names;
+headers and data files remain mounted without being compiled. Normal and LLDB runs therefore use
+the same multi-TU program. Trace instrumentation remains single-TU and rejects a workspace with
+additional translation units instead of silently omitting their debug metadata.
 Source-level `compileArgs` such as definitions and warning controls remain available, but LLDB mode
 rejects target triples, CPUs, target features, machine attributes, raw LLVM backend options, and
 thread, SIMD, atomics, memory64, shared-memory, or multi-memory switches before invoking Clang.
