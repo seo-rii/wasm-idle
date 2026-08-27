@@ -86,16 +86,15 @@ describe('required CI workflow gates', () => {
 		expect(consumerVerify).toBeGreaterThan(producerVerify);
 	});
 
-	it('regenerates layered assets and runs their runtime-specific tests', async () => {
+	it('tests layered asset generation without requiring deployment-only layer files', async () => {
 		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
 		const packagesJobStart = workflow.indexOf('    packages:');
 		const nextJobStart = workflow.indexOf('    lsp-browser-smoke:', packagesJobStart);
 		const packagesJob = workflow.slice(packagesJobStart, nextJobStart);
-		const layer = packagesJob.indexOf('- run: pnpm run layer:static-runtimes');
-		const clean = packagesJob.indexOf('- run: git diff --exit-code -- static');
 
-		expect(layer).toBeGreaterThanOrEqual(0);
-		expect(clean).toBeGreaterThan(layer);
+		expect(packagesJob).not.toContain('- run: pnpm run layer:static-runtimes');
+		expect(packagesJob).not.toContain('- run: git diff --exit-code -- static');
+		expect(packagesJob).toContain('src/lib/build-layered-runtime-assets.test.ts');
 		expect(packagesJob).toContain('- run: pnpm --dir runtimes/wasm-go test');
 		expect(packagesJob).toContain(
 			'- run: pnpm --dir runtimes/wasm-rust exec vitest run test/runtime-pack.test.ts test/runtime-manifest-edge.test.ts'

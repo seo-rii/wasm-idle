@@ -32,8 +32,6 @@ jobs:
             - run: pnpm run check
             - run: pnpm test
             - run: pnpm run check:support-matrix
-            - run: pnpm run layer:static-runtimes
-            - run: git diff --exit-code -- static
             - run: pnpm run check:asset-sizes
             - run: pnpm run check:packages
             - run: pnpm --dir packages/debug test
