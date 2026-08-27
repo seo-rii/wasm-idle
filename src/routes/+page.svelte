@@ -188,6 +188,7 @@
 		terminalPaneWidth = $state<number | null>(null),
 		resizingPane = $state(false);
 	let restartDebugPending = $state(false);
+	let executionStopPending = $state(false);
 	let executionGeneration = 0;
 	let restartRequestGeneration = 0;
 	let activeExecution: Promise<void> | null = null;
@@ -1245,32 +1246,81 @@
 		saveStatus = `${languageLabels[language]} runtime restarted`;
 	}
 
+	function completeExecutionGeneration(generation: number) {
+		if (executionGeneration !== generation) return;
+		loadingProgress.reset();
+		runningMode = null;
+		activeExecution = null;
+		if (!debug.paused) debug.reset();
+	}
+
+	async function settleExecutionTeardown(
+		stoppedMode: 'run' | 'debug',
+		previousExecution: Promise<void> | null
+	) {
+		const [stopResult, executionResult] = await Promise.allSettled([
+			(async () => {
+				if (stoppedMode === 'debug') {
+					await debug.stop();
+					return;
+				}
+				await terminal?.stop?.();
+			})(),
+			previousExecution ?? Promise.resolve()
+		]);
+		if (stopResult.status === 'rejected') throw stopResult.reason;
+		if (executionResult.status === 'rejected') throw executionResult.reason;
+	}
+
+	function reportExecutionTeardownFailure(action: 'stop' | 'restart', error: unknown) {
+		const message = error instanceof Error ? error.message : String(error);
+		saveStatus = `Unable to ${action} execution: ${message}`;
+		console.error(`Unable to ${action} execution cleanly.`, error);
+	}
+
 	async function stopExecution() {
-		if (!terminal || !runningMode) return;
+		if (!terminal || !runningMode || executionStopPending || restartDebugPending) return;
+		const stoppedMode = runningMode;
+		const previousExecution = activeExecution;
+		const stopGeneration = ++executionGeneration;
 		restartRequestGeneration += 1;
 		restartDebugPending = false;
+		executionStopPending = true;
 		executionPreflight.cancel();
-		if (runningMode === 'debug') {
-			await debug.stop();
-			return;
+		try {
+			await settleExecutionTeardown(stoppedMode, previousExecution);
+		} catch (error) {
+			reportExecutionTeardownFailure('stop', error);
+		} finally {
+			completeExecutionGeneration(stopGeneration);
+			executionStopPending = false;
 		}
-		await terminal.stop?.();
 	}
 
 	async function restartDebugExecution() {
-		if (!terminal || runningMode !== 'debug' || restartDebugPending) return;
+		if (!terminal || runningMode !== 'debug' || restartDebugPending || executionStopPending)
+			return;
 		const requestGeneration = ++restartRequestGeneration;
 		const previousExecution = activeExecution;
+		const teardownGeneration = ++executionGeneration;
 		restartDebugPending = true;
 		executionPreflight.cancel();
 		try {
-			await debug.stop();
-			await previousExecution;
+			try {
+				await settleExecutionTeardown('debug', previousExecution);
+			} catch (error) {
+				reportExecutionTeardownFailure('restart', error);
+				return;
+			}
 			if (restartRequestGeneration !== requestGeneration) return;
+			completeExecutionGeneration(teardownGeneration);
 			restartDebugPending = false;
 			await exec(true);
 		} finally {
-			if (restartRequestGeneration === requestGeneration) restartDebugPending = false;
+			if (restartRequestGeneration === requestGeneration) {
+				completeExecutionGeneration(teardownGeneration);
+				restartDebugPending = false;
+			}
 		}
 	}
 
@@ -1839,12 +1889,7 @@
 				throw error;
 			} finally {
 				executionPreflight.finish(preflight);
-				if (executionGeneration === generation) {
-					loadingProgress.reset();
-					runningMode = null;
-					activeExecution = null;
-					if (!debug.paused) debug.reset();
-				}
+				completeExecutionGeneration(generation);
 			}
 		})();
 		activeExecution = execution;
@@ -2333,7 +2378,11 @@
 				</div>
 				<div class="action-group">
 					{#if runningMode === 'run'}
-						<button class="action-button action-button--stop" onclick={stopExecution}>
+						<button
+							class="action-button action-button--stop"
+							onclick={stopExecution}
+							disabled={executionStopPending}
+						>
 							<span class="material-symbols-outlined">stop_circle</span>
 							<span>Stop Running</span>
 						</button>
@@ -2351,13 +2400,17 @@
 						<button
 							class="action-button action-button--debug-restart"
 							onclick={restartDebugExecution}
-							disabled={restartDebugPending}
+							disabled={restartDebugPending || executionStopPending}
 							aria-label="Restart Debug"
 						>
 							<span class="material-symbols-outlined">restart_alt</span>
 							<span>{restartDebugPending ? 'Restarting…' : 'Restart Debug'}</span>
 						</button>
-						<button class="action-button action-button--stop" onclick={stopExecution}>
+						<button
+							class="action-button action-button--stop"
+							onclick={stopExecution}
+							disabled={executionStopPending || restartDebugPending}
+						>
 							<span class="material-symbols-outlined">stop_circle</span>
 							<span>Stop Debug</span>
 						</button>

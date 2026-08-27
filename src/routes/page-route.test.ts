@@ -28,27 +28,50 @@ const expectPlaygroundLanguage = (language: PlaygroundLanguage) => {
 
 describe('example route debug actions', () => {
 	it('swaps run/debug actions for stop buttons while sessions are active', () => {
+		const stopExecutionStart = source.indexOf('async function stopExecution()');
+		const restartExecutionStart = source.indexOf(
+			'async function restartDebugExecution()',
+			stopExecutionStart
+		);
+		const stopExecutionSource = source.slice(stopExecutionStart, restartExecutionStart);
 		expect(() =>
 			compile(source, {
 				filename: 'src/routes/+page.svelte',
 				generate: 'client'
 			})
 		).not.toThrow();
-		expect(source).toMatch(/async function stopExecution\(\) \{/);
-		expect(source).toMatch(/if \(!terminal \|\| !runningMode\) return;/);
-		expect(source).toMatch(/if \(runningMode === 'debug'\) \{/);
-		expect(source).toMatch(/await debug\.stop\(\);/);
+		expect(source.includes('let executionStopPending = $state(false);')).toBe(true);
+		expect(stopExecutionSource).toMatch(/async function stopExecution\(\) \{/);
+		expect(stopExecutionSource).toMatch(
+			/if \(\s*!terminal \|\|\s*!runningMode \|\|\s*executionStopPending \|\|\s*restartDebugPending\s*\)/s
+		);
+		expect(stopExecutionSource.includes('const stoppedMode = runningMode;')).toBe(true);
+		expect(stopExecutionSource.includes('const previousExecution = activeExecution;')).toBe(
+			true
+		);
+		expect(stopExecutionSource.includes('const stopGeneration = ++executionGeneration;')).toBe(
+			true
+		);
 		expect(source).toMatch(
-			/\{#if runningMode === 'run'\}\s+<button class="action-button action-button--stop" onclick=\{stopExecution\}>/s
+			/if \(stoppedMode === 'debug'\) \{\s+await debug\.stop\(\);\s+return;\s+\}\s+await terminal\?\.stop\?\.\(\);/s
+		);
+		expect(source.includes('await Promise.allSettled([')).toBe(true);
+		expect(stopExecutionSource.includes('completeExecutionGeneration(stopGeneration);')).toBe(
+			true
+		);
+		expect(stopExecutionSource).toMatch(
+			/catch \(error\) \{\s+reportExecutionTeardownFailure\('stop', error\);\s+\}/s
+		);
+		expect(source).toMatch(
+			/\{#if runningMode === 'run'\}\s+<button\s+class="action-button action-button--stop"\s+onclick=\{stopExecution\}\s+disabled=\{executionStopPending\}/s
 		);
 		expect(source).toMatch(/<span>Stop Running<\/span>/);
-		expect(source).toMatch(/await terminal\.stop\?\.\(\);/);
 		expect(source).toMatch(
 			/\{#if runningMode === 'debug'\}\s+<button\s+class="action-button action-button--debug-restart"/s
 		);
 		expect(source).toContain('aria-label="Restart Debug"');
-		expect(source).toContain(
-			'<button class="action-button action-button--stop" onclick={stopExecution}>'
+		expect(source).toMatch(
+			/<button\s+class="action-button action-button--stop"\s+onclick=\{stopExecution\}\s+disabled=\{executionStopPending \|\| restartDebugPending\}/s
 		);
 		expect(source).toMatch(/<span>Stop Debug<\/span>/);
 		expect(source).toMatch(/disabled=\{runningMode === 'debug' \|\| !executionAvailable\}/);
@@ -230,21 +253,31 @@ describe('example route debug actions', () => {
 	});
 
 	it('restarts LLDB debugging through a fully disposed fresh execution', () => {
+		const restartExecutionStart = source.indexOf('async function restartDebugExecution()');
+		const restartExecutionSource = source.slice(
+			restartExecutionStart,
+			source.indexOf('async function sendTerminalEof()', restartExecutionStart)
+		);
 		expect(source).toContain('let restartDebugPending = $state(false);');
 		expect(source).toContain('let executionGeneration = 0;');
 		expect(source).toContain('async function restartDebugExecution()');
 		expect(source).toContain('const previousExecution = activeExecution;');
+		expect(source).toContain('const teardownGeneration = ++executionGeneration;');
 		expect(source).toContain('restartRequestGeneration += 1;');
 		expect(source).toContain('if (restartRequestGeneration !== requestGeneration) return;');
-		expect(source).toContain('await debug.stop();');
-		expect(source).toContain('await previousExecution;');
+		expect(source).toContain("await settleExecutionTeardown('debug', previousExecution);");
+		expect(source).toContain('completeExecutionGeneration(teardownGeneration);');
 		expect(source).toContain('await exec(true);');
 		expect(source).toContain('executionPreflight.cancel();');
 		expect(source).toContain('aria-label="Restart Debug"');
-		expect(source).toContain('disabled={restartDebugPending}');
-		expect(source).toMatch(
-			/if \(executionGeneration === generation\) \{[\s\S]*?runningMode = null;\s+activeExecution = null;/
+		expect(source).toContain('disabled={restartDebugPending || executionStopPending}');
+		expect(restartExecutionSource).toMatch(
+			/if \(\s*!terminal \|\|\s*runningMode !== 'debug' \|\|\s*restartDebugPending \|\|\s*executionStopPending\s*\)/s
 		);
+		expect(restartExecutionSource).toMatch(
+			/catch \(error\) \{\s+reportExecutionTeardownFailure\('restart', error\);\s+return;\s+\}/s
+		);
+		expect(source).toContain('completeExecutionGeneration(generation);');
 	});
 
 	it('keeps a stopped preflight obsolete and admits a clean relaunch', async () => {
