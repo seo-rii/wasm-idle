@@ -573,6 +573,65 @@ describe('LldbSandboxSession', () => {
 		expect(runtimeState.sessions).toHaveLength(1);
 	});
 
+	it('settles a cancelled relaunch when retired disposal rejects', async () => {
+		const events: Array<{ type: string }> = [];
+		let rejectDisposal!: (error: Error) => void;
+		runtimeState.disposeGate = new Promise<void>((_resolve, reject) => {
+			rejectDisposal = reject;
+		});
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const firstCompletion = controller.start();
+		const firstOutcome = firstCompletion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(1));
+		runtimeState.sessions[0]!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+		const replacementCompletion = controller.start();
+		const replacementOutcome = replacementCompletion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		const disconnectOutcome = controller.disconnect().then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		const disposalError = new Error('retired disposal failed');
+
+		rejectDisposal(disposalError);
+
+		await expect(firstOutcome).resolves.toBe(disposalError);
+		await expect(disconnectOutcome).resolves.toBe(disposalError);
+		await expect(
+			Promise.race([
+				replacementOutcome,
+				new Promise<never>((_, reject) => {
+					setTimeout(
+						() => reject(new Error('replacement completion stayed pending')),
+						500
+					);
+				})
+			])
+		).resolves.toBe(disposalError);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(2);
+	});
+
 	it('keeps disconnect completion ownership across a stop-callback relaunch', async () => {
 		let controller!: LldbSandboxSession;
 		let replacementCompletion: Promise<true> | undefined;

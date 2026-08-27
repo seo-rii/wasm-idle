@@ -1007,6 +1007,7 @@ export class LldbSandboxSession {
 
 	async disconnect() {
 		const completionResolve = this.completionResolve;
+		const completionReject = this.completionReject;
 		this.lifecycleVersion += 1;
 		const startupAbortController = this.startupAbortController;
 		this.startupAbortController = undefined;
@@ -1028,8 +1029,20 @@ export class LldbSandboxSession {
 		const disposal = session
 			? this.trackSessionDisposal(session.disconnect({ terminateTarget: true }))
 			: this.sessionDisposal;
-		await disposal;
+		let disposalFailure: Error | undefined;
+		try {
+			await disposal;
+		} catch (error) {
+			disposalFailure =
+				error instanceof Error
+					? error
+					: new Error('Unable to disconnect the LLDB debug session.');
+		}
 		if (shouldPublishStop) this.options.onDebugEvent({ type: 'stop' });
+		if (disposalFailure) {
+			completionReject?.(disposalFailure);
+			throw disposalFailure;
+		}
 		completionResolve?.(true);
 	}
 
