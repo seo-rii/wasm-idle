@@ -191,7 +191,7 @@ describe('Terminal source', () => {
 			/function flushPendingSandboxInput\(\) \{\s+if \(pendingSandboxInput\.length > 0\) \{\s+for \(const pendingInput of pendingSandboxInput\) \{\s+sandbox\.write\?\.\(pendingInput\);\s+\}\s+pendingSandboxInput = \[\];\s+\}\s+if \(pendingSandboxEof\) \{\s+sandbox\.eof\?\.\(\);\s+pendingSandboxEof = false;\s+\}\s+\}/s
 		);
 		expect(source).toMatch(
-			/function discardPendingSandboxInput\(\) \{\s+pendingSandboxInput = \[\];\s+pendingSandboxEof = false;\s+\}/s
+			/function discardPendingSandboxInput\(\) \{\s+sandboxInputGeneration \+= 1;\s+pendingSandboxInput = \[\];\s+pendingSandboxEof = false;\s+\}/s
 		);
 		expect(source).toMatch(
 			/function submitSandboxEof\(\) \{\s+if \(sandbox && sandboxAcceptingInput\) sandbox\.eof\?\.\(\);\s+else pendingSandboxEof = true;\s+\}/s

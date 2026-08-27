@@ -61,6 +61,7 @@
 		pendingSandboxInput: string[] = [],
 		pendingDebugBreakpoints = new Map<string, number[]>(),
 		pendingSandboxEof = false,
+		sandboxInputGeneration = 0,
 		sandbox: BoundSandbox,
 		sandboxAcceptingInput = false,
 		first = true,
@@ -133,6 +134,7 @@
 	}
 
 	function discardPendingSandboxInput() {
+		sandboxInputGeneration += 1;
 		pendingSandboxInput = [];
 		pendingSandboxEof = false;
 	}
@@ -588,9 +590,14 @@
 					submitSandboxEof();
 				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') {
 					ev.preventDefault();
-					navigator.clipboard.readText().then((text) => {
-						applyPastedText(text);
-					});
+					const generation = sandboxInputGeneration;
+					navigator.clipboard
+						.readText()
+						.then((text) => {
+							if (generation !== sandboxInputGeneration) return;
+							applyPastedText(text);
+						})
+						.catch(() => {});
 				}
 			});
 			plugin = await registerAllPlugins(term);
