@@ -4,12 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const runtimeState = vi.hoisted(() => ({
 	session: null as FakeRuntimeSession | null,
+	sessions: [] as FakeRuntimeSession[],
 	options: null as Record<string, unknown> | null,
 	initializeCapabilities: {} as Record<string, unknown>,
 	initializeGate: null as Promise<void> | null,
 	continueGate: null as Promise<void> | null,
 	pauseGate: null as Promise<void> | null,
 	disposeGate: null as Promise<void> | null,
+	stdinWriteGates: [] as Promise<void>[],
 	scopesErrorFrameId: null as number | null,
 	requestErrors: new Map<string, Error>(),
 	responseOverrides: new Map<string, unknown>(),
@@ -31,6 +33,7 @@ class FakeRuntimeSession {
 	readonly requests: Array<{ command: string; args?: unknown }> = [];
 	readonly breakpointRequests: Array<{ source: { path: string }; lines: number[] }> = [];
 	readonly input: string[] = [];
+	readonly inputAttempts: string[] = [];
 	readonly resolvedBreakpointsBySource = new Map<
 		string,
 		Array<{
@@ -177,6 +180,9 @@ class FakeRuntimeSession {
 	}
 
 	async writeStdin(value: string) {
+		this.inputAttempts.push(value);
+		const gate = runtimeState.stdinWriteGates.shift();
+		if (gate) await gate;
 		this.input.push(value);
 	}
 
@@ -214,6 +220,7 @@ vi.mock('@wasm-idle/llvm-core/debug', () => ({
 	createBrowserLldbSession: (options: Record<string, unknown>) => {
 		runtimeState.options = options;
 		runtimeState.session = new FakeRuntimeSession();
+		runtimeState.sessions.push(runtimeState.session);
 		return runtimeState.session;
 	}
 }));
@@ -223,6 +230,7 @@ import { LldbSandboxSession } from './lldbSession';
 describe('LldbSandboxSession', () => {
 	beforeEach(() => {
 		runtimeState.session = null;
+		runtimeState.sessions.length = 0;
 		runtimeState.options = null;
 		runtimeState.initializeCapabilities = {
 			supportsReadMemoryRequest: true,
@@ -232,6 +240,7 @@ describe('LldbSandboxSession', () => {
 		runtimeState.continueGate = null;
 		runtimeState.pauseGate = null;
 		runtimeState.disposeGate = null;
+		runtimeState.stdinWriteGates.length = 0;
 		runtimeState.scopesErrorFrameId = null;
 		runtimeState.requestErrors.clear();
 		runtimeState.responseOverrides.clear();
@@ -345,6 +354,112 @@ describe('LldbSandboxSession', () => {
 				})
 		).toThrow('LLDB breakpoint lines must be positive safe integers.');
 		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('does not let a retired stdin flush enter a replacement session', async () => {
+		let releaseRetiredWrite!: () => void;
+		runtimeState.stdinWriteGates.push(
+			new Promise<void>((resolve) => {
+				releaseRetiredWrite = resolve;
+			})
+		);
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		await controller.write('retired-1');
+		await controller.write('retired-2');
+		const firstCompletion = controller.start();
+		await vi.waitFor(() =>
+			expect(runtimeState.sessions[0]?.inputAttempts).toEqual(['retired-1'])
+		);
+
+		await controller.disconnect();
+		let releaseReplacementInitialize!: () => void;
+		runtimeState.initializeGate = new Promise<void>((resolve) => {
+			releaseReplacementInitialize = resolve;
+		});
+		const secondCompletion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(2));
+		const replacement = runtimeState.sessions[1]!;
+		await controller.write('fresh');
+
+		releaseRetiredWrite();
+		await firstCompletion;
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(replacement.inputAttempts).toEqual([]);
+
+		releaseReplacementInitialize();
+		await vi.waitFor(() => expect(replacement.input).toEqual(['fresh']));
+		replacement.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+		await secondCompletion;
+	});
+
+	it('fails the active session when a stdin write fails', async () => {
+		const events: Array<{ type: string }> = [];
+		let rejectWrite!: (error: Error) => void;
+		runtimeState.stdinWriteGates.push(
+			new Promise<void>((_resolve, reject) => {
+				rejectWrite = reject;
+			})
+		);
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		const completionOutcome = completion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		const session = runtimeState.session!;
+		const writeError = new Error('stdin transport failed');
+		const writeOutcome = controller.write('blocked').then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(session.inputAttempts).toEqual(['blocked']));
+		rejectWrite(writeError);
+
+		await expect(writeOutcome).resolves.toBe(writeError);
+		await expect(
+			Promise.race([
+				completionOutcome,
+				new Promise<never>((_, reject) => {
+					setTimeout(() => reject(new Error('test completion deadline expired')), 500);
+				})
+			])
+		).resolves.toBe(writeError);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(1);
+		expect(session.disposeCount).toBe(1);
 	});
 
 	it('maps DAP stopped state to source frames and top-level scopes', async () => {

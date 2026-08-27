@@ -372,7 +372,7 @@ export class LldbSandboxSession {
 				this.pendingInput.push(this.options.stdin);
 				this.pendingEof = true;
 			}
-			await this.flushInput();
+			await this.flushInput(session, lifecycleVersion);
 		} catch (error) {
 			if (
 				lifecycleVersion === this.lifecycleVersion &&
@@ -403,12 +403,24 @@ export class LldbSandboxSession {
 	write(input: string) {
 		this.pendingInput.push(input);
 		this.pendingEof = false;
-		return this.flushInput();
+		const session = this.session;
+		const lifecycleVersion = this.lifecycleVersion;
+		return this.observeInputFlush(
+			this.flushInput(session, lifecycleVersion),
+			session,
+			lifecycleVersion
+		);
 	}
 
 	eof() {
 		this.pendingEof = true;
-		return this.flushInput();
+		const session = this.session;
+		const lifecycleVersion = this.lifecycleVersion;
+		return this.observeInputFlush(
+			this.flushInput(session, lifecycleVersion),
+			session,
+			lifecycleVersion
+		);
 	}
 
 	async debugCommand(command: DebugCommand) {
@@ -975,7 +987,7 @@ export class LldbSandboxSession {
 			new Error('LLDB sandbox session disconnected during startup.')
 		);
 		this.stateVersion += 1;
-		this.inputReady = false;
+		this.retireInput();
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
 		this.supportsReadMemory = false;
@@ -1261,7 +1273,7 @@ export class LldbSandboxSession {
 		if (this.stopped) return;
 		this.stopped = true;
 		this.stateVersion += 1;
-		this.inputReady = false;
+		this.retireInput();
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
 		this.supportsReadMemory = false;
@@ -1297,7 +1309,7 @@ export class LldbSandboxSession {
 		if (this.stopped) return;
 		this.stopped = true;
 		this.stateVersion += 1;
-		this.inputReady = false;
+		this.retireInput();
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
 		this.supportsReadMemory = false;
@@ -1353,14 +1365,54 @@ export class LldbSandboxSession {
 		});
 	}
 
-	private async flushInput() {
-		if (!this.inputReady || !this.session) return;
+	private observeInputFlush(
+		flush: Promise<void>,
+		session: BrowserLldbSession | undefined,
+		lifecycleVersion: number
+	) {
+		void flush.catch((error: unknown) => {
+			if (
+				this.stopped ||
+				this.lifecycleVersion !== lifecycleVersion ||
+				this.session !== session
+			) {
+				return;
+			}
+			this.fail(
+				error instanceof Error ? error : new Error('Unable to write LLDB target input.')
+			);
+		});
+		return flush;
+	}
+
+	private retireInput() {
+		this.inputReady = false;
+		this.pendingInput.length = 0;
+		this.pendingEof = false;
+	}
+
+	private async flushInput(session: BrowserLldbSession | undefined, lifecycleVersion: number) {
+		if (
+			!this.inputReady ||
+			!session ||
+			this.lifecycleVersion !== lifecycleVersion ||
+			this.session !== session
+		) {
+			return;
+		}
 		while (this.pendingInput.length > 0) {
-			await this.session.writeStdin(this.pendingInput.shift() || '');
+			await session.writeStdin(this.pendingInput.shift() || '');
+			if (
+				!this.inputReady ||
+				this.lifecycleVersion !== lifecycleVersion ||
+				this.session !== session
+			) {
+				return;
+			}
 		}
 		if (this.pendingEof) {
 			this.pendingEof = false;
-			await this.session.closeStdin();
+			await session.closeStdin();
 		}
 	}
 }

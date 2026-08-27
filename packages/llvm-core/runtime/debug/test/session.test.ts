@@ -825,6 +825,54 @@ describe('BrowserLldbSession', () => {
 		expect(commands).toContain('disconnect');
 	});
 
+	it('retires a saturated stdin write with the session disposal reason', async () => {
+		const commands: string[] = [];
+		const workers: FakeWorker[] = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources: [{ path: '/workspace/main.cpp', content: 'int main() { return 0; }' }],
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, commands);
+				workers.push(worker);
+				return worker;
+			},
+			fetchImpl: async () => new Response('debug-asset'),
+			queueCapacity: 4 * 1024,
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+		await session.initialize();
+		const targetWorker = workers.find((worker) => worker.kind === 'target');
+		const targetInit = targetWorker?.received.find(
+			(message) => message.type === 'initialize-target'
+		);
+		if (!targetInit || targetInit.type !== 'initialize-target') {
+			throw new Error('target stdin queue was not initialized');
+		}
+		const stdin = new SharedByteQueue(targetInit.stdin);
+
+		const writeOutcome = session.writeStdin('x'.repeat(8 * 1024)).then<Error | undefined>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await expect.poll(() => stdin.available).toBe(4 * 1024);
+		const eofOutcome = session.closeStdin().then(
+			() => 'settled' as const,
+			(error: unknown) => error
+		);
+		await session.disconnect();
+
+		await expect(writeOutcome).resolves.toMatchObject({
+			message: 'LLDB debug session is disposed'
+		});
+		await expect(eofOutcome).resolves.toBe('settled');
+		expect(stdin.closed).toBe(true);
+		expect(workers).toHaveLength(2);
+		expect(workers.every((worker) => worker.isTerminated)).toBe(true);
+	});
+
 	it('allows attach to outlive the request timeout while initial breakpoints are configured', async () => {
 		const commands: string[] = [];
 		const session = new BrowserLldbSession({

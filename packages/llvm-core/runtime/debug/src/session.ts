@@ -881,22 +881,16 @@ export class BrowserLldbSession {
 	}
 
 	writeStdin(value: string) {
-		if (!this.stdin || !this.initialized) {
-			throw new Error('LLDB debug session is not initialized');
-		}
 		const bytes = new TextEncoder().encode(value);
-		this.stdinWrites = this.stdinWrites.then(() => this.stdin?.write(bytes));
-		return this.stdinWrites;
+		return this.enqueueStdin((stdin) =>
+			stdin.write(bytes, this.lifecycleAbortController.signal)
+		);
 	}
 
 	closeStdin() {
-		if (!this.stdin || !this.initialized) {
-			throw new Error('LLDB debug session is not initialized');
-		}
-		this.stdinWrites = this.stdinWrites.then(() => {
-			this.stdin?.close();
+		return this.enqueueStdin((stdin) => {
+			stdin.close();
 		});
-		return this.stdinWrites;
 	}
 
 	async disconnect(options: { terminateTarget?: boolean } = {}) {
@@ -966,6 +960,7 @@ export class BrowserLldbSession {
 						});
 			await Promise.all([
 				this.dap?.close() ?? Promise.resolve(),
+				this.stdinWrites,
 				Promise.allSettled(this.outputReaders),
 				gracefulShutdown
 			]);
@@ -1150,6 +1145,22 @@ export class BrowserLldbSession {
 
 	private assertActive() {
 		if (this.disposed) throw this.disposedError();
+	}
+
+	private enqueueStdin(operation: (stdin: SharedByteQueue) => void | Promise<void>) {
+		this.assertActive();
+		const stdin = this.stdin;
+		if (!stdin || !this.initialized) {
+			throw new Error('LLDB debug session is not initialized');
+		}
+		const queued = this.stdinWrites
+			.then(() => operation(stdin))
+			.catch((error: unknown) => {
+				if (this.disposed) throw this.disposedError();
+				throw error;
+			});
+		this.stdinWrites = queued.catch(() => undefined);
+		return queued;
 	}
 
 	private async awaitWhileActive<T>(operation: Promise<T>): Promise<T> {

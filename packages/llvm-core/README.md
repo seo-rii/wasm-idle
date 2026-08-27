@@ -265,6 +265,13 @@ breakpoint update is converted to the shared Core `ProtocolError`. The session p
 disposes both debug workers, and rejects its completion with the low-level error retained as the
 cause. Other active initialization failures preserve their original `Error` while following the
 same single-stop and Worker-disposal lifecycle, including failures while flushing startup input.
+Target stdin writes are serialized on a recovered internal tail. Disconnect aborts a blocked write
+with the standard session-disposed error, waits for the recovered tail, and still permits an
+already queued EOF operation to settle without an unhandled rejection. The playground additionally
+captures the owning session generation for each flush: disconnect, target exit, and failure discard
+the retired generation's queued input and EOF, so a late write completion cannot feed a replacement
+debug session. A current-generation stdin transport failure remains fatal and is reported through
+the normal single-stop session completion path.
 Direct `DapClient` consumers can set `onEventError(error, event)` to observe an event-listener
 exception. Throwing listeners and a throwing error hook are isolated from one another, and the
 client continues parsing later events and responses on the same byte stream.
