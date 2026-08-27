@@ -116,6 +116,11 @@ on the same line.
 
 Compile C/C++ LLDB artifacts with `compileArtifact(..., { debugMode: 'lldb' })`. They contain
 untouched source, embedded DWARF, stable `/workspace/...` paths, and exact Clang provenance.
+Source-level `compileArgs` such as definitions and warning controls remain available, but LLDB mode
+rejects target triples, CPUs, target features, machine attributes, raw LLVM backend options, and
+thread, SIMD, atomics, memory64, shared-memory, or multi-memory switches before invoking Clang.
+This keeps the producer inside the pinned wasm32 WAMR classic-interpreter profile instead of
+letting a browser-valid artifact fail only after the debugger runtime has started.
 `compileLinkRun()` rejects `lldb` because an LLDB artifact must not be instantiated through the
 normal browser execution path. Launch arguments, WASI environment variables, and the `/workspace`
 working directory are forwarded to WAMR rather than being applied only to LLDB's attach request.

@@ -51,6 +51,44 @@ const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
 
 const defaultCppStandardArg = '-std=gnu++2a';
 const defaultCStandardArg = '-std=gnu11';
+const lldbForbiddenCompileArgs = new Set([
+	'-target',
+	'--target',
+	'-triple',
+	'-target-feature',
+	'-target-cpu',
+	'-target-abi',
+	'-mcpu',
+	'-march',
+	'-mattr',
+	'-mthread-model',
+	'-mllvm',
+	'-pthread',
+	'-fopenmp',
+	'-msimd128',
+	'-mno-simd128',
+	'-matomics',
+	'-mno-atomics',
+	'-mmemory64',
+	'-mno-memory64',
+	'-mshared-memory',
+	'-mno-shared-memory',
+	'-mmulti-memory',
+	'-mno-multi-memory'
+]);
+const lldbForbiddenCompileArgPrefixes = [
+	'-target=',
+	'--target=',
+	'-triple=',
+	'-target-feature=',
+	'-target-cpu=',
+	'-target-abi=',
+	'-mcpu=',
+	'-march=',
+	'-mattr=',
+	'-mthread-model=',
+	'-mllvm='
+];
 
 export type ClangSourceLanguage = 'C' | 'CPP' | 'OBJC';
 
@@ -360,6 +398,21 @@ class Clang {
 		const debugMode = resolveDebugMode(options);
 		const traceDebug = debugMode === 'trace';
 		const lldbDebug = debugMode === 'lldb';
+		if (lldbDebug) {
+			for (const argument of compileArgs) {
+				if (typeof argument !== 'string') {
+					throw new TypeError('LLDB compile arguments must be strings');
+				}
+				if (
+					lldbForbiddenCompileArgs.has(argument) ||
+					lldbForbiddenCompileArgPrefixes.some((prefix) => argument.startsWith(prefix))
+				) {
+					throw new Error(
+						`LLDB compile argument ${JSON.stringify(argument)} cannot change the WAMR debug target profile`
+					);
+				}
+			}
+		}
 		const opt = debugMode === 'none' ? options.opt || '2' : '0';
 		if (traceDebug) {
 			const lines = source.split('\n');

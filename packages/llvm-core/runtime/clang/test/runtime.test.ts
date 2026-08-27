@@ -114,6 +114,37 @@ describe('Clang compile/debug flow', () => {
 		expect(String(sourceWrite?.[1])).not.toContain('__wasm_idle_debug_');
 	});
 
+	it.each([
+		['target triple', ['-triple', 'wasm64-wasi']],
+		['joined target triple', ['--target=wasm64-wasi']],
+		['target feature', ['-target-feature', '+simd128']],
+		['joined target feature', ['-target-feature=+atomics']],
+		['target CPU', ['-target-cpu', 'bleeding-edge']],
+		['machine architecture', ['-march=wasm64']],
+		['machine CPU', ['-mcpu', 'bleeding-edge']],
+		['machine attributes', ['-mattr=+simd128']],
+		['LLVM backend escape', ['-mllvm', '-wasm-enable-sjlj']],
+		['thread model', ['-pthread']],
+		['SIMD shortcut', ['-msimd128']],
+		['atomics shortcut', ['-matomics']],
+		['memory64 shortcut', ['-mmemory64']],
+		['shared-memory shortcut', ['-mshared-memory']],
+		['multi-memory shortcut', ['-mmulti-memory']]
+	])('rejects LLDB %s overrides before invoking Clang', async (_label, compileArgs) => {
+		const { clang } = createClangHarness();
+
+		await expect(
+			clang.compile({
+				input: 'main.cc',
+				code: 'int main() {}',
+				obj: 'main.o',
+				debugMode: 'lldb',
+				compileArgs
+			})
+		).rejects.toThrow(/WAMR debug target profile/u);
+		expect(clang.run).not.toHaveBeenCalled();
+	});
+
 	it('maps newer C++ versions to the newest supported clang standard', async () => {
 		const { clang } = createClangHarness();
 
