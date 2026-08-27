@@ -462,6 +462,176 @@ describe('LldbSandboxSession', () => {
 		expect(session.disposeCount).toBe(1);
 	});
 
+	it('serializes a stop-callback relaunch behind the retiring completion', async () => {
+		let releaseDisposal!: () => void;
+		runtimeState.disposeGate = new Promise<void>((resolve) => {
+			releaseDisposal = resolve;
+		});
+		let controller!: LldbSandboxSession;
+		let replacementCompletion: Promise<true> | undefined;
+		let replacementSettled = false;
+		controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => {
+				if (event.type !== 'stop' || replacementCompletion) return;
+				replacementCompletion = controller.start();
+				void replacementCompletion.then(
+					() => {
+						replacementSettled = true;
+					},
+					() => {
+						replacementSettled = true;
+					}
+				);
+			},
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const firstCompletion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(1));
+		const retiringSession = runtimeState.sessions[0]!;
+
+		try {
+			retiringSession.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			await vi.waitFor(() => expect(replacementCompletion).toBeDefined());
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			expect(runtimeState.sessions).toHaveLength(1);
+
+			releaseDisposal();
+			await expect(
+				Promise.race([
+					firstCompletion,
+					new Promise<never>((_, reject) => {
+						setTimeout(() => reject(new Error('first completion did not settle')), 500);
+					})
+				])
+			).resolves.toBe(true);
+			await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(2));
+			expect(replacementSettled).toBe(false);
+
+			const replacementSession = runtimeState.sessions[1]!;
+			replacementSession.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			await expect(replacementCompletion).resolves.toBe(true);
+		} finally {
+			releaseDisposal();
+			await controller.disconnect();
+			void firstCompletion.catch(() => undefined);
+		}
+	});
+
+	it('lets disconnect cancel a relaunch waiting for retired disposal', async () => {
+		let releaseDisposal!: () => void;
+		runtimeState.disposeGate = new Promise<void>((resolve) => {
+			releaseDisposal = resolve;
+		});
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const firstCompletion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(1));
+		runtimeState.sessions[0]!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+		const replacementCompletion = controller.start();
+		void replacementCompletion.catch(() => undefined);
+		const disconnecting = controller.disconnect();
+
+		releaseDisposal();
+		await disconnecting;
+		await firstCompletion;
+		await expect(
+			Promise.race([
+				replacementCompletion,
+				new Promise<never>((_, reject) => {
+					setTimeout(() => reject(new Error('cancelled relaunch did not settle')), 500);
+				})
+			])
+		).resolves.toBe(true);
+		expect(runtimeState.sessions).toHaveLength(1);
+	});
+
+	it('keeps disconnect completion ownership across a stop-callback relaunch', async () => {
+		let controller!: LldbSandboxSession;
+		let replacementCompletion: Promise<true> | undefined;
+		let replacementSettled = false;
+		controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => {
+				if (event.type !== 'stop' || replacementCompletion) return;
+				replacementCompletion = controller.start();
+				void replacementCompletion.then(
+					() => {
+						replacementSettled = true;
+					},
+					() => {
+						replacementSettled = true;
+					}
+				);
+			},
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const firstCompletion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(1));
+
+		try {
+			await controller.disconnect();
+			await expect(
+				Promise.race([
+					firstCompletion,
+					new Promise<never>((_, reject) => {
+						setTimeout(
+							() => reject(new Error('disconnected completion did not settle')),
+							500
+						);
+					})
+				])
+			).resolves.toBe(true);
+			await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(2));
+			expect(replacementSettled).toBe(false);
+
+			runtimeState.sessions[1]!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			await expect(replacementCompletion).resolves.toBe(true);
+		} finally {
+			await controller.disconnect();
+			void firstCompletion.catch(() => undefined);
+		}
+	});
+
 	it('maps DAP stopped state to source frames and top-level scopes', async () => {
 		const events: unknown[] = [];
 		const output: string[] = [];

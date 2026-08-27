@@ -236,6 +236,7 @@ export class LldbSandboxSession {
 		if (this.session || this.startupAbortController) {
 			throw new Error('LLDB sandbox session is already running.');
 		}
+		const previousDisposal = this.sessionDisposal;
 		const lifecycleVersion = ++this.lifecycleVersion;
 		const startupAbortController = new AbortController();
 		this.startupAbortController = startupAbortController;
@@ -243,11 +244,36 @@ export class LldbSandboxSession {
 		this.pauseRequested = false;
 		this.initialized = false;
 		this.dapExitCode = null;
+		let rejectCompletion!: (error: Error) => void;
 		const completion = new Promise<true>((resolve, reject) => {
 			this.completionResolve = resolve;
 			this.completionReject = reject;
+			rejectCompletion = reject;
 		});
 		void completion.catch(() => undefined);
+		if (previousDisposal) {
+			try {
+				await previousDisposal;
+			} catch (error) {
+				if (lifecycleVersion !== this.lifecycleVersion) return completion;
+				if (this.startupAbortController === startupAbortController) {
+					this.startupAbortController = undefined;
+				}
+				this.stopped = true;
+				rejectCompletion(
+					error instanceof Error
+						? error
+						: new Error('Unable to dispose the previous LLDB debug session.')
+				);
+				return completion;
+			}
+			if (
+				lifecycleVersion !== this.lifecycleVersion ||
+				startupAbortController.signal.aborted
+			) {
+				return completion;
+			}
+		}
 		let manifest: Awaited<ReturnType<typeof loadVerifiedDebugRuntimeManifest>>;
 		try {
 			manifest = await loadVerifiedDebugRuntimeManifest(
@@ -980,6 +1006,7 @@ export class LldbSandboxSession {
 	}
 
 	async disconnect() {
+		const completionResolve = this.completionResolve;
 		this.lifecycleVersion += 1;
 		const startupAbortController = this.startupAbortController;
 		this.startupAbortController = undefined;
@@ -1003,7 +1030,7 @@ export class LldbSandboxSession {
 			: this.sessionDisposal;
 		await disposal;
 		if (shouldPublishStop) this.options.onDebugEvent({ type: 'stop' });
-		this.completionResolve?.(true);
+		completionResolve?.(true);
 	}
 
 	private handleDapEvent(event: DapEvent) {
@@ -1282,27 +1309,27 @@ export class LldbSandboxSession {
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;
-		this.options.onDebugEvent({ type: 'stop' });
+		const completionResolve = this.completionResolve;
+		const completionReject = this.completionReject;
 		const disposal = session
 			? this.trackSessionDisposal(session.dispose())
 			: (this.sessionDisposal ?? Promise.resolve());
 		void disposal.then(
 			() => {
 				if (exitCode !== null && exitCode !== 0) {
-					this.completionReject?.(
-						new Error(`Debug target exited with code ${exitCode}.`)
-					);
+					completionReject?.(new Error(`Debug target exited with code ${exitCode}.`));
 				} else {
-					this.completionResolve?.(true);
+					completionResolve?.(true);
 				}
 			},
 			(error: unknown) =>
-				this.completionReject?.(
+				completionReject?.(
 					error instanceof Error
 						? error
 						: new Error('Unable to dispose the LLDB debug session.')
 				)
 		);
+		this.options.onDebugEvent({ type: 'stop' });
 	}
 
 	private fail(error: Error) {
@@ -1318,14 +1345,15 @@ export class LldbSandboxSession {
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;
-		this.options.onDebugEvent({ type: 'stop' });
+		const completionReject = this.completionReject;
 		const disposal = session
 			? this.trackSessionDisposal(session.dispose())
 			: (this.sessionDisposal ?? Promise.resolve());
 		void disposal.then(
-			() => this.completionReject?.(error),
-			() => this.completionReject?.(error)
+			() => completionReject?.(error),
+			() => completionReject?.(error)
 		);
+		this.options.onDebugEvent({ type: 'stop' });
 	}
 
 	private trackSessionDisposal(disposal: Promise<void>) {

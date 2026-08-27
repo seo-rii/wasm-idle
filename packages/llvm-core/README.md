@@ -272,6 +272,11 @@ captures the owning session generation for each flush: disconnect, target exit, 
 the retired generation's queued input and EOF, so a late write completion cannot feed a replacement
 debug session. A current-generation stdin transport failure remains fatal and is reported through
 the normal single-stop session completion path.
+Reusing a playground session controller is also serialized across teardown. A relaunch reserves its
+own lifecycle and completion before awaiting the prior Worker disposal, so a concurrent disconnect
+can still cancel that wait and two starts cannot pass the same teardown barrier. Finish, failure,
+and disconnect capture the completion they own before publishing `stop`; a synchronous relaunch
+from that callback therefore cannot be settled early by the retired generation.
 Direct `DapClient` consumers can set `onEventError(error, event)` to observe an event-listener
 exception. Throwing listeners and a throwing error hook are isolated from one another, and the
 client continues parsing later events and responses on the same byte stream.
