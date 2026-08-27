@@ -8,6 +8,7 @@ import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
 import { getVerifiedRuntimeExecutableGraphConfiguration, isIntegratedCompilerOutput } from './runtime-manifest.js';
 import { readMirroredBitcode } from './rustc-runtime.js';
 import { readWorkerFailure, WORKER_STATUS_BUFFER_BYTES } from './worker-status.js';
+import { assertRuntimeAssetDeliveryBudgetAvailable, readRuntimeAssetDeliveryBudget, snapshotRuntimeAssetDeliveryBudget } from './runtime-delivery-budget.js';
 export { createBrowserRustCompileRequestIdentity, resolveBrowserRustDebugMode };
 export { preloadBrowserRustRuntime };
 const PROGRESS_STAGE_RANGES = {
@@ -29,6 +30,20 @@ export async function compileRust(request, dependencies = {}) {
         return makeFailure(validationError);
     }
     const debugMode = resolveBrowserRustDebugMode(request);
+    if (debugMode !== 'none' && request.assetDeliveryBudget !== undefined) {
+        return makeFailure('wasm-rust debug compilation does not accept an asset delivery budget');
+    }
+    let deliveryBudget;
+    try {
+        deliveryBudget = request.assetDeliveryBudget
+            ? snapshotRuntimeAssetDeliveryBudget(request.assetDeliveryBudget)
+            : undefined;
+        if (deliveryBudget)
+            assertRuntimeAssetDeliveryBudgetAvailable(deliveryBudget);
+    }
+    catch (error) {
+        return makeFailure(error instanceof Error ? error.message : String(error));
+    }
     const workerLimits = resolveBrowserRustWorkerLimits(request.workerLimits);
     if ((!dependencies.createWorker && typeof Worker === 'undefined') ||
         typeof SharedArrayBuffer === 'undefined' ||
@@ -104,6 +119,9 @@ export async function compileRust(request, dependencies = {}) {
         }
         lastProgressPercent = percent;
         try {
+            const delivery = deliveryBudget
+                ? readRuntimeAssetDeliveryBudget(deliveryBudget)
+                : payload.delivery;
             request.onProgress({
                 stage,
                 attempt,
@@ -115,7 +133,8 @@ export async function compileRust(request, dependencies = {}) {
                 ...(payload.bytesCompleted !== undefined
                     ? { bytesCompleted: payload.bytesCompleted }
                     : {}),
-                ...(payload.bytesTotal !== undefined ? { bytesTotal: payload.bytesTotal } : {})
+                ...(payload.bytesTotal !== undefined ? { bytesTotal: payload.bytesTotal } : {}),
+                ...(delivery ? { delivery } : {})
             });
         }
         catch { }
@@ -131,7 +150,18 @@ export async function compileRust(request, dependencies = {}) {
         message: 'loading runtime manifest'
     });
     try {
-        const { manifest, targetConfig, versionedModuleBaseUrl, versionedRuntimeBaseUrl } = await loadBundledRuntimeContext(dependencies.loadManifest, request.targetTriple, dependencies.runtimeProfile);
+        const { manifest, targetConfig, versionedModuleBaseUrl, versionedRuntimeBaseUrl } = await loadBundledRuntimeContext(dependencies.loadManifest, request.targetTriple, dependencies.runtimeProfile, {
+            ...(deliveryBudget ? { deliveryBudget } : {}),
+            onManifestProgress(progress) {
+                emitCompileProgress('manifest', 1, {
+                    completed: 0,
+                    total: 1,
+                    message: 'loading runtime manifest',
+                    bytesCompleted: progress.loaded,
+                    bytesTotal: progress.total ?? progress.loaded
+                });
+            }
+        });
         let dwarfDebugDescriptorBase = null;
         if (debugMode === 'lldb') {
             if (!globalThis.crypto?.subtle) {
@@ -171,10 +201,11 @@ export async function compileRust(request, dependencies = {}) {
         recordPersistentCompileLog(`[wasm-rust] manifest loaded target=${targetConfig.targetTriple} timeout=${compileTimeoutMs}ms idle=${manifest.compiler.artifactIdleMs}ms memory=${manifest.compiler.rustcMemory.initialPages}/${manifest.compiler.rustcMemory.maximumPages}`);
         const helperThreadFailureGraceMs = Math.max(1_000, Math.min(4_000, manifest.compiler.artifactIdleMs * 2));
         let lastFailure = makeFailure(`browser rustc failed before emitting ${mirroredOutputName}`);
-        const { onProgress: _ignoredOnProgress, workerLimits: _ignoredWorkerLimits, ...workerRequestBase } = request;
+        const { onProgress: _ignoredOnProgress, workerLimits: _ignoredWorkerLimits, assetDeliveryBudget: _ignoredAssetDeliveryBudget, ...workerRequestBase } = request;
         const workerRequest = {
             ...workerRequestBase,
-            ...(workerLimits ? { workerLimits } : {})
+            ...(workerLimits ? { workerLimits } : {}),
+            ...(deliveryBudget ? { assetDeliveryBudget: deliveryBudget } : {})
         };
         for (let attempt = 1; attempt <= maxBrowserAttempts; attempt += 1) {
             const attemptCompileLogs = [];
@@ -339,7 +370,8 @@ export async function compileRust(request, dependencies = {}) {
                     let artifact;
                     try {
                         artifact = await (dependencies.linkBitcode || linkBitcodeWithLlvmWasm)(mirrored.bytes, manifest, targetConfig, versionedRuntimeBaseUrl.toString(), {
-                            onProgress: (progress) => emitCompileProgress(progress.stage, attempt, progress)
+                            onProgress: (progress) => emitCompileProgress(progress.stage, attempt, progress),
+                            ...(deliveryBudget ? { deliveryBudget } : {})
                         });
                     }
                     catch (error) {
@@ -392,7 +424,8 @@ export async function compileRust(request, dependencies = {}) {
                     let artifact;
                     try {
                         artifact = await (dependencies.linkBitcode || linkBitcodeWithLlvmWasm)(mirrored.bytes, manifest, targetConfig, versionedRuntimeBaseUrl.toString(), {
-                            onProgress: (progress) => emitCompileProgress(progress.stage, attempt, progress)
+                            onProgress: (progress) => emitCompileProgress(progress.stage, attempt, progress),
+                            ...(deliveryBudget ? { deliveryBudget } : {})
                         });
                     }
                     catch (error) {
@@ -447,7 +480,8 @@ export async function compileRust(request, dependencies = {}) {
                         });
                         try {
                             const artifact = await (dependencies.linkBitcode || linkBitcodeWithLlvmWasm)(mirrored.bytes, manifest, targetConfig, versionedRuntimeBaseUrl.toString(), {
-                                onProgress: (progress) => emitCompileProgress(progress.stage, attempt, progress)
+                                onProgress: (progress) => emitCompileProgress(progress.stage, attempt, progress),
+                                ...(deliveryBudget ? { deliveryBudget } : {})
                             });
                             if (dwarfDebugDescriptorBase) {
                                 if (!artifact.wasm) {
@@ -505,7 +539,8 @@ export async function compileRust(request, dependencies = {}) {
                     let artifact = null;
                     try {
                         artifact = await (dependencies.linkBitcode || linkBitcodeWithLlvmWasm)(mirrored.bytes, manifest, targetConfig, versionedRuntimeBaseUrl.toString(), {
-                            onProgress: (progress) => emitCompileProgress(progress.stage, attempt, progress)
+                            onProgress: (progress) => emitCompileProgress(progress.stage, attempt, progress),
+                            ...(deliveryBudget ? { deliveryBudget } : {})
                         });
                     }
                     catch (error) {

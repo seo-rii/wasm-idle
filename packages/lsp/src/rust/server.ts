@@ -1,6 +1,7 @@
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 import type { RustLanguageServerTargetTriple } from './service.js';
+import { resolveExecutionLimits } from '@wasm-idle/core';
 
 export interface RustLanguageServerConfig {
 	compilerUrl?: string;
@@ -26,6 +27,11 @@ function resolveConfig(
 	return typeof options === 'object' ? options.rust || {} : {};
 }
 
+function resolveMaxAssetBytes(value: unknown): number {
+	return resolveExecutionLimits(value === undefined ? {} : { maxAssetBytes: value as number })
+		.maxAssetBytes;
+}
+
 export async function getRustLanguageServer(
 	options?: EditorLanguageServerOptions | RustLanguageServerOptions
 ) {
@@ -41,6 +47,7 @@ export async function getRustLanguageServer(
 	) {
 		throw new Error('Rust language server requires a verified executable graph configuration');
 	}
+	const maxAssetBytes = resolveMaxAssetBytes(hostOptions?.maxAssetBytes);
 	return await createWorkerLanguageServerClient({
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
@@ -49,6 +56,7 @@ export async function getRustLanguageServer(
 			verifiedModuleUrls: config.verifiedModuleUrls,
 			graphFingerprint: config.graphFingerprint,
 			runtimeProfile: config.runtimeProfile,
+			maxAssetBytes,
 			targetTriple: config.targetTriple,
 			edition: config.edition
 		},

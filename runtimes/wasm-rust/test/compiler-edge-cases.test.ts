@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -5,7 +8,12 @@ import {
 	createBrowserRustCompileRequestIdentity,
 	resolveBrowserRustDebugMode
 } from '../src/compiler.js';
-import type { BrowserRustWorkerLimits } from '../src/types.js';
+import { createRuntimeAssetDeliveryBudget } from '../src/runtime-delivery-budget.js';
+import type {
+	BrowserRustCompileRequest,
+	BrowserRustWorkerLimits,
+	RuntimeAssetDeliveryBudgetDescriptor
+} from '../src/types.js';
 import {
 	FakeWorker,
 	createRuntimeManifest,
@@ -123,6 +131,72 @@ describe('wasm-rust compiler edge cases', () => {
 		expect(postedRequest.workerLimits).toEqual({ maxWorkers: 3, maxThreads: 7 });
 		expect(Object.isFrozen(postedRequest.workerLimits)).toBe(true);
 	});
+
+	it.each(['undefined', 'replacement'] as const)(
+		'keeps the initial delivery-budget snapshot when the request changes to %s during manifest loading',
+		async (mutation) => {
+			const manifestSource = JSON.parse(
+				await readFile(
+					new URL(
+						'../../../static/wasm-rust/runtime/runtime-manifest.v3.json',
+						import.meta.url
+					),
+					'utf8'
+				)
+			) as Record<string, any>;
+			manifestSource.compiler.workerSharedOutputBytes = 1024;
+			manifestSource.compiler.workerSharedWorkspaceBytes = 1024;
+			const manifestBytes = new TextEncoder().encode(JSON.stringify(manifestSource));
+			const manifestFingerprint = createHash('sha256').update(manifestBytes).digest('hex');
+			const initialBudget = createRuntimeAssetDeliveryBudget(64 * 1024 * 1024);
+			const replacementBudget = createRuntimeAssetDeliveryBudget(64 * 1024 * 1024);
+			const request: BrowserRustCompileRequest = {
+				code: 'fn main() {}',
+				assetDeliveryBudget: initialBudget
+			};
+			let resolveManifest!: (response: Response) => void;
+			const fetchImpl = vi.fn(
+				() =>
+					new Promise<Response>((resolve) => {
+						resolveManifest = resolve;
+					})
+			);
+			vi.stubGlobal('fetch', fetchImpl);
+			let postedBudget: RuntimeAssetDeliveryBudgetDescriptor | undefined;
+			const worker = new FakeWorker((message, currentWorker) => {
+				postedBudget = message.request.assetDeliveryBudget;
+				currentWorker.emitMessage({ type: 'error', message: 'expected test stop' });
+			});
+
+			try {
+				const compiling = compileRust(request, {
+					runtimeProfile: {
+						profileId: 'delivery-budget-snapshot-test',
+						protocolVersion: 1,
+						manifestPath: 'runtime/runtime-manifest.v3.json',
+						manifestFingerprint,
+						manifestReceipt: {
+							bytes: manifestBytes.byteLength,
+							sha256: manifestFingerprint
+						},
+						moduleUrl: `https://example.test/wasm-rust/index.js?v=${manifestFingerprint}`
+					},
+					createWorker: () => worker,
+					sleep: async () => Promise.resolve()
+				});
+				expect(fetchImpl).toHaveBeenCalledOnce();
+				request.assetDeliveryBudget =
+					mutation === 'replacement' ? replacementBudget : undefined;
+				resolveManifest(new Response(manifestBytes));
+				await compiling;
+			} finally {
+				vi.unstubAllGlobals();
+			}
+
+			expect(postedBudget?.state).toBe(initialBudget.state);
+			expect(postedBudget?.state).not.toBe(replacementBudget.state);
+		}
+	);
 
 	it('includes the resolved debug mode in stable compile request identities', () => {
 		const request = {

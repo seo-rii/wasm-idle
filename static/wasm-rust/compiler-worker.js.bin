@@ -8,6 +8,7 @@ import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot } from './thre
 import { createBudgetedThreadWorker, createThreadWorkerBudgetBuffer } from './thread-worker-budget.js';
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
 import { loadRuntimePackEntries } from './runtime-asset-store.js';
+import { assertRuntimeAssetDeliveryBudgetAvailable, readRuntimeAssetDeliveryBudget, snapshotRuntimeAssetDeliveryBudget } from './runtime-delivery-budget.js';
 const ARCHIVE_MAGIC = new Uint8Array([0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a]);
 export function validateRuntimeAssetBytes(assetPath, bytes) {
     if (!assetPath.endsWith('.rlib') && !assetPath.endsWith('.a')) {
@@ -67,9 +68,12 @@ function emitCompileWorkerLog(request, message) {
     });
 }
 function emitCompileWorkerProgress(request, progress) {
+    const delivery = request.request.assetDeliveryBudget
+        ? readRuntimeAssetDeliveryBudget(request.request.assetDeliveryBudget)
+        : undefined;
     postMessage({
         type: 'progress',
-        progress
+        progress: delivery ? { ...progress, delivery } : progress
     });
 }
 async function compileRustInWorker(request) {
@@ -94,6 +98,12 @@ async function compileRustInWorker(request) {
     if (request.manifest.assetReceipts) {
         registerRuntimeManifestAssetReceipts(request.runtimeBaseUrl, request.manifest);
     }
+    const deliveryBudget = request.request.assetDeliveryBudget
+        ? snapshotRuntimeAssetDeliveryBudget(request.request.assetDeliveryBudget)
+        : undefined;
+    if (deliveryBudget)
+        assertRuntimeAssetDeliveryBudgetAvailable(deliveryBudget);
+    const deliveryOptions = deliveryBudget ? { deliveryBudget } : {};
     const target = resolveTargetManifest(request.manifest, request.request.targetTriple);
     const workerLimits = resolveBrowserRustWorkerLimits(request.request.workerLimits);
     const threadPoolSize = resolveBrowserRustThreadPoolSize(workerLimits);
@@ -112,7 +122,7 @@ async function compileRustInWorker(request) {
             message: `fetching ${sysrootAssetTotal} sysroot assets from pack`,
             bytesCompleted: progress.loaded,
             bytesTotal: progress.total ?? sysrootPack.totalBytes
-        }))
+        }), deliveryOptions)
         : null;
     emitCompileWorkerProgress(request, {
         stage: 'fetch-rustc',
@@ -127,7 +137,7 @@ async function compileRustInWorker(request) {
         message: 'fetching rustc.wasm',
         bytesCompleted: progress.loaded,
         bytesTotal: progress.total ?? progress.loaded
-    }));
+    }), deliveryOptions);
     emitCompileWorkerLog(request, `[wasm-rust:compiler-worker] rustc.wasm fetched bytes=${rustcBytes.byteLength}`);
     emitCompileWorkerProgress(request, {
         stage: 'fetch-rustc',
@@ -197,7 +207,7 @@ async function compileRustInWorker(request) {
                 message: `fetching sysroot asset ${entry.runtimePath}`,
                 bytesCompleted: fetchedSysrootBytes + progress.loaded,
                 bytesTotal: fetchedSysrootBytes + (progress.total ?? progress.loaded)
-            }));
+            }), deliveryOptions);
             validateRuntimeAssetBytes(entry.asset, bytes);
             const sharedBuffer = new SharedArrayBuffer(bytes.byteLength);
             new Uint8Array(sharedBuffer).set(bytes);

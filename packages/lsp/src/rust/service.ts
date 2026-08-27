@@ -5,6 +5,11 @@ import {
 	type WorkerLanguageService
 } from '../lsp.js';
 import type { RustLanguageServerRuntimeProfile } from '../types.js';
+import {
+	createRuntimeAssetDeliveryBudget,
+	resolveExecutionLimits,
+	type RuntimeAssetDeliveryBudgetDescriptor
+} from '@wasm-idle/core';
 
 export type RustLanguageServerTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
 
@@ -14,6 +19,7 @@ export interface RustWorkerOptions {
 	verifiedModuleUrls: Readonly<Record<string, string>>;
 	graphFingerprint: string;
 	runtimeProfile: RustLanguageServerRuntimeProfile;
+	maxAssetBytes: number;
 	targetTriple?: RustLanguageServerTargetTriple;
 	edition?: string;
 }
@@ -40,7 +46,18 @@ interface RustCompiler {
 		targetTriple: RustLanguageServerTargetTriple;
 		extendedTimeout: boolean;
 		log: boolean;
-		onProgress?: (progress: { stage?: string; completed?: number; total?: number }) => void;
+		assetDeliveryBudget: RuntimeAssetDeliveryBudgetDescriptor;
+		onProgress?: (progress: {
+			stage?: string;
+			completed?: number;
+			total?: number;
+			delivery?: {
+				deliveredBytes: number;
+				expectedBytes: number;
+				maxBytes: number;
+				sequence: number;
+			};
+		}) => void;
 	}) => Promise<RustCompilerResult>;
 }
 
@@ -58,6 +75,8 @@ interface RustCompilerModule {
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 const MAX_RUNTIME_MANIFEST_BYTES = 16 * 1024 * 1024;
 const MAX_EXECUTABLE_MODULES = 256;
+// The largest pinned logical target closure is currently 179,123,525 bytes (wasip3).
+const MAX_RUST_LSP_ASSET_DELIVERY_BYTES = 192 * 1024 * 1024;
 
 function requireCanonicalBlobUrl(value: unknown, label: string): string {
 	if (typeof value !== 'string') throw new Error(`${label} must be a canonical Blob URL`);
@@ -289,6 +308,7 @@ export function createRustWorkerService(
 	let compiler: RustCompiler | null = null;
 	let targetTriple: RustLanguageServerTargetTriple = 'wasm32-wasip1';
 	let edition = '2024';
+	let maxAssetDeliveryBytes = MAX_RUST_LSP_ASSET_DELIVERY_BYTES;
 	let lastKey = '';
 	let lastDiagnostics: LspDiagnostic[] = [];
 
@@ -298,10 +318,16 @@ export function createRustWorkerService(
 		capabilities: {},
 		async initialize(options, context) {
 			const config = (options || {}) as RustWorkerOptions;
+			const configuredMaxAssetBytes = resolveExecutionLimits(
+				config.maxAssetBytes === undefined ? {} : { maxAssetBytes: config.maxAssetBytes }
+			).maxAssetBytes;
+			const configuredAssetDeliveryBytes =
+				Math.min(configuredMaxAssetBytes, MAX_RUST_LSP_ASSET_DELIVERY_BYTES / 2) * 2;
 			targetTriple = config.targetTriple || targetTriple;
 			edition = config.edition || edition;
 			context.reportProgress('load-rust-compiler');
 			compiler = await loadRustCompiler(config, importModule);
+			maxAssetDeliveryBytes = configuredAssetDeliveryBytes;
 		},
 		async diagnostics(document, context: LspDocumentContext) {
 			if (!compiler) return [];
@@ -309,6 +335,7 @@ export function createRustWorkerService(
 			const key = `${targetTriple}\n${edition}\n${document.text}`;
 			if (key === lastKey) return lastDiagnostics;
 			context.reportProgress('rustc-diagnostics');
+			const assetDeliveryBudget = createRuntimeAssetDeliveryBudget(maxAssetDeliveryBytes);
 			const result = await compiler.compile({
 				code: document.text,
 				edition,
@@ -316,7 +343,16 @@ export function createRustWorkerService(
 				targetTriple,
 				extendedTimeout: true,
 				log: false,
+				assetDeliveryBudget,
 				onProgress(progress) {
+					if (progress.delivery) {
+						context.reportProgress(
+							progress.stage || 'rustc-diagnostics',
+							progress.delivery.deliveredBytes,
+							progress.delivery.expectedBytes || progress.delivery.maxBytes
+						);
+						return;
+					}
 					context.reportProgress(
 						progress.stage || 'rustc-diagnostics',
 						progress.completed,

@@ -6,6 +6,10 @@ import {
 	WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
 	WASM_RUST_RUNTIME_PROFILE
 } from '$lib/playground/wasmRustVersion';
+import {
+	createRuntimeAssetDeliveryBudget,
+	type RuntimeAssetDeliveryBudgetDescriptor
+} from '@wasm-idle/core';
 
 declare var self: any;
 
@@ -86,6 +90,7 @@ let compilerPromise: Promise<{
 }> | null = null;
 let compiledArtifact: any = null;
 let compiledCacheKey = '';
+let compiledAssetDeliveryBudget: RuntimeAssetDeliveryBudgetDescriptor | null = null;
 let loadedDebugModuleUrl = '';
 let debugInstrumenterPromise: Promise<RustDebugInstrumenter> | null = null;
 
@@ -295,6 +300,7 @@ async function loadCompiler(
 	runtimeBaseUrl = resolvedRuntimeBaseUrl.toString();
 	compiledArtifact = null;
 	compiledCacheKey = '';
+	compiledAssetDeliveryBudget = null;
 	compilerPromise = (async () => {
 		const module = await importRustCompilerModule(bootstrap.compilerUrl);
 		if (typeof module.configureVerifiedRuntimeExecutableModuleUrls !== 'function') {
@@ -624,8 +630,19 @@ self.onmessage = async (event: { data: any }) => {
 		const compileCode = debugInstrumenter
 			? debugInstrumenter.instrumentRustDebugSource(code)
 			: code;
-		const compileCacheKey = `${executableGraphFingerprint}\n${debugMode}\n${targetTriple}\n${compileCode}`;
+		const compileCacheKey = [
+			executableGraphFingerprint,
+			debugMode,
+			targetTriple,
+			...(nonDebugResourceLimits
+				? [String(nonDebugResourceLimits.maxAssetDeliveryBytes)]
+				: []),
+			compileCode
+		].join('\n');
 		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
+			const assetDeliveryBudget = nonDebugResourceLimits
+				? createRuntimeAssetDeliveryBudget(nonDebugResourceLimits.maxAssetDeliveryBytes)
+				: undefined;
 			if (log) {
 				console.log(
 					`[wasm-idle:rust-worker] compile start prepare=${String(prepare)} target=${targetTriple} bytes=${compileCode.length}`
@@ -635,7 +652,10 @@ self.onmessage = async (event: { data: any }) => {
 				code: compileCode,
 				debugMode,
 				...(nonDebugResourceLimits
-					? { workerLimits: nonDebugResourceLimits.compilerLimits }
+					? {
+							workerLimits: nonDebugResourceLimits.compilerLimits,
+							assetDeliveryBudget
+						}
 					: {}),
 				edition: '2024',
 				crateType: 'bin',
@@ -670,6 +690,7 @@ self.onmessage = async (event: { data: any }) => {
 			}
 			compiledArtifact = result.artifact;
 			compiledCacheKey = compileCacheKey;
+			compiledAssetDeliveryBudget = assetDeliveryBudget || null;
 			if (log) {
 				console.log(
 					`[wasm-idle:rust-worker] cached artifact target=${compiledArtifact.targetTriple} format=${compiledArtifact.format}`
@@ -789,6 +810,9 @@ self.onmessage = async (event: { data: any }) => {
 			compiledArtifact,
 			runtimeBaseUrl,
 			{
+				...(debugMode === 'none' && compiledAssetDeliveryBudget
+					? { assetDeliveryBudget: compiledAssetDeliveryBudget }
+					: {}),
 				args,
 				env: {
 					USER: 'jungol'

@@ -18,6 +18,17 @@ export {
 	type RuntimeWorkerPolicy
 } from './capabilities.js';
 export {
+	RUNTIME_ASSET_DELIVERY_BUDGET_SCHEMA_VERSION,
+	consumeRuntimeAssetDeliveryBytes,
+	createRuntimeAssetDeliveryBudget,
+	declareRuntimeAssetDeliveryExpectedBytes,
+	readRuntimeAssetDeliveryBudget,
+	snapshotRuntimeAssetDeliveryBudgetDescriptor,
+	type RuntimeAssetDeliveryBudgetContext,
+	type RuntimeAssetDeliveryBudgetDescriptor,
+	type RuntimeAssetDeliveryBudgetSnapshot
+} from './asset-delivery-budget.js';
+export {
 	verifyRuntimeAssetIntegrity,
 	verifyRuntimeAssetPair,
 	type RuntimeAssetIntegrityStage,

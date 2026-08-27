@@ -3,26 +3,41 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRustWorkerService } from '../src/index.js';
 
 const compilerUrl = 'blob:https://app.example/verified-rust-entry';
-const compilerMocks = vi.hoisted(() => ({
-	configure: vi.fn(),
-	create: vi.fn(async () => ({
-		async compile(request: any) {
-			(globalThis as any).__lastRustLspCompile = request;
-			request.onProgress?.({ stage: 'rustc-main', completed: 1, total: 2 });
-			return {
-				success: false,
-				diagnostics: [
-					{
-						lineNumber: 2,
-						columnNumber: 5,
-						severity: 'error',
-						message: 'cannot find value'
+const compilerMocks = vi.hoisted(() => {
+	const requests: any[] = [];
+	return {
+		requests,
+		configure: vi.fn(),
+		create: vi.fn(async () => ({
+			async compile(request: any) {
+				requests.push(request);
+				(globalThis as any).__lastRustLspCompile = request;
+				request.onProgress?.({
+					stage: 'rustc-main',
+					completed: 1,
+					total: 2,
+					delivery: {
+						deliveredBytes: 17,
+						expectedBytes: 42,
+						maxBytes: 192 * 1024 * 1024,
+						sequence: 2
 					}
-				]
-			};
-		}
-	}))
-}));
+				});
+				return {
+					success: false,
+					diagnostics: [
+						{
+							lineNumber: 2,
+							columnNumber: 5,
+							severity: 'error',
+							message: 'cannot find value'
+						}
+					]
+				};
+			}
+		}))
+	};
+});
 
 vi.mock('blob:https://app.example/verified-rust-entry', () => ({
 	configureVerifiedRuntimeExecutableModuleUrls: compilerMocks.configure,
@@ -49,6 +64,9 @@ const expectedNetworkModuleUrls = Object.freeze(Object.keys(verifiedModuleUrls))
 describe('createRustWorkerService', () => {
 	beforeEach(() => {
 		(globalThis as any).__lastRustLspCompile = undefined;
+		compilerMocks.requests.length = 0;
+		compilerMocks.configure.mockClear();
+		compilerMocks.create.mockClear();
 	});
 
 	it('uses the real wasm-rust compiler API for diagnostics', async () => {
@@ -90,7 +108,12 @@ describe('createRustWorkerService', () => {
 			crateType: 'bin',
 			targetTriple: 'wasm32-wasip2',
 			extendedTimeout: true,
-			log: false
+			log: false,
+			assetDeliveryBudget: {
+				schemaVersion: 1,
+				maxBytes: 192 * 1024 * 1024,
+				state: expect.any(SharedArrayBuffer)
+			}
 		});
 		expect(diagnostics).toEqual([
 			{
@@ -104,9 +127,156 @@ describe('createRustWorkerService', () => {
 			}
 		]);
 		expect(reportProgress).toHaveBeenCalledWith('load-rust-compiler');
-		expect(reportProgress).toHaveBeenCalledWith('rustc-main', 1, 2);
+		expect(reportProgress).toHaveBeenCalledWith('rustc-main', 17, 42);
 		expect(compilerMocks.configure).toHaveBeenCalledWith(verifiedModuleUrls, 'a'.repeat(64));
 		expect(compilerMocks.create).toHaveBeenCalledWith({ dependencies: { runtimeProfile } });
+	});
+
+	it('creates a fresh capped asset delivery budget for every diagnostics compile', async () => {
+		const service = createRustWorkerService(async () => ({
+			configureVerifiedRuntimeExecutableModuleUrls: compilerMocks.configure,
+			createRustCompiler: compilerMocks.create
+		}));
+		const context = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		await service.initialize?.(
+			{
+				compilerUrl,
+				expectedNetworkModuleUrls,
+				verifiedModuleUrls,
+				graphFingerprint: 'a'.repeat(64),
+				runtimeProfile,
+				maxAssetBytes: 1024
+			},
+			context
+		);
+
+		for (const [version, text] of [
+			[1, 'fn main() {}'],
+			[2, 'fn main() { let _x = 1; }']
+		] as const) {
+			await service.diagnostics?.(
+				{ uri: 'file:///workspace/main.rs', languageId: 'rust', version, text },
+				context
+			);
+		}
+
+		expect(compilerMocks.requests).toHaveLength(2);
+		const [firstBudget, secondBudget] = compilerMocks.requests.map(
+			(request) => request.assetDeliveryBudget
+		);
+		expect(firstBudget).toMatchObject({ schemaVersion: 1, maxBytes: 2048 });
+		expect(secondBudget).toMatchObject({ schemaVersion: 1, maxBytes: 2048 });
+		expect(firstBudget).not.toBe(secondBudget);
+		expect(firstBudget.state).not.toBe(secondBudget.state);
+	});
+
+	it('caps an overflow-prone per-asset policy before deriving the aggregate budget', async () => {
+		const service = createRustWorkerService(async () => ({
+			configureVerifiedRuntimeExecutableModuleUrls: compilerMocks.configure,
+			createRustCompiler: compilerMocks.create
+		}));
+		const context = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		await service.initialize?.(
+			{
+				compilerUrl,
+				expectedNetworkModuleUrls,
+				verifiedModuleUrls,
+				graphFingerprint: 'a'.repeat(64),
+				runtimeProfile,
+				maxAssetBytes: Number.MAX_SAFE_INTEGER
+			},
+			context
+		);
+
+		await service.diagnostics?.(
+			{
+				uri: 'file:///workspace/main.rs',
+				languageId: 'rust',
+				version: 1,
+				text: 'fn main() {}'
+			},
+			context
+		);
+
+		expect(compilerMocks.requests).toHaveLength(1);
+		expect(compilerMocks.requests[0]?.assetDeliveryBudget).toMatchObject({
+			schemaVersion: 1,
+			maxBytes: 192 * 1024 * 1024
+		});
+	});
+
+	it('uses the delivery limit while expected delivery bytes are not declared', async () => {
+		const compile = vi.fn(async (request: any) => {
+			request.onProgress?.({
+				stage: 'fetch-rustc',
+				delivery: {
+					deliveredBytes: 5,
+					expectedBytes: 0,
+					maxBytes: 8192,
+					sequence: 1
+				}
+			});
+			return { success: true, diagnostics: [] };
+		});
+		const service = createRustWorkerService(async () => ({
+			configureVerifiedRuntimeExecutableModuleUrls: vi.fn(),
+			createRustCompiler: vi.fn(async () => ({ compile }))
+		}));
+		const reportProgress = vi.fn();
+		const context = { documents: new Map(), publishDiagnostics: vi.fn(), reportProgress };
+		await service.initialize?.(
+			{
+				compilerUrl,
+				expectedNetworkModuleUrls,
+				verifiedModuleUrls,
+				graphFingerprint: 'a'.repeat(64),
+				runtimeProfile,
+				maxAssetBytes: 4096
+			},
+			context
+		);
+
+		await service.diagnostics?.(
+			{
+				uri: 'file:///workspace/main.rs',
+				languageId: 'rust',
+				version: 1,
+				text: 'fn main() {}'
+			},
+			context
+		);
+
+		expect(reportProgress).toHaveBeenCalledWith('fetch-rustc', 5, 8192);
+	});
+
+	it('rejects an invalid asset policy before importing the compiler', async () => {
+		const importModule = vi.fn(async () => {
+			throw new Error('must not import');
+		});
+		const service = createRustWorkerService(importModule);
+
+		await expect(
+			service.initialize?.(
+				{
+					compilerUrl,
+					expectedNetworkModuleUrls,
+					verifiedModuleUrls,
+					graphFingerprint: 'a'.repeat(64),
+					runtimeProfile,
+					maxAssetBytes: 0
+				},
+				{ documents: new Map(), publishDiagnostics: vi.fn(), reportProgress: vi.fn() }
+			)
+		).rejects.toThrow('positive safe integer');
+		expect(importModule).not.toHaveBeenCalled();
 	});
 
 	it.each([

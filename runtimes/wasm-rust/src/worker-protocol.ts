@@ -2,7 +2,8 @@ import type { NormalizedRuntimeManifest } from './runtime-manifest.js';
 import type {
 	BrowserRustCompileStage,
 	BrowserRustCompileWorkerRequest,
-	CompilerDiagnostic
+	CompilerDiagnostic,
+	RuntimeAssetDeliveryBudgetSnapshot
 } from './types.js';
 
 export interface SharedRuntimeAssetFile {
@@ -67,6 +68,7 @@ export interface CompileWorkerProgressMessage {
 		message?: string;
 		bytesCompleted?: number;
 		bytesTotal?: number;
+		delivery?: RuntimeAssetDeliveryBudgetSnapshot;
 	};
 }
 

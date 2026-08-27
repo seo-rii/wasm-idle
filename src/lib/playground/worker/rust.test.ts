@@ -10,7 +10,8 @@ const mockCompilerModules = new Map<string, string>();
 let nextMockCompilerId = 0;
 const nonDebugExecutionLimits = Object.freeze({
 	maxWorkers: 1,
-	maxThreads: 4
+	maxThreads: 4,
+	maxAssetBytes: 128 * 1024 * 1024
 });
 
 function asDataModule(source: string, id: string) {
@@ -199,10 +200,18 @@ describe('Rust worker', () => {
 			maxWorkers: 1,
 			maxThreads: 4
 		});
+		expect((globalThis as any).__lastCompileOptions.assetDeliveryBudget).toMatchObject({
+			schemaVersion: 1,
+			maxBytes: 192 * 1024 * 1024,
+			state: expect.any(SharedArrayBuffer)
+		});
 		expect((globalThis as any).__lastExecution.artifact.targetTriple).toBe('wasm32-wasip2');
 		expect((globalThis as any).__lastExecution.runtimeBaseUrl).toBe(expectedRuntimeBaseUrl());
 		expect((globalThis as any).__lastExecution.options.args).toEqual(['one']);
 		expect((globalThis as any).__lastExecution.options.env).toEqual({ USER: 'jungol' });
+		expect((globalThis as any).__lastExecution.options.assetDeliveryBudget).toBe(
+			(globalThis as any).__lastCompileOptions.assetDeliveryBudget
+		);
 		expect((globalThis as any).__lastVerifiedModuleUrls).toEqual(
 			compilerBootstrap(compilerModuleUrl).verifiedModuleUrls
 		);
@@ -213,13 +222,98 @@ describe('Rust worker', () => {
 	});
 
 	it.each([
+		{
+			name: 'recompiles for a lower cap',
+			runMaxAssetBytes: 32 * 1024 * 1024,
+			expectedCompileCount: 2,
+			expectedExecutionBudgetIndex: 1,
+			expectedExecutionMaxBytes: 64 * 1024 * 1024
+		},
+		{
+			name: 'reuses the prepared artifact and budget for the same cap',
+			runMaxAssetBytes: nonDebugExecutionLimits.maxAssetBytes,
+			expectedCompileCount: 1,
+			expectedExecutionBudgetIndex: 0,
+			expectedExecutionMaxBytes: 192 * 1024 * 1024
+		}
+	])(
+		'$name',
+		async ({
+			runMaxAssetBytes,
+			expectedCompileCount,
+			expectedExecutionBudgetIndex,
+			expectedExecutionMaxBytes
+		}) => {
+			const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() {
+				return {
+					async compile(options) {
+						globalThis.__compileBudgets.push(options.assetDeliveryBudget);
+						return {
+							success: true,
+							artifact: {
+								wasm: new Uint8Array([0, 97, 115, 109]),
+								targetTriple: options.targetTriple,
+								format: 'component'
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserRustArtifact(_artifact, _runtimeBaseUrl, options = {}) {
+				globalThis.__executionBudgets.push(options.assetDeliveryBudget);
+				return { exitCode: 0, stdout: '', stderr: '' };
+			}
+		`);
+			(globalThis as any).__compileBudgets = [];
+			(globalThis as any).__executionBudgets = [];
+
+			await import('./rust');
+			await (globalThis as any).self.onmessage({
+				data: compilerBootstrap(compilerModuleUrl)
+			});
+			await (globalThis as any).self.onmessage({
+				data: {
+					code: 'fn main() {}',
+					prepare: true,
+					buffer: new SharedArrayBuffer(1024),
+					limits: nonDebugExecutionLimits,
+					targetTriple: 'wasm32-wasip2'
+				}
+			});
+			await (globalThis as any).self.onmessage({
+				data: {
+					code: 'fn main() {}',
+					prepare: false,
+					buffer: new SharedArrayBuffer(1024),
+					limits: {
+						...nonDebugExecutionLimits,
+						maxAssetBytes: runMaxAssetBytes
+					},
+					targetTriple: 'wasm32-wasip2'
+				}
+			});
+
+			const compileBudgets = (globalThis as any).__compileBudgets;
+			const executionBudgets = (globalThis as any).__executionBudgets;
+			expect(compileBudgets).toHaveLength(expectedCompileCount);
+			expect(compileBudgets[0].maxBytes).toBe(192 * 1024 * 1024);
+			expect(executionBudgets).toHaveLength(1);
+			expect(executionBudgets[0].maxBytes).toBe(expectedExecutionMaxBytes);
+			expect(executionBudgets[0]).toBe(compileBudgets[expectedExecutionBudgetIndex]);
+		}
+	);
+
+	it.each([
 		undefined,
 		{},
 		{ maxWorkers: 1 },
-		{ maxWorkers: 0, maxThreads: 1 },
-		{ maxWorkers: 1.5, maxThreads: 1 },
-		{ maxWorkers: 1, maxThreads: Number.NaN },
-		{ maxWorkers: 1, maxThreads: Number.MAX_SAFE_INTEGER + 1 }
+		{ maxWorkers: 0, maxThreads: 1, maxAssetBytes: 1 },
+		{ maxWorkers: 1.5, maxThreads: 1, maxAssetBytes: 1 },
+		{ maxWorkers: 1, maxThreads: Number.NaN, maxAssetBytes: 1 },
+		{ maxWorkers: 1, maxThreads: 1, maxAssetBytes: Number.NaN },
+		{ maxWorkers: 1, maxThreads: Number.MAX_SAFE_INTEGER + 1, maxAssetBytes: 1 }
 	])('rejects a malformed non-debug resource snapshot before compilation %#', async (limits) => {
 		const compilerModuleUrl = await createMockRustRuntimeModule(`
 			export async function createRustCompiler() {

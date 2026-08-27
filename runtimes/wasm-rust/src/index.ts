@@ -19,6 +19,8 @@ import {
 	type CreateRustCompilerOptions,
 	type DwarfDebugDescriptor,
 	type PreloadBrowserRustRuntimeOptions,
+	type RuntimeAssetDeliveryBudgetDescriptor,
+	type RuntimeAssetDeliveryBudgetSnapshot,
 	type RuntimeRustCompilerProvenance
 } from './compiler.js';
 import {
@@ -50,6 +52,8 @@ export type {
 	CreateRustCompilerOptions,
 	DwarfDebugDescriptor,
 	PreloadBrowserRustRuntimeOptions,
+	RuntimeAssetDeliveryBudgetDescriptor,
+	RuntimeAssetDeliveryBudgetSnapshot,
 	RuntimeRustCompilerProvenance,
 	BrowserExecutionOptions,
 	BrowserExecutionResult

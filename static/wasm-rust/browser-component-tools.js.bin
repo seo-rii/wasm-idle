@@ -1,4 +1,4 @@
-import { fetchRuntimeAssetBytes } from './runtime-asset.js';
+import { fetchRuntimeAssetBytes, withRuntimeAssetDeliveryBudget } from './runtime-asset.js';
 import { resolveRuntimeAssetUrl } from './runtime-manifest.js';
 export const JCO_BROWSER_MODULE = '../vendor/jco/src/browser.js';
 export const JCO_WASM_TOOLS_MODULE = '../vendor/jco/obj/wasm-tools.js';
@@ -27,27 +27,33 @@ async function importRuntimeModule(runtimeBaseUrl, assetPath) {
     return (await import(
     /* @vite-ignore */ resolveRuntimeAssetUrl(runtimeBaseUrl, assetPath)));
 }
-export async function componentizeCoreWasmToPreview2Component(coreWasm, runtimeBaseUrl, onProgress) {
-    const wasmToolsModule = await importRuntimeModule(runtimeBaseUrl, JCO_WASM_TOOLS_MODULE);
-    const adapterUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, PREVIEW1_COMMAND_ADAPTER);
-    const adapterBytes = await fetchRuntimeAssetBytes(adapterUrl, 'wasm-rust preview1 adapter', fetch, true, onProgress);
-    await wasmToolsModule.$init;
-    return wasmToolsModule.tools.componentNew(coreWasm, [['wasi_snapshot_preview1', adapterBytes]]);
-}
-export async function transpilePreview2Component(componentBytes, runtimeBaseUrl, name = 'component') {
-    const browserModule = await importRuntimeModule(runtimeBaseUrl, JCO_BROWSER_MODULE);
-    const generated = await browserModule.generate(componentBytes, {
-        name,
-        instantiation: { tag: 'async' },
-        noTypescript: true,
-        noNodejsCompat: true,
-        map: []
+export async function componentizeCoreWasmToPreview2Component(coreWasm, runtimeBaseUrl, onProgress, deliveryBudget) {
+    return withRuntimeAssetDeliveryBudget(deliveryBudget, async () => {
+        const wasmToolsModule = await importRuntimeModule(runtimeBaseUrl, JCO_WASM_TOOLS_MODULE);
+        const adapterUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, PREVIEW1_COMMAND_ADAPTER);
+        const adapterBytes = await fetchRuntimeAssetBytes(adapterUrl, 'wasm-rust preview1 adapter', fetch, true, onProgress, deliveryBudget ? { deliveryBudget } : {});
+        await wasmToolsModule.$init;
+        return wasmToolsModule.tools.componentNew(coreWasm, [
+            ['wasi_snapshot_preview1', adapterBytes]
+        ]);
     });
-    return {
-        files: new Map(generated.files),
-        imports: generated.imports,
-        exports: generated.exports
-    };
+}
+export async function transpilePreview2Component(componentBytes, runtimeBaseUrl, name = 'component', deliveryBudget) {
+    return withRuntimeAssetDeliveryBudget(deliveryBudget, async () => {
+        const browserModule = await importRuntimeModule(runtimeBaseUrl, JCO_BROWSER_MODULE);
+        const generated = await browserModule.generate(componentBytes, {
+            name,
+            instantiation: { tag: 'async' },
+            noTypescript: true,
+            noNodejsCompat: true,
+            map: []
+        });
+        return {
+            files: new Map(generated.files),
+            imports: generated.imports,
+            exports: generated.exports
+        };
+    });
 }
 export async function createPreview2ImportObject(runtimeBaseUrl, options = {}, dependencies = {}) {
     const loadModule = dependencies.importRuntimeModule || importRuntimeModule;

@@ -101,7 +101,7 @@ async function runPreview2Component(componentBytes, runtimeBaseUrl, options = {}
     const stdin = new BufferedExecutionInput(options.stdin);
     const stdout = new CaptureFd(options.stdout);
     const stderr = new CaptureFd(options.stderr);
-    const transpiled = await transpilePreview2Component(bytes, runtimeBaseUrl, 'wasm-rust-component');
+    const transpiled = await transpilePreview2Component(bytes, runtimeBaseUrl, 'wasm-rust-component', options.assetDeliveryBudget);
     const entryName = Array.from(transpiled.files.keys()).find((name) => name.endsWith('.js'));
     if (!entryName) {
         throw new Error('jco transpile did not generate a JavaScript entry file');

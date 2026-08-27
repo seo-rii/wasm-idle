@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,6 +9,10 @@ import {
 	hasRegisteredRuntimeAssetReceipt
 } from '../src/runtime-asset.js';
 import {
+	createRuntimeAssetDeliveryBudget,
+	readRuntimeAssetDeliveryBudget
+} from '../src/runtime-delivery-budget.js';
+import {
 	clearVerifiedRuntimeExecutableModuleUrls,
 	collectRuntimeManifestAssetPaths,
 	configureVerifiedRuntimeExecutableModuleUrls,
@@ -16,6 +21,7 @@ import {
 	parseWasmRustRuntimeProfileFromModuleUrl,
 	parseRuntimeManifest,
 	registerRuntimeManifestAssetReceipts,
+	resolveRuntimeAssetDeliveryExpectedBytes,
 	resolveRuntimeAssetUrl,
 	resolveTargetManifest,
 	verifyRuntimeManifestAssetReceipts
@@ -50,6 +56,37 @@ describe('runtime manifest edge cases', () => {
 		);
 		return { ...source, assetReceipts };
 	};
+
+	it('derives the exact cold delivery baseline for every pinned target closure', async () => {
+		const manifestBytes = await readFile(
+			new URL('../../../static/wasm-rust/runtime/runtime-manifest.v3.json', import.meta.url)
+		);
+		const manifest = normalizeRuntimeManifest(
+			parseRuntimeManifest(JSON.parse(new TextDecoder().decode(manifestBytes)))
+		);
+
+		expect(
+			resolveRuntimeAssetDeliveryExpectedBytes(
+				manifest,
+				manifestBytes.byteLength,
+				'wasm32-wasip1'
+			)
+		).toBe(150_648_938);
+		expect(
+			resolveRuntimeAssetDeliveryExpectedBytes(
+				manifest,
+				manifestBytes.byteLength,
+				'wasm32-wasip2'
+			)
+		).toBe(178_479_712);
+		expect(
+			resolveRuntimeAssetDeliveryExpectedBytes(
+				manifest,
+				manifestBytes.byteLength,
+				'wasm32-wasip3'
+			)
+		).toBe(179_123_525);
+	});
 
 	it('requires an exact receipt graph for every manifest-referenced binary asset', () => {
 		const source = createIntegratedManifestWithReceipts();
@@ -252,6 +289,23 @@ describe('runtime manifest edge cases', () => {
 				{ receipt }
 			)
 		).rejects.toThrow(/storage SHA-256 differs/);
+	});
+
+	it('meters and parses an unpinned manifest through the bounded byte loader', async () => {
+		const manifestBytes = new TextEncoder().encode(JSON.stringify(createRuntimeManifestV3()));
+		const deliveryBudget = createRuntimeAssetDeliveryBudget(manifestBytes.byteLength + 1);
+
+		await expect(
+			loadRuntimeManifest(
+				'https://example.test/runtime/runtime-manifest.v3.json',
+				async () => new Response(manifestBytes),
+				{ deliveryBudget }
+			)
+		).resolves.toMatchObject({ manifestVersion: 3 });
+		expect(readRuntimeAssetDeliveryBudget(deliveryBudget)).toMatchObject({
+			deliveredBytes: manifestBytes.byteLength,
+			sequence: 1
+		});
 	});
 
 	it('rejects legacy, invalid UTF-8, and duplicate-key JSON in pinned mode', async () => {

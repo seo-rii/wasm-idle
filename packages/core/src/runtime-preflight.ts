@@ -3,6 +3,11 @@ import {
 	type VerifiedRuntimeAssetIntegrity
 } from './asset-integrity.js';
 import {
+	consumeRuntimeAssetDeliveryBytes,
+	snapshotRuntimeAssetDeliveryBudgetDescriptor,
+	type RuntimeAssetDeliveryBudgetDescriptor
+} from './asset-delivery-budget.js';
+import {
 	AssetIntegrityError,
 	AssetNotFoundError,
 	AssetTooLargeError,
@@ -39,6 +44,7 @@ export interface RuntimeAssetPreflightRequest {
 	readonly requireExactResponseUrl?: boolean;
 	readonly maxConcurrentDownloads?: number;
 	readonly maxTotalDeliveryBytes?: number;
+	readonly deliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor;
 	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
 }
 
@@ -245,6 +251,7 @@ async function readBoundedResponse(
 		if (signal.aborted) {
 			throw signal.reason ?? new Error('Runtime asset preflight was aborted');
 		}
+		accountDeliveryBytes?.(bytes.byteLength);
 		if (bytes.byteLength > maxAssetBytes) {
 			throw new AssetTooLargeError(
 				`Runtime asset ${asset.key} exceeds the ${maxAssetBytes} byte limit`,
@@ -256,7 +263,6 @@ async function readBoundedResponse(
 				}
 			);
 		}
-		accountDeliveryBytes?.(bytes.byteLength);
 		reportProgress(bytes.byteLength);
 		return bytes;
 	}
@@ -613,6 +619,10 @@ export async function preflightRuntimeAssets(
 			}
 		);
 	}
+	const deliveryBudget =
+		request.deliveryBudget === undefined
+			? undefined
+			: snapshotRuntimeAssetDeliveryBudgetDescriptor(request.deliveryBudget);
 	const concurrency = request.maxConcurrentDownloads ?? DEFAULT_MAX_CONCURRENT_DOWNLOADS;
 	if (!Number.isSafeInteger(concurrency) || concurrency <= 0 || concurrency > 32) {
 		throw new RuntimeConfigurationError(
@@ -699,9 +709,16 @@ export async function preflightRuntimeAssets(
 		let nextIndex = 0;
 		let deliveredBytes = 0;
 		const accountDeliveryBytes =
-			maxTotalDeliveryBytes === undefined
+			maxTotalDeliveryBytes === undefined && deliveryBudget === undefined
 				? undefined
 				: (bytes: number) => {
+						if (deliveryBudget) {
+							consumeRuntimeAssetDeliveryBytes(deliveryBudget, bytes, {
+								runtimeId: runtime.runtimeId,
+								profileId: runtime.identity.profile.profileId
+							});
+						}
+						if (maxTotalDeliveryBytes === undefined) return;
 						const nextTotal = deliveredBytes + bytes;
 						if (!Number.isSafeInteger(nextTotal) || nextTotal > maxTotalDeliveryBytes) {
 							throw new AssetTooLargeError(

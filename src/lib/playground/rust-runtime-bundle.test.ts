@@ -77,7 +77,8 @@ describe('bundled wasm-rust compiler', () => {
 		expect(graph).toEqual(WASM_RUST_EXECUTABLE_GRAPH_PROFILE);
 		expect(graphLock.authorities['published-static']).toEqual(graph);
 		expect(sha256(canonicalRustExecutableGraphProfile(graph))).toBe(graph.fingerprint);
-		expect(Object.keys(graph.modules)).toHaveLength(42);
+		expect(Object.keys(graph.modules)).toHaveLength(43);
+		expect(graph.modules['runtime-delivery-budget.js']).toBeDefined();
 		expect(graph.modules['thread-worker-budget.js']).toBeDefined();
 
 		for (const [modulePath, module] of Object.entries(graph.modules)) {

@@ -13,8 +13,13 @@ vi.mock('../src/compiler-runtime.js', () => ({
 import { preloadBrowserRustRuntime } from '../src/compiler-preload.js';
 import {
 	clearRegisteredRuntimeAssetReceipts,
+	fetchRuntimeAssetBytes,
 	registerRuntimeAssetReceipts
 } from '../src/runtime-asset.js';
+import {
+	createRuntimeAssetDeliveryBudget,
+	readRuntimeAssetDeliveryBudget
+} from '../src/runtime-delivery-budget.js';
 import type { WasmRustRuntimeProfile } from '../src/runtime-manifest.js';
 
 const sha256 = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
@@ -151,5 +156,47 @@ describe('preloadBrowserRustRuntime cache', () => {
 		await expect(
 			preloadBrowserRustRuntime({ dependencies: { runtimeProfile } })
 		).rejects.toThrow('storage SHA-256 differs from its receipt');
+	});
+
+	it('scopes optionless module side-effect fetches before starting preload promises', async () => {
+		const runtimeProfile = createRuntimeProfile('budgeted-module-side-effect');
+		const versionedModuleBaseUrl = new URL(runtimeProfile.moduleUrl);
+		const versionedRuntimeBaseUrl = new URL('./runtime/', versionedModuleBaseUrl);
+		versionedRuntimeBaseUrl.search = versionedModuleBaseUrl.search;
+		loadBundledRuntimeContextMock.mockResolvedValue({
+			manifest: { compiler: { rustcWasm: 'rustc/rustc.wasm' } },
+			targetConfig: {
+				targetTriple: 'wasm32-wasip2',
+				artifactFormat: 'component',
+				compile: { kind: 'integrated-rustc+component-encoder' },
+				execution: { kind: 'preview2-component' }
+			},
+			versionedModuleBaseUrl,
+			versionedRuntimeBaseUrl
+		});
+		const responseBytes = Uint8Array.of(1, 2, 3);
+		const fetchImpl = vi.fn(async () => new Response(responseBytes));
+		let importedModules = 0;
+		const importRuntimeModule = vi.fn(async () => {
+			importedModules += 1;
+			await fetchRuntimeAssetBytes(
+				`https://example.test/module-side-effect-${importedModules}.bin`,
+				'module side effect',
+				fetchImpl,
+				false
+			);
+			return {};
+		});
+		const assetDeliveryBudget = createRuntimeAssetDeliveryBudget(1024);
+
+		await preloadBrowserRustRuntime({
+			assetDeliveryBudget,
+			dependencies: { fetchImpl, importRuntimeModule, runtimeProfile }
+		});
+
+		expect(importRuntimeModule).toHaveBeenCalled();
+		expect(readRuntimeAssetDeliveryBudget(assetDeliveryBudget).deliveredBytes).toBe(
+			fetchImpl.mock.calls.length * responseBytes.byteLength
+		);
 	});
 });

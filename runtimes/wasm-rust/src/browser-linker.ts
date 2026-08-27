@@ -7,7 +7,7 @@ import {
 	type NormalizedRuntimeManifest,
 	type RuntimeTargetConfig
 } from './runtime-manifest.js';
-import type { BrowserRustCompilerResult } from './types.js';
+import type { BrowserRustCompilerResult, RuntimeAssetDeliveryBudgetDescriptor } from './types.js';
 
 const linkAssetCache = new Map<string, Promise<Uint8Array>>();
 
@@ -23,6 +23,7 @@ export interface LinkBitcodeWithLlvmWasmOptions {
 	fetchImpl?: typeof fetch;
 	importRuntimeModule?: <T>(assetUrl: string) => Promise<T>;
 	componentizeCoreWasm?: typeof componentizeCoreWasmToPreview2Component;
+	deliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor;
 }
 
 function mkdirp(module: { FS: { mkdir(path: string): void } }, targetPath: string) {
@@ -74,6 +75,9 @@ export async function linkBitcodeWithLlvmWasm(
 	const fetchImpl = options.fetchImpl || fetch;
 	const componentizeCoreWasm =
 		options.componentizeCoreWasm || componentizeCoreWasmToPreview2Component;
+	const deliveryOptions = options.deliveryBudget
+		? { deliveryBudget: options.deliveryBudget }
+		: {};
 	const emitProgress = (
 		stage: 'link' | 'componentize',
 		completed: number,
@@ -95,15 +99,19 @@ export async function linkBitcodeWithLlvmWasm(
 		emitProgress('link', 1, 1, 'integrated rustc link finished');
 		if (target.compile.kind === 'integrated-rustc+component-encoder') {
 			emitProgress('componentize', 0, 1, 'encoding preview2 component');
-			const component = await componentizeCoreWasm(bitcode, runtimeBaseUrl, (progress) =>
-				emitProgress(
-					'componentize',
-					0,
-					1,
-					'encoding preview2 component',
-					progress.loaded,
-					progress.total
-				)
+			const component = await componentizeCoreWasm(
+				bitcode,
+				runtimeBaseUrl,
+				(progress) =>
+					emitProgress(
+						'componentize',
+						0,
+						1,
+						'encoding preview2 component',
+						progress.loaded,
+						progress.total
+					),
+				options.deliveryBudget
 			);
 			emitProgress('componentize', 1, 1, 'preview2 component ready');
 			return {
@@ -120,7 +128,7 @@ export async function linkBitcodeWithLlvmWasm(
 	}
 	const llcWasmAsset = target.compile.llvm.llcWasm || 'llvm/llc.wasm';
 	const llcWasmUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, llcWasmAsset);
-	const llcWasmCacheKey = createRuntimeAssetCacheKey(llcWasmUrl, fetchImpl);
+	const llcWasmCacheKey = createRuntimeAssetCacheKey(llcWasmUrl, fetchImpl, deliveryOptions);
 	let cachedLlcWasm = linkAssetCache.get(llcWasmCacheKey);
 	if (!cachedLlcWasm) {
 		cachedLlcWasm = fetchRuntimeAssetBytes(
@@ -136,7 +144,8 @@ export async function linkBitcodeWithLlvmWasm(
 					'running llvm-wasm code generation',
 					progress.loaded,
 					progress.total
-				)
+				),
+			deliveryOptions
 		);
 		linkAssetCache.set(llcWasmCacheKey, cachedLlcWasm);
 		cachedLlcWasm.catch(() => {
@@ -180,7 +189,7 @@ export async function linkBitcodeWithLlvmWasm(
 	});
 	const lldWasmAsset = target.compile.llvm.lldWasm || 'llvm/lld.wasm';
 	const lldWasmUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, lldWasmAsset);
-	const lldWasmCacheKey = createRuntimeAssetCacheKey(lldWasmUrl, fetchImpl);
+	const lldWasmCacheKey = createRuntimeAssetCacheKey(lldWasmUrl, fetchImpl, deliveryOptions);
 	let cachedLldWasm = linkAssetCache.get(lldWasmCacheKey);
 	if (!cachedLldWasm) {
 		cachedLldWasm = fetchRuntimeAssetBytes(
@@ -196,7 +205,8 @@ export async function linkBitcodeWithLlvmWasm(
 					'running llvm-wasm link',
 					progress.loaded,
 					progress.total
-				)
+				),
+			deliveryOptions
 		);
 		linkAssetCache.set(lldWasmCacheKey, cachedLldWasm);
 		cachedLldWasm.catch(() => {
@@ -207,7 +217,7 @@ export async function linkBitcodeWithLlvmWasm(
 	}
 	const lldDataAsset = target.compile.llvm.lldData || 'llvm/lld.data';
 	const lldDataUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, lldDataAsset);
-	const lldDataCacheKey = createRuntimeAssetCacheKey(lldDataUrl, fetchImpl);
+	const lldDataCacheKey = createRuntimeAssetCacheKey(lldDataUrl, fetchImpl, deliveryOptions);
 	let cachedLldData = linkAssetCache.get(lldDataCacheKey);
 	if (!cachedLldData) {
 		cachedLldData = fetchRuntimeAssetBytes(
@@ -223,7 +233,8 @@ export async function linkBitcodeWithLlvmWasm(
 					'running llvm-wasm link',
 					progress.loaded,
 					progress.total
-				)
+				),
+			deliveryOptions
 		);
 		linkAssetCache.set(lldDataCacheKey, cachedLldData);
 		cachedLldData.catch(() => {
@@ -266,7 +277,8 @@ export async function linkBitcodeWithLlvmWasm(
 					'running llvm-wasm link',
 					progress.loaded,
 					progress.total
-				)
+				),
+			deliveryOptions
 		);
 	} else if (
 		target.compile.link.allocatorObjectRuntimePath &&
@@ -285,7 +297,11 @@ export async function linkBitcodeWithLlvmWasm(
 				assetPath,
 				(async () => {
 					const assetUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, assetPath);
-					const cacheKey = createRuntimeAssetCacheKey(assetUrl, fetchImpl);
+					const cacheKey = createRuntimeAssetCacheKey(
+						assetUrl,
+						fetchImpl,
+						deliveryOptions
+					);
 					let cachedAsset = linkAssetCache.get(cacheKey);
 					if (!cachedAsset) {
 						cachedAsset = fetchRuntimeAssetBytes(
@@ -301,7 +317,8 @@ export async function linkBitcodeWithLlvmWasm(
 									'running llvm-wasm link',
 									progress.loaded,
 									progress.total
-								)
+								),
+							deliveryOptions
 						);
 						linkAssetCache.set(cacheKey, cachedAsset);
 						cachedAsset.catch(() => {
@@ -381,13 +398,16 @@ export async function linkBitcodeWithLlvmWasm(
 			return;
 		}
 		const assetUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, assetPath);
-		const cacheKey = createRuntimeAssetCacheKey(assetUrl, fetchImpl);
+		const cacheKey = createRuntimeAssetCacheKey(assetUrl, fetchImpl, deliveryOptions);
 		let cachedAsset = linkAssetCache.get(cacheKey);
 		if (!cachedAsset) {
 			cachedAsset = fetchRuntimeAssetBytes(
 				assetUrl,
 				`wasm-rust link asset ${assetPath}`,
-				fetchImpl
+				fetchImpl,
+				true,
+				undefined,
+				deliveryOptions
 			);
 			linkAssetCache.set(cacheKey, cachedAsset);
 			cachedAsset.catch(() => {
@@ -402,7 +422,13 @@ export async function linkBitcodeWithLlvmWasm(
 	await addFile('/work/main.o', '', mainObject);
 	if (target.compile.link.pack) {
 		for (const entry of await (packedLinkEntriesPromise ||
-			loadRuntimePackEntries(runtimeBaseUrl, target.compile.link.pack, fetchImpl))) {
+			loadRuntimePackEntries(
+				runtimeBaseUrl,
+				target.compile.link.pack,
+				fetchImpl,
+				undefined,
+				deliveryOptions
+			))) {
 			await addFile(entry.runtimePath, '', entry.bytes);
 		}
 	} else if (
@@ -438,15 +464,19 @@ export async function linkBitcodeWithLlvmWasm(
 		emitProgress('link', 2, 2, 'llvm-wasm link finished');
 		if (target.compile.kind === 'llvm-wasm+component-encoder') {
 			emitProgress('componentize', 0, 1, 'encoding preview2 component');
-			const component = await componentizeCoreWasm(coreWasm, runtimeBaseUrl, (progress) =>
-				emitProgress(
-					'componentize',
-					0,
-					1,
-					'encoding preview2 component',
-					progress.loaded,
-					progress.total
-				)
+			const component = await componentizeCoreWasm(
+				coreWasm,
+				runtimeBaseUrl,
+				(progress) =>
+					emitProgress(
+						'componentize',
+						0,
+						1,
+						'encoding preview2 component',
+						progress.loaded,
+						progress.total
+					),
+				options.deliveryBudget
 			);
 			emitProgress('componentize', 1, 1, 'preview2 component ready');
 			return {

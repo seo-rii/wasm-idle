@@ -1,3 +1,12 @@
+import {
+	assertRuntimeAssetDeliveryBudgetAvailable,
+	consumeRuntimeAssetDeliveryBytes,
+	resolveRuntimeAssetDeliveryBudget,
+	type RuntimeAssetDeliveryBudgetDescriptor
+} from './runtime-delivery-budget.js';
+
+export { withRuntimeAssetDeliveryBudget } from './runtime-delivery-budget.js';
+
 export interface RuntimeAssetDownloadProgress {
 	loaded: number;
 	total?: number;
@@ -13,6 +22,7 @@ export interface RuntimeAssetReceipt {
 }
 
 export interface RuntimeAssetFetchOptions {
+	deliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor;
 	maxAssetBytes?: number;
 	signal?: AbortSignal;
 	receipt?: RuntimeAssetReceipt;
@@ -127,12 +137,14 @@ export function createRuntimeAssetCacheKey(
 ) {
 	const resolvedUrl = new URL(assetUrl.toString()).href;
 	const receipt = options.receipt ?? runtimeAssetReceipts.get(resolvedUrl);
+	const deliveryBudget = resolveRuntimeAssetDeliveryBudget(options.deliveryBudget);
 	return [
 		resolvedUrl,
 		runtimeAssetReceiptIdentity(receipt),
 		options.maxAssetBytes ?? DEFAULT_MAX_RUNTIME_ASSET_BYTES,
 		cacheIdentity(fetchImpl),
-		options.signal ? cacheIdentity(options.signal) : 'none'
+		options.signal ? cacheIdentity(options.signal) : 'none',
+		deliveryBudget ? cacheIdentity(deliveryBudget.state) : 'none'
 	].join('\0');
 }
 
@@ -157,7 +169,8 @@ async function readBoundedStream(
 	sizeKind: 'download' | 'decompressed',
 	total?: number,
 	onProgress?: (progress: RuntimeAssetDownloadProgress) => void,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	deliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor
 ): Promise<Uint8Array<ArrayBuffer>> {
 	throwIfRuntimeAssetAborted(signal);
 	const reader = stream.getReader();
@@ -202,6 +215,9 @@ async function readBoundedStream(
 			throwIfRuntimeAssetAborted(signal);
 			if (done) break;
 			if (!value) continue;
+			if (deliveryBudget) {
+				consumeRuntimeAssetDeliveryBytes(deliveryBudget, value.byteLength);
+			}
 			const nextLength = loaded + value.byteLength;
 			if (!Number.isSafeInteger(nextLength) || nextLength > maxAssetBytes) {
 				const error = new Error(
@@ -261,7 +277,8 @@ async function readResponseBytes(
 	assetLabel: string,
 	maxAssetBytes: number,
 	onProgress?: (progress: RuntimeAssetDownloadProgress) => void,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	deliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor
 ): Promise<Uint8Array<ArrayBuffer>> {
 	throwIfRuntimeAssetAborted(signal);
 	const contentLength = response.headers.get('content-length');
@@ -302,12 +319,15 @@ async function readResponseBytes(
 		} finally {
 			if (cancelOnAbort) signal?.removeEventListener('abort', cancelOnAbort);
 		}
-		const bytes = new Uint8Array(source);
-		if (bytes.byteLength > maxAssetBytes) {
+		if (deliveryBudget) {
+			consumeRuntimeAssetDeliveryBytes(deliveryBudget, source.byteLength);
+		}
+		if (source.byteLength > maxAssetBytes) {
 			throw new Error(
 				`wasm-rust runtime asset ${assetLabel} download size exceeds the ${maxAssetBytes} byte limit`
 			);
 		}
+		const bytes = new Uint8Array(source);
 		onProgress?.({ loaded: bytes.byteLength, total: total ?? bytes.byteLength });
 		throwIfRuntimeAssetAborted(signal);
 		return bytes;
@@ -319,7 +339,8 @@ async function readResponseBytes(
 		'download',
 		total,
 		onProgress,
-		signal
+		signal,
+		deliveryBudget
 	);
 }
 
@@ -388,6 +409,10 @@ export async function fetchRuntimeAssetBytes(
 		throw new Error(`wasm-rust runtime asset has an invalid maxAssetBytes: ${maxAssetBytes}`);
 	}
 	throwIfRuntimeAssetAborted(options.signal);
+	const deliveryBudget = resolveRuntimeAssetDeliveryBudget(options.deliveryBudget);
+	if (deliveryBudget) {
+		assertRuntimeAssetDeliveryBudgetAvailable(deliveryBudget);
+	}
 	let resolvedAssetUrlObject: URL;
 	try {
 		resolvedAssetUrlObject = new URL(assetUrl.toString());
@@ -521,7 +546,8 @@ export async function fetchRuntimeAssetBytes(
 		assetLabel,
 		downloadLimit,
 		onProgress,
-		options.signal
+		options.signal,
+		deliveryBudget
 	);
 	const assetPreview = new TextDecoder()
 		.decode(assetBytes.slice(0, 128))

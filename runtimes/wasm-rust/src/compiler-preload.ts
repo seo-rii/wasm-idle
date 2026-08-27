@@ -1,5 +1,9 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
-import { fetchRuntimeAssetBytes, hasRegisteredRuntimeAssetReceipt } from './runtime-asset.js';
+import {
+	fetchRuntimeAssetBytes,
+	hasRegisteredRuntimeAssetReceipt,
+	withRuntimeAssetDeliveryBudget
+} from './runtime-asset.js';
 import { PREVIEW2_COMPONENT_RUNTIME_ASSETS } from './browser-component-tools.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
 import {
@@ -9,7 +13,7 @@ import {
 	resolveRuntimeAssetUrl
 } from './runtime-manifest.js';
 import type { WasmRustRuntimeProfile } from './runtime-manifest.js';
-import type { SupportedTargetTriple } from './types.js';
+import type { RuntimeAssetDeliveryBudgetDescriptor, SupportedTargetTriple } from './types.js';
 
 export interface PreloadBrowserRustRuntimeDependencies {
 	loadManifest?: typeof loadRuntimeManifest;
@@ -20,6 +24,7 @@ export interface PreloadBrowserRustRuntimeDependencies {
 
 export interface PreloadBrowserRustRuntimeOptions {
 	targetTriple?: SupportedTargetTriple;
+	assetDeliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor;
 	dependencies?: PreloadBrowserRustRuntimeDependencies;
 }
 
@@ -28,13 +33,22 @@ const rustRuntimePreloadCache = new Map<string, Promise<void>>();
 export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRuntimeOptions = {}) {
 	const defaultImportRuntimeModule = <T>(assetUrl: string) =>
 		import(/* @vite-ignore */ assetUrl) as Promise<T>;
-	const runPreload = async () => {
+	const runPreloadOperation = async () => {
 		const fetchImpl = options.dependencies?.fetchImpl || fetch;
 		const importRuntimeModule =
 			options.dependencies?.importRuntimeModule || defaultImportRuntimeModule;
 		const preloadAsset = async (assetUrl: string, assetLabel: string) => {
-			if (hasRegisteredRuntimeAssetReceipt(assetUrl)) {
-				await fetchRuntimeAssetBytes(assetUrl, assetLabel, fetchImpl, false);
+			if (hasRegisteredRuntimeAssetReceipt(assetUrl) || options.assetDeliveryBudget) {
+				await fetchRuntimeAssetBytes(
+					assetUrl,
+					assetLabel,
+					fetchImpl,
+					false,
+					undefined,
+					options.assetDeliveryBudget
+						? { deliveryBudget: options.assetDeliveryBudget }
+						: {}
+				);
 				return;
 			}
 			const response = await fetchImpl(assetUrl);
@@ -49,7 +63,8 @@ export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRunti
 			await loadBundledRuntimeContext(
 				options.dependencies?.loadManifest,
 				options.targetTriple,
-				options.dependencies?.runtimeProfile
+				options.dependencies?.runtimeProfile,
+				options.assetDeliveryBudget ? { deliveryBudget: options.assetDeliveryBudget } : {}
 			);
 		const assetPreloads = [
 			preloadAsset(
@@ -194,7 +209,10 @@ export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRunti
 		}
 		await Promise.all([...assetPreloads, ...modulePreloads]);
 	};
+	const runPreload = () =>
+		withRuntimeAssetDeliveryBudget(options.assetDeliveryBudget, runPreloadOperation);
 	if (
+		options.assetDeliveryBudget ||
 		options.dependencies?.loadManifest ||
 		options.dependencies?.fetchImpl ||
 		options.dependencies?.importRuntimeModule

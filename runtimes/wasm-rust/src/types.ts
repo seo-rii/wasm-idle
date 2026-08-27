@@ -38,6 +38,23 @@ export interface BrowserRustCompileProgress {
 	message?: string;
 	bytesCompleted?: number;
 	bytesTotal?: number;
+	delivery?: RuntimeAssetDeliveryBudgetSnapshot;
+}
+
+/** Structured-clone-safe Core capability used to meter one compiler asset activation. */
+export interface RuntimeAssetDeliveryBudgetDescriptor {
+	readonly schemaVersion: 1;
+	readonly maxBytes: number;
+	readonly state: SharedArrayBuffer;
+}
+
+export interface RuntimeAssetDeliveryBudgetSnapshot {
+	readonly maxBytes: number;
+	readonly expectedBytes: number;
+	readonly deliveredBytes: number;
+	readonly remainingBytes: number;
+	/** Monotonic change counter for telemetry; it is not a transactional seqlock. */
+	readonly sequence: number;
 }
 
 export interface BrowserRustWorkerLimits {
@@ -77,6 +94,11 @@ export interface BrowserRustCompileRequest {
 	 * application host supplies this from the Core execution policy for non-debug compilation.
 	 */
 	workerLimits?: BrowserRustWorkerLimits;
+	/**
+	 * Core-owned aggregate delivery budget for one non-debug compiler operation. Application and
+	 * language-server hosts provide this capability; legacy standalone consumers may omit it.
+	 */
+	assetDeliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor;
 	onProgress?: (progress: BrowserRustCompileProgress) => void;
 }
 

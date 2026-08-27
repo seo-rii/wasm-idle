@@ -102,6 +102,7 @@ describe('getRustLanguageServer', () => {
 				verifiedModuleUrls: { [runtimeProfile.moduleUrl]: compilerUrl },
 				graphFingerprint: 'a'.repeat(64),
 				runtimeProfile,
+				maxAssetBytes: 128 * 1024 * 1024,
 				targetTriple: 'wasm32-wasip2',
 				edition: undefined
 			}
@@ -134,4 +135,27 @@ describe('getRustLanguageServer', () => {
 		).rejects.toThrow('verified executable graph configuration');
 		expect(mockState.workers).toHaveLength(0);
 	});
+
+	it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '1024'])(
+		'rejects an invalid maxAssetBytes policy before creating a worker: %s',
+		async (maxAssetBytes) => {
+			const moduleUrl = 'https://static.example.com/wasm-rust/index.js';
+			await expect(
+				getRustLanguageServer({
+					maxAssetBytes: maxAssetBytes as number,
+					rust: {
+						compilerUrl: 'blob:https://app.example/verified-rust-entry',
+						expectedNetworkModuleUrls: [moduleUrl],
+						verifiedModuleUrls: {
+							[moduleUrl]: 'blob:https://app.example/verified-rust-entry'
+						},
+						graphFingerprint: 'a'.repeat(64),
+						runtimeProfile: {} as any
+					},
+					createWorker: () => new mockState.FakeWorker() as unknown as Worker
+				})
+			).rejects.toThrow('positive safe integer');
+			expect(mockState.workers).toHaveLength(0);
+		}
+	);
 });

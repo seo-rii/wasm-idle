@@ -9,9 +9,13 @@ export const RUST_NON_DEBUG_RESOURCE_REQUIREMENTS = Object.freeze({
 	maxThreads: 4
 });
 
+// The largest pinned logical target closure is currently 179,123,525 bytes (wasip3).
+export const RUST_NON_DEBUG_MAX_ASSET_DELIVERY_BYTES = 192 * 1024 * 1024;
+
 export interface RustNonDebugResourceLimits {
 	readonly maxWorkers: number;
 	readonly maxThreads: number;
+	readonly maxAssetDeliveryBytes: number;
 	readonly compilerLimits: Readonly<{
 		maxWorkers: number;
 		maxThreads: number;
@@ -26,7 +30,7 @@ export function snapshotRustNonDebugResourceLimits(value: unknown): RustNonDebug
 		});
 	}
 	const limits = value as Record<string, unknown>;
-	for (const name of ['maxWorkers', 'maxThreads'] as const) {
+	for (const name of ['maxWorkers', 'maxThreads', 'maxAssetBytes'] as const) {
 		if (!Number.isSafeInteger(limits[name]) || (limits[name] as number) <= 0) {
 			throw new RuntimeConfigurationError(
 				`Rust non-debug execution limit ${name} must be a positive safe integer`,
@@ -36,10 +40,13 @@ export function snapshotRustNonDebugResourceLimits(value: unknown): RustNonDebug
 	}
 	const maxWorkers = limits.maxWorkers as number;
 	const maxThreads = limits.maxThreads as number;
+	const maxAssetDeliveryBytes =
+		Math.min(limits.maxAssetBytes as number, RUST_NON_DEBUG_MAX_ASSET_DELIVERY_BYTES / 2) * 2;
 	const compilerLimits = Object.freeze({ maxWorkers, maxThreads });
 	return Object.freeze({
 		maxWorkers,
 		maxThreads,
+		maxAssetDeliveryBytes,
 		compilerLimits
 	});
 }

@@ -672,6 +672,7 @@ class Rust implements Sandbox {
 						maxDiagnostics: limits.maxDiagnostics,
 						...(nonDebugResourceLimits
 							? {
+									maxAssetBytes: limits.maxAssetBytes,
 									maxWorkers: nonDebugResourceLimits.maxWorkers,
 									maxThreads: nonDebugResourceLimits.maxThreads
 								}

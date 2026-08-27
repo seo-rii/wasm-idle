@@ -9,7 +9,7 @@ import {
 	createPreview2ImportObject,
 	transpilePreview2Component
 } from './browser-component-tools.js';
-import type { BrowserRustCompilerResult } from './types.js';
+import type { BrowserRustCompilerResult, RuntimeAssetDeliveryBudgetDescriptor } from './types.js';
 
 export interface BrowserExecutionResult {
 	exitCode: number | null;
@@ -23,6 +23,7 @@ export interface BrowserExecutionOptions {
 	stdin?: () => string | Uint8Array | ArrayBuffer | null;
 	stdout?: (chunk: string) => void;
 	stderr?: (chunk: string) => void;
+	assetDeliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor;
 }
 
 class CaptureFd extends Fd {
@@ -155,7 +156,8 @@ async function runPreview2Component(
 	const transpiled = await transpilePreview2Component(
 		bytes,
 		runtimeBaseUrl,
-		'wasm-rust-component'
+		'wasm-rust-component',
+		options.assetDeliveryBudget
 	);
 	const entryName = Array.from(transpiled.files.keys()).find((name) => name.endsWith('.js'));
 	if (!entryName) {

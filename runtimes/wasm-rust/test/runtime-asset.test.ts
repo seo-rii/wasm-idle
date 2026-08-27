@@ -5,12 +5,20 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
 	clearRegisteredRuntimeAssetReceipts,
+	createRuntimeAssetCacheKey,
 	DEFAULT_MAX_RUNTIME_ASSET_BYTES,
 	fetchRuntimeAssetBytes,
 	fetchRuntimeAssetJson,
 	hasRegisteredRuntimeAssetReceipt,
 	registerRuntimeAssetReceipts
 } from '../src/runtime-asset.js';
+import {
+	consumeRuntimeAssetDeliveryBytes,
+	createRuntimeAssetDeliveryBudget,
+	readRuntimeAssetDeliveryBudget,
+	snapshotRuntimeAssetDeliveryBudget,
+	withRuntimeAssetDeliveryBudget
+} from '../src/runtime-delivery-budget.js';
 
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
@@ -1083,5 +1091,232 @@ describe('runtime asset fetch fallback', () => {
 
 		expect(progressEvents.map((event) => event.loaded)).toEqual([2, 5, 6]);
 		expect(progressEvents.at(-1)?.total).toBe(bytes.byteLength);
+	});
+});
+
+describe('runtime asset aggregate delivery accounting', () => {
+	it('accounts every response chunk before copying and reporting progress', async () => {
+		const budget = createRuntimeAssetDeliveryBudget(10);
+		const progress: Array<{ loaded: number; delivered: number }> = [];
+		const response = new Response(
+			new ReadableStream({
+				start(controller) {
+					controller.enqueue(Uint8Array.of(1, 2));
+					controller.enqueue(Uint8Array.of(3, 4, 5));
+					controller.close();
+				}
+			})
+		);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/chunked.bin',
+				'chunked.bin',
+				async () => response,
+				false,
+				(event) => {
+					progress.push({
+						loaded: event.loaded,
+						delivered: readRuntimeAssetDeliveryBudget(budget).deliveredBytes
+					});
+				},
+				{ deliveryBudget: budget }
+			)
+		).resolves.toEqual(Uint8Array.of(1, 2, 3, 4, 5));
+		expect(progress).toEqual([
+			{ loaded: 2, delivered: 2 },
+			{ loaded: 5, delivered: 5 }
+		]);
+		expect(readRuntimeAssetDeliveryBudget(budget)).toMatchObject({
+			deliveredBytes: 5,
+			sequence: 2
+		});
+	});
+
+	it('records the complete crossing chunk, then cancels without reporting it', async () => {
+		const budget = createRuntimeAssetDeliveryBudget(4);
+		const progress: number[] = [];
+		const reader = {
+			read: vi
+				.fn()
+				.mockResolvedValueOnce({ done: false, value: Uint8Array.of(1, 2, 3) })
+				.mockResolvedValueOnce({ done: false, value: Uint8Array.of(4, 5) })
+				.mockResolvedValueOnce({ done: true, value: undefined }),
+			cancel: vi.fn(async () => undefined),
+			releaseLock: vi.fn()
+		};
+		const response = {
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: { getReader: () => reader }
+		} as unknown as Response;
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/over-budget.bin',
+				'over-budget.bin',
+				async () => response,
+				false,
+				(event) => progress.push(event.loaded),
+				{ deliveryBudget: budget, maxAssetBytes: 10 }
+			)
+		).rejects.toThrow(/aggregate limit/);
+		expect(readRuntimeAssetDeliveryBudget(budget)).toMatchObject({
+			deliveredBytes: 5,
+			sequence: 2
+		});
+		expect(progress).toEqual([3]);
+		expect(reader.cancel).toHaveBeenCalledOnce();
+		expect(reader.releaseLock).toHaveBeenCalledOnce();
+	});
+
+	it('accounts a bodyless materialization exactly once', async () => {
+		const budget = createRuntimeAssetDeliveryBudget(10);
+		const arrayBuffer = vi.fn(async () => Uint8Array.of(1, 2, 3).buffer);
+		const response = {
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: null,
+			arrayBuffer
+		} as unknown as Response;
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/bodyless.bin',
+				'bodyless.bin',
+				async () => response,
+				false,
+				undefined,
+				{ deliveryBudget: budget }
+			)
+		).resolves.toEqual(Uint8Array.of(1, 2, 3));
+		expect(arrayBuffer).toHaveBeenCalledOnce();
+		expect(readRuntimeAssetDeliveryBudget(budget)).toMatchObject({
+			deliveredBytes: 3,
+			sequence: 1
+		});
+	});
+
+	it('does not count decompressed output as delivered bytes', async () => {
+		const logicalBytes = new Uint8Array(256);
+		const storageBytes = gzipSync(logicalBytes);
+		const budget = createRuntimeAssetDeliveryBudget(storageBytes.byteLength);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/compressed.bin.gz',
+				'compressed.bin',
+				async () => new Response(storageBytes),
+				false,
+				undefined,
+				{ deliveryBudget: budget }
+			)
+		).resolves.toEqual(logicalBytes);
+		expect(readRuntimeAssetDeliveryBudget(budget).deliveredBytes).toBe(storageBytes.byteLength);
+	});
+
+	it('rejects exhausted and expected-over-limit budgets before fetching', async () => {
+		const fetchImpl = vi.fn(async () => new Response(Uint8Array.of(1)));
+		const exhausted = createRuntimeAssetDeliveryBudget(2);
+		consumeRuntimeAssetDeliveryBytes(exhausted, 2);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/exhausted.bin',
+				'exhausted.bin',
+				fetchImpl,
+				false,
+				undefined,
+				{ deliveryBudget: exhausted }
+			)
+		).rejects.toThrow(/exhausted/);
+
+		const invalidExpected = createRuntimeAssetDeliveryBudget(2);
+		Atomics.store(new BigInt64Array(invalidExpected.state), 2, 3n);
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/invalid-expected.bin',
+				'invalid-expected.bin',
+				fetchImpl,
+				false,
+				undefined,
+				{ deliveryBudget: invalidExpected }
+			)
+		).rejects.toThrow(/expected bytes exceed/);
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('keeps pre-aborted requests ahead of aggregate budget failures', async () => {
+		const fetchImpl = vi.fn(async () => new Response(Uint8Array.of(1)));
+		const budget = createRuntimeAssetDeliveryBudget(1);
+		consumeRuntimeAssetDeliveryBytes(budget, 1);
+		const controller = new AbortController();
+		const reason = new Error('cancelled before aggregate assertion');
+		controller.abort(reason);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/aborted.bin',
+				'aborted.bin',
+				fetchImpl,
+				false,
+				undefined,
+				{ deliveryBudget: budget, signal: controller.signal }
+			)
+		).rejects.toBe(reason);
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('uses explicit budgets ahead of the active generated-fetch scope', async () => {
+		const active = createRuntimeAssetDeliveryBudget(10);
+		const explicit = createRuntimeAssetDeliveryBudget(10);
+
+		await withRuntimeAssetDeliveryBudget(active, async () => {
+			await fetchRuntimeAssetBytes(
+				'https://example.test/runtime/explicit.bin',
+				'explicit.bin',
+				async () => new Response(Uint8Array.of(1, 2)),
+				false,
+				undefined,
+				{ deliveryBudget: explicit }
+			);
+			await fetchRuntimeAssetBytes(
+				'https://example.test/runtime/generated-child.bin',
+				'generated-child.bin',
+				async () => new Response(Uint8Array.of(3, 4, 5)),
+				false
+			);
+		});
+
+		expect(readRuntimeAssetDeliveryBudget(explicit).deliveredBytes).toBe(2);
+		expect(readRuntimeAssetDeliveryBudget(active).deliveredBytes).toBe(3);
+	});
+
+	it('isolates pending cache keys by shared budget state identity', async () => {
+		const first = createRuntimeAssetDeliveryBudget(10);
+		const second = createRuntimeAssetDeliveryBudget(10);
+		const firstClone = snapshotRuntimeAssetDeliveryBudget({ ...first });
+		const fetchImpl: typeof fetch = async () => new Response();
+		const assetUrl = 'https://example.test/runtime/cached.bin';
+
+		const firstKey = createRuntimeAssetCacheKey(assetUrl, fetchImpl, {
+			deliveryBudget: first
+		});
+		expect(
+			createRuntimeAssetCacheKey(assetUrl, fetchImpl, { deliveryBudget: firstClone })
+		).toBe(firstKey);
+		expect(
+			createRuntimeAssetCacheKey(assetUrl, fetchImpl, { deliveryBudget: second })
+		).not.toBe(firstKey);
+
+		const unscopedKey = createRuntimeAssetCacheKey(assetUrl, fetchImpl);
+		await withRuntimeAssetDeliveryBudget(first, async () => {
+			expect(createRuntimeAssetCacheKey(assetUrl, fetchImpl)).toBe(firstKey);
+			expect(createRuntimeAssetCacheKey(assetUrl, fetchImpl)).not.toBe(unscopedKey);
+		});
 	});
 });

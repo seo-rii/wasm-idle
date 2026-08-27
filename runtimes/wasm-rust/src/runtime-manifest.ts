@@ -2,10 +2,12 @@ import { resolveVersionedAssetUrl } from './asset-url.js';
 import {
 	fetchRuntimeAssetBytes,
 	registerRuntimeAssetReceipts,
+	type RuntimeAssetDownloadProgress,
 	type RuntimeAssetReceipt
 } from './runtime-asset.js';
 import type {
 	BrowserRustArtifactFormat,
+	RuntimeAssetDeliveryBudgetDescriptor,
 	RuntimeRustCompilerProvenance,
 	SupportedTargetTriple
 } from './types.js';
@@ -1136,6 +1138,68 @@ function collectRuntimePackAssetPaths(pack: RuntimeAssetPackReference, paths: Se
 	if (pack.delta) collectRuntimePackAssetPaths(pack.delta.base, paths);
 }
 
+export function collectRuntimeTargetAssetPaths(
+	manifest: NormalizedRuntimeManifest,
+	targetTriple: SupportedTargetTriple = manifest.defaultTargetTriple
+) {
+	const target = resolveTargetManifest(manifest, targetTriple);
+	const paths = new Set<string>([runtimeReceiptPath(manifest.compiler.rustcWasm)]);
+	if (target.sysrootPack) {
+		collectRuntimePackAssetPaths(target.sysrootPack, paths);
+	} else {
+		for (const entry of target.sysrootFiles || []) paths.add(runtimeReceiptPath(entry.asset));
+	}
+	if (!isIntegratedCompilerOutput(target.compile)) {
+		paths.add(runtimeReceiptPath(target.compile.llvm.llcWasm || 'llvm/llc.wasm'));
+		paths.add(runtimeReceiptPath(target.compile.llvm.lldWasm || 'llvm/lld.wasm'));
+		paths.add(runtimeReceiptPath(target.compile.llvm.lldData || 'llvm/lld.data'));
+		if (target.compile.link.pack) {
+			collectRuntimePackAssetPaths(target.compile.link.pack, paths);
+		} else {
+			if (target.compile.link.allocatorObjectAsset) {
+				paths.add(runtimeReceiptPath(target.compile.link.allocatorObjectAsset));
+			}
+			for (const entry of target.compile.link.files || []) {
+				paths.add(runtimeReceiptPath(entry.asset));
+			}
+		}
+	}
+	if (
+		target.artifactFormat === 'component' ||
+		target.execution.kind === 'preview2-component' ||
+		target.compile.kind.endsWith('+component-encoder')
+	) {
+		for (const assetPath of COMPONENT_BINARY_ASSET_PATHS) paths.add(assetPath);
+	}
+	return [...paths].sort();
+}
+
+export function resolveRuntimeAssetDeliveryExpectedBytes(
+	manifest: NormalizedRuntimeManifest,
+	manifestDeliveryBytes: number,
+	targetTriple: SupportedTargetTriple = manifest.defaultTargetTriple
+) {
+	if (!Number.isSafeInteger(manifestDeliveryBytes) || manifestDeliveryBytes <= 0) {
+		throw new Error(
+			'wasm-rust runtime manifest delivery bytes must be a positive safe integer'
+		);
+	}
+	const receipts = verifyRuntimeManifestAssetReceipts(manifest);
+	let expectedBytes = manifestDeliveryBytes;
+	for (const assetPath of collectRuntimeTargetAssetPaths(manifest, targetTriple)) {
+		const receipt = receipts[assetPath];
+		if (!receipt) {
+			throw new Error(`wasm-rust runtime asset ${assetPath} is missing its delivery receipt`);
+		}
+		// Fetch can expose logical bytes after HTTP or service-worker transparent decoding.
+		expectedBytes += receipt.uncompressedBytes ?? receipt.bytes;
+		if (!Number.isSafeInteger(expectedBytes)) {
+			throw new Error('wasm-rust runtime asset delivery baseline is unsafe');
+		}
+	}
+	return expectedBytes;
+}
+
 export function collectRuntimeManifestAssetPaths(manifest: NormalizedRuntimeManifest) {
 	const paths = new Set<string>([runtimeReceiptPath(manifest.compiler.rustcWasm)]);
 	let needsComponentAssets = false;
@@ -1323,7 +1387,7 @@ function rejectDuplicateRuntimeManifestJsonKeys(source: string) {
 	if (index !== source.length) fail('unexpected trailing data');
 }
 
-function decodePinnedRuntimeManifest(bytes: Uint8Array) {
+function decodeStrictRuntimeManifest(bytes: Uint8Array) {
 	let source: string;
 	try {
 		source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
@@ -1389,27 +1453,45 @@ export function parseWasmRustRuntimeProfileFromModuleUrl(
 export async function loadRuntimeManifest(
 	manifestUrl: string | URL,
 	fetchImpl: typeof fetch = fetch,
-	options: { receipt?: RuntimeAssetReceipt } = {}
+	options: {
+		receipt?: RuntimeAssetReceipt;
+		deliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor;
+		onProgress?: (progress: RuntimeAssetDownloadProgress) => void;
+	} = {}
 ): Promise<RuntimeManifest> {
 	if (options.receipt) {
+		const { onProgress, ...fetchOptions } = options;
 		const bytes = await fetchRuntimeAssetBytes(
 			manifestUrl,
 			'wasm-rust runtime manifest',
 			fetchImpl,
 			false,
-			undefined,
+			onProgress,
 			{
+				...fetchOptions,
 				maxAssetBytes: Math.max(options.receipt.bytes, 1),
 				receipt: options.receipt
 			}
 		);
-		const manifest = parseRuntimeManifest(decodePinnedRuntimeManifest(bytes));
+		const manifest = parseRuntimeManifest(decodeStrictRuntimeManifest(bytes));
 		if (!isRuntimeManifestV3(manifest) || !manifest.assetReceipts) {
 			throw new Error(
 				'wasm-rust runtime manifest receipt profile requires a v3 asset receipt graph'
 			);
 		}
 		return manifest;
+	}
+	if (options.deliveryBudget) {
+		const { onProgress, ...fetchOptions } = options;
+		const bytes = await fetchRuntimeAssetBytes(
+			manifestUrl,
+			'wasm-rust runtime manifest',
+			fetchImpl,
+			false,
+			onProgress,
+			fetchOptions
+		);
+		return parseRuntimeManifest(decodeStrictRuntimeManifest(bytes));
 	}
 	const response = await fetchImpl(manifestUrl.toString());
 	if (!response.ok) {

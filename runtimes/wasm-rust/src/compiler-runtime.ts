@@ -4,15 +4,21 @@ import {
 	loadRuntimeManifest,
 	normalizeRuntimeManifest,
 	registerRuntimeManifestAssetReceipts,
+	resolveRuntimeAssetDeliveryExpectedBytes,
 	resolveTargetManifest
 } from './runtime-manifest.js';
 import type { WasmRustRuntimeProfile } from './runtime-manifest.js';
-import type { SupportedTargetTriple } from './types.js';
+import { declareRuntimeAssetDeliveryExpectedBytes } from './runtime-delivery-budget.js';
+import type { RuntimeAssetDeliveryBudgetDescriptor, SupportedTargetTriple } from './types.js';
 
 export async function loadBundledRuntimeContext(
 	manifestLoader: typeof loadRuntimeManifest = loadRuntimeManifest,
 	targetTriple?: SupportedTargetTriple,
-	runtimeProfile?: WasmRustRuntimeProfile
+	runtimeProfile?: WasmRustRuntimeProfile,
+	options: {
+		deliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor;
+		onManifestProgress?: (progress: { loaded: number; total?: number }) => void;
+	} = {}
 ) {
 	if (!runtimeProfile && manifestLoader === loadRuntimeManifest) {
 		throw new Error('wasm-rust runtime receipt profile is required');
@@ -32,7 +38,13 @@ export async function loadBundledRuntimeContext(
 			loadedManifest = await effectiveManifestLoader(
 				resolveVersionedAssetUrl(runtimeBaseUrl, manifestFileName),
 				fetch,
-				runtimeProfile ? { receipt: runtimeProfile.manifestReceipt } : {}
+				{
+					...(runtimeProfile ? { receipt: runtimeProfile.manifestReceipt } : {}),
+					...(options.deliveryBudget ? { deliveryBudget: options.deliveryBudget } : {}),
+					...(options.onManifestProgress
+						? { onProgress: options.onManifestProgress }
+						: {})
+				}
 			);
 			break;
 		} catch (error) {
@@ -54,6 +66,19 @@ export async function loadBundledRuntimeContext(
 		registerRuntimeManifestAssetReceipts(runtimeBaseUrl, manifest);
 	}
 	const targetConfig = resolveTargetManifest(manifest, targetTriple);
+	if (options.deliveryBudget) {
+		if (!runtimeProfile) {
+			throw new Error('wasm-rust aggregate asset delivery requires a pinned runtime profile');
+		}
+		declareRuntimeAssetDeliveryExpectedBytes(
+			options.deliveryBudget,
+			resolveRuntimeAssetDeliveryExpectedBytes(
+				manifest,
+				runtimeProfile.manifestReceipt.bytes,
+				targetConfig.targetTriple
+			)
+		);
+	}
 	const versionedModuleBaseUrl = new URL(moduleBaseUrl);
 	if (runtimeProfile) {
 		versionedModuleBaseUrl.searchParams.set('v', runtimeProfile.manifestFingerprint);
