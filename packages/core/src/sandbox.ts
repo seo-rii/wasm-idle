@@ -316,6 +316,7 @@ function runSandboxOperation<T>(
 		let settled = false;
 		let operationStarted = false;
 		let cancellationRequested = false;
+		let cancellationPromise: Promise<void> | undefined;
 		let timeout: ReturnType<typeof setTimeout> | undefined;
 
 		const cleanup = () => {
@@ -333,9 +334,13 @@ function runSandboxOperation<T>(
 					: sandbox.kill
 						? sandbox.kill()
 						: sandbox.terminate();
-				void Promise.resolve(cancellation).catch(() => undefined);
+				cancellationPromise = Promise.resolve(cancellation).then(
+					() => undefined,
+					() => undefined
+				);
 			} catch {
 				// The boundary error remains authoritative even if runtime cleanup fails.
+				cancellationPromise = Promise.resolve();
 			}
 		};
 		const releaseOperation = () => {
@@ -408,9 +413,11 @@ function runSandboxOperation<T>(
 			operationStarted = true;
 			try {
 				const value = await operation();
+				if (cancellationPromise) await cancellationPromise;
 				releaseOperation();
 				settle(() => resolve(value));
 			} catch (error) {
+				if (cancellationPromise) await cancellationPromise;
 				releaseOperation();
 				settle(() => reject(error));
 			}

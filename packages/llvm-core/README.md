@@ -391,6 +391,10 @@ The execution preflight signal also remains attached after manifest verification
 before and after terminal clear, prepare, and run. Stop or Restart during the clear/compile startup
 window therefore retires that execution before it can create a late debugger session; a Restart
 waits for the retired execution to settle and then starts one fresh generation.
+If the shared execution boundary cancels a run for timeout or output limits, it reports that limit
+promptly but keeps the sandbox busy until both the guest operation and asynchronous debugger
+teardown have settled. A following clear, restart, or run therefore cannot overlap the retiring
+LLDB/WAMR Workers.
 It also requests garbage collection and limits renderer JS heap growth to 64 MiB by default; set
 `WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES` to tune that budget for constrained CI environments. Set
 `WASM_IDLE_DEBUG_BROWSER_CASES=c-relaunch` to run only this fixture locally.

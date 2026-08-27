@@ -141,6 +141,7 @@ describe('core execution boundary', () => {
 		vi.useFakeTimers();
 		try {
 			let finishExecution: ((result: ExecutionResult) => void) | undefined;
+			let finishCancellation: (() => void) | undefined;
 			const execute = vi
 				.fn()
 				.mockImplementationOnce(
@@ -150,7 +151,12 @@ describe('core execution boundary', () => {
 						})
 				)
 				.mockResolvedValue(completedResult);
-			const cancel = vi.fn(async () => undefined);
+			const cancel = vi.fn(
+				() =>
+					new Promise<void>((resolve) => {
+						finishCancellation = resolve;
+					})
+			);
 			const binding = createPlaygroundBinding('/runtime', async () =>
 				createSandbox({ execute, cancel })
 			);
@@ -180,7 +186,14 @@ describe('core execution boundary', () => {
 			finishExecution?.(completedResult);
 			await Promise.resolve();
 			await Promise.resolve();
-			await expect(sandbox.execute!({ code: 'int fourth() {}' })).resolves.toBe(
+			await expect(sandbox.execute!({ code: 'int fourth() {}' })).rejects.toMatchObject({
+				code: 'busy',
+				phase: 'execute'
+			});
+			finishCancellation?.();
+			await Promise.resolve();
+			await Promise.resolve();
+			await expect(sandbox.execute!({ code: 'int fifth() {}' })).resolves.toBe(
 				completedResult
 			);
 			expect(execute).toHaveBeenCalledTimes(2);
@@ -221,13 +234,22 @@ describe('core execution boundary', () => {
 
 	it('blocks streamed output at the UTF-8 byte budget and cancels the runtime', async () => {
 		let finishRun: ((result: boolean | string) => void) | undefined;
-		const run = vi.fn(
+		let finishCancellation: (() => void) | undefined;
+		const run = vi
+			.fn()
+			.mockImplementationOnce(
+				() =>
+					new Promise<boolean | string>((resolve) => {
+						finishRun = resolve;
+					})
+			)
+			.mockResolvedValue(true);
+		const cancel = vi.fn(
 			() =>
-				new Promise<boolean | string>((resolve) => {
-					finishRun = resolve;
+				new Promise<void>((resolve) => {
+					finishCancellation = resolve;
 				})
 		);
-		const cancel = vi.fn(async () => undefined);
 		const rawSandbox = createSandbox({ run, cancel });
 		const binding = createPlaygroundBinding('/runtime', async () => rawSandbox);
 		const sandbox = await binding.load('C');
@@ -253,6 +275,15 @@ describe('core execution boundary', () => {
 		expect(cancel).toHaveBeenCalledOnce();
 		finishRun?.(true);
 		await Promise.resolve();
+		await Promise.resolve();
+		await expect(sandbox.run('int second() {}', false)).rejects.toMatchObject({
+			code: 'busy',
+			phase: 'execute'
+		});
+		finishCancellation?.();
+		await Promise.resolve();
+		await Promise.resolve();
+		await expect(sandbox.run('int third() {}', false)).resolves.toBe(true);
 	});
 
 	it('validates structured output and diagnostic budgets before returning results', async () => {
