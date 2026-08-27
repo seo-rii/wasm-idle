@@ -73,8 +73,8 @@ jobs:
               run: pnpm run check:asset-sizes
             - if: github.event_name != 'schedule'
               run: pnpm run test:browser:debug:lldb
-            - name: Run the nightly 100-relaunch LLDB soak
-              if: github.event_name == 'schedule'
+            - name: Run the 100-relaunch LLDB soak
+              if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
               env:
                   WASM_IDLE_DEBUG_BROWSER_CASES: c-relaunch
                   WASM_IDLE_DEBUG_RELAUNCH_COUNT: 100

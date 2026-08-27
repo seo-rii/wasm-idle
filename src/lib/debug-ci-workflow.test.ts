@@ -204,7 +204,12 @@ describe('LLDB browser integration workflow', () => {
 		expect(workflow).toContain('WASM_IDLE_DEBUG_BROWSER_CASES: c-relaunch');
 		expect(workflow).toContain('WASM_IDLE_DEBUG_RELAUNCH_COUNT: 100');
 		expect(workflow).toContain('WASM_IDLE_DEBUG_BROWSER_TEST_TIMEOUT_MS: 7200000');
-		expect(llvmCoreReadme).toContain('nightly schedule runs the relaunch fixture 100 times');
+		expect(workflow).toContain(
+			"if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+		);
+		expect(llvmCoreReadme).toContain(
+			'manual release-candidate dispatch run the relaunch fixture 100 times'
+		);
 	});
 
 	it('gates the reduced LLDB and WAMR initial-memory profile', async () => {
