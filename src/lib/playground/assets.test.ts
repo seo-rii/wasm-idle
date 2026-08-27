@@ -242,7 +242,7 @@ describe('runtime asset config resolution', () => {
 			manifestUrl: 'https://example.com/absproxy/5173/wasm-debug/runtime-manifest.v2.json',
 			manifestReceipt: {
 				bytes: 2853,
-				sha256: '74f5f1f8e7d831f58533ea3362061f133cd3d14ad56ae2eb3f1d11f666816a26'
+				sha256: 'a43dfb9c1fa41ba10bb408bf48ee41bc51834d499f11a26f4c37e3ad1f74ef54'
 			}
 		});
 	});
@@ -291,7 +291,7 @@ describe('runtime asset config resolution', () => {
 		).toMatchObject({
 			manifestReceipt: {
 				bytes: 2853,
-				sha256: '74f5f1f8e7d831f58533ea3362061f133cd3d14ad56ae2eb3f1d11f666816a26'
+				sha256: 'a43dfb9c1fa41ba10bb408bf48ee41bc51834d499f11a26f4c37e3ad1f74ef54'
 			}
 		});
 	});

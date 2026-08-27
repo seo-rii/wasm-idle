@@ -84,7 +84,7 @@ describe('LLDB browser integration workflow', () => {
 			expect(workflow).toContain(sha256);
 		}
 		expect(workflow).toContain(
-			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/aea9928755d2b66cd1a0e43e9cbfc5a9e5ccf05e/artifacts/runtime-source'
+			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/adac1d77676e48eb994c78f3053057708d389ca2/artifacts/runtime-source'
 		);
 		const pinnedRuntimeRevision = workflow.match(
 			/wasm-llvm\/([0-9a-f]{40})\/artifacts\/runtime-source/
@@ -95,7 +95,7 @@ describe('LLDB browser integration workflow', () => {
 		for (const [asset, sha256] of [
 			[
 				'runtime-manifest.v2.json',
-				'74f5f1f8e7d831f58533ea3362061f133cd3d14ad56ae2eb3f1d11f666816a26'
+				'a43dfb9c1fa41ba10bb408bf48ee41bc51834d499f11a26f4c37e3ad1f74ef54'
 			],
 			[
 				'debug/lldb-web-dap.js',
@@ -103,7 +103,7 @@ describe('LLDB browser integration workflow', () => {
 			],
 			[
 				'debug/lldb-web-dap.wasm',
-				'b12f1fa80b00db4f5d8ed472697cc141f1025988dce704401eb25d90089d7665'
+				'17346bd942d9e630437ed6519e5aa1cd1c88f2a9c5e46c96f4dcbb74d6a680d0'
 			],
 			[
 				'debug/lldb-web-dap.pthread.mjs',
