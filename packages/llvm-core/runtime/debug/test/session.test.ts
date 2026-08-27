@@ -2182,6 +2182,39 @@ describe('BrowserLldbSession', () => {
 		expect(workers.every((worker) => worker.isTerminated)).toBe(true);
 	});
 
+	it('hard-terminates every worker when DAP transport cleanup rejects', async () => {
+		const workers: FakeWorker[] = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources: [],
+			fetchImpl: async () => new Response('debug-asset'),
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, []);
+				workers.push(worker);
+				return worker;
+			},
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+		await session.initialize();
+		const internalSession = session as unknown as {
+			dap?: { close(error?: Error): Promise<void> };
+		};
+		if (!internalSession.dap) throw new Error('DAP client was not initialized');
+		const cleanupError = new Error('forced DAP cleanup failure');
+		internalSession.dap.close = async () => {
+			throw cleanupError;
+		};
+
+		await expect(session.dispose()).rejects.toBe(cleanupError);
+		expect(workers.every((worker) => worker.isTerminated)).toBe(true);
+		expect(
+			workers.every((worker) => worker.received.some((message) => message.type === 'dispose'))
+		).toBe(true);
+	});
+
 	it('shares one in-flight disposal across concurrent callers', async () => {
 		const session = new BrowserLldbSession({
 			manifest,

@@ -958,8 +958,8 @@ export class BrowserLldbSession {
 					: new Promise<void>((resolve) => {
 							setTimeout(resolve, WORKER_SHUTDOWN_GRACE_MS);
 						});
-			await Promise.all([
-				this.dap?.close() ?? Promise.resolve(),
+			const cleanupResults = await Promise.allSettled([
+				Promise.resolve().then(() => this.dap?.close()),
 				this.stdinWrites,
 				Promise.allSettled(this.outputReaders),
 				gracefulShutdown
@@ -979,6 +979,10 @@ export class BrowserLldbSession {
 			this.breakpointRequestVersions.clear();
 			this.retiredBreakpointIds.clear();
 			this.eventListeners.clear();
+			const cleanupFailure = cleanupResults.find(
+				(result): result is PromiseRejectedResult => result.status === 'rejected'
+			);
+			if (cleanupFailure) throw cleanupFailure.reason;
 		})();
 		return this.disposePromise;
 	}
