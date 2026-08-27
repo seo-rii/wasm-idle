@@ -18,6 +18,13 @@ const runtimeState = vi.hoisted(() => ({
 		}>
 	>
 }));
+const { loadManifest } = vi.hoisted(() => ({
+	loadManifest: vi.fn()
+}));
+
+vi.mock('$lib/playground/lldbManifest', () => ({
+	loadVerifiedDebugRuntimeManifest: loadManifest
+}));
 
 class FakeRuntimeSession {
 	readonly requests: Array<{ command: string; args?: unknown }> = [];
@@ -225,6 +232,92 @@ describe('LldbSandboxSession', () => {
 		runtimeState.scopesErrorFrameId = null;
 		runtimeState.responseOverrides.clear();
 		runtimeState.breakpointResponseGates = [];
+		loadManifest.mockReset();
+		loadManifest.mockImplementation(
+			async (url: string, _expected: unknown, fetchImpl: typeof fetch) => {
+				const response = await fetchImpl(url);
+				if (!response.ok) {
+					throw new Error(
+						`Unable to load the LLDB runtime manifest (${response.status}).`
+					);
+				}
+				return await response.json();
+			}
+		);
+	});
+
+	it('does not create a runtime session after manifest verification fails', async () => {
+		const fetchImpl = vi.fn();
+		loadManifest.mockRejectedValueOnce(
+			new Error('LLDB runtime requires an expected manifest SHA-256 receipt.')
+		);
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://cdn.example/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: fetchImpl as unknown as typeof fetch
+		});
+
+		await expect(controller.start()).rejects.toThrow(
+			'LLDB runtime requires an expected manifest SHA-256 receipt.'
+		);
+		expect(fetchImpl).not.toHaveBeenCalled();
+		expect(loadManifest).toHaveBeenCalledWith(
+			'https://cdn.example/debug/runtime-manifest.v2.json',
+			undefined,
+			fetchImpl,
+			expect.any(AbortSignal)
+		);
+		expect(runtimeState.session).toBeNull();
+	});
+
+	it('aborts a pending manifest load when the session is disconnected', async () => {
+		let startupSignal: AbortSignal | undefined;
+		loadManifest.mockImplementationOnce(
+			async (
+				_url: string,
+				_expected: unknown,
+				_fetchImpl: typeof fetch,
+				signal?: AbortSignal
+			) => {
+				startupSignal = signal;
+				return await new Promise((_resolve, reject) => {
+					signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+				});
+			}
+		);
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://cdn.example/debug/runtime-manifest.v2.json',
+			manifestReceipt: { sha256: 'a'.repeat(64) },
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn() as unknown as typeof fetch
+		});
+
+		const starting = controller.start();
+		await vi.waitFor(() => expect(loadManifest).toHaveBeenCalledOnce());
+		expect(startupSignal).toBeInstanceOf(AbortSignal);
+		await controller.disconnect();
+
+		expect(startupSignal?.aborted).toBe(true);
+		await expect(starting).resolves.toBe(true);
+		expect(runtimeState.session).toBeNull();
 	});
 
 	it('rejects invalid configured breakpoint lines before loading the runtime', () => {

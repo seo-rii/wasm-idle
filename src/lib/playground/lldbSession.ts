@@ -11,15 +11,14 @@ import type {
 	DebugResolvedDataBreakpoint,
 	DebugVariable
 } from '$lib/playground/options';
-import { ProtocolError } from '@wasm-idle/core';
+import { ProtocolError, type RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 import {
 	createBrowserLldbSession,
 	DapProtocolError,
-	parseDebugRuntimeManifest,
 	type BrowserLldbSession,
-	type DapEvent,
-	type RuntimeManifestV2
+	type DapEvent
 } from '@wasm-idle/llvm-core/debug';
+import { loadVerifiedDebugRuntimeManifest } from '$lib/playground/lldbManifest';
 
 const MAX_DEBUG_MEMORY_BYTES = 256;
 const MAX_DEBUG_IDENTIFIER_CODE_UNITS = 4096;
@@ -46,6 +45,7 @@ export interface LldbArtifactPayload {
 
 export interface LldbSandboxSessionOptions {
 	manifestUrl: string;
+	manifestReceipt?: Readonly<RuntimeAssetIntegrityEntry>;
 	runtimeBaseUrl: string;
 	artifact: LldbArtifactPayload;
 	sourcePath: `/workspace/${string}`;
@@ -83,14 +83,6 @@ function pauseReason(reason: string, command: DebugCommand | null): DebugPauseRe
 	if (command === 'nextLine') return 'nextLine';
 	if (command === 'stepOut') return 'stepOut';
 	return 'step';
-}
-
-async function loadManifest(url: string, fetchImpl: typeof fetch): Promise<RuntimeManifestV2> {
-	const response = await fetchImpl(url);
-	if (!response.ok) {
-		throw new Error(`Unable to load the LLDB runtime manifest (${response.status}).`);
-	}
-	return parseDebugRuntimeManifest(await response.json());
 }
 
 function invalidDapPayload(subject: string, path: string, expectation: string): never {
@@ -199,6 +191,7 @@ function assertOptionalBooleanArgument(value: unknown, name: string) {
 
 export class LldbSandboxSession {
 	private session?: BrowserLldbSession;
+	private startupAbortController?: AbortController;
 	private activeThreadId = 1;
 	private activeFrameId?: number;
 	private command: DebugCommand | null = null;
@@ -239,8 +232,12 @@ export class LldbSandboxSession {
 	}
 
 	async start(): Promise<true> {
-		if (this.session) throw new Error('LLDB sandbox session is already running.');
+		if (this.session || this.startupAbortController) {
+			throw new Error('LLDB sandbox session is already running.');
+		}
 		const lifecycleVersion = ++this.lifecycleVersion;
+		const startupAbortController = new AbortController();
+		this.startupAbortController = startupAbortController;
 		this.stopped = false;
 		this.pauseRequested = false;
 		this.initialized = false;
@@ -250,10 +247,22 @@ export class LldbSandboxSession {
 			this.completionReject = reject;
 		});
 		void completion.catch(() => undefined);
-		const manifest = await loadManifest(
-			this.options.manifestUrl,
-			this.options.fetchImpl ?? fetch
-		);
+		let manifest: Awaited<ReturnType<typeof loadVerifiedDebugRuntimeManifest>>;
+		try {
+			manifest = await loadVerifiedDebugRuntimeManifest(
+				this.options.manifestUrl,
+				this.options.manifestReceipt,
+				this.options.fetchImpl ?? fetch,
+				startupAbortController.signal
+			);
+		} catch (error) {
+			if (lifecycleVersion !== this.lifecycleVersion) return completion;
+			throw error;
+		} finally {
+			if (this.startupAbortController === startupAbortController) {
+				this.startupAbortController = undefined;
+			}
+		}
 		this.supportsEvaluateExpressions =
 			manifest.debugger?.capabilities?.evaluateExpressions === true;
 		const manifestSupportsReadMemory = manifest.debugger?.capabilities?.readMemory === true;
@@ -954,6 +963,11 @@ export class LldbSandboxSession {
 
 	async disconnect() {
 		this.lifecycleVersion += 1;
+		const startupAbortController = this.startupAbortController;
+		this.startupAbortController = undefined;
+		startupAbortController?.abort(
+			new Error('LLDB sandbox session disconnected during startup.')
+		);
 		this.stateVersion += 1;
 		this.inputReady = false;
 		this.initialized = false;

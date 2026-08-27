@@ -3,6 +3,7 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
 		PUBLIC_WASM_DEBUG_RUNTIME_URL: '',
+		PUBLIC_WASM_DEBUG_RUNTIME_MANIFEST_SHA256: '',
 		PUBLIC_WASM_RUST_COMPILER_URL: '',
 		PUBLIC_WASM_GO_COMPILER_URL: '',
 		PUBLIC_WASM_D_MODULE_URL: '',
@@ -233,12 +234,84 @@ describe('runtime asset config resolution', () => {
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/debug-runtime/',
-			manifestUrl: 'https://example.com/debug-runtime/runtime-manifest.v2.json'
+			manifestUrl: 'https://example.com/debug-runtime/runtime-manifest.v2.json',
+			manifestReceipt: undefined
 		});
 		expect(resolveDebugRuntimeUrls('/absproxy/5173', 'https://example.com/app')).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-debug/',
-			manifestUrl: 'https://example.com/absproxy/5173/wasm-debug/runtime-manifest.v2.json'
+			manifestUrl: 'https://example.com/absproxy/5173/wasm-debug/runtime-manifest.v2.json',
+			manifestReceipt: {
+				bytes: 2853,
+				sha256: '74f5f1f8e7d831f58533ea3362061f133cd3d14ad56ae2eb3f1d11f666816a26'
+			}
 		});
+	});
+
+	it('requires an explicit manifest receipt for custom LLDB/WAMR assets', () => {
+		const custom = resolveDebugRuntimeUrls(
+			{
+				rootUrl: '/absproxy/5173',
+				debug: {
+					baseUrl: 'https://cdn.example/debug/',
+					manifestUrl: 'https://cdn.example/debug/runtime-manifest.v2.json'
+				}
+			},
+			'https://example.com/app'
+		);
+		expect(custom.manifestReceipt).toBeUndefined();
+
+		const pinned = resolveDebugRuntimeUrls(
+			{
+				debug: {
+					baseUrl: 'https://cdn.example/debug/',
+					manifestUrl: 'https://cdn.example/debug/runtime-manifest.v2.json',
+					manifestSha256:
+						'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+				}
+			},
+			'https://example.com/app'
+		);
+		expect(pinned.manifestReceipt).toEqual({
+			sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+		});
+	});
+
+	it('recognizes the application-local debug URLs as the bundled stable profile', () => {
+		expect(
+			resolveDebugRuntimeUrls(
+				{
+					rootUrl: '/absproxy/5173',
+					debug: {
+						baseUrl: '/absproxy/5173/wasm-debug/',
+						manifestUrl: '/absproxy/5173/wasm-debug/runtime-manifest.v2.json'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toMatchObject({
+			manifestReceipt: {
+				bytes: 2853,
+				sha256: '74f5f1f8e7d831f58533ea3362061f133cd3d14ad56ae2eb3f1d11f666816a26'
+			}
+		});
+	});
+
+	it('pairs a public custom LLDB/WAMR base URL with its public manifest receipt', () => {
+		publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_URL = 'https://cdn.example/debug/';
+		publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_MANIFEST_SHA256 =
+			'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+		try {
+			expect(resolveDebugRuntimeUrls(undefined, 'https://example.com/app')).toEqual({
+				baseUrl: 'https://cdn.example/debug/',
+				manifestUrl: 'https://cdn.example/debug/runtime-manifest.v2.json',
+				manifestReceipt: {
+					sha256: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+				}
+			});
+		} finally {
+			publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_URL = '';
+			publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_MANIFEST_SHA256 = '';
+		}
 	});
 
 	it('derives the default TeaVM asset base url from the shared root path', () => {

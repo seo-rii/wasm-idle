@@ -9,7 +9,8 @@ import { WorkerAssetBridge } from '$lib/playground/assetBridge';
 import {
 	resolveDebugRuntimeUrls,
 	resolveRuntimeAssetConfig,
-	type PlaygroundRuntimeAssets
+	type PlaygroundRuntimeAssets,
+	type RuntimeAssetIntegrityEntry
 } from '$lib/playground/assets';
 import { LldbSandboxSession, type LldbArtifactPayload } from '$lib/playground/lldbSession';
 import { normalizeDwarfWorkspacePath } from '@wasm-idle/llvm-core/clang';
@@ -62,6 +63,7 @@ class Clang implements Sandbox {
 	assetBridge: WorkerAssetBridge | null = null;
 	debugRuntimeBaseUrl = '';
 	debugManifestUrl = '';
+	debugManifestReceipt?: Readonly<RuntimeAssetIntegrityEntry>;
 	private lldbSession?: LldbSandboxSession;
 	private debugMode: 'none' | 'trace' | 'lldb' = 'none';
 	private readonly lldbBreakpoints = new Map<`/workspace/${string}`, number[]>();
@@ -108,6 +110,7 @@ class Clang implements Sandbox {
 			);
 			this.debugRuntimeBaseUrl = debugRuntime.baseUrl;
 			this.debugManifestUrl = debugRuntime.manifestUrl;
+			this.debugManifestReceipt = debugRuntime.manifestReceipt;
 			const needsWorkerReset =
 				!this.worker || !this.assetBridge || !this.assetBridge.matches(assetConfig);
 			if (needsWorkerReset && this.worker) {
@@ -238,6 +241,7 @@ class Clang implements Sandbox {
 					const compilerWorker = this.worker;
 					const lldbSession = new LldbSandboxSession({
 						manifestUrl: this.debugManifestUrl,
+						manifestReceipt: this.debugManifestReceipt,
 						runtimeBaseUrl: this.debugRuntimeBaseUrl,
 						artifact: lldbArtifact as LldbArtifactPayload,
 						sourcePath,

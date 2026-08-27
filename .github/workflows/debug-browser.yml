@@ -63,6 +63,8 @@ jobs:
                   sha256sum --check <<<"27ae46467c33d7794878f956aadf70f7fb1ac92f3625466d5d066a772ccdf081  static/wasm-debug/debug/wamr-debug.js"
                   sha256sum --check <<<"652518a5c03d4b855ab5e661a313cb698f66ae462971d18e1a4ddac78160694f  static/wasm-debug/debug/wamr-debug.wasm"
                   sha256sum --check <<<"22998261a62469360bb373812566c364a9b97af01622f8479794c1624464beb3  static/wasm-debug/debug/wamr-debug.worker.mjs"
+            - name: Verify bundled debugger manifest receipt
+              run: pnpm vitest run src/lib/playground/lldbManifestReceipt.test.ts
             - name: Enforce synced static asset budgets
               run: pnpm run check:asset-sizes
             - if: github.event_name != 'schedule'

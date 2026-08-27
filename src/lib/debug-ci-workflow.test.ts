@@ -24,13 +24,17 @@ describe('LLDB browser integration workflow', () => {
 			'Download pinned LLDB and WAMR browser assets'
 		);
 		const lastHashVerificationIndex = workflow.lastIndexOf('sha256sum --check');
+		const manifestReceiptTestIndex = workflow.indexOf(
+			'pnpm vitest run src/lib/playground/lldbManifestReceipt.test.ts'
+		);
 		const assetBudgetIndex = workflow.indexOf('pnpm run check:asset-sizes');
 		const browserTestIndex = workflow.indexOf('pnpm run test:browser:debug:lldb');
 
 		expect(clangDownloadIndex).toBeGreaterThan(-1);
 		expect(debuggerDownloadIndex).toBeGreaterThan(clangDownloadIndex);
 		expect(lastHashVerificationIndex).toBeGreaterThan(debuggerDownloadIndex);
-		expect(assetBudgetIndex).toBeGreaterThan(lastHashVerificationIndex);
+		expect(manifestReceiptTestIndex).toBeGreaterThan(lastHashVerificationIndex);
+		expect(assetBudgetIndex).toBeGreaterThan(manifestReceiptTestIndex);
 		expect(browserTestIndex).toBeGreaterThan(assetBudgetIndex);
 	});
 

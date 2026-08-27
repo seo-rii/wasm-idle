@@ -281,14 +281,35 @@ memory change. The current basic fixture reports one sample at exactly 256 MiB a
 respectively. These values are the Emscripten linear-memory backing-buffer sizes, not total browser
 RSS; both workers retain bounded memory growth for workloads that exceed the initial allocation.
 
-The debug runtime requires a cross-origin-isolated page with `SharedArrayBuffer`. LLDB and WAMR
-assets are lazy-loaded from the versioned producer manifest and are not included in this npm
-package.
-Before compiling an LLDB run, the application resolves all six LLDB/WAMR assets from that manifest,
-downloads them one at a time, and verifies their pinned SHA-256 values. A missing or corrupt asset
-therefore selects trace debugging for that run before DWARF compilation begins. The session repeats
-the same preflight before creating workers so direct package consumers retain the integrity
-boundary.
+The debug runtime requires a cross-origin-isolated page with `SharedArrayBuffer`. Its verified
+Blob-backed modules and nested pthread Workers also require `blob:` in the deployment CSP's
+`script-src` and `worker-src`. LLDB and WAMR assets are lazy-loaded from the versioned producer
+manifest and are not included in this npm package.
+The bundled `/wasm-debug/` profile pins the raw `runtime-manifest.v2.json` response to its exact
+byte length and SHA-256 receipt. The consumer verifies those response bytes before JSON parsing or
+Worker creation; the verified manifest then supplies the six LLDB/WAMR asset receipts. A custom
+`runtimeAssets.debug.baseUrl` or `manifestUrl` must include
+`runtimeAssets.debug.manifestSha256`. Deployments configured through public environment variables
+must pair `PUBLIC_WASM_DEBUG_RUNTIME_URL` with
+`PUBLIC_WASM_DEBUG_RUNTIME_MANIFEST_SHA256`. A custom profile without a valid expected digest fails
+closed before fetching the manifest or creating a debugger Worker, allowing the product's
+pre-session capability check to offer a new trace run instead.
+Manifest downloads are capped at 64 KiB. An invalid or oversized `Content-Length` fails before the
+body reader starts; a missing or understated header still uses a counted byte stream that cancels
+as soon as the cap is crossed. The loader never calls the unbounded `Response.arrayBuffer()` path
+for this outer trust boundary.
+Before compiling an LLDB run, the application verifies only the bounded outer manifest. Once the
+DWARF artifact is ready, `BrowserLldbSession` resolves all six LLDB/WAMR assets from that manifest,
+downloads and verifies each one exactly once, and transfers the owned verified bytes to its Workers.
+The Workers never re-fetch executable URLs. A missing or corrupt binary fails the LLDB session before
+Worker creation. Direct package consumers must authenticate the raw manifest before passing its
+parsed value to `BrowserLldbSession`; the session then enforces the same single-fetch asset boundary.
+The tracked consumer profile and copied manifest/assets form one release compatibility unit.
+`sync:wasm-debug` derives the profile bytes and digest from the exact copied manifest and rolls both
+the asset directory and profile module back after ordinary publication failures; the dedicated
+post-sync receipt test is the release drift gate. A machine power loss between filesystem renames is
+outside the runtime publication contract, so release commits must include and verify code, profile,
+manifest, and assets together.
 
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
 Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,

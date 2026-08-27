@@ -480,8 +480,16 @@ describe('Rust sandbox', () => {
 		const sandbox = new Rust();
 		const worker = new MockWorker();
 		const events: any[] = [];
+		const manifestReceipt = {
+			sha256: 'a'.repeat(64)
+		};
 
 		sandbox.worker = worker as unknown as Worker;
+		(
+			sandbox as unknown as {
+				debugManifestReceipt?: Readonly<{ sha256: string }>;
+			}
+		).debugManifestReceipt = manifestReceipt;
 		sandbox.ondebug = (event) => events.push(event);
 		worker.postMessage.mockImplementationOnce(() => {
 			queueMicrotask(() => {
@@ -521,6 +529,7 @@ describe('Rust sandbox', () => {
 		await vi.waitFor(() => expect(lldbSessions).toHaveLength(1));
 		const session = lldbSessions[0];
 		expect(session.options).toMatchObject({
+			manifestReceipt,
 			sourcePath: '/workspace/main.rs',
 			breakpoints: [2, 3, 4, 7],
 			sourceBreakpoints: [

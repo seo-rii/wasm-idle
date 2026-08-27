@@ -45,6 +45,7 @@ import {
 import { WASM_PERL_RUNTIME_BUNDLE } from '$lib/playground/wasmPerlVersion';
 import { WASM_TCL_RUNTIME_BUNDLE } from '$lib/playground/wasmTclVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
+import { WASM_DEBUG_RUNTIME_PROFILE } from '$lib/playground/wasmDebugVersion';
 import {
 	RUBY_RUNTIME_BUNDLE,
 	RUBY_RUNTIME_MANIFEST_PATH,
@@ -139,6 +140,7 @@ export interface RustRuntimeAssetConfig {
 export interface DebugRuntimeAssetConfig {
 	baseUrl?: string;
 	manifestUrl?: string;
+	manifestSha256?: string;
 }
 
 export interface GoRuntimeAssetConfig {
@@ -881,20 +883,33 @@ export function resolveDebugRuntimeUrls(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.debug?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_URL || '').trim();
+	const configuredDebug = typeof options === 'object' ? options?.debug : undefined;
+	const publicBaseUrl = (publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_URL || '').trim();
+	const configuredBaseUrl = configuredDebug?.baseUrl || publicBaseUrl;
 	const rootUrl = (typeof options === 'string' ? options : options?.rootUrl) || '';
+	const bundledBaseUrl = resolveFolderRuntimeBaseUrl('wasm-debug', rootUrl, currentUrl);
 	const baseUrl = configuredBaseUrl
 		? normalizeBaseUrl(configuredBaseUrl, currentUrl)
-		: resolveFolderRuntimeBaseUrl('wasm-debug', rootUrl, currentUrl);
-	const configuredManifestUrl =
-		typeof options === 'object' ? options?.debug?.manifestUrl : undefined;
+		: bundledBaseUrl;
+	const configuredManifestUrl = configuredDebug?.manifestUrl;
+	const manifestUrl = configuredManifestUrl
+		? resolveConfiguredUrl(configuredManifestUrl, currentUrl)
+		: new URL('runtime-manifest.v2.json', baseUrl).href;
+	const bundledManifestUrl = new URL('runtime-manifest.v2.json', bundledBaseUrl).href;
+	const explicitManifestSha256 = (
+		configuredDebug
+			? configuredDebug.manifestSha256
+			: publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_MANIFEST_SHA256
+	)?.trim();
+	const manifestReceipt = explicitManifestSha256
+		? Object.freeze({ sha256: explicitManifestSha256 })
+		: baseUrl === bundledBaseUrl && manifestUrl === bundledManifestUrl
+			? WASM_DEBUG_RUNTIME_PROFILE.manifestReceipt
+			: undefined;
 	return {
 		baseUrl,
-		manifestUrl: configuredManifestUrl
-			? resolveConfiguredUrl(configuredManifestUrl, currentUrl)
-			: new URL('runtime-manifest.v2.json', baseUrl).href
+		manifestUrl,
+		manifestReceipt
 	};
 }
 

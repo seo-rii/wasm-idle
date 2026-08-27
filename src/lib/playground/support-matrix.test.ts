@@ -31,6 +31,8 @@ describe('README support matrix', () => {
 			'write data breakpoint stops when at least one watched byte changes'
 		);
 		expect(section).toContain('DAP is an internal product protocol boundary');
+		expect(section).toContain('`script-src` and `worker-src` must permit `blob:`');
+		expect(section).toMatch(/Workers do not\s+re-fetch executable runtime URLs/);
 		expect(section).toContain('LLDB-designated browser fixtures reject trace fallback');
 		expect(section).toMatch(
 			/a separate missing-asset\s+fixture qualifies the pre-session trace alternative/

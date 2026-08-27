@@ -2,7 +2,8 @@ import {
 	resolveDebugRuntimeUrls,
 	resolveRustCompilerUrl,
 	resolveRustDebugModuleUrl,
-	type PlaygroundRuntimeAssets
+	type PlaygroundRuntimeAssets,
+	type RuntimeAssetIntegrityEntry
 } from '$lib/playground/assets';
 import { LldbSandboxSession, type LldbArtifactPayload } from '$lib/playground/lldbSession';
 import {
@@ -71,6 +72,7 @@ class Rust implements Sandbox {
 	assetPath = '';
 	debugRuntimeBaseUrl = '';
 	debugManifestUrl = '';
+	debugManifestReceipt?: Readonly<RuntimeAssetIntegrityEntry>;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -110,6 +112,7 @@ class Rust implements Sandbox {
 			const debugRuntime = resolveDebugRuntimeUrls(runtimeAssets, currentUrl);
 			this.debugRuntimeBaseUrl = debugRuntime.baseUrl;
 			this.debugManifestUrl = debugRuntime.manifestUrl;
+			this.debugManifestReceipt = debugRuntime.manifestReceipt;
 			const nextAssetPath =
 				typeof runtimeAssets === 'string'
 					? runtimeAssets
@@ -252,6 +255,7 @@ class Rust implements Sandbox {
 					const compilerWorker = this.worker;
 					const lldbSession = new LldbSandboxSession({
 						manifestUrl: this.debugManifestUrl,
+						manifestReceipt: this.debugManifestReceipt,
 						runtimeBaseUrl: this.debugRuntimeBaseUrl,
 						artifact: lldbArtifact as LldbArtifactPayload,
 						sourcePath: rustLldbSourcePath,

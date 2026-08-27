@@ -3,6 +3,7 @@ import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
 import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
+import { createExecutionPreflightGate } from './executionPreflight';
 import {
 	argsHelpLanguages,
 	argsLabels,
@@ -102,10 +103,15 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/language !== 'RUST' \|\| rustTargetTriple === 'wasm32-wasip1'/);
 		expect(source).toMatch(/if \(executionDebugMode === 'lldb'\) \{/);
 		expect(source).toMatch(/executionDebugMode = 'trace';/);
-		expect(source).toMatch(/parseDebugRuntimeManifest\(await response\.json\(\)\)/);
+		expect(source).not.toMatch(/parseDebugRuntimeManifest\(await response\.json\(\)\)/);
 		expect(source).toMatch(
-			/await preflightDebugRuntimeAssets\(\s*manifest,\s*new URL\(runtimeAssets\.debug\.baseUrl, globalThis\.location\.href\)\s*\);/s
+			/resolveDebugRuntimeUrls\(\s*runtimeAssets,\s*globalThis\.location\.href\s*\)/s
 		);
+		expect(source).toMatch(
+			/loadVerifiedDebugRuntimeManifest\(\s*debugRuntime\.manifestUrl,\s*debugRuntime\.manifestReceipt,\s*fetch,\s*preflight\.signal\s*\)/s
+		);
+		expect(source).not.toContain('preflightDebugRuntimeAssets');
+		expect(source).toContain('if (!executionPreflight.isCurrent(preflight)) return;');
 		expect(source).toMatch(/if \(!debug\.paused\) debug\.reset\(\);/);
 		expect(source).toMatch(
 			/title=\{debug\.cursorLine\s+\?\s+`Run to Cursor \(L\$\{debug\.cursorLine\}\)`\s+:\s+'Run to Cursor'\}/
@@ -221,11 +227,37 @@ describe('example route debug actions', () => {
 		expect(source).toContain('await debug.stop();');
 		expect(source).toContain('await previousExecution;');
 		expect(source).toContain('await exec(true);');
+		expect(source).toContain('executionPreflight.cancel();');
 		expect(source).toContain('aria-label="Restart Debug"');
 		expect(source).toContain('disabled={restartDebugPending}');
 		expect(source).toMatch(
 			/if \(executionGeneration === generation\) \{[\s\S]*?runningMode = null;\s+activeExecution = null;/
 		);
+	});
+
+	it('keeps a stopped preflight obsolete and admits a clean relaunch', async () => {
+		const gate = createExecutionPreflightGate();
+		let releasePreflight!: () => void;
+		const stalledPreflight = new Promise<void>((resolve) => {
+			releasePreflight = resolve;
+		});
+		let executionCount = 0;
+		const first = gate.begin();
+		const obsoleteRun = (async () => {
+			await stalledPreflight;
+			if (gate.isCurrent(first)) executionCount += 1;
+		})();
+
+		gate.cancel();
+		expect(first.signal.aborted).toBe(true);
+		releasePreflight();
+		await obsoleteRun;
+		expect(executionCount).toBe(0);
+
+		const relaunch = gate.begin();
+		if (gate.isCurrent(relaunch)) executionCount += 1;
+		gate.finish(relaunch);
+		expect(executionCount).toBe(1);
 	});
 
 	it('navigates the workspace editor when an LLDB frame belongs to another source', () => {

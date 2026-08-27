@@ -20,6 +20,7 @@
 		createApplicationRuntimeAssets
 	} from '$lib/playground/applicationAssets';
 	import { createLoadingProgressController } from '$lib/playground/loadingProgress';
+	import { resolveDebugRuntimeUrls } from '$lib/playground/assets';
 	import type {
 		CompilerDiagnostic,
 		DebugDataBreakpoint,
@@ -39,6 +40,7 @@
 	} from '$lib/playground/options';
 	import type monaco from 'monaco-editor';
 	import { executeTerminalRun } from './execute';
+	import { createExecutionPreflightGate } from './executionPreflight';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
 	import {
 		isEditorDefaultSource,
@@ -189,6 +191,7 @@
 	let executionGeneration = 0;
 	let restartRequestGeneration = 0;
 	let activeExecution: Promise<void> | null = null;
+	const executionPreflight = createExecutionPreflightGate();
 
 	const initialWorkspace = createDefaultWorkspace('CPP');
 	let languageWorkspaces = $state<Record<PlaygroundLanguage, LanguageWorkspace>>({
@@ -1246,6 +1249,7 @@
 		if (!terminal || !runningMode) return;
 		restartRequestGeneration += 1;
 		restartDebugPending = false;
+		executionPreflight.cancel();
 		if (runningMode === 'debug') {
 			await debug.stop();
 			return;
@@ -1258,6 +1262,7 @@
 		const requestGeneration = ++restartRequestGeneration;
 		const previousExecution = activeExecution;
 		restartDebugPending = true;
+		executionPreflight.cancel();
 		try {
 			await debug.stop();
 			await previousExecution;
@@ -1733,6 +1738,7 @@
 		if (enableDebug && !debugTargetAvailable) return Promise.resolve();
 		if (runningMode) return Promise.resolve();
 		const generation = ++executionGeneration;
+		const preflight = executionPreflight.begin();
 		const execution = (async () => {
 			let executionDebugMode: NonNullable<SandboxExecutionOptions['debugMode']> = enableDebug
 				? selectedDebugMode
@@ -1764,16 +1770,18 @@
 				if (executionDebugMode === 'lldb') {
 					try {
 						loadingProgress.set(0, 'Checking LLDB debug runtime');
-						const manifestUrl = runtimeAssets.debug?.manifestUrl;
-						if (!manifestUrl)
-							throw new Error('LLDB runtime manifest URL is not configured.');
-						const response = await fetch(manifestUrl, { cache: 'no-store' });
-						if (!response.ok) {
-							throw new Error(`LLDB runtime manifest returned ${response.status}.`);
-						}
-						const { parseDebugRuntimeManifest, preflightDebugRuntimeAssets } =
-							await import('@wasm-idle/llvm-core/debug');
-						const manifest = parseDebugRuntimeManifest(await response.json());
+						const debugRuntime = resolveDebugRuntimeUrls(
+							runtimeAssets,
+							globalThis.location.href
+						);
+						const { loadVerifiedDebugRuntimeManifest } =
+							await import('$lib/playground/lldbManifest');
+						const manifest = await loadVerifiedDebugRuntimeManifest(
+							debugRuntime.manifestUrl,
+							debugRuntime.manifestReceipt,
+							fetch,
+							preflight.signal
+						);
 						const capabilities = manifest.debugger.capabilities;
 						if (
 							!capabilities.breakpoints ||
@@ -1783,12 +1791,10 @@
 						) {
 							throw new Error('LLDB runtime is missing required debug capabilities.');
 						}
-						await preflightDebugRuntimeAssets(
-							manifest,
-							new URL(runtimeAssets.debug.baseUrl, globalThis.location.href)
-						);
+						if (!executionPreflight.isCurrent(preflight)) return;
 						activeDebugBackend = 'lldb';
 					} catch (error) {
+						if (!executionPreflight.isCurrent(preflight)) return;
 						executionDebugMode = 'trace';
 						activeDebugBackend = 'trace';
 						console.warn(
@@ -1797,6 +1803,7 @@
 						);
 					}
 				}
+				if (!executionPreflight.isCurrent(preflight)) return;
 				const preloadedStdin =
 					sharedBufferAvailable && language !== 'BASH' ? undefined : stdinInput;
 				await executeTerminalRun({
@@ -1826,6 +1833,7 @@
 					}
 				});
 			} finally {
+				executionPreflight.finish(preflight);
 				if (executionGeneration === generation) {
 					loadingProgress.reset();
 					runningMode = null;

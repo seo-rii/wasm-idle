@@ -102,9 +102,15 @@ debug target connects.
 `@wasm-idle/llvm-core/debug` owns the browser session and `wasm-llvm` owns the pinned LLDB/WAMR
 producers and binary manifests.
 
-Debugging requires `SharedArrayBuffer` and a cross-origin-isolated deployment. The LLDB and WAMR
-assets are not downloaded until a supported debug session starts. If the LLDB manifest is absent,
-invalid, or does not advertise the required breakpoint/step/stack/local capabilities, the
+Debugging requires `SharedArrayBuffer` and a cross-origin-isolated deployment. Because verified
+runtime bytes are executed through Blob-backed ES modules and nested pthread Workers, the deployed
+Content Security Policy's `script-src` and `worker-src` must permit `blob:`. The LLDB and WAMR
+assets are not downloaded until a supported debug session starts. The bundled raw manifest is
+checked against its release receipt before parsing, and custom runtime locations must provide an
+explicit expected manifest SHA-256. The six executable assets are then streamed, bounded, and
+hash-verified exactly once before their owned bytes are transferred to the Workers. Workers do not
+re-fetch executable runtime URLs. If the LLDB manifest is absent, invalid, or does not advertise
+the required breakpoint/step/stack/local capabilities, the
 playground labels that run as a trace fallback and keeps the existing instrumentation debugger
 available. LLDB-designated browser fixtures reject trace fallback, while a separate missing-asset
 fixture qualifies the pre-session trace alternative. Build and verify both producers
