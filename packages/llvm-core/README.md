@@ -395,7 +395,9 @@ debug Worker termination calls are observable.
 The execution preflight signal also remains attached after manifest verification and is checked
 before and after terminal clear, prepare, and run. Stop or Restart during the clear/compile startup
 window therefore retires that execution before it can create a late debugger session; a Restart
-waits for the retired execution to settle and then starts one fresh generation.
+waits for the retired execution to settle and then starts one fresh generation. A retired aborted
+generation is ignored even when the shared sandbox boundary wraps the abort reason in its typed
+cancellation error.
 If the shared execution boundary cancels a run for timeout or output limits, it reports that limit
 promptly but keeps the sandbox busy until both the guest operation and asynchronous debugger
 teardown have settled. A following clear, restart, or run therefore cannot overlap the retiring

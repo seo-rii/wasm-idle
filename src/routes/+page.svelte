@@ -1834,12 +1834,7 @@
 					}
 				});
 			} catch (error) {
-				if (
-					preflight.signal.aborted &&
-					!executionPreflight.isCurrent(preflight) &&
-					error === preflight.signal.reason
-				)
-					return;
+				if (preflight.signal.aborted && !executionPreflight.isCurrent(preflight)) return;
 				throw error;
 			} finally {
 				executionPreflight.finish(preflight);

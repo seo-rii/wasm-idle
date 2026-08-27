@@ -58,6 +58,12 @@ describe('example route debug actions', () => {
 	});
 
 	it('delegates debug state, runtime watches, and run-to-cursor to the shared debug controller', () => {
+		const executionStart = source.indexOf('function exec(');
+		const executionCatchStart = source.indexOf('} catch (error) {', executionStart);
+		const executionCatch = source.slice(
+			executionCatchStart,
+			source.indexOf('} finally', executionCatchStart) + '} finally'.length
+		);
 		expect(source).toMatch(
 			/import Terminal, \{ type TerminalControl \} from '@wasm-idle\/terminal';/
 		);
@@ -113,9 +119,10 @@ describe('example route debug actions', () => {
 		expect(source).not.toContain('preflightDebugRuntimeAssets');
 		expect(source).toContain('if (!executionPreflight.isCurrent(preflight)) return;');
 		expect(source).toMatch(/signal: preflight\.signal,/);
-		expect(source).toMatch(
-			/catch \(error\) \{\s+if \(\s*preflight\.signal\.aborted &&\s*!executionPreflight\.isCurrent\(preflight\) &&\s*error === preflight\.signal\.reason\s*\)\s*return;\s+throw error;\s+\} finally/s
+		expect(executionCatch).toMatch(
+			/catch \(error\) \{\s+if \(\s*preflight\.signal\.aborted &&\s*!executionPreflight\.isCurrent\(preflight\)\s*\)\s+return;\s+throw error;\s+\} finally/s
 		);
+		expect(executionCatch).not.toContain('error === preflight.signal.reason');
 		expect(source).toMatch(/if \(!debug\.paused\) debug\.reset\(\);/);
 		expect(source).toMatch(
 			/title=\{debug\.cursorLine\s+\?\s+`Run to Cursor \(L\$\{debug\.cursorLine\}\)`\s+:\s+'Run to Cursor'\}/
