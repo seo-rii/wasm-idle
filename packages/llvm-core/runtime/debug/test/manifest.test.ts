@@ -256,6 +256,56 @@ describe('debug runtime manifest', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it.each([
+		{
+			caseName: 'invalid byte chunk',
+			chunk: 'not-bytes',
+			error: /response body yielded invalid bytes/u
+		},
+		{
+			caseName: 'oversized byte chunk',
+			chunk: Object.defineProperty(new Uint8Array(0), 'byteLength', {
+				value: 55_000_001
+			}),
+			error: /55,000,000 byte budget/u
+		}
+	])(
+		'preserves the $caseName failure when cancelling its stream also fails',
+		async ({ chunk, error }) => {
+			const parsed = parseDebugRuntimeManifest(manifest());
+			const cancel = vi.fn(async () => {
+				throw new Error('asset stream cancellation failed');
+			});
+			let readCount = 0;
+			const response = {
+				ok: true,
+				status: 200,
+				headers: new Headers(),
+				body: {
+					getReader: () => ({
+						read: vi.fn(async () => {
+							readCount += 1;
+							return readCount === 1
+								? { done: false, value: chunk }
+								: { done: true, value: undefined };
+						}),
+						cancel,
+						releaseLock: vi.fn()
+					})
+				}
+			} as unknown as Response;
+
+			await expect(
+				preflightDebugRuntimeAssets(
+					parsed,
+					'https://cdn.example/runtime/',
+					async () => response
+				)
+			).rejects.toThrow(error);
+			expect(cancel).toHaveBeenCalledOnce();
+		}
+	);
+
 	it('cancels a pending asset body when preflight is aborted', async () => {
 		const parsed = parseDebugRuntimeManifest(manifest());
 		const abortController = new AbortController();

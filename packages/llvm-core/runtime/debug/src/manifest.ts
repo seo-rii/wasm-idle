@@ -336,14 +336,22 @@ export async function preflightDebugRuntimeAssets(
 					if (result.done) break;
 					if (!(result.value instanceof Uint8Array)) {
 						const error = new TypeError(`${label} response body yielded invalid bytes`);
-						await reader.cancel(error);
+						try {
+							await reader.cancel(error);
+						} catch {
+							// Preserve the byte-validation failure when response cancellation also fails.
+						}
 						throw error;
 					}
 					if (result.value.byteLength > remainingBytes - length) {
 						const error = new Error(
 							`${label} exceeds the ${MAX_DEBUG_RUNTIME_ASSET_BYTES.toLocaleString('en-US')} byte budget`
 						);
-						await reader.cancel(error);
+						try {
+							await reader.cancel(error);
+						} catch {
+							// Preserve the budget failure when response cancellation also fails.
+						}
 						throw error;
 					}
 					const owned = new Uint8Array(result.value.byteLength);
