@@ -83,6 +83,7 @@ export interface StaticWorkerRuntimeConfig {
 	displayName: string;
 	defaultActivePath: string;
 	inlineVerifiedWorker?: boolean;
+	requireExactWorkerResponseUrl?: boolean;
 	moduleWorker?: boolean;
 	stdin: StaticWorkerRuntimeStdin;
 	workerLifetime?: RuntimeWorkerLifetimePolicy;
@@ -670,6 +671,14 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				);
 				if (phaseController.signal.aborted) onPhaseAbort();
 			});
+			if (!response.url && this.config.requireExactWorkerResponseUrl) {
+				const error = new ProtocolError(
+					`${this.config.displayName} worker script response did not expose an exact final URL`,
+					{ phase: 'asset', runtimeId: this.config.languageId }
+				);
+				cancelWorkerScriptResponse(response, error);
+				throw error;
+			}
 			if (response.url) {
 				let finalResponseUrl: string;
 				try {

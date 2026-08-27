@@ -10,6 +10,10 @@ import { BUNDLED_ELIXIR_ASSET_VERSION } from './bundledElixirRuntimeIntegrity.js
 import { BUNDLED_GLEAM_MANIFEST_FINGERPRINT } from './bundledGleamRuntime.js';
 import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from './bundledLispRuntime.js';
 import {
+	BUNDLED_AWK_MANIFEST_FINGERPRINT,
+	BUNDLED_AWK_RUNTIME_BUNDLE
+} from './bundledAwkRuntime.js';
+import {
 	BUNDLED_JANET_MANIFEST_FINGERPRINT,
 	BUNDLED_JANET_RUNTIME_BUNDLE
 } from './bundledJanetRuntime.js';
@@ -36,12 +40,15 @@ import {
 	RUBY_RUNTIME_MODULE_STORAGE_PATH,
 	RUBY_RUNTIME_PROFILE,
 	RUBY_RUNTIME_WASM_STORAGE_PATH,
+	AWK_RUNTIME_WORKER_PATH,
+	snapshotAwkRuntimePreflightProfile,
 	snapshotJanetRuntimePreflightProfile,
 	snapshotPascalRuntimePreflightProfile,
 	snapshotPerlRuntimePreflightProfile,
 	snapshotPrologRuntimePreflightProfile,
 	snapshotRubyRuntimePreflightProfile,
 	snapshotTclRuntimePreflightProfile,
+	type AwkRuntimePreflightProfile,
 	type JanetRuntimePreflightProfile,
 	type PascalRuntimePreflightProfile,
 	type PerlRuntimePreflightProfile,
@@ -1230,42 +1237,206 @@ export function resolveRLanguageServerBaseUrl(
 	return resolveApplicationAssetUrl('/webr/', currentUrl);
 }
 
-export function resolveAwkLanguageServerBaseUrl(
+type AwkLanguageServerRuntimeConfig = NonNullable<EditorLanguageServerRuntimeOptions['awk']>;
+
+const AWK_LANGUAGE_SERVER_CONFIG_KEYS = [
+	'baseUrl',
+	'workerUrl',
+	'manifestUrl',
+	'manifestFingerprint',
+	'profileId',
+	'goVersion',
+	'goawkVersion',
+	'manifestReceipt',
+	'workerReceipt',
+	'goShimReceipt',
+	'wasmReceipt'
+] as const satisfies readonly (keyof AwkLanguageServerRuntimeConfig)[];
+
+function snapshotAwkLanguageServerOptions(
+	options: EditorLanguageServerOptions | undefined
+): EditorLanguageServerOptions | undefined {
+	if (!options || typeof options !== 'object') return options;
+	const source = options.awk;
+	const rootUrl = options.rootUrl;
+	if (!source) return Object.freeze({ rootUrl });
+	const awk: Record<string, unknown> = {};
+	for (const key of AWK_LANGUAGE_SERVER_CONFIG_KEYS) awk[key] = source[key];
+	return Object.freeze({
+		rootUrl,
+		awk: Object.freeze(awk) as Readonly<AwkLanguageServerRuntimeConfig>
+	});
+}
+
+function hasConfiguredAwkTrust(
+	configured: Readonly<AwkLanguageServerRuntimeConfig> | undefined
+): boolean {
+	return (
+		!!configured &&
+		[
+			configured.profileId,
+			configured.goVersion,
+			configured.goawkVersion,
+			configured.manifestFingerprint,
+			configured.manifestReceipt,
+			configured.workerReceipt,
+			configured.goShimReceipt,
+			configured.wasmReceipt
+		].some((value) => value !== undefined)
+	);
+}
+
+function resolveAwkLanguageServerPreflightProfileFromSnapshot(
+	options: EditorLanguageServerOptions | undefined
+): AwkRuntimePreflightProfile {
+	const configured = typeof options === 'object' ? options.awk : undefined;
+	const bundledProfile = snapshotAwkRuntimePreflightProfile(BUNDLED_AWK_RUNTIME_BUNDLE.profile);
+	if (!hasConfiguredAwkTrust(configured)) {
+		return bundledProfile;
+	}
+
+	let configuredProfile: AwkRuntimePreflightProfile;
+	try {
+		configuredProfile = snapshotAwkRuntimePreflightProfile({
+			profileId: configured?.profileId?.trim(),
+			goVersion: configured?.goVersion?.trim(),
+			goawkVersion: configured?.goawkVersion?.trim(),
+			manifestFingerprint: configured?.manifestFingerprint?.trim(),
+			manifestReceipt: configured?.manifestReceipt,
+			workerReceipt: configured?.workerReceipt,
+			goShimReceipt: configured?.goShimReceipt,
+			wasmReceipt: configured?.wasmReceipt
+		});
+	} catch {
+		throw new LanguageServerAssetConfigurationError(
+			'AWK LSP',
+			'a complete valid runtime preflight profile and receipts'
+		);
+	}
+	if (
+		configuredProfile.profileId !== bundledProfile.profileId ||
+		configuredProfile.goVersion !== bundledProfile.goVersion ||
+		configuredProfile.goawkVersion !== bundledProfile.goawkVersion ||
+		configuredProfile.manifestFingerprint !== bundledProfile.manifestFingerprint ||
+		configuredProfile.manifestReceipt.bytes !== bundledProfile.manifestReceipt.bytes ||
+		configuredProfile.manifestReceipt.sha256 !== bundledProfile.manifestReceipt.sha256 ||
+		configuredProfile.workerReceipt.bytes !== bundledProfile.workerReceipt.bytes ||
+		configuredProfile.workerReceipt.sha256 !== bundledProfile.workerReceipt.sha256 ||
+		configuredProfile.goShimReceipt.bytes !== bundledProfile.goShimReceipt.bytes ||
+		configuredProfile.goShimReceipt.sha256 !== bundledProfile.goShimReceipt.sha256 ||
+		configuredProfile.wasmReceipt.bytes !== bundledProfile.wasmReceipt.bytes ||
+		configuredProfile.wasmReceipt.sha256 !== bundledProfile.wasmReceipt.sha256 ||
+		configuredProfile.wasmReceipt.uncompressedBytes !==
+			bundledProfile.wasmReceipt.uncompressedBytes ||
+		configuredProfile.wasmReceipt.uncompressedSha256 !==
+			bundledProfile.wasmReceipt.uncompressedSha256
+	) {
+		throw new LanguageServerAssetConfigurationError(
+			'AWK LSP',
+			'the bundled runtime trust profile; custom URLs may only mirror bundled assets'
+		);
+	}
+	return bundledProfile;
+}
+
+function resolveAwkLanguageServerBaseUrlFromSnapshot(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''
 ) {
 	if (typeof options === 'string') {
 		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-awk/`, currentUrl);
 	}
-	if (options?.awk?.baseUrl) {
-		return resolveFileUrl(options.awk.baseUrl, currentUrl);
-	}
+	if (options?.awk?.baseUrl) return normalizeBaseUrl(options.awk.baseUrl, currentUrl);
 	if (options?.rootUrl) {
 		return resolveFileUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-awk/`, currentUrl);
 	}
 	return resolveApplicationAssetUrl('/wasm-awk/', currentUrl);
 }
 
+export function resolveAwkLanguageServerPreflightProfile(
+	options: EditorLanguageServerOptions | undefined
+): AwkRuntimePreflightProfile {
+	return resolveAwkLanguageServerPreflightProfileFromSnapshot(
+		snapshotAwkLanguageServerOptions(options)
+	);
+}
+
+export function resolveAwkLanguageServerManifestFingerprint(
+	options: EditorLanguageServerOptions | undefined
+) {
+	const profile = resolveAwkLanguageServerPreflightProfile(options);
+	return profile.manifestFingerprint || BUNDLED_AWK_MANIFEST_FINGERPRINT;
+}
+
+export function resolveAwkLanguageServerWorkerReceipt(
+	options: EditorLanguageServerOptions | undefined
+) {
+	return resolveAwkLanguageServerPreflightProfile(options).workerReceipt;
+}
+
+export function resolveAwkLanguageServerBaseUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	const snapshot = snapshotAwkLanguageServerOptions(options);
+	resolveAwkLanguageServerPreflightProfileFromSnapshot(snapshot);
+	return resolveAwkLanguageServerBaseUrlFromSnapshot(snapshot, currentUrl);
+}
+
 export function resolveAwkLanguageServerWorkerUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''
 ) {
-	if (typeof options === 'string') {
-		return resolveFileUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-awk/runner-worker.js`,
-			currentUrl
-		);
+	const snapshot = snapshotAwkLanguageServerOptions(options);
+	const profile = resolveAwkLanguageServerPreflightProfileFromSnapshot(snapshot);
+	if (typeof snapshot === 'object' && snapshot.awk?.workerUrl) {
+		return resolveFileUrl(snapshot.awk.workerUrl, currentUrl);
 	}
-	if (options?.awk?.workerUrl) {
-		return resolveFileUrl(options.awk.workerUrl, currentUrl);
+	const baseUrl = resolveAwkLanguageServerBaseUrlFromSnapshot(snapshot, currentUrl);
+	return resolveFileUrl(
+		`${baseUrl}${AWK_RUNTIME_WORKER_PATH}?v=${profile.workerReceipt.sha256}`,
+		currentUrl
+	);
+}
+
+export function resolveAwkLanguageServerManifestUrl(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	const snapshot = snapshotAwkLanguageServerOptions(options);
+	const profile = resolveAwkLanguageServerPreflightProfileFromSnapshot(snapshot);
+	if (typeof snapshot === 'object' && snapshot.awk?.manifestUrl) {
+		return resolveFileUrl(snapshot.awk.manifestUrl, currentUrl);
 	}
-	if (options?.rootUrl) {
-		return resolveFileUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-awk/runner-worker.js`,
-			currentUrl
-		);
-	}
-	return resolveApplicationAssetUrl('/wasm-awk/runner-worker.js', currentUrl);
+	const baseUrl = resolveAwkLanguageServerBaseUrlFromSnapshot(snapshot, currentUrl);
+	return resolveFileUrl(
+		`${baseUrl}runtime-manifest.v2.json?v=${profile.manifestFingerprint}`,
+		currentUrl
+	);
+}
+
+export function resolveAwkLanguageServerAssetConfig(
+	options: EditorLanguageServerOptions | undefined,
+	currentUrl = ''
+) {
+	const snapshot = snapshotAwkLanguageServerOptions(options);
+	const profile = resolveAwkLanguageServerPreflightProfileFromSnapshot(snapshot);
+	const baseUrl = resolveAwkLanguageServerBaseUrlFromSnapshot(snapshot, currentUrl);
+	const workerUrl =
+		typeof snapshot === 'object' && snapshot.awk?.workerUrl
+			? resolveFileUrl(snapshot.awk.workerUrl, currentUrl)
+			: resolveFileUrl(
+					`${baseUrl}${AWK_RUNTIME_WORKER_PATH}?v=${profile.workerReceipt.sha256}`,
+					currentUrl
+				);
+	const manifestUrl =
+		typeof snapshot === 'object' && snapshot.awk?.manifestUrl
+			? resolveFileUrl(snapshot.awk.manifestUrl, currentUrl)
+			: resolveFileUrl(
+					`${baseUrl}runtime-manifest.v2.json?v=${profile.manifestFingerprint}`,
+					currentUrl
+				);
+	return Object.freeze({ baseUrl, workerUrl, manifestUrl, profile });
 }
 
 export function resolvePerlLanguageServerBaseUrl(

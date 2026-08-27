@@ -26,7 +26,8 @@ type LayeredFixtures = {
 
 async function createServiceWorkerHarness(
 	payloads: Record<string, Uint8Array>,
-	layeredFixtures?: LayeredFixtures
+	layeredFixtures?: LayeredFixtures,
+	networkPayloads: Record<string, Uint8Array> = {}
 ) {
 	const source = await readFile(serviceWorkerPath, 'utf8');
 	const listeners = new Map<string, Array<(event: any) => void>>();
@@ -78,6 +79,12 @@ async function createServiceWorkerHarness(
 			});
 		}
 		const relativePath = url.pathname.slice(new URL(scope).pathname.length);
+		const networkPayload = networkPayloads[relativePath];
+		if (networkPayload) {
+			const response = new Response(Uint8Array.from(networkPayload), { status: 200 });
+			Object.defineProperty(response, 'url', { value: url.href });
+			return response;
+		}
 		for (const [layerPath, fixture] of Object.entries(currentLayeredFixtures?.layers ?? {})) {
 			const gzipPath = layerPath.endsWith('.gz') ? layerPath : `${layerPath}.gz`;
 			if (relativePath !== gzipPath) continue;
@@ -159,6 +166,37 @@ async function createServiceWorkerHarness(
 }
 
 describe('compressed runtime service worker', () => {
+	it('preserves exact final URLs for pinned AWK v2 network responses', async () => {
+		const receipt = 'a'.repeat(64);
+		for (const assetName of [
+			'goawk.wasm.gz.bin',
+			'runner-worker.v2.js',
+			'runtime-manifest.v2.json',
+			'wasm_exec.js'
+		]) {
+			const assetPath = `wasm-awk/${assetName}`;
+			const harness = await createServiceWorkerHarness({}, undefined, {
+				[assetPath]: new TextEncoder().encode(assetName)
+			});
+
+			const response = await harness.request(`${assetPath}?v=${receipt}`);
+
+			expect(response.status).toBe(200);
+			expect(response.url).toBe(`${scope}${assetPath}?v=${receipt}`);
+		}
+	});
+
+	it('does not widen AWK exact-URL preservation to matching basenames or extra queries', async () => {
+		const receipt = 'a'.repeat(64);
+		const harness = await createServiceWorkerHarness({}, undefined, {
+			'other/wasm_exec.js': new TextEncoder().encode('other'),
+			'wasm-awk/wasm_exec.js': new TextEncoder().encode('awk')
+		});
+
+		expect((await harness.request(`other/wasm_exec.js?v=${receipt}`)).url).toBe('');
+		expect((await harness.request(`wasm-awk/wasm_exec.js?v=${receipt}&extra=1`)).url).toBe('');
+	});
+
 	it('refreshes a stale manifest when a newly deployed logical asset is requested', async () => {
 		const originalPath = 'wasm-php/assets/php-old.wasm';
 		const nextPath = 'wasm-php/assets/php-next.wasm';

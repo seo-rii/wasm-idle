@@ -72,6 +72,11 @@ import {
 } from './wasmTclVersion';
 import { WASM_TINYGO_ASSET_VERSION, WASM_TINYGO_RUNTIME_PROFILE } from './wasmTinyGoVersion';
 import { WASM_ZIG_ASSET_RECEIPTS, WASM_ZIG_ASSET_VERSION } from './wasmZigVersion';
+import {
+	WASM_AWK_ASSET_VERSION,
+	WASM_AWK_RUNNER_RECEIPT,
+	WASM_AWK_RUNTIME_PROFILE
+} from './wasmAwkVersion';
 
 describe('application runtime asset root', () => {
 	it.each([
@@ -173,6 +178,12 @@ describe('application runtime asset root', () => {
 		expect(assets.go).toEqual({
 			compilerUrl: `/foo/bar/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`,
 			manifestUrl: `/foo/bar/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`
+		});
+		expect(assets.awk).toEqual({
+			baseUrl: '/foo/bar/wasm-awk/',
+			workerUrl: `/foo/bar/wasm-awk/runner-worker.v2.js?v=${WASM_AWK_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-awk/runtime-manifest.v2.json?v=${WASM_AWK_ASSET_VERSION}`,
+			...WASM_AWK_RUNTIME_PROFILE
 		});
 		expect(assets.pascal).toEqual({
 			baseUrl: '/foo/bar/wasm-pascal/',
@@ -439,6 +450,17 @@ describe('application runtime asset root', () => {
 					}
 				]
 			]),
+			awkBaseUrl: '/foo/bar/wasm-awk/',
+			awkWorkerUrl: `/foo/bar/wasm-awk/runner-worker.v2.js?v=${WASM_AWK_RUNNER_RECEIPT.sha256}`,
+			awkManifestUrl: `/foo/bar/wasm-awk/runtime-manifest.v2.json?v=${WASM_AWK_ASSET_VERSION}`,
+			awkManifestFingerprint: WASM_AWK_ASSET_VERSION,
+			awkProfileId: WASM_AWK_RUNTIME_PROFILE.profileId,
+			awkGoVersion: WASM_AWK_RUNTIME_PROFILE.goVersion,
+			awkGoawkVersion: WASM_AWK_RUNTIME_PROFILE.goawkVersion,
+			awkManifestReceipt: expect.any(String),
+			awkWorkerReceipt: expect.any(String),
+			awkGoShimReceipt: expect.any(String),
+			awkWasmReceipt: expect.any(String),
 			pascalBaseUrl: '/foo/bar/wasm-pascal/',
 			pascalWorkerUrl: `/foo/bar/wasm-pascal/runner-worker.js?v=${WASM_PASCAL_RUNNER_RECEIPT.sha256}`,
 			pascalManifestUrl: `/foo/bar/wasm-pascal/runtime-manifest.v2.json?v=${WASM_PASCAL_ASSET_VERSION}`,

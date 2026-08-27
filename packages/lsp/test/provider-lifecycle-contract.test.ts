@@ -126,6 +126,7 @@ import { editorLanguageServerProviders } from '../src/registry.js';
 import type { DOuterAssetReceipts } from '../src/d/assets.js';
 import type { EditorLanguageServerRuntimeOptions } from '../src/types.js';
 import { createJanetTestAssetResponse } from './janet-fixture.js';
+import { createAwkTestAssetResponse } from './awk-fixture.js';
 import { createPascalTestAssetResponse } from './pascal-fixture.js';
 import { createPerlTestAssetResponse } from './perl-fixture.js';
 import { createPrologTestAssetResponse } from './prolog-fixture.js';
@@ -252,6 +253,10 @@ describe('registered LSP provider lifecycle contract', () => {
 				);
 				if (requestUrl.pathname.includes('/wasm-prolog/')) {
 					const response = createPrologTestAssetResponse(requestUrl);
+					if (response) return response;
+				}
+				if (requestUrl.pathname.includes('/wasm-awk/')) {
+					const response = createAwkTestAssetResponse(requestUrl);
 					if (response) return response;
 				}
 				if (requestUrl.pathname.includes('/wasm-tcl/')) {

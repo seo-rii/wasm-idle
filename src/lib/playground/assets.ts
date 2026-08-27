@@ -37,6 +37,7 @@ import { WASM_JULIA_RUNTIME_BUNDLE } from '$lib/playground/wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 import { WASM_NIM_RUNTIME_BUNDLE } from '$lib/playground/wasmNimVersion';
 import { WASM_PASCAL_RUNTIME_BUNDLE } from '$lib/playground/wasmPascalVersion';
+import { WASM_AWK_RUNTIME_BUNDLE } from '$lib/playground/wasmAwkVersion';
 import {
 	WASM_PROLOG_ASSET_VERSION,
 	WASM_PROLOG_RUNNER_RECEIPT,
@@ -54,6 +55,7 @@ import {
 	TEAVM_RUNTIME_ASSET_RECEIPTS,
 	RuntimeConfigurationError,
 	snapshotBashRuntimePreflightProfile,
+	snapshotAwkRuntimePreflightProfile,
 	snapshotJanetRuntimePreflightProfile,
 	snapshotJuliaRuntimePreflightProfile,
 	snapshotNimRuntimePreflightProfile,
@@ -64,6 +66,7 @@ import {
 	snapshotTclRuntimePreflightProfile,
 	snapshotTeaVmRuntimeAssetReceipts,
 	type HaskellRuntimeAssetReceipts,
+	type AwkRuntimePreflightProfile,
 	type RubyRuntimePreflightProfile
 } from '@wasm-idle/core';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from '$lib/playground/wasmFortranExecutionAssets';
@@ -348,6 +351,15 @@ export interface TclRuntimeAssetConfig {
 export interface AwkRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
+	manifestUrl?: string;
+	manifestFingerprint?: string;
+	profileId?: string;
+	goVersion?: string;
+	goawkVersion?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	workerReceipt?: RuntimeAssetIntegrityEntry;
+	goShimReceipt?: RuntimeAssetIntegrityEntry;
+	wasmReceipt?: RuntimeAssetIntegrityEntry;
 }
 
 export interface PascalRuntimeAssetConfig {
@@ -2714,28 +2726,126 @@ export function resolveAwkWorkerUrl(
 
 	if (typeof options === 'string') {
 		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-awk/runner-worker.js`,
+			`${normalizeRootUrl(options) || ''}/wasm-awk/runner-worker.v2.js`,
 			currentUrl
 		);
 	}
 
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-awk/runner-worker.js`,
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-awk/runner-worker.v2.js`,
 			currentUrl
 		);
 	}
 
-	return resolveConfiguredUrl('/wasm-awk/runner-worker.js', currentUrl);
+	return resolveConfiguredUrl('/wasm-awk/runner-worker.v2.js', currentUrl);
+}
+
+function resolveAwkPinnedAssetUrl(
+	configuredUrl: string,
+	currentUrl: string,
+	expectedFileName: string,
+	pin: string
+) {
+	const sentinelOrigin = 'https://wasm-idle.invalid';
+	let url: URL;
+	try {
+		url = new URL(configuredUrl, currentUrl || sentinelOrigin);
+	} catch (cause) {
+		throw new RuntimeConfigurationError(`AWK runtime ${expectedFileName} URL is invalid.`, {
+			cause,
+			runtimeId: 'AWK'
+		});
+	}
+	if (
+		(url.protocol !== 'http:' && url.protocol !== 'https:') ||
+		url.username ||
+		url.password ||
+		url.hash ||
+		!url.pathname.endsWith(`/${expectedFileName}`) ||
+		(url.search && url.search !== `?v=${pin}`)
+	) {
+		throw new RuntimeConfigurationError(
+			`AWK runtime ${expectedFileName} URL must use its query-pinned immutable path.`,
+			{ runtimeId: 'AWK' }
+		);
+	}
+	if (!url.search) url.searchParams.set('v', pin);
+	return currentUrl || configuredUrl.startsWith('http://') || configuredUrl.startsWith('https://')
+		? url.href
+		: `${url.pathname}${url.search}`;
 }
 
 export function resolveAwkRuntimeAssetConfig(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
+	const configured = typeof options === 'object' ? options?.awk : undefined;
+	const hasConfiguredTrust =
+		!!configured &&
+		[
+			configured.profileId,
+			configured.goVersion,
+			configured.goawkVersion,
+			configured.manifestFingerprint,
+			configured.manifestReceipt,
+			configured.workerReceipt,
+			configured.goShimReceipt,
+			configured.wasmReceipt
+		].some((value) => value !== undefined);
+	const bundledProfile = snapshotAwkRuntimePreflightProfile(WASM_AWK_RUNTIME_BUNDLE.profile);
+	let preflightProfile: Readonly<AwkRuntimePreflightProfile> = bundledProfile;
+	if (hasConfiguredTrust) {
+		let configuredProfile: Readonly<AwkRuntimePreflightProfile>;
+		try {
+			configuredProfile = snapshotAwkRuntimePreflightProfile({
+				profileId: configured?.profileId?.trim(),
+				goVersion: configured?.goVersion?.trim(),
+				goawkVersion: configured?.goawkVersion?.trim(),
+				manifestFingerprint: configured?.manifestFingerprint?.trim(),
+				manifestReceipt: configured?.manifestReceipt,
+				workerReceipt: configured?.workerReceipt,
+				goShimReceipt: configured?.goShimReceipt,
+				wasmReceipt: configured?.wasmReceipt
+			});
+		} catch (cause) {
+			throw new RuntimeConfigurationError(
+				'AWK runtime custom assets require one complete profile and receipt bundle.',
+				{ cause, runtimeId: 'AWK' }
+			);
+		}
+		if (JSON.stringify(configuredProfile) !== JSON.stringify(bundledProfile)) {
+			throw new RuntimeConfigurationError(
+				'AWK runtime public configuration accepts URL mirrors only; receipts must match the bundled profile.',
+				{ runtimeId: 'AWK' }
+			);
+		}
+		preflightProfile = configuredProfile;
+	}
+	const baseUrl = resolveAwkBaseUrl(options, currentUrl);
+	const workerUrl = resolveAwkPinnedAssetUrl(
+		configured?.workerUrl ||
+			(publicEnv.PUBLIC_WASM_AWK_WORKER_URL || '').trim() ||
+			`${baseUrl}runner-worker.v2.js`,
+		currentUrl,
+		'runner-worker.v2.js',
+		preflightProfile.workerReceipt.sha256
+	);
+	const manifestUrl = resolveAwkPinnedAssetUrl(
+		configured?.manifestUrl || `${baseUrl}runtime-manifest.v2.json`,
+		currentUrl,
+		'runtime-manifest.v2.json',
+		preflightProfile.manifestFingerprint
+	);
+	const identity = { baseUrl, workerUrl, manifestUrl, profile: preflightProfile };
 	return {
-		baseUrl: resolveAwkBaseUrl(options, currentUrl),
-		workerUrl: resolveAwkWorkerUrl(options, currentUrl)
+		baseUrl,
+		workerUrl,
+		manifestUrl,
+		manifestFingerprint: preflightProfile.manifestFingerprint,
+		preflightKey: JSON.stringify(identity),
+		preflightProfile,
+		workerReceipt: preflightProfile.workerReceipt
 	};
 }
 

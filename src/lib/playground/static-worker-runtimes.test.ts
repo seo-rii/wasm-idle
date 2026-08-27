@@ -156,6 +156,11 @@ import forthRuntimeSource from '../../../static/wasm-forth/waforth.js?raw';
 import juliaManifestTemplateSource from '../../../static/wasm-julia/runtime-manifest.v2.json?raw';
 import nimManifestTemplateSource from '../../../static/wasm-nim/runtime-manifest.v2.json?raw';
 import {
+	WASM_AWK_ASSET_VERSION,
+	WASM_AWK_RUNNER_RECEIPT,
+	WASM_AWK_RUNTIME_PROFILE
+} from './wasmAwkVersion';
+import {
 	WASM_FORTH_ASSET_VERSION,
 	WASM_FORTH_RUNNER_RECEIPT,
 	WASM_FORTH_RUNTIME_PROFILE
@@ -321,6 +326,20 @@ const pascalRtlBytes = Uint8Array.from(
 );
 const pascalSystemBytes = Uint8Array.from(
 	readFileSync(resolve(process.cwd(), 'static/wasm-pascal/system.pas.bin'))
+);
+const awkManifestSource = readFileSync(
+	resolve(process.cwd(), 'static/wasm-awk/runtime-manifest.v2.json'),
+	'utf8'
+);
+const awkGoShimBytes = Uint8Array.from(
+	readFileSync(resolve(process.cwd(), 'static/wasm-awk/wasm_exec.js'))
+);
+const awkWasmGzipBytes = Uint8Array.from(
+	readFileSync(resolve(process.cwd(), 'static/wasm-awk/goawk.wasm.gz.bin'))
+);
+const awkWorkerSource = readFileSync(
+	resolve(process.cwd(), 'static/wasm-awk/runner-worker.v2.js'),
+	'utf8'
 );
 const perlTestSha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const perlTestArtifactRevision = '6f2173d29a2c2e3536e1de75ff5d291ae96ab348';
@@ -880,9 +899,69 @@ function clojureScriptTestRuntimeAssets(workerUrl = '/wasm-clojurescript/runner-
 	};
 }
 
+function withExactResponseUrl(response: Response, input: RequestInfo | URL) {
+	const inputUrl =
+		typeof Request === 'function' && input instanceof Request ? input.url : String(input);
+	Object.defineProperty(response, 'url', {
+		configurable: true,
+		value: new URL(inputUrl, 'http://localhost:3000').href
+	});
+	return response;
+}
+
 function createStaticWorkerFetchResponse(input: RequestInfo | URL) {
 	const inputUrl = String(input);
 	runtimeLifecycleEvents.push(`fetch:${inputUrl}`);
+	if (inputUrl.includes('/wasm-awk/runtime-manifest.v2.json')) {
+		return withExactResponseUrl(
+			new Response(awkManifestSource, {
+				status: 200,
+				headers: {
+					'content-length': String(
+						new TextEncoder().encode(awkManifestSource).byteLength
+					),
+					'content-type': 'application/json'
+				}
+			}),
+			input
+		);
+	}
+	if (inputUrl.includes('/wasm-awk/wasm_exec.js')) {
+		return withExactResponseUrl(
+			new Response(Uint8Array.from(awkGoShimBytes), {
+				status: 200,
+				headers: {
+					'content-length': String(awkGoShimBytes.byteLength),
+					'content-type': 'text/javascript'
+				}
+			}),
+			input
+		);
+	}
+	if (inputUrl.includes('/wasm-awk/goawk.wasm.gz.bin')) {
+		return withExactResponseUrl(
+			new Response(Uint8Array.from(awkWasmGzipBytes), {
+				status: 200,
+				headers: {
+					'content-length': String(awkWasmGzipBytes.byteLength),
+					'content-type': 'application/octet-stream'
+				}
+			}),
+			input
+		);
+	}
+	if (inputUrl.includes('/wasm-awk/runner-worker.v2.js')) {
+		return withExactResponseUrl(
+			new Response(awkWorkerSource, {
+				status: 200,
+				headers: {
+					'content-length': String(new TextEncoder().encode(awkWorkerSource).byteLength),
+					'content-type': 'text/javascript'
+				}
+			}),
+			input
+		);
+	}
 	if (inputUrl.includes('/wasm-perl/runtime-manifest.v2.json')) {
 		return new Response(perlTestManifestSource, {
 			status: 200,
@@ -2087,32 +2166,135 @@ describe('static worker backed language sandboxes', () => {
 		expect(workerInstances).toHaveLength(0);
 	});
 
-	it('loads AWK runtime urls and forwards stdin to the GoAWK worker', async () => {
+	it('preflights the complete AWK v2 graph before creating fresh verified workers', async () => {
 		const sandbox = new Awk();
-		await sandbox.load({
-			awk: {
-				baseUrl: '/wasm-awk/',
-				workerUrl: '/wasm-awk/runner-worker.js?v=test'
-			}
-		});
+		await sandbox.load('/absproxy/5173');
 		await expect(
 			sandbox.run('{ print $0 }', false, true, undefined, ['demo=1'], {
 				stdin: 'ok\n'
 			})
 		).resolves.toBe(true);
 
-		await expectWorkerBootstrap(
+		await expectVerifiedWorkerBootstrap(
 			workerInstances[0],
-			'http://localhost:3000/wasm-awk/runner-worker.js?v=test'
+			`http://localhost:3000/absproxy/5173/wasm-awk/runner-worker.v2.js?v=${WASM_AWK_RUNNER_RECEIPT.sha256}`,
+			awkWorkerSource
 		);
-		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+		expect(workerInstances[0].lastMessage).toEqual(
 			expect.objectContaining({
-				baseUrl: 'http://localhost:3000/wasm-awk/',
+				baseUrl: 'http://localhost:3000/absproxy/5173/wasm-awk/',
+				manifestUrl: `http://localhost:3000/absproxy/5173/wasm-awk/runtime-manifest.v2.json?v=${WASM_AWK_ASSET_VERSION}`,
+				manifestFingerprint: WASM_AWK_ASSET_VERSION,
 				args: ['demo=1'],
 				stdin: 'ok\n',
 				activePath: 'main.awk'
 			})
 		);
+		expect(workerInstances[0].lastMessage.runtimePreflight.protocol).toBe(
+			'wasm-idle-awk-runtime-v2'
+		);
+		expect(
+			ArrayBuffer.isView(workerInstances[0].lastMessage.runtimePreflight.goShimBytes)
+		).toBe(true);
+		expect(ArrayBuffer.isView(workerInstances[0].lastMessage.runtimePreflight.wasmBytes)).toBe(
+			true
+		);
+		expect(workerInstances[0].lastTransferList).toHaveLength(2);
+		expect(new Set(workerInstances[0].lastTransferList).size).toBe(2);
+		expect(
+			workerInstances[0].lastTransferList?.every(
+				(transferable) => (transferable as ArrayBuffer).byteLength === 0
+			)
+		).toBe(true);
+		const firstDelivery = workerInstances[0].lastMessage.runtimePreflight;
+		expect(firstDelivery.goShimBytes).toHaveLength(
+			WASM_AWK_RUNTIME_PROFILE.goShimReceipt.bytes
+		);
+		expect(firstDelivery.wasmBytes).toHaveLength(
+			WASM_AWK_RUNTIME_PROFILE.wasmReceipt.uncompressedBytes
+		);
+		const firstWorkerEvent = runtimeLifecycleEvents.findIndex((event) =>
+			event.startsWith('worker:')
+		);
+		for (const expectedPath of [
+			'runtime-manifest.v2.json',
+			'wasm_exec.js',
+			'goawk.wasm.gz.bin',
+			'runner-worker.v2.js'
+		]) {
+			const fetchIndex = runtimeLifecycleEvents.findIndex(
+				(event) => event.startsWith('fetch:') && event.includes(expectedPath)
+			);
+			expect(fetchIndex).toBeGreaterThanOrEqual(0);
+			expect(fetchIndex).toBeLessThan(firstWorkerEvent);
+		}
+
+		await expect(
+			sandbox.run('{ print $0 }', false, true, undefined, [], { stdin: 'again\n' })
+		).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].lastTransferList).toHaveLength(2);
+		expect(workerInstances[1].lastTransferList).not.toBe(workerInstances[0].lastTransferList);
+		expect(workerInstances[1].lastMessage.runtimePreflight.goShimBytes.buffer).not.toBe(
+			firstDelivery.goShimBytes.buffer
+		);
+		expect(workerInstances[1].lastMessage.runtimePreflight.wasmBytes.buffer).not.toBe(
+			firstDelivery.wasmBytes.buffer
+		);
+	});
+
+	it('rejects a corrupt AWK asset before fetching or creating its runner', async () => {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-awk/goawk.wasm.gz.bin')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			const corruptWasmGzipBytes = Uint8Array.from(awkWasmGzipBytes);
+			corruptWasmGzipBytes[10] ^= 1;
+			return withExactResponseUrl(
+				new Response(corruptWasmGzipBytes, {
+					status: 200,
+					headers: {
+						'content-length': String(corruptWasmGzipBytes.byteLength),
+						'content-type': 'application/octet-stream'
+					}
+				}),
+				input
+			);
+		});
+		const sandbox = new Awk();
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'asset-integrity',
+			runtimeId: 'AWK'
+		});
+		expect(
+			vi
+				.mocked(fetch)
+				.mock.calls.some(([input]) =>
+					String(input).includes('/wasm-awk/runner-worker.v2.js')
+				)
+		).toBe(false);
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('rejects an AWK runner response without an exact final URL before Worker creation', async () => {
+		vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+			if (!String(input).includes('/wasm-awk/runner-worker.v2.js')) {
+				return createStaticWorkerFetchResponse(input);
+			}
+			return new Response(awkWorkerSource, {
+				status: 200,
+				headers: {
+					'content-length': String(new TextEncoder().encode(awkWorkerSource).byteLength),
+					'content-type': 'text/javascript'
+				}
+			});
+		});
+		const sandbox = new Awk();
+		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+			code: 'protocol',
+			runtimeId: 'AWK'
+		});
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('preflights Pascal assets before its runner and transfers one verified payload', async () => {

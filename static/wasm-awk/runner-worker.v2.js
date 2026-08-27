@@ -28,14 +28,14 @@ const lspRunKeys = [
 	'stdin'
 ];
 const pinnedRuntimeProfile = Object.freeze({
-	profileId: '__WASM_IDLE_AWK_PROFILE_ID__',
+	profileId: 'goawk-v1.31.0-go1.25.3',
 	goShimReceipt: Object.freeze({
-		bytes: Number('__WASM_IDLE_AWK_GO_SHIM_BYTES__'),
-		sha256: '__WASM_IDLE_AWK_GO_SHIM_SHA256__'
+		bytes: Number('16992'),
+		sha256: '0c949f4996f9a89698e4b5c586de32249c3b69b7baadb64d220073cc04acba14'
 	}),
 	logicalWasmReceipt: Object.freeze({
-		bytes: Number('__WASM_IDLE_AWK_LOGICAL_WASM_BYTES__'),
-		sha256: '__WASM_IDLE_AWK_LOGICAL_WASM_SHA256__'
+		bytes: Number('4697052'),
+		sha256: '04ea6a3b3024ce6c4fd779a620eb5569a23879fb8fe2afaac87103ea7dd4b7a6'
 	})
 });
 const deniedNetworkGlobals = [

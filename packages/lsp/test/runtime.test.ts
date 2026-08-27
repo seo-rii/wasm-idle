@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RUBY_RUNTIME_PROFILE } from '@wasm-idle/core';
+import { AWK_RUNTIME_WORKER_PATH, RUBY_RUNTIME_PROFILE } from '@wasm-idle/core';
 
 import { BUNDLED_CLANGD_ASSET_INTEGRITY } from '../src/bundledClangdAssetIntegrity.js';
 import { BUNDLED_ELIXIR_ASSET_VERSION } from '../src/bundledElixirRuntimeIntegrity.js';
@@ -10,6 +10,7 @@ import {
 	BUNDLED_JANET_RUNNER_RECEIPT
 } from '../src/bundledJanetRuntime.js';
 import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from '../src/bundledLispRuntime.js';
+import { BUNDLED_AWK_RUNTIME_PROFILE } from '../src/bundledAwkRuntime.js';
 import {
 	BUNDLED_PROLOG_MANIFEST_FINGERPRINT,
 	BUNDLED_PROLOG_RUNTIME_PROFILE,
@@ -57,7 +58,12 @@ import {
 	resolveLispLanguageServerManifestFingerprint,
 	resolveLispLanguageServerManifestUrl,
 	resolveLispLanguageServerModuleUrl,
+	resolveAwkLanguageServerAssetConfig,
 	resolveAwkLanguageServerBaseUrl,
+	resolveAwkLanguageServerManifestFingerprint,
+	resolveAwkLanguageServerManifestUrl,
+	resolveAwkLanguageServerPreflightProfile,
+	resolveAwkLanguageServerWorkerReceipt,
 	resolveAwkLanguageServerWorkerUrl,
 	resolvePythonLanguageServerBaseUrl,
 	resolvePerlLanguageServerBaseUrl,
@@ -108,6 +114,58 @@ import {
 } from '../src/runtime.js';
 
 describe('lsp runtime asset resolution', () => {
+	it('uses bundled AWK trust pins for URL mirrors and rejects replacement profiles', () => {
+		const mirrored = resolveAwkLanguageServerAssetConfig({
+			awk: { baseUrl: 'https://assets.example.com/wasm-awk/' }
+		});
+		expect(mirrored).toMatchObject({
+			baseUrl: 'https://assets.example.com/wasm-awk/',
+			profile: BUNDLED_AWK_RUNTIME_PROFILE,
+			workerUrl: `https://assets.example.com/wasm-awk/${AWK_RUNTIME_WORKER_PATH}?v=${BUNDLED_AWK_RUNTIME_PROFILE.workerReceipt.sha256}`
+		});
+		expect(() =>
+			resolveAwkLanguageServerPreflightProfile({
+				awk: {
+					manifestFingerprint: 'a'.repeat(64),
+					profileId: BUNDLED_AWK_RUNTIME_PROFILE.profileId
+				}
+			})
+		).toThrow('complete valid runtime preflight profile and receipts');
+		expect(() =>
+			resolveAwkLanguageServerPreflightProfile({
+				awk: {
+					...BUNDLED_AWK_RUNTIME_PROFILE,
+					manifestFingerprint: 'a'.repeat(64)
+				}
+			})
+		).toThrow('bundled runtime trust profile');
+
+		const options = {
+			awk: {
+				...BUNDLED_AWK_RUNTIME_PROFILE,
+				baseUrl: 'https://assets.example.com/wasm-awk/',
+				manifestUrl: `https://assets.example.com/wasm-awk/runtime-manifest.v2.json?v=${BUNDLED_AWK_RUNTIME_PROFILE.manifestFingerprint}`,
+				workerUrl: `https://assets.example.com/wasm-awk/${AWK_RUNTIME_WORKER_PATH}`
+			}
+		};
+		const resolved = resolveAwkLanguageServerAssetConfig(options);
+		expect(resolved).toMatchObject({
+			baseUrl: 'https://assets.example.com/wasm-awk/',
+			manifestUrl: `https://assets.example.com/wasm-awk/runtime-manifest.v2.json?v=${BUNDLED_AWK_RUNTIME_PROFILE.manifestFingerprint}`,
+			workerUrl: `https://assets.example.com/wasm-awk/${AWK_RUNTIME_WORKER_PATH}`,
+			profile: BUNDLED_AWK_RUNTIME_PROFILE
+		});
+		expect(resolveAwkLanguageServerManifestFingerprint(options)).toBe(
+			BUNDLED_AWK_RUNTIME_PROFILE.manifestFingerprint
+		);
+		expect(resolveAwkLanguageServerWorkerReceipt(options)).toEqual(
+			BUNDLED_AWK_RUNTIME_PROFILE.workerReceipt
+		);
+		expect(resolveAwkLanguageServerManifestUrl(options)).toBe(
+			`https://assets.example.com/wasm-awk/runtime-manifest.v2.json?v=${BUNDLED_AWK_RUNTIME_PROFILE.manifestFingerprint}`
+		);
+	});
+
 	it('snapshots Ruby runtime configuration once before deriving trust and URLs', () => {
 		const source = {
 			...RUBY_RUNTIME_PROFILE,
@@ -735,7 +793,10 @@ describe('lsp runtime asset resolution', () => {
 			],
 			[resolveRLanguageServerBaseUrl, 'webr/'],
 			[resolveAwkLanguageServerBaseUrl, 'wasm-awk/'],
-			[resolveAwkLanguageServerWorkerUrl, 'wasm-awk/runner-worker.js'],
+			[
+				resolveAwkLanguageServerWorkerUrl,
+				`wasm-awk/${AWK_RUNTIME_WORKER_PATH}?v=${BUNDLED_AWK_RUNTIME_PROFILE.workerReceipt.sha256}`
+			],
 			[resolvePerlLanguageServerBaseUrl, 'wasm-perl/'],
 			[
 				resolvePerlLanguageServerWorkerUrl,
@@ -975,7 +1036,9 @@ describe('lsp runtime asset resolution', () => {
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
 			)
-		).toBe('https://static.example.com/repl_20240807/wasm-awk/runner-worker.js');
+		).toBe(
+			`https://static.example.com/repl_20240807/wasm-awk/${AWK_RUNTIME_WORKER_PATH}?v=${BUNDLED_AWK_RUNTIME_PROFILE.workerReceipt.sha256}`
+		);
 		expect(
 			resolvePerlLanguageServerBaseUrl(
 				'https://static.example.com/repl_20240807',
@@ -1086,8 +1149,9 @@ describe('lsp runtime asset resolution', () => {
 				workerUrl: 'https://app.example.com/assets/erlang-worker.js'
 			},
 			awk: {
+				...BUNDLED_AWK_RUNTIME_PROFILE,
 				baseUrl: 'https://awk.example.com/wasm-awk/',
-				workerUrl: 'https://awk.example.com/runner-worker.js?v=20240807'
+				workerUrl: `https://awk.example.com/${AWK_RUNTIME_WORKER_PATH}?v=20240807`
 			},
 			perl: {
 				baseUrl: 'https://perl.example.com/wasm-perl/',
@@ -1205,7 +1269,7 @@ describe('lsp runtime asset resolution', () => {
 		);
 		expect(resolveAwkLanguageServerBaseUrl(options)).toBe('https://awk.example.com/wasm-awk/');
 		expect(resolveAwkLanguageServerWorkerUrl(options)).toBe(
-			'https://awk.example.com/runner-worker.js?v=20240807'
+			`https://awk.example.com/${AWK_RUNTIME_WORKER_PATH}?v=20240807`
 		);
 		expect(resolvePerlLanguageServerBaseUrl(options)).toBe(
 			'https://perl.example.com/wasm-perl/'

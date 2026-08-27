@@ -7,6 +7,12 @@ self.addEventListener('activate', (event) => {
 });
 
 const precompressedExtension = /\.(br|brotli|gz|tgz|zip|zst)$/i;
+const exactResponseUrlAssetNames = new Set([
+	'goawk.wasm.gz.bin',
+	'runner-worker.v2.js',
+	'runtime-manifest.v2.json',
+	'wasm_exec.js'
+]);
 const runtimeAssetAliases = [
 	{
 		from: 'wasm-tinygo/vendor/wasm-rust-runtime/',
@@ -28,6 +34,19 @@ function shouldBypassIsolationHeaders(url) {
 		url.pathname.includes('/webr/') &&
 		!url.pathname.endsWith('/R.js') &&
 		!url.pathname.endsWith('/webr-worker.js')
+	);
+}
+
+function shouldPreserveExactResponseUrl(url) {
+	const scopeUrl = new URL(self.registration.scope);
+	const assetName = url.pathname.slice(url.pathname.lastIndexOf('/') + 1);
+	const version = url.searchParams.get('v') || '';
+	return (
+		url.origin === scopeUrl.origin &&
+		exactResponseUrlAssetNames.has(assetName) &&
+		url.pathname === new URL(`wasm-awk/${assetName}`, scopeUrl).pathname &&
+		/^[a-f0-9]{64}$/u.test(version) &&
+		url.search === `?v=${version}`
 	);
 }
 
@@ -403,6 +422,10 @@ self.addEventListener('fetch', function (event) {
 				);
 			})
 			.then(function (response) {
+				// Receipt-verified AWK consumers require the browser's network Response URL.
+				// Cloning into a synthetic Response clears it, so preserve these pinned
+				// same-origin responses exactly as fetched.
+				if (shouldPreserveExactResponseUrl(url)) return response;
 				// It seems like we only need to set the headers for index.html
 				// If you want to be on the safe side, comment this out
 				// if (!response.url.includes("index.html")) return response;

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -6,9 +7,16 @@ import {
 	createRWorkerService,
 	type LspDocument,
 	type LspDocumentContext,
+	type AwkWorkerOptions,
 	type PerlWorkerOptions
 } from '../src/index.js';
-import { PERL_MAX_ASSET_BYTES, type PerlRuntimePreflightPayload } from '@wasm-idle/core';
+import {
+	AWK_MAX_ASSET_BYTES,
+	PERL_MAX_ASSET_BYTES,
+	type AwkRuntimePreflightPayload,
+	type PerlRuntimePreflightPayload
+} from '@wasm-idle/core';
+import { BUNDLED_AWK_RUNTIME_PROFILE } from '../src/bundledAwkRuntime.js';
 
 const contextFor = (document: LspDocument): LspDocumentContext => ({
 	documents: new Map([[document.uri, document]]),
@@ -66,6 +74,40 @@ describe('createRWorkerService', () => {
 });
 
 describe('createAwkWorkerService', () => {
+	const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+	const createWorkerOptions = (): AwkWorkerOptions => {
+		const runnerWorkerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
+		const goShimBytes = new TextEncoder().encode('globalThis.Go = class {};');
+		const wasmBytes = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
+		const runtimePreflight: AwkRuntimePreflightPayload = {
+			protocol: 'wasm-idle-awk-runtime-v2',
+			goShimBytes,
+			wasmBytes
+		};
+		const workerReceipt = {
+			bytes: runnerWorkerBytes.byteLength,
+			sha256: sha256(runnerWorkerBytes)
+		};
+		return {
+			manifestUrl: `https://assets.example.com/wasm-awk/runtime-manifest.v2.json?v=${BUNDLED_AWK_RUNTIME_PROFILE.manifestFingerprint}`,
+			maxAssetBytes: AWK_MAX_ASSET_BYTES,
+			profile: {
+				...BUNDLED_AWK_RUNTIME_PROFILE,
+				workerReceipt,
+				goShimReceipt: { bytes: goShimBytes.byteLength, sha256: sha256(goShimBytes) },
+				wasmReceipt: {
+					bytes: wasmBytes.byteLength,
+					sha256: sha256(wasmBytes),
+					uncompressedBytes: wasmBytes.byteLength,
+					uncompressedSha256: sha256(wasmBytes)
+				}
+			},
+			runnerWorkerBytes,
+			runtimePreflight,
+			workerReceipt
+		};
+	};
+
 	it('checks syntax through the configured GoAWK worker and exposes AWK symbols', async () => {
 		const runDiagnostics = vi.fn(async () => ({
 			error: 'parse error at 2:5: unexpected newline'
@@ -78,11 +120,9 @@ describe('createAwkWorkerService', () => {
 			text: 'function total(x) {\n  print(\n}\n'
 		};
 		const context = contextFor(document);
+		const workerOptions = createWorkerOptions();
 
-		await service.initialize?.(
-			{ baseUrl: '/wasm-awk/', workerUrl: '/wasm-awk/runner-worker.js' },
-			context
-		);
+		await service.initialize?.(workerOptions, context);
 		const diagnostics = await service.diagnostics?.(document, context);
 		const completions = (await service.completion?.(
 			document,
@@ -94,8 +134,7 @@ describe('createAwkWorkerService', () => {
 		}>;
 
 		expect(runDiagnostics).toHaveBeenCalledWith({
-			baseUrl: '/wasm-awk/',
-			workerUrl: '/wasm-awk/runner-worker.js',
+			...workerOptions,
 			code: document.text,
 			activePath: 'main.awk'
 		});

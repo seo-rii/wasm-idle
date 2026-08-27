@@ -5,6 +5,7 @@ import type { DOuterAssetReceipts } from './d/assets.js';
 import type { DocumentLanguageId } from './document/service.js';
 import type { ElixirRuntimeAssetReceipts } from './elixir/assets.js';
 import type {
+	AwkRuntimePreflightProfile,
 	HaskellRuntimeAssetReceipts,
 	JanetRuntimePreflightProfile,
 	PascalRuntimePreflightProfile,
@@ -199,6 +200,15 @@ export interface EditorLanguageServerRuntimeOptions {
 	awk?: {
 		baseUrl?: string;
 		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: AwkRuntimePreflightProfile['manifestFingerprint'];
+		profileId?: AwkRuntimePreflightProfile['profileId'];
+		goVersion?: AwkRuntimePreflightProfile['goVersion'];
+		goawkVersion?: AwkRuntimePreflightProfile['goawkVersion'];
+		manifestReceipt?: AwkRuntimePreflightProfile['manifestReceipt'];
+		workerReceipt?: AwkRuntimePreflightProfile['workerReceipt'];
+		goShimReceipt?: AwkRuntimePreflightProfile['goShimReceipt'];
+		wasmReceipt?: AwkRuntimePreflightProfile['wasmReceipt'];
 	};
 	perl?: {
 		baseUrl?: string;

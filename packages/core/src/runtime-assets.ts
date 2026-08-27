@@ -177,7 +177,19 @@ export interface RuntimeAssetKeySource {
 		wasmReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
-	awk?: { baseUrl?: string; workerUrl?: string };
+	awk?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		profileId?: string;
+		goVersion?: string;
+		goawkVersion?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+		goShimReceipt?: RuntimeAssetIntegrityEntry;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	pascal?: {
 		baseUrl?: string;
 		workerUrl?: string;
@@ -908,6 +920,35 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	},
 	{ runtime: 'awk', property: 'baseUrl', key: 'awkBaseUrl' },
 	{ runtime: 'awk', property: 'workerUrl', key: 'awkWorkerUrl' },
+	{ runtime: 'awk', property: 'manifestUrl', key: 'awkManifestUrl' },
+	{ runtime: 'awk', property: 'manifestFingerprint', key: 'awkManifestFingerprint' },
+	{ runtime: 'awk', property: 'profileId', key: 'awkProfileId' },
+	{ runtime: 'awk', property: 'goVersion', key: 'awkGoVersion' },
+	{ runtime: 'awk', property: 'goawkVersion', key: 'awkGoawkVersion' },
+	{
+		runtime: 'awk',
+		property: 'manifestReceipt',
+		key: 'awkManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'awk',
+		property: 'workerReceipt',
+		key: 'awkWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'awk',
+		property: 'goShimReceipt',
+		key: 'awkGoShimReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'awk',
+		property: 'wasmReceipt',
+		key: 'awkWasmReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'pascal', property: 'baseUrl', key: 'pascalBaseUrl' },
 	{ runtime: 'pascal', property: 'workerUrl', key: 'pascalWorkerUrl' },
 	{ runtime: 'pascal', property: 'manifestUrl', key: 'pascalManifestUrl' },

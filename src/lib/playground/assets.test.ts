@@ -175,6 +175,11 @@ import {
 	WASM_TCL_RUNNER_RECEIPT,
 	WASM_TCL_RUNTIME_PROFILE
 } from './wasmTclVersion';
+import {
+	WASM_AWK_ASSET_VERSION,
+	WASM_AWK_RUNNER_RECEIPT,
+	WASM_AWK_RUNTIME_PROFILE
+} from './wasmAwkVersion';
 
 describe('runtime asset config resolution', () => {
 	it('keeps application runtime asset keys aligned with the Core contract', () => {
@@ -1304,7 +1309,12 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(resolveAwkRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-awk/',
-			workerUrl: 'https://example.com/absproxy/5173/wasm-awk/runner-worker.js'
+			workerUrl: `https://example.com/absproxy/5173/wasm-awk/runner-worker.v2.js?v=${WASM_AWK_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `https://example.com/absproxy/5173/wasm-awk/runtime-manifest.v2.json?v=${WASM_AWK_ASSET_VERSION}`,
+			manifestFingerprint: WASM_AWK_ASSET_VERSION,
+			preflightKey: expect.any(String),
+			preflightProfile: WASM_AWK_RUNTIME_PROFILE,
+			workerReceipt: WASM_AWK_RUNNER_RECEIPT
 		});
 		expect(
 			resolvePascalRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
@@ -1800,12 +1810,22 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(
 			resolveAwkRuntimeAssetConfig(
-				{ awk: { baseUrl: '/runtime/awk', workerUrl: '/runtime/awk/worker.js' } },
+				{
+					awk: {
+						baseUrl: '/runtime/awk',
+						workerUrl: '/runtime/awk/runner-worker.v2.js'
+					}
+				},
 				'https://example.com/app'
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/awk/',
-			workerUrl: 'https://example.com/runtime/awk/worker.js'
+			workerUrl: `https://example.com/runtime/awk/runner-worker.v2.js?v=${WASM_AWK_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `https://example.com/runtime/awk/runtime-manifest.v2.json?v=${WASM_AWK_ASSET_VERSION}`,
+			manifestFingerprint: WASM_AWK_ASSET_VERSION,
+			preflightKey: expect.any(String),
+			preflightProfile: WASM_AWK_RUNTIME_PROFILE,
+			workerReceipt: WASM_AWK_RUNNER_RECEIPT
 		});
 		expect(
 			resolvePascalRuntimeAssetConfig(
@@ -2078,6 +2098,38 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/runtime/swift/worker.js',
 			manifestUrl: 'https://example.com/runtime/swift/manifest.json'
 		});
+	});
+
+	it('keeps AWK URL mirrors bound to the bundled trust root', async () => {
+		vi.resetModules();
+		const { resolveAwkRuntimeAssetConfig } = await import('./assets');
+
+		expect(() =>
+			resolveAwkRuntimeAssetConfig(
+				{
+					awk: {
+						baseUrl: 'https://mirror.example.com/wasm-awk/',
+						workerUrl: 'https://mirror.example.com/wasm-awk/runner-worker.v2.js',
+						manifestFingerprint: 'a'.repeat(64)
+					}
+				},
+				'https://example.com/app'
+			)
+		).toThrow('complete profile and receipt bundle');
+
+		expect(() =>
+			resolveAwkRuntimeAssetConfig(
+				{
+					awk: {
+						baseUrl: 'https://mirror.example.com/wasm-awk/',
+						workerUrl: 'https://mirror.example.com/wasm-awk/runner-worker.v2.js',
+						...WASM_AWK_RUNTIME_PROFILE,
+						profileId: 'attacker-selected-goawk-profile'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toThrow('URL mirrors only');
 	});
 
 	it('accepts custom Gleam URL environment overrides only with complete integrity pins', async () => {

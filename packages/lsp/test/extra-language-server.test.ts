@@ -4,6 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+	AWK_MAX_ASSET_BYTES,
+	AWK_RUNTIME_WORKER_PATH,
 	HASKELL_RUNTIME_ASSET_RECEIPTS,
 	JANET_MAX_ASSET_BYTES,
 	PASCAL_MAX_ASSET_BYTES,
@@ -36,6 +38,8 @@ import {
 	BUNDLED_PASCAL_RUNNER_RECEIPT
 } from '../src/bundledPascalRuntime.js';
 import { BUNDLED_LISP_MANIFEST_FINGERPRINT } from '../src/bundledLispRuntime.js';
+import { BUNDLED_AWK_RUNTIME_PROFILE } from '../src/bundledAwkRuntime.js';
+import { awkTestAssetBytes, createAwkTestAssetResponse } from './awk-fixture.js';
 import { createPrologTestAssetResponse } from './prolog-fixture.js';
 import { createPerlTestAssetResponse, perlTestAssetBytes } from './perl-fixture.js';
 import { createTclTestAssetResponse, tclTestAssetBytes } from './tcl-fixture.js';
@@ -297,9 +301,11 @@ describe('additional language server workers', () => {
 		const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
 			const url = input.toString();
 			const bytes = url.includes('runtime-manifest') ? manifestBytes : moduleBytes;
-			return new Response(bytes, {
+			const response = new Response(bytes, {
 				headers: { 'Content-Length': String(bytes.byteLength) }
 			});
+			Object.defineProperty(response, 'url', { value: url });
+			return response;
 		});
 		vi.stubGlobal('fetch', fetchMock);
 		const handle = await getDLanguageServer({
@@ -345,12 +351,13 @@ describe('additional language server workers', () => {
 		const onStatus = vi.fn();
 		vi.stubGlobal(
 			'fetch',
-			vi.fn(
-				async (input: RequestInfo | URL) =>
-					new Response(
-						input.toString().includes('runtime-manifest') ? manifestBytes : moduleBytes
-					)
-			)
+			vi.fn(async (input: RequestInfo | URL) => {
+				const response = new Response(
+					input.toString().includes('runtime-manifest') ? manifestBytes : moduleBytes
+				);
+				Object.defineProperty(response, 'url', { value: input.toString() });
+				return response;
+			})
 		);
 
 		await expect(
@@ -905,19 +912,33 @@ describe('additional language server workers', () => {
 	});
 
 	it('starts AWK with GoAWK worker assets', async () => {
+		const fetchMock = vi.fn(async (input: string | URL | Request) => {
+			const requestUrl = new URL(
+				typeof input === 'string' || input instanceof URL ? input : input.url
+			);
+			const response = createAwkTestAssetResponse(requestUrl);
+			if (!response) throw new Error(`Unexpected AWK asset request: ${requestUrl.href}`);
+			return response;
+		});
+		vi.stubGlobal('fetch', fetchMock);
 		const handle = await getAwkLanguageServer({
 			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker
 		});
 
-		expect(mockState.workers[0]?.messages[0]).toEqual({
+		expect(mockState.workers[0]?.messages[0]).toMatchObject({
 			type: 'init',
 			options: {
-				baseUrl: 'https://static.example.com/repl_20240807/wasm-awk/',
-				workerUrl: 'https://static.example.com/repl_20240807/wasm-awk/runner-worker.js'
+				manifestUrl: `https://static.example.com/repl_20240807/wasm-awk/runtime-manifest.v2.json?v=${BUNDLED_AWK_RUNTIME_PROFILE.manifestFingerprint}`,
+				maxAssetBytes: AWK_MAX_ASSET_BYTES,
+				profile: BUNDLED_AWK_RUNTIME_PROFILE,
+				workerReceipt: BUNDLED_AWK_RUNTIME_PROFILE.workerReceipt,
+				runnerWorkerBytes: awkTestAssetBytes[AWK_RUNTIME_WORKER_PATH],
+				runtimePreflight: { protocol: 'wasm-idle-awk-runtime-v2' }
 			}
 		});
+		expect(fetchMock).toHaveBeenCalledTimes(4);
 
 		handle.dispose();
 	});

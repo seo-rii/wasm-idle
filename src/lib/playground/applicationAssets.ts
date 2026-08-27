@@ -1,6 +1,6 @@
 import type { PlaygroundRuntimeAssets } from './assets';
 import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
-import { WASM_AWK_ASSET_VERSION } from './wasmAwkVersion';
+import { WASM_AWK_RUNTIME_BUNDLE } from './wasmAwkVersion';
 import { WASM_BASH_RUNTIME_PROFILE } from './wasmBashVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import {
@@ -154,7 +154,15 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		awk: {
 			baseUrl: asset('wasm-awk/'),
-			workerUrl: asset('wasm-awk/runner-worker.js', WASM_AWK_ASSET_VERSION)
+			workerUrl: asset(
+				'wasm-awk/runner-worker.v2.js',
+				WASM_AWK_RUNTIME_BUNDLE.workerReceipt.sha256
+			),
+			manifestUrl: asset(
+				'wasm-awk/runtime-manifest.v2.json',
+				WASM_AWK_RUNTIME_BUNDLE.profile.manifestFingerprint
+			),
+			...WASM_AWK_RUNTIME_BUNDLE.profile
 		},
 		pascal: {
 			baseUrl: asset('wasm-pascal/'),
