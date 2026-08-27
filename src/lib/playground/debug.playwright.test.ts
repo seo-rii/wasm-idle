@@ -1135,12 +1135,21 @@ describe('native-source browser debugging in Chromium', () => {
 					);
 					const pageErrors: string[] = [];
 					const consoleMessages: string[] = [];
+					const requestFailures: Array<{ error: string; method: string; url: string }> =
+						[];
 					const debugAssetResponses = new Map<string, number>();
 					page.on('console', (message) => {
 						consoleMessages.push(`[${message.type()}] ${message.text()}`);
 					});
 					page.on('pageerror', (error) => {
 						pageErrors.push(String(error.stack || error.message || error));
+					});
+					page.on('requestfailed', (request) => {
+						requestFailures.push({
+							error: request.failure()?.errorText || 'unknown request failure',
+							method: request.method(),
+							url: request.url()
+						});
 					});
 					page.on('response', (response) => {
 						const pathname = new URL(response.url()).pathname;
@@ -2417,11 +2426,68 @@ describe('native-source browser debugging in Chromium', () => {
 							const lifecycleMetrics = [baselineMetrics];
 							for (let run = 1; run < repeatCount; run += 1) {
 								const pausedStatus = page.locator('.debug-status-pill--paused');
-								await page.getByRole('button', { name: 'Restart Debug' }).click();
-								await pausedStatus.waitFor({ state: 'hidden' });
-								await pausedStatus.waitFor({ state: 'visible', timeout: 120_000 });
+								try {
+									await page
+										.getByRole('button', { name: 'Restart Debug' })
+										.click();
+									await pausedStatus.waitFor({ state: 'hidden' });
+									await pausedStatus.waitFor({
+										state: 'visible',
+										timeout: 120_000
+									});
+								} catch (error) {
+									const failureMetrics = await readBrowserLifecycleMetrics(
+										page
+									).catch(() => null);
+									const debugState = await page
+										.evaluate(() =>
+											(window as any).__wasmIdleDebug.getDebugState()
+										)
+										.catch(() => null);
+									const debugMetrics = await page
+										.evaluate(() =>
+											Array.from(
+												document.querySelectorAll('.debug-metric')
+											).map((metric) => metric.textContent?.trim() || '')
+										)
+										.catch(() => []);
+									const transcript =
+										(await page
+											.locator('[data-testid="terminal-debug-output"]')
+											.textContent()
+											.catch(() => '')) || '';
+									const previewStatus = await page.request
+										.get(previewServer.browserUrl)
+										.then((response) => response.status())
+										.catch(() => null);
+									throw new Error(
+										`C LLDB relaunch ${run + 1}/${repeatCount} did not pause\n${JSON.stringify(
+											{
+												error:
+													error instanceof Error
+														? error.stack || error.message
+														: String(error),
+												failureMetrics,
+												debugState,
+												debugMetrics,
+												pageClosed: page.isClosed(),
+												pageUrl: page.url(),
+												previewStatus,
+												consoleTail: consoleMessages.slice(-80),
+												pageErrors,
+												requestFailures: requestFailures.slice(-80),
+												transcript
+											},
+											null,
+											2
+										)}`
+									);
+								}
 								latestMetrics = await readBrowserLifecycleMetrics(page);
 								lifecycleMetrics.push(latestMetrics);
+								console.info(
+									`[wasm-idle:lldb-relaunch] ${JSON.stringify({ run: run + 1, repeatCount, metrics: latestMetrics })}`
+								);
 								expect(latestMetrics.activeDebug).toBe(2);
 								expect(latestMetrics.peakActive).toBeLessThanOrEqual(2);
 								expect(

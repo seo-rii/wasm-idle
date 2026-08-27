@@ -406,6 +406,11 @@ It also requests garbage collection and limits renderer JS heap growth to 64 MiB
 The nightly schedule and each manual release-candidate dispatch run the relaunch fixture 100 times
 with a two-hour browser-test budget. Pull requests and `main` pushes continue to run the complete
 LLDB C, C++, and Rust fixture matrix instead of substituting the soak-only shard.
+If a relaunch does not reach its source pause, the fixture reports the exact iteration, debugger
+state, Worker and heap counters, preview-server status, failed request URLs, browser console tail,
+page errors, and terminal transcript. Run a local soak without another build or browser probe
+mutating the same preview output; an unavailable application chunk is a preview-environment
+failure, not an LLDB stopped-state timeout.
 A companion fixture force-terminates the real target Worker and LLDB Worker after separate source
 pauses. It dispatches the browser worker-error boundary, requires both workers from each failed
 session to terminate within five seconds, and launches a final clean session that must print
