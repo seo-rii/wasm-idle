@@ -40,8 +40,12 @@ export async function executeTerminalRun({
 	args = [],
 	options = {}
 }: ExecuteTerminalRunOptions) {
+	const signal = options.signal;
+	signal?.throwIfAborted();
 	await terminal.clear();
+	signal?.throwIfAborted();
 	const prepared = await terminal.prepare(language, code, log, progress, args, options);
+	signal?.throwIfAborted();
 	if (!prepared) return prepared;
 	const deferredProgress = isDeferredProgressLanguage(language);
 	if (!deferredProgress) progress?.set?.(1, `${language} runtime ready`);
@@ -53,6 +57,7 @@ export async function executeTerminalRun({
 		args,
 		options
 	);
+	signal?.throwIfAborted();
 	if (deferredProgress) progress?.set?.(1, `${language} run ready`);
 	return result;
 }

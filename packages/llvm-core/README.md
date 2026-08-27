@@ -381,6 +381,10 @@ and verifies that the active worker count returns to the first-run baseline afte
 If a target-exit or worker-error path has already started disposal, the playground disconnect waits
 for that same disposal before reporting completion, so the UI cannot return to Ready before both
 debug Worker termination calls are observable.
+The execution preflight signal also remains attached after manifest verification and is checked
+before and after terminal clear, prepare, and run. Stop or Restart during the clear/compile startup
+window therefore retires that execution before it can create a late debugger session; a Restart
+waits for the retired execution to settle and then starts one fresh generation.
 It also requests garbage collection and limits renderer JS heap growth to 64 MiB by default; set
 `WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES` to tune that budget for constrained CI environments. Set
 `WASM_IDLE_DEBUG_BROWSER_CASES=c-relaunch` to run only this fixture locally.

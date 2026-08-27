@@ -52,6 +52,67 @@ describe('executeTerminalRun', () => {
 		expect(result).toBe(false);
 	});
 
+	it('does not prepare after cancellation wins during terminal clear', async () => {
+		let releaseClear: (() => void) | undefined;
+		const terminal = {
+			clear: vi.fn(
+				() =>
+					new Promise<void>((resolve) => {
+						releaseClear = resolve;
+					})
+			),
+			prepare: vi.fn(async () => true),
+			run: vi.fn(async () => 'should not happen')
+		};
+		const controller = new AbortController();
+		const reason = new DOMException('execution stopped during clear', 'AbortError');
+		const execution = executeTerminalRun({
+			terminal,
+			language: 'C',
+			code: 'int main(void) { return 0; }',
+			options: { signal: controller.signal }
+		});
+		const rejected = expect(execution).rejects.toBe(reason);
+
+		await vi.waitFor(() => expect(terminal.clear).toHaveBeenCalledTimes(1));
+		controller.abort(reason);
+		releaseClear?.();
+
+		await rejected;
+		expect(terminal.prepare).not.toHaveBeenCalled();
+		expect(terminal.run).not.toHaveBeenCalled();
+	});
+
+	it('does not run after cancellation wins during terminal prepare', async () => {
+		let releasePrepare: ((prepared: boolean) => void) | undefined;
+		const terminal = {
+			clear: vi.fn(async () => {}),
+			prepare: vi.fn(
+				() =>
+					new Promise<boolean>((resolve) => {
+						releasePrepare = resolve;
+					})
+			),
+			run: vi.fn(async () => 'should not happen')
+		};
+		const controller = new AbortController();
+		const reason = new DOMException('execution stopped during prepare', 'AbortError');
+		const execution = executeTerminalRun({
+			terminal,
+			language: 'CPP',
+			code: 'int main() { return 0; }',
+			options: { signal: controller.signal }
+		});
+		const rejected = expect(execution).rejects.toBe(reason);
+
+		await vi.waitFor(() => expect(terminal.prepare).toHaveBeenCalledTimes(1));
+		controller.abort(reason);
+		releasePrepare?.(true);
+
+		await rejected;
+		expect(terminal.run).not.toHaveBeenCalled();
+	});
+
 	it('finishes prepared runtime loading before code can wait for input', async () => {
 		const values: number[] = [];
 		const stages: Array<string | undefined> = [];

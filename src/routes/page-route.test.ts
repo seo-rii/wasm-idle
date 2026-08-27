@@ -112,6 +112,10 @@ describe('example route debug actions', () => {
 		);
 		expect(source).not.toContain('preflightDebugRuntimeAssets');
 		expect(source).toContain('if (!executionPreflight.isCurrent(preflight)) return;');
+		expect(source).toMatch(/signal: preflight\.signal,/);
+		expect(source).toMatch(
+			/catch \(error\) \{\s+if \(\s*preflight\.signal\.aborted &&\s*!executionPreflight\.isCurrent\(preflight\) &&\s*error === preflight\.signal\.reason\s*\)\s*return;\s+throw error;\s+\} finally/s
+		);
 		expect(source).toMatch(/if \(!debug\.paused\) debug\.reset\(\);/);
 		expect(source).toMatch(
 			/title=\{debug\.cursorLine\s+\?\s+`Run to Cursor \(L\$\{debug\.cursorLine\}\)`\s+:\s+'Run to Cursor'\}/

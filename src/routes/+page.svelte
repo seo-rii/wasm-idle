@@ -1829,9 +1829,18 @@
 						})),
 						pauseOnEntry: enableDebug,
 						...languageExecutionOptions,
+						signal: preflight.signal,
 						stdin: preloadedStdin
 					}
 				});
+			} catch (error) {
+				if (
+					preflight.signal.aborted &&
+					!executionPreflight.isCurrent(preflight) &&
+					error === preflight.signal.reason
+				)
+					return;
+				throw error;
 			} finally {
 				executionPreflight.finish(preflight);
 				if (executionGeneration === generation) {
