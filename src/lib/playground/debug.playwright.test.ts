@@ -503,21 +503,42 @@ int main(void) {
 		testId: 'c-relaunch'
 	},
 	{
-		activePath: 'asset-fallback.c',
+		activePath: 'manifest-fallback.c',
 		backend: 'trace',
-		expectedFallbackWarning: 'LLDB WebAssembly debug asset (404)',
-		expectedOutput: 'trace-asset-fallback=73',
+		expectedFallbackWarning: 'Unable to load the LLDB runtime manifest (404).',
+		expectedNoDebugWorkers: true,
+		expectedOutput: 'trace-manifest-fallback=73',
 		language: 'C',
-		missingDebugAsset: 'debug/lldb-web-dap.wasm',
+		missingDebugResource: 'runtime-manifest.v2.json',
 		programArgs: [],
 		source: `#include <stdio.h>
 
 int main(void) {
     int value = 73;
-    printf("trace-asset-fallback=%d\\n", value);
+    printf("trace-manifest-fallback=%d\\n", value);
     return 0;
 }`,
-		testId: 'c-asset-fallback'
+		testId: 'c-manifest-fallback'
+	},
+	{
+		activePath: 'asset-session-failure.c',
+		backend: 'lldb',
+		breakpointLine: 4,
+		expectedNoDebugWorkers: true,
+		expectedSessionFailure: 'Unable to load LLDB WebAssembly debug asset (404)',
+		expectedTitle: 'C · LLDB / WAMR',
+		forbiddenOutput: 'late-asset-must-not-run=73',
+		language: 'C',
+		missingDebugResource: 'debug/lldb-web-dap.wasm',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int value = 73;
+    printf("late-asset-must-not-run=%d\\n", value);
+    return 0;
+}`,
+		testId: 'c-asset-session-failure'
 	},
 	{
 		activePath: 'solution.rs',
@@ -812,21 +833,25 @@ async function readBrowserLifecycleMetrics(page: Page) {
 					active: number;
 					activeDebug: number;
 					created: number;
+					createdDebug: number;
 					linearMemory: Record<'lldb' | 'target', { peakBytes: number; samples: number }>;
 					peakActive: number;
 					terminated: number;
+					terminatedDebug: number;
 				};
 			}
 		).__wasmIdleWorkerMetrics?.() ?? {
 			active: 0,
 			activeDebug: 0,
 			created: 0,
+			createdDebug: 0,
 			linearMemory: {
 				lldb: { peakBytes: 0, samples: 0 },
 				target: { peakBytes: 0, samples: 0 }
 			},
 			peakActive: 0,
-			terminated: 0
+			terminated: 0,
+			terminatedDebug: 0
 		};
 		const memory = (
 			performance as Performance & {
@@ -886,8 +911,10 @@ describe('native-source browser debugging in Chromium', () => {
 				let active = 0;
 				let created = 0;
 				let activeDebug = 0;
+				let createdDebug = 0;
 				let peakActive = 0;
 				let terminated = 0;
+				let terminatedDebug = 0;
 				const liveWorkers = new WeakSet<Worker>();
 				const debugWorkers = new Map<'lldb' | 'target', Worker>();
 				type DebugQueueDescriptor = {
@@ -914,6 +941,7 @@ describe('native-source browser debugging in Chromium', () => {
 						}
 						if (debugWorkerKind) {
 							activeDebug += 1;
+							createdDebug += 1;
 							peakActive = Math.max(peakActive, activeDebug);
 							debugWorkers.set(debugWorkerKind, this);
 							this.addEventListener('message', (event) => {
@@ -977,6 +1005,7 @@ describe('native-source browser debugging in Chromium', () => {
 							if (worker !== this) continue;
 							debugWorkers.delete(kind);
 							activeDebug -= 1;
+							terminatedDebug += 1;
 							if (kind === 'target') targetQueues.clear();
 						}
 						super.terminate();
@@ -993,12 +1022,14 @@ describe('native-source browser debugging in Chromium', () => {
 						active,
 						activeDebug,
 						created,
+						createdDebug,
 						linearMemory: {
 							lldb: { ...linearMemory.lldb },
 							target: { ...linearMemory.target }
 						},
 						peakActive,
-						terminated
+						terminated,
+						terminatedDebug
 					})
 				});
 				Object.defineProperty(globalThis, '__wasmIdleDebugWorkerFaults', {
@@ -1116,8 +1147,8 @@ describe('native-source browser debugging in Chromium', () => {
 						);
 					});
 					try {
-						if ('missingDebugAsset' in testCase) {
-							await page.addInitScript((assetPath) => {
+						if ('missingDebugResource' in testCase) {
+							await page.addInitScript((resourcePath) => {
 								const nativeFetch = globalThis.fetch.bind(globalThis);
 								Object.defineProperty(globalThis, 'fetch', {
 									configurable: true,
@@ -1134,18 +1165,21 @@ describe('native-source browser debugging in Chromium', () => {
 															: input.url,
 														location.href
 													);
-										if (url.pathname.endsWith(`/${assetPath}`)) {
+										if (url.pathname.endsWith(`/${resourcePath}`)) {
 											return Promise.resolve(
-												new Response('missing debug asset fixture', {
-													status: 404
-												})
+												new Response(
+													'missing debug runtime resource fixture',
+													{
+														status: 404
+													}
+												)
 											);
 										}
 										return nativeFetch(input, init);
 									},
 									writable: true
 								});
-							}, testCase.missingDebugAsset);
+							}, testCase.missingDebugResource);
 						}
 						const activeState = await ensureSharedBrowserPage(
 							page,
@@ -1246,7 +1280,52 @@ describe('native-source browser debugging in Chromium', () => {
 						const debugButton = page.locator('button.action-button--debug');
 						await debugButton.waitFor({ state: 'visible' });
 						expect(await debugButton.isEnabled()).toBe(true);
+						const workerMetricsBeforeStart =
+							'expectedNoDebugWorkers' in testCase
+								? await readBrowserLifecycleMetrics(page)
+								: null;
 						await debugButton.click();
+						if ('expectedSessionFailure' in testCase) {
+							await page.waitForFunction(
+								(expectedFailure) =>
+									document
+										.querySelector('[data-testid="terminal-debug-output"]')
+										?.textContent?.includes(expectedFailure),
+								testCase.expectedSessionFailure,
+								{
+									timeout: Number(
+										process.env.WASM_IDLE_DEBUG_START_TIMEOUT_MS || '120000'
+									)
+								}
+							);
+							await debugButton.waitFor({ state: 'visible' });
+							const transcript =
+								(await page
+									.locator('[data-testid="terminal-debug-output"]')
+									.textContent()) || '';
+							expect(transcript).toContain(testCase.expectedSessionFailure);
+							expect(transcript).not.toContain(testCase.forbiddenOutput);
+							expect(
+								consoleMessages.some((message) =>
+									message.includes('using trace debugging for this run')
+								)
+							).toBe(false);
+							if (testCase.expectedNoDebugWorkers) {
+								const workerMetricsAfterFailure =
+									await readBrowserLifecycleMetrics(page);
+								expect(workerMetricsAfterFailure.createdDebug).toBe(
+									workerMetricsBeforeStart?.createdDebug
+								);
+								expect(workerMetricsAfterFailure.terminatedDebug).toBe(
+									workerMetricsBeforeStart?.terminatedDebug
+								);
+								expect(workerMetricsAfterFailure.activeDebug).toBe(
+									workerMetricsBeforeStart?.activeDebug
+								);
+							}
+							expect(pageErrors).toEqual([]);
+							continue;
+						}
 						let startTimeout: ReturnType<typeof setTimeout> | undefined;
 						const startOutcome = await Promise.race([
 							page
@@ -1289,6 +1368,11 @@ describe('native-source browser debugging in Chromium', () => {
 									)
 								)
 								.toContain(testCase.expectedFallbackWarning);
+							expect(
+								consoleMessages.some((message) =>
+									message.includes('using trace debugging for this run')
+								)
+							).toBe(true);
 						}
 						let pauseTimeout: ReturnType<typeof setTimeout> | undefined;
 						const pauseOutcome = await Promise.race([
@@ -2555,6 +2639,22 @@ describe('native-source browser debugging in Chromium', () => {
 						await page
 							.locator('button.action-button--debug')
 							.waitFor({ state: 'visible' });
+						if (
+							'expectedFallbackWarning' in testCase &&
+							testCase.expectedNoDebugWorkers
+						) {
+							const workerMetricsAfterFallback =
+								await readBrowserLifecycleMetrics(page);
+							expect(workerMetricsAfterFallback.createdDebug).toBe(
+								workerMetricsBeforeStart?.createdDebug
+							);
+							expect(workerMetricsAfterFallback.terminatedDebug).toBe(
+								workerMetricsBeforeStart?.terminatedDebug
+							);
+							expect(workerMetricsAfterFallback.activeDebug).toBe(
+								workerMetricsBeforeStart?.activeDebug
+							);
+						}
 						expect(pageErrors).toEqual([]);
 					} finally {
 						await page.close();

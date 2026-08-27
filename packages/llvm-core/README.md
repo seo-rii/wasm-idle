@@ -294,6 +294,7 @@ must pair `PUBLIC_WASM_DEBUG_RUNTIME_URL` with
 `PUBLIC_WASM_DEBUG_RUNTIME_MANIFEST_SHA256`. A custom profile without a valid expected digest fails
 closed before fetching the manifest or creating a debugger Worker, allowing the product's
 pre-session capability check to offer a new trace run instead.
+Only authenticated manifest preflight failures may offer a new trace run before compilation.
 Manifest downloads are capped at 64 KiB. An invalid or oversized `Content-Length` fails before the
 body reader starts; a missing or understated header still uses a counted byte stream that cancels
 as soon as the cap is crossed. The loader never calls the unbounded `Response.arrayBuffer()` path
@@ -304,6 +305,8 @@ downloads and verifies each one exactly once, and transfers the owned verified b
 The Workers never re-fetch executable URLs. A missing or corrupt binary fails the LLDB session before
 Worker creation. Direct package consumers must authenticate the raw manifest before passing its
 parsed value to `BrowserLldbSession`; the session then enforces the same single-fetch asset boundary.
+A binary asset failure after DWARF compilation fails that LLDB session explicitly, before any
+debugger Worker starts, and never continues the compiled artifact through trace debugging.
 The tracked consumer profile and copied manifest/assets form one release compatibility unit.
 `sync:wasm-debug` derives the profile bytes and digest from the exact copied manifest and rolls both
 the asset directory and profile module back after ordinary publication failures; the dedicated
@@ -372,11 +375,18 @@ pauses. It dispatches the browser worker-error boundary, requires both workers f
 session to terminate within five seconds, and launches a final clean session that must print
 `lldb-worker-recovery=73`. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-worker-crash` to run only this
 fixture locally.
-A fifth C fixture intercepts the LLDB WebAssembly asset with a synthetic 404 after a valid manifest
-load. It requires the application preflight to report that exact asset status, select trace
-debugging, and still produce `trace-asset-fallback=73`. Set
-`WASM_IDLE_DEBUG_BROWSER_CASES=c-asset-fallback` to run only this fixture locally.
-A sixth C fixture stops after stepping inside a three-level recursive call, selects every `recurse`
+A fifth C fixture intercepts the outer runtime manifest with a synthetic 404. It requires the
+pre-session capability check to select trace, complete the guest with
+`trace-manifest-fallback=73`, and leave all debugger Worker lifecycle counters unchanged. The
+manifest fallback fixture proves that no debugger Worker starts before the authenticated manifest
+boundary succeeds. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-manifest-fallback` to run only this fixture
+locally.
+A sixth C fixture intercepts the LLDB WebAssembly asset with a synthetic 404 after a valid manifest
+load and DWARF compilation. It requires an explicit LLDB session failure with that exact asset
+status, proves that neither debugger Worker started, and rejects both trace fallback and guest
+execution. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-asset-session-failure` to run only this fixture
+locally.
+A seventh C fixture stops after stepping inside a three-level recursive call, selects every `recurse`
 frame through the product UI adapter, and requires distinct frame IDs with `n=1`, `n=2`, and `n=3`
 scope values. This guards the pinned synthetic-CFA fix against reusing the top frame's Wasm locals
 for callers. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-recursive-frames` to run only this fixture locally.

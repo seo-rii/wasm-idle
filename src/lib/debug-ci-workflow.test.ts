@@ -242,14 +242,38 @@ describe('LLDB browser integration workflow', () => {
 		);
 	});
 
-	it('keeps a missing-asset trace fallback fixture in the browser gate', async () => {
+	it('keeps late binary-asset failures inside the LLDB session boundary', async () => {
 		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+		const llvmReadme = await readFile('packages/llvm-core/README.md', 'utf8');
 
-		expect(browserTest).toContain("testId: 'c-asset-fallback'");
-		expect(browserTest).toContain("missingDebugAsset: 'debug/lldb-web-dap.wasm'");
-		expect(browserTest).toContain("expectedOutput: 'trace-asset-fallback=73'");
+		expect(browserTest).toContain("testId: 'c-asset-session-failure'");
+		expect(browserTest).toContain("backend: 'lldb'");
+		expect(browserTest).toContain("missingDebugResource: 'debug/lldb-web-dap.wasm'");
 		expect(browserTest).toContain(
-			"expectedFallbackWarning: 'LLDB WebAssembly debug asset (404)'"
+			"expectedSessionFailure: 'Unable to load LLDB WebAssembly debug asset (404)'"
+		);
+		expect(browserTest).toContain('expectedNoDebugWorkers: true');
+		expect(browserTest).not.toContain('trace-asset-fallback=73');
+		expect(llvmReadme).toContain(
+			'Only authenticated manifest preflight failures may offer a new trace run before compilation.'
+		);
+		expect(llvmReadme).toContain(
+			'A binary asset failure after DWARF compilation fails that LLDB session explicitly'
+		);
+	});
+
+	it('keeps authenticated manifest preflight fallback before debugger startup', async () => {
+		const browserTest = await readFile('src/lib/playground/debug.playwright.test.ts', 'utf8');
+		const llvmReadme = await readFile('packages/llvm-core/README.md', 'utf8');
+
+		expect(browserTest).toContain("testId: 'c-manifest-fallback'");
+		expect(browserTest).toMatch(
+			/activePath: 'manifest-fallback\.c',[\s\S]{0,500}backend: 'trace',[\s\S]{0,500}expectedFallbackWarning: 'Unable to load the LLDB runtime manifest \(404\)\.',[\s\S]{0,500}expectedNoDebugWorkers: true,[\s\S]{0,500}expectedOutput: 'trace-manifest-fallback=73',[\s\S]{0,500}missingDebugResource: 'runtime-manifest\.v2\.json'/
+		);
+		expect(browserTest).toContain("message.includes('using trace debugging for this run')");
+		expect(browserTest).toContain('workerMetricsAfterFallback.createdDebug');
+		expect(llvmReadme).toMatch(
+			/The\s+manifest fallback fixture proves that no debugger Worker starts/
 		);
 	});
 
