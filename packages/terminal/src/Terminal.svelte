@@ -98,7 +98,11 @@
 		let _tc = ++tc;
 		await wait();
 		sandboxAcceptingInput = false;
-		if (sandbox && requiresSandboxReset) await sandbox.clear();
+		if (sandbox && requiresSandboxReset) {
+			discardPendingSandboxInput();
+			await sandbox.clear();
+			discardPendingSandboxInput();
+		}
 		input = '';
 		inputCursor = 0;
 		finish = false;
@@ -126,6 +130,11 @@
 			sandbox.eof?.();
 			pendingSandboxEof = false;
 		}
+	}
+
+	function discardPendingSandboxInput() {
+		pendingSandboxInput = [];
+		pendingSandboxEof = false;
 	}
 
 	function submitSandboxEof() {
@@ -268,6 +277,7 @@
 	const terminalControl: TerminalControl = {
 		async clear() {
 			await wait();
+			discardPendingSandboxInput();
 			term?.reset();
 			term?.write(`\u001B[?25l\x1b[0m\x1b[?25h`);
 			if (term) term.options.cursorBlink = false;
@@ -275,9 +285,9 @@
 			input = '';
 			inputCursor = 0;
 			sandboxAcceptingInput = false;
-			pendingSandboxEof = false;
 			first = true;
 			await new Promise((r) => setTimeout(r, 100));
+			discardPendingSandboxInput();
 		},
 		async prepare(
 			language: string,
@@ -356,17 +366,17 @@
 			await wait();
 			progressController.invalidate();
 			sandboxAcceptingInput = false;
-			pendingSandboxEof = false;
+			discardPendingSandboxInput();
 			term?.dispose();
 			if (sandbox) await sandbox.clear();
+			discardPendingSandboxInput();
 		},
 		async restartRuntime() {
 			await wait();
 			if (!sandbox) return;
 			progressController.invalidate();
 			sandboxAcceptingInput = false;
-			pendingSandboxInput = [];
-			pendingSandboxEof = false;
+			discardPendingSandboxInput();
 			input = '';
 			inputCursor = 0;
 			finish = true;
@@ -374,6 +384,7 @@
 			tc += 1;
 			if (sandbox.restart) await sandbox.restart();
 			else await sandbox.clear();
+			discardPendingSandboxInput();
 		},
 		async stop() {
 			await wait();
@@ -381,9 +392,10 @@
 			stopRequested = true;
 			finish = true;
 			sandboxAcceptingInput = false;
-			pendingSandboxEof = false;
+			discardPendingSandboxInput();
 			if (sandbox?.kill) await sandbox.kill();
 			else await sandbox?.terminate?.();
+			discardPendingSandboxInput();
 		},
 		async debugCommand(command: DebugCommand) {
 			await wait();
@@ -588,8 +600,10 @@
 
 		return async () => {
 			progressController.invalidate();
+			discardPendingSandboxInput();
 			term?.dispose();
 			if (sandbox) await sandbox.clear();
+			discardPendingSandboxInput();
 		};
 	});
 </script>
