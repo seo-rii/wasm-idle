@@ -20,6 +20,8 @@ jobs:
     product-lldb-wamr:
         runs-on: ubuntu-latest
         timeout-minutes: 150
+        env:
+            WASM_IDLE_STRICT_CSP: '1'
         steps:
             - uses: actions/checkout@v4
             - uses: pnpm/action-setup@v4

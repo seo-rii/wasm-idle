@@ -57,9 +57,18 @@ describe('LLDB browser integration workflow', () => {
 	it('gates pull requests and main pushes with the product LLDB/WAMR Chromium test', async () => {
 		const workflow = await readFile('.github/workflows/debug-browser.yml', 'utf8');
 		const debugReadme = await readFile('packages/llvm-core/README.md', 'utf8');
+		const productJobIndex = workflow.indexOf('    product-lldb-wamr:');
+		const strictCspIndex = workflow.indexOf(
+			"        env:\n            WASM_IDLE_STRICT_CSP: '1'",
+			productJobIndex
+		);
+		const productStepsIndex = workflow.indexOf('        steps:', productJobIndex);
 
 		expect(workflow).toContain('pull_request:');
 		expect(workflow).toContain('branches: [main]');
+		expect(productJobIndex).toBeGreaterThan(-1);
+		expect(strictCspIndex).toBeGreaterThan(productJobIndex);
+		expect(strictCspIndex).toBeLessThan(productStepsIndex);
 		expect(workflow).toContain('playwright-core install --with-deps chromium');
 		expect(workflow).not.toContain('prepare:test-assets');
 		expect(workflow).not.toContain('sync:wasm-clang');
