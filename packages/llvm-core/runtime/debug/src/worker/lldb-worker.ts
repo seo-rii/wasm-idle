@@ -1,6 +1,7 @@
 import type { DebugWorkerInboundMessage, LldbWorkerInitializeMessage } from '../types.js';
 import {
 	createByteOutput,
+	createEmscriptenAssetUrls,
 	createTransportBindings,
 	loadEmscriptenModuleFactory,
 	mountDebugFiles,
@@ -94,49 +95,55 @@ async function initialize(message: LldbWorkerInitializeMessage) {
 				generation: message.generation
 			})
 		);
-	const factory = await loadEmscriptenModuleFactory(message.assets.js);
-	if (disposed) return;
-	const module = await factory({
-		noInitialRun: true,
-		wasmLldbSharedRingV1: registry,
-		mainScriptUrlOrBlob: message.assets.worker,
-		locateFile: (path: string) =>
-			path.endsWith('.wasm')
-				? message.assets.wasm
-				: path.endsWith('.pthread.mjs')
-					? message.assets.worker
-					: new URL(path, message.assets.js).toString(),
-		stdout: emitOutput('stdout'),
-		stderr: emitOutput('stderr'),
-		onAbort: (reason: unknown) => {
-			if (!disposed) failLifecycle(new Error(`LLDB aborted: ${String(reason)}`));
-		},
-		onExit: (exitCode: unknown) => {
-			if (disposed) {
-				finishLifecycle();
-				return;
-			}
-			const suffix =
-				typeof exitCode === 'number' && Number.isSafeInteger(exitCode)
-					? ` (exit code ${exitCode})`
-					: '';
-			failLifecycle(new Error(`LLDB debug adapter exited unexpectedly${suffix}`));
-		}
+	const assetUrls = createEmscriptenAssetUrls(message.assets, {
+		rewritePthreadMainModuleImport: './lldb-web-dap.js'
 	});
-	if (disposed) return;
-	mountDebugFiles(module, message.module, message.sources);
-	const stopMemoryTelemetry = startLinearMemoryTelemetry(module, 'lldb', message.generation);
 	try {
-		postWorkerMessage({
-			type: 'ready',
-			worker: 'lldb',
-			generation: message.generation
+		const factory = await loadEmscriptenModuleFactory(assetUrls.js);
+		if (disposed) return;
+		const module = await factory({
+			noInitialRun: true,
+			wasmLldbSharedRingV1: registry,
+			mainScriptUrlOrBlob: assetUrls.worker,
+			locateFile: (path: string) => {
+				if (path.endsWith('.wasm')) return assetUrls.wasm;
+				if (path.endsWith('.pthread.mjs')) return assetUrls.worker;
+				throw new Error(`LLDB requested an unverified runtime asset: ${path}`);
+			},
+			stdout: emitOutput('stdout'),
+			stderr: emitOutput('stderr'),
+			onAbort: (reason: unknown) => {
+				if (!disposed) failLifecycle(new Error(`LLDB aborted: ${String(reason)}`));
+			},
+			onExit: (exitCode: unknown) => {
+				if (disposed) {
+					finishLifecycle();
+					return;
+				}
+				const suffix =
+					typeof exitCode === 'number' && Number.isSafeInteger(exitCode)
+						? ` (exit code ${exitCode})`
+						: '';
+				failLifecycle(new Error(`LLDB debug adapter exited unexpectedly${suffix}`));
+			}
 		});
-		await module.callMain([message.generation]);
-		await lifecycle;
+		if (disposed) return;
+		mountDebugFiles(module, message.module, message.sources);
+		const stopMemoryTelemetry = startLinearMemoryTelemetry(module, 'lldb', message.generation);
+		try {
+			postWorkerMessage({
+				type: 'ready',
+				worker: 'lldb',
+				generation: message.generation
+			});
+			await module.callMain([message.generation]);
+			await lifecycle;
+		} finally {
+			stopMemoryTelemetry();
+			if (finishActiveLifecycle === finishLifecycle) finishActiveLifecycle = undefined;
+		}
 	} finally {
-		stopMemoryTelemetry();
-		if (finishActiveLifecycle === finishLifecycle) finishActiveLifecycle = undefined;
+		assetUrls.revoke();
 	}
 }
 

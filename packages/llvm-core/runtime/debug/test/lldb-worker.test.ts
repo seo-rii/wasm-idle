@@ -67,9 +67,9 @@ function initializeMessage(generation: string): LldbWorkerInitializeMessage {
 		rspInput: createSharedByteQueue(4096, 1),
 		rspOutput: createSharedByteQueue(4096, 1),
 		assets: {
-			js: 'https://example.test/lldb.js',
-			wasm: 'https://example.test/lldb.wasm',
-			worker: 'https://example.test/lldb.worker.mjs'
+			js: new TextEncoder().encode('export default function lldb() {}').buffer,
+			wasm: Uint8Array.of(0, 97, 115, 109).buffer,
+			worker: new TextEncoder().encode("await import('./lldb-web-dap.js');").buffer
 		}
 	};
 }

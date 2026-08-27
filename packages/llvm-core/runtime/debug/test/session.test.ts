@@ -79,6 +79,7 @@ const manifest: RuntimeManifestV2 = {
 
 class FakeWorker implements WorkerLike {
 	readonly received: DebugWorkerInboundMessage[] = [];
+	readonly transferLists: Transferable[][] = [];
 	readonly requests: DapRequest[] = [];
 	private readonly listeners = new Set<
 		(event: MessageEvent<DebugWorkerOutboundMessage>) => void
@@ -101,8 +102,9 @@ class FakeWorker implements WorkerLike {
 		}
 	) {}
 
-	postMessage(message: DebugWorkerInboundMessage) {
+	postMessage(message: DebugWorkerInboundMessage, transfer: Transferable[] = []) {
 		this.received.push(message);
+		this.transferLists.push(transfer);
 		if (message.type === 'initialize-target') {
 			const stdout = new SharedByteQueue(message.stdout);
 			stdout.tryWrite(new TextEncoder().encode('target output\n'));
@@ -811,6 +813,54 @@ describe('BrowserLldbSession', () => {
 		expect(commands).toContain('disconnect');
 	});
 
+	it('transfers owned verified asset bytes to workers without retaining runtime URLs', async () => {
+		const commands: string[] = [];
+		const workers: FakeWorker[] = [];
+		const requested = new Map<string, number>();
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: Uint8Array.of(0, 97, 115, 109),
+			sources: [],
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, commands);
+				workers.push(worker);
+				return worker;
+			},
+			fetchImpl: async (input) => {
+				const url = String(input);
+				const count = (requested.get(url) ?? 0) + 1;
+				requested.set(url, count);
+				return new Response(count === 1 ? 'debug-asset' : 'changed-after-verification');
+			},
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+
+		try {
+			await session.initialize();
+			expect([...requested.values()]).toEqual([1, 1, 1, 1, 1, 1]);
+			for (const worker of workers) {
+				const initialization = worker.received.find((message) =>
+					message.type.startsWith('initialize-')
+				);
+				if (!initialization || !('assets' in initialization)) {
+					throw new Error(`${worker.kind} worker was not initialized`);
+				}
+				expect(initialization.assets.js).toBeInstanceOf(ArrayBuffer);
+				expect(initialization.assets.wasm).toBeInstanceOf(ArrayBuffer);
+				expect(initialization.assets.worker).toBeInstanceOf(ArrayBuffer);
+				expect(worker.transferLists[0]).toEqual([
+					initialization.assets.js,
+					initialization.assets.wasm,
+					initialization.assets.worker
+				]);
+			}
+		} finally {
+			await session.dispose();
+		}
+	});
+
 	it('snapshots mutable initialization inputs before awaiting runtime assets', async () => {
 		const commands: string[] = [];
 		const workers: FakeWorker[] = [];
@@ -1226,11 +1276,10 @@ describe('BrowserLldbSession', () => {
 			const lldbInit = workers
 				.flatMap((worker) => worker.received)
 				.find((message) => message.type === 'initialize-lldb');
-			expect(lldbInit).toMatchObject({
-				assets: {
-					js: 'https://cdn.example/original/lldb.js'
-				}
-			});
+			if (!lldbInit || lldbInit.type !== 'initialize-lldb') {
+				throw new Error('LLDB worker was not initialized');
+			}
+			expect(new TextDecoder().decode(lldbInit.assets.js)).toBe('debug-asset');
 		} finally {
 			await session.dispose();
 		}

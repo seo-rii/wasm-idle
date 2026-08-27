@@ -1,6 +1,7 @@
 import type { DebugWorkerInboundMessage, TargetWorkerInitializeMessage } from '../types.js';
 import { assertDistinctSharedByteQueueBuffers, SharedByteQueue } from '../shared-byte-queue.js';
 import {
+	createEmscriptenAssetUrls,
 	createTransportBindings,
 	loadEmscriptenModuleFactory,
 	mountDebugFiles,
@@ -125,73 +126,81 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 		stderr(null);
 		rejectLifecycle(error);
 	};
-	const factory = await loadEmscriptenModuleFactory(message.assets.js);
-	if (disposed) return;
-	const module = await factory({
-		noInitialRun: true,
-		wasmIdleDebugTransport: transport,
-		mainScriptUrlOrBlob: message.assets.worker,
-		locateFile: (path: string) =>
-			path.endsWith('.wasm')
-				? message.assets.wasm
-				: path.endsWith('.worker.mjs')
-					? message.assets.worker
-					: new URL(path, message.assets.js).toString(),
-		stdin: () => {
-			if (!stdin) return null;
-			const length = stdin.readBlocking(inputByte);
-			return length === 0 ? null : inputByte[0];
-		},
-		stdout,
-		stderr,
-		onExit: (exitCode: unknown) => {
-			if (lifecycleSettled) return;
-			if (typeof exitCode !== 'number' || !Number.isSafeInteger(exitCode)) {
-				rejectTarget(new Error('WAMR exited without a valid integer exit code'));
-				return;
-			}
-			lifecycleSettled = true;
-			stdout(null);
-			stderr(null);
-			if (!disposed) {
-				postWorkerMessage({
-					type: 'exit',
-					exitCode,
-					generation: message.generation
-				});
-			}
-			resolveLifecycle();
-		},
-		onAbort: (reason: unknown) => {
-			rejectTarget(new Error(`WAMR aborted: ${String(reason)}`));
-		}
-	});
-	if (disposed) return;
-	mountDebugFiles(module, message.module, message.workspaceFiles);
-	module.FS.chdir(cwd);
-	const stopMemoryTelemetry = startLinearMemoryTelemetry(module, 'target', message.generation);
+	const assetUrls = createEmscriptenAssetUrls(message.assets);
 	try {
-		postWorkerMessage({
-			type: 'ready',
-			worker: 'target',
-			generation: message.generation
+		const factory = await loadEmscriptenModuleFactory(assetUrls.js);
+		if (disposed) return;
+		const module = await factory({
+			noInitialRun: true,
+			wasmIdleDebugTransport: transport,
+			mainScriptUrlOrBlob: assetUrls.worker,
+			locateFile: (path: string) => {
+				if (path.endsWith('.wasm')) return assetUrls.wasm;
+				if (path.endsWith('.worker.mjs')) return assetUrls.worker;
+				throw new Error(`WAMR requested an unverified runtime asset: ${path}`);
+			},
+			stdin: () => {
+				if (!stdin) return null;
+				const length = stdin.readBlocking(inputByte);
+				return length === 0 ? null : inputByte[0];
+			},
+			stdout,
+			stderr,
+			onExit: (exitCode: unknown) => {
+				if (lifecycleSettled) return;
+				if (typeof exitCode !== 'number' || !Number.isSafeInteger(exitCode)) {
+					rejectTarget(new Error('WAMR exited without a valid integer exit code'));
+					return;
+				}
+				lifecycleSettled = true;
+				stdout(null);
+				stderr(null);
+				if (!disposed) {
+					postWorkerMessage({
+						type: 'exit',
+						exitCode,
+						generation: message.generation
+					});
+				}
+				resolveLifecycle();
+			},
+			onAbort: (reason: unknown) => {
+				rejectTarget(new Error(`WAMR aborted: ${String(reason)}`));
+			}
 		});
-		void Promise.resolve(
-			module.callMain([
-				...environmentArgs,
-				'-v=0',
-				'--heap-size=1048576',
-				`--dir=${cwd}`,
-				'-g=wasm-messageport:1',
-				'/workspace/program.wasm',
-				...args
-			])
-		).catch((error) =>
-			rejectTarget(error instanceof Error ? error : new Error('WAMR main failed'))
+		if (disposed) return;
+		mountDebugFiles(module, message.module, message.workspaceFiles);
+		module.FS.chdir(cwd);
+		const stopMemoryTelemetry = startLinearMemoryTelemetry(
+			module,
+			'target',
+			message.generation
 		);
-		await lifecycle;
+		try {
+			postWorkerMessage({
+				type: 'ready',
+				worker: 'target',
+				generation: message.generation
+			});
+			void Promise.resolve(
+				module.callMain([
+					...environmentArgs,
+					'-v=0',
+					'--heap-size=1048576',
+					`--dir=${cwd}`,
+					'-g=wasm-messageport:1',
+					'/workspace/program.wasm',
+					...args
+				])
+			).catch((error) =>
+				rejectTarget(error instanceof Error ? error : new Error('WAMR main failed'))
+			);
+			await lifecycle;
+		} finally {
+			stopMemoryTelemetry();
+		}
 	} finally {
-		stopMemoryTelemetry();
+		assetUrls.revoke();
 	}
 }
 

@@ -570,41 +570,39 @@ export class BrowserLldbSession {
 				);
 			}
 
-			targetWorker.postMessage({
-				type: 'initialize-target',
-				generation: this.generation,
-				module,
-				args: launch?.args ?? [],
-				env: launch?.env ?? {},
-				cwd: launch?.cwd ?? '/workspace',
-				workspaceFiles: sources,
-				rspInput: lldbToTarget,
-				rspOutput: targetToLldb,
-				stdout,
-				stderr,
-				stdin,
-				assets: {
-					js: assets.targetRuntime.js.toString(),
-					wasm: assets.targetRuntime.wasm.toString(),
-					worker: assets.targetRuntime.worker.toString()
-				}
-			});
+			targetWorker.postMessage(
+				{
+					type: 'initialize-target',
+					generation: this.generation,
+					module,
+					args: launch?.args ?? [],
+					env: launch?.env ?? {},
+					cwd: launch?.cwd ?? '/workspace',
+					workspaceFiles: sources,
+					rspInput: lldbToTarget,
+					rspOutput: targetToLldb,
+					stdout,
+					stderr,
+					stdin,
+					assets: assets.targetRuntime
+				},
+				[assets.targetRuntime.js, assets.targetRuntime.wasm, assets.targetRuntime.worker]
+			);
 			this.assertActive();
-			lldbWorker.postMessage({
-				type: 'initialize-lldb',
-				generation: this.generation,
-				module,
-				sources,
-				dapInput,
-				dapOutput,
-				rspInput: targetToLldb,
-				rspOutput: lldbToTarget,
-				assets: {
-					js: assets.lldb.js.toString(),
-					wasm: assets.lldb.wasm.toString(),
-					worker: assets.lldb.worker.toString()
-				}
-			});
+			lldbWorker.postMessage(
+				{
+					type: 'initialize-lldb',
+					generation: this.generation,
+					module,
+					sources,
+					dapInput,
+					dapOutput,
+					rspInput: targetToLldb,
+					rspOutput: lldbToTarget,
+					assets: assets.lldb
+				},
+				[assets.lldb.js, assets.lldb.wasm, assets.lldb.worker]
+			);
 			this.assertActive();
 
 			await this.awaitWhileActive(workersReady);

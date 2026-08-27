@@ -2,11 +2,52 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createSharedByteQueue } from '../src/shared-byte-queue.js';
 import {
+	createEmscriptenAssetUrls,
 	createTransportBindings,
 	mountDebugFiles,
 	startLinearMemoryTelemetry,
 	type EmscriptenDebugModule
 } from '../src/worker/module-loader.js';
+
+describe('verified Emscripten asset URLs', () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('creates every runtime URL from owned bytes and rewrites the LLDB pthread import', async () => {
+		const blobs: Blob[] = [];
+		const revoked: string[] = [];
+		const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+			blobs.push(blob);
+			return `blob:verified-${blobs.length}`;
+		});
+		vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url) => revoked.push(url));
+
+		const urls = createEmscriptenAssetUrls(
+			{
+				js: new TextEncoder().encode('export default function module() {}').buffer,
+				wasm: Uint8Array.of(0, 97, 115, 109).buffer,
+				worker: new TextEncoder().encode("await import('./lldb-web-dap.js');").buffer
+			},
+			{ rewritePthreadMainModuleImport: './lldb-web-dap.js' }
+		);
+
+		expect(urls).toMatchObject({
+			js: 'blob:verified-1',
+			wasm: 'blob:verified-2',
+			worker: 'blob:verified-3'
+		});
+		expect(createObjectURL).toHaveBeenCalledTimes(3);
+		expect(new Uint8Array(await blobs[1]!.arrayBuffer())).toEqual(
+			Uint8Array.of(0, 97, 115, 109)
+		);
+		expect(await blobs[2]!.text()).toContain('await import("blob:verified-1")');
+		expect(await blobs[2]!.text()).not.toContain("import('./lldb-web-dap.js')");
+
+		urls.revoke();
+		expect(revoked).toEqual(['blob:verified-3', 'blob:verified-2', 'blob:verified-1']);
+	});
+});
 
 function debugModule(bytes?: number): EmscriptenDebugModule {
 	return {

@@ -98,9 +98,9 @@ function initializeMessage(generation: string): TargetWorkerInitializeMessage {
 		stderr: createSharedByteQueue(4096, 1),
 		stdin: createSharedByteQueue(4096, 1),
 		assets: {
-			js: 'https://example.test/wamr.js',
-			wasm: 'https://example.test/wamr.wasm',
-			worker: 'https://example.test/wamr.worker.mjs'
+			js: new TextEncoder().encode('export default function wamr() {}').buffer,
+			wasm: Uint8Array.of(0, 97, 115, 109).buffer,
+			worker: new TextEncoder().encode('export default function pthread() {}').buffer
 		}
 	};
 }

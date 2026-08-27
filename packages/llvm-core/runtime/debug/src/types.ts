@@ -192,6 +192,17 @@ export interface DebugRuntimeAssets {
 	};
 }
 
+export interface VerifiedDebugAssetBytes {
+	js: ArrayBuffer;
+	wasm: ArrayBuffer;
+	worker: ArrayBuffer;
+}
+
+export interface VerifiedDebugRuntimeAssets {
+	lldb: VerifiedDebugAssetBytes;
+	targetRuntime: VerifiedDebugAssetBytes;
+}
+
 export interface DebugLaunchConfig {
 	program: '/workspace/program.wasm';
 	stopOnEntry?: boolean;
@@ -224,9 +235,9 @@ export interface LldbWorkerInitializeMessage {
 	rspInput: SharedByteQueueDescriptor;
 	rspOutput: SharedByteQueueDescriptor;
 	assets: {
-		js: string;
-		wasm: string;
-		worker: string;
+		js: ArrayBuffer;
+		wasm: ArrayBuffer;
+		worker: ArrayBuffer;
 	};
 }
 
@@ -243,9 +254,9 @@ export interface TargetWorkerInitializeMessage {
 	stdout: SharedByteQueueDescriptor;
 	stderr: SharedByteQueueDescriptor;
 	assets: {
-		js: string;
-		wasm: string;
-		worker: string;
+		js: ArrayBuffer;
+		wasm: ArrayBuffer;
+		worker: ArrayBuffer;
 	};
 	stdin?: SharedByteQueueDescriptor;
 }
@@ -293,7 +304,7 @@ export type DebugWorkerOutboundMessage =
 	  };
 
 export interface WorkerLike {
-	postMessage(message: DebugWorkerInboundMessage): void;
+	postMessage(message: DebugWorkerInboundMessage, transfer?: Transferable[]): void;
 	addEventListener(
 		type: 'message',
 		listener: (event: MessageEvent<DebugWorkerOutboundMessage>) => void
