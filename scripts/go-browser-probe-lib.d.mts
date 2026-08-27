@@ -1,3 +1,5 @@
+export const defaultGoBrowserExpectedOutput: 'fibonacci=11';
+
 /**
  * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; stdinText?: string; target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm'; stdinMethod?: 'debug-hook' | 'keyboard' }} options
  */
