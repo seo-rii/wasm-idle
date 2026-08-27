@@ -369,6 +369,9 @@ available for slower CI hosts.
 A fourth C fixture repeats that running-target launch and disconnect sequence three times in one
 page. It instruments page-created workers, requires every extra LLDB/WAMR worker pair to terminate,
 and verifies that the active worker count returns to the first-run baseline after each disconnect.
+If a target-exit or worker-error path has already started disposal, the playground disconnect waits
+for that same disposal before reporting completion, so the UI cannot return to Ready before both
+debug Worker termination calls are observable.
 It also requests garbage collection and limits renderer JS heap growth to 64 MiB by default; set
 `WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES` to tune that budget for constrained CI environments. Set
 `WASM_IDLE_DEBUG_BROWSER_CASES=c-relaunch` to run only this fixture locally.

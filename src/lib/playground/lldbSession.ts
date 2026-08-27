@@ -201,6 +201,7 @@ export class LldbSandboxSession {
 	private stateVersion = 0;
 	private completionResolve?: (value: true) => void;
 	private completionReject?: (error: Error) => void;
+	private sessionDisposal?: Promise<void>;
 	private readonly pendingInput: string[] = [];
 	private pendingEof = false;
 	private inputReady = false;
@@ -985,7 +986,10 @@ export class LldbSandboxSession {
 		this.session = undefined;
 		const shouldPublishStop = !this.stopped;
 		this.stopped = true;
-		await session?.disconnect({ terminateTarget: true });
+		const disposal = session
+			? this.trackSessionDisposal(session.disconnect({ terminateTarget: true }))
+			: this.sessionDisposal;
+		await disposal;
 		if (shouldPublishStop) this.options.onDebugEvent({ type: 'stop' });
 		this.completionResolve?.(true);
 	}
@@ -1267,7 +1271,10 @@ export class LldbSandboxSession {
 		const session = this.session;
 		this.session = undefined;
 		this.options.onDebugEvent({ type: 'stop' });
-		void (session?.dispose() ?? Promise.resolve()).then(
+		const disposal = session
+			? this.trackSessionDisposal(session.dispose())
+			: (this.sessionDisposal ?? Promise.resolve());
+		void disposal.then(
 			() => {
 				if (exitCode !== null && exitCode !== 0) {
 					this.completionReject?.(
@@ -1300,10 +1307,26 @@ export class LldbSandboxSession {
 		const session = this.session;
 		this.session = undefined;
 		this.options.onDebugEvent({ type: 'stop' });
-		void (session?.dispose() ?? Promise.resolve()).then(
+		const disposal = session
+			? this.trackSessionDisposal(session.dispose())
+			: (this.sessionDisposal ?? Promise.resolve());
+		void disposal.then(
 			() => this.completionReject?.(error),
 			() => this.completionReject?.(error)
 		);
+	}
+
+	private trackSessionDisposal(disposal: Promise<void>) {
+		this.sessionDisposal = disposal;
+		void disposal.then(
+			() => {
+				if (this.sessionDisposal === disposal) this.sessionDisposal = undefined;
+			},
+			() => {
+				if (this.sessionDisposal === disposal) this.sessionDisposal = undefined;
+			}
+		);
+		return disposal;
 	}
 
 	private requireSession() {

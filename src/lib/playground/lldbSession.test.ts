@@ -1377,6 +1377,48 @@ describe('LldbSandboxSession', () => {
 		await expect(completion).resolves.toBe(true);
 	});
 
+	it.each(Array.from({ length: 10 }, (_value, index) => index + 1))(
+		'waits for in-flight target-exit disposal before disconnect completes (cycle %i)',
+		async () => {
+			let releaseDispose!: () => void;
+			runtimeState.disposeGate = new Promise<void>((resolve) => {
+				releaseDispose = resolve;
+			});
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: false,
+				onDebugEvent: () => undefined,
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({ manifestVersion: 2 })
+				})) as unknown as typeof fetch
+			});
+			const completion = controller.start();
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+			runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			await vi.waitFor(() => expect(runtimeState.session!.disposeCount).toBe(1));
+			let disconnected = false;
+			const disconnect = controller.disconnect().then(() => {
+				disconnected = true;
+			});
+			for (let turn = 0; turn < 4; turn += 1) await Promise.resolve();
+
+			expect(disconnected).toBe(false);
+			releaseDispose();
+			await expect(disconnect).resolves.toBeUndefined();
+			await expect(completion).resolves.toBe(true);
+		}
+	);
+
 	it('rejects invalid dynamic breakpoints before replacing the current source state', async () => {
 		const events: Array<{
 			type: string;
