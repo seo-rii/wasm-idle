@@ -149,6 +149,10 @@ memory range. The browser gate qualifies `wasm32-wasi` C write, C++ read/write, 
 **Clear** sends an empty replacement set to the target. Its opaque DAP data ID is never persisted
 across restart or a new debug execution. Because WAMR reports a completed memory access, the stopped
 source location can be the next executable line after the watched instruction.
+If a replacement or clear request times out, is rejected, or returns malformed DAP data, the debug
+execution stops and disposes both Workers so the UI cannot continue with an uncertain watchpoint
+set; **Restart Debug** then starts a clean execution. A successful but unverified replacement remains
+nonfatal and is reported as unverified.
 The Chromium qualification includes an indexed one-byte watched subrange that overlaps a four-byte scalar store.
 LLDB uses modify semantics for write mode: a write data breakpoint stops when at least one watched byte changes;
 a same-value store is reported by WAMR but automatically resumed by LLDB.

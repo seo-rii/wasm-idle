@@ -956,8 +956,13 @@ export class LldbSandboxSession {
 			});
 		} catch (error) {
 			if (!this.isCurrentValueRequest(session, stateVersion)) return [];
-			this.rethrowProtocolError(error);
-			throw error;
+			const failure =
+				this.asProtocolError(error) ??
+				(error instanceof Error
+					? error
+					: new Error('Unable to replace the LLDB data breakpoints.'));
+			this.fail(failure);
+			throw failure;
 		}
 	}
 

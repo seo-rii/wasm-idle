@@ -11,6 +11,7 @@ const runtimeState = vi.hoisted(() => ({
 	pauseGate: null as Promise<void> | null,
 	disposeGate: null as Promise<void> | null,
 	scopesErrorFrameId: null as number | null,
+	requestErrors: new Map<string, Error>(),
 	responseOverrides: new Map<string, unknown>(),
 	breakpointResponseGates: [] as Array<
 		Promise<{
@@ -64,6 +65,8 @@ class FakeRuntimeSession {
 
 	async request<T>(command: string, args?: unknown): Promise<T> {
 		this.requests.push({ command, args });
+		const requestError = runtimeState.requestErrors.get(command);
+		if (requestError) throw requestError;
 		if (command === 'continue') await runtimeState.continueGate;
 		if (command === 'pause') await runtimeState.pauseGate;
 		if (command === 'setBreakpoints' && runtimeState.breakpointResponseGates.length > 0) {
@@ -230,6 +233,7 @@ describe('LldbSandboxSession', () => {
 		runtimeState.pauseGate = null;
 		runtimeState.disposeGate = null;
 		runtimeState.scopesErrorFrameId = null;
+		runtimeState.requestErrors.clear();
 		runtimeState.responseOverrides.clear();
 		runtimeState.breakpointResponseGates = [];
 		loadManifest.mockReset();
@@ -1927,6 +1931,130 @@ describe('LldbSandboxSession', () => {
 				args: { breakpoints: [{ dataId: '1000/4', accessType: 'write' }] }
 			}
 		]);
+
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it.each([
+		{
+			caseName: 'DAP response timeout',
+			breakpoints: [{ dataId: '1000/4', accessType: 'write' as const }],
+			failure: new Error('DAP response timeout after 15000ms: setDataBreakpoints')
+		},
+		{
+			caseName: 'negative DAP response while clearing',
+			breakpoints: [],
+			failure: new Error('Unable to remove the active data breakpoint')
+		},
+		{
+			caseName: 'malformed DAP response',
+			breakpoints: [{ dataId: '1000/4', accessType: 'write' as const }],
+			response: { breakpoints: [{ id: 5, verified: 'yes' }] }
+		}
+	])(
+		'fails, disposes, and permits a clean relaunch after a current $caseName',
+		async ({ breakpoints, failure, response }) => {
+			runtimeState.initializeCapabilities = { supportsDataBreakpoints: true };
+			const events: Array<{ type: string }> = [];
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: (event) => events.push(event),
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({
+						manifestVersion: 2,
+						debugger: { capabilities: { dataBreakpoints: true } }
+					})
+				})) as unknown as typeof fetch
+			});
+
+			const firstCompletionError = controller.start().then(
+				() => null,
+				(error: unknown) => error
+			);
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			const failedSession = runtimeState.session!;
+			if (failure) runtimeState.requestErrors.set('setDataBreakpoints', failure);
+			else runtimeState.responseOverrides.set('setDataBreakpoints', response);
+
+			const replacementError = await controller.setDataBreakpoints(breakpoints).then(
+				() => null,
+				(error: unknown) => error
+			);
+			if (failure) expect(replacementError).toBe(failure);
+			else expect(replacementError).toBeInstanceOf(ProtocolError);
+			await expect(firstCompletionError).resolves.toBe(replacementError);
+			await vi.waitFor(() => expect(failedSession.disposeCount).toBe(1));
+			expect(events.filter((event) => event.type === 'stop')).toHaveLength(1);
+			await expect(controller.debugCommand('continue')).rejects.toThrow(
+				'LLDB sandbox session is not running.'
+			);
+			expect(failedSession.requests).not.toContainEqual(
+				expect.objectContaining({ command: 'continue' })
+			);
+
+			runtimeState.requestErrors.delete('setDataBreakpoints');
+			runtimeState.responseOverrides.delete('setDataBreakpoints');
+			const secondCompletion = controller.start();
+			await vi.waitFor(() => expect(runtimeState.session).not.toBe(failedSession));
+			const relaunchedSession = runtimeState.session!;
+			await expect(
+				controller.setDataBreakpoints([{ dataId: '2000/4', accessType: 'write' }])
+			).resolves.toEqual([{ id: 5, verified: true }]);
+			expect(relaunchedSession.disposeCount).toBe(0);
+
+			await controller.disconnect();
+			await expect(secondCompletion).resolves.toBe(true);
+		}
+	);
+
+	it('keeps a successful unverified data-breakpoint replacement nonfatal', async () => {
+		runtimeState.initializeCapabilities = { supportsDataBreakpoints: true };
+		const events: Array<{ type: string }> = [];
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { dataBreakpoints: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		const session = runtimeState.session!;
+		runtimeState.responseOverrides.set('setDataBreakpoints', {
+			breakpoints: [{ id: 5, verified: false, message: 'unsupported location' }]
+		});
+
+		await expect(
+			controller.setDataBreakpoints([{ dataId: '1000/4', accessType: 'write' }])
+		).resolves.toEqual([{ id: 5, verified: false, message: 'unsupported location' }]);
+		expect(session.disposeCount).toBe(0);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(0);
+		await controller.debugCommand('continue');
+		expect(session.requests).toContainEqual({ command: 'continue', args: { threadId: 1 } });
 
 		await controller.disconnect();
 		await expect(completion).resolves.toBe(true);
