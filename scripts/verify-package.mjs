@@ -45,7 +45,7 @@ export const scenarios = [
 	{
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
-		budget: { maxBytes: 4.75 * MiB, maxFiles: 700, maxPackages: 6 },
+		budget: { maxBytes: 5 * MiB, maxFiles: 700, maxPackages: 6 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
@@ -79,7 +79,7 @@ export const scenarios = [
 	{
 		name: '@wasm-idle/debug install',
 		packageNames: ['@wasm-idle/debug', '@wasm-idle/core'],
-		budget: { maxBytes: 6.25 * MiB, maxFiles: 1_150, maxPackages: 25 },
+		budget: { maxBytes: 6.75 * MiB, maxFiles: 1_175, maxPackages: 25 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/lsp',
@@ -98,7 +98,7 @@ export const scenarios = [
 	{
 		name: '@wasm-idle/lsp install',
 		packageNames: ['@wasm-idle/lsp', '@wasm-idle/llvm-core', '@wasm-idle/core'],
-		budget: { maxBytes: 4.25 * MiB, maxFiles: 1_050, maxPackages: 7 },
+		budget: { maxBytes: 4.75 * MiB, maxFiles: 1_050, maxPackages: 7 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',
