@@ -24,7 +24,8 @@ describe('wasm-idle rust browser playwright integration', () => {
 		expect(
 			Object.values(defaultBrowserRepeats).reduce((total, value) => total + value, 0)
 		).toBe(10);
-		expect(Object.keys(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules)).toHaveLength(41);
+		expect(Object.keys(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules)).toHaveLength(42);
+		expect(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules['thread-worker-budget.js']).toBeDefined();
 	});
 
 	it('rejects an unbounded executable graph contract before browser startup', async () => {

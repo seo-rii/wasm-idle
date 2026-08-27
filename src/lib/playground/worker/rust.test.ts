@@ -8,6 +8,10 @@ import {
 
 const mockCompilerModules = new Map<string, string>();
 let nextMockCompilerId = 0;
+const nonDebugExecutionLimits = Object.freeze({
+	maxWorkers: 1,
+	maxThreads: 4
+});
 
 function asDataModule(source: string, id: string) {
 	return `data:text/javascript;base64,${Buffer.from(source, 'utf8').toString('base64')}#${id}`;
@@ -168,6 +172,7 @@ describe('Rust worker', () => {
 				code: 'fn main() { println!("hi"); }',
 				prepare: false,
 				buffer: new SharedArrayBuffer(1024),
+				limits: nonDebugExecutionLimits,
 				args: ['one'],
 				targetTriple: 'wasm32-wasip2',
 				log: true
@@ -190,6 +195,10 @@ describe('Rust worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 		expect((globalThis as any).__lastCompileOptions.debugMode).toBe('none');
 		expect((globalThis as any).__lastCompileOptions.targetTriple).toBe('wasm32-wasip2');
+		expect((globalThis as any).__lastCompileOptions.workerLimits).toEqual({
+			maxWorkers: 1,
+			maxThreads: 4
+		});
 		expect((globalThis as any).__lastExecution.artifact.targetTriple).toBe('wasm32-wasip2');
 		expect((globalThis as any).__lastExecution.runtimeBaseUrl).toBe(expectedRuntimeBaseUrl());
 		expect((globalThis as any).__lastExecution.options.args).toEqual(['one']);
@@ -201,6 +210,49 @@ describe('Rust worker', () => {
 			WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint
 		);
 		expect((globalThis as any).__compilerModuleImportCount).toBe(1);
+	});
+
+	it.each([
+		undefined,
+		{},
+		{ maxWorkers: 1 },
+		{ maxWorkers: 0, maxThreads: 1 },
+		{ maxWorkers: 1.5, maxThreads: 1 },
+		{ maxWorkers: 1, maxThreads: Number.NaN },
+		{ maxWorkers: 1, maxThreads: Number.MAX_SAFE_INTEGER + 1 }
+	])('rejects a malformed non-debug resource snapshot before compilation %#', async (limits) => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() {
+				return {
+					async compile(options) {
+						globalThis.__lastCompileOptions = options;
+						return { success: false };
+					}
+				};
+			}
+			export async function executeBrowserRustArtifact() {
+				return { exitCode: 0, stdout: '', stderr: '' };
+			}
+		`);
+		await import('./rust');
+		await (globalThis as any).self.onmessage({
+			data: compilerBootstrap(compilerModuleUrl)
+		});
+		(globalThis as any).postMessage.mockClear();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'fn main() {}',
+				prepare: false,
+				buffer: new SharedArrayBuffer(1024),
+				limits
+			}
+		});
+
+		expect((globalThis as any).__lastCompileOptions).toBeUndefined();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: expect.stringMatching(/Rust non-debug execution limit/u)
+		});
 	});
 
 	it.each([
@@ -276,7 +328,8 @@ describe('Rust worker', () => {
 			data: {
 				code: 'fn main() {}',
 				prepare: true,
-				buffer: new SharedArrayBuffer(1024)
+				buffer: new SharedArrayBuffer(1024),
+				limits: nonDebugExecutionLimits
 			}
 		});
 		await vi.waitFor(() =>
@@ -286,7 +339,8 @@ describe('Rust worker', () => {
 			data: {
 				code: 'fn main() { println!("second"); }',
 				prepare: true,
-				buffer: new SharedArrayBuffer(1024)
+				buffer: new SharedArrayBuffer(1024),
+				limits: nonDebugExecutionLimits
 			}
 		});
 
@@ -511,7 +565,7 @@ describe('Rust worker', () => {
 				code: 'fn main() {}',
 				prepare: true,
 				buffer: new SharedArrayBuffer(1024),
-				limits: { maxOutputBytes: 5 }
+				limits: { ...nonDebugExecutionLimits, maxOutputBytes: 5 }
 			}
 		});
 
@@ -570,6 +624,7 @@ describe('Rust worker', () => {
 				code: 'use std::io::{self, Read}; fn main() { let mut input = String::new(); io::stdin().read_to_string(&mut input).unwrap(); print!("{input}"); }',
 				prepare: false,
 				buffer,
+				limits: nonDebugExecutionLimits,
 				targetTriple: 'wasm32-wasip2'
 			}
 		});
@@ -622,6 +677,7 @@ describe('Rust worker', () => {
 				code: 'fn main() { println!("hi"); }',
 				prepare: false,
 				buffer: new SharedArrayBuffer(1024),
+				limits: nonDebugExecutionLimits,
 				targetTriple: 'wasm32-wasip3'
 			}
 		});
@@ -680,6 +736,7 @@ describe('Rust worker', () => {
 				code: 'fn main() {}',
 				prepare: true,
 				buffer: new SharedArrayBuffer(1024),
+				limits: nonDebugExecutionLimits,
 				targetTriple: 'wasm32-wasip1'
 			}
 		});
@@ -761,6 +818,7 @@ describe('Rust worker', () => {
 				code: source,
 				prepare: false,
 				buffer: new SharedArrayBuffer(1024),
+				limits: nonDebugExecutionLimits,
 				debugMode: 'none',
 				targetTriple: 'wasm32-wasip1'
 			}

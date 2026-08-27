@@ -23,6 +23,7 @@ import {
 	loadVerifiedRustExecutableGraph,
 	type LoadedRustExecutableGraph
 } from '$lib/playground/rustExecutableGraph';
+import { resolveRustNonDebugResourceLimits } from '$lib/playground/rustWorkerLimits';
 import {
 	WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
 	WASM_RUST_RUNTIME_PROFILE
@@ -421,8 +422,11 @@ class Rust implements Sandbox {
 				return reject(options.signal.reason ?? new Error('Rust runtime run aborted'));
 			}
 			let limits;
+			let nonDebugResourceLimits;
 			try {
 				limits = resolveExecutionLimits(options.limits);
+				nonDebugResourceLimits =
+					debugMode === 'none' ? resolveRustNonDebugResourceLimits(limits) : undefined;
 			} catch (error) {
 				return reject(error);
 			}
@@ -665,7 +669,13 @@ class Rust implements Sandbox {
 					pauseOnEntry: !!options.pauseOnEntry,
 					limits: {
 						maxOutputBytes: limits.maxOutputBytes,
-						maxDiagnostics: limits.maxDiagnostics
+						maxDiagnostics: limits.maxDiagnostics,
+						...(nonDebugResourceLimits
+							? {
+									maxWorkers: nonDebugResourceLimits.maxWorkers,
+									maxThreads: nonDebugResourceLimits.maxThreads
+								}
+							: {})
 					}
 				});
 			} catch (error) {

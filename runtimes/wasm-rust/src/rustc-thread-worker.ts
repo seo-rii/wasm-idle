@@ -15,6 +15,7 @@ import {
 	THREAD_STARTUP_STATE_STARTING,
 	waitForThreadEntry
 } from './thread-startup.js';
+import { createBudgetedThreadWorker } from './thread-worker-budget.js';
 
 const MIRRORED_BITCODE_LENGTH_INDEX = 0;
 let acceptedThreadBootstrap = false;
@@ -80,7 +81,11 @@ async function instantiateThreadWorkerRuntime(
 				const nestedReadyBuffer = new SharedArrayBuffer(4);
 				const nestedReadyState = new Int32Array(nestedReadyBuffer);
 				const nestedThreadWorkerUrl = new URL(request.rustcThreadWorkerUrl);
-				const nestedWorker = createModuleWorker(nestedThreadWorkerUrl);
+				const reservation = createBudgetedThreadWorker(
+					request.threadWorkerBudgetBuffer,
+					() => createModuleWorker(nestedThreadWorkerUrl)
+				);
+				const nestedWorker = reservation.worker;
 				const markNestedStartupFailure = () => {
 					if (Atomics.load(nestedReadyState, 0) < 0) {
 						return;
@@ -90,31 +95,40 @@ async function instantiateThreadWorkerRuntime(
 				};
 				nestedWorker.addEventListener('error', markNestedStartupFailure);
 				nestedWorker.addEventListener('messageerror', markNestedStartupFailure);
-				nestedWorker.postMessage({
-					type: 'thread-start',
-					rustcThreadWorkerUrl: request.rustcThreadWorkerUrl,
-					runtimeBaseUrl: request.runtimeBaseUrl,
-					manifest: request.manifest,
-					sourceCode: request.sourceCode,
-					log: request.log,
-					sharedBitcodeBuffer: request.sharedBitcodeBuffer,
-					sharedWorkspaceBuffer: request.sharedWorkspaceBuffer,
-					sharedStatusBuffer: request.sharedStatusBuffer,
-					threadCounterBuffer: request.threadCounterBuffer,
-					sysrootAssets: request.sysrootAssets,
-					rustcModule: request.rustcModule,
-					memory: request.memory,
-					args: request.args,
-					threadId: nestedThreadId,
-					startArg,
-					readyBuffer: nestedReadyBuffer
-				} satisfies RustcThreadWorkerRequest);
-				waitForThreadEntry(
-					nestedReadyState,
-					30_000,
-					`rustc dedicated helper thread ${nestedThreadId} failed before entering wasi_thread_start`,
-					`rustc dedicated helper thread ${nestedThreadId} timed out before entering wasi_thread_start`
-				);
+				try {
+					nestedWorker.postMessage({
+						type: 'thread-start',
+						rustcThreadWorkerUrl: request.rustcThreadWorkerUrl,
+						runtimeBaseUrl: request.runtimeBaseUrl,
+						manifest: request.manifest,
+						sourceCode: request.sourceCode,
+						log: request.log,
+						sharedBitcodeBuffer: request.sharedBitcodeBuffer,
+						sharedWorkspaceBuffer: request.sharedWorkspaceBuffer,
+						sharedStatusBuffer: request.sharedStatusBuffer,
+						threadCounterBuffer: request.threadCounterBuffer,
+						sysrootAssets: request.sysrootAssets,
+						rustcModule: request.rustcModule,
+						memory: request.memory,
+						args: request.args,
+						threadId: nestedThreadId,
+						startArg,
+						readyBuffer: nestedReadyBuffer,
+						...(request.threadWorkerBudgetBuffer
+							? { threadWorkerBudgetBuffer: request.threadWorkerBudgetBuffer }
+							: {})
+					} satisfies RustcThreadWorkerRequest);
+					waitForThreadEntry(
+						nestedReadyState,
+						30_000,
+						`rustc dedicated helper thread ${nestedThreadId} failed before entering wasi_thread_start`,
+						`rustc dedicated helper thread ${nestedThreadId} timed out before entering wasi_thread_start`
+					);
+				} catch (error) {
+					nestedWorker.terminate();
+					reservation.rollback();
+					throw error;
+				}
 				return nestedThreadId;
 			};
 			if (request.type === 'thread-pool-init') {

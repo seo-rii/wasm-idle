@@ -5,6 +5,7 @@ import {
 	createBrowserRustCompileRequestIdentity,
 	resolveBrowserRustDebugMode
 } from '../src/compiler.js';
+import type { BrowserRustWorkerLimits } from '../src/types.js';
 import {
 	FakeWorker,
 	createRuntimeManifest,
@@ -70,6 +71,57 @@ describe('wasm-rust compiler edge cases', () => {
 		expect(modeResult.stderr).toContain('mode selection is not supported yet');
 		expect(loadManifest).not.toHaveBeenCalled();
 		expect(createWorker).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{ maxWorkers: 0, maxThreads: 1 },
+		{ maxWorkers: 1, maxThreads: 0 },
+		{ maxWorkers: 1.5, maxThreads: 1 },
+		{ maxWorkers: 1, maxThreads: Number.NaN },
+		{ maxWorkers: 1, maxThreads: Number.MAX_SAFE_INTEGER + 1 },
+		{ maxWorkers: 1, maxThreads: 1, unexpected: 1 }
+	])('rejects malformed worker limits before runtime work %#', async (workerLimits) => {
+		const loadManifest = vi.fn(async () => createRuntimeManifest());
+		const createWorker = vi.fn(() => new FakeWorker());
+
+		const result = await compileRust(
+			{
+				code: 'fn main() {}',
+				workerLimits: workerLimits as BrowserRustWorkerLimits
+			},
+			{ loadManifest, createWorker }
+		);
+
+		expect(result.success).toBe(false);
+		expect(result.stderr).toMatch(/wasm-rust worker limit/u);
+		expect(loadManifest).not.toHaveBeenCalled();
+		expect(createWorker).not.toHaveBeenCalled();
+	});
+
+	it('forwards an exact immutable worker limit snapshot to the compiler worker', async () => {
+		let postedRequest: any;
+		const worker = new FakeWorker((message, currentWorker) => {
+			postedRequest = message.request;
+			currentWorker.emitMessage({
+				type: 'error',
+				message: 'expected test stop'
+			});
+		});
+
+		await compileRust(
+			{
+				code: 'fn main() {}',
+				workerLimits: { maxWorkers: 3, maxThreads: 7 }
+			},
+			{
+				loadManifest: async () => createRuntimeManifest(),
+				createWorker: () => worker,
+				sleep: async () => Promise.resolve()
+			}
+		);
+
+		expect(postedRequest.workerLimits).toEqual({ maxWorkers: 3, maxThreads: 7 });
+		expect(Object.isFrozen(postedRequest.workerLimits)).toBe(true);
 	});
 
 	it('includes the resolved debug mode in stable compile request identities', () => {

@@ -308,6 +308,44 @@ describe('Rust sandbox', () => {
 		]);
 	});
 
+	it('forwards exact Core worker and thread ceilings on non-debug runs', async () => {
+		const sandbox = new Rust();
+		sandbox.output = () => {};
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockClear();
+
+		await expect(
+			sandbox.run('fn main() {}', false, true, undefined, [], {
+				limits: { maxWorkers: 3, maxThreads: 7 }
+			})
+		).resolves.toBe(true);
+
+		expect(worker.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				limits: expect.objectContaining({
+					maxWorkers: 3,
+					maxThreads: 7
+				})
+			})
+		);
+	});
+
+	it('rejects invalid Core worker limits before posting a run message', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockClear();
+
+		await expect(
+			sandbox.run('fn main() {}', false, true, undefined, [], {
+				limits: { maxWorkers: 0 }
+			})
+		).rejects.toThrow('Execution limit maxWorkers must be a positive safe integer');
+
+		expect(worker.postMessage).not.toHaveBeenCalled();
+	});
+
 	it('rejects load when no rust compiler url is configured', async () => {
 		publicEnv.PUBLIC_WASM_RUST_COMPILER_URL = '';
 		const sandbox = new Rust();

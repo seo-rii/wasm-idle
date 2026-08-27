@@ -1,6 +1,7 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import type { DebugFrame, DebugPauseReason } from '$lib/playground/options';
+import { snapshotRustNonDebugResourceLimits } from '$lib/playground/rustWorkerLimits';
 import {
 	WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
 	WASM_RUST_RUNTIME_PROFILE
@@ -590,6 +591,8 @@ self.onmessage = async (event: { data: any }) => {
 		if (debugMode !== 'none' && debugMode !== 'trace' && debugMode !== 'lldb') {
 			throw new Error(`Unsupported Rust debug mode: ${String(debugMode)}`);
 		}
+		const nonDebugResourceLimits =
+			debugMode === 'none' ? snapshotRustNonDebugResourceLimits(executionLimits) : undefined;
 		stdinBufferRust = new Int32Array(buffer);
 		debugBufferRust = debugBuffer ? new Int32Array(debugBuffer) : null;
 		if (
@@ -631,6 +634,9 @@ self.onmessage = async (event: { data: any }) => {
 			const result = await runtime.compiler.compile({
 				code: compileCode,
 				debugMode,
+				...(nonDebugResourceLimits
+					? { workerLimits: nonDebugResourceLimits.compilerLimits }
+					: {}),
 				edition: '2024',
 				crateType: 'bin',
 				targetTriple,

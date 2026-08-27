@@ -1,6 +1,6 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { linkBitcodeWithLlvmWasm } from './browser-linker.js';
-import { attachCompileLogs, createBrowserRustCompileRequestIdentity, describeWorkerErrorEvent, makeFailure, resolveBrowserRustDebugMode, validateCompileRequest } from './compiler-support.js';
+import { attachCompileLogs, createBrowserRustCompileRequestIdentity, describeWorkerErrorEvent, makeFailure, resolveBrowserRustWorkerLimits, resolveBrowserRustDebugMode, validateCompileRequest } from './compiler-support.js';
 import { preloadBrowserRustRuntime } from './compiler-preload.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
 import { createModuleWorker } from './module-worker.js';
@@ -29,6 +29,7 @@ export async function compileRust(request, dependencies = {}) {
         return makeFailure(validationError);
     }
     const debugMode = resolveBrowserRustDebugMode(request);
+    const workerLimits = resolveBrowserRustWorkerLimits(request.workerLimits);
     if ((!dependencies.createWorker && typeof Worker === 'undefined') ||
         typeof SharedArrayBuffer === 'undefined' ||
         typeof Atomics === 'undefined') {
@@ -170,7 +171,11 @@ export async function compileRust(request, dependencies = {}) {
         recordPersistentCompileLog(`[wasm-rust] manifest loaded target=${targetConfig.targetTriple} timeout=${compileTimeoutMs}ms idle=${manifest.compiler.artifactIdleMs}ms memory=${manifest.compiler.rustcMemory.initialPages}/${manifest.compiler.rustcMemory.maximumPages}`);
         const helperThreadFailureGraceMs = Math.max(1_000, Math.min(4_000, manifest.compiler.artifactIdleMs * 2));
         let lastFailure = makeFailure(`browser rustc failed before emitting ${mirroredOutputName}`);
-        const { onProgress: _ignoredOnProgress, ...workerRequest } = request;
+        const { onProgress: _ignoredOnProgress, workerLimits: _ignoredWorkerLimits, ...workerRequestBase } = request;
+        const workerRequest = {
+            ...workerRequestBase,
+            ...(workerLimits ? { workerLimits } : {})
+        };
         for (let attempt = 1; attempt <= maxBrowserAttempts; attempt += 1) {
             const attemptCompileLogs = [];
             const recordAttemptCompileLog = (message, level = 'log') => {

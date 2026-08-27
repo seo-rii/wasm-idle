@@ -8,7 +8,11 @@ import type {
 } from './worker-protocol.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
-import { resolveBrowserRustDebugMode } from './compiler-support.js';
+import {
+	resolveBrowserRustDebugMode,
+	resolveBrowserRustThreadPoolSize,
+	resolveBrowserRustWorkerLimits
+} from './compiler-support.js';
 import {
 	configureVerifiedRuntimeExecutableModuleUrls,
 	isIntegratedCompilerOutput,
@@ -17,6 +21,10 @@ import {
 } from './runtime-manifest.js';
 import { buildPreopenedDirectories, instantiateRustcInstance } from './rustc-runtime.js';
 import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot } from './thread-startup.js';
+import {
+	createBudgetedThreadWorker,
+	createThreadWorkerBudgetBuffer
+} from './thread-worker-budget.js';
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
 import { loadRuntimePackEntries } from './runtime-asset-store.js';
 
@@ -129,7 +137,11 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 		registerRuntimeManifestAssetReceipts(request.runtimeBaseUrl, request.manifest);
 	}
 	const target = resolveTargetManifest(request.manifest, request.request.targetTriple);
-	const threadPoolSize = 4;
+	const workerLimits = resolveBrowserRustWorkerLimits(request.request.workerLimits);
+	const threadPoolSize = resolveBrowserRustThreadPoolSize(workerLimits);
+	const threadWorkerBudgetBuffer = workerLimits
+		? createThreadWorkerBudgetBuffer(workerLimits.maxThreads)
+		: undefined;
 	emitCompileWorkerLog(
 		request,
 		`[wasm-rust:compiler-worker] start target=${target.targetTriple} timeout=${request.manifest.compiler.compileTimeoutMs}ms`
@@ -348,7 +360,10 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 				import.meta.url,
 				'./rustc-thread-worker.js'
 			);
-			const worker = createModuleWorker(threadWorkerUrl);
+			const reservation = createBudgetedThreadWorker(threadWorkerBudgetBuffer, () =>
+				createModuleWorker(threadWorkerUrl)
+			);
+			const worker = reservation.worker;
 			worker.addEventListener(
 				'message',
 				(event: MessageEvent<RustcThreadWorkerLogMessage>) => {
@@ -397,25 +412,32 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 				Atomics.store(slotState, 0, -1);
 				Atomics.notify(slotState, 0);
 			});
-			worker.postMessage({
-				type: 'thread-pool-init',
-				rustcThreadWorkerUrl: threadWorkerUrl.toString(),
-				runtimeBaseUrl: request.runtimeBaseUrl,
-				manifest: request.manifest,
-				sourceCode: request.request.code,
-				log: Boolean(request.request.log),
-				sharedBitcodeBuffer: request.sharedBitcodeBuffer,
-				sharedWorkspaceBuffer: request.sharedWorkspaceBuffer,
-				sharedStatusBuffer: request.sharedStatusBuffer,
-				threadCounterBuffer: threadCounter.buffer as SharedArrayBuffer,
-				sysrootAssets,
-				rustcModule,
-				memory,
-				args,
-				slotIndex,
-				slotBuffer,
-				poolBuffers: slotBuffers
-			} satisfies RustcThreadPoolInitRequest);
+			try {
+				worker.postMessage({
+					type: 'thread-pool-init',
+					rustcThreadWorkerUrl: threadWorkerUrl.toString(),
+					runtimeBaseUrl: request.runtimeBaseUrl,
+					manifest: request.manifest,
+					sourceCode: request.request.code,
+					log: Boolean(request.request.log),
+					sharedBitcodeBuffer: request.sharedBitcodeBuffer,
+					sharedWorkspaceBuffer: request.sharedWorkspaceBuffer,
+					sharedStatusBuffer: request.sharedStatusBuffer,
+					threadCounterBuffer: threadCounter.buffer as SharedArrayBuffer,
+					sysrootAssets,
+					rustcModule,
+					memory,
+					args,
+					slotIndex,
+					slotBuffer,
+					poolBuffers: slotBuffers,
+					...(threadWorkerBudgetBuffer ? { threadWorkerBudgetBuffer } : {})
+				} satisfies RustcThreadPoolInitRequest);
+			} catch (error) {
+				worker.terminate();
+				reservation.rollback();
+				throw error;
+			}
 			const initStartedAt = Date.now();
 			while (Atomics.load(slotState, 0) === -3 && Date.now() - initStartedAt < 120_000) {
 				await new Promise<void>((resolve) => setTimeout(resolve, 25));

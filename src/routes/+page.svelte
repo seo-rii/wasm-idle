@@ -20,6 +20,7 @@
 		createApplicationRuntimeAssets
 	} from '$lib/playground/applicationAssets';
 	import { createLoadingProgressController } from '$lib/playground/loadingProgress';
+	import { RUST_NON_DEBUG_RESOURCE_REQUIREMENTS } from '$lib/playground/rustWorkerLimits';
 	import type {
 		CompilerDiagnostic,
 		GoTarget,
@@ -180,7 +181,10 @@
 	const executionOptionResolvers: Partial<
 		Record<PlaygroundLanguage, () => Partial<SandboxExecutionOptions>>
 	> = {
-		RUST: () => ({ rustTargetTriple }),
+		RUST: () => ({
+			rustTargetTriple,
+			limits: RUST_NON_DEBUG_RESOURCE_REQUIREMENTS
+		}),
 		GO: () => ({ goTarget }),
 		TINYGO: () => ({ limits: { maxWasmMemoryBytes: 2 * 1024 * 1024 * 1024 } }),
 		OCAML: () => ({ ocamlBackend, ocamlWasmBinaryenMode }),

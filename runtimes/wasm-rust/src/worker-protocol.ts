@@ -94,6 +94,7 @@ export interface RustcThreadWorkerRequest {
 	threadId: number;
 	startArg: number;
 	readyBuffer: SharedArrayBuffer;
+	threadWorkerBudgetBuffer?: SharedArrayBuffer;
 }
 
 export interface RustcThreadPoolInitRequest {
@@ -114,6 +115,7 @@ export interface RustcThreadPoolInitRequest {
 	slotIndex: number;
 	slotBuffer: SharedArrayBuffer;
 	poolBuffers: SharedArrayBuffer[];
+	threadWorkerBudgetBuffer?: SharedArrayBuffer;
 }
 
 export interface RustcThreadWorkerLogMessage {

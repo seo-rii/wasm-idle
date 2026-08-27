@@ -2,6 +2,7 @@ import type {
 	BrowserRustDebugMode,
 	BrowserRustCompileRequest,
 	BrowserRustCompilerResult,
+	BrowserRustWorkerLimits,
 	CompilerDiagnostic,
 	CompilerLogRecord,
 	SupportedTargetTriple
@@ -15,6 +16,48 @@ const SUPPORTED_TARGET_TRIPLES = new Set<SupportedTargetTriple>([
 	'wasm32-wasip2',
 	'wasm32-wasip3'
 ]);
+
+export const BROWSER_RUST_COMPILER_WORKER_REQUIREMENTS = Object.freeze({
+	maxWorkers: 1
+});
+
+export const BROWSER_RUST_THREAD_POOL_CAPACITY = 4;
+
+export function resolveBrowserRustWorkerLimits(
+	value: BrowserRustWorkerLimits | undefined
+): Readonly<BrowserRustWorkerLimits> | undefined {
+	if (value === undefined) return undefined;
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new Error('wasm-rust worker limits must be an object');
+	}
+	if (
+		JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(['maxThreads', 'maxWorkers'])
+	) {
+		throw new Error('wasm-rust worker limits require exactly maxWorkers and maxThreads');
+	}
+	for (const [name, limit] of Object.entries(value)) {
+		if (!Number.isSafeInteger(limit) || limit <= 0) {
+			throw new Error(`wasm-rust worker limit ${name} must be a positive safe integer`);
+		}
+	}
+	if (value.maxWorkers < BROWSER_RUST_COMPILER_WORKER_REQUIREMENTS.maxWorkers) {
+		throw new Error(
+			`wasm-rust compilation requires at least ${BROWSER_RUST_COMPILER_WORKER_REQUIREMENTS.maxWorkers} compiler worker`
+		);
+	}
+	return Object.freeze({
+		maxWorkers: value.maxWorkers,
+		maxThreads: value.maxThreads
+	});
+}
+
+export function resolveBrowserRustThreadPoolSize(
+	workerLimits: Readonly<BrowserRustWorkerLimits> | undefined
+) {
+	return workerLimits
+		? Math.min(BROWSER_RUST_THREAD_POOL_CAPACITY, workerLimits.maxThreads)
+		: BROWSER_RUST_THREAD_POOL_CAPACITY;
+}
 
 export function resolveBrowserRustDebugMode(
 	request: Pick<BrowserRustCompileRequest, 'debugMode'>
@@ -113,6 +156,11 @@ export function validateCompileRequest(request: BrowserRustCompileRequest) {
 	}
 	if (request.targetTriple && !SUPPORTED_TARGET_TRIPLES.has(request.targetTriple)) {
 		return `unsupported browser compiler target: ${request.targetTriple}`;
+	}
+	try {
+		resolveBrowserRustWorkerLimits(request.workerLimits);
+	} catch (error) {
+		return error instanceof Error ? error.message : String(error);
 	}
 	let debugMode: BrowserRustDebugMode;
 	try {

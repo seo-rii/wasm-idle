@@ -5,6 +5,7 @@ import {
 	createBrowserRustCompileRequestIdentity,
 	describeWorkerErrorEvent,
 	makeFailure,
+	resolveBrowserRustWorkerLimits,
 	resolveBrowserRustDebugMode,
 	validateCompileRequest
 } from './compiler-support.js';
@@ -48,6 +49,7 @@ export type {
 	BrowserRustCompilerFactory,
 	BrowserRustCompilerResult,
 	BrowserRustDebugMode,
+	BrowserRustWorkerLimits,
 	CompilerDiagnostic,
 	CompilerLogLevel,
 	CompilerLogRecord,
@@ -110,6 +112,7 @@ export async function compileRust(
 		return makeFailure(validationError);
 	}
 	const debugMode = resolveBrowserRustDebugMode(request);
+	const workerLimits = resolveBrowserRustWorkerLimits(request.workerLimits);
 	if (
 		(!dependencies.createWorker && typeof Worker === 'undefined') ||
 		typeof SharedArrayBuffer === 'undefined' ||
@@ -279,7 +282,15 @@ export async function compileRust(
 			Math.min(4_000, manifest.compiler.artifactIdleMs * 2)
 		);
 		let lastFailure = makeFailure(`browser rustc failed before emitting ${mirroredOutputName}`);
-		const { onProgress: _ignoredOnProgress, ...workerRequest } = request;
+		const {
+			onProgress: _ignoredOnProgress,
+			workerLimits: _ignoredWorkerLimits,
+			...workerRequestBase
+		} = request;
+		const workerRequest = {
+			...workerRequestBase,
+			...(workerLimits ? { workerLimits } : {})
+		};
 
 		for (let attempt = 1; attempt <= maxBrowserAttempts; attempt += 1) {
 			const attemptCompileLogs: BufferedCompileLog[] = [];

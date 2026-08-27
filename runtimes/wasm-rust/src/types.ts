@@ -40,6 +40,11 @@ export interface BrowserRustCompileProgress {
 	bytesTotal?: number;
 }
 
+export interface BrowserRustWorkerLimits {
+	readonly maxWorkers: number;
+	readonly maxThreads: number;
+}
+
 export interface BrowserRustCompileRequest {
 	code: string;
 	/**
@@ -67,6 +72,11 @@ export interface BrowserRustCompileRequest {
 	 * @deprecated Use `extendedTimeout` instead. This remains as a compatibility alias.
 	 */
 	prepare?: boolean;
+	/**
+	 * Caps the single nested compiler worker and its separate Wasm helper-thread population. The
+	 * application host supplies this from the Core execution policy for non-debug compilation.
+	 */
+	workerLimits?: BrowserRustWorkerLimits;
 	onProgress?: (progress: BrowserRustCompileProgress) => void;
 }
 
