@@ -24,6 +24,7 @@ describe('LLDB browser integration workflow', () => {
 			'Download pinned LLDB and WAMR browser assets'
 		);
 		const lastHashVerificationIndex = workflow.lastIndexOf('sha256sum --check');
+		const consumerBuildIndex = workflow.indexOf('pnpm run build:publish-deps');
 		const manifestReceiptTestIndex = workflow.indexOf(
 			'pnpm vitest run src/lib/playground/lldbManifestReceipt.test.ts'
 		);
@@ -33,7 +34,8 @@ describe('LLDB browser integration workflow', () => {
 		expect(clangDownloadIndex).toBeGreaterThan(-1);
 		expect(debuggerDownloadIndex).toBeGreaterThan(clangDownloadIndex);
 		expect(lastHashVerificationIndex).toBeGreaterThan(debuggerDownloadIndex);
-		expect(manifestReceiptTestIndex).toBeGreaterThan(lastHashVerificationIndex);
+		expect(consumerBuildIndex).toBeGreaterThan(lastHashVerificationIndex);
+		expect(manifestReceiptTestIndex).toBeGreaterThan(consumerBuildIndex);
 		expect(assetBudgetIndex).toBeGreaterThan(manifestReceiptTestIndex);
 		expect(browserTestIndex).toBeGreaterThan(assetBudgetIndex);
 	});
