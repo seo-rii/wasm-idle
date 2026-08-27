@@ -341,10 +341,10 @@ int main(void) {
 		activePath: 'multi-main.c',
 		backend: 'lldb',
 		breakpointLine: 3,
-		breakpointSourcePath: 'helper.h',
+		breakpointSourcePath: 'helper.c',
 		expectedLocal: { name: 'value', value: '70' },
 		expectedOutput: 'lldb-multifile=73',
-		expectedPausedLine: 3,
+		expectedPausedLine: 4,
 		expectedTitle: 'C · LLDB / WAMR',
 		language: 'C',
 		programArgs: [],
@@ -361,7 +361,13 @@ int main(void) {
 			{
 				path: 'helper.h',
 				content: `#pragma once
-static __attribute__((noinline)) int add_three(int value) {
+int add_three(int value);`
+			},
+			{
+				path: 'helper.c',
+				content: `#include "helper.h"
+
+__attribute__((noinline)) int add_three(int value) {
     int result = value + 3;
     return result;
 }`
@@ -2105,7 +2111,7 @@ describe('native-source browser debugging in Chromium', () => {
 								expect(helperFrame?.id).toBeTypeOf('number');
 								expect(mainFrame?.id).toBeTypeOf('number');
 								const editedMainSource = `${testCase.source}
-// edited while paused in helper.h`;
+// edited while paused in ${testCase.breakpointSourcePath}`;
 								const workspaceReplaced = await page.evaluate(
 									async ({ activePath, activeSourcePath, editedMainSource }) =>
 										await (window as any).__wasmIdleDebug.setWorkspaceFiles(
