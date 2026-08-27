@@ -185,8 +185,34 @@ const { publicEnv } = vi.hoisted(() => ({
 	}
 }));
 
+const { executableGraphFixture } = vi.hoisted(() => ({
+	executableGraphFixture: {
+		disposeCalls: 0,
+		load: vi.fn()
+	}
+}));
+
+function installExecutableGraphFixture() {
+	executableGraphFixture.disposeCalls = 0;
+	executableGraphFixture.load.mockReset();
+	executableGraphFixture.load.mockImplementation(
+		async ({ moduleUrl }: { moduleUrl: string }) => ({
+			entryUrl: moduleUrl,
+			assetBaseUrl: 'https://example.invalid/wasm-tinygo/',
+			moduleUrls: { 'upstream.js': moduleUrl },
+			dispose() {
+				executableGraphFixture.disposeCalls += 1;
+			}
+		})
+	);
+}
+
 vi.mock('$lib/playground/worker/tinygo?worker', () => ({
 	default: MockWorker
+}));
+
+vi.mock('$lib/playground/tinygoExecutableGraph', () => ({
+	loadVerifiedTinyGoExecutableGraph: executableGraphFixture.load
 }));
 
 vi.mock('$env/dynamic/public', () => ({
@@ -227,6 +253,7 @@ describe('TinyGo operation lifecycle', () => {
 		autoResolveLoad = true;
 		autoResolveRun = true;
 		Object.assign(runtimeFixtureState, createRuntimeFixtureState());
+		installExecutableGraphFixture();
 		window.history.replaceState({}, '', 'http://localhost:3000/');
 		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
 		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
@@ -263,6 +290,27 @@ describe('TinyGo operation lifecycle', () => {
 			workerInstances[0]?.resolveLoad();
 			await loading.catch(() => undefined);
 		}
+	});
+
+	it('aborts executable graph preflight without creating a worker', async () => {
+		const sandbox = new TinyGo();
+		let graphSignal: AbortSignal | undefined;
+		executableGraphFixture.load.mockImplementationOnce(
+			({ signal }: { signal?: AbortSignal }) =>
+				new Promise((_resolve, reject) => {
+					graphSignal = signal;
+					signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+				})
+		);
+		const loading = sandbox.load(runtimeAssets);
+		await vi.waitFor(() => expect(executableGraphFixture.load).toHaveBeenCalledOnce());
+		const reason = new Error('stop TinyGo graph preflight');
+
+		sandbox.terminate(reason);
+
+		await expect(loading).rejects.toBe(reason);
+		expect(graphSignal?.aborted).toBe(true);
+		expect(workerInstances).toHaveLength(0);
 	});
 
 	it('owns the TinyGo operation throughout compilation', async () => {
@@ -1683,6 +1731,7 @@ describe('TinyGo operation lifecycle', () => {
 
 		expect(worker?.terminate).toHaveBeenCalledOnce();
 		expect(runtime?.disposeCalls).toBe(1);
+		expect(executableGraphFixture.disposeCalls).toBe(1);
 		expect(sandbox.worker).toBeUndefined();
 		expect(sandbox.runtime).toBeNull();
 		expect(sandbox.compiledArtifact).toBeNull();
@@ -1907,7 +1956,7 @@ describe('TinyGo operation lifecycle', () => {
 		expect(workerInstances).toHaveLength(1);
 	});
 
-	it('disposes TinyGo startup that completes a module import after terminal cancellation', async () => {
+	it('disposes a late TinyGo module import without spawning an execution worker', async () => {
 		let releaseImport!: () => void;
 		runtimeFixtureState.importGate = new Promise<void>((resolve) => {
 			releaseImport = resolve;
@@ -1918,7 +1967,7 @@ describe('TinyGo operation lifecycle', () => {
 			tinygo: { moduleUrl: createRuntimeModuleUrl('pending-terminal-import') }
 		});
 		await vi.waitFor(() => expect(runtimeFixtureState.importCalls).toBe(1));
-		const worker = workerInstances[0];
+		expect(workerInstances).toHaveLength(0);
 
 		const disposal = sandbox.dispose();
 		const cancellation = await loading.catch((error) => error);
@@ -1928,7 +1977,8 @@ describe('TinyGo operation lifecycle', () => {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 
 		expect(runtimeFixtureState.runtimeRecords).toHaveLength(0);
-		expect(worker?.terminate).toHaveBeenCalledOnce();
+		expect(executableGraphFixture.disposeCalls).toBe(1);
+		expect(workerInstances).toHaveLength(0);
 		expect(sandbox.runtime).toBeNull();
 		expect(sandbox.moduleUrl).toBe('');
 		expect(sandbox.worker).toBeUndefined();

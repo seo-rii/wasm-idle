@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "format": "wasm-idle-tinygo-executable-graph-v1",
+  "entryPath": "upstream.js",
+  "fingerprint": "33fe04eb515aaaea7e7dd5571a4a614a48d51b991115f05288b236377c53c5b9",
+  "modules": {
+    "assets/upstream-compile-worker-CFw6Ych6.js": {
+      "bytes": 558,
+      "sha256": "03a76345c69f8bd751dac18894f65c0918f1690fbbb661f38052819cd5ae8209",
+      "imports": []
+    },
+    "assets/upstream-compile-worker-Dat9LBTc.js": {
+      "bytes": 12538521,
+      "sha256": "b8d987c32914715b0ba91ace85585f5db467957d14982aa163c1febe9d6dfc04",
+      "imports": [
+        {
+          "specifier": "./upstream-compile-worker-CFw6Ych6.js",
+          "target": "assets/upstream-compile-worker-CFw6Ych6.js",
+          "kind": "static"
+        },
+        {
+          "specifier": "./upstream-compile-worker-NPJcbr3r.js",
+          "target": "assets/upstream-compile-worker-NPJcbr3r.js",
+          "kind": "dynamic"
+        }
+      ]
+    },
+    "assets/upstream-compile-worker-NPJcbr3r.js": {
+      "bytes": 110,
+      "sha256": "2ac9a6dff1bfd7198815ead612722d9b2ffbbc6c8a0e62958444ee84ff155b80",
+      "imports": [
+        {
+          "specifier": "./upstream-compile-worker-CFw6Ych6.js",
+          "target": "assets/upstream-compile-worker-CFw6Ych6.js",
+          "kind": "static"
+        }
+      ]
+    },
+    "assets/upstream-compile-worker-R7P8Uy5f.js": {
+      "bytes": 100032,
+      "sha256": "1cc51b6435aa72d0ad9c513658a8ed4b2e9d5f94a28b0902b1f200364bccbf82",
+      "imports": [
+        {
+          "specifier": "./upstream-compile-worker-Dat9LBTc.js",
+          "target": "assets/upstream-compile-worker-Dat9LBTc.js",
+          "kind": "dynamic"
+        }
+      ]
+    },
+    "upstream.js": {
+      "bytes": 123164,
+      "sha256": "bee971f17a538c1afc3fa01f2050a233a4b75030f0a8e258fd8ca76584cc93a6",
+      "imports": [
+        {
+          "specifier": "assets/upstream-compile-worker-R7P8Uy5f.js",
+          "target": "assets/upstream-compile-worker-R7P8Uy5f.js",
+          "kind": "worker"
+        }
+      ]
+    }
+  }
+}

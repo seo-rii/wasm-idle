@@ -187,6 +187,43 @@ describe('runtime registry asset preflight', () => {
 		).rejects.toThrow('response URL does not match its requested URL');
 	});
 
+	it('can require an explicit exact final response URL', async () => {
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				requireExactResponseUrl: true,
+				fetch: async () => responseFor('https://example.test/runtime/loader.js')
+			})
+		).rejects.toThrow('response did not expose an exact final URL');
+	});
+
+	it.each(['redirected', 'opaque', 'opaqueredirect', 'status-zero'] as const)(
+		'rejects %s response metadata when exact final URLs are required',
+		async (mode) => {
+			const requestUrl = 'https://example.test/runtime/loader.js';
+			const response = responseFor(requestUrl);
+			Object.defineProperty(response, 'url', { value: requestUrl });
+			if (mode === 'redirected') {
+				Object.defineProperty(response, 'redirected', { value: true });
+			} else if (mode === 'status-zero') {
+				Object.defineProperty(response, 'status', { value: 0 });
+			} else {
+				Object.defineProperty(response, 'type', { value: mode });
+			}
+			await expect(
+				preflightRuntimeAssets({
+					manifest: createManifest([assets[0]!]),
+					runtimeId: 'fortran/preflight-test',
+					rootUrl: 'https://example.test/',
+					requireExactResponseUrl: true,
+					fetch: async () => response
+				})
+			).rejects.toThrow('did not preserve exact delivery metadata');
+		}
+	);
+
 	it('releases a successful streamed response reader without cancelling it', async () => {
 		const cancel = vi.fn(async () => {});
 		const releaseLock = vi.fn();

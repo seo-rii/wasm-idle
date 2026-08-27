@@ -58,6 +58,7 @@ export interface RuntimeAssetKeySource {
 	tinygo?: {
 		appUrl?: string;
 		moduleUrl?: string;
+		executableGraphFingerprint?: string;
 		assetLoader?: unknown;
 		assetLoaderKey?: string;
 		profileId?: string;
@@ -628,6 +629,11 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'ocaml', property: 'manifestUrl', key: 'ocamlManifestUrl' },
 	{ runtime: 'tinygo', property: 'appUrl', key: 'tinygoAppUrl' },
 	{ runtime: 'tinygo', property: 'moduleUrl', key: 'tinygoModuleUrl' },
+	{
+		runtime: 'tinygo',
+		property: 'executableGraphFingerprint',
+		key: 'tinygoExecutableGraphFingerprint'
+	},
 	{ runtime: 'tinygo', property: 'profileId', key: 'tinygoProfileId' },
 	{
 		runtime: 'tinygo',

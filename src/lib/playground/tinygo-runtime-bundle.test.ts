@@ -4,7 +4,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { WASM_TINYGO_RUNTIME_PROFILE } from './wasmTinyGoVersion';
+import {
+	canonicalTinyGoExecutableGraphProfile,
+	snapshotTinyGoExecutableGraphProfile
+} from './tinygoExecutableGraph';
+import {
+	WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE,
+	WASM_TINYGO_RUNTIME_PROFILE
+} from './wasmTinyGoVersion';
 
 const checkoutRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const runtimeDir = path.join(checkoutRoot, 'static', 'wasm-tinygo');
@@ -80,4 +87,26 @@ describe('bundled wasm-tinygo runtime', () => {
 		expect(manifestBytes.byteLength).toBe(WASM_TINYGO_RUNTIME_PROFILE.manifestReceipt.bytes);
 		expect(sha256(manifestBytes)).toBe(WASM_TINYGO_RUNTIME_PROFILE.manifestReceipt.sha256);
 	}, 30_000);
+
+	it('recomputes the complete executable module graph with the consumer canonicalization', () => {
+		const profile = snapshotTinyGoExecutableGraphProfile(WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE);
+		const manifest = JSON.parse(
+			readFileSync(path.join(runtimeDir, 'runtime-executable-graph.v1.json'), 'utf8')
+		);
+		expect(manifest).toEqual(profile);
+		expect(sha256(canonicalTinyGoExecutableGraphProfile(profile))).toBe(profile.fingerprint);
+
+		const executablePaths = [
+			'upstream.js',
+			...readdirSync(assetsDir)
+				.filter((entry) => /^upstream-compile-worker-.+\.js$/u.test(entry))
+				.map((entry) => `assets/${entry}`)
+		].sort();
+		expect(executablePaths).toEqual(Object.keys(profile.modules).sort());
+		for (const modulePath of executablePaths) {
+			const bytes = readFileSync(path.join(runtimeDir, modulePath));
+			expect(bytes.byteLength).toBe(profile.modules[modulePath]!.bytes);
+			expect(sha256(bytes)).toBe(profile.modules[modulePath]!.sha256);
+		}
+	});
 });

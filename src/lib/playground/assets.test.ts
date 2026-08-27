@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE } from './wasmTinyGoVersion';
 
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
@@ -790,7 +791,9 @@ describe('runtime asset config resolution', () => {
 				},
 				'https://example.com/app'
 			)
-		).toBe('https://example.com/runtime/tinygo/runtime.js');
+		).toBe(
+			`https://example.com/runtime/tinygo/runtime.js?v=${WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules[WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.entryPath].sha256}`
+		);
 	});
 
 	it('derives the default TinyGo runtime module url from the shared root path', async () => {
@@ -800,7 +803,7 @@ describe('runtime asset config resolution', () => {
 		const { resolveTinyGoModuleUrl } = await import('./assets');
 
 		expect(resolveTinyGoModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/absproxy/5173/wasm-tinygo/upstream.js'
+			`https://example.com/absproxy/5173/wasm-tinygo/upstream.js?v=${WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules[WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.entryPath].sha256}`
 		);
 	});
 
@@ -811,8 +814,23 @@ describe('runtime asset config resolution', () => {
 			'https://env.example.com/wasm-tinygo/index.html?v=42';
 		const { resolveTinyGoModuleUrl } = await import('./assets');
 
+		expect(() => resolveTinyGoModuleUrl(undefined, 'https://example.com/app')).toThrow(
+			'TinyGo executable module URL must use its exact receipt query pin'
+		);
+	});
+
+	it('accepts the exact TinyGo entry receipt pin from a legacy app url', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
+		const receipt =
+			WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules[
+				WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.entryPath
+			].sha256;
+		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = `https://env.example.com/wasm-tinygo/index.html?v=${receipt}`;
+		const { resolveTinyGoModuleUrl } = await import('./assets');
+
 		expect(resolveTinyGoModuleUrl(undefined, 'https://example.com/app')).toBe(
-			'https://env.example.com/wasm-tinygo/upstream.js?v=42'
+			`https://env.example.com/wasm-tinygo/upstream.js?v=${receipt}`
 		);
 	});
 

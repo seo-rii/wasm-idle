@@ -70,7 +70,10 @@ import {
 	WASM_TCL_RUNNER_RECEIPT,
 	WASM_TCL_RUNTIME_PROFILE
 } from './wasmTclVersion';
-import { WASM_TINYGO_ASSET_VERSION, WASM_TINYGO_RUNTIME_PROFILE } from './wasmTinyGoVersion';
+import {
+	WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE,
+	WASM_TINYGO_RUNTIME_PROFILE
+} from './wasmTinyGoVersion';
 import { WASM_ZIG_ASSET_RECEIPTS, WASM_ZIG_ASSET_VERSION } from './wasmZigVersion';
 import {
 	WASM_AWK_ASSET_VERSION,
@@ -1123,8 +1126,13 @@ describe('application runtime asset root', () => {
 
 	it('pins every TinyGo toolchain profile receipt in runtime cache identity', () => {
 		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const entryReceipt =
+			WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules[
+				WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.entryPath
+			];
 		expect(assets.tinygo).toEqual({
-			moduleUrl: `/foo/bar/wasm-tinygo/upstream.js?v=${WASM_TINYGO_ASSET_VERSION}`,
+			moduleUrl: `/foo/bar/wasm-tinygo/upstream.js?v=${entryReceipt.sha256}`,
+			executableGraphFingerprint: WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.fingerprint,
 			...WASM_TINYGO_RUNTIME_PROFILE
 		});
 		const originalKey = createRuntimeAssetsKey(assets);
@@ -1135,6 +1143,7 @@ describe('application runtime asset root', () => {
 			throw new Error('bundled TinyGo asset receipts must include size metadata');
 		}
 		const replacements = [
+			{ executableGraphFingerprint: '0'.repeat(64) },
 			{ profileId: `${tinygo.profileId}-replacement` },
 			{ protocolVersion: 5 },
 			{ manifestPath: 'tools/upstream/replacement.json' },

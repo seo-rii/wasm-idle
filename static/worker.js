@@ -7,11 +7,16 @@ self.addEventListener('activate', (event) => {
 });
 
 const precompressedExtension = /\.(br|brotli|gz|tgz|zip|zst)$/i;
-const exactResponseUrlAssetNames = new Set([
-	'goawk.wasm.gz.bin',
-	'runner-worker.v2.js',
-	'runtime-manifest.v2.json',
-	'wasm_exec.js'
+const exactResponseUrlAssetPaths = new Set([
+	'wasm-awk/goawk.wasm.gz.bin',
+	'wasm-awk/runner-worker.v2.js',
+	'wasm-awk/runtime-manifest.v2.json',
+	'wasm-awk/wasm_exec.js',
+	'wasm-tinygo/upstream.js',
+	'wasm-tinygo/assets/upstream-compile-worker-CFw6Ych6.js',
+	'wasm-tinygo/assets/upstream-compile-worker-Dat9LBTc.js',
+	'wasm-tinygo/assets/upstream-compile-worker-NPJcbr3r.js',
+	'wasm-tinygo/assets/upstream-compile-worker-R7P8Uy5f.js'
 ]);
 const runtimeAssetAliases = [
 	{
@@ -39,12 +44,13 @@ function shouldBypassIsolationHeaders(url) {
 
 function shouldPreserveExactResponseUrl(url) {
 	const scopeUrl = new URL(self.registration.scope);
-	const assetName = url.pathname.slice(url.pathname.lastIndexOf('/') + 1);
+	const assetPath = url.pathname.startsWith(scopeUrl.pathname)
+		? url.pathname.slice(scopeUrl.pathname.length)
+		: '';
 	const version = url.searchParams.get('v') || '';
 	return (
 		url.origin === scopeUrl.origin &&
-		exactResponseUrlAssetNames.has(assetName) &&
-		url.pathname === new URL(`wasm-awk/${assetName}`, scopeUrl).pathname &&
+		exactResponseUrlAssetPaths.has(assetPath) &&
 		/^[a-f0-9]{64}$/u.test(version) &&
 		url.search === `?v=${version}`
 	);
@@ -413,6 +419,7 @@ self.addEventListener('fetch', function (event) {
 	event.respondWith(
 		Promise.resolve()
 			.then(async function () {
+				if (shouldPreserveExactResponseUrl(url)) return fetch(event.request);
 				return (
 					(await fetchDynamicModule(event.request, url)) ||
 					(await fetchRuntimeAssetAlias(event.request, url)) ||
@@ -422,7 +429,7 @@ self.addEventListener('fetch', function (event) {
 				);
 			})
 			.then(function (response) {
-				// Receipt-verified AWK consumers require the browser's network Response URL.
+				// Receipt-verified AWK and TinyGo consumers require the browser's network Response URL.
 				// Cloning into a synthetic Response clears it, so preserve these pinned
 				// same-origin responses exactly as fetched.
 				if (shouldPreserveExactResponseUrl(url)) return response;

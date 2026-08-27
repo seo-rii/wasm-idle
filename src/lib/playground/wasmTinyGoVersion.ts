@@ -41,5 +41,71 @@ export const WASM_TINYGO_RUNTIME_PROFILE = Object.freeze({
 	})
 });
 
+export const WASM_TINYGO_EXECUTABLE_GRAPH_FORMAT = 'wasm-idle-tinygo-executable-graph-v1';
+export const WASM_TINYGO_EXECUTABLE_GRAPH_FINGERPRINT_DOMAIN =
+	'wasm-idle:tinygo-executable-graph:v1\n';
+export const WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
+	schemaVersion: 1,
+	format: WASM_TINYGO_EXECUTABLE_GRAPH_FORMAT,
+	entryPath: 'upstream.js',
+	fingerprint: '33fe04eb515aaaea7e7dd5571a4a614a48d51b991115f05288b236377c53c5b9',
+	modules: Object.freeze({
+		'assets/upstream-compile-worker-CFw6Ych6.js': Object.freeze({
+			bytes: 558,
+			sha256: '03a76345c69f8bd751dac18894f65c0918f1690fbbb661f38052819cd5ae8209',
+			imports: Object.freeze([])
+		}),
+		'assets/upstream-compile-worker-Dat9LBTc.js': Object.freeze({
+			bytes: 12538521,
+			sha256: 'b8d987c32914715b0ba91ace85585f5db467957d14982aa163c1febe9d6dfc04',
+			imports: Object.freeze([
+				Object.freeze({
+					specifier: './upstream-compile-worker-CFw6Ych6.js',
+					target: 'assets/upstream-compile-worker-CFw6Ych6.js',
+					kind: 'static'
+				}),
+				Object.freeze({
+					specifier: './upstream-compile-worker-NPJcbr3r.js',
+					target: 'assets/upstream-compile-worker-NPJcbr3r.js',
+					kind: 'dynamic'
+				})
+			])
+		}),
+		'assets/upstream-compile-worker-NPJcbr3r.js': Object.freeze({
+			bytes: 110,
+			sha256: '2ac9a6dff1bfd7198815ead612722d9b2ffbbc6c8a0e62958444ee84ff155b80',
+			imports: Object.freeze([
+				Object.freeze({
+					specifier: './upstream-compile-worker-CFw6Ych6.js',
+					target: 'assets/upstream-compile-worker-CFw6Ych6.js',
+					kind: 'static'
+				})
+			])
+		}),
+		'assets/upstream-compile-worker-R7P8Uy5f.js': Object.freeze({
+			bytes: 100032,
+			sha256: '1cc51b6435aa72d0ad9c513658a8ed4b2e9d5f94a28b0902b1f200364bccbf82',
+			imports: Object.freeze([
+				Object.freeze({
+					specifier: './upstream-compile-worker-Dat9LBTc.js',
+					target: 'assets/upstream-compile-worker-Dat9LBTc.js',
+					kind: 'dynamic'
+				})
+			])
+		}),
+		'upstream.js': Object.freeze({
+			bytes: 123164,
+			sha256: 'bee971f17a538c1afc3fa01f2050a233a4b75030f0a8e258fd8ca76584cc93a6',
+			imports: Object.freeze([
+				Object.freeze({
+					specifier: 'assets/upstream-compile-worker-R7P8Uy5f.js',
+					target: 'assets/upstream-compile-worker-R7P8Uy5f.js',
+					kind: 'worker'
+				})
+			])
+		})
+	})
+});
+
 export const WASM_TINYGO_ASSET_VERSION =
 	'5ff593680ea205ac06ce66afd181d811f46933a5358113a11206b6b89d95707f';

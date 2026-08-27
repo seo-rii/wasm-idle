@@ -4,6 +4,7 @@ import path from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it, vi } from 'vitest';
+import { WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE } from './playground/wasmTinyGoVersion';
 
 const serviceWorkerPath = path.resolve('static/worker.js');
 const scope = 'https://example.com/wasm-idle/';
@@ -195,6 +196,56 @@ describe('compressed runtime service worker', () => {
 
 		expect((await harness.request(`other/wasm_exec.js?v=${receipt}`)).url).toBe('');
 		expect((await harness.request(`wasm-awk/wasm_exec.js?v=${receipt}&extra=1`)).url).toBe('');
+	});
+
+	it('preserves exact final URLs for every pinned TinyGo executable graph module', async () => {
+		const receipt = 'b'.repeat(64);
+		for (const modulePath of Object.keys(WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules)) {
+			const assetPath = `wasm-tinygo/${modulePath}`;
+			const harness = await createServiceWorkerHarness({}, undefined, {
+				[assetPath]: new TextEncoder().encode(assetPath)
+			});
+
+			const response = await harness.request(`${assetPath}?v=${receipt}`);
+
+			expect(response.status).toBe(200);
+			expect(response.url).toBe(`${scope}${assetPath}?v=${receipt}`);
+		}
+	});
+
+	it('does not widen TinyGo exact-URL preservation beyond canonical paths and pins', async () => {
+		const receipt = 'b'.repeat(64);
+		const assetPath = 'wasm-tinygo/upstream.js';
+		const harness = await createServiceWorkerHarness({}, undefined, {
+			[assetPath]: new TextEncoder().encode('entry'),
+			'other/upstream.js': new TextEncoder().encode('other')
+		});
+
+		expect((await harness.request(`other/upstream.js?v=${receipt}`)).url).toBe('');
+		expect((await harness.request(`${assetPath}?v=${receipt}&extra=1`)).url).toBe('');
+		expect((await harness.request(`${assetPath}?v=${receipt.toUpperCase()}`)).url).toBe('');
+	});
+
+	it('bypasses compressed synthesis for a pinned TinyGo graph module', async () => {
+		const receipt = 'b'.repeat(64);
+		const assetPath = 'wasm-tinygo/assets/upstream-compile-worker-Dat9LBTc.js';
+		const compressedBytes = new TextEncoder().encode('stale compressed module');
+		const networkBytes = new TextEncoder().encode('receipt-matched network module');
+		const harness = await createServiceWorkerHarness(
+			{ [assetPath]: compressedBytes },
+			undefined,
+			{ [assetPath]: networkBytes }
+		);
+
+		const response = await harness.request(`${assetPath}?v=${receipt}`);
+
+		expect(response.url).toBe(`${scope}${assetPath}?v=${receipt}`);
+		expect(Array.from(new Uint8Array(await response.arrayBuffer()))).toEqual(
+			Array.from(networkBytes)
+		);
+		expect(harness.fetchMock).toHaveBeenCalledTimes(1);
+		const fetchedInput = harness.fetchMock.mock.calls[0]?.[0] as { url?: string } | undefined;
+		expect(fetchedInput?.url).toBe(`${scope}${assetPath}?v=${receipt}`);
 	});
 
 	it('refreshes a stale manifest when a newly deployed logical asset is requested', async () => {

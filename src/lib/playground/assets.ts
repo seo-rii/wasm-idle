@@ -45,6 +45,7 @@ import {
 } from '$lib/playground/wasmPrologVersion';
 import { WASM_PERL_RUNTIME_BUNDLE } from '$lib/playground/wasmPerlVersion';
 import { WASM_TCL_RUNTIME_BUNDLE } from '$lib/playground/wasmTclVersion';
+import { WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE } from '$lib/playground/wasmTinyGoVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from '$lib/playground/wasmObjectiveCVersion';
 import {
 	RUBY_RUNTIME_BUNDLE,
@@ -167,6 +168,7 @@ export interface OcamlRuntimeAssetConfig {
 export interface TinyGoRuntimeAssetConfig {
 	moduleUrl?: string;
 	appUrl?: string;
+	executableGraphFingerprint?: string;
 	assetLoader?: TinyGoRuntimeAssetLoader;
 	assetLoaderKey?: string;
 	profileId?: string;
@@ -1140,6 +1142,54 @@ function deriveTinyGoModuleUrlFromAppUrl(appUrl: string, currentUrl = '') {
 	return `${moduleUrlPath}${query ? `?${query}` : ''}${hash ? `#${hash}` : ''}`;
 }
 
+function pinTinyGoExecutableModuleUrl(moduleUrl: string, currentUrl = '') {
+	const entryReceipt =
+		WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules[
+			WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.entryPath
+		];
+	if (!entryReceipt) {
+		throw new RuntimeConfigurationError('TinyGo executable graph entry receipt is missing', {
+			phase: 'asset',
+			runtimeId: 'TINYGO'
+		});
+	}
+	let parsed: URL | undefined;
+	try {
+		parsed = currentUrl ? new URL(moduleUrl, currentUrl) : new URL(moduleUrl);
+	} catch {
+		// Relative URLs without a current document stay relative until browser resolution.
+	}
+	if (parsed?.protocol === 'http:' || parsed?.protocol === 'https:') {
+		if (parsed.username || parsed.password || parsed.hash) {
+			throw new RuntimeConfigurationError('TinyGo executable module URL is unsafe', {
+				phase: 'asset',
+				runtimeId: 'TINYGO'
+			});
+		}
+		const receiptQuery = `?v=${entryReceipt.sha256}`;
+		if (parsed.search && parsed.search !== receiptQuery) {
+			throw new RuntimeConfigurationError(
+				'TinyGo executable module URL must use its exact receipt query pin',
+				{ phase: 'asset', runtimeId: 'TINYGO' }
+			);
+		}
+		parsed.search = receiptQuery;
+		return parsed.href;
+	}
+	if (!parsed) {
+		const [withoutHash, hash = ''] = moduleUrl.split('#', 2);
+		const [withoutQuery, query = ''] = withoutHash.split('?', 2);
+		if (hash || (query && query !== `v=${entryReceipt.sha256}`)) {
+			throw new RuntimeConfigurationError(
+				'TinyGo executable module URL must use its exact receipt query pin',
+				{ phase: 'asset', runtimeId: 'TINYGO' }
+			);
+		}
+		return `${withoutQuery}?v=${entryReceipt.sha256}`;
+	}
+	return moduleUrl;
+}
+
 export function resolveTinyGoModuleUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
@@ -1149,7 +1199,10 @@ export function resolveTinyGoModuleUrl(
 		(publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL || '').trim();
 
 	if (configuredModuleUrl) {
-		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
+		return pinTinyGoExecutableModuleUrl(
+			resolveConfiguredUrl(configuredModuleUrl, currentUrl),
+			currentUrl
+		);
 	}
 
 	const configuredLegacyAppUrl =
@@ -1157,19 +1210,28 @@ export function resolveTinyGoModuleUrl(
 		(publicEnv.PUBLIC_WASM_TINYGO_APP_URL || '').trim();
 
 	if (configuredLegacyAppUrl) {
-		return deriveTinyGoModuleUrlFromAppUrl(configuredLegacyAppUrl, currentUrl);
+		return pinTinyGoExecutableModuleUrl(
+			deriveTinyGoModuleUrlFromAppUrl(configuredLegacyAppUrl, currentUrl),
+			currentUrl
+		);
 	}
 
 	if (typeof options === 'string') {
-		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options) || ''}/wasm-tinygo/upstream.js`,
+		return pinTinyGoExecutableModuleUrl(
+			resolveConfiguredUrl(
+				`${normalizeRootUrl(options) || ''}/wasm-tinygo/upstream.js`,
+				currentUrl
+			),
 			currentUrl
 		);
 	}
 
 	if (options?.rootUrl) {
-		return resolveConfiguredUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tinygo/upstream.js`,
+		return pinTinyGoExecutableModuleUrl(
+			resolveConfiguredUrl(
+				`${normalizeRootUrl(options.rootUrl) || ''}/wasm-tinygo/upstream.js`,
+				currentUrl
+			),
 			currentUrl
 		);
 	}

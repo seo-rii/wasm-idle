@@ -57,7 +57,10 @@ import {
 	WASM_TCL_RUNNER_RECEIPT,
 	WASM_TCL_RUNTIME_PROFILE
 } from './wasmTclVersion';
-import { WASM_TINYGO_ASSET_VERSION, WASM_TINYGO_RUNTIME_PROFILE } from './wasmTinyGoVersion';
+import {
+	WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE,
+	WASM_TINYGO_RUNTIME_PROFILE
+} from './wasmTinyGoVersion';
 import { WASM_TYPESCRIPT_ASSET_VERSION } from './wasmTypeScriptVersion';
 import { WASM_WAT_ASSET_VERSION } from './wasmWatVersion';
 import { WASM_ZIG_ASSET_RECEIPTS, WASM_ZIG_ASSET_VERSION } from './wasmZigVersion';
@@ -298,7 +301,13 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			)
 		},
 		tinygo: {
-			moduleUrl: asset('wasm-tinygo/upstream.js', WASM_TINYGO_ASSET_VERSION),
+			moduleUrl: asset(
+				'wasm-tinygo/upstream.js',
+				WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules[
+					WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.entryPath
+				].sha256
+			),
+			executableGraphFingerprint: WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.fingerprint,
 			...WASM_TINYGO_RUNTIME_PROFILE
 		},
 		typescript: {

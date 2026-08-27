@@ -36,6 +36,7 @@ export interface RuntimeAssetPreflightRequest {
 	readonly limits?: Partial<ExecutionLimits>;
 	readonly cache?: RequestCache;
 	readonly redirect?: RequestRedirect;
+	readonly requireExactResponseUrl?: boolean;
 	readonly maxConcurrentDownloads?: number;
 	readonly maxTotalDeliveryBytes?: number;
 	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
@@ -367,6 +368,7 @@ async function preflightAsset(
 	maxAssetBytes: number,
 	cache: RequestCache | undefined,
 	redirect: RequestRedirect,
+	requireExactResponseUrl: boolean,
 	reportProgress: (loadedBytes: number) => void,
 	runtimeId: string,
 	profileId: string,
@@ -424,6 +426,25 @@ async function preflightAsset(
 	}
 	let responseUrl: URL;
 	try {
+		if (requireExactResponseUrl) {
+			if (!response.url) {
+				throw new RuntimeConfigurationError(
+					`Runtime asset ${asset.key} response did not expose an exact final URL`,
+					{ phase: 'asset', runtimeId, profileId }
+				);
+			}
+			if (
+				response.redirected ||
+				response.status === 0 ||
+				response.type === 'opaque' ||
+				response.type === 'opaqueredirect'
+			) {
+				throw new RuntimeConfigurationError(
+					`Runtime asset ${asset.key} response did not preserve exact delivery metadata`,
+					{ phase: 'asset', runtimeId, profileId }
+				);
+			}
+		}
 		responseUrl = requireConfinedUrl(
 			response.url || requestUrl.href,
 			assetRootUrl,
@@ -611,6 +632,19 @@ export async function preflightRuntimeAssets(
 			profileId: runtime.identity.profile.profileId
 		});
 	}
+	if (
+		request.requireExactResponseUrl !== undefined &&
+		typeof request.requireExactResponseUrl !== 'boolean'
+	) {
+		throw new RuntimeConfigurationError(
+			'Runtime asset exact-response-URL policy must be boolean',
+			{
+				phase: 'asset',
+				runtimeId: runtime.runtimeId,
+				profileId: runtime.identity.profile.profileId
+			}
+		);
+	}
 	const fetchImpl = request.fetch ?? globalThis.fetch;
 	if (runtime.assets.length > 0 && typeof fetchImpl !== 'function') {
 		throw new AssetNotFoundError('fetch is unavailable for runtime asset preflight', {
@@ -701,6 +735,7 @@ export async function preflightRuntimeAssets(
 							limits.maxAssetBytes,
 							request.cache,
 							redirect,
+							request.requireExactResponseUrl === true,
 							(loadedBytes) =>
 								request.reportProgress?.({
 									runtimeId: runtime.runtimeId,
