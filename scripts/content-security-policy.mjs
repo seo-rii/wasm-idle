@@ -13,7 +13,7 @@ export const applicationContentSecurityPolicyDirectives = {
 	'object-src': ['none'],
 	'script-src': ['self', 'blob:', 'wasm-unsafe-eval'],
 	'worker-src': ['self', 'blob:'],
-	'connect-src': ['self', 'https:', 'http:'],
+	'connect-src': ['self', 'blob:', 'https:', 'http:'],
 	'font-src': ['self', 'data:', 'https://fonts.gstatic.com'],
 	'img-src': ['self', 'blob:', 'data:'],
 	'manifest-src': ['self'],

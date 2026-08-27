@@ -283,8 +283,8 @@ RSS; both workers retain bounded memory growth for workloads that exceed the ini
 
 The debug runtime requires a cross-origin-isolated page with `SharedArrayBuffer`. Its verified
 Blob-backed modules and nested pthread Workers also require `blob:` in the deployment CSP's
-`script-src` and `worker-src`. LLDB and WAMR assets are lazy-loaded from the versioned producer
-manifest and are not included in this npm package.
+`script-src`, `worker-src`, and `connect-src`. LLDB and WAMR assets are lazy-loaded from the
+versioned producer manifest and are not included in this npm package.
 The bundled `/wasm-debug/` profile pins the raw `runtime-manifest.v2.json` response to its exact
 byte length and SHA-256 receipt. The consumer verifies those response bytes before JSON parsing or
 Worker creation; the verified manifest then supplies the six LLDB/WAMR asset receipts. A custom

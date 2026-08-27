@@ -1590,8 +1590,8 @@ producers and binary manifests.
 
 Debugging requires \`SharedArrayBuffer\` and a cross-origin-isolated deployment. Because verified
 runtime bytes are executed through Blob-backed ES modules and nested pthread Workers, the deployed
-Content Security Policy's \`script-src\` and \`worker-src\` must permit \`blob:\`. The LLDB and WAMR
-assets are not downloaded until a supported debug session starts. The bundled raw manifest is
+Content Security Policy's \`script-src\`, \`worker-src\`, and \`connect-src\` must permit \`blob:\`. The
+LLDB and WAMR assets are not downloaded until a supported debug session starts. The bundled raw manifest is
 checked against its release receipt before parsing, and custom runtime locations must provide an
 explicit expected manifest SHA-256. The six executable assets are then streamed, bounded, and
 hash-verified exactly once before their owned bytes are transferred to the Workers. Workers do not
