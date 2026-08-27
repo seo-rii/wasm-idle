@@ -34,6 +34,15 @@ The C/C++ and Rust LLDB sandboxes use this contract to wait for both LLDB and WA
 Callers can therefore await `stop()` before launching another debug session without overlapping the
 previous session's workers or receiving its late events.
 
+## Interactive runs
+
+Set `interactive: true` only for a run that remains under explicit user control and has a working
+stop/dispose path. The shared execution boundary then omits the wall-clock deadline only for the
+final `run(..., prepare = false)` call. Runtime loading and `prepare()` keep their configured
+deadlines, and AbortSignal cancellation, output/diagnostic limits, exclusive sandbox ownership, and
+teardown remain enforced. wasm-idle uses this contract for Debug runs, which may stay paused at a
+breakpoint indefinitely; ordinary Run requests remain time-bounded.
+
 ## Input generations
 
 Input submitted while `prepare()` is still running remains queued for the matching `run()` when the

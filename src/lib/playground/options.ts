@@ -51,6 +51,8 @@ export interface SandboxExecutionOptions {
 	debugMode?: BrowserDebugMode;
 	/** @deprecated Use debugMode. true maps to trace unless the caller explicitly selects lldb. */
 	debug?: boolean;
+	/** Keep the final run alive until the host explicitly stops or disposes it. */
+	interactive?: boolean;
 	breakpoints?: number[];
 	sourceBreakpoints?: DebugSourceBreakpoints[];
 	pauseOnEntry?: boolean;

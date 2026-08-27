@@ -119,6 +119,7 @@ describe('example route debug actions', () => {
 		expect(source).not.toContain('preflightDebugRuntimeAssets');
 		expect(source).toContain('if (!executionPreflight.isCurrent(preflight)) return;');
 		expect(source).toMatch(/signal: preflight\.signal,/);
+		expect(source.includes('interactive: enableDebug,')).toBe(true);
 		expect(executionCatch).toMatch(
 			/catch \(error\) \{\s+if \(\s*preflight\.signal\.aborted &&\s*!executionPreflight\.isCurrent\(preflight\)\s*\)\s+return;\s+throw error;\s+\} finally/s
 		);

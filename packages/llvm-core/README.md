@@ -398,6 +398,11 @@ window therefore retires that execution before it can create a late debugger ses
 waits for the retired execution to settle and then starts one fresh generation. A retired aborted
 generation is ignored even when the shared sandbox boundary wraps the abort reason in its typed
 cancellation error.
+Debug executions opt into the shared boundary's explicit interactive-run contract, so the final
+guest run is not killed by the ordinary compile-plus-run wall-clock deadline while the user is
+paused or stepping. Asset loading, compilation/prepare, DAP startup requests, Worker watchdogs,
+AbortSignal cancellation, output and diagnostic limits, Stop, and disposal remain bounded. Normal
+Run does not opt in and retains its configured wall-clock deadline.
 If the shared execution boundary cancels a run for timeout or output limits, it reports that limit
 promptly but keeps the sandbox busy until both the guest operation and asynchronous debugger
 teardown have settled. A following clear, restart, or run therefore cannot overlap the retiring
