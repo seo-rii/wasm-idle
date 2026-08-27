@@ -5,6 +5,8 @@ const MAX_STRING_BYTES = 16 * 1024 * 1024;
 const MAX_FUNCTION_BODY_BYTES = 64 * 1024 * 1024;
 const MAX_INSTRUCTIONS = 16_000_000;
 const MAX_CONTROL_DEPTH = 4_096;
+const MAX_INITIAL_MEMORY_PAGES = 2_048;
+const MAX_INITIAL_TABLE_ELEMENTS = 1_000_000;
 
 const CORE_V1_HEADER = Uint8Array.of(0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00);
 const WASI_PREVIEW1_IMPORT_MODULE = 'wasi_snapshot_preview1';
@@ -558,7 +560,15 @@ class WamrModuleValidator {
 			if (kind === 'memory') unsupported('shared memory and atomics are not supported');
 			unsupported('shared tables are not supported');
 		}
-		reader.readVarUint32(`${context} minimum`);
+		const minimum = reader.readVarUint32(`${context} minimum`);
+		if (kind === 'memory' && minimum > MAX_INITIAL_MEMORY_PAGES) {
+			unsupported(`${context} minimum ${minimum} pages exceeds ${MAX_INITIAL_MEMORY_PAGES}`);
+		}
+		if (kind === 'table' && minimum > MAX_INITIAL_TABLE_ELEMENTS) {
+			unsupported(
+				`${context} minimum ${minimum} elements exceeds ${MAX_INITIAL_TABLE_ELEMENTS}`
+			);
+		}
 		if ((flags & 0x01) !== 0) reader.readVarUint32(`${context} maximum`);
 	}
 

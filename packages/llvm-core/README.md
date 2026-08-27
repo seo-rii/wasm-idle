@@ -125,7 +125,9 @@ Before fetching debugger assets or creating Workers, the LLDB session structural
 guest as a bounded core WebAssembly v1 module for the supported WAMR profile. Only
 the 45 `wasi_snapshot_preview1` function names and signatures emitted by pinned WASI SDK 33 are
 accepted; unknown names, ABI mismatches, non-function imports, and legacy or extension namespaces
-fail closed. SIMD, atomics and shared memory, memory64, table64, multiple memories or tables,
+fail closed. Initial guest memory is limited to 2,048 pages (128 MiB), and an initial table is
+limited to 1,000,000 elements, so compact modules cannot defer oversized startup allocations to the
+WAMR Worker. SIMD, atomics and shared memory, memory64, table64, multiple memories or tables,
 multi-memory instruction encodings, extended constant expressions, typed references, exception
 handling, GC instructions, dynamic linking, and relocatable modules also fail with an explicit
 unsupported-module error. The target Worker repeats this check before claiming its generation or

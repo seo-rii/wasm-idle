@@ -148,6 +148,21 @@ describe('validateWamrDebugModule', () => {
 		);
 	});
 
+	it.each([
+		{
+			kind: 'memory',
+			module: moduleWith(section(5, [1, 0, ...u32(2_049)])),
+			error: /memory 0 minimum 2049 pages exceeds 2048/u
+		},
+		{
+			kind: 'table',
+			module: moduleWith(section(4, [1, 0x70, 0, ...u32(1_000_001)])),
+			error: /table 0 minimum 1000001 elements exceeds 1000000/u
+		}
+	])('rejects an oversized initial $kind before creating WAMR workers', ({ module, error }) => {
+		expect(() => validateWamrDebugModule(module)).toThrow(error);
+	});
+
 	it('bounds nested instruction control depth', () => {
 		const nestedBlocks = new Array(4_097).fill([0x02, 0x40]).flat();
 
