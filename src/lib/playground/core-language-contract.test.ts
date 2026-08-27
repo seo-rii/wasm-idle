@@ -160,19 +160,21 @@ describe('core language contract', () => {
 		expect(firstKey).not.toBe(secondKey);
 	});
 
-	it('includes both Rust compiler assets in runtime cache keys', () => {
+	it('includes Rust compiler assets and executable graph identity in runtime cache keys', () => {
 		const key = JSON.parse(
 			createRuntimeAssetsKey({
 				rust: {
 					compilerUrl: '/wasm-rust/index.js?v=test',
-					debugModuleUrl: '/wasm-rust/debug-instrumenter.js?v=test'
+					debugModuleUrl: '/wasm-rust/debug-instrumenter.js?v=test',
+					executableGraphFingerprint: 'a'.repeat(64)
 				}
 			}) || '{}'
 		);
 
 		expect(key).toMatchObject({
 			rustCompilerUrl: '/wasm-rust/index.js?v=test',
-			rustDebugModuleUrl: '/wasm-rust/debug-instrumenter.js?v=test'
+			rustDebugModuleUrl: '/wasm-rust/debug-instrumenter.js?v=test',
+			rustExecutableGraphFingerprint: 'a'.repeat(64)
 		});
 	});
 

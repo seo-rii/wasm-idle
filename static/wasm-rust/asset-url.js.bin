@@ -1,7 +1,7 @@
 export function resolveVersionedAssetUrl(baseUrl, assetPath) {
     const base = new URL(baseUrl.toString());
     const resolved = new URL(assetPath, base);
-    if (!resolved.search && base.search) {
+    if (!resolved.search && base.search && resolved.protocol !== 'blob:') {
         resolved.search = base.search;
     }
     return resolved;

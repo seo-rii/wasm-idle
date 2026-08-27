@@ -8,12 +8,15 @@ import {
 	hasRegisteredRuntimeAssetReceipt
 } from '../src/runtime-asset.js';
 import {
+	clearVerifiedRuntimeExecutableModuleUrls,
 	collectRuntimeManifestAssetPaths,
+	configureVerifiedRuntimeExecutableModuleUrls,
 	loadRuntimeManifest,
 	normalizeRuntimeManifest,
 	parseWasmRustRuntimeProfileFromModuleUrl,
 	parseRuntimeManifest,
 	registerRuntimeManifestAssetReceipts,
+	resolveRuntimeAssetUrl,
 	resolveTargetManifest,
 	verifyRuntimeManifestAssetReceipts
 } from '../src/runtime-manifest.js';
@@ -27,6 +30,7 @@ import {
 describe('runtime manifest edge cases', () => {
 	afterEach(() => {
 		clearRegisteredRuntimeAssetReceipts();
+		clearVerifiedRuntimeExecutableModuleUrls();
 	});
 
 	const createIntegratedManifestWithReceipts = () => {
@@ -98,6 +102,82 @@ describe('runtime manifest edge cases', () => {
 				`https://cdn.example.test/wasm-rust/runtime/rustc/rustc.wasm.gz?v=${'1'.repeat(64)}`
 			)
 		).toBe(false);
+	});
+
+	it('resolves declared executable modules to their verified Blob URLs only', () => {
+		const sourceUrl =
+			'https://cdn.example.test/wasm-rust/runtime/llvm/llc.js?v=' + '1'.repeat(64);
+		const blobUrl = 'blob:https://cdn.example.test/verified-llc';
+		configureVerifiedRuntimeExecutableModuleUrls({ [sourceUrl]: blobUrl }, 'a'.repeat(64));
+
+		expect(
+			resolveRuntimeAssetUrl(
+				`https://cdn.example.test/wasm-rust/runtime/?v=${'1'.repeat(64)}`,
+				'llvm/llc.js'
+			)
+		).toBe(blobUrl);
+		expect(
+			resolveRuntimeAssetUrl(
+				`https://cdn.example.test/wasm-rust/runtime/?v=${'1'.repeat(64)}`,
+				'llvm/llc.wasm.gz'
+			)
+		).toBe(`https://cdn.example.test/wasm-rust/runtime/llvm/llc.wasm.gz?v=${'1'.repeat(64)}`);
+		expect(() =>
+			resolveRuntimeAssetUrl(
+				`https://cdn.example.test/wasm-rust/runtime/?v=${'1'.repeat(64)}`,
+				'llvm/lld.js'
+			)
+		).toThrow(/missing from the verified Blob graph/u);
+		expect(() =>
+			resolveRuntimeAssetUrl(
+				`https://cdn.example.test/wasm-rust/runtime/?v=${'1'.repeat(64)}`,
+				'llvm/lld.mjs'
+			)
+		).toThrow(/missing from the verified Blob graph/u);
+	});
+
+	it('rejects unsafe or duplicate verified executable module URL mappings', () => {
+		expect(() =>
+			configureVerifiedRuntimeExecutableModuleUrls(
+				{
+					'file:///tmp/llc.js': 'blob:https://example.test/llc'
+				},
+				'a'.repeat(64)
+			)
+		).toThrow(/source URL is unsafe/);
+		expect(() =>
+			configureVerifiedRuntimeExecutableModuleUrls(
+				{
+					'https://example.test/llc.js': 'blob:https://example.test/llc?generation=1'
+				},
+				'a'.repeat(64)
+			)
+		).toThrow(/Blob URL is unsafe/);
+		expect(() =>
+			configureVerifiedRuntimeExecutableModuleUrls(
+				{
+					'https://example.test/llc.js': 'blob:https://example.test/shared',
+					'https://example.test/lld.js': 'blob:https://example.test/shared'
+				},
+				'a'.repeat(64)
+			)
+		).toThrow(/duplicated/);
+	});
+
+	it('keeps one immutable executable graph configuration per worker realm', () => {
+		const sourceUrl = 'https://example.test/wasm-rust/runtime/llvm/llc.js';
+		const moduleUrls = { [sourceUrl]: 'blob:https://example.test/verified-llc' };
+		configureVerifiedRuntimeExecutableModuleUrls(moduleUrls, 'a'.repeat(64));
+
+		expect(() =>
+			configureVerifiedRuntimeExecutableModuleUrls(moduleUrls, 'a'.repeat(64))
+		).not.toThrow();
+		expect(() =>
+			configureVerifiedRuntimeExecutableModuleUrls(moduleUrls, 'b'.repeat(64))
+		).toThrow(/cannot change within one worker/u);
+		expect(() =>
+			configureVerifiedRuntimeExecutableModuleUrls(moduleUrls, 'not-a-fingerprint')
+		).toThrow(/fingerprint is invalid/u);
 	});
 
 	it('parses a complete host trust root and rejects partial receipt query parameters', () => {

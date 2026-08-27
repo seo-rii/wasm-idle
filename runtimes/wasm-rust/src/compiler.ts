@@ -16,6 +16,7 @@ import { loadBundledRuntimeContext } from './compiler-runtime.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
 import {
+	getVerifiedRuntimeExecutableGraphConfiguration,
 	isIntegratedCompilerOutput,
 	loadRuntimeManifest,
 	type WasmRustRuntimeProfile
@@ -292,7 +293,7 @@ export async function compileRust(
 				versionedModuleBaseUrl,
 				'./compiler-worker.js'
 			);
-			workerUrl.searchParams.set('attempt', String(attempt));
+			const executableGraph = getVerifiedRuntimeExecutableGraphConfiguration();
 			const worker = (
 				dependencies.createWorker || ((url) => createModuleWorker(url) as WorkerLike)
 			)(workerUrl);
@@ -336,6 +337,13 @@ export async function compileRust(
 
 			worker.postMessage({
 				type: 'compile',
+				compilerWorkerUrl: workerUrl.toString(),
+				...(executableGraph
+					? {
+							executableGraphFingerprint: executableGraph.fingerprint,
+							verifiedExecutableModuleUrls: executableGraph.moduleUrls
+						}
+					: {}),
 				runtimeBaseUrl: versionedRuntimeBaseUrl.toString(),
 				manifest,
 				request: workerRequest,

@@ -11,6 +11,7 @@ import {
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
 import { runRustBrowserProbe } from '../../../scripts/rust-browser-probe-lib.mjs';
+import { WASM_RUST_EXECUTABLE_GRAPH_PROFILE } from './wasmRustVersion';
 
 const defaultBrowserRepeats = {
 	'wasm32-wasip1': 4,
@@ -23,6 +24,29 @@ describe('wasm-idle rust browser playwright integration', () => {
 		expect(
 			Object.values(defaultBrowserRepeats).reduce((total, value) => total + value, 0)
 		).toBe(10);
+		expect(Object.keys(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules)).toHaveLength(41);
+	});
+
+	it('rejects an unbounded executable graph contract before browser startup', async () => {
+		const modules = Object.fromEntries(
+			Array.from({ length: 257 }, (_, index) => [
+				`module-${index}.js`,
+				{
+					delivery: {
+						storagePath: `module-${index}.js.bin`,
+						encoding: 'identity' as const
+					},
+					storage: { sha256: 'a'.repeat(64) }
+				}
+			])
+		);
+
+		await expect(
+			runRustBrowserProbe({
+				browserUrl: 'https://example.com/wasm-idle/',
+				rustExecutableGraphProfile: { entryPath: 'module-0.js', modules }
+			})
+		).rejects.toThrow('must contain 1-256 modules');
 	});
 
 	it('runs the real Rust page path for every shipped wasm-rust target without worker bootstrap or memory-oob failures', async () => {
@@ -91,7 +115,8 @@ describe('wasm-idle rust browser playwright integration', () => {
 							stdinText: '5\n',
 							sendEof: false,
 							expectedOutput: 'factorial_plus_bonus=123',
-							targetTriple
+							targetTriple,
+							rustExecutableGraphProfile: WASM_RUST_EXECUTABLE_GRAPH_PROFILE
 						});
 
 						expect(summary.activeState.crossOriginIsolated).toBe(true);
@@ -107,6 +132,49 @@ describe('wasm-idle rust browser playwright integration', () => {
 						expect(summary.rustConsoleErrors).toEqual([]);
 						expect(summary.compilerRetries).toEqual([]);
 						expect(summary.callStackErrors).toEqual([]);
+						expect(summary.rustExecutableHttpRequests).toEqual([]);
+						expect(summary.rustLogicalModuleHttpRequests).toEqual([]);
+						expect(summary.unexpectedRustExecutableStorageRequests).toEqual([]);
+						expect(summary.rustExecutableGraphStorageEvidence).toHaveLength(
+							Object.keys(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules).length
+						);
+						for (const evidence of summary.rustExecutableGraphStorageEvidence) {
+							const module =
+								WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules[
+									evidence.modulePath as keyof typeof WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules
+								];
+							expect(module).toBeDefined();
+							expect(evidence).toMatchObject({
+								encoding: module.delivery.encoding,
+								storagePath: module.delivery.storagePath
+							});
+							const expectedUrl = new URL(evidence.expectedUrl);
+							expect(
+								expectedUrl.pathname.endsWith(
+									`/wasm-rust/${module.delivery.storagePath}`
+								)
+							).toBe(true);
+							expect([...expectedUrl.searchParams]).toEqual([
+								['v', module.storage.sha256]
+							]);
+							expect(evidence.requests.length).toBeGreaterThan(0);
+							expect(
+								evidence.requests.every(({ url }) => url === evidence.expectedUrl)
+							).toBe(true);
+							expect(evidence.responses.length).toBeGreaterThan(0);
+							for (const response of evidence.responses) {
+								expect(response).toMatchObject({
+									url: evidence.expectedUrl,
+									ok: true
+								});
+								expect(response.contentType?.split(';', 1)[0]).toBe(
+									'application/octet-stream'
+								);
+								if (module.delivery.encoding === 'gzip') {
+									expect(response.contentEncoding).toBeNull();
+								}
+							}
+						}
 						expect(summary.transcript).toContain('factorial_plus_bonus=123');
 						if (targetTriple === 'wasm32-wasip2') {
 							expect(summary.transcript).toContain('preview2_component=preview2-cli');

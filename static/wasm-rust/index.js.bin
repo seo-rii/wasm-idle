@@ -1,9 +1,15 @@
 import { compileRust, createBrowserRustCompileRequestIdentity, preloadBrowserRustRuntime as preloadBrowserRustRuntimeInternal, resolveBrowserRustDebugMode } from './compiler.js';
 import { executeBrowserRustArtifact as executeBrowserRustArtifactInternal } from './browser-execution.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
-import { parseWasmRustRuntimeProfileFromModuleUrl } from './runtime-manifest.js';
+import { configureVerifiedRuntimeExecutableModuleUrls, hasVerifiedRuntimeExecutableModuleUrls, parseWasmRustRuntimeProfileFromModuleUrl } from './runtime-manifest.js';
 export { createBrowserRustCompileRequestIdentity, resolveBrowserRustDebugMode };
+export { configureVerifiedRuntimeExecutableModuleUrls };
 const bundledRuntimeProfile = parseWasmRustRuntimeProfileFromModuleUrl(import.meta.url);
+function requireVerifiedExecutableGraph() {
+    if (bundledRuntimeProfile && !hasVerifiedRuntimeExecutableModuleUrls()) {
+        throw new Error('wasm-rust executable modules must be loaded through a receipt-verified graph');
+    }
+}
 function assertMatchingRuntimeProfile(provided, bundled) {
     if (!provided)
         return;
@@ -23,6 +29,7 @@ function sealCompileDependencies(dependencies, profile) {
     return { ...sealed, runtimeProfile: profile };
 }
 export async function preloadBrowserRustRuntime(options = {}) {
+    requireVerifiedExecutableGraph();
     if (bundledRuntimeProfile) {
         assertMatchingRuntimeProfile(options.dependencies?.runtimeProfile, bundledRuntimeProfile);
     }
@@ -40,6 +47,7 @@ export async function preloadBrowserRustRuntime(options = {}) {
     });
 }
 export async function executeBrowserRustArtifact(artifact, runtimeBaseUrlOrOptions, options) {
+    requireVerifiedExecutableGraph();
     if (typeof runtimeBaseUrlOrOptions === 'string') {
         return executeBrowserRustArtifactInternal(artifact, runtimeBaseUrlOrOptions, options);
     }
@@ -50,6 +58,7 @@ export async function executeBrowserRustArtifact(artifact, runtimeBaseUrlOrOptio
     return executeBrowserRustArtifactInternal(artifact, runtimeBaseUrlOrOptions);
 }
 export async function createRustCompiler(options) {
+    requireVerifiedExecutableGraph();
     return {
         compile: async (request) => compileRust(request, bundledRuntimeProfile
             ? sealCompileDependencies(options?.dependencies, bundledRuntimeProfile)

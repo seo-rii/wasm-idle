@@ -2,7 +2,7 @@ import { resolveVersionedAssetUrl } from './asset-url.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
 import { resolveBrowserRustDebugMode } from './compiler-support.js';
-import { isIntegratedCompilerOutput, registerRuntimeManifestAssetReceipts, resolveTargetManifest } from './runtime-manifest.js';
+import { configureVerifiedRuntimeExecutableModuleUrls, isIntegratedCompilerOutput, registerRuntimeManifestAssetReceipts, resolveTargetManifest } from './runtime-manifest.js';
 import { buildPreopenedDirectories, instantiateRustcInstance } from './rustc-runtime.js';
 import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot } from './thread-startup.js';
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
@@ -72,6 +72,24 @@ function emitCompileWorkerProgress(request, progress) {
     });
 }
 async function compileRustInWorker(request) {
+    let actualWorkerUrl;
+    try {
+        actualWorkerUrl = new URL(globalThis.location.href).href;
+    }
+    catch (cause) {
+        throw new Error('wasm-rust compiler worker location is unavailable', { cause });
+    }
+    if (new URL(request.compilerWorkerUrl).href !== actualWorkerUrl) {
+        throw new Error('wasm-rust compiler worker URL does not match its activated topology');
+    }
+    if ((request.executableGraphFingerprint === undefined) !==
+        (request.verifiedExecutableModuleUrls === undefined)) {
+        throw new Error('wasm-rust compiler worker executable graph configuration is incomplete');
+    }
+    if (request.executableGraphFingerprint !== undefined &&
+        request.verifiedExecutableModuleUrls !== undefined) {
+        configureVerifiedRuntimeExecutableModuleUrls(request.verifiedExecutableModuleUrls, request.executableGraphFingerprint);
+    }
     if (request.manifest.assetReceipts) {
         registerRuntimeManifestAssetReceipts(request.runtimeBaseUrl, request.manifest);
     }
@@ -248,9 +266,6 @@ async function compileRustInWorker(request) {
         const slotState = new Int32Array(slotBuffer);
         Atomics.store(slotState, 0, -3);
         const threadWorkerUrl = resolveVersionedAssetUrl(import.meta.url, './rustc-thread-worker.js');
-        if (request.request.log) {
-            threadWorkerUrl.searchParams.set('log', '1');
-        }
         const worker = createModuleWorker(threadWorkerUrl);
         worker.addEventListener('message', (event) => {
             if (event.data?.type !== 'thread-log') {
@@ -283,6 +298,7 @@ async function compileRustInWorker(request) {
         });
         worker.postMessage({
             type: 'thread-pool-init',
+            rustcThreadWorkerUrl: threadWorkerUrl.toString(),
             runtimeBaseUrl: request.runtimeBaseUrl,
             manifest: request.manifest,
             sourceCode: request.request.code,
@@ -397,11 +413,20 @@ async function compileRustInWorker(request) {
             stderr: stderrText
         });
 }
+let acceptedCompileRequest = false;
 if (typeof globalThis.addEventListener === 'function') {
     globalThis.addEventListener('message', (event) => {
         if (event.data?.type !== 'compile') {
             return;
         }
+        if (acceptedCompileRequest) {
+            postMessage({
+                type: 'error',
+                message: 'wasm-rust compiler worker accepts exactly one compile request'
+            });
+            return;
+        }
+        acceptedCompileRequest = true;
         void compileRustInWorker(event.data).catch((error) => {
             emitCompileWorkerLog(event.data, `[wasm-rust:compiler-worker] unhandled failure ${error instanceof Error ? error.message : String(error)}`);
             const message = error instanceof Error ? error.message : String(error);

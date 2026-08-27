@@ -53,6 +53,10 @@ export interface EditorLanguageServerRuntimeOptions {
 	};
 	rust?: {
 		compilerUrl?: string;
+		expectedNetworkModuleUrls?: readonly string[];
+		verifiedModuleUrls?: Readonly<Record<string, string>>;
+		graphFingerprint?: string;
+		runtimeProfile?: RustLanguageServerRuntimeProfile;
 		targetTriple?: 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
 		edition?: string;
 	};
@@ -266,6 +270,15 @@ export interface EditorLanguageServerRuntimeOptions {
 	document?: {
 		language?: DocumentLanguageId;
 	};
+}
+
+export interface RustLanguageServerRuntimeProfile {
+	profileId: string;
+	protocolVersion: 1;
+	manifestPath: 'runtime/runtime-manifest.v3.json';
+	manifestFingerprint: string;
+	manifestReceipt: Readonly<{ bytes: number; sha256: string }>;
+	moduleUrl: string;
 }
 
 export type EditorLanguageServerOptions = string | EditorLanguageServerRuntimeOptions;

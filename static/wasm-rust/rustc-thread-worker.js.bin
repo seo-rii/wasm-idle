@@ -1,9 +1,9 @@
-import { resolveVersionedAssetUrl } from './asset-url.js';
 import { createModuleWorker } from './module-worker.js';
 import { buildPreopenedDirectories, instantiateRustcInstance } from './rustc-runtime.js';
 import { markWorkerFailure, recordWorkerFailureContext } from './worker-status.js';
 import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot, THREAD_STARTUP_STATE_ENTERING, THREAD_STARTUP_STATE_INSTANTIATED, THREAD_STARTUP_STATE_STARTING, waitForThreadEntry } from './thread-startup.js';
 const MIRRORED_BITCODE_LENGTH_INDEX = 0;
+let acceptedThreadBootstrap = false;
 postMessage({
     type: 'thread-ready'
 });
@@ -14,6 +14,11 @@ function describeStartArgMemory(memory, startArg) {
     }
     catch (error) {
         return `startArg=${startArg} snapshot-error=${error instanceof Error ? error.message : String(error)}`;
+    }
+}
+function assertActivatedThreadWorkerUrl(request) {
+    if (request.rustcThreadWorkerUrl !== globalThis.location.href) {
+        throw new Error('wasm-rust thread worker URL does not match its activated topology');
     }
 }
 async function instantiateThreadWorkerRuntime(request) {
@@ -46,10 +51,7 @@ async function instantiateThreadWorkerRuntime(request) {
                 }
                 const nestedReadyBuffer = new SharedArrayBuffer(4);
                 const nestedReadyState = new Int32Array(nestedReadyBuffer);
-                const nestedThreadWorkerUrl = resolveVersionedAssetUrl(import.meta.url, './rustc-thread-worker.js');
-                if (request.log) {
-                    nestedThreadWorkerUrl.searchParams.set('log', '1');
-                }
+                const nestedThreadWorkerUrl = new URL(request.rustcThreadWorkerUrl);
                 const nestedWorker = createModuleWorker(nestedThreadWorkerUrl);
                 const markNestedStartupFailure = () => {
                     if (Atomics.load(nestedReadyState, 0) < 0) {
@@ -62,6 +64,7 @@ async function instantiateThreadWorkerRuntime(request) {
                 nestedWorker.addEventListener('messageerror', markNestedStartupFailure);
                 nestedWorker.postMessage({
                     type: 'thread-start',
+                    rustcThreadWorkerUrl: request.rustcThreadWorkerUrl,
                     runtimeBaseUrl: request.runtimeBaseUrl,
                     manifest: request.manifest,
                     sourceCode: request.sourceCode,
@@ -107,6 +110,7 @@ async function instantiateThreadWorkerRuntime(request) {
     });
 }
 async function startThreadWorker(request) {
+    assertActivatedThreadWorkerUrl(request);
     if (request.log) {
         postMessage({
             type: 'thread-log',
@@ -142,6 +146,7 @@ async function startThreadWorker(request) {
     instantiated.instance.exports.wasi_thread_start(request.threadId, request.startArg);
 }
 async function startThreadPoolWorker(request) {
+    assertActivatedThreadWorkerUrl(request);
     const slotState = new Int32Array(request.slotBuffer);
     if (request.log) {
         postMessage({
@@ -204,6 +209,9 @@ async function startThreadPoolWorker(request) {
 globalThis.addEventListener('message', (event) => {
     if (event.data?.type === 'thread-start') {
         const request = event.data;
+        if (acceptedThreadBootstrap)
+            return;
+        acceptedThreadBootstrap = true;
         void startThreadWorker(request).catch((error) => {
             const detail = error instanceof Error ? error.message : String(error);
             const mirroredState = new Int32Array(request.sharedBitcodeBuffer, 0, 4);
@@ -228,6 +236,9 @@ globalThis.addEventListener('message', (event) => {
     }
     if (event.data?.type === 'thread-pool-init') {
         const request = event.data;
+        if (acceptedThreadBootstrap)
+            return;
+        acceptedThreadBootstrap = true;
         void startThreadPoolWorker(request).catch((error) => {
             const detail = error instanceof Error ? error.message : String(error);
             const mirroredState = new Int32Array(request.sharedBitcodeBuffer, 0, 4);

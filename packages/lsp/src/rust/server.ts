@@ -1,10 +1,13 @@
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
-import { resolveRustLanguageServerCompilerUrl } from '../runtime.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 import type { RustLanguageServerTargetTriple } from './service.js';
 
 export interface RustLanguageServerConfig {
 	compilerUrl?: string;
+	expectedNetworkModuleUrls?: readonly string[];
+	verifiedModuleUrls?: Readonly<Record<string, string>>;
+	graphFingerprint?: string;
+	runtimeProfile?: import('../types.js').RustLanguageServerRuntimeProfile;
 	targetTriple?: RustLanguageServerTargetTriple;
 	edition?: string;
 }
@@ -29,10 +32,23 @@ export async function getRustLanguageServer(
 	const hostOptions =
 		typeof options === 'object' ? (options as RustLanguageServerOptions) : undefined;
 	const config = resolveConfig(options);
+	if (
+		!config.compilerUrl ||
+		!config.expectedNetworkModuleUrls ||
+		!config.verifiedModuleUrls ||
+		!config.graphFingerprint ||
+		!config.runtimeProfile
+	) {
+		throw new Error('Rust language server requires a verified executable graph configuration');
+	}
 	return await createWorkerLanguageServerClient({
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
-			compilerUrl: resolveRustLanguageServerCompilerUrl(options, hostOptions?.currentUrl),
+			compilerUrl: config.compilerUrl,
+			expectedNetworkModuleUrls: config.expectedNetworkModuleUrls,
+			verifiedModuleUrls: config.verifiedModuleUrls,
+			graphFingerprint: config.graphFingerprint,
+			runtimeProfile: config.runtimeProfile,
 			targetTriple: config.targetTriple,
 			edition: config.edition
 		},

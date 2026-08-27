@@ -50,7 +50,11 @@ import {
 	RUBY_RUNTIME_MODULE_STORAGE_PATH,
 	RUBY_RUNTIME_WASM_STORAGE_PATH
 } from '@wasm-idle/core';
-import { WASM_RUST_ASSET_VERSION, WASM_RUST_RUNTIME_PROFILE } from './wasmRustVersion';
+import {
+	WASM_RUST_ASSET_VERSION,
+	WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
+	WASM_RUST_RUNTIME_PROFILE
+} from './wasmRustVersion';
 import { WASM_SWIFT_ASSET_VERSION } from './wasmSwiftVersion';
 import {
 	WASM_TCL_ASSET_VERSION,
@@ -105,7 +109,8 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 				'wasm-rust/runtime/runtime-manifest.v3.json',
 				WASM_RUST_RUNTIME_PROFILE.manifestFingerprint
 			),
-			...WASM_RUST_RUNTIME_PROFILE
+			...WASM_RUST_RUNTIME_PROFILE,
+			executableGraphFingerprint: WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint
 		},
 		go: {
 			compilerUrl: asset('wasm-go/index.js', WASM_GO_ASSET_VERSION),

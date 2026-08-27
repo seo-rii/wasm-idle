@@ -12,6 +12,9 @@ export interface SharedRuntimeAssetFile {
 
 export interface CompileWorkerRequest {
 	type: 'compile';
+	compilerWorkerUrl: string;
+	executableGraphFingerprint?: string;
+	verifiedExecutableModuleUrls?: Readonly<Record<string, string>>;
 	runtimeBaseUrl: string;
 	manifest: NormalizedRuntimeManifest;
 	request: BrowserRustCompileWorkerRequest;
@@ -75,6 +78,7 @@ export type CompileWorkerMessage =
 
 export interface RustcThreadWorkerRequest {
 	type: 'thread-start';
+	rustcThreadWorkerUrl: string;
 	runtimeBaseUrl: string;
 	manifest: NormalizedRuntimeManifest;
 	sourceCode: string;
@@ -94,6 +98,7 @@ export interface RustcThreadWorkerRequest {
 
 export interface RustcThreadPoolInitRequest {
 	type: 'thread-pool-init';
+	rustcThreadWorkerUrl: string;
 	runtimeBaseUrl: string;
 	manifest: NormalizedRuntimeManifest;
 	sourceCode: string;

@@ -1,0 +1,1311 @@
+{
+  "schemaVersion": 1,
+  "format": "wasm-idle-rust-executable-graph-v1",
+  "authority": "published-static",
+  "entryPath": "index.js",
+  "modules": {
+    "asset-url.js": {
+      "delivery": {
+        "storagePath": "asset-url.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 300,
+        "sha256": "0cfc9638ca814251f9ddf117a5cef1832a1ee1c5035226f6538cdf739c55772a"
+      },
+      "logical": {
+        "bytes": 300,
+        "sha256": "0cfc9638ca814251f9ddf117a5cef1832a1ee1c5035226f6538cdf739c55772a"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "browser-component-tools.js": {
+      "delivery": {
+        "storagePath": "browser-component-tools.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 12267,
+        "sha256": "5d8981ab2e776cf1c91afdf7e08b7bacb53ff60ec9353294098309aa7db66d30"
+      },
+      "logical": {
+        "bytes": 12267,
+        "sha256": "5d8981ab2e776cf1c91afdf7e08b7bacb53ff60ec9353294098309aa7db66d30"
+      },
+      "imports": [
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/jco/obj/wasm-tools.js",
+          "target": "vendor/jco/obj/wasm-tools.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/jco/src/browser.js",
+          "target": "vendor/jco/src/browser.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/cli.js",
+          "target": "vendor/preview2-shim/lib/browser/cli.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/clocks.js",
+          "target": "vendor/preview2-shim/lib/browser/clocks.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/filesystem.js",
+          "target": "vendor/preview2-shim/lib/browser/filesystem.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/http.js",
+          "target": "vendor/preview2-shim/lib/browser/http.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/io.js",
+          "target": "vendor/preview2-shim/lib/browser/io.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/random.js",
+          "target": "vendor/preview2-shim/lib/browser/random.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/sockets.js",
+          "target": "vendor/preview2-shim/lib/browser/sockets.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-asset.js",
+          "target": "runtime-asset.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-manifest.js",
+          "target": "runtime-manifest.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "browser-execution.js": {
+      "delivery": {
+        "storagePath": "browser-execution.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 6907,
+        "sha256": "c6897e959c05627e5bb708a4f1d4035f6b911adc86e8d7c4a735cd391b91e944"
+      },
+      "logical": {
+        "bytes": 6907,
+        "sha256": "c6897e959c05627e5bb708a4f1d4035f6b911adc86e8d7c4a735cd391b91e944"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./asset-url.js",
+          "target": "asset-url.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./browser-component-tools.js",
+          "target": "browser-component-tools.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./browser-stdin.js",
+          "target": "browser-stdin.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./vendor/browser_wasi_shim/fd.js",
+          "target": "vendor/browser_wasi_shim/fd.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./vendor/browser_wasi_shim/fs_mem.js",
+          "target": "vendor/browser_wasi_shim/fs_mem.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./vendor/browser_wasi_shim/wasi.js",
+          "target": "vendor/browser_wasi_shim/wasi.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./vendor/browser_wasi_shim/wasi_defs.js",
+          "target": "vendor/browser_wasi_shim/wasi_defs.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "browser-linker.js": {
+      "delivery": {
+        "storagePath": "browser-linker.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 12616,
+        "sha256": "5bb3d25bab942c7908a0ec8116dc8c11c5c46117b3ccde40cd88219da2855cb7"
+      },
+      "logical": {
+        "bytes": 12616,
+        "sha256": "5bb3d25bab942c7908a0ec8116dc8c11c5c46117b3ccde40cd88219da2855cb7"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./browser-component-tools.js",
+          "target": "browser-component-tools.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-asset-store.js",
+          "target": "runtime-asset-store.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-asset.js",
+          "target": "runtime-asset.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-manifest.js",
+          "target": "runtime-manifest.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "browser-stdin.js": {
+      "delivery": {
+        "storagePath": "browser-stdin.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 1482,
+        "sha256": "52dba3d7edc435816adb4b795033000f3d5fee16bb265710b4361601f9a1eee5"
+      },
+      "logical": {
+        "bytes": 1482,
+        "sha256": "52dba3d7edc435816adb4b795033000f3d5fee16bb265710b4361601f9a1eee5"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "compiler-preload.js": {
+      "delivery": {
+        "storagePath": "compiler-preload.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 6719,
+        "sha256": "00528f41dbe28a20bd3389889a01ab444780b66be68cfa312e701b17a2e6e185"
+      },
+      "logical": {
+        "bytes": 6719,
+        "sha256": "00528f41dbe28a20bd3389889a01ab444780b66be68cfa312e701b17a2e6e185"
+      },
+      "imports": [
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/jco/obj/wasm-tools.js",
+          "target": "vendor/jco/obj/wasm-tools.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/jco/src/browser.js",
+          "target": "vendor/jco/src/browser.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/cli.js",
+          "target": "vendor/preview2-shim/lib/browser/cli.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/clocks.js",
+          "target": "vendor/preview2-shim/lib/browser/clocks.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/filesystem.js",
+          "target": "vendor/preview2-shim/lib/browser/filesystem.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/http.js",
+          "target": "vendor/preview2-shim/lib/browser/http.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/io.js",
+          "target": "vendor/preview2-shim/lib/browser/io.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/random.js",
+          "target": "vendor/preview2-shim/lib/browser/random.js"
+        },
+        {
+          "kind": "dynamic",
+          "specifier": "../vendor/preview2-shim/lib/browser/sockets.js",
+          "target": "vendor/preview2-shim/lib/browser/sockets.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./asset-url.js",
+          "target": "asset-url.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./browser-component-tools.js",
+          "target": "browser-component-tools.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./compiler-runtime.js",
+          "target": "compiler-runtime.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-asset.js",
+          "target": "runtime-asset.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-manifest.js",
+          "target": "runtime-manifest.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "compiler-runtime.js": {
+      "delivery": {
+        "storagePath": "compiler-runtime.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 2608,
+        "sha256": "cdb81fdb5d5ce4b872e74f622444ea4da87f3f76a2ae2d28250cb523f6c5da0f"
+      },
+      "logical": {
+        "bytes": 2608,
+        "sha256": "cdb81fdb5d5ce4b872e74f622444ea4da87f3f76a2ae2d28250cb523f6c5da0f"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./asset-url.js",
+          "target": "asset-url.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-manifest.js",
+          "target": "runtime-manifest.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "compiler-support.js": {
+      "delivery": {
+        "storagePath": "compiler-support.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 3656,
+        "sha256": "cc42eadb107b61d04142739840d823fdbb70d9d167f9706e31e73291a085e6a3"
+      },
+      "logical": {
+        "bytes": 3656,
+        "sha256": "cc42eadb107b61d04142739840d823fdbb70d9d167f9706e31e73291a085e6a3"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "compiler-worker.js": {
+      "delivery": {
+        "storagePath": "compiler-worker.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 19728,
+        "sha256": "0959cb65fd230338dd6c9a4534505125f2cb074065ea25b4fa0b7ed2d6278cf0"
+      },
+      "logical": {
+        "bytes": 19728,
+        "sha256": "0959cb65fd230338dd6c9a4534505125f2cb074065ea25b4fa0b7ed2d6278cf0"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./asset-url.js",
+          "target": "asset-url.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./compiler-support.js",
+          "target": "compiler-support.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./module-worker.js",
+          "target": "module-worker.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./retryable-failure-kind.js",
+          "target": "retryable-failure-kind.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-asset-store.js",
+          "target": "runtime-asset-store.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-asset.js",
+          "target": "runtime-asset.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-manifest.js",
+          "target": "runtime-manifest.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./rustc-runtime.js",
+          "target": "rustc-runtime.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./thread-startup.js",
+          "target": "thread-startup.js"
+        },
+        {
+          "kind": "worker",
+          "specifier": "./rustc-thread-worker.js",
+          "target": "rustc-thread-worker.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "compiler.js": {
+      "delivery": {
+        "storagePath": "compiler.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 30977,
+        "sha256": "540c35a4a00115a4fc9fe2e31363b80bba404bee66c75aad47639c269d2292be"
+      },
+      "logical": {
+        "bytes": 30977,
+        "sha256": "540c35a4a00115a4fc9fe2e31363b80bba404bee66c75aad47639c269d2292be"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./asset-url.js",
+          "target": "asset-url.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./browser-linker.js",
+          "target": "browser-linker.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./compiler-preload.js",
+          "target": "compiler-preload.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./compiler-runtime.js",
+          "target": "compiler-runtime.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./compiler-support.js",
+          "target": "compiler-support.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./module-worker.js",
+          "target": "module-worker.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./retryable-failure-kind.js",
+          "target": "retryable-failure-kind.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-manifest.js",
+          "target": "runtime-manifest.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./rustc-runtime.js",
+          "target": "rustc-runtime.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./worker-status.js",
+          "target": "worker-status.js"
+        },
+        {
+          "kind": "worker",
+          "specifier": "./compiler-worker.js",
+          "target": "compiler-worker.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "index.js": {
+      "delivery": {
+        "storagePath": "index.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 3686,
+        "sha256": "cfbc70c3349b35c1f510ead79fdfb95bb29700f2566716b6b5fa0d1017cd00d7"
+      },
+      "logical": {
+        "bytes": 3686,
+        "sha256": "cfbc70c3349b35c1f510ead79fdfb95bb29700f2566716b6b5fa0d1017cd00d7"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./browser-execution.js",
+          "target": "browser-execution.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./compiler-runtime.js",
+          "target": "compiler-runtime.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./compiler.js",
+          "target": "compiler.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-manifest.js",
+          "target": "runtime-manifest.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "module-worker.js": {
+      "delivery": {
+        "storagePath": "module-worker.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 104,
+        "sha256": "317eee43c55be3923ffc9630342deeac9ff1030abb2cb2d222e1036ca796b3fc"
+      },
+      "logical": {
+        "bytes": 104,
+        "sha256": "317eee43c55be3923ffc9630342deeac9ff1030abb2cb2d222e1036ca796b3fc"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "retryable-failure-kind.js": {
+      "delivery": {
+        "storagePath": "retryable-failure-kind.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 1432,
+        "sha256": "32d49e791d1c35329e8aa8dc16cc372ee0c52ba8570c7488c7f7a5a99e1e003c"
+      },
+      "logical": {
+        "bytes": 1432,
+        "sha256": "32d49e791d1c35329e8aa8dc16cc372ee0c52ba8570c7488c7f7a5a99e1e003c"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "runtime-asset-store.js": {
+      "delivery": {
+        "storagePath": "runtime-asset-store.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 16608,
+        "sha256": "769111f9fbcef89ad83cddd3a9081c8908638e0f0a1bb80702f65f454d0866ce"
+      },
+      "logical": {
+        "bytes": 16608,
+        "sha256": "769111f9fbcef89ad83cddd3a9081c8908638e0f0a1bb80702f65f454d0866ce"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./asset-url.js",
+          "target": "asset-url.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-asset.js",
+          "target": "runtime-asset.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "runtime-asset.js": {
+      "delivery": {
+        "storagePath": "runtime-asset.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 21586,
+        "sha256": "a922e7598932199505715884ab75efb6bd2b4a283f2741e44b9e38a81f18d951"
+      },
+      "logical": {
+        "bytes": 21586,
+        "sha256": "a922e7598932199505715884ab75efb6bd2b4a283f2741e44b9e38a81f18d951"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "runtime-manifest.js": {
+      "delivery": {
+        "storagePath": "runtime-manifest.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 46493,
+        "sha256": "8fb4f728a386c2350fd8e49f1c1cd3c562dbe6c602cb1762d976945b63549d27"
+      },
+      "logical": {
+        "bytes": 46493,
+        "sha256": "8fb4f728a386c2350fd8e49f1c1cd3c562dbe6c602cb1762d976945b63549d27"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./asset-url.js",
+          "target": "asset-url.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./runtime-asset.js",
+          "target": "runtime-asset.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "rustc-runtime.js": {
+      "delivery": {
+        "storagePath": "rustc-runtime.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 22766,
+        "sha256": "f72739e496d8b9e012f323f30f5869f8fee2d444986494cfe08c378fc05e6913"
+      },
+      "logical": {
+        "bytes": 22766,
+        "sha256": "f72739e496d8b9e012f323f30f5869f8fee2d444986494cfe08c378fc05e6913"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./shared-workspace.js",
+          "target": "shared-workspace.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./vendor/browser_wasi_shim/index.js",
+          "target": "vendor/browser_wasi_shim/index.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "rustc-thread-worker.js": {
+      "delivery": {
+        "storagePath": "rustc-thread-worker.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 11900,
+        "sha256": "0fcaad568a966036952251eeabab53c99483d1e484f1cd7644ca5630ecdbb10e"
+      },
+      "logical": {
+        "bytes": 11900,
+        "sha256": "0fcaad568a966036952251eeabab53c99483d1e484f1cd7644ca5630ecdbb10e"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./module-worker.js",
+          "target": "module-worker.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./rustc-runtime.js",
+          "target": "rustc-runtime.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./thread-startup.js",
+          "target": "thread-startup.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./worker-status.js",
+          "target": "worker-status.js"
+        },
+        {
+          "kind": "worker",
+          "specifier": "./rustc-thread-worker.js",
+          "target": "rustc-thread-worker.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "shared-workspace.js": {
+      "delivery": {
+        "storagePath": "shared-workspace.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 16122,
+        "sha256": "a522f740cac9d237cedb54ad4aaeb68e595a08073259a1e603f5dec3d7274469"
+      },
+      "logical": {
+        "bytes": 16122,
+        "sha256": "a522f740cac9d237cedb54ad4aaeb68e595a08073259a1e603f5dec3d7274469"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./vendor/browser_wasi_shim/index.js",
+          "target": "vendor/browser_wasi_shim/index.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "thread-startup.js": {
+      "delivery": {
+        "storagePath": "thread-startup.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 2096,
+        "sha256": "2c407a04ed387991ff4c770d3ba8af6f493217ba48c57df381ab13909799e258"
+      },
+      "logical": {
+        "bytes": 2096,
+        "sha256": "2c407a04ed387991ff4c770d3ba8af6f493217ba48c57df381ab13909799e258"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/browser_wasi_shim/debug.js": {
+      "delivery": {
+        "storagePath": "vendor/browser_wasi_shim/debug.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 414,
+        "sha256": "a91848ee180529e2a60c05dfb9584cad19cd4e1c6f391fdb76a938bcae4c0328"
+      },
+      "logical": {
+        "bytes": 414,
+        "sha256": "a91848ee180529e2a60c05dfb9584cad19cd4e1c6f391fdb76a938bcae4c0328"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/browser_wasi_shim/fd.js": {
+      "delivery": {
+        "storagePath": "vendor/browser_wasi_shim/fd.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 1906,
+        "sha256": "9e82e1fc1bfd3e3573f64349dc42b4b624ed61d24e5c553f2bb4d041444f166c"
+      },
+      "logical": {
+        "bytes": 1906,
+        "sha256": "9e82e1fc1bfd3e3573f64349dc42b4b624ed61d24e5c553f2bb4d041444f166c"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./wasi_defs.js",
+          "target": "vendor/browser_wasi_shim/wasi_defs.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/browser_wasi_shim/fs_mem.js": {
+      "delivery": {
+        "storagePath": "vendor/browser_wasi_shim/fs_mem.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 12206,
+        "sha256": "85dbc9e0ee784d9ff8b55452644e00bf7058e32355aab974f8b71d7d85772324"
+      },
+      "logical": {
+        "bytes": 12206,
+        "sha256": "85dbc9e0ee784d9ff8b55452644e00bf7058e32355aab974f8b71d7d85772324"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./debug.js",
+          "target": "vendor/browser_wasi_shim/debug.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./fd.js",
+          "target": "vendor/browser_wasi_shim/fd.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./wasi_defs.js",
+          "target": "vendor/browser_wasi_shim/wasi_defs.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/browser_wasi_shim/fs_opfs.js": {
+      "delivery": {
+        "storagePath": "vendor/browser_wasi_shim/fs_opfs.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 2280,
+        "sha256": "4b96aaeb5ac5986cf802cbf22b975c656682d22a38248160c96fc2ded5644869"
+      },
+      "logical": {
+        "bytes": 2280,
+        "sha256": "4b96aaeb5ac5986cf802cbf22b975c656682d22a38248160c96fc2ded5644869"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./fd.js",
+          "target": "vendor/browser_wasi_shim/fd.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./wasi_defs.js",
+          "target": "vendor/browser_wasi_shim/wasi_defs.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/browser_wasi_shim/index.js": {
+      "delivery": {
+        "storagePath": "vendor/browser_wasi_shim/index.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 316,
+        "sha256": "7e2fd52ee3f728bb0b1d6e449724e0f13e3d586bb25bde6e02a66366175b5605"
+      },
+      "logical": {
+        "bytes": 316,
+        "sha256": "7e2fd52ee3f728bb0b1d6e449724e0f13e3d586bb25bde6e02a66366175b5605"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./fd.js",
+          "target": "vendor/browser_wasi_shim/fd.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./fs_mem.js",
+          "target": "vendor/browser_wasi_shim/fs_mem.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./fs_opfs.js",
+          "target": "vendor/browser_wasi_shim/fs_opfs.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./strace.js",
+          "target": "vendor/browser_wasi_shim/strace.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./wasi.js",
+          "target": "vendor/browser_wasi_shim/wasi.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./wasi_defs.js",
+          "target": "vendor/browser_wasi_shim/wasi_defs.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/browser_wasi_shim/strace.js": {
+      "delivery": {
+        "storagePath": "vendor/browser_wasi_shim/strace.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 318,
+        "sha256": "ece435d3784d928d02bff4d015b7cb686f8c06de8536ff9f8ebc38a8f403a3be"
+      },
+      "logical": {
+        "bytes": 318,
+        "sha256": "ece435d3784d928d02bff4d015b7cb686f8c06de8536ff9f8ebc38a8f403a3be"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/browser_wasi_shim/wasi.js": {
+      "delivery": {
+        "storagePath": "vendor/browser_wasi_shim/wasi.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 16429,
+        "sha256": "168eb977a826f75ab0c39f9322f78cc58dbd5b233019ad1d6a7e940af8a7c4aa"
+      },
+      "logical": {
+        "bytes": 16429,
+        "sha256": "168eb977a826f75ab0c39f9322f78cc58dbd5b233019ad1d6a7e940af8a7c4aa"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./debug.js",
+          "target": "vendor/browser_wasi_shim/debug.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./wasi_defs.js",
+          "target": "vendor/browser_wasi_shim/wasi_defs.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/browser_wasi_shim/wasi_defs.js": {
+      "delivery": {
+        "storagePath": "vendor/browser_wasi_shim/wasi_defs.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 9027,
+        "sha256": "0db0f42ba330749a7b05095ea1fd0ff63fd2b30e84cead30fe4c28359d15f194"
+      },
+      "logical": {
+        "bytes": 9027,
+        "sha256": "0db0f42ba330749a7b05095ea1fd0ff63fd2b30e84cead30fe4c28359d15f194"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/jco/obj/js-component-bindgen-component.js": {
+      "delivery": {
+        "storagePath": "vendor/jco/obj/js-component-bindgen-component.js.gz.bin",
+        "encoding": "gzip"
+      },
+      "storage": {
+        "bytes": 41401,
+        "sha256": "7b5f36771a9bbcb47576d45d00629c59e9046166e5c6b686a2e3b77f0058e612"
+      },
+      "logical": {
+        "bytes": 358340,
+        "sha256": "bf5ea764275866171fe564ea92a78f9289ef7ff47746534887b882235a6e780c"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "../../../runtime-asset.js",
+          "target": "runtime-asset.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "../../preview2-shim/lib/browser/cli.js",
+          "target": "vendor/preview2-shim/lib/browser/cli.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "../../preview2-shim/lib/browser/filesystem.js",
+          "target": "vendor/preview2-shim/lib/browser/filesystem.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "../../preview2-shim/lib/browser/io.js",
+          "target": "vendor/preview2-shim/lib/browser/io.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "../../preview2-shim/lib/browser/random.js",
+          "target": "vendor/preview2-shim/lib/browser/random.js"
+        }
+      ],
+      "assets": [
+        {
+          "kind": "core-wasm",
+          "specifier": "./js-component-bindgen-component.core.wasm",
+          "target": "vendor/jco/obj/js-component-bindgen-component.core.wasm.gz"
+        },
+        {
+          "kind": "core-wasm",
+          "specifier": "./js-component-bindgen-component.core2.wasm",
+          "target": "vendor/jco/obj/js-component-bindgen-component.core2.wasm"
+        }
+      ],
+      "externals": [
+        {
+          "specifier": "node:fs/promises",
+          "kind": "dynamic",
+          "condition": "node-only"
+        }
+      ]
+    },
+    "vendor/jco/obj/wasm-tools.js": {
+      "delivery": {
+        "storagePath": "vendor/jco/obj/wasm-tools.js.gz.bin",
+        "encoding": "gzip"
+      },
+      "storage": {
+        "bytes": 42464,
+        "sha256": "9bf222d2dfc2006ee0ffe2a79f5d0d15816f44938458e0e0f6eec4ba820b0ff0"
+      },
+      "logical": {
+        "bytes": 376425,
+        "sha256": "b34e3766db2e82991f9c531e8f7d30533f1907f6ddb3b873517100a2ce66bbfb"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "../../../runtime-asset.js",
+          "target": "runtime-asset.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "../../preview2-shim/lib/browser/cli.js",
+          "target": "vendor/preview2-shim/lib/browser/cli.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "../../preview2-shim/lib/browser/filesystem.js",
+          "target": "vendor/preview2-shim/lib/browser/filesystem.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "../../preview2-shim/lib/browser/io.js",
+          "target": "vendor/preview2-shim/lib/browser/io.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "../../preview2-shim/lib/browser/random.js",
+          "target": "vendor/preview2-shim/lib/browser/random.js"
+        }
+      ],
+      "assets": [
+        {
+          "kind": "core-wasm",
+          "specifier": "./wasm-tools.core.wasm",
+          "target": "vendor/jco/obj/wasm-tools.core.wasm.gz"
+        },
+        {
+          "kind": "core-wasm",
+          "specifier": "./wasm-tools.core2.wasm",
+          "target": "vendor/jco/obj/wasm-tools.core2.wasm"
+        }
+      ],
+      "externals": [
+        {
+          "specifier": "node:fs/promises",
+          "kind": "dynamic",
+          "condition": "node-only"
+        }
+      ]
+    },
+    "vendor/jco/src/browser.js": {
+      "delivery": {
+        "storagePath": "vendor/jco/src/browser.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 404,
+        "sha256": "7d8d056dedc4327245520d7b3b2ce1930953f017fe0335902899e8aa5dbd3f8e"
+      },
+      "logical": {
+        "bytes": 404,
+        "sha256": "7d8d056dedc4327245520d7b3b2ce1930953f017fe0335902899e8aa5dbd3f8e"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "../obj/js-component-bindgen-component.js",
+          "target": "vendor/jco/obj/js-component-bindgen-component.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/preview2-shim/lib/browser/cli.js": {
+      "delivery": {
+        "storagePath": "vendor/preview2-shim/lib/browser/cli.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 2826,
+        "sha256": "fc73e8c872db6e100522ae1b41c1b7ae5160ac97629610cae53eb2bc2d320266"
+      },
+      "logical": {
+        "bytes": 2826,
+        "sha256": "fc73e8c872db6e100522ae1b41c1b7ae5160ac97629610cae53eb2bc2d320266"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./config.js",
+          "target": "vendor/preview2-shim/lib/browser/config.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./environment.js",
+          "target": "vendor/preview2-shim/lib/browser/environment.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./io.js",
+          "target": "vendor/preview2-shim/lib/browser/io.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/preview2-shim/lib/browser/clocks.js": {
+      "delivery": {
+        "storagePath": "vendor/preview2-shim/lib/browser/clocks.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 1170,
+        "sha256": "3a44508f62ce3cd3fb2adbabf8cc70be0c3fd962bb0e77cbc8125b6d5bba3f35"
+      },
+      "logical": {
+        "bytes": 1170,
+        "sha256": "3a44508f62ce3cd3fb2adbabf8cc70be0c3fd962bb0e77cbc8125b6d5bba3f35"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./io.js",
+          "target": "vendor/preview2-shim/lib/browser/io.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/preview2-shim/lib/browser/config.js": {
+      "delivery": {
+        "storagePath": "vendor/preview2-shim/lib/browser/config.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 110,
+        "sha256": "ef5271f78522c5ecb7fee3579f73f12a43e85874f6bfcb24d449d0d6e1c9e813"
+      },
+      "logical": {
+        "bytes": 110,
+        "sha256": "ef5271f78522c5ecb7fee3579f73f12a43e85874f6bfcb24d449d0d6e1c9e813"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/preview2-shim/lib/browser/environment.js": {
+      "delivery": {
+        "storagePath": "vendor/preview2-shim/lib/browser/environment.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 434,
+        "sha256": "6a755f21d705e98caede66bb86e5aa880deff71c1721c39a641a59d287123298"
+      },
+      "logical": {
+        "bytes": 434,
+        "sha256": "6a755f21d705e98caede66bb86e5aa880deff71c1721c39a641a59d287123298"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./config.js",
+          "target": "vendor/preview2-shim/lib/browser/config.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/preview2-shim/lib/browser/filesystem.js": {
+      "delivery": {
+        "storagePath": "vendor/preview2-shim/lib/browser/filesystem.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 11570,
+        "sha256": "083e8c1be5c4b11264c3be7e15477fc37894723a649445daeaabfb973460acc5"
+      },
+      "logical": {
+        "bytes": 11570,
+        "sha256": "083e8c1be5c4b11264c3be7e15477fc37894723a649445daeaabfb973460acc5"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./config.js",
+          "target": "vendor/preview2-shim/lib/browser/config.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./environment.js",
+          "target": "vendor/preview2-shim/lib/browser/environment.js"
+        },
+        {
+          "kind": "static",
+          "specifier": "./io.js",
+          "target": "vendor/preview2-shim/lib/browser/io.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/preview2-shim/lib/browser/http.js": {
+      "delivery": {
+        "storagePath": "vendor/preview2-shim/lib/browser/http.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 17055,
+        "sha256": "270e10d75628add4d96878b705dbf0ce3121648540c2c8df331796f809c7d84a"
+      },
+      "logical": {
+        "bytes": 17055,
+        "sha256": "270e10d75628add4d96878b705dbf0ce3121648540c2c8df331796f809c7d84a"
+      },
+      "imports": [
+        {
+          "kind": "static",
+          "specifier": "./io.js",
+          "target": "vendor/preview2-shim/lib/browser/io.js"
+        }
+      ],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/preview2-shim/lib/browser/io.js": {
+      "delivery": {
+        "storagePath": "vendor/preview2-shim/lib/browser/io.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 6348,
+        "sha256": "c2429defe2de286efe7579c76e17a627d68846fb9c100260b1f5ea4ddb370096"
+      },
+      "logical": {
+        "bytes": 6348,
+        "sha256": "c2429defe2de286efe7579c76e17a627d68846fb9c100260b1f5ea4ddb370096"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/preview2-shim/lib/browser/random.js": {
+      "delivery": {
+        "storagePath": "vendor/preview2-shim/lib/browser/random.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 1531,
+        "sha256": "10ca591c575a43051f205ef953861e2bcba3a917e1ffbb40d74c0bc6985c4eb2"
+      },
+      "logical": {
+        "bytes": 1531,
+        "sha256": "10ca591c575a43051f205ef953861e2bcba3a917e1ffbb40d74c0bc6985c4eb2"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "vendor/preview2-shim/lib/browser/sockets.js": {
+      "delivery": {
+        "storagePath": "vendor/preview2-shim/lib/browser/sockets.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 1370,
+        "sha256": "a9a6ba4c7847c8109924447d36ec3087d410237e0728832f1de14625d03969e3"
+      },
+      "logical": {
+        "bytes": 1370,
+        "sha256": "a9a6ba4c7847c8109924447d36ec3087d410237e0728832f1de14625d03969e3"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    },
+    "worker-status.js": {
+      "delivery": {
+        "storagePath": "worker-status.js.bin",
+        "encoding": "identity"
+      },
+      "storage": {
+        "bytes": 3841,
+        "sha256": "8c345945f87eb1305fca69d4b99cca7a3df90a8f5b4ac334cd04e5d5b5be7041"
+      },
+      "logical": {
+        "bytes": 3841,
+        "sha256": "8c345945f87eb1305fca69d4b99cca7a3df90a8f5b4ac334cd04e5d5b5be7041"
+      },
+      "imports": [],
+      "assets": [],
+      "externals": []
+    }
+  },
+  "fingerprint": "3ed274fdff8f7c421b01da0bebf0f4f3be3c1e1bec6fdec8d090da4b2db0feaa"
+}

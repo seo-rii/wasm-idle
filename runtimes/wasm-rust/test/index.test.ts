@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/browser-execution.js', () => ({
 	executeBrowserRustArtifact: vi.fn()
@@ -15,8 +15,13 @@ import {
 	createRuntimeManifestV3,
 	mirrorBitcode
 } from './helpers.js';
+import {
+	clearVerifiedRuntimeExecutableModuleUrls,
+	configureVerifiedRuntimeExecutableModuleUrls
+} from '../src/runtime-manifest.js';
 
 describe('wasm-rust compiler contract', () => {
+	afterEach(() => clearVerifiedRuntimeExecutableModuleUrls());
 	it('exports both default and named factory functions', async () => {
 		const defaultCompiler = await createRustCompiler();
 		const namedCompiler = await createNamedCompiler();
@@ -60,6 +65,76 @@ describe('wasm-rust compiler contract', () => {
 		expect(result.artifact?.targetTriple).toBe('wasm32-wasip1');
 		expect(result.artifact?.format).toBe('core-wasm');
 		expect(result.artifact?.wat).toBeUndefined();
+	});
+
+	it('starts the verified compiler worker URL without an executable query suffix', async () => {
+		let clock = 0;
+		let createdWorkerUrl = '';
+		const compiler = await createRustCompiler({
+			dependencies: {
+				loadManifest: async () => createRuntimeManifest(),
+				createWorker: (url) => {
+					createdWorkerUrl = url.toString();
+					return new FakeWorker((message) => {
+						mirrorBitcode(message.sharedBitcodeBuffer, new Uint8Array([1]));
+					});
+				},
+				linkBitcode: async () => ({
+					wasm: new Uint8Array([0]),
+					targetTriple: 'wasm32-wasip1',
+					format: 'core-wasm'
+				}),
+				now: () => clock,
+				sleep: async (milliseconds) => {
+					clock += milliseconds;
+				}
+			}
+		});
+
+		await compiler.compile({ code: 'fn main() {}' });
+
+		expect(createdWorkerUrl).toMatch(/\/compiler-worker\.js\?v=test-runtime-v1$/u);
+		expect(createdWorkerUrl).not.toContain('attempt=');
+	});
+
+	it('passes the activated executable graph into the compiler worker realm', async () => {
+		let clock = 0;
+		let postedRequest: Record<string, unknown> | undefined;
+		const fingerprint = 'a'.repeat(64);
+		const moduleUrls = {
+			[`https://example.test/wasm-rust/runtime/llvm/llc.js?v=${'1'.repeat(64)}`]:
+				'blob:https://example.test/verified-llc'
+		};
+		configureVerifiedRuntimeExecutableModuleUrls(moduleUrls, fingerprint);
+		const compiler = await createRustCompiler({
+			dependencies: {
+				loadManifest: async () => createRuntimeManifest(),
+				createWorker: () =>
+					new FakeWorker((message) => {
+						postedRequest = message as Record<string, unknown>;
+						mirrorBitcode(message.sharedBitcodeBuffer, new Uint8Array([1]));
+					}),
+				linkBitcode: async () => ({
+					wasm: new Uint8Array([0]),
+					targetTriple: 'wasm32-wasip1',
+					format: 'core-wasm'
+				}),
+				now: () => clock,
+				sleep: async (milliseconds) => {
+					clock += milliseconds;
+				}
+			}
+		});
+
+		await compiler.compile({ code: 'fn main() {}' });
+
+		expect(postedRequest).toMatchObject({
+			executableGraphFingerprint: fingerprint,
+			verifiedExecutableModuleUrls: moduleUrls
+		});
+		expect(postedRequest?.compilerWorkerUrl).toMatch(
+			/compiler-worker\.js\?v=test-runtime-v1$/u
+		);
 	});
 
 	it('preloads selected target runtime assets and component modules', async () => {
@@ -172,5 +247,32 @@ describe('wasm-rust compiler contract', () => {
 				expect.stringMatching(/vendor\/preview2-shim\/lib\/browser\/cli\.js/)
 			])
 		);
+	});
+
+	it('does not refetch worker JavaScript after executable graph activation', async () => {
+		const fetchedUrls: string[] = [];
+		configureVerifiedRuntimeExecutableModuleUrls(
+			{
+				'https://example.test/wasm-rust/compiler-worker.js':
+					'blob:https://example.test/compiler-worker'
+			},
+			'a'.repeat(64)
+		);
+
+		await preloadBrowserRustRuntime({
+			targetTriple: 'wasm32-wasip1',
+			dependencies: {
+				loadManifest: async () => createIntegratedRuntimeManifestV3(),
+				fetchImpl: async (assetUrl) => {
+					fetchedUrls.push(assetUrl.toString());
+					return new Response(new Uint8Array([1, 2, 3]));
+				},
+				importRuntimeModule: async () => ({})
+			}
+		});
+
+		expect(fetchedUrls.some((url) => url.includes('compiler-worker.js'))).toBe(false);
+		expect(fetchedUrls.some((url) => url.includes('rustc-thread-worker.js'))).toBe(false);
+		expect(fetchedUrls.some((url) => url.includes('rustc.wasm'))).toBe(true);
 	});
 });

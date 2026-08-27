@@ -27,6 +27,8 @@ import {
 } from './browser-execution.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
 import {
+	configureVerifiedRuntimeExecutableModuleUrls,
+	hasVerifiedRuntimeExecutableModuleUrls,
 	parseWasmRustRuntimeProfileFromModuleUrl,
 	type WasmRustRuntimeProfile
 } from './runtime-manifest.js';
@@ -51,8 +53,17 @@ export type {
 	BrowserExecutionResult
 };
 export { createBrowserRustCompileRequestIdentity, resolveBrowserRustDebugMode };
+export { configureVerifiedRuntimeExecutableModuleUrls };
 
 const bundledRuntimeProfile = parseWasmRustRuntimeProfileFromModuleUrl(import.meta.url);
+
+function requireVerifiedExecutableGraph() {
+	if (bundledRuntimeProfile && !hasVerifiedRuntimeExecutableModuleUrls()) {
+		throw new Error(
+			'wasm-rust executable modules must be loaded through a receipt-verified graph'
+		);
+	}
+}
 
 function assertMatchingRuntimeProfile(
 	provided: WasmRustRuntimeProfile | undefined,
@@ -86,6 +97,7 @@ function sealCompileDependencies(
 }
 
 export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRuntimeOptions = {}) {
+	requireVerifiedExecutableGraph();
 	if (bundledRuntimeProfile) {
 		assertMatchingRuntimeProfile(options.dependencies?.runtimeProfile, bundledRuntimeProfile);
 	}
@@ -112,6 +124,7 @@ export async function executeBrowserRustArtifact(
 	runtimeBaseUrlOrOptions?: string | BrowserExecutionOptions,
 	options?: BrowserExecutionOptions
 ): Promise<BrowserExecutionResult> {
+	requireVerifiedExecutableGraph();
 	if (typeof runtimeBaseUrlOrOptions === 'string') {
 		return executeBrowserRustArtifactInternal(artifact, runtimeBaseUrlOrOptions, options);
 	}
@@ -133,6 +146,7 @@ export async function executeBrowserRustArtifact(
 export async function createRustCompiler(
 	options?: CreateRustCompilerOptions
 ): Promise<BrowserRustCompiler> {
+	requireVerifiedExecutableGraph();
 	return {
 		compile: async (request) =>
 			compileRust(

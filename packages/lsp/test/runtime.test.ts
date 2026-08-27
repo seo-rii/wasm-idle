@@ -710,29 +710,17 @@ describe('lsp runtime asset resolution', () => {
 	});
 
 	it('requires host context for document-relative asset overrides', () => {
-		const options = { rust: { compilerUrl: './assets/rustc.js' } };
-
-		expect(() => resolveRustLanguageServerCompilerUrl(options)).toThrow(
-			LanguageServerAssetConfigurationError
+		const compilerUrl = 'blob:https://app.example/verified-rust-entry';
+		expect(resolveRustLanguageServerCompilerUrl({ rust: { compilerUrl } })).toBe(compilerUrl);
+		expect(() => resolveRustLanguageServerCompilerUrl(undefined)).toThrow(
+			'explicit verified compiler Blob URL'
 		);
-		expect(
-			resolveRustLanguageServerCompilerUrl(
-				options,
-				'https://app.example.com/wasm-idle/editor/'
-			)
-		).toBe('https://app.example.com/wasm-idle/editor/assets/rustc.js');
-		expect(
-			resolveRustLanguageServerCompilerUrl({
-				rust: { compilerUrl: '/wasm-idle/wasm-rust/index.js' }
-			})
-		).toBe('/wasm-idle/wasm-rust/index.js');
 	});
 
 	it('resolves declared runtime roots and rejects document-relative fallbacks', () => {
 		const applicationUrl = 'https://app.example.com/wasm-idle/';
 		const cases: [(options: string | undefined, currentUrl: string) => string, string][] = [
 			[resolveAssemblyScriptLanguageServerModuleUrl, 'wasm-assemblyscript/runtime.mjs'],
-			[resolveRustLanguageServerCompilerUrl, 'wasm-rust/index.js'],
 			[resolveGoLanguageServerCompilerUrl, 'wasm-go/index.js'],
 			[resolveDLanguageServerModuleUrl, 'wasm-d/index.js'],
 			[resolveGleamLanguageServerBaseUrl, 'wasm-gleam/'],
@@ -847,12 +835,12 @@ describe('lsp runtime asset resolution', () => {
 				'https://app.example.com/editor'
 			)
 		).toBe('https://static.example.com/repl_20240807/pyodide/');
-		expect(
+		expect(() =>
 			resolveRustLanguageServerCompilerUrl(
 				'https://static.example.com/repl_20240807',
 				'https://app.example.com/editor'
 			)
-		).toBe('https://static.example.com/repl_20240807/wasm-rust/index.js');
+		).toThrow('explicit verified compiler Blob URL');
 		expect(
 			resolveGoLanguageServerCompilerUrl(
 				'https://static.example.com/repl_20240807',

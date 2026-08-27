@@ -36,6 +36,7 @@ export interface RuntimeAssetKeySource {
 		compilerUrl?: string;
 		manifestUrl?: string;
 		debugModuleUrl?: string;
+		executableGraphFingerprint?: string;
 		profileId?: string;
 		protocolVersion?: number;
 		manifestPath?: string;
@@ -577,6 +578,11 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'rust', property: 'compilerUrl', key: 'rustCompilerUrl' },
 	{ runtime: 'rust', property: 'manifestUrl', key: 'rustManifestUrl' },
 	{ runtime: 'rust', property: 'debugModuleUrl', key: 'rustDebugModuleUrl' },
+	{
+		runtime: 'rust',
+		property: 'executableGraphFingerprint',
+		key: 'rustExecutableGraphFingerprint'
+	},
 	{ runtime: 'rust', property: 'profileId', key: 'rustProfileId' },
 	{
 		runtime: 'rust',

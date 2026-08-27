@@ -5,7 +5,7 @@ import { preloadBrowserRustRuntime } from './compiler-preload.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
-import { isIntegratedCompilerOutput } from './runtime-manifest.js';
+import { getVerifiedRuntimeExecutableGraphConfiguration, isIntegratedCompilerOutput } from './runtime-manifest.js';
 import { readMirroredBitcode } from './rustc-runtime.js';
 import { readWorkerFailure, WORKER_STATUS_BUFFER_BYTES } from './worker-status.js';
 export { createBrowserRustCompileRequestIdentity, resolveBrowserRustDebugMode };
@@ -180,7 +180,7 @@ export async function compileRust(request, dependencies = {}) {
                 });
             };
             const workerUrl = resolveVersionedAssetUrl(versionedModuleBaseUrl, './compiler-worker.js');
-            workerUrl.searchParams.set('attempt', String(attempt));
+            const executableGraph = getVerifiedRuntimeExecutableGraphConfiguration();
             const worker = (dependencies.createWorker || ((url) => createModuleWorker(url)))(workerUrl);
             const sharedBitcodeBuffer = new SharedArrayBuffer(16 + manifest.compiler.workerSharedOutputBytes);
             const sharedWorkspaceBuffer = new SharedArrayBuffer(manifest.compiler.workerSharedWorkspaceBytes);
@@ -209,6 +209,13 @@ export async function compileRust(request, dependencies = {}) {
             });
             worker.postMessage({
                 type: 'compile',
+                compilerWorkerUrl: workerUrl.toString(),
+                ...(executableGraph
+                    ? {
+                        executableGraphFingerprint: executableGraph.fingerprint,
+                        verifiedExecutableModuleUrls: executableGraph.moduleUrls
+                    }
+                    : {}),
                 runtimeBaseUrl: versionedRuntimeBaseUrl.toString(),
                 manifest,
                 request: workerRequest,

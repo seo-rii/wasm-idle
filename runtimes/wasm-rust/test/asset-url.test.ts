@@ -24,4 +24,13 @@ describe('resolveVersionedAssetUrl', () => {
 			'http://127.0.0.1:4173/wasm-rust/runtime/llvm/llc.js?v=runtime-cache-bust'
 		);
 	});
+
+	it('does not append an HTTP generation query to an absolute Blob URL', () => {
+		const resolved = resolveVersionedAssetUrl(
+			'http://127.0.0.1:4173/wasm-rust/compiler-worker.js?v=runtime-cache-bust',
+			'blob:http://127.0.0.1:4173/verified-thread-worker'
+		);
+
+		expect(resolved.toString()).toBe('blob:http://127.0.0.1:4173/verified-thread-worker');
+	});
 });

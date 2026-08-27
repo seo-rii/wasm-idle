@@ -1448,6 +1448,103 @@ export function registerRuntimeManifestAssetReceipts(
 	registerRuntimeAssetReceipts(runtimeBaseUrl, resolvedReceipts);
 }
 
+const EXECUTABLE_GRAPH_FINGERPRINT_PATTERN = /^[a-f0-9]{64}$/u;
+
+interface VerifiedRuntimeExecutableGraphConfiguration {
+	readonly fingerprint: string;
+	readonly moduleUrls: ReadonlyMap<string, string>;
+}
+
+let verifiedRuntimeExecutableGraph: VerifiedRuntimeExecutableGraphConfiguration | null = null;
+
+export function configureVerifiedRuntimeExecutableModuleUrls(
+	moduleUrls: Readonly<Record<string, string>>,
+	executableGraphFingerprint: string
+) {
+	if (!moduleUrls || typeof moduleUrls !== 'object' || Array.isArray(moduleUrls)) {
+		throw new Error('wasm-rust verified executable module URLs must be an object');
+	}
+	const entries = Object.entries(moduleUrls);
+	if (entries.length === 0 || entries.length > 256) {
+		throw new Error('wasm-rust verified executable module URL count is invalid');
+	}
+	if (!EXECUTABLE_GRAPH_FINGERPRINT_PATTERN.test(executableGraphFingerprint)) {
+		throw new Error('wasm-rust verified executable graph fingerprint is invalid');
+	}
+	const next = new Map<string, string>();
+	const targets = new Set<string>();
+	for (const [sourceUrl, blobUrl] of entries) {
+		let parsedSource: URL;
+		let parsedBlob: URL;
+		try {
+			parsedSource = new URL(sourceUrl);
+			parsedBlob = new URL(blobUrl);
+		} catch (cause) {
+			throw new Error('wasm-rust verified executable module URL is invalid', { cause });
+		}
+		if (
+			(parsedSource.protocol !== 'http:' && parsedSource.protocol !== 'https:') ||
+			parsedSource.username ||
+			parsedSource.password ||
+			parsedSource.hash ||
+			parsedSource.href !== sourceUrl
+		) {
+			throw new Error('wasm-rust verified executable source URL is unsafe');
+		}
+		if (
+			parsedBlob.protocol !== 'blob:' ||
+			parsedBlob.search ||
+			parsedBlob.hash ||
+			parsedBlob.href !== blobUrl ||
+			targets.has(blobUrl)
+		) {
+			throw new Error('wasm-rust verified executable Blob URL is unsafe or duplicated');
+		}
+		targets.add(blobUrl);
+		next.set(sourceUrl, blobUrl);
+	}
+	const existing = verifiedRuntimeExecutableGraph;
+	if (existing) {
+		if (
+			existing.fingerprint !== executableGraphFingerprint ||
+			existing.moduleUrls.size !== next.size ||
+			[...next].some(([sourceUrl, blobUrl]) => existing.moduleUrls.get(sourceUrl) !== blobUrl)
+		) {
+			throw new Error('wasm-rust verified executable graph cannot change within one worker');
+		}
+		return;
+	}
+	verifiedRuntimeExecutableGraph = Object.freeze({
+		fingerprint: executableGraphFingerprint,
+		moduleUrls: next
+	});
+}
+
+export function clearVerifiedRuntimeExecutableModuleUrls() {
+	verifiedRuntimeExecutableGraph = null;
+}
+
+export function hasVerifiedRuntimeExecutableModuleUrls() {
+	return verifiedRuntimeExecutableGraph !== null;
+}
+
+export function getVerifiedRuntimeExecutableGraphConfiguration() {
+	if (!verifiedRuntimeExecutableGraph) return null;
+	return Object.freeze({
+		fingerprint: verifiedRuntimeExecutableGraph.fingerprint,
+		moduleUrls: Object.freeze(Object.fromEntries(verifiedRuntimeExecutableGraph.moduleUrls))
+	});
+}
+
 export function resolveRuntimeAssetUrl(baseUrl: string | URL, assetPath: string): string {
-	return resolveVersionedAssetUrl(baseUrl, assetPath).toString();
+	const resolved = resolveVersionedAssetUrl(baseUrl, assetPath).toString();
+	const verifiedModuleUrl = verifiedRuntimeExecutableGraph?.moduleUrls.get(resolved);
+	if (verifiedModuleUrl) return verifiedModuleUrl;
+	if (
+		verifiedRuntimeExecutableGraph &&
+		/\.(?:c|m)?js$/u.test(new URL(resolved).pathname.toLowerCase())
+	) {
+		throw new Error('wasm-rust executable module is missing from the verified Blob graph');
+	}
+	return resolved;
 }

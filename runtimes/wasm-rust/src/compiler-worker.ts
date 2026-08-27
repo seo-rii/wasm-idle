@@ -10,6 +10,7 @@ import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
 import { resolveBrowserRustDebugMode } from './compiler-support.js';
 import {
+	configureVerifiedRuntimeExecutableModuleUrls,
 	isIntegratedCompilerOutput,
 	registerRuntimeManifestAssetReceipts,
 	resolveTargetManifest
@@ -100,6 +101,30 @@ function emitCompileWorkerProgress(
 }
 
 async function compileRustInWorker(request: CompileWorkerRequest) {
+	let actualWorkerUrl: string;
+	try {
+		actualWorkerUrl = new URL(globalThis.location.href).href;
+	} catch (cause) {
+		throw new Error('wasm-rust compiler worker location is unavailable', { cause });
+	}
+	if (new URL(request.compilerWorkerUrl).href !== actualWorkerUrl) {
+		throw new Error('wasm-rust compiler worker URL does not match its activated topology');
+	}
+	if (
+		(request.executableGraphFingerprint === undefined) !==
+		(request.verifiedExecutableModuleUrls === undefined)
+	) {
+		throw new Error('wasm-rust compiler worker executable graph configuration is incomplete');
+	}
+	if (
+		request.executableGraphFingerprint !== undefined &&
+		request.verifiedExecutableModuleUrls !== undefined
+	) {
+		configureVerifiedRuntimeExecutableModuleUrls(
+			request.verifiedExecutableModuleUrls,
+			request.executableGraphFingerprint
+		);
+	}
 	if (request.manifest.assetReceipts) {
 		registerRuntimeManifestAssetReceipts(request.runtimeBaseUrl, request.manifest);
 	}
@@ -323,9 +348,6 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 				import.meta.url,
 				'./rustc-thread-worker.js'
 			);
-			if (request.request.log) {
-				threadWorkerUrl.searchParams.set('log', '1');
-			}
 			const worker = createModuleWorker(threadWorkerUrl);
 			worker.addEventListener(
 				'message',
@@ -377,6 +399,7 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 			});
 			worker.postMessage({
 				type: 'thread-pool-init',
+				rustcThreadWorkerUrl: threadWorkerUrl.toString(),
 				runtimeBaseUrl: request.runtimeBaseUrl,
 				manifest: request.manifest,
 				sourceCode: request.request.code,
@@ -514,11 +537,21 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 	);
 }
 
+let acceptedCompileRequest = false;
+
 if (typeof globalThis.addEventListener === 'function') {
 	globalThis.addEventListener('message', (event: MessageEvent<CompileWorkerRequest>) => {
 		if (event.data?.type !== 'compile') {
 			return;
 		}
+		if (acceptedCompileRequest) {
+			postMessage({
+				type: 'error',
+				message: 'wasm-rust compiler worker accepts exactly one compile request'
+			} satisfies CompileWorkerMessage);
+			return;
+		}
+		acceptedCompileRequest = true;
 		void compileRustInWorker(event.data).catch((error) => {
 			emitCompileWorkerLog(
 				event.data,

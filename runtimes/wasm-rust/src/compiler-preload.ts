@@ -3,6 +3,7 @@ import { fetchRuntimeAssetBytes, hasRegisteredRuntimeAssetReceipt } from './runt
 import { PREVIEW2_COMPONENT_RUNTIME_ASSETS } from './browser-component-tools.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
 import {
+	hasVerifiedRuntimeExecutableModuleUrls,
 	isIntegratedCompilerOutput,
 	loadRuntimeManifest,
 	resolveRuntimeAssetUrl
@@ -52,21 +53,28 @@ export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRunti
 			);
 		const assetPreloads = [
 			preloadAsset(
-				resolveVersionedAssetUrl(versionedModuleBaseUrl, './compiler-worker.js').toString(),
-				'wasm-rust compiler worker'
-			),
-			preloadAsset(
-				resolveVersionedAssetUrl(
-					versionedModuleBaseUrl,
-					'./rustc-thread-worker.js'
-				).toString(),
-				'wasm-rust rustc thread worker'
-			),
-			preloadAsset(
 				resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, manifest.compiler.rustcWasm),
 				`wasm-rust runtime asset ${manifest.compiler.rustcWasm}`
 			)
 		];
+		if (!hasVerifiedRuntimeExecutableModuleUrls()) {
+			assetPreloads.push(
+				preloadAsset(
+					resolveVersionedAssetUrl(
+						versionedModuleBaseUrl,
+						'./compiler-worker.js'
+					).toString(),
+					'wasm-rust compiler worker'
+				),
+				preloadAsset(
+					resolveVersionedAssetUrl(
+						versionedModuleBaseUrl,
+						'./rustc-thread-worker.js'
+					).toString(),
+					'wasm-rust rustc thread worker'
+				)
+			);
+		}
 		if (!isIntegratedCompilerOutput(targetConfig.compile)) {
 			assetPreloads.push(
 				preloadAsset(

@@ -64,7 +64,11 @@ import {
 	WASM_PROLOG_RUNTIME_PROFILE
 } from './wasmPrologVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
-import { WASM_RUST_ASSET_VERSION, WASM_RUST_RUNTIME_PROFILE } from './wasmRustVersion';
+import {
+	WASM_RUST_ASSET_VERSION,
+	WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
+	WASM_RUST_RUNTIME_PROFILE
+} from './wasmRustVersion';
 import {
 	WASM_TCL_ASSET_VERSION,
 	WASM_TCL_RUNNER_RECEIPT,
@@ -176,7 +180,8 @@ describe('application runtime asset root', () => {
 		expect(assets.rust).toEqual({
 			compilerUrl: `/foo/bar/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}&rustManifestBytes=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.bytes}&rustManifestSha256=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.sha256}`,
 			manifestUrl: `/foo/bar/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`,
-			...WASM_RUST_RUNTIME_PROFILE
+			...WASM_RUST_RUNTIME_PROFILE,
+			executableGraphFingerprint: WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint
 		});
 		expect(assets.go).toEqual({
 			compilerUrl: `/foo/bar/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`,
@@ -775,7 +780,7 @@ describe('application runtime asset root', () => {
 			{ manifestReceipt: { ...rust.manifestReceipt!, sha256: 'b'.repeat(64) } },
 			{
 				assetReceipts: {
-					...rust.assetReceipts,
+					...rust.assetReceipts!,
 					[firstAsset]: { ...firstReceipt, sha256: 'c'.repeat(64) }
 				}
 			}

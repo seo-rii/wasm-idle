@@ -2,7 +2,7 @@ import { resolveVersionedAssetUrl } from './asset-url.js';
 import { fetchRuntimeAssetBytes, hasRegisteredRuntimeAssetReceipt } from './runtime-asset.js';
 import { PREVIEW2_COMPONENT_RUNTIME_ASSETS } from './browser-component-tools.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
-import { isIntegratedCompilerOutput, resolveRuntimeAssetUrl } from './runtime-manifest.js';
+import { hasVerifiedRuntimeExecutableModuleUrls, isIntegratedCompilerOutput, resolveRuntimeAssetUrl } from './runtime-manifest.js';
 const rustRuntimePreloadCache = new Map();
 export async function preloadBrowserRustRuntime(options = {}) {
     const defaultImportRuntimeModule = (assetUrl) => import(/* @vite-ignore */ assetUrl);
@@ -22,10 +22,11 @@ export async function preloadBrowserRustRuntime(options = {}) {
         };
         const { manifest, targetConfig, versionedModuleBaseUrl, versionedRuntimeBaseUrl } = await loadBundledRuntimeContext(options.dependencies?.loadManifest, options.targetTriple, options.dependencies?.runtimeProfile);
         const assetPreloads = [
-            preloadAsset(resolveVersionedAssetUrl(versionedModuleBaseUrl, './compiler-worker.js').toString(), 'wasm-rust compiler worker'),
-            preloadAsset(resolveVersionedAssetUrl(versionedModuleBaseUrl, './rustc-thread-worker.js').toString(), 'wasm-rust rustc thread worker'),
             preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, manifest.compiler.rustcWasm), `wasm-rust runtime asset ${manifest.compiler.rustcWasm}`)
         ];
+        if (!hasVerifiedRuntimeExecutableModuleUrls()) {
+            assetPreloads.push(preloadAsset(resolveVersionedAssetUrl(versionedModuleBaseUrl, './compiler-worker.js').toString(), 'wasm-rust compiler worker'), preloadAsset(resolveVersionedAssetUrl(versionedModuleBaseUrl, './rustc-thread-worker.js').toString(), 'wasm-rust rustc thread worker'));
+        }
         if (!isIntegratedCompilerOutput(targetConfig.compile)) {
             assetPreloads.push(preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.llcWasm || 'llvm/llc.wasm'), `wasm-rust runtime asset ${targetConfig.compile.llvm.llcWasm || 'llvm/llc.wasm'}`), preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.lldWasm || 'llvm/lld.wasm'), `wasm-rust runtime asset ${targetConfig.compile.llvm.lldWasm || 'llvm/lld.wasm'}`), preloadAsset(resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, targetConfig.compile.llvm.lldData || 'llvm/lld.data'), `wasm-rust runtime asset ${targetConfig.compile.llvm.lldData || 'llvm/lld.data'}`));
         }

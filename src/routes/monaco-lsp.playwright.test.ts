@@ -10,6 +10,7 @@ import {
 	startBrowserPreviewServer
 } from '../../scripts/browser-preview-server.mjs';
 import { resolveChromiumExecutable } from '../../scripts/rust-browser-probe-lib.mjs';
+import { WASM_RUST_EXECUTABLE_GRAPH_PROFILE } from '$lib/playground/wasmRustVersion';
 
 interface LspBrowserCase {
 	language: string;
@@ -26,6 +27,8 @@ interface LspBrowserCase {
 	forbiddenRequestPathnames?: string[];
 	requestPathMarker?: string;
 	requireSha256RequestPins?: boolean;
+	allowAdditionalRequestPathnames?: boolean;
+	expectedRequestSha256Pins?: Readonly<Record<string, string>>;
 	timeoutMs?: number;
 }
 
@@ -84,6 +87,20 @@ const bypassCookie = 'dev_bypass_waf=seorii_bypass_token_is_this';
 const diagnosticSelector = '.squiggly-error, .squiggly-warning, .squiggly-info';
 const browserTimeoutMs = Number(process.env.WASM_IDLE_LSP_BROWSER_TIMEOUT_MS || '180000');
 const suiteTimeoutMs = Number(process.env.WASM_IDLE_LSP_BROWSER_SUITE_TIMEOUT_MS || '1800000');
+const rustExecutableGraphModules = Object.entries(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules);
+const rustExecutableStoragePathnames = rustExecutableGraphModules.map(
+	([, module]) => `/wasm-rust/${module.delivery.storagePath}`
+);
+const rustExecutableStoragePins = Object.fromEntries(
+	rustExecutableGraphModules.map(([, module]) => [
+		`/wasm-rust/${module.delivery.storagePath}`,
+		module.storage.sha256
+	])
+);
+const rustExecutableForbiddenPathnames = rustExecutableGraphModules.flatMap(([modulePath]) => [
+	`/wasm-rust/${modulePath}`,
+	`/wasm-rust/${modulePath}.gz`
+]);
 
 const lspBrowserCases: LspBrowserCase[] = [
 	{
@@ -218,7 +235,13 @@ const lspBrowserCases: LspBrowserCase[] = [
 		label: 'Rust',
 		fileName: 'main.rs',
 		source: 'fn main() {\n    let n: i32 = "nope";\n    println!("{n}");\n}\n',
-		aliases: ['rs']
+		aliases: ['rs'],
+		expectedRequestPathnames: rustExecutableStoragePathnames,
+		forbiddenRequestPathnames: rustExecutableForbiddenPathnames,
+		requestPathMarker: '/wasm-rust/',
+		requireSha256RequestPins: true,
+		allowAdditionalRequestPathnames: true,
+		expectedRequestSha256Pins: rustExecutableStoragePins
 	},
 	{
 		language: 'GO',
@@ -1002,7 +1025,9 @@ async function runLspCase(
 			.filter((entry) => entry.startsWith('> '))
 			.map((entry) => new URL(entry.slice(entry.indexOf(' ', 2) + 1)))
 			.filter((url) => url.pathname.includes(testCase.requestPathMarker || ''));
-		expect(requestUrls).toHaveLength(testCase.expectedRequestPathnames.length);
+		if (!testCase.allowAdditionalRequestPathnames) {
+			expect(requestUrls).toHaveLength(testCase.expectedRequestPathnames.length);
+		}
 		for (const pathname of testCase.expectedRequestPathnames) {
 			expect(requestUrls.filter((url) => url.pathname.endsWith(pathname))).toHaveLength(1);
 		}
@@ -1013,6 +1038,11 @@ async function runLspCase(
 			for (const url of requestUrls) {
 				expect(url.searchParams.get('v')).toMatch(/^[a-f0-9]{64}$/u);
 			}
+		}
+		for (const [pathname, sha256] of Object.entries(testCase.expectedRequestSha256Pins || {})) {
+			const matchingRequests = requestUrls.filter((url) => url.pathname.endsWith(pathname));
+			expect(matchingRequests).toHaveLength(1);
+			expect(matchingRequests[0]?.search).toBe(`?v=${sha256}`);
 		}
 	}
 
@@ -1112,6 +1142,17 @@ async function collectPageDebugInfo(page: Page) {
 }
 
 describe('Monaco LSP browser integration', () => {
+	it('binds the Rust case to all inert executable graph deliveries', () => {
+		expect(rustExecutableGraphModules).toHaveLength(41);
+		expect(rustExecutableStoragePathnames).toHaveLength(41);
+		expect(new Set(rustExecutableStoragePathnames).size).toBe(41);
+		expect(rustExecutableStoragePathnames.every((pathname) => pathname.endsWith('.bin'))).toBe(
+			true
+		);
+		expect(rustExecutableForbiddenPathnames).toHaveLength(82);
+		expect(Object.keys(rustExecutableStoragePins)).toHaveLength(41);
+	});
+
 	it('selects browser LSP cases by named matrix group', () => {
 		const previousLanguages = process.env.WASM_IDLE_LSP_BROWSER_LANGUAGES;
 		const previousGroups = process.env.WASM_IDLE_LSP_BROWSER_GROUPS;

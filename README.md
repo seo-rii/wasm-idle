@@ -368,12 +368,26 @@ pnpm run sync:wasm-nim
 
 ## Rust browser integration
 
-The demo app bundles the workspace `wasm-rust` browser compiler under `static/wasm-rust/` and points
-the example `Terminal` at `/wasm-rust/index.js` by default. Refresh it with:
+The demo app publishes the workspace `wasm-rust` compiler as a receipt-pinned executable graph
+under `static/wasm-rust/`. The example `Terminal` uses `/wasm-rust/index.js` as the graph's logical
+base URL; that logical JavaScript path is never fetched or imported. Verified module bytes are
+served from inert `.js.bin`/`.js.gz.bin` storage and execute only through owned Blob URLs. Refresh
+the receipts for the checked static publication with the command below. Publication removes raw or
+precompressed JavaScript outside the verified graph; the separately scoped debug instrumenter is
+the only explicit raw-JavaScript allowlist.
+
+```bash
+pnpm run sync:wasm-rust
+```
+
+Publishing a newly built producer dist is an explicit operation and succeeds only when both graph
+authorities match `scripts/wasm-rust-assets.lock.json`. It replaces the complete published runtime
+tree, including WASI sysroot/link packs, so first verify that the producer dist contains the exact
+pack generation intended for publication:
 
 ```bash
 pnpm --dir runtimes/wasm-rust build
-pnpm run sync:wasm-rust
+pnpm run sync:wasm-rust -- runtimes/wasm-rust/dist
 ```
 
 The built-in Rust route supports `wasm32-wasip1`, `wasm32-wasip2`, and `wasm32-wasip3`. The page
@@ -571,13 +585,11 @@ and its language is selected. Vite emits those providers into lazy worker chunks
 fetched before they are needed. Library consumers using one of those providers must install its
 optional peer set, while compiler and language-runtime payloads still come only from external URLs.
 
-Rust still supports an external browser compiler module for library consumers. Point
-`PUBLIC_WASM_RUST_COMPILER_URL` at a built `wasm-rust` ESM entry such as
-`.../wasm-rust/dist/index.js`, or pass `runtimeAssets.rust.compilerUrl` at runtime. Rust source
-instrumentation is emitted as the separate `debug-instrumenter.js` static asset and is imported
-only for debug executions. Override it with `runtimeAssets.rust.debugModuleUrl`; otherwise
-wasm-idle resolves it beside the configured compiler module and preserves the compiler URL version
-query.
+Rust supports an external mirror of the pinned compiler graph for library consumers. Set
+`PUBLIC_WASM_RUST_COMPILER_URL` or `runtimeAssets.rust.compilerUrl` to the logical `index.js` URL
+with the exact generated runtime-manifest query, and mirror every `.bin` delivery path and receipt
+from `WASM_RUST_EXECUTABLE_GRAPH_PROFILE`. An arbitrary browser-loadable ESM entry or a raw
+`dist/index.js` is rejected. Rust source instrumentation remains a separate static asset.
 TinyGo uses the public receipt-verified `static/wasm-tinygo/upstream.js` compiler by default.
 Override it with `PUBLIC_WASM_TINYGO_MODULE_URL` or `runtimeAssets.tinygo.moduleUrl`; a custom
 `runtimeAssets.tinygo.assetLoader` can serve the module's verified sibling toolchain files. The
@@ -700,7 +712,8 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 		loader: async ({ asset }) => ({ url: `https://cdn.example.com/repl/clangd/${asset}` })
 	},
 	rust: {
-		compilerUrl: 'https://cdn.example.com/wasm-rust/index.js'
+		compilerUrl:
+			'https://cdn.example.com/wasm-rust/index.js?v=<runtime-manifest-sha256>&rustManifestBytes=<runtime-manifest-bytes>&rustManifestSha256=<runtime-manifest-sha256>'
 	},
 	dotnet: {
 		moduleUrl: 'https://cdn.example.com/wasm-dotnet/index.js'
@@ -740,7 +753,7 @@ Verified static runtimes such as Janet and Julia intentionally omit URL-only exa
 field declared by that runtime's asset config, including the matching `workerReceipt`. Partial
 trust bundles fail closed instead of borrowing receipts from bundled executable bytes.
 
-Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Clang custom loaders receive `bin/memfs.wasm.gz`, `bin/clang.wasm.gz`, `bin/lld.wasm.gz`, and `bin/sysroot.tar.gz`; COBOL loaders receive `cobc.wasm.gz`, `rootfs.tar.gz`, and `c-sysroot.tar.gz`. The shared loader pipes these gzip response bodies through native `DecompressionStream`. Legacy external manifests that still reference ZIP assets remain supported through the dynamically loaded `fflate` compatibility path. Zig custom loaders receive `zig_small.wasm` and `std.tar.gz`; an explicitly configured legacy `std.zip` URL remains compatible. Clangd custom loaders receive `clangd.js` and `clangd.wasm.gz`, with the worker decompressing the gzip payload before instantiation. Rust expects a browser-loadable compiler module URL; that module is responsible for serving its own nested runtime assets. C#, F#, and VB.NET expect a browser-loadable `wasm-dotnet` module with its language-specific static .NET `browser-wasm` runtime assets. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
+Python custom loaders receive file names under the Pyodide asset root and can serve both core assets and package files. TeaVM custom loaders receive file names under the TeaVM asset root. Clang custom loaders receive `bin/memfs.wasm.gz`, `bin/clang.wasm.gz`, `bin/lld.wasm.gz`, and `bin/sysroot.tar.gz`; COBOL loaders receive `cobc.wasm.gz`, `rootfs.tar.gz`, and `c-sysroot.tar.gz`. The shared loader pipes these gzip response bodies through native `DecompressionStream`. Legacy external manifests that still reference ZIP assets remain supported through the dynamically loaded `fflate` compatibility path. Zig custom loaders receive `zig_small.wasm` and `std.tar.gz`; an explicitly configured legacy `std.zip` URL remains compatible. Clangd custom loaders receive `clangd.js` and `clangd.wasm.gz`, with the worker decompressing the gzip payload before instantiation. Rust expects a logical, profile-pinned graph entry URL whose sibling inert storage exactly matches the generated receipts; it does not import that HTTP entry directly. C#, F#, and VB.NET expect a browser-loadable `wasm-dotnet` module with its language-specific static .NET `browser-wasm` runtime assets. Compressed TeaVM runtime assets are no longer unpacked inside the library; provide the final file URL or handle decompression in your own loader.
 
 To reuse the same runtime asset configuration for both `<Terminal>` and direct `playground(...)`
 access, bind it once:
@@ -752,7 +765,8 @@ import { createPlaygroundBinding } from 'wasm-idle';
 const wasmIdle = createPlaygroundBinding({
 	rootUrl: 'https://cdn.example.com/repl',
 	rust: {
-		compilerUrl: 'https://cdn.example.com/wasm-rust/index.js'
+		compilerUrl:
+			'https://cdn.example.com/wasm-rust/index.js?v=<runtime-manifest-sha256>&rustManifestBytes=<runtime-manifest-bytes>&rustManifestSha256=<runtime-manifest-sha256>'
 	},
 	dotnet: {
 		moduleUrl: 'https://cdn.example.com/wasm-dotnet/index.js'

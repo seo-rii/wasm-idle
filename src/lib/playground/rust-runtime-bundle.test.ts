@@ -1,15 +1,26 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
-import compilerSource from '../../../static/wasm-rust/compiler.js?raw';
-import compilerWorkerSource from '../../../static/wasm-rust/compiler-worker.js?raw';
+import compressedRuntimeAssetsSource from '../../../static/compressed-runtime-assets.v1.json?raw';
+import compilerSource from '../../../static/wasm-rust/compiler.js.bin?raw';
+import compilerWorkerSource from '../../../static/wasm-rust/compiler-worker.js.bin?raw';
 import debugInstrumenterSource from '../../../static/wasm-rust/debug-instrumenter.js?raw';
-import runtimeAssetSource from '../../../static/wasm-rust/runtime-asset.js?raw';
+import runtimeAssetSource from '../../../static/wasm-rust/runtime-asset.js.bin?raw';
+import runtimeExecutableGraphSource from '../../../static/wasm-rust/runtime-executable-graph.v1.json?raw';
 import runtimeManifestSource from '../../../static/wasm-rust/runtime/runtime-manifest.v3.json?raw';
 import { describe, expect, it } from 'vitest';
-import { WASM_RUST_RUNTIME_PROFILE } from './wasmRustVersion';
+import { parseRustExecutableGraphLock } from '../../../scripts/sync-wasm-rust.mjs';
+import {
+	canonicalRustExecutableGraphProfile,
+	snapshotRustExecutableGraphProfile
+} from './rustExecutableGraph';
+import {
+	WASM_RUST_EXECUTABLE_GRAPH_MANIFEST_PATH,
+	WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
+	WASM_RUST_RUNTIME_PROFILE
+} from './wasmRustVersion';
 
 describe('bundled wasm-rust compiler', () => {
 	it('ships byte-aware runtime download progress handling', () => {
@@ -50,6 +61,69 @@ describe('bundled wasm-rust compiler', () => {
 				expect(sha256(logicalBytes), assetPath).toBe(receipt.uncompressedSha256);
 			}
 		}
+	});
+
+	it('ships one lock-pinned executable graph with exact storage and logical receipts', () => {
+		const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+		const graph = snapshotRustExecutableGraphProfile(JSON.parse(runtimeExecutableGraphSource));
+		const compressedRuntimeAssets = JSON.parse(compressedRuntimeAssetsSource) as {
+			assets: string[];
+		};
+		const graphLock = parseRustExecutableGraphLock(
+			readFileSync(path.resolve('scripts/wasm-rust-assets.lock.json'))
+		);
+
+		expect(WASM_RUST_EXECUTABLE_GRAPH_MANIFEST_PATH).toBe('runtime-executable-graph.v1.json');
+		expect(graph).toEqual(WASM_RUST_EXECUTABLE_GRAPH_PROFILE);
+		expect(graphLock.authorities['published-static']).toEqual(graph);
+		expect(sha256(canonicalRustExecutableGraphProfile(graph))).toBe(graph.fingerprint);
+		expect(Object.keys(graph.modules)).toHaveLength(41);
+
+		for (const [modulePath, module] of Object.entries(graph.modules)) {
+			expect(module.delivery.storagePath.endsWith('.bin'), modulePath).toBe(true);
+			expect(compressedRuntimeAssets.assets, modulePath).not.toContain(
+				`wasm-rust/${modulePath}`
+			);
+			expect(compressedRuntimeAssets.assets, module.delivery.storagePath).not.toContain(
+				`wasm-rust/${module.delivery.storagePath}`
+			);
+			expect(existsSync(path.resolve('static', 'wasm-rust', modulePath)), modulePath).toBe(
+				false
+			);
+			expect(
+				existsSync(path.resolve('static', 'wasm-rust', `${modulePath}.gz`)),
+				modulePath
+			).toBe(false);
+			const storageBytes = readFileSync(
+				path.resolve('static', 'wasm-rust', module.delivery.storagePath)
+			);
+			expect(storageBytes.byteLength, modulePath).toBe(module.storage.bytes);
+			expect(sha256(storageBytes), modulePath).toBe(module.storage.sha256);
+			const logicalBytes =
+				module.delivery.encoding === 'gzip' ? gunzipSync(storageBytes) : storageBytes;
+			expect(logicalBytes.byteLength, modulePath).toBe(module.logical.bytes);
+			expect(sha256(logicalBytes), modulePath).toBe(module.logical.sha256);
+		}
+	});
+
+	it('publishes no executable JavaScript outside the explicit debug allowlist', () => {
+		const rootDir = path.resolve('static', 'wasm-rust');
+		const pending = [rootDir];
+		const executablePaths: string[] = [];
+		while (pending.length > 0) {
+			const directory = pending.pop()!;
+			for (const entry of readdirSync(directory, { withFileTypes: true })) {
+				const entryPath = path.join(directory, entry.name);
+				if (entry.isDirectory()) {
+					pending.push(entryPath);
+				} else if (/\.(?:c|m)?js(?:\.(?:br|gz))?$/iu.test(entry.name)) {
+					executablePaths.push(
+						path.relative(rootDir, entryPath).replaceAll(path.sep, '/')
+					);
+				}
+			}
+		}
+		expect(executablePaths.sort()).toEqual(['debug-instrumenter.js']);
 	});
 
 	it('ships the LLDB DWARF artifact and compiler contract', () => {

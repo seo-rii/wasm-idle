@@ -138,6 +138,13 @@ export interface RustRuntimeAssetConfig {
 	compilerUrl?: string;
 	manifestUrl?: string;
 	debugModuleUrl?: string;
+	executableGraphFingerprint?: string;
+	profileId?: string;
+	protocolVersion?: number;
+	manifestPath?: string;
+	manifestFingerprint?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	assetReceipts?: RuntimeAssetIntegrityMap;
 }
 
 export interface DebugRuntimeAssetConfig {

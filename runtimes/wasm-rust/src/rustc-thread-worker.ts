@@ -1,4 +1,3 @@
-import { resolveVersionedAssetUrl } from './asset-url.js';
 import { createModuleWorker } from './module-worker.js';
 import type {
 	RustcThreadPoolInitRequest,
@@ -18,6 +17,7 @@ import {
 } from './thread-startup.js';
 
 const MIRRORED_BITCODE_LENGTH_INDEX = 0;
+let acceptedThreadBootstrap = false;
 
 postMessage({
 	type: 'thread-ready'
@@ -29,6 +29,14 @@ function describeStartArgMemory(memory: WebAssembly.Memory, startArg: number) {
 		return `startArg=${startArg} words=${words.join(',')}`;
 	} catch (error) {
 		return `startArg=${startArg} snapshot-error=${error instanceof Error ? error.message : String(error)}`;
+	}
+}
+
+function assertActivatedThreadWorkerUrl(
+	request: RustcThreadWorkerRequest | RustcThreadPoolInitRequest
+) {
+	if (request.rustcThreadWorkerUrl !== globalThis.location.href) {
+		throw new Error('wasm-rust thread worker URL does not match its activated topology');
 	}
 }
 
@@ -71,13 +79,7 @@ async function instantiateThreadWorkerRuntime(
 				}
 				const nestedReadyBuffer = new SharedArrayBuffer(4);
 				const nestedReadyState = new Int32Array(nestedReadyBuffer);
-				const nestedThreadWorkerUrl = resolveVersionedAssetUrl(
-					import.meta.url,
-					'./rustc-thread-worker.js'
-				);
-				if (request.log) {
-					nestedThreadWorkerUrl.searchParams.set('log', '1');
-				}
+				const nestedThreadWorkerUrl = new URL(request.rustcThreadWorkerUrl);
 				const nestedWorker = createModuleWorker(nestedThreadWorkerUrl);
 				const markNestedStartupFailure = () => {
 					if (Atomics.load(nestedReadyState, 0) < 0) {
@@ -90,6 +92,7 @@ async function instantiateThreadWorkerRuntime(
 				nestedWorker.addEventListener('messageerror', markNestedStartupFailure);
 				nestedWorker.postMessage({
 					type: 'thread-start',
+					rustcThreadWorkerUrl: request.rustcThreadWorkerUrl,
 					runtimeBaseUrl: request.runtimeBaseUrl,
 					manifest: request.manifest,
 					sourceCode: request.sourceCode,
@@ -150,6 +153,7 @@ async function instantiateThreadWorkerRuntime(
 }
 
 async function startThreadWorker(request: RustcThreadWorkerRequest) {
+	assertActivatedThreadWorkerUrl(request);
 	if (request.log) {
 		postMessage({
 			type: 'thread-log',
@@ -191,6 +195,7 @@ async function startThreadWorker(request: RustcThreadWorkerRequest) {
 }
 
 async function startThreadPoolWorker(request: RustcThreadPoolInitRequest) {
+	assertActivatedThreadWorkerUrl(request);
 	const slotState = new Int32Array(request.slotBuffer);
 	if (request.log) {
 		postMessage({
@@ -261,6 +266,8 @@ globalThis.addEventListener(
 	(event: MessageEvent<RustcThreadWorkerRequest | RustcThreadPoolInitRequest>) => {
 		if (event.data?.type === 'thread-start') {
 			const request = event.data;
+			if (acceptedThreadBootstrap) return;
+			acceptedThreadBootstrap = true;
 			void startThreadWorker(request).catch((error) => {
 				const detail = error instanceof Error ? error.message : String(error);
 				const mirroredState = new Int32Array(request.sharedBitcodeBuffer, 0, 4);
@@ -285,6 +292,8 @@ globalThis.addEventListener(
 		}
 		if (event.data?.type === 'thread-pool-init') {
 			const request = event.data;
+			if (acceptedThreadBootstrap) return;
+			acceptedThreadBootstrap = true;
 			void startThreadPoolWorker(request).catch((error) => {
 				const detail = error instanceof Error ? error.message : String(error);
 				const mirroredState = new Int32Array(request.sharedBitcodeBuffer, 0, 4);

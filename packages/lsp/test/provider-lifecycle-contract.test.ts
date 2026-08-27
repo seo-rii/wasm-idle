@@ -194,6 +194,25 @@ const createProviderOptions = (
 	javascript: {
 		libUrl: `${deployment.rootUrl}typescript-libs.json.gz`
 	},
+	rust: {
+		compilerUrl: 'blob:https://app.example/verified-rust-entry',
+		expectedNetworkModuleUrls: [
+			`${applicationOrigin}${deployment.rootUrl}wasm-rust/index.js?v=${'b'.repeat(64)}`
+		],
+		verifiedModuleUrls: {
+			[`${applicationOrigin}${deployment.rootUrl}wasm-rust/index.js?v=${'b'.repeat(64)}`]:
+				'blob:https://app.example/verified-rust-entry'
+		},
+		graphFingerprint: 'a'.repeat(64),
+		runtimeProfile: {
+			profileId: 'rust-runtime-v1',
+			protocolVersion: 1,
+			manifestPath: 'runtime/runtime-manifest.v3.json',
+			manifestFingerprint: 'b'.repeat(64),
+			manifestReceipt: { bytes: 42, sha256: 'c'.repeat(64) },
+			moduleUrl: `${applicationOrigin}${deployment.rootUrl}wasm-rust/index.js?v=${'b'.repeat(64)}`
+		}
+	},
 	gleam: {
 		manifestFingerprint: 'a'.repeat(64)
 	},

@@ -200,19 +200,13 @@ export function resolveRustLanguageServerCompilerUrl(
 	options: EditorLanguageServerOptions | undefined,
 	currentUrl = ''
 ) {
-	if (typeof options === 'string') {
-		return resolveFileUrl(`${normalizeRootUrl(options) || ''}/wasm-rust/index.js`, currentUrl);
+	if (typeof options === 'object' && options?.rust?.compilerUrl) {
+		return options.rust.compilerUrl;
 	}
-	if (options?.rust?.compilerUrl) {
-		return resolveFileUrl(options.rust.compilerUrl, currentUrl);
-	}
-	if (options?.rootUrl) {
-		return resolveFileUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-rust/index.js`,
-			currentUrl
-		);
-	}
-	return resolveApplicationAssetUrl('/wasm-rust/index.js', currentUrl);
+	throw new LanguageServerAssetConfigurationError(
+		'Rust language server',
+		'an explicit verified compiler Blob URL'
+	);
 }
 
 export function resolveGoLanguageServerCompilerUrl(
