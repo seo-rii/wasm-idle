@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { chromium } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
@@ -26,7 +26,6 @@ const compressedRuntimeAssetSamples = [
 	'wasm-octave/runtime/bin/octave-cli.wasm',
 	'wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js',
 	'wasm-tinygo/tools/upstream/tinygo-compiler.wasm',
-	'wasm-tinygo/vendor/emception/04de61a8a0f85ee15beb.a',
 	'wasm-zig/zig_small.wasm'
 ] as const;
 
@@ -87,6 +86,50 @@ async function discoverBuildAssetSamples() {
 }
 
 describe('compressed runtime assets', () => {
+	it('samples assets available after clean browser test preparation', async () => {
+		const layerManifest = JSON.parse(
+			await readFile(
+				new URL('../../../static/layered-runtime-assets.v1.json', import.meta.url),
+				'utf8'
+			)
+		) as { assets?: Record<string, { layer?: string }> };
+		const preparationManifest = JSON.parse(
+			await readFile(
+				new URL('../../../scripts/browser-test-assets.v1.json', import.meta.url),
+				'utf8'
+			)
+		) as { assets?: Array<{ group: string; target: string }> };
+		const preparedTargets = new Set(
+			(preparationManifest.assets || [])
+				.filter((asset) => asset.group === 'clang' || asset.group === 'ocaml')
+				.map((asset) => asset.target)
+		);
+		const unavailable: string[] = [];
+
+		for (const assetPath of compressedRuntimeAssetSamples) {
+			const layerPath = layerManifest.assets?.[assetPath]?.layer;
+			const trackedCandidates = [
+				assetPath,
+				`${assetPath}.gz`,
+				...(layerPath ? [layerPath] : [])
+			];
+			const tracked = (
+				await Promise.all(
+					trackedCandidates.map((candidate) =>
+						stat(new URL(`../../../static/${candidate}`, import.meta.url))
+							.then((metadata) => metadata.isFile())
+							.catch(() => false)
+					)
+				)
+			).some(Boolean);
+			const prepared =
+				preparedTargets.has(assetPath) || preparedTargets.has(`${assetPath}.gz`);
+			if (!tracked && !prepared) unavailable.push(assetPath);
+		}
+
+		expect(unavailable).toEqual([]);
+	});
+
 	it(
 		'serves gzip-only runtime assets through their original URLs',
 		async () => {
