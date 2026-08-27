@@ -310,7 +310,11 @@ class FakeWorker implements WorkerLike {
 								: {}
 				};
 				await output.write(encodeDapMessage(response));
-				if (request.command === 'configurationDone' && pendingAttach) {
+				if (
+					request.command === 'configurationDone' &&
+					pendingAttach &&
+					!this.suppressedResponses.has('attach')
+				) {
 					const attachResponse: DapResponse = {
 						seq: this.commands.length + 101,
 						type: 'response',
@@ -862,6 +866,56 @@ describe('BrowserLldbSession', () => {
 		} finally {
 			await session.disconnect();
 		}
+	});
+
+	it('bounds a missing attach response after configuration is complete', async () => {
+		const commands: string[] = [];
+		const workers: FakeWorker[] = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources: [{ path: '/workspace/main.cpp', content: 'int main() { return 0; }' }],
+			breakpoints: [{ source: { path: '/workspace/main.cpp' }, lines: [1] }],
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(
+					kind,
+					commands,
+					false,
+					false,
+					kind === 'lldb' ? new Set(['attach']) : new Set()
+				);
+				workers.push(worker);
+				return worker;
+			},
+			fetchImpl: async () => new Response('debug-asset'),
+			requestTimeoutMs: 50,
+			readyTimeoutMs: 1_000
+		});
+		const initialization = session.initialize();
+
+		try {
+			await expect(
+				Promise.race([
+					initialization,
+					new Promise<never>((_, reject) => {
+						setTimeout(() => reject(new Error('test attach deadline expired')), 500);
+					})
+				])
+			).rejects.toThrow('DAP attach response did not complete after configurationDone');
+			expect(commands).toEqual([
+				'initialize',
+				'attach',
+				'setBreakpoints',
+				'configurationDone'
+			]);
+		} finally {
+			await session.dispose();
+			await initialization.catch(() => undefined);
+		}
+
+		expect(workers).toHaveLength(2);
+		expect(workers.every((worker) => worker.isTerminated)).toBe(true);
 	});
 
 	it('transfers owned verified asset bytes to workers without retaining runtime URLs', async () => {

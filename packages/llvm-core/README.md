@@ -187,7 +187,9 @@ transport-write timeout; ordinary DAP requests still use the configured response
 The initial `attach` response is likewise causal: LLDB sends it only after the client has installed
 every source's breakpoints and sent `configurationDone`. Attach therefore has no cumulative response
 deadline, while the `initialized` event, each breakpoint request, and `configurationDone` retain
-their individual configured timeouts.
+their individual configured timeouts. Once `configurationDone` succeeds, the pending attach must
+complete within one configured request timeout; a missing final attach response fails and disposes
+the session instead of leaving startup pending indefinitely.
 A deferred execution failure is fatal only while that request still owns the current run state. If
 a valid `continued` or newer `stopped` event has already advanced the session, the obsolete failure
 is ignored and cannot tear down the running target or its newer pause.

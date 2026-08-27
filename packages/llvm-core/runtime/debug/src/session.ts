@@ -704,7 +704,26 @@ export class BrowserLldbSession {
 				await this.setBreakpoints(breakpoint.source, breakpoint.lines);
 			}
 			await this.awaitWhileActive(this.dap.request('configurationDone'));
-			await this.awaitWhileActive(attachResponse);
+			let attachCompletionTimeout: ReturnType<typeof setTimeout> | undefined;
+			await this.awaitWhileActive(
+				Promise.race([
+					attachResponse,
+					new Promise<never>((_, reject) => {
+						attachCompletionTimeout = setTimeout(
+							() =>
+								reject(
+									new Error(
+										'DAP attach response did not complete after configurationDone'
+									)
+								),
+							requestTimeoutMs
+						);
+					})
+				]).finally(() => {
+					if (attachCompletionTimeout !== undefined)
+						clearTimeout(attachCompletionTimeout);
+				})
+			);
 			this.assertActive();
 			this.initialized = true;
 			return capabilities;
