@@ -121,6 +121,15 @@ rejects target triples, CPUs, target features, machine attributes, raw LLVM back
 thread, SIMD, atomics, memory64, shared-memory, or multi-memory switches before invoking Clang.
 This keeps the producer inside the pinned wasm32 WAMR classic-interpreter profile instead of
 letting a browser-valid artifact fail only after the debugger runtime has started.
+Before fetching debugger assets or creating Workers, the LLDB session structurally validates the
+guest as a bounded core WebAssembly v1 module for the supported WAMR profile. Only
+the 45 `wasi_snapshot_preview1` function names and signatures emitted by pinned WASI SDK 33 are
+accepted; unknown names, ABI mismatches, non-function imports, and legacy or extension namespaces
+fail closed. SIMD, atomics and shared memory, memory64, table64, multiple memories or tables,
+multi-memory instruction encodings, extended constant expressions, typed references, exception
+handling, GC instructions, dynamic linking, and relocatable modules also fail with an explicit
+unsupported-module error. The target Worker repeats this check before claiming its generation or
+loading WAMR, so direct Worker messages cannot bypass the preflight boundary.
 `compileLinkRun()` rejects `lldb` because an LLDB artifact must not be instantiated through the
 normal browser execution path. Launch arguments, WASI environment variables, and the `/workspace`
 working directory are forwarded to WAMR rather than being applied only to LLDB's attach request.

@@ -1,6 +1,11 @@
 import { DapClient, resolveDapTimeout } from './dap-client.js';
 import { parseDebugRuntimeManifest, preflightDebugRuntimeAssets, sha256Hex } from './manifest.js';
 import { createSharedByteQueue, SharedByteQueue } from './shared-byte-queue.js';
+import {
+	getArrayBufferKind,
+	normalizeUint8ArrayObject,
+	validateWamrDebugModule
+} from './wasm-module-preflight.js';
 import { validateDebugSourcePath } from './worker/module-loader.js';
 import type {
 	BrowserLldbCallbackKind,
@@ -344,7 +349,9 @@ export class BrowserLldbSession {
 		const manifest = parseDebugRuntimeManifest(this.options.manifest);
 		const runtimeBaseUrl = this.options.runtimeBaseUrl.toString();
 		const moduleValue: unknown = this.options.module;
-		if (!(moduleValue instanceof Uint8Array) && !(moduleValue instanceof ArrayBuffer)) {
+		const normalizedModuleValue = normalizeUint8ArrayObject(moduleValue);
+		const moduleBufferKind = getArrayBufferKind(moduleValue);
+		if (!normalizedModuleValue && moduleBufferKind !== 'array-buffer') {
 			throw new TypeError('debug module must be a Uint8Array or ArrayBuffer');
 		}
 		const moduleSha256Value: unknown = this.options.moduleSha256;
@@ -446,9 +453,11 @@ export class BrowserLldbSession {
 			validateBreakpointLines(breakpoint.lines);
 		}
 
-		const module = new Uint8Array(
-			moduleValue instanceof Uint8Array ? moduleValue : moduleValue.slice(0)
-		);
+		const moduleView = normalizedModuleValue
+			? normalizedModuleValue
+			: new Uint8Array(moduleValue as ArrayBuffer);
+		validateWamrDebugModule(moduleView);
+		const module = new Uint8Array(moduleView);
 		if (moduleSha256 !== undefined) {
 			const actualSha256 = await this.awaitWhileActive(sha256Hex(module));
 			if (actualSha256 !== moduleSha256) {

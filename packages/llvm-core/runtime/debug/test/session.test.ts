@@ -1,3 +1,5 @@
+import { runInNewContext } from 'node:vm';
+
 import { describe, expect, it } from 'vitest';
 
 import { DapMessageParser, encodeDapMessage } from '../src/dap-client.js';
@@ -16,6 +18,7 @@ import type {
 
 const hash = 'a'.repeat(64);
 const assetHash = 'a647260c0a2f386cdb893fdc303169041dcf2955da1fa881501863ec8b968785';
+const validWasmModule = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 const manifest: RuntimeManifestV2 = {
 	manifestVersion: 2,
 	version: 'test',
@@ -330,7 +333,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [{ path: '/workspace/main.cpp', content: 'int main() { return 0; }' }],
 			workerFactory: (kind) => {
 				const worker = new FakeWorker(kind, [], false, false, new Set(), initializeBody);
@@ -356,7 +359,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [{ path: '/workspace/main.cpp', content: 'int main() { return 0; }' }],
 			breakpoints: [
 				{
@@ -820,7 +823,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			workerFactory: (kind) => {
 				const worker = new FakeWorker(kind, commands);
@@ -876,7 +879,7 @@ describe('BrowserLldbSession', () => {
 		const options: BrowserLldbSessionOptions = {
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [
 				{
 					path: '/workspace/main.cpp',
@@ -983,7 +986,7 @@ describe('BrowserLldbSession', () => {
 		const options: BrowserLldbSessionOptions = {
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [
 				{
 					path: '/workspace/main.cpp',
@@ -1039,7 +1042,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1119,7 +1122,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1166,7 +1169,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1209,7 +1212,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			workerFactory: (kind) => {
 				const worker = new FakeWorker(kind, []);
@@ -1244,7 +1247,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest: mutableManifest,
 			runtimeBaseUrl,
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [
 				{
 					path: '/workspace/main.cpp',
@@ -1293,7 +1296,7 @@ describe('BrowserLldbSession', () => {
 		session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			workerFactory: (kind) => {
 				const worker = new FakeWorker(kind, []);
@@ -1328,7 +1331,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			workerFactory: (kind) => {
 				const worker = new FakeWorker(kind, []);
@@ -1376,7 +1379,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			workerFactory: (kind) => {
 				const worker = new FakeWorker(kind, []);
@@ -1421,7 +1424,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0),
+			module: validWasmModule.slice(),
 			moduleSha256: hash,
 			sources: [],
 			workerFactory: () => {
@@ -1431,6 +1434,88 @@ describe('BrowserLldbSession', () => {
 		});
 		await expect(session.initialize()).rejects.toThrow(/SHA-256 mismatch/u);
 		expect(created).toBe(false);
+	});
+
+	it('rejects an unsupported WAMR module before fetching assets or creating workers', async () => {
+		let assetFetches = 0;
+		let workersCreated = 0;
+		const sharedMemoryModule = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0, 5, 4, 1, 3, 1, 1);
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: sharedMemoryModule,
+			sources: [],
+			fetchImpl: async () => {
+				assetFetches += 1;
+				return new Response('debug-asset');
+			},
+			workerFactory: (kind) => {
+				workersCreated += 1;
+				return new FakeWorker(kind, []);
+			}
+		});
+
+		await expect(session.initialize()).rejects.toThrow(/shared memory/u);
+		expect(assetFetches).toBe(0);
+		expect(workersCreated).toBe(0);
+	});
+
+	it('rejects SharedArrayBuffer-backed modules before copying or hashing them', async () => {
+		let assetFetches = 0;
+		let workersCreated = 0;
+		const sharedModule = new Uint8Array(new SharedArrayBuffer(validWasmModule.byteLength));
+		sharedModule.set(validWasmModule);
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: sharedModule,
+			moduleSha256: hash,
+			sources: [],
+			fetchImpl: async () => {
+				assetFetches += 1;
+				return new Response('debug-asset');
+			},
+			workerFactory: (kind) => {
+				workersCreated += 1;
+				return new FakeWorker(kind, []);
+			}
+		});
+
+		await expect(session.initialize()).rejects.toThrow(/SharedArrayBuffer-backed/u);
+		expect(assetFetches).toBe(0);
+		expect(workersCreated).toBe(0);
+	});
+
+	it('accepts cross-realm Uint8Array modules without copying before preflight', async () => {
+		const foreignModule = runInNewContext(
+			'Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0])'
+		) as Uint8Array;
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: foreignModule,
+			moduleSha256: hash,
+			sources: []
+		});
+
+		await expect(session.initialize()).rejects.toThrow(/SHA-256 mismatch/u);
+	});
+
+	it('rejects cross-realm SharedArrayBuffer module views before copying or hashing them', async () => {
+		const foreignSharedModule = runInNewContext(`
+			const module = new Uint8Array(new SharedArrayBuffer(8));
+			module.set([0, 97, 115, 109, 1, 0, 0, 0]);
+			module;
+		`) as Uint8Array;
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: foreignSharedModule,
+			moduleSha256: hash,
+			sources: []
+		});
+
+		await expect(session.initialize()).rejects.toThrow(/SharedArrayBuffer-backed/u);
 	});
 
 	it.each([
@@ -1470,7 +1555,7 @@ describe('BrowserLldbSession', () => {
 			const session = new BrowserLldbSession({
 				manifest,
 				runtimeBaseUrl: 'https://cdn.example/debug/',
-				module: Uint8Array.of(0, 97, 115, 109),
+				module: validWasmModule.slice(),
 				sources: [],
 				fetchImpl: async () => {
 					assetFetches += 1;
@@ -1532,7 +1617,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			launch: launch as BrowserLldbSessionOptions['launch'],
 			fetchImpl: async () => {
@@ -1561,7 +1646,7 @@ describe('BrowserLldbSession', () => {
 		const options: BrowserLldbSessionOptions = {
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			moduleSha256: hash,
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
@@ -1591,7 +1676,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('corrupt'),
 			workerFactory: () => {
@@ -1619,7 +1704,7 @@ describe('BrowserLldbSession', () => {
 			const session = new BrowserLldbSession({
 				manifest,
 				runtimeBaseUrl: 'https://cdn.example/debug/',
-				module: Uint8Array.of(0, 97, 115, 109),
+				module: validWasmModule.slice(),
 				sources: [source],
 				workerFactory: () => {
 					created = true;
@@ -1638,7 +1723,7 @@ describe('BrowserLldbSession', () => {
 			const session = new BrowserLldbSession({
 				manifest,
 				runtimeBaseUrl: 'https://cdn.example/debug/',
-				module: Uint8Array.of(0, 97, 115, 109),
+				module: validWasmModule.slice(),
 				sources: [
 					{
 						path: '/workspace/main.cpp',
@@ -1683,7 +1768,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			[option]: value,
 			fetchImpl: async () => {
@@ -1711,7 +1796,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1740,7 +1825,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => {
 				await assetGate;
@@ -1771,7 +1856,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1803,7 +1888,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1858,7 +1943,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1911,7 +1996,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1951,7 +2036,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: []
 		});
 

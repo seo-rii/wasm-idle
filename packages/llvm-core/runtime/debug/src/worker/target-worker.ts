@@ -1,5 +1,6 @@
 import type { DebugWorkerInboundMessage, TargetWorkerInitializeMessage } from '../types.js';
 import { assertDistinctSharedByteQueueBuffers, SharedByteQueue } from '../shared-byte-queue.js';
+import { validateWamrDebugModule } from '../wasm-module-preflight.js';
 import {
 	createEmscriptenAssetUrls,
 	createTransportBindings,
@@ -38,6 +39,7 @@ function closeActiveTargetTransports() {
 async function initialize(message: TargetWorkerInitializeMessage) {
 	validateDebugSessionGeneration(message.generation);
 	if (activeGeneration) throw new Error('target worker is already initialized');
+	validateWamrDebugModule(message.module);
 	const cwdValue: unknown = message.cwd;
 	if (cwdValue !== undefined && cwdValue !== '/workspace') {
 		throw new RangeError('WAMR working directory must be /workspace');
