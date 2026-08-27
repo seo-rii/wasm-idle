@@ -278,7 +278,9 @@ can still cancel that wait and two starts cannot pass the same teardown barrier.
 and disconnect capture the completion they own before publishing `stop`; a synchronous relaunch
 from that callback therefore cannot be settled early by the retired generation. If teardown itself
 fails, disconnect rejects both its own operation and the completion it owns with that same error,
-so a cancelled relaunch cannot remain pending behind a failed disposal barrier.
+so a cancelled relaunch cannot remain pending behind a failed disposal barrier. Completion
+settlement also precedes the final `stop` notification during an explicit disconnect, and throwing
+consumer stop callbacks are isolated from finish, failure, and disconnect teardown semantics.
 Direct `DapClient` consumers can set `onEventError(error, event)` to observe an event-listener
 exception. Throwing listeners and a throwing error hook are isolated from one another, and the
 client continues parsing later events and responses on the same byte stream.

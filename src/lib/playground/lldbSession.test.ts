@@ -575,6 +575,7 @@ describe('LldbSandboxSession', () => {
 
 	it('settles a cancelled relaunch when retired disposal rejects', async () => {
 		const events: Array<{ type: string }> = [];
+		const stopCallbackError = new Error('stop callback failed');
 		let rejectDisposal!: (error: Error) => void;
 		runtimeState.disposeGate = new Promise<void>((_resolve, reject) => {
 			rejectDisposal = reject;
@@ -589,7 +590,10 @@ describe('LldbSandboxSession', () => {
 			sourcePath: '/workspace/main.cpp',
 			breakpoints: [],
 			pauseOnEntry: false,
-			onDebugEvent: (event) => events.push(event),
+			onDebugEvent: (event) => {
+				events.push(event);
+				if (event.type === 'stop') throw stopCallbackError;
+			},
 			onOutput: () => undefined,
 			fetchImpl: vi.fn(async () => ({
 				ok: true,
@@ -689,6 +693,42 @@ describe('LldbSandboxSession', () => {
 			await controller.disconnect();
 			void firstCompletion.catch(() => undefined);
 		}
+	});
+
+	it('settles disconnect when the stop callback throws', async () => {
+		const stopError = new Error('stop callback failed');
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => {
+				if (event.type === 'stop') throw stopError;
+			},
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		void completion.catch(() => undefined);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		await expect(controller.disconnect()).resolves.toBeUndefined();
+		await expect(
+			Promise.race([
+				completion,
+				new Promise<never>((_, reject) => {
+					setTimeout(() => reject(new Error('completion stayed pending')), 500);
+				})
+			])
+		).resolves.toBe(true);
 	});
 
 	it('maps DAP stopped state to source frames and top-level scopes', async () => {

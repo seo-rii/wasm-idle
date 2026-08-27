@@ -1038,12 +1038,13 @@ export class LldbSandboxSession {
 					? error
 					: new Error('Unable to disconnect the LLDB debug session.');
 		}
-		if (shouldPublishStop) this.options.onDebugEvent({ type: 'stop' });
 		if (disposalFailure) {
 			completionReject?.(disposalFailure);
+			if (shouldPublishStop) this.publishStop();
 			throw disposalFailure;
 		}
 		completionResolve?.(true);
+		if (shouldPublishStop) this.publishStop();
 	}
 
 	private handleDapEvent(event: DapEvent) {
@@ -1342,7 +1343,7 @@ export class LldbSandboxSession {
 						: new Error('Unable to dispose the LLDB debug session.')
 				)
 		);
-		this.options.onDebugEvent({ type: 'stop' });
+		this.publishStop();
 	}
 
 	private fail(error: Error) {
@@ -1366,7 +1367,15 @@ export class LldbSandboxSession {
 			() => completionReject?.(error),
 			() => completionReject?.(error)
 		);
-		this.options.onDebugEvent({ type: 'stop' });
+		this.publishStop();
+	}
+
+	private publishStop() {
+		try {
+			this.options.onDebugEvent({ type: 'stop' });
+		} catch {
+			// Consumer callbacks cannot interrupt target teardown or completion settlement.
+		}
 	}
 
 	private trackSessionDisposal(disposal: Promise<void>) {
