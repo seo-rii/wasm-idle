@@ -206,7 +206,9 @@ describe('Monaco route debug sync', () => {
 			/async \(_providerLanguage: string, context\?: MonacoLspProviderContext\)/
 		);
 		expect(source).toMatch(/context\?\.signal\?\.aborted \|\| key !== lspConnectionKey/);
-		expect(source).toMatch(/const connection = await route\.load\(currentUrl\);/);
+		expect(source).toMatch(
+			/const connection = await route\.load\(currentUrl, context\?\.signal\);/
+		);
 		expect(source).toMatch(/connection\.dispose\(\);/);
 		expect(source).toMatch(/return connection as unknown as Exclude/);
 		expect(source).not.toMatch(/manualDocumentSync/);
