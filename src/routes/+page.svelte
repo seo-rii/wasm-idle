@@ -2161,9 +2161,9 @@
 		{#if language === 'TINYGO'}
 			<p class="hint">
 				TinyGo 0.40.1 compiles locally through the receipt-verified upstream toolchain for
-				`wasip1`. Compilation, package discovery, linking, and optimization run in a disposable
-				worker with phase and WebAssembly memory limits. Add `vendor/modules.txt` to use offline
-				vendored modules; network module downloads remain disabled.
+				`wasip1`. Compilation, package discovery, linking, and optimization run in a
+				disposable worker with phase and WebAssembly memory limits. Add `vendor/modules.txt`
+				to use offline vendored modules; network module downloads remain disabled.
 			</p>
 		{/if}
 		{#if language === 'D'}
