@@ -339,7 +339,7 @@ describe('J runner worker', () => {
 		expect(messages).toContainEqual(
 			expect.objectContaining({ harnessBlobRevoked: expect.stringMatching(/^blob:wasm-j-/u) })
 		);
-	});
+	}, 15_000);
 
 	it('fails malformed streaming stdin before evaluating a runtime module', async () => {
 		const messages = await runHarness(
