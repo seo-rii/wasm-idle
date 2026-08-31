@@ -5,25 +5,29 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import { compressStaticRuntimeAssets } from './compress-static-runtime-assets.mjs';
 import {
 	DEFAULT_WASM_DEBUG_VERSION_MODULE_PATH,
 	syncWasmDebugDist,
 	verifySyncedWasmDebugDist
 } from './sync-wasm-debug.mjs';
+import { verifyPageWasmDebugRelease } from './verify-page-wasm-debug.mjs';
 
 function sha256(bytes) {
 	return createHash('sha256').update(bytes).digest('hex');
 }
 
-async function fixture(root, marker = '') {
+async function fixture(root, marker = '', { largeWasm = false } = {}) {
 	const source = path.join(root, 'source');
 	await mkdir(path.join(source, 'debug'), { recursive: true });
 	const assets = {
 		'debug/lldb-web-dap.js': Buffer.from('lldb-js'),
-		'debug/lldb-web-dap.wasm': Buffer.from('lldb-wasm'),
+		'debug/lldb-web-dap.wasm': largeWasm
+			? Buffer.alloc(300_000, 0x6c)
+			: Buffer.from('lldb-wasm'),
 		'debug/lldb-web-dap.pthread.mjs': Buffer.from('lldb-worker'),
 		'debug/wamr-debug.js': Buffer.from('wamr-js'),
-		'debug/wamr-debug.wasm': Buffer.from('wamr-wasm'),
+		'debug/wamr-debug.wasm': largeWasm ? Buffer.alloc(300_000, 0x77) : Buffer.from('wamr-wasm'),
 		'debug/wamr-debug.worker.mjs': Buffer.from('wamr-worker')
 	};
 	for (const [relativePath, bytes] of Object.entries(assets)) {
@@ -114,6 +118,120 @@ test('atomically installs a hash-verified LLDB/WAMR debug runtime', async () => 
 			await readFile(versionModulePath, 'utf8'),
 			expectedVersionModule(manifestBytes)
 		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('replaces a compressed Pages runtime during a repeated release preparation', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-compressed-repeat-'));
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ', { largeWasm: true });
+		const newFixture = await fixture(path.join(root, 'new'), '  ', { largeWasm: true });
+		const staticDir = path.join(root, 'static');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+		const compression = await compressStaticRuntimeAssets({ rootDir: staticDir });
+		assert.equal(compression.compressed.length, 2);
+
+		await syncWasmDebugDist({
+			sourceDir: newFixture.source,
+			staticDir,
+			versionModulePath
+		});
+
+		assert.deepEqual(
+			await readFile(path.join(staticDir, 'wasm-debug/runtime-manifest.v2.json')),
+			newFixture.manifestBytes
+		);
+		assert.deepEqual(
+			await readFile(path.join(staticDir, 'wasm-debug/debug/lldb-web-dap.wasm')),
+			newFixture.assets['debug/lldb-web-dap.wasm']
+		);
+		assert.equal(
+			await readFile(versionModulePath, 'utf8'),
+			expectedVersionModule(newFixture.manifestBytes)
+		);
+		await verifySyncedWasmDebugDist({ staticDir, versionModulePath });
+		await compressStaticRuntimeAssets({ rootDir: staticDir });
+		await verifyPageWasmDebugRelease({
+			buildDir: staticDir,
+			profile: {
+				schemaVersion: 1,
+				producerRevision: 'b'.repeat(40),
+				manifestReceipt: {
+					bytes: newFixture.manifestBytes.byteLength,
+					sha256: sha256(newFixture.manifestBytes)
+				}
+			}
+		});
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('restores an exact compressed Pages baseline when replacement fails', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-compressed-rollback-'));
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ', { largeWasm: true });
+		const newFixture = await fixture(path.join(root, 'new'), '  ', { largeWasm: true });
+		const staticDir = path.join(root, 'static');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+		await compressStaticRuntimeAssets({ rootDir: staticDir });
+		const oldLldbGzip = await readFile(
+			path.join(staticDir, 'wasm-debug/debug/lldb-web-dap.wasm.gz')
+		);
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: newFixture.source,
+				staticDir,
+				versionModulePath,
+				testOnlyAfterRuntimePublish() {
+					throw new Error('injected compressed replacement failure');
+				}
+			}),
+			/injected compressed replacement failure/u
+		);
+
+		assert.deepEqual(
+			await readFile(path.join(staticDir, 'wasm-debug/debug/lldb-web-dap.wasm.gz')),
+			oldLldbGzip
+		);
+		assert.equal(
+			await readFile(
+				path.join(staticDir, 'wasm-debug/debug/lldb-web-dap.wasm'),
+				'utf8'
+			).catch((error) => {
+				if (error?.code === 'ENOENT') return null;
+				throw error;
+			}),
+			null
+		);
+		assert.equal(
+			await readFile(versionModulePath, 'utf8'),
+			expectedVersionModule(oldFixture.manifestBytes)
+		);
+		await verifyPageWasmDebugRelease({
+			buildDir: staticDir,
+			profile: {
+				schemaVersion: 1,
+				producerRevision: 'a'.repeat(40),
+				manifestReceipt: {
+					bytes: oldFixture.manifestBytes.byteLength,
+					sha256: sha256(oldFixture.manifestBytes)
+				}
+			}
+		});
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

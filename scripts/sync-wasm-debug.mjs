@@ -6,6 +6,7 @@ import {
 	mkdir,
 	open,
 	readFile,
+	readdir,
 	rename,
 	rm,
 	stat,
@@ -23,6 +24,8 @@ export const DEFAULT_WASM_DEBUG_VERSION_MODULE_PATH = path.join(
 	'src/lib/playground/wasmDebugVersion.ts'
 );
 const SHA256 = /^[0-9a-f]{64}$/u;
+const MAX_INSTALLED_RUNTIME_FILES = 128;
+const MAX_INSTALLED_RUNTIME_BYTES = 64 * 1024 * 1024;
 const publicationQueues = new Map();
 
 function sha256(bytes) {
@@ -98,6 +101,75 @@ async function validateSourceBundle(sourceDir) {
 		}
 	}
 	return { manifestPath, manifestBytes, assets };
+}
+
+async function snapshotInstalledRuntime(rootDir) {
+	const rootMetadata = await lstat(rootDir);
+	if (!rootMetadata.isDirectory() || rootMetadata.isSymbolicLink()) {
+		throw new Error('installed wasm debug runtime must be a real directory');
+	}
+	const pending = [{ absolutePath: rootDir, relativePath: '' }];
+	const entries = [];
+	let fileCount = 0;
+	let totalBytes = 0;
+	while (pending.length > 0) {
+		const directory = pending.pop();
+		const children = await readdir(directory.absolutePath, { withFileTypes: true });
+		for (const child of children) {
+			const absolutePath = path.join(directory.absolutePath, child.name);
+			const relativePath = path
+				.join(directory.relativePath, child.name)
+				.split(path.sep)
+				.join('/');
+			const metadata = await lstat(absolutePath);
+			if (metadata.isSymbolicLink()) {
+				throw new Error(`installed wasm debug runtime contains a symlink: ${relativePath}`);
+			}
+			if (metadata.isDirectory()) {
+				entries.push({ path: relativePath, type: 'directory' });
+				pending.push({ absolutePath, relativePath });
+				continue;
+			}
+			if (!metadata.isFile()) {
+				throw new Error(
+					`installed wasm debug runtime contains a non-regular entry: ${relativePath}`
+				);
+			}
+			fileCount += 1;
+			if (fileCount > MAX_INSTALLED_RUNTIME_FILES) {
+				throw new Error('installed wasm debug runtime exceeds its file-count budget');
+			}
+			totalBytes += metadata.size;
+			if (totalBytes > MAX_INSTALLED_RUNTIME_BYTES) {
+				throw new Error('installed wasm debug runtime exceeds its byte budget');
+			}
+			const bytes = await readFile(absolutePath);
+			const finalMetadata = await lstat(absolutePath);
+			if (
+				bytes.byteLength !== metadata.size ||
+				finalMetadata.dev !== metadata.dev ||
+				finalMetadata.ino !== metadata.ino ||
+				finalMetadata.size !== metadata.size ||
+				finalMetadata.mtimeMs !== metadata.mtimeMs
+			) {
+				throw new Error(
+					`installed wasm debug runtime changed while being inspected: ${relativePath}`
+				);
+			}
+			entries.push({
+				bytes: bytes.byteLength,
+				path: relativePath,
+				sha256: sha256(bytes),
+				type: 'file'
+			});
+		}
+	}
+	entries.sort((left, right) => left.path.localeCompare(right.path, 'en'));
+	return {
+		digest: sha256(Buffer.from(JSON.stringify(entries))),
+		fileCount,
+		totalBytes
+	};
 }
 
 function renderVersionModule(manifestBytes) {
@@ -264,12 +336,12 @@ export async function syncWasmDebugDist({
 		const nextVersionModule = path.join(versionDir, `.${versionName}.next-${suffix}`);
 		const previousVersionModule = path.join(versionDir, `.${versionName}.previous-${suffix}`);
 		const baselineRuntimeStats = await lstat(current).catch(() => null);
-		let baselineRuntimeManifestBytes;
+		let baselineRuntimeSnapshot;
 		if (baselineRuntimeStats) {
 			if (!baselineRuntimeStats.isDirectory() || baselineRuntimeStats.isSymbolicLink()) {
 				throw new Error('installed wasm debug runtime must be a real directory');
 			}
-			baselineRuntimeManifestBytes = (await validateSourceBundle(current)).manifestBytes;
+			baselineRuntimeSnapshot = await snapshotInstalledRuntime(current);
 		}
 		const baselineVersionStats = await lstat(resolvedVersionModule).catch(() => null);
 		let baselineVersionModule;
@@ -391,9 +463,9 @@ export async function syncWasmDebugDist({
 				);
 			} else {
 				try {
-					const currentBundle = await validateSourceBundle(current);
-					if (!currentBundle.manifestBytes.equals(baselineRuntimeManifestBytes)) {
-						throw new Error('wasm debug baseline runtime manifest changed');
+					const currentSnapshot = await snapshotInstalledRuntime(current);
+					if (currentSnapshot.digest !== baselineRuntimeSnapshot.digest) {
+						throw new Error('wasm debug baseline runtime snapshot changed');
 					}
 				} catch (ownershipError) {
 					ownershipErrors.push(
@@ -468,9 +540,9 @@ export async function syncWasmDebugDist({
 					);
 				} else {
 					try {
-						const previousBundle = await validateSourceBundle(previous);
-						if (!previousBundle.manifestBytes.equals(baselineRuntimeManifestBytes)) {
-							throw new Error('wasm debug previous runtime manifest changed');
+						const previousSnapshot = await snapshotInstalledRuntime(previous);
+						if (previousSnapshot.digest !== baselineRuntimeSnapshot.digest) {
+							throw new Error('wasm debug previous runtime snapshot changed');
 						}
 					} catch (ownershipError) {
 						ownershipErrors.push(
