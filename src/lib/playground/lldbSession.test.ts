@@ -2446,7 +2446,7 @@ describe('LldbSandboxSession', () => {
 			})) as unknown as typeof fetch
 		});
 		const completion = controller.start();
-		const completionOutcome = completion.then<true | Error>(
+		const completionOutcome = completion.then<true | Error, true | Error>(
 			(value) => value,
 			(error: unknown) => error as Error
 		);
