@@ -158,6 +158,49 @@ test('restores both the runtime and receipt when publication fails between repla
 	}
 });
 
+test('rolls back both replacements when publication is aborted', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-abort-'));
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ');
+		const newFixture = await fixture(path.join(root, 'new'), '  ');
+		const staticDir = path.join(root, 'static');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+		const controller = new AbortController();
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: newFixture.source,
+				staticDir,
+				versionModulePath,
+				signal: controller.signal,
+				testOnlyAfterRuntimePublish() {
+					controller.abort(
+						new DOMException('release publication cancelled', 'AbortError')
+					);
+				}
+			}),
+			/release publication cancelled/u
+		);
+
+		assert.deepEqual(
+			await readFile(path.join(staticDir, 'wasm-debug/runtime-manifest.v2.json')),
+			oldFixture.manifestBytes
+		);
+		assert.equal(
+			await readFile(versionModulePath, 'utf8'),
+			expectedVersionModule(oldFixture.manifestBytes)
+		);
+		await verifySyncedWasmDebugDist({ staticDir, versionModulePath });
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('detects drift between the installed manifest and generated receipt', async () => {
 	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-drift-'));
 	try {

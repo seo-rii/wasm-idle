@@ -370,7 +370,10 @@ manifest, and assets together.
 Clean Pages builds run `prepare:wasm-debug-release` before layering or compression. That command
 reads the tracked release profile, fetches only its immutable `wasm-llvm` revision, authenticates
 the manifest receipt before trusting its asset list, and installs the six verified assets through
-the same transactional sync path. Immediately before `gh-pages` publication, the deployment
+the same transactional sync path. Each producer request has a 30-second attempt timeout and up to
+three attempts for transient failures. Cancellation is forwarded through download and publication;
+an abort during replacement rolls both the runtime tree and generated receipt back. Immediately
+before `gh-pages` publication, the deployment
 verifier authenticates the logical manifest and every asset again; it accepts either raw bytes or
 the deterministic gzip representation recorded by `compressed-runtime-assets.v1.json`, and refuses
 missing, ambiguous, stale, oversized, or mismatched output. Browser behavior remains lazy because

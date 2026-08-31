@@ -113,15 +113,19 @@ export async function syncWasmDebugDist({
 	sourceDir,
 	staticDir = DEFAULT_STATIC_DIR,
 	versionModulePath = DEFAULT_WASM_DEBUG_VERSION_MODULE_PATH,
+	signal,
 	testOnlyAfterRuntimePublish
 } = {}) {
 	if (!sourceDir) {
 		throw new Error('wasm debug sync requires an explicit source directory.');
 	}
+	const fallbackAbortError = new DOMException('wasm debug publication aborted', 'AbortError');
+	if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
 	const resolvedSource = path.resolve(sourceDir);
 	const resolvedStatic = path.resolve(staticDir);
 	const resolvedVersionModule = path.resolve(versionModulePath);
 	const { manifestPath, manifestBytes, assets } = await validateSourceBundle(resolvedSource);
+	if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
 	await mkdir(resolvedStatic, { recursive: true });
 	await mkdir(path.dirname(resolvedVersionModule), { recursive: true });
 
@@ -153,10 +157,12 @@ export async function syncWasmDebugDist({
 			staticDir: nextRoot,
 			versionModulePath: nextVersionModule
 		});
+		if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
 		if (await stat(current).catch(() => null)) {
 			await mkdir(previousRoot, { recursive: true });
 			await rename(current, previous);
 			movedPrevious = true;
+			if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
 		}
 		const versionMetadata = await stat(resolvedVersionModule).catch(() => null);
 		if (versionMetadata) {
@@ -165,16 +171,21 @@ export async function syncWasmDebugDist({
 			}
 			await rename(resolvedVersionModule, previousVersionModule);
 			movedPreviousVersion = true;
+			if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
 		}
 		await rename(next, current);
 		installedNext = true;
+		if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
 		await testOnlyAfterRuntimePublish?.();
+		if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
 		await rename(nextVersionModule, resolvedVersionModule);
 		installedNextVersion = true;
+		if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
 		await verifySyncedWasmDebugDist({
 			staticDir: resolvedStatic,
 			versionModulePath: resolvedVersionModule
 		});
+		if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
 	} catch (error) {
 		const rollbackErrors = [];
 		for (const operation of [

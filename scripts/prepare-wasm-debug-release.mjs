@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { setTimeout as wait } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 import { DEFAULT_WASM_DEBUG_VERSION_MODULE_PATH, syncWasmDebugDist } from './sync-wasm-debug.mjs';
@@ -18,6 +19,11 @@ export const DEFAULT_WASM_DEBUG_RELEASE_PROFILE_PATH = path.join(
 export const DEFAULT_WASM_DEBUG_STATIC_DIR = path.join(REPO_ROOT, 'static');
 export const MAX_WASM_DEBUG_MANIFEST_BYTES = 64 * 1024;
 export const MAX_WASM_DEBUG_RUNTIME_BYTES = 55_000_000;
+export const DEFAULT_WASM_DEBUG_REQUEST_TIMEOUT_MS = 30_000;
+export const DEFAULT_WASM_DEBUG_MAX_ATTEMPTS = 3;
+export const DEFAULT_WASM_DEBUG_RETRY_DELAY_MS = 250;
+
+class NonRetryableDownloadError extends Error {}
 
 function sha256(bytes) {
 	return createHash('sha256').update(bytes).digest('hex');
@@ -52,96 +58,150 @@ function parseContentLength(response, label) {
 	return bytes;
 }
 
-async function fetchBoundedBytes({ url, fetchImpl, limit, label, expectedBytes, signal }) {
-	throwIfAborted(signal);
-	const response = await fetchImpl(url, { cache: 'no-store', signal });
-	if (!response?.ok) {
-		const error = new Error(
-			`Unable to download ${label} (${response?.status ?? 'invalid response'}) from ${url}`
+async function fetchBoundedBytes({
+	url,
+	fetchImpl,
+	limit,
+	label,
+	expectedBytes,
+	signal,
+	requestTimeoutMs,
+	maxAttempts,
+	retryDelayMs
+}) {
+	let lastError;
+	for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+		throwIfAborted(signal);
+		const requestController = new AbortController();
+		const forwardAbort = () => requestController.abort(abortReason(signal));
+		signal?.addEventListener('abort', forwardAbort, { once: true });
+		const timeout = setTimeout(
+			() =>
+				requestController.abort(
+					new DOMException(
+						`${label} timed out after ${requestTimeoutMs} ms`,
+						'TimeoutError'
+					)
+				),
+			requestTimeoutMs
 		);
-		if (response) await cancelResponse(response, error);
-		throw error;
-	}
-
-	let declaredBytes;
-	try {
-		declaredBytes = parseContentLength(response, label);
-	} catch (error) {
-		await cancelResponse(response, error);
-		throw error;
-	}
-	if (declaredBytes !== undefined && declaredBytes > limit) {
-		const error = new Error(`${label} exceeds its ${limit} byte limit`);
-		await cancelResponse(response, error);
-		throw error;
-	}
-	if (!response.body) {
-		throw new Error(`${label} response body is unavailable`);
-	}
-
-	const reader = response.body.getReader();
-	const chunks = [];
-	let receivedBytes = 0;
-	let finished = false;
-	let cancelled = false;
-	const cancelOnAbort = () => {
-		cancelled = true;
-		void reader.cancel(abortReason(signal)).catch(() => undefined);
-	};
-	signal?.addEventListener('abort', cancelOnAbort, { once: true });
-	try {
-		while (true) {
-			throwIfAborted(signal);
-			const { done, value } = await reader.read();
-			throwIfAborted(signal);
-			if (done) {
-				finished = true;
-				break;
-			}
-			if (!(value instanceof Uint8Array)) {
-				throw new TypeError(`${label} response body yielded invalid bytes`);
-			}
-			if (value.byteLength > limit - receivedBytes) {
-				const error = new Error(`${label} exceeds its ${limit} byte limit`);
-				cancelled = true;
-				try {
-					await reader.cancel(error);
-				} catch {
-					// Preserve the byte-limit failure.
+		const requestSignal = requestController.signal;
+		try {
+			const response = await fetchImpl(url, { cache: 'no-store', signal: requestSignal });
+			throwIfAborted(requestSignal);
+			if (!response?.ok) {
+				const error = new Error(
+					`Unable to download ${label} (${response?.status ?? 'invalid response'}) from ${url}`
+				);
+				if (response) await cancelResponse(response, error);
+				const status = response?.status;
+				if (
+					status === undefined ||
+					(status !== 408 && status !== 425 && status !== 429 && status < 500)
+				) {
+					throw new NonRetryableDownloadError(error.message, { cause: error });
 				}
 				throw error;
 			}
-			const owned = Uint8Array.from(value);
-			chunks.push(owned);
-			receivedBytes += owned.byteLength;
-		}
-	} catch (error) {
-		if (!finished && !cancelled) {
-			cancelled = true;
-			try {
-				await reader.cancel(error);
-			} catch {
-				// Preserve the download or lifecycle failure.
-			}
-		}
-		throw error;
-	} finally {
-		signal?.removeEventListener('abort', cancelOnAbort);
-		reader.releaseLock();
-	}
 
-	if (expectedBytes !== undefined && receivedBytes !== expectedBytes) {
-		throw new Error(
-			`${label} size mismatch: expected ${expectedBytes} bytes, received ${receivedBytes}`
-		);
+			let declaredBytes;
+			try {
+				declaredBytes = parseContentLength(response, label);
+			} catch (error) {
+				await cancelResponse(response, error);
+				throw new NonRetryableDownloadError(error.message, { cause: error });
+			}
+			if (declaredBytes !== undefined && declaredBytes > limit) {
+				const error = new NonRetryableDownloadError(
+					`${label} exceeds its ${limit} byte limit`
+				);
+				await cancelResponse(response, error);
+				throw error;
+			}
+			if (!response.body) {
+				throw new Error(`${label} response body is unavailable`);
+			}
+
+			const reader = response.body.getReader();
+			const chunks = [];
+			let receivedBytes = 0;
+			let finished = false;
+			let cancelled = false;
+			const cancelOnAbort = () => {
+				cancelled = true;
+				void reader.cancel(abortReason(requestSignal)).catch(() => undefined);
+			};
+			requestSignal.addEventListener('abort', cancelOnAbort, { once: true });
+			try {
+				while (true) {
+					throwIfAborted(requestSignal);
+					const { done, value } = await reader.read();
+					throwIfAborted(requestSignal);
+					if (done) {
+						finished = true;
+						break;
+					}
+					if (!(value instanceof Uint8Array)) {
+						throw new NonRetryableDownloadError(
+							`${label} response body yielded invalid bytes`
+						);
+					}
+					if (value.byteLength > limit - receivedBytes) {
+						const error = new NonRetryableDownloadError(
+							`${label} exceeds its ${limit} byte limit`
+						);
+						cancelled = true;
+						try {
+							await reader.cancel(error);
+						} catch {
+							// Preserve the byte-limit failure.
+						}
+						throw error;
+					}
+					const owned = Uint8Array.from(value);
+					chunks.push(owned);
+					receivedBytes += owned.byteLength;
+				}
+			} catch (error) {
+				if (!finished && !cancelled) {
+					cancelled = true;
+					try {
+						await reader.cancel(error);
+					} catch {
+						// Preserve the download or lifecycle failure.
+					}
+				}
+				throw error;
+			} finally {
+				requestSignal.removeEventListener('abort', cancelOnAbort);
+				reader.releaseLock();
+			}
+
+			if (expectedBytes !== undefined && receivedBytes !== expectedBytes) {
+				throw new NonRetryableDownloadError(
+					`${label} size mismatch: expected ${expectedBytes} bytes, received ${receivedBytes}`
+				);
+			}
+			const bytes = new Uint8Array(receivedBytes);
+			let offset = 0;
+			for (const chunk of chunks) {
+				bytes.set(chunk, offset);
+				offset += chunk.byteLength;
+			}
+			return bytes;
+		} catch (error) {
+			if (signal?.aborted) throw abortReason(signal);
+			if (error instanceof NonRetryableDownloadError || attempt === maxAttempts) throw error;
+			lastError = error;
+		} finally {
+			clearTimeout(timeout);
+			signal?.removeEventListener('abort', forwardAbort);
+		}
+		if (retryDelayMs > 0) {
+			await wait(retryDelayMs * attempt, undefined, signal ? { signal } : undefined);
+		}
 	}
-	const bytes = new Uint8Array(receivedBytes);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return bytes;
+	throw lastError ?? new Error(`Unable to download ${label} from ${url}`);
 }
 
 function assertSafeAssetPath(value, label) {
@@ -261,10 +321,24 @@ export async function prepareWasmDebugRelease({
 	profilePath = DEFAULT_WASM_DEBUG_RELEASE_PROFILE_PATH,
 	staticDir = DEFAULT_WASM_DEBUG_STATIC_DIR,
 	versionModulePath = DEFAULT_WASM_DEBUG_VERSION_MODULE_PATH,
-	signal
+	signal,
+	requestTimeoutMs = DEFAULT_WASM_DEBUG_REQUEST_TIMEOUT_MS,
+	maxAttempts = DEFAULT_WASM_DEBUG_MAX_ATTEMPTS,
+	retryDelayMs = DEFAULT_WASM_DEBUG_RETRY_DELAY_MS
 } = {}) {
 	if (typeof fetchImpl !== 'function') {
 		throw new TypeError('wasm debug release preparation requires fetch');
+	}
+	for (const [label, value, minimum] of [
+		['requestTimeoutMs', requestTimeoutMs, 1],
+		['maxAttempts', maxAttempts, 1],
+		['retryDelayMs', retryDelayMs, 0]
+	]) {
+		if (!Number.isSafeInteger(value) || value < minimum) {
+			throw new RangeError(
+				`${label} must be a safe integer greater than or equal to ${minimum}`
+			);
+		}
 	}
 	throwIfAborted(signal);
 	const profile = await loadReleaseProfile(path.resolve(profilePath));
@@ -276,7 +350,10 @@ export async function prepareWasmDebugRelease({
 		limit: MAX_WASM_DEBUG_MANIFEST_BYTES,
 		label: 'wasm debug release manifest',
 		expectedBytes: profile.manifestReceipt.bytes,
-		signal
+		signal,
+		requestTimeoutMs,
+		maxAttempts,
+		retryDelayMs
 	});
 	if (sha256(manifestBytes) !== profile.manifestReceipt.sha256) {
 		throw new Error('wasm debug release manifest failed SHA-256 validation');
@@ -302,7 +379,10 @@ export async function prepareWasmDebugRelease({
 				fetchImpl,
 				limit: remainingBytes,
 				label: `wasm debug aggregate runtime asset ${asset.path}`,
-				signal
+				signal,
+				requestTimeoutMs,
+				maxAttempts,
+				retryDelayMs
 			});
 			if (sha256(bytes) !== asset.sha256) {
 				throw new Error(`wasm debug runtime asset ${asset.path} failed SHA-256 validation`);
@@ -316,7 +396,8 @@ export async function prepareWasmDebugRelease({
 		await syncWasmDebugDist({
 			sourceDir,
 			staticDir,
-			versionModulePath
+			versionModulePath,
+			signal
 		});
 		return {
 			producerRevision: profile.producerRevision,

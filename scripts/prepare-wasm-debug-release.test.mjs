@@ -218,6 +218,72 @@ test('validates decoded manifest bytes when Content-Length describes encoded tra
 	}
 });
 
+test('retries a transient producer response within the bounded attempt budget', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-release-retry-'));
+	try {
+		const { assets, manifestBytes } = createFixture();
+		const profilePath = await writeProfile(root, manifestBytes);
+		const { staticDir, versionModulePath } = await createPaths(root);
+		const fixtureFetch = fetchFixture(manifestBytes, assets);
+		let manifestAttempts = 0;
+		const fetchImpl = async (input, init) => {
+			if (
+				String(input) === `${RELEASE_BASE_URL}runtime-manifest.v2.json` &&
+				manifestAttempts++ === 0
+			) {
+				return new Response('temporary failure', { status: 503 });
+			}
+			return fixtureFetch.fetchImpl(input, init);
+		};
+
+		await prepareWasmDebugRelease({
+			fetchImpl,
+			profilePath,
+			staticDir,
+			versionModulePath,
+			maxAttempts: 2,
+			retryDelayMs: 0,
+			requestTimeoutMs: 1_000
+		});
+
+		assert.equal(manifestAttempts, 2);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('times out a stalled producer request before an external safety abort', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-release-timeout-'));
+	const safety = new AbortController();
+	const safetyTimer = setTimeout(() => safety.abort(new Error('test safety abort fired')), 250);
+	try {
+		const { manifestBytes } = createFixture();
+		const profilePath = await writeProfile(root, manifestBytes);
+		const { staticDir, versionModulePath } = await createPaths(root);
+		const fetchImpl = (_input, { signal }) =>
+			new Promise((resolve, reject) => {
+				signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+			});
+
+		await assert.rejects(
+			prepareWasmDebugRelease({
+				fetchImpl,
+				profilePath,
+				staticDir,
+				versionModulePath,
+				signal: safety.signal,
+				maxAttempts: 1,
+				requestTimeoutMs: 10
+			}),
+			/timed out after 10 ms/iu
+		);
+	} finally {
+		clearTimeout(safetyTimer);
+		safety.abort();
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('rejects a corrupt asset before publication and preserves the install', async () => {
 	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-release-asset-'));
 	try {
