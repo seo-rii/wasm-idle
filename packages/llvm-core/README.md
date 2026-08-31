@@ -2,7 +2,9 @@
 
 Browser-side LLVM runtime hosts used by wasm-idle. This package contains JavaScript and TypeScript
 code only. Compiler modules, sysroots, archives, and other runtime assets must be deployed
-separately and supplied through explicit HTTP(S) URLs.
+separately and supplied through explicit HTTP(S) URLs. Published tarballs omit generated source and
+declaration maps because their TypeScript source tree is not part of the package; executable
+JavaScript, declarations, and every documented export remain available.
 
 ```ts
 import { createClangCompiler } from '@wasm-idle/llvm-core/clang';

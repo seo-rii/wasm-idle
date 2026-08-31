@@ -58,6 +58,7 @@ export const scenarios = [
 		imports: [
 			"await import('@wasm-idle/core');",
 			"await import('@wasm-idle/llvm-core/core/gcc-compat');",
+			"await import('@wasm-idle/llvm-core/debug');",
 			"if (!import.meta.resolve('wasm-idle').endsWith('/wasm-idle/dist/index.js')) throw new Error('wasm-idle import export did not resolve');"
 		]
 	},

@@ -76,6 +76,9 @@ describe('package install budgets', () => {
 	it('keeps heavy optional tooling out of focused installs', () => {
 		const byName = new Map(scenarios.map((scenario) => [scenario.name, scenario]));
 		expect(byName.get('@wasm-idle/lsp install')?.packageNames).toContain('@wasm-idle/core');
+		expect(byName.get('wasm-idle root install')?.imports).toContain(
+			"await import('@wasm-idle/llvm-core/debug');"
+		);
 
 		expect(byName.get('wasm-idle root install')?.absentPackageNames).toEqual(
 			expect.arrayContaining([

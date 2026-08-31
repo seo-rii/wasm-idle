@@ -42,6 +42,20 @@ describe('required CI workflow gates', () => {
 		expect(packagesJob).toContain('- run: pnpm run check:asset-sizes');
 	});
 
+	it('verifies the code-only LLVM package boundary before install budgets', async () => {
+		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+		const packagesJobStart = workflow.indexOf('    packages:');
+		const nextJobStart = workflow.indexOf('    lsp-browser-smoke:', packagesJobStart);
+		const packagesJob = workflow.slice(packagesJobStart, nextJobStart);
+		const boundary = packagesJob.indexOf(
+			'- run: pnpm --dir packages/llvm-core run verify:package-boundary'
+		);
+		const installBudgets = packagesJob.indexOf('- run: pnpm run verify:package');
+
+		expect(boundary).toBeGreaterThanOrEqual(0);
+		expect(installBudgets).toBeGreaterThan(boundary);
+	});
+
 	it('runs the complete browser matrix as scheduled isolated shards', async () => {
 		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
 		const jobStart = workflow.indexOf('    runtime-browser-full:');

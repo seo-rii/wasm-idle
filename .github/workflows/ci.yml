@@ -45,6 +45,7 @@ jobs:
             - run: pnpm exec vitest run src/lib/prepare-browser-test-assets.test.ts src/lib/run-all-language-browser-tests.test.ts src/lib/verify-package.test.ts
             - run: pnpm exec vitest run src/lib/compress-static-runtime-assets.test.ts src/lib/static-asset-sizes.test.ts src/lib/build-layered-runtime-assets.test.ts src/lib/compressed-runtime-service-worker.test.ts src/lib/package-scripts.test.ts src/lib/playground/static-runtime-assets.test.ts src/lib/playground/support-matrix.test.ts
             - run: node --test runtimes/wasm-awk/scripts/build.test.mjs
+            - run: pnpm --dir packages/llvm-core run verify:package-boundary
             - run: pnpm run verify:package
 
     lsp-browser-smoke:

@@ -45,6 +45,7 @@
 	},
 	"files": [
 		"dist",
+		"!dist/**/*.map",
 		"!dist/**/*.{wasm,zip,tar,gz,tgz,data,zst,br,a,o,so,bc,pack}",
 		"README.md"
 	],
