@@ -17,13 +17,14 @@ describe('LLDB browser integration workflow', () => {
 		});
 	});
 
-	it('checks pinned debugger asset hashes and budgets before launching Chromium', async () => {
+	it('prepares the shared debugger release and checks its budget before launching Chromium', async () => {
 		const workflow = await readFile('.github/workflows/debug-browser.yml', 'utf8');
+		const pkg = JSON.parse(await readFile('package.json', 'utf8')) as {
+			scripts?: Record<string, string>;
+		};
 		const clangDownloadIndex = workflow.indexOf('Download pinned Clang browser assets');
-		const debuggerDownloadIndex = workflow.indexOf(
-			'Download pinned LLDB and WAMR browser assets'
-		);
-		const lastHashVerificationIndex = workflow.lastIndexOf('sha256sum --check');
+		const clangHashVerificationIndex = workflow.lastIndexOf('sha256sum --check');
+		const debuggerPrepareIndex = workflow.indexOf('pnpm run prepare:wasm-debug-release');
 		const consumerBuildIndex = workflow.indexOf('pnpm run build:publish-deps');
 		const manifestReceiptTestIndex = workflow.indexOf(
 			'pnpm vitest run src/lib/playground/lldbManifestReceipt.test.ts'
@@ -32,12 +33,18 @@ describe('LLDB browser integration workflow', () => {
 		const browserTestIndex = workflow.indexOf('pnpm run test:browser:debug:lldb');
 
 		expect(clangDownloadIndex).toBeGreaterThan(-1);
-		expect(debuggerDownloadIndex).toBeGreaterThan(clangDownloadIndex);
-		expect(lastHashVerificationIndex).toBeGreaterThan(debuggerDownloadIndex);
-		expect(consumerBuildIndex).toBeGreaterThan(lastHashVerificationIndex);
+		expect(clangHashVerificationIndex).toBeGreaterThan(clangDownloadIndex);
+		expect(debuggerPrepareIndex).toBeGreaterThan(clangHashVerificationIndex);
+		expect(consumerBuildIndex).toBeGreaterThan(debuggerPrepareIndex);
 		expect(manifestReceiptTestIndex).toBeGreaterThan(consumerBuildIndex);
 		expect(assetBudgetIndex).toBeGreaterThan(manifestReceiptTestIndex);
 		expect(browserTestIndex).toBeGreaterThan(assetBudgetIndex);
+		expect(pkg.scripts?.['prepare:wasm-debug-release']).toBe(
+			'node scripts/prepare-wasm-debug-release.mjs'
+		);
+		expect(workflow).not.toContain('Download pinned LLDB and WAMR browser assets');
+		expect(workflow).not.toContain('WASM_LLVM_DEBUG_RELEASE_URL');
+		expect(workflow).not.toContain('static/wasm-debug/');
 	});
 
 	it('does not let a nightly soak cancel the main-push browser gate', async () => {
@@ -58,7 +65,9 @@ describe('LLDB browser integration workflow', () => {
 
 	it('gates pull requests and main pushes with the product LLDB/WAMR Chromium test', async () => {
 		const workflow = await readFile('.github/workflows/debug-browser.yml', 'utf8');
-		const debugReadme = await readFile('packages/llvm-core/README.md', 'utf8');
+		const pkg = JSON.parse(await readFile('package.json', 'utf8')) as {
+			scripts?: Record<string, string>;
+		};
 		const productJobIndex = workflow.indexOf('    product-lldb-wamr:');
 		const strictCspIndex = workflow.indexOf(
 			"        env:\n            WASM_IDLE_STRICT_CSP: '1'",
@@ -83,48 +92,12 @@ describe('LLDB browser integration workflow', () => {
 			expect(workflow).toContain(`static/clang/bin/${asset}`);
 			expect(workflow).toContain(sha256);
 		}
-		expect(workflow).toContain(
-			'https://raw.githubusercontent.com/seo-rii/wasm-llvm/adac1d77676e48eb994c78f3053057708d389ca2/artifacts/runtime-source'
+		expect(pkg.scripts?.['prepare:wasm-debug-release']).toBe(
+			'node scripts/prepare-wasm-debug-release.mjs'
 		);
-		const pinnedRuntimeRevision = workflow.match(
-			/wasm-llvm\/([0-9a-f]{40})\/artifacts\/runtime-source/
-		)?.[1];
-		expect(pinnedRuntimeRevision).toBeDefined();
-		expect(debugReadme).toContain(`wasm-llvm\` commit \`${pinnedRuntimeRevision}\``);
-		expect(workflow).not.toContain('/wasm-llvm/main/artifacts/runtime-source');
-		for (const [asset, sha256] of [
-			[
-				'runtime-manifest.v2.json',
-				'a43dfb9c1fa41ba10bb408bf48ee41bc51834d499f11a26f4c37e3ad1f74ef54'
-			],
-			[
-				'debug/lldb-web-dap.js',
-				'c6ecfaf08d60af11b003df60435c77a5ed24fc46887d2aa43e19436d5a5eb59d'
-			],
-			[
-				'debug/lldb-web-dap.wasm',
-				'17346bd942d9e630437ed6519e5aa1cd1c88f2a9c5e46c96f4dcbb74d6a680d0'
-			],
-			[
-				'debug/lldb-web-dap.pthread.mjs',
-				'd40975277aa0c98c6570f9a35d52ab9be475ded4e7a4796fc6d0f8f314c9652d'
-			],
-			[
-				'debug/wamr-debug.js',
-				'27ae46467c33d7794878f956aadf70f7fb1ac92f3625466d5d066a772ccdf081'
-			],
-			[
-				'debug/wamr-debug.wasm',
-				'652518a5c03d4b855ab5e661a313cb698f66ae462971d18e1a4ddac78160694f'
-			],
-			[
-				'debug/wamr-debug.worker.mjs',
-				'22998261a62469360bb373812566c364a9b97af01622f8479794c1624464beb3'
-			]
-		]) {
-			expect(workflow).toContain(`static/wasm-debug/${asset}`);
-			expect(workflow).toContain(sha256);
-		}
+		expect(workflow).toContain('pnpm run prepare:wasm-debug-release');
+		expect(workflow).not.toContain('WASM_LLVM_DEBUG_RELEASE_URL');
+		expect(workflow).not.toContain('static/wasm-debug/');
 		expect(workflow).toContain('pnpm run test:browser:debug:lldb');
 		expect(workflow).not.toContain('continue-on-error: true');
 	});

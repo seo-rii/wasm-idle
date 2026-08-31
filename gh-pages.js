@@ -2,9 +2,12 @@ import { publish } from 'gh-pages';
 import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyPageWasmDebugRelease } from './scripts/verify-page-wasm-debug.mjs';
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 const buildDir = path.join(repoRoot, 'build');
+
+await verifyPageWasmDebugRelease({ buildDir });
 
 const requiredBuildFiles = [
 	'compressed-runtime-assets.v1.json',

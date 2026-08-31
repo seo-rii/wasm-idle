@@ -46,25 +46,8 @@ jobs:
                   sha256sum --check <<<"f842a9b5df3c6d326f0260bfd313c11c2e22bc8b8ae0387deede9a4af55779cd  static/clang/bin/lld.wasm.gz"
                   sha256sum --check <<<"d86f141eacd58a93511fbfb7c4e81d498eb7106a8a57df1bea7d33df3ce1f403  static/clang/bin/memfs.wasm.gz"
                   sha256sum --check <<<"68437624a81c465b93895615e7afd3f235ff256de17dc1927b124e783614e3e4  static/clang/bin/sysroot.tar.gz"
-            - name: Download pinned LLDB and WAMR browser assets
-              env:
-                  WASM_LLVM_DEBUG_RELEASE_URL: https://raw.githubusercontent.com/seo-rii/wasm-llvm/adac1d77676e48eb994c78f3053057708d389ca2/artifacts/runtime-source
-              run: |
-                  mkdir -p static/wasm-debug/debug
-                  curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_LLVM_DEBUG_RELEASE_URL/runtime-manifest.v2.json" --output static/wasm-debug/runtime-manifest.v2.json
-                  curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_LLVM_DEBUG_RELEASE_URL/debug/lldb-web-dap.js" --output static/wasm-debug/debug/lldb-web-dap.js
-                  curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_LLVM_DEBUG_RELEASE_URL/debug/lldb-web-dap.wasm" --output static/wasm-debug/debug/lldb-web-dap.wasm
-                  curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_LLVM_DEBUG_RELEASE_URL/debug/lldb-web-dap.pthread.mjs" --output static/wasm-debug/debug/lldb-web-dap.pthread.mjs
-                  curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_LLVM_DEBUG_RELEASE_URL/debug/wamr-debug.js" --output static/wasm-debug/debug/wamr-debug.js
-                  curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_LLVM_DEBUG_RELEASE_URL/debug/wamr-debug.wasm" --output static/wasm-debug/debug/wamr-debug.wasm
-                  curl --fail --location --retry 3 --header "Cookie: dev_bypass_waf=seorii_bypass_token_is_this" "$WASM_LLVM_DEBUG_RELEASE_URL/debug/wamr-debug.worker.mjs" --output static/wasm-debug/debug/wamr-debug.worker.mjs
-                  sha256sum --check <<<"a43dfb9c1fa41ba10bb408bf48ee41bc51834d499f11a26f4c37e3ad1f74ef54  static/wasm-debug/runtime-manifest.v2.json"
-                  sha256sum --check <<<"c6ecfaf08d60af11b003df60435c77a5ed24fc46887d2aa43e19436d5a5eb59d  static/wasm-debug/debug/lldb-web-dap.js"
-                  sha256sum --check <<<"17346bd942d9e630437ed6519e5aa1cd1c88f2a9c5e46c96f4dcbb74d6a680d0  static/wasm-debug/debug/lldb-web-dap.wasm"
-                  sha256sum --check <<<"d40975277aa0c98c6570f9a35d52ab9be475ded4e7a4796fc6d0f8f314c9652d  static/wasm-debug/debug/lldb-web-dap.pthread.mjs"
-                  sha256sum --check <<<"27ae46467c33d7794878f956aadf70f7fb1ac92f3625466d5d066a772ccdf081  static/wasm-debug/debug/wamr-debug.js"
-                  sha256sum --check <<<"652518a5c03d4b855ab5e661a313cb698f66ae462971d18e1a4ddac78160694f  static/wasm-debug/debug/wamr-debug.wasm"
-                  sha256sum --check <<<"22998261a62469360bb373812566c364a9b97af01622f8479794c1624464beb3  static/wasm-debug/debug/wamr-debug.worker.mjs"
+            - name: Prepare pinned LLDB and WAMR browser release
+              run: pnpm run prepare:wasm-debug-release
             - name: Build debugger consumer dependencies
               run: pnpm run build:publish-deps
             - name: Verify bundled debugger manifest receipt
