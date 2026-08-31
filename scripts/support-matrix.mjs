@@ -1595,7 +1595,12 @@ LLDB and WAMR assets are not downloaded until a supported debug session starts. 
 checked against its release receipt before parsing, and custom runtime locations must provide an
 explicit expected manifest SHA-256. The six executable assets are then streamed, bounded, and
 hash-verified exactly once before their owned bytes are transferred to the Workers. Workers do not
-re-fetch executable runtime URLs. If the LLDB manifest is absent, invalid, or does not advertise
+re-fetch executable runtime URLs. Clean Pages builds fetch the exact pinned producer revision and
+manifest receipt through the shared release profile before the application build. The deployment
+refuses publication when any logical LLDB/WAMR asset is missing or mismatched after re-verifying
+raw or compressed logical bytes. This build-time preparation does not change lazy browser loading:
+clients fetch the debugger payload only when a supported debug session starts. If the LLDB manifest
+is absent, invalid, or does not advertise
 the required breakpoint/step/stack/local capabilities, the
 playground labels that run as a trace fallback and keeps the existing instrumentation debugger
 available. LLDB-designated browser fixtures reject trace fallback, while a separate missing-asset

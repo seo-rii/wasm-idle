@@ -35,6 +35,12 @@ describe('README support matrix', () => {
 			'`script-src`, `worker-src`, and `connect-src` must permit `blob:`'
 		);
 		expect(section).toMatch(/Workers do not\s+re-fetch executable runtime URLs/);
+		expect(section).toMatch(
+			/Clean Pages builds fetch the exact pinned producer revision and\s+manifest receipt/
+		);
+		expect(section).toMatch(
+			/deployment\s+refuses publication when any logical LLDB\/WAMR asset is missing or mismatched/
+		);
 		expect(section).toContain('LLDB-designated browser fixtures reject trace fallback');
 		expect(section).toMatch(
 			/a separate missing-asset\s+fixture qualifies the pre-session trace alternative/

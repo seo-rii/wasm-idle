@@ -367,6 +367,15 @@ post-sync receipt test is the release drift gate. A machine power loss between f
 outside the runtime publication contract, so release commits must include and verify code, profile,
 manifest, and assets together.
 
+Clean Pages builds run `prepare:wasm-debug-release` before layering or compression. That command
+reads the tracked release profile, fetches only its immutable `wasm-llvm` revision, authenticates
+the manifest receipt before trusting its asset list, and installs the six verified assets through
+the same transactional sync path. Immediately before `gh-pages` publication, the deployment
+verifier authenticates the logical manifest and every asset again; it accepts either raw bytes or
+the deterministic gzip representation recorded by `compressed-runtime-assets.v1.json`, and refuses
+missing, ambiguous, stale, oversized, or mismatched output. Browser behavior remains lazy because
+this is a build-time static-tree preparation step, not an application-start preload.
+
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
 Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,
 verifies every pinned SHA-256 receipt, and requires the product LLDB/WAMR binaries published by
