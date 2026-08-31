@@ -27,6 +27,18 @@ function repeatedBytes(size: number, value: number) {
 	return Uint8Array.from({ length: size }, () => value);
 }
 
+function deterministicNoise(size: number) {
+	const bytes = new Uint8Array(size);
+	let state = 0x12345678;
+	for (let index = 0; index < bytes.byteLength; index += 1) {
+		state ^= state << 13;
+		state ^= state >>> 17;
+		state ^= state << 5;
+		bytes[index] = state & 0xff;
+	}
+	return bytes;
+}
+
 describe('compressStaticRuntimeAssets', () => {
 	afterEach(async () => {
 		await Promise.all(
@@ -82,6 +94,47 @@ describe('compressStaticRuntimeAssets', () => {
 		expect(manifest.sizes['wasm-swift/swiftc.wasm']).toBe(1_000_001);
 		expect(manifest.sizes['wasm-swift/swiftpm.wasm']).toBe(1_000_001);
 	});
+
+	it('leaves inert Rust executable graph storage untouched and unregistered', async () => {
+		const rootDir = await makeTempDir();
+		const identityPath = 'wasm-rust/compiler-worker.js.bin';
+		const gzipPath = 'wasm-rust/vendor/jco/obj/wasm-tools.js.gz.bin';
+		const identityBytes = repeatedBytes(STATIC_RUNTIME_MIN_COMPRESS_BYTES + 1, 5);
+		const gzipBytes = gzipSync(deterministicNoise(STATIC_RUNTIME_MIN_COMPRESS_BYTES + 4_096), {
+			level: 9
+		});
+		expect(gzipBytes.byteLength).toBeGreaterThan(STATIC_RUNTIME_MIN_COMPRESS_BYTES);
+		await writeAsset(rootDir, identityPath, identityBytes);
+		await writeAsset(rootDir, gzipPath, gzipBytes);
+		await writeAsset(
+			rootDir,
+			'compressed-runtime-assets.v1.json',
+			new TextEncoder().encode(
+				JSON.stringify({
+					assets: [identityPath, gzipPath],
+					sizes: { [identityPath]: 1, [gzipPath]: 2 }
+				})
+			)
+		);
+
+		const result = await compressStaticRuntimeAssets({ rootDir });
+
+		expect(result.compressed).toEqual([]);
+		expect(result.manifestAssets).toEqual([]);
+		await expect(readFile(path.join(rootDir, identityPath))).resolves.toEqual(
+			Buffer.from(identityBytes)
+		);
+		await expect(readFile(path.join(rootDir, gzipPath))).resolves.toEqual(
+			Buffer.from(gzipBytes)
+		);
+		await expect(stat(path.join(rootDir, `${identityPath}.gz`))).rejects.toThrow();
+		await expect(stat(path.join(rootDir, `${gzipPath}.gz`))).rejects.toThrow();
+		await expect(
+			readFile(path.join(rootDir, 'compressed-runtime-assets.v1.json'), 'utf8').then(
+				(value) => JSON.parse(value)
+			)
+		).resolves.toEqual({ assets: [], sizes: {} });
+	}, 15_000);
 
 	it('compresses generic runtime payloads and immutable Vite assets', async () => {
 		const rootDir = await makeTempDir();

@@ -1,8 +1,58 @@
 const textEncoder = new TextEncoder();
-
-function assetUrl(baseUrl, path) {
-	return new URL(path, baseUrl).href;
-}
+const runtimePreflightKeys = ['goShimBytes', 'protocol', 'wasmBytes'];
+const appRunKeys = [
+	'activePath',
+	'args',
+	'baseUrl',
+	'code',
+	'log',
+	'manifestFingerprint',
+	'manifestUrl',
+	'maxAssetBytes',
+	'run',
+	'runId',
+	'runtimePreflight',
+	'stdin',
+	'stdinEof',
+	'workspaceFiles'
+];
+const appStreamingRunKeys = [...appRunKeys, 'stdinChannel'].sort();
+const lspRunKeys = [
+	'activePath',
+	'args',
+	'code',
+	'diagnose',
+	'log',
+	'run',
+	'runtimePreflight',
+	'stdin'
+];
+const pinnedRuntimeProfile = Object.freeze({
+	profileId: '__WASM_IDLE_AWK_PROFILE_ID__',
+	goShimReceipt: Object.freeze({
+		bytes: Number('__WASM_IDLE_AWK_GO_SHIM_BYTES__'),
+		sha256: '__WASM_IDLE_AWK_GO_SHIM_SHA256__'
+	}),
+	logicalWasmReceipt: Object.freeze({
+		bytes: Number('__WASM_IDLE_AWK_LOGICAL_WASM_BYTES__'),
+		sha256: '__WASM_IDLE_AWK_LOGICAL_WASM_SHA256__'
+	})
+});
+const deniedNetworkGlobals = [
+	'Cache',
+	'CacheStorage',
+	'EventSource',
+	'RTCPeerConnection',
+	'SharedWorker',
+	'WebSocket',
+	'WebSocketStream',
+	'WebTransport',
+	'Worker',
+	'XMLHttpRequest',
+	'fetch'
+];
+const deniedCacheStorageMethods = ['delete', 'has', 'keys', 'match', 'open'];
+let runState = 'idle';
 
 function postOutput(text) {
 	if (text) self.postMessage({ output: text });
@@ -109,17 +159,243 @@ function waitForRunFunction() {
 	});
 }
 
-async function loadRuntime(baseUrl) {
-	importScripts(assetUrl(baseUrl, 'wasm_exec.js'));
-	const go = new globalThis.Go();
-	const response = await fetch(assetUrl(baseUrl, 'goawk.wasm'));
-	if (!response.ok) {
-		throw new Error(`failed to load GoAWK wasm: ${response.status}`);
+function validateOwnedBytes(value, label) {
+	if (
+		!(value instanceof Uint8Array) ||
+		!(value.buffer instanceof ArrayBuffer) ||
+		value.byteOffset !== 0 ||
+		value.byteLength === 0 ||
+		value.byteLength !== value.buffer.byteLength
+	) {
+		throw new Error(`GoAWK ${label} must be an exclusively owned Uint8Array.`);
 	}
-	const { instance } = await WebAssembly.instantiate(
-		await response.arrayBuffer(),
-		go.importObject
+	return value;
+}
+
+function isPlainRecord(value) {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+	const prototype = Object.getPrototypeOf(value);
+	if (prototype !== Object.prototype && prototype !== null) return false;
+	if (Object.getOwnPropertySymbols(value).length) return false;
+	return Object.values(Object.getOwnPropertyDescriptors(value)).every(
+		(descriptor) => !descriptor.get && !descriptor.set
 	);
+}
+
+function hasExactKeys(value, expectedKeys) {
+	const keys = Object.keys(value).sort();
+	return (
+		keys.length === expectedKeys.length &&
+		keys.every((key, index) => key === expectedKeys[index])
+	);
+}
+
+function isWorkspaceFile(value) {
+	return (
+		isPlainRecord(value) &&
+		hasExactKeys(value, ['content', 'path']) &&
+		typeof value.path === 'string' &&
+		value.path.length > 0 &&
+		typeof value.content === 'string'
+	);
+}
+
+function validateRunEnvelope(value) {
+	if (!isPlainRecord(value)) throw new Error('Invalid GoAWK run request envelope.');
+	const isLsp = hasExactKeys(value, lspRunKeys);
+	const expectedAppKeys = value.stdinChannel === undefined ? appRunKeys : appStreamingRunKeys;
+	const isApp = hasExactKeys(value, expectedAppKeys);
+	if (!isLsp && !isApp) throw new Error('Invalid GoAWK run request envelope.');
+	if (
+		value.run !== true ||
+		typeof value.code !== 'string' ||
+		!Array.isArray(value.args) ||
+		value.args.some((argument) => typeof argument !== 'string') ||
+		typeof value.activePath !== 'string' ||
+		!value.activePath ||
+		typeof value.log !== 'boolean'
+	) {
+		throw new Error('Invalid GoAWK run request envelope.');
+	}
+	if (isLsp) {
+		if (value.diagnose !== true || typeof value.stdin !== 'string') {
+			throw new Error('Invalid GoAWK language-server request envelope.');
+		}
+	} else if (
+		typeof value.runId !== 'string' ||
+		!/^static-\d+$/u.test(value.runId) ||
+		typeof value.baseUrl !== 'string' ||
+		typeof value.manifestUrl !== 'string' ||
+		!value.manifestUrl ||
+		typeof value.manifestFingerprint !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(value.manifestFingerprint) ||
+		!Number.isSafeInteger(value.maxAssetBytes) ||
+		value.maxAssetBytes <= 0 ||
+		(value.stdin !== undefined && typeof value.stdin !== 'string') ||
+		typeof value.stdinEof !== 'boolean' ||
+		!Array.isArray(value.workspaceFiles) ||
+		value.workspaceFiles.some((file) => !isWorkspaceFile(file)) ||
+		(value.stdinChannel !== undefined && !isPlainRecord(value.stdinChannel))
+	) {
+		throw new Error('Invalid GoAWK application request envelope.');
+	}
+	return value;
+}
+
+function validatePinnedReceipt(value, label) {
+	if (
+		!isPlainRecord(value) ||
+		!hasExactKeys(value, ['bytes', 'sha256']) ||
+		!Number.isSafeInteger(value.bytes) ||
+		value.bytes <= 0 ||
+		typeof value.sha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(value.sha256)
+	) {
+		throw new Error(`GoAWK runner has an invalid baked ${label} receipt.`);
+	}
+	return value;
+}
+
+function validatePinnedRuntimeProfile() {
+	if (
+		!isPlainRecord(pinnedRuntimeProfile) ||
+		!hasExactKeys(pinnedRuntimeProfile, ['goShimReceipt', 'logicalWasmReceipt', 'profileId']) ||
+		typeof pinnedRuntimeProfile.profileId !== 'string' ||
+		!/^goawk-[A-Za-z0-9._-]+$/u.test(pinnedRuntimeProfile.profileId)
+	) {
+		throw new Error('GoAWK runner does not contain a valid baked runtime profile.');
+	}
+	return {
+		goShimReceipt: validatePinnedReceipt(pinnedRuntimeProfile.goShimReceipt, 'Go shim'),
+		logicalWasmReceipt: validatePinnedReceipt(
+			pinnedRuntimeProfile.logicalWasmReceipt,
+			'logical Wasm'
+		)
+	};
+}
+
+function validateRuntimePreflight(value) {
+	if (!isPlainRecord(value)) {
+		throw new Error('Invalid GoAWK runtime preflight payload.');
+	}
+	if (
+		!hasExactKeys(value, runtimePreflightKeys) ||
+		value.protocol !== 'wasm-idle-awk-runtime-v2'
+	) {
+		throw new Error('Invalid GoAWK runtime preflight payload.');
+	}
+	const goShimBytes = validateOwnedBytes(value.goShimBytes, 'Go shim');
+	const wasmBytes = validateOwnedBytes(value.wasmBytes, 'Wasm');
+	if (
+		wasmBytes.byteLength < 8 ||
+		wasmBytes[0] !== 0x00 ||
+		wasmBytes[1] !== 0x61 ||
+		wasmBytes[2] !== 0x73 ||
+		wasmBytes[3] !== 0x6d
+	) {
+		throw new Error('GoAWK Wasm payload does not have a WebAssembly module header.');
+	}
+	return { goShimBytes, wasmBytes };
+}
+
+async function sha256Hex(bytes) {
+	if (!globalThis.crypto?.subtle) {
+		throw new Error('GoAWK runtime verification requires Web Crypto SHA-256.');
+	}
+	const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes.buffer));
+	return Array.from(digest, (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+async function verifyPinnedAsset(bytes, receipt, label) {
+	if (bytes.byteLength !== receipt.bytes) {
+		throw new Error(`GoAWK ${label} does not match the baked byte receipt.`);
+	}
+	if ((await sha256Hex(bytes)) !== receipt.sha256) {
+		throw new Error(`GoAWK ${label} does not match the baked SHA-256 receipt.`);
+	}
+}
+
+async function verifyRuntimePreflight(runtimePreflight) {
+	const receipts = validatePinnedRuntimeProfile();
+	await verifyPinnedAsset(runtimePreflight.goShimBytes, receipts.goShimReceipt, 'Go shim');
+	await verifyPinnedAsset(
+		runtimePreflight.wasmBytes,
+		receipts.logicalWasmReceipt,
+		'logical Wasm'
+	);
+}
+
+function installNetworkGuard(shimUrl) {
+	if (typeof globalThis.importScripts !== 'function') {
+		throw new Error('GoAWK runtime requires classic worker importScripts.');
+	}
+	const nativeImportScripts = globalThis.importScripts.bind(globalThis);
+	const denyNetwork = () => {
+		throw new Error('GoAWK runner network access is disabled.');
+	};
+	for (const name of deniedNetworkGlobals) {
+		Object.defineProperty(globalThis, name, {
+			value: denyNetwork,
+			writable: false,
+			configurable: false
+		});
+	}
+	Object.defineProperty(globalThis, 'caches', {
+		value: Object.freeze(
+			Object.fromEntries(deniedCacheStorageMethods.map((name) => [name, denyNetwork]))
+		),
+		writable: false,
+		configurable: false
+	});
+	if (typeof globalThis.navigator?.sendBeacon === 'function') {
+		Object.defineProperty(globalThis.navigator, 'sendBeacon', {
+			value: denyNetwork,
+			writable: false,
+			configurable: false
+		});
+	}
+	let shimImportAvailable = true;
+	Object.defineProperty(globalThis, 'importScripts', {
+		value: (...urls) => {
+			if (!shimImportAvailable || urls.length !== 1 || urls[0] !== shimUrl) {
+				throw new Error('GoAWK runner rejected a non-pinned script import.');
+			}
+			shimImportAvailable = false;
+			return nativeImportScripts(shimUrl);
+		},
+		writable: false,
+		configurable: false
+	});
+}
+
+function loadGoShim(goShimBytes) {
+	if (
+		typeof Blob !== 'function' ||
+		typeof URL !== 'function' ||
+		typeof URL.createObjectURL !== 'function' ||
+		typeof URL.revokeObjectURL !== 'function'
+	) {
+		throw new Error('GoAWK runtime requires Blob-backed classic worker scripts.');
+	}
+	const shimUrl = URL.createObjectURL(
+		new Blob([goShimBytes], { type: 'text/javascript;charset=utf-8' })
+	);
+	try {
+		installNetworkGuard(shimUrl);
+		globalThis.importScripts(shimUrl);
+	} finally {
+		URL.revokeObjectURL(shimUrl);
+	}
+	if (typeof globalThis.Go !== 'function') {
+		throw new Error('GoAWK Go shim did not install the Go runtime.');
+	}
+}
+
+async function loadRuntime(runtimePreflight) {
+	const { goShimBytes, wasmBytes } = runtimePreflight;
+	loadGoShim(goShimBytes);
+	const go = new globalThis.Go();
+	const { instance } = await WebAssembly.instantiate(wasmBytes, go.importObject);
 	void go.run(instance).catch((error) => {
 		console.error('[wasm-idle:awk-worker] Go runtime stopped', error);
 	});
@@ -127,26 +403,48 @@ async function loadRuntime(baseUrl) {
 }
 
 self.onmessage = async (event) => {
-	const { baseUrl, code, args = [], stdin, stdinChannel, log } = event.data || {};
+	if (runState !== 'idle') {
+		self.postMessage({ error: 'Invalid or repeated GoAWK run request.' });
+		return;
+	}
+	runState = 'validating';
 	let stdoutSink;
 	let stderrSink;
+	let log = false;
 	try {
+		const request = validateRunEnvelope(event.data);
+		log = request.log;
+		const runtimePreflight = validateRuntimePreflight(request.runtimePreflight);
+		runState = 'verifying';
+		await verifyRuntimePreflight(runtimePreflight);
+		runState = 'verified';
 		if (log) {
-			console.log(`[wasm-idle:awk-worker] run start baseUrl=${baseUrl}`);
+			console.log('[wasm-idle:awk-worker] run start');
 		}
-		const runAwk = await loadRuntime(baseUrl);
+		runState = 'loading-runtime';
+		const runAwk = await loadRuntime(runtimePreflight);
+		runState = 'running';
 		let result;
-		if (stdinChannel === undefined) {
-			result = runAwk(String(code || ''), typeof stdin === 'string' ? stdin : '', args);
+		if (request.stdinChannel === undefined) {
+			result = runAwk(
+				request.code,
+				typeof request.stdin === 'string' ? request.stdin : '',
+				request.args
+			);
 			postOutput(String(result.stdout || ''));
 			postOutput(String(result.stderr || ''));
 		} else {
 			stdoutSink = createOutputSink(postOutput);
 			stderrSink = createOutputSink(postOutput);
-			result = runAwk(String(code || ''), createStdinReader(stdin, stdinChannel), args, {
-				stdout: (chunk) => stdoutSink.write(chunk),
-				stderr: (chunk) => stderrSink.write(chunk)
-			});
+			result = runAwk(
+				request.code,
+				createStdinReader(request.stdin, request.stdinChannel),
+				request.args,
+				{
+					stdout: (chunk) => stdoutSink.write(chunk),
+					stderr: (chunk) => stderrSink.write(chunk)
+				}
+			);
 			stdoutSink.finish();
 			stderrSink.finish();
 		}
@@ -159,9 +457,12 @@ self.onmessage = async (event) => {
 		if (log) {
 			console.log('[wasm-idle:awk-worker] run settled');
 		}
+		runState = 'settled';
 		self.postMessage({ results: true });
 	} catch (error) {
-		if (log) {
+		const failedAfterVerification = !['idle', 'validating', 'verifying'].includes(runState);
+		runState = 'failed';
+		if (log && failedAfterVerification) {
 			console.error('[wasm-idle:awk-worker] failed', error);
 		}
 		self.postMessage({ error: error?.message || String(error) });

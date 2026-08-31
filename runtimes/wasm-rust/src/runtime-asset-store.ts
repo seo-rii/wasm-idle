@@ -1,5 +1,10 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
-import { fetchRuntimeAssetBytes, fetchRuntimeAssetJson } from './runtime-asset.js';
+import {
+	createRuntimeAssetCacheKey,
+	fetchRuntimeAssetBytes,
+	fetchRuntimeAssetJson,
+	type RuntimeAssetFetchOptions
+} from './runtime-asset.js';
 import type { RuntimeAssetPackReference } from './runtime-manifest.js';
 
 export interface RuntimePackIndexEntry {
@@ -40,6 +45,17 @@ export interface RuntimePackAssetEntry {
 
 const runtimePackBytesCache = new Map<string, Promise<Uint8Array>>();
 const runtimePackIndexCache = new Map<string, Promise<RuntimePackIndex>>();
+
+function runtimePackCacheIdentity(pack: RuntimeAssetPackReference): string {
+	return JSON.stringify([
+		pack.asset,
+		pack.index,
+		pack.fileCount,
+		pack.totalBytes,
+		pack.decodedTotalBytes ?? null,
+		pack.delta ? [pack.delta.format, runtimePackCacheIdentity(pack.delta.base)] : null
+	]);
+}
 
 function expectObject(value: unknown, label: string): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -171,22 +187,25 @@ async function loadRuntimePackBytes(
 	runtimeBaseUrl: string | URL,
 	pack: RuntimeAssetPackReference,
 	fetchImpl: typeof fetch,
-	onProgress?: (progress: { loaded: number; total?: number }) => void
+	onProgress?: (progress: { loaded: number; total?: number }) => void,
+	options: RuntimeAssetFetchOptions = {}
 ) {
 	const assetUrl = resolveVersionedAssetUrl(runtimeBaseUrl, pack.asset).toString();
-	let cachedBytes = runtimePackBytesCache.get(assetUrl);
+	const cacheKey = `${createRuntimeAssetCacheKey(assetUrl, fetchImpl, options)}\0${runtimePackCacheIdentity(pack)}`;
+	let cachedBytes = runtimePackBytesCache.get(cacheKey);
 	if (!cachedBytes) {
 		cachedBytes = fetchRuntimeAssetBytes(
 			assetUrl,
 			`wasm-rust runtime pack ${pack.asset}`,
 			fetchImpl,
 			true,
-			onProgress
+			onProgress,
+			options
 		);
-		runtimePackBytesCache.set(assetUrl, cachedBytes);
+		runtimePackBytesCache.set(cacheKey, cachedBytes);
 		cachedBytes.catch(() => {
-			if (runtimePackBytesCache.get(assetUrl) === cachedBytes) {
-				runtimePackBytesCache.delete(assetUrl);
+			if (runtimePackBytesCache.get(cacheKey) === cachedBytes) {
+				runtimePackBytesCache.delete(cacheKey);
 			}
 		});
 	}
@@ -196,20 +215,24 @@ async function loadRuntimePackBytes(
 async function loadRuntimePackIndex(
 	runtimeBaseUrl: string | URL,
 	pack: RuntimeAssetPackReference,
-	fetchImpl: typeof fetch
+	fetchImpl: typeof fetch,
+	options: RuntimeAssetFetchOptions = {}
 ) {
 	const indexUrl = resolveVersionedAssetUrl(runtimeBaseUrl, pack.index).toString();
-	let cachedIndex = runtimePackIndexCache.get(indexUrl);
+	const cacheKey = `${createRuntimeAssetCacheKey(indexUrl, fetchImpl, options)}\0${runtimePackCacheIdentity(pack)}`;
+	let cachedIndex = runtimePackIndexCache.get(cacheKey);
 	if (!cachedIndex) {
 		cachedIndex = fetchRuntimeAssetJson<unknown>(
 			indexUrl,
 			`wasm-rust runtime pack index ${pack.index}`,
-			fetchImpl
+			fetchImpl,
+			undefined,
+			options
 		).then((value) => parseRuntimePackIndex(value));
-		runtimePackIndexCache.set(indexUrl, cachedIndex);
+		runtimePackIndexCache.set(cacheKey, cachedIndex);
 		cachedIndex.catch(() => {
-			if (runtimePackIndexCache.get(indexUrl) === cachedIndex) {
-				runtimePackIndexCache.delete(indexUrl);
+			if (runtimePackIndexCache.get(cacheKey) === cachedIndex) {
+				runtimePackIndexCache.delete(cacheKey);
 			}
 		});
 	}
@@ -223,7 +246,8 @@ async function loadRuntimePackEntriesRecursive(
 	onProgressForPack: (
 		pack: RuntimeAssetPackReference
 	) => ((progress: { loaded: number; total?: number }) => void) | undefined,
-	ancestorIndexUrls: Set<string>
+	ancestorIndexUrls: Set<string>,
+	options: RuntimeAssetFetchOptions
 ): Promise<RuntimePackAssetEntry[]> {
 	const indexUrl = resolveVersionedAssetUrl(runtimeBaseUrl, pack.index).toString();
 	if (ancestorIndexUrls.has(indexUrl)) {
@@ -240,12 +264,13 @@ async function loadRuntimePackEntriesRecursive(
 					pack.delta.base,
 					fetchImpl,
 					onProgressForPack,
-					ancestorIndexUrls
+					ancestorIndexUrls,
+					options
 				)
 			: Promise.resolve<RuntimePackAssetEntry[] | undefined>(undefined);
 		const [index, packBytes, baseEntries] = await Promise.all([
-			loadRuntimePackIndex(runtimeBaseUrl, pack, fetchImpl),
-			loadRuntimePackBytes(runtimeBaseUrl, pack, fetchImpl, onProgress),
+			loadRuntimePackIndex(runtimeBaseUrl, pack, fetchImpl, options),
+			loadRuntimePackBytes(runtimeBaseUrl, pack, fetchImpl, onProgress, options),
 			baseEntriesPromise
 		]);
 		if (index.fileCount !== pack.fileCount) {
@@ -428,7 +453,8 @@ export async function loadRuntimePackEntries(
 	runtimeBaseUrl: string | URL,
 	pack: RuntimeAssetPackReference,
 	fetchImpl: typeof fetch = fetch,
-	onProgress?: (progress: { loaded: number; total?: number }) => void
+	onProgress?: (progress: { loaded: number; total?: number }) => void,
+	options: RuntimeAssetFetchOptions = {}
 ): Promise<RuntimePackAssetEntry[]> {
 	if (!pack.delta) {
 		return loadRuntimePackEntriesRecursive(
@@ -436,7 +462,8 @@ export async function loadRuntimePackEntries(
 			pack,
 			fetchImpl,
 			() => onProgress,
-			new Set()
+			new Set(),
+			options
 		);
 	}
 
@@ -473,6 +500,7 @@ export async function loadRuntimePackEntries(
 		pack,
 		fetchImpl,
 		onProgressForPack,
-		new Set()
+		new Set(),
+		options
 	);
 }

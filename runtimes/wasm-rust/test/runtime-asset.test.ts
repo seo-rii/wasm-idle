@@ -1,14 +1,237 @@
 import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
 
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+	clearRegisteredRuntimeAssetReceipts,
+	createRuntimeAssetCacheKey,
 	DEFAULT_MAX_RUNTIME_ASSET_BYTES,
 	fetchRuntimeAssetBytes,
-	fetchRuntimeAssetJson
+	fetchRuntimeAssetJson,
+	hasRegisteredRuntimeAssetReceipt,
+	registerRuntimeAssetReceipts
 } from '../src/runtime-asset.js';
+import {
+	consumeRuntimeAssetDeliveryBytes,
+	createRuntimeAssetDeliveryBudget,
+	readRuntimeAssetDeliveryBudget,
+	snapshotRuntimeAssetDeliveryBudget,
+	withRuntimeAssetDeliveryBudget
+} from '../src/runtime-delivery-budget.js';
+
+const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
 describe('runtime asset fetch fallback', () => {
+	it('verifies registered storage and logical receipts before returning gzip bytes', async () => {
+		clearRegisteredRuntimeAssetReceipts();
+		const runtimeBaseUrl = 'https://example.test/runtime/?v=profile';
+		const logicalBytes = new TextEncoder().encode('verified rust runtime');
+		const storageBytes = gzipSync(logicalBytes);
+		registerRuntimeAssetReceipts(runtimeBaseUrl, {
+			'packs/runtime.pack.gz': {
+				bytes: storageBytes.byteLength,
+				sha256: sha256(storageBytes),
+				uncompressedBytes: logicalBytes.byteLength,
+				uncompressedSha256: sha256(logicalBytes)
+			}
+		});
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/packs/runtime.pack.gz?v=profile',
+				'runtime pack',
+				async () => new Response(storageBytes),
+				false
+			)
+		).resolves.toEqual(logicalBytes);
+	});
+
+	it('rejects same-length corruption against a registered receipt', async () => {
+		clearRegisteredRuntimeAssetReceipts();
+		const assetUrl = 'https://example.test/runtime/rustc.wasm?v=profile';
+		const expected = new Uint8Array([0, 97, 115, 109]);
+		registerRuntimeAssetReceipts('https://example.test/runtime/?v=profile', {
+			'rustc.wasm': { bytes: expected.byteLength, sha256: sha256(expected) }
+		});
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				assetUrl,
+				'rustc.wasm',
+				async () => new Response(new Uint8Array([0, 97, 115, 110])),
+				false
+			)
+		).rejects.toThrow(/storage SHA-256 differs/);
+	});
+
+	it('accepts transparently decoded gzip only when its logical receipt matches', async () => {
+		clearRegisteredRuntimeAssetReceipts();
+		const logicalBytes = new Uint8Array([0, 97, 115, 109]);
+		const storageBytes = gzipSync(logicalBytes);
+		registerRuntimeAssetReceipts('https://example.test/runtime/?v=profile', {
+			'rustc.wasm.gz': {
+				bytes: storageBytes.byteLength,
+				sha256: sha256(storageBytes),
+				uncompressedBytes: logicalBytes.byteLength,
+				uncompressedSha256: sha256(logicalBytes)
+			}
+		});
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/rustc.wasm.gz?v=profile',
+				'rustc.wasm',
+				async () => new Response(logicalBytes),
+				false
+			)
+		).resolves.toEqual(logicalBytes);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/rustc.wasm.gz?v=profile',
+				'rustc.wasm',
+				async () => new Response(new Uint8Array([0, 97, 115, 110])),
+				false
+			)
+		).rejects.toThrow(/logical SHA-256 differs/);
+	});
+
+	it.each([
+		['a missing response', new Response(null, { status: 404 })],
+		['an HTML response', new Response('<!doctype html><html></html>')]
+	])('never attempts a gzip fallback for a pinned asset with %s', async (_case, response) => {
+		clearRegisteredRuntimeAssetReceipts();
+		const assetUrl = 'https://example.test/runtime/rustc.wasm?v=profile';
+		registerRuntimeAssetReceipts('https://example.test/runtime/?v=profile', {
+			'rustc.wasm': { bytes: 4, sha256: sha256(Uint8Array.of(0, 97, 115, 109)) }
+		});
+		const requests: string[] = [];
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				assetUrl,
+				'rustc.wasm',
+				async (input) => {
+					requests.push(String(input));
+					return response.clone();
+				},
+				true
+			)
+		).rejects.toThrow();
+		expect(requests).toEqual([assetUrl]);
+	});
+
+	it('classifies pinned storage encoding from the receipt instead of the URL suffix', async () => {
+		clearRegisteredRuntimeAssetReceipts();
+		const logicalBytes = Uint8Array.of(0, 97, 115, 109);
+		const storageBytes = gzipSync(logicalBytes);
+		const receipt = {
+			bytes: storageBytes.byteLength,
+			sha256: sha256(storageBytes),
+			uncompressedBytes: logicalBytes.byteLength,
+			uncompressedSha256: sha256(logicalBytes)
+		};
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/rustc.wasm?v=profile',
+				'rustc.wasm',
+				async () => new Response(storageBytes),
+				false,
+				undefined,
+				{ receipt }
+			)
+		).resolves.toEqual(logicalBytes);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/identity.gz?v=profile',
+				'identity.gz',
+				async () => new Response(storageBytes),
+				false,
+				undefined,
+				{ receipt: { bytes: storageBytes.byteLength, sha256: sha256(storageBytes) } }
+			)
+		).resolves.toEqual(Uint8Array.from(storageBytes));
+	});
+
+	it('accepts transparent logical bytes that themselves begin with gzip magic', async () => {
+		const logicalBytes = Uint8Array.of(0x1f, 0x8b, 0x00, 0x01);
+		const storageBytes = gzipSync(logicalBytes);
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/data.bin.gz?v=profile',
+				'data.bin',
+				async () => new Response(logicalBytes),
+				false,
+				undefined,
+				{
+					receipt: {
+						bytes: storageBytes.byteLength,
+						sha256: sha256(storageBytes),
+						uncompressedBytes: logicalBytes.byteLength,
+						uncompressedSha256: sha256(logicalBytes)
+					}
+				}
+			)
+		).resolves.toEqual(logicalBytes);
+	});
+
+	it('fails closed across conflicting receipt generations and registers atomically', () => {
+		clearRegisteredRuntimeAssetReceipts();
+		const receiptA = { bytes: 1, sha256: sha256(Uint8Array.of(1)) };
+		const receiptB = { bytes: 1, sha256: sha256(Uint8Array.of(2)) };
+		registerRuntimeAssetReceipts('https://example.test/runtime/?v=a', {
+			'asset.wasm': receiptA
+		});
+		registerRuntimeAssetReceipts('https://example.test/runtime/?v=b', {
+			'asset.wasm': receiptA
+		});
+		expect(
+			hasRegisteredRuntimeAssetReceipt('https://example.test/runtime/asset.wasm?v=a')
+		).toBe(true);
+		expect(
+			hasRegisteredRuntimeAssetReceipt('https://example.test/runtime/asset.wasm?v=b')
+		).toBe(true);
+		expect(hasRegisteredRuntimeAssetReceipt('https://example.test/runtime/asset.wasm')).toBe(
+			true
+		);
+		expect(() =>
+			registerRuntimeAssetReceipts('https://example.test/runtime/?v=c', {
+				'asset.wasm': receiptB
+			})
+		).toThrow(/conflicting receipts/);
+		expect(
+			hasRegisteredRuntimeAssetReceipt('https://example.test/runtime/asset.wasm?v=c')
+		).toBe(false);
+
+		expect(() =>
+			registerRuntimeAssetReceipts('https://example.test/runtime/?v=a', {
+				'new.wasm': receiptA,
+				'asset.wasm': receiptB
+			})
+		).toThrow(/conflicting receipts/);
+		expect(hasRegisteredRuntimeAssetReceipt('https://example.test/runtime/new.wasm?v=a')).toBe(
+			false
+		);
+	});
+
+	it('rejects promptly when a fetch implementation ignores its abort signal', async () => {
+		const controller = new AbortController();
+		const reason = new Error('cancelled stalled fetch');
+		const loading = fetchRuntimeAssetBytes(
+			'https://example.test/runtime/data.bin',
+			'data.bin',
+			() => new Promise<Response>(() => {}),
+			false,
+			undefined,
+			{ signal: controller.signal }
+		);
+		controller.abort(reason);
+		await expect(loading).rejects.toBe(reason);
+	});
+
 	it('uses least-authority fetch options and accepts an exact final URL', async () => {
 		const assetUrl = 'https://example.test/runtime/data.bin';
 		const response = new Response(new Uint8Array([1, 2, 3]));
@@ -506,11 +729,10 @@ describe('runtime asset fetch fallback', () => {
 				const abortRegistrations = addEventListener.mock.calls.filter(
 					([type]) => type === 'abort'
 				);
-				expect(abortRegistrations).toHaveLength(1);
-				expect(removeEventListener).toHaveBeenCalledWith(
-					'abort',
-					abortRegistrations[0]?.[1]
-				);
+				expect(abortRegistrations).toHaveLength(2);
+				for (const registration of abortRegistrations) {
+					expect(removeEventListener).toHaveBeenCalledWith('abort', registration[1]);
+				}
 				expect(onProgress).not.toHaveBeenCalled();
 
 				resolveCancel();
@@ -869,5 +1091,232 @@ describe('runtime asset fetch fallback', () => {
 
 		expect(progressEvents.map((event) => event.loaded)).toEqual([2, 5, 6]);
 		expect(progressEvents.at(-1)?.total).toBe(bytes.byteLength);
+	});
+});
+
+describe('runtime asset aggregate delivery accounting', () => {
+	it('accounts every response chunk before copying and reporting progress', async () => {
+		const budget = createRuntimeAssetDeliveryBudget(10);
+		const progress: Array<{ loaded: number; delivered: number }> = [];
+		const response = new Response(
+			new ReadableStream({
+				start(controller) {
+					controller.enqueue(Uint8Array.of(1, 2));
+					controller.enqueue(Uint8Array.of(3, 4, 5));
+					controller.close();
+				}
+			})
+		);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/chunked.bin',
+				'chunked.bin',
+				async () => response,
+				false,
+				(event) => {
+					progress.push({
+						loaded: event.loaded,
+						delivered: readRuntimeAssetDeliveryBudget(budget).deliveredBytes
+					});
+				},
+				{ deliveryBudget: budget }
+			)
+		).resolves.toEqual(Uint8Array.of(1, 2, 3, 4, 5));
+		expect(progress).toEqual([
+			{ loaded: 2, delivered: 2 },
+			{ loaded: 5, delivered: 5 }
+		]);
+		expect(readRuntimeAssetDeliveryBudget(budget)).toMatchObject({
+			deliveredBytes: 5,
+			sequence: 2
+		});
+	});
+
+	it('records the complete crossing chunk, then cancels without reporting it', async () => {
+		const budget = createRuntimeAssetDeliveryBudget(4);
+		const progress: number[] = [];
+		const reader = {
+			read: vi
+				.fn()
+				.mockResolvedValueOnce({ done: false, value: Uint8Array.of(1, 2, 3) })
+				.mockResolvedValueOnce({ done: false, value: Uint8Array.of(4, 5) })
+				.mockResolvedValueOnce({ done: true, value: undefined }),
+			cancel: vi.fn(async () => undefined),
+			releaseLock: vi.fn()
+		};
+		const response = {
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: { getReader: () => reader }
+		} as unknown as Response;
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/over-budget.bin',
+				'over-budget.bin',
+				async () => response,
+				false,
+				(event) => progress.push(event.loaded),
+				{ deliveryBudget: budget, maxAssetBytes: 10 }
+			)
+		).rejects.toThrow(/aggregate limit/);
+		expect(readRuntimeAssetDeliveryBudget(budget)).toMatchObject({
+			deliveredBytes: 5,
+			sequence: 2
+		});
+		expect(progress).toEqual([3]);
+		expect(reader.cancel).toHaveBeenCalledOnce();
+		expect(reader.releaseLock).toHaveBeenCalledOnce();
+	});
+
+	it('accounts a bodyless materialization exactly once', async () => {
+		const budget = createRuntimeAssetDeliveryBudget(10);
+		const arrayBuffer = vi.fn(async () => Uint8Array.of(1, 2, 3).buffer);
+		const response = {
+			url: '',
+			ok: true,
+			status: 200,
+			headers: new Headers(),
+			body: null,
+			arrayBuffer
+		} as unknown as Response;
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/bodyless.bin',
+				'bodyless.bin',
+				async () => response,
+				false,
+				undefined,
+				{ deliveryBudget: budget }
+			)
+		).resolves.toEqual(Uint8Array.of(1, 2, 3));
+		expect(arrayBuffer).toHaveBeenCalledOnce();
+		expect(readRuntimeAssetDeliveryBudget(budget)).toMatchObject({
+			deliveredBytes: 3,
+			sequence: 1
+		});
+	});
+
+	it('does not count decompressed output as delivered bytes', async () => {
+		const logicalBytes = new Uint8Array(256);
+		const storageBytes = gzipSync(logicalBytes);
+		const budget = createRuntimeAssetDeliveryBudget(storageBytes.byteLength);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/compressed.bin.gz',
+				'compressed.bin',
+				async () => new Response(storageBytes),
+				false,
+				undefined,
+				{ deliveryBudget: budget }
+			)
+		).resolves.toEqual(logicalBytes);
+		expect(readRuntimeAssetDeliveryBudget(budget).deliveredBytes).toBe(storageBytes.byteLength);
+	});
+
+	it('rejects exhausted and expected-over-limit budgets before fetching', async () => {
+		const fetchImpl = vi.fn(async () => new Response(Uint8Array.of(1)));
+		const exhausted = createRuntimeAssetDeliveryBudget(2);
+		consumeRuntimeAssetDeliveryBytes(exhausted, 2);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/exhausted.bin',
+				'exhausted.bin',
+				fetchImpl,
+				false,
+				undefined,
+				{ deliveryBudget: exhausted }
+			)
+		).rejects.toThrow(/exhausted/);
+
+		const invalidExpected = createRuntimeAssetDeliveryBudget(2);
+		Atomics.store(new BigInt64Array(invalidExpected.state), 2, 3n);
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/invalid-expected.bin',
+				'invalid-expected.bin',
+				fetchImpl,
+				false,
+				undefined,
+				{ deliveryBudget: invalidExpected }
+			)
+		).rejects.toThrow(/expected bytes exceed/);
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('keeps pre-aborted requests ahead of aggregate budget failures', async () => {
+		const fetchImpl = vi.fn(async () => new Response(Uint8Array.of(1)));
+		const budget = createRuntimeAssetDeliveryBudget(1);
+		consumeRuntimeAssetDeliveryBytes(budget, 1);
+		const controller = new AbortController();
+		const reason = new Error('cancelled before aggregate assertion');
+		controller.abort(reason);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.test/runtime/aborted.bin',
+				'aborted.bin',
+				fetchImpl,
+				false,
+				undefined,
+				{ deliveryBudget: budget, signal: controller.signal }
+			)
+		).rejects.toBe(reason);
+		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('uses explicit budgets ahead of the active generated-fetch scope', async () => {
+		const active = createRuntimeAssetDeliveryBudget(10);
+		const explicit = createRuntimeAssetDeliveryBudget(10);
+
+		await withRuntimeAssetDeliveryBudget(active, async () => {
+			await fetchRuntimeAssetBytes(
+				'https://example.test/runtime/explicit.bin',
+				'explicit.bin',
+				async () => new Response(Uint8Array.of(1, 2)),
+				false,
+				undefined,
+				{ deliveryBudget: explicit }
+			);
+			await fetchRuntimeAssetBytes(
+				'https://example.test/runtime/generated-child.bin',
+				'generated-child.bin',
+				async () => new Response(Uint8Array.of(3, 4, 5)),
+				false
+			);
+		});
+
+		expect(readRuntimeAssetDeliveryBudget(explicit).deliveredBytes).toBe(2);
+		expect(readRuntimeAssetDeliveryBudget(active).deliveredBytes).toBe(3);
+	});
+
+	it('isolates pending cache keys by shared budget state identity', async () => {
+		const first = createRuntimeAssetDeliveryBudget(10);
+		const second = createRuntimeAssetDeliveryBudget(10);
+		const firstClone = snapshotRuntimeAssetDeliveryBudget({ ...first });
+		const fetchImpl: typeof fetch = async () => new Response();
+		const assetUrl = 'https://example.test/runtime/cached.bin';
+
+		const firstKey = createRuntimeAssetCacheKey(assetUrl, fetchImpl, {
+			deliveryBudget: first
+		});
+		expect(
+			createRuntimeAssetCacheKey(assetUrl, fetchImpl, { deliveryBudget: firstClone })
+		).toBe(firstKey);
+		expect(
+			createRuntimeAssetCacheKey(assetUrl, fetchImpl, { deliveryBudget: second })
+		).not.toBe(firstKey);
+
+		const unscopedKey = createRuntimeAssetCacheKey(assetUrl, fetchImpl);
+		await withRuntimeAssetDeliveryBudget(first, async () => {
+			expect(createRuntimeAssetCacheKey(assetUrl, fetchImpl)).toBe(firstKey);
+			expect(createRuntimeAssetCacheKey(assetUrl, fetchImpl)).not.toBe(unscopedKey);
+		});
 	});
 });

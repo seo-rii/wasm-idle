@@ -1,13 +1,24 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import {
+	canonicalTinyGoExecutableGraphProfile,
+	snapshotTinyGoExecutableGraphProfile
+} from './tinygoExecutableGraph';
+import {
+	WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE,
+	WASM_TINYGO_RUNTIME_PROFILE
+} from './wasmTinyGoVersion';
 
 const checkoutRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const runtimeDir = path.join(checkoutRoot, 'static', 'wasm-tinygo');
 const assetsDir = path.join(runtimeDir, 'assets');
 const toolsDir = path.join(runtimeDir, 'tools');
 const upstreamToolsDir = path.join(toolsDir, 'upstream');
+const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
 describe('bundled wasm-tinygo runtime', () => {
 	it('publishes only the receipt-verified upstream TinyGo compiler path', () => {
@@ -40,5 +51,62 @@ describe('bundled wasm-tinygo runtime', () => {
 		});
 		expect(existsSync(path.join(upstreamToolsDir, 'tinygoroot.tar.gz.bin'))).toBe(true);
 		expect(existsSync(path.join(upstreamToolsDir, 'tinygoroot.tar.gz'))).toBe(false);
+	});
+
+	it('recomputes every generated TinyGo logical and deployment-storage receipt', () => {
+		type TinyGoAssetPath = keyof typeof WASM_TINYGO_RUNTIME_PROFILE.assetReceipts;
+		const expectedPaths = [
+			'tools/upstream/lld.wasm',
+			'tools/upstream/package-graph-provider-receipt.json',
+			'tools/upstream/producer-receipt.json',
+			'tools/upstream/tinygo-compiler.wasm',
+			'tools/upstream/tinygo-package-graph.wasm',
+			'tools/upstream/tinygoroot.tar.gz.bin'
+		] satisfies TinyGoAssetPath[];
+		expect(Object.keys(WASM_TINYGO_RUNTIME_PROFILE.assetReceipts).sort()).toEqual(
+			expectedPaths
+		);
+		for (const assetPath of expectedPaths) {
+			const logicalBytes = readFileSync(path.join(runtimeDir, assetPath));
+			const receipt = WASM_TINYGO_RUNTIME_PROFILE.assetReceipts[assetPath];
+			expect(receipt).toBeDefined();
+			if ('uncompressedBytes' in receipt) {
+				expect(logicalBytes.byteLength).toBe(receipt.uncompressedBytes);
+				expect(sha256(logicalBytes)).toBe(receipt.uncompressedSha256);
+				const storageBytes = gzipSync(logicalBytes, { level: 9 });
+				expect(storageBytes.byteLength).toBe(receipt.bytes);
+				expect(sha256(storageBytes)).toBe(receipt.sha256);
+			} else {
+				expect(logicalBytes.byteLength).toBe(receipt.bytes);
+				expect(sha256(logicalBytes)).toBe(receipt.sha256);
+			}
+		}
+		const manifestBytes = readFileSync(
+			path.join(runtimeDir, WASM_TINYGO_RUNTIME_PROFILE.manifestPath)
+		);
+		expect(manifestBytes.byteLength).toBe(WASM_TINYGO_RUNTIME_PROFILE.manifestReceipt.bytes);
+		expect(sha256(manifestBytes)).toBe(WASM_TINYGO_RUNTIME_PROFILE.manifestReceipt.sha256);
+	}, 30_000);
+
+	it('recomputes the complete executable module graph with the consumer canonicalization', () => {
+		const profile = snapshotTinyGoExecutableGraphProfile(WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE);
+		const manifest = JSON.parse(
+			readFileSync(path.join(runtimeDir, 'runtime-executable-graph.v1.json'), 'utf8')
+		);
+		expect(manifest).toEqual(profile);
+		expect(sha256(canonicalTinyGoExecutableGraphProfile(profile))).toBe(profile.fingerprint);
+
+		const executablePaths = [
+			'upstream.js',
+			...readdirSync(assetsDir)
+				.filter((entry) => /^upstream-compile-worker-.+\.js$/u.test(entry))
+				.map((entry) => `assets/${entry}`)
+		].sort();
+		expect(executablePaths).toEqual(Object.keys(profile.modules).sort());
+		for (const modulePath of executablePaths) {
+			const bytes = readFileSync(path.join(runtimeDir, modulePath));
+			expect(bytes.byteLength).toBe(profile.modules[modulePath]!.bytes);
+			expect(sha256(bytes)).toBe(profile.modules[modulePath]!.sha256);
+		}
 	});
 });

@@ -365,21 +365,12 @@ describe('example route debug actions', () => {
 		}
 	});
 
-	it('persists and forwards the Rust target triple selection', () => {
-		expect(source).toMatch(
-			/type WasmRustRuntimeModule = \{\s+preloadBrowserRustRuntime\?: \(options\?: \{\s+targetTriple\?: RustTargetTriple;\s+\}\) => Promise<void>;\s+\};/s
-		);
+	it('persists the Rust target triple selection without directly loading executable modules', () => {
+		expect(source).not.toContain('type WasmRustRuntimeModule');
+		expect(source).not.toContain('preloadBrowserRustRuntime');
+		expect(source).not.toMatch(/const compilerUrl = runtimeAssets\.rust\?\.compilerUrl;/);
 		expect(source).toMatch(/rustTargetTriple = \$state<RustTargetTriple>\('wasm32-wasip1'\),/);
 		expect(source).toMatch(/if \(!browser \|\| language !== 'RUST'\) return;/);
-		expect(source).toMatch(
-			/const compilerUrl = runtimeAssets\.rust\?\.compilerUrl;\s+const preloadTargetTriple = availableRustTargetTriples\.includes\(rustTargetTriple\)\s+\?\s+rustTargetTriple\s+:\s+availableRustTargetTriples\[0\];/s
-		);
-		expect(source).toMatch(
-			/const runtimeModule = \(await import\(\s+\/\* @vite-ignore \*\/ compilerUrl\s+\)\) as WasmRustRuntimeModule;/
-		);
-		expect(source).toMatch(
-			/await runtimeModule\.preloadBrowserRustRuntime\?\.\(\{\s+targetTriple: preloadTargetTriple\s+\}\);/s
-		);
 		expect(source).toMatch(
 			/const knownRustTargetTriples = \['wasm32-wasip1', 'wasm32-wasip2', 'wasm32-wasip3'\] as const;/
 		);
@@ -431,7 +422,10 @@ describe('example route debug actions', () => {
 		expectEditorLanguage('HTML', 'html');
 		expectEditorLanguage('CSS', 'css');
 		expectEditorLanguage('MARKDOWN', 'markdown');
-		expect(source).toMatch(/RUST: \(\) => \(\{ rustTargetTriple \}\)/);
+		expect(source).toMatch(
+			/RUST: \(\) => \(\{\s+rustTargetTriple,\s+limits: RUST_NON_DEBUG_RESOURCE_REQUIREMENTS\s+\}\)/s
+		);
+		expect(source).toContain("from '$lib/playground/rustWorkerLimits';");
 		expect(source).toMatch(/\.\.\.languageExecutionOptions/);
 		expect(source).toMatch(/<select id="rust-target-triple" bind:value=\{rustTargetTriple\}>/);
 		expect(source).toMatch(

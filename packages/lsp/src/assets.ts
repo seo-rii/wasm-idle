@@ -1,5 +1,6 @@
 import { runWithSignalAndTimeout } from './lifecycle.js';
 import {
+	AWK_RUNTIME_WORKER_PATH,
 	ProtocolError,
 	RUBY_RUNTIME_ASSET_NAMES,
 	verifyRuntimeAssetIntegrity,
@@ -8,6 +9,7 @@ import {
 import { D_OUTER_ASSETS } from './d/assets.js';
 
 export type LanguageToolAssetRuntime =
+	| 'awk'
 	| 'clangd'
 	| 'd'
 	| 'janet'
@@ -210,6 +212,11 @@ async function fetchAsset(
 		referrerPolicy: 'no-referrer',
 		signal
 	});
+	if (config.requireExactResponseUrl && !response.url) {
+		const error = new Error(`Runtime asset ${asset} did not expose an exact final URL`);
+		cancelResponseBody(response, error);
+		throw error;
+	}
 	let finalResponseUrl = requestUrl.href;
 	if (response.url) {
 		try {
@@ -477,6 +484,9 @@ export async function loadLanguageToolAsset(
 	}
 	if (runtime === 'ruby' && !(RUBY_RUNTIME_ASSET_NAMES as readonly string[]).includes(asset)) {
 		throw new Error(`Unexpected Ruby runtime asset: ${asset}`);
+	}
+	if (runtime === 'awk' && asset !== AWK_RUNTIME_WORKER_PATH) {
+		throw new Error(`Unexpected AWK runtime asset: ${asset}`);
 	}
 	if (runtime === 'prolog' && asset !== 'runner-worker.js') {
 		throw new Error(`Unexpected Prolog runtime asset: ${asset}`);

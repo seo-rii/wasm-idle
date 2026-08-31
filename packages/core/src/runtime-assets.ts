@@ -25,13 +25,6 @@ export interface RuntimeAssetLoaderKeySource {
 	allowedBaseUrls?: string[];
 }
 
-export interface RuntimeAssetPackKeySource {
-	index: string;
-	asset: string;
-	fileCount: number;
-	totalBytes: number;
-}
-
 export interface RuntimeAssetKeySource {
 	rootUrl?: string;
 	runtimeProfiles?: Readonly<Record<string, RuntimeAssetProfileKeySource>>;
@@ -39,7 +32,18 @@ export interface RuntimeAssetKeySource {
 	java?: RuntimeAssetLoaderKeySource;
 	clang?: RuntimeAssetLoaderKeySource;
 	clangd?: RuntimeAssetLoaderKeySource;
-	rust?: { compilerUrl?: string; manifestUrl?: string; debugModuleUrl?: string };
+	rust?: {
+		compilerUrl?: string;
+		manifestUrl?: string;
+		debugModuleUrl?: string;
+		executableGraphFingerprint?: string;
+		profileId?: string;
+		protocolVersion?: number;
+		manifestPath?: string;
+		manifestFingerprint?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		assetReceipts?: RuntimeAssetIntegrityMap;
+	};
 	go?: { compilerUrl?: string; manifestUrl?: string };
 	assemblyscript?: { moduleUrl?: string };
 	duckdb?: { moduleUrl?: string };
@@ -55,9 +59,15 @@ export interface RuntimeAssetKeySource {
 	tinygo?: {
 		appUrl?: string;
 		moduleUrl?: string;
+		executableGraphFingerprint?: string;
 		assetLoader?: unknown;
 		assetLoaderKey?: string;
-		assetPacks?: readonly RuntimeAssetPackKeySource[];
+		profileId?: string;
+		protocolVersion?: number;
+		manifestPath?: string;
+		manifestFingerprint?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		assetReceipts?: RuntimeAssetIntegrityMap;
 	};
 	typescript?: { moduleUrl?: string; libUrl?: string };
 	wat?: { moduleUrl?: string };
@@ -169,7 +179,19 @@ export interface RuntimeAssetKeySource {
 		wasmReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
-	awk?: { baseUrl?: string; workerUrl?: string };
+	awk?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		profileId?: string;
+		goVersion?: string;
+		goawkVersion?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+		goShimReceipt?: RuntimeAssetIntegrityEntry;
+		wasmReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	pascal?: {
 		baseUrl?: string;
 		workerUrl?: string;
@@ -364,35 +386,12 @@ const joinStringList = (value: unknown) => (Array.isArray(value) ? value.join('\
 const joinSortedStringList = (value: unknown) =>
 	Array.isArray(value) ? [...value].sort().join('\0') : '';
 
-const serializeRuntimeAssetPacks = (value: unknown) => {
+const serializeSafeInteger = (value: unknown) => {
 	if (value === undefined) return '';
-	if (!Array.isArray(value)) throw new TypeError('Runtime asset packs must be an array');
-	return JSON.stringify(
-		value.map((entry, position) => {
-			if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-				throw new TypeError(`Runtime asset pack ${position} must be an object`);
-			}
-			const pack = entry as Record<string, unknown>;
-			if (typeof pack.index !== 'string' || !pack.index) {
-				throw new TypeError(`Runtime asset pack ${position} requires an index`);
-			}
-			if (typeof pack.asset !== 'string' || !pack.asset) {
-				throw new TypeError(`Runtime asset pack ${position} requires an asset`);
-			}
-			if (!Number.isSafeInteger(pack.fileCount) || (pack.fileCount as number) < 0) {
-				throw new TypeError(`Runtime asset pack ${position} has an invalid file count`);
-			}
-			if (!Number.isSafeInteger(pack.totalBytes) || (pack.totalBytes as number) < 0) {
-				throw new TypeError(`Runtime asset pack ${position} has an invalid byte size`);
-			}
-			return {
-				index: pack.index,
-				asset: pack.asset,
-				fileCount: pack.fileCount,
-				totalBytes: pack.totalBytes
-			};
-		})
-	);
+	if (!Number.isSafeInteger(value) || (value as number) < 0) {
+		throw new TypeError('Runtime asset integer identity must be a non-negative safe integer');
+	}
+	return String(value);
 };
 
 const serializeIntegrity = (value: unknown) => {
@@ -579,6 +578,32 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'rust', property: 'compilerUrl', key: 'rustCompilerUrl' },
 	{ runtime: 'rust', property: 'manifestUrl', key: 'rustManifestUrl' },
 	{ runtime: 'rust', property: 'debugModuleUrl', key: 'rustDebugModuleUrl' },
+	{
+		runtime: 'rust',
+		property: 'executableGraphFingerprint',
+		key: 'rustExecutableGraphFingerprint'
+	},
+	{ runtime: 'rust', property: 'profileId', key: 'rustProfileId' },
+	{
+		runtime: 'rust',
+		property: 'protocolVersion',
+		key: 'rustProtocolVersion',
+		serialize: serializeSafeInteger
+	},
+	{ runtime: 'rust', property: 'manifestPath', key: 'rustManifestPath' },
+	{ runtime: 'rust', property: 'manifestFingerprint', key: 'rustManifestFingerprint' },
+	{
+		runtime: 'rust',
+		property: 'manifestReceipt',
+		key: 'rustManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'rust',
+		property: 'assetReceipts',
+		key: 'rustAssetReceipts',
+		serialize: serializeIntegrity
+	},
 	{ runtime: 'go', property: 'compilerUrl', key: 'goCompilerUrl' },
 	{ runtime: 'go', property: 'manifestUrl', key: 'goManifestUrl' },
 	{ runtime: 'assemblyscript', property: 'moduleUrl', key: 'assemblyScriptModuleUrl' },
@@ -612,15 +637,39 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'tinygo', property: 'moduleUrl', key: 'tinygoModuleUrl' },
 	{
 		runtime: 'tinygo',
-		property: 'assetLoader',
-		key: 'hasTinyGoAssetLoader',
-		serialize: hasValue
+		property: 'executableGraphFingerprint',
+		key: 'tinygoExecutableGraphFingerprint'
+	},
+	{ runtime: 'tinygo', property: 'profileId', key: 'tinygoProfileId' },
+	{
+		runtime: 'tinygo',
+		property: 'protocolVersion',
+		key: 'tinygoProtocolVersion',
+		serialize: serializeSafeInteger
+	},
+	{ runtime: 'tinygo', property: 'manifestPath', key: 'tinygoManifestPath' },
+	{
+		runtime: 'tinygo',
+		property: 'manifestFingerprint',
+		key: 'tinygoManifestFingerprint'
 	},
 	{
 		runtime: 'tinygo',
-		property: 'assetPacks',
-		key: 'tinygoAssetPacks',
-		serialize: serializeRuntimeAssetPacks
+		property: 'manifestReceipt',
+		key: 'tinygoManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'tinygo',
+		property: 'assetReceipts',
+		key: 'tinygoAssetReceipts',
+		serialize: serializeIntegrity
+	},
+	{
+		runtime: 'tinygo',
+		property: 'assetLoader',
+		key: 'hasTinyGoAssetLoader',
+		serialize: hasValue
 	},
 	{ runtime: 'typescript', property: 'moduleUrl', key: 'typeScriptModuleUrl' },
 	{ runtime: 'typescript', property: 'libUrl', key: 'typeScriptLibUrl' },
@@ -883,6 +932,35 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	},
 	{ runtime: 'awk', property: 'baseUrl', key: 'awkBaseUrl' },
 	{ runtime: 'awk', property: 'workerUrl', key: 'awkWorkerUrl' },
+	{ runtime: 'awk', property: 'manifestUrl', key: 'awkManifestUrl' },
+	{ runtime: 'awk', property: 'manifestFingerprint', key: 'awkManifestFingerprint' },
+	{ runtime: 'awk', property: 'profileId', key: 'awkProfileId' },
+	{ runtime: 'awk', property: 'goVersion', key: 'awkGoVersion' },
+	{ runtime: 'awk', property: 'goawkVersion', key: 'awkGoawkVersion' },
+	{
+		runtime: 'awk',
+		property: 'manifestReceipt',
+		key: 'awkManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'awk',
+		property: 'workerReceipt',
+		key: 'awkWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'awk',
+		property: 'goShimReceipt',
+		key: 'awkGoShimReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'awk',
+		property: 'wasmReceipt',
+		key: 'awkWasmReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'pascal', property: 'baseUrl', key: 'pascalBaseUrl' },
 	{ runtime: 'pascal', property: 'workerUrl', key: 'pascalWorkerUrl' },
 	{ runtime: 'pascal', property: 'manifestUrl', key: 'pascalManifestUrl' },

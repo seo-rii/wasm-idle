@@ -16,6 +16,134 @@ import {
  */
 
 /**
+ * @typedef {{
+ *   delivery: { storagePath: string; encoding: 'identity' | 'gzip' };
+ *   storage: { sha256: string };
+ * }} RustExecutableGraphProbeModule
+ */
+
+/**
+ * @typedef {{
+ *   entryPath: string;
+ *   modules: Readonly<Record<string, RustExecutableGraphProbeModule>>;
+ * }} RustExecutableGraphProbeProfile
+ */
+
+const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
+const MAX_RUST_EXECUTABLE_GRAPH_MODULES = 256;
+
+/**
+ * @param {unknown} value
+ * @param {string} label
+ * @param {string} suffix
+ */
+function requireSafeGraphPath(value, label, suffix) {
+	if (
+		typeof value !== 'string' ||
+		!value.endsWith(suffix) ||
+		!/^[A-Za-z0-9._/-]+$/u.test(value) ||
+		value.startsWith('/') ||
+		value.includes('//') ||
+		value.split('/').some((segment) => segment === '.' || segment === '..') ||
+		path.posix.normalize(value) !== value
+	) {
+		throw new Error(`${label} must be a safe relative ${suffix} path`);
+	}
+	return value;
+}
+
+/**
+ * @param {string} browserUrl
+ * @param {RustExecutableGraphProbeProfile | undefined} profile
+ */
+function createRustExecutableGraphProbeContract(browserUrl, profile) {
+	if (profile === undefined) return [];
+	if (!profile || typeof profile !== 'object' || Array.isArray(profile)) {
+		throw new Error('Rust executable graph probe profile must be an object');
+	}
+	if (!profile.modules || typeof profile.modules !== 'object' || Array.isArray(profile.modules)) {
+		throw new Error('Rust executable graph probe profile must contain modules');
+	}
+	const moduleEntries = Object.entries(profile.modules);
+	if (moduleEntries.length === 0 || moduleEntries.length > MAX_RUST_EXECUTABLE_GRAPH_MODULES) {
+		throw new Error(
+			`Rust executable graph probe profile must contain 1-${MAX_RUST_EXECUTABLE_GRAPH_MODULES} modules`
+		);
+	}
+	const entryPath = requireSafeGraphPath(
+		profile.entryPath,
+		'Rust executable graph entryPath',
+		'.js'
+	);
+	if (!Object.prototype.hasOwnProperty.call(profile.modules, entryPath)) {
+		throw new Error('Rust executable graph probe profile entryPath is missing from modules');
+	}
+
+	const applicationRootUrl = new URL(browserUrl);
+	applicationRootUrl.hash = '';
+	applicationRootUrl.search = '';
+	if (!applicationRootUrl.pathname.endsWith('/')) applicationRootUrl.pathname += '/';
+	const runtimeBaseUrl = new URL('wasm-rust/', applicationRootUrl);
+	const storagePaths = new Set();
+	return moduleEntries
+		.map(([rawModulePath, rawModule]) => {
+			const modulePath = requireSafeGraphPath(
+				rawModulePath,
+				'Rust executable graph module path',
+				'.js'
+			);
+			if (!rawModule || typeof rawModule !== 'object' || Array.isArray(rawModule)) {
+				throw new Error(`Rust executable graph module ${modulePath} must be an object`);
+			}
+			const encoding = rawModule.delivery?.encoding;
+			if (encoding !== 'identity' && encoding !== 'gzip') {
+				throw new Error(
+					`Rust executable graph module ${modulePath} has an invalid encoding`
+				);
+			}
+			const expectedStoragePath =
+				encoding === 'gzip' ? `${modulePath}.gz.bin` : `${modulePath}.bin`;
+			const storagePath = requireSafeGraphPath(
+				rawModule.delivery?.storagePath,
+				`Rust executable graph module ${modulePath} storagePath`,
+				encoding === 'gzip' ? '.js.gz.bin' : '.js.bin'
+			);
+			if (storagePath !== expectedStoragePath) {
+				throw new Error(
+					`Rust executable graph module ${modulePath} has a non-inert storagePath`
+				);
+			}
+			if (storagePaths.has(storagePath)) {
+				throw new Error(`Rust executable graph repeats storagePath ${storagePath}`);
+			}
+			storagePaths.add(storagePath);
+			const receipt = rawModule.storage?.sha256;
+			if (typeof receipt !== 'string' || !SHA256_PATTERN.test(receipt)) {
+				throw new Error(
+					`Rust executable graph module ${modulePath} has an invalid receipt`
+				);
+			}
+			const logicalUrl = new URL(modulePath, runtimeBaseUrl);
+			const storageUrl = new URL(storagePath, runtimeBaseUrl);
+			storageUrl.searchParams.set('v', receipt);
+			return Object.freeze({
+				encoding,
+				expectedUrl: storageUrl.href,
+				logicalPathname: logicalUrl.pathname,
+				modulePath,
+				storagePath,
+				storagePathname: storageUrl.pathname
+			});
+		})
+		.sort((left, right) => left.modulePath.localeCompare(right.modulePath));
+}
+
+/** @param {string | null} contentType */
+function responseMediaType(contentType) {
+	return (contentType || '').split(';', 1)[0].trim().toLowerCase();
+}
+
+/**
  * @param {string} explicitPath
  */
 export async function resolveChromiumExecutable(explicitPath = '') {
@@ -257,7 +385,7 @@ export async function readActiveState(page) {
 }
 
 /**
- * @param {{ browserUrl: string; runTimeoutMs?: number; chromiumExecutable?: string; stdinText?: string; sendEof?: boolean; expectedOutput?: string; targetTriple?: 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3' }} options
+ * @param {{ browserUrl: string; runTimeoutMs?: number; chromiumExecutable?: string; stdinText?: string; sendEof?: boolean; expectedOutput?: string; targetTriple?: 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3'; rustExecutableGraphProfile?: RustExecutableGraphProbeProfile }} options
  */
 export async function runRustBrowserProbe({
 	browserUrl,
@@ -266,11 +394,16 @@ export async function runRustBrowserProbe({
 	stdinText = '5\n',
 	sendEof = false,
 	expectedOutput = 'factorial_plus_bonus=123',
-	targetTriple = 'wasm32-wasip1'
+	targetTriple = 'wasm32-wasip1',
+	rustExecutableGraphProfile
 }) {
 	if (!browserUrl) {
 		throw new Error('runRustBrowserProbe requires a browserUrl');
 	}
+	const executableGraphContract = createRustExecutableGraphProbeContract(
+		browserUrl,
+		rustExecutableGraphProfile
+	);
 	const executablePath = await resolveChromiumExecutable(chromiumExecutable);
 	const browser = await chromium.launch({
 		headless: true,
@@ -295,6 +428,10 @@ export async function runRustBrowserProbe({
 	const pageErrors = [];
 	/** @type {string[]} */
 	const requestUrls = [];
+	/** @type {Array<{ url: string; resourceType: string }>} */
+	const requestRecords = [];
+	/** @type {Array<{ url: string; status: number; ok: boolean; contentType: string | null; contentEncoding: string | null }>} */
+	const responseRecords = [];
 	page.on('console', (message) => {
 		consoleMessages.push({
 			type: message.type(),
@@ -306,6 +443,17 @@ export async function runRustBrowserProbe({
 	});
 	page.on('request', (request) => {
 		requestUrls.push(request.url());
+		requestRecords.push({ url: request.url(), resourceType: request.resourceType() });
+	});
+	page.on('response', (response) => {
+		const headers = response.headers();
+		responseRecords.push({
+			url: response.url(),
+			status: response.status(),
+			ok: response.ok(),
+			contentType: headers['content-type'] || null,
+			contentEncoding: headers['content-encoding'] || null
+		});
 	});
 
 	try {
@@ -546,8 +694,92 @@ export async function runRustBrowserProbe({
 				`browser probe still observed maximum call stack errors for ${targetTriple}\n${JSON.stringify(summary, null, 2)}`
 			);
 		}
+		const logicalPathnames = new Set(
+			executableGraphContract.map((entry) => entry.logicalPathname)
+		);
+		const rustLogicalModuleHttpRequests = requestRecords.filter(({ url }) => {
+			const parsed = new URL(url);
+			return (
+				(parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+				logicalPathnames.has(parsed.pathname)
+			);
+		});
+		const rustExecutableHttpRequests =
+			executableGraphContract.length > 0
+				? rustLogicalModuleHttpRequests
+				: requestRecords.filter(({ url, resourceType }) => {
+						const parsed = new URL(url);
+						return (
+							(parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+							parsed.pathname.includes('/wasm-rust/') &&
+							resourceType === 'script'
+						);
+					});
+		const rustExecutableGraphStorageEvidence = executableGraphContract.map((entry) => ({
+			encoding: entry.encoding,
+			expectedUrl: entry.expectedUrl,
+			logicalPathname: entry.logicalPathname,
+			modulePath: entry.modulePath,
+			requests: requestRecords.filter(({ url }) => url === entry.expectedUrl),
+			responses: responseRecords.filter(({ url }) => url === entry.expectedUrl),
+			storagePath: entry.storagePath
+		}));
+		const storagePathContracts = new Map(
+			executableGraphContract.map((entry) => [entry.storagePathname, entry])
+		);
+		const unexpectedRustExecutableStorageRequests = requestRecords.filter(({ url }) => {
+			const parsed = new URL(url);
+			if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+			const contract = storagePathContracts.get(parsed.pathname);
+			return contract !== undefined && url !== contract.expectedUrl;
+		});
+		const missingRustExecutableStorage = rustExecutableGraphStorageEvidence.filter(
+			(entry) => entry.requests.length === 0 || entry.responses.length === 0
+		);
+		const invalidRustExecutableStorageResponses = rustExecutableGraphStorageEvidence.flatMap(
+			(entry) =>
+				entry.responses
+					.filter(
+						(response) =>
+							!response.ok ||
+							responseMediaType(response.contentType) !==
+								'application/octet-stream' ||
+							(entry.encoding === 'gzip' && response.contentEncoding !== null)
+					)
+					.map((response) => ({
+						encoding: entry.encoding,
+						modulePath: entry.modulePath,
+						response
+					}))
+		);
+		const networkEvidence = {
+			rustExecutableGraphStorageEvidence,
+			rustExecutableHttpRequests,
+			rustLogicalModuleHttpRequests,
+			unexpectedRustExecutableStorageRequests
+		};
+		if (rustLogicalModuleHttpRequests.length > 0 || rustExecutableHttpRequests.length > 0) {
+			throw new Error(
+				`Rust requested logical executable modules over HTTP(S) instead of using its verified Blob graph\n${JSON.stringify({ ...summary, ...networkEvidence }, null, 2)}`
+			);
+		}
+		if (unexpectedRustExecutableStorageRequests.length > 0) {
+			throw new Error(
+				`Rust executable graph storage was requested without its exact receipt URL\n${JSON.stringify({ ...summary, ...networkEvidence }, null, 2)}`
+			);
+		}
+		if (missingRustExecutableStorage.length > 0) {
+			throw new Error(
+				`Rust executable graph storage requests or responses were missing\n${JSON.stringify({ ...summary, ...networkEvidence, missingRustExecutableStorage }, null, 2)}`
+			);
+		}
+		if (invalidRustExecutableStorageResponses.length > 0) {
+			throw new Error(
+				`Rust executable graph storage responses violated the inert delivery contract\n${JSON.stringify({ ...summary, ...networkEvidence, invalidRustExecutableStorageResponses }, null, 2)}`
+			);
+		}
 
-		return summary;
+		return { ...summary, ...networkEvidence };
 	} finally {
 		await browser.close();
 	}

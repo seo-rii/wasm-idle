@@ -1,5 +1,6 @@
-import { fetchRuntimeAssetBytes } from './runtime-asset.js';
+import { fetchRuntimeAssetBytes, withRuntimeAssetDeliveryBudget } from './runtime-asset.js';
 import { resolveRuntimeAssetUrl } from './runtime-manifest.js';
+import type { RuntimeAssetDeliveryBudgetDescriptor } from './types.js';
 
 export const JCO_BROWSER_MODULE = '../vendor/jco/src/browser.js';
 export const JCO_WASM_TOOLS_MODULE = '../vendor/jco/obj/wasm-tools.js';
@@ -34,59 +35,71 @@ async function importRuntimeModule<T>(runtimeBaseUrl: string, assetPath: string)
 export async function componentizeCoreWasmToPreview2Component(
 	coreWasm: Uint8Array,
 	runtimeBaseUrl: string,
-	onProgress?: (progress: { loaded: number; total?: number }) => void
+	onProgress?: (progress: { loaded: number; total?: number }) => void,
+	deliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor
 ) {
-	const wasmToolsModule = await importRuntimeModule<{
-		$init: Promise<void>;
-		tools: {
-			componentNew: (binary: Uint8Array, adapters: Array<[string, Uint8Array]>) => Uint8Array;
-		};
-	}>(runtimeBaseUrl, JCO_WASM_TOOLS_MODULE);
-	const adapterUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, PREVIEW1_COMMAND_ADAPTER);
-	const adapterBytes = await fetchRuntimeAssetBytes(
-		adapterUrl,
-		'wasm-rust preview1 adapter',
-		fetch,
-		true,
-		onProgress
-	);
-	await wasmToolsModule.$init;
-	return wasmToolsModule.tools.componentNew(coreWasm, [['wasi_snapshot_preview1', adapterBytes]]);
+	return withRuntimeAssetDeliveryBudget(deliveryBudget, async () => {
+		const wasmToolsModule = await importRuntimeModule<{
+			$init: Promise<void>;
+			tools: {
+				componentNew: (
+					binary: Uint8Array,
+					adapters: Array<[string, Uint8Array]>
+				) => Uint8Array;
+			};
+		}>(runtimeBaseUrl, JCO_WASM_TOOLS_MODULE);
+		const adapterUrl = resolveRuntimeAssetUrl(runtimeBaseUrl, PREVIEW1_COMMAND_ADAPTER);
+		const adapterBytes = await fetchRuntimeAssetBytes(
+			adapterUrl,
+			'wasm-rust preview1 adapter',
+			fetch,
+			true,
+			onProgress,
+			deliveryBudget ? { deliveryBudget } : {}
+		);
+		await wasmToolsModule.$init;
+		return wasmToolsModule.tools.componentNew(coreWasm, [
+			['wasi_snapshot_preview1', adapterBytes]
+		]);
+	});
 }
 
 export async function transpilePreview2Component(
 	componentBytes: Uint8Array,
 	runtimeBaseUrl: string,
-	name = 'component'
+	name = 'component',
+	deliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor
 ) {
-	const browserModule = await importRuntimeModule<{
-		generate: (
-			component: Uint8Array,
-			options: {
-				name: string;
-				instantiation: { tag: 'async' };
-				noTypescript: boolean;
-				noNodejsCompat: boolean;
-				map: string[][];
-			}
-		) => Promise<{
-			files: Array<[string, Uint8Array]>;
-			imports: string[];
-			exports: Array<[string, 'function' | 'instance']>;
-		}>;
-	}>(runtimeBaseUrl, JCO_BROWSER_MODULE);
-	const generated = await browserModule.generate(componentBytes, {
-		name,
-		instantiation: { tag: 'async' },
-		noTypescript: true,
-		noNodejsCompat: true,
-		map: []
+	return withRuntimeAssetDeliveryBudget(deliveryBudget, async () => {
+		const browserModule = await importRuntimeModule<{
+			generate: (
+				component: Uint8Array,
+				options: {
+					name: string;
+					instantiation: { tag: 'async' };
+					noTypescript: boolean;
+					noNodejsCompat: boolean;
+					map: string[][];
+				}
+			) => Promise<{
+				files: Array<[string, Uint8Array]>;
+				imports: string[];
+				exports: Array<[string, 'function' | 'instance']>;
+			}>;
+		}>(runtimeBaseUrl, JCO_BROWSER_MODULE);
+		const generated = await browserModule.generate(componentBytes, {
+			name,
+			instantiation: { tag: 'async' },
+			noTypescript: true,
+			noNodejsCompat: true,
+			map: []
+		});
+		return {
+			files: new Map(generated.files),
+			imports: generated.imports,
+			exports: generated.exports
+		};
 	});
-	return {
-		files: new Map(generated.files),
-		imports: generated.imports,
-		exports: generated.exports
-	};
 }
 
 export interface CreatePreview2ImportObjectDependencies {

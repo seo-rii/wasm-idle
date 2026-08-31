@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
-const { lldbSessions, publicEnv } = vi.hoisted(() => ({
+const { executableGraphFixture, lldbSessions, publicEnv } = vi.hoisted(() => ({
+	executableGraphFixture: {
+		load: vi.fn()
+	},
 	lldbSessions: [] as any[],
 	publicEnv: {
 		PUBLIC_WASM_RUST_COMPILER_URL: ''
@@ -54,6 +57,23 @@ vi.mock('$lib/playground/worker/rust?worker', () => ({
 	default: MockWorker
 }));
 
+vi.mock('$lib/playground/rustExecutableGraph', () => ({
+	loadVerifiedRustExecutableGraph: executableGraphFixture.load
+}));
+
+vi.mock('$lib/playground/wasmRustVersion', () => ({
+	WASM_RUST_EXECUTABLE_GRAPH_PROFILE: {
+		fingerprint: 'a'.repeat(64)
+	},
+	WASM_RUST_RUNTIME_PROFILE: {
+		profileId: `wasm-rust-${'1'.repeat(64)}`,
+		protocolVersion: 1,
+		manifestPath: 'runtime/runtime-manifest.v3.json',
+		manifestFingerprint: '1'.repeat(64),
+		manifestReceipt: { bytes: 42, sha256: '2'.repeat(64) }
+	}
+}));
+
 vi.mock('$env/dynamic/public', () => ({
 	env: publicEnv
 }));
@@ -92,7 +112,7 @@ vi.mock('$lib/playground/lldbSession', () => ({
 		pause() {}
 		write() {}
 		eof() {}
-		disconnect() {}
+		disconnect = vi.fn(() => Promise.resolve());
 		evaluate() {
 			return Promise.resolve('?');
 		}
@@ -110,6 +130,25 @@ describe('Rust sandbox', () => {
 		workerInstances.length = 0;
 		publicEnv.PUBLIC_WASM_RUST_COMPILER_URL = '/wasm-rust/index.js';
 		suppressAutoLoadAck = false;
+		executableGraphFixture.load.mockReset();
+		executableGraphFixture.load.mockImplementation(async ({ moduleUrl }: any) => ({
+			entryUrl: `blob:http://localhost/verified-rust-${executableGraphFixture.load.mock.calls.length}`,
+			sourceModuleUrl: moduleUrl,
+			assetBaseUrl: 'http://localhost/wasm-rust/',
+			runtimeProfile: {
+				profileId: `wasm-rust-${'1'.repeat(64)}`,
+				protocolVersion: 1,
+				manifestPath: 'runtime/runtime-manifest.v3.json',
+				manifestFingerprint: '1'.repeat(64),
+				manifestReceipt: { bytes: 42, sha256: '2'.repeat(64) },
+				moduleUrl
+			},
+			moduleUrls: { 'index.js': 'blob:http://localhost/verified-rust-entry' },
+			networkModuleUrls: {
+				'http://localhost/wasm-rust/index.js': 'blob:http://localhost/verified-rust-entry'
+			},
+			dispose: vi.fn()
+		}));
 	});
 
 	it('waits for the active LLDB session to disconnect before terminate resolves', async () => {
@@ -269,9 +308,14 @@ describe('Rust sandbox', () => {
 			1,
 			expect.objectContaining({
 				load: true,
-				compilerUrl: expect.stringMatching(/\/wasm-rust\/index\.js$/),
+				compilerUrl: expect.stringMatching(/^blob:http:\/\/localhost\/verified-rust-/),
 				debugModuleUrl: expect.stringMatching(/\/wasm-rust\/debug-instrumenter\.js$/),
-				path: '/absproxy/5173'
+				path: '/absproxy/5173',
+				executableGraphFingerprint: 'a'.repeat(64),
+				runtimeProfile: expect.objectContaining({
+					manifestFingerprint: '1'.repeat(64)
+				}),
+				verifiedModuleUrls: expect.any(Object)
 			})
 		);
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
@@ -315,12 +359,452 @@ describe('Rust sandbox', () => {
 		]);
 	});
 
+	it('forwards exact Core worker and thread ceilings on non-debug runs', async () => {
+		const sandbox = new Rust();
+		sandbox.output = () => {};
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockClear();
+
+		await expect(
+			sandbox.run('fn main() {}', false, true, undefined, [], {
+				limits: { maxWorkers: 3, maxThreads: 7 }
+			})
+		).resolves.toBe(true);
+
+		expect(worker.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				limits: expect.objectContaining({
+					maxWorkers: 3,
+					maxThreads: 7
+				})
+			})
+		);
+	});
+
+	it('rejects invalid Core worker limits before posting a run message', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockClear();
+
+		await expect(
+			sandbox.run('fn main() {}', false, true, undefined, [], {
+				limits: { maxWorkers: 0 }
+			})
+		).rejects.toThrow('Execution limit maxWorkers must be a positive safe integer');
+
+		expect(worker.postMessage).not.toHaveBeenCalled();
+	});
+
 	it('rejects load when no rust compiler url is configured', async () => {
 		publicEnv.PUBLIC_WASM_RUST_COMPILER_URL = '';
 		const sandbox = new Rust();
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toContain(
+		await expect(sandbox.load('/absproxy/5173')).rejects.toThrow(
 			'Rust runtime is not configured'
+		);
+	});
+
+	it('does not create an outer worker when executable graph verification fails', async () => {
+		executableGraphFixture.load.mockRejectedValueOnce(new Error('graph receipt mismatch'));
+		const sandbox = new Rust();
+
+		await expect(sandbox.load('/absproxy/5173')).rejects.toThrow('graph receipt mismatch');
+
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('preserves the active generation when replacement graph verification fails', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const activeWorker = workerInstances[0];
+		const activeGraph = await executableGraphFixture.load.mock.results[0]!.value;
+		executableGraphFixture.load.mockRejectedValueOnce(new Error('replacement rejected'));
+
+		await expect(
+			sandbox.load({
+				rootUrl: '/replacement',
+				rust: {
+					compilerUrl: '/replacement/wasm-rust/index.js',
+					executableGraphFingerprint: 'a'.repeat(64)
+				}
+			})
+		).rejects.toThrow('replacement rejected');
+
+		expect(activeWorker.terminate).not.toHaveBeenCalled();
+		expect(activeGraph.dispose).not.toHaveBeenCalled();
+		expect(sandbox.worker).toBe(activeWorker);
+	});
+
+	it('preserves the active LLDB runtime receipt when replacement verification fails', async () => {
+		const sandbox = new Rust();
+		await sandbox.load({
+			rootUrl: '/active',
+			rust: {
+				compilerUrl: '/active/wasm-rust/index.js',
+				executableGraphFingerprint: 'a'.repeat(64)
+			},
+			debug: {
+				baseUrl: 'https://debug-a.example.test/',
+				manifestSha256: '3'.repeat(64)
+			}
+		});
+		executableGraphFixture.load.mockRejectedValueOnce(new Error('replacement rejected'));
+
+		await expect(
+			sandbox.load({
+				rootUrl: '/replacement',
+				rust: {
+					compilerUrl: '/replacement/wasm-rust/index.js',
+					executableGraphFingerprint: 'a'.repeat(64)
+				},
+				debug: {
+					baseUrl: 'https://debug-b.example.test/',
+					manifestSha256: '4'.repeat(64)
+				}
+			})
+		).rejects.toThrow('replacement rejected');
+
+		expect(sandbox.debugRuntimeBaseUrl).toBe('https://debug-a.example.test/');
+		expect(sandbox.debugManifestUrl).toBe(
+			'https://debug-a.example.test/runtime-manifest.v2.json'
+		);
+		expect(sandbox.debugManifestReceipt).toEqual({ sha256: '3'.repeat(64) });
+	});
+
+	it('rejects a configured runtime manifest profile that differs from the bundle', async () => {
+		const sandbox = new Rust();
+
+		await expect(
+			sandbox.load({
+				rootUrl: '/mirror',
+				rust: {
+					compilerUrl: `/mirror/wasm-rust/index.js?v=${'3'.repeat(64)}&rustManifestBytes=42&rustManifestSha256=${'2'.repeat(64)}`,
+					manifestFingerprint: '3'.repeat(64),
+					executableGraphFingerprint: 'a'.repeat(64)
+				}
+			})
+		).rejects.toThrow('Rust runtime profile does not match the bundled receipt profile');
+		expect(executableGraphFixture.load).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('preserves active stdin state when replacement graph verification fails', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const activeWorker = workerInstances[0];
+		let runMessage: any;
+		activeWorker.postMessage.mockImplementationOnce((message) => {
+			runMessage = message;
+			queueMicrotask(() => {
+				activeWorker.onmessage?.({ data: { buffer: true } } as MessageEvent<any>);
+			});
+		});
+		const runPromise = sandbox.run('fn main() {}', false);
+		await vi.waitFor(() => expect(sandbox.waitingForInput).toBe(true));
+		executableGraphFixture.load.mockRejectedValueOnce(new Error('replacement rejected'));
+
+		await expect(
+			sandbox.load({
+				rootUrl: '/replacement',
+				rust: {
+					compilerUrl: '/replacement/wasm-rust/index.js',
+					executableGraphFingerprint: 'a'.repeat(64)
+				}
+			})
+		).rejects.toThrow('replacement rejected');
+		sandbox.write('42\n');
+
+		expect(readBufferedStdin(runMessage.buffer)).toBe('42\n');
+		activeWorker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(runPromise).resolves.toBe(true);
+	});
+
+	it('aborts a pending graph load without creating a late worker', async () => {
+		let rejectGraph!: (reason: unknown) => void;
+		executableGraphFixture.load.mockImplementationOnce(
+			({ signal }: { signal: AbortSignal }) =>
+				new Promise((_resolve, reject) => {
+					rejectGraph = reject;
+					signal.addEventListener(
+						'abort',
+						() => reject(signal.reason ?? new Error('aborted')),
+						{ once: true }
+					);
+				})
+		);
+		const sandbox = new Rust();
+		const loadPromise = sandbox.load('/absproxy/5173');
+		await Promise.resolve();
+
+		await sandbox.terminate();
+		rejectGraph(new Error('late graph completion'));
+
+		await expect(loadPromise).rejects.toThrow(/terminated|late graph completion/u);
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('terminates the old worker before disposing only its executable graph', async () => {
+		const events: string[] = [];
+		let graphIndex = 0;
+		executableGraphFixture.load.mockImplementation(async ({ moduleUrl }: any) => {
+			const currentGraph = ++graphIndex;
+			return {
+				entryUrl: `blob:http://localhost/graph-${currentGraph}`,
+				sourceModuleUrl: moduleUrl,
+				assetBaseUrl: 'http://localhost/wasm-rust/',
+				runtimeProfile: {
+					profileId: `wasm-rust-${'1'.repeat(64)}`,
+					protocolVersion: 1,
+					manifestPath: 'runtime/runtime-manifest.v3.json',
+					manifestFingerprint: '1'.repeat(64),
+					manifestReceipt: { bytes: 42, sha256: '2'.repeat(64) },
+					moduleUrl
+				},
+				moduleUrls: { 'index.js': `blob:http://localhost/graph-${currentGraph}` },
+				networkModuleUrls: {
+					[moduleUrl]: `blob:http://localhost/graph-${currentGraph}`
+				},
+				dispose: vi.fn(() => events.push(`dispose-${currentGraph}`))
+			};
+		});
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const firstWorker = workerInstances[0];
+		firstWorker.terminate.mockImplementation(() => events.push('terminate-1'));
+
+		await sandbox.load({
+			rootUrl: '/replacement',
+			rust: {
+				compilerUrl: '/replacement/wasm-rust/index.js',
+				executableGraphFingerprint: 'a'.repeat(64)
+			}
+		});
+
+		expect(events).toEqual(['terminate-1', 'dispose-1']);
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.worker).toBe(workerInstances[1]);
+	});
+
+	it('rejects an active run when a verified replacement becomes active', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		workerInstances[0].postMessage.mockImplementationOnce(() => {});
+		const runPromise = sandbox.run('fn main() {}', false);
+		const rejectedRun = expect(runPromise).rejects.toContain('Rust runtime worker replaced');
+
+		await sandbox.load({
+			rootUrl: '/replacement',
+			rust: {
+				compilerUrl: '/replacement/wasm-rust/index.js',
+				executableGraphFingerprint: 'a'.repeat(64)
+			}
+		});
+
+		await rejectedRun;
+		expect(sandbox.worker).toBe(workerInstances[1]);
+	});
+
+	it('rejects an overlapping run without posting it to the active worker', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => {});
+
+		const firstRun = sandbox.run('fn main() {}', false);
+		await expect(sandbox.run('fn main() { println!("second"); }', false)).rejects.toContain(
+			'Rust runtime already has an active run'
+		);
+		expect(worker.postMessage).toHaveBeenCalledTimes(2);
+
+		worker.onmessage?.({ data: { results: true } } as MessageEvent<any>);
+		await expect(firstRun).resolves.toBe(true);
+	});
+
+	it('aborts an active run and disposes its worker graph', async () => {
+		const controller = new AbortController();
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const graph = await executableGraphFixture.load.mock.results[0]!.value;
+		worker.postMessage.mockImplementationOnce(() => {});
+
+		const runPromise = sandbox.run('fn main() {}', false, true, undefined, [], {
+			signal: controller.signal
+		});
+		const rejectedRun = expect(runPromise).rejects.toThrow('caller cancelled Rust run');
+		controller.abort(new Error('caller cancelled Rust run'));
+
+		await rejectedRun;
+		expect(worker.terminate).toHaveBeenCalledTimes(1);
+		expect(graph.dispose).toHaveBeenCalledTimes(1);
+		expect(sandbox.worker).toBeFalsy();
+	});
+
+	it('terminates the active generation when compilation exceeds its wall timeout', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const graph = await executableGraphFixture.load.mock.results[0]!.value;
+		worker.postMessage.mockImplementationOnce(() => {});
+		vi.useFakeTimers();
+		try {
+			const runPromise = sandbox.run('fn main() {}', false, true, undefined, [], {
+				limits: { compileTimeoutMs: 5 }
+			});
+			const rejectedRun = expect(runPromise).rejects.toThrow(
+				'Rust compile timed out after 5 ms'
+			);
+
+			await vi.advanceTimersByTimeAsync(5);
+			await rejectedRun;
+			expect(worker.terminate).toHaveBeenCalledTimes(1);
+			expect(graph.dispose).toHaveBeenCalledTimes(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('clears the compile timeout and disposes the verified graph at LLDB handoff', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const graph = await executableGraphFixture.load.mock.results[0]!.value;
+		worker.postMessage.mockImplementationOnce(() => {});
+		vi.useFakeTimers();
+		try {
+			const runPromise = sandbox.run('fn main() {}', false, true, undefined, [], {
+				debugMode: 'lldb',
+				limits: { compileTimeoutMs: 5 }
+			});
+			worker.onmessage?.({
+				data: {
+					lldbArtifact: {
+						bytes: Uint8Array.of(0, 97, 115, 109),
+						descriptor: {
+							kind: 'dwarf',
+							sourceRoot: '/workspace',
+							moduleSha256: '1'.repeat(64)
+						},
+						sources: []
+					}
+				}
+			} as MessageEvent<any>);
+
+			expect(lldbSessions).toHaveLength(1);
+			expect(graph.dispose).toHaveBeenCalledTimes(1);
+			await vi.advanceTimersByTimeAsync(5);
+			lldbSessions[0].finish();
+			await expect(runPromise).resolves.toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('disconnects the active LLDB session when the run signal aborts after handoff', async () => {
+		const controller = new AbortController();
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => {});
+		const runPromise = sandbox.run('fn main() {}', false, true, undefined, [], {
+			debugMode: 'lldb',
+			signal: controller.signal
+		});
+		worker.onmessage?.({
+			data: {
+				lldbArtifact: {
+					bytes: Uint8Array.of(0, 97, 115, 109),
+					descriptor: {
+						kind: 'dwarf',
+						sourceRoot: '/workspace',
+						moduleSha256: '1'.repeat(64)
+					},
+					sources: []
+				}
+			}
+		} as MessageEvent<any>);
+		const session = lldbSessions[0];
+		const rejectedRun = expect(runPromise).rejects.toThrow('caller cancelled LLDB run');
+
+		controller.abort(new Error('caller cancelled LLDB run'));
+
+		await rejectedRun;
+		expect(session.disconnect).toHaveBeenCalledTimes(1);
+	});
+
+	it('switches to the run timeout when the worker begins execution', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => {});
+		vi.useFakeTimers();
+		try {
+			const runPromise = sandbox.run('fn main() {}', false, true, undefined, [], {
+				limits: { compileTimeoutMs: 1000, runTimeoutMs: 5 }
+			});
+			const rejectedRun = expect(runPromise).rejects.toThrow('Rust run timed out after 5 ms');
+			worker.onmessage?.({ data: { runtimePhase: 'run' } } as MessageEvent<any>);
+
+			await vi.advanceTimersByTimeAsync(5);
+			await rejectedRun;
+			expect(worker.terminate).toHaveBeenCalledTimes(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('terminates the active generation before forwarding excessive output', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const outputs: string[] = [];
+		sandbox.output = (output: string) => outputs.push(output);
+		worker.postMessage.mockImplementationOnce(() => {});
+		const runPromise = sandbox.run('fn main() {}', false, true, undefined, [], {
+			limits: { maxOutputBytes: 5 }
+		});
+		const rejectedRun = expect(runPromise).rejects.toThrow('Rust output exceeded 5 bytes');
+
+		worker.onmessage?.({ data: { output: '123456' } } as MessageEvent<any>);
+
+		await rejectedRun;
+		expect(outputs).toEqual([]);
+		expect(worker.terminate).toHaveBeenCalledTimes(1);
+	});
+
+	it('bounds worker error payloads with the same output budget', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => {});
+		const runPromise = sandbox.run('fn main() {}', false, true, undefined, [], {
+			limits: { maxOutputBytes: 5 }
+		});
+		const rejectedRun = expect(runPromise).rejects.toThrow('Rust output exceeded 5 bytes');
+
+		worker.onmessage?.({ data: { error: '123456' } } as MessageEvent<any>);
+
+		await rejectedRun;
+		expect(worker.terminate).toHaveBeenCalledTimes(1);
+	});
+
+	it('forwards executable graph asset limits and abort signal', async () => {
+		const controller = new AbortController();
+		const sandbox = new Rust();
+
+		await sandbox.load('/absproxy/5173', '', true, [], {
+			signal: controller.signal,
+			limits: { maxAssetBytes: 1234, assetTimeoutMs: 5678 }
+		});
+
+		expect(executableGraphFixture.load).toHaveBeenCalledWith(
+			expect.objectContaining({
+				maxAssetBytes: 1234,
+				assetTimeoutMs: 5678,
+				signal: expect.any(AbortSignal)
+			})
 		);
 	});
 
@@ -341,6 +825,25 @@ describe('Rust sandbox', () => {
 		await expect(loadPromise).rejects.toContain(
 			'Rust worker script error: worker script error (/worker/rust.js:88:24)'
 		);
+	});
+
+	it('aborts a worker bootstrap and disposes its verified graph', async () => {
+		suppressAutoLoadAck = true;
+		const controller = new AbortController();
+		const sandbox = new Rust();
+		const loadPromise = sandbox.load('/absproxy/5173', '', true, [], {
+			signal: controller.signal
+		});
+		await vi.dynamicImportSettled();
+		const worker = workerInstances[0];
+		const graph = await executableGraphFixture.load.mock.results[0]!.value;
+
+		controller.abort(new Error('caller cancelled Rust startup'));
+
+		await expect(loadPromise).rejects.toThrow('caller cancelled Rust startup');
+		expect(worker.terminate).toHaveBeenCalledTimes(1);
+		expect(graph.dispose).toHaveBeenCalledTimes(1);
+		expect(sandbox.worker).toBeFalsy();
 	});
 
 	it('writes queued terminal input when the worker requests stdin', async () => {

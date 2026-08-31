@@ -3,10 +3,12 @@ import { verifyRuntimeAssetIntegrity, type RuntimeAssetIntegrityEntry } from '@w
 
 export interface RuntimeWorkerDiagnosticRequest {
 	runtime?: LanguageToolAssetRuntime;
+	workerAsset?: string;
 	workerUrl?: string;
 	workerReceipt?: RuntimeAssetIntegrityEntry;
 	workerBytes?: Uint8Array;
 	message: Record<string, unknown>;
+	messageTransfer?: readonly Transferable[];
 	timeoutMs?: number;
 	timeoutMessage: string;
 }
@@ -19,6 +21,7 @@ export interface RuntimeWorkerDiagnosticResult {
 export async function runRuntimeWorkerDiagnostics(
 	request: RuntimeWorkerDiagnosticRequest
 ): Promise<RuntimeWorkerDiagnosticResult> {
+	const workerAsset = request.workerAsset ?? 'runner-worker.js';
 	let workerUrl = request.workerUrl || '';
 	let blobUrl = '';
 	if (request.workerBytes && !request.workerReceipt) {
@@ -38,12 +41,15 @@ export async function runRuntimeWorkerDiagnostics(
 		if (request.workerBytes) {
 			if (
 				!ArrayBuffer.isView(request.workerBytes) ||
-				Object.prototype.toString.call(request.workerBytes) !== '[object Uint8Array]'
+				Object.getOwnPropertyDescriptor(
+					Object.getPrototypeOf(Uint8Array.prototype),
+					Symbol.toStringTag
+				)?.get?.call(request.workerBytes) !== 'Uint8Array'
 			) {
 				throw new Error('Runtime diagnostic worker bytes are invalid');
 			}
 			await verifyRuntimeAssetIntegrity({
-				asset: 'runner-worker.js',
+				asset: workerAsset,
 				bytes: request.workerBytes,
 				expected: request.workerReceipt,
 				stage: 'compressed',
@@ -62,11 +68,11 @@ export async function runRuntimeWorkerDiagnostics(
 			}
 			const loaded = await loadLanguageToolAsset(
 				runtime,
-				'runner-worker.js',
+				workerAsset,
 				{
 					baseUrl: new URL('.', requestedWorkerUrl).href,
 					loader: () => requestedWorkerUrl,
-					integrity: { 'runner-worker.js': request.workerReceipt },
+					integrity: { [workerAsset]: request.workerReceipt },
 					cache: 'no-store',
 					redirect: 'error',
 					requireExactResponseUrl: true
@@ -144,7 +150,11 @@ export async function runRuntimeWorkerDiagnostics(
 			resolve({ error: event.data.error, output });
 		};
 		try {
-			worker.postMessage(request.message);
+			if (request.messageTransfer?.length) {
+				worker.postMessage(request.message, [...request.messageTransfer]);
+			} else {
+				worker.postMessage(request.message);
+			}
 		} catch (error) {
 			clearTimeout(timeout);
 			try {

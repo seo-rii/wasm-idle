@@ -41,8 +41,14 @@ export interface StaticWorkerDiagnosticsOptions<
 	defaultActivePath: string;
 	timeoutMessage: string;
 	runtime?: LanguageToolAssetRuntime;
+	workerAsset?: string;
+	singleFlight?: boolean;
 	runDiagnostics?: StaticWorkerDiagnosticRunner<TConfig, TResult>;
 	createMessage: (request: StaticWorkerDiagnosticRequest<TConfig>) => Record<string, unknown>;
+	messageTransfer?: (
+		message: Record<string, unknown>,
+		request: StaticWorkerDiagnosticRequest<TConfig>
+	) => readonly Transferable[];
 	diagnosticsFromResult: (result: TResult, document: LspDocument) => LspDiagnostic[];
 	validateConfig?: (config: TConfig) => string | null | undefined;
 	cacheKeyParts?: (config: TConfig) => readonly string[];
@@ -61,18 +67,33 @@ export function createStaticWorkerDiagnostics<
 	let config: TConfig | null = null;
 	let lastKey = '';
 	let lastDiagnostics: LspDiagnostic[] = [];
-	const pendingDiagnosticsByKey = new Map<string, Promise<LspDiagnostic[]>>();
+	let serializedDiagnostics: Promise<void> = Promise.resolve();
+	const latestRequestByDocument = new Map<string, symbol>();
+	const pendingDiagnosticsByKey = new Map<
+		string,
+		{
+			documentUri: string;
+			operation: Promise<LspDiagnostic[]>;
+			token: symbol;
+		}
+	>();
 	const runDiagnostics =
 		options.runDiagnostics ||
-		(((request: StaticWorkerDiagnosticRequest<TConfig>) =>
-			runRuntimeWorkerDiagnostics({
+		(((request: StaticWorkerDiagnosticRequest<TConfig>) => {
+			const message = options.createMessage(request);
+			return runRuntimeWorkerDiagnostics({
 				...(options.runtime ? { runtime: options.runtime } : {}),
+				...(options.workerAsset ? { workerAsset: options.workerAsset } : {}),
 				workerUrl: request.workerUrl,
 				workerReceipt: request.workerReceipt,
 				workerBytes: request.runnerWorkerBytes,
 				timeoutMessage: options.timeoutMessage,
-				message: options.createMessage(request)
-			}) as Promise<TResult>) satisfies StaticWorkerDiagnosticRunner<TConfig, TResult>);
+				message,
+				...(options.messageTransfer
+					? { messageTransfer: options.messageTransfer(message, request) }
+					: {})
+			}) as Promise<TResult>;
+		}) satisfies StaticWorkerDiagnosticRunner<TConfig, TResult>);
 
 	return {
 		initialize(workerOptions: unknown, context: LspDocumentContext) {
@@ -88,41 +109,83 @@ export function createStaticWorkerDiagnostics<
 			config = nextConfig;
 		},
 		async diagnostics(document: LspDocument, context: LspDocumentContext) {
-			if (!config || !document.text.trim()) return [];
+			if (!config) return [];
+			const token = Symbol(document.uri);
+			if (options.singleFlight) latestRequestByDocument.set(document.uri, token);
+			if (!document.text.trim()) {
+				if (options.singleFlight && latestRequestByDocument.get(document.uri) === token) {
+					latestRequestByDocument.delete(document.uri);
+				}
+				return [];
+			}
+			const requestConfig = config;
 			const activePath =
 				options.activePathFromDocument?.(document) ||
 				defaultActivePathFromDocument(document, options.defaultActivePath);
 			const key = [
-				...(options.cacheKeyParts?.(config) || [
-					config.baseUrl || '',
-					config.workerUrl || ''
+				...(options.cacheKeyParts?.(requestConfig) || [
+					requestConfig.baseUrl || '',
+					requestConfig.workerUrl || ''
 				]),
 				activePath,
 				document.text
 			].join('\n');
-			if (key === lastKey) return lastDiagnostics;
+			if (key === lastKey) {
+				if (options.singleFlight && latestRequestByDocument.get(document.uri) === token) {
+					latestRequestByDocument.delete(document.uri);
+				}
+				return lastDiagnostics;
+			}
 			const pendingDiagnostics = pendingDiagnosticsByKey.get(key);
-			if (pendingDiagnostics) return await pendingDiagnostics;
+			if (pendingDiagnostics) {
+				if (options.singleFlight && pendingDiagnostics.documentUri === document.uri) {
+					latestRequestByDocument.set(document.uri, pendingDiagnostics.token);
+				} else if (
+					options.singleFlight &&
+					latestRequestByDocument.get(document.uri) === token
+				) {
+					latestRequestByDocument.delete(document.uri);
+				}
+				return await pendingDiagnostics.operation;
+			}
 			if (options.diagnosticsProgressStage) {
 				context.reportProgress(options.diagnosticsProgressStage);
 			}
-			const operation = (async () => {
+			const execute = async () => {
+				if (options.singleFlight && latestRequestByDocument.get(document.uri) !== token) {
+					return [];
+				}
 				const result = await runDiagnostics({
-					...config,
+					...requestConfig,
 					code: document.text,
 					activePath
 				});
+				if (options.singleFlight && latestRequestByDocument.get(document.uri) !== token) {
+					return [];
+				}
 				const diagnostics = options.diagnosticsFromResult(result, document);
 				lastKey = key;
 				lastDiagnostics = diagnostics;
 				return diagnostics;
-			})();
-			pendingDiagnosticsByKey.set(key, operation);
+			};
+			const operation = options.singleFlight
+				? serializedDiagnostics.then(execute, execute)
+				: execute();
+			if (options.singleFlight) {
+				serializedDiagnostics = operation.then(
+					() => undefined,
+					() => undefined
+				);
+			}
+			pendingDiagnosticsByKey.set(key, { documentUri: document.uri, operation, token });
 			try {
 				return await operation;
 			} finally {
-				if (pendingDiagnosticsByKey.get(key) === operation) {
+				if (pendingDiagnosticsByKey.get(key)?.operation === operation) {
 					pendingDiagnosticsByKey.delete(key);
+				}
+				if (options.singleFlight && latestRequestByDocument.get(document.uri) === token) {
+					latestRequestByDocument.delete(document.uri);
 				}
 			}
 		}

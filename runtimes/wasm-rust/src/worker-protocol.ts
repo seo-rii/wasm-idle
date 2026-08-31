@@ -2,7 +2,8 @@ import type { NormalizedRuntimeManifest } from './runtime-manifest.js';
 import type {
 	BrowserRustCompileStage,
 	BrowserRustCompileWorkerRequest,
-	CompilerDiagnostic
+	CompilerDiagnostic,
+	RuntimeAssetDeliveryBudgetSnapshot
 } from './types.js';
 
 export interface SharedRuntimeAssetFile {
@@ -12,6 +13,9 @@ export interface SharedRuntimeAssetFile {
 
 export interface CompileWorkerRequest {
 	type: 'compile';
+	compilerWorkerUrl: string;
+	executableGraphFingerprint?: string;
+	verifiedExecutableModuleUrls?: Readonly<Record<string, string>>;
 	runtimeBaseUrl: string;
 	manifest: NormalizedRuntimeManifest;
 	request: BrowserRustCompileWorkerRequest;
@@ -64,6 +68,7 @@ export interface CompileWorkerProgressMessage {
 		message?: string;
 		bytesCompleted?: number;
 		bytesTotal?: number;
+		delivery?: RuntimeAssetDeliveryBudgetSnapshot;
 	};
 }
 
@@ -75,6 +80,7 @@ export type CompileWorkerMessage =
 
 export interface RustcThreadWorkerRequest {
 	type: 'thread-start';
+	rustcThreadWorkerUrl: string;
 	runtimeBaseUrl: string;
 	manifest: NormalizedRuntimeManifest;
 	sourceCode: string;
@@ -90,10 +96,12 @@ export interface RustcThreadWorkerRequest {
 	threadId: number;
 	startArg: number;
 	readyBuffer: SharedArrayBuffer;
+	threadWorkerBudgetBuffer?: SharedArrayBuffer;
 }
 
 export interface RustcThreadPoolInitRequest {
 	type: 'thread-pool-init';
+	rustcThreadWorkerUrl: string;
 	runtimeBaseUrl: string;
 	manifest: NormalizedRuntimeManifest;
 	sourceCode: string;
@@ -109,6 +117,7 @@ export interface RustcThreadPoolInitRequest {
 	slotIndex: number;
 	slotBuffer: SharedArrayBuffer;
 	poolBuffers: SharedArrayBuffer[];
+	threadWorkerBudgetBuffer?: SharedArrayBuffer;
 }
 
 export interface RustcThreadWorkerLogMessage {

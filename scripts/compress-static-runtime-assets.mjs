@@ -33,6 +33,7 @@ const COMPRESSIBLE_EXTENSIONS = new Set([
 ]);
 const PRECOMPRESSED_EXTENSIONS = new Set(['.br', '.brotli', '.gz', '.tgz', '.zip', '.zst']);
 const PRECOMPRESSED_SUFFIXES = ['.gz.bin'];
+const INERT_JAVASCRIPT_SUFFIXES = ['.js.bin', '.js.gz.bin'];
 const RUNTIME_TOP_LEVEL_DIRS = new Set(['clang', 'clangd', 'pyodide', 'teavm', 'webr']);
 
 /**
@@ -72,6 +73,7 @@ function isUnderCompressibleRuntime(rootDir, filePath) {
 /** @param {string} filePath */
 function hasCompressibleExtension(filePath) {
 	const normalizedPath = filePath.toLowerCase();
+	if (INERT_JAVASCRIPT_SUFFIXES.some((suffix) => normalizedPath.endsWith(suffix))) return false;
 	if (PRECOMPRESSED_SUFFIXES.some((suffix) => normalizedPath.endsWith(suffix))) return false;
 	const extension = path.extname(filePath).toLowerCase();
 	if (!extension) return true;

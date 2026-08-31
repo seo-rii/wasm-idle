@@ -28,7 +28,7 @@ const createRuntimeFixtureState = () => ({
 	planCalls: 0,
 	executeCalls: 0,
 	disposeCalls: 0,
-	lastRuntimeOptions: null as { assetLoader?: unknown; assetPacks?: unknown } | null,
+	lastRuntimeOptions: null as { assetLoader?: unknown } | null,
 	nextExecutionFailureLine: null as string | null,
 	skipArtifact: false
 });
@@ -51,6 +51,28 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_TINYGO_MODULE_URL: ''
 	}
 }));
+
+const { executableGraphFixture } = vi.hoisted(() => ({
+	executableGraphFixture: {
+		disposeCalls: 0,
+		load: vi.fn()
+	}
+}));
+
+function installExecutableGraphFixture() {
+	executableGraphFixture.disposeCalls = 0;
+	executableGraphFixture.load.mockReset();
+	executableGraphFixture.load.mockImplementation(
+		async ({ moduleUrl }: { moduleUrl: string }) => ({
+			entryUrl: moduleUrl,
+			assetBaseUrl: 'https://example.invalid/wasm-tinygo/',
+			moduleUrls: { 'upstream.js': moduleUrl },
+			dispose() {
+				executableGraphFixture.disposeCalls += 1;
+			}
+		})
+	);
+}
 
 const runtimeModuleSource = `
 const state = globalThis.__wasmIdleTinyGoRuntimeFixtureState;
@@ -197,6 +219,10 @@ vi.mock('$lib/playground/worker/tinygo?worker', () => ({
 	default: MockWorker
 }));
 
+vi.mock('$lib/playground/tinygoExecutableGraph', () => ({
+	loadVerifiedTinyGoExecutableGraph: executableGraphFixture.load
+}));
+
 vi.mock('$env/dynamic/public', () => ({
 	env: publicEnv
 }));
@@ -213,6 +239,7 @@ describe('TinyGo sandbox', () => {
 		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
 		Object.assign(runtimeFixtureState, createRuntimeFixtureState());
 		Object.assign(upstreamFixtureState, createUpstreamFixtureState());
+		installExecutableGraphFixture();
 	});
 
 	it('compiles public TinyGo with receipt-verified upstream assets in the disposable worker', async () => {
@@ -239,6 +266,12 @@ describe('TinyGo sandbox', () => {
 		).resolves.toBe(true);
 
 		expect(upstreamFixtureState.loadCalls).toBe(1);
+		expect(upstreamFixtureState.loadOptions?.profile).toMatchObject({
+			profileId: 'tinygo-0.40.1-wasip1-protocol-v6',
+			protocolVersion: 6,
+			manifestPath: 'tools/upstream/upstream-toolchain.v2.json',
+			manifestFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/u)
+		});
 		expect(upstreamFixtureState.compileCalls).toBe(2);
 		expect(upstreamFixtureState.compileRequest?.workspaceFiles).toEqual({
 			'go.mod': 'module wasm-idle.local/main\n\ngo 1.24.0\n',
@@ -247,6 +280,112 @@ describe('TinyGo sandbox', () => {
 		expect(upstreamFixtureState.compileOptions?.maxWasmMemoryBytes).toBe(131_072);
 		expect(outputs.join('')).toContain('upstream TinyGo phase: compile');
 		expect(outputs.join('')).toContain('upstream TinyGo artifact ready');
+	});
+
+	it('rejects an incomplete TinyGo trust-profile override before worker creation', async () => {
+		const sandbox = new TinyGo();
+
+		await expect(
+			sandbox.load({
+				tinygo: {
+					moduleUrl: upstreamModuleUrl,
+					profileId: 'partial-profile'
+				}
+			})
+		).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			runtimeId: 'TINYGO'
+		});
+		expect(workerInstances).toHaveLength(0);
+		expect(upstreamFixtureState.loadCalls).toBe(0);
+	});
+
+	it('rejects an executable graph fingerprint override before graph or worker creation', async () => {
+		const sandbox = new TinyGo();
+
+		await expect(
+			sandbox.load({
+				tinygo: {
+					moduleUrl: upstreamModuleUrl,
+					executableGraphFingerprint: '0'.repeat(64)
+				}
+			})
+		).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			runtimeId: 'TINYGO'
+		});
+		expect(executableGraphFixture.load).not.toHaveBeenCalled();
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('verifies the executable graph before creating a worker and retries cleanly', async () => {
+		const sandbox = new TinyGo();
+		executableGraphFixture.load.mockRejectedValueOnce(
+			new Error('fixture TinyGo executable receipt mismatch')
+		);
+
+		await expect(sandbox.load({ tinygo: { moduleUrl: upstreamModuleUrl } })).rejects.toThrow(
+			'fixture TinyGo executable receipt mismatch'
+		);
+		expect(workerInstances).toHaveLength(0);
+
+		await expect(
+			sandbox.load({ tinygo: { moduleUrl: upstreamModuleUrl } })
+		).resolves.toBeUndefined();
+		expect(executableGraphFixture.load).toHaveBeenCalledTimes(2);
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('imports only the verified graph entry instead of the configured network URL', async () => {
+		const sandbox = new TinyGo();
+		const configuredModuleUrl = 'https://mirror.example/wasm-tinygo/upstream.js';
+		executableGraphFixture.load.mockImplementationOnce(async () => ({
+			entryUrl: runtimeModuleUrl,
+			assetBaseUrl: 'https://mirror.example/wasm-tinygo/',
+			moduleUrls: { 'upstream.js': runtimeModuleUrl },
+			dispose() {
+				executableGraphFixture.disposeCalls += 1;
+			}
+		}));
+
+		await expect(
+			sandbox.load({ tinygo: { moduleUrl: configuredModuleUrl } })
+		).resolves.toBeUndefined();
+
+		expect(executableGraphFixture.load).toHaveBeenCalledWith(
+			expect.objectContaining({
+				moduleUrl: expect.stringMatching(
+					/^https:\/\/mirror\.example\/wasm-tinygo\/upstream\.js\?v=[a-f0-9]{64}$/u
+				)
+			})
+		);
+		expect(runtimeFixtureState.lastRuntimeOptions).not.toBeNull();
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('disposes a verified graph whose entry module fails to import', async () => {
+		const sandbox = new TinyGo();
+		executableGraphFixture.load.mockImplementationOnce(async () => ({
+			entryUrl:
+				'data:text/javascript,throw%20new%20Error(%22fixture%20verified%20import%20failed%22)',
+			assetBaseUrl: 'https://mirror.example/wasm-tinygo/',
+			moduleUrls: {},
+			dispose() {
+				executableGraphFixture.disposeCalls += 1;
+			}
+		}));
+
+		await expect(
+			sandbox.load({
+				tinygo: { moduleUrl: 'https://mirror.example/wasm-tinygo/upstream.js' }
+			})
+		).rejects.toThrow('fixture verified import failed');
+
+		expect(executableGraphFixture.disposeCalls).toBe(1);
+		expect(workerInstances).toHaveLength(0);
+		expect(sandbox.executableGraph).toBeNull();
 	});
 
 	it('uses the verified upstream compiler memory default when the caller omits a limit', async () => {
@@ -420,30 +559,20 @@ describe('TinyGo sandbox', () => {
 		);
 	});
 
-	it('passes TinyGo runtime asset loader and pack references into the runtime module', async () => {
+	it('passes the TinyGo runtime asset loader into the runtime module', async () => {
 		const sandbox = new TinyGo();
 		const loader = vi.fn(async () => null);
-		const packs = [
-			{
-				index: 'https://assets.invalid/runtime-pack.index.json',
-				asset: 'https://assets.invalid/runtime-pack.bin',
-				fileCount: 2,
-				totalBytes: 42
-			}
-		];
 
 		await sandbox.load({
 			tinygo: {
 				moduleUrl: runtimeModuleUrl,
-				assetLoader: loader,
-				assetPacks: packs
+				assetLoader: loader
 			}
 		});
 
 		expect(runtimeFixtureState.lastRuntimeOptions).toEqual(
 			expect.objectContaining({
 				assetLoader: loader,
-				assetPacks: packs,
 				onProgress: expect.any(Function)
 			})
 		);

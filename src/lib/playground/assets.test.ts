@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE } from './wasmTinyGoVersion';
 
 const { publicEnv } = vi.hoisted(() => ({
 	publicEnv: {
@@ -176,6 +177,11 @@ import {
 	WASM_TCL_RUNNER_RECEIPT,
 	WASM_TCL_RUNTIME_PROFILE
 } from './wasmTclVersion';
+import {
+	WASM_AWK_ASSET_VERSION,
+	WASM_AWK_RUNNER_RECEIPT,
+	WASM_AWK_RUNTIME_PROFILE
+} from './wasmAwkVersion';
 
 describe('runtime asset config resolution', () => {
 	it('keeps application runtime asset keys aligned with the Core contract', () => {
@@ -858,7 +864,9 @@ describe('runtime asset config resolution', () => {
 				},
 				'https://example.com/app'
 			)
-		).toBe('https://example.com/runtime/tinygo/runtime.js');
+		).toBe(
+			`https://example.com/runtime/tinygo/runtime.js?v=${WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules[WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.entryPath].sha256}`
+		);
 	});
 
 	it('derives the default TinyGo runtime module url from the shared root path', async () => {
@@ -868,7 +876,7 @@ describe('runtime asset config resolution', () => {
 		const { resolveTinyGoModuleUrl } = await import('./assets');
 
 		expect(resolveTinyGoModuleUrl('/absproxy/5173', 'https://example.com/app')).toBe(
-			'https://example.com/absproxy/5173/wasm-tinygo/upstream.js'
+			`https://example.com/absproxy/5173/wasm-tinygo/upstream.js?v=${WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules[WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.entryPath].sha256}`
 		);
 	});
 
@@ -879,8 +887,23 @@ describe('runtime asset config resolution', () => {
 			'https://env.example.com/wasm-tinygo/index.html?v=42';
 		const { resolveTinyGoModuleUrl } = await import('./assets');
 
+		expect(() => resolveTinyGoModuleUrl(undefined, 'https://example.com/app')).toThrow(
+			'TinyGo executable module URL must use its exact receipt query pin'
+		);
+	});
+
+	it('accepts the exact TinyGo entry receipt pin from a legacy app url', async () => {
+		vi.resetModules();
+		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
+		const receipt =
+			WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules[
+				WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.entryPath
+			].sha256;
+		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = `https://env.example.com/wasm-tinygo/index.html?v=${receipt}`;
+		const { resolveTinyGoModuleUrl } = await import('./assets');
+
 		expect(resolveTinyGoModuleUrl(undefined, 'https://example.com/app')).toBe(
-			'https://env.example.com/wasm-tinygo/upstream.js?v=42'
+			`https://env.example.com/wasm-tinygo/upstream.js?v=${receipt}`
 		);
 	});
 
@@ -1377,7 +1400,12 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(resolveAwkRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/wasm-awk/',
-			workerUrl: 'https://example.com/absproxy/5173/wasm-awk/runner-worker.js'
+			workerUrl: `https://example.com/absproxy/5173/wasm-awk/runner-worker.v2.js?v=${WASM_AWK_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `https://example.com/absproxy/5173/wasm-awk/runtime-manifest.v2.json?v=${WASM_AWK_ASSET_VERSION}`,
+			manifestFingerprint: WASM_AWK_ASSET_VERSION,
+			preflightKey: expect.any(String),
+			preflightProfile: WASM_AWK_RUNTIME_PROFILE,
+			workerReceipt: WASM_AWK_RUNNER_RECEIPT
 		});
 		expect(
 			resolvePascalRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')
@@ -1873,12 +1901,22 @@ describe('runtime asset config resolution', () => {
 		});
 		expect(
 			resolveAwkRuntimeAssetConfig(
-				{ awk: { baseUrl: '/runtime/awk', workerUrl: '/runtime/awk/worker.js' } },
+				{
+					awk: {
+						baseUrl: '/runtime/awk',
+						workerUrl: '/runtime/awk/runner-worker.v2.js'
+					}
+				},
 				'https://example.com/app'
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/runtime/awk/',
-			workerUrl: 'https://example.com/runtime/awk/worker.js'
+			workerUrl: `https://example.com/runtime/awk/runner-worker.v2.js?v=${WASM_AWK_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `https://example.com/runtime/awk/runtime-manifest.v2.json?v=${WASM_AWK_ASSET_VERSION}`,
+			manifestFingerprint: WASM_AWK_ASSET_VERSION,
+			preflightKey: expect.any(String),
+			preflightProfile: WASM_AWK_RUNTIME_PROFILE,
+			workerReceipt: WASM_AWK_RUNNER_RECEIPT
 		});
 		expect(
 			resolvePascalRuntimeAssetConfig(
@@ -2151,6 +2189,38 @@ describe('runtime asset config resolution', () => {
 			workerUrl: 'https://example.com/runtime/swift/worker.js',
 			manifestUrl: 'https://example.com/runtime/swift/manifest.json'
 		});
+	});
+
+	it('keeps AWK URL mirrors bound to the bundled trust root', async () => {
+		vi.resetModules();
+		const { resolveAwkRuntimeAssetConfig } = await import('./assets');
+
+		expect(() =>
+			resolveAwkRuntimeAssetConfig(
+				{
+					awk: {
+						baseUrl: 'https://mirror.example.com/wasm-awk/',
+						workerUrl: 'https://mirror.example.com/wasm-awk/runner-worker.v2.js',
+						manifestFingerprint: 'a'.repeat(64)
+					}
+				},
+				'https://example.com/app'
+			)
+		).toThrow('complete profile and receipt bundle');
+
+		expect(() =>
+			resolveAwkRuntimeAssetConfig(
+				{
+					awk: {
+						baseUrl: 'https://mirror.example.com/wasm-awk/',
+						workerUrl: 'https://mirror.example.com/wasm-awk/runner-worker.v2.js',
+						...WASM_AWK_RUNTIME_PROFILE,
+						profileId: 'attacker-selected-goawk-profile'
+					}
+				},
+				'https://example.com/app'
+			)
+		).toThrow('URL mirrors only');
 	});
 
 	it('accepts custom Gleam URL environment overrides only with complete integrity pins', async () => {

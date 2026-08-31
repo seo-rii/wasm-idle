@@ -1,14 +1,98 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { flushQueuedStdin } from '$lib/playground/stdinBuffer';
+import {
+	WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
+	WASM_RUST_RUNTIME_PROFILE
+} from '$lib/playground/wasmRustVersion';
+
+const mockCompilerModules = new Map<string, string>();
+let nextMockCompilerId = 0;
+const nonDebugExecutionLimits = Object.freeze({
+	maxWorkers: 1,
+	maxThreads: 4,
+	maxAssetBytes: 128 * 1024 * 1024
+});
+
+function asDataModule(source: string, id: string) {
+	return `data:text/javascript;base64,${Buffer.from(source, 'utf8').toString('base64')}#${id}`;
+}
 
 async function createMockRustRuntimeModule(source: string) {
-	return `data:text/javascript;base64,${Buffer.from(source, 'utf8').toString('base64')}`;
+	const id = String(++nextMockCompilerId);
+	const compilerUrl = `blob:https://assets.example.test/mock-rust-compiler-${id}`;
+	mockCompilerModules.set(
+		compilerUrl,
+		asDataModule(
+			`export function configureVerifiedRuntimeExecutableModuleUrls(moduleUrls, graphFingerprint) {
+				globalThis.__lastVerifiedModuleUrls = moduleUrls;
+				globalThis.__lastExecutableGraphFingerprint = graphFingerprint;
+			}
+			${source}`,
+			`compiler-${id}`
+		)
+	);
+	return compilerUrl;
+}
+
+async function createMockRustDebugModule(source: string) {
+	return asDataModule(source, `debug-${++nextMockCompilerId}`);
+}
+
+function runtimeModuleUrl(entryPath: string = WASM_RUST_EXECUTABLE_GRAPH_PROFILE.entryPath) {
+	return `https://assets.example.test/wasm-rust/${entryPath}?v=${WASM_RUST_RUNTIME_PROFILE.manifestFingerprint}&rustManifestBytes=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.bytes}&rustManifestSha256=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.sha256}`;
+}
+
+function expectedRuntimeBaseUrl() {
+	const sourceModuleUrl = new URL(runtimeModuleUrl());
+	const baseUrl = new URL('./runtime/', sourceModuleUrl);
+	baseUrl.search = sourceModuleUrl.search;
+	return baseUrl.href;
+}
+
+function verifiedModuleUrls(compilerUrl: string, moduleUrl = runtimeModuleUrl()) {
+	const sourceModuleUrl = new URL(moduleUrl);
+	const sourceBaseUrl = new URL('./', sourceModuleUrl);
+	sourceBaseUrl.search = sourceModuleUrl.search;
+	return Object.fromEntries(
+		Object.keys(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules)
+			.sort()
+			.map((modulePath, index) => {
+				const networkUrl = new URL(modulePath, sourceBaseUrl);
+				networkUrl.search = sourceModuleUrl.search;
+				return [
+					networkUrl.href,
+					modulePath === WASM_RUST_EXECUTABLE_GRAPH_PROFILE.entryPath
+						? compilerUrl
+						: `blob:https://assets.example.test/mock-rust-module-${nextMockCompilerId}-${index}`
+				];
+			})
+	);
+}
+
+function compilerBootstrap(compilerUrl: string) {
+	const moduleUrl = runtimeModuleUrl();
+	return {
+		load: true,
+		compilerUrl,
+		runtimeProfile: {
+			profileId: WASM_RUST_RUNTIME_PROFILE.profileId,
+			protocolVersion: WASM_RUST_RUNTIME_PROFILE.protocolVersion,
+			manifestPath: WASM_RUST_RUNTIME_PROFILE.manifestPath,
+			manifestFingerprint: WASM_RUST_RUNTIME_PROFILE.manifestFingerprint,
+			manifestReceipt: { ...WASM_RUST_RUNTIME_PROFILE.manifestReceipt },
+			moduleUrl
+		},
+		verifiedModuleUrls: verifiedModuleUrls(compilerUrl, moduleUrl),
+		executableGraphFingerprint: WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint
+	};
 }
 
 describe('Rust worker', () => {
 	beforeEach(() => {
 		vi.resetModules();
+		mockCompilerModules.clear();
+		nextMockCompilerId = 0;
 		(globalThis as any).self = globalThis as any;
 		(globalThis as any).document = undefined;
 		(globalThis as any).postMessage = vi.fn();
@@ -24,6 +108,18 @@ describe('Rust worker', () => {
 		(globalThis as any).__lldbDescriptor = undefined;
 		(globalThis as any).__artifactTargetTriple = undefined;
 		(globalThis as any).__artifactFormat = undefined;
+		(globalThis as any).__resolveRustCompile = undefined;
+		(globalThis as any).__lastVerifiedModuleUrls = undefined;
+		(globalThis as any).__lastExecutableGraphFingerprint = undefined;
+		(globalThis as any).__compilerModuleImportCount = 0;
+		(globalThis as any).__WASM_IDLE_TEST_ONLY_RUST_COMPILER_MODULE_IMPORTER__ = async (
+			url: string
+		) => {
+			(globalThis as any).__compilerModuleImportCount += 1;
+			const moduleUrl = mockCompilerModules.get(url);
+			if (!moduleUrl) throw new Error(`Unexpected Rust compiler module URL: ${url}`);
+			return import(/* @vite-ignore */ moduleUrl);
+		};
 	});
 
 	it('loads a wasm-rust-style compiler module and runs the returned artifact through executeBrowserRustArtifact', async () => {
@@ -68,10 +164,7 @@ describe('Rust worker', () => {
 
 		await import('./rust');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				compilerUrl: compilerModuleUrl
-			}
+			data: compilerBootstrap(compilerModuleUrl)
 		});
 		await Promise.resolve();
 
@@ -80,6 +173,7 @@ describe('Rust worker', () => {
 				code: 'fn main() { println!("hi"); }',
 				prepare: false,
 				buffer: new SharedArrayBuffer(1024),
+				limits: nonDebugExecutionLimits,
 				args: ['one'],
 				targetTriple: 'wasm32-wasip2',
 				log: true
@@ -98,13 +192,481 @@ describe('Rust worker', () => {
 		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'build log\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'hi\n' });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ runtimePhase: 'run' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 		expect((globalThis as any).__lastCompileOptions.debugMode).toBe('none');
 		expect((globalThis as any).__lastCompileOptions.targetTriple).toBe('wasm32-wasip2');
+		expect((globalThis as any).__lastCompileOptions.workerLimits).toEqual({
+			maxWorkers: 1,
+			maxThreads: 4
+		});
+		expect((globalThis as any).__lastCompileOptions.assetDeliveryBudget).toMatchObject({
+			schemaVersion: 1,
+			maxBytes: 192 * 1024 * 1024,
+			state: expect.any(SharedArrayBuffer)
+		});
 		expect((globalThis as any).__lastExecution.artifact.targetTriple).toBe('wasm32-wasip2');
-		expect((globalThis as any).__lastExecution.runtimeBaseUrl).toBe(compilerModuleUrl);
+		expect((globalThis as any).__lastExecution.runtimeBaseUrl).toBe(expectedRuntimeBaseUrl());
 		expect((globalThis as any).__lastExecution.options.args).toEqual(['one']);
 		expect((globalThis as any).__lastExecution.options.env).toEqual({ USER: 'jungol' });
+		expect((globalThis as any).__lastExecution.options.assetDeliveryBudget).toBe(
+			(globalThis as any).__lastCompileOptions.assetDeliveryBudget
+		);
+		expect((globalThis as any).__lastVerifiedModuleUrls).toEqual(
+			compilerBootstrap(compilerModuleUrl).verifiedModuleUrls
+		);
+		expect((globalThis as any).__lastExecutableGraphFingerprint).toBe(
+			WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint
+		);
+		expect((globalThis as any).__compilerModuleImportCount).toBe(1);
+	});
+
+	it.each([
+		{
+			name: 'recompiles for a lower cap',
+			runMaxAssetBytes: 32 * 1024 * 1024,
+			expectedCompileCount: 2,
+			expectedExecutionBudgetIndex: 1,
+			expectedExecutionMaxBytes: 64 * 1024 * 1024
+		},
+		{
+			name: 'reuses the prepared artifact and budget for the same cap',
+			runMaxAssetBytes: nonDebugExecutionLimits.maxAssetBytes,
+			expectedCompileCount: 1,
+			expectedExecutionBudgetIndex: 0,
+			expectedExecutionMaxBytes: 192 * 1024 * 1024
+		}
+	])(
+		'$name',
+		async ({
+			runMaxAssetBytes,
+			expectedCompileCount,
+			expectedExecutionBudgetIndex,
+			expectedExecutionMaxBytes
+		}) => {
+			const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() {
+				return {
+					async compile(options) {
+						globalThis.__compileBudgets.push(options.assetDeliveryBudget);
+						return {
+							success: true,
+							artifact: {
+								wasm: new Uint8Array([0, 97, 115, 109]),
+								targetTriple: options.targetTriple,
+								format: 'component'
+							}
+						};
+					}
+				};
+			}
+
+			export async function executeBrowserRustArtifact(_artifact, _runtimeBaseUrl, options = {}) {
+				globalThis.__executionBudgets.push(options.assetDeliveryBudget);
+				return { exitCode: 0, stdout: '', stderr: '' };
+			}
+		`);
+			(globalThis as any).__compileBudgets = [];
+			(globalThis as any).__executionBudgets = [];
+
+			await import('./rust');
+			await (globalThis as any).self.onmessage({
+				data: compilerBootstrap(compilerModuleUrl)
+			});
+			await (globalThis as any).self.onmessage({
+				data: {
+					code: 'fn main() {}',
+					prepare: true,
+					buffer: new SharedArrayBuffer(1024),
+					limits: nonDebugExecutionLimits,
+					targetTriple: 'wasm32-wasip2'
+				}
+			});
+			await (globalThis as any).self.onmessage({
+				data: {
+					code: 'fn main() {}',
+					prepare: false,
+					buffer: new SharedArrayBuffer(1024),
+					limits: {
+						...nonDebugExecutionLimits,
+						maxAssetBytes: runMaxAssetBytes
+					},
+					targetTriple: 'wasm32-wasip2'
+				}
+			});
+
+			const compileBudgets = (globalThis as any).__compileBudgets;
+			const executionBudgets = (globalThis as any).__executionBudgets;
+			expect(compileBudgets).toHaveLength(expectedCompileCount);
+			expect(compileBudgets[0].maxBytes).toBe(192 * 1024 * 1024);
+			expect(executionBudgets).toHaveLength(1);
+			expect(executionBudgets[0].maxBytes).toBe(expectedExecutionMaxBytes);
+			expect(executionBudgets[0]).toBe(compileBudgets[expectedExecutionBudgetIndex]);
+		}
+	);
+
+	it.each([
+		undefined,
+		{},
+		{ maxWorkers: 1 },
+		{ maxWorkers: 0, maxThreads: 1, maxAssetBytes: 1 },
+		{ maxWorkers: 1.5, maxThreads: 1, maxAssetBytes: 1 },
+		{ maxWorkers: 1, maxThreads: Number.NaN, maxAssetBytes: 1 },
+		{ maxWorkers: 1, maxThreads: 1, maxAssetBytes: Number.NaN },
+		{ maxWorkers: 1, maxThreads: Number.MAX_SAFE_INTEGER + 1, maxAssetBytes: 1 }
+	])('rejects a malformed non-debug resource snapshot before compilation %#', async (limits) => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() {
+				return {
+					async compile(options) {
+						globalThis.__lastCompileOptions = options;
+						return { success: false };
+					}
+				};
+			}
+			export async function executeBrowserRustArtifact() {
+				return { exitCode: 0, stdout: '', stderr: '' };
+			}
+		`);
+		await import('./rust');
+		await (globalThis as any).self.onmessage({
+			data: compilerBootstrap(compilerModuleUrl)
+		});
+		(globalThis as any).postMessage.mockClear();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'fn main() {}',
+				prepare: false,
+				buffer: new SharedArrayBuffer(1024),
+				limits
+			}
+		});
+
+		expect((globalThis as any).__lastCompileOptions).toBeUndefined();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: expect.stringMatching(/Rust non-debug execution limit/u)
+		});
+	});
+
+	it.each([
+		['https', 'https://assets.example.test/wasm-rust/index.js'],
+		['data', 'data:text/javascript,export default function () {}'],
+		['file', 'file:///tmp/wasm-rust/index.js']
+	])('rejects a %s compiler URL before importing the module', async (_kind, compilerUrl) => {
+		await import('./rust');
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: expect.stringContaining('canonical Blob URL')
+		});
+		expect((globalThis as any).__compilerModuleImportCount).toBe(0);
+	});
+
+	it('accepts exactly one compiler bootstrap per application worker', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() {
+				return { compile: async () => ({ success: true }) };
+			}
+			export async function executeBrowserRustArtifact() {
+				return { exitCode: 0, stdout: '', stderr: '' };
+			}
+		`);
+		await import('./rust');
+		await (globalThis as any).self.onmessage({
+			data: compilerBootstrap(compilerModuleUrl)
+		});
+		await (globalThis as any).self.onmessage({
+			data: compilerBootstrap(compilerModuleUrl)
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'wasm-rust application worker accepts exactly one bootstrap'
+		});
+	});
+
+	it('rejects concurrent execution before shared worker state can be replaced', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() {
+				return {
+					compile() {
+						return new Promise((resolve) => {
+							globalThis.__resolveRustCompile = () => resolve({
+								success: true,
+								artifact: {
+									wasm: new Uint8Array([0, 97, 115, 109]),
+									targetTriple: 'wasm32-wasip1',
+									format: 'core-wasm'
+								}
+							});
+						});
+					}
+				};
+			}
+			export async function executeBrowserRustArtifact() {
+				return { exitCode: 0, stdout: '', stderr: '' };
+			}
+		`);
+		await import('./rust');
+		await (globalThis as any).self.onmessage({
+			data: compilerBootstrap(compilerModuleUrl)
+		});
+
+		const firstExecution = (globalThis as any).self.onmessage({
+			data: {
+				code: 'fn main() {}',
+				prepare: true,
+				buffer: new SharedArrayBuffer(1024),
+				limits: nonDebugExecutionLimits
+			}
+		});
+		await vi.waitFor(() =>
+			expect((globalThis as any).__resolveRustCompile).toEqual(expect.any(Function))
+		);
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'fn main() { println!("second"); }',
+				prepare: true,
+				buffer: new SharedArrayBuffer(1024),
+				limits: nonDebugExecutionLimits
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'wasm-rust application worker already has an active execution'
+		});
+		(globalThis as any).__resolveRustCompile();
+		await firstExecution;
+	});
+
+	it('rejects an incompletely configured compiler Blob before importing it', async () => {
+		await import('./rust');
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: 'blob:https://assets.example.test/verified-entry'
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'wasm-rust executable graph fingerprint does not match the bundled receipt profile'
+		});
+		expect((globalThis as any).__compilerModuleImportCount).toBe(0);
+	});
+
+	it('rejects an arbitrary compiler Blob that is not the mapped graph entry', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(
+			'export default async () => ({});'
+		);
+		const bootstrap = compilerBootstrap(compilerModuleUrl);
+		await import('./rust');
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				...bootstrap,
+				compilerUrl: 'blob:https://assets.example.test/arbitrary-compiler'
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'wasm-rust compiler URL must identify the bundled graph entry'
+		});
+		expect((globalThis as any).__compilerModuleImportCount).toBe(0);
+	});
+
+	it.each(['partial', 'extra'])('rejects a %s verified module URL key set', async (shape) => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(
+			'export default async () => ({});'
+		);
+		const bootstrap = compilerBootstrap(compilerModuleUrl);
+		const moduleUrls = { ...bootstrap.verifiedModuleUrls };
+		if (shape === 'partial') {
+			const removableKey = Object.keys(moduleUrls).find(
+				(key) => key !== bootstrap.runtimeProfile.moduleUrl
+			)!;
+			delete moduleUrls[removableKey];
+		} else {
+			moduleUrls[`${runtimeModuleUrl()}&unexpected=1`] =
+				'blob:https://assets.example.test/unexpected-module';
+		}
+		await import('./rust');
+
+		await (globalThis as any).self.onmessage({
+			data: { ...bootstrap, verifiedModuleUrls: moduleUrls }
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'wasm-rust verified module URL map does not match the bundled graph'
+		});
+		expect((globalThis as any).__compilerModuleImportCount).toBe(0);
+	});
+
+	it('rejects duplicate or non-canonical verified Blob values', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(
+			'export default async () => ({});'
+		);
+		const duplicateBootstrap = compilerBootstrap(compilerModuleUrl);
+		const duplicateUrls = { ...duplicateBootstrap.verifiedModuleUrls };
+		const nonEntryKeys = Object.keys(duplicateUrls).filter(
+			(key) => key !== duplicateBootstrap.runtimeProfile.moduleUrl
+		);
+		duplicateUrls[nonEntryKeys[1]] = duplicateUrls[nonEntryKeys[0]];
+		await import('./rust');
+
+		await (globalThis as any).self.onmessage({
+			data: { ...duplicateBootstrap, verifiedModuleUrls: duplicateUrls }
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'wasm-rust verified module URLs must map one-to-one to Blob URLs'
+		});
+		expect((globalThis as any).__compilerModuleImportCount).toBe(0);
+	});
+
+	it('rejects a non-canonical verified Blob value', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(
+			'export default async () => ({});'
+		);
+		const bootstrap = compilerBootstrap(compilerModuleUrl);
+		const moduleUrls = { ...bootstrap.verifiedModuleUrls };
+		const nonEntryKey = Object.keys(moduleUrls).find(
+			(key) => key !== bootstrap.runtimeProfile.moduleUrl
+		)!;
+		moduleUrls[nonEntryKey] = `${moduleUrls[nonEntryKey]}?unexpected=1`;
+		await import('./rust');
+
+		await (globalThis as any).self.onmessage({
+			data: { ...bootstrap, verifiedModuleUrls: moduleUrls }
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'wasm-rust verified module URL must be a canonical Blob URL without a query or fragment'
+		});
+		expect((globalThis as any).__compilerModuleImportCount).toBe(0);
+	});
+
+	it('rejects a graph fingerprint that differs from the bundled graph', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(
+			'export default async () => ({});'
+		);
+		const bootstrap = compilerBootstrap(compilerModuleUrl);
+		await import('./rust');
+
+		await (globalThis as any).self.onmessage({
+			data: { ...bootstrap, executableGraphFingerprint: 'a'.repeat(64) }
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'wasm-rust executable graph fingerprint does not match the bundled receipt profile'
+		});
+		expect((globalThis as any).__compilerModuleImportCount).toBe(0);
+	});
+
+	it.each([
+		[
+			'identity',
+			(profile: ReturnType<typeof compilerBootstrap>['runtimeProfile']) => ({
+				...profile,
+				profileId: `wasm-rust-${'a'.repeat(64)}`
+			}),
+			'wasm-rust runtime profile must match the bundled receipt profile'
+		],
+		[
+			'manifest path',
+			(profile: ReturnType<typeof compilerBootstrap>['runtimeProfile']) => ({
+				...profile,
+				manifestPath: 'runtime/other-manifest.json'
+			}),
+			'wasm-rust runtime profile must match the bundled receipt profile'
+		],
+		[
+			'receipt',
+			(profile: ReturnType<typeof compilerBootstrap>['runtimeProfile']) => ({
+				...profile,
+				manifestReceipt: {
+					...profile.manifestReceipt,
+					bytes: profile.manifestReceipt.bytes + 1
+				}
+			}),
+			'wasm-rust runtime profile receipt must match the bundled receipt profile'
+		]
+	])('rejects a mismatched runtime profile %s', async (_case, mutateProfile, error) => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(
+			'export default async () => ({});'
+		);
+		const bootstrap = compilerBootstrap(compilerModuleUrl);
+		await import('./rust');
+
+		await (globalThis as any).self.onmessage({
+			data: { ...bootstrap, runtimeProfile: mutateProfile(bootstrap.runtimeProfile) }
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ error });
+		expect((globalThis as any).__compilerModuleImportCount).toBe(0);
+	});
+
+	it('rejects a runtime profile whose module URL is not the bundled graph entry', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(
+			'export default async () => ({});'
+		);
+		const bootstrap = compilerBootstrap(compilerModuleUrl);
+		await import('./rust');
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				...bootstrap,
+				runtimeProfile: {
+					...bootstrap.runtimeProfile,
+					moduleUrl: runtimeModuleUrl('other.js')
+				}
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'wasm-rust runtime profile module URL is invalid'
+		});
+		expect((globalThis as any).__compilerModuleImportCount).toBe(0);
+	});
+
+	it('bounds compiler error messages before posting them to the host', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() {
+				return {
+					async compile() {
+						return { success: false, stderr: 'untrusted compiler error' };
+					}
+				};
+			}
+			export async function executeBrowserRustArtifact() {
+				return { exitCode: 0, stdout: '', stderr: '' };
+			}
+		`);
+		await import('./rust');
+		await (globalThis as any).self.onmessage({
+			data: compilerBootstrap(compilerModuleUrl)
+		});
+		(globalThis as any).postMessage.mockClear();
+
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'fn main() {}',
+				prepare: true,
+				buffer: new SharedArrayBuffer(1024),
+				limits: { ...nonDebugExecutionLimits, maxOutputBytes: 5 }
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledOnce();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'Rust worker error exceeded 5 bytes'
+		});
 	});
 
 	it('reads stdin from the shared buffer when executeBrowserRustArtifact requests input', async () => {
@@ -148,10 +710,7 @@ describe('Rust worker', () => {
 
 		await import('./rust');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				compilerUrl: compilerModuleUrl
-			}
+			data: compilerBootstrap(compilerModuleUrl)
 		});
 		await Promise.resolve();
 		await (globalThis as any).self.onmessage({
@@ -159,6 +718,7 @@ describe('Rust worker', () => {
 				code: 'use std::io::{self, Read}; fn main() { let mut input = String::new(); io::stdin().read_to_string(&mut input).unwrap(); print!("{input}"); }',
 				prepare: false,
 				buffer,
+				limits: nonDebugExecutionLimits,
 				targetTriple: 'wasm32-wasip2'
 			}
 		});
@@ -202,10 +762,7 @@ describe('Rust worker', () => {
 
 		await import('./rust');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				compilerUrl: compilerModuleUrl
-			}
+			data: compilerBootstrap(compilerModuleUrl)
 		});
 		await Promise.resolve();
 
@@ -214,6 +771,7 @@ describe('Rust worker', () => {
 				code: 'fn main() { println!("hi"); }',
 				prepare: false,
 				buffer: new SharedArrayBuffer(1024),
+				limits: nonDebugExecutionLimits,
 				targetTriple: 'wasm32-wasip3'
 			}
 		});
@@ -264,10 +822,7 @@ describe('Rust worker', () => {
 
 		await import('./rust');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				compilerUrl: compilerModuleUrl
-			}
+			data: compilerBootstrap(compilerModuleUrl)
 		});
 		await Promise.resolve();
 		await (globalThis as any).self.onmessage({
@@ -275,6 +830,7 @@ describe('Rust worker', () => {
 				code: 'fn main() {}',
 				prepare: true,
 				buffer: new SharedArrayBuffer(1024),
+				limits: nonDebugExecutionLimits,
 				targetTriple: 'wasm32-wasip1'
 			}
 		});
@@ -349,16 +905,14 @@ describe('Rust worker', () => {
 
 		await import('./rust');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				compilerUrl: compilerModuleUrl
-			}
+			data: compilerBootstrap(compilerModuleUrl)
 		});
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: source,
 				prepare: false,
 				buffer: new SharedArrayBuffer(1024),
+				limits: nonDebugExecutionLimits,
 				debugMode: 'none',
 				targetTriple: 'wasm32-wasip1'
 			}
@@ -527,10 +1081,7 @@ describe('Rust worker', () => {
 
 		await import('./rust');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				compilerUrl: compilerModuleUrl
-			}
+			data: compilerBootstrap(compilerModuleUrl)
 		});
 
 		for (const [index, malformed] of malformedCases.entries()) {
@@ -590,10 +1141,7 @@ describe('Rust worker', () => {
 
 		await import('./rust');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				compilerUrl: compilerModuleUrl
-			}
+			data: compilerBootstrap(compilerModuleUrl)
 		});
 		for (const targetTriple of ['wasm32-wasip2', 'wasm32-wasip3']) {
 			await (globalThis as any).self.onmessage({
@@ -651,7 +1199,7 @@ describe('Rust worker', () => {
 
 			export default createRustCompiler;
 		`);
-		const debugModuleUrl = await createMockRustRuntimeModule(`
+		const debugModuleUrl = await createMockRustDebugModule(`
 			globalThis.__debugModuleLoads += 1;
 			export const RUST_DEBUG_MARKER = '__WASM_IDLE_RUST_DEBUG__';
 			export function instrumentRustDebugSource(source) {
@@ -674,8 +1222,7 @@ describe('Rust worker', () => {
 		await import('./rust');
 		await (globalThis as any).self.onmessage({
 			data: {
-				load: true,
-				compilerUrl: compilerModuleUrl,
+				...compilerBootstrap(compilerModuleUrl),
 				debugModuleUrl
 			}
 		});
@@ -757,7 +1304,7 @@ describe('Rust worker', () => {
 				return { exitCode: 0, stdout: '', stderr: '' };
 			}
 		`);
-		const debugModuleUrl = await createMockRustRuntimeModule(`
+		const debugModuleUrl = await createMockRustDebugModule(`
 			export const RUST_DEBUG_MARKER = '__WASM_IDLE_RUST_DEBUG__';
 			export function instrumentRustDebugSource(source) {
 				return source;
@@ -777,7 +1324,7 @@ describe('Rust worker', () => {
 
 		await import('./rust');
 		await (globalThis as any).self.onmessage({
-			data: { load: true, compilerUrl: compilerModuleUrl, debugModuleUrl }
+			data: { ...compilerBootstrap(compilerModuleUrl), debugModuleUrl }
 		});
 		await (globalThis as any).self.onmessage({
 			data: {

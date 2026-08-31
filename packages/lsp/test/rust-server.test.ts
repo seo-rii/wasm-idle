@@ -70,10 +70,23 @@ describe('getRustLanguageServer', () => {
 
 	it('starts the wasm-rust-backed Rust LSP worker', async () => {
 		const status = vi.fn();
+		const compilerUrl = 'blob:https://app.example/verified-rust-entry';
+		const runtimeProfile = {
+			profileId: 'rust-runtime-v1',
+			protocolVersion: 1 as const,
+			manifestPath: 'runtime/runtime-manifest.v3.json' as const,
+			manifestFingerprint: 'b'.repeat(64),
+			manifestReceipt: { bytes: 42, sha256: 'c'.repeat(64) },
+			moduleUrl: `https://static.example.com/wasm-rust/index.js?v=${'b'.repeat(64)}`
+		};
 		const handle = await getRustLanguageServer({
-			rootUrl: 'https://static.example.com/repl_20240807',
 			currentUrl: 'https://app.example.com/editor',
 			rust: {
+				compilerUrl,
+				expectedNetworkModuleUrls: [runtimeProfile.moduleUrl],
+				verifiedModuleUrls: { [runtimeProfile.moduleUrl]: compilerUrl },
+				graphFingerprint: 'a'.repeat(64),
+				runtimeProfile,
 				targetTriple: 'wasm32-wasip2'
 			},
 			createWorker: () => new mockState.FakeWorker() as unknown as Worker,
@@ -84,7 +97,12 @@ describe('getRustLanguageServer', () => {
 		expect(worker?.messages[0]).toEqual({
 			type: 'init',
 			options: {
-				compilerUrl: 'https://static.example.com/repl_20240807/wasm-rust/index.js',
+				compilerUrl,
+				expectedNetworkModuleUrls: [runtimeProfile.moduleUrl],
+				verifiedModuleUrls: { [runtimeProfile.moduleUrl]: compilerUrl },
+				graphFingerprint: 'a'.repeat(64),
+				runtimeProfile,
+				maxAssetBytes: 128 * 1024 * 1024,
 				targetTriple: 'wasm32-wasip2',
 				edition: undefined
 			}
@@ -107,4 +125,37 @@ describe('getRustLanguageServer', () => {
 		expect(worker?.terminated).toBe(true);
 		expect(status).toHaveBeenCalledWith({ state: 'disabled' });
 	});
+
+	it('rejects missing verified executable graph configuration before creating a worker', async () => {
+		await expect(
+			getRustLanguageServer({
+				rust: { compilerUrl: 'https://static.example.com/wasm-rust/index.js' },
+				createWorker: () => new mockState.FakeWorker() as unknown as Worker
+			})
+		).rejects.toThrow('verified executable graph configuration');
+		expect(mockState.workers).toHaveLength(0);
+	});
+
+	it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '1024'])(
+		'rejects an invalid maxAssetBytes policy before creating a worker: %s',
+		async (maxAssetBytes) => {
+			const moduleUrl = 'https://static.example.com/wasm-rust/index.js';
+			await expect(
+				getRustLanguageServer({
+					maxAssetBytes: maxAssetBytes as number,
+					rust: {
+						compilerUrl: 'blob:https://app.example/verified-rust-entry',
+						expectedNetworkModuleUrls: [moduleUrl],
+						verifiedModuleUrls: {
+							[moduleUrl]: 'blob:https://app.example/verified-rust-entry'
+						},
+						graphFingerprint: 'a'.repeat(64),
+						runtimeProfile: {} as any
+					},
+					createWorker: () => new mockState.FakeWorker() as unknown as Worker
+				})
+			).rejects.toThrow('positive safe integer');
+			expect(mockState.workers).toHaveLength(0);
+		}
+	);
 });

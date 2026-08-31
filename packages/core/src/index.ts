@@ -18,6 +18,17 @@ export {
 	type RuntimeWorkerPolicy
 } from './capabilities.js';
 export {
+	RUNTIME_ASSET_DELIVERY_BUDGET_SCHEMA_VERSION,
+	consumeRuntimeAssetDeliveryBytes,
+	createRuntimeAssetDeliveryBudget,
+	declareRuntimeAssetDeliveryExpectedBytes,
+	readRuntimeAssetDeliveryBudget,
+	snapshotRuntimeAssetDeliveryBudgetDescriptor,
+	type RuntimeAssetDeliveryBudgetContext,
+	type RuntimeAssetDeliveryBudgetDescriptor,
+	type RuntimeAssetDeliveryBudgetSnapshot
+} from './asset-delivery-budget.js';
+export {
 	verifyRuntimeAssetIntegrity,
 	verifyRuntimeAssetPair,
 	type RuntimeAssetIntegrityStage,
@@ -144,9 +155,34 @@ export {
 	type RuntimeAssetKeyInput,
 	type RuntimeAssetKeySource,
 	type RuntimeAssetLoaderKeySource,
-	type RuntimeAssetPackKeySource,
 	type RuntimeAssetProfileKeySource
 } from './runtime-assets.js';
+export {
+	AWK_MAX_ASSET_BYTES,
+	AWK_MAX_DELIVERY_BYTES,
+	AWK_MAX_LOGICAL_BYTES,
+	AWK_MAX_MANIFEST_BYTES,
+	AWK_PREFLIGHT_PROTOCOL,
+	AWK_PREFLIGHT_PROTOCOL_VERSION,
+	AWK_PREFLIGHT_RUNTIME_ID,
+	AWK_RUNTIME_GO_SHIM_PATH,
+	AWK_RUNTIME_MANIFEST_PATH,
+	AWK_RUNTIME_PREFLIGHT_CAPABILITIES,
+	AWK_RUNTIME_WASM_STORAGE_PATH,
+	AWK_RUNTIME_WORKER_PATH,
+	awkRuntimePreflightTransferables,
+	canonicalizeAwkRuntimeManifestFingerprint,
+	cloneAwkRuntimePreflightPayload,
+	preflightAwkRuntimeAssets,
+	requireAwkRuntimePreflightPayload,
+	snapshotAwkRuntimePreflightProfile,
+	verifyAwkRuntimePreflightPayload,
+	type AwkRuntimeIdentityReceipt,
+	type AwkRuntimePreflightPayload,
+	type AwkRuntimePreflightProfile,
+	type AwkRuntimePreflightRequest,
+	type AwkRuntimeWasmReceipt
+} from './awk-runtime.js';
 export {
 	RUBY_MAX_ASSET_BYTES,
 	RUBY_MAX_DELIVERY_BYTES,

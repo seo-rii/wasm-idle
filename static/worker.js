@@ -7,6 +7,62 @@ self.addEventListener('activate', (event) => {
 });
 
 const precompressedExtension = /\.(br|brotli|gz|tgz|zip|zst)$/i;
+const exactResponseUrlAssetPaths = new Set([
+	'wasm-awk/goawk.wasm.gz.bin',
+	'wasm-awk/runner-worker.v2.js',
+	'wasm-awk/runtime-manifest.v2.json',
+	'wasm-awk/wasm_exec.js',
+	'wasm-tinygo/upstream.js',
+	'wasm-tinygo/assets/upstream-compile-worker-CFw6Ych6.js',
+	'wasm-tinygo/assets/upstream-compile-worker-Dat9LBTc.js',
+	'wasm-tinygo/assets/upstream-compile-worker-NPJcbr3r.js',
+	'wasm-tinygo/assets/upstream-compile-worker-R7P8Uy5f.js'
+]);
+const exactResponseUrlAssetReceipts = new Map([
+	['wasm-rust/asset-url.js.bin', '0cfc9638ca814251f9ddf117a5cef1832a1ee1c5035226f6538cdf739c55772a'],
+	['wasm-rust/browser-component-tools.js.bin', '7860e2c261bb3d40daacc3c4dfefa18fb8e558ce56f4f0527b50f3134ce15be3'],
+	['wasm-rust/browser-execution.js.bin', '3a7d5ad84676ceabef0758be7230abb97ef496375b2d4838cc25d02371465f7b'],
+	['wasm-rust/browser-linker.js.bin', 'e01a93da60e7901416a57dfdbd71b299f92aa42382ded5371bf1a9ff8a33d009'],
+	['wasm-rust/browser-stdin.js.bin', '52dba3d7edc435816adb4b795033000f3d5fee16bb265710b4361601f9a1eee5'],
+	['wasm-rust/compiler-preload.js.bin', 'c7b17e1976852946266a1deab378ce6a5aa4ec8eb2a95be9350179222f68bee4'],
+	['wasm-rust/compiler-runtime.js.bin', '5486aee518414b519d7218282c0b65e2f97f3432a8c4ca77995a49c3b59aff3a'],
+	['wasm-rust/compiler-support.js.bin', '52164fb602e546e61e6a5a2e09ae3c61aba9377c1b9918b0a788d92e4c497a5b'],
+	['wasm-rust/compiler-worker.js.bin', '742fbfb33fc0eb89249c49832fbe57c33c392b86d9faaa8688f5213ef95aeae8'],
+	['wasm-rust/compiler.js.bin', '57610f3dd5babfb44e40a29bb40c1de78b1adfff8b9d1ce7dd5c83a991b9d865'],
+	['wasm-rust/index.js.bin', 'cfbc70c3349b35c1f510ead79fdfb95bb29700f2566716b6b5fa0d1017cd00d7'],
+	['wasm-rust/module-worker.js.bin', '317eee43c55be3923ffc9630342deeac9ff1030abb2cb2d222e1036ca796b3fc'],
+	['wasm-rust/retryable-failure-kind.js.bin', '32d49e791d1c35329e8aa8dc16cc372ee0c52ba8570c7488c7f7a5a99e1e003c'],
+	['wasm-rust/runtime-asset-store.js.bin', '95278dcb0e836d460c657bffcd8ae429e7e8e0508e60665d377a69aaa27e10b4'],
+	['wasm-rust/runtime-asset.js.bin', '66f5f3d00bdc0ea75d44aad2c421ebb44e1a476375c4e29f7f91f0b33c8f13a6'],
+	['wasm-rust/runtime-delivery-budget.js.bin', '9340496c81f33b0780ac760d89939dfe22442df0318989b8edf1dc97d57f36e5'],
+	['wasm-rust/runtime-manifest.js.bin', '52939e1bb35c208ab7ad26000ea52e4a5ad9b724a35533f0b004f65212e22314'],
+	['wasm-rust/rustc-runtime.js.bin', 'f72739e496d8b9e012f323f30f5869f8fee2d444986494cfe08c378fc05e6913'],
+	['wasm-rust/rustc-thread-worker.js.bin', '0b41ccb2c0053b860ac4297545e5f3ffcbb4a11525dfca6f495bd43b7e2a7bb6'],
+	['wasm-rust/shared-workspace.js.bin', 'a522f740cac9d237cedb54ad4aaeb68e595a08073259a1e603f5dec3d7274469'],
+	['wasm-rust/thread-startup.js.bin', '2c407a04ed387991ff4c770d3ba8af6f493217ba48c57df381ab13909799e258'],
+	['wasm-rust/thread-worker-budget.js.bin', '3e188eda32c36119716a85164da79451a3283574464db0bfbd8016363c5f5129'],
+	['wasm-rust/vendor/browser_wasi_shim/debug.js.bin', 'a91848ee180529e2a60c05dfb9584cad19cd4e1c6f391fdb76a938bcae4c0328'],
+	['wasm-rust/vendor/browser_wasi_shim/fd.js.bin', '9e82e1fc1bfd3e3573f64349dc42b4b624ed61d24e5c553f2bb4d041444f166c'],
+	['wasm-rust/vendor/browser_wasi_shim/fs_mem.js.bin', '85dbc9e0ee784d9ff8b55452644e00bf7058e32355aab974f8b71d7d85772324'],
+	['wasm-rust/vendor/browser_wasi_shim/fs_opfs.js.bin', '4b96aaeb5ac5986cf802cbf22b975c656682d22a38248160c96fc2ded5644869'],
+	['wasm-rust/vendor/browser_wasi_shim/index.js.bin', '7e2fd52ee3f728bb0b1d6e449724e0f13e3d586bb25bde6e02a66366175b5605'],
+	['wasm-rust/vendor/browser_wasi_shim/strace.js.bin', 'ece435d3784d928d02bff4d015b7cb686f8c06de8536ff9f8ebc38a8f403a3be'],
+	['wasm-rust/vendor/browser_wasi_shim/wasi_defs.js.bin', '0db0f42ba330749a7b05095ea1fd0ff63fd2b30e84cead30fe4c28359d15f194'],
+	['wasm-rust/vendor/browser_wasi_shim/wasi.js.bin', '168eb977a826f75ab0c39f9322f78cc58dbd5b233019ad1d6a7e940af8a7c4aa'],
+	['wasm-rust/vendor/jco/obj/js-component-bindgen-component.js.gz.bin', '7b5f36771a9bbcb47576d45d00629c59e9046166e5c6b686a2e3b77f0058e612'],
+	['wasm-rust/vendor/jco/obj/wasm-tools.js.gz.bin', '9bf222d2dfc2006ee0ffe2a79f5d0d15816f44938458e0e0f6eec4ba820b0ff0'],
+	['wasm-rust/vendor/jco/src/browser.js.bin', '7d8d056dedc4327245520d7b3b2ce1930953f017fe0335902899e8aa5dbd3f8e'],
+	['wasm-rust/vendor/preview2-shim/lib/browser/cli.js.bin', 'fc73e8c872db6e100522ae1b41c1b7ae5160ac97629610cae53eb2bc2d320266'],
+	['wasm-rust/vendor/preview2-shim/lib/browser/clocks.js.bin', '3a44508f62ce3cd3fb2adbabf8cc70be0c3fd962bb0e77cbc8125b6d5bba3f35'],
+	['wasm-rust/vendor/preview2-shim/lib/browser/config.js.bin', 'ef5271f78522c5ecb7fee3579f73f12a43e85874f6bfcb24d449d0d6e1c9e813'],
+	['wasm-rust/vendor/preview2-shim/lib/browser/environment.js.bin', '6a755f21d705e98caede66bb86e5aa880deff71c1721c39a641a59d287123298'],
+	['wasm-rust/vendor/preview2-shim/lib/browser/filesystem.js.bin', '083e8c1be5c4b11264c3be7e15477fc37894723a649445daeaabfb973460acc5'],
+	['wasm-rust/vendor/preview2-shim/lib/browser/http.js.bin', '270e10d75628add4d96878b705dbf0ce3121648540c2c8df331796f809c7d84a'],
+	['wasm-rust/vendor/preview2-shim/lib/browser/io.js.bin', 'c2429defe2de286efe7579c76e17a627d68846fb9c100260b1f5ea4ddb370096'],
+	['wasm-rust/vendor/preview2-shim/lib/browser/random.js.bin', '10ca591c575a43051f205ef953861e2bcba3a917e1ffbb40d74c0bc6985c4eb2'],
+	['wasm-rust/vendor/preview2-shim/lib/browser/sockets.js.bin', 'a9a6ba4c7847c8109924447d36ec3087d410237e0728832f1de14625d03969e3'],
+	['wasm-rust/worker-status.js.bin', '8c345945f87eb1305fca69d4b99cca7a3df90a8f5b4ac334cd04e5d5b5be7041']
+]);
 const runtimeAssetAliases = [
 	{
 		from: 'wasm-tinygo/vendor/wasm-rust-runtime/',
@@ -28,6 +84,27 @@ function shouldBypassIsolationHeaders(url) {
 		url.pathname.includes('/webr/') &&
 		!url.pathname.endsWith('/R.js') &&
 		!url.pathname.endsWith('/webr-worker.js')
+	);
+}
+
+function shouldPreserveExactResponseUrl(request, url) {
+	const scopeUrl = new URL(self.registration.scope);
+	const assetPath = url.pathname.startsWith(scopeUrl.pathname)
+		? url.pathname.slice(scopeUrl.pathname.length)
+		: '';
+	const version = url.searchParams.get('v') || '';
+	const exactReceipt = exactResponseUrlAssetReceipts.get(assetPath);
+	return (
+		request.method === 'GET' &&
+		request.destination === '' &&
+		request.credentials === 'omit' &&
+		!request.headers.has('range') &&
+		url.origin === scopeUrl.origin &&
+		((exactReceipt !== undefined && version === exactReceipt) ||
+			(exactReceipt === undefined &&
+				exactResponseUrlAssetPaths.has(assetPath) &&
+				/^[a-f0-9]{64}$/u.test(version))) &&
+		url.search === `?v=${version}`
 	);
 }
 
@@ -394,6 +471,7 @@ self.addEventListener('fetch', function (event) {
 	event.respondWith(
 		Promise.resolve()
 			.then(async function () {
+				if (shouldPreserveExactResponseUrl(event.request, url)) return fetch(event.request);
 				return (
 					(await fetchDynamicModule(event.request, url)) ||
 					(await fetchRuntimeAssetAlias(event.request, url)) ||
@@ -403,6 +481,10 @@ self.addEventListener('fetch', function (event) {
 				);
 			})
 			.then(function (response) {
+				// Receipt-verified runtime consumers require the browser's network Response URL.
+				// Cloning into a synthetic Response clears it, so preserve these pinned
+				// same-origin responses exactly as fetched.
+				if (shouldPreserveExactResponseUrl(event.request, url)) return response;
 				// It seems like we only need to set the headers for index.html
 				// If you want to be on the safe side, comment this out
 				// if (!response.url.includes("index.html")) return response;

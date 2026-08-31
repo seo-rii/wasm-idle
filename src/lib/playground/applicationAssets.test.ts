@@ -64,13 +64,26 @@ import {
 	WASM_PROLOG_RUNTIME_PROFILE
 } from './wasmPrologVersion';
 import { WASM_R_ASSET_VERSION } from './wasmRVersion';
-import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
+import {
+	WASM_RUST_ASSET_VERSION,
+	WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
+	WASM_RUST_RUNTIME_PROFILE
+} from './wasmRustVersion';
 import {
 	WASM_TCL_ASSET_VERSION,
 	WASM_TCL_RUNNER_RECEIPT,
 	WASM_TCL_RUNTIME_PROFILE
 } from './wasmTclVersion';
+import {
+	WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE,
+	WASM_TINYGO_RUNTIME_PROFILE
+} from './wasmTinyGoVersion';
 import { WASM_ZIG_ASSET_RECEIPTS, WASM_ZIG_ASSET_VERSION } from './wasmZigVersion';
+import {
+	WASM_AWK_ASSET_VERSION,
+	WASM_AWK_RUNNER_RECEIPT,
+	WASM_AWK_RUNTIME_PROFILE
+} from './wasmAwkVersion';
 
 describe('application runtime asset root', () => {
 	it.each([
@@ -165,12 +178,20 @@ describe('application runtime asset root', () => {
 		expect(assets.rootUrl).toBe('/foo/bar');
 		expect(assets.debug).toBeUndefined();
 		expect(assets.rust).toEqual({
-			compilerUrl: `/foo/bar/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}`,
-			manifestUrl: `/foo/bar/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`
+			compilerUrl: `/foo/bar/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}&rustManifestBytes=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.bytes}&rustManifestSha256=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.sha256}`,
+			manifestUrl: `/foo/bar/wasm-rust/runtime/runtime-manifest.v3.json?v=${WASM_RUST_ASSET_VERSION}`,
+			...WASM_RUST_RUNTIME_PROFILE,
+			executableGraphFingerprint: WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint
 		});
 		expect(assets.go).toEqual({
 			compilerUrl: `/foo/bar/wasm-go/index.js?v=${WASM_GO_ASSET_VERSION}`,
 			manifestUrl: `/foo/bar/wasm-go/runtime/runtime-manifest.v1.json?v=${WASM_GO_ASSET_VERSION}`
+		});
+		expect(assets.awk).toEqual({
+			baseUrl: '/foo/bar/wasm-awk/',
+			workerUrl: `/foo/bar/wasm-awk/runner-worker.v2.js?v=${WASM_AWK_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-awk/runtime-manifest.v2.json?v=${WASM_AWK_ASSET_VERSION}`,
+			...WASM_AWK_RUNTIME_PROFILE
 		});
 		expect(assets.pascal).toEqual({
 			baseUrl: '/foo/bar/wasm-pascal/',
@@ -437,6 +458,17 @@ describe('application runtime asset root', () => {
 					}
 				]
 			]),
+			awkBaseUrl: '/foo/bar/wasm-awk/',
+			awkWorkerUrl: `/foo/bar/wasm-awk/runner-worker.v2.js?v=${WASM_AWK_RUNNER_RECEIPT.sha256}`,
+			awkManifestUrl: `/foo/bar/wasm-awk/runtime-manifest.v2.json?v=${WASM_AWK_ASSET_VERSION}`,
+			awkManifestFingerprint: WASM_AWK_ASSET_VERSION,
+			awkProfileId: WASM_AWK_RUNTIME_PROFILE.profileId,
+			awkGoVersion: WASM_AWK_RUNTIME_PROFILE.goVersion,
+			awkGoawkVersion: WASM_AWK_RUNTIME_PROFILE.goawkVersion,
+			awkManifestReceipt: expect.any(String),
+			awkWorkerReceipt: expect.any(String),
+			awkGoShimReceipt: expect.any(String),
+			awkWasmReceipt: expect.any(String),
 			pascalBaseUrl: '/foo/bar/wasm-pascal/',
 			pascalWorkerUrl: `/foo/bar/wasm-pascal/runner-worker.js?v=${WASM_PASCAL_RUNNER_RECEIPT.sha256}`,
 			pascalManifestUrl: `/foo/bar/wasm-pascal/runtime-manifest.v2.json?v=${WASM_PASCAL_ASSET_VERSION}`,
@@ -730,6 +762,41 @@ describe('application runtime asset root', () => {
 			objectiveCLibffiUrl: assets.objectivec?.libffiUrl,
 			objectiveCIntegrity: expect.any(String)
 		});
+	});
+
+	it('changes the runtime cache identity for every Rust trust profile field', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const rust = assets.rust!;
+		const baseline = createRuntimeAssetsKey(assets);
+		const firstAsset = Object.keys(rust.assetReceipts!)[0]!;
+		const firstReceipt = rust.assetReceipts![firstAsset]!;
+		if (typeof firstReceipt === 'string') {
+			throw new Error('bundled Rust asset receipts must include size metadata');
+		}
+		const replacements = [
+			{ compilerUrl: `${rust.compilerUrl}&custom=1` },
+			{ manifestUrl: `${rust.manifestUrl}&custom=1` },
+			{ profileId: `${rust.profileId}-custom` },
+			{ protocolVersion: rust.protocolVersion! + 1 },
+			{ manifestPath: `custom/${rust.manifestPath}` },
+			{ manifestFingerprint: 'a'.repeat(64) },
+			{ manifestReceipt: { ...rust.manifestReceipt!, sha256: 'b'.repeat(64) } },
+			{
+				assetReceipts: {
+					...rust.assetReceipts!,
+					[firstAsset]: { ...firstReceipt, sha256: 'c'.repeat(64) }
+				}
+			}
+		];
+
+		for (const replacement of replacements) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					rust: { ...rust, ...replacement }
+				})
+			).not.toBe(baseline);
+		}
 	});
 
 	it('includes every Ruby URL, identity field, and receipt in cache identity', () => {
@@ -1036,47 +1103,75 @@ describe('application runtime asset root', () => {
 		});
 	});
 
-	it('keys TinyGo asset packs and custom loader identity', () => {
+	it('keys TinyGo custom loader identity', () => {
 		const firstLoader = () => undefined;
 		const secondLoader = () => undefined;
-		const assetPacks = [
-			{ index: 'stdlib.index.json', asset: 'stdlib.tar.gz', fileCount: 12, totalBytes: 3456 }
-		];
 		const firstKey = createRuntimeAssetsKey({
-			tinygo: { assetLoader: firstLoader, assetPacks }
+			tinygo: { assetLoader: firstLoader }
 		});
 		const secondKey = createRuntimeAssetsKey({
-			tinygo: { assetLoader: secondLoader, assetPacks }
+			tinygo: { assetLoader: secondLoader }
 		});
 
-		expect(firstKey).toBe(
-			createRuntimeAssetsKey({ tinygo: { assetLoader: firstLoader, assetPacks } })
-		);
+		expect(firstKey).toBe(createRuntimeAssetsKey({ tinygo: { assetLoader: firstLoader } }));
 		expect(firstKey).not.toBe(secondKey);
 		expect(
 			createRuntimeAssetsKey({
 				tinygo: {
 					assetLoader: firstLoader,
-					assetLoaderKey: 'tinygo-pack-loader-v1',
-					assetPacks
+					assetLoaderKey: 'tinygo-loader-v1'
 				}
 			})
 		).toBe(
 			createRuntimeAssetsKey({
 				tinygo: {
 					assetLoader: secondLoader,
-					assetLoaderKey: 'tinygo-pack-loader-v1',
-					assetPacks
+					assetLoaderKey: 'tinygo-loader-v1'
 				}
 			})
 		);
-		expect(firstKey).not.toBe(
-			createRuntimeAssetsKey({
-				tinygo: {
-					assetLoader: firstLoader,
-					assetPacks: [{ ...assetPacks[0], totalBytes: 3457 }]
+	});
+
+	it('pins every TinyGo toolchain profile receipt in runtime cache identity', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+		const entryReceipt =
+			WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules[
+				WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.entryPath
+			];
+		expect(assets.tinygo).toEqual({
+			moduleUrl: `/foo/bar/wasm-tinygo/upstream.js?v=${entryReceipt.sha256}`,
+			executableGraphFingerprint: WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.fingerprint,
+			...WASM_TINYGO_RUNTIME_PROFILE
+		});
+		const originalKey = createRuntimeAssetsKey(assets);
+		const tinygo = assets.tinygo!;
+		const firstAsset = Object.keys(tinygo.assetReceipts!)[0]!;
+		const firstReceipt = tinygo.assetReceipts![firstAsset];
+		if (!firstReceipt || typeof firstReceipt === 'string') {
+			throw new Error('bundled TinyGo asset receipts must include size metadata');
+		}
+		const replacements = [
+			{ executableGraphFingerprint: '0'.repeat(64) },
+			{ profileId: `${tinygo.profileId}-replacement` },
+			{ protocolVersion: 5 },
+			{ manifestPath: 'tools/upstream/replacement.json' },
+			{ manifestFingerprint: 'f'.repeat(64) },
+			{ manifestReceipt: { ...tinygo.manifestReceipt!, sha256: '1'.repeat(64) } },
+			{
+				assetReceipts: {
+					...tinygo.assetReceipts,
+					[firstAsset]: { ...firstReceipt, sha256: '2'.repeat(64) }
 				}
-			})
-		);
+			}
+		];
+		for (const replacement of replacements) {
+			expect(
+				createRuntimeAssetsKey({
+					...assets,
+					tinygo: { ...tinygo, ...replacement }
+				}),
+				`TinyGo cache identity did not include ${Object.keys(replacement)[0]}`
+			).not.toBe(originalKey);
+		}
 	});
 });

@@ -8,12 +8,30 @@ import type {
 } from './worker-protocol.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
-import { resolveBrowserRustDebugMode } from './compiler-support.js';
-import { isIntegratedCompilerOutput, resolveTargetManifest } from './runtime-manifest.js';
+import {
+	resolveBrowserRustDebugMode,
+	resolveBrowserRustThreadPoolSize,
+	resolveBrowserRustWorkerLimits
+} from './compiler-support.js';
+import {
+	configureVerifiedRuntimeExecutableModuleUrls,
+	isIntegratedCompilerOutput,
+	registerRuntimeManifestAssetReceipts,
+	resolveTargetManifest
+} from './runtime-manifest.js';
 import { buildPreopenedDirectories, instantiateRustcInstance } from './rustc-runtime.js';
 import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot } from './thread-startup.js';
+import {
+	createBudgetedThreadWorker,
+	createThreadWorkerBudgetBuffer
+} from './thread-worker-budget.js';
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
 import { loadRuntimePackEntries } from './runtime-asset-store.js';
+import {
+	assertRuntimeAssetDeliveryBudgetAvailable,
+	readRuntimeAssetDeliveryBudget,
+	snapshotRuntimeAssetDeliveryBudget
+} from './runtime-delivery-budget.js';
 
 const ARCHIVE_MAGIC = new Uint8Array([0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a]);
 
@@ -89,15 +107,54 @@ function emitCompileWorkerProgress(
 	request: CompileWorkerRequest,
 	progress: Extract<CompileWorkerMessage, { type: 'progress' }>['progress']
 ) {
+	const delivery = request.request.assetDeliveryBudget
+		? readRuntimeAssetDeliveryBudget(request.request.assetDeliveryBudget)
+		: undefined;
 	postMessage({
 		type: 'progress',
-		progress
+		progress: delivery ? { ...progress, delivery } : progress
 	} satisfies CompileWorkerMessage);
 }
 
 async function compileRustInWorker(request: CompileWorkerRequest) {
+	let actualWorkerUrl: string;
+	try {
+		actualWorkerUrl = new URL(globalThis.location.href).href;
+	} catch (cause) {
+		throw new Error('wasm-rust compiler worker location is unavailable', { cause });
+	}
+	if (new URL(request.compilerWorkerUrl).href !== actualWorkerUrl) {
+		throw new Error('wasm-rust compiler worker URL does not match its activated topology');
+	}
+	if (
+		(request.executableGraphFingerprint === undefined) !==
+		(request.verifiedExecutableModuleUrls === undefined)
+	) {
+		throw new Error('wasm-rust compiler worker executable graph configuration is incomplete');
+	}
+	if (
+		request.executableGraphFingerprint !== undefined &&
+		request.verifiedExecutableModuleUrls !== undefined
+	) {
+		configureVerifiedRuntimeExecutableModuleUrls(
+			request.verifiedExecutableModuleUrls,
+			request.executableGraphFingerprint
+		);
+	}
+	if (request.manifest.assetReceipts) {
+		registerRuntimeManifestAssetReceipts(request.runtimeBaseUrl, request.manifest);
+	}
+	const deliveryBudget = request.request.assetDeliveryBudget
+		? snapshotRuntimeAssetDeliveryBudget(request.request.assetDeliveryBudget)
+		: undefined;
+	if (deliveryBudget) assertRuntimeAssetDeliveryBudgetAvailable(deliveryBudget);
+	const deliveryOptions = deliveryBudget ? { deliveryBudget } : {};
 	const target = resolveTargetManifest(request.manifest, request.request.targetTriple);
-	const threadPoolSize = 4;
+	const workerLimits = resolveBrowserRustWorkerLimits(request.request.workerLimits);
+	const threadPoolSize = resolveBrowserRustThreadPoolSize(workerLimits);
+	const threadWorkerBudgetBuffer = workerLimits
+		? createThreadWorkerBudgetBuffer(workerLimits.maxThreads)
+		: undefined;
 	emitCompileWorkerLog(
 		request,
 		`[wasm-rust:compiler-worker] start target=${target.targetTriple} timeout=${request.manifest.compiler.compileTimeoutMs}ms`
@@ -109,15 +166,20 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 	const sysrootPack = target.sysrootPack;
 	const sysrootAssetTotal = sysrootPack?.fileCount || target.sysrootFiles?.length || 0;
 	const packedSysrootEntriesPromise = sysrootPack
-		? loadRuntimePackEntries(request.runtimeBaseUrl, sysrootPack, fetch, (progress) =>
-				emitCompileWorkerProgress(request, {
-					stage: 'fetch-sysroot',
-					completed: 0,
-					total: sysrootAssetTotal,
-					message: `fetching ${sysrootAssetTotal} sysroot assets from pack`,
-					bytesCompleted: progress.loaded,
-					bytesTotal: progress.total ?? sysrootPack.totalBytes
-				})
+		? loadRuntimePackEntries(
+				request.runtimeBaseUrl,
+				sysrootPack,
+				fetch,
+				(progress) =>
+					emitCompileWorkerProgress(request, {
+						stage: 'fetch-sysroot',
+						completed: 0,
+						total: sysrootAssetTotal,
+						message: `fetching ${sysrootAssetTotal} sysroot assets from pack`,
+						bytesCompleted: progress.loaded,
+						bytesTotal: progress.total ?? sysrootPack.totalBytes
+					}),
+				deliveryOptions
 			)
 		: null;
 	emitCompileWorkerProgress(request, {
@@ -139,7 +201,8 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 				message: 'fetching rustc.wasm',
 				bytesCompleted: progress.loaded,
 				bytesTotal: progress.total ?? progress.loaded
-			})
+			}),
+		deliveryOptions
 	);
 	emitCompileWorkerLog(
 		request,
@@ -224,7 +287,8 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 							message: `fetching sysroot asset ${entry.runtimePath}`,
 							bytesCompleted: fetchedSysrootBytes + progress.loaded,
 							bytesTotal: fetchedSysrootBytes + (progress.total ?? progress.loaded)
-						})
+						}),
+					deliveryOptions
 				);
 				validateRuntimeAssetBytes(entry.asset, bytes);
 				const sharedBuffer = new SharedArrayBuffer(bytes.byteLength);
@@ -316,10 +380,10 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 				import.meta.url,
 				'./rustc-thread-worker.js'
 			);
-			if (request.request.log) {
-				threadWorkerUrl.searchParams.set('log', '1');
-			}
-			const worker = createModuleWorker(threadWorkerUrl);
+			const reservation = createBudgetedThreadWorker(threadWorkerBudgetBuffer, () =>
+				createModuleWorker(threadWorkerUrl)
+			);
+			const worker = reservation.worker;
 			worker.addEventListener(
 				'message',
 				(event: MessageEvent<RustcThreadWorkerLogMessage>) => {
@@ -368,24 +432,32 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 				Atomics.store(slotState, 0, -1);
 				Atomics.notify(slotState, 0);
 			});
-			worker.postMessage({
-				type: 'thread-pool-init',
-				runtimeBaseUrl: request.runtimeBaseUrl,
-				manifest: request.manifest,
-				sourceCode: request.request.code,
-				log: Boolean(request.request.log),
-				sharedBitcodeBuffer: request.sharedBitcodeBuffer,
-				sharedWorkspaceBuffer: request.sharedWorkspaceBuffer,
-				sharedStatusBuffer: request.sharedStatusBuffer,
-				threadCounterBuffer: threadCounter.buffer as SharedArrayBuffer,
-				sysrootAssets,
-				rustcModule,
-				memory,
-				args,
-				slotIndex,
-				slotBuffer,
-				poolBuffers: slotBuffers
-			} satisfies RustcThreadPoolInitRequest);
+			try {
+				worker.postMessage({
+					type: 'thread-pool-init',
+					rustcThreadWorkerUrl: threadWorkerUrl.toString(),
+					runtimeBaseUrl: request.runtimeBaseUrl,
+					manifest: request.manifest,
+					sourceCode: request.request.code,
+					log: Boolean(request.request.log),
+					sharedBitcodeBuffer: request.sharedBitcodeBuffer,
+					sharedWorkspaceBuffer: request.sharedWorkspaceBuffer,
+					sharedStatusBuffer: request.sharedStatusBuffer,
+					threadCounterBuffer: threadCounter.buffer as SharedArrayBuffer,
+					sysrootAssets,
+					rustcModule,
+					memory,
+					args,
+					slotIndex,
+					slotBuffer,
+					poolBuffers: slotBuffers,
+					...(threadWorkerBudgetBuffer ? { threadWorkerBudgetBuffer } : {})
+				} satisfies RustcThreadPoolInitRequest);
+			} catch (error) {
+				worker.terminate();
+				reservation.rollback();
+				throw error;
+			}
 			const initStartedAt = Date.now();
 			while (Atomics.load(slotState, 0) === -3 && Date.now() - initStartedAt < 120_000) {
 				await new Promise<void>((resolve) => setTimeout(resolve, 25));
@@ -507,11 +579,21 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 	);
 }
 
+let acceptedCompileRequest = false;
+
 if (typeof globalThis.addEventListener === 'function') {
 	globalThis.addEventListener('message', (event: MessageEvent<CompileWorkerRequest>) => {
 		if (event.data?.type !== 'compile') {
 			return;
 		}
+		if (acceptedCompileRequest) {
+			postMessage({
+				type: 'error',
+				message: 'wasm-rust compiler worker accepts exactly one compile request'
+			} satisfies CompileWorkerMessage);
+			return;
+		}
+		acceptedCompileRequest = true;
 		void compileRustInWorker(event.data).catch((error) => {
 			emitCompileWorkerLog(
 				event.data,

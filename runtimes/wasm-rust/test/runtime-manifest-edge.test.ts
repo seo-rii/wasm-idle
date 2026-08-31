@@ -1,11 +1,30 @@
-import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { loadBundledRuntimeContext } from '../src/compiler-runtime.js';
 import {
+	clearRegisteredRuntimeAssetReceipts,
+	hasRegisteredRuntimeAssetReceipt
+} from '../src/runtime-asset.js';
+import {
+	createRuntimeAssetDeliveryBudget,
+	readRuntimeAssetDeliveryBudget
+} from '../src/runtime-delivery-budget.js';
+import {
+	clearVerifiedRuntimeExecutableModuleUrls,
+	collectRuntimeManifestAssetPaths,
+	configureVerifiedRuntimeExecutableModuleUrls,
 	loadRuntimeManifest,
 	normalizeRuntimeManifest,
+	parseWasmRustRuntimeProfileFromModuleUrl,
 	parseRuntimeManifest,
-	resolveTargetManifest
+	registerRuntimeManifestAssetReceipts,
+	resolveRuntimeAssetDeliveryExpectedBytes,
+	resolveRuntimeAssetUrl,
+	resolveTargetManifest,
+	verifyRuntimeManifestAssetReceipts
 } from '../src/runtime-manifest.js';
 import {
 	createIntegratedRuntimeManifestV3,
@@ -15,6 +34,392 @@ import {
 } from './helpers.js';
 
 describe('runtime manifest edge cases', () => {
+	afterEach(() => {
+		clearRegisteredRuntimeAssetReceipts();
+		clearVerifiedRuntimeExecutableModuleUrls();
+	});
+
+	const createIntegratedManifestWithReceipts = () => {
+		const source = createIntegratedRuntimeManifestV3();
+		const normalized = normalizeRuntimeManifest(parseRuntimeManifest(source));
+		const assetReceipts = Object.fromEntries(
+			collectRuntimeManifestAssetPaths(normalized).map((assetPath) => [
+				assetPath,
+				{
+					bytes: assetPath.endsWith('.pack.gz') ? 2 : 1,
+					sha256: 'a'.repeat(64),
+					...(assetPath.endsWith('.pack.gz')
+						? { uncompressedBytes: 3, uncompressedSha256: 'b'.repeat(64) }
+						: {})
+				}
+			])
+		);
+		return { ...source, assetReceipts };
+	};
+
+	it('derives the exact cold delivery baseline for every pinned target closure', async () => {
+		const manifestBytes = await readFile(
+			new URL('../../../static/wasm-rust/runtime/runtime-manifest.v3.json', import.meta.url)
+		);
+		const manifest = normalizeRuntimeManifest(
+			parseRuntimeManifest(JSON.parse(new TextDecoder().decode(manifestBytes)))
+		);
+
+		expect(
+			resolveRuntimeAssetDeliveryExpectedBytes(
+				manifest,
+				manifestBytes.byteLength,
+				'wasm32-wasip1'
+			)
+		).toBe(150_648_938);
+		expect(
+			resolveRuntimeAssetDeliveryExpectedBytes(
+				manifest,
+				manifestBytes.byteLength,
+				'wasm32-wasip2'
+			)
+		).toBe(178_479_712);
+		expect(
+			resolveRuntimeAssetDeliveryExpectedBytes(
+				manifest,
+				manifestBytes.byteLength,
+				'wasm32-wasip3'
+			)
+		).toBe(179_123_525);
+	});
+
+	it('requires an exact receipt graph for every manifest-referenced binary asset', () => {
+		const source = createIntegratedManifestWithReceipts();
+		const manifest = normalizeRuntimeManifest(parseRuntimeManifest(source));
+
+		expect(() => verifyRuntimeManifestAssetReceipts(manifest)).not.toThrow();
+
+		const missing = structuredClone(source);
+		delete missing.assetReceipts['wasm-rust/runtime/rustc/rustc.wasm.gz'];
+		expect(() =>
+			verifyRuntimeManifestAssetReceipts(
+				normalizeRuntimeManifest(parseRuntimeManifest(missing))
+			)
+		).toThrow(/receipt graph mismatch.*rustc\/rustc\.wasm\.gz/);
+
+		const extra = structuredClone(source);
+		extra.assetReceipts['unreferenced.wasm'] = { bytes: 1, sha256: 'c'.repeat(64) };
+		expect(() =>
+			verifyRuntimeManifestAssetReceipts(
+				normalizeRuntimeManifest(parseRuntimeManifest(extra))
+			)
+		).toThrow(/extra=unreferenced\.wasm/);
+	});
+
+	it('registers every receipt against a renamed nested runtime layout', () => {
+		const manifest = normalizeRuntimeManifest(
+			parseRuntimeManifest(createIntegratedManifestWithReceipts())
+		);
+		const runtimeBaseUrl = new URL(
+			'https://cdn.example.test/deploy/custom-rust/runtime/?v=' + '1'.repeat(64)
+		);
+
+		registerRuntimeManifestAssetReceipts(runtimeBaseUrl, manifest);
+
+		for (const canonicalPath of collectRuntimeManifestAssetPaths(manifest)) {
+			let relativePath: string;
+			if (canonicalPath.startsWith('wasm-rust/runtime/')) {
+				relativePath = canonicalPath.slice('wasm-rust/runtime/'.length);
+			} else if (canonicalPath.startsWith('wasm-rust/vendor/')) {
+				relativePath = `../vendor/${canonicalPath.slice('wasm-rust/vendor/'.length)}`;
+			} else {
+				relativePath = `../../shared/emscripten-lld/${canonicalPath.slice('shared/emscripten-lld/'.length)}`;
+			}
+			const assetUrl = new URL(relativePath, runtimeBaseUrl);
+			assetUrl.search = runtimeBaseUrl.search;
+			expect(hasRegisteredRuntimeAssetReceipt(assetUrl), canonicalPath).toBe(true);
+		}
+		expect(
+			hasRegisteredRuntimeAssetReceipt(
+				`https://cdn.example.test/wasm-rust/runtime/rustc/rustc.wasm.gz?v=${'1'.repeat(64)}`
+			)
+		).toBe(false);
+	});
+
+	it('resolves declared executable modules to their verified Blob URLs only', () => {
+		const sourceUrl =
+			'https://cdn.example.test/wasm-rust/runtime/llvm/llc.js?v=' + '1'.repeat(64);
+		const blobUrl = 'blob:https://cdn.example.test/verified-llc';
+		configureVerifiedRuntimeExecutableModuleUrls({ [sourceUrl]: blobUrl }, 'a'.repeat(64));
+
+		expect(
+			resolveRuntimeAssetUrl(
+				`https://cdn.example.test/wasm-rust/runtime/?v=${'1'.repeat(64)}`,
+				'llvm/llc.js'
+			)
+		).toBe(blobUrl);
+		expect(
+			resolveRuntimeAssetUrl(
+				`https://cdn.example.test/wasm-rust/runtime/?v=${'1'.repeat(64)}`,
+				'llvm/llc.wasm.gz'
+			)
+		).toBe(`https://cdn.example.test/wasm-rust/runtime/llvm/llc.wasm.gz?v=${'1'.repeat(64)}`);
+		expect(() =>
+			resolveRuntimeAssetUrl(
+				`https://cdn.example.test/wasm-rust/runtime/?v=${'1'.repeat(64)}`,
+				'llvm/lld.js'
+			)
+		).toThrow(/missing from the verified Blob graph/u);
+		expect(() =>
+			resolveRuntimeAssetUrl(
+				`https://cdn.example.test/wasm-rust/runtime/?v=${'1'.repeat(64)}`,
+				'llvm/lld.mjs'
+			)
+		).toThrow(/missing from the verified Blob graph/u);
+	});
+
+	it('rejects unsafe or duplicate verified executable module URL mappings', () => {
+		expect(() =>
+			configureVerifiedRuntimeExecutableModuleUrls(
+				{
+					'file:///tmp/llc.js': 'blob:https://example.test/llc'
+				},
+				'a'.repeat(64)
+			)
+		).toThrow(/source URL is unsafe/);
+		expect(() =>
+			configureVerifiedRuntimeExecutableModuleUrls(
+				{
+					'https://example.test/llc.js': 'blob:https://example.test/llc?generation=1'
+				},
+				'a'.repeat(64)
+			)
+		).toThrow(/Blob URL is unsafe/);
+		expect(() =>
+			configureVerifiedRuntimeExecutableModuleUrls(
+				{
+					'https://example.test/llc.js': 'blob:https://example.test/shared',
+					'https://example.test/lld.js': 'blob:https://example.test/shared'
+				},
+				'a'.repeat(64)
+			)
+		).toThrow(/duplicated/);
+	});
+
+	it('keeps one immutable executable graph configuration per worker realm', () => {
+		const sourceUrl = 'https://example.test/wasm-rust/runtime/llvm/llc.js';
+		const moduleUrls = { [sourceUrl]: 'blob:https://example.test/verified-llc' };
+		configureVerifiedRuntimeExecutableModuleUrls(moduleUrls, 'a'.repeat(64));
+
+		expect(() =>
+			configureVerifiedRuntimeExecutableModuleUrls(moduleUrls, 'a'.repeat(64))
+		).not.toThrow();
+		expect(() =>
+			configureVerifiedRuntimeExecutableModuleUrls(moduleUrls, 'b'.repeat(64))
+		).toThrow(/cannot change within one worker/u);
+		expect(() =>
+			configureVerifiedRuntimeExecutableModuleUrls(moduleUrls, 'not-a-fingerprint')
+		).toThrow(/fingerprint is invalid/u);
+	});
+
+	it('parses a complete host trust root and rejects partial receipt query parameters', () => {
+		const fingerprint = '1'.repeat(64);
+		const manifestSha256 = '2'.repeat(64);
+		expect(
+			parseWasmRustRuntimeProfileFromModuleUrl(
+				`https://example.test/wasm-rust/index.js?v=${fingerprint}&rustManifestBytes=42&rustManifestSha256=${manifestSha256}`
+			)
+		).toMatchObject({
+			protocolVersion: 1,
+			manifestFingerprint: fingerprint,
+			manifestReceipt: { bytes: 42, sha256: manifestSha256 }
+		});
+		expect(() =>
+			parseWasmRustRuntimeProfileFromModuleUrl(
+				`https://example.test/wasm-rust/index.js?v=${fingerprint}`
+			)
+		).toThrow(/invalid receipt profile/);
+	});
+
+	it('pins one v3 manifest URL and disables legacy fallback for a runtime profile', async () => {
+		const fingerprint = '3'.repeat(64);
+		const manifestBytes = new TextEncoder().encode(
+			JSON.stringify(createIntegratedManifestWithReceipts())
+		);
+		const manifestSha256 = createHash('sha256').update(manifestBytes).digest('hex');
+		const moduleUrl = `https://example.test/wasm-rust/index.js?v=${fingerprint}&rustManifestBytes=${manifestBytes.byteLength}&rustManifestSha256=${manifestSha256}`;
+		const profile = parseWasmRustRuntimeProfileFromModuleUrl(moduleUrl)!;
+		const requestedUrls: string[] = [];
+		const injectedLoader = vi.fn(async () => createRuntimeManifest());
+		vi.stubGlobal('fetch', async (input: string | URL | Request) => {
+			requestedUrls.push(String(input));
+			return new Response(manifestBytes);
+		});
+		let loaded;
+		try {
+			loaded = await loadBundledRuntimeContext(injectedLoader, 'wasm32-wasip1', profile);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+
+		expect(requestedUrls).toHaveLength(1);
+		expect(injectedLoader).not.toHaveBeenCalled();
+		expect(requestedUrls[0]).toContain('/runtime/runtime-manifest.v3.json');
+		expect(requestedUrls[0]).toContain(`v=${fingerprint}`);
+		expect(loaded.versionedRuntimeBaseUrl.searchParams.get('v')).toBe(fingerprint);
+	});
+
+	it('verifies raw manifest bytes before parsing JSON', async () => {
+		const manifestBytes = new TextEncoder().encode(
+			JSON.stringify(createIntegratedManifestWithReceipts())
+		);
+		const receipt = {
+			bytes: manifestBytes.byteLength,
+			sha256: createHash('sha256').update(manifestBytes).digest('hex')
+		};
+		await expect(
+			loadRuntimeManifest(
+				'https://example.test/runtime/runtime-manifest.v3.json',
+				async () => new Response(manifestBytes),
+				{ receipt }
+			)
+		).resolves.toMatchObject({ version: 'test-integrated-runtime-v3', manifestVersion: 3 });
+
+		const corrupted = Uint8Array.from(manifestBytes);
+		corrupted[corrupted.byteLength - 1] ^= 1;
+		await expect(
+			loadRuntimeManifest(
+				'https://example.test/runtime/runtime-manifest.v3.json',
+				async () => new Response(corrupted),
+				{ receipt }
+			)
+		).rejects.toThrow(/storage SHA-256 differs/);
+	});
+
+	it('meters and parses an unpinned manifest through the bounded byte loader', async () => {
+		const manifestBytes = new TextEncoder().encode(JSON.stringify(createRuntimeManifestV3()));
+		const deliveryBudget = createRuntimeAssetDeliveryBudget(manifestBytes.byteLength + 1);
+
+		await expect(
+			loadRuntimeManifest(
+				'https://example.test/runtime/runtime-manifest.v3.json',
+				async () => new Response(manifestBytes),
+				{ deliveryBudget }
+			)
+		).resolves.toMatchObject({ manifestVersion: 3 });
+		expect(readRuntimeAssetDeliveryBudget(deliveryBudget)).toMatchObject({
+			deliveredBytes: manifestBytes.byteLength,
+			sequence: 1
+		});
+	});
+
+	it('rejects legacy, invalid UTF-8, and duplicate-key JSON in pinned mode', async () => {
+		const loadPinnedBytes = (bytes: Uint8Array) =>
+			loadRuntimeManifest(
+				'https://example.test/runtime/runtime-manifest.v3.json',
+				async () => new Response(bytes),
+				{
+					receipt: {
+						bytes: bytes.byteLength,
+						sha256: createHash('sha256').update(bytes).digest('hex')
+					}
+				}
+			);
+
+		const legacyBytes = new TextEncoder().encode(JSON.stringify(createRuntimeManifest()));
+		await expect(loadPinnedBytes(legacyBytes)).rejects.toThrow(
+			/requires a v3 asset receipt graph/
+		);
+
+		const invalidUtf8 = Uint8Array.of(0x7b, 0x22, 0x78, 0x22, 0x3a, 0xc3, 0x28, 0x7d);
+		await expect(loadPinnedBytes(invalidUtf8)).rejects.toThrow(/invalid.*UTF-8/);
+
+		const validSource = JSON.stringify(createIntegratedManifestWithReceipts());
+		const duplicateRoot = new TextEncoder().encode(
+			validSource.replace(
+				'"manifestVersion":3',
+				'"manifestVersion":3,"\\u006danifestVersion":3'
+			)
+		);
+		await expect(loadPinnedBytes(duplicateRoot)).rejects.toThrow(/duplicate object key/);
+
+		const duplicateNested = new TextEncoder().encode(
+			validSource.replace('"rustcWasm":', '"rustcWasm":"ignored","rustcWasm":')
+		);
+		await expect(loadPinnedBytes(duplicateNested)).rejects.toThrow(/duplicate object key/);
+	});
+
+	it('rejects ambiguous duplicate runtime profile query parameters', () => {
+		const fingerprint = '1'.repeat(64);
+		const manifestSha256 = '2'.repeat(64);
+		const base = `https://example.test/wasm-rust/index.js?v=${fingerprint}&rustManifestBytes=42&rustManifestSha256=${manifestSha256}`;
+		for (const duplicate of [
+			`v=${fingerprint}`,
+			'rustManifestBytes=42',
+			`rustManifestSha256=${manifestSha256}`
+		]) {
+			expect(() => parseWasmRustRuntimeProfileFromModuleUrl(`${base}&${duplicate}`)).toThrow(
+				/invalid receipt profile/
+			);
+		}
+	});
+
+	it('strictly rejects unknown fields, unknown targets, and mixed asset alternatives in v3', () => {
+		const integrated = createIntegratedManifestWithReceipts();
+		expect(() => parseRuntimeManifest({ ...integrated, unexpected: true })).toThrow(
+			/unknown fields unexpected/
+		);
+		expect(() =>
+			parseRuntimeManifest({
+				...integrated,
+				targets: {
+					...integrated.targets,
+					'wasm32-unknown': integrated.targets['wasm32-wasip1']
+				}
+			})
+		).toThrow(/unknown fields wasm32-unknown/);
+		expect(() =>
+			parseRuntimeManifest({
+				...integrated,
+				compiler: { ...integrated.compiler, unexpected: true }
+			})
+		).toThrow(/compiler.*unknown fields unexpected/);
+
+		const mixedSysroot = structuredClone(integrated);
+		mixedSysroot.targets['wasm32-wasip1'].sysrootFiles = [
+			{ asset: 'sysroot/libstd.rlib', runtimePath: '/lib/libstd.rlib' }
+		];
+		expect(() => parseRuntimeManifest(mixedSysroot)).toThrow(/mutually exclusive/);
+
+		const strayIntegrated = structuredClone(integrated);
+		strayIntegrated.targets['wasm32-wasip1'].compile.llvm = {
+			llc: 'llvm/llc.js',
+			lld: 'llvm/lld.js'
+		};
+		expect(() => parseRuntimeManifest(strayIntegrated)).toThrow(/compile.*unknown fields llvm/);
+
+		const split = createRuntimeManifestV3();
+		const mixedLink = structuredClone(split);
+		Object.assign(mixedLink.targets['wasm32-wasip1'].compile.link, {
+			allocatorObjectRuntimePath: '/work/alloc.o',
+			allocatorObjectAsset: 'link/alloc.o',
+			files: [{ asset: 'link/lib.o', runtimePath: '/work/lib.o' }]
+		});
+		expect(() => parseRuntimeManifest(mixedLink)).toThrow(/mutually exclusive/);
+	});
+
+	it.each([
+		'./rustc.wasm',
+		'rustc//rustc.wasm',
+		'rustc/../rustc.wasm',
+		'rustc/%2e/rustc.wasm',
+		'rustc\\rustc.wasm',
+		'rustc/rustc.wasm?x=1',
+		'rustc/rustc.wasm#x'
+	])('rejects a non-canonical v3 asset reference: %s', (rustcWasm) => {
+		const source = createIntegratedManifestWithReceipts();
+		expect(() =>
+			parseRuntimeManifest({
+				...source,
+				compiler: { ...source.compiler, rustcWasm }
+			})
+		).toThrow(/non-canonical path/);
+	});
 	it('rejects malformed runtime manifest fields', () => {
 		expect(() =>
 			parseRuntimeManifest({
@@ -187,7 +592,12 @@ describe('runtime manifest edge cases', () => {
 					decodedTotalBytes: 3,
 					delta: {
 						format: 'copy-literal-v1',
-						base: { ...sysrootPack, totalBytes: -1 }
+						base: {
+							...sysrootPack,
+							asset: 'packs/sysroot/base.pack.gz',
+							index: 'packs/sysroot/base.index.json.gz',
+							totalBytes: -1
+						}
 					}
 				})
 			)
@@ -200,7 +610,12 @@ describe('runtime manifest edge cases', () => {
 					decodedTotalBytes: 3,
 					delta: {
 						format: 'copy-literal-v1',
-						base: { ...sysrootPack, fileCount: -1 }
+						base: {
+							...sysrootPack,
+							asset: 'packs/sysroot/base.pack.gz',
+							index: 'packs/sysroot/base.index.json.gz',
+							fileCount: -1
+						}
 					}
 				})
 			)

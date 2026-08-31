@@ -1,1 +1,1461 @@
-export const WASM_RUST_ASSET_VERSION = '0a334e10abe3dd33';
+export const WASM_RUST_RUNTIME_PROFILE = Object.freeze({
+	profileId: 'wasm-rust-e08b681dc178ea1f48c632c7a03746589f0340952b225d006b198aa958727789',
+	protocolVersion: 1,
+	manifestPath: 'runtime/runtime-manifest.v3.json',
+	manifestFingerprint: 'e08b681dc178ea1f48c632c7a03746589f0340952b225d006b198aa958727789',
+	manifestReceipt: {
+		bytes: 6185,
+		sha256: '30b210003632395a1effd19f7a46565d5f8c52a9d3a28a310fa24219f97a5a9a'
+	},
+	assetReceipts: {
+		'wasm-rust/runtime/packs/sysroot/wasm32-wasip1.index.json.gz': {
+			bytes: 1126,
+			sha256: 'd3846ecae39b774300272f883e3d85a7e986214584a6ca23d15b9b55c6024cb4',
+			uncompressedBytes: 6986,
+			uncompressedSha256: '2f05e809be7df5f92b91eb8493a63091574cecb249f3de376e4c8f3aea81b05c'
+		},
+		'wasm-rust/runtime/packs/sysroot/wasm32-wasip1.pack.gz': {
+			bytes: 24626071,
+			sha256: 'c98393f3ab41a009fe6d36b9afacea7d47aa282b88c93c171b1d5a924ce18f96',
+			uncompressedBytes: 75268153,
+			uncompressedSha256: 'c77bbafd0d7496731810296f91f34cf02be47f8708a6a669172c97963d12a5cb'
+		},
+		'wasm-rust/runtime/packs/sysroot/wasm32-wasip2.index.json.gz': {
+			bytes: 1811,
+			sha256: '5f3cc86d59e8f5388f072dc48a0951ddc616f18a4860c220afaff2a89199d4e0',
+			uncompressedBytes: 12822,
+			uncompressedSha256: '780e0716fb5bddc9f142f4b2205b76d495593e6c34b7d654c034d0e4b7cea3b3'
+		},
+		'wasm-rust/runtime/packs/sysroot/wasm32-wasip2.pack.gz': {
+			bytes: 7747620,
+			sha256: '417a9316a2a6a7db5fab6adfa0a7e7e5958ed4591754562a66f6cdd96a68df6e',
+			uncompressedBytes: 17558862,
+			uncompressedSha256: '957dca062890c0550fe3bf8a5ce0e2fe69f6bd69d19a429f73ceec888f05be83'
+		},
+		'wasm-rust/runtime/packs/sysroot/wasm32-wasip3.index.json.gz': {
+			bytes: 1829,
+			sha256: '14251cd39eb88dcfef74f0ed626994109a24f2b560910da453db8d24caf7bdb9',
+			uncompressedBytes: 12825,
+			uncompressedSha256: 'bc5e257d8560487902d4a023fed6c64faa90508cddac067db23a4eed9af50cb4'
+		},
+		'wasm-rust/runtime/packs/sysroot/wasm32-wasip3.pack.gz': {
+			bytes: 7862375,
+			sha256: 'dbd22b4c728b0d8eb60ca8371bfd2a4de3cc309aec919ac21d4b2e9a5f687bf3',
+			uncompressedBytes: 18202672,
+			uncompressedSha256: 'b6c9fb2dfb6fe7de6d21c23eb468b57d2629973e40fd63e0acf2324689592b70'
+		},
+		'wasm-rust/runtime/rustc/rustc.wasm.gz': {
+			bytes: 21103827,
+			sha256: '3cbbf421f97460cd36c678509289976a8346fa4875009e064944024bc9c7e3da',
+			uncompressedBytes: 75367614,
+			uncompressedSha256: 'b7b1dc0687115b3243e4e41b7dc24718178d4e75e1ccc975d4400a407627c493'
+		},
+		'wasm-rust/vendor/jco/lib/wasi_snapshot_preview1.command.wasm': {
+			bytes: 57236,
+			sha256: 'b391794bf40029766403da7353eb2e1da17067844b78e19eaf9d934c25c4055d'
+		},
+		'wasm-rust/vendor/jco/obj/js-component-bindgen-component.core.wasm.gz': {
+			bytes: 2508654,
+			sha256: '004a5f62b0514f78b645c0acc403f599c8706cb27f21a0ac9f96b119ea20fe0c',
+			uncompressedBytes: 7739762,
+			uncompressedSha256: '50d8ad4bf3f2d985f90b2571a8090d2075301adbaaf9fe21d4771c772477cc48'
+		},
+		'wasm-rust/vendor/jco/obj/js-component-bindgen-component.core2.wasm': {
+			bytes: 16426,
+			sha256: 'ae04633eab380bc18fbe3842a092eab4924688fcc93f04a2ac659add202ede5e'
+		},
+		'wasm-rust/vendor/jco/obj/wasm-tools.core.wasm.gz': {
+			bytes: 928763,
+			sha256: '347ad6e84cb0904203f862bb1b8fa0cea49e9bc43e129918fd6d728aeab13730',
+			uncompressedBytes: 2429240,
+			uncompressedSha256: 'c58816cb0a4751250dc2aea56064e50730d8af7bafffa3ab7bc31d7bd56670e4'
+		},
+		'wasm-rust/vendor/jco/obj/wasm-tools.core2.wasm': {
+			bytes: 16426,
+			sha256: 'ae04633eab380bc18fbe3842a092eab4924688fcc93f04a2ac659add202ede5e'
+		}
+	}
+} as const);
+
+export const WASM_RUST_EXECUTABLE_GRAPH_FORMAT = 'wasm-idle-rust-executable-graph-v1' as const;
+export const WASM_RUST_EXECUTABLE_GRAPH_FINGERPRINT_DOMAIN =
+	'wasm-idle:rust-executable-graph:v1\n' as const;
+export const WASM_RUST_EXECUTABLE_GRAPH_MANIFEST_PATH = 'runtime-executable-graph.v1.json' as const;
+export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
+	schemaVersion: 1,
+	format: 'wasm-idle-rust-executable-graph-v1',
+	authority: 'published-static',
+	entryPath: 'index.js',
+	modules: {
+		'asset-url.js': {
+			delivery: {
+				storagePath: 'asset-url.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 300,
+				sha256: '0cfc9638ca814251f9ddf117a5cef1832a1ee1c5035226f6538cdf739c55772a'
+			},
+			logical: {
+				bytes: 300,
+				sha256: '0cfc9638ca814251f9ddf117a5cef1832a1ee1c5035226f6538cdf739c55772a'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'browser-component-tools.js': {
+			delivery: {
+				storagePath: 'browser-component-tools.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 12627,
+				sha256: '7860e2c261bb3d40daacc3c4dfefa18fb8e558ce56f4f0527b50f3134ce15be3'
+			},
+			logical: {
+				bytes: 12627,
+				sha256: '7860e2c261bb3d40daacc3c4dfefa18fb8e558ce56f4f0527b50f3134ce15be3'
+			},
+			imports: [
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/jco/obj/wasm-tools.js',
+					target: 'vendor/jco/obj/wasm-tools.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/jco/src/browser.js',
+					target: 'vendor/jco/src/browser.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/cli.js',
+					target: 'vendor/preview2-shim/lib/browser/cli.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/clocks.js',
+					target: 'vendor/preview2-shim/lib/browser/clocks.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/filesystem.js',
+					target: 'vendor/preview2-shim/lib/browser/filesystem.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/http.js',
+					target: 'vendor/preview2-shim/lib/browser/http.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/io.js',
+					target: 'vendor/preview2-shim/lib/browser/io.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/random.js',
+					target: 'vendor/preview2-shim/lib/browser/random.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/sockets.js',
+					target: 'vendor/preview2-shim/lib/browser/sockets.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-asset.js',
+					target: 'runtime-asset.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-manifest.js',
+					target: 'runtime-manifest.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'browser-execution.js': {
+			delivery: {
+				storagePath: 'browser-execution.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 6936,
+				sha256: '3a7d5ad84676ceabef0758be7230abb97ef496375b2d4838cc25d02371465f7b'
+			},
+			logical: {
+				bytes: 6936,
+				sha256: '3a7d5ad84676ceabef0758be7230abb97ef496375b2d4838cc25d02371465f7b'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './asset-url.js',
+					target: 'asset-url.js'
+				},
+				{
+					kind: 'static',
+					specifier: './browser-component-tools.js',
+					target: 'browser-component-tools.js'
+				},
+				{
+					kind: 'static',
+					specifier: './browser-stdin.js',
+					target: 'browser-stdin.js'
+				},
+				{
+					kind: 'static',
+					specifier: './vendor/browser_wasi_shim/fd.js',
+					target: 'vendor/browser_wasi_shim/fd.js'
+				},
+				{
+					kind: 'static',
+					specifier: './vendor/browser_wasi_shim/fs_mem.js',
+					target: 'vendor/browser_wasi_shim/fs_mem.js'
+				},
+				{
+					kind: 'static',
+					specifier: './vendor/browser_wasi_shim/wasi.js',
+					target: 'vendor/browser_wasi_shim/wasi.js'
+				},
+				{
+					kind: 'static',
+					specifier: './vendor/browser_wasi_shim/wasi_defs.js',
+					target: 'vendor/browser_wasi_shim/wasi_defs.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'browser-linker.js': {
+			delivery: {
+				storagePath: 'browser-linker.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 13014,
+				sha256: 'e01a93da60e7901416a57dfdbd71b299f92aa42382ded5371bf1a9ff8a33d009'
+			},
+			logical: {
+				bytes: 13014,
+				sha256: 'e01a93da60e7901416a57dfdbd71b299f92aa42382ded5371bf1a9ff8a33d009'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './browser-component-tools.js',
+					target: 'browser-component-tools.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-asset-store.js',
+					target: 'runtime-asset-store.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-asset.js',
+					target: 'runtime-asset.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-manifest.js',
+					target: 'runtime-manifest.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'browser-stdin.js': {
+			delivery: {
+				storagePath: 'browser-stdin.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 1482,
+				sha256: '52dba3d7edc435816adb4b795033000f3d5fee16bb265710b4361601f9a1eee5'
+			},
+			logical: {
+				bytes: 1482,
+				sha256: '52dba3d7edc435816adb4b795033000f3d5fee16bb265710b4361601f9a1eee5'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'compiler-preload.js': {
+			delivery: {
+				storagePath: 'compiler-preload.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 7160,
+				sha256: 'c7b17e1976852946266a1deab378ce6a5aa4ec8eb2a95be9350179222f68bee4'
+			},
+			logical: {
+				bytes: 7160,
+				sha256: 'c7b17e1976852946266a1deab378ce6a5aa4ec8eb2a95be9350179222f68bee4'
+			},
+			imports: [
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/jco/obj/wasm-tools.js',
+					target: 'vendor/jco/obj/wasm-tools.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/jco/src/browser.js',
+					target: 'vendor/jco/src/browser.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/cli.js',
+					target: 'vendor/preview2-shim/lib/browser/cli.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/clocks.js',
+					target: 'vendor/preview2-shim/lib/browser/clocks.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/filesystem.js',
+					target: 'vendor/preview2-shim/lib/browser/filesystem.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/http.js',
+					target: 'vendor/preview2-shim/lib/browser/http.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/io.js',
+					target: 'vendor/preview2-shim/lib/browser/io.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/random.js',
+					target: 'vendor/preview2-shim/lib/browser/random.js'
+				},
+				{
+					kind: 'dynamic',
+					specifier: '../vendor/preview2-shim/lib/browser/sockets.js',
+					target: 'vendor/preview2-shim/lib/browser/sockets.js'
+				},
+				{
+					kind: 'static',
+					specifier: './asset-url.js',
+					target: 'asset-url.js'
+				},
+				{
+					kind: 'static',
+					specifier: './browser-component-tools.js',
+					target: 'browser-component-tools.js'
+				},
+				{
+					kind: 'static',
+					specifier: './compiler-runtime.js',
+					target: 'compiler-runtime.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-asset.js',
+					target: 'runtime-asset.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-manifest.js',
+					target: 'runtime-manifest.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'compiler-runtime.js': {
+			delivery: {
+				storagePath: 'compiler-runtime.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 3397,
+				sha256: '5486aee518414b519d7218282c0b65e2f97f3432a8c4ca77995a49c3b59aff3a'
+			},
+			logical: {
+				bytes: 3397,
+				sha256: '5486aee518414b519d7218282c0b65e2f97f3432a8c4ca77995a49c3b59aff3a'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './asset-url.js',
+					target: 'asset-url.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-delivery-budget.js',
+					target: 'runtime-delivery-budget.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-manifest.js',
+					target: 'runtime-manifest.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'compiler-support.js': {
+			delivery: {
+				storagePath: 'compiler-support.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 5220,
+				sha256: '52164fb602e546e61e6a5a2e09ae3c61aba9377c1b9918b0a788d92e4c497a5b'
+			},
+			logical: {
+				bytes: 5220,
+				sha256: '52164fb602e546e61e6a5a2e09ae3c61aba9377c1b9918b0a788d92e4c497a5b'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'compiler-worker.js': {
+			delivery: {
+				storagePath: 'compiler-worker.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 21326,
+				sha256: '742fbfb33fc0eb89249c49832fbe57c33c392b86d9faaa8688f5213ef95aeae8'
+			},
+			logical: {
+				bytes: 21326,
+				sha256: '742fbfb33fc0eb89249c49832fbe57c33c392b86d9faaa8688f5213ef95aeae8'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './asset-url.js',
+					target: 'asset-url.js'
+				},
+				{
+					kind: 'static',
+					specifier: './compiler-support.js',
+					target: 'compiler-support.js'
+				},
+				{
+					kind: 'static',
+					specifier: './module-worker.js',
+					target: 'module-worker.js'
+				},
+				{
+					kind: 'static',
+					specifier: './retryable-failure-kind.js',
+					target: 'retryable-failure-kind.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-asset-store.js',
+					target: 'runtime-asset-store.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-asset.js',
+					target: 'runtime-asset.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-delivery-budget.js',
+					target: 'runtime-delivery-budget.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-manifest.js',
+					target: 'runtime-manifest.js'
+				},
+				{
+					kind: 'static',
+					specifier: './rustc-runtime.js',
+					target: 'rustc-runtime.js'
+				},
+				{
+					kind: 'static',
+					specifier: './thread-startup.js',
+					target: 'thread-startup.js'
+				},
+				{
+					kind: 'static',
+					specifier: './thread-worker-budget.js',
+					target: 'thread-worker-budget.js'
+				},
+				{
+					kind: 'worker',
+					specifier: './rustc-thread-worker.js',
+					target: 'rustc-thread-worker.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'compiler.js': {
+			delivery: {
+				storagePath: 'compiler.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 33077,
+				sha256: '57610f3dd5babfb44e40a29bb40c1de78b1adfff8b9d1ce7dd5c83a991b9d865'
+			},
+			logical: {
+				bytes: 33077,
+				sha256: '57610f3dd5babfb44e40a29bb40c1de78b1adfff8b9d1ce7dd5c83a991b9d865'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './asset-url.js',
+					target: 'asset-url.js'
+				},
+				{
+					kind: 'static',
+					specifier: './browser-linker.js',
+					target: 'browser-linker.js'
+				},
+				{
+					kind: 'static',
+					specifier: './compiler-preload.js',
+					target: 'compiler-preload.js'
+				},
+				{
+					kind: 'static',
+					specifier: './compiler-runtime.js',
+					target: 'compiler-runtime.js'
+				},
+				{
+					kind: 'static',
+					specifier: './compiler-support.js',
+					target: 'compiler-support.js'
+				},
+				{
+					kind: 'static',
+					specifier: './module-worker.js',
+					target: 'module-worker.js'
+				},
+				{
+					kind: 'static',
+					specifier: './retryable-failure-kind.js',
+					target: 'retryable-failure-kind.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-delivery-budget.js',
+					target: 'runtime-delivery-budget.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-manifest.js',
+					target: 'runtime-manifest.js'
+				},
+				{
+					kind: 'static',
+					specifier: './rustc-runtime.js',
+					target: 'rustc-runtime.js'
+				},
+				{
+					kind: 'static',
+					specifier: './worker-status.js',
+					target: 'worker-status.js'
+				},
+				{
+					kind: 'worker',
+					specifier: './compiler-worker.js',
+					target: 'compiler-worker.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'index.js': {
+			delivery: {
+				storagePath: 'index.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 3686,
+				sha256: 'cfbc70c3349b35c1f510ead79fdfb95bb29700f2566716b6b5fa0d1017cd00d7'
+			},
+			logical: {
+				bytes: 3686,
+				sha256: 'cfbc70c3349b35c1f510ead79fdfb95bb29700f2566716b6b5fa0d1017cd00d7'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './browser-execution.js',
+					target: 'browser-execution.js'
+				},
+				{
+					kind: 'static',
+					specifier: './compiler-runtime.js',
+					target: 'compiler-runtime.js'
+				},
+				{
+					kind: 'static',
+					specifier: './compiler.js',
+					target: 'compiler.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-manifest.js',
+					target: 'runtime-manifest.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'module-worker.js': {
+			delivery: {
+				storagePath: 'module-worker.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 104,
+				sha256: '317eee43c55be3923ffc9630342deeac9ff1030abb2cb2d222e1036ca796b3fc'
+			},
+			logical: {
+				bytes: 104,
+				sha256: '317eee43c55be3923ffc9630342deeac9ff1030abb2cb2d222e1036ca796b3fc'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'retryable-failure-kind.js': {
+			delivery: {
+				storagePath: 'retryable-failure-kind.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 1432,
+				sha256: '32d49e791d1c35329e8aa8dc16cc372ee0c52ba8570c7488c7f7a5a99e1e003c'
+			},
+			logical: {
+				bytes: 1432,
+				sha256: '32d49e791d1c35329e8aa8dc16cc372ee0c52ba8570c7488c7f7a5a99e1e003c'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'runtime-asset-store.js': {
+			delivery: {
+				storagePath: 'runtime-asset-store.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 16751,
+				sha256: '95278dcb0e836d460c657bffcd8ae429e7e8e0508e60665d377a69aaa27e10b4'
+			},
+			logical: {
+				bytes: 16751,
+				sha256: '95278dcb0e836d460c657bffcd8ae429e7e8e0508e60665d377a69aaa27e10b4'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './asset-url.js',
+					target: 'asset-url.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-asset.js',
+					target: 'runtime-asset.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'runtime-asset.js': {
+			delivery: {
+				storagePath: 'runtime-asset.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 22484,
+				sha256: '66f5f3d00bdc0ea75d44aad2c421ebb44e1a476375c4e29f7f91f0b33c8f13a6'
+			},
+			logical: {
+				bytes: 22484,
+				sha256: '66f5f3d00bdc0ea75d44aad2c421ebb44e1a476375c4e29f7f91f0b33c8f13a6'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './runtime-delivery-budget.js',
+					target: 'runtime-delivery-budget.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'runtime-delivery-budget.js': {
+			delivery: {
+				storagePath: 'runtime-delivery-budget.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 9681,
+				sha256: '9340496c81f33b0780ac760d89939dfe22442df0318989b8edf1dc97d57f36e5'
+			},
+			logical: {
+				bytes: 9681,
+				sha256: '9340496c81f33b0780ac760d89939dfe22442df0318989b8edf1dc97d57f36e5'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'runtime-manifest.js': {
+			delivery: {
+				storagePath: 'runtime-manifest.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 49498,
+				sha256: '52939e1bb35c208ab7ad26000ea52e4a5ad9b724a35533f0b004f65212e22314'
+			},
+			logical: {
+				bytes: 49498,
+				sha256: '52939e1bb35c208ab7ad26000ea52e4a5ad9b724a35533f0b004f65212e22314'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './asset-url.js',
+					target: 'asset-url.js'
+				},
+				{
+					kind: 'static',
+					specifier: './runtime-asset.js',
+					target: 'runtime-asset.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'rustc-runtime.js': {
+			delivery: {
+				storagePath: 'rustc-runtime.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 22766,
+				sha256: 'f72739e496d8b9e012f323f30f5869f8fee2d444986494cfe08c378fc05e6913'
+			},
+			logical: {
+				bytes: 22766,
+				sha256: 'f72739e496d8b9e012f323f30f5869f8fee2d444986494cfe08c378fc05e6913'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './shared-workspace.js',
+					target: 'shared-workspace.js'
+				},
+				{
+					kind: 'static',
+					specifier: './vendor/browser_wasi_shim/index.js',
+					target: 'vendor/browser_wasi_shim/index.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'rustc-thread-worker.js': {
+			delivery: {
+				storagePath: 'rustc-thread-worker.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 12578,
+				sha256: '0b41ccb2c0053b860ac4297545e5f3ffcbb4a11525dfca6f495bd43b7e2a7bb6'
+			},
+			logical: {
+				bytes: 12578,
+				sha256: '0b41ccb2c0053b860ac4297545e5f3ffcbb4a11525dfca6f495bd43b7e2a7bb6'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './module-worker.js',
+					target: 'module-worker.js'
+				},
+				{
+					kind: 'static',
+					specifier: './rustc-runtime.js',
+					target: 'rustc-runtime.js'
+				},
+				{
+					kind: 'static',
+					specifier: './thread-startup.js',
+					target: 'thread-startup.js'
+				},
+				{
+					kind: 'static',
+					specifier: './thread-worker-budget.js',
+					target: 'thread-worker-budget.js'
+				},
+				{
+					kind: 'static',
+					specifier: './worker-status.js',
+					target: 'worker-status.js'
+				},
+				{
+					kind: 'worker',
+					specifier: './rustc-thread-worker.js',
+					target: 'rustc-thread-worker.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'shared-workspace.js': {
+			delivery: {
+				storagePath: 'shared-workspace.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 16122,
+				sha256: 'a522f740cac9d237cedb54ad4aaeb68e595a08073259a1e603f5dec3d7274469'
+			},
+			logical: {
+				bytes: 16122,
+				sha256: 'a522f740cac9d237cedb54ad4aaeb68e595a08073259a1e603f5dec3d7274469'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './vendor/browser_wasi_shim/index.js',
+					target: 'vendor/browser_wasi_shim/index.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'thread-startup.js': {
+			delivery: {
+				storagePath: 'thread-startup.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 2096,
+				sha256: '2c407a04ed387991ff4c770d3ba8af6f493217ba48c57df381ab13909799e258'
+			},
+			logical: {
+				bytes: 2096,
+				sha256: '2c407a04ed387991ff4c770d3ba8af6f493217ba48c57df381ab13909799e258'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'thread-worker-budget.js': {
+			delivery: {
+				storagePath: 'thread-worker-budget.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 3634,
+				sha256: '3e188eda32c36119716a85164da79451a3283574464db0bfbd8016363c5f5129'
+			},
+			logical: {
+				bytes: 3634,
+				sha256: '3e188eda32c36119716a85164da79451a3283574464db0bfbd8016363c5f5129'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'vendor/browser_wasi_shim/debug.js': {
+			delivery: {
+				storagePath: 'vendor/browser_wasi_shim/debug.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 414,
+				sha256: 'a91848ee180529e2a60c05dfb9584cad19cd4e1c6f391fdb76a938bcae4c0328'
+			},
+			logical: {
+				bytes: 414,
+				sha256: 'a91848ee180529e2a60c05dfb9584cad19cd4e1c6f391fdb76a938bcae4c0328'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'vendor/browser_wasi_shim/fd.js': {
+			delivery: {
+				storagePath: 'vendor/browser_wasi_shim/fd.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 1906,
+				sha256: '9e82e1fc1bfd3e3573f64349dc42b4b624ed61d24e5c553f2bb4d041444f166c'
+			},
+			logical: {
+				bytes: 1906,
+				sha256: '9e82e1fc1bfd3e3573f64349dc42b4b624ed61d24e5c553f2bb4d041444f166c'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './wasi_defs.js',
+					target: 'vendor/browser_wasi_shim/wasi_defs.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'vendor/browser_wasi_shim/fs_mem.js': {
+			delivery: {
+				storagePath: 'vendor/browser_wasi_shim/fs_mem.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 12206,
+				sha256: '85dbc9e0ee784d9ff8b55452644e00bf7058e32355aab974f8b71d7d85772324'
+			},
+			logical: {
+				bytes: 12206,
+				sha256: '85dbc9e0ee784d9ff8b55452644e00bf7058e32355aab974f8b71d7d85772324'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './debug.js',
+					target: 'vendor/browser_wasi_shim/debug.js'
+				},
+				{
+					kind: 'static',
+					specifier: './fd.js',
+					target: 'vendor/browser_wasi_shim/fd.js'
+				},
+				{
+					kind: 'static',
+					specifier: './wasi_defs.js',
+					target: 'vendor/browser_wasi_shim/wasi_defs.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'vendor/browser_wasi_shim/fs_opfs.js': {
+			delivery: {
+				storagePath: 'vendor/browser_wasi_shim/fs_opfs.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 2280,
+				sha256: '4b96aaeb5ac5986cf802cbf22b975c656682d22a38248160c96fc2ded5644869'
+			},
+			logical: {
+				bytes: 2280,
+				sha256: '4b96aaeb5ac5986cf802cbf22b975c656682d22a38248160c96fc2ded5644869'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './fd.js',
+					target: 'vendor/browser_wasi_shim/fd.js'
+				},
+				{
+					kind: 'static',
+					specifier: './wasi_defs.js',
+					target: 'vendor/browser_wasi_shim/wasi_defs.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'vendor/browser_wasi_shim/index.js': {
+			delivery: {
+				storagePath: 'vendor/browser_wasi_shim/index.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 316,
+				sha256: '7e2fd52ee3f728bb0b1d6e449724e0f13e3d586bb25bde6e02a66366175b5605'
+			},
+			logical: {
+				bytes: 316,
+				sha256: '7e2fd52ee3f728bb0b1d6e449724e0f13e3d586bb25bde6e02a66366175b5605'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './fd.js',
+					target: 'vendor/browser_wasi_shim/fd.js'
+				},
+				{
+					kind: 'static',
+					specifier: './fs_mem.js',
+					target: 'vendor/browser_wasi_shim/fs_mem.js'
+				},
+				{
+					kind: 'static',
+					specifier: './fs_opfs.js',
+					target: 'vendor/browser_wasi_shim/fs_opfs.js'
+				},
+				{
+					kind: 'static',
+					specifier: './strace.js',
+					target: 'vendor/browser_wasi_shim/strace.js'
+				},
+				{
+					kind: 'static',
+					specifier: './wasi.js',
+					target: 'vendor/browser_wasi_shim/wasi.js'
+				},
+				{
+					kind: 'static',
+					specifier: './wasi_defs.js',
+					target: 'vendor/browser_wasi_shim/wasi_defs.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'vendor/browser_wasi_shim/strace.js': {
+			delivery: {
+				storagePath: 'vendor/browser_wasi_shim/strace.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 318,
+				sha256: 'ece435d3784d928d02bff4d015b7cb686f8c06de8536ff9f8ebc38a8f403a3be'
+			},
+			logical: {
+				bytes: 318,
+				sha256: 'ece435d3784d928d02bff4d015b7cb686f8c06de8536ff9f8ebc38a8f403a3be'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'vendor/browser_wasi_shim/wasi.js': {
+			delivery: {
+				storagePath: 'vendor/browser_wasi_shim/wasi.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 16429,
+				sha256: '168eb977a826f75ab0c39f9322f78cc58dbd5b233019ad1d6a7e940af8a7c4aa'
+			},
+			logical: {
+				bytes: 16429,
+				sha256: '168eb977a826f75ab0c39f9322f78cc58dbd5b233019ad1d6a7e940af8a7c4aa'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './debug.js',
+					target: 'vendor/browser_wasi_shim/debug.js'
+				},
+				{
+					kind: 'static',
+					specifier: './wasi_defs.js',
+					target: 'vendor/browser_wasi_shim/wasi_defs.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'vendor/browser_wasi_shim/wasi_defs.js': {
+			delivery: {
+				storagePath: 'vendor/browser_wasi_shim/wasi_defs.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 9027,
+				sha256: '0db0f42ba330749a7b05095ea1fd0ff63fd2b30e84cead30fe4c28359d15f194'
+			},
+			logical: {
+				bytes: 9027,
+				sha256: '0db0f42ba330749a7b05095ea1fd0ff63fd2b30e84cead30fe4c28359d15f194'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'vendor/jco/obj/js-component-bindgen-component.js': {
+			delivery: {
+				storagePath: 'vendor/jco/obj/js-component-bindgen-component.js.gz.bin',
+				encoding: 'gzip'
+			},
+			storage: {
+				bytes: 41401,
+				sha256: '7b5f36771a9bbcb47576d45d00629c59e9046166e5c6b686a2e3b77f0058e612'
+			},
+			logical: {
+				bytes: 358340,
+				sha256: 'bf5ea764275866171fe564ea92a78f9289ef7ff47746534887b882235a6e780c'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: '../../../runtime-asset.js',
+					target: 'runtime-asset.js'
+				},
+				{
+					kind: 'static',
+					specifier: '../../preview2-shim/lib/browser/cli.js',
+					target: 'vendor/preview2-shim/lib/browser/cli.js'
+				},
+				{
+					kind: 'static',
+					specifier: '../../preview2-shim/lib/browser/filesystem.js',
+					target: 'vendor/preview2-shim/lib/browser/filesystem.js'
+				},
+				{
+					kind: 'static',
+					specifier: '../../preview2-shim/lib/browser/io.js',
+					target: 'vendor/preview2-shim/lib/browser/io.js'
+				},
+				{
+					kind: 'static',
+					specifier: '../../preview2-shim/lib/browser/random.js',
+					target: 'vendor/preview2-shim/lib/browser/random.js'
+				}
+			],
+			assets: [
+				{
+					kind: 'core-wasm',
+					specifier: './js-component-bindgen-component.core.wasm',
+					target: 'vendor/jco/obj/js-component-bindgen-component.core.wasm.gz'
+				},
+				{
+					kind: 'core-wasm',
+					specifier: './js-component-bindgen-component.core2.wasm',
+					target: 'vendor/jco/obj/js-component-bindgen-component.core2.wasm'
+				}
+			],
+			externals: [
+				{
+					specifier: 'node:fs/promises',
+					kind: 'dynamic',
+					condition: 'node-only'
+				}
+			]
+		},
+		'vendor/jco/obj/wasm-tools.js': {
+			delivery: {
+				storagePath: 'vendor/jco/obj/wasm-tools.js.gz.bin',
+				encoding: 'gzip'
+			},
+			storage: {
+				bytes: 42464,
+				sha256: '9bf222d2dfc2006ee0ffe2a79f5d0d15816f44938458e0e0f6eec4ba820b0ff0'
+			},
+			logical: {
+				bytes: 376425,
+				sha256: 'b34e3766db2e82991f9c531e8f7d30533f1907f6ddb3b873517100a2ce66bbfb'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: '../../../runtime-asset.js',
+					target: 'runtime-asset.js'
+				},
+				{
+					kind: 'static',
+					specifier: '../../preview2-shim/lib/browser/cli.js',
+					target: 'vendor/preview2-shim/lib/browser/cli.js'
+				},
+				{
+					kind: 'static',
+					specifier: '../../preview2-shim/lib/browser/filesystem.js',
+					target: 'vendor/preview2-shim/lib/browser/filesystem.js'
+				},
+				{
+					kind: 'static',
+					specifier: '../../preview2-shim/lib/browser/io.js',
+					target: 'vendor/preview2-shim/lib/browser/io.js'
+				},
+				{
+					kind: 'static',
+					specifier: '../../preview2-shim/lib/browser/random.js',
+					target: 'vendor/preview2-shim/lib/browser/random.js'
+				}
+			],
+			assets: [
+				{
+					kind: 'core-wasm',
+					specifier: './wasm-tools.core.wasm',
+					target: 'vendor/jco/obj/wasm-tools.core.wasm.gz'
+				},
+				{
+					kind: 'core-wasm',
+					specifier: './wasm-tools.core2.wasm',
+					target: 'vendor/jco/obj/wasm-tools.core2.wasm'
+				}
+			],
+			externals: [
+				{
+					specifier: 'node:fs/promises',
+					kind: 'dynamic',
+					condition: 'node-only'
+				}
+			]
+		},
+		'vendor/jco/src/browser.js': {
+			delivery: {
+				storagePath: 'vendor/jco/src/browser.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 404,
+				sha256: '7d8d056dedc4327245520d7b3b2ce1930953f017fe0335902899e8aa5dbd3f8e'
+			},
+			logical: {
+				bytes: 404,
+				sha256: '7d8d056dedc4327245520d7b3b2ce1930953f017fe0335902899e8aa5dbd3f8e'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: '../obj/js-component-bindgen-component.js',
+					target: 'vendor/jco/obj/js-component-bindgen-component.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'vendor/preview2-shim/lib/browser/cli.js': {
+			delivery: {
+				storagePath: 'vendor/preview2-shim/lib/browser/cli.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 2826,
+				sha256: 'fc73e8c872db6e100522ae1b41c1b7ae5160ac97629610cae53eb2bc2d320266'
+			},
+			logical: {
+				bytes: 2826,
+				sha256: 'fc73e8c872db6e100522ae1b41c1b7ae5160ac97629610cae53eb2bc2d320266'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './config.js',
+					target: 'vendor/preview2-shim/lib/browser/config.js'
+				},
+				{
+					kind: 'static',
+					specifier: './environment.js',
+					target: 'vendor/preview2-shim/lib/browser/environment.js'
+				},
+				{
+					kind: 'static',
+					specifier: './io.js',
+					target: 'vendor/preview2-shim/lib/browser/io.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'vendor/preview2-shim/lib/browser/clocks.js': {
+			delivery: {
+				storagePath: 'vendor/preview2-shim/lib/browser/clocks.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 1170,
+				sha256: '3a44508f62ce3cd3fb2adbabf8cc70be0c3fd962bb0e77cbc8125b6d5bba3f35'
+			},
+			logical: {
+				bytes: 1170,
+				sha256: '3a44508f62ce3cd3fb2adbabf8cc70be0c3fd962bb0e77cbc8125b6d5bba3f35'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './io.js',
+					target: 'vendor/preview2-shim/lib/browser/io.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'vendor/preview2-shim/lib/browser/config.js': {
+			delivery: {
+				storagePath: 'vendor/preview2-shim/lib/browser/config.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 110,
+				sha256: 'ef5271f78522c5ecb7fee3579f73f12a43e85874f6bfcb24d449d0d6e1c9e813'
+			},
+			logical: {
+				bytes: 110,
+				sha256: 'ef5271f78522c5ecb7fee3579f73f12a43e85874f6bfcb24d449d0d6e1c9e813'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'vendor/preview2-shim/lib/browser/environment.js': {
+			delivery: {
+				storagePath: 'vendor/preview2-shim/lib/browser/environment.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 434,
+				sha256: '6a755f21d705e98caede66bb86e5aa880deff71c1721c39a641a59d287123298'
+			},
+			logical: {
+				bytes: 434,
+				sha256: '6a755f21d705e98caede66bb86e5aa880deff71c1721c39a641a59d287123298'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './config.js',
+					target: 'vendor/preview2-shim/lib/browser/config.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'vendor/preview2-shim/lib/browser/filesystem.js': {
+			delivery: {
+				storagePath: 'vendor/preview2-shim/lib/browser/filesystem.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 11570,
+				sha256: '083e8c1be5c4b11264c3be7e15477fc37894723a649445daeaabfb973460acc5'
+			},
+			logical: {
+				bytes: 11570,
+				sha256: '083e8c1be5c4b11264c3be7e15477fc37894723a649445daeaabfb973460acc5'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './config.js',
+					target: 'vendor/preview2-shim/lib/browser/config.js'
+				},
+				{
+					kind: 'static',
+					specifier: './environment.js',
+					target: 'vendor/preview2-shim/lib/browser/environment.js'
+				},
+				{
+					kind: 'static',
+					specifier: './io.js',
+					target: 'vendor/preview2-shim/lib/browser/io.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'vendor/preview2-shim/lib/browser/http.js': {
+			delivery: {
+				storagePath: 'vendor/preview2-shim/lib/browser/http.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 17055,
+				sha256: '270e10d75628add4d96878b705dbf0ce3121648540c2c8df331796f809c7d84a'
+			},
+			logical: {
+				bytes: 17055,
+				sha256: '270e10d75628add4d96878b705dbf0ce3121648540c2c8df331796f809c7d84a'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './io.js',
+					target: 'vendor/preview2-shim/lib/browser/io.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'vendor/preview2-shim/lib/browser/io.js': {
+			delivery: {
+				storagePath: 'vendor/preview2-shim/lib/browser/io.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 6348,
+				sha256: 'c2429defe2de286efe7579c76e17a627d68846fb9c100260b1f5ea4ddb370096'
+			},
+			logical: {
+				bytes: 6348,
+				sha256: 'c2429defe2de286efe7579c76e17a627d68846fb9c100260b1f5ea4ddb370096'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'vendor/preview2-shim/lib/browser/random.js': {
+			delivery: {
+				storagePath: 'vendor/preview2-shim/lib/browser/random.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 1531,
+				sha256: '10ca591c575a43051f205ef953861e2bcba3a917e1ffbb40d74c0bc6985c4eb2'
+			},
+			logical: {
+				bytes: 1531,
+				sha256: '10ca591c575a43051f205ef953861e2bcba3a917e1ffbb40d74c0bc6985c4eb2'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'vendor/preview2-shim/lib/browser/sockets.js': {
+			delivery: {
+				storagePath: 'vendor/preview2-shim/lib/browser/sockets.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 1370,
+				sha256: 'a9a6ba4c7847c8109924447d36ec3087d410237e0728832f1de14625d03969e3'
+			},
+			logical: {
+				bytes: 1370,
+				sha256: 'a9a6ba4c7847c8109924447d36ec3087d410237e0728832f1de14625d03969e3'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		},
+		'worker-status.js': {
+			delivery: {
+				storagePath: 'worker-status.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 3841,
+				sha256: '8c345945f87eb1305fca69d4b99cca7a3df90a8f5b4ac334cd04e5d5b5be7041'
+			},
+			logical: {
+				bytes: 3841,
+				sha256: '8c345945f87eb1305fca69d4b99cca7a3df90a8f5b4ac334cd04e5d5b5be7041'
+			},
+			imports: [],
+			assets: [],
+			externals: []
+		}
+	},
+	fingerprint: 'dc7ad407a4190ea84f80ad5589d86d6c704aa2c982d211f6ddcaed558bc57f65'
+} as const);
+
+export const WASM_RUST_ASSET_VERSION = WASM_RUST_RUNTIME_PROFILE.manifestFingerprint;

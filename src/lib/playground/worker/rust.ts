@@ -1,27 +1,31 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import type { DebugFrame, DebugPauseReason } from '$lib/playground/options';
+import { snapshotRustNonDebugResourceLimits } from '$lib/playground/rustWorkerLimits';
+import {
+	WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
+	WASM_RUST_RUNTIME_PROFILE
+} from '$lib/playground/wasmRustVersion';
+import {
+	createRuntimeAssetDeliveryBudget,
+	type RuntimeAssetDeliveryBudgetDescriptor
+} from '@wasm-idle/core';
 
 declare var self: any;
 
 type RustWorkerDebugMode = 'none' | 'trace' | 'lldb';
 const lowercaseSha256Pattern = /^[0-9a-f]{64}$/u;
 
-self.document = {
-	querySelectorAll() {
-		return [];
-	}
-};
-
-let stdinBufferRust: Int32Array | null = null;
-let debugBufferRust: Int32Array | null = null;
-let compilerUrl = '';
-let debugModuleUrl = '';
-let runtimeBaseUrl = '';
-let loadedCompilerUrl = '';
-let compilerPromise: Promise<{
-	compiler: any;
-	executeBrowserRustArtifact: (
+interface RustCompilerModule {
+	configureVerifiedRuntimeExecutableModuleUrls?: (
+		moduleUrls: Readonly<Record<string, string>>,
+		graphFingerprint: string
+	) => void;
+	createRustCompiler?: (options: {
+		dependencies: { runtimeProfile: RustWorkerRuntimeProfile };
+	}) => Promise<any>;
+	default?: RustCompilerModule['createRustCompiler'];
+	executeBrowserRustArtifact?: (
 		artifact: any,
 		runtimeBaseUrl: string,
 		options?: {
@@ -36,9 +40,57 @@ let compilerPromise: Promise<{
 		stdout: string;
 		stderr: string;
 	}>;
+}
+
+interface RustWorkerRuntimeProfile {
+	readonly profileId: string;
+	readonly protocolVersion: 1;
+	readonly manifestPath: 'runtime/runtime-manifest.v3.json';
+	readonly manifestFingerprint: string;
+	readonly manifestReceipt: Readonly<{ bytes: number; sha256: string }>;
+	readonly moduleUrl: string;
+}
+
+type RustCompilerModuleImporter = (url: string) => Promise<RustCompilerModule>;
+
+const testOnlyCompilerModuleImporter =
+	import.meta.env.MODE === 'test'
+		? (
+				globalThis as typeof globalThis & {
+					__WASM_IDLE_TEST_ONLY_RUST_COMPILER_MODULE_IMPORTER__?: unknown;
+				}
+			).__WASM_IDLE_TEST_ONLY_RUST_COMPILER_MODULE_IMPORTER__
+		: undefined;
+const importRustCompilerModule: RustCompilerModuleImporter =
+	typeof testOnlyCompilerModuleImporter === 'function'
+		? (testOnlyCompilerModuleImporter as RustCompilerModuleImporter)
+		: (url) => import(/* @vite-ignore */ url) as Promise<RustCompilerModule>;
+
+self.document = {
+	querySelectorAll() {
+		return [];
+	}
+};
+
+let stdinBufferRust: Int32Array | null = null;
+let debugBufferRust: Int32Array | null = null;
+let compilerUrl = '';
+let debugModuleUrl = '';
+let runtimeBaseUrl = '';
+let runtimeProfile: RustWorkerRuntimeProfile | null = null;
+let verifiedModuleUrls: Record<string, string> | null = null;
+let executableGraphFingerprint = '';
+let loadedCompilerUrl = '';
+let loadedExecutableGraphFingerprint = '';
+let acceptedCompilerBootstrap = false;
+let activeExecution = false;
+let compilerPromise: Promise<{
+	compiler: any;
+	executeBrowserRustArtifact: NonNullable<RustCompilerModule['executeBrowserRustArtifact']>;
 }> | null = null;
 let compiledArtifact: any = null;
 let compiledCacheKey = '';
+let compiledAssetDeliveryBudget: RuntimeAssetDeliveryBudgetDescriptor | null = null;
 let loadedDebugModuleUrl = '';
 let debugInstrumenterPromise: Promise<RustDebugInstrumenter> | null = null;
 
@@ -59,25 +111,207 @@ interface RustDebugState {
 	callStack: DebugFrame[];
 }
 
-async function loadCompiler(url: string) {
+function compareCodeUnits(left: string, right: string) {
+	return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]) {
+	return (
+		JSON.stringify(Object.keys(value).sort(compareCodeUnits)) ===
+		JSON.stringify([...expected].sort(compareCodeUnits))
+	);
+}
+
+function requireCanonicalBlobUrl(value: unknown, label: string) {
+	if (typeof value !== 'string') throw new Error(`${label} must be a canonical Blob URL`);
+	let parsed: URL;
+	try {
+		parsed = new URL(value);
+	} catch {
+		throw new Error(`${label} must be a canonical Blob URL`);
+	}
+	if (
+		parsed.protocol !== 'blob:' ||
+		value.includes('?') ||
+		value.includes('#') ||
+		parsed.href !== value
+	) {
+		throw new Error(`${label} must be a canonical Blob URL without a query or fragment`);
+	}
+	return value;
+}
+
+function snapshotRuntimeProfile(value: unknown): RustWorkerRuntimeProfile {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new Error('wasm-rust runtime profile must match the bundled receipt profile');
+	}
+	const profile = value as Record<string, unknown>;
+	if (
+		!hasExactKeys(profile, [
+			'manifestFingerprint',
+			'manifestPath',
+			'manifestReceipt',
+			'moduleUrl',
+			'profileId',
+			'protocolVersion'
+		]) ||
+		profile.profileId !== WASM_RUST_RUNTIME_PROFILE.profileId ||
+		profile.protocolVersion !== WASM_RUST_RUNTIME_PROFILE.protocolVersion ||
+		profile.manifestPath !== WASM_RUST_RUNTIME_PROFILE.manifestPath ||
+		profile.manifestFingerprint !== WASM_RUST_RUNTIME_PROFILE.manifestFingerprint ||
+		!profile.manifestReceipt ||
+		typeof profile.manifestReceipt !== 'object' ||
+		Array.isArray(profile.manifestReceipt)
+	) {
+		throw new Error('wasm-rust runtime profile must match the bundled receipt profile');
+	}
+	const manifestReceipt = profile.manifestReceipt as Record<string, unknown>;
+	if (
+		!hasExactKeys(manifestReceipt, ['bytes', 'sha256']) ||
+		manifestReceipt.bytes !== WASM_RUST_RUNTIME_PROFILE.manifestReceipt.bytes ||
+		manifestReceipt.sha256 !== WASM_RUST_RUNTIME_PROFILE.manifestReceipt.sha256
+	) {
+		throw new Error('wasm-rust runtime profile receipt must match the bundled receipt profile');
+	}
+	if (typeof profile.moduleUrl !== 'string') {
+		throw new Error('wasm-rust runtime profile module URL is invalid');
+	}
+	let moduleUrl: URL;
+	try {
+		moduleUrl = new URL(profile.moduleUrl);
+	} catch {
+		throw new Error('wasm-rust runtime profile module URL is invalid');
+	}
+	const expectedQuery = `?v=${WASM_RUST_RUNTIME_PROFILE.manifestFingerprint}&rustManifestBytes=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.bytes}&rustManifestSha256=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.sha256}`;
+	if (
+		(moduleUrl.protocol !== 'http:' && moduleUrl.protocol !== 'https:') ||
+		moduleUrl.username ||
+		moduleUrl.password ||
+		profile.moduleUrl.includes('#') ||
+		moduleUrl.href !== profile.moduleUrl ||
+		/%(?:2e|2f|5c)/iu.test(moduleUrl.pathname) ||
+		!moduleUrl.pathname.endsWith(`/${WASM_RUST_EXECUTABLE_GRAPH_PROFILE.entryPath}`) ||
+		moduleUrl.search !== expectedQuery
+	) {
+		throw new Error('wasm-rust runtime profile module URL is invalid');
+	}
+	return Object.freeze({
+		profileId: WASM_RUST_RUNTIME_PROFILE.profileId,
+		protocolVersion: WASM_RUST_RUNTIME_PROFILE.protocolVersion,
+		manifestPath: WASM_RUST_RUNTIME_PROFILE.manifestPath,
+		manifestFingerprint: WASM_RUST_RUNTIME_PROFILE.manifestFingerprint,
+		manifestReceipt: Object.freeze({
+			bytes: WASM_RUST_RUNTIME_PROFILE.manifestReceipt.bytes,
+			sha256: WASM_RUST_RUNTIME_PROFILE.manifestReceipt.sha256
+		}),
+		moduleUrl: moduleUrl.href
+	});
+}
+
+function snapshotVerifiedModuleUrls(
+	value: unknown,
+	runtimeModuleUrl: string
+): Readonly<Record<string, string>> {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new Error('wasm-rust verified module URL map is invalid');
+	}
+	const sourceModuleUrl = new URL(runtimeModuleUrl);
+	const sourceBaseUrl = new URL('./', sourceModuleUrl);
+	sourceBaseUrl.search = sourceModuleUrl.search;
+	const expectedNetworkUrls = Object.keys(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules)
+		.sort(compareCodeUnits)
+		.map((modulePath) => {
+			const networkUrl = new URL(modulePath, sourceBaseUrl);
+			networkUrl.search = sourceModuleUrl.search;
+			return networkUrl.href;
+		})
+		.sort(compareCodeUnits);
+	const entries = Object.entries(value as Record<string, unknown>);
+	const actualNetworkUrls = entries.map(([networkUrl]) => networkUrl).sort(compareCodeUnits);
+	if (JSON.stringify(actualNetworkUrls) !== JSON.stringify(expectedNetworkUrls)) {
+		throw new Error('wasm-rust verified module URL map does not match the bundled graph');
+	}
+	const snapshot: Record<string, string> = {};
+	const blobUrls = new Set<string>();
+	for (const [networkUrl, candidateBlobUrl] of entries) {
+		const blobUrl = requireCanonicalBlobUrl(candidateBlobUrl, 'wasm-rust verified module URL');
+		if (blobUrls.has(blobUrl)) {
+			throw new Error('wasm-rust verified module URLs must map one-to-one to Blob URLs');
+		}
+		blobUrls.add(blobUrl);
+		snapshot[networkUrl] = blobUrl;
+	}
+	return Object.freeze(snapshot);
+}
+
+function snapshotCompilerBootstrap(
+	url: string,
+	profileValue: unknown,
+	moduleUrlsValue: unknown,
+	graphFingerprint: unknown
+) {
+	const verifiedCompilerUrl = requireCanonicalBlobUrl(url, 'wasm-rust compiler URL');
+	if (graphFingerprint !== WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint) {
+		throw new Error(
+			'wasm-rust executable graph fingerprint does not match the bundled receipt profile'
+		);
+	}
+	const profile = snapshotRuntimeProfile(profileValue);
+	const moduleUrls = snapshotVerifiedModuleUrls(moduleUrlsValue, profile.moduleUrl);
+	if (moduleUrls[profile.moduleUrl] !== verifiedCompilerUrl) {
+		throw new Error('wasm-rust compiler URL must identify the bundled graph entry');
+	}
+	return Object.freeze({
+		compilerUrl: verifiedCompilerUrl,
+		profile,
+		moduleUrls,
+		graphFingerprint: WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint
+	});
+}
+
+async function loadCompiler(
+	url: string,
+	profile: RustWorkerRuntimeProfile | null = runtimeProfile,
+	moduleUrls: Record<string, string> | null = verifiedModuleUrls,
+	graphFingerprint = executableGraphFingerprint
+) {
 	if (!url) {
 		throw new Error(
 			'Rust runtime is not configured. Set PUBLIC_WASM_RUST_COMPILER_URL or runtimeAssets.rust.compilerUrl.'
 		);
 	}
-	if (loadedCompilerUrl === url && compilerPromise) {
+	const bootstrap = snapshotCompilerBootstrap(url, profile, moduleUrls, graphFingerprint);
+	if (
+		loadedCompilerUrl === bootstrap.compilerUrl &&
+		loadedExecutableGraphFingerprint === bootstrap.graphFingerprint &&
+		compilerPromise
+	) {
 		return await compilerPromise;
 	}
-	loadedCompilerUrl = url;
-	try {
-		runtimeBaseUrl = new URL('./runtime/', url).toString();
-	} catch {
-		runtimeBaseUrl = url;
-	}
+	compilerUrl = bootstrap.compilerUrl;
+	runtimeProfile = bootstrap.profile;
+	verifiedModuleUrls = bootstrap.moduleUrls;
+	executableGraphFingerprint = bootstrap.graphFingerprint;
+	loadedCompilerUrl = bootstrap.compilerUrl;
+	loadedExecutableGraphFingerprint = bootstrap.graphFingerprint;
+	const runtimeModuleUrl = new URL(bootstrap.profile.moduleUrl);
+	const resolvedRuntimeBaseUrl = new URL('./runtime/', runtimeModuleUrl);
+	resolvedRuntimeBaseUrl.search = runtimeModuleUrl.search;
+	runtimeBaseUrl = resolvedRuntimeBaseUrl.toString();
 	compiledArtifact = null;
 	compiledCacheKey = '';
+	compiledAssetDeliveryBudget = null;
 	compilerPromise = (async () => {
-		const module = await import(/* @vite-ignore */ url);
+		const module = await importRustCompilerModule(bootstrap.compilerUrl);
+		if (typeof module.configureVerifiedRuntimeExecutableModuleUrls !== 'function') {
+			throw new Error(
+				'wasm-rust module must export configureVerifiedRuntimeExecutableModuleUrls'
+			);
+		}
+		module.configureVerifiedRuntimeExecutableModuleUrls(
+			bootstrap.moduleUrls,
+			bootstrap.graphFingerprint
+		);
 		const factory =
 			typeof module.createRustCompiler === 'function'
 				? module.createRustCompiler
@@ -91,7 +325,9 @@ async function loadCompiler(url: string) {
 			throw new Error('wasm-rust module must export executeBrowserRustArtifact');
 		}
 		return {
-			compiler: await factory(),
+			compiler: await factory({
+				dependencies: { runtimeProfile: bootstrap.profile }
+			}),
 			executeBrowserRustArtifact: module.executeBrowserRustArtifact
 		};
 	})();
@@ -305,6 +541,9 @@ self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
 		compilerUrl: nextCompilerUrl,
+		runtimeProfile: nextRuntimeProfile,
+		verifiedModuleUrls: nextVerifiedModuleUrls,
+		executableGraphFingerprint: nextExecutableGraphFingerprint,
 		debugModuleUrl: nextDebugModuleUrl,
 		buffer,
 		debugBuffer,
@@ -317,25 +556,49 @@ self.onmessage = async (event: { data: any }) => {
 		debug = false,
 		debugMode: requestedDebugMode,
 		breakpoints = [],
-		pauseOnEntry = false
+		pauseOnEntry = false,
+		limits: executionLimits
 	} = event.data;
+	let ownsExecution = false;
 	try {
 		if (load) {
+			if (acceptedCompilerBootstrap) {
+				throw new Error('wasm-rust application worker accepts exactly one bootstrap');
+			}
+			acceptedCompilerBootstrap = true;
 			compilerUrl = nextCompilerUrl;
 			debugModuleUrl = nextDebugModuleUrl;
+			runtimeProfile = nextRuntimeProfile || null;
+			verifiedModuleUrls = nextVerifiedModuleUrls || null;
+			executableGraphFingerprint = nextExecutableGraphFingerprint || '';
 			if (log) {
 				console.log(`[wasm-idle:rust-worker] load compilerUrl=${compilerUrl}`);
 			}
-			await loadCompiler(compilerUrl);
+			await loadCompiler(
+				compilerUrl,
+				runtimeProfile,
+				verifiedModuleUrls,
+				executableGraphFingerprint
+			);
 			postMessage({ load: true });
 			return;
 		}
+		if (!acceptedCompilerBootstrap) {
+			throw new Error('wasm-rust application worker must be bootstrapped before execution');
+		}
+		if (activeExecution) {
+			throw new Error('wasm-rust application worker already has an active execution');
+		}
+		activeExecution = true;
+		ownsExecution = true;
 
 		const debugMode: RustWorkerDebugMode =
 			requestedDebugMode === undefined ? (debug ? 'trace' : 'none') : requestedDebugMode;
 		if (debugMode !== 'none' && debugMode !== 'trace' && debugMode !== 'lldb') {
 			throw new Error(`Unsupported Rust debug mode: ${String(debugMode)}`);
 		}
+		const nonDebugResourceLimits =
+			debugMode === 'none' ? snapshotRustNonDebugResourceLimits(executionLimits) : undefined;
 		stdinBufferRust = new Int32Array(buffer);
 		debugBufferRust = debugBuffer ? new Int32Array(debugBuffer) : null;
 		if (
@@ -367,8 +630,19 @@ self.onmessage = async (event: { data: any }) => {
 		const compileCode = debugInstrumenter
 			? debugInstrumenter.instrumentRustDebugSource(code)
 			: code;
-		const compileCacheKey = `${debugMode}\n${targetTriple}\n${compileCode}`;
+		const compileCacheKey = [
+			executableGraphFingerprint,
+			debugMode,
+			targetTriple,
+			...(nonDebugResourceLimits
+				? [String(nonDebugResourceLimits.maxAssetDeliveryBytes)]
+				: []),
+			compileCode
+		].join('\n');
 		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
+			const assetDeliveryBudget = nonDebugResourceLimits
+				? createRuntimeAssetDeliveryBudget(nonDebugResourceLimits.maxAssetDeliveryBytes)
+				: undefined;
 			if (log) {
 				console.log(
 					`[wasm-idle:rust-worker] compile start prepare=${String(prepare)} target=${targetTriple} bytes=${compileCode.length}`
@@ -377,6 +651,12 @@ self.onmessage = async (event: { data: any }) => {
 			const result = await runtime.compiler.compile({
 				code: compileCode,
 				debugMode,
+				...(nonDebugResourceLimits
+					? {
+							workerLimits: nonDebugResourceLimits.compilerLimits,
+							assetDeliveryBudget
+						}
+					: {}),
 				edition: '2024',
 				crateType: 'bin',
 				targetTriple,
@@ -410,6 +690,7 @@ self.onmessage = async (event: { data: any }) => {
 			}
 			compiledArtifact = result.artifact;
 			compiledCacheKey = compileCacheKey;
+			compiledAssetDeliveryBudget = assetDeliveryBudget || null;
 			if (log) {
 				console.log(
 					`[wasm-idle:rust-worker] cached artifact target=${compiledArtifact.targetTriple} format=${compiledArtifact.format}`
@@ -508,6 +789,7 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
+		postMessage({ runtimePhase: 'run' });
 		if (log) {
 			console.log(
 				`[wasm-idle:rust-worker] runtime start target=${compiledArtifact.targetTriple} format=${compiledArtifact.format}`
@@ -528,6 +810,9 @@ self.onmessage = async (event: { data: any }) => {
 			compiledArtifact,
 			runtimeBaseUrl,
 			{
+				...(debugMode === 'none' && compiledAssetDeliveryBudget
+					? { assetDeliveryBudget: compiledAssetDeliveryBudget }
+					: {}),
 				args,
 				env: {
 					USER: 'jungol'
@@ -593,6 +878,19 @@ self.onmessage = async (event: { data: any }) => {
 		if (log) {
 			console.error('[wasm-idle:rust-worker] failed', error);
 		}
-		postMessage({ error: error?.message || String(error) });
+		const errorMessage = String(error?.message || error);
+		const maxErrorBytes =
+			Number.isSafeInteger(executionLimits?.maxOutputBytes) &&
+			executionLimits.maxOutputBytes > 0
+				? executionLimits.maxOutputBytes
+				: 1024 * 1024;
+		postMessage({
+			error:
+				new TextEncoder().encode(errorMessage).byteLength <= maxErrorBytes
+					? errorMessage
+					: `Rust worker error exceeded ${maxErrorBytes} bytes`
+		});
+	} finally {
+		if (ownsExecution) activeExecution = false;
 	}
 };

@@ -530,7 +530,7 @@ describe('Monaco route debug sync', () => {
 		expect(pageSource).toMatch(
 			/\{#each availableRustTargetTriples as targetTriple \(targetTriple\)\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
 		);
-		expect(pageSource).toMatch(/preloadBrowserRustRuntime/);
+		expect(pageSource).not.toMatch(/preloadBrowserRustRuntime/);
 		expect(pageSource).toMatch(/preloadBrowserGoRuntime/);
 		expect(pageSource).toMatch(
 			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
@@ -615,6 +615,23 @@ describe('Monaco route debug sync', () => {
 		expect(source).toMatch(
 			/@media \(max-width: 960px\) \{\s+main \{\s+min-height: 360px;\s+border-left: 0;\s+border-top: 1px solid #e5e7eb;\s+\}\s+\}/s
 		);
+	});
+
+	it('loads the Rust LSP from a pinned verified executable graph and owns its lifetime', () => {
+		expect(source).toContain(
+			"import { loadVerifiedRustExecutableGraph } from '$lib/playground/rustExecutableGraph';"
+		);
+		expect(source).toMatch(
+			/loadVerifiedRustExecutableGraph\(\{[\s\S]*profile: WASM_RUST_EXECUTABLE_GRAPH_PROFILE,[\s\S]*runtimeProfile: WASM_RUST_RUNTIME_PROFILE,[\s\S]*signal/
+		);
+		expect(source).toMatch(
+			/rust: \{[\s\S]*compilerUrl: graph\.entryUrl,[\s\S]*expectedNetworkModuleUrls: graph\.expectedNetworkModuleUrls,[\s\S]*verifiedModuleUrls: graph\.networkModuleUrls,[\s\S]*graphFingerprint: WASM_RUST_EXECUTABLE_GRAPH_PROFILE\.fingerprint,[\s\S]*runtimeProfile: graph\.runtimeProfile/
+		);
+		expect(source).toMatch(/const handle = await getRustLanguageServer\(\{[\s\S]*signal,/);
+		expect(source).toMatch(
+			/if \(disposed\) return;[\s\S]*handle\.dispose\(\);[\s\S]*finally \{[\s\S]*graph\.dispose\(\);/
+		);
+		expect(source).toMatch(/catch \(error\) \{\s*graph\.dispose\(\);\s*throw error;/);
 	});
 
 	it('does not keep the legacy monaco-languageclient in the app shell', async () => {

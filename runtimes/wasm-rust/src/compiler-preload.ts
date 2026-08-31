@@ -1,21 +1,30 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
+import {
+	fetchRuntimeAssetBytes,
+	hasRegisteredRuntimeAssetReceipt,
+	withRuntimeAssetDeliveryBudget
+} from './runtime-asset.js';
 import { PREVIEW2_COMPONENT_RUNTIME_ASSETS } from './browser-component-tools.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
 import {
+	hasVerifiedRuntimeExecutableModuleUrls,
 	isIntegratedCompilerOutput,
 	loadRuntimeManifest,
 	resolveRuntimeAssetUrl
 } from './runtime-manifest.js';
-import type { SupportedTargetTriple } from './types.js';
+import type { WasmRustRuntimeProfile } from './runtime-manifest.js';
+import type { RuntimeAssetDeliveryBudgetDescriptor, SupportedTargetTriple } from './types.js';
 
 export interface PreloadBrowserRustRuntimeDependencies {
 	loadManifest?: typeof loadRuntimeManifest;
 	fetchImpl?: typeof fetch;
 	importRuntimeModule?: <T>(assetUrl: string) => Promise<T>;
+	runtimeProfile?: WasmRustRuntimeProfile;
 }
 
 export interface PreloadBrowserRustRuntimeOptions {
 	targetTriple?: SupportedTargetTriple;
+	assetDeliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor;
 	dependencies?: PreloadBrowserRustRuntimeDependencies;
 }
 
@@ -24,11 +33,24 @@ const rustRuntimePreloadCache = new Map<string, Promise<void>>();
 export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRuntimeOptions = {}) {
 	const defaultImportRuntimeModule = <T>(assetUrl: string) =>
 		import(/* @vite-ignore */ assetUrl) as Promise<T>;
-	const runPreload = async () => {
+	const runPreloadOperation = async () => {
 		const fetchImpl = options.dependencies?.fetchImpl || fetch;
 		const importRuntimeModule =
 			options.dependencies?.importRuntimeModule || defaultImportRuntimeModule;
 		const preloadAsset = async (assetUrl: string, assetLabel: string) => {
+			if (hasRegisteredRuntimeAssetReceipt(assetUrl) || options.assetDeliveryBudget) {
+				await fetchRuntimeAssetBytes(
+					assetUrl,
+					assetLabel,
+					fetchImpl,
+					false,
+					undefined,
+					options.assetDeliveryBudget
+						? { deliveryBudget: options.assetDeliveryBudget }
+						: {}
+				);
+				return;
+			}
 			const response = await fetchImpl(assetUrl);
 			if (!response.ok) {
 				throw new Error(
@@ -40,25 +62,34 @@ export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRunti
 		const { manifest, targetConfig, versionedModuleBaseUrl, versionedRuntimeBaseUrl } =
 			await loadBundledRuntimeContext(
 				options.dependencies?.loadManifest,
-				options.targetTriple
+				options.targetTriple,
+				options.dependencies?.runtimeProfile,
+				options.assetDeliveryBudget ? { deliveryBudget: options.assetDeliveryBudget } : {}
 			);
 		const assetPreloads = [
-			preloadAsset(
-				resolveVersionedAssetUrl(versionedModuleBaseUrl, './compiler-worker.js').toString(),
-				'wasm-rust compiler worker'
-			),
-			preloadAsset(
-				resolveVersionedAssetUrl(
-					versionedModuleBaseUrl,
-					'./rustc-thread-worker.js'
-				).toString(),
-				'wasm-rust rustc thread worker'
-			),
 			preloadAsset(
 				resolveRuntimeAssetUrl(versionedRuntimeBaseUrl, manifest.compiler.rustcWasm),
 				`wasm-rust runtime asset ${manifest.compiler.rustcWasm}`
 			)
 		];
+		if (!hasVerifiedRuntimeExecutableModuleUrls()) {
+			assetPreloads.push(
+				preloadAsset(
+					resolveVersionedAssetUrl(
+						versionedModuleBaseUrl,
+						'./compiler-worker.js'
+					).toString(),
+					'wasm-rust compiler worker'
+				),
+				preloadAsset(
+					resolveVersionedAssetUrl(
+						versionedModuleBaseUrl,
+						'./rustc-thread-worker.js'
+					).toString(),
+					'wasm-rust rustc thread worker'
+				)
+			);
+		}
 		if (!isIntegratedCompilerOutput(targetConfig.compile)) {
 			assetPreloads.push(
 				preloadAsset(
@@ -178,11 +209,27 @@ export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRunti
 		}
 		await Promise.all([...assetPreloads, ...modulePreloads]);
 	};
-	if (options.dependencies) {
+	const runPreload = () =>
+		withRuntimeAssetDeliveryBudget(options.assetDeliveryBudget, runPreloadOperation);
+	if (
+		options.assetDeliveryBudget ||
+		options.dependencies?.loadManifest ||
+		options.dependencies?.fetchImpl ||
+		options.dependencies?.importRuntimeModule
+	) {
 		await runPreload();
 		return;
 	}
-	const cacheKey = options.targetTriple || '__default__';
+	const profile = options.dependencies?.runtimeProfile;
+	const cacheKey = [
+		options.targetTriple || '__default__',
+		profile?.protocolVersion ?? 'legacy',
+		profile?.profileId ?? 'legacy',
+		profile?.manifestFingerprint ?? 'legacy',
+		profile?.manifestReceipt.bytes ?? 'legacy',
+		profile?.manifestReceipt.sha256 ?? 'legacy',
+		profile?.moduleUrl ?? 'legacy'
+	].join('\0');
 	let cachedPreload = rustRuntimePreloadCache.get(cacheKey);
 	if (!cachedPreload) {
 		cachedPreload = runPreload();

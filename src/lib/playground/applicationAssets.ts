@@ -1,6 +1,6 @@
 import type { PlaygroundRuntimeAssets } from './assets';
 import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
-import { WASM_AWK_ASSET_VERSION } from './wasmAwkVersion';
+import { WASM_AWK_RUNTIME_BUNDLE } from './wasmAwkVersion';
 import { WASM_BASH_RUNTIME_PROFILE } from './wasmBashVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
 import {
@@ -50,14 +50,21 @@ import {
 	RUBY_RUNTIME_MODULE_STORAGE_PATH,
 	RUBY_RUNTIME_WASM_STORAGE_PATH
 } from '@wasm-idle/core';
-import { WASM_RUST_ASSET_VERSION } from './wasmRustVersion';
+import {
+	WASM_RUST_ASSET_VERSION,
+	WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
+	WASM_RUST_RUNTIME_PROFILE
+} from './wasmRustVersion';
 import { WASM_SWIFT_ASSET_VERSION } from './wasmSwiftVersion';
 import {
 	WASM_TCL_ASSET_VERSION,
 	WASM_TCL_RUNNER_RECEIPT,
 	WASM_TCL_RUNTIME_PROFILE
 } from './wasmTclVersion';
-import { WASM_TINYGO_ASSET_VERSION } from './wasmTinyGoVersion';
+import {
+	WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE,
+	WASM_TINYGO_RUNTIME_PROFILE
+} from './wasmTinyGoVersion';
 import { WASM_TYPESCRIPT_ASSET_VERSION } from './wasmTypeScriptVersion';
 import { WASM_WAT_ASSET_VERSION } from './wasmWatVersion';
 import { WASM_ZIG_ASSET_RECEIPTS, WASM_ZIG_ASSET_VERSION } from './wasmZigVersion';
@@ -97,11 +104,13 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			moduleUrl: asset('wasm-php/runtime.mjs', STATIC_RUNTIME_MODULE_VERSION)
 		},
 		rust: {
-			compilerUrl: asset('wasm-rust/index.js', WASM_RUST_ASSET_VERSION),
+			compilerUrl: `${asset('wasm-rust/index.js', WASM_RUST_ASSET_VERSION)}&rustManifestBytes=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.bytes}&rustManifestSha256=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.sha256}`,
 			manifestUrl: asset(
 				'wasm-rust/runtime/runtime-manifest.v3.json',
-				WASM_RUST_ASSET_VERSION
-			)
+				WASM_RUST_RUNTIME_PROFILE.manifestFingerprint
+			),
+			...WASM_RUST_RUNTIME_PROFILE,
+			executableGraphFingerprint: WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint
 		},
 		go: {
 			compilerUrl: asset('wasm-go/index.js', WASM_GO_ASSET_VERSION),
@@ -153,7 +162,15 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		awk: {
 			baseUrl: asset('wasm-awk/'),
-			workerUrl: asset('wasm-awk/runner-worker.js', WASM_AWK_ASSET_VERSION)
+			workerUrl: asset(
+				'wasm-awk/runner-worker.v2.js',
+				WASM_AWK_RUNTIME_BUNDLE.workerReceipt.sha256
+			),
+			manifestUrl: asset(
+				'wasm-awk/runtime-manifest.v2.json',
+				WASM_AWK_RUNTIME_BUNDLE.profile.manifestFingerprint
+			),
+			...WASM_AWK_RUNTIME_BUNDLE.profile
 		},
 		pascal: {
 			baseUrl: asset('wasm-pascal/'),
@@ -289,7 +306,14 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			)
 		},
 		tinygo: {
-			moduleUrl: asset('wasm-tinygo/upstream.js', WASM_TINYGO_ASSET_VERSION)
+			moduleUrl: asset(
+				'wasm-tinygo/upstream.js',
+				WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules[
+					WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.entryPath
+				].sha256
+			),
+			executableGraphFingerprint: WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.fingerprint,
+			...WASM_TINYGO_RUNTIME_PROFILE
 		},
 		typescript: {
 			moduleUrl: asset('wasm-typescript/index.js', WASM_TYPESCRIPT_ASSET_VERSION),

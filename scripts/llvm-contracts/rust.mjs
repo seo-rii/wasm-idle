@@ -26,6 +26,36 @@ export const RUST_INTEGRATED_PROFILE = Object.freeze({
 	rustcLlvmVersion: '22.1.8',
 	manifest: 'runtime/runtime-manifest.v3.json'
 });
+
+export function assertCanonicalRustRuntimeAssetPath(sourcePath, allowSharedLld = false) {
+	if (typeof sourcePath !== 'string' || !sourcePath) {
+		throw new Error('Rust runtime asset has a non-canonical path');
+	}
+	const sharedLldPrefix = '../../shared/emscripten-lld/';
+	const relativePath =
+		allowSharedLld && sourcePath.startsWith(sharedLldPrefix)
+			? sourcePath.slice(sharedLldPrefix.length)
+			: sourcePath;
+	if (
+		!relativePath ||
+		relativePath.startsWith('/') ||
+		relativePath.endsWith('/') ||
+		relativePath.includes('\\') ||
+		relativePath.includes(':') ||
+		relativePath.includes('%') ||
+		relativePath.includes('?') ||
+		relativePath.includes('#') ||
+		/[\u0000-\u001f\u007f]/u.test(relativePath) ||
+		relativePath
+			.split('/')
+			.some((segment) => !segment || segment === '.' || segment === '..') ||
+		(sourcePath.startsWith('../') && relativePath === sourcePath)
+	) {
+		throw new Error(`Rust runtime asset has a non-canonical path: ${sourcePath}`);
+	}
+	return sourcePath;
+}
+
 export async function validateRustRuntimeProfile(sourceDir) {
 	const manifestPath = path.join(sourceDir, RUST_LLVM_PROFILE.manifest);
 	const manifestStats = await stat(manifestPath).catch(() => null);
@@ -65,6 +95,7 @@ export async function validateRustRuntimeProfile(sourceDir) {
 				);
 			}
 			for (const relativePath of [config.sysrootPack.asset, config.sysrootPack.index]) {
+				assertCanonicalRustRuntimeAssetPath(relativePath);
 				const fileStats = await stat(path.join(sourceDir, 'runtime', relativePath)).catch(
 					() => null
 				);

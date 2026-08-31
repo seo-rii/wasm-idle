@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AWK_RUNTIME_WORKER_PATH } from '@wasm-idle/core';
 
 const mocks = vi.hoisted(() => ({
 	loadLanguageToolAsset: vi.fn()
@@ -132,6 +133,92 @@ describe('runRuntimeWorkerDiagnostics', () => {
 			expect.any(Function),
 			{ timeoutMs: 5000 }
 		);
+	});
+
+	it('uses the configured v2 AWK worker identity for loading and verification', async () => {
+		const workerBytes = new TextEncoder().encode('self.onmessage = () => undefined;');
+		const receipt = { bytes: workerBytes.byteLength, sha256: 'c'.repeat(64) };
+		mocks.loadLanguageToolAsset.mockResolvedValue({ bytes: workerBytes });
+		vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:verified-awk-worker');
+		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+		class FakeWorker {
+			onerror: ((event: ErrorEvent) => void) | null = null;
+			onmessage: ((event: MessageEvent) => void) | null = null;
+
+			postMessage() {
+				this.onmessage?.({ data: { results: true } } as MessageEvent);
+			}
+
+			terminate() {}
+		}
+		vi.stubGlobal('Worker', FakeWorker);
+
+		await expect(
+			runRuntimeWorkerDiagnostics({
+				runtime: 'awk',
+				workerAsset: AWK_RUNTIME_WORKER_PATH,
+				workerUrl: `https://assets.example.com/wasm-awk/${AWK_RUNTIME_WORKER_PATH}?v=pinned`,
+				workerReceipt: receipt,
+				message: {},
+				timeoutMessage: 'AWK diagnostics timed out'
+			})
+		).resolves.toEqual({ error: undefined, output: '' });
+
+		expect(mocks.loadLanguageToolAsset).toHaveBeenCalledWith(
+			'awk',
+			AWK_RUNTIME_WORKER_PATH,
+			expect.objectContaining({
+				baseUrl: 'https://assets.example.com/wasm-awk/',
+				integrity: { [AWK_RUNTIME_WORKER_PATH]: receipt },
+				requireExactResponseUrl: true
+			}),
+			expect.any(Function),
+			{ timeoutMs: 5000 }
+		);
+
+		await expect(
+			runRuntimeWorkerDiagnostics({
+				runtime: 'awk',
+				workerAsset: AWK_RUNTIME_WORKER_PATH,
+				workerReceipt: { ...receipt, sha256: '0'.repeat(64) },
+				workerBytes,
+				message: {},
+				timeoutMessage: 'AWK diagnostics timed out'
+			})
+		).rejects.toThrow(`${AWK_RUNTIME_WORKER_PATH} compressed SHA-256 mismatch`);
+	});
+
+	it('transfers explicitly owned runtime payload buffers to the nested worker', async () => {
+		const posted = vi.fn();
+		class FakeWorker {
+			onerror: ((event: ErrorEvent) => void) | null = null;
+			onmessage: ((event: MessageEvent) => void) | null = null;
+
+			postMessage(message: unknown, transfer?: Transferable[]) {
+				posted(message, transfer);
+				this.onmessage?.({ data: { results: true } } as MessageEvent);
+			}
+
+			terminate() {}
+		}
+		vi.stubGlobal('Worker', FakeWorker);
+		const goShimBytes = Uint8Array.of(1, 2);
+		const wasmBytes = Uint8Array.of(3, 4);
+		const message = {
+			runtimePreflight: { goShimBytes, wasmBytes },
+			code: 'BEGIN { print 1 }'
+		};
+
+		await expect(
+			runRuntimeWorkerDiagnostics({
+				workerUrl: 'https://assets.example.com/verified-awk-runner.js',
+				message,
+				messageTransfer: [goShimBytes.buffer, wasmBytes.buffer],
+				timeoutMessage: 'AWK diagnostics timed out'
+			})
+		).resolves.toEqual({ error: undefined, output: '' });
+
+		expect(posted).toHaveBeenCalledWith(message, [goShimBytes.buffer, wasmBytes.buffer]);
 	});
 
 	it('preserves direct URL workers for runtimes without a worker receipt', async () => {

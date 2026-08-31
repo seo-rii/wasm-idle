@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 import {
 	RUNTIME_REGISTRY_MANIFEST_SCHEMA_VERSION,
+	consumeRuntimeAssetDeliveryBytes,
+	createRuntimeAssetDeliveryBudget,
 	preflightRuntimeAssets,
+	readRuntimeAssetDeliveryBudget,
+	type RuntimeAssetDeliveryBudgetDescriptor,
 	type RuntimeRegistryAsset,
 	type RuntimeRegistryManifest
 } from '@wasm-idle/core';
@@ -186,6 +190,43 @@ describe('runtime registry asset preflight', () => {
 			})
 		).rejects.toThrow('response URL does not match its requested URL');
 	});
+
+	it('can require an explicit exact final response URL', async () => {
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				requireExactResponseUrl: true,
+				fetch: async () => responseFor('https://example.test/runtime/loader.js')
+			})
+		).rejects.toThrow('response did not expose an exact final URL');
+	});
+
+	it.each(['redirected', 'opaque', 'opaqueredirect', 'status-zero'] as const)(
+		'rejects %s response metadata when exact final URLs are required',
+		async (mode) => {
+			const requestUrl = 'https://example.test/runtime/loader.js';
+			const response = responseFor(requestUrl);
+			Object.defineProperty(response, 'url', { value: requestUrl });
+			if (mode === 'redirected') {
+				Object.defineProperty(response, 'redirected', { value: true });
+			} else if (mode === 'status-zero') {
+				Object.defineProperty(response, 'status', { value: 0 });
+			} else {
+				Object.defineProperty(response, 'type', { value: mode });
+			}
+			await expect(
+				preflightRuntimeAssets({
+					manifest: createManifest([assets[0]!]),
+					runtimeId: 'fortran/preflight-test',
+					rootUrl: 'https://example.test/',
+					requireExactResponseUrl: true,
+					fetch: async () => response
+				})
+			).rejects.toThrow('did not preserve exact delivery metadata');
+		}
+	);
 
 	it('releases a successful streamed response reader without cancelling it', async () => {
 		const cancel = vi.fn(async () => {});
@@ -1126,6 +1167,157 @@ describe('runtime registry asset preflight', () => {
 		).resolves.toMatchObject({
 			assets: { first: { bytes: firstBytes }, second: { bytes: secondBytes } }
 		});
+	});
+
+	it('accounts streamed and bodyless response bytes exactly once in a shared budget', async () => {
+		const streamedBytes = Uint8Array.from([1, 2, 3, 4]);
+		const bodylessBytes = Uint8Array.from([5, 6, 7]);
+		const sharedAssets: readonly RuntimeRegistryAsset[] = [
+			{
+				key: 'streamed',
+				path: 'streamed.bin',
+				compressedSha256: sha256(streamedBytes),
+				uncompressedSha256: sha256(streamedBytes),
+				compressedBytes: streamedBytes.byteLength,
+				uncompressedBytes: streamedBytes.byteLength,
+				mediaType: 'application/octet-stream',
+				encoding: 'identity'
+			},
+			{
+				key: 'bodyless',
+				path: 'bodyless.bin',
+				compressedSha256: sha256(bodylessBytes),
+				uncompressedSha256: sha256(bodylessBytes),
+				compressedBytes: bodylessBytes.byteLength,
+				uncompressedBytes: bodylessBytes.byteLength,
+				mediaType: 'application/octet-stream',
+				encoding: 'identity'
+			}
+		];
+		const maxBytes = streamedBytes.byteLength + bodylessBytes.byteLength;
+		const deliveryBudget = createRuntimeAssetDeliveryBudget(maxBytes);
+		const bodylessArrayBuffer = bodylessBytes.slice().buffer;
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest(sharedAssets),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async (input) => {
+					if (String(input).endsWith('/streamed.bin')) {
+						return new Response(streamedBytes, {
+							status: 200,
+							headers: { 'content-type': 'application/octet-stream' }
+						});
+					}
+					return {
+						url: '',
+						ok: true,
+						status: 200,
+						headers: new Headers({ 'content-type': 'application/octet-stream' }),
+						body: null,
+						arrayBuffer: vi.fn(async () => bodylessArrayBuffer)
+					} as unknown as Response;
+				},
+				maxTotalDeliveryBytes: maxBytes,
+				deliveryBudget
+			})
+		).resolves.toMatchObject({
+			assets: {
+				streamed: { bytes: streamedBytes },
+				bodyless: { bytes: bodylessBytes }
+			}
+		});
+		expect(readRuntimeAssetDeliveryBudget(deliveryBudget)).toEqual({
+			maxBytes,
+			expectedBytes: 0,
+			deliveredBytes: maxBytes,
+			remainingBytes: 0,
+			sequence: 2
+		});
+	});
+
+	it('records a shared-budget overflow before cancelling the active response reader', async () => {
+		const deliveredBytes = Uint8Array.from([1, 2, 3, 4]);
+		const asset: RuntimeRegistryAsset = {
+			key: 'shared-overflow',
+			path: 'shared-overflow.bin',
+			compressedSha256: sha256(deliveredBytes),
+			uncompressedSha256: sha256(deliveredBytes),
+			compressedBytes: deliveredBytes.byteLength,
+			uncompressedBytes: deliveredBytes.byteLength,
+			mediaType: 'application/octet-stream',
+			encoding: 'identity'
+		};
+		const deliveryBudget = createRuntimeAssetDeliveryBudget(6);
+		consumeRuntimeAssetDeliveryBytes(deliveryBudget, 3);
+		let emitted = false;
+		const cancel = vi.fn(async () => {});
+		const releaseLock = vi.fn();
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([asset]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch: async () =>
+					({
+						url: '',
+						ok: true,
+						status: 200,
+						headers: new Headers({ 'content-type': 'application/octet-stream' }),
+						body: {
+							getReader: () => ({
+								async read() {
+									if (emitted) return { done: true, value: undefined };
+									emitted = true;
+									return { done: false, value: deliveredBytes };
+								},
+								cancel,
+								releaseLock
+							})
+						}
+					}) as unknown as Response,
+				maxTotalDeliveryBytes: deliveredBytes.byteLength,
+				deliveryBudget
+			})
+		).rejects.toMatchObject({
+			name: 'AssetTooLargeError',
+			code: 'asset-too-large',
+			phase: 'asset',
+			limit: 6,
+			actual: 7,
+			runtimeId: 'fortran/preflight-test',
+			profileId: 'preflight-v1'
+		});
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(releaseLock).toHaveBeenCalledOnce();
+		expect(readRuntimeAssetDeliveryBudget(deliveryBudget)).toMatchObject({
+			deliveredBytes: 7,
+			remainingBytes: 0,
+			sequence: 2
+		});
+	});
+
+	it('rejects a malformed shared budget before fetching assets', async () => {
+		const fetch = vi.fn<typeof globalThis.fetch>();
+		const valid = createRuntimeAssetDeliveryBudget(32);
+		const malformed = { ...valid, maxBytes: 31 } as RuntimeAssetDeliveryBudgetDescriptor;
+
+		await expect(
+			preflightRuntimeAssets({
+				manifest: createManifest([assets[0]!]),
+				runtimeId: 'fortran/preflight-test',
+				rootUrl: 'https://example.test/',
+				fetch,
+				deliveryBudget: malformed
+			})
+		).rejects.toMatchObject({
+			name: 'RuntimeConfigurationError',
+			code: 'runtime-configuration',
+			phase: 'asset'
+		});
+		expect(fetch).not.toHaveBeenCalled();
 	});
 
 	it('returns typed timeout and pre-abort failures', async () => {

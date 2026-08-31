@@ -24,6 +24,11 @@
 	import type { ElixirRuntimeAssetReceipts } from '$lib/playground/elixirAssets';
 	import { WASM_D_OUTER_ASSET_RECEIPTS } from '$lib/playground/wasmDIntegrity';
 	import { WASM_ELIXIR_ASSET_RECEIPTS } from '$lib/playground/wasmElixirVersion';
+	import { loadVerifiedRustExecutableGraph } from '$lib/playground/rustExecutableGraph';
+	import {
+		WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
+		WASM_RUST_RUNTIME_PROFILE
+	} from '$lib/playground/wasmRustVersion';
 	import type monaco from 'monaco-editor';
 	import { onMount, untrack } from 'svelte';
 	import { SvelteURL } from 'svelte/reactivity';
@@ -3062,16 +3067,46 @@
 			languages: ['rust'],
 			isEnabled: () => rustLspEnabled && !!rustLspCompilerUrl,
 			setStatus: (status) => (rustLspStatus = status),
-			load: async (currentUrl) => {
-				const { getRustLanguageServer } = await import('@wasm-idle/lsp/rust');
-				return await getRustLanguageServer({
+			load: async (currentUrl, signal) => {
+				const graph = await loadVerifiedRustExecutableGraph({
+					moduleUrl: rustLspCompilerUrl || '',
 					currentUrl,
-					rust: {
-						compilerUrl: rustLspCompilerUrl || '',
-						targetTriple: rustTargetTriple
-					},
-					onStatus: (status) => (rustLspStatus = status)
+					profile: WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
+					runtimeProfile: WASM_RUST_RUNTIME_PROFILE,
+					signal
 				});
+				try {
+					const { getRustLanguageServer } = await import('@wasm-idle/lsp/rust');
+					const handle = await getRustLanguageServer({
+						currentUrl,
+						signal,
+						rust: {
+							compilerUrl: graph.entryUrl,
+							expectedNetworkModuleUrls: graph.expectedNetworkModuleUrls,
+							verifiedModuleUrls: graph.networkModuleUrls,
+							graphFingerprint: WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint,
+							runtimeProfile: graph.runtimeProfile,
+							targetTriple: rustTargetTriple
+						},
+						onStatus: (status) => (rustLspStatus = status)
+					});
+					let disposed = false;
+					return {
+						...handle,
+						dispose() {
+							if (disposed) return;
+							disposed = true;
+							try {
+								handle.dispose();
+							} finally {
+								graph.dispose();
+							}
+						}
+					};
+				} catch (error) {
+					graph.dispose();
+					throw error;
+				}
 			}
 		},
 		{

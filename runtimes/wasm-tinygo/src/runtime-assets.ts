@@ -1,3 +1,10 @@
+interface TinyGoRuntimeAssetReceipt {
+	bytes: number;
+	sha256: string;
+	uncompressedBytes?: number;
+	uncompressedSha256?: string;
+}
+
 export type TinyGoRuntimeAssetLoaderResult =
 	| string
 	| URL
@@ -106,6 +113,37 @@ function enforceAssetSize(assetPath: string, bytes: Uint8Array, maxAssetBytes: n
 		throw new Error(
 			`wasm-tinygo runtime asset ${assetPath} exceeds the ${maxAssetBytes} byte limit`
 		);
+	}
+	return bytes;
+}
+
+async function verifyRuntimeAssetReceipt<Buffer extends ArrayBufferLike>(
+	assetLabel: string,
+	bytes: Uint8Array<Buffer>,
+	receipt: TinyGoRuntimeAssetReceipt | undefined,
+	stage: 'storage' | 'logical'
+): Promise<Uint8Array<Buffer>> {
+	if (!receipt) return bytes;
+	const expectedBytes =
+		stage === 'logical' ? (receipt.uncompressedBytes ?? receipt.bytes) : receipt.bytes;
+	const expectedSha256 =
+		stage === 'logical' ? (receipt.uncompressedSha256 ?? receipt.sha256) : receipt.sha256;
+	if (bytes.byteLength !== expectedBytes) {
+		throw new Error(`${assetLabel} ${stage} byte length differs from its runtime profile`);
+	}
+	if (!globalThis.crypto?.subtle) {
+		throw new Error('wasm-tinygo runtime asset verification requires Web Crypto');
+	}
+	const digestInput =
+		bytes.buffer instanceof ArrayBuffer
+			? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+			: Uint8Array.from(bytes);
+	const digest = await globalThis.crypto.subtle.digest('SHA-256', digestInput);
+	const actualSha256 = [...new Uint8Array(digest)]
+		.map((value) => value.toString(16).padStart(2, '0'))
+		.join('');
+	if (actualSha256 !== expectedSha256) {
+		throw new Error(`${assetLabel} ${stage} SHA-256 differs from its runtime profile`);
 	}
 	return bytes;
 }
@@ -708,6 +746,7 @@ async function fetchRuntimeAssetBytes(
 		onProgress?: TinyGoRuntimeAssetProgressCallback;
 		signal?: AbortSignal;
 		maxAssetBytes: number;
+		receipt?: TinyGoRuntimeAssetReceipt;
 	}
 ): Promise<Uint8Array<ArrayBuffer>> {
 	let resolvedAssetUrlObject: URL;
@@ -868,11 +907,12 @@ async function fetchRuntimeAssetBytes(
 		);
 	}
 	if (!resolvedAssetUrlObject.pathname.endsWith('.gz')) {
-		return assetBytes;
+		return await verifyRuntimeAssetReceipt(assetLabel, assetBytes, options.receipt, 'logical');
 	}
 	if (assetBytes.byteLength < 2 || assetBytes[0] !== 0x1f || assetBytes[1] !== 0x8b) {
-		return assetBytes;
+		return await verifyRuntimeAssetReceipt(assetLabel, assetBytes, options.receipt, 'logical');
 	}
+	await verifyRuntimeAssetReceipt(assetLabel, assetBytes, options.receipt, 'storage');
 	if (typeof DecompressionStream !== 'function') {
 		throw new Error(
 			`failed to decompress ${assetLabel} from ${resolvedAssetUrl}: this browser does not support DecompressionStream('gzip').`
@@ -887,13 +927,19 @@ async function fetchRuntimeAssetBytes(
 		])
 			.stream()
 			.pipeThrough(new DecompressionStream('gzip'));
-		return await readBoundedAssetStream({
+		const logicalBytes = await readBoundedAssetStream({
 			stream: decompressed,
 			assetLabel,
 			maxAssetBytes: options.maxAssetBytes,
 			sizeKind: 'decompressed',
 			signal: options.signal
 		});
+		return await verifyRuntimeAssetReceipt(
+			assetLabel,
+			logicalBytes,
+			options.receipt,
+			'logical'
+		);
 	} catch (error) {
 		if (options.signal?.aborted) {
 			throw options.signal.reason ?? new Error('wasm-tinygo runtime asset load was aborted');
@@ -1075,6 +1121,7 @@ export async function loadRuntimeAssetBytes(options: {
 	loader?: TinyGoRuntimeAssetLoader;
 	assetBaseUrl?: string;
 	packs?: TinyGoRuntimeAssetPackReference[] | null;
+	receipt?: TinyGoRuntimeAssetReceipt;
 	onProgress?: TinyGoRuntimeAssetProgressCallback;
 	signal?: AbortSignal;
 	maxAssetBytes?: number;
@@ -1103,7 +1150,14 @@ export async function loadRuntimeAssetBytes(options: {
 				maxAssetBytes
 			);
 			const packed = entries.get(options.assetPath);
-			if (packed) return packed;
+			if (packed) {
+				return await verifyRuntimeAssetReceipt(
+					options.label,
+					packed,
+					options.receipt,
+					'logical'
+				);
+			}
 		}
 	}
 	if (loader) {
@@ -1118,13 +1172,21 @@ export async function loadRuntimeAssetBytes(options: {
 			maxAssetBytes,
 			options.signal
 		);
-		if (normalized?.bytes) return normalized.bytes;
+		if (normalized?.bytes) {
+			return await verifyRuntimeAssetReceipt(
+				options.label,
+				normalized.bytes,
+				options.receipt,
+				'logical'
+			);
+		}
 		if (normalized?.url) {
 			return await fetchRuntimeAssetBytes(normalized.url, options.label, fetchImpl, {
 				allowCompressedFallback: true,
 				onProgress: options.onProgress,
 				signal: options.signal,
-				maxAssetBytes
+				maxAssetBytes,
+				receipt: options.receipt
 			});
 		}
 	}
@@ -1132,7 +1194,8 @@ export async function loadRuntimeAssetBytes(options: {
 		allowCompressedFallback: true,
 		onProgress: options.onProgress,
 		signal: options.signal,
-		maxAssetBytes
+		maxAssetBytes,
+		receipt: options.receipt
 	});
 }
 

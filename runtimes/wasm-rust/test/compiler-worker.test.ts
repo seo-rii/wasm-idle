@@ -7,6 +7,7 @@ import {
 	fetchRuntimeAssetBytes,
 	validateRuntimeAssetBytes
 } from '../src/compiler-worker.js';
+import { resolveBrowserRustThreadPoolSize } from '../src/compiler-support.js';
 import { normalizeRuntimeManifest } from '../src/runtime-manifest.js';
 import { createIntegratedRuntimeManifestV3 } from './helpers.js';
 
@@ -22,6 +23,16 @@ describe('compiler-worker runtime asset validation', () => {
 				new Uint8Array([0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a, 0x41])
 			)
 		).not.toThrow();
+	});
+
+	it.each([
+		[undefined, 4],
+		[{ maxWorkers: 1, maxThreads: 1 }, 1],
+		[{ maxWorkers: 2, maxThreads: 3 }, 3],
+		[{ maxWorkers: 1, maxThreads: 4 }, 4],
+		[{ maxWorkers: 1, maxThreads: 9 }, 4]
+	] as const)('sizes the helper pool within maxThreads for %j', (workerLimits, expected) => {
+		expect(resolveBrowserRustThreadPoolSize(workerLimits)).toBe(expected);
 	});
 
 	it('ignores non-archive runtime assets', () => {

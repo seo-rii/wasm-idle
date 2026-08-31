@@ -1,0 +1,27 @@
+{
+  "format": "wasm-awk-runtime-manifest-v2",
+  "runtime": "GoAWK",
+  "profileId": "goawk-v1.31.0-go1.25.3",
+  "goVersion": "go1.25.3",
+  "goawkVersion": "v1.31.0",
+  "assets": {
+    "worker": {
+      "path": "runner-worker.v2.js",
+      "bytes": 14124,
+      "sha256": "4a199657d6d56f8626b4c67cbed3219e7852db8152743758968693553ef8c75e"
+    },
+    "goShim": {
+      "path": "wasm_exec.js",
+      "bytes": 16992,
+      "sha256": "0c949f4996f9a89698e4b5c586de32249c3b69b7baadb64d220073cc04acba14"
+    },
+    "wasm": {
+      "path": "goawk.wasm.gz.bin",
+      "bytes": 1289352,
+      "sha256": "1e152f3ecfc0e5f66820c8e08987ab9a05d594968ac6af500e93a8a556a2d86e",
+      "uncompressedBytes": 4697052,
+      "uncompressedSha256": "04ea6a3b3024ce6c4fd779a620eb5569a23879fb8fe2afaac87103ea7dd4b7a6"
+    }
+  },
+  "fingerprint": "73f047e9cc32fea4d353f5f77da9137dd16c0c5196b512475f55bb25ea5a4e43"
+}

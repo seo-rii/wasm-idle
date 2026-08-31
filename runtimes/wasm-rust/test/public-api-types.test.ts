@@ -37,6 +37,7 @@ describe('public api type contracts', () => {
 	type BrowserRustDebugMode,
 	type BrowserRustCompilerFactory,
 	type BrowserRustCompilerResult,
+	type BrowserRustWorkerLimits,
 	type DwarfDebugDescriptor
 } from './index.js';
 
@@ -48,6 +49,7 @@ await createNamedCompiler({ dependencies: {} });
 const debugMode: BrowserRustDebugMode = resolveBrowserRustDebugMode({
 	debugMode: 'lldb'
 });
+const workerLimits: BrowserRustWorkerLimits = { maxWorkers: 1, maxThreads: 4 };
 createBrowserRustCompileRequestIdentity({
 	code: 'fn main() {}',
 	debugMode
@@ -79,6 +81,10 @@ const artifact: NonNullable<BrowserRustCompilerResult['artifact']> = {
 };
 
 const compiler = await createRustCompiler();
+await compiler.compile({
+	code: 'fn main() {}',
+	workerLimits
+});
 await compiler.compile({
 	code: 'fn main() {}',
 	debugMode: 'lldb',

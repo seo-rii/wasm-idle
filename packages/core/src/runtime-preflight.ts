@@ -3,6 +3,11 @@ import {
 	type VerifiedRuntimeAssetIntegrity
 } from './asset-integrity.js';
 import {
+	consumeRuntimeAssetDeliveryBytes,
+	snapshotRuntimeAssetDeliveryBudgetDescriptor,
+	type RuntimeAssetDeliveryBudgetDescriptor
+} from './asset-delivery-budget.js';
+import {
 	AssetIntegrityError,
 	AssetNotFoundError,
 	AssetTooLargeError,
@@ -36,8 +41,10 @@ export interface RuntimeAssetPreflightRequest {
 	readonly limits?: Partial<ExecutionLimits>;
 	readonly cache?: RequestCache;
 	readonly redirect?: RequestRedirect;
+	readonly requireExactResponseUrl?: boolean;
 	readonly maxConcurrentDownloads?: number;
 	readonly maxTotalDeliveryBytes?: number;
+	readonly deliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor;
 	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
 }
 
@@ -244,6 +251,7 @@ async function readBoundedResponse(
 		if (signal.aborted) {
 			throw signal.reason ?? new Error('Runtime asset preflight was aborted');
 		}
+		accountDeliveryBytes?.(bytes.byteLength);
 		if (bytes.byteLength > maxAssetBytes) {
 			throw new AssetTooLargeError(
 				`Runtime asset ${asset.key} exceeds the ${maxAssetBytes} byte limit`,
@@ -255,7 +263,6 @@ async function readBoundedResponse(
 				}
 			);
 		}
-		accountDeliveryBytes?.(bytes.byteLength);
 		reportProgress(bytes.byteLength);
 		return bytes;
 	}
@@ -367,6 +374,7 @@ async function preflightAsset(
 	maxAssetBytes: number,
 	cache: RequestCache | undefined,
 	redirect: RequestRedirect,
+	requireExactResponseUrl: boolean,
 	reportProgress: (loadedBytes: number) => void,
 	runtimeId: string,
 	profileId: string,
@@ -424,6 +432,25 @@ async function preflightAsset(
 	}
 	let responseUrl: URL;
 	try {
+		if (requireExactResponseUrl) {
+			if (!response.url) {
+				throw new RuntimeConfigurationError(
+					`Runtime asset ${asset.key} response did not expose an exact final URL`,
+					{ phase: 'asset', runtimeId, profileId }
+				);
+			}
+			if (
+				response.redirected ||
+				response.status === 0 ||
+				response.type === 'opaque' ||
+				response.type === 'opaqueredirect'
+			) {
+				throw new RuntimeConfigurationError(
+					`Runtime asset ${asset.key} response did not preserve exact delivery metadata`,
+					{ phase: 'asset', runtimeId, profileId }
+				);
+			}
+		}
 		responseUrl = requireConfinedUrl(
 			response.url || requestUrl.href,
 			assetRootUrl,
@@ -592,6 +619,10 @@ export async function preflightRuntimeAssets(
 			}
 		);
 	}
+	const deliveryBudget =
+		request.deliveryBudget === undefined
+			? undefined
+			: snapshotRuntimeAssetDeliveryBudgetDescriptor(request.deliveryBudget);
 	const concurrency = request.maxConcurrentDownloads ?? DEFAULT_MAX_CONCURRENT_DOWNLOADS;
 	if (!Number.isSafeInteger(concurrency) || concurrency <= 0 || concurrency > 32) {
 		throw new RuntimeConfigurationError(
@@ -610,6 +641,19 @@ export async function preflightRuntimeAssets(
 			runtimeId: runtime.runtimeId,
 			profileId: runtime.identity.profile.profileId
 		});
+	}
+	if (
+		request.requireExactResponseUrl !== undefined &&
+		typeof request.requireExactResponseUrl !== 'boolean'
+	) {
+		throw new RuntimeConfigurationError(
+			'Runtime asset exact-response-URL policy must be boolean',
+			{
+				phase: 'asset',
+				runtimeId: runtime.runtimeId,
+				profileId: runtime.identity.profile.profileId
+			}
+		);
 	}
 	const fetchImpl = request.fetch ?? globalThis.fetch;
 	if (runtime.assets.length > 0 && typeof fetchImpl !== 'function') {
@@ -665,9 +709,16 @@ export async function preflightRuntimeAssets(
 		let nextIndex = 0;
 		let deliveredBytes = 0;
 		const accountDeliveryBytes =
-			maxTotalDeliveryBytes === undefined
+			maxTotalDeliveryBytes === undefined && deliveryBudget === undefined
 				? undefined
 				: (bytes: number) => {
+						if (deliveryBudget) {
+							consumeRuntimeAssetDeliveryBytes(deliveryBudget, bytes, {
+								runtimeId: runtime.runtimeId,
+								profileId: runtime.identity.profile.profileId
+							});
+						}
+						if (maxTotalDeliveryBytes === undefined) return;
 						const nextTotal = deliveredBytes + bytes;
 						if (!Number.isSafeInteger(nextTotal) || nextTotal > maxTotalDeliveryBytes) {
 							throw new AssetTooLargeError(
@@ -701,6 +752,7 @@ export async function preflightRuntimeAssets(
 							limits.maxAssetBytes,
 							request.cache,
 							redirect,
+							request.requireExactResponseUrl === true,
 							(loadedBytes) =>
 								request.reportProgress?.({
 									runtimeId: runtime.runtimeId,

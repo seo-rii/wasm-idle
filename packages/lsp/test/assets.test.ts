@@ -39,6 +39,21 @@ describe('language tool asset loading', () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	it('rejects the legacy AWK worker identity before fetching', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			loadLanguageToolAsset(
+				'awk',
+				'runner-worker.js',
+				{ baseUrl: 'https://assets.example.com/wasm-awk/' },
+				vi.fn()
+			)
+		).rejects.toThrow('Unexpected AWK runtime asset: runner-worker.js');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it('rejects assets outside the Tcl diagnostic worker allowlist before fetching', async () => {
 		const fetchMock = vi.fn();
 		vi.stubGlobal('fetch', fetchMock);
@@ -132,6 +147,40 @@ describe('language tool asset loading', () => {
 			})
 		);
 		expect(cancel).toHaveBeenCalledOnce();
+	});
+
+	it('rejects an AWK runner response without an exact final URL before reading it', async () => {
+		const cancel = vi.fn(async () => {});
+		const getReader = vi.fn();
+		const arrayBuffer = vi.fn();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				url: '',
+				headers: new Headers(),
+				body: { cancel, getReader },
+				arrayBuffer
+			})
+		);
+
+		await expect(
+			loadLanguageToolAsset(
+				'awk',
+				'runner-worker.v2.js',
+				{
+					baseUrl: 'https://assets.example.com/wasm-awk/',
+					cache: 'no-store',
+					redirect: 'error',
+					requireExactResponseUrl: true
+				},
+				vi.fn()
+			)
+		).rejects.toThrow('Runtime asset runner-worker.v2.js did not expose an exact final URL');
+		expect(cancel).toHaveBeenCalledOnce();
+		expect(getReader).not.toHaveBeenCalled();
+		expect(arrayBuffer).not.toHaveBeenCalled();
 	});
 
 	it('does not treat an empty D receipt as integrity opt-out', async () => {

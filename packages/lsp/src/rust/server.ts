@@ -1,10 +1,14 @@
 import type { EditorLanguageServerOptions, EditorLanguageServerRuntimeOptions } from '../types.js';
-import { resolveRustLanguageServerCompilerUrl } from '../runtime.js';
 import { createWorkerLanguageServerClient, type LanguageServerStatus } from '../worker-client.js';
 import type { RustLanguageServerTargetTriple } from './service.js';
+import { resolveExecutionLimits } from '@wasm-idle/core';
 
 export interface RustLanguageServerConfig {
 	compilerUrl?: string;
+	expectedNetworkModuleUrls?: readonly string[];
+	verifiedModuleUrls?: Readonly<Record<string, string>>;
+	graphFingerprint?: string;
+	runtimeProfile?: import('../types.js').RustLanguageServerRuntimeProfile;
 	targetTriple?: RustLanguageServerTargetTriple;
 	edition?: string;
 }
@@ -23,16 +27,36 @@ function resolveConfig(
 	return typeof options === 'object' ? options.rust || {} : {};
 }
 
+function resolveMaxAssetBytes(value: unknown): number {
+	return resolveExecutionLimits(value === undefined ? {} : { maxAssetBytes: value as number })
+		.maxAssetBytes;
+}
+
 export async function getRustLanguageServer(
 	options?: EditorLanguageServerOptions | RustLanguageServerOptions
 ) {
 	const hostOptions =
 		typeof options === 'object' ? (options as RustLanguageServerOptions) : undefined;
 	const config = resolveConfig(options);
+	if (
+		!config.compilerUrl ||
+		!config.expectedNetworkModuleUrls ||
+		!config.verifiedModuleUrls ||
+		!config.graphFingerprint ||
+		!config.runtimeProfile
+	) {
+		throw new Error('Rust language server requires a verified executable graph configuration');
+	}
+	const maxAssetBytes = resolveMaxAssetBytes(hostOptions?.maxAssetBytes);
 	return await createWorkerLanguageServerClient({
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {
-			compilerUrl: resolveRustLanguageServerCompilerUrl(options, hostOptions?.currentUrl),
+			compilerUrl: config.compilerUrl,
+			expectedNetworkModuleUrls: config.expectedNetworkModuleUrls,
+			verifiedModuleUrls: config.verifiedModuleUrls,
+			graphFingerprint: config.graphFingerprint,
+			runtimeProfile: config.runtimeProfile,
+			maxAssetBytes,
 			targetTriple: config.targetTriple,
 			edition: config.edition
 		},

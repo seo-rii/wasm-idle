@@ -21,6 +21,7 @@
 	} from '$lib/playground/applicationAssets';
 	import { createLoadingProgressController } from '$lib/playground/loadingProgress';
 	import { resolveDebugRuntimeUrls } from '$lib/playground/assets';
+	import { RUST_NON_DEBUG_RESOURCE_REQUIREMENTS } from '$lib/playground/rustWorkerLimits';
 	import type {
 		CompilerDiagnostic,
 		DebugDataBreakpoint,
@@ -213,7 +214,10 @@
 	const executionOptionResolvers: Partial<
 		Record<PlaygroundLanguage, () => Partial<SandboxExecutionOptions>>
 	> = {
-		RUST: () => ({ rustTargetTriple }),
+		RUST: () => ({
+			rustTargetTriple,
+			limits: RUST_NON_DEBUG_RESOURCE_REQUIREMENTS
+		}),
 		GO: () => ({ goTarget }),
 		TINYGO: () => ({ limits: { maxWasmMemoryBytes: 2 * 1024 * 1024 * 1024 } }),
 		OCAML: () => ({ ocamlBackend, ocamlWasmBinaryenMode }),
@@ -513,11 +517,6 @@
 		) => Promise<DebugResolvedDataBreakpoint[]>;
 	};
 	let browserDebugHookVersion = 0;
-	type WasmRustRuntimeModule = {
-		preloadBrowserRustRuntime?: (options?: {
-			targetTriple?: RustTargetTriple;
-		}) => Promise<void>;
-	};
 	type WasmGoRuntimeModule = {
 		preloadBrowserGoRuntime?: (options?: { target?: GoTarget }) => Promise<void>;
 	};
@@ -2056,28 +2055,6 @@
 				}
 			}
 		})();
-		return () => {
-			cancelled = true;
-		};
-	});
-
-	$effect(() => {
-		if (!browser || language !== 'RUST') return;
-		const compilerUrl = runtimeAssets.rust?.compilerUrl;
-		const preloadTargetTriple = availableRustTargetTriples.includes(rustTargetTriple)
-			? rustTargetTriple
-			: availableRustTargetTriples[0];
-		if (!compilerUrl || !preloadTargetTriple) return;
-		let cancelled = false;
-		(async () => {
-			const runtimeModule = (await import(
-				/* @vite-ignore */ compilerUrl
-			)) as WasmRustRuntimeModule;
-			if (cancelled) return;
-			await runtimeModule.preloadBrowserRustRuntime?.({
-				targetTriple: preloadTargetTriple
-			});
-		})().catch(() => {});
 		return () => {
 			cancelled = true;
 		};
