@@ -917,6 +917,45 @@ describe('LldbDapAdapter', () => {
 		]);
 	});
 
+	it('maps an optional successful full-write response to the requested byte count', async () => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', { supportsWriteMemoryRequest: true });
+		session.queueResponse('writeMemory', undefined);
+		session.queueResponse('writeMemory', {});
+		const adapter = createLldbDapAdapter(session, {
+			featureSupport: { writeMemory: true }
+		});
+		await adapter.initialize();
+
+		await expect(adapter.writeMemory('memory', 0, Uint8Array.of(1, 2))).resolves.toEqual({
+			bytesWritten: 2
+		});
+		await expect(adapter.writeMemory('memory', 2, Uint8Array.of(3))).resolves.toEqual({
+			bytesWritten: 1
+		});
+	});
+
+	it('rejects a short full-write acknowledgement but exposes an allowed partial write', async () => {
+		const session = new FakeDapSession();
+		session.setResponse('initialize', { supportsWriteMemoryRequest: true });
+		session.queueResponse('writeMemory', { bytesWritten: 1 });
+		session.queueResponse('writeMemory', { offset: 2, bytesWritten: 1 });
+		const adapter = createLldbDapAdapter(session, {
+			featureSupport: { writeMemory: true }
+		});
+		await adapter.initialize();
+
+		const fullWrite = adapter.writeMemory('memory', 0, Uint8Array.of(1, 2));
+		await expect(fullWrite).rejects.toMatchObject({
+			name: 'DebugAdapterProtocolError',
+			command: 'writeMemory',
+			path: 'bytesWritten'
+		});
+		await expect(
+			adapter.writeMemory('memory', 0, Uint8Array.of(1, 2), true)
+		).resolves.toEqual({ offset: 2, bytesWritten: 1 });
+	});
+
 	it('gates, maps, and replaces LLDB data breakpoints', async () => {
 		const unsupportedSession = new FakeDapSession();
 		unsupportedSession.setResponse('initialize', { supportsDataBreakpoints: true });

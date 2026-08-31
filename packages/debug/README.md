@@ -90,9 +90,11 @@ responses may report a null or omitted identifier when a value is unavailable, b
 identifiers obey the same string bound and advertised access types must be unique valid values.
 For `readMemory` and `writeMemory`, the product session requires both the LLDB runtime manifest and
 the DAP initialize response to advertise the corresponding request before it sends one. Input
-bytes cross DAP as Base64, and a successful write response cannot claim more bytes than the caller
-supplied. This is raw target-memory mutation only; it does not advertise `setVariable` or general
-C/C++/Rust expression assignment.
+bytes cross DAP as Base64. A successful complete-write response may omit its optional DAP body or
+`bytesWritten`; the adapter then reports the requested byte count. An explicit short count is
+accepted only when the caller enabled `allowPartial`, and a response can never claim more bytes than
+the caller supplied. This is raw target-memory mutation only; it does not advertise `setVariable`
+or general C/C++/Rust expression assignment.
 Each pause event carries these effective session capabilities to the controller. The controller
 rejects unsupported memory and data-breakpoint operations locally, and the playground renders only
 the controls supported by that specific LLDB/WAMR session.
@@ -113,7 +115,10 @@ The playground-facing controller also exposes `readMemory(memoryReference, offse
 `writeMemory(memoryReference, offset, data, allowPartial)` while the target is paused. Memory bytes
 cross the framework-neutral Sandbox and Terminal contracts as `Uint8Array`; browser automation and
 other serialization boundaries should explicitly convert them to plain byte values instead of
-relying on implicit typed-array serialization.
+relying on implicit typed-array serialization. The adapter controller binds each memory operation
+to the current session and stopped-state generation. If the target continues, stops again, or starts
+a new session before the operation settles, the controller rejects its obsolete successful result
+with `DebugAdapterStateError` without recording it as an error in the newer state.
 The playground memory inspector is visible only while an LLDB target is paused. It accepts decimal
 or hexadecimal safe-integer offsets, limits each read to 256 bytes, pages by the chosen byte count,
 and renders readable bytes in hexadecimal and ASCII while marking unreadable bytes as `??`. A

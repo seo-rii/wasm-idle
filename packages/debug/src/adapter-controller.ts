@@ -481,7 +481,13 @@ export function createAdapterDebugSessionController(adapter: DebugAdapter) {
 		const sessionToken = sessionGeneration;
 		const stopToken = stoppedGeneration;
 		try {
-			return await adapter.readMemory(memoryReference, offset, count);
+			const memory = await adapter.readMemory(memoryReference, offset, count);
+			if (!isCurrentStop(sessionToken, stopToken)) {
+				throw new DebugAdapterStateError(
+					'The memory read result belongs to an obsolete stopped state.'
+				);
+			}
+			return memory;
 		} catch (error) {
 			if (isCurrentStop(sessionToken, stopToken)) recordError(error);
 			throw error;
@@ -497,7 +503,13 @@ export function createAdapterDebugSessionController(adapter: DebugAdapter) {
 		const sessionToken = sessionGeneration;
 		const stopToken = stoppedGeneration;
 		try {
-			return await adapter.writeMemory(memoryReference, offset, data, allowPartial);
+			const result = await adapter.writeMemory(memoryReference, offset, data, allowPartial);
+			if (!isCurrentStop(sessionToken, stopToken)) {
+				throw new DebugAdapterStateError(
+					'The memory write result belongs to an obsolete stopped state.'
+				);
+			}
+			return result;
 		} catch (error) {
 			if (isCurrentStop(sessionToken, stopToken)) recordError(error);
 			throw error;

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+	DebugAdapterStateError,
 	createAdapterDebugSessionController,
 	type DebugAdapter,
 	type DebugAdapterEvent,
@@ -560,6 +561,63 @@ describe('createAdapterDebugSessionController', () => {
 		]);
 		expect(controller.stoppedReason).toBeNull();
 		expect(controller.frames).toEqual([]);
+	});
+
+	it.each([
+		{
+			operation: 'readMemory',
+			install(adapter: FakeDebugAdapter, result: ReturnType<typeof deferred<DebugMemory>>) {
+				adapter.readMemoryHandler = () => result.promise;
+			},
+			invoke(controller: ReturnType<typeof createAdapterDebugSessionController>) {
+				return controller.readMemory('memory', 0, 1);
+			},
+			resolve(result: ReturnType<typeof deferred<DebugMemory>>) {
+				result.resolve({ address: '0x0', data: Uint8Array.of(1), unreadableBytes: 0 });
+			}
+		},
+		{
+			operation: 'writeMemory',
+			install(
+				adapter: FakeDebugAdapter,
+				result: ReturnType<typeof deferred<DebugWriteMemoryResult>>
+			) {
+				adapter.writeMemoryHandler = () => result.promise;
+			},
+			invoke(controller: ReturnType<typeof createAdapterDebugSessionController>) {
+				return controller.writeMemory('memory', 0, Uint8Array.of(1));
+			},
+			resolve(result: ReturnType<typeof deferred<DebugWriteMemoryResult>>) {
+				result.resolve({ bytesWritten: 1 });
+			}
+		}
+	])('suppresses a stale successful $operation result', async ({ install, invoke, resolve }) => {
+		const invalidations = [
+			(adapter: FakeDebugAdapter) => adapter.emit({ type: 'continued', threadId: 1 }),
+			(adapter: FakeDebugAdapter) =>
+				adapter.emit({ type: 'stopped', reason: 'step', threadId: 1 }),
+			async (
+				_adapter: FakeDebugAdapter,
+				controller: ReturnType<typeof createAdapterDebugSessionController>
+			) => controller.launch({ program: '/workspace/new.wasm' })
+		];
+
+		for (const invalidate of invalidations) {
+			const adapter = new FakeDebugAdapter();
+			const result = deferred<DebugMemory>() as ReturnType<typeof deferred<DebugMemory>> &
+				ReturnType<typeof deferred<DebugWriteMemoryResult>>;
+			install(adapter, result);
+			const controller = createAdapterDebugSessionController(adapter);
+			adapter.emit({ type: 'stopped', reason: 'breakpoint', threadId: 1 });
+
+			const pending = invoke(controller);
+			await invalidate(adapter, controller);
+			resolve(result);
+
+			await expect(pending).rejects.toBeInstanceOf(DebugAdapterStateError);
+			expect(controller.error).toBeNull();
+			controller.dispose();
+		}
 	});
 
 	it('ignores a previous stopped response that resolves after a newer stop', async () => {

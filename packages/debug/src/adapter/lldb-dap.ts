@@ -844,19 +844,29 @@ export class LldbDapAdapter implements DebugAdapter {
 			allowPartial,
 			data: globalThis.btoa(chunks.join(''))
 		});
-		assertDapRecord(response, 'writeMemory', 'body');
-		assertDapNonNegativeSafeInteger(response.bytesWritten, 'writeMemory', 'bytesWritten');
-		if (response.bytesWritten > data.byteLength) {
+		if (response !== undefined) assertDapRecord(response, 'writeMemory', 'body');
+		const responseBody = response ?? {};
+		const bytesWritten =
+			dapOptionalNonNegativeSafeInteger(responseBody, 'bytesWritten', 'writeMemory', '') ??
+			data.byteLength;
+		if (bytesWritten > data.byteLength) {
 			invalidDapResponse(
 				'writeMemory',
 				'bytesWritten',
-				`reported ${response.bytesWritten} bytes written for ${data.byteLength} input bytes`
+				`reported ${bytesWritten} bytes written for ${data.byteLength} input bytes`
 			);
 		}
-		const responseOffset = dapOptionalSafeInteger(response, 'offset', 'writeMemory', '');
+		if (!allowPartial && bytesWritten !== data.byteLength) {
+			invalidDapResponse(
+				'writeMemory',
+				'bytesWritten',
+				`reported a partial write of ${bytesWritten} bytes for a required ${data.byteLength}-byte write`
+			);
+		}
+		const responseOffset = dapOptionalSafeInteger(responseBody, 'offset', 'writeMemory', '');
 		return {
 			...(responseOffset === undefined ? {} : { offset: responseOffset }),
-			bytesWritten: response.bytesWritten
+			bytesWritten
 		} satisfies DebugWriteMemoryResult;
 	}
 
