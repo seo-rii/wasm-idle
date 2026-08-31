@@ -2423,6 +2423,223 @@ describe('LldbSandboxSession', () => {
 		await expect(completion).resolves.toBe(true);
 	});
 
+	it('maps optional successful write-memory responses to the requested byte count', async () => {
+		runtimeState.initializeCapabilities = { supportsWriteMemoryRequest: true };
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { writeMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		const completionOutcome = completion.then<true | Error>(
+			(value) => value,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		try {
+			runtimeState.responseOverrides.set('writeMemory', undefined);
+			await expect(controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2))).resolves.toEqual(
+				{ bytesWritten: 2 }
+			);
+			runtimeState.responseOverrides.set('writeMemory', {});
+			await expect(controller.writeMemory('0x1002', 0, Uint8Array.of(3))).resolves.toEqual({
+				bytesWritten: 1
+			});
+		} finally {
+			if (runtimeState.session!.disposeCount === 0) await controller.disconnect();
+			await completionOutcome;
+		}
+	});
+
+	it('rejects a short write-memory acknowledgement when partial writes are disallowed', async () => {
+		runtimeState.initializeCapabilities = { supportsWriteMemoryRequest: true };
+		runtimeState.responseOverrides.set('writeMemory', { bytesWritten: 1 });
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { writeMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start().then(
+			() => null,
+			(error: unknown) => error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		await expect(
+			controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2))
+		).rejects.toBeInstanceOf(ProtocolError);
+		await expect(completion).resolves.toBeInstanceOf(ProtocolError);
+		expect(runtimeState.session!.disposeCount).toBe(1);
+	});
+
+	it('exposes an allowed partial write-memory acknowledgement', async () => {
+		runtimeState.initializeCapabilities = { supportsWriteMemoryRequest: true };
+		runtimeState.responseOverrides.set('writeMemory', { offset: 2, bytesWritten: 1 });
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { writeMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		await expect(
+			controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2), true)
+		).resolves.toEqual({ offset: 2, bytesWritten: 1 });
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('rejects an over-counted write-memory acknowledgement', async () => {
+		runtimeState.initializeCapabilities = { supportsWriteMemoryRequest: true };
+		runtimeState.responseOverrides.set('writeMemory', { bytesWritten: 3 });
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { writeMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start().then(
+			() => null,
+			(error: unknown) => error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		await expect(
+			controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2), true)
+		).rejects.toBeInstanceOf(ProtocolError);
+		await expect(completion).resolves.toBeInstanceOf(ProtocolError);
+		expect(runtimeState.session!.disposeCount).toBe(1);
+	});
+
+	it.each([
+		{ invalidation: 'continue', response: { bytesWritten: 1 } },
+		{ invalidation: 'continue', response: { bytesWritten: -1 } },
+		{ invalidation: 'new stop', response: { bytesWritten: 1 } },
+		{ invalidation: 'new stop', response: { bytesWritten: -1 } }
+	])(
+		'suppresses a stale write-memory response after $invalidation ($response.bytesWritten)',
+		async ({ invalidation, response }) => {
+			runtimeState.initializeCapabilities = { supportsWriteMemoryRequest: true };
+			let resolveWrite!: (response: unknown) => void;
+			runtimeState.responseOverrides.set(
+				'writeMemory',
+				new Promise<unknown>((resolve) => {
+					resolveWrite = resolve;
+				})
+			);
+			const events: Array<{ type: string }> = [];
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: (event) => events.push(event),
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({
+						manifestVersion: 2,
+						debugger: { capabilities: { writeMemory: true } }
+					})
+				})) as unknown as typeof fetch
+			});
+			const completion = controller.start().then(
+				() => null,
+				(error: unknown) => error
+			);
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			const write = controller.writeMemory('0x1000', 0, Uint8Array.of(1));
+			await vi.waitFor(() =>
+				expect(runtimeState.session!.requests.at(-1)?.command).toBe('writeMemory')
+			);
+
+			if (invalidation === 'continue') {
+				runtimeState.session!.emit({
+					event: 'continued',
+					body: { threadId: 7, allThreadsContinued: true }
+				});
+			} else {
+				runtimeState.session!.emit({
+					event: 'stopped',
+					body: { reason: 'step', threadId: 7 }
+				});
+			}
+			resolveWrite(response);
+
+			await expect(write).resolves.toBeNull();
+			expect(runtimeState.session!.disposeCount).toBe(0);
+			expect(events.filter((event) => event.type === 'stop')).toHaveLength(0);
+			runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			await expect(completion).resolves.toBeNull();
+		}
+	);
+
 	it('does not access memory unless LLDB initialize advertises the requests', async () => {
 		runtimeState.initializeCapabilities = {
 			supportsReadMemoryRequest: false,

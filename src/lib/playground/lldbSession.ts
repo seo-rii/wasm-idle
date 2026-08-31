@@ -766,16 +766,32 @@ export class LldbSandboxSession {
 				data: globalThis.btoa(chunks.join(''))
 			});
 			if (!this.isCurrentValueRequest(session, stateVersion)) return null;
-			assertDapRecord(response, 'writeMemory', 'body');
-			assertDapNonNegativeSafeInteger(response.bytesWritten, 'writeMemory', 'bytesWritten');
-			if (response.bytesWritten > data.byteLength) {
+			if (response !== undefined) assertDapRecord(response, 'writeMemory', 'body');
+			const responseBody = response ?? {};
+			const responseBytesWritten = responseBody.bytesWritten;
+			if (responseBytesWritten !== undefined) {
+				assertDapNonNegativeSafeInteger(
+					responseBytesWritten,
+					'writeMemory',
+					'bytesWritten'
+				);
+			}
+			const bytesWritten = responseBytesWritten ?? data.byteLength;
+			if (bytesWritten > data.byteLength) {
 				invalidDapResponse(
 					'writeMemory',
 					'bytesWritten',
-					`reported ${response.bytesWritten} bytes written for ${data.byteLength} input bytes`
+					`reported ${bytesWritten} bytes written for ${data.byteLength} input bytes`
 				);
 			}
-			const responseOffset = response.offset;
+			if (!allowPartial && bytesWritten !== data.byteLength) {
+				invalidDapResponse(
+					'writeMemory',
+					'bytesWritten',
+					`reported a partial write of ${bytesWritten} bytes for a required ${data.byteLength}-byte write`
+				);
+			}
+			const responseOffset = responseBody.offset;
 			if (
 				responseOffset !== undefined &&
 				(typeof responseOffset !== 'number' || !Number.isSafeInteger(responseOffset))
@@ -784,7 +800,7 @@ export class LldbSandboxSession {
 			}
 			return {
 				...(responseOffset === undefined ? {} : { offset: responseOffset }),
-				bytesWritten: response.bytesWritten
+				bytesWritten
 			};
 		} catch (error) {
 			if (!this.isCurrentValueRequest(session, stateVersion)) return null;
