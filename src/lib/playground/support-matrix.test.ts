@@ -43,6 +43,16 @@ describe('README support matrix', () => {
 			/`wasm32-wasi` C write, C\+\+ read\/write, and\s+`wasm32-wasip1` Rust read access/
 		);
 		expect(section).toMatch(/typed variable mutation through DAP\s+`setVariable`/);
+		expect(
+			/synchronous WAMR stdin read may time out instead of\s+producing an inspectable pause/.test(
+				section
+			)
+		).toBe(true);
+		expect(
+			/\*\*Stop Debug\*\* still performs bounded\s+Worker cleanup and permits a fresh debug execution/.test(
+				section
+			)
+		).toBe(true);
 	});
 
 	it('keeps every execution language tied to real browser coverage', () => {

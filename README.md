@@ -133,6 +133,11 @@ attachment to an existing browser-engine run. DAP is an internal product protoco
 does not claim compatibility with arbitrary third-party DAP clients or arbitrary externally
 produced Wasm/DWARF artifacts.
 
+Pause is bounded but is not guaranteed to yield an inspectable stop while WAMR is blocked in a
+synchronous host call. In particular, a synchronous WAMR stdin read may time out instead of
+producing an inspectable pause. After that explicit timeout, **Stop Debug** still performs bounded
+Worker cleanup and permits a fresh debug execution; the session never remains indefinitely pending.
+
 Stable v2 adds bounded variable-path watches and a paused-target memory inspector.
 Watch fallback accepts identifiers, nested fields, and non-negative indexes without enabling general
 expression evaluation. The memory panel can select a variable's DAP `memoryReference`, reads at most
