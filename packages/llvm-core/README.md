@@ -442,6 +442,11 @@ and verifies that the active worker count returns to the first-run baseline afte
 If a target-exit or worker-error path has already started disposal, the playground disconnect waits
 for that same disposal before reporting completion, so the UI cannot return to Ready before both
 debug Worker termination calls are observable.
+Each debug Worker also owns Blob URLs for its verified Emscripten JavaScript, WebAssembly, and
+pthread sidecar assets. A live-session dispose revokes those URLs synchronously before the outer
+Worker can reach its bounded force-termination fallback; the normal and failure `finally` paths use
+the same idempotent cleanup. Repeated relaunches therefore cannot retain one complete verified
+runtime asset set merely because a blocking native entry point did not unwind before termination.
 The execution preflight signal also remains attached after manifest verification and is checked
 before and after terminal clear, prepare, and run. Stop or Restart during the clear/compile startup
 window therefore retires that execution before it can create a late debugger session; a Restart

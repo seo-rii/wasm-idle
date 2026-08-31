@@ -14,6 +14,17 @@ import {
 let activeGeneration: string | undefined;
 let disposed = false;
 let finishActiveLifecycle: (() => void) | undefined;
+let revokeActiveAssetUrls: (() => void) | undefined;
+
+function revokeActiveLldbAssets() {
+	const revoke = revokeActiveAssetUrls;
+	revokeActiveAssetUrls = undefined;
+	try {
+		revoke?.();
+	} catch {
+		// Blob cleanup must not prevent transport shutdown or worker termination.
+	}
+}
 
 function closeActiveLldbTransports() {
 	const transport = globalThis.__wasmIdleDebugTransport;
@@ -98,6 +109,13 @@ async function initialize(message: LldbWorkerInitializeMessage) {
 	const assetUrls = createEmscriptenAssetUrls(message.assets, {
 		rewritePthreadMainModuleImport: './lldb-web-dap.js'
 	});
+	let assetUrlsRevoked = false;
+	const revokeAssetUrls = () => {
+		if (assetUrlsRevoked) return;
+		assetUrlsRevoked = true;
+		assetUrls.revoke();
+	};
+	revokeActiveAssetUrls = revokeAssetUrls;
 	try {
 		const factory = await loadEmscriptenModuleFactory(assetUrls.js);
 		if (disposed) return;
@@ -143,7 +161,8 @@ async function initialize(message: LldbWorkerInitializeMessage) {
 			if (finishActiveLifecycle === finishLifecycle) finishActiveLifecycle = undefined;
 		}
 	} finally {
-		assetUrls.revoke();
+		if (revokeActiveAssetUrls === revokeAssetUrls) revokeActiveAssetUrls = undefined;
+		revokeAssetUrls();
 	}
 }
 
@@ -172,6 +191,7 @@ export function handleLldbWorkerMessage(message: DebugWorkerInboundMessage) {
 		disposed = true;
 		finishActiveLifecycle?.();
 		finishActiveLifecycle = undefined;
+		revokeActiveLldbAssets();
 		closeActiveLldbTransports();
 	}
 }

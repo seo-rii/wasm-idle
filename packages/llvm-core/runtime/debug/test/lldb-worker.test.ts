@@ -13,7 +13,8 @@ const workerMocks = vi.hoisted(() => ({
 	loadGate: undefined as Promise<void> | undefined,
 	moduleOptions: undefined as Record<string, unknown> | undefined,
 	postWorkerError: vi.fn(),
-	postWorkerMessage: vi.fn()
+	postWorkerMessage: vi.fn(),
+	revokeAssets: vi.fn()
 }));
 
 vi.mock('../src/worker/module-loader.js', async (importOriginal) => ({
@@ -24,6 +25,12 @@ vi.mock('../src/worker/module-loader.js', async (importOriginal) => ({
 		dapOutput: { close: workerMocks.closeDapOutput },
 		rspInput: { close: workerMocks.closeRspInput },
 		rspOutput: { close: workerMocks.closeRspOutput }
+	})),
+	createEmscriptenAssetUrls: vi.fn(() => ({
+		js: 'blob:lldb-js',
+		wasm: 'blob:lldb-wasm',
+		worker: 'blob:lldb-worker',
+		revoke: workerMocks.revokeAssets
 	})),
 	loadEmscriptenModuleFactory: vi.fn(async () => {
 		if (workerMocks.loadGate) await workerMocks.loadGate;
@@ -85,6 +92,27 @@ describe('LLDB worker lifecycle', () => {
 		workerMocks.loadFailure = undefined;
 		workerMocks.loadGate = undefined;
 		workerMocks.moduleOptions = undefined;
+	});
+
+	it('revokes verified runtime blobs synchronously when a live adapter is disposed', async () => {
+		const { handleLldbWorkerMessage } = await loadLldbWorker();
+		const message = initializeMessage('lldb-worker-revoke-on-dispose');
+
+		handleLldbWorkerMessage(message);
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
+				type: 'ready',
+				worker: 'lldb',
+				generation: message.generation
+			})
+		);
+		expect(workerMocks.revokeAssets).not.toHaveBeenCalled();
+
+		handleLldbWorkerMessage({ type: 'dispose', generation: message.generation });
+
+		expect(workerMocks.revokeAssets).toHaveBeenCalledOnce();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(workerMocks.revokeAssets).toHaveBeenCalledOnce();
 	});
 
 	it('keeps a proxied adapter alive until the real runtime exit', async () => {

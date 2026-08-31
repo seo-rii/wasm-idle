@@ -16,6 +16,17 @@ let activeGeneration: string | undefined;
 let disposed = false;
 let activeStdin: SharedByteQueue | undefined;
 let activeOutputs: SharedByteQueue[] = [];
+let revokeActiveAssetUrls: (() => void) | undefined;
+
+function revokeActiveTargetAssets() {
+	const revoke = revokeActiveAssetUrls;
+	revokeActiveAssetUrls = undefined;
+	try {
+		revoke?.();
+	} catch {
+		// Blob cleanup must not prevent transport shutdown or worker termination.
+	}
+}
 
 function closeQueue(queue: SharedByteQueue | undefined) {
 	if (!queue) return;
@@ -129,6 +140,13 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 		rejectLifecycle(error);
 	};
 	const assetUrls = createEmscriptenAssetUrls(message.assets);
+	let assetUrlsRevoked = false;
+	const revokeAssetUrls = () => {
+		if (assetUrlsRevoked) return;
+		assetUrlsRevoked = true;
+		assetUrls.revoke();
+	};
+	revokeActiveAssetUrls = revokeAssetUrls;
 	try {
 		const factory = await loadEmscriptenModuleFactory(assetUrls.js);
 		if (disposed) return;
@@ -202,7 +220,8 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 			stopMemoryTelemetry();
 		}
 	} finally {
-		assetUrls.revoke();
+		if (revokeActiveAssetUrls === revokeAssetUrls) revokeActiveAssetUrls = undefined;
+		revokeAssetUrls();
 	}
 }
 
@@ -228,6 +247,7 @@ export function handleTargetWorkerMessage(message: DebugWorkerInboundMessage) {
 	if (!activeGeneration || message.generation !== activeGeneration) return;
 	if (message.type === 'dispose') {
 		disposed = true;
+		revokeActiveTargetAssets();
 		closeActiveTargetTransports();
 	}
 }

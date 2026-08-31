@@ -12,6 +12,7 @@ const workerMocks = vi.hoisted(() => ({
 	lifecycle: 'exit' as 'exit' | 'abort' | 'pending',
 	loadFailure: undefined as Error | undefined,
 	loadGate: undefined as Promise<void> | undefined,
+	revokeAssets: vi.fn(),
 	loadEmscriptenModuleFactory: vi.fn(async () => {
 		if (workerMocks.loadGate) await workerMocks.loadGate;
 		if (workerMocks.loadFailure) {
@@ -59,6 +60,12 @@ vi.mock('../src/worker/module-loader.js', async (importOriginal) => ({
 			closed: false,
 			close: workerMocks.closeRspOutput
 		}
+	})),
+	createEmscriptenAssetUrls: vi.fn(() => ({
+		js: 'blob:target-js',
+		wasm: 'blob:target-wasm',
+		worker: 'blob:target-worker',
+		revoke: workerMocks.revokeAssets
 	})),
 	loadEmscriptenModuleFactory: workerMocks.loadEmscriptenModuleFactory,
 	mountDebugFiles: workerMocks.mountDebugFiles,
@@ -118,6 +125,26 @@ describe('WAMR target worker launch', () => {
 		workerMocks.lifecycle = 'exit';
 		workerMocks.loadFailure = undefined;
 		workerMocks.loadGate = undefined;
+	});
+
+	it('revokes verified runtime blobs synchronously when a live target is disposed', async () => {
+		workerMocks.lifecycle = 'pending';
+		const { handleTargetWorkerMessage } = await loadTargetWorker();
+		const message = initializeMessage('target-worker-revoke-on-dispose');
+
+		handleTargetWorkerMessage(message);
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
+				type: 'ready',
+				worker: 'target',
+				generation: message.generation
+			})
+		);
+		expect(workerMocks.revokeAssets).not.toHaveBeenCalled();
+
+		handleTargetWorkerMessage({ type: 'dispose', generation: message.generation });
+
+		expect(workerMocks.revokeAssets).toHaveBeenCalledOnce();
 	});
 
 	it.each([
