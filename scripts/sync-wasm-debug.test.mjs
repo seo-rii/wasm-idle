@@ -715,6 +715,232 @@ test('does not reattach a detached runtime changed during previous-pair restore'
 	}
 });
 
+test('preserves a foreign hidden receipt destination before rollback detach', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-hidden-receipt-dest-'));
+	let foreignReceiptPath;
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ');
+		const newFixture = await fixture(path.join(root, 'new'), '  ');
+		const staticDir = path.join(root, 'static');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: newFixture.source,
+				staticDir,
+				versionModulePath,
+				async testOnlyAfterReceiptPublish() {
+					const nextRootName = (await readdir(staticDir)).find((entry) =>
+						entry.startsWith('.wasm-debug.next-')
+					);
+					assert.ok(nextRootName);
+					const suffix = nextRootName.slice('.wasm-debug.next-'.length);
+					foreignReceiptPath = path.join(
+						path.dirname(versionModulePath),
+						`.${path.basename(versionModulePath)}.next-${suffix}`
+					);
+					await writeFile(foreignReceiptPath, 'foreign hidden receipt destination');
+					throw new Error('injected hidden receipt destination');
+				}
+			}),
+			/ownership changed/u
+		);
+
+		assert.ok(foreignReceiptPath);
+		assert.equal(
+			await readFile(foreignReceiptPath, 'utf8'),
+			'foreign hidden receipt destination'
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('preserves a foreign receipt destination before previous-pair restore', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-restore-receipt-dest-'));
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ');
+		const newFixture = await fixture(path.join(root, 'new'), '  ');
+		const staticDir = path.join(root, 'static');
+		const current = path.join(staticDir, 'wasm-debug');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: newFixture.source,
+				staticDir,
+				versionModulePath,
+				testOnlyAfterReceiptPublish() {
+					throw new Error('begin receipt restore destination rollback');
+				},
+				async testOnlyAfterPreviousRuntimeRestore() {
+					await writeFile(versionModulePath, 'foreign receipt restore destination');
+				}
+			}),
+			/ownership changed/u
+		);
+
+		assert.equal(
+			await readFile(versionModulePath, 'utf8'),
+			'foreign receipt restore destination'
+		);
+		assert.equal(
+			await readFile(path.join(current, 'runtime-manifest.v2.json'), 'utf8').catch(
+				(error) => {
+					if (error?.code === 'ENOENT') return null;
+					throw error;
+				}
+			),
+			null
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('preserves both generations when a restored runtime changes before cleanup', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-restored-postcondition-'));
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ');
+		const newFixture = await fixture(path.join(root, 'new'), '  ');
+		const staticDir = path.join(root, 'static');
+		const current = path.join(staticDir, 'wasm-debug');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: newFixture.source,
+				staticDir,
+				versionModulePath,
+				testOnlyAfterReceiptPublish() {
+					throw new Error('begin restored runtime postcondition rollback');
+				},
+				async testOnlyAfterPreviousRuntimeRestore() {
+					await writeFile(
+						path.join(current, 'debug/wamr-debug.js'),
+						'foreign restored runtime'
+					);
+				}
+			}),
+			/postcondition ownership changed/u
+		);
+
+		assert.equal(
+			await readFile(path.join(current, 'debug/wamr-debug.js'), 'utf8'),
+			'foreign restored runtime'
+		);
+		const nextRootName = (await readdir(staticDir)).find((entry) =>
+			entry.startsWith('.wasm-debug.next-')
+		);
+		assert.ok(nextRootName);
+		assert.deepEqual(
+			await readFile(
+				path.join(staticDir, nextRootName, 'wasm-debug/runtime-manifest.v2.json')
+			),
+			newFixture.manifestBytes
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('preserves a changed previous runtime before successful publication cleanup', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-previous-postcondition-'));
+	let previousRuntimePath;
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ');
+		const newFixture = await fixture(path.join(root, 'new'), '  ');
+		const staticDir = path.join(root, 'static');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: newFixture.source,
+				staticDir,
+				versionModulePath,
+				async testOnlyAfterReceiptPublish() {
+					const previousRootName = (await readdir(staticDir)).find((entry) =>
+						entry.startsWith('.wasm-debug.previous-')
+					);
+					assert.ok(previousRootName);
+					previousRuntimePath = path.join(staticDir, previousRootName, 'wasm-debug');
+					await writeFile(
+						path.join(previousRuntimePath, 'debug/wamr-debug.js'),
+						'foreign previous runtime before cleanup'
+					);
+				}
+			}),
+			/ownership changed/u
+		);
+
+		assert.ok(previousRuntimePath);
+		assert.equal(
+			await readFile(path.join(previousRuntimePath, 'debug/wamr-debug.js'), 'utf8'),
+			'foreign previous runtime before cleanup'
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('does not recursively delete a foreign transaction-root sibling', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-root-sibling-'));
+	let foreignSiblingPath;
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ');
+		const newFixture = await fixture(path.join(root, 'new'), '  ');
+		const staticDir = path.join(root, 'static');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: newFixture.source,
+				staticDir,
+				versionModulePath,
+				async testOnlyAfterReceiptPublish() {
+					const nextRootName = (await readdir(staticDir)).find((entry) =>
+						entry.startsWith('.wasm-debug.next-')
+					);
+					assert.ok(nextRootName);
+					foreignSiblingPath = path.join(staticDir, nextRootName, 'foreign-sibling');
+					await writeFile(foreignSiblingPath, 'foreign transaction sibling');
+				}
+			}),
+			/directory not empty|ENOTEMPTY/iu
+		);
+
+		assert.ok(foreignSiblingPath);
+		assert.equal(await readFile(foreignSiblingPath, 'utf8'), 'foreign transaction sibling');
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('serializes overlapping publishers so an aborted rollback cannot delete the successor', async () => {
 	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-concurrent-'));
 	let releaseFirst;
