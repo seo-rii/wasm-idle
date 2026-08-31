@@ -636,6 +636,64 @@ describe('LldbSandboxSession', () => {
 		expect(events.filter((event) => event.type === 'stop')).toHaveLength(2);
 	});
 
+	it('settles two superseded starts when retired disposal rejects', async () => {
+		const events: Array<{ type: string }> = [];
+		let rejectDisposal!: (error: Error) => void;
+		runtimeState.disposeGate = new Promise<void>((_resolve, reject) => {
+			rejectDisposal = reject;
+		});
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const firstCompletion = controller.start();
+		const firstOutcome = firstCompletion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(1));
+		runtimeState.sessions[0]!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+
+		const secondCompletion = controller.start();
+		const secondOutcome = secondCompletion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		const disconnectOutcome = controller.disconnect().then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		const thirdCompletion = controller.start();
+		const thirdOutcome = thirdCompletion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		const disposalError = new Error('retired disposal failed');
+
+		rejectDisposal(disposalError);
+
+		await expect(firstOutcome).resolves.toBe(disposalError);
+		await expect(secondOutcome).resolves.toBe(disposalError);
+		await expect(disconnectOutcome).resolves.toBe(disposalError);
+		await expect(thirdOutcome).resolves.toBe(disposalError);
+		expect(runtimeState.sessions).toHaveLength(1);
+		expect(runtimeState.sessions[0]!.disposeCount).toBe(1);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(2);
+	});
+
 	it('keeps disconnect completion ownership across a stop-callback relaunch', async () => {
 		let controller!: LldbSandboxSession;
 		let replacementCompletion: Promise<true> | undefined;
@@ -1155,6 +1213,56 @@ describe('LldbSandboxSession', () => {
 		await completion;
 	});
 
+	it('fails closed when a resolved-breakpoint projection throws', async () => {
+		const projectionError = new Error('resolved breakpoint projection failed');
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.c', content: 'int main(void) {}' }]
+			},
+			sourcePath: '/workspace/main.c',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => {
+				if (event.type === 'breakpoints' && event.breakpoints[0]?.requestedLine === 8) {
+					throw projectionError;
+				}
+			},
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		const completionOutcome = completion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		try {
+			await expect(controller.setBreakpoints([8])).rejects.toBe(projectionError);
+			await expect(
+				Promise.race([
+					completionOutcome,
+					new Promise<never>((_, reject) => {
+						setTimeout(
+							() => reject(new Error('projection failure did not settle completion')),
+							500
+						);
+					})
+				])
+			).resolves.toBe(projectionError);
+			expect(runtimeState.session!.disposeCount).toBe(1);
+		} finally {
+			if (runtimeState.session!.disposeCount === 0) await controller.disconnect();
+			await completionOutcome;
+		}
+	});
+
 	it('rejects Rust artifacts built with an incompatible LLVM version', async () => {
 		const controller = new LldbSandboxSession({
 			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
@@ -1459,6 +1567,54 @@ describe('LldbSandboxSession', () => {
 			runtimeState.session!.emit({ event: 'terminated' });
 			runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
 			await completion;
+		}
+	});
+
+	it('fails closed when a resume projection throws', async () => {
+		const projectionError = new Error('resume projection failed');
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.c', content: 'int main(void) {}' }]
+			},
+			sourcePath: '/workspace/main.c',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => {
+				if (event.type === 'resume') throw projectionError;
+			},
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		const completionOutcome = completion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		try {
+			await expect(controller.debugCommand('continue')).rejects.toBe(projectionError);
+			await expect(
+				Promise.race([
+					completionOutcome,
+					new Promise<never>((_, reject) => {
+						setTimeout(
+							() => reject(new Error('projection failure did not settle completion')),
+							500
+						);
+					})
+				])
+			).resolves.toBe(projectionError);
+			expect(runtimeState.session!.disposeCount).toBe(1);
+		} finally {
+			if (runtimeState.session!.disposeCount === 0) await controller.disconnect();
+			await completionOutcome;
 		}
 	});
 

@@ -467,7 +467,7 @@ export class LldbSandboxSession {
 			{ threadId: this.activeThreadId },
 			{ responseTimeoutMs: null }
 		);
-		this.options.onDebugEvent({ type: 'resume', command });
+		this.publishActiveDebugEvent({ type: 'resume', command });
 		void request.catch((error: unknown) => {
 			if (this.session !== session || this.stateVersion !== stateVersion) return;
 			this.fail(
@@ -1378,6 +1378,19 @@ export class LldbSandboxSession {
 		}
 	}
 
+	private publishActiveDebugEvent(event: DebugSessionEvent) {
+		try {
+			this.options.onDebugEvent(event);
+		} catch (error) {
+			const failure =
+				error instanceof Error
+					? error
+					: new Error('Unable to publish the LLDB debug session state.');
+			this.fail(failure);
+			throw failure;
+		}
+	}
+
 	private trackSessionDisposal(disposal: Promise<void>) {
 		this.sessionDisposal = disposal;
 		void disposal.then(
@@ -1402,7 +1415,7 @@ export class LldbSandboxSession {
 		sourcePath = this.options.sourcePath
 	) {
 		const sourceContentSha256 = this.sourceContentSha256ByPath.get(sourcePath);
-		this.options.onDebugEvent({
+		this.publishActiveDebugEvent({
 			type: 'breakpoints',
 			sourcePath,
 			...(sourceContentSha256 ? { sourceContentSha256 } : {}),
