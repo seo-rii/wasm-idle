@@ -410,6 +410,7 @@ export async function syncWasmDebugDist({
 		let installedRuntimeStats;
 		let installedVersionStats;
 		let nextRuntimeSnapshot;
+		let stagedVersionStats;
 		let preserveRecoveryFiles = false;
 		try {
 			await mkdir(next, { recursive: true });
@@ -425,6 +426,7 @@ export async function syncWasmDebugDist({
 				versionModulePath: nextVersionModule
 			});
 			nextRuntimeSnapshot = await snapshotInstalledRuntime(next);
+			stagedVersionStats = await lstat(nextVersionModule);
 			if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
 			if (baselineRuntimeStats) {
 				await mkdir(previousRoot, { recursive: true });
@@ -653,6 +655,10 @@ export async function syncWasmDebugDist({
 			// Rollback is phased so a partial filesystem failure cannot mix generations.
 			let detachedNext = false;
 			let detachedNextVersion = false;
+			let rollbackPhase;
+			let rollbackPhaseError;
+			const compensationErrors = [];
+			let canReattachNext = true;
 			try {
 				if (installedNext) {
 					await rename(current, next);
@@ -664,51 +670,36 @@ export async function syncWasmDebugDist({
 					detachedNextVersion = true;
 				}
 			} catch (detachError) {
-				const compensationErrors = [];
-				if (detachedNextVersion) {
-					try {
-						await rename(nextVersionModule, resolvedVersionModule);
-						detachedNextVersion = false;
-					} catch (compensationError) {
-						compensationErrors.push(compensationError);
-					}
-				}
-				if (detachedNext) {
-					try {
-						await rename(next, current);
-						detachedNext = false;
-					} catch (compensationError) {
-						compensationErrors.push(compensationError);
-					}
-				}
-				preserveRecoveryFiles = true;
-				throw new AggregateError(
-					[error, detachError, ...compensationErrors],
-					'wasm debug publication failed and the published pair could not be detached safely'
-				);
+				rollbackPhase = 'detach';
+				rollbackPhaseError = detachError;
 			}
 
 			let restoredPrevious = false;
 			let restoredPreviousVersion = false;
-			try {
-				if (movedPrevious) {
-					await rename(previous, current);
-					restoredPrevious = true;
-					await testOnlyAfterPreviousRuntimeRestore?.();
+			if (!rollbackPhaseError) {
+				try {
+					if (movedPrevious) {
+						await rename(previous, current);
+						restoredPrevious = true;
+						await testOnlyAfterPreviousRuntimeRestore?.();
+					}
+					if (movedPreviousVersion) {
+						await rename(previousVersionModule, resolvedVersionModule);
+						restoredPreviousVersion = true;
+					}
+				} catch (restoreError) {
+					rollbackPhase = 'restore';
+					rollbackPhaseError = restoreError;
 				}
-				if (movedPreviousVersion) {
-					await rename(previousVersionModule, resolvedVersionModule);
-					restoredPreviousVersion = true;
-				}
-			} catch (restoreError) {
-				const compensationErrors = [];
-				let restoredPreviousCompensated = true;
+			}
+
+			if (rollbackPhaseError && rollbackPhase === 'restore') {
 				if (restoredPreviousVersion) {
 					try {
 						await rename(resolvedVersionModule, previousVersionModule);
 						restoredPreviousVersion = false;
 					} catch (compensationError) {
-						restoredPreviousCompensated = false;
+						canReattachNext = false;
 						compensationErrors.push(compensationError);
 					}
 				}
@@ -717,50 +708,226 @@ export async function syncWasmDebugDist({
 						await rename(current, previous);
 						restoredPrevious = false;
 					} catch (compensationError) {
-						restoredPreviousCompensated = false;
+						canReattachNext = false;
 						compensationErrors.push(compensationError);
 					}
 				}
+			}
 
-				if (restoredPreviousCompensated) {
-					let reattachedNext = false;
-					let reattachedNextVersion = false;
-					try {
-						if (detachedNext) {
-							await rename(next, current);
-							detachedNext = false;
-							reattachedNext = true;
-						}
-						if (detachedNextVersion) {
-							await rename(nextVersionModule, resolvedVersionModule);
-							detachedNextVersion = false;
-							reattachedNextVersion = true;
-						}
-					} catch (compensationError) {
-						compensationErrors.push(compensationError);
-						if (reattachedNextVersion) {
-							try {
-								await rename(resolvedVersionModule, nextVersionModule);
-								detachedNextVersion = true;
-							} catch (reattachUndoError) {
-								compensationErrors.push(reattachUndoError);
+			if (rollbackPhaseError && canReattachNext) {
+				const compensationOwnershipErrors = [];
+				if (installedNext) {
+					const runtimePath = detachedNext ? next : current;
+					const runtimeStats = await lstat(runtimePath).catch(() => null);
+					if (
+						!installedRuntimeStats ||
+						!runtimeStats ||
+						runtimeStats.dev !== installedRuntimeStats.dev ||
+						runtimeStats.ino !== installedRuntimeStats.ino
+					) {
+						compensationOwnershipErrors.push(
+							new Error('wasm debug runtime compensation ownership changed')
+						);
+					} else {
+						try {
+							const runtimeSnapshot = await snapshotInstalledRuntime(runtimePath);
+							if (
+								!nextRuntimeSnapshot ||
+								runtimeSnapshot.digest !== nextRuntimeSnapshot.digest
+							) {
+								throw new Error('wasm debug runtime compensation snapshot changed');
 							}
+						} catch (ownershipError) {
+							compensationOwnershipErrors.push(
+								new Error('wasm debug runtime compensation ownership changed', {
+									cause: ownershipError
+								})
+							);
 						}
-						if (reattachedNext) {
-							try {
-								await rename(current, next);
-								detachedNext = true;
-							} catch (reattachUndoError) {
-								compensationErrors.push(reattachUndoError);
-							}
-						}
+					}
+					const runtimeDestinationStats = await lstat(
+						detachedNext ? current : next
+					).catch(() => null);
+					if (runtimeDestinationStats) {
+						compensationOwnershipErrors.push(
+							new Error('wasm debug runtime compensation destination changed')
+						);
 					}
 				}
 
+				if (installedNextVersion) {
+					const receiptPath = detachedNextVersion
+						? nextVersionModule
+						: resolvedVersionModule;
+					const receiptStats = await lstat(receiptPath).catch(() => null);
+					const receipt = await readFile(receiptPath, 'utf8').catch(() => null);
+					if (
+						!installedVersionStats ||
+						!receiptStats ||
+						receiptStats.dev !== installedVersionStats.dev ||
+						receiptStats.ino !== installedVersionStats.ino ||
+						receipt !== expectedVersionModule
+					) {
+						compensationOwnershipErrors.push(
+							new Error('wasm debug receipt compensation ownership changed')
+						);
+					}
+					const receiptDestinationStats = await lstat(
+						detachedNextVersion ? resolvedVersionModule : nextVersionModule
+					).catch(() => null);
+					if (receiptDestinationStats) {
+						compensationOwnershipErrors.push(
+							new Error('wasm debug receipt compensation destination changed')
+						);
+					}
+				} else if (stagedVersionStats) {
+					const receiptStats = await lstat(nextVersionModule).catch(() => null);
+					const receipt = await readFile(nextVersionModule, 'utf8').catch(() => null);
+					const currentReceiptStats = await lstat(resolvedVersionModule).catch(
+						() => null
+					);
+					if (
+						!receiptStats ||
+						receiptStats.dev !== stagedVersionStats.dev ||
+						receiptStats.ino !== stagedVersionStats.ino ||
+						receipt !== expectedVersionModule ||
+						currentReceiptStats
+					) {
+						compensationOwnershipErrors.push(
+							new Error('wasm debug staged receipt compensation ownership changed')
+						);
+					}
+				}
+
+				const compensationPreviousStats = await lstat(previous).catch(() => null);
+				if (movedPrevious) {
+					if (
+						!previousRuntimeStats ||
+						!compensationPreviousStats ||
+						compensationPreviousStats.dev !== previousRuntimeStats.dev ||
+						compensationPreviousStats.ino !== previousRuntimeStats.ino
+					) {
+						compensationOwnershipErrors.push(
+							new Error('wasm debug previous runtime compensation ownership changed')
+						);
+					} else {
+						try {
+							const previousSnapshot = await snapshotInstalledRuntime(previous);
+							if (
+								!baselineRuntimeSnapshot ||
+								previousSnapshot.digest !== baselineRuntimeSnapshot.digest
+							) {
+								throw new Error(
+									'wasm debug previous runtime compensation snapshot changed'
+								);
+							}
+						} catch (ownershipError) {
+							compensationOwnershipErrors.push(
+								new Error(
+									'wasm debug previous runtime compensation ownership changed',
+									{
+										cause: ownershipError
+									}
+								)
+							);
+						}
+					}
+				} else if (compensationPreviousStats) {
+					compensationOwnershipErrors.push(
+						new Error('wasm debug unexpected previous runtime during compensation')
+					);
+				}
+
+				const compensationPreviousVersionStats = await lstat(previousVersionModule).catch(
+					() => null
+				);
+				if (movedPreviousVersion) {
+					const previousReceipt = await readFile(previousVersionModule, 'utf8').catch(
+						() => null
+					);
+					if (
+						!previousVersionStats ||
+						!compensationPreviousVersionStats ||
+						compensationPreviousVersionStats.dev !== previousVersionStats.dev ||
+						compensationPreviousVersionStats.ino !== previousVersionStats.ino ||
+						previousReceipt !== baselineVersionModule
+					) {
+						compensationOwnershipErrors.push(
+							new Error('wasm debug previous receipt compensation ownership changed')
+						);
+					}
+				} else if (compensationPreviousVersionStats) {
+					compensationOwnershipErrors.push(
+						new Error('wasm debug unexpected previous receipt during compensation')
+					);
+				}
+
+				if (compensationOwnershipErrors.length > 0) {
+					preserveRecoveryFiles = true;
+					throw new AggregateError(
+						[error, rollbackPhaseError, ...compensationOwnershipErrors],
+						'wasm debug compensation ownership changed; recovery files were preserved'
+					);
+				}
+
+				let reattachedNext = false;
+				let reattachedNextVersion = false;
+				try {
+					if (detachedNext) {
+						await rename(next, current);
+						detachedNext = false;
+						reattachedNext = true;
+					}
+					if (detachedNextVersion) {
+						await rename(nextVersionModule, resolvedVersionModule);
+						detachedNextVersion = false;
+						reattachedNextVersion = true;
+					}
+					if (installedNext) {
+						const reattachedSnapshot = await snapshotInstalledRuntime(current);
+						if (
+							!nextRuntimeSnapshot ||
+							reattachedSnapshot.digest !== nextRuntimeSnapshot.digest
+						) {
+							throw new Error('wasm debug reattached runtime snapshot changed');
+						}
+					}
+					if (installedNextVersion) {
+						await verifySyncedWasmDebugDist({
+							staticDir: resolvedStatic,
+							versionModulePath: resolvedVersionModule
+						});
+					}
+				} catch (compensationError) {
+					compensationErrors.push(compensationError);
+					if (reattachedNextVersion) {
+						try {
+							await rename(resolvedVersionModule, nextVersionModule);
+							detachedNextVersion = true;
+						} catch (reattachUndoError) {
+							compensationErrors.push(reattachUndoError);
+						}
+					}
+					if (reattachedNext) {
+						try {
+							await rename(current, next);
+							detachedNext = true;
+						} catch (reattachUndoError) {
+							compensationErrors.push(reattachUndoError);
+						}
+					}
+				}
+			}
+
+			if (rollbackPhaseError) {
 				preserveRecoveryFiles = true;
+				const message =
+					rollbackPhase === 'detach'
+						? 'wasm debug publication failed and the published pair could not be detached safely'
+						: 'wasm debug publication failed and the previous pair could not be restored safely';
 				throw new AggregateError(
-					[error, restoreError, ...compensationErrors],
-					'wasm debug publication failed and the previous pair could not be restored safely'
+					[error, rollbackPhaseError, ...compensationErrors],
+					message
 				);
 			}
 			throw error;

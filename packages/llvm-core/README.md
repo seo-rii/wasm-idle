@@ -377,12 +377,13 @@ publishers are serialized per destination, while owner-checked filesystem locks 
 processes fail closed instead of modifying the same release concurrently. Repeated page builds may
 replace either the raw or already-compressed destination. A bounded streaming snapshot binds the
 exact staged and installed trees, and rollback restores the same storage representation if
-replacement fails.
-Immediately before `gh-pages` publication, the deployment verifier authenticates the logical
-manifest and every asset again; it accepts either raw bytes or the deterministic gzip representation
-recorded by `compressed-runtime-assets.v1.json`, and refuses
-missing, ambiguous, stale, oversized, or mismatched output. Browser behavior remains lazy because
-this is a build-time static-tree preparation step, not an application-start preload.
+replacement fails. Failed rollback phases revalidate both recovery generations before any
+compensating reattachment and preserve them in place on an ownership mismatch. Immediately before
+`gh-pages` publication, the deployment verifier authenticates the logical manifest and every asset
+again; it accepts either raw bytes or the deterministic gzip representation recorded by
+`compressed-runtime-assets.v1.json`, and refuses missing, ambiguous, stale, oversized, or mismatched
+output. Browser behavior remains lazy because this is a build-time static-tree preparation step, not
+an application-start preload.
 
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
 Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,

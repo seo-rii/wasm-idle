@@ -525,6 +525,196 @@ test('restores the published pair when rollback cannot finish restoring the prev
 	}
 });
 
+test('does not reattach a runtime changed after rollback detached it', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-detached-runtime-owner-'));
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ');
+		const newFixture = await fixture(path.join(root, 'new'), '  ');
+		const staticDir = path.join(root, 'static');
+		const current = path.join(staticDir, 'wasm-debug');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: newFixture.source,
+				staticDir,
+				versionModulePath,
+				testOnlyAfterReceiptPublish() {
+					throw new Error('begin detached runtime rollback');
+				},
+				async testOnlyAfterRollbackRuntimeDetach() {
+					const nextRootName = (await readdir(staticDir)).find((entry) =>
+						entry.startsWith('.wasm-debug.next-')
+					);
+					assert.ok(nextRootName);
+					await writeFile(
+						path.join(staticDir, nextRootName, 'wasm-debug/debug/wamr-debug.js'),
+						'foreign detached runtime'
+					);
+					throw new Error('injected detached runtime ownership change');
+				}
+			}),
+			/compensation ownership changed/u
+		);
+
+		assert.equal(
+			await readFile(path.join(current, 'runtime-manifest.v2.json'), 'utf8').catch(
+				(error) => {
+					if (error?.code === 'ENOENT') return null;
+					throw error;
+				}
+			),
+			null
+		);
+		assert.equal(
+			await readFile(versionModulePath, 'utf8'),
+			expectedVersionModule(newFixture.manifestBytes)
+		);
+		const nextRootName = (await readdir(staticDir)).find((entry) =>
+			entry.startsWith('.wasm-debug.next-')
+		);
+		assert.ok(nextRootName);
+		assert.equal(
+			await readFile(
+				path.join(staticDir, nextRootName, 'wasm-debug/debug/wamr-debug.js'),
+				'utf8'
+			),
+			'foreign detached runtime'
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('does not combine a detached runtime with a changed current receipt', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-detached-receipt-owner-'));
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ');
+		const newFixture = await fixture(path.join(root, 'new'), '  ');
+		const staticDir = path.join(root, 'static');
+		const current = path.join(staticDir, 'wasm-debug');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: newFixture.source,
+				staticDir,
+				versionModulePath,
+				testOnlyAfterReceiptPublish() {
+					throw new Error('begin detached receipt rollback');
+				},
+				async testOnlyAfterRollbackRuntimeDetach() {
+					await writeFile(versionModulePath, 'foreign current receipt');
+					throw new Error('injected current receipt ownership change');
+				}
+			}),
+			/compensation ownership changed/u
+		);
+
+		assert.equal(
+			await readFile(path.join(current, 'runtime-manifest.v2.json'), 'utf8').catch(
+				(error) => {
+					if (error?.code === 'ENOENT') return null;
+					throw error;
+				}
+			),
+			null
+		);
+		assert.equal(await readFile(versionModulePath, 'utf8'), 'foreign current receipt');
+		const nextRootName = (await readdir(staticDir)).find((entry) =>
+			entry.startsWith('.wasm-debug.next-')
+		);
+		assert.ok(nextRootName);
+		assert.deepEqual(
+			await readFile(
+				path.join(staticDir, nextRootName, 'wasm-debug/runtime-manifest.v2.json')
+			),
+			newFixture.manifestBytes
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('does not reattach a detached runtime changed during previous-pair restore', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-restore-next-owner-'));
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ');
+		const newFixture = await fixture(path.join(root, 'new'), '  ');
+		const staticDir = path.join(root, 'static');
+		const current = path.join(staticDir, 'wasm-debug');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: newFixture.source,
+				staticDir,
+				versionModulePath,
+				testOnlyAfterReceiptPublish() {
+					throw new Error('begin previous-pair restore rollback');
+				},
+				async testOnlyAfterPreviousRuntimeRestore() {
+					const nextRootName = (await readdir(staticDir)).find((entry) =>
+						entry.startsWith('.wasm-debug.next-')
+					);
+					assert.ok(nextRootName);
+					await writeFile(
+						path.join(staticDir, nextRootName, 'wasm-debug/debug/wamr-debug.js'),
+						'foreign restore runtime'
+					);
+					throw new Error('injected restore runtime ownership change');
+				}
+			}),
+			/compensation ownership changed/u
+		);
+
+		assert.equal(
+			await readFile(path.join(current, 'runtime-manifest.v2.json'), 'utf8').catch(
+				(error) => {
+					if (error?.code === 'ENOENT') return null;
+					throw error;
+				}
+			),
+			null
+		);
+		assert.equal(
+			await readFile(versionModulePath, 'utf8').catch((error) => {
+				if (error?.code === 'ENOENT') return null;
+				throw error;
+			}),
+			null
+		);
+		const nextRootName = (await readdir(staticDir)).find((entry) =>
+			entry.startsWith('.wasm-debug.next-')
+		);
+		assert.ok(nextRootName);
+		assert.equal(
+			await readFile(
+				path.join(staticDir, nextRootName, 'wasm-debug/debug/wamr-debug.js'),
+				'utf8'
+			),
+			'foreign restore runtime'
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('serializes overlapping publishers so an aborted rollback cannot delete the successor', async () => {
 	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-concurrent-'));
 	let releaseFirst;
