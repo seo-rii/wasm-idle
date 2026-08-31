@@ -1,5 +1,17 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { cp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import {
+	cp,
+	link,
+	lstat,
+	mkdir,
+	open,
+	readFile,
+	rename,
+	rm,
+	stat,
+	unlink,
+	writeFile
+} from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,6 +23,7 @@ export const DEFAULT_WASM_DEBUG_VERSION_MODULE_PATH = path.join(
 	'src/lib/playground/wasmDebugVersion.ts'
 );
 const SHA256 = /^[0-9a-f]{64}$/u;
+const publicationQueues = new Map();
 
 function sha256(bytes) {
 	return createHash('sha256').update(bytes).digest('hex');
@@ -114,7 +127,13 @@ export async function syncWasmDebugDist({
 	staticDir = DEFAULT_STATIC_DIR,
 	versionModulePath = DEFAULT_WASM_DEBUG_VERSION_MODULE_PATH,
 	signal,
-	testOnlyAfterRuntimePublish
+	testOnlyAfterLockCandidateOpen,
+	testOnlyAfterPreviousRuntimeMove,
+	testOnlyAfterPreviousReceiptMove,
+	testOnlyAfterRuntimePublish,
+	testOnlyAfterReceiptPublish,
+	testOnlyAfterRollbackRuntimeDetach,
+	testOnlyAfterPreviousRuntimeRestore
 } = {}) {
 	if (!sourceDir) {
 		throw new Error('wasm debug sync requires an explicit source directory.');
@@ -124,113 +143,585 @@ export async function syncWasmDebugDist({
 	const resolvedSource = path.resolve(sourceDir);
 	const resolvedStatic = path.resolve(staticDir);
 	const resolvedVersionModule = path.resolve(versionModulePath);
-	const { manifestPath, manifestBytes, assets } = await validateSourceBundle(resolvedSource);
-	if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
 	await mkdir(resolvedStatic, { recursive: true });
 	await mkdir(path.dirname(resolvedVersionModule), { recursive: true });
 
-	const suffix = `${process.pid}-${randomUUID()}`;
-	const nextRoot = path.join(resolvedStatic, `.wasm-debug.next-${suffix}`);
-	const previousRoot = path.join(resolvedStatic, `.wasm-debug.previous-${suffix}`);
-	const next = path.join(nextRoot, 'wasm-debug');
-	const current = path.join(resolvedStatic, 'wasm-debug');
-	const previous = path.join(previousRoot, 'wasm-debug');
-	const versionName = path.basename(resolvedVersionModule);
-	const versionDir = path.dirname(resolvedVersionModule);
-	const nextVersionModule = path.join(versionDir, `.${versionName}.next-${suffix}`);
-	const previousVersionModule = path.join(versionDir, `.${versionName}.previous-${suffix}`);
-	let movedPrevious = false;
-	let movedPreviousVersion = false;
-	let installedNext = false;
-	let installedNextVersion = false;
-	let preserveRecoveryFiles = false;
+	const lockPaths = [
+		path.join(resolvedStatic, '.wasm-debug.sync.lock'),
+		path.join(
+			path.dirname(resolvedVersionModule),
+			`.${path.basename(resolvedVersionModule)}.sync.lock`
+		)
+	].sort((left, right) => left.localeCompare(right, 'en'));
+	let releaseQueue;
+	const queueGate = new Promise((resolve) => {
+		releaseQueue = resolve;
+	});
+	// Reserve every overlapping target synchronously before awaiting predecessors.
+	const queueRecords = [];
+	for (const lockPath of [...new Set(lockPaths)]) {
+		const predecessor = publicationQueues.get(lockPath) ?? Promise.resolve();
+		const ready = predecessor.catch(() => undefined);
+		const tail = ready.then(() => queueGate);
+		publicationQueues.set(lockPath, tail);
+		queueRecords.push({ lockPath, ready, tail });
+	}
+	let queueAbortListener;
 	try {
-		await mkdir(next, { recursive: true });
-		await cp(manifestPath, path.join(next, 'runtime-manifest.v2.json'));
-		for (const asset of assets) {
-			const destination = resolveContained(next, asset.path);
-			await mkdir(path.dirname(destination), { recursive: true });
-			await cp(resolveContained(resolvedSource, asset.path), destination);
+		const ready = Promise.all(queueRecords.map((record) => record.ready));
+		if (!signal) {
+			await ready;
+		} else {
+			await Promise.race([
+				ready,
+				new Promise((resolve, reject) => {
+					queueAbortListener = () => reject(signal.reason ?? fallbackAbortError);
+					if (signal.aborted) queueAbortListener();
+					else signal.addEventListener('abort', queueAbortListener, { once: true });
+				})
+			]);
 		}
-		await writeFile(nextVersionModule, renderVersionModule(manifestBytes));
-		await verifySyncedWasmDebugDist({
-			staticDir: nextRoot,
-			versionModulePath: nextVersionModule
-		});
-		if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
-		if (await stat(current).catch(() => null)) {
-			await mkdir(previousRoot, { recursive: true });
-			await rename(current, previous);
-			movedPrevious = true;
-			if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
-		}
-		const versionMetadata = await stat(resolvedVersionModule).catch(() => null);
-		if (versionMetadata) {
-			if (!versionMetadata.isFile()) {
-				throw new Error('wasm debug version module path must be a file');
-			}
-			await rename(resolvedVersionModule, previousVersionModule);
-			movedPreviousVersion = true;
-			if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
-		}
-		await rename(next, current);
-		installedNext = true;
-		if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
-		await testOnlyAfterRuntimePublish?.();
-		if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
-		await rename(nextVersionModule, resolvedVersionModule);
-		installedNextVersion = true;
-		if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
-		await verifySyncedWasmDebugDist({
-			staticDir: resolvedStatic,
-			versionModulePath: resolvedVersionModule
-		});
-		if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
 	} catch (error) {
-		const rollbackErrors = [];
-		for (const operation of [
-			async () => {
-				if (installedNextVersion) {
-					await rm(resolvedVersionModule, { force: true });
-				}
-			},
-			async () => {
-				if (installedNext) {
-					await rm(current, { recursive: true, force: true });
-				}
-			},
-			async () => {
-				if (movedPrevious) {
-					await rename(previous, current);
-				}
-			},
-			async () => {
-				if (movedPreviousVersion) {
-					await rename(previousVersionModule, resolvedVersionModule);
-				}
-			}
-		]) {
-			try {
-				await operation();
-			} catch (rollbackError) {
-				rollbackErrors.push(rollbackError);
-			}
-		}
-		if (rollbackErrors.length > 0) {
-			preserveRecoveryFiles = true;
-			throw new AggregateError(
-				[error, ...rollbackErrors],
-				'wasm debug publication failed and could not be rolled back completely'
-			);
+		releaseQueue();
+		for (const { lockPath, tail } of queueRecords) {
+			void tail.then(() => {
+				if (publicationQueues.get(lockPath) === tail) publicationQueues.delete(lockPath);
+			});
 		}
 		throw error;
 	} finally {
-		await rm(nextRoot, { recursive: true, force: true });
-		await rm(nextVersionModule, { force: true });
-		if (!preserveRecoveryFiles) {
-			await rm(previousRoot, { recursive: true, force: true });
-			await rm(previousVersionModule, { force: true });
+		if (queueAbortListener) signal?.removeEventListener('abort', queueAbortListener);
+	}
+
+	const locks = [];
+	let publicationError;
+	try {
+		if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
+		for (const lockPath of [...new Set(lockPaths)]) {
+			// Expose only a fully initialized inode at the canonical cross-process lock path.
+			const candidatePath = `${lockPath}.candidate-${process.pid}-${randomUUID()}`;
+			let handle;
+			try {
+				handle = await open(candidatePath, 'wx', 0o600);
+			} catch (error) {
+				if (error && typeof error === 'object' && error.code === 'EEXIST') {
+					throw new Error(
+						`wasm debug publication lock candidate already exists: ${candidatePath}`,
+						{ cause: error }
+					);
+				}
+				throw error;
+			}
+			const token = randomUUID();
+			const lock = {
+				candidatePath,
+				canonicalLinked: false,
+				handle,
+				initialized: false,
+				lockPath,
+				stats: null,
+				token
+			};
+			locks.push(lock);
+			await testOnlyAfterLockCandidateOpen?.({ candidatePath, lockPath });
+			await handle.writeFile(
+				`${JSON.stringify({ format: 'wasm-debug-sync-lock-v1', pid: process.pid, token })}\n`,
+				'utf8'
+			);
+			await handle.sync();
+			lock.stats = await handle.stat();
+			lock.initialized = true;
+			try {
+				await link(candidatePath, lockPath);
+				lock.canonicalLinked = true;
+			} catch (error) {
+				if (error && typeof error === 'object' && error.code === 'EEXIST') {
+					throw new Error(
+						`wasm debug publication lock already exists; verify no publisher is active before removing it: ${lockPath}`,
+						{ cause: error }
+					);
+				}
+				throw error;
+			}
+			const canonicalStats = await lstat(lockPath);
+			if (canonicalStats.dev !== lock.stats.dev || canonicalStats.ino !== lock.stats.ino) {
+				throw new Error('wasm debug publication lock ownership changed during acquisition');
+			}
+			await unlink(candidatePath);
 		}
+
+		const { manifestPath, manifestBytes, assets } = await validateSourceBundle(resolvedSource);
+		if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
+		const expectedVersionModule = renderVersionModule(manifestBytes);
+		const suffix = `${process.pid}-${randomUUID()}`;
+		const nextRoot = path.join(resolvedStatic, `.wasm-debug.next-${suffix}`);
+		const previousRoot = path.join(resolvedStatic, `.wasm-debug.previous-${suffix}`);
+		const next = path.join(nextRoot, 'wasm-debug');
+		const current = path.join(resolvedStatic, 'wasm-debug');
+		const previous = path.join(previousRoot, 'wasm-debug');
+		const versionName = path.basename(resolvedVersionModule);
+		const versionDir = path.dirname(resolvedVersionModule);
+		const nextVersionModule = path.join(versionDir, `.${versionName}.next-${suffix}`);
+		const previousVersionModule = path.join(versionDir, `.${versionName}.previous-${suffix}`);
+		const baselineRuntimeStats = await lstat(current).catch(() => null);
+		let baselineRuntimeManifestBytes;
+		if (baselineRuntimeStats) {
+			if (!baselineRuntimeStats.isDirectory() || baselineRuntimeStats.isSymbolicLink()) {
+				throw new Error('installed wasm debug runtime must be a real directory');
+			}
+			baselineRuntimeManifestBytes = (await validateSourceBundle(current)).manifestBytes;
+		}
+		const baselineVersionStats = await lstat(resolvedVersionModule).catch(() => null);
+		let baselineVersionModule;
+		if (baselineVersionStats) {
+			if (!baselineVersionStats.isFile() || baselineVersionStats.isSymbolicLink()) {
+				throw new Error('wasm debug version module path must be a regular file');
+			}
+			baselineVersionModule = await readFile(resolvedVersionModule, 'utf8');
+		}
+		let movedPrevious = false;
+		let movedPreviousVersion = false;
+		let installedNext = false;
+		let installedNextVersion = false;
+		let previousRuntimeStats;
+		let previousVersionStats;
+		let installedRuntimeStats;
+		let installedVersionStats;
+		let preserveRecoveryFiles = false;
+		try {
+			await mkdir(next, { recursive: true });
+			await cp(manifestPath, path.join(next, 'runtime-manifest.v2.json'));
+			for (const asset of assets) {
+				const destination = resolveContained(next, asset.path);
+				await mkdir(path.dirname(destination), { recursive: true });
+				await cp(resolveContained(resolvedSource, asset.path), destination);
+			}
+			await writeFile(nextVersionModule, expectedVersionModule);
+			await verifySyncedWasmDebugDist({
+				staticDir: nextRoot,
+				versionModulePath: nextVersionModule
+			});
+			if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
+			if (baselineRuntimeStats) {
+				await mkdir(previousRoot, { recursive: true });
+				await rename(current, previous);
+				movedPrevious = true;
+				previousRuntimeStats = await lstat(previous);
+				await testOnlyAfterPreviousRuntimeMove?.();
+				if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
+			}
+			if (baselineVersionStats) {
+				await rename(resolvedVersionModule, previousVersionModule);
+				movedPreviousVersion = true;
+				previousVersionStats = await lstat(previousVersionModule);
+				await testOnlyAfterPreviousReceiptMove?.();
+				if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
+			}
+			await rename(next, current);
+			installedNext = true;
+			installedRuntimeStats = await lstat(current);
+			if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
+			await testOnlyAfterRuntimePublish?.();
+			if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
+			await rename(nextVersionModule, resolvedVersionModule);
+			installedNextVersion = true;
+			installedVersionStats = await lstat(resolvedVersionModule);
+			if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
+			await testOnlyAfterReceiptPublish?.();
+			if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
+			await verifySyncedWasmDebugDist({
+				staticDir: resolvedStatic,
+				versionModulePath: resolvedVersionModule
+			});
+			if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
+		} catch (error) {
+			// Validate the complete four-path phase before performing any destructive rollback.
+			const ownershipErrors = [];
+			const currentRuntimeStats = await lstat(current).catch(() => null);
+			if (installedNext) {
+				if (
+					!installedRuntimeStats ||
+					!currentRuntimeStats ||
+					currentRuntimeStats.dev !== installedRuntimeStats.dev ||
+					currentRuntimeStats.ino !== installedRuntimeStats.ino
+				) {
+					ownershipErrors.push(
+						new Error(
+							'wasm debug runtime ownership changed before publication rollback'
+						)
+					);
+				} else {
+					try {
+						const currentBundle = await validateSourceBundle(current);
+						if (!currentBundle.manifestBytes.equals(manifestBytes)) {
+							throw new Error('wasm debug runtime manifest changed');
+						}
+					} catch (ownershipError) {
+						ownershipErrors.push(
+							new Error(
+								'wasm debug runtime ownership changed before publication rollback',
+								{
+									cause: ownershipError
+								}
+							)
+						);
+					}
+				}
+			} else if (movedPrevious) {
+				if (currentRuntimeStats) {
+					ownershipErrors.push(
+						new Error(
+							'wasm debug runtime destination changed before publication rollback'
+						)
+					);
+				}
+			} else if (!baselineRuntimeStats) {
+				if (currentRuntimeStats) {
+					ownershipErrors.push(
+						new Error('wasm debug runtime appeared before publication rollback')
+					);
+				}
+			} else if (
+				!currentRuntimeStats ||
+				currentRuntimeStats.dev !== baselineRuntimeStats.dev ||
+				currentRuntimeStats.ino !== baselineRuntimeStats.ino
+			) {
+				ownershipErrors.push(
+					new Error('wasm debug baseline runtime ownership changed before rollback')
+				);
+			} else {
+				try {
+					const currentBundle = await validateSourceBundle(current);
+					if (!currentBundle.manifestBytes.equals(baselineRuntimeManifestBytes)) {
+						throw new Error('wasm debug baseline runtime manifest changed');
+					}
+				} catch (ownershipError) {
+					ownershipErrors.push(
+						new Error('wasm debug baseline runtime content changed before rollback', {
+							cause: ownershipError
+						})
+					);
+				}
+			}
+
+			const currentVersionStats = await lstat(resolvedVersionModule).catch(() => null);
+			if (installedNextVersion) {
+				const currentReceipt = await readFile(resolvedVersionModule, 'utf8').catch(
+					() => null
+				);
+				if (
+					!installedVersionStats ||
+					!currentVersionStats ||
+					currentVersionStats.dev !== installedVersionStats.dev ||
+					currentVersionStats.ino !== installedVersionStats.ino ||
+					currentReceipt !== expectedVersionModule
+				) {
+					ownershipErrors.push(
+						new Error(
+							'wasm debug receipt ownership changed before publication rollback'
+						)
+					);
+				}
+			} else if (movedPreviousVersion || installedNext) {
+				if (currentVersionStats) {
+					ownershipErrors.push(
+						new Error(
+							'wasm debug receipt destination changed before publication rollback'
+						)
+					);
+				}
+			} else if (!baselineVersionStats) {
+				if (currentVersionStats) {
+					ownershipErrors.push(
+						new Error('wasm debug receipt appeared before publication rollback')
+					);
+				}
+			} else {
+				const currentReceipt = await readFile(resolvedVersionModule, 'utf8').catch(
+					() => null
+				);
+				if (
+					!currentVersionStats ||
+					currentVersionStats.dev !== baselineVersionStats.dev ||
+					currentVersionStats.ino !== baselineVersionStats.ino ||
+					currentReceipt !== baselineVersionModule
+				) {
+					ownershipErrors.push(
+						new Error('wasm debug baseline receipt changed before publication rollback')
+					);
+				}
+			}
+
+			const currentPreviousStats = await lstat(previous).catch(() => null);
+			if (movedPrevious) {
+				if (
+					!baselineRuntimeStats ||
+					!previousRuntimeStats ||
+					!currentPreviousStats ||
+					previousRuntimeStats.dev !== baselineRuntimeStats.dev ||
+					previousRuntimeStats.ino !== baselineRuntimeStats.ino ||
+					currentPreviousStats.dev !== previousRuntimeStats.dev ||
+					currentPreviousStats.ino !== previousRuntimeStats.ino
+				) {
+					ownershipErrors.push(
+						new Error('wasm debug previous runtime ownership changed before rollback')
+					);
+				} else {
+					try {
+						const previousBundle = await validateSourceBundle(previous);
+						if (!previousBundle.manifestBytes.equals(baselineRuntimeManifestBytes)) {
+							throw new Error('wasm debug previous runtime manifest changed');
+						}
+					} catch (ownershipError) {
+						ownershipErrors.push(
+							new Error(
+								'wasm debug previous runtime content changed before rollback',
+								{
+									cause: ownershipError
+								}
+							)
+						);
+					}
+				}
+			} else if (currentPreviousStats) {
+				ownershipErrors.push(
+					new Error('wasm debug unexpected previous runtime appeared before rollback')
+				);
+			}
+
+			const currentPreviousVersionStats = await lstat(previousVersionModule).catch(
+				() => null
+			);
+			if (movedPreviousVersion) {
+				const previousReceipt = await readFile(previousVersionModule, 'utf8').catch(
+					() => null
+				);
+				if (
+					!baselineVersionStats ||
+					!previousVersionStats ||
+					!currentPreviousVersionStats ||
+					previousVersionStats.dev !== baselineVersionStats.dev ||
+					previousVersionStats.ino !== baselineVersionStats.ino ||
+					currentPreviousVersionStats.dev !== previousVersionStats.dev ||
+					currentPreviousVersionStats.ino !== previousVersionStats.ino ||
+					previousReceipt !== baselineVersionModule
+				) {
+					ownershipErrors.push(
+						new Error('wasm debug previous receipt ownership changed before rollback')
+					);
+				}
+			} else if (currentPreviousVersionStats) {
+				ownershipErrors.push(
+					new Error('wasm debug unexpected previous receipt appeared before rollback')
+				);
+			}
+			if (ownershipErrors.length > 0) {
+				preserveRecoveryFiles = true;
+				throw new AggregateError(
+					[error, ...ownershipErrors],
+					'wasm debug publication ownership changed; rollback was not attempted'
+				);
+			}
+
+			// Rollback is phased so a partial filesystem failure cannot mix generations.
+			let detachedNext = false;
+			let detachedNextVersion = false;
+			try {
+				if (installedNext) {
+					await rename(current, next);
+					detachedNext = true;
+					await testOnlyAfterRollbackRuntimeDetach?.();
+				}
+				if (installedNextVersion) {
+					await rename(resolvedVersionModule, nextVersionModule);
+					detachedNextVersion = true;
+				}
+			} catch (detachError) {
+				const compensationErrors = [];
+				if (detachedNextVersion) {
+					try {
+						await rename(nextVersionModule, resolvedVersionModule);
+						detachedNextVersion = false;
+					} catch (compensationError) {
+						compensationErrors.push(compensationError);
+					}
+				}
+				if (detachedNext) {
+					try {
+						await rename(next, current);
+						detachedNext = false;
+					} catch (compensationError) {
+						compensationErrors.push(compensationError);
+					}
+				}
+				preserveRecoveryFiles = true;
+				throw new AggregateError(
+					[error, detachError, ...compensationErrors],
+					'wasm debug publication failed and the published pair could not be detached safely'
+				);
+			}
+
+			let restoredPrevious = false;
+			let restoredPreviousVersion = false;
+			try {
+				if (movedPrevious) {
+					await rename(previous, current);
+					restoredPrevious = true;
+					await testOnlyAfterPreviousRuntimeRestore?.();
+				}
+				if (movedPreviousVersion) {
+					await rename(previousVersionModule, resolvedVersionModule);
+					restoredPreviousVersion = true;
+				}
+			} catch (restoreError) {
+				const compensationErrors = [];
+				let restoredPreviousCompensated = true;
+				if (restoredPreviousVersion) {
+					try {
+						await rename(resolvedVersionModule, previousVersionModule);
+						restoredPreviousVersion = false;
+					} catch (compensationError) {
+						restoredPreviousCompensated = false;
+						compensationErrors.push(compensationError);
+					}
+				}
+				if (restoredPrevious) {
+					try {
+						await rename(current, previous);
+						restoredPrevious = false;
+					} catch (compensationError) {
+						restoredPreviousCompensated = false;
+						compensationErrors.push(compensationError);
+					}
+				}
+
+				if (restoredPreviousCompensated) {
+					let reattachedNext = false;
+					let reattachedNextVersion = false;
+					try {
+						if (detachedNext) {
+							await rename(next, current);
+							detachedNext = false;
+							reattachedNext = true;
+						}
+						if (detachedNextVersion) {
+							await rename(nextVersionModule, resolvedVersionModule);
+							detachedNextVersion = false;
+							reattachedNextVersion = true;
+						}
+					} catch (compensationError) {
+						compensationErrors.push(compensationError);
+						if (reattachedNextVersion) {
+							try {
+								await rename(resolvedVersionModule, nextVersionModule);
+								detachedNextVersion = true;
+							} catch (reattachUndoError) {
+								compensationErrors.push(reattachUndoError);
+							}
+						}
+						if (reattachedNext) {
+							try {
+								await rename(current, next);
+								detachedNext = true;
+							} catch (reattachUndoError) {
+								compensationErrors.push(reattachUndoError);
+							}
+						}
+					}
+				}
+
+				preserveRecoveryFiles = true;
+				throw new AggregateError(
+					[error, restoreError, ...compensationErrors],
+					'wasm debug publication failed and the previous pair could not be restored safely'
+				);
+			}
+			throw error;
+		} finally {
+			if (!preserveRecoveryFiles) {
+				await rm(nextRoot, { recursive: true, force: true });
+				await rm(nextVersionModule, { force: true });
+				await rm(previousRoot, { recursive: true, force: true });
+				await rm(previousVersionModule, { force: true });
+			}
+		}
+	} catch (error) {
+		publicationError = error;
+	}
+
+	const releaseErrors = [];
+	for (const lock of [...locks].reverse()) {
+		let closeError;
+		try {
+			const ownedStats = lock.stats ?? (await lock.handle.stat().catch(() => null));
+			if (lock.canonicalLinked) {
+				const current = await lstat(lock.lockPath).catch(() => null);
+				if (
+					!ownedStats ||
+					!current ||
+					current.dev !== ownedStats.dev ||
+					current.ino !== ownedStats.ino
+				) {
+					throw new Error('wasm debug publication lock ownership changed');
+				}
+				const value = JSON.parse(await readFile(lock.lockPath, 'utf8'));
+				if (
+					!lock.initialized ||
+					value?.format !== 'wasm-debug-sync-lock-v1' ||
+					value?.pid !== process.pid ||
+					value?.token !== lock.token
+				) {
+					throw new Error('wasm debug publication lock ownership changed');
+				}
+				const finalStats = await lstat(lock.lockPath).catch(() => null);
+				if (
+					!finalStats ||
+					finalStats.dev !== ownedStats.dev ||
+					finalStats.ino !== ownedStats.ino
+				) {
+					throw new Error('wasm debug publication lock ownership changed');
+				}
+				await unlink(lock.lockPath);
+			}
+			const candidateStats = await lstat(lock.candidatePath).catch(() => null);
+			if (candidateStats) {
+				if (
+					!ownedStats ||
+					candidateStats.dev !== ownedStats.dev ||
+					candidateStats.ino !== ownedStats.ino
+				) {
+					throw new Error('wasm debug publication lock candidate ownership changed');
+				}
+				await unlink(lock.candidatePath);
+			}
+		} catch (error) {
+			releaseErrors.push(error);
+		} finally {
+			try {
+				await lock.handle.close();
+			} catch (error) {
+				closeError = error;
+			}
+		}
+		if (closeError) releaseErrors.push(closeError);
+	}
+	releaseQueue();
+	for (const { lockPath, tail } of queueRecords) {
+		void tail.then(() => {
+			if (publicationQueues.get(lockPath) === tail) publicationQueues.delete(lockPath);
+		});
+	}
+
+	if (publicationError && releaseErrors.length > 0) {
+		throw new AggregateError(
+			[publicationError, ...releaseErrors],
+			'wasm debug publication and lock release both failed'
+		);
+	}
+	if (publicationError) throw publicationError;
+	if (releaseErrors.length === 1) throw releaseErrors[0];
+	if (releaseErrors.length > 1) {
+		throw new AggregateError(releaseErrors, 'wasm debug publication lock releases failed');
 	}
 }
 

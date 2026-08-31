@@ -373,6 +373,8 @@ the manifest receipt before trusting its asset list, and installs the six verifi
 the same transactional sync path. Each producer request has a 30-second attempt timeout and up to
 three attempts for transient failures. Cancellation is forwarded through download and publication;
 an abort during replacement rolls both the runtime tree and generated receipt back. Immediately
+overlapping publishers are serialized per destination, while owner-checked filesystem locks make
+separate processes fail closed instead of modifying the same release concurrently. Immediately
 before `gh-pages` publication, the deployment
 verifier authenticates the logical manifest and every asset again; it accepts either raw bytes or
 the deterministic gzip representation recorded by `compressed-runtime-assets.v1.json`, and refuses
