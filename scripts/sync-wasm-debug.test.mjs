@@ -237,6 +237,90 @@ test('restores an exact compressed Pages baseline when replacement fails', async
 	}
 });
 
+test('bounds every installed runtime entry and releases locks after rejection', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-entry-budget-'));
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ');
+		const newFixture = await fixture(path.join(root, 'new'), '  ');
+		const staticDir = path.join(root, 'static');
+		const current = path.join(staticDir, 'wasm-debug');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+		const emptyDirectories = path.join(current, 'empty-directories');
+		await Promise.all(
+			Array.from({ length: 129 }, (_, index) =>
+				mkdir(path.join(emptyDirectories, String(index)), { recursive: true })
+			)
+		);
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: newFixture.source,
+				staticDir,
+				versionModulePath
+			}),
+			/entry-count budget/u
+		);
+
+		await rm(emptyDirectories, { recursive: true, force: true });
+		await syncWasmDebugDist({
+			sourceDir: newFixture.source,
+			staticDir,
+			versionModulePath
+		});
+		assert.deepEqual(
+			await readFile(path.join(current, 'runtime-manifest.v2.json')),
+			newFixture.manifestBytes
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test('preserves a foreign entry added to the published runtime before rollback', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-published-extra-'));
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ');
+		const newFixture = await fixture(path.join(root, 'new'), '  ');
+		const staticDir = path.join(root, 'static');
+		const current = path.join(staticDir, 'wasm-debug');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: newFixture.source,
+				staticDir,
+				versionModulePath,
+				async testOnlyAfterRuntimePublish() {
+					await writeFile(path.join(current, 'foreign.txt'), 'foreign publication entry');
+					throw new Error('injected foreign publication entry');
+				}
+			}),
+			/ownership changed/u
+		);
+
+		assert.equal(
+			await readFile(path.join(current, 'foreign.txt'), 'utf8'),
+			'foreign publication entry'
+		);
+		assert.deepEqual(
+			await readFile(path.join(current, 'runtime-manifest.v2.json')),
+			newFixture.manifestBytes
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('restores both the runtime and receipt when publication fails between replacements', async () => {
 	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-rollback-'));
 	try {

@@ -5,8 +5,8 @@ import {
 	lstat,
 	mkdir,
 	open,
+	opendir,
 	readFile,
-	readdir,
 	rename,
 	rm,
 	stat,
@@ -24,8 +24,10 @@ export const DEFAULT_WASM_DEBUG_VERSION_MODULE_PATH = path.join(
 	'src/lib/playground/wasmDebugVersion.ts'
 );
 const SHA256 = /^[0-9a-f]{64}$/u;
-const MAX_INSTALLED_RUNTIME_FILES = 128;
+const MAX_INSTALLED_RUNTIME_ENTRIES = 128;
 const MAX_INSTALLED_RUNTIME_BYTES = 64 * 1024 * 1024;
+const MAX_INSTALLED_RUNTIME_DEPTH = 16;
+const MAX_INSTALLED_RUNTIME_PATH_BYTES = 4096;
 const publicationQueues = new Map();
 
 function sha256(bytes) {
@@ -110,17 +112,29 @@ async function snapshotInstalledRuntime(rootDir) {
 	}
 	const pending = [{ absolutePath: rootDir, relativePath: '' }];
 	const entries = [];
-	let fileCount = 0;
+	let entryCount = 0;
 	let totalBytes = 0;
 	while (pending.length > 0) {
 		const directory = pending.pop();
-		const children = await readdir(directory.absolutePath, { withFileTypes: true });
-		for (const child of children) {
+		const handle = await opendir(directory.absolutePath);
+		for await (const child of handle) {
+			entryCount += 1;
+			if (entryCount > MAX_INSTALLED_RUNTIME_ENTRIES) {
+				throw new Error('installed wasm debug runtime exceeds its entry-count budget');
+			}
 			const absolutePath = path.join(directory.absolutePath, child.name);
 			const relativePath = path
 				.join(directory.relativePath, child.name)
 				.split(path.sep)
 				.join('/');
+			if (
+				relativePath.split('/').length > MAX_INSTALLED_RUNTIME_DEPTH ||
+				Buffer.byteLength(relativePath) > MAX_INSTALLED_RUNTIME_PATH_BYTES
+			) {
+				throw new Error(
+					`installed wasm debug runtime path exceeds its budget: ${relativePath}`
+				);
+			}
 			const metadata = await lstat(absolutePath);
 			if (metadata.isSymbolicLink()) {
 				throw new Error(`installed wasm debug runtime contains a symlink: ${relativePath}`);
@@ -135,26 +149,62 @@ async function snapshotInstalledRuntime(rootDir) {
 					`installed wasm debug runtime contains a non-regular entry: ${relativePath}`
 				);
 			}
-			fileCount += 1;
-			if (fileCount > MAX_INSTALLED_RUNTIME_FILES) {
-				throw new Error('installed wasm debug runtime exceeds its file-count budget');
-			}
-			totalBytes += metadata.size;
-			if (totalBytes > MAX_INSTALLED_RUNTIME_BYTES) {
-				throw new Error('installed wasm debug runtime exceeds its byte budget');
-			}
-			const bytes = await readFile(absolutePath);
-			const finalMetadata = await lstat(absolutePath);
-			if (
-				bytes.byteLength !== metadata.size ||
-				finalMetadata.dev !== metadata.dev ||
-				finalMetadata.ino !== metadata.ino ||
-				finalMetadata.size !== metadata.size ||
-				finalMetadata.mtimeMs !== metadata.mtimeMs
-			) {
-				throw new Error(
-					`installed wasm debug runtime changed while being inspected: ${relativePath}`
-				);
+			const fileHandle = await open(absolutePath, 'r');
+			let bytes;
+			try {
+				const openedMetadata = await fileHandle.stat();
+				if (
+					!openedMetadata.isFile() ||
+					openedMetadata.dev !== metadata.dev ||
+					openedMetadata.ino !== metadata.ino ||
+					openedMetadata.size !== metadata.size ||
+					openedMetadata.mtimeMs !== metadata.mtimeMs
+				) {
+					throw new Error(
+						`installed wasm debug runtime changed while being opened: ${relativePath}`
+					);
+				}
+				totalBytes += openedMetadata.size;
+				if (totalBytes > MAX_INSTALLED_RUNTIME_BYTES) {
+					throw new Error('installed wasm debug runtime exceeds its byte budget');
+				}
+				bytes = Buffer.alloc(openedMetadata.size);
+				let offset = 0;
+				while (offset < bytes.byteLength) {
+					const { bytesRead } = await fileHandle.read(
+						bytes,
+						offset,
+						bytes.byteLength - offset,
+						offset
+					);
+					if (bytesRead === 0) {
+						throw new Error(
+							`installed wasm debug runtime changed while being read: ${relativePath}`
+						);
+					}
+					offset += bytesRead;
+				}
+				const [finalOpenedMetadata, finalPathMetadata] = await Promise.all([
+					fileHandle.stat(),
+					lstat(absolutePath)
+				]);
+				if (
+					finalOpenedMetadata.dev !== openedMetadata.dev ||
+					finalOpenedMetadata.ino !== openedMetadata.ino ||
+					finalOpenedMetadata.size !== openedMetadata.size ||
+					finalOpenedMetadata.mtimeMs !== openedMetadata.mtimeMs ||
+					finalPathMetadata.isSymbolicLink() ||
+					finalPathMetadata.dev !== openedMetadata.dev ||
+					finalPathMetadata.ino !== openedMetadata.ino ||
+					finalPathMetadata.size !== openedMetadata.size ||
+					finalPathMetadata.mtimeMs !== openedMetadata.mtimeMs
+				) {
+					throw new Error(
+						`installed wasm debug runtime changed while being inspected: ${relativePath}`
+					);
+				}
+			} finally {
+				await fileHandle.close();
 			}
 			entries.push({
 				bytes: bytes.byteLength,
@@ -167,7 +217,7 @@ async function snapshotInstalledRuntime(rootDir) {
 	entries.sort((left, right) => left.path.localeCompare(right.path, 'en'));
 	return {
 		digest: sha256(Buffer.from(JSON.stringify(entries))),
-		fileCount,
+		entryCount,
 		totalBytes
 	};
 }
@@ -359,6 +409,7 @@ export async function syncWasmDebugDist({
 		let previousVersionStats;
 		let installedRuntimeStats;
 		let installedVersionStats;
+		let nextRuntimeSnapshot;
 		let preserveRecoveryFiles = false;
 		try {
 			await mkdir(next, { recursive: true });
@@ -373,6 +424,7 @@ export async function syncWasmDebugDist({
 				staticDir: nextRoot,
 				versionModulePath: nextVersionModule
 			});
+			nextRuntimeSnapshot = await snapshotInstalledRuntime(next);
 			if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
 			if (baselineRuntimeStats) {
 				await mkdir(previousRoot, { recursive: true });
@@ -424,9 +476,12 @@ export async function syncWasmDebugDist({
 					);
 				} else {
 					try {
-						const currentBundle = await validateSourceBundle(current);
-						if (!currentBundle.manifestBytes.equals(manifestBytes)) {
-							throw new Error('wasm debug runtime manifest changed');
+						const currentSnapshot = await snapshotInstalledRuntime(current);
+						if (
+							!nextRuntimeSnapshot ||
+							currentSnapshot.digest !== nextRuntimeSnapshot.digest
+						) {
+							throw new Error('wasm debug runtime snapshot changed');
 						}
 					} catch (ownershipError) {
 						ownershipErrors.push(
