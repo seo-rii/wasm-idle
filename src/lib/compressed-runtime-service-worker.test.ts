@@ -180,7 +180,9 @@ describe('compressed runtime service worker', () => {
 				[assetPath]: new TextEncoder().encode(assetName)
 			});
 
-			const response = await harness.request(`${assetPath}?v=${receipt}`);
+			const response = await harness.request(`${assetPath}?v=${receipt}`, {
+				credentials: 'omit'
+			});
 
 			expect(response.status).toBe(200);
 			expect(response.url).toBe(`${scope}${assetPath}?v=${receipt}`);
@@ -206,7 +208,9 @@ describe('compressed runtime service worker', () => {
 				[assetPath]: new TextEncoder().encode(assetPath)
 			});
 
-			const response = await harness.request(`${assetPath}?v=${receipt}`);
+			const response = await harness.request(`${assetPath}?v=${receipt}`, {
+				credentials: 'omit'
+			});
 
 			expect(response.status).toBe(200);
 			expect(response.url).toBe(`${scope}${assetPath}?v=${receipt}`);
@@ -237,7 +241,9 @@ describe('compressed runtime service worker', () => {
 			{ [assetPath]: networkBytes }
 		);
 
-		const response = await harness.request(`${assetPath}?v=${receipt}`);
+		const response = await harness.request(`${assetPath}?v=${receipt}`, {
+			credentials: 'omit'
+		});
 
 		expect(response.url).toBe(`${scope}${assetPath}?v=${receipt}`);
 		expect(Array.from(new Uint8Array(await response.arrayBuffer()))).toEqual(
