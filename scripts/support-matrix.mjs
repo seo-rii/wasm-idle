@@ -1598,7 +1598,11 @@ hash-verified exactly once before their owned bytes are transferred to the Worke
 re-fetch executable runtime URLs. Clean Pages builds fetch the exact pinned producer revision and
 manifest receipt through the shared release profile before the application build. The deployment
 refuses publication when any logical LLDB/WAMR asset is missing or mismatched after re-verifying
-raw or compressed logical bytes. This build-time preparation does not change lazy browser loading:
+raw or compressed logical bytes. If transactional publication cannot safely restore or identify an
+owned generation, its \`.wasm-debug.next-*\` and \`.wasm-debug.previous-*\` recovery artifacts are
+preserved for operator inspection. Later synchronization and the final Pages verifier fail closed
+until those artifacts (or a leftover \`.wasm-debug.sync.lock*\`) are manually inspected and resolved;
+they are never silently deleted or published. This build-time preparation does not change lazy browser loading:
 clients fetch the debugger payload only when a supported debug session starts. If the LLDB manifest
 is absent, invalid, or does not advertise
 the required breakpoint/step/stack/local capabilities, the
