@@ -71,6 +71,7 @@
 		"sync:wasm-fortran": "node scripts/sync-runtime.mjs wasm-fortran",
 		"sync:wasm-debug": "node scripts/sync-wasm-debug.mjs",
 		"prepare:wasm-debug-release": "node scripts/prepare-wasm-debug-release.mjs",
+		"test:wasm-debug-release": "node --test scripts/prepare-wasm-debug-release.test.mjs scripts/sync-wasm-debug.test.mjs scripts/verify-page-wasm-debug.test.mjs",
 		"sync:wasm-objectivec": "node scripts/sync-wasm-objectivec.mjs",
 		"sync:wasm-cobol": "node scripts/sync-runtime.mjs wasm-cobol",
 		"sync:wasm-of-js-of-ocaml": "node scripts/sync-runtime.mjs wasm-of-js-of-ocaml",

@@ -3,6 +3,24 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 describe('LLDB browser integration workflow', () => {
+	it('runs the immutable debugger release contracts in general CI and keeps docs on the pinned producer', async () => {
+		const [workflow, packageJson, profileJson, debugReadme] = await Promise.all([
+			readFile('.github/workflows/ci.yml', 'utf8'),
+			readFile('package.json', 'utf8'),
+			readFile('scripts/wasm-debug-release.v2.json', 'utf8'),
+			readFile('packages/llvm-core/README.md', 'utf8')
+		]);
+		const pkg = JSON.parse(packageJson) as { scripts?: Record<string, string> };
+		const profile = JSON.parse(profileJson) as { producerRevision?: string };
+
+		expect(pkg.scripts?.['test:wasm-debug-release']).toBe(
+			'node --test scripts/prepare-wasm-debug-release.test.mjs scripts/sync-wasm-debug.test.mjs scripts/verify-page-wasm-debug.test.mjs'
+		);
+		expect(workflow).toContain('pnpm run test:wasm-debug-release');
+		expect(profile.producerRevision).toMatch(/^[0-9a-f]{40}$/u);
+		expect(debugReadme).toContain(`wasm-llvm\` commit \`${profile.producerRevision}\``);
+	});
+
 	it('keeps the complete synced debugger runtime within its aggregate asset budget', async () => {
 		const assetBudgets = JSON.parse(
 			await readFile('scripts/static-asset-budgets.v1.json', 'utf8')
