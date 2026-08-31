@@ -1905,6 +1905,128 @@ describe('BrowserLldbSession', () => {
 		}
 	);
 
+	it('accepts the documented initial source and breakpoint limits', async () => {
+		const commands: string[] = [];
+		const sources = Array.from({ length: 256 }, (_, index) => ({
+			path: `/workspace/source-${index}.cpp` as `/workspace/${string}`,
+			content: ''
+		}));
+		const breakpoints = sources.map((source, index) => {
+			const length = index === 0 ? 1_024 : index <= 12 ? 13 : 12;
+			return {
+				source: { path: source.path },
+				lines: Array.from({ length }, (_, line) => line + 1)
+			};
+		});
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources,
+			breakpoints,
+			fetchImpl: async () => new Response('debug-asset'),
+			workerFactory: (kind) => new FakeWorker(kind, commands),
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+
+		try {
+			await expect(session.initialize()).resolves.toBeDefined();
+			expect(
+				breakpoints.reduce((total, breakpoint) => total + breakpoint.lines.length, 0)
+			).toBe(4_096);
+			expect(commands.filter((command) => command === 'setBreakpoints')).toHaveLength(256);
+		} finally {
+			await session.dispose();
+		}
+	});
+
+	it.each([
+		{
+			name: 'source-file count',
+			sources: Array.from({ length: 257 }, (_, index) => ({
+				path: `/workspace/source-${index}.cpp` as `/workspace/${string}`,
+				content: ''
+			})),
+			breakpoints: [],
+			expected: 'debug source count must not exceed 256; received 257'
+		},
+		{
+			name: 'per-source breakpoint count',
+			sources: [{ path: '/workspace/main.cpp' as const, content: '' }],
+			breakpoints: [
+				{
+					source: { path: '/workspace/main.cpp' },
+					lines: Array.from({ length: 1_025 }, (_, index) => index + 1)
+				}
+			],
+			expected:
+				'breakpoints for /workspace/main.cpp must not exceed 1024 lines; received 1025'
+		},
+		{
+			name: 'aggregate per-source breakpoint count',
+			sources: [{ path: '/workspace/main.cpp' as const, content: '' }],
+			breakpoints: [
+				{
+					source: { path: '/workspace/main.cpp' },
+					lines: Array.from({ length: 1_024 }, (_, index) => index + 1)
+				},
+				{ source: { path: '/workspace/main.cpp' }, lines: [1_025] }
+			],
+			expected:
+				'breakpoints for /workspace/main.cpp must not exceed 1024 lines; received 1025'
+		},
+		{
+			name: 'initial breakpoint source count',
+			sources: [{ path: '/workspace/main.cpp' as const, content: '' }],
+			breakpoints: Array.from({ length: 257 }, (_, index) => ({
+				source: { path: `/workspace/source-${index}.cpp` },
+				lines: []
+			})),
+			expected: 'initial breakpoint source count must not exceed 256; received 257'
+		},
+		{
+			name: 'total initial breakpoint count',
+			sources: [{ path: '/workspace/main.cpp' as const, content: '' }],
+			breakpoints: [1_024, 1_024, 1_024, 1_024, 1].map((length, index) => ({
+				source: { path: `/workspace/source-${index}.cpp` },
+				lines: Array.from({ length }, (_, line) => line + 1)
+			})),
+			expected: 'initial breakpoint count must not exceed 4096; received 4097'
+		}
+	])(
+		'rejects an excessive $name before fetching assets or creating workers',
+		async ({ sources, breakpoints, expected }) => {
+			let fetched = false;
+			let created = false;
+			const session = new BrowserLldbSession({
+				manifest,
+				runtimeBaseUrl: 'https://cdn.example/debug/',
+				module: validWasmModule.slice(),
+				sources,
+				breakpoints,
+				fetchImpl: async () => {
+					fetched = true;
+					return new Response('debug-asset');
+				},
+				workerFactory: (kind) => {
+					created = true;
+					return new FakeWorker(kind, []);
+				},
+				requestTimeoutMs: 1_000,
+				readyTimeoutMs: 1_000
+			});
+
+			try {
+				await expect(session.initialize()).rejects.toThrow(expected);
+				expect(fetched).toBe(false);
+				expect(created).toBe(false);
+			} finally {
+				await session.dispose();
+			}
+		}
+	);
+
 	it.each([
 		['requestTimeoutMs', 0],
 		['requestTimeoutMs', Number.NaN],

@@ -69,6 +69,15 @@ loading. Transport queue capacity, the asset fetch implementation, and the worke
 captured before verification starts, preventing in-flight option changes from resizing queues or
 replacing the code that loads assets and creates workers.
 
+Initial attach input is limited to 256 workspace source files and 256 source-breakpoint requests.
+Across those requests, each source may contain at most 1,024 lines and all initially configured
+sources may contain at most 4,096 lines in total. Repeating a source does not reset its per-source
+allowance. A max-plus-one input is rejected before runtime asset fetching or Worker creation. After
+LLDB sends `initialized`, setup can therefore issue no more than 256 sequential `setBreakpoints`
+requests. Each retains its own transport-write and DAP response deadlines, followed by the bounded
+`configurationDone` and final attach-response waits; the attach request itself is intentionally not
+given a cumulative deadline while configuration is still in progress.
+
 ```ts
 import { createBrowserLldbSession } from '@wasm-idle/llvm-core/debug';
 
@@ -94,9 +103,10 @@ await session.setBreakpoints({ path: '/workspace/main.cpp' }, [12, 18]);
 ```
 
 Configured and dynamic breakpoint lines must be positive safe integers. The product session
-validates and snapshots them before changing its per-source state; invalid lines are rejected before
-debug workers or a DAP request are created and do not supersede an in-flight valid update. Values
-above `Number.MAX_SAFE_INTEGER` are rejected instead of being rounded in a DAP message.
+validates and snapshots them before changing its per-source state; invalid configured lines are
+rejected before debug workers are created, while invalid dynamic lines are rejected before a DAP
+request is created and do not supersede an in-flight valid update. Values above
+`Number.MAX_SAFE_INTEGER` are rejected instead of being rounded in a DAP message.
 
 `setBreakpoints()` updates the session's resolved-breakpoint cache as well as sending DAP. Later
 `breakpoint` events therefore retain the IDs and source mapping from dynamic editor changes;

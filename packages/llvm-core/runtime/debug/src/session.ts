@@ -23,6 +23,10 @@ import type {
 
 const DEFAULT_QUEUE_CAPACITY = 256 * 1024;
 const WORKER_SHUTDOWN_GRACE_MS = 25;
+const MAX_DEBUG_SOURCE_COUNT = 256;
+const MAX_INITIAL_BREAKPOINT_SOURCE_COUNT = 256;
+const MAX_BREAKPOINTS_PER_SOURCE = 1_024;
+const MAX_INITIAL_BREAKPOINT_COUNT = 4_096;
 const DAP_BOOLEAN_CAPABILITY_KEYS = [
 	'supportsConfigurationDoneRequest',
 	'supportsReadMemoryRequest',
@@ -362,6 +366,11 @@ export class BrowserLldbSession {
 			throw new TypeError('debug module SHA-256 must be 64 lowercase hexadecimal characters');
 		}
 		const moduleSha256 = moduleSha256Value as string | undefined;
+		if (this.options.sources.length > MAX_DEBUG_SOURCE_COUNT) {
+			throw new RangeError(
+				`debug source count must not exceed ${MAX_DEBUG_SOURCE_COUNT}; received ${this.options.sources.length}`
+			);
+		}
 		const sources = this.options.sources.map((source) => ({ ...source }));
 		for (const source of sources) {
 			if (typeof source.content !== 'string') {
@@ -379,7 +388,39 @@ export class BrowserLldbSession {
 				);
 			}
 		}
-		const breakpoints = (this.options.breakpoints ?? []).map((breakpoint) => ({
+		const initialBreakpoints = this.options.breakpoints ?? [];
+		if (initialBreakpoints.length > MAX_INITIAL_BREAKPOINT_SOURCE_COUNT) {
+			throw new RangeError(
+				`initial breakpoint source count must not exceed ${MAX_INITIAL_BREAKPOINT_SOURCE_COUNT}; received ${initialBreakpoints.length}`
+			);
+		}
+		let initialBreakpointCount = 0;
+		const initialBreakpointCountBySource = new Map<string, number>();
+		for (const breakpoint of initialBreakpoints) {
+			validateDebugSourcePath(breakpoint.source.path);
+			if (breakpoint.lines.length > MAX_BREAKPOINTS_PER_SOURCE) {
+				throw new RangeError(
+					`breakpoints for ${breakpoint.source.path} must not exceed ${MAX_BREAKPOINTS_PER_SOURCE} lines; received ${breakpoint.lines.length}`
+				);
+			}
+			validateBreakpointLines(breakpoint.lines);
+			const sourceBreakpointCount =
+				(initialBreakpointCountBySource.get(breakpoint.source.path) ?? 0) +
+				breakpoint.lines.length;
+			if (sourceBreakpointCount > MAX_BREAKPOINTS_PER_SOURCE) {
+				throw new RangeError(
+					`breakpoints for ${breakpoint.source.path} must not exceed ${MAX_BREAKPOINTS_PER_SOURCE} lines; received ${sourceBreakpointCount}`
+				);
+			}
+			initialBreakpointCountBySource.set(breakpoint.source.path, sourceBreakpointCount);
+			initialBreakpointCount += breakpoint.lines.length;
+			if (initialBreakpointCount > MAX_INITIAL_BREAKPOINT_COUNT) {
+				throw new RangeError(
+					`initial breakpoint count must not exceed ${MAX_INITIAL_BREAKPOINT_COUNT}; received ${initialBreakpointCount}`
+				);
+			}
+		}
+		const breakpoints = initialBreakpoints.map((breakpoint) => ({
 			source: { ...breakpoint.source },
 			lines: [...breakpoint.lines]
 		}));
@@ -448,11 +489,6 @@ export class BrowserLldbSession {
 					...(this.options.launch.env ? { env: { ...this.options.launch.env } } : {})
 				}
 			: undefined;
-		for (const breakpoint of breakpoints) {
-			validateDebugSourcePath(breakpoint.source.path);
-			validateBreakpointLines(breakpoint.lines);
-		}
-
 		const moduleView = normalizedModuleValue
 			? normalizedModuleValue
 			: new Uint8Array(moduleValue as ArrayBuffer);
