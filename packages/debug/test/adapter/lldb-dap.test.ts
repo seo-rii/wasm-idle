@@ -951,9 +951,10 @@ describe('LldbDapAdapter', () => {
 			command: 'writeMemory',
 			path: 'bytesWritten'
 		});
-		await expect(
-			adapter.writeMemory('memory', 0, Uint8Array.of(1, 2), true)
-		).resolves.toEqual({ offset: 2, bytesWritten: 1 });
+		await expect(adapter.writeMemory('memory', 0, Uint8Array.of(1, 2), true)).resolves.toEqual({
+			offset: 2,
+			bytesWritten: 1
+		});
 	});
 
 	it('gates, maps, and replaces LLDB data breakpoints', async () => {
