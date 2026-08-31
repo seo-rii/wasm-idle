@@ -285,6 +285,17 @@ export async function verifyPageWasmDebugRelease({
 	if (!rootMetadata?.isDirectory() || rootMetadata.isSymbolicLink()) {
 		throw new Error(`Pages output root is missing or is not a directory: ${resolvedRoot}`);
 	}
+	const recoveryArtifact = (await readdir(resolvedRoot, { withFileTypes: true })).find(
+		(entry) =>
+			entry.name.startsWith('.wasm-debug.next-') ||
+			entry.name.startsWith('.wasm-debug.previous-') ||
+			entry.name.startsWith('.wasm-debug.sync.lock')
+	);
+	if (recoveryArtifact) {
+		throw new Error(
+			`wasm debug recovery artifact must not be published: ${recoveryArtifact.name}`
+		);
+	}
 	const releaseProfile = await loadReleaseProfile(profile, profilePath);
 	const debugRoot = path.join(resolvedRoot, DEBUG_DIRECTORY);
 	const debugRootMetadata = await metadataOrNull(debugRoot);

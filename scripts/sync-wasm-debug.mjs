@@ -233,6 +233,17 @@ function renderVersionModule(manifestBytes) {
 `;
 }
 
+async function assertNoPublicationRecoveryArtifacts(directory, prefixes) {
+	const handle = await opendir(directory);
+	for await (const entry of handle) {
+		if (prefixes.some((prefix) => entry.name.startsWith(prefix))) {
+			throw new Error(
+				`wasm debug recovery artifact requires manual inspection before publication: ${path.join(directory, entry.name)}`
+			);
+		}
+	}
+}
+
 export async function verifySyncedWasmDebugDist({
 	staticDir = DEFAULT_STATIC_DIR,
 	versionModulePath = DEFAULT_WASM_DEBUG_VERSION_MODULE_PATH
@@ -266,15 +277,14 @@ export async function syncWasmDebugDist({
 	const resolvedSource = path.resolve(sourceDir);
 	const resolvedStatic = path.resolve(staticDir);
 	const resolvedVersionModule = path.resolve(versionModulePath);
+	const versionName = path.basename(resolvedVersionModule);
+	const versionDir = path.dirname(resolvedVersionModule);
 	await mkdir(resolvedStatic, { recursive: true });
-	await mkdir(path.dirname(resolvedVersionModule), { recursive: true });
+	await mkdir(versionDir, { recursive: true });
 
 	const lockPaths = [
 		path.join(resolvedStatic, '.wasm-debug.sync.lock'),
-		path.join(
-			path.dirname(resolvedVersionModule),
-			`.${path.basename(resolvedVersionModule)}.sync.lock`
-		)
+		path.join(versionDir, `.${versionName}.sync.lock`)
 	].sort((left, right) => left.localeCompare(right, 'en'));
 	let releaseQueue;
 	const queueGate = new Promise((resolve) => {
@@ -372,6 +382,16 @@ export async function syncWasmDebugDist({
 			}
 			await unlink(candidatePath);
 		}
+		await assertNoPublicationRecoveryArtifacts(resolvedStatic, [
+			'.wasm-debug.next-',
+			'.wasm-debug.previous-',
+			'.wasm-debug.sync.lock.candidate-'
+		]);
+		await assertNoPublicationRecoveryArtifacts(versionDir, [
+			`.${versionName}.next-`,
+			`.${versionName}.previous-`,
+			`.${versionName}.sync.lock.candidate-`
+		]);
 
 		const { manifestPath, manifestBytes, assets } = await validateSourceBundle(resolvedSource);
 		if (signal?.aborted) throw signal.reason ?? fallbackAbortError;
@@ -382,8 +402,6 @@ export async function syncWasmDebugDist({
 		const next = path.join(nextRoot, 'wasm-debug');
 		const current = path.join(resolvedStatic, 'wasm-debug');
 		const previous = path.join(previousRoot, 'wasm-debug');
-		const versionName = path.basename(resolvedVersionModule);
-		const versionDir = path.dirname(resolvedVersionModule);
 		const nextVersionModule = path.join(versionDir, `.${versionName}.next-${suffix}`);
 		const previousVersionModule = path.join(versionDir, `.${versionName}.previous-${suffix}`);
 		const baselineRuntimeStats = await lstat(current).catch(() => null);

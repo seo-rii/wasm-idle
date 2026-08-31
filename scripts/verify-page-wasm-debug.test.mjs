@@ -135,6 +135,26 @@ test('verifies exactly six mixed raw and gzip Pages debug assets', async (t) => 
 	);
 });
 
+test('rejects transaction recovery and lock artifacts from the Pages output root', async (t) => {
+	for (const artifactName of [
+		'.wasm-debug.next-fixture',
+		'.wasm-debug.previous-fixture',
+		'.wasm-debug.sync.lock.candidate-fixture'
+	]) {
+		await t.test(artifactName, async (t) => {
+			const fixture = await createFixture(t);
+			const artifactPath = path.join(fixture.rootDir, artifactName);
+			await mkdir(artifactPath, { recursive: true });
+			await writeFile(path.join(artifactPath, 'unverified.wasm'), 'unverified runtime');
+
+			await assert.rejects(
+				verifyPageWasmDebug({ rootDir: fixture.rootDir, profile: fixture.profile }),
+				/recovery artifact.*must not be published/iu
+			);
+		});
+	}
+});
+
 test('rejects a wasm-debug root directory symlink', async (t) => {
 	const fixture = await createFixture(t);
 	const rootDir = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-pages-link-'));

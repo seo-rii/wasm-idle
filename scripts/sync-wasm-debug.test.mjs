@@ -1360,6 +1360,59 @@ test('does not mutate either current target when runtime ownership changed befor
 	}
 });
 
+test('blocks a later publication while preserved recovery artifacts require inspection', async () => {
+	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-preserved-recovery-'));
+	try {
+		const oldFixture = await fixture(path.join(root, 'old'), ' ');
+		const failedFixture = await fixture(path.join(root, 'failed'), '  ');
+		const retryFixture = await fixture(path.join(root, 'retry'), '   ');
+		const staticDir = path.join(root, 'static');
+		const versionModulePath = path.join(root, 'src/wasmDebugVersion.ts');
+		const current = path.join(staticDir, 'wasm-debug');
+		await syncWasmDebugDist({
+			sourceDir: oldFixture.source,
+			staticDir,
+			versionModulePath
+		});
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: failedFixture.source,
+				staticDir,
+				versionModulePath,
+				async testOnlyAfterRuntimePublish() {
+					await rm(current, { recursive: true, force: true });
+					await mkdir(current, { recursive: true });
+					await writeFile(
+						path.join(current, 'runtime-manifest.v2.json'),
+						'foreign runtime'
+					);
+					throw new Error('injected runtime ownership change');
+				}
+			}),
+			/ownership|rolled back/iu
+		);
+		assert.ok(
+			(await readdir(staticDir)).some((entry) => entry.startsWith('.wasm-debug.previous-'))
+		);
+
+		await assert.rejects(
+			syncWasmDebugDist({
+				sourceDir: retryFixture.source,
+				staticDir,
+				versionModulePath
+			}),
+			/recovery artifact.*manual/iu
+		);
+		assert.equal(
+			await readFile(path.join(current, 'runtime-manifest.v2.json'), 'utf8'),
+			'foreign runtime'
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 test('cleans an uninitialized lock candidate so the next publication can succeed', async () => {
 	const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-debug-sync-lock-init-'));
 	try {
