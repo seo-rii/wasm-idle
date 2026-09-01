@@ -769,7 +769,10 @@ describe('application runtime asset root', () => {
 		const rust = assets.rust!;
 		const baseline = createRuntimeAssetsKey(assets);
 		const firstAsset = Object.keys(rust.assetReceipts!)[0]!;
-		const firstReceipt = rust.assetReceipts![firstAsset]!;
+		const firstReceipt = rust.assetReceipts![firstAsset];
+		if (!firstReceipt || typeof firstReceipt === 'string') {
+			throw new Error('bundled Rust asset receipts must include size metadata');
+		}
 		const replacements = [
 			{ compilerUrl: `${rust.compilerUrl}&custom=1` },
 			{ manifestUrl: `${rust.manifestUrl}&custom=1` },
