@@ -8,6 +8,8 @@ import {
 } from './browser-progress-probe.mjs';
 import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
 
+export const DEFAULT_GO_BROWSER_EXPECTED_OUTPUT = 'fibonacci=11';
+
 /**
  * @typedef {{ type: string; text: string }} BrowserConsoleMessage
  */
@@ -74,6 +76,18 @@ async function waitForConsoleMessage(page, messages, predicate, timeoutMs) {
 }
 
 /**
+ * @param {{ previousTranscript: string; previousFinishedCount: number }} options
+ */
+export function hasGoExecutionPhaseCompleted({ previousTranscript, previousFinishedCount }) {
+	const text = document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '';
+	if (text === previousTranscript) {
+		return false;
+	}
+	const finishedCount = (text.match(/Process finished after/g) || []).length;
+	return text.includes('Go compilation failed') || finishedCount >= previousFinishedCount + 1;
+}
+
+/**
  * @param {import('playwright-core').Page} page
  * @param {{ crossOriginIsolated: boolean; sharedArrayBuffer: boolean; serviceWorkerControlled: boolean }} activeState
  * @param {string[]} pageErrors
@@ -122,7 +136,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 export async function runGoBrowserProbe({
 	browserUrl,
 	chromiumExecutable = '',
-	expectedOutput = 'factorial_plus_bonus=123',
+	expectedOutput = DEFAULT_GO_BROWSER_EXPECTED_OUTPUT,
 	runTimeoutMs = 300_000,
 	stdinText = '5\n',
 	target = 'wasip1/wasm',
@@ -253,24 +267,10 @@ export async function runGoBrowserProbe({
 
 		try {
 			await page.waitForFunction(
-				({ previousTranscript, previousFinishedCount, requiredOutput }) => {
-					const text =
-						document.querySelector('[data-testid="terminal-debug-output"]')
-							?.textContent || '';
-					if (text === previousTranscript) {
-						return false;
-					}
-					const finishedCount = (text.match(/Process finished after/g) || []).length;
-					return (
-						text.includes('Go compilation failed') ||
-						(finishedCount >= previousFinishedCount + 1 &&
-							(!requiredOutput || text.includes(requiredOutput)))
-					);
-				},
+				hasGoExecutionPhaseCompleted,
 				{
 					previousTranscript: initialTranscript,
-					previousFinishedCount: initialFinishedCount,
-					requiredOutput: expectedOutput
+					previousFinishedCount: initialFinishedCount
 				},
 				{
 					polling: 250,

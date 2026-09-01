@@ -10,7 +10,10 @@ import {
 	shouldReuseProvidedBrowserUrl,
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
-import { runGoBrowserProbe } from '../../../scripts/go-browser-probe-lib.mjs';
+import {
+	DEFAULT_GO_BROWSER_EXPECTED_OUTPUT,
+	runGoBrowserProbe
+} from '../../../scripts/go-browser-probe-lib.mjs';
 
 const goBrowserTestTimeoutMs = Number(process.env.WASM_IDLE_GO_TEST_TIMEOUT_MS || '1500000');
 
@@ -72,7 +75,7 @@ describe('wasm-idle Go browser playwright integration', () => {
 								process.env.WASM_IDLE_GO_RUN_TIMEOUT_MS || '300000'
 							),
 							stdinText: '5\n',
-							expectedOutput: 'factorial_plus_bonus=123',
+							expectedOutput: DEFAULT_GO_BROWSER_EXPECTED_OUTPUT,
 							target,
 							stdinMethod: 'keyboard'
 						});
@@ -85,7 +88,7 @@ describe('wasm-idle Go browser playwright integration', () => {
 						expect(summary.pageErrors).toEqual([]);
 						expect(summary.moduleResolutionErrors).toEqual([]);
 						expect(summary.goConsoleErrors).toEqual([]);
-						expect(summary.transcript).toContain('factorial_plus_bonus=123');
+						expect(summary.transcript).toContain(DEFAULT_GO_BROWSER_EXPECTED_OUTPUT);
 						expect(summary.transcript).toContain('Process finished after');
 						expect(
 							summary.consoleTail.some((entry: string) =>

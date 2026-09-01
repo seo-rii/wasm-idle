@@ -1,3 +1,11 @@
+export const DEFAULT_GO_BROWSER_EXPECTED_OUTPUT: "fibonacci=11";
+/**
+ * @param {{ previousTranscript: string; previousFinishedCount: number }} options
+ */
+export function hasGoExecutionPhaseCompleted({ previousTranscript, previousFinishedCount }: {
+    previousTranscript: string;
+    previousFinishedCount: number;
+}): boolean;
 /**
  * @param {{ browserUrl: string; chromiumExecutable?: string; expectedOutput?: string; runTimeoutMs?: number; stdinText?: string; target?: 'wasip1/wasm' | 'wasip2/wasm' | 'wasip3/wasm' | 'js/wasm'; stdinMethod?: 'debug-hook' | 'keyboard' }} options
  */
