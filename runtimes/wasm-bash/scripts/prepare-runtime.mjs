@@ -48,14 +48,22 @@ const INPUTS = {
 	}
 };
 
+/** @param {Uint8Array | string} bytes */
 function sha256(bytes) {
 	return createHash('sha256').update(bytes).digest('hex');
 }
 
+/** @param {string} filePath */
 async function sha256File(filePath) {
 	return sha256(await readFile(filePath));
 }
 
+/**
+ * @param {string} filePath
+ * @param {string} expectedSha256
+ * @param {number | undefined} expectedBytes
+ * @param {string} label
+ */
 async function assertFile(filePath, expectedSha256, expectedBytes, label) {
 	const fileStats = await stat(filePath).catch(() => null);
 	if (!fileStats?.isFile()) throw new Error(`${label} was not found at ${filePath}`);
@@ -72,12 +80,17 @@ async function assertFile(filePath, expectedSha256, expectedBytes, label) {
 	}
 }
 
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {import('node:child_process').SpawnOptions} [options]
+ */
 async function run(command, args, options = {}) {
 	await new Promise((resolve, reject) => {
 		const child = spawn(command, args, { stdio: 'inherit', ...options });
 		child.on('error', reject);
 		child.on('close', (code) => {
-			if (code === 0) resolve();
+			if (code === 0) resolve(undefined);
 			else reject(new Error(`command failed (${code}): ${command} ${args.join(' ')}`));
 		});
 	});
@@ -118,6 +131,7 @@ export async function prepareBashRuntime() {
 
 	const downloadsRoot = path.join(CACHE_ROOT, 'downloads');
 	await mkdir(downloadsRoot, { recursive: true });
+	/** @type {Record<string, string>} */
 	const archives = {};
 	for (const [name, input] of Object.entries(INPUTS)) {
 		const archivePath = path.join(downloadsRoot, input.filename);
