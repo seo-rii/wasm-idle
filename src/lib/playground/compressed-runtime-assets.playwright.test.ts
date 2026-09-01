@@ -25,8 +25,7 @@ const compressedRuntimeAssetSamples = [
 	'wasm-objectivec/libgnustep-base.o',
 	'wasm-octave/runtime/bin/octave-cli.wasm',
 	'wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js',
-	'wasm-tinygo/tools/tinygo-compiler.wasm',
-	'wasm-tinygo/vendor/emception/04de61a8a0f85ee15beb.a',
+	'wasm-tinygo/tools/upstream/tinygo-compiler.wasm',
 	'wasm-zig/zig_small.wasm'
 ] as const;
 
