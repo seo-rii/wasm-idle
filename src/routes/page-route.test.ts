@@ -299,6 +299,20 @@ describe('example route debug actions', () => {
 		);
 	});
 
+	it('persists and forwards the selected C++ standard', () => {
+		expect(source).toMatch(/cppVersion = \$state<CppVersion>\('CPP20'\),/);
+		expect(source).toMatch(
+			/const knownCppVersions = \[\s*'CPP03',\s*'CPP11',\s*'CPP14',\s*'CPP17',\s*'CPP20',\s*'CPP23',\s*'CPP26'\s*\] as const;/s
+		);
+		expect(source).toMatch(/CPP: \(\) => \(\{ cppVersion \}\)/);
+		expect(source).toMatch(/cppVersion,/);
+		expect(source).toMatch(/knownCppVersions\.includes\(value\?\.cppVersion as CppVersion\)/);
+		expect(source).toMatch(/<select id="cpp-version" bind:value=\{cppVersion\}>/);
+		expect(source).toMatch(
+			/\{#each knownCppVersions as version \(version\)\}\s+<option value=\{version\}>\{cppVersionLabels\[version\]\}<\/option>\s+\{\/each\}/s
+		);
+	});
+
 	it('exposes a browser debug hook that writes terminal stdin through the bound control', () => {
 		expect(source).toMatch(
 			/type WasmIdleDebugApi = \{\s+writeTerminalInput: \(text: string, eof\?: boolean\) => Promise<void>;\s+getEditorValue: \(\) => string;\s+setEditorValue: \(text: string\) => Promise<boolean>;\s+setWorkspaceFiles: \(files: WorkspaceFile\[], activePath\?: string\) => Promise<boolean>;\s+setBreakpoints: \(lines: number\[]\) => void;\s+getDebugState: \(\) => \{\s+paused: boolean;\s+pausedLine: number \| null;\s+sourcePath: string;\s+pausedSourcePath: string \| null;\s+sourceRevisionStale: boolean;\s+frameId: number \| null;\s+callStack: DebugFrame\[];\s+scopes: DebugScope\[];\s+variablesByReference: Array<\[number, DebugVariable\[]\]>;\s+\};\s+selectDebugFrame: \(frameId: number\) => Promise<boolean>;\s+loadDebugVariables: \(\s+variablesReference: number,\s+start\?: number,\s+count\?: number\s+\) => Promise<DebugVariable\[]>;\s+readDebugMemory: \(\s+memoryReference: string,\s+offset: number,\s+count: number\s*\) => Promise<\{\s+address\?: string;\s+data: number\[\];\s+unreadableBytes: number;\s+\} \| null>;\s+setPreloadedStdin: \(text: string\) => void;\s+\};/s

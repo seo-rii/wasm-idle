@@ -49,7 +49,7 @@ if (typeof globalThis.document === 'undefined') {
 const defaultClangResourceDir = '/lib/clang/8.0.1';
 const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
 
-const defaultCppStandardArg = '-std=gnu++2a';
+const defaultCppStandardArg = '-std=gnu++20';
 const defaultCStandardArg = '-std=gnu11';
 
 export type ClangSourceLanguage = 'C' | 'CPP' | 'OBJC';
@@ -85,21 +85,23 @@ function resolveCppStandardArg(version?: string) {
 		case 'GNUC++17':
 			return '-std=gnu++17';
 		case '20':
-		case '23':
-		case '26':
 		case 'CPP20':
-		case 'CPP23':
-		case 'CPP26':
 		case 'C++20':
-		case 'C++23':
-		case 'C++26':
 		case 'GNU++20':
-		case 'GNU++23':
-		case 'GNU++26':
 		case 'GNUC++20':
+			return '-std=gnu++20';
+		case '23':
+		case 'CPP23':
+		case 'C++23':
+		case 'GNU++23':
 		case 'GNUC++23':
+			return '-std=gnu++23';
+		case '26':
+		case 'CPP26':
+		case 'C++26':
+		case 'GNU++26':
 		case 'GNUC++26':
-			return defaultCppStandardArg;
+			return '-std=gnu++26';
 		default:
 			return defaultCppStandardArg;
 	}

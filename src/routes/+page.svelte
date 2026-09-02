@@ -75,10 +75,30 @@
 		files: WorkspaceFile[];
 		openTabs: string[];
 	};
+	const knownCppVersions = [
+		'CPP03',
+		'CPP11',
+		'CPP14',
+		'CPP17',
+		'CPP20',
+		'CPP23',
+		'CPP26'
+	] as const;
+	type CppVersion = (typeof knownCppVersions)[number];
+	const cppVersionLabels: Record<CppVersion, string> = {
+		CPP03: 'C++03',
+		CPP11: 'C++11',
+		CPP14: 'C++14',
+		CPP17: 'C++17',
+		CPP20: 'C++20',
+		CPP23: 'C++23',
+		CPP26: 'C++26'
+	};
 
 	type WorkspaceSnapshot = {
 		activePath: string;
 		argsInput: string;
+		cppVersion: CppVersion;
 		files: WorkspaceFile[];
 		goTarget: GoTarget;
 		language: string;
@@ -142,6 +162,7 @@
 		compilerDiagnostics = $state<CompilerDiagnostic[]>([]),
 		clangdRequested = $state(false),
 		argsInput = $state(''),
+		cppVersion = $state<CppVersion>('CPP20'),
 		rustTargetTriple = $state<RustTargetTriple>('wasm32-wasip1'),
 		goTarget = $state<GoTarget>('wasip1/wasm'),
 		ocamlBackend = $state<OcamlBackend>('wasm'),
@@ -181,6 +202,7 @@
 	const executionOptionResolvers: Partial<
 		Record<PlaygroundLanguage, () => Partial<SandboxExecutionOptions>>
 	> = {
+		CPP: () => ({ cppVersion }),
 		RUST: () => ({
 			rustTargetTriple,
 			limits: RUST_NON_DEBUG_RESOURCE_REQUIREMENTS
@@ -327,6 +349,7 @@
 	const workspaceSaveKey = $derived(
 		JSON.stringify({
 			argsInput,
+			cppVersion,
 			goTarget,
 			language,
 			log,
@@ -950,6 +973,7 @@
 		return {
 			activePath,
 			argsInput,
+			cppVersion,
 			files: files.map((file) => ({ path: file.path, content: file.content })),
 			goTarget,
 			language,
@@ -991,6 +1015,8 @@
 		language = nextLanguage;
 		activateWorkspace(nextWorkspaces[nextLanguage]);
 		if (typeof value?.argsInput === 'string') argsInput = value.argsInput;
+		if (knownCppVersions.includes(value?.cppVersion as CppVersion))
+			cppVersion = value?.cppVersion as CppVersion;
 		if (typeof value?.log === 'boolean') log = value.log;
 		if (typeof value?.lspEnabled === 'boolean') lspEnabled = value.lspEnabled;
 		if (
@@ -2047,6 +2073,16 @@
 						<span class="material-symbols-outlined">list_alt</span>
 						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
 						<span>{argsLabel}</span>
+					</label>
+				{/if}
+				{#if language === 'CPP'}
+					<label class="select-chip">
+						<span class="material-symbols-outlined">tune</span>
+						<select id="cpp-version" bind:value={cppVersion}>
+							{#each knownCppVersions as version (version)}
+								<option value={version}>{cppVersionLabels[version]}</option>
+							{/each}
+						</select>
 					</label>
 				{/if}
 				{#if language === 'RUST'}
