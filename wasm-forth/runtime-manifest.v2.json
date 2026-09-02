@@ -1,0 +1,14 @@
+{
+	"format": "wasm-forth-runtime-manifest-v2",
+	"runtime": "waforth",
+	"profileId": "waforth-0.20.1",
+	"waforthVersion": "0.20.1",
+	"fingerprint": "86da4fe96b8e3b6f7b0f6b01660b08cc12ae88d8f8418cc01a33a353c4d6cbf4",
+	"assets": [
+		{
+			"path": "waforth.js",
+			"size": 33434,
+			"sha256": "254a973285f5c63b2be52db4a74090029075d8fe2cc52909d40e4c5f6d28eeb0"
+		}
+	]
+}

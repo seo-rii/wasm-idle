@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 2,
+  "format": "wasm-idle-tinygo-upstream-assets-v2",
+  "producerReceipt": {
+    "path": "producer-receipt.json",
+    "bytes": 7572,
+    "sha256": "bcf1ca1951a64896df98ae8d04137c80c503b1f5e64a099fae99d90deffe8b60"
+  },
+  "packageGraphReceipt": {
+    "path": "package-graph-provider-receipt.json",
+    "bytes": 10368,
+    "sha256": "b25c8ffd86af0e540cf058e38b273271100ff297316f30a38c8239c77d9357d1"
+  },
+  "assets": {
+    "compiler": {
+      "path": "tinygo-compiler.wasm",
+      "bytes": 70288217,
+      "sha256": "a5f6cb6cbfff45e6c5ee6ab8f3bca37c5dabd19d443107707ad1de330ecb8db2"
+    },
+    "packageGraph": {
+      "path": "tinygo-package-graph.wasm",
+      "bytes": 25870831,
+      "sha256": "b7b28719bf97d5c5e140c3ec6f8f40a40fc7d02216e0160e460a34b79f61cb14"
+    },
+    "rootArchive": {
+      "path": "tinygoroot.tar.gz.bin",
+      "bytes": 28919860,
+      "sha256": "e9e8314b406e57a512b49d9716455665bfac36e24694763bdecf86f4b0c2fae3"
+    },
+    "lld": {
+      "path": "lld.wasm",
+      "bytes": 20795796,
+      "sha256": "14f08c475b24ef45313cab7a086693525955c2c000b833faaaf48ad35b2521f8"
+    }
+  }
+}

@@ -18,6 +18,11 @@
     "sysroot": {
       "asset": "bin/sysroot.tar.gz"
     },
+    "provenance": {
+      "name": "clang",
+      "version": "22.1.8",
+      "revision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1"
+    },
     "resourceDir": "/lib/clang/22",
     "compilerRuntimeLibDir": "lib/clang/22/lib/wasi"
   },

@@ -25,8 +25,11 @@ SOFTWARE.
 This project bundles third-party wasm binaries:
 
 - clang.wasm, lld.wasm, memfs.wasm, sysroot.tar: Copyright (c) Andy Wingo,
-  distributed under the terms of the binji/clang.js project
-  (https://github.com/binji/clang.js).
+  distributed under the terms of the binji/wasm-clang project
+  (https://github.com/binji/wasm-clang).
 
 - nim.wasm, nim-bundle.js, nimbase.h: Nim 2.2.4, MIT License
   (https://nim-lang.org).
+
+Full upstream license texts and the wasm-idle modification notice are provided in
+THIRD_PARTY_NOTICES.md.

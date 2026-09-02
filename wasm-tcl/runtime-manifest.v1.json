@@ -2,8 +2,8 @@
   "format": "wasm-tcl-runtime-manifest-v1",
   "version": "2017-05-29",
   "package": "wacl.zip",
-  "packageUrl": "https://ecky-l.github.io/wacl/releases/wacl.zip",
-  "fingerprint": "4d805f0cd0cbfdc7",
+  "packageUrl": "https://raw.githubusercontent.com/ecky-l/ecky-l.github.io/045aa904c2073eeded1be803cf5416901f6ce8ee/wacl/releases/wacl.zip",
+  "fingerprint": "4687ad97c5bb5e96d4354a24e9faffeb9dc9eb1ee7e8c9b0c0ea289c5d9a2baa",
   "files": [
     "require.js",
     "tcl/wacl-custom.data",

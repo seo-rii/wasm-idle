@@ -1,4 +1,4 @@
-"use strict";
+import { accountBrowserToolInputBytes, createBrowserToolInputBudget, decodeBrowserToolSource, fetchBrowserToolAsset } from '../runtime/browser-native-tool-assets.js';
 class ToolExit extends Error {
     code;
     constructor(code) {
@@ -250,16 +250,6 @@ function writeVirtualFiles(runtimeGlobal, files) {
         createFile(file.path, bytesToBinaryString(file.data));
     }
 }
-function loadBinaryenToolSource(toolUrl) {
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', toolUrl, false);
-    xhr.responseType = 'text';
-    xhr.send(null);
-    if (xhr.status !== 200) {
-        throw new Error(`failed to fetch static Binaryen tool: ${toolUrl} (${xhr.status})`);
-    }
-    return xhr.responseText || '';
-}
 function ensureBinaryenCliDirectory(fs, targetPath) {
     const normalizedPath = normalizePath(targetPath);
     const directory = normalizedPath.replace(/\/[^/]+$/, '') || '/';
@@ -344,19 +334,19 @@ function parseBinaryenCommand(command) {
         outputPaths: [...outputPaths]
     };
 }
-function runBinaryenTool(runtimeGlobal, command, toolUrls) {
-    if (!toolUrls) {
+function runBinaryenTool(runtimeGlobal, command, toolSources) {
+    if (!toolSources) {
         throw new Error('browser-native Binaryen tools are missing from the tool request');
     }
     const parsed = parseBinaryenCommand(command);
-    const toolUrl = (parsed.toolName === 'wasm-opt'
-        ? toolUrls.wasm_opt
+    const toolName = (parsed.toolName === 'wasm-opt'
+        ? 'wasm_opt'
         : parsed.toolName === 'wasm-merge'
-            ? toolUrls.wasm_merge
+            ? 'wasm_merge'
             : parsed.toolName === 'wasm-metadce'
-                ? toolUrls.wasm_metadce
+                ? 'wasm_metadce'
                 : '') || '';
-    if (!toolUrl) {
+    if (!toolName) {
         throw new Error(`unsupported static Binaryen tool: ${parsed.toolName}`);
     }
     if (isBinaryenBridgeDebugEnabled(runtimeGlobal)) {
@@ -411,6 +401,10 @@ function runBinaryenTool(runtimeGlobal, command, toolUrls) {
         }
         return 0;
     }
+    const toolAsset = toolSources[toolName];
+    if (!toolAsset) {
+        throw new Error(`static Binaryen tool was not prefetched: ${parsed.toolName}`);
+    }
     const originalModule = runtimeGlobal['Module'];
     const originalBinaryenCliRuntime = runtimeGlobal['__binaryen_cli_runtime'];
     const originalBinaryenCliQuit = runtimeGlobal['__binaryen_cli_quit'];
@@ -433,7 +427,7 @@ function runBinaryenTool(runtimeGlobal, command, toolUrls) {
             runtimeGlobal['__binaryen_cli_quit'] = (status) => {
                 throw new ToolExit(status);
             };
-            new Function(`${loadBinaryenToolSource(toolUrl)}\n//# sourceURL=${toolUrl}`)();
+            new Function(`${toolAsset.source}\n//# sourceURL=${toolAsset.url}`)();
             const cliRuntime = runtimeGlobal['__binaryen_cli_runtime'];
             const fs = cliRuntime?.FS;
             if (!fs || typeof fs.writeFile !== 'function') {
@@ -583,32 +577,58 @@ function runBinaryenTool(runtimeGlobal, command, toolUrls) {
         }
     }
 }
-async function materializePreloadFiles(preloadFiles) {
+async function materializeBinaryenToolSources(toolAssets, budget, fastMode) {
+    if (!toolAssets) {
+        throw new Error('browser-native Binaryen tools are missing from the tool request');
+    }
+    const selectedTools = fastMode
+        ? ['wasm_merge']
+        : ['wasm_opt', 'wasm_merge', 'wasm_metadce'];
+    const sources = {};
+    await Promise.all(selectedTools.map(async (toolName) => {
+        const toolAsset = toolAssets[toolName];
+        const displayName = toolName.replaceAll('_', '-');
+        if (!toolAsset) {
+            throw new Error(`browser-native Binaryen tool URL is missing: ${displayName}`);
+        }
+        const bytes = await fetchBrowserToolAsset(toolAsset.url, `browser-native Binaryen tool ${displayName}`, budget, { cache: 'force-cache', receipt: toolAsset });
+        sources[toolName] = {
+            url: toolAsset.url,
+            source: decodeBrowserToolSource(bytes, `browser-native Binaryen tool ${displayName}`)
+        };
+    }));
+    return sources;
+}
+async function materializePreloadFiles(preloadFiles, budget) {
     const encoder = new TextEncoder();
     const materialized = [];
     for (let index = 0; index < preloadFiles.length; index += 24) {
         const batch = preloadFiles.slice(index, index + 24);
         const batchResults = await Promise.all(batch.map(async (preloadFile) => {
+            const label = `browser-native preload ${preloadFile.path}`;
             if (typeof preloadFile.text === 'string') {
+                const content = encoder.encode(preloadFile.text);
+                accountBrowserToolInputBytes(budget, label, content.byteLength);
                 return {
                     name: preloadFile.path,
-                    content: encoder.encode(preloadFile.text)
+                    content
                 };
             }
             if (preloadFile.bytes instanceof ArrayBuffer) {
+                accountBrowserToolInputBytes(budget, label, preloadFile.bytes.byteLength);
                 return {
                     name: preloadFile.path,
                     content: bytesToBinaryString(new Uint8Array(preloadFile.bytes))
                 };
             }
             if (preloadFile.url) {
-                const response = await fetch(preloadFile.url, { cache: 'force-cache' });
-                if (!response.ok) {
-                    throw new Error(`failed to fetch preload file: ${preloadFile.url} (${response.status})`);
-                }
+                const content = await fetchBrowserToolAsset(preloadFile.url, label, budget, {
+                    cache: 'force-cache',
+                    ...(preloadFile.receipt ? { receipt: preloadFile.receipt } : {})
+                });
                 return {
                     name: preloadFile.path,
-                    content: bytesToBinaryString(new Uint8Array(await response.arrayBuffer()))
+                    content: bytesToBinaryString(content)
                 };
             }
             throw new Error(`preload file is missing data: ${preloadFile.path}`);
@@ -642,19 +662,20 @@ self.addEventListener('message', async (event) => {
     const originalBinaryenCliQuit = runtimeSlots['__binaryen_cli_quit'];
     const originalCreatedFiles = runtimeSlots['__jsoo_created_files'];
     try {
-        const preloadFiles = await materializePreloadFiles(request.preloadFiles);
-        const toolResponse = await fetch(request.toolUrl, { cache: 'no-store' });
-        if (!toolResponse.ok) {
-            throw new Error(`failed to fetch browser tool: ${request.toolUrl}`);
-        }
-        const toolSource = patchToolSource(await toolResponse.text());
+        const inputBudget = createBrowserToolInputBudget();
+        const preloadFiles = await materializePreloadFiles(request.preloadFiles, inputBudget);
+        const toolBytes = await fetchBrowserToolAsset(request.tool.url, 'browser-native tool source', inputBudget, { cache: 'no-store', receipt: request.tool });
+        const toolSource = patchToolSource(decodeBrowserToolSource(toolBytes, 'browser-native tool source'));
+        const binaryenToolSources = request.systemBridge === 'binaryen'
+            ? await materializeBinaryenToolSources(request.binaryenTools, inputBudget, request.env['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'] === '1')
+            : undefined;
         const patchedToolSource = toolSource;
         runtimeSlots['__jsoo_mounts'] = [];
         runtimeSlots['__jsoo_created_files'] = {};
         runtimeSlots['jsoo_env'] = { ...request.env };
         runtimeSlots['jsoo_fs_tmp'] = preloadFiles;
         runtimeSlots['process'] = {
-            argv: ['browser', request.toolUrl.split('/').at(-1) || 'tool', ...request.argv],
+            argv: ['browser', request.tool.url.split('/').at(-1) || 'tool', ...request.argv],
             env: { ...request.env },
             exit(code) {
                 throw new ToolExit(code);
@@ -681,13 +702,13 @@ self.addEventListener('message', async (event) => {
                 if (runtimeSlots['__wasm_bridge_debug'] === true) {
                     pushBinaryenBridgeMessage(runtimeGlobal, `binaryen system command invoked: ${command}`);
                 }
-                return runBinaryenTool(runtimeGlobal, command, request.binaryenTools);
+                return runBinaryenTool(runtimeGlobal, command, binaryenToolSources);
             };
             const browserRequire = Object.assign((specifier) => {
                 if (specifier === 'node:child_process') {
                     return {
                         execSync: (command) => {
-                            const exitCode = runBinaryenTool(runtimeGlobal, String(command), request.binaryenTools);
+                            const exitCode = runBinaryenTool(runtimeGlobal, String(command), binaryenToolSources);
                             if (exitCode !== 0) {
                                 const error = new Error(`execSync failed with exit code ${exitCode}`);
                                 error.status = exitCode;
@@ -705,7 +726,7 @@ self.addEventListener('message', async (event) => {
                                     String(command),
                                     ...args.map((arg) => JSON.stringify(arg))
                                 ].join(' ');
-                            const status = runBinaryenTool(runtimeGlobal, commandLine, request.binaryenTools);
+                            const status = runBinaryenTool(runtimeGlobal, commandLine, binaryenToolSources);
                             return {
                                 status,
                                 signal: null,
@@ -819,20 +840,6 @@ self.addEventListener('message', async (event) => {
                         }
                     };
                 }
-                if (specifier === 'node:fs/promises') {
-                    return {
-                        readFile: async (filePath) => {
-                            const response = await fetch(filePath, {
-                                cache: 'no-store',
-                                credentials: 'same-origin'
-                            });
-                            if (!response.ok) {
-                                throw new Error(`failed to read browser file: ${filePath}`);
-                            }
-                            return new Uint8Array(await response.arrayBuffer());
-                        }
-                    };
-                }
                 if (specifier === 'node:os') {
                     return {
                         tmpdir: () => '/tmp'
@@ -847,7 +854,7 @@ self.addEventListener('message', async (event) => {
                 throw new Error(`unsupported require in browser tool worker: ${specifier}`);
             }, {
                 main: {
-                    filename: request.toolUrl
+                    filename: request.tool.url
                 }
             });
             runtimeSlots['require'] = browserRequire;
@@ -870,7 +877,7 @@ self.addEventListener('message', async (event) => {
         let thrown = '';
         let exitCode = 0;
         try {
-            new Function(`${patchedToolSource}\n//# sourceURL=${request.toolUrl}`)();
+            new Function(`${patchedToolSource}\n//# sourceURL=${request.tool.url}`)();
         }
         catch (error) {
             if (error instanceof ToolExit) {

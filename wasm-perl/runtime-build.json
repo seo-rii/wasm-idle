@@ -1,0 +1,49 @@
+{
+  "format": "wasm-perl-runtime-build-v1",
+  "runtime": "webperl",
+  "profileId": "webperl-v0.09-beta-perl-5.28.1-emscripten-1.38.28",
+  "provenanceLevel": "opaque-prebuilt",
+  "artifact": {
+    "kind": "opaque-prebuilt",
+    "repository": "https://github.com/haukex/webperl.git",
+    "revision": "6f2173d29a2c2e3536e1de75ff5d291ae96ab348",
+    "tag": "v0.09-beta",
+    "doi": "10.5281/zenodo.2582586",
+    "path": "webperl_prebuilt_v0.09-beta.zip",
+    "url": "https://zenodo.org/api/records/2582586/files/webperl_prebuilt_v0.09-beta.zip/content",
+    "size": 3936557,
+    "sha256": "5f441249217e90ab378c666f473d4206ab4f44907f6bb0aa8d70834bc38c40dc"
+  },
+  "components": {
+    "webperl": {
+      "version": "v0.09-beta",
+      "repository": "https://github.com/haukex/webperl.git",
+      "revision": "6f2173d29a2c2e3536e1de75ff5d291ae96ab348",
+      "verifiedBuildInput": false,
+      "evidence": "release tag and opaque prebuilt archive"
+    },
+    "perl": {
+      "version": "5.28.1",
+      "repository": "https://github.com/haukex/emperl5.git",
+      "revision": "e70d909feb796ec99d5e91de5d1635d4526ec131",
+      "verifiedBuildInput": false,
+      "evidence": "embedded runtime version string and versioned WebPerl build configuration"
+    },
+    "emscripten": {
+      "version": "1.38.28",
+      "repository": "https://github.com/emscripten-core/emscripten.git",
+      "revision": "69ab40586822209758165df170e9fc8b81e05608",
+      "verifiedBuildInput": false,
+      "evidence": "versioned WebPerl build configuration"
+    },
+    "cpanExtensions": {
+      "modules": [
+        "Cpanel::JSON::XS",
+        "Devel::StackTrace",
+        "Future"
+      ],
+      "verifiedBuildInput": false,
+      "evidence": "versioned WebPerl build configuration without transitive artifact locks"
+    }
+  }
+}

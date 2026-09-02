@@ -1,0 +1,1 @@
+function e(e){return new Worker(``+new URL(`../workers/java-vfcq-1kl.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

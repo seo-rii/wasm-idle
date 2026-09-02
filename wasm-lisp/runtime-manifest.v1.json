@@ -1,0 +1,15 @@
+{
+  "format": "wasm-lisp-runtime-manifest-v1",
+  "runtime": "puppy-scheme",
+  "profileId": "puppy-scheme-0.0.7-jco-1.19.0-preview2-shim-0.17.9",
+  "fingerprint": "ed597352c039a002",
+  "files": [
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "index.js.gz",
+    "puppyc.core.wasm",
+    "puppyc.core2.wasm.gz",
+    "puppyc.js",
+    "runtime-build.json"
+  ]
+}

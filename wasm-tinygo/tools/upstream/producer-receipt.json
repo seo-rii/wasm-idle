@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 6,
+  "format": "wasm-llvm-tinygo-browser-compiler-v6",
+  "producerId": "wasm-llvm/tinygo-browser",
+  "inputs": {
+    "manifestSha256": "0f10e6b929e0fe004920066ffc6f02c1c68724b66fe8d22052023a385275e671",
+    "sourcesLockSha256": "12e4e1cfb070af4faa96cd83633227881b9de774fcb5799683d6352a01b7660f",
+    "sourceReceiptSha256": "635ad0181fdb8ae9c38d5b98201ef513e3ddb61239004101ba14e98e59732ad7"
+  },
+  "source": {
+    "tinygoCommit": "db9f1182f5f2a64ea496752899626578d2b313a7",
+    "goLlvmCommit": "b8f170971e747fec20a03b25a4490f627140709a",
+    "llvmCommit": "670759811adc85df52f410d7306788fabfc6242d"
+  },
+  "build": {
+    "entrypoint": {
+      "mode": "upstream-compiler-adapter",
+      "upstreamModule": "github.com/tinygo-org/tinygo",
+      "referenceCliFile": "main.go"
+    },
+    "hostTarget": "wasm32-wasip1",
+    "cgoEnabled": true,
+    "llvmLinkage": "in-process-c-api",
+    "hostCompileFallback": false,
+    "packageGraph": [
+      "github.com/tinygo-org/tinygo/builder",
+      "github.com/tinygo-org/tinygo/cgo",
+      "github.com/tinygo-org/tinygo/compiler",
+      "github.com/tinygo-org/tinygo/interp",
+      "github.com/tinygo-org/tinygo/loader",
+      "github.com/tinygo-org/tinygo/transform",
+      "tinygo.org/x/go-llvm"
+    ],
+    "compileProtocol": {
+      "version": 6,
+      "format": "wasm-llvm-tinygo-link-plan-v6",
+      "capabilities": [
+        "go-embed-objects",
+        "target-cgo-c",
+        "target-cxx-hosted-noeh",
+        "target-clang-assembly",
+        "target-cgo-cxxflags",
+        "target-cgo-linker-flags"
+      ]
+    },
+    "compileOutputs": [
+      "objects",
+      "link-plan.json"
+    ],
+    "runtimeProfile": {
+      "id": "wasip1-asyncify-precise-o1",
+      "target": "wasip1",
+      "opt": "1",
+      "gc": "precise",
+      "panicStrategy": "print",
+      "scheduler": "asyncify",
+      "debug": false,
+      "parallelism": 1
+    },
+    "rootArchive": {
+      "format": "wasm-llvm-tinygo-browser-root-v1",
+      "requiredPaths": [
+        "src",
+        "go.env",
+        "targets",
+        "go.mod",
+        "go.sum",
+        "lib/clang",
+        "lib/wasi-libc/include",
+        "lib/wasi-libc/include/c++/v1",
+        "runtime"
+      ],
+      "omittedTinyGoPaths": [
+        "lib except receipt-bound Clang, wasi-libc, and libc++ headers"
+      ],
+      "runtimeClosureFormat": "wasm-llvm-tinygo-runtime-closure-v2",
+      "runtimeProbe": {
+        "fixture": "fixtures/runtime-closure-probe/main.go",
+        "sha256": "55a60bb97151b2b4b680462447ce60ec34511b14fa10d77440c97b9777101566"
+      }
+    },
+    "finalization": {
+      "linker": "wasm-llvm/raw-wasi-lld",
+      "optimizer": "binaryen/wasm-opt",
+      "linkArguments": [
+        "--stack-first",
+        "--no-demangle",
+        "-L",
+        "/home/runner/work/_temp/tinygo-browser-producer/extracted-root",
+        "-L/home/runner/work/wasm-llvm/wasm-llvm/producer/tinygo-browser/fixtures/upstream-language-smoke",
+        "-o",
+        "program.unoptimized.wasm",
+        "--strip-debug",
+        "--compress-relocations",
+        "objects/0000-program.o",
+        "/home/runner/work/_temp/tinygo-browser-producer/extracted-root/runtime/wasip1-asyncify-precise-o1/compiler-rt.a",
+        "/home/runner/work/_temp/tinygo-browser-producer/extracted-root/runtime/wasip1-asyncify-precise-o1/extra-0.o",
+        "/home/runner/work/_temp/tinygo-browser-producer/extracted-root/runtime/wasip1-asyncify-precise-o1/extra-1.bc",
+        "/home/runner/work/_temp/tinygo-browser-producer/extracted-root/runtime/wasip1-asyncify-precise-o1/extra-2.o",
+        "objects/0001-target-c.bc",
+        "objects/0002-target-cxx.bc",
+        "objects/0003-target-assembly.o",
+        "/home/runner/work/_temp/tinygo-browser-producer/extracted-root/runtime/wasip1-asyncify-precise-o1/libcxx.a",
+        "/home/runner/work/_temp/tinygo-browser-producer/extracted-root/runtime/wasip1-asyncify-precise-o1/libcxxabi.a",
+        "/home/runner/work/_temp/tinygo-browser-producer/extracted-root/runtime/wasip1-asyncify-precise-o1/wasi-libc.a",
+        "objects/0004-embed.o",
+        "-mllvm",
+        "-mcpu=generic",
+        "-mllvm",
+        "-mattr=+bulk-memory,+bulk-memory-opt,+call-indirect-overlong,+mutable-globals,+nontrapping-fptoint,+sign-ext,-multivalue,-reference-types",
+        "--lto-O1"
+      ]
+    }
+  },
+  "verification": {
+    "status": "passed",
+    "identityMode": "upstream-package-graph",
+    "compilerVersion": "tinygo version 0.40.1 linux/amd64 (using go version go1.24.13 and LLVM version 20.1.1)",
+    "acceptance": {
+      "status": "passed",
+      "fixture": {
+        "sourceSha256": "3865b8f20a49885e4eea91cd4d51beffb183b690c98245ff679759b0d232261b",
+        "nativeSources": [
+          {
+            "path": "fixtures/upstream-language-smoke/cgo.go",
+            "sha256": "6785285ee5ab85be508ca37eecd60e386b25b3607e20d27c32547acdb2962135"
+          },
+          {
+            "path": "fixtures/upstream-language-smoke/helper.c",
+            "sha256": "0b23a8e9f77d6297fefa6ab09f36e1fe24508b613987d62ebb9c3d9937446d96"
+          },
+          {
+            "path": "fixtures/upstream-language-smoke/helper.cpp",
+            "sha256": "17e33478452f54b1b5d5424c88f51e95272b4fdf417444164b08b2e5096f1e2f"
+          },
+          {
+            "path": "fixtures/upstream-language-smoke/helper.S",
+            "sha256": "ad79ca3644cb88f5d6d52a1f966637736abfed0e4fd1a118cbdefc0f69406044"
+          }
+        ],
+        "embedSha256": "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
+        "stdinSha256": "c4b7d45359e10813d1787293eb7ffa9a074e837fcf99c0281610eab5fe907e79",
+        "stdoutSha256": "e6b130580a6a273384f9475f8ce7c973a3dd1decc09215f5b73066d7e8c67a16"
+      },
+      "compile": {
+        "objects": [
+          {
+            "path": "objects/0000-program.o",
+            "bytes": 267352,
+            "sha256": "6abdde8d26d99f14b4fb9cfb0853e5cd4ee5b70ed246059b34aadedcb976c433"
+          },
+          {
+            "path": "objects/0001-target-c.bc",
+            "bytes": 3048,
+            "sha256": "1149f5c7d5d91b53f206a5d902fe041020d4f365fdd2b09bb591669eb49a969e"
+          },
+          {
+            "path": "objects/0002-target-cxx.bc",
+            "bytes": 3652,
+            "sha256": "e0d37a05603b9f37825d5f7c26600268b544ff7f6d33b58b11b3a3478fe74f87"
+          },
+          {
+            "path": "objects/0003-target-assembly.o",
+            "bytes": 805,
+            "sha256": "82e87ff58e4fa790d5cff74097a4706a8cb934aa1df02e4018980682dda3ea94"
+          },
+          {
+            "path": "objects/0004-embed.o",
+            "bytes": 1144,
+            "sha256": "49b6b97580e10d09082f89f29aaf3c131ff8028da150908cbc0d7599e6ae3d05"
+          }
+        ],
+        "linkPlan": {
+          "path": "link-plan.json",
+          "bytes": 8354,
+          "sha256": "4dae0573424f4f9658746a1dbbb032a5804f487ac750c31b2cf72eb817507de4"
+        },
+        "finalWasmSha256": "63c7a3b6beb7df11d6b0af9131d74394f4ba1eaa256ea604fda1d1453483bba9"
+      },
+      "execution": {
+        "exitCode": 0,
+        "stdout": "hello Ada count=2 total=3 semantics=9/9 cgo=5/20 cxxasm=13\n",
+        "stdoutSha256": "e6b130580a6a273384f9475f8ce7c973a3dd1decc09215f5b73066d7e8c67a16"
+      }
+    }
+  },
+  "assets": [
+    {
+      "path": "tinygo-compiler.wasm",
+      "bytes": 70288217,
+      "sha256": "a5f6cb6cbfff45e6c5ee6ab8f3bca37c5dabd19d443107707ad1de330ecb8db2"
+    },
+    {
+      "path": "tinygoroot.tar.gz",
+      "bytes": 28919860,
+      "sha256": "e9e8314b406e57a512b49d9716455665bfac36e24694763bdecf86f4b0c2fae3"
+    }
+  ]
+}

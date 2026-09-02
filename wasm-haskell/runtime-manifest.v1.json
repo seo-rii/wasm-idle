@@ -1,0 +1,24 @@
+{
+  "formatVersion": 1,
+  "runtimeModule": "dyld.mjs",
+  "packages": {
+    "@bjorn3/browser_wasi_shim": "0.4.2"
+  },
+  "files": [
+    {
+      "path": "dyld.mjs",
+      "bytes": 82322,
+      "sha256": "cc1835b8530f71e29727a71648b635a5cf28f46ed84451f2de17b194d60033d4"
+    },
+    {
+      "path": "rootfs.tar.zst",
+      "bytes": 49091550,
+      "sha256": "35f68f56fdb72111f150ba05ad31efed2f6fc77ee7026fb4b197ae7901a67adf"
+    },
+    {
+      "path": "bsdtar.wasm",
+      "bytes": 1240004,
+      "sha256": "e13ebb15ca0971f6629a6313bc043c532dd9be3a0e6bb0b7f8a395de835ad0c0"
+    }
+  ]
+}

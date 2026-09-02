@@ -1,17 +1,45 @@
 {
   "version": 1,
-  "generatedAt": "2026-07-16T16:32:22.716Z",
+  "generatedAt": "2026-07-29T16:32:40.093Z",
   "switchPrefix": "/home/seorii/.cache/wasm-of-js-of-ocaml/opam/wasm-of-js-of-ocaml-5.4.1",
-  "findlibConf": "/wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf",
+  "findlibConf": {
+    "url": "/wasm-of-js-of-ocaml/browser-native-bundle/findlib.conf",
+    "bytes": 181,
+    "sha256": "7a3f7339e24631f266e25a996a2001eca1633fcd4a66cc9b3074863ffee572b7"
+  },
   "tools": {
-    "ocamlc": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/ocamlc.byte.browser.js",
-    "js_of_ocaml": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/js_of_ocaml.bc.browser.js",
-    "wasm_of_ocaml": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js"
+    "ocamlc": {
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/ocamlc.byte.browser.js",
+      "bytes": 2328856,
+      "sha256": "78796cf45398351cb42ea116c83639d577b310a6f13e9308403a90a8fbb51f14"
+    },
+    "js_of_ocaml": {
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/js_of_ocaml.bc.browser.js",
+      "bytes": 4783689,
+      "sha256": "f0db3bb33757eff619f3f6889ba88f72c2150a4972aedfd5373ae8ffe02b5a42"
+    },
+    "wasm_of_ocaml": {
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm_of_ocaml.bc.browser.js",
+      "bytes": 6250420,
+      "sha256": "666b83417cdf9b0aab3b3933529e48432953763c0385a26605c84efbfaab2e76"
+    }
   },
   "binaryenTools": {
-    "wasm_opt": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js",
-    "wasm_merge": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js",
-    "wasm_metadce": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js"
+    "wasm_opt": {
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-opt.browser.js",
+      "bytes": 10601940,
+      "sha256": "c20aa56b52da835ec997a15599971c59114ed2665c030b04a55b8f093964a20f"
+    },
+    "wasm_merge": {
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js",
+      "bytes": 9560005,
+      "sha256": "be81efabcf5d87ad5622a4577169841600ffef431e9bf095899580f5516753c7"
+    },
+    "wasm_metadce": {
+      "url": "/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-metadce.browser.js",
+      "bytes": 9599667,
+      "sha256": "b8badf17dbf6094dbf2e207beff6706deff918e4e1b4622e455d8ec04fa98cdd"
+    }
   },
   "toolPatches": {
     "version_dune_static_placeholder": {
@@ -23,16 +51,16 @@
     },
     "runtime_wasm_module_names": {
       "path": "/home/seorii/.cache/wasm-of-js-of-ocaml/opam/wasm-of-js-of-ocaml-5.4.1/.opam-switch/sources/js_of_ocaml-compiler.6.3.2/runtime/wasm/args.ml",
-      "alreadyPatched": false,
-      "sourceSha256": "6083ed96628feb1c729d807ad5e003944fd84efae78b40761ee700208be967a6",
+      "alreadyPatched": true,
+      "sourceSha256": "b7ac9996b605530800166862724c49de5b236cb92f7c18408dbe47045e597982",
       "patchedSha256": "b7ac9996b605530800166862724c49de5b236cb92f7c18408dbe47045e597982"
     },
     "wasm_of_ocaml_binaryen_bridge": {
       "tool": "wasm_of_ocaml.bc.browser.js",
       "bridgeSymbol": "globalThis.__wasm_of_js_system_command",
       "systemFunctionName": "px",
-      "alreadyPatched": false,
-      "sourceSha256": "303aa68b4b6b19c1eeac1c5a96dca6addfb10ce4aca42810db0ce1a28e1af551",
+      "alreadyPatched": true,
+      "sourceSha256": "666b83417cdf9b0aab3b3933529e48432953763c0385a26605c84efbfaab2e76",
       "patchedSha256": "666b83417cdf9b0aab3b3933529e48432953763c0385a26605c84efbfaab2e76"
     },
     "browser_binaryen_tools": [
@@ -63,8 +91,13 @@
     "format": "wasm-of-js-of-ocaml-browser-native-runtime-pack-v1",
     "asset": "/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz",
     "index": "/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-runtime-pack.v1.index.json",
+    "indexBytes": 70441,
+    "indexSha256": "ac426368561253a13f6b645e09d7278ffab2fc80816c6ad1096f9e9919050d59",
+    "compressedBytes": 18132361,
+    "compressedSha256": "3aaa3dec4bdce49f1786eb2373c782d0bf2803013ee105dc81791ef6b936f2da",
     "fileCount": 509,
-    "totalBytes": 24453239
+    "totalBytes": 24453239,
+    "uncompressedSha256": "760db8afcfdfd0e121120f29498efbbc99406e6ca6eb8c522d6e1d5d788e956b"
   },
   "ocamlLibFiles": [
     {

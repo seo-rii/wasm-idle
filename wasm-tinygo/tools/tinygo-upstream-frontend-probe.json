@@ -1,9 +1,0 @@
-{
-  "sourceRef": "v0.40.1",
-  "sourceUrl": "https://github.com/tinygo-org/tinygo.git",
-  "sourceVersion": "0.40.1",
-  "patchedRoot": "/tmp/wasm-tinygo-clean.YNk9Ut/.cache/tinygo-src-wasi-frontend-probe",
-  "cachedGoroot": "/home/seorii/.cache/tinygo/goroot-2cb631d929d5fa952e06914e3989771f77a19fd951a6d34a6e4ed740ad6b749e",
-  "outputPath": "/tmp/wasm-tinygo-clean.YNk9Ut/public/tools/tinygo-upstream-frontend-probe.wasm",
-  "wasmBytes": 7842940
-}

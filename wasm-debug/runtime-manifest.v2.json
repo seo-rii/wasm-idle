@@ -1,0 +1,84 @@
+{
+  "manifestVersion": 2,
+  "version": "llvmorg-22.1.8",
+  "defaultTarget": "wasm32-wasi",
+  "compiler": {
+    "memfs": {
+      "asset": "bin/memfs.zip",
+      "argv0": "memfs"
+    },
+    "clang": {
+      "asset": "bin/clang.zip",
+      "argv0": "clang"
+    },
+    "lld": {
+      "asset": "bin/lld.zip",
+      "argv0": "wasm-ld"
+    },
+    "sysroot": {
+      "asset": "bin/sysroot.tar.zip"
+    },
+    "provenance": {
+      "name": "clang",
+      "version": "22.1.8",
+      "revision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1"
+    },
+    "resourceDir": "/lib/clang/22",
+    "compilerRuntimeLibDir": "lib/clang/22/lib/wasi"
+  },
+  "clangd": {
+    "js": "clangd/clangd.js",
+    "wasm": "clangd/clangd.wasm.gz"
+  },
+  "targets": {
+    "wasm32-wasi": {
+      "artifactFormat": "wasi-core-wasm",
+      "execution": {
+        "kind": "wasi-preview1"
+      }
+    }
+  },
+  "debugger": {
+    "protocolVersion": 1,
+    "transport": "shared-ring-v1",
+    "lldb": {
+      "js": "debug/lldb-web-dap.js",
+      "wasm": "debug/lldb-web-dap.wasm",
+      "worker": "debug/lldb-web-dap.pthread.mjs",
+      "jsSha256": "e459d2588fad29e1d24b992a5acee2d4b3f84d414cf8b517bddeac61c6b92c60",
+      "wasmSha256": "4d355af4301df8955b91e5cd0d78f9845c6d81e6508982e7e9beae4a3f778711",
+      "workerSha256": "d40975277aa0c98c6570f9a35d52ab9be475ded4e7a4796fc6d0f8f314c9652d",
+      "llvmVersion": "22.1.8",
+      "llvmRevision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+      "patchesSha256": "1c80a97107f6232f86804ea23fdf3308d78bc7626245659990f0e3e97b77ba49",
+      "sourcesLockSha256": "ea6ebe48778b50f4f64fa165f46ccafa25a45ca6388daf769d4e164b8781bd27"
+    },
+    "targetRuntime": {
+      "name": "wamr",
+      "js": "debug/wamr-debug.js",
+      "wasm": "debug/wamr-debug.wasm",
+      "worker": "debug/wamr-debug.worker.mjs",
+      "jsSha256": "9948dc4dc7fe7cf575a6480abac6de3b451ad10e3a7b851d4e43f435df0ddcec",
+      "wasmSha256": "e3c848b676cbc65b9014d19a3b36f480f7989309ce2e2385fcbeafa75240d338",
+      "workerSha256": "d42f216c4aac3aff61741537d0507ab86aefbe4525661f8d75e49c274b639f79",
+      "revision": "25bd7eb63e828e4bd242cc9b38d260b4b31c6605",
+      "provenance": {
+        "sourcesLockSha256": "18f924fa418c7dccb0c557c1310ae877f5e5ab41ce34256230565879fe1f2727",
+        "producerManifestSha256": "4ca46f882c7b8962098e949c43c91b1080752ba622b61e8cba614911fed100cd",
+        "patchesSha256": "e56cc12925ab01934a747bd3697a057eff641fdc77f9f301e5dc7e942a36a982",
+        "overlaysSha256": "28bdcc1fc1901cfe6a249b1c541e31c02e07927b879bacbf81de11b91df5f4ca"
+      }
+    },
+    "capabilities": {
+      "breakpoints": true,
+      "stepping": true,
+      "stackTrace": true,
+      "locals": true,
+      "globals": true,
+      "readMemory": true,
+      "evaluateExpressions": false,
+      "dataBreakpoints": false,
+      "wasmThreads": false
+    }
+  }
+}

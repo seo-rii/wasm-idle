@@ -1,0 +1,165 @@
+{
+  "format": "wasm-tcl-runtime-manifest-v2",
+  "runtime": "wacl",
+  "profileId": "wacl-pages-045aa904-tcl-8.6.6",
+  "fingerprint": "4687ad97c5bb5e96d4354a24e9faffeb9dc9eb1ee7e8c9b0c0ea289c5d9a2baa",
+  "artifact": {
+    "kind": "opaque-prebuilt",
+    "path": "wacl/releases/wacl.zip",
+    "repository": "https://github.com/ecky-l/ecky-l.github.io.git",
+    "revision": "045aa904c2073eeded1be803cf5416901f6ce8ee",
+    "sha256": "50d4ecb40c4db0448942332f9562c3cedc8bea38fa89d95ca5e5b9afcc5afb23",
+    "size": 1350907,
+    "url": "https://raw.githubusercontent.com/ecky-l/ecky-l.github.io/045aa904c2073eeded1be803cf5416901f6ce8ee/wacl/releases/wacl.zip"
+  },
+  "components": {
+    "wacl": {
+      "version": "2017-05-29",
+      "repository": "https://github.com/ecky-l/wacl.git",
+      "revision": "9daacabb0102a9986f33263261350edfeebdd83b",
+      "verifiedBuildInput": false
+    },
+    "tcl": {
+      "version": "8.6.6",
+      "revision": "27696b490b9b339a869a8f6fe3113d05ebcbf565",
+      "verifiedBuildInput": false
+    },
+    "tdom": {
+      "version": "0.8.3",
+      "revision": "5a0a14aeb9321e50532af6c18ef4d05e44b158c8",
+      "verifiedBuildInput": false
+    },
+    "rlJson": {
+      "version": "0.9.7",
+      "revision": "89ae2c67fc6023b3e0886ff5d2850dcde127a1c1",
+      "verifiedBuildInput": false
+    },
+    "tcllib": {
+      "version": "1.18",
+      "revision": "700ee122b5c26243929831b242897ea7170c7015",
+      "verifiedBuildInput": false
+    },
+    "requirejs": {
+      "version": "2.3.3",
+      "revision": "f2335026867afd80c394247bfe5278d2bd8f32ee",
+      "verifiedBuildInput": false
+    },
+    "emscripten": {
+      "version": "1.37.9",
+      "revision": "f1222cc8c315e47ba3541a42ab391bd3b1d9be14",
+      "verifiedBuildInput": false
+    }
+  },
+  "patches": [
+    {
+      "id": "inject-verified-wasm"
+    },
+    {
+      "id": "inject-host-module"
+    },
+    {
+      "id": "preserve-host-output"
+    },
+    {
+      "id": "preserve-host-error-output"
+    },
+    {
+      "id": "guard-window-cleanup"
+    }
+  ],
+  "licenses": [
+    {
+      "path": "licenses/WACL.txt",
+      "spdx": "BSD-3-Clause",
+      "size": 1506,
+      "sha256": "c692473de719bd2429a4f1205982685a88ac0e3fda415ed5ea1dfb475c5d901d"
+    },
+    {
+      "path": "licenses/TCL.txt",
+      "spdx": "TCL",
+      "size": 2255,
+      "sha256": "c0a69a2bfd757361ec7e6143973b103c90409316b49e9c88db26ad6388e79f16"
+    },
+    {
+      "path": "licenses/REQUIREJS.txt",
+      "spdx": "MIT",
+      "size": 1904,
+      "sha256": "4e51314366fce8914fde48ccd4d52255d37f5fcb72e00fe0dccbc6cbb6682bc9"
+    }
+  ],
+  "metadata": {
+    "path": "runtime-build.json",
+    "mediaType": "application/json",
+    "size": 1972,
+    "sha256": "3b426e4332c3e89a80878d4cc1b159192de50e03185757420ceef3699c786834"
+  },
+  "assets": [
+    {
+      "path": "require.js",
+      "mediaType": "text/javascript",
+      "size": 17831,
+      "sha256": "0ca49b7de8f5e006ba5eb976937a3f9fb96b05ebfbb11d685c0b21ead94aacaf"
+    },
+    {
+      "path": "tcl/wacl-custom.data",
+      "mediaType": "application/octet-stream",
+      "size": 976,
+      "sha256": "46874b6dfe04b9c693815fe904a52e3583260323857dee46ac7373c484e3b2f8"
+    },
+    {
+      "path": "tcl/wacl-library.data",
+      "mediaType": "application/octet-stream",
+      "size": 2307994,
+      "sha256": "3a8e166c2197920e36c874e2fefae4ca6e0c4a920a443b8e1d2282c344d485f0"
+    },
+    {
+      "path": "tcl/wacl.js",
+      "mediaType": "text/javascript",
+      "size": 240157,
+      "sha256": "c3377f974386190f1e465ffd66b528b0e33ea7a66bcde3b8c1695d4d720276af"
+    },
+    {
+      "path": "tcl/wacl.wasm",
+      "mediaType": "application/wasm",
+      "size": 1884110,
+      "sha256": "9f55db5a617fd154882bb93bbf333dad5af1d0d697e8076ed05896fb91b22e99"
+    }
+  ],
+  "storage": [
+    {
+      "path": "require.js",
+      "logicalPath": "require.js",
+      "encoding": "identity",
+      "size": 17831,
+      "sha256": "0ca49b7de8f5e006ba5eb976937a3f9fb96b05ebfbb11d685c0b21ead94aacaf"
+    },
+    {
+      "path": "tcl/wacl-custom.data.bin",
+      "logicalPath": "tcl/wacl-custom.data",
+      "encoding": "identity",
+      "size": 976,
+      "sha256": "46874b6dfe04b9c693815fe904a52e3583260323857dee46ac7373c484e3b2f8"
+    },
+    {
+      "path": "tcl/wacl-library.data.gz.bin",
+      "logicalPath": "tcl/wacl-library.data",
+      "encoding": "gzip",
+      "size": 593060,
+      "sha256": "909811fc942d947e1d5efb0ee425447dce9f267bfd6207c4d5af91dedca1ae8a"
+    },
+    {
+      "path": "tcl/wacl.js",
+      "logicalPath": "tcl/wacl.js",
+      "encoding": "identity",
+      "size": 240157,
+      "sha256": "c3377f974386190f1e465ffd66b528b0e33ea7a66bcde3b8c1695d4d720276af"
+    },
+    {
+      "path": "tcl/wacl.wasm.gz.bin",
+      "logicalPath": "tcl/wacl.wasm",
+      "encoding": "gzip",
+      "size": 640669,
+      "sha256": "35a913cb5400f1eaa350de61bf9b6276fb6114d2a6ac7d16e5ee58d5c8b83ac4"
+    }
+  ]
+}

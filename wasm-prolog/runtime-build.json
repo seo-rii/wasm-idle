@@ -1,0 +1,22 @@
+{
+  "format": "wasm-prolog-runtime-build-v1",
+  "runtime": "swipl-wasm",
+  "profileId": "swipl-wasm-8.0.1-swipl-10.1.9",
+  "package": {
+    "name": "swipl-wasm",
+    "version": "8.0.1",
+    "repository": "https://github.com/SWI-Prolog/npm-swipl-wasm.git",
+    "revision": "18fa003833dd4fb2531195063291687255038372",
+    "tarball": "https://registry.npmjs.org/swipl-wasm/-/swipl-wasm-8.0.1.tgz",
+    "integrity": "sha512-tP3bSRaMboFRWGD5cfBAGIzu2HH80yqRG+i/YL8BEgQ7xasvJAycwgx0DW16vqqRhUHyFOOPbzX4aXuy9s+b1g=="
+  },
+  "toolchain": {
+    "swiplVersion": "10.1.9",
+    "swiplRevision": "6be143dbd030cc9ea621cde719a37f8385575453",
+    "emsdkVersion": "6.0.0",
+    "emsdkRevision": "d223ae73c6998296e3ab27cf81dc2c2c9fd383de",
+    "zlibVersion": "1.3.2",
+    "pcre2Version": "10.47",
+    "pcre2Revision": "f454e231fe5006dd7ff8f4693fd2b8eb94333429"
+  }
+}

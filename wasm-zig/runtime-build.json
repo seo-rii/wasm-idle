@@ -1,0 +1,34 @@
+{
+	"schemaVersion": 2,
+	"profileId": "zigc-wasm-0.11.0",
+	"fingerprint": "df5423149ff36642",
+	"upstream": {
+		"lockSchemaVersion": 2,
+		"releaseBaseUrl": "https://github.com/Afirium/zigc-wasm/releases/download/v0.11.0",
+		"allowedRedirectOrigins": [
+			"https://release-assets.githubusercontent.com"
+		],
+		"inputs": {
+			"zig_small.wasm": {
+				"bytes": 5018805,
+				"sha256": "cbfc172100b07beee2710c837b7ed0fe2e456fb10c00aa7ff5e618db949adf61"
+			},
+			"std.zip": {
+				"bytes": 2871033,
+				"sha256": "9b5b9243d511efe1adc4f1081c2fbcc7b0df6caa4d3f6d4099d7c392d2f5b59d"
+			}
+		}
+	},
+	"assets": {
+		"zig_small.wasm": {
+			"bytes": 5018805,
+			"sha256": "cbfc172100b07beee2710c837b7ed0fe2e456fb10c00aa7ff5e618db949adf61"
+		},
+		"std.tar.gz": {
+			"bytes": 2575470,
+			"sha256": "03b09a29961853c11dbd3f8e7496f17df0a03a1e90d95932970e59730e958b62",
+			"uncompressedBytes": 12559872,
+			"uncompressedSha256": "ab9d792e3803dc66177ffe9ee715df2987d8348d7a808e2273229dd99d5fbfdd"
+		}
+	}
+}
