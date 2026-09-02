@@ -1568,6 +1568,7 @@ describe('static worker backed language sandboxes', () => {
 	it('streams run-correlated input after dispatch through a bounded shared ring', async () => {
 		await withCrossOriginIsolation(true, async () => {
 			const messages: any[] = [];
+			const progress = { set: vi.fn() };
 			onPostMessage = (worker, message) => {
 				messages.push(message);
 				if (message.run) {
@@ -1595,8 +1596,14 @@ describe('static worker backed language sandboxes', () => {
 			expect(new Tcl().stdinMode).toBe('streaming');
 			await sandbox.load();
 
-			const run = sandbox.run('print("prompt"); read()', false);
+			const run = sandbox.run('print("prompt"); read()', false, true, progress);
 			await vi.waitFor(() => expect(messages.some((message) => message.run)).toBe(true));
+			await vi.waitFor(() =>
+				expect(progress.set).toHaveBeenLastCalledWith(
+					1,
+					'Streaming stdin test runtime ready for input'
+				)
+			);
 			const runMessage = messages.find((message) => message.run);
 			expect(runMessage).toMatchObject({
 				run: true,

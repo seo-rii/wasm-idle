@@ -1584,6 +1584,13 @@ self.postMessage = (message, transferOrOptions) => {
 		try {
 			if (event.data?.type === 'stdin-request') {
 				activeRun.stdinRing?.consumerRequestedInput();
+				if (this.activeRun === activeRun) {
+					this.reportProgress(
+						activeRun.progress,
+						1,
+						`${this.config.displayName} runtime ready for input`
+					);
+				}
 				return;
 			}
 			const { output, results, error, diagnostic, progress } = event.data || {};
