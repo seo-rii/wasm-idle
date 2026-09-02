@@ -137,6 +137,86 @@ describe('core execution boundary', () => {
 		await expect(sandbox.run('int main() {}', false)).resolves.toBe(true);
 	});
 
+	it('keeps an explicitly interactive final run alive beyond the ordinary deadline', async () => {
+		vi.useFakeTimers();
+		try {
+			let finishRun: ((result: boolean | string) => void) | undefined;
+			const run = vi.fn(
+				() =>
+					new Promise<boolean | string>((resolve) => {
+						finishRun = resolve;
+					})
+			);
+			const cancel = vi.fn(async () => undefined);
+			const binding = createPlaygroundBinding('/runtime', async () =>
+				createSandbox({ run, cancel })
+			);
+			const sandbox = await binding.load('C');
+
+			const operation = sandbox.run('int main() {}', false, false, undefined, [], {
+				interactive: true,
+				limits: { compileTimeoutMs: 10, runTimeoutMs: 15 }
+			});
+			await Promise.resolve();
+			await vi.advanceTimersByTimeAsync(250);
+			finishRun?.(true);
+
+			await expect(operation).resolves.toBe(true);
+			expect(cancel).not.toHaveBeenCalled();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('keeps prepare bounded when the following final run is interactive', async () => {
+		vi.useFakeTimers();
+		try {
+			let finishRun: ((result: boolean | string) => void) | undefined;
+			const run = vi.fn(
+				() =>
+					new Promise<boolean | string>((resolve) => {
+						finishRun = resolve;
+					})
+			);
+			const cancel = vi.fn(async () => undefined);
+			const binding = createPlaygroundBinding('/runtime', async () =>
+				createSandbox({ run, cancel })
+			);
+			const sandbox = await binding.load('C');
+			const operation = sandbox.run('int main() {}', true, false, undefined, [], {
+				interactive: true,
+				limits: { compileTimeoutMs: 10, runTimeoutMs: 15 }
+			});
+			const rejection = expect(operation).rejects.toMatchObject({
+				code: 'timeout',
+				phase: 'execute',
+				timeoutMs: 25
+			});
+			await Promise.resolve();
+			await vi.advanceTimersByTimeAsync(25);
+
+			await rejection;
+			expect(cancel).toHaveBeenCalledOnce();
+			finishRun?.(true);
+			await Promise.resolve();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('rejects a non-boolean interactive run before invoking the sandbox', async () => {
+		const run = vi.fn(async () => true);
+		const binding = createPlaygroundBinding('/runtime', async () => createSandbox({ run }));
+		const sandbox = await binding.load('C');
+
+		await expect(
+			sandbox.run('int main() {}', false, false, undefined, [], {
+				interactive: 'yes' as unknown as boolean
+			})
+		).rejects.toMatchObject({ code: 'runtime-configuration', phase: 'execute' });
+		expect(run).not.toHaveBeenCalled();
+	});
+
 	it('keeps structured execution exclusive until a timed-out runtime actually settles', async () => {
 		vi.useFakeTimers();
 		try {

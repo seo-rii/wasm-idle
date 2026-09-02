@@ -118,6 +118,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/onclick=\{\(\) => debug\.runToCursor\(\)\}/);
 		expect(source).toMatch(/disabled=\{!debug\.canRunToCursor\}/);
 		expect(source).toMatch(/onclick=\{\(\) => debug\.sendCommand\('continue'\)\}/);
+		expect(source).toContain('interactive: enableDebug,');
 		expect(source).toMatch(/ondebug=\{onDebugEvent\}/);
 		expect(source).toMatch(/bind:value=\{debug\.watchInput\}/);
 		expect(source).toMatch(/onclick=\{\(\) => debug\.addWatchExpression\(\)\}/);

@@ -47,6 +47,8 @@ export interface SandboxExecutionOptions {
 	[key: string]: unknown;
 	activePath?: string;
 	env?: Record<string, string>;
+	/** Keep the final run alive until the host explicitly stops or disposes it. */
+	interactive?: boolean;
 	limits?: Partial<ExecutionLimits>;
 	runtimeRequirements?: ExecutionRuntimeRequirements;
 	signal?: AbortSignal;
@@ -178,6 +180,9 @@ function validateSandboxExecutionOptions(
 			phase
 		});
 	}
+	if (options.interactive !== undefined && typeof options.interactive !== 'boolean') {
+		throw new RuntimeConfigurationError('Interactive execution must be a boolean', { phase });
+	}
 	const limits = resolveExecutionLimits(options.limits);
 	const workspaceLimits = {
 		...options.workspaceLimits,
@@ -277,7 +282,7 @@ function runSandboxOperation<T>(
 	operationState: SandboxOperationState,
 	operation: () => Promise<T>,
 	signal: AbortSignal | undefined,
-	timeoutMs: number,
+	timeoutMs: number | null,
 	limits: ExecutionLimits,
 	phase: RuntimePhase
 ): Promise<T> {
@@ -371,18 +376,20 @@ function runSandboxOperation<T>(
 			onAbort();
 			return;
 		}
-		timeout = setTimeout(() => {
-			if (operationStarted) requestCancellation();
-			else releaseOperation();
-			settle(() =>
-				reject(
-					new TimeoutError(`Runtime ${phase} exceeded ${timeoutMs} ms`, {
-						phase,
-						timeoutMs
-					})
-				)
-			);
-		}, timeoutMs);
+		if (timeoutMs !== null) {
+			timeout = setTimeout(() => {
+				if (operationStarted) requestCancellation();
+				else releaseOperation();
+				settle(() =>
+					reject(
+						new TimeoutError(`Runtime ${phase} exceeded ${timeoutMs} ms`, {
+							phase,
+							timeoutMs
+						})
+					)
+				);
+			}, timeoutMs);
+		}
 		void Promise.resolve().then(async () => {
 			if (settled) {
 				releaseOperation();
@@ -621,10 +628,12 @@ function bindRuntimeAssets(
 						operationState,
 						() => target.run(code, prepare, log, progress, args, validated),
 						validated.signal,
-						combinedPhaseTimeoutMs(
-							validated.limits.compileTimeoutMs,
-							validated.limits.runTimeoutMs
-						),
+						prepare === false && validated.interactive === true
+							? null
+							: combinedPhaseTimeoutMs(
+									validated.limits.compileTimeoutMs,
+									validated.limits.runTimeoutMs
+								),
 						validated.limits,
 						'execute'
 					);

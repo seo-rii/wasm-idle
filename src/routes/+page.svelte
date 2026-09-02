@@ -1445,6 +1445,7 @@
 				options: {
 					debugMode: executionDebugMode,
 					debug: enableDebug,
+					interactive: enableDebug,
 					breakpoints: [...debug.effectiveBreakpoints],
 					sourceBreakpoints: debug.sourceBreakpoints.filter(({ sourcePath }) =>
 						files.some(

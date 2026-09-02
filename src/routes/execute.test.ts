@@ -15,7 +15,12 @@ describe('executeTerminalRun', () => {
 			language: 'CPP',
 			code: 'int main() {}',
 			log: false,
-			options: { debug: true, breakpoints: [3, 7], pauseOnEntry: true }
+			options: {
+				debug: true,
+				interactive: true,
+				breakpoints: [3, 7],
+				pauseOnEntry: true
+			}
 		});
 
 		expect(terminal.clear).toHaveBeenCalledTimes(1);
@@ -25,10 +30,11 @@ describe('executeTerminalRun', () => {
 			false,
 			undefined,
 			[],
-			{ debug: true, breakpoints: [3, 7], pauseOnEntry: true }
+			{ debug: true, interactive: true, breakpoints: [3, 7], pauseOnEntry: true }
 		);
 		expect(terminal.run).toHaveBeenCalledWith('CPP', 'int main() {}', false, undefined, [], {
 			debug: true,
+			interactive: true,
 			breakpoints: [3, 7],
 			pauseOnEntry: true
 		});

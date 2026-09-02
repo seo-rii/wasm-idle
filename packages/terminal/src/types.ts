@@ -36,6 +36,8 @@ export interface SandboxExecutionOptions {
 	debugMode?: BrowserDebugMode;
 	/** @deprecated Use debugMode. */
 	debug?: boolean;
+	/** Keep the final run alive until the host explicitly stops or disposes it. */
+	interactive?: boolean;
 	breakpoints?: number[];
 	sourceBreakpoints?: DebugSourceBreakpoints[];
 	pauseOnEntry?: boolean;
