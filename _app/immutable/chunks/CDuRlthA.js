@@ -1,0 +1,1 @@
+function e(e){return new Worker(``+new URL(`../workers/cobol-DYWy6aYx.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};
