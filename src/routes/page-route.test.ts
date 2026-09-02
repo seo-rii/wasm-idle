@@ -26,6 +26,12 @@ const expectPlaygroundLanguage = (language: PlaygroundLanguage) => {
 };
 
 describe('example route debug actions', () => {
+	it('reloads once the Pages isolation service worker is ready', () => {
+		expect(layoutSource).toMatch(/await navigator\.serviceWorker\.ready;/);
+		expect(layoutSource).toMatch(/if \(!crossOriginIsolated\) window\.location\.reload\(\);/);
+		expect(layoutSource).not.toMatch(/!navigator\.serviceWorker\.controller/);
+	});
+
 	it('swaps run/debug actions for stop buttons while sessions are active', () => {
 		expect(() =>
 			compile(source, {

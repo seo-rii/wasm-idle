@@ -9,18 +9,16 @@
 		onMount(async () => {
 			if ('serviceWorker' in navigator) {
 				const workerPath = `${base}/worker.js`;
-				navigator.serviceWorker
-					.register(workerPath, { scope: base ? `${base}/` : '/' })
-					.then(
-						function (registration) {
-							console.log('COOP/COEP Service Worker registered', registration.scope);
-							if (registration.active && !navigator.serviceWorker.controller)
-								window.location.reload();
-						},
-						function (err) {
-							console.log('COOP/COEP Service Worker failed to register', err);
-						}
-					);
+				try {
+					const registration = await navigator.serviceWorker.register(workerPath, {
+						scope: base ? `${base}/` : '/'
+					});
+					console.log('COOP/COEP Service Worker registered', registration.scope);
+					await navigator.serviceWorker.ready;
+					if (!crossOriginIsolated) window.location.reload();
+				} catch (err) {
+					console.log('COOP/COEP Service Worker failed to register', err);
+				}
 			} else {
 				console.warn('Cannot register a service worker');
 			}
