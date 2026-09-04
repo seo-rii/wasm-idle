@@ -4,18 +4,59 @@ import { flushBufferedEof, flushQueuedStdin } from '$lib/playground/stdinBuffer'
 
 const manifestUrl =
 	'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json';
+const bundleRoot = '/wasm-of-js-of-ocaml/browser-native-bundle';
+const manifestAsset = (url: string, bytes: number, digestCharacter: string) => ({
+	url,
+	bytes,
+	sha256: digestCharacter.repeat(64)
+});
 const manifest = {
 	version: 1,
 	generatedAt: '2026-04-10T00:00:00.000Z',
 	switchPrefix: '/static/toolchain',
-	findlibConf: '/static/toolchain/lib/findlib.conf',
+	findlibConf: manifestAsset(`${bundleRoot}/findlib.conf`, 181, '1'),
 	tools: {
-		ocamlc: '/static/toolchain/bin/ocamlc.bc.browser.js',
-		js_of_ocaml: '/static/toolchain/bin/js_of_ocaml.bc.browser.js',
-		wasm_of_ocaml: '/static/toolchain/bin/wasm_of_ocaml.bc.browser.js'
+		ocamlc: manifestAsset(`${bundleRoot}/tools/ocamlc.byte.browser.js`, 2_328_856, '2'),
+		js_of_ocaml: manifestAsset(`${bundleRoot}/tools/js_of_ocaml.bc.browser.js`, 4_783_689, '3'),
+		wasm_of_ocaml: manifestAsset(
+			`${bundleRoot}/tools/wasm_of_ocaml.bc.browser.js`,
+			6_250_420,
+			'4'
+		)
 	},
-	ocamlLibFiles: [],
-	packages: []
+	binaryenTools: {
+		wasm_opt: manifestAsset(`${bundleRoot}/tools/wasm-opt.browser.js`, 10_601_940, '5'),
+		wasm_merge: manifestAsset(`${bundleRoot}/tools/wasm-merge.browser.js`, 9_560_005, '6'),
+		wasm_metadce: manifestAsset(`${bundleRoot}/tools/wasm-metadce.browser.js`, 9_599_667, '7')
+	},
+	runtimePack: {
+		format: 'wasm-of-js-of-ocaml-browser-native-runtime-pack-v1',
+		asset: `${bundleRoot}/browser-native-runtime-pack.v1.bin.gz`,
+		index: `${bundleRoot}/browser-native-runtime-pack.v1.index.json`,
+		fileCount: 2,
+		totalBytes: 30
+	},
+	ocamlLibFiles: [
+		{
+			path: '/static/toolchain/lib/ocaml/stdlib.cma',
+			url: `${bundleRoot}/lib/ocaml/stdlib.cma`,
+			size: 10
+		}
+	],
+	packages: [
+		{
+			name: 'yojson',
+			rootPath: '/static/toolchain/lib/yojson',
+			requires: [],
+			files: [
+				{
+					path: '/static/toolchain/lib/yojson/yojson.cma',
+					url: `${bundleRoot}/lib/yojson/yojson.cma`,
+					size: 20
+				}
+			]
+		}
+	]
 };
 const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
 
@@ -34,6 +75,44 @@ function manifestResponse(data = manifestBytes, url = manifestUrl) {
 
 async function createMockOcamlCompilerModule(source: string) {
 	return `data:text/javascript;base64,${Buffer.from(source, 'utf8').toString('base64')}`;
+}
+
+let capturedManifestIndex = 0;
+
+async function captureDispatcherManifest() {
+	const captureKey = `__ocamlDispatcherManifest${capturedManifestIndex++}`;
+	const compilerModuleUrl = await createMockOcamlCompilerModule(`
+		export async function compile() {
+			return {
+				success: true,
+				stdout: '',
+				stderr: '',
+				diagnostics: [],
+				artifacts: []
+			};
+		}
+
+		export function createBrowserWorkerSystemDispatcher(options) {
+			globalThis[${JSON.stringify(captureKey)}] = options.manifest;
+			return {};
+		}
+	`);
+
+	await import('./ocaml');
+	await (globalThis as any).self.onmessage({
+		data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl }
+	});
+	await (globalThis as any).self.onmessage({
+		data: {
+			code: 'let () = ()',
+			prepare: true,
+			target: 'wasm'
+		}
+	});
+
+	const capturedManifest = (globalThis as any)[captureKey];
+	delete (globalThis as any)[captureKey];
+	return capturedManifest;
 }
 
 describe('OCaml worker', () => {
@@ -63,6 +142,44 @@ describe('OCaml worker', () => {
 			referrerPolicy: 'no-referrer'
 		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
+	});
+
+	it('passes rewritten descriptor URLs and unchanged receipts to the compiler dispatcher', async () => {
+		const rewrittenManifest = await captureDispatcherManifest();
+		const expectedUrl = (url: string) => new URL(url, manifestUrl).href;
+		const descriptorEntries = [
+			[rewrittenManifest.findlibConf, manifest.findlibConf],
+			[rewrittenManifest.tools.ocamlc, manifest.tools.ocamlc],
+			[rewrittenManifest.tools.js_of_ocaml, manifest.tools.js_of_ocaml],
+			[rewrittenManifest.tools.wasm_of_ocaml, manifest.tools.wasm_of_ocaml],
+			[rewrittenManifest.binaryenTools.wasm_opt, manifest.binaryenTools.wasm_opt],
+			[rewrittenManifest.binaryenTools.wasm_merge, manifest.binaryenTools.wasm_merge],
+			[rewrittenManifest.binaryenTools.wasm_metadce, manifest.binaryenTools.wasm_metadce]
+		];
+
+		for (const [rewrittenAsset, sourceAsset] of descriptorEntries) {
+			expect(rewrittenAsset).toEqual({
+				...sourceAsset,
+				url: expectedUrl(sourceAsset.url)
+			});
+		}
+	});
+
+	it('keeps runtime pack and file URLs as strings without object coercion', async () => {
+		const rewrittenManifest = await captureDispatcherManifest();
+		const expectedUrl = (url: string) => new URL(url, manifestUrl).href;
+
+		expect(rewrittenManifest.runtimePack).toMatchObject({
+			asset: expectedUrl(manifest.runtimePack.asset),
+			index: expectedUrl(manifest.runtimePack.index)
+		});
+		expect(rewrittenManifest.ocamlLibFiles[0].url).toBe(
+			expectedUrl(manifest.ocamlLibFiles[0].url)
+		);
+		expect(rewrittenManifest.packages[0].files[0].url).toBe(
+			expectedUrl(manifest.packages[0].files[0].url)
+		);
+		expect(JSON.stringify(rewrittenManifest)).not.toMatch(/\[object(?:%20| )Object\]/u);
 	});
 
 	it('rejects an oversized manifest declaration before reading its body', async () => {

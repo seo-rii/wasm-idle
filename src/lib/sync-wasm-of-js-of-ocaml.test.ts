@@ -28,6 +28,32 @@ self.onmessage = (event) => {
 };
 `;
 
+const sourceBundleRoot = '/.cache/browser-native-bundle';
+const publicBundleRoot = '/wasm-of-js-of-ocaml/browser-native-bundle';
+
+function createAssetDescriptor(relativePath: string, bytes: number, sha256: string) {
+	return {
+		url: `${sourceBundleRoot}/${relativePath}`,
+		bytes,
+		sha256
+	};
+}
+
+function createBinaryenToolDescriptors() {
+	return {
+		wasm_opt: createAssetDescriptor('tools/wasm-opt.browser.js', 101, '1'.repeat(64)),
+		wasm_merge: createAssetDescriptor('tools/wasm-merge.browser.js', 102, '2'.repeat(64)),
+		wasm_metadce: createAssetDescriptor('tools/wasm-metadce.browser.js', 103, '3'.repeat(64))
+	};
+}
+
+function expectedPublicDescriptor<T extends { url: string }>(descriptor: T): T {
+	return {
+		...descriptor,
+		url: descriptor.url.replace(sourceBundleRoot, publicBundleRoot)
+	};
+}
+
 describe('syncWasmOfJsOfOcamlDist', () => {
 	afterEach(async () => {
 		await Promise.all(
@@ -41,6 +67,25 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 		const targetBrowserDistDir = await makeTempDir();
 		const targetBundleDir = await makeTempDir();
 		const versionModulePath = path.join(await makeTempDir(), 'wasmOcamlVersion.ts');
+		const sourceManifest = {
+			version: 1,
+			findlibConf: createAssetDescriptor('findlib.conf', 181, '4'.repeat(64)),
+			tools: {
+				ocamlc: createAssetDescriptor(
+					'tools/ocamlc.byte.browser.js',
+					2_328_856,
+					'5'.repeat(64)
+				)
+			},
+			binaryenTools: createBinaryenToolDescriptors(),
+			runtimePack: {
+				format: 'wasm-of-js-of-ocaml-browser-native-runtime-pack-v1',
+				asset: `${sourceBundleRoot}/browser-native-runtime-pack.v1.bin.gz`,
+				index: `${sourceBundleRoot}/browser-native-runtime-pack.v1.index.json`,
+				fileCount: 1,
+				totalBytes: 6
+			}
+		};
 
 		await writeFixtureFile(
 			sourceBrowserDistDir,
@@ -55,7 +100,7 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 		await writeFixtureFile(
 			sourceBundleDir,
 			'browser-native-manifest.v1.json',
-			'{"version":1,"findlibConf":"/.cache/browser-native-bundle/findlib.conf","tools":{"ocamlc":"/.cache/browser-native-bundle/tools/ocamlc.byte.browser.js"},"binaryenTools":{"wasm_opt":"/.cache/browser-native-bundle/tools/wasm-opt.browser.js","wasm_merge":"/.cache/browser-native-bundle/tools/wasm-merge.browser.js","wasm_metadce":"/.cache/browser-native-bundle/tools/wasm-metadce.browser.js"},"runtimePack":{"format":"wasm-of-js-of-ocaml-browser-native-runtime-pack-v1","asset":"/.cache/browser-native-bundle/browser-native-runtime-pack.v1.bin.gz","index":"/.cache/browser-native-bundle/browser-native-runtime-pack.v1.index.json","fileCount":1,"totalBytes":6}}\n'
+			`${JSON.stringify(sourceManifest)}\n`
 		);
 		await writeFixtureFile(
 			sourceBundleDir,
@@ -108,11 +153,20 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 		await expect(
 			readFile(path.join(targetBundleDir, 'tools/wasm-metadce.browser.js'), 'utf8')
 		).resolves.toContain('wasm-metadce');
-		await expect(
-			readFile(path.join(targetBundleDir, 'browser-native-manifest.v1.json'), 'utf8')
-		).resolves.toContain(
-			'/wasm-of-js-of-ocaml/browser-native-bundle/tools/wasm-merge.browser.js'
+		const syncedManifest = JSON.parse(
+			await readFile(path.join(targetBundleDir, 'browser-native-manifest.v1.json'), 'utf8')
+		) as typeof sourceManifest;
+		expect(syncedManifest.findlibConf).toEqual(
+			expectedPublicDescriptor(sourceManifest.findlibConf)
 		);
+		expect(syncedManifest.tools.ocamlc).toEqual(
+			expectedPublicDescriptor(sourceManifest.tools.ocamlc)
+		);
+		expect(syncedManifest.binaryenTools).toEqual({
+			wasm_opt: expectedPublicDescriptor(sourceManifest.binaryenTools.wasm_opt),
+			wasm_merge: expectedPublicDescriptor(sourceManifest.binaryenTools.wasm_merge),
+			wasm_metadce: expectedPublicDescriptor(sourceManifest.binaryenTools.wasm_metadce)
+		});
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
 			`export const WASM_OCAML_ASSET_VERSION = '${result.fingerprint}';`
 		);
@@ -134,7 +188,7 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 		await writeFixtureFile(
 			sourceBundleDir,
 			'browser-native-manifest.v1.json',
-			'{"version":1,"binaryenTools":{"wasm_opt":"/.cache/browser-native-bundle/tools/wasm-opt.browser.js","wasm_merge":"/.cache/browser-native-bundle/tools/wasm-merge.browser.js","wasm_metadce":"/.cache/browser-native-bundle/tools/wasm-metadce.browser.js"}}\n'
+			`${JSON.stringify({ version: 1, binaryenTools: createBinaryenToolDescriptors() })}\n`
 		);
 		await writeFixtureFile(sourceBundleDir, 'tools/wasm-opt.browser.js', 'opt');
 		await writeFixtureFile(sourceBundleDir, 'tools/wasm-merge.browser.js', 'merge');
@@ -190,7 +244,7 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 		await writeFixtureFile(
 			sourceBundleDir,
 			'browser-native-manifest.v1.json',
-			'{"version":1,"binaryenTools":{"wasm_opt":"/.cache/browser-native-bundle/tools/wasm-opt.browser.js","wasm_merge":"/.cache/browser-native-bundle/tools/wasm-merge.browser.js","wasm_metadce":"/.cache/browser-native-bundle/tools/wasm-metadce.browser.js"}}\n'
+			`${JSON.stringify({ version: 1, binaryenTools: createBinaryenToolDescriptors() })}\n`
 		);
 		await writeFixtureFile(sourceBundleDir, 'tools/wasm-opt.browser.js', 'opt');
 		await writeFixtureFile(sourceBundleDir, 'tools/wasm-merge.browser.js', 'merge');
@@ -231,7 +285,7 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 		await writeFixtureFile(
 			sourceBundleDir,
 			'browser-native-manifest.v1.json',
-			'{"version":1,"binaryenTools":{"wasm_opt":"/.cache/browser-native-bundle/tools/wasm-opt.browser.js","wasm_merge":"/.cache/browser-native-bundle/tools/wasm-merge.browser.js","wasm_metadce":"/.cache/browser-native-bundle/tools/wasm-metadce.browser.js"}}\n'
+			`${JSON.stringify({ version: 1, binaryenTools: createBinaryenToolDescriptors() })}\n`
 		);
 		await writeFixtureFile(sourceBundleDir, 'tools/wasm-opt.browser.js', 'opt');
 		await writeFixtureFile(sourceBundleDir, 'tools/wasm-merge.browser.js', 'merge');

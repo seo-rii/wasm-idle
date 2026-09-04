@@ -33,10 +33,16 @@ interface BrowserNativeManifestPackage {
 	[key: string]: unknown;
 }
 
+interface BrowserNativeManifestAsset {
+	url: string;
+	bytes: number;
+	sha256: string;
+}
+
 interface BrowserNativeManifest {
-	findlibConf?: string;
-	tools?: Record<string, string>;
-	binaryenTools?: Record<string, string>;
+	findlibConf?: BrowserNativeManifestAsset;
+	tools?: Record<string, BrowserNativeManifestAsset>;
+	binaryenTools?: Record<string, BrowserNativeManifestAsset>;
 	runtimePack?: {
 		asset?: string;
 		index?: string;
@@ -256,17 +262,25 @@ const rewriteAbsoluteBundleUrl = (url: string | undefined, manifestUrl: string) 
 	return new URL(`${basePath}${url}`, manifestLocation.origin).toString();
 };
 
+const rewriteManifestAsset = (
+	asset: BrowserNativeManifestAsset,
+	manifestUrl: string
+): BrowserNativeManifestAsset => ({
+	...asset,
+	url: rewriteAbsoluteBundleUrl(asset.url, manifestUrl) || asset.url
+});
+
 const rewriteManifest = (manifest: BrowserNativeManifest, manifestUrl: string) => ({
 	...manifest,
 	...(manifest.findlibConf
-		? { findlibConf: rewriteAbsoluteBundleUrl(manifest.findlibConf, manifestUrl) }
+		? { findlibConf: rewriteManifestAsset(manifest.findlibConf, manifestUrl) }
 		: {}),
 	...(manifest.tools
 		? {
 				tools: Object.fromEntries(
 					Object.entries(manifest.tools).map(([key, value]) => [
 						key,
-						rewriteAbsoluteBundleUrl(value, manifestUrl) || value
+						rewriteManifestAsset(value, manifestUrl)
 					])
 				)
 			}
@@ -276,7 +290,7 @@ const rewriteManifest = (manifest: BrowserNativeManifest, manifestUrl: string) =
 				binaryenTools: Object.fromEntries(
 					Object.entries(manifest.binaryenTools).map(([key, value]) => [
 						key,
-						rewriteAbsoluteBundleUrl(value, manifestUrl) || value
+						rewriteManifestAsset(value, manifestUrl)
 					])
 				)
 			}
