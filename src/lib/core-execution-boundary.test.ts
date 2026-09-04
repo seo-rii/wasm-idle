@@ -168,6 +168,48 @@ describe('core execution boundary', () => {
 		}
 	});
 
+	it('gives network-backed preparation asset, startup, and compile time budgets', async () => {
+		vi.useFakeTimers();
+		try {
+			let finishRun: ((result: boolean | string) => void) | undefined;
+			const run = vi.fn(
+				() =>
+					new Promise<boolean | string>((resolve) => {
+						finishRun = resolve;
+					})
+			);
+			const cancel = vi.fn(async () => undefined);
+			const binding = createPlaygroundBinding('/runtime', async () =>
+				createSandbox({ run, cancel })
+			);
+			const sandbox = await binding.load('C');
+
+			const operation = sandbox.run('int main() {}', true, false, undefined, [], {
+				limits: {
+					assetTimeoutMs: 10,
+					startupTimeoutMs: 10,
+					compileTimeoutMs: 10,
+					runTimeoutMs: 5
+				}
+			});
+			const outcome = operation.then(
+				(value) => ({ value }),
+				(error: unknown) => ({ error })
+			);
+			await Promise.resolve();
+
+			// Preparing can legitimately include lazy compiler and toolchain downloads.
+			// It must therefore survive the old compile-plus-run deadline (15 ms here).
+			await vi.advanceTimersByTimeAsync(20);
+			expect(cancel).not.toHaveBeenCalled();
+			finishRun?.(true);
+
+			expect(await outcome).toEqual({ value: true });
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it('keeps prepare bounded when the following final run is interactive', async () => {
 		vi.useFakeTimers();
 		try {
@@ -185,15 +227,20 @@ describe('core execution boundary', () => {
 			const sandbox = await binding.load('C');
 			const operation = sandbox.run('int main() {}', true, false, undefined, [], {
 				interactive: true,
-				limits: { compileTimeoutMs: 10, runTimeoutMs: 15 }
+				limits: {
+					assetTimeoutMs: 5,
+					startupTimeoutMs: 7,
+					compileTimeoutMs: 10,
+					runTimeoutMs: 15
+				}
 			});
 			const rejection = expect(operation).rejects.toMatchObject({
 				code: 'timeout',
 				phase: 'execute',
-				timeoutMs: 25
+				timeoutMs: 22
 			});
 			await Promise.resolve();
-			await vi.advanceTimersByTimeAsync(25);
+			await vi.advanceTimersByTimeAsync(22);
 
 			await rejection;
 			expect(cancel).toHaveBeenCalledOnce();
