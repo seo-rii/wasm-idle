@@ -193,6 +193,14 @@ class Python implements Sandbox {
 				} = event.data;
 				reportWorkerProgress(_prog, event.data?.progress);
 				if (buffer) {
+					if (!prepare) {
+						_prog?.report?.({
+							kind: 'ready',
+							state: 'waiting-input',
+							reason: 'stdin-request',
+							label: 'Python program is waiting for input'
+						});
+					}
 					this.waitingForInput = true;
 					this.flushPendingInput();
 				}

@@ -26,6 +26,7 @@ import {
 } from '$lib/playground/sharedBuffer';
 import { WASM_TYPESCRIPT_MODULE_RECEIPT } from '$lib/playground/wasmTypeScriptVersion';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 
 type TypeScriptSandboxLanguage = 'JAVASCRIPT' | 'TYPESCRIPT';
 
@@ -595,6 +596,8 @@ class TypeScriptSandbox implements Sandbox {
 		let diagnosticCallback: ((diagnostic: CompilerDiagnostic) => void) | undefined;
 		let progressTarget: SandboxProgress | undefined;
 		let progressSet: SandboxProgress['set'] | undefined;
+		let progressReport: SandboxProgress['report'] | undefined;
+		let progressSink: SandboxProgress | undefined;
 		try {
 			signal = options.signal;
 			this.requireOperationActive(activeOperation);
@@ -694,6 +697,26 @@ class TypeScriptSandbox implements Sandbox {
 			progressTarget = _prog;
 			progressSet = progressTarget?.set;
 			this.requireOperationActive(activeOperation);
+			progressReport = progressTarget?.report;
+			this.requireOperationActive(activeOperation);
+			progressSink = progressTarget
+				? {
+						...(progressSet
+							? {
+									set: (value: number, stage?: string) =>
+										Reflect.apply(progressSet!, progressTarget!, [value, stage])
+								}
+							: {}),
+						...(progressReport
+							? {
+									report: (
+										event: Parameters<NonNullable<SandboxProgress['report']>>[0]
+									) => Reflect.apply(progressReport!, progressTarget!, [event])
+								}
+							: {})
+					}
+				: undefined;
+			this.requireOperationActive(activeOperation);
 			unbindPreSessionAbort();
 			this.requireOperationActive(activeOperation);
 		} catch (error) {
@@ -775,33 +798,20 @@ class TypeScriptSandbox implements Sandbox {
 					if (!ownsRun()) return;
 					if (requestedBuffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
+						if (!prepare) {
+							reportWorkerInputReady(
+								progressSink,
+								`${this.languageLabel} runtime ready for input`
+							);
+							if (!ownsRun()) return;
+						}
 						this.flushPendingInput();
 						if (!ownsRun()) return;
 					}
 					const progress = message.progress;
 					if (!ownsRun()) return;
-					if (typeof progress === 'number') {
-						if (Number.isFinite(progress) && progressSet) {
-							Reflect.apply(progressSet, progressTarget, [
-								Math.max(0, Math.min(progress, 1))
-							]);
-						}
-					} else if (progress && typeof progress === 'object') {
-						const percent = progress.percent;
-						if (!ownsRun()) return;
-						const stage = progress.stage;
-						if (!ownsRun()) return;
-						if (
-							typeof percent === 'number' &&
-							Number.isFinite(percent) &&
-							progressSet
-						) {
-							Reflect.apply(progressSet, progressTarget, [
-								Math.max(0, Math.min(percent / 100, 1)),
-								typeof stage === 'string' && stage ? stage : undefined
-							]);
-						}
-					}
+					reportWorkerProgress(progressSink, progress);
+					if (!ownsRun()) return;
 					if (!ownsRun()) return;
 					const output = message.output;
 					if (!ownsRun()) return;

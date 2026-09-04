@@ -48,7 +48,7 @@ const INPUTS = {
 	}
 };
 
-/** @param {import('node:crypto').BinaryLike} bytes */
+/** @param {Uint8Array | string} bytes */
 function sha256(bytes) {
 	return createHash('sha256').update(bytes).digest('hex');
 }
@@ -83,15 +83,15 @@ async function assertFile(filePath, expectedSha256, expectedBytes, label) {
 /**
  * @param {string} command
  * @param {string[]} args
- * @param {import('node:child_process').SpawnOptions} options
+ * @param {import('node:child_process').SpawnOptions} [options]
  * @returns {Promise<void>}
  */
-function run(command, args, options = {}) {
-	return new Promise((resolve, reject) => {
+async function run(command, args, options = {}) {
+	await new Promise((resolve, reject) => {
 		const child = spawn(command, args, { stdio: 'inherit', ...options });
 		child.on('error', reject);
 		child.on('close', (code) => {
-			if (code === 0) resolve();
+			if (code === 0) resolve(undefined);
 			else reject(new Error(`command failed (${code}): ${command} ${args.join(' ')}`));
 		});
 	});

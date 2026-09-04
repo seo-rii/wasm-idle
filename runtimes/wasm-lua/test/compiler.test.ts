@@ -20,13 +20,17 @@ print("factorial_plus_bonus=" .. tostring(factorial(n) + bonus))
 
 		expect(compileResult.success).toBe(true);
 		expect(compileResult.artifact).toBeTruthy();
+		const lifecycle: string[] = [];
 		const execution = await executeBrowserLuaArtifact(compileResult.artifact!, {
 			args: ['5'],
-			stdin: () => '4\n'
+			stdin: () => '4\n',
+			onReady: () => lifecycle.push('ready'),
+			stdout: () => lifecycle.push('stdout')
 		});
 
 		expect(execution.exitCode).toBe(0);
 		expect(execution.stdout).toContain('factorial_plus_bonus=29');
+		expect(lifecycle).toEqual(['ready', 'stdout']);
 	});
 
 	it('reports syntax diagnostics without executing the program', async () => {

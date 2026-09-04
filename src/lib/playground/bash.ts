@@ -11,6 +11,7 @@ import {
 	type BashSerializedError,
 	type BashWorkerToHostMessage
 } from '$lib/playground/bashWorkerProtocol';
+import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	AssetTooLargeError,
 	AssetIntegrityError,
@@ -91,6 +92,7 @@ type BashOperation = {
 	delivery?: BashOwnedDelivery;
 	outputBytes: number;
 	progress?: SandboxProgress;
+	executionReady: boolean;
 	reject: (reason?: unknown) => void;
 	requestId: number;
 	resolve: (value?: boolean | string | void) => void;
@@ -187,6 +189,7 @@ class Bash implements Sandbox {
 			kind: 'load',
 			outputBytes: 0,
 			progress,
+			executionReady: false,
 			reject: rejectPromise,
 			requestId: 0,
 			resolve: () => resolvePromise(),
@@ -287,6 +290,7 @@ class Bash implements Sandbox {
 			kind: 'run',
 			outputBytes: 0,
 			progress,
+			executionReady: false,
 			reject: rejectPromise,
 			requestId: 0,
 			resolve: (value) => resolvePromise(value as boolean | string),
@@ -943,6 +947,24 @@ class Bash implements Sandbox {
 				if (previousWorker && previousWorker !== handle) this.retireWorker(previousWorker);
 				return;
 			}
+			case 'execution-ready':
+				if (operation.kind !== 'run' || operation.stage !== 'execute') {
+					this.failProtocol(
+						operation,
+						'Bash worker reported execution readiness outside execution',
+						message
+					);
+					return;
+				}
+				if (operation.executionReady) return;
+				operation.executionReady = true;
+				try {
+					reportWorkerProgress(operation.progress, message.progress);
+				} catch (error) {
+					this.failOperation(operation, error, true);
+					return;
+				}
+				return;
 			case 'stdin-ready':
 				if (operation.kind !== 'run' || operation.stage !== 'execute') {
 					this.failProtocol(
@@ -951,6 +973,21 @@ class Bash implements Sandbox {
 						message
 					);
 					return;
+				}
+				if (!operation.executionReady) {
+					operation.executionReady = true;
+					try {
+						reportWorkerProgress(operation.progress, {
+							kind: 'ready',
+							state: 'waiting-input',
+							reason: 'stdin-request',
+							label: 'Bash process is ready for input'
+						});
+					} catch (error) {
+						this.failOperation(operation, error, true);
+						return;
+					}
+					if (!this.isActive(operation)) return;
 				}
 				operation.stdinReady = true;
 				this.flushStdin(operation);

@@ -11,6 +11,7 @@ import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { reportWorkerInputReady } from '$lib/playground/workerProgress';
 import {
 	bufferedSequence,
 	flushBufferedEof,
@@ -50,8 +51,16 @@ class ObjectiveC implements Sandbox {
 	private readonly workerSession = new WorkerSession({
 		label: 'Objective-C',
 		onDispose: (worker) => {
-			if (this.worker === worker) delete this.worker;
-			this.assetBridge = null;
+			if (this.worker === worker) {
+				const assetBridge = this.assetBridge;
+				delete this.worker;
+				this.assetBridge = null;
+				try {
+					assetBridge?.dispose();
+				} catch {
+					// Asset cleanup must not replace the worker operation result.
+				}
+			}
 			this.activeObjectiveCAssetsKey = '';
 			this.exit = true;
 			this.waitingForInput = false;
@@ -175,6 +184,9 @@ class ObjectiveC implements Sandbox {
 				const { output, results, log, error, buffer, progress, debugEvent } = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
+					if (!prepare) {
+						reportWorkerInputReady(prog, 'Objective-C runtime ready for input');
+					}
 					this.flushPendingInput();
 				}
 				if (output) this.output?.(output);

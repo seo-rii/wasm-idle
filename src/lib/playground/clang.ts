@@ -25,7 +25,11 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
-import { reportWorkerProgress, type ProgressSink } from '$lib/playground/workerProgress';
+import {
+	reportWorkerInputReady,
+	reportWorkerProgress,
+	type ProgressSink
+} from '$lib/playground/workerProgress';
 
 const debugBreakpointBufferInts = 1028;
 
@@ -71,8 +75,8 @@ class Clang implements Sandbox {
 	private readonly workerSession = new WorkerSession({
 		label: 'Clang',
 		onDispose: (worker) => {
+			this.disposeWorkerAssetBridge(worker);
 			if (this.worker === worker) delete this.worker;
-			this.assetBridge = null;
 			this.exit = true;
 			this.waitingForInput = false;
 			this.pendingEof = false;
@@ -81,6 +85,17 @@ class Clang implements Sandbox {
 			this.lldbSession = undefined;
 		}
 	});
+
+	private disposeWorkerAssetBridge(worker: Worker) {
+		if (this.worker !== worker) return;
+		const assetBridge = this.assetBridge;
+		this.assetBridge = null;
+		try {
+			assetBridge?.dispose();
+		} catch {
+			// Asset cleanup must not replace the worker operation result.
+		}
+	}
 
 	constructor(language: 'C' | 'CPP') {
 		this.language = language;
@@ -233,6 +248,9 @@ class Clang implements Sandbox {
 				} = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
+					if (!prepare) {
+						reportWorkerInputReady(prog, `${this.language} runtime ready for input`);
+					}
 					this.flushPendingInput();
 				}
 				if (output) this.output(output);
@@ -266,8 +284,8 @@ class Clang implements Sandbox {
 						void lldbSession.eof();
 					}
 					if (compilerWorker && this.workerSession.release(compilerWorker)) {
+						this.disposeWorkerAssetBridge(compilerWorker);
 						if (this.worker === compilerWorker) delete this.worker;
-						this.assetBridge = null;
 					}
 					void lldbSession.start().then(
 						(result) => {

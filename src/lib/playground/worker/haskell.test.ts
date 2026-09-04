@@ -23,15 +23,23 @@ const shim = vi.hoisted(() => {
 		constructor(public file: File) {}
 	}
 
+	class Directory {
+		contents: Map<string, any>;
+
+		constructor(contents: Map<string, any> | [string, any][]) {
+			this.contents = contents instanceof Map ? contents : new Map(contents);
+		}
+	}
+
 	class PreopenDirectory {
 		targetFile = new File(new Uint8Array([1]));
-		dir = {
-			get_entry_for_path: () => ({ ret: 0, entry: this.targetFile })
-		};
+		dir: Directory;
 		constructor(
 			public name: string,
 			public contents: Map<string, any>
-		) {}
+		) {
+			this.dir = new Directory(contents);
+		}
 
 		path_lookup(path: string) {
 			state.pathLookups.push(path);
@@ -98,6 +106,7 @@ const shim = vi.hoisted(() => {
 
 	return {
 		state,
+		Directory,
 		File,
 		OpenFile,
 		PreopenDirectory,
@@ -107,6 +116,7 @@ const shim = vi.hoisted(() => {
 });
 
 vi.mock('@bjorn3/browser_wasi_shim', () => ({
+	Directory: shim.Directory,
 	File: shim.File,
 	OpenFile: shim.OpenFile,
 	PreopenDirectory: shim.PreopenDirectory,
@@ -160,6 +170,18 @@ function haskellLoadConfig(moduleUrl: string) {
 		},
 		maxAssetBytes: 1024 * 1024
 	};
+}
+
+function readMountedWorkspaceFile(
+	rootfs: InstanceType<typeof shim.PreopenDirectory>,
+	path: string
+) {
+	let entry: any = rootfs.dir;
+	for (const segment of ['tmp', 'wasm-idle-workspace', ...path.split('/')]) {
+		entry = entry.contents.get(segment);
+		if (!entry) return undefined;
+	}
+	return entry instanceof shim.File ? new TextDecoder().decode(entry.data) : undefined;
 }
 
 describe('Haskell worker', () => {
@@ -291,6 +313,113 @@ describe('Haskell worker', () => {
 			output: 'hello from haskell\n'
 		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
+	it('mounts the active source and auxiliary modules for the GHC session', async () => {
+		const moduleUrl = createMockDyldModule(`
+			export class DyLDBrowserHost {
+				constructor(options) {
+					globalThis.__lastHostOptions = options;
+					this.options = options;
+				}
+			}
+			export async function main() {
+				return {
+					exportFuncs: {
+						async myMain() {
+							return async (ghcArgs, source) => {
+								globalThis.__lastMainCall = { ghcArgs, source };
+							};
+						}
+					}
+				};
+			}
+		`);
+		const code = 'module Main where\nimport Helper\nmain = print answer';
+
+		await import('./haskell');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, ...haskellLoadConfig(moduleUrl) }
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code,
+				prepare: false,
+				ghcArgs: '-Wall',
+				activePath: 'src/Main.hs',
+				workspaceFiles: [
+					{ path: 'src/Helper.hs', content: 'module Helper where\nanswer = 42' },
+					{ path: 'lib/Model/Value.hs', content: 'module Model.Value where\nvalue = 7' }
+				]
+			}
+		});
+
+		const rootfs = (globalThis as any).__lastHostOptions.rootfs as InstanceType<
+			typeof shim.PreopenDirectory
+		>;
+		expect(readMountedWorkspaceFile(rootfs, 'src/Main.hs')).toBe(code);
+		expect(readMountedWorkspaceFile(rootfs, 'src/Helper.hs')).toBe(
+			'module Helper where\nanswer = 42'
+		);
+		expect(readMountedWorkspaceFile(rootfs, 'lib/Model/Value.hs')).toBe(
+			'module Model.Value where\nvalue = 7'
+		);
+		expect((globalThis as any).__lastMainCall.source).toBe(code);
+		expect((globalThis as any).__lastMainCall.ghcArgs).toContain(
+			'-i/tmp/wasm-idle-workspace/src'
+		);
+		expect((globalThis as any).__lastMainCall.ghcArgs).toContain(
+			'/tmp/wasm-idle-workspace/lib'
+		);
+	});
+
+	it('maps fixed and virtual GHC diagnostic paths back to workspace paths', async () => {
+		const moduleUrl = createMockDyldModule(`
+			export class DyLDBrowserHost {
+				constructor(options) { this.options = options; }
+			}
+			export async function main(options) {
+				return {
+					exportFuncs: {
+						async myMain() {
+							return async () => {
+								options.rpc.options.stderr('/tmp/Main.hs:2:1: error: Bad main');
+								options.rpc.options.stderr('/tmp/wasm-idle-workspace/lib/Helper.hs:3:2: warning: Bad helper');
+								throw new Error('compile failed');
+							};
+						}
+					}
+				};
+			}
+		`);
+
+		await import('./haskell');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, ...haskellLoadConfig(moduleUrl) }
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'main = nope',
+				prepare: false,
+				activePath: 'src/Main.hs',
+				workspaceFiles: [
+					{ path: 'lib/Helper.hs', content: 'module Helper where\nhelper = nope' }
+				]
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			diagnostic: expect.objectContaining({ fileName: 'src/Main.hs', message: 'Bad main' })
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			diagnostic: expect.objectContaining({
+				fileName: 'lib/Helper.hs',
+				message: 'Bad helper'
+			})
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: 'src/Main.hs:2:1: error: Bad main\nlib/Helper.hs:3:2: warning: Bad helper'
+		});
 	});
 
 	it('connects run stdin to the dyld browser host fd0 implementation', async () => {

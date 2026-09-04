@@ -21,7 +21,7 @@ import untar from '../../core/src/tar.js';
 import { green, yellow, normal } from '../../core/src/color.js';
 import { createCombinedProgress, type CombinedProgressSlots } from './progress.js';
 import { resolveRuntimeAssetUrls, type RuntimeAssetUrls } from './runtime-assets.js';
-import { compile, readBuffer } from '../../core/src/wasm.js';
+import { DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES, compile, readBuffer } from '../../core/src/wasm.js';
 import {
 	normalizeDwarfWorkspacePath,
 	normalizeWorkspacePath,
@@ -51,7 +51,7 @@ const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
 const internalBuildRoot = '__wasm_idle_build';
 const workspaceTranslationUnitPattern = /\.(?:c|cc|cpp|cxx)$/;
 
-const defaultCppStandardArg = '-std=gnu++2a';
+const defaultCppStandardArg = '-std=gnu++20';
 const defaultCStandardArg = '-std=gnu11';
 const lldbForbiddenCompileArgs = new Set([
 	'-target',
@@ -125,21 +125,23 @@ function resolveCppStandardArg(version?: string) {
 		case 'GNUC++17':
 			return '-std=gnu++17';
 		case '20':
-		case '23':
-		case '26':
 		case 'CPP20':
-		case 'CPP23':
-		case 'CPP26':
 		case 'C++20':
-		case 'C++23':
-		case 'C++26':
 		case 'GNU++20':
-		case 'GNU++23':
-		case 'GNU++26':
 		case 'GNUC++20':
+			return '-std=gnu++20';
+		case '23':
+		case 'CPP23':
+		case 'C++23':
+		case 'GNU++23':
 		case 'GNUC++23':
+			return '-std=gnu++23';
+		case '26':
+		case 'CPP26':
+		case 'C++26':
+		case 'GNU++26':
 		case 'GNUC++26':
-			return defaultCppStandardArg;
+			return '-std=gnu++26';
 		default:
 			return defaultCppStandardArg;
 	}
@@ -288,8 +290,14 @@ class Clang {
 	lastArtifactPath = 'main.wasm';
 	traceStartedAt = 0;
 	progress: CombinedProgressSlots;
+	private readonly maxAssetBytes: number;
 
 	constructor(options: BrowserClangRuntimeOptions) {
+		const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES;
+		if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes <= 0) {
+			throw new TypeError('Clang maxAssetBytes must be a positive safe integer');
+		}
+		this.maxAssetBytes = maxAssetBytes;
 		this.moduleCache = {};
 		this.stdout = options.stdout || (() => {});
 		this.showTiming = options.showTiming || false;
@@ -306,6 +314,7 @@ class Clang {
 			moduleUrl: this.assetUrls.memfs,
 			progress: this.progress.memfs,
 			signal: options.signal,
+			maxAssetBytes,
 			trace: (message) => this.trace(message)
 		});
 
@@ -317,8 +326,8 @@ class Clang {
 		const lldReady = this.getModule(this.assetUrls.lld, this.progress.lld, options.signal);
 		const fileSystemReady = this.memfs.ready.then(async () => {
 			const sysrootReady = options.signal
-				? readBuffer(this.assetUrls.sysroot, undefined, undefined, options.signal)
-				: readBuffer(this.assetUrls.sysroot);
+				? readBuffer(this.assetUrls.sysroot, undefined, maxAssetBytes, options.signal)
+				: readBuffer(this.assetUrls.sysroot, undefined, maxAssetBytes);
 			await this.hostLogAsync(
 				`Untarring ${this.assetUrls.sysroot}`,
 				sysrootReady.then((buffer) => untar(buffer, this.memfs))
@@ -360,7 +369,7 @@ class Clang {
 		if (this.moduleCache[name]) return this.moduleCache[name];
 		const module = await this.hostLogAsync(
 			`Fetching and compiling ${name}`,
-			signal ? compile(name, progress, signal) : compile(name, progress)
+			compile(name, progress, signal, this.maxAssetBytes)
 		);
 		this.moduleCache[name] = module;
 		return module;

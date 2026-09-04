@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -6,6 +8,14 @@ import {
 } from '../../../scripts/rust-browser-probe-lib.mjs';
 
 describe('Rust browser compiler stability diagnostics', () => {
+	it('targets the dedicated language selector', async () => {
+		const source = await readFile('scripts/rust-browser-probe-lib.mjs', 'utf8');
+
+		expect(source).toContain("document.querySelector('#language-select')");
+		expect(source).not.toMatch(/waitForSelector\('select'/u);
+		expect(source).not.toContain("querySelector('select')");
+	});
+
 	it('retains a rustc retry even when later console output would evict it from the tail', () => {
 		const messages = [
 			{

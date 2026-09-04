@@ -146,7 +146,10 @@ export {
 	phaseProgress,
 	progressBandsForLanguage,
 	type ProgressLike,
-	type RuntimeProgressLifecycle
+	type RuntimeProgressActivityPhase,
+	type RuntimeProgressEvent,
+	type RuntimeProgressLifecycle,
+	type RuntimeProgressMeasurement
 } from './progress.js';
 export {
 	createRuntimeAssetsKey,

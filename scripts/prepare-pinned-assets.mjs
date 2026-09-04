@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+const TRANSIENT_HTTP_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+
 /**
  * @typedef {{
  *   sourcePath: string;
@@ -21,6 +23,8 @@ import path from 'node:path';
  *   bypassCookie?: string;
  *   fetchImpl?: typeof fetch;
  *   timeoutMs?: number;
+ *   maxAttempts?: number;
+ *   retryDelayMs?: number;
  * }} options
  */
 export async function preparePinnedAssets({
@@ -31,8 +35,16 @@ export async function preparePinnedAssets({
 	userAgent,
 	bypassCookie = '',
 	fetchImpl = fetch,
-	timeoutMs = 120_000
+	timeoutMs = 120_000,
+	maxAttempts = 3,
+	retryDelayMs = 1_000
 }) {
+	if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10) {
+		throw new Error('maxAttempts must be an integer between 1 and 10');
+	}
+	if (!Number.isSafeInteger(retryDelayMs) || retryDelayMs < 0 || retryDelayMs > 60_000) {
+		throw new Error('retryDelayMs must be an integer between 0 and 60000');
+	}
 	const sourceBase = new URL(sourceBaseUrl);
 	if (!['https:', 'http:'].includes(sourceBase.protocol)) {
 		throw new Error(`Unsupported ${label} asset URL scheme: ${sourceBase.protocol}`);
@@ -88,29 +100,82 @@ export async function preparePinnedAssets({
 		/** @type {Record<string, string>} */
 		const headers = { 'User-Agent': userAgent };
 		if (bypassCookie) headers.Cookie = bypassCookie;
-		const response = await fetchImpl(sourceUrl, {
-			headers,
-			redirect: 'follow',
-			signal: AbortSignal.timeout(timeoutMs)
-		});
-		const finalUrl = new URL(response.url || sourceUrl.href);
-		if (
-			finalUrl.origin !== sourceBase.origin ||
-			!finalUrl.pathname.startsWith(sourceBase.pathname)
-		) {
-			throw new Error(`${label} asset redirected outside its trusted base: ${finalUrl.href}`);
+		/** @type {Uint8Array | undefined} */
+		let bytes;
+		for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+			/** @type {Response} */
+			let response;
+			try {
+				response = await fetchImpl(sourceUrl, {
+					headers,
+					redirect: 'follow',
+					signal: AbortSignal.timeout(timeoutMs)
+				});
+			} catch (error) {
+				if (attempt === maxAttempts) {
+					throw new Error(
+						`Failed to download ${sourceUrl.href} after ${maxAttempts} attempts`,
+						{ cause: error }
+					);
+				}
+				if (retryDelayMs > 0) {
+					await new Promise((resolve) =>
+						setTimeout(resolve, Math.min(retryDelayMs * 2 ** (attempt - 1), 60_000))
+					);
+				}
+				continue;
+			}
+
+			const finalUrl = new URL(response.url || sourceUrl.href);
+			if (
+				finalUrl.origin !== sourceBase.origin ||
+				!finalUrl.pathname.startsWith(sourceBase.pathname)
+			) {
+				throw new Error(
+					`${label} asset redirected outside its trusted base: ${finalUrl.href}`
+				);
+			}
+			if (!response.ok) {
+				if (!TRANSIENT_HTTP_STATUSES.has(response.status) || attempt === maxAttempts) {
+					throw new Error(`Failed to download ${sourceUrl.href}: ${response.status}`);
+				}
+				await response.body?.cancel().catch(() => undefined);
+				if (retryDelayMs > 0) {
+					await new Promise((resolve) =>
+						setTimeout(resolve, Math.min(retryDelayMs * 2 ** (attempt - 1), 60_000))
+					);
+				}
+				continue;
+			}
+
+			const declaredLength = Number(response.headers.get('content-length') || 0);
+			const contentEncoding = response.headers.get('content-encoding');
+			if (declaredLength && !contentEncoding && declaredLength !== asset.size) {
+				throw new Error(
+					`${label} asset ${asset.targetPath} size mismatch: expected ${asset.size}, received ${declaredLength}`
+				);
+			}
+			try {
+				bytes = new Uint8Array(await response.arrayBuffer());
+			} catch (error) {
+				if (attempt === maxAttempts) {
+					throw new Error(
+						`Failed to read ${sourceUrl.href} after ${maxAttempts} attempts`,
+						{ cause: error }
+					);
+				}
+				if (retryDelayMs > 0) {
+					await new Promise((resolve) =>
+						setTimeout(resolve, Math.min(retryDelayMs * 2 ** (attempt - 1), 60_000))
+					);
+				}
+				continue;
+			}
+			break;
 		}
-		if (!response.ok) {
-			throw new Error(`Failed to download ${sourceUrl.href}: ${response.status}`);
+		if (!bytes) {
+			throw new Error(`Failed to download ${sourceUrl.href}`);
 		}
-		const declaredLength = Number(response.headers.get('content-length') || 0);
-		const contentEncoding = response.headers.get('content-encoding');
-		if (declaredLength && !contentEncoding && declaredLength !== asset.size) {
-			throw new Error(
-				`${label} asset ${asset.targetPath} size mismatch: expected ${asset.size}, received ${declaredLength}`
-			);
-		}
-		const bytes = new Uint8Array(await response.arrayBuffer());
 		const digest = createHash('sha256').update(bytes).digest('hex');
 		if (bytes.byteLength !== asset.size || digest !== asset.sha256) {
 			throw new Error(

@@ -3,6 +3,7 @@ import { chromium } from 'playwright-core';
 import {
 	assertLoadingProgressTrace,
 	installLoadingProgressProbe,
+	markLoadingProgressReady,
 	readLoadingProgressTrace,
 	stopLoadingProgressProbe
 } from './browser-progress-probe.mjs';
@@ -142,8 +143,11 @@ export async function runTinyGoBrowserProbe({
 
 		await page.goto(resolvedBrowserUrl.toString(), { waitUntil: 'domcontentloaded' });
 		await page.waitForTimeout(1_000);
-		await page.waitForSelector('select', { state: 'attached', timeout: runTimeoutMs });
-		await page.locator('select').selectOption('TINYGO');
+		await page.waitForSelector('#language-select', {
+			state: 'attached',
+			timeout: runTimeoutMs
+		});
+		await page.locator('#language-select').selectOption('TINYGO');
 
 		const logToggle = page.locator('#log-toggle');
 		if (!(await logToggle.isChecked())) {
@@ -208,7 +212,39 @@ export async function runTinyGoBrowserProbe({
 			await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, false);
 		}, stdinText);
 
+		let progressReadiness;
 		try {
+			const readinessHandle = await page.waitForFunction(
+				({ previousTranscript, previousFinishedCount, requiredOutput }) => {
+					const text =
+						document.querySelector('[data-testid="terminal-debug-output"]')
+							?.textContent || '';
+					const delta = text.startsWith(previousTranscript)
+						? text.slice(previousTranscript.length)
+						: text;
+					if (requiredOutput && delta.includes(requiredOutput)) {
+						return 'expected terminal output';
+					}
+					const finishedCount = (text.match(/Process finished after/g) || []).length;
+					if (
+						delta.includes('TinyGo compilation failed') ||
+						/(?:RuntimeError|Error):/u.test(delta) ||
+						finishedCount >= previousFinishedCount + 1
+					) {
+						return 'TinyGo execution settled';
+					}
+					return false;
+				},
+				{
+					previousTranscript: prepareTranscript,
+					previousFinishedCount: prepareFinishedCount,
+					requiredOutput: expectedOutput
+				},
+				{ polling: 50, timeout: runTimeoutMs }
+			);
+			const readinessReason = String(await readinessHandle.jsonValue());
+			await readinessHandle.dispose();
+			progressReadiness = await markLoadingProgressReady(page, readinessReason);
 			await page.waitForFunction(
 				({ previousTranscript, previousFinishedCount, requiredOutput }) => {
 					const text =
@@ -242,17 +278,20 @@ export async function runTinyGoBrowserProbe({
 		}
 
 		await stopLoadingProgressProbe(page);
-		const summary = await readProbeSummary(
-			page,
-			activeState,
-			pageErrors,
-			consoleMessages,
-			resolvedBrowserUrl.toString()
-		);
+		const summary = {
+			...(await readProbeSummary(
+				page,
+				activeState,
+				pageErrors,
+				consoleMessages,
+				resolvedBrowserUrl.toString()
+			)),
+			progressReadiness
+		};
 		if (summary.pageErrors.length > 0) {
 			throw new Error(`page errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
-		assertLoadingProgressTrace(summary.progressTrace, 'TinyGo');
+		assertLoadingProgressTrace(summary.progressTrace, 'TinyGo', progressReadiness);
 		if (summary.transcript.includes('TinyGo compilation failed')) {
 			throw new Error(`TinyGo run failed\n${JSON.stringify(summary, null, 2)}`);
 		}

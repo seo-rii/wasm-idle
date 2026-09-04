@@ -21,6 +21,7 @@ interface RequestIdentity {
 }
 
 interface ActiveRun extends RequestIdentity {
+	executionReady: boolean;
 	readonly stdinDecoder: TextDecoder;
 }
 
@@ -233,6 +234,7 @@ async function handleRun(message: BashWorkerRunMessage) {
 		);
 	}
 	const run: ActiveRun = {
+		executionReady: false,
 		sessionId: message.sessionId,
 		requestId: message.requestId,
 		stdinDecoder: new TextDecoder()
@@ -248,7 +250,45 @@ async function handleRun(message: BashWorkerRunMessage) {
 			message.code,
 			false,
 			message.log ?? false,
-			undefined,
+			{
+				report(progress) {
+					if (
+						progress.kind !== 'ready' ||
+						progress.state !== 'running' ||
+						progress.reason !== 'started' ||
+						run.executionReady ||
+						activeRun !== run ||
+						!ownsOperation(message)
+					) {
+						return;
+					}
+					run.executionReady = true;
+					postMessage({
+						protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
+						type: 'execution-ready',
+						sessionId: message.sessionId,
+						requestId: message.requestId,
+						progress: {
+							kind: 'ready',
+							state: 'running',
+							reason: 'started',
+							...(progress.label ? { label: progress.label } : {})
+						}
+					});
+					if (
+						message.stdin === undefined &&
+						activeRun === run &&
+						ownsOperation(message)
+					) {
+						postMessage({
+							protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
+							type: 'stdin-ready',
+							sessionId: message.sessionId,
+							requestId: message.requestId
+						});
+					}
+				}
+			},
 			[...message.programArgs],
 			{
 				activePath: message.activePath,
@@ -262,14 +302,6 @@ async function handleRun(message: BashWorkerRunMessage) {
 				workspaceLimits: { ...message.workspaceLimits }
 			}
 		);
-		if (message.stdin === undefined && ownsOperation(message)) {
-			postMessage({
-				protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
-				type: 'stdin-ready',
-				sessionId: message.sessionId,
-				requestId: message.requestId
-			});
-		}
 		const result = await runPromise;
 		if (!ownsOperation(message)) return;
 		postMessage({

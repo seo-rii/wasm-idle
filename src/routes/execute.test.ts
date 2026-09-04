@@ -119,7 +119,7 @@ describe('executeTerminalRun', () => {
 		expect(terminal.run).not.toHaveBeenCalled();
 	});
 
-	it('finishes prepared runtime loading before code can wait for input', async () => {
+	it('keeps one progress lifecycle connected through prepare and execute for every language', async () => {
 		const values: number[] = [];
 		const stages: Array<string | undefined> = [];
 		const progress = {
@@ -147,12 +147,12 @@ describe('executeTerminalRun', () => {
 			progress
 		});
 
-		expect(values).toEqual([0.5, 1]);
-		expect(stages).toEqual(['Compiling and linking Nim output', 'PYTHON runtime ready']);
-		expect(terminal.run).toHaveBeenCalledWith('PYTHON', 'print(1)', true, undefined, [], {});
+		expect(values).toEqual([0.5, 0.75]);
+		expect(stages).toEqual(['Compiling and linking Nim output', 'Starting runtime']);
+		expect(terminal.run).toHaveBeenCalledWith('PYTHON', 'print(1)', true, progress, [], {});
 	});
 
-	it('keeps deferred runtime loading connected through execute', async () => {
+	it('does not synthesize 100% when a run fails', async () => {
 		const values: number[] = [];
 		const stages: Array<string | undefined> = [];
 		const progress = {
@@ -169,7 +169,7 @@ describe('executeTerminalRun', () => {
 			}),
 			run: vi.fn(async (_language, _code, _log, sink) => {
 				sink?.set?.(0.75, 'Loading Nim runtime');
-				return 'ok';
+				return false;
 			})
 		};
 
@@ -180,8 +180,8 @@ describe('executeTerminalRun', () => {
 			progress
 		});
 
-		expect(values).toEqual([0.25, 0.75, 1]);
-		expect(stages).toEqual(['Nim worker ready', 'Loading Nim runtime', 'NIM run ready']);
+		expect(values).toEqual([0.25, 0.75]);
+		expect(stages).toEqual(['Nim worker ready', 'Loading Nim runtime']);
 		expect(terminal.run).toHaveBeenCalledWith('NIM', 'echo "ok"', true, progress, [], {});
 	});
 });

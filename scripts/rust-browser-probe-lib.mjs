@@ -7,6 +7,7 @@ import { chromium } from 'playwright-core';
 import {
 	assertLoadingProgressTrace,
 	installLoadingProgressProbe,
+	markLoadingProgressReady,
 	readLoadingProgressTrace,
 	stopLoadingProgressProbe
 } from './browser-progress-probe.mjs';
@@ -501,7 +502,10 @@ export async function runRustBrowserProbe({
 		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
 		await page.waitForTimeout(1_000);
 		try {
-			await page.waitForSelector('select', { state: 'attached', timeout: runTimeoutMs });
+			await page.waitForSelector('#language-select', {
+				state: 'attached',
+				timeout: runTimeoutMs
+			});
 		} catch (error) {
 			const summary = await readProbeSummary(
 				page,
@@ -534,7 +538,7 @@ export async function runRustBrowserProbe({
 		try {
 			await page.waitForFunction(
 				({ expectedSource, expectedTarget }) => {
-					const language = document.querySelector('select');
+					const language = document.querySelector('#language-select');
 					const target = document.querySelector('#rust-target-triple');
 					return (
 						language?.value === 'RUST' &&
@@ -628,15 +632,13 @@ export async function runRustBrowserProbe({
 				`rust browser probe timed out waiting for terminal output: ${error instanceof Error ? error.message : String(error)}\n${JSON.stringify(summary, null, 2)}`
 			);
 		}
+		const progressReadiness = await markLoadingProgressReady(page, 'Rust execution settled');
 
 		await stopLoadingProgressProbe(page);
-		const summary = await readProbeSummary(
-			page,
-			activeState,
-			pageErrors,
-			consoleMessages,
-			browserUrl
-		);
+		const summary = {
+			...(await readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl)),
+			progressReadiness
+		};
 		const relevantPageErrors = filterBenignPageErrors(pageErrors);
 
 		if (relevantPageErrors.length > 0) {
@@ -655,7 +657,11 @@ export async function runRustBrowserProbe({
 		if (findRustCompilerRetries(consoleMessages).length > 0) {
 			throw new Error(`rust compiler retries detected\n${JSON.stringify(summary, null, 2)}`);
 		}
-		assertLoadingProgressTrace(summary.progressTrace, `Rust (${targetTriple})`);
+		assertLoadingProgressTrace(
+			summary.progressTrace,
+			`Rust (${targetTriple})`,
+			progressReadiness
+		);
 		if (summary.transcript.includes('Rust compilation failed')) {
 			throw new Error(`rust run failed\n${JSON.stringify(summary, null, 2)}`);
 		}

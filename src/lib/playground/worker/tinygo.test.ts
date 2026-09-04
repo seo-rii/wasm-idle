@@ -129,6 +129,22 @@ describe('TinyGo worker', () => {
 
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ buffer: true });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				progress: expect.objectContaining({
+					kind: 'ready',
+					state: 'running',
+					reason: 'started'
+				})
+			})
+		);
+		const readyCall = (globalThis as any).postMessage.mock.calls.findIndex(
+			([message]: [any]) => message?.progress?.kind === 'ready'
+		);
+		const firstOutputCall = (globalThis as any).postMessage.mock.calls.findIndex(
+			([message]: [any]) => message?.output
+		);
+		expect(readyCall).toBeLessThan(firstOutputCall);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: '5\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'tinygo-worker\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });

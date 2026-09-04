@@ -4,15 +4,28 @@
 
 	interface Props {
 		playground: PlaygroundBinding;
-		onReady: (terminal: TerminalControl) => void;
+		onReady?: (terminal: TerminalControl) => void;
+		onload?: () => void;
+		onterminal?: (terminal: TerminalControl) => void;
 	}
 
-	let { playground, onReady }: Props = $props();
+	let { playground, onReady, onload, onterminal }: Props = $props();
 	let terminal = $state<TerminalControl>();
+	let reportedTerminal: TerminalControl | undefined;
+
+	$effect(() => {
+		if (terminal && terminal !== reportedTerminal) {
+			reportedTerminal = terminal;
+			onterminal?.(terminal);
+		}
+	});
 
 	function handleLoad() {
-		if (!terminal) throw new Error('Terminal control was not bound before load');
-		onReady(terminal);
+		onload?.();
+		if (onReady) {
+			if (!terminal) throw new Error('Terminal control was not bound before load');
+			onReady(terminal);
+		}
 	}
 </script>
 

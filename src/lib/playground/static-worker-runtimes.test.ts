@@ -1568,6 +1568,7 @@ describe('static worker backed language sandboxes', () => {
 	it('streams run-correlated input after dispatch through a bounded shared ring', async () => {
 		await withCrossOriginIsolation(true, async () => {
 			const messages: any[] = [];
+			const progress = { set: vi.fn() };
 			onPostMessage = (worker, message) => {
 				messages.push(message);
 				if (message.run) {
@@ -1595,8 +1596,14 @@ describe('static worker backed language sandboxes', () => {
 			expect(new Tcl().stdinMode).toBe('streaming');
 			await sandbox.load();
 
-			const run = sandbox.run('print("prompt"); read()', false);
+			const run = sandbox.run('print("prompt"); read()', false, true, progress);
 			await vi.waitFor(() => expect(messages.some((message) => message.run)).toBe(true));
+			await vi.waitFor(() =>
+				expect(progress.set).toHaveBeenLastCalledWith(
+					1,
+					'Streaming stdin test runtime ready for input'
+				)
+			);
 			const runMessage = messages.find((message) => message.run);
 			expect(runMessage).toMatchObject({
 				run: true,
@@ -1626,13 +1633,298 @@ describe('static worker backed language sandboxes', () => {
 		});
 	});
 
+	it('reports stdin readiness as a structured event without treating it as numeric completion', async () => {
+		await withCrossOriginIsolation(true, async () => {
+			let runMessage: any;
+			onPostMessage = (worker, message) => {
+				if (!message.run) return;
+				runMessage = message;
+				queueMicrotask(() => {
+					worker.onmessage?.({
+						data: { type: 'stdin-request', runId: message.runId }
+					} as MessageEvent<any>);
+				});
+			};
+			const progress = { set: vi.fn(), report: vi.fn() };
+			const sandbox = createStreamingTestSandbox();
+			await sandbox.load();
+
+			const run = sandbox.run('read()', false, true, progress);
+			await vi.waitFor(() =>
+				expect(progress.report).toHaveBeenCalledWith(
+					expect.objectContaining({
+						kind: 'ready',
+						state: 'waiting-input',
+						reason: 'stdin-request'
+					})
+				)
+			);
+			expect(progress.set).not.toHaveBeenCalled();
+
+			workerInstances[0].onmessage?.({
+				data: { results: true, runId: runMessage.runId }
+			} as MessageEvent<any>);
+			await expect(run).resolves.toBe(true);
+			expect(progress.report).toHaveBeenCalledWith(
+				expect.objectContaining({ kind: 'settled', outcome: 'completed' })
+			);
+		});
+	});
+
+	it.each([
+		{ reason: 'stdout', stream: undefined },
+		{ reason: 'stderr', stream: 'stderr' as const }
+	])(
+		'uses the first current-run $reason output as a readiness fallback',
+		async ({ reason, stream }) => {
+			let runMessage: any;
+			onPostMessage = (_worker, message) => {
+				if (message.run) runMessage = message;
+			};
+			const sandbox = createStreamingTestSandbox();
+			const output = vi.fn();
+			const prepareProgress = { report: vi.fn() };
+			const progress = { report: vi.fn() };
+			sandbox.output = output;
+			await sandbox.load();
+
+			await sandbox.run('prepare-only', true, true, prepareProgress);
+			workerInstances[0].onmessage?.({
+				data: { runId: 'prepare-only', output: 'prepare output\n' }
+			} as MessageEvent<any>);
+			expect(prepareProgress.report).not.toHaveBeenCalledWith(
+				expect.objectContaining({ kind: 'ready' })
+			);
+			expect(output).not.toHaveBeenCalled();
+
+			const run = sandbox.run('execute()', false, true, progress, [], { stdin: '' });
+			await vi.waitFor(() => expect(runMessage).toBeTruthy());
+			workerInstances[0].onmessage?.({
+				data: { runId: 'stale-run', output: 'stale output\n' }
+			} as MessageEvent<any>);
+			workerInstances[0].onmessage?.({
+				data: { output: 'uncorrelated output\n' }
+			} as MessageEvent<any>);
+			expect(output).not.toHaveBeenCalled();
+
+			workerInstances[0].onmessage?.({
+				data: {
+					runId: runMessage.runId,
+					output: 'first output\n',
+					...(stream ? { stream } : {})
+				}
+			} as MessageEvent<any>);
+			workerInstances[0].onmessage?.({
+				data: {
+					runId: runMessage.runId,
+					output: 'second output\n',
+					stream: reason === 'stdout' ? 'stderr' : 'stdout'
+				}
+			} as MessageEvent<any>);
+
+			expect(output.mock.calls.map(([chunk]) => chunk)).toEqual([
+				'first output\n',
+				'second output\n'
+			]);
+			expect(
+				progress.report.mock.calls
+					.map(([event]) => event)
+					.filter((event) => event.kind === 'ready')
+			).toEqual([expect.objectContaining({ kind: 'ready', state: 'running', reason })]);
+
+			workerInstances[0].onmessage?.({
+				data: { runId: runMessage.runId, results: true }
+			} as MessageEvent<any>);
+			await expect(run).resolves.toBe(true);
+		}
+	);
+
+	it('ignores worker-supplied completion and lets the host own failure settlement', async () => {
+		let runMessage: any;
+		onPostMessage = (_worker, message) => {
+			if (message.run) runMessage = message;
+		};
+		const progress = { report: vi.fn() };
+		const sandbox = createStreamingTestSandbox();
+		await sandbox.load();
+
+		const run = sandbox.run('fail_later()', false, true, progress, [], { stdin: '' });
+		await vi.waitFor(() => expect(runMessage).toBeTruthy());
+		workerInstances[0].onmessage?.({
+			data: {
+				runId: runMessage.runId,
+				progress: { kind: 'settled', outcome: 'completed', label: 'worker claim' }
+			}
+		} as MessageEvent<any>);
+		workerInstances[0].onmessage?.({
+			data: { runId: runMessage.runId, error: 'late failure' }
+		} as MessageEvent<any>);
+
+		await expect(run).rejects.toBe('late failure');
+		expect(
+			progress.report.mock.calls
+				.map(([event]) => event)
+				.filter((event) => event.kind === 'settled')
+		).toEqual([expect.objectContaining({ kind: 'settled', outcome: 'failed' })]);
+	});
+
+	it('ignores worker-supplied failure and lets the host own successful settlement', async () => {
+		let runMessage: any;
+		onPostMessage = (_worker, message) => {
+			if (message.run) runMessage = message;
+		};
+		const progress = { report: vi.fn() };
+		const sandbox = createStreamingTestSandbox();
+		await sandbox.load();
+
+		const run = sandbox.run('succeed_later()', false, true, progress, [], { stdin: '' });
+		await vi.waitFor(() => expect(runMessage).toBeTruthy());
+		workerInstances[0].onmessage?.({
+			data: {
+				runId: runMessage.runId,
+				progress: { kind: 'settled', outcome: 'failed', label: 'worker claim' }
+			}
+		} as MessageEvent<any>);
+		workerInstances[0].onmessage?.({
+			data: { runId: runMessage.runId, results: true }
+		} as MessageEvent<any>);
+
+		await expect(run).resolves.toBe(true);
+		const lifecycleEvents = progress.report.mock.calls
+			.map(([event]) => event)
+			.filter((event) => event.kind === 'ready' || event.kind === 'settled');
+		expect(lifecycleEvents).toEqual([
+			expect.objectContaining({ kind: 'ready', state: 'running', reason: 'result' }),
+			expect.objectContaining({ kind: 'settled', outcome: 'completed' })
+		]);
+	});
+
+	it('accepts only run-correlated execution readiness after the worker shell is ready', async () => {
+		let runMessage: any;
+		onPostMessage = (_worker, message) => {
+			if (message.run) runMessage = message;
+		};
+		const progress = { report: vi.fn() };
+		const sandbox = createStreamingTestSandbox();
+		await sandbox.load();
+
+		const run = sandbox.run('loop()', false, true, progress);
+		await vi.waitFor(() => expect(runMessage).toBeTruthy());
+		expect(progress.report).not.toHaveBeenCalledWith(
+			expect.objectContaining({ kind: 'ready' })
+		);
+		workerInstances[0].onmessage?.({
+			data: {
+				runId: 'stale-run',
+				progress: { kind: 'ready', state: 'running', reason: 'started' }
+			}
+		} as MessageEvent<any>);
+		workerInstances[0].onmessage?.({
+			data: {
+				progress: { kind: 'ready', state: 'running', reason: 'started' }
+			}
+		} as MessageEvent<any>);
+		expect(progress.report).not.toHaveBeenCalledWith(
+			expect.objectContaining({ kind: 'ready' })
+		);
+
+		workerInstances[0].onmessage?.({
+			data: {
+				runId: runMessage.runId,
+				progress: {
+					kind: 'ready',
+					state: 'running',
+					reason: 'started',
+					label: 'Execution ready'
+				}
+			}
+		} as MessageEvent<any>);
+		await vi.waitFor(() =>
+			expect(progress.report).toHaveBeenCalledWith(
+				expect.objectContaining({
+					kind: 'ready',
+					state: 'running',
+					reason: 'started'
+				})
+			)
+		);
+
+		workerInstances[0].onmessage?.({
+			data: { results: true, runId: runMessage.runId }
+		} as MessageEvent<any>);
+		await expect(run).resolves.toBe(true);
+		expect(
+			progress.report.mock.calls.filter(
+				([event]) => event.kind === 'ready' && event.reason === 'result'
+			)
+		).toHaveLength(0);
+	});
+
+	it('uses a correlated result as the successful readiness fallback', async () => {
+		let runMessage: any;
+		onPostMessage = (_worker, message) => {
+			if (message.run) runMessage = message;
+		};
+		const progress = { report: vi.fn() };
+		const sandbox = createStreamingTestSandbox();
+		await sandbox.load();
+
+		const run = sandbox.run('return_result()', false, true, progress);
+		await vi.waitFor(() => expect(runMessage).toBeTruthy());
+		workerInstances[0].onmessage?.({
+			data: { results: true, runId: runMessage.runId }
+		} as MessageEvent<any>);
+
+		await expect(run).resolves.toBe(true);
+		const lifecycleEvents = progress.report.mock.calls
+			.map(([event]) => event)
+			.filter((event) => event.kind === 'ready' || event.kind === 'settled');
+		expect(lifecycleEvents).toEqual([
+			expect.objectContaining({ kind: 'ready', state: 'running', reason: 'result' }),
+			expect.objectContaining({ kind: 'settled', outcome: 'completed' })
+		]);
+	});
+
+	it('settles a correlated pre-ready failure without fabricating readiness', async () => {
+		let runMessage: any;
+		onPostMessage = (_worker, message) => {
+			if (message.run) runMessage = message;
+		};
+		const progress = { report: vi.fn() };
+		const sandbox = createStreamingTestSandbox();
+		await sandbox.load();
+
+		const run = sandbox.run('fail_before_start()', false, true, progress);
+		await vi.waitFor(() => expect(runMessage).toBeTruthy());
+		workerInstances[0].onmessage?.({
+			data: { error: 'startup failed', runId: runMessage.runId }
+		} as MessageEvent<any>);
+
+		await expect(run).rejects.toBe('startup failed');
+		expect(progress.report).not.toHaveBeenCalledWith(
+			expect.objectContaining({ kind: 'ready' })
+		);
+		expect(progress.report).toHaveBeenCalledWith(
+			expect.objectContaining({ kind: 'settled', outcome: 'failed' })
+		);
+	});
+
 	it('falls back to prebuffered stdin without cross-origin isolation', async () => {
 		await withCrossOriginIsolation(false, async () => {
+			const progress = { report: vi.fn() };
 			const sandbox = createStreamingTestSandbox();
 			expect(sandbox.stdinMode).toBe('prebuffered');
 			await sandbox.load();
-			const run = sandbox.run('read()', false);
-			await Promise.resolve();
+			const run = sandbox.run('read()', false, true, progress);
+			await vi.waitFor(() =>
+				expect(progress.report).toHaveBeenCalledWith(
+					expect.objectContaining({
+						kind: 'ready',
+						state: 'waiting-input',
+						reason: 'stdin-request'
+					})
+				)
+			);
 			expect(workerInstances[0].postMessage).not.toHaveBeenCalled();
 
 			sandbox.write('fallback\n');
@@ -3671,6 +3963,13 @@ describe('static worker backed language sandboxes', () => {
 		expect(runHandler).toHaveBeenCalledTimes(1);
 		expect(runHandler.mock.calls[0]?.[0]).toMatchObject({ data: { runId: 'run-1' } });
 
+		workerScope.postMessage({
+			progress: { kind: 'ready', state: 'running', reason: 'started' }
+		});
+		expect(nativePostMessage).toHaveBeenLastCalledWith({
+			runId: 'run-1',
+			progress: { kind: 'ready', state: 'running', reason: 'started' }
+		});
 		workerScope.postMessage({ results: true });
 		expect(nativePostMessage).toHaveBeenLastCalledWith({ results: true, runId: 'run-1' });
 		workerScope.dispatchEvent(
@@ -4920,6 +5219,37 @@ describe('static worker backed language sandboxes', () => {
 			sandbox.run('writeln(second).', false, true, undefined, [], { stdin: '' })
 		).resolves.toBe(true);
 		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('settles active progress as cancelled when a static run is killed', async () => {
+		onPostMessage = () => {};
+		const sandbox = createPrologLifecycleTestSandbox();
+		const progress = { report: vi.fn() };
+		await sandbox.load('/absproxy/5173');
+		const run = sandbox.run('writeln(cancelled).', false, true, progress, [], {
+			stdin: ''
+		});
+		await vi.waitFor(() => expect(workerInstances[0].postMessage).toHaveBeenCalledOnce());
+
+		sandbox.kill();
+
+		await expect(run).rejects.toMatchObject({
+			name: 'CancelledError',
+			code: 'cancelled',
+			phase: 'execute',
+			runtimeId: 'PROLOG'
+		});
+		expect(
+			progress.report.mock.calls
+				.map(([event]) => event)
+				.filter((event) => event.kind === 'settled')
+		).toEqual([
+			expect.objectContaining({
+				kind: 'settled',
+				outcome: 'cancelled',
+				operationId: expect.stringMatching(/^prolog-\d+$/)
+			})
+		]);
 	});
 
 	it('buffers every stdin chunk until EOF and preserves explicit empty stdin', async () => {

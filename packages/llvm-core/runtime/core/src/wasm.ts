@@ -768,19 +768,20 @@ export const readBuffer = async (
 	return Uint8Array.from(data);
 };
 
-export async function compile(filename: string, progress?: ProgressSink, signal?: AbortSignal) {
+export async function compile(
+	filename: string,
+	progress?: ProgressSink,
+	signal?: AbortSignal,
+	maxOutputBytes = DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES
+) {
 	// TODO: make compileStreaming work. It needs the server to use the
 	// application/wasm mimetype.
 	throwIfRuntimeAssetAborted(signal);
-	const cached = signal ? undefined : store.get(filename);
+	const cacheKey = `${filename}\0${maxOutputBytes}`;
+	const cached = signal ? undefined : store.get(cacheKey);
 	if (cached) return cached;
 	let pending = (async () => {
-		const bytes = await readBuffer(
-			filename,
-			progress,
-			DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES,
-			signal
-		);
+		const bytes = await readBuffer(filename, progress, maxOutputBytes, signal);
 		throwIfRuntimeAssetAborted(signal);
 		const module = await waitForRuntimeAssetOperation(WebAssembly.compile(bytes), signal);
 		throwIfRuntimeAssetAborted(signal);
@@ -788,10 +789,10 @@ export async function compile(filename: string, progress?: ProgressSink, signal?
 	})();
 	if (!signal) {
 		pending = pending.catch((error) => {
-			if (store.get(filename) === pending) store.delete(filename);
+			if (store.get(cacheKey) === pending) store.delete(cacheKey);
 			throw error;
 		});
-		store.set(filename, pending);
+		store.set(cacheKey, pending);
 	}
 	return pending;
 }

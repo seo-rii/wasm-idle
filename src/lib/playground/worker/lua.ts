@@ -12,6 +12,7 @@ let runtimePromise: Promise<{
 		artifact: any,
 		options?: {
 			args?: string[];
+			onReady?: () => void;
 			stdin?: () => string | null;
 			stdout?: (chunk: string) => void;
 			stderr?: (chunk: string) => void;
@@ -153,6 +154,15 @@ self.onmessage = async (event: { data: any }) => {
 		let initialStdin: string | null = hasInitialStdin ? stdin : null;
 		const execution = await runtime.executeBrowserLuaArtifact(compiledArtifact, {
 			args,
+			onReady: () =>
+				postMessage({
+					progress: {
+						kind: 'ready',
+						state: 'running',
+						reason: 'started',
+						label: 'Lua program started'
+					}
+				}),
 			stdin: () => {
 				if (hasInitialStdin) {
 					const chunk = initialStdin;

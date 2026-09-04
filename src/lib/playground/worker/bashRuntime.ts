@@ -644,7 +644,7 @@ class BashWorkerRuntime implements Sandbox {
 		code: string,
 		prepare: boolean,
 		_log = true,
-		_prog?: SandboxProgress,
+		progress?: SandboxProgress,
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
@@ -846,6 +846,27 @@ class BashWorkerRuntime implements Sandbox {
 						} catch {
 							// Command cleanup must not replace the execution result.
 						}
+					}
+					if (!ownsRun()) {
+						this.disposeRunHandles(
+							instance,
+							null,
+							null,
+							activeOperation.cancellationReason
+						);
+						return;
+					}
+					try {
+						progress?.report?.({
+							kind: 'ready',
+							state: 'running',
+							reason: 'started',
+							label: 'Bash process started'
+						});
+					} catch (error) {
+						this.disposeRunHandles(instance, null, null, error);
+						if (!ownsRun()) return;
+						throw error;
 					}
 					if (!ownsRun()) {
 						this.disposeRunHandles(

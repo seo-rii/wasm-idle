@@ -265,18 +265,21 @@ describe('GnuCOBOL llvm-core runtime', () => {
 		expect(loadRuntimeManifest).toHaveBeenCalledWith(
 			'https://cdn.test/clang/runtime-manifest.v1.json',
 			fetchImpl,
-			controller.signal
+			controller.signal,
+			4 * 1024 * 1024
 		);
 		expect(calls.runtimeOptions[0]?.signal).toBe(controller.signal);
+		expect(calls.runtimeOptions[0]?.maxAssetBytes).toBe(128 * 1024 * 1024);
 		expect(compile).toHaveBeenCalledWith(
 			'https://cdn.test/cobol/cobc.wasm.gz',
 			undefined,
-			controller.signal
+			controller.signal,
+			128 * 1024 * 1024
 		);
 		expect(readBuffer).toHaveBeenCalledWith(
 			'https://cdn.test/cobol/rootfs.tar.gz',
 			undefined,
-			undefined,
+			128 * 1024 * 1024,
 			controller.signal
 		);
 

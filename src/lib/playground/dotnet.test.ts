@@ -286,9 +286,10 @@ describe('Dotnet sandbox', () => {
 		);
 	});
 
-	it('keeps C# execution in the worker when SharedArrayBuffer is available', async () => {
+	it('keeps C# execution in the worker when the page is cross-origin isolated and controlled', async () => {
 		vi.stubGlobal('crossOriginIsolated', true);
 		vi.stubGlobal('SharedArrayBuffer', class SharedArrayBuffer {});
+		vi.stubGlobal('navigator', { serviceWorker: { controller: {} } });
 		const sandbox = new Dotnet('CSHARP');
 
 		await sandbox.load('/absproxy/5173');
@@ -1086,6 +1087,7 @@ export async function executeBrowserDotnetArtifact() {
 `;
 		const moduleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(moduleSource)}`;
 		const sandbox = new Dotnet('CSHARP');
+		vi.spyOn(sandbox as any, 'shouldRunOnMainThread').mockReturnValue(true);
 
 		try {
 			const loading = sandbox.load({ dotnet: { moduleUrl } }, '', true, [], {
@@ -1825,6 +1827,7 @@ export function executeBrowserDotnetArtifact(artifact, options) {
 `;
 		const moduleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(moduleSource)}`;
 		const sandbox = new Dotnet('CSHARP');
+		vi.spyOn(sandbox as any, 'shouldRunOnMainThread').mockReturnValue(true);
 		const code = 'var input = Console.ReadLine();';
 
 		try {
@@ -2139,6 +2142,7 @@ export async function executeBrowserDotnetArtifact() {
 		const moduleUrlA = `data:text/javascript;charset=utf-8,${encodeURIComponent(moduleSourceA)}`;
 		const moduleUrlB = `data:text/javascript;charset=utf-8,${encodeURIComponent(moduleSourceB)}`;
 		const sandbox = new Dotnet('CSHARP');
+		vi.spyOn(sandbox as any, 'shouldRunOnMainThread').mockReturnValue(true);
 
 		try {
 			await expect(
@@ -2201,6 +2205,7 @@ export async function executeBrowserDotnetArtifact() {
 `;
 		const moduleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(moduleSource)}`;
 		const sandbox = new Dotnet('CSHARP');
+		vi.spyOn(sandbox as any, 'shouldRunOnMainThread').mockReturnValue(true);
 		fixture.sandbox = sandbox;
 
 		try {
@@ -2249,6 +2254,7 @@ export async function executeBrowserDotnetArtifact() {
 `;
 		const moduleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(moduleSource)}`;
 		const sandbox = new Dotnet('CSHARP');
+		vi.spyOn(sandbox as any, 'shouldRunOnMainThread').mockReturnValue(true);
 
 		try {
 			await expect(

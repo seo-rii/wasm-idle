@@ -42,6 +42,7 @@ export interface SandboxExecutionOptions {
 	sourceBreakpoints?: DebugSourceBreakpoints[];
 	pauseOnEntry?: boolean;
 	stdin?: string;
+	signal?: AbortSignal;
 	activePath?: string;
 	debugPath?: string;
 	workspaceFiles?: SandboxWorkspaceFile[];

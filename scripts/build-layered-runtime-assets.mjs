@@ -629,6 +629,58 @@ async function buildServiceWorkerLayers(rootDir) {
 		const existingGroupPaths = Object.keys(existingAssets)
 			.filter((logicalPath) => logicalPath.startsWith(config.prefix))
 			.sort();
+		const missingLayerKeys = new Set();
+		for (const layerKey of new Set(
+			existingGroupPaths.flatMap((logicalPath) => {
+				const entry = existingAssets[logicalPath];
+				return entry && typeof entry === 'object' && typeof entry.layer === 'string'
+					? [entry.layer]
+					: [];
+			})
+		)) {
+			const descriptor = existingLayerManifest.layers[layerKey];
+			if (descriptor === undefined) continue;
+			let layerPath = layerKey;
+			if (typeof descriptor === 'string') layerPath = descriptor;
+			else if (descriptor && typeof descriptor === 'object' && descriptor.path) {
+				layerPath = descriptor.path;
+			}
+			if (!layerPath.endsWith('.gz')) layerPath = `${layerPath}.gz`;
+			const layerStats = await stat(resolveRuntimeAsset(rootDir, layerPath)).catch(
+				(error) => {
+					if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+						return null;
+					}
+					throw error;
+				}
+			);
+			if (!layerStats?.isFile()) missingLayerKeys.add(layerKey);
+		}
+		const availableExistingGroupPaths = existingGroupPaths.filter((logicalPath) => {
+			const entry = existingAssets[logicalPath];
+			return (
+				!entry ||
+				typeof entry !== 'object' ||
+				typeof entry.layer !== 'string' ||
+				!missingLayerKeys.has(entry.layer)
+			);
+		});
+		const availableExistingGroupPathSet = new Set(availableExistingGroupPaths);
+		if (missingLayerKeys.size > 0) {
+			for (const logicalPath of existingGroupPaths) {
+				const entry = existingAssets[logicalPath];
+				if (
+					entry &&
+					typeof entry === 'object' &&
+					typeof entry.layer === 'string' &&
+					missingLayerKeys.has(entry.layer)
+				) {
+					delete nextAssets[logicalPath];
+				}
+			}
+			for (const layerKey of missingLayerKeys) delete nextLayers[layerKey];
+			summaries[config.family].changed = true;
+		}
 		/** @type {Map<string, SourceRecord>} */
 		const sourceRecords = new Map();
 		for (const logicalPath of candidatePaths) {
@@ -720,7 +772,7 @@ async function buildServiceWorkerLayers(rootDir) {
 		let rebuildGroup = false;
 		for (const logicalPath of candidatePaths) {
 			const sourceBytes = await readSourceBytes(logicalPath);
-			if (!existingAssets[logicalPath]) {
+			if (!availableExistingGroupPathSet.has(logicalPath)) {
 				if (sourceBytes.byteLength <= MAX_LAYER_RAW_BYTES) rebuildGroup = true;
 				continue;
 			}
@@ -729,7 +781,7 @@ async function buildServiceWorkerLayers(rootDir) {
 
 		if (!rebuildGroup) {
 			for (const logicalPath of candidatePaths) {
-				if (!existingAssets[logicalPath]) continue;
+				if (!availableExistingGroupPathSet.has(logicalPath)) continue;
 				const source = sourceRecords.get(logicalPath);
 				if (!source) continue;
 				for (const sourceFile of source.sourceFiles) {
@@ -741,7 +793,7 @@ async function buildServiceWorkerLayers(rootDir) {
 		}
 
 		const oldLayerKeys = new Set(
-			existingGroupPaths.map((logicalPath) => existingAssets[logicalPath].layer)
+			availableExistingGroupPaths.map((logicalPath) => existingAssets[logicalPath].layer)
 		);
 		for (const layerKey of oldLayerKeys) {
 			const descriptor = existingLayerManifest.layers[layerKey];
@@ -757,7 +809,7 @@ async function buildServiceWorkerLayers(rootDir) {
 			staleLayerPathsToRemove.add(layerFilePath);
 			delete nextLayers[layerKey];
 		}
-		for (const logicalPath of existingGroupPaths) delete nextAssets[logicalPath];
+		for (const logicalPath of availableExistingGroupPaths) delete nextAssets[logicalPath];
 
 		let layerNumber = 0;
 		/** @type {PendingLayer | null} */
@@ -787,7 +839,9 @@ async function buildServiceWorkerLayers(rootDir) {
 			return /** @type {PendingLayer} */ ({ path: layerPath, rawBytes: 0, chunks: [] });
 		};
 
-		const rebuiltPaths = [...new Set([...existingGroupPaths, ...candidatePaths])].sort();
+		const rebuiltPaths = [
+			...new Set([...availableExistingGroupPaths, ...candidatePaths])
+		].sort();
 		for (const logicalPath of rebuiltPaths) {
 			const source = sourceRecords.get(logicalPath);
 			const bytes = source
@@ -974,7 +1028,7 @@ async function buildServiceWorkerLayers(rootDir) {
 		if (!retainedLayerPaths.has(staleLayerPath)) await rm(staleLayerPath, { force: true });
 	}
 	for (const summary of Object.values(summaries)) {
-		summary.changed = summary.assetCount > 0 || summary.beforeBytes > 0;
+		summary.changed = summary.changed || summary.assetCount > 0 || summary.beforeBytes > 0;
 		summary.savedBytes = summary.beforeBytes - summary.afterBytes;
 	}
 	return summaries;

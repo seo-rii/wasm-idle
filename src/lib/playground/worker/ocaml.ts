@@ -33,6 +33,12 @@ type BrowserNativeManifestFile = {
 	size: number;
 };
 
+type BrowserNativeManifestAsset = {
+	url: string;
+	bytes: number;
+	sha256: string;
+};
+
 type BrowserNativeManifestRuntimePack = {
 	format: 'wasm-of-js-of-ocaml-browser-native-runtime-pack-v1';
 	asset: string;
@@ -54,16 +60,16 @@ type BrowserNativeManifest = {
 	version: 1;
 	generatedAt: string;
 	switchPrefix: string;
-	findlibConf: string;
+	findlibConf: BrowserNativeManifestAsset;
 	tools: {
-		ocamlc: string;
-		js_of_ocaml: string;
-		wasm_of_ocaml: string;
+		ocamlc: BrowserNativeManifestAsset;
+		js_of_ocaml: BrowserNativeManifestAsset;
+		wasm_of_ocaml: BrowserNativeManifestAsset;
 	};
 	binaryenTools?: {
-		wasm_opt: string;
-		wasm_merge: string;
-		wasm_metadce: string;
+		wasm_opt: BrowserNativeManifestAsset;
+		wasm_merge: BrowserNativeManifestAsset;
+		wasm_metadce: BrowserNativeManifestAsset;
 	};
 	toolPatches?: Record<string, unknown>;
 	runtimePack?: BrowserNativeManifestRuntimePack;
@@ -156,33 +162,40 @@ function rewriteAbsoluteBundleUrl(url: string, currentManifestUrl: string) {
 	return new URL(`${basePath}${url}`, manifestLocation.origin).toString();
 }
 
+function rewriteManifestAsset(
+	asset: BrowserNativeManifestAsset,
+	currentManifestUrl: string
+): BrowserNativeManifestAsset {
+	return {
+		...asset,
+		url: rewriteAbsoluteBundleUrl(asset.url, currentManifestUrl)
+	};
+}
+
 function rewriteManifest(
 	manifest: BrowserNativeManifest,
 	currentManifestUrl: string
 ): BrowserNativeManifest {
 	return {
 		...manifest,
-		findlibConf: rewriteAbsoluteBundleUrl(manifest.findlibConf, currentManifestUrl),
+		findlibConf: rewriteManifestAsset(manifest.findlibConf, currentManifestUrl),
 		tools: {
-			ocamlc: rewriteAbsoluteBundleUrl(manifest.tools.ocamlc, currentManifestUrl),
-			js_of_ocaml: rewriteAbsoluteBundleUrl(manifest.tools.js_of_ocaml, currentManifestUrl),
-			wasm_of_ocaml: rewriteAbsoluteBundleUrl(
-				manifest.tools.wasm_of_ocaml,
-				currentManifestUrl
-			)
+			ocamlc: rewriteManifestAsset(manifest.tools.ocamlc, currentManifestUrl),
+			js_of_ocaml: rewriteManifestAsset(manifest.tools.js_of_ocaml, currentManifestUrl),
+			wasm_of_ocaml: rewriteManifestAsset(manifest.tools.wasm_of_ocaml, currentManifestUrl)
 		},
 		...(manifest.binaryenTools
 			? {
 					binaryenTools: {
-						wasm_opt: rewriteAbsoluteBundleUrl(
+						wasm_opt: rewriteManifestAsset(
 							manifest.binaryenTools.wasm_opt,
 							currentManifestUrl
 						),
-						wasm_merge: rewriteAbsoluteBundleUrl(
+						wasm_merge: rewriteManifestAsset(
 							manifest.binaryenTools.wasm_merge,
 							currentManifestUrl
 						),
-						wasm_metadce: rewriteAbsoluteBundleUrl(
+						wasm_metadce: rewriteManifestAsset(
 							manifest.binaryenTools.wasm_metadce,
 							currentManifestUrl
 						)

@@ -1,5 +1,7 @@
 // @vitest-environment node
 
+import { readFile } from 'node:fs/promises';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -17,6 +19,13 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 		const pathname = new URL(browserUrl).pathname.replace(/\/$/, '');
 		return `${pathname === '' ? '' : pathname}/wasm-of-js-of-ocaml/browser-native-bundle/tools/`;
 	}
+
+	it('targets the dedicated language selector', async () => {
+		const source = await readFile('scripts/ocaml-browser-probe-lib.mjs', 'utf8');
+
+		expect(source).toContain("page.locator('#language-select').selectOption('OCAML')");
+		expect(source).not.toMatch(/(?:locator|waitForSelector)\('select'/u);
+	});
 
 	it(
 		'runs the real OCaml page path through both bundled browser-native backends',

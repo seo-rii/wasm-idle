@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Monaco from './Monaco.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
+	import type { ProgressLike } from '@wasm-idle/core';
 	import { createPlaygroundBinding, isSharedArrayBufferAvailable } from '$lib';
 	import {
 		createDebugSessionController,
@@ -82,10 +83,30 @@
 		files: WorkspaceFile[];
 		openTabs: string[];
 	};
+	const knownCppVersions = [
+		'CPP03',
+		'CPP11',
+		'CPP14',
+		'CPP17',
+		'CPP20',
+		'CPP23',
+		'CPP26'
+	] as const;
+	type CppVersion = (typeof knownCppVersions)[number];
+	const cppVersionLabels: Record<CppVersion, string> = {
+		CPP03: 'C++03',
+		CPP11: 'C++11',
+		CPP14: 'C++14',
+		CPP17: 'C++17',
+		CPP20: 'C++20',
+		CPP23: 'C++23',
+		CPP26: 'C++26'
+	};
 
 	type WorkspaceSnapshot = {
 		activePath: string;
 		argsInput: string;
+		cppVersion: CppVersion;
 		files: WorkspaceFile[];
 		goTarget: GoTarget;
 		language: string;
@@ -169,6 +190,7 @@
 		compilerDiagnostics = $state<CompilerDiagnostic[]>([]),
 		clangdRequested = $state(false),
 		argsInput = $state(''),
+		cppVersion = $state<CppVersion>('CPP20'),
 		rustTargetTriple = $state<RustTargetTriple>('wasm32-wasip1'),
 		goTarget = $state<GoTarget>('wasip1/wasm'),
 		ocamlBackend = $state<OcamlBackend>('wasm'),
@@ -178,7 +200,8 @@
 		language = $state<PlaygroundLanguage>('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
 		activeDebugBackend = $state<'lldb' | 'trace' | null>(null),
-		progress = $state(-1),
+		progressVisible = $state(false),
+		progress = $state(0),
 		progressStage = $state(''),
 		progressIndeterminate = $state(false),
 		stdinInput = $state(''),
@@ -207,6 +230,8 @@
 	let saveStatus = $state('Ready');
 	let workspaceInitialized = false;
 	let workspaceSaveTimer: ReturnType<typeof setTimeout> | null = null;
+	let activeProgressSession: ProgressLike | undefined;
+	let executionAbortController: AbortController | undefined;
 	let fileInput = $state<HTMLInputElement | null>(null);
 	let dragActive = $state(false);
 	const sharedBufferAvailable = $derived(!browser || isSharedArrayBufferAvailable());
@@ -214,6 +239,7 @@
 	const executionOptionResolvers: Partial<
 		Record<PlaygroundLanguage, () => Partial<SandboxExecutionOptions>>
 	> = {
+		CPP: () => ({ cppVersion }),
 		RUST: () => ({
 			rustTargetTriple,
 			limits: RUST_NON_DEBUG_RESOURCE_REQUIREMENTS
@@ -360,6 +386,7 @@
 	const workspaceSaveKey = $derived(
 		JSON.stringify({
 			argsInput,
+			cppVersion,
 			goTarget,
 			language,
 			log,
@@ -374,12 +401,12 @@
 
 	const loadingProgress = createLoadingProgressController({
 		onChange(state) {
+			progressVisible = state.visible;
 			progress = state.value;
 			progressStage = state.stage;
 			progressIndeterminate = state.indeterminate;
 		}
 	});
-	const progressRef = { set: loadingProgress.set };
 
 	const debugLanguage = $derived(debugLanguageAdapters[language] ?? null);
 	const selectedDebugMode = $derived(
@@ -436,11 +463,11 @@
 			? `${languageLabels[language] ?? language} · Trace fallback`
 			: (debugTitles[language] ?? 'Pyodide Trace')
 	);
-	const loading = $derived(progress >= 0 && progress < 1);
-	const progressValue = $derived(progress < 0 ? 0 : progress > 1 ? 1 : progress);
+	const loading = $derived(progressVisible);
+	const progressValue = $derived(progress > 1 ? 1 : progress);
 	const progressPercent = $derived(Math.round(progressValue * 100));
 	const progressLabel = $derived(
-		runningMode === 'debug' ? 'Preparing debug session' : progressStage || 'Loading runtime'
+		progressStage || (runningMode === 'debug' ? 'Preparing debug session' : 'Loading runtime')
 	);
 	const examplePaneHorizontalPadding = 40;
 	const panelResizerWidth = 14;
@@ -1016,6 +1043,7 @@
 		return {
 			activePath,
 			argsInput,
+			cppVersion,
 			files: files.map((file) => ({ path: file.path, content: file.content })),
 			goTarget,
 			language,
@@ -1057,6 +1085,8 @@
 		language = nextLanguage;
 		activateWorkspace(nextWorkspaces[nextLanguage]);
 		if (typeof value?.argsInput === 'string') argsInput = value.argsInput;
+		if (knownCppVersions.includes(value?.cppVersion as CppVersion))
+			cppVersion = value?.cppVersion as CppVersion;
 		if (typeof value?.log === 'boolean') log = value.log;
 		if (typeof value?.lspEnabled === 'boolean') lspEnabled = value.lspEnabled;
 		if (
@@ -1285,6 +1315,11 @@
 		restartRequestGeneration += 1;
 		restartDebugPending = false;
 		executionStopPending = true;
+		if (executionAbortController && !executionAbortController.signal.aborted) {
+			executionAbortController.abort(
+				new DOMException('Execution stopped by the user', 'AbortError')
+			);
+		}
 		executionPreflight.cancel();
 		try {
 			await settleExecutionTeardown(stoppedMode, previousExecution);
@@ -1303,6 +1338,11 @@
 		const previousExecution = activeExecution;
 		const teardownGeneration = ++executionGeneration;
 		restartDebugPending = true;
+		if (executionAbortController && !executionAbortController.signal.aborted) {
+			executionAbortController.abort(
+				new DOMException('Execution restarted by the user', 'AbortError')
+			);
+		}
 		executionPreflight.cancel();
 		try {
 			try {
@@ -1469,6 +1509,12 @@
 			dataBreakpointLoading = false;
 		}
 		if (event.type === 'pause') {
+			activeProgressSession?.report?.({
+				kind: 'ready',
+				state: 'paused',
+				reason: 'debug-paused',
+				label: 'Debugger paused'
+			});
 			const sourcePath = event.sourcePath || event.callStack[0]?.sourcePath;
 			const workspacePath = normalizePath(sourcePath?.replace(/^\/workspace\//u, '') || '');
 			if (workspacePath && files.some((file) => file.path === workspacePath)) {
@@ -1789,6 +1835,11 @@
 		const generation = ++executionGeneration;
 		const preflight = executionPreflight.begin();
 		const execution = (async () => {
+			const abortController = new AbortController();
+			const progressSession = loadingProgress.start(`Loading ${language} runtime`);
+			executionAbortController = abortController;
+			activeProgressSession = progressSession;
+			let progressOutcome: 'completed' | 'failed' | 'cancelled' | 'timed-out' = 'completed';
 			let executionDebugMode: NonNullable<SandboxExecutionOptions['debugMode']> = enableDebug
 				? selectedDebugMode
 				: 'none';
@@ -1815,10 +1866,13 @@
 				saveWorkspace();
 			}
 			try {
-				loadingProgress.start(`Loading ${language} runtime`);
 				if (executionDebugMode === 'lldb') {
 					try {
-						loadingProgress.set(0, 'Checking LLDB debug runtime');
+						progressSession.report?.({
+							kind: 'activity',
+							phase: 'resolving',
+							label: 'Checking LLDB debug runtime'
+						});
 						const debugRuntime = resolveDebugRuntimeUrls(
 							runtimeAssets,
 							globalThis.location.href
@@ -1829,7 +1883,7 @@
 							debugRuntime.manifestUrl,
 							debugRuntime.manifestReceipt,
 							fetch,
-							preflight.signal
+							abortController.signal
 						);
 						const capabilities = manifest.debugger.capabilities;
 						if (
@@ -1840,10 +1894,16 @@
 						) {
 							throw new Error('LLDB runtime is missing required debug capabilities.');
 						}
-						if (!executionPreflight.isCurrent(preflight)) return;
+						if (!executionPreflight.isCurrent(preflight)) {
+							progressOutcome = 'cancelled';
+							return;
+						}
 						activeDebugBackend = 'lldb';
 					} catch (error) {
-						if (!executionPreflight.isCurrent(preflight)) return;
+						if (!executionPreflight.isCurrent(preflight)) {
+							progressOutcome = 'cancelled';
+							return;
+						}
 						executionDebugMode = 'trace';
 						activeDebugBackend = 'trace';
 						console.warn(
@@ -1852,15 +1912,18 @@
 						);
 					}
 				}
-				if (!executionPreflight.isCurrent(preflight)) return;
+				if (!executionPreflight.isCurrent(preflight)) {
+					progressOutcome = 'cancelled';
+					return;
+				}
 				const preloadedStdin =
 					sharedBufferAvailable && language !== 'BASH' ? undefined : stdinInput;
-				await executeTerminalRun({
+				const result = await executeTerminalRun({
 					terminal,
 					language,
 					code: codeToRun,
 					log,
-					progress: progressRef,
+					progress: progressSession,
 					args,
 					options: {
 						debugMode: executionDebugMode,
@@ -1879,14 +1942,26 @@
 						})),
 						pauseOnEntry: enableDebug,
 						...languageExecutionOptions,
-						signal: preflight.signal,
+						signal: abortController.signal,
 						stdin: preloadedStdin
 					}
 				});
+				if (result === false) {
+					progressOutcome = abortController.signal.aborted ? 'cancelled' : 'failed';
+				}
 			} catch (error) {
-				if (preflight.signal.aborted && !executionPreflight.isCurrent(preflight)) return;
-				throw error;
+				const executionWasCancelled = abortController.signal.aborted;
+				const executionTimedOut = error instanceof Error && error.name === 'TimeoutError';
+				progressOutcome = executionWasCancelled
+					? 'cancelled'
+					: executionTimedOut
+						? 'timed-out'
+						: 'failed';
+				if (!executionWasCancelled && !executionTimedOut) throw error;
 			} finally {
+				progressSession.report?.({ kind: 'settled', outcome: progressOutcome });
+				if (executionAbortController === abortController) executionAbortController = undefined;
+				if (activeProgressSession === progressSession) activeProgressSession = undefined;
 				executionPreflight.finish(preflight);
 				completeExecutionGeneration(generation);
 			}
@@ -2538,6 +2613,16 @@
 						<span>{argsLabel}</span>
 					</label>
 				{/if}
+				{#if language === 'CPP'}
+					<label class="select-chip">
+						<span class="material-symbols-outlined">tune</span>
+						<select id="cpp-version" bind:value={cppVersion}>
+							{#each knownCppVersions as version (version)}
+								<option value={version}>{cppVersionLabels[version]}</option>
+							{/each}
+						</select>
+					</label>
+				{/if}
 				{#if language === 'RUST'}
 					<label class="select-chip">
 						<span class="material-symbols-outlined">conversion_path</span>
@@ -2581,7 +2666,7 @@
 				<div class="progress-shell" aria-live="polite">
 					<div class="progress-copy">
 						<div class="progress-copy__text">
-							<span class="material-symbols-outlined">downloading</span>
+							<span class="material-symbols-outlined">hourglass_top</span>
 							<strong>{progressLabel}</strong>
 						</div>
 						{#if !progressIndeterminate}
@@ -4084,20 +4169,26 @@
 	}
 
 	.progress-track--indeterminate .progress-fill {
-		width: 38%;
-		transform: translateX(-120%);
-		animation: progress-indeterminate 1.4s ease-in-out infinite;
+		transform: scaleX(1);
+		transform-origin: center;
+		animation: progress-activity 1.4s ease-in-out infinite;
 	}
 
-	@keyframes progress-indeterminate {
-		to {
-			transform: translateX(365%);
+	@keyframes progress-activity {
+		0%,
+		100% {
+			opacity: 0.35;
+		}
+
+		50% {
+			opacity: 1;
 		}
 	}
 
 	@media (prefers-reduced-motion: reduce) {
 		.progress-track--indeterminate .progress-fill {
-			animation-duration: 3s;
+			animation: none;
+			opacity: 0.65;
 		}
 	}
 

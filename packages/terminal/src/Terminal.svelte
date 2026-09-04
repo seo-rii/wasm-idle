@@ -1,9 +1,8 @@
 <script lang="ts">
 	import {
 		RuntimeProgressController,
+		TimeoutError,
 		createRuntimeAssetsKey,
-		phaseProgress,
-		progressBandsForLanguage,
 		type DebugCommand,
 		type DebugDataBreakpoint,
 		type DebugDataBreakpointInfoArguments,
@@ -70,11 +69,76 @@
 		ll: string | null = null,
 		loadedRuntimeAssetsKey: string | undefined = undefined,
 		stopRequested = false,
-		progressLifecycleCounter = 0;
+		progressLifecycleCounter = 0,
+		activeExecutionProgress: ProgressLike | undefined,
+		activeExecutionLanguage: string | undefined,
+		preparedExecution:
+			| {
+					key: string;
+					sandbox: BoundSandbox;
+			  }
+			| undefined;
 	const progressController = new RuntimeProgressController();
+	const terminalOutputReadinessLanguages = new Set([
+		'C',
+		'CPP',
+		'OBJC',
+		'RUST',
+		'GO',
+		'D',
+		'CSHARP',
+		'FSHARP',
+		'VBNET',
+		'FORTRAN',
+		'COBOL',
+		'OCAML',
+		'HASKELL'
+	]);
 
-	function writeTerminalOutput(text: string) {
+	function invalidatePreparedExecution() {
+		preparedExecution = undefined;
+	}
+
+	function executionPreparationKey(
+		language: string,
+		code: string,
+		log: boolean,
+		args: string[],
+		options: TerminalExecutionOptions
+	) {
+		try {
+			const keyOptions = { ...options };
+			delete keyOptions.signal;
+			return JSON.stringify([language, code, log, args, keyOptions]);
+		} catch {
+			return undefined;
+		}
+	}
+
+	function activityOnlyProgress(progress: ProgressLike | undefined) {
+		if (!progress) return undefined;
+		return {
+			set: progress.set,
+			report: (event: Parameters<NonNullable<ProgressLike['report']>>[0]) => {
+				if (event.kind === 'activity') progress.report?.(event);
+			}
+		} satisfies ProgressLike;
+	}
+
+	function writeTerminalOutput(text: string, executionOutput = false) {
 		if (!text) return;
+		if (
+			executionOutput &&
+			activeExecutionLanguage &&
+			terminalOutputReadinessLanguages.has(activeExecutionLanguage)
+		) {
+			activeExecutionProgress?.report?.({
+				kind: 'ready',
+				state: 'running',
+				reason: 'stdout',
+				label: 'Program output received'
+			});
+		}
 		debugOutput += text;
 		term?.write(text);
 	}
@@ -99,6 +163,7 @@
 		let _tc = ++tc;
 		await wait();
 		sandboxAcceptingInput = false;
+		if (requiresSandboxReset) invalidatePreparedExecution();
 		if (sandbox && requiresSandboxReset) {
 			discardPendingSandboxInput();
 			await sandbox.clear();
@@ -114,10 +179,20 @@
 			loadedRuntimeAssetsKey = currentRuntimeAssetsKey;
 		}
 		sandbox.image = onimage;
-		sandbox.ondebug = ondebug;
+		sandbox.ondebug = (event) => {
+			if (event.type === 'pause') {
+				activeExecutionProgress?.report?.({
+					kind: 'ready',
+					state: 'paused',
+					reason: 'debug-paused',
+					label: 'Debugger paused'
+				});
+			}
+			ondebug?.(event);
+		};
 		sandbox.oncompilerdiagnostic = oncompilediagnostic;
 		sandbox.output = (output: string) =>
-			_tc === tc && writeTerminalOutput(output.replaceAll('\n', '\r\n'));
+			_tc === tc && writeTerminalOutput(output.replaceAll('\n', '\r\n'), true);
 	}
 
 	function flushPendingSandboxInput() {
@@ -144,7 +219,22 @@
 		else pendingSandboxEof = true;
 	}
 
-	function runSandbox<T>(pr: Promise<T>, reportFinish = true) {
+	function finishSandboxRun() {
+		sandboxAcceptingInput = false;
+		stopRequested = false;
+		onfinish?.();
+		finish = true;
+		if (term) term.options.cursorBlink = false;
+	}
+
+	function isTimeoutError(error: unknown) {
+		return (
+			error instanceof TimeoutError ||
+			(error instanceof Error && error.name === 'TimeoutError')
+		);
+	}
+
+	function runSandbox<T>(pr: Promise<T>, reportFinish = true, finalize = true) {
 		return pr
 			.then((x) => {
 				if (reportFinish) {
@@ -156,15 +246,15 @@
 			})
 			.catch((msg) => {
 				if (stopRequested) return false;
+				if (isTimeoutError(msg)) {
+					writeTerminalOutput(`\r\n\x1B[1;3;31m${msg}\u001B[?25l`);
+					throw msg;
+				}
 				writeTerminalOutput(`\r\n\x1B[1;3;31m${msg}\u001B[?25l`);
 				return false;
 			})
 			.finally(() => {
-				sandboxAcceptingInput = false;
-				stopRequested = false;
-				onfinish?.();
-				finish = true;
-				if (term) term.options.cursorBlink = false;
+				if (finalize) finishSandboxRun();
 			});
 	}
 
@@ -279,6 +369,7 @@
 	const terminalControl: TerminalControl = {
 		async clear() {
 			await wait();
+			invalidatePreparedExecution();
 			discardPendingSandboxInput();
 			term?.reset();
 			term?.write(`\u001B[?25l\x1b[0m\x1b[?25h`);
@@ -295,36 +386,32 @@
 			language: string,
 			code: string,
 			log = true,
-			prog?: { set?: (value: number, stage?: string) => void },
+			prog?: ProgressLike,
 			args: string[] = [],
 			options: TerminalExecutionOptions = {}
 		) {
 			return await withProgressLifecycle(language, prog, async (runProgress) => {
-				const progressBands = progressBandsForLanguage(language);
-				const loadProgress = phaseProgress(
-					runProgress,
-					progressBands.load[0],
-					progressBands.load[1],
-					`Loading ${language} runtime`
-				);
-				const prepareProgress = phaseProgress(
-					runProgress,
-					progressBands.prepare[0],
-					progressBands.prepare[1],
-					`Preparing ${language} program`
-				);
+				invalidatePreparedExecution();
+				const prepareProgress = activityOnlyProgress(runProgress);
 				await Promise.all([
 					initSandbox(language).then(() =>
-						sandbox.load(code, log, args, options, loadProgress)
+						sandbox.load(code, log, args, options, prepareProgress)
 					),
 					initTerm(false)
 				]);
-				prepareProgress?.set?.(0, `Preparing ${language} program`);
+				runProgress?.report?.({
+					kind: 'activity',
+					phase: 'starting',
+					label: `Preparing ${language} program`
+				});
 				const prepared = !!(await runSandbox(
 					sandbox.run(code, true, log, prepareProgress, args, options),
 					false
 				));
-				if (prepared) prepareProgress?.set?.(1, `${language} runtime ready`);
+				const preparationKey = executionPreparationKey(language, code, log, args, options);
+				if (prepared && preparationKey) {
+					preparedExecution = { key: preparationKey, sandbox };
+				}
 				return prepared;
 			});
 		},
@@ -332,19 +419,18 @@
 			language: string,
 			code: string,
 			log = true,
-			prog?: { set?: (value: number, stage?: string) => void },
+			prog?: ProgressLike,
 			args: string[] = [],
 			options: TerminalExecutionOptions = {}
 		) {
 			return await withProgressLifecycle(language, prog, async (runProgress) => {
+				let executionRunWillFinalize = false;
 				pendingDebugBreakpoints.clear();
 				for (const { sourcePath, lines } of options.sourceBreakpoints || []) {
 					pendingDebugBreakpoints.set(sourcePath, [...lines]);
 				}
 				await Promise.all([
-					initSandbox(language).then(() =>
-						sandbox.load(code, log, args, options, runProgress)
-					),
+					initSandbox(language).then(() => sandbox.load(code, log, args, options)),
 					initTerm()
 				]);
 				const executionOptions = {
@@ -357,16 +443,85 @@
 						})
 					)
 				};
-				sandboxAcceptingInput = true;
-				flushPendingSandboxInput();
-				return await runSandbox(
-					sandbox.run(code, false, log, runProgress, args, executionOptions)
-				);
+				const preparationKey = executionPreparationKey(language, code, log, args, options);
+				const mayUsePreparedOutput =
+					!!preparationKey &&
+					preparedExecution?.sandbox === sandbox &&
+					preparedExecution.key === preparationKey;
+				invalidatePreparedExecution();
+				try {
+					if (terminalOutputReadinessLanguages.has(language) && !mayUsePreparedOutput) {
+						const prepareProgress = activityOnlyProgress(runProgress);
+						runProgress?.report?.({
+							kind: 'activity',
+							phase: 'starting',
+							label: `Preparing ${language} program`
+						});
+						const prepared = !!(await runSandbox(
+							sandbox.run(code, true, log, prepareProgress, args, options),
+							false,
+							false
+						));
+						if (!prepared) {
+							runProgress?.report?.({
+								kind: 'settled',
+								outcome: options.signal?.aborted ? 'cancelled' : 'failed',
+								label: `${language} run ended`
+							});
+							return false;
+						}
+					}
+
+					activeExecutionProgress = runProgress;
+					activeExecutionLanguage = language;
+					sandboxAcceptingInput = true;
+					flushPendingSandboxInput();
+					executionRunWillFinalize = true;
+					const result = await runSandbox(
+						sandbox.run(code, false, log, runProgress, args, executionOptions)
+					);
+					if (result === false) {
+						runProgress?.report?.({
+							kind: 'settled',
+							outcome: options.signal?.aborted ? 'cancelled' : 'failed',
+							label: `${language} run ended`
+						});
+					} else {
+						runProgress?.report?.({
+							kind: 'ready',
+							state: 'running',
+							reason: 'result',
+							label: `${language} run completed`
+						});
+						runProgress?.report?.({
+							kind: 'settled',
+							outcome: 'completed',
+							label: `${language} run completed`
+						});
+					}
+					return result;
+				} catch (error) {
+					if (isTimeoutError(error)) {
+						runProgress?.report?.({
+							kind: 'settled',
+							outcome: 'timed-out',
+							label: `${language} run timed out`
+						});
+					}
+					throw error;
+				} finally {
+					if (!executionRunWillFinalize) finishSandboxRun();
+					if (activeExecutionProgress === runProgress) {
+						activeExecutionProgress = undefined;
+						activeExecutionLanguage = undefined;
+					}
+				}
 			});
 		},
 		async destroy() {
 			await wait();
 			progressController.invalidate();
+			invalidatePreparedExecution();
 			sandboxAcceptingInput = false;
 			discardPendingSandboxInput();
 			term?.dispose();
@@ -377,6 +532,7 @@
 			await wait();
 			if (!sandbox) return;
 			progressController.invalidate();
+			invalidatePreparedExecution();
 			sandboxAcceptingInput = false;
 			discardPendingSandboxInput();
 			input = '';
@@ -391,6 +547,7 @@
 		async stop() {
 			await wait();
 			progressController.invalidate();
+			invalidatePreparedExecution();
 			stopRequested = true;
 			finish = true;
 			sandboxAcceptingInput = false;
@@ -607,6 +764,7 @@
 
 		return async () => {
 			progressController.invalidate();
+			invalidatePreparedExecution();
 			discardPendingSandboxInput();
 			term?.dispose();
 			if (sandbox) await sandbox.clear();

@@ -237,6 +237,14 @@ self.onmessage = async (event: { data: any }) => {
 			wasi_unstable: wasiRuntime.wasiImport
 		});
 		const exportsObject = instance.exports as Record<string, unknown>;
+		postMessage({
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: 'WASM program started'
+			}
+		});
 		let exitCode = 0;
 		let printed = false;
 

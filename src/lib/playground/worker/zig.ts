@@ -654,6 +654,14 @@ async function runZigArtifact({
 			wasi_unstable: zigWasi.wasiImport
 		})
 	);
+	postMessage({
+		progress: {
+			kind: 'ready',
+			state: 'running',
+			reason: 'started',
+			label: 'Zig program started'
+		}
+	});
 	const exitCode = zigWasi.start(
 		instance as { exports: { memory: WebAssembly.Memory; _start: () => unknown } }
 	);

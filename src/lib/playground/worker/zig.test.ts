@@ -285,6 +285,24 @@ describe('Zig worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: '5\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'zig-worker\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		const readyIndex = messages.findIndex((message: any) => message.progress?.kind === 'ready');
+		expect(messages.filter((message: any) => message.progress?.kind === 'ready')).toEqual([
+			{
+				progress: {
+					kind: 'ready',
+					state: 'running',
+					reason: 'started',
+					label: 'Zig program started'
+				}
+			}
+		]);
+		expect(readyIndex).toBeGreaterThanOrEqual(0);
+		expect(readyIndex).toBeLessThan(
+			messages.findIndex((message: any) => message.output === '5\n')
+		);
 		expect(shim.state.compileCount).toBe(1);
 		expect(shim.state.runCount).toBe(1);
 	});
@@ -321,6 +339,9 @@ describe('Zig worker', () => {
 			}
 		});
 		await Promise.resolve();
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
+			progress: expect.objectContaining({ kind: 'ready' })
+		});
 		await (globalThis as any).self.onmessage({
 			data: {
 				...request,
@@ -331,6 +352,11 @@ describe('Zig worker', () => {
 
 		expect(shim.state.compileCount).toBe(1);
 		expect(shim.state.runCount).toBe(1);
+		expect(
+			(globalThis as any).postMessage.mock.calls.filter(
+				([message]: [any]) => message.progress?.kind === 'ready'
+			)
+		).toHaveLength(1);
 	});
 
 	it('posts a compile error when the Zig compiler exits non-zero', async () => {

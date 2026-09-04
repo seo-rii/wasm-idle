@@ -145,18 +145,22 @@ describe('Clang compile/debug flow', () => {
 		expect(clang.run).not.toHaveBeenCalled();
 	});
 
-	it('maps newer C++ versions to the newest supported clang standard', async () => {
+	it.each([
+		['CPP20', '-std=gnu++20'],
+		['CPP23', '-std=gnu++23'],
+		['CPP26', '-std=gnu++26']
+	])('maps %s to its distinct clang standard mode', async (cppVersion, standardArg) => {
 		const { clang } = createClangHarness();
 
 		await clang.compile({
 			input: 'main.cc',
 			code: 'int main() {}',
 			obj: 'main.o',
-			cppVersion: 'CPP26'
+			cppVersion
 		});
 
 		const compileArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
-		expect(compileArgs).toContain('-std=gnu++2a');
+		expect(compileArgs).toContain(standardArg);
 	});
 
 	it('uses the manifest clang resource directory for compiler headers', async () => {

@@ -3,6 +3,10 @@ import { createDwarfDebugDescriptor } from './dwarf.js';
 import { loadRuntimeManifest, resolveRuntimeManifestUrl } from './runtime-manifest.js';
 import { resolveRuntimeBaseUrl, resolveRuntimeBaseUrlFromManifestUrl } from './url.js';
 import {
+	DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES,
+	DEFAULT_MAX_RUNTIME_JSON_BYTES
+} from '../../core/src/wasm.js';
+import {
 	resolveDebugMode,
 	type BrowserClangDebugMode,
 	BrowserClangArtifact,
@@ -42,14 +46,24 @@ export type CreateClangCompilerOptions = ClangRuntimeLocation & {
 	log?: boolean;
 	manifest?: RuntimeManifestV1;
 	fetchImpl?: typeof fetch;
+	maxAssetBytes?: number;
 	signal?: AbortSignal;
 };
 
 export type PreloadBrowserClangRuntimeOptions = ClangRuntimeLocation & {
 	manifest?: RuntimeManifestV1;
 	fetchImpl?: typeof fetch;
+	maxAssetBytes?: number;
 	signal?: AbortSignal;
 };
+
+function resolveMaxAssetBytes(maxAssetBytes?: number) {
+	const resolved = maxAssetBytes ?? DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES;
+	if (!Number.isSafeInteger(resolved) || resolved <= 0) {
+		throw new TypeError('Clang maxAssetBytes must be a positive safe integer');
+	}
+	return resolved;
+}
 
 function toStandaloneBytes(value: Uint8Array | ArrayBuffer) {
 	return value instanceof Uint8Array ? new Uint8Array(value) : new Uint8Array(value);
@@ -110,6 +124,7 @@ function createLogResult(records: CompilerLogRecord[], enabled: boolean) {
 async function resolveRuntimeLocation(
 	options: CreateClangCompilerOptions | PreloadBrowserClangRuntimeOptions
 ) {
+	const maxAssetBytes = resolveMaxAssetBytes(options.maxAssetBytes);
 	const runtimeBaseUrl =
 		options.runtimeBaseUrl !== undefined
 			? resolveRuntimeBaseUrl(options.runtimeBaseUrl)
@@ -117,21 +132,27 @@ async function resolveRuntimeLocation(
 	const manifestUrl = options.manifestUrl || resolveRuntimeManifestUrl(runtimeBaseUrl);
 	const manifest =
 		options.manifest ||
-		(await loadRuntimeManifest(manifestUrl, options.fetchImpl || fetch, options.signal));
-	return { manifest, runtimeBaseUrl };
+		(await loadRuntimeManifest(
+			manifestUrl,
+			options.fetchImpl || fetch,
+			options.signal,
+			Math.min(maxAssetBytes, DEFAULT_MAX_RUNTIME_JSON_BYTES)
+		));
+	return { manifest, maxAssetBytes, runtimeBaseUrl };
 }
 
 export async function preloadBrowserClangRuntime(
 	options: PreloadBrowserClangRuntimeOptions
 ): Promise<void> {
 	if (options.signal?.aborted) throw options.signal.reason;
-	const { manifest, runtimeBaseUrl } = await resolveRuntimeLocation(options);
+	const { manifest, maxAssetBytes, runtimeBaseUrl } = await resolveRuntimeLocation(options);
 	const runtime = new Runtime({
 		stdin: () => '',
 		stdout: () => {},
 		progress: () => {},
 		signal: options.signal,
 		log: false,
+		maxAssetBytes,
 		runtimeBaseUrl,
 		manifest
 	});
@@ -161,7 +182,7 @@ export async function compileClang(
 	const logRecords: CompilerLogRecord[] = [];
 	const compilerOutput: string[] = [];
 	emitProgress(request, 'bootstrap', 0, 'loading runtime manifest');
-	const { manifest, runtimeBaseUrl } = await resolveRuntimeLocation(options);
+	const { manifest, maxAssetBytes, runtimeBaseUrl } = await resolveRuntimeLocation(options);
 	pushRecord(logRecords, enabledLogs, '[wasm-clang] runtime manifest loaded');
 
 	let lastPercent = 0;
@@ -184,6 +205,7 @@ export async function compileClang(
 			);
 		},
 		log: enabledLogs,
+		maxAssetBytes,
 		signal: options.signal,
 		showTiming: request.showTiming ?? options.showTiming ?? false,
 		runtimeBaseUrl,

@@ -104,6 +104,23 @@ describe('PHP worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			progress: { percent: 100 }
 		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				progress: expect.objectContaining({
+					kind: 'ready',
+					state: 'running',
+					reason: 'started'
+				})
+			})
+		);
+		const readyCall = (globalThis as any).postMessage.mock.calls.findIndex(
+			([message]: [any]) => message?.progress?.kind === 'ready'
+		);
+		const outputCall = (globalThis as any).postMessage.mock.calls.findIndex(
+			([message]: [any]) => message?.output
+		);
+		expect(readyCall).toBeGreaterThanOrEqual(0);
+		expect(readyCall).toBeLessThan(outputCall);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			output: 'factorial_plus_bonus=27\n'
 		});

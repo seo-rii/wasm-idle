@@ -86,6 +86,7 @@ self.onmessage = async (event: { data: any }) => {
 		}
 	} else if (typeof log === 'boolean' && !code) {
 		// The compiler receives the current logging preference for every compilation.
+		if (typeof code === 'string') postMessage({ results: true });
 	} else if (code) {
 		if (!compiler) {
 			postMessage({ error: 'COBOL runtime is not loaded.' });

@@ -30,7 +30,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
-import { reportWorkerProgress } from '$lib/playground/workerProgress';
+import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 
 const DEFAULT_HASKELL_MAIN_SO_PATH = '/tmp/libplayground001.so';
 const DEFAULT_HASKELL_SEARCH_DIRS = [
@@ -585,6 +585,10 @@ class Haskell implements Sandbox {
 					const { output, results, error, buffer, diagnostic, progress } = event.data;
 					if (buffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
+						if (!prepare) {
+							reportWorkerInputReady(_prog, 'Haskell runtime ready for input');
+							if (!ownsRun()) return;
+						}
 						this.flushPendingInput();
 						if (!ownsRun()) return;
 					}

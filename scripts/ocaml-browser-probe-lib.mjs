@@ -3,6 +3,7 @@ import { chromium } from 'playwright-core';
 import {
 	assertLoadingProgressTrace,
 	installLoadingProgressProbe,
+	markLoadingProgressReady,
 	readLoadingProgressTrace,
 	stopLoadingProgressProbe
 } from './browser-progress-probe.mjs';
@@ -276,8 +277,11 @@ export async function runOcamlBrowserProbe({
 
 		await page.goto(targetUrl.toString(), { waitUntil: 'domcontentloaded' });
 		await page.waitForTimeout(1_000);
-		await page.waitForSelector('select', { state: 'attached', timeout: runTimeoutMs });
-		await page.locator('select').first().selectOption('OCAML');
+		await page.waitForSelector('#language-select', {
+			state: 'attached',
+			timeout: runTimeoutMs
+		});
+		await page.locator('#language-select').selectOption('OCAML');
 		await page.waitForSelector('#ocaml-backend', { state: 'attached', timeout: runTimeoutMs });
 		await page.locator('#ocaml-backend').selectOption(backend);
 		await page.waitForFunction(
@@ -432,19 +436,23 @@ export async function runOcamlBrowserProbe({
 				);
 			}
 		}
+		const progressReadiness = await markLoadingProgressReady(page, 'OCaml execution settled');
 
 		await stopLoadingProgressProbe(page);
-		const summary = await readProbeSummary(
-			page,
-			activeState,
-			pageErrors,
-			consoleMessages,
-			binaryenBridgeRequests,
-			binaryenBridgeResponses,
-			binaryenToolRequests,
-			binaryenToolResponses,
-			targetUrl.toString()
-		);
+		const summary = {
+			...(await readProbeSummary(
+				page,
+				activeState,
+				pageErrors,
+				consoleMessages,
+				binaryenBridgeRequests,
+				binaryenBridgeResponses,
+				binaryenToolRequests,
+				binaryenToolResponses,
+				targetUrl.toString()
+			)),
+			progressReadiness
+		};
 		if (summary.pageErrors.length > 0) {
 			throw new Error(`page errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
@@ -456,7 +464,7 @@ export async function runOcamlBrowserProbe({
 		if (summary.ocamlConsoleErrors.length > 0) {
 			throw new Error(`ocaml console errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
-		assertLoadingProgressTrace(summary.progressTrace, `OCaml (${backend})`);
+		assertLoadingProgressTrace(summary.progressTrace, `OCaml (${backend})`, progressReadiness);
 		if (!summary.transcript.includes(expectedOutput)) {
 			throw new Error(
 				`expected OCaml output "${expectedOutput}" was not found\n${JSON.stringify(summary, null, 2)}`

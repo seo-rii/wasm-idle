@@ -840,7 +840,7 @@ const runtimeDetailsByLanguage = new Map([
 				`${workspacePackage('packages/llvm-core')} / Clang 22.1.8 WASI sysroot ` +
 				`from the ${code('wasm-llvm')} producer`,
 			execution:
-				`${code('clang++')} for ${code('wasm32-wasi')}; default ${code('-std=gnu++2a')}; ` +
+				`${code('clang++')} for ${code('wasm32-wasi')}; default ${code('-std=gnu++20')}; ` +
 				`LLDB mode compiles untouched source with embedded DWARF at ${code('-g -O0')} and runs it in WAMR; ` +
 				`normal runs still use the browser WASI host; supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:

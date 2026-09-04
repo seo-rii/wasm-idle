@@ -9,7 +9,13 @@ import {
 	type BrowserExecutionOptions,
 	type RuntimeManifestV1
 } from '../../clang/src/index.js';
-import { compile, fetchRuntimeJson, readBuffer } from '../../core/src/wasm.js';
+import {
+	DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES,
+	DEFAULT_MAX_RUNTIME_JSON_BYTES,
+	compile,
+	fetchRuntimeJson,
+	readBuffer
+} from '../../core/src/wasm.js';
 import untar from '../../core/src/tar.js';
 
 const COBOL_MANIFEST_NAME = 'runtime-manifest.v1.json';
@@ -109,6 +115,7 @@ export type CreateCobolCompilerOptions = CobolRuntimeLocation &
 		clangManifest?: RuntimeManifestV1;
 		fetchImpl?: typeof fetch;
 		log?: boolean;
+		maxAssetBytes?: number;
 		signal?: AbortSignal;
 	};
 
@@ -222,13 +229,15 @@ export function resolveCobolRuntimeAssetUrls(
 export async function loadCobolRuntimeManifest(
 	manifestUrl: string | URL,
 	fetchImpl: typeof fetch = fetch,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	maxBytes = DEFAULT_MAX_RUNTIME_JSON_BYTES
 ): Promise<CobolRuntimeManifestV1> {
 	const url = resolveHostedRuntimeUrl(manifestUrl, 'wasm-cobol runtime manifest URL');
 	return parseCobolRuntimeManifest(
 		await fetchRuntimeJson(url, {
 			fetchImpl,
 			label: 'wasm-cobol runtime manifest',
+			maxBytes,
 			signal
 		})
 	);
@@ -325,6 +334,10 @@ class CobolCompiler implements BrowserCobolCompiler {
 
 	static async create(options: CreateCobolCompilerOptions) {
 		if (options.signal?.aborted) throw options.signal.reason;
+		const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES;
+		if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes <= 0) {
+			throw new TypeError('COBOL maxAssetBytes must be a positive safe integer');
+		}
 		const fetchImpl = options.fetchImpl || fetch;
 		const runtimeBaseUrl =
 			options.runtimeBaseUrl !== undefined
@@ -335,7 +348,8 @@ class CobolCompiler implements BrowserCobolCompiler {
 			(await loadCobolRuntimeManifest(
 				options.manifestUrl || resolveCobolRuntimeManifestUrl(runtimeBaseUrl),
 				fetchImpl,
-				options.signal
+				options.signal,
+				Math.min(maxAssetBytes, DEFAULT_MAX_RUNTIME_JSON_BYTES)
 			));
 		const assets = resolveCobolRuntimeAssetUrls(runtimeBaseUrl, manifest);
 		const clangRuntimeBaseUrl =
@@ -347,7 +361,8 @@ class CobolCompiler implements BrowserCobolCompiler {
 			(await loadRuntimeManifest(
 				options.clangManifestUrl || resolveRuntimeManifestUrl(clangRuntimeBaseUrl),
 				fetchImpl,
-				options.signal
+				options.signal,
+				Math.min(maxAssetBytes, DEFAULT_MAX_RUNTIME_JSON_BYTES)
 			));
 		const runtime = new BrowserClangRuntime({
 			runtimeBaseUrl: clangRuntimeBaseUrl,
@@ -359,15 +374,12 @@ class CobolCompiler implements BrowserCobolCompiler {
 				}
 			},
 			log: options.log,
+			maxAssetBytes,
 			signal: options.signal,
 			stdout: () => {}
 		});
-		const frontendReady = options.signal
-			? compile(assets.frontend, undefined, options.signal)
-			: compile(assets.frontend);
-		const rootfsReady = options.signal
-			? readBuffer(assets.rootfs, undefined, undefined, options.signal)
-			: readBuffer(assets.rootfs);
+		const frontendReady = compile(assets.frontend, undefined, options.signal, maxAssetBytes);
+		const rootfsReady = readBuffer(assets.rootfs, undefined, maxAssetBytes, options.signal);
 		const [frontend, rootfs] = await Promise.all([frontendReady, rootfsReady]);
 		await runtime.ready;
 		if (options.signal?.aborted) throw options.signal.reason;

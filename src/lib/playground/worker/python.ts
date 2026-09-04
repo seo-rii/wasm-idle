@@ -344,6 +344,21 @@ self.onmessage = async (event: any) => {
 		const debugReadWatchName = `__wasm_idle_python_debug_watch_read_${ts}`;
 		const debugWriteWatchName = `__wasm_idle_python_debug_watch_write_${ts}`;
 		const debugReadBreakpointsName = `__wasm_idle_python_debug_breakpoints_${ts}`;
+		const executionReadyName = `__wasm_idle_python_execution_ready_${ts}`;
+		let executionReadyReported = false;
+		self[executionReadyName] = () => {
+			if (executionReadyReported) return;
+			executionReadyReported = true;
+			delete self[executionReadyName];
+			postMessage({
+				progress: {
+					kind: 'ready',
+					state: 'running',
+					reason: 'started',
+					label: 'Python program started'
+				}
+			});
+		};
 		self[debugPauseName] = (
 			line: number,
 			reason: string,
@@ -417,6 +432,7 @@ import inspect
 import json
 import sys
 from js import __pyodide__input_${ts}, __pyodide__output_${ts}
+from js import ${executionReadyName} as __wasm_idle_execution_ready
 ${debug ? `from js import ${debugPauseName}, ${debugWaitName}` : ''}
 ${debug ? `from js import ${debugReadWatchName}, ${debugWriteWatchName}` : ''}
 ${debug ? `from js import ${debugReadBreakpointsName}` : ''}
@@ -605,15 +621,27 @@ sys.settrace(__wasm_idle_debug_trace)
 }
 
 try:
-    __wasm_idle_globals = {"__name__": "__main__"}
+    __wasm_idle_globals = {
+        "__name__": "__main__",
+        ${JSON.stringify(executionReadyName)}: __wasm_idle_execution_ready,
+    }
+    __wasm_idle_compiled = compile(
+        ${JSON.stringify(code)},
+        ${executionFilenameLiteral},
+        "exec",
+        flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+    )
+    __wasm_idle_globals.pop(${JSON.stringify(executionReadyName)})()
     __wasm_idle_result = eval(
-        compile(${JSON.stringify(code)}, ${executionFilenameLiteral}, "exec", flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT),
+        __wasm_idle_compiled,
         __wasm_idle_globals,
         __wasm_idle_globals,
     )
     if inspect.isawaitable(__wasm_idle_result):
         await __wasm_idle_result
 finally:
+    __wasm_idle_globals.pop(${JSON.stringify(executionReadyName)}, None)
+    del __wasm_idle_execution_ready
     sys.settrace(None)
     ${
 		debug
@@ -631,6 +659,7 @@ finally:
 		} catch (e: any) {
 			self.postMessage({ error: e.message || 'Unknown error' });
 		} finally {
+			delete self[executionReadyName];
 			delete self[debugPauseName];
 			delete self[debugWaitName];
 			delete self[debugReadWatchName];

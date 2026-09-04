@@ -44,6 +44,7 @@ describe('WAT worker', () => {
 
 			export async function executeBrowserWatArtifact(artifact, options = {}) {
 				globalThis.__lastExecution = { artifact, options };
+				options.onReady?.();
 				options.stdout?.('answer=45\\n');
 				return {
 					exitCode: 0,
@@ -64,17 +65,44 @@ describe('WAT worker', () => {
 		});
 		await Promise.resolve();
 
+		const request = {
+			code: '(module)',
+			activePath: 'main.wat',
+			workspaceFiles: [{ path: 'lib.wat', content: '(module)' }],
+			log: true
+		};
+		await (globalThis as any).self.onmessage({
+			data: { ...request, prepare: true }
+		});
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
+			progress: expect.objectContaining({ kind: 'ready' })
+		});
 		await (globalThis as any).self.onmessage({
 			data: {
-				code: '(module)',
-				prepare: false,
-				activePath: 'main.wat',
-				workspaceFiles: [{ path: 'lib.wat', content: '(module)' }],
-				log: true
+				...request,
+				prepare: false
 			}
 		});
 		await Promise.resolve();
 
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		const readyIndex = messages.findIndex((message: any) => message.progress?.kind === 'ready');
+		expect(messages.filter((message: any) => message.progress?.kind === 'ready')).toEqual([
+			{
+				progress: {
+					kind: 'ready',
+					state: 'running',
+					reason: 'started',
+					label: 'WAT program started'
+				}
+			}
+		]);
+		expect(readyIndex).toBeGreaterThanOrEqual(0);
+		expect(readyIndex).toBeLessThan(
+			messages.findIndex((message: any) => message.output === 'answer=45\n')
+		);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			diagnostic: {

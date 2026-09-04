@@ -3,6 +3,7 @@ import { chromium } from 'playwright-core';
 import {
 	assertLoadingProgressTrace,
 	installLoadingProgressProbe,
+	markLoadingProgressReady,
 	readLoadingProgressTrace,
 	stopLoadingProgressProbe
 } from './browser-progress-probe.mjs';
@@ -126,7 +127,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
 		finalUrl: page.url(),
 		language:
 			(await withWallClockTimeout(
-				page.locator('select').first().inputValue({ timeout: readTimeoutMs }),
+				page.locator('#language-select').inputValue({ timeout: readTimeoutMs }),
 				readTimeoutMs + 250,
 				'language summary read'
 			).catch(() => '')) || '',
@@ -270,7 +271,10 @@ export async function runStdinBrowserProbe(options) {
 
 		await page.evaluate(() => localStorage.clear());
 		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
-		await page.waitForSelector('select', { state: 'attached', timeout: runTimeoutMs });
+		await page.waitForSelector('#language-select', {
+			state: 'attached',
+			timeout: runTimeoutMs
+		});
 		activeState = await readActiveState(page);
 		await page.waitForFunction(
 			() =>
@@ -293,10 +297,14 @@ export async function runStdinBrowserProbe(options) {
 			);
 		}
 		languageSelected = true;
-		await page.locator('select').selectOption(language);
+		await page.locator('#language-select').selectOption(language);
 		await page.waitForFunction(
 			(expectedLanguage) =>
-				document.querySelector('select')?.value === expectedLanguage &&
+				(
+					/** @type {HTMLSelectElement | null} */ (
+						document.querySelector('#language-select')
+					)
+				)?.value === expectedLanguage &&
 				typeof (/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue) ===
 					'function' &&
 				typeof (/** @type {any} */ (window).__wasmIdleDebug?.setEditorValue) ===
@@ -536,6 +544,7 @@ export async function runStdinBrowserProbe(options) {
 				)}`
 			);
 		}
+		const progressReadiness = await markLoadingProgressReady(page, 'expected terminal output');
 		await stdinDelivery;
 		if (stdinDeliveryError) {
 			throw new Error(
@@ -559,6 +568,7 @@ export async function runStdinBrowserProbe(options) {
 		await stopLoadingProgressProbe(page);
 		const summary = {
 			...(await readProbeSummary(page, activeState, pageErrors, consoleMessages)),
+			progressReadiness,
 			runtimeRequests: [...new Set(selectedRuntimeRequests)]
 		};
 		const relevantPageErrors = filterBenignPageErrors(summary.pageErrors);
@@ -585,7 +595,7 @@ export async function runStdinBrowserProbe(options) {
 			);
 		}
 		try {
-			assertLoadingProgressTrace(summary.progressTrace, language);
+			assertLoadingProgressTrace(summary.progressTrace, language, progressReadiness);
 		} catch (error) {
 			throw new Error(
 				`${error instanceof Error ? error.message : String(error)}\n${JSON.stringify(summary, null, 2)}`,

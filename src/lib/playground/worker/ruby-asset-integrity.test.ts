@@ -32,11 +32,69 @@ const payload = Object.freeze({
 	wasmBytes: Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)
 });
 const moduleSource = 'export const verified = true;';
+const rubyEvalMock = vi.fn();
+const rubyInstantiateMock = vi.fn(async () => ({ vm: { eval: rubyEvalMock } }));
+class RubyFd {}
+class RubyFile {
+	constructor(
+		readonly data: Uint8Array,
+		readonly options?: { readonly?: boolean }
+	) {}
+}
+class RubyDirectory {
+	constructor(readonly contents: Map<string, unknown>) {}
+}
+class RubyOpenFile {
+	constructor(readonly file: RubyFile) {}
+}
+class RubyPreopenDirectory {
+	constructor(
+		readonly path: string,
+		readonly contents: Map<string, unknown>
+	) {}
+}
+class RubyWasi {
+	constructor(
+		readonly args: string[],
+		readonly env: string[],
+		readonly fds: unknown[]
+	) {}
+}
 const runtimeModule = {
-	RubyVM: {},
-	consolePrinter() {},
+	RubyVM: { instantiateModule: rubyInstantiateMock },
+	consolePrinter: vi.fn(() => ({
+		addToImports: vi.fn(),
+		setMemory: vi.fn()
+	})),
 	rubyStdlibWasmUrl: 'wasm-idle-verified:ruby/assets/ruby-stdlib.wasm',
-	wasiShim: {}
+	wasiShim: {
+		Directory: RubyDirectory,
+		Fd: RubyFd,
+		File: RubyFile,
+		Inode: { issue_ino: vi.fn(() => 1n) },
+		OpenFile: RubyOpenFile,
+		PreopenDirectory: RubyPreopenDirectory,
+		WASI: RubyWasi,
+		wasi: {
+			ERRNO_SUCCESS: 0,
+			FILETYPE_CHARACTER_DEVICE: 2,
+			RIGHTS_FD_READ: 2,
+			Fdstat: class {
+				fs_rights_base = 0n;
+				constructor(
+					readonly filetype: number,
+					readonly flags: number
+				) {}
+			},
+			Filestat: class {
+				constructor(
+					readonly ino: bigint,
+					readonly filetype: number,
+					readonly size: bigint
+				) {}
+			}
+		}
+	}
 };
 
 const loadWorker = async () => {
@@ -51,6 +109,10 @@ describe('Ruby execution worker verified-payload boundary', () => {
 		mocks.verifyRubyRuntimePreflightPayload.mockReset();
 		mocks.rewriteVerifiedRubyRuntimeModule.mockReset();
 		mocks.importRuntimeModule.mockReset();
+		rubyEvalMock.mockReset();
+		rubyInstantiateMock.mockReset();
+		rubyInstantiateMock.mockImplementation(async () => ({ vm: { eval: rubyEvalMock } }));
+		runtimeModule.consolePrinter.mockClear();
 		(globalThis as any).self = globalThis as any;
 		(globalThis as any).postMessage = vi.fn();
 		(globalThis as any).fetch = vi.fn(() => {
@@ -85,6 +147,48 @@ describe('Ruby execution worker verified-payload boundary', () => {
 		expect(revokeObjectUrl).toHaveBeenCalledWith(blobUrl);
 		expect((globalThis as any).fetch).not.toHaveBeenCalled();
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
+	});
+
+	it('reports readiness only for final execution and immediately before Ruby eval', async () => {
+		vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:verified-ruby');
+		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+		vi.spyOn(WebAssembly, 'compile').mockResolvedValue({} as WebAssembly.Module);
+		const onmessage = await loadWorker();
+		await onmessage({ data: { load: true, runtimePreflight: payload, maxAssetBytes: 1024 } });
+		const request = {
+			buffer: new SharedArrayBuffer(1024),
+			code: 'puts 42',
+			activePath: 'main.rb',
+			workspaceFiles: [],
+			stdin: ''
+		};
+
+		await onmessage({ data: { ...request, prepare: true } });
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
+			progress: expect.objectContaining({ kind: 'ready' })
+		});
+		await onmessage({ data: { ...request, prepare: false } });
+
+		const readyCallIndex = (globalThis as any).postMessage.mock.calls.findIndex(
+			([message]: [any]) => message.progress?.kind === 'ready'
+		);
+		expect((globalThis as any).postMessage.mock.calls[readyCallIndex]?.[0]).toEqual({
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: 'Ruby program started'
+			}
+		});
+		expect(readyCallIndex).toBeGreaterThanOrEqual(0);
+		expect(rubyInstantiateMock.mock.invocationCallOrder[0]).toBeLessThan(
+			(globalThis as any).postMessage.mock.invocationCallOrder[readyCallIndex]
+		);
+		expect(
+			(globalThis as any).postMessage.mock.invocationCallOrder[readyCallIndex]
+		).toBeLessThan(rubyEvalMock.mock.invocationCallOrder[0]);
+		expect(rubyEvalMock).toHaveBeenCalledOnce();
+		expect(rubyEvalMock).toHaveBeenCalledWith('puts 42');
 	});
 
 	it('rejects duplicate load while ready and never reimports or recompiles the runtime', async () => {

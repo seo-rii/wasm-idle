@@ -435,8 +435,11 @@ function runSandboxOperation<T>(
 	});
 }
 
-function combinedPhaseTimeoutMs(firstTimeoutMs: number, secondTimeoutMs: number): number {
-	return Math.min(2_147_483_647, firstTimeoutMs + secondTimeoutMs);
+function combinedPhaseTimeoutMs(...phaseTimeoutsMs: number[]): number {
+	return phaseTimeoutsMs.reduce(
+		(total, timeoutMs) => Math.min(2_147_483_647, total + timeoutMs),
+		0
+	);
 }
 
 function bindRuntimeAssets(
@@ -655,9 +658,17 @@ function bindRuntimeAssets(
 						operationState,
 						() => target.run(code, prepare, log, progress, args, validated),
 						validated.signal,
-						prepare === false && validated.interactive === true
-							? null
-							: combinedPhaseTimeoutMs(
+						// Legacy prepare hooks may lazily fetch and initialize compiler assets.
+						// Reserve those phase budgets without granting prepare any run time.
+						prepare
+							? combinedPhaseTimeoutMs(
+									validated.limits.assetTimeoutMs,
+									validated.limits.startupTimeoutMs,
+									validated.limits.compileTimeoutMs
+								)
+							: validated.interactive === true
+								? null
+								: combinedPhaseTimeoutMs(
 									validated.limits.compileTimeoutMs,
 									validated.limits.runTimeoutMs
 								),

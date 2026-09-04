@@ -342,6 +342,90 @@ describe('Bash sandbox', () => {
 		expect(commandFree).toHaveBeenCalledOnce();
 	});
 
+	it('reports final execution readiness only after command startup yields the owned instance', async () => {
+		let resolveInstance!: (instance: any) => void;
+		const pendingInstance = new Promise<any>((resolve) => {
+			resolveInstance = resolve;
+		});
+		let resolveWait!: (result: { ok: boolean; code: number }) => void;
+		const wait = vi.fn(
+			() =>
+				new Promise<{ ok: boolean; code: number }>((resolve) => {
+					resolveWait = resolve;
+				})
+		);
+		const stdoutPipe = vi.fn(async () => {});
+		const stderrPipe = vi.fn(async () => {});
+		commandRun.mockReturnValueOnce(pendingInstance);
+		const progress = { report: vi.fn() };
+		const sandbox = createSandbox();
+		await sandbox.load();
+
+		await expect(sandbox.run('printf prepare', true, true, progress)).resolves.toBe(true);
+		expect(commandRun).not.toHaveBeenCalled();
+		expect(progress.report).not.toHaveBeenCalled();
+
+		const running = sandbox.run('printf ready', false, true, progress);
+		await vi.waitFor(() => expect(commandRun).toHaveBeenCalledOnce());
+		expect(progress.report).not.toHaveBeenCalled();
+		expect(stdoutPipe).not.toHaveBeenCalled();
+		expect(stderrPipe).not.toHaveBeenCalled();
+		expect(wait).not.toHaveBeenCalled();
+
+		resolveInstance({
+			stdin: undefined,
+			stdout: { pipeTo: stdoutPipe },
+			stderr: { pipeTo: stderrPipe },
+			wait,
+			free: vi.fn()
+		});
+		await vi.waitFor(() => expect(progress.report).toHaveBeenCalledOnce());
+		expect(progress.report).toHaveBeenCalledWith({
+			kind: 'ready',
+			state: 'running',
+			reason: 'started',
+			label: 'Bash process started'
+		});
+		await vi.waitFor(() => expect(wait).toHaveBeenCalledOnce());
+		expect(progress.report.mock.invocationCallOrder[0]).toBeLessThan(
+			stdoutPipe.mock.invocationCallOrder[0]!
+		);
+		expect(progress.report.mock.invocationCallOrder[0]).toBeLessThan(
+			stderrPipe.mock.invocationCallOrder[0]!
+		);
+		expect(progress.report.mock.invocationCallOrder[0]).toBeLessThan(
+			wait.mock.invocationCallOrder[0]!
+		);
+
+		resolveWait({ ok: true, code: 0 });
+		await expect(running).resolves.toBe(true);
+	});
+
+	it('disposes an unadopted instance when readiness reporting ends its run', async () => {
+		const free = vi.fn();
+		const wait = vi.fn(async () => ({ ok: true, code: 0 }));
+		commandRun.mockResolvedValueOnce({
+			stdin: undefined,
+			stdout: byteStream(''),
+			stderr: byteStream(''),
+			wait,
+			free
+		});
+		const sandbox = createSandbox();
+		await sandbox.load();
+		const reason = new Error('stop Bash at execution readiness');
+		const progress = {
+			report: vi.fn(() => sandbox.terminate(reason))
+		};
+
+		await expect(sandbox.run('printf stale', false, true, progress)).rejects.toBe(reason);
+
+		expect(progress.report).toHaveBeenCalledOnce();
+		expect(wait).not.toHaveBeenCalled();
+		expect(free).toHaveBeenCalledOnce();
+		expect(sandbox.instance).toBeNull();
+	});
+
 	it.each(['throw', 'reject'] as const)(
 		'frees the Bash command handle when entrypoint startup %ss',
 		async (failureMode) => {

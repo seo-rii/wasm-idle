@@ -112,4 +112,17 @@ describe('Objective-C sandbox debugging', () => {
 
 		await expect(sandbox.debugEvaluate('value')).resolves.toBe('73');
 	});
+
+	it('disposes the host asset bridge when the worker is terminated', async () => {
+		const sandbox = new ObjectiveC();
+		await sandbox.load('/');
+		const worker = workerInstances[0];
+		const disposeAssetBridge = vi.spyOn(sandbox.assetBridge!, 'dispose');
+
+		sandbox.terminate();
+
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(disposeAssetBridge).toHaveBeenCalledOnce();
+		expect(sandbox.assetBridge).toBeNull();
+	});
 });

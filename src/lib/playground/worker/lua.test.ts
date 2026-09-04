@@ -43,6 +43,7 @@ describe('Lua worker', () => {
 
 			export async function executeBrowserLuaArtifact(artifact, options = {}) {
 				globalThis.__lastExecution = { artifact, options };
+				options.onReady?.();
 				options.stdout?.('factorial_plus_bonus=27\\n');
 				return {
 					exitCode: 0,
@@ -63,20 +64,47 @@ describe('Lua worker', () => {
 		});
 		await Promise.resolve();
 
+		const request = {
+			code: 'print("ok")',
+			buffer: new SharedArrayBuffer(1024),
+			args: ['5'],
+			stdin: '4\n',
+			activePath: 'main.lua',
+			workspaceFiles: [{ path: 'lib.lua', content: 'return 1' }],
+			log: true
+		};
+		await (globalThis as any).self.onmessage({
+			data: { ...request, prepare: true }
+		});
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
+			progress: expect.objectContaining({ kind: 'ready' })
+		});
 		await (globalThis as any).self.onmessage({
 			data: {
-				code: 'print("ok")',
-				prepare: false,
-				buffer: new SharedArrayBuffer(1024),
-				args: ['5'],
-				stdin: '4\n',
-				activePath: 'main.lua',
-				workspaceFiles: [{ path: 'lib.lua', content: 'return 1' }],
-				log: true
+				...request,
+				prepare: false
 			}
 		});
 		await Promise.resolve();
 
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		const readyIndex = messages.findIndex((message: any) => message.progress?.kind === 'ready');
+		expect(messages.filter((message: any) => message.progress?.kind === 'ready')).toEqual([
+			{
+				progress: {
+					kind: 'ready',
+					state: 'running',
+					reason: 'started',
+					label: 'Lua program started'
+				}
+			}
+		]);
+		expect(readyIndex).toBeGreaterThanOrEqual(0);
+		expect(readyIndex).toBeLessThan(
+			messages.findIndex((message: any) => message.output === 'factorial_plus_bonus=27\n')
+		);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			diagnostic: {

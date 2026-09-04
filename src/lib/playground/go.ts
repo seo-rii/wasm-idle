@@ -14,7 +14,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
-import { reportWorkerProgress } from '$lib/playground/workerProgress';
+import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 
 const debugBreakpointBufferInts = 1028;
 
@@ -273,6 +273,7 @@ class Go implements Sandbox {
 					event.data;
 				if (buffer && !hasExplicitStdin) {
 					this.waitingForInput = true;
+					if (!prepare) reportWorkerInputReady(_prog, 'Go runtime ready for input');
 					this.flushPendingInput();
 				}
 				reportWorkerProgress(_prog, progress);

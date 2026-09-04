@@ -119,6 +119,14 @@ self.onmessage = async (event: { data: any }) => {
 		const db = new SQL.Database();
 		try {
 			loadWorkspaceFiles(db, workspaceFiles);
+			postMessage({
+				progress: {
+					kind: 'ready',
+					state: 'running',
+					reason: 'started',
+					label: 'SQLite query started'
+				}
+			});
 			if (log) {
 				console.log(
 					`[wasm-idle:sqlite-worker] exec start bytes=${code.length} activePath=${activePath}`

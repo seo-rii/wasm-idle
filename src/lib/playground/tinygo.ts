@@ -26,6 +26,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
 	CancelledError,
@@ -1342,11 +1343,22 @@ class TinyGo implements Sandbox {
 								'results'
 							);
 							const hasError = Object.prototype.hasOwnProperty.call(message, 'error');
-							const { output, results, error, buffer } = message;
+							const { output, results, error, buffer, progress } = message;
 							if (buffer && !hasExplicitStdin) {
+								if (!prepare) {
+									_prog?.report?.({
+										kind: 'ready',
+										state: 'waiting-input',
+										reason: 'stdin-request',
+										label: 'TinyGo program is waiting for input'
+									});
+								}
 								this.waitingForInput = true;
 								this.flushPendingInput();
 							}
+							reportWorkerProgress(_prog, progress);
+							if (!this.isOperationActive(operation) || this.worker !== worker)
+								return;
 							if (output) {
 								if (!this.emitOutput(operation, output)) return;
 							}

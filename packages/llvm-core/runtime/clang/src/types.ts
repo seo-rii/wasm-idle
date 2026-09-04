@@ -210,6 +210,7 @@ export interface BrowserClangRuntimeOptions {
 	showTiming?: boolean;
 	runtimeBaseUrl: string | URL;
 	manifest?: RuntimeManifestV1;
+	maxAssetBytes?: number;
 }
 
 export interface BrowserClangRuntimeRunOptions {

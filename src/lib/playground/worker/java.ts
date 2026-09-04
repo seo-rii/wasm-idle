@@ -302,6 +302,14 @@ self.addEventListener('message', async (event) => {
 					enabled: false
 				}
 			});
+			self.postMessage({
+				progress: {
+					kind: 'ready',
+					state: 'running',
+					reason: 'started',
+					label: 'Java program started'
+				}
+			});
 			module.exports.main(args);
 			flushStdout();
 			flushStderr();

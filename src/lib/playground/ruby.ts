@@ -19,7 +19,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
-import { reportWorkerProgress } from '$lib/playground/workerProgress';
+import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
 	AssetTooLargeError,
@@ -658,6 +658,10 @@ class Ruby implements Sandbox {
 					const { output, results, error, buffer, diagnostic, progress } = event.data;
 					if (buffer && !hasExplicitStdin) {
 						this.waitingForInput = true;
+						if (!prepare) {
+							reportWorkerInputReady(_prog, 'Ruby runtime ready for input');
+							if (!ownsRun()) return;
+						}
 						this.flushPendingInput();
 						if (!ownsRun()) return;
 					}

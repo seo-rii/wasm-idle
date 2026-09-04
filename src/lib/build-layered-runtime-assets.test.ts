@@ -520,6 +520,25 @@ describe('build-layered-runtime-assets', () => {
 		);
 	});
 
+	it('prunes orphaned manifest entries when their layer file was removed', async () => {
+		const rootDir = await makeTempDir();
+		const logicalPath = 'wasm-tinygo/vendor/emception/compiler.a';
+		await writeFixture(rootDir, logicalPath, Buffer.from('tinygo-layer-payload'));
+
+		await buildLayeredRuntimeAssets({ rootDir });
+		const manifestPath = path.join(rootDir, 'layered-runtime-assets.v1.json');
+		const initialManifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+		const layerPath = initialManifest.assets[logicalPath].layer as string;
+		await rm(path.join(rootDir, ...layerPath.split('/')));
+
+		const result = await buildLayeredRuntimeAssets({ rootDir });
+		const prunedManifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+
+		expect(result.tinygo).toMatchObject({ changed: true, assetCount: 0 });
+		expect(prunedManifest.assets).toEqual({});
+		expect(prunedManifest.layers).toEqual({});
+	});
+
 	it('prints Rust, Go, TinyGo, and .NET byte summaries from the CLI', async () => {
 		const rootDir = await makeTempDir();
 		const scriptPath = path.resolve('scripts/build-layered-runtime-assets.mjs');

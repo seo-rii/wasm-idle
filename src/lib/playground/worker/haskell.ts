@@ -1,5 +1,6 @@
 import {
 	ConsoleStdout,
+	Directory,
 	File,
 	OpenFile,
 	PreopenDirectory,
@@ -33,7 +34,10 @@ let searchDirs = ['/tmp/clib', '/tmp/hslib/lib/wasm32-wasi-ghc-9.14.0.20251031-i
 let loadedAssetKey = '';
 let runtimePromise: Promise<HaskellRuntime> | null = null;
 let activeStderrCollector: ((line: string) => void) | null = null;
+let activeDiagnosticPaths: ReadonlyMap<string, string> | null = null;
 const encoder = new TextEncoder();
+const workspaceRootName = 'wasm-idle-workspace';
+const workspaceRootPath = `/tmp/${workspaceRootName}`;
 
 class HaskellStdin {
 	private fixedStdin = false;
@@ -139,6 +143,13 @@ function postProgress(percent: number) {
 
 function outputLine(line: string) {
 	postMessage({ output: line.endsWith('\n') ? line : `${line}\n` });
+}
+
+function remapDiagnosticPath(line: string) {
+	const match = /^(.*?)(:\d+:\d+:\s+(?:error|warning):)/i.exec(line);
+	if (!match) return line;
+	const workspacePath = activeDiagnosticPaths?.get(match[1]);
+	return workspacePath ? `${workspacePath}${line.slice(match[1].length)}` : line;
 }
 
 function formatError(error: unknown) {
@@ -295,8 +306,9 @@ async function createRuntime() {
 			stdin,
 			stdout: outputLine,
 			stderr(line: string) {
-				activeStderrCollector?.(line);
-				outputLine(line);
+				const mappedLine = remapDiagnosticPath(line);
+				activeStderrCollector?.(mappedLine);
+				outputLine(mappedLine);
 			}
 		});
 		const dyld = await dyldModule.main({
@@ -356,13 +368,131 @@ export function parseHaskellDiagnostics(output: string) {
 	return diagnostics;
 }
 
-function normalizeWorkspaceSource(
+type WorkspaceTree = {
+	directories: Map<string, WorkspaceTree>;
+	files: Map<string, Uint8Array>;
+};
+
+function createWorkspaceTree(): WorkspaceTree {
+	return { directories: new Map(), files: new Map() };
+}
+
+function encodeWorkspacePath(path: string) {
+	return path
+		.split('/')
+		.map((segment) => encodeURIComponent(segment))
+		.join('/');
+}
+
+function addWorkspaceFile(tree: WorkspaceTree, encodedPath: string, content: string) {
+	const pathParts = encodedPath.split('/');
+	const fileName = pathParts.pop();
+	if (!fileName) throw new Error(`Invalid Haskell workspace path: ${encodedPath}`);
+	let directory = tree;
+	for (const pathPart of pathParts) {
+		if (directory.files.has(pathPart)) {
+			throw new Error(`Haskell workspace path collides with a file: ${encodedPath}`);
+		}
+		let child = directory.directories.get(pathPart);
+		if (!child) {
+			child = createWorkspaceTree();
+			directory.directories.set(pathPart, child);
+		}
+		directory = child;
+	}
+	if (directory.directories.has(fileName)) {
+		throw new Error(`Haskell workspace path collides with a directory: ${encodedPath}`);
+	}
+	directory.files.set(fileName, encoder.encode(content));
+}
+
+function materializeWorkspaceTree(tree: WorkspaceTree): Directory {
+	const contents: [string, File | Directory][] = [];
+	for (const [name, directory] of tree.directories) {
+		contents.push([name, materializeWorkspaceTree(directory)]);
+	}
+	for (const [name, content] of tree.files) {
+		contents.push([name, new File(content, { readonly: true })]);
+	}
+	return new Directory(contents);
+}
+
+function addImportRoot(importRoots: string[], seen: Set<string>, encodedDirectory: string) {
+	const root = encodedDirectory ? `${workspaceRootPath}/${encodedDirectory}` : workspaceRootPath;
+	if (seen.has(root)) return;
+	seen.add(root);
+	importRoots.push(root);
+}
+
+function addFileImportRoots(importRoots: string[], seen: Set<string>, encodedPath: string) {
+	const directoryParts = encodedPath.split('/').slice(0, -1);
+	for (let length = directoryParts.length; length >= 0; length -= 1) {
+		addImportRoot(importRoots, seen, directoryParts.slice(0, length).join('/'));
+	}
+}
+
+function mountWorkspace(
+	rootfs: PreopenDirectory,
 	code: string,
 	activePath: string,
 	workspaceFiles: SandboxWorkspaceFile[]
 ) {
-	const activeFile = workspaceFiles.find((file) => file.path === activePath);
-	return activeFile ? code : code;
+	const sourceFiles = new Map<string, string>();
+	for (const file of workspaceFiles) {
+		if (file.path !== activePath) sourceFiles.set(file.path, file.content);
+	}
+	sourceFiles.set(activePath, code);
+
+	const tree = createWorkspaceTree();
+	const diagnosticPaths = new Map<string, string>([
+		['/tmp/Main.hs', activePath],
+		['tmp/Main.hs', activePath],
+		['Main.hs', activePath]
+	]);
+	const encodedPaths = new Map<string, string>();
+	for (const [path, content] of sourceFiles) {
+		const encodedPath = encodeWorkspacePath(path);
+		encodedPaths.set(path, encodedPath);
+		addWorkspaceFile(tree, encodedPath, content);
+		const absolutePath = `${workspaceRootPath}/${encodedPath}`;
+		diagnosticPaths.set(absolutePath, path);
+		diagnosticPaths.set(absolutePath.slice(1), path);
+	}
+
+	let tmp = rootfs.dir.contents.get('tmp');
+	if (tmp === undefined) {
+		tmp = new Directory(new Map());
+		rootfs.dir.contents.set('tmp', tmp);
+	}
+	if (!(tmp instanceof Directory)) {
+		throw new Error('Haskell runtime rootfs /tmp entry is not a directory');
+	}
+	tmp.contents.set(workspaceRootName, materializeWorkspaceTree(tree));
+
+	const importRoots: string[] = [];
+	const seenImportRoots = new Set<string>();
+	const encodedActivePath = encodedPaths.get(activePath);
+	if (encodedActivePath) {
+		addFileImportRoots(importRoots, seenImportRoots, encodedActivePath);
+	}
+	for (const [path, encodedPath] of encodedPaths) {
+		if (path !== activePath) addFileImportRoots(importRoots, seenImportRoots, encodedPath);
+	}
+
+	return {
+		diagnosticPaths,
+		importRoots,
+		hasAuxiliaryFiles: sourceFiles.size > 1
+	};
+}
+
+function appendWorkspaceCompilerArgs(
+	ghcArgs: string,
+	workspace: ReturnType<typeof mountWorkspace>
+) {
+	if (!workspace.hasAuxiliaryFiles) return ghcArgs;
+	const internalArgs = ['-fforce-recomp', `-i${workspace.importRoots.join(':')}`];
+	return [...internalArgs, ghcArgs].filter(Boolean).join(' ');
 }
 
 self.onmessage = async (event: { data: any }) => {
@@ -419,19 +549,22 @@ self.onmessage = async (event: { data: any }) => {
 		}
 
 		const runtime = await createRuntime();
-		const source = normalizeWorkspaceSource(code, activePath, workspaceFiles);
+		const source = String(code ?? '');
+		const workspace = mountWorkspace(runtime.rootfs, source, activePath, workspaceFiles);
+		const compilerArgs = appendWorkspaceCompilerArgs(String(ghcArgs || ''), workspace);
 		runtime.stdin.reset({ stdin, buffer, log: !!log });
 		let stderrText = '';
 		try {
+			activeDiagnosticPaths = workspace.diagnosticPaths;
 			activeStderrCollector = (line: string) => {
 				stderrText += line.endsWith('\n') ? line : `${line}\n`;
 			};
 			if (log) {
 				console.log(
-					`[wasm-idle:haskell-worker] run start activePath=${activePath} ghcArgs=${JSON.stringify(ghcArgs)} bytes=${source.length}`
+					`[wasm-idle:haskell-worker] run start activePath=${activePath} ghcArgs=${JSON.stringify(compilerArgs)} bytes=${source.length}`
 				);
 			}
-			await runtime.mainFunc(String(ghcArgs || ''), source);
+			await runtime.mainFunc(compilerArgs, source);
 		} catch (error) {
 			for (const diagnostic of parseHaskellDiagnostics(stderrText)) {
 				postMessage({ diagnostic });
@@ -439,6 +572,7 @@ self.onmessage = async (event: { data: any }) => {
 			throw new Error(stderrText.trim() || formatError(error), { cause: error });
 		} finally {
 			activeStderrCollector = null;
+			activeDiagnosticPaths = null;
 		}
 		for (const diagnostic of parseHaskellDiagnostics(stderrText)) {
 			postMessage({ diagnostic });

@@ -31,6 +31,7 @@ import {
 } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { StaticStdinRingHost } from '$lib/playground/staticStdinRing';
+import { reportWorkerProgress, type WorkerProgressPayload } from '$lib/playground/workerProgress';
 
 type StaticWorkerReceipt = Readonly<Required<Pick<RuntimeAssetIntegrityEntry, 'bytes' | 'sha256'>>>;
 
@@ -121,13 +122,14 @@ const ownedDeliveryStateByTicket = new WeakMap<
 
 type StaticWorkerMessage = {
 	__wasmIdleStaticWorkerReady?: boolean;
-	type?: 'stdin-request';
+	type?: 'execution-ready' | 'stdin-request';
 	runId?: string;
 	output?: string;
+	stream?: 'stdout' | 'stderr';
 	results?: boolean | string;
 	error?: string;
 	diagnostic?: CompilerDiagnostic;
-	progress?: { percent?: number; stage?: string };
+	progress?: WorkerProgressPayload;
 };
 
 type BufferedStdin = {
@@ -142,8 +144,10 @@ type ActiveRun = {
 	limits: ExecutionLimits;
 	outputBytes: number;
 	progress?: SandboxProgress;
+	readyReported: boolean;
 	resolve: (result: boolean | string) => void;
 	reject: (reason: unknown) => void;
+	settledReported: boolean;
 	stdinRing?: StaticStdinRingHost;
 };
 
@@ -452,7 +456,8 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 
 	private async collectStdinForRun(
 		code: string,
-		options: SandboxExecutionOptions
+		options: SandboxExecutionOptions,
+		activeRun: ActiveRun
 	): Promise<BufferedStdin> {
 		if (this.stdinMode === 'none') {
 			this.clearPendingStdin();
@@ -464,6 +469,21 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		}
 		if (!this.sourceMayReadStdin(code) && this.pendingInput.length === 0 && !this.pendingEof) {
 			return { stdin: undefined, stdinEof: false };
+		}
+
+		if (!this.pendingEof) {
+			this.reportRunReady(
+				activeRun,
+				'waiting-input',
+				'stdin-request',
+				`${this.config.displayName} runtime ready for input`
+			);
+			if (this.activeRun !== activeRun) {
+				throw new CancelledError(`${this.config.displayName} run terminated`, {
+					phase: 'execute',
+					runtimeId: this.config.languageId
+				});
+			}
 		}
 
 		while (!this.pendingEof) {
@@ -527,6 +547,27 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		if (!progress) return;
 		const clamped = Number.isFinite(value) ? Math.max(0, Math.min(value, 1)) : 0;
 		progress.set?.(clamped, stage);
+	}
+
+	private reportRunReady(
+		activeRun: ActiveRun,
+		state: 'running' | 'waiting-input',
+		reason: 'started' | 'stdout' | 'stderr' | 'stdin-request' | 'result',
+		label: string
+	) {
+		if (activeRun.readyReported || activeRun.settledReported) return;
+		reportWorkerProgress(activeRun.progress, { kind: 'ready', state, reason, label });
+		activeRun.readyReported = true;
+	}
+
+	private reportRunSettled(
+		activeRun: ActiveRun,
+		outcome: 'completed' | 'failed' | 'cancelled' | 'timed-out',
+		label: string
+	) {
+		if (activeRun.settledReported) return;
+		activeRun.settledReported = true;
+		reportWorkerProgress(activeRun.progress, { kind: 'settled', outcome, label });
 	}
 
 	private async verifyWorkerReceipt(
@@ -983,7 +1024,7 @@ self.postMessage = (message, transferOrOptions) => {
   const executionMessage = __wasmIdleRunId !== null &&
     message !== null && typeof message === 'object' &&
     (__wasmIdleExecutionKeys.some((key) => Object.prototype.hasOwnProperty.call(message, key)) ||
-      message.type === 'stdin-request');
+      message.type === 'stdin-request' || message.type === 'execution-ready');
   const correlated = executionMessage
     ? Object.assign({}, message, { runId: __wasmIdleRunId })
     : message;
@@ -1582,12 +1623,35 @@ self.postMessage = (message, transferOrOptions) => {
 		if (!activeRun) return;
 		if (event.data?.runId !== activeRun.id) return;
 		try {
-			if (event.data?.type === 'stdin-request') {
-				activeRun.stdinRing?.consumerRequestedInput();
+			if (event.data?.type === 'execution-ready') {
+				this.reportRunReady(
+					activeRun,
+					'running',
+					'started',
+					`${this.config.displayName} program started`
+				);
 				return;
 			}
-			const { output, results, error, diagnostic, progress } = event.data || {};
-			if (progress && typeof progress.percent === 'number') {
+			if (event.data?.type === 'stdin-request') {
+				activeRun.stdinRing?.consumerRequestedInput();
+				if (this.activeRun === activeRun) {
+					this.reportRunReady(
+						activeRun,
+						'waiting-input',
+						'stdin-request',
+						`${this.config.displayName} runtime ready for input`
+					);
+				}
+				return;
+			}
+			const { output, stream, results, error, diagnostic, progress } = event.data || {};
+			if (progress && typeof progress === 'object' && 'kind' in progress) {
+				if (progress.kind !== 'settled') {
+					const lifecycleEvent = reportWorkerProgress(activeRun.progress, progress);
+					if (lifecycleEvent?.kind === 'ready') activeRun.readyReported = true;
+					if (this.activeRun !== activeRun) return;
+				}
+			} else if (progress && typeof progress.percent === 'number') {
 				const runtimeProgress = Math.max(0, Math.min(progress.percent / 100, 1));
 				this.reportProgress(
 					activeRun.progress,
@@ -1613,6 +1677,13 @@ self.postMessage = (message, transferOrOptions) => {
 					);
 					return;
 				}
+				this.reportRunReady(
+					activeRun,
+					'running',
+					stream === 'stderr' ? 'stderr' : 'stdout',
+					`${this.config.displayName} program output received`
+				);
+				if (this.activeRun !== activeRun) return;
 				activeRun.outputBytes = outputBytes;
 				this.output?.(output);
 				if (this.activeRun !== activeRun) return;
@@ -1684,7 +1755,20 @@ self.postMessage = (message, transferOrOptions) => {
 		const activeRun = this.activeRun;
 		if (!activeRun || activeRun.id !== id) return;
 		try {
-			this.reportProgress(activeRun.progress, 1, `${this.config.displayName} run complete`);
+			if (!activeRun.readyReported && !activeRun.settledReported) {
+				this.reportRunReady(
+					activeRun,
+					'running',
+					'result',
+					`${this.config.displayName} run complete`
+				);
+				if (this.activeRun !== activeRun) return;
+			}
+			this.reportRunSettled(
+				activeRun,
+				'completed',
+				`${this.config.displayName} run complete`
+			);
 		} catch (error) {
 			if (this.activeRun === activeRun) this.rejectRun(id, error);
 			return;
@@ -1703,6 +1787,19 @@ self.postMessage = (message, transferOrOptions) => {
 	private rejectRun(id: string, reason: unknown) {
 		const activeRun = this.claimRun(id);
 		if (!activeRun) return;
+		try {
+			this.reportRunSettled(
+				activeRun,
+				reason instanceof TimeoutError
+					? 'timed-out'
+					: reason instanceof CancelledError
+						? 'cancelled'
+						: 'failed',
+				`${this.config.displayName} run ended`
+			);
+		} catch {
+			// Progress observers must not prevent a failed run from releasing its worker.
+		}
 		this.elapse = Date.now() - this.begin;
 		this.exit = true;
 		this.clearPendingStdin();
@@ -2010,8 +2107,10 @@ self.postMessage = (message, transferOrOptions) => {
 				limits: controls.limits,
 				outputBytes: 0,
 				progress,
+				readyReported: false,
 				resolve,
 				reject,
+				settledReported: false,
 				...(stdinRing ? { stdinRing } : {})
 			};
 			this.activeReject = reject;
@@ -2035,7 +2134,7 @@ self.postMessage = (message, transferOrOptions) => {
 					if (!activeRun || activeRun.id !== id) return;
 					const { stdin, stdinEof } = activeRun.stdinRing
 						? { stdin: undefined, stdinEof: false }
-						: await this.collectStdinForRun(code, options);
+						: await this.collectStdinForRun(code, options, activeRun);
 					if (this.activeRun?.id !== id) return;
 					const executionTimeoutMs = Math.min(
 						2_147_483_647,
@@ -2170,6 +2269,19 @@ self.postMessage = (message, transferOrOptions) => {
 	}
 
 	private terminateLifecycle(startupReason: unknown, runReason: unknown) {
+		const activeRun = this.activeRun;
+		if (activeRun) {
+			try {
+				this.reportRunSettled(
+					activeRun,
+					'cancelled',
+					`${this.config.displayName} run ended`
+				);
+			} catch {
+				// Progress observers must not prevent explicit runtime termination.
+			}
+			if (this.activeRun !== activeRun) return;
+		}
 		const workerReason = this.activeRun ? runReason : startupReason;
 		this.progressController.invalidate();
 		this.uid += 1;

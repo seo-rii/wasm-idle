@@ -28,8 +28,8 @@ describe('Python debug tracer source', () => {
 		);
 		expect(source).toContain('current.f_code.co_filename == ${debugFilenameLiteral}');
 		expect(source).toContain('frame.f_code.co_filename != ${debugFilenameLiteral}');
-		expect(source).toContain(
-			'compile(${JSON.stringify(code)}, ${executionFilenameLiteral}, "exec", flags = ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)'
+		expect(source).toMatch(
+			/compile\(\s*\$\{JSON\.stringify\(code\)\},\s*\$\{executionFilenameLiteral\},\s*"exec",\s*flags = ast\.PyCF_ALLOW_TOP_LEVEL_AWAIT,?\s*\)/
 		);
 	});
 });

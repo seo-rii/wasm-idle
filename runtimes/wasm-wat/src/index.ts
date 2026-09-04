@@ -41,6 +41,7 @@ export type BrowserWatCompilerFactory = () => Promise<BrowserWatCompiler>;
 
 export interface BrowserWatExecutionOptions {
 	imports?: WebAssembly.Imports;
+	onReady?: () => void;
 	stdout?: (chunk: string) => void;
 	stderr?: (chunk: string) => void;
 }
@@ -138,6 +139,7 @@ export async function executeBrowserWatArtifact(
 					? 'main'
 					: '';
 		let printed = false;
+		options.onReady?.();
 
 		if (preferredExportName) {
 			const value = (exports[preferredExportName] as () => unknown)();

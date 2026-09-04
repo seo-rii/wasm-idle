@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 afterEach(() => {
@@ -8,6 +10,13 @@ afterEach(() => {
 });
 
 describe('probe-tinygo-browser script', () => {
+	it('selects TinyGo through the dedicated language selector', async () => {
+		const source = await readFile('scripts/tinygo-browser-probe-lib.mjs', 'utf8');
+
+		expect(source).toContain("page.locator('#language-select').selectOption('TINYGO')");
+		expect(source).not.toMatch(/(?:locator|waitForSelector)\('select'/u);
+	});
+
 	it('uses the configured preview base path by default when no browser url override is provided', async () => {
 		const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
 		const runBrowserPreparationScripts = vi.fn(async () => {});

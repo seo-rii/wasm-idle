@@ -17,6 +17,7 @@ let runtimePromise: Promise<{
 		options?: {
 			args?: string[];
 			env?: Record<string, string>;
+			onReady?: () => void;
 			stdin?: () => string | null;
 			stdout?: (chunk: string) => void;
 			stderr?: (chunk: string) => void;
@@ -264,6 +265,15 @@ self.onmessage = async (event: { data: any }) => {
 			env: {
 				USER: 'jungol'
 			},
+			onReady: () =>
+				postMessage({
+					progress: {
+						kind: 'ready',
+						state: 'running',
+						reason: 'started',
+						label: `${language === 'typescript' ? 'TypeScript' : 'JavaScript'} program started`
+					}
+				}),
 			files: workspaceFiles,
 			activePath,
 			stdin: () => {

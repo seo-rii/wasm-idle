@@ -74,6 +74,7 @@ describe('Lisp worker', () => {
 			},
 			async execute(artifact, options = {}) {
 				(globalThis as any).__lastExecution = { artifact, options };
+				options.onReady?.();
 				options.stdout?.('hi\n');
 				return { exitCode: 0, stdout: 'hi\n', stderr: '' };
 			}
@@ -81,18 +82,45 @@ describe('Lisp worker', () => {
 
 		await import('./lisp');
 		await (globalThis as any).self.onmessage({ data: { load: true, runtimeConfig } });
+		const request = {
+			code: '(display "hi")',
+			buffer: new SharedArrayBuffer(1024),
+			args: ['one'],
+			activePath: 'main.scm',
+			workspaceFiles: [{ path: 'lib.scm', content: '(define x 1)' }],
+			log: true
+		};
+		await (globalThis as any).self.onmessage({
+			data: { ...request, prepare: true }
+		});
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
+			progress: expect.objectContaining({ kind: 'ready' })
+		});
 		await (globalThis as any).self.onmessage({
 			data: {
-				code: '(display "hi")',
-				prepare: false,
-				buffer: new SharedArrayBuffer(1024),
-				args: ['one'],
-				activePath: 'main.scm',
-				workspaceFiles: [{ path: 'lib.scm', content: '(define x 1)' }],
-				log: true
+				...request,
+				prepare: false
 			}
 		});
 
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		const readyIndex = messages.findIndex((message: any) => message.progress?.kind === 'ready');
+		expect(messages.filter((message: any) => message.progress?.kind === 'ready')).toEqual([
+			{
+				progress: {
+					kind: 'ready',
+					state: 'running',
+					reason: 'started',
+					label: 'Lisp program started'
+				}
+			}
+		]);
+		expect(readyIndex).toBeGreaterThanOrEqual(0);
+		expect(readyIndex).toBeLessThan(
+			messages.findIndex((message: any) => message.output === 'hi\n')
+		);
 		expect(mocks.loadVerifiedLispRuntimeAssets).toHaveBeenCalledWith(runtimeConfig);
 		expect((globalThis as any).__lastCompilerInjection).toEqual({
 			compilerModule: injection.compilerModule,

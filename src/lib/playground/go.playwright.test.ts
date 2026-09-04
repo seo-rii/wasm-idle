@@ -11,15 +11,15 @@ import {
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
 import {
-	defaultGoBrowserExpectedOutput,
+	DEFAULT_GO_BROWSER_EXPECTED_OUTPUT,
 	runGoBrowserProbe
 } from '../../../scripts/go-browser-probe-lib.mjs';
 
 const goBrowserTestTimeoutMs = Number(process.env.WASM_IDLE_GO_TEST_TIMEOUT_MS || '1500000');
 
-describe('wasm-idle Go browser playwright integration', () => {
+	describe('wasm-idle Go browser playwright integration', () => {
 	it('expects the output produced by the current Go starter source', () => {
-		expect(defaultGoBrowserExpectedOutput).toBe('fibonacci=11');
+		expect(DEFAULT_GO_BROWSER_EXPECTED_OUTPUT).toBe('fibonacci=11');
 	});
 
 	it(
@@ -79,7 +79,7 @@ describe('wasm-idle Go browser playwright integration', () => {
 								process.env.WASM_IDLE_GO_RUN_TIMEOUT_MS || '300000'
 							),
 							stdinText: '5\n',
-							expectedOutput: defaultGoBrowserExpectedOutput,
+							expectedOutput: DEFAULT_GO_BROWSER_EXPECTED_OUTPUT,
 							target,
 							stdinMethod: 'keyboard'
 						});
@@ -92,7 +92,7 @@ describe('wasm-idle Go browser playwright integration', () => {
 						expect(summary.pageErrors).toEqual([]);
 						expect(summary.moduleResolutionErrors).toEqual([]);
 						expect(summary.goConsoleErrors).toEqual([]);
-						expect(summary.transcript).toContain(defaultGoBrowserExpectedOutput);
+						expect(summary.transcript).toContain(DEFAULT_GO_BROWSER_EXPECTED_OUTPUT);
 						expect(summary.transcript).toContain('Process finished after');
 						expect(
 							summary.consoleTail.some((entry: string) =>

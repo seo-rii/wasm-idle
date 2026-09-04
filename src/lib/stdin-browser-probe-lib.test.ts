@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -40,5 +42,16 @@ describe('withWallClockTimeout', () => {
 		await expect(
 			withWallClockTimeout(new Promise(() => {}), 5, 'terminal read')
 		).rejects.toThrow('terminal read timed out after 5ms');
+	});
+});
+
+describe('stdin browser probe language selector', () => {
+	it('targets the language selector instead of whichever select happens to render first', async () => {
+		const source = await readFile('scripts/stdin-browser-probe-lib.mjs', 'utf8');
+
+		expect(source).toContain("page.locator('#language-select').selectOption(language)");
+		expect(source).toContain("document.querySelector('#language-select')?.value");
+		expect(source).not.toMatch(/(?:locator|waitForSelector)\('select'/u);
+		expect(source).not.toContain("querySelector('select')");
 	});
 });

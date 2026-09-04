@@ -155,7 +155,10 @@ async function createServiceWorkerHarness(
 		async request(relativePath: string, init?: RequestInit) {
 			let responsePromise: Promise<Response> | undefined;
 			fetchListener({
-				request: new Request(new URL(relativePath, scope), init),
+				request: new Request(new URL(relativePath, scope), {
+					credentials: 'omit',
+					...init
+				}),
 				respondWith(response: Promise<Response>) {
 					responsePromise = Promise.resolve(response);
 				}

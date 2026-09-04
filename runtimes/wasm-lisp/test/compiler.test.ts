@@ -693,13 +693,20 @@ export async function instantiate() {
 		expect(compiled.artifact?.format).toBe('component');
 		expect(compiled.artifact?.component.byteLength).toBeGreaterThan(1000);
 
-		const execution = await runtime.executeBrowserLispArtifact(compiled.artifact);
+		const lifecycle: string[] = [];
+		const execution = await runtime.executeBrowserLispArtifact(compiled.artifact, {
+			onReady: () => lifecycle.push('ready'),
+			stdout: () => lifecycle.push('stdout')
+		});
 
 		expect(execution).toEqual({
 			exitCode: 0,
 			stdout: '240\n',
 			stderr: ''
 		});
+		expect(lifecycle[0]).toBe('ready');
+		expect(lifecycle.filter((event) => event === 'ready')).toHaveLength(1);
+		expect(lifecycle).toContain('stdout');
 	});
 
 	it('passes command-line arguments into compiled Scheme components', async () => {

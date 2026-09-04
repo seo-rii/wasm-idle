@@ -172,9 +172,18 @@ self.onmessage = async (event: { data: any }) => {
 				`[wasm-idle:php-worker] run start bytes=${code.length} activePath=${activePath}`
 			);
 		}
+		const body = readInitialStdin(code, stdin, log);
+		postMessage({
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: 'PHP program started'
+			}
+		});
 		const response = await php.run({
 			scriptPath,
-			body: readInitialStdin(code, stdin, log),
+			body,
 			env: {
 				USER: 'jungol'
 			},

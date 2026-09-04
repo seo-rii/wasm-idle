@@ -12,6 +12,16 @@ self.document = {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
+const postExecutionReady = () =>
+	postMessage({
+		progress: {
+			kind: 'ready',
+			state: 'running',
+			reason: 'started',
+			label: 'TinyGo program started'
+		}
+	});
+
 let stdinBufferTinyGo: Int32Array | null = null;
 let stdinChunkTinyGo = new Uint8Array(0);
 let stdinChunkOffsetTinyGo = 0;
@@ -116,6 +126,7 @@ self.onmessage = async (event: { data: any }) => {
 		let exitCode = 0;
 		try {
 			if (typeof exportsObject._start === 'function') {
+				postExecutionReady();
 				exitCode = wasiRuntime.start(
 					instance as { exports: { memory: WebAssembly.Memory; _start: () => unknown } }
 				);
@@ -136,6 +147,7 @@ self.onmessage = async (event: { data: any }) => {
 					(exportsObject.__wasm_call_ctors as () => unknown)();
 				}
 				if (typeof exportsObject.main === 'function') {
+					postExecutionReady();
 					const mainResult = (exportsObject.main as () => unknown)();
 					exitCode = typeof mainResult === 'number' ? mainResult : 0;
 				}

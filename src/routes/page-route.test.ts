@@ -27,6 +27,29 @@ const expectPlaygroundLanguage = (language: PlaygroundLanguage) => {
 };
 
 describe('example route debug actions', () => {
+	it('reloads once the Pages isolation service worker is ready', () => {
+		expect(layoutSource).toMatch(/await navigator\.serviceWorker\.ready;/);
+		expect(layoutSource).toMatch(/if \(!crossOriginIsolated\) window\.location\.reload\(\);/);
+		expect(layoutSource).not.toMatch(/!navigator\.serviceWorker\.controller/);
+	});
+
+	it('renders unmeasured activity without fabricating a completion position', () => {
+		expect(source).toMatch(
+			/style=\{progressIndeterminate\s+\? undefined\s+: `transform: scaleX\(\$\{progressValue\}\)`\}/s
+		);
+		expect(source).toMatch(
+			/\.progress-track--indeterminate \.progress-fill \{\s+transform: scaleX\(1\);\s+transform-origin: center;\s+animation: progress-activity 1\.4s ease-in-out infinite;/s
+		);
+		expect(source).toMatch(
+			/@keyframes progress-activity \{[\s\S]+opacity: 0\.35;[\s\S]+opacity: 1;/
+		);
+		expect(source).not.toContain('scaleX(0.98)');
+		expect(source).not.toContain('--progress-value');
+		expect(source).toMatch(
+			/aria-valuenow=\{progressIndeterminate \? undefined : progressPercent\}/
+		);
+	});
+
 	it('swaps run/debug actions for stop buttons while sessions are active', () => {
 		const stopExecutionStart = source.indexOf('async function stopExecution()');
 		const restartExecutionStart = source.indexOf(
@@ -52,6 +75,8 @@ describe('example route debug actions', () => {
 		expect(stopExecutionSource.includes('const stopGeneration = ++executionGeneration;')).toBe(
 			true
 		);
+		expect(stopExecutionSource).toContain('executionAbortController.abort(');
+		expect(stopExecutionSource).toContain("new DOMException('Execution stopped by the user'");
 		expect(source).toMatch(
 			/if \(stoppedMode === 'debug'\) \{\s+await debug\.stop\(\);\s+return;\s+\}\s+await terminal\?\.stop\?\.\(\);/s
 		);
@@ -78,6 +103,14 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/async function sendTerminalEof\(\) \{/);
 		expect(source).toMatch(/await terminal\.eof\?\.\(\);/);
 		expect(source).toMatch(/title="Send EOF"/);
+	});
+
+	it('handles expected cancellation and timeout outcomes without rejecting the click handler', () => {
+		expect(source).toMatch(/const executionWasCancelled = abortController\.signal\.aborted;/);
+		expect(source).toMatch(
+			/const executionTimedOut = error instanceof Error && error\.name === 'TimeoutError';/
+		);
+		expect(source).toMatch(/if \(!executionWasCancelled && !executionTimedOut\) throw error;/);
 	});
 
 	it('delegates debug state, runtime watches, and run-to-cursor to the shared debug controller', () => {
@@ -137,16 +170,20 @@ describe('example route debug actions', () => {
 			/resolveDebugRuntimeUrls\(\s*runtimeAssets,\s*globalThis\.location\.href\s*\)/s
 		);
 		expect(source).toMatch(
-			/loadVerifiedDebugRuntimeManifest\(\s*debugRuntime\.manifestUrl,\s*debugRuntime\.manifestReceipt,\s*fetch,\s*preflight\.signal\s*\)/s
+			/loadVerifiedDebugRuntimeManifest\(\s*debugRuntime\.manifestUrl,\s*debugRuntime\.manifestReceipt,\s*fetch,\s*abortController\.signal\s*\)/s
 		);
 		expect(source).not.toContain('preflightDebugRuntimeAssets');
-		expect(source).toContain('if (!executionPreflight.isCurrent(preflight)) return;');
-		expect(source).toMatch(/signal: preflight\.signal,/);
+		expect(source).toMatch(/if \(!executionPreflight\.isCurrent\(preflight\)\) \{/);
+		expect(source).toMatch(/signal: abortController\.signal,/);
 		expect(source.includes('interactive: enableDebug,')).toBe(true);
-		expect(executionCatch).toMatch(
-			/catch \(error\) \{\s+if \(\s*preflight\.signal\.aborted &&\s*!executionPreflight\.isCurrent\(preflight\)\s*\)\s+return;\s+throw error;\s+\} finally/s
+		expect(source).toMatch(
+			/activeProgressSession\?\.report\?\.\(\{\s*kind: 'ready',\s*state: 'paused',\s*reason: 'debug-paused'/s
 		);
-		expect(executionCatch).not.toContain('error === preflight.signal.reason');
+		expect(executionCatch).toMatch(/const executionWasCancelled = abortController\.signal\.aborted;/);
+		expect(executionCatch).toMatch(
+			/const executionTimedOut = error instanceof Error && error\.name === 'TimeoutError';/
+		);
+		expect(executionCatch).toMatch(/if \(!executionWasCancelled && !executionTimedOut\) throw error;/);
 		expect(source).toMatch(/if \(!debug\.paused\) debug\.reset\(\);/);
 		expect(source).toMatch(
 			/title=\{debug\.cursorLine\s+\?\s+`Run to Cursor \(L\$\{debug\.cursorLine\}\)`\s+:\s+'Run to Cursor'\}/
@@ -157,6 +194,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/onclick=\{\(\) => runToCursorWhileDataBreakpointIdle\(\)\}/);
 		expect(source).toMatch(/disabled=\{!debug\.canRunToCursor \|\| dataBreakpointLoading\}/);
 		expect(source).toMatch(/onclick=\{\(\) => debug\.sendCommand\('continue'\)\}/);
+		expect(source).toContain('interactive: enableDebug,');
 		expect(source).toMatch(/ondebug=\{onDebugEvent\}/);
 		expect(source).toMatch(/bind:value=\{debug\.watchInput\}/);
 		expect(source).toMatch(/bind:value=\{debug\.watchInput\}\s+maxlength=\{4096\}/);
@@ -474,6 +512,20 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/<select id="go-target" bind:value=\{goTarget\}>/);
 		expect(source).toMatch(
 			/\{#each availableGoTargets as target \(target\)\}\s+<option value=\{target\}>\{target\}<\/option>\s+\{\/each\}/s
+		);
+	});
+
+	it('persists and forwards the selected C++ standard', () => {
+		expect(source).toMatch(/cppVersion = \$state<CppVersion>\('CPP20'\),/);
+		expect(source).toMatch(
+			/const knownCppVersions = \[\s*'CPP03',\s*'CPP11',\s*'CPP14',\s*'CPP17',\s*'CPP20',\s*'CPP23',\s*'CPP26'\s*\] as const;/s
+		);
+		expect(source).toMatch(/CPP: \(\) => \(\{ cppVersion \}\)/);
+		expect(source).toMatch(/cppVersion,/);
+		expect(source).toMatch(/knownCppVersions\.includes\(value\?\.cppVersion as CppVersion\)/);
+		expect(source).toMatch(/<select id="cpp-version" bind:value=\{cppVersion\}>/);
+		expect(source).toMatch(
+			/\{#each knownCppVersions as version \(version\)\}\s+<option value=\{version\}>\{cppVersionLabels\[version\]\}<\/option>\s+\{\/each\}/s
 		);
 	});
 

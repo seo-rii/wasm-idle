@@ -32,6 +32,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { reportWorkerProgress } from '$lib/playground/workerProgress';
 
 type JavaOperation = {
 	token: symbol;
@@ -653,12 +654,22 @@ class Java implements Sandbox {
 				try {
 					if (assetBridge?.handleMessage(event as MessageEvent<any>)) return;
 					if (!ownsRun()) return;
-					const { output, results, error, buffer, diagnostic } = event.data;
+					const { output, results, error, buffer, diagnostic, progress } = event.data;
 					if (buffer && !hasExplicitStdin) {
+						if (!prepare) {
+							_prog?.report?.({
+								kind: 'ready',
+								state: 'waiting-input',
+								reason: 'stdin-request',
+								label: 'Java program is waiting for input'
+							});
+						}
 						this.waitingForInput = true;
 						this.flushPendingInput();
 						if (!ownsRun()) return;
 					}
+					reportWorkerProgress(_prog, progress);
+					if (!ownsRun()) return;
 					if (output) {
 						const actual =
 							outputBytes + OUTPUT_ENCODER.encode(String(output)).byteLength;

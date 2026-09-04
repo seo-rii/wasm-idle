@@ -337,6 +337,14 @@ self.onmessage = async (event: { data: any }) => {
 					? 'main'
 					: '';
 		let printed = false;
+		postMessage({
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: 'AssemblyScript program started'
+			}
+		});
 
 		if (preferredExportName) {
 			const value = (activeExports[preferredExportName] as () => unknown)();

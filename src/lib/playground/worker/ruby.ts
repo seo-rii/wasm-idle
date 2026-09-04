@@ -293,6 +293,14 @@ self.onmessage = async (event: { data: any }) => {
 				`[wasm-idle:ruby-worker] eval start bytes=${code.length} activePath=${activePath}`
 			);
 		}
+		postMessage({
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: 'Ruby program started'
+			}
+		});
 		vm.eval(code);
 		if (log) {
 			console.log(

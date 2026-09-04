@@ -510,6 +510,12 @@ function normalizeCallError(module: AtomVmModule, error: unknown) {
 	}
 }
 
+function postExecutionReady(label: string) {
+	postMessage({
+		progress: { kind: 'ready', state: 'running', reason: 'started', label }
+	});
+}
+
 self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
@@ -899,11 +905,13 @@ self.onmessage = async (event: { data: any }) => {
 			}
 			if (moduleMatch) {
 				await runtime.module.call(runtime.process, ['eval_erlang_module', evalCode]);
+				postExecutionReady('Erlang program started');
 				response = await runtime.module.call(runtime.process, [
 					'eval_erlang',
 					`${moduleMatch[1]}:main().`
 				]);
 			} else {
+				postExecutionReady('Erlang expression started');
 				response = await runtime.module.call(runtime.process, ['eval_erlang', evalCode]);
 			}
 		} else if (diagnose) {
@@ -914,6 +922,7 @@ self.onmessage = async (event: { data: any }) => {
 			postMessage({ results: true });
 			return;
 		} else {
+			postExecutionReady('Elixir program started');
 			response = await runtime.module.call(runtime.process, ['eval_elixir', evalCode]);
 		}
 		const rendered = runtime.module.deserialize(response);
