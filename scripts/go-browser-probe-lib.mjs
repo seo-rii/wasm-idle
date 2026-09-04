@@ -3,12 +3,16 @@ import { chromium } from 'playwright-core';
 import {
 	assertLoadingProgressTrace,
 	installLoadingProgressProbe,
+	markLoadingProgressReady,
 	readLoadingProgressTrace,
 	stopLoadingProgressProbe
 } from './browser-progress-probe.mjs';
 import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
 
 export const DEFAULT_GO_BROWSER_EXPECTED_OUTPUT = 'fibonacci=11';
+
+const GO_EDITOR_STABLE_READS = 3;
+const GO_EDITOR_POLL_INTERVAL_MS = 100;
 
 /**
  * @typedef {{ type: string; text: string }} BrowserConsoleMessage
@@ -58,6 +62,84 @@ function findGoConsoleErrors(messages) {
 					entry.text.includes('Go worker script error:'))
 		)
 		.map((entry) => `[${entry.type}] ${entry.text}`);
+}
+
+/**
+ * @param {{ editorApiReady: boolean; language: string; source: string }} state
+ */
+export function isGoEditorStateReady({ editorApiReady, language, source }) {
+	return editorApiReady && language === 'GO' && /^\s*package\s+main\b/mu.test(source);
+}
+
+/**
+ * @param {unknown} error
+ */
+function isTransientNavigationError(error) {
+	const message = String(error);
+	return (
+		message.includes('Execution context was destroyed') ||
+		message.includes('Cannot find context with specified id')
+	);
+}
+
+/**
+ * Wait until selecting Go has propagated through the async editor state. A single
+ * non-empty read is insufficient because the previous language's source can still
+ * be replaced on a later Svelte update.
+ *
+ * @param {import('playwright-core').Page} page
+ * @param {number} timeoutMs
+ */
+export async function waitForStableGoEditorSource(page, timeoutMs) {
+	const deadline = Date.now() + timeoutMs;
+	let previousSource = '';
+	let selectionRecovered = false;
+	let stableReads = 0;
+
+	while (Date.now() < deadline) {
+		let state;
+		try {
+			state = await page.evaluate(() => {
+				const api = /** @type {any} */ (window).__wasmIdleDebug;
+				const editorApiReady =
+					typeof api?.getEditorValue === 'function' &&
+					typeof api?.setEditorValue === 'function';
+				return {
+					editorApiReady,
+					language: document.querySelector('#language-select')?.value || '',
+					source: editorApiReady ? String(api.getEditorValue() || '') : ''
+				};
+			});
+		} catch (error) {
+			if (!isTransientNavigationError(error)) throw error;
+			previousSource = '';
+			selectionRecovered = false;
+			stableReads = 0;
+			await page.waitForTimeout(GO_EDITOR_POLL_INTERVAL_MS);
+			continue;
+		}
+
+		if (isGoEditorStateReady(state)) {
+			stableReads = state.source === previousSource ? stableReads + 1 : 1;
+			previousSource = state.source;
+			if (stableReads >= GO_EDITOR_STABLE_READS) {
+				return state.source;
+			}
+		} else {
+			previousSource = '';
+			stableReads = 0;
+			if (state.editorApiReady && !selectionRecovered) {
+				await page.locator('#language-select').selectOption('GO', {
+					timeout: Math.max(1, Math.min(1_000, deadline - Date.now()))
+				});
+				selectionRecovered = true;
+			}
+		}
+
+		await page.waitForTimeout(GO_EDITOR_POLL_INTERVAL_MS);
+	}
+
+	throw new Error(`timed out after ${timeoutMs}ms waiting for stable Go editor source`);
 }
 
 /**
@@ -214,10 +296,32 @@ export async function runGoBrowserProbe({
 			);
 		}
 
+		await page.evaluate(() => localStorage.clear());
 		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
-		await page.waitForTimeout(1_000);
-		await page.waitForSelector('select', { state: 'attached', timeout: runTimeoutMs });
-		await page.locator('select').selectOption('GO');
+		await page.waitForSelector('#language-select', {
+			state: 'attached',
+			timeout: runTimeoutMs
+		});
+		await page.locator('#language-select').selectOption('GO');
+		const editorReadyTimeoutMs = Math.min(runTimeoutMs, 30_000);
+		try {
+			await waitForStableGoEditorSource(page, editorReadyTimeoutMs);
+		} catch (error) {
+			throw new Error(
+				`Go editor did not become ready within ${editorReadyTimeoutMs}ms\n${JSON.stringify(
+					{
+						activeState,
+						browserUrl,
+						consoleTail: summarizeConsole(consoleMessages),
+						finalUrl: page.url(),
+						pageErrors
+					},
+					null,
+					2
+				)}`,
+				{ cause: error }
+			);
+		}
 		await page.locator('#go-target').selectOption(target);
 
 		const logToggle = page.locator('#log-toggle');
@@ -265,7 +369,38 @@ export async function runGoBrowserProbe({
 			}, stdinText);
 		}
 
+		let progressReadiness;
 		try {
+			const readinessHandle = await page.waitForFunction(
+				({ previousTranscript, previousFinishedCount, requiredOutput }) => {
+					const text =
+						document.querySelector('[data-testid="terminal-debug-output"]')
+							?.textContent || '';
+					const delta = text.startsWith(previousTranscript)
+						? text.slice(previousTranscript.length)
+						: text;
+					if (requiredOutput && delta.includes(requiredOutput)) {
+						return 'expected terminal output';
+					}
+					const finishedCount = (text.match(/Process finished after/g) || []).length;
+					if (
+						delta.includes('Go compilation failed') ||
+						finishedCount >= previousFinishedCount + 1
+					) {
+						return 'Go execution settled';
+					}
+					return false;
+				},
+				{
+					previousTranscript: initialTranscript,
+					previousFinishedCount: initialFinishedCount,
+					requiredOutput: expectedOutput
+				},
+				{ polling: 50, timeout: runTimeoutMs }
+			);
+			const readinessReason = String(await readinessHandle.jsonValue());
+			await readinessHandle.dispose();
+			progressReadiness = await markLoadingProgressReady(page, readinessReason);
 			await page.waitForFunction(
 				hasGoExecutionPhaseCompleted,
 				{
@@ -285,13 +420,10 @@ export async function runGoBrowserProbe({
 		}
 
 		await stopLoadingProgressProbe(page);
-		const summary = await readProbeSummary(
-			page,
-			activeState,
-			pageErrors,
-			consoleMessages,
-			browserUrl
-		);
+		const summary = {
+			...(await readProbeSummary(page, activeState, pageErrors, consoleMessages, browserUrl)),
+			progressReadiness
+		};
 		if (summary.pageErrors.length > 0) {
 			throw new Error(`page errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
@@ -303,7 +435,7 @@ export async function runGoBrowserProbe({
 		if (summary.goConsoleErrors.length > 0) {
 			throw new Error(`go console errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
-		assertLoadingProgressTrace(summary.progressTrace, `Go (${target})`);
+		assertLoadingProgressTrace(summary.progressTrace, `Go (${target})`, progressReadiness);
 		if (summary.transcript.includes('Go compilation failed')) {
 			throw new Error(`Go run failed\n${JSON.stringify(summary, null, 2)}`);
 		}
