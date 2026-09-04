@@ -365,12 +365,10 @@ class Dotnet implements Sandbox {
 	}
 
 	private shouldRunOnMainThread() {
-		return (
-			typeof window !== 'undefined' &&
-			globalThis.crossOriginIsolated === true &&
-			typeof SharedArrayBuffer !== 'undefined' &&
-			navigator.serviceWorker?.controller != null
-		);
+		// Compiler and user-program execution must remain physically cancellable.
+		// Keep the legacy backend implementation below until its state machinery can
+		// be removed independently, but never select it through the public runtime.
+		return false;
 	}
 
 	load(
