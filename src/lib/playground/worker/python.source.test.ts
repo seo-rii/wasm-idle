@@ -17,15 +17,28 @@ describe('Python worker source', () => {
 		expect(source).toContain("postProgress(100, 'Python packages ready');");
 	});
 
-	it('loads the Pyodide module from the configured static runtime URL', () => {
-		expect(source).toContain('pyodide.mjs');
+	it('loads the Pyodide entry and asm modules through the bounded runtime asset loader', () => {
+		expect(source).toContain("importRuntimeAssetModule('pyodide.asm.js')");
+		expect(source).toContain("importRuntimeAssetModule(\n\t\t'pyodide.mjs'");
+		expect(source).toContain('loadWorkerRuntimeAsset(asset)');
 		expect(source).toContain('/* @vite-ignore */ moduleUrl');
 		expect(source).not.toContain("await import('pyodide')");
 	});
 
-	it('configures the supported Pyodide package base URL instead of a removed setter', () => {
+	it('keeps bridged packages on the configured base and direct packages on the pinned CDN', () => {
+		expect(source).toContain(
+			'packageBaseUrl = useAssetBridge ? runtimeBaseUrl : cdnFallbackUrl(runtimeModule.version);'
+		);
 		expect(source).toContain('loadPyodide({ indexURL: path, packageBaseUrl })');
 		expect(source).not.toContain('setCdnUrl');
+	});
+
+	it('executes empty source and posts a terminal result', () => {
+		expect(source).toContain("else if (typeof code === 'string') {");
+		expect(source).not.toContain('else if (code) {');
+		expect(source).toMatch(
+			/else if \(typeof code === 'string'\) \{[\s\S]*?self\.postMessage\(\{ results: true \}\);/
+		);
 	});
 
 	it('reports initialization failures instead of leaving the host waiting', () => {
@@ -33,7 +46,7 @@ describe('Python worker source', () => {
 			/if \(load\) \{[\s\S]*?try \{[\s\S]*?await loadPyodide\(baseUrl\);[\s\S]*?catch/
 		);
 		expect(source).toMatch(
-			/else if \(code\) \{[\s\S]*?await loadPackages\([\s\S]*?catch[\s\S]*?return;/
+			/else if \(typeof code === 'string'\) \{[\s\S]*?await loadPackages\([\s\S]*?catch[\s\S]*?return;/
 		);
 	});
 

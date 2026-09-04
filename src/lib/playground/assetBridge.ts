@@ -33,6 +33,7 @@ type LoadedAsset = {
 type AssetBridgeState = 'active' | 'rebinding' | 'disposed';
 
 const encoder = new TextEncoder();
+const strictDecoder = new TextDecoder('utf-8', { fatal: true });
 const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
 const MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
 const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
@@ -237,6 +238,52 @@ const transferBuffer = (bytes: Uint8Array, transferOwnership = false) => {
 const expectedAssetsForRuntime = (runtime: RuntimeAssetRuntime) =>
 	new Set<string>(RUNTIME_LOAD_ASSETS[runtime]);
 
+const pythonPackageAssetPattern = /^[A-Za-z0-9][A-Za-z0-9._+-]*\.(?:whl|tar|zip)$/u;
+
+const readPythonPackageAssets = (bytes: Uint8Array) => {
+	let lock: unknown;
+	try {
+		lock = JSON.parse(strictDecoder.decode(bytes));
+	} catch {
+		throw new ProtocolError('Python runtime lock file is not valid UTF-8 JSON', {
+			phase: 'asset',
+			runtimeId: 'python'
+		});
+	}
+	if (
+		typeof lock !== 'object' ||
+		lock === null ||
+		!('packages' in lock) ||
+		typeof lock.packages !== 'object' ||
+		lock.packages === null ||
+		Array.isArray(lock.packages)
+	) {
+		throw new ProtocolError('Python runtime lock file has an invalid packages map', {
+			phase: 'asset',
+			runtimeId: 'python'
+		});
+	}
+
+	const assets = new Set<string>();
+	for (const entry of Object.values(lock.packages)) {
+		if (typeof entry !== 'object' || entry === null || !('file_name' in entry)) {
+			throw new ProtocolError('Python runtime lock file has an invalid package entry', {
+				phase: 'asset',
+				runtimeId: 'python'
+			});
+		}
+		const asset = entry.file_name;
+		if (typeof asset !== 'string' || !pythonPackageAssetPattern.test(asset)) {
+			throw new ProtocolError('Python runtime lock file has an unsafe package asset name', {
+				phase: 'asset',
+				runtimeId: 'python'
+			});
+		}
+		assets.add(asset);
+	}
+	return assets;
+};
+
 const integrityKey = (config: ResolvedRuntimeAssetConfig) =>
 	JSON.stringify(
 		Object.entries(config.integrity || {})
@@ -371,6 +418,7 @@ export class WorkerAssetBridge {
 	private config: ResolvedRuntimeAssetConfig;
 	private readonly progress: RuntimeLoadProgress;
 	private readonly expectedAssets: Set<string>;
+	private pythonPackageAssets = new Set<string>();
 	private generation = 0;
 	private state: AssetBridgeState = 'active';
 	private readonly activeLoads = new Set<AbortController>();
@@ -417,11 +465,13 @@ export class WorkerAssetBridge {
 			throw new Error('Cannot rebind a worker asset bridge while another rebind is active');
 		}
 		const nextMaxAssetBytes = requireBridgeMaxAssetBytes(maxAssetBytes);
+		const preservePythonPackageAssets = this.matches(config, nextMaxAssetBytes);
 		this.state = 'rebinding';
 		const generation = ++this.generation;
 		this.progress.reset();
 		try {
 			this.abortActiveLoads();
+			if (!preservePythonPackageAssets) this.pythonPackageAssets.clear();
 			if (this.state !== 'rebinding' || this.generation !== generation) {
 				throw new Error('Cannot rebind a disposed worker asset bridge');
 			}
@@ -444,6 +494,7 @@ export class WorkerAssetBridge {
 		this.state = 'disposed';
 		this.generation += 1;
 		this.progress.reset();
+		this.pythonPackageAssets.clear();
 		this.abortActiveLoads();
 	}
 
@@ -577,6 +628,9 @@ export class WorkerAssetBridge {
 				}
 			}
 			if (controller.signal.aborted || generation !== this.generation) return;
+			if (this.runtime === 'python' && request.asset === 'pyodide-lock.json') {
+				this.pythonPackageAssets = readPythonPackageAssets(runtimeBytes);
+			}
 			const buffer = transferBuffer(
 				runtimeBytes,
 				normalizedRuntimeBytes === deliveryBytes ? loaded.transferOwnership : true
@@ -611,7 +665,7 @@ export class WorkerAssetBridge {
 	}
 
 	private async loadAsset(asset: string, signal: AbortSignal): Promise<LoadedAsset> {
-		if (!this.expectedAssets.has(asset)) {
+		if (!this.expectedAssets.has(asset) && !this.pythonPackageAssets.has(asset)) {
 			throw new Error(`Unexpected ${this.runtime} runtime asset: ${asset}`);
 		}
 		if (this.config.integrity && !Object.hasOwn(this.config.integrity, asset)) {

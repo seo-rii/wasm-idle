@@ -2,12 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushQueuedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
+let autoResolveLoad = true;
+let autoResolveRun = true;
 
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
+	onerror: ((event: ErrorEvent) => void) | null = null;
+	onmessageerror: ((event: MessageEvent<any>) => void) | null = null;
 	postMessage = vi.fn((message: any) => {
 		if (message.load) {
 			queueMicrotask(() => {
+				if (!autoResolveLoad) return;
 				this.onmessage?.({
 					data: { progress: { percent: 35, stage: 'Initializing Pyodide' } }
 				} as MessageEvent<any>);
@@ -15,16 +20,29 @@ class MockWorker {
 			});
 			return;
 		}
-		queueMicrotask(() =>
+		queueMicrotask(() => {
+			if (!autoResolveRun) return;
 			this.onmessage?.({
 				data: { output: '10:True\n', results: true, buffer: true }
-			} as MessageEvent<any>)
-		);
+			} as MessageEvent<any>);
+		});
 	});
 	terminate = vi.fn();
 
 	constructor() {
 		workerInstances.push(this);
+	}
+
+	emit(data: Record<string, unknown>) {
+		this.onmessage?.({ data } as MessageEvent<any>);
+	}
+
+	resolveLoad() {
+		this.emit({ load: true });
+	}
+
+	resolveRun(results: boolean | string = true) {
+		this.emit({ results });
 	}
 }
 
@@ -41,6 +59,8 @@ import Python from './python';
 describe('Python sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
+		autoResolveLoad = true;
+		autoResolveRun = true;
 	});
 
 	it('passes complex Python source with multiple assignment and mutual recursion to the worker', async () => {
@@ -172,6 +192,33 @@ print((left + right) // (left - left))`,
 		expect(worker.terminate).toHaveBeenCalledTimes(1);
 	});
 
+	it('rejects load and run overlap while Python startup retains ownership', async () => {
+		autoResolveLoad = false;
+		const sandbox = new Python();
+		const loading = sandbox.load('/');
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		const activeHandler = worker.onmessage;
+
+		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'startup',
+			runtimeId: 'PYTHON3'
+		});
+		await expect(sandbox.run('print("too early")', false)).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'startup',
+			runtimeId: 'PYTHON3'
+		});
+		expect(worker.onmessage).toBe(activeHandler);
+		expect(worker.postMessage).toHaveBeenCalledOnce();
+
+		worker.resolveLoad();
+		await expect(loading).resolves.toBeUndefined();
+	});
+
 	it('aborts an active non-debug Python run and ignores late worker messages', async () => {
 		const sandbox = new Python();
 		const outputs: string[] = [];
@@ -253,13 +300,7 @@ print((left + right) // (left - left))`,
 
 		await sandbox.load('/');
 		const worker = workerInstances[workerInstances.length - 1];
-		worker.postMessage.mockImplementationOnce(() => {
-			queueMicrotask(() =>
-				worker.onmessage?.({
-					data: { output: 'first output', results: true }
-				} as MessageEvent<any>)
-			);
-		});
+		worker.postMessage.mockImplementationOnce(() => {});
 		const firstRun = sandbox.run('print("first")', false);
 		const activeHandler = worker.onmessage;
 		const callsBeforeOverlap = worker.postMessage.mock.calls.length;
@@ -275,6 +316,7 @@ print((left + right) // (left - left))`,
 			expect(worker.postMessage).toHaveBeenCalledTimes(callsBeforeOverlap);
 			expect(worker.onmessage).toBe(activeHandler);
 
+			worker.emit({ output: 'first output', results: true });
 			await expect(firstRun).resolves.toBe(true);
 			expect(outputs).toEqual(['first output']);
 
@@ -284,6 +326,127 @@ print((left + right) // (left - left))`,
 			sandbox.kill();
 			await Promise.allSettled([firstRun, secondRun]);
 		}
+	});
+
+	it('rejects debug-run and load overlap without replacing the active worker handler', async () => {
+		autoResolveRun = false;
+		const sandbox = new Python();
+		await sandbox.load('/');
+		const worker = workerInstances[0];
+		const running = sandbox.run('print("first")', false, true, undefined, [], {
+			debug: true
+		});
+		const activeHandler = worker.onmessage;
+		const callsBeforeOverlap = worker.postMessage.mock.calls.length;
+
+		await expect(
+			sandbox.run('print("second")', false, true, undefined, [], { debug: true })
+		).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'PYTHON3'
+		});
+		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+			name: 'BusyError',
+			code: 'busy',
+			phase: 'execute',
+			runtimeId: 'PYTHON3'
+		});
+		expect(worker.onmessage).toBe(activeHandler);
+		expect(worker.postMessage).toHaveBeenCalledTimes(callsBeforeOverlap);
+
+		worker.resolveRun('first result');
+		await expect(running).resolves.toBe('first result');
+	});
+
+	it('rejects a pre-aborted startup before constructing a worker', async () => {
+		const sandbox = new Python();
+		const controller = new AbortController();
+		const reason = new Error('stop Python startup before dispatch');
+		controller.abort(reason);
+
+		await expect(sandbox.load('/', '', true, [], { signal: controller.signal })).rejects.toBe(
+			reason
+		);
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('applies the asset byte limit and abort signal to active Python startup assets', async () => {
+		autoResolveLoad = false;
+		const sandbox = new Python();
+		const controller = new AbortController();
+		const reason = new Error('stop active Python asset load');
+		let loaderSignal: AbortSignal | undefined;
+		const loader = vi.fn(({ signal }: { signal?: AbortSignal }) => {
+			loaderSignal = signal;
+			return new Promise<Uint8Array>(() => undefined);
+		});
+		const loading = sandbox.load({ python: { loader } }, '', true, [], {
+			signal: controller.signal,
+			limits: { maxAssetBytes: 1234 }
+		});
+		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+		const worker = workerInstances[0];
+		expect(worker.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				load: true,
+				assets: expect.objectContaining({ maxAssetBytes: 1234 })
+			})
+		);
+
+		worker.emit({ assetRequest: { id: 81, asset: 'pyodide.mjs' } });
+		await vi.waitFor(() => expect(loader).toHaveBeenCalledOnce());
+		controller.abort(reason);
+
+		await expect(loading).rejects.toBe(reason);
+		expect(loaderSignal?.aborted).toBe(true);
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(worker.postMessage).not.toHaveBeenCalledWith(
+			expect.objectContaining({ assetResponse: expect.objectContaining({ id: 81 }) }),
+			expect.anything()
+		);
+	});
+
+	it('rejects a throwing run callback, retires the worker, and permits retry', async () => {
+		autoResolveRun = false;
+		const sandbox = new Python();
+		const callbackError = new Error('Python output callback failed');
+		let throwOutput = true;
+		sandbox.output = vi.fn(() => {
+			if (throwOutput) throw callbackError;
+		});
+		await sandbox.load('/');
+		const retiredWorker = workerInstances[0];
+		const running = sandbox.run('print("first")', false);
+
+		retiredWorker.emit({ output: 'combined output', results: true });
+		await expect(running).rejects.toBe(callbackError);
+		expect(retiredWorker.terminate).toHaveBeenCalledOnce();
+
+		throwOutput = false;
+		autoResolveRun = true;
+		await sandbox.load('/');
+		await expect(sandbox.run('print("retry")', false)).resolves.toBe(true);
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('settles a throwing startup progress callback and permits retry', async () => {
+		const sandbox = new Python();
+		const callbackError = new Error('Python startup progress failed');
+		let throwProgress = true;
+		const progress = {
+			set: vi.fn(() => {
+				if (throwProgress) throw callbackError;
+			})
+		};
+
+		await expect(sandbox.load('/', '', true, [], {}, progress)).rejects.toBe(callbackError);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+
+		throwProgress = false;
+		await expect(sandbox.load('/', '', true, [], {}, progress)).resolves.toBeUndefined();
+		expect(workerInstances).toHaveLength(2);
 	});
 
 	it('evaluates watch expressions through the worker debug buffers', async () => {

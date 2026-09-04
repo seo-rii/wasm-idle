@@ -8,6 +8,7 @@ import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import {
 	configureWorkerRuntimeAssets,
 	handleWorkerAssetMessage,
+	loadWorkerRuntimeAsset,
 	type WorkerRuntimeAssetConfig
 } from '$lib/playground/worker/assets';
 
@@ -35,7 +36,8 @@ let stdinBufferPyodide: Int32Array,
 	interruptBufferPyodide: Uint8Array,
 	pyodide: PyodideInterface,
 	baseUrl = '',
-	packageBaseUrl = '';
+	packageBaseUrl = '',
+	useAssetBridge = false;
 
 const imageHook = `
 if not globals().get("__wasm_idle_img_inited__", False):
@@ -188,13 +190,29 @@ function postProgress(percent: number, stage: string) {
 	self.postMessage({ progress: { percent, stage } });
 }
 
+async function importRuntimeAssetModule(asset: string) {
+	const loaded = await loadWorkerRuntimeAsset(asset);
+	const moduleUrl = URL.createObjectURL(
+		new Blob([loaded.bytes.slice().buffer], {
+			type: loaded.mimeType || 'text/javascript'
+		})
+	);
+	try {
+		return await import(/* @vite-ignore */ moduleUrl);
+	} finally {
+		URL.revokeObjectURL(moduleUrl);
+	}
+}
+
 async function loadPyodide(path: string) {
 	if (pyodide) return;
-	const moduleUrl = `${path.endsWith('/') ? path : `${path}/`}pyodide.mjs`;
-	const { loadPyodide, version } = (await import(
-		/* @vite-ignore */ moduleUrl
+	const runtimeBaseUrl = path.endsWith('/') ? path : `${path}/`;
+	await importRuntimeAssetModule('pyodide.asm.js');
+	const runtimeModule = (await importRuntimeAssetModule(
+		'pyodide.mjs'
 	)) as typeof import('pyodide');
-	packageBaseUrl = cdnFallbackUrl(version);
+	packageBaseUrl = useAssetBridge ? runtimeBaseUrl : cdnFallbackUrl(runtimeModule.version);
+	const { loadPyodide } = runtimeModule;
 	pyodide = await loadPyodide({ indexURL: path, packageBaseUrl });
 }
 
@@ -246,6 +264,7 @@ self.onmessage = async (event: any) => {
 		try {
 			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
 			baseUrl = runtimeAssets?.baseUrl || baseUrl;
+			useAssetBridge = runtimeAssets?.useAssetBridge === true;
 			configureWorkerRuntimeAssets(runtimeAssets || null);
 			postMessage({ output: 'Loading Pyodide...' });
 			postProgress(2, 'Loading Pyodide module');
@@ -275,7 +294,7 @@ self.onmessage = async (event: any) => {
 		} catch (e: any) {
 			self.postMessage({ error: e.message || 'Unknown error' });
 		}
-	} else if (code) {
+	} else if (typeof code === 'string') {
 		try {
 			await loadPyodide(baseUrl);
 			writeWorkspaceFiles(workspaceFiles);
