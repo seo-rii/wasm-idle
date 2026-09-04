@@ -33,7 +33,29 @@ const runtimeMocks = vi.hoisted(() => {
 				progress?.set?.(1, 'Bash runtime ready');
 			}
 		);
-		run = vi.fn(async () => true as boolean | string);
+		run = vi.fn(
+			async (
+				_code: string,
+				_prepare: boolean,
+				_log: boolean,
+				progress?: {
+					report?: (event: {
+						kind: 'ready';
+						state: 'running';
+						reason: 'started';
+						label?: string;
+					}) => void;
+				}
+			) => {
+				progress?.report?.({
+					kind: 'ready',
+					state: 'running',
+					reason: 'started',
+					label: 'Bash process started'
+				});
+				return true as boolean | string;
+			}
+		);
 		write = vi.fn();
 		eof = vi.fn();
 
@@ -183,10 +205,18 @@ describe('Bash outer worker bridge', () => {
 		).postMessage.mockClear();
 
 		let resolveRun: ((result: boolean | string) => void) | undefined;
+		let reportReady: (() => void) | undefined;
 		runtime.run.mockImplementationOnce(
-			() =>
+			(_code, _prepare, _log, progress) =>
 				new Promise<boolean | string>((resolve) => {
 					resolveRun = resolve;
+					reportReady = () =>
+						progress?.report?.({
+							kind: 'ready',
+							state: 'running',
+							reason: 'started',
+							label: 'Bash process started'
+						});
 				})
 		);
 		const pendingRun = send(runMessage);
@@ -196,7 +226,7 @@ describe('Bash outer worker bridge', () => {
 			runMessage.code,
 			false,
 			false,
-			undefined,
+			expect.objectContaining({ report: expect.any(Function) }),
 			['first', 'second'],
 			{
 				activePath: runMessage.activePath,
@@ -206,12 +236,32 @@ describe('Bash outer worker bridge', () => {
 				workspaceLimits
 			}
 		);
+		expect(postedMessages().some(({ type }) => type === 'execution-ready')).toBe(false);
+		expect(postedMessages().some(({ type }) => type === 'stdin-ready')).toBe(false);
+
+		reportReady?.();
+		expect(postedMessages()).toContainEqual({
+			protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
+			type: 'execution-ready',
+			sessionId: runMessage.sessionId,
+			requestId: runMessage.requestId,
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: 'Bash process started'
+			}
+		});
 		expect(postedMessages()).toContainEqual({
 			protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
 			type: 'stdin-ready',
 			sessionId: runMessage.sessionId,
 			requestId: runMessage.requestId
 		});
+		expect(postedMessages().map(({ type }) => type)).toEqual([
+			'execution-ready',
+			'stdin-ready'
+		]);
 
 		const encodedInput = new TextEncoder().encode('한');
 		await send({
@@ -286,10 +336,11 @@ describe('Bash outer worker bridge', () => {
 			runMessage.code,
 			false,
 			false,
-			undefined,
+			expect.objectContaining({ report: expect.any(Function) }),
 			['first', 'second'],
 			expect.objectContaining({ stdin: 'prebuffered\n' })
 		);
+		expect(postedMessages().some(({ type }) => type === 'execution-ready')).toBe(true);
 		expect(postedMessages().some(({ type }) => type === 'stdin-ready')).toBe(false);
 		expect(postedMessages()).toContainEqual({
 			protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
@@ -298,6 +349,29 @@ describe('Bash outer worker bridge', () => {
 			requestId: 13,
 			result: true
 		});
+	});
+
+	it('drops a late execution readiness callback after the run loses ownership', async () => {
+		const runtime = await importWorker();
+		await send(loadMessage);
+		(
+			globalThis as unknown as { postMessage: ReturnType<typeof vi.fn> }
+		).postMessage.mockClear();
+		let reportReady: (() => void) | undefined;
+		runtime.run.mockImplementationOnce(async (_code, _prepare, _log, progress) => {
+			reportReady = () =>
+				progress?.report?.({
+					kind: 'ready',
+					state: 'running',
+					reason: 'started'
+				});
+			return true;
+		});
+
+		await send(runMessage);
+		expect(postedMessages().map(({ type }) => type)).toEqual(['result']);
+		reportReady?.();
+		expect(postedMessages().map(({ type }) => type)).toEqual(['result']);
 	});
 
 	it('serializes runtime failures into clone-safe errors with the request identity', async () => {
@@ -406,5 +480,32 @@ describe('Bash outer worker bridge', () => {
 				bytes: new Uint8Array([111, 107])
 			})
 		).toBe(true);
+		expect(
+			isBashWorkerToHostMessage({
+				protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
+				type: 'execution-ready',
+				sessionId: 7,
+				requestId: 12,
+				progress: {
+					kind: 'ready',
+					state: 'running',
+					reason: 'started',
+					label: 'Bash process started'
+				}
+			})
+		).toBe(true);
+		expect(
+			isBashWorkerToHostMessage({
+				protocolVersion: BASH_WORKER_PROTOCOL_VERSION,
+				type: 'execution-ready',
+				sessionId: 7,
+				requestId: 12,
+				progress: {
+					kind: 'ready',
+					state: 'running',
+					reason: 'dispatch'
+				}
+			})
+		).toBe(false);
 	});
 });

@@ -45,6 +45,7 @@ export type BrowserLuaCompilerFactory = (
 
 export interface BrowserLuaExecutionOptions {
 	args?: string[];
+	onReady?: () => void;
 	stdin?: () => string | null;
 	stdout?: (chunk: string) => void;
 	stderr?: (chunk: string) => void;
@@ -250,6 +251,7 @@ if io then
   end
 end
 `);
+		options.onReady?.();
 		await lua.doString(artifact.source);
 		return {
 			exitCode: 0,

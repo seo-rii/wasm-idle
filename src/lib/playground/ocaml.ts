@@ -17,7 +17,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
-import { reportWorkerProgress } from '$lib/playground/workerProgress';
+import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
 	CancelledError,
@@ -756,6 +756,10 @@ class Ocaml implements Sandbox {
 						}
 						if (requestsInput && !hasExplicitStdin) {
 							this.waitingForInput = true;
+							if (!prepare) {
+								reportWorkerInputReady(_prog, 'OCaml runtime ready for input');
+								if (!ownsRun()) return;
+							}
 							this.flushPendingInput(buffer);
 							if (!ownsRun()) {
 								return;

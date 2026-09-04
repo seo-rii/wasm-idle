@@ -84,6 +84,16 @@ export interface BashWorkerStdinReadyMessage extends BashWorkerEnvelope {
 	readonly type: 'stdin-ready';
 }
 
+export interface BashWorkerExecutionReadyMessage extends BashWorkerEnvelope {
+	readonly type: 'execution-ready';
+	readonly progress: Readonly<{
+		kind: 'ready';
+		state: 'running';
+		reason: 'started';
+		label?: string;
+	}>;
+}
+
 export interface BashWorkerOutputMessage extends BashWorkerEnvelope {
 	readonly type: 'output';
 	readonly stream: 'stdout' | 'stderr';
@@ -105,6 +115,7 @@ export type BashWorkerToHostMessage =
 	| BashWorkerProgressMessage
 	| BashWorkerLoadedMessage
 	| BashWorkerStdinReadyMessage
+	| BashWorkerExecutionReadyMessage
 	| BashWorkerOutputMessage
 	| BashWorkerResultMessage
 	| BashWorkerErrorMessage;
@@ -250,6 +261,14 @@ export function isBashWorkerToHostMessage(value: unknown): value is BashWorkerTo
 		case 'loaded':
 		case 'stdin-ready':
 			return true;
+		case 'execution-ready':
+			return (
+				isRecord(value.progress) &&
+				value.progress.kind === 'ready' &&
+				value.progress.state === 'running' &&
+				value.progress.reason === 'started' &&
+				(value.progress.label === undefined || typeof value.progress.label === 'string')
+			);
 		case 'output':
 			return (
 				(value.stream === 'stdout' || value.stream === 'stderr') &&

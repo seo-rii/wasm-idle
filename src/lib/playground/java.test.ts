@@ -15,6 +15,14 @@ let suppressAutoLoadAck = false;
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
 let onWorkerConstruct: (() => void) | null = null;
 
+const emitAllJavaAssetProgress = (
+	handler: ((event: MessageEvent<any>) => void) | null | undefined
+) => {
+	for (const asset of TEAVM_RUNTIME_ASSET_NAMES) {
+		handler?.({ data: { assetProgress: { asset, loaded: 1, total: 1 } } } as MessageEvent<any>);
+	}
+};
+
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
 	onerror: ((event: ErrorEvent) => void) | null = null;
@@ -538,13 +546,7 @@ public class Main {
 		const assetBridge = sandbox.assetBridge!;
 		const dispose = vi.spyOn(assetBridge, 'dispose');
 
-		expect(() =>
-			staleHandler?.({
-				data: {
-					assetProgress: { asset: 'compiler.wasm', loaded: 1, total: 1 }
-				}
-			} as MessageEvent<any>)
-		).not.toThrow();
+		expect(() => emitAllJavaAssetProgress(staleHandler)).not.toThrow();
 		await expect(loading).rejects.toBe(callbackError);
 		expect(worker.terminate).toHaveBeenCalledOnce();
 		expect(dispose).toHaveBeenCalledOnce();
@@ -558,7 +560,7 @@ public class Main {
 				load: true
 			}
 		} as MessageEvent<any>);
-		expect(progress.set).toHaveBeenCalledTimes(2);
+		expect(progress.set).toHaveBeenCalledTimes(TEAVM_RUNTIME_ASSET_NAMES.length + 1);
 
 		suppressAutoLoadAck = false;
 		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
@@ -592,13 +594,7 @@ public class Main {
 		const staleHandler = workerInstances[0].onmessage;
 		callbackArmed = true;
 
-		expect(() =>
-			staleHandler?.({
-				data: {
-					assetProgress: { asset: 'compiler.wasm', loaded: 1, total: 1 }
-				}
-			} as MessageEvent<any>)
-		).not.toThrow();
+		expect(() => emitAllJavaAssetProgress(staleHandler)).not.toThrow();
 		await expect(loading).rejects.toBe(terminationReason);
 		await expect(replacement).resolves.toBeUndefined();
 		expect(sandbox.worker).toBe(workerInstances[1]);
@@ -1439,17 +1435,19 @@ public class Main {
 			const staleHandler = worker.onmessage;
 			sandbox.write('discard after explicit stdin\n');
 			progressArmed = true;
-			const message =
-				callbackKind === 'asset-progress'
-					? {
-							assetProgress: { asset: 'compiler.wasm', loaded: 1, total: 1 }
-						}
-					: {
-							output: 'callback output\n',
-							diagnostic: { message: 'callback diagnostic' },
-							results: true
-						};
-			expect(() => staleHandler?.({ data: message } as MessageEvent<any>)).not.toThrow();
+			expect(() => {
+				if (callbackKind === 'asset-progress') {
+					emitAllJavaAssetProgress(staleHandler);
+					return;
+				}
+				staleHandler?.({
+					data: {
+						output: 'callback output\n',
+						diagnostic: { message: 'callback diagnostic' },
+						results: true
+					}
+				} as MessageEvent<any>);
+			}).not.toThrow();
 
 			await expect(running).rejects.toBe(callbackError);
 			expect(worker.terminate).toHaveBeenCalledOnce();

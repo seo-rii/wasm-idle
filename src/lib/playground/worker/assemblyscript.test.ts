@@ -32,9 +32,8 @@ describe('AssemblyScript worker', () => {
 
 	it('compiles AssemblyScript source and prints zero-argument exports', async () => {
 		await loadWorker();
-		await (globalThis as any).self.onmessage({
-			data: {
-				code: `const bonus: i32 = 3;
+		const request = {
+			code: `const bonus: i32 = 3;
 
 function factorial(n: i32): i32 {
   return n <= 1 ? 1 : n * factorial(n - 1);
@@ -43,12 +42,41 @@ function factorial(n: i32): i32 {
 export function factorial_plus_bonus(): i32 {
   return factorial(4) + bonus;
 }`,
-				prepare: false,
-				activePath: 'main.as.ts',
-				workspaceFiles: []
+			activePath: 'main.as.ts',
+			workspaceFiles: []
+		};
+		await (globalThis as any).self.onmessage({
+			data: { ...request, prepare: true }
+		});
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
+			progress: expect.objectContaining({ kind: 'ready' })
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				...request,
+				prepare: false
 			}
 		});
 
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		const readyMessage = {
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: 'AssemblyScript program started'
+			}
+		};
+		expect(messages.filter((message: any) => message.progress?.kind === 'ready')).toEqual([
+			readyMessage
+		]);
+		const readyIndex = messages.findIndex((message: any) => message.progress?.kind === 'ready');
+		expect(readyIndex).toBeGreaterThanOrEqual(0);
+		expect(readyIndex).toBeLessThan(
+			messages.findIndex((message: any) => message.output === 'factorial_plus_bonus=27\n')
+		);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			output: 'factorial_plus_bonus=27\n'

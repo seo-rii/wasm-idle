@@ -22,7 +22,11 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
-import { reportWorkerProgress, type ProgressSink } from '$lib/playground/workerProgress';
+import {
+	reportWorkerInputReady,
+	reportWorkerProgress,
+	type ProgressSink
+} from '$lib/playground/workerProgress';
 
 const debugBreakpointBufferInts = 1028;
 
@@ -228,6 +232,9 @@ class Clang implements Sandbox {
 				} = event.data;
 				if (buffer) {
 					this.waitingForInput = true;
+					if (!prepare) {
+						reportWorkerInputReady(prog, `${this.language} runtime ready for input`);
+					}
 					this.flushPendingInput();
 				}
 				if (output) this.output(output);

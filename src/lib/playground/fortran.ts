@@ -22,6 +22,7 @@ import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { reportWorkerInputReady } from '$lib/playground/workerProgress';
 import {
 	flushBufferedEof,
 	flushQueuedStdin,
@@ -561,6 +562,10 @@ class Fortran implements Sandbox {
 						} = event.data;
 						if (buffer && !hasExplicitStdin) {
 							this.waitingForInput = true;
+							if (!prepare) {
+								reportWorkerInputReady(prog, 'Fortran runtime ready for input');
+								if (!ownsRun()) return;
+							}
 							this.flushPendingInput();
 							if (!ownsRun()) return;
 						}

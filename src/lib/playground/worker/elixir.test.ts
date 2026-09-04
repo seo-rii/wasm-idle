@@ -817,6 +817,15 @@ main() ->
 			'main',
 			JSON.stringify(['eval_erlang', 'main:main().'])
 		);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				progress: expect.objectContaining({
+					kind: 'ready',
+					state: 'running',
+					reason: 'started'
+				})
+			})
+		);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'module=ok\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: 'ok' });
 	});

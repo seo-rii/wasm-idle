@@ -19,9 +19,14 @@ describe('wasm-wat compiler runtime', () => {
 		expect(result.diagnostics).toEqual([]);
 		expect(result.artifact?.wasm.byteLength).toBeGreaterThan(0);
 
-		const execution = await executeBrowserWatArtifact(result.artifact!);
+		const lifecycle: string[] = [];
+		const execution = await executeBrowserWatArtifact(result.artifact!, {
+			onReady: () => lifecycle.push('ready'),
+			stdout: () => lifecycle.push('stdout')
+		});
 		expect(execution.exitCode).toBe(0);
 		expect(execution.stdout).toBe('answer=45\n');
+		expect(lifecycle).toEqual(['ready', 'stdout']);
 	});
 
 	it('reports WABT parse diagnostics with source locations', async () => {

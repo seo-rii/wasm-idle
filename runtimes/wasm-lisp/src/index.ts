@@ -72,6 +72,7 @@ export interface BrowserLispCompilerOptions {
 export interface BrowserLispExecutionOptions {
 	args?: string[];
 	env?: Record<string, string>;
+	onReady?: () => void;
 	stdin?: () => string | Uint8Array | ArrayBuffer | null;
 	stdout?: (chunk: string) => void;
 	stderr?: (chunk: string) => void;
@@ -616,12 +617,14 @@ function findRunExport(instance: Record<string, any>) {
 async function runComponentModule(
 	module: ComponentModule,
 	getCoreModule: (name: string) => Promise<WebAssembly.Module>,
-	imports: Record<string, unknown>
+	imports: Record<string, unknown>,
+	onReady?: () => void
 ) {
 	const instance = await module.instantiate(getCoreModule, imports);
 	const runExport = findRunExport(instance);
 	let exitCode = 0;
 	try {
+		onReady?.();
 		await runExport.run();
 	} catch (errorValue) {
 		if (!isExitError(errorValue)) throw errorValue;
@@ -633,7 +636,8 @@ async function runComponentModule(
 async function instantiateGeneratedComponent(
 	componentBytes: Uint8Array,
 	name: string,
-	imports: Record<string, unknown>
+	imports: Record<string, unknown>,
+	onReady?: () => void
 ) {
 	const generated = await generate(componentBytes, {
 		name,
@@ -665,7 +669,8 @@ async function instantiateGeneratedComponent(
 				}
 				return WebAssembly.compile(new Uint8Array(moduleBytes));
 			},
-			imports
+			imports,
+			onReady
 		);
 	} finally {
 		entryUrl.revoke();
@@ -848,7 +853,8 @@ export async function executeBrowserLispArtifact(
 		exitCode = await instantiateGeneratedComponent(
 			artifact.component,
 			'wasm_lisp_program',
-			wasi.imports
+			wasi.imports,
+			options.onReady
 		);
 	} catch (errorValue) {
 		const output = wasi.finish();

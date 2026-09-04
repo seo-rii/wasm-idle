@@ -12,6 +12,7 @@ let runtimePromise: Promise<{
 	executeBrowserWatArtifact: (
 		artifact: any,
 		options?: {
+			onReady?: () => void;
 			stdout?: (chunk: string) => void;
 			stderr?: (chunk: string) => void;
 			files?: SandboxWorkspaceFile[];
@@ -202,6 +203,15 @@ self.onmessage = async (event: { data: any }) => {
 		const execution = await runtime.executeBrowserWatArtifact(compiledArtifact, {
 			files: workspaceFiles,
 			activePath,
+			onReady: () =>
+				postMessage({
+					progress: {
+						kind: 'ready',
+						state: 'running',
+						reason: 'started',
+						label: 'WAT program started'
+					}
+				}),
 			imports: {
 				env: {
 					readByte() {

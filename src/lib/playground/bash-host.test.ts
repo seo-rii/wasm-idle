@@ -259,6 +259,60 @@ describe('Bash disposable worker host', () => {
 		expect(worker.terminate).not.toHaveBeenCalled();
 	});
 
+	it('forwards only current-run execution readiness and keeps stdin readiness as fallback', async () => {
+		const sandbox = new Bash();
+		const worker = await loadSandbox(sandbox);
+		const progress = { set: vi.fn(), report: vi.fn() };
+
+		const running = sandbox.run('printf current', false, true, progress);
+		const request = await waitForPosted(worker, 'run');
+		expect(progress.report).not.toHaveBeenCalled();
+		worker.emitFor(
+			{ ...request, requestId: request.requestId - 1 },
+			{
+				type: 'execution-ready',
+				progress: { kind: 'ready', state: 'running', reason: 'started' }
+			}
+		);
+		expect(progress.report).not.toHaveBeenCalled();
+
+		const executionReady = {
+			type: 'execution-ready',
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: 'Bash process started'
+			}
+		};
+		worker.emitFor(request, executionReady);
+		worker.emitFor(request, executionReady);
+		expect(progress.report).toHaveBeenCalledOnce();
+		expect(progress.report).toHaveBeenCalledWith({
+			kind: 'ready',
+			state: 'running',
+			reason: 'started',
+			label: 'Bash process started'
+		});
+		expect(progress.set).not.toHaveBeenCalled();
+		worker.emitFor(request, { type: 'result', result: true });
+		await expect(running).resolves.toBe(true);
+
+		worker.messages.length = 0;
+		const fallbackProgress = { report: vi.fn() };
+		const fallbackRun = sandbox.run('read value', false, true, fallbackProgress);
+		const fallbackRequest = await waitForPosted(worker, 'run');
+		worker.emitFor(fallbackRequest, { type: 'stdin-ready' });
+		expect(fallbackProgress.report).toHaveBeenCalledWith({
+			kind: 'ready',
+			state: 'waiting-input',
+			reason: 'stdin-request',
+			label: 'Bash process is ready for input'
+		});
+		worker.emitFor(fallbackRequest, { type: 'result', result: true });
+		await expect(fallbackRun).resolves.toBe(true);
+	});
+
 	it('terminates an aborted run immediately and lazily rehydrates for a clean retry', async () => {
 		const sandbox = new Bash();
 		const firstWorker = await loadSandbox(sandbox);

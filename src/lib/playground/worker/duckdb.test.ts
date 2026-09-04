@@ -110,6 +110,17 @@ describe('DuckDB worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				code: "SELECT 'factorial_plus_bonus' AS label, 27 AS value;",
+				prepare: true,
+				activePath: 'main.duckdb',
+				workspaceFiles: []
+			}
+		});
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
+			progress: expect.objectContaining({ kind: 'ready' })
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: "SELECT 'factorial_plus_bonus' AS label, 27 AS value;",
 				prepare: false,
 				activePath: 'main.duckdb',
 				stdin: '5\n',
@@ -156,12 +167,57 @@ describe('DuckDB worker', () => {
 			2,
 			"SELECT 'factorial_plus_bonus' AS label, 27 AS value;"
 		);
+		const readyCallIndex = (globalThis as any).postMessage.mock.calls.findIndex(
+			([message]: [any]) => message.progress?.kind === 'ready'
+		);
+		expect((globalThis as any).postMessage.mock.calls[readyCallIndex]?.[0]).toEqual({
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: 'DuckDB query started'
+			}
+		});
+		expect(readyCallIndex).toBeGreaterThanOrEqual(0);
+		expect(duckdbMock.db.connect.mock.invocationCallOrder[0]).toBeLessThan(
+			(globalThis as any).postMessage.mock.invocationCallOrder[readyCallIndex]
+		);
+		expect(duckdbMock.query.mock.invocationCallOrder[0]).toBeLessThan(
+			(globalThis as any).postMessage.mock.invocationCallOrder[readyCallIndex]
+		);
+		expect(
+			(globalThis as any).postMessage.mock.invocationCallOrder[readyCallIndex]
+		).toBeLessThan(duckdbMock.query.mock.invocationCallOrder[1]);
 		expect(duckdbMock.close).toHaveBeenCalledTimes(1);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			output: 'label\tvalue\nfactorial_plus_bonus\t27\n'
 		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
+	it('does not report ready when a workspace setup query fails', async () => {
+		duckdbMock.query.mockRejectedValueOnce(new Error('bad duckdb setup'));
+
+		await loadWorker();
+		await (globalThis as any).self.onmessage({
+			data: {
+				code: 'SELECT * FROM numbers;',
+				prepare: false,
+				activePath: 'main.duckdb',
+				workspaceFiles: [
+					{ path: 'setup.sql', content: 'BROKEN SETUP;' },
+					{ path: 'main.duckdb', content: 'SELECT 0;' }
+				]
+			}
+		});
+
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
+			progress: expect.objectContaining({ kind: 'ready' })
+		});
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ error: 'bad duckdb setup' });
+		expect(duckdbMock.query).toHaveBeenCalledOnce();
+		expect(duckdbMock.close).toHaveBeenCalledOnce();
 	});
 
 	it('reports DuckDB execution failures as worker errors', async () => {

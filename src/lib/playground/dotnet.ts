@@ -2,7 +2,7 @@ import { resolveDotnetModuleUrl, type PlaygroundRuntimeAssets } from '$lib/playg
 import { type CompilerDiagnostic, type SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { WorkerSession } from '$lib/playground/workerSession';
-import { reportWorkerProgress } from '$lib/playground/workerProgress';
+import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 import {
 	BusyError,
 	CancelledError,
@@ -635,7 +635,8 @@ class Dotnet implements Sandbox {
 		code: string,
 		prepare: boolean,
 		explicitStdin: string | undefined,
-		runUid: number
+		runUid: number,
+		progress?: SandboxProgress
 	) {
 		const hasExplicitStdin = !prepare && explicitStdin !== undefined;
 		if (runUid !== this.uid) return '';
@@ -646,6 +647,8 @@ class Dotnet implements Sandbox {
 			!this.pendingEof &&
 			readsConsoleStdin(code)
 		) {
+			reportWorkerInputReady(progress, `${this.languageLabel} runtime ready for input`);
+			if (runUid !== this.uid) return '';
 			await new Promise<void>((resolve) => this.stdinWaiters.push(resolve));
 		}
 		if (runUid !== this.uid) return '';
@@ -1154,7 +1157,7 @@ class Dotnet implements Sandbox {
 				worker.onmessage = handler;
 				if (!ownsRun()) return;
 				this.begin = Date.now();
-				this.collectStdinForRun(code, prepare, request.stdin, _uid)
+				this.collectStdinForRun(code, prepare, request.stdin, _uid, _prog)
 					.then((stdin) => {
 						if (!ownsRun()) return;
 						worker.postMessage({
@@ -1299,7 +1302,7 @@ class Dotnet implements Sandbox {
 			}
 			if (prepare) return true;
 
-			const stdin = await this.collectStdinForRun(code, prepare, request.stdin, _uid);
+			const stdin = await this.collectStdinForRun(code, prepare, request.stdin, _uid, _prog);
 			if (!this.isOperationActive(operation) || _uid !== this.uid) return false;
 			const execution = await Reflect.apply(backend.execute, backend.runtimeModule, [
 				compiledArtifact,

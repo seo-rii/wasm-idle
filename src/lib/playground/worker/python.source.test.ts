@@ -37,6 +37,26 @@ describe('Python worker source', () => {
 		);
 	});
 
+	it('invokes the execution-ready bridge through isolated Python globals and removes it', () => {
+		const importedBridge =
+			'from js import ${executionReadyName} as __wasm_idle_execution_ready';
+		const injectedBridge = '${JSON.stringify(executionReadyName)}: __wasm_idle_execution_ready';
+		const invokedBridge = '__wasm_idle_globals.pop(${JSON.stringify(executionReadyName)})()';
+		const userEval = '__wasm_idle_result = eval(';
+
+		expect(source).toContain(importedBridge);
+		expect(source).toContain(injectedBridge);
+		expect(source).toContain(invokedBridge);
+		expect(source).toContain('del __wasm_idle_execution_ready');
+		expect(source).not.toContain('    ${executionReadyName}()');
+		expect(source.indexOf(importedBridge)).toBeLessThan(source.indexOf(injectedBridge));
+		expect(source.indexOf(injectedBridge)).toBeLessThan(source.indexOf(invokedBridge));
+		expect(source.indexOf(invokedBridge)).toBeLessThan(source.indexOf(userEval));
+		expect(source).toMatch(
+			/self\[executionReadyName\] = \(\) => \{[\s\S]*?if \(executionReadyReported\) return;[\s\S]*?delete self\[executionReadyName\];[\s\S]*?\};/
+		);
+	});
+
 	it('refreshes breakpoints from shared state while the debugger is running', () => {
 		expect(source).toContain(
 			'const debugReadBreakpointsName = `__wasm_idle_python_debug_breakpoints_${ts}`;'

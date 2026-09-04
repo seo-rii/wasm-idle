@@ -653,6 +653,14 @@ class Octave implements Sandbox {
 						try {
 							const { output, results, error, buffer, progress } = event.data;
 							if (buffer) {
+								if (!prepare) {
+									_prog?.report?.({
+										kind: 'ready',
+										state: 'waiting-input',
+										reason: 'stdin-request',
+										label: 'Octave program is waiting for input'
+									});
+								}
 								this.waitingForInput = true;
 								this.flushPendingInput();
 								if (!ownsRun()) return;

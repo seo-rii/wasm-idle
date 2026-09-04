@@ -3,7 +3,7 @@ import {
 	createTypeScriptCompiler,
 	executeBrowserTypeScriptArtifact
 } from '../src/index.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 describe('wasm-typescript runner contract', () => {
 	it('exports a compiler factory', async () => {
@@ -25,11 +25,31 @@ describe('wasm-typescript runner contract', () => {
 		expect(result.artifact).toBeDefined();
 
 		const chunks = ['35\n'];
+		const lifecycle: string[] = [];
 		const execution = await executeBrowserTypeScriptArtifact(result.artifact!, {
-			stdin: () => chunks.shift() ?? null
+			stdin: () => chunks.shift() ?? null,
+			onReady: () => lifecycle.push('ready'),
+			stdout: () => lifecycle.push('stdout')
 		});
 		expect(execution.exitCode).toBe(0);
 		expect(execution.stdout).toBe('42\n');
+		expect(lifecycle).toEqual(['ready', 'stdout']);
+	});
+
+	it('does not report readiness when the generated JavaScript cannot be parsed', async () => {
+		const onReady = vi.fn();
+		const execution = await executeBrowserTypeScriptArtifact(
+			{
+				javascript: 'if {',
+				source: 'if {',
+				language: 'javascript',
+				fileName: 'broken.js'
+			},
+			{ onReady }
+		);
+
+		expect(execution.exitCode).toBe(1);
+		expect(onReady).not.toHaveBeenCalled();
 	});
 
 	it('reads one stdin line without waiting for EOF', async () => {

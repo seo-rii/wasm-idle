@@ -23,6 +23,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
+import { reportWorkerProgress } from '$lib/playground/workerProgress';
 import { WASM_ELIXIR_ASSET_RECEIPTS } from '$lib/playground/wasmElixirVersion';
 
 type BeamEvalLanguage = 'ELIXIR' | 'ERLANG';
@@ -539,16 +540,26 @@ class Elixir implements Sandbox {
 					return;
 				}
 				try {
-					const { output, error, buffer } = event.data;
+					const { output, error, buffer, progress } = event.data;
 					const hasResults = Object.prototype.hasOwnProperty.call(
 						event.data || {},
 						'results'
 					);
 					const results = hasResults ? event.data.results : undefined;
 					if (buffer && !hasExplicitStdin) {
+						if (!prepare) {
+							_prog?.report?.({
+								kind: 'ready',
+								state: 'waiting-input',
+								reason: 'stdin-request',
+								label: `${runtimeLabel} program is waiting for input`
+							});
+						}
 						this.waitingForInput = true;
 						this.flushPendingInput();
 					}
+					reportWorkerProgress(_prog, progress);
+					if (!acceptsMessage()) return;
 					const emissions: unknown[] = [];
 					if (output) emissions.push(output);
 					if (!prepare && typeof results === 'string' && results) {

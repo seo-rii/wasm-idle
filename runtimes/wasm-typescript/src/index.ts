@@ -50,6 +50,7 @@ export interface BrowserTypeScriptVirtualFile {
 export interface BrowserTypeScriptExecutionOptions {
 	args?: string[];
 	env?: Record<string, string>;
+	onReady?: () => void;
 	stdin?: () => string | null;
 	stdout?: (chunk: string) => void;
 	stderr?: (chunk: string) => void;
@@ -609,6 +610,7 @@ export async function executeBrowserTypeScriptArtifact(
 			'__dirname',
 			`${artifact.javascript}\n//# sourceURL=${artifact.fileName}`
 		);
+		options.onReady?.();
 		await execute(
 			require,
 			module,

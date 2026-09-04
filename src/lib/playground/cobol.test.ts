@@ -931,26 +931,36 @@ describe('COBOL sandbox workspace boundary', () => {
 
 	it('keeps the asset bridge reachable after load and run settlement', async () => {
 		const sandbox = new Cobol();
-		const progress = { set: vi.fn() };
+		const progress = { report: vi.fn() };
 		await sandbox.load('/assets', '', true, [], {}, progress);
 		const worker = workerInstances[0];
-		progress.set.mockClear();
+		progress.report.mockClear();
 
 		worker.onmessage?.({
 			data: {
 				assetProgress: { asset: 'bin/clang.wasm.gz', loaded: 1, total: 2 }
 			}
 		} as MessageEvent<any>);
-		expect(progress.set).toHaveBeenCalledWith(0.1);
+		expect(progress.report).toHaveBeenCalledWith({
+			kind: 'activity',
+			phase: 'downloading',
+			phaseId: 'clang:runtime-assets',
+			label: 'Downloading runtime assets'
+		});
 
 		await sandbox.run('IDENTIFICATION DIVISION.', false);
-		progress.set.mockClear();
+		progress.report.mockClear();
 		worker.onmessage?.({
 			data: {
 				assetProgress: { asset: 'bin/clang.wasm.gz', loaded: 2, total: 2 }
 			}
 		} as MessageEvent<any>);
-		expect(progress.set).toHaveBeenCalledWith(0.2);
+		expect(progress.report).toHaveBeenCalledWith({
+			kind: 'activity',
+			phase: 'downloading',
+			phaseId: 'clang:runtime-assets',
+			label: 'Downloading runtime assets'
+		});
 	});
 
 	it('cleans up an unattached worker when load progress throws', async () => {

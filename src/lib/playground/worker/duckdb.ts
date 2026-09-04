@@ -148,6 +148,14 @@ self.onmessage = async (event: { data: any }) => {
 			for (const setup of setupSql) {
 				await connection.query(setup.content);
 			}
+			postMessage({
+				progress: {
+					kind: 'ready',
+					state: 'running',
+					reason: 'started',
+					label: 'DuckDB query started'
+				}
+			});
 			const table = await connection.query(code);
 			const output = formatTable(table);
 			if (output) postMessage({ output });

@@ -196,6 +196,14 @@ self.onmessage = async (event: { data: any }) => {
 				`[wasm-idle:r-worker] eval start bytes=${code.length} activePath=${activePath}`
 			);
 		}
+		postMessage({
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: 'R program started'
+			}
+		});
 		const captured = await webR.globalShelter.captureR(buildRunnerSource(activePath, args), {
 			captureStreams: true,
 			captureConditions: true,

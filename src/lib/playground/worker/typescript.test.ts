@@ -102,6 +102,7 @@ describe('TypeScript worker', () => {
 
 			export async function executeBrowserTypeScriptArtifact(artifact, options = {}) {
 				globalThis.__lastExecution = { artifact, options };
+				options.onReady?.();
 				options.stdout?.('hi\\n');
 				return {
 					exitCode: 0,
@@ -125,19 +126,46 @@ describe('TypeScript worker', () => {
 		});
 		await Promise.resolve();
 
+		const request = {
+			code: 'const value: number = 1;',
+			buffer: new SharedArrayBuffer(1024),
+			args: ['one'],
+			language: 'typescript',
+			activePath: 'main.ts',
+			log: true
+		};
+		await (globalThis as any).self.onmessage({
+			data: { ...request, prepare: true }
+		});
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({
+			progress: expect.objectContaining({ kind: 'ready' })
+		});
 		await (globalThis as any).self.onmessage({
 			data: {
-				code: 'const value: number = 1;',
-				prepare: false,
-				buffer: new SharedArrayBuffer(1024),
-				args: ['one'],
-				language: 'typescript',
-				activePath: 'main.ts',
-				log: true
+				...request,
+				prepare: false
 			}
 		});
 		await Promise.resolve();
 
+		const messages = (globalThis as any).postMessage.mock.calls.map(
+			([message]: [any]) => message
+		);
+		const readyIndex = messages.findIndex((message: any) => message.progress?.kind === 'ready');
+		expect(messages.filter((message: any) => message.progress?.kind === 'ready')).toEqual([
+			{
+				progress: {
+					kind: 'ready',
+					state: 'running',
+					reason: 'started',
+					label: 'TypeScript program started'
+				}
+			}
+		]);
+		expect(readyIndex).toBeGreaterThanOrEqual(0);
+		expect(readyIndex).toBeLessThan(
+			messages.findIndex((message: any) => message.output === 'hi\n')
+		);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			diagnostic: {
@@ -179,6 +207,7 @@ describe('TypeScript worker', () => {
 			}
 
 			export async function executeBrowserTypeScriptArtifact(_artifact, options = {}) {
+				options.onReady?.();
 				const first = options.stdin?.();
 				const second = options.stdin?.();
 				globalThis.__lastStdin = [first, second];
@@ -217,6 +246,14 @@ describe('TypeScript worker', () => {
 		await Promise.resolve();
 
 		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({ buffer: true });
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: 'JavaScript program started'
+			}
+		});
 		expect((globalThis as any).__lastStdin).toEqual(['injected\n', null]);
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'injected\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });

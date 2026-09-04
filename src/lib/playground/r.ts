@@ -518,6 +518,14 @@ class R implements Sandbox {
 				try {
 					const { output, results, error, buffer, diagnostic, progress } = event.data;
 					if (buffer && !hasExplicitStdin) {
+						if (!prepare) {
+							_prog?.report?.({
+								kind: 'ready',
+								state: 'waiting-input',
+								reason: 'stdin-request',
+								label: 'R program is waiting for input'
+							});
+						}
 						this.waitingForInput = true;
 						this.flushPendingInput();
 						if (!ownsRun()) return;
