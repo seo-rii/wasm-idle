@@ -3,7 +3,8 @@ import {
 	type JRuntimePreflightProfile,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
-import { preflightJRuntimeAssets } from '$lib/playground/jPreflight';
+import type { JRuntimePreflightPayload } from '$lib/playground/jPreflight';
+import { preflightStaticRuntimeAssetsInWorker } from '$lib/playground/staticRuntimePreflight';
 import { StaticWorkerRuntimeSandbox } from '$lib/playground/staticWorkerRuntime';
 import { RuntimeConfigurationError } from '@wasm-idle/core';
 
@@ -15,6 +16,7 @@ class J extends StaticWorkerRuntimeSandbox {
 			defaultActivePath: 'main.ijs',
 			moduleWorker: true,
 			inlineVerifiedWorker: true,
+			runtimePreflightDelivery: 'transfer-owned',
 			stdin: {
 				mode: 'streaming',
 				sourceHintPattern: /1!:\s*1|\/dev\/stdin|\bstdin\b/iu
@@ -41,33 +43,42 @@ class J extends StaticWorkerRuntimeSandbox {
 					(profile.manifestReceipt?.bytes ?? 0) +
 					(profile.moduleReceipt?.bytes ?? 0) +
 					(profile.wasmReceipt?.bytes ?? 0);
-				return await preflightJRuntimeAssets({
-					baseUrl: urls.baseUrl,
-					manifestUrl: urls.manifestUrl || '',
-					profile,
-					limits: context.limits,
-					signal: context.signal,
-					reportProgress(progress) {
-						loadedByAsset.set(progress.assetKey, progress.loadedBytes);
-						const loadedBytes = [...loadedByAsset.values()].reduce(
-							(total, loaded) => total + loaded,
-							0
-						);
-						const fraction =
-							totalDownloadBytes > 0 ? loadedBytes / totalDownloadBytes : 0;
-						context.reportProgress(
-							0.04 + Math.min(1, fraction) * 0.11,
-							`Preflighting J asset ${progress.assetKey}`
-						);
-					},
-					reportDecompressionProgress(loadedBytes, totalBytes) {
-						const fraction = totalBytes > 0 ? loadedBytes / totalBytes : 0;
-						context.reportProgress(
-							0.15 + Math.min(1, fraction) * 0.02,
-							'Decompressing verified J Wasm'
-						);
-					}
-				});
+				const payload =
+					await preflightStaticRuntimeAssetsInWorker<JRuntimePreflightPayload>({
+						runtimeId: 'J',
+						displayName: 'J',
+						baseUrl: urls.baseUrl,
+						manifestUrl: urls.manifestUrl || '',
+						profile,
+						limits: context.limits,
+						signal: context.signal,
+						reportProgress(progress) {
+							if (progress.kind === 'asset') {
+								loadedByAsset.set(
+									progress.progress.assetKey,
+									progress.progress.loadedBytes
+								);
+								const loadedBytes = [...loadedByAsset.values()].reduce(
+									(total, loaded) => total + loaded,
+									0
+								);
+								const fraction =
+									totalDownloadBytes > 0 ? loadedBytes / totalDownloadBytes : 0;
+								context.reportProgress(
+									0.04 + Math.min(1, fraction) * 0.11,
+									`Preflighting J asset ${progress.progress.assetKey}`
+								);
+								return;
+							}
+							const { loadedBytes, totalBytes } = progress;
+							const fraction = totalBytes > 0 ? loadedBytes / totalBytes : 0;
+							context.reportProgress(
+								0.15 + Math.min(1, fraction) * 0.02,
+								'Decompressing verified J Wasm'
+							);
+						}
+					});
+				return context.createOwnedDelivery(payload);
 			}
 		});
 	}

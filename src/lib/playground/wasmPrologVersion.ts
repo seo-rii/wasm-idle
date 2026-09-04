@@ -26,6 +26,6 @@ export const WASM_PROLOG_RUNTIME_PROFILE = {
 } as const;
 export const WASM_PROLOG_ASSET_VERSION = WASM_PROLOG_RUNTIME_PROFILE.manifestFingerprint;
 export const WASM_PROLOG_RUNNER_RECEIPT = {
-	bytes: 22614,
-	sha256: '3910176192b3ae2c8883d103c1013df720f9e52d7254f7aac987a57e97a58131'
+	bytes: 25068,
+	sha256: '96c7efd29a360a44edfc1acc02497d12e1c477eced79b5ec086950c2ae6e70ef'
 } as const;

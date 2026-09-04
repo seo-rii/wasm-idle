@@ -3,7 +3,8 @@ import {
 	type ForthRuntimePreflightProfile,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
-import { preflightForthRuntimeAssets } from '$lib/playground/forthPreflight';
+import type { ForthRuntimePreflightPayload } from '$lib/playground/forthPreflight';
+import { preflightStaticRuntimeAssetsInWorker } from '$lib/playground/staticRuntimePreflight';
 import { StaticWorkerRuntimeSandbox } from '$lib/playground/staticWorkerRuntime';
 import { RuntimeConfigurationError } from '@wasm-idle/core';
 
@@ -18,6 +19,7 @@ class Forth extends StaticWorkerRuntimeSandbox {
 				sourceHintPattern: /\b(?:KEY|ACCEPT|REFILL)\b/i
 			},
 			inlineVerifiedWorker: true,
+			runtimePreflightDelivery: 'transfer-owned',
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {
 				const resolved = resolveForthRuntimeAssetConfig(runtimeAssets, currentUrl);
 				const profile = resolved.preflightProfile;
@@ -38,25 +40,33 @@ class Forth extends StaticWorkerRuntimeSandbox {
 				const loadedByAsset = new Map<string, number>();
 				const totalBytes =
 					(profile.manifestReceipt?.bytes ?? 0) + (profile.runtimeReceipt?.bytes ?? 0);
-				return await preflightForthRuntimeAssets({
-					baseUrl: urls.baseUrl,
-					manifestUrl: urls.manifestUrl || '',
-					profile,
-					limits: context.limits,
-					signal: context.signal,
-					reportProgress(progress) {
-						loadedByAsset.set(progress.assetKey, progress.loadedBytes);
-						const loadedBytes = [...loadedByAsset.values()].reduce(
-							(total, loaded) => total + loaded,
-							0
-						);
-						const fraction = totalBytes > 0 ? loadedBytes / totalBytes : 0;
-						context.reportProgress(
-							0.04 + Math.min(1, fraction) * 0.13,
-							`Preflighting Forth asset ${progress.assetKey}`
-						);
-					}
-				});
+				const payload =
+					await preflightStaticRuntimeAssetsInWorker<ForthRuntimePreflightPayload>({
+						runtimeId: 'FORTH',
+						displayName: 'Forth',
+						baseUrl: urls.baseUrl,
+						manifestUrl: urls.manifestUrl || '',
+						profile,
+						limits: context.limits,
+						signal: context.signal,
+						reportProgress(progress) {
+							if (progress.kind !== 'asset') return;
+							loadedByAsset.set(
+								progress.progress.assetKey,
+								progress.progress.loadedBytes
+							);
+							const loadedBytes = [...loadedByAsset.values()].reduce(
+								(total, loaded) => total + loaded,
+								0
+							);
+							const fraction = totalBytes > 0 ? loadedBytes / totalBytes : 0;
+							context.reportProgress(
+								0.04 + Math.min(1, fraction) * 0.13,
+								`Preflighting Forth asset ${progress.progress.assetKey}`
+							);
+						}
+					});
+				return context.createOwnedDelivery(payload);
 			}
 		});
 	}
