@@ -793,33 +793,88 @@ afterAll(async () => {
 
 async function ensureSharedBrowserPage(page: Page, browserUrl: string) {
 	await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
-	for (let attempt = 0; attempt < 5; attempt += 1) {
-		let state;
+	let lastState:
+		| {
+				crossOriginIsolated: boolean;
+				serviceWorkerControlled: boolean;
+				sharedArrayBuffer: boolean;
+		  }
+		| undefined;
+	for (let attempt = 0; attempt < 80; attempt += 1) {
 		try {
-			state = await page.evaluate(() => ({
+			lastState = await page.evaluate(() => ({
 				crossOriginIsolated,
 				serviceWorkerControlled: !!navigator.serviceWorker?.controller,
 				sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined'
 			}));
 		} catch (error) {
 			if (!String(error).includes('Execution context was destroyed')) throw error;
-			await page.waitForLoadState('domcontentloaded');
+			await page.waitForLoadState('domcontentloaded').catch(() => {});
 			continue;
 		}
-		if (state.crossOriginIsolated && state.serviceWorkerControlled && state.sharedArrayBuffer) {
-			return state;
+		if (
+			lastState.crossOriginIsolated &&
+			lastState.serviceWorkerControlled &&
+			lastState.sharedArrayBuffer
+		) {
+			return lastState;
 		}
-		await page.evaluate(async () => {
-			if (!navigator.serviceWorker) return;
-			await Promise.race([
-				navigator.serviceWorker.ready,
-				new Promise((resolve) => setTimeout(resolve, 1_500))
-			]).catch(() => {});
-		});
-		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
-		await page.waitForTimeout(2_000 + attempt * 500);
+		await page.waitForTimeout(250);
 	}
-	throw new Error('Debug browser test requires a cross-origin-isolated service worker page.');
+	const navigationStates = await page
+		.evaluate(() =>
+			JSON.parse(sessionStorage.getItem('wasm-idle:test:isolation-navigations') || '[]')
+		)
+		.catch(() => []);
+	throw new Error(
+		`Debug browser test requires a cross-origin-isolated service worker page: ${JSON.stringify({
+			lastState,
+			navigationStates,
+			url: page.url()
+		})}`
+	);
+}
+
+async function verifyPagesIsolationBootstrap(page: Page, browserUrl: string) {
+	let initialDocumentHeadersStripped = false;
+	await page.addInitScript(() => {
+		const key = 'wasm-idle:test:isolation-navigations';
+		const previous = JSON.parse(sessionStorage.getItem(key) || '[]') as unknown[];
+		const navigation = performance.getEntriesByType(
+			'navigation'
+		)[0] as PerformanceNavigationTiming;
+		previous.push({
+			controller: !!navigator.serviceWorker?.controller,
+			crossOriginIsolated,
+			type: navigation?.type
+		});
+		sessionStorage.setItem(key, JSON.stringify(previous));
+	});
+	await page.route(
+		browserUrl,
+		async (route) => {
+			const response = await route.fetch();
+			const headers = response.headers();
+			delete headers['cross-origin-embedder-policy'];
+			delete headers['cross-origin-opener-policy'];
+			delete headers['cross-origin-resource-policy'];
+			initialDocumentHeadersStripped = true;
+			await route.fulfill({ response, headers });
+		},
+		{ times: 1 }
+	);
+
+	const state = await ensureSharedBrowserPage(page, browserUrl);
+	const navigationStates = await page.evaluate(() =>
+		JSON.parse(sessionStorage.getItem('wasm-idle:test:isolation-navigations') || '[]')
+	);
+	console.info(`[wasm-idle:coi-bootstrap] ${JSON.stringify(navigationStates)}`);
+	expect(initialDocumentHeadersStripped).toBe(true);
+	expect(navigationStates).toEqual([
+		{ controller: false, crossOriginIsolated: false, type: 'navigate' },
+		{ controller: true, crossOriginIsolated: true, type: 'reload' }
+	]);
+	return state;
 }
 
 async function readPausedLine(page: Page) {
@@ -900,6 +955,31 @@ describe('native-source browser debugging in Chromium', () => {
 					process.env.WASM_IDLE_CHROMIUM_EXECUTABLE || ''
 				)
 			});
+			const isolationContext = await browser.newContext();
+			try {
+				await isolationContext.addCookies([
+					{
+						name: 'dev_bypass_waf',
+						value: 'seorii_bypass_token_is_this',
+						url: new URL(previewServer.browserUrl).origin
+					}
+				]);
+				await isolationContext.setExtraHTTPHeaders({
+					Cookie: 'dev_bypass_waf=seorii_bypass_token_is_this'
+				});
+				const isolationBootstrapPage = await isolationContext.newPage();
+				const activeState = await verifyPagesIsolationBootstrap(
+					isolationBootstrapPage,
+					previewServer.browserUrl
+				);
+				expect(activeState).toEqual({
+					crossOriginIsolated: true,
+					serviceWorkerControlled: true,
+					sharedArrayBuffer: true
+				});
+			} finally {
+				await isolationContext.close();
+			}
 			const context = await browser.newContext();
 			await context.addCookies([
 				{
