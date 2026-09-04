@@ -95,6 +95,63 @@ afterEach(async () => {
 });
 
 describe('Terminal sandbox input generations', () => {
+	it.each(['stop', 'clear'] as const)(
+		'does not cache a prepare whose sandbox load resumes after %s',
+		async (boundary) => {
+			const loaded = deferred<void>();
+			const prepareCalls: boolean[] = [];
+			const sandbox = createSandbox(async (_code, prepare) => {
+				prepareCalls.push(prepare);
+				return true;
+			});
+			sandbox.load = vi.fn(() => loaded.promise);
+			const playground: PlaygroundBinding = {
+				runtimeAssets: {} as PlaygroundBinding['runtimeAssets'],
+				load: vi.fn(async () => sandbox)
+			};
+			const terminal = await mountTerminal(playground);
+
+			const preparing = terminal.prepare('C', 'source');
+			await vi.waitFor(() => expect(sandbox.load).toHaveBeenCalledOnce());
+			if (boundary === 'stop') await terminal.stop!();
+			else await terminal.clear();
+			loaded.resolve(undefined);
+			await preparing;
+			await terminal.run('C', 'source');
+
+			expect(prepareCalls).toEqual([true, true, false]);
+		}
+	);
+
+	it.each(['stop', 'clear'] as const)(
+		'does not restore a prepared execution after %s invalidates its pending prepare',
+		async (boundary) => {
+			const prepared = deferred<boolean | string>();
+			const prepareCalls: boolean[] = [];
+			const sandbox = createSandbox((_code, prepare) => {
+				prepareCalls.push(prepare);
+				return prepare && prepareCalls.length === 1
+					? prepared.promise
+					: Promise.resolve(true);
+			});
+			const playground: PlaygroundBinding = {
+				runtimeAssets: {} as PlaygroundBinding['runtimeAssets'],
+				load: vi.fn(async () => sandbox)
+			};
+			const terminal = await mountTerminal(playground);
+
+			const preparing = terminal.prepare('C', 'source');
+			await vi.waitFor(() => expect(sandbox.run).toHaveBeenCalledOnce());
+			if (boundary === 'stop') await terminal.stop!();
+			else await terminal.clear();
+			prepared.resolve(true);
+			await preparing;
+			await terminal.run('C', 'source');
+
+			expect(prepareCalls).toEqual([true, true, false]);
+		}
+	);
+
 	it.each(['stop', 'clear', 'replace'] as const)(
 		'discards prepare-time input before a sandbox is retired by %s',
 		async (boundary) => {

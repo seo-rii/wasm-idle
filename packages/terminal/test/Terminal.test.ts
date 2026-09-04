@@ -225,7 +225,7 @@ describe('Terminal source', () => {
 		);
 		expect(source).toMatch(/sandbox\.run\(code, true, log, prepareProgress, args, options\)/);
 		expect(source).toMatch(
-			/initSandbox\(language\)\.then\(\(\) => sandbox\.load\(code, log, args, options\)\)/
+			/initSandbox\(language\)\.then\(async \(wasReset\) => \{\s+await sandbox\.load\(code, log, args, options\);\s+return wasReset;\s+\}\)/s
 		);
 		expect(source).toMatch(
 			/sandbox\.run\(code, false, log, runProgress, args, executionOptions\)/

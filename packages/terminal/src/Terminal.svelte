@@ -78,6 +78,7 @@
 					sandbox: BoundSandbox;
 			  }
 			| undefined;
+	let preparedExecutionGeneration = 0;
 	const progressController = new RuntimeProgressController();
 	const terminalOutputReadinessLanguages = new Set([
 		'C',
@@ -95,8 +96,14 @@
 		'HASKELL'
 	]);
 
-	function invalidatePreparedExecution() {
+	function clearPreparedExecution() {
 		preparedExecution = undefined;
+	}
+
+	function invalidatePreparedExecution() {
+		preparedExecutionGeneration += 1;
+		clearPreparedExecution();
+		return preparedExecutionGeneration;
 	}
 
 	function executionPreparationKey(
@@ -163,7 +170,7 @@
 		let _tc = ++tc;
 		await wait();
 		sandboxAcceptingInput = false;
-		if (requiresSandboxReset) invalidatePreparedExecution();
+		if (requiresSandboxReset) clearPreparedExecution();
 		if (sandbox && requiresSandboxReset) {
 			discardPendingSandboxInput();
 			await sandbox.clear();
@@ -193,6 +200,7 @@
 		sandbox.oncompilerdiagnostic = oncompilediagnostic;
 		sandbox.output = (output: string) =>
 			_tc === tc && writeTerminalOutput(output.replaceAll('\n', '\r\n'), true);
+		return requiresSandboxReset;
 	}
 
 	function flushPendingSandboxInput() {
@@ -391,7 +399,7 @@
 			options: TerminalExecutionOptions = {}
 		) {
 			return await withProgressLifecycle(language, prog, async (runProgress) => {
-				invalidatePreparedExecution();
+				const preparationGeneration = invalidatePreparedExecution();
 				const prepareProgress = activityOnlyProgress(runProgress);
 				await Promise.all([
 					initSandbox(language).then(() =>
@@ -399,18 +407,24 @@
 					),
 					initTerm(false)
 				]);
+				const preparationSandbox = sandbox;
 				runProgress?.report?.({
 					kind: 'activity',
 					phase: 'starting',
 					label: `Preparing ${language} program`
 				});
 				const prepared = !!(await runSandbox(
-					sandbox.run(code, true, log, prepareProgress, args, options),
+					preparationSandbox.run(code, true, log, prepareProgress, args, options),
 					false
 				));
 				const preparationKey = executionPreparationKey(language, code, log, args, options);
-				if (prepared && preparationKey) {
-					preparedExecution = { key: preparationKey, sandbox };
+				if (
+					prepared &&
+					preparationKey &&
+					preparationGeneration === preparedExecutionGeneration &&
+					preparationSandbox === sandbox
+				) {
+					preparedExecution = { key: preparationKey, sandbox: preparationSandbox };
 				}
 				return prepared;
 			});
@@ -425,12 +439,17 @@
 		) {
 			return await withProgressLifecycle(language, prog, async (runProgress) => {
 				let executionRunWillFinalize = false;
+				const preparedCandidate = preparedExecution;
+				const executionGeneration = invalidatePreparedExecution();
 				pendingDebugBreakpoints.clear();
 				for (const { sourcePath, lines } of options.sourceBreakpoints || []) {
 					pendingDebugBreakpoints.set(sourcePath, [...lines]);
 				}
-				await Promise.all([
-					initSandbox(language).then(() => sandbox.load(code, log, args, options)),
+				const [sandboxWasReset] = await Promise.all([
+					initSandbox(language).then(async (wasReset) => {
+						await sandbox.load(code, log, args, options);
+						return wasReset;
+					}),
 					initTerm()
 				]);
 				const executionOptions = {
@@ -445,10 +464,11 @@
 				};
 				const preparationKey = executionPreparationKey(language, code, log, args, options);
 				const mayUsePreparedOutput =
+					executionGeneration === preparedExecutionGeneration &&
+					!sandboxWasReset &&
 					!!preparationKey &&
-					preparedExecution?.sandbox === sandbox &&
-					preparedExecution.key === preparationKey;
-				invalidatePreparedExecution();
+					preparedCandidate?.sandbox === sandbox &&
+					preparedCandidate.key === preparationKey;
 				try {
 					if (terminalOutputReadinessLanguages.has(language) && !mayUsePreparedOutput) {
 						const prepareProgress = activityOnlyProgress(runProgress);
