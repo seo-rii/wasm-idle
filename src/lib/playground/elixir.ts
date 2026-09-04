@@ -7,6 +7,7 @@ import { snapshotElixirRuntimeAssetReceipts } from '$lib/playground/elixirAssets
 import type { SandboxExecutionOptions } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
+	AssetTooLargeError,
 	BusyError,
 	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
@@ -237,6 +238,19 @@ class Elixir implements Sandbox {
 				const assetReceipts = snapshotElixirRuntimeAssetReceipts(
 					configuredReceipts || WASM_ELIXIR_ASSET_RECEIPTS
 				);
+				for (const [asset, receipt] of Object.entries(assetReceipts)) {
+					const actual = Math.max(receipt.bytes, receipt.uncompressedBytes);
+					if (actual > limits.maxAssetBytes) {
+						throw new AssetTooLargeError(
+							`${runtimeLabel} runtime asset ${asset} exceeds the ${limits.maxAssetBytes} byte limit`,
+							{
+								actual,
+								limit: limits.maxAssetBytes,
+								runtimeId: this.language
+							}
+						);
+					}
+				}
 				if (
 					this.activeLoadCleanup !== cleanup ||
 					activeUid !== this.uid ||
@@ -244,7 +258,11 @@ class Elixir implements Sandbox {
 				) {
 					return;
 				}
-				const nextBundleIdentity = JSON.stringify([nextBundleUrl, assetReceipts]);
+				const nextBundleIdentity = JSON.stringify([
+					nextBundleUrl,
+					assetReceipts,
+					limits.maxAssetBytes
+				]);
 				if (
 					this.activeLoadCleanup !== cleanup ||
 					activeUid !== this.uid ||
@@ -335,6 +353,7 @@ class Elixir implements Sandbox {
 						load: true,
 						bundleUrl: this.bundleUrl,
 						assetReceipts,
+						maxAssetBytes: limits.maxAssetBytes,
 						log
 					});
 				} else {

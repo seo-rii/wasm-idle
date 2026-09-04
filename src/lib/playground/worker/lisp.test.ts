@@ -121,7 +121,9 @@ describe('Lisp worker', () => {
 		expect(readyIndex).toBeLessThan(
 			messages.findIndex((message: any) => message.output === 'hi\n')
 		);
-		expect(mocks.loadVerifiedLispRuntimeAssets).toHaveBeenCalledWith(runtimeConfig);
+		expect(mocks.loadVerifiedLispRuntimeAssets).toHaveBeenCalledWith(runtimeConfig, {
+			maxAssetBytes: 128 * 1024 * 1024
+		});
 		expect((globalThis as any).__lastCompilerInjection).toEqual({
 			compilerModule: injection.compilerModule,
 			compilerCoreModules: injection.compilerCoreModules
@@ -147,6 +149,32 @@ describe('Lisp worker', () => {
 		});
 		expect((globalThis as any).__lastExecution.options.args).toEqual(['one']);
 		expect((globalThis as any).__lastExecution.options.env).toEqual({ USER: 'jungol' });
+	});
+
+	it('forwards a lower asset limit and reloads when only that limit changes', async () => {
+		configureRuntime({
+			async compile() {
+				throw new Error('not used');
+			},
+			async execute() {
+				throw new Error('not used');
+			}
+		});
+		await import('./lisp');
+
+		await (globalThis as any).self.onmessage({
+			data: { load: true, runtimeConfig, maxAssetBytes: 8 * 1024 * 1024 }
+		});
+		await (globalThis as any).self.onmessage({
+			data: { load: true, runtimeConfig, maxAssetBytes: 9 * 1024 * 1024 }
+		});
+
+		expect(mocks.loadVerifiedLispRuntimeAssets).toHaveBeenNthCalledWith(1, runtimeConfig, {
+			maxAssetBytes: 8 * 1024 * 1024
+		});
+		expect(mocks.loadVerifiedLispRuntimeAssets).toHaveBeenNthCalledWith(2, runtimeConfig, {
+			maxAssetBytes: 9 * 1024 * 1024
+		});
 	});
 
 	it('reads stdin from the shared buffer when the verified runtime requests input', async () => {

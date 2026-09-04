@@ -70,6 +70,32 @@ describe('COBOL sandbox workspace boundary', () => {
 		vi.useRealTimers();
 	});
 
+	it('forwards the caller asset ceiling to the COBOL worker', async () => {
+		const sandbox = new Cobol();
+		const maxAssetBytes = 256 * 1024 * 1024;
+
+		await sandbox.load(
+			{ clang: { baseUrl: 'https://cdn.example.test/clang/' } },
+			'',
+			true,
+			[],
+			{ limits: { maxAssetBytes } }
+		);
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				load: true,
+				clangAssets: {
+					baseUrl: 'https://cdn.example.test/clang/',
+					maxAssetBytes,
+					useAssetBridge: false
+				},
+				maxAssetBytes
+			})
+		);
+	});
+
 	it('canonicalizes the active path and workspace files before worker dispatch', async () => {
 		const sandbox = new Cobol();
 		const code = '       IDENTIFICATION DIVISION.';

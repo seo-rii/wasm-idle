@@ -1,13 +1,16 @@
-import type { PyodideInterface } from 'pyodide';
+import type { Lockfile, PyodideInterface } from 'pyodide';
 import {
 	flushQueuedStdin,
 	readBufferedStdin,
 	waitForBufferedStdin
 } from '$lib/playground/stdinBuffer';
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
+import { parsePythonPackageLock } from '$lib/playground/pythonPackageLock';
 import {
+	configureWorkerRuntimeAssetAllowlist,
 	configureWorkerRuntimeAssets,
 	handleWorkerAssetMessage,
+	loadWorkerRuntimeAsset,
 	type WorkerRuntimeAssetConfig
 } from '$lib/playground/worker/assets';
 
@@ -35,7 +38,7 @@ let stdinBufferPyodide: Int32Array,
 	interruptBufferPyodide: Uint8Array,
 	pyodide: PyodideInterface,
 	baseUrl = '',
-	packageBaseUrl = '';
+	useAssetBridge = false;
 
 const imageHook = `
 if not globals().get("__wasm_idle_img_inited__", False):
@@ -181,21 +184,69 @@ if not globals().get("__wasm_idle_img_inited__", False):
         pass
 `;
 
-const cdnFallbackUrl = (version: string) =>
-	version ? `https://cdn.jsdelivr.net/pyodide/v${version}/full/` : '';
+const pyodideVersionPattern = /^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}(?:[A-Za-z0-9._+-]{0,64})?$/u;
+const directPyodideRuntimeAssets = [
+	'pyodide.mjs',
+	'pyodide.asm.js',
+	'pyodide-lock.json',
+	'pyodide.asm.wasm',
+	'python_stdlib.zip'
+] as const;
+
+const resolvePinnedPackageBaseUrl = (version: string) => {
+	if (typeof version !== 'string' || !pyodideVersionPattern.test(version)) {
+		throw new Error('Pyodide runtime version is invalid');
+	}
+	return new URL(`v${encodeURIComponent(version)}/full/`, 'https://cdn.jsdelivr.net/pyodide/')
+		.href;
+};
 
 function postProgress(percent: number, stage: string) {
 	self.postMessage({ progress: { percent, stage } });
 }
 
+async function importRuntimeAssetModule(asset: string) {
+	const loaded = await loadWorkerRuntimeAsset(asset);
+	const moduleUrl = URL.createObjectURL(
+		new Blob([loaded.bytes.slice().buffer], {
+			type: loaded.mimeType || 'text/javascript'
+		})
+	);
+	try {
+		return await import(/* @vite-ignore */ moduleUrl);
+	} finally {
+		URL.revokeObjectURL(moduleUrl);
+	}
+}
+
 async function loadPyodide(path: string) {
 	if (pyodide) return;
-	const moduleUrl = `${path.endsWith('/') ? path : `${path}/`}pyodide.mjs`;
-	const { loadPyodide, version } = (await import(
-		/* @vite-ignore */ moduleUrl
+	const runtimeBaseUrl = path.endsWith('/') ? path : `${path}/`;
+	await importRuntimeAssetModule('pyodide.asm.js');
+	const runtimeModule = (await importRuntimeAssetModule(
+		'pyodide.mjs'
 	)) as typeof import('pyodide');
-	packageBaseUrl = cdnFallbackUrl(version);
-	pyodide = await loadPyodide({ indexURL: path, packageBaseUrl });
+	let packageBaseUrl = runtimeBaseUrl;
+	let lockFileContents: Lockfile | undefined;
+	if (!useAssetBridge) {
+		packageBaseUrl = resolvePinnedPackageBaseUrl(runtimeModule.version);
+		const loadedLock = await loadWorkerRuntimeAsset('pyodide-lock.json');
+		const parsedLock = parsePythonPackageLock(loadedLock.bytes);
+		// The interceptor caps downloaded (including browser-decoded transport) archive bytes.
+		// Pyodide owns package extraction after receiving that bounded archive.
+		configureWorkerRuntimeAssetAllowlist({
+			baseUrl: packageBaseUrl,
+			assets: [...parsedLock.packageAssets],
+			runtimeAssets: directPyodideRuntimeAssets
+		});
+		lockFileContents = parsedLock.lock as unknown as Lockfile;
+	}
+	const { loadPyodide } = runtimeModule;
+	pyodide = await loadPyodide({
+		indexURL: path,
+		packageBaseUrl,
+		...(lockFileContents ? { lockFileContents } : {})
+	});
 }
 
 async function loadPackages(code: string) {
@@ -246,6 +297,7 @@ self.onmessage = async (event: any) => {
 		try {
 			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
 			baseUrl = runtimeAssets?.baseUrl || baseUrl;
+			useAssetBridge = runtimeAssets?.useAssetBridge === true;
 			configureWorkerRuntimeAssets(runtimeAssets || null);
 			postMessage({ output: 'Loading Pyodide...' });
 			postProgress(2, 'Loading Pyodide module');
@@ -275,7 +327,7 @@ self.onmessage = async (event: any) => {
 		} catch (e: any) {
 			self.postMessage({ error: e.message || 'Unknown error' });
 		}
-	} else if (code) {
+	} else if (typeof code === 'string') {
 		try {
 			await loadPyodide(baseUrl);
 			writeWorkspaceFiles(workspaceFiles);

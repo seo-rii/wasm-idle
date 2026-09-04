@@ -31,6 +31,7 @@ import {
 } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { StaticStdinRingHost } from '$lib/playground/staticStdinRing';
+import { inspectStaticRuntimePreflightBytes } from '$lib/playground/staticRuntimePreflightProtocol';
 import { reportWorkerProgress, type WorkerProgressPayload } from '$lib/playground/workerProgress';
 
 type StaticWorkerReceipt = Readonly<Required<Pick<RuntimeAssetIntegrityEntry, 'bytes' | 'sha256'>>>;
@@ -96,7 +97,10 @@ export interface StaticWorkerRuntimeConfig {
 		urls: StaticWorkerRuntimeUrls,
 		context: StaticWorkerRuntimePreflightContext
 	) => unknown | Promise<unknown>;
-	runtimePreflightDelivery?: 'structured-clone' | 'transfer-owned';
+	runtimePreflightDelivery?:
+		| 'structured-clone'
+		| 'transfer-owned'
+		| 'transfer-owned-worker-cache';
 }
 
 type OwnedDeliveryOperation = {
@@ -217,13 +221,13 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	private workerStartPromise: Promise<Worker> | null = null;
 	private resolvedRuntimeUrls: StaticWorkerRuntimeUrls | null = null;
 	private readonly workerRuntimePreflight = new WeakMap<Worker, unknown>();
+	private readonly workerRuntimePreflightMaxAssetBytes = new WeakMap<Worker, number>();
+	private readonly workersWithCachedRuntimePreflight = new WeakSet<Worker>();
+	private workerStartMaxAssetBytes: number | null = null;
 
 	constructor(private readonly config: StaticWorkerRuntimeConfig) {
 		const workerLifetime = config.workerLifetime ?? { mode: 'per-run' as const };
-		if (
-			config.runtimePreflightDelivery === 'transfer-owned' &&
-			!config.preflightRuntimeAssets
-		) {
+		if (this.usesOwnedRuntimePreflight() && !config.preflightRuntimeAssets) {
 			throw new RuntimeConfigurationError(
 				`${config.displayName} transfer-owned runtime preflight requires a runtime preflight callback.`,
 				{ phase: 'startup', runtimeId: config.languageId }
@@ -235,6 +239,15 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		) {
 			throw new RuntimeConfigurationError(
 				`${config.displayName} transfer-owned runtime preflight requires per-run workers.`,
+				{ phase: 'startup', runtimeId: config.languageId }
+			);
+		}
+		if (
+			config.runtimePreflightDelivery === 'transfer-owned-worker-cache' &&
+			workerLifetime.mode !== 'persistent'
+		) {
+			throw new RuntimeConfigurationError(
+				`${config.displayName} transfer-owned worker-cache preflight requires persistent workers.`,
 				{ phase: 'startup', runtimeId: config.languageId }
 			);
 		}
@@ -250,6 +263,34 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			},
 			disposeWorker: (worker) => this.retireManagedWorker(worker)
 		});
+	}
+
+	private usesOwnedRuntimePreflight() {
+		return (
+			this.config.runtimePreflightDelivery === 'transfer-owned' ||
+			this.config.runtimePreflightDelivery === 'transfer-owned-worker-cache'
+		);
+	}
+
+	private usesWorkerCachedRuntimePreflight() {
+		return this.config.runtimePreflightDelivery === 'transfer-owned-worker-cache';
+	}
+
+	private resetWorkerForLowerAssetLimit(maxAssetBytes: number) {
+		if (!this.usesOwnedRuntimePreflight()) return;
+		const currentLimit = this.worker
+			? this.workerRuntimePreflightMaxAssetBytes.get(this.worker)
+			: this.workerStartPromise
+				? (this.workerStartMaxAssetBytes ?? undefined)
+				: undefined;
+		if (currentLimit !== undefined && maxAssetBytes < currentLimit) {
+			this.disposeWorker(
+				new CancelledError(
+					`${this.config.displayName} worker reset for a lower runtime asset limit`,
+					{ phase: 'asset', runtimeId: this.config.languageId }
+				)
+			);
+		}
 	}
 
 	private getDisposeReason() {
@@ -364,6 +405,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			this.preflightKey = nextPreflightKey;
 			this.resolvedRuntimeUrls = urls;
 			this.workerReceipt = nextWorkerReceipt;
+			this.resetWorkerForLowerAssetLimit(controls.limits.maxAssetBytes);
 
 			if (!this.baseUrl || !this.workerUrl) {
 				throw new RuntimeConfigurationError(
@@ -1077,6 +1119,9 @@ self.postMessage = (message, transferOrOptions) => {
 		if (this.workerStartPromise) return this.workerStartPromise;
 		const startAbortController = new AbortController();
 		let generation = this.workerGeneration;
+		this.workerStartMaxAssetBytes = this.usesOwnedRuntimePreflight()
+			? controls.limits.maxAssetBytes
+			: null;
 		this.workerStartAbortController = startAbortController;
 		const callerSignal = controls.signal;
 		let callerListenerAttempted = false;
@@ -1210,10 +1255,7 @@ self.postMessage = (message, transferOrOptions) => {
 				);
 			}
 			const preflightKey = urls.preflightKey || urls.manifestFingerprint || '';
-			if (
-				this.config.runtimePreflightDelivery === 'transfer-owned' &&
-				preflightKey.length === 0
-			) {
+			if (this.usesOwnedRuntimePreflight() && preflightKey.length === 0) {
 				throw new RuntimeConfigurationError(
 					`${this.config.displayName} transfer-owned runtime preflight requires a stable preflight key.`,
 					{ phase: 'asset', runtimeId: this.config.languageId }
@@ -1289,26 +1331,26 @@ self.postMessage = (message, transferOrOptions) => {
 								);
 							}
 							const value = descriptor.value;
-							if (value instanceof Uint8Array) {
+							const bytes = inspectStaticRuntimePreflightBytes(value);
+							if (bytes) {
 								if (
-									!(value.buffer instanceof ArrayBuffer) ||
-									value.byteLength === 0 ||
-									value.byteOffset !== 0 ||
-									value.byteLength !== value.buffer.byteLength
+									bytes.byteLength === 0 ||
+									bytes.byteOffset !== 0 ||
+									bytes.byteLength !== bytes.bufferByteLength
 								) {
 									throw new RuntimeConfigurationError(
 										`${this.config.displayName} owned runtime preflight bytes must span non-empty whole ArrayBuffers.`,
 										{ phase: 'asset', runtimeId: this.config.languageId }
 									);
 								}
-								if (seenBuffers.has(value.buffer)) {
+								if (seenBuffers.has(bytes.buffer)) {
 									throw new RuntimeConfigurationError(
 										`${this.config.displayName} owned runtime preflight ArrayBuffers must be unique.`,
 										{ phase: 'asset', runtimeId: this.config.languageId }
 									);
 								}
-								seenBuffers.add(value.buffer);
-								transferables.push(value.buffer);
+								seenBuffers.add(bytes.buffer);
+								transferables.push(bytes.buffer);
 								continue;
 							}
 							if (
@@ -1354,7 +1396,7 @@ self.postMessage = (message, transferOrOptions) => {
 							runtimePreflight as StaticWorkerRuntimeOwnedDelivery
 						)
 					: undefined;
-			if (this.config.runtimePreflightDelivery === 'transfer-owned') {
+			if (this.usesOwnedRuntimePreflight()) {
 				const currentUrls = this.resolvedRuntimeUrls;
 				const currentPreflightKey =
 					currentUrls?.preflightKey || currentUrls?.manifestFingerprint || '';
@@ -1464,6 +1506,9 @@ self.postMessage = (message, transferOrOptions) => {
 			}
 			if (runtimePreflight !== undefined) {
 				this.workerRuntimePreflight.set(worker, runtimePreflight);
+			}
+			if (this.usesOwnedRuntimePreflight()) {
+				this.workerRuntimePreflightMaxAssetBytes.set(worker, controls.limits.maxAssetBytes);
 			}
 		} catch (error) {
 			if (workerCreated) this.detachAndTerminateWorker(worker);
@@ -1840,6 +1885,7 @@ self.postMessage = (message, transferOrOptions) => {
 		const lease = this.workerLease;
 		this.workerLease = null;
 		this.workerStartPromise = null;
+		this.workerStartMaxAssetBytes = null;
 		if (!lease) return;
 		try {
 			lease.release({ reusable });
@@ -1857,6 +1903,7 @@ self.postMessage = (message, transferOrOptions) => {
 		if (this.worker === worker) {
 			delete this.worker;
 			this.workerStartPromise = null;
+			this.workerStartMaxAssetBytes = null;
 			this.workerGeneration += 1;
 		}
 		this.detachAndTerminateWorker(worker);
@@ -1876,6 +1923,8 @@ self.postMessage = (message, transferOrOptions) => {
 	private detachAndTerminateWorker(worker: Worker) {
 		this.retireRuntimePreflight(this.workerRuntimePreflight.get(worker));
 		this.workerRuntimePreflight.delete(worker);
+		this.workerRuntimePreflightMaxAssetBytes.delete(worker);
+		this.workersWithCachedRuntimePreflight.delete(worker);
 		try {
 			worker.onmessage = null;
 		} catch {
@@ -1903,6 +1952,7 @@ self.postMessage = (message, transferOrOptions) => {
 		this.workerStartAbortController = null;
 		this.workerGeneration += 1;
 		this.workerStartPromise = null;
+		this.workerStartMaxAssetBytes = null;
 		this.startupReject = null;
 		const lease = this.workerLease;
 		this.workerLease = null;
@@ -1976,6 +2026,7 @@ self.postMessage = (message, transferOrOptions) => {
 		} catch (error) {
 			return Promise.reject(this.preserveDisposeReason(error));
 		}
+		this.resetWorkerForLowerAssetLimit(controls.limits.maxAssetBytes);
 		const id = `static-${++this.uid}`;
 		this.startingRunId = id;
 		const progressSink = this.selectProgress(_prog);
@@ -2170,8 +2221,9 @@ self.postMessage = (message, transferOrOptions) => {
 						const storedRuntimePreflight = this.workerRuntimePreflight.get(worker);
 						let runtimePreflight = storedRuntimePreflight;
 						let transferList: ArrayBuffer[] | undefined;
+						let deliveredOwnedPreflight = false;
 						try {
-							if (this.config.runtimePreflightDelivery === 'transfer-owned') {
+							if (this.usesOwnedRuntimePreflight()) {
 								const state =
 									storedRuntimePreflight !== null &&
 									typeof storedRuntimePreflight === 'object'
@@ -2185,25 +2237,33 @@ self.postMessage = (message, transferOrOptions) => {
 									currentUrls?.manifestFingerprint ||
 									'';
 								if (
-									!state ||
-									state.operation.owner !== this ||
-									state.operation.runtimeId !== this.config.languageId ||
-									state.operation.generation !== this.workerGeneration ||
-									state.operation.preflightKey !== currentPreflightKey ||
-									state.status !== 'available' ||
-									!state.payload ||
-									!state.transferables
+									state &&
+									state.operation.owner === this &&
+									state.operation.runtimeId === this.config.languageId &&
+									state.operation.generation === this.workerGeneration &&
+									state.operation.preflightKey === currentPreflightKey &&
+									state.status === 'available' &&
+									state.payload &&
+									state.transferables
 								) {
+									runtimePreflight = state.payload;
+									transferList = state.transferables;
+									state.status = 'consumed';
+									state.payload = null;
+									state.transferables = null;
+									deliveredOwnedPreflight = true;
+								} else if (
+									this.usesWorkerCachedRuntimePreflight() &&
+									storedRuntimePreflight === undefined &&
+									this.workersWithCachedRuntimePreflight.has(worker)
+								) {
+									runtimePreflight = undefined;
+								} else {
 									throw new RuntimeConfigurationError(
 										`${this.config.displayName} runtime preflight owned delivery is unavailable or stale.`,
 										{ phase: 'protocol', runtimeId: this.config.languageId }
 									);
 								}
-								runtimePreflight = state.payload;
-								transferList = state.transferables;
-								state.status = 'consumed';
-								state.payload = null;
-								state.transferables = null;
 							} else if (
 								storedRuntimePreflight !== null &&
 								typeof storedRuntimePreflight === 'object' &&
@@ -2237,8 +2297,14 @@ self.postMessage = (message, transferOrOptions) => {
 							};
 							if (transferList) worker.postMessage(message, transferList);
 							else worker.postMessage(message);
+							if (
+								deliveredOwnedPreflight &&
+								this.usesWorkerCachedRuntimePreflight()
+							) {
+								this.workersWithCachedRuntimePreflight.add(worker);
+							}
 						} finally {
-							if (this.config.runtimePreflightDelivery === 'transfer-owned') {
+							if (this.usesOwnedRuntimePreflight()) {
 								this.workerRuntimePreflight.delete(worker);
 								this.retireRuntimePreflight(storedRuntimePreflight);
 							}

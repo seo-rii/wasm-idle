@@ -318,7 +318,7 @@ class Cobol implements Sandbox {
 				const needsWorkerReset =
 					!this.worker ||
 					!this.assetBridge ||
-					!this.assetBridge.matches(clangAssets) ||
+					!this.assetBridge.matches(clangAssets, limits.maxAssetBytes) ||
 					this.activeCobolBaseUrl !== cobolBaseUrl;
 				if (needsWorkerReset && this.worker) {
 					this.workerSession.reset();
@@ -334,7 +334,13 @@ class Cobol implements Sandbox {
 					}
 					let assetBridge: WorkerAssetBridge;
 					try {
-						assetBridge = new WorkerAssetBridge(worker, 'clang', clangAssets, progress);
+						assetBridge = new WorkerAssetBridge(
+							worker,
+							'clang',
+							clangAssets,
+							progress,
+							limits.maxAssetBytes
+						);
 					} catch (error) {
 						try {
 							worker.terminate();
@@ -393,9 +399,11 @@ class Cobol implements Sandbox {
 						args,
 						clangAssets: {
 							baseUrl: clangAssets.baseUrl,
+							maxAssetBytes: limits.maxAssetBytes,
 							useAssetBridge: clangAssets.useAssetBridge
 						},
-						cobolBaseUrl
+						cobolBaseUrl,
+						maxAssetBytes: limits.maxAssetBytes
 					});
 				} else {
 					const worker = this.worker;
@@ -403,7 +411,7 @@ class Cobol implements Sandbox {
 					if (!assetBridge) {
 						return rejectOperation('COBOL asset bridge is not loaded');
 					}
-					assetBridge.rebind(worker, clangAssets, progress);
+					assetBridge.rebind(worker, clangAssets, progress, limits.maxAssetBytes);
 					if (
 						!this.isOperationActive(operation) ||
 						this.worker !== worker ||

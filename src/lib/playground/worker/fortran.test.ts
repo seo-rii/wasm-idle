@@ -124,6 +124,7 @@ describe('Fortran worker runtime assets', () => {
 				log: false,
 				clangAssets: {
 					baseUrl: 'https://assets.example.test/clang/',
+					maxAssetBytes: 128 * 1024 * 1024,
 					useAssetBridge: false
 				},
 				fortranAssets: {
@@ -162,6 +163,11 @@ describe('Fortran worker runtime assets', () => {
 		}
 		expect(workerMocks.addFile).toHaveBeenCalledWith('f2c.h', 'integer f2c(void);');
 		expect(workerMocks.addFile).toHaveBeenCalledWith('libf2c.a', new Uint8Array([1, 2, 3]));
+		expect(workerMocks.configureWorkerRuntimeAssets).toHaveBeenCalledWith({
+			baseUrl: 'https://assets.example.test/clang/',
+			maxAssetBytes: 128 * 1024 * 1024,
+			useAssetBridge: false
+		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 	});
 

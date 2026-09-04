@@ -316,7 +316,10 @@ class Lisp implements Sandbox {
 						'Lisp runtime is not configured: moduleUrl, manifestUrl, and an explicit 64-character manifestFingerprint are required.'
 					);
 				}
-				const nextRuntimeConfigKey = JSON.stringify(nextRuntimeConfig);
+				const nextRuntimeConfigKey = JSON.stringify([
+					nextRuntimeConfig,
+					limits.maxAssetBytes
+				]);
 				const needsWorkerReset =
 					!this.worker || this.runtimeConfigKey !== nextRuntimeConfigKey;
 				this.moduleUrl = nextRuntimeConfig.moduleUrl;
@@ -361,7 +364,8 @@ class Lisp implements Sandbox {
 					worker.onmessage = handler;
 					worker.postMessage({
 						load: true,
-						runtimeConfig: nextRuntimeConfig
+						runtimeConfig: nextRuntimeConfig,
+						maxAssetBytes: limits.maxAssetBytes
 					});
 				} else {
 					const worker = this.worker;

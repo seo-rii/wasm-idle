@@ -83,6 +83,7 @@ class Ocaml implements Sandbox {
 	exit = true;
 	moduleUrl = '';
 	manifestUrl = '';
+	private maxAssetBytes = 0;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -441,7 +442,8 @@ class Ocaml implements Sandbox {
 			const needsWorkerReset =
 				!this.worker ||
 				this.moduleUrl !== nextModuleUrl ||
-				this.manifestUrl !== nextManifestUrl;
+				this.manifestUrl !== nextManifestUrl ||
+				this.maxAssetBytes !== limits.maxAssetBytes;
 			if (needsWorkerReset) {
 				const WorkerConstructor = (await import('$lib/playground/worker/ocaml?worker'))
 					.default;
@@ -473,6 +475,7 @@ class Ocaml implements Sandbox {
 							worker.onmessage = null;
 							this.moduleUrl = nextModuleUrl;
 							this.manifestUrl = nextManifestUrl;
+							this.maxAssetBytes = limits.maxAssetBytes;
 							resolve();
 							this.completeOperation(operation);
 							return;
@@ -486,7 +489,8 @@ class Ocaml implements Sandbox {
 				worker.postMessage({
 					load: true,
 					moduleUrl: nextModuleUrl,
-					manifestUrl: nextManifestUrl
+					manifestUrl: nextManifestUrl,
+					maxAssetBytes: limits.maxAssetBytes
 				});
 			} else {
 				progress?.set?.(1);
@@ -910,6 +914,7 @@ class Ocaml implements Sandbox {
 		delete this.worker;
 		this.moduleUrl = '';
 		this.manifestUrl = '';
+		this.maxAssetBytes = 0;
 		this.output = undefined;
 		this.oncompilerdiagnostic = undefined;
 		this.resetExplicitStdinState(this.buffer);

@@ -72,6 +72,22 @@ describe('browser execution', () => {
 		expect(result.stderr).toBe('');
 	});
 
+	it('rejects a program whose declared memory minimum exceeds the caller cap', async () => {
+		const wabtApi = await wabt();
+		const parsed = wabtApi.parseWat(
+			'large-memory.wat',
+			'(module (memory (export "memory") 2) (func (export "_start")))'
+		);
+		const bytes = new Uint8Array(parsed.toBinary({}).buffer);
+
+		await expect(
+			executeBrowserGoArtifact(
+				{ bytes, target: 'wasip1/wasm', format: 'wasi-core-wasm' },
+				{ maxWasmMemoryBytes: 65_536 }
+			)
+		).rejects.toThrow(/minimum memory .* exceeds the hard limit/);
+	});
+
 	it('also executes transitional wasip2/wasip3 aliases through the preview1 host', async () => {
 		const bytes = await buildPreview1StdoutModule();
 

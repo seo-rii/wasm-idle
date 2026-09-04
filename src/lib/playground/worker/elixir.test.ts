@@ -39,6 +39,15 @@ const TEST_ASSET_RECEIPTS = Object.freeze({
 	})
 });
 
+const SMALL_TEST_ASSET_RECEIPTS = Object.freeze({
+	'bundle.avm': Object.freeze({
+		...TEST_ASSET_RECEIPTS['bundle.avm'],
+		uncompressedBytes: 3
+	}),
+	'AtomVM.mjs': TEST_ASSET_RECEIPTS['AtomVM.mjs'],
+	'AtomVM.wasm': TEST_ASSET_RECEIPTS['AtomVM.wasm']
+});
+
 vi.mock('$lib/playground/stdinBuffer', () => ({
 	waitForBufferedStdin: waitForBufferedStdinMock
 }));
@@ -369,6 +378,51 @@ describe('Elixir worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
 			error: 'Elixir runtime requires exactly three asset receipts'
 		});
+	});
+
+	it('rejects receipts above a lower caller asset limit before fetching', async () => {
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: SMALL_TEST_ASSET_RECEIPTS,
+				maxAssetBytes: 2,
+				log: false
+			}
+		});
+
+		expect((globalThis as any).fetch).not.toHaveBeenCalled();
+		expect(atomVmInitMock).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: 'Elixir runtime asset bundle.avm exceeds the 2 byte limit'
+		});
+	});
+
+	it('reloads the runtime when only the caller asset limit changes', async () => {
+		await import('./elixir');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: SMALL_TEST_ASSET_RECEIPTS,
+				maxAssetBytes: 4,
+				log: false
+			}
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				bundleUrl: '/runtime/elixir/bundle.avm',
+				assetReceipts: SMALL_TEST_ASSET_RECEIPTS,
+				maxAssetBytes: 5,
+				log: false
+			}
+		});
+
+		expect((globalThis as any).fetch).toHaveBeenCalledTimes(6);
+		expect(atomVmInitMock).toHaveBeenCalledTimes(2);
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({ load: true });
 	});
 
 	it('does not initialize AtomVM from unverified assets and permits a clean retry', async () => {

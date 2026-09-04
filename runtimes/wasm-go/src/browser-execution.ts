@@ -22,6 +22,7 @@ import type {
 	RuntimeManifestV1
 } from './types.js';
 import { CaptureFd, toStandaloneBytes, writeGuestFile } from './wasi-guest.js';
+import { assertGoInstanceMemoryLimit, capGoWasmMemory } from './wasm-memory.js';
 
 export interface BrowserExecutionResult {
 	exitCode: number | null;
@@ -42,6 +43,11 @@ export interface BrowserExecutionOptions {
 	runtimeManifestUrl?: string | URL;
 	runtimeBaseUrl?: string | URL;
 	fetchImpl?: typeof fetch;
+	signal?: AbortSignal;
+	assetTimeoutMs?: number;
+	maxAssetBytes?: number;
+	maxWasmMemoryBytes?: number;
+	runTimeoutMs?: number;
 }
 
 export interface BrowserWasiHost {
@@ -55,13 +61,65 @@ export interface BrowserWasiHost {
 
 const DEFAULT_RUNTIME_MANIFEST_URL = new URL('./runtime/runtime-manifest.v1.json', import.meta.url);
 const DEFAULT_RUNTIME_BASE_URL = new URL('./runtime/', import.meta.url);
+const DEFAULT_MAX_WASM_MEMORY_BYTES = 512 * 1024 * 1024;
+const DEFAULT_RUN_TIMEOUT_MS = 30_000;
+
+function throwIfAborted(signal?: AbortSignal) {
+	if (signal?.aborted) {
+		throw signal.reason ?? new DOMException('Go execution aborted', 'AbortError');
+	}
+}
+
+function positiveLimit(value: number | undefined, fallback: number, label: string) {
+	const resolved = value ?? fallback;
+	if (!Number.isSafeInteger(resolved) || resolved <= 0) {
+		throw new Error(`${label} must be a positive safe integer`);
+	}
+	return resolved;
+}
+
+function runWithDeadline<T>(operation: Promise<T>, timeoutMs: number, signal?: AbortSignal) {
+	return new Promise<T>((resolve, reject) => {
+		let settled = false;
+		const finish = (callback: () => void) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			signal?.removeEventListener('abort', abort);
+			callback();
+		};
+		const abort = () =>
+			finish(() =>
+				reject(signal?.reason ?? new DOMException('Go execution aborted', 'AbortError'))
+			);
+		const timer = setTimeout(
+			() =>
+				finish(() =>
+					reject(
+						new DOMException(
+							`Go execution timed out after ${timeoutMs} ms`,
+							'TimeoutError'
+						)
+					)
+				),
+			timeoutMs
+		);
+		signal?.addEventListener('abort', abort, { once: true });
+		if (signal?.aborted) abort();
+		operation.then(
+			(value) => finish(() => resolve(value)),
+			(error) => finish(() => reject(error))
+		);
+	});
+}
 
 function createRuntimeFetch(): typeof fetch {
-	return (async (input: string | URL) => {
+	return (async (input: string | URL, init?: RequestInit) => {
 		const url = new URL(input.toString());
 		if (url.protocol !== 'file:') {
-			return fetch(url);
+			return fetch(url, init);
 		}
+		if (init?.signal?.aborted) throw init.signal.reason;
 		const [{ readFile }, { fileURLToPath }] = await Promise.all([
 			import('node:fs/promises'),
 			import('node:url')
@@ -172,15 +230,27 @@ export async function executeBrowserGoArtifact(
 	artifact: BrowserGoArtifact,
 	options: BrowserExecutionOptions = {}
 ): Promise<BrowserExecutionResult> {
+	throwIfAborted(options.signal);
+	const maxWasmMemoryBytes = positiveLimit(
+		options.maxWasmMemoryBytes,
+		DEFAULT_MAX_WASM_MEMORY_BYTES,
+		'maxWasmMemoryBytes'
+	);
+	const runTimeoutMs = positiveLimit(
+		options.runTimeoutMs,
+		DEFAULT_RUN_TIMEOUT_MS,
+		'runTimeoutMs'
+	);
 	if (artifact.target === 'js/wasm' && artifact.format === 'js-wasm') {
 		const fetchImpl = options.fetchImpl || createRuntimeFetch();
 		const runtimeManifestUrl = options.runtimeManifestUrl || DEFAULT_RUNTIME_MANIFEST_URL;
-		const runtimeBaseUrl =
-			options.runtimeBaseUrl || new URL('./', runtimeManifestUrl.toString());
+		const derivedRuntimeBaseUrl = new URL('./', runtimeManifestUrl.toString());
+		derivedRuntimeBaseUrl.search = new URL(runtimeManifestUrl.toString()).search;
+		const runtimeBaseUrl = options.runtimeBaseUrl || derivedRuntimeBaseUrl;
 		const stdin = new BufferedExecutionInput(options.stdin);
 		const manifest = options.manifest
 			? normalizeRuntimeManifest(options.manifest)
-			: await loadRuntimeManifest(runtimeManifestUrl, fetchImpl);
+			: await loadRuntimeManifest(runtimeManifestUrl, fetchImpl, undefined, options);
 		const target = resolveTargetManifest(manifest, artifact.target);
 		if (target.execution.kind !== 'js-wasm-exec' || !target.execution.wasmExecJs) {
 			throw new Error(
@@ -192,7 +262,10 @@ export async function executeBrowserGoArtifact(
 				await fetchRuntimeAssetBytes(
 					resolveVersionedAssetUrl(runtimeBaseUrl, target.execution.wasmExecJs),
 					'wasm_exec.js',
-					fetchImpl
+					fetchImpl,
+					true,
+					undefined,
+					options
 				)
 			)
 		);
@@ -389,17 +462,23 @@ export async function executeBrowserGoArtifact(
 			go.exit = (code) => {
 				exitCode = code;
 			};
+			throwIfAborted(options.signal);
 			const instantiated = (await WebAssembly.instantiate(
-				artifact.bytes instanceof Uint8Array
-					? artifact.bytes
-					: new Uint8Array(artifact.bytes),
+				capGoWasmMemory(
+					artifact.bytes instanceof Uint8Array
+						? artifact.bytes
+						: new Uint8Array(artifact.bytes),
+					maxWasmMemoryBytes,
+					'Go program'
+				),
 				go.importObject
 			)) as WebAssembly.Instance | WebAssembly.WebAssemblyInstantiatedSource;
-			await go.run(
-				('instance' in instantiated
-					? instantiated.instance
-					: instantiated) as WebAssembly.Instance
-			);
+			const instance = (
+				'instance' in instantiated ? instantiated.instance : instantiated
+			) as WebAssembly.Instance;
+			assertGoInstanceMemoryLimit(instance, maxWasmMemoryBytes, 'Go program');
+			await runWithDeadline(go.run(instance), runTimeoutMs, options.signal);
+			assertGoInstanceMemoryLimit(instance, maxWasmMemoryBytes, 'Go program');
 		} finally {
 			if (previousGo === undefined) {
 				delete (globalThis as Record<string, unknown>).Go;
@@ -434,10 +513,14 @@ export async function executeBrowserGoArtifact(
 		artifact.bytes instanceof Uint8Array
 			? new Uint8Array(artifact.bytes)
 			: new Uint8Array(artifact.bytes);
-	const module = await WebAssembly.compile(bytes);
+	throwIfAborted(options.signal);
+	const cappedBytes = capGoWasmMemory(bytes, maxWasmMemoryBytes, 'Go program');
+	const module = await WebAssembly.compile(cappedBytes.slice().buffer as ArrayBuffer);
 	const instance = await WebAssembly.instantiate(module, {
 		wasi_snapshot_preview1: wasiInstance.wasiImport
 	});
+	assertGoInstanceMemoryLimit(instance, maxWasmMemoryBytes, 'Go program');
+	throwIfAborted(options.signal);
 	const exitCode = wasiInstance.start(
 		instance as unknown as {
 			exports: {
@@ -446,6 +529,8 @@ export async function executeBrowserGoArtifact(
 			};
 		}
 	);
+	assertGoInstanceMemoryLimit(instance, maxWasmMemoryBytes, 'Go program');
+	throwIfAborted(options.signal);
 	return {
 		exitCode,
 		stdout: host.stdout.getText(),

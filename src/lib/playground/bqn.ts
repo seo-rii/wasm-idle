@@ -3,7 +3,8 @@ import {
 	type BqnRuntimePreflightProfile,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
-import { preflightBqnRuntimeAssets } from '$lib/playground/bqnPreflight';
+import type { BqnRuntimePreflightPayload } from '$lib/playground/bqnPreflight';
+import { preflightStaticRuntimeAssetsInWorker } from '$lib/playground/staticRuntimePreflight';
 import { StaticWorkerRuntimeSandbox } from '$lib/playground/staticWorkerRuntime';
 import { RuntimeConfigurationError } from '@wasm-idle/core';
 
@@ -16,6 +17,7 @@ class Bqn extends StaticWorkerRuntimeSandbox {
 			moduleWorker: true,
 			inlineVerifiedWorker: true,
 			stdin: { mode: 'streaming', sourceHintPattern: /•GetLine|stdin/iu },
+			runtimePreflightDelivery: 'transfer-owned',
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {
 				const resolved = resolveBqnRuntimeAssetConfig(runtimeAssets, currentUrl);
 				const profile = resolved.preflightProfile;
@@ -38,33 +40,42 @@ class Bqn extends StaticWorkerRuntimeSandbox {
 					(profile.manifestReceipt?.bytes ?? 0) +
 					(profile.moduleReceipt?.bytes ?? 0) +
 					(profile.wasmReceipt?.bytes ?? 0);
-				return await preflightBqnRuntimeAssets({
-					baseUrl: urls.baseUrl,
-					manifestUrl: urls.manifestUrl || '',
-					profile,
-					limits: context.limits,
-					signal: context.signal,
-					reportProgress(progress) {
-						loadedByAsset.set(progress.assetKey, progress.loadedBytes);
-						const loadedBytes = [...loadedByAsset.values()].reduce(
-							(total, loaded) => total + loaded,
-							0
-						);
-						const fraction =
-							totalDownloadBytes > 0 ? loadedBytes / totalDownloadBytes : 0;
-						context.reportProgress(
-							0.04 + Math.min(1, fraction) * 0.11,
-							`Preflighting BQN asset ${progress.assetKey}`
-						);
-					},
-					reportDecompressionProgress(loadedBytes, totalBytes) {
-						const fraction = totalBytes > 0 ? loadedBytes / totalBytes : 0;
-						context.reportProgress(
-							0.15 + Math.min(1, fraction) * 0.02,
-							'Decompressing verified BQN Wasm'
-						);
-					}
-				});
+				const payload =
+					await preflightStaticRuntimeAssetsInWorker<BqnRuntimePreflightPayload>({
+						runtimeId: 'BQN',
+						displayName: 'BQN',
+						baseUrl: urls.baseUrl,
+						manifestUrl: urls.manifestUrl || '',
+						profile,
+						limits: context.limits,
+						signal: context.signal,
+						reportProgress(progress) {
+							if (progress.kind === 'asset') {
+								loadedByAsset.set(
+									progress.progress.assetKey,
+									progress.progress.loadedBytes
+								);
+								const loadedBytes = [...loadedByAsset.values()].reduce(
+									(total, loaded) => total + loaded,
+									0
+								);
+								const fraction =
+									totalDownloadBytes > 0 ? loadedBytes / totalDownloadBytes : 0;
+								context.reportProgress(
+									0.04 + Math.min(1, fraction) * 0.11,
+									`Preflighting BQN asset ${progress.progress.assetKey}`
+								);
+								return;
+							}
+							const { loadedBytes, totalBytes } = progress;
+							const fraction = totalBytes > 0 ? loadedBytes / totalBytes : 0;
+							context.reportProgress(
+								0.15 + Math.min(1, fraction) * 0.02,
+								'Decompressing verified BQN Wasm'
+							);
+						}
+					});
+				return context.createOwnedDelivery(payload);
 			}
 		});
 	}

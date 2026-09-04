@@ -172,6 +172,141 @@ describe('WorkerAssetBridge asset requests', () => {
 		expect(loader).not.toHaveBeenCalled();
 	});
 
+	it('authorizes only Python package files declared by the served lock file', async () => {
+		const postMessage = vi.fn();
+		const packageAsset = 'numpy-2.3.3-cp313-cp313-pyodide_2025_0_wasm32.whl';
+		const loader = vi.fn(async ({ asset }: { asset: string }) => {
+			if (asset === 'pyodide-lock.json') {
+				return {
+					data: JSON.stringify({ packages: { numpy: { file_name: packageAsset } } }),
+					mimeType: 'application/json'
+				};
+			}
+			if (asset === packageAsset) return new Uint8Array([4, 5, 6]);
+			throw new Error(`unexpected loader call for ${asset}`);
+		});
+		const config = {
+			baseUrl: 'https://assets.example.com/python/',
+			loader,
+			useAssetBridge: true
+		};
+		const worker = { postMessage } as unknown as Worker;
+		const bridge = new WorkerAssetBridge(worker, 'python', config);
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 40, asset: packageAsset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1));
+		expect(postMessage.mock.calls[0]?.[0]).toMatchObject({
+			assetResponse: {
+				id: 40,
+				ok: false,
+				error: `Unexpected python runtime asset: ${packageAsset}`
+			}
+		});
+		expect(loader).not.toHaveBeenCalled();
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 41, asset: 'pyodide-lock.json' } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+		expect(postMessage.mock.calls[1]?.[0]).toMatchObject({
+			assetResponse: { id: 41, ok: true }
+		});
+
+		bridge.rebind(worker, config);
+		bridge.handleMessage({
+			data: { assetRequest: { id: 42, asset: packageAsset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(3));
+		expect(loader).toHaveBeenLastCalledWith(
+			expect.objectContaining({ runtime: 'python', asset: packageAsset })
+		);
+		expect(postMessage.mock.calls[2]?.[0]).toMatchObject({
+			assetResponse: { id: 42, ok: true }
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 43, asset: 'not-in-lock.whl' } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(4));
+		expect(postMessage.mock.calls[3]?.[0]).toMatchObject({
+			assetResponse: {
+				id: 43,
+				ok: false,
+				error: 'Unexpected python runtime asset: not-in-lock.whl'
+			}
+		});
+	});
+
+	it('keeps lock-declared Python package URLs inside configured asset bases', async () => {
+		const postMessage = vi.fn();
+		const packageAsset = 'demo-1.0-py3-none-any.whl';
+		const loader = vi.fn(async ({ asset }: { asset: string }) =>
+			asset === 'pyodide-lock.json'
+				? { data: JSON.stringify({ packages: { demo: { file_name: packageAsset } } }) }
+				: { url: `https://untrusted.example/${packageAsset}` }
+		);
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'python', {
+			baseUrl: 'https://assets.example.com/python/',
+			loader,
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 44, asset: 'pyodide-lock.json' } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1));
+		bridge.handleMessage({
+			data: { assetRequest: { id: 45, asset: packageAsset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+
+		expect(postMessage.mock.calls[1]?.[0]).toEqual({
+			assetResponse: {
+				id: 45,
+				ok: false,
+				error: `Runtime asset ${packageAsset} URL is outside the allowed asset bases`
+			}
+		});
+	});
+
+	it('requires integrity metadata for lock-declared Python packages when integrity is enabled', async () => {
+		const postMessage = vi.fn();
+		const packageAsset = 'demo-1.0-py3-none-any.whl';
+		const lockBytes = new TextEncoder().encode(
+			JSON.stringify({ packages: { demo: { file_name: packageAsset } } })
+		);
+		const loader = vi.fn(async ({ asset }: { asset: string }) =>
+			asset === 'pyodide-lock.json' ? lockBytes : new Uint8Array([1])
+		);
+		const bridge = new WorkerAssetBridge({ postMessage } as unknown as Worker, 'python', {
+			baseUrl: 'https://assets.example.com/python/',
+			loader,
+			integrity: {
+				'pyodide-lock.json': createHash('sha256').update(lockBytes).digest('hex')
+			},
+			useAssetBridge: true
+		});
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 46, asset: 'pyodide-lock.json' } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(1));
+		bridge.handleMessage({
+			data: { assetRequest: { id: 47, asset: packageAsset } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+
+		expect(postMessage.mock.calls[1]?.[0]).toEqual({
+			assetResponse: {
+				id: 47,
+				ok: false,
+				error: `Runtime asset ${packageAsset} is missing integrity metadata`
+			}
+		});
+	});
+
 	it('continues loading assets declared for the runtime', async () => {
 		const postMessage = vi.fn();
 		const loader = vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3]));

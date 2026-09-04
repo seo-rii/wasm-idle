@@ -53,6 +53,7 @@ export interface ObjectiveCWorkspaceFile {
 
 export interface ObjectiveCWorkerRuntimeAssetConfig {
 	baseUrl: string;
+	maxAssetBytes?: number;
 	useAssetBridge: boolean;
 }
 

@@ -198,6 +198,10 @@ globalThis.importScripts = (url) => {
         )
       }
     });
+    if (harnessMode === 'mutate-injected-assets') {
+      options.wasmBinary.fill(0);
+      data.fill(0);
+    }
     return {
 	  _PL_cleanup(status) {
 		parentPort.postMessage({ harnessCleanup: status });
@@ -314,11 +318,18 @@ async function runHarnessSequence(requests: Record<string, unknown>[]) {
 function integrityRequest(overrides: Record<string, unknown> = {}) {
 	return {
 		runtimePreflight: runtimePreflight(),
+		manifestFingerprint: fixtureFingerprint,
 		maxAssetBytes: 1_000_000,
 		code: 'main :- true.',
 		stdin: '68\n',
 		...overrides
 	};
+}
+
+function warmIntegrityRequest(overrides: Record<string, unknown> = {}) {
+	const request = integrityRequest(overrides);
+	delete (request as { runtimePreflight?: unknown }).runtimePreflight;
+	return request;
 }
 
 describe('SWI-Prolog runner worker', () => {
@@ -472,6 +483,119 @@ describe('SWI-Prolog runner worker', () => {
 		});
 	});
 
+	it('requires the owned preflight only on the first execution and pins its fingerprint', async () => {
+		const missing = await runHarness(warmIntegrityRequest());
+		expect(missing.at(-1)).toEqual({
+			error: 'SWI-Prolog worker requires runtime preflight bytes for its first execution.'
+		});
+
+		const invalidFingerprint = await runHarness(
+			integrityRequest({ manifestFingerprint: 'not-a-fingerprint' })
+		);
+		expect(invalidFingerprint.at(-1)).toEqual({
+			error: 'SWI-Prolog runtime manifest fingerprint is invalid.'
+		});
+
+		const mismatchedFingerprint = await runHarness(
+			integrityRequest({ manifestFingerprint: '0'.repeat(64) })
+		);
+		expect(mismatchedFingerprint.at(-1)).toEqual({
+			error: 'SWI-Prolog runtime manifest identity is invalid.'
+		});
+		expect(
+			[...missing, ...invalidFingerprint, ...mismatchedFingerprint].some(
+				(message) => message.harnessImported
+			)
+		).toBe(false);
+	});
+
+	it('rejects aliased or partial preflight byte buffers before verification', async () => {
+		const javascript = Uint8Array.from(fixtureLogicalBytes['swipl-web.js']);
+		const paddedJavascript = new Uint8Array(javascript.byteLength + 2);
+		paddedJavascript.set(javascript, 1);
+		const partialJavascript = new Uint8Array(paddedJavascript.buffer, 1, javascript.byteLength);
+		const partial = await runHarness(
+			integrityRequest({
+				runtimePreflight: runtimePreflight({ javascriptBytes: partialJavascript })
+			})
+		);
+
+		const shared = new Uint8Array(
+			fixtureLogicalBytes['swipl-web.js'].byteLength +
+				fixtureLogicalBytes['swipl-web.wasm'].byteLength
+		);
+		shared.set(fixtureLogicalBytes['swipl-web.js'], 0);
+		shared.set(
+			fixtureLogicalBytes['swipl-web.wasm'],
+			fixtureLogicalBytes['swipl-web.js'].byteLength
+		);
+		const aliased = await runHarness(
+			integrityRequest({
+				runtimePreflight: runtimePreflight({
+					javascriptBytes: new Uint8Array(
+						shared.buffer,
+						0,
+						fixtureLogicalBytes['swipl-web.js'].byteLength
+					),
+					wasmBytes: new Uint8Array(
+						shared.buffer,
+						fixtureLogicalBytes['swipl-web.js'].byteLength,
+						fixtureLogicalBytes['swipl-web.wasm'].byteLength
+					)
+				})
+			})
+		);
+
+		for (const messages of [partial, aliased]) {
+			expect(messages.at(-1)).toEqual({
+				error: 'SWI-Prolog runtime preflight payload must contain distinct whole-buffer owned byte arrays.'
+			});
+			expect(messages.some((message) => message.harnessImported)).toBe(false);
+		}
+	});
+
+	it('keeps verified canonical bytes private from each warm runtime instance', async () => {
+		const { messages, terminals } = await runHarnessSequence([
+			integrityRequest({ harnessMode: 'mutate-injected-assets' }),
+			warmIntegrityRequest()
+		]);
+
+		expect(terminals).toEqual([{ results: true }, { results: true }]);
+		expect(messages.filter((message) => message.harnessImported)).toHaveLength(1);
+		expect(messages.filter((message) => message.harnessInjected)).toEqual([
+			{
+				harnessInjected: expect.objectContaining({
+					wasmSha256: sha256(fixtureLogicalBytes['swipl-web.wasm']),
+					dataSha256: sha256(fixtureLogicalBytes['swipl-web.data'])
+				})
+			},
+			{
+				harnessInjected: expect.objectContaining({
+					wasmSha256: sha256(fixtureLogicalBytes['swipl-web.wasm']),
+					dataSha256: sha256(fixtureLogicalBytes['swipl-web.data'])
+				})
+			}
+		]);
+	});
+
+	it('rejects repeated warm preflight bytes without discarding the cache', async () => {
+		const { messages, terminals } = await runHarnessSequence([
+			integrityRequest(),
+			integrityRequest(),
+			warmIntegrityRequest()
+		]);
+
+		expect(terminals).toEqual([
+			{ results: true },
+			{
+				error: 'SWI-Prolog worker accepts runtime preflight bytes only for its first execution.'
+			},
+			{ results: true }
+		]);
+		expect(messages.filter((message) => message.harnessImported)).toHaveLength(1);
+		expect(messages.filter((message) => message.harnessInjected)).toHaveLength(2);
+	});
+
 	it('rejects missing, extra, or version-mismatched preflight fields before evaluation', async () => {
 		const missing = runtimePreflight() as Record<string, unknown>;
 		delete missing.dataBytes;
@@ -578,7 +702,7 @@ describe('SWI-Prolog runner worker', () => {
 		expect(messages.some((message) => message.harnessImported)).toBe(false);
 	});
 
-	it('rejects invalid manifest bytes and validates caps without reconsuming warm payload bytes', async () => {
+	it('rejects invalid manifest bytes and validates lower caps against warm cached bytes', async () => {
 		const invalidManifest = await runHarness(
 			integrityRequest({
 				runtimePreflight: runtimePreflight({ manifestBytes: Uint8Array.from([0xff]) })
@@ -589,15 +713,12 @@ describe('SWI-Prolog runner worker', () => {
 		});
 
 		const payload = runtimePreflight();
-		const ignoredWarmWasmBytes = Uint8Array.from(fixtureLogicalBytes['swipl-web.wasm']);
-		ignoredWarmWasmBytes[ignoredWarmWasmBytes.byteLength - 1] ^= 1;
 		const { messages, terminals } = await runHarnessSequence([
 			integrityRequest({ runtimePreflight: payload }),
-			integrityRequest({
-				runtimePreflight: runtimePreflight({ wasmBytes: ignoredWarmWasmBytes }),
+			warmIntegrityRequest({
 				maxAssetBytes: payload.manifestBytes.byteLength
 			}),
-			integrityRequest({ runtimePreflight: runtimePreflight(), maxAssetBytes: 1 })
+			warmIntegrityRequest({ maxAssetBytes: 1 })
 		]);
 		expect(terminals).toEqual([
 			{ results: true },
@@ -622,11 +743,11 @@ describe('SWI-Prolog runner worker', () => {
 	it('verifies an empty source before running and cleans each warm SWI-Prolog instance', async () => {
 		const { messages, terminals } = await runHarnessSequence([
 			integrityRequest({ code: '' }),
-			integrityRequest({
+			warmIntegrityRequest({
 				code: 'main :- writeln(second).',
 				harnessMode: 'mutate-global-factory'
 			}),
-			integrityRequest({ code: 'main :- writeln(third).' })
+			warmIntegrityRequest({ code: 'main :- writeln(third).' })
 		]);
 
 		expect(terminals).toEqual([{ results: true }, { results: true }, { results: true }]);
@@ -686,10 +807,10 @@ describe('SWI-Prolog runner worker', () => {
 	it('rejects a warm identity mismatch without discarding the verified profile', async () => {
 		const { messages, terminals } = await runHarnessSequence([
 			integrityRequest(),
-			integrityRequest({
-				runtimePreflight: runtimePreflight({ profileId: 'swipl-wasm-other-profile' })
+			warmIntegrityRequest({
+				manifestFingerprint: '0'.repeat(64)
 			}),
-			integrityRequest()
+			warmIntegrityRequest()
 		]);
 
 		expect(terminals).toEqual([

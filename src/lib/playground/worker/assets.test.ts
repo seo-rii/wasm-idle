@@ -4,6 +4,7 @@ const originalFetch = globalThis.fetch;
 const originalPostMessage = globalThis.postMessage;
 const originalXmlHttpRequest = globalThis.XMLHttpRequest;
 const runtimeBaseUrl = 'https://assets.example.test/runtime/';
+const packageBaseUrl = 'https://cdn.jsdelivr.net/pyodide/v0.29.3/full/';
 
 function createStreamResponse(
 	chunks: Uint8Array[],
@@ -342,5 +343,127 @@ describe('worker direct runtime asset fallback', () => {
 		await expect(loadWorkerRuntimeAsset('compiler.wasm')).rejects.toThrow(
 			'Runtime asset compiler.wasm exceeds the 4 byte limit'
 		);
+	});
+
+	it('bounds an exact package allowlist and preserves native integrity verification', async () => {
+		const packageUrl = `${packageBaseUrl}numpy-2.3.3-py3-none-any.whl`;
+		const streamed = createStreamResponse([new Uint8Array([1, 2, 3])], {
+			url: packageUrl
+		});
+		const fetchMock = vi.fn(async () => streamed.response);
+		const { configureWorkerRuntimeAssetAllowlist } = await setupDirectAssetLoader(fetchMock, 4);
+		configureWorkerRuntimeAssetAllowlist({
+			baseUrl: packageBaseUrl,
+			assets: ['numpy-2.3.3-py3-none-any.whl']
+		});
+
+		const response = await globalThis.fetch(packageUrl, {
+			integrity: 'sha256-ZGVtby1kaWdlc3Q='
+		});
+
+		await expect(response.arrayBuffer()).resolves.toEqual(new Uint8Array([1, 2, 3]).buffer);
+		expect(fetchMock).toHaveBeenCalledWith(packageUrl, {
+			credentials: 'omit',
+			redirect: 'error',
+			referrerPolicy: 'no-referrer',
+			integrity: 'sha256-ZGVtby1kaWdlc3Q='
+		});
+	});
+
+	it('cancels an allowlisted package stream when it exceeds the caller ceiling', async () => {
+		const packageAsset = 'numpy-2.3.3-py3-none-any.whl';
+		const packageUrl = `${packageBaseUrl}${packageAsset}`;
+		const streamed = createStreamResponse([new Uint8Array(3), new Uint8Array(2)], {
+			url: packageUrl
+		});
+		const fetchMock = vi.fn(async () => streamed.response);
+		const { configureWorkerRuntimeAssetAllowlist } = await setupDirectAssetLoader(fetchMock, 4);
+		configureWorkerRuntimeAssetAllowlist({
+			baseUrl: packageBaseUrl,
+			assets: [packageAsset]
+		});
+
+		await expect(globalThis.fetch(packageUrl)).rejects.toThrow(
+			`Runtime asset ${packageAsset} exceeds the 4 byte limit`
+		);
+		expect(streamed.cancel).toHaveBeenCalledOnce();
+		expect(streamed.releaseLock).toHaveBeenCalledOnce();
+	});
+
+	it('rejects an oversized allowlisted package declaration before reading it', async () => {
+		const packageAsset = 'numpy-2.3.3-py3-none-any.whl';
+		const packageUrl = `${packageBaseUrl}${packageAsset}`;
+		const bodyCancel = vi.fn(async () => undefined);
+		const fetchMock = vi.fn(async () => ({
+			body: { cancel: bodyCancel },
+			headers: new Headers({ 'content-length': '5' }),
+			ok: true,
+			status: 200,
+			statusText: 'OK',
+			url: packageUrl
+		}));
+		const { configureWorkerRuntimeAssetAllowlist } = await setupDirectAssetLoader(fetchMock, 4);
+		configureWorkerRuntimeAssetAllowlist({
+			baseUrl: packageBaseUrl,
+			assets: [packageAsset]
+		});
+
+		await expect(globalThis.fetch(packageUrl)).rejects.toThrow(
+			`Runtime asset ${packageAsset} exceeds the 4 byte limit`
+		);
+		expect(bodyCancel).toHaveBeenCalledOnce();
+	});
+
+	it('fails closed for package-base paths absent from the exact allowlist', async () => {
+		const fetchMock = vi.fn();
+		const { configureWorkerRuntimeAssetAllowlist } = await setupDirectAssetLoader(fetchMock);
+		configureWorkerRuntimeAssetAllowlist({
+			baseUrl: packageBaseUrl,
+			assets: ['numpy-2.3.3-py3-none-any.whl']
+		});
+
+		await expect(globalThis.fetch(`${packageBaseUrl}unlisted.whl`)).rejects.toThrow(
+			'Untracked runtime asset request'
+		);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('keeps the exact allowlist authoritative when package and runtime bases overlap', async () => {
+		const packageAsset = 'numpy-2.3.3-py3-none-any.whl';
+		const packageUrl = `${runtimeBaseUrl}${packageAsset}`;
+		const fetchMock = vi.fn(
+			async (input: string) =>
+				createStreamResponse([new Uint8Array([1, 2, 3])], { url: input }).response
+		);
+		const { configureWorkerRuntimeAssetAllowlist } = await setupDirectAssetLoader(fetchMock, 4);
+		configureWorkerRuntimeAssetAllowlist({
+			baseUrl: runtimeBaseUrl,
+			assets: [packageAsset],
+			runtimeAssets: ['compiler.wasm']
+		});
+
+		await expect(globalThis.fetch(packageUrl)).resolves.toBeInstanceOf(Response);
+		await expect(globalThis.fetch(`${runtimeBaseUrl}compiler.wasm`)).resolves.toBeInstanceOf(
+			Response
+		);
+		await expect(globalThis.fetch(`${runtimeBaseUrl}unlisted.whl`)).rejects.toThrow(
+			'Untracked runtime asset request'
+		);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it.each([
+		'../numpy.whl',
+		'nested/numpy.whl',
+		'https://untrusted.example/numpy.whl',
+		'numpy.whl?mirror=untrusted'
+	])('rejects an unsafe direct allowlist entry: %s', async (asset) => {
+		const fetchMock = vi.fn();
+		const { configureWorkerRuntimeAssetAllowlist } = await setupDirectAssetLoader(fetchMock);
+
+		expect(() =>
+			configureWorkerRuntimeAssetAllowlist({ baseUrl: packageBaseUrl, assets: [asset] })
+		).toThrow(`Direct runtime asset name is unsafe: ${asset}`);
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 });

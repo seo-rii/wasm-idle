@@ -51,12 +51,14 @@ function readProgramStdin() {
 async function loadCobolRuntime(
 	clangAssets: WorkerRuntimeAssetConfig | undefined,
 	cobolBaseUrl: string,
+	maxAssetBytes: number | undefined,
 	log: boolean
 ) {
 	configureWorkerRuntimeAssets(clangAssets || null);
 	compiler = await createCobolCompiler({
 		runtimeBaseUrl: cobolBaseUrl,
 		clangRuntimeBaseUrl: clangAssets?.baseUrl || '',
+		maxAssetBytes,
 		log
 	});
 }
@@ -75,11 +77,12 @@ self.onmessage = async (event: { data: any }) => {
 		workspaceFiles,
 		stdin,
 		clangAssets,
-		cobolBaseUrl
+		cobolBaseUrl,
+		maxAssetBytes
 	} = event.data;
 	if (load) {
 		try {
-			await loadCobolRuntime(clangAssets, cobolBaseUrl, log);
+			await loadCobolRuntime(clangAssets, cobolBaseUrl, maxAssetBytes, log);
 			postMessage({ load: true });
 		} catch (error: any) {
 			postMessage({ error: error.message });

@@ -17,15 +17,34 @@ describe('Python worker source', () => {
 		expect(source).toContain("postProgress(100, 'Python packages ready');");
 	});
 
-	it('loads the Pyodide module from the configured static runtime URL', () => {
-		expect(source).toContain('pyodide.mjs');
+	it('loads the Pyodide entry and asm modules through the bounded runtime asset loader', () => {
+		expect(source).toContain("importRuntimeAssetModule('pyodide.asm.js')");
+		expect(source).toContain("importRuntimeAssetModule(\n\t\t'pyodide.mjs'");
+		expect(source).toContain('loadWorkerRuntimeAsset(asset)');
 		expect(source).toContain('/* @vite-ignore */ moduleUrl');
 		expect(source).not.toContain("await import('pyodide')");
 	});
 
-	it('configures the supported Pyodide package base URL instead of a removed setter', () => {
-		expect(source).toContain('loadPyodide({ indexURL: path, packageBaseUrl })');
+	it('bounds direct packages to lock-declared files on the version-pinned CDN', () => {
+		expect(source).toContain("'https://cdn.jsdelivr.net/pyodide/'");
+		expect(source).toContain('resolvePinnedPackageBaseUrl(runtimeModule.version)');
+		expect(source).toContain("loadWorkerRuntimeAsset('pyodide-lock.json')");
+		expect(source).toContain('parsePythonPackageLock(loadedLock.bytes)');
+		expect(source).toContain('configureWorkerRuntimeAssetAllowlist({');
+		expect(source).toContain('assets: [...parsedLock.packageAssets]');
+		expect(source).toContain('runtimeAssets: directPyodideRuntimeAssets');
+		expect(source).toContain('lockFileContents = parsedLock.lock as unknown as Lockfile;');
+		expect(source).toContain('...(lockFileContents ? { lockFileContents } : {})');
+		expect(source).not.toContain('cdnFallbackUrl');
 		expect(source).not.toContain('setCdnUrl');
+	});
+
+	it('executes empty source and posts a terminal result', () => {
+		expect(source).toContain("else if (typeof code === 'string') {");
+		expect(source).not.toContain('else if (code) {');
+		expect(source).toMatch(
+			/else if \(typeof code === 'string'\) \{[\s\S]*?self\.postMessage\(\{ results: true \}\);/
+		);
 	});
 
 	it('reports initialization failures instead of leaving the host waiting', () => {
@@ -33,7 +52,7 @@ describe('Python worker source', () => {
 			/if \(load\) \{[\s\S]*?try \{[\s\S]*?await loadPyodide\(baseUrl\);[\s\S]*?catch/
 		);
 		expect(source).toMatch(
-			/else if \(code\) \{[\s\S]*?await loadPackages\([\s\S]*?catch[\s\S]*?return;/
+			/else if \(typeof code === 'string'\) \{[\s\S]*?await loadPackages\([\s\S]*?catch[\s\S]*?return;/
 		);
 	});
 

@@ -699,6 +699,7 @@ export interface ResolvedZigRuntimeAssetConfig {
 }
 
 export const PYTHON_RUNTIME_LOAD_ASSETS = [
+	'pyodide.mjs',
 	'pyodide.asm.js',
 	'pyodide-lock.json',
 	'pyodide.asm.wasm',

@@ -179,12 +179,18 @@ async function loadFortranRuntime(
 
 	configureWorkerRuntimeAssets(clangAssets || null);
 	const clangBaseUrl = clangAssets?.baseUrl || '';
-	const manifest = await loadRuntimeManifest(resolveRuntimeManifestUrl(clangBaseUrl));
+	const manifest = await loadRuntimeManifest(
+		resolveRuntimeManifestUrl(clangBaseUrl),
+		fetch,
+		undefined,
+		fortranAssets.maxAssetBytes
+	);
 	const nextClang = new BrowserClangRuntime({
 		stdout: (output) => postMessage({ output }),
 		stdin: () => '',
 		progress: (value) => postMessage({ progress: value }),
 		log,
+		maxAssetBytes: fortranAssets.maxAssetBytes,
 		runtimeBaseUrl: clangBaseUrl,
 		manifest
 	});

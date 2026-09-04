@@ -1,5 +1,6 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import type {
+	GoRuntimeBoundaryOptions,
 	RuntimeAssetPackReference,
 	RuntimeDeltaPackIndexEntry,
 	RuntimeIdentityPackIndexEntry,
@@ -9,6 +10,132 @@ import type {
 const runtimePackBytesCache = new Map<string, Promise<Uint8Array>>();
 const runtimePackIndexCache = new Map<string, Promise<RuntimePackIndex>>();
 type RuntimeAssetProgressReporter = (loaded: number, total?: number) => void;
+const DEFAULT_MAX_ASSET_BYTES = 128 * 1024 * 1024;
+
+function resolveMaxAssetBytes(options: GoRuntimeBoundaryOptions) {
+	const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_ASSET_BYTES;
+	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes <= 0) {
+		throw new Error('wasm-go maxAssetBytes must be a positive safe integer');
+	}
+	return maxAssetBytes;
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+	if (signal?.aborted) {
+		throw signal.reason ?? new DOMException('wasm-go runtime asset load aborted', 'AbortError');
+	}
+}
+
+function waitForSignal<T>(operation: Promise<T>, signal?: AbortSignal) {
+	if (!signal) return operation;
+	return new Promise<T>((resolve, reject) => {
+		let settled = false;
+		const finish = (callback: () => void) => {
+			if (settled) return;
+			settled = true;
+			signal.removeEventListener('abort', abort);
+			callback();
+		};
+		const abort = () =>
+			finish(() =>
+				reject(
+					signal.reason ??
+						new DOMException('wasm-go runtime asset load aborted', 'AbortError')
+				)
+			);
+		signal.addEventListener('abort', abort, { once: true });
+		if (signal.aborted) abort();
+		operation.then(
+			(value) => finish(() => resolve(value)),
+			(error) => finish(() => reject(error))
+		);
+	});
+}
+
+function createAssetDeadline(options: GoRuntimeBoundaryOptions, assetLabel: string) {
+	if (options.assetTimeoutMs === undefined) {
+		return { signal: options.signal, cleanup: () => undefined };
+	}
+	if (!Number.isSafeInteger(options.assetTimeoutMs) || options.assetTimeoutMs <= 0) {
+		throw new Error('wasm-go assetTimeoutMs must be a positive safe integer');
+	}
+	const controller = new AbortController();
+	const forwardAbort = () =>
+		controller.abort(
+			options.signal?.reason ??
+				new DOMException('wasm-go runtime asset load aborted', 'AbortError')
+		);
+	options.signal?.addEventListener('abort', forwardAbort, { once: true });
+	if (options.signal?.aborted) forwardAbort();
+	const timeout = setTimeout(
+		() =>
+			controller.abort(
+				new DOMException(
+					`${assetLabel} timed out after ${options.assetTimeoutMs} ms`,
+					'TimeoutError'
+				)
+			),
+		options.assetTimeoutMs
+	);
+	return {
+		signal: controller.signal,
+		cleanup: () => {
+			clearTimeout(timeout);
+			options.signal?.removeEventListener('abort', forwardAbort);
+		}
+	};
+}
+
+async function readBoundedStream(
+	stream: ReadableStream<Uint8Array>,
+	assetLabel: string,
+	maxAssetBytes: number,
+	signal?: AbortSignal,
+	reportProgress?: RuntimeAssetProgressReporter,
+	total?: number
+) {
+	const reader = stream.getReader();
+	let receivedLength = 0;
+	let capacity = Math.min(total ?? 64 * 1024, maxAssetBytes);
+	let output = new Uint8Array(Math.max(1, capacity));
+	const abort = () => {
+		void reader.cancel(signal?.reason).catch(() => {});
+	};
+	signal?.addEventListener('abort', abort, { once: true });
+	try {
+		while (true) {
+			throwIfAborted(signal);
+			const { done, value } = await reader.read();
+			throwIfAborted(signal);
+			if (done) break;
+			if (!value?.byteLength) continue;
+			if (value.byteLength > maxAssetBytes - receivedLength) {
+				void reader.cancel('asset byte limit exceeded').catch(() => {});
+				throw new Error(
+					`${assetLabel} exceeds the hard asset limit ${maxAssetBytes} bytes`
+				);
+			}
+			const nextLength = receivedLength + value.byteLength;
+			if (nextLength > output.byteLength) {
+				capacity = Math.min(
+					maxAssetBytes,
+					Math.max(nextLength, Math.max(output.byteLength * 2, 64 * 1024))
+				);
+				const grown = new Uint8Array(capacity);
+				grown.set(output.subarray(0, receivedLength));
+				output = grown;
+			}
+			output.set(value, receivedLength);
+			receivedLength = nextLength;
+			reportProgress?.(receivedLength, total);
+		}
+		reportProgress?.(receivedLength, total ?? receivedLength);
+		return output.slice(0, receivedLength);
+	} finally {
+		signal?.removeEventListener('abort', abort);
+		reader.releaseLock();
+	}
+}
 
 function expectObject(value: unknown, label: string): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -143,103 +270,126 @@ export async function fetchRuntimeAssetBytes(
 	assetLabel: string,
 	fetchImpl: typeof fetch = fetch,
 	allowCompressedFallback = true,
-	reportProgress?: RuntimeAssetProgressReporter
+	reportProgress?: RuntimeAssetProgressReporter,
+	options: GoRuntimeBoundaryOptions = {}
 ) {
-	const resolvedAssetUrl = assetUrl.toString();
-	const resolvedAssetUrlObject = new URL(resolvedAssetUrl);
-	let response: Response;
+	const maxAssetBytes = resolveMaxAssetBytes(options);
+	const deadline = createAssetDeadline(options, assetLabel);
+	const signal = deadline.signal;
 	try {
-		response = await fetchImpl(resolvedAssetUrl);
-	} catch (error) {
-		throw new Error(
-			`failed to fetch ${assetLabel} from ${resolvedAssetUrl}: ${error instanceof Error ? error.message : String(error)}. This usually means the browser loaded a stale wasm-go bundle or blocked a nested runtime asset request; hard refresh and resync the runtime assets.`
-		);
-	}
-	let assetBytes: Uint8Array;
-	if (!response.body) {
-		assetBytes = new Uint8Array(await response.arrayBuffer());
-		reportProgress?.(assetBytes.byteLength, assetBytes.byteLength);
-	} else {
-		const reader = response.body.getReader();
-		const contentLength = Number(response.headers.get('content-length') || 0) || undefined;
-		let receivedLength = 0;
-		const chunks: Uint8Array[] = [];
-		while (true) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			if (!value) continue;
-			const chunk = Uint8Array.from(value);
-			chunks.push(chunk);
-			receivedLength += chunk.byteLength;
-			reportProgress?.(receivedLength, contentLength);
-		}
-		assetBytes = new Uint8Array(receivedLength);
-		let position = 0;
-		for (const chunk of chunks) {
-			assetBytes.set(chunk, position);
-			position += chunk.byteLength;
-		}
-		reportProgress?.(receivedLength, contentLength ?? receivedLength);
-	}
-	const assetPreview = new TextDecoder()
-		.decode(assetBytes.slice(0, 128))
-		.replace(/^\uFEFF/, '')
-		.trimStart()
-		.toLowerCase();
-	const responseLooksLikeHtml =
-		assetPreview.startsWith('<!doctype html') ||
-		assetPreview.startsWith('<html') ||
-		assetPreview.startsWith('<head') ||
-		assetPreview.startsWith('<body');
-	if (
-		allowCompressedFallback &&
-		!resolvedAssetUrlObject.pathname.endsWith('.gz') &&
-		(!response.ok || responseLooksLikeHtml)
-	) {
-		const compressedAssetUrl = new URL(resolvedAssetUrl);
-		compressedAssetUrl.pathname = `${compressedAssetUrl.pathname}.gz`;
+		throwIfAborted(signal);
+		const resolvedAssetUrl = assetUrl.toString();
+		const resolvedAssetUrlObject = new URL(resolvedAssetUrl);
+		let response: Response;
 		try {
+			const responsePromise = fetchImpl(resolvedAssetUrl, { signal });
+			void responsePromise.then(
+				(lateResponse) => {
+					if (signal?.aborted) {
+						void lateResponse.body?.cancel(signal.reason).catch(() => {});
+					}
+				},
+				() => undefined
+			);
+			response = await waitForSignal(responsePromise, signal);
+		} catch (error) {
+			throwIfAborted(signal);
+			throw new Error(
+				`failed to fetch ${assetLabel} from ${resolvedAssetUrl}: ${error instanceof Error ? error.message : String(error)}. This usually means the browser loaded a stale wasm-go bundle or blocked a nested runtime asset request; hard refresh and resync the runtime assets.`
+			);
+		}
+		const contentLength = Number(response.headers.get('content-length') || 0) || undefined;
+		if (contentLength !== undefined && contentLength > maxAssetBytes) {
+			void response.body?.cancel('asset byte limit exceeded').catch(() => {});
+			throw new Error(`${assetLabel} exceeds the hard asset limit ${maxAssetBytes} bytes`);
+		}
+		let assetBytes: Uint8Array;
+		if (!response.body) {
+			assetBytes = new Uint8Array(await waitForSignal(response.arrayBuffer(), signal));
+			throwIfAborted(signal);
+			if (assetBytes.byteLength > maxAssetBytes) {
+				throw new Error(
+					`${assetLabel} exceeds the hard asset limit ${maxAssetBytes} bytes`
+				);
+			}
+			reportProgress?.(assetBytes.byteLength, assetBytes.byteLength);
+		} else {
+			assetBytes = await readBoundedStream(
+				response.body,
+				assetLabel,
+				maxAssetBytes,
+				signal,
+				reportProgress,
+				contentLength
+			);
+		}
+		const assetPreview = new TextDecoder()
+			.decode(assetBytes.slice(0, 128))
+			.replace(/^\uFEFF/, '')
+			.trimStart()
+			.toLowerCase();
+		const responseLooksLikeHtml =
+			assetPreview.startsWith('<!doctype html') ||
+			assetPreview.startsWith('<html') ||
+			assetPreview.startsWith('<head') ||
+			assetPreview.startsWith('<body');
+		if (
+			allowCompressedFallback &&
+			!resolvedAssetUrlObject.pathname.endsWith('.gz') &&
+			(!response.ok || responseLooksLikeHtml)
+		) {
+			const compressedAssetUrl = new URL(resolvedAssetUrl);
+			compressedAssetUrl.pathname = `${compressedAssetUrl.pathname}.gz`;
 			return await fetchRuntimeAssetBytes(
 				compressedAssetUrl,
 				assetLabel,
 				fetchImpl,
 				false,
+				reportProgress,
+				{ ...options, signal }
+			);
+		}
+		if (!response.ok) {
+			throw new Error(
+				`failed to fetch ${assetLabel} from ${resolvedAssetUrl} (status ${response.status}). This usually means the browser loaded a stale wasm-go bundle or a nested runtime asset is missing.`
+			);
+		}
+		if (responseLooksLikeHtml) {
+			throw new Error(
+				`failed to fetch ${assetLabel} from ${resolvedAssetUrl}: expected a wasm-go runtime asset but got HTML instead. This usually means the browser loaded a stale or wrong wasm-go bundle, or the host rewrote a missing nested asset request to index.html; hard refresh and resync the runtime assets.`
+			);
+		}
+		if (!resolvedAssetUrlObject.pathname.endsWith('.gz')) {
+			return assetBytes;
+		}
+		if (assetBytes.byteLength < 2 || assetBytes[0] !== 0x1f || assetBytes[1] !== 0x8b) {
+			return assetBytes;
+		}
+		if (typeof DecompressionStream !== 'function') {
+			throw new Error(
+				`failed to decompress ${assetLabel} from ${resolvedAssetUrl}: this browser does not support DecompressionStream('gzip').`
+			);
+		}
+		try {
+			const compressedBytes = new Uint8Array(assetBytes.byteLength);
+			compressedBytes.set(assetBytes);
+			return await readBoundedStream(
+				new Blob([compressedBytes.buffer])
+					.stream()
+					.pipeThrough(new DecompressionStream('gzip')),
+				assetLabel,
+				maxAssetBytes,
+				signal,
 				reportProgress
 			);
-		} catch {}
-	}
-	if (!response.ok) {
-		throw new Error(
-			`failed to fetch ${assetLabel} from ${resolvedAssetUrl} (status ${response.status}). This usually means the browser loaded a stale wasm-go bundle or a nested runtime asset is missing.`
-		);
-	}
-	if (responseLooksLikeHtml) {
-		throw new Error(
-			`failed to fetch ${assetLabel} from ${resolvedAssetUrl}: expected a wasm-go runtime asset but got HTML instead. This usually means the browser loaded a stale or wrong wasm-go bundle, or the host rewrote a missing nested asset request to index.html; hard refresh and resync the runtime assets.`
-		);
-	}
-	if (!resolvedAssetUrlObject.pathname.endsWith('.gz')) {
-		return assetBytes;
-	}
-	if (assetBytes.byteLength < 2 || assetBytes[0] !== 0x1f || assetBytes[1] !== 0x8b) {
-		return assetBytes;
-	}
-	if (typeof DecompressionStream !== 'function') {
-		throw new Error(
-			`failed to decompress ${assetLabel} from ${resolvedAssetUrl}: this browser does not support DecompressionStream('gzip').`
-		);
-	}
-	try {
-		const compressedBytes = new Uint8Array(assetBytes.byteLength);
-		compressedBytes.set(assetBytes);
-		const decompressedResponse = new Response(
-			new Blob([compressedBytes.buffer]).stream().pipeThrough(new DecompressionStream('gzip'))
-		);
-		return new Uint8Array(await decompressedResponse.arrayBuffer());
-	} catch (error) {
-		throw new Error(
-			`failed to decompress ${assetLabel} from ${resolvedAssetUrl}: ${error instanceof Error ? error.message : String(error)}`
-		);
+		} catch (error) {
+			throwIfAborted(signal);
+			throw new Error(
+				`failed to decompress ${assetLabel} from ${resolvedAssetUrl}: ${error instanceof Error ? error.message : String(error)}`
+			);
+		}
+	} finally {
+		deadline.cleanup();
 	}
 }
 
@@ -247,11 +397,19 @@ export async function fetchRuntimeAssetJson<T>(
 	assetUrl: string | URL,
 	assetLabel: string,
 	fetchImpl: typeof fetch = fetch,
-	reportProgress?: RuntimeAssetProgressReporter
+	reportProgress?: RuntimeAssetProgressReporter,
+	options: GoRuntimeBoundaryOptions = {}
 ): Promise<T> {
 	return JSON.parse(
 		new TextDecoder().decode(
-			await fetchRuntimeAssetBytes(assetUrl, assetLabel, fetchImpl, true, reportProgress)
+			await fetchRuntimeAssetBytes(
+				assetUrl,
+				assetLabel,
+				fetchImpl,
+				true,
+				reportProgress,
+				options
+			)
 		)
 	) as T;
 }
@@ -260,10 +418,12 @@ async function loadRuntimePackBytes(
 	baseUrl: string | URL,
 	pack: RuntimeAssetPackReference,
 	fetchImpl: typeof fetch,
-	reportProgress?: RuntimeAssetProgressReporter
+	reportProgress?: RuntimeAssetProgressReporter,
+	options: GoRuntimeBoundaryOptions = {}
 ) {
 	const assetUrl = resolveVersionedAssetUrl(baseUrl, pack.asset).toString();
-	let cached = runtimePackBytesCache.get(assetUrl);
+	const cacheKey = `${assetUrl}\n${resolveMaxAssetBytes(options)}\n${options.assetTimeoutMs ?? ''}`;
+	let cached = runtimePackBytesCache.get(cacheKey);
 	const reusedCachedBytes = Boolean(cached);
 	if (!cached) {
 		cached = fetchRuntimeAssetBytes(
@@ -271,16 +431,20 @@ async function loadRuntimePackBytes(
 			`wasm-go runtime pack ${pack.asset}`,
 			fetchImpl,
 			true,
-			reportProgress
+			reportProgress,
+			options
 		);
-		runtimePackBytesCache.set(assetUrl, cached);
+		if (!options.signal) runtimePackBytesCache.set(cacheKey, cached);
 		cached.catch(() => {
-			if (runtimePackBytesCache.get(assetUrl) === cached) {
-				runtimePackBytesCache.delete(assetUrl);
+			if (runtimePackBytesCache.get(cacheKey) === cached) {
+				runtimePackBytesCache.delete(cacheKey);
 			}
 		});
 	}
-	const bytes = await cached;
+	const bytes = await waitForSignal(cached, options.signal);
+	if (options.signal && !options.signal.aborted && !runtimePackBytesCache.has(cacheKey)) {
+		runtimePackBytesCache.set(cacheKey, Promise.resolve(bytes));
+	}
 	if (reusedCachedBytes) {
 		reportProgress?.(bytes.byteLength, bytes.byteLength);
 	}
@@ -291,26 +455,32 @@ export async function loadRuntimePackIndex(
 	baseUrl: string | URL,
 	pack: RuntimeAssetPackReference,
 	fetchImpl: typeof fetch = fetch,
-	reportProgress?: RuntimeAssetProgressReporter
+	reportProgress?: RuntimeAssetProgressReporter,
+	options: GoRuntimeBoundaryOptions = {}
 ) {
 	const indexUrl = resolveVersionedAssetUrl(baseUrl, pack.index).toString();
-	let cached = runtimePackIndexCache.get(indexUrl);
+	const cacheKey = `${indexUrl}\n${resolveMaxAssetBytes(options)}\n${options.assetTimeoutMs ?? ''}`;
+	let cached = runtimePackIndexCache.get(cacheKey);
 	const reusedCachedIndex = Boolean(cached);
 	if (!cached) {
 		cached = fetchRuntimeAssetJson<unknown>(
 			indexUrl,
 			`wasm-go runtime pack index ${pack.index}`,
 			fetchImpl,
-			reportProgress
+			reportProgress,
+			options
 		).then((value) => parseRuntimePackIndex(value));
-		runtimePackIndexCache.set(indexUrl, cached);
+		if (!options.signal) runtimePackIndexCache.set(cacheKey, cached);
 		cached.catch(() => {
-			if (runtimePackIndexCache.get(indexUrl) === cached) {
-				runtimePackIndexCache.delete(indexUrl);
+			if (runtimePackIndexCache.get(cacheKey) === cached) {
+				runtimePackIndexCache.delete(cacheKey);
 			}
 		});
 	}
-	const index = await cached;
+	const index = await waitForSignal(cached, options.signal);
+	if (options.signal && !options.signal.aborted && !runtimePackIndexCache.has(cacheKey)) {
+		runtimePackIndexCache.set(cacheKey, Promise.resolve(index));
+	}
 	if (reusedCachedIndex) {
 		reportProgress?.(index.fileCount, index.fileCount);
 	}
@@ -336,7 +506,8 @@ async function loadRuntimePackEntriesRecursive(
 				index?: RuntimeAssetProgressReporter;
 				asset?: RuntimeAssetProgressReporter;
 		  }
-		| undefined
+		| undefined,
+	options: GoRuntimeBoundaryOptions
 ): Promise<LoadedRuntimePackEntry[]> {
 	const packKey = runtimePackKey(baseUrl, pack);
 	if (ancestorPacks.has(packKey)) {
@@ -346,8 +517,8 @@ async function loadRuntimePackEntriesRecursive(
 	nestedAncestorPacks.add(packKey);
 	const reportProgress = reportProgressForPack(pack);
 	const [index, bytes] = await Promise.all([
-		loadRuntimePackIndex(baseUrl, pack, fetchImpl, reportProgress?.index),
-		loadRuntimePackBytes(baseUrl, pack, fetchImpl, reportProgress?.asset)
+		loadRuntimePackIndex(baseUrl, pack, fetchImpl, reportProgress?.index, options),
+		loadRuntimePackBytes(baseUrl, pack, fetchImpl, reportProgress?.asset, options)
 	]);
 	if (index.fileCount !== pack.fileCount) {
 		throw new Error(
@@ -368,6 +539,11 @@ async function loadRuntimePackEntriesRecursive(
 		index.format === 'wasm-go-runtime-delta-pack-index-v1'
 			? index.decodedTotalBytes
 			: index.totalBytes;
+	if (decodedTotalBytes > resolveMaxAssetBytes(options)) {
+		throw new Error(
+			`runtime pack ${pack.asset} decoded bytes exceed the hard asset limit ${resolveMaxAssetBytes(options)} bytes`
+		);
+	}
 	if (pack.decodedTotalBytes !== undefined && pack.decodedTotalBytes !== decodedTotalBytes) {
 		throw new Error(
 			`runtime pack index ${pack.index} expected decodedTotalBytes ${pack.decodedTotalBytes} but loaded ${decodedTotalBytes}`
@@ -395,7 +571,8 @@ async function loadRuntimePackEntriesRecursive(
 		pack.delta.base,
 		fetchImpl,
 		nestedAncestorPacks,
-		reportProgressForPack
+		reportProgressForPack,
+		options
 	);
 	const baseEntriesByRuntimePath = new Map(
 		baseEntries.map((entry) => [entry.runtimePath, entry] as const)
@@ -505,7 +682,8 @@ export async function loadRuntimePackEntries(
 	reportProgress?: {
 		index?: RuntimeAssetProgressReporter;
 		asset?: RuntimeAssetProgressReporter;
-	}
+	},
+	options: GoRuntimeBoundaryOptions = {}
 ) {
 	if (!pack.delta) {
 		return loadRuntimePackEntriesRecursive(
@@ -513,7 +691,8 @@ export async function loadRuntimePackEntries(
 			pack,
 			fetchImpl,
 			new Set(),
-			() => reportProgress
+			() => reportProgress,
+			options
 		);
 	}
 
@@ -590,6 +769,7 @@ export async function loadRuntimePackEntries(
 		pack,
 		fetchImpl,
 		new Set(),
-		reportProgressForPack
+		reportProgressForPack,
+		options
 	);
 }

@@ -10,24 +10,43 @@ import {
 	toStandaloneBytes,
 	writeGuestFile
 } from './wasi-guest.js';
+import { assertGoInstanceMemoryLimit, capGoWasmMemory } from './wasm-memory.js';
 import type {
 	BrowserGoBuildPlan,
 	BrowserGoToolInvocation,
 	BrowserGoToolResult,
-	BrowserGoWorkspaceFile
+	BrowserGoWorkspaceFile,
+	GoRuntimeBoundaryOptions
 } from './types.js';
+
+const DEFAULT_MAX_WASM_MEMORY_BYTES = 512 * 1024 * 1024;
+
+function throwIfAborted(signal?: AbortSignal) {
+	if (signal?.aborted) {
+		throw signal.reason ?? new DOMException('wasm-go tool execution aborted', 'AbortError');
+	}
+}
 
 async function loadSysrootFiles(
 	plan: BrowserGoBuildPlan,
 	runtimeBaseUrl: string | URL,
 	fetchImpl: typeof fetch,
-	reportAssetProgress?: (asset: string, loaded: number, total?: number) => void
+	reportAssetProgress?: (asset: string, loaded: number, total?: number) => void,
+	options: GoRuntimeBoundaryOptions = {}
 ) {
 	if (plan.sysrootPack) {
-		return await loadRuntimePackEntries(runtimeBaseUrl, plan.sysrootPack, fetchImpl, {
-			index: (loaded, total) => reportAssetProgress?.(plan.sysrootPack!.index, loaded, total),
-			asset: (loaded, total) => reportAssetProgress?.(plan.sysrootPack!.asset, loaded, total)
-		});
+		return await loadRuntimePackEntries(
+			runtimeBaseUrl,
+			plan.sysrootPack,
+			fetchImpl,
+			{
+				index: (loaded, total) =>
+					reportAssetProgress?.(plan.sysrootPack!.index, loaded, total),
+				asset: (loaded, total) =>
+					reportAssetProgress?.(plan.sysrootPack!.asset, loaded, total)
+			},
+			options
+		);
 	}
 	return await Promise.all(
 		(plan.sysrootFiles || []).map(async (entry) => ({
@@ -37,7 +56,8 @@ async function loadSysrootFiles(
 				`sysroot asset ${entry.runtimePath}`,
 				fetchImpl,
 				true,
-				(loaded, total) => reportAssetProgress?.(entry.asset, loaded, total)
+				(loaded, total) => reportAssetProgress?.(entry.asset, loaded, total),
+				options
 			)
 		}))
 	);
@@ -59,15 +79,19 @@ export async function executeGoToolInvocation(
 	plan: BrowserGoBuildPlan,
 	runtimeBaseUrl: string | URL,
 	fetchImpl: typeof fetch = fetch,
-	reportAssetProgress?: (asset: string, loaded: number, total?: number) => void
+	reportAssetProgress?: (asset: string, loaded: number, total?: number) => void,
+	options: GoRuntimeBoundaryOptions = {}
 ): Promise<BrowserGoToolResult> {
+	throwIfAborted(options.signal);
+	const maxWasmMemoryBytes = options.maxWasmMemoryBytes ?? DEFAULT_MAX_WASM_MEMORY_BYTES;
 	const root = new Directory(new Map());
 	ensureGuestDirectory(root, '/tmp');
 	for (const entry of await loadSysrootFiles(
 		plan,
 		runtimeBaseUrl,
 		fetchImpl,
-		reportAssetProgress
+		reportAssetProgress,
+		options
 	)) {
 		writeGuestFile(root, entry.runtimePath, entry.bytes, true);
 	}
@@ -83,7 +107,8 @@ export async function executeGoToolInvocation(
 		`${invocation.tool}.wasm`,
 		fetchImpl,
 		true,
-		(loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total)
+		(loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total),
+		options
 	);
 	const stdout = new CaptureFd();
 	const stderr = new CaptureFd();
@@ -98,10 +123,18 @@ export async function executeGoToolInvocation(
 		],
 		{ debug: false }
 	);
-	const module = await WebAssembly.compile(toStandaloneBytes(toolBytes));
+	throwIfAborted(options.signal);
+	const cappedToolBytes = capGoWasmMemory(
+		toStandaloneBytes(toolBytes),
+		maxWasmMemoryBytes,
+		`${invocation.tool}.wasm`
+	);
+	const module = await WebAssembly.compile(cappedToolBytes.slice().buffer as ArrayBuffer);
 	const instance = await WebAssembly.instantiate(module, {
 		wasi_snapshot_preview1: wasiInstance.wasiImport
 	});
+	assertGoInstanceMemoryLimit(instance, maxWasmMemoryBytes, `${invocation.tool}.wasm`);
+	throwIfAborted(options.signal);
 	const exitCode = wasiInstance.start(
 		instance as unknown as {
 			exports: {
@@ -110,6 +143,8 @@ export async function executeGoToolInvocation(
 			};
 		}
 	);
+	assertGoInstanceMemoryLimit(instance, maxWasmMemoryBytes, `${invocation.tool}.wasm`);
+	throwIfAborted(options.signal);
 	const outputBytes = readGuestFile(root, invocation.outputPath);
 	return {
 		exitCode,

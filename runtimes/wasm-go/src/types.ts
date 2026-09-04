@@ -256,7 +256,20 @@ export interface BrowserGoCompileRequest {
 	embeds?: GoEmbedPattern[];
 	log?: boolean;
 	prepare?: boolean;
+	signal?: AbortSignal;
+	assetTimeoutMs?: number;
+	maxAssetBytes?: number;
+	maxWasmMemoryBytes?: number;
+	compileTimeoutMs?: number;
+	linkTimeoutMs?: number;
 	onProgress?: (progress: BrowserGoCompileProgress) => void;
+}
+
+export interface GoRuntimeBoundaryOptions {
+	signal?: AbortSignal;
+	assetTimeoutMs?: number;
+	maxAssetBytes?: number;
+	maxWasmMemoryBytes?: number;
 }
 
 export interface BrowserGoCompilerResult {

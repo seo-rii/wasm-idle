@@ -68,6 +68,7 @@ type AtomVmInitializer = (options?: Record<string, unknown>) => Promise<AtomVmMo
 
 let bundleUrl = '';
 let bundleReceipts: ElixirRuntimeAssetReceipts | null = null;
+let bundleMaxAssetBytes = MAX_ELIXIR_ASSET_BYTES;
 let loadedRuntimeIdentity = '';
 let runtimePromise: Promise<{ module: AtomVmModule; process: string | null }> | null = null;
 let stdinBufferElixir: Int32Array | null = null;
@@ -401,6 +402,7 @@ async function startVm(
 async function loadRuntime(
 	nextBundleUrl: string,
 	nextAssetReceipts: ElixirRuntimeAssetReceipts | undefined,
+	nextMaxAssetBytes: number | undefined,
 	log: boolean
 ) {
 	if (typeof nextBundleUrl !== 'string' || !nextBundleUrl.trim()) {
@@ -431,15 +433,21 @@ async function loadRuntime(
 	if (requestUrl.hash) {
 		throw new Error(`Elixir bundle URL must not include a fragment: ${nextBundleUrl}`);
 	}
+	const configuredMaxAssetBytes = nextMaxAssetBytes ?? MAX_ELIXIR_ASSET_BYTES;
+	if (!Number.isSafeInteger(configuredMaxAssetBytes) || configuredMaxAssetBytes <= 0) {
+		throw new TypeError('Elixir runtime maxAssetBytes must be a positive safe integer');
+	}
+	const effectiveMaxAssetBytes = Math.min(MAX_ELIXIR_ASSET_BYTES, configuredMaxAssetBytes);
 	const receipts = snapshotElixirRuntimeAssetReceipts(nextAssetReceipts);
 	for (const asset of ELIXIR_RUNTIME_ASSET_NAMES) {
-		if (receipts[asset].uncompressedBytes > MAX_ELIXIR_ASSET_BYTES) {
+		const actual = Math.max(receipts[asset].bytes, receipts[asset].uncompressedBytes);
+		if (actual > effectiveMaxAssetBytes) {
 			throw new Error(
-				`Elixir runtime asset exceeds the ${MAX_ELIXIR_ASSET_BYTES} byte limit`
+				`Elixir runtime asset ${asset} exceeds the ${effectiveMaxAssetBytes} byte limit`
 			);
 		}
 	}
-	const identity = JSON.stringify([requestUrl.href, receipts]);
+	const identity = JSON.stringify([requestUrl.href, receipts, configuredMaxAssetBytes]);
 	if (loadedRuntimeIdentity === identity && runtimePromise) {
 		return await runtimePromise;
 	}
@@ -457,7 +465,7 @@ async function loadRuntime(
 			const bytes = await fetchRuntimeAssetBytes({
 				url: assetUrl,
 				label: `Elixir runtime asset ${asset}`,
-				maxAssetBytes: receipt.uncompressedBytes
+				maxAssetBytes: Math.min(receipt.uncompressedBytes, effectiveMaxAssetBytes)
 			});
 			await verifyRuntimeAssetIntegrity({
 				asset,
@@ -521,6 +529,7 @@ self.onmessage = async (event: { data: any }) => {
 		load,
 		bundleUrl: nextBundleUrl,
 		assetReceipts: nextAssetReceipts,
+		maxAssetBytes: nextMaxAssetBytes,
 		buffer,
 		code,
 		diagnose = false,
@@ -532,10 +541,11 @@ self.onmessage = async (event: { data: any }) => {
 	const evalLanguage = language === 'ERLANG' ? 'ERLANG' : 'ELIXIR';
 	try {
 		if (load) {
-			await loadRuntime(nextBundleUrl, nextAssetReceipts, log);
+			await loadRuntime(nextBundleUrl, nextAssetReceipts, nextMaxAssetBytes, log);
 			const configuredReceipts = snapshotElixirRuntimeAssetReceipts(nextAssetReceipts);
 			bundleUrl = nextBundleUrl;
 			bundleReceipts = configuredReceipts;
+			bundleMaxAssetBytes = nextMaxAssetBytes ?? MAX_ELIXIR_ASSET_BYTES;
 			postMessage({ load: true });
 			return;
 		}
@@ -543,6 +553,7 @@ self.onmessage = async (event: { data: any }) => {
 		if (nextBundleUrl) {
 			bundleUrl = nextBundleUrl;
 			bundleReceipts = snapshotElixirRuntimeAssetReceipts(nextAssetReceipts);
+			bundleMaxAssetBytes = nextMaxAssetBytes ?? MAX_ELIXIR_ASSET_BYTES;
 		}
 		if (!bundleUrl || !bundleReceipts) {
 			throw new Error('Elixir runtime not loaded');
@@ -553,7 +564,7 @@ self.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
-		const runtime = await loadRuntime(bundleUrl, bundleReceipts, log);
+		const runtime = await loadRuntime(bundleUrl, bundleReceipts, bundleMaxAssetBytes, log);
 		if (!runtime.process) {
 			throw new Error('Popcorn runtime did not expose a default process');
 		}

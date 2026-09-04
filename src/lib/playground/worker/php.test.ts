@@ -127,6 +127,52 @@ describe('PHP worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 	});
 
+	it.each([
+		{
+			label: 'strict_types declaration',
+			code: '<?php\ndeclare(strict_types=1);\necho $argc;',
+			header: 'declare(strict_types=1);',
+			body: 'echo $argc;'
+		},
+		{
+			label: 'unbracketed namespace declaration',
+			code: '<?php\ndeclare(strict_types=1);\nnamespace Demo\\Cli;\necho $argc;',
+			header: 'namespace Demo\\Cli;',
+			body: 'echo $argc;'
+		},
+		{
+			label: 'bracketed namespace declaration',
+			code: '<?php\ndeclare(strict_types=1);\nnamespace Demo\\Cli { echo $argc; }',
+			header: 'namespace Demo\\Cli {',
+			body: 'echo $argc;'
+		}
+	])('injects argv after the required $label header', async ({ code, header, body }) => {
+		await loadWorker();
+		await (globalThis as any).self.onmessage({
+			data: {
+				code,
+				prepare: false,
+				buffer: new SharedArrayBuffer(4096),
+				args: ['value'],
+				activePath: 'main.php',
+				workspaceFiles: []
+			}
+		});
+
+		const source = phpInstances[0].writeFile.mock.calls.find(
+			([path]: [string]) => path === '/workspace/main.php'
+		)?.[1] as string;
+		expect(source.indexOf('declare(strict_types=1);')).toBeLessThan(
+			source.indexOf("$argv = array('main.php', 'value');")
+		);
+		expect(source.indexOf(header)).toBeLessThan(
+			source.indexOf("$argv = array('main.php', 'value');")
+		);
+		expect(source.indexOf("$argv = array('main.php', 'value');")).toBeLessThan(
+			source.indexOf(body)
+		);
+	});
+
 	it('reports nonzero PHP exits as worker errors', async () => {
 		runResponses.push({
 			text: '',

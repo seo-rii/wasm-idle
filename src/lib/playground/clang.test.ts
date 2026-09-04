@@ -257,8 +257,34 @@ int main() {
 				load: true,
 				assets: {
 					baseUrl: 'https://wasm-idle.invalid/clang/',
+					maxAssetBytes: 128 * 1024 * 1024,
 					useAssetBridge: true
 				}
+			})
+		);
+	});
+
+	it('forwards the caller asset ceiling to the C++ worker', async () => {
+		const sandbox = new Clang('CPP');
+
+		await sandbox.load(
+			{ clang: { baseUrl: 'https://cdn.example.test/clang/' } },
+			'',
+			true,
+			[],
+			{ limits: { maxAssetBytes: 4096 } }
+		);
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				load: true,
+				assets: {
+					baseUrl: 'https://cdn.example.test/clang/',
+					maxAssetBytes: 4096,
+					useAssetBridge: false
+				},
+				maxAssetBytes: 4096
 			})
 		);
 	});

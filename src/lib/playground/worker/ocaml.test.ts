@@ -79,8 +79,8 @@ async function createMockOcamlCompilerModule(source: string) {
 
 let capturedManifestIndex = 0;
 
-async function captureDispatcherManifest() {
-	const captureKey = `__ocamlDispatcherManifest${capturedManifestIndex++}`;
+async function captureDispatcherOptions(maxAssetBytes?: number) {
+	const captureKey = `__ocamlDispatcherOptions${capturedManifestIndex++}`;
 	const compilerModuleUrl = await createMockOcamlCompilerModule(`
 		export async function compile() {
 			return {
@@ -93,14 +93,14 @@ async function captureDispatcherManifest() {
 		}
 
 		export function createBrowserWorkerSystemDispatcher(options) {
-			globalThis[${JSON.stringify(captureKey)}] = options.manifest;
+			globalThis[${JSON.stringify(captureKey)}] = options;
 			return {};
 		}
 	`);
 
 	await import('./ocaml');
 	await (globalThis as any).self.onmessage({
-		data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl }
+		data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl, maxAssetBytes }
 	});
 	await (globalThis as any).self.onmessage({
 		data: {
@@ -110,9 +110,13 @@ async function captureDispatcherManifest() {
 		}
 	});
 
-	const capturedManifest = (globalThis as any)[captureKey];
+	const capturedOptions = (globalThis as any)[captureKey];
 	delete (globalThis as any)[captureKey];
-	return capturedManifest;
+	return capturedOptions;
+}
+
+async function captureDispatcherManifest() {
+	return (await captureDispatcherOptions()).manifest;
 }
 
 describe('OCaml worker', () => {
@@ -204,6 +208,62 @@ describe('OCaml worker', () => {
 		expect(bodyCancel).toHaveBeenCalledOnce();
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			error: `OCaml manifest exceeds the ${4 * 1024 * 1024} byte limit`
+		});
+	});
+
+	it('applies a lower caller limit while fetching the manifest', async () => {
+		const maxAssetBytes = manifestBytes.byteLength - 1;
+		const bodyCancel = vi.fn(async () => undefined);
+		(globalThis as any).fetch = vi.fn(async () => ({
+			body: { cancel: bodyCancel },
+			headers: new Headers({ 'content-length': String(manifestBytes.byteLength) }),
+			ok: true,
+			status: 200,
+			url: manifestUrl
+		}));
+		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			export async function compile() { throw new Error('not used'); }
+			export function createBrowserWorkerSystemDispatcher() { return {}; }
+		`);
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl, maxAssetBytes }
+		});
+
+		expect(bodyCancel).toHaveBeenCalledOnce();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: `OCaml manifest exceeds the ${maxAssetBytes} byte limit`
+		});
+	});
+
+	it('rejects a manifest receipt above the caller asset limit before compilation', async () => {
+		const maxAssetBytes = 10_000_000;
+		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			export async function compile() { throw new Error('not used'); }
+			export function createBrowserWorkerSystemDispatcher() { return {}; }
+		`);
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl, maxAssetBytes }
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
+			error: `OCaml runtime asset wasm_opt exceeds the ${maxAssetBytes} byte limit`
+		});
+	});
+
+	it('passes the caller asset limit to the runtime-pack dispatcher', async () => {
+		const maxAssetBytes = 16 * 1024 * 1024;
+		const options = await captureDispatcherOptions(maxAssetBytes);
+
+		expect(options.runtimeAssets).toEqual({
+			limits: {
+				maxAssetBytes,
+				maxMetadataBytes: 4 * 1024 * 1024,
+				maxEntryBytes: maxAssetBytes
+			}
 		});
 	});
 

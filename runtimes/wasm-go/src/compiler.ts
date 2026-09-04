@@ -45,11 +45,12 @@ const DEFAULT_RUNTIME_MANIFEST_URL = new URL('./runtime/runtime-manifest.v1.json
 const DEFAULT_RUNTIME_BASE_URL = new URL('./runtime/', import.meta.url);
 
 function createRuntimeFetch(): typeof fetch {
-	return (async (input: string | URL) => {
+	return (async (input: string | URL, init?: RequestInit) => {
 		const url = new URL(input.toString());
 		if (url.protocol !== 'file:') {
-			return fetch(url);
+			return fetch(url, init);
 		}
+		if (init?.signal?.aborted) throw init.signal.reason;
 		const [{ readFile }, { fileURLToPath }] = await Promise.all([
 			import('node:fs/promises'),
 			import('node:url')
@@ -74,6 +75,10 @@ export interface CompileGoDependencies {
 		invocation: BrowserGoToolInvocation,
 		context?: {
 			reportAssetProgress?: (asset: string, loaded: number, total?: number) => void;
+			signal?: AbortSignal;
+			assetTimeoutMs?: number;
+			maxAssetBytes?: number;
+			maxWasmMemoryBytes?: number;
 		}
 	) => Promise<BrowserGoToolResult>;
 	fetchImpl?: typeof fetch;
@@ -83,6 +88,12 @@ export interface CreateGoCompilerOptions {
 	manifest?: RuntimeManifestV1 | NormalizedRuntimeManifest;
 	runtimeManifestUrl?: string | URL;
 	runtimeBaseUrl?: string | URL;
+	signal?: AbortSignal;
+	assetTimeoutMs?: number;
+	maxAssetBytes?: number;
+	maxWasmMemoryBytes?: number;
+	compileTimeoutMs?: number;
+	linkTimeoutMs?: number;
 	dependencies?: CompileGoDependencies;
 }
 
@@ -93,6 +104,79 @@ export interface PreloadBrowserGoRuntimeOptions {
 	target?: SupportedGoTarget;
 	includeSysroot?: boolean;
 	fetchImpl?: typeof fetch;
+	signal?: AbortSignal;
+	assetTimeoutMs?: number;
+	maxAssetBytes?: number;
+	maxWasmMemoryBytes?: number;
+}
+
+const DEFAULT_MAX_WASM_MEMORY_BYTES = 512 * 1024 * 1024;
+
+function throwIfAborted(signal?: AbortSignal) {
+	if (signal?.aborted) {
+		throw signal.reason ?? new DOMException('wasm-go operation aborted', 'AbortError');
+	}
+}
+
+function positiveLimit(value: number | undefined, fallback: number, label: string) {
+	const resolved = value ?? fallback;
+	if (!Number.isSafeInteger(resolved) || resolved <= 0) {
+		throw new Error(`${label} must be a positive safe integer`);
+	}
+	return resolved;
+}
+
+function runWithDeadline<T>(
+	start: (signal: AbortSignal) => Promise<T>,
+	timeoutMs: number,
+	label: string,
+	parentSignal?: AbortSignal
+) {
+	return new Promise<T>((resolve, reject) => {
+		const controller = new AbortController();
+		let settled = false;
+		let timer: ReturnType<typeof setTimeout>;
+		const finish = (callback: () => void) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			controller.signal.removeEventListener('abort', abort);
+			parentSignal?.removeEventListener('abort', forwardAbort);
+			callback();
+		};
+		const abort = () =>
+			finish(() =>
+				reject(
+					controller.signal.reason ?? new DOMException(`${label} aborted`, 'AbortError')
+				)
+			);
+		const forwardAbort = () =>
+			controller.abort(
+				parentSignal?.reason ?? new DOMException(`${label} aborted`, 'AbortError')
+			);
+		controller.signal.addEventListener('abort', abort, { once: true });
+		parentSignal?.addEventListener('abort', forwardAbort, { once: true });
+		timer = setTimeout(
+			() =>
+				controller.abort(
+					new DOMException(`${label} timed out after ${timeoutMs} ms`, 'TimeoutError')
+				),
+			timeoutMs
+		);
+		if (parentSignal?.aborted) forwardAbort();
+		if (settled) return;
+		let operation: Promise<T>;
+		try {
+			operation = start(controller.signal);
+		} catch (error) {
+			finish(() => reject(error));
+			return;
+		}
+		operation.then(
+			(value) => finish(() => resolve(value)),
+			(error) => finish(() => reject(error))
+		);
+	});
 }
 
 function toStandaloneBytes(value: Uint8Array | ArrayBuffer) {
@@ -121,13 +205,22 @@ async function resolveCompilerRuntime(
 		};
 	}
 	const manifestUrl = options.runtimeManifestUrl || DEFAULT_RUNTIME_MANIFEST_URL;
+	throwIfAborted(options.signal);
+	const derivedRuntimeBaseUrl = new URL('./', manifestUrl.toString());
+	derivedRuntimeBaseUrl.search = new URL(manifestUrl.toString()).search;
 	return {
 		manifest: await (dependencies.loadManifest || loadRuntimeManifest)(
 			manifestUrl,
 			dependencies.fetchImpl,
-			reportManifestProgress
+			reportManifestProgress,
+			{
+				signal: options.signal,
+				assetTimeoutMs: options.assetTimeoutMs,
+				maxAssetBytes: options.maxAssetBytes,
+				maxWasmMemoryBytes: options.maxWasmMemoryBytes
+			}
 		),
-		runtimeBaseUrl: options.runtimeBaseUrl || new URL('./', manifestUrl.toString())
+		runtimeBaseUrl: options.runtimeBaseUrl || derivedRuntimeBaseUrl
 	};
 }
 
@@ -276,7 +369,10 @@ export async function preloadBrowserGoRuntime(options: PreloadBrowserGoRuntimeOp
 		await fetchRuntimeAssetBytes(
 			resolveVersionedAssetUrl(runtimeBaseUrl, assetPath),
 			label,
-			fetchImpl
+			fetchImpl,
+			true,
+			undefined,
+			options
 		);
 		fetchedAssets.push(resolveVersionedAssetUrl(runtimeBaseUrl, assetPath).toString());
 	};
@@ -284,7 +380,13 @@ export async function preloadBrowserGoRuntime(options: PreloadBrowserGoRuntimeOp
 	await preloadAsset(manifest.compiler.link.asset, 'link.wasm');
 	if (options.includeSysroot !== false) {
 		if (target.sysrootPack) {
-			await loadRuntimePackEntries(runtimeBaseUrl, target.sysrootPack, fetchImpl);
+			await loadRuntimePackEntries(
+				runtimeBaseUrl,
+				target.sysrootPack,
+				fetchImpl,
+				undefined,
+				options
+			);
 			fetchedAssets.push(
 				resolveVersionedAssetUrl(runtimeBaseUrl, target.sysrootPack.index).toString()
 			);
@@ -315,6 +417,13 @@ async function resolveAutoDependencies(
 	fetchImpl: typeof fetch,
 	reportAssetProgress?: (asset: string, loaded: number, total?: number) => void
 ) {
+	throwIfAborted(request.signal);
+	const boundary = {
+		signal: request.signal,
+		maxAssetBytes: request.maxAssetBytes,
+		assetTimeoutMs: request.assetTimeoutMs,
+		maxWasmMemoryBytes: request.maxWasmMemoryBytes
+	};
 	if (request.dependencies && request.dependencies.length > 0) {
 		return request.dependencies;
 	}
@@ -332,7 +441,8 @@ async function resolveAutoDependencies(
 			resolveVersionedAssetUrl(runtimeBaseUrl, target.stdlibIndex.asset),
 			'wasm-go stdlib index',
 			fetchImpl,
-			(loaded, total) => reportAssetProgress?.(target.stdlibIndex!.asset, loaded, total)
+			(loaded, total) => reportAssetProgress?.(target.stdlibIndex!.asset, loaded, total),
+			boundary
 		)) as RuntimeStdlibIndex;
 		if (
 			stdlibIndex.format === 'wasm-go-stdlib-index-v1' &&
@@ -355,7 +465,8 @@ async function resolveAutoDependencies(
 			runtimeBaseUrl,
 			target.sysrootPack,
 			fetchImpl,
-			(loaded, total) => reportAssetProgress?.(target.sysrootPack!.index, loaded, total)
+			(loaded, total) => reportAssetProgress?.(target.sysrootPack!.index, loaded, total),
+			boundary
 		);
 		return index.entries
 			.map((entry) => createSysrootDependency(entry.runtimePath))
@@ -403,8 +514,24 @@ export async function compileGo(
 	options: CreateGoCompilerOptions = {}
 ): Promise<BrowserGoCompilerResult> {
 	const dependencies = options.dependencies || {};
+	const signal = request.signal ?? options.signal;
+	const assetTimeoutMs = request.assetTimeoutMs ?? options.assetTimeoutMs;
+	const maxAssetBytes = request.maxAssetBytes ?? options.maxAssetBytes;
+	const maxWasmMemoryBytes = positiveLimit(
+		request.maxWasmMemoryBytes ?? options.maxWasmMemoryBytes,
+		DEFAULT_MAX_WASM_MEMORY_BYTES,
+		'maxWasmMemoryBytes'
+	);
+	throwIfAborted(signal);
+	const boundedRequest = {
+		...request,
+		signal,
+		assetTimeoutMs,
+		maxAssetBytes,
+		maxWasmMemoryBytes
+	};
 	const fetchImpl = dependencies.fetchImpl || createRuntimeFetch();
-	const progress = createProgressEmitter(request);
+	const progress = createProgressEmitter(boundedRequest);
 	const logs = createLogBuffer(Boolean(request.log));
 	const emitManifestAssetProgress = createStageAssetProgressReporter('manifest', progress, 1);
 	const reportManifestAssetProgress = (loaded: number, total?: number) =>
@@ -412,7 +539,7 @@ export async function compileGo(
 	const reportPlanAssetProgress = createStageAssetProgressReporter('plan', progress, 0.45);
 	progress('manifest', 0, 1, 'loading runtime manifest');
 	const { manifest, runtimeBaseUrl } = await resolveCompilerRuntime(
-		options,
+		{ ...options, signal, assetTimeoutMs, maxAssetBytes, maxWasmMemoryBytes },
 		{
 			...dependencies,
 			fetchImpl
@@ -422,7 +549,7 @@ export async function compileGo(
 	progress('manifest', 1, 1, `loaded runtime manifest for ${manifest.defaultTarget}`);
 	progress('plan', 0, 1, 'resolving compile inputs');
 	const resolvedRequest = await resolveCompileRequest(
-		request,
+		boundedRequest,
 		manifest,
 		runtimeBaseUrl,
 		fetchImpl,
@@ -499,6 +626,10 @@ export async function compileGo(
 			invocation: BrowserGoToolInvocation,
 			context?: {
 				reportAssetProgress?: (asset: string, loaded: number, total?: number) => void;
+				signal?: AbortSignal;
+				assetTimeoutMs?: number;
+				maxAssetBytes?: number;
+				maxWasmMemoryBytes?: number;
 			}
 		) =>
 			executeGoToolInvocation(
@@ -506,7 +637,8 @@ export async function compileGo(
 				plan,
 				runtimeBaseUrl,
 				fetchImpl,
-				context?.reportAssetProgress
+				context?.reportAssetProgress,
+				context
 			));
 	if (useDetailedRuntimeProgress) {
 		emitCompileStage('preparing compile runtime');
@@ -516,10 +648,29 @@ export async function compileGo(
 	logs.push(`[wasm-go] compile ${plan.compile.args.join(' ')}`);
 	let compileResult: BrowserGoToolResult;
 	try {
-		compileResult = await runTool(plan.compile, {
-			reportAssetProgress: updateCompileAssetProgress
-		});
+		const compileTimeoutMs = Math.min(
+			positiveLimit(
+				request.compileTimeoutMs ?? options.compileTimeoutMs,
+				manifest.compiler.compileTimeoutMs,
+				'compileTimeoutMs'
+			),
+			manifest.compiler.compileTimeoutMs
+		);
+		compileResult = await runWithDeadline(
+			(phaseSignal) =>
+				runTool(plan.compile, {
+					reportAssetProgress: updateCompileAssetProgress,
+					signal: phaseSignal,
+					assetTimeoutMs,
+					maxAssetBytes,
+					maxWasmMemoryBytes
+				}),
+			compileTimeoutMs,
+			'Go compile tool',
+			signal
+		);
 	} catch (error) {
+		throwIfAborted(signal);
 		return failure(error instanceof Error ? error.message : String(error), logs.records, plan);
 	}
 	const compileOutputs = normalizeToolOutputs(compileResult.outputs);
@@ -593,10 +744,29 @@ export async function compileGo(
 	};
 	let linkResult: BrowserGoToolResult;
 	try {
-		linkResult = await runTool(linkInputs, {
-			reportAssetProgress: updateLinkAssetProgress
-		});
+		const linkTimeoutMs = Math.min(
+			positiveLimit(
+				request.linkTimeoutMs ?? options.linkTimeoutMs,
+				manifest.compiler.linkTimeoutMs,
+				'linkTimeoutMs'
+			),
+			manifest.compiler.linkTimeoutMs
+		);
+		linkResult = await runWithDeadline(
+			(phaseSignal) =>
+				runTool(linkInputs, {
+					reportAssetProgress: updateLinkAssetProgress,
+					signal: phaseSignal,
+					assetTimeoutMs,
+					maxAssetBytes,
+					maxWasmMemoryBytes
+				}),
+			linkTimeoutMs,
+			'Go link tool',
+			signal
+		);
 	} catch (error) {
+		throwIfAborted(signal);
 		return failure(
 			error instanceof Error ? error.message : String(error),
 			logs.records,
@@ -655,13 +825,29 @@ export async function createGoCompiler(
 ): Promise<BrowserGoCompiler> {
 	return {
 		plan: async (request) => {
+			const boundedRequest = {
+				...request,
+				signal: request.signal ?? options.signal,
+				assetTimeoutMs: request.assetTimeoutMs ?? options.assetTimeoutMs,
+				maxAssetBytes: request.maxAssetBytes ?? options.maxAssetBytes,
+				maxWasmMemoryBytes: request.maxWasmMemoryBytes ?? options.maxWasmMemoryBytes
+			};
 			const fetchImpl = options.dependencies?.fetchImpl || createRuntimeFetch();
-			const { manifest, runtimeBaseUrl } = await resolveCompilerRuntime(options, {
-				...options.dependencies,
-				fetchImpl
-			});
+			const { manifest, runtimeBaseUrl } = await resolveCompilerRuntime(
+				{
+					...options,
+					signal: boundedRequest.signal,
+					assetTimeoutMs: boundedRequest.assetTimeoutMs,
+					maxAssetBytes: boundedRequest.maxAssetBytes,
+					maxWasmMemoryBytes: boundedRequest.maxWasmMemoryBytes
+				},
+				{
+					...options.dependencies,
+					fetchImpl
+				}
+			);
 			const resolvedRequest = await resolveCompileRequest(
-				request,
+				boundedRequest,
 				manifest,
 				runtimeBaseUrl,
 				fetchImpl

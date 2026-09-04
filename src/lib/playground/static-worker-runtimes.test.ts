@@ -7,8 +7,17 @@ import { computeJanetRuntimeFingerprint } from '../../../scripts/sync-wasm-janet
 import { computeJuliaRuntimeFingerprint } from '../../../scripts/sync-wasm-julia.mjs';
 import { computeNimRuntimeFingerprint } from '../../../scripts/sync-wasm-nim.mjs';
 import { computePerlRuntimeFingerprint } from '../../../scripts/sync-wasm-perl.mjs';
+import { executeStaticRuntimePreflight } from './staticRuntimePreflightExecute';
+import {
+	STATIC_RUNTIME_PREFLIGHT_PROTOCOL_VERSION,
+	collectStaticRuntimePreflightTransferables,
+	serializeStaticRuntimePreflightError,
+	type StaticRuntimePreflightRequestMessage,
+	type StaticRuntimePreflightResponseMessage
+} from './staticRuntimePreflightProtocol';
 
 const workerInstances: MockWorker[] = [];
+const preflightWorkerInstances: MockStaticRuntimePreflightWorker[] = [];
 const workerBootstrapBlobs = new Map<string, Blob>();
 const runtimeLifecycleEvents: string[] = [];
 const { publicEnv } = vi.hoisted(() => ({
@@ -72,12 +81,16 @@ class MockWorker {
 	lastRunId: string | undefined;
 	lastMessage: any;
 	lastTransferList: Transferable[] | undefined;
+	readonly messages: any[] = [];
+	readonly transferLists: (Transferable[] | undefined)[] = [];
 	postMessage = vi.fn((message: any, transferList?: Transferable[]) => {
 		this.lastTransferList = transferList;
+		this.transferLists.push(transferList);
 		const deliveredMessage = transferList?.length
 			? structuredClone(message, { transfer: transferList })
 			: message;
 		this.lastMessage = deliveredMessage;
+		this.messages.push(deliveredMessage);
 		this.lastRunId = deliveredMessage?.runId;
 		if (onPostMessage) {
 			onPostMessage(this, deliveredMessage);
@@ -111,6 +124,72 @@ class MockWorker {
 }
 
 vi.stubGlobal('Worker', MockWorker);
+
+class MockStaticRuntimePreflightWorker {
+	onmessage: ((event: MessageEvent<StaticRuntimePreflightResponseMessage>) => void) | null = null;
+	onerror: ((event: ErrorEvent) => void) | null = null;
+	onmessageerror: ((event: MessageEvent<unknown>) => void) | null = null;
+	private readonly controller = new AbortController();
+	resultTransferList: ArrayBuffer[] | undefined;
+	postMessage = vi.fn((message: StaticRuntimePreflightRequestMessage) => {
+		const request = structuredClone(message);
+		queueMicrotask(() => {
+			void executeStaticRuntimePreflight(
+				request,
+				(progress) => {
+					if (this.controller.signal.aborted) return;
+					this.onmessage?.({
+						data: structuredClone({
+							protocolVersion: STATIC_RUNTIME_PREFLIGHT_PROTOCOL_VERSION,
+							type: 'progress',
+							requestId: request.requestId,
+							progress
+						})
+					} as MessageEvent<StaticRuntimePreflightResponseMessage>);
+				},
+				this.controller.signal
+			).then(
+				(payload) => {
+					if (this.controller.signal.aborted) return;
+					const transfer = collectStaticRuntimePreflightTransferables(payload);
+					this.resultTransferList = transfer;
+					const response = structuredClone(
+						{
+							protocolVersion: STATIC_RUNTIME_PREFLIGHT_PROTOCOL_VERSION,
+							type: 'result',
+							requestId: request.requestId,
+							payload
+						} satisfies StaticRuntimePreflightResponseMessage,
+						{ transfer }
+					);
+					this.onmessage?.({
+						data: response
+					} as MessageEvent<StaticRuntimePreflightResponseMessage>);
+				},
+				(error) => {
+					if (this.controller.signal.aborted) return;
+					this.onmessage?.({
+						data: {
+							protocolVersion: STATIC_RUNTIME_PREFLIGHT_PROTOCOL_VERSION,
+							type: 'error',
+							requestId: request.requestId,
+							error: serializeStaticRuntimePreflightError(error)
+						}
+					} as MessageEvent<StaticRuntimePreflightResponseMessage>);
+				}
+			);
+		});
+	});
+	terminate = vi.fn(() => this.controller.abort());
+
+	constructor() {
+		preflightWorkerInstances.push(this);
+	}
+}
+
+vi.mock('$lib/playground/worker/staticRuntimePreflight?worker', () => ({
+	default: MockStaticRuntimePreflightWorker
+}));
 
 vi.mock('$env/dynamic/public', () => ({
 	env: publicEnv
@@ -641,6 +720,31 @@ const janetTestWorkerReceipt = {
 	bytes: new TextEncoder().encode(janetWorkerSource).byteLength,
 	sha256: janetTestSha256(new TextEncoder().encode(janetWorkerSource))
 } as const;
+
+function janetTestRuntimeAssets() {
+	return {
+		janet: {
+			baseUrl: '/wasm-janet/',
+			workerUrl: `/wasm-janet/runner-worker.js?v=${janetTestWorkerReceipt.sha256}`,
+			manifestUrl: `/wasm-janet/runtime-manifest.v2.json?v=${janetTestManifestFingerprint}`,
+			...janetTestProfile,
+			workerReceipt: janetTestWorkerReceipt
+		}
+	};
+}
+
+function prologTestRuntimeAssets() {
+	return {
+		prolog: {
+			baseUrl: '/wasm-prolog/',
+			workerUrl: `/wasm-prolog/runner-worker.js?v=${WASM_PROLOG_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/wasm-prolog/runtime-manifest.v2.json?v=${WASM_PROLOG_ASSET_VERSION}`,
+			...WASM_PROLOG_RUNTIME_PROFILE,
+			workerReceipt: WASM_PROLOG_RUNNER_RECEIPT
+		}
+	};
+}
+
 const juliaTestSha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const juliaTestManifestTemplate = JSON.parse(juliaManifestTemplateSource);
 const juliaTestJavaScriptBytes = new TextEncoder().encode(
@@ -1379,6 +1483,29 @@ function createOwnedPreflightTestSandbox(
 	});
 }
 
+function createWorkerCachedPreflightTestSandbox(
+	preflight: (context: StaticWorkerRuntimePreflightContext) => unknown | Promise<unknown>
+) {
+	return new StaticWorkerRuntimeSandbox({
+		languageId: 'CACHED_PREFLIGHT_TEST',
+		displayName: 'Cached preflight test',
+		defaultActivePath: 'main.txt',
+		stdin: { mode: 'none' },
+		workerLifetime: {
+			mode: 'persistent',
+			idleTimeoutMs: 1_000,
+			evictOnMemoryPressure: false
+		},
+		runtimePreflightDelivery: 'transfer-owned-worker-cache',
+		resolveRuntimeAssets: () => ({
+			baseUrl: '/cached-preflight-test/',
+			workerUrl: '/cached-preflight-test/worker.js',
+			preflightKey: 'cached-preflight-test-v1'
+		}),
+		preflightRuntimeAssets: (_urls, context) => preflight(context)
+	});
+}
+
 function createOwnedPreflightTestPayload() {
 	return Object.freeze({
 		protocol: 'owned-preflight-test',
@@ -1417,6 +1544,29 @@ function hasRuntimePreflightForWorker(
 			workerRuntimePreflight: WeakMap<Worker, unknown>;
 		}
 	).workerRuntimePreflight.has(worker as unknown as Worker);
+}
+
+function expectTwoHopOwnedPreflightTransfer(worker: MockWorker, expectedBuffers: number) {
+	const preflightWorker = preflightWorkerInstances.at(-1);
+	expect(preflightWorker).toBeDefined();
+	expect(preflightWorker?.terminate).toHaveBeenCalledOnce();
+	expect(preflightWorker?.resultTransferList).toHaveLength(expectedBuffers);
+	expect(
+		preflightWorker?.resultTransferList?.every(
+			(buffer) =>
+				Object.prototype.toString.call(buffer) === '[object ArrayBuffer]' &&
+				buffer.byteLength === 0
+		)
+	).toBe(true);
+	const runnerTransfer = worker.transferLists.find((candidate) => candidate?.length);
+	expect(runnerTransfer).toHaveLength(expectedBuffers);
+	expect(
+		runnerTransfer?.every(
+			(buffer) =>
+				Object.prototype.toString.call(buffer) === '[object ArrayBuffer]' &&
+				(buffer as ArrayBuffer).byteLength === 0
+		)
+	).toBe(true);
 }
 
 async function withCrossOriginIsolation(value: boolean, callback: () => Promise<void>) {
@@ -1476,6 +1626,7 @@ describe('static worker backed language sandboxes', () => {
 			value: false
 		});
 		workerInstances.length = 0;
+		preflightWorkerInstances.length = 0;
 		workerBootstrapBlobs.clear();
 		runtimeLifecycleEvents.length = 0;
 		onPostMessage = null;
@@ -1517,6 +1668,54 @@ describe('static worker backed language sandboxes', () => {
 		expect(new Prolog().stdinMode).toBe('prebuffered');
 		expect(new Tcl().stdinMode).toBe('prebuffered');
 	});
+
+	it.each([
+		['BQN', () => new Bqn(), () => bqnTestRuntimeAssets(), 3],
+		['ClojureScript', () => new ClojureScript(), () => clojureScriptTestRuntimeAssets(), 2],
+		['Forth', () => new Forth(), () => '/absproxy/5173', 2],
+		['J', () => new J(), () => jTestRuntimeAssets(), 3],
+		['Janet', () => new Janet(), () => janetTestRuntimeAssets(), 3],
+		['Prolog', () => new Prolog(), () => prologTestRuntimeAssets(), 4]
+	] satisfies ReadonlyArray<
+		readonly [
+			string,
+			() => StaticWorkerRuntimeSandbox,
+			() => Parameters<StaticWorkerRuntimeSandbox['load']>[0],
+			number
+		]
+	>)(
+		're-preflights %s with a fresh worker when maxAssetBytes is lowered for a run',
+		async (_label, createSandbox, runtimeAssets, expectedBuffers) => {
+			const sandbox = createSandbox();
+			await sandbox.load(runtimeAssets());
+			const initialRunner = workerInstances[0];
+
+			await expect(
+				sandbox.run('', true, true, undefined, [], {
+					limits: { maxAssetBytes: 1 }
+				})
+			).rejects.toMatchObject({ code: 'asset-too-large', phase: 'asset' });
+
+			expect(initialRunner.terminate).toHaveBeenCalledOnce();
+			expect(workerInstances).toHaveLength(1);
+			expect(preflightWorkerInstances).toHaveLength(2);
+			expect(preflightWorkerInstances[1].postMessage).toHaveBeenCalledWith(
+				expect.objectContaining({
+					limits: expect.objectContaining({ maxAssetBytes: 1 })
+				})
+			);
+			expect(preflightWorkerInstances[1].terminate).toHaveBeenCalledOnce();
+
+			await sandbox.load(runtimeAssets());
+			await expect(sandbox.run('', false, true, undefined, [], { stdin: '' })).resolves.toBe(
+				true
+			);
+
+			expect(workerInstances).toHaveLength(2);
+			expect(preflightWorkerInstances).toHaveLength(3);
+			expectTwoHopOwnedPreflightTransfer(workerInstances[1], expectedBuffers);
+		}
+	);
 
 	it('does not forward input when a static runtime declares no stdin capability', async () => {
 		const sandbox = new StaticWorkerRuntimeSandbox({
@@ -1968,7 +2167,7 @@ describe('static worker backed language sandboxes', () => {
 			`http://localhost:3000/wasm-prolog/runner-worker.js?v=${WASM_PROLOG_RUNNER_RECEIPT.sha256}`,
 			prologWorkerSource
 		);
-		const runMessages = worker.postMessage.mock.calls.map(([message]) => message);
+		const runMessages = worker.messages;
 		expect(runMessages).toHaveLength(2);
 		expect(runMessages[0]).toEqual(
 			expect.objectContaining({
@@ -1994,7 +2193,17 @@ describe('static worker backed language sandboxes', () => {
 		expect(runMessages[0].runtimePreflight.dataBytes).toHaveLength(
 			WASM_PROLOG_RUNTIME_PROFILE.dataReceipt.uncompressedBytes
 		);
-		expect(runMessages[1].runtimePreflight).toBe(runMessages[0].runtimePreflight);
+		expect(runMessages[1]).not.toHaveProperty('runtimePreflight');
+		expect(worker.transferLists[0]).toHaveLength(4);
+		expect(worker.transferLists[1]).toBeUndefined();
+		expect(
+			worker.transferLists[0]?.every(
+				(transferable) =>
+					Object.prototype.toString.call(transferable) === '[object ArrayBuffer]' &&
+					(transferable as ArrayBuffer).byteLength === 0
+			)
+		).toBe(true);
+		expectTwoHopOwnedPreflightTransfer(worker, 4);
 		const workerEventIndex = runtimeLifecycleEvents.findIndex((event) =>
 			event.startsWith('worker:')
 		);
@@ -2729,7 +2938,7 @@ describe('static worker backed language sandboxes', () => {
 			clojureScriptWorkerSource
 		);
 		expect(workerInstances[0].options).toBeUndefined();
-		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+		expect(workerInstances[0].lastMessage).toEqual(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-clojurescript/',
 				manifestUrl: 'http://localhost:3000/wasm-clojurescript/runtime-manifest.v2.json',
@@ -2749,13 +2958,20 @@ describe('static worker backed language sandboxes', () => {
 				})
 			})
 		);
-		const runMessage = workerInstances[0].postMessage.mock.calls[0]?.[0];
-		expect(runMessage.runtimePreflight.manifestBytes).toBeInstanceOf(Uint8Array);
-		expect(runMessage.runtimePreflight.compilerBytes).toBeInstanceOf(Uint8Array);
+		const runMessage = workerInstances[0].lastMessage;
+		expect(Object.prototype.toString.call(runMessage.runtimePreflight.manifestBytes)).toBe(
+			'[object Uint8Array]'
+		);
+		expect(Object.prototype.toString.call(runMessage.runtimePreflight.compilerBytes)).toBe(
+			'[object Uint8Array]'
+		);
 		expect(new TextDecoder().decode(runMessage.runtimePreflight.manifestBytes)).toBe(
 			clojureScriptTestManifestSource
 		);
-		expect(runMessage.runtimePreflight.compilerBytes).toEqual(clojureScriptTestCompilerBytes);
+		expect(Array.from(runMessage.runtimePreflight.compilerBytes)).toEqual(
+			Array.from(clojureScriptTestCompilerBytes)
+		);
+		expectTwoHopOwnedPreflightTransfer(workerInstances[0], 2);
 		const workerStartIndex = runtimeLifecycleEvents.findIndex((event) =>
 			event.startsWith('worker:')
 		);
@@ -2884,12 +3100,18 @@ describe('static worker backed language sandboxes', () => {
 
 	it('loads Forth runtime urls and forwards stdin to the WAForth worker', async () => {
 		const sandbox = new Forth();
-		await sandbox.load({
-			forth: {
-				baseUrl: '/wasm-forth/',
-				workerUrl: '/wasm-forth/runner-worker.js?v=test'
-			}
-		});
+		await sandbox.load(
+			{
+				forth: {
+					baseUrl: '/wasm-forth/',
+					workerUrl: '/wasm-forth/runner-worker.js?v=test'
+				}
+			},
+			'',
+			true,
+			[],
+			{ limits: { maxAssetBytes: 64_000 } }
+		);
 		await expect(
 			sandbox.run('KEY EMIT', false, true, undefined, [], {
 				stdin: 'ok\n',
@@ -2902,8 +3124,8 @@ describe('static worker backed language sandboxes', () => {
 			'http://localhost:3000/wasm-forth/runner-worker.js?v=test',
 			forthWorkerSource
 		);
-		const runMessage = workerInstances[0].postMessage.mock.calls[0]?.[0];
-		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+		const runMessage = workerInstances[0].lastMessage;
+		expect(workerInstances[0].lastMessage).toEqual(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-forth/',
 				manifestUrl: 'http://localhost:3000/wasm-forth/runtime-manifest.v2.json',
@@ -2920,14 +3142,19 @@ describe('static worker backed language sandboxes', () => {
 				})
 			})
 		);
-		expect(runMessage.runtimePreflight.manifestBytes).toBeInstanceOf(Uint8Array);
-		expect(runMessage.runtimePreflight.runtimeBytes).toBeInstanceOf(Uint8Array);
+		expect(Object.prototype.toString.call(runMessage.runtimePreflight.manifestBytes)).toBe(
+			'[object Uint8Array]'
+		);
+		expect(Object.prototype.toString.call(runMessage.runtimePreflight.runtimeBytes)).toBe(
+			'[object Uint8Array]'
+		);
 		expect(new TextDecoder().decode(runMessage.runtimePreflight.manifestBytes)).toBe(
 			forthManifestSource
 		);
 		expect(new TextDecoder().decode(runMessage.runtimePreflight.runtimeBytes)).toBe(
 			forthRuntimeSource
 		);
+		expectTwoHopOwnedPreflightTransfer(workerInstances[0], 2);
 		expect(sandbox.workerReceipt).toEqual(WASM_FORTH_RUNNER_RECEIPT);
 		expect(fetch).toHaveBeenCalledWith(
 			'http://localhost:3000/wasm-forth/runner-worker.js?v=test',
@@ -3018,7 +3245,7 @@ describe('static worker backed language sandboxes', () => {
 			jWorkerSource
 		);
 		expect(workerInstances[0].options).toEqual({ type: 'module' });
-		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+		expect(workerInstances[0].lastMessage).toEqual(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-j/',
 				manifestUrl: 'http://localhost:3000/wasm-j/runtime-manifest.v2.json',
@@ -3034,17 +3261,24 @@ describe('static worker backed language sandboxes', () => {
 				})
 			})
 		);
-		const runMessage = workerInstances[0].postMessage.mock.calls[0]?.[0];
-		expect(runMessage.runtimePreflight.manifestBytes).toBeInstanceOf(Uint8Array);
-		expect(runMessage.runtimePreflight.moduleBytes).toBeInstanceOf(Uint8Array);
-		expect(runMessage.runtimePreflight.wasmBytes).toBeInstanceOf(Uint8Array);
+		const runMessage = workerInstances[0].lastMessage;
+		for (const bytes of [
+			runMessage.runtimePreflight.manifestBytes,
+			runMessage.runtimePreflight.moduleBytes,
+			runMessage.runtimePreflight.wasmBytes
+		]) {
+			expect(Object.prototype.toString.call(bytes)).toBe('[object Uint8Array]');
+		}
 		expect(new TextDecoder().decode(runMessage.runtimePreflight.manifestBytes)).toBe(
 			jTestManifestSource
 		);
 		expect(new TextDecoder().decode(runMessage.runtimePreflight.moduleBytes)).toBe(
 			jTestModuleSource
 		);
-		expect(runMessage.runtimePreflight.wasmBytes).toEqual(jTestWasmBytes);
+		expect(Array.from(runMessage.runtimePreflight.wasmBytes)).toEqual(
+			Array.from(jTestWasmBytes)
+		);
+		expectTwoHopOwnedPreflightTransfer(workerInstances[0], 3);
 		expect(sandbox.workerReceipt).toEqual(WASM_J_RUNNER_RECEIPT);
 		const workerStartIndex = runtimeLifecycleEvents.findIndex((event) =>
 			event.startsWith('worker:')
@@ -3133,7 +3367,7 @@ describe('static worker backed language sandboxes', () => {
 			bqnWorkerSource
 		);
 		expect(workerInstances[0].options).toEqual({ type: 'module' });
-		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+		expect(workerInstances[0].lastMessage).toEqual(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-bqn/',
 				manifestUrl: 'http://localhost:3000/wasm-bqn/runtime-manifest.v2.json',
@@ -3149,17 +3383,24 @@ describe('static worker backed language sandboxes', () => {
 				})
 			})
 		);
-		const runMessage = workerInstances[0].postMessage.mock.calls[0]?.[0];
-		expect(runMessage.runtimePreflight.manifestBytes).toBeInstanceOf(Uint8Array);
-		expect(runMessage.runtimePreflight.moduleBytes).toBeInstanceOf(Uint8Array);
-		expect(runMessage.runtimePreflight.wasmBytes).toBeInstanceOf(Uint8Array);
+		const runMessage = workerInstances[0].lastMessage;
+		for (const bytes of [
+			runMessage.runtimePreflight.manifestBytes,
+			runMessage.runtimePreflight.moduleBytes,
+			runMessage.runtimePreflight.wasmBytes
+		]) {
+			expect(Object.prototype.toString.call(bytes)).toBe('[object Uint8Array]');
+		}
 		expect(new TextDecoder().decode(runMessage.runtimePreflight.manifestBytes)).toBe(
 			bqnTestManifestSource
 		);
 		expect(new TextDecoder().decode(runMessage.runtimePreflight.moduleBytes)).toBe(
 			bqnTestModuleSource
 		);
-		expect(runMessage.runtimePreflight.wasmBytes).toEqual(bqnTestWasmBytes);
+		expect(Array.from(runMessage.runtimePreflight.wasmBytes)).toEqual(
+			Array.from(bqnTestWasmBytes)
+		);
+		expectTwoHopOwnedPreflightTransfer(workerInstances[0], 3);
 		expect(sandbox.workerReceipt).toEqual(WASM_BQN_RUNNER_RECEIPT);
 		const workerStartIndex = runtimeLifecycleEvents.findIndex((event) =>
 			event.startsWith('worker:')
@@ -3336,7 +3577,7 @@ describe('static worker backed language sandboxes', () => {
 			janetWorkerSource
 		);
 		expect(workerInstances[0].options).toEqual({ type: 'module' });
-		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+		expect(workerInstances[0].lastMessage).toEqual(
 			expect.objectContaining({
 				baseUrl: 'http://localhost:3000/wasm-janet/',
 				manifestUrl: `http://localhost:3000/wasm-janet/runtime-manifest.v2.json?v=${janetTestManifestFingerprint}`,
@@ -3354,7 +3595,7 @@ describe('static worker backed language sandboxes', () => {
 				activePath: 'main.janet'
 			})
 		);
-		const runMessage = workerInstances[0].postMessage.mock.calls[0][0];
+		const runMessage = workerInstances[0].lastMessage;
 		expect(Array.from(runMessage.runtimePreflight.manifestBytes)).toEqual(
 			Array.from(janetTestManifestBytes)
 		);
@@ -3364,6 +3605,7 @@ describe('static worker backed language sandboxes', () => {
 		expect(Array.from(runMessage.runtimePreflight.wasmBytes)).toEqual(
 			Array.from(janetTestWasmBytes)
 		);
+		expectTwoHopOwnedPreflightTransfer(workerInstances[0], 3);
 		const workerEventIndex = runtimeLifecycleEvents.findIndex((event) =>
 			event.startsWith('worker:')
 		);
@@ -3392,7 +3634,7 @@ describe('static worker backed language sandboxes', () => {
 			sandbox.run('(print "second")', false, true, undefined, [], { stdin: '' })
 		).resolves.toBe(true);
 		expect(workerInstances).toHaveLength(2);
-		expect(workerInstances[1].postMessage).toHaveBeenCalledWith(
+		expect(workerInstances[1].lastMessage).toEqual(
 			expect.objectContaining({
 				runtimePreflight: expect.objectContaining({
 					manifestFingerprint: janetTestManifestFingerprint
@@ -3698,9 +3940,52 @@ describe('static worker backed language sandboxes', () => {
 		expect(hasRuntimePreflightForWorker(sandbox, workerInstances[0])).toBe(false);
 	});
 
+	it('transfers persistent preflight bytes once and lets the same worker use its private cache', async () => {
+		const payloads: ReturnType<typeof createOwnedPreflightTestPayload>[] = [];
+		const preflight = vi.fn((context: StaticWorkerRuntimePreflightContext) => {
+			const payload = createOwnedPreflightTestPayload();
+			payloads.push(payload);
+			return context.createOwnedDelivery(payload);
+		});
+		const sandbox = createWorkerCachedPreflightTestSandbox(preflight);
+
+		await sandbox.load('/cached-preflight-test', '', true, [], {
+			limits: { maxAssetBytes: 1_000_000 }
+		});
+		await expect(
+			sandbox.run('first', false, true, undefined, [], {
+				limits: { maxAssetBytes: 1_000_000 }
+			})
+		).resolves.toBe(true);
+		await expect(
+			sandbox.run('second', false, true, undefined, [], {
+				limits: { maxAssetBytes: 1_000_000 }
+			})
+		).resolves.toBe(true);
+
+		expect(preflight).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].messages).toHaveLength(2);
+		expect(workerInstances[0].messages[0].runtimePreflight).toMatchObject({
+			protocol: 'owned-preflight-test'
+		});
+		expect(workerInstances[0].messages[1]).not.toHaveProperty('runtimePreflight');
+		expect(workerInstances[0].messages[1].maxAssetBytes).toBe(1_000_000);
+		expect(workerInstances[0].transferLists[0]).toHaveLength(2);
+		expect(workerInstances[0].transferLists[1]).toBeUndefined();
+		expect(payloads[0].manifestBytes.byteLength).toBe(0);
+		expect(payloads[0].wasmBytes.byteLength).toBe(0);
+		expect(hasRuntimePreflightForWorker(sandbox, workerInstances[0])).toBe(false);
+	});
+
 	it('rejects invalid owned preflight payload roots and binary ownership', async () => {
 		const duplicateBuffer = new ArrayBuffer(4);
 		const accessor = vi.fn(() => Uint8Array.from([1]));
+		const spoofedDataView = new DataView(new ArrayBuffer(1));
+		Object.defineProperty(spoofedDataView, Symbol.toStringTag, {
+			configurable: true,
+			value: 'Uint8Array'
+		});
 		const accessorPayload = Object.freeze(
 			Object.defineProperty({ protocol: 'fixture' }, 'bytes', {
 				enumerable: true,
@@ -3721,6 +4006,7 @@ describe('static worker backed language sandboxes', () => {
 			],
 			['direct buffer', Object.freeze({ bytes: new ArrayBuffer(1) })],
 			['other view', Object.freeze({ bytes: new DataView(new ArrayBuffer(1)) })],
+			['spoofed view', Object.freeze({ bytes: spoofedDataView })],
 			['nested object', Object.freeze({ bytes: Uint8Array.from([1]), nested: {} })],
 			['accessor', accessorPayload],
 			[
@@ -3919,6 +4205,26 @@ describe('static worker backed language sandboxes', () => {
 					runtimePreflightDelivery: 'transfer-owned'
 				})
 		).toThrow('transfer-owned runtime preflight requires per-run workers');
+	});
+
+	it('rejects worker-cached transfer delivery for non-persistent workers', () => {
+		expect(
+			() =>
+				new StaticWorkerRuntimeSandbox({
+					languageId: 'INVALID_CACHED_TRANSFER_TEST',
+					displayName: 'Invalid cached transfer test',
+					defaultActivePath: 'main.txt',
+					stdin: { mode: 'none' },
+					workerLifetime: { mode: 'per-run' },
+					resolveRuntimeAssets: () => ({
+						baseUrl: '/invalid-cached-transfer-test/',
+						workerUrl: '/invalid-cached-transfer-test/worker.js'
+					}),
+					preflightRuntimeAssets: (_urls, context) =>
+						context.createOwnedDelivery(Object.freeze({ bytes: Uint8Array.from([1]) })),
+					runtimePreflightDelivery: 'transfer-owned-worker-cache'
+				})
+		).toThrow('transfer-owned worker-cache preflight requires persistent workers');
 	});
 
 	it('rejects transfer-owned delivery without a runtime preflight callback', () => {

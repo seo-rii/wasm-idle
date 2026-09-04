@@ -183,6 +183,98 @@ func main() {
 		expect(values).toEqual([0.18, 0.63]);
 	});
 
+	it('resolves and forwards the configured manifest plus caller execution limits', async () => {
+		const sandbox = new Go();
+		sandbox.output = vi.fn();
+		await sandbox.load(
+			{
+				go: {
+					compilerUrl: './custom/go/index.js?version=7',
+					manifestUrl: './custom/go/runtime/manifest.json?version=8'
+				}
+			},
+			'',
+			true,
+			[],
+			{
+				limits: {
+					maxAssetBytes: 4_096,
+					maxWasmMemoryBytes: 8 * 65_536,
+					compileTimeoutMs: 321,
+					runTimeoutMs: 123
+				}
+			}
+		);
+
+		const worker = workerInstances[0]!;
+		expect(worker.postMessage).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				load: true,
+				compilerUrl: expect.stringContaining('/custom/go/index.js?version=7'),
+				manifestUrl: expect.stringContaining('/custom/go/runtime/manifest.json?version=8'),
+				runtimeLimits: expect.objectContaining({
+					maxAssetBytes: 4_096,
+					maxWasmMemoryBytes: 8 * 65_536,
+					compileTimeoutMs: 321,
+					runTimeoutMs: 123
+				})
+			})
+		);
+
+		await sandbox.run('package main\nfunc main() {}', false, true, undefined, [], {
+			limits: {
+				maxAssetBytes: 2_048,
+				maxWasmMemoryBytes: 4 * 65_536
+			}
+		});
+		expect(worker.postMessage).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				runtimeLimits: expect.objectContaining({
+					maxAssetBytes: 2_048,
+					maxWasmMemoryBytes: 4 * 65_536
+				})
+			})
+		);
+	});
+
+	it('recreates the compiler worker when compiler asset limits change', async () => {
+		const sandbox = new Go();
+
+		await sandbox.load('/absproxy/5173', '', true, [], {
+			limits: { maxAssetBytes: 8_192 }
+		});
+		const firstWorker = workerInstances[0]!;
+
+		await sandbox.load('/absproxy/5173', '', true, [], {
+			limits: { maxAssetBytes: 4_096 }
+		});
+
+		expect(workerInstances).toHaveLength(2);
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances[1]?.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				load: true,
+				runtimeLimits: expect.objectContaining({ maxAssetBytes: 4_096 })
+			})
+		);
+	});
+
+	it('derives the bundled manifest URL from the compiler URL and preserves its version', async () => {
+		const sandbox = new Go();
+
+		await sandbox.load({ go: { compilerUrl: '/wasm-go/index.js?v=bundled' } });
+
+		expect(workerInstances[0]?.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({
+				manifestUrl: expect.stringMatching(
+					/\/wasm-go\/runtime\/runtime-manifest\.v1\.json\?v=bundled$/
+				)
+			})
+		);
+	});
+
 	it('rejects load when no go compiler url is configured', async () => {
 		publicEnv.PUBLIC_WASM_GO_COMPILER_URL = '';
 		const sandbox = new Go();
@@ -333,6 +425,63 @@ func main() {
 		sandbox.worker = retryWorker as unknown as Worker;
 		await expect(sandbox.run('package main\nfunc main() {}', false)).resolves.toBe(true);
 		expect(retryWorker.terminate).not.toHaveBeenCalled();
+	});
+
+	it('terminates an overlapping raw run before another handler can own stale output', async () => {
+		const sandbox = new Go();
+		const worker = new MockWorker();
+		const output = vi.fn();
+		sandbox.output = output;
+		sandbox.worker = worker as unknown as Worker;
+		worker.postMessage.mockImplementationOnce(() => undefined);
+
+		const firstRun = sandbox.run('package main\nfunc main() {}', false);
+		const staleHandler = worker.onmessage;
+		const secondRun = sandbox.run('package main\nfunc main() {}', false);
+
+		await expect(firstRun).rejects.toMatchObject({ name: 'BusyError', code: 'busy' });
+		await expect(secondRun).rejects.toMatchObject({ name: 'BusyError', code: 'busy' });
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(worker.onmessage).toBeNull();
+		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
+		expect(output).not.toHaveBeenCalled();
+
+		const retryWorker = new MockWorker();
+		sandbox.worker = retryWorker as unknown as Worker;
+		await expect(sandbox.run('package main\nfunc main() {}', false)).resolves.toBe(true);
+	});
+
+	it('physically terminates the worker when the compile phase deadline expires', async () => {
+		vi.useFakeTimers();
+		try {
+			const sandbox = new Go();
+			const worker = new MockWorker();
+			sandbox.worker = worker as unknown as Worker;
+			worker.postMessage.mockImplementationOnce(() => undefined);
+			const running = sandbox.run(
+				'package main\nfunc main() {}',
+				false,
+				true,
+				undefined,
+				[],
+				{
+					limits: { compileTimeoutMs: 5 }
+				}
+			);
+			const outcome = running.catch((error) => error);
+
+			await vi.advanceTimersByTimeAsync(5);
+
+			await expect(outcome).resolves.toMatchObject({
+				name: 'TimeoutError',
+				phase: 'compile',
+				timeoutMs: 5
+			});
+			expect(worker.terminate).toHaveBeenCalledOnce();
+			expect(sandbox.worker).toBeUndefined();
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it('does not let a superseded load signal cancel the replacement run', async () => {

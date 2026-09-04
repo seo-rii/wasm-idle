@@ -27,6 +27,7 @@ import {
 	parseRuntimeManifest,
 	resolveTargetManifest
 } from './runtime-manifest.js';
+import { assertGoInstanceMemoryLimit, capGoWasmMemory } from './wasm-memory.js';
 
 export type {
 	BrowserGoArtifact,
@@ -49,6 +50,7 @@ export type {
 	GoEmbedFile,
 	GoEmbedPattern,
 	GoPackageArchive,
+	GoRuntimeBoundaryOptions,
 	NormalizedRuntimeManifest,
 	RuntimeAssetFile,
 	RuntimeAssetPackReference,
@@ -89,7 +91,9 @@ export {
 	parseRuntimeManifest,
 	parseRuntimePackIndex,
 	preloadBrowserGoRuntime,
-	resolveTargetManifest
+	resolveTargetManifest,
+	assertGoInstanceMemoryLimit,
+	capGoWasmMemory
 };
 
 const defaultFactory = createGoCompiler;

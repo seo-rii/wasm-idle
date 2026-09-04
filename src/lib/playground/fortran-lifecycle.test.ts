@@ -210,6 +210,30 @@ describe('Fortran worker lifecycle', () => {
 		);
 	});
 
+	it('forwards a larger caller asset ceiling to the Fortran and Clang runtimes', async () => {
+		const sandbox = new Fortran();
+		const maxAssetBytes = 256 * 1024 * 1024;
+
+		await sandbox.load(
+			{ clang: { baseUrl: 'https://cdn.example.test/clang/' } },
+			'',
+			true,
+			[],
+			{ limits: { maxAssetBytes } }
+		);
+
+		expect(workerInstances[0].postMessage.mock.calls[0][0]).toEqual(
+			expect.objectContaining({
+				clangAssets: {
+					baseUrl: 'https://cdn.example.test/clang/',
+					maxAssetBytes,
+					useAssetBridge: false
+				},
+				fortranAssets: expect.objectContaining({ maxAssetBytes })
+			})
+		);
+	});
+
 	it('does not let a stale receipt getter replace a reentrant load', async () => {
 		const sandbox = new Fortran();
 		const terminationReason = new Error('replace Fortran receipt snapshot');

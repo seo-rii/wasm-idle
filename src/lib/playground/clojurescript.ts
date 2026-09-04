@@ -3,7 +3,8 @@ import {
 	type ClojureScriptRuntimePreflightProfile,
 	type PlaygroundRuntimeAssets
 } from '$lib/playground/assets';
-import { preflightClojureScriptRuntimeAssets } from '$lib/playground/clojurescriptPreflight';
+import type { ClojureScriptRuntimePreflightPayload } from '$lib/playground/clojurescriptPreflight';
+import { preflightStaticRuntimeAssetsInWorker } from '$lib/playground/staticRuntimePreflight';
 import { StaticWorkerRuntimeSandbox } from '$lib/playground/staticWorkerRuntime';
 import { RuntimeConfigurationError } from '@wasm-idle/core';
 
@@ -18,6 +19,7 @@ class ClojureScript extends StaticWorkerRuntimeSandbox {
 				sourceHintPattern: /\b(?:wasm-idle\.runtime\/)?(?:read-line|stdin)\b|\bread-line\b/
 			},
 			inlineVerifiedWorker: true,
+			runtimePreflightDelivery: 'transfer-owned',
 			resolveRuntimeAssets(runtimeAssets: string | PlaygroundRuntimeAssets, currentUrl) {
 				const resolved = resolveClojureScriptRuntimeAssetConfig(runtimeAssets, currentUrl);
 				const profile = resolved.preflightProfile;
@@ -38,33 +40,46 @@ class ClojureScript extends StaticWorkerRuntimeSandbox {
 				const loadedByAsset = new Map<string, number>();
 				const totalDownloadBytes =
 					(profile.manifestReceipt?.bytes ?? 0) + (profile.compilerReceipt?.bytes ?? 0);
-				return await preflightClojureScriptRuntimeAssets({
-					baseUrl: urls.baseUrl,
-					manifestUrl: urls.manifestUrl || '',
-					profile,
-					limits: context.limits,
-					signal: context.signal,
-					reportProgress(progress) {
-						loadedByAsset.set(progress.assetKey, progress.loadedBytes);
-						const loadedBytes = [...loadedByAsset.values()].reduce(
-							(total, loaded) => total + loaded,
-							0
-						);
-						const fraction =
-							totalDownloadBytes > 0 ? loadedBytes / totalDownloadBytes : 0;
-						context.reportProgress(
-							0.04 + Math.min(1, fraction) * 0.11,
-							`Preflighting ClojureScript asset ${progress.assetKey}`
-						);
-					},
-					reportDecompressionProgress(loadedBytes, totalBytes) {
-						const fraction = totalBytes > 0 ? loadedBytes / totalBytes : 0;
-						context.reportProgress(
-							0.15 + Math.min(1, fraction) * 0.02,
-							'Decompressing verified ClojureScript compiler'
-						);
-					}
-				});
+				const payload =
+					await preflightStaticRuntimeAssetsInWorker<ClojureScriptRuntimePreflightPayload>(
+						{
+							runtimeId: 'CLOJURESCRIPT',
+							displayName: 'ClojureScript',
+							baseUrl: urls.baseUrl,
+							manifestUrl: urls.manifestUrl || '',
+							profile,
+							limits: context.limits,
+							signal: context.signal,
+							reportProgress(progress) {
+								if (progress.kind === 'asset') {
+									loadedByAsset.set(
+										progress.progress.assetKey,
+										progress.progress.loadedBytes
+									);
+									const loadedBytes = [...loadedByAsset.values()].reduce(
+										(total, loaded) => total + loaded,
+										0
+									);
+									const fraction =
+										totalDownloadBytes > 0
+											? loadedBytes / totalDownloadBytes
+											: 0;
+									context.reportProgress(
+										0.04 + Math.min(1, fraction) * 0.11,
+										`Preflighting ClojureScript asset ${progress.progress.assetKey}`
+									);
+									return;
+								}
+								const { loadedBytes, totalBytes } = progress;
+								const fraction = totalBytes > 0 ? loadedBytes / totalBytes : 0;
+								context.reportProgress(
+									0.15 + Math.min(1, fraction) * 0.02,
+									'Decompressing verified ClojureScript compiler'
+								);
+							}
+						}
+					);
+				return context.createOwnedDelivery(payload);
 			}
 		});
 	}

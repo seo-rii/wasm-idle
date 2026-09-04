@@ -11,6 +11,7 @@ import {
 	type ProgressLike
 } from '@wasm-idle/core';
 import { decompressGzip } from '@wasm-idle/llvm-core';
+import { readPythonPackageAssets } from '$lib/playground/pythonPackageLock';
 
 interface AssetRequestMessage {
 	id: number;
@@ -371,6 +372,7 @@ export class WorkerAssetBridge {
 	private config: ResolvedRuntimeAssetConfig;
 	private readonly progress: RuntimeLoadProgress;
 	private readonly expectedAssets: Set<string>;
+	private pythonPackageAssets = new Set<string>();
 	private generation = 0;
 	private state: AssetBridgeState = 'active';
 	private readonly activeLoads = new Set<AbortController>();
@@ -417,11 +419,13 @@ export class WorkerAssetBridge {
 			throw new Error('Cannot rebind a worker asset bridge while another rebind is active');
 		}
 		const nextMaxAssetBytes = requireBridgeMaxAssetBytes(maxAssetBytes);
+		const preservePythonPackageAssets = this.matches(config, nextMaxAssetBytes);
 		this.state = 'rebinding';
 		const generation = ++this.generation;
 		this.progress.reset();
 		try {
 			this.abortActiveLoads();
+			if (!preservePythonPackageAssets) this.pythonPackageAssets.clear();
 			if (this.state !== 'rebinding' || this.generation !== generation) {
 				throw new Error('Cannot rebind a disposed worker asset bridge');
 			}
@@ -444,6 +448,7 @@ export class WorkerAssetBridge {
 		this.state = 'disposed';
 		this.generation += 1;
 		this.progress.reset();
+		this.pythonPackageAssets.clear();
 		this.abortActiveLoads();
 	}
 
@@ -577,6 +582,9 @@ export class WorkerAssetBridge {
 				}
 			}
 			if (controller.signal.aborted || generation !== this.generation) return;
+			if (this.runtime === 'python' && request.asset === 'pyodide-lock.json') {
+				this.pythonPackageAssets = readPythonPackageAssets(runtimeBytes);
+			}
 			const buffer = transferBuffer(
 				runtimeBytes,
 				normalizedRuntimeBytes === deliveryBytes ? loaded.transferOwnership : true
@@ -611,7 +619,7 @@ export class WorkerAssetBridge {
 	}
 
 	private async loadAsset(asset: string, signal: AbortSignal): Promise<LoadedAsset> {
-		if (!this.expectedAssets.has(asset)) {
+		if (!this.expectedAssets.has(asset) && !this.pythonPackageAssets.has(asset)) {
 			throw new Error(`Unexpected ${this.runtime} runtime asset: ${asset}`);
 		}
 		if (this.config.integrity && !Object.hasOwn(this.config.integrity, asset)) {

@@ -8,6 +8,12 @@ export interface WorkerRuntimeAssetConfig {
 	useAssetBridge: boolean;
 }
 
+export interface WorkerRuntimeAssetAllowlist {
+	baseUrl: string;
+	assets: readonly string[];
+	runtimeAssets?: readonly string[];
+}
+
 interface LoadedWorkerAsset {
 	bytes: Uint8Array;
 	mimeType?: string;
@@ -21,10 +27,16 @@ interface PendingAssetRequest {
 const decoder = new TextDecoder();
 const DEFAULT_MAX_ASSET_BYTES = 128 * 1024 * 1024;
 const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
+const MAX_DIRECT_ASSET_ALLOWLIST_ENTRIES = 4096;
+const MAX_DIRECT_RUNTIME_ASSET_ALLOWLIST_ENTRIES = 64;
+const MAX_DIRECT_ASSET_NAME_LENGTH = 1024;
+const directAssetNamePattern = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/u;
 const originalFetch = globalThis.fetch.bind(globalThis);
 const NativeXMLHttpRequest = globalThis.XMLHttpRequest;
 
 let activeConfig: WorkerRuntimeAssetConfig | null = null;
+let activeDirectAssetBaseUrl: URL | null = null;
+let activeDirectAssetUrls = new Map<string, string>();
 let interceptorsInstalled = false;
 let nextAssetRequestId = 0;
 
@@ -87,6 +99,21 @@ const trackedAssetUrl = (input: RequestInfo | URL) => {
 	}
 };
 
+const isDirectAssetScopeUrl = (url: string) => {
+	if (!activeDirectAssetBaseUrl) return false;
+	let assetUrl: URL;
+	try {
+		assetUrl = new URL(url);
+	} catch {
+		return false;
+	}
+	return (
+		assetUrl.protocol === activeDirectAssetBaseUrl.protocol &&
+		assetUrl.origin === activeDirectAssetBaseUrl.origin &&
+		assetUrl.pathname.startsWith(activeDirectAssetBaseUrl.pathname)
+	);
+};
+
 const trackedAssetName = (url: string) => {
 	const baseUrl = configuredBaseUrl();
 	if (!baseUrl) return null;
@@ -99,6 +126,9 @@ const trackedAssetName = (url: string) => {
 	if (assetUrl.protocol !== 'http:' && assetUrl.protocol !== 'https:') return null;
 	if (assetUrl.username || assetUrl.password || assetUrl.hash) return null;
 	if (/%2f|%5c/iu.test(assetUrl.pathname)) return null;
+	const directAsset = activeDirectAssetUrls.get(assetUrl.href);
+	if (directAsset) return directAsset;
+	if (isDirectAssetScopeUrl(assetUrl.href)) return null;
 	if (assetUrl.origin !== baseUrl.origin || !assetUrl.pathname.startsWith(baseUrl.pathname)) {
 		return null;
 	}
@@ -120,7 +150,7 @@ const loadAssetFromBridge = async (asset: string) => {
 	});
 };
 
-const loadAssetFromUrl = async (url: string, asset: string) => {
+const loadAssetFromUrl = async (url: string, asset: string, integrity?: string) => {
 	const requestUrl = trackedAssetUrl(url);
 	if (!requestUrl || trackedAssetName(requestUrl) !== asset || !activeConfig) {
 		throw new Error('Untracked runtime asset request');
@@ -129,7 +159,8 @@ const loadAssetFromUrl = async (url: string, asset: string) => {
 	const response = await originalFetch(requestUrl, {
 		credentials: 'omit',
 		redirect: 'error',
-		referrerPolicy: 'no-referrer'
+		referrerPolicy: 'no-referrer',
+		...(integrity ? { integrity } : {})
 	});
 	if (response.url) {
 		let responseUrl: URL;
@@ -254,12 +285,12 @@ const loadAssetFromUrl = async (url: string, asset: string) => {
 	return { bytes, mimeType };
 };
 
-async function loadTrackedAsset(url: string): Promise<LoadedWorkerAsset> {
+async function loadTrackedAsset(url: string, integrity?: string): Promise<LoadedWorkerAsset> {
 	const asset = trackedAssetName(url);
 	if (!asset || !activeConfig) throw new Error('Untracked runtime asset request');
 	return activeConfig.useAssetBridge
 		? await loadAssetFromBridge(asset)
-		: await loadAssetFromUrl(url, asset);
+		: await loadAssetFromUrl(url, asset, integrity);
 }
 
 function createTrackedResponse(asset: LoadedWorkerAsset) {
@@ -293,6 +324,9 @@ function installTrackedFetch() {
 		open(method: string, url: string | URL) {
 			const resolvedUrl = trackedAssetUrl(url);
 			if (!resolvedUrl || !isTrackedAssetUrl(resolvedUrl)) {
+				if (resolvedUrl && isDirectAssetScopeUrl(resolvedUrl)) {
+					throw new Error('Untracked runtime asset request');
+				}
 				const nativeUrl = resolvedUrl || (url instanceof URL ? url.href : String(url));
 				this.native = new NativeXMLHttpRequest();
 				this.native.responseType = this.responseType;
@@ -393,8 +427,23 @@ function installRuntimeAssetInterceptors() {
 	interceptorsInstalled = true;
 	globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
 		const resolvedUrl = trackedAssetUrl(input);
-		if (!resolvedUrl || !isTrackedAssetUrl(resolvedUrl)) return originalFetch(input, init);
-		return createTrackedResponse(await loadTrackedAsset(resolvedUrl));
+		if (!resolvedUrl || !isTrackedAssetUrl(resolvedUrl)) {
+			if (resolvedUrl && isDirectAssetScopeUrl(resolvedUrl)) {
+				throw new Error('Untracked runtime asset request');
+			}
+			return originalFetch(input, init);
+		}
+		const requestIntegrity =
+			init?.integrity ??
+			(typeof Request !== 'undefined' && input instanceof Request
+				? input.integrity
+				: undefined);
+		return createTrackedResponse(
+			await loadTrackedAsset(
+				resolvedUrl,
+				typeof requestIntegrity === 'string' ? requestIntegrity : undefined
+			)
+		);
 	}) as typeof fetch;
 	installTrackedFetch();
 }
@@ -406,8 +455,72 @@ export function configureWorkerRuntimeAssets(config: WorkerRuntimeAssetConfig | 
 	) {
 		throw new TypeError('Runtime asset maxAssetBytes must be a positive safe integer');
 	}
+	activeDirectAssetBaseUrl = null;
+	activeDirectAssetUrls = new Map();
 	activeConfig = config;
 	installRuntimeAssetInterceptors();
+}
+
+export function configureWorkerRuntimeAssetAllowlist(
+	allowlist: WorkerRuntimeAssetAllowlist | null
+) {
+	if (!activeConfig) throw new Error('Runtime asset config unavailable');
+	if (activeConfig.useAssetBridge) {
+		throw new Error('Direct runtime asset allowlists require direct asset loading');
+	}
+	if (allowlist === null) {
+		activeDirectAssetBaseUrl = null;
+		activeDirectAssetUrls = new Map();
+		return;
+	}
+	if (!Array.isArray(allowlist.assets)) {
+		throw new TypeError('Direct runtime asset allowlist must be an array');
+	}
+	if (allowlist.assets.length > MAX_DIRECT_ASSET_ALLOWLIST_ENTRIES) {
+		throw new Error('Direct runtime asset allowlist has too many entries');
+	}
+	const runtimeAssets = allowlist.runtimeAssets ?? [];
+	if (!Array.isArray(runtimeAssets)) {
+		throw new TypeError('Direct core runtime asset allowlist must be an array');
+	}
+	if (runtimeAssets.length > MAX_DIRECT_RUNTIME_ASSET_ALLOWLIST_ENTRIES) {
+		throw new Error('Direct core runtime asset allowlist has too many entries');
+	}
+	let baseUrl: URL;
+	try {
+		baseUrl = new URL(allowlist.baseUrl);
+	} catch {
+		throw new Error(`Direct runtime asset base URL is invalid: ${allowlist.baseUrl}`);
+	}
+	if (baseUrl.protocol !== 'http:' && baseUrl.protocol !== 'https:') {
+		throw new Error(`Direct runtime asset base URL must use HTTP(S): ${allowlist.baseUrl}`);
+	}
+	if (baseUrl.username || baseUrl.password || baseUrl.hash || baseUrl.search) {
+		throw new Error(
+			`Direct runtime asset base URL must not include credentials, a query, or a fragment: ${allowlist.baseUrl}`
+		);
+	}
+	if (!baseUrl.pathname.endsWith('/')) baseUrl.pathname += '/';
+
+	const addAssets = (urls: Map<string, string>, assets: readonly string[], rootUrl: URL) => {
+		for (const asset of assets) {
+			if (
+				typeof asset !== 'string' ||
+				asset.length > MAX_DIRECT_ASSET_NAME_LENGTH ||
+				!directAssetNamePattern.test(asset)
+			) {
+				throw new Error(`Direct runtime asset name is unsafe: ${String(asset)}`);
+			}
+			urls.set(new URL(asset, rootUrl).href, asset);
+		}
+	};
+	const urls = new Map<string, string>();
+	addAssets(urls, allowlist.assets, baseUrl);
+	const runtimeBaseUrl = configuredBaseUrl();
+	if (!runtimeBaseUrl) throw new Error('Runtime asset config unavailable');
+	addAssets(urls, runtimeAssets, runtimeBaseUrl);
+	activeDirectAssetBaseUrl = baseUrl;
+	activeDirectAssetUrls = urls;
 }
 
 export function handleWorkerAssetMessage(data: any) {

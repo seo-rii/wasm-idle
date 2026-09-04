@@ -100,12 +100,107 @@ function phpString(value: string) {
 	return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 }
 
+function skipPhpTrivia(code: string, offset: number) {
+	let cursor = offset;
+	while (cursor < code.length) {
+		if (/\s/u.test(code[cursor])) {
+			cursor += 1;
+			continue;
+		}
+		if (
+			code.startsWith('//', cursor) ||
+			(code[cursor] === '#' && !code.startsWith('#[', cursor))
+		) {
+			const newline = code.indexOf('\n', cursor + 1);
+			cursor = newline === -1 ? code.length : newline + 1;
+			continue;
+		}
+		if (code.startsWith('/*', cursor)) {
+			const commentEnd = code.indexOf('*/', cursor + 2);
+			cursor = commentEnd === -1 ? code.length : commentEnd + 2;
+			continue;
+		}
+		break;
+	}
+	return cursor;
+}
+
+function startsWithPhpKeyword(code: string, offset: number, keyword: string) {
+	if (code.slice(offset, offset + keyword.length).toLowerCase() !== keyword) return false;
+	return !/[A-Za-z0-9_\u0080-\uffff]/u.test(code[offset + keyword.length] || '');
+}
+
+function findPhpHeaderDelimiter(code: string, offset: number, delimiters: Set<string>) {
+	let quote = '';
+	let parentheses = 0;
+	let brackets = 0;
+	for (let cursor = offset; cursor < code.length; cursor += 1) {
+		const character = code[cursor];
+		if (quote) {
+			if (character === '\\') cursor += 1;
+			else if (character === quote) quote = '';
+			continue;
+		}
+		if (character === "'" || character === '"') {
+			quote = character;
+			continue;
+		}
+		if (
+			code.startsWith('//', cursor) ||
+			(character === '#' && !code.startsWith('#[', cursor))
+		) {
+			const newline = code.indexOf('\n', cursor + 1);
+			if (newline === -1) return -1;
+			cursor = newline;
+			continue;
+		}
+		if (code.startsWith('/*', cursor)) {
+			const commentEnd = code.indexOf('*/', cursor + 2);
+			if (commentEnd === -1) return -1;
+			cursor = commentEnd + 1;
+			continue;
+		}
+		if (character === '(') parentheses += 1;
+		else if (character === ')') parentheses = Math.max(0, parentheses - 1);
+		else if (character === '[') brackets += 1;
+		else if (character === ']') brackets = Math.max(0, brackets - 1);
+		else if (parentheses === 0 && brackets === 0 && delimiters.has(character)) return cursor;
+	}
+	return -1;
+}
+
+function argvPreludeInsertionOffset(code: string, openingTagEnd: number) {
+	let cursor = skipPhpTrivia(code, openingTagEnd);
+	while (startsWithPhpKeyword(code, cursor, 'declare')) {
+		const declarationEnd = findPhpHeaderDelimiter(
+			code,
+			cursor + 'declare'.length,
+			new Set([';'])
+		);
+		if (declarationEnd === -1) return cursor;
+		cursor = skipPhpTrivia(code, declarationEnd + 1);
+	}
+	if (
+		startsWithPhpKeyword(code, cursor, 'namespace') &&
+		(/\s/u.test(code[cursor + 'namespace'.length] || '') ||
+			code[cursor + 'namespace'.length] === '{')
+	) {
+		const namespaceEnd = findPhpHeaderDelimiter(
+			code,
+			cursor + 'namespace'.length,
+			new Set([';', '{'])
+		);
+		if (namespaceEnd !== -1) return namespaceEnd + 1;
+	}
+	return cursor;
+}
+
 function injectArgv(code: string, activePath: string, args: string[]) {
 	const argv = [activePath, ...args].map(phpString).join(', ');
 	const prelude = `$argv = array(${argv});\n$argc = count($argv);\n$_SERVER['argv'] = $argv;\n$_SERVER['argc'] = $argc;\n`;
-	const openingTag = code.match(/^\s*<\?php\b/);
+	const openingTag = code.match(/^\s*<\?php\b/i);
 	if (openingTag) {
-		const insertAt = openingTag[0].length;
+		const insertAt = argvPreludeInsertionOffset(code, openingTag[0].length);
 		return `${code.slice(0, insertAt)}\n${prelude}${code.slice(insertAt)}`;
 	}
 	return `<?php\n${prelude}\n?>\n${code}`;

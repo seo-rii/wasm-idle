@@ -43,6 +43,8 @@ type BrowserNativeManifestRuntimePack = {
 	format: 'wasm-of-js-of-ocaml-browser-native-runtime-pack-v1';
 	asset: string;
 	index: string;
+	indexBytes: number;
+	compressedBytes: number;
 	fileCount: number;
 	totalBytes: number;
 };
@@ -91,13 +93,23 @@ type CompilerModule = {
 			toolchainRoot: string;
 		}
 	) => Promise<CompileResult>;
-	createBrowserWorkerSystemDispatcher: (options: { manifest: BrowserNativeManifest }) => unknown;
+	createBrowserWorkerSystemDispatcher: (options: {
+		manifest: BrowserNativeManifest;
+		runtimeAssets?: {
+			limits?: {
+				maxAssetBytes?: number;
+				maxMetadataBytes?: number;
+				maxEntryBytes?: number;
+			};
+		};
+	}) => unknown;
 };
 
 type LoadRequest = {
 	load: true;
 	moduleUrl: string;
 	manifestUrl: string;
+	maxAssetBytes?: number;
 };
 
 type RunRequest = {
@@ -114,12 +126,16 @@ type RunRequest = {
 };
 
 const MAX_OCAML_MANIFEST_BYTES = 4 * 1024 * 1024;
+const MAX_OCAML_RUNTIME_ENTRY_BYTES = 32 * 1024 * 1024;
+const DEFAULT_MAX_OCAML_ASSET_BYTES = 128 * 1024 * 1024;
 const textDecoder = new TextDecoder();
 
 let moduleUrl = '';
 let manifestUrl = '';
+let maxAssetBytes = DEFAULT_MAX_OCAML_ASSET_BYTES;
 let loadedModuleUrl = '';
 let loadedManifestUrl = '';
+let loadedManifestMaxAssetBytes = 0;
 let compilerPromise: Promise<CompilerModule> | null = null;
 let manifestPromise: Promise<BrowserNativeManifest> | null = null;
 let compiledResult: CompileResult | null = null;
@@ -258,16 +274,62 @@ async function loadCompiler(nextModuleUrl: string) {
 	return await compilerPromise;
 }
 
-async function loadManifest(nextManifestUrl: string) {
+function resolveMaxAssetBytes(value: number | undefined) {
+	const resolved = value ?? DEFAULT_MAX_OCAML_ASSET_BYTES;
+	if (!Number.isSafeInteger(resolved) || resolved <= 0) {
+		throw new TypeError('OCaml runtime maxAssetBytes must be a positive safe integer');
+	}
+	return resolved;
+}
+
+function assertManifestAssetLimit(manifest: BrowserNativeManifest, limit: number) {
+	const declaredAssets: Array<readonly [string, unknown]> = [
+		['findlib.conf', manifest.findlibConf?.bytes],
+		['ocamlc', manifest.tools?.ocamlc?.bytes],
+		['js_of_ocaml', manifest.tools?.js_of_ocaml?.bytes],
+		['wasm_of_ocaml', manifest.tools?.wasm_of_ocaml?.bytes],
+		...Object.entries(manifest.binaryenTools || {}).map(
+			([name, asset]) => [name, asset?.bytes] as const
+		),
+		...(manifest.runtimePack
+			? [
+					['runtime pack index', manifest.runtimePack.indexBytes] as const,
+					[
+						'runtime pack compressed payload',
+						manifest.runtimePack.compressedBytes
+					] as const,
+					['runtime pack expanded payload', manifest.runtimePack.totalBytes] as const
+				]
+			: []),
+		...((manifest.ocamlLibFiles || []).map((file) => [file.path, file.size] as const) as Array<
+			readonly [string, unknown]
+		>),
+		...((manifest.packages || []).flatMap((manifestPackage) =>
+			(manifestPackage.files || []).map((file) => [file.path, file.size] as const)
+		) as Array<readonly [string, unknown]>)
+	];
+	for (const [label, declaredBytes] of declaredAssets) {
+		if (Number.isSafeInteger(declaredBytes) && (declaredBytes as number) > limit) {
+			throw new Error(`OCaml runtime asset ${label} exceeds the ${limit} byte limit`);
+		}
+	}
+}
+
+async function loadManifest(nextManifestUrl: string, nextMaxAssetBytes: number) {
 	if (!nextManifestUrl) {
 		throw new Error(
 			'OCaml runtime is not configured. Set runtimeAssets.ocaml.moduleUrl and runtimeAssets.ocaml.manifestUrl or sync the bundled wasm-of-js-of-ocaml assets.'
 		);
 	}
-	if (loadedManifestUrl === nextManifestUrl && manifestPromise) {
+	if (
+		loadedManifestUrl === nextManifestUrl &&
+		loadedManifestMaxAssetBytes === nextMaxAssetBytes &&
+		manifestPromise
+	) {
 		return await manifestPromise;
 	}
 	loadedManifestUrl = nextManifestUrl;
+	loadedManifestMaxAssetBytes = nextMaxAssetBytes;
 	compiledResult = null;
 	compiledCacheKey = '';
 	manifestPromise = (async () => {
@@ -275,7 +337,7 @@ async function loadManifest(nextManifestUrl: string) {
 			url: nextManifestUrl,
 			label: 'OCaml manifest',
 			cache: 'no-store',
-			maxAssetBytes: MAX_OCAML_MANIFEST_BYTES
+			maxAssetBytes: Math.min(MAX_OCAML_MANIFEST_BYTES, nextMaxAssetBytes)
 		});
 		let manifest: BrowserNativeManifest;
 		try {
@@ -283,6 +345,7 @@ async function loadManifest(nextManifestUrl: string) {
 		} catch {
 			throw new Error('OCaml manifest is not valid JSON');
 		}
+		assertManifestAssetLimit(manifest, nextMaxAssetBytes);
 		return rewriteManifest(manifest, nextManifestUrl);
 	})();
 	return await manifestPromise;
@@ -585,7 +648,8 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		if (event.data.load) {
 			moduleUrl = event.data.moduleUrl;
 			manifestUrl = event.data.manifestUrl;
-			await Promise.all([loadCompiler(moduleUrl), loadManifest(manifestUrl)]);
+			maxAssetBytes = resolveMaxAssetBytes(event.data.maxAssetBytes);
+			await Promise.all([loadCompiler(moduleUrl), loadManifest(manifestUrl, maxAssetBytes)]);
 			postMessage({ load: true });
 			return;
 		}
@@ -612,7 +676,7 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		postMessage({ progress: { stage: 'compile-bootstrap', percent: 10 } });
 		const [compilerModule, manifest] = await Promise.all([
 			loadCompiler(moduleUrl),
-			loadManifest(manifestUrl)
+			loadManifest(manifestUrl, maxAssetBytes)
 		]);
 		postMessage({ progress: { stage: 'compile-ready', percent: 25 } });
 
@@ -638,7 +702,17 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 				},
 				{
 					system: compilerModule.createBrowserWorkerSystemDispatcher({
-						manifest
+						manifest,
+						runtimeAssets: {
+							limits: {
+								maxAssetBytes,
+								maxMetadataBytes: Math.min(MAX_OCAML_MANIFEST_BYTES, maxAssetBytes),
+								maxEntryBytes: Math.min(
+									MAX_OCAML_RUNTIME_ENTRY_BYTES,
+									maxAssetBytes
+								)
+							}
+						}
 					}),
 					toolchainRoot: '/static/toolchain'
 				}
