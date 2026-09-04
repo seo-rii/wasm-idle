@@ -403,6 +403,7 @@ class Fortran implements Sandbox {
 						args,
 						clangAssets: {
 							baseUrl: clangAssets.baseUrl,
+							maxAssetBytes: limits.maxAssetBytes,
 							useAssetBridge: clangAssets.useAssetBridge
 						},
 						fortranAssets: {

@@ -72,14 +72,27 @@ describe('COBOL sandbox workspace boundary', () => {
 
 	it('forwards the caller asset ceiling to the COBOL worker', async () => {
 		const sandbox = new Cobol();
+		const maxAssetBytes = 256 * 1024 * 1024;
 
-		await sandbox.load('/absproxy/5173', '', true, [], {
-			limits: { maxAssetBytes: 4096 }
-		});
+		await sandbox.load(
+			{ clang: { baseUrl: 'https://cdn.example.test/clang/' } },
+			'',
+			true,
+			[],
+			{ limits: { maxAssetBytes } }
+		);
 
 		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
 			1,
-			expect.objectContaining({ load: true, maxAssetBytes: 4096 })
+			expect.objectContaining({
+				load: true,
+				clangAssets: {
+					baseUrl: 'https://cdn.example.test/clang/',
+					maxAssetBytes,
+					useAssetBridge: false
+				},
+				maxAssetBytes
+			})
 		);
 	});
 

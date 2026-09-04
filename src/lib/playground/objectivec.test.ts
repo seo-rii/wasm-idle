@@ -139,4 +139,29 @@ describe('Objective-C sandbox debugging', () => {
 		});
 		expect(workerInstances).toHaveLength(0);
 	});
+
+	it('forwards the caller asset ceiling to direct Clang asset fetches', async () => {
+		const sandbox = new ObjectiveC();
+		const maxAssetBytes = 256 * 1024 * 1024;
+
+		await sandbox.load(
+			{ clang: { baseUrl: 'https://cdn.example.test/clang/' } },
+			'',
+			true,
+			[],
+			{ limits: { maxAssetBytes } }
+		);
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				clangAssets: {
+					baseUrl: 'https://cdn.example.test/clang/',
+					maxAssetBytes,
+					useAssetBridge: false
+				},
+				objectivecAssets: expect.objectContaining({ maxAssetBytes })
+			})
+		);
+	});
 });

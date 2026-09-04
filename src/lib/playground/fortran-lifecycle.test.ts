@@ -214,10 +214,21 @@ describe('Fortran worker lifecycle', () => {
 		const sandbox = new Fortran();
 		const maxAssetBytes = 256 * 1024 * 1024;
 
-		await sandbox.load('/assets', '', true, [], { limits: { maxAssetBytes } });
+		await sandbox.load(
+			{ clang: { baseUrl: 'https://cdn.example.test/clang/' } },
+			'',
+			true,
+			[],
+			{ limits: { maxAssetBytes } }
+		);
 
 		expect(workerInstances[0].postMessage.mock.calls[0][0]).toEqual(
 			expect.objectContaining({
+				clangAssets: {
+					baseUrl: 'https://cdn.example.test/clang/',
+					maxAssetBytes,
+					useAssetBridge: false
+				},
 				fortranAssets: expect.objectContaining({ maxAssetBytes })
 			})
 		);

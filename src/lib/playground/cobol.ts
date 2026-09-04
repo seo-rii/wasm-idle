@@ -399,6 +399,7 @@ class Cobol implements Sandbox {
 						args,
 						clangAssets: {
 							baseUrl: clangAssets.baseUrl,
+							maxAssetBytes: limits.maxAssetBytes,
 							useAssetBridge: clangAssets.useAssetBridge
 						},
 						cobolBaseUrl,

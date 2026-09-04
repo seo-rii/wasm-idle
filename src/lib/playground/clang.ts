@@ -158,6 +158,7 @@ class Clang implements Sandbox {
 					args,
 					assets: {
 						baseUrl: assetConfig.baseUrl,
+						maxAssetBytes: limits.maxAssetBytes,
 						useAssetBridge: assetConfig.useAssetBridge
 					},
 					maxAssetBytes: limits.maxAssetBytes
