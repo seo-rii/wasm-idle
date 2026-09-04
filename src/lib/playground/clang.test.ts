@@ -217,12 +217,15 @@ int main() {
 
 		await sandbox.load('/');
 		const worker = workerInstances[workerInstances.length - 1];
+		const disposeAssetBridge = vi.spyOn(sandbox.assetBridge!, 'dispose');
 		worker.postMessage.mockImplementationOnce(() => {});
 		const running = sandbox.run('int main() {}', false);
 		sandbox.kill();
 
 		await expect(running).rejects.toBe('Process terminated');
 		expect(worker.terminate).toHaveBeenCalledTimes(1);
+		expect(disposeAssetBridge).toHaveBeenCalledOnce();
+		expect(sandbox.assetBridge).toBeNull();
 	});
 
 	it('evaluates C++ watch expressions through the worker debug buffers', async () => {

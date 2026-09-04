@@ -51,8 +51,16 @@ class ObjectiveC implements Sandbox {
 	private readonly workerSession = new WorkerSession({
 		label: 'Objective-C',
 		onDispose: (worker) => {
-			if (this.worker === worker) delete this.worker;
-			this.assetBridge = null;
+			if (this.worker === worker) {
+				const assetBridge = this.assetBridge;
+				delete this.worker;
+				this.assetBridge = null;
+				try {
+					assetBridge?.dispose();
+				} catch {
+					// Asset cleanup must not replace the worker operation result.
+				}
+			}
 			this.activeObjectiveCAssetsKey = '';
 			this.exit = true;
 			this.waitingForInput = false;
