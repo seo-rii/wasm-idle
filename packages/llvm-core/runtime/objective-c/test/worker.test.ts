@@ -62,4 +62,46 @@ describe('installObjectiveCWorker', () => {
 
 		expect(scope.postMessage).toHaveBeenCalledWith({ results: true });
 	});
+
+	it('rejects execution receipts above the caller asset ceiling before fetching', async () => {
+		const scope: ObjectiveCWorkerScope = {
+			onmessage: null,
+			postMessage: vi.fn()
+		};
+		const receipt = { bytes: 2, sha256: 'a'.repeat(64) };
+
+		installObjectiveCWorker(scope, {
+			configureRuntimeAssets: vi.fn(),
+			handleAssetMessage: vi.fn(() => false),
+			waitForStdin: vi.fn(() => null),
+			verifyRuntimeAssetIntegrity: vi.fn(async () => undefined)
+		});
+		await scope.onmessage?.({
+			data: {
+				load: true,
+				log: false,
+				objectivecAssets: {
+					libobjcUrl: 'https://cdn.test/libobjc.a',
+					headersUrl: 'https://cdn.test/headers.json',
+					libgnustepBaseUrl: 'https://cdn.test/libgnustep-base.a',
+					libgnustepBaseObjectUrl: 'https://cdn.test/libgnustep-base.o',
+					foundationHeadersUrl: 'https://cdn.test/foundation-headers.json',
+					libffiUrl: 'https://cdn.test/libffi.a',
+					integrity: {
+						'libobjc.a': receipt,
+						'headers.json': receipt,
+						'libgnustep-base.a': receipt,
+						'libgnustep-base.o': receipt,
+						'foundation-headers.json': receipt,
+						'libffi.a': receipt
+					},
+					maxAssetBytes: 1
+				}
+			}
+		});
+
+		expect(scope.postMessage).toHaveBeenCalledWith({
+			error: 'Objective-C runtime asset libobjc.a exceeds the 1 byte limit.'
+		});
+	});
 });

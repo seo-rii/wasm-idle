@@ -184,6 +184,7 @@ describe('public wasm-clang API contract', () => {
 			runtimeBaseUrl: 'https://cdn.example.com/pkg/runtime/',
 			manifest,
 			log: true,
+			maxAssetBytes: 4096,
 			showTiming: true
 		});
 
@@ -205,7 +206,9 @@ describe('public wasm-clang API contract', () => {
 			debugFunctionMetadata: unknown;
 			wasm: WebAssembly.Module;
 			compileLinkCall: unknown;
+			options: Record<string, unknown>;
 		};
+		expect(runtime.options.maxAssetBytes).toBe(4096);
 		expect(result.artifact).toEqual(
 			expect.objectContaining({
 				fileName: 'hello.wasm',

@@ -21,7 +21,7 @@ import untar from '../../core/src/tar.js';
 import { green, yellow, normal } from '../../core/src/color.js';
 import { createCombinedProgress, type CombinedProgressSlots } from './progress.js';
 import { resolveRuntimeAssetUrls, type RuntimeAssetUrls } from './runtime-assets.js';
-import { compile, readBuffer } from '../../core/src/wasm.js';
+import { DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES, compile, readBuffer } from '../../core/src/wasm.js';
 import {
 	normalizeDwarfWorkspacePath,
 	normalizeWorkspacePath,
@@ -250,8 +250,14 @@ class Clang {
 	lastArtifactPath = 'main.wasm';
 	traceStartedAt = 0;
 	progress: CombinedProgressSlots;
+	private readonly maxAssetBytes: number;
 
 	constructor(options: BrowserClangRuntimeOptions) {
+		const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES;
+		if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes <= 0) {
+			throw new TypeError('Clang maxAssetBytes must be a positive safe integer');
+		}
+		this.maxAssetBytes = maxAssetBytes;
 		this.moduleCache = {};
 		this.stdout = options.stdout || (() => {});
 		this.showTiming = options.showTiming || false;
@@ -268,6 +274,7 @@ class Clang {
 			moduleUrl: this.assetUrls.memfs,
 			progress: this.progress.memfs,
 			signal: options.signal,
+			maxAssetBytes,
 			trace: (message) => this.trace(message)
 		});
 
@@ -279,8 +286,8 @@ class Clang {
 		const lldReady = this.getModule(this.assetUrls.lld, this.progress.lld, options.signal);
 		const fileSystemReady = this.memfs.ready.then(async () => {
 			const sysrootReady = options.signal
-				? readBuffer(this.assetUrls.sysroot, undefined, undefined, options.signal)
-				: readBuffer(this.assetUrls.sysroot);
+				? readBuffer(this.assetUrls.sysroot, undefined, maxAssetBytes, options.signal)
+				: readBuffer(this.assetUrls.sysroot, undefined, maxAssetBytes);
 			await this.hostLogAsync(
 				`Untarring ${this.assetUrls.sysroot}`,
 				sysrootReady.then((buffer) => untar(buffer, this.memfs))
@@ -322,7 +329,7 @@ class Clang {
 		if (this.moduleCache[name]) return this.moduleCache[name];
 		const module = await this.hostLogAsync(
 			`Fetching and compiling ${name}`,
-			signal ? compile(name, progress, signal) : compile(name, progress)
+			compile(name, progress, signal, this.maxAssetBytes)
 		);
 		this.moduleCache[name] = module;
 		return module;

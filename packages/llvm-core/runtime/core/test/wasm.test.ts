@@ -1441,6 +1441,23 @@ describe('WebAssembly loading utilities', () => {
 		compileSpy.mockRestore();
 	});
 
+	it('keeps compiled modules isolated by their caller asset ceiling', async () => {
+		const url = 'https://cdn.test/llvm/limit-keyed.wasm';
+		const fetchMock = vi.fn(async () => new Response(emptyWasm));
+		const compileSpy = vi.spyOn(WebAssembly, 'compile');
+		vi.stubGlobal('fetch', fetchMock);
+
+		await expect(
+			compile(url, undefined, undefined, emptyWasm.byteLength)
+		).resolves.toBeInstanceOf(WebAssembly.Module);
+		await expect(compile(url, undefined, undefined, emptyWasm.byteLength - 1)).rejects.toThrow(
+			new RegExp(`size exceeds the ${emptyWasm.byteLength - 1} byte limit`, 'u')
+		);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(compileSpy).toHaveBeenCalledTimes(1);
+		compileSpy.mockRestore();
+	});
+
 	it('compiles zipped wasm and instantiates the resulting module', async () => {
 		const archive = await zipBytes('fixture.wasm', emptyWasm);
 		const url = 'https://cdn.test/llvm/fixture.wasm.zip';

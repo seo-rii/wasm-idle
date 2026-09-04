@@ -104,6 +104,20 @@ describe('runtime manifest', () => {
 		expect(cancelled).toBe(true);
 	});
 
+	it('honors a caller asset ceiling below the native manifest cap', async () => {
+		const body = JSON.stringify(manifestValue);
+		const fetchImpl = vi.fn(async () => new Response(body));
+
+		await expect(
+			loadRuntimeManifest(
+				'https://cdn.example.com/clang/v1/manifest.json',
+				fetchImpl,
+				undefined,
+				body.length - 1
+			)
+		).rejects.toThrow(new RegExp(`size exceeds the ${body.length - 1} byte limit`, 'u'));
+	});
+
 	it('preserves a pre-aborted manifest signal without fetching', async () => {
 		const fetchImpl = vi.fn();
 		const controller = new AbortController();

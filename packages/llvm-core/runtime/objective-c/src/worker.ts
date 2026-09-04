@@ -5,7 +5,11 @@ import {
 	loadRuntimeManifest,
 	resolveRuntimeManifestUrl
 } from '../../clang/src/index.js';
-import { DEFAULT_MAX_RUNTIME_JSON_BYTES, readBuffer } from '../../core/src/wasm.js';
+import {
+	DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES,
+	DEFAULT_MAX_RUNTIME_JSON_BYTES,
+	readBuffer
+} from '../../core/src/wasm.js';
 
 const OBJECTIVEC_ASSET_NAMES = [
 	'libobjc.a',
@@ -88,6 +92,7 @@ export interface ObjectiveCWorkerAssetConfig {
 	foundationHeadersUrl: string;
 	libffiUrl: string;
 	integrity: ObjectiveCAssetIntegrityMap;
+	maxAssetBytes?: number;
 }
 
 type ObjectiveCSourceLanguage = 'c' | 'objective-c' | 'objective-c++';
@@ -199,6 +204,10 @@ function resolveObjectiveCAssetConfig(assets: ObjectiveCWorkerAssetConfig) {
 		throw new Error('Objective-C runtime asset integrity verifier is not installed.');
 	}
 	const integrity = assets.integrity;
+	const maxAssetBytes = assets.maxAssetBytes ?? DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES;
+	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes <= 0) {
+		throw new Error('Objective-C maxAssetBytes must be a positive safe integer.');
+	}
 	if (!integrity || typeof integrity !== 'object' || Array.isArray(integrity)) {
 		throw new Error('Objective-C runtime asset integrity receipt is required.');
 	}
@@ -226,6 +235,11 @@ function resolveObjectiveCAssetConfig(assets: ObjectiveCWorkerAssetConfig) {
 						`Objective-C runtime asset integrity receipt is invalid for ${assetName}.`
 					);
 				}
+				if (receipt.bytes > maxAssetBytes) {
+					throw new Error(
+						`Objective-C runtime asset ${assetName} exceeds the ${maxAssetBytes} byte limit.`
+					);
+				}
 				return [assetName, Object.freeze({ bytes: receipt.bytes, sha256: receipt.sha256 })];
 			})
 		)
@@ -246,7 +260,8 @@ function resolveObjectiveCAssetConfig(assets: ObjectiveCWorkerAssetConfig) {
 			'Objective-C Foundation headers URL'
 		),
 		libffiUrl: resolveHostedAssetUrl(assets.libffiUrl, 'Objective-C libffi URL'),
-		integrity: verifiedIntegrity
+		integrity: verifiedIntegrity,
+		maxAssetBytes
 	} satisfies ObjectiveCWorkerAssetConfig;
 }
 
@@ -580,13 +595,19 @@ async function loadObjectiveCRuntime(
 	const hostedObjectiveCAssets = resolveObjectiveCAssetConfig(objectivecAssets);
 	configureWorkerRuntimeAssets(clangAssets || null);
 	const clangBaseUrl = clangAssets?.baseUrl || '';
-	const manifest = await loadRuntimeManifest(resolveRuntimeManifestUrl(clangBaseUrl));
+	const manifest = await loadRuntimeManifest(
+		resolveRuntimeManifestUrl(clangBaseUrl),
+		fetch,
+		undefined,
+		hostedObjectiveCAssets.maxAssetBytes
+	);
 	clang = new BrowserClangRuntime({
 		stdout: (output) => postMessage({ output }),
 		stdin: () => '',
 		progress: (value) => postMessage({ progress: value }),
 		onDebugEvent: (debugEvent) => postMessage({ debugEvent }),
 		log,
+		maxAssetBytes: hostedObjectiveCAssets.maxAssetBytes,
 		runtimeBaseUrl: clangBaseUrl,
 		manifest
 	});

@@ -1,4 +1,4 @@
-import { fetchRuntimeJson } from '../../core/src/wasm.js';
+import { DEFAULT_MAX_RUNTIME_JSON_BYTES, fetchRuntimeJson } from '../../core/src/wasm.js';
 import { resolveHostedRuntimeUrl, runtimeManifestUrl } from './url.js';
 import type {
 	RuntimeClangdConfig,
@@ -157,13 +157,15 @@ export function normalizeRuntimeManifest(value: RuntimeManifestV1 | unknown): Ru
 export async function loadRuntimeManifest(
 	manifestUrl: string | URL,
 	fetchImpl: typeof fetch = fetch,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	maxBytes = DEFAULT_MAX_RUNTIME_JSON_BYTES
 ): Promise<RuntimeManifestV1> {
 	const resolvedUrl = resolveHostedRuntimeUrl(manifestUrl, 'wasm-clang runtime manifest URL');
 	return parseRuntimeManifest(
 		await fetchRuntimeJson(resolvedUrl, {
 			fetchImpl,
 			label: 'wasm-clang runtime manifest',
+			maxBytes: Math.min(maxBytes, DEFAULT_MAX_RUNTIME_JSON_BYTES),
 			signal
 		})
 	);
