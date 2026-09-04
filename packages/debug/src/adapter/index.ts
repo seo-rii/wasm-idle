@@ -18,6 +18,10 @@ export type {
 	DebugAdapterEvent,
 	DebugAdapterKind,
 	DebugCapabilities,
+	DebugDataBreakpoint,
+	DebugDataBreakpointAccessType,
+	DebugDataBreakpointInfo,
+	DebugDataBreakpointInfoArguments,
 	DebugDisconnectOptions,
 	DebugEvaluateResult,
 	DebugLaunchConfig,
@@ -28,5 +32,7 @@ export type {
 	DebugThread,
 	DebugVariable,
 	DebugVariablePresentationHint,
+	DebugWriteMemoryResult,
+	ResolvedDataBreakpoint,
 	ResolvedBreakpoint
 } from './types.js';

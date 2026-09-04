@@ -101,6 +101,7 @@ export interface BrowserClangCompileRequest {
 	target?: SupportedClangTarget;
 	fileName?: string;
 	activePath?: string;
+	/** Lowercase .c/.cc/.cpp/.cxx siblings are separate translation units outside trace mode. */
 	workspaceFiles?: BrowserClangWorkspaceFile[];
 	compileArgs?: string[];
 	cppVersion?: string;
@@ -219,6 +220,7 @@ export interface BrowserClangRuntimeRunOptions {
 	compileArgs?: string[];
 	programArgs?: string[];
 	activePath?: string;
+	/** Lowercase .c/.cc/.cpp/.cxx siblings are separate translation units outside trace mode. */
 	workspaceFiles?: BrowserClangWorkspaceFile[];
 	cppVersion?: string;
 	cVersion?: string;

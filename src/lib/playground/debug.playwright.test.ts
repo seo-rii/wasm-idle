@@ -32,6 +32,31 @@ int main(void) {
 		testId: 'c-basic'
 	},
 	{
+		activePath: 'memory-write.c',
+		backend: 'lldb',
+		breakpointLine: 5,
+		expectedLocal: { name: 'value', value: '70' },
+		expectedMemoryInspector: { count: 4, variable: 'value' },
+		expectedMemoryWrite: {
+			data: [100, 0, 0, 0],
+			variable: 'value'
+		},
+		expectedOutput: 'lldb-memory-write=103',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int value = 70;
+    volatile int ready = value;
+    value += 3;
+    printf("lldb-memory-write=%d\\n", value);
+    return ready == 70 ? 0 : 2;
+}`,
+		testId: 'c-memory-write'
+	},
+	{
 		activePath: 'stale-generation.c',
 		backend: 'lldb',
 		breakpointLine: 4,
@@ -50,6 +75,66 @@ int main(void) {
     return 0;
 }`,
 		testId: 'c-stale-generation'
+	},
+	{
+		activePath: 'data-breakpoint.c',
+		backend: 'lldb',
+		breakpointLine: 5,
+		expectedDataBreakpoint: {
+			accessType: 'write',
+			data: [73, 0, 0, 0],
+			variable: 'value'
+		},
+		expectedLocal: { name: 'value', value: '70' },
+		expectedOutput: 'lldb-data-breakpoint=73',
+		expectedStoppedLine: 7,
+		expectedStoppedReason: 'data breakpoint',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int value = 70;
+    volatile int ready = value;
+    value += 3;
+    printf("lldb-data-breakpoint=%d\\n", value);
+    return ready == 70 ? 0 : 2;
+}`,
+		testId: 'c-data-breakpoint'
+	},
+	{
+		activePath: 'data-breakpoint-indexed-overlap.c',
+		backend: 'lldb',
+		breakpointLine: 6,
+		expectedDataBreakpoint: {
+			accessType: 'write',
+			bytes: 1,
+			data: [0, 1, 0, 0],
+			initialData: [255, 0, 0, 0],
+			offset: 5,
+			readOffset: 4,
+			variable: 'items'
+		},
+		expectedLocal: { name: 'ready', value: '255' },
+		expectedOutput: 'lldb-data-breakpoint-indexed-overlap=256',
+		expectedStoppedLine: 9,
+		expectedStoppedReason: 'data breakpoint',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int items[3] = {11, 255, 22};
+    volatile int ready = items[1];
+    volatile int armed = ready;
+    items[1] = ready;
+    items[1] += 1;
+    printf("lldb-data-breakpoint-indexed-overlap=%d\\n", items[1]);
+    return ready == 255 && armed == 255 ? 0 : 2;
+}`,
+		testId: 'c-data-breakpoint-indexed-overlap'
 	},
 	{
 		activePath: 'worker-crash.c',
@@ -126,6 +211,7 @@ int main(void) {
 		activePath: 'main.cpp',
 		backend: 'lldb',
 		breakpointLine: 16,
+		expectedWatch: { expression: 'pair.first', value: '35' },
 		expectedVariableTrees: [
 			{
 				parent: 'pair',
@@ -163,9 +249,61 @@ int main() {
     Pair pair{35, 38};
     Pair *pair_ptr = &pair;
     int result = calculate(pair_ptr->first);
-    std::printf("lldb-cpp=%d\\n", result);
-    return 0;
-}`
+		std::printf("lldb-cpp=%d\\n", result);
+		return 0;
+}`,
+		testId: 'cpp-composite'
+	},
+	{
+		activePath: 'data-breakpoint.cpp',
+		backend: 'lldb',
+		breakpointLine: 5,
+		expectedDataBreakpoint: {
+			accessType: 'readWrite',
+			data: [73, 0, 0, 0],
+			variable: 'value'
+		},
+		expectedLocal: { name: 'value', value: '70' },
+		expectedOutput: 'lldb-cpp-data-breakpoint=73',
+		expectedStoppedLine: 7,
+		expectedStoppedReason: 'data breakpoint',
+		expectedTitle: 'C++ · LLDB / WAMR',
+		language: 'CPP',
+		programArgs: [],
+		source: `#include <cstdio>
+
+int main() {
+    int value = 70;
+    volatile int ready = value;
+    value = 73;
+    std::printf("lldb-cpp-data-breakpoint=%d\\n", value);
+    return ready == 70 ? 0 : 2;
+}`,
+		testId: 'cpp-data-breakpoint'
+	},
+	{
+		activePath: 'memory-write.cpp',
+		backend: 'lldb',
+		breakpointLine: 5,
+		expectedLocal: { name: 'value', value: '70' },
+		expectedMemoryWrite: {
+			data: [100, 0, 0, 0],
+			variable: 'value'
+		},
+		expectedOutput: 'lldb-cpp-memory-write=103',
+		expectedTitle: 'C++ · LLDB / WAMR',
+		language: 'CPP',
+		programArgs: [],
+		source: `#include <cstdio>
+
+int main() {
+    int value = 70;
+    volatile int ready = value;
+    value += 3;
+    std::printf("lldb-cpp-memory-write=%d\\n", value);
+    return ready == 70 ? 0 : 2;
+}`,
+		testId: 'cpp-memory-write'
 	},
 	{
 		activePath: 'recursive.c',
@@ -203,10 +341,10 @@ int main(void) {
 		activePath: 'multi-main.c',
 		backend: 'lldb',
 		breakpointLine: 3,
-		breakpointSourcePath: 'helper.h',
+		breakpointSourcePath: 'helper.c',
 		expectedLocal: { name: 'value', value: '70' },
 		expectedOutput: 'lldb-multifile=73',
-		expectedPausedLine: 3,
+		expectedPausedLine: 4,
 		expectedTitle: 'C · LLDB / WAMR',
 		language: 'C',
 		programArgs: [],
@@ -223,7 +361,13 @@ int main(void) {
 			{
 				path: 'helper.h',
 				content: `#pragma once
-static __attribute__((noinline)) int add_three(int value) {
+int add_three(int value);`
+			},
+			{
+				path: 'helper.c',
+				content: `#include "helper.h"
+
+__attribute__((noinline)) int add_three(int value) {
     int result = value + 3;
     return result;
 }`
@@ -365,21 +509,42 @@ int main(void) {
 		testId: 'c-relaunch'
 	},
 	{
-		activePath: 'asset-fallback.c',
+		activePath: 'manifest-fallback.c',
 		backend: 'trace',
-		expectedFallbackWarning: 'LLDB WebAssembly debug asset (404)',
-		expectedOutput: 'trace-asset-fallback=73',
+		expectedFallbackWarning: 'Unable to load the LLDB runtime manifest (404).',
+		expectedNoDebugWorkers: true,
+		expectedOutput: 'trace-manifest-fallback=73',
 		language: 'C',
-		missingDebugAsset: 'debug/lldb-web-dap.wasm',
+		missingDebugResource: 'runtime-manifest.v2.json',
 		programArgs: [],
 		source: `#include <stdio.h>
 
 int main(void) {
     int value = 73;
-    printf("trace-asset-fallback=%d\\n", value);
+    printf("trace-manifest-fallback=%d\\n", value);
     return 0;
 }`,
-		testId: 'c-asset-fallback'
+		testId: 'c-manifest-fallback'
+	},
+	{
+		activePath: 'asset-session-failure.c',
+		backend: 'lldb',
+		breakpointLine: 4,
+		expectedNoDebugWorkers: true,
+		expectedSessionFailure: 'Unable to load LLDB WebAssembly debug asset (404)',
+		expectedTitle: 'C · LLDB / WAMR',
+		forbiddenOutput: 'late-asset-must-not-run=73',
+		language: 'C',
+		missingDebugResource: 'debug/lldb-web-dap.wasm',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int value = 73;
+    printf("late-asset-must-not-run=%d\\n", value);
+    return 0;
+}`,
+		testId: 'c-asset-session-failure'
 	},
 	{
 		activePath: 'solution.rs',
@@ -397,6 +562,53 @@ int main(void) {
     println!("lldb-rust={value}:{argument}");
 }`,
 		testId: 'rust-basic'
+	},
+	{
+		activePath: 'data-breakpoint.rs',
+		backend: 'lldb',
+		breakpointLine: 3,
+		expectedDataBreakpoint: {
+			accessType: 'read',
+			data: [70, 0, 0, 0],
+			variable: 'value'
+		},
+		expectedLocal: { name: 'value', value: '70' },
+		expectedOutput: 'lldb-rust-data-breakpoint=73',
+		expectedStoppedLine: 4,
+		expectedStoppedReason: 'data breakpoint',
+		expectedTitle: 'Rust · LLDB / WAMR',
+		language: 'RUST',
+		programArgs: [],
+		source: `fn main() {
+    let mut value: i32 = 70;
+    let ready = value;
+    value += 3;
+    println!("lldb-rust-data-breakpoint={value}");
+    assert_eq!(ready, 70);
+}`,
+		testId: 'rust-data-breakpoint'
+	},
+	{
+		activePath: 'memory-write.rs',
+		backend: 'lldb',
+		breakpointLine: 3,
+		expectedLocal: { name: 'value', value: '70' },
+		expectedMemoryWrite: {
+			data: [100, 0, 0, 0],
+			variable: 'value'
+		},
+		expectedOutput: 'lldb-rust-memory-write=103',
+		expectedTitle: 'Rust · LLDB / WAMR',
+		language: 'RUST',
+		programArgs: [],
+		source: `fn main() {
+    let mut value: i32 = 70;
+    let ready = value;
+    value += 3;
+    println!("lldb-rust-memory-write={value}");
+    assert!(ready >= 0);
+}`,
+		testId: 'rust-memory-write'
 	},
 	{
 		activePath: 'composite.rs',
@@ -544,6 +756,17 @@ const requestedDebugCases = new Set(
 		.map((value) => value.trim())
 		.filter(Boolean)
 );
+const knownDebugCaseIds = new Set<string>(
+	debugCases.flatMap((testCase) => ('testId' in testCase ? [testCase.testId] : []))
+);
+const unknownRequestedDebugCases = [...requestedDebugCases].filter(
+	(testId) => !knownDebugCaseIds.has(testId)
+);
+if (unknownRequestedDebugCases.length) {
+	throw new Error(
+		`Unknown WASM_IDLE_DEBUG_BROWSER_CASES selection: ${unknownRequestedDebugCases.join(', ')}`
+	);
+}
 const activeDebugCases = debugCases.filter(
 	(testCase) =>
 		(!requestedDebugLanguages.size || requestedDebugLanguages.has(testCase.language)) &&
@@ -570,33 +793,88 @@ afterAll(async () => {
 
 async function ensureSharedBrowserPage(page: Page, browserUrl: string) {
 	await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
-	for (let attempt = 0; attempt < 5; attempt += 1) {
-		let state;
+	let lastState:
+		| {
+				crossOriginIsolated: boolean;
+				serviceWorkerControlled: boolean;
+				sharedArrayBuffer: boolean;
+		  }
+		| undefined;
+	for (let attempt = 0; attempt < 80; attempt += 1) {
 		try {
-			state = await page.evaluate(() => ({
+			lastState = await page.evaluate(() => ({
 				crossOriginIsolated,
 				serviceWorkerControlled: !!navigator.serviceWorker?.controller,
 				sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined'
 			}));
 		} catch (error) {
 			if (!String(error).includes('Execution context was destroyed')) throw error;
-			await page.waitForLoadState('domcontentloaded');
+			await page.waitForLoadState('domcontentloaded').catch(() => {});
 			continue;
 		}
-		if (state.crossOriginIsolated && state.serviceWorkerControlled && state.sharedArrayBuffer) {
-			return state;
+		if (
+			lastState.crossOriginIsolated &&
+			lastState.serviceWorkerControlled &&
+			lastState.sharedArrayBuffer
+		) {
+			return lastState;
 		}
-		await page.evaluate(async () => {
-			if (!navigator.serviceWorker) return;
-			await Promise.race([
-				navigator.serviceWorker.ready,
-				new Promise((resolve) => setTimeout(resolve, 1_500))
-			]).catch(() => {});
-		});
-		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
-		await page.waitForTimeout(2_000 + attempt * 500);
+		await page.waitForTimeout(250);
 	}
-	throw new Error('Debug browser test requires a cross-origin-isolated service worker page.');
+	const navigationStates = await page
+		.evaluate(() =>
+			JSON.parse(sessionStorage.getItem('wasm-idle:test:isolation-navigations') || '[]')
+		)
+		.catch(() => []);
+	throw new Error(
+		`Debug browser test requires a cross-origin-isolated service worker page: ${JSON.stringify({
+			lastState,
+			navigationStates,
+			url: page.url()
+		})}`
+	);
+}
+
+async function verifyPagesIsolationBootstrap(page: Page, browserUrl: string) {
+	let initialDocumentHeadersStripped = false;
+	await page.addInitScript(() => {
+		const key = 'wasm-idle:test:isolation-navigations';
+		const previous = JSON.parse(sessionStorage.getItem(key) || '[]') as unknown[];
+		const navigation = performance.getEntriesByType(
+			'navigation'
+		)[0] as PerformanceNavigationTiming;
+		previous.push({
+			controller: !!navigator.serviceWorker?.controller,
+			crossOriginIsolated,
+			type: navigation?.type
+		});
+		sessionStorage.setItem(key, JSON.stringify(previous));
+	});
+	await page.route(
+		browserUrl,
+		async (route) => {
+			const response = await route.fetch();
+			const headers = response.headers();
+			delete headers['cross-origin-embedder-policy'];
+			delete headers['cross-origin-opener-policy'];
+			delete headers['cross-origin-resource-policy'];
+			initialDocumentHeadersStripped = true;
+			await route.fulfill({ response, headers });
+		},
+		{ times: 1 }
+	);
+
+	const state = await ensureSharedBrowserPage(page, browserUrl);
+	const navigationStates = await page.evaluate(() =>
+		JSON.parse(sessionStorage.getItem('wasm-idle:test:isolation-navigations') || '[]')
+	);
+	console.info(`[wasm-idle:coi-bootstrap] ${JSON.stringify(navigationStates)}`);
+	expect(initialDocumentHeadersStripped).toBe(true);
+	expect(navigationStates).toEqual([
+		{ controller: false, crossOriginIsolated: false, type: 'navigate' },
+		{ controller: true, crossOriginIsolated: true, type: 'reload' }
+	]);
+	return state;
 }
 
 async function readPausedLine(page: Page) {
@@ -614,19 +892,27 @@ async function readBrowserLifecycleMetrics(page: Page) {
 			globalThis as typeof globalThis & {
 				__wasmIdleWorkerMetrics?: () => {
 					active: number;
+					activeDebug: number;
 					created: number;
+					createdDebug: number;
 					linearMemory: Record<'lldb' | 'target', { peakBytes: number; samples: number }>;
+					peakActive: number;
 					terminated: number;
+					terminatedDebug: number;
 				};
 			}
 		).__wasmIdleWorkerMetrics?.() ?? {
 			active: 0,
+			activeDebug: 0,
 			created: 0,
+			createdDebug: 0,
 			linearMemory: {
 				lldb: { peakBytes: 0, samples: 0 },
 				target: { peakBytes: 0, samples: 0 }
 			},
-			terminated: 0
+			peakActive: 0,
+			terminated: 0,
+			terminatedDebug: 0
 		};
 		const memory = (
 			performance as Performance & {
@@ -669,6 +955,31 @@ describe('native-source browser debugging in Chromium', () => {
 					process.env.WASM_IDLE_CHROMIUM_EXECUTABLE || ''
 				)
 			});
+			const isolationContext = await browser.newContext();
+			try {
+				await isolationContext.addCookies([
+					{
+						name: 'dev_bypass_waf',
+						value: 'seorii_bypass_token_is_this',
+						url: new URL(previewServer.browserUrl).origin
+					}
+				]);
+				await isolationContext.setExtraHTTPHeaders({
+					Cookie: 'dev_bypass_waf=seorii_bypass_token_is_this'
+				});
+				const isolationBootstrapPage = await isolationContext.newPage();
+				const activeState = await verifyPagesIsolationBootstrap(
+					isolationBootstrapPage,
+					previewServer.browserUrl
+				);
+				expect(activeState).toEqual({
+					crossOriginIsolated: true,
+					serviceWorkerControlled: true,
+					sharedArrayBuffer: true
+				});
+			} finally {
+				await isolationContext.close();
+			}
 			const context = await browser.newContext();
 			await context.addCookies([
 				{
@@ -685,7 +996,11 @@ describe('native-source browser debugging in Chromium', () => {
 				if (typeof NativeWorker !== 'function') return;
 				let active = 0;
 				let created = 0;
+				let activeDebug = 0;
+				let createdDebug = 0;
+				let peakActive = 0;
 				let terminated = 0;
+				let terminatedDebug = 0;
 				const liveWorkers = new WeakSet<Worker>();
 				const debugWorkers = new Map<'lldb' | 'target', Worker>();
 				type DebugQueueDescriptor = {
@@ -711,6 +1026,9 @@ describe('native-source browser debugging in Chromium', () => {
 							debugWorkerKind = 'target';
 						}
 						if (debugWorkerKind) {
+							activeDebug += 1;
+							createdDebug += 1;
+							peakActive = Math.max(peakActive, activeDebug);
 							debugWorkers.set(debugWorkerKind, this);
 							this.addEventListener('message', (event) => {
 								const data: unknown = event.data;
@@ -772,6 +1090,8 @@ describe('native-source browser debugging in Chromium', () => {
 						for (const [kind, worker] of debugWorkers) {
 							if (worker !== this) continue;
 							debugWorkers.delete(kind);
+							activeDebug -= 1;
+							terminatedDebug += 1;
 							if (kind === 'target') targetQueues.clear();
 						}
 						super.terminate();
@@ -786,12 +1106,16 @@ describe('native-source browser debugging in Chromium', () => {
 					configurable: true,
 					value: () => ({
 						active,
+						activeDebug,
 						created,
+						createdDebug,
 						linearMemory: {
 							lldb: { ...linearMemory.lldb },
 							target: { ...linearMemory.target }
 						},
-						terminated
+						peakActive,
+						terminated,
+						terminatedDebug
 					})
 				});
 				Object.defineProperty(globalThis, '__wasmIdleDebugWorkerFaults', {
@@ -891,12 +1215,21 @@ describe('native-source browser debugging in Chromium', () => {
 					);
 					const pageErrors: string[] = [];
 					const consoleMessages: string[] = [];
+					const requestFailures: Array<{ error: string; method: string; url: string }> =
+						[];
 					const debugAssetResponses = new Map<string, number>();
 					page.on('console', (message) => {
 						consoleMessages.push(`[${message.type()}] ${message.text()}`);
 					});
 					page.on('pageerror', (error) => {
 						pageErrors.push(String(error.stack || error.message || error));
+					});
+					page.on('requestfailed', (request) => {
+						requestFailures.push({
+							error: request.failure()?.errorText || 'unknown request failure',
+							method: request.method(),
+							url: request.url()
+						});
 					});
 					page.on('response', (response) => {
 						const pathname = new URL(response.url()).pathname;
@@ -909,8 +1242,8 @@ describe('native-source browser debugging in Chromium', () => {
 						);
 					});
 					try {
-						if ('missingDebugAsset' in testCase) {
-							await page.addInitScript((assetPath) => {
+						if ('missingDebugResource' in testCase) {
+							await page.addInitScript((resourcePath) => {
 								const nativeFetch = globalThis.fetch.bind(globalThis);
 								Object.defineProperty(globalThis, 'fetch', {
 									configurable: true,
@@ -927,18 +1260,21 @@ describe('native-source browser debugging in Chromium', () => {
 															: input.url,
 														location.href
 													);
-										if (url.pathname.endsWith(`/${assetPath}`)) {
+										if (url.pathname.endsWith(`/${resourcePath}`)) {
 											return Promise.resolve(
-												new Response('missing debug asset fixture', {
-													status: 404
-												})
+												new Response(
+													'missing debug runtime resource fixture',
+													{
+														status: 404
+													}
+												)
 											);
 										}
 										return nativeFetch(input, init);
 									},
 									writable: true
 								});
-							}, testCase.missingDebugAsset);
+							}, testCase.missingDebugResource);
 						}
 						const activeState = await ensureSharedBrowserPage(
 							page,
@@ -1039,7 +1375,52 @@ describe('native-source browser debugging in Chromium', () => {
 						const debugButton = page.locator('button.action-button--debug');
 						await debugButton.waitFor({ state: 'visible' });
 						expect(await debugButton.isEnabled()).toBe(true);
+						const workerMetricsBeforeStart =
+							'expectedNoDebugWorkers' in testCase
+								? await readBrowserLifecycleMetrics(page)
+								: null;
 						await debugButton.click();
+						if ('expectedSessionFailure' in testCase) {
+							await page.waitForFunction(
+								(expectedFailure) =>
+									document
+										.querySelector('[data-testid="terminal-debug-output"]')
+										?.textContent?.includes(expectedFailure),
+								testCase.expectedSessionFailure,
+								{
+									timeout: Number(
+										process.env.WASM_IDLE_DEBUG_START_TIMEOUT_MS || '120000'
+									)
+								}
+							);
+							await debugButton.waitFor({ state: 'visible' });
+							const transcript =
+								(await page
+									.locator('[data-testid="terminal-debug-output"]')
+									.textContent()) || '';
+							expect(transcript).toContain(testCase.expectedSessionFailure);
+							expect(transcript).not.toContain(testCase.forbiddenOutput);
+							expect(
+								consoleMessages.some((message) =>
+									message.includes('using trace debugging for this run')
+								)
+							).toBe(false);
+							if (testCase.expectedNoDebugWorkers) {
+								const workerMetricsAfterFailure =
+									await readBrowserLifecycleMetrics(page);
+								expect(workerMetricsAfterFailure.createdDebug).toBe(
+									workerMetricsBeforeStart?.createdDebug
+								);
+								expect(workerMetricsAfterFailure.terminatedDebug).toBe(
+									workerMetricsBeforeStart?.terminatedDebug
+								);
+								expect(workerMetricsAfterFailure.activeDebug).toBe(
+									workerMetricsBeforeStart?.activeDebug
+								);
+							}
+							expect(pageErrors).toEqual([]);
+							continue;
+						}
 						let startTimeout: ReturnType<typeof setTimeout> | undefined;
 						const startOutcome = await Promise.race([
 							page
@@ -1082,6 +1463,11 @@ describe('native-source browser debugging in Chromium', () => {
 									)
 								)
 								.toContain(testCase.expectedFallbackWarning);
+							expect(
+								consoleMessages.some((message) =>
+									message.includes('using trace debugging for this run')
+								)
+							).toBe(true);
 						}
 						let pauseTimeout: ReturnType<typeof setTimeout> | undefined;
 						const pauseOutcome = await Promise.race([
@@ -1415,6 +1801,28 @@ describe('native-source browser debugging in Chromium', () => {
 									expect.objectContaining(testCase.expectedLocal)
 								])
 							);
+							if ('expectedWatch' in testCase) {
+								await page
+									.locator('.watch-row input')
+									.fill(testCase.expectedWatch.expression);
+								await page.locator('.watch-add').click();
+								const watchEntry = page.locator('.debug-entry--watch').filter({
+									has: page.locator('.debug-expression', {
+										hasText: testCase.expectedWatch.expression
+									})
+								});
+								await expect
+									.poll(
+										async () =>
+											(
+												await watchEntry
+													.locator('.debug-value')
+													.textContent()
+											)?.trim(),
+										{ timeout: 30_000 }
+									)
+									.toBe(testCase.expectedWatch.value);
+							}
 							if ('expectedVariableTrees' in testCase) {
 								for (const expectedTree of testCase.expectedVariableTrees) {
 									const parent = loadedVariables.find(
@@ -1458,6 +1866,99 @@ describe('native-source browser debugging in Chromium', () => {
 								(window as any).__wasmIdleDebug.getDebugState()
 							);
 							expect(loadedState.variablesByReference.length).toBeGreaterThan(0);
+							if ('expectedMemoryInspector' in testCase) {
+								const referenceInput = page.getByLabel('Memory reference');
+								const offsetInput = page.getByLabel('Memory offset');
+								const countInput = page.getByLabel('Memory byte count');
+								expect(await referenceInput.inputValue()).toBe('0x0');
+								expect(await offsetInput.inputValue()).toBe('0');
+								expect(await countInput.inputValue()).toBe(
+									String(testCase.expectedMemoryInspector.count)
+								);
+								await page
+									.locator('.debug-memory-read')
+									.evaluate((button: HTMLButtonElement) => button.click());
+								const cdpSession = await context.newCDPSession(page);
+								await new Promise((resolve) => setTimeout(resolve, 2_000));
+								const firstPageResponse = await cdpSession.send(
+									'Runtime.evaluate',
+									{
+										expression: `({
+										error: document.querySelector('.debug-memory-error')?.textContent?.trim() ?? '',
+										bytes: Array.from(document.querySelectorAll('.debug-memory-byte'), (node) => node.textContent?.trim() ?? '')
+									})`,
+										returnByValue: true
+									}
+								);
+								const firstPage = firstPageResponse.result.value as {
+									bytes: string[];
+									error: string;
+								};
+								expect(
+									firstPage,
+									JSON.stringify({
+										consoleTail: consoleMessages.slice(-80),
+										pageErrors
+									})
+								).toMatchObject({
+									error: '',
+									bytes: expect.any(Array)
+								});
+								const displayedBytes = firstPage.bytes;
+								expect(displayedBytes).toHaveLength(
+									testCase.expectedMemoryInspector.count
+								);
+								for (const byte of displayedBytes) {
+									expect(byte.trim()).toMatch(/^[0-9a-f]{2}$/u);
+								}
+								await cdpSession.send('Runtime.evaluate', {
+									expression: `Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Next')?.click()`
+								});
+								await new Promise((resolve) => setTimeout(resolve, 2_000));
+								const nextOffsetResponse = await cdpSession.send(
+									'Runtime.evaluate',
+									{
+										expression: `document.querySelector('[aria-label="Memory offset"]')?.value`,
+										returnByValue: true
+									}
+								);
+								expect(nextOffsetResponse.result.value).toBe(
+									String(testCase.expectedMemoryInspector.count)
+								);
+								await cdpSession.send('Runtime.evaluate', {
+									expression: `Array.from(document.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Previous')?.click()`
+								});
+								await new Promise((resolve) => setTimeout(resolve, 2_000));
+								const previousOffsetResponse = await cdpSession.send(
+									'Runtime.evaluate',
+									{
+										expression: `document.querySelector('[aria-label="Memory offset"]')?.value`,
+										returnByValue: true
+									}
+								);
+								expect(previousOffsetResponse.result.value).toBe('0');
+								const inspectLabel = `Inspect memory for ${testCase.expectedMemoryInspector.variable}`;
+								await cdpSession.send('Runtime.evaluate', {
+									expression: `Array.from(document.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === ${JSON.stringify(inspectLabel)})?.click()`
+								});
+								const selectedInputsResponse = await cdpSession.send(
+									'Runtime.evaluate',
+									{
+										expression: `({
+											reference: document.querySelector('[aria-label="Memory reference"]')?.value,
+											offset: document.querySelector('[aria-label="Memory offset"]')?.value
+										})`,
+										returnByValue: true
+									}
+								);
+								const selectedInputs = selectedInputsResponse.result.value as {
+									offset: string;
+									reference: string;
+								};
+								expect(selectedInputs.reference).not.toBe('');
+								expect(selectedInputs.reference).not.toBe('0x0');
+								expect(selectedInputs.offset).toBe('0');
+							}
 							const memory = await page.evaluate(() =>
 								(window as any).__wasmIdleDebug.readDebugMemory('0x0', 0, 4)
 							);
@@ -1466,6 +1967,118 @@ describe('native-source browser debugging in Chromium', () => {
 								unreadableBytes: 0
 							});
 							expect(memory.data).toHaveLength(4);
+							if ('expectedMemoryWrite' in testCase) {
+								const variable = loadedVariables.find(
+									(candidate) =>
+										candidate.name === testCase.expectedMemoryWrite.variable
+								);
+								expect(variable?.memoryReference).toBeTypeOf('string');
+								if (!variable?.memoryReference) {
+									throw new Error(
+										`${testCase.language} did not expose a memory reference for ${testCase.expectedMemoryWrite.variable}`
+									);
+								}
+								await page
+									.getByLabel('Memory reference')
+									.fill(variable.memoryReference);
+								await page.getByLabel('Memory offset').fill('0');
+								await page
+									.getByLabel('Memory write bytes')
+									.fill(
+										testCase.expectedMemoryWrite.data
+											.map((byte) => byte.toString(16).padStart(2, '0'))
+											.join(' ')
+									);
+								await page.getByLabel('Write memory').click();
+								await expect
+									.poll(
+										async () =>
+											(
+												await page
+													.locator('.debug-memory-write-status')
+													.textContent()
+											)?.trim() || '',
+										{ timeout: 30_000 }
+									)
+									.toContain('4 bytes written');
+								const writtenMemory = await page.evaluate(
+									(memoryReference) =>
+										(window as any).__wasmIdleDebug.readDebugMemory(
+											memoryReference,
+											0,
+											4
+										),
+									variable.memoryReference
+								);
+								expect(writtenMemory).toMatchObject({
+									data: testCase.expectedMemoryWrite.data,
+									unreadableBytes: 0
+								});
+							}
+							if ('expectedDataBreakpoint' in testCase) {
+								const variable = loadedVariables.find(
+									(candidate) =>
+										candidate.name === testCase.expectedDataBreakpoint.variable
+								);
+								expect(variable?.memoryReference).toBeTypeOf('string');
+								if (!variable?.memoryReference) {
+									throw new Error(
+										`${testCase.language} did not expose a memory reference for ${testCase.expectedDataBreakpoint.variable}`
+									);
+								}
+								await page
+									.getByLabel('Memory reference')
+									.fill(variable.memoryReference);
+								const watchOffset =
+									'offset' in testCase.expectedDataBreakpoint
+										? testCase.expectedDataBreakpoint.offset
+										: 0;
+								const watchBytes =
+									'bytes' in testCase.expectedDataBreakpoint
+										? testCase.expectedDataBreakpoint.bytes
+										: 4;
+								await page.getByLabel('Memory offset').fill(String(watchOffset));
+								await page.getByLabel('Memory byte count').fill(String(watchBytes));
+								await page
+									.getByLabel('Data breakpoint access')
+									.selectOption(testCase.expectedDataBreakpoint.accessType);
+								await page.getByLabel('Set data breakpoint').click();
+								await expect
+									.poll(
+										async () =>
+											(
+												await page
+													.locator('.debug-data-breakpoint-status')
+													.textContent()
+											)?.trim() || '',
+										{ timeout: 30_000 }
+									)
+									.toContain(testCase.expectedDataBreakpoint.accessType);
+								if ('initialData' in testCase.expectedDataBreakpoint) {
+									const readOffset =
+										'readOffset' in testCase.expectedDataBreakpoint
+											? testCase.expectedDataBreakpoint.readOffset
+											: 0;
+									const initialMemory = await page.evaluate(
+										({ count, memoryReference, offset }) =>
+											(window as any).__wasmIdleDebug.readDebugMemory(
+												memoryReference,
+												offset,
+												count
+											),
+										{
+											count: testCase.expectedDataBreakpoint.initialData
+												.length,
+											memoryReference: variable.memoryReference,
+											offset: readOffset
+										}
+									);
+									expect(initialMemory).toMatchObject({
+										data: testCase.expectedDataBreakpoint.initialData,
+										unreadableBytes: 0
+									});
+								}
+							}
 							if ('testId' in testCase && testCase.testId === 'c-basic') {
 								const workerMetrics = await readBrowserLifecycleMetrics(page);
 								const linearMemoryLimits = {
@@ -1587,7 +2200,7 @@ describe('native-source browser debugging in Chromium', () => {
 								expect(helperFrame?.id).toBeTypeOf('number');
 								expect(mainFrame?.id).toBeTypeOf('number');
 								const editedMainSource = `${testCase.source}
-// edited while paused in helper.h`;
+// edited while paused in ${testCase.breakpointSourcePath}`;
 								const workspaceReplaced = await page.evaluate(
 									async ({ activePath, activeSourcePath, editedMainSource }) =>
 										await (window as any).__wasmIdleDebug.setWorkspaceFiles(
@@ -1850,8 +2463,7 @@ describe('native-source browser debugging in Chromium', () => {
 						}
 						if (
 							'afterContinue' in testCase &&
-							(testCase.afterContinue === 'disconnect' ||
-								testCase.afterContinue === 'relaunch')
+							testCase.afterContinue === 'disconnect'
 						) {
 							await page
 								.locator('.debug-status-pill--active')
@@ -1864,82 +2476,128 @@ describe('native-source browser debugging in Chromium', () => {
 									process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS || '5000'
 								)
 							});
-							if (testCase.afterContinue === 'relaunch') {
-								await page.evaluate(() =>
-									(window as any).__wasmIdleDebug.setBreakpoints([])
-								);
-								const repeatCount = Number(
-									process.env.WASM_IDLE_DEBUG_RELAUNCH_COUNT ||
-										testCase.repeatCount
-								);
-								if (
-									!Number.isSafeInteger(repeatCount) ||
-									repeatCount < testCase.repeatCount
-								) {
-									throw new Error(
-										`WASM_IDLE_DEBUG_RELAUNCH_COUNT must be an integer greater than or equal to ${testCase.repeatCount}`
-									);
-								}
-								await page.requestGC();
-								const baselineMetrics = await readBrowserLifecycleMetrics(page);
-								expect(baselineMetrics.usedJsHeapSize).toBeGreaterThan(0);
-								const heapGrowthLimit = Number(
-									process.env.WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES ||
-										String(64 * 1024 * 1024)
-								);
-								let latestMetrics = baselineMetrics;
-								const lifecycleMetrics = [baselineMetrics];
-								for (let run = 1; run < repeatCount; run += 1) {
-									await debugButton.click();
-									await page
-										.getByRole('button', { name: 'Stop Debug' })
-										.waitFor({ state: 'visible' });
-									await page
-										.locator('.debug-status-pill--paused')
-										.waitFor({ state: 'visible' });
-									await page.locator('button[aria-label="Continue"]').click();
-									await page
-										.locator('.debug-status-pill--active')
-										.waitFor({ state: 'visible' });
-									await page.waitForTimeout(250);
-									await page.getByRole('button', { name: 'Stop Debug' }).click();
-									await debugButton.waitFor({
-										state: 'visible',
-										timeout: Number(
-											process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS ||
-												'5000'
-										)
-									});
-									await page.waitForTimeout(250);
-									const debugState = await page.evaluate(() =>
-										(window as any).__wasmIdleDebug.getDebugState()
-									);
-									expect(debugState.paused).toBe(false);
-									await page.requestGC();
-									latestMetrics = await readBrowserLifecycleMetrics(page);
-									lifecycleMetrics.push(latestMetrics);
-									expect(latestMetrics.active).toBeLessThanOrEqual(
-										baselineMetrics.active
-									);
-									expect(
-										latestMetrics.usedJsHeapSize -
-											baselineMetrics.usedJsHeapSize
-									).toBeLessThanOrEqual(heapGrowthLimit);
-								}
-								const repeatedRuns = repeatCount - 1;
-								expect(
-									latestMetrics.created - baselineMetrics.created
-								).toBeGreaterThanOrEqual(repeatedRuns * 2);
-								expect(
-									latestMetrics.terminated - baselineMetrics.terminated
-								).toBeGreaterThanOrEqual(repeatedRuns * 2);
-								console.info(
-									`[wasm-idle:lldb-lifecycle] ${JSON.stringify({
-										heapGrowthLimit,
-										runs: lifecycleMetrics
-									})}`
+						} else if (
+							'afterContinue' in testCase &&
+							testCase.afterContinue === 'relaunch'
+						) {
+							await page
+								.locator('.debug-status-pill--active')
+								.waitFor({ state: 'visible' });
+							const repeatCount = Number(
+								process.env.WASM_IDLE_DEBUG_RELAUNCH_COUNT || testCase.repeatCount
+							);
+							if (
+								!Number.isSafeInteger(repeatCount) ||
+								repeatCount < testCase.repeatCount
+							) {
+								throw new Error(
+									`WASM_IDLE_DEBUG_RELAUNCH_COUNT must be an integer greater than or equal to ${testCase.repeatCount}`
 								);
 							}
+							await page.requestGC();
+							const baselineMetrics = await readBrowserLifecycleMetrics(page);
+							expect(baselineMetrics.activeDebug).toBe(2);
+							expect(baselineMetrics.usedJsHeapSize).toBeGreaterThan(0);
+							const heapGrowthLimit = Number(
+								process.env.WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES ||
+									String(64 * 1024 * 1024)
+							);
+							let latestMetrics = baselineMetrics;
+							const lifecycleMetrics = [baselineMetrics];
+							for (let run = 1; run < repeatCount; run += 1) {
+								const pausedStatus = page.locator('.debug-status-pill--paused');
+								try {
+									await page
+										.getByRole('button', { name: 'Restart Debug' })
+										.click();
+									await pausedStatus.waitFor({ state: 'hidden' });
+									await pausedStatus.waitFor({
+										state: 'visible',
+										timeout: 120_000
+									});
+								} catch (error) {
+									const failureMetrics = await readBrowserLifecycleMetrics(
+										page
+									).catch(() => null);
+									const debugState = await page
+										.evaluate(() =>
+											(window as any).__wasmIdleDebug.getDebugState()
+										)
+										.catch(() => null);
+									const debugMetrics = await page
+										.evaluate(() =>
+											Array.from(
+												document.querySelectorAll('.debug-metric')
+											).map((metric) => metric.textContent?.trim() || '')
+										)
+										.catch(() => []);
+									const transcript =
+										(await page
+											.locator('[data-testid="terminal-debug-output"]')
+											.textContent()
+											.catch(() => '')) || '';
+									const previewStatus = await page.request
+										.get(previewServer.browserUrl)
+										.then((response) => response.status())
+										.catch(() => null);
+									throw new Error(
+										`C LLDB relaunch ${run + 1}/${repeatCount} did not pause\n${JSON.stringify(
+											{
+												error:
+													error instanceof Error
+														? error.stack || error.message
+														: String(error),
+												failureMetrics,
+												debugState,
+												debugMetrics,
+												pageClosed: page.isClosed(),
+												pageUrl: page.url(),
+												previewStatus,
+												consoleTail: consoleMessages.slice(-80),
+												pageErrors,
+												requestFailures: requestFailures.slice(-80),
+												transcript
+											},
+											null,
+											2
+										)}`
+									);
+								}
+								latestMetrics = await readBrowserLifecycleMetrics(page);
+								lifecycleMetrics.push(latestMetrics);
+								console.info(
+									`[wasm-idle:lldb-relaunch] ${JSON.stringify({ run: run + 1, repeatCount, metrics: latestMetrics })}`
+								);
+								expect(latestMetrics.activeDebug).toBe(2);
+								expect(latestMetrics.peakActive).toBeLessThanOrEqual(2);
+								expect(
+									latestMetrics.created - baselineMetrics.created
+								).toBeGreaterThanOrEqual(run * 2);
+								expect(
+									latestMetrics.terminated - baselineMetrics.terminated
+								).toBeGreaterThanOrEqual(run * 2);
+							}
+							await page.getByRole('button', { name: 'Stop Debug' }).click();
+							await debugButton.waitFor({
+								state: 'visible',
+								timeout: Number(
+									process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS || '5000'
+								)
+							});
+							await page.requestGC();
+							latestMetrics = await readBrowserLifecycleMetrics(page);
+							lifecycleMetrics.push(latestMetrics);
+							expect(latestMetrics.activeDebug).toBe(0);
+							expect(latestMetrics.peakActive).toBeLessThanOrEqual(2);
+							expect(
+								latestMetrics.usedJsHeapSize - baselineMetrics.usedJsHeapSize
+							).toBeLessThanOrEqual(heapGrowthLimit);
+							console.info(
+								`[wasm-idle:lldb-lifecycle] ${JSON.stringify({
+									heapGrowthLimit,
+									runs: lifecycleMetrics
+								})}`
+							);
 						} else if ('expectedStoppedReason' in testCase) {
 							if ('afterContinue' in testCase && testCase.afterContinue === 'pause') {
 								const pauseButton = page.locator('button[aria-label="Pause"]');
@@ -2019,7 +2677,10 @@ describe('native-source browser debugging in Chromium', () => {
 							} else {
 								expect(stoppedState.scopes.length).toBeGreaterThan(0);
 							}
-							if ('expectedOutput' in testCase) {
+							if (
+								'expectedOutput' in testCase &&
+								!('expectedDataBreakpoint' in testCase)
+							) {
 								await page.waitForFunction(
 									(expectedOutput) =>
 										document
@@ -2040,7 +2701,44 @@ describe('native-source browser debugging in Chromium', () => {
 							} else {
 								expect(stoppedLine).toBe('L3');
 							}
-							await page.getByRole('button', { name: 'Stop Debug' }).click();
+							if ('expectedDataBreakpoint' in testCase) {
+								const memoryReference = await page
+									.getByLabel('Memory reference')
+									.inputValue();
+								const readOffset =
+									'readOffset' in testCase.expectedDataBreakpoint
+										? testCase.expectedDataBreakpoint.readOffset
+										: 0;
+								const watchedMemory = await page.evaluate(
+									({ count, memoryReference, offset }) =>
+										(window as any).__wasmIdleDebug.readDebugMemory(
+											memoryReference,
+											offset,
+											count
+										),
+									{
+										count: testCase.expectedDataBreakpoint.data.length,
+										memoryReference,
+										offset: readOffset
+									}
+								);
+								expect(watchedMemory).toMatchObject({
+									data: testCase.expectedDataBreakpoint.data,
+									unreadableBytes: 0
+								});
+								await page.getByLabel('Clear data breakpoint').click();
+								await page.locator('button[aria-label="Continue"]').click();
+								await page.waitForFunction(
+									(expectedOutput) =>
+										document
+											.querySelector('[data-testid="terminal-debug-output"]')
+											?.textContent?.includes(expectedOutput),
+									testCase.expectedOutput
+								);
+								await debugButton.waitFor({ state: 'visible' });
+							} else {
+								await page.getByRole('button', { name: 'Stop Debug' }).click();
+							}
 						} else {
 							try {
 								await page.waitForFunction(
@@ -2093,6 +2791,22 @@ describe('native-source browser debugging in Chromium', () => {
 						await page
 							.locator('button.action-button--debug')
 							.waitFor({ state: 'visible' });
+						if (
+							'expectedFallbackWarning' in testCase &&
+							testCase.expectedNoDebugWorkers
+						) {
+							const workerMetricsAfterFallback =
+								await readBrowserLifecycleMetrics(page);
+							expect(workerMetricsAfterFallback.createdDebug).toBe(
+								workerMetricsBeforeStart?.createdDebug
+							);
+							expect(workerMetricsAfterFallback.terminatedDebug).toBe(
+								workerMetricsBeforeStart?.terminatedDebug
+							);
+							expect(workerMetricsAfterFallback.activeDebug).toBe(
+								workerMetricsBeforeStart?.activeDebug
+							);
+						}
 						expect(pageErrors).toEqual([]);
 					} finally {
 						await page.close();

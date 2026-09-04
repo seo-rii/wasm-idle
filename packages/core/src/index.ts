@@ -122,17 +122,24 @@ export {
 export type {
 	DebugArrayElementKind,
 	DebugCommand,
+	DebugDataBreakpoint,
+	DebugDataBreakpointAccessType,
+	DebugDataBreakpointInfo,
+	DebugDataBreakpointInfoArguments,
 	DebugFrame,
 	DebugMemory,
 	DebugPauseReason,
 	DebugResolvedBreakpoint,
+	DebugResolvedDataBreakpoint,
 	DebugScope,
+	DebugSessionCapabilities,
 	DebugSessionEvent,
 	DebugSourceBreakpoints,
 	DebugStructFieldMetadata,
 	DebugVariable,
 	DebugVariableKind,
-	DebugVariableMetadata
+	DebugVariableMetadata,
+	DebugWriteMemoryResult
 } from './debug.js';
 export {
 	RuntimeProgressController,

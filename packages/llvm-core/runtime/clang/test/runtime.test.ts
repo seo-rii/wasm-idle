@@ -115,6 +115,37 @@ describe('Clang compile/debug flow', () => {
 	});
 
 	it.each([
+		['target triple', ['-triple', 'wasm64-wasi']],
+		['joined target triple', ['--target=wasm64-wasi']],
+		['target feature', ['-target-feature', '+simd128']],
+		['joined target feature', ['-target-feature=+atomics']],
+		['target CPU', ['-target-cpu', 'bleeding-edge']],
+		['machine architecture', ['-march=wasm64']],
+		['machine CPU', ['-mcpu', 'bleeding-edge']],
+		['machine attributes', ['-mattr=+simd128']],
+		['LLVM backend escape', ['-mllvm', '-wasm-enable-sjlj']],
+		['thread model', ['-pthread']],
+		['SIMD shortcut', ['-msimd128']],
+		['atomics shortcut', ['-matomics']],
+		['memory64 shortcut', ['-mmemory64']],
+		['shared-memory shortcut', ['-mshared-memory']],
+		['multi-memory shortcut', ['-mmulti-memory']]
+	])('rejects LLDB %s overrides before invoking Clang', async (_label, compileArgs) => {
+		const { clang } = createClangHarness();
+
+		await expect(
+			clang.compile({
+				input: 'main.cc',
+				code: 'int main() {}',
+				obj: 'main.o',
+				debugMode: 'lldb',
+				compileArgs
+			})
+		).rejects.toThrow(/WAMR debug target profile/u);
+		expect(clang.run).not.toHaveBeenCalled();
+	});
+
+	it.each([
 		['CPP20', '-std=gnu++20'],
 		['CPP23', '-std=gnu++23'],
 		['CPP26', '-std=gnu++26']
@@ -890,6 +921,25 @@ int main() {
 		expect(linkArgs).not.toContain('--allow-undefined');
 	});
 
+	it('flattens a nonempty object list into an LLDB link', async () => {
+		const { clang } = createClangHarness();
+
+		await Clang.prototype.link.call(
+			clang,
+			['__wasm_idle_build/objects/0000.o', '__wasm_idle_build/objects/0001.o'],
+			'main.wasm',
+			'lldb'
+		);
+
+		const linkArgs = vi.mocked(clang.run).mock.calls[0]?.slice(2) ?? [];
+		expect(linkArgs).toContain('__wasm_idle_build/objects/0000.o');
+		expect(linkArgs).toContain('__wasm_idle_build/objects/0001.o');
+		expect(linkArgs).not.toContain('--allow-undefined');
+		await expect(Clang.prototype.link.call(clang, [], 'main.wasm', 'lldb')).rejects.toThrow(
+			/object file/u
+		);
+	});
+
 	it('reuses cached wasm only when the three-way debug mode/build key matches', async () => {
 		const compileWasm = vi
 			.spyOn(WebAssembly, 'compile')
@@ -992,6 +1042,135 @@ int main() {
 		);
 		expect(vi.mocked(clang.link)).toHaveBeenCalledWith('main.o', 'main.wasm', 'none');
 		expect(clang.lastArtifactPath).toBe('main.wasm');
+	});
+
+	it('compiles sorted C and C++ workspace translation units into distinct objects', async () => {
+		const compileSpy = vi.spyOn(Clang.prototype, 'compile');
+		vi.spyOn(WebAssembly, 'compile').mockResolvedValue({
+			id: 'multi-tu-module'
+		} as unknown as WebAssembly.Module);
+		const { clang } = createClangHarness();
+
+		await clang.compileLink('int helper_c(void); int helper_cpp(void); int main(void) {}', {
+			language: 'C',
+			activePath: 'src/main.c',
+			workspaceFiles: [
+				{ path: 'z/helper.cpp', content: 'int helper_cpp() { return 2; }' },
+				{ path: 'notes/data.txt', content: 'not a translation unit' },
+				{ path: 'src/main.c', content: 'stale active copy' },
+				{ path: 'include/helper.h', content: 'int helper_c(void);' },
+				{ path: 'a/helper.c', content: 'int helper_c(void) { return 1; }' }
+			],
+			debugMode: 'lldb'
+		});
+
+		expect(compileSpy.mock.calls).toEqual([
+			[
+				expect.objectContaining({
+					input: 'a/helper.c',
+					code: 'int helper_c(void) { return 1; }',
+					obj: '__wasm_idle_build/objects/0000.o',
+					language: 'C',
+					debugMode: 'lldb',
+					sourceAlreadyMounted: true
+				})
+			],
+			[
+				expect.objectContaining({
+					input: 'src/main.c',
+					code: 'int helper_c(void); int helper_cpp(void); int main(void) {}',
+					obj: '__wasm_idle_build/objects/0001.o',
+					language: 'C',
+					debugMode: 'lldb',
+					sourceAlreadyMounted: true
+				})
+			],
+			[
+				expect.objectContaining({
+					input: 'z/helper.cpp',
+					code: 'int helper_cpp() { return 2; }',
+					obj: '__wasm_idle_build/objects/0002.o',
+					language: 'CPP',
+					debugMode: 'lldb',
+					sourceAlreadyMounted: true
+				})
+			]
+		]);
+		expect(vi.mocked(clang.link)).toHaveBeenCalledWith(
+			[
+				'__wasm_idle_build/objects/0000.o',
+				'__wasm_idle_build/objects/0001.o',
+				'__wasm_idle_build/objects/0002.o'
+			],
+			'main.wasm',
+			'lldb'
+		);
+		expect(vi.mocked(clang.memfs.addFile)).toHaveBeenCalledWith(
+			'include/helper.h',
+			'int helper_c(void);'
+		);
+		expect(vi.mocked(clang.memfs.addFile)).toHaveBeenCalledWith(
+			'notes/data.txt',
+			'not a translation unit'
+		);
+	});
+
+	it('canonicalizes workspace order and active content in the multi-TU cache key', async () => {
+		vi.spyOn(WebAssembly, 'compile').mockResolvedValue({
+			id: 'cached-multi-tu-module'
+		} as unknown as WebAssembly.Module);
+		const { clang } = createClangHarness();
+		clang.compile = vi.fn(async () => null) as any;
+		const active = { path: 'src/main.c', content: 'stale active copy' };
+		const helper = { path: 'src/helper.c', content: 'int helper(void) { return 1; }' };
+
+		await clang.compileLink('int main(void) { return helper(); }', {
+			language: 'C',
+			activePath: 'src/main.c',
+			workspaceFiles: [active, helper],
+			debugMode: 'lldb'
+		});
+		await clang.compileLink('int main(void) { return helper(); }', {
+			language: 'C',
+			activePath: 'src/main.c',
+			workspaceFiles: [helper, { ...active, content: 'another stale copy' }],
+			debugMode: 'lldb'
+		});
+		await clang.compileLink('int main(void) { return helper(); }', {
+			language: 'C',
+			activePath: 'src/main.c',
+			workspaceFiles: [{ ...helper, content: 'int helper(void) { return 2; }' }, active],
+			debugMode: 'lldb'
+		});
+
+		expect(vi.mocked(clang.compile)).toHaveBeenCalledTimes(4);
+		expect(vi.mocked(clang.link)).toHaveBeenCalledTimes(2);
+	});
+
+	it('rejects multi-TU trace builds and the reserved internal build namespace', async () => {
+		const { clang } = createClangHarness();
+
+		await expect(
+			clang.compileLink('int main(void) { return helper(); }', {
+				language: 'C',
+				activePath: 'src/main.c',
+				workspaceFiles: [
+					{ path: 'src/helper.c', content: 'int helper(void) { return 1; }' }
+				],
+				debugMode: 'trace'
+			})
+		).rejects.toThrow(/trace.*translation unit/iu);
+		await expect(
+			clang.compileLink('int main(void) { return 0; }', {
+				language: 'C',
+				activePath: 'src/main.c',
+				workspaceFiles: [
+					{ path: '__wasm_idle_build/evil.c', content: 'int evil(void) { return 1; }' }
+				]
+			})
+		).rejects.toThrow(/reserved.*__wasm_idle_build/iu);
+		expect(clang.run).not.toHaveBeenCalled();
+		expect(vi.mocked(clang.link)).not.toHaveBeenCalled();
 	});
 
 	it('normalizes an explicit /workspace root for LLDB inputs and sibling files', async () => {

@@ -1,17 +1,91 @@
 import type {
 	DebugCommand,
+	DebugDataBreakpoint,
+	DebugDataBreakpointInfo,
+	DebugDataBreakpointInfoArguments,
 	DebugFrame,
 	DebugMemory,
 	DebugResolvedBreakpoint,
+	DebugResolvedDataBreakpoint,
 	DebugScope,
+	DebugSessionCapabilities,
 	DebugSessionEvent,
 	DebugSourceBreakpoints,
 	DebugVariable,
+	DebugWriteMemoryResult,
 	TerminalControl
 } from '@wasm-idle/core';
 import { fromStore, get, writable } from 'svelte/store';
 
 import type { DebugLanguageAdapter } from './language/index.js';
+
+const MAX_MEMORY_TRANSFER_BYTES = 256;
+const MAX_DEBUG_PROTOCOL_STRING_CODE_UNITS = 4096;
+const MAX_DATA_BREAKPOINTS = 256;
+const MAX_WATCH_EXPRESSION_CODE_UNITS = 4096;
+const MAX_WATCH_EXPRESSIONS = 64;
+const MAX_WATCH_VARIABLE_PATH_SEGMENTS = 64;
+
+type WatchVariablePathSegment = { name: string } | { index: number };
+type WatchVariablePathParseResult =
+	| { kind: 'path'; root: string; segments: WatchVariablePathSegment[] }
+	| { kind: 'other' }
+	| { kind: 'too-deep' };
+
+function parseWatchVariablePath(expression: string): WatchVariablePathParseResult {
+	const root = expression.match(/^[A-Za-z_][A-Za-z0-9_]*/u)?.[0];
+	if (!root) return { kind: 'other' };
+
+	const segments: WatchVariablePathSegment[] = [];
+	let cursor = root.length;
+	let segmentCount = 1;
+	let tooDeep = false;
+	while (cursor < expression.length) {
+		let segment: WatchVariablePathSegment;
+		let consumed: number;
+		if (expression[cursor] === '.') {
+			const field = expression.slice(cursor + 1).match(/^[A-Za-z_][A-Za-z0-9_]*/u)?.[0];
+			if (!field) return { kind: 'other' };
+			segment = { name: field };
+			consumed = field.length + 1;
+		} else if (expression[cursor] === '[') {
+			const indexMatch = expression.slice(cursor).match(/^\[(0|[1-9][0-9]*)\]/u);
+			const index = indexMatch ? Number(indexMatch[1]) : -1;
+			if (!indexMatch || !Number.isSafeInteger(index)) return { kind: 'other' };
+			segment = { index };
+			consumed = indexMatch[0].length;
+		} else {
+			return { kind: 'other' };
+		}
+
+		segmentCount += 1;
+		if (segmentCount > MAX_WATCH_VARIABLE_PATH_SEGMENTS) {
+			tooDeep = true;
+		} else {
+			segments.push(segment);
+		}
+		cursor += consumed;
+	}
+
+	return tooDeep ? { kind: 'too-deep' } : { kind: 'path', root, segments };
+}
+
+function isBoundedNonEmptyString(value: unknown): value is string {
+	return (
+		typeof value === 'string' &&
+		value.length > 0 &&
+		value.length <= MAX_DEBUG_PROTOCOL_STRING_CODE_UNITS
+	);
+}
+
+function isBoundedMemoryByteCount(value: unknown, allowZero: boolean): value is number {
+	return (
+		typeof value === 'number' &&
+		Number.isSafeInteger(value) &&
+		value >= (allowZero ? 0 : 1) &&
+		value <= MAX_MEMORY_TRANSFER_BYTES
+	);
+}
 
 export type DebugWatchValue = {
 	expression: string;
@@ -27,6 +101,9 @@ export type DebugTerminalControl = Pick<
 	| 'debugVariables'
 	| 'debugScopes'
 	| 'debugReadMemory'
+	| 'debugWriteMemory'
+	| 'debugDataBreakpointInfo'
+	| 'debugSetDataBreakpoints'
 	| 'stop'
 >;
 
@@ -41,6 +118,11 @@ export type DebugSessionControllerOptions = {
 };
 
 export function createDebugSessionController(options: DebugSessionControllerOptions = {}) {
+	const disabledCapabilities: DebugSessionCapabilities = {
+		readMemory: false,
+		writeMemory: false,
+		dataBreakpoints: false
+	};
 	const activeStore = writable(false);
 	const pausedStore = writable(false);
 	const pausedLineStore = writable<number | null>(null);
@@ -48,6 +130,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const callStackStore = writable<DebugFrame[]>([]);
 	const scopesStore = writable<DebugScope[]>([]);
 	const variablesByReferenceStore = writable<ReadonlyMap<number, DebugVariable[]>>(new Map());
+	const capabilitiesStore = writable<DebugSessionCapabilities>({ ...disabledCapabilities });
 	const threadIdStore = writable<number | null>(null);
 	const frameIdStore = writable<number | null>(null);
 	const stoppedReasonStore = writable<string | null>(null);
@@ -97,6 +180,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const callStackState = fromStore(callStackStore);
 	const scopesState = fromStore(scopesStore);
 	const variablesByReferenceState = fromStore(variablesByReferenceStore);
+	const capabilitiesState = fromStore(capabilitiesStore);
 	const threadIdState = fromStore(threadIdStore);
 	const frameIdState = fromStore(frameIdStore);
 	const stoppedReasonState = fromStore(stoppedReasonStore);
@@ -175,17 +259,89 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			watchValuesStore.set(expressions.map((expression) => ({ expression, value: '...' })));
 			(async () => {
 				const resolved: DebugWatchValue[] = [];
+				let resolvedVariables = [...localVariables];
+				const resolvedReferences = new Map(get(variablesByReferenceStore));
 				for (const expression of expressions) {
+					if (expression.length > MAX_WATCH_EXPRESSION_CODE_UNITS) {
+						resolved.push({ expression, value: '?' });
+						continue;
+					}
+					const variablePath = parseWatchVariablePath(expression);
+					if (variablePath.kind === 'too-deep') {
+						resolved.push({ expression, value: '?' });
+						continue;
+					}
 					const runtimeValue = await terminal.debugEvaluate!(expression);
-					const exactVariable = localVariables.find(
-						(variable) => variable.name === expression
-					);
+					if (version !== watchRequestVersion || !get(pausedStore)) return;
+					if (runtimeValue !== '?') {
+						resolved.push({ expression, value: runtimeValue });
+						continue;
+					}
+
+					if (variablePath.kind !== 'path') {
+						resolved.push({ expression, value: '?' });
+						continue;
+					}
+					const { root, segments } = variablePath;
+
+					let variable = resolvedVariables.find((candidate) => candidate.name === root);
+					if (!variable && terminal.debugVariables) {
+						for (const scope of get(scopesStore)) {
+							if (scope.variablesReference <= 0) continue;
+							let scopeVariables = resolvedReferences.get(scope.variablesReference);
+							if (!scopeVariables) {
+								scopeVariables = await terminal.debugVariables(
+									scope.variablesReference
+								);
+								if (version !== watchRequestVersion || !get(pausedStore)) return;
+								resolvedReferences.set(scope.variablesReference, scopeVariables);
+								variablesByReferenceStore.update((current) => {
+									const next = new Map(current);
+									next.set(scope.variablesReference, [...scopeVariables!]);
+									return next;
+								});
+							}
+							resolvedVariables = [...resolvedVariables, ...scopeVariables];
+							variable = resolvedVariables.find(
+								(candidate) => candidate.name === root
+							);
+							if (variable) break;
+						}
+						localsStore.set([...resolvedVariables]);
+					}
+
+					for (const segment of segments) {
+						const variablesReference = variable?.variablesReference ?? 0;
+						if (!variable || variablesReference <= 0 || !terminal.debugVariables) {
+							variable = undefined;
+							break;
+						}
+						if ('index' in segment) {
+							const children = await terminal.debugVariables(
+								variablesReference,
+								segment.index,
+								1
+							);
+							if (version !== watchRequestVersion || !get(pausedStore)) return;
+							variable = children[0];
+							continue;
+						}
+						let children = resolvedReferences.get(variablesReference);
+						if (!children) {
+							children = await terminal.debugVariables(variablesReference);
+							if (version !== watchRequestVersion || !get(pausedStore)) return;
+							resolvedReferences.set(variablesReference, children);
+							variablesByReferenceStore.update((current) => {
+								const next = new Map(current);
+								next.set(variablesReference, [...children!]);
+								return next;
+							});
+						}
+						variable = children.find((candidate) => candidate.name === segment.name);
+					}
 					resolved.push({
 						expression,
-						value:
-							runtimeValue === '?' && exactVariable
-								? exactVariable.value
-								: runtimeValue
+						value: variable?.value ?? '?'
 					});
 				}
 				if (version === watchRequestVersion) watchValuesStore.set(resolved);
@@ -247,6 +403,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		callStackStore.set([]);
 		scopesStore.set([]);
 		variablesByReferenceStore.set(new Map());
+		capabilitiesStore.set({ ...disabledCapabilities });
 		threadIdStore.set(null);
 		frameIdStore.set(null);
 		stoppedReasonStore.set(null);
@@ -289,6 +446,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			releaseCommandRequest();
 			frameRequestVersion += 1;
 			activeStore.set(true);
+			capabilitiesStore.set({ ...(event.capabilities ?? disabledCapabilities) });
 			const restoreBreakpoints = get(runToCursorLineStore) !== null;
 			runToCursorLineStore.set(null);
 			if (restoreBreakpoints) {
@@ -336,6 +494,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			return;
 		}
 		if (event.type === 'resume') {
+			capabilitiesStore.set({ ...disabledCapabilities });
 			pausedStore.set(false);
 			pausedLineStore.set(null);
 			localsStore.set([]);
@@ -410,8 +569,16 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	function addWatchExpression(expression?: string) {
 		const watchInput = get(watchInputStore);
 		const watchExpressions = get(watchExpressionsStore);
-		const nextExpression = (expression || watchInput).trim();
-		if (!nextExpression || watchExpressions.includes(nextExpression)) return false;
+		const candidate = expression || watchInput;
+		if (candidate.length > MAX_WATCH_EXPRESSION_CODE_UNITS) return false;
+		const nextExpression = candidate.trim();
+		if (
+			!nextExpression ||
+			watchExpressions.includes(nextExpression) ||
+			watchExpressions.length >= MAX_WATCH_EXPRESSIONS ||
+			parseWatchVariablePath(nextExpression).kind === 'too-deep'
+		)
+			return false;
 		watchExpressionsStore.set([...watchExpressions, nextExpression]);
 		watchInputStore.set('');
 		refreshWatchValues();
@@ -580,15 +747,91 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	): Promise<DebugMemory | null> {
 		if (
 			!get(pausedStore) ||
-			!memoryReference ||
-			!Number.isInteger(offset) ||
-			!Number.isInteger(count) ||
-			count < 0
+			!get(capabilitiesStore).readMemory ||
+			!isBoundedNonEmptyString(memoryReference) ||
+			!Number.isSafeInteger(offset) ||
+			!isBoundedMemoryByteCount(count, true)
 		) {
 			return null;
 		}
 		const terminal = get(terminalStore);
 		return (await terminal?.debugReadMemory?.(memoryReference, offset, count)) ?? null;
+	}
+
+	async function writeMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial?: boolean
+	): Promise<DebugWriteMemoryResult | null> {
+		if (
+			!get(pausedStore) ||
+			!get(capabilitiesStore).writeMemory ||
+			!isBoundedNonEmptyString(memoryReference) ||
+			!Number.isSafeInteger(offset) ||
+			!(data instanceof Uint8Array) ||
+			data.byteLength > MAX_MEMORY_TRANSFER_BYTES ||
+			(allowPartial !== undefined && typeof allowPartial !== 'boolean')
+		) {
+			return null;
+		}
+		const terminal = get(terminalStore);
+		return (
+			(await terminal?.debugWriteMemory?.(memoryReference, offset, data, allowPartial)) ??
+			null
+		);
+	}
+
+	async function dataBreakpointInfo(
+		arguments_: DebugDataBreakpointInfoArguments
+	): Promise<DebugDataBreakpointInfo | null> {
+		if (
+			!get(pausedStore) ||
+			!get(capabilitiesStore).dataBreakpoints ||
+			!arguments_ ||
+			typeof arguments_ !== 'object' ||
+			!isBoundedNonEmptyString(arguments_.name) ||
+			(arguments_.bytes !== undefined &&
+				!isBoundedMemoryByteCount(arguments_.bytes, false)) ||
+			(arguments_.asAddress !== undefined && typeof arguments_.asAddress !== 'boolean')
+		) {
+			return null;
+		}
+		const terminal = get(terminalStore);
+		return (await terminal?.debugDataBreakpointInfo?.(arguments_)) ?? null;
+	}
+
+	async function setDataBreakpoints(
+		breakpoints: DebugDataBreakpoint[]
+	): Promise<DebugResolvedDataBreakpoint[]> {
+		if (
+			commandInFlight ||
+			!get(pausedStore) ||
+			!get(capabilitiesStore).dataBreakpoints ||
+			!Array.isArray(breakpoints) ||
+			breakpoints.length > MAX_DATA_BREAKPOINTS ||
+			!breakpoints.every(
+				(breakpoint) =>
+					breakpoint !== null &&
+					typeof breakpoint === 'object' &&
+					!Array.isArray(breakpoint) &&
+					isBoundedNonEmptyString(breakpoint.dataId) &&
+					(breakpoint.accessType === undefined ||
+						breakpoint.accessType === 'read' ||
+						breakpoint.accessType === 'write' ||
+						breakpoint.accessType === 'readWrite')
+			)
+		) {
+			return [];
+		}
+		const terminal = get(terminalStore);
+		if (!terminal?.debugSetDataBreakpoints) return [];
+		const version = beginCommandRequest();
+		try {
+			return await terminal.debugSetDataBreakpoints(breakpoints);
+		} finally {
+			finishCommandRequest(version);
+		}
 	}
 
 	return {
@@ -612,6 +855,9 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		},
 		get variablesByReference() {
 			return variablesByReferenceState.current;
+		},
+		get capabilities() {
+			return capabilitiesState.current;
 		},
 		get threadId() {
 			return threadIdState.current;
@@ -667,7 +913,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			return watchInputState.current;
 		},
 		set watchInput(value: string) {
-			watchInputStore.set(value);
+			if (value.length <= MAX_WATCH_EXPRESSION_CODE_UNITS) watchInputStore.set(value);
 		},
 		get watchExpressions() {
 			return watchExpressionsState.current;
@@ -693,7 +939,10 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		clearWatches,
 		loadVariableChildren,
 		selectFrame,
-		readMemory
+		readMemory,
+		writeMemory,
+		dataBreakpointInfo,
+		setDataBreakpoints
 	};
 }
 

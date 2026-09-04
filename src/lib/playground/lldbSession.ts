@@ -1,21 +1,28 @@
 import type {
 	DebugCommand,
+	DebugDataBreakpoint,
+	DebugDataBreakpointInfo,
+	DebugDataBreakpointInfoArguments,
 	DebugFrame,
 	DebugMemory,
 	DebugPauseReason,
 	DebugScope,
 	DebugSessionEvent,
+	DebugResolvedDataBreakpoint,
 	DebugVariable
 } from '$lib/playground/options';
-import { ProtocolError } from '@wasm-idle/core';
+import { ProtocolError, type RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 import {
 	createBrowserLldbSession,
 	DapProtocolError,
-	parseDebugRuntimeManifest,
 	type BrowserLldbSession,
-	type DapEvent,
-	type RuntimeManifestV2
+	type DapEvent
 } from '@wasm-idle/llvm-core/debug';
+import { loadVerifiedDebugRuntimeManifest } from '$lib/playground/lldbManifest';
+
+const MAX_DEBUG_MEMORY_BYTES = 256;
+const MAX_DEBUG_IDENTIFIER_CODE_UNITS = 4096;
+const MAX_DEBUG_DATA_BREAKPOINTS = 256;
 
 export interface LldbArtifactPayload {
 	bytes: Uint8Array | ArrayBuffer;
@@ -38,6 +45,7 @@ export interface LldbArtifactPayload {
 
 export interface LldbSandboxSessionOptions {
 	manifestUrl: string;
+	manifestReceipt?: Readonly<RuntimeAssetIntegrityEntry>;
 	runtimeBaseUrl: string;
 	artifact: LldbArtifactPayload;
 	sourcePath: `/workspace/${string}`;
@@ -69,19 +77,12 @@ interface DapStackFrame {
 
 function pauseReason(reason: string, command: DebugCommand | null): DebugPauseReason {
 	if (reason === 'breakpoint') return 'breakpoint';
+	if (reason === 'data breakpoint') return 'dataBreakpoint';
 	if (reason === 'entry') return 'entry';
 	if (reason === 'pause') return 'pause';
 	if (command === 'nextLine') return 'nextLine';
 	if (command === 'stepOut') return 'stepOut';
 	return 'step';
-}
-
-async function loadManifest(url: string, fetchImpl: typeof fetch): Promise<RuntimeManifestV2> {
-	const response = await fetchImpl(url);
-	if (!response.ok) {
-		throw new Error(`Unable to load the LLDB runtime manifest (${response.status}).`);
-	}
-	return parseDebugRuntimeManifest(await response.json());
 }
 
 function invalidDapPayload(subject: string, path: string, expectation: string): never {
@@ -168,17 +169,40 @@ function assertNonNegativeSafeIntegerArgument(value: number, name: string) {
 	}
 }
 
+function assertBoundedNonEmptyStringArgument(
+	value: unknown,
+	name: string
+): asserts value is string {
+	if (typeof value !== 'string' || value.length === 0) {
+		throw new TypeError(`${name} must be a non-empty string.`);
+	}
+	if (value.length > MAX_DEBUG_IDENTIFIER_CODE_UNITS) {
+		throw new RangeError(
+			`${name} must not exceed ${MAX_DEBUG_IDENTIFIER_CODE_UNITS} UTF-16 code units.`
+		);
+	}
+}
+
+function assertOptionalBooleanArgument(value: unknown, name: string) {
+	if (value !== undefined && typeof value !== 'boolean') {
+		throw new TypeError(`${name} must be a boolean.`);
+	}
+}
+
 export class LldbSandboxSession {
 	private session?: BrowserLldbSession;
+	private startupAbortController?: AbortController;
 	private activeThreadId = 1;
 	private activeFrameId?: number;
 	private command: DebugCommand | null = null;
 	private pauseRequested = false;
 	private pauseRequestVersion = 0;
+	private targetStopped = false;
 	private stopped = false;
 	private stateVersion = 0;
 	private completionResolve?: (value: true) => void;
 	private completionReject?: (error: Error) => void;
+	private sessionDisposal?: Promise<void>;
 	private readonly pendingInput: string[] = [];
 	private pendingEof = false;
 	private inputReady = false;
@@ -186,6 +210,8 @@ export class LldbSandboxSession {
 	private initialized = false;
 	private supportsEvaluateExpressions = false;
 	private supportsReadMemory = false;
+	private supportsWriteMemory = false;
+	private supportsDataBreakpoints = false;
 	private breakpointVersion = 0;
 	private scopeRequestVersion = 0;
 	private dapExitCode: number | null = null;
@@ -208,24 +234,72 @@ export class LldbSandboxSession {
 	}
 
 	async start(): Promise<true> {
-		if (this.session) throw new Error('LLDB sandbox session is already running.');
+		if (this.session || this.startupAbortController) {
+			throw new Error('LLDB sandbox session is already running.');
+		}
+		const previousDisposal = this.sessionDisposal;
 		const lifecycleVersion = ++this.lifecycleVersion;
+		const startupAbortController = new AbortController();
+		this.startupAbortController = startupAbortController;
+		this.targetStopped = false;
 		this.stopped = false;
 		this.pauseRequested = false;
 		this.initialized = false;
 		this.dapExitCode = null;
+		let rejectCompletion!: (error: Error) => void;
 		const completion = new Promise<true>((resolve, reject) => {
 			this.completionResolve = resolve;
 			this.completionReject = reject;
+			rejectCompletion = reject;
 		});
 		void completion.catch(() => undefined);
-		const manifest = await loadManifest(
-			this.options.manifestUrl,
-			this.options.fetchImpl ?? fetch
-		);
+		if (previousDisposal) {
+			try {
+				await previousDisposal;
+			} catch (error) {
+				if (lifecycleVersion !== this.lifecycleVersion) return completion;
+				if (this.startupAbortController === startupAbortController) {
+					this.startupAbortController = undefined;
+				}
+				this.stopped = true;
+				rejectCompletion(
+					error instanceof Error
+						? error
+						: new Error('Unable to dispose the previous LLDB debug session.')
+				);
+				return completion;
+			}
+			if (
+				lifecycleVersion !== this.lifecycleVersion ||
+				startupAbortController.signal.aborted
+			) {
+				return completion;
+			}
+		}
+		let manifest: Awaited<ReturnType<typeof loadVerifiedDebugRuntimeManifest>>;
+		try {
+			manifest = await loadVerifiedDebugRuntimeManifest(
+				this.options.manifestUrl,
+				this.options.manifestReceipt,
+				this.options.fetchImpl ?? fetch,
+				startupAbortController.signal
+			);
+		} catch (error) {
+			if (lifecycleVersion !== this.lifecycleVersion) return completion;
+			throw error;
+		} finally {
+			if (this.startupAbortController === startupAbortController) {
+				this.startupAbortController = undefined;
+			}
+		}
 		this.supportsEvaluateExpressions =
 			manifest.debugger?.capabilities?.evaluateExpressions === true;
-		this.supportsReadMemory = manifest.debugger?.capabilities?.readMemory === true;
+		const manifestSupportsReadMemory = manifest.debugger?.capabilities?.readMemory === true;
+		const manifestSupportsWriteMemory = manifest.debugger?.capabilities?.writeMemory === true;
+		this.supportsReadMemory = false;
+		this.supportsWriteMemory = false;
+		const manifestSupportsDataBreakpoints =
+			manifest.debugger?.capabilities?.dataBreakpoints === true;
 		if (lifecycleVersion !== this.lifecycleVersion) return completion;
 		const artifactCompiler = this.options.artifact.descriptor?.compiler;
 		if (
@@ -296,11 +370,17 @@ export class LldbSandboxSession {
 			}
 		});
 		try {
-			await session.initialize();
+			const capabilities = await session.initialize();
 			if (lifecycleVersion !== this.lifecycleVersion || this.session !== session) {
 				await session.dispose();
 				return completion;
 			}
+			this.supportsReadMemory =
+				manifestSupportsReadMemory && capabilities.supportsReadMemoryRequest === true;
+			this.supportsWriteMemory =
+				manifestSupportsWriteMemory && capabilities.supportsWriteMemoryRequest === true;
+			this.supportsDataBreakpoints =
+				manifestSupportsDataBreakpoints && capabilities.supportsDataBreakpoints === true;
 			this.initialized = true;
 			if (configuredBreakpointVersion === this.breakpointVersion) {
 				for (const { sourcePath, lines } of sourceBreakpoints) {
@@ -320,7 +400,7 @@ export class LldbSandboxSession {
 				this.pendingInput.push(this.options.stdin);
 				this.pendingEof = true;
 			}
-			await this.flushInput();
+			await this.flushInput(session, lifecycleVersion);
 		} catch (error) {
 			if (
 				lifecycleVersion === this.lifecycleVersion &&
@@ -351,16 +431,29 @@ export class LldbSandboxSession {
 	write(input: string) {
 		this.pendingInput.push(input);
 		this.pendingEof = false;
-		return this.flushInput();
+		const session = this.session;
+		const lifecycleVersion = this.lifecycleVersion;
+		return this.observeInputFlush(
+			this.flushInput(session, lifecycleVersion),
+			session,
+			lifecycleVersion
+		);
 	}
 
 	eof() {
 		this.pendingEof = true;
-		return this.flushInput();
+		const session = this.session;
+		const lifecycleVersion = this.lifecycleVersion;
+		return this.observeInputFlush(
+			this.flushInput(session, lifecycleVersion),
+			session,
+			lifecycleVersion
+		);
 	}
 
 	async debugCommand(command: DebugCommand) {
 		const session = this.requireSession();
+		this.targetStopped = false;
 		this.command = command;
 		this.pauseRequested = false;
 		const dapCommand =
@@ -377,7 +470,7 @@ export class LldbSandboxSession {
 			{ threadId: this.activeThreadId },
 			{ responseTimeoutMs: null }
 		);
-		this.options.onDebugEvent({ type: 'resume', command });
+		this.publishActiveDebugEvent({ type: 'resume', command });
 		void request.catch((error: unknown) => {
 			if (this.session !== session || this.stateVersion !== stateVersion) return;
 			this.fail(
@@ -574,11 +667,15 @@ export class LldbSandboxSession {
 		offset: number,
 		count: number
 	): Promise<DebugMemory | null> {
-		if (!this.supportsReadMemory) return null;
+		if (!this.targetStopped || !this.supportsReadMemory) return null;
+		assertBoundedNonEmptyStringArgument(memoryReference, 'memoryReference');
 		if (!Number.isSafeInteger(offset)) {
 			throw new RangeError('offset must be a safe integer.');
 		}
 		assertNonNegativeSafeIntegerArgument(count, 'count');
+		if (count > MAX_DEBUG_MEMORY_BYTES) {
+			throw new RangeError(`count must not exceed ${MAX_DEBUG_MEMORY_BYTES}.`);
+		}
 		const session = this.requireSession();
 		const stateVersion = this.stateVersion;
 		try {
@@ -595,6 +692,14 @@ export class LldbSandboxSession {
 			const unreadableBytes = response.unreadableBytes;
 			if (unreadableBytes !== undefined) {
 				assertDapNonNegativeSafeInteger(unreadableBytes, 'readMemory', 'unreadableBytes');
+			}
+			const maximumEncodedDataLength = Math.ceil(count / 3) * 4;
+			if (encodedData !== undefined && encodedData.length > maximumEncodedDataLength) {
+				invalidDapResponse(
+					'readMemory',
+					'data',
+					`encoded data exceeds the ${maximumEncodedDataLength}-character limit for a ${count}-byte request`
+				);
 			}
 			let binary: string;
 			try {
@@ -632,21 +737,334 @@ export class LldbSandboxSession {
 		}
 	}
 
+	async writeMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial = false
+	): Promise<{ offset?: number; bytesWritten: number } | null> {
+		if (!this.targetStopped || !this.supportsWriteMemory) return null;
+		assertBoundedNonEmptyStringArgument(memoryReference, 'memoryReference');
+		if (!Number.isSafeInteger(offset)) {
+			throw new RangeError('offset must be a safe integer.');
+		}
+		if (!(data instanceof Uint8Array)) {
+			throw new TypeError('data must be a Uint8Array.');
+		}
+		if (data.byteLength > MAX_DEBUG_MEMORY_BYTES) {
+			throw new RangeError(`data must not exceed ${MAX_DEBUG_MEMORY_BYTES} bytes.`);
+		}
+		assertOptionalBooleanArgument(allowPartial, 'allowPartial');
+		const chunks: string[] = [];
+		for (let start = 0; start < data.byteLength; start += 0x8000) {
+			chunks.push(String.fromCharCode(...data.subarray(start, start + 0x8000)));
+		}
+		const session = this.requireSession();
+		const stateVersion = this.stateVersion;
+		try {
+			const response = await session.request<unknown>('writeMemory', {
+				memoryReference,
+				offset,
+				allowPartial,
+				data: globalThis.btoa(chunks.join(''))
+			});
+			if (!this.isCurrentValueRequest(session, stateVersion)) return null;
+			if (response !== undefined) assertDapRecord(response, 'writeMemory', 'body');
+			const responseBody = response ?? {};
+			const responseBytesWritten = responseBody.bytesWritten;
+			if (responseBytesWritten !== undefined) {
+				assertDapNonNegativeSafeInteger(
+					responseBytesWritten,
+					'writeMemory',
+					'bytesWritten'
+				);
+			}
+			const bytesWritten = responseBytesWritten ?? data.byteLength;
+			if (bytesWritten > data.byteLength) {
+				invalidDapResponse(
+					'writeMemory',
+					'bytesWritten',
+					`reported ${bytesWritten} bytes written for ${data.byteLength} input bytes`
+				);
+			}
+			if (!allowPartial && bytesWritten !== data.byteLength) {
+				invalidDapResponse(
+					'writeMemory',
+					'bytesWritten',
+					`reported a partial write of ${bytesWritten} bytes for a required ${data.byteLength}-byte write`
+				);
+			}
+			const responseOffset = responseBody.offset;
+			if (
+				responseOffset !== undefined &&
+				(typeof responseOffset !== 'number' || !Number.isSafeInteger(responseOffset))
+			) {
+				invalidDapResponse('writeMemory', 'offset', 'expected a safe integer');
+			}
+			return {
+				...(responseOffset === undefined ? {} : { offset: responseOffset }),
+				bytesWritten
+			};
+		} catch (error) {
+			if (!this.isCurrentValueRequest(session, stateVersion)) return null;
+			this.rethrowProtocolError(error);
+			throw error;
+		}
+	}
+
+	async dataBreakpointInfo(
+		arguments_: DebugDataBreakpointInfoArguments
+	): Promise<DebugDataBreakpointInfo | null> {
+		if (!this.targetStopped || !this.supportsDataBreakpoints) return null;
+		if (typeof arguments_ !== 'object' || arguments_ === null || Array.isArray(arguments_)) {
+			throw new TypeError('arguments must be an object.');
+		}
+		assertBoundedNonEmptyStringArgument(arguments_.name, 'name');
+		if (arguments_.variablesReference !== undefined) {
+			assertNonNegativeSafeIntegerArgument(
+				arguments_.variablesReference,
+				'variablesReference'
+			);
+		}
+		if (arguments_.frameId !== undefined) {
+			assertPositiveSafeIntegerArgument(arguments_.frameId, 'frameId');
+		}
+		if (arguments_.bytes !== undefined) {
+			assertPositiveSafeIntegerArgument(arguments_.bytes, 'bytes');
+			if (arguments_.bytes > MAX_DEBUG_MEMORY_BYTES) {
+				throw new RangeError(`bytes must not exceed ${MAX_DEBUG_MEMORY_BYTES}.`);
+			}
+		}
+		assertOptionalBooleanArgument(arguments_.asAddress, 'asAddress');
+		const session = this.requireSession();
+		const stateVersion = this.stateVersion;
+		try {
+			const response = await session.request<unknown>('dataBreakpointInfo', {
+				name: arguments_.name,
+				...(arguments_.variablesReference === undefined
+					? {}
+					: { variablesReference: arguments_.variablesReference }),
+				...(arguments_.frameId === undefined ? {} : { frameId: arguments_.frameId }),
+				...(arguments_.asAddress === undefined ? {} : { asAddress: arguments_.asAddress }),
+				...(arguments_.bytes === undefined ? {} : { bytes: arguments_.bytes })
+			});
+			if (!this.isCurrentValueRequest(session, stateVersion)) return null;
+			assertDapRecord(response, 'dataBreakpointInfo', 'body');
+			assertDapString(response.description, 'dataBreakpointInfo', 'description');
+			let dataId: string | undefined;
+			if (response.dataId !== undefined && response.dataId !== null) {
+				assertDapString(response.dataId, 'dataBreakpointInfo', 'dataId');
+				if (response.dataId.length === 0) {
+					invalidDapResponse(
+						'dataBreakpointInfo',
+						'dataId',
+						'expected a non-empty string'
+					);
+				}
+				if (response.dataId.length > MAX_DEBUG_IDENTIFIER_CODE_UNITS) {
+					invalidDapResponse(
+						'dataBreakpointInfo',
+						'dataId',
+						`expected at most ${MAX_DEBUG_IDENTIFIER_CODE_UNITS} UTF-16 code units`
+					);
+				}
+				dataId = response.dataId;
+			}
+			let accessTypes: Array<'read' | 'write' | 'readWrite'> | undefined;
+			if (response.accessTypes !== undefined) {
+				if (!Array.isArray(response.accessTypes)) {
+					invalidDapResponse('dataBreakpointInfo', 'accessTypes', 'expected an array');
+				}
+				if (response.accessTypes.length > 3) {
+					invalidDapResponse(
+						'dataBreakpointInfo',
+						'accessTypes',
+						'expected at most 3 entries'
+					);
+				}
+				const seenAccessTypes = new Set<unknown>();
+				accessTypes = response.accessTypes.map((accessType, index) => {
+					if (
+						accessType !== 'read' &&
+						accessType !== 'write' &&
+						accessType !== 'readWrite'
+					) {
+						invalidDapResponse(
+							'dataBreakpointInfo',
+							`accessTypes[${index}]`,
+							'expected read, write, or readWrite'
+						);
+					}
+					if (seenAccessTypes.has(accessType)) {
+						invalidDapResponse(
+							'dataBreakpointInfo',
+							`accessTypes[${index}]`,
+							'expected a unique access type'
+						);
+					}
+					seenAccessTypes.add(accessType);
+					return accessType;
+				});
+			}
+			let canPersist: boolean | undefined;
+			if (response.canPersist !== undefined) {
+				assertDapBoolean(response.canPersist, 'dataBreakpointInfo', 'canPersist');
+				canPersist = response.canPersist;
+			}
+			return {
+				...(dataId === undefined ? {} : { dataId }),
+				description: response.description,
+				...(accessTypes === undefined ? {} : { accessTypes }),
+				...(canPersist === undefined ? {} : { canPersist })
+			};
+		} catch (error) {
+			if (!this.isCurrentValueRequest(session, stateVersion)) return null;
+			this.rethrowProtocolError(error);
+			throw error;
+		}
+	}
+
+	async setDataBreakpoints(
+		breakpoints: DebugDataBreakpoint[]
+	): Promise<DebugResolvedDataBreakpoint[]> {
+		if (!this.targetStopped || !this.supportsDataBreakpoints) return [];
+		if (!Array.isArray(breakpoints)) {
+			throw new TypeError('breakpoints must be an array.');
+		}
+		if (breakpoints.length > MAX_DEBUG_DATA_BREAKPOINTS) {
+			throw new RangeError(
+				`breakpoints must not contain more than ${MAX_DEBUG_DATA_BREAKPOINTS} entries.`
+			);
+		}
+		for (let index = 0; index < breakpoints.length; index += 1) {
+			const breakpoint = breakpoints[index];
+			if (
+				typeof breakpoint !== 'object' ||
+				breakpoint === null ||
+				Array.isArray(breakpoint)
+			) {
+				throw new TypeError(`breakpoints[${index}] must be an object.`);
+			}
+			if (typeof breakpoint.dataId !== 'string' || breakpoint.dataId.length === 0) {
+				throw new TypeError(`breakpoints[${index}].dataId must be a non-empty string.`);
+			}
+			if (breakpoint.dataId.length > MAX_DEBUG_IDENTIFIER_CODE_UNITS) {
+				throw new RangeError(
+					`breakpoints[${index}].dataId must not exceed ${MAX_DEBUG_IDENTIFIER_CODE_UNITS} UTF-16 code units.`
+				);
+			}
+			if (
+				breakpoint.accessType !== undefined &&
+				breakpoint.accessType !== 'read' &&
+				breakpoint.accessType !== 'write' &&
+				breakpoint.accessType !== 'readWrite'
+			) {
+				throw new TypeError(
+					`breakpoints[${index}].accessType must be read, write, or readWrite.`
+				);
+			}
+		}
+		const requestBreakpoints = breakpoints.map((breakpoint) => {
+			return {
+				dataId: breakpoint.dataId,
+				...(breakpoint.accessType === undefined
+					? {}
+					: { accessType: breakpoint.accessType })
+			};
+		});
+		const session = this.requireSession();
+		const stateVersion = this.stateVersion;
+		try {
+			const response = await session.request<unknown>('setDataBreakpoints', {
+				breakpoints: requestBreakpoints
+			});
+			if (!this.isCurrentValueRequest(session, stateVersion)) return [];
+			const responseBreakpoints = dapResponseCollection(
+				response,
+				'setDataBreakpoints',
+				'breakpoints'
+			);
+			if (responseBreakpoints.length !== requestBreakpoints.length) {
+				invalidDapResponse(
+					'setDataBreakpoints',
+					'breakpoints',
+					`expected ${requestBreakpoints.length} entries`
+				);
+			}
+			return responseBreakpoints.map((breakpoint, index) => {
+				const path = `breakpoints[${index}]`;
+				assertDapRecord(breakpoint, 'setDataBreakpoints', path);
+				assertDapBoolean(breakpoint.verified, 'setDataBreakpoints', `${path}.verified`);
+				const id = dapOptionalNonNegativeSafeInteger(
+					breakpoint,
+					'id',
+					'setDataBreakpoints',
+					path
+				);
+				let message: string | undefined;
+				if (breakpoint.message !== undefined) {
+					assertDapString(breakpoint.message, 'setDataBreakpoints', `${path}.message`);
+					message = breakpoint.message;
+				}
+				return {
+					...(id === undefined ? {} : { id }),
+					verified: breakpoint.verified,
+					...(message === undefined ? {} : { message })
+				};
+			});
+		} catch (error) {
+			if (!this.isCurrentValueRequest(session, stateVersion)) return [];
+			const failure =
+				this.asProtocolError(error) ??
+				(error instanceof Error
+					? error
+					: new Error('Unable to replace the LLDB data breakpoints.'));
+			this.fail(failure);
+			throw failure;
+		}
+	}
+
 	async disconnect() {
+		const completionResolve = this.completionResolve;
+		const completionReject = this.completionReject;
 		this.lifecycleVersion += 1;
+		const startupAbortController = this.startupAbortController;
+		this.startupAbortController = undefined;
+		startupAbortController?.abort(
+			new Error('LLDB sandbox session disconnected during startup.')
+		);
 		this.stateVersion += 1;
-		this.inputReady = false;
+		this.targetStopped = false;
+		this.retireInput();
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
 		this.supportsReadMemory = false;
+		this.supportsWriteMemory = false;
+		this.supportsDataBreakpoints = false;
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;
 		const shouldPublishStop = !this.stopped;
 		this.stopped = true;
-		await session?.disconnect({ terminateTarget: true });
-		if (shouldPublishStop) this.options.onDebugEvent({ type: 'stop' });
-		this.completionResolve?.(true);
+		const disposal = session
+			? this.trackSessionDisposal(session.disconnect({ terminateTarget: true }))
+			: this.sessionDisposal;
+		let disposalFailure: Error | undefined;
+		try {
+			await disposal;
+		} catch (error) {
+			disposalFailure =
+				error instanceof Error
+					? error
+					: new Error('Unable to disconnect the LLDB debug session.');
+		}
+		if (disposalFailure) {
+			completionReject?.(disposalFailure);
+			if (shouldPublishStop) this.publishStop();
+			throw disposalFailure;
+		}
+		completionResolve?.(true);
+		if (shouldPublishStop) this.publishStop();
 	}
 
 	private handleDapEvent(event: DapEvent) {
@@ -656,6 +1074,7 @@ export class LldbSandboxSession {
 			return;
 		}
 		if (event.event === 'stopped') {
+			this.targetStopped = false;
 			if (
 				typeof event.body !== 'object' ||
 				event.body === null ||
@@ -691,6 +1110,7 @@ export class LldbSandboxSession {
 			return;
 		}
 		if (event.event === 'continued') {
+			this.targetStopped = false;
 			if (
 				typeof event.body !== 'object' ||
 				event.body === null ||
@@ -812,6 +1232,7 @@ export class LldbSandboxSession {
 		if (version !== this.stateVersion || this.session !== session) return;
 		this.activeThreadId = threadId;
 		this.activeFrameId = selectedFrame.id;
+		this.targetStopped = true;
 		const callStack = frames.map<DebugFrame>((frame) => {
 			const sourcePath = frame.source?.path;
 			const sourceContentSha256 = this.sourceContentSha256ByPath.get(sourcePath || '');
@@ -829,6 +1250,11 @@ export class LldbSandboxSession {
 		);
 		this.options.onDebugEvent({
 			type: 'pause',
+			capabilities: {
+				readMemory: this.supportsReadMemory,
+				writeMemory: this.supportsWriteMemory,
+				dataBreakpoints: this.supportsDataBreakpoints
+			},
 			line: selectedFrame.line,
 			sourcePath: selectedFrame.source?.path,
 			...(sourceContentSha256 ? { sourceContentSha256 } : {}),
@@ -911,49 +1337,96 @@ export class LldbSandboxSession {
 		if (this.stopped) return;
 		this.stopped = true;
 		this.stateVersion += 1;
-		this.inputReady = false;
+		this.targetStopped = false;
+		this.retireInput();
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
 		this.supportsReadMemory = false;
+		this.supportsWriteMemory = false;
+		this.supportsDataBreakpoints = false;
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;
-		this.options.onDebugEvent({ type: 'stop' });
-		void (session?.dispose() ?? Promise.resolve()).then(
+		const completionResolve = this.completionResolve;
+		const completionReject = this.completionReject;
+		const disposal = session
+			? this.trackSessionDisposal(session.dispose())
+			: (this.sessionDisposal ?? Promise.resolve());
+		void disposal.then(
 			() => {
 				if (exitCode !== null && exitCode !== 0) {
-					this.completionReject?.(
-						new Error(`Debug target exited with code ${exitCode}.`)
-					);
+					completionReject?.(new Error(`Debug target exited with code ${exitCode}.`));
 				} else {
-					this.completionResolve?.(true);
+					completionResolve?.(true);
 				}
 			},
 			(error: unknown) =>
-				this.completionReject?.(
+				completionReject?.(
 					error instanceof Error
 						? error
 						: new Error('Unable to dispose the LLDB debug session.')
 				)
 		);
+		this.publishStop();
 	}
 
 	private fail(error: Error) {
 		if (this.stopped) return;
 		this.stopped = true;
 		this.stateVersion += 1;
-		this.inputReady = false;
+		this.targetStopped = false;
+		this.retireInput();
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
 		this.supportsReadMemory = false;
+		this.supportsWriteMemory = false;
+		this.supportsDataBreakpoints = false;
 		this.dapExitCode = null;
 		const session = this.session;
 		this.session = undefined;
-		this.options.onDebugEvent({ type: 'stop' });
-		void (session?.dispose() ?? Promise.resolve()).then(
-			() => this.completionReject?.(error),
-			() => this.completionReject?.(error)
+		const completionReject = this.completionReject;
+		const disposal = session
+			? this.trackSessionDisposal(session.dispose())
+			: (this.sessionDisposal ?? Promise.resolve());
+		void disposal.then(
+			() => completionReject?.(error),
+			() => completionReject?.(error)
 		);
+		this.publishStop();
+	}
+
+	private publishStop() {
+		try {
+			this.options.onDebugEvent({ type: 'stop' });
+		} catch {
+			// Consumer callbacks cannot interrupt target teardown or completion settlement.
+		}
+	}
+
+	private publishActiveDebugEvent(event: DebugSessionEvent) {
+		try {
+			this.options.onDebugEvent(event);
+		} catch (error) {
+			const failure =
+				error instanceof Error
+					? error
+					: new Error('Unable to publish the LLDB debug session state.');
+			this.fail(failure);
+			throw failure;
+		}
+	}
+
+	private trackSessionDisposal(disposal: Promise<void>) {
+		this.sessionDisposal = disposal;
+		void disposal.then(
+			() => {
+				if (this.sessionDisposal === disposal) this.sessionDisposal = undefined;
+			},
+			() => {
+				if (this.sessionDisposal === disposal) this.sessionDisposal = undefined;
+			}
+		);
+		return disposal;
 	}
 
 	private requireSession() {
@@ -967,7 +1440,7 @@ export class LldbSandboxSession {
 		sourcePath = this.options.sourcePath
 	) {
 		const sourceContentSha256 = this.sourceContentSha256ByPath.get(sourcePath);
-		this.options.onDebugEvent({
+		this.publishActiveDebugEvent({
 			type: 'breakpoints',
 			sourcePath,
 			...(sourceContentSha256 ? { sourceContentSha256 } : {}),
@@ -980,14 +1453,54 @@ export class LldbSandboxSession {
 		});
 	}
 
-	private async flushInput() {
-		if (!this.inputReady || !this.session) return;
+	private observeInputFlush(
+		flush: Promise<void>,
+		session: BrowserLldbSession | undefined,
+		lifecycleVersion: number
+	) {
+		void flush.catch((error: unknown) => {
+			if (
+				this.stopped ||
+				this.lifecycleVersion !== lifecycleVersion ||
+				this.session !== session
+			) {
+				return;
+			}
+			this.fail(
+				error instanceof Error ? error : new Error('Unable to write LLDB target input.')
+			);
+		});
+		return flush;
+	}
+
+	private retireInput() {
+		this.inputReady = false;
+		this.pendingInput.length = 0;
+		this.pendingEof = false;
+	}
+
+	private async flushInput(session: BrowserLldbSession | undefined, lifecycleVersion: number) {
+		if (
+			!this.inputReady ||
+			!session ||
+			this.lifecycleVersion !== lifecycleVersion ||
+			this.session !== session
+		) {
+			return;
+		}
 		while (this.pendingInput.length > 0) {
-			await this.session.writeStdin(this.pendingInput.shift() || '');
+			await session.writeStdin(this.pendingInput.shift() || '');
+			if (
+				!this.inputReady ||
+				this.lifecycleVersion !== lifecycleVersion ||
+				this.session !== session
+			) {
+				return;
+			}
 		}
 		if (this.pendingEof) {
 			this.pendingEof = false;
-			await this.session.closeStdin();
+			await session.closeStdin();
 		}
 	}
 }

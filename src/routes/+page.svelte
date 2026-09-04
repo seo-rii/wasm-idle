@@ -21,9 +21,15 @@
 		createApplicationRuntimeAssets
 	} from '$lib/playground/applicationAssets';
 	import { createLoadingProgressController } from '$lib/playground/loadingProgress';
+	import { resolveDebugRuntimeUrls } from '$lib/playground/assets';
 	import { RUST_NON_DEBUG_RESOURCE_REQUIREMENTS } from '$lib/playground/rustWorkerLimits';
 	import type {
 		CompilerDiagnostic,
+		DebugDataBreakpoint,
+		DebugDataBreakpointAccessType,
+		DebugDataBreakpointInfo,
+		DebugDataBreakpointInfoArguments,
+		DebugResolvedDataBreakpoint,
 		GoTarget,
 		OcamlBackend,
 		OcamlWasmBinaryenMode,
@@ -36,6 +42,7 @@
 	} from '$lib/playground/options';
 	import type monaco from 'monaco-editor';
 	import { executeTerminalRun } from './execute';
+	import { createExecutionPreflightGate } from './executionPreflight';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
 	import {
 		isEditorDefaultSource,
@@ -120,9 +127,29 @@
 		title: string;
 		progressPercent: number | null;
 	};
+	type DebugMemoryView = {
+		address?: string;
+		memoryReference: string;
+		offset: number;
+		unreadableBytes: number;
+	};
+	type DebugMemoryRow = {
+		ascii: string;
+		bytes: Array<number | null>;
+		offset: number;
+	};
+	type ActiveDebugDataBreakpoint = {
+		accessType: DebugDataBreakpointAccessType;
+		address: string;
+		bytes: number;
+		dataId: string;
+		description: string;
+		id?: number;
+	};
 
 	const WORKSPACE_STORAGE_KEY = 'wasm-idle:example-workspace:v3';
 	const SHARE_PREFIX = 'workspace=';
+	const MAX_DEBUG_MEMORY_BYTES = 256;
 	const lldbDebugLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST']);
 	const debugLanguageAdapters: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>> = {
 		C: cppDebugLanguageAdapter,
@@ -184,6 +211,12 @@
 		examplePaneWidth = $state(0),
 		terminalPaneWidth = $state<number | null>(null),
 		resizingPane = $state(false);
+	let restartDebugPending = $state(false);
+	let executionStopPending = $state(false);
+	let executionGeneration = 0;
+	let restartRequestGeneration = 0;
+	let activeExecution: Promise<void> | null = null;
+	const executionPreflight = createExecutionPreflightGate();
 
 	const initialWorkspace = createDefaultWorkspace('CPP');
 	let languageWorkspaces = $state<Record<PlaygroundLanguage, LanguageWorkspace>>({
@@ -392,6 +425,25 @@
 	const debug = createDebugSessionController({
 		syncBreakpointsWhile: () => runningMode === 'debug'
 	});
+	let memoryReference = $state('0x0');
+	let memoryOffsetInput = $state('0');
+	let memoryCountInput = $state('4');
+	let memoryResult = $state.raw<DebugMemoryView | null>(null);
+	let memoryRows = $state.raw<DebugMemoryRow[]>([]);
+	let memoryError = $state('');
+	let memoryLoading = $state(false);
+	let memoryRequestVersion = 0;
+	let memoryWriteInput = $state('');
+	let memoryWriteStatus = $state.raw<{
+		bytesWritten: number;
+		requestedBytes: number;
+	} | null>(null);
+	let dataBreakpointAccessType = $state<DebugDataBreakpointAccessType>('write');
+	let activeDataBreakpoint = $state.raw<ActiveDebugDataBreakpoint | null>(null);
+	let dataBreakpointError = $state('');
+	let dataBreakpointLoading = $state(false);
+	let dataBreakpointRequestVersion = 0;
+	let dataBreakpointLoadingOwner: number | null = null;
 	const debugStatusLabel = $derived(
 		debug.paused
 			? 'Paused'
@@ -476,6 +528,20 @@
 			unreadableBytes: number;
 		} | null>;
 		setPreloadedStdin: (text: string) => void;
+	};
+	type WasmIdleDebugTestApi = WasmIdleDebugApi & {
+		writeDebugMemory: (
+			memoryReference: string,
+			offset: number,
+			data: number[],
+			allowPartial?: boolean
+		) => Promise<{ offset?: number; bytesWritten: number } | null>;
+		dataBreakpointInfo: (
+			arguments_: DebugDataBreakpointInfoArguments
+		) => Promise<DebugDataBreakpointInfo | null>;
+		setDataBreakpoints: (
+			breakpoints: DebugDataBreakpoint[]
+		) => Promise<DebugResolvedDataBreakpoint[]>;
 	};
 	let browserDebugHookVersion = 0;
 	type WasmGoRuntimeModule = {
@@ -1209,18 +1275,92 @@
 		saveStatus = `${languageLabels[language]} runtime restarted`;
 	}
 
+	function completeExecutionGeneration(generation: number) {
+		if (executionGeneration !== generation) return;
+		loadingProgress.reset();
+		runningMode = null;
+		activeExecution = null;
+		if (!debug.paused) debug.reset();
+	}
+
+	async function settleExecutionTeardown(
+		stoppedMode: 'run' | 'debug',
+		previousExecution: Promise<void> | null
+	) {
+		const [stopResult, executionResult] = await Promise.allSettled([
+			(async () => {
+				if (stoppedMode === 'debug') {
+					await debug.stop();
+					return;
+				}
+				await terminal?.stop?.();
+			})(),
+			previousExecution ?? Promise.resolve()
+		]);
+		if (stopResult.status === 'rejected') throw stopResult.reason;
+		if (executionResult.status === 'rejected') throw executionResult.reason;
+	}
+
+	function reportExecutionTeardownFailure(action: 'stop' | 'restart', error: unknown) {
+		const message = error instanceof Error ? error.message : String(error);
+		saveStatus = `Unable to ${action} execution: ${message}`;
+		console.error(`Unable to ${action} execution cleanly.`, error);
+	}
+
 	async function stopExecution() {
-		if (!terminal || !runningMode) return;
+		if (!terminal || !runningMode || executionStopPending || restartDebugPending) return;
+		const stoppedMode = runningMode;
+		const previousExecution = activeExecution;
+		const stopGeneration = ++executionGeneration;
+		restartRequestGeneration += 1;
+		restartDebugPending = false;
+		executionStopPending = true;
 		if (executionAbortController && !executionAbortController.signal.aborted) {
 			executionAbortController.abort(
 				new DOMException('Execution stopped by the user', 'AbortError')
 			);
 		}
-		if (runningMode === 'debug') {
-			await debug.stop();
-			return;
+		executionPreflight.cancel();
+		try {
+			await settleExecutionTeardown(stoppedMode, previousExecution);
+		} catch (error) {
+			reportExecutionTeardownFailure('stop', error);
+		} finally {
+			completeExecutionGeneration(stopGeneration);
+			executionStopPending = false;
 		}
-		await terminal.stop?.();
+	}
+
+	async function restartDebugExecution() {
+		if (!terminal || runningMode !== 'debug' || restartDebugPending || executionStopPending)
+			return;
+		const requestGeneration = ++restartRequestGeneration;
+		const previousExecution = activeExecution;
+		const teardownGeneration = ++executionGeneration;
+		restartDebugPending = true;
+		if (executionAbortController && !executionAbortController.signal.aborted) {
+			executionAbortController.abort(
+				new DOMException('Execution restarted by the user', 'AbortError')
+			);
+		}
+		executionPreflight.cancel();
+		try {
+			try {
+				await settleExecutionTeardown('debug', previousExecution);
+			} catch (error) {
+				reportExecutionTeardownFailure('restart', error);
+				return;
+			}
+			if (restartRequestGeneration !== requestGeneration) return;
+			completeExecutionGeneration(teardownGeneration);
+			restartDebugPending = false;
+			await exec(true);
+		} finally {
+			if (restartRequestGeneration === requestGeneration) {
+				completeExecutionGeneration(teardownGeneration);
+				restartDebugPending = false;
+			}
+		}
 	}
 
 	async function sendTerminalEof() {
@@ -1354,6 +1494,20 @@
 	}
 
 	function onDebugEvent(event: DebugSessionEvent) {
+		if (event.type === 'resume' || event.type === 'stop') {
+			invalidateMemoryInspector();
+		}
+		if (event.type === 'resume') {
+			dataBreakpointRequestVersion += 1;
+			dataBreakpointError = '';
+		}
+		if (event.type === 'stop') {
+			dataBreakpointRequestVersion += 1;
+			dataBreakpointLoadingOwner = null;
+			activeDataBreakpoint = null;
+			dataBreakpointError = '';
+			dataBreakpointLoading = false;
+		}
 		if (event.type === 'pause') {
 			activeProgressSession?.report?.({
 				kind: 'ready',
@@ -1372,6 +1526,8 @@
 	}
 
 	async function selectDebugFrame(frame: DebugFrame) {
+		dataBreakpointRequestVersion += 1;
+		invalidateMemoryInspector();
 		if (!frame.id || !(await debug.selectFrame(frame.id))) return;
 		const workspacePath = normalizePath(frame.sourcePath?.replace(/^\/workspace\//u, '') || '');
 		if (!workspacePath || !files.some((file) => file.path === workspacePath)) return;
@@ -1379,138 +1535,439 @@
 		debug.setSourcePath(`/workspace/${workspacePath}`);
 	}
 
-	async function exec(enableDebug = false) {
-		if (!editor || !terminal || !activeFile) return;
-		if (!executionAvailable) return;
-		if (enableDebug && !debugLanguage) return;
-		if (enableDebug && !sharedBufferAvailable) return;
-		if (enableDebug && !debugTargetAvailable) return;
-		if (runningMode) return;
-		let executionDebugMode: NonNullable<SandboxExecutionOptions['debugMode']> = enableDebug
-			? selectedDebugMode
-			: 'none';
-		runningMode = enableDebug ? 'debug' : 'run';
-		activeDebugBackend = enableDebug ? selectedDebugMode : null;
-		if (enableDebug && debugLspLanguages.has(language)) clangdRequested = true;
-		if (enableDebug) {
-			debug.begin();
-		} else {
-			debug.reset();
+	function invalidateMemoryInspector() {
+		memoryRequestVersion += 1;
+		memoryResult = null;
+		memoryRows = [];
+		memoryError = '';
+		memoryLoading = false;
+		memoryWriteStatus = null;
+	}
+
+	function inspectDebugVariable(variable: DebugVariable) {
+		if (!variable.memoryReference) return;
+		invalidateMemoryInspector();
+		memoryReference = variable.memoryReference;
+		memoryOffsetInput = '0';
+	}
+
+	async function readDebugMemoryPage(pageDelta = 0) {
+		const requestedReference = memoryReference.trim();
+		const offsetText = memoryOffsetInput.trim();
+		const countText = memoryCountInput.trim();
+		const offsetPattern = /^-?(?:0[xX][0-9a-fA-F]+|(?:0|[1-9][0-9]*))$/u;
+		const countPattern = /^(?:[1-9][0-9]*)$/u;
+		const requestedOffset = offsetPattern.test(offsetText) ? Number(offsetText) : Number.NaN;
+		const count = countPattern.test(countText) ? Number(countText) : Number.NaN;
+
+		if (!requestedReference) {
+			memoryError = 'Enter a memory reference.';
+			return;
 		}
-		compilerDiagnostics = [];
-		const codeToRun = activeFile.content;
-		const args = parseArgs(argsInput);
-		if (browser) {
-			localStorage.setItem('code', codeToRun);
-			localStorage.setItem('language', language);
-			localStorage.setItem('argsInput', argsInput);
-			localStorage.setItem('rustTargetTriple', rustTargetTriple);
-			localStorage.setItem('goTarget', goTarget);
-			localStorage.setItem('ocamlBackend', ocamlBackend);
-			localStorage.setItem('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode);
-			saveWorkspace();
+		if (!Number.isSafeInteger(requestedOffset)) {
+			memoryError = 'Offset must be a safe decimal or hexadecimal integer.';
+			return;
 		}
-		const abortController = new AbortController();
-		const progressSession = loadingProgress.start(`Loading ${language} runtime`);
-		executionAbortController = abortController;
-		activeProgressSession = progressSession;
-		let progressOutcome: 'completed' | 'failed' | 'cancelled' | 'timed-out' = 'completed';
+		if (!Number.isSafeInteger(count) || count < 1 || count > MAX_DEBUG_MEMORY_BYTES) {
+			memoryError = `Byte count must be between 1 and ${MAX_DEBUG_MEMORY_BYTES}.`;
+			return;
+		}
+		const offset = requestedOffset + pageDelta * count;
+		if (!Number.isSafeInteger(offset)) {
+			memoryError = 'The requested page exceeds the safe offset range.';
+			return;
+		}
+		if (activeDebugBackend !== 'lldb' || !debug.paused) {
+			memoryError = 'Pause an LLDB debug session before reading memory.';
+			return;
+		}
+
+		memoryOffsetInput = String(offset);
+		memoryError = '';
+		memoryResult = null;
+		memoryLoading = true;
+		const requestVersion = ++memoryRequestVersion;
+		const frameId = debug.frameId;
 		try {
-			if (executionDebugMode === 'lldb') {
-				try {
-					progressSession.report?.({
-						kind: 'activity',
-						phase: 'resolving',
-						label: 'Checking LLDB debug runtime'
-					});
-					const manifestUrl = runtimeAssets.debug?.manifestUrl;
-					if (!manifestUrl)
-						throw new Error('LLDB runtime manifest URL is not configured.');
-					const response = await fetch(manifestUrl, {
-						cache: 'no-store',
-						signal: abortController.signal
-					});
-					if (!response.ok) {
-						throw new Error(`LLDB runtime manifest returned ${response.status}.`);
-					}
-					const { parseDebugRuntimeManifest, preflightDebugRuntimeAssets } =
-						await import('@wasm-idle/llvm-core/debug');
-					const manifest = parseDebugRuntimeManifest(await response.json());
-					const capabilities = manifest.debugger.capabilities;
-					if (
-						!capabilities.breakpoints ||
-						!capabilities.stepping ||
-						!capabilities.stackTrace ||
-						!capabilities.locals
-					) {
-						throw new Error('LLDB runtime is missing required debug capabilities.');
-					}
-					await preflightDebugRuntimeAssets(
-						manifest,
-						new URL(runtimeAssets.debug.baseUrl, globalThis.location.href),
-						fetch,
-						abortController.signal
-					);
-					activeDebugBackend = 'lldb';
-				} catch (error) {
-					if (abortController.signal.aborted) throw error;
-					executionDebugMode = 'trace';
-					activeDebugBackend = 'trace';
-					console.warn(
-						'LLDB debug runtime is unavailable; using trace debugging for this run.',
-						error
-					);
-				}
+			const memory = await debug.readMemory(requestedReference, offset, count);
+			if (
+				requestVersion !== memoryRequestVersion ||
+				!debug.paused ||
+				debug.frameId !== frameId
+			)
+				return;
+			if (!memory) {
+				memoryError = 'Memory reading is unavailable for this session.';
+				return;
 			}
-			const preloadedStdin =
-				sharedBufferAvailable && language !== 'BASH' ? undefined : stdinInput;
-			const result = await executeTerminalRun({
-				terminal,
-				language,
-				code: codeToRun,
-				log,
-				progress: progressSession,
-				args,
-				options: {
-					debugMode: executionDebugMode,
-					debug: enableDebug,
-					interactive: enableDebug,
-					breakpoints: [...debug.effectiveBreakpoints],
-					sourceBreakpoints: debug.sourceBreakpoints.filter(({ sourcePath }) =>
-						files.some(
-							(file) => `/workspace/${normalizePath(file.path)}` === sourcePath
+			const bytes: Array<number | null> = [
+				...memory.data,
+				...Array.from({ length: memory.unreadableBytes }, () => null)
+			];
+			const rows: DebugMemoryRow[] = [];
+			for (let rowOffset = 0; rowOffset < bytes.length; rowOffset += 16) {
+				const rowBytes = bytes.slice(rowOffset, rowOffset + 16);
+				rows.push({
+					ascii: rowBytes
+						.map((byte) =>
+							byte === null
+								? '·'
+								: byte >= 32 && byte <= 126
+									? String.fromCharCode(byte)
+									: '.'
 						)
-					),
-					activePath,
-					workspaceFiles: files.map((file) => ({
-						path: file.path,
-						content: file.path === activePath ? codeToRun : file.content
-					})),
-					pauseOnEntry: enableDebug,
-					signal: abortController.signal,
-					...languageExecutionOptions,
-					stdin: preloadedStdin
-				}
-			});
-			if (result === false) {
-				progressOutcome = abortController.signal.aborted ? 'cancelled' : 'failed';
+						.join(''),
+					bytes: rowBytes,
+					offset: rowOffset
+				});
 			}
+			memoryResult = {
+				address: memory.address,
+				memoryReference: requestedReference,
+				offset,
+				unreadableBytes: memory.unreadableBytes
+			};
+			memoryRows = rows;
 		} catch (error) {
-			const executionWasCancelled = abortController.signal.aborted;
-			const executionTimedOut = error instanceof Error && error.name === 'TimeoutError';
-			progressOutcome = executionWasCancelled
-				? 'cancelled'
-				: executionTimedOut
-					? 'timed-out'
-					: 'failed';
-			if (!executionWasCancelled && !executionTimedOut) throw error;
+			if (requestVersion !== memoryRequestVersion || !debug.paused) return;
+			memoryError = error instanceof Error ? error.message : String(error);
 		} finally {
-			progressSession.report?.({ kind: 'settled', outcome: progressOutcome });
-			if (executionAbortController === abortController) executionAbortController = undefined;
-			if (activeProgressSession === progressSession) activeProgressSession = undefined;
-			runningMode = null;
-			if (!debug.paused) debug.reset();
+			if (requestVersion === memoryRequestVersion) memoryLoading = false;
 		}
+	}
+
+	async function writeDebugMemoryPage() {
+		const requestedReference = memoryReference.trim();
+		const offsetText = memoryOffsetInput.trim();
+		const offsetPattern = /^-?(?:0[xX][0-9a-fA-F]+|(?:0|[1-9][0-9]*))$/u;
+		const offset = offsetPattern.test(offsetText) ? Number(offsetText) : Number.NaN;
+		const byteText = memoryWriteInput.trim();
+		const byteTokens = byteText ? byteText.split(/[\s,]+/u) : [];
+
+		if (!requestedReference) {
+			memoryError = 'Enter a memory reference.';
+			return;
+		}
+		if (!Number.isSafeInteger(offset)) {
+			memoryError = 'Offset must be a safe decimal or hexadecimal integer.';
+			return;
+		}
+		if (
+			byteTokens.length < 1 ||
+			byteTokens.length > MAX_DEBUG_MEMORY_BYTES ||
+			byteTokens.some((token) => !/^(?:[0-9a-fA-F]{2}|0[xX][0-9a-fA-F]{2})$/u.test(token))
+		) {
+			memoryError = `Enter 1–${MAX_DEBUG_MEMORY_BYTES} two-digit hexadecimal bytes separated by spaces or commas.`;
+			return;
+		}
+		if (activeDebugBackend !== 'lldb' || !debug.paused) {
+			memoryError = 'Pause an LLDB debug session before writing memory.';
+			return;
+		}
+
+		const bytes = byteTokens.map((token) => Number.parseInt(token.replace(/^0[xX]/u, ''), 16));
+		memoryError = '';
+		memoryWriteStatus = null;
+		memoryLoading = true;
+		const requestVersion = ++memoryRequestVersion;
+		const frameId = debug.frameId;
+		let refresh = false;
+		try {
+			const result = await debug.writeMemory(
+				requestedReference,
+				offset,
+				Uint8Array.from(bytes),
+				false
+			);
+			if (
+				requestVersion !== memoryRequestVersion ||
+				!debug.paused ||
+				debug.frameId !== frameId
+			)
+				return;
+			if (!result) {
+				memoryError = 'Memory writing is unavailable for this session.';
+				return;
+			}
+			memoryWriteStatus = {
+				bytesWritten: result.bytesWritten,
+				requestedBytes: bytes.length
+			};
+			memoryCountInput = String(bytes.length);
+			refresh = result.bytesWritten > 0;
+		} catch (error) {
+			if (requestVersion !== memoryRequestVersion || !debug.paused) return;
+			memoryError = error instanceof Error ? error.message : String(error);
+		} finally {
+			if (requestVersion === memoryRequestVersion) memoryLoading = false;
+		}
+		if (refresh && debug.capabilities.readMemory) await readDebugMemoryPage();
+	}
+
+	async function setMemoryDataBreakpoint() {
+		if (dataBreakpointLoadingOwner !== null) return;
+		const requestedReference = memoryReference.trim();
+		const offsetText = memoryOffsetInput.trim();
+		const countText = memoryCountInput.trim();
+		const offsetPattern = /^-?(?:0[xX][0-9a-fA-F]+|(?:0|[1-9][0-9]*))$/u;
+		const countPattern = /^(?:[1-9][0-9]*)$/u;
+		const offset = offsetPattern.test(offsetText) ? Number(offsetText) : Number.NaN;
+		const bytes = countPattern.test(countText) ? Number(countText) : Number.NaN;
+		if (!requestedReference) {
+			dataBreakpointError = 'Enter a memory reference.';
+			return;
+		}
+		if (!Number.isSafeInteger(offset)) {
+			dataBreakpointError = 'Offset must be a safe decimal or hexadecimal integer.';
+			return;
+		}
+		if (!Number.isSafeInteger(bytes) || bytes < 1 || bytes > MAX_DEBUG_MEMORY_BYTES) {
+			dataBreakpointError = `Byte count must be between 1 and ${MAX_DEBUG_MEMORY_BYTES}.`;
+			return;
+		}
+		if (activeDebugBackend !== 'lldb' || !debug.paused) {
+			dataBreakpointError = 'Pause an LLDB debug session before setting a data breakpoint.';
+			return;
+		}
+		let address: string;
+		try {
+			const resolvedAddress = BigInt(requestedReference) + BigInt(offset);
+			if (resolvedAddress < 0n) throw new RangeError('negative address');
+			address = `0x${resolvedAddress.toString(16)}`;
+		} catch {
+			dataBreakpointError = 'Reference must be a decimal or hexadecimal address.';
+			return;
+		}
+
+		dataBreakpointError = '';
+		const accessType = dataBreakpointAccessType;
+		const requestVersion = ++dataBreakpointRequestVersion;
+		dataBreakpointLoadingOwner = requestVersion;
+		dataBreakpointLoading = true;
+		const frameId = debug.frameId;
+		try {
+			const info = await debug.dataBreakpointInfo({
+				name: address,
+				asAddress: true,
+				bytes
+			});
+			if (
+				requestVersion !== dataBreakpointRequestVersion ||
+				!debug.paused ||
+				debug.frameId !== frameId
+			)
+				return;
+			if (!info?.dataId) {
+				dataBreakpointError =
+					info?.description || 'Data breakpoints are unavailable for this memory range.';
+				return;
+			}
+			if (info.accessTypes && !info.accessTypes.includes(accessType)) {
+				dataBreakpointError = `${accessType} access is unavailable for this memory range.`;
+				return;
+			}
+			activeDataBreakpoint = null;
+			const resolved = await debug.setDataBreakpoints([{ dataId: info.dataId, accessType }]);
+			if (
+				requestVersion !== dataBreakpointRequestVersion ||
+				!debug.paused ||
+				debug.frameId !== frameId
+			)
+				return;
+			const breakpoint = resolved[0];
+			if (!breakpoint?.verified) {
+				dataBreakpointError =
+					breakpoint?.message || 'LLDB could not set the data breakpoint.';
+				return;
+			}
+			activeDataBreakpoint = {
+				accessType,
+				address,
+				bytes,
+				dataId: info.dataId,
+				description: info.description,
+				...(breakpoint.id === undefined ? {} : { id: breakpoint.id })
+			};
+		} catch (error) {
+			if (requestVersion !== dataBreakpointRequestVersion || !debug.paused) return;
+			dataBreakpointError = error instanceof Error ? error.message : String(error);
+		} finally {
+			if (dataBreakpointLoadingOwner === requestVersion) {
+				dataBreakpointLoadingOwner = null;
+				dataBreakpointLoading = false;
+			}
+		}
+	}
+
+	async function clearMemoryDataBreakpoint() {
+		if (dataBreakpointLoadingOwner !== null) return;
+		if (activeDebugBackend !== 'lldb' || !debug.paused) return;
+		dataBreakpointError = '';
+		const requestVersion = ++dataBreakpointRequestVersion;
+		dataBreakpointLoadingOwner = requestVersion;
+		dataBreakpointLoading = true;
+		activeDataBreakpoint = null;
+		try {
+			await debug.setDataBreakpoints([]);
+		} catch (error) {
+			if (requestVersion !== dataBreakpointRequestVersion || !debug.paused) return;
+			dataBreakpointError = error instanceof Error ? error.message : String(error);
+		} finally {
+			if (dataBreakpointLoadingOwner === requestVersion) {
+				dataBreakpointLoadingOwner = null;
+				dataBreakpointLoading = false;
+			}
+		}
+	}
+
+	function runToCursorWhileDataBreakpointIdle(targetLine?: number | null) {
+		if (dataBreakpointLoadingOwner !== null) return Promise.resolve(false);
+		return debug.runToCursor(targetLine);
+	}
+
+	function exec(enableDebug = false): Promise<void> {
+		if (!editor || !terminal || !activeFile) return Promise.resolve();
+		if (!executionAvailable) return Promise.resolve();
+		if (enableDebug && !debugLanguage) return Promise.resolve();
+		if (enableDebug && !sharedBufferAvailable) return Promise.resolve();
+		if (enableDebug && !debugTargetAvailable) return Promise.resolve();
+		if (runningMode) return Promise.resolve();
+		const generation = ++executionGeneration;
+		const preflight = executionPreflight.begin();
+		const execution = (async () => {
+			const abortController = new AbortController();
+			const progressSession = loadingProgress.start(`Loading ${language} runtime`);
+			executionAbortController = abortController;
+			activeProgressSession = progressSession;
+			let progressOutcome: 'completed' | 'failed' | 'cancelled' | 'timed-out' = 'completed';
+			let executionDebugMode: NonNullable<SandboxExecutionOptions['debugMode']> = enableDebug
+				? selectedDebugMode
+				: 'none';
+			runningMode = enableDebug ? 'debug' : 'run';
+			activeDebugBackend = enableDebug ? selectedDebugMode : null;
+			if (enableDebug && debugLspLanguages.has(language)) clangdRequested = true;
+			if (enableDebug) {
+				invalidateMemoryInspector();
+				debug.begin();
+			} else {
+				debug.reset();
+			}
+			compilerDiagnostics = [];
+			const codeToRun = activeFile.content;
+			const args = parseArgs(argsInput);
+			if (browser) {
+				localStorage.setItem('code', codeToRun);
+				localStorage.setItem('language', language);
+				localStorage.setItem('argsInput', argsInput);
+				localStorage.setItem('rustTargetTriple', rustTargetTriple);
+				localStorage.setItem('goTarget', goTarget);
+				localStorage.setItem('ocamlBackend', ocamlBackend);
+				localStorage.setItem('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode);
+				saveWorkspace();
+			}
+			try {
+				if (executionDebugMode === 'lldb') {
+					try {
+						progressSession.report?.({
+							kind: 'activity',
+							phase: 'resolving',
+							label: 'Checking LLDB debug runtime'
+						});
+						const debugRuntime = resolveDebugRuntimeUrls(
+							runtimeAssets,
+							globalThis.location.href
+						);
+						const { loadVerifiedDebugRuntimeManifest } =
+							await import('$lib/playground/lldbManifest');
+						const manifest = await loadVerifiedDebugRuntimeManifest(
+							debugRuntime.manifestUrl,
+							debugRuntime.manifestReceipt,
+							fetch,
+							abortController.signal
+						);
+						const capabilities = manifest.debugger.capabilities;
+						if (
+							!capabilities.breakpoints ||
+							!capabilities.stepping ||
+							!capabilities.stackTrace ||
+							!capabilities.locals
+						) {
+							throw new Error('LLDB runtime is missing required debug capabilities.');
+						}
+						if (!executionPreflight.isCurrent(preflight)) {
+							progressOutcome = 'cancelled';
+							return;
+						}
+						activeDebugBackend = 'lldb';
+					} catch (error) {
+						if (!executionPreflight.isCurrent(preflight)) {
+							progressOutcome = 'cancelled';
+							return;
+						}
+						executionDebugMode = 'trace';
+						activeDebugBackend = 'trace';
+						console.warn(
+							'LLDB debug runtime is unavailable; using trace debugging for this run.',
+							error
+						);
+					}
+				}
+				if (!executionPreflight.isCurrent(preflight)) {
+					progressOutcome = 'cancelled';
+					return;
+				}
+				const preloadedStdin =
+					sharedBufferAvailable && language !== 'BASH' ? undefined : stdinInput;
+				const result = await executeTerminalRun({
+					terminal,
+					language,
+					code: codeToRun,
+					log,
+					progress: progressSession,
+					args,
+					options: {
+						debugMode: executionDebugMode,
+						debug: enableDebug,
+						interactive: enableDebug,
+						breakpoints: [...debug.effectiveBreakpoints],
+						sourceBreakpoints: debug.sourceBreakpoints.filter(({ sourcePath }) =>
+							files.some(
+								(file) => `/workspace/${normalizePath(file.path)}` === sourcePath
+							)
+						),
+						activePath,
+						workspaceFiles: files.map((file) => ({
+							path: file.path,
+							content: file.path === activePath ? codeToRun : file.content
+						})),
+						pauseOnEntry: enableDebug,
+						...languageExecutionOptions,
+						signal: abortController.signal,
+						stdin: preloadedStdin
+					}
+				});
+				if (result === false) {
+					progressOutcome = abortController.signal.aborted ? 'cancelled' : 'failed';
+				}
+			} catch (error) {
+				const executionWasCancelled = abortController.signal.aborted;
+				const executionTimedOut = error instanceof Error && error.name === 'TimeoutError';
+				progressOutcome = executionWasCancelled
+					? 'cancelled'
+					: executionTimedOut
+						? 'timed-out'
+						: 'failed';
+				if (!executionWasCancelled && !executionTimedOut) throw error;
+			} finally {
+				progressSession.report?.({ kind: 'settled', outcome: progressOutcome });
+				if (executionAbortController === abortController) executionAbortController = undefined;
+				if (activeProgressSession === progressSession) activeProgressSession = undefined;
+				executionPreflight.finish(preflight);
+				completeExecutionGeneration(generation);
+			}
+		})();
+		activeExecution = execution;
+		return execution;
 	}
 
 	$effect(() => {
@@ -1766,9 +2223,9 @@
 	$effect(() => {
 		if (!browser) return;
 		const target = window as Window &
-			typeof globalThis & { __wasmIdleDebug?: WasmIdleDebugApi };
+			typeof globalThis & { __wasmIdleDebug?: WasmIdleDebugTestApi };
 		const debugHookVersion = ++browserDebugHookVersion;
-		const debugApi: WasmIdleDebugApi = {
+		const debugApi: WasmIdleDebugTestApi = {
 			async writeTerminalInput(text: string, eof = false) {
 				if (!terminal) return;
 				await terminal.waitForInput?.();
@@ -1856,6 +2313,25 @@
 			async readDebugMemory(memoryReference: string, offset: number, count: number) {
 				const memory = await debug.readMemory(memoryReference, offset, count);
 				return memory ? { ...memory, data: Array.from(memory.data) } : null;
+			},
+			writeDebugMemory(
+				memoryReference: string,
+				offset: number,
+				data: number[],
+				allowPartial?: boolean
+			) {
+				return debug.writeMemory(
+					memoryReference,
+					offset,
+					Uint8Array.from(data),
+					allowPartial
+				);
+			},
+			dataBreakpointInfo(arguments_: DebugDataBreakpointInfoArguments) {
+				return debug.dataBreakpointInfo(arguments_);
+			},
+			setDataBreakpoints(breakpoints: DebugDataBreakpoint[]) {
+				return debug.setDataBreakpoints(breakpoints);
 			},
 			setPreloadedStdin(text: string) {
 				stdinInput = text;
@@ -1954,7 +2430,11 @@
 				</div>
 				<div class="action-group">
 					{#if runningMode === 'run'}
-						<button class="action-button action-button--stop" onclick={stopExecution}>
+						<button
+							class="action-button action-button--stop"
+							onclick={stopExecution}
+							disabled={executionStopPending}
+						>
 							<span class="material-symbols-outlined">stop_circle</span>
 							<span>Stop Running</span>
 						</button>
@@ -1969,7 +2449,20 @@
 						</button>
 					{/if}
 					{#if runningMode === 'debug'}
-						<button class="action-button action-button--stop" onclick={stopExecution}>
+						<button
+							class="action-button action-button--debug-restart"
+							onclick={restartDebugExecution}
+							disabled={restartDebugPending || executionStopPending}
+							aria-label="Restart Debug"
+						>
+							<span class="material-symbols-outlined">restart_alt</span>
+							<span>{restartDebugPending ? 'Restarting…' : 'Restart Debug'}</span>
+						</button>
+						<button
+							class="action-button action-button--stop"
+							onclick={stopExecution}
+							disabled={executionStopPending || restartDebugPending}
+						>
 							<span class="material-symbols-outlined">stop_circle</span>
 							<span>Stop Debug</span>
 						</button>
@@ -2008,7 +2501,7 @@
 					<button
 						class="action-button action-button--icon"
 						onclick={() => debug.sendCommand('continue')}
-						disabled={!debug.paused}
+						disabled={!debug.paused || dataBreakpointLoading}
 						title="Continue"
 						aria-label="Continue"
 					>
@@ -2016,8 +2509,8 @@
 					</button>
 					<button
 						class="action-button action-button--icon"
-						onclick={() => debug.runToCursor()}
-						disabled={!debug.canRunToCursor}
+						onclick={() => runToCursorWhileDataBreakpointIdle()}
+						disabled={!debug.canRunToCursor || dataBreakpointLoading}
 						title={debug.cursorLine
 							? `Run to Cursor (L${debug.cursorLine})`
 							: 'Run to Cursor'}
@@ -2030,7 +2523,7 @@
 					<button
 						class="action-button action-button--icon"
 						onclick={() => debug.sendCommand('stepInto')}
-						disabled={!debug.paused}
+						disabled={!debug.paused || dataBreakpointLoading}
 						title="Step Into"
 						aria-label="Step Into"
 					>
@@ -2039,7 +2532,7 @@
 					<button
 						class="action-button action-button--icon"
 						onclick={() => debug.sendCommand('nextLine')}
-						disabled={!debug.paused}
+						disabled={!debug.paused || dataBreakpointLoading}
 						title="Next Line"
 						aria-label="Next Line"
 					>
@@ -2048,7 +2541,7 @@
 					<button
 						class="action-button action-button--icon"
 						onclick={() => debug.sendCommand('stepOut')}
-						disabled={!debug.paused}
+						disabled={!debug.paused || dataBreakpointLoading}
 						title="Step Out"
 						aria-label="Step Out"
 					>
@@ -2493,6 +2986,15 @@
 							>{/if}
 					</div>
 					<code class="debug-value">{variable.value}</code>
+					{#if activeDebugBackend === 'lldb' && debug.paused && variable.memoryReference && (debug.capabilities.readMemory || debug.capabilities.writeMemory || debug.capabilities.dataBreakpoints)}
+						<button
+							class="debug-memory-inspect"
+							onclick={() => inspectDebugVariable(variable)}
+							aria-label={`Inspect memory for ${variable.name}`}
+						>
+							<span class="material-symbols-outlined">memory</span>
+						</button>
+					{/if}
 					{#if reference > 0}
 						<button
 							class="debug-expand"
@@ -2646,6 +3148,177 @@
 							</p>
 						{/if}
 					</section>
+					{#if activeDebugBackend === 'lldb' && debug.paused && (debug.capabilities.readMemory || debug.capabilities.writeMemory || debug.capabilities.dataBreakpoints)}
+						<section class="debug-panel debug-memory-panel">
+							<header class="debug-panel__header">
+								<div class="debug-panel__title">
+									<span class="material-symbols-outlined">memory</span>
+									<div class="debug-panel__copy">
+										<h3>Memory</h3>
+									</div>
+								</div>
+								<span class="debug-count">max {MAX_DEBUG_MEMORY_BYTES} B</span>
+							</header>
+							<div class="debug-memory-controls">
+								<label>
+									<span>Reference</span>
+									<input
+										bind:value={memoryReference}
+										aria-label="Memory reference"
+									/>
+								</label>
+								<label>
+									<span>Offset</span>
+									<input
+										bind:value={memoryOffsetInput}
+										aria-label="Memory offset"
+									/>
+								</label>
+								<label>
+									<span>Bytes</span>
+									<input
+										bind:value={memoryCountInput}
+										inputmode="numeric"
+										aria-label="Memory byte count"
+									/>
+								</label>
+								{#if debug.capabilities.readMemory}
+									<button
+										class="debug-memory-read"
+										onclick={() => void readDebugMemoryPage()}
+										disabled={memoryLoading}
+									>
+										{memoryLoading ? 'Reading…' : 'Read'}
+									</button>
+								{/if}
+							</div>
+							{#if debug.capabilities.writeMemory}
+								<div class="debug-memory-watch-controls">
+									<label class="debug-memory-write-field">
+										<span>Write hex bytes</span>
+										<input
+											bind:value={memoryWriteInput}
+											placeholder="64 00 00 00"
+											aria-label="Memory write bytes"
+										/>
+									</label>
+									<button
+										class="debug-memory-write"
+										onclick={() => void writeDebugMemoryPage()}
+										disabled={memoryLoading}
+										aria-label="Write memory"
+									>
+										{memoryLoading ? 'Writing…' : 'Write memory'}
+									</button>
+								</div>
+							{/if}
+							{#if debug.capabilities.writeMemory && memoryWriteStatus}
+								<p class="debug-memory-write-status">
+									<strong>{memoryWriteStatus.bytesWritten} bytes written</strong>
+									{#if memoryWriteStatus.bytesWritten < memoryWriteStatus.requestedBytes}
+										<span>of {memoryWriteStatus.requestedBytes} requested</span>
+									{/if}
+								</p>
+							{/if}
+							{#if debug.capabilities.dataBreakpoints}
+								<div class="debug-memory-watch-controls">
+									<label>
+										<span>Break on</span>
+										<select
+											bind:value={dataBreakpointAccessType}
+											disabled={dataBreakpointLoading}
+											aria-label="Data breakpoint access"
+										>
+											<option value="write">Write</option>
+											<option value="read">Read</option>
+											<option value="readWrite">Read or write</option>
+										</select>
+									</label>
+									<button
+										class="debug-data-breakpoint-set"
+										onclick={() => void setMemoryDataBreakpoint()}
+										disabled={dataBreakpointLoading}
+										aria-label="Set data breakpoint"
+									>
+										{dataBreakpointLoading && !activeDataBreakpoint
+											? 'Setting…'
+											: 'Set data breakpoint'}
+									</button>
+									{#if activeDataBreakpoint}
+										<button
+											class="debug-data-breakpoint-clear"
+											onclick={() => void clearMemoryDataBreakpoint()}
+											disabled={dataBreakpointLoading}
+											aria-label="Clear data breakpoint"
+										>
+											Clear
+										</button>
+									{/if}
+								</div>
+							{/if}
+							{#if debug.capabilities.dataBreakpoints && activeDataBreakpoint}
+								<p class="debug-data-breakpoint-status">
+									<strong>{activeDataBreakpoint.accessType}</strong>
+									<span>{activeDataBreakpoint.description}</span>
+								</p>
+							{/if}
+							{#if debug.capabilities.dataBreakpoints && dataBreakpointError}
+								<p class="debug-memory-error" role="alert">{dataBreakpointError}</p>
+							{/if}
+							{#if memoryError}
+								<p class="debug-memory-error" role="alert">{memoryError}</p>
+							{/if}
+							{#if debug.capabilities.readMemory && memoryResult}
+								<div class="debug-memory-toolbar">
+									<button onclick={() => void readDebugMemoryPage(-1)}
+										>Previous</button
+									>
+									<code
+										>{memoryResult.address ??
+											memoryResult.memoryReference}</code
+									>
+									<button onclick={() => void readDebugMemoryPage(1)}>Next</button
+									>
+								</div>
+								<div
+									class="debug-memory-table"
+									role="table"
+									aria-label="Memory contents"
+								>
+									{#each memoryRows as row (row.offset)}
+										<div class="debug-memory-row" role="row">
+											<code class="debug-memory-address">
+												{memoryResult.address ??
+													memoryResult.memoryReference}
+												{#if row.offset > 0}+0x{row.offset.toString(
+														16
+													)}{/if}
+											</code>
+											<div class="debug-memory-hex" role="cell">
+												{#each row.bytes as byte, index (index)}
+													{#if byte === null}
+														<code
+															class="debug-memory-byte debug-memory-byte--unreadable"
+															>??</code
+														>
+													{:else}
+														<code class="debug-memory-byte"
+															>{byte
+																.toString(16)
+																.padStart(2, '0')}</code
+														>
+													{/if}
+												{/each}
+											</div>
+											<div role="cell">
+												<code class="debug-memory-ascii">{row.ascii}</code>
+											</div>
+										</div>
+									{/each}
+								</div>
+							{/if}
+						</section>
+					{/if}
 					<section class="debug-panel">
 						<header class="debug-panel__header">
 							<div class="debug-panel__title">
@@ -2659,7 +3332,8 @@
 						<div class="watch-row">
 							<input
 								bind:value={debug.watchInput}
-								placeholder="a == b"
+								maxlength={4096}
+								placeholder="pair.first or items[2]"
 								onkeydown={(event) =>
 									event.key === 'Enter' && debug.addWatchExpression()}
 							/>
@@ -2716,7 +3390,7 @@
 									>
 										<button
 											class="debug-frame-select"
-											disabled={!frame.id}
+											disabled={!frame.id || dataBreakpointLoading}
 											onclick={() => selectDebugFrame(frame)}
 										>
 											<div class="stack-meta">
@@ -2960,7 +3634,7 @@
 				pausedLine={debug.pausedLine}
 				bind:lspStatus={editorLspStatus}
 				onCursorLineChange={debug.setCursorLine}
-				onRunToCursor={debug.runToCursor}
+				onRunToCursor={runToCursorWhileDataBreakpointIdle}
 				onBreakpointsChange={debug.setBreakpoints}
 			/>
 		{/key}
@@ -3945,6 +4619,226 @@
 		color: #64748b;
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 		font-size: 10px;
+	}
+
+	.debug-memory-inspect {
+		display: inline-grid;
+		width: 24px;
+		height: 24px;
+		flex: 0 0 auto;
+		place-items: center;
+		border: 0;
+		border-radius: 8px;
+		background: rgba(14, 116, 144, 0.09);
+		color: #0e7490;
+		cursor: pointer;
+	}
+
+	.debug-memory-inspect .material-symbols-outlined {
+		font-size: 16px;
+	}
+
+	.debug-memory-controls {
+		display: grid;
+		grid-template-columns: minmax(120px, 2fr) minmax(72px, 1fr) minmax(64px, 0.7fr) auto;
+		gap: 8px;
+		align-items: end;
+	}
+
+	.debug-memory-controls label {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 4px;
+		color: #64748b;
+		font-size: 10px;
+		font-weight: 650;
+	}
+
+	.debug-memory-controls input {
+		min-width: 0;
+		height: 34px;
+		box-sizing: border-box;
+		border: 1px solid rgba(148, 163, 184, 0.35);
+		border-radius: 9px;
+		background: rgba(255, 255, 255, 0.94);
+		padding: 0 9px;
+		color: #0f172a;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 11px;
+	}
+
+	.debug-memory-watch-controls {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: end;
+		gap: 8px;
+	}
+
+	.debug-memory-watch-controls label {
+		display: flex;
+		min-width: 120px;
+		flex-direction: column;
+		gap: 4px;
+		color: #64748b;
+		font-size: 10px;
+		font-weight: 650;
+	}
+
+	.debug-memory-watch-controls select,
+	.debug-memory-write-field input,
+	.debug-memory-write,
+	.debug-data-breakpoint-set,
+	.debug-data-breakpoint-clear {
+		height: 34px;
+		box-sizing: border-box;
+		border: 1px solid rgba(99, 102, 241, 0.24);
+		border-radius: 9px;
+		background: rgba(99, 102, 241, 0.08);
+		padding: 0 11px;
+		color: #4338ca;
+		font: inherit;
+		font-size: 11px;
+		font-weight: 700;
+	}
+
+	.debug-data-breakpoint-set,
+	.debug-memory-write,
+	.debug-data-breakpoint-clear {
+		cursor: pointer;
+	}
+
+	.debug-memory-write-field {
+		flex: 1 1 180px;
+	}
+
+	.debug-memory-write-field input {
+		min-width: 0;
+		width: 100%;
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-weight: 500;
+	}
+
+	.debug-data-breakpoint-clear {
+		border-color: rgba(239, 68, 68, 0.2);
+		background: rgba(239, 68, 68, 0.08);
+		color: #b91c1c;
+	}
+
+	.debug-data-breakpoint-set:disabled,
+	.debug-memory-write:disabled,
+	.debug-data-breakpoint-clear:disabled {
+		cursor: wait;
+		opacity: 0.65;
+	}
+
+	.debug-data-breakpoint-status {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin: 0;
+		border-radius: 9px;
+		background: rgba(99, 102, 241, 0.08);
+		padding: 8px 10px;
+		color: #4338ca;
+		font-size: 11px;
+	}
+
+	.debug-memory-write-status {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		margin: 0;
+		border-radius: 9px;
+		background: rgba(14, 116, 144, 0.08);
+		padding: 8px 10px;
+		color: #0e7490;
+		font-size: 11px;
+	}
+
+	.debug-memory-read,
+	.debug-memory-toolbar button {
+		height: 34px;
+		border: 0;
+		border-radius: 9px;
+		background: rgba(14, 116, 144, 0.1);
+		padding: 0 11px;
+		color: #0e7490;
+		font: inherit;
+		font-size: 11px;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.debug-memory-read:disabled {
+		cursor: wait;
+		opacity: 0.65;
+	}
+
+	.debug-memory-error {
+		margin: 0;
+		border-radius: 9px;
+		background: rgba(239, 68, 68, 0.08);
+		padding: 8px 10px;
+		color: #b91c1c;
+		font-size: 11px;
+	}
+
+	.debug-memory-toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+
+	.debug-memory-toolbar code {
+		min-width: 0;
+		overflow-wrap: anywhere;
+		color: #475569;
+		font-size: 10px;
+	}
+
+	.debug-memory-table {
+		display: flex;
+		max-width: 100%;
+		flex-direction: column;
+		gap: 4px;
+		overflow-x: auto;
+		padding-bottom: 2px;
+	}
+
+	.debug-memory-row {
+		display: grid;
+		min-width: max-content;
+		grid-template-columns: minmax(72px, auto) auto minmax(16ch, auto);
+		gap: 10px;
+		align-items: center;
+	}
+
+	.debug-memory-address,
+	.debug-memory-ascii {
+		color: #64748b;
+		font-size: 10px;
+	}
+
+	.debug-memory-hex {
+		display: grid;
+		grid-template-columns: repeat(16, 2ch);
+		gap: 4px;
+	}
+
+	.debug-memory-byte {
+		color: #0f172a;
+		font-size: 10px;
+		text-align: center;
+	}
+
+	.debug-memory-byte--unreadable {
+		color: #dc2626;
+	}
+
+	.debug-memory-ascii {
+		white-space: pre;
 	}
 
 	.debug-expand {

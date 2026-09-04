@@ -300,7 +300,11 @@ export async function runStdinBrowserProbe(options) {
 		await page.locator('#language-select').selectOption(language);
 		await page.waitForFunction(
 			(expectedLanguage) =>
-				document.querySelector('#language-select')?.value === expectedLanguage &&
+				(
+					/** @type {HTMLSelectElement | null} */ (
+						document.querySelector('#language-select')
+					)
+				)?.value === expectedLanguage &&
 				typeof (/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue) ===
 					'function' &&
 				typeof (/** @type {any} */ (window).__wasmIdleDebug?.setEditorValue) ===

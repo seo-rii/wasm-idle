@@ -3,17 +3,24 @@ import type { DebugSourceBreakpoints, ExecutionLimits, WorkspaceLimits } from '@
 export type {
 	DebugArrayElementKind,
 	DebugCommand,
+	DebugDataBreakpoint,
+	DebugDataBreakpointAccessType,
+	DebugDataBreakpointInfo,
+	DebugDataBreakpointInfoArguments,
 	DebugFrame,
 	DebugMemory,
 	DebugPauseReason,
 	DebugResolvedBreakpoint,
+	DebugResolvedDataBreakpoint,
+	DebugSessionCapabilities,
 	DebugSessionEvent,
 	DebugScope,
 	DebugSourceBreakpoints,
 	DebugStructFieldMetadata,
 	DebugVariable,
 	DebugVariableKind,
-	DebugVariableMetadata
+	DebugVariableMetadata,
+	DebugWriteMemoryResult
 } from '@wasm-idle/core';
 
 export type CompilerDiagnosticSeverity = 'error' | 'warning' | 'other';

@@ -1,5 +1,7 @@
 import type {
 	DebugCommand,
+	DebugDataBreakpoint,
+	DebugDataBreakpointInfoArguments,
 	DebugSessionEvent,
 	SandboxExecutionOptions
 } from '$lib/playground/options';
@@ -7,7 +9,8 @@ import { WorkerAssetBridge } from '$lib/playground/assetBridge';
 import {
 	resolveDebugRuntimeUrls,
 	resolveRuntimeAssetConfig,
-	type PlaygroundRuntimeAssets
+	type PlaygroundRuntimeAssets,
+	type RuntimeAssetIntegrityEntry
 } from '$lib/playground/assets';
 import { LldbSandboxSession, type LldbArtifactPayload } from '$lib/playground/lldbSession';
 import { normalizeDwarfWorkspacePath } from '@wasm-idle/llvm-core/clang';
@@ -65,6 +68,7 @@ class Clang implements Sandbox {
 	assetBridge: WorkerAssetBridge | null = null;
 	debugRuntimeBaseUrl = '';
 	debugManifestUrl = '';
+	debugManifestReceipt?: Readonly<RuntimeAssetIntegrityEntry>;
 	private lldbSession?: LldbSandboxSession;
 	private debugMode: 'none' | 'trace' | 'lldb' = 'none';
 	private readonly lldbBreakpoints = new Map<`/workspace/${string}`, number[]>();
@@ -128,6 +132,7 @@ class Clang implements Sandbox {
 			);
 			this.debugRuntimeBaseUrl = debugRuntime.baseUrl;
 			this.debugManifestUrl = debugRuntime.manifestUrl;
+			this.debugManifestReceipt = debugRuntime.manifestReceipt;
 			const needsWorkerReset =
 				!this.worker ||
 				!this.assetBridge ||
@@ -266,6 +271,7 @@ class Clang implements Sandbox {
 					const compilerWorker = this.worker;
 					const lldbSession = new LldbSandboxSession({
 						manifestUrl: this.debugManifestUrl,
+						manifestReceipt: this.debugManifestReceipt,
 						runtimeBaseUrl: this.debugRuntimeBaseUrl,
 						artifact: lldbArtifact as LldbArtifactPayload,
 						sourcePath,
@@ -439,6 +445,26 @@ class Clang implements Sandbox {
 		return (
 			this.lldbSession?.readMemory(memoryReference, offset, count) ?? Promise.resolve(null)
 		);
+	}
+
+	debugWriteMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial = false
+	) {
+		return (
+			this.lldbSession?.writeMemory(memoryReference, offset, data, allowPartial) ??
+			Promise.resolve(null)
+		);
+	}
+
+	debugDataBreakpointInfo(arguments_: DebugDataBreakpointInfoArguments) {
+		return this.lldbSession?.dataBreakpointInfo(arguments_) ?? Promise.resolve(null);
+	}
+
+	debugSetDataBreakpoints(breakpoints: DebugDataBreakpoint[]) {
+		return this.lldbSession?.setDataBreakpoints(breakpoints) ?? Promise.resolve([]);
 	}
 
 	kill() {

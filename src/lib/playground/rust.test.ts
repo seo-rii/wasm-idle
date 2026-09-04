@@ -113,7 +113,7 @@ vi.mock('$lib/playground/lldbSession', () => ({
 		pause() {}
 		write() {}
 		eof() {}
-		disconnect() {}
+		disconnect = vi.fn(() => Promise.resolve());
 		evaluate() {
 			return Promise.resolve('?');
 		}
@@ -208,6 +208,57 @@ describe('Rust sandbox', () => {
 			unreadableBytes: 0
 		});
 		expect(readMemory).toHaveBeenCalledWith('0x40', 0, 2);
+	});
+
+	it('forwards target memory writes to the active LLDB session', async () => {
+		const sandbox = new Rust();
+		const writeMemory = vi.fn(
+			async (
+				_memoryReference: string,
+				_offset: number,
+				_data: Uint8Array,
+				_allowPartial?: boolean
+			) => ({ offset: 1, bytesWritten: 2 })
+		);
+		(
+			sandbox as unknown as {
+				lldbSession: { writeMemory: typeof writeMemory };
+			}
+		).lldbSession = { writeMemory };
+
+		await expect(
+			(sandbox as unknown as { debugWriteMemory: typeof writeMemory }).debugWriteMemory(
+				'0x40',
+				1,
+				Uint8Array.of(4, 2),
+				false
+			)
+		).resolves.toEqual({ offset: 1, bytesWritten: 2 });
+		expect(writeMemory).toHaveBeenCalledWith('0x40', 1, Uint8Array.of(4, 2), false);
+	});
+
+	it('forwards data breakpoints to the active LLDB session', async () => {
+		const sandbox = new Rust();
+		const dataBreakpointInfo = vi.fn(async () => ({
+			dataId: '40/4',
+			description: '4 bytes at 40'
+		}));
+		const setDataBreakpoints = vi.fn(async () => [{ id: 3, verified: true }]);
+		(
+			sandbox as unknown as {
+				lldbSession: {
+					dataBreakpointInfo: typeof dataBreakpointInfo;
+					setDataBreakpoints: typeof setDataBreakpoints;
+				};
+			}
+		).lldbSession = { dataBreakpointInfo, setDataBreakpoints };
+
+		await expect(
+			sandbox.debugDataBreakpointInfo({ name: '0x40', asAddress: true, bytes: 4 })
+		).resolves.toEqual({ dataId: '40/4', description: '4 bytes at 40' });
+		await expect(
+			sandbox.debugSetDataBreakpoints([{ dataId: '40/4', accessType: 'readWrite' }])
+		).resolves.toEqual([{ id: 3, verified: true }]);
 	});
 
 	it('forwards frame scope requests to the active LLDB session', async () => {
@@ -385,6 +436,42 @@ describe('Rust sandbox', () => {
 		expect(activeWorker.terminate).not.toHaveBeenCalled();
 		expect(activeGraph.dispose).not.toHaveBeenCalled();
 		expect(sandbox.worker).toBe(activeWorker);
+	});
+
+	it('preserves the active LLDB runtime receipt when replacement verification fails', async () => {
+		const sandbox = new Rust();
+		await sandbox.load({
+			rootUrl: '/active',
+			rust: {
+				compilerUrl: '/active/wasm-rust/index.js',
+				executableGraphFingerprint: 'a'.repeat(64)
+			},
+			debug: {
+				baseUrl: 'https://debug-a.example.test/',
+				manifestSha256: '3'.repeat(64)
+			}
+		});
+		executableGraphFixture.load.mockRejectedValueOnce(new Error('replacement rejected'));
+
+		await expect(
+			sandbox.load({
+				rootUrl: '/replacement',
+				rust: {
+					compilerUrl: '/replacement/wasm-rust/index.js',
+					executableGraphFingerprint: 'a'.repeat(64)
+				},
+				debug: {
+					baseUrl: 'https://debug-b.example.test/',
+					manifestSha256: '4'.repeat(64)
+				}
+			})
+		).rejects.toThrow('replacement rejected');
+
+		expect(sandbox.debugRuntimeBaseUrl).toBe('https://debug-a.example.test/');
+		expect(sandbox.debugManifestUrl).toBe(
+			'https://debug-a.example.test/runtime-manifest.v2.json'
+		);
+		expect(sandbox.debugManifestReceipt).toEqual({ sha256: '3'.repeat(64) });
 	});
 
 	it('rejects a configured runtime manifest profile that differs from the bundle', async () => {
@@ -585,6 +672,74 @@ describe('Rust sandbox', () => {
 		}
 	});
 
+	it('clears the compile timeout and disposes the verified graph at LLDB handoff', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		const graph = await executableGraphFixture.load.mock.results[0]!.value;
+		worker.postMessage.mockImplementationOnce(() => {});
+		vi.useFakeTimers();
+		try {
+			const runPromise = sandbox.run('fn main() {}', false, true, undefined, [], {
+				debugMode: 'lldb',
+				limits: { compileTimeoutMs: 5 }
+			});
+			worker.onmessage?.({
+				data: {
+					lldbArtifact: {
+						bytes: Uint8Array.of(0, 97, 115, 109),
+						descriptor: {
+							kind: 'dwarf',
+							sourceRoot: '/workspace',
+							moduleSha256: '1'.repeat(64)
+						},
+						sources: []
+					}
+				}
+			} as MessageEvent<any>);
+
+			expect(lldbSessions).toHaveLength(1);
+			expect(graph.dispose).toHaveBeenCalledTimes(1);
+			await vi.advanceTimersByTimeAsync(5);
+			lldbSessions[0].finish();
+			await expect(runPromise).resolves.toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('disconnects the active LLDB session when the run signal aborts after handoff', async () => {
+		const controller = new AbortController();
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => {});
+		const runPromise = sandbox.run('fn main() {}', false, true, undefined, [], {
+			debugMode: 'lldb',
+			signal: controller.signal
+		});
+		worker.onmessage?.({
+			data: {
+				lldbArtifact: {
+					bytes: Uint8Array.of(0, 97, 115, 109),
+					descriptor: {
+						kind: 'dwarf',
+						sourceRoot: '/workspace',
+						moduleSha256: '1'.repeat(64)
+					},
+					sources: []
+				}
+			}
+		} as MessageEvent<any>);
+		const session = lldbSessions[0];
+		const rejectedRun = expect(runPromise).rejects.toThrow('caller cancelled LLDB run');
+
+		controller.abort(new Error('caller cancelled LLDB run'));
+
+		await rejectedRun;
+		expect(session.disconnect).toHaveBeenCalledTimes(1);
+	});
+
 	it('switches to the run timeout when the worker begins execution', async () => {
 		const sandbox = new Rust();
 		await sandbox.load('/absproxy/5173');
@@ -657,6 +812,7 @@ describe('Rust sandbox', () => {
 
 	it('uses and suspends the run timeout after handing an artifact to LLDB', async () => {
 		const sandbox = new Rust();
+		sandbox.output = () => undefined;
 		await sandbox.load('/absproxy/5173');
 		const graph = await executableGraphFixture.load.mock.results[0]!.value;
 		const worker = workerInstances[0];
@@ -686,6 +842,13 @@ describe('Rust sandbox', () => {
 			} as MessageEvent<any>);
 			expect(lldbSessions).toHaveLength(1);
 			expect(graph.dispose).toHaveBeenCalledOnce();
+			let releaseDisconnect!: () => void;
+			lldbSessions[0].disconnect.mockImplementationOnce(
+				() =>
+					new Promise<void>((resolve) => {
+						releaseDisconnect = resolve;
+					})
+			);
 
 			await vi.advanceTimersByTimeAsync(3);
 			lldbSessions[0].emit({
@@ -703,7 +866,13 @@ describe('Rust sandbox', () => {
 			expect(settled).toBe(false);
 			await vi.advanceTimersByTimeAsync(1);
 
+			expect(lldbSessions[0].disconnect).toHaveBeenCalledTimes(1);
+			expect(settled).toBe(false);
+			releaseDisconnect();
 			await rejectedRun;
+
+			await sandbox.load('/absproxy/5173');
+			await expect(sandbox.run('fn main() {}', false)).resolves.toBe(true);
 		} finally {
 			vi.useRealTimers();
 		}
@@ -957,8 +1126,16 @@ describe('Rust sandbox', () => {
 		const sandbox = new Rust();
 		const worker = new MockWorker();
 		const events: any[] = [];
+		const manifestReceipt = {
+			sha256: 'a'.repeat(64)
+		};
 
 		sandbox.worker = worker as unknown as Worker;
+		(
+			sandbox as unknown as {
+				debugManifestReceipt?: Readonly<{ sha256: string }>;
+			}
+		).debugManifestReceipt = manifestReceipt;
 		sandbox.ondebug = (event) => events.push(event);
 		worker.postMessage.mockImplementationOnce(() => {
 			queueMicrotask(() => {
@@ -998,6 +1175,7 @@ describe('Rust sandbox', () => {
 		await vi.waitFor(() => expect(lldbSessions).toHaveLength(1));
 		const session = lldbSessions[0];
 		expect(session.options).toMatchObject({
+			manifestReceipt,
 			sourcePath: '/workspace/main.rs',
 			breakpoints: [2, 3, 4, 7],
 			sourceBreakpoints: [

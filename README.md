@@ -102,11 +102,27 @@ debug target connects.
 `@wasm-idle/llvm-core/debug` owns the browser session and `wasm-llvm` owns the pinned LLDB/WAMR
 producers and binary manifests.
 
-Debugging requires `SharedArrayBuffer` and a cross-origin-isolated deployment. The LLDB and WAMR
-assets are not downloaded until a supported debug session starts. If the LLDB manifest is absent,
-invalid, or does not advertise the required breakpoint/step/stack/local capabilities, the
+Debugging requires `SharedArrayBuffer` and a cross-origin-isolated deployment. Because verified
+runtime bytes are executed through Blob-backed ES modules and nested pthread Workers, the deployed
+Content Security Policy's `script-src`, `worker-src`, and `connect-src` must permit `blob:`. The
+LLDB and WAMR assets are not downloaded until a supported debug session starts. The bundled raw manifest is
+checked against its release receipt before parsing, and custom runtime locations must provide an
+explicit expected manifest SHA-256. The six executable assets are then streamed, bounded, and
+hash-verified exactly once before their owned bytes are transferred to the Workers. Workers do not
+re-fetch executable runtime URLs. Clean Pages builds fetch the exact pinned producer revision and
+manifest receipt through the shared release profile before the application build. The deployment
+refuses publication when any logical LLDB/WAMR asset is missing or mismatched after re-verifying
+raw or compressed logical bytes. If transactional publication cannot safely restore or identify an
+owned generation, its `.wasm-debug.next-*` and `.wasm-debug.previous-*` recovery artifacts are
+preserved for operator inspection. Later synchronization and the final Pages verifier fail closed
+until those artifacts (or a leftover `.wasm-debug.sync.lock*`) are manually inspected and resolved;
+they are never silently deleted or published. This build-time preparation does not change lazy browser loading:
+clients fetch the debugger payload only when a supported debug session starts. If the LLDB manifest
+is absent, invalid, or does not advertise
+the required breakpoint/step/stack/local capabilities, the
 playground labels that run as a trace fallback and keeps the existing instrumentation debugger
-available. Build and verify both producers
+available. LLDB-designated browser fixtures reject trace fallback, while a separate missing-asset
+fixture qualifies the pre-session trace alternative. Build and verify both producers
 using [`producer/lldb-browser`](../wasm-llvm/producer/lldb-browser) and
 [`producer/wamr-browser`](../wasm-llvm/producer/wamr-browser), then assemble them with the Clang
 release:
@@ -119,10 +135,53 @@ and runtime-specific behavior can differ. Trace fallback is selected only before
 established; an LLDB or WAMR failure ends that session instead of silently changing debugger
 semantics.
 
-Full expression evaluation, conditional/log/data breakpoints, variable mutation, restart,
-standalone terminate, optimized-debug guarantees, C++ exception support, STL pretty-printers,
-`wasm64`, guest threads, reverse debugging, SIMD, multi-module guests, and Rust WASI Preview 2/3
-debugging are outside the v1 support boundary.
+Stable v2 inherits that exact release boundary: 64-bit desktop Chromium on Linux, a
+cross-origin-isolated deployment, one active session, pinned C/C++ and `wasm32-wasip1` Rust
+producer artifacts at `-O0` with embedded DWARF, and a new WAMR debug execution rather than an
+attachment to an existing browser-engine run. DAP is an internal product protocol boundary; v2
+does not claim compatibility with arbitrary third-party DAP clients or arbitrary externally
+produced Wasm/DWARF artifacts.
+
+Pause is bounded but is not guaranteed to yield an inspectable stop while WAMR is blocked in a
+synchronous host call. In particular, a synchronous WAMR stdin read may time out instead of
+producing an inspectable pause. After that explicit timeout, **Stop Debug** still performs bounded
+Worker cleanup and permits a fresh debug execution; the session never remains indefinitely pending.
+
+Stable v2 adds bounded variable-path watches and a paused-target memory inspector.
+Watch fallback accepts identifiers, nested fields, and non-negative indexes without enabling general
+expression evaluation. The memory panel can select a variable's DAP `memoryReference`, reads at most
+256 bytes per request, pages by the selected byte count, renders hexadecimal/ASCII data and unreadable
+bytes as `??`, and discards a response when the target resumes or the selected frame changes. While
+paused, it also accepts 1–256 two-digit hexadecimal bytes for a raw target-memory write and refreshes
+the displayed range after a successful write. This edits memory only; it does not provide typed
+`setVariable` semantics, validate that a value is safe for the guest, or preserve the mutation after
+restart. The complete UI write path is qualified in real Chromium with `wasm32-wasi` C/C++ and
+`wasm32-wasip1` Rust programs.
+While paused, the same panel can install one session-scoped LLDB data breakpoint over a 1–256 byte
+memory range. The browser gate qualifies `wasm32-wasi` C write, C++ read/write, and
+`wasm32-wasip1` Rust read access. Setting a new data breakpoint replaces the previous set, and
+**Clear** sends an empty replacement set to the target. Its opaque DAP data ID is never persisted
+across restart or a new debug execution. Because WAMR reports a completed memory access, the stopped
+source location can be the next executable line after the watched instruction.
+If a replacement or clear request times out, is rejected, or returns malformed DAP data, the debug
+execution stops and disposes both Workers so the UI cannot continue with an uncertain watchpoint
+set; **Restart Debug** then starts a clean execution. A successful but unverified replacement remains
+nonfatal and is reported as unverified.
+The Chromium qualification includes an indexed one-byte watched subrange that overlaps a four-byte scalar store.
+LLDB uses modify semantics for write mode: a write data breakpoint stops when at least one watched byte changes;
+a same-value store is reported by WAMR but automatically resumed by LLDB.
+Data breakpoints cover scalar classic-interpreter loads and stores only.
+Bulk-memory operations and host-side memory writes do not trigger data breakpoints; guest threads
+and memories outside the supported linear-memory configuration remain out of scope. Trace fallback
+does not advertise or emulate data breakpoints.
+The v2 **Restart Debug** action fully disposes the active LLDB and WAMR Workers, waits for the old
+execution to settle, and launches a fresh debug execution from the current workspace. It does not
+preserve target state or advertise the DAP `restart` capability.
+
+Full expression evaluation, conditional/log breakpoints, typed variable mutation through DAP
+`setVariable`, DAP in-session restart, standalone terminate, optimized-debug guarantees, C++
+exception support, STL pretty-printers, `wasm64`, guest threads, reverse debugging, SIMD,
+multi-module guests, and Rust WASI Preview 2/3 debugging remain outside the supported boundary.
 
 ```sh
 cd ../wasm-llvm

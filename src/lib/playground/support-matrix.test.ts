@@ -17,7 +17,48 @@ describe('README support matrix', () => {
 		expect(renderSupportMatrixSection()).toContain('| Scheme');
 		expect(renderSupportMatrixSection()).toContain('@php-wasm/web-8-4@3.1.34');
 		expect(renderSupportMatrixSection()).not.toContain('@php-wasm/web-8-4@unknown');
-		expect(renderSupportMatrixSection()).toContain('## Browser LLDB debug runtime');
+		const section = renderSupportMatrixSection();
+		expect(section).toContain('## Browser LLDB debug runtime');
+		expect(section).toContain('Stable v2 inherits that exact release boundary');
+		expect(section).not.toContain('v2 inspection preview');
+		expect(section).toContain(
+			'one-byte watched subrange that overlaps a four-byte scalar store'
+		);
+		expect(section).toContain(
+			'Bulk-memory operations and host-side memory writes do not trigger'
+		);
+		expect(section).toContain(
+			'write data breakpoint stops when at least one watched byte changes'
+		);
+		expect(section).toContain('DAP is an internal product protocol boundary');
+		expect(section).toContain(
+			'`script-src`, `worker-src`, and `connect-src` must permit `blob:`'
+		);
+		expect(section).toMatch(/Workers do not\s+re-fetch executable runtime URLs/);
+		expect(section).toMatch(
+			/Clean Pages builds fetch the exact pinned producer revision and\s+manifest receipt/
+		);
+		expect(section).toMatch(
+			/deployment\s+refuses publication when any logical LLDB\/WAMR asset is missing or mismatched/
+		);
+		expect(section).toContain('LLDB-designated browser fixtures reject trace fallback');
+		expect(section).toMatch(
+			/a separate missing-asset\s+fixture qualifies the pre-session trace alternative/
+		);
+		expect(section).toMatch(
+			/`wasm32-wasi` C write, C\+\+ read\/write, and\s+`wasm32-wasip1` Rust read access/
+		);
+		expect(section).toMatch(/typed variable mutation through DAP\s+`setVariable`/);
+		expect(
+			/synchronous WAMR stdin read may time out instead of\s+producing an inspectable pause/.test(
+				section
+			)
+		).toBe(true);
+		expect(
+			/\*\*Stop Debug\*\* still performs bounded\s+Worker cleanup and permits a fresh debug execution/.test(
+				section
+			)
+		).toBe(true);
 	});
 
 	it('keeps every execution language tied to real browser coverage', () => {

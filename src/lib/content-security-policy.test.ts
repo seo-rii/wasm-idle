@@ -28,6 +28,12 @@ describe('release content security policy', () => {
 			'unsafe-inline'
 		);
 		expect(applicationContentSecurityPolicyDirectives['worker-src']).toEqual(['self', 'blob:']);
+		expect(applicationContentSecurityPolicyDirectives['connect-src']).toEqual([
+			'self',
+			'blob:',
+			'https:',
+			'http:'
+		]);
 		expect(applicationContentSecurityPolicyDirectives['style-src']).toEqual([
 			'self',
 			'unsafe-inline',
@@ -50,6 +56,9 @@ describe('release content security policy', () => {
 			"script-src 'self' blob: 'wasm-unsafe-eval' 'unsafe-inline'"
 		);
 		expect(releaseResponseContentSecurityPolicy).toContain("worker-src 'self' blob:");
+		expect(releaseResponseContentSecurityPolicy).toContain(
+			"connect-src 'self' blob: https: http:"
+		);
 		expect(releaseResponseContentSecurityPolicy).not.toContain("'unsafe-eval'");
 		const strictHeaders = createReleasePreviewSecurityHeaders(true);
 		const defaultHeaders = createReleasePreviewSecurityHeaders(false);

@@ -12,7 +12,7 @@ if (result.status !== 0) {
 
 const packed = JSON.parse(result.stdout)[0];
 const forbiddenPath =
-	/(^|\/)(?:assets?|artifacts?|producer|static)(\/|$)|\.(?:a|bc|br|data|gz|o|pack|so|tar|tgz|wasm|zip|zst)$/iu;
+	/(^|\/)(?:assets?|artifacts?|producer|static)(\/|$)|\.(?:a|bc|br|data|gz|map|o|pack|so|tar|tgz|wasm|zip|zst)$/iu;
 const forbiddenFiles = packed.files
 	.map(({ path }) => path)
 	.filter((path) => forbiddenPath.test(path));
@@ -35,7 +35,7 @@ if (manifest.dependencies?.['@seo-rii/wasm-llvm']) {
 }
 if (forbiddenFiles.length > 0 || embeddedPayloads.length > 0) {
 	throw new Error(
-		`runtime package contains forbidden assets: ${[...forbiddenFiles, ...embeddedPayloads].join(', ')}`
+		`runtime package contains forbidden files: ${[...forbiddenFiles, ...embeddedPayloads].join(', ')}`
 	);
 }
 

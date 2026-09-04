@@ -117,5 +117,6 @@ export type {
 	DebugSessionEvent,
 	DebugScope,
 	DebugVariable,
+	DebugWriteMemoryResult,
 	ProgressLike
 } from '@wasm-idle/core';

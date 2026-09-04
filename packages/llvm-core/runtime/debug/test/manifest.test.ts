@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
 	parseDebugRuntimeManifest,
@@ -64,6 +64,7 @@ function manifest() {
 				locals: true,
 				globals: true,
 				readMemory: true,
+				writeMemory: true,
 				evaluateExpressions: false,
 				dataBreakpoints: false,
 				wasmThreads: false
@@ -77,6 +78,7 @@ describe('debug runtime manifest', () => {
 		const parsed = parseDebugRuntimeManifest(manifest());
 		expect(parsed.debugger.lldb.llvmVersion).toBe('22.1.8');
 		expect(parsed.debugger.targetRuntime.name).toBe('wamr');
+		expect(parsed.debugger.capabilities.writeMemory).toBe(true);
 		expect(parsed.debugger.capabilities.evaluateExpressions).toBe(false);
 		expect(resolveDebugRuntimeAssets(parsed, 'https://cdn.example/runtime')).toEqual({
 			lldb: {
@@ -104,6 +106,10 @@ describe('debug runtime manifest', () => {
 		const mismatchedRevision = manifest();
 		mismatchedRevision.compiler.provenance.revision = 'different';
 		expect(() => parseDebugRuntimeManifest(mismatchedRevision)).toThrow(/must match/u);
+
+		const missingWriteMemory = manifest();
+		delete (missingWriteMemory.debugger.capabilities as Record<string, unknown>).writeMemory;
+		expect(() => parseDebugRuntimeManifest(missingWriteMemory)).toThrow(/writeMemory/u);
 	});
 
 	it('rejects debug assets that escape the configured runtime root', () => {
@@ -154,12 +160,19 @@ describe('debug runtime manifest', () => {
 		}
 		const requests: string[] = [];
 
-		await expect(
-			preflightDebugRuntimeAssets(parsed, 'https://cdn.example/runtime/', async (url) => {
+		const verified = await preflightDebugRuntimeAssets(
+			parsed,
+			'https://cdn.example/runtime/',
+			async (url) => {
 				requests.push(String(url));
 				return new Response('debug-asset');
-			})
-		).resolves.toEqual(resolveDebugRuntimeAssets(parsed, 'https://cdn.example/runtime/'));
+			}
+		);
+		for (const group of [verified.lldb, verified.targetRuntime]) {
+			for (const bytes of [group.js, group.wasm, group.worker]) {
+				expect(new TextDecoder().decode(bytes)).toBe('debug-asset');
+			}
+		}
 		expect(requests).toEqual([
 			'https://cdn.example/runtime/debug/lldb.js',
 			'https://cdn.example/runtime/debug/lldb.wasm',
@@ -188,5 +201,161 @@ describe('debug runtime manifest', () => {
 				async () => new Response('corrupt')
 			)
 		).rejects.toThrow(/SHA-256 mismatch/u);
+	});
+
+	it.each([
+		['invalid', 'not-a-byte-count'],
+		['declared oversize', '55000001']
+	])('rejects and cancels an %s asset response', async (_caseName, contentLength) => {
+		const parsed = parseDebugRuntimeManifest(manifest());
+		let cancelled = false;
+		const response = new Response(
+			new ReadableStream<Uint8Array>({
+				cancel() {
+					cancelled = true;
+				}
+			}),
+			{ headers: { 'content-length': contentLength } }
+		);
+
+		await expect(
+			preflightDebugRuntimeAssets(
+				parsed,
+				'https://cdn.example/runtime/',
+				async () => response
+			)
+		).rejects.toThrow(/content-length|55,000,000 byte budget/u);
+		expect(cancelled).toBe(true);
+	});
+
+	it('cancels a chunked response as soon as the cumulative asset budget is exceeded', async () => {
+		const parsed = parseDebugRuntimeManifest(manifest());
+		const chunk = new Uint8Array(5_000_000);
+		let emitted = 0;
+		let cancelled = false;
+		const response = new Response(
+			new ReadableStream<Uint8Array>({
+				pull(controller) {
+					emitted += 1;
+					controller.enqueue(chunk);
+				},
+				cancel() {
+					cancelled = true;
+				}
+			})
+		);
+
+		await expect(
+			preflightDebugRuntimeAssets(
+				parsed,
+				'https://cdn.example/runtime/',
+				async () => response
+			)
+		).rejects.toThrow(/55,000,000 byte budget/u);
+		expect(emitted).toBeGreaterThanOrEqual(12);
+		expect(cancelled).toBe(true);
+	});
+
+	it.each([
+		{
+			caseName: 'invalid byte chunk',
+			chunk: 'not-bytes',
+			error: /response body yielded invalid bytes/u
+		},
+		{
+			caseName: 'oversized byte chunk',
+			chunk: Object.defineProperty(new Uint8Array(0), 'byteLength', {
+				value: 55_000_001
+			}),
+			error: /55,000,000 byte budget/u
+		}
+	])(
+		'preserves the $caseName failure when cancelling its stream also fails',
+		async ({ chunk, error }) => {
+			const parsed = parseDebugRuntimeManifest(manifest());
+			const cancel = vi.fn(async () => {
+				throw new Error('asset stream cancellation failed');
+			});
+			let readCount = 0;
+			const response = {
+				ok: true,
+				status: 200,
+				headers: new Headers(),
+				body: {
+					getReader: () => ({
+						read: vi.fn(async () => {
+							readCount += 1;
+							return readCount === 1
+								? { done: false, value: chunk }
+								: { done: true, value: undefined };
+						}),
+						cancel,
+						releaseLock: vi.fn()
+					})
+				}
+			} as unknown as Response;
+
+			await expect(
+				preflightDebugRuntimeAssets(
+					parsed,
+					'https://cdn.example/runtime/',
+					async () => response
+				)
+			).rejects.toThrow(error);
+			expect(cancel).toHaveBeenCalledOnce();
+		}
+	);
+
+	it('cancels a pending asset body when preflight is aborted', async () => {
+		const parsed = parseDebugRuntimeManifest(manifest());
+		const abortController = new AbortController();
+		let cancelled = false;
+		let reportPull!: () => void;
+		const pulled = new Promise<void>((resolve) => {
+			reportPull = resolve;
+		});
+		const response = new Response(
+			new ReadableStream<Uint8Array>({
+				pull() {
+					reportPull();
+					return new Promise<void>(() => undefined);
+				},
+				cancel() {
+					cancelled = true;
+				}
+			})
+		);
+		const preflight = preflightDebugRuntimeAssets(
+			parsed,
+			'https://cdn.example/runtime/',
+			async () => response,
+			abortController.signal
+		);
+
+		await pulled;
+		abortController.abort(new Error('asset preflight stopped'));
+
+		await expect(preflight).rejects.toThrow('asset preflight stopped');
+		expect(cancelled).toBe(true);
+	});
+
+	it('cancels an asset response that arrives after preflight is aborted', async () => {
+		const parsed = parseDebugRuntimeManifest(manifest());
+		const abortController = new AbortController();
+		const response = new Response('debug-asset');
+		const cancel = vi.spyOn(response.body!, 'cancel');
+
+		await expect(
+			preflightDebugRuntimeAssets(
+				parsed,
+				'https://cdn.example/runtime/',
+				async () => {
+					abortController.abort(new Error('asset preflight stopped'));
+					return response;
+				},
+				abortController.signal
+			)
+		).rejects.toThrow('asset preflight stopped');
+		expect(cancel).toHaveBeenCalledOnce();
 	});
 });

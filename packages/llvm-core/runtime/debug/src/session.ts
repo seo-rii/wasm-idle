@@ -1,6 +1,11 @@
 import { DapClient, resolveDapTimeout } from './dap-client.js';
 import { parseDebugRuntimeManifest, preflightDebugRuntimeAssets, sha256Hex } from './manifest.js';
 import { createSharedByteQueue, SharedByteQueue } from './shared-byte-queue.js';
+import {
+	getArrayBufferKind,
+	normalizeUint8ArrayObject,
+	validateWamrDebugModule
+} from './wasm-module-preflight.js';
 import { validateDebugSourcePath } from './worker/module-loader.js';
 import type {
 	BrowserLldbCallbackKind,
@@ -18,9 +23,14 @@ import type {
 
 const DEFAULT_QUEUE_CAPACITY = 256 * 1024;
 const WORKER_SHUTDOWN_GRACE_MS = 25;
+const MAX_DEBUG_SOURCE_COUNT = 256;
+const MAX_INITIAL_BREAKPOINT_SOURCE_COUNT = 256;
+const MAX_BREAKPOINTS_PER_SOURCE = 1_024;
+const MAX_INITIAL_BREAKPOINT_COUNT = 4_096;
 const DAP_BOOLEAN_CAPABILITY_KEYS = [
 	'supportsConfigurationDoneRequest',
 	'supportsReadMemoryRequest',
+	'supportsWriteMemoryRequest',
 	'supportsEvaluateForHovers',
 	'supportsConditionalBreakpoints',
 	'supportsLogPoints',
@@ -343,7 +353,9 @@ export class BrowserLldbSession {
 		const manifest = parseDebugRuntimeManifest(this.options.manifest);
 		const runtimeBaseUrl = this.options.runtimeBaseUrl.toString();
 		const moduleValue: unknown = this.options.module;
-		if (!(moduleValue instanceof Uint8Array) && !(moduleValue instanceof ArrayBuffer)) {
+		const normalizedModuleValue = normalizeUint8ArrayObject(moduleValue);
+		const moduleBufferKind = getArrayBufferKind(moduleValue);
+		if (!normalizedModuleValue && moduleBufferKind !== 'array-buffer') {
 			throw new TypeError('debug module must be a Uint8Array or ArrayBuffer');
 		}
 		const moduleSha256Value: unknown = this.options.moduleSha256;
@@ -354,6 +366,11 @@ export class BrowserLldbSession {
 			throw new TypeError('debug module SHA-256 must be 64 lowercase hexadecimal characters');
 		}
 		const moduleSha256 = moduleSha256Value as string | undefined;
+		if (this.options.sources.length > MAX_DEBUG_SOURCE_COUNT) {
+			throw new RangeError(
+				`debug source count must not exceed ${MAX_DEBUG_SOURCE_COUNT}; received ${this.options.sources.length}`
+			);
+		}
 		const sources = this.options.sources.map((source) => ({ ...source }));
 		for (const source of sources) {
 			if (typeof source.content !== 'string') {
@@ -371,7 +388,39 @@ export class BrowserLldbSession {
 				);
 			}
 		}
-		const breakpoints = (this.options.breakpoints ?? []).map((breakpoint) => ({
+		const initialBreakpoints = this.options.breakpoints ?? [];
+		if (initialBreakpoints.length > MAX_INITIAL_BREAKPOINT_SOURCE_COUNT) {
+			throw new RangeError(
+				`initial breakpoint source count must not exceed ${MAX_INITIAL_BREAKPOINT_SOURCE_COUNT}; received ${initialBreakpoints.length}`
+			);
+		}
+		let initialBreakpointCount = 0;
+		const initialBreakpointCountBySource = new Map<string, number>();
+		for (const breakpoint of initialBreakpoints) {
+			validateDebugSourcePath(breakpoint.source.path);
+			if (breakpoint.lines.length > MAX_BREAKPOINTS_PER_SOURCE) {
+				throw new RangeError(
+					`breakpoints for ${breakpoint.source.path} must not exceed ${MAX_BREAKPOINTS_PER_SOURCE} lines; received ${breakpoint.lines.length}`
+				);
+			}
+			validateBreakpointLines(breakpoint.lines);
+			const sourceBreakpointCount =
+				(initialBreakpointCountBySource.get(breakpoint.source.path) ?? 0) +
+				breakpoint.lines.length;
+			if (sourceBreakpointCount > MAX_BREAKPOINTS_PER_SOURCE) {
+				throw new RangeError(
+					`breakpoints for ${breakpoint.source.path} must not exceed ${MAX_BREAKPOINTS_PER_SOURCE} lines; received ${sourceBreakpointCount}`
+				);
+			}
+			initialBreakpointCountBySource.set(breakpoint.source.path, sourceBreakpointCount);
+			initialBreakpointCount += breakpoint.lines.length;
+			if (initialBreakpointCount > MAX_INITIAL_BREAKPOINT_COUNT) {
+				throw new RangeError(
+					`initial breakpoint count must not exceed ${MAX_INITIAL_BREAKPOINT_COUNT}; received ${initialBreakpointCount}`
+				);
+			}
+		}
+		const breakpoints = initialBreakpoints.map((breakpoint) => ({
 			source: { ...breakpoint.source },
 			lines: [...breakpoint.lines]
 		}));
@@ -440,14 +489,11 @@ export class BrowserLldbSession {
 					...(this.options.launch.env ? { env: { ...this.options.launch.env } } : {})
 				}
 			: undefined;
-		for (const breakpoint of breakpoints) {
-			validateDebugSourcePath(breakpoint.source.path);
-			validateBreakpointLines(breakpoint.lines);
-		}
-
-		const module = new Uint8Array(
-			moduleValue instanceof Uint8Array ? moduleValue : moduleValue.slice(0)
-		);
+		const moduleView = normalizedModuleValue
+			? normalizedModuleValue
+			: new Uint8Array(moduleValue as ArrayBuffer);
+		validateWamrDebugModule(moduleView);
+		const module = new Uint8Array(moduleView);
 		if (moduleSha256 !== undefined) {
 			const actualSha256 = await this.awaitWhileActive(sha256Hex(module));
 			if (actualSha256 !== moduleSha256) {
@@ -569,41 +615,39 @@ export class BrowserLldbSession {
 				);
 			}
 
-			targetWorker.postMessage({
-				type: 'initialize-target',
-				generation: this.generation,
-				module,
-				args: launch?.args ?? [],
-				env: launch?.env ?? {},
-				cwd: launch?.cwd ?? '/workspace',
-				workspaceFiles: sources,
-				rspInput: lldbToTarget,
-				rspOutput: targetToLldb,
-				stdout,
-				stderr,
-				stdin,
-				assets: {
-					js: assets.targetRuntime.js.toString(),
-					wasm: assets.targetRuntime.wasm.toString(),
-					worker: assets.targetRuntime.worker.toString()
-				}
-			});
+			targetWorker.postMessage(
+				{
+					type: 'initialize-target',
+					generation: this.generation,
+					module,
+					args: launch?.args ?? [],
+					env: launch?.env ?? {},
+					cwd: launch?.cwd ?? '/workspace',
+					workspaceFiles: sources,
+					rspInput: lldbToTarget,
+					rspOutput: targetToLldb,
+					stdout,
+					stderr,
+					stdin,
+					assets: assets.targetRuntime
+				},
+				[assets.targetRuntime.js, assets.targetRuntime.wasm, assets.targetRuntime.worker]
+			);
 			this.assertActive();
-			lldbWorker.postMessage({
-				type: 'initialize-lldb',
-				generation: this.generation,
-				module,
-				sources,
-				dapInput,
-				dapOutput,
-				rspInput: targetToLldb,
-				rspOutput: lldbToTarget,
-				assets: {
-					js: assets.lldb.js.toString(),
-					wasm: assets.lldb.wasm.toString(),
-					worker: assets.lldb.worker.toString()
-				}
-			});
+			lldbWorker.postMessage(
+				{
+					type: 'initialize-lldb',
+					generation: this.generation,
+					module,
+					sources,
+					dapInput,
+					dapOutput,
+					rspInput: targetToLldb,
+					rspOutput: lldbToTarget,
+					assets: assets.lldb
+				},
+				[assets.lldb.js, assets.lldb.wasm, assets.lldb.worker]
+			);
 			this.assertActive();
 
 			await this.awaitWhileActive(workersReady);
@@ -658,16 +702,20 @@ export class BrowserLldbSession {
 				}
 			}
 			const capabilities = { ...capabilityRecord } as DebugCapabilities;
-			const attachResponse = this.dap.request('attach', {
-				program: launch?.program ?? '/workspace/program.wasm',
-				stopOnEntry: launch?.stopOnEntry ?? false,
-				args: launch?.args ?? [],
-				env: launch?.env ?? {},
-				cwd: launch?.cwd ?? '/workspace',
-				attachCommands: [
-					`process connect --plugin wasm wasm-messageport://${this.generation}`
-				]
-			});
+			const attachResponse = this.dap.request(
+				'attach',
+				{
+					program: launch?.program ?? '/workspace/program.wasm',
+					stopOnEntry: launch?.stopOnEntry ?? false,
+					args: launch?.args ?? [],
+					env: launch?.env ?? {},
+					cwd: launch?.cwd ?? '/workspace',
+					attachCommands: [
+						`process connect --plugin wasm wasm-messageport://${this.generation}`
+					]
+				},
+				{ responseTimeoutMs: null }
+			);
 			const attachFailure = attachResponse.then<never>(
 				() => new Promise<never>(() => undefined),
 				(error: unknown) => Promise.reject(error)
@@ -692,7 +740,26 @@ export class BrowserLldbSession {
 				await this.setBreakpoints(breakpoint.source, breakpoint.lines);
 			}
 			await this.awaitWhileActive(this.dap.request('configurationDone'));
-			await this.awaitWhileActive(attachResponse);
+			let attachCompletionTimeout: ReturnType<typeof setTimeout> | undefined;
+			await this.awaitWhileActive(
+				Promise.race([
+					attachResponse,
+					new Promise<never>((_, reject) => {
+						attachCompletionTimeout = setTimeout(
+							() =>
+								reject(
+									new Error(
+										'DAP attach response did not complete after configurationDone'
+									)
+								),
+							requestTimeoutMs
+						);
+					})
+				]).finally(() => {
+					if (attachCompletionTimeout !== undefined)
+						clearTimeout(attachCompletionTimeout);
+				})
+			);
 			this.assertActive();
 			this.initialized = true;
 			return capabilities;
@@ -850,22 +917,16 @@ export class BrowserLldbSession {
 	}
 
 	writeStdin(value: string) {
-		if (!this.stdin || !this.initialized) {
-			throw new Error('LLDB debug session is not initialized');
-		}
 		const bytes = new TextEncoder().encode(value);
-		this.stdinWrites = this.stdinWrites.then(() => this.stdin?.write(bytes));
-		return this.stdinWrites;
+		return this.enqueueStdin((stdin) =>
+			stdin.write(bytes, this.lifecycleAbortController.signal)
+		);
 	}
 
 	closeStdin() {
-		if (!this.stdin || !this.initialized) {
-			throw new Error('LLDB debug session is not initialized');
-		}
-		this.stdinWrites = this.stdinWrites.then(() => {
-			this.stdin?.close();
+		return this.enqueueStdin((stdin) => {
+			stdin.close();
 		});
-		return this.stdinWrites;
 	}
 
 	async disconnect(options: { terminateTarget?: boolean } = {}) {
@@ -933,8 +994,9 @@ export class BrowserLldbSession {
 					: new Promise<void>((resolve) => {
 							setTimeout(resolve, WORKER_SHUTDOWN_GRACE_MS);
 						});
-			await Promise.all([
-				this.dap?.close() ?? Promise.resolve(),
+			const cleanupResults = await Promise.allSettled([
+				Promise.resolve().then(() => this.dap?.close()),
+				this.stdinWrites,
 				Promise.allSettled(this.outputReaders),
 				gracefulShutdown
 			]);
@@ -953,6 +1015,10 @@ export class BrowserLldbSession {
 			this.breakpointRequestVersions.clear();
 			this.retiredBreakpointIds.clear();
 			this.eventListeners.clear();
+			const cleanupFailure = cleanupResults.find(
+				(result): result is PromiseRejectedResult => result.status === 'rejected'
+			);
+			if (cleanupFailure) throw cleanupFailure.reason;
 		})();
 		return this.disposePromise;
 	}
@@ -1119,6 +1185,22 @@ export class BrowserLldbSession {
 
 	private assertActive() {
 		if (this.disposed) throw this.disposedError();
+	}
+
+	private enqueueStdin(operation: (stdin: SharedByteQueue) => void | Promise<void>) {
+		this.assertActive();
+		const stdin = this.stdin;
+		if (!stdin || !this.initialized) {
+			throw new Error('LLDB debug session is not initialized');
+		}
+		const queued = this.stdinWrites
+			.then(() => operation(stdin))
+			.catch((error: unknown) => {
+				if (this.disposed) throw this.disposedError();
+				throw error;
+			});
+		this.stdinWrites = queued.catch(() => undefined);
+		return queued;
 	}
 
 	private async awaitWhileActive<T>(operation: Promise<T>): Promise<T> {

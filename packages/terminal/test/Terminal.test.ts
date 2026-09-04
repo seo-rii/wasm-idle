@@ -47,13 +47,13 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/stopRequested = false;/);
 		expect(source).toMatch(/if \(stopRequested\) return false;/);
 		expect(source).toMatch(
-			/async stop\(\) \{\s+await wait\(\);\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+stopRequested = true;\s+finish = true;\s+sandboxAcceptingInput = false;\s+pendingSandboxEof = false;\s+if \(sandbox\?\.kill\) await sandbox\.kill\(\);\s+else await sandbox\?\.terminate\?\.\(\);\s+\}/s
+			/async stop\(\) \{\s+await wait\(\);\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+stopRequested = true;\s+finish = true;\s+sandboxAcceptingInput = false;\s+discardPendingSandboxInput\(\);\s+if \(sandbox\?\.kill\) await sandbox\.kill\(\);\s+else await sandbox\?\.terminate\?\.\(\);\s+discardPendingSandboxInput\(\);\s+\}/s
 		);
 	});
 
 	it('exposes a runtime restart that clears queued input before restarting the sandbox', () => {
 		expect(source).toMatch(
-			/async restartRuntime\(\) \{\s+await wait\(\);\s+if \(!sandbox\) return;\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+sandboxAcceptingInput = false;\s+pendingSandboxInput = \[\];\s+pendingSandboxEof = false;\s+input = '';\s+inputCursor = 0;\s+finish = true;\s+stopRequested = false;\s+tc \+= 1;\s+if \(sandbox\.restart\) await sandbox\.restart\(\);\s+else await sandbox\.clear\(\);\s+\}/s
+			/async restartRuntime\(\) \{\s+await wait\(\);\s+if \(!sandbox\) return;\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+sandboxAcceptingInput = false;\s+discardPendingSandboxInput\(\);\s+input = '';\s+inputCursor = 0;\s+finish = true;\s+stopRequested = false;\s+tc \+= 1;\s+if \(sandbox\.restart\) await sandbox\.restart\(\);\s+else await sandbox\.clear\(\);\s+discardPendingSandboxInput\(\);\s+\}/s
 		);
 	});
 
@@ -72,6 +72,15 @@ describe('Terminal source', () => {
 		);
 		expect(source).toMatch(
 			/async debugReadMemory\(memoryReference: string, offset: number, count: number\) \{\s+await wait\(\);\s+return \(await sandbox\.debugReadMemory\?\.\(memoryReference, offset, count\)\) \?\? null;\s+\}/s
+		);
+		expect(source).toMatch(
+			/async debugWriteMemory\([\s\S]*?await wait\(\);[\s\S]*?sandbox\.debugWriteMemory\?\.\(memoryReference, offset, data, allowPartial\)/
+		);
+		expect(source).toMatch(
+			/async debugDataBreakpointInfo\(arguments_: DebugDataBreakpointInfoArguments\) \{\s+await wait\(\);\s+return \(await sandbox\.debugDataBreakpointInfo\?\.\(arguments_\)\) \?\? null;\s+\}/s
+		);
+		expect(source).toMatch(
+			/async debugSetDataBreakpoints\(breakpoints: DebugDataBreakpoint\[\]\) \{\s+await wait\(\);\s+return \(await sandbox\.debugSetDataBreakpoints\?\.\(breakpoints\)\) \?\? \[\];\s+\}/s
 		);
 		expect(source).toMatch(
 			/async debugScopes\(frameId: number\) \{\s+await wait\(\);\s+return \(await sandbox\.debugScopes\?\.\(frameId\)\) \?\? \[\];\s+\}/s
@@ -157,7 +166,9 @@ describe('Terminal source', () => {
 		expect(source).toMatch(
 			/const requiresSandboxReset =\s+ll !== language \|\| loadedRuntimeAssetsKey !== currentRuntimeAssetsKey;/
 		);
-		expect(source).toMatch(/if \(sandbox && requiresSandboxReset\) await sandbox\.clear\(\);/);
+		expect(source).toMatch(
+			/if \(sandbox && requiresSandboxReset\) \{\s+discardPendingSandboxInput\(\);\s+await sandbox\.clear\(\);\s+discardPendingSandboxInput\(\);\s+\}/s
+		);
 		expect(source).toMatch(/if \(!sandbox \|\| requiresSandboxReset\) \{/);
 	});
 
@@ -182,6 +193,9 @@ describe('Terminal source', () => {
 			/function flushPendingSandboxInput\(\) \{\s+if \(pendingSandboxInput\.length > 0\) \{\s+for \(const pendingInput of pendingSandboxInput\) \{\s+sandbox\.write\?\.\(pendingInput\);\s+\}\s+pendingSandboxInput = \[\];\s+\}\s+if \(pendingSandboxEof\) \{\s+sandbox\.eof\?\.\(\);\s+pendingSandboxEof = false;\s+\}\s+\}/s
 		);
 		expect(source).toMatch(
+			/function discardPendingSandboxInput\(\) \{\s+sandboxInputGeneration \+= 1;\s+pendingSandboxInput = \[\];\s+pendingSandboxEof = false;\s+\}/s
+		);
+		expect(source).toMatch(
 			/function submitSandboxEof\(\) \{\s+if \(sandbox && sandboxAcceptingInput\) sandbox\.eof\?\.\(\);\s+else pendingSandboxEof = true;\s+\}/s
 		);
 		expect(source).toMatch(
@@ -203,7 +217,7 @@ describe('Terminal source', () => {
 		);
 		expect(source).toMatch(/finally \{\s+lifecycle\.end\(\);\s+\}/s);
 		expect(source).toMatch(
-			/return async \(\) => \{\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+term\?\.dispose\(\);/s
+			/return async \(\) => \{\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+discardPendingSandboxInput\(\);\s+term\?\.dispose\(\);/s
 		);
 		expect(source).toMatch(/sandbox\.load\(code, log, args, options, prepareProgress\)/);
 		expect(source).toMatch(
@@ -211,7 +225,7 @@ describe('Terminal source', () => {
 		);
 		expect(source).toMatch(/sandbox\.run\(code, true, log, prepareProgress, args, options\)/);
 		expect(source).toMatch(
-			/initSandbox\(language\)\.then\(\(\) => sandbox\.load\(code, log, args, options\)\)/
+			/initSandbox\(language\)\.then\(async \(wasReset\) => \{\s+await sandbox\.load\(code, log, args, options\);\s+return wasReset;\s+\}\)/s
 		);
 		expect(source).toMatch(
 			/sandbox\.run\(code, false, log, runProgress, args, executionOptions\)/

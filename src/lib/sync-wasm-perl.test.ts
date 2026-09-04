@@ -131,7 +131,8 @@ describe('syncWasmPerlAssets', () => {
 			expect(logical.byteLength).toBe(receipt.size);
 			expect(sha256(logical)).toBe(receipt.sha256);
 			const legacyPath = storage.path.replace(/\.bin$/u, '');
-			expect(await readFile(path.join(fixture.targetDir, legacyPath))).toEqual(stored);
+			const legacyBytes = await readFile(path.join(fixture.targetDir, legacyPath));
+			expect(legacyBytes.equals(stored)).toBe(true);
 		}
 		const worker = await readFile(path.join(fixture.targetDir, 'runner-worker.js'));
 		expect(result.workerReceipt).toEqual({
@@ -195,9 +196,11 @@ describe('syncWasmPerlAssets', () => {
 			lockFilePath
 		});
 		for (const file of await listFiles(fixture.targetDir)) {
-			expect(await readFile(path.join(second.targetDir, file))).toEqual(
-				await readFile(path.join(fixture.targetDir, file))
-			);
+			const [secondBytes, firstBytes] = await Promise.all([
+				readFile(path.join(second.targetDir, file)),
+				readFile(path.join(fixture.targetDir, file))
+			]);
+			expect(secondBytes.equals(firstBytes)).toBe(true);
 		}
 	}, 120_000);
 
@@ -309,9 +312,10 @@ describe('syncWasmPerlAssets', () => {
 			}
 		});
 
-		expect(
-			gunzipSync(await readFile(path.join(fixture.targetDir, 'emperl.js.gz.bin')))
-		).toEqual(original);
+		const published = gunzipSync(
+			await readFile(path.join(fixture.targetDir, 'emperl.js.gz.bin'))
+		);
+		expect(published.equals(original)).toBe(true);
 	});
 
 	it('restores all previous outputs when the final publication fails', async () => {

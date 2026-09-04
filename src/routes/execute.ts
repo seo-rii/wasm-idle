@@ -40,8 +40,14 @@ export async function executeTerminalRun({
 	args = [],
 	options = {}
 }: ExecuteTerminalRunOptions) {
+	const signal = options.signal;
+	signal?.throwIfAborted();
 	await terminal.clear();
+	signal?.throwIfAborted();
 	const prepared = await terminal.prepare(language, code, log, progress, args, options);
+	signal?.throwIfAborted();
 	if (!prepared) return prepared;
-	return await terminal.run(language, code, log, progress, args, options);
+	const result = await terminal.run(language, code, log, progress, args, options);
+	signal?.throwIfAborted();
+	return result;
 }

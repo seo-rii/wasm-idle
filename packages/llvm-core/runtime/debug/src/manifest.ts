@@ -5,8 +5,12 @@ import type {
 	RuntimeDebugAsset,
 	RuntimeDebugCapabilities,
 	RuntimeDebuggerConfig,
-	RuntimeManifestV2
+	RuntimeManifestV2,
+	VerifiedDebugRuntimeAssets
 } from './types.js';
+
+const MAX_DEBUG_RUNTIME_ASSET_COUNT = 10;
+const MAX_DEBUG_RUNTIME_ASSET_BYTES = 55_000_000;
 
 function expectObject(value: unknown, label: string): Record<string, unknown> {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -95,6 +99,10 @@ function parseCapabilities(value: unknown): RuntimeDebugCapabilities {
 		locals: expectBoolean(capabilities.locals, 'root.debugger.capabilities.locals'),
 		globals: expectBoolean(capabilities.globals, 'root.debugger.capabilities.globals'),
 		readMemory: expectBoolean(capabilities.readMemory, 'root.debugger.capabilities.readMemory'),
+		writeMemory: expectBoolean(
+			capabilities.writeMemory,
+			'root.debugger.capabilities.writeMemory'
+		),
 		evaluateExpressions: expectBoolean(
 			capabilities.evaluateExpressions,
 			'root.debugger.capabilities.evaluateExpressions'
@@ -213,14 +221,162 @@ export async function preflightDebugRuntimeAssets(
 			'WAMR pthread worker'
 		]
 	] as const;
+	if (checks.length > MAX_DEBUG_RUNTIME_ASSET_COUNT) {
+		throw new Error(
+			`wasm debug runtime manifest exceeds the ${MAX_DEBUG_RUNTIME_ASSET_COUNT} asset limit`
+		);
+	}
+	const verified: VerifiedDebugRuntimeAssets = {
+		lldb: { js: new ArrayBuffer(0), wasm: new ArrayBuffer(0), worker: new ArrayBuffer(0) },
+		targetRuntime: {
+			js: new ArrayBuffer(0),
+			wasm: new ArrayBuffer(0),
+			worker: new ArrayBuffer(0)
+		}
+	};
+	const destinations = [
+		[verified.lldb, 'js'],
+		[verified.lldb, 'wasm'],
+		[verified.lldb, 'worker'],
+		[verified.targetRuntime, 'js'],
+		[verified.targetRuntime, 'wasm'],
+		[verified.targetRuntime, 'worker']
+	] as const;
+	let totalBytes = 0;
+	let index = 0;
 	for (const [url, expectedSha256, label] of checks) {
+		if (signal?.aborted) {
+			throw signal.reason ?? new DOMException('The operation was aborted', 'AbortError');
+		}
 		const response = await fetchImpl(url, { signal });
 		if (!response.ok) {
+			try {
+				await response.body?.cancel();
+			} catch {
+				// Preserve the HTTP failure when response cancellation also fails.
+			}
 			throw new Error(`Unable to load ${label} debug asset (${response.status}) from ${url}`);
 		}
-		await verifyAssetSha256(await response.arrayBuffer(), expectedSha256, label);
+		const remainingBytes = MAX_DEBUG_RUNTIME_ASSET_BYTES - totalBytes;
+		const rawContentLength = response.headers.get('content-length');
+		let declaredBytes: number | undefined;
+		if (rawContentLength !== null) {
+			if (!/^(?:0|[1-9]\d*)$/u.test(rawContentLength)) {
+				const error = new Error(`${label} has an invalid content-length header`);
+				try {
+					await response.body?.cancel(error);
+				} catch {
+					// Preserve the validation failure when response cancellation also fails.
+				}
+				throw error;
+			}
+			declaredBytes = Number(rawContentLength);
+			if (!Number.isSafeInteger(declaredBytes)) {
+				const error = new Error(`${label} has an invalid content-length header`);
+				try {
+					await response.body?.cancel(error);
+				} catch {
+					// Preserve the validation failure when response cancellation also fails.
+				}
+				throw error;
+			}
+		}
+		if (declaredBytes !== undefined && declaredBytes > remainingBytes) {
+			const error = new Error(
+				`${label} exceeds the ${MAX_DEBUG_RUNTIME_ASSET_BYTES.toLocaleString('en-US')} byte budget`
+			);
+			try {
+				await response.body?.cancel(error);
+			} catch {
+				// Preserve the budget failure when response cancellation also fails.
+			}
+			throw error;
+		}
+		if (signal?.aborted) {
+			const error =
+				signal.reason ?? new DOMException('The operation was aborted', 'AbortError');
+			try {
+				await response.body?.cancel(error);
+			} catch {
+				// Preserve the lifecycle failure when response cancellation also fails.
+			}
+			throw error;
+		}
+		let bytes: ArrayBuffer;
+		if (!response.body) {
+			bytes = new ArrayBuffer(0);
+		} else {
+			const reader = response.body.getReader();
+			const chunks: Uint8Array[] = [];
+			let length = 0;
+			const cancelOnAbort = () => {
+				void reader
+					.cancel(
+						signal?.reason ??
+							new DOMException('The operation was aborted', 'AbortError')
+					)
+					.catch(() => undefined);
+			};
+			signal?.addEventListener('abort', cancelOnAbort, { once: true });
+			try {
+				while (true) {
+					if (signal?.aborted) {
+						throw (
+							signal.reason ??
+							new DOMException('The operation was aborted', 'AbortError')
+						);
+					}
+					const result = await reader.read();
+					if (signal?.aborted) {
+						throw (
+							signal.reason ??
+							new DOMException('The operation was aborted', 'AbortError')
+						);
+					}
+					if (result.done) break;
+					if (!(result.value instanceof Uint8Array)) {
+						const error = new TypeError(`${label} response body yielded invalid bytes`);
+						try {
+							await reader.cancel(error);
+						} catch {
+							// Preserve the byte-validation failure when response cancellation also fails.
+						}
+						throw error;
+					}
+					if (result.value.byteLength > remainingBytes - length) {
+						const error = new Error(
+							`${label} exceeds the ${MAX_DEBUG_RUNTIME_ASSET_BYTES.toLocaleString('en-US')} byte budget`
+						);
+						try {
+							await reader.cancel(error);
+						} catch {
+							// Preserve the budget failure when response cancellation also fails.
+						}
+						throw error;
+					}
+					const owned = new Uint8Array(result.value.byteLength);
+					owned.set(result.value);
+					chunks.push(owned);
+					length += owned.byteLength;
+				}
+			} finally {
+				signal?.removeEventListener('abort', cancelOnAbort);
+				reader.releaseLock();
+			}
+			const combined = new Uint8Array(length);
+			let offset = 0;
+			for (const chunk of chunks) {
+				combined.set(chunk, offset);
+				offset += chunk.byteLength;
+			}
+			bytes = combined.buffer;
+		}
+		totalBytes += bytes.byteLength;
+		await verifyAssetSha256(bytes, expectedSha256, label);
+		const [destination, key] = destinations[index++]!;
+		destination[key] = bytes;
 	}
-	return assets;
+	return verified;
 }
 
 export async function sha256Hex(value: Uint8Array | ArrayBuffer) {
