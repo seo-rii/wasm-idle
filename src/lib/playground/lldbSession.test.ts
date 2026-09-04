@@ -204,6 +204,31 @@ class FakeRuntimeSession {
 	}
 }
 
+async function emitStoppedAndWait(
+	session: FakeRuntimeSession,
+	reason = 'breakpoint',
+	threadId = 7
+) {
+	const previousStackTraceRequests = session.requests.filter(
+		(request) => request.command === 'stackTrace'
+	).length;
+	const previousScopeRequests = session.requests.filter(
+		(request) => request.command === 'scopes'
+	).length;
+	session.emit({ event: 'stopped', body: { reason, threadId } });
+	await vi.waitFor(() =>
+		expect(session.requests.filter((request) => request.command === 'stackTrace')).toHaveLength(
+			previousStackTraceRequests + 1
+		)
+	);
+	await vi.waitFor(() =>
+		expect(session.requests.filter((request) => request.command === 'scopes')).toHaveLength(
+			previousScopeRequests + 1
+		)
+	);
+	await Promise.resolve();
+}
+
 vi.mock('@wasm-idle/llvm-core/debug', () => ({
 	DapProtocolError: class DapProtocolError extends Error {
 		readonly command: string;
@@ -1492,6 +1517,7 @@ describe('LldbSandboxSession', () => {
 				(error: unknown) => error
 			);
 			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			await emitStoppedAndWait(runtimeState.session!);
 			if (command === 'evaluate') await controller.scopes(41);
 			runtimeState.responseOverrides.set(
 				command,
@@ -2089,6 +2115,7 @@ describe('LldbSandboxSession', () => {
 			(error: unknown) => error
 		);
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 		const requestCount = runtimeState.session!.requests.filter(
 			(request) => request.command === command
 		).length;
@@ -2274,6 +2301,7 @@ describe('LldbSandboxSession', () => {
 				(error: unknown) => error
 			);
 			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			await emitStoppedAndWait(runtimeState.session!);
 			const requestCount = runtimeState.session!.requests.filter(
 				(request) => request.command === command
 			).length;
@@ -2321,6 +2349,7 @@ describe('LldbSandboxSession', () => {
 
 		const completion = controller.start();
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 
 		await expect(controller.readMemory('0x1000', 4, 6)).resolves.toEqual({
 			address: '0x1004',
@@ -2333,6 +2362,93 @@ describe('LldbSandboxSession', () => {
 		});
 
 		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('fails closed for direct memory and data-breakpoint requests while the target is running', async () => {
+		runtimeState.initializeCapabilities = {
+			supportsReadMemoryRequest: true,
+			supportsWriteMemoryRequest: true,
+			supportsDataBreakpoints: true
+		};
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: {
+						capabilities: {
+							readMemory: true,
+							writeMemory: true,
+							dataBreakpoints: true
+						}
+					}
+				})
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		const session = runtimeState.session!;
+		const inspectionRequestCount = () =>
+			session.requests.filter((request) =>
+				['readMemory', 'writeMemory', 'dataBreakpointInfo', 'setDataBreakpoints'].includes(
+					request.command
+				)
+			).length;
+		const expectInspectionClosed = async (expectedRequestCount: number) => {
+			await expect(controller.readMemory('0x1000', 0, 6)).resolves.toBeNull();
+			await expect(
+				controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2, 3), true)
+			).resolves.toBeNull();
+			await expect(
+				controller.dataBreakpointInfo({ name: '0x1000', asAddress: true, bytes: 4 })
+			).resolves.toBeNull();
+			await expect(
+				controller.setDataBreakpoints([{ dataId: '1000/4', accessType: 'write' }])
+			).resolves.toEqual([]);
+			expect(inspectionRequestCount()).toBe(expectedRequestCount);
+		};
+
+		await expectInspectionClosed(0);
+
+		await emitStoppedAndWait(session);
+		await expect(controller.readMemory('0x1000', 0, 6)).resolves.toEqual({
+			address: '0x1004',
+			data: Uint8Array.of(1, 2, 3, 4),
+			unreadableBytes: 2
+		});
+		await expect(
+			controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2, 3), true)
+		).resolves.toEqual({ offset: 4, bytesWritten: 3 });
+		await expect(
+			controller.dataBreakpointInfo({ name: '0x1000', asAddress: true, bytes: 4 })
+		).resolves.toMatchObject({ dataId: '1000/4' });
+		await expect(
+			controller.setDataBreakpoints([{ dataId: '1000/4', accessType: 'write' }])
+		).resolves.toEqual([{ id: 5, verified: true }]);
+		expect(inspectionRequestCount()).toBe(4);
+
+		await controller.debugCommand('continue');
+		await expectInspectionClosed(4);
+
+		await emitStoppedAndWait(session, 'step');
+		session.emit({ event: 'continued', body: { threadId: 7, allThreadsContinued: true } });
+		await expectInspectionClosed(4);
+
+		await controller.disconnect();
+		await expectInspectionClosed(4);
 		await expect(completion).resolves.toBe(true);
 	});
 
@@ -2364,6 +2480,7 @@ describe('LldbSandboxSession', () => {
 			(error: unknown) => error
 		);
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 		runtimeState.responseOverrides.set('readMemory', {
 			address: '0x1000',
 			data: 'AAAAAAAA'
@@ -2405,6 +2522,7 @@ describe('LldbSandboxSession', () => {
 
 		const completion = controller.start();
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 
 		await expect(
 			controller.writeMemory('0x1000', 4, Uint8Array.of(0, 0xff, 1), true)
@@ -2451,6 +2569,7 @@ describe('LldbSandboxSession', () => {
 			(error: unknown) => error as Error
 		);
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 
 		try {
 			runtimeState.responseOverrides.set('writeMemory', undefined);
@@ -2495,6 +2614,7 @@ describe('LldbSandboxSession', () => {
 			(error: unknown) => error
 		);
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 
 		await expect(
 			controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2))
@@ -2528,6 +2648,7 @@ describe('LldbSandboxSession', () => {
 		});
 		const completion = controller.start();
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 
 		await expect(
 			controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2), true)
@@ -2564,6 +2685,7 @@ describe('LldbSandboxSession', () => {
 			(error: unknown) => error
 		);
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 
 		await expect(
 			controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2), true)
@@ -2614,6 +2736,7 @@ describe('LldbSandboxSession', () => {
 				(error: unknown) => error
 			);
 			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			await emitStoppedAndWait(runtimeState.session!);
 			const write = controller.writeMemory('0x1000', 0, Uint8Array.of(1));
 			await vi.waitFor(() =>
 				expect(runtimeState.session!.requests.at(-1)?.command).toBe('writeMemory')
@@ -2668,6 +2791,7 @@ describe('LldbSandboxSession', () => {
 
 		const completion = controller.start();
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 
 		await expect(controller.readMemory('0x1000', 0, 4)).resolves.toBeNull();
 		await expect(
@@ -2709,6 +2833,7 @@ describe('LldbSandboxSession', () => {
 
 		const completion = controller.start();
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 		await expect(
 			controller.dataBreakpointInfo({ name: '0x1000', asAddress: true, bytes: 4 })
 		).resolves.toEqual({
@@ -2783,6 +2908,7 @@ describe('LldbSandboxSession', () => {
 			);
 			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
 			const failedSession = runtimeState.session!;
+			await emitStoppedAndWait(failedSession);
 			if (failure) runtimeState.requestErrors.set('setDataBreakpoints', failure);
 			else runtimeState.responseOverrides.set('setDataBreakpoints', response);
 
@@ -2807,6 +2933,7 @@ describe('LldbSandboxSession', () => {
 			const secondCompletion = controller.start();
 			await vi.waitFor(() => expect(runtimeState.session).not.toBe(failedSession));
 			const relaunchedSession = runtimeState.session!;
+			await emitStoppedAndWait(relaunchedSession);
 			await expect(
 				controller.setDataBreakpoints([{ dataId: '2000/4', accessType: 'write' }])
 			).resolves.toEqual([{ id: 5, verified: true }]);
@@ -2843,6 +2970,7 @@ describe('LldbSandboxSession', () => {
 		const completion = controller.start();
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
 		const session = runtimeState.session!;
+		await emitStoppedAndWait(session);
 		runtimeState.responseOverrides.set('setDataBreakpoints', {
 			breakpoints: [{ id: 5, verified: false, message: 'unsupported location' }]
 		});
@@ -2853,7 +2981,7 @@ describe('LldbSandboxSession', () => {
 		expect(session.disposeCount).toBe(0);
 		expect(events.filter((event) => event.type === 'stop')).toHaveLength(0);
 		await controller.debugCommand('continue');
-		expect(session.requests).toContainEqual({ command: 'continue', args: { threadId: 1 } });
+		expect(session.requests).toContainEqual({ command: 'continue', args: { threadId: 7 } });
 
 		await controller.disconnect();
 		await expect(completion).resolves.toBe(true);
@@ -2883,6 +3011,7 @@ describe('LldbSandboxSession', () => {
 		});
 		const completion = controller.start();
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 
 		runtimeState.responseOverrides.set('dataBreakpointInfo', {
 			dataId: null,
@@ -2933,6 +3062,7 @@ describe('LldbSandboxSession', () => {
 
 		const completion = controller.start();
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 		await expect(
 			controller.dataBreakpointInfo({ name: '0x1000', asAddress: true, bytes: 4 })
 		).resolves.toBeNull();
@@ -3162,6 +3292,7 @@ describe('LldbSandboxSession', () => {
 				(error: unknown) => error
 			);
 			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			await emitStoppedAndWait(runtimeState.session!);
 			runtimeState.responseOverrides.set(command, response);
 
 			await expect(invoke(controller)).rejects.toBeInstanceOf(ProtocolError);

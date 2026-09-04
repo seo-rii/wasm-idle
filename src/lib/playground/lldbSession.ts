@@ -197,6 +197,7 @@ export class LldbSandboxSession {
 	private command: DebugCommand | null = null;
 	private pauseRequested = false;
 	private pauseRequestVersion = 0;
+	private targetStopped = false;
 	private stopped = false;
 	private stateVersion = 0;
 	private completionResolve?: (value: true) => void;
@@ -240,6 +241,7 @@ export class LldbSandboxSession {
 		const lifecycleVersion = ++this.lifecycleVersion;
 		const startupAbortController = new AbortController();
 		this.startupAbortController = startupAbortController;
+		this.targetStopped = false;
 		this.stopped = false;
 		this.pauseRequested = false;
 		this.initialized = false;
@@ -451,6 +453,7 @@ export class LldbSandboxSession {
 
 	async debugCommand(command: DebugCommand) {
 		const session = this.requireSession();
+		this.targetStopped = false;
 		this.command = command;
 		this.pauseRequested = false;
 		const dapCommand =
@@ -664,7 +667,7 @@ export class LldbSandboxSession {
 		offset: number,
 		count: number
 	): Promise<DebugMemory | null> {
-		if (!this.supportsReadMemory) return null;
+		if (!this.targetStopped || !this.supportsReadMemory) return null;
 		assertBoundedNonEmptyStringArgument(memoryReference, 'memoryReference');
 		if (!Number.isSafeInteger(offset)) {
 			throw new RangeError('offset must be a safe integer.');
@@ -740,7 +743,7 @@ export class LldbSandboxSession {
 		data: Uint8Array,
 		allowPartial = false
 	): Promise<{ offset?: number; bytesWritten: number } | null> {
-		if (!this.supportsWriteMemory) return null;
+		if (!this.targetStopped || !this.supportsWriteMemory) return null;
 		assertBoundedNonEmptyStringArgument(memoryReference, 'memoryReference');
 		if (!Number.isSafeInteger(offset)) {
 			throw new RangeError('offset must be a safe integer.');
@@ -812,7 +815,7 @@ export class LldbSandboxSession {
 	async dataBreakpointInfo(
 		arguments_: DebugDataBreakpointInfoArguments
 	): Promise<DebugDataBreakpointInfo | null> {
-		if (!this.supportsDataBreakpoints) return null;
+		if (!this.targetStopped || !this.supportsDataBreakpoints) return null;
 		if (typeof arguments_ !== 'object' || arguments_ === null || Array.isArray(arguments_)) {
 			throw new TypeError('arguments must be an object.');
 		}
@@ -924,7 +927,7 @@ export class LldbSandboxSession {
 	async setDataBreakpoints(
 		breakpoints: DebugDataBreakpoint[]
 	): Promise<DebugResolvedDataBreakpoint[]> {
-		if (!this.supportsDataBreakpoints) return [];
+		if (!this.targetStopped || !this.supportsDataBreakpoints) return [];
 		if (!Array.isArray(breakpoints)) {
 			throw new TypeError('breakpoints must be an array.');
 		}
@@ -1031,6 +1034,7 @@ export class LldbSandboxSession {
 			new Error('LLDB sandbox session disconnected during startup.')
 		);
 		this.stateVersion += 1;
+		this.targetStopped = false;
 		this.retireInput();
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
@@ -1070,6 +1074,7 @@ export class LldbSandboxSession {
 			return;
 		}
 		if (event.event === 'stopped') {
+			this.targetStopped = false;
 			if (
 				typeof event.body !== 'object' ||
 				event.body === null ||
@@ -1105,6 +1110,7 @@ export class LldbSandboxSession {
 			return;
 		}
 		if (event.event === 'continued') {
+			this.targetStopped = false;
 			if (
 				typeof event.body !== 'object' ||
 				event.body === null ||
@@ -1226,6 +1232,7 @@ export class LldbSandboxSession {
 		if (version !== this.stateVersion || this.session !== session) return;
 		this.activeThreadId = threadId;
 		this.activeFrameId = selectedFrame.id;
+		this.targetStopped = true;
 		const callStack = frames.map<DebugFrame>((frame) => {
 			const sourcePath = frame.source?.path;
 			const sourceContentSha256 = this.sourceContentSha256ByPath.get(sourcePath || '');
@@ -1330,6 +1337,7 @@ export class LldbSandboxSession {
 		if (this.stopped) return;
 		this.stopped = true;
 		this.stateVersion += 1;
+		this.targetStopped = false;
 		this.retireInput();
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
@@ -1366,6 +1374,7 @@ export class LldbSandboxSession {
 		if (this.stopped) return;
 		this.stopped = true;
 		this.stateVersion += 1;
+		this.targetStopped = false;
 		this.retireInput();
 		this.initialized = false;
 		this.supportsEvaluateExpressions = false;
