@@ -50,7 +50,9 @@ describe('stdin browser probe language selector', () => {
 		const source = await readFile('scripts/stdin-browser-probe-lib.mjs', 'utf8');
 
 		expect(source).toContain("page.locator('#language-select').selectOption(language)");
-		expect(source).toContain("document.querySelector('#language-select')?.value");
+		expect(source).toContain("document.querySelector('#language-select')");
+		expect(source).toContain('HTMLSelectElement | null');
+		expect(source).toContain(')?.value === expectedLanguage');
 		expect(source).not.toMatch(/(?:locator|waitForSelector)\('select'/u);
 		expect(source).not.toContain("querySelector('select')");
 	});
