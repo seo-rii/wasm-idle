@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { TimeoutError } from '@wasm-idle/core';
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
@@ -566,9 +567,14 @@ describe('Rust sandbox', () => {
 			const runPromise = sandbox.run('fn main() {}', false, true, undefined, [], {
 				limits: { compileTimeoutMs: 5 }
 			});
-			const rejectedRun = expect(runPromise).rejects.toThrow(
-				'Rust compile timed out after 5 ms'
-			);
+			const rejectedRun = expect(runPromise).rejects.toMatchObject({
+				name: 'TimeoutError',
+				code: 'timeout',
+				phase: 'compile',
+				runtimeId: 'RUST',
+				timeoutMs: 5,
+				message: 'Rust compile timed out after 5 ms'
+			} satisfies Partial<TimeoutError>);
 
 			await vi.advanceTimersByTimeAsync(5);
 			await rejectedRun;
@@ -595,6 +601,107 @@ describe('Rust sandbox', () => {
 			await vi.advanceTimersByTimeAsync(5);
 			await rejectedRun;
 			expect(worker.terminate).toHaveBeenCalledTimes(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('preserves the remaining run timeout while trace debugging is paused', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => {});
+		vi.useFakeTimers();
+		try {
+			const runPromise = sandbox.run('fn main() {}', false, true, undefined, [], {
+				debug: true,
+				limits: { compileTimeoutMs: 1000, runTimeoutMs: 10 }
+			});
+			const rejectedRun = expect(runPromise).rejects.toMatchObject({
+				name: 'TimeoutError',
+				code: 'timeout',
+				phase: 'execute',
+				runtimeId: 'RUST',
+				timeoutMs: 10,
+				message: 'Rust run timed out after 10 ms'
+			} satisfies Partial<TimeoutError>);
+			worker.onmessage?.({ data: { runtimePhase: 'run' } } as MessageEvent<any>);
+
+			await vi.advanceTimersByTimeAsync(3);
+			worker.onmessage?.({
+				data: {
+					debugEvent: {
+						type: 'pause',
+						line: 1,
+						reason: 'entry',
+						locals: [],
+						callStack: []
+					}
+				}
+			} as MessageEvent<any>);
+
+			await vi.advanceTimersByTimeAsync(100);
+			expect(worker.terminate).not.toHaveBeenCalled();
+
+			sandbox.debugCommand('continue');
+			await vi.advanceTimersByTimeAsync(6);
+			expect(worker.terminate).not.toHaveBeenCalled();
+			await vi.advanceTimersByTimeAsync(1);
+
+			await rejectedRun;
+			expect(worker.terminate).toHaveBeenCalledTimes(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it('uses and suspends the run timeout after handing an artifact to LLDB', async () => {
+		const sandbox = new Rust();
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		worker.postMessage.mockImplementationOnce(() => {});
+		vi.useFakeTimers();
+		try {
+			let settled = false;
+			const runPromise = sandbox.run('fn main() {}', false, true, undefined, [], {
+				debugMode: 'lldb',
+				limits: { compileTimeoutMs: 1000, runTimeoutMs: 10 }
+			});
+			void runPromise.then(
+				() => (settled = true),
+				() => (settled = true)
+			);
+			const rejectedRun = expect(runPromise).rejects.toThrow(
+				'Rust run timed out after 10 ms'
+			);
+			worker.onmessage?.({
+				data: {
+					lldbArtifact: {
+						bytes: Uint8Array.of(0, 97, 115, 109),
+						descriptor: {},
+						sources: []
+					}
+				}
+			} as MessageEvent<any>);
+			expect(lldbSessions).toHaveLength(1);
+
+			await vi.advanceTimersByTimeAsync(3);
+			lldbSessions[0].emit({
+				type: 'pause',
+				line: 1,
+				reason: 'entry',
+				locals: [],
+				callStack: []
+			});
+			await vi.advanceTimersByTimeAsync(100);
+			expect(settled).toBe(false);
+
+			lldbSessions[0].emit({ type: 'resume', command: 'continue' });
+			await vi.advanceTimersByTimeAsync(6);
+			expect(settled).toBe(false);
+			await vi.advanceTimersByTimeAsync(1);
+
+			await rejectedRun;
 		} finally {
 			vi.useRealTimers();
 		}
@@ -694,6 +801,7 @@ describe('Rust sandbox', () => {
 	it('writes queued terminal input when the worker requests stdin', async () => {
 		const sandbox = new Rust();
 		const worker = new MockWorker();
+		const report = vi.fn();
 		let runMessage: any;
 
 		sandbox.worker = worker as unknown as Worker;
@@ -713,13 +821,32 @@ describe('Rust sandbox', () => {
 		await expect(
 			sandbox.run(
 				`fn main() {
-    println!("hi");
+	    println!("hi");
 }`,
-				false
+				false,
+				true,
+				{ report }
 			)
 		).resolves.toBe(true);
 
 		expect(readBufferedStdin(runMessage.buffer)).toBe('42\n');
+		expect(report).toHaveBeenCalledWith({
+			kind: 'ready',
+			state: 'waiting-input',
+			reason: 'stdin-request',
+			label: 'Rust program is waiting for input'
+		});
+	});
+
+	it('does not report stdin readiness for compiler-only preparation', async () => {
+		const sandbox = new Rust();
+		const worker = new MockWorker();
+		const report = vi.fn();
+		sandbox.worker = worker as unknown as Worker;
+
+		await expect(sandbox.run('fn main() {}', true, true, { report })).resolves.toBe(true);
+
+		expect(report).not.toHaveBeenCalled();
 	});
 
 	it('maps worker compile progress into the provided sandbox progress sink', async () => {

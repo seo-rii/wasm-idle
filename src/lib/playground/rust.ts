@@ -29,12 +29,17 @@ import {
 	WASM_RUST_RUNTIME_PROFILE
 } from '$lib/playground/wasmRustVersion';
 import { WorkerSession } from '$lib/playground/workerSession';
-import { reportWorkerProgress } from '$lib/playground/workerProgress';
-import { resolveExecutionLimits } from '@wasm-idle/core';
+import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
+import { resolveExecutionLimits, TimeoutError } from '@wasm-idle/core';
 
 const debugBreakpointBufferInts = 1028;
 const rustLldbSourcePath = '/workspace/main.rs' as const;
 const outputEncoder = new TextEncoder();
+
+interface DebugPhaseTimeoutControl {
+	pause(): void;
+	resume(): void;
+}
 
 function normalizeRustLldbSourcePath(sourcePath?: string): `/workspace/${string}` {
 	let normalized = (sourcePath || 'main.rs').trim().replaceAll('\\', '/');
@@ -109,6 +114,7 @@ class Rust implements Sandbox {
 	private runActive = false;
 	private lldbSession?: LldbSandboxSession;
 	private debugMode: 'none' | 'trace' | 'lldb' = 'none';
+	private activeDebugPhaseTimeout?: DebugPhaseTimeoutControl;
 	private readonly lldbBreakpoints = new Map<`/workspace/${string}`, number[]>();
 	private lldbEditorSourcePath: `/workspace/${string}` = rustLldbSourcePath;
 
@@ -434,17 +440,73 @@ class Rust implements Sandbox {
 			this.exit = false;
 			let settled = false;
 			let phaseTimeout: ReturnType<typeof setTimeout> | undefined;
+			let phaseTimeoutState:
+				| {
+						phase: 'compile' | 'run';
+						timeoutMs: number;
+						remainingMs: number;
+						startedAt: number;
+						paused: boolean;
+				  }
+				| undefined;
 			let outputBytes = 0;
 			let diagnosticCount = 0;
-			const clearPhaseTimeout = () => {
+			const clearScheduledPhaseTimeout = () => {
 				if (phaseTimeout !== undefined) clearTimeout(phaseTimeout);
 				phaseTimeout = undefined;
 			};
+			const clearPhaseTimeout = () => {
+				clearScheduledPhaseTimeout();
+				phaseTimeoutState = undefined;
+			};
+			const armPhaseTimeout = () => {
+				const state = phaseTimeoutState;
+				if (!state || state.paused || settled) return;
+				clearScheduledPhaseTimeout();
+				state.startedAt = Date.now();
+				phaseTimeout = setTimeout(() => {
+					if (phaseTimeoutState !== state || state.paused || settled) return;
+					phaseTimeout = undefined;
+					state.remainingMs = 0;
+					this.workerSession.terminate(
+						new TimeoutError(
+							`Rust ${state.phase} timed out after ${state.timeoutMs} ms`,
+							{
+								phase: state.phase === 'compile' ? 'compile' : 'execute',
+								runtimeId: 'RUST',
+								timeoutMs: state.timeoutMs
+							}
+						)
+					);
+				}, state.remainingMs);
+			};
+			const debugPhaseTimeout: DebugPhaseTimeoutControl = {
+				pause: () => {
+					const state = phaseTimeoutState;
+					if (!state || state.paused || settled) return;
+					state.remainingMs = Math.max(
+						0,
+						state.remainingMs - Math.max(0, Date.now() - state.startedAt)
+					);
+					state.paused = true;
+					clearScheduledPhaseTimeout();
+				},
+				resume: () => {
+					const state = phaseTimeoutState;
+					if (!state || !state.paused || settled) return;
+					state.paused = false;
+					armPhaseTimeout();
+				}
+			};
+			if (debugMode !== 'none') this.activeDebugPhaseTimeout = debugPhaseTimeout;
 			const finishResolve = (result: boolean | string) => {
 				if (settled) return;
 				settled = true;
 				this.runActive = false;
 				clearPhaseTimeout();
+				if (this.activeDebugPhaseTimeout === debugPhaseTimeout) {
+					this.activeDebugPhaseTimeout = undefined;
+				}
 				options.signal?.removeEventListener('abort', abortRun);
 				resolve(result);
 			};
@@ -453,6 +515,9 @@ class Rust implements Sandbox {
 				settled = true;
 				this.runActive = false;
 				clearPhaseTimeout();
+				if (this.activeDebugPhaseTimeout === debugPhaseTimeout) {
+					this.activeDebugPhaseTimeout = undefined;
+				}
 				options.signal?.removeEventListener('abort', abortRun);
 				reject(reason);
 			};
@@ -462,12 +527,21 @@ class Rust implements Sandbox {
 				);
 			};
 			const startPhaseTimeout = (phase: 'compile' | 'run', timeoutMs: number) => {
-				clearPhaseTimeout();
-				phaseTimeout = setTimeout(() => {
-					this.workerSession.terminate(
-						new Error(`Rust ${phase} timed out after ${timeoutMs} ms`)
-					);
-				}, timeoutMs);
+				const paused = phaseTimeoutState?.paused === true;
+				clearScheduledPhaseTimeout();
+				phaseTimeoutState = {
+					phase,
+					timeoutMs,
+					remainingMs: timeoutMs,
+					startedAt: Date.now(),
+					paused
+				};
+				armPhaseTimeout();
+			};
+			const forwardDebugEvent = (event: DebugSessionEvent) => {
+				if (event.type === 'pause') debugPhaseTimeout.pause();
+				else if (event.type === 'resume') debugPhaseTimeout.resume();
+				this.ondebug?.(event);
 			};
 			const { programArgs } = resolveSandboxExecutionArgs('RUST', args, options);
 			const targetTriple = options.rustTargetTriple || 'wasm32-wasip1';
@@ -518,6 +592,9 @@ class Rust implements Sandbox {
 					startPhaseTimeout('run', limits.runTimeoutMs);
 				}
 				if (buffer) {
+					if (!prepare) {
+						reportWorkerInputReady(_prog, 'Rust program is waiting for input');
+					}
 					this.waitingForInput = true;
 					this.flushPendingInput();
 				}
@@ -542,8 +619,9 @@ class Rust implements Sandbox {
 					}
 					this.oncompilerdiagnostic?.(diagnostic);
 				}
-				if (debugEvent) this.ondebug?.(debugEvent);
+				if (debugEvent) forwardDebugEvent(debugEvent);
 				if (lldbArtifact) {
+					startPhaseTimeout('run', limits.runTimeoutMs);
 					const compilerWorker = this.worker;
 					const lldbSession = new LldbSandboxSession({
 						manifestUrl: this.debugManifestUrl,
@@ -567,7 +645,7 @@ class Rust implements Sandbox {
 								debugEvent.type === 'breakpoints' &&
 								debugEvent.sourcePath === rustLldbSourcePath
 							) {
-								this.ondebug?.({
+								forwardDebugEvent({
 									...debugEvent,
 									sourcePath: editorSourcePath
 								});
@@ -577,7 +655,7 @@ class Rust implements Sandbox {
 								editorSourcePath !== rustLldbSourcePath &&
 								debugEvent.type === 'pause'
 							) {
-								this.ondebug?.({
+								forwardDebugEvent({
 									...debugEvent,
 									sourcePath:
 										debugEvent.sourcePath === rustLldbSourcePath
@@ -591,7 +669,7 @@ class Rust implements Sandbox {
 								});
 								return;
 							}
-							this.ondebug?.(debugEvent);
+							forwardDebugEvent(debugEvent);
 						},
 						onOutput: (debugOutput) => this.output(debugOutput)
 					});
@@ -695,6 +773,7 @@ class Rust implements Sandbox {
 		);
 		Atomics.add(control, 0, 1);
 		Atomics.notify(control, 0);
+		this.activeDebugPhaseTimeout?.resume();
 		this.ondebug?.({ type: 'resume', command });
 	}
 
