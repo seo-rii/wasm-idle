@@ -7,11 +7,10 @@ import {
 import {
 	ProtocolError,
 	verifyRuntimeAssetIntegrity,
-	verifyRuntimeAssetPair
+	verifyRuntimeAssetPair,
+	type ProgressLike
 } from '@wasm-idle/core';
 import { decompressGzip } from '@wasm-idle/llvm-core';
-
-type ProgressLike = { set?: (value: number) => void };
 
 interface AssetRequestMessage {
 	id: number;
@@ -260,36 +259,109 @@ const allowedBaseUrlsKey = (config: ResolvedRuntimeAssetConfig) =>
 	JSON.stringify([...(config.allowedBaseUrls || [])].sort());
 
 class RuntimeLoadProgress {
-	private readonly fractions = new Map<string, number>();
+	private readonly samples = new Map<string, { loaded: number; total?: number }>();
 	private readonly expectedAssets: Set<string>;
+	private readonly phaseId: string;
 	private progress?: ProgressLike;
+	private lockedTotal: number | undefined;
+	private measurementInvalid = false;
 
 	constructor(runtime: RuntimeAssetRuntime) {
 		this.expectedAssets = expectedAssetsForRuntime(runtime);
+		this.phaseId = `${runtime}:runtime-assets`;
 		this.reset();
 	}
 
 	reset(progress?: ProgressLike) {
 		this.progress = progress;
-		this.fractions.clear();
-		for (const asset of this.expectedAssets) this.fractions.set(asset, 0);
+		this.samples.clear();
+		this.lockedTotal = undefined;
+		this.measurementInvalid = false;
+		for (const asset of this.expectedAssets) this.samples.set(asset, { loaded: 0 });
 		this.emit();
 	}
 
 	update(asset: string, loaded: number, total?: number) {
 		if (!this.expectedAssets.has(asset)) return;
-		if (!total || total <= 0) return;
-		const fraction = Math.min(loaded / total, 1);
-		this.fractions.set(asset, fraction);
+		if (!Number.isSafeInteger(loaded) || loaded < 0) {
+			this.measurementInvalid = true;
+			this.emit();
+			return;
+		}
+		const previous = this.samples.get(asset) || { loaded: 0 };
+		let nextTotal = previous.total;
+		if (total !== undefined) {
+			if (!Number.isSafeInteger(total) || total <= 0) {
+				this.measurementInvalid = true;
+			} else if (previous.total !== undefined && previous.total !== total) {
+				this.measurementInvalid = true;
+			} else {
+				nextTotal = total;
+			}
+		}
+		const nextLoaded = Math.max(previous.loaded, loaded);
+		if (nextTotal !== undefined && nextLoaded > nextTotal) {
+			this.measurementInvalid = true;
+		}
+		this.samples.set(asset, {
+			loaded: nextLoaded,
+			...(nextTotal === undefined ? {} : { total: nextTotal })
+		});
 		this.emit();
+	}
+
+	activity(phase: 'decompressing' | 'verifying', asset: string) {
+		if (!this.progress) return;
+		const action = phase === 'decompressing' ? 'Decompressing' : 'Verifying';
+		const label = `${action} ${asset}`;
+		if (this.progress.report) {
+			this.progress.report({
+				kind: 'activity',
+				phase,
+				phaseId: `${this.phaseId}:${asset}`,
+				label
+			});
+			return;
+		}
+		this.progress.set?.(0, label);
 	}
 
 	private emit() {
 		if (!this.progress) return;
-		if (!this.fractions.size) return this.progress.set?.(0);
-		let total = 0;
-		for (const fraction of this.fractions.values()) total += fraction;
-		this.progress.set?.(total / this.fractions.size);
+		let completedBytes = 0;
+		let totalBytes = 0;
+		let allTotalsKnown = this.samples.size > 0;
+		for (const sample of this.samples.values()) {
+			if (sample.total === undefined) {
+				allTotalsKnown = false;
+				continue;
+			}
+			completedBytes += sample.loaded;
+			totalBytes += sample.total;
+		}
+		if (!Number.isSafeInteger(completedBytes) || !Number.isSafeInteger(totalBytes)) {
+			this.measurementInvalid = true;
+		}
+		if (allTotalsKnown && this.lockedTotal === undefined) this.lockedTotal = totalBytes;
+		if (this.lockedTotal !== undefined && this.lockedTotal !== totalBytes) {
+			this.measurementInvalid = true;
+		}
+
+		const measurement =
+			allTotalsKnown && !this.measurementInvalid && totalBytes > 0
+				? ({ kind: 'bytes', completed: completedBytes, total: totalBytes } as const)
+				: undefined;
+		if (this.progress.report) {
+			this.progress.report({
+				kind: 'activity',
+				phase: 'downloading',
+				phaseId: this.phaseId,
+				label: 'Downloading runtime assets',
+				...(measurement ? { measurement } : {})
+			});
+			return;
+		}
+		this.progress.set?.(measurement ? measurement.completed / measurement.total : 0);
 	}
 }
 
@@ -462,14 +534,18 @@ export class WorkerAssetBridge {
 			const sourceAssetByteLimit = this.sourceAssetByteLimit(request.asset);
 			const runtimeAssetByteLimit = this.runtimeAssetByteLimit(request.asset);
 			requireRuntimeAssetSize(request.asset, deliveryBytes.byteLength, sourceAssetByteLimit);
-			const normalizedRuntimeBytes = request.asset.endsWith('.gz')
-				? await decompressGzip(
-						deliveryBytes,
-						request.asset,
-						runtimeAssetByteLimit,
-						controller.signal
-					)
-				: deliveryBytes;
+			let normalizedRuntimeBytes: Uint8Array;
+			if (request.asset.endsWith('.gz')) {
+				this.progress.activity('decompressing', request.asset);
+				normalizedRuntimeBytes = await decompressGzip(
+					deliveryBytes,
+					request.asset,
+					runtimeAssetByteLimit,
+					controller.signal
+				);
+			} else {
+				normalizedRuntimeBytes = deliveryBytes;
+			}
 			const runtimeBytes = canonicalUint8Array(normalizedRuntimeBytes);
 			requireRuntimeAssetSize(request.asset, runtimeBytes.byteLength, runtimeAssetByteLimit);
 			const httpDecodedGzip = (loaded.contentEncoding || '')
@@ -484,6 +560,9 @@ export class WorkerAssetBridge {
 				controller.signal.addEventListener('abort', cancelOnAbort, { once: true });
 			});
 			try {
+				if (this.config.integrity?.[request.asset]) {
+					this.progress.activity('verifying', request.asset);
+				}
 				const verification = this.verifyIntegrity(
 					request.asset,
 					deliveryBytes,

@@ -32,6 +32,23 @@ describe('example route debug actions', () => {
 		expect(layoutSource).not.toMatch(/!navigator\.serviceWorker\.controller/);
 	});
 
+	it('renders unmeasured activity without fabricating a completion position', () => {
+		expect(source).toMatch(
+			/style=\{progressIndeterminate\s+\? undefined\s+: `transform: scaleX\(\$\{progressValue\}\)`\}/s
+		);
+		expect(source).toMatch(
+			/\.progress-track--indeterminate \.progress-fill \{\s+transform: scaleX\(1\);\s+transform-origin: center;\s+animation: progress-activity 1\.4s ease-in-out infinite;/s
+		);
+		expect(source).toMatch(
+			/@keyframes progress-activity \{[\s\S]+opacity: 0\.35;[\s\S]+opacity: 1;/
+		);
+		expect(source).not.toContain('scaleX(0.98)');
+		expect(source).not.toContain('--progress-value');
+		expect(source).toMatch(
+			/aria-valuenow=\{progressIndeterminate \? undefined : progressPercent\}/
+		);
+	});
+
 	it('swaps run/debug actions for stop buttons while sessions are active', () => {
 		expect(() =>
 			compile(source, {
@@ -56,6 +73,14 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/async function sendTerminalEof\(\) \{/);
 		expect(source).toMatch(/await terminal\.eof\?\.\(\);/);
 		expect(source).toMatch(/title="Send EOF"/);
+	});
+
+	it('handles expected cancellation and timeout outcomes without rejecting the click handler', () => {
+		expect(source).toMatch(/const executionWasCancelled = abortController\.signal\.aborted;/);
+		expect(source).toMatch(
+			/const executionTimedOut = error instanceof Error && error\.name === 'TimeoutError';/
+		);
+		expect(source).toMatch(/if \(!executionWasCancelled && !executionTimedOut\) throw error;/);
 	});
 
 	it('delegates debug state, runtime watches, and run-to-cursor to the shared debug controller', () => {
@@ -106,7 +131,12 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/executionDebugMode = 'trace';/);
 		expect(source).toMatch(/parseDebugRuntimeManifest\(await response\.json\(\)\)/);
 		expect(source).toMatch(
-			/await preflightDebugRuntimeAssets\(\s*manifest,\s*new URL\(runtimeAssets\.debug\.baseUrl, globalThis\.location\.href\)\s*\);/s
+			/await preflightDebugRuntimeAssets\(\s*manifest,\s*new URL\(runtimeAssets\.debug\.baseUrl, globalThis\.location\.href\),\s*fetch,\s*abortController\.signal\s*\);/s
+		);
+		expect(source).toMatch(/interactive: enableDebug,/);
+		expect(source).toMatch(/signal: abortController\.signal,/);
+		expect(source).toMatch(
+			/activeProgressSession\?\.report\?\.\(\{\s*kind: 'ready',\s*state: 'paused',\s*reason: 'debug-paused'/s
 		);
 		expect(source).toMatch(/if \(!debug\.paused\) debug\.reset\(\);/);
 		expect(source).toMatch(

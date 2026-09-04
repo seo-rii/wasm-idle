@@ -18,30 +18,122 @@ const setBridgeAssetByteLimit = (bridge: WorkerAssetBridge, maxAssetBytes: numbe
 };
 
 describe('WorkerAssetBridge progress', () => {
-	it('does not mark an asset complete from the first chunk when its total is unknown', () => {
+	it('keeps legacy progress indeterminate until every asset total is known', () => {
 		const progress = { set: vi.fn() };
 		const bridge = new WorkerAssetBridge(
 			{ postMessage: vi.fn() } as unknown as Worker,
-			'clang',
-			{ baseUrl: '/clang/', useAssetBridge: true },
+			'clangd',
+			{ baseUrl: '/clangd/', useAssetBridge: true },
 			progress
 		);
-		const asset = RUNTIME_LOAD_ASSETS.clang[0];
+		const [smallAsset, largeAsset] = RUNTIME_LOAD_ASSETS.clangd;
 
 		bridge.handleMessage({
-			data: { assetProgress: { asset, loaded: 64 * 1024 } }
+			data: { assetProgress: { asset: smallAsset, loaded: 10, total: 10 } }
 		} as MessageEvent);
 		expect(progress.set).toHaveBeenLastCalledWith(0);
 
 		bridge.handleMessage({
-			data: { assetProgress: { asset, loaded: 64 * 1024, total: 128 * 1024 } }
+			data: { assetProgress: { asset: largeAsset, loaded: 0, total: 90 } }
 		} as MessageEvent);
 		expect(progress.set).toHaveBeenLastCalledWith(0.1);
+	});
+
+	it('reports actual aggregate bytes instead of equally weighting asset fractions', () => {
+		const report = vi.fn();
+		const bridge = new WorkerAssetBridge(
+			{ postMessage: vi.fn() } as unknown as Worker,
+			'clangd',
+			{ baseUrl: '/clangd/', useAssetBridge: true },
+			{ report }
+		);
+		const [smallAsset, largeAsset] = RUNTIME_LOAD_ASSETS.clangd;
+		report.mockClear();
 
 		bridge.handleMessage({
-			data: { assetProgress: { asset, loaded: 128 * 1024, total: 128 * 1024 } }
+			data: { assetProgress: { asset: smallAsset, loaded: 10, total: 10 } }
 		} as MessageEvent);
-		expect(progress.set).toHaveBeenLastCalledWith(0.2);
+		expect(report.mock.lastCall?.[0]).toMatchObject({ kind: 'activity' });
+		expect(report.mock.lastCall?.[0]).not.toHaveProperty('measurement');
+
+		bridge.handleMessage({
+			data: { assetProgress: { asset: largeAsset, loaded: 0, total: 90 } }
+		} as MessageEvent);
+		expect(report).toHaveBeenLastCalledWith({
+			kind: 'activity',
+			phase: 'downloading',
+			phaseId: 'clangd:runtime-assets',
+			label: 'Downloading runtime assets',
+			measurement: { kind: 'bytes', completed: 10, total: 100 }
+		});
+	});
+
+	it('fails closed if an asset changes its declared total mid-phase', () => {
+		const report = vi.fn();
+		const bridge = new WorkerAssetBridge(
+			{ postMessage: vi.fn() } as unknown as Worker,
+			'clangd',
+			{ baseUrl: '/clangd/', useAssetBridge: true },
+			{ report }
+		);
+		const [firstAsset, secondAsset] = RUNTIME_LOAD_ASSETS.clangd;
+		report.mockClear();
+		bridge.handleMessage({
+			data: { assetProgress: { asset: firstAsset, loaded: 5, total: 10 } }
+		} as MessageEvent);
+		bridge.handleMessage({
+			data: { assetProgress: { asset: secondAsset, loaded: 10, total: 10 } }
+		} as MessageEvent);
+		expect(report.mock.lastCall?.[0]).toHaveProperty('measurement.total', 20);
+
+		bridge.handleMessage({
+			data: { assetProgress: { asset: firstAsset, loaded: 6, total: 12 } }
+		} as MessageEvent);
+		expect(report).toHaveBeenLastCalledWith({
+			kind: 'activity',
+			phase: 'downloading',
+			phaseId: 'clangd:runtime-assets',
+			label: 'Downloading runtime assets'
+		});
+	});
+
+	it('poisons determinate progress when loaded bytes exceed the declared total', () => {
+		const report = vi.fn();
+		const bridge = new WorkerAssetBridge(
+			{ postMessage: vi.fn() } as unknown as Worker,
+			'clangd',
+			{ baseUrl: '/clangd/', useAssetBridge: true },
+			{ report }
+		);
+		const [firstAsset, secondAsset] = RUNTIME_LOAD_ASSETS.clangd;
+		report.mockClear();
+
+		bridge.handleMessage({
+			data: { assetProgress: { asset: firstAsset, loaded: 5, total: 10 } }
+		} as MessageEvent);
+		bridge.handleMessage({
+			data: { assetProgress: { asset: secondAsset, loaded: 10, total: 10 } }
+		} as MessageEvent);
+		expect(report.mock.lastCall?.[0]).toHaveProperty('measurement', {
+			kind: 'bytes',
+			completed: 15,
+			total: 20
+		});
+
+		bridge.handleMessage({
+			data: { assetProgress: { asset: firstAsset, loaded: 11, total: 10 } }
+		} as MessageEvent);
+		expect(report).toHaveBeenLastCalledWith({
+			kind: 'activity',
+			phase: 'downloading',
+			phaseId: 'clangd:runtime-assets',
+			label: 'Downloading runtime assets'
+		});
+
+		bridge.handleMessage({
+			data: { assetProgress: { asset: firstAsset, loaded: 10, total: 10 } }
+		} as MessageEvent);
+		expect(report.mock.lastCall?.[0]).not.toHaveProperty('measurement');
 	});
 });
 
@@ -702,6 +794,74 @@ describe('WorkerAssetBridge asset requests', () => {
 			assetResponse: { id: 25, ok: true }
 		});
 		expect(new Uint8Array(response.assetResponse.bytes)).toEqual(runtimeBytes);
+	});
+
+	it('leaves completed download progress for decompression and integrity verification', async () => {
+		const postMessage = vi.fn();
+		const report = vi.fn();
+		const runtimeBytes = new Uint8Array([1, 2, 3]);
+		const deliveryBytes = Uint8Array.from(gzipSync(runtimeBytes));
+		const [firstAsset, asset] = RUNTIME_LOAD_ASSETS.clangd;
+		const bridge = new WorkerAssetBridge(
+			{ postMessage } as unknown as Worker,
+			'clangd',
+			{
+				baseUrl: '/clangd/',
+				loader: vi.fn().mockResolvedValue(deliveryBytes),
+				integrity: {
+					[asset]: {
+						bytes: deliveryBytes.byteLength,
+						sha256: createHash('sha256').update(deliveryBytes).digest('hex'),
+						uncompressedBytes: runtimeBytes.byteLength,
+						uncompressedSha256: createHash('sha256').update(runtimeBytes).digest('hex')
+					}
+				},
+				useAssetBridge: true
+			},
+			{ report }
+		);
+		bridge.handleMessage({
+			data: {
+				assetProgress: {
+					asset: firstAsset,
+					loaded: 10,
+					total: 10
+				}
+			}
+		} as MessageEvent);
+		report.mockClear();
+
+		bridge.handleMessage({
+			data: { assetRequest: { id: 36, asset } }
+		} as MessageEvent);
+
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		const events = report.mock.calls.map(([event]) => event);
+		expect(events).toEqual([
+			{
+				kind: 'activity',
+				phase: 'downloading',
+				phaseId: 'clangd:runtime-assets',
+				label: 'Downloading runtime assets',
+				measurement: {
+					kind: 'bytes',
+					completed: 10 + deliveryBytes.byteLength,
+					total: 10 + deliveryBytes.byteLength
+				}
+			},
+			{
+				kind: 'activity',
+				phase: 'decompressing',
+				phaseId: `clangd:runtime-assets:${asset}`,
+				label: `Decompressing ${asset}`
+			},
+			{
+				kind: 'activity',
+				phase: 'verifying',
+				phaseId: `clangd:runtime-assets:${asset}`,
+				label: `Verifying ${asset}`
+			}
+		]);
 	});
 
 	it('disposes stalled gzip decompression without publishing a response', async () => {

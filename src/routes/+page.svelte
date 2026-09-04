@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Monaco from './Monaco.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
+	import type { ProgressLike } from '@wasm-idle/core';
 	import { createPlaygroundBinding, isSharedArrayBufferAvailable } from '$lib';
 	import {
 		createDebugSessionController,
@@ -172,7 +173,8 @@
 		language = $state<PlaygroundLanguage>('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
 		activeDebugBackend = $state<'lldb' | 'trace' | null>(null),
-		progress = $state(-1),
+		progressVisible = $state(false),
+		progress = $state(0),
 		progressStage = $state(''),
 		progressIndeterminate = $state(false),
 		stdinInput = $state(''),
@@ -195,6 +197,8 @@
 	let saveStatus = $state('Ready');
 	let workspaceInitialized = false;
 	let workspaceSaveTimer: ReturnType<typeof setTimeout> | null = null;
+	let activeProgressSession: ProgressLike | undefined;
+	let executionAbortController: AbortController | undefined;
 	let fileInput = $state<HTMLInputElement | null>(null);
 	let dragActive = $state(false);
 	const sharedBufferAvailable = $derived(!browser || isSharedArrayBufferAvailable());
@@ -364,12 +368,12 @@
 
 	const loadingProgress = createLoadingProgressController({
 		onChange(state) {
+			progressVisible = state.visible;
 			progress = state.value;
 			progressStage = state.stage;
 			progressIndeterminate = state.indeterminate;
 		}
 	});
-	const progressRef = { set: loadingProgress.set };
 
 	const debugLanguage = $derived(debugLanguageAdapters[language] ?? null);
 	const selectedDebugMode = $derived(
@@ -407,11 +411,11 @@
 			? `${languageLabels[language] ?? language} · Trace fallback`
 			: (debugTitles[language] ?? 'Pyodide Trace')
 	);
-	const loading = $derived(progress >= 0 && progress < 1);
-	const progressValue = $derived(progress < 0 ? 0 : progress > 1 ? 1 : progress);
+	const loading = $derived(progressVisible);
+	const progressValue = $derived(progress > 1 ? 1 : progress);
 	const progressPercent = $derived(Math.round(progressValue * 100));
 	const progressLabel = $derived(
-		runningMode === 'debug' ? 'Preparing debug session' : progressStage || 'Loading runtime'
+		progressStage || (runningMode === 'debug' ? 'Preparing debug session' : 'Loading runtime')
 	);
 	const examplePaneHorizontalPadding = 40;
 	const panelResizerWidth = 14;
@@ -1207,6 +1211,11 @@
 
 	async function stopExecution() {
 		if (!terminal || !runningMode) return;
+		if (executionAbortController && !executionAbortController.signal.aborted) {
+			executionAbortController.abort(
+				new DOMException('Execution stopped by the user', 'AbortError')
+			);
+		}
 		if (runningMode === 'debug') {
 			await debug.stop();
 			return;
@@ -1346,6 +1355,12 @@
 
 	function onDebugEvent(event: DebugSessionEvent) {
 		if (event.type === 'pause') {
+			activeProgressSession?.report?.({
+				kind: 'ready',
+				state: 'paused',
+				reason: 'debug-paused',
+				label: 'Debugger paused'
+			});
 			const sourcePath = event.sourcePath || event.callStack[0]?.sourcePath;
 			const workspacePath = normalizePath(sourcePath?.replace(/^\/workspace\//u, '') || '');
 			if (workspacePath && files.some((file) => file.path === workspacePath)) {
@@ -1395,15 +1410,26 @@
 			localStorage.setItem('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode);
 			saveWorkspace();
 		}
+		const abortController = new AbortController();
+		const progressSession = loadingProgress.start(`Loading ${language} runtime`);
+		executionAbortController = abortController;
+		activeProgressSession = progressSession;
+		let progressOutcome: 'completed' | 'failed' | 'cancelled' | 'timed-out' = 'completed';
 		try {
-			loadingProgress.start(`Loading ${language} runtime`);
 			if (executionDebugMode === 'lldb') {
 				try {
-					loadingProgress.set(0, 'Checking LLDB debug runtime');
+					progressSession.report?.({
+						kind: 'activity',
+						phase: 'resolving',
+						label: 'Checking LLDB debug runtime'
+					});
 					const manifestUrl = runtimeAssets.debug?.manifestUrl;
 					if (!manifestUrl)
 						throw new Error('LLDB runtime manifest URL is not configured.');
-					const response = await fetch(manifestUrl, { cache: 'no-store' });
+					const response = await fetch(manifestUrl, {
+						cache: 'no-store',
+						signal: abortController.signal
+					});
 					if (!response.ok) {
 						throw new Error(`LLDB runtime manifest returned ${response.status}.`);
 					}
@@ -1421,10 +1447,13 @@
 					}
 					await preflightDebugRuntimeAssets(
 						manifest,
-						new URL(runtimeAssets.debug.baseUrl, globalThis.location.href)
+						new URL(runtimeAssets.debug.baseUrl, globalThis.location.href),
+						fetch,
+						abortController.signal
 					);
 					activeDebugBackend = 'lldb';
 				} catch (error) {
+					if (abortController.signal.aborted) throw error;
 					executionDebugMode = 'trace';
 					activeDebugBackend = 'trace';
 					console.warn(
@@ -1435,12 +1464,12 @@
 			}
 			const preloadedStdin =
 				sharedBufferAvailable && language !== 'BASH' ? undefined : stdinInput;
-			await executeTerminalRun({
+			const result = await executeTerminalRun({
 				terminal,
 				language,
 				code: codeToRun,
 				log,
-				progress: progressRef,
+				progress: progressSession,
 				args,
 				options: {
 					debugMode: executionDebugMode,
@@ -1458,12 +1487,27 @@
 						content: file.path === activePath ? codeToRun : file.content
 					})),
 					pauseOnEntry: enableDebug,
+					signal: abortController.signal,
 					...languageExecutionOptions,
 					stdin: preloadedStdin
 				}
 			});
+			if (result === false) {
+				progressOutcome = abortController.signal.aborted ? 'cancelled' : 'failed';
+			}
+		} catch (error) {
+			const executionWasCancelled = abortController.signal.aborted;
+			const executionTimedOut = error instanceof Error && error.name === 'TimeoutError';
+			progressOutcome = executionWasCancelled
+				? 'cancelled'
+				: executionTimedOut
+					? 'timed-out'
+					: 'failed';
+			if (!executionWasCancelled && !executionTimedOut) throw error;
 		} finally {
-			loadingProgress.reset();
+			progressSession.report?.({ kind: 'settled', outcome: progressOutcome });
+			if (executionAbortController === abortController) executionAbortController = undefined;
+			if (activeProgressSession === progressSession) activeProgressSession = undefined;
 			runningMode = null;
 			if (!debug.paused) debug.reset();
 		}
@@ -2129,7 +2173,7 @@
 				<div class="progress-shell" aria-live="polite">
 					<div class="progress-copy">
 						<div class="progress-copy__text">
-							<span class="material-symbols-outlined">downloading</span>
+							<span class="material-symbols-outlined">hourglass_top</span>
 							<strong>{progressLabel}</strong>
 						</div>
 						{#if !progressIndeterminate}
@@ -3451,20 +3495,26 @@
 	}
 
 	.progress-track--indeterminate .progress-fill {
-		width: 38%;
-		transform: translateX(-120%);
-		animation: progress-indeterminate 1.4s ease-in-out infinite;
+		transform: scaleX(1);
+		transform-origin: center;
+		animation: progress-activity 1.4s ease-in-out infinite;
 	}
 
-	@keyframes progress-indeterminate {
-		to {
-			transform: translateX(365%);
+	@keyframes progress-activity {
+		0%,
+		100% {
+			opacity: 0.35;
+		}
+
+		50% {
+			opacity: 1;
 		}
 	}
 
 	@media (prefers-reduced-motion: reduce) {
 		.progress-track--indeterminate .progress-fill {
-			animation-duration: 3s;
+			animation: none;
+			opacity: 0.65;
 		}
 	}
 

@@ -47,13 +47,13 @@ describe('Terminal source', () => {
 		expect(source).toMatch(/stopRequested = false;/);
 		expect(source).toMatch(/if \(stopRequested\) return false;/);
 		expect(source).toMatch(
-			/async stop\(\) \{\s+await wait\(\);\s+progressController\.invalidate\(\);\s+stopRequested = true;\s+finish = true;\s+sandboxAcceptingInput = false;\s+pendingSandboxEof = false;\s+if \(sandbox\?\.kill\) await sandbox\.kill\(\);\s+else await sandbox\?\.terminate\?\.\(\);\s+\}/s
+			/async stop\(\) \{\s+await wait\(\);\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+stopRequested = true;\s+finish = true;\s+sandboxAcceptingInput = false;\s+pendingSandboxEof = false;\s+if \(sandbox\?\.kill\) await sandbox\.kill\(\);\s+else await sandbox\?\.terminate\?\.\(\);\s+\}/s
 		);
 	});
 
 	it('exposes a runtime restart that clears queued input before restarting the sandbox', () => {
 		expect(source).toMatch(
-			/async restartRuntime\(\) \{\s+await wait\(\);\s+if \(!sandbox\) return;\s+progressController\.invalidate\(\);\s+sandboxAcceptingInput = false;\s+pendingSandboxInput = \[\];\s+pendingSandboxEof = false;\s+input = '';\s+inputCursor = 0;\s+finish = true;\s+stopRequested = false;\s+tc \+= 1;\s+if \(sandbox\.restart\) await sandbox\.restart\(\);\s+else await sandbox\.clear\(\);\s+\}/s
+			/async restartRuntime\(\) \{\s+await wait\(\);\s+if \(!sandbox\) return;\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+sandboxAcceptingInput = false;\s+pendingSandboxInput = \[\];\s+pendingSandboxEof = false;\s+input = '';\s+inputCursor = 0;\s+finish = true;\s+stopRequested = false;\s+tc \+= 1;\s+if \(sandbox\.restart\) await sandbox\.restart\(\);\s+else await sandbox\.clear\(\);\s+\}/s
 		);
 	});
 
@@ -143,7 +143,9 @@ describe('Terminal source', () => {
 		expect(source).not.toContain('dotnet' + 'Host' + 'CompileUrl');
 		expect(source).not.toMatch(/loadedRuntimeAssets !== currentRuntimeAssets/);
 		expect(source).not.toMatch(/loadedPlayground !== currentPlayground/);
-		expect(source).toMatch(/function writeTerminalOutput\(text: string\)/);
+		expect(source).toMatch(
+			/function writeTerminalOutput\(text: string, executionOutput = false\)/
+		);
 		expect(source).toMatch(/debugOutput \+= text;/);
 		expect(source).toMatch(/debugOutput = '';/);
 		expect(source).toMatch(
@@ -162,11 +164,11 @@ describe('Terminal source', () => {
 	it('buffers stdin until the current sandbox is ready to accept it', () => {
 		const prepareStart = source.slice(
 			source.indexOf('async prepare('),
-			source.indexOf('const progressBands')
+			source.indexOf('async run(', source.indexOf('async prepare('))
 		);
 		const runStart = source.slice(
 			source.indexOf('async run('),
-			source.indexOf('await Promise.all', source.indexOf('async run('))
+			source.indexOf('async destroy(', source.indexOf('async run('))
 		);
 		expect(source).toMatch(/sandboxAcceptingInput = false,/);
 		expect(source).toMatch(/pendingSandboxEof = false,/);
@@ -186,30 +188,78 @@ describe('Terminal source', () => {
 			/async write\(input: string\) \{\s+await waitForInput\(\);\s+if \(!input\) return;\s+applyPastedText\(input\);/s
 		);
 		expect(source).toMatch(
-			/sandboxAcceptingInput = true;\s+flushPendingSandboxInput\(\);\s+return await runSandbox\(\s+sandbox\.run\(code, false, log, runProgress, args, executionOptions\)\s+\);/s
+			/sandboxAcceptingInput = true;\s+flushPendingSandboxInput\(\);\s+executionRunWillFinalize = true;\s+const result = await runSandbox\(\s+sandbox\.run\(code, false, log, runProgress, args, executionOptions\)\s+\);/s
 		);
-		expect(source).toMatch(/\.finally\(\(\) => \{\s+sandboxAcceptingInput = false;/s);
+		expect(source).toMatch(
+			/function finishSandboxRun\(\) \{\s+sandboxAcceptingInput = false;/s
+		);
+		expect(source).toMatch(/\.finally\(\(\) => \{\s+if \(finalize\) finishSandboxRun\(\);/s);
 	});
 
-	it('uses the same bounded load and prepare progress phases for every language', () => {
+	it('scopes progress lifecycles without fabricating cross-runtime phase bands', () => {
 		expect(source).toContain('const progressController = new RuntimeProgressController();');
 		expect(source).toMatch(
 			/progressController\.begin\(\s+`\$\{language\}:\$\{\+\+progressLifecycleCounter\}`,\s+progress,\s+`Loading \$\{language\} runtime`/s
 		);
 		expect(source).toMatch(/finally \{\s+lifecycle\.end\(\);\s+\}/s);
 		expect(source).toMatch(
-			/return async \(\) => \{\s+progressController\.invalidate\(\);\s+term\?\.dispose\(\);/s
+			/return async \(\) => \{\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+term\?\.dispose\(\);/s
 		);
-		expect(source).toMatch(/const progressBands = progressBandsForLanguage\(language\);/);
+		expect(source).toMatch(/sandbox\.load\(code, log, args, options, prepareProgress\)/);
 		expect(source).toMatch(
-			/phaseProgress\(\s+runProgress,\s+progressBands\.load\[0\],\s+progressBands\.load\[1\],\s+`Loading \$\{language\} runtime`/s
+			/runProgress\?\.report\?\.\(\{\s+kind: 'activity',\s+phase: 'starting'/s
 		);
-		expect(source).toMatch(/progressBands\.prepare\[0\]/);
-		expect(source).toMatch(/progressBands\.prepare\[1\]/);
-		expect(source).toMatch(/if \(prepared\) prepareProgress\?\.set\?\.\(1,/);
+		expect(source).toMatch(/sandbox\.run\(code, true, log, prepareProgress, args, options\)/);
+		expect(source).toMatch(
+			/initSandbox\(language\)\.then\(\(\) => sandbox\.load\(code, log, args, options\)\)/
+		);
+		expect(source).toMatch(
+			/sandbox\.run\(code, false, log, runProgress, args, executionOptions\)/
+		);
+		expect(source).not.toContain('phaseProgress');
+		expect(source).not.toContain('progressBandsForLanguage');
+	});
+
+	it('reports readiness only from the final execution, never prepare completion', () => {
+		expect(source).toMatch(
+			/function activityOnlyProgress\([\s\S]+if \(event\.kind === 'activity'\) progress\.report\?\.\(event\);/s
+		);
+		expect(source).toMatch(
+			/writeTerminalOutput\(output\.replaceAll\('\\n', '\\r\\n'\), true\)/
+		);
+		expect(source).toContain('const terminalOutputReadinessLanguages = new Set([');
+		expect(source).toMatch(
+			/executionOutput &&\s+activeExecutionLanguage &&\s+terminalOutputReadinessLanguages\.has\(activeExecutionLanguage\)[\s\S]+reason: 'stdout'/s
+		);
+		expect(source).toMatch(
+			/if \(event\.type === 'pause'\) \{[\s\S]+reason: 'debug-paused'[\s\S]+\}/s
+		);
+		expect(source).toMatch(/reason: 'result'/);
+		expect(source).toMatch(/kind: 'settled'/);
+	});
+
+	it('prepares direct ABI-fallback runs before arming output readiness', () => {
+		const runSource = source.slice(
+			source.indexOf('async run('),
+			source.indexOf('async destroy(', source.indexOf('async run('))
+		);
+		expect(runSource).toMatch(
+			/terminalOutputReadinessLanguages\.has\(language\)[\s\S]+sandbox\.run\(code, true, log, prepareProgress, args, options\)[\s\S]+activeExecutionProgress = runProgress;[\s\S]+sandbox\.run\(code, false, log, runProgress, args, executionOptions\)/s
+		);
 	});
 
 	it('allows runtime progress stages to flow through the terminal progress sink', () => {
-		expect(source).toMatch(/prog\?: \{ set\?: \(value: number, stage\?: string\) => void \}/);
+		expect(source).toMatch(/prog\?: ProgressLike/);
+	});
+
+	it('preserves timeout errors so the page can report a timed-out outcome', () => {
+		expect(source).toContain('error instanceof TimeoutError');
+		expect(source).toContain("error instanceof Error && error.name === 'TimeoutError'");
+		expect(source).toMatch(
+			/if \(isTimeoutError\(msg\)\) \{[\s\S]+writeTerminalOutput\([\s\S]+throw msg;/s
+		);
+		expect(source).toMatch(
+			/if \(isTimeoutError\(error\)\) \{[\s\S]+outcome: 'timed-out'[\s\S]+throw error;/s
+		);
 	});
 });
