@@ -12,6 +12,7 @@ import type {
 	RuntimeTargetConfig,
 	RuntimeTargetExecutionConfig,
 	RuntimeToolConfig,
+	GoRuntimeBoundaryOptions,
 	SupportedGoTarget
 } from './types.js';
 
@@ -367,7 +368,8 @@ export function resolveTargetManifest(
 export async function loadRuntimeManifest(
 	manifestUrl: string | URL,
 	fetchImpl: typeof fetch = fetch,
-	reportProgress?: (loaded: number, total?: number) => void
+	reportProgress?: (loaded: number, total?: number) => void,
+	options: GoRuntimeBoundaryOptions = {}
 ): Promise<NormalizedRuntimeManifest> {
 	try {
 		return normalizeRuntimeManifest(
@@ -375,10 +377,23 @@ export async function loadRuntimeManifest(
 				manifestUrl,
 				'wasm-go runtime manifest',
 				fetchImpl,
-				reportProgress
+				reportProgress,
+				options
 			)
 		);
 	} catch (error) {
+		if (options.signal?.aborted) {
+			throw (
+				options.signal.reason ??
+				new DOMException('wasm-go runtime manifest load aborted', 'AbortError')
+			);
+		}
+		if (
+			error instanceof DOMException &&
+			(error.name === 'AbortError' || error.name === 'TimeoutError')
+		) {
+			throw error;
+		}
 		throw new Error(
 			`failed to load wasm-go runtime manifest from ${manifestUrl.toString()}: ${error instanceof Error ? error.message : String(error)}`
 		);

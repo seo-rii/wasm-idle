@@ -15,8 +15,34 @@ import {
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
+import { BusyError, TimeoutError, resolveExecutionLimits } from '@wasm-idle/core';
 
 const debugBreakpointBufferInts = 1028;
+
+function resolveGoManifestUrl(
+	runtimeAssets: string | PlaygroundRuntimeAssets,
+	currentUrl: string,
+	compilerUrl: string
+) {
+	const configured =
+		typeof runtimeAssets === 'object' ? runtimeAssets.go?.manifestUrl?.trim() : undefined;
+	if (configured) {
+		return currentUrl ? new URL(configured, currentUrl).href : new URL(configured).href;
+	}
+	const compiler = currentUrl ? new URL(compilerUrl, currentUrl) : new URL(compilerUrl);
+	const manifest = new URL('./runtime/runtime-manifest.v1.json', compiler);
+	manifest.search = compiler.search;
+	return manifest.href;
+}
+
+function compilerRuntimeLimitsKey(limits: ReturnType<typeof resolveExecutionLimits>) {
+	return [
+		limits.assetTimeoutMs,
+		limits.compileTimeoutMs,
+		limits.maxAssetBytes,
+		limits.maxWasmMemoryBytes
+	].join(':');
+}
 
 class Go implements Sandbox {
 	output: any = null;
@@ -32,6 +58,8 @@ class Go implements Sandbox {
 	uid = 0;
 	exit = true;
 	compilerUrl = '';
+	manifestUrl = '';
+	private compilerLimitsKey = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -60,13 +88,20 @@ class Go implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		const signal = options.debug ? undefined : options.signal;
+		let limits: ReturnType<typeof resolveExecutionLimits>;
+		try {
+			limits = resolveExecutionLimits(options.limits);
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		const signal = options.signal;
 		if (signal?.aborted) {
 			return Promise.reject(
 				signal.reason ?? new DOMException('Go runtime startup aborted', 'AbortError')
 			);
 		}
 		let onAbort: (() => void) | undefined;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
 		let cleanedUp = false;
 		const cleanupSignal = () => {
 			if (cleanedUp) return;
@@ -78,6 +113,7 @@ class Go implements Sandbox {
 					// Cleanup must not replace the startup result.
 				}
 			}
+			if (timeout !== undefined) clearTimeout(timeout);
 			if (this.activeLoadSignalCleanup === cleanupSignal) {
 				this.activeLoadSignalCleanup = null;
 			}
@@ -116,8 +152,20 @@ class Go implements Sandbox {
 						'Go runtime is not configured. Set PUBLIC_WASM_GO_COMPILER_URL or runtimeAssets.go.compilerUrl.'
 					);
 				}
-				const needsWorkerReset = !this.worker || this.compilerUrl !== nextCompilerUrl;
+				const nextManifestUrl = resolveGoManifestUrl(
+					runtimeAssets,
+					currentUrl,
+					nextCompilerUrl
+				);
+				const nextCompilerLimitsKey = compilerRuntimeLimitsKey(limits);
+				const needsWorkerReset =
+					!this.worker ||
+					this.compilerUrl !== nextCompilerUrl ||
+					this.manifestUrl !== nextManifestUrl ||
+					this.compilerLimitsKey !== nextCompilerLimitsKey;
 				this.compilerUrl = nextCompilerUrl;
+				this.manifestUrl = nextManifestUrl;
+				this.compilerLimitsKey = nextCompilerLimitsKey;
 				if (needsWorkerReset && this.worker) {
 					this.workerSession.reset();
 				}
@@ -148,7 +196,9 @@ class Go implements Sandbox {
 					};
 					worker.postMessage({
 						load: true,
-						compilerUrl: this.compilerUrl
+						compilerUrl: this.compilerUrl,
+						manifestUrl: this.manifestUrl,
+						runtimeLimits: limits
 					});
 				} else {
 					progress?.set?.(1);
@@ -164,6 +214,16 @@ class Go implements Sandbox {
 			signal.addEventListener('abort', onAbort, { once: true });
 			if (signal.aborted) onAbort();
 		}
+		timeout = setTimeout(() => {
+			if (this.activeLoadSignalCleanup !== cleanupSignal) return;
+			this.workerSession.terminate(
+				new TimeoutError(`Go startup timed out after ${limits.startupTimeoutMs} ms`, {
+					phase: 'startup',
+					runtimeId: 'GO',
+					timeoutMs: limits.startupTimeoutMs
+				})
+			);
+		}, limits.startupTimeoutMs);
 		return loadPromise.finally(cleanupSignal);
 	}
 
@@ -207,7 +267,21 @@ class Go implements Sandbox {
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
 		if (options.debug) requireSharedArrayBuffer('Go debugging');
-		const signal = options.debug ? undefined : options.signal;
+		if (!this.exit) {
+			const error = new BusyError('Go runtime already has an active execution', {
+				runtimeId: 'GO',
+				phase: 'execute'
+			});
+			this.terminate(error);
+			return Promise.reject(error);
+		}
+		let limits: ReturnType<typeof resolveExecutionLimits>;
+		try {
+			limits = resolveExecutionLimits(options.limits);
+		} catch (error) {
+			return Promise.reject(error);
+		}
+		const signal = options.signal;
 		if (signal?.aborted) {
 			return Promise.reject(
 				signal.reason ?? new DOMException('Go execution aborted', 'AbortError')
@@ -237,6 +311,30 @@ class Go implements Sandbox {
 				this.activeExplicitStdinCleanup = cleanupExplicitStdin;
 			}
 			let onAbort: (() => void) | undefined;
+			let timeout: ReturnType<typeof setTimeout> | undefined;
+			let activePhase: 'compile' | 'execute' = 'compile';
+			const armTimeout = (phase: 'compile' | 'execute') => {
+				activePhase = phase;
+				if (timeout !== undefined) clearTimeout(timeout);
+				const timeoutMs =
+					phase === 'compile' ? limits.compileTimeoutMs : limits.runTimeoutMs;
+				timeout = setTimeout(() => {
+					if (
+						this.activeRunSignalCleanup !== cleanupSignal ||
+						this.worker !== worker ||
+						_uid !== this.uid
+					) {
+						return;
+					}
+					this.terminate(
+						new TimeoutError(`Go ${phase} timed out after ${timeoutMs} ms`, {
+							phase,
+							runtimeId: 'GO',
+							timeoutMs
+						})
+					);
+				}, timeoutMs);
+			};
 			let signalCleanedUp = false;
 			const cleanupSignal = () => {
 				if (signalCleanedUp) return;
@@ -248,6 +346,7 @@ class Go implements Sandbox {
 						// Cleanup must not replace the execution result.
 					}
 				}
+				if (timeout !== undefined) clearTimeout(timeout);
 				if (this.activeRunSignalCleanup === cleanupSignal) {
 					this.activeRunSignalCleanup = null;
 				}
@@ -269,8 +368,11 @@ class Go implements Sandbox {
 					if (worker.onmessage === handler) worker.onmessage = null;
 					return;
 				}
-				const { output, results, error, buffer, diagnostic, progress, debugEvent } =
+				const { output, results, error, buffer, diagnostic, progress, debugEvent, phase } =
 					event.data;
+				if (phase === 'compile' || phase === 'execute') {
+					if (phase !== activePhase) armTimeout(phase);
+				}
 				if (buffer && !hasExplicitStdin) {
 					this.waitingForInput = true;
 					if (!prepare) reportWorkerInputReady(_prog, 'Go runtime ready for input');
@@ -321,6 +423,7 @@ class Go implements Sandbox {
 				: undefined;
 			this.activeRunSignalCleanup = cleanupSignal;
 			worker.onmessage = handler;
+			armTimeout('compile');
 			if (signal && onAbort) {
 				signal.addEventListener('abort', onAbort, { once: true });
 				if (signal.aborted) onAbort();
@@ -339,7 +442,8 @@ class Go implements Sandbox {
 					log: _log,
 					debug: !!options.debug,
 					breakpoints: [...(options.breakpoints || [])],
-					pauseOnEntry: !!options.pauseOnEntry
+					pauseOnEntry: !!options.pauseOnEntry,
+					runtimeLimits: limits
 				});
 			} catch (error) {
 				cleanup();

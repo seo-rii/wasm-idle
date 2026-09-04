@@ -13,6 +13,7 @@ describe('Go worker', () => {
 		(globalThis as any).document = undefined;
 		(globalThis as any).postMessage = vi.fn();
 		(globalThis as any).__lastCompileOptions = undefined;
+		(globalThis as any).__lastFactoryOptions = undefined;
 		(globalThis as any).__lastExecution = undefined;
 		(globalThis as any).__lastStdin = undefined;
 		(globalThis as any).__debugControl = undefined;
@@ -22,7 +23,8 @@ describe('Go worker', () => {
 
 	it('loads a wasm-go-style compiler module and runs the returned artifact through executeBrowserGoArtifact', async () => {
 		const compilerModuleUrl = await createMockGoRuntimeModule(`
-			export async function createGoCompiler() {
+			export async function createGoCompiler(options) {
+				globalThis.__lastFactoryOptions = options;
 				return {
 					async compile(options) {
 						globalThis.__lastCompileOptions = options;
@@ -65,7 +67,16 @@ describe('Go worker', () => {
 		await (globalThis as any).self.onmessage({
 			data: {
 				load: true,
-				compilerUrl: compilerModuleUrl
+				compilerUrl: compilerModuleUrl,
+				manifestUrl: 'https://example.invalid/go/custom-manifest.json?v=3',
+				runtimeLimits: {
+					assetTimeoutMs: 11,
+					startupTimeoutMs: 12,
+					compileTimeoutMs: 13,
+					runTimeoutMs: 14,
+					maxAssetBytes: 15,
+					maxWasmMemoryBytes: 16
+				}
 			}
 		});
 		await Promise.resolve();
@@ -77,7 +88,15 @@ describe('Go worker', () => {
 				buffer: new SharedArrayBuffer(1024),
 				args: ['one'],
 				target: 'wasip2/wasm',
-				log: true
+				log: true,
+				runtimeLimits: {
+					assetTimeoutMs: 21,
+					startupTimeoutMs: 22,
+					compileTimeoutMs: 23,
+					runTimeoutMs: 24,
+					maxAssetBytes: 25,
+					maxWasmMemoryBytes: 26
+				}
 			}
 		});
 		await Promise.resolve();
@@ -96,9 +115,69 @@ describe('Go worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ output: 'hi\n' });
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
 		expect((globalThis as any).__lastCompileOptions.target).toBe('wasip2/wasm');
+		expect((globalThis as any).__lastFactoryOptions).toEqual({
+			runtimeManifestUrl: 'https://example.invalid/go/custom-manifest.json?v=3',
+			assetTimeoutMs: 11,
+			compileTimeoutMs: 13,
+			linkTimeoutMs: 13,
+			maxAssetBytes: 15,
+			maxWasmMemoryBytes: 16
+		});
+		expect((globalThis as any).__lastCompileOptions).toEqual(
+			expect.objectContaining({
+				assetTimeoutMs: 21,
+				compileTimeoutMs: 23,
+				linkTimeoutMs: 23,
+				maxAssetBytes: 25,
+				maxWasmMemoryBytes: 26
+			})
+		);
 		expect((globalThis as any).__lastExecution.artifact.target).toBe('wasip2/wasm');
 		expect((globalThis as any).__lastExecution.options.args).toEqual(['one']);
 		expect((globalThis as any).__lastExecution.options.env).toEqual({ USER: 'jungol' });
+		expect((globalThis as any).__lastExecution.options).toEqual(
+			expect.objectContaining({
+				runtimeManifestUrl: 'https://example.invalid/go/custom-manifest.json?v=3',
+				assetTimeoutMs: 21,
+				runTimeoutMs: 24,
+				maxAssetBytes: 25,
+				maxWasmMemoryBytes: 26
+			})
+		);
+	});
+
+	it('recreates the compiler factory when load-time resource limits change', async () => {
+		const compilerModuleUrl = await createMockGoRuntimeModule(`
+			export async function createGoCompiler(options) {
+				globalThis.__factoryOptions ??= [];
+				globalThis.__factoryOptions.push(options);
+				return { async compile() { throw new Error('not used'); } };
+			}
+			export async function executeBrowserGoArtifact() { throw new Error('not used'); }
+		`);
+
+		await import('./go');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: compilerModuleUrl,
+				manifestUrl: 'https://example.invalid/manifest.json',
+				runtimeLimits: { maxAssetBytes: 8_192 }
+			}
+		});
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				compilerUrl: compilerModuleUrl,
+				manifestUrl: 'https://example.invalid/manifest.json',
+				runtimeLimits: { maxAssetBytes: 4_096 }
+			}
+		});
+
+		expect((globalThis as any).__factoryOptions).toEqual([
+			expect.objectContaining({ maxAssetBytes: 8_192 }),
+			expect.objectContaining({ maxAssetBytes: 4_096 })
+		]);
 	});
 
 	it('reads stdin from the shared buffer when executeBrowserGoArtifact requests input', async () => {

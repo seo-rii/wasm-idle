@@ -14,7 +14,17 @@ self.document = {
 let stdinBufferGo: Int32Array | null = null;
 let debugBufferGo: Int32Array | null = null;
 let compilerUrl = '';
-let loadedCompilerUrl = '';
+let manifestUrl = '';
+let loadedCompilerKey = '';
+type GoRuntimeLimits = {
+	assetTimeoutMs: number;
+	startupTimeoutMs: number;
+	compileTimeoutMs: number;
+	runTimeoutMs: number;
+	maxAssetBytes: number;
+	maxWasmMemoryBytes: number;
+};
+let compilerLimits: GoRuntimeLimits | undefined;
 let compilerPromise: Promise<{
 	compiler: any;
 	executeBrowserGoArtifact: (
@@ -25,6 +35,11 @@ let compilerPromise: Promise<{
 			stdin?: () => string | null;
 			stdout?: (chunk: string) => void;
 			stderr?: (chunk: string) => void;
+			runtimeManifestUrl?: string;
+			assetTimeoutMs?: number;
+			runTimeoutMs?: number;
+			maxAssetBytes?: number;
+			maxWasmMemoryBytes?: number;
 		}
 	) => Promise<{
 		exitCode: number | null;
@@ -46,16 +61,24 @@ interface GoDebugState {
 	stepOutDepth: number | null;
 }
 
-async function loadCompiler(url: string) {
+async function loadCompiler(url: string, runtimeManifestUrl: string, limits?: GoRuntimeLimits) {
 	if (!url) {
 		throw new Error(
 			'Go runtime is not configured. Set PUBLIC_WASM_GO_COMPILER_URL or runtimeAssets.go.compilerUrl.'
 		);
 	}
-	if (loadedCompilerUrl === url && compilerPromise) {
+	const compilerKey = [
+		url,
+		runtimeManifestUrl,
+		limits?.assetTimeoutMs ?? '',
+		limits?.compileTimeoutMs ?? '',
+		limits?.maxAssetBytes ?? '',
+		limits?.maxWasmMemoryBytes ?? ''
+	].join('\n');
+	if (loadedCompilerKey === compilerKey && compilerPromise) {
 		return await compilerPromise;
 	}
-	loadedCompilerUrl = url;
+	loadedCompilerKey = compilerKey;
 	compiledArtifact = null;
 	compiledCacheKey = '';
 	compilerPromise = (async () => {
@@ -73,7 +96,14 @@ async function loadCompiler(url: string) {
 			throw new Error('wasm-go module must export executeBrowserGoArtifact');
 		}
 		return {
-			compiler: await factory(),
+			compiler: await factory({
+				...(runtimeManifestUrl ? { runtimeManifestUrl } : {}),
+				assetTimeoutMs: limits?.assetTimeoutMs,
+				compileTimeoutMs: limits?.compileTimeoutMs,
+				linkTimeoutMs: limits?.compileTimeoutMs,
+				maxAssetBytes: limits?.maxAssetBytes,
+				maxWasmMemoryBytes: limits?.maxWasmMemoryBytes
+			}),
 			executeBrowserGoArtifact: module.executeBrowserGoArtifact
 		};
 	})();
@@ -244,6 +274,8 @@ self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
 		compilerUrl: nextCompilerUrl,
+		manifestUrl: nextManifestUrl,
+		runtimeLimits,
 		buffer,
 		debugBuffer,
 		code,
@@ -259,10 +291,12 @@ self.onmessage = async (event: { data: any }) => {
 	try {
 		if (load) {
 			compilerUrl = nextCompilerUrl;
+			manifestUrl = nextManifestUrl;
+			compilerLimits = runtimeLimits;
 			if (log) {
 				console.log(`[wasm-idle:go-worker] load compilerUrl=${compilerUrl}`);
 			}
-			await loadCompiler(compilerUrl);
+			await loadCompiler(compilerUrl, manifestUrl, compilerLimits);
 			postMessage({ load: true });
 			return;
 		}
@@ -273,11 +307,12 @@ self.onmessage = async (event: { data: any }) => {
 			postMessage({ error: 'Go debugging requires SharedArrayBuffer.' });
 			return;
 		}
-		const runtime = await loadCompiler(compilerUrl);
+		const runtime = await loadCompiler(compilerUrl, manifestUrl, compilerLimits);
 		const effectiveTarget = debug ? 'js/wasm' : target;
 		const compileCode = debug ? instrumentGoDebugSource(code) : code;
 		const compileCacheKey = `${effectiveTarget}\n${compileCode}`;
 		if (!compiledArtifact || compiledCacheKey !== compileCacheKey) {
+			postMessage({ phase: 'compile' });
 			if (log) {
 				console.log(
 					`[wasm-idle:go-worker] compile start prepare=${String(prepare)} target=${effectiveTarget} bytes=${compileCode.length}`
@@ -288,6 +323,11 @@ self.onmessage = async (event: { data: any }) => {
 				target: effectiveTarget,
 				prepare,
 				log,
+				assetTimeoutMs: runtimeLimits?.assetTimeoutMs,
+				compileTimeoutMs: runtimeLimits?.compileTimeoutMs,
+				linkTimeoutMs: runtimeLimits?.compileTimeoutMs,
+				maxAssetBytes: runtimeLimits?.maxAssetBytes,
+				maxWasmMemoryBytes: runtimeLimits?.maxWasmMemoryBytes,
 				onProgress(progress: unknown) {
 					postMessage({ progress });
 				}
@@ -336,6 +376,7 @@ self.onmessage = async (event: { data: any }) => {
 				`[wasm-idle:go-worker] runtime start target=${compiledArtifact.target} format=${compiledArtifact.format}`
 			);
 		}
+		postMessage({ phase: 'execute' });
 		const restoreGoDebugHost =
 			debug && debugBufferGo
 				? createGoDebugHost({
@@ -354,6 +395,11 @@ self.onmessage = async (event: { data: any }) => {
 		try {
 			execution = await runtime.executeBrowserGoArtifact(compiledArtifact, {
 				args,
+				runtimeManifestUrl: manifestUrl,
+				assetTimeoutMs: runtimeLimits?.assetTimeoutMs,
+				runTimeoutMs: runtimeLimits?.runTimeoutMs,
+				maxAssetBytes: runtimeLimits?.maxAssetBytes,
+				maxWasmMemoryBytes: runtimeLimits?.maxWasmMemoryBytes,
 				env: {
 					USER: 'jungol'
 				},

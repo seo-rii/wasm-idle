@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { gzipSync } from 'node:zlib';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
 	clearRuntimePackCache,
@@ -22,6 +23,7 @@ function encodeCopy(baseOffset: number, length: number) {
 describe('runtime assets', () => {
 	afterEach(() => {
 		clearRuntimePackCache();
+		vi.useRealTimers();
 	});
 
 	it('parses runtime pack indexes', () => {
@@ -75,6 +77,50 @@ describe('runtime assets', () => {
 			'/sysroot/runtime.a'
 		]);
 		expect(Array.from(entries[1]!.bytes)).toEqual([4, 5, 6]);
+		expect(requests).toEqual([
+			'https://example.invalid/runtime/sysroot/wasip1.index.json',
+			'https://example.invalid/runtime/sysroot/wasip1.pack'
+		]);
+	});
+
+	it('reuses successfully loaded packs when callers provide abort signals', async () => {
+		const requests: string[] = [];
+		const fetchImpl = async (url: string | URL | Request) => {
+			requests.push(String(url));
+			if (String(url).endsWith('.index.json')) {
+				return new Response(
+					JSON.stringify({
+						format: 'wasm-go-runtime-pack-index-v1',
+						fileCount: 1,
+						totalBytes: 3,
+						entries: [{ runtimePath: '/sysroot/fmt.a', offset: 0, length: 3 }]
+					})
+				);
+			}
+			return new Response(new Uint8Array([1, 2, 3]));
+		};
+		const pack = {
+			index: 'sysroot/wasip1.index.json',
+			asset: 'sysroot/wasip1.pack',
+			fileCount: 1,
+			totalBytes: 3
+		};
+
+		await loadRuntimePackEntries(
+			'https://example.invalid/runtime/',
+			pack,
+			fetchImpl as typeof fetch,
+			undefined,
+			{ signal: new AbortController().signal }
+		);
+		await loadRuntimePackEntries(
+			'https://example.invalid/runtime/',
+			pack,
+			fetchImpl as typeof fetch,
+			undefined,
+			{ signal: new AbortController().signal }
+		);
+
 		expect(requests).toEqual([
 			'https://example.invalid/runtime/sysroot/wasip1.index.json',
 			'https://example.invalid/runtime/sysroot/wasip1.pack'
@@ -333,5 +379,157 @@ describe('runtime assets', () => {
 			[4, 4],
 			[4, 4]
 		]);
+	});
+
+	it('rejects declared and streamed assets above the caller byte cap', async () => {
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.invalid/declared.wasm',
+				'declared.wasm',
+				async () =>
+					new Response(new Uint8Array(8), {
+						headers: { 'content-length': '8' }
+					}),
+				true,
+				undefined,
+				{ maxAssetBytes: 4 }
+			)
+		).rejects.toThrow(/hard asset limit 4 bytes/);
+
+		const cancel = vi.fn();
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.invalid/streamed.wasm',
+				'streamed.wasm',
+				async () =>
+					new Response(
+						new ReadableStream({
+							start(controller) {
+								controller.enqueue(new Uint8Array([1, 2, 3]));
+								controller.enqueue(new Uint8Array([4, 5, 6]));
+							},
+							cancel
+						})
+					),
+				true,
+				undefined,
+				{ maxAssetBytes: 4 }
+			)
+		).rejects.toThrow(/hard asset limit 4 bytes/);
+		expect(cancel).toHaveBeenCalled();
+	});
+
+	it('caps decompressed gzip bytes instead of trusting the compressed size', async () => {
+		const compressed = new Uint8Array(gzipSync(new Uint8Array(1024).fill(65)));
+		expect(compressed.byteLength).toBeLessThan(1024);
+
+		await expect(
+			fetchRuntimeAssetBytes(
+				'https://example.invalid/runtime.pack.gz',
+				'runtime.pack',
+				async () => new Response(compressed),
+				true,
+				undefined,
+				{ maxAssetBytes: compressed.byteLength }
+			)
+		).rejects.toThrow(/hard asset limit/);
+	});
+
+	it('aborts an in-flight streamed asset and cancels its reader', async () => {
+		const controller = new AbortController();
+		const reason = new Error('stop Go asset');
+		const cancel = vi.fn();
+		let markStarted!: () => void;
+		const started = new Promise<void>((resolve) => {
+			markStarted = resolve;
+		});
+		const pending = fetchRuntimeAssetBytes(
+			'https://example.invalid/pending.wasm',
+			'pending.wasm',
+			async () =>
+				new Response(
+					new ReadableStream({
+						start(streamController) {
+							streamController.enqueue(new Uint8Array([1]));
+						},
+						cancel
+					})
+				),
+			true,
+			() => markStarted(),
+			{ signal: controller.signal }
+		);
+		await started;
+		controller.abort(reason);
+
+		await expect(pending).rejects.toBe(reason);
+		expect(cancel).toHaveBeenCalled();
+	});
+
+	it('enforces the asset deadline even when a custom fetch ignores its signal', async () => {
+		vi.useFakeTimers();
+		const pending = fetchRuntimeAssetBytes(
+			'https://example.invalid/hung.wasm',
+			'hung.wasm',
+			() => new Promise(() => undefined),
+			true,
+			undefined,
+			{ assetTimeoutMs: 5 }
+		);
+		const outcome = pending.catch((error) => error);
+
+		await vi.advanceTimersByTimeAsync(5);
+
+		await expect(outcome).resolves.toMatchObject({
+			name: 'TimeoutError',
+			message: 'hung.wasm timed out after 5 ms'
+		});
+	});
+
+	it('rejects oversized declared delta output before allocating decoded entries', async () => {
+		await expect(
+			loadRuntimePackEntries(
+				'https://example.invalid/runtime/',
+				{
+					index: 'delta.index.json',
+					asset: 'delta.pack',
+					fileCount: 1,
+					totalBytes: 0,
+					decodedTotalBytes: 2_048,
+					delta: {
+						format: 'copy-literal-v1',
+						base: {
+							index: 'base.index.json',
+							asset: 'base.pack',
+							fileCount: 0,
+							totalBytes: 0
+						}
+					}
+				},
+				async (url) => {
+					if (String(url).endsWith('.index.json')) {
+						return new Response(
+							JSON.stringify({
+								format: 'wasm-go-runtime-delta-pack-index-v1',
+								fileCount: 1,
+								totalBytes: 0,
+								decodedTotalBytes: 2_048,
+								entries: [
+									{
+										runtimePath: '/large.a',
+										offset: 0,
+										length: 0,
+										decodedLength: 2_048
+									}
+								]
+							})
+						);
+					}
+					return new Response(new Uint8Array());
+				},
+				undefined,
+				{ maxAssetBytes: 1_024 }
+			)
+		).rejects.toThrow(/decoded bytes exceed the hard asset limit 1024 bytes/);
 	});
 });
