@@ -7,6 +7,7 @@ const startupMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../core/src/wasm.js', () => ({
+	DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES: 128 * 1024 * 1024,
 	compile: startupMocks.compile,
 	readBuffer: startupMocks.readBuffer
 }));
@@ -69,11 +70,12 @@ describe('Clang runtime startup', () => {
 		]);
 		for (const call of startupMocks.compile.mock.calls) {
 			expect(call[2]).toBe(controller.signal);
+			expect(call[3]).toBe(128 * 1024 * 1024);
 		}
 		expect(startupMocks.readBuffer).toHaveBeenCalledWith(
 			'https://cdn.test/clang/bin/sysroot.tar.gz',
 			undefined,
-			undefined,
+			128 * 1024 * 1024,
 			controller.signal
 		);
 

@@ -50,14 +50,16 @@ export default class MemFS {
 		);
 
 		this.ready = (
-			options.signal
+			options.maxAssetBytes !== undefined
 				? compile(
 						options.moduleUrl,
 						options.progress,
 						options.signal,
 						options.maxAssetBytes
 					)
-				: compile(options.moduleUrl, options.progress, undefined, options.maxAssetBytes)
+				: options.signal
+					? compile(options.moduleUrl, options.progress, options.signal)
+					: compile(options.moduleUrl, options.progress)
 		)
 			.then(
 				(module) =>

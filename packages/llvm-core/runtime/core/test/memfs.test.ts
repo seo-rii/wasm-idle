@@ -73,6 +73,33 @@ describe('MemFS', () => {
 		instantiate.mockRestore();
 	});
 
+	it('forwards an explicit asset ceiling to the Wasm loader', async () => {
+		const module = {} as WebAssembly.Module;
+		vi.mocked(compile).mockResolvedValue(module);
+		const instantiate = vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({
+			exports: {
+				init: vi.fn(),
+				memory: new WebAssembly.Memory({ initial: 1 })
+			}
+		} as WebAssembly.Instance);
+
+		const memfs = new MemFS({
+			moduleUrl: 'https://example.test/memfs.zip',
+			stdin: () => '',
+			stdout: vi.fn(),
+			maxAssetBytes: 4096
+		});
+		await memfs.ready;
+
+		expect(compile).toHaveBeenCalledWith(
+			'https://example.test/memfs.zip',
+			undefined,
+			undefined,
+			4096
+		);
+		instantiate.mockRestore();
+	});
+
 	it('replaces an existing file through the JS overlay without adding a duplicate node', async () => {
 		const module = {} as WebAssembly.Module;
 		const memory = new WebAssembly.Memory({ initial: 1 });
