@@ -1079,6 +1079,7 @@ const handleObjectiveCWorkerMessage = async (event: { data: any }) => {
 		}
 	} else if (typeof log === 'boolean' && !code) {
 		if (clang) clang.log = log;
+		if (typeof code === 'string') postMessage({ results: true });
 	} else if (code) {
 		if (!clang) {
 			postMessage({ error: 'Objective-C runtime is not loaded.' });

@@ -40,6 +40,15 @@ describe('COBOL worker', () => {
 		});
 	});
 
+	it('settles an empty source request without waiting for compilation', async () => {
+		await import('./cobol');
+		await (globalThis as any).self.onmessage({
+			data: { code: '', prepare: true, log: false }
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
 	it('loads GnuCOBOL through llvm-core, compiles workspace source, and executes stdin', async () => {
 		await import('./cobol');
 		await (globalThis as any).self.onmessage({

@@ -92,6 +92,15 @@ describe('Fortran worker runtime assets', () => {
 		globalThis.fetch = originalFetch;
 	});
 
+	it('settles an empty source request without waiting for compilation', async () => {
+		await import('./fortran');
+		await (globalThis as any).self.onmessage({
+			data: { code: '', prepare: true, log: false }
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
 	it('loads every f2c asset through the bounded least-authority fetch boundary', async () => {
 		const assets = new Map([
 			[`${assetBaseUrl}f2c.wasm`, new Uint8Array([0, 97, 115, 109])],

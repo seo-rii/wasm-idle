@@ -45,4 +45,21 @@ describe('installObjectiveCWorker', () => {
 			error: 'Objective-C runtime asset integrity verifier is not installed.'
 		});
 	});
+
+	it('settles an empty source request without waiting for compilation', async () => {
+		const scope: ObjectiveCWorkerScope = {
+			onmessage: null,
+			postMessage: vi.fn()
+		};
+
+		installObjectiveCWorker(scope, {
+			configureRuntimeAssets: vi.fn(),
+			handleAssetMessage: vi.fn(() => false),
+			waitForStdin: vi.fn(() => null),
+			verifyRuntimeAssetIntegrity: vi.fn(async () => undefined)
+		});
+		await scope.onmessage?.({ data: { code: '', prepare: true, log: false } });
+
+		expect(scope.postMessage).toHaveBeenCalledWith({ results: true });
+	});
 });
