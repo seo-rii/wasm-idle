@@ -278,6 +278,16 @@ self.onmessage = async (event) => {
 				outputLine(message);
 			},
 			stdin: createStdinReader(buffer, stdin, log),
+			onRuntimeInitialized() {
+				postMessage({
+					progress: {
+						kind: 'ready',
+						state: 'running',
+						reason: 'started',
+						label: 'Octave program started'
+					}
+				});
+			},
 			preRun: [
 				() => {
 					const FS = self.FS;

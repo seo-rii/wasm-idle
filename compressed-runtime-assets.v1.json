@@ -228,7 +228,7 @@
     "wasm-tinygo/tools/upstream/lld.wasm": 20795796,
     "wasm-tinygo/tools/upstream/tinygo-compiler.wasm": 70288217,
     "wasm-tinygo/tools/upstream/tinygo-package-graph.wasm": 25870831,
-    "wasm-typescript/index.js": 3766162,
+    "wasm-typescript/index.js": 3766184,
     "wasm-wat/index.js": 920134,
     "wasm-zig/zig_small.wasm": 5018805,
     "webr/000bd2c7d2f13441/R.js": 785875,

@@ -1,0 +1,1 @@
+function e(e){return new Worker(``+new URL(`../workers/zig-Do0M9riO.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};
