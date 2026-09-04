@@ -812,6 +812,7 @@ describe('Rust sandbox', () => {
 
 	it('uses and suspends the run timeout after handing an artifact to LLDB', async () => {
 		const sandbox = new Rust();
+		sandbox.output = () => undefined;
 		await sandbox.load('/absproxy/5173');
 		const graph = await executableGraphFixture.load.mock.results[0]!.value;
 		const worker = workerInstances[0];
@@ -841,6 +842,13 @@ describe('Rust sandbox', () => {
 			} as MessageEvent<any>);
 			expect(lldbSessions).toHaveLength(1);
 			expect(graph.dispose).toHaveBeenCalledOnce();
+			let releaseDisconnect!: () => void;
+			lldbSessions[0].disconnect.mockImplementationOnce(
+				() =>
+					new Promise<void>((resolve) => {
+						releaseDisconnect = resolve;
+					})
+			);
 
 			await vi.advanceTimersByTimeAsync(3);
 			lldbSessions[0].emit({
@@ -858,7 +866,13 @@ describe('Rust sandbox', () => {
 			expect(settled).toBe(false);
 			await vi.advanceTimersByTimeAsync(1);
 
+			expect(lldbSessions[0].disconnect).toHaveBeenCalledTimes(1);
+			expect(settled).toBe(false);
+			releaseDisconnect();
 			await rejectedRun;
+
+			await sandbox.load('/absproxy/5173');
+			await expect(sandbox.run('fn main() {}', false)).resolves.toBe(true);
 		} finally {
 			vi.useRealTimers();
 		}

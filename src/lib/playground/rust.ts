@@ -483,16 +483,36 @@ class Rust implements Sandbox {
 					if (phaseTimeoutState !== state || state.paused || settled) return;
 					phaseTimeout = undefined;
 					state.remainingMs = 0;
-					this.workerSession.terminate(
-						new TimeoutError(
-							`Rust ${state.phase} timed out after ${state.timeoutMs} ms`,
-							{
-								phase: state.phase === 'compile' ? 'compile' : 'execute',
-								runtimeId: 'RUST',
-								timeoutMs: state.timeoutMs
-							}
-						)
+					const timeoutError = new TimeoutError(
+						`Rust ${state.phase} timed out after ${state.timeoutMs} ms`,
+						{
+							phase: state.phase === 'compile' ? 'compile' : 'execute',
+							runtimeId: 'RUST',
+							timeoutMs: state.timeoutMs
+						}
 					);
+					const lldbSession = this.lldbSession;
+					if (!lldbSession) {
+						this.workerSession.terminate(timeoutError);
+						return;
+					}
+					if (!this.workerSession.complete(operation)) return;
+					let disconnecting: Promise<void>;
+					try {
+						disconnecting = Promise.resolve(lldbSession.disconnect());
+					} catch {
+						disconnecting = Promise.resolve();
+					}
+					void disconnecting
+						.catch(() => undefined)
+						.then(() => {
+							if (this.lldbSession === lldbSession) this.lldbSession = undefined;
+							this.lldbEditorSourcePath = rustLldbSourcePath;
+							this.exit = true;
+							this.waitingForInput = false;
+							this.pendingEof = false;
+							finishReject(timeoutError);
+						});
 				}, state.remainingMs);
 			};
 			const debugPhaseTimeout: DebugPhaseTimeoutControl = {
