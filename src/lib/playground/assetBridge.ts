@@ -11,6 +11,7 @@ import {
 	type ProgressLike
 } from '@wasm-idle/core';
 import { decompressGzip } from '@wasm-idle/llvm-core';
+import { readPythonPackageAssets } from '$lib/playground/pythonPackageLock';
 
 interface AssetRequestMessage {
 	id: number;
@@ -33,7 +34,6 @@ type LoadedAsset = {
 type AssetBridgeState = 'active' | 'rebinding' | 'disposed';
 
 const encoder = new TextEncoder();
-const strictDecoder = new TextDecoder('utf-8', { fatal: true });
 const DEFAULT_STREAM_BUFFER_BYTES = 64 * 1024;
 const MAX_RUNTIME_ASSET_BYTES = 128 * 1024 * 1024;
 const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
@@ -237,52 +237,6 @@ const transferBuffer = (bytes: Uint8Array, transferOwnership = false) => {
 
 const expectedAssetsForRuntime = (runtime: RuntimeAssetRuntime) =>
 	new Set<string>(RUNTIME_LOAD_ASSETS[runtime]);
-
-const pythonPackageAssetPattern = /^[A-Za-z0-9][A-Za-z0-9._+-]*\.(?:whl|tar|zip)$/u;
-
-const readPythonPackageAssets = (bytes: Uint8Array) => {
-	let lock: unknown;
-	try {
-		lock = JSON.parse(strictDecoder.decode(bytes));
-	} catch {
-		throw new ProtocolError('Python runtime lock file is not valid UTF-8 JSON', {
-			phase: 'asset',
-			runtimeId: 'python'
-		});
-	}
-	if (
-		typeof lock !== 'object' ||
-		lock === null ||
-		!('packages' in lock) ||
-		typeof lock.packages !== 'object' ||
-		lock.packages === null ||
-		Array.isArray(lock.packages)
-	) {
-		throw new ProtocolError('Python runtime lock file has an invalid packages map', {
-			phase: 'asset',
-			runtimeId: 'python'
-		});
-	}
-
-	const assets = new Set<string>();
-	for (const entry of Object.values(lock.packages)) {
-		if (typeof entry !== 'object' || entry === null || !('file_name' in entry)) {
-			throw new ProtocolError('Python runtime lock file has an invalid package entry', {
-				phase: 'asset',
-				runtimeId: 'python'
-			});
-		}
-		const asset = entry.file_name;
-		if (typeof asset !== 'string' || !pythonPackageAssetPattern.test(asset)) {
-			throw new ProtocolError('Python runtime lock file has an unsafe package asset name', {
-				phase: 'asset',
-				runtimeId: 'python'
-			});
-		}
-		assets.add(asset);
-	}
-	return assets;
-};
 
 const integrityKey = (config: ResolvedRuntimeAssetConfig) =>
 	JSON.stringify(

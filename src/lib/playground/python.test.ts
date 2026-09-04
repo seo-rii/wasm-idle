@@ -408,6 +408,57 @@ print((left + right) // (left - left))`,
 		);
 	});
 
+	it('forwards the caller asset ceiling to direct worker asset fetches', async () => {
+		const sandbox = new Python();
+
+		await sandbox.load(
+			{ python: { baseUrl: 'https://cdn.example.test/pyodide/' } },
+			'',
+			true,
+			[],
+			{ limits: { maxAssetBytes: 4096 } }
+		);
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				assets: {
+					baseUrl: 'https://cdn.example.test/pyodide/',
+					maxAssetBytes: 4096,
+					useAssetBridge: false
+				}
+			})
+		);
+	});
+
+	it('replaces a direct worker when the caller asset ceiling changes', async () => {
+		const sandbox = new Python();
+		const runtimeAssets = {
+			python: { baseUrl: 'https://cdn.example.test/pyodide/' }
+		};
+
+		await sandbox.load(runtimeAssets, '', true, [], {
+			limits: { maxAssetBytes: 8192 }
+		});
+		const firstWorker = workerInstances[0];
+		await sandbox.load(runtimeAssets, '', true, [], {
+			limits: { maxAssetBytes: 4096 }
+		});
+
+		expect(workerInstances).toHaveLength(2);
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances[1].postMessage).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				assets: {
+					baseUrl: 'https://cdn.example.test/pyodide/',
+					maxAssetBytes: 4096,
+					useAssetBridge: false
+				}
+			})
+		);
+	});
+
 	it('rejects a throwing run callback, retires the worker, and permits retry', async () => {
 		autoResolveRun = false;
 		const sandbox = new Python();

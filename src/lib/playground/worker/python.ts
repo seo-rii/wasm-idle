@@ -1,11 +1,13 @@
-import type { PyodideInterface } from 'pyodide';
+import type { Lockfile, PyodideInterface } from 'pyodide';
 import {
 	flushQueuedStdin,
 	readBufferedStdin,
 	waitForBufferedStdin
 } from '$lib/playground/stdinBuffer';
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
+import { parsePythonPackageLock } from '$lib/playground/pythonPackageLock';
 import {
+	configureWorkerRuntimeAssetAllowlist,
 	configureWorkerRuntimeAssets,
 	handleWorkerAssetMessage,
 	loadWorkerRuntimeAsset,
@@ -36,7 +38,6 @@ let stdinBufferPyodide: Int32Array,
 	interruptBufferPyodide: Uint8Array,
 	pyodide: PyodideInterface,
 	baseUrl = '',
-	packageBaseUrl = '',
 	useAssetBridge = false;
 
 const imageHook = `
@@ -183,8 +184,22 @@ if not globals().get("__wasm_idle_img_inited__", False):
         pass
 `;
 
-const cdnFallbackUrl = (version: string) =>
-	version ? `https://cdn.jsdelivr.net/pyodide/v${version}/full/` : '';
+const pyodideVersionPattern = /^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}(?:[A-Za-z0-9._+-]{0,64})?$/u;
+const directPyodideRuntimeAssets = [
+	'pyodide.mjs',
+	'pyodide.asm.js',
+	'pyodide-lock.json',
+	'pyodide.asm.wasm',
+	'python_stdlib.zip'
+] as const;
+
+const resolvePinnedPackageBaseUrl = (version: string) => {
+	if (typeof version !== 'string' || !pyodideVersionPattern.test(version)) {
+		throw new Error('Pyodide runtime version is invalid');
+	}
+	return new URL(`v${encodeURIComponent(version)}/full/`, 'https://cdn.jsdelivr.net/pyodide/')
+		.href;
+};
 
 function postProgress(percent: number, stage: string) {
 	self.postMessage({ progress: { percent, stage } });
@@ -211,9 +226,27 @@ async function loadPyodide(path: string) {
 	const runtimeModule = (await importRuntimeAssetModule(
 		'pyodide.mjs'
 	)) as typeof import('pyodide');
-	packageBaseUrl = useAssetBridge ? runtimeBaseUrl : cdnFallbackUrl(runtimeModule.version);
+	let packageBaseUrl = runtimeBaseUrl;
+	let lockFileContents: Lockfile | undefined;
+	if (!useAssetBridge) {
+		packageBaseUrl = resolvePinnedPackageBaseUrl(runtimeModule.version);
+		const loadedLock = await loadWorkerRuntimeAsset('pyodide-lock.json');
+		const parsedLock = parsePythonPackageLock(loadedLock.bytes);
+		// The interceptor caps downloaded (including browser-decoded transport) archive bytes.
+		// Pyodide owns package extraction after receiving that bounded archive.
+		configureWorkerRuntimeAssetAllowlist({
+			baseUrl: packageBaseUrl,
+			assets: [...parsedLock.packageAssets],
+			runtimeAssets: directPyodideRuntimeAssets
+		});
+		lockFileContents = parsedLock.lock as unknown as Lockfile;
+	}
 	const { loadPyodide } = runtimeModule;
-	pyodide = await loadPyodide({ indexURL: path, packageBaseUrl });
+	pyodide = await loadPyodide({
+		indexURL: path,
+		packageBaseUrl,
+		...(lockFileContents ? { lockFileContents } : {})
+	});
 }
 
 async function loadPackages(code: string) {

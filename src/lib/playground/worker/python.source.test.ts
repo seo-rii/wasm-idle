@@ -25,11 +25,17 @@ describe('Python worker source', () => {
 		expect(source).not.toContain("await import('pyodide')");
 	});
 
-	it('keeps bridged packages on the configured base and direct packages on the pinned CDN', () => {
-		expect(source).toContain(
-			'packageBaseUrl = useAssetBridge ? runtimeBaseUrl : cdnFallbackUrl(runtimeModule.version);'
-		);
-		expect(source).toContain('loadPyodide({ indexURL: path, packageBaseUrl })');
+	it('bounds direct packages to lock-declared files on the version-pinned CDN', () => {
+		expect(source).toContain("'https://cdn.jsdelivr.net/pyodide/'");
+		expect(source).toContain('resolvePinnedPackageBaseUrl(runtimeModule.version)');
+		expect(source).toContain("loadWorkerRuntimeAsset('pyodide-lock.json')");
+		expect(source).toContain('parsePythonPackageLock(loadedLock.bytes)');
+		expect(source).toContain('configureWorkerRuntimeAssetAllowlist({');
+		expect(source).toContain('assets: [...parsedLock.packageAssets]');
+		expect(source).toContain('runtimeAssets: directPyodideRuntimeAssets');
+		expect(source).toContain('lockFileContents = parsedLock.lock as unknown as Lockfile;');
+		expect(source).toContain('...(lockFileContents ? { lockFileContents } : {})');
+		expect(source).not.toContain('cdnFallbackUrl');
 		expect(source).not.toContain('setCdnUrl');
 	});
 
