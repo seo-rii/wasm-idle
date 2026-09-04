@@ -125,4 +125,18 @@ describe('Objective-C sandbox debugging', () => {
 		expect(disposeAssetBridge).toHaveBeenCalledOnce();
 		expect(sandbox.assetBridge).toBeNull();
 	});
+
+	it('rejects Objective-C receipts above the caller asset ceiling before spawning a worker', async () => {
+		const sandbox = new ObjectiveC();
+
+		await expect(
+			sandbox.load('/', '', true, [], { limits: { maxAssetBytes: 1 } })
+		).rejects.toMatchObject({
+			name: 'AssetTooLargeError',
+			code: 'asset-too-large',
+			limit: 1,
+			runtimeId: 'OBJC'
+		});
+		expect(workerInstances).toHaveLength(0);
+	});
 });

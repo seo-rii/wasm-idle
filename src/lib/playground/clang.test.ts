@@ -212,6 +212,17 @@ int main() {
 		);
 	});
 
+	it('forwards the caller asset ceiling to the C++ worker', async () => {
+		const sandbox = new Clang('CPP');
+
+		await sandbox.load('/', '', true, [], { limits: { maxAssetBytes: 4096 } });
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({ load: true, maxAssetBytes: 4096 })
+		);
+	});
+
 	it('rejects the active C++ run when kill terminates the worker', async () => {
 		const sandbox = new Clang('CPP');
 

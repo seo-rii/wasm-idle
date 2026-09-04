@@ -19,7 +19,11 @@ import {
 	resetBufferedStdin,
 	waitForBufferedSequenceChange
 } from '$lib/playground/stdinBuffer';
-import { createRuntimeAssetsKey } from '@wasm-idle/core';
+import {
+	AssetTooLargeError,
+	createRuntimeAssetsKey,
+	resolveExecutionLimits
+} from '@wasm-idle/core';
 
 const debugBreakpointBufferInts = 1028;
 
@@ -77,7 +81,12 @@ class ObjectiveC implements Sandbox {
 		options: SandboxExecutionOptions = {},
 		progress?: SandboxProgress
 	) {
-		void options;
+		let limits: ReturnType<typeof resolveExecutionLimits>;
+		try {
+			limits = resolveExecutionLimits(options.limits);
+		} catch (error) {
+			return Promise.reject(error);
+		}
 		return this.workerSession.load(async (resolve, reject) => {
 			this.log = log;
 			this.pendingInput = [];
@@ -86,11 +95,23 @@ class ObjectiveC implements Sandbox {
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const clangAssets = resolveRuntimeAssetConfig('clang', runtimeAssets, currentUrl);
 			const objectivecAssets = resolveObjectiveCRuntimeAssetConfig(runtimeAssets, currentUrl);
+			for (const [asset, receipt] of Object.entries(objectivecAssets.integrity)) {
+				if (receipt.bytes > limits.maxAssetBytes) {
+					throw new AssetTooLargeError(
+						`Objective-C execution asset ${asset} exceeds the ${limits.maxAssetBytes} byte limit`,
+						{
+							actual: receipt.bytes,
+							limit: limits.maxAssetBytes,
+							runtimeId: this.language
+						}
+					);
+				}
+			}
 			const nextObjectiveCAssetsKey = objectiveCAssetsKey(objectivecAssets);
 			const needsWorkerReset =
 				!this.worker ||
 				!this.assetBridge ||
-				!this.assetBridge.matches(clangAssets) ||
+				!this.assetBridge.matches(clangAssets, limits.maxAssetBytes) ||
 				this.activeObjectiveCAssetsKey !== nextObjectiveCAssetsKey;
 			if (needsWorkerReset && this.worker) {
 				this.workerSession.reset();
@@ -104,7 +125,8 @@ class ObjectiveC implements Sandbox {
 					this.worker,
 					'clang',
 					clangAssets,
-					progress
+					progress,
+					limits.maxAssetBytes
 				);
 				this.activeObjectiveCAssetsKey = nextObjectiveCAssetsKey;
 				this.worker.onmessage = (event: MessageEvent<any>) => {
@@ -122,10 +144,13 @@ class ObjectiveC implements Sandbox {
 						baseUrl: clangAssets.baseUrl,
 						useAssetBridge: clangAssets.useAssetBridge
 					},
-					objectivecAssets
+					objectivecAssets: {
+						...objectivecAssets,
+						maxAssetBytes: limits.maxAssetBytes
+					}
 				});
 			} else {
-				this.assetBridge?.rebind(this.worker, clangAssets, progress);
+				this.assetBridge?.rebind(this.worker, clangAssets, progress, limits.maxAssetBytes);
 				this.worker.postMessage({ log });
 				resolve();
 			}

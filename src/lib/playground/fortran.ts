@@ -274,7 +274,7 @@ class Fortran implements Sandbox {
 			needsWorkerReset =
 				!this.worker ||
 				!this.assetBridge ||
-				!this.assetBridge.matches(clangAssets) ||
+				!this.assetBridge.matches(clangAssets, limits.maxAssetBytes) ||
 				this.activeFortranAssetsKey !== nextFortranAssetsKey;
 		} catch (error) {
 			const failure = operation.cancellation ? operation.cancellation.reason : error;
@@ -329,7 +329,13 @@ class Fortran implements Sandbox {
 					}
 					let assetBridge: WorkerAssetBridge;
 					try {
-						assetBridge = new WorkerAssetBridge(worker, 'clang', clangAssets, progress);
+						assetBridge = new WorkerAssetBridge(
+							worker,
+							'clang',
+							clangAssets,
+							progress,
+							limits.maxAssetBytes
+						);
 					} catch (error) {
 						try {
 							worker.terminate();
@@ -408,7 +414,7 @@ class Fortran implements Sandbox {
 					const worker = this.worker;
 					const assetBridge = this.assetBridge;
 					if (!assetBridge) return rejectOperation('Fortran asset bridge is not loaded');
-					assetBridge.rebind(worker, clangAssets, progress);
+					assetBridge.rebind(worker, clangAssets, progress, limits.maxAssetBytes);
 					if (
 						!this.isOperationActive(operation) ||
 						this.worker !== worker ||

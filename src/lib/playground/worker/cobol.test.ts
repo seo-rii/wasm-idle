@@ -56,7 +56,8 @@ describe('COBOL worker', () => {
 				load: true,
 				log: false,
 				clangAssets: { baseUrl: '/wasm-clang/', useAssetBridge: true },
-				cobolBaseUrl: '/wasm-cobol/'
+				cobolBaseUrl: '/wasm-cobol/',
+				maxAssetBytes: 4096
 			}
 		});
 
@@ -82,6 +83,7 @@ describe('COBOL worker', () => {
 		expect(mocks.createCobolCompiler).toHaveBeenCalledWith({
 			runtimeBaseUrl: '/wasm-cobol/',
 			clangRuntimeBaseUrl: '/wasm-clang/',
+			maxAssetBytes: 4096,
 			log: false
 		});
 		expect(mocks.compile).toHaveBeenCalledWith(

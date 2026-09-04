@@ -11,6 +11,7 @@ import {
 } from '$lib/playground/assets';
 import { LldbSandboxSession, type LldbArtifactPayload } from '$lib/playground/lldbSession';
 import { normalizeDwarfWorkspacePath } from '@wasm-idle/llvm-core/clang';
+import { resolveExecutionLimits } from '@wasm-idle/core';
 import { resolveSandboxExecutionArgs } from '$lib/playground/options';
 import type { Sandbox } from '$lib/playground/sandbox';
 import {
@@ -102,9 +103,15 @@ class Clang implements Sandbox {
 		code = '',
 		log = true,
 		args: string[] = [],
-		_options: SandboxExecutionOptions = {},
+		options: SandboxExecutionOptions = {},
 		progress?: ProgressSink
 	) {
+		let limits: ReturnType<typeof resolveExecutionLimits>;
+		try {
+			limits = resolveExecutionLimits(options.limits);
+		} catch (error) {
+			return Promise.reject(error);
+		}
 		return this.workerSession.load(async (resolve, reject) => {
 			this.log = log;
 			this.pendingInput = [];
@@ -122,7 +129,9 @@ class Clang implements Sandbox {
 			this.debugRuntimeBaseUrl = debugRuntime.baseUrl;
 			this.debugManifestUrl = debugRuntime.manifestUrl;
 			const needsWorkerReset =
-				!this.worker || !this.assetBridge || !this.assetBridge.matches(assetConfig);
+				!this.worker ||
+				!this.assetBridge ||
+				!this.assetBridge.matches(assetConfig, limits.maxAssetBytes);
 			if (needsWorkerReset && this.worker) {
 				this.workerSession.reset();
 			}
@@ -133,7 +142,8 @@ class Clang implements Sandbox {
 					this.worker,
 					'clang',
 					assetConfig,
-					progress
+					progress,
+					limits.maxAssetBytes
 				);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
 					if (this.assetBridge?.handleMessage(event)) return;
@@ -149,10 +159,11 @@ class Clang implements Sandbox {
 					assets: {
 						baseUrl: assetConfig.baseUrl,
 						useAssetBridge: assetConfig.useAssetBridge
-					}
+					},
+					maxAssetBytes: limits.maxAssetBytes
 				});
 			} else {
-				this.assetBridge?.rebind(this.worker, assetConfig, progress);
+				this.assetBridge?.rebind(this.worker, assetConfig, progress, limits.maxAssetBytes);
 				this.worker.postMessage({ log });
 				resolve();
 			}

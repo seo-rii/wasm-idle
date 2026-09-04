@@ -70,6 +70,19 @@ describe('COBOL sandbox workspace boundary', () => {
 		vi.useRealTimers();
 	});
 
+	it('forwards the caller asset ceiling to the COBOL worker', async () => {
+		const sandbox = new Cobol();
+
+		await sandbox.load('/absproxy/5173', '', true, [], {
+			limits: { maxAssetBytes: 4096 }
+		});
+
+		expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({ load: true, maxAssetBytes: 4096 })
+		);
+	});
+
 	it('canonicalizes the active path and workspace files before worker dispatch', async () => {
 		const sandbox = new Cobol();
 		const code = '       IDENTIFICATION DIVISION.';
