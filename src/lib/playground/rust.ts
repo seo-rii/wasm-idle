@@ -92,9 +92,7 @@ class Rust implements Sandbox {
 	private readonly workerSession = new WorkerSession({
 		label: 'Rust',
 		onDispose: (worker) => {
-			const executableGraph = this.workerExecutableGraphs.get(worker);
-			this.workerExecutableGraphs.delete(worker);
-			executableGraph?.dispose();
+			this.disposeWorkerExecutableGraph(worker);
 			if (this.worker === worker) delete this.worker;
 			this.exit = true;
 			this.waitingForInput = false;
@@ -117,6 +115,12 @@ class Rust implements Sandbox {
 	private activeDebugPhaseTimeout?: DebugPhaseTimeoutControl;
 	private readonly lldbBreakpoints = new Map<`/workspace/${string}`, number[]>();
 	private lldbEditorSourcePath: `/workspace/${string}` = rustLldbSourcePath;
+
+	private disposeWorkerExecutableGraph(worker: Worker) {
+		const executableGraph = this.workerExecutableGraphs.get(worker);
+		this.workerExecutableGraphs.delete(worker);
+		executableGraph?.dispose();
+	}
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -680,6 +684,7 @@ class Rust implements Sandbox {
 						void lldbSession.eof();
 					}
 					if (compilerWorker && this.workerSession.release(compilerWorker)) {
+						this.disposeWorkerExecutableGraph(compilerWorker);
 						if (this.worker === compilerWorker) delete this.worker;
 					}
 					void lldbSession.start().then(

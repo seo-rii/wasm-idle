@@ -658,6 +658,7 @@ describe('Rust sandbox', () => {
 	it('uses and suspends the run timeout after handing an artifact to LLDB', async () => {
 		const sandbox = new Rust();
 		await sandbox.load('/absproxy/5173');
+		const graph = await executableGraphFixture.load.mock.results[0]!.value;
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => {});
 		vi.useFakeTimers();
@@ -684,6 +685,7 @@ describe('Rust sandbox', () => {
 				}
 			} as MessageEvent<any>);
 			expect(lldbSessions).toHaveLength(1);
+			expect(graph.dispose).toHaveBeenCalledOnce();
 
 			await vi.advanceTimersByTimeAsync(3);
 			lldbSessions[0].emit({
