@@ -145,6 +145,49 @@ describe('Elixir sandbox', () => {
 		expect(workerInstances[0].terminate).toHaveBeenCalledTimes(1);
 	});
 
+	it('rejects oversized receipts and keys worker reuse by maxAssetBytes', async () => {
+		const runtimeAssets = {
+			elixir: { bundleUrl: '/runtime/elixir/bundle.avm' }
+		};
+		const rejected = new Elixir();
+		const oversizedLimit = WASM_ELIXIR_ASSET_RECEIPTS['bundle.avm'].uncompressedBytes - 1;
+
+		await expect(
+			rejected.load(runtimeAssets, '', true, [], {
+				limits: { maxAssetBytes: oversizedLimit }
+			})
+		).rejects.toMatchObject({
+			name: 'AssetTooLargeError',
+			actual: WASM_ELIXIR_ASSET_RECEIPTS['bundle.avm'].uncompressedBytes,
+			limit: oversizedLimit,
+			runtimeId: 'ELIXIR'
+		});
+		expect(workerInstances).toHaveLength(0);
+
+		const sandbox = new Elixir();
+		await sandbox.load(runtimeAssets, '', true, [], {
+			limits: { maxAssetBytes: 8 * 1024 * 1024 }
+		});
+		const firstWorker = workerInstances[0];
+		expect(firstWorker.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ maxAssetBytes: 8 * 1024 * 1024 })
+		);
+
+		await sandbox.load(runtimeAssets, '', true, [], {
+			limits: { maxAssetBytes: 8 * 1024 * 1024 }
+		});
+		expect(workerInstances).toHaveLength(1);
+
+		await sandbox.load(runtimeAssets, '', true, [], {
+			limits: { maxAssetBytes: 9 * 1024 * 1024 }
+		});
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ maxAssetBytes: 9 * 1024 * 1024 })
+		);
+	});
+
 	it('loads Erlang through the shared Popcorn worker and marks run messages as Erlang', async () => {
 		const sandbox = new Elixir('ERLANG');
 		const progress = { set: vi.fn() };

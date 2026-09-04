@@ -132,6 +132,39 @@ describe('Lisp sandbox', () => {
 		]);
 	});
 
+	it('forwards maxAssetBytes and replaces the worker when only the limit changes', async () => {
+		const sandbox = new Lisp();
+		const runtimeAssets = {
+			lisp: {
+				moduleUrl: '/runtime/lisp/index.js',
+				manifestUrl: '/runtime/lisp/runtime-manifest.v2.json',
+				manifestFingerprint: 'a'.repeat(64)
+			}
+		};
+
+		await sandbox.load(runtimeAssets, '', true, [], {
+			limits: { maxAssetBytes: 8 * 1024 * 1024 }
+		});
+		const firstWorker = workerInstances[0];
+		expect(firstWorker.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ maxAssetBytes: 8 * 1024 * 1024 })
+		);
+
+		await sandbox.load(runtimeAssets, '', true, [], {
+			limits: { maxAssetBytes: 8 * 1024 * 1024 }
+		});
+		expect(workerInstances).toHaveLength(1);
+
+		await sandbox.load(runtimeAssets, '', true, [], {
+			limits: { maxAssetBytes: 9 * 1024 * 1024 }
+		});
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ maxAssetBytes: 9 * 1024 * 1024 })
+		);
+	});
+
 	it('terminates Lisp output before exceeding the cumulative UTF-8 byte limit', async () => {
 		const sandbox = new Lisp();
 		const output = vi.fn();

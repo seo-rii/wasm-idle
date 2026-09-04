@@ -7,6 +7,8 @@ declare var self: any;
 
 let stdinBufferLisp: Int32Array | null = null;
 let runtimeConfig: ResolvedLispRuntimeAssetConfig | null = null;
+const DEFAULT_MAX_LISP_ASSET_BYTES = 128 * 1024 * 1024;
+let runtimeMaxAssetBytes = DEFAULT_MAX_LISP_ASSET_BYTES;
 let loadedRuntimeKey = '';
 type LoadedLispRuntime = {
 	compiler: any;
@@ -32,13 +34,21 @@ let runtimePromise: Promise<LoadedLispRuntime> | null = null;
 let compiledArtifact: any = null;
 let compiledCacheKey = '';
 
-async function loadRuntime(config: ResolvedLispRuntimeAssetConfig | null) {
+function resolveMaxAssetBytes(value: number | undefined) {
+	const resolved = value ?? DEFAULT_MAX_LISP_ASSET_BYTES;
+	if (!Number.isSafeInteger(resolved) || resolved <= 0) {
+		throw new TypeError('Lisp runtime maxAssetBytes must be a positive safe integer');
+	}
+	return resolved;
+}
+
+async function loadRuntime(config: ResolvedLispRuntimeAssetConfig | null, maxAssetBytes: number) {
 	if (!config) {
 		throw new Error(
 			'Lisp runtime is not configured. Provide its module, manifest, and fingerprint.'
 		);
 	}
-	const runtimeKey = JSON.stringify(config);
+	const runtimeKey = JSON.stringify([config, maxAssetBytes]);
 	if (loadedRuntimeKey === runtimeKey && runtimePromise) {
 		return await runtimePromise;
 	}
@@ -46,7 +56,7 @@ async function loadRuntime(config: ResolvedLispRuntimeAssetConfig | null) {
 	compiledArtifact = null;
 	compiledCacheKey = '';
 	const nextRuntimePromise: Promise<LoadedLispRuntime> = (async () => {
-		const verified = await loadVerifiedLispRuntimeAssets(config);
+		const verified = await loadVerifiedLispRuntimeAssets(config, { maxAssetBytes });
 		const module = verified.module;
 		const factory =
 			typeof module.createLispCompiler === 'function'
@@ -105,6 +115,7 @@ self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
 		runtimeConfig: nextRuntimeConfig,
+		maxAssetBytes: nextMaxAssetBytes,
 		buffer,
 		code,
 		prepare,
@@ -117,18 +128,19 @@ self.onmessage = async (event: { data: any }) => {
 	try {
 		if (load) {
 			runtimeConfig = nextRuntimeConfig;
+			runtimeMaxAssetBytes = resolveMaxAssetBytes(nextMaxAssetBytes);
 			if (log) {
 				console.log(
 					`[wasm-idle:lisp-worker] load profile=${runtimeConfig?.manifestFingerprint || 'missing'}`
 				);
 			}
-			await loadRuntime(runtimeConfig);
+			await loadRuntime(runtimeConfig, runtimeMaxAssetBytes);
 			postMessage({ load: true });
 			return;
 		}
 
 		stdinBufferLisp = new Int32Array(buffer);
-		const runtime = await loadRuntime(runtimeConfig);
+		const runtime = await loadRuntime(runtimeConfig, runtimeMaxAssetBytes);
 		const compileCacheKey = JSON.stringify({
 			activePath,
 			code,

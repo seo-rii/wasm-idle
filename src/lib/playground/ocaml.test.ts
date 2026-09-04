@@ -188,6 +188,38 @@ describe('OCaml sandbox', () => {
 		expect(values).toEqual([0.35]);
 	});
 
+	it('forwards maxAssetBytes and replaces the worker when only the limit changes', async () => {
+		const sandbox = new Ocaml();
+		const runtimeAssets = {
+			ocaml: {
+				moduleUrl: '/runtime/ocaml/index.js',
+				manifestUrl: '/runtime/ocaml/manifest.json'
+			}
+		};
+
+		await sandbox.load(runtimeAssets, '', true, [], {
+			limits: { maxAssetBytes: 16 * 1024 * 1024 }
+		});
+		const firstWorker = workerInstances[0];
+		expect(firstWorker.postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ maxAssetBytes: 16 * 1024 * 1024 })
+		);
+
+		await sandbox.load(runtimeAssets, '', true, [], {
+			limits: { maxAssetBytes: 16 * 1024 * 1024 }
+		});
+		expect(workerInstances).toHaveLength(1);
+
+		await sandbox.load(runtimeAssets, '', true, [], {
+			limits: { maxAssetBytes: 24 * 1024 * 1024 }
+		});
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[1].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ maxAssetBytes: 24 * 1024 * 1024 })
+		);
+	});
+
 	it('rejects load when the OCaml worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Ocaml();

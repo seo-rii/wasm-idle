@@ -167,4 +167,22 @@ describe('verified Lisp runtime assets', () => {
 		).rejects.toThrow(/manifestFingerprint trust anchor/u);
 		expect(fetch).not.toHaveBeenCalled();
 	});
+
+	it('applies a lower caller limit while fetching the manifest', async () => {
+		const maxAssetBytes = installed['runtime-manifest.v2.json'].byteLength - 1;
+
+		await expect(loadVerifiedLispRuntimeAssets(config, { maxAssetBytes })).rejects.toThrow(
+			`Lisp runtime manifest exceeds the ${maxAssetBytes} byte limit`
+		);
+		expect(fetch).toHaveBeenCalledOnce();
+	});
+
+	it('rejects logical or stored receipts above the caller limit before asset fetches', async () => {
+		const maxAssetBytes = 5 * 1024 * 1024;
+
+		await expect(loadVerifiedLispRuntimeAssets(config, { maxAssetBytes })).rejects.toThrow(
+			`Lisp runtime asset index.js exceeds the ${maxAssetBytes} byte limit`
+		);
+		expect(fetch).toHaveBeenCalledOnce();
+	});
 });
