@@ -151,6 +151,7 @@
 	}
 
 	function wait() {
+		if (term) return Promise.resolve();
 		return new Promise<void>((r) => {
 			const i = setInterval(() => {
 				if (term) {
