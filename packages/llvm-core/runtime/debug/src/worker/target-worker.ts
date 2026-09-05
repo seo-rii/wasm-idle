@@ -124,7 +124,6 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 		}
 		stderrQueue.writeBlocking(Uint8Array.of(character));
 	};
-	const inputByte = new Uint8Array(1);
 	let resolveLifecycle!: () => void;
 	let rejectLifecycle!: (error: Error) => void;
 	const lifecycle = new Promise<void>((resolve, reject) => {
@@ -159,11 +158,8 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 				if (path.endsWith('.worker.mjs')) return assetUrls.worker;
 				throw new Error(`WAMR requested an unverified runtime asset: ${path}`);
 			},
-			stdin: () => {
-				if (!stdin) return null;
-				const length = stdin.readBlocking(inputByte);
-				return length === 0 ? null : inputByte[0];
-			},
+			// Allocate a dedicated stdin device; install its whole-read operation below.
+			stdin: () => null,
 			stdout,
 			stderr,
 			onExit: (exitCode: unknown) => {
@@ -189,6 +185,19 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 			}
 		});
 		if (disposed) return;
+		const inputStream = module.FS.getStream?.(0);
+		if (!inputStream?.stream_ops) {
+			throw new Error('WAMR did not expose its standard input device');
+		}
+		// Emscripten's byte callback keeps reading until the entire libc buffer is full.
+		// A device read must instead return available bytes, then wait on the next read.
+		// Mutate the registered operations so reopening /dev/stdin has the same behavior.
+		inputStream.stream_ops.read = (_stream, buffer, offset, length) => {
+			if (!stdin) return 0;
+			return stdin.readBlocking(
+				new Uint8Array(buffer.buffer, buffer.byteOffset + offset, length)
+			);
+		};
 		mountDebugFiles(module, message.module, message.workspaceFiles);
 		module.FS.chdir(cwd);
 		const stopMemoryTelemetry = startLinearMemoryTelemetry(

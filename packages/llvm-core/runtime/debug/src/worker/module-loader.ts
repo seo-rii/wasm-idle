@@ -7,10 +7,23 @@ import type {
 	VerifiedDebugAssetBytes
 } from '../types.js';
 
+export interface EmscriptenFileStream {
+	stream_ops: {
+		read?: (
+			stream: EmscriptenFileStream,
+			buffer: Int8Array | Uint8Array,
+			offset: number,
+			length: number,
+			position?: number
+		) => number;
+	};
+}
+
 export interface EmscriptenFileSystem {
 	mkdirTree(path: string): void;
 	writeFile(path: string, data: string | Uint8Array): void;
 	chdir(path: string): void;
+	getStream?(fd: number): EmscriptenFileStream | undefined;
 }
 
 export interface EmscriptenDebugModule {

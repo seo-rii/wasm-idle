@@ -9,6 +9,16 @@ const workerMocks = vi.hoisted(() => ({
 	chdir: vi.fn(),
 	closeRspInput: vi.fn(),
 	closeRspOutput: vi.fn(),
+	stdinStream: {
+		stream_ops: {
+			read: (
+				_stream: unknown,
+				_buffer: Uint8Array | Int8Array,
+				_offset: number,
+				_length: number
+			) => 0
+		}
+	},
 	lifecycle: 'exit' as 'exit' | 'abort' | 'pending',
 	loadFailure: undefined as Error | undefined,
 	loadGate: undefined as Promise<void> | undefined,
@@ -24,7 +34,8 @@ const workerMocks = vi.hoisted(() => ({
 			FS: {
 				mkdirTree: vi.fn(),
 				writeFile: vi.fn(),
-				chdir: workerMocks.chdir
+				chdir: workerMocks.chdir,
+				getStream: (fd: number) => (fd === 0 ? workerMocks.stdinStream : undefined)
 			},
 			HEAPU8: new Uint8Array(256),
 			callMain: (args: string[]) => {
@@ -125,6 +136,61 @@ describe('WAMR target worker launch', () => {
 		workerMocks.lifecycle = 'exit';
 		workerMocks.loadFailure = undefined;
 		workerMocks.loadGate = undefined;
+		workerMocks.stdinStream.stream_ops.read = () => 0;
+	});
+
+	it('returns each available stdin chunk without EOF and preserves the next read', async () => {
+		workerMocks.lifecycle = 'pending';
+		const { handleTargetWorkerMessage } = await loadTargetWorker();
+		const message = initializeMessage('target-worker-streaming-stdin');
+		const stdin = new SharedByteQueue(message.stdin!);
+		handleTargetWorkerMessage(message);
+		await vi.waitFor(() => expect(workerMocks.callMain).toHaveBeenCalledOnce());
+		const stream = workerMocks.stdinStream;
+		const buffer = new Uint8Array(1030).fill(0xff);
+		try {
+			stdin.tryWrite(new TextEncoder().encode('35\n'));
+			expect(stream.stream_ops.read(stream, buffer, 3, 1024)).toBe(3);
+			expect(Array.from(buffer.subarray(2, 7))).toEqual([0xff, 51, 53, 10, 0xff]);
+			expect(stdin.closed).toBe(false);
+			expect(stdin.available).toBe(0);
+
+			stdin.tryWrite(new TextEncoder().encode('38\n'));
+			expect(stream.stream_ops.read(stream, buffer, 0, 1)).toBe(1);
+			expect(buffer[0]).toBe(51);
+			expect(stream.stream_ops.read(stream, buffer, 1, 1024)).toBe(2);
+			expect(new TextDecoder().decode(buffer.subarray(0, 3))).toBe('38\n');
+			expect(stdin.closed).toBe(false);
+		} finally {
+			handleTargetWorkerMessage({ type: 'dispose', generation: message.generation });
+		}
+	});
+
+	it('preserves split UTF-8 bytes and drains buffered stdin before EOF', async () => {
+		workerMocks.lifecycle = 'pending';
+		const { handleTargetWorkerMessage } = await loadTargetWorker();
+		const message = initializeMessage('target-worker-stdin-eof');
+		const stdin = new SharedByteQueue(message.stdin!);
+		handleTargetWorkerMessage(message);
+		await vi.waitFor(() => expect(workerMocks.callMain).toHaveBeenCalledOnce());
+		const stream = workerMocks.stdinStream;
+		const storage = new Uint8Array(20).fill(0xff);
+		const view = new Int8Array(storage.buffer, 4, 12);
+		const bytes = new TextEncoder().encode('한\n');
+		try {
+			expect(stream.stream_ops.read(stream, view, 0, 0)).toBe(0);
+			stdin.tryWrite(bytes.subarray(0, 1));
+			expect(stream.stream_ops.read(stream, view, 2, 8)).toBe(1);
+			stdin.tryWrite(bytes.subarray(1));
+			stdin.close();
+			expect(stream.stream_ops.read(stream, view, 3, 8)).toBe(3);
+			expect(new TextDecoder().decode(storage.subarray(6, 10))).toBe('한\n');
+			expect(storage[5]).toBe(0xff);
+			expect(storage[10]).toBe(0xff);
+			expect(stream.stream_ops.read(stream, view, 0, 12)).toBe(0);
+		} finally {
+			handleTargetWorkerMessage({ type: 'dispose', generation: message.generation });
+		}
 	});
 
 	it('revokes verified runtime blobs synchronously when a live target is disposed', async () => {
