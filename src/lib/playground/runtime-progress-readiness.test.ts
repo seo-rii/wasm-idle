@@ -8,7 +8,9 @@ import {
 	type RuntimeProgressEvent
 } from '@wasm-idle/core';
 import { describe, expect, it } from 'vitest';
+import { RuntimeProgressController } from '../../../packages/core/src/progress.js';
 import { createLoadingProgressController, type LoadingProgressState } from './loadingProgress';
+import { reportWorkerProgress } from './workerProgress';
 
 type EntryReadiness = {
 	strategy: 'entry-signal';
@@ -284,20 +286,21 @@ describe('runtime progress readiness audit', () => {
 	});
 });
 
-describe('truthful progress presentation contract', () => {
-	it('is determinate only for valid measured bytes and never for legacy percentages', () => {
+describe('estimated progress presentation contract', () => {
+	it('shows numeric and phase estimates while preserving valid measured byte ratios', () => {
 		const states: LoadingProgressState[] = [];
 		const controller = createLoadingProgressController({
 			onChange: (state) => states.push(state)
 		});
 		const progress = controller.start('Starting runtime');
+		expect(states.at(-1)).toMatchObject({ visible: true, value: 0, indeterminate: false });
 
 		progress.set?.(0.2, 'Initializing compiler');
 		expect(states.at(-1)).toMatchObject({
 			visible: true,
-			value: 0,
+			value: 0.2,
 			stage: 'Initializing compiler',
-			indeterminate: true
+			indeterminate: false
 		});
 
 		progress.report?.({
@@ -305,7 +308,7 @@ describe('truthful progress presentation contract', () => {
 			phase: 'compiling',
 			label: 'Compiling program'
 		});
-		expect(states.at(-1)).toMatchObject({ value: 0, indeterminate: true });
+		expect(states.at(-1)).toMatchObject({ value: 0.75, indeterminate: false });
 
 		progress.report?.({
 			kind: 'activity',
@@ -321,8 +324,52 @@ describe('truthful progress presentation contract', () => {
 			phase: 'initializing',
 			label: 'Initializing runtime'
 		});
-		expect(states.at(-1)).toMatchObject({ value: 0, indeterminate: true });
+		expect(states.at(-1)).toMatchObject({ value: 0.65, indeterminate: false });
 	});
+
+	it.each([false, true])(
+		'preserves worker percentages through runtime lifecycles (nested: %s) until actual readiness',
+		(nested) => {
+			const states: LoadingProgressState[] = [];
+			const controller = createLoadingProgressController({
+				onChange: (state) => states.push(state)
+			});
+			const terminal = new RuntimeProgressController().begin(
+				'terminal-1',
+				controller.start()
+			);
+			const runtime = nested
+				? new RuntimeProgressController().begin('runtime-1', terminal.progress)
+				: terminal;
+
+			for (const [percent, expected] of [
+				[20, 0.2],
+				[75, 0.75],
+				[100, 0.99]
+			]) {
+				const stage = `Preparing runtime: ${percent}%`;
+				reportWorkerProgress(runtime.progress, { percent, stage });
+				expect(states.at(-1)).toEqual({
+					visible: true,
+					value: expected,
+					stage,
+					indeterminate: false
+				});
+			}
+
+			reportWorkerProgress(runtime.progress, {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started'
+			});
+			expect(states.at(-1)).toEqual({
+				visible: false,
+				value: 0,
+				stage: '',
+				indeterminate: false
+			});
+		}
+	);
 
 	it('hides at every safe ready fallback and at every settlement outcome', () => {
 		const readyEvents: Extract<RuntimeProgressEvent, { kind: 'ready' }>[] = [

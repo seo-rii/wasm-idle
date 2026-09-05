@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createLoadingProgressController, type LoadingProgressState } from './loadingProgress';
 
 describe('loading progress controller', () => {
-	it('starts as unmeasured activity and never treats legacy numbers as percentages', () => {
+	it('starts with a percentage and preserves legacy estimates until explicit readiness', () => {
 		const states: LoadingProgressState[] = [];
 		const progress = createLoadingProgressController({
 			onChange: (state) => states.push(state)
@@ -18,24 +18,78 @@ describe('loading progress controller', () => {
 				visible: true,
 				value: 0,
 				stage: 'Loading Python runtime',
-				indeterminate: true
+				indeterminate: false
 			},
 			{
 				visible: true,
-				value: 0,
+				value: 0.2,
 				stage: 'Initializing Pyodide',
-				indeterminate: true
+				indeterminate: false
 			},
 			{
 				visible: true,
-				value: 0,
+				value: 0.99,
 				stage: 'Legacy runtime ready',
-				indeterminate: true
+				indeterminate: false
 			}
 		]);
 	});
 
-	it('renders only valid byte measurements as phase-local determinate progress', () => {
+	it('shows estimates through stages with no byte totals, then accepts measured progress', () => {
+		const states: LoadingProgressState[] = [];
+		const session = createLoadingProgressController({
+			onChange: (state) => states.push(state)
+		}).start();
+
+		session.report?.({ kind: 'activity', phase: 'resolving', label: 'Finding runtime' });
+		session.report?.({ kind: 'activity', phase: 'downloading', label: 'Downloading runtime' });
+		expect(states.at(-1)).toMatchObject({ value: 0.1, indeterminate: false });
+
+		session.report?.({
+			kind: 'activity',
+			phase: 'downloading',
+			label: 'Downloading runtime',
+			measurement: { kind: 'bytes', completed: 40, total: 100 }
+		});
+		expect(states.at(-1)).toMatchObject({ value: 0.4, indeterminate: false });
+
+		session.report?.({ kind: 'activity', phase: 'downloading', label: 'Waiting for a chunk' });
+		expect(states.at(-1)).toMatchObject({ value: 0.4, indeterminate: false });
+
+		session.report?.({
+			kind: 'activity',
+			phase: 'initializing',
+			label: 'Initializing runtime'
+		});
+		session.report?.({ kind: 'activity', phase: 'compiling', label: 'Compiling program' });
+		session.report?.({ kind: 'activity', phase: 'linking', label: 'Linking program' });
+		session.report?.({
+			kind: 'activity',
+			phase: 'instantiating',
+			label: 'Instantiating program'
+		});
+		expect(states.at(-1)).toMatchObject({ value: 0.95, visible: true, indeterminate: false });
+		expect(states.every((state) => !state.indeterminate && Number.isFinite(state.value))).toBe(
+			true
+		);
+	});
+
+	it('keeps estimates stable on decreasing or malformed numeric updates', () => {
+		const states: LoadingProgressState[] = [];
+		const session = createLoadingProgressController({
+			onChange: (state) => states.push(state)
+		}).start();
+
+		session.set?.(0.4, 'Loading runtime');
+		for (const value of [0.1, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+			session.set?.(value, 'Loading runtime');
+			expect(states.at(-1)).toMatchObject({ value: 0.4, indeterminate: false });
+		}
+		session.set?.(2, 'Initializing runtime');
+		expect(states.at(-1)).toMatchObject({ value: 0.99, visible: true, indeterminate: false });
+	});
+
+	it('renders valid byte measurements as phase-local determinate progress', () => {
 		const states: LoadingProgressState[] = [];
 		const session = createLoadingProgressController({
 			onChange: (state) => states.push(state)
@@ -90,7 +144,7 @@ describe('loading progress controller', () => {
 		});
 	});
 
-	it('fails closed to indeterminate when a denominator is invalid or changes mid-phase', () => {
+	it('falls back to estimates when a denominator is invalid or changes mid-phase', () => {
 		const states: LoadingProgressState[] = [];
 		const session = createLoadingProgressController({
 			onChange: (state) => states.push(state)
@@ -111,9 +165,9 @@ describe('loading progress controller', () => {
 
 		expect(states.at(-1)).toEqual({
 			visible: true,
-			value: 0,
+			value: 0.1,
 			stage: 'Runtime asset set changed',
-			indeterminate: true
+			indeterminate: false
 		});
 
 		session.report?.({
@@ -124,9 +178,9 @@ describe('loading progress controller', () => {
 		});
 		expect(states.at(-1)).toEqual({
 			visible: true,
-			value: 0,
+			value: 0.1,
 			stage: 'Later update from the poisoned phase',
-			indeterminate: true
+			indeterminate: false
 		});
 
 		session.report?.({
@@ -135,7 +189,7 @@ describe('loading progress controller', () => {
 			label: 'Verifying runtime',
 			measurement: { kind: 'bytes', completed: 1, total: 0 }
 		});
-		expect(states.at(-1)).toMatchObject({ value: 0, indeterminate: true });
+		expect(states.at(-1)).toMatchObject({ value: 0.45, indeterminate: false });
 	});
 
 	it.each([
@@ -145,7 +199,7 @@ describe('loading progress controller', () => {
 		{ completed: 1, total: 1.5 },
 		{ completed: Number.NaN, total: 100 },
 		{ completed: 1, total: Number.POSITIVE_INFINITY }
-	])('rejects malformed byte counts and keeps their phase poisoned: %o', (measurement) => {
+	])('uses estimates after malformed byte counts invalidate a phase: %o', (measurement) => {
 		const states: LoadingProgressState[] = [];
 		const session = createLoadingProgressController({
 			onChange: (state) => states.push(state)
@@ -166,9 +220,9 @@ describe('loading progress controller', () => {
 
 		expect(states.at(-1)).toEqual({
 			visible: true,
-			value: 0,
+			value: 0.1,
 			stage: 'Later valid-looking count',
-			indeterminate: true
+			indeterminate: false
 		});
 	});
 
@@ -200,9 +254,9 @@ describe('loading progress controller', () => {
 		});
 
 		expect(states.at(-1)).toMatchObject({
-			value: 0,
+			value: 0.1,
 			stage: 'Changed total after an unmeasured update',
-			indeterminate: true
+			indeterminate: false
 		});
 	});
 

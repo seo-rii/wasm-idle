@@ -23,6 +23,8 @@ export type RuntimeProgressEvent =
 			phaseId?: string;
 			label: string;
 			measurement?: RuntimeProgressMeasurement;
+			/** Estimated completion from 0 to 1; reaching 1 does not imply runtime readiness. */
+			estimatedFraction?: number;
 			operationId?: string;
 	  }
 	| {
@@ -105,12 +107,15 @@ export class RuntimeProgressController {
 			if (event.kind === 'activity') {
 				const measurement = event.measurement;
 				const value =
-					measurement &&
-					Number.isFinite(measurement.completed) &&
-					Number.isFinite(measurement.total) &&
-					measurement.total > 0
-						? measurement.completed / measurement.total
-						: state.lastValue;
+					typeof event.estimatedFraction === 'number' &&
+					Number.isFinite(event.estimatedFraction)
+						? event.estimatedFraction
+						: measurement &&
+							  Number.isFinite(measurement.completed) &&
+							  Number.isFinite(measurement.total) &&
+							  measurement.total > 0
+							? measurement.completed / measurement.total
+							: state.lastValue;
 				const clamped = clampProgressValue(value);
 				if (clamped < state.lastValue) return;
 				state.lastValue = clamped;
@@ -138,6 +143,7 @@ export class RuntimeProgressController {
 								kind: 'activity',
 								phase: 'legacy',
 								label: nextStage,
+								estimatedFraction: clampProgressValue(value),
 								operationId: lifecycleId
 							});
 							return;

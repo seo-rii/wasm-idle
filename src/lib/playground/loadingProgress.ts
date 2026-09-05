@@ -23,6 +23,21 @@ const hiddenState = (): LoadingProgressState => ({
 	indeterminate: false
 });
 
+// These are presentation estimates for runtimes that cannot measure a phase.
+// They must never substitute for an explicit ready or settled event.
+const estimatedPhaseProgress = {
+	legacy: 0.05,
+	resolving: 0.05,
+	downloading: 0.1,
+	verifying: 0.45,
+	decompressing: 0.55,
+	initializing: 0.65,
+	compiling: 0.75,
+	linking: 0.9,
+	instantiating: 0.95,
+	starting: 0.02
+} satisfies Record<Extract<RuntimeProgressEvent, { kind: 'activity' }>['phase'], number>;
+
 export function createLoadingProgressController({
 	onChange
 }: LoadingProgressControllerOptions): LoadingProgressController {
@@ -58,23 +73,7 @@ export function createLoadingProgressController({
 		active = true;
 		resetActivityPhase();
 		resetOperationTracking();
-		state = { visible: true, value: 0, stage, indeterminate: true };
-		emit();
-	};
-	const setLegacyActivity = (expectedGeneration: number, stage?: string) => {
-		if (!active || expectedGeneration !== generation) return;
-		// Once a correlated operation is active, an unscoped legacy update cannot safely
-		// be distinguished from delayed work belonging to an older operation.
-		if (currentOperationId !== null) return;
-		const nextStage = stage || state.stage;
-		if (state.indeterminate && nextStage === state.stage) return;
-		resetActivityPhase();
-		state = {
-			visible: true,
-			value: 0,
-			stage: nextStage,
-			indeterminate: true
-		};
+		state = { visible: true, value: 0, stage, indeterminate: false };
 		emit();
 	};
 	const reportEvent = (expectedGeneration: number, event: RuntimeProgressEvent) => {
@@ -109,13 +108,18 @@ export function createLoadingProgressController({
 			measurementPoisoned = false;
 		}
 
+		const estimate =
+			typeof event.estimatedFraction === 'number' && Number.isFinite(event.estimatedFraction)
+				? event.estimatedFraction
+				: estimatedPhaseProgress[event.phase];
+		const estimatedValue = Math.min(0.99, Math.max(state.value, estimate, 0));
 		const { measurement } = event;
 		if (!measurement) {
 			state = {
 				visible: true,
-				value: 0,
+				value: estimatedValue,
 				stage: event.label,
-				indeterminate: true
+				indeterminate: false
 			};
 			emit();
 			return;
@@ -137,9 +141,9 @@ export function createLoadingProgressController({
 		if (measurementPoisoned) {
 			state = {
 				visible: true,
-				value: 0,
+				value: estimatedValue,
 				stage: event.label,
-				indeterminate: true
+				indeterminate: false
 			};
 			emit();
 			return;
@@ -156,19 +160,28 @@ export function createLoadingProgressController({
 		emit();
 	};
 
+	const setLegacyActivity = (expectedGeneration: number, value: number, stage?: string) => {
+		reportEvent(expectedGeneration, {
+			kind: 'activity',
+			phase: 'legacy',
+			label: stage || state.stage,
+			estimatedFraction: value
+		});
+	};
+
 	const start = (stage = 'Loading runtime') => {
 		generation += 1;
 		const sessionGeneration = generation;
 		begin(stage);
 		return Object.freeze<ProgressLike>({
-			set: (_value, nextStage) => setLegacyActivity(sessionGeneration, nextStage),
+			set: (value, nextStage) => setLegacyActivity(sessionGeneration, value, nextStage),
 			report: (event) => reportEvent(sessionGeneration, event)
 		});
 	};
 
-	const set = (_value: number, stage?: string) => {
+	const set = (value: number, stage?: string) => {
 		if (!active) return;
-		setLegacyActivity(generation, stage);
+		setLegacyActivity(generation, value, stage);
 	};
 	const report = (event: RuntimeProgressEvent) => {
 		if (!active) return;

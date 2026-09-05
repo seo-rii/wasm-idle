@@ -99,7 +99,7 @@ describe('runtime progress phases', () => {
 		);
 	});
 
-	it('translates legacy numeric updates to unmeasured activity for event-aware sinks', () => {
+	it('preserves legacy numeric estimates without treating completion as readiness', () => {
 		const events: RuntimeProgressEvent[] = [];
 		const set = vi.fn();
 		const controller = new RuntimeProgressController();
@@ -123,14 +123,69 @@ describe('runtime progress phases', () => {
 				kind: 'activity',
 				phase: 'legacy',
 				label: 'Downloading compiler',
+				estimatedFraction: 0.2,
 				operationId: 'run-1'
 			},
 			{
 				kind: 'activity',
 				phase: 'legacy',
 				label: 'Legacy runtime ready',
+				estimatedFraction: 1,
 				operationId: 'run-1'
 			}
+		]);
+	});
+
+	it.each([
+		[-1, 0],
+		[0.4, 0.4],
+		[2, 1],
+		[Number.NaN, 0],
+		[Number.POSITIVE_INFINITY, 0],
+		[Number.NEGATIVE_INFINITY, 0]
+	])('clamps numeric estimate %s to a finite fraction %s', (value, expected) => {
+		const report = vi.fn();
+		const lifecycle = new RuntimeProgressController().begin('run-1', { report });
+
+		lifecycle.progress?.set?.(value, 'Loading runtime');
+
+		expect(report).toHaveBeenLastCalledWith({
+			kind: 'activity',
+			phase: 'legacy',
+			label: 'Loading runtime',
+			estimatedFraction: expected,
+			operationId: 'run-1'
+		});
+	});
+
+	it('preserves numeric estimates through nested runtime lifecycles', () => {
+		const events: RuntimeProgressEvent[] = [];
+		const terminal = new RuntimeProgressController().begin('terminal-1', {
+			report: (event) => events.push(event)
+		});
+		const runtime = new RuntimeProgressController().begin('runtime-1', terminal.progress);
+
+		runtime.progress?.set?.(0.65, 'Compiling program');
+		runtime.progress?.set?.(1, 'Compiler ready');
+		runtime.progress?.report?.({ kind: 'ready', state: 'running', reason: 'started' });
+		runtime.progress?.set?.(0.5, 'Late estimate');
+
+		expect(events.slice(2)).toEqual([
+			{
+				kind: 'activity',
+				phase: 'legacy',
+				label: 'Compiling program',
+				estimatedFraction: 0.65,
+				operationId: 'terminal-1'
+			},
+			{
+				kind: 'activity',
+				phase: 'legacy',
+				label: 'Compiler ready',
+				estimatedFraction: 1,
+				operationId: 'terminal-1'
+			},
+			{ kind: 'ready', state: 'running', reason: 'started', operationId: 'terminal-1' }
 		]);
 	});
 
@@ -329,6 +384,45 @@ describe('runtime progress phases', () => {
 			[0, 'Starting runtime'],
 			[0.25, 'Downloading runtime'],
 			[0.25, 'Runtime failed']
+		]);
+	});
+
+	it('prefers estimates for legacy sinks and falls back to measurements or previous progress', () => {
+		const set = vi.fn();
+		const lifecycle = new RuntimeProgressController().begin('run-1', { set });
+
+		lifecycle.progress?.report?.({
+			kind: 'activity',
+			phase: 'downloading',
+			label: 'Estimated download',
+			estimatedFraction: 0.2,
+			measurement: { kind: 'bytes', completed: 80, total: 100 }
+		});
+		lifecycle.progress?.report?.({
+			kind: 'activity',
+			phase: 'downloading',
+			label: 'Measured download',
+			estimatedFraction: Number.NaN,
+			measurement: { kind: 'bytes', completed: 30, total: 100 }
+		});
+		lifecycle.progress?.report?.({
+			kind: 'activity',
+			phase: 'verifying',
+			label: 'Verifying download'
+		});
+		lifecycle.progress?.report?.({
+			kind: 'activity',
+			phase: 'starting',
+			label: 'Starting program',
+			estimatedFraction: 2
+		});
+
+		expect(set.mock.calls).toEqual([
+			[0, 'Starting runtime'],
+			[0.2, 'Estimated download'],
+			[0.3, 'Measured download'],
+			[0.3, 'Verifying download'],
+			[1, 'Starting program']
 		]);
 	});
 });
