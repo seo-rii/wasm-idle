@@ -97,6 +97,45 @@ describe('workspace ZIP browser integration', () => {
 				const downloadedWasm = await readFile(wasmPath);
 				expect(downloadedWasm).toEqual(wasmBytes);
 				expect(WebAssembly.validate(downloadedWasm)).toBe(true);
+
+				// Restore the pre-encoding snapshot format before renaming and duplicating.
+				const legacyContext = await browser.newContext();
+				await addBrowserTestCookies(legacyContext, previewServer.browserUrl);
+				await legacyContext.addInitScript(() => {
+					localStorage.setItem(
+						'wasm-idle:example-workspace:v3',
+						JSON.stringify({
+							version: 5,
+							language: 'WASM',
+							activePath: 'legacy.wasm',
+							files: [
+								{
+									path: 'legacy.wasm',
+									content: 'data:application/wasm;base64,AGFzbQEAAAA='
+								}
+							],
+							openTabs: ['legacy.wasm']
+						})
+					);
+				});
+				// Isolate the fixture from any pending autosave in the first page.
+				const restoredPage = await legacyContext.newPage();
+				restoredPage.on('pageerror', (error) => pageErrors.push(error.message));
+				await restoredPage.goto(previewServer.browserUrl, {
+					waitUntil: 'domcontentloaded'
+				});
+				await restoredPage.locator('button[title="legacy.wasm"]').waitFor();
+				restoredPage.once('dialog', (dialog) => dialog.accept('legacy.bin'));
+				await restoredPage.getByRole('button', { name: 'Rename', exact: true }).click();
+				await restoredPage.locator('button[title="legacy.bin"]').waitFor();
+				await restoredPage.getByRole('button', { name: 'Duplicate', exact: true }).click();
+				await restoredPage.locator('button[title="legacy-2.bin"]').waitFor();
+				const legacyDownload = restoredPage.waitForEvent('download');
+				await restoredPage.getByRole('button', { name: 'Download', exact: true }).click();
+				const legacyPath = await (await legacyDownload).path();
+				if (!legacyPath) throw new Error('Missing renamed legacy WASM download');
+				expect(await readFile(legacyPath)).toEqual(wasmBytes);
+				await legacyContext.close();
 				expect(pageErrors).toEqual([]);
 			} finally {
 				await context.close();
