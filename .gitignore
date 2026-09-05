@@ -25,8 +25,12 @@ static/wasm-rust/runtime/llvm/lld.data.gz
 static/wasm-rust/runtime/llvm/lld.wasm.gz
 scripts/*.d.mts
 !scripts/sync-wasm-haskell.d.mts
+!scripts/c3-browser-probe.d.mts
 src/routes/editor-defaults.d.ts
 static/wasm-d/runtime/bin/ldc2.wasm
 static/wasm-d/runtime/bin/lld.data
 static/wasm-d/runtime/bin/lld.wasm
 static/wasm-d/runtime/toolchain/toolchain.tar
+
+# C3 assets are synced from the separately verified wasm-llvm producer.
+/static/wasm-c3/

@@ -2,6 +2,7 @@ import type { RustTargetTriple } from '$lib/playground/options';
 
 export type EditorDefaultLanguage =
 	| 'c'
+	| 'c3'
 	| 'cpp'
 	| 'objectivec'
 	| 'python'
@@ -56,6 +57,7 @@ export type EditorDefaultLanguage =
 
 export const editorDefaults: Record<
 	| 'c'
+	| 'c3'
 	| 'cpp'
 	| 'objectivec'
 	| 'python'
@@ -108,6 +110,22 @@ export const editorDefaults: Record<
 	| 'markdown',
 	string
 > = {
+	c3: `module main;
+
+// UTF-8 bytes; read_byte returns -1 after EOF (Ctrl+D or the EOF button).
+extern fn int read_byte() @wasm("env", "readByte");
+extern fn void write_byte(int value) @wasm("env", "writeByte");
+
+fn void main() @wasm("main")
+{
+    while (true)
+    {
+        int value = read_byte();
+        if (value < 0) break;
+        write_byte(value);
+    }
+}
+`,
 	c: `#include <stdio.h>
 
 static int bonus = 3;
@@ -1325,6 +1343,7 @@ printfn "fibonacci=%d" (fibonacci n + bonus)`;
 export function isEditorDefaultSource(source: string) {
 	return (
 		source === editorDefaults.c ||
+		source === editorDefaults.c3 ||
 		source === editorDefaults.cpp ||
 		source === editorDefaults.python ||
 		source === editorDefaults.java ||

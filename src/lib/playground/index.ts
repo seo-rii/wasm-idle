@@ -19,6 +19,13 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'C3',
+		load: async () => {
+			const { default: C3 } = await import('$lib/playground/c3');
+			return new C3();
+		}
+	},
+	{
 		languageId: 'PYTHON3',
 		load: async () => {
 			const { default: Python } = await import('$lib/playground/python');

@@ -646,6 +646,7 @@
 			'.bqn': 'BQN',
 			'.janet': 'JANET',
 			'.jl': 'JULIA',
+			'.c3': 'C3',
 			'.nim': 'NIM',
 			'.nims': 'NIM',
 			'.sh': 'BASH',
@@ -728,6 +729,7 @@
 			BQN: 'main.bqn',
 			JANET: 'main.janet',
 			JULIA: 'main.jl',
+			C3: 'main.c3',
 			NIM: 'main.nim',
 			BASH: 'main.sh',
 			CLOJURESCRIPT: 'main.cljs',
@@ -787,6 +789,7 @@
 			BQN: 'bqn',
 			JANET: 'janet',
 			JULIA: 'julia',
+			C3: 'c3',
 			NIM: 'nim',
 			BASH: 'bash',
 			CLOJURESCRIPT: 'clojurescript',
@@ -1473,6 +1476,7 @@
 			janet: 'JANET',
 			julia: 'JULIA',
 			jl: 'JULIA',
+			c3: 'C3',
 			nim: 'NIM',
 			nimrod: 'NIM',
 			bash: 'BASH',
@@ -2940,6 +2944,15 @@
 				`@chriskoch/julia-wasm@1.0.4`. Use `readline()` for line input; the worker connects
 				terminal stdin through a streaming channel when cross-origin isolation is available,
 				and otherwise provides buffered input through a Julia `IOBuffer`.
+			</p>
+		{/if}
+		{#if language === 'C3'}
+			<p class="hint">
+				C3 0.8.3 compiles in the browser with a 1 GiB Wasm memory budget. The example uses
+				UTF-8 byte input and output; send Ctrl+D or use the EOF button to finish input. This
+				runtime supports the
+				<code>env.readByte</code> / <code>env.writeByte</code> ABI; C3 <code>std::io</code>
+				and WASI are not available.
 			</p>
 		{/if}
 		{#if language === 'NIM'}

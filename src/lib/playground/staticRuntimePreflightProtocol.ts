@@ -292,7 +292,7 @@ export function isStaticRuntimePreflightSerializedError(
 
 export function deserializeStaticRuntimePreflightError(
 	error: StaticRuntimePreflightSerializedError,
-	fallbackRuntimeId: StaticRuntimePreflightRuntimeId
+	fallbackRuntimeId: string
 ) {
 	const phase = error.phase ?? 'asset';
 	const context = {
