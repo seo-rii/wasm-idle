@@ -550,7 +550,8 @@ describe('Monaco route debug sync', () => {
 			/--lsp-progress-scale: \$\{editorLspStatus\.progressPercent \/ 100\};/
 		);
 		expect(pageSource).toMatch(/bind:lspStatus=\{editorLspStatus\}/);
-		expect(pageSource).toMatch(/version: 5,/);
+		// Binary-preserving workspace snapshots use v6 and still persist the LSP opt-in.
+		expect(pageSource).toMatch(/version: 6,/);
 		expect(pageSource).toMatch(
 			/if \(typeof value\?\.lspEnabled === 'boolean'\) lspEnabled = value\.lspEnabled;/
 		);
