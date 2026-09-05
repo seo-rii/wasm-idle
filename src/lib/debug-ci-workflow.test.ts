@@ -41,7 +41,9 @@ describe('LLDB browser integration workflow', () => {
 			scripts?: Record<string, string>;
 		};
 		const clangDownloadIndex = workflow.indexOf('Download pinned Clang browser assets');
-		const clangHashVerificationIndex = workflow.lastIndexOf('sha256sum --check');
+		const clangHashVerificationIndex = workflow.indexOf(
+			'pnpm run prepare:test-assets -- clang'
+		);
 		const debuggerPrepareIndex = workflow.indexOf('pnpm run prepare:wasm-debug-release');
 		const consumerBuildIndex = workflow.indexOf('pnpm run build:publish-deps');
 		const manifestReceiptTestIndex = workflow.indexOf(
@@ -99,7 +101,16 @@ describe('LLDB browser integration workflow', () => {
 		expect(strictCspIndex).toBeGreaterThan(productJobIndex);
 		expect(strictCspIndex).toBeLessThan(productStepsIndex);
 		expect(workflow).toContain('playwright-core install --with-deps chromium');
-		expect(workflow).not.toContain('prepare:test-assets');
+		expect(workflow).toContain('pnpm run prepare:test-assets -- clang');
+		const assetManifest = JSON.parse(
+			await readFile('scripts/browser-test-assets.v1.json', 'utf8')
+		) as {
+			defaultBaseUrl: string;
+			assets: Array<{ group: string; target: string; sha256: string }>;
+		};
+		expect(assetManifest.defaultBaseUrl).toMatch(
+			/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-idle\/[0-9a-f]{40}\/$/u
+		);
 		expect(workflow).not.toContain('sync:wasm-clang');
 		for (const [asset, sha256] of [
 			['clang.wasm.gz', 'b1174438d9a67b7ff11e623541b9a0572c024a9e798084b9b021dd9da2da0874'],
@@ -107,8 +118,13 @@ describe('LLDB browser integration workflow', () => {
 			['memfs.wasm.gz', 'd86f141eacd58a93511fbfb7c4e81d498eb7106a8a57df1bea7d33df3ce1f403'],
 			['sysroot.tar.gz', '68437624a81c465b93895615e7afd3f235ff256de17dc1927b124e783614e3e4']
 		]) {
-			expect(workflow).toContain(`static/clang/bin/${asset}`);
-			expect(workflow).toContain(sha256);
+			expect(assetManifest.assets).toContainEqual(
+				expect.objectContaining({
+					group: 'clang',
+					target: `clang/bin/${asset}`,
+					sha256
+				})
+			);
 		}
 		expect(pkg.scripts?.['prepare:wasm-debug-release']).toBe(
 			'node scripts/prepare-wasm-debug-release.mjs'
