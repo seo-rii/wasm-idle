@@ -142,7 +142,9 @@
 		"check:watch": "pnpm run build:publish-deps && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
-		"page": "pnpm run page:build && node gh-pages.js"
+		"page": "pnpm run page:build && node gh-pages.js",
+		"probe:crystal-wasi-consumer": "node scripts/probe-crystal-wasi-consumer.mjs",
+		"test:unit:crystal-consumer": "node --test scripts/probe-crystal-wasi-consumer.test.mjs"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
