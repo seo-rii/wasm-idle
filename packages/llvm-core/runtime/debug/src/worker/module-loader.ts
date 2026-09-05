@@ -8,8 +8,16 @@ import type {
 } from '../types.js';
 
 export interface EmscriptenFileStream {
+	node: { mtime: number; ctime: number };
 	stream_ops: {
 		read?: (
+			stream: EmscriptenFileStream,
+			buffer: Int8Array | Uint8Array,
+			offset: number,
+			length: number,
+			position?: number
+		) => number;
+		write?: (
 			stream: EmscriptenFileStream,
 			buffer: Int8Array | Uint8Array,
 			offset: number,
@@ -20,6 +28,7 @@ export interface EmscriptenFileStream {
 }
 
 export interface EmscriptenFileSystem {
+	ErrnoError?: new (errno: number) => { name: string; errno: number };
 	mkdirTree(path: string): void;
 	writeFile(path: string, data: string | Uint8Array): void;
 	chdir(path: string): void;

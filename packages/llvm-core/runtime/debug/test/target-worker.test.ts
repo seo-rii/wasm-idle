@@ -5,6 +5,10 @@ import type { TargetWorkerInitializeMessage } from '../src/types.js';
 const validWasmModule = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
 
 const workerMocks = vi.hoisted(() => ({
+	ErrnoError: class {
+		name = 'ErrnoError';
+		constructor(public errno: number) {}
+	},
 	callMain: vi.fn(),
 	chdir: vi.fn(),
 	closeRspInput: vi.fn(),
@@ -12,6 +16,28 @@ const workerMocks = vi.hoisted(() => ({
 	stdinStream: {
 		stream_ops: {
 			read: (
+				_stream: unknown,
+				_buffer: Uint8Array | Int8Array,
+				_offset: number,
+				_length: number
+			) => 0
+		}
+	},
+	stdoutStream: {
+		node: { mtime: 0, ctime: 0 },
+		stream_ops: {
+			write: (
+				_stream: unknown,
+				_buffer: Uint8Array | Int8Array,
+				_offset: number,
+				_length: number
+			) => 0
+		}
+	},
+	stderrStream: {
+		node: { mtime: 0, ctime: 0 },
+		stream_ops: {
+			write: (
 				_stream: unknown,
 				_buffer: Uint8Array | Int8Array,
 				_offset: number,
@@ -32,10 +58,14 @@ const workerMocks = vi.hoisted(() => ({
 		}
 		return async (options: Record<string, unknown>) => ({
 			FS: {
+				ErrnoError: workerMocks.ErrnoError,
 				mkdirTree: vi.fn(),
 				writeFile: vi.fn(),
 				chdir: workerMocks.chdir,
-				getStream: (fd: number) => (fd === 0 ? workerMocks.stdinStream : undefined)
+				getStream: (fd: number) =>
+					[workerMocks.stdinStream, workerMocks.stdoutStream, workerMocks.stderrStream][
+						fd
+					]
 			},
 			HEAPU8: new Uint8Array(256),
 			callMain: (args: string[]) => {
@@ -137,6 +167,124 @@ describe('WAMR target worker launch', () => {
 		workerMocks.loadFailure = undefined;
 		workerMocks.loadGate = undefined;
 		workerMocks.stdinStream.stream_ops.read = () => 0;
+		workerMocks.stdoutStream.stream_ops.write = () => 0;
+		workerMocks.stderrStream.stream_ops.write = () => 0;
+		workerMocks.stdoutStream.node = { mtime: 0, ctime: 0 };
+		workerMocks.stderrStream.node = { mtime: 0, ctime: 0 };
+	});
+
+	it.each(['stdout', 'stderr'] as const)(
+		'writes a complete %s buffer with one queue publication',
+		async (channel) => {
+			workerMocks.lifecycle = 'pending';
+			const { handleTargetWorkerMessage } = await loadTargetWorker();
+			const message = initializeMessage(`target-worker-bulk-${channel}`);
+			const output = new SharedByteQueue(message[channel]);
+			const header = new Int32Array(message[channel].control);
+			handleTargetWorkerMessage(message);
+			await vi.waitFor(() => expect(workerMocks.callMain).toHaveBeenCalledOnce());
+			const stream =
+				channel === 'stdout' ? workerMocks.stdoutStream : workerMocks.stderrStream;
+			const payload = Uint8Array.from({ length: 1024 }, (_, index) => index & 255);
+			const storage = new Uint8Array(1040).fill(0xcc);
+			storage.set(payload, 8);
+			const view = new Int8Array(storage.buffer, 5, 1030);
+			const now = vi.spyOn(Date, 'now').mockReturnValue(12_345);
+			try {
+				const before = Atomics.load(header, 3);
+				expect(stream.stream_ops.write(stream, view, 3, payload.length)).toBe(
+					payload.length
+				);
+				expect(Atomics.load(header, 3) - before).toBe(1);
+				expect(output.available).toBe(payload.length);
+				expect(output.closed).toBe(false);
+				expect(stream.node).toEqual({ mtime: 12_345, ctime: 12_345 });
+				expect(
+					new SharedByteQueue(message[channel === 'stdout' ? 'stderr' : 'stdout'])
+						.available
+				).toBe(0);
+				expect(Atomics.load(new Int32Array(message.rspOutput.control), 1)).toBe(0);
+				const received = new Uint8Array(payload.length);
+				expect(output.tryRead(received)).toBe(payload.length);
+				expect(received).toEqual(payload);
+				const afterRead = Atomics.load(header, 3);
+				now.mockReturnValue(12_346);
+				expect(stream.stream_ops.write(stream, view, 0, 0)).toBe(0);
+				expect(Atomics.load(header, 3)).toBe(afterRead);
+				expect(stream.node).toEqual({ mtime: 12_345, ctime: 12_345 });
+			} finally {
+				now.mockRestore();
+				handleTargetWorkerMessage({ type: 'dispose', generation: message.generation });
+			}
+		}
+	);
+
+	it.each(['stdout', 'stderr'] as const)(
+		'converts a %s queue closure under backpressure into EIO without updating timestamps',
+		async (channel) => {
+			workerMocks.lifecycle = 'pending';
+			const { handleTargetWorkerMessage } = await loadTargetWorker();
+			const message = initializeMessage(`target-worker-closed-${channel}`);
+			const output = new SharedByteQueue(message[channel]);
+			handleTargetWorkerMessage(message);
+			await vi.waitFor(() => expect(workerMocks.callMain).toHaveBeenCalledOnce());
+			const stream =
+				channel === 'stdout' ? workerMocks.stdoutStream : workerMocks.stderrStream;
+			const payload = Uint8Array.from({ length: 8_192 }, (_, index) => index & 255);
+			stream.node = { mtime: 10, ctime: 20 };
+			// The consumer may close the queue while the worker waits for output space.
+			const wait = vi.spyOn(Atomics, 'wait').mockImplementation(() => {
+				output.close();
+				return 'ok';
+			});
+			try {
+				let writeError: unknown;
+				try {
+					stream.stream_ops.write(stream, payload, 0, payload.length);
+				} catch (error) {
+					writeError = error;
+				}
+				expect(wait).toHaveBeenCalledOnce();
+				expect(writeError).toBeInstanceOf(workerMocks.ErrnoError);
+				expect(writeError).toMatchObject({ errno: 29 });
+				expect(stream.node).toEqual({ mtime: 10, ctime: 20 });
+				expect(output.closed).toBe(true);
+				const received = new Uint8Array(4_096);
+				expect(output.tryRead(received)).toBe(received.length);
+				expect(received).toEqual(payload.subarray(0, received.length));
+				expect(stream.stream_ops.write(stream, payload, 0, 0)).toBe(0);
+				expect(stream.node).toEqual({ mtime: 10, ctime: 20 });
+			} finally {
+				wait.mockRestore();
+				handleTargetWorkerMessage({ type: 'dispose', generation: message.generation });
+			}
+		}
+	);
+
+	it('publishes a prompt without a newline before the next stdin read', async () => {
+		workerMocks.lifecycle = 'pending';
+		const { handleTargetWorkerMessage } = await loadTargetWorker();
+		const message = initializeMessage('target-worker-prompt');
+		const stdout = new SharedByteQueue(message.stdout);
+		const stdin = new SharedByteQueue(message.stdin!);
+		handleTargetWorkerMessage(message);
+		await vi.waitFor(() => expect(workerMocks.callMain).toHaveBeenCalledOnce());
+		const prompt = new TextEncoder().encode('입력? ');
+		try {
+			const outputStream = workerMocks.stdoutStream;
+			expect(outputStream.stream_ops.write(outputStream, prompt, 0, prompt.length)).toBe(
+				prompt.length
+			);
+			const received = new Uint8Array(prompt.length);
+			expect(stdout.tryRead(received)).toBe(prompt.length);
+			expect(received).toEqual(prompt);
+			stdin.tryWrite(new TextEncoder().encode('73\n'));
+			const inputStream = workerMocks.stdinStream;
+			expect(inputStream.stream_ops.read(inputStream, received, 0, received.length)).toBe(3);
+			expect(new TextDecoder().decode(received.subarray(0, 3))).toBe('73\n');
+		} finally {
+			handleTargetWorkerMessage({ type: 'dispose', generation: message.generation });
+		}
 	});
 
 	it('returns each available stdin chunk without EOF and preserves the next read', async () => {
