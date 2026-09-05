@@ -5,12 +5,14 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
 	normalizeBrowserTestAssetGroups,
 	prepareBrowserTestAssets
 } from '../../scripts/prepare-browser-test-assets.mjs';
+import { WASM_OCAML_RUNTIME_PROFILE } from './playground/wasmOcamlVersion';
 
 const temporaryDirectories: string[] = [];
 
@@ -212,5 +214,60 @@ describe('browser test asset preparation', () => {
 		expect(() => normalizeBrowserTestAssetGroups(['missing'])).toThrow(
 			'Unknown browser test asset group: missing'
 		);
+	});
+
+	it('keeps OCaml outer receipts aligned with the consumer integrity profile', async () => {
+		const manifest = JSON.parse(await readFile('scripts/browser-test-assets.v1.json', 'utf8'));
+		for (const [target, receipt] of [
+			[
+				'wasm-of-js-of-ocaml/browser-native/src/index.js',
+				WASM_OCAML_RUNTIME_PROFILE.moduleReceipt
+			],
+			[
+				'wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json',
+				WASM_OCAML_RUNTIME_PROFILE.manifestReceipt
+			]
+		] as const) {
+			expect(
+				manifest.assets.find((asset: { target: string }) => asset.target === target)
+			).toMatchObject({
+				size: receipt.bytes,
+				sha256: receipt.sha256
+			});
+		}
+	});
+
+	it('includes the relative module dependencies of the pinned OCaml producer graph', async () => {
+		const manifest = JSON.parse(
+			await readFile('scripts/browser-test-assets.v1.json', 'utf8')
+		) as {
+			assets: Array<{ group: string; target: string }>;
+		};
+		const prefix = 'wasm-of-js-of-ocaml/browser-native/';
+		const targets = new Set(
+			manifest.assets.filter((asset) => asset.group === 'ocaml').map((asset) => asset.target)
+		);
+		for (const target of targets) {
+			if (!target.startsWith(prefix) || !target.endsWith('.js')) continue;
+			const sourcePath = `runtimes/wasm-of-js-of-ocaml/${target.slice(prefix.length).replace(/\.js$/u, '.ts')}`;
+			const source = ts.createSourceFile(
+				sourcePath,
+				await readFile(sourcePath, 'utf8'),
+				ts.ScriptTarget.Latest,
+				true
+			);
+			for (const node of source.statements) {
+				if (!ts.isImportDeclaration(node) && !ts.isExportDeclaration(node)) continue;
+				if (ts.isImportDeclaration(node) && node.importClause?.isTypeOnly) continue;
+				if (ts.isExportDeclaration(node) && node.isTypeOnly) continue;
+				const specifier = node.moduleSpecifier;
+				if (!specifier || !ts.isStringLiteral(specifier) || !specifier.text.startsWith('.'))
+					continue;
+				const dependency = path.posix.normalize(
+					path.posix.join(path.posix.dirname(target), specifier.text)
+				);
+				expect(targets.has(dependency), `${target} requires ${dependency}`).toBe(true);
+			}
+		}
 	});
 });

@@ -151,6 +151,13 @@
 		},
 		{
 			"group": "ocaml",
+			"source": "wasm-of-js-of-ocaml/browser-native/runtime/browser-native-tool-assets.js",
+			"target": "wasm-of-js-of-ocaml/browser-native/runtime/browser-native-tool-assets.js",
+			"size": 14035,
+			"sha256": "2799bd95f813dab3893112fdca1e1ed1e11b7a6b9d47a43318e78981859967bd"
+		},
+		{
+			"group": "ocaml",
 			"source": "wasm-of-js-of-ocaml/browser-native/runtime/fs/memory-fs.js",
 			"target": "wasm-of-js-of-ocaml/browser-native/runtime/fs/memory-fs.js",
 			"size": 4673,
