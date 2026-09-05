@@ -64,7 +64,6 @@
 	import {
 		isBinaryWorkspaceFile,
 		workspaceFileBlob,
-		workspaceFileBytes,
 		workspaceFileFromBytes,
 		type WorkspaceFile
 	} from './workspaceCodec';
@@ -1532,12 +1531,7 @@
 					activePath,
 					workspaceFiles: files.map((file) => ({
 						path: file.path,
-						content:
-							file.path === activePath
-								? codeToRun
-								: isBinaryWorkspaceFile(file)
-									? workspaceFileBytes(file)
-									: file.content
+						content: file.path === activePath ? codeToRun : file.content
 					})),
 					pauseOnEntry: enableDebug,
 					signal: abortController.signal,
