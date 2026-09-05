@@ -33,25 +33,41 @@ const INPUTS = {
 	}
 };
 
+/** @param {Uint8Array} bytes */
 function sha256(bytes) {
 	return createHash('sha256').update(bytes).digest('hex');
 }
 
+/** @param {string} filePath */
 async function sha256File(filePath) {
 	return sha256(await readFile(filePath));
 }
 
+/**
+ * @param {string} filePath
+ * @param {string} label
+ */
 async function assertFile(filePath, label) {
 	const fileStats = await stat(filePath).catch(() => null);
 	if (!fileStats?.isFile()) throw new Error(`${label} was not found at ${filePath}`);
 	return fileStats;
 }
 
+/**
+ * @param {string} source
+ * @param {string} [runtimeRoot]
+ */
 export function normalizeClojureScriptCompilerPaths(source, runtimeRoot = RUNTIME_ROOT) {
 	const normalizedRuntimeRoot = path.resolve(runtimeRoot).split(path.sep).join('/');
 	return source.replaceAll(normalizedRuntimeRoot, CANONICAL_RUNTIME_ROOT);
 }
 
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {import('node:child_process').SpawnOptions} [options]
+ * @returns {Promise<void>}
+ */
 function run(command, args, options = {}) {
 	return new Promise((resolve, reject) => {
 		const child = spawn(command, args, { stdio: 'inherit', ...options });
@@ -66,7 +82,7 @@ function run(command, args, options = {}) {
 async function downloadPinnedInputs() {
 	const downloadsRoot = path.join(CACHE_ROOT, 'downloads');
 	await mkdir(downloadsRoot, { recursive: true });
-	const archives = {};
+	const archives = /** @type {Record<keyof typeof INPUTS, string>} */ ({});
 	for (const [name, input] of Object.entries(INPUTS)) {
 		const archivePath = path.join(downloadsRoot, input.filename);
 		const currentHash = await sha256File(archivePath).catch(() => '');
@@ -81,11 +97,15 @@ async function downloadPinnedInputs() {
 		if (actualHash !== input.sha256) {
 			throw new Error(`${name} archive SHA-256 mismatch: ${actualHash}`);
 		}
-		archives[name] = archivePath;
+		archives[/** @type {keyof typeof INPUTS} */ (name)] = archivePath;
 	}
 	return archives;
 }
 
+/**
+ * @param {string} sourceRoot
+ * @param {string} installRoot
+ */
 async function installClojureTools(sourceRoot, installRoot) {
 	await mkdir(path.join(installRoot, 'bin'), { recursive: true });
 	await mkdir(path.join(installRoot, 'libexec'), { recursive: true });
