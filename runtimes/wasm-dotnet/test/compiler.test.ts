@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { compileDotnet, createDotnetCompiler, parseDotnetDiagnostics } from '../src/compiler.js';
 import {
 	loadDotnetCompilerRuntime,
@@ -96,6 +96,95 @@ describe('compileDotnet', () => {
 		expect(csharpAgain).toBe(csharp);
 		expect(fsharp).not.toBe(csharp);
 		expect(creates).toBe(2);
+	});
+
+	it.each(['create', 'exports', 'compile', 'run'] as const)(
+		'rejects a pending %s immediately when the runtime aborts',
+		async (phase) => {
+			const fatal = new Error('native pthread initialization failed');
+			let callbacks!: { onAbort(reason: unknown): void; onExit(code: number): void };
+			let reached!: () => void;
+			const pending = new Promise<void>((resolve) => {
+				reached = resolve;
+			});
+			const stall = () => {
+				reached();
+				return new Promise<never>(() => {});
+			};
+			const bridge = {
+				Compile: () => (phase === 'compile' ? stall() : JSON.stringify({ success: true })),
+				Run: () => (phase === 'run' ? stall() : JSON.stringify({ exitCode: 0 }))
+			};
+			const create = vi.fn(async () => {
+				if (phase === 'create') return await stall();
+				return {
+					getAssemblyExports: async () =>
+						phase === 'exports' ? await stall() : { CompilerHost: bridge }
+				};
+			});
+			const options = {
+				onFatalError: vi.fn(),
+				dotnetModule: {
+					dotnet: {
+						withModuleConfig(value: typeof callbacks) {
+							callbacks = value;
+							return this;
+						},
+						create
+					}
+				}
+			};
+			let runtime: Awaited<ReturnType<typeof loadDotnetCompilerRuntime>> | undefined;
+			const operation = (async () => {
+				runtime = await loadDotnetCompilerRuntime(options);
+				if (phase === 'compile')
+					return await runtime.compile({
+						language: 'csharp',
+						source: '',
+						target: 'browser-wasm'
+					});
+				if (phase === 'run') return await runtime.run({ assemblyId: 'asm-csharp' });
+			})();
+			const rejected = expect(operation).rejects.toBe(fatal);
+			await pending;
+			callbacks.onAbort(fatal);
+			await rejected;
+			expect(options.onFatalError).toHaveBeenCalledExactlyOnceWith(fatal);
+			callbacks.onExit(1);
+			expect(options.onFatalError).toHaveBeenCalledTimes(1);
+			if (runtime)
+				await expect(runtime.run({ assemblyId: 'asm-csharp' })).rejects.toBe(fatal);
+		}
+	);
+
+	it('evicts an exited runtime and creates a replacement for the next load', async () => {
+		let onExit!: (code: number) => void;
+		const create = vi.fn(async () => ({
+			getAssemblyExports: async () => ({
+				CompilerHost: {
+					Compile: () => JSON.stringify({ success: true }),
+					Run: () => JSON.stringify({ exitCode: 0 })
+				}
+			})
+		}));
+		const options = {
+			dotnetModule: {
+				dotnet: {
+					withModuleConfig(config: { onExit(code: number): void }) {
+						onExit = config.onExit;
+						return this;
+					},
+					create
+				}
+			}
+		};
+		const runtime = await loadDotnetCompilerRuntime(options);
+		onExit(1);
+		await expect(runtime.run({ assemblyId: 'asm-csharp' })).rejects.toThrow(
+			'.NET runtime exited with code 1'
+		);
+		expect(await loadDotnetCompilerRuntime(options)).not.toBe(runtime);
+		expect(create).toHaveBeenCalledTimes(2);
 	});
 
 	it('does not lazy-load Roslyn assemblies embedded in the AOT runtime', async () => {

@@ -17,7 +17,10 @@ workerSelf.document ??= {
 type DotnetCompileLanguage = 'fsharp' | 'csharp' | 'vbnet';
 
 type DotnetRuntimeModule = {
-	createDotnetCompiler: (options?: { loadReferences?: boolean }) => {
+	createDotnetCompiler: (options?: {
+		loadReferences?: boolean;
+		onFatalError?: (error: Error) => void;
+	}) => {
 		compile(request: {
 			code: string;
 			language: DotnetCompileLanguage;
@@ -81,7 +84,11 @@ async function loadRuntime(url: string) {
 		if (typeof runtimeModule.executeBrowserDotnetArtifact !== 'function') {
 			throw new Error('wasm-dotnet module must export executeBrowserDotnetArtifact');
 		}
-		compiler = runtimeModule.createDotnetCompiler();
+		compiler = runtimeModule.createDotnetCompiler({
+			onFatalError(error) {
+				postMessage({ error: error.message, fatal: true });
+			}
+		});
 		return runtimeModule;
 	})();
 	return await runtimePromise;

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +22,22 @@ export async function patchRuntime({
 
 	await rm(workerPolyfillPath, { force: true });
 	if (usesPthreads) {
+		// .NET's sidecar replacement identifies this host worker as the runtime's
+		// main thread. Emscripten must read the replacement after it is initialized;
+		// otherwise Mono attaches the host as a pthread with no worker event target.
+		const nativePath = resolve(runtimeDir, 'dotnet.native.js');
+		const nativeSource = await readFile(nativePath, 'utf8');
+		const before =
+			'ENVIRONMENT_IS_WORKER=dotnet_replacements.ENVIRONMENT_IS_WORKER;Module.__dotnet_runtime.initializeReplacements(dotnet_replacements);';
+		const after =
+			'Module.__dotnet_runtime.initializeReplacements(dotnet_replacements);ENVIRONMENT_IS_WORKER=dotnet_replacements.ENVIRONMENT_IS_WORKER;';
+		if (!nativeSource.includes(before) && !nativeSource.includes(after)) {
+			throw new Error('Unsupported .NET pthread initialization in dotnet.native.js');
+		}
+		const patchedNativeSource = nativeSource.replace(before, after);
+		await writeFile(nativePath, patchedNativeSource, 'utf8');
+		boot.resources.jsModuleNative['dotnet.native.js'] =
+			`sha256-${createHash('sha256').update(patchedNativeSource).digest('base64')}`;
 		boot.pthreadPoolInitialSize = Math.max(boot.pthreadPoolInitialSize || 0, 8);
 		boot.pthreadPoolUnusedSize = Math.max(boot.pthreadPoolUnusedSize || 0, 8);
 	} else {

@@ -4,8 +4,8 @@
   "layers": {
     "wasm-dotnet/runtime/layers/csharp-00.pack.gz": {
       "length": 16672093,
-      "compressedLength": 4527544,
-      "sha256": "210aec054fa96053fcc9bd1aebee1683865a8c02d258aa3ebd5d0fd928380ca4"
+      "compressedLength": 4527546,
+      "sha256": "0da034331388f6534748b341bcc8d20f36f6b197926128f7db442f8068530b4b"
     },
     "wasm-dotnet/runtime/layers/csharp-01.pack.gz": {
       "length": 424490,
@@ -19,8 +19,8 @@
     },
     "wasm-dotnet/runtime/layers/fsharp-01.pack.gz": {
       "length": 12168865,
-      "compressedLength": 3644352,
-      "sha256": "260e367c76d5901c2e49d7ac8b86f3ad10567f0e768d9c1a97cbdacb43fdbd60"
+      "compressedLength": 3644355,
+      "sha256": "0b80d7a0e93bfdc9d7fbfa313992615d6f23e3a7e545893b75dba8a5b1c43702"
     },
     "wasm-dotnet/runtime/layers/ref-00.pack.gz": {
       "length": 8231119,
@@ -30,7 +30,7 @@
     "wasm-dotnet/runtime/layers/vbnet-00.pack.gz": {
       "length": 13057379,
       "compressedLength": 3624465,
-      "sha256": "9a46f46e1eb30dc84240b190ae9fabf797deec955a560bbf9f70c52c42b7ca96"
+      "sha256": "0449c5cf04387f4c6d017680a189c977059afa0a834b1b18fa866b9ad65505a3"
     }
   },
   "assets": {

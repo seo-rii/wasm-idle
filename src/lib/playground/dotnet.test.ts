@@ -77,6 +77,26 @@ describe('Dotnet sandbox', () => {
 		vi.unstubAllGlobals();
 	});
 
+	it('terminates a fatally aborted worker immediately and loads a fresh worker for retry', async () => {
+		const sandbox = new Dotnet('CSHARP');
+		await sandbox.load();
+		const worker = workerInstances[0];
+		suppressAutoRunAck = true;
+		const running = sandbox.run('Console.WriteLine("hello");', false);
+		const rejected = expect(running).rejects.toBe('native pthread initialization failed');
+		await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledTimes(2));
+		worker.onmessage?.({
+			data: { error: 'native pthread initialization failed', fatal: true }
+		} as MessageEvent);
+		await rejected;
+		expect(worker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		await sandbox.load();
+		expect(workerInstances).toHaveLength(2);
+		suppressAutoRunAck = false;
+		await expect(sandbox.run('Console.WriteLine("hello");', false)).resolves.toBe(true);
+	});
+
 	it('loads the dotnet worker and forwards diagnostics plus run output', async () => {
 		const sandbox = new Dotnet();
 		const outputs: string[] = [];

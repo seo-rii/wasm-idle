@@ -1146,7 +1146,7 @@ class Dotnet implements Sandbox {
 						}
 						if (hasError) {
 							this.elapse = Date.now() - this.begin;
-							failRun(error);
+							failRun(error, message.fatal === true);
 						}
 					} catch (error) {
 						failRun(error, true);

@@ -37,11 +37,14 @@ Roslyn with concurrent builds disabled. All three languages rewrite `Console` in
 buffered browser stdin shim before compilation. The shim is a compiler-independent assembly shared
 by all three bundles.
 
-The playground executes the threaded runtime on the browser UI thread. The .NET Monaco language
-servers use an in-process `MessageChannel` JSON-RPC transport for the same reason: Emscripten treats
-a host Web Worker as a pthread worker and cannot start the threaded runtime there. The compiler hot
-paths are AOT compiled, keeping diagnostics responsive while preserving the existing language-server
-transport contract.
+The playground executes the threaded runtime in a dedicated host Worker so cancellation can
+terminate compilation and user code. The host sets `dotnetSidecar`; the runtime patcher ensures
+Emscripten reads `ENVIRONMENT_IS_WORKER` after .NET initializes its replacements. This identifies
+the host as the runtime's main thread while preserving normal initialization of its pthreads.
+The patcher rejects unfamiliar generated code and refreshes the native JS integrity hash in the
+boot manifest. Runtime abort and exit callbacks reject pending initialization, compilation, and
+execution immediately. The .NET Monaco language servers retain their in-process `MessageChannel`
+JSON-RPC transport.
 
 ## Build
 

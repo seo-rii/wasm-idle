@@ -1,5 +1,7 @@
 // @vitest-environment node
 
+import { createHash } from 'node:crypto';
+import { runInNewContext } from 'node:vm';
 import { readFile, stat } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
@@ -73,6 +75,42 @@ describe('checked-in wasm-dotnet runtime', () => {
 					)
 				).toEqual([]);
 			}
+		}
+	});
+
+	it('ships matching native JS hashes and applies sidecar replacements before thread attachment', async () => {
+		for (const language of ['csharp', 'fsharp', 'vbnet']) {
+			const native = await readLogicalStaticAsset(
+				`wasm-dotnet/runtime/${language}/dotnet.native.js`
+			);
+			const boot = JSON.parse(
+				(
+					await readLogicalStaticAsset(`wasm-dotnet/runtime/${language}/blazor.boot.json`)
+				).toString()
+			);
+			expect(boot.resources.jsModuleNative['dotnet.native.js']).toBe(
+				`sha256-${createHash('sha256').update(native).digest('base64')}`
+			);
+			const source = native.toString();
+			const start = source.indexOf('const dotnet_replacements=');
+			const end = source.indexOf('noExitRuntime=', start);
+			expect(start).toBeGreaterThan(-1);
+			expect(end).toBeGreaterThan(start);
+			const state = {
+				ENVIRONMENT_IS_WORKER: true,
+				require: undefined,
+				modulePThread: {},
+				scriptDirectory: '',
+				Module: {
+					__dotnet_runtime: {
+						initializeReplacements(replacements: { ENVIRONMENT_IS_WORKER: boolean }) {
+							replacements.ENVIRONMENT_IS_WORKER = false;
+						}
+					}
+				}
+			};
+			runInNewContext(source.slice(start, end), state);
+			expect(state.ENVIRONMENT_IS_WORKER).toBe(false);
 		}
 	});
 
