@@ -2,8 +2,8 @@
   "format": "wasm-clojurescript-runtime-manifest-v1",
   "runtime": "cljs.js",
   "clojureScriptVersion": "1.12.134",
-  "compilerSha256": "8b055dd50f8c8736db9680924209782ba5027718ab84b6a0a3eb40a913d05b17",
-  "fingerprint": "177dfd8dc4e67a33",
+  "compilerSha256": "ec1d3f02f8ee2ff7d8007acb565ec454c8a0625bd305260db3e974bbf5d3b162",
+  "fingerprint": "11cf68d6d0987a15",
   "files": [
     "LICENSE.txt",
     "compiler.js.gz",

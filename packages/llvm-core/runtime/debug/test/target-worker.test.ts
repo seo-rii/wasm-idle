@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SharedByteQueue, createSharedByteQueue } from '../src/shared-byte-queue.js';
 import type { TargetWorkerInitializeMessage } from '../src/types.js';
+const validWasmModule = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
 
 const workerMocks = vi.hoisted(() => ({
 	callMain: vi.fn(),
@@ -11,25 +12,7 @@ const workerMocks = vi.hoisted(() => ({
 	lifecycle: 'exit' as 'exit' | 'abort' | 'pending',
 	loadFailure: undefined as Error | undefined,
 	loadGate: undefined as Promise<void> | undefined,
-	mountDebugFiles: vi.fn(),
-	postWorkerError: vi.fn(),
-	postWorkerMessage: vi.fn()
-}));
-
-vi.mock('../src/worker/module-loader.js', async (importOriginal) => ({
-	...(await importOriginal<typeof import('../src/worker/module-loader.js')>()),
-	createTransportBindings: vi.fn((options: TargetWorkerInitializeMessage) => ({
-		rspInput: {
-			descriptor: options.rspInput,
-			closed: false,
-			close: workerMocks.closeRspInput
-		},
-		rspOutput: {
-			descriptor: options.rspOutput,
-			closed: false,
-			close: workerMocks.closeRspOutput
-		}
-	})),
+	revokeAssets: vi.fn(),
 	loadEmscriptenModuleFactory: vi.fn(async () => {
 		if (workerMocks.loadGate) await workerMocks.loadGate;
 		if (workerMocks.loadFailure) {
@@ -59,6 +42,32 @@ vi.mock('../src/worker/module-loader.js', async (importOriginal) => ({
 			}
 		});
 	}),
+	mountDebugFiles: vi.fn(),
+	postWorkerError: vi.fn(),
+	postWorkerMessage: vi.fn()
+}));
+
+vi.mock('../src/worker/module-loader.js', async (importOriginal) => ({
+	...(await importOriginal<typeof import('../src/worker/module-loader.js')>()),
+	createTransportBindings: vi.fn((options: TargetWorkerInitializeMessage) => ({
+		rspInput: {
+			descriptor: options.rspInput,
+			closed: false,
+			close: workerMocks.closeRspInput
+		},
+		rspOutput: {
+			descriptor: options.rspOutput,
+			closed: false,
+			close: workerMocks.closeRspOutput
+		}
+	})),
+	createEmscriptenAssetUrls: vi.fn(() => ({
+		js: 'blob:target-js',
+		wasm: 'blob:target-wasm',
+		worker: 'blob:target-worker',
+		revoke: workerMocks.revokeAssets
+	})),
+	loadEmscriptenModuleFactory: workerMocks.loadEmscriptenModuleFactory,
 	mountDebugFiles: workerMocks.mountDebugFiles,
 	postWorkerError: workerMocks.postWorkerError,
 	postWorkerMessage: workerMocks.postWorkerMessage,
@@ -79,7 +88,7 @@ function initializeMessage(generation: string): TargetWorkerInitializeMessage {
 	return {
 		type: 'initialize-target',
 		generation,
-		module: new Uint8Array([0, 97, 115, 109]),
+		module: validWasmModule.slice(),
 		args: ['first', 'second'],
 		env: {
 			MODE: 'debug',
@@ -98,9 +107,9 @@ function initializeMessage(generation: string): TargetWorkerInitializeMessage {
 		stderr: createSharedByteQueue(4096, 1),
 		stdin: createSharedByteQueue(4096, 1),
 		assets: {
-			js: 'https://example.test/wamr.js',
-			wasm: 'https://example.test/wamr.wasm',
-			worker: 'https://example.test/wamr.worker.mjs'
+			js: new TextEncoder().encode('export default function wamr() {}').buffer,
+			wasm: Uint8Array.of(0, 97, 115, 109).buffer,
+			worker: new TextEncoder().encode('export default function pthread() {}').buffer
 		}
 	};
 }
@@ -116,6 +125,26 @@ describe('WAMR target worker launch', () => {
 		workerMocks.lifecycle = 'exit';
 		workerMocks.loadFailure = undefined;
 		workerMocks.loadGate = undefined;
+	});
+
+	it('revokes verified runtime blobs synchronously when a live target is disposed', async () => {
+		workerMocks.lifecycle = 'pending';
+		const { handleTargetWorkerMessage } = await loadTargetWorker();
+		const message = initializeMessage('target-worker-revoke-on-dispose');
+
+		handleTargetWorkerMessage(message);
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
+				type: 'ready',
+				worker: 'target',
+				generation: message.generation
+			})
+		);
+		expect(workerMocks.revokeAssets).not.toHaveBeenCalled();
+
+		handleTargetWorkerMessage({ type: 'dispose', generation: message.generation });
+
+		expect(workerMocks.revokeAssets).toHaveBeenCalledOnce();
 	});
 
 	it.each([
@@ -186,6 +215,34 @@ describe('WAMR target worker launch', () => {
 			);
 		}
 	);
+
+	it('rejects an unsupported guest module before loading Emscripten WAMR assets', async () => {
+		const { handleTargetWorkerMessage } = await loadTargetWorker();
+		const message = initializeMessage('target-worker-unsupported-module');
+		message.module = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0, 5, 4, 1, 3, 1, 1);
+
+		handleTargetWorkerMessage(message);
+
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerError).toHaveBeenCalledWith(
+				'target',
+				message.generation,
+				expect.objectContaining({ message: expect.stringMatching(/shared memory/u) })
+			)
+		);
+		expect(workerMocks.loadEmscriptenModuleFactory).not.toHaveBeenCalled();
+		expect(workerMocks.mountDebugFiles).not.toHaveBeenCalled();
+
+		const recovery = initializeMessage('target-worker-unsupported-module-recovery');
+		handleTargetWorkerMessage(recovery);
+		await vi.waitFor(() =>
+			expect(workerMocks.postWorkerMessage).toHaveBeenCalledWith({
+				type: 'ready',
+				worker: 'target',
+				generation: recovery.generation
+			})
+		);
+	});
 
 	it.each(['stdout', 'stderr', 'stdin'] as const)(
 		'rejects %s sharing an RSP buffer before loading WAMR',

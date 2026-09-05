@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+	DebugAdapterStateError,
 	createAdapterDebugSessionController,
 	type DebugAdapter,
 	type DebugAdapterEvent,
 	type DebugCapabilities,
+	type DebugDataBreakpoint,
+	type DebugDataBreakpointInfo,
+	type DebugDataBreakpointInfoArguments,
 	type DebugDisconnectOptions,
 	type DebugEvaluateResult,
 	type DebugLaunchConfig,
@@ -14,6 +18,8 @@ import {
 	type DebugStackFrame,
 	type DebugThread,
 	type DebugVariable,
+	type DebugWriteMemoryResult,
+	type ResolvedDataBreakpoint,
 	type ResolvedBreakpoint
 } from '../src/index.js';
 
@@ -44,6 +50,7 @@ const capabilities: DebugCapabilities = {
 	supportsEvaluate: true,
 	supportsEvaluateForHovers: false,
 	supportsReadMemory: true,
+	supportsWriteMemory: true,
 	supportsDataBreakpoints: false,
 	supportsSetVariable: false,
 	supportsRestart: false,
@@ -91,6 +98,18 @@ class FakeDebugAdapter implements DebugAdapter {
 		_offset: number,
 		_count: number
 	): Promise<DebugMemory> => ({ data: new Uint8Array(), unreadableBytes: 0 });
+	writeMemoryHandler = async (
+		_memoryReference: string,
+		_offset: number,
+		_data: Uint8Array,
+		_allowPartial?: boolean
+	): Promise<DebugWriteMemoryResult> => ({ bytesWritten: 0 });
+	dataBreakpointInfoHandler = async (
+		_arguments: DebugDataBreakpointInfoArguments
+	): Promise<DebugDataBreakpointInfo> => ({ description: 'unavailable' });
+	setDataBreakpointsHandler = async (
+		_breakpoints: DebugDataBreakpoint[]
+	): Promise<ResolvedDataBreakpoint[]> => [];
 	evaluateHandler = async (
 		expression: string,
 		_frameId?: number
@@ -170,6 +189,30 @@ class FakeDebugAdapter implements DebugAdapter {
 	async readMemory(memoryReference: string, offset: number, count: number) {
 		this.transcript.push(`readMemory:${memoryReference}:${offset}:${count}`);
 		return this.readMemoryHandler(memoryReference, offset, count);
+	}
+
+	async writeMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial?: boolean
+	) {
+		this.transcript.push(
+			`writeMemory:${memoryReference}:${offset}:${Array.from(data).join(',')}:${allowPartial === true}`
+		);
+		return this.writeMemoryHandler(memoryReference, offset, data, allowPartial);
+	}
+
+	async dataBreakpointInfo(arguments_: DebugDataBreakpointInfoArguments) {
+		this.transcript.push(`dataBreakpointInfo:${arguments_.name}`);
+		return this.dataBreakpointInfoHandler(arguments_);
+	}
+
+	async setDataBreakpoints(breakpoints: DebugDataBreakpoint[]) {
+		this.transcript.push(
+			`setDataBreakpoints:${breakpoints.map(({ dataId, accessType }) => `${dataId}:${accessType ?? ''}`).join(',')}`
+		);
+		return this.setDataBreakpointsHandler(breakpoints);
 	}
 
 	async evaluate(expression: string, frameId?: number) {
@@ -457,6 +500,13 @@ describe('createAdapterDebugSessionController', () => {
 			data: new Uint8Array([1, 2]),
 			unreadableBytes: 0
 		});
+		adapter.writeMemoryHandler = async () => ({ offset: 4, bytesWritten: 2 });
+		adapter.dataBreakpointInfoHandler = async () => ({
+			dataId: '10/2',
+			description: '2 bytes at 10',
+			accessTypes: ['read', 'write', 'readWrite']
+		});
+		adapter.setDataBreakpointsHandler = async () => [{ id: 3, verified: true }];
 		const controller = createAdapterDebugSessionController(adapter);
 
 		adapter.emit({ type: 'stopped', reason: 'entry', threadId: 2 });
@@ -478,15 +528,31 @@ describe('createAdapterDebugSessionController', () => {
 			data: new Uint8Array([1, 2]),
 			unreadableBytes: 0
 		});
+		await expect(
+			controller.writeMemory('memory', 4, Uint8Array.of(9, 10), true)
+		).resolves.toEqual({ offset: 4, bytesWritten: 2 });
+		await expect(
+			controller.dataBreakpointInfo({ name: '0x10', asAddress: true, bytes: 2 })
+		).resolves.toEqual({
+			dataId: '10/2',
+			description: '2 bytes at 10',
+			accessTypes: ['read', 'write', 'readWrite']
+		});
+		await expect(
+			controller.setDataBreakpoints([{ dataId: '10/2', accessType: 'write' }])
+		).resolves.toEqual([{ id: 3, verified: true }]);
 
 		await controller.pause();
 		await controller.next();
 		await controller.stepIn();
 		await controller.stepOut();
 		await controller.continue();
-		expect(adapter.transcript.slice(-7)).toEqual([
+		expect(adapter.transcript.slice(-10)).toEqual([
 			'evaluate:counter:11',
 			'readMemory:memory:4:2',
+			'writeMemory:memory:4:9,10:true',
+			'dataBreakpointInfo:0x10',
+			'setDataBreakpoints:10/2:write',
 			'pause:1',
 			'next:1',
 			'stepIn:1',
@@ -495,6 +561,63 @@ describe('createAdapterDebugSessionController', () => {
 		]);
 		expect(controller.stoppedReason).toBeNull();
 		expect(controller.frames).toEqual([]);
+	});
+
+	it.each([
+		{
+			operation: 'readMemory',
+			install(adapter: FakeDebugAdapter, result: ReturnType<typeof deferred<DebugMemory>>) {
+				adapter.readMemoryHandler = () => result.promise;
+			},
+			invoke(controller: ReturnType<typeof createAdapterDebugSessionController>) {
+				return controller.readMemory('memory', 0, 1);
+			},
+			resolve(result: ReturnType<typeof deferred<DebugMemory>>) {
+				result.resolve({ address: '0x0', data: Uint8Array.of(1), unreadableBytes: 0 });
+			}
+		},
+		{
+			operation: 'writeMemory',
+			install(
+				adapter: FakeDebugAdapter,
+				result: ReturnType<typeof deferred<DebugWriteMemoryResult>>
+			) {
+				adapter.writeMemoryHandler = () => result.promise;
+			},
+			invoke(controller: ReturnType<typeof createAdapterDebugSessionController>) {
+				return controller.writeMemory('memory', 0, Uint8Array.of(1));
+			},
+			resolve(result: ReturnType<typeof deferred<DebugWriteMemoryResult>>) {
+				result.resolve({ bytesWritten: 1 });
+			}
+		}
+	])('suppresses a stale successful $operation result', async ({ install, invoke, resolve }) => {
+		const invalidations = [
+			(adapter: FakeDebugAdapter) => adapter.emit({ type: 'continued', threadId: 1 }),
+			(adapter: FakeDebugAdapter) =>
+				adapter.emit({ type: 'stopped', reason: 'step', threadId: 1 }),
+			async (
+				_adapter: FakeDebugAdapter,
+				controller: ReturnType<typeof createAdapterDebugSessionController>
+			) => controller.launch({ program: '/workspace/new.wasm' })
+		];
+
+		for (const invalidate of invalidations) {
+			const adapter = new FakeDebugAdapter();
+			const result = deferred<DebugMemory>() as ReturnType<typeof deferred<DebugMemory>> &
+				ReturnType<typeof deferred<DebugWriteMemoryResult>>;
+			install(adapter, result);
+			const controller = createAdapterDebugSessionController(adapter);
+			adapter.emit({ type: 'stopped', reason: 'breakpoint', threadId: 1 });
+
+			const pending = invoke(controller);
+			await invalidate(adapter, controller);
+			resolve(result);
+
+			await expect(pending).rejects.toBeInstanceOf(DebugAdapterStateError);
+			expect(controller.error).toBeNull();
+			controller.dispose();
+		}
 	});
 
 	it('ignores a previous stopped response that resolves after a newer stop', async () => {

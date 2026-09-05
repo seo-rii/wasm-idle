@@ -237,7 +237,7 @@ describe('ClojureScript runner worker', () => {
 			new URL('compiler.js.gz', staticRuntimeUrl)
 		);
 		const compressedCompiler = await readFile(new URL('compiler.js.gz.bin', staticRuntimeUrl));
-		expect(compressedCompiler).toEqual(legacyCompressedCompiler);
+		expect(compressedCompiler.equals(legacyCompressedCompiler)).toBe(true);
 		const compiler = gunzipSync(compressedCompiler);
 		expect(compiler.byteLength).toBe(manifest.assets[0].size);
 		expect(createHash('sha256').update(compiler).digest('hex')).toBe(manifest.assets[0].sha256);

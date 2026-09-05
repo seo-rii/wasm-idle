@@ -3,6 +3,8 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { writeWasmTypeScriptProducerBuildReceipt } from './provenance.mjs';
+
 const THIS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
 
@@ -89,3 +91,5 @@ await build({
 		js: '/* wasm-typescript browser bundle */'
 	}
 });
+
+await writeWasmTypeScriptProducerBuildReceipt({ producerDir: REPO_ROOT });

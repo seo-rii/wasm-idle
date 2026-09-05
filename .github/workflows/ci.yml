@@ -29,21 +29,24 @@ jobs:
             - run: pnpm --dir producers/wasm-php build
             - run: pnpm --dir producers/wasm-php verify
             - run: pnpm run verify:wasm-php
+            - run: pnpm run verify:page-runtime-freshness
             - run: pnpm run check
             - run: pnpm test
+            - run: pnpm run test:wasm-debug-release
             - run: pnpm run check:support-matrix
-            - run: pnpm run layer:static-runtimes
-            - run: git diff --exit-code -- static
             - run: pnpm run check:asset-sizes
             - run: pnpm run check:packages
+            - run: pnpm --dir packages/debug test
             - run: pnpm --dir packages/llvm-core test
             - run: pnpm --dir packages/lsp test
+            - run: pnpm --dir packages/terminal test
             - run: pnpm --dir runtimes/wasm-go test
             - run: pnpm --dir runtimes/wasm-rust exec vitest run test/runtime-pack.test.ts test/runtime-manifest-edge.test.ts
             - run: pnpm exec vitest run --no-file-parallelism --testTimeout=15000 src/lib/sync-*.test.ts
             - run: pnpm exec vitest run src/lib/prepare-browser-test-assets.test.ts src/lib/run-all-language-browser-tests.test.ts src/lib/verify-package.test.ts
             - run: pnpm exec vitest run src/lib/compress-static-runtime-assets.test.ts src/lib/static-asset-sizes.test.ts src/lib/build-layered-runtime-assets.test.ts src/lib/compressed-runtime-service-worker.test.ts src/lib/package-scripts.test.ts src/lib/playground/static-runtime-assets.test.ts src/lib/playground/support-matrix.test.ts
             - run: node --test runtimes/wasm-awk/scripts/build.test.mjs
+            - run: pnpm --dir packages/llvm-core run verify:package-boundary
             - run: pnpm run verify:package
 
     lsp-browser-smoke:

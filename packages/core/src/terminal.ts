@@ -1,4 +1,14 @@
-import type { DebugCommand, DebugMemory, DebugScope, DebugVariable } from './debug.js';
+import type {
+	DebugCommand,
+	DebugDataBreakpoint,
+	DebugDataBreakpointInfo,
+	DebugDataBreakpointInfoArguments,
+	DebugMemory,
+	DebugResolvedDataBreakpoint,
+	DebugScope,
+	DebugVariable,
+	DebugWriteMemoryResult
+} from './debug.js';
 import type { ProgressLike } from './progress.js';
 import type { SandboxExecutionOptions } from './sandbox.js';
 
@@ -38,6 +48,18 @@ export interface TerminalControl {
 		offset: number,
 		count: number
 	) => Promise<DebugMemory | null>;
+	debugWriteMemory?: (
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial?: boolean
+	) => Promise<DebugWriteMemoryResult | null>;
+	debugDataBreakpointInfo?: (
+		arguments_: DebugDataBreakpointInfoArguments
+	) => Promise<DebugDataBreakpointInfo | null>;
+	debugSetDataBreakpoints?: (
+		breakpoints: DebugDataBreakpoint[]
+	) => Promise<DebugResolvedDataBreakpoint[]>;
 	waitForInput?: () => Promise<void>;
 	write: (input: string) => Promise<void>;
 	eof?: () => Promise<void>;

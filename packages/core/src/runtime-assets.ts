@@ -55,7 +55,12 @@ export interface RuntimeAssetKeySource {
 	dotnet?: { moduleUrl?: string };
 	elixir?: { bundleUrl?: string; integrity?: RuntimeAssetIntegrityMap };
 	erlang?: { bundleUrl?: string; integrity?: RuntimeAssetIntegrityMap };
-	ocaml?: { moduleUrl?: string; manifestUrl?: string };
+	ocaml?: {
+		moduleUrl?: string;
+		manifestUrl?: string;
+		moduleReceipt?: RuntimeAssetIntegrityEntry;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	tinygo?: {
 		appUrl?: string;
 		moduleUrl?: string;
@@ -633,6 +638,18 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	},
 	{ runtime: 'ocaml', property: 'moduleUrl', key: 'ocamlModuleUrl' },
 	{ runtime: 'ocaml', property: 'manifestUrl', key: 'ocamlManifestUrl' },
+	{
+		runtime: 'ocaml',
+		property: 'moduleReceipt',
+		key: 'ocamlModuleReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'ocaml',
+		property: 'manifestReceipt',
+		key: 'ocamlManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'tinygo', property: 'appUrl', key: 'tinygoAppUrl' },
 	{ runtime: 'tinygo', property: 'moduleUrl', key: 'tinygoModuleUrl' },
 	{

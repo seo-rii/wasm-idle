@@ -4,6 +4,8 @@
 		TimeoutError,
 		createRuntimeAssetsKey,
 		type DebugCommand,
+		type DebugDataBreakpoint,
+		type DebugDataBreakpointInfoArguments,
 		type DebugSessionEvent,
 		type ProgressLike
 	} from '@wasm-idle/core';
@@ -58,6 +60,7 @@
 		pendingSandboxInput: string[] = [],
 		pendingDebugBreakpoints = new Map<string, number[]>(),
 		pendingSandboxEof = false,
+		sandboxInputGeneration = 0,
 		sandbox: BoundSandbox,
 		sandboxAcceptingInput = false,
 		first = true,
@@ -75,6 +78,7 @@
 					sandbox: BoundSandbox;
 			  }
 			| undefined;
+	let preparedExecutionGeneration = 0;
 	const progressController = new RuntimeProgressController();
 	const terminalOutputReadinessLanguages = new Set([
 		'C',
@@ -92,8 +96,14 @@
 		'HASKELL'
 	]);
 
-	function invalidatePreparedExecution() {
+	function clearPreparedExecution() {
 		preparedExecution = undefined;
+	}
+
+	function invalidatePreparedExecution() {
+		preparedExecutionGeneration += 1;
+		clearPreparedExecution();
+		return preparedExecutionGeneration;
 	}
 
 	function executionPreparationKey(
@@ -160,8 +170,12 @@
 		let _tc = ++tc;
 		await wait();
 		sandboxAcceptingInput = false;
-		if (requiresSandboxReset) invalidatePreparedExecution();
-		if (sandbox && requiresSandboxReset) await sandbox.clear();
+		if (requiresSandboxReset) clearPreparedExecution();
+		if (sandbox && requiresSandboxReset) {
+			discardPendingSandboxInput();
+			await sandbox.clear();
+			discardPendingSandboxInput();
+		}
 		input = '';
 		inputCursor = 0;
 		finish = false;
@@ -186,6 +200,7 @@
 		sandbox.oncompilerdiagnostic = oncompilediagnostic;
 		sandbox.output = (output: string) =>
 			_tc === tc && writeTerminalOutput(output.replaceAll('\n', '\r\n'), true);
+		return requiresSandboxReset;
 	}
 
 	function flushPendingSandboxInput() {
@@ -199,6 +214,12 @@
 			sandbox.eof?.();
 			pendingSandboxEof = false;
 		}
+	}
+
+	function discardPendingSandboxInput() {
+		sandboxInputGeneration += 1;
+		pendingSandboxInput = [];
+		pendingSandboxEof = false;
 	}
 
 	function submitSandboxEof() {
@@ -357,6 +378,7 @@
 		async clear() {
 			await wait();
 			invalidatePreparedExecution();
+			discardPendingSandboxInput();
 			term?.reset();
 			term?.write(`\u001B[?25l\x1b[0m\x1b[?25h`);
 			if (term) term.options.cursorBlink = false;
@@ -364,9 +386,9 @@
 			input = '';
 			inputCursor = 0;
 			sandboxAcceptingInput = false;
-			pendingSandboxEof = false;
 			first = true;
 			await new Promise((r) => setTimeout(r, 100));
+			discardPendingSandboxInput();
 		},
 		async prepare(
 			language: string,
@@ -377,7 +399,7 @@
 			options: TerminalExecutionOptions = {}
 		) {
 			return await withProgressLifecycle(language, prog, async (runProgress) => {
-				invalidatePreparedExecution();
+				const preparationGeneration = invalidatePreparedExecution();
 				const prepareProgress = activityOnlyProgress(runProgress);
 				await Promise.all([
 					initSandbox(language).then(() =>
@@ -385,18 +407,24 @@
 					),
 					initTerm(false)
 				]);
+				const preparationSandbox = sandbox;
 				runProgress?.report?.({
 					kind: 'activity',
 					phase: 'starting',
 					label: `Preparing ${language} program`
 				});
 				const prepared = !!(await runSandbox(
-					sandbox.run(code, true, log, prepareProgress, args, options),
+					preparationSandbox.run(code, true, log, prepareProgress, args, options),
 					false
 				));
 				const preparationKey = executionPreparationKey(language, code, log, args, options);
-				if (prepared && preparationKey) {
-					preparedExecution = { key: preparationKey, sandbox };
+				if (
+					prepared &&
+					preparationKey &&
+					preparationGeneration === preparedExecutionGeneration &&
+					preparationSandbox === sandbox
+				) {
+					preparedExecution = { key: preparationKey, sandbox: preparationSandbox };
 				}
 				return prepared;
 			});
@@ -411,14 +439,23 @@
 		) {
 			return await withProgressLifecycle(language, prog, async (runProgress) => {
 				let executionRunWillFinalize = false;
+				const preparedCandidate = preparedExecution;
+				const executionGeneration = invalidatePreparedExecution();
 				pendingDebugBreakpoints.clear();
 				for (const { sourcePath, lines } of options.sourceBreakpoints || []) {
 					pendingDebugBreakpoints.set(sourcePath, [...lines]);
 				}
-				await Promise.all([
-					initSandbox(language).then(() =>
-						sandbox.load(code, log, args, options, activityOnlyProgress(runProgress))
-					),
+				const [sandboxWasReset] = await Promise.all([
+					initSandbox(language).then(async (wasReset) => {
+						await sandbox.load(
+							code,
+							log,
+							args,
+							options,
+							activityOnlyProgress(runProgress)
+						);
+						return wasReset;
+					}),
 					initTerm()
 				]);
 				const executionOptions = {
@@ -433,10 +470,11 @@
 				};
 				const preparationKey = executionPreparationKey(language, code, log, args, options);
 				const mayUsePreparedOutput =
+					executionGeneration === preparedExecutionGeneration &&
+					!sandboxWasReset &&
 					!!preparationKey &&
-					preparedExecution?.sandbox === sandbox &&
-					preparedExecution.key === preparationKey;
-				invalidatePreparedExecution();
+					preparedCandidate?.sandbox === sandbox &&
+					preparedCandidate.key === preparationKey;
 				try {
 					if (terminalOutputReadinessLanguages.has(language) && !mayUsePreparedOutput) {
 						const prepareProgress = activityOnlyProgress(runProgress);
@@ -511,9 +549,10 @@
 			progressController.invalidate();
 			invalidatePreparedExecution();
 			sandboxAcceptingInput = false;
-			pendingSandboxEof = false;
+			discardPendingSandboxInput();
 			term?.dispose();
 			if (sandbox) await sandbox.clear();
+			discardPendingSandboxInput();
 		},
 		async restartRuntime() {
 			await wait();
@@ -521,8 +560,7 @@
 			progressController.invalidate();
 			invalidatePreparedExecution();
 			sandboxAcceptingInput = false;
-			pendingSandboxInput = [];
-			pendingSandboxEof = false;
+			discardPendingSandboxInput();
 			input = '';
 			inputCursor = 0;
 			finish = true;
@@ -530,6 +568,7 @@
 			tc += 1;
 			if (sandbox.restart) await sandbox.restart();
 			else await sandbox.clear();
+			discardPendingSandboxInput();
 		},
 		async stop() {
 			await wait();
@@ -538,9 +577,10 @@
 			stopRequested = true;
 			finish = true;
 			sandboxAcceptingInput = false;
-			pendingSandboxEof = false;
+			discardPendingSandboxInput();
 			if (sandbox?.kill) await sandbox.kill();
 			else await sandbox?.terminate?.();
+			discardPendingSandboxInput();
 		},
 		async debugCommand(command: DebugCommand) {
 			await wait();
@@ -570,6 +610,26 @@
 		async debugReadMemory(memoryReference: string, offset: number, count: number) {
 			await wait();
 			return (await sandbox.debugReadMemory?.(memoryReference, offset, count)) ?? null;
+		},
+		async debugWriteMemory(
+			memoryReference: string,
+			offset: number,
+			data: Uint8Array,
+			allowPartial?: boolean
+		) {
+			await wait();
+			return (
+				(await sandbox.debugWriteMemory?.(memoryReference, offset, data, allowPartial)) ??
+				null
+			);
+		},
+		async debugDataBreakpointInfo(arguments_: DebugDataBreakpointInfoArguments) {
+			await wait();
+			return (await sandbox.debugDataBreakpointInfo?.(arguments_)) ?? null;
+		},
+		async debugSetDataBreakpoints(breakpoints: DebugDataBreakpoint[]) {
+			await wait();
+			return (await sandbox.debugSetDataBreakpoints?.(breakpoints)) ?? [];
 		},
 		async waitForInput() {
 			await waitForInput();
@@ -713,9 +773,14 @@
 					submitSandboxEof();
 				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') {
 					ev.preventDefault();
-					navigator.clipboard.readText().then((text) => {
-						applyPastedText(text);
-					});
+					const generation = sandboxInputGeneration;
+					navigator.clipboard
+						.readText()
+						.then((text) => {
+							if (generation !== sandboxInputGeneration) return;
+							applyPastedText(text);
+						})
+						.catch(() => {});
 				}
 			});
 			plugin = await registerAllPlugins(term);
@@ -726,8 +791,10 @@
 		return async () => {
 			progressController.invalidate();
 			invalidatePreparedExecution();
+			discardPendingSandboxInput();
 			term?.dispose();
 			if (sandbox) await sandbox.clear();
+			discardPendingSandboxInput();
 		};
 	});
 </script>

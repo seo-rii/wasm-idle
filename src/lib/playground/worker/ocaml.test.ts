@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 
 import { flushBufferedEof, flushQueuedStdin } from '$lib/playground/stdinBuffer';
 
@@ -59,11 +60,22 @@ const manifest = {
 	]
 };
 const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
+const receipt = (bytes: Uint8Array) => ({
+	bytes: bytes.byteLength,
+	sha256: createHash('sha256').update(bytes).digest('hex')
+});
+const compilerModules = new Map<
+	string,
+	{ bytes: Uint8Array; importUrl: string; moduleReceipt: ReturnType<typeof receipt> }
+>();
+const createdCompilerBlobs: Blob[] = [];
+let pendingCompilerImportUrl = '';
+let compilerModuleSequence = 0;
 
-function manifestResponse(data = manifestBytes, url = manifestUrl) {
+function manifestResponse(data: Uint8Array<ArrayBufferLike> = manifestBytes, url = manifestUrl) {
 	return {
 		async arrayBuffer() {
-			return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+			return Uint8Array.from(data).buffer;
 		},
 		body: null,
 		headers: new Headers({ 'content-length': String(data.byteLength) }),
@@ -74,7 +86,42 @@ function manifestResponse(data = manifestBytes, url = manifestUrl) {
 }
 
 async function createMockOcamlCompilerModule(source: string) {
-	return `data:text/javascript;base64,${Buffer.from(source, 'utf8').toString('base64')}`;
+	const bytes = new TextEncoder().encode(source);
+	const moduleUrl = `https://example.test/ocaml-runtime-${++compilerModuleSequence}/index.js`;
+	compilerModules.set(moduleUrl, {
+		bytes,
+		importUrl: `data:text/javascript;base64,${Buffer.from(source, 'utf8').toString('base64')}`,
+		moduleReceipt: receipt(bytes)
+	});
+	return moduleUrl;
+}
+
+function loadRequest(
+	compilerModuleUrl: string,
+	overrides: Partial<{
+		manifestUrl: string;
+		moduleReceipt: ReturnType<typeof receipt>;
+		manifestReceipt: ReturnType<typeof receipt>;
+		maxAssetBytes: number;
+	}> = {}
+) {
+	const registered = compilerModules.get(compilerModuleUrl);
+	if (!registered) throw new Error(`unregistered OCaml compiler module: ${compilerModuleUrl}`);
+	return {
+		load: true as const,
+		moduleUrl: compilerModuleUrl,
+		manifestUrl,
+		moduleReceipt: registered.moduleReceipt,
+		manifestReceipt: receipt(manifestBytes),
+		...overrides
+	};
+}
+
+function registeredCompilerResponse(url: string) {
+	const registered = compilerModules.get(url);
+	if (!registered) return undefined;
+	pendingCompilerImportUrl = registered.importUrl;
+	return manifestResponse(registered.bytes, url);
 }
 
 let capturedManifestIndex = 0;
@@ -100,7 +147,7 @@ async function captureDispatcherOptions(maxAssetBytes?: number) {
 
 	await import('./ocaml');
 	await (globalThis as any).self.onmessage({
-		data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl, maxAssetBytes }
+		data: loadRequest(compilerModuleUrl, { maxAssetBytes })
 	});
 	await (globalThis as any).self.onmessage({
 		data: {
@@ -121,11 +168,30 @@ async function captureDispatcherManifest() {
 
 describe('OCaml worker', () => {
 	beforeEach(() => {
+		vi.restoreAllMocks();
 		vi.resetModules();
+		compilerModules.clear();
+		createdCompilerBlobs.length = 0;
+		pendingCompilerImportUrl = '';
 		(globalThis as any).self = globalThis as any;
 		(globalThis as any).document = undefined;
 		(globalThis as any).postMessage = vi.fn();
-		(globalThis as any).fetch = vi.fn(async () => manifestResponse());
+		(globalThis as any).fetch = vi.fn(async (input: RequestInfo | URL) => {
+			const url = String(input);
+			const compilerResponse = registeredCompilerResponse(url);
+			if (compilerResponse) return compilerResponse;
+			if (url === manifestUrl) return manifestResponse();
+			throw new Error(`unexpected OCaml runtime request: ${url}`);
+		});
+		vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+			if (!(blob instanceof Blob)) throw new TypeError('expected an OCaml runtime Blob');
+			if (blob.type === 'text/javascript') {
+				createdCompilerBlobs.push(blob);
+				return pendingCompilerImportUrl;
+			}
+			return `blob:ocaml-test-asset-${createdCompilerBlobs.length}`;
+		});
+		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
 	});
 
 	it('loads the manifest through the bounded no-store asset boundary', async () => {
@@ -136,7 +202,7 @@ describe('OCaml worker', () => {
 
 		await import('./ocaml');
 		await (globalThis as any).self.onmessage({
-			data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl }
+			data: loadRequest(compilerModuleUrl)
 		});
 
 		expect((globalThis as any).fetch).toHaveBeenCalledWith(manifestUrl, {
@@ -146,6 +212,118 @@ describe('OCaml worker', () => {
 			referrerPolicy: 'no-referrer'
 		});
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
+	});
+
+	it('fetches and verifies both outer assets before importing the module through a blob URL', async () => {
+		const source = `
+			export async function compile() { throw new Error('not used'); }
+			export function createBrowserWorkerSystemDispatcher() { return {}; }
+		`;
+		const moduleBytes = new TextEncoder().encode(source);
+		const moduleUrl = 'https://example.test/ocaml/index.js';
+		const importedUrl = `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
+		const blobs: Blob[] = [];
+		(globalThis as any).fetch = vi.fn(async (input: RequestInfo | URL) => {
+			const url = String(input);
+			if (url === moduleUrl) {
+				return manifestResponse(moduleBytes, moduleUrl);
+			}
+			if (url === manifestUrl) return manifestResponse();
+			throw new Error(`unexpected URL: ${url}`);
+		});
+		vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+			if (!(blob instanceof Blob)) throw new TypeError('expected an OCaml runtime Blob');
+			blobs.push(blob);
+			return importedUrl;
+		});
+		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: {
+				load: true,
+				moduleUrl,
+				manifestUrl,
+				moduleReceipt: receipt(moduleBytes),
+				manifestReceipt: receipt(manifestBytes)
+			}
+		});
+
+		expect((globalThis as any).fetch).toHaveBeenCalledWith(
+			moduleUrl,
+			expect.objectContaining({ credentials: 'omit', redirect: 'error' })
+		);
+		expect(blobs).toHaveLength(1);
+		expect(await blobs[0].text()).toBe(source);
+		expect(URL.revokeObjectURL).toHaveBeenCalledOnce();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
+	});
+
+	it('rejects a corrupted outer module before creating its blob URL', async () => {
+		const moduleUrl = await createMockOcamlCompilerModule(`
+			export async function compile() { throw new Error('not used'); }
+			export function createBrowserWorkerSystemDispatcher() { return {}; }
+		`);
+		const request = loadRequest(moduleUrl);
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: {
+				...request,
+				moduleReceipt: { ...request.moduleReceipt, sha256: '0'.repeat(64) }
+			}
+		});
+
+		expect(URL.createObjectURL).not.toHaveBeenCalled();
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: expect.stringMatching(/OCaml.*SHA-256/iu)
+		});
+	});
+
+	it('rejects a corrupted outer manifest before parsing it', async () => {
+		const moduleUrl = await createMockOcamlCompilerModule(`
+			export async function compile() { throw new Error('not used'); }
+			export function createBrowserWorkerSystemDispatcher() { return {}; }
+		`);
+		const request = loadRequest(moduleUrl);
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: {
+				...request,
+				manifestReceipt: { ...request.manifestReceipt, sha256: '0'.repeat(64) }
+			}
+		});
+
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
+			error: expect.stringMatching(/OCaml.*SHA-256/iu)
+		});
+		expect((globalThis as any).postMessage).not.toHaveBeenCalledWith({ load: true });
+	});
+
+	it('restores the verified module origin for relative imports and import.meta.url', async () => {
+		const source = `
+			export * from './dependency.js';
+			export const sourceUrl = import.meta.url;
+		`;
+		const moduleUrl = await createMockOcamlCompilerModule(source);
+		const registered = compilerModules.get(moduleUrl)!;
+		registered.importUrl = `data:text/javascript;base64,${Buffer.from(
+			`
+			export async function compile() { throw new Error('not used'); }
+			export function createBrowserWorkerSystemDispatcher() { return {}; }
+		`
+		).toString('base64')}`;
+
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({ data: loadRequest(moduleUrl) });
+
+		const verifiedSource = await createdCompilerBlobs[0].text();
+		expect(verifiedSource).toContain(
+			`export * from '${new URL('./dependency.js', moduleUrl).href}'`
+		);
+		expect(verifiedSource).toContain(`export const sourceUrl = ${JSON.stringify(moduleUrl)}`);
+		expect(verifiedSource).not.toContain('import.meta.url');
 	});
 
 	it('passes rewritten descriptor URLs and unchanged receipts to the compiler dispatcher', async () => {
@@ -188,39 +366,36 @@ describe('OCaml worker', () => {
 
 	it('rejects an oversized manifest declaration before reading its body', async () => {
 		const bodyCancel = vi.fn(async () => undefined);
-		(globalThis as any).fetch = vi.fn(async () => ({
-			body: { cancel: bodyCancel },
-			headers: new Headers({ 'content-length': String(4 * 1024 * 1024 + 1) }),
-			ok: true,
-			status: 200,
-			url: manifestUrl
-		}));
 		const compilerModuleUrl = await createMockOcamlCompilerModule(`
 			export async function compile() { throw new Error('not used'); }
 			export function createBrowserWorkerSystemDispatcher() { return {}; }
 		`);
+		(globalThis as any).fetch = vi.fn(async (input: RequestInfo | URL) => {
+			const url = String(input);
+			const compilerResponse = registeredCompilerResponse(url);
+			if (compilerResponse) return compilerResponse;
+			return {
+				body: { cancel: bodyCancel },
+				headers: new Headers({ 'content-length': String(4 * 1024 * 1024 + 1) }),
+				ok: true,
+				status: 200,
+				url: manifestUrl
+			};
+		});
 
 		await import('./ocaml');
 		await (globalThis as any).self.onmessage({
-			data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl }
+			data: loadRequest(compilerModuleUrl)
 		});
 
 		expect(bodyCancel).toHaveBeenCalledOnce();
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
-			error: `OCaml manifest exceeds the ${4 * 1024 * 1024} byte limit`
+			error: `OCaml manifest exceeds the ${manifestBytes.byteLength} byte limit`
 		});
 	});
 
-	it('applies a lower caller limit while fetching the manifest', async () => {
+	it('rejects a manifest receipt above the caller limit before fetching it', async () => {
 		const maxAssetBytes = manifestBytes.byteLength - 1;
-		const bodyCancel = vi.fn(async () => undefined);
-		(globalThis as any).fetch = vi.fn(async () => ({
-			body: { cancel: bodyCancel },
-			headers: new Headers({ 'content-length': String(manifestBytes.byteLength) }),
-			ok: true,
-			status: 200,
-			url: manifestUrl
-		}));
 		const compilerModuleUrl = await createMockOcamlCompilerModule(`
 			export async function compile() { throw new Error('not used'); }
 			export function createBrowserWorkerSystemDispatcher() { return {}; }
@@ -228,10 +403,10 @@ describe('OCaml worker', () => {
 
 		await import('./ocaml');
 		await (globalThis as any).self.onmessage({
-			data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl, maxAssetBytes }
+			data: loadRequest(compilerModuleUrl, { maxAssetBytes })
 		});
 
-		expect(bodyCancel).toHaveBeenCalledOnce();
+		expect((globalThis as any).fetch).not.toHaveBeenCalledWith(manifestUrl, expect.anything());
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			error: `OCaml manifest exceeds the ${maxAssetBytes} byte limit`
 		});
@@ -246,7 +421,7 @@ describe('OCaml worker', () => {
 
 		await import('./ocaml');
 		await (globalThis as any).self.onmessage({
-			data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl, maxAssetBytes }
+			data: loadRequest(compilerModuleUrl, { maxAssetBytes })
 		});
 
 		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
@@ -269,15 +444,18 @@ describe('OCaml worker', () => {
 
 	it('reports invalid manifest JSON deterministically', async () => {
 		const invalidJson = new TextEncoder().encode('{invalid');
-		(globalThis as any).fetch = vi.fn(async () => manifestResponse(invalidJson));
 		const compilerModuleUrl = await createMockOcamlCompilerModule(`
 			export async function compile() { throw new Error('not used'); }
 			export function createBrowserWorkerSystemDispatcher() { return {}; }
 		`);
+		(globalThis as any).fetch = vi.fn(async (input: RequestInfo | URL) => {
+			const url = String(input);
+			return registeredCompilerResponse(url) ?? manifestResponse(invalidJson);
+		});
 
 		await import('./ocaml');
 		await (globalThis as any).self.onmessage({
-			data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl }
+			data: loadRequest(compilerModuleUrl, { manifestReceipt: receipt(invalidJson) })
 		});
 
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
@@ -332,12 +510,7 @@ describe('OCaml worker', () => {
 
 		await import('./ocaml');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				moduleUrl: compilerModuleUrl,
-				manifestUrl:
-					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
-			}
+			data: loadRequest(compilerModuleUrl)
 		});
 		await Promise.resolve();
 
@@ -395,12 +568,7 @@ describe('OCaml worker', () => {
 
 		await import('./ocaml');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				moduleUrl: compilerModuleUrl,
-				manifestUrl:
-					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
-			}
+			data: loadRequest(compilerModuleUrl)
 		});
 		await Promise.resolve();
 
@@ -457,12 +625,7 @@ describe('OCaml worker', () => {
 
 		await import('./ocaml');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				moduleUrl: compilerModuleUrl,
-				manifestUrl:
-					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
-			}
+			data: loadRequest(compilerModuleUrl)
 		});
 		await Promise.resolve();
 
@@ -523,12 +686,7 @@ describe('OCaml worker', () => {
 
 		await import('./ocaml');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				moduleUrl: compilerModuleUrl,
-				manifestUrl:
-					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
-			}
+			data: loadRequest(compilerModuleUrl)
 		});
 		await Promise.resolve();
 
@@ -591,7 +749,7 @@ describe('OCaml worker', () => {
 
 		await import('./ocaml');
 		await (globalThis as any).self.onmessage({
-			data: { load: true, moduleUrl: compilerModuleUrl, manifestUrl }
+			data: loadRequest(compilerModuleUrl)
 		});
 		const runRequest = {
 			code: 'let () = Helper.print_message ()',
@@ -679,12 +837,7 @@ describe('OCaml worker', () => {
 
 		await import('./ocaml');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				moduleUrl: compilerModuleUrl,
-				manifestUrl:
-					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
-			}
+			data: loadRequest(compilerModuleUrl)
 		});
 		await Promise.resolve();
 
@@ -759,12 +912,7 @@ describe('OCaml worker', () => {
 
 		await import('./ocaml');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				moduleUrl: compilerModuleUrl,
-				manifestUrl:
-					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
-			}
+			data: loadRequest(compilerModuleUrl)
 		});
 		await Promise.resolve();
 
@@ -824,12 +972,7 @@ describe('OCaml worker', () => {
 
 		await import('./ocaml');
 		await (globalThis as any).self.onmessage({
-			data: {
-				load: true,
-				moduleUrl: compilerModuleUrl,
-				manifestUrl:
-					'https://example.test/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
-			}
+			data: loadRequest(compilerModuleUrl)
 		});
 		await Promise.resolve();
 

@@ -5,12 +5,13 @@
 
 	interface Props {
 		playground: PlaygroundBinding;
-		onload: () => void;
-		onterminal: (terminal: TerminalControl) => void;
+		onReady?: (terminal: TerminalControl) => void;
+		onload?: () => void;
+		onterminal?: (terminal: TerminalControl) => void;
 		onprogress?: (event: RuntimeProgressEvent) => void;
 	}
 
-	let { playground, onload, onterminal, onprogress }: Props = $props();
+	let { playground, onReady, onload, onterminal, onprogress }: Props = $props();
 	let terminal = $state<TerminalControl>();
 	let progressLabel = $state('');
 	let reportedTerminal: TerminalControl | undefined;
@@ -18,12 +19,20 @@
 	$effect(() => {
 		if (terminal && terminal !== reportedTerminal) {
 			reportedTerminal = terminal;
-			onterminal(terminal);
+			onterminal?.(terminal);
 		}
 	});
+
+	function handleLoad() {
+		onload?.();
+		if (onReady) {
+			if (!terminal) throw new Error('Terminal control was not bound before load');
+			onReady(terminal);
+		}
+	}
 </script>
 
-<Terminal {playground} {onload} bind:terminal />
+<Terminal {playground} bind:terminal onload={handleLoad} />
 
 <button
 	onclick={() =>

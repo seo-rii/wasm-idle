@@ -2,16 +2,16 @@ export const WASM_CLOJURESCRIPT_RUNTIME_PROFILE = {
 	profileId: 'clojurescript-1.12.134-cljs-js-wasm-idle-e8083f4f',
 	sourceRevision: 'r1.12.134',
 	integrationRevision: 'e8083f4fd57d6d9beebdb38709ba8cc7fa07a2c8',
-	manifestFingerprint: '177dfd8dc4e67a33d2096143b3d27af96703bef002006ac9e42bd4a2609e9492',
+	manifestFingerprint: '11cf68d6d0987a15fe908464b160396108d4d37e7bb1d8fe02d05222eec7ed7e',
 	manifestReceipt: {
 		bytes: 1664,
-		sha256: '2adc22e9461d9af25862c0142e9f6cd009ec4caad960aed9b654381e6d242e1d'
+		sha256: 'b3fdb915bf79db5c970fafc9e34ad1ba7f958acebf251d28f307e82d7e72811f'
 	},
 	compilerReceipt: {
-		bytes: 614204,
-		sha256: 'ea4ac9faff58cf89de1187a700b9cc30e267072ecba60064aedc11eea2b96245',
-		uncompressedBytes: 6588133,
-		uncompressedSha256: '8b055dd50f8c8736db9680924209782ba5027718ab84b6a0a3eb40a913d05b17'
+		bytes: 614160,
+		sha256: '76bb9862946f341609a28fb14eb079432dfc239350c2515efc7fccc6d3051676',
+		uncompressedBytes: 6588008,
+		uncompressedSha256: 'ec1d3f02f8ee2ff7d8007acb565ec454c8a0625bd305260db3e974bbf5d3b162'
 	}
 } as const;
 export const WASM_CLOJURESCRIPT_ASSET_VERSION =

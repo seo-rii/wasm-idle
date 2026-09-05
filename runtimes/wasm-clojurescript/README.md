@@ -14,7 +14,9 @@ pnpm --filter @wasm-idle/runtime-clojurescript build
 The first build downloads the pinned JDK and Clojure CLI archives and resolves the pinned Maven
 dependency graph. It writes `dist/compiler.js`, `dist/LICENSE.txt`, and
 `dist/runtime-build.json`. `pnpm run sync:wasm-clojurescript` copies these assets and the runtime
-worker into `static/wasm-clojurescript`.
+worker into `static/wasm-clojurescript`. The producer rewrites embedded checkout paths to the stable
+virtual root `/wasm-idle/runtimes/wasm-clojurescript`, so identical inputs produce identical
+compiler bytes in different worktrees.
 
 Programs can require `[wasm-idle.runtime :as runtime]`. The namespace exposes `read-line`, `stdin`,
 and `args`. Workspace `.cljs` and `.cljc` namespaces can be required by their namespace name.

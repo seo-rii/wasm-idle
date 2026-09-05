@@ -48,6 +48,7 @@ import {
 	WASM_NIM_RUNTIME_PROFILE
 } from './wasmNimVersion';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
+import { WASM_OCAML_RUNTIME_PROFILE } from './wasmOcamlVersion';
 import {
 	WASM_PASCAL_ASSET_VERSION,
 	WASM_PASCAL_RUNNER_RECEIPT,
@@ -628,11 +629,15 @@ describe('application runtime asset root', () => {
 	it('includes every specialized application asset in runtime cache identity', () => {
 		const assets = createApplicationRuntimeAssets('/foo/bar');
 		const key = JSON.parse(createRuntimeAssetsKey(assets) || '{}') as Record<string, unknown>;
+		const serializedReceipt = (value: { bytes: number; sha256: string }) =>
+			JSON.stringify([['worker', { sha256: value.sha256, bytes: value.bytes }]]);
 
 		expect(key).toMatchObject({
 			dModuleUrl: assets.d?.moduleUrl,
 			dManifestUrl: assets.d?.manifestUrl,
 			dIntegrity: expect.any(String),
+			ocamlModuleReceipt: serializedReceipt(WASM_OCAML_RUNTIME_PROFILE.moduleReceipt),
+			ocamlManifestReceipt: serializedReceipt(WASM_OCAML_RUNTIME_PROFILE.manifestReceipt),
 			elixirIntegrity: expect.any(String),
 			erlangIntegrity: expect.any(String),
 			lispModuleUrl: assets.lisp?.moduleUrl,
@@ -761,6 +766,15 @@ describe('application runtime asset root', () => {
 			objectiveCFoundationHeadersUrl: assets.objectivec?.foundationHeadersUrl,
 			objectiveCLibffiUrl: assets.objectivec?.libffiUrl,
 			objectiveCIntegrity: expect.any(String)
+		});
+	});
+
+	it('pins both OCaml outer assets to their generated receipts', () => {
+		const assets = createApplicationRuntimeAssets('/foo/bar');
+
+		expect(assets.ocaml).toMatchObject({
+			moduleReceipt: WASM_OCAML_RUNTIME_PROFILE.moduleReceipt,
+			manifestReceipt: WASM_OCAML_RUNTIME_PROFILE.manifestReceipt
 		});
 	});
 

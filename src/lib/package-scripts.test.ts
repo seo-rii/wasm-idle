@@ -99,6 +99,20 @@ describe('LLVM runtime package scripts', () => {
 		);
 	});
 
+	it('verifies rebuildable page runtime freshness without mutating checked-in assets', async () => {
+		const root = await readRootPackage();
+
+		expect(root.scripts?.['verify:wasm-typescript-freshness']).toBe(
+			'pnpm --dir runtimes/wasm-typescript build && node scripts/sync-wasm-typescript.mjs --verify'
+		);
+		expect(root.scripts?.['verify:wasm-ocaml-freshness']).toBe(
+			'pnpm --dir runtimes/wasm-of-js-of-ocaml build && node scripts/sync-wasm-of-js-of-ocaml.mjs --verify-wrapper'
+		);
+		expect(root.scripts?.['verify:page-runtime-freshness']).toBe(
+			'pnpm run verify:wasm-typescript-freshness && pnpm run verify:wasm-ocaml-freshness'
+		);
+	});
+
 	it('builds Rust source instrumentation as a lazy static asset', async () => {
 		const root = await readRootPackage();
 		const rustRuntime = await readPackageManifest('runtimes/wasm-rust');
@@ -212,6 +226,30 @@ describe('LLVM runtime package scripts', () => {
 		expect(pageBuild.indexOf('pnpm run compress:static-runtimes')).toBeGreaterThan(
 			pageBuild.indexOf('pnpm run layer:static-runtimes')
 		);
+	});
+
+	it('prepares the pinned debugger release only on the page deployment path', async () => {
+		const pkg = await readRootPackage();
+		const pageBuildCommands = (pkg.scripts?.['page:build'] || '').split(' && ');
+		const prepareCommand = 'pnpm run prepare:wasm-debug-release';
+
+		expect(pkg.scripts?.['prepare:wasm-debug-release']).toBe(
+			'node scripts/prepare-wasm-debug-release.mjs'
+		);
+		expect(pageBuildCommands).toContain(prepareCommand);
+		for (const command of [
+			'pnpm run layer:static-runtimes',
+			'pnpm run compress:static-runtimes',
+			'pnpm run build'
+		]) {
+			expect(pageBuildCommands.indexOf(command)).toBeGreaterThan(
+				pageBuildCommands.indexOf(prepareCommand)
+			);
+		}
+
+		for (const scriptName of ['dev', 'build:preview', 'build', 'prepare:app']) {
+			expect(pkg.scripts?.[scriptName]).not.toContain('prepare:wasm-debug-release');
+		}
 	});
 
 	it('checks every public workspace package tarball for static assets', async () => {

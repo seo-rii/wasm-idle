@@ -1,8 +1,13 @@
 import type {
 	CompilerDiagnostic,
 	DebugCommand,
+	DebugDataBreakpoint,
+	DebugDataBreakpointInfo,
+	DebugDataBreakpointInfoArguments,
 	DebugMemory,
+	DebugResolvedDataBreakpoint,
 	DebugSessionEvent,
+	DebugWriteMemoryResult,
 	SandboxExecutionOptions
 } from '$lib/playground/options';
 import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
@@ -48,6 +53,18 @@ export interface Sandbox {
 		offset: number,
 		count: number
 	) => Promise<DebugMemory | null>;
+	debugWriteMemory?: (
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial?: boolean
+	) => Promise<DebugWriteMemoryResult | null>;
+	debugDataBreakpointInfo?: (
+		arguments_: DebugDataBreakpointInfoArguments
+	) => Promise<DebugDataBreakpointInfo | null>;
+	debugSetDataBreakpoints?: (
+		breakpoints: DebugDataBreakpoint[]
+	) => Promise<DebugResolvedDataBreakpoint[]>;
 	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	elapse?: number;
 }

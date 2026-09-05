@@ -3,7 +3,8 @@ import type {
 	DebugSessionGeneration,
 	DebugWorkerKind,
 	DebugWorkerOutboundMessage,
-	SharedByteQueueDescriptor
+	SharedByteQueueDescriptor,
+	VerifiedDebugAssetBytes
 } from '../types.js';
 
 export interface EmscriptenFileSystem {
@@ -21,6 +22,13 @@ export interface EmscriptenDebugModule {
 export type EmscriptenModuleFactory = (
 	options: Record<string, unknown>
 ) => EmscriptenDebugModule | Promise<EmscriptenDebugModule>;
+
+export interface EmscriptenAssetUrls {
+	js: string;
+	wasm: string;
+	worker: string;
+	revoke(): void;
+}
 
 export interface BrowserDebugTransportBindings {
 	generation: DebugSessionGeneration;
@@ -65,6 +73,71 @@ export async function loadEmscriptenModuleFactory(url: string): Promise<Emscript
 		throw new Error(`debug runtime module at ${url} does not export an Emscripten factory`);
 	}
 	return candidate as EmscriptenModuleFactory;
+}
+
+export function createEmscriptenAssetUrls(
+	assets: VerifiedDebugAssetBytes,
+	options: { rewritePthreadMainModuleImport?: string } = {}
+): EmscriptenAssetUrls {
+	for (const [value, label] of [
+		[assets.js, 'debug runtime JavaScript'],
+		[assets.wasm, 'debug runtime WebAssembly'],
+		[assets.worker, 'debug runtime pthread worker']
+	] as const) {
+		if (!(value instanceof ArrayBuffer) || value.byteLength === 0) {
+			throw new TypeError(`${label} must be a non-empty owned ArrayBuffer`);
+		}
+	}
+	const { js, wasm, worker } = assets;
+	const urls: string[] = [];
+	try {
+		const jsUrl = URL.createObjectURL(new Blob([js], { type: 'text/javascript' }));
+		urls.push(jsUrl);
+		const wasmUrl = URL.createObjectURL(new Blob([wasm], { type: 'application/wasm' }));
+		urls.push(wasmUrl);
+		let workerSource: ArrayBuffer | string = worker;
+		if (options.rewritePthreadMainModuleImport) {
+			const specifier = options.rewritePthreadMainModuleImport;
+			const source = new TextDecoder('utf-8', { fatal: true }).decode(worker);
+			const candidates = [`import('${specifier}')`, `import("${specifier}")`];
+			const matches = candidates.flatMap((candidate) => {
+				const offsets: number[] = [];
+				let offset = source.indexOf(candidate);
+				while (offset !== -1) {
+					offsets.push(offset);
+					offset = source.indexOf(candidate, offset + candidate.length);
+				}
+				return offsets.map((offset) => ({ candidate, offset }));
+			});
+			if (matches.length !== 1) {
+				throw new Error(
+					`verified pthread worker must import ${specifier} exactly once; found ${matches.length}`
+				);
+			}
+			const [{ candidate, offset }] = matches;
+			workerSource = `${source.slice(0, offset)}import(${JSON.stringify(jsUrl)})${source.slice(
+				offset + candidate.length
+			)}`;
+		}
+		const workerUrl = URL.createObjectURL(
+			new Blob([workerSource], { type: 'text/javascript' })
+		);
+		urls.push(workerUrl);
+		let revoked = false;
+		return {
+			js: jsUrl,
+			wasm: wasmUrl,
+			worker: workerUrl,
+			revoke() {
+				if (revoked) return;
+				revoked = true;
+				for (const url of [...urls].reverse()) URL.revokeObjectURL(url);
+			}
+		};
+	} catch (error) {
+		for (const url of [...urls].reverse()) URL.revokeObjectURL(url);
+		throw error;
+	}
 }
 
 export function validateDebugSessionGeneration(

@@ -89,31 +89,216 @@ async function listFiles(rootDir) {
 	return files.sort();
 }
 
-/** @param {string[]} rootDirs */
-async function computeBundleFingerprint(rootDirs) {
+/** @param {string[]} rootDirs @returns {Promise<string>} */
+export async function computeBundleFingerprint(rootDirs) {
 	const hash = createHash('sha256');
-	for (const rootDir of rootDirs) {
+	hash.update('wasm-idle:wasm-of-js-of-ocaml-bundle:v1\0');
+	for (const [rootIndex, rootDir] of rootDirs.entries()) {
+		hash.update(`root:${rootIndex}\0`);
 		for (const filePath of await listFiles(rootDir)) {
-			const fileStats = await stat(filePath);
-			hash.update(path.relative(rootDir, filePath));
+			hash.update(path.relative(rootDir, filePath).split(path.sep).join('/'));
 			hash.update('\0');
-			hash.update(String(fileStats.size));
-			hash.update('\0');
-			hash.update(String(Math.trunc(fileStats.mtimeMs)));
+			hash.update(await readFile(filePath));
 			hash.update('\n');
 		}
 		hash.update('\n---\n');
 	}
-	return hash.digest('hex').slice(0, 16);
+	return hash.digest('hex');
 }
 
-/** @param {string} versionModulePath @param {string} fingerprint */
-async function writeVersionModule(versionModulePath, fingerprint) {
+/** @typedef {{readonly bytes: number; readonly sha256: string}} AssetReceipt */
+
+/** @param {string} filePath @returns {Promise<AssetReceipt>} */
+async function computeAssetReceipt(filePath) {
+	const bytes = await readFile(filePath);
+	return Object.freeze({
+		bytes: bytes.byteLength,
+		sha256: createHash('sha256').update(bytes).digest('hex')
+	});
+}
+
+/** @param {unknown} value @param {string} label @returns {AssetReceipt} */
+function requireAssetReceipt(value, label) {
+	if (!value || typeof value !== 'object') {
+		throw new Error(`wasm-of-js-of-ocaml generated ${label} receipt is invalid`);
+	}
+	const receipt = /** @type {{bytes?: unknown; sha256?: unknown}} */ (value);
+	if (
+		typeof receipt.bytes !== 'number' ||
+		!Number.isSafeInteger(receipt.bytes) ||
+		receipt.bytes <= 0 ||
+		typeof receipt.sha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(receipt.sha256)
+	) {
+		throw new Error(`wasm-of-js-of-ocaml generated ${label} receipt is invalid`);
+	}
+	return Object.freeze({ bytes: receipt.bytes, sha256: receipt.sha256 });
+}
+
+/** @param {string} versionModulePath */
+async function readGeneratedRuntimeProfile(versionModulePath) {
+	const moduleSource = await readFile(versionModulePath, 'utf8');
+	let generatedModule;
+	try {
+		generatedModule = await import(
+			`data:text/javascript;base64,${Buffer.from(moduleSource).toString('base64')}`
+		);
+	} catch (error) {
+		throw new Error('wasm-of-js-of-ocaml generated runtime profile could not be loaded', {
+			cause: error
+		});
+	}
+	const profile = generatedModule.WASM_OCAML_RUNTIME_PROFILE;
+	if (
+		!profile ||
+		typeof profile !== 'object' ||
+		typeof profile.fingerprint !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(profile.fingerprint)
+	) {
+		throw new Error('wasm-of-js-of-ocaml generated runtime profile is invalid');
+	}
+	return Object.freeze({
+		fingerprint: profile.fingerprint,
+		moduleReceipt: requireAssetReceipt(profile.moduleReceipt, 'module'),
+		manifestReceipt: requireAssetReceipt(profile.manifestReceipt, 'manifest')
+	});
+}
+
+/**
+ * @param {string} fingerprint
+ * @param {AssetReceipt} moduleReceipt
+ * @param {AssetReceipt} manifestReceipt
+ */
+function renderVersionModule(fingerprint, moduleReceipt, manifestReceipt) {
+	return `export const WASM_OCAML_ASSET_VERSION =
+	'${fingerprint}';
+
+export const WASM_OCAML_RUNTIME_PROFILE = Object.freeze({
+	fingerprint: WASM_OCAML_ASSET_VERSION,
+	moduleReceipt: Object.freeze({
+		bytes: ${moduleReceipt.bytes},
+		sha256: '${moduleReceipt.sha256}'
+	}),
+	manifestReceipt: Object.freeze({
+		bytes: ${manifestReceipt.bytes},
+		sha256: '${manifestReceipt.sha256}'
+	})
+});
+`;
+}
+
+/**
+ * @param {string} versionModulePath
+ * @param {string} fingerprint
+ * @param {AssetReceipt} moduleReceipt
+ * @param {AssetReceipt} manifestReceipt
+ */
+async function writeVersionModule(versionModulePath, fingerprint, moduleReceipt, manifestReceipt) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource = `export const WASM_OCAML_ASSET_VERSION = '${fingerprint}';\n`;
+	const moduleSource = renderVersionModule(fingerprint, moduleReceipt, manifestReceipt);
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current === moduleSource) return;
 	await writeFile(versionModulePath, moduleSource, 'utf8');
+}
+
+/** @param {string} label @param {string} expected @param {string} actual */
+function assertMatchingFingerprint(label, expected, actual) {
+	if (actual !== expected) {
+		throw new Error(
+			`${label} does not match the current producer output; rebuild and sync the OCaml runtime assets`
+		);
+	}
+}
+
+/**
+ * Verifies the rebuildable browser wrapper against the generated release profile. This is
+ * intentionally independent of the heavyweight deployment-only browser-native bundle.
+ *
+ * @param {{sourceBrowserDistDir?: string; versionModulePath?: string}} [options]
+ */
+export async function verifyWasmOfJsOfOcamlWrapper({
+	sourceBrowserDistDir = DEFAULT_SOURCE_BROWSER_DIST_DIR,
+	versionModulePath = DEFAULT_VERSION_MODULE_PATH
+} = {}) {
+	const profile = await readGeneratedRuntimeProfile(versionModulePath);
+	const moduleReceipt = await computeAssetReceipt(
+		path.join(sourceBrowserDistDir, 'src', 'index.js')
+	);
+	if (
+		moduleReceipt.bytes !== profile.moduleReceipt.bytes ||
+		moduleReceipt.sha256 !== profile.moduleReceipt.sha256
+	) {
+		throw new Error(
+			'wasm-of-js-of-ocaml browser wrapper does not match the generated runtime profile; rebuild and sync the OCaml runtime assets'
+		);
+	}
+	return {
+		sourceBrowserDistDir,
+		fingerprint: profile.fingerprint,
+		moduleReceipt,
+		manifestReceipt: profile.manifestReceipt,
+		versionModulePath
+	};
+}
+
+/**
+ * Verifies the rebuildable browser wrapper against the checked-in runtime bundle without
+ * mutating either tree. The heavyweight native bundle is itself the pinned producer input.
+ *
+ * @param {SyncWasmOfJsOfOcamlOptions} [options]
+ */
+export async function verifyWasmOfJsOfOcamlDist({
+	sourceBrowserDistDir = DEFAULT_SOURCE_BROWSER_DIST_DIR,
+	sourceBundleDir = DEFAULT_TARGET_BUNDLE_DIR,
+	targetBrowserDistDir = DEFAULT_TARGET_BROWSER_DIST_DIR,
+	targetBundleDir = DEFAULT_TARGET_BUNDLE_DIR,
+	versionModulePath = DEFAULT_VERSION_MODULE_PATH
+} = {}) {
+	const wrapper = await verifyWasmOfJsOfOcamlWrapper({
+		sourceBrowserDistDir,
+		versionModulePath
+	});
+	const sourceFingerprint = await computeBundleFingerprint([
+		sourceBrowserDistDir,
+		sourceBundleDir
+	]);
+	const targetFingerprint = await computeBundleFingerprint([
+		targetBrowserDistDir,
+		targetBundleDir
+	]);
+	assertMatchingFingerprint(
+		'wasm-of-js-of-ocaml checked-in bundle',
+		sourceFingerprint,
+		targetFingerprint
+	);
+	assertMatchingFingerprint(
+		'wasm-of-js-of-ocaml generated bundle profile',
+		wrapper.fingerprint,
+		sourceFingerprint
+	);
+
+	const manifestReceipt = await computeAssetReceipt(
+		path.join(sourceBundleDir, 'browser-native-manifest.v1.json')
+	);
+	if (
+		manifestReceipt.bytes !== wrapper.manifestReceipt.bytes ||
+		manifestReceipt.sha256 !== wrapper.manifestReceipt.sha256
+	) {
+		throw new Error(
+			'wasm-of-js-of-ocaml manifest does not match the generated runtime profile; rebuild and sync the OCaml runtime assets'
+		);
+	}
+
+	return {
+		sourceBrowserDistDir,
+		sourceBundleDir,
+		targetBrowserDistDir,
+		targetBundleDir,
+		fingerprint: sourceFingerprint,
+		moduleReceipt: wrapper.moduleReceipt,
+		manifestReceipt,
+		versionModulePath
+	};
 }
 
 /** @param {string} nativeWorkerPath */
@@ -224,8 +409,12 @@ export async function syncWasmOfJsOfOcamlDist({
 	if (rewrittenManifestSource !== targetManifestSource) {
 		await writeFile(targetManifestPath, rewrittenManifestSource, 'utf8');
 	}
-	const fingerprint = await computeBundleFingerprint([sourceBrowserDistDir, sourceBundleDir]);
-	await writeVersionModule(versionModulePath, fingerprint);
+	const fingerprint = await computeBundleFingerprint([targetBrowserDistDir, targetBundleDir]);
+	const moduleReceipt = await computeAssetReceipt(
+		path.join(targetBrowserDistDir, 'src', 'index.js')
+	);
+	const manifestReceipt = await computeAssetReceipt(targetManifestPath);
+	await writeVersionModule(versionModulePath, fingerprint, moduleReceipt, manifestReceipt);
 
 	return {
 		sourceBrowserDistDir,
@@ -233,11 +422,27 @@ export async function syncWasmOfJsOfOcamlDist({
 		targetBrowserDistDir,
 		targetBundleDir,
 		fingerprint,
+		moduleReceipt,
+		manifestReceipt,
 		versionModulePath
 	};
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {
+	if (process.argv[2] === '--verify-wrapper') {
+		const result = await verifyWasmOfJsOfOcamlWrapper();
+		console.log(
+			`Verified wasm-of-js-of-ocaml browser wrapper ${result.moduleReceipt.sha256} against the generated runtime profile`
+		);
+		process.exit(0);
+	}
+	if (process.argv[2] === '--verify' || process.argv[2] === '--check') {
+		const result = await verifyWasmOfJsOfOcamlDist();
+		console.log(
+			`Verified checked-in wasm-of-js-of-ocaml ${result.fingerprint} against ${result.sourceBrowserDistDir}`
+		);
+		process.exit(0);
+	}
 	const result = await syncWasmOfJsOfOcamlDist();
 	console.log(
 		`Synced wasm-of-js-of-ocaml from ${result.sourceBrowserDistDir} and ${result.sourceBundleDir} to ${result.targetBrowserDistDir} and ${result.targetBundleDir}`

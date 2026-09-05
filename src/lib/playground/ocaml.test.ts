@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BusyError, ProtocolError } from '@wasm-idle/core';
 
 import { readBufferedStdin } from './stdinBuffer';
+import { WASM_OCAML_RUNTIME_PROFILE } from './wasmOcamlVersion';
+
+const moduleReceipt = { bytes: 1_892, sha256: 'a'.repeat(64) };
+const manifestReceipt = { bytes: 60_068, sha256: 'b'.repeat(64) };
 
 const workerInstances: MockWorker[] = [];
 const { publicEnv } = vi.hoisted(() => ({
@@ -133,6 +137,8 @@ describe('OCaml sandbox', () => {
 			1,
 			expect.objectContaining({
 				load: true,
+				moduleReceipt: WASM_OCAML_RUNTIME_PROFILE.moduleReceipt,
+				manifestReceipt: WASM_OCAML_RUNTIME_PROFILE.manifestReceipt,
 				moduleUrl: expect.stringMatching(
 					/\/wasm-of-js-of-ocaml\/browser-native\/src\/index\.js$/
 				),
@@ -186,6 +192,66 @@ describe('OCaml sandbox', () => {
 			}
 		]);
 		expect(values).toEqual([0.35]);
+	});
+
+	it('replaces a warm worker when only an outer receipt changes', async () => {
+		const sandbox = new Ocaml();
+		const runtimeAssets = {
+			ocaml: {
+				moduleUrl: '/runtime/ocaml/index.js',
+				manifestUrl: '/runtime/ocaml/manifest.json',
+				moduleReceipt,
+				manifestReceipt
+			}
+		};
+
+		await sandbox.load(runtimeAssets);
+		const firstWorker = workerInstances[0];
+		await sandbox.load({
+			ocaml: {
+				...runtimeAssets.ocaml,
+				moduleReceipt: { ...moduleReceipt, sha256: 'c'.repeat(64) }
+			}
+		});
+
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		expect(workerInstances).toHaveLength(2);
+	});
+
+	it('rejects a partial custom OCaml receipt generation before creating a worker', async () => {
+		const sandbox = new Ocaml();
+
+		await expect(
+			sandbox.load({
+				ocaml: {
+					moduleUrl: '/runtime/ocaml/index.js',
+					manifestUrl: '/runtime/ocaml/manifest.json',
+					moduleReceipt
+				}
+			})
+		).rejects.toThrow('require both module and manifest receipts');
+		expect(workerInstances).toHaveLength(0);
+	});
+
+	it('snapshots custom OCaml receipts before worker startup', async () => {
+		const sandbox = new Ocaml();
+		const mutableModuleReceipt = { ...moduleReceipt };
+		const runtimeAssets = {
+			ocaml: {
+				moduleUrl: '/runtime/ocaml/index.js',
+				manifestUrl: '/runtime/ocaml/manifest.json',
+				moduleReceipt: mutableModuleReceipt,
+				manifestReceipt
+			}
+		};
+
+		const loading = sandbox.load(runtimeAssets);
+		mutableModuleReceipt.sha256 = 'c'.repeat(64);
+		await loading;
+
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ moduleReceipt })
+		);
 	});
 
 	it('forwards maxAssetBytes and replaces the worker when only the limit changes', async () => {

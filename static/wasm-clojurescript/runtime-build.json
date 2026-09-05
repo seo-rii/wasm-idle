@@ -8,6 +8,6 @@
   "clojureToolsArchiveSha256": "13769da6d63a98deb2024378ae1a64e4ee211ac1035340dfca7a6944c41cde21",
   "target": "webworker",
   "optimizations": "simple",
-  "compilerSha256": "8b055dd50f8c8736db9680924209782ba5027718ab84b6a0a3eb40a913d05b17",
-  "compilerBytes": 6588133
+  "compilerSha256": "ec1d3f02f8ee2ff7d8007acb565ec454c8a0625bd305260db3e974bbf5d3b162",
+  "compilerBytes": 6588008
 }

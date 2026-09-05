@@ -17,7 +17,11 @@ import {
 
 const goBrowserTestTimeoutMs = Number(process.env.WASM_IDLE_GO_TEST_TIMEOUT_MS || '1500000');
 
-describe('wasm-idle Go browser playwright integration', () => {
+	describe('wasm-idle Go browser playwright integration', () => {
+	it('expects the output produced by the current Go starter source', () => {
+		expect(DEFAULT_GO_BROWSER_EXPECTED_OUTPUT).toBe('fibonacci=11');
+	});
+
 	it(
 		'runs the real Go page path through the bundled wasm-go browser compiler',
 		async () => {

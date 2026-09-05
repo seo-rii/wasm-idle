@@ -25,13 +25,13 @@
 	"assets": [
 		{
 			"path": "compiler.js",
-			"bytes": 6588133,
-			"sha256": "8b055dd50f8c8736db9680924209782ba5027718ab84b6a0a3eb40a913d05b17"
+			"bytes": 6588008,
+			"sha256": "ec1d3f02f8ee2ff7d8007acb565ec454c8a0625bd305260db3e974bbf5d3b162"
 		},
 		{
 			"path": "runtime-build.json",
 			"bytes": 545,
-			"sha256": "4afafa66d14803ff10f614848aeadeec117c61a35d2854620eb5dad2f0425ad9"
+			"sha256": "0551fe28ffcab0520b438a46881eb851e7abfae10f7f63f6201e7d145a712052"
 		}
 	]
 }

@@ -229,6 +229,57 @@ int main() {
 		expect(readMemory).toHaveBeenCalledWith('0x10', 0, 2);
 	});
 
+	it('forwards target memory writes to the active LLDB session', async () => {
+		const sandbox = new Clang('C');
+		const writeMemory = vi.fn(
+			async (
+				_memoryReference: string,
+				_offset: number,
+				_data: Uint8Array,
+				_allowPartial?: boolean
+			) => ({ offset: 2, bytesWritten: 2 })
+		);
+		(
+			sandbox as unknown as {
+				lldbSession: { writeMemory: typeof writeMemory };
+			}
+		).lldbSession = { writeMemory };
+
+		await expect(
+			(sandbox as unknown as { debugWriteMemory: typeof writeMemory }).debugWriteMemory(
+				'0x10',
+				2,
+				Uint8Array.of(7, 3),
+				true
+			)
+		).resolves.toEqual({ offset: 2, bytesWritten: 2 });
+		expect(writeMemory).toHaveBeenCalledWith('0x10', 2, Uint8Array.of(7, 3), true);
+	});
+
+	it('forwards data breakpoints to the active LLDB session', async () => {
+		const sandbox = new Clang('C');
+		const dataBreakpointInfo = vi.fn(async () => ({
+			dataId: '10/2',
+			description: '2 bytes at 10'
+		}));
+		const setDataBreakpoints = vi.fn(async () => [{ id: 2, verified: true }]);
+		(
+			sandbox as unknown as {
+				lldbSession: {
+					dataBreakpointInfo: typeof dataBreakpointInfo;
+					setDataBreakpoints: typeof setDataBreakpoints;
+				};
+			}
+		).lldbSession = { dataBreakpointInfo, setDataBreakpoints };
+
+		await expect(
+			sandbox.debugDataBreakpointInfo({ name: '0x10', asAddress: true, bytes: 2 })
+		).resolves.toEqual({ dataId: '10/2', description: '2 bytes at 10' });
+		await expect(
+			sandbox.debugSetDataBreakpoints([{ dataId: '10/2', accessType: 'write' }])
+		).resolves.toEqual([{ id: 2, verified: true }]);
+	});
+
 	it('forwards frame scope requests to the active LLDB session', async () => {
 		const sandbox = new Clang('C');
 		const scopes = vi.fn(async (_frameId: number) => [

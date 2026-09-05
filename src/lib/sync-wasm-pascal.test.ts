@@ -1,5 +1,17 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import {
+	cp,
+	mkdtemp,
+	mkdir,
+	readFile,
+	readdir,
+	rename,
+	rm,
+	stat,
+	writeFile
+} from 'node:fs/promises';
+import { promisify } from 'node:util';
 import { gunzipSync } from 'node:zlib';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,6 +29,7 @@ import {
 } from './playground/wasmPascalVersion';
 
 const repositoryRoot = process.cwd();
+const execFileAsync = promisify(execFile);
 const temporaryDirectories: string[] = [];
 const artifactRevision = '2c1edc2d47a221498d6086f62431796012e2f3ca';
 const pas2jsRevision = '9ac46614dc82';
@@ -195,6 +208,38 @@ afterEach(async () => {
 });
 
 describe('syncWasmPascalAssets', () => {
+	it('prepares the checked-in page runtime without an ignored producer dist', async () => {
+		const cleanRoot = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-pascal-clean-'));
+		temporaryDirectories.push(cleanRoot);
+		for (const relativePath of [
+			'scripts/sync-wasm-pascal.mjs',
+			'scripts/wasm-pascal-assets.lock.json',
+			'scripts/runtime-workers/wasm-pascal-runner-worker.js',
+			'static/wasm-pascal',
+			'src/lib/playground/wasmPascalVersion.ts',
+			'packages/lsp/src/bundledPascalRuntime.ts'
+		]) {
+			const sourcePath = path.join(repositoryRoot, relativePath);
+			const targetPath = path.join(cleanRoot, relativePath);
+			await mkdir(path.dirname(targetPath), { recursive: true });
+			await cp(sourcePath, targetPath, { recursive: true });
+		}
+		expect(
+			await stat(path.join(cleanRoot, 'runtimes/wasm-pascal/dist')).catch(() => null)
+		).toBeNull();
+
+		const before = await treeReceipt(path.join(cleanRoot, 'static/wasm-pascal'));
+		await execFileAsync(
+			process.execPath,
+			[path.join(cleanRoot, 'scripts/sync-wasm-pascal.mjs')],
+			{
+				cwd: cleanRoot
+			}
+		);
+
+		expect(await treeReceipt(path.join(cleanRoot, 'static/wasm-pascal'))).toBe(before);
+	});
+
 	it('publishes one exact v2 profile and fingerprint-bound runner generation', async () => {
 		const fixture = await createFixture();
 		const result = await syncWasmPascalAssets(fixture);

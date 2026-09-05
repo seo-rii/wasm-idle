@@ -2,6 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createDebugSessionController } from '../src/controller.js';
 
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((resolvePromise) => {
+		resolve = resolvePromise;
+	});
+	return { promise, resolve };
+}
+
 describe('createDebugSessionController', () => {
 	it('pauses an active LLDB terminal without requiring an existing stopped frame', async () => {
 		const debugPause = vi.fn(async () => undefined);
@@ -109,6 +117,175 @@ describe('createDebugSessionController', () => {
 		);
 		expect(debugEvaluate).toHaveBeenCalledWith('answer');
 		expect(debugEvaluate).toHaveBeenCalledWith('answer + 1');
+	});
+
+	it('resolves safe nested LLDB variable paths with indexed paging', async () => {
+		const debugEvaluate = vi.fn(async () => '?');
+		const debugVariables = vi.fn(
+			async (variablesReference: number, start?: number, count?: number) => {
+				if (variablesReference === 10) {
+					return [
+						{ name: 'pair', value: '{...}', variablesReference: 20 },
+						{ name: 'items', value: '[...]', variablesReference: 30 }
+					];
+				}
+				if (variablesReference === 20) {
+					return [
+						{ name: 'first', value: '35', variablesReference: 0 },
+						{ name: 'second', value: '38', variablesReference: 0 }
+					];
+				}
+				if (variablesReference === 30 && start === 2 && count === 1) {
+					return [{ name: '[2]', value: '73', variablesReference: 0 }];
+				}
+				return [];
+			}
+		);
+		const controller = createDebugSessionController({
+			terminal: { debugEvaluate, debugVariables } as never
+		});
+		controller.addWatchExpression('pair.first');
+		controller.addWatchExpression('items[2]');
+		controller.handleEvent({
+			type: 'pause',
+			line: 5,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: [{ functionName: 'main', line: 5 }],
+			scopes: [
+				{
+					name: 'Locals',
+					variablesReference: 10,
+					expensive: false,
+					variables: []
+				}
+			]
+		});
+
+		await vi.waitFor(() =>
+			expect(controller.watchValues).toEqual([
+				{ expression: 'pair.first', value: '35' },
+				{ expression: 'items[2]', value: '73' }
+			])
+		);
+		expect(debugVariables).toHaveBeenCalledWith(10);
+		expect(debugVariables).toHaveBeenCalledWith(20);
+		expect(debugVariables).toHaveBeenCalledWith(30, 2, 1);
+	});
+
+	it('does not traverse arbitrary watch expressions when LLDB evaluation is unavailable', async () => {
+		const debugVariables = vi.fn(async () => []);
+		const controller = createDebugSessionController({
+			terminal: {
+				debugEvaluate: vi.fn(async () => '?'),
+				debugVariables
+			} as never
+		});
+		controller.handleEvent({
+			type: 'pause',
+			line: 5,
+			reason: 'breakpoint',
+			locals: [{ name: 'pair', value: '{...}', variablesReference: 20 }],
+			callStack: [{ functionName: 'main', line: 5 }]
+		});
+		controller.addWatchExpression('pair.first + 1');
+		controller.addWatchExpression('pair.first()');
+
+		await vi.waitFor(() =>
+			expect(controller.watchValues).toEqual([
+				{ expression: 'pair.first + 1', value: '?' },
+				{ expression: 'pair.first()', value: '?' }
+			])
+		);
+		expect(debugVariables).not.toHaveBeenCalled();
+	});
+
+	it('rejects oversized and over-deep watch expressions before invoking the runtime', () => {
+		const debugEvaluate = vi.fn(async () => '?');
+		const debugVariables = vi.fn(async () => []);
+		const controller = createDebugSessionController({
+			terminal: { debugEvaluate, debugVariables } as never
+		});
+		controller.handleEvent({
+			type: 'pause',
+			line: 5,
+			reason: 'breakpoint',
+			locals: [{ name: 'root', value: '{...}', variablesReference: 20 }],
+			callStack: [{ functionName: 'main', line: 5 }]
+		});
+
+		const oversized = `${'x'.repeat(4_096)}y`;
+		const overDeep = [
+			'root',
+			...Array.from({ length: 64 }, (_, index) => `field${index}`)
+		].join('.');
+
+		expect(controller.addWatchExpression(oversized)).toBe(false);
+		expect(controller.addWatchExpression(overDeep)).toBe(false);
+		expect(controller.watchExpressions).toEqual([]);
+		expect(controller.watchValues).toEqual([]);
+		expect(debugEvaluate).not.toHaveBeenCalled();
+		expect(debugVariables).not.toHaveBeenCalled();
+	});
+
+	it('accepts the exact watch expression and variable-path limits', () => {
+		const controller = createDebugSessionController();
+		const exactCodeUnits = 'x'.repeat(4_096);
+		const exactSegments = [
+			'root',
+			...Array.from({ length: 63 }, (_, index) => `field${index}`)
+		].join('.');
+
+		expect(controller.addWatchExpression(exactCodeUnits)).toBe(true);
+		expect(controller.addWatchExpression(exactSegments)).toBe(true);
+		expect(controller.watchExpressions).toEqual([exactCodeUnits, exactSegments]);
+	});
+
+	it('limits active watches without evaluating a rejected entry', () => {
+		const controller = createDebugSessionController();
+		for (let index = 0; index < 64; index += 1) {
+			expect(controller.addWatchExpression(`watch${index}`)).toBe(true);
+		}
+		const evaluateExpression = vi.fn(() => 'value');
+		controller.setAdapter({
+			id: 'cpp',
+			evaluateExpression,
+			selectInlineLocals: vi.fn(() => [])
+		} as never);
+		const callsAtLimit = evaluateExpression.mock.calls.length;
+
+		expect(controller.addWatchExpression('watch64')).toBe(false);
+		expect(controller.watchExpressions).toHaveLength(64);
+		expect(evaluateExpression).toHaveBeenCalledTimes(callsAtLimit);
+	});
+
+	it('discards a nested watch result that resolves after resume', async () => {
+		const children =
+			deferred<Array<{ name: string; value: string; variablesReference: number }>>();
+		const controller = createDebugSessionController({
+			terminal: {
+				debugEvaluate: vi.fn(async () => '?'),
+				debugVariables: vi.fn(() => children.promise)
+			} as never
+		});
+		controller.handleEvent({
+			type: 'pause',
+			line: 5,
+			reason: 'breakpoint',
+			locals: [{ name: 'pair', value: '{...}', variablesReference: 20 }],
+			callStack: [{ functionName: 'main', line: 5 }]
+		});
+		controller.addWatchExpression('pair.first');
+		await vi.waitFor(() =>
+			expect(controller.watchValues).toEqual([{ expression: 'pair.first', value: '...' }])
+		);
+
+		controller.handleEvent({ type: 'resume', command: 'continue' });
+		children.resolve([{ name: 'first', value: '35', variablesReference: 0 }]);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(controller.watchValues).toEqual([{ expression: 'pair.first', value: 'error' }]);
 	});
 
 	it('falls back to adapter evaluation, syncs breakpoints, and clears pause state on stop', () => {
@@ -525,7 +702,8 @@ describe('createDebugSessionController', () => {
 			line: 3,
 			reason: 'breakpoint',
 			locals: [],
-			callStack: []
+			callStack: [],
+			capabilities: { readMemory: true, writeMemory: false, dataBreakpoints: false }
 		});
 
 		await expect(controller.readMemory('0x20', 0, 2)).resolves.toEqual({
@@ -534,6 +712,228 @@ describe('createDebugSessionController', () => {
 			unreadableBytes: 0
 		});
 		expect(debugReadMemory).toHaveBeenCalledWith('0x20', 0, 2);
+	});
+
+	it('writes LLDB memory only through a paused terminal session', async () => {
+		const debugWriteMemory = vi.fn(async () => ({ offset: 4, bytesWritten: 2 }));
+		const controller = createDebugSessionController({
+			terminal: {
+				debugCommand: vi.fn(async () => undefined),
+				debugWriteMemory
+			} as never
+		});
+
+		await expect(
+			controller.writeMemory('0x20', 4, Uint8Array.of(0x2a, 0x00), true)
+		).resolves.toBeNull();
+
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 3,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: [],
+			capabilities: { readMemory: false, writeMemory: true, dataBreakpoints: false }
+		});
+
+		await expect(
+			controller.writeMemory('0x20', 4, Uint8Array.of(0x2a, 0x00), true)
+		).resolves.toEqual({ offset: 4, bytesWritten: 2 });
+		expect(debugWriteMemory).toHaveBeenCalledTimes(1);
+		expect(debugWriteMemory).toHaveBeenCalledWith('0x20', 4, Uint8Array.of(0x2a, 0x00), true);
+	});
+
+	it('manages LLDB data breakpoints only through a paused terminal session', async () => {
+		const debugDataBreakpointInfo = vi.fn(async () => ({
+			dataId: '20/2',
+			description: '2 bytes at 20',
+			accessTypes: ['read', 'write', 'readWrite'] as const
+		}));
+		const debugSetDataBreakpoints = vi.fn(async () => [{ id: 4, verified: true }]);
+		const controller = createDebugSessionController({
+			terminal: {
+				debugCommand: vi.fn(async () => undefined),
+				debugDataBreakpointInfo,
+				debugSetDataBreakpoints
+			} as never
+		});
+
+		await expect(
+			controller.dataBreakpointInfo({ name: '0x20', asAddress: true, bytes: 2 })
+		).resolves.toBeNull();
+		await expect(controller.setDataBreakpoints([])).resolves.toEqual([]);
+
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 3,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: [],
+			capabilities: { readMemory: false, writeMemory: false, dataBreakpoints: true }
+		});
+
+		await expect(
+			controller.dataBreakpointInfo({ name: '0x20', asAddress: true, bytes: 2 })
+		).resolves.toEqual({
+			dataId: '20/2',
+			description: '2 bytes at 20',
+			accessTypes: ['read', 'write', 'readWrite']
+		});
+		await expect(
+			controller.setDataBreakpoints([{ dataId: '20/2', accessType: 'write' }])
+		).resolves.toEqual([{ id: 4, verified: true }]);
+		expect(debugDataBreakpointInfo).toHaveBeenCalledOnce();
+		expect(debugSetDataBreakpoints).toHaveBeenCalledOnce();
+	});
+
+	it('rejects bounded memory and data-breakpoint inputs before calling the terminal', async () => {
+		const debugReadMemory = vi.fn(async () => ({
+			address: '0x0',
+			data: new Uint8Array(),
+			unreadableBytes: 0
+		}));
+		const debugWriteMemory = vi.fn(async () => ({ bytesWritten: 0 }));
+		const debugDataBreakpointInfo = vi.fn(async () => ({ description: 'byte' }));
+		const debugSetDataBreakpoints = vi.fn(async () => []);
+		const controller = createDebugSessionController({
+			terminal: {
+				debugReadMemory,
+				debugWriteMemory,
+				debugDataBreakpointInfo,
+				debugSetDataBreakpoints
+			} as never
+		});
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 1,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: [],
+			capabilities: { readMemory: true, writeMemory: true, dataBreakpoints: true }
+		});
+
+		await expect(controller.readMemory('m'.repeat(4097), 0, 1)).resolves.toBeNull();
+		await expect(controller.readMemory('memory', 0, 257)).resolves.toBeNull();
+		await expect(
+			controller.writeMemory('m'.repeat(4097), 0, Uint8Array.of(1))
+		).resolves.toBeNull();
+		await expect(controller.writeMemory('memory', 0, new Uint8Array(257))).resolves.toBeNull();
+		await expect(
+			controller.writeMemory('memory', 0, Uint8Array.of(1), 'yes' as never)
+		).resolves.toBeNull();
+		await expect(controller.dataBreakpointInfo({ name: '' })).resolves.toBeNull();
+		await expect(controller.dataBreakpointInfo({ name: 'n'.repeat(4097) })).resolves.toBeNull();
+		await expect(
+			controller.dataBreakpointInfo({ name: 'counter', bytes: 257 })
+		).resolves.toBeNull();
+		await expect(
+			controller.dataBreakpointInfo({ name: 'counter', asAddress: 'yes' as never })
+		).resolves.toBeNull();
+		await expect(controller.setDataBreakpoints({ length: 0 } as never)).resolves.toEqual([]);
+		await expect(
+			controller.setDataBreakpoints(
+				Array.from({ length: 257 }, (_, index) => ({ dataId: `${index}/1` }))
+			)
+		).resolves.toEqual([]);
+		await expect(controller.setDataBreakpoints([{ dataId: '' }])).resolves.toEqual([]);
+		await expect(
+			controller.setDataBreakpoints([{ dataId: 'd'.repeat(4097) }])
+		).resolves.toEqual([]);
+
+		expect(debugReadMemory).not.toHaveBeenCalled();
+		expect(debugWriteMemory).not.toHaveBeenCalled();
+		expect(debugDataBreakpointInfo).not.toHaveBeenCalled();
+		expect(debugSetDataBreakpoints).not.toHaveBeenCalled();
+	});
+
+	it('serializes a data-breakpoint replacement against run to cursor', async () => {
+		const replacement = deferred<Array<{ id: number; verified: boolean }>>();
+		const debugSetDataBreakpoints = vi.fn(() => replacement.promise);
+		const debugCommand = vi.fn(async () => undefined);
+		const setBreakpoints = vi.fn(async () => undefined);
+		const controller = createDebugSessionController({
+			terminal: {
+				debugCommand,
+				debugSetDataBreakpoints,
+				setBreakpoints
+			} as never,
+			breakpoints: [4],
+			cursorLine: 8
+		});
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 5,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: [],
+			capabilities: { dataBreakpoints: true }
+		});
+		setBreakpoints.mockClear();
+
+		const replacing = controller.setDataBreakpoints([
+			{ dataId: '1000/1', accessType: 'write' }
+		]);
+		await vi.waitFor(() => expect(debugSetDataBreakpoints).toHaveBeenCalledOnce());
+
+		await expect(controller.runToCursor()).resolves.toBe(false);
+		expect(setBreakpoints).not.toHaveBeenCalled();
+		expect(debugCommand).not.toHaveBeenCalled();
+
+		replacement.resolve([{ id: 1, verified: true }]);
+		await expect(replacing).resolves.toEqual([{ id: 1, verified: true }]);
+		await expect(controller.runToCursor()).resolves.toBe(true);
+		expect(setBreakpoints).toHaveBeenLastCalledWith([4, 8]);
+		expect(debugCommand).toHaveBeenLastCalledWith('continue');
+	});
+
+	it('gates paused memory operations with effective LLDB capabilities', async () => {
+		const debugReadMemory = vi.fn(async () => ({ data: Uint8Array.of(1), unreadableBytes: 0 }));
+		const debugWriteMemory = vi.fn(async () => ({ bytesWritten: 1 }));
+		const debugDataBreakpointInfo = vi.fn(async () => ({ description: 'byte' }));
+		const debugSetDataBreakpoints = vi.fn(async () => [{ verified: true }]);
+		const controller = createDebugSessionController({
+			terminal: {
+				debugReadMemory,
+				debugWriteMemory,
+				debugDataBreakpointInfo,
+				debugSetDataBreakpoints
+			} as never
+		});
+
+		controller.begin();
+		controller.handleEvent({
+			type: 'pause',
+			line: 1,
+			reason: 'breakpoint',
+			locals: [],
+			callStack: [],
+			capabilities: { readMemory: false, writeMemory: false, dataBreakpoints: false }
+		});
+
+		expect(controller.capabilities).toEqual({
+			readMemory: false,
+			writeMemory: false,
+			dataBreakpoints: false
+		});
+		await expect(controller.readMemory('0x0', 0, 1)).resolves.toBeNull();
+		await expect(controller.writeMemory('0x0', 0, Uint8Array.of(1))).resolves.toBeNull();
+		await expect(controller.dataBreakpointInfo({ name: '0x0' })).resolves.toBeNull();
+		await expect(controller.setDataBreakpoints([])).resolves.toEqual([]);
+		expect(debugReadMemory).not.toHaveBeenCalled();
+		expect(debugWriteMemory).not.toHaveBeenCalled();
+		expect(debugDataBreakpointInfo).not.toHaveBeenCalled();
+		expect(debugSetDataBreakpoints).not.toHaveBeenCalled();
+
+		controller.handleEvent({ type: 'resume', command: 'continue' });
+		expect(controller.capabilities).toEqual({
+			readMemory: false,
+			writeMemory: false,
+			dataBreakpoints: false
+		});
 	});
 
 	it('keeps breakpoints and resolved locations isolated by source path', () => {

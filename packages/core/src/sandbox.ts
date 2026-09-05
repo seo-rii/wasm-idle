@@ -1,10 +1,15 @@
 import type {
 	DebugCommand,
+	DebugDataBreakpoint,
+	DebugDataBreakpointInfo,
+	DebugDataBreakpointInfoArguments,
 	DebugMemory,
+	DebugResolvedDataBreakpoint,
 	DebugScope,
 	DebugSessionEvent,
 	DebugSourceBreakpoints,
-	DebugVariable
+	DebugVariable,
+	DebugWriteMemoryResult
 } from './debug.js';
 import {
 	defineRuntimeTrustProfile,
@@ -47,7 +52,10 @@ export interface SandboxExecutionOptions {
 	[key: string]: unknown;
 	activePath?: string;
 	env?: Record<string, string>;
-	/** Keep the final run alive until the host explicitly stops or disposes it. */
+	/**
+	 * Keep the final `run(..., prepare = false)` operation alive until the host stops it.
+	 * Loading and prepare operations remain bounded by their configured deadlines.
+	 */
 	interactive?: boolean;
 	limits?: Partial<ExecutionLimits>;
 	runtimeRequirements?: ExecutionRuntimeRequirements;
@@ -129,6 +137,18 @@ export interface Sandbox {
 		offset: number,
 		count: number
 	) => Promise<DebugMemory | null>;
+	debugWriteMemory?: (
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial?: boolean
+	) => Promise<DebugWriteMemoryResult | null>;
+	debugDataBreakpointInfo?: (
+		arguments_: DebugDataBreakpointInfoArguments
+	) => Promise<DebugDataBreakpointInfo | null>;
+	debugSetDataBreakpoints?: (
+		breakpoints: DebugDataBreakpoint[]
+	) => Promise<DebugResolvedDataBreakpoint[]>;
 	image?: (data: { mime: string; b64: string; ts?: number }) => void;
 	elapse?: number;
 }
@@ -304,6 +324,7 @@ function runSandboxOperation<T>(
 		let settled = false;
 		let operationStarted = false;
 		let cancellationRequested = false;
+		let cancellationPromise: Promise<void> | undefined;
 		let timeout: ReturnType<typeof setTimeout> | undefined;
 
 		const cleanup = () => {
@@ -321,9 +342,13 @@ function runSandboxOperation<T>(
 					: sandbox.kill
 						? sandbox.kill()
 						: sandbox.terminate();
-				void Promise.resolve(cancellation).catch(() => undefined);
+				cancellationPromise = Promise.resolve(cancellation).then(
+					() => undefined,
+					() => undefined
+				);
 			} catch {
 				// The boundary error remains authoritative even if runtime cleanup fails.
+				cancellationPromise = Promise.resolve();
 			}
 		};
 		const releaseOperation = () => {
@@ -398,9 +423,11 @@ function runSandboxOperation<T>(
 			operationStarted = true;
 			try {
 				const value = await operation();
+				if (cancellationPromise) await cancellationPromise;
 				releaseOperation();
 				settle(() => resolve(value));
 			} catch (error) {
+				if (cancellationPromise) await cancellationPromise;
 				releaseOperation();
 				settle(() => reject(error));
 			}
@@ -642,9 +669,9 @@ function bindRuntimeAssets(
 							: validated.interactive === true
 								? null
 								: combinedPhaseTimeoutMs(
-										validated.limits.compileTimeoutMs,
-										validated.limits.runTimeoutMs
-									),
+									validated.limits.compileTimeoutMs,
+									validated.limits.runTimeoutMs
+								),
 						validated.limits,
 						'execute'
 					);

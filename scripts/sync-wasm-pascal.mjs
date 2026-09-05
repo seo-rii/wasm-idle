@@ -1,8 +1,19 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import {
+	lstat,
+	mkdtemp,
+	mkdir,
+	readFile,
+	readdir,
+	realpath,
+	rename,
+	rm,
+	writeFile
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gzipSync } from 'node:zlib';
+import { gzipSync, gunzipSync } from 'node:zlib';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
@@ -112,6 +123,32 @@ const WORKER_IDENTITY_PLACEHOLDERS = new Map([
 /** @typedef {{path: string; mediaType: string; size: number; sha256: string}} LogicalAsset */
 /** @typedef {{path: string; logicalPath: string; encoding: 'identity' | 'gzip'; size: number; sha256: string}} StorageAsset */
 /** @typedef {{target: string; temporary: string; previous: string; hadTarget: boolean; backedUp: boolean; published: boolean}} Publication */
+/** @typedef {{bytes: number; sha256: string; uncompressedBytes: number; uncompressedSha256: string}} CompressedReceipt */
+/**
+ * @typedef {{
+ *   profileId: string;
+ *   artifactRevision: string;
+ *   pas2jsVersion: string;
+ *   pas2jsRevision: string;
+ *   manifestFingerprint: string;
+ *   manifestReceipt: Receipt;
+ *   compilerJavaScriptReceipt: CompressedReceipt;
+ *   rtlJavaScriptReceipt: Receipt;
+ *   systemPascalReceipt: Receipt;
+ * }} PascalRuntimeProfile
+ */
+/**
+ * @typedef {{
+ *   sourceDir: string;
+ *   targetDir: string;
+ *   fingerprint: string;
+ *   versionModulePath: string;
+ *   lspVersionModulePath: string;
+ *   runtimeProfile: PascalRuntimeProfile;
+ *   runnerReceipt: Receipt;
+ *   reused?: boolean;
+ * }} PascalSyncResult
+ */
 
 /** @param {Uint8Array} bytes */
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -291,6 +328,123 @@ async function resolveSourceDir(sourceDir) {
 	return resolved;
 }
 
+/**
+ * @param {string} rootDir
+ * @param {string} [currentDir]
+ * @returns {Promise<string[]>}
+ */
+async function listRegularFiles(rootDir, currentDir = rootDir) {
+	const entries = await readdir(currentDir, { withFileTypes: true });
+	const files = [];
+	for (const entry of entries) {
+		const entryPath = path.join(currentDir, entry.name);
+		if (entry.isDirectory()) {
+			files.push(...(await listRegularFiles(rootDir, entryPath)));
+			continue;
+		}
+		if (!entry.isFile()) {
+			throw new Error(`wasm-pascal installation contains a non-regular file: ${entryPath}`);
+		}
+		files.push(path.relative(rootDir, entryPath).split(path.sep).join('/'));
+	}
+	return files.sort();
+}
+
+/** @param {string} installedRoot @param {string} expectedRoot @param {string} label */
+async function assertIdenticalTree(installedRoot, expectedRoot, label) {
+	const installedFiles = await listRegularFiles(installedRoot);
+	const expectedFiles = await listRegularFiles(expectedRoot);
+	if (JSON.stringify(installedFiles) !== JSON.stringify(expectedFiles)) {
+		throw new Error(`wasm-pascal checked-in ${label} has unexpected files`);
+	}
+	for (const relativePath of expectedFiles) {
+		const [installedBytes, expectedBytes] = await Promise.all([
+			readFile(path.join(installedRoot, relativePath)),
+			readFile(path.join(expectedRoot, relativePath))
+		]);
+		if (!installedBytes.equals(expectedBytes)) {
+			throw new Error(`wasm-pascal checked-in ${label} differs at ${relativePath}`);
+		}
+	}
+}
+
+/**
+ * @param {{targetDir: string; workerSourcePath: string; versionModulePath: string; lspVersionModulePath: string; lockFilePath: string}} paths
+ * @returns {Promise<PascalSyncResult>}
+ */
+async function reuseCheckedInRuntime(paths) {
+	const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'wasm-idle-pascal-verify-'));
+	const sourceDir = path.join(temporaryRoot, 'source');
+	const expectedTargetDir = path.join(temporaryRoot, 'target');
+	const expectedVersionModulePath = path.join(temporaryRoot, 'wasmPascalVersion.ts');
+	const expectedLspVersionModulePath = path.join(temporaryRoot, 'bundledPascalRuntime.ts');
+	try {
+		await mkdir(sourceDir, { recursive: true });
+		let compilerBytes;
+		try {
+			compilerBytes = gunzipSync(
+				await readFile(path.join(paths.targetDir, 'compiler.js.gz.bin'))
+			);
+		} catch (error) {
+			throw new Error(
+				`wasm-pascal checked-in compiler asset is unavailable or invalid: ${error instanceof Error ? error.message : error}`
+			);
+		}
+		await Promise.all([
+			writeFile(path.join(sourceDir, 'compiler.js'), compilerBytes),
+			writeFile(
+				path.join(sourceDir, 'rtl.js'),
+				await readFile(path.join(paths.targetDir, 'rtl.js.bin'))
+			),
+			writeFile(
+				path.join(sourceDir, 'system.pas'),
+				await readFile(path.join(paths.targetDir, 'system.pas.bin'))
+			),
+			writeFile(
+				path.join(sourceDir, BUILD_METADATA_FILE),
+				await readFile(path.join(paths.targetDir, BUILD_METADATA_FILE))
+			)
+		]);
+
+		const expected = await syncWasmPascalAssets({
+			sourceDir,
+			targetDir: expectedTargetDir,
+			workerSourcePath: paths.workerSourcePath,
+			versionModulePath: expectedVersionModulePath,
+			lspVersionModulePath: expectedLspVersionModulePath,
+			lockFilePath: paths.lockFilePath
+		});
+		await assertIdenticalTree(paths.targetDir, expectedTargetDir, 'runtime');
+		for (const [installedPath, expectedPath, label] of [
+			[paths.versionModulePath, expectedVersionModulePath, 'application version module'],
+			[paths.lspVersionModulePath, expectedLspVersionModulePath, 'LSP version module']
+		]) {
+			if (!(await isRegularFile(installedPath))) {
+				throw new Error(
+					`wasm-pascal checked-in ${label} must be a regular file: ${installedPath}`
+				);
+			}
+			const [installedBytes, expectedBytes] = await Promise.all([
+				readFile(installedPath),
+				readFile(expectedPath)
+			]);
+			if (!installedBytes.equals(expectedBytes)) {
+				throw new Error(`wasm-pascal checked-in ${label} does not match the input lock`);
+			}
+		}
+		return {
+			...expected,
+			sourceDir: paths.targetDir,
+			targetDir: paths.targetDir,
+			versionModulePath: paths.versionModulePath,
+			lspVersionModulePath: paths.lspVersionModulePath,
+			reused: true
+		};
+	} finally {
+		await rm(temporaryRoot, { recursive: true, force: true });
+	}
+}
+
 /** @param {unknown} value */
 function serializeGeneratedObject(value) {
 	return JSON.stringify(value, null, '\t')
@@ -300,6 +454,7 @@ function serializeGeneratedObject(value) {
 
 /**
  * @param {{sourceDir?: string; targetDir?: string; workerSourcePath?: string; versionModulePath?: string; lspVersionModulePath?: string; lockFilePath?: string; renamePath?: (sourcePath: string, targetPath: string) => Promise<void>}} [options]
+ * @returns {Promise<PascalSyncResult>}
  */
 export async function syncWasmPascalAssets(options = {}) {
 	const targetDir = path.resolve(options.targetDir || DEFAULT_TARGET_DIR);
@@ -318,6 +473,18 @@ export async function syncWasmPascalAssets(options = {}) {
 	);
 	const lockFilePath = path.resolve(options.lockFilePath || DEFAULT_LOCK_FILE_PATH);
 	const renamePath = options.renamePath || rename;
+	if (
+		options.sourceDir === undefined &&
+		!(await isRegularFile(path.join(DEFAULT_SOURCE_DIR, 'compiler.js')))
+	) {
+		return reuseCheckedInRuntime({
+			targetDir,
+			workerSourcePath,
+			versionModulePath,
+			lspVersionModulePath,
+			lockFilePath
+		});
+	}
 	const sourceDir = await resolveSourceDir(options.sourceDir);
 	const lock = await readInputLock(lockFilePath);
 

@@ -4,12 +4,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const runtimeState = vi.hoisted(() => ({
 	session: null as FakeRuntimeSession | null,
+	sessions: [] as FakeRuntimeSession[],
 	options: null as Record<string, unknown> | null,
+	initializeCapabilities: {} as Record<string, unknown>,
 	initializeGate: null as Promise<void> | null,
 	continueGate: null as Promise<void> | null,
 	pauseGate: null as Promise<void> | null,
 	disposeGate: null as Promise<void> | null,
+	stdinWriteGates: [] as Promise<void>[],
 	scopesErrorFrameId: null as number | null,
+	requestErrors: new Map<string, Error>(),
 	responseOverrides: new Map<string, unknown>(),
 	breakpointResponseGates: [] as Array<
 		Promise<{
@@ -17,11 +21,19 @@ const runtimeState = vi.hoisted(() => ({
 		}>
 	>
 }));
+const { loadManifest } = vi.hoisted(() => ({
+	loadManifest: vi.fn()
+}));
+
+vi.mock('$lib/playground/lldbManifest', () => ({
+	loadVerifiedDebugRuntimeManifest: loadManifest
+}));
 
 class FakeRuntimeSession {
 	readonly requests: Array<{ command: string; args?: unknown }> = [];
 	readonly breakpointRequests: Array<{ source: { path: string }; lines: number[] }> = [];
 	readonly input: string[] = [];
+	readonly inputAttempts: string[] = [];
 	readonly resolvedBreakpointsBySource = new Map<
 		string,
 		Array<{
@@ -43,7 +55,7 @@ class FakeRuntimeSession {
 
 	async initialize() {
 		await runtimeState.initializeGate;
-		return {};
+		return runtimeState.initializeCapabilities;
 	}
 
 	getResolvedBreakpoints(sourcePath: string) {
@@ -56,6 +68,8 @@ class FakeRuntimeSession {
 
 	async request<T>(command: string, args?: unknown): Promise<T> {
 		this.requests.push({ command, args });
+		const requestError = runtimeState.requestErrors.get(command);
+		if (requestError) throw requestError;
 		if (command === 'continue') await runtimeState.continueGate;
 		if (command === 'pause') await runtimeState.pauseGate;
 		if (command === 'setBreakpoints' && runtimeState.breakpointResponseGates.length > 0) {
@@ -120,6 +134,20 @@ class FakeRuntimeSession {
 				unreadableBytes: 2
 			} as T;
 		}
+		if (command === 'writeMemory') {
+			return { offset: 4, bytesWritten: 3 } as T;
+		}
+		if (command === 'dataBreakpointInfo') {
+			return {
+				dataId: '1000/4',
+				description: '4 bytes at 1000',
+				accessTypes: ['read', 'write', 'readWrite'],
+				canPersist: false
+			} as T;
+		}
+		if (command === 'setDataBreakpoints') {
+			return { breakpoints: [{ id: 5, verified: true }] } as T;
+		}
 		if (command === 'evaluate') return { result: '42', variablesReference: 0 } as T;
 		return {} as T;
 	}
@@ -152,6 +180,9 @@ class FakeRuntimeSession {
 	}
 
 	async writeStdin(value: string) {
+		this.inputAttempts.push(value);
+		const gate = runtimeState.stdinWriteGates.shift();
+		if (gate) await gate;
 		this.input.push(value);
 	}
 
@@ -173,6 +204,31 @@ class FakeRuntimeSession {
 	}
 }
 
+async function emitStoppedAndWait(
+	session: FakeRuntimeSession,
+	reason = 'breakpoint',
+	threadId = 7
+) {
+	const previousStackTraceRequests = session.requests.filter(
+		(request) => request.command === 'stackTrace'
+	).length;
+	const previousScopeRequests = session.requests.filter(
+		(request) => request.command === 'scopes'
+	).length;
+	session.emit({ event: 'stopped', body: { reason, threadId } });
+	await vi.waitFor(() =>
+		expect(session.requests.filter((request) => request.command === 'stackTrace')).toHaveLength(
+			previousStackTraceRequests + 1
+		)
+	);
+	await vi.waitFor(() =>
+		expect(session.requests.filter((request) => request.command === 'scopes')).toHaveLength(
+			previousScopeRequests + 1
+		)
+	);
+	await Promise.resolve();
+}
+
 vi.mock('@wasm-idle/llvm-core/debug', () => ({
 	DapProtocolError: class DapProtocolError extends Error {
 		readonly command: string;
@@ -189,6 +245,7 @@ vi.mock('@wasm-idle/llvm-core/debug', () => ({
 	createBrowserLldbSession: (options: Record<string, unknown>) => {
 		runtimeState.options = options;
 		runtimeState.session = new FakeRuntimeSession();
+		runtimeState.sessions.push(runtimeState.session);
 		return runtimeState.session;
 	}
 }));
@@ -198,14 +255,107 @@ import { LldbSandboxSession } from './lldbSession';
 describe('LldbSandboxSession', () => {
 	beforeEach(() => {
 		runtimeState.session = null;
+		runtimeState.sessions.length = 0;
 		runtimeState.options = null;
+		runtimeState.initializeCapabilities = {
+			supportsReadMemoryRequest: true,
+			supportsWriteMemoryRequest: true
+		};
 		runtimeState.initializeGate = null;
 		runtimeState.continueGate = null;
 		runtimeState.pauseGate = null;
 		runtimeState.disposeGate = null;
+		runtimeState.stdinWriteGates.length = 0;
 		runtimeState.scopesErrorFrameId = null;
+		runtimeState.requestErrors.clear();
 		runtimeState.responseOverrides.clear();
 		runtimeState.breakpointResponseGates = [];
+		loadManifest.mockReset();
+		loadManifest.mockImplementation(
+			async (url: string, _expected: unknown, fetchImpl: typeof fetch) => {
+				const response = await fetchImpl(url);
+				if (!response.ok) {
+					throw new Error(
+						`Unable to load the LLDB runtime manifest (${response.status}).`
+					);
+				}
+				return await response.json();
+			}
+		);
+	});
+
+	it('does not create a runtime session after manifest verification fails', async () => {
+		const fetchImpl = vi.fn();
+		loadManifest.mockRejectedValueOnce(
+			new Error('LLDB runtime requires an expected manifest SHA-256 receipt.')
+		);
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://cdn.example/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: fetchImpl as unknown as typeof fetch
+		});
+
+		await expect(controller.start()).rejects.toThrow(
+			'LLDB runtime requires an expected manifest SHA-256 receipt.'
+		);
+		expect(fetchImpl).not.toHaveBeenCalled();
+		expect(loadManifest).toHaveBeenCalledWith(
+			'https://cdn.example/debug/runtime-manifest.v2.json',
+			undefined,
+			fetchImpl,
+			expect.any(AbortSignal)
+		);
+		expect(runtimeState.session).toBeNull();
+	});
+
+	it('aborts a pending manifest load when the session is disconnected', async () => {
+		let startupSignal: AbortSignal | undefined;
+		loadManifest.mockImplementationOnce(
+			async (
+				_url: string,
+				_expected: unknown,
+				_fetchImpl: typeof fetch,
+				signal?: AbortSignal
+			) => {
+				startupSignal = signal;
+				return await new Promise((_resolve, reject) => {
+					signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+				});
+			}
+		);
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://cdn.example/debug/runtime-manifest.v2.json',
+			manifestReceipt: { sha256: 'a'.repeat(64) },
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn() as unknown as typeof fetch
+		});
+
+		const starting = controller.start();
+		await vi.waitFor(() => expect(loadManifest).toHaveBeenCalledOnce());
+		expect(startupSignal).toBeInstanceOf(AbortSignal);
+		await controller.disconnect();
+
+		expect(startupSignal?.aborted).toBe(true);
+		await expect(starting).resolves.toBe(true);
+		expect(runtimeState.session).toBeNull();
 	});
 
 	it('rejects invalid configured breakpoint lines before loading the runtime', () => {
@@ -229,6 +379,439 @@ describe('LldbSandboxSession', () => {
 				})
 		).toThrow('LLDB breakpoint lines must be positive safe integers.');
 		expect(fetchImpl).not.toHaveBeenCalled();
+	});
+
+	it('does not let a retired stdin flush enter a replacement session', async () => {
+		let releaseRetiredWrite!: () => void;
+		runtimeState.stdinWriteGates.push(
+			new Promise<void>((resolve) => {
+				releaseRetiredWrite = resolve;
+			})
+		);
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		await controller.write('retired-1');
+		await controller.write('retired-2');
+		const firstCompletion = controller.start();
+		await vi.waitFor(() =>
+			expect(runtimeState.sessions[0]?.inputAttempts).toEqual(['retired-1'])
+		);
+
+		await controller.disconnect();
+		let releaseReplacementInitialize!: () => void;
+		runtimeState.initializeGate = new Promise<void>((resolve) => {
+			releaseReplacementInitialize = resolve;
+		});
+		const secondCompletion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(2));
+		const replacement = runtimeState.sessions[1]!;
+		await controller.write('fresh');
+
+		releaseRetiredWrite();
+		await firstCompletion;
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(replacement.inputAttempts).toEqual([]);
+
+		releaseReplacementInitialize();
+		await vi.waitFor(() => expect(replacement.input).toEqual(['fresh']));
+		replacement.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+		await secondCompletion;
+	});
+
+	it('fails the active session when a stdin write fails', async () => {
+		const events: Array<{ type: string }> = [];
+		let rejectWrite!: (error: Error) => void;
+		runtimeState.stdinWriteGates.push(
+			new Promise<void>((_resolve, reject) => {
+				rejectWrite = reject;
+			})
+		);
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		const completionOutcome = completion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		const session = runtimeState.session!;
+		const writeError = new Error('stdin transport failed');
+		const writeOutcome = controller.write('blocked').then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(session.inputAttempts).toEqual(['blocked']));
+		rejectWrite(writeError);
+
+		await expect(writeOutcome).resolves.toBe(writeError);
+		await expect(
+			Promise.race([
+				completionOutcome,
+				new Promise<never>((_, reject) => {
+					setTimeout(() => reject(new Error('test completion deadline expired')), 500);
+				})
+			])
+		).resolves.toBe(writeError);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(1);
+		expect(session.disposeCount).toBe(1);
+	});
+
+	it('serializes a stop-callback relaunch behind the retiring completion', async () => {
+		let releaseDisposal!: () => void;
+		runtimeState.disposeGate = new Promise<void>((resolve) => {
+			releaseDisposal = resolve;
+		});
+		let controller!: LldbSandboxSession;
+		let replacementCompletion: Promise<true> | undefined;
+		let replacementSettled = false;
+		controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => {
+				if (event.type !== 'stop' || replacementCompletion) return;
+				replacementCompletion = controller.start();
+				void replacementCompletion.then(
+					() => {
+						replacementSettled = true;
+					},
+					() => {
+						replacementSettled = true;
+					}
+				);
+			},
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const firstCompletion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(1));
+		const retiringSession = runtimeState.sessions[0]!;
+
+		try {
+			retiringSession.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			await vi.waitFor(() => expect(replacementCompletion).toBeDefined());
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			expect(runtimeState.sessions).toHaveLength(1);
+
+			releaseDisposal();
+			await expect(
+				Promise.race([
+					firstCompletion,
+					new Promise<never>((_, reject) => {
+						setTimeout(() => reject(new Error('first completion did not settle')), 500);
+					})
+				])
+			).resolves.toBe(true);
+			await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(2));
+			expect(replacementSettled).toBe(false);
+
+			const replacementSession = runtimeState.sessions[1]!;
+			replacementSession.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			await expect(replacementCompletion).resolves.toBe(true);
+		} finally {
+			releaseDisposal();
+			await controller.disconnect();
+			void firstCompletion.catch(() => undefined);
+		}
+	});
+
+	it('lets disconnect cancel a relaunch waiting for retired disposal', async () => {
+		let releaseDisposal!: () => void;
+		runtimeState.disposeGate = new Promise<void>((resolve) => {
+			releaseDisposal = resolve;
+		});
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const firstCompletion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(1));
+		runtimeState.sessions[0]!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+		const replacementCompletion = controller.start();
+		void replacementCompletion.catch(() => undefined);
+		const disconnecting = controller.disconnect();
+
+		releaseDisposal();
+		await disconnecting;
+		await firstCompletion;
+		await expect(
+			Promise.race([
+				replacementCompletion,
+				new Promise<never>((_, reject) => {
+					setTimeout(() => reject(new Error('cancelled relaunch did not settle')), 500);
+				})
+			])
+		).resolves.toBe(true);
+		expect(runtimeState.sessions).toHaveLength(1);
+	});
+
+	it('settles a cancelled relaunch when retired disposal rejects', async () => {
+		const events: Array<{ type: string }> = [];
+		const stopCallbackError = new Error('stop callback failed');
+		let rejectDisposal!: (error: Error) => void;
+		runtimeState.disposeGate = new Promise<void>((_resolve, reject) => {
+			rejectDisposal = reject;
+		});
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => {
+				events.push(event);
+				if (event.type === 'stop') throw stopCallbackError;
+			},
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const firstCompletion = controller.start();
+		const firstOutcome = firstCompletion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(1));
+		runtimeState.sessions[0]!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+		const replacementCompletion = controller.start();
+		const replacementOutcome = replacementCompletion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		const disconnectOutcome = controller.disconnect().then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		const disposalError = new Error('retired disposal failed');
+
+		rejectDisposal(disposalError);
+
+		await expect(firstOutcome).resolves.toBe(disposalError);
+		await expect(disconnectOutcome).resolves.toBe(disposalError);
+		await expect(
+			Promise.race([
+				replacementOutcome,
+				new Promise<never>((_, reject) => {
+					setTimeout(
+						() => reject(new Error('replacement completion stayed pending')),
+						500
+					);
+				})
+			])
+		).resolves.toBe(disposalError);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(2);
+	});
+
+	it('settles two superseded starts when retired disposal rejects', async () => {
+		const events: Array<{ type: string }> = [];
+		let rejectDisposal!: (error: Error) => void;
+		runtimeState.disposeGate = new Promise<void>((_resolve, reject) => {
+			rejectDisposal = reject;
+		});
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const firstCompletion = controller.start();
+		const firstOutcome = firstCompletion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(1));
+		runtimeState.sessions[0]!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+
+		const secondCompletion = controller.start();
+		const secondOutcome = secondCompletion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		const disconnectOutcome = controller.disconnect().then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		const thirdCompletion = controller.start();
+		const thirdOutcome = thirdCompletion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		const disposalError = new Error('retired disposal failed');
+
+		rejectDisposal(disposalError);
+
+		await expect(firstOutcome).resolves.toBe(disposalError);
+		await expect(secondOutcome).resolves.toBe(disposalError);
+		await expect(disconnectOutcome).resolves.toBe(disposalError);
+		await expect(thirdOutcome).resolves.toBe(disposalError);
+		expect(runtimeState.sessions).toHaveLength(1);
+		expect(runtimeState.sessions[0]!.disposeCount).toBe(1);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(2);
+	});
+
+	it('keeps disconnect completion ownership across a stop-callback relaunch', async () => {
+		let controller!: LldbSandboxSession;
+		let replacementCompletion: Promise<true> | undefined;
+		let replacementSettled = false;
+		controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => {
+				if (event.type !== 'stop' || replacementCompletion) return;
+				replacementCompletion = controller.start();
+				void replacementCompletion.then(
+					() => {
+						replacementSettled = true;
+					},
+					() => {
+						replacementSettled = true;
+					}
+				);
+			},
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const firstCompletion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(1));
+
+		try {
+			await controller.disconnect();
+			await expect(
+				Promise.race([
+					firstCompletion,
+					new Promise<never>((_, reject) => {
+						setTimeout(
+							() => reject(new Error('disconnected completion did not settle')),
+							500
+						);
+					})
+				])
+			).resolves.toBe(true);
+			await vi.waitFor(() => expect(runtimeState.sessions).toHaveLength(2));
+			expect(replacementSettled).toBe(false);
+
+			runtimeState.sessions[1]!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			await expect(replacementCompletion).resolves.toBe(true);
+		} finally {
+			await controller.disconnect();
+			void firstCompletion.catch(() => undefined);
+		}
+	});
+
+	it('settles disconnect when the stop callback throws', async () => {
+		const stopError = new Error('stop callback failed');
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0, 97, 115, 109),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => {
+				if (event.type === 'stop') throw stopError;
+			},
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2, debugger: { capabilities: {} } })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		void completion.catch(() => undefined);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		await expect(controller.disconnect()).resolves.toBeUndefined();
+		await expect(
+			Promise.race([
+				completion,
+				new Promise<never>((_, reject) => {
+					setTimeout(() => reject(new Error('completion stayed pending')), 500);
+				})
+			])
+		).resolves.toBe(true);
 	});
 
 	it('maps DAP stopped state to source frames and top-level scopes', async () => {
@@ -267,7 +850,14 @@ describe('LldbSandboxSession', () => {
 				ok: true,
 				json: async () => ({
 					manifestVersion: 2,
-					debugger: { capabilities: { evaluateExpressions: true } }
+					debugger: {
+						capabilities: {
+							evaluateExpressions: true,
+							readMemory: true,
+							writeMemory: true,
+							dataBreakpoints: true
+						}
+					}
 				})
 			})) as unknown as typeof fetch
 		});
@@ -329,6 +919,11 @@ describe('LldbSandboxSession', () => {
 			expect(events).toContainEqual(
 				expect.objectContaining({
 					type: 'pause',
+					capabilities: {
+						readMemory: true,
+						writeMemory: true,
+						dataBreakpoints: false
+					},
 					line: 6,
 					sourcePath: '/workspace/main.cpp',
 					sourceContentSha256: 'main-source-sha',
@@ -643,6 +1238,56 @@ describe('LldbSandboxSession', () => {
 		await completion;
 	});
 
+	it('fails closed when a resolved-breakpoint projection throws', async () => {
+		const projectionError = new Error('resolved breakpoint projection failed');
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.c', content: 'int main(void) {}' }]
+			},
+			sourcePath: '/workspace/main.c',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => {
+				if (event.type === 'breakpoints' && event.breakpoints[0]?.requestedLine === 8) {
+					throw projectionError;
+				}
+			},
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		const completionOutcome = completion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		try {
+			await expect(controller.setBreakpoints([8])).rejects.toBe(projectionError);
+			await expect(
+				Promise.race([
+					completionOutcome,
+					new Promise<never>((_, reject) => {
+						setTimeout(
+							() => reject(new Error('projection failure did not settle completion')),
+							500
+						);
+					})
+				])
+			).resolves.toBe(projectionError);
+			expect(runtimeState.session!.disposeCount).toBe(1);
+		} finally {
+			if (runtimeState.session!.disposeCount === 0) await controller.disconnect();
+			await completionOutcome;
+		}
+	});
+
 	it('rejects Rust artifacts built with an incompatible LLVM version', async () => {
 		const controller = new LldbSandboxSession({
 			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
@@ -872,6 +1517,7 @@ describe('LldbSandboxSession', () => {
 				(error: unknown) => error
 			);
 			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			await emitStoppedAndWait(runtimeState.session!);
 			if (command === 'evaluate') await controller.scopes(41);
 			runtimeState.responseOverrides.set(
 				command,
@@ -947,6 +1593,54 @@ describe('LldbSandboxSession', () => {
 			runtimeState.session!.emit({ event: 'terminated' });
 			runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
 			await completion;
+		}
+	});
+
+	it('fails closed when a resume projection throws', async () => {
+		const projectionError = new Error('resume projection failed');
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.c', content: 'int main(void) {}' }]
+			},
+			sourcePath: '/workspace/main.c',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: (event) => {
+				if (event.type === 'resume') throw projectionError;
+			},
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		const completionOutcome = completion.then<undefined, Error>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+		try {
+			await expect(controller.debugCommand('continue')).rejects.toBe(projectionError);
+			await expect(
+				Promise.race([
+					completionOutcome,
+					new Promise<never>((_, reject) => {
+						setTimeout(
+							() => reject(new Error('projection failure did not settle completion')),
+							500
+						);
+					})
+				])
+			).resolves.toBe(projectionError);
+			expect(runtimeState.session!.disposeCount).toBe(1);
+		} finally {
+			if (runtimeState.session!.disposeCount === 0) await controller.disconnect();
+			await completionOutcome;
 		}
 	});
 
@@ -1249,6 +1943,48 @@ describe('LldbSandboxSession', () => {
 		await expect(completion).resolves.toBe(true);
 	});
 
+	it.each(Array.from({ length: 10 }, (_value, index) => index + 1))(
+		'waits for in-flight target-exit disposal before disconnect completes (cycle %i)',
+		async () => {
+			let releaseDispose!: () => void;
+			runtimeState.disposeGate = new Promise<void>((resolve) => {
+				releaseDispose = resolve;
+			});
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: false,
+				onDebugEvent: () => undefined,
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({ manifestVersion: 2 })
+				})) as unknown as typeof fetch
+			});
+			const completion = controller.start();
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+
+			runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			await vi.waitFor(() => expect(runtimeState.session!.disposeCount).toBe(1));
+			let disconnected = false;
+			const disconnect = controller.disconnect().then(() => {
+				disconnected = true;
+			});
+			for (let turn = 0; turn < 4; turn += 1) await Promise.resolve();
+
+			expect(disconnected).toBe(false);
+			releaseDispose();
+			await expect(disconnect).resolves.toBeUndefined();
+			await expect(completion).resolves.toBe(true);
+		}
+	);
+
 	it('rejects invalid dynamic breakpoints before replacing the current source state', async () => {
 		const events: Array<{
 			type: string;
@@ -1379,6 +2115,7 @@ describe('LldbSandboxSession', () => {
 			(error: unknown) => error
 		);
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 		const requestCount = runtimeState.session!.requests.filter(
 			(request) => request.command === command
 		).length;
@@ -1402,7 +2139,193 @@ describe('LldbSandboxSession', () => {
 		expect(completionError).toBeNull();
 	});
 
+	it.each([
+		{
+			caseName: 'empty memory reference',
+			command: 'readMemory',
+			message: 'memoryReference must be a non-empty string.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) => controller.readMemory('', 0, 1)
+		},
+		{
+			caseName: 'oversized memory reference',
+			command: 'readMemory',
+			message: 'memoryReference must not exceed 4096 UTF-16 code units.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.readMemory('x'.repeat(4097), 0, 1)
+		},
+		{
+			caseName: 'oversized memory read',
+			command: 'readMemory',
+			message: 'count must not exceed 256.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) => controller.readMemory('0x0', 0, 257)
+		},
+		{
+			caseName: 'non-byte memory write',
+			command: 'writeMemory',
+			message: 'data must be a Uint8Array.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.writeMemory('0x0', 0, {} as Uint8Array)
+		},
+		{
+			caseName: 'empty memory-write reference',
+			command: 'writeMemory',
+			message: 'memoryReference must be a non-empty string.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.writeMemory('', 0, Uint8Array.of(1))
+		},
+		{
+			caseName: 'oversized memory write',
+			command: 'writeMemory',
+			message: 'data must not exceed 256 bytes.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.writeMemory('0x0', 0, new Uint8Array(257))
+		},
+		{
+			caseName: 'non-boolean partial-write flag',
+			command: 'writeMemory',
+			message: 'allowPartial must be a boolean.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.writeMemory('0x0', 0, Uint8Array.of(1), 'yes' as unknown as boolean)
+		},
+		{
+			caseName: 'oversized data-breakpoint name',
+			command: 'dataBreakpointInfo',
+			message: 'name must not exceed 4096 UTF-16 code units.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({ name: 'x'.repeat(4097) })
+		},
+		{
+			caseName: 'non-object data-breakpoint discovery arguments',
+			command: 'dataBreakpointInfo',
+			message: 'arguments must be an object.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) => controller.dataBreakpointInfo(null as never)
+		},
+		{
+			caseName: 'oversized data-breakpoint byte range',
+			command: 'dataBreakpointInfo',
+			message: 'bytes must not exceed 256.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({ name: '0x0', asAddress: true, bytes: 257 })
+		},
+		{
+			caseName: 'non-boolean address flag',
+			command: 'dataBreakpointInfo',
+			message: 'asAddress must be a boolean.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({
+					name: '0x0',
+					asAddress: 1 as unknown as boolean,
+					bytes: 1
+				})
+		},
+		{
+			caseName: 'non-array data-breakpoint collection',
+			command: 'setDataBreakpoints',
+			message: 'breakpoints must be an array.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) => controller.setDataBreakpoints(null as never)
+		},
+		{
+			caseName: 'oversized data-breakpoint collection',
+			command: 'setDataBreakpoints',
+			message: 'breakpoints must not contain more than 256 entries.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.setDataBreakpoints(
+					Array.from({ length: 257 }, (_, index) => ({ dataId: `id-${index}` }))
+				)
+		},
+		{
+			caseName: 'non-object data-breakpoint entry',
+			command: 'setDataBreakpoints',
+			message: 'breakpoints[0] must be an object.',
+			errorType: TypeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.setDataBreakpoints([null] as never)
+		},
+		{
+			caseName: 'oversized data-breakpoint identifier',
+			command: 'setDataBreakpoints',
+			message: 'breakpoints[0].dataId must not exceed 4096 UTF-16 code units.',
+			errorType: RangeError,
+			invoke: (controller: LldbSandboxSession) =>
+				controller.setDataBreakpoints([{ dataId: 'x'.repeat(4097), accessType: 'write' }])
+		}
+	])(
+		'rejects an invalid $caseName before allocating or sending DAP',
+		async ({ command, message, errorType, invoke }) => {
+			runtimeState.initializeCapabilities = {
+				supportsReadMemoryRequest: true,
+				supportsWriteMemoryRequest: true,
+				supportsDataBreakpoints: true
+			};
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: () => undefined,
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({
+						manifestVersion: 2,
+						debugger: {
+							capabilities: {
+								readMemory: true,
+								writeMemory: true,
+								dataBreakpoints: true
+							}
+						}
+					})
+				})) as unknown as typeof fetch
+			});
+			const completion = controller.start().then(
+				() => null,
+				(error: unknown) => error
+			);
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			await emitStoppedAndWait(runtimeState.session!);
+			const requestCount = runtimeState.session!.requests.filter(
+				(request) => request.command === command
+			).length;
+
+			const callError = await invoke(controller).then(
+				() => null,
+				(error: unknown) => error
+			);
+			const disposeCountBeforeCleanup = runtimeState.session!.disposeCount;
+			if (disposeCountBeforeCleanup === 0) await controller.disconnect();
+			const completionError = await completion;
+
+			expect(callError).toBeInstanceOf(errorType);
+			expect((callError as Error).message).toBe(message);
+			expect(
+				runtimeState.session!.requests.filter((request) => request.command === command)
+			).toHaveLength(requestCount);
+			expect(disposeCountBeforeCleanup).toBe(0);
+			expect(completionError).toBeNull();
+		}
+	);
+
 	it('reads target memory through DAP and decodes the returned bytes', async () => {
+		runtimeState.initializeCapabilities = { supportsReadMemoryRequest: true };
 		const controller = new LldbSandboxSession({
 			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
 			runtimeBaseUrl: 'https://example.com/debug/',
@@ -1426,6 +2349,7 @@ describe('LldbSandboxSession', () => {
 
 		const completion = controller.start();
 		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
 
 		await expect(controller.readMemory('0x1000', 4, 6)).resolves.toEqual({
 			address: '0x1004',
@@ -1436,6 +2360,716 @@ describe('LldbSandboxSession', () => {
 			command: 'readMemory',
 			args: { memoryReference: '0x1000', offset: 4, count: 6 }
 		});
+
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('fails closed for direct memory and data-breakpoint requests while the target is running', async () => {
+		runtimeState.initializeCapabilities = {
+			supportsReadMemoryRequest: true,
+			supportsWriteMemoryRequest: true,
+			supportsDataBreakpoints: true
+		};
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: false,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: {
+						capabilities: {
+							readMemory: true,
+							writeMemory: true,
+							dataBreakpoints: true
+						}
+					}
+				})
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		const session = runtimeState.session!;
+		const inspectionRequestCount = () =>
+			session.requests.filter((request) =>
+				['readMemory', 'writeMemory', 'dataBreakpointInfo', 'setDataBreakpoints'].includes(
+					request.command
+				)
+			).length;
+		const expectInspectionClosed = async (expectedRequestCount: number) => {
+			await expect(controller.readMemory('0x1000', 0, 6)).resolves.toBeNull();
+			await expect(
+				controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2, 3), true)
+			).resolves.toBeNull();
+			await expect(
+				controller.dataBreakpointInfo({ name: '0x1000', asAddress: true, bytes: 4 })
+			).resolves.toBeNull();
+			await expect(
+				controller.setDataBreakpoints([{ dataId: '1000/4', accessType: 'write' }])
+			).resolves.toEqual([]);
+			expect(inspectionRequestCount()).toBe(expectedRequestCount);
+		};
+
+		await expectInspectionClosed(0);
+
+		await emitStoppedAndWait(session);
+		await expect(controller.readMemory('0x1000', 0, 6)).resolves.toEqual({
+			address: '0x1004',
+			data: Uint8Array.of(1, 2, 3, 4),
+			unreadableBytes: 2
+		});
+		await expect(
+			controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2, 3), true)
+		).resolves.toEqual({ offset: 4, bytesWritten: 3 });
+		await expect(
+			controller.dataBreakpointInfo({ name: '0x1000', asAddress: true, bytes: 4 })
+		).resolves.toMatchObject({ dataId: '1000/4' });
+		await expect(
+			controller.setDataBreakpoints([{ dataId: '1000/4', accessType: 'write' }])
+		).resolves.toEqual([{ id: 5, verified: true }]);
+		expect(inspectionRequestCount()).toBe(4);
+
+		await controller.debugCommand('continue');
+		await expectInspectionClosed(4);
+
+		await emitStoppedAndWait(session, 'step');
+		session.emit({ event: 'continued', body: { threadId: 7, allThreadsContinued: true } });
+		await expectInspectionClosed(4);
+
+		await controller.disconnect();
+		await expectInspectionClosed(4);
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('rejects an oversized encoded memory response before Base64 decoding', async () => {
+		runtimeState.initializeCapabilities = { supportsReadMemoryRequest: true };
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { readMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		const completionError = completion.then(
+			() => null,
+			(error: unknown) => error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
+		runtimeState.responseOverrides.set('readMemory', {
+			address: '0x1000',
+			data: 'AAAAAAAA'
+		});
+		const originalAtob = globalThis.atob;
+		const atobSpy = vi
+			.spyOn(globalThis, 'atob')
+			.mockImplementation((value) => originalAtob(value));
+
+		await expect(controller.readMemory('0x1000', 0, 1)).rejects.toBeInstanceOf(ProtocolError);
+		expect(atobSpy).not.toHaveBeenCalled();
+		await expect(completionError).resolves.toBeInstanceOf(ProtocolError);
+		await vi.waitFor(() => expect(runtimeState.session!.disposeCount).toBe(1));
+		atobSpy.mockRestore();
+	});
+
+	it('writes target memory through DAP with an exact Base64 payload', async () => {
+		runtimeState.initializeCapabilities = { supportsWriteMemoryRequest: true };
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { writeMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
+
+		await expect(
+			controller.writeMemory('0x1000', 4, Uint8Array.of(0, 0xff, 1), true)
+		).resolves.toEqual({ offset: 4, bytesWritten: 3 });
+		expect(runtimeState.session?.requests).toContainEqual({
+			command: 'writeMemory',
+			args: {
+				memoryReference: '0x1000',
+				offset: 4,
+				allowPartial: true,
+				data: 'AP8B'
+			}
+		});
+
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('maps optional successful write-memory responses to the requested byte count', async () => {
+		runtimeState.initializeCapabilities = { supportsWriteMemoryRequest: true };
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { writeMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		const completionOutcome = completion.then<true | Error, true | Error>(
+			(value) => value,
+			(error: unknown) => error as Error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
+
+		try {
+			runtimeState.responseOverrides.set('writeMemory', undefined);
+			await expect(controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2))).resolves.toEqual(
+				{ bytesWritten: 2 }
+			);
+			runtimeState.responseOverrides.set('writeMemory', {});
+			await expect(controller.writeMemory('0x1002', 0, Uint8Array.of(3))).resolves.toEqual({
+				bytesWritten: 1
+			});
+		} finally {
+			if (runtimeState.session!.disposeCount === 0) await controller.disconnect();
+			await completionOutcome;
+		}
+	});
+
+	it('rejects a short write-memory acknowledgement when partial writes are disallowed', async () => {
+		runtimeState.initializeCapabilities = { supportsWriteMemoryRequest: true };
+		runtimeState.responseOverrides.set('writeMemory', { bytesWritten: 1 });
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { writeMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start().then(
+			() => null,
+			(error: unknown) => error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
+
+		await expect(
+			controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2))
+		).rejects.toBeInstanceOf(ProtocolError);
+		await expect(completion).resolves.toBeInstanceOf(ProtocolError);
+		expect(runtimeState.session!.disposeCount).toBe(1);
+	});
+
+	it('exposes an allowed partial write-memory acknowledgement', async () => {
+		runtimeState.initializeCapabilities = { supportsWriteMemoryRequest: true };
+		runtimeState.responseOverrides.set('writeMemory', { offset: 2, bytesWritten: 1 });
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { writeMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
+
+		await expect(
+			controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2), true)
+		).resolves.toEqual({ offset: 2, bytesWritten: 1 });
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('rejects an over-counted write-memory acknowledgement', async () => {
+		runtimeState.initializeCapabilities = { supportsWriteMemoryRequest: true };
+		runtimeState.responseOverrides.set('writeMemory', { bytesWritten: 3 });
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { writeMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start().then(
+			() => null,
+			(error: unknown) => error
+		);
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
+
+		await expect(
+			controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2), true)
+		).rejects.toBeInstanceOf(ProtocolError);
+		await expect(completion).resolves.toBeInstanceOf(ProtocolError);
+		expect(runtimeState.session!.disposeCount).toBe(1);
+	});
+
+	it.each([
+		{ invalidation: 'continue', response: { bytesWritten: 1 } },
+		{ invalidation: 'continue', response: { bytesWritten: -1 } },
+		{ invalidation: 'new stop', response: { bytesWritten: 1 } },
+		{ invalidation: 'new stop', response: { bytesWritten: -1 } }
+	])(
+		'suppresses a stale write-memory response after $invalidation ($response.bytesWritten)',
+		async ({ invalidation, response }) => {
+			runtimeState.initializeCapabilities = { supportsWriteMemoryRequest: true };
+			let resolveWrite!: (response: unknown) => void;
+			runtimeState.responseOverrides.set(
+				'writeMemory',
+				new Promise<unknown>((resolve) => {
+					resolveWrite = resolve;
+				})
+			);
+			const events: Array<{ type: string }> = [];
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: (event) => events.push(event),
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({
+						manifestVersion: 2,
+						debugger: { capabilities: { writeMemory: true } }
+					})
+				})) as unknown as typeof fetch
+			});
+			const completion = controller.start().then(
+				() => null,
+				(error: unknown) => error
+			);
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			await emitStoppedAndWait(runtimeState.session!);
+			const write = controller.writeMemory('0x1000', 0, Uint8Array.of(1));
+			await vi.waitFor(() =>
+				expect(runtimeState.session!.requests.at(-1)?.command).toBe('writeMemory')
+			);
+
+			if (invalidation === 'continue') {
+				runtimeState.session!.emit({
+					event: 'continued',
+					body: { threadId: 7, allThreadsContinued: true }
+				});
+			} else {
+				runtimeState.session!.emit({
+					event: 'stopped',
+					body: { reason: 'step', threadId: 7 }
+				});
+			}
+			resolveWrite(response);
+
+			await expect(write).resolves.toBeNull();
+			expect(runtimeState.session!.disposeCount).toBe(0);
+			expect(events.filter((event) => event.type === 'stop')).toHaveLength(0);
+			runtimeState.session!.emitLifecycle({ type: 'target-exit', exitCode: 0 });
+			await expect(completion).resolves.toBeNull();
+		}
+	);
+
+	it('does not access memory unless LLDB initialize advertises the requests', async () => {
+		runtimeState.initializeCapabilities = {
+			supportsReadMemoryRequest: false,
+			supportsWriteMemoryRequest: false
+		};
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { readMemory: true, writeMemory: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
+
+		await expect(controller.readMemory('0x1000', 0, 4)).resolves.toBeNull();
+		await expect(
+			controller.writeMemory('0x1000', 0, Uint8Array.of(1, 2, 3, 4))
+		).resolves.toBeNull();
+		expect(runtimeState.session?.requests).not.toContainEqual(
+			expect.objectContaining({ command: 'readMemory' })
+		);
+		expect(runtimeState.session?.requests).not.toContainEqual(
+			expect.objectContaining({ command: 'writeMemory' })
+		);
+
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('discovers and replaces manifest-qualified LLDB data breakpoints', async () => {
+		runtimeState.initializeCapabilities = { supportsDataBreakpoints: true };
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { dataBreakpoints: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
+		await expect(
+			controller.dataBreakpointInfo({ name: '0x1000', asAddress: true, bytes: 4 })
+		).resolves.toEqual({
+			dataId: '1000/4',
+			description: '4 bytes at 1000',
+			accessTypes: ['read', 'write', 'readWrite'],
+			canPersist: false
+		});
+		await expect(
+			controller.setDataBreakpoints([{ dataId: '1000/4', accessType: 'write' }])
+		).resolves.toEqual([{ id: 5, verified: true }]);
+		expect(runtimeState.session?.requests.slice(-2)).toEqual([
+			{
+				command: 'dataBreakpointInfo',
+				args: { name: '0x1000', asAddress: true, bytes: 4 }
+			},
+			{
+				command: 'setDataBreakpoints',
+				args: { breakpoints: [{ dataId: '1000/4', accessType: 'write' }] }
+			}
+		]);
+
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it.each([
+		{
+			caseName: 'DAP response timeout',
+			breakpoints: [{ dataId: '1000/4', accessType: 'write' as const }],
+			failure: new Error('DAP response timeout after 15000ms: setDataBreakpoints')
+		},
+		{
+			caseName: 'negative DAP response while clearing',
+			breakpoints: [],
+			failure: new Error('Unable to remove the active data breakpoint')
+		},
+		{
+			caseName: 'malformed DAP response',
+			breakpoints: [{ dataId: '1000/4', accessType: 'write' as const }],
+			response: { breakpoints: [{ id: 5, verified: 'yes' }] }
+		}
+	])(
+		'fails, disposes, and permits a clean relaunch after a current $caseName',
+		async ({ breakpoints, failure, response }) => {
+			runtimeState.initializeCapabilities = { supportsDataBreakpoints: true };
+			const events: Array<{ type: string }> = [];
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: (event) => events.push(event),
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({
+						manifestVersion: 2,
+						debugger: { capabilities: { dataBreakpoints: true } }
+					})
+				})) as unknown as typeof fetch
+			});
+
+			const firstCompletionError = controller.start().then(
+				() => null,
+				(error: unknown) => error
+			);
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			const failedSession = runtimeState.session!;
+			await emitStoppedAndWait(failedSession);
+			if (failure) runtimeState.requestErrors.set('setDataBreakpoints', failure);
+			else runtimeState.responseOverrides.set('setDataBreakpoints', response);
+
+			const replacementError = await controller.setDataBreakpoints(breakpoints).then(
+				() => null,
+				(error: unknown) => error
+			);
+			if (failure) expect(replacementError).toBe(failure);
+			else expect(replacementError).toBeInstanceOf(ProtocolError);
+			await expect(firstCompletionError).resolves.toBe(replacementError);
+			await vi.waitFor(() => expect(failedSession.disposeCount).toBe(1));
+			expect(events.filter((event) => event.type === 'stop')).toHaveLength(1);
+			await expect(controller.debugCommand('continue')).rejects.toThrow(
+				'LLDB sandbox session is not running.'
+			);
+			expect(failedSession.requests).not.toContainEqual(
+				expect.objectContaining({ command: 'continue' })
+			);
+
+			runtimeState.requestErrors.delete('setDataBreakpoints');
+			runtimeState.responseOverrides.delete('setDataBreakpoints');
+			const secondCompletion = controller.start();
+			await vi.waitFor(() => expect(runtimeState.session).not.toBe(failedSession));
+			const relaunchedSession = runtimeState.session!;
+			await emitStoppedAndWait(relaunchedSession);
+			await expect(
+				controller.setDataBreakpoints([{ dataId: '2000/4', accessType: 'write' }])
+			).resolves.toEqual([{ id: 5, verified: true }]);
+			expect(relaunchedSession.disposeCount).toBe(0);
+
+			await controller.disconnect();
+			await expect(secondCompletion).resolves.toBe(true);
+		}
+	);
+
+	it('keeps a successful unverified data-breakpoint replacement nonfatal', async () => {
+		runtimeState.initializeCapabilities = { supportsDataBreakpoints: true };
+		const events: Array<{ type: string }> = [];
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: (event) => events.push(event),
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { dataBreakpoints: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		const session = runtimeState.session!;
+		await emitStoppedAndWait(session);
+		runtimeState.responseOverrides.set('setDataBreakpoints', {
+			breakpoints: [{ id: 5, verified: false, message: 'unsupported location' }]
+		});
+
+		await expect(
+			controller.setDataBreakpoints([{ dataId: '1000/4', accessType: 'write' }])
+		).resolves.toEqual([{ id: 5, verified: false, message: 'unsupported location' }]);
+		expect(session.disposeCount).toBe(0);
+		expect(events.filter((event) => event.type === 'stop')).toHaveLength(0);
+		await controller.debugCommand('continue');
+		expect(session.requests).toContainEqual({ command: 'continue', args: { threadId: 7 } });
+
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('treats null or omitted data IDs as unavailable and allows clearing all data breakpoints', async () => {
+		runtimeState.initializeCapabilities = { supportsDataBreakpoints: true };
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { dataBreakpoints: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
+
+		runtimeState.responseOverrides.set('dataBreakpointInfo', {
+			dataId: null,
+			description: 'not available'
+		});
+		await expect(controller.dataBreakpointInfo({ name: 'counter' })).resolves.toEqual({
+			description: 'not available'
+		});
+		runtimeState.responseOverrides.set('dataBreakpointInfo', {
+			description: 'still not available'
+		});
+		await expect(controller.dataBreakpointInfo({ name: 'counter' })).resolves.toEqual({
+			description: 'still not available'
+		});
+
+		runtimeState.responseOverrides.set('setDataBreakpoints', { breakpoints: [] });
+		await expect(controller.setDataBreakpoints([])).resolves.toEqual([]);
+		expect(runtimeState.session?.requests.at(-1)).toEqual({
+			command: 'setDataBreakpoints',
+			args: { breakpoints: [] }
+		});
+
+		await controller.disconnect();
+		await expect(completion).resolves.toBe(true);
+	});
+
+	it('requires both the runtime manifest and DAP capability for data breakpoints', async () => {
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { dataBreakpoints: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
+		await expect(
+			controller.dataBreakpointInfo({ name: '0x1000', asAddress: true, bytes: 4 })
+		).resolves.toBeNull();
+		await expect(controller.setDataBreakpoints([])).resolves.toEqual([]);
+		expect(runtimeState.session?.requests).not.toContainEqual(
+			expect.objectContaining({ command: 'dataBreakpointInfo' })
+		);
 
 		await controller.disconnect();
 		await expect(completion).resolves.toBe(true);
@@ -1581,6 +3215,33 @@ describe('LldbSandboxSession', () => {
 			invoke: (controller: LldbSandboxSession) => controller.readMemory('0x1000', 0, 6)
 		},
 		{
+			command: 'dataBreakpointInfo',
+			response: { dataId: '', description: 'empty identifier' },
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({ name: 'counter' })
+		},
+		{
+			command: 'dataBreakpointInfo',
+			response: { dataId: 'x'.repeat(4097), description: 'oversized identifier' },
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({ name: 'counter' })
+		},
+		{
+			command: 'dataBreakpointInfo',
+			response: { description: 'duplicate access', accessTypes: ['read', 'read'] },
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({ name: 'counter' })
+		},
+		{
+			command: 'dataBreakpointInfo',
+			response: {
+				description: 'too many access modes',
+				accessTypes: ['read', 'write', 'readWrite', 'read']
+			},
+			invoke: (controller: LldbSandboxSession) =>
+				controller.dataBreakpointInfo({ name: 'counter' })
+		},
+		{
 			command: 'evaluate',
 			response: { variablesReference: 0 },
 			invoke: async (controller: LldbSandboxSession) => {
@@ -1591,6 +3252,12 @@ describe('LldbSandboxSession', () => {
 	])(
 		'fails and disposes the live session for a malformed $command response',
 		async ({ command, response, invoke }) => {
+			if (command === 'dataBreakpointInfo') {
+				runtimeState.initializeCapabilities = {
+					...runtimeState.initializeCapabilities,
+					supportsDataBreakpoints: true
+				};
+			}
 			const events: Array<{ type: string }> = [];
 			const controller = new LldbSandboxSession({
 				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
@@ -1609,7 +3276,11 @@ describe('LldbSandboxSession', () => {
 					json: async () => ({
 						manifestVersion: 2,
 						debugger: {
-							capabilities: { evaluateExpressions: true, readMemory: true }
+							capabilities: {
+								evaluateExpressions: true,
+								readMemory: true,
+								dataBreakpoints: true
+							}
 						}
 					})
 				})) as unknown as typeof fetch
@@ -1621,6 +3292,7 @@ describe('LldbSandboxSession', () => {
 				(error: unknown) => error
 			);
 			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			await emitStoppedAndWait(runtimeState.session!);
 			runtimeState.responseOverrides.set(command, response);
 
 			await expect(invoke(controller)).rejects.toBeInstanceOf(ProtocolError);

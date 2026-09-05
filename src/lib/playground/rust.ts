@@ -2,11 +2,14 @@ import {
 	resolveDebugRuntimeUrls,
 	resolveRustCompilerUrl,
 	resolveRustDebugModuleUrl,
-	type PlaygroundRuntimeAssets
+	type PlaygroundRuntimeAssets,
+	type RuntimeAssetIntegrityEntry
 } from '$lib/playground/assets';
 import { LldbSandboxSession, type LldbArtifactPayload } from '$lib/playground/lldbSession';
 import {
 	type DebugCommand,
+	type DebugDataBreakpoint,
+	type DebugDataBreakpointInfoArguments,
 	type DebugSessionEvent,
 	resolveSandboxExecutionArgs,
 	type CompilerDiagnostic,
@@ -85,6 +88,7 @@ class Rust implements Sandbox {
 	assetPath = '';
 	debugRuntimeBaseUrl = '';
 	debugManifestUrl = '';
+	debugManifestReceipt?: Readonly<RuntimeAssetIntegrityEntry>;
 	executableGraphFingerprint = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
@@ -164,8 +168,9 @@ class Rust implements Sandbox {
 				const nextCompilerUrl = resolveRustCompilerUrl(runtimeAssets, currentUrl);
 				const nextDebugModuleUrl = resolveRustDebugModuleUrl(runtimeAssets, currentUrl);
 				const debugRuntime = resolveDebugRuntimeUrls(runtimeAssets, currentUrl);
-				this.debugRuntimeBaseUrl = debugRuntime.baseUrl;
-				this.debugManifestUrl = debugRuntime.manifestUrl;
+				const nextDebugRuntimeBaseUrl = debugRuntime.baseUrl;
+				const nextDebugManifestUrl = debugRuntime.manifestUrl;
+				const nextDebugManifestReceipt = debugRuntime.manifestReceipt;
 				const nextAssetPath =
 					typeof runtimeAssets === 'string'
 						? runtimeAssets
@@ -227,6 +232,9 @@ class Rust implements Sandbox {
 					this.executableGraphFingerprint !==
 						WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint;
 				if (!needsWorkerReset) {
+					this.debugRuntimeBaseUrl = nextDebugRuntimeBaseUrl;
+					this.debugManifestUrl = nextDebugManifestUrl;
+					this.debugManifestReceipt = nextDebugManifestReceipt;
 					progress?.set?.(1);
 					return;
 				}
@@ -351,6 +359,9 @@ class Rust implements Sandbox {
 				this.compilerUrl = nextCompilerUrl;
 				this.debugModuleUrl = nextDebugModuleUrl;
 				this.assetPath = nextAssetPath;
+				this.debugRuntimeBaseUrl = nextDebugRuntimeBaseUrl;
+				this.debugManifestUrl = nextDebugManifestUrl;
+				this.debugManifestReceipt = nextDebugManifestReceipt;
 				this.executableGraphFingerprint = WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint;
 				if (this.worker && this.worker !== candidateWorker) {
 					this.workerSession.terminate('Rust runtime worker replaced');
@@ -472,16 +483,36 @@ class Rust implements Sandbox {
 					if (phaseTimeoutState !== state || state.paused || settled) return;
 					phaseTimeout = undefined;
 					state.remainingMs = 0;
-					this.workerSession.terminate(
-						new TimeoutError(
-							`Rust ${state.phase} timed out after ${state.timeoutMs} ms`,
-							{
-								phase: state.phase === 'compile' ? 'compile' : 'execute',
-								runtimeId: 'RUST',
-								timeoutMs: state.timeoutMs
-							}
-						)
+					const timeoutError = new TimeoutError(
+						`Rust ${state.phase} timed out after ${state.timeoutMs} ms`,
+						{
+							phase: state.phase === 'compile' ? 'compile' : 'execute',
+							runtimeId: 'RUST',
+							timeoutMs: state.timeoutMs
+						}
 					);
+					const lldbSession = this.lldbSession;
+					if (!lldbSession) {
+						this.workerSession.terminate(timeoutError);
+						return;
+					}
+					if (!this.workerSession.complete(operation)) return;
+					let disconnecting: Promise<void>;
+					try {
+						disconnecting = Promise.resolve(lldbSession.disconnect());
+					} catch {
+						disconnecting = Promise.resolve();
+					}
+					void disconnecting
+						.catch(() => undefined)
+						.then(() => {
+							if (this.lldbSession === lldbSession) this.lldbSession = undefined;
+							this.lldbEditorSourcePath = rustLldbSourcePath;
+							this.exit = true;
+							this.waitingForInput = false;
+							this.pendingEof = false;
+							finishReject(timeoutError);
+						});
 				}, state.remainingMs);
 			};
 			const debugPhaseTimeout: DebugPhaseTimeoutControl = {
@@ -526,6 +557,12 @@ class Rust implements Sandbox {
 				reject(reason);
 			};
 			const abortRun = () => {
+				try {
+					const disconnecting = this.lldbSession?.disconnect();
+					if (disconnecting) void Promise.resolve(disconnecting).catch(() => {});
+				} catch {
+					// Worker termination below still settles the run if LLDB teardown throws.
+				}
 				this.workerSession.terminate(
 					options.signal?.reason ?? new Error('Rust runtime run aborted')
 				);
@@ -629,6 +666,7 @@ class Rust implements Sandbox {
 					const compilerWorker = this.worker;
 					const lldbSession = new LldbSandboxSession({
 						manifestUrl: this.debugManifestUrl,
+						manifestReceipt: this.debugManifestReceipt,
 						runtimeBaseUrl: this.debugRuntimeBaseUrl,
 						artifact: lldbArtifact as LldbArtifactPayload,
 						sourcePath: rustLldbSourcePath,
@@ -827,6 +865,26 @@ class Rust implements Sandbox {
 		return (
 			this.lldbSession?.readMemory(memoryReference, offset, count) ?? Promise.resolve(null)
 		);
+	}
+
+	debugWriteMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial = false
+	) {
+		return (
+			this.lldbSession?.writeMemory(memoryReference, offset, data, allowPartial) ??
+			Promise.resolve(null)
+		);
+	}
+
+	debugDataBreakpointInfo(arguments_: DebugDataBreakpointInfoArguments) {
+		return this.lldbSession?.dataBreakpointInfo(arguments_) ?? Promise.resolve(null);
+	}
+
+	debugSetDataBreakpoints(breakpoints: DebugDataBreakpoint[]) {
+		return this.lldbSession?.setDataBreakpoints(breakpoints) ?? Promise.resolve([]);
 	}
 
 	kill() {

@@ -102,11 +102,27 @@ debug target connects.
 `@wasm-idle/llvm-core/debug` owns the browser session and `wasm-llvm` owns the pinned LLDB/WAMR
 producers and binary manifests.
 
-Debugging requires `SharedArrayBuffer` and a cross-origin-isolated deployment. The LLDB and WAMR
-assets are not downloaded until a supported debug session starts. If the LLDB manifest is absent,
-invalid, or does not advertise the required breakpoint/step/stack/local capabilities, the
+Debugging requires `SharedArrayBuffer` and a cross-origin-isolated deployment. Because verified
+runtime bytes are executed through Blob-backed ES modules and nested pthread Workers, the deployed
+Content Security Policy's `script-src`, `worker-src`, and `connect-src` must permit `blob:`. The
+LLDB and WAMR assets are not downloaded until a supported debug session starts. The bundled raw manifest is
+checked against its release receipt before parsing, and custom runtime locations must provide an
+explicit expected manifest SHA-256. The six executable assets are then streamed, bounded, and
+hash-verified exactly once before their owned bytes are transferred to the Workers. Workers do not
+re-fetch executable runtime URLs. Clean Pages builds fetch the exact pinned producer revision and
+manifest receipt through the shared release profile before the application build. The deployment
+refuses publication when any logical LLDB/WAMR asset is missing or mismatched after re-verifying
+raw or compressed logical bytes. If transactional publication cannot safely restore or identify an
+owned generation, its `.wasm-debug.next-*` and `.wasm-debug.previous-*` recovery artifacts are
+preserved for operator inspection. Later synchronization and the final Pages verifier fail closed
+until those artifacts (or a leftover `.wasm-debug.sync.lock*`) are manually inspected and resolved;
+they are never silently deleted or published. This build-time preparation does not change lazy browser loading:
+clients fetch the debugger payload only when a supported debug session starts. If the LLDB manifest
+is absent, invalid, or does not advertise
+the required breakpoint/step/stack/local capabilities, the
 playground labels that run as a trace fallback and keeps the existing instrumentation debugger
-available. Build and verify both producers
+available. LLDB-designated browser fixtures reject trace fallback, while a separate missing-asset
+fixture qualifies the pre-session trace alternative. Build and verify both producers
 using [`producer/lldb-browser`](../wasm-llvm/producer/lldb-browser) and
 [`producer/wamr-browser`](../wasm-llvm/producer/wamr-browser), then assemble them with the Clang
 release:
@@ -119,10 +135,53 @@ and runtime-specific behavior can differ. Trace fallback is selected only before
 established; an LLDB or WAMR failure ends that session instead of silently changing debugger
 semantics.
 
-Full expression evaluation, conditional/log/data breakpoints, variable mutation, restart,
-standalone terminate, optimized-debug guarantees, C++ exception support, STL pretty-printers,
-`wasm64`, guest threads, reverse debugging, SIMD, multi-module guests, and Rust WASI Preview 2/3
-debugging are outside the v1 support boundary.
+Stable v2 inherits that exact release boundary: 64-bit desktop Chromium on Linux, a
+cross-origin-isolated deployment, one active session, pinned C/C++ and `wasm32-wasip1` Rust
+producer artifacts at `-O0` with embedded DWARF, and a new WAMR debug execution rather than an
+attachment to an existing browser-engine run. DAP is an internal product protocol boundary; v2
+does not claim compatibility with arbitrary third-party DAP clients or arbitrary externally
+produced Wasm/DWARF artifacts.
+
+Pause is bounded but is not guaranteed to yield an inspectable stop while WAMR is blocked in a
+synchronous host call. In particular, a synchronous WAMR stdin read may time out instead of
+producing an inspectable pause. After that explicit timeout, **Stop Debug** still performs bounded
+Worker cleanup and permits a fresh debug execution; the session never remains indefinitely pending.
+
+Stable v2 adds bounded variable-path watches and a paused-target memory inspector.
+Watch fallback accepts identifiers, nested fields, and non-negative indexes without enabling general
+expression evaluation. The memory panel can select a variable's DAP `memoryReference`, reads at most
+256 bytes per request, pages by the selected byte count, renders hexadecimal/ASCII data and unreadable
+bytes as `??`, and discards a response when the target resumes or the selected frame changes. While
+paused, it also accepts 1–256 two-digit hexadecimal bytes for a raw target-memory write and refreshes
+the displayed range after a successful write. This edits memory only; it does not provide typed
+`setVariable` semantics, validate that a value is safe for the guest, or preserve the mutation after
+restart. The complete UI write path is qualified in real Chromium with `wasm32-wasi` C/C++ and
+`wasm32-wasip1` Rust programs.
+While paused, the same panel can install one session-scoped LLDB data breakpoint over a 1–256 byte
+memory range. The browser gate qualifies `wasm32-wasi` C write, C++ read/write, and
+`wasm32-wasip1` Rust read access. Setting a new data breakpoint replaces the previous set, and
+**Clear** sends an empty replacement set to the target. Its opaque DAP data ID is never persisted
+across restart or a new debug execution. Because WAMR reports a completed memory access, the stopped
+source location can be the next executable line after the watched instruction.
+If a replacement or clear request times out, is rejected, or returns malformed DAP data, the debug
+execution stops and disposes both Workers so the UI cannot continue with an uncertain watchpoint
+set; **Restart Debug** then starts a clean execution. A successful but unverified replacement remains
+nonfatal and is reported as unverified.
+The Chromium qualification includes an indexed one-byte watched subrange that overlaps a four-byte scalar store.
+LLDB uses modify semantics for write mode: a write data breakpoint stops when at least one watched byte changes;
+a same-value store is reported by WAMR but automatically resumed by LLDB.
+Data breakpoints cover scalar classic-interpreter loads and stores only.
+Bulk-memory operations and host-side memory writes do not trigger data breakpoints; guest threads
+and memories outside the supported linear-memory configuration remain out of scope. Trace fallback
+does not advertise or emulate data breakpoints.
+The v2 **Restart Debug** action fully disposes the active LLDB and WAMR Workers, waits for the old
+execution to settle, and launches a fresh debug execution from the current workspace. It does not
+preserve target state or advertise the DAP `restart` capability.
+
+Full expression evaluation, conditional/log breakpoints, typed variable mutation through DAP
+`setVariable`, DAP in-session restart, standalone terminate, optimized-debug guarantees, C++
+exception support, STL pretty-printers, `wasm64`, guest threads, reverse debugging, SIMD,
+multi-module guests, and Rust WASI Preview 2/3 debugging remain outside the supported boundary.
 
 ```sh
 cd ../wasm-llvm
@@ -184,7 +243,7 @@ when they exist.
 | Bash<br>`BASH`                     | @wasm-idle/runtime-bash@0.1.0 / GNU Bash WASIX + receipt-pinned @wasmer/sdk@0.9.0 profile                                                                                      | host-verifies one profile manifest, the stored SDK JavaScript, Wasmer Wasm, and WEBc before starting a fixed worker generation with no runtime-asset fetches; invokes `bash -c <code> <activePath> ...programArgs` and supports `stdin`, `programArgs`, `activePath`, and `workspaceFiles`                                                                                                                                                                                                                                                                              | `rootUrl` mirrors reuse the bundled profile; explicit `runtimeAssets.bash.baseUrl`/`manifestUrl`/`moduleUrl`/`wasmerWasmUrl`/`webcUrl` overrides require one complete profile; `workerUrl` is rejected; `stdin`, `programArgs`, `activePath`, `workspaceFiles`                                                                                   |
 | ClojureScript<br>`CLOJURESCRIPT`   | @wasm-idle/runtime-clojurescript@0.1.0 / ClojureScript 1.12.134                                                                                                                | static worker compiles and evaluates with the official `cljs.js` self-hosted compiler; supports `stdin`, `programArgs`, `activePath`, and `workspaceFiles`                                                                                                                                                                                                                                                                                                                                                                                                              | `runtimeAssets.clojurescript.baseUrl`/`runtimeAssets.clojurescript.workerUrl` or `PUBLIC_WASM_CLOJURESCRIPT_BASE_URL`/`PUBLIC_WASM_CLOJURESCRIPT_WORKER_URL`; `programArgs`, `activePath`, `workspaceFiles`                                                                                                                                      |
 | TinyGo<br>`TINYGO`                 | wasm-tinygo@0.0.0 / upstream TinyGo 0.40.1 browser toolchain                                                                                                                   | receipt-verifies and runs upstream `cmd/go` plus TinyGo in a disposable capped Worker; targets `wasip1`; supports `stdin`, `programArgs`, `workspaceFiles`, hosted C++ without exceptions/RTTI, and offline `vendor/modules.txt`                                                                                                                                                                                                                                                                                                                                        | `runtimeAssets.tinygo.moduleUrl`/`assetLoader`; `PUBLIC_WASM_TINYGO_MODULE_URL`, execution/workspace resource limits, `programArgs`                                                                                                                                                                                                              |
-| OCaml<br>`OCAML`                   | wasm-of-js-of-ocaml@0.1.0 / js_of_ocaml + wasm_of_ocaml                                                                                                                        | default backend `wasm`; selectable `wasm`, `js`; `ocamlWasmBinaryenMode` `fast`, `full`; supports `stdin`                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `runtimeAssets.ocaml.moduleUrl`/`manifestUrl` or `PUBLIC_WASM_OCAML_*`; `ocamlBackend`                                                                                                                                                                                                                                                           |
+| OCaml<br>`OCAML`                   | wasm-of-js-of-ocaml@0.1.0 / js_of_ocaml + wasm_of_ocaml                                                                                                                        | default backend `wasm`; selectable `wasm`, `js`; `ocamlWasmBinaryenMode` `fast`, `full`; supports `stdin`; outer module and manifest are size/SHA-256 verified before use                                                                                                                                                                                                                                                                                                                                                                                               | `runtimeAssets.ocaml.moduleUrl`/`manifestUrl` plus `moduleReceipt`/`manifestReceipt` for a custom generation, or `PUBLIC_WASM_OCAML_*` for a mirror of the bundled generation; `ocamlBackend`                                                                                                                                                    |
 | JavaScript<br>`JAVASCRIPT`         | wasm-typescript@0.1.0 / @swc/wasm-typescript@1.15.33                                                                                                                           | TypeScript service transpiles JS/TS and runs in browser sandbox; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `runtimeAssets.typescript.moduleUrl`/`libUrl` or `PUBLIC_WASM_TYPESCRIPT_MODULE_URL`                                                                                                                                                                                                                                                             |
 | TypeScript<br>`TYPESCRIPT`         | wasm-typescript@0.1.0 / @swc/wasm-typescript@1.15.33                                                                                                                           | TypeScript service transpiles then runs in browser sandbox; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `runtimeAssets.typescript.moduleUrl`/`libUrl` or `PUBLIC_WASM_TYPESCRIPT_MODULE_URL`                                                                                                                                                                                                                                                             |
 | AssemblyScript<br>`ASSEMBLYSCRIPT` | static ESM `static/wasm-assemblyscript/runtime.mjs` produced from assemblyscript@0.28.17 + @assemblyscript/loader@0.28.17                                                      | `asc <activePath> --outFile module.wasm --runtime incremental --bindings raw --optimize --exportRuntime`; runs the emitted WASM through WASI/browser imports and supports `stdin`                                                                                                                                                                                                                                                                                                                                                                                       | `runtimeAssets.assemblyscript.moduleUrl` or `PUBLIC_WASM_ASSEMBLYSCRIPT_MODULE_URL` or `rootUrl`; `stdin`, `activePath`, `workspaceFiles`                                                                                                                                                                                                        |
@@ -660,7 +719,9 @@ fingerprint. It then transfers exactly those three verified logical buffers to a
 that performs no runtime-asset fetches. A `rootUrl` mirror reuses the bundled profile. Any explicit
 `runtimeAssets.ruby` override must provide one complete identity-and-receipt profile and use its
 same-origin canonical paths with absent or exact receipt query pins. URL-only
-`PUBLIC_WASM_RUBY_*` overrides intentionally fail closed.
+`PUBLIC_WASM_RUBY_*` overrides intentionally fail closed. The producer receipt covers every
+package-owned Vite file but excludes pnpm-generated nested `node_modules/.bin/` launch shims, whose
+installation paths are not reproducible package content.
 AssemblyScript dynamically imports `static/wasm-assemblyscript/runtime.mjs`, produced from the
 pinned AssemblyScript compiler and loader. Override it with
 `PUBLIC_WASM_ASSEMBLYSCRIPT_MODULE_URL` or `runtimeAssets.assemblyscript.moduleUrl`. Compilation

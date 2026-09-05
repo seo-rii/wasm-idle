@@ -115,6 +115,26 @@ describe('core language contract', () => {
 		expect(firstKey).not.toBe(secondKey);
 	});
 
+	it('includes OCaml outer receipts in runtime asset cache keys', () => {
+		const base = {
+			moduleUrl: '/wasm-ocaml/index.js?v=test',
+			manifestUrl: '/wasm-ocaml/manifest.json?v=test',
+			moduleReceipt: { bytes: 123, sha256: 'a'.repeat(64) },
+			manifestReceipt: { bytes: 456, sha256: 'b'.repeat(64) }
+		};
+		const firstKey = createRuntimeAssetsKey({ ocaml: base });
+		const secondKey = createRuntimeAssetsKey({
+			ocaml: {
+				...base,
+				moduleReceipt: { ...base.moduleReceipt, sha256: 'c'.repeat(64) }
+			}
+		});
+
+		expect(firstKey).toContain('"ocamlModuleReceipt":');
+		expect(firstKey).toContain('"ocamlManifestReceipt":');
+		expect(firstKey).not.toBe(secondKey);
+	});
+
 	it('rejects malformed runtime integrity metadata before key generation', () => {
 		expect(() =>
 			createRuntimeAssetsKey({

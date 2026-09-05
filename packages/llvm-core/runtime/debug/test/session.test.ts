@@ -1,3 +1,5 @@
+import { runInNewContext } from 'node:vm';
+
 import { describe, expect, it } from 'vitest';
 
 import { DapMessageParser, encodeDapMessage } from '../src/dap-client.js';
@@ -16,6 +18,7 @@ import type {
 
 const hash = 'a'.repeat(64);
 const assetHash = 'a647260c0a2f386cdb893fdc303169041dcf2955da1fa881501863ec8b968785';
+const validWasmModule = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 const manifest: RuntimeManifestV2 = {
 	manifestVersion: 2,
 	version: 'test',
@@ -69,6 +72,7 @@ const manifest: RuntimeManifestV2 = {
 			locals: true,
 			globals: true,
 			readMemory: true,
+			writeMemory: true,
 			evaluateExpressions: false,
 			dataBreakpoints: false,
 			wasmThreads: false
@@ -78,7 +82,9 @@ const manifest: RuntimeManifestV2 = {
 
 class FakeWorker implements WorkerLike {
 	readonly received: DebugWorkerInboundMessage[] = [];
+	readonly transferLists: Transferable[][] = [];
 	readonly requests: DapRequest[] = [];
+	readonly responseDelayMs = new Map<string, number>();
 	private readonly listeners = new Set<
 		(event: MessageEvent<DebugWorkerOutboundMessage>) => void
 	>();
@@ -95,12 +101,14 @@ class FakeWorker implements WorkerLike {
 		private readonly suppressedResponses = new Set<string>(),
 		private readonly initializeBody: unknown = {
 			supportsConfigurationDoneRequest: true,
-			supportsReadMemoryRequest: true
+			supportsReadMemoryRequest: true,
+			supportsWriteMemoryRequest: true
 		}
 	) {}
 
-	postMessage(message: DebugWorkerInboundMessage) {
+	postMessage(message: DebugWorkerInboundMessage, transfer: Transferable[] = []) {
 		this.received.push(message);
+		this.transferLists.push(transfer);
 		if (message.type === 'initialize-target') {
 			const stdout = new SharedByteQueue(message.stdout);
 			stdout.tryWrite(new TextEncoder().encode('target output\n'));
@@ -279,6 +287,10 @@ class FakeWorker implements WorkerLike {
 					continue;
 				}
 				if (this.suppressedResponses.has(request.command)) continue;
+				const responseDelayMs = this.responseDelayMs.get(request.command);
+				if (responseDelayMs !== undefined) {
+					await new Promise((resolve) => setTimeout(resolve, responseDelayMs));
+				}
 				const response: DapResponse = {
 					seq: this.commands.length + 100,
 					type: 'response',
@@ -298,7 +310,11 @@ class FakeWorker implements WorkerLike {
 								: {}
 				};
 				await output.write(encodeDapMessage(response));
-				if (request.command === 'configurationDone' && pendingAttach) {
+				if (
+					request.command === 'configurationDone' &&
+					pendingAttach &&
+					!this.suppressedResponses.has('attach')
+				) {
 					const attachResponse: DapResponse = {
 						seq: this.commands.length + 101,
 						type: 'response',
@@ -319,13 +335,14 @@ describe('BrowserLldbSession', () => {
 	it.each([
 		['null body', null],
 		['array body', []],
-		['non-boolean capability', { supportsReadMemoryRequest: 'yes' }]
+		['non-boolean read capability', { supportsReadMemoryRequest: 'yes' }],
+		['non-boolean write capability', { supportsWriteMemoryRequest: 'yes' }]
 	])('rejects an invalid DAP initialize capability %s', async (_label, initializeBody) => {
 		const workers: FakeWorker[] = [];
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [{ path: '/workspace/main.cpp', content: 'int main() { return 0; }' }],
 			workerFactory: (kind) => {
 				const worker = new FakeWorker(kind, [], false, false, new Set(), initializeBody);
@@ -351,7 +368,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [{ path: '/workspace/main.cpp', content: 'int main() { return 0; }' }],
 			breakpoints: [
 				{
@@ -379,7 +396,8 @@ describe('BrowserLldbSession', () => {
 
 		await expect(session.initialize()).resolves.toMatchObject({
 			supportsConfigurationDoneRequest: true,
-			supportsReadMemoryRequest: true
+			supportsReadMemoryRequest: true,
+			supportsWriteMemoryRequest: true
 		});
 		expect(commands).toEqual(['initialize', 'attach', 'setBreakpoints', 'configurationDone']);
 		expect(memory).toEqual(['target:256', 'lldb:512']);
@@ -807,6 +825,195 @@ describe('BrowserLldbSession', () => {
 		expect(commands).toContain('disconnect');
 	});
 
+	it('retires a saturated stdin write with the session disposal reason', async () => {
+		const commands: string[] = [];
+		const workers: FakeWorker[] = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources: [{ path: '/workspace/main.cpp', content: 'int main() { return 0; }' }],
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, commands);
+				workers.push(worker);
+				return worker;
+			},
+			fetchImpl: async () => new Response('debug-asset'),
+			queueCapacity: 4 * 1024,
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+		await session.initialize();
+		const targetWorker = workers.find((worker) => worker.kind === 'target');
+		const targetInit = targetWorker?.received.find(
+			(message) => message.type === 'initialize-target'
+		);
+		if (!targetInit || targetInit.type !== 'initialize-target') {
+			throw new Error('target stdin queue was not initialized');
+		}
+		const stdin = new SharedByteQueue(targetInit.stdin);
+
+		const writeOutcome = session.writeStdin('x'.repeat(8 * 1024)).then<Error | undefined>(
+			() => undefined,
+			(error: unknown) => error as Error
+		);
+		await expect.poll(() => stdin.available).toBe(4 * 1024);
+		const eofOutcome = session.closeStdin().then(
+			() => 'settled' as const,
+			(error: unknown) => error
+		);
+		await session.disconnect();
+
+		await expect(writeOutcome).resolves.toMatchObject({
+			message: 'LLDB debug session is disposed'
+		});
+		await expect(eofOutcome).resolves.toBe('settled');
+		expect(stdin.closed).toBe(true);
+		expect(workers).toHaveLength(2);
+		expect(workers.every((worker) => worker.isTerminated)).toBe(true);
+	});
+
+	it('allows attach to outlive the request timeout while initial breakpoints are configured', async () => {
+		const commands: string[] = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources: [
+				{ path: '/workspace/main.cpp', content: 'int main() { return 0; }' },
+				{ path: '/workspace/first.cpp', content: 'void first() {}' },
+				{ path: '/workspace/second.cpp', content: 'void second() {}' }
+			],
+			breakpoints: [
+				{ source: { path: '/workspace/main.cpp' }, lines: [1] },
+				{ source: { path: '/workspace/first.cpp' }, lines: [1] },
+				{ source: { path: '/workspace/second.cpp' }, lines: [1] }
+			],
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, commands);
+				if (kind === 'lldb') worker.responseDelayMs.set('setBreakpoints', 200);
+				return worker;
+			},
+			fetchImpl: async () => new Response('debug-asset'),
+			requestTimeoutMs: 500,
+			readyTimeoutMs: 1_000
+		});
+
+		try {
+			await expect(session.initialize()).resolves.toMatchObject({
+				supportsConfigurationDoneRequest: true
+			});
+			expect(commands).toEqual([
+				'initialize',
+				'attach',
+				'setBreakpoints',
+				'setBreakpoints',
+				'setBreakpoints',
+				'configurationDone'
+			]);
+		} finally {
+			await session.disconnect();
+		}
+	});
+
+	it('bounds a missing attach response after configuration is complete', async () => {
+		const commands: string[] = [];
+		const workers: FakeWorker[] = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources: [{ path: '/workspace/main.cpp', content: 'int main() { return 0; }' }],
+			breakpoints: [{ source: { path: '/workspace/main.cpp' }, lines: [1] }],
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(
+					kind,
+					commands,
+					false,
+					false,
+					kind === 'lldb' ? new Set(['attach']) : new Set()
+				);
+				workers.push(worker);
+				return worker;
+			},
+			fetchImpl: async () => new Response('debug-asset'),
+			requestTimeoutMs: 50,
+			readyTimeoutMs: 1_000
+		});
+		const initialization = session.initialize();
+
+		try {
+			await expect(
+				Promise.race([
+					initialization,
+					new Promise<never>((_, reject) => {
+						setTimeout(() => reject(new Error('test attach deadline expired')), 500);
+					})
+				])
+			).rejects.toThrow('DAP attach response did not complete after configurationDone');
+			expect(commands).toEqual([
+				'initialize',
+				'attach',
+				'setBreakpoints',
+				'configurationDone'
+			]);
+		} finally {
+			await session.dispose();
+			await initialization.catch(() => undefined);
+		}
+
+		expect(workers).toHaveLength(2);
+		expect(workers.every((worker) => worker.isTerminated)).toBe(true);
+	});
+
+	it('transfers owned verified asset bytes to workers without retaining runtime URLs', async () => {
+		const commands: string[] = [];
+		const workers: FakeWorker[] = [];
+		const requested = new Map<string, number>();
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources: [],
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, commands);
+				workers.push(worker);
+				return worker;
+			},
+			fetchImpl: async (input) => {
+				const url = String(input);
+				const count = (requested.get(url) ?? 0) + 1;
+				requested.set(url, count);
+				return new Response(count === 1 ? 'debug-asset' : 'changed-after-verification');
+			},
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+
+		try {
+			await session.initialize();
+			expect([...requested.values()]).toEqual([1, 1, 1, 1, 1, 1]);
+			for (const worker of workers) {
+				const initialization = worker.received.find((message) =>
+					message.type.startsWith('initialize-')
+				);
+				if (!initialization || !('assets' in initialization)) {
+					throw new Error(`${worker.kind} worker was not initialized`);
+				}
+				expect(initialization.assets.js).toBeInstanceOf(ArrayBuffer);
+				expect(initialization.assets.wasm).toBeInstanceOf(ArrayBuffer);
+				expect(initialization.assets.worker).toBeInstanceOf(ArrayBuffer);
+				expect(worker.transferLists[0]).toEqual([
+					initialization.assets.js,
+					initialization.assets.wasm,
+					initialization.assets.worker
+				]);
+			}
+		} finally {
+			await session.dispose();
+		}
+	});
+
 	it('snapshots mutable initialization inputs before awaiting runtime assets', async () => {
 		const commands: string[] = [];
 		const workers: FakeWorker[] = [];
@@ -822,7 +1029,7 @@ describe('BrowserLldbSession', () => {
 		const options: BrowserLldbSessionOptions = {
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [
 				{
 					path: '/workspace/main.cpp',
@@ -929,7 +1136,7 @@ describe('BrowserLldbSession', () => {
 		const options: BrowserLldbSessionOptions = {
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [
 				{
 					path: '/workspace/main.cpp',
@@ -985,7 +1192,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1065,7 +1272,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1112,7 +1319,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1155,7 +1362,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			workerFactory: (kind) => {
 				const worker = new FakeWorker(kind, []);
@@ -1190,7 +1397,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest: mutableManifest,
 			runtimeBaseUrl,
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [
 				{
 					path: '/workspace/main.cpp',
@@ -1222,11 +1429,10 @@ describe('BrowserLldbSession', () => {
 			const lldbInit = workers
 				.flatMap((worker) => worker.received)
 				.find((message) => message.type === 'initialize-lldb');
-			expect(lldbInit).toMatchObject({
-				assets: {
-					js: 'https://cdn.example/original/lldb.js'
-				}
-			});
+			if (!lldbInit || lldbInit.type !== 'initialize-lldb') {
+				throw new Error('LLDB worker was not initialized');
+			}
+			expect(new TextDecoder().decode(lldbInit.assets.js)).toBe('debug-asset');
 		} finally {
 			await session.dispose();
 		}
@@ -1240,7 +1446,7 @@ describe('BrowserLldbSession', () => {
 		session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			workerFactory: (kind) => {
 				const worker = new FakeWorker(kind, []);
@@ -1275,7 +1481,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			workerFactory: (kind) => {
 				const worker = new FakeWorker(kind, []);
@@ -1323,7 +1529,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			workerFactory: (kind) => {
 				const worker = new FakeWorker(kind, []);
@@ -1368,7 +1574,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0),
+			module: validWasmModule.slice(),
 			moduleSha256: hash,
 			sources: [],
 			workerFactory: () => {
@@ -1378,6 +1584,88 @@ describe('BrowserLldbSession', () => {
 		});
 		await expect(session.initialize()).rejects.toThrow(/SHA-256 mismatch/u);
 		expect(created).toBe(false);
+	});
+
+	it('rejects an unsupported WAMR module before fetching assets or creating workers', async () => {
+		let assetFetches = 0;
+		let workersCreated = 0;
+		const sharedMemoryModule = Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0, 5, 4, 1, 3, 1, 1);
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: sharedMemoryModule,
+			sources: [],
+			fetchImpl: async () => {
+				assetFetches += 1;
+				return new Response('debug-asset');
+			},
+			workerFactory: (kind) => {
+				workersCreated += 1;
+				return new FakeWorker(kind, []);
+			}
+		});
+
+		await expect(session.initialize()).rejects.toThrow(/shared memory/u);
+		expect(assetFetches).toBe(0);
+		expect(workersCreated).toBe(0);
+	});
+
+	it('rejects SharedArrayBuffer-backed modules before copying or hashing them', async () => {
+		let assetFetches = 0;
+		let workersCreated = 0;
+		const sharedModule = new Uint8Array(new SharedArrayBuffer(validWasmModule.byteLength));
+		sharedModule.set(validWasmModule);
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: sharedModule,
+			moduleSha256: hash,
+			sources: [],
+			fetchImpl: async () => {
+				assetFetches += 1;
+				return new Response('debug-asset');
+			},
+			workerFactory: (kind) => {
+				workersCreated += 1;
+				return new FakeWorker(kind, []);
+			}
+		});
+
+		await expect(session.initialize()).rejects.toThrow(/SharedArrayBuffer-backed/u);
+		expect(assetFetches).toBe(0);
+		expect(workersCreated).toBe(0);
+	});
+
+	it('accepts cross-realm Uint8Array modules without copying before preflight', async () => {
+		const foreignModule = runInNewContext(
+			'Uint8Array.from([0, 97, 115, 109, 1, 0, 0, 0])'
+		) as Uint8Array;
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: foreignModule,
+			moduleSha256: hash,
+			sources: []
+		});
+
+		await expect(session.initialize()).rejects.toThrow(/SHA-256 mismatch/u);
+	});
+
+	it('rejects cross-realm SharedArrayBuffer module views before copying or hashing them', async () => {
+		const foreignSharedModule = runInNewContext(`
+			const module = new Uint8Array(new SharedArrayBuffer(8));
+			module.set([0, 97, 115, 109, 1, 0, 0, 0]);
+			module;
+		`) as Uint8Array;
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: foreignSharedModule,
+			moduleSha256: hash,
+			sources: []
+		});
+
+		await expect(session.initialize()).rejects.toThrow(/SharedArrayBuffer-backed/u);
 	});
 
 	it.each([
@@ -1417,7 +1705,7 @@ describe('BrowserLldbSession', () => {
 			const session = new BrowserLldbSession({
 				manifest,
 				runtimeBaseUrl: 'https://cdn.example/debug/',
-				module: Uint8Array.of(0, 97, 115, 109),
+				module: validWasmModule.slice(),
 				sources: [],
 				fetchImpl: async () => {
 					assetFetches += 1;
@@ -1479,7 +1767,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			launch: launch as BrowserLldbSessionOptions['launch'],
 			fetchImpl: async () => {
@@ -1508,7 +1796,7 @@ describe('BrowserLldbSession', () => {
 		const options: BrowserLldbSessionOptions = {
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			moduleSha256: hash,
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
@@ -1538,7 +1826,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('corrupt'),
 			workerFactory: () => {
@@ -1566,7 +1854,7 @@ describe('BrowserLldbSession', () => {
 			const session = new BrowserLldbSession({
 				manifest,
 				runtimeBaseUrl: 'https://cdn.example/debug/',
-				module: Uint8Array.of(0, 97, 115, 109),
+				module: validWasmModule.slice(),
 				sources: [source],
 				workerFactory: () => {
 					created = true;
@@ -1585,7 +1873,7 @@ describe('BrowserLldbSession', () => {
 			const session = new BrowserLldbSession({
 				manifest,
 				runtimeBaseUrl: 'https://cdn.example/debug/',
-				module: Uint8Array.of(0, 97, 115, 109),
+				module: validWasmModule.slice(),
 				sources: [
 					{
 						path: '/workspace/main.cpp',
@@ -1617,6 +1905,128 @@ describe('BrowserLldbSession', () => {
 		}
 	);
 
+	it('accepts the documented initial source and breakpoint limits', async () => {
+		const commands: string[] = [];
+		const sources = Array.from({ length: 256 }, (_, index) => ({
+			path: `/workspace/source-${index}.cpp` as `/workspace/${string}`,
+			content: ''
+		}));
+		const breakpoints = sources.map((source, index) => {
+			const length = index === 0 ? 1_024 : index <= 12 ? 13 : 12;
+			return {
+				source: { path: source.path },
+				lines: Array.from({ length }, (_, line) => line + 1)
+			};
+		});
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources,
+			breakpoints,
+			fetchImpl: async () => new Response('debug-asset'),
+			workerFactory: (kind) => new FakeWorker(kind, commands),
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+
+		try {
+			await expect(session.initialize()).resolves.toBeDefined();
+			expect(
+				breakpoints.reduce((total, breakpoint) => total + breakpoint.lines.length, 0)
+			).toBe(4_096);
+			expect(commands.filter((command) => command === 'setBreakpoints')).toHaveLength(256);
+		} finally {
+			await session.dispose();
+		}
+	});
+
+	it.each([
+		{
+			name: 'source-file count',
+			sources: Array.from({ length: 257 }, (_, index) => ({
+				path: `/workspace/source-${index}.cpp` as `/workspace/${string}`,
+				content: ''
+			})),
+			breakpoints: [],
+			expected: 'debug source count must not exceed 256; received 257'
+		},
+		{
+			name: 'per-source breakpoint count',
+			sources: [{ path: '/workspace/main.cpp' as const, content: '' }],
+			breakpoints: [
+				{
+					source: { path: '/workspace/main.cpp' },
+					lines: Array.from({ length: 1_025 }, (_, index) => index + 1)
+				}
+			],
+			expected:
+				'breakpoints for /workspace/main.cpp must not exceed 1024 lines; received 1025'
+		},
+		{
+			name: 'aggregate per-source breakpoint count',
+			sources: [{ path: '/workspace/main.cpp' as const, content: '' }],
+			breakpoints: [
+				{
+					source: { path: '/workspace/main.cpp' },
+					lines: Array.from({ length: 1_024 }, (_, index) => index + 1)
+				},
+				{ source: { path: '/workspace/main.cpp' }, lines: [1_025] }
+			],
+			expected:
+				'breakpoints for /workspace/main.cpp must not exceed 1024 lines; received 1025'
+		},
+		{
+			name: 'initial breakpoint source count',
+			sources: [{ path: '/workspace/main.cpp' as const, content: '' }],
+			breakpoints: Array.from({ length: 257 }, (_, index) => ({
+				source: { path: `/workspace/source-${index}.cpp` },
+				lines: []
+			})),
+			expected: 'initial breakpoint source count must not exceed 256; received 257'
+		},
+		{
+			name: 'total initial breakpoint count',
+			sources: [{ path: '/workspace/main.cpp' as const, content: '' }],
+			breakpoints: [1_024, 1_024, 1_024, 1_024, 1].map((length, index) => ({
+				source: { path: `/workspace/source-${index}.cpp` },
+				lines: Array.from({ length }, (_, line) => line + 1)
+			})),
+			expected: 'initial breakpoint count must not exceed 4096; received 4097'
+		}
+	])(
+		'rejects an excessive $name before fetching assets or creating workers',
+		async ({ sources, breakpoints, expected }) => {
+			let fetched = false;
+			let created = false;
+			const session = new BrowserLldbSession({
+				manifest,
+				runtimeBaseUrl: 'https://cdn.example/debug/',
+				module: validWasmModule.slice(),
+				sources,
+				breakpoints,
+				fetchImpl: async () => {
+					fetched = true;
+					return new Response('debug-asset');
+				},
+				workerFactory: (kind) => {
+					created = true;
+					return new FakeWorker(kind, []);
+				},
+				requestTimeoutMs: 1_000,
+				readyTimeoutMs: 1_000
+			});
+
+			try {
+				await expect(session.initialize()).rejects.toThrow(expected);
+				expect(fetched).toBe(false);
+				expect(created).toBe(false);
+			} finally {
+				await session.dispose();
+			}
+		}
+	);
+
 	it.each([
 		['requestTimeoutMs', 0],
 		['requestTimeoutMs', Number.NaN],
@@ -1630,7 +2040,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			[option]: value,
 			fetchImpl: async () => {
@@ -1658,7 +2068,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1687,7 +2097,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => {
 				await assetGate;
@@ -1718,7 +2128,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1750,7 +2160,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1805,7 +2215,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1858,7 +2268,7 @@ describe('BrowserLldbSession', () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: [],
 			fetchImpl: async () => new Response('debug-asset'),
 			workerFactory: (kind) => {
@@ -1894,11 +2304,44 @@ describe('BrowserLldbSession', () => {
 		expect(workers.every((worker) => worker.isTerminated)).toBe(true);
 	});
 
+	it('hard-terminates every worker when DAP transport cleanup rejects', async () => {
+		const workers: FakeWorker[] = [];
+		const session = new BrowserLldbSession({
+			manifest,
+			runtimeBaseUrl: 'https://cdn.example/debug/',
+			module: validWasmModule.slice(),
+			sources: [],
+			fetchImpl: async () => new Response('debug-asset'),
+			workerFactory: (kind) => {
+				const worker = new FakeWorker(kind, []);
+				workers.push(worker);
+				return worker;
+			},
+			requestTimeoutMs: 1_000,
+			readyTimeoutMs: 1_000
+		});
+		await session.initialize();
+		const internalSession = session as unknown as {
+			dap?: { close(error?: Error): Promise<void> };
+		};
+		if (!internalSession.dap) throw new Error('DAP client was not initialized');
+		const cleanupError = new Error('forced DAP cleanup failure');
+		internalSession.dap.close = async () => {
+			throw cleanupError;
+		};
+
+		await expect(session.dispose()).rejects.toBe(cleanupError);
+		expect(workers.every((worker) => worker.isTerminated)).toBe(true);
+		expect(
+			workers.every((worker) => worker.received.some((message) => message.type === 'dispose'))
+		).toBe(true);
+	});
+
 	it('shares one in-flight disposal across concurrent callers', async () => {
 		const session = new BrowserLldbSession({
 			manifest,
 			runtimeBaseUrl: 'https://cdn.example/debug/',
-			module: Uint8Array.of(0, 97, 115, 109),
+			module: validWasmModule.slice(),
 			sources: []
 		});
 

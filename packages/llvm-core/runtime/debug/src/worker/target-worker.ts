@@ -1,6 +1,8 @@
 import type { DebugWorkerInboundMessage, TargetWorkerInitializeMessage } from '../types.js';
 import { assertDistinctSharedByteQueueBuffers, SharedByteQueue } from '../shared-byte-queue.js';
+import { validateWamrDebugModule } from '../wasm-module-preflight.js';
 import {
+	createEmscriptenAssetUrls,
 	createTransportBindings,
 	loadEmscriptenModuleFactory,
 	mountDebugFiles,
@@ -14,6 +16,17 @@ let activeGeneration: string | undefined;
 let disposed = false;
 let activeStdin: SharedByteQueue | undefined;
 let activeOutputs: SharedByteQueue[] = [];
+let revokeActiveAssetUrls: (() => void) | undefined;
+
+function revokeActiveTargetAssets() {
+	const revoke = revokeActiveAssetUrls;
+	revokeActiveAssetUrls = undefined;
+	try {
+		revoke?.();
+	} catch {
+		// Blob cleanup must not prevent transport shutdown or worker termination.
+	}
+}
 
 function closeQueue(queue: SharedByteQueue | undefined) {
 	if (!queue) return;
@@ -37,6 +50,7 @@ function closeActiveTargetTransports() {
 async function initialize(message: TargetWorkerInitializeMessage) {
 	validateDebugSessionGeneration(message.generation);
 	if (activeGeneration) throw new Error('target worker is already initialized');
+	validateWamrDebugModule(message.module);
 	const cwdValue: unknown = message.cwd;
 	if (cwdValue !== undefined && cwdValue !== '/workspace') {
 		throw new RangeError('WAMR working directory must be /workspace');
@@ -125,73 +139,89 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 		stderr(null);
 		rejectLifecycle(error);
 	};
-	const factory = await loadEmscriptenModuleFactory(message.assets.js);
-	if (disposed) return;
-	const module = await factory({
-		noInitialRun: true,
-		wasmIdleDebugTransport: transport,
-		mainScriptUrlOrBlob: message.assets.worker,
-		locateFile: (path: string) =>
-			path.endsWith('.wasm')
-				? message.assets.wasm
-				: path.endsWith('.worker.mjs')
-					? message.assets.worker
-					: new URL(path, message.assets.js).toString(),
-		stdin: () => {
-			if (!stdin) return null;
-			const length = stdin.readBlocking(inputByte);
-			return length === 0 ? null : inputByte[0];
-		},
-		stdout,
-		stderr,
-		onExit: (exitCode: unknown) => {
-			if (lifecycleSettled) return;
-			if (typeof exitCode !== 'number' || !Number.isSafeInteger(exitCode)) {
-				rejectTarget(new Error('WAMR exited without a valid integer exit code'));
-				return;
-			}
-			lifecycleSettled = true;
-			stdout(null);
-			stderr(null);
-			if (!disposed) {
-				postWorkerMessage({
-					type: 'exit',
-					exitCode,
-					generation: message.generation
-				});
-			}
-			resolveLifecycle();
-		},
-		onAbort: (reason: unknown) => {
-			rejectTarget(new Error(`WAMR aborted: ${String(reason)}`));
-		}
-	});
-	if (disposed) return;
-	mountDebugFiles(module, message.module, message.workspaceFiles);
-	module.FS.chdir(cwd);
-	const stopMemoryTelemetry = startLinearMemoryTelemetry(module, 'target', message.generation);
+	const assetUrls = createEmscriptenAssetUrls(message.assets);
+	let assetUrlsRevoked = false;
+	const revokeAssetUrls = () => {
+		if (assetUrlsRevoked) return;
+		assetUrlsRevoked = true;
+		assetUrls.revoke();
+	};
+	revokeActiveAssetUrls = revokeAssetUrls;
 	try {
-		postWorkerMessage({
-			type: 'ready',
-			worker: 'target',
-			generation: message.generation
+		const factory = await loadEmscriptenModuleFactory(assetUrls.js);
+		if (disposed) return;
+		const module = await factory({
+			noInitialRun: true,
+			wasmIdleDebugTransport: transport,
+			mainScriptUrlOrBlob: assetUrls.worker,
+			locateFile: (path: string) => {
+				if (path.endsWith('.wasm')) return assetUrls.wasm;
+				if (path.endsWith('.worker.mjs')) return assetUrls.worker;
+				throw new Error(`WAMR requested an unverified runtime asset: ${path}`);
+			},
+			stdin: () => {
+				if (!stdin) return null;
+				const length = stdin.readBlocking(inputByte);
+				return length === 0 ? null : inputByte[0];
+			},
+			stdout,
+			stderr,
+			onExit: (exitCode: unknown) => {
+				if (lifecycleSettled) return;
+				if (typeof exitCode !== 'number' || !Number.isSafeInteger(exitCode)) {
+					rejectTarget(new Error('WAMR exited without a valid integer exit code'));
+					return;
+				}
+				lifecycleSettled = true;
+				stdout(null);
+				stderr(null);
+				if (!disposed) {
+					postWorkerMessage({
+						type: 'exit',
+						exitCode,
+						generation: message.generation
+					});
+				}
+				resolveLifecycle();
+			},
+			onAbort: (reason: unknown) => {
+				rejectTarget(new Error(`WAMR aborted: ${String(reason)}`));
+			}
 		});
-		void Promise.resolve(
-			module.callMain([
-				...environmentArgs,
-				'-v=0',
-				'--heap-size=1048576',
-				`--dir=${cwd}`,
-				'-g=wasm-messageport:1',
-				'/workspace/program.wasm',
-				...args
-			])
-		).catch((error) =>
-			rejectTarget(error instanceof Error ? error : new Error('WAMR main failed'))
+		if (disposed) return;
+		mountDebugFiles(module, message.module, message.workspaceFiles);
+		module.FS.chdir(cwd);
+		const stopMemoryTelemetry = startLinearMemoryTelemetry(
+			module,
+			'target',
+			message.generation
 		);
-		await lifecycle;
+		try {
+			postWorkerMessage({
+				type: 'ready',
+				worker: 'target',
+				generation: message.generation
+			});
+			void Promise.resolve(
+				module.callMain([
+					...environmentArgs,
+					'-v=0',
+					'--heap-size=1048576',
+					`--dir=${cwd}`,
+					'-g=wasm-messageport:1',
+					'/workspace/program.wasm',
+					...args
+				])
+			).catch((error) =>
+				rejectTarget(error instanceof Error ? error : new Error('WAMR main failed'))
+			);
+			await lifecycle;
+		} finally {
+			stopMemoryTelemetry();
+		}
 	} finally {
-		stopMemoryTelemetry();
+		if (revokeActiveAssetUrls === revokeAssetUrls) revokeActiveAssetUrls = undefined;
+		revokeAssetUrls();
 	}
 }
 
@@ -217,6 +247,7 @@ export function handleTargetWorkerMessage(message: DebugWorkerInboundMessage) {
 	if (!activeGeneration || message.generation !== activeGeneration) return;
 	if (message.type === 'dispose') {
 		disposed = true;
+		revokeActiveTargetAssets();
 		closeActiveTargetTransports();
 	}
 }

@@ -31,6 +31,8 @@ export type {
 	DebugStackFrame,
 	DebugThread,
 	DebugVariable,
+	VerifiedDebugAssetBytes,
+	VerifiedDebugRuntimeAssets,
 	DebugWorkerInboundMessage,
 	DebugWorkerKind,
 	DebugWorkerOutboundMessage,

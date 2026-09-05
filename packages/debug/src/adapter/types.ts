@@ -19,6 +19,7 @@ export interface DebugCapabilities {
 	readonly supportsEvaluate: boolean;
 	readonly supportsEvaluateForHovers: boolean;
 	readonly supportsReadMemory: boolean;
+	readonly supportsWriteMemory: boolean;
 	readonly supportsDataBreakpoints: boolean;
 	readonly supportsSetVariable: boolean;
 	readonly supportsRestart: boolean;
@@ -136,6 +137,41 @@ export interface DebugVariable {
 
 export type DebugMemory = CoreDebugMemory;
 
+export interface DebugWriteMemoryResult {
+	offset?: number;
+	bytesWritten: number;
+}
+
+export type DebugDataBreakpointAccessType = 'read' | 'write' | 'readWrite';
+
+export interface DebugDataBreakpointInfoArguments {
+	name: string;
+	variablesReference?: number;
+	frameId?: number;
+	/** Treat `name` as a numeric address. This is an LLDB DAP extension. */
+	asAddress?: boolean;
+	/** Number of bytes to watch when `asAddress` is true. This is an LLDB DAP extension. */
+	bytes?: number;
+}
+
+export interface DebugDataBreakpointInfo {
+	dataId?: string;
+	description: string;
+	accessTypes?: DebugDataBreakpointAccessType[];
+	canPersist?: boolean;
+}
+
+export interface DebugDataBreakpoint {
+	dataId: string;
+	accessType?: DebugDataBreakpointAccessType;
+}
+
+export interface ResolvedDataBreakpoint {
+	id?: number;
+	verified: boolean;
+	message?: string;
+}
+
 export interface DebugEvaluateResult {
 	result: string;
 	type?: string;
@@ -214,6 +250,18 @@ export interface DebugAdapter {
 	variables(variablesReference: number, start?: number, count?: number): Promise<DebugVariable[]>;
 
 	readMemory(memoryReference: string, offset: number, count: number): Promise<DebugMemory>;
+	writeMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial?: boolean
+	): Promise<DebugWriteMemoryResult>;
+	dataBreakpointInfo(
+		arguments_: DebugDataBreakpointInfoArguments
+	): Promise<DebugDataBreakpointInfo>;
+	setDataBreakpoints(
+		breakpoints: DebugDataBreakpoint[]
+	): Promise<ResolvedDataBreakpoint[]>;
 	evaluate(expression: string, frameId?: number): Promise<DebugEvaluateResult>;
 
 	onEvent(listener: (event: DebugAdapterEvent) => void): () => void;

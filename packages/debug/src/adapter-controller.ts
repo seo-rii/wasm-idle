@@ -5,6 +5,9 @@ import {
 	type DebugAdapter,
 	type DebugAdapterEvent,
 	type DebugCapabilities,
+	type DebugDataBreakpoint,
+	type DebugDataBreakpointInfo,
+	type DebugDataBreakpointInfoArguments,
 	type DebugDisconnectOptions,
 	type DebugEvaluateResult,
 	type DebugLaunchConfig,
@@ -14,6 +17,8 @@ import {
 	type DebugStackFrame,
 	type DebugThread,
 	type DebugVariable,
+	type DebugWriteMemoryResult,
+	type ResolvedDataBreakpoint,
 	type ResolvedBreakpoint
 } from './adapter/index.js';
 
@@ -476,7 +481,61 @@ export function createAdapterDebugSessionController(adapter: DebugAdapter) {
 		const sessionToken = sessionGeneration;
 		const stopToken = stoppedGeneration;
 		try {
-			return await adapter.readMemory(memoryReference, offset, count);
+			const memory = await adapter.readMemory(memoryReference, offset, count);
+			if (!isCurrentStop(sessionToken, stopToken)) {
+				throw new DebugAdapterStateError(
+					'The memory read result belongs to an obsolete stopped state.'
+				);
+			}
+			return memory;
+		} catch (error) {
+			if (isCurrentStop(sessionToken, stopToken)) recordError(error);
+			throw error;
+		}
+	}
+
+	async function writeMemory(
+		memoryReference: string,
+		offset: number,
+		data: Uint8Array,
+		allowPartial?: boolean
+	): Promise<DebugWriteMemoryResult> {
+		const sessionToken = sessionGeneration;
+		const stopToken = stoppedGeneration;
+		try {
+			const result = await adapter.writeMemory(memoryReference, offset, data, allowPartial);
+			if (!isCurrentStop(sessionToken, stopToken)) {
+				throw new DebugAdapterStateError(
+					'The memory write result belongs to an obsolete stopped state.'
+				);
+			}
+			return result;
+		} catch (error) {
+			if (isCurrentStop(sessionToken, stopToken)) recordError(error);
+			throw error;
+		}
+	}
+
+	async function dataBreakpointInfo(
+		arguments_: DebugDataBreakpointInfoArguments
+	): Promise<DebugDataBreakpointInfo> {
+		const sessionToken = sessionGeneration;
+		const stopToken = stoppedGeneration;
+		try {
+			return await adapter.dataBreakpointInfo(arguments_);
+		} catch (error) {
+			if (isCurrentStop(sessionToken, stopToken)) recordError(error);
+			throw error;
+		}
+	}
+
+	async function setDataBreakpoints(
+		breakpoints: DebugDataBreakpoint[]
+	): Promise<ResolvedDataBreakpoint[]> {
+		const sessionToken = sessionGeneration;
+		const stopToken = stoppedGeneration;
+		try {
+			return await adapter.setDataBreakpoints(breakpoints);
 		} catch (error) {
 			if (isCurrentStop(sessionToken, stopToken)) recordError(error);
 			throw error;
@@ -562,6 +621,9 @@ export function createAdapterDebugSessionController(adapter: DebugAdapter) {
 		stepOut,
 		evaluate,
 		readMemory,
+		writeMemory,
+		dataBreakpointInfo,
+		setDataBreakpoints,
 		disconnect,
 		clearOutput,
 		dispose

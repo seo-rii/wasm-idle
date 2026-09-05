@@ -18,6 +18,7 @@ import {
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
+import { WASM_OCAML_RUNTIME_PROFILE } from '$lib/playground/wasmOcamlVersion';
 import {
 	BusyError,
 	CancelledError,
@@ -31,6 +32,7 @@ import {
 	resolveExecutionLimits,
 	validateExecutionWorkspace,
 	type ExecutionLimits,
+	type RuntimeAssetIntegrityEntry,
 	type WorkspaceLimits
 } from '@wasm-idle/core';
 
@@ -58,6 +60,31 @@ const OCAML_WORKSPACE_LIMIT_KEYS = [
 
 const OUTPUT_ENCODER = new TextEncoder();
 
+type OcamlOuterAssetReceipt = Readonly<
+	Required<Pick<RuntimeAssetIntegrityEntry, 'bytes' | 'sha256'>>
+>;
+
+function snapshotOuterAssetReceipt(
+	value: RuntimeAssetIntegrityEntry | undefined,
+	label: 'module' | 'manifest'
+): OcamlOuterAssetReceipt {
+	if (
+		!value ||
+		!Number.isSafeInteger(value.bytes) ||
+		(value.bytes as number) <= 0 ||
+		typeof value.sha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(value.sha256)
+	) {
+		throw new RuntimeConfigurationError(`OCaml ${label} receipt is invalid`, {
+			phase: 'startup',
+			runtimeId: 'OCAML'
+		});
+	}
+	return Object.freeze({ bytes: value.bytes as number, sha256: value.sha256 });
+}
+
+const receiptIdentity = (receipt: OcamlOuterAssetReceipt) => `${receipt.bytes}:${receipt.sha256}`;
+
 type OcamlOperation = {
 	token: symbol;
 	phase: 'startup' | 'execute';
@@ -83,6 +110,8 @@ class Ocaml implements Sandbox {
 	exit = true;
 	moduleUrl = '';
 	manifestUrl = '';
+	private moduleReceiptIdentity = '';
+	private manifestReceiptIdentity = '';
 	private maxAssetBytes = 0;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
@@ -337,6 +366,8 @@ class Ocaml implements Sandbox {
 		let limits: ExecutionLimits;
 		let nextModuleUrl: string;
 		let nextManifestUrl: string;
+		let nextModuleReceipt: OcamlOuterAssetReceipt;
+		let nextManifestReceipt: OcamlOuterAssetReceipt;
 		let buffer: ArrayBufferLike;
 		try {
 			signal = options.signal;
@@ -370,6 +401,8 @@ class Ocaml implements Sandbox {
 				);
 			}
 			let resolverAssets: string | PlaygroundRuntimeAssets = runtimeAssets;
+			let configuredModuleReceipt: RuntimeAssetIntegrityEntry | undefined;
+			let configuredManifestReceipt: RuntimeAssetIntegrityEntry | undefined;
 			if (runtimeAssets === null) {
 				resolverAssets = {};
 			} else if (typeof runtimeAssets === 'object') {
@@ -386,6 +419,18 @@ class Ocaml implements Sandbox {
 					);
 				}
 				const manifestUrl = source?.manifestUrl;
+				if (!this.isOperationActive(operation)) {
+					return Promise.reject(
+						this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
+					);
+				}
+				configuredModuleReceipt = source?.moduleReceipt;
+				if (!this.isOperationActive(operation)) {
+					return Promise.reject(
+						this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
+					);
+				}
+				configuredManifestReceipt = source?.manifestReceipt;
 				if (!this.isOperationActive(operation)) {
 					return Promise.reject(
 						this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
@@ -422,6 +467,34 @@ class Ocaml implements Sandbox {
 			if (!nextModuleUrl || !nextManifestUrl) {
 				throw 'OCaml runtime is not configured. Set runtimeAssets.ocaml.moduleUrl and runtimeAssets.ocaml.manifestUrl or sync the bundled wasm-of-js-of-ocaml assets.';
 			}
+			const hasConfiguredReceipt =
+				configuredModuleReceipt !== undefined || configuredManifestReceipt !== undefined;
+			if (
+				hasConfiguredReceipt &&
+				(configuredModuleReceipt === undefined || configuredManifestReceipt === undefined)
+			) {
+				throw new RuntimeConfigurationError(
+					'OCaml custom runtime assets require both module and manifest receipts',
+					{ phase: 'startup', runtimeId: 'OCAML' }
+				);
+			}
+			nextModuleReceipt = snapshotOuterAssetReceipt(
+				configuredModuleReceipt ?? WASM_OCAML_RUNTIME_PROFILE.moduleReceipt,
+				'module'
+			);
+			nextManifestReceipt = snapshotOuterAssetReceipt(
+				configuredManifestReceipt ?? WASM_OCAML_RUNTIME_PROFILE.manifestReceipt,
+				'manifest'
+			);
+			if (
+				nextModuleReceipt.bytes > limits.maxAssetBytes ||
+				nextManifestReceipt.bytes > limits.maxAssetBytes
+			) {
+				throw new RuntimeConfigurationError(
+					`OCaml outer runtime asset exceeds the ${limits.maxAssetBytes} byte limit`,
+					{ phase: 'startup', runtimeId: 'OCAML' }
+				);
+			}
 			buffer = this.buffer;
 			if (!this.isOperationActive(operation)) {
 				return Promise.reject(
@@ -443,6 +516,8 @@ class Ocaml implements Sandbox {
 				!this.worker ||
 				this.moduleUrl !== nextModuleUrl ||
 				this.manifestUrl !== nextManifestUrl ||
+				this.moduleReceiptIdentity !== receiptIdentity(nextModuleReceipt) ||
+				this.manifestReceiptIdentity !== receiptIdentity(nextManifestReceipt) ||
 				this.maxAssetBytes !== limits.maxAssetBytes;
 			if (needsWorkerReset) {
 				const WorkerConstructor = (await import('$lib/playground/worker/ocaml?worker'))
@@ -475,6 +550,8 @@ class Ocaml implements Sandbox {
 							worker.onmessage = null;
 							this.moduleUrl = nextModuleUrl;
 							this.manifestUrl = nextManifestUrl;
+							this.moduleReceiptIdentity = receiptIdentity(nextModuleReceipt);
+							this.manifestReceiptIdentity = receiptIdentity(nextManifestReceipt);
 							this.maxAssetBytes = limits.maxAssetBytes;
 							resolve();
 							this.completeOperation(operation);
@@ -490,6 +567,8 @@ class Ocaml implements Sandbox {
 					load: true,
 					moduleUrl: nextModuleUrl,
 					manifestUrl: nextManifestUrl,
+					moduleReceipt: nextModuleReceipt,
+					manifestReceipt: nextManifestReceipt,
 					maxAssetBytes: limits.maxAssetBytes
 				});
 			} else {
@@ -914,6 +993,8 @@ class Ocaml implements Sandbox {
 		delete this.worker;
 		this.moduleUrl = '';
 		this.manifestUrl = '';
+		this.moduleReceiptIdentity = '';
+		this.manifestReceiptIdentity = '';
 		this.maxAssetBytes = 0;
 		this.output = undefined;
 		this.oncompilerdiagnostic = undefined;

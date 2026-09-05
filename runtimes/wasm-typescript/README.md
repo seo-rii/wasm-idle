@@ -16,3 +16,17 @@ resolved by this single-file browser runner.
 after Enter. `fs.readFileSync('/dev/stdin', 'utf8')` and
 `fs.readFileSync(0, 'utf8')` read from the host-provided stdin callback until
 EOF.
+
+This package is a member of the repository pnpm workspace. The root
+`pnpm-lock.yaml` is the sole dependency lock; do not generate or commit a
+nested lockfile here. `pnpm run build` also emits `dist/runtime-build.json`,
+which binds the browser bundle to its source inputs and effective producer
+toolchain. The application sync step rejects stale or mismatched producer
+receipts.
+
+After building, verify the producer output against the checked-in compressed
+runtime without modifying the worktree:
+
+```sh
+node scripts/sync-wasm-typescript.mjs --verify
+```

@@ -84,6 +84,7 @@ async function assertFile(filePath, expectedSha256, expectedBytes, label) {
  * @param {string} command
  * @param {string[]} args
  * @param {import('node:child_process').SpawnOptions} [options]
+ * @returns {Promise<void>}
  */
 async function run(command, args, options = {}) {
 	await new Promise((resolve, reject) => {

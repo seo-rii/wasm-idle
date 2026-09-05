@@ -8,10 +8,10 @@ export const RUBY_RUNTIME_GENERATED_PROFILE = Object.freeze({
 	rubyWasmRevision: '3318796e2c9f0f75c98c669cabdc422cf8218ec2' as const,
 	wasiSdkVersion: '22.0' as const,
 	manifestFingerprint:
-		'5584f97b962de660bcff8b2144e289bd1814420bdae887f62edbd1f573e39263' as const,
+		'e8b1ff472882d0580a235bf31715b699fbb70d75d09ad0dc88b19ba7f42d9ed2' as const,
 	manifestReceipt: Object.freeze({
-		bytes: 7803,
-		sha256: '2024d75c2250b11c891db52060608e2defe07eea94967cade3ef4480069740e2' as const
+		bytes: 7832,
+		sha256: '0f0c0cdb2548aebde61e0a2cb9b8d899ce5a4b51b9a21aac9bd96555fc46fe0a' as const
 	}),
 	moduleJavaScriptReceipt: Object.freeze({
 		bytes: 54623,

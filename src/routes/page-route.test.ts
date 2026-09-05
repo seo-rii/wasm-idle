@@ -3,6 +3,7 @@ import source from './+page.svelte?raw';
 import { createApplicationRuntimeAssets } from '$lib/playground/applicationAssets';
 import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
+import { createExecutionPreflightGate } from './executionPreflight';
 import {
 	argsHelpLanguages,
 	argsLabels,
@@ -50,23 +51,52 @@ describe('example route debug actions', () => {
 	});
 
 	it('swaps run/debug actions for stop buttons while sessions are active', () => {
+		const stopExecutionStart = source.indexOf('async function stopExecution()');
+		const restartExecutionStart = source.indexOf(
+			'async function restartDebugExecution()',
+			stopExecutionStart
+		);
+		const stopExecutionSource = source.slice(stopExecutionStart, restartExecutionStart);
 		expect(() =>
 			compile(source, {
 				filename: 'src/routes/+page.svelte',
 				generate: 'client'
 			})
 		).not.toThrow();
-		expect(source).toMatch(/async function stopExecution\(\) \{/);
-		expect(source).toMatch(/if \(!terminal \|\| !runningMode\) return;/);
-		expect(source).toMatch(/if \(runningMode === 'debug'\) \{/);
-		expect(source).toMatch(/await debug\.stop\(\);/);
+		expect(source.includes('let executionStopPending = $state(false);')).toBe(true);
+		expect(stopExecutionSource).toMatch(/async function stopExecution\(\) \{/);
+		expect(stopExecutionSource).toMatch(
+			/if \(\s*!terminal \|\|\s*!runningMode \|\|\s*executionStopPending \|\|\s*restartDebugPending\s*\)/s
+		);
+		expect(stopExecutionSource.includes('const stoppedMode = runningMode;')).toBe(true);
+		expect(stopExecutionSource.includes('const previousExecution = activeExecution;')).toBe(
+			true
+		);
+		expect(stopExecutionSource.includes('const stopGeneration = ++executionGeneration;')).toBe(
+			true
+		);
+		expect(stopExecutionSource).toContain('executionAbortController.abort(');
+		expect(stopExecutionSource).toContain("new DOMException('Execution stopped by the user'");
 		expect(source).toMatch(
-			/\{#if runningMode === 'run'\}\s+<button class="action-button action-button--stop" onclick=\{stopExecution\}>/s
+			/if \(stoppedMode === 'debug'\) \{\s+await debug\.stop\(\);\s+return;\s+\}\s+await terminal\?\.stop\?\.\(\);/s
+		);
+		expect(source.includes('await Promise.allSettled([')).toBe(true);
+		expect(stopExecutionSource.includes('completeExecutionGeneration(stopGeneration);')).toBe(
+			true
+		);
+		expect(stopExecutionSource).toMatch(
+			/catch \(error\) \{\s+reportExecutionTeardownFailure\('stop', error\);\s+\}/s
+		);
+		expect(source).toMatch(
+			/\{#if runningMode === 'run'\}\s+<button\s+class="action-button action-button--stop"\s+onclick=\{stopExecution\}\s+disabled=\{executionStopPending\}/s
 		);
 		expect(source).toMatch(/<span>Stop Running<\/span>/);
-		expect(source).toMatch(/await terminal\.stop\?\.\(\);/);
 		expect(source).toMatch(
-			/\{#if runningMode === 'debug'\}\s+<button class="action-button action-button--stop" onclick=\{stopExecution\}>/s
+			/\{#if runningMode === 'debug'\}\s+<button\s+class="action-button action-button--debug-restart"/s
+		);
+		expect(source).toContain('aria-label="Restart Debug"');
+		expect(source).toMatch(
+			/<button\s+class="action-button action-button--stop"\s+onclick=\{stopExecution\}\s+disabled=\{executionStopPending \|\| restartDebugPending\}/s
 		);
 		expect(source).toMatch(/<span>Stop Debug<\/span>/);
 		expect(source).toMatch(/disabled=\{runningMode === 'debug' \|\| !executionAvailable\}/);
@@ -84,6 +114,12 @@ describe('example route debug actions', () => {
 	});
 
 	it('delegates debug state, runtime watches, and run-to-cursor to the shared debug controller', () => {
+		const executionStart = source.indexOf('function exec(');
+		const executionCatchStart = source.indexOf('} catch (error) {', executionStart);
+		const executionCatch = source.slice(
+			executionCatchStart,
+			source.indexOf('} finally', executionCatchStart) + '} finally'.length
+		);
 		expect(source).toMatch(
 			/import Terminal, \{ type TerminalControl \} from '@wasm-idle\/terminal';/
 		);
@@ -129,15 +165,25 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/language !== 'RUST' \|\| rustTargetTriple === 'wasm32-wasip1'/);
 		expect(source).toMatch(/if \(executionDebugMode === 'lldb'\) \{/);
 		expect(source).toMatch(/executionDebugMode = 'trace';/);
-		expect(source).toMatch(/parseDebugRuntimeManifest\(await response\.json\(\)\)/);
+		expect(source).not.toMatch(/parseDebugRuntimeManifest\(await response\.json\(\)\)/);
 		expect(source).toMatch(
-			/await preflightDebugRuntimeAssets\(\s*manifest,\s*new URL\(runtimeAssets\.debug\.baseUrl, globalThis\.location\.href\),\s*fetch,\s*abortController\.signal\s*\);/s
+			/resolveDebugRuntimeUrls\(\s*runtimeAssets,\s*globalThis\.location\.href\s*\)/s
 		);
-		expect(source).toMatch(/interactive: enableDebug,/);
+		expect(source).toMatch(
+			/loadVerifiedDebugRuntimeManifest\(\s*debugRuntime\.manifestUrl,\s*debugRuntime\.manifestReceipt,\s*fetch,\s*abortController\.signal\s*\)/s
+		);
+		expect(source).not.toContain('preflightDebugRuntimeAssets');
+		expect(source).toMatch(/if \(!executionPreflight\.isCurrent\(preflight\)\) \{/);
 		expect(source).toMatch(/signal: abortController\.signal,/);
+		expect(source.includes('interactive: enableDebug,')).toBe(true);
 		expect(source).toMatch(
 			/activeProgressSession\?\.report\?\.\(\{\s*kind: 'ready',\s*state: 'paused',\s*reason: 'debug-paused'/s
 		);
+		expect(executionCatch).toMatch(/const executionWasCancelled = abortController\.signal\.aborted;/);
+		expect(executionCatch).toMatch(
+			/const executionTimedOut = error instanceof Error && error\.name === 'TimeoutError';/
+		);
+		expect(executionCatch).toMatch(/if \(!executionWasCancelled && !executionTimedOut\) throw error;/);
 		expect(source).toMatch(/if \(!debug\.paused\) debug\.reset\(\);/);
 		expect(source).toMatch(
 			/title=\{debug\.cursorLine\s+\?\s+`Run to Cursor \(L\$\{debug\.cursorLine\}\)`\s+:\s+'Run to Cursor'\}/
@@ -145,25 +191,164 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/aria-label=\{debug\.cursorLine\s+\?\s+`Run to Cursor \(L\$\{debug\.cursorLine\}\)`\s+:\s+'Run to Cursor'\}/
 		);
-		expect(source).toMatch(/onclick=\{\(\) => debug\.runToCursor\(\)\}/);
-		expect(source).toMatch(/disabled=\{!debug\.canRunToCursor\}/);
+		expect(source).toMatch(/onclick=\{\(\) => runToCursorWhileDataBreakpointIdle\(\)\}/);
+		expect(source).toMatch(/disabled=\{!debug\.canRunToCursor \|\| dataBreakpointLoading\}/);
 		expect(source).toMatch(/onclick=\{\(\) => debug\.sendCommand\('continue'\)\}/);
 		expect(source).toContain('interactive: enableDebug,');
 		expect(source).toMatch(/ondebug=\{onDebugEvent\}/);
 		expect(source).toMatch(/bind:value=\{debug\.watchInput\}/);
+		expect(source).toMatch(/bind:value=\{debug\.watchInput\}\s+maxlength=\{4096\}/);
 		expect(source).toMatch(/onclick=\{\(\) => debug\.addWatchExpression\(\)\}/);
 		expect(source).toMatch(
 			/onclick=\{\(\) =>\s+debug\.removeWatchExpression\(watch\.expression\)\}/
 		);
 		expect(source).toMatch(/debugLocals=\{debug\.locals\}/);
 		expect(source).toMatch(/pausedLine=\{debug\.pausedLine\}/);
-		expect(source).toMatch(/onRunToCursor=\{debug\.runToCursor\}/);
+		expect(source).toMatch(/onRunToCursor=\{runToCursorWhileDataBreakpointIdle\}/);
 		expect(source).toMatch(/<span class="material-symbols-outlined">play_circle<\/span>/);
 	});
 
-	it('navigates the workspace editor when an LLDB frame belongs to another source', () => {
+	it('provides a bounded LLDB memory inspector with stale-request invalidation', () => {
+		expect(source).toContain('const MAX_DEBUG_MEMORY_BYTES = 256;');
+		expect(source).toContain('let memoryResult = $state.raw<DebugMemoryView | null>(null);');
+		expect(source).toContain('let memoryRows = $state.raw<DebugMemoryRow[]>([]);');
+		expect(source).toContain("let memoryCountInput = $state('4');");
+		expect(source).not.toContain('const memoryRows = $derived.by');
+		expect(source).toContain('async function readDebugMemoryPage(pageDelta = 0)');
+		expect(source).toContain('memoryRequestVersion += 1;');
+		expect(source).toContain("event.type === 'resume' || event.type === 'stop'");
+		expect(source).not.toContain(
+			"event.type === 'pause' || event.type === 'resume' || event.type === 'stop'"
+		);
 		expect(source).toMatch(
-			/async function selectDebugFrame\(frame: DebugFrame\) \{\s+if \(!frame\.id \|\| !\(await debug\.selectFrame\(frame\.id\)\)\) return;\s+const workspacePath = normalizePath\(\s*frame\.sourcePath\?\.replace\(\/\^\\\/workspace\\\/\/u, ''\) \|\| ''\s*\);\s+if \(!workspacePath \|\| !files\.some\(\(file\) => file\.path === workspacePath\)\) return;\s+selectFile\(workspacePath\);\s+debug\.setSourcePath\(`\/workspace\/\$\{workspacePath\}`\);\s+\}/s
+			/if \(\s*requestVersion !== memoryRequestVersion \|\|\s*!debug\.paused \|\|\s*debug\.frameId !== frameId\s*\)\s*return;/s
+		);
+		expect(source).toMatch(/activeDebugBackend === 'lldb' &&\s*debug\.paused/s);
+		expect(source).toContain('aria-label="Memory reference"');
+		expect(source).toContain('aria-label="Memory offset"');
+		expect(source).toContain('aria-label="Memory byte count"');
+		expect(source).toContain('class="debug-memory-byte debug-memory-byte--unreadable"');
+		expect(source).toContain('aria-label={`Inspect memory for ${variable.name}`}');
+		expect(source).toContain('readDebugMemoryPage(-1)');
+		expect(source).toContain('readDebugMemoryPage(1)');
+		expect(source).toContain('debug.capabilities.readMemory');
+		expect(source).toContain('debug.capabilities.writeMemory');
+		expect(source).toContain('debug.capabilities.dataBreakpoints');
+	});
+
+	it('sets one session-scoped LLDB memory data breakpoint from the inspector', () => {
+		expect(source).toContain(
+			"let dataBreakpointAccessType = $state<DebugDataBreakpointAccessType>('write');"
+		);
+		expect(source).toContain(
+			'let activeDataBreakpoint = $state.raw<ActiveDebugDataBreakpoint | null>(null);'
+		);
+		expect(source).toContain('async function setMemoryDataBreakpoint()');
+		expect(source).toContain('async function clearMemoryDataBreakpoint()');
+		expect(source).toContain('debug.dataBreakpointInfo({');
+		expect(source).toMatch(/debug\.setDataBreakpoints\(\[\s*\{/s);
+		expect(source).toContain("event.type === 'stop'");
+		expect(source).toContain('aria-label="Data breakpoint access"');
+		expect(source).toContain('aria-label="Set data breakpoint"');
+		expect(source).toContain('aria-label="Clear data breakpoint"');
+		expect(source).toContain('class="debug-data-breakpoint-status"');
+		expect(source).toContain('dataBreakpointInfo: (');
+		expect(source).toContain('setDataBreakpoints: (');
+		expect(source).toContain('let dataBreakpointLoadingOwner: number | null = null;');
+		expect(source).toMatch(
+			/function runToCursorWhileDataBreakpointIdle\(targetLine\?: number \| null\) \{\s+if \(dataBreakpointLoadingOwner !== null\) return Promise\.resolve\(false\);\s+return debug\.runToCursor\(targetLine\);\s+\}/
+		);
+		expect(source).toMatch(
+			/async function setMemoryDataBreakpoint\(\) \{[\s\S]*?if \(dataBreakpointLoadingOwner !== null\) return;[\s\S]*?const accessType = dataBreakpointAccessType;[\s\S]*?info\.accessTypes\.includes\(accessType\)[\s\S]*?activeDataBreakpoint = null;[\s\S]*?await debug\.setDataBreakpoints\(\[[\s\S]*?accessType[\s\S]*?\]\)/
+		);
+		expect(source).toMatch(
+			/async function clearMemoryDataBreakpoint\(\) \{[\s\S]*?if \(dataBreakpointLoadingOwner !== null\) return;[\s\S]*?activeDataBreakpoint = null;[\s\S]*?await debug\.setDataBreakpoints\(\[\]\)/
+		);
+		expect(source).toMatch(
+			/finally \{\s+if \(dataBreakpointLoadingOwner === requestVersion\) \{\s+dataBreakpointLoadingOwner = null;\s+dataBreakpointLoading = false;\s+\}\s+\}/
+		);
+		expect(source).toMatch(
+			/bind:value=\{dataBreakpointAccessType\}\s+disabled=\{dataBreakpointLoading\}/
+		);
+		expect(source).toMatch(
+			/onclick=\{\(\) => debug\.sendCommand\('continue'\)\}\s+disabled=\{!debug\.paused \|\| dataBreakpointLoading\}/
+		);
+		expect(source).toMatch(
+			/class="debug-frame-select"\s+disabled=\{!frame\.id \|\| dataBreakpointLoading\}/
+		);
+	});
+
+	it('writes bounded hexadecimal bytes through the paused LLDB memory inspector', () => {
+		expect(source).toContain("let memoryWriteInput = $state('');");
+		expect(source).toContain('let memoryWriteStatus = $state.raw<');
+		expect(source).toContain('async function writeDebugMemoryPage()');
+		expect(source).toMatch(
+			/debug\.writeMemory\(\s*requestedReference,\s*offset,\s*Uint8Array\.from\(bytes\),\s*false\s*\)/s
+		);
+		expect(source).toContain('aria-label="Memory write bytes"');
+		expect(source).toContain('aria-label="Write memory"');
+		expect(source).toContain('class="debug-memory-write-status"');
+	});
+
+	it('restarts LLDB debugging through a fully disposed fresh execution', () => {
+		const restartExecutionStart = source.indexOf('async function restartDebugExecution()');
+		const restartExecutionSource = source.slice(
+			restartExecutionStart,
+			source.indexOf('async function sendTerminalEof()', restartExecutionStart)
+		);
+		expect(source).toContain('let restartDebugPending = $state(false);');
+		expect(source).toContain('let executionGeneration = 0;');
+		expect(source).toContain('async function restartDebugExecution()');
+		expect(source).toContain('const previousExecution = activeExecution;');
+		expect(source).toContain('const teardownGeneration = ++executionGeneration;');
+		expect(source).toContain('restartRequestGeneration += 1;');
+		expect(source).toContain('if (restartRequestGeneration !== requestGeneration) return;');
+		expect(source).toContain("await settleExecutionTeardown('debug', previousExecution);");
+		expect(source).toContain('completeExecutionGeneration(teardownGeneration);');
+		expect(source).toContain('await exec(true);');
+		expect(source).toContain('executionPreflight.cancel();');
+		expect(source).toContain('aria-label="Restart Debug"');
+		expect(source).toContain('disabled={restartDebugPending || executionStopPending}');
+		expect(restartExecutionSource).toMatch(
+			/if \(\s*!terminal \|\|\s*runningMode !== 'debug' \|\|\s*restartDebugPending \|\|\s*executionStopPending\s*\)/s
+		);
+		expect(restartExecutionSource).toMatch(
+			/catch \(error\) \{\s+reportExecutionTeardownFailure\('restart', error\);\s+return;\s+\}/s
+		);
+		expect(source).toContain('completeExecutionGeneration(generation);');
+	});
+
+	it('keeps a stopped preflight obsolete and admits a clean relaunch', async () => {
+		const gate = createExecutionPreflightGate();
+		let releasePreflight!: () => void;
+		const stalledPreflight = new Promise<void>((resolve) => {
+			releasePreflight = resolve;
+		});
+		let executionCount = 0;
+		const first = gate.begin();
+		const obsoleteRun = (async () => {
+			await stalledPreflight;
+			if (gate.isCurrent(first)) executionCount += 1;
+		})();
+
+		gate.cancel();
+		expect(first.signal.aborted).toBe(true);
+		releasePreflight();
+		await obsoleteRun;
+		expect(executionCount).toBe(0);
+
+		const relaunch = gate.begin();
+		if (gate.isCurrent(relaunch)) executionCount += 1;
+		gate.finish(relaunch);
+		expect(executionCount).toBe(1);
+	});
+
+	it('navigates the workspace editor when an LLDB frame belongs to another source', () => {
+		expect(source).toContain(
+			'async function selectDebugFrame(frame: DebugFrame) {\n\t\tdataBreakpointRequestVersion += 1;'
+		);
+		expect(source).toMatch(
+			/async function selectDebugFrame\(frame: DebugFrame\) \{\s+dataBreakpointRequestVersion \+= 1;\s+invalidateMemoryInspector\(\);\s+if \(!frame\.id \|\| !\(await debug\.selectFrame\(frame\.id\)\)\) return;\s+const workspacePath = normalizePath\(\s*frame\.sourcePath\?\.replace\(\/\^\\\/workspace\\\/\/u, ''\) \|\| ''\s*\);\s+if \(!workspacePath \|\| !files\.some\(\(file\) => file\.path === workspacePath\)\) return;\s+selectFile\(workspacePath\);\s+debug\.setSourcePath\(`\/workspace\/\$\{workspacePath\}`\);\s+\}/s
 		);
 		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
 	});
@@ -381,6 +566,10 @@ describe('example route debug actions', () => {
 		);
 		expect(source).toMatch(
 			/async readDebugMemory\(memoryReference: string, offset: number, count: number\) \{\s+const memory = await debug\.readMemory\(memoryReference, offset, count\);\s+return memory \? \{ \.\.\.memory, data: Array\.from\(memory\.data\) \} : null;\s+\}/s
+		);
+		expect(source).toContain('writeDebugMemory: (');
+		expect(source).toMatch(
+			/return debug\.writeMemory\([\s\S]{0,160}Uint8Array\.from\(data\)[\s\S]{0,80}allowPartial/
 		);
 		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
 		expect(source).toMatch(/debug\.frameId === frame\.id && 'debug-entry--current'/);
@@ -878,7 +1067,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/const executionAvailable = \$derived\(!editorOnlyLanguages\.has\(language\)\);/
 		);
-		expect(source).toMatch(/if \(!executionAvailable\) return;/);
+		expect(source).toMatch(/if \(!executionAvailable\) return Promise\.resolve\(\);/);
 		expect(source).toMatch(/fortran: 'FORTRAN'/);
 		expect(source).toMatch(/graphql: 'GRAPHQL'/);
 		expect(source).toMatch(/json: 'JSON'/);
@@ -1058,7 +1247,7 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/breakpoints=\{debug\.effectiveBreakpoints\}/);
 		expect(source).toMatch(/onCursorLineChange=\{debug\.setCursorLine\}/);
 		expect(source).toMatch(/onBreakpointsChange=\{debug\.setBreakpoints\}/);
-		expect(source).toMatch(/onRunToCursor=\{debug\.runToCursor\}/);
+		expect(source).toMatch(/onRunToCursor=\{runToCursorWhileDataBreakpointIdle\}/);
 		expect(layoutSource).toMatch(
 			/:global\(html\),\s+:global\(body\) \{\s+margin: 0;\s+min-height: 100%;\s+\}/s
 		);

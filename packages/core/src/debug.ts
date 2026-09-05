@@ -1,5 +1,12 @@
 export type DebugCommand = 'continue' | 'stepInto' | 'nextLine' | 'stepOut';
-export type DebugPauseReason = 'breakpoint' | 'entry' | 'pause' | 'step' | 'nextLine' | 'stepOut';
+export type DebugPauseReason =
+	| 'breakpoint'
+	| 'dataBreakpoint'
+	| 'entry'
+	| 'pause'
+	| 'step'
+	| 'nextLine'
+	| 'stepOut';
 
 export interface DebugVariable {
 	name: string;
@@ -58,11 +65,50 @@ export interface DebugMemory {
 	unreadableBytes: number;
 }
 
+export interface DebugWriteMemoryResult {
+	offset?: number;
+	bytesWritten: number;
+}
+
+export type DebugDataBreakpointAccessType = 'read' | 'write' | 'readWrite';
+
+export interface DebugDataBreakpointInfoArguments {
+	name: string;
+	variablesReference?: number;
+	frameId?: number;
+	asAddress?: boolean;
+	bytes?: number;
+}
+
+export interface DebugDataBreakpointInfo {
+	dataId?: string;
+	description: string;
+	accessTypes?: DebugDataBreakpointAccessType[];
+	canPersist?: boolean;
+}
+
+export interface DebugDataBreakpoint {
+	dataId: string;
+	accessType?: DebugDataBreakpointAccessType;
+}
+
+export interface DebugResolvedDataBreakpoint {
+	id?: number;
+	verified: boolean;
+	message?: string;
+}
+
 export interface DebugResolvedBreakpoint {
 	requestedLine: number;
 	line: number;
 	verified: boolean;
 	message?: string;
+}
+
+export interface DebugSessionCapabilities {
+	readMemory: boolean;
+	writeMemory: boolean;
+	dataBreakpoints: boolean;
 }
 
 export interface DebugSourceBreakpoints {
@@ -84,6 +130,7 @@ export type DebugSessionEvent =
 			sourcePath?: string;
 			sourceContentSha256?: string;
 			sourceRevisionStale?: boolean;
+			capabilities?: DebugSessionCapabilities;
 	  }
 	| { type: 'resume'; command: DebugCommand }
 	| {

@@ -257,9 +257,11 @@ describe('J runner worker', () => {
 				await readFile(new URL('jamalgam.wasm.gz.bin', staticRuntimeUrl))
 			)
 		};
-		expect(await readFile(new URL('jamalgam.wasm.gz', staticRuntimeUrl))).toEqual(
-			await readFile(new URL('jamalgam.wasm.gz.bin', staticRuntimeUrl))
+		const legacyWasmStorage = await readFile(new URL('jamalgam.wasm.gz', staticRuntimeUrl));
+		const canonicalWasmStorage = await readFile(
+			new URL('jamalgam.wasm.gz.bin', staticRuntimeUrl)
 		);
+		expect(legacyWasmStorage.equals(canonicalWasmStorage)).toBe(true);
 		for (const receipt of manifest.assets) {
 			const bytes = logicalBytes[receipt.path as keyof typeof logicalBytes];
 			expect(bytes.byteLength).toBe(receipt.size);
@@ -337,7 +339,7 @@ describe('J runner worker', () => {
 		expect(messages).toContainEqual(
 			expect.objectContaining({ harnessBlobRevoked: expect.stringMatching(/^blob:wasm-j-/u) })
 		);
-	});
+	}, 15_000);
 
 	it('fails malformed streaming stdin before evaluating a runtime module', async () => {
 		const messages = await runHarness(

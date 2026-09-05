@@ -18,6 +18,7 @@ import {
 	computeClojureScriptRuntimeFingerprint,
 	syncWasmClojureScriptAssets
 } from '../../scripts/sync-wasm-clojurescript.mjs';
+import { normalizeClojureScriptCompilerPaths } from '../../runtimes/wasm-clojurescript/scripts/prepare-runtime.mjs';
 
 const tempDirs: string[] = [];
 const build = {
@@ -138,6 +139,25 @@ describe('syncWasmClojureScriptAssets', () => {
 		await Promise.all(
 			tempDirs.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))
 		);
+	});
+
+	it('normalizes compiler metadata paths independently of the checkout root', () => {
+		const firstRoot = '/tmp/checkout-one/runtimes/wasm-clojurescript';
+		const secondRoot = '/srv/checkout-two/runtimes/wasm-clojurescript';
+		const suffix = '/dist/out/cljs/core.cljc';
+		const first = normalizeClojureScriptCompilerPaths(
+			`const source = ${JSON.stringify(`${firstRoot}${suffix}`)};`,
+			firstRoot
+		);
+		const second = normalizeClojureScriptCompilerPaths(
+			`const source = ${JSON.stringify(`${secondRoot}${suffix}`)};`,
+			secondRoot
+		);
+
+		expect(first).toBe(second);
+		expect(first).toContain('/wasm-idle/runtimes/wasm-clojurescript/dist/out/cljs/core.cljc');
+		expect(first).not.toContain(firstRoot);
+		expect(second).not.toContain(secondRoot);
 	});
 
 	it('publishes a deterministic receipt-backed compiler snapshot', async () => {

@@ -2,7 +2,9 @@
 
 Browser-side LLVM runtime hosts used by wasm-idle. This package contains JavaScript and TypeScript
 code only. Compiler modules, sysroots, archives, and other runtime assets must be deployed
-separately and supplied through explicit HTTP(S) URLs.
+separately and supplied through explicit HTTP(S) URLs. Published tarballs omit generated source and
+declaration maps because their TypeScript source tree is not part of the package; executable
+JavaScript, declarations, and every documented export remain available.
 
 ```ts
 import { createClangCompiler } from '@wasm-idle/llvm-core/clang';
@@ -69,6 +71,15 @@ loading. Transport queue capacity, the asset fetch implementation, and the worke
 captured before verification starts, preventing in-flight option changes from resizing queues or
 replacing the code that loads assets and creates workers.
 
+Initial attach input is limited to 256 workspace source files and 256 source-breakpoint requests.
+Across those requests, each source may contain at most 1,024 lines and all initially configured
+sources may contain at most 4,096 lines in total. Repeating a source does not reset its per-source
+allowance. A max-plus-one input is rejected before runtime asset fetching or Worker creation. After
+LLDB sends `initialized`, setup can therefore issue no more than 256 sequential `setBreakpoints`
+requests. Each retains its own transport-write and DAP response deadlines, followed by the bounded
+`configurationDone` and final attach-response waits; the attach request itself is intentionally not
+given a cumulative deadline while configuration is still in progress.
+
 ```ts
 import { createBrowserLldbSession } from '@wasm-idle/llvm-core/debug';
 
@@ -94,9 +105,10 @@ await session.setBreakpoints({ path: '/workspace/main.cpp' }, [12, 18]);
 ```
 
 Configured and dynamic breakpoint lines must be positive safe integers. The product session
-validates and snapshots them before changing its per-source state; invalid lines are rejected before
-debug workers or a DAP request are created and do not supersede an in-flight valid update. Values
-above `Number.MAX_SAFE_INTEGER` are rejected instead of being rounded in a DAP message.
+validates and snapshots them before changing its per-source state; invalid configured lines are
+rejected before debug workers are created, while invalid dynamic lines are rejected before a DAP
+request is created and do not supersede an in-flight valid update. Values above
+`Number.MAX_SAFE_INTEGER` are rejected instead of being rounded in a DAP message.
 
 `setBreakpoints()` updates the session's resolved-breakpoint cache as well as sending DAP. Later
 `breakpoint` events therefore retain the IDs and source mapping from dynamic editor changes;
@@ -116,6 +128,27 @@ on the same line.
 
 Compile C/C++ LLDB artifacts with `compileArtifact(..., { debugMode: 'lldb' })`. They contain
 untouched source, embedded DWARF, stable `/workspace/...` paths, and exact Clang provenance.
+Lowercase `.c`, `.cc`, `.cpp`, and `.cxx` workspace siblings are compiled as independent
+translation units in canonical path order and linked through collision-free internal object names;
+headers and data files remain mounted without being compiled. Normal and LLDB runs therefore use
+the same multi-TU program. Trace instrumentation remains single-TU and rejects a workspace with
+additional translation units instead of silently omitting their debug metadata.
+Source-level `compileArgs` such as definitions and warning controls remain available, but LLDB mode
+rejects target triples, CPUs, target features, machine attributes, raw LLVM backend options, and
+thread, SIMD, atomics, memory64, shared-memory, or multi-memory switches before invoking Clang.
+This keeps the producer inside the pinned wasm32 WAMR classic-interpreter profile instead of
+letting a browser-valid artifact fail only after the debugger runtime has started.
+Before fetching debugger assets or creating Workers, the LLDB session structurally validates the
+guest as a bounded core WebAssembly v1 module for the supported WAMR profile. Only
+the 45 `wasi_snapshot_preview1` function names and signatures emitted by pinned WASI SDK 33 are
+accepted; unknown names, ABI mismatches, non-function imports, and legacy or extension namespaces
+fail closed. Initial guest memory is limited to 2,048 pages (128 MiB), and an initial table is
+limited to 1,000,000 elements, so compact modules cannot defer oversized startup allocations to the
+WAMR Worker. SIMD, atomics and shared memory, memory64, table64, multiple memories or tables,
+multi-memory instruction encodings, extended constant expressions, typed references, exception
+handling, GC instructions, dynamic linking, and relocatable modules also fail with an explicit
+unsupported-module error. The target Worker repeats this check before claiming its generation or
+loading WAMR, so direct Worker messages cannot bypass the preflight boundary.
 `compileLinkRun()` rejects `lldb` because an LLDB artifact must not be instantiated through the
 normal browser execution path. Launch arguments, WASI environment variables, and the `/workspace`
 working directory are forwarded to WAMR rather than being applied only to LLDB's attach request.
@@ -163,6 +196,12 @@ runtime reports a real exit, abort, or session disposal.
 LLDB may defer `continue`, `next`, `stepIn`, and `stepOut` responses until the target stops again.
 Those execution requests therefore opt out of the DAP response timeout while retaining the
 transport-write timeout; ordinary DAP requests still use the configured response deadline.
+The initial `attach` response is likewise causal: LLDB sends it only after the client has installed
+every source's breakpoints and sent `configurationDone`. Attach therefore has no cumulative response
+deadline, while the `initialized` event, each breakpoint request, and `configurationDone` retain
+their individual configured timeouts. Once `configurationDone` succeeds, the pending attach must
+complete within one configured request timeout; a missing final attach response fails and disposes
+the session instead of leaving startup pending indefinitely.
 A deferred execution failure is fatal only while that request still owns the current run state. If
 a valid `continued` or newer `stopped` event has already advanced the session, the obsolete failure
 is ignored and cannot tear down the running target or its newer pause.
@@ -175,7 +214,7 @@ workers, so invalid or concurrently changed timer settings cannot produce immedi
 browser timers. Per-request DAP response timeout overrides follow the same numeric rule and are
 rejected before the request is sent; `null` is the explicit opt-out for execution requests whose
 response arrives only after the target stops.
-Product `scopes`, `variables`, and `readMemory` calls validate frame IDs, variable references,
+Product `scopes`, `variables`, `readMemory`, and `writeMemory` calls validate frame IDs, variable references,
 pagination offsets/counts, and memory offsets/counts as safe integers before sending DAP. Invalid
 caller input rejects with `RangeError` without changing the selected frame, stopping the session,
 or creating a Worker request.
@@ -206,7 +245,7 @@ Receiving one fails and closes the DAP stream explicitly, instead of silently le
 for a response that the browser host cannot provide. Reverse-request commands are validated before
 the unsupported-operation error is reported.
 The live playground session also validates the command-specific bodies it consumes after envelope
-parsing. Malformed `scopes`, `variables`, `readMemory`, or `evaluate` data raises a `ProtocolError`,
+parsing. Malformed `scopes`, `variables`, `readMemory`, `writeMemory`, or `evaluate` data raises a `ProtocolError`,
 stops the debug view, and disposes both workers. In particular, memory data must be valid Base64 and
 the readable-plus-unreadable total cannot exceed the requested byte count; expression fallback to
 `?` applies only to ordinary LLDB evaluation failures, not to a malformed successful response.
@@ -238,6 +277,22 @@ breakpoint update is converted to the shared Core `ProtocolError`. The session p
 disposes both debug workers, and rejects its completion with the low-level error retained as the
 cause. Other active initialization failures preserve their original `Error` while following the
 same single-stop and Worker-disposal lifecycle, including failures while flushing startup input.
+Target stdin writes are serialized on a recovered internal tail. Disconnect aborts a blocked write
+with the standard session-disposed error, waits for the recovered tail, and still permits an
+already queued EOF operation to settle without an unhandled rejection. The playground additionally
+captures the owning session generation for each flush: disconnect, target exit, and failure discard
+the retired generation's queued input and EOF, so a late write completion cannot feed a replacement
+debug session. A current-generation stdin transport failure remains fatal and is reported through
+the normal single-stop session completion path.
+Reusing a playground session controller is also serialized across teardown. A relaunch reserves its
+own lifecycle and completion before awaiting the prior Worker disposal, so a concurrent disconnect
+can still cancel that wait and two starts cannot pass the same teardown barrier. Finish, failure,
+and disconnect capture the completion they own before publishing `stop`; a synchronous relaunch
+from that callback therefore cannot be settled early by the retired generation. If teardown itself
+fails, disconnect rejects both its own operation and the completion it owns with that same error,
+so a cancelled relaunch cannot remain pending behind a failed disposal barrier. Completion
+settlement also precedes the final `stop` notification during an explicit disconnect, and throwing
+consumer stop callbacks are isolated from finish, failure, and disconnect teardown semantics.
 Direct `DapClient` consumers can set `onEventError(error, event)` to observe an event-listener
 exception. Throwing listeners and a throwing error hook are isolated from one another, and the
 client continues parsing later events and responses on the same byte stream.
@@ -281,19 +336,63 @@ memory change. The current basic fixture reports one sample at exactly 256 MiB a
 respectively. These values are the Emscripten linear-memory backing-buffer sizes, not total browser
 RSS; both workers retain bounded memory growth for workloads that exceed the initial allocation.
 
-The debug runtime requires a cross-origin-isolated page with `SharedArrayBuffer`. LLDB and WAMR
-assets are lazy-loaded from the versioned producer manifest and are not included in this npm
-package.
-Before compiling an LLDB run, the application resolves all six LLDB/WAMR assets from that manifest,
-downloads them one at a time, and verifies their pinned SHA-256 values. A missing or corrupt asset
-therefore selects trace debugging for that run before DWARF compilation begins. The session repeats
-the same preflight before creating workers so direct package consumers retain the integrity
-boundary.
+The debug runtime requires a cross-origin-isolated page with `SharedArrayBuffer`. Its verified
+Blob-backed modules and nested pthread Workers also require `blob:` in the deployment CSP's
+`script-src`, `worker-src`, and `connect-src`. LLDB and WAMR assets are lazy-loaded from the
+versioned producer manifest and are not included in this npm package.
+The bundled `/wasm-debug/` profile pins the raw `runtime-manifest.v2.json` response to its exact
+byte length and SHA-256 receipt. The consumer verifies those response bytes before JSON parsing or
+Worker creation; the verified manifest then supplies the six LLDB/WAMR asset receipts. A custom
+`runtimeAssets.debug.baseUrl` or `manifestUrl` must include
+`runtimeAssets.debug.manifestSha256`. Deployments configured through public environment variables
+must pair `PUBLIC_WASM_DEBUG_RUNTIME_URL` with
+`PUBLIC_WASM_DEBUG_RUNTIME_MANIFEST_SHA256`. A custom profile without a valid expected digest fails
+closed before fetching the manifest or creating a debugger Worker, allowing the product's
+pre-session capability check to offer a new trace run instead.
+Only authenticated manifest preflight failures may offer a new trace run before compilation.
+Manifest downloads are capped at 64 KiB. An invalid or oversized `Content-Length` fails before the
+body reader starts; a missing or understated header still uses a counted byte stream that cancels
+as soon as the cap is crossed. The loader never calls the unbounded `Response.arrayBuffer()` path
+for this outer trust boundary.
+Before compiling an LLDB run, the application verifies only the bounded outer manifest. Once the
+DWARF artifact is ready, `BrowserLldbSession` resolves all six LLDB/WAMR assets from that manifest,
+downloads and verifies each one exactly once, and transfers the owned verified bytes to its Workers.
+The Workers never re-fetch executable URLs. A missing or corrupt binary fails the LLDB session before
+Worker creation. Direct package consumers must authenticate the raw manifest before passing its
+parsed value to `BrowserLldbSession`; the session then enforces the same single-fetch asset boundary.
+A binary asset failure after DWARF compilation fails that LLDB session explicitly, before any
+debugger Worker starts, and never continues the compiled artifact through trace debugging.
+The tracked consumer profile and copied manifest/assets form one release compatibility unit.
+`sync:wasm-debug` derives the profile bytes and digest from the exact copied manifest and rolls both
+the asset directory and profile module back after ordinary publication failures; the dedicated
+post-sync receipt test is the release drift gate. A machine power loss between filesystem renames is
+outside the runtime publication contract, so release commits must include and verify code, profile,
+manifest, and assets together.
+
+Clean Pages builds run `prepare:wasm-debug-release` before layering or compression. That command
+reads the tracked release profile, fetches only its immutable `wasm-llvm` revision, authenticates
+the manifest receipt before trusting its asset list, and installs the six verified assets through
+the same transactional sync path. Each producer request has a 30-second attempt timeout and up to
+three attempts for transient failures. Cancellation is forwarded through download and publication;
+an abort during replacement rolls both the runtime tree and generated receipt back. Overlapping
+publishers are serialized per destination, while owner-checked filesystem locks make separate
+processes fail closed instead of modifying the same release concurrently. Repeated page builds may
+replace either the raw or already-compressed destination. A bounded streaming snapshot binds the
+exact staged and installed trees, and rollback restores the same storage representation if
+replacement fails. Failed rollback phases revalidate both recovery generations before any
+compensating reattachment and preserve them in place on an ownership mismatch. Every destructive
+rename rechecks its source and destination, both success and rollback postconditions are verified
+before cleanup, and transaction-root cleanup is non-recursive outside the owned runtime directory.
+Immediately before `gh-pages` publication, the deployment verifier authenticates the logical
+manifest and every asset again; it accepts either raw bytes or the deterministic gzip representation
+recorded by `compressed-runtime-assets.v1.json`, and refuses missing, ambiguous, stale, oversized, or
+mismatched output. Browser behavior remains lazy because this is a build-time static-tree preparation
+step, not an application-start preload.
 
 Repository CI runs `test:browser:debug:lldb` for every pull request and `main` push in a dedicated
 Chromium job. The gate installs Chromium, downloads the four external Clang delivery assets,
 verifies every pinned SHA-256 receipt, and requires the product LLDB/WAMR binaries published by
-`wasm-llvm` commit `c5c5385c2c15d95b6bc15429ccfa888c5981a501` for C, C++, and Rust. The V2
+`wasm-llvm` commit `adac1d77676e48eb994c78f3053057708d389ca2` for C, C++, and Rust. The V2
 manifest and all six debug assets are downloaded from that immutable revision and verified before
 the browser starts; the test cannot silently fall back to trace debugging. At each C, C++, and Rust
 source pause, the gate also verifies that LLDB scopes remain lazy until their
@@ -340,19 +439,57 @@ available for slower CI hosts.
 A fourth C fixture repeats that running-target launch and disconnect sequence three times in one
 page. It instruments page-created workers, requires every extra LLDB/WAMR worker pair to terminate,
 and verifies that the active worker count returns to the first-run baseline after each disconnect.
+If a target-exit or worker-error path has already started disposal, the playground disconnect waits
+for that same disposal before reporting completion, so the UI cannot return to Ready before both
+debug Worker termination calls are observable.
+Each debug Worker also owns Blob URLs for its verified Emscripten JavaScript, WebAssembly, and
+pthread sidecar assets. A live-session dispose revokes those URLs synchronously before the outer
+Worker can reach its bounded force-termination fallback; the normal and failure `finally` paths use
+the same idempotent cleanup. Repeated relaunches therefore cannot retain one complete verified
+runtime asset set merely because a blocking native entry point did not unwind before termination.
+The execution preflight signal also remains attached after manifest verification and is checked
+before and after terminal clear, prepare, and run. Stop or Restart during the clear/compile startup
+window therefore retires that execution before it can create a late debugger session; a Restart
+waits for the retired execution to settle and then starts one fresh generation. A retired aborted
+generation is ignored even when the shared sandbox boundary wraps the abort reason in its typed
+cancellation error.
+Debug executions opt into the shared boundary's explicit interactive-run contract, so the final
+guest run is not killed by the ordinary compile-plus-run wall-clock deadline while the user is
+paused or stepping. Asset loading, compilation/prepare, DAP startup requests, Worker watchdogs,
+AbortSignal cancellation, output and diagnostic limits, Stop, and disposal remain bounded. Normal
+Run does not opt in and retains its configured wall-clock deadline.
+If the shared execution boundary cancels a run for timeout or output limits, it reports that limit
+promptly but keeps the sandbox busy until both the guest operation and asynchronous debugger
+teardown have settled. A following clear, restart, or run therefore cannot overlap the retiring
+LLDB/WAMR Workers.
 It also requests garbage collection and limits renderer JS heap growth to 64 MiB by default; set
 `WASM_IDLE_DEBUG_HEAP_GROWTH_LIMIT_BYTES` to tune that budget for constrained CI environments. Set
 `WASM_IDLE_DEBUG_BROWSER_CASES=c-relaunch` to run only this fixture locally.
+The nightly schedule and each manual release-candidate dispatch run the relaunch fixture 100 times
+with a two-hour browser-test budget. Pull requests and `main` pushes continue to run the complete
+LLDB C, C++, and Rust fixture matrix instead of substituting the soak-only shard.
+If a relaunch does not reach its source pause, the fixture reports the exact iteration, debugger
+state, Worker and heap counters, preview-server status, failed request URLs, browser console tail,
+page errors, and terminal transcript. Run a local soak without another build or browser probe
+mutating the same preview output; an unavailable application chunk is a preview-environment
+failure, not an LLDB stopped-state timeout.
 A companion fixture force-terminates the real target Worker and LLDB Worker after separate source
 pauses. It dispatches the browser worker-error boundary, requires both workers from each failed
 session to terminate within five seconds, and launches a final clean session that must print
 `lldb-worker-recovery=73`. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-worker-crash` to run only this
 fixture locally.
-A fifth C fixture intercepts the LLDB WebAssembly asset with a synthetic 404 after a valid manifest
-load. It requires the application preflight to report that exact asset status, select trace
-debugging, and still produce `trace-asset-fallback=73`. Set
-`WASM_IDLE_DEBUG_BROWSER_CASES=c-asset-fallback` to run only this fixture locally.
-A sixth C fixture stops after stepping inside a three-level recursive call, selects every `recurse`
+A fifth C fixture intercepts the outer runtime manifest with a synthetic 404. It requires the
+pre-session capability check to select trace, complete the guest with
+`trace-manifest-fallback=73`, and leave all debugger Worker lifecycle counters unchanged. The
+manifest fallback fixture proves that no debugger Worker starts before the authenticated manifest
+boundary succeeds. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-manifest-fallback` to run only this fixture
+locally.
+A sixth C fixture intercepts the LLDB WebAssembly asset with a synthetic 404 after a valid manifest
+load and DWARF compilation. It requires an explicit LLDB session failure with that exact asset
+status, proves that neither debugger Worker started, and rejects both trace fallback and guest
+execution. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-asset-session-failure` to run only this fixture
+locally.
+A seventh C fixture stops after stepping inside a three-level recursive call, selects every `recurse`
 frame through the product UI adapter, and requires distinct frame IDs with `n=1`, `n=2`, and `n=3`
 scope values. This guards the pinned synthetic-CFA fix against reusing the top frame's Wasm locals
 for callers. Set `WASM_IDLE_DEBUG_BROWSER_CASES=c-recursive-frames` to run only this fixture locally.
@@ -361,6 +498,12 @@ bytes of Wasm linear memory through the complete Sandbox and Terminal control pa
 that the response is readable before resuming. The hexadecimal form matters because LLDB-DAP
 treats memory references as opaque strings and accepts addresses emitted by its own
 `memoryReference` encoder.
+A dedicated C memory-write fixture stops before an addition, resolves the local `value` variable's
+LLDB `memoryReference`, writes the little-endian bytes for `100`, reads the same four bytes back,
+and resumes to require `lldb-memory-write=103`. Set
+`WASM_IDLE_DEBUG_BROWSER_CASES=c-memory-write` to run only this fixture locally. The capability is
+fail-closed across the producer manifest and DAP initialize response, and does not imply variable
+assignment or expression evaluation support.
 This pinned LLDB build registers the inert no-script interpreter required by native formatter
 matching, so the first lazy `variables` request cannot fall through a missing plugin callback. Its
 call-depth frame identities also keep caller frames stable while a callee is pushed, allowing the
