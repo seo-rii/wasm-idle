@@ -89,28 +89,57 @@ async function listFiles(rootDir) {
 	return files.sort();
 }
 
-/** @param {string[]} rootDirs */
-async function computeBundleFingerprint(rootDirs) {
+/** @param {string[]} rootDirs @returns {Promise<string>} */
+export async function computeBundleFingerprint(rootDirs) {
 	const hash = createHash('sha256');
-	for (const rootDir of rootDirs) {
+	hash.update('wasm-idle:wasm-of-js-of-ocaml-bundle:v1\0');
+	for (const [rootIndex, rootDir] of rootDirs.entries()) {
+		hash.update(`root:${rootIndex}\0`);
 		for (const filePath of await listFiles(rootDir)) {
-			const fileStats = await stat(filePath);
-			hash.update(path.relative(rootDir, filePath));
+			hash.update(path.relative(rootDir, filePath).split(path.sep).join('/'));
 			hash.update('\0');
-			hash.update(String(fileStats.size));
-			hash.update('\0');
-			hash.update(String(Math.trunc(fileStats.mtimeMs)));
+			hash.update(await readFile(filePath));
 			hash.update('\n');
 		}
 		hash.update('\n---\n');
 	}
-	return hash.digest('hex').slice(0, 16);
+	return hash.digest('hex');
 }
 
-/** @param {string} versionModulePath @param {string} fingerprint */
-async function writeVersionModule(versionModulePath, fingerprint) {
+/** @typedef {{readonly bytes: number; readonly sha256: string}} AssetReceipt */
+
+/** @param {string} filePath @returns {Promise<AssetReceipt>} */
+async function computeAssetReceipt(filePath) {
+	const bytes = await readFile(filePath);
+	return Object.freeze({
+		bytes: bytes.byteLength,
+		sha256: createHash('sha256').update(bytes).digest('hex')
+	});
+}
+
+/**
+ * @param {string} versionModulePath
+ * @param {string} fingerprint
+ * @param {AssetReceipt} moduleReceipt
+ * @param {AssetReceipt} manifestReceipt
+ */
+async function writeVersionModule(versionModulePath, fingerprint, moduleReceipt, manifestReceipt) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource = `export const WASM_OCAML_ASSET_VERSION = '${fingerprint}';\n`;
+	const moduleSource = `export const WASM_OCAML_ASSET_VERSION =
+	'${fingerprint}';
+
+export const WASM_OCAML_RUNTIME_PROFILE = Object.freeze({
+	fingerprint: WASM_OCAML_ASSET_VERSION,
+	moduleReceipt: Object.freeze({
+		bytes: ${moduleReceipt.bytes},
+		sha256: '${moduleReceipt.sha256}'
+	}),
+	manifestReceipt: Object.freeze({
+		bytes: ${manifestReceipt.bytes},
+		sha256: '${manifestReceipt.sha256}'
+	})
+});
+`;
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current === moduleSource) return;
 	await writeFile(versionModulePath, moduleSource, 'utf8');
@@ -224,8 +253,12 @@ export async function syncWasmOfJsOfOcamlDist({
 	if (rewrittenManifestSource !== targetManifestSource) {
 		await writeFile(targetManifestPath, rewrittenManifestSource, 'utf8');
 	}
-	const fingerprint = await computeBundleFingerprint([sourceBrowserDistDir, sourceBundleDir]);
-	await writeVersionModule(versionModulePath, fingerprint);
+	const fingerprint = await computeBundleFingerprint([targetBrowserDistDir, targetBundleDir]);
+	const moduleReceipt = await computeAssetReceipt(
+		path.join(targetBrowserDistDir, 'src', 'index.js')
+	);
+	const manifestReceipt = await computeAssetReceipt(targetManifestPath);
+	await writeVersionModule(versionModulePath, fingerprint, moduleReceipt, manifestReceipt);
 
 	return {
 		sourceBrowserDistDir,
@@ -233,6 +266,8 @@ export async function syncWasmOfJsOfOcamlDist({
 		targetBrowserDistDir,
 		targetBundleDir,
 		fingerprint,
+		moduleReceipt,
+		manifestReceipt,
 		versionModulePath
 	};
 }

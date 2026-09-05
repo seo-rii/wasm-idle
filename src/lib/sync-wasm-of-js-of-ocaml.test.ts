@@ -1,8 +1,12 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { syncWasmOfJsOfOcamlDist } from '../../scripts/sync-wasm-of-js-of-ocaml.mjs';
+import {
+	computeBundleFingerprint,
+	syncWasmOfJsOfOcamlDist
+} from '../../scripts/sync-wasm-of-js-of-ocaml.mjs';
 
 const tempDirs: string[] = [];
 
@@ -59,6 +63,38 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 		await Promise.all(
 			tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
 		);
+	});
+
+	it('fingerprints bundle contents independently of file timestamps', async () => {
+		const browserDistDir = await makeTempDir();
+		const bundleDir = await makeTempDir();
+		const browserEntryPath = path.join(browserDistDir, 'src/index.js');
+		await writeFixtureFile(browserDistDir, 'src/index.js', 'export default 1;\n');
+		await writeFixtureFile(bundleDir, 'manifest.json', '{"version":1}\n');
+
+		const first = await computeBundleFingerprint([browserDistDir, bundleDir]);
+		const future = new Date(Date.now() + 60_000);
+		await utimes(browserEntryPath, future, future);
+		const second = await computeBundleFingerprint([browserDistDir, bundleDir]);
+
+		expect(second).toBe(first);
+		expect(first).toMatch(/^[a-f0-9]{64}$/u);
+	});
+
+	it('changes the fingerprint when same-sized contents change with the same timestamp', async () => {
+		const browserDistDir = await makeTempDir();
+		const bundleDir = await makeTempDir();
+		const browserEntryPath = path.join(browserDistDir, 'src/index.js');
+		await writeFixtureFile(browserDistDir, 'src/index.js', 'export default 1;\n');
+		await writeFixtureFile(bundleDir, 'manifest.json', '{"version":1}\n');
+		const originalTimes = await stat(browserEntryPath);
+
+		const first = await computeBundleFingerprint([browserDistDir, bundleDir]);
+		await writeFile(browserEntryPath, 'export default 2;\n', 'utf8');
+		await utimes(browserEntryPath, originalTimes.atime, originalTimes.mtime);
+		const second = await computeBundleFingerprint([browserDistDir, bundleDir]);
+
+		expect(second).not.toBe(first);
 	});
 
 	it('copies the built wasm-of-js-of-ocaml browser bundle and bundled static Binaryen tools', async () => {
@@ -168,8 +204,34 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 			wasm_metadce: expectedPublicDescriptor(sourceManifest.binaryenTools.wasm_metadce)
 		});
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toContain(
-			`export const WASM_OCAML_ASSET_VERSION = '${result.fingerprint}';`
+			`'${result.fingerprint}';`
 		);
+		const moduleBytes = await readFile(path.join(targetBrowserDistDir, 'src/index.js'));
+		const manifestBytes = await readFile(
+			path.join(targetBundleDir, 'browser-native-manifest.v1.json')
+		);
+		const versionModule = await readFile(versionModulePath, 'utf8');
+		expect(versionModule).toContain(
+			'export const WASM_OCAML_RUNTIME_PROFILE = Object.freeze({'
+		);
+		expect(versionModule).toContain(`bytes: ${moduleBytes.byteLength}`);
+		expect(versionModule).toContain(
+			`sha256: '${createHash('sha256').update(moduleBytes).digest('hex')}'`
+		);
+		expect(versionModule).toContain(`bytes: ${manifestBytes.byteLength}`);
+		expect(versionModule).toContain(
+			`sha256: '${createHash('sha256').update(manifestBytes).digest('hex')}'`
+		);
+		expect(result).toMatchObject({
+			moduleReceipt: {
+				bytes: moduleBytes.byteLength,
+				sha256: createHash('sha256').update(moduleBytes).digest('hex')
+			},
+			manifestReceipt: {
+				bytes: manifestBytes.byteLength,
+				sha256: createHash('sha256').update(manifestBytes).digest('hex')
+			}
+		});
 	});
 
 	it('clears stale files from previous synced outputs', async () => {
