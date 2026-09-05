@@ -711,7 +711,9 @@ fingerprint. It then transfers exactly those three verified logical buffers to a
 that performs no runtime-asset fetches. A `rootUrl` mirror reuses the bundled profile. Any explicit
 `runtimeAssets.ruby` override must provide one complete identity-and-receipt profile and use its
 same-origin canonical paths with absent or exact receipt query pins. URL-only
-`PUBLIC_WASM_RUBY_*` overrides intentionally fail closed.
+`PUBLIC_WASM_RUBY_*` overrides intentionally fail closed. The producer receipt covers every
+package-owned Vite file but excludes pnpm-generated nested `node_modules/.bin/` launch shims, whose
+installation paths are not reproducible package content.
 AssemblyScript dynamically imports `static/wasm-assemblyscript/runtime.mjs`, produced from the
 pinned AssemblyScript compiler and loader. Override it with
 `PUBLIC_WASM_ASSEMBLYSCRIPT_MODULE_URL` or `runtimeAssets.assemblyscript.moduleUrl`. Compilation

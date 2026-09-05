@@ -464,6 +464,28 @@ describe('syncWasmRubyAssets', () => {
 		);
 	});
 
+	it('ignores pnpm-generated Vite shims while validating package-owned files', async () => {
+		const fixture = await createFixture();
+		await writeFixtureFile(
+			fixture.nodeModulesDir,
+			'vite/node_modules/.bin/esbuild',
+			'#!/bin/sh\nexec ../esbuild/bin/esbuild "$@"\n'
+		);
+		await expect(syncWasmRubyAssets(fixture)).resolves.toBeDefined();
+
+		await writeFixtureFile(
+			fixture.nodeModulesDir,
+			'vite/node_modules/.bin/esbuild',
+			'#!/bin/sh\nexec /different/store/esbuild "$@"\n'
+		);
+		await expect(syncWasmRubyAssets(fixture)).resolves.toBeDefined();
+
+		await writeFixtureFile(fixture.nodeModulesDir, 'vite/index.js', 'corrupted\n');
+		await expect(syncWasmRubyAssets(fixture)).rejects.toThrow(
+			'installed package tree does not match the input lock'
+		);
+	});
+
 	it('rejects a package-manager integrity mismatch', async () => {
 		const fixture = await createFixture();
 		const lock = await readFile(fixture.pnpmLockPath, 'utf8');

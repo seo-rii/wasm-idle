@@ -93,8 +93,8 @@
 		},
 		"script": {
 			"path": "scripts/sync-wasm-ruby.mjs",
-			"bytes": 46491,
-			"sha256": "85c0470fd9d903350761fb6996580f38b6178f8119d4aae25eb2b7cb9c216b3b"
+			"bytes": 46815,
+			"sha256": "2805cc5794231142c9ef6f0843b31c64e8169064a106a807f08742e521de6b54"
 		},
 		"tool": {
 			"name": "vite",
@@ -103,9 +103,9 @@
 			"tarballUrl": "https://registry.npmjs.org/vite/-/vite-8.0.8.tgz",
 			"integrity": "sha512-dbU7/iLVa8KZALJyLOBOQ88nOXtNG8vxKuOT4I2mD+Ya70KPceF4IAmDsmU0h1Qsn5bPrvsY9HJstCRh3hG6Uw==",
 			"license": "MIT",
-			"files": 47,
-			"bytes": 2190838,
-			"treeSha256": "b3462dd488501c9744a64040f6169ab8afe0d4ec257c5fa822f7ccf5fd779536"
+			"files": 42,
+			"bytes": 2185148,
+			"treeSha256": "63becb5aef9c86b925810f4298df7c05905aa0ff74e6b8ee3b98991ca6a25a25"
 		}
 	},
 	"transformations": [

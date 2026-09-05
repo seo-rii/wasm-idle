@@ -312,9 +312,15 @@ async function listRegularFiles(rootDir, currentDir = rootDir) {
 	return files.sort();
 }
 
-/** @param {string} packageDir */
-async function packageTreeReceipt(packageDir) {
-	const files = await listRegularFiles(packageDir);
+/**
+ * @param {string} packageDir
+ * @param {{ excludePackageManagerBins?: boolean }} [options]
+ */
+async function packageTreeReceipt(packageDir, options = {}) {
+	const files = (await listRegularFiles(packageDir)).filter(
+		(relativePath) =>
+			!options.excludePackageManagerBins || !relativePath.startsWith('node_modules/.bin/')
+	);
 	let bytes = 0;
 	const entries = [];
 	for (const relativePath of files) {
@@ -690,7 +696,9 @@ async function validateInstalledInputs(options) {
 		) {
 			throw new Error(`wasm-ruby installed package identity is invalid: ${descriptor.name}`);
 		}
-		const tree = await packageTreeReceipt(packageDir);
+		const tree = await packageTreeReceipt(packageDir, {
+			excludePackageManagerBins: descriptor.name === options.lock.producer.tool.name
+		});
 		if (
 			tree.files !== descriptor.files ||
 			tree.bytes !== descriptor.bytes ||
@@ -1003,7 +1011,8 @@ export async function syncWasmRubyAssets(options = {}) {
 				entry: lock.producer.entry,
 				script: lock.producer.script,
 				tool: lock.producer.tool,
-				packageTreeReceiptFormat: 'sha256-json-sorted-path-bytes-sha256-v1'
+				packageTreeReceiptFormat:
+					'sha256-json-sorted-path-bytes-sha256-v2-excludes-package-manager-bin'
 			},
 			transformations: lock.transformations,
 			legalFiles,
