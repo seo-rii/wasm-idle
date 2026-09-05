@@ -1213,10 +1213,12 @@ const runtimeDetailsByLanguage = new Map([
 			packageBase: `${workspacePackage('runtimes/wasm-of-js-of-ocaml')} / js_of_ocaml + wasm_of_ocaml`,
 			execution:
 				`default backend ${code('wasm')}; selectable ${codeList(['wasm', 'js'])}; ` +
-				`${code('ocamlWasmBinaryenMode')} ${codeList(['fast', 'full'])}; supports ${code('stdin')}`,
+				`${code('ocamlWasmBinaryenMode')} ${codeList(['fast', 'full'])}; supports ${code('stdin')}; ` +
+				'outer module and manifest are size/SHA-256 verified before use',
 			customization:
-				`${code('runtimeAssets.ocaml.moduleUrl')}/${code('manifestUrl')} or ` +
-				`${code('PUBLIC_WASM_OCAML_*')}; ${code('ocamlBackend')}`
+				`${code('runtimeAssets.ocaml.moduleUrl')}/${code('manifestUrl')} plus ` +
+				`${code('moduleReceipt')}/${code('manifestReceipt')} for a custom generation, or ` +
+				`${code('PUBLIC_WASM_OCAML_*')} for a mirror of the bundled generation; ${code('ocamlBackend')}`
 		}
 	],
 	[
