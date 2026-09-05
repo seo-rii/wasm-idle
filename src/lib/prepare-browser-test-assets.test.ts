@@ -170,7 +170,9 @@ describe('browser test asset preparation', () => {
 			.map((asset) => asset.target);
 
 		expect(manifest.format).toBe('wasm-idle-browser-test-assets-v1');
-		expect(manifest.defaultBaseUrl).toBe('https://seorii.page/wasm-idle/');
+		expect(manifest.defaultBaseUrl).toMatch(
+			/^https:\/\/raw\.githubusercontent\.com\/seo-rii\/wasm-idle\/[a-f0-9]{40}\/$/u
+		);
 		expect(clangTargets).toEqual(
 			expect.arrayContaining([
 				'clang/bin/clang.wasm.gz',

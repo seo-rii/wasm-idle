@@ -8,7 +8,11 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 const REPOSITORY_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
 const DEFAULT_RECEIPT_PATH = path.join(REPOSITORY_ROOT, 'static', 'clang', 'runtime-build.json');
 const DEFAULT_STATIC_DIR = path.join(REPOSITORY_ROOT, 'static');
-const DEFAULT_ASSET_BASE_URL = 'https://seorii.page/wasm-idle/';
+const DEFAULT_ASSET_MANIFEST_PATH = path.join(
+	REPOSITORY_ROOT,
+	'scripts',
+	'browser-test-assets.v1.json'
+);
 
 /**
  * @typedef {{ asset: string; size: number; sha256: string }} ClangdReceiptAsset
@@ -28,7 +32,7 @@ export async function prepareClangdAssets(options = {}) {
 	const {
 		receiptPath = DEFAULT_RECEIPT_PATH,
 		staticDir = DEFAULT_STATIC_DIR,
-		baseUrl = process.env.WASM_IDLE_TEST_ASSET_BASE_URL || DEFAULT_ASSET_BASE_URL,
+		baseUrl = process.env.WASM_IDLE_TEST_ASSET_BASE_URL,
 		bypassCookie = process.env.WASM_IDLE_TEST_BYPASS_COOKIE || '',
 		fetchImpl = fetch,
 		timeoutMs = 120_000
@@ -58,7 +62,9 @@ export async function prepareClangdAssets(options = {}) {
 			sha256: asset.sha256
 		})),
 		targetRoot: staticDir,
-		sourceBaseUrl: baseUrl,
+		sourceBaseUrl:
+			baseUrl ||
+			JSON.parse(await readFile(DEFAULT_ASSET_MANIFEST_PATH, 'utf8')).defaultBaseUrl,
 		label: 'clangd',
 		userAgent: 'wasm-idle-clangd-assets',
 		bypassCookie,

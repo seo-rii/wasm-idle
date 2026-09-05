@@ -203,13 +203,6 @@ export async function preparePinnedAssets({
 				continue;
 			}
 
-			const declaredLength = Number(response.headers.get('content-length') || 0);
-			const contentEncoding = response.headers.get('content-encoding');
-			if (declaredLength && !contentEncoding && declaredLength !== asset.size) {
-				throw new Error(
-					`${label} asset ${asset.targetPath} size mismatch: expected ${asset.size}, received ${declaredLength}`
-				);
-			}
 			try {
 				bytes = new Uint8Array(await response.arrayBuffer());
 			} catch (error) {
@@ -234,7 +227,9 @@ export async function preparePinnedAssets({
 		const digest = createHash('sha256').update(bytes).digest('hex');
 		if (bytes.byteLength !== asset.size || digest !== asset.sha256) {
 			throw new Error(
-				`Downloaded ${label} asset failed receipt validation: ${asset.targetPath}`
+				`Downloaded ${label} asset failed receipt validation: ${asset.targetPath}; ` +
+					`expected size=${asset.size} sha256=${asset.sha256}; ` +
+					`actual size=${bytes.byteLength} sha256=${digest}`
 			);
 		}
 

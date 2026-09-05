@@ -180,14 +180,38 @@ describe('pinned asset retries', () => {
 		expect(new Headers(fetchImpl.mock.calls[0][1]?.headers).get('cookie')).toBeNull();
 	});
 
-	it('does not retry a receipt hash mismatch', async () => {
+	it('reports expected and actual hashes for a same-size mismatch without retrying', async () => {
 		const fixture = await createFixture(Buffer.from('expected payload'));
-		const fetchImpl = vi
-			.fn<typeof fetch>()
-			.mockResolvedValue(new Response(Buffer.from('tampered payload')));
+		const actual = Buffer.from('tampered payload');
+		const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(actual));
 
 		await expect(prepareFixture(fixture, fetchImpl)).rejects.toThrow(
-			'Downloaded test asset failed receipt validation: runtime/asset.wasm'
+			'Downloaded test asset failed receipt validation: runtime/asset.wasm; ' +
+				`expected size=${fixture.asset.size} sha256=${fixture.asset.sha256}; ` +
+				`actual size=${actual.byteLength} sha256=${createHash('sha256').update(actual).digest('hex')}`
+		);
+		expect(fetchImpl).toHaveBeenCalledTimes(1);
+	});
+
+	it('reports actual body size and digest for a different-size response and preserves existing bytes', async () => {
+		const fixture = await createFixture();
+		const validFetch = vi.fn<typeof fetch>().mockResolvedValue(new Response(fixture.payload));
+		await prepareFixture(fixture, validFetch);
+		const expected = Buffer.from('new expected version');
+		fixture.asset.size = expected.byteLength;
+		fixture.asset.sha256 = createHash('sha256').update(expected).digest('hex');
+		const actual = Buffer.from('wrong version');
+		const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(actual, {
+				headers: { 'content-length': String(actual.byteLength) }
+			})
+		);
+		await expect(prepareFixture(fixture, fetchImpl)).rejects.toThrow(
+			`expected size=${fixture.asset.size} sha256=${fixture.asset.sha256}; ` +
+				`actual size=${actual.byteLength} sha256=${createHash('sha256').update(actual).digest('hex')}`
+		);
+		expect(await readFile(path.join(fixture.targetRoot, fixture.asset.targetPath))).toEqual(
+			fixture.payload
 		);
 		expect(fetchImpl).toHaveBeenCalledTimes(1);
 	});

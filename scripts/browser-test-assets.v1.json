@@ -1,6 +1,6 @@
 {
 	"format": "wasm-idle-browser-test-assets-v1",
-	"defaultBaseUrl": "https://seorii.page/wasm-idle/",
+	"defaultBaseUrl": "https://raw.githubusercontent.com/seo-rii/wasm-idle/2fa57c4c66302c01f3b4c2a8d75913b54e49b838/",
 	"assets": [
 		{
 			"group": "clang",
@@ -62,8 +62,8 @@
 			"group": "ocaml",
 			"source": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json",
 			"target": "wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json",
-			"size": 58798,
-			"sha256": "0bbb643036ae7c96f63eec80ebaa3efdb079a851a3aab98f82a3edd1cfcd4951"
+			"size": 60068,
+			"sha256": "3203629ed2c550ab5d40312c6f33a95cb173441bcdae0a51671d323093907428"
 		},
 		{
 			"group": "ocaml",
@@ -146,8 +146,8 @@
 			"group": "ocaml",
 			"source": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-tool-worker.js",
 			"target": "wasm-of-js-of-ocaml/browser-native/browser-harness/native-tool-worker.js",
-			"size": 41858,
-			"sha256": "37c5a36a9a2c415ba37f143edba42cea6487f8c00ae494b961cf8aa96c7d7198"
+			"size": 42698,
+			"sha256": "1211186180762e4b94c031572684e84d5ac1ef9ec2599cc3d70a407008bc5e58"
 		},
 		{
 			"group": "ocaml",
@@ -160,8 +160,8 @@
 			"group": "ocaml",
 			"source": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-browser-worker.js",
 			"target": "wasm-of-js-of-ocaml/browser-native/runtime/system-dispatch-browser-worker.js",
-			"size": 14259,
-			"sha256": "cef884adaadf9bfbda2f7a58cdc812b16e1b0618b50c94f13c1ab28797aea719"
+			"size": 34552,
+			"sha256": "3fc2dd60a99ccf6283406c850cb04817e83765ce72d478c12515d7e91f8ae678"
 		},
 		{
 			"group": "ocaml",

@@ -476,12 +476,20 @@ pnpm run prepare:test-assets -- clangd
 pnpm run prepare:test-assets -- clang ocaml
 ```
 
-`scripts/browser-test-assets.v1.json` pins every downloaded file by exact size and SHA-256 digest.
-The preparer also rejects source or target paths outside their configured roots, validates the
-final redirect origin, writes atomically, and reuses only matching files. With no group argument,
+`scripts/browser-test-assets.v1.json` pins one existing Git snapshot of the published asset graph
+and every downloaded file's exact size and SHA-256 digest. CI downloads that immutable snapshot
+from GitHub without WAF credentials. Update the snapshot URL and all changed receipts together;
+do not replace a receipt with bytes from a mutable deployment URL. Receipt failures report both
+expected and actual byte counts and SHA-256 digests.
+
+The preparer rejects source or target paths outside their configured roots, checks each redirect
+before following it, writes atomically, and reuses only matching files. With no group argument,
 it prepares both the Clang delivery bundle and the complete OCaml browser compiler graph.
-`WASM_IDLE_TEST_ASSET_BASE_URL` and `WASM_IDLE_TEST_BYPASS_COOKIE` can select a compatible mirror
-and its access cookie.
+`WASM_IDLE_TEST_ASSET_BASE_URL` can select a compatible mirror with the same receipt-verified bytes.
+For protected local browser tests, provide `WASM_IDLE_TEST_BYPASS_COOKIE` through the environment
+in `dev_bypass_waf=<value>` form; the browser cookie jar scopes it to the test origin. Asset
+downloads forward this optional cookie only to the trusted `https://seorii.page` origin and never
+to GitHub or another mirror. There is no built-in credential fallback.
 
 Browser-level Rust checks are reproducible from this repo:
 
