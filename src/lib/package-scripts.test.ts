@@ -99,6 +99,20 @@ describe('LLVM runtime package scripts', () => {
 		);
 	});
 
+	it('verifies rebuildable page runtime freshness without mutating checked-in assets', async () => {
+		const root = await readRootPackage();
+
+		expect(root.scripts?.['verify:wasm-typescript-freshness']).toBe(
+			'pnpm --dir runtimes/wasm-typescript build && node scripts/sync-wasm-typescript.mjs --verify'
+		);
+		expect(root.scripts?.['verify:wasm-ocaml-freshness']).toBe(
+			'pnpm --dir runtimes/wasm-of-js-of-ocaml build && node scripts/sync-wasm-of-js-of-ocaml.mjs --verify'
+		);
+		expect(root.scripts?.['verify:page-runtime-freshness']).toBe(
+			'pnpm run verify:wasm-typescript-freshness && pnpm run verify:wasm-ocaml-freshness'
+		);
+	});
+
 	it('builds Rust source instrumentation as a lazy static asset', async () => {
 		const root = await readRootPackage();
 		const rustRuntime = await readPackageManifest('runtimes/wasm-rust');

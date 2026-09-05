@@ -29,6 +29,7 @@ jobs:
             - run: pnpm --dir producers/wasm-php build
             - run: pnpm --dir producers/wasm-php verify
             - run: pnpm run verify:wasm-php
+            - run: pnpm run verify:page-runtime-freshness
             - run: pnpm run check
             - run: pnpm test
             - run: pnpm run test:wasm-debug-release

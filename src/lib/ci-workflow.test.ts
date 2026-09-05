@@ -108,6 +108,7 @@ describe('required CI workflow gates', () => {
 
 		expect(packagesJob).not.toContain('- run: pnpm run layer:static-runtimes');
 		expect(packagesJob).not.toContain('- run: git diff --exit-code -- static');
+		expect(packagesJob).toContain('- run: pnpm run verify:page-runtime-freshness');
 		expect(packagesJob).toContain('src/lib/build-layered-runtime-assets.test.ts');
 		expect(packagesJob).toContain('- run: pnpm --dir runtimes/wasm-go test');
 		expect(packagesJob).toContain(

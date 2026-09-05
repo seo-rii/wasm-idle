@@ -118,14 +118,12 @@ async function computeAssetReceipt(filePath) {
 }
 
 /**
- * @param {string} versionModulePath
  * @param {string} fingerprint
  * @param {AssetReceipt} moduleReceipt
  * @param {AssetReceipt} manifestReceipt
  */
-async function writeVersionModule(versionModulePath, fingerprint, moduleReceipt, manifestReceipt) {
-	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource = `export const WASM_OCAML_ASSET_VERSION =
+function renderVersionModule(fingerprint, moduleReceipt, manifestReceipt) {
+	return `export const WASM_OCAML_ASSET_VERSION =
 	'${fingerprint}';
 
 export const WASM_OCAML_RUNTIME_PROFILE = Object.freeze({
@@ -140,9 +138,86 @@ export const WASM_OCAML_RUNTIME_PROFILE = Object.freeze({
 	})
 });
 `;
+}
+
+/**
+ * @param {string} versionModulePath
+ * @param {string} fingerprint
+ * @param {AssetReceipt} moduleReceipt
+ * @param {AssetReceipt} manifestReceipt
+ */
+async function writeVersionModule(versionModulePath, fingerprint, moduleReceipt, manifestReceipt) {
+	await mkdir(path.dirname(versionModulePath), { recursive: true });
+	const moduleSource = renderVersionModule(fingerprint, moduleReceipt, manifestReceipt);
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current === moduleSource) return;
 	await writeFile(versionModulePath, moduleSource, 'utf8');
+}
+
+/** @param {string} label @param {string} expected @param {string} actual */
+function assertMatchingFingerprint(label, expected, actual) {
+	if (actual !== expected) {
+		throw new Error(
+			`${label} does not match the current producer output; rebuild and sync the OCaml runtime assets`
+		);
+	}
+}
+
+/**
+ * Verifies the rebuildable browser wrapper against the checked-in runtime bundle without
+ * mutating either tree. The heavyweight native bundle is itself the pinned producer input.
+ *
+ * @param {SyncWasmOfJsOfOcamlOptions} [options]
+ */
+export async function verifyWasmOfJsOfOcamlDist({
+	sourceBrowserDistDir = DEFAULT_SOURCE_BROWSER_DIST_DIR,
+	sourceBundleDir = DEFAULT_TARGET_BUNDLE_DIR,
+	targetBrowserDistDir = DEFAULT_TARGET_BROWSER_DIST_DIR,
+	targetBundleDir = DEFAULT_TARGET_BUNDLE_DIR,
+	versionModulePath = DEFAULT_VERSION_MODULE_PATH
+} = {}) {
+	const sourceFingerprint = await computeBundleFingerprint([
+		sourceBrowserDistDir,
+		sourceBundleDir
+	]);
+	const targetFingerprint = await computeBundleFingerprint([
+		targetBrowserDistDir,
+		targetBundleDir
+	]);
+	assertMatchingFingerprint(
+		'wasm-of-js-of-ocaml checked-in bundle',
+		sourceFingerprint,
+		targetFingerprint
+	);
+
+	const moduleReceipt = await computeAssetReceipt(
+		path.join(sourceBrowserDistDir, 'src', 'index.js')
+	);
+	const manifestReceipt = await computeAssetReceipt(
+		path.join(sourceBundleDir, 'browser-native-manifest.v1.json')
+	);
+	const expectedVersionModule = renderVersionModule(
+		sourceFingerprint,
+		moduleReceipt,
+		manifestReceipt
+	);
+	const actualVersionModule = await readFile(versionModulePath, 'utf8').catch(() => '');
+	if (actualVersionModule !== expectedVersionModule) {
+		throw new Error(
+			'wasm-of-js-of-ocaml checked-in version module does not match the current producer output; rebuild and sync the OCaml runtime assets'
+		);
+	}
+
+	return {
+		sourceBrowserDistDir,
+		sourceBundleDir,
+		targetBrowserDistDir,
+		targetBundleDir,
+		fingerprint: sourceFingerprint,
+		moduleReceipt,
+		manifestReceipt,
+		versionModulePath
+	};
 }
 
 /** @param {string} nativeWorkerPath */
@@ -273,6 +348,13 @@ export async function syncWasmOfJsOfOcamlDist({
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {
+	if (process.argv[2] === '--verify' || process.argv[2] === '--check') {
+		const result = await verifyWasmOfJsOfOcamlDist();
+		console.log(
+			`Verified checked-in wasm-of-js-of-ocaml ${result.fingerprint} against ${result.sourceBrowserDistDir}`
+		);
+		process.exit(0);
+	}
 	const result = await syncWasmOfJsOfOcamlDist();
 	console.log(
 		`Synced wasm-of-js-of-ocaml from ${result.sourceBrowserDistDir} and ${result.sourceBundleDir} to ${result.targetBrowserDistDir} and ${result.targetBundleDir}`

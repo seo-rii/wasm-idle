@@ -5,7 +5,8 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
 	computeBundleFingerprint,
-	syncWasmOfJsOfOcamlDist
+	syncWasmOfJsOfOcamlDist,
+	verifyWasmOfJsOfOcamlDist
 } from '../../scripts/sync-wasm-of-js-of-ocaml.mjs';
 
 const tempDirs: string[] = [];
@@ -232,6 +233,26 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 				sha256: createHash('sha256').update(manifestBytes).digest('hex')
 			}
 		});
+		await expect(
+			verifyWasmOfJsOfOcamlDist({
+				sourceBrowserDistDir,
+				sourceBundleDir: targetBundleDir,
+				targetBrowserDistDir,
+				targetBundleDir,
+				versionModulePath
+			})
+		).resolves.toMatchObject({ fingerprint: result.fingerprint });
+
+		await writeFile(path.join(targetBrowserDistDir, 'src/index.js'), 'corrupt', 'utf8');
+		await expect(
+			verifyWasmOfJsOfOcamlDist({
+				sourceBrowserDistDir,
+				sourceBundleDir: targetBundleDir,
+				targetBrowserDistDir,
+				targetBundleDir,
+				versionModulePath
+			})
+		).rejects.toThrow('does not match the current producer output');
 	});
 
 	it('clears stale files from previous synced outputs', async () => {
