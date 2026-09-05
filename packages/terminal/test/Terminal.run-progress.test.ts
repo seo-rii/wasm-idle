@@ -50,7 +50,10 @@ afterEach(async () => {
 	terminalWrites.length = 0;
 });
 
-async function mountTerminal(sandbox: BoundSandbox) {
+async function mountTerminal(
+	sandbox: BoundSandbox,
+	onprogress?: (event: RuntimeProgressEvent) => void
+) {
 	let loaded: () => void = () => {};
 	let terminalReady: (terminal: TerminalControl) => void = () => {};
 	const ready = new Promise<void>((resolve) => {
@@ -67,7 +70,8 @@ async function mountTerminal(sandbox: BoundSandbox) {
 				load: vi.fn(async () => sandbox)
 			} as unknown as PlaygroundBinding,
 			onload: loaded,
-			onterminal: terminalReady
+			onterminal: terminalReady,
+			onprogress
 		}
 	});
 	mountedComponents.push(component);
@@ -105,6 +109,48 @@ function createSandbox(
 }
 
 describe('Terminal direct-run progress', () => {
+	it('renders cold-start loader activity without reporting execution readiness', async () => {
+		const events: RuntimeProgressEvent[] = [];
+		const { sandbox } = createSandbox(() => true);
+		let started!: () => void;
+		let finishLoad!: () => void;
+		const loading = new Promise<void>((resolve) => (started = resolve));
+		const loaded = new Promise<void>((resolve) => (finishLoad = resolve));
+		const activity: RuntimeProgressEvent = {
+			kind: 'activity',
+			phase: 'downloading',
+			label: 'Downloading Python runtime',
+			measurement: { kind: 'bytes', completed: 42, total: 100 }
+		};
+		let loadProgress: ProgressLike | undefined;
+		vi.mocked(sandbox.load).mockImplementation(
+			async (_code, _log, _args, _options, progress) => {
+				loadProgress = progress;
+				progress?.report?.(activity);
+				progress?.report?.({ kind: 'ready', state: 'running', reason: 'started' });
+				progress?.report?.({ kind: 'settled', outcome: 'completed' });
+				started();
+				await loaded;
+			}
+		);
+		await mountTerminal(sandbox, (event) => events.push(event));
+
+		document.querySelector('button')!.click();
+		await loading;
+		flushSync();
+		expect(document.querySelector('output')!.textContent).toBe(activity.label);
+		expect(events).toContainEqual(expect.objectContaining(activity));
+		expect(events.filter((event) => event.kind !== 'activity')).toEqual([]);
+
+		finishLoad();
+		await vi.waitFor(() => expect(events.some((event) => event.kind === 'settled')).toBe(true));
+		const count = events.length;
+		loadProgress?.report?.({ ...activity, label: 'Stale loader event' });
+		flushSync();
+		expect(events).toHaveLength(count);
+		expect(document.querySelector('output')!.textContent).not.toBe('Stale loader event');
+	});
+
 	it('does not treat compiler output as execution readiness', async () => {
 		const events: RuntimeProgressEvent[] = [];
 		const readinessAfterOutput: Array<{ prepare: boolean; readyCount: number }> = [];

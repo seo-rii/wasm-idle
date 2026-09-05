@@ -211,9 +211,6 @@ describe('Terminal source', () => {
 		);
 		expect(source).toMatch(/sandbox\.run\(code, true, log, prepareProgress, args, options\)/);
 		expect(source).toMatch(
-			/initSandbox\(language\)\.then\(\(\) => sandbox\.load\(code, log, args, options\)\)/
-		);
-		expect(source).toMatch(
 			/sandbox\.run\(code, false, log, runProgress, args, executionOptions\)/
 		);
 		expect(source).not.toContain('phaseProgress');

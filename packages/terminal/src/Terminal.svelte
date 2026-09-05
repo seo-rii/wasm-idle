@@ -416,7 +416,9 @@
 					pendingDebugBreakpoints.set(sourcePath, [...lines]);
 				}
 				await Promise.all([
-					initSandbox(language).then(() => sandbox.load(code, log, args, options)),
+					initSandbox(language).then(() =>
+						sandbox.load(code, log, args, options, activityOnlyProgress(runProgress))
+					),
 					initTerm()
 				]);
 				const executionOptions = {
