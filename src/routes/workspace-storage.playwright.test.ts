@@ -61,7 +61,7 @@ describe('workspace storage browser integration', () => {
 	it('shows failed saves, preserves the last snapshot, shares, exports, and retries', async () => {
 		await withWorkspacePage(async (page, context, browserUrl) => {
 			await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
-			await page.getByRole('button', { name: 'Save', exact: true }).click();
+			await page.getByRole('button', { name: /^save\s+Save$/ }).click();
 			await page.locator('[data-workspace-save-state="saved"]').waitFor();
 			const previous = await page.evaluate(() =>
 				localStorage.getItem('wasm-idle:example-workspace:v3')
@@ -84,7 +84,7 @@ describe('workspace storage browser integration', () => {
 			).toBe(previous);
 			// Sharing must serialize current edits even while local writes fail.
 			await context.grantPermissions(['clipboard-write', 'clipboard-read']);
-			await page.getByRole('button', { name: 'Share', exact: true }).click();
+			await page.getByRole('button', { name: /^share\s+Share$/ }).click();
 			await page.waitForFunction(() => location.hash.startsWith('#workspace='));
 			expect(
 				await page.getByRole('alert').filter({ hasText: 'Not saved locally' }).isVisible()
@@ -161,7 +161,7 @@ describe('workspace storage browser integration', () => {
 				expect(
 					await page.evaluate(() => (window as any).__wasmIdleDebug.getEditorValue())
 				).toBe('');
-				await page.getByRole('button', { name: 'Save', exact: true }).click();
+				await page.getByRole('button', { name: /^save\s+Save$/ }).click();
 				const afterUnload = await page.evaluate(() => {
 					window.dispatchEvent(new Event('beforeunload', { cancelable: true }));
 					return localStorage.getItem('wasm-idle:example-workspace:v3');
