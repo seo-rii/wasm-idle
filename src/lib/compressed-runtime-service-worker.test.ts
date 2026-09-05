@@ -28,9 +28,25 @@ type LayeredFixtures = {
 async function createServiceWorkerHarness(
 	payloads: Record<string, Uint8Array>,
 	layeredFixtures?: LayeredFixtures,
-	networkPayloads: Record<string, Uint8Array> = {}
+	networkPayloads: Record<string, Uint8Array> = {},
+	cacheLimits?: { layerBytes: number; cacheBytes: number; timeoutMs?: number }
 ) {
-	const source = await readFile(serviceWorkerPath, 'utf8');
+	let source = await readFile(serviceWorkerPath, 'utf8');
+	if (cacheLimits) {
+		source = source
+			.replace(
+				'const maxDecompressedLayerBytes = 64 * 1024 * 1024;',
+				`const maxDecompressedLayerBytes = ${cacheLimits.layerBytes};`
+			)
+			.replace(
+				'const maxDecompressedLayerCacheBytes = 64 * 1024 * 1024;',
+				`const maxDecompressedLayerCacheBytes = ${cacheLimits.cacheBytes};`
+			)
+			.replace(
+				'const layerLoadTimeoutMs = 30000;',
+				`const layerLoadTimeoutMs = ${cacheLimits.timeoutMs ?? 30000};`
+			);
+	}
 	const listeners = new Map<string, Array<(event: any) => void>>();
 	let compressedPayloads = payloads;
 	let currentLayeredFixtures = layeredFixtures;
@@ -51,7 +67,7 @@ async function createServiceWorkerHarness(
 			})
 		)
 	});
-	const fetchMock = vi.fn(async (input: unknown) => {
+	const fetchMock = vi.fn(async (input: unknown, _init?: RequestInit) => {
 		const url =
 			input instanceof Request
 				? new URL(input.url)
@@ -129,23 +145,33 @@ async function createServiceWorkerHarness(
 		registration: { scope },
 		skipWaiting: vi.fn()
 	};
-	runInNewContext(source, {
-		Date,
-		DecompressionStream,
-		Headers,
-		Request,
-		Response,
-		URL,
-		caches: { open: vi.fn() },
-		console,
-		fetch: fetchMock,
-		self: workerSelf
-	});
+	const layerCacheState = runInNewContext(
+		source +
+			`
+		(() => ({ bytes: decompressedLayerCacheBytes, entries: decompressedLayerPromises.size }))
+	`,
+		{
+			AbortController,
+			Date,
+			DecompressionStream,
+			Headers,
+			Request,
+			Response,
+			URL,
+			caches: { open: vi.fn() },
+			console,
+			fetch: fetchMock,
+			setTimeout,
+			clearTimeout,
+			self: workerSelf
+		}
+	);
 
 	const fetchListener = listeners.get('fetch')?.[0];
 	if (!fetchListener) throw new Error('service worker did not register a fetch listener');
 	return {
 		fetchMock,
+		layerCacheState: layerCacheState as () => { bytes: number; entries: number },
 		setCompressedPayloads(nextPayloads: Record<string, Uint8Array>) {
 			compressedPayloads = nextPayloads;
 		},
@@ -369,6 +395,148 @@ describe('compressed runtime service worker', () => {
 		).toHaveLength(1);
 	});
 
+	it.each(['fetch', 'stream'] as const)(
+		'releases the next language after a stalled layer %s times out',
+		async (stalledPhase) => {
+			const bytes = Uint8Array.of(1, 2, 3, 4);
+			const harness = await createServiceWorkerHarness(
+				{},
+				{
+					assets: {
+						'first/module.wasm': { layer: 'layers/first.gz', offset: 0, length: 4 },
+						'next/module.wasm': { layer: 'layers/next.gz', offset: 0, length: 4 }
+					},
+					layers: {
+						'layers/first.gz': { bytes, contentDecoded: true },
+						'layers/next.gz': { bytes, contentDecoded: true }
+					}
+				},
+				{},
+				{ layerBytes: 16, cacheBytes: 16, timeoutMs: 30 }
+			);
+			const fetch = harness.fetchMock.getMockImplementation()!;
+			let requested!: () => void;
+			const firstRequested = new Promise<void>((resolve) => (requested = resolve));
+			let signal: AbortSignal | undefined;
+			const cancel = vi.fn(() => new Promise<void>(() => {}));
+			harness.fetchMock.mockImplementation(async (input, init) => {
+				if (!String(input).includes('/layers/first.gz')) return fetch(input, init);
+				signal = init?.signal ?? undefined;
+				requested();
+				if (stalledPhase === 'fetch') return await new Promise<Response>(() => {});
+				return new Response(new ReadableStream({ cancel }), {
+					headers: { 'content-encoding': 'gzip' }
+				});
+			});
+			const first = harness.request('first/module.wasm');
+			await firstRequested;
+			const next = harness.request('next/module.wasm');
+			expect((await first).status).toBe(404);
+			const response = await next;
+			expect(response.status).toBe(200);
+			expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+			expect(signal?.aborted).toBe(true);
+			if (stalledPhase === 'stream') expect(cancel).toHaveBeenCalledOnce();
+			expect(harness.layerCacheState()).toEqual({ bytes: 4, entries: 1 });
+			// A timed-out key is retryable; it must not poison later requests.
+			harness.fetchMock.mockImplementation(fetch);
+			expect((await harness.request('first/module.wasm')).status).toBe(200);
+		}
+	);
+
+	it('does not retain completed zero-byte layers outside the byte budget', async () => {
+		const names = Array.from({ length: 25 }, (_, index) => `layers/empty-${index}.gz`);
+		const harness = await createServiceWorkerHarness(
+			{},
+			{
+				assets: Object.fromEntries(
+					names.map((layer) => [layer + '.txt', { layer, offset: 0, length: 0 }])
+				),
+				layers: Object.fromEntries(
+					names.map((layer) => [layer, { bytes: new Uint8Array(), contentDecoded: true }])
+				)
+			}
+		);
+		for (const layer of names) {
+			const response = await harness.request(layer + '.txt');
+			expect(response.status).toBe(200);
+			expect((await response.arrayBuffer()).byteLength).toBe(0);
+			expect(harness.layerCacheState()).toEqual({ bytes: 0, entries: 0 });
+		}
+	});
+
+	it('keeps retained bytes bounded across repeated language switches and evicts the least used layer', async () => {
+		const assets = Object.fromEntries(
+			['a', 'b', 'c'].map((name) => [
+				`runtime/${name}.wasm`,
+				{ layer: `layers/${name}.gz`, offset: 0, length: 8 }
+			])
+		);
+		const layers = Object.fromEntries(
+			['a', 'b', 'c'].map((name) => [
+				`layers/${name}.gz`,
+				{ bytes: new TextEncoder().encode(name.repeat(8)) }
+			])
+		);
+		const harness = await createServiceWorkerHarness(
+			{},
+			{ assets, layers },
+			{},
+			{ layerBytes: 16, cacheBytes: 16 }
+		);
+		for (const name of ['a', 'b', 'a', 'c', 'a', 'b', 'c', 'a', 'b', 'c']) {
+			expect(await (await harness.request(`runtime/${name}.wasm`)).text()).toBe(
+				name.repeat(8)
+			);
+			expect(harness.layerCacheState().bytes).toBeLessThanOrEqual(16);
+			expect(harness.layerCacheState().entries).toBeLessThanOrEqual(2);
+		}
+		const requests = harness.fetchMock.mock.calls
+			.map(([input]) => new URL(String(input)).pathname)
+			.filter((pathname) => pathname.includes('/layers/'));
+		expect(requests.slice(0, 4)).toEqual(
+			['a', 'b', 'c', 'b'].map((name) => new URL(`layers/${name}.gz`, scope).pathname)
+		);
+	});
+
+	it.each([false, true])(
+		'rejects oversized decompression (already decoded: %s) and does not retain it',
+		async (contentDecoded) => {
+			const assetPath = 'runtime/oversized.wasm';
+			const layerPath = 'layers/large.gz';
+			const harness = await createServiceWorkerHarness(
+				{},
+				{
+					assets: { [assetPath]: { layer: layerPath, offset: 0, length: 17 } },
+					layers: { [layerPath]: { bytes: new Uint8Array(17), contentDecoded } }
+				},
+				{},
+				{ layerBytes: 16, cacheBytes: 8 }
+			);
+			expect((await harness.request(assetPath)).status).toBe(404);
+			expect(harness.layerCacheState()).toEqual({ bytes: 0, entries: 0 });
+		}
+	);
+
+	it('serves layers larger than the cache budget without retaining their buffers', async () => {
+		const assetPath = 'runtime/uncached.wasm';
+		const layerPath = 'layers/uncached.gz';
+		const bytes = new TextEncoder().encode('twelve bytes');
+		const harness = await createServiceWorkerHarness(
+			{},
+			{
+				assets: { [assetPath]: { layer: layerPath, offset: 0, length: bytes.byteLength } },
+				layers: { [layerPath]: { bytes } }
+			},
+			{},
+			{ layerBytes: 16, cacheBytes: 8 }
+		);
+		for (let index = 0; index < 2; index++) {
+			expect(await (await harness.request(assetPath)).text()).toBe('twelve bytes');
+			expect(harness.layerCacheState()).toEqual({ bytes: 0, entries: 0 });
+		}
+	});
+
 	it('answers layered HEAD requests from manifest metadata', async () => {
 		const assetPath = 'wasm-runtime/runtime.js';
 		const bytes = new TextEncoder().encode('runtime body');
@@ -490,6 +658,7 @@ describe('compressed runtime service worker', () => {
 				.map(([input]) => new URL(String(input)))
 				.filter((url) => url.pathname === new URL(layerPath, scope).pathname);
 			expect(layerRequests).toHaveLength(2);
+			expect(harness.layerCacheState()).toEqual({ bytes: nextBytes.byteLength, entries: 1 });
 			expect(layerRequests[0]?.searchParams.get('__wasm_idle_layer')).not.toBe(
 				layerRequests[1]?.searchParams.get('__wasm_idle_layer')
 			);

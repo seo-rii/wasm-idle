@@ -76,7 +76,14 @@ let compressedRuntimeAssetManifestMissRefreshAt = 0;
 let layeredRuntimeAssetManifestPromise = null;
 let layeredRuntimeAssetManifestLoadedAt = 0;
 let layeredRuntimeAssetManifestMissRefreshAt = 0;
+// Only retained, completed layers count against the LRU byte budget.
 const decompressedLayerPromises = new Map();
+const maxDecompressedLayerBytes = 64 * 1024 * 1024;
+const maxDecompressedLayerCacheBytes = 64 * 1024 * 1024;
+const layerLoadTimeoutMs = 30000;
+let decompressedLayerCacheBytes = 0;
+let layerDecompressionQueue = Promise.resolve();
+let currentLayerKeys = new Set();
 const runtimeAssetManifestMaxAgeMs = 5000;
 
 function shouldBypassIsolationHeaders(url) {
@@ -196,6 +203,14 @@ async function layeredRuntimeAssetManifest(forceRefresh = false) {
 						length: entry.length
 					});
 				}
+				currentLayerKeys = new Set(
+					Array.from(assets.values(), (asset) =>
+						layerCacheKey(asset.layerPath, asset.layerVersion)
+					)
+				);
+				for (const [key, entry] of decompressedLayerPromises) {
+					if (!currentLayerKeys.has(key)) removeCachedLayer(key, entry);
+				}
 				return { assets };
 			})
 			.catch(() => ({ assets: new Map() }));
@@ -254,41 +269,138 @@ function hasGzipContentEncoding(response) {
 		.includes('gzip');
 }
 
-function decompressedLayer(request, layerPath, layerVersion) {
-	const layerUrl = new URL(layerPath, self.registration.scope);
-	if (!layerUrl.pathname.endsWith('.gz')) layerUrl.pathname = `${layerUrl.pathname}.gz`;
-	layerUrl.searchParams.set('__wasm_idle_layer', layerVersion);
-	const cacheKey = layerUrl.href;
-	let layerPromise = decompressedLayerPromises.get(cacheKey);
-	if (!layerPromise) {
+function layerCacheKey(layerPath, layerVersion) {
+	const url = new URL(layerPath, self.registration.scope);
+	if (!url.pathname.endsWith('.gz')) url.pathname = `${url.pathname}.gz`;
+	url.searchParams.set('__wasm_idle_layer', layerVersion);
+	return url.href;
+}
+
+function removeCachedLayer(key, entry) {
+	if (decompressedLayerPromises.get(key) !== entry) return;
+	decompressedLayerPromises.delete(key);
+	decompressedLayerCacheBytes -= entry.bytes;
+}
+
+async function readLayerBytes(body, signal) {
+	const reader = body.getReader();
+	const chunks = [];
+	let total = 0;
+	const cancel = () => {
+		// A stalled source may never settle cancel(); it must not hold up the queue.
+		void reader.cancel(signal.reason).catch(() => {});
+	};
+	signal.addEventListener('abort', cancel, { once: true });
+	try {
+		signal.throwIfAborted();
+		while (true) {
+			const { done, value } = await reader.read();
+			signal.throwIfAborted();
+			if (done) break;
+			total += value.byteLength;
+			if (total > maxDecompressedLayerBytes) {
+				throw new Error('decompressed layer exceeds byte limit');
+			}
+			chunks.push(value);
+		}
+		const bytes = new Uint8Array(total);
+		let offset = 0;
+		for (const chunk of chunks) {
+			bytes.set(chunk, offset);
+			offset += chunk.byteLength;
+		}
+		return bytes;
+	} catch (error) {
+		void reader.cancel(error).catch(() => {});
+		throw error;
+	} finally {
+		signal.removeEventListener('abort', cancel);
+		chunks.length = 0;
+		reader.releaseLock();
+	}
+}
+
+async function fetchLayerBytes(request, cacheKey) {
+	const controller = new AbortController();
+	let timeout;
+	const deadline = new Promise((_, reject) => {
+		timeout = setTimeout(() => {
+			const error = new Error('runtime layer load timed out');
+			controller.abort(error);
+			reject(error);
+		}, layerLoadTimeoutMs);
+	});
+	const loading = (async () => {
 		const headers = new Headers(request.headers);
 		headers.delete('range');
-		layerPromise = fetch(layerUrl, {
+		const response = await fetch(new URL(cacheKey), {
 			cache: request.cache,
 			credentials: request.credentials,
 			headers,
 			mode: request.mode,
 			redirect: request.redirect,
 			referrer: request.referrer,
-			referrerPolicy: request.referrerPolicy
-		})
-			.then((response) => {
-				if (!response.ok || !response.body) throw new Error('layer fetch failed');
-				const body = hasGzipContentEncoding(response)
-					? response.body
-					: response.body.pipeThrough(new DecompressionStream('gzip'));
-				return new Response(body).arrayBuffer();
-			})
-			.then((bytes) => new Uint8Array(bytes))
-			.catch(() => {
-				if (decompressedLayerPromises.get(cacheKey) === layerPromise) {
-					decompressedLayerPromises.delete(cacheKey);
-				}
-				return null;
-			});
-		decompressedLayerPromises.set(cacheKey, layerPromise);
+			referrerPolicy: request.referrerPolicy,
+			signal: controller.signal
+		});
+		if (controller.signal.aborted) {
+			void response.body?.cancel(controller.signal.reason).catch(() => {});
+			controller.signal.throwIfAborted();
+		}
+		if (!response.ok || !response.body) {
+			void response.body?.cancel().catch(() => {});
+			throw new Error('layer fetch failed');
+		}
+		const body = hasGzipContentEncoding(response)
+			? response.body
+			: response.body.pipeThrough(new DecompressionStream('gzip'));
+		return await readLayerBytes(body, controller.signal);
+	})();
+	try {
+		return await Promise.race([loading, deadline]);
+	} finally {
+		clearTimeout(timeout);
 	}
-	return layerPromise;
+}
+
+function decompressedLayer(request, layerPath, layerVersion) {
+	const cacheKey = layerCacheKey(layerPath, layerVersion);
+	const cached = decompressedLayerPromises.get(cacheKey);
+	if (cached) {
+		decompressedLayerPromises.delete(cacheKey);
+		decompressedLayerPromises.set(cacheKey, cached);
+		return cached.promise;
+	}
+	const entry = { bytes: 0, promise: null };
+	// Serial decompression also bounds temporary buffers from concurrent cold starts.
+	entry.promise = layerDecompressionQueue.then(async () => {
+		if (!currentLayerKeys.has(cacheKey)) {
+			removeCachedLayer(cacheKey, entry);
+			return null;
+		}
+		const bytes = await fetchLayerBytes(request, cacheKey);
+		if (decompressedLayerPromises.get(cacheKey) === entry && currentLayerKeys.has(cacheKey)) {
+			if (bytes.byteLength === 0 || bytes.byteLength > maxDecompressedLayerCacheBytes) {
+				removeCachedLayer(cacheKey, entry);
+			} else {
+				for (const [key, candidate] of decompressedLayerPromises) {
+					if (decompressedLayerCacheBytes + bytes.byteLength <= maxDecompressedLayerCacheBytes) {
+						break;
+					}
+					if (key !== cacheKey && candidate.bytes > 0) removeCachedLayer(key, candidate);
+				}
+				entry.bytes = bytes.byteLength;
+				decompressedLayerCacheBytes += entry.bytes;
+			}
+		}
+		return bytes;
+	}).catch(() => {
+		removeCachedLayer(cacheKey, entry);
+		return null;
+	});
+	layerDecompressionQueue = entry.promise.then(() => undefined);
+	decompressedLayerPromises.set(cacheKey, entry);
+	return entry.promise;
 }
 
 async function fetchLayeredRuntimeAsset(request, url) {
