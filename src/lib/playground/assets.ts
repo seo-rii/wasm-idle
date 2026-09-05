@@ -172,6 +172,8 @@ export interface DotnetRuntimeAssetConfig {
 export interface OcamlRuntimeAssetConfig {
 	moduleUrl?: string;
 	manifestUrl?: string;
+	moduleReceipt?: RuntimeAssetIntegrityEntry;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
 }
 
 export interface TinyGoRuntimeAssetConfig {

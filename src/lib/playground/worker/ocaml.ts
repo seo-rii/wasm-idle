@@ -1,4 +1,5 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import { verifyRuntimeAssetIntegrity, type RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
 import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
 
 declare var self: any;
@@ -109,6 +110,8 @@ type LoadRequest = {
 	load: true;
 	moduleUrl: string;
 	manifestUrl: string;
+	moduleReceipt: RuntimeAssetIntegrityEntry;
+	manifestReceipt: RuntimeAssetIntegrityEntry;
 	maxAssetBytes?: number;
 };
 
@@ -132,15 +135,38 @@ const textDecoder = new TextDecoder();
 
 let moduleUrl = '';
 let manifestUrl = '';
+let moduleReceipt: OuterAssetReceipt | null = null;
+let manifestReceipt: OuterAssetReceipt | null = null;
 let maxAssetBytes = DEFAULT_MAX_OCAML_ASSET_BYTES;
-let loadedModuleUrl = '';
-let loadedManifestUrl = '';
+let loadedModuleIdentity = '';
+let loadedManifestIdentity = '';
 let loadedManifestMaxAssetBytes = 0;
 let compilerPromise: Promise<CompilerModule> | null = null;
 let manifestPromise: Promise<BrowserNativeManifest> | null = null;
 let compiledResult: CompileResult | null = null;
 let compiledCacheKey = '';
 let stdinBufferOcaml: Int32Array | null = null;
+
+type OuterAssetReceipt = Readonly<Required<Pick<RuntimeAssetIntegrityEntry, 'bytes' | 'sha256'>>>;
+
+function requireOuterAssetReceipt(
+	value: RuntimeAssetIntegrityEntry | undefined,
+	label: 'module' | 'manifest'
+): OuterAssetReceipt {
+	if (
+		!value ||
+		!Number.isSafeInteger(value.bytes) ||
+		(value.bytes as number) <= 0 ||
+		typeof value.sha256 !== 'string' ||
+		!/^[a-f0-9]{64}$/u.test(value.sha256)
+	) {
+		throw new TypeError(`OCaml ${label} receipt is invalid`);
+	}
+	return Object.freeze({ bytes: value.bytes as number, sha256: value.sha256 });
+}
+
+const outerAssetIdentity = (url: string, receipt: OuterAssetReceipt) =>
+	JSON.stringify([url, receipt.bytes, receipt.sha256]);
 
 function appendTrailingNewline(text: string) {
 	return text.endsWith('\n') ? text : `${text}\n`;
@@ -247,20 +273,72 @@ function rewriteManifest(
 	};
 }
 
-async function loadCompiler(nextModuleUrl: string) {
+function prepareVerifiedModuleSource(bytes: Uint8Array, nextModuleUrl: string) {
+	const source = textDecoder.decode(bytes);
+	const withAbsoluteImports = source.replace(
+		/(\bfrom\s+|\bimport\s*(?:\(\s*)?)(['"])(\.{1,2}\/[^'"]+)\2/gu,
+		(_match, prefix: string, quote: string, specifier: string) =>
+			`${prefix}${quote}${new URL(specifier, nextModuleUrl).href}${quote}`
+	);
+	return withAbsoluteImports.replace(/\bimport\.meta\.url\b/gu, JSON.stringify(nextModuleUrl));
+}
+
+async function loadCompiler(
+	nextModuleUrl: string,
+	nextReceipt: OuterAssetReceipt,
+	nextMaxAssetBytes: number
+) {
 	if (!nextModuleUrl) {
 		throw new Error(
 			'OCaml runtime is not configured. Set runtimeAssets.ocaml.moduleUrl and runtimeAssets.ocaml.manifestUrl or sync the bundled wasm-of-js-of-ocaml assets.'
 		);
 	}
-	if (loadedModuleUrl === nextModuleUrl && compilerPromise) {
+	if (nextReceipt.bytes > nextMaxAssetBytes) {
+		throw new Error(`OCaml module exceeds the ${nextMaxAssetBytes} byte limit`);
+	}
+	const identity = outerAssetIdentity(nextModuleUrl, nextReceipt);
+	if (loadedModuleIdentity === identity && compilerPromise) {
 		return await compilerPromise;
 	}
-	loadedModuleUrl = nextModuleUrl;
+	loadedModuleIdentity = identity;
 	compiledResult = null;
 	compiledCacheKey = '';
 	compilerPromise = (async () => {
-		const module = (await import(/* @vite-ignore */ nextModuleUrl)) as Partial<CompilerModule>;
+		const bytes = await fetchRuntimeAssetBytes({
+			url: nextModuleUrl,
+			label: 'OCaml runtime module',
+			cache: 'no-store',
+			maxAssetBytes: nextReceipt.bytes
+		});
+		await verifyRuntimeAssetIntegrity({
+			asset: nextModuleUrl,
+			bytes,
+			expected: nextReceipt,
+			runtimeId: 'OCAML'
+		});
+		if (
+			typeof URL.createObjectURL !== 'function' ||
+			typeof URL.revokeObjectURL !== 'function'
+		) {
+			throw new Error('OCaml runtime requires Blob URL support');
+		}
+		const verifiedModuleUrl = URL.createObjectURL(
+			new Blob([prepareVerifiedModuleSource(bytes, nextModuleUrl)], {
+				type: 'text/javascript'
+			})
+		);
+		let module: Partial<CompilerModule>;
+		try {
+			module = (await import(
+				/* @vite-ignore */ verifiedModuleUrl
+			)) as Partial<CompilerModule>;
+		} finally {
+			try {
+				URL.revokeObjectURL(verifiedModuleUrl);
+			} catch {
+				// Blob URL cleanup must not replace the verified module import outcome.
+			}
+		}
 		if (typeof module.compile !== 'function') {
 			throw new Error('wasm-of-js-of-ocaml bundle must export compile');
 		}
@@ -315,20 +393,29 @@ function assertManifestAssetLimit(manifest: BrowserNativeManifest, limit: number
 	}
 }
 
-async function loadManifest(nextManifestUrl: string, nextMaxAssetBytes: number) {
+async function loadManifest(
+	nextManifestUrl: string,
+	nextReceipt: OuterAssetReceipt,
+	nextMaxAssetBytes: number
+) {
 	if (!nextManifestUrl) {
 		throw new Error(
 			'OCaml runtime is not configured. Set runtimeAssets.ocaml.moduleUrl and runtimeAssets.ocaml.manifestUrl or sync the bundled wasm-of-js-of-ocaml assets.'
 		);
 	}
+	const manifestLimit = Math.min(MAX_OCAML_MANIFEST_BYTES, nextMaxAssetBytes);
+	if (nextReceipt.bytes > manifestLimit) {
+		throw new Error(`OCaml manifest exceeds the ${manifestLimit} byte limit`);
+	}
+	const identity = outerAssetIdentity(nextManifestUrl, nextReceipt);
 	if (
-		loadedManifestUrl === nextManifestUrl &&
+		loadedManifestIdentity === identity &&
 		loadedManifestMaxAssetBytes === nextMaxAssetBytes &&
 		manifestPromise
 	) {
 		return await manifestPromise;
 	}
-	loadedManifestUrl = nextManifestUrl;
+	loadedManifestIdentity = identity;
 	loadedManifestMaxAssetBytes = nextMaxAssetBytes;
 	compiledResult = null;
 	compiledCacheKey = '';
@@ -337,7 +424,13 @@ async function loadManifest(nextManifestUrl: string, nextMaxAssetBytes: number) 
 			url: nextManifestUrl,
 			label: 'OCaml manifest',
 			cache: 'no-store',
-			maxAssetBytes: Math.min(MAX_OCAML_MANIFEST_BYTES, nextMaxAssetBytes)
+			maxAssetBytes: nextReceipt.bytes
+		});
+		await verifyRuntimeAssetIntegrity({
+			asset: nextManifestUrl,
+			bytes,
+			expected: nextReceipt,
+			runtimeId: 'OCAML'
 		});
 		let manifest: BrowserNativeManifest;
 		try {
@@ -648,8 +741,11 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 		if (event.data.load) {
 			moduleUrl = event.data.moduleUrl;
 			manifestUrl = event.data.manifestUrl;
+			moduleReceipt = requireOuterAssetReceipt(event.data.moduleReceipt, 'module');
+			manifestReceipt = requireOuterAssetReceipt(event.data.manifestReceipt, 'manifest');
 			maxAssetBytes = resolveMaxAssetBytes(event.data.maxAssetBytes);
-			await Promise.all([loadCompiler(moduleUrl), loadManifest(manifestUrl, maxAssetBytes)]);
+			await loadManifest(manifestUrl, manifestReceipt, maxAssetBytes);
+			await loadCompiler(moduleUrl, moduleReceipt, maxAssetBytes);
 			postMessage({ load: true });
 			return;
 		}
@@ -674,10 +770,11 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 			);
 		}
 		postMessage({ progress: { stage: 'compile-bootstrap', percent: 10 } });
-		const [compilerModule, manifest] = await Promise.all([
-			loadCompiler(moduleUrl),
-			loadManifest(manifestUrl, maxAssetBytes)
-		]);
+		if (!moduleReceipt || !manifestReceipt) {
+			throw new Error('OCaml runtime outer asset receipts are not loaded');
+		}
+		const manifest = await loadManifest(manifestUrl, manifestReceipt, maxAssetBytes);
+		const compilerModule = await loadCompiler(moduleUrl, moduleReceipt, maxAssetBytes);
 		postMessage({ progress: { stage: 'compile-ready', percent: 25 } });
 
 		const files = Object.fromEntries([

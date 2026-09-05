@@ -29,7 +29,7 @@ import {
 	WASM_OBJECTIVEC_ASSET_RECEIPTS,
 	WASM_OBJECTIVEC_ASSET_VERSION
 } from './wasmObjectiveCVersion';
-import { WASM_OCAML_ASSET_VERSION } from './wasmOcamlVersion';
+import { WASM_OCAML_ASSET_VERSION, WASM_OCAML_RUNTIME_PROFILE } from './wasmOcamlVersion';
 import { WASM_OCTAVE_ASSET_VERSION } from './wasmOctaveVersion';
 import { WASM_PASCAL_RUNTIME_BUNDLE } from './wasmPascalVersion';
 import {
@@ -303,7 +303,9 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			manifestUrl: asset(
 				'wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json',
 				WASM_OCAML_ASSET_VERSION
-			)
+			),
+			moduleReceipt: WASM_OCAML_RUNTIME_PROFILE.moduleReceipt,
+			manifestReceipt: WASM_OCAML_RUNTIME_PROFILE.manifestReceipt
 		},
 		tinygo: {
 			moduleUrl: asset(
