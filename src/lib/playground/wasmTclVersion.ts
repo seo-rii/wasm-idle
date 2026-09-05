@@ -37,8 +37,8 @@ export const WASM_TCL_RUNTIME_PROFILE = {
 } as const;
 export const WASM_TCL_ASSET_VERSION = WASM_TCL_RUNTIME_PROFILE.manifestFingerprint;
 export const WASM_TCL_RUNNER_RECEIPT = {
-	bytes: 31494,
-	sha256: '2ffb2e10396ebaf68ba67415b50c6f0e893d72c58152c6166e82bc398af4cbf7'
+	bytes: 31654,
+	sha256: 'f65d0ed41589fe280219948afe7b4bb5f07766faac66fd2b15b70c5c2c50c4f2'
 } as const;
 export const WASM_TCL_RUNTIME_BUNDLE = Object.freeze({
 	profile: WASM_TCL_RUNTIME_PROFILE,

@@ -19,6 +19,6 @@ export const WASM_BQN_RUNTIME_PROFILE = {
 } as const;
 export const WASM_BQN_ASSET_VERSION = WASM_BQN_RUNTIME_PROFILE.manifestFingerprint;
 export const WASM_BQN_RUNNER_RECEIPT = {
-	bytes: 14768,
-	sha256: 'c568c8d2cc9819676ea3bd35f7988b3dc8669242a3189973009198f659c5aab1'
+	bytes: 14928,
+	sha256: '4ac73f01a459a641e392abdd5cfe5e5407f75656e1e7f77fda3ec1fddc9fe660'
 } as const;

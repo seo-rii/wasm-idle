@@ -601,6 +601,13 @@ session; the repo-owned regression target is the local preview path above.
 
 ## Runtime expectations
 
+The BQN, Forth, and Tcl static Workers use a shared stdin ring. Its write counter and EOF/cancel
+flags are separate atomic values: notifying a waiter does not change its expected write counter.
+Their Worker-only waits therefore recheck these flags at least every 100 ms while scheduled, even
+when an EOF/cancel notification arrives just before the wait starts. This is not an input deadline;
+an open, empty stdin remains available for later input. `staticStdinRingWorker.test.ts` forces that
+check-to-wait ordering for both EOF and cancellation without relying on scheduling luck.
+
 `@wasm-idle/terminal` is an optional browser UI package:
 
 ```bash
