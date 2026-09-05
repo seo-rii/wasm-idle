@@ -1,10 +1,55 @@
 {
-  "format": "wasm-typescript-runtime-build-v1",
-  "fingerprint": "2bcfecc2e1b01f6e",
+  "format": "wasm-typescript-runtime-build-v2",
+  "fingerprint": "1ed3672d1170db47",
+  "producer": {
+    "format": "wasm-typescript-producer-build-v1",
+    "source": {
+      "format": "wasm-typescript-source-inputs-v1",
+      "sha256": "bc0909b0bddfb39ec88c160f2f74a72ef47d9405a78c757b520e70e11e80b6b4",
+      "files": [
+        {
+          "path": "package.json",
+          "bytes": 725,
+          "sha256": "d562e4ed0dd5f0e3d1413e233c896f2752a172038f50c95414557f5ef386dbb1"
+        },
+        {
+          "path": "scripts/build.mjs",
+          "bytes": 2877,
+          "sha256": "6a85fc1d87de13c84b48e9b1e1881ad87f50fd7697aaab6647ada4a523bb4283"
+        },
+        {
+          "path": "scripts/provenance.mjs",
+          "bytes": 5875,
+          "sha256": "85edcc439c8fa3ee804c12e53b55b8511671582da4fab81366064f32a23d8908"
+        },
+        {
+          "path": "src/index.ts",
+          "bytes": 18437,
+          "sha256": "cc492fb8124f0cf2552966416b62be3d95ff6adcd2730e16ee1b459a2df79bbd"
+        },
+        {
+          "path": "tsconfig.json",
+          "bytes": 357,
+          "sha256": "fd77c7fdc8e7c51a056efa8f05d37376e11336229c6c2ab128314b3059f6d6f0"
+        }
+      ]
+    },
+    "toolchain": {
+      "@swc/wasm-typescript": "1.15.33",
+      "buffer": "6.0.3",
+      "esbuild": "0.27.3",
+      "typescript": "5.9.3"
+    },
+    "artifact": {
+      "path": "index.js",
+      "bytes": 3766184,
+      "sha256": "e7e38f188d8c5bf13d21e0b701723b9ec9c3c12b4226aa51c933497f09c1b874"
+    }
+  },
   "assets": {
     "index.js": {
-      "bytes": 3766162,
-      "sha256": "ecbfca0b801c83afce32496503fdf05ce1b275238ae5f2881db41355574147ef"
+      "bytes": 3766184,
+      "sha256": "e7e38f188d8c5bf13d21e0b701723b9ec9c3c12b4226aa51c933497f09c1b874"
     }
   }
 }
