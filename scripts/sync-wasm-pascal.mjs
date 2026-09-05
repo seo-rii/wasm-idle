@@ -123,6 +123,32 @@ const WORKER_IDENTITY_PLACEHOLDERS = new Map([
 /** @typedef {{path: string; mediaType: string; size: number; sha256: string}} LogicalAsset */
 /** @typedef {{path: string; logicalPath: string; encoding: 'identity' | 'gzip'; size: number; sha256: string}} StorageAsset */
 /** @typedef {{target: string; temporary: string; previous: string; hadTarget: boolean; backedUp: boolean; published: boolean}} Publication */
+/** @typedef {{bytes: number; sha256: string; uncompressedBytes: number; uncompressedSha256: string}} CompressedReceipt */
+/**
+ * @typedef {{
+ *   profileId: string;
+ *   artifactRevision: string;
+ *   pas2jsVersion: string;
+ *   pas2jsRevision: string;
+ *   manifestFingerprint: string;
+ *   manifestReceipt: Receipt;
+ *   compilerJavaScriptReceipt: CompressedReceipt;
+ *   rtlJavaScriptReceipt: Receipt;
+ *   systemPascalReceipt: Receipt;
+ * }} PascalRuntimeProfile
+ */
+/**
+ * @typedef {{
+ *   sourceDir: string;
+ *   targetDir: string;
+ *   fingerprint: string;
+ *   versionModulePath: string;
+ *   lspVersionModulePath: string;
+ *   runtimeProfile: PascalRuntimeProfile;
+ *   runnerReceipt: Receipt;
+ *   reused?: boolean;
+ * }} PascalSyncResult
+ */
 
 /** @param {Uint8Array} bytes */
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -302,7 +328,11 @@ async function resolveSourceDir(sourceDir) {
 	return resolved;
 }
 
-/** @param {string} rootDir @param {string} [currentDir] */
+/**
+ * @param {string} rootDir
+ * @param {string} [currentDir]
+ * @returns {Promise<string[]>}
+ */
 async function listRegularFiles(rootDir, currentDir = rootDir) {
 	const entries = await readdir(currentDir, { withFileTypes: true });
 	const files = [];
@@ -340,6 +370,7 @@ async function assertIdenticalTree(installedRoot, expectedRoot, label) {
 
 /**
  * @param {{targetDir: string; workerSourcePath: string; versionModulePath: string; lspVersionModulePath: string; lockFilePath: string}} paths
+ * @returns {Promise<PascalSyncResult>}
  */
 async function reuseCheckedInRuntime(paths) {
 	const temporaryRoot = await mkdtemp(path.join(tmpdir(), 'wasm-idle-pascal-verify-'));
@@ -423,6 +454,7 @@ function serializeGeneratedObject(value) {
 
 /**
  * @param {{sourceDir?: string; targetDir?: string; workerSourcePath?: string; versionModulePath?: string; lspVersionModulePath?: string; lockFilePath?: string; renamePath?: (sourcePath: string, targetPath: string) => Promise<void>}} [options]
+ * @returns {Promise<PascalSyncResult>}
  */
 export async function syncWasmPascalAssets(options = {}) {
 	const targetDir = path.resolve(options.targetDir || DEFAULT_TARGET_DIR);
