@@ -36,6 +36,7 @@
 	} from '$lib/playground/options';
 	import type monaco from 'monaco-editor';
 	import { executeTerminalRun } from './execute';
+	import { createWorkspaceStorage, type WorkspaceSaveState } from './workspaceStorage';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
 	import {
 		isEditorDefaultSource,
@@ -198,7 +199,19 @@
 	let openTabs = $state<string[]>([...initialWorkspace.openTabs]);
 	let sidebarOpen = $state(true);
 	let saveStatus = $state('Ready');
-	let workspaceInitialized = false;
+	let workspaceSaveState = $state<WorkspaceSaveState>({
+		phase: 'dirty',
+		revision: 0,
+		savedRevision: -1,
+		error: null
+	});
+	const workspaceStorage = createWorkspaceStorage(
+		(value) => localStorage.setItem(WORKSPACE_STORAGE_KEY, value),
+		(state) => {
+			workspaceSaveState = state;
+		}
+	);
+	let workspaceInitialized = $state(false);
 	let workspaceSaveTimer: ReturnType<typeof setTimeout> | null = null;
 	let activeProgressSession: ProgressLike | undefined;
 	let executionAbortController: AbortController | undefined;
@@ -353,21 +366,7 @@
 	const sortedFiles = $derived([...files].sort((a, b) => a.path.localeCompare(b.path)));
 	const activeLines = $derived(activeFile ? activeFile.content.split(/\r\n|\r|\n/).length : 0);
 	const activeBytes = $derived(activeFile ? new Blob([activeFile.content]).size : 0);
-	const workspaceSaveKey = $derived(
-		JSON.stringify({
-			argsInput,
-			cppVersion,
-			goTarget,
-			language,
-			log,
-			lspEnabled,
-			ocamlBackend,
-			ocamlWasmBinaryenMode,
-			rustTargetTriple,
-			sidebarOpen,
-			workspaces: workspaceMapForSnapshot()
-		})
-	);
+	const workspaceSaveKey = $derived(JSON.stringify(snapshot()));
 
 	const loadingProgress = createLoadingProgressController({
 		onChange(state) {
@@ -867,9 +866,11 @@
 			nextFiles.push({
 				path: safePath,
 				content: file.content,
-				...(file.encoding === 'utf-8' || file.encoding === 'data-url'
-					? { encoding: file.encoding }
-					: {})
+				...(isBinaryWorkspaceFile(file)
+					? { encoding: 'data-url' as const }
+					: file.encoding === 'utf-8'
+						? { encoding: 'utf-8' as const }
+						: {})
 			});
 		}
 		return nextFiles;
@@ -1061,11 +1062,35 @@
 	}
 
 	function saveWorkspace(showStatus = false) {
-		if (!browser) return;
-		localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(snapshot()));
-		if (showStatus) saveStatus = 'Saved locally';
-		else
-			saveStatus = `Saved ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+		if (!browser || !workspaceInitialized) return false;
+		const saved = workspaceStorage.save(workspaceSaveKey);
+		if (saved && showStatus) saveStatus = 'Saved locally';
+		return saved;
+	}
+
+	function readStoredValue(key: string) {
+		try {
+			return localStorage.getItem(key);
+		} catch {
+			return null;
+		}
+	}
+
+	function downloadWorkspaceBackup() {
+		downloadBlob(
+			new Blob([workspaceSaveKey], { type: 'application/json' }),
+			'wasm-idle-workspace.json'
+		);
+		saveStatus = 'Workspace backup downloaded';
+	}
+
+	function warnUnsavedChanges(event: BeforeUnloadEvent) {
+		if (!workspaceInitialized) return;
+		workspaceStorage.observe(workspaceSaveKey);
+		const state = workspaceStorage.getState();
+		if (state.revision === state.savedRevision || saveWorkspace()) return;
+		event.preventDefault();
+		event.returnValue = '';
 	}
 
 	async function shareWorkspace() {
@@ -1160,6 +1185,13 @@
 	async function importFiles(fileList: File[]) {
 		const imported: string[] = [];
 		for (const file of fileList) {
+			if (file.name === 'wasm-idle-workspace.json') {
+				const backup = JSON.parse(await file.text());
+				if (!backup.workspaces || typeof backup.version !== 'number')
+					throw new Error('Invalid workspace backup');
+				applySnapshot(backup, 'Workspace backup restored');
+				continue;
+			}
 			if (file.name.toLowerCase().endsWith('.zip')) {
 				imported.push(...(await importZip(file)));
 			} else {
@@ -1407,14 +1439,18 @@
 		const codeToRun = activeFile.content;
 		const args = parseArgs(argsInput);
 		if (browser) {
-			localStorage.setItem('code', codeToRun);
-			localStorage.setItem('language', language);
-			localStorage.setItem('argsInput', argsInput);
-			localStorage.setItem('rustTargetTriple', rustTargetTriple);
-			localStorage.setItem('goTarget', goTarget);
-			localStorage.setItem('ocamlBackend', ocamlBackend);
-			localStorage.setItem('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode);
 			saveWorkspace();
+			try {
+				localStorage.setItem('code', codeToRun);
+				localStorage.setItem('language', language);
+				localStorage.setItem('argsInput', argsInput);
+				localStorage.setItem('rustTargetTriple', rustTargetTriple);
+				localStorage.setItem('goTarget', goTarget);
+				localStorage.setItem('ocamlBackend', ocamlBackend);
+				localStorage.setItem('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode);
+			} catch {
+				// The complete workspace above is authoritative; legacy keys are optional.
+			}
 		}
 		const abortController = new AbortController();
 		const progressSession = loadingProgress.start(`Loading ${language} runtime`);
@@ -1534,7 +1570,7 @@
 				return;
 			}
 
-			const storedWorkspace = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+			const storedWorkspace = readStoredValue(WORKSPACE_STORAGE_KEY);
 			if (storedWorkspace) {
 				try {
 					applySnapshot(JSON.parse(storedWorkspace), 'Workspace restored');
@@ -1542,16 +1578,16 @@
 					init = true;
 					return;
 				} catch {
-					localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+					saveStatus = 'Stored workspace could not be restored';
 				}
 			}
 
-			const code = localStorage.getItem('code');
-			const lang = localStorage.getItem('language');
-			const storedArgs = localStorage.getItem('argsInput');
-			const storedGoTarget = localStorage.getItem('goTarget');
-			const storedOcamlBackend = localStorage.getItem('ocamlBackend');
-			const storedOcamlWasmBinaryenMode = localStorage.getItem('ocamlWasmBinaryenMode');
+			const code = readStoredValue('code');
+			const lang = readStoredValue('language');
+			const storedArgs = readStoredValue('argsInput');
+			const storedGoTarget = readStoredValue('goTarget');
+			const storedOcamlBackend = readStoredValue('ocamlBackend');
+			const storedOcamlWasmBinaryenMode = readStoredValue('ocamlWasmBinaryenMode');
 			const requestedCode =
 				decodeBase64Url(page.url.searchParams.get('code64')) ??
 				page.url.searchParams.get('code');
@@ -1621,6 +1657,7 @@
 		if (!browser || !workspaceInitialized) return;
 		const key = workspaceSaveKey;
 		if (!key) return;
+		workspaceStorage.observe(key);
 		if (workspaceSaveTimer) clearTimeout(workspaceSaveTimer);
 		workspaceSaveTimer = setTimeout(() => saveWorkspace(), 400);
 		return () => {
@@ -1649,7 +1686,7 @@
 				);
 				if (!nextAvailableRustTargetTriples.length || cancelled) return;
 				availableRustTargetTriples = [...nextAvailableRustTargetTriples];
-				const storedRustTargetTriple = localStorage.getItem('rustTargetTriple');
+				const storedRustTargetTriple = readStoredValue('rustTargetTriple');
 				const nextDefaultTargetTriple = nextAvailableRustTargetTriples.includes(
 					manifest.defaultTargetTriple as RustTargetTriple
 				)
@@ -1670,7 +1707,7 @@
 			} catch {
 				if (cancelled) return;
 				availableRustTargetTriples = ['wasm32-wasip1', 'wasm32-wasip2'];
-				const storedRustTargetTriple = localStorage.getItem('rustTargetTriple');
+				const storedRustTargetTriple = readStoredValue('rustTargetTriple');
 				if (
 					(storedRustTargetTriple === 'wasm32-wasip1' ||
 						storedRustTargetTriple === 'wasm32-wasip2') &&
@@ -1709,7 +1746,7 @@
 				);
 				if (!nextAvailableGoTargets.length || cancelled) return;
 				availableGoTargets = [...nextAvailableGoTargets];
-				const storedGoTarget = localStorage.getItem('goTarget');
+				const storedGoTarget = readStoredValue('goTarget');
 				const nextDefaultGoTarget = nextAvailableGoTargets.includes(
 					manifest.defaultTarget as GoTarget
 				)
@@ -1725,7 +1762,7 @@
 			} catch {
 				if (cancelled) return;
 				availableGoTargets = ['wasip1/wasm'];
-				const storedGoTarget = localStorage.getItem('goTarget');
+				const storedGoTarget = readStoredValue('goTarget');
 				if (storedGoTarget === 'wasip1/wasm') {
 					goTarget = storedGoTarget;
 					return;
@@ -1900,6 +1937,7 @@
 </svelte:head>
 
 <svelte:window
+	onbeforeunload={warnUnsavedChanges}
 	ondragover={handleDragOver}
 	ondragleave={() => (dragActive = false)}
 	ondrop={handleDrop}
@@ -2082,6 +2120,16 @@
 						placeholder="Input to pass before running"
 						spellcheck={false}
 					></textarea>
+				</div>
+			{/if}
+			{#if workspaceSaveState.phase === 'error'}
+				<div class="workspace-save-error" role="alert">
+					<span
+						>Not saved locally. Keep this tab open and retry or download a workspace
+						backup.</span
+					>
+					<button onclick={() => saveWorkspace(true)}>Retry save</button>
+					<button onclick={downloadWorkspaceBackup}>Export workspace</button>
 				</div>
 			{/if}
 			<div class="toolbar-row toolbar-row--secondary">
@@ -2876,6 +2924,13 @@
 						{/if}
 					</span>
 				{/if}
+				<span role="status" data-workspace-save-state={workspaceSaveState.phase}>
+					{workspaceSaveState.phase === 'saved'
+						? 'Saved locally'
+						: workspaceSaveState.phase === 'saving'
+							? 'Saving…'
+							: 'Not saved locally'}
+				</span>
 				<span>{saveStatus}</span>
 				<span>{activeLines} lines</span>
 				<span>{activeBytes} bytes</span>
@@ -3693,6 +3748,16 @@
 
 	.action-button--icon .material-symbols-outlined {
 		font-size: 16px;
+	}
+
+	.workspace-save-error {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		align-items: center;
+		padding: 0.75rem;
+		border: 1px solid #d97706;
+		border-radius: 0.5rem;
 	}
 
 	.hint {

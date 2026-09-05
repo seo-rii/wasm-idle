@@ -311,7 +311,7 @@ describe('example route debug actions', () => {
 			/let availableGoTargets = \$state<GoTarget\[]>\(\['wasip1\/wasm'\]\);/
 		);
 		expect(source).toMatch(/localStorage\.setItem\('goTarget', goTarget\);/);
-		expect(source).toMatch(/const storedGoTarget = localStorage\.getItem\('goTarget'\);/);
+		expect(source).toMatch(/const storedGoTarget = readStoredValue\('goTarget'\);/);
 		expect(source).toMatch(/const manifestUrl = runtimeAssets\.go\?\.manifestUrl;/);
 		expect(applicationRuntimeAssets.go?.manifestUrl).toContain(
 			'/wasm-go/runtime/runtime-manifest.v1.json?'
@@ -989,11 +989,9 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/localStorage\.setItem\('ocamlWasmBinaryenMode', ocamlWasmBinaryenMode\);/
 		);
+		expect(source).toMatch(/const storedOcamlBackend = readStoredValue\('ocamlBackend'\);/);
 		expect(source).toMatch(
-			/const storedOcamlBackend = localStorage\.getItem\('ocamlBackend'\);/
-		);
-		expect(source).toMatch(
-			/const storedOcamlWasmBinaryenMode = localStorage\.getItem\('ocamlWasmBinaryenMode'\);/
+			/const storedOcamlWasmBinaryenMode = readStoredValue\('ocamlWasmBinaryenMode'\);/
 		);
 		expect(source).toMatch(
 			/const requestedOcamlBackend = page\.url\.searchParams\.get\('ocamlBackend'\);/
