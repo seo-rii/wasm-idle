@@ -97,10 +97,12 @@ describe('README support matrix', () => {
 			language: 'Swift',
 			candidateIds: ['SWIFT']
 		});
-		expect(swiftBlockedRow?.blocker).toContain('real Swift compiler path');
-		expect(swiftBlockedRow?.requiredFollowUp).toContain('prove stdin/stdout execution');
+		expect(swiftBlockedRow?.currentEvidence).toContain('production WASM worker');
+		expect(swiftBlockedRow?.currentEvidence).toContain('explicit and shared-buffer input');
+		expect(swiftBlockedRow?.blocker).toContain('browser-hosted real Swift compiler');
+		expect(swiftBlockedRow?.requiredFollowUp).toContain('source compilation, diagnostics');
 		expect(blockedTable).toContain('| Swift');
-		expect(blockedTable).toContain('browser-hosted real Swift compiler path');
+		expect(blockedTable).toContain('SWIFT remains unregistered');
 		expect(fullSection).toContain('### Blocked candidates');
 		expect(fullSection).toContain('`SWIFT`');
 	});

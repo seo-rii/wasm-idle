@@ -786,11 +786,11 @@ export const blockedCandidateRows = [
 		language: 'Swift',
 		candidateIds: ['SWIFT'],
 		currentEvidence:
-			'Swift.org documents Wasm support through a native Swift 6.x toolchain plus a Wasm SDK, and SwiftWasm Pad uses a backend compile service; no browser-hosted swiftc/SwiftPM runtime asset is packaged here',
+			'Native Swift 6.3.3 and the full Wasm SDK produce a target that passes Chromium stdin/UTF-8/EOF checks through the production WASM worker with explicit and shared-buffer input; browser-hosted swiftc/SwiftPM assets remain unavailable',
 		blocker:
-			'Swift cannot be implemented as a wasm-idle-authored parser/runtime subset or as a remote compile service; the playground needs a redistributable browser-hosted real Swift compiler path',
+			'Target execution evidence does not supply a browser-hosted real Swift compiler or SwiftPM; SWIFT remains unregistered',
 		requiredFollowUp:
-			'Build or source a browser-hosted Swift compiler/SwiftPM runtime bundle, prove stdin/stdout execution for generated WASI modules, then register SWIFT as a first-class runtime'
+			'Produce a browser-hosted Swift compiler/SwiftPM bundle and pass source compilation, diagnostics, arguments, and workspace contracts before registering SWIFT'
 	}
 ];
 
