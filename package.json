@@ -142,7 +142,10 @@
 		"check:watch": "pnpm run build:publish-deps && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
-		"page": "pnpm run page:build && node gh-pages.js"
+		"page": "pnpm run page:build && node gh-pages.js",
+		"sync:wasm-c3": "node scripts/sync-wasm-c3.mjs",
+		"test:browser:c3": "WASM_IDLE_RUN_REAL_BROWSER_C3=1 pnpm exec vitest run src/lib/playground/c3.playwright.test.ts",
+		"test:unit:c3": "node --test scripts/c3-memory.test.mjs scripts/c3-stdin.test.mjs scripts/sync-wasm-c3.test.mjs"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
