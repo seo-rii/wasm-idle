@@ -45,27 +45,27 @@
       "js": "debug/lldb-web-dap.js",
       "wasm": "debug/lldb-web-dap.wasm",
       "worker": "debug/lldb-web-dap.pthread.mjs",
-      "jsSha256": "e459d2588fad29e1d24b992a5acee2d4b3f84d414cf8b517bddeac61c6b92c60",
-      "wasmSha256": "4d355af4301df8955b91e5cd0d78f9845c6d81e6508982e7e9beae4a3f778711",
+      "jsSha256": "c6ecfaf08d60af11b003df60435c77a5ed24fc46887d2aa43e19436d5a5eb59d",
+      "wasmSha256": "17346bd942d9e630437ed6519e5aa1cd1c88f2a9c5e46c96f4dcbb74d6a680d0",
       "workerSha256": "d40975277aa0c98c6570f9a35d52ab9be475ded4e7a4796fc6d0f8f314c9652d",
       "llvmVersion": "22.1.8",
       "llvmRevision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
-      "patchesSha256": "1c80a97107f6232f86804ea23fdf3308d78bc7626245659990f0e3e97b77ba49",
-      "sourcesLockSha256": "ea6ebe48778b50f4f64fa165f46ccafa25a45ca6388daf769d4e164b8781bd27"
+      "patchesSha256": "521cca5abe2a15c8b38d913f2bf5b9e2df52fd8d3bd76383d1533b573351ad11",
+      "sourcesLockSha256": "fededead779b3720c9dfdc01b09634442f1eb0334c69ad70f611a9de38f5de0c"
     },
     "targetRuntime": {
       "name": "wamr",
       "js": "debug/wamr-debug.js",
       "wasm": "debug/wamr-debug.wasm",
       "worker": "debug/wamr-debug.worker.mjs",
-      "jsSha256": "9948dc4dc7fe7cf575a6480abac6de3b451ad10e3a7b851d4e43f435df0ddcec",
-      "wasmSha256": "e3c848b676cbc65b9014d19a3b36f480f7989309ce2e2385fcbeafa75240d338",
-      "workerSha256": "d42f216c4aac3aff61741537d0507ab86aefbe4525661f8d75e49c274b639f79",
+      "jsSha256": "27ae46467c33d7794878f956aadf70f7fb1ac92f3625466d5d066a772ccdf081",
+      "wasmSha256": "652518a5c03d4b855ab5e661a313cb698f66ae462971d18e1a4ddac78160694f",
+      "workerSha256": "22998261a62469360bb373812566c364a9b97af01622f8479794c1624464beb3",
       "revision": "25bd7eb63e828e4bd242cc9b38d260b4b31c6605",
       "provenance": {
         "sourcesLockSha256": "18f924fa418c7dccb0c557c1310ae877f5e5ab41ce34256230565879fe1f2727",
-        "producerManifestSha256": "4ca46f882c7b8962098e949c43c91b1080752ba622b61e8cba614911fed100cd",
-        "patchesSha256": "e56cc12925ab01934a747bd3697a057eff641fdc77f9f301e5dc7e942a36a982",
+        "producerManifestSha256": "5d346dec43c73d6598fcd5fe0363f739d540b62695b7c11e9e8936faec7f88a3",
+        "patchesSha256": "d6a9ff47ebf17340c6146bc648b37c3d18b3f9e8b7b5a65bac6e54c674bbf33a",
         "overlaysSha256": "28bdcc1fc1901cfe6a249b1c541e31c02e07927b879bacbf81de11b91df5f4ca"
       }
     },
@@ -76,8 +76,9 @@
       "locals": true,
       "globals": true,
       "readMemory": true,
+      "writeMemory": true,
       "evaluateExpressions": false,
-      "dataBreakpoints": false,
+      "dataBreakpoints": true,
       "wasmThreads": false
     }
   }
