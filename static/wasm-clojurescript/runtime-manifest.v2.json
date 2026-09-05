@@ -2,7 +2,7 @@
   "format": "wasm-clojurescript-runtime-manifest-v2",
   "runtime": "cljs.js",
   "profileId": "clojurescript-1.12.134-cljs-js-wasm-idle-e8083f4f",
-  "fingerprint": "177dfd8dc4e67a33d2096143b3d27af96703bef002006ac9e42bd4a2609e9492",
+  "fingerprint": "11cf68d6d0987a15fe908464b160396108d4d37e7bb1d8fe02d05222eec7ed7e",
   "source": {
     "repository": "https://github.com/clojure/clojurescript",
     "revision": "r1.12.134",
@@ -28,14 +28,14 @@
     "path": "runtime-build.json",
     "mediaType": "application/json",
     "size": 545,
-    "sha256": "4afafa66d14803ff10f614848aeadeec117c61a35d2854620eb5dad2f0425ad9"
+    "sha256": "0551fe28ffcab0520b438a46881eb851e7abfae10f7f63f6201e7d145a712052"
   },
   "assets": [
     {
       "path": "compiler.js",
       "mediaType": "text/javascript",
-      "size": 6588133,
-      "sha256": "8b055dd50f8c8736db9680924209782ba5027718ab84b6a0a3eb40a913d05b17"
+      "size": 6588008,
+      "sha256": "ec1d3f02f8ee2ff7d8007acb565ec454c8a0625bd305260db3e974bbf5d3b162"
     }
   ],
   "storage": [
@@ -43,8 +43,8 @@
       "path": "compiler.js.gz.bin",
       "logicalPath": "compiler.js",
       "encoding": "gzip",
-      "size": 614204,
-      "sha256": "ea4ac9faff58cf89de1187a700b9cc30e267072ecba60064aedc11eea2b96245"
+      "size": 614160,
+      "sha256": "76bb9862946f341609a28fb14eb079432dfc239350c2515efc7fccc6d3051676"
     }
   ]
 }

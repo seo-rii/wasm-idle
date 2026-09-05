@@ -10,6 +10,7 @@ const ARTIFACTS_ROOT = path.join(RUNTIME_ROOT, 'artifacts');
 const CACHE_ROOT = path.join(ARTIFACTS_ROOT, 'cache');
 const BUILD_ROOT = path.join(ARTIFACTS_ROOT, 'build');
 const DIST_ROOT = path.join(RUNTIME_ROOT, 'dist');
+const CANONICAL_RUNTIME_ROOT = '/wasm-idle/runtimes/wasm-clojurescript';
 
 const CLOJURESCRIPT_VERSION = '1.12.134';
 const CLOJURE_TOOLS_VERSION = '1.12.4.1618';
@@ -44,6 +45,11 @@ async function assertFile(filePath, label) {
 	const fileStats = await stat(filePath).catch(() => null);
 	if (!fileStats?.isFile()) throw new Error(`${label} was not found at ${filePath}`);
 	return fileStats;
+}
+
+export function normalizeClojureScriptCompilerPaths(source, runtimeRoot = RUNTIME_ROOT) {
+	const normalizedRuntimeRoot = path.resolve(runtimeRoot).split(path.sep).join('/');
+	return source.replaceAll(normalizedRuntimeRoot, CANONICAL_RUNTIME_ROOT);
 }
 
 function run(command, args, options = {}) {
@@ -164,6 +170,12 @@ export async function prepareClojureScriptRuntime() {
 	await cp(archives.license, path.join(DIST_ROOT, 'LICENSE.txt'));
 
 	const compilerPath = path.join(DIST_ROOT, 'compiler.js');
+	const compilerSource = await readFile(compilerPath, 'utf8');
+	const normalizedCompilerSource = normalizeClojureScriptCompilerPaths(compilerSource);
+	if (normalizedCompilerSource.includes(RUNTIME_ROOT.split(path.sep).join('/'))) {
+		throw new Error('compiler.js still contains the checkout runtime path after normalization');
+	}
+	await writeFile(compilerPath, normalizedCompilerSource, 'utf8');
 	const compilerStats = await assertFile(compilerPath, 'compiler.js');
 	const compilerSha256 = await sha256File(compilerPath);
 	await writeFile(
