@@ -20,27 +20,14 @@ const payloadViewOf = (control: Int32Array) =>
 	);
 
 const splitChunk = (input: string, maxBytes: number) => {
-	const encoded = encoder.encode(input);
-	if (encoded.length <= maxBytes) {
-		return { chunk: input, bytes: encoded, rest: '' };
+	const bytes = new Uint8Array(maxBytes);
+	const { read, written } = encoder.encodeInto(input, bytes);
+	if (input.length > 0 && read === 0) {
+		throw new RangeError('Stdin buffer payload cannot fit the next UTF-8 character');
 	}
-
-	let left = 0;
-	let right = input.length;
-	while (left < right) {
-		const middle = Math.ceil((left + right) / 2);
-		if (encoder.encode(input.slice(0, middle)).length <= maxBytes) {
-			left = middle;
-		} else {
-			right = middle - 1;
-		}
-	}
-
-	const chunk = input.slice(0, left);
 	return {
-		chunk,
-		bytes: encoder.encode(chunk),
-		rest: input.slice(left)
+		bytes: bytes.subarray(0, written),
+		rest: input.slice(read)
 	};
 };
 
