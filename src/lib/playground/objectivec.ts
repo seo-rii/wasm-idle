@@ -87,7 +87,7 @@ class ObjectiveC implements Sandbox {
 		} catch (error) {
 			return Promise.reject(error);
 		}
-		return this.workerSession.load(async (resolve, reject) => {
+		return this.workerSession.load(async (resolve, reject, operation) => {
 			this.log = log;
 			this.pendingInput = [];
 			this.waitingForInput = false;
@@ -117,10 +117,12 @@ class ObjectiveC implements Sandbox {
 				this.workerSession.reset();
 			}
 			if (!this.worker) {
-				this.worker = new (
-					await import('$lib/playground/worker/objectivec?worker')
-				).default();
-				this.workerSession.attach(this.worker);
+				const { default: ObjectiveCWorker } =
+					await import('$lib/playground/worker/objectivec?worker');
+				if (!this.workerSession.isActive(operation)) return;
+				const worker = new ObjectiveCWorker();
+				if (!this.workerSession.attach(worker, operation)) return;
+				this.worker = worker;
 				this.assetBridge = new WorkerAssetBridge(
 					this.worker,
 					'clang',
@@ -130,6 +132,7 @@ class ObjectiveC implements Sandbox {
 				);
 				this.activeObjectiveCAssetsKey = nextObjectiveCAssetsKey;
 				this.worker.onmessage = (event: MessageEvent<any>) => {
+					if (!this.workerSession.isActive(operation)) return;
 					if (this.assetBridge?.handleMessage(event)) return;
 					if (event.data?.progress != null) progress?.set?.(event.data.progress);
 					if (event.data?.load) resolve();
@@ -204,6 +207,7 @@ class ObjectiveC implements Sandbox {
 			const interrupt = new Uint8Array(this.interruptBuffer);
 			const _uid = ++this.uid;
 			const handler = (event: Event & { data: any }) => {
+				if (!this.workerSession.isActive(operation)) return;
 				if (this.assetBridge?.handleMessage(event as MessageEvent<any>)) return;
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);

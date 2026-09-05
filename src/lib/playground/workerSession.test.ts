@@ -65,6 +65,50 @@ async function expectStaleWorkerHandlerIgnored(
 }
 
 describe('WorkerSession', () => {
+	it('does not start an initializer cancelled before its microtask', async () => {
+		const session = new WorkerSession({ label: 'Clang' });
+		const initialize = vi.fn();
+		const loading = session.load(initialize);
+		session.terminate();
+		await expect(loading).rejects.toBe('Process terminated');
+		expect(initialize).not.toHaveBeenCalled();
+	});
+
+	it.each(['terminate', 'supersede'] as const)(
+		'retires late workers after %s without disturbing a replacement run',
+		async (action) => {
+			const session = new WorkerSession({ label: 'Clang' });
+			const lateWorker = new MockWorker();
+			const nextWorker = new MockWorker();
+			let resume!: () => void;
+			const imported = new Promise<void>((resolve) => (resume = resolve));
+			const oldCallbacks = vi.fn();
+			const loading = session.load(async (resolve, _reject, operation) => {
+				await imported;
+				if (!session.attach(lateWorker as unknown as Worker, operation)) return;
+				oldCallbacks();
+				resolve();
+			});
+			const rejected = expect(loading).rejects.toBe(
+				action === 'terminate' ? 'Process terminated' : 'Worker operation superseded'
+			);
+			await Promise.resolve();
+			if (action === 'terminate') session.terminate();
+			await session.waitForLoad(nextWorker as unknown as Worker, (resolve) => resolve());
+			const rejectRun = vi.fn();
+			const run = session.beginRun(nextWorker as unknown as Worker, rejectRun);
+			resume();
+			await imported;
+			await rejected;
+			expect(lateWorker.terminate).toHaveBeenCalledOnce();
+			expect(lateWorker.onerror).toBeNull();
+			expect(oldCallbacks).not.toHaveBeenCalled();
+			expect(nextWorker.terminate).not.toHaveBeenCalled();
+			expect(rejectRun).not.toHaveBeenCalled();
+			expect(session.complete(run)).toBe(true);
+		}
+	);
+
 	it('rejects and disposes a worker that fails while loading', async () => {
 		const worker = new MockWorker();
 		const onDispose = vi.fn();

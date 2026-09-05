@@ -45,6 +45,22 @@ import ObjectiveC from './objectivec';
 describe('Objective-C sandbox debugging', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
+		vi.stubGlobal('Worker', MockWorker);
+	});
+
+	it.each([false, true])('cancels initialization during import: %s', async (duringImport) => {
+		const sandbox = new ObjectiveC();
+		const loading = sandbox.load('/');
+		const rejected = expect(loading).rejects.toBe('Process terminated');
+		if (duringImport) await Promise.resolve();
+		expect(workerInstances).toHaveLength(0);
+		const terminating = sandbox.terminate();
+		const replacement = sandbox.load('/');
+		await Promise.all([terminating, replacement, rejected]);
+		expect(workerInstances).toHaveLength(1);
+		expect(sandbox.worker).toBe(workerInstances[0]);
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+		await expect(sandbox.run('int main() {}', false)).resolves.toBe(true);
 	});
 
 	it('forwards debug controls, buffers, and pause events to the Objective-C worker', async () => {

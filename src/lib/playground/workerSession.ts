@@ -25,11 +25,22 @@ export class WorkerSession {
 
 	constructor(private readonly options: WorkerSessionOptions) {}
 
-	attach(worker: Worker) {
+	attach(worker: Worker): Worker;
+	attach(worker: Worker, operation: WorkerOperation): Worker | null;
+	attach(worker: Worker, operation?: WorkerOperation) {
+		if (operation !== undefined && !this.isActive(operation)) {
+			// A retired initializer must never replace the current operation's worker.
+			if (this.worker !== worker) this.retireWorker(worker);
+			return null;
+		}
 		if (this.worker === worker) return worker;
 		if (this.worker) {
 			const replacedWorker = this.disposeWorker();
 			if (replacedWorker) this.notifyDisposed(replacedWorker);
+		}
+		if (operation !== undefined && !this.isActive(operation)) {
+			if (this.worker !== worker) this.retireWorker(worker);
+			return null;
 		}
 
 		this.worker = worker;
@@ -47,7 +58,8 @@ export class WorkerSession {
 	load(
 		initialize: (
 			resolve: () => void,
-			reject: (reason?: unknown) => void
+			reject: (reason?: unknown) => void,
+			operation: WorkerOperation
 		) => void | Promise<void>
 	): Promise<void> {
 		return new Promise<void>((resolve, reject) => {
@@ -62,7 +74,10 @@ export class WorkerSession {
 			};
 
 			Promise.resolve()
-				.then(() => initialize(resolveLoad, rejectLoad))
+				.then(() => {
+					if (!this.isActive(token)) return;
+					return initialize(resolveLoad, rejectLoad, token);
+				})
 				.catch(rejectLoad);
 		});
 	}
@@ -118,7 +133,7 @@ export class WorkerSession {
 		return token;
 	}
 
-	private isActive(operation: WorkerOperation) {
+	isActive(operation: WorkerOperation) {
 		return this.activeOperation?.token === operation;
 	}
 

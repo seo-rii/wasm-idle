@@ -41,6 +41,60 @@ import Clang from './clang';
 describe('Clang sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
+		vi.stubGlobal('Worker', MockWorker);
+	});
+
+	it.each([false, true])('cancels initialization during import: %s', async (duringImport) => {
+		const sandbox = new Clang('CPP');
+		const oldProgress = { report: vi.fn(), set: vi.fn() };
+		sandbox.output = vi.fn();
+		const loading = sandbox.load('/', '', true, [], {}, oldProgress);
+		const rejected = expect(loading).rejects.toBe('Process terminated');
+		if (duringImport) await Promise.resolve();
+		expect(workerInstances).toHaveLength(0);
+		const terminating = sandbox.terminate();
+		const replacement = sandbox.load('/');
+		await Promise.all([terminating, replacement, rejected]);
+		expect(workerInstances).toHaveLength(1);
+		expect(sandbox.worker).toBe(workerInstances[0]);
+		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+		expect(oldProgress.report).not.toHaveBeenCalled();
+		expect(oldProgress.set).not.toHaveBeenCalled();
+		await expect(sandbox.run('int main() {}', false)).resolves.toBe(true);
+	});
+
+	it('ignores saved callbacks from a cancelled worker after a replacement run starts', async () => {
+		const sandbox = new Clang('CPP');
+		sandbox.output = vi.fn();
+		const progress = { report: vi.fn(), set: vi.fn() };
+		await sandbox.load('/', '', true, [], {}, progress);
+		const worker = workerInstances[0];
+		const staleLoadHandler = worker.onmessage;
+		worker.postMessage.mockImplementation(() => {});
+		const run = sandbox.run('int main() {}', false);
+		const rejected = expect(run).rejects.toBe('Process terminated');
+		const staleRunHandler = worker.onmessage;
+		await sandbox.terminate();
+		await rejected;
+		await sandbox.load('/');
+		const replacement = workerInstances[1];
+		replacement.postMessage.mockImplementation(() => {});
+		const nextRun = sandbox.run('int main() {}', false);
+		const nextHandler = replacement.onmessage;
+		progress.report.mockClear();
+		progress.set.mockClear();
+
+		staleLoadHandler?.({ data: { load: true, progress: 0.5 } } as MessageEvent);
+		staleRunHandler?.({
+			data: { output: 'stale', results: true, buffer: true }
+		} as MessageEvent);
+		expect(sandbox.output).not.toHaveBeenCalled();
+		expect(progress.report).not.toHaveBeenCalled();
+		expect(progress.set).not.toHaveBeenCalled();
+		expect(replacement.onmessage).toBe(nextHandler);
+		expect(sandbox.exit).toBe(false);
+		nextHandler?.({ data: { results: true } } as MessageEvent);
+		await expect(nextRun).resolves.toBe(true);
 	});
 
 	it('passes complex C++ source with multiple declarations and mutual recursion to the worker', async () => {

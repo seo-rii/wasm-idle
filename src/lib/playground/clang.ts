@@ -112,7 +112,7 @@ class Clang implements Sandbox {
 		} catch (error) {
 			return Promise.reject(error);
 		}
-		return this.workerSession.load(async (resolve, reject) => {
+		return this.workerSession.load(async (resolve, reject, operation) => {
 			this.log = log;
 			this.pendingInput = [];
 			this.waitingForInput = false;
@@ -136,8 +136,12 @@ class Clang implements Sandbox {
 				this.workerSession.reset();
 			}
 			if (!this.worker) {
-				this.worker = new (await import('$lib/playground/worker/clang?worker')).default();
-				this.workerSession.attach(this.worker);
+				const { default: ClangWorker } =
+					await import('$lib/playground/worker/clang?worker');
+				if (!this.workerSession.isActive(operation)) return;
+				const worker = new ClangWorker();
+				if (!this.workerSession.attach(worker, operation)) return;
+				this.worker = worker;
 				this.assetBridge = new WorkerAssetBridge(
 					this.worker,
 					'clang',
@@ -146,6 +150,7 @@ class Clang implements Sandbox {
 					limits.maxAssetBytes
 				);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
+					if (!this.workerSession.isActive(operation)) return;
 					if (this.assetBridge?.handleMessage(event)) return;
 					reportWorkerProgress(progress, event.data?.progress);
 					if (event.data?.load) resolve();
@@ -239,6 +244,7 @@ class Clang implements Sandbox {
 			const interrupt = new Uint8Array(this.interruptBuffer),
 				_uid = ++this.uid;
 			const handler = (event: Event & { data: any }) => {
+				if (!this.workerSession.isActive(operation)) return;
 				if (this.assetBridge?.handleMessage(event as MessageEvent<any>)) return;
 				if (!this.worker) return reject('Worker not loaded');
 				if (_uid !== this.uid) return (this.worker.onmessage = null);
@@ -295,6 +301,7 @@ class Clang implements Sandbox {
 					}
 					void lldbSession.start().then(
 						(result) => {
+							if (!this.workerSession.isActive(operation)) return;
 							if (this.lldbSession === lldbSession) this.lldbSession = undefined;
 							this.elapse = Date.now() - this.begin;
 							this.exit = true;
@@ -302,6 +309,7 @@ class Clang implements Sandbox {
 							resolve(result);
 						},
 						(sessionError) => {
+							if (!this.workerSession.isActive(operation)) return;
 							if (this.lldbSession === lldbSession) this.lldbSession = undefined;
 							this.elapse = Date.now() - this.begin;
 							this.exit = true;
