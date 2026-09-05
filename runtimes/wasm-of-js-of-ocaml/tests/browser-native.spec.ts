@@ -45,14 +45,19 @@ test('browser-native harness executes hello, yojson, and diagnostics fixtures', 
 		}
 	});
 
-	await context.addCookies([
-		{
-			name: 'dev_bypass_waf',
-			value: 'seorii_bypass_token_is_this',
-			domain: '127.0.0.1',
-			path: '/'
-		}
-	]);
+	const bypassCookie = process.env.WASM_IDLE_TEST_BYPASS_COOKIE?.match(
+		/^dev_bypass_waf=([^;\r\n]+)$/u
+	)?.[1];
+	if (bypassCookie) {
+		await context.addCookies([
+			{
+				name: 'dev_bypass_waf',
+				value: bypassCookie,
+				domain: '127.0.0.1',
+				path: '/'
+			}
+		]);
+	}
 
 	await page.goto('/');
 

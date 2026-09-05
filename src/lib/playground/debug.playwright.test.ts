@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
 import { afterAll, describe, expect, it } from 'vitest';
 import { chromium, type Page } from 'playwright-core';
 
@@ -670,16 +671,7 @@ describe('native-source browser debugging in Chromium', () => {
 				)
 			});
 			const context = await browser.newContext();
-			await context.addCookies([
-				{
-					name: 'dev_bypass_waf',
-					value: 'seorii_bypass_token_is_this',
-					url: new URL(previewServer.browserUrl).origin
-				}
-			]);
-			await context.setExtraHTTPHeaders({
-				Cookie: 'dev_bypass_waf=seorii_bypass_token_is_this'
-			});
+			await addBrowserTestCookies(context, previewServer.browserUrl);
 			await context.addInitScript(() => {
 				const NativeWorker = globalThis.Worker;
 				if (typeof NativeWorker !== 'function') return;

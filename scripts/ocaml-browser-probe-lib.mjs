@@ -1,3 +1,4 @@
+import { addBrowserTestCookies } from './browser-test-cookies.mjs';
 import { chromium } from 'playwright-core';
 
 import {
@@ -165,13 +166,7 @@ export async function runOcamlBrowserProbe({
 	const targetUrl = new URL(browserUrl);
 
 	const context = await browser.newContext();
-	await context.addCookies([
-		{
-			name: 'dev_bypass_waf',
-			value: 'seorii_bypass_token_is_this',
-			url: targetUrl.origin
-		}
-	]);
+	await addBrowserTestCookies(context, browserUrl);
 	const page = await context.newPage();
 	page.setDefaultTimeout(runTimeoutMs);
 

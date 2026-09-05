@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
 import { chromium, type CDPSession, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 
@@ -225,16 +226,7 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 	const cdp = await browser.newBrowserCDPSession();
 	await cdp.send('Target.setDiscoverTargets', { discover: true });
 	const context = await browser.newContext();
-	await context.addCookies([
-		{
-			name: 'dev_bypass_waf',
-			value: 'seorii_bypass_token_is_this',
-			url: new URL(browserUrl).origin
-		}
-	]);
-	await context.setExtraHTTPHeaders({
-		Cookie: 'dev_bypass_waf=seorii_bypass_token_is_this'
-	});
+	await addBrowserTestCookies(context, browserUrl);
 	const page = await context.newPage();
 	page.setDefaultTimeout(runTimeoutMs);
 	const pageErrors: string[] = [];

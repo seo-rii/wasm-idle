@@ -1,3 +1,5 @@
+import { addBrowserTestCookies } from './browser-test-cookies.mjs';
+
 import { chromium } from 'playwright-core';
 
 import {
@@ -185,16 +187,7 @@ export async function runStdinBrowserProbe(options) {
 		executablePath
 	});
 	const context = await browser.newContext();
-	await context.addCookies([
-		{
-			name: 'dev_bypass_waf',
-			value: 'seorii_bypass_token_is_this',
-			url: new URL(browserUrl).origin
-		}
-	]);
-	await context.setExtraHTTPHeaders({
-		Cookie: 'dev_bypass_waf=seorii_bypass_token_is_this'
-	});
+	await addBrowserTestCookies(context, browserUrl);
 	const page = await context.newPage();
 	page.setDefaultTimeout(runTimeoutMs);
 

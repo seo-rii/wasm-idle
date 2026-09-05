@@ -121,6 +121,65 @@ describe('pinned asset retries', () => {
 		expect(fetchImpl).toHaveBeenCalledTimes(1);
 	});
 
+	it.each(['https://untrusted.example.test/asset.wasm', '/outside/asset.wasm'])(
+		'rejects redirect %s before sending credentials to the destination',
+		async (location) => {
+			const fixture = await createFixture();
+			const fetchImpl = vi
+				.fn<typeof fetch>()
+				.mockResolvedValue(new Response(null, { status: 302, headers: { location } }));
+			await expect(
+				preparePinnedAssets({
+					assets: [{ ...fixture.asset, sourcePath: 'asset.wasm' }],
+					targetRoot: fixture.targetRoot,
+					sourceBaseUrl: 'https://assets.example.test/runtime/',
+					label: 'test',
+					userAgent: 'test',
+					bypassCookie: 'dev_bypass_waf=test-only',
+					bypassCookieOrigin: 'https://assets.example.test',
+					fetchImpl
+				})
+			).rejects.toThrow('redirected outside its trusted base');
+			expect(fetchImpl).toHaveBeenCalledTimes(1);
+			expect(fetchImpl.mock.calls[0][1]).toMatchObject({
+				redirect: 'manual',
+				headers: { Cookie: 'dev_bypass_waf=test-only' }
+			});
+		}
+	);
+
+	it('follows a redirect inside the trusted base', async () => {
+		const fixture = await createFixture();
+		const fetchImpl = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				new Response(null, {
+					status: 302,
+					headers: { location: 'asset-v1.wasm' }
+				})
+			)
+			.mockResolvedValueOnce(new Response(fixture.payload));
+		await expect(prepareFixture(fixture, fetchImpl)).resolves.toMatchObject({ downloaded: 1 });
+		expect(String(fetchImpl.mock.calls[1][0])).toBe(
+			'https://assets.example.test/runtime/asset-v1.wasm'
+		);
+	});
+
+	it('does not forward a bypass cookie to an overridden asset origin', async () => {
+		const fixture = await createFixture();
+		const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(fixture.payload));
+		await preparePinnedAssets({
+			assets: [fixture.asset],
+			targetRoot: fixture.targetRoot,
+			sourceBaseUrl: 'https://raw.githubusercontent.com/owner/repo/commit/',
+			label: 'test',
+			userAgent: 'test',
+			bypassCookie: 'dev_bypass_waf=test-only',
+			fetchImpl
+		});
+		expect(new Headers(fetchImpl.mock.calls[0][1]?.headers).get('cookie')).toBeNull();
+	});
+
 	it('does not retry a receipt hash mismatch', async () => {
 		const fixture = await createFixture(Buffer.from('expected payload'));
 		const fetchImpl = vi

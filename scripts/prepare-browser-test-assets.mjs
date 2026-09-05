@@ -8,7 +8,6 @@ const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
 const DEFAULT_MANIFEST_PATH = path.join(REPO_ROOT, 'scripts', 'browser-test-assets.v1.json');
 const DEFAULT_STATIC_DIR = path.join(REPO_ROOT, 'static');
-const DEFAULT_BYPASS_COOKIE = 'dev_bypass_waf=seorii_bypass_token_is_this';
 const SUPPORTED_GROUPS = new Set(['all', 'clang', 'clangd', 'ocaml']);
 
 /**
@@ -126,7 +125,7 @@ export async function prepareBrowserTestAssets({
 	manifestPath = DEFAULT_MANIFEST_PATH,
 	staticDir = DEFAULT_STATIC_DIR,
 	baseUrl,
-	bypassCookie = process.env.WASM_IDLE_TEST_BYPASS_COOKIE || DEFAULT_BYPASS_COOKIE,
+	bypassCookie = process.env.WASM_IDLE_TEST_BYPASS_COOKIE || '',
 	fetchImpl = fetch,
 	timeoutMs = 120_000
 } = {}) {

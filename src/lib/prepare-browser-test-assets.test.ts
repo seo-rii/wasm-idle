@@ -45,9 +45,7 @@ describe('browser test asset preparation', () => {
 			})
 		);
 		const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
-			expect(new Headers(init?.headers).get('cookie')).toBe(
-				'dev_bypass_waf=seorii_bypass_token_is_this'
-			);
+			expect(new Headers(init?.headers).get('cookie')).toBeNull();
 			return new Response(payload);
 		});
 		const staticDir = path.join(root, 'static');

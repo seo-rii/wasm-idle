@@ -1,7 +1,9 @@
 // @vitest-environment node
 
+import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
 import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
+
 import { chromium } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 
@@ -126,16 +128,7 @@ describe('compressed runtime assets', () => {
 					)
 				});
 				const context = await browser.newContext();
-				await context.addCookies([
-					{
-						name: 'dev_bypass_waf',
-						value: 'seorii_bypass_token_is_this',
-						url: new URL(previewServer.browserUrl).origin
-					}
-				]);
-				await context.setExtraHTTPHeaders({
-					Cookie: 'dev_bypass_waf=seorii_bypass_token_is_this'
-				});
+				await addBrowserTestCookies(context, previewServer.browserUrl);
 				const page = await context.newPage();
 				page.setDefaultTimeout(
 					Number(process.env.WASM_IDLE_COMPRESSED_ASSET_TIMEOUT_MS || '120000')

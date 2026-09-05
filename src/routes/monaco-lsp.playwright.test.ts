@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 
@@ -83,7 +84,6 @@ interface MonacoTestGlobal {
 	__wasmIdleLspProgressTrace?: MonacoLspProgressEntry[];
 }
 
-const bypassCookie = 'dev_bypass_waf=seorii_bypass_token_is_this';
 const diagnosticSelector = '.squiggly-error, .squiggly-warning, .squiggly-info';
 const browserTimeoutMs = Number(process.env.WASM_IDLE_LSP_BROWSER_TIMEOUT_MS || '180000');
 const suiteTimeoutMs = Number(process.env.WASM_IDLE_LSP_BROWSER_SUITE_TIMEOUT_MS || '1800000');
@@ -619,14 +619,7 @@ function selectedCases() {
 }
 
 async function prepareBrowserContext(context: BrowserContext, browserUrl: string) {
-	await context.addCookies([
-		{
-			name: 'dev_bypass_waf',
-			value: 'seorii_bypass_token_is_this',
-			url: new URL(browserUrl).origin
-		}
-	]);
-	await context.setExtraHTTPHeaders({ Cookie: bypassCookie });
+	await addBrowserTestCookies(context, browserUrl);
 	await context.addInitScript(() => {
 		try {
 			for (const key of [

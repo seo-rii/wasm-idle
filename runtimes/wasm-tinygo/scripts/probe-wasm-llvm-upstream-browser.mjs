@@ -240,13 +240,18 @@ try {
 				: {})
 		});
 		const context = await browser.newContext();
-		await context.addCookies([
-			{
-				name: 'dev_bypass_waf',
-				value: 'seorii_bypass_token_is_this',
-				url
-			}
-		]);
+		const bypassCookie = process.env.WASM_IDLE_TEST_BYPASS_COOKIE?.match(
+			/^dev_bypass_waf=([^;\r\n]+)$/u
+		)?.[1];
+		if (bypassCookie) {
+			await context.addCookies([
+				{
+					name: 'dev_bypass_waf',
+					value: bypassCookie,
+					url
+				}
+			]);
+		}
 		const page = await context.newPage();
 		page.on('console', (message) => {
 			if (message.type() === 'error')

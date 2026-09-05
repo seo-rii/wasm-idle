@@ -9,7 +9,6 @@ const REPOSITORY_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
 const DEFAULT_RECEIPT_PATH = path.join(REPOSITORY_ROOT, 'static', 'clang', 'runtime-build.json');
 const DEFAULT_STATIC_DIR = path.join(REPOSITORY_ROOT, 'static');
 const DEFAULT_ASSET_BASE_URL = 'https://seorii.page/wasm-idle/';
-const DEFAULT_BYPASS_COOKIE = 'dev_bypass_waf=seorii_bypass_token_is_this';
 
 /**
  * @typedef {{ asset: string; size: number; sha256: string }} ClangdReceiptAsset
@@ -30,7 +29,7 @@ export async function prepareClangdAssets(options = {}) {
 		receiptPath = DEFAULT_RECEIPT_PATH,
 		staticDir = DEFAULT_STATIC_DIR,
 		baseUrl = process.env.WASM_IDLE_TEST_ASSET_BASE_URL || DEFAULT_ASSET_BASE_URL,
-		bypassCookie = process.env.WASM_IDLE_TEST_BYPASS_COOKIE || DEFAULT_BYPASS_COOKIE,
+		bypassCookie = process.env.WASM_IDLE_TEST_BYPASS_COOKIE || '',
 		fetchImpl = fetch,
 		timeoutMs = 120_000
 	} = options;

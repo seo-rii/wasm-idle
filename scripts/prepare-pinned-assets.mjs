@@ -3,6 +3,51 @@ import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const TRANSIENT_HTTP_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+const REDIRECT_HTTP_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+class AssetRedirectError extends Error {}
+
+/** @param {URL} url @param {URL} base */
+function isTrustedUrl(url, base) {
+	return (
+		url.origin === base.origin &&
+		url.pathname.startsWith(base.pathname) &&
+		!url.username &&
+		!url.password
+	);
+}
+
+/**
+ * Check every redirect before making its request, including before forwarding
+ * optional cookies. A final-URL check alone happens after credentials escape.
+ * @param {URL} url
+ * @param {URL} base
+ * @param {RequestInit} init
+ * @param {typeof fetch} fetchImpl
+ * @param {string} label
+ */
+async function fetchTrustedAsset(url, base, init, fetchImpl, label) {
+	for (let redirects = 0; ; redirects += 1) {
+		const response = await fetchImpl(url, { ...init, redirect: 'manual' });
+		if (!isTrustedUrl(new URL(response.url || url.href), base)) {
+			await response.body?.cancel().catch(() => undefined);
+			throw new AssetRedirectError(`${label} asset redirected outside its trusted base`);
+		}
+		if (!REDIRECT_HTTP_STATUSES.has(response.status)) return response;
+		const location = response.headers.get('location');
+		await response.body?.cancel().catch(() => undefined);
+		if (!location || redirects >= 5) {
+			throw new AssetRedirectError(
+				`${label} asset returned an invalid or excessive redirect`
+			);
+		}
+		const nextUrl = new URL(location, url);
+		if (!isTrustedUrl(nextUrl, base)) {
+			throw new AssetRedirectError(`${label} asset redirected outside its trusted base`);
+		}
+		url = nextUrl;
+	}
+}
 
 /**
  * @typedef {{
@@ -21,6 +66,7 @@ const TRANSIENT_HTTP_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
  *   label: string;
  *   userAgent: string;
  *   bypassCookie?: string;
+ *   bypassCookieOrigin?: string;
  *   fetchImpl?: typeof fetch;
  *   timeoutMs?: number;
  *   maxAttempts?: number;
@@ -34,6 +80,7 @@ export async function preparePinnedAssets({
 	label,
 	userAgent,
 	bypassCookie = '',
+	bypassCookieOrigin = 'https://seorii.page',
 	fetchImpl = fetch,
 	timeoutMs = 120_000,
 	maxAttempts = 3,
@@ -48,6 +95,9 @@ export async function preparePinnedAssets({
 	const sourceBase = new URL(sourceBaseUrl);
 	if (!['https:', 'http:'].includes(sourceBase.protocol)) {
 		throw new Error(`Unsupported ${label} asset URL scheme: ${sourceBase.protocol}`);
+	}
+	if (sourceBase.username || sourceBase.password) {
+		throw new Error(`${label} asset base must not contain URL credentials`);
 	}
 	if (!sourceBase.pathname.endsWith('/')) sourceBase.pathname += '/';
 
@@ -70,10 +120,7 @@ export async function preparePinnedAssets({
 		}
 
 		const sourceUrl = new URL(asset.sourcePath, sourceBase);
-		if (
-			sourceUrl.origin !== sourceBase.origin ||
-			!sourceUrl.pathname.startsWith(sourceBase.pathname)
-		) {
+		if (!isTrustedUrl(sourceUrl, sourceBase)) {
 			throw new Error(`${label} asset escapes its trusted source: ${asset.sourcePath}`);
 		}
 		const targetPath = path.resolve(targetRoot, asset.targetPath);
@@ -99,19 +146,27 @@ export async function preparePinnedAssets({
 
 		/** @type {Record<string, string>} */
 		const headers = { 'User-Agent': userAgent };
-		if (bypassCookie) headers.Cookie = bypassCookie;
+		if (bypassCookie && sourceBase.origin === new URL(bypassCookieOrigin).origin) {
+			if (sourceBase.protocol !== 'https:') {
+				throw new Error(`${label} asset cookies require HTTPS`);
+			}
+			headers.Cookie = bypassCookie;
+		}
 		/** @type {Uint8Array | undefined} */
 		let bytes;
 		for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
 			/** @type {Response} */
 			let response;
 			try {
-				response = await fetchImpl(sourceUrl, {
-					headers,
-					redirect: 'follow',
-					signal: AbortSignal.timeout(timeoutMs)
-				});
+				response = await fetchTrustedAsset(
+					sourceUrl,
+					sourceBase,
+					{ headers, signal: AbortSignal.timeout(timeoutMs) },
+					fetchImpl,
+					label
+				);
 			} catch (error) {
+				if (error instanceof AssetRedirectError) throw error;
 				if (attempt === maxAttempts) {
 					throw new Error(
 						`Failed to download ${sourceUrl.href} after ${maxAttempts} attempts`,

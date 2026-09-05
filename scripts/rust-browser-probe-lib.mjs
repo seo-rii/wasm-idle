@@ -1,3 +1,4 @@
+import { addBrowserTestCookies } from './browser-test-cookies.mjs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -411,14 +412,7 @@ export async function runRustBrowserProbe({
 		executablePath
 	});
 	const context = await browser.newContext();
-	await context.addCookies([
-		{
-			name: 'dev_bypass_waf',
-			value: 'seorii_bypass_token_is_this',
-			url: new URL(browserUrl).origin,
-			sameSite: 'Lax'
-		}
-	]);
+	await addBrowserTestCookies(context, browserUrl);
 
 	const page = await context.newPage();
 	page.setDefaultTimeout(runTimeoutMs);
