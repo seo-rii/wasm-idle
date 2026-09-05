@@ -183,6 +183,89 @@ int main(void) {
 		testId: 'c-streaming-stdin'
 	},
 	{
+		activePath: 'stdin-step.c',
+		backend: 'lldb',
+		breakpointLine: 8,
+		expectedLocal: { name: 'first', value: '0' },
+		expectedOutput: 'lldb-stdin-sum=73',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		keyboardStdin: { nextLine: 9 },
+		source: `#include <stdio.h>
+
+int main(void) {
+    int first = 0;
+    int second = 0;
+    printf("lldb-first? ");
+    fflush(stdout);
+    if (scanf("%d", &first) != 1) return 2;
+    printf("lldb-first=%d\\n", first);
+    printf("lldb-second? ");
+    fflush(stdout);
+    if (scanf("%d", &second) != 1) return 3;
+    printf("lldb-stdin-sum=%d\\n", first + second);
+    return 0;
+}`,
+		testId: 'c-stdin-step'
+	},
+	{
+		activePath: 'stdin-step.cpp',
+		backend: 'lldb',
+		breakpointLine: 7,
+		expectedLocal: { name: 'first', value: '0' },
+		expectedOutput: 'lldb-stdin-sum=73',
+		expectedTitle: 'C++ · LLDB / WAMR',
+		language: 'CPP',
+		programArgs: [],
+		keyboardStdin: { nextLine: 8 },
+		source: `#include <iostream>
+
+int main() {
+    int first = 0;
+    int second = 0;
+    std::cout << "lldb-first? " << std::flush;
+    if (!(std::cin >> first)) return 2;
+    std::cout << "lldb-first=" << first << '\\n';
+    std::cout << "lldb-second? " << std::flush;
+    if (!(std::cin >> second)) return 3;
+    std::cout << "lldb-stdin-sum=" << first + second << '\\n';
+    return 0;
+}`,
+		testId: 'cpp-stdin-step'
+	},
+	{
+		activePath: 'stdin-readv.c',
+		backend: 'lldb',
+		breakpointLine: 10,
+		expectedOutput: 'lldb-readv=3,3',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		keyboardStdin: { nextLine: 11 },
+		source: `#include <stdio.h>
+#include <__struct_iovec.h>
+extern unsigned short __wasi_fd_read(unsigned int, const struct iovec *, size_t, size_t *);
+int main(void) {
+    char first[3] = {0};
+    char overflow[8] = {0};
+    struct iovec vectors[2] = {{first, sizeof(first)}, {overflow, sizeof(overflow)}}; size_t firstCount = 0, secondCount = 0;
+    printf("lldb-first? ");
+    fflush(stdout);
+    if (__wasi_fd_read(0, vectors, 2, &firstCount) != 0) return 5;
+    if (firstCount != 3 || first[0] != '3' || first[1] != '5' || first[2] != '\\n') return 2;
+    printf("lldb-first=%c%c\\n", first[0], first[1]);
+    printf("lldb-second? ");
+    fflush(stdout);
+    if (__wasi_fd_read(0, vectors, 2, &secondCount) != 0) return 6;
+    if (secondCount != 3 || first[0] != '3' || first[1] != '8' || first[2] != '\\n') return 3;
+    for (int index = 0; index < 8; index++) if (overflow[index] != 0) return 4;
+    printf("lldb-readv=%d,%d\\n", (int)firstCount, (int)secondCount);
+    return 0;
+}`,
+		testId: 'c-stdin-readv'
+	},
+	{
 		activePath: 'wasi-file.c',
 		backend: 'lldb',
 		breakpointLine: 4,
@@ -474,6 +557,7 @@ int main(void) {
 		breakpointLine: 4,
 		expectedLocal: { name: 'value', value: '0' },
 		expectedPrompt: 'lldb-blocked-input? ',
+		expectedAfterInputOutput: 'lldb-blocked-input=73',
 		expectedTitle: 'C · LLDB / WAMR',
 		language: 'C',
 		programArgs: [],
@@ -494,6 +578,10 @@ int main(void) {
     if (scanf("%d", &value) != 1) {
         return 2;
     }
+    printf("lldb-blocked-input=%d\\n", value);
+    fflush(stdout);
+    volatile int keepRunning = 1;
+    while (keepRunning) {}
     return value;
 }`,
 		testId: 'c-blocked-stdin',
@@ -912,6 +1000,77 @@ async function readPausedLine(page: Page) {
 	});
 }
 
+const sourceStepBudgetMs = 2_000;
+
+async function waitForSourceStop(
+	page: Page,
+	expected: { functionName: string; line: number; sourcePath: string },
+	timeoutMs = sourceStepBudgetMs
+) {
+	await page
+		.waitForFunction(
+			(expected) => {
+				const state = (window as any).__wasmIdleDebug.getDebugState();
+				const frame = state.callStack[0];
+				return (
+					state.paused &&
+					frame?.functionName === expected.functionName &&
+					frame?.line === expected.line &&
+					frame?.sourcePath === expected.sourcePath
+				);
+			},
+			expected,
+			{ timeout: timeoutMs }
+		)
+		.catch(async (cause) => {
+			const actual = await page.evaluate(() =>
+				(window as any).__wasmIdleDebug.getDebugState()
+			);
+			throw new Error(
+				`Source stop exceeded ${timeoutMs}ms: ${JSON.stringify({ expected, actual })}`,
+				{ cause }
+			);
+		});
+}
+
+async function stepToSourceLine(
+	page: Page,
+	command: 'Next Line' | 'Step Into',
+	expected: { functionName: string; line: number; sourcePath: string }
+) {
+	const started = performance.now();
+	await page.getByRole('button', { name: command, exact: true }).click({
+		timeout: sourceStepBudgetMs
+	});
+	await waitForSourceStop(
+		page,
+		expected,
+		Math.max(1, sourceStepBudgetMs - (performance.now() - started))
+	);
+	const durationMs = performance.now() - started;
+	console.info(`[wasm-idle:source-step] ${JSON.stringify({ command, ...expected, durationMs })}`);
+	expect(durationMs, `${command} to ${expected.sourcePath}:${expected.line}`).toBeLessThan(
+		sourceStepBudgetMs
+	);
+}
+
+async function typeTerminalLine(page: Page, line: string) {
+	await page.locator('.xterm-helper-textarea').focus();
+	await page.keyboard.type(line);
+	await page.keyboard.press('Enter');
+}
+
+async function waitForTerminalOutput(page: Page, output: string) {
+	await page.waitForFunction(
+		(output) =>
+			document
+				.querySelector('[data-testid="terminal-debug-output"]')
+				?.textContent?.includes(output),
+		output,
+		{ timeout: 5_000 }
+	);
+}
+
 async function readBrowserLifecycleMetrics(page: Page) {
 	return page.evaluate(() => {
 		const workerMetrics = (
@@ -953,9 +1112,8 @@ async function readBrowserLifecycleMetrics(page: Page) {
 }
 
 describe('native-source browser debugging in Chromium', () => {
-	it('pauses, steps, and completes the requested browser programs without page errors', async () => {
-		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_DEBUG !== '1') return;
-
+	const browserTest = process.env.WASM_IDLE_RUN_REAL_BROWSER_DEBUG === '1' ? it : it.skip;
+	browserTest('pauses, steps, and completes browser programs without page errors', async () => {
 		await runWithBrowserProbeSessionLock(async () => {
 			const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
 			const serverMode =
@@ -1561,68 +1719,20 @@ describe('native-source browser debugging in Chromium', () => {
 								true
 							);
 
-							await page.locator('button[aria-label="Next Line"]').click();
-							await page
-								.waitForFunction(
-									({ line, path }) => {
-										const state = (
-											window as any
-										).__wasmIdleDebug.getDebugState();
-										return (
-											state.paused &&
-											state.callStack[0]?.functionName === 'main' &&
-											state.callStack[0]?.line === line &&
-											state.callStack[0]?.sourcePath === path
-										);
-									},
-									{
-										line: testCase.expectedSourceEntry.nextLine,
-										path: sourcePath
-									},
-									{ timeout: 30_000 }
-								)
-								.catch(async (error) => {
-									const state = await page.evaluate(() =>
-										(window as any).__wasmIdleDebug.getDebugState()
-									);
-									throw new Error(
-										`C++ Next did not stop at the expected main source line: ${JSON.stringify(state)}`,
-										{ cause: error }
-									);
-								});
+							await stepToSourceLine(page, 'Next Line', {
+								functionName: 'main',
+								line: testCase.expectedSourceEntry.nextLine,
+								sourcePath
+							});
 							expect(await readPausedLine(page)).toBe(
 								`L${testCase.expectedSourceEntry.nextLine}`
 							);
 
-							await page.locator('button[aria-label="Step Into"]').click();
-							await page
-								.waitForFunction(
-									({ line, path }) => {
-										const state = (
-											window as any
-										).__wasmIdleDebug.getDebugState();
-										return (
-											state.paused &&
-											state.callStack[0]?.functionName === 'calculate(int)' &&
-											state.callStack[0]?.line === line &&
-											state.callStack[0]?.sourcePath === path
-										);
-									},
-									{
-										line: testCase.expectedSourceEntry.stepInLine,
-										path: sourcePath
-									},
-									{ timeout: 30_000 }
-								)
-								.catch(async (error) => {
-									const state = await page.evaluate(() =>
-										(window as any).__wasmIdleDebug.getDebugState()
-									);
-									throw new Error(
-										`C++ Step Into did not stop at the expected calculate source line: ${JSON.stringify(state)}`,
-										{ cause: error }
-									);
-								});
+							await stepToSourceLine(page, 'Step Into', {
+								functionName: 'calculate(int)',
+								line: testCase.expectedSourceEntry.stepInLine,
+								sourcePath
+							});
 							const steppedState = await page.evaluate(() =>
 								(window as any).__wasmIdleDebug.getDebugState()
 							);
@@ -1639,35 +1749,11 @@ describe('native-source browser debugging in Chromium', () => {
 							expect(steppedFrames[1]).toContain('main');
 							expect(steppedFrames[2]).toContain('_start');
 							// LLDB first stops at the callee's declaration/prologue, then its body.
-							await page.locator('button[aria-label="Next Line"]').click();
-							await page
-								.waitForFunction(
-									({ line, path }) => {
-										const state = (
-											window as any
-										).__wasmIdleDebug.getDebugState();
-										return (
-											state.paused &&
-											state.callStack[0]?.functionName === 'calculate(int)' &&
-											state.callStack[0]?.line === line &&
-											state.callStack[0]?.sourcePath === path
-										);
-									},
-									{
-										line: testCase.expectedSourceEntry.bodyLine,
-										path: sourcePath
-									},
-									{ timeout: 30_000 }
-								)
-								.catch(async (error) => {
-									const state = await page.evaluate(() =>
-										(window as any).__wasmIdleDebug.getDebugState()
-									);
-									throw new Error(
-										`C++ Next did not leave the calculate prologue: ${JSON.stringify(state)}`,
-										{ cause: error }
-									);
-								});
+							await stepToSourceLine(page, 'Next Line', {
+								functionName: 'calculate(int)',
+								line: testCase.expectedSourceEntry.bodyLine,
+								sourcePath
+							});
 							stepStartLine = await readPausedLine(page);
 						}
 						if (
@@ -1788,6 +1874,53 @@ describe('native-source browser debugging in Chromium', () => {
 								}
 							);
 							stepStartLine = await readPausedLine(page);
+						}
+						if ('keyboardStdin' in testCase) {
+							const sourcePath = `/workspace/${testCase.activePath}`;
+							await waitForSourceStop(page, {
+								functionName: 'main',
+								line: testCase.breakpointLine,
+								sourcePath
+							});
+							await waitForTerminalOutput(page, 'lldb-first? ');
+							const beforeInput = await readBrowserLifecycleMetrics(page);
+							await page
+								.getByRole('button', { name: 'Next Line', exact: true })
+								.click();
+							await page.waitForFunction(
+								() => !(window as any).__wasmIdleDebug.getDebugState().paused,
+								undefined,
+								{ timeout: sourceStepBudgetMs }
+							);
+							// Each Enter must unblock fd_read without closing stdin. Keep the same
+							// session alive for a second read, then let the program exit normally.
+							await typeTerminalLine(page, '35');
+							await waitForSourceStop(page, {
+								functionName: 'main',
+								line: testCase.keyboardStdin.nextLine,
+								sourcePath
+							});
+							await page
+								.getByRole('button', { name: 'Continue', exact: true })
+								.click();
+							await waitForTerminalOutput(page, 'lldb-first=35');
+							await waitForTerminalOutput(page, 'lldb-second? ');
+							const beforeSecondInput = await readBrowserLifecycleMetrics(page);
+							expect(beforeSecondInput.createdDebug).toBe(beforeInput.createdDebug);
+							expect(beforeSecondInput.terminatedDebug).toBe(
+								beforeInput.terminatedDebug
+							);
+							await typeTerminalLine(page, '38');
+							await waitForTerminalOutput(page, testCase.expectedOutput);
+							await debugButton.waitFor({ state: 'visible', timeout: 5_000 });
+							await expect
+								.poll(
+									async () =>
+										(await readBrowserLifecycleMetrics(page)).activeDebug
+								)
+								.toBe(0);
+							expect(pageErrors).toEqual([]);
+							continue;
 						}
 						if ('injectStaleGeneration' in testCase) {
 							const injected = await page.evaluate(
@@ -2467,14 +2600,7 @@ describe('native-source browser debugging in Chromium', () => {
 										?.textContent?.includes(expectedPrompt),
 								testCase.expectedPrompt
 							);
-							await page.evaluate(
-								async (input) =>
-									await (window as any).__wasmIdleDebug.writeTerminalInput(
-										input,
-										true
-									),
-								testCase.stdinAfterPrompt
-							);
+							await typeTerminalLine(page, testCase.stdinAfterPrompt.trimEnd());
 						}
 						if ('transportStress' in testCase) {
 							await page
@@ -2526,28 +2652,33 @@ describe('native-source browser debugging in Chromium', () => {
 									return true;
 								});
 								expect(pauseRequested).toBe(true);
+								// Supply input while Pause is pending; native fd_read cannot service
+								// the guest interrupt until the host read returns.
+								await typeTerminalLine(page, '73');
 							}
 							const stressPauseTimeoutMs = Number(
 								process.env.WASM_IDLE_DEBUG_TRANSPORT_PAUSE_TIMEOUT_MS || '5000'
 							);
-							let pauseOutcome: 'paused' | 'timeout' = 'paused';
-							try {
-								await page
-									.locator('.debug-status-pill--paused')
-									.waitFor({ state: 'visible', timeout: stressPauseTimeoutMs });
-							} catch (error) {
-								if (!(error instanceof Error) || error.name !== 'TimeoutError')
-									throw error;
-								pauseOutcome = 'timeout';
-							}
-							if (testCase.transportStress === 'output') {
-								expect(pauseOutcome).toBe('paused');
-							}
-							if (pauseOutcome === 'paused') {
-								const pausedStressState = await page.evaluate(() =>
-									(window as any).__wasmIdleDebug.getDebugState()
+							await page
+								.locator('.debug-status-pill--paused')
+								.waitFor({ state: 'visible', timeout: stressPauseTimeoutMs });
+							const pausedStressState = await page.evaluate(() =>
+								(window as any).__wasmIdleDebug.getDebugState()
+							);
+							expect(pausedStressState.paused).toBe(true);
+							if (testCase.transportStress === 'stdin') {
+								const pausedMetrics = await readBrowserLifecycleMetrics(page);
+								expect(pausedMetrics.createdDebug).toBe(beforeStress.createdDebug);
+								expect(pausedMetrics.terminatedDebug).toBe(
+									beforeStress.terminatedDebug
 								);
-								expect(pausedStressState.paused).toBe(true);
+								await page
+									.getByRole('button', { name: 'Continue', exact: true })
+									.click();
+								await waitForTerminalOutput(
+									page,
+									testCase.expectedAfterInputOutput
+								);
 							}
 							await page.getByRole('button', { name: 'Stop Debug' }).click();
 							await debugButton.waitFor({
@@ -2606,7 +2737,7 @@ describe('native-source browser debugging in Chromium', () => {
 							console.info(
 								`[wasm-idle:lldb-transport-stress] ${JSON.stringify({
 									kind: testCase.transportStress,
-									pauseOutcome,
+									pauseOutcome: 'paused',
 									before: beforeStress,
 									after: recoveredMetrics
 								})}`
