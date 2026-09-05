@@ -1,5 +1,5 @@
 export const WASM_OCAML_ASSET_VERSION =
-	'68263266f1c8dd5429e3e2a0f29690ae4cb9a37eabedc0dfab01718759de7d4b';
+	'4845ced6dd18fc275265ebbd1a1332db673e1e07fc41924341754c4db2c94636';
 
 export const WASM_OCAML_RUNTIME_PROFILE = Object.freeze({
 	fingerprint: WASM_OCAML_ASSET_VERSION,

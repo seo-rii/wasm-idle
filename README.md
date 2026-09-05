@@ -541,6 +541,15 @@ from GitHub without WAF credentials. Update the snapshot URL and all changed rec
 do not replace a receipt with bytes from a mutable deployment URL. Receipt failures report both
 expected and actual byte counts and SHA-256 digests.
 
+OCaml preparation keeps these verified download inputs in a separate receipt-keyed cache,
+compiles the tracked TypeScript browser adapter with the producer's locked compiler, and syncs
+that adapter together with the verified native bundle. The sync derives the final
+`wasmOcamlVersion.ts` profile; downloaded input receipts remain unchanged. This makes adapter
+fixes reproducible in clean CI without rebuilding or publishing the native OCaml toolchain.
+Gzip-only Binaryen inputs are checked against their expanded manifest receipts before sync.
+At runtime, raw gzip packs retain compressed and expanded receipt checks; HTTP-decoded packs
+are bounded and verified against the exact expanded size and SHA-256.
+
 The preparer rejects source or target paths outside their configured roots, checks each redirect
 before following it, writes atomically, and reuses only matching files. With no group argument,
 it prepares both the Clang delivery bundle and the complete OCaml browser compiler graph.

@@ -1,13 +1,16 @@
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { preparePinnedAssets } from './prepare-pinned-assets.mjs';
+import { prepareOcamlBrowserWrapper } from './prepare-ocaml-browser-wrapper.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
 const DEFAULT_MANIFEST_PATH = path.join(REPO_ROOT, 'scripts', 'browser-test-assets.v1.json');
 const DEFAULT_STATIC_DIR = path.join(REPO_ROOT, 'static');
+const DEFAULT_CACHE_DIR = path.join(REPO_ROOT, '.cache', 'browser-test-assets');
 const SUPPORTED_GROUPS = new Set(['all', 'clang', 'clangd', 'ocaml']);
 
 /**
@@ -114,6 +117,9 @@ export function normalizeBrowserTestAssetGroups(groups) {
  *   groups?: string[];
  *   manifestPath?: string;
  *   staticDir?: string;
+ *   cacheDir?: string;
+ *   versionModulePath?: string;
+ *   prepareOcamlWrapper?: (options: { sourceRoot: string; staticDir: string; versionModulePath?: string }) => Promise<unknown>;
  *   baseUrl?: string;
  *   bypassCookie?: string;
  *   fetchImpl?: typeof fetch;
@@ -124,6 +130,9 @@ export async function prepareBrowserTestAssets({
 	groups = ['all'],
 	manifestPath = DEFAULT_MANIFEST_PATH,
 	staticDir = DEFAULT_STATIC_DIR,
+	cacheDir = DEFAULT_CACHE_DIR,
+	versionModulePath,
+	prepareOcamlWrapper = prepareOcamlBrowserWrapper,
 	baseUrl,
 	bypassCookie = process.env.WASM_IDLE_TEST_BYPASS_COOKIE || '',
 	fetchImpl = fetch,
@@ -138,14 +147,28 @@ export async function prepareBrowserTestAssets({
 	let reused = 0;
 
 	for (const group of selectedGroups) {
-		const result = await installAssets(
-			manifest.assets.filter((candidate) => candidate.group === group),
-			staticDir,
-			resolvedBaseUrl,
-			{ bypassCookie, fetchImpl, timeoutMs }
-		);
+		const assets = manifest.assets.filter((candidate) => candidate.group === group);
+		const inputRoot =
+			group === 'ocaml'
+				? path.join(
+						cacheDir,
+						createHash('sha256').update(JSON.stringify(assets)).digest('hex')
+					)
+				: staticDir;
+		const result = await installAssets(assets, inputRoot, resolvedBaseUrl, {
+			bypassCookie,
+			fetchImpl,
+			timeoutMs
+		});
 		downloaded += result.downloaded;
 		reused += result.reused;
+		if (group === 'ocaml') {
+			await prepareOcamlWrapper({
+				sourceRoot: inputRoot,
+				staticDir,
+				...(versionModulePath ? { versionModulePath } : {})
+			});
+		}
 	}
 
 	return {

@@ -2,6 +2,7 @@ import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promi
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
@@ -386,9 +387,26 @@ export async function syncWasmOfJsOfOcamlDist({
 		const toolPath = path.join(sourceBundleDir, relativeToolPath);
 		const toolStats = await stat(toolPath).catch(() => null);
 		if (!toolStats?.isFile()) {
-			throw new Error(
-				`wasm-of-js-of-ocaml static Binaryen tool was not found at ${toolPath}.`
-			);
+			const compressedStats = await stat(`${toolPath}.gz`).catch(() => null);
+			if (!compressedStats?.isFile()) {
+				throw new Error(
+					`wasm-of-js-of-ocaml static Binaryen tool was not found at ${toolPath}.`
+				);
+			}
+			const manifest = JSON.parse(manifestSource);
+			const toolKey = path.basename(relativeToolPath, '.browser.js').replaceAll('-', '_');
+			const receipt = requireAssetReceipt(manifest.binaryenTools?.[toolKey], toolKey);
+			const bytes = gunzipSync(await readFile(`${toolPath}.gz`), {
+				maxOutputLength: receipt.bytes
+			});
+			if (
+				bytes.byteLength !== receipt.bytes ||
+				createHash('sha256').update(bytes).digest('hex') !== receipt.sha256
+			) {
+				throw new Error(
+					`wasm-of-js-of-ocaml compressed Binaryen tool failed receipt validation: ${relativeToolPath}`
+				);
+			}
 		}
 	}
 

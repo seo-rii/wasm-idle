@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
 	computeBundleFingerprint,
@@ -64,6 +65,70 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 	afterEach(async () => {
 		await Promise.all(
 			tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
+		);
+	});
+
+	it('syncs gzip-only pinned tools after verifying their expanded receipts and preserves the last output on failure', async () => {
+		const sourceBrowserDistDir = await makeTempDir();
+		const sourceBundleDir = await makeTempDir();
+		const targetBrowserDistDir = await makeTempDir();
+		const targetBundleDir = await makeTempDir();
+		const versionModulePath = path.join(await makeTempDir(), 'profile.ts');
+		await writeFixtureFile(
+			sourceBrowserDistDir,
+			'src/index.js',
+			'export const compiler = true;'
+		);
+		await writeFixtureFile(
+			sourceBrowserDistDir,
+			'browser-harness/native-tool-worker.js',
+			staticBinaryenWorkerSource
+		);
+		const payload = Buffer.from('console.log("tool");');
+		const tools = Object.fromEntries(
+			['wasm-opt', 'wasm-merge', 'wasm-metadce'].map((tool) => [
+				tool.replaceAll('-', '_'),
+				createAssetDescriptor(
+					`tools/${tool}.browser.js`,
+					payload.length,
+					createHash('sha256').update(payload).digest('hex')
+				)
+			])
+		);
+		await writeFixtureFile(
+			sourceBundleDir,
+			'browser-native-manifest.v1.json',
+			JSON.stringify({ binaryenTools: tools })
+		);
+		await mkdir(path.join(sourceBundleDir, 'tools'));
+		for (const tool of ['wasm-opt', 'wasm-merge', 'wasm-metadce']) {
+			await writeFile(
+				path.join(sourceBundleDir, `tools/${tool}.browser.js.gz`),
+				gzipSync(payload)
+			);
+		}
+		const options = {
+			sourceBrowserDistDir,
+			sourceBundleDir,
+			targetBrowserDistDir,
+			targetBundleDir,
+			versionModulePath
+		};
+		await syncWasmOfJsOfOcamlDist(options);
+		const profile = await readFile(versionModulePath, 'utf8');
+		expect(await readFile(path.join(targetBundleDir, 'tools/wasm-opt.browser.js.gz'))).toEqual(
+			gzipSync(payload)
+		);
+		await writeFile(
+			path.join(sourceBundleDir, 'tools/wasm-opt.browser.js.gz'),
+			gzipSync(Buffer.from('CONSOLE.LOG("tool");'))
+		);
+		await expect(syncWasmOfJsOfOcamlDist(options)).rejects.toThrow(
+			'compressed Binaryen tool failed receipt validation'
+		);
+		expect(await readFile(versionModulePath, 'utf8')).toBe(profile);
+		expect(await readFile(path.join(targetBundleDir, 'tools/wasm-opt.browser.js.gz'))).toEqual(
+			gzipSync(payload)
 		);
 	});
 

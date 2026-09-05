@@ -108,6 +108,58 @@ describe('browser test asset preparation', () => {
 		expect(await readFile(path.join(staticDir, 'clang/bin/clang.wasm.gz'))).toEqual(payload);
 	});
 
+	it('verifies cached OCaml inputs before deriving the browser wrapper without overwriting input receipts', async () => {
+		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-ocaml-inputs-'));
+		temporaryDirectories.push(root);
+		const payload = Buffer.from('verified producer input');
+		const target = 'wasm-of-js-of-ocaml/browser-native/src/index.js';
+		const manifestPath = path.join(root, 'manifest.json');
+		await writeFile(
+			manifestPath,
+			JSON.stringify({
+				format: 'wasm-idle-browser-test-assets-v1',
+				defaultBaseUrl: 'https://assets.example.test/runtime/',
+				assets: [
+					{
+						group: 'ocaml',
+						source: target,
+						target,
+						size: payload.length,
+						sha256: createHash('sha256').update(payload).digest('hex')
+					}
+				]
+			})
+		);
+		const derived = path.join(root, 'derived.js');
+		const prepareOcamlWrapper = vi.fn(async ({ sourceRoot }: { sourceRoot: string }) => {
+			expect(await readFile(path.join(sourceRoot, target))).toEqual(payload);
+			await writeFile(derived, 'corrected browser adapter');
+			return {};
+		});
+		const fetchImpl = vi
+			.fn<typeof fetch>()
+			.mockImplementation(async () => new Response(payload));
+		const options = {
+			groups: ['ocaml'],
+			manifestPath,
+			staticDir: path.join(root, 'static'),
+			cacheDir: path.join(root, 'cache'),
+			prepareOcamlWrapper,
+			fetchImpl
+		};
+		await expect(prepareBrowserTestAssets(options)).resolves.toMatchObject({
+			downloaded: 1,
+			reused: 0
+		});
+		await expect(prepareBrowserTestAssets(options)).resolves.toMatchObject({
+			downloaded: 0,
+			reused: 1
+		});
+		expect(fetchImpl).toHaveBeenCalledTimes(1);
+		expect(prepareOcamlWrapper).toHaveBeenCalledTimes(2);
+		expect(await readFile(derived, 'utf8')).toBe('corrected browser adapter');
+	});
+
 	it('rejects assets that escape the trusted source or target roots', async () => {
 		const root = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-test-assets-'));
 		temporaryDirectories.push(root);

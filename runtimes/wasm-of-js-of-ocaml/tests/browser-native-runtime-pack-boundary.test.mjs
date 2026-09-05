@@ -156,6 +156,110 @@ test('loads a gzip runtime pack through bounded exact-URL requests', async () =>
 	for (const { init } of calls) assert.deepEqual(init, SAFE_REQUEST_INIT);
 });
 
+function createHttpDecodedPackFixture() {
+	const payload = new Uint8Array(1024).fill(65);
+	// Decoded data can itself start with gzip magic; do not decompress it twice.
+	payload.set([0x1f, 0x8b]);
+	const files = [{ path: '/static/toolchain/lib/ocaml/a.cmi', size: payload.byteLength }];
+	const indexBytes = encodeJson(createIndex(files));
+	const compressed = gzipSync(payload);
+	const manifest = createManifest(
+		files,
+		createRuntimePackReceipts(indexBytes, compressed, payload)
+	);
+	return { payload, compressed, indexBytes, manifest };
+}
+
+function fetchHttpDecodedPack(fixture, payload = fixture.payload) {
+	const response = createResponse(payload, ASSET_URL, fixture.compressed.byteLength);
+	response.headers.set('content-encoding', 'gzip');
+	return createFetch(
+		new Map([
+			[INDEX_URL, createResponse(fixture.indexBytes, INDEX_URL)],
+			[ASSET_URL, response]
+		]),
+		[]
+	);
+}
+
+test('verifies HTTP-decoded runtime packs against the exact expanded receipt', async () => {
+	const fixture = createHttpDecodedPackFixture();
+	assert.ok(fixture.payload.byteLength > fixture.compressed.byteLength);
+	const loaded = await loadBrowserNativeRuntimePack(fixture.manifest, {
+		baseUrl: BASE_URL,
+		fetch: fetchHttpDecodedPack(fixture)
+	});
+	assert.deepEqual(loaded.bytes, fixture.payload);
+});
+
+test('verifies raw gzip bytes from a synthetic response that retains Content-Encoding', async () => {
+	const fixture = createHttpDecodedPackFixture();
+	const loaded = await loadBrowserNativeRuntimePack(fixture.manifest, {
+		baseUrl: BASE_URL,
+		fetch: fetchHttpDecodedPack(fixture, fixture.compressed)
+	});
+	assert.deepEqual(loaded.bytes, fixture.payload);
+});
+
+test('rejects corrupt synthetic gzip bytes instead of treating the header as proof', async () => {
+	const fixture = createHttpDecodedPackFixture();
+	const tampered = fixture.compressed.slice();
+	tampered[tampered.length - 1] ^= 1;
+	await assert.rejects(
+		loadBrowserNativeRuntimePack(fixture.manifest, {
+			baseUrl: BASE_URL,
+			fetch: fetchHttpDecodedPack(fixture, tampered)
+		}),
+		/browser-native runtime pack metadata does not match payload/
+	);
+});
+
+test('rejects a corrupt HTTP-decoded payload despite its valid encoded size header', async () => {
+	const fixture = createHttpDecodedPackFixture();
+	const tampered = fixture.payload.slice();
+	tampered[tampered.length - 1] ^= 1;
+	await assert.rejects(
+		loadBrowserNativeRuntimePack(fixture.manifest, {
+			baseUrl: BASE_URL,
+			fetch: fetchHttpDecodedPack(fixture, tampered)
+		}),
+		/browser-native runtime pack expanded payload SHA-256 mismatch/
+	);
+});
+
+test('rejects a truncated HTTP-decoded payload', async () => {
+	const fixture = createHttpDecodedPackFixture();
+	await assert.rejects(
+		loadBrowserNativeRuntimePack(fixture.manifest, {
+			baseUrl: BASE_URL,
+			fetch: fetchHttpDecodedPack(fixture, fixture.payload.subarray(1))
+		}),
+		/browser-native runtime pack metadata does not match payload/
+	);
+});
+
+test('cancels HTTP-decoded expansion at the exact manifest payload bound', async () => {
+	const fixture = createHttpDecodedPackFixture();
+	let cancelled = false;
+	const stream = new ReadableStream({
+		start(controller) {
+			controller.enqueue(fixture.payload);
+			controller.enqueue(new Uint8Array([1]));
+		},
+		cancel() {
+			cancelled = true;
+		}
+	});
+	await assert.rejects(
+		loadBrowserNativeRuntimePack(fixture.manifest, {
+			baseUrl: BASE_URL,
+			fetch: fetchHttpDecodedPack(fixture, stream)
+		}),
+		/browser-native runtime pack asset exceeds the 1024 byte limit/
+	);
+	assert.equal(cancelled, true);
+});
+
 test('rejects invalid runtime-pack metadata before issuing a request', async () => {
 	const files = [{ path: '/static/toolchain/lib/ocaml/a.cmi', size: 9 }];
 	let fetchCount = 0;
