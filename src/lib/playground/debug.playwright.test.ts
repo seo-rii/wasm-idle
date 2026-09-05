@@ -1,8 +1,8 @@
 // @vitest-environment node
 
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
-import { afterAll, describe, expect, it } from 'vitest';
-import { chromium, type Page } from 'playwright-core';
+import { afterAll, describe, expect, it, onTestFinished } from 'vitest';
+import { chromium, type BrowserContext, type Page } from 'playwright-core';
 
 import {
 	runBrowserPreparationScripts,
@@ -905,6 +905,15 @@ afterAll(async () => {
 	await previewServer?.close();
 });
 
+async function prepareDebugBrowserContext(context: BrowserContext, browserUrl: string) {
+	await addBrowserTestCookies(context, browserUrl);
+	// The external icon stylesheet can block the inline app bootstrap and SW
+	// registration, so keep debugger startup independent of font delivery.
+	await context.route(/^https:\/\/fonts\.googleapis\.com\/css2(?:\?.*)?$/u, (route) =>
+		route.fulfill({ status: 200, contentType: 'text/css', body: '' })
+	);
+}
+
 async function ensureSharedBrowserPage(page: Page, browserUrl: string) {
 	await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
 	let lastState:
@@ -1139,9 +1148,12 @@ describe('native-source browser debugging in Chromium', () => {
 					process.env.WASM_IDLE_CHROMIUM_EXECUTABLE || ''
 				)
 			});
+			onTestFinished(async () => {
+				if (browser.isConnected()) await browser.close();
+			});
 			const isolationContext = await browser.newContext();
 			try {
-				await addBrowserTestCookies(isolationContext, previewServer.browserUrl);
+				await prepareDebugBrowserContext(isolationContext, previewServer.browserUrl);
 				const isolationBootstrapPage = await isolationContext.newPage();
 				const activeState = await verifyPagesIsolationBootstrap(
 					isolationBootstrapPage,
@@ -1156,7 +1168,7 @@ describe('native-source browser debugging in Chromium', () => {
 				await isolationContext.close();
 			}
 			const context = await browser.newContext();
-			await addBrowserTestCookies(context, previewServer.browserUrl);
+			await prepareDebugBrowserContext(context, previewServer.browserUrl);
 			await context.addInitScript(() => {
 				const NativeWorker = globalThis.Worker;
 				if (typeof NativeWorker !== 'function') return;
