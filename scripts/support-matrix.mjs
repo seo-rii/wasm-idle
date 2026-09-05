@@ -761,6 +761,16 @@ export const supportMatrixRows = [
 /** @type {BlockedCandidateRow[]} */
 export const blockedCandidateRows = [
 	{
+		language: 'Odin',
+		candidateIds: ['ODIN'],
+		currentEvidence:
+			'[Pinned native WASI baseline](https://github.com/seo-rii/wasm-llvm/pull/2) compiles real multi-file Odin and passes stdin, EOF and nonzero-exit cases; the consumer target probe exercises the production WASM Worker',
+		blocker:
+			'The compiler-host Emscripten probe fails in upstream gb.h on unsupported OS/CPU definitions and missing sys/sendfile.h; no browser-hosted Odin compiler exists in the bundle',
+		requiredFollowUp:
+			'[Complete the compiler host port and consumer acceptance](docs/language-ports/odin.md) before registering ODIN; native target execution does not enable source compilation'
+	},
+	{
 		language: 'Modern Fortran',
 		candidateIds: ['F90', 'F95'],
 		currentEvidence:
