@@ -1,1 +1,0 @@
-function e(e){return new Worker(``+new URL(`../workers/fortran-C62Z8a5N.js`,import.meta.url).href,{type:`module`,name:e?.name})}export{e as default};

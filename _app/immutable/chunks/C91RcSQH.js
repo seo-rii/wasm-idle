@@ -1,0 +1,1 @@
+import"./BgqzKo2x2.js";

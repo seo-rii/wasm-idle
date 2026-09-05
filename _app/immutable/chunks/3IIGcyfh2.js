@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./D2ZU4KfC.js";t({id:`objective-c`,extensions:[`.m`],aliases:[`Objective-C`],loader:()=>e(()=>import(`./BHOY4wje.js`),[],import.meta.url)});

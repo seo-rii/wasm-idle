@@ -81,7 +81,7 @@ async function readBoundedStream(stream, label, maxBytes, signal, declaredLength
         reader.releaseLock();
     }
 }
-async function fetchBoundedRuntimeAsset(value, label, maxBytes, options) {
+async function fetchBoundedRuntimeAsset(value, label, maxBytes, options, decodedGzipMaxBytes) {
     throwIfAborted(options.signal);
     const configuredBase = options.baseUrl;
     const baseUrl = configuredBase instanceof URL
@@ -228,6 +228,18 @@ async function fetchBoundedRuntimeAsset(value, label, maxBytes, options) {
         }
         throw new Error(`${label} exceeds the ${maxBytes} byte limit`);
     }
+    // Fetch has already decoded HTTP Content-Encoding before exposing its body.
+    // Content-Length still describes the encoded transfer, so keep its separate
+    // delivery bound and read the decoded body against the manifest payload bound.
+    const decodedGzip = decodedGzipMaxBytes !== undefined &&
+        (response.headers.get('content-encoding') || '')
+            .toLowerCase()
+            .split(',')
+            .some((encoding) => encoding.trim() === 'gzip');
+    // A synthetic fetch can retain the header without decoding. Both delivery
+    // forms remain bounded by their authenticated receipts and are distinguished
+    // by the exact compressed receipt before any decompression below.
+    const bodyLimit = decodedGzip ? Math.max(maxBytes, decodedGzipMaxBytes) : maxBytes;
     if (!response.body) {
         let cancelOnAbort;
         const aborted = options.signal
@@ -244,10 +256,10 @@ async function fetchBoundedRuntimeAsset(value, label, maxBytes, options) {
                 : await materialized;
             throwIfAborted(options.signal);
             const bytes = new Uint8Array(source);
-            if (bytes.byteLength > maxBytes) {
-                throw new Error(`${label} exceeds the ${maxBytes} byte limit`);
+            if (bytes.byteLength > bodyLimit) {
+                throw new Error(`${label} exceeds the ${bodyLimit} byte limit`);
             }
-            return bytes;
+            return { bytes, decodedGzip };
         }
         catch (error) {
             if (options.signal?.aborted)
@@ -260,7 +272,10 @@ async function fetchBoundedRuntimeAsset(value, label, maxBytes, options) {
             }
         }
     }
-    return readBoundedStream(response.body, label, maxBytes, options.signal, contentLength);
+    return {
+        bytes: await readBoundedStream(response.body, label, bodyLimit, options.signal, decodedGzip ? undefined : contentLength),
+        decodedGzip
+    };
 }
 function parseJson(bytes, label) {
     let source;
@@ -277,7 +292,7 @@ function parseJson(bytes, label) {
         throw new Error(`${label} is not valid JSON`, { cause: error });
     }
 }
-async function verifySha256(bytes, expectedSha256, label, signal) {
+async function computeSha256(bytes, label, signal) {
     throwIfAborted(signal);
     const subtle = globalThis.crypto?.subtle;
     if (!subtle)
@@ -313,7 +328,10 @@ async function verifySha256(bytes, expectedSha256, label, signal) {
         : await pendingDigest;
     const digest = new Uint8Array(digestBuffer);
     throwIfAborted(signal);
-    const actualSha256 = Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+async function verifySha256(bytes, expectedSha256, label, signal) {
+    const actualSha256 = await computeSha256(bytes, label, signal);
     if (actualSha256 !== expectedSha256) {
         throw new Error(`${label} SHA-256 mismatch: expected ${expectedSha256}, received ${actualSha256}`);
     }
@@ -540,7 +558,7 @@ function getToolchainPreloads(command, manifest, packages, runtimePack) {
 }
 export async function fetchBrowserNativeManifest(options = {}) {
     const limits = resolveRuntimeAssetLimits(options.limits);
-    const bytes = await fetchBoundedRuntimeAsset('/.cache/browser-native-bundle/browser-native-manifest.v1.json', 'browser-native runtime manifest', limits.maxMetadataBytes, options);
+    const { bytes } = await fetchBoundedRuntimeAsset('/.cache/browser-native-bundle/browser-native-manifest.v1.json', 'browser-native runtime manifest', limits.maxMetadataBytes, options);
     const parsed = parseJson(bytes, 'browser-native runtime manifest');
     if (!isRecord(parsed) ||
         parsed.version !== 1 ||
@@ -598,7 +616,7 @@ export async function loadBrowserNativeRuntimePack(manifest, options = {}) {
     if (runtimePack.totalBytes !== expectedTotalBytes) {
         throw new Error('browser-native runtime pack size does not match the manifest');
     }
-    const indexBytes = await fetchBoundedRuntimeAsset(runtimePack.index, 'browser-native runtime pack index', runtimePack.indexBytes, options);
+    const { bytes: indexBytes } = await fetchBoundedRuntimeAsset(runtimePack.index, 'browser-native runtime pack index', runtimePack.indexBytes, options);
     if (indexBytes.byteLength !== runtimePack.indexBytes) {
         throw new Error('browser-native runtime pack index size does not match the manifest');
     }
@@ -653,12 +671,22 @@ export async function loadBrowserNativeRuntimePack(manifest, options = {}) {
             throw new Error(`browser-native runtime pack index is missing ${path}`);
         }
     }
-    let bytes = await fetchBoundedRuntimeAsset(runtimePack.asset, 'browser-native runtime pack asset', runtimePack.compressedBytes, options);
-    if (bytes.byteLength !== runtimePack.compressedBytes) {
-        throw new Error('browser-native runtime pack compressed size does not match the manifest');
+    const delivery = await fetchBoundedRuntimeAsset(runtimePack.asset, 'browser-native runtime pack asset', runtimePack.compressedBytes, options, runtimePack.totalBytes);
+    let bytes = delivery.bytes;
+    const encodedCompressedMatch = delivery.decodedGzip &&
+        bytes.byteLength === runtimePack.compressedBytes &&
+        bytes[0] === 0x1f &&
+        bytes[1] === 0x8b &&
+        (await computeSha256(bytes, 'browser-native runtime pack compressed asset', options.signal)) === runtimePack.compressedSha256;
+    const compressedDelivery = !delivery.decodedGzip || encodedCompressedMatch;
+    if (compressedDelivery) {
+        if (bytes.byteLength !== runtimePack.compressedBytes) {
+            throw new Error('browser-native runtime pack compressed size does not match the manifest');
+        }
+        if (!encodedCompressedMatch)
+            await verifySha256(bytes, runtimePack.compressedSha256, 'browser-native runtime pack compressed asset', options.signal);
     }
-    await verifySha256(bytes, runtimePack.compressedSha256, 'browser-native runtime pack compressed asset', options.signal);
-    if (bytes.byteLength >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+    if (compressedDelivery && bytes.byteLength >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
         if (typeof DecompressionStream !== 'function') {
             throw new Error("failed to decompress browser-native runtime pack: this browser does not support DecompressionStream('gzip')");
         }

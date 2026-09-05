@@ -58,9 +58,48 @@ export async function loadDotnetCompilerRuntime(options = {}) {
     const cached = runtimePromises.get(key);
     if (cached)
         return await cached;
-    const promise = (async () => {
+    const promise = Promise.resolve().then(async () => {
         const dotnetModule = options.dotnetModule || (await import(/* @vite-ignore */ dotnetJsUrl));
         let builder = getDotnetBuilder(dotnetModule);
+        let fatalError;
+        const pending = new Set();
+        const abort = (reason) => {
+            if (fatalError)
+                return;
+            fatalError = reason instanceof Error ? reason : new Error(String(reason));
+            for (const reject of pending)
+                reject(fatalError);
+            pending.clear();
+            if (runtimePromises.get(key) === promise)
+                runtimePromises.delete(key);
+            try {
+                options.onFatalError?.(fatalError);
+            }
+            catch {
+                // Notification errors must not replace the original runtime failure.
+            }
+        };
+        const call = (action) => {
+            if (fatalError)
+                return Promise.reject(fatalError);
+            return new Promise((resolve, reject) => {
+                pending.add(reject);
+                void Promise.resolve()
+                    .then(() => {
+                    if (fatalError)
+                        throw fatalError;
+                    return action();
+                })
+                    .then(resolve, reject)
+                    .finally(() => pending.delete(reject));
+            });
+        };
+        if (builder.withModuleConfig) {
+            builder = builder.withModuleConfig({
+                onAbort: abort,
+                onExit: (code) => abort(new Error(`.NET runtime exited with code ${code}`))
+            });
+        }
         if (builder.withConfig) {
             builder = builder.withConfig({
                 jsThreadBlockingMode: 'DangerousAllowBlockingWait'
@@ -69,14 +108,15 @@ export async function loadDotnetCompilerRuntime(options = {}) {
         if (builder.withDiagnosticTracing) {
             builder = builder.withDiagnosticTracing(Boolean(options.diagnosticTracing));
         }
-        const runtime = await builder.create();
+        const runtime = await call(() => builder.create());
         if (typeof runtime.getAssemblyExports !== 'function') {
             throw new Error('wasm-dotnet runtime did not expose getAssemblyExports().');
         }
         const assemblyName = options.mainAssemblyName ||
             runtime.getConfig?.().mainAssemblyName ||
             'WasmDotnet.Compiler.dll';
-        const exports = await runtime.getAssemblyExports(assemblyName);
+        const getAssemblyExports = runtime.getAssemblyExports.bind(runtime);
+        const exports = await call(() => getAssemblyExports(assemblyName));
         const bridge = findBridge(exports);
         const compile = bridge.Compile || bridge.compile;
         const run = bridge.Run || bridge.run;
@@ -85,13 +125,13 @@ export async function loadDotnetCompilerRuntime(options = {}) {
         }
         return {
             compile(request) {
-                return callJson(compile.bind(bridge), request);
+                return call(() => callJson(compile.bind(bridge), request));
             },
             run(request) {
-                return callJson(run.bind(bridge), request);
+                return call(() => callJson(run.bind(bridge), request));
             }
         };
-    })();
+    });
     runtimePromises.set(key, promise);
     try {
         return await promise;

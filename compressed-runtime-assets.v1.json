@@ -138,7 +138,7 @@
     "wasm-bash/bash.webc": 1808682,
     "wasm-bash/sdk/wasmer_js_bg.wasm": 5701868,
     "wasm-bqn/BQN.wasm": 1175370,
-    "wasm-clojurescript/compiler.js": 6588133,
+    "wasm-clojurescript/compiler.js": 6588008,
     "wasm-d/runtime/bin/ldc2.wasm": 23577090,
     "wasm-d/runtime/toolchain/toolchain.tar": 36239360,
     "wasm-debug/debug/lldb-web-dap.wasm": 42718338,

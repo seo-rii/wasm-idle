@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./D2ZU4KfC.js";t({id:`vb`,extensions:[`.vb`],aliases:[`Visual Basic`,`vb`],loader:()=>e(()=>import(`./D7aXH_rv2.js`),[],import.meta.url)});

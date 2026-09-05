@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./D2ZU4KfC.js";t({id:`perl`,extensions:[`.pl`,`.pm`],aliases:[`Perl`,`pl`],loader:()=>e(()=>import(`./DU7YdTy2.js`),[],import.meta.url)});
