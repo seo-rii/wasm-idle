@@ -46,6 +46,16 @@ fully stops the current execution, awaits both debugger Workers' disposal, and l
 LLDB/WAMR session from the current workspace. It does not preserve target state or claim the DAP
 `restart` capability.
 
+The playground's C/C++ LLDB **Debug** action pauses at the first executable location in `main`.
+The host keeps the low-level runtime's safe `_start` entry stop internal, installs a verified
+temporary DAP function breakpoint, and continues after user source breakpoints are configured.
+The temporary breakpoint is removed at the next stop, including an earlier constructor breakpoint,
+trap, or user Pause. Stop and Pause during setup cannot cause a late automatic resume. Source
+breakpoints remain intact. If `main` cannot be resolved, LLDB stays at runtime entry with an
+explanation. Generic DAP clients and Rust retain their existing `stopOnEntry` behavior.
+The `cpp-source-entry` Chromium fixture covers Debug without user breakpoints, Next within `main`,
+and Step Into with the visible `calculate(int) → main → _start` call stack.
+
 `createAdapterDebugSessionController()` provides the shared view model. Variable children remain
 lazy through `variablesReference`; consumers should not serialize an entire LLDB variable tree.
 Both controller surfaces bind each lazy-variable request to the current stopped frame. Resume,

@@ -290,6 +290,7 @@ class Clang implements Sandbox {
 							})
 						),
 						pauseOnEntry: !!options.pauseOnEntry,
+						pauseAtMain: true,
 						programArgs,
 						stdin: options.stdin,
 						onDebugEvent: (debugEvent) => this.ondebug?.(debugEvent),
