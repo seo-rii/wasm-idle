@@ -7,7 +7,6 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
 const REPO_ROOT = path.resolve(THIS_DIR, '..');
-const DEFAULT_SOURCE_DIR = path.resolve(REPO_ROOT, 'runtimes', 'wasm-clojurescript', 'dist');
 const DEFAULT_TARGET_DIR = path.resolve(REPO_ROOT, 'static', 'wasm-clojurescript');
 const DEFAULT_WORKER_SOURCE_PATH = path.resolve(
 	REPO_ROOT,
@@ -49,7 +48,7 @@ export const CLOJURESCRIPT_FINGERPRINT_DOMAIN = 'wasm-idle:clojurescript-runtime
 
 /**
  * @typedef {object} SyncWasmClojureScriptOptions
- * @property {string} [sourceDir]
+ * @property {string} [sourceDir] Explicit raw producer snapshot; omitted uses the installed locked gzip.
  * @property {string} [targetDir]
  * @property {string} [workerSourcePath]
  * @property {string} [versionModulePath]
@@ -256,16 +255,6 @@ export function computeClojureScriptRuntimeFingerprint(manifest) {
 	return hash.digest('hex');
 }
 
-async function ensureDefaultSourceDir() {
-	if (await isRegularFile(path.join(DEFAULT_SOURCE_DIR, LOGICAL_ASSET)))
-		return DEFAULT_SOURCE_DIR;
-	const buildModule = await import(
-		new URL('../runtimes/wasm-clojurescript/scripts/prepare-runtime.mjs', import.meta.url).href
-	);
-	await buildModule.prepareClojureScriptRuntime();
-	return DEFAULT_SOURCE_DIR;
-}
-
 /** @param {Uint8Array} metadataBytes @param {Readonly<ClojureScriptBuild>} expectedBuild @param {InputReceipt} compilerReceipt */
 function validateBuildMetadata(metadataBytes, expectedBuild, compilerReceipt) {
 	let metadata;
@@ -307,8 +296,11 @@ async function assertExactPublishedFiles(directory) {
 
 /** @param {SyncWasmClojureScriptOptions} [options] */
 export async function syncWasmClojureScriptAssets(options = {}) {
-	const sourceDir = path.resolve(options.sourceDir || (await ensureDefaultSourceDir()));
 	const targetDir = path.resolve(options.targetDir || DEFAULT_TARGET_DIR);
+	// Deploy the checked-in snapshot by default. An ignored producer dist/ may come
+	// from an older checkout; only an explicit source requests producer ingestion.
+	const installedSource = options.sourceDir === undefined;
+	const sourceDir = path.resolve(options.sourceDir ?? targetDir);
 	const workerSourcePath = path.resolve(options.workerSourcePath || DEFAULT_WORKER_SOURCE_PATH);
 	const versionModulePath = path.resolve(
 		options.versionModulePath ||
@@ -350,7 +342,7 @@ export async function syncWasmClojureScriptAssets(options = {}) {
 		throw new Error('wasm-clojurescript runtime target and version module must not overlap');
 	}
 	for (const [candidateBoundary, label] of [
-		[sourceBoundary, 'source directory'],
+		...(!installedSource ? [[sourceBoundary, 'source directory']] : []),
 		[workerBoundary, 'worker source'],
 		[lockBoundary, 'input lock']
 	]) {
@@ -362,11 +354,12 @@ export async function syncWasmClojureScriptAssets(options = {}) {
 		}
 	}
 
-	const compilerPath = path.join(sourceDir, LOGICAL_ASSET);
+	const compilerInputName = installedSource ? STORAGE_ASSET : LOGICAL_ASSET;
+	const compilerPath = path.join(sourceDir, compilerInputName);
 	const metadataPath = path.join(sourceDir, BUILD_METADATA_FILE);
 	const licensePath = path.join(sourceDir, LICENSE_FILE);
 	for (const [filePath, label] of [
-		[compilerPath, LOGICAL_ASSET],
+		[compilerPath, compilerInputName],
 		[metadataPath, BUILD_METADATA_FILE],
 		[licensePath, LICENSE_FILE]
 	]) {
@@ -376,12 +369,21 @@ export async function syncWasmClojureScriptAssets(options = {}) {
 			);
 		}
 	}
-	const [compilerBytes, metadataBytes, licenseBytes, workerBytes] = await Promise.all([
+	const [compilerInput, metadataBytes, licenseBytes, workerBytes] = await Promise.all([
 		readFile(compilerPath),
 		readFile(metadataPath),
 		readFile(licensePath),
 		readFile(workerSourcePath)
 	]);
+	const compilerReceipt = lock.receipts.get(LOGICAL_ASSET);
+	let compilerBytes = compilerInput;
+	if (installedSource) {
+		try {
+			compilerBytes = gunzipSync(compilerInput, { maxOutputLength: compilerReceipt.bytes });
+		} catch {
+			throw new Error(`wasm-clojurescript source ${STORAGE_ASSET} is not valid bounded gzip`);
+		}
+	}
 	let compilerSource;
 	try {
 		compilerSource = new TextDecoder('utf-8', { fatal: true }).decode(compilerBytes);
@@ -394,7 +396,6 @@ export async function syncWasmClojureScriptAssets(options = {}) {
 	if (compilerSource.includes('clojure.browser.repl')) {
 		throw new Error('wasm-clojurescript compiler.js contains the browser REPL preload');
 	}
-	const compilerReceipt = lock.receipts.get(LOGICAL_ASSET);
 	if (
 		compilerBytes.byteLength !== compilerReceipt.bytes ||
 		sha256(compilerBytes) !== compilerReceipt.sha256

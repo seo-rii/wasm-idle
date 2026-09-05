@@ -322,6 +322,176 @@ describe('syncWasmClojureScriptAssets', () => {
 		await expect(readFile(versionModulePath, 'utf8')).resolves.toBe('previous version\n');
 	});
 
+	it('refreshes the locked installed snapshot without consulting a stale producer cache', async () => {
+		const targetDir = path.join(await makeTempDir(), 'runtime');
+		const compiler = compilerBytes('installed');
+		const metadata = metadataBytes(compiler);
+		const license = licenseBytes();
+		await writeSourceSnapshot(targetDir, compilerBytes('stale raw cache'), metadata, license);
+		await writeFixtureFile(targetDir, 'compiler.js.gz.bin', gzipSync(compiler, { level: 9 }));
+		const workerSourcePath = await writeFixtureFile(
+			await makeTempDir(),
+			'runner-worker.js',
+			'self.onmessage = () => {}; // updated adapter\n'
+		);
+		const lockFilePath = await writeFixtureLock(
+			await makeTempDir(),
+			compiler,
+			metadata,
+			license
+		);
+
+		const first = await syncWasmClojureScriptAssets({
+			targetDir,
+			workerSourcePath,
+			lockFilePath
+		});
+		const installed = await readFile(path.join(targetDir, 'compiler.js.gz.bin'));
+		const manifest = await readFile(path.join(targetDir, 'runtime-manifest.v2.json'));
+		expect(first.sourceDir).toBe(targetDir);
+		expect(gunzipSync(installed)).toEqual(compiler);
+		expect(await readFile(path.join(targetDir, 'runner-worker.js'))).toEqual(
+			await readFile(workerSourcePath)
+		);
+		const second = await syncWasmClojureScriptAssets({
+			targetDir,
+			workerSourcePath,
+			lockFilePath
+		});
+		expect(second.fingerprint).toBe(first.fingerprint);
+		expect(await readFile(path.join(targetDir, 'compiler.js.gz.bin'))).toEqual(installed);
+		expect(await readFile(path.join(targetDir, 'runtime-manifest.v2.json'))).toEqual(manifest);
+	});
+
+	it.each([
+		['missing compiler', undefined, 'compiler.js.gz.bin must be a regular file'],
+		['corrupt gzip', Buffer.from('not gzip'), 'compiler.js.gz.bin is not valid bounded gzip'],
+		[
+			'compiler drift',
+			gzipSync(compilerBytes('drift!')),
+			'compiler.js does not match the input lock'
+		],
+		[
+			'oversized gzip',
+			gzipSync(Buffer.alloc(4096)),
+			'compiler.js.gz.bin is not valid bounded gzip'
+		]
+	] as const)(
+		'rejects an installed %s without falling back or publishing',
+		async (_label, stored, message) => {
+			const targetDir = path.join(await makeTempDir(), 'runtime');
+			const compiler = compilerBytes('locked');
+			const metadata = metadataBytes(compiler);
+			const license = licenseBytes();
+			await writeSourceSnapshot(targetDir, compiler, metadata, license);
+			// A raw producer file and legacy gzip must not mask a broken canonical snapshot.
+			await writeFixtureFile(targetDir, 'compiler.js.gz', gzipSync(compiler));
+			if (stored) await writeFixtureFile(targetDir, 'compiler.js.gz.bin', stored);
+			const versionModulePath = await writeFixtureFile(
+				await makeTempDir(),
+				'version.ts',
+				'previous version\n'
+			);
+			const workerSourcePath = await writeFixtureFile(
+				await makeTempDir(),
+				'worker.js',
+				'worker\n'
+			);
+			const lockFilePath = await writeFixtureLock(
+				await makeTempDir(),
+				compiler,
+				metadata,
+				license
+			);
+
+			await expect(
+				syncWasmClojureScriptAssets({
+					targetDir,
+					versionModulePath,
+					workerSourcePath,
+					lockFilePath
+				})
+			).rejects.toThrow(message);
+			expect(await readFile(versionModulePath, 'utf8')).toBe('previous version\n');
+			expect(await readFile(path.join(targetDir, 'compiler.js'))).toEqual(compiler);
+		}
+	);
+
+	it.each(['runtime-build.json', 'LICENSE.txt'])(
+		'rejects installed %s drift even when the compiler matches',
+		async (fileName) => {
+			const targetDir = path.join(await makeTempDir(), 'runtime');
+			const compiler = compilerBytes('locked');
+			const metadata = metadataBytes(compiler);
+			const license = licenseBytes();
+			await writeSourceSnapshot(targetDir, compiler, metadata, license);
+			await writeFixtureFile(targetDir, 'compiler.js.gz.bin', gzipSync(compiler));
+			await writeFixtureFile(
+				targetDir,
+				fileName,
+				Buffer.concat([await readFile(path.join(targetDir, fileName)), Buffer.from(' ')])
+			);
+			const versionModulePath = await writeFixtureFile(
+				await makeTempDir(),
+				'version.ts',
+				'previous version\n'
+			);
+			const workerSourcePath = await writeFixtureFile(
+				await makeTempDir(),
+				'worker.js',
+				'worker\n'
+			);
+			const lockFilePath = await writeFixtureLock(
+				await makeTempDir(),
+				compiler,
+				metadata,
+				license
+			);
+
+			await expect(
+				syncWasmClojureScriptAssets({
+					targetDir,
+					versionModulePath,
+					workerSourcePath,
+					lockFilePath
+				})
+			).rejects.toThrow('does not match the input lock');
+			expect(await readFile(versionModulePath, 'utf8')).toBe('previous version\n');
+			expect(gunzipSync(await readFile(path.join(targetDir, 'compiler.js.gz.bin')))).toEqual(
+				compiler
+			);
+		}
+	);
+
+	it('does not fall back to a valid installed snapshot when an explicit producer input drifts', async () => {
+		const targetDir = path.join(await makeTempDir(), 'runtime');
+		const sourceDir = await makeTempDir();
+		const compiler = compilerBytes('locked');
+		const metadata = metadataBytes(compiler);
+		const license = licenseBytes();
+		await writeSourceSnapshot(targetDir, compiler, metadata, license);
+		await writeFixtureFile(targetDir, 'compiler.js.gz.bin', gzipSync(compiler));
+		await writeSourceSnapshot(sourceDir, compilerBytes('drift!'), metadata, license);
+		const workerSourcePath = await writeFixtureFile(
+			await makeTempDir(),
+			'worker.js',
+			'worker\n'
+		);
+		const lockFilePath = await writeFixtureLock(
+			await makeTempDir(),
+			compiler,
+			metadata,
+			license
+		);
+
+		await expect(
+			syncWasmClojureScriptAssets({ sourceDir, targetDir, workerSourcePath, lockFilePath })
+		).rejects.toThrow('compiler.js does not match the input lock');
+		expect(gunzipSync(await readFile(path.join(targetDir, 'compiler.js.gz.bin')))).toEqual(
+			compiler
+		);
+	});
+
 	it('rejects an explicit source directory that overlaps the publication target', async () => {
 		const targetDir = path.join(await makeTempDir(), 'runtime');
 		const versionModulePath = path.join(await makeTempDir(), 'wasmClojureScriptVersion.ts');
