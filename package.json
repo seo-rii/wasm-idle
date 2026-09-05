@@ -118,7 +118,7 @@
 		"check:asset-sizes": "node scripts/static-asset-sizes.mjs check",
 		"build:page-runtimes": "node scripts/prepare-page-runtimes.mjs",
 		"verify:wasm-typescript-freshness": "pnpm --dir runtimes/wasm-typescript build && node scripts/sync-wasm-typescript.mjs --verify",
-		"verify:wasm-ocaml-freshness": "pnpm --dir runtimes/wasm-of-js-of-ocaml build && node scripts/sync-wasm-of-js-of-ocaml.mjs --verify",
+		"verify:wasm-ocaml-freshness": "pnpm --dir runtimes/wasm-of-js-of-ocaml build && node scripts/sync-wasm-of-js-of-ocaml.mjs --verify-wrapper",
 		"verify:page-runtime-freshness": "pnpm run verify:wasm-typescript-freshness && pnpm run verify:wasm-ocaml-freshness",
 		"build:static-runtime-modules": "node scripts/build-static-runtime-modules.mjs",
 		"support:matrix": "node scripts/support-matrix.mjs write",

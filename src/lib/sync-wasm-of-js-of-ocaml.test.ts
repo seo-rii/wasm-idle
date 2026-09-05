@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
 	computeBundleFingerprint,
 	syncWasmOfJsOfOcamlDist,
-	verifyWasmOfJsOfOcamlDist
+	verifyWasmOfJsOfOcamlDist,
+	verifyWasmOfJsOfOcamlWrapper
 } from '../../scripts/sync-wasm-of-js-of-ocaml.mjs';
 
 const tempDirs: string[] = [];
@@ -242,6 +243,9 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 				versionModulePath
 			})
 		).resolves.toMatchObject({ fingerprint: result.fingerprint });
+		await expect(
+			verifyWasmOfJsOfOcamlWrapper({ sourceBrowserDistDir, versionModulePath })
+		).resolves.toMatchObject({ moduleReceipt: result.moduleReceipt });
 
 		await writeFile(path.join(targetBrowserDistDir, 'src/index.js'), 'corrupt', 'utf8');
 		await expect(
@@ -253,6 +257,11 @@ describe('syncWasmOfJsOfOcamlDist', () => {
 				versionModulePath
 			})
 		).rejects.toThrow('does not match the current producer output');
+
+		await writeFile(path.join(sourceBrowserDistDir, 'src/index.js'), 'corrupt', 'utf8');
+		await expect(
+			verifyWasmOfJsOfOcamlWrapper({ sourceBrowserDistDir, versionModulePath })
+		).rejects.toThrow('browser wrapper does not match the generated runtime profile');
 	});
 
 	it('clears stale files from previous synced outputs', async () => {

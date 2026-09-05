@@ -106,7 +106,7 @@ describe('LLVM runtime package scripts', () => {
 			'pnpm --dir runtimes/wasm-typescript build && node scripts/sync-wasm-typescript.mjs --verify'
 		);
 		expect(root.scripts?.['verify:wasm-ocaml-freshness']).toBe(
-			'pnpm --dir runtimes/wasm-of-js-of-ocaml build && node scripts/sync-wasm-of-js-of-ocaml.mjs --verify'
+			'pnpm --dir runtimes/wasm-of-js-of-ocaml build && node scripts/sync-wasm-of-js-of-ocaml.mjs --verify-wrapper'
 		);
 		expect(root.scripts?.['verify:page-runtime-freshness']).toBe(
 			'pnpm run verify:wasm-typescript-freshness && pnpm run verify:wasm-ocaml-freshness'
