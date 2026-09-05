@@ -19,7 +19,8 @@ const runtimeState = vi.hoisted(() => ({
 		Promise<{
 			breakpoints?: Array<{ verified?: boolean; line?: number; message?: string }>;
 		}>
-	>
+	>,
+	functionBreakpointResponseGates: [] as Promise<unknown>[]
 }));
 const { loadManifest } = vi.hoisted(() => ({
 	loadManifest: vi.fn()
@@ -72,6 +73,12 @@ class FakeRuntimeSession {
 		if (requestError) throw requestError;
 		if (command === 'continue') await runtimeState.continueGate;
 		if (command === 'pause') await runtimeState.pauseGate;
+		if (
+			command === 'setFunctionBreakpoints' &&
+			runtimeState.functionBreakpointResponseGates.length
+		) {
+			return (await runtimeState.functionBreakpointResponseGates.shift()) as T;
+		}
 		if (command === 'setBreakpoints' && runtimeState.breakpointResponseGates.length > 0) {
 			return (await runtimeState.breakpointResponseGates.shift()) as T;
 		}
@@ -79,6 +86,13 @@ class FakeRuntimeSession {
 			return runtimeState.responseOverrides.get(command) as T;
 		}
 		if (command === 'threads') return { threads: [{ id: 7, name: 'wasm' }] } as T;
+		if (command === 'setFunctionBreakpoints')
+			return {
+				breakpoints: (args as { breakpoints: unknown[] }).breakpoints.map(() => ({
+					id: 99,
+					verified: true
+				}))
+			} as T;
 		if (command === 'stackTrace') {
 			return {
 				stackFrames: [
@@ -270,6 +284,7 @@ describe('LldbSandboxSession', () => {
 		runtimeState.requestErrors.clear();
 		runtimeState.responseOverrides.clear();
 		runtimeState.breakpointResponseGates = [];
+		runtimeState.functionBreakpointResponseGates = [];
 		loadManifest.mockReset();
 		loadManifest.mockImplementation(
 			async (url: string, _expected: unknown, fetchImpl: typeof fetch) => {
@@ -280,6 +295,260 @@ describe('LldbSandboxSession', () => {
 					);
 				}
 				return await response.json();
+			}
+		);
+	});
+
+	describe('C/C++ source entry', () => {
+		async function startEntry(pauseAtMain = true, pauseOnEntry = true) {
+			const events: any[] = [];
+			const output: string[] = [];
+			loadManifest.mockResolvedValue({ manifestVersion: 2, debugger: { capabilities: {} } });
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [6],
+				pauseOnEntry,
+				pauseAtMain,
+				onDebugEvent: (event) => events.push(event),
+				onOutput: (text) => output.push(text)
+			});
+			const completion = controller.start();
+			void completion.catch(() => undefined);
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			const runtime = runtimeState.session!;
+			runtimeState.responseOverrides.set('stackTrace', {
+				stackFrames: [
+					{
+						id: 41,
+						name: '_start',
+						line: 42,
+						column: 7,
+						source: { path: 'wasisdk:/src/crt1-command.c' }
+					}
+				]
+			});
+			return { controller, completion, runtime, events, output };
+		}
+
+		it('hides runtime entry and removes the private main breakpoint before publishing source entry', async () => {
+			const { controller, completion, runtime, events } = await startEntry();
+			runtime.emit({ event: 'stopped', body: { reason: 'entry', threadId: 7 } });
+			await vi.waitFor(() =>
+				expect(runtime.requests).toContainEqual({
+					command: 'continue',
+					args: { threadId: 7 }
+				})
+			);
+			expect(events.filter((event) => event.type === 'pause')).toEqual([]);
+			expect(runtime.requests).toContainEqual({
+				command: 'setFunctionBreakpoints',
+				args: { breakpoints: [{ name: 'main' }] }
+			});
+			runtime.emit({ event: 'continued', body: { threadId: 7 } });
+			runtimeState.responseOverrides.delete('stackTrace');
+			await emitStoppedAndWait(runtime);
+			await vi.waitFor(() =>
+				expect(events).toContainEqual(
+					expect.objectContaining({
+						type: 'pause',
+						reason: 'entry',
+						line: 6,
+						callStack: expect.arrayContaining([
+							expect.objectContaining({ functionName: 'main' })
+						])
+					})
+				)
+			);
+			expect(runtime.requests).toContainEqual({
+				command: 'setFunctionBreakpoints',
+				args: { breakpoints: [] }
+			});
+			expect(runtime.breakpointRequests).toEqual([]);
+			expect(runtime.getResolvedBreakpoints('/workspace/main.cpp')).toEqual([
+				expect.objectContaining({ verified: true, line: 6 })
+			]);
+			await controller.disconnect();
+			await completion;
+		});
+
+		it('keeps an earlier user breakpoint and removes the main entry breakpoint', async () => {
+			const { controller, completion, runtime, events } = await startEntry();
+			runtime.emit({ event: 'stopped', body: { reason: 'entry', threadId: 7 } });
+			await vi.waitFor(() =>
+				expect(runtime.requests.some((request) => request.command === 'continue')).toBe(
+					true
+				)
+			);
+			runtimeState.responseOverrides.set('stackTrace', {
+				stackFrames: [
+					{
+						id: 43,
+						name: 'initialize_global()',
+						line: 2,
+						column: 1,
+						source: { path: '/workspace/main.cpp' }
+					}
+				]
+			});
+			await emitStoppedAndWait(runtime);
+			await vi.waitFor(() =>
+				expect(events).toContainEqual(
+					expect.objectContaining({ type: 'pause', reason: 'breakpoint', line: 2 })
+				)
+			);
+			expect(
+				runtime.requests
+					.filter((request) => request.command === 'setFunctionBreakpoints')
+					.at(-1)?.args
+			).toEqual({ breakpoints: [] });
+			await controller.disconnect();
+			await completion;
+		});
+
+		it('waits for breakpoint edits made during initialization before automatically continuing', async () => {
+			let finishInitialize!: () => void;
+			let finishBreakpoints!: (value: {
+				breakpoints: { verified: boolean; line: number }[];
+			}) => void;
+			runtimeState.initializeGate = new Promise<void>((resolve) => {
+				finishInitialize = resolve;
+			});
+			runtimeState.breakpointResponseGates.push(
+				new Promise((resolve) => {
+					finishBreakpoints = resolve;
+				})
+			);
+			const { controller, completion, runtime } = await startEntry();
+			await controller.setBreakpoints([9]);
+			runtime.emit({ event: 'stopped', body: { reason: 'entry', threadId: 7 } });
+			finishInitialize();
+			await vi.waitFor(() =>
+				expect(runtime.breakpointRequests).toContainEqual({
+					source: { path: '/workspace/main.cpp' },
+					lines: [9]
+				})
+			);
+			expect(runtime.requests.some((request) => request.command === 'continue')).toBe(false);
+			finishBreakpoints({ breakpoints: [{ verified: true, line: 9 }] });
+			await vi.waitFor(() =>
+				expect(runtime.requests.some((request) => request.command === 'continue')).toBe(
+					true
+				)
+			);
+			await controller.disconnect();
+			await completion;
+		});
+
+		it('keeps runtime entry visible with an explanation when main is unverified', async () => {
+			const { controller, completion, runtime, events, output } = await startEntry();
+			runtimeState.functionBreakpointResponseGates.push(
+				Promise.resolve({ breakpoints: [{ verified: false }] })
+			);
+			runtime.emit({ event: 'stopped', body: { reason: 'entry', threadId: 7 } });
+			await vi.waitFor(() =>
+				expect(events.some((event) => event.type === 'pause')).toBe(true)
+			);
+			expect(runtime.requests.some((request) => request.command === 'continue')).toBe(false);
+			expect(
+				runtime.requests
+					.filter((request) => request.command === 'setFunctionBreakpoints')
+					.at(-1)?.args
+			).toEqual({ breakpoints: [] });
+			expect(output.join('')).toMatch(/main.*runtime entry/i);
+			await controller.disconnect();
+			await completion;
+		});
+
+		it.each(['resolve', 'reject'] as const)(
+			'does not resume a disconnected session after late breakpoint %s',
+			async (outcome) => {
+				const { controller, completion, runtime, events } = await startEntry();
+				let resolve!: (value: unknown) => void;
+				let reject!: (error: Error) => void;
+				runtimeState.functionBreakpointResponseGates.push(
+					new Promise((yes, no) => {
+						resolve = yes;
+						reject = no;
+					})
+				);
+				runtime.emit({ event: 'stopped', body: { reason: 'entry', threadId: 7 } });
+				await vi.waitFor(() =>
+					expect(
+						runtime.requests.some(
+							(request) => request.command === 'setFunctionBreakpoints'
+						)
+					).toBe(true)
+				);
+				await controller.disconnect();
+				if (outcome === 'resolve') resolve({ breakpoints: [{ id: 99, verified: true }] });
+				else reject(new Error('retired entry breakpoint'));
+				await completion;
+				await Promise.resolve();
+				expect(runtime.requests.some((request) => request.command === 'continue')).toBe(
+					false
+				);
+				expect(events.filter((event) => event.type === 'pause')).toEqual([]);
+			}
+		);
+
+		it('honors Pause during entry breakpoint installation without resuming the guest', async () => {
+			const { controller, completion, runtime, events } = await startEntry();
+			let resolve!: (value: unknown) => void;
+			runtimeState.functionBreakpointResponseGates.push(
+				new Promise((yes) => {
+					resolve = yes;
+				})
+			);
+			runtime.emit({ event: 'stopped', body: { reason: 'entry', threadId: 7 } });
+			await vi.waitFor(() =>
+				expect(
+					runtime.requests.some((request) => request.command === 'setFunctionBreakpoints')
+				).toBe(true)
+			);
+			await controller.pause();
+			resolve({ breakpoints: [{ id: 99, verified: true }] });
+			await vi.waitFor(() =>
+				expect(events).toContainEqual(
+					expect.objectContaining({ type: 'pause', reason: 'pause' })
+				)
+			);
+			expect(runtime.requests.some((request) => request.command === 'continue')).toBe(false);
+			expect(
+				runtime.requests
+					.filter((request) => request.command === 'setFunctionBreakpoints')
+					.at(-1)?.args
+			).toEqual({ breakpoints: [] });
+			await controller.disconnect();
+			await completion;
+		});
+
+		it.each([
+			[false, true],
+			[true, false]
+		])(
+			'preserves raw entry without both source-entry opt-ins (%s, %s)',
+			async (pauseAtMain, pauseOnEntry) => {
+				const { controller, completion, runtime, events } = await startEntry(
+					pauseAtMain,
+					pauseOnEntry
+				);
+				runtime.emit({ event: 'stopped', body: { reason: 'entry', threadId: 7 } });
+				await vi.waitFor(() =>
+					expect(events.some((event) => event.type === 'pause')).toBe(true)
+				);
+				expect(
+					runtime.requests.some((request) =>
+						['setFunctionBreakpoints', 'continue'].includes(request.command)
+					)
+				).toBe(false);
+				await controller.disconnect();
+				await completion;
 			}
 		);
 	});

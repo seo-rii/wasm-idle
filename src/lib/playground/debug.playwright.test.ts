@@ -208,6 +208,31 @@ int main(void) {
 		workspaceFiles: [{ path: 'data/input.txt', content: '73\n' }]
 	},
 	{
+		activePath: 'source-entry.cpp',
+		backend: 'lldb',
+		breakpointLine: null,
+		expectedSourceEntry: { line: 9, nextLine: 10, stepInLine: 3, bodyLine: 4 },
+		expectedOutput: 'lldb-cpp-entry=73',
+		expectedLocal: { name: 'doubled', value: '70' },
+		expectedTitle: 'C++ · LLDB / WAMR',
+		language: 'CPP',
+		programArgs: [],
+		source: `#include <cstdio>
+
+int calculate(int value) {
+    int doubled = value * 2;
+    return doubled + 3;
+}
+
+int main() {
+    int value = 35;
+    int result = calculate(value);
+    std::printf("lldb-cpp-entry=%d\\n", result);
+    return 0;
+}`,
+		testId: 'cpp-source-entry'
+	},
+	{
 		activePath: 'main.cpp',
 		backend: 'lldb',
 		breakpointLine: 16,
@@ -1355,7 +1380,10 @@ describe('native-source browser debugging in Chromium', () => {
 								);
 							}
 							await page.evaluate(
-								(line) => (window as any).__wasmIdleDebug.setBreakpoints([line]),
+								(line) =>
+									(window as any).__wasmIdleDebug.setBreakpoints(
+										line === null ? [] : [line]
+									),
 								testCase.breakpointLine
 							);
 							if ('breakpointSourcePath' in testCase) {
@@ -1522,8 +1550,146 @@ describe('native-source browser debugging in Chromium', () => {
 						}
 
 						let stepStartLine = entryLine;
+						if ('expectedSourceEntry' in testCase) {
+							const sourcePath = `/workspace/${testCase.activePath}`;
+							const entryState = await page.evaluate(() =>
+								(window as any).__wasmIdleDebug.getDebugState()
+							);
+							expect(entryLine).toBe(`L${testCase.expectedSourceEntry.line}`);
+							expect(entryState.callStack[0]).toMatchObject({
+								functionName: 'main',
+								line: testCase.expectedSourceEntry.line,
+								sourcePath
+							});
+							expect(
+								(
+									await page
+										.locator('.debug-metric')
+										.filter({ hasText: 'Breakpoints' })
+										.locator('strong')
+										.textContent()
+								)?.trim()
+							).toBe('0');
+							const entryFrames = await page
+								.locator('.debug-frame-select')
+								.allTextContents();
+							expect(entryFrames[0]).toContain('main');
+							expect(entryFrames.some((frame) => frame.includes('_start'))).toBe(
+								true
+							);
+
+							await page.locator('button[aria-label="Next Line"]').click();
+							await page
+								.waitForFunction(
+									({ line, path }) => {
+										const state = (
+											window as any
+										).__wasmIdleDebug.getDebugState();
+										return (
+											state.paused &&
+											state.callStack[0]?.functionName === 'main' &&
+											state.callStack[0]?.line === line &&
+											state.callStack[0]?.sourcePath === path
+										);
+									},
+									{
+										line: testCase.expectedSourceEntry.nextLine,
+										path: sourcePath
+									},
+									{ timeout: 30_000 }
+								)
+								.catch(async (error) => {
+									const state = await page.evaluate(() =>
+										(window as any).__wasmIdleDebug.getDebugState()
+									);
+									throw new Error(
+										`C++ Next did not stop at the expected main source line: ${JSON.stringify(state)}`,
+										{ cause: error }
+									);
+								});
+							expect(await readPausedLine(page)).toBe(
+								`L${testCase.expectedSourceEntry.nextLine}`
+							);
+
+							await page.locator('button[aria-label="Step Into"]').click();
+							await page
+								.waitForFunction(
+									({ line, path }) => {
+										const state = (
+											window as any
+										).__wasmIdleDebug.getDebugState();
+										return (
+											state.paused &&
+											state.callStack[0]?.functionName === 'calculate(int)' &&
+											state.callStack[0]?.line === line &&
+											state.callStack[0]?.sourcePath === path
+										);
+									},
+									{
+										line: testCase.expectedSourceEntry.stepInLine,
+										path: sourcePath
+									},
+									{ timeout: 30_000 }
+								)
+								.catch(async (error) => {
+									const state = await page.evaluate(() =>
+										(window as any).__wasmIdleDebug.getDebugState()
+									);
+									throw new Error(
+										`C++ Step Into did not stop at the expected calculate source line: ${JSON.stringify(state)}`,
+										{ cause: error }
+									);
+								});
+							const steppedState = await page.evaluate(() =>
+								(window as any).__wasmIdleDebug.getDebugState()
+							);
+							expect(
+								steppedState.callStack.map(
+									(frame: { functionName: string }) => frame.functionName
+								)
+							).toEqual(['calculate(int)', 'main', '_start']);
+							const steppedFrames = await page
+								.locator('.debug-frame-select')
+								.allTextContents();
+							expect(steppedFrames).toHaveLength(3);
+							expect(steppedFrames[0]).toContain('calculate(int)');
+							expect(steppedFrames[1]).toContain('main');
+							expect(steppedFrames[2]).toContain('_start');
+							// LLDB first stops at the callee's declaration/prologue, then its body.
+							await page.locator('button[aria-label="Next Line"]').click();
+							await page
+								.waitForFunction(
+									({ line, path }) => {
+										const state = (
+											window as any
+										).__wasmIdleDebug.getDebugState();
+										return (
+											state.paused &&
+											state.callStack[0]?.functionName === 'calculate(int)' &&
+											state.callStack[0]?.line === line &&
+											state.callStack[0]?.sourcePath === path
+										);
+									},
+									{
+										line: testCase.expectedSourceEntry.bodyLine,
+										path: sourcePath
+									},
+									{ timeout: 30_000 }
+								)
+								.catch(async (error) => {
+									const state = await page.evaluate(() =>
+										(window as any).__wasmIdleDebug.getDebugState()
+									);
+									throw new Error(
+										`C++ Next did not leave the calculate prologue: ${JSON.stringify(state)}`,
+										{ cause: error }
+									);
+								});
+							stepStartLine = await readPausedLine(page);
+						}
 						if (
 							testCase.backend === 'lldb' &&
+							testCase.breakpointLine !== null &&
 							entryLine !== `L${testCase.breakpointLine}`
 						) {
 							await page.locator('button[aria-label="Continue"]').click();
@@ -1585,7 +1751,11 @@ describe('native-source browser debugging in Chromium', () => {
 							}
 							stepStartLine = await readPausedLine(page);
 						}
-						if (requireLldbDebug && testCase.backend === 'lldb') {
+						if (
+							requireLldbDebug &&
+							testCase.backend === 'lldb' &&
+							testCase.breakpointLine !== null
+						) {
 							await page.waitForFunction(
 								() => {
 									const metric = Array.from(

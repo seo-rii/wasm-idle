@@ -55,6 +55,8 @@ export interface LldbSandboxSessionOptions {
 		lines: number[];
 	}>;
 	pauseOnEntry: boolean;
+	/** C/C++ source entry; the low-level runtime still stops safely before _start executes. */
+	pauseAtMain?: boolean;
 	programArgs?: string[];
 	stdin?: string;
 	onDebugEvent: (event: DebugSessionEvent) => void;
@@ -198,6 +200,8 @@ export class LldbSandboxSession {
 	private pauseRequested = false;
 	private pauseRequestVersion = 0;
 	private targetStopped = false;
+	private entryPhase: 'initial' | 'seeking-main' | 'done' = 'done';
+	private entrySetup?: { ready: Promise<void>; resolve: () => void };
 	private stopped = false;
 	private stateVersion = 0;
 	private completionResolve?: (value: true) => void;
@@ -243,6 +247,8 @@ export class LldbSandboxSession {
 		this.startupAbortController = startupAbortController;
 		this.targetStopped = false;
 		this.stopped = false;
+		this.entryPhase =
+			this.options.pauseOnEntry && this.options.pauseAtMain ? 'initial' : 'done';
 		this.pauseRequested = false;
 		this.initialized = false;
 		this.dapExitCode = null;
@@ -359,6 +365,13 @@ export class LldbSandboxSession {
 			return completion;
 		}
 		this.session = session;
+		let resolveEntrySetup!: () => void;
+		this.entrySetup = {
+			ready: new Promise<void>((resolve) => {
+				resolveEntrySetup = resolve;
+			}),
+			resolve: () => resolveEntrySetup()
+		};
 		session.onEvent((event) => {
 			if (lifecycleVersion === this.lifecycleVersion && this.session === session) {
 				try {
@@ -395,6 +408,9 @@ export class LldbSandboxSession {
 					await this.setBreakpoints(lines, sourcePath);
 				}
 			}
+			// Startup breakpoint edits must reach LLDB before automatic source entry. Do not
+			// wait for stdin to drain: a full input queue needs the guest to run first.
+			resolveEntrySetup();
 			this.inputReady = true;
 			if (this.options.stdin !== undefined) {
 				this.pendingInput.push(this.options.stdin);
@@ -424,6 +440,8 @@ export class LldbSandboxSession {
 			}
 			await session.dispose();
 			throw error;
+		} finally {
+			resolveEntrySetup();
 		}
 		return completion;
 	}
@@ -1028,6 +1046,8 @@ export class LldbSandboxSession {
 		const completionResolve = this.completionResolve;
 		const completionReject = this.completionReject;
 		this.lifecycleVersion += 1;
+		this.entrySetup?.resolve();
+		this.entrySetup = undefined;
 		const startupAbortController = this.startupAbortController;
 		this.startupAbortController = undefined;
 		startupAbortController?.abort(
@@ -1228,6 +1248,44 @@ export class LldbSandboxSession {
 		const isWorkspaceFrame = this.options.artifact.sources.some(
 			(source) => source.path === selectedFrame.source?.path
 		);
+		if (!this.isCurrentValueRequest(session, version)) return;
+		if (this.entryPhase === 'initial') {
+			await this.entrySetup?.ready;
+			if (!this.isCurrentValueRequest(session, version)) return;
+			this.entryPhase = 'done';
+			if (reason === 'entry' && selectedFrame.name === '_start' && !isWorkspaceFrame) {
+				// configurationDone has already installed all user source breakpoints. Function
+				// breakpoints occupy a separate DAP registry owned by this product session.
+				this.entryPhase = 'seeking-main';
+				const verified = await this.setMainEntryBreakpoint(session, true);
+				if (!this.isCurrentValueRequest(session, version)) return;
+				if (verified && !this.pauseRequested) {
+					this.activeThreadId = threadId;
+					await this.debugCommand('continue');
+					return;
+				}
+				await this.setMainEntryBreakpoint(session, false);
+				if (!this.isCurrentValueRequest(session, version)) return;
+				this.entryPhase = 'done';
+				if (this.pauseRequested) {
+					this.pauseRequested = false;
+					reason = 'pause';
+				} else {
+					this.options.onOutput(
+						'LLDB could not resolve main; paused at runtime entry.\n'
+					);
+				}
+			}
+		} else if (this.entryPhase === 'seeking-main') {
+			// Honor any earlier user breakpoint, trap, or Pause, and never leave a hidden
+			// main breakpoint behind for a later Continue.
+			this.entryPhase = 'done';
+			await this.setMainEntryBreakpoint(session, false);
+			if (!this.isCurrentValueRequest(session, version)) return;
+			if (reason === 'breakpoint' && selectedFrame.name === 'main' && isWorkspaceFrame) {
+				reason = 'entry';
+			}
+		}
 		const scopes = isWorkspaceFrame ? await this.requestScopes(session, selectedFrame.id) : [];
 		if (version !== this.stateVersion || this.session !== session) return;
 		this.activeThreadId = threadId;
@@ -1267,6 +1325,29 @@ export class LldbSandboxSession {
 			scopes
 		});
 		this.command = null;
+	}
+
+	private async setMainEntryBreakpoint(session: BrowserLldbSession, enabled: boolean) {
+		const response = await session.request<unknown>('setFunctionBreakpoints', {
+			breakpoints: enabled ? [{ name: 'main' }] : []
+		});
+		const breakpoints = dapResponseCollection(
+			response,
+			'setFunctionBreakpoints',
+			'breakpoints'
+		);
+		if (breakpoints.length !== (enabled ? 1 : 0)) {
+			invalidDapResponse(
+				'setFunctionBreakpoints',
+				'breakpoints',
+				'unexpected breakpoint count'
+			);
+		}
+		if (!enabled) return false;
+		const breakpoint = breakpoints[0];
+		assertDapRecord(breakpoint, 'setFunctionBreakpoints', 'breakpoints[0]');
+		assertDapBoolean(breakpoint.verified, 'setFunctionBreakpoints', 'breakpoints[0].verified');
+		return breakpoint.verified;
 	}
 
 	private async requestScopes(session: BrowserLldbSession, frameId: number) {
@@ -1335,6 +1416,8 @@ export class LldbSandboxSession {
 
 	private finish(exitCode: number | null) {
 		if (this.stopped) return;
+		this.entrySetup?.resolve();
+		this.entrySetup = undefined;
 		this.stopped = true;
 		this.stateVersion += 1;
 		this.targetStopped = false;
@@ -1372,6 +1455,8 @@ export class LldbSandboxSession {
 
 	private fail(error: Error) {
 		if (this.stopped) return;
+		this.entrySetup?.resolve();
+		this.entrySetup = undefined;
 		this.stopped = true;
 		this.stateVersion += 1;
 		this.targetStopped = false;
