@@ -958,16 +958,7 @@ describe('native-source browser debugging in Chromium', () => {
 			});
 			const isolationContext = await browser.newContext();
 			try {
-				await isolationContext.addCookies([
-					{
-						name: 'dev_bypass_waf',
-						value: 'seorii_bypass_token_is_this',
-						url: new URL(previewServer.browserUrl).origin
-					}
-				]);
-				await isolationContext.setExtraHTTPHeaders({
-					Cookie: 'dev_bypass_waf=seorii_bypass_token_is_this'
-				});
+				await addBrowserTestCookies(isolationContext, previewServer.browserUrl);
 				const isolationBootstrapPage = await isolationContext.newPage();
 				const activeState = await verifyPagesIsolationBootstrap(
 					isolationBootstrapPage,
