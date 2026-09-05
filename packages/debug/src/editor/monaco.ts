@@ -16,6 +16,7 @@ export class MonacoDebugView {
 	inlineValueDecorations: monaco.editor.IEditorDecorationsCollection;
 	pausedLineWidget: monaco.editor.IContentWidget | null = null;
 	pausedLineWidgetNode: HTMLDivElement | null = null;
+	private renderedPausedLine: number | null = null;
 	mouseHandler: monaco.IDisposable | null = null;
 	breakpoints: number[] = [];
 	onBreakpointsChange?: (lines: number[]) => void;
@@ -73,6 +74,7 @@ export class MonacoDebugView {
 			pausedLine <= (model?.getLineCount() ?? 0)
 				? pausedLine
 				: null;
+		this.renderedPausedLine = renderedPausedLine;
 		const lineMaxColumn = renderedPausedLine
 			? model?.getLineMaxColumn(renderedPausedLine) || 1
 			: 1;
@@ -89,7 +91,10 @@ export class MonacoDebugView {
 					getId: () => 'wasm-idle-debug-current-line',
 					getDomNode: () => this.pausedLineWidgetNode!,
 					getPosition: () => ({
-						position: { lineNumber: renderedPausedLine, column: 1 },
+						position:
+							this.renderedPausedLine === null
+								? null
+								: { lineNumber: this.renderedPausedLine, column: 1 },
 						preference: [this.Monaco.editor.ContentWidgetPositionPreference.EXACT]
 					})
 				};
@@ -143,6 +148,7 @@ export class MonacoDebugView {
 		if (this.pausedLineWidget) this.editor.removeContentWidget(this.pausedLineWidget);
 		this.pausedLineWidget = null;
 		this.pausedLineWidgetNode = null;
+		this.renderedPausedLine = null;
 		this.mouseHandler?.dispose();
 		this.mouseHandler = null;
 	}
