@@ -36,6 +36,7 @@
 	} from '$lib/playground/options';
 	import type monaco from 'monaco-editor';
 	import { executeTerminalRun } from './execute';
+	import { parseArgs } from './parseArgs';
 	import { createWorkspaceStorage, type WorkspaceSaveState } from './workspaceStorage';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
 	import {
@@ -965,9 +966,13 @@
 		}
 	}
 
-	function parseArgs(value: string) {
-		return value.trim() ? value.trim().split(/\s+/) : [];
-	}
+	const parsedArgs = $derived.by(() => {
+		try {
+			return { args: parseArgs(argsInput), error: null };
+		} catch (error) {
+			return { args: null, error: error instanceof Error ? error.message : String(error) };
+		}
+	});
 
 	function encodeBase64Url(value: string) {
 		const bytes = new TextEncoder().encode(value);
@@ -1424,6 +1429,8 @@
 		if (enableDebug && !sharedBufferAvailable) return;
 		if (enableDebug && !debugTargetAvailable) return;
 		if (runningMode) return;
+		const args = parsedArgs.args;
+		if (!args) return;
 		let executionDebugMode: NonNullable<SandboxExecutionOptions['debugMode']> = enableDebug
 			? selectedDebugMode
 			: 'none';
@@ -1437,7 +1444,6 @@
 		}
 		compilerDiagnostics = [];
 		const codeToRun = activeFile.content;
-		const args = parseArgs(argsInput);
 		if (browser) {
 			saveWorkspace();
 			try {
@@ -2175,9 +2181,19 @@
 				{#if argsHelpLanguages.has(language)}
 					<label class="args-chip">
 						<span class="material-symbols-outlined">list_alt</span>
-						<input bind:value={argsInput} placeholder="3 4 5" spellcheck={false} />
+						<input
+							bind:value={argsInput}
+							placeholder={'--name "Hong Gil" ""'}
+							aria-label="Program arguments"
+							aria-invalid={!!parsedArgs.error}
+							title="Separate arguments with spaces. Single or double quotes group an argument, including empty strings. Backslash escapes the next character outside single quotes."
+							spellcheck={false}
+						/>
 						<span>{argsLabel}</span>
 					</label>
+					{#if parsedArgs.error}
+						<span role="alert">{parsedArgs.error}</span>
+					{/if}
 				{/if}
 				{#if language === 'CPP'}
 					<label class="select-chip">
