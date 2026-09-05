@@ -171,9 +171,11 @@ describe('workspace storage browser integration', () => {
 				releaseModule();
 			}
 			await page.locator('button[title="prior.cc"]').waitFor();
-			expect(
-				await page.evaluate(() => (window as any).__wasmIdleDebug.getEditorValue())
-			).toBe('int saved_before_reload = 73;');
+			await page.waitForFunction(
+				() =>
+					(window as any).__wasmIdleDebug.getEditorValue() ===
+					'int saved_before_reload = 73;'
+			);
 		});
 	}, 300_000);
 });
