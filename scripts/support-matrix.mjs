@@ -776,11 +776,11 @@ export const blockedCandidateRows = [
 		language: 'Crystal',
 		candidateIds: ['CRYSTAL'],
 		currentEvidence:
-			'No browser Crystal compiler/runtime assets are packaged in this repository',
+			'[Pinned Crystal 1.21.0 producer](https://github.com/seo-rii/wasm-llvm/pull/3) emits a real WASI object; the consumer probe links that target with verified WASI libc and exercises standard input and EOF in the production WASM Worker',
 		blocker:
-			'Crystal cannot be treated as syntax-only or as a wasm-idle-authored translator/subset',
+			'Cross-compiling the compiler fails at Crystal::System::Process.prepare_args in the upstream WASI process implementation; no browser-hosted Crystal compiler bundle is available',
 		requiredFollowUp:
-			'Find or build a browser-hosted real Crystal compiler/runtime path with stdin/stdout coverage before registering the language'
+			'[Implement the compiler host and consumer source-execution contract](docs/language-ports/crystal.md) before registering CRYSTAL; a native object or linked target does not establish browser compilation'
 	},
 	{
 		language: 'Swift',
