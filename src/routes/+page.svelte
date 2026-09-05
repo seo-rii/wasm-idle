@@ -59,10 +59,13 @@
 		type PlaygroundLanguage
 	} from './language-registry';
 
-	type WorkspaceFile = {
-		path: string;
-		content: string;
-	};
+	import {
+		isBinaryWorkspaceFile,
+		workspaceFileBlob,
+		workspaceFileBytes,
+		workspaceFileFromBytes,
+		type WorkspaceFile
+	} from './workspaceCodec';
 	type WorkspaceArchiveRequest =
 		| { type: 'create'; files: WorkspaceFile[] }
 		| { type: 'extract'; archive: ArrayBuffer };
@@ -483,7 +486,7 @@
 	};
 
 	function cloneFiles(value: WorkspaceFile[]) {
-		return value.map((file) => ({ path: file.path, content: file.content }));
+		return value.map((file) => ({ ...file }));
 	}
 
 	function cloneWorkspace(value: LanguageWorkspace): LanguageWorkspace {
@@ -773,8 +776,10 @@
 		const fallback = createDefaultWorkspace(nextLanguage);
 		const nextFiles = sanitizeFiles(value?.files);
 		const files = (nextFiles.length ? nextFiles : fallback.files).map((file) => ({
-			path: file.path,
-			content: migrateWorkspaceFileContent(file.content, nextLanguage)
+			...file,
+			content: isBinaryWorkspaceFile(file)
+				? file.content
+				: migrateWorkspaceFileContent(file.content, nextLanguage)
 		}));
 		const requestedActivePath =
 			typeof value?.activePath === 'string' ? normalizePath(value.activePath) : '';
@@ -859,7 +864,13 @@
 			const safePath = normalizePath(file.path);
 			if (!safePath || seen.includes(safePath)) continue;
 			seen.push(safePath);
-			nextFiles.push({ path: safePath, content: file.content });
+			nextFiles.push({
+				path: safePath,
+				content: file.content,
+				...(file.encoding === 'utf-8' || file.encoding === 'data-url'
+					? { encoding: file.encoding }
+					: {})
+			});
 		}
 		return nextFiles;
 	}
@@ -881,9 +892,14 @@
 		if (compact) sidebarOpen = false;
 	}
 
-	function addWorkspaceFile(filePath: string, content = '', select = true) {
+	function addWorkspaceFile(
+		filePath: string,
+		content = '',
+		select = true,
+		encoding?: WorkspaceFile['encoding']
+	) {
 		const nextPath = uniquePath(filePath);
-		files = [...files, { path: nextPath, content }];
+		files = [...files, { path: nextPath, content, encoding }];
 		if (select) selectFile(nextPath);
 		saveStatus = `${basename(nextPath)} added`;
 		return nextPath;
@@ -917,7 +933,7 @@
 	function duplicateActiveFile() {
 		const file = activeFile;
 		if (!file) return;
-		addWorkspaceFile(file.path, file.content);
+		addWorkspaceFile(file.path, file.content, true, file.encoding);
 	}
 
 	function deleteActiveFile() {
@@ -978,7 +994,7 @@
 			activePath,
 			argsInput,
 			cppVersion,
-			files: files.map((file) => ({ path: file.path, content: file.content })),
+			files: files.map((file) => ({ ...file })),
 			goTarget,
 			language,
 			log,
@@ -988,7 +1004,7 @@
 			openTabs: openTabs.filter((tab) => files.some((file) => file.path === tab)),
 			rustTargetTriple,
 			sidebarOpen,
-			version: 5,
+			version: 6,
 			workspaces: workspaceMapForSnapshot()
 		};
 	}
@@ -1080,10 +1096,7 @@
 	function downloadActiveFile() {
 		const file = activeFile;
 		if (!file) return;
-		downloadBlob(
-			new Blob([file.content], { type: 'text/plain;charset=utf-8' }),
-			basename(file.path)
-		);
+		downloadBlob(workspaceFileBlob(file), basename(file.path));
 		saveStatus = `${basename(file.path)} downloaded`;
 	}
 
@@ -1111,7 +1124,7 @@
 	async function downloadZip() {
 		const response = await runWorkspaceArchive({
 			type: 'create',
-			files: files.map((file) => ({ path: file.path, content: file.content }))
+			files: files.map((file) => ({ ...file }))
 		});
 		if (response.type !== 'created') throw new Error('ZIP worker returned an invalid response');
 		downloadBlob(
@@ -1132,7 +1145,14 @@
 		}
 		const imported: string[] = [];
 		for (const importedFile of response.files) {
-			imported.push(addWorkspaceFile(importedFile.path, importedFile.content, false));
+			imported.push(
+				addWorkspaceFile(
+					importedFile.path,
+					importedFile.content,
+					false,
+					importedFile.encoding
+				)
+			);
 		}
 		return imported;
 	}
@@ -1142,28 +1162,14 @@
 		for (const file of fileList) {
 			if (file.name.toLowerCase().endsWith('.zip')) {
 				imported.push(...(await importZip(file)));
-			} else if (file.name.toLowerCase().endsWith('.wasm')) {
-				const bytes = new Uint8Array(await file.arrayBuffer());
-				let binary = '';
-				for (let index = 0; index < bytes.length; index += 0x8000) {
-					binary += String.fromCharCode(...bytes.slice(index, index + 0x8000));
-				}
-				imported.push(
-					addWorkspaceFile(
-						(file as File & { webkitRelativePath?: string }).webkitRelativePath ||
-							file.name,
-						`data:application/wasm;base64,${btoa(binary)}`,
-						false
-					)
-				);
 			} else {
+				const decoded = workspaceFileFromBytes(
+					(file as File & { webkitRelativePath?: string }).webkitRelativePath ||
+						file.name,
+					new Uint8Array(await file.arrayBuffer())
+				);
 				imported.push(
-					addWorkspaceFile(
-						(file as File & { webkitRelativePath?: string }).webkitRelativePath ||
-							file.name,
-						await file.text(),
-						false
-					)
+					addWorkspaceFile(decoded.path, decoded.content, false, decoded.encoding)
 				);
 			}
 		}
@@ -1484,7 +1490,12 @@
 					activePath,
 					workspaceFiles: files.map((file) => ({
 						path: file.path,
-						content: file.path === activePath ? codeToRun : file.content
+						content:
+							file.path === activePath
+								? codeToRun
+								: isBinaryWorkspaceFile(file)
+									? workspaceFileBytes(file)
+									: file.content
 					})),
 					pauseOnEntry: enableDebug,
 					signal: abortController.signal,

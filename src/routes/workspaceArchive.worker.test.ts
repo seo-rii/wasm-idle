@@ -32,7 +32,9 @@ describe('workspace archive worker', () => {
 			{ path: 'README.md', content: '# wasm-idle\n' }
 		];
 
-		expect(extractWorkspaceArchive(createWorkspaceArchive(files))).toEqual(files);
+		expect(extractWorkspaceArchive(createWorkspaceArchive(files))).toEqual(
+			files.map((file) => ({ ...file, encoding: 'utf-8' }))
+		);
 	});
 
 	it('extracts stored files and ignores directory entries', () => {
@@ -45,14 +47,14 @@ describe('workspace archive worker', () => {
 		);
 
 		expect(extractWorkspaceArchive(archive)).toEqual([
-			{ path: 'src/main.txt', content: 'stored' }
+			{ path: 'src/main.txt', content: 'stored', encoding: 'utf-8' }
 		]);
 	});
 
 	it('preserves duplicate ZIP entries in archive order', () => {
 		expect(extractWorkspaceArchive(duplicateEntryArchive())).toEqual([
-			{ path: 'duplicate.txt', content: 'first' },
-			{ path: 'duplicate.txt', content: 'second' }
+			{ path: 'duplicate.txt', content: 'first', encoding: 'utf-8' },
+			{ path: 'duplicate.txt', content: 'second', encoding: 'utf-8' }
 		]);
 	});
 

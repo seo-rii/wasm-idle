@@ -1,13 +1,12 @@
-import { strFromU8, strToU8, Unzip, UnzipInflate, zipSync } from 'fflate';
+import { Unzip, UnzipInflate, zipSync } from 'fflate';
 
 const MAX_FILES = 1000;
 const MAX_FILE_BYTES = 16 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 
-export interface WorkspaceArchiveFile {
-	path: string;
-	content: string;
-}
+import { workspaceFileBytes, workspaceFileFromBytes, type WorkspaceFile } from './workspaceCodec';
+
+export type WorkspaceArchiveFile = WorkspaceFile;
 
 type WorkspaceArchiveRequest =
 	| { type: 'create'; files: WorkspaceArchiveFile[] }
@@ -37,7 +36,7 @@ export function createWorkspaceArchive(files: WorkspaceArchiveFile[]) {
 	const entries: Record<string, Uint8Array> = {};
 	for (const file of files) {
 		const path = normalizeArchivePath(file.path);
-		const contents = strToU8(file.content);
+		const contents = workspaceFileBytes(file);
 		if (contents.byteLength > MAX_FILE_BYTES) {
 			throw new Error(`ZIP entry exceeds the ${MAX_FILE_BYTES} byte limit: ${path}`);
 		}
@@ -89,7 +88,7 @@ export function extractWorkspaceArchive(source: Uint8Array) {
 				contents.set(chunk, offset);
 				offset += chunk.byteLength;
 			}
-			files.push({ path, content: strFromU8(contents) });
+			files.push(workspaceFileFromBytes(path, contents));
 		};
 		file.start();
 	});
