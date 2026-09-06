@@ -312,6 +312,12 @@ export const playgroundLanguageDescriptors: Readonly<
 		supportsArgs: true,
 		diagnosticMarkers: true
 	},
+	LFORTRAN: {
+		label: 'LFortran (experimental)',
+		editorLanguage: 'fortran',
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	FORTRAN: {
 		label: 'Fortran',
 		editorLanguage: 'fortran',

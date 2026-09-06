@@ -142,7 +142,9 @@
 		"check:watch": "pnpm run build:publish-deps && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
-		"page": "pnpm run page:build && node gh-pages.js"
+		"page": "pnpm run page:build && node gh-pages.js",
+		"sync:wasm-lfortran": "node scripts/sync-runtime.mjs wasm-lfortran",
+		"test:browser:lfortran": "WASM_IDLE_RUN_REAL_BROWSER_LFORTRAN=1 pnpm exec vitest run src/lib/playground/lfortran.playwright.test.ts"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

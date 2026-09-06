@@ -666,6 +666,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'LFortran',
+		ids: ['LFORTRAN'],
+		runtime: 'LFortran LLVM evaluator (experimental)',
+		stdin: 'Yes',
+		editorSupport: 'compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/lfortran.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_LFORTRAN',
+			marker: "selectOption('LFORTRAN')"
+		}
+	},
+	{
 		language: 'Fortran',
 		ids: ['FORTRAN'],
 		runtime: 'f2c + @wasm-idle/llvm-core',
@@ -1346,6 +1359,14 @@ const runtimeDetailsByLanguage = new Map([
 			customization:
 				`${code('runtimeAssets.haskell.moduleUrl')}/${code('rootfsUrl')}/${code('bsdtarUrl')}; ` +
 				`${code('mainSoPath')}, ${code('searchDirs')}, ${code('activePath')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'LFortran',
+		{
+			packageBase: `receipt-pinned ${code('wasm-llvm/producer/lfortran-browser')} artifacts in ${code('static/wasm-lfortran')}`,
+			execution: `real LFortran 0.65.0-97-gab867a23 LLVM evaluator compiles and executes Emscripten side modules in a fresh Worker; shared-ring stdin supports delayed READ and EOF; experimental Fortran feature coverage`,
+			customization: `${code('runtimeAssets.lfortran.baseUrl')} relocates the reviewed bundle; ${code('stdin')}, ${code('activePath')}, workspace data/include files, cancellation and execution limits; no program arguments or multi-file module build orchestration`
 		}
 	],
 	[
