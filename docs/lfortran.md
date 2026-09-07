@@ -44,6 +44,17 @@ directly. Generated side modules are loaded from that invocation's memory filesy
 default location is `<rootUrl>/wasm-lfortran/`. There is no automatic download,
 release upload, or deployment step in this integration.
 
+`pnpm page:build` requires this verified local bundle as an explicit release input.
+On a fresh checkout, run the sync command above with the reviewed producer artifacts
+first. The page build checks every compiler, receipt, and Worker against the committed
+consumer profile before building, then checks the copied `build/` output after
+compression. Missing files, different hashes, or a stale gzip delivery index fail
+the build. The publish script repeats the output check before publishing. These
+checks never rewrite the committed profile or fetch an unpinned replacement.
+
+Run `pnpm verify:page-lfortran` to check local input or
+`pnpm verify:page-lfortran -- build` to check prepared page output.
+
 ## Supported execution contract
 
 - Real list-directed `READ`, delayed terminal input, and EOF use the existing
