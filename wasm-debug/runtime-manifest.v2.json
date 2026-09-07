@@ -46,27 +46,27 @@
       "wasm": "debug/lldb-web-dap.wasm",
       "worker": "debug/lldb-web-dap.pthread.mjs",
       "jsSha256": "c6ecfaf08d60af11b003df60435c77a5ed24fc46887d2aa43e19436d5a5eb59d",
-      "wasmSha256": "17346bd942d9e630437ed6519e5aa1cd1c88f2a9c5e46c96f4dcbb74d6a680d0",
+      "wasmSha256": "e7146642a865ffb41cca6635c72f97bfe923be1ce7f0d930e2e59713a3ee5222",
       "workerSha256": "d40975277aa0c98c6570f9a35d52ab9be475ded4e7a4796fc6d0f8f314c9652d",
       "llvmVersion": "22.1.8",
       "llvmRevision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
-      "patchesSha256": "521cca5abe2a15c8b38d913f2bf5b9e2df52fd8d3bd76383d1533b573351ad11",
-      "sourcesLockSha256": "fededead779b3720c9dfdc01b09634442f1eb0334c69ad70f611a9de38f5de0c"
+      "patchesSha256": "5812710a11b6d9a83b30981753123f9de0b0931a1c13eda07d20f4a4556c081f",
+      "sourcesLockSha256": "ef0352666fd3ec65164a67af8c380241a4d12dd432dfd4a73abd8080ddce855d"
     },
     "targetRuntime": {
       "name": "wamr",
       "js": "debug/wamr-debug.js",
       "wasm": "debug/wamr-debug.wasm",
       "worker": "debug/wamr-debug.worker.mjs",
-      "jsSha256": "27ae46467c33d7794878f956aadf70f7fb1ac92f3625466d5d066a772ccdf081",
-      "wasmSha256": "652518a5c03d4b855ab5e661a313cb698f66ae462971d18e1a4ddac78160694f",
-      "workerSha256": "22998261a62469360bb373812566c364a9b97af01622f8479794c1624464beb3",
+      "jsSha256": "ee0d1d3cbb1379a7f4389a445c5b3846461ebaa8e0b320fb1e3c1062eb9a838a",
+      "wasmSha256": "35e53c222ec5cde0935d48bdd5fd1897de91622619f78e9b939170e67792b95b",
+      "workerSha256": "6cdfdba3fba1d9f0226f2ac748d9be1ee567049a086727072b82a9451f6eb609",
       "revision": "25bd7eb63e828e4bd242cc9b38d260b4b31c6605",
       "provenance": {
         "sourcesLockSha256": "18f924fa418c7dccb0c557c1310ae877f5e5ab41ce34256230565879fe1f2727",
-        "producerManifestSha256": "5d346dec43c73d6598fcd5fe0363f739d540b62695b7c11e9e8936faec7f88a3",
-        "patchesSha256": "d6a9ff47ebf17340c6146bc648b37c3d18b3f9e8b7b5a65bac6e54c674bbf33a",
-        "overlaysSha256": "28bdcc1fc1901cfe6a249b1c541e31c02e07927b879bacbf81de11b91df5f4ca"
+        "producerManifestSha256": "c78fe663f4406e74f63305834565dc8d9cd6f63415993a39d77beebbc5e0dc19",
+        "patchesSha256": "6c6bcf6037fc33378ea290a6a263fb60eaaf5a82a12bd6687c6b78fb0cf25289",
+        "overlaysSha256": "356dee9776146b0e453b382c98610ce86ce530c5b9ae66a64e14f66f24550f2b"
       }
     },
     "capabilities": {
