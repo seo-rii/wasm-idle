@@ -124,7 +124,7 @@
 		"support:matrix": "node scripts/support-matrix.mjs write",
 		"check:support-matrix": "node scripts/support-matrix.mjs check",
 		"sync:page-runtimes": "pnpm run sync:pyodide && pnpm run sync:webr && pnpm run sync:wasm-of-js-of-ocaml && pnpm run sync:wasm-typescript && pnpm run sync:wasm-octave && pnpm run sync:wasm-prolog && pnpm run sync:wasm-gleam && pnpm run sync:wasm-perl && pnpm run sync:wasm-tcl && pnpm run sync:wasm-awk && pnpm run sync:wasm-pascal && pnpm run sync:wasm-forth && pnpm run sync:wasm-j && pnpm run sync:wasm-bqn && pnpm run sync:wasm-janet && pnpm run sync:wasm-julia && pnpm run sync:wasm-nim && pnpm run sync:wasm-ruby && pnpm run sync:wasm-bash && pnpm run sync:wasm-clojurescript",
-		"page:build": "pnpm run build:page-runtimes && pnpm run sync:page-runtimes && pnpm run build:static-runtime-modules && pnpm run prepare:wasm-debug-release && pnpm run layer:static-runtimes && pnpm run compress:static-runtimes && pnpm run build && pnpm run compress:build-runtimes",
+		"page:build": "pnpm run verify:page-c3 && pnpm run build:page-runtimes && pnpm run sync:page-runtimes && pnpm run build:static-runtime-modules && pnpm run prepare:wasm-debug-release && pnpm run layer:static-runtimes && pnpm run compress:static-runtimes && pnpm run build && pnpm run compress:build-runtimes && pnpm run verify:page-c3 -- build",
 		"package:root": "svelte-kit sync && node scripts/clean-package-output.mjs && svelte-package --tsconfig ./tsconfig.package.json && publint",
 		"package": "pnpm run build:publish-deps && pnpm run package:root",
 		"prepack": "pnpm run package",
@@ -145,7 +145,9 @@
 		"page": "pnpm run page:build && node gh-pages.js",
 		"sync:wasm-c3": "node scripts/sync-wasm-c3.mjs",
 		"test:browser:c3": "WASM_IDLE_RUN_REAL_BROWSER_C3=1 pnpm exec vitest run src/lib/playground/c3.playwright.test.ts",
-		"test:unit:c3": "node --test scripts/c3-memory.test.mjs scripts/c3-stdin.test.mjs scripts/sync-wasm-c3.test.mjs"
+		"test:unit:c3": "node --test scripts/c3-memory.test.mjs scripts/c3-stdin.test.mjs scripts/sync-wasm-c3.test.mjs",
+		"verify:page-c3": "node scripts/verify-page-c3-compiler.mjs",
+		"test:page-compiler-assets": "node --test scripts/verify-pinned-runtime-assets.test.mjs scripts/verify-page-*-compiler.test.mjs"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

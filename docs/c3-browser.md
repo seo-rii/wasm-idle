@@ -24,6 +24,17 @@ The host verifies the compiler, receipt and Worker before execution and transfer
 
 The Chromium suite exercises the exported playground API and the actual language selector, default editor sample, and delayed terminal input. It compiles different sources, checks UTF-8/EOF, source diagnostics, output limits, compile/run timeouts, stdin cancellation and recovery, compiler allocation failure, and guest `memory.grow` at the boundary. Node tests also cover malformed/unsupported Wasm memory declarations and the stdin EOF notification race.
 
+`pnpm page:build` requires this verified local bundle as an explicit release input.
+On a fresh checkout, run the sync command above with the reviewed producer artifacts
+first. The page build checks every compiler, receipt, and Worker against the committed
+consumer profile before building, then checks the copied `build/` output after
+compression. Missing files, different hashes, or a stale gzip delivery index fail
+the build. The publish script repeats the output check before publishing. These
+checks never rewrite the committed profile or fetch an unpinned replacement.
+
+Run `pnpm verify:page-c3` to check local input or
+`pnpm verify:page-c3 -- build` to check prepared page output.
+
 ## Memory and deadlines
 
 C3's default linear-memory budget is **1 GiB**, declared by the C3 adapter and applied by both direct calls and the Core bound sandbox. Other languages retain their existing defaults. A caller's explicit `limits.maxWasmMemoryBytes` always takes precedence; a lower limit is never silently increased. The editor displays this C3 memory requirement.
