@@ -25,6 +25,7 @@ const MAX_DATA_BREAKPOINTS = 256;
 const MAX_WATCH_EXPRESSION_CODE_UNITS = 4096;
 const MAX_WATCH_EXPRESSIONS = 64;
 const MAX_WATCH_VARIABLE_PATH_SEGMENTS = 64;
+const VARIABLE_PAGE_SIZE = 50;
 
 type WatchVariablePathSegment = { name: string } | { index: number };
 type WatchVariablePathParseResult =
@@ -130,6 +131,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const callStackStore = writable<DebugFrame[]>([]);
 	const scopesStore = writable<DebugScope[]>([]);
 	const variablesByReferenceStore = writable<ReadonlyMap<number, DebugVariable[]>>(new Map());
+	const loadingVariableReferencesStore = writable<ReadonlySet<number>>(new Set());
 	const capabilitiesStore = writable<DebugSessionCapabilities>({ ...disabledCapabilities });
 	const threadIdStore = writable<number | null>(null);
 	const frameIdStore = writable<number | null>(null);
@@ -180,6 +182,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	const callStackState = fromStore(callStackStore);
 	const scopesState = fromStore(scopesStore);
 	const variablesByReferenceState = fromStore(variablesByReferenceStore);
+	const loadingVariableReferencesState = fromStore(loadingVariableReferencesStore);
 	const capabilitiesState = fromStore(capabilitiesStore);
 	const threadIdState = fromStore(threadIdStore);
 	const frameIdState = fromStore(frameIdStore);
@@ -202,6 +205,62 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	let frameRequestVersion = 0;
 	let commandInFlight = false;
 	let commandRequestVersion = 0;
+	const variableRequests = new Map<
+		string,
+		{ variablesReference: number; promise: Promise<DebugVariable[]> }
+	>();
+
+	function invalidateVariableRequests() {
+		frameRequestVersion += 1;
+		watchRequestVersion += 1;
+		variableRequests.clear();
+		loadingVariableReferencesStore.set(new Set());
+	}
+
+	function requestVariableChildren(
+		variablesReference: number,
+		...paging: [start?: number, count?: number]
+	): Promise<DebugVariable[]> {
+		const terminal = get(terminalStore);
+		if (
+			!get(pausedStore) ||
+			!Number.isInteger(variablesReference) ||
+			variablesReference <= 0 ||
+			!terminal?.debugVariables
+		)
+			return Promise.resolve([]);
+		const key = `${variablesReference}:${paging[0] ?? 0}:${paging[1] ?? 0}`;
+		const pending = variableRequests.get(key);
+		if (pending) return pending.promise;
+		const version = frameRequestVersion;
+		const request = { variablesReference, promise: Promise.resolve<DebugVariable[]>([]) };
+		variableRequests.set(key, request);
+		loadingVariableReferencesStore.update((current) =>
+			new Set(current).add(variablesReference)
+		);
+		request.promise = (async () => {
+			try {
+				const variables = await terminal.debugVariables!(variablesReference, ...paging);
+				return version === frameRequestVersion && get(pausedStore) ? variables : [];
+			} catch (error) {
+				if (version !== frameRequestVersion || !get(pausedStore)) return [];
+				throw error;
+			} finally {
+				if (variableRequests.get(key) === request) {
+					variableRequests.delete(key);
+					loadingVariableReferencesStore.set(
+						new Set(
+							Array.from(
+								variableRequests.values(),
+								(entry) => entry.variablesReference
+							)
+						)
+					);
+				}
+			}
+		})();
+		return request.promise;
+	}
 
 	function beginCommandRequest() {
 		commandInFlight = true;
@@ -290,7 +349,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 							if (scope.variablesReference <= 0) continue;
 							let scopeVariables = resolvedReferences.get(scope.variablesReference);
 							if (!scopeVariables) {
-								scopeVariables = await terminal.debugVariables(
+								scopeVariables = await requestVariableChildren(
 									scope.variablesReference
 								);
 								if (version !== watchRequestVersion || !get(pausedStore)) return;
@@ -317,7 +376,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 							break;
 						}
 						if ('index' in segment) {
-							const children = await terminal.debugVariables(
+							const children = await requestVariableChildren(
 								variablesReference,
 								segment.index,
 								1
@@ -327,15 +386,22 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 							continue;
 						}
 						let children = resolvedReferences.get(variablesReference);
-						if (!children) {
-							children = await terminal.debugVariables(variablesReference);
+						const indexedChildren = (variable.indexedVariables ?? 0) > 0;
+						if (
+							!children ||
+							(indexedChildren &&
+								!children.some((child) => child.name === segment.name))
+						) {
+							children = await requestVariableChildren(variablesReference);
 							if (version !== watchRequestVersion || !get(pausedStore)) return;
 							resolvedReferences.set(variablesReference, children);
-							variablesByReferenceStore.update((current) => {
-								const next = new Map(current);
-								next.set(variablesReference, [...children!]);
-								return next;
-							});
+							// A watch lookup must not turn a partially expanded array into an unbounded UI list.
+							if (!indexedChildren)
+								variablesByReferenceStore.update((current) => {
+									const next = new Map(current);
+									next.set(variablesReference, [...children!]);
+									return next;
+								});
 						}
 						variable = children.find((candidate) => candidate.name === segment.name);
 					}
@@ -396,7 +462,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 
 	function clearPauseState() {
 		releaseCommandRequest();
-		frameRequestVersion += 1;
+		invalidateVariableRequests();
 		runToCursorLineStore.set(null);
 		pausedLineStore.set(null);
 		localsStore.set([]);
@@ -444,7 +510,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		}
 		if (event.type === 'pause') {
 			releaseCommandRequest();
-			frameRequestVersion += 1;
+			invalidateVariableRequests();
 			activeStore.set(true);
 			capabilitiesStore.set({ ...(event.capabilities ?? disabledCapabilities) });
 			const restoreBreakpoints = get(runToCursorLineStore) !== null;
@@ -494,6 +560,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			return;
 		}
 		if (event.type === 'resume') {
+			invalidateVariableRequests();
 			capabilitiesStore.set({ ...disabledCapabilities });
 			pausedStore.set(false);
 			pausedLineStore.set(null);
@@ -511,6 +578,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	}
 
 	function setTerminal(terminal?: DebugTerminalControl) {
+		if (get(terminalStore) !== terminal) invalidateVariableRequests();
 		terminalStore.set(terminal);
 		refreshWatchValues();
 		syncBreakpoints();
@@ -664,17 +732,15 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		start?: number,
 		count?: number
 	) {
-		if (!Number.isInteger(variablesReference) || variablesReference <= 0) return [];
-		const terminal = get(terminalStore);
-		if (!terminal?.debugVariables) return [];
+		if (
+			!get(pausedStore) ||
+			!Number.isInteger(variablesReference) ||
+			variablesReference <= 0 ||
+			!get(terminalStore)?.debugVariables
+		)
+			return [];
 		const version = frameRequestVersion;
-		let variables: DebugVariable[];
-		try {
-			variables = await terminal.debugVariables(variablesReference, start, count);
-		} catch (error) {
-			if (version !== frameRequestVersion || !get(pausedStore)) return [];
-			throw error;
-		}
+		const variables = await requestVariableChildren(variablesReference, start, count);
 		if (version !== frameRequestVersion || !get(pausedStore)) return [];
 		variablesByReferenceStore.update((current) => {
 			const next = new Map(current);
@@ -700,15 +766,33 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		return variables;
 	}
 
+	function loadMoreVariableChildren(variable: DebugVariable) {
+		const reference = variable.variablesReference ?? 0;
+		const children = get(variablesByReferenceStore).get(reference);
+		if ((variable.indexedVariables ?? 0) > 0) {
+			const total = (variable.namedVariables ?? 0) + variable.indexedVariables!;
+			const start = children?.length ?? 0;
+			if (start >= total) return Promise.resolve([]);
+			return loadVariableChildren(
+				reference,
+				start,
+				Math.min(VARIABLE_PAGE_SIZE, total - start)
+			);
+		}
+		return children === undefined ? loadVariableChildren(reference) : Promise.resolve([]);
+	}
+
 	async function selectFrame(frameId: number) {
 		const frame = get(callStackStore).find((entry) => entry.id === frameId);
 		const terminal = get(terminalStore);
 		if (!get(pausedStore) || !frame || !terminal?.debugScopes) return false;
-		const version = ++frameRequestVersion;
+		invalidateVariableRequests();
+		const version = frameRequestVersion;
 		let scopes: DebugScope[];
 		try {
 			scopes = await terminal.debugScopes(frameId);
 		} catch {
+			if (version === frameRequestVersion && get(pausedStore)) refreshWatchValues();
 			return false;
 		}
 		if (
@@ -718,6 +802,8 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		) {
 			return false;
 		}
+		// Reads started while the scope request was pending still belong to the old frame.
+		invalidateVariableRequests();
 		const selectedSourcePath = frame.sourcePath || get(sourcePathStore);
 		const sourceRevisionStale =
 			!!selectedSourcePath && get(staleSourcePathsStore).has(selectedSourcePath);
@@ -856,6 +942,9 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		get variablesByReference() {
 			return variablesByReferenceState.current;
 		},
+		get loadingVariableReferences() {
+			return loadingVariableReferencesState.current;
+		},
 		get capabilities() {
 			return capabilitiesState.current;
 		},
@@ -938,6 +1027,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		removeWatchExpression,
 		clearWatches,
 		loadVariableChildren,
+		loadMoreVariableChildren,
 		selectFrame,
 		readMemory,
 		writeMemory,

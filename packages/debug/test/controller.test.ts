@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { DebugVariable } from '@wasm-idle/core';
 
-import { createDebugSessionController } from '../src/controller.js';
+import { createDebugSessionController, type DebugTerminalControl } from '../src/controller.js';
 
 function deferred<T>() {
 	let resolve!: (value: T) => void;
@@ -8,6 +9,26 @@ function deferred<T>() {
 		resolve = resolvePromise;
 	});
 	return { promise, resolve };
+}
+
+function createPausedVariableController(
+	terminal: Partial<DebugTerminalControl>,
+	locals: DebugVariable[] = []
+) {
+	const controller = createDebugSessionController({ terminal: terminal as DebugTerminalControl });
+	controller.handleEvent({
+		type: 'pause',
+		line: 7,
+		reason: 'breakpoint',
+		frameId: 11,
+		locals,
+		callStack: [
+			{ id: 11, functionName: 'callee', line: 7 },
+			{ id: 12, functionName: 'main', line: 9 }
+		],
+		scopes: [{ name: 'Locals', variablesReference: 10, expensive: false, variables: locals }]
+	});
+	return controller;
 }
 
 describe('createDebugSessionController', () => {
@@ -681,6 +702,315 @@ describe('createDebugSessionController', () => {
 		expect(debugVariables).toHaveBeenNthCalledWith(2, 50, 2, 2);
 		expect(controller.variablesByReference.get(50)).toEqual([...firstPage, ...secondPage]);
 		expect(controller.locals).toEqual([...firstPage, ...secondPage]);
+	});
+
+	it('loads a thousand-element array in 50-child pages and coalesces rapid expansion clicks', async () => {
+		const elements = Array.from({ length: 1_000 }, (_, index) => ({
+			name: `[${index}]`,
+			value: String(index),
+			variablesReference: 0
+		}));
+		const firstPage = deferred<DebugVariable[]>();
+		const debugVariables = vi.fn(async (_reference: number, start?: number, count?: number) =>
+			start === 0 ? firstPage.promise : elements.slice(start, start! + count!)
+		);
+		const variable = {
+			name: 'items',
+			value: '[...]',
+			variablesReference: 50,
+			indexedVariables: 1_000
+		};
+		const controller = createPausedVariableController({ debugVariables }, [variable]);
+
+		const firstClick = controller.loadMoreVariableChildren(variable);
+		const repeatedClick = controller.loadMoreVariableChildren(variable);
+		expect(debugVariables).toHaveBeenCalledExactlyOnceWith(50, 0, 50);
+		expect(controller.loadingVariableReferences.has(50)).toBe(true);
+		firstPage.resolve(elements.slice(0, 50));
+		await Promise.all([firstClick, repeatedClick]);
+		expect(controller.loadingVariableReferences.size).toBe(0);
+		expect(controller.variablesByReference.get(50)).toEqual(elements.slice(0, 50));
+
+		await controller.loadMoreVariableChildren(variable);
+		expect(debugVariables).toHaveBeenNthCalledWith(2, 50, 50, 50);
+		expect(controller.variablesByReference.get(50)).toEqual(elements.slice(0, 100));
+		expect(controller.locals).toEqual([variable]);
+	});
+
+	it('preserves mixed named/indexed children and stops after the short final page', async () => {
+		const children = [
+			{ name: 'length', value: '51' },
+			{ name: 'capacity', value: '51' },
+			...Array.from({ length: 51 }, (_, index) => ({
+				name: `[${index}]`,
+				value: String(index)
+			}))
+		];
+		const debugVariables = vi.fn(async (_reference: number, start?: number, count?: number) =>
+			children.slice(start, start! + count!)
+		);
+		const variable = {
+			name: 'items',
+			value: '[...]',
+			variablesReference: 50,
+			namedVariables: 2,
+			indexedVariables: 51
+		};
+		const controller = createPausedVariableController({ debugVariables }, [variable]);
+
+		await controller.loadMoreVariableChildren(variable);
+		await controller.loadMoreVariableChildren(variable);
+		await expect(controller.loadMoreVariableChildren(variable)).resolves.toEqual([]);
+		expect(debugVariables.mock.calls).toEqual([
+			[50, 0, 50],
+			[50, 50, 3]
+		]);
+		expect(controller.variablesByReference.get(50)).toEqual(children);
+	});
+
+	it('keeps named-only children unpaged and leaves scalar variables alone', async () => {
+		const fields = [
+			{ name: 'x', value: '1' },
+			{ name: 'y', value: '2' }
+		];
+		const debugVariables = vi.fn(async () => fields);
+		const variable = {
+			name: 'point',
+			value: '{...}',
+			variablesReference: 50,
+			namedVariables: 2
+		};
+		const controller = createPausedVariableController({ debugVariables }, [variable]);
+
+		await controller.loadMoreVariableChildren(variable);
+		await controller.loadMoreVariableChildren(variable);
+		await controller.loadMoreVariableChildren({
+			name: 'scalar',
+			value: '3',
+			variablesReference: 0
+		});
+		expect(debugVariables).toHaveBeenCalledExactlyOnceWith(50, undefined, undefined);
+		expect(controller.variablesByReference.get(50)).toEqual(fields);
+	});
+
+	it('shares an in-flight scope read between a watch and the variable panel', async () => {
+		const variables = deferred<DebugVariable[]>();
+		const debugVariables = vi.fn(() => variables.promise);
+		const controller = createPausedVariableController({
+			debugVariables,
+			debugEvaluate: async () => '?'
+		});
+		controller.addWatchExpression('answer');
+		await vi.waitFor(() => expect(debugVariables).toHaveBeenCalledOnce());
+		const panel = controller.loadVariableChildren(10);
+		expect(debugVariables).toHaveBeenCalledOnce();
+		variables.resolve([{ name: 'answer', value: '42' }]);
+		await panel;
+		await vi.waitFor(() =>
+			expect(controller.watchValues).toEqual([{ expression: 'answer', value: '42' }])
+		);
+		expect(debugVariables).toHaveBeenCalledOnce();
+		expect(controller.locals).toEqual([{ name: 'answer', value: '42' }]);
+	});
+
+	it('keeps distant indexed watch reads separate from the displayed array prefix', async () => {
+		const elements = Array.from({ length: 1_000 }, (_, index) => ({
+			name: `[${index}]`,
+			value: String(index)
+		}));
+		const debugVariables = vi.fn(async (_reference: number, start?: number, count?: number) =>
+			elements.slice(start, start! + count!)
+		);
+		const variable = {
+			name: 'items',
+			value: '[...]',
+			variablesReference: 50,
+			indexedVariables: 1_000
+		};
+		const controller = createPausedVariableController(
+			{ debugVariables, debugEvaluate: async () => '?' },
+			[variable]
+		);
+		await controller.loadMoreVariableChildren(variable);
+		controller.addWatchExpression('items[999]');
+		await vi.waitFor(() =>
+			expect(controller.watchValues).toEqual([{ expression: 'items[999]', value: '999' }])
+		);
+		expect(debugVariables).toHaveBeenLastCalledWith(50, 999, 1);
+		expect(controller.variablesByReference.get(50)).toEqual(elements.slice(0, 50));
+		await controller.loadMoreVariableChildren(variable);
+		expect(debugVariables).toHaveBeenLastCalledWith(50, 50, 50);
+		expect(controller.variablesByReference.get(50)).toEqual(elements.slice(0, 100));
+	});
+
+	it('resolves a named watch outside a mixed array page without expanding the displayed list', async () => {
+		const children = [
+			...Array.from({ length: 100 }, (_, index) => ({
+				name: `[${index}]`,
+				value: String(index)
+			})),
+			{ name: 'length', value: '100' }
+		];
+		const debugVariables = vi.fn(async (_reference: number, start?: number, count?: number) =>
+			start === undefined ? children : children.slice(start, start + count!)
+		);
+		const variable = {
+			name: 'items',
+			value: '[...]',
+			variablesReference: 50,
+			indexedVariables: 100,
+			namedVariables: 1
+		};
+		const controller = createPausedVariableController(
+			{ debugVariables, debugEvaluate: async () => '?' },
+			[variable]
+		);
+		await controller.loadMoreVariableChildren(variable);
+		controller.addWatchExpression('items.length');
+		await vi.waitFor(() =>
+			expect(controller.watchValues).toEqual([{ expression: 'items.length', value: '100' }])
+		);
+		expect(controller.variablesByReference.get(50)).toEqual(children.slice(0, 50));
+	});
+
+	it('does not share old in-flight reads when a new stop reuses a variable reference', async () => {
+		const oldPage = deferred<DebugVariable[]>();
+		const newPage = deferred<DebugVariable[]>();
+		const debugVariables = vi
+			.fn()
+			.mockReturnValueOnce(oldPage.promise)
+			.mockReturnValueOnce(newPage.promise);
+		const variable = {
+			name: 'items',
+			value: '[...]',
+			variablesReference: 50,
+			indexedVariables: 100
+		};
+		const controller = createPausedVariableController({ debugVariables }, [variable]);
+		const oldLoad = controller.loadMoreVariableChildren(variable);
+		controller.handleEvent({ type: 'resume', command: 'nextLine' });
+		expect(controller.loadingVariableReferences.size).toBe(0);
+		await controller.loadMoreVariableChildren(variable);
+		expect(debugVariables).toHaveBeenCalledOnce();
+		controller.handleEvent({
+			type: 'pause',
+			reason: 'step',
+			line: 8,
+			locals: [variable],
+			callStack: []
+		});
+		const newLoad = controller.loadMoreVariableChildren(variable);
+		expect(debugVariables).toHaveBeenCalledTimes(2);
+		oldPage.resolve([{ name: '[0]', value: 'old' }]);
+		await expect(oldLoad).resolves.toEqual([]);
+		expect(controller.loadingVariableReferences.has(50)).toBe(true);
+		expect(controller.variablesByReference.has(50)).toBe(false);
+		newPage.resolve([{ name: '[0]', value: 'new' }]);
+		await newLoad;
+		expect(controller.variablesByReference.get(50)).toEqual([{ name: '[0]', value: 'new' }]);
+		expect(controller.loadingVariableReferences.size).toBe(0);
+	});
+
+	it('invalidates reads started both before and during a frame switch', async () => {
+		const oldPage = deferred<DebugVariable[]>();
+		const duringSwitch = deferred<DebugVariable[]>();
+		const scopeRead = deferred<[]>();
+		const debugVariables = vi
+			.fn()
+			.mockReturnValueOnce(oldPage.promise)
+			.mockReturnValueOnce(duringSwitch.promise)
+			.mockResolvedValue([{ name: '[0]', value: 'new frame' }]);
+		const variable = {
+			name: 'items',
+			value: '[...]',
+			variablesReference: 50,
+			indexedVariables: 100
+		};
+		const controller = createPausedVariableController(
+			{ debugVariables, debugScopes: () => scopeRead.promise },
+			[variable]
+		);
+		const oldLoad = controller.loadMoreVariableChildren(variable);
+		const selecting = controller.selectFrame(12);
+		const duringLoad = controller.loadMoreVariableChildren(variable);
+		expect(debugVariables).toHaveBeenCalledTimes(2);
+		scopeRead.resolve([]);
+		await expect(selecting).resolves.toBe(true);
+		oldPage.resolve([{ name: '[0]', value: 'old' }]);
+		duringSwitch.resolve([{ name: '[0]', value: 'during' }]);
+		await expect(oldLoad).resolves.toEqual([]);
+		await expect(duringLoad).resolves.toEqual([]);
+		expect(controller.variablesByReference.has(50)).toBe(false);
+		await controller.loadMoreVariableChildren(variable);
+		expect(debugVariables).toHaveBeenNthCalledWith(3, 50, 0, 50);
+		expect(controller.variablesByReference.get(50)).toEqual([
+			{ name: '[0]', value: 'new frame' }
+		]);
+	});
+
+	it('restarts canceled watch evaluation when a frame switch fails', async () => {
+		const oldEvaluation = deferred<string>();
+		const debugEvaluate = vi
+			.fn()
+			.mockReturnValueOnce(oldEvaluation.promise)
+			.mockResolvedValue('?');
+		const controller = createPausedVariableController(
+			{
+				debugEvaluate,
+				debugScopes: async () => {
+					throw new Error('scope failure');
+				}
+			},
+			[{ name: 'answer', value: '42' }]
+		);
+		controller.addWatchExpression('answer');
+		expect(controller.watchValues).toEqual([{ expression: 'answer', value: '...' }]);
+		await expect(controller.selectFrame(12)).resolves.toBe(false);
+		await vi.waitFor(() =>
+			expect(controller.watchValues).toEqual([{ expression: 'answer', value: '42' }])
+		);
+		oldEvaluation.resolve('stale');
+		await oldEvaluation.promise;
+		expect(controller.frameId).toBe(11);
+		expect(controller.watchValues).toEqual([{ expression: 'answer', value: '42' }]);
+	});
+
+	it('does not reuse a pending variable read after the terminal changes', async () => {
+		const oldPage = deferred<DebugVariable[]>();
+		const oldVariables = vi.fn(() => oldPage.promise);
+		const newVariables = vi.fn(async () => [{ name: '[0]', value: 'new terminal' }]);
+		const controller = createPausedVariableController({ debugVariables: oldVariables });
+		const oldLoad = controller.loadVariableChildren(50, 0, 50);
+		controller.setTerminal({ debugVariables: newVariables } as DebugTerminalControl);
+		await controller.loadVariableChildren(50, 0, 50);
+		oldPage.resolve([{ name: '[0]', value: 'old terminal' }]);
+		await expect(oldLoad).resolves.toEqual([]);
+		expect(newVariables).toHaveBeenCalledExactlyOnceWith(50, 0, 50);
+		expect(controller.variablesByReference.get(50)).toEqual([
+			{ name: '[0]', value: 'new terminal' }
+		]);
+	});
+
+	it('releases failed requests so the same page can be retried', async () => {
+		const debugVariables = vi
+			.fn()
+			.mockRejectedValueOnce(new Error('read failed'))
+			.mockResolvedValue([{ name: '[0]', value: '1' }]);
+		const variable = {
+			name: 'items',
+			value: '[...]',
+			variablesReference: 50,
+			indexedVariables: 100
+		};
+		const controller = createPausedVariableController({ debugVariables }, [variable]);
+		await expect(controller.loadMoreVariableChildren(variable)).rejects.toThrow('read failed');
+		expect(controller.loadingVariableReferences.size).toBe(0);
+		expect(controller.variablesByReference.has(50)).toBe(false);
+		await controller.loadMoreVariableChildren(variable);
+		expect(debugVariables.mock.calls).toEqual([
+			[50, 0, 50],
+			[50, 0, 50]
+		]);
 	});
 
 	it('reads LLDB memory through the paused terminal session', async () => {
