@@ -3049,6 +3049,9 @@
 			{#each variables as variable, index (`${variable.name}:${index}`)}
 				{@const reference = variable.variablesReference || 0}
 				{@const children = debug.variablesByReference.get(reference)}
+				{@const childCount =
+					(variable.namedVariables ?? 0) + (variable.indexedVariables ?? 0)}
+				{@const loadingChildren = debug.loadingVariableReferences.has(reference)}
 				<li class="debug-entry debug-entry--local">
 					<div class="debug-entry__body">
 						<code class="debug-key">{variable.name}</code>
@@ -3068,8 +3071,8 @@
 					{#if reference > 0}
 						<button
 							class="debug-expand"
-							onclick={() => debug.loadVariableChildren(reference)}
-							disabled={children !== undefined}
+							onclick={() => debug.loadMoreVariableChildren(variable)}
+							disabled={children !== undefined || loadingChildren}
 							aria-label={`Load children for ${variable.name}`}
 						>
 							<span class="material-symbols-outlined">
@@ -3081,6 +3084,16 @@
 				{#if children?.length}
 					<li class="debug-variable-children">
 						<ul>{@render debugVariableRows(children)}</ul>
+						{#if (variable.indexedVariables ?? 0) > 0 && children.length < childCount}
+							<button
+								class="debug-load-scope"
+								onclick={() => debug.loadMoreVariableChildren(variable)}
+								disabled={loadingChildren}
+								aria-label={`Load more children for ${variable.name}`}
+							>
+								Load more ({children.length} / {childCount})
+							</button>
+						{/if}
 					</li>
 				{/if}
 			{/each}
@@ -3194,6 +3207,9 @@
 										{:else if loadedScopeVariables === undefined && scope.variablesReference > 0}
 											<button
 												class="debug-load-scope"
+												disabled={debug.loadingVariableReferences.has(
+													scope.variablesReference
+												)}
 												onclick={() =>
 													debug.loadVariableChildren(
 														scope.variablesReference

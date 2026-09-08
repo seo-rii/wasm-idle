@@ -33,6 +33,8 @@
 		"probe:rust-browser": "node scripts/probe-rust-browser.mjs",
 		"probe:tinygo-browser": "node scripts/probe-tinygo-browser.mjs",
 		"probe:tinygo-browser:static": "node scripts/probe-tinygo-browser.mjs",
+		"probe:swift-target-consumer": "node scripts/probe-swift-target-consumer.mjs",
+		"test:swift-target-consumer": "node --test scripts/probe-swift-target-consumer.test.mjs",
 		"sync:pyodide": "node scripts/sync-pyodide.mjs",
 		"test:browser:clang-stdin": "WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
 		"test:browser:fortran": "WASM_IDLE_RUN_REAL_BROWSER_FORTRAN=1 pnpm exec vitest run src/lib/playground/stdin.playwright.test.ts",
