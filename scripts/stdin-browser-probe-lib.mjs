@@ -23,38 +23,28 @@ function summarizeConsole(messages) {
 }
 
 /**
- * @param {string[]} pageErrors
- */
-function filterBenignPageErrors(pageErrors) {
-	return pageErrors.filter(
-		(entry) =>
-			!entry.includes('Missing requestHandler or method: getSyntacticDiagnostics') &&
-			!entry.includes('Missing requestHandler or method: provideInlayHints') &&
-			!entry.includes('Missing requestHandler or method: getCodeFixesAtPosition') &&
-			!entry.includes('Missing requestHandler or method: getNavigationTree')
-	);
-}
-
-/**
+ * Output is evidence only after the current execution has completed successfully.
  * @param {string} previousTranscript
  * @param {string} transcript
  * @param {string} expectedOutput
+ * @param {{ id: number; status: string; exitCode: number | null } | null} state
+ * @param {number} previousRunId
  * @returns {'running' | 'success' | 'failure'}
  */
-export function classifyTerminalRun(previousTranscript, transcript, expectedOutput) {
-	if (transcript === previousTranscript) return 'running';
+export function classifyTerminalRun(
+	previousTranscript,
+	transcript,
+	expectedOutput,
+	state,
+	previousRunId = 0
+) {
+	if (!state || state.id <= previousRunId) return 'running';
+	if (['failed', 'cancelled', 'timed-out'].includes(state.status)) return 'failure';
+	if (state.status !== 'completed') return 'running';
 	const delta = transcript.startsWith(previousTranscript)
 		? transcript.slice(previousTranscript.length)
 		: transcript;
-	if (delta.includes(expectedOutput)) return 'success';
-	if (
-		/process exited with code \d+/i.test(delta) ||
-		delta.includes('Process finished after') ||
-		delta.includes('\x1b[1;3;31m')
-	) {
-		return 'failure';
-	}
-	return 'running';
+	return state.exitCode === 0 && delta.includes(expectedOutput) ? 'success' : 'failure';
 }
 
 /**
@@ -123,7 +113,16 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
 		readTimeoutMs,
 		'progress summary read'
 	).catch(() => []);
+	const execution = await withWallClockTimeout(
+		page.evaluate(() => ({
+			state: /** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.() ?? null,
+			build: /** @type {any} */ (window).__wasmIdleDebug?.getBuildIdentity?.() ?? null
+		})),
+		readTimeoutMs,
+		'execution summary read'
+	).catch(() => null);
 	return {
+		execution,
 		activeState,
 		consoleTail: summarizeConsole(consoleMessages),
 		finalUrl: page.url(),
@@ -293,11 +292,8 @@ export async function runStdinBrowserProbe(options) {
 		await page.locator('#language-select').selectOption(language);
 		await page.waitForFunction(
 			(expectedLanguage) =>
-				(
-					/** @type {HTMLSelectElement | null} */ (
-						document.querySelector('#language-select')
-					)
-				)?.value === expectedLanguage &&
+				/** @type {HTMLSelectElement | null} */ (document.querySelector('#language-select'))
+					?.value === expectedLanguage &&
 				typeof (/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue) ===
 					'function' &&
 				typeof (/** @type {any} */ (window).__wasmIdleDebug?.setEditorValue) ===
@@ -448,6 +444,11 @@ export async function runStdinBrowserProbe(options) {
 				);
 			}
 		}
+		const previousRunId = await page.evaluate(() => {
+			const state = /** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.();
+			if (!state) throw new Error('Structured execution state API is unavailable');
+			return state.id;
+		});
 		await page.locator('button.action-button--run').first().click();
 		/** @type {unknown} */
 		let stdinDeliveryError = null;
@@ -501,7 +502,20 @@ export async function runStdinBrowserProbe(options) {
 					pollTimeoutMs + 250,
 					'terminal poll'
 				).catch(() => '')) || '';
-			terminalRunStatus = classifyTerminalRun(initialTranscript, transcript, expectedOutput);
+			const executionState = await withWallClockTimeout(
+				page.evaluate(
+					() => /** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.() ?? null
+				),
+				pollTimeoutMs + 250,
+				'execution state poll'
+			).catch(() => null);
+			terminalRunStatus = classifyTerminalRun(
+				initialTranscript,
+				transcript,
+				expectedOutput,
+				executionState,
+				previousRunId
+			);
 			if (terminalRunStatus === 'running') {
 				await withWallClockTimeout(
 					page.waitForTimeout(250),
@@ -548,15 +562,6 @@ export async function runStdinBrowserProbe(options) {
 				)}`
 			);
 		}
-		await page.waitForFunction(
-			() =>
-				(
-					document.querySelector('[data-testid="terminal-debug-output"]')?.textContent ||
-					''
-				).includes('Process finished after'),
-			undefined,
-			{ polling: 100, timeout: runTimeoutMs }
-		);
 
 		await stopLoadingProgressProbe(page);
 		const summary = {
@@ -564,7 +569,7 @@ export async function runStdinBrowserProbe(options) {
 			progressReadiness,
 			runtimeRequests: [...new Set(selectedRuntimeRequests)]
 		};
-		const relevantPageErrors = filterBenignPageErrors(summary.pageErrors);
+		const relevantPageErrors = summary.pageErrors;
 		if (relevantPageErrors.length > 0) {
 			throw new Error(`page errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
@@ -582,11 +587,7 @@ export async function runStdinBrowserProbe(options) {
 				)}`
 			);
 		}
-		if (!summary.transcript.includes('Process finished after')) {
-			throw new Error(
-				`stdin browser run did not finish\n${JSON.stringify(summary, null, 2)}`
-			);
-		}
+
 		try {
 			assertLoadingProgressTrace(summary.progressTrace, language, progressReadiness);
 		} catch (error) {

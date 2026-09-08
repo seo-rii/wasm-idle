@@ -21,6 +21,7 @@
 		createApplicationRuntimeAssets
 	} from '$lib/playground/applicationAssets';
 	import { createLoadingProgressController } from '$lib/playground/loadingProgress';
+	import { createExecutionObserver, type ExecutionObservation } from '$lib/playground/executionObservation';
 	import { resolveDebugRuntimeUrls } from '$lib/playground/assets';
 	import { RUST_NON_DEBUG_RESOURCE_REQUIREMENTS } from '$lib/playground/rustWorkerLimits';
 	import type {
@@ -409,6 +410,7 @@
 			progressIndeterminate = state.indeterminate;
 		}
 	});
+	const executionObserver = createExecutionObserver();
 
 	const debugLanguage = $derived(debugLanguageAdapters[language] ?? null);
 	const selectedDebugMode = $derived(
@@ -533,6 +535,8 @@
 		setPreloadedStdin: (text: string) => void;
 	};
 	type WasmIdleDebugTestApi = WasmIdleDebugApi & {
+		getExecutionState: () => ExecutionObservation;
+		getBuildIdentity: () => typeof __WASM_IDLE_BUILD__ & { serviceWorkerUrl: string | null };
 		writeDebugMemory: (
 			memoryReference: string,
 			offset: number,
@@ -1881,10 +1885,11 @@
 		const preflight = executionPreflight.begin();
 		const execution = (async () => {
 			const abortController = new AbortController();
-			const progressSession = loadingProgress.start(`Loading ${language} runtime`);
+			const progressSession = executionObserver.start(generation, language, loadingProgress.start(`Loading ${language} runtime`));
 			executionAbortController = abortController;
 			activeProgressSession = progressSession;
 			let progressOutcome: 'completed' | 'failed' | 'cancelled' | 'timed-out' = 'completed';
+			let executionError: unknown;
 			let executionDebugMode: NonNullable<SandboxExecutionOptions['debugMode']> = enableDebug
 				? selectedDebugMode
 				: 'none';
@@ -1998,6 +2003,7 @@
 					progressOutcome = abortController.signal.aborted ? 'cancelled' : 'failed';
 				}
 			} catch (error) {
+				executionError = error;
 				const executionWasCancelled = abortController.signal.aborted;
 				const executionTimedOut = error instanceof Error && error.name === 'TimeoutError';
 				progressOutcome = executionWasCancelled
@@ -2007,6 +2013,7 @@
 						: 'failed';
 				if (!executionWasCancelled && !executionTimedOut) throw error;
 			} finally {
+				executionObserver.finish(generation, progressOutcome, executionError);
 				progressSession.report?.({ kind: 'settled', outcome: progressOutcome });
 				if (executionAbortController === abortController)
 					executionAbortController = undefined;
@@ -2276,6 +2283,8 @@
 			typeof globalThis & { __wasmIdleDebug?: WasmIdleDebugTestApi };
 		const debugHookVersion = ++browserDebugHookVersion;
 		const debugApi: WasmIdleDebugTestApi = {
+			getExecutionState() { return executionObserver.snapshot(); },
+			getBuildIdentity() { return { ...__WASM_IDLE_BUILD__, serviceWorkerUrl: navigator.serviceWorker?.controller?.scriptURL ?? null }; },
 			async writeTerminalInput(text: string, eof = false) {
 				if (!terminal) return;
 				await terminal.waitForInput?.();

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 import { createReleasePreviewSecurityHeaders } from './scripts/content-security-policy.mjs';
+import { createBuildIdentity } from './scripts/build-identity.mjs';
 
 const wasmIdleCoreEntry = join(
 	dirname(fileURLToPath(import.meta.url)),
@@ -13,6 +14,7 @@ const wasmIdleCoreEntry = join(
 export const releasePreviewSecurityHeaders = createReleasePreviewSecurityHeaders();
 
 export default defineConfig({
+	define: { __WASM_IDLE_BUILD__: JSON.stringify(createBuildIdentity()) },
 	plugins: [
 		{
 			name: 'wasm-idle-release-preview-security-headers',

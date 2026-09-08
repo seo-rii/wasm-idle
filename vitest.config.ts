@@ -2,6 +2,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+	define: { __WASM_IDLE_BUILD__: JSON.stringify({ commit: 'test', builtAt: '', runtimeAssets: {} }) },
 	plugins: [sveltekit()],
 	test: {
 		environment: 'jsdom',

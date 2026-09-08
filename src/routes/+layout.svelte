@@ -8,7 +8,7 @@
 	if (browser)
 		onMount(async () => {
 			if ('serviceWorker' in navigator) {
-				const workerPath = `${base}/worker.js`;
+				const workerPath = `${base}/worker.js?build=${encodeURIComponent(__WASM_IDLE_BUILD__.builtAt)}`;
 				try {
 					const registration = await navigator.serviceWorker.register(workerPath, {
 						scope: base ? `${base}/` : '/'

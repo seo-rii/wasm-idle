@@ -8,29 +8,39 @@ import {
 } from '../../scripts/stdin-browser-probe-lib.mjs';
 
 describe('classifyTerminalRun', () => {
-	it('waits while the terminal has no new conclusive output', () => {
-		expect(classifyTerminalRun('ready', 'ready', 'main=73')).toBe('running');
-		expect(classifyTerminalRun('ready', 'ready\ncompiling', 'main=73')).toBe('running');
+	const completed = { id: 2, status: 'completed', exitCode: 0 };
+	it('requires the current run to settle, even after expected output appears', () => {
+		expect(
+			classifyTerminalRun('', 'main=73', 'main=73', { ...completed, status: 'running' }, 1)
+		).toBe('running');
+		expect(classifyTerminalRun('', 'main=73', 'main=73', completed, 2)).toBe('running');
+		expect(classifyTerminalRun('', 'main=73', 'main=73', null, 1)).toBe('running');
 	});
-
-	it('accepts expected output only from the current run', () => {
-		expect(classifyTerminalRun('old main=73', 'old main=73\ncompiling', 'main=73')).toBe(
-			'running'
+	it('accepts only current output with successful completion and zero exit', () => {
+		expect(
+			classifyTerminalRun('old main=73', 'old main=73\nother', 'main=73', completed, 1)
+		).toBe('failure');
+		expect(classifyTerminalRun('ready', 'ready\nmain=73', 'main=73', completed, 1)).toBe(
+			'success'
 		);
-		expect(classifyTerminalRun('ready', 'ready\nmain=73', 'main=73')).toBe('success');
+		expect(
+			classifyTerminalRun('', 'main=73', 'main=73', { ...completed, exitCode: 1 }, 1)
+		).toBe('failure');
 	});
-
-	it('fails immediately when the current run exits without expected output', () => {
-		expect(classifyTerminalRun('ready', 'ready\nprocess exited with code 1', 'main=73')).toBe(
-			'failure'
-		);
-		expect(classifyTerminalRun('ready', 'ready\nProcess finished after 12ms', 'main=73')).toBe(
-			'failure'
-		);
-		expect(classifyTerminalRun('ready', 'ready\r\n\x1b[1;3;31mcompile failed', 'main=73')).toBe(
-			'failure'
-		);
-	});
+	it.each(['failed', 'cancelled', 'timed-out'])(
+		'does not mistake output before %s for success',
+		(status) => {
+			expect(
+				classifyTerminalRun(
+					'',
+					'main=73\nProcess finished after 12ms',
+					'main=73',
+					{ ...completed, status },
+					1
+				)
+			).toBe('failure');
+		}
+	);
 });
 
 describe('withWallClockTimeout', () => {
@@ -52,7 +62,7 @@ describe('stdin browser probe language selector', () => {
 		expect(source).toContain("page.locator('#language-select').selectOption(language)");
 		expect(source).toContain("document.querySelector('#language-select')");
 		expect(source).toContain('HTMLSelectElement | null');
-		expect(source).toContain(')?.value === expectedLanguage');
+		expect(source).toMatch(/\?\.value\s*===\s*expectedLanguage/u);
 		expect(source).not.toMatch(/(?:locator|waitForSelector)\('select'/u);
 		expect(source).not.toContain("querySelector('select')");
 	});
