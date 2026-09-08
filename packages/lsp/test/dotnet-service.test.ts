@@ -1,8 +1,75 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createDotnetWorkerService, type DotnetLanguage } from '../src/index.js';
+import { createDotnetWorkerService, type DotnetLanguage } from '../src/dotnet/service.js';
 
 describe('createDotnetWorkerService', () => {
+	it('continues the diagnostics queue after a compilation rejection', async () => {
+		const compile = vi
+			.fn()
+			.mockRejectedValueOnce(new Error('compiler failed'))
+			.mockResolvedValue({ success: true, diagnostics: [] });
+		const service = createDotnetWorkerService('csharp', async () => ({
+			createDotnetCompiler: () => ({ compile })
+		}));
+		const context = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		await service.initialize?.({ language: 'csharp', moduleUrl: '/dotnet.js' }, context);
+		const document = {
+			uri: 'file:///Program.cs',
+			languageId: 'csharp',
+			version: 1,
+			text: 'first'
+		};
+		await expect(service.diagnostics!(document, context)).rejects.toThrow('compiler failed');
+		await expect(
+			service.diagnostics!({ ...document, version: 2, text: 'second' }, context)
+		).resolves.toEqual([]);
+		expect(compile).toHaveBeenCalledTimes(2);
+	});
+
+	it('serializes compilation, coalesces duplicate diagnostics, and skips superseded queued versions', async () => {
+		let release!: (value: { success: boolean; diagnostics: [] }) => void;
+		const compile = vi
+			.fn()
+			.mockImplementationOnce(
+				() =>
+					new Promise((resolve) => {
+						release = resolve;
+					})
+			)
+			.mockResolvedValue({ success: true, diagnostics: [] });
+		const service = createDotnetWorkerService('csharp', async () => ({
+			createDotnetCompiler: () => ({ compile })
+		}));
+		const context = {
+			documents: new Map(),
+			publishDiagnostics: vi.fn(),
+			reportProgress: vi.fn()
+		};
+		await service.initialize?.({ language: 'csharp', moduleUrl: '/dotnet.js' }, context);
+		const doc = (version: number) => ({
+			uri: 'file:///Program.cs',
+			languageId: 'csharp',
+			version,
+			text: `version ${version}`
+		});
+		const first = service.diagnostics!(doc(1), context);
+		const duplicate = service.diagnostics!(doc(1), context);
+		await vi.waitFor(() => expect(compile).toHaveBeenCalledOnce());
+		const second = service.diagnostics!(doc(2), context);
+		const third = service.diagnostics!(doc(3), context);
+		expect(compile).toHaveBeenCalledOnce();
+		release({ success: true, diagnostics: [] });
+		await Promise.all([first, duplicate, second, third]);
+		expect(compile.mock.calls.map(([request]) => request.code)).toEqual([
+			'version 1',
+			'version 3'
+		]);
+	});
+
 	it.each([
 		{
 			language: 'csharp',

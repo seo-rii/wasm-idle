@@ -304,6 +304,14 @@ export function createDotnetWorkerService(
 	let language = defaultLanguage;
 	let compiler: DotnetCompiler;
 	let debug = false;
+	let compileQueue: Promise<unknown> = Promise.resolve();
+	const pending = new Map<
+		string,
+		{
+			document: LspDocument;
+			promise: Promise<LspDiagnostic[]>;
+		}
+	>();
 	let reportProgress: (stage: string, loaded?: number, total?: number) => void = () => {};
 
 	const diagnosticSource = () =>
@@ -364,45 +372,74 @@ export function createDotnetWorkerService(
 			compiler = module.createDotnetCompiler();
 			if (debug) console.debug('[wasm-idle:dotnet-lsp] compiler ready');
 		},
-		async diagnostics(document: LspDocument) {
-			if (debug) {
-				console.debug(
-					`[wasm-idle:dotnet-lsp] compile start language=${language} uri=${document.uri} bytes=${document.text.length}`
-				);
+		diagnostics(document: LspDocument, context) {
+			const previous = pending.get(document.uri);
+			if (
+				previous?.document.version === document.version &&
+				previous.document.text === document.text
+			) {
+				return previous.promise;
 			}
-			const result = await compiler.compile({
-				code: document.text,
-				language,
-				target: 'browser-wasm',
-				prepare: true,
-				log: debug,
-				onProgress(progress) {
+			const entry = { document, promise: Promise.resolve<LspDiagnostic[]>([]) };
+			entry.promise = compileQueue
+				.then(async () => {
+					const current = context.documents.get(document.uri);
+					if (
+						pending.get(document.uri) !== entry ||
+						(current &&
+							(current.version !== document.version ||
+								current.text !== document.text))
+					)
+						return [];
 					if (debug) {
 						console.debug(
-							`[wasm-idle:dotnet-lsp] compile progress stage=${progress.stage || 'compile'} completed=${progress.completed ?? ''} total=${progress.total ?? ''}`
+							`[wasm-idle:dotnet-lsp] compile start language=${language} uri=${document.uri} bytes=${document.text.length}`
 						);
 					}
-					reportProgress(progress.stage || 'compile', progress.completed, progress.total);
-				}
-			});
-			const diagnostics = (result.diagnostics || []).map(convertDiagnostic);
-			if (!result.success && diagnostics.length === 0 && result.stderr) {
-				diagnostics.push({
-					range: {
-						start: { line: 0, character: 0 },
-						end: { line: 0, character: 1 }
-					},
-					severity: 1,
-					source: diagnosticSource(),
-					message: result.stderr
+					const result = await compiler.compile({
+						code: document.text,
+						language,
+						target: 'browser-wasm',
+						prepare: true,
+						log: debug,
+						onProgress(progress) {
+							if (debug) {
+								console.debug(
+									`[wasm-idle:dotnet-lsp] compile progress stage=${progress.stage || 'compile'} completed=${progress.completed ?? ''} total=${progress.total ?? ''}`
+								);
+							}
+							reportProgress(
+								progress.stage || 'compile',
+								progress.completed,
+								progress.total
+							);
+						}
+					});
+					const diagnostics = (result.diagnostics || []).map(convertDiagnostic);
+					if (!result.success && diagnostics.length === 0 && result.stderr) {
+						diagnostics.push({
+							range: {
+								start: { line: 0, character: 0 },
+								end: { line: 0, character: 1 }
+							},
+							severity: 1,
+							source: diagnosticSource(),
+							message: result.stderr
+						});
+					}
+					if (debug) {
+						console.debug(
+							`[wasm-idle:dotnet-lsp] compile done success=${String(result.success)} diagnostics=${diagnostics.length} stderr=${result.stderr ? result.stderr.slice(0, 160) : ''}`
+						);
+					}
+					return pending.get(document.uri) === entry ? diagnostics : [];
+				})
+				.finally(() => {
+					if (pending.get(document.uri) === entry) pending.delete(document.uri);
 				});
-			}
-			if (debug) {
-				console.debug(
-					`[wasm-idle:dotnet-lsp] compile done success=${String(result.success)} diagnostics=${diagnostics.length} stderr=${result.stderr ? result.stderr.slice(0, 160) : ''}`
-				);
-			}
-			return diagnostics;
+			pending.set(document.uri, entry);
+			compileQueue = entry.promise.catch(() => undefined);
+			return entry.promise;
 		},
 		completion() {
 			const keywords = completionKeywords();

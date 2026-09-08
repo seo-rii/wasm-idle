@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mockState = vi.hoisted(() => {
 	class MockReader {
@@ -44,26 +44,46 @@ describe('dotnet language server', () => {
 		).toBe('https://app.example.com/wasm-idle/wasm-dotnet/index.js');
 	});
 
-	it('hosts the threaded dotnet compiler through an in-process JSON-RPC channel', async () => {
-		const statuses: string[] = [];
-		const moduleSource = [
-			'export function createDotnetCompiler() {',
-			'  return { async compile() { return { success: true, diagnostics: [] }; } };',
-			'}'
-		].join('\n');
-		const moduleUrl = `data:text/javascript,${encodeURIComponent(moduleSource)}`;
+	afterEach(() => vi.unstubAllGlobals());
 
+	it('runs diagnostics in a dedicated module Worker that is terminated on disposal', async () => {
+		const workers: MockWorker[] = [];
+		class MockWorker extends EventTarget {
+			terminate = vi.fn();
+			postMessage = vi.fn(() =>
+				queueMicrotask(() =>
+					this.dispatchEvent(new MessageEvent('message', { data: { type: 'ready' } }))
+				)
+			);
+			constructor(
+				readonly url: URL,
+				readonly options: WorkerOptions
+			) {
+				super();
+				workers.push(this);
+			}
+		}
+		vi.stubGlobal('Worker', MockWorker);
+		const statuses: string[] = [];
 		const handle = await getCSharpLanguageServer({
 			currentUrl: 'https://app.example.com/editor',
-			dotnet: { moduleUrl },
-			onStatus(status) {
-				statuses.push(status.state);
+			dotnet: { moduleUrl: 'https://static.example.com/wasm-dotnet/index.js' },
+			onStatus: (status) => statuses.push(status.state)
+		});
+		expect(workers).toHaveLength(1);
+		expect(workers[0].url.pathname).toMatch(/dotnet\/worker\.js$/);
+		expect(workers[0].options).toEqual({ type: 'module' });
+		expect(workers[0].postMessage).toHaveBeenCalledWith({
+			type: 'init',
+			options: {
+				language: 'csharp',
+				moduleUrl: 'https://static.example.com/wasm-dotnet/index.js',
+				debug: false
 			}
 		});
-
-		expect(statuses[0]).toBe('loading');
 		expect(statuses).toContain('ready');
 		handle.dispose();
+		expect(workers[0].terminate).toHaveBeenCalledOnce();
 		expect(statuses.at(-1)).toBe('disabled');
 	});
 });
