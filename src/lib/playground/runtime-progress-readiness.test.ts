@@ -37,6 +37,7 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	C3: { strategy: 'static-worker-fallback', hostModule: 'c3' },
 	C: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	CPP: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	OBJC: { strategy: 'terminal-fallback', hostModule: 'objectivec' },
@@ -187,8 +188,17 @@ describe('runtime progress readiness audit', () => {
 			(counts, row) => ({ ...counts, [row.strategy]: (counts[row.strategy] ?? 0) + 1 }),
 			{}
 		);
-		expect(Object.keys(strategyCounts).sort()).toEqual(['entry-signal', 'static-worker-fallback', 'terminal-fallback']);
-		expect(Object.values(strategyCounts).reduce((sum, count) => sum + count, 0)).toBe(supportedLanguageIds.length);
+		expect(Object.keys(strategyCounts).sort()).toEqual([
+			'entry-signal',
+			'static-worker-fallback',
+			'terminal-fallback'
+		]);
+		expect(strategyCounts['entry-signal']).toBeGreaterThanOrEqual(20);
+		expect(strategyCounts['static-worker-fallback']).toBeGreaterThanOrEqual(13);
+		expect(strategyCounts['terminal-fallback']).toBeGreaterThanOrEqual(13);
+		expect(Object.values(strategyCounts).reduce((sum, count) => sum + count, 0)).toBe(
+			supportedLanguageIds.length
+		);
 	});
 
 	it('keeps every audited language connected to its declared playground host', () => {

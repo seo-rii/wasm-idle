@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 913000000,
-		"maxFiles": 1855
+		"maxBytes": 953000000,
+		"maxFiles": 1859
 	},
 	"directories": {
 		"clang": { "maxBytes": 31000000, "maxFiles": 8 },
@@ -15,6 +15,7 @@
 		"wasm-awk": { "maxBytes": 2700000, "maxFiles": 8 },
 		"wasm-bash": { "maxBytes": 6500000, "maxFiles": 16 },
 		"wasm-bqn": { "maxBytes": 1100000, "maxFiles": 8 },
+		"wasm-c3": { "maxBytes": 40000000, "maxFiles": 4, "optional": true },
 		"wasm-clojurescript": { "maxBytes": 1500000, "maxFiles": 8 },
 		"wasm-cobol": { "maxBytes": 2700000, "maxFiles": 8 },
 		"wasm-d": { "maxBytes": 18000000, "maxFiles": 20 },

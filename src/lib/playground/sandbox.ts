@@ -11,13 +11,14 @@ import type {
 	SandboxExecutionOptions
 } from '$lib/playground/options';
 import type { PlaygroundRuntimeAssets } from '$lib/playground/assets';
-import type { SandboxProgress as CoreSandboxProgress } from '@wasm-idle/core';
+import type { ExecutionLimits, SandboxProgress as CoreSandboxProgress } from '@wasm-idle/core';
 
 export type SandboxRuntimeAssets = string | PlaygroundRuntimeAssets;
 export type SandboxProgress = CoreSandboxProgress;
 
 export interface Sandbox {
 	constructor: any;
+	readonly defaultExecutionLimits?: Readonly<Partial<ExecutionLimits>>;
 	eof: () => void;
 	load: (
 		runtimeAssets?: SandboxRuntimeAssets,

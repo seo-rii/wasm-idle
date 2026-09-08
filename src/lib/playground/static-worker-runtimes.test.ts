@@ -1590,7 +1590,9 @@ async function expectWorkerBootstrap(worker: MockWorker, targetUrl: string) {
 	expect(bootstrap).toBeDefined();
 	const source = await bootstrap!.text();
 	expect(source).toContain(JSON.stringify(targetUrl));
-	expect(source).toContain("['output', 'results', 'error', 'diagnostic', 'progress']");
+	expect(source).toContain(
+		"['output', 'results', 'error', 'diagnostic', 'progress', 'evidence']"
+	);
 	expect(source).toContain('runId: __wasmIdleRunId');
 	expect(source).toContain('__wasmIdleRunId === terminalRunId');
 	expect(source).toContain("message.type === 'stdin-request'");
@@ -1651,6 +1653,83 @@ describe('static worker backed language sandboxes', () => {
 		vi.useRealTimers();
 		vi.restoreAllMocks();
 		restoreCrossOriginIsolation(initialCrossOriginIsolation);
+	});
+
+	it('delivers opted-in limits and correlates evidence and typed compilation failures', async () => {
+		const onEvidence = vi.fn();
+		const sandbox = new StaticWorkerRuntimeSandbox({
+			languageId: 'C3',
+			displayName: 'C3',
+			defaultActivePath: 'main.c3',
+			stdin: { mode: 'none' },
+			includeExecutionLimits: true,
+			onEvidence,
+			resolveRuntimeAssets: () => ({ baseUrl: '/test/', workerUrl: '/test/worker.js' })
+		});
+		await sandbox.load();
+		onPostMessage = (worker, message) => {
+			expect(message.limits.maxWasmMemoryBytes).toBe(1024 ** 3);
+			worker.onmessage?.({ data: { runId: 'stale', evidence: 'old' } } as MessageEvent);
+			worker.onmessage?.({
+				data: { runId: message.runId, evidence: { maximumBytes: 1024 ** 3 } }
+			} as MessageEvent);
+			worker.onmessage?.({
+				data: {
+					runId: message.runId,
+					error: 'compile failed',
+					failure: {
+						name: 'Error',
+						message: 'source diagnostic',
+						code: 'compile',
+						phase: 'compile',
+						runtimeId: 'C3'
+					}
+				}
+			} as MessageEvent);
+		};
+		await expect(
+			sandbox.run('', false, false, undefined, [], {
+				limits: { maxWasmMemoryBytes: 1024 ** 3 }
+			})
+		).rejects.toMatchObject({
+			code: 'compile',
+			phase: 'compile',
+			message: 'source diagnostic'
+		});
+		expect(onEvidence).toHaveBeenCalledExactlyOnceWith({ maximumBytes: 1024 ** 3 });
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+	});
+
+	it('starts the run deadline at execution-ready and clamps large opted-in timers', async () => {
+		const sandbox = new StaticWorkerRuntimeSandbox({
+			languageId: 'C3',
+			displayName: 'C3',
+			defaultActivePath: 'main.c3',
+			stdin: { mode: 'none' },
+			enforcePhaseTimeouts: true,
+			resolveRuntimeAssets: () => ({ baseUrl: '/test/', workerUrl: '/test/worker.js' })
+		});
+		await sandbox.load();
+		onPostMessage = () => {};
+		vi.useFakeTimers();
+		const result = sandbox
+			.run('', false, false, undefined, [], {
+				limits: { compileTimeoutMs: 3_000_000_000, runTimeoutMs: 50 }
+			})
+			.catch((error) => error);
+		await vi.advanceTimersByTimeAsync(100);
+		const worker = workerInstances[0];
+		expect(worker.terminate).not.toHaveBeenCalled();
+		worker.onmessage?.({
+			data: { runId: worker.lastRunId, type: 'execution-ready' }
+		} as MessageEvent);
+		await vi.advanceTimersByTimeAsync(50);
+		await expect(result).resolves.toMatchObject({
+			code: 'timeout',
+			phase: 'execute',
+			timeoutMs: 50
+		});
+		expect(worker.terminate).toHaveBeenCalledOnce();
 	});
 
 	it('reports prebuffered stdin for legacy runtimes and the non-isolated fallback', () => {

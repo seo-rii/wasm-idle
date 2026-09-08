@@ -1,5 +1,6 @@
 const canonicalLanguageIds = [
 	'C',
+	'C3',
 	'CPP',
 	'OBJC',
 	'PYTHON3',
