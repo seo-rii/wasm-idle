@@ -148,7 +148,9 @@
 		"sync:wasm-lfortran": "node scripts/sync-runtime.mjs wasm-lfortran",
 		"test:browser:lfortran": "WASM_IDLE_RUN_REAL_BROWSER_LFORTRAN=1 pnpm exec vitest run src/lib/playground/lfortran.playwright.test.ts",
 		"verify:page-lfortran": "node scripts/verify-page-lfortran-compiler.mjs",
-		"test:page-compiler-assets": "node --test scripts/verify-pinned-runtime-assets.test.mjs scripts/verify-page-*-compiler.test.mjs"
+		"test:page-compiler-assets": "node --test scripts/verify-pinned-runtime-assets.test.mjs scripts/verify-page-*-compiler.test.mjs",
+		"probe:odin-wasi-consumer": "node scripts/probe-odin-wasi-consumer.mjs",
+		"test:unit:odin-consumer": "node --test scripts/probe-odin-wasi-consumer.test.mjs"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
