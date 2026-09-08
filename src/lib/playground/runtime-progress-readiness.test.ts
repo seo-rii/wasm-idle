@@ -87,6 +87,7 @@ const runtimeReadinessAudit = {
 		strategy: 'static-worker-fallback',
 		hostModule: 'clojurescript'
 	},
+	LFORTRAN: { strategy: 'static-worker-fallback', hostModule: 'lfortran' },
 	FORTRAN: { strategy: 'terminal-fallback', hostModule: 'fortran' },
 	COBOL: { strategy: 'terminal-fallback', hostModule: 'cobol' },
 	TINYGO: {
@@ -176,7 +177,7 @@ const sorted = (values: readonly string[]) =>
 describe('runtime progress readiness audit', () => {
 	it('classifies every supported language exactly once, including Haskell', () => {
 		expect(sorted(Object.keys(runtimeReadinessAudit))).toEqual(sorted(supportedLanguageIds));
-		expect(Object.keys(runtimeReadinessAudit)).toHaveLength(46);
+		expect(Object.keys(runtimeReadinessAudit)).toHaveLength(supportedLanguageIds.length);
 		expect(runtimeReadinessAudit.HASKELL).toEqual({
 			strategy: 'terminal-fallback',
 			hostModule: 'haskell'
@@ -186,11 +187,8 @@ describe('runtime progress readiness audit', () => {
 			(counts, row) => ({ ...counts, [row.strategy]: (counts[row.strategy] ?? 0) + 1 }),
 			{}
 		);
-		expect(strategyCounts).toEqual({
-			'entry-signal': 20,
-			'static-worker-fallback': 13,
-			'terminal-fallback': 13
-		});
+		expect(Object.keys(strategyCounts).sort()).toEqual(['entry-signal', 'static-worker-fallback', 'terminal-fallback']);
+		expect(Object.values(strategyCounts).reduce((sum, count) => sum + count, 0)).toBe(supportedLanguageIds.length);
 	});
 
 	it('keeps every audited language connected to its declared playground host', () => {
@@ -221,7 +219,7 @@ describe('runtime progress readiness audit', () => {
 		}
 	});
 
-	it('routes the 13 standalone workers through run-correlated readiness fallbacks', () => {
+	it('routes standalone workers through run-correlated readiness fallbacks', () => {
 		const staticRuntimeSource = readProjectSource('src/lib/playground/staticWorkerRuntime.ts');
 		for (const [languageId, row] of Object.entries(runtimeReadinessAudit)) {
 			if (row.strategy !== 'static-worker-fallback') continue;

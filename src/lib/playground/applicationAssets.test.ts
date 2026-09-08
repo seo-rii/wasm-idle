@@ -134,6 +134,7 @@ describe('application runtime asset root', () => {
 	it('projects every non-debug page runtime from the shared root', () => {
 		const assets = createApplicationRuntimeAssets('/foo/bar/');
 
+		expect(assets.lfortran).toEqual({ baseUrl: '/foo/bar/wasm-lfortran/' });
 		expect(Object.keys(assets).sort()).toEqual([
 			'assemblyscript',
 			'awk',
@@ -154,6 +155,7 @@ describe('application runtime asset root', () => {
 			'j',
 			'janet',
 			'julia',
+			'lfortran',
 			'lisp',
 			'lua',
 			'nim',

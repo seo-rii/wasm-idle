@@ -85,6 +85,7 @@ export interface RuntimeAssetKeySource {
 		mainSoPath?: string;
 		searchDirs?: string[];
 	};
+	lfortran?: { baseUrl?: string };
 	fortran?: {
 		baseUrl?: string;
 		f2cWasmUrl?: string;
@@ -708,6 +709,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		key: 'haskellSearchDirs',
 		serialize: joinStringList
 	},
+	{ runtime: 'lfortran', property: 'baseUrl', key: 'lfortranBaseUrl' },
 	{ runtime: 'fortran', property: 'baseUrl', key: 'fortranBaseUrl' },
 	{ runtime: 'fortran', property: 'f2cWasmUrl', key: 'fortranF2cWasmUrl' },
 	{ runtime: 'fortran', property: 'libf2cUrl', key: 'fortranLibf2cUrl' },
