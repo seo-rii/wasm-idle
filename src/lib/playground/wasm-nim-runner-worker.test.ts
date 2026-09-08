@@ -550,7 +550,7 @@ describe('Nim runner worker', () => {
 		expect(messages.filter(isTerminal)).toEqual(
 			expect.arrayContaining([
 				{ error: 'Nim worker accepts exactly one run.' },
-				{ results: true }
+				{ results: true, exitCode: 0, stage: 'Nim run complete' }
 			])
 		);
 		expect(messages).toContainEqual({ harnessClosed: true });

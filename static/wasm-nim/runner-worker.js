@@ -622,7 +622,10 @@ function exactArrayBuffer(bytes) {
 	return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
+let currentStage = 'Verifying Nim assets';
+
 function postProgress(percent, stage) {
+	currentStage = stage;
 	self.postMessage({ progress: { percent, stage } });
 }
 
@@ -710,42 +713,66 @@ function restoreRuntimeGlobals(snapshot) {
 	}
 }
 
-async function installNimCompiler(verifiedRuntime, stdout, stderr) {
-	const [wasmBytes, bundleBytes] = await Promise.all([
-		verifiedRuntime.take('nim/nim.wasm'),
-		verifiedRuntime.take('nim/nim-bundle.js')
-	]);
+function installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs = 30000) {
 	return new Promise((resolve, reject) => {
+		let settled = false;
+		let failed = false;
+		let readinessTimer;
+		const finish = (error) => {
+			if (settled) return;
+			settled = true;
+			failed = !!error;
+			clearTimeout(deadline);
+			clearTimeout(readinessTimer);
+			self.removeEventListener?.('unhandledrejection', onRejection);
+			if (error) reject(error);
+			else resolve({ FS: self.FS, callMain: self.callMain });
+		};
+		const onRejection = (event) => {
+			if (settled) return;
+			event.preventDefault?.();
+			finish(new Error(`Nim compiler initialization failed: ${errorMessage(event.reason)}`));
+		};
+		const deadline = setTimeout(
+			() => finish(new Error(`Nim compiler initialization timed out after ${timeoutMs} ms.`)),
+			timeoutMs
+		);
+		const checkReady = () => {
+			if (settled) return;
+			if (self.FS && typeof self.callMain === 'function') finish();
+			else readinessTimer = setTimeout(checkReady, 25);
+		};
 		const module = {
 			noInitialRun: true,
-			wasmBinary: exactArrayBuffer(wasmBytes),
 			locateFile(path) {
 				const value = String(path);
 				if (value.endsWith('nim.wasm')) return 'wasm-idle-verified:nim.wasm';
 				throw new Error(`Nim requested an undeclared compiler asset: ${value}`);
 			},
-			print: (text) => stdout.push(String(text)),
-			printErr: (text) => stderr.push(String(text)),
-			onRuntimeInitialized: () => resolve()
+			print: (text) => {
+				if (!failed) stdout.push(String(text));
+			},
+			printErr: (text) => {
+				if (!failed) stderr.push(String(text));
+			},
+			onAbort: (reason) =>
+				finish(new Error(`Nim compiler initialization aborted: ${errorMessage(reason)}`)),
+			onRuntimeInitialized: checkReady
 		};
-		self.Nim = module;
-		self.Module = module;
+		self.addEventListener?.('unhandledrejection', onRejection);
 		try {
-			importVerifiedRuntimeScript(bundleBytes);
+			module.wasmBinary = exactArrayBuffer(verifiedRuntime.take('nim/nim.wasm'));
+			self.Nim = module;
+			self.Module = module;
+			importVerifiedRuntimeScript(verifiedRuntime.take('nim/nim-bundle.js'));
 		} catch (error) {
-			reject(error);
+			finish(error);
 		}
 	});
 }
 
-async function loadNimCompiler(verifiedRuntime, stdout, stderr) {
-	await installNimCompiler(verifiedRuntime, stdout, stderr);
-	const started = Date.now();
-	while (typeof self.FS === 'undefined' || typeof self.callMain !== 'function') {
-		if (Date.now() - started > 30000) throw new Error('Nim compiler did not initialize.');
-		await new Promise((resolve) => setTimeout(resolve, 25));
-	}
-	return { FS: self.FS, callMain: self.callMain };
+async function loadNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs) {
+	return await installNimCompiler(verifiedRuntime, stdout, stderr, timeoutMs);
 }
 
 function withCapturedConsole(stdout, stderr, callback) {
@@ -767,7 +794,10 @@ function withCapturedConsole(stdout, stderr, callback) {
 	}
 }
 
+let compilationGeneration = 0;
+
 function compileNimToC({ FS, callMain }, code, stdout, stderr) {
+	const cacheDir = `/tmp/wasm-idle-nim-${++compilationGeneration}`;
 	self.__NIM_USER_CODE__ = code;
 	self.__NIM_USER_CODE_PENDING__ = code;
 	self.__NIM_USER_PATH__ = '/tmp/user.nim';
@@ -778,6 +808,8 @@ function compileNimToC({ FS, callMain }, code, stdout, stderr) {
 		returnCode = withCapturedConsole(stdout, stderr, () =>
 			callMain([
 				'c',
+				'--compileOnly:on',
+				`--nimcache:${cacheDir}`,
 				'--hints:off',
 				'-d:release',
 				'-d:useMalloc',
@@ -789,11 +821,18 @@ function compileNimToC({ FS, callMain }, code, stdout, stderr) {
 			])
 		);
 	} catch (error) {
-		stderr.push(`[nim] callMain failed: ${error?.message || error}`);
-		returnCode = -1;
+		if (error?.name === 'ExitStatus' && Number.isInteger(error.status)) {
+			returnCode = error.status;
+		} else {
+			throw new Error(`Nim translation failed: ${errorMessage(error)}`);
+		}
 	}
 
-	const cacheDir = '/home/web_user/.cache/nim/user_r';
+	if (returnCode !== 0) {
+		throw new Error(
+			`Nim translation failed with exit code ${String(returnCode)}.\n${stderr.join('\n')}`
+		);
+	}
 	let entries;
 	try {
 		entries = FS.readdir(cacheDir);
@@ -816,7 +855,7 @@ function compileNimToC({ FS, callMain }, code, stdout, stderr) {
 		);
 	}
 
-	return { cacheDir, cFiles };
+	return { success: true, exitCode: 0, diagnostics: [...stderr], cacheDir, cFiles };
 }
 
 function prepareTranslationUnit(source, nimbaseContent) {
@@ -918,8 +957,8 @@ async function buildWasm({ verifiedRuntime, code, stdout, stderr }) {
 		await clangModule.init({ assets: compilerAssets });
 		postProgress(50, 'Compiling and linking Nim output');
 		const result = await clangModule.compileEachLink(files, 'app.wasm');
-		if (result && result.ok === false && result.error) {
-			throw new Error(result.error);
+		if (result?.ok !== true) {
+			throw new Error(result?.error || 'Nim C compilation or linking failed.');
 		}
 		postProgress(75, 'Loading Nim executable');
 		output = await clangModule.getFile('app.wasm');
@@ -1199,18 +1238,24 @@ function createWasiRunner({
 		const imports = {};
 		for (const { module: moduleName, name, kind } of WebAssembly.Module.imports(module)) {
 			imports[moduleName] = imports[moduleName] || {};
-			if (kind === 'function')
-				imports[moduleName][name] = importsImpl[name] || (() => errnoSuccess);
+			if (kind !== 'function' || !importsImpl[name]) {
+				throw new Error(
+					`Nim runtime does not support Wasm import ${moduleName}.${name} (${kind}).`
+				);
+			}
+			imports[moduleName][name] = importsImpl[name];
 		}
 		return imports;
 	}
 
 	async function run(bytes) {
+		postProgress(80, 'Instantiating Nim executable');
 		const module = await WebAssembly.compile(bytes);
 		const instance = await WebAssembly.instantiate(module, importsFor(module));
 		memory = instance.exports.memory;
 		let code = 0;
 		try {
+			postProgress(85, 'Running Nim program');
 			instance.exports._start();
 		} catch (error) {
 			if (error instanceof ProcExit) {
@@ -1248,7 +1293,6 @@ async function runVerifiedNim({
 			stdout: compilerStdout,
 			stderr: compilerStderr
 		});
-		postProgress(85, 'Running Nim program');
 		result = await createWasiRunner({
 			stdinReader,
 			args,
@@ -1318,7 +1362,7 @@ self.onmessage = async (event) => {
 		}
 		postProgress(100, 'Nim run complete');
 		if (log) console.log('[wasm-idle:nim-worker] run settled');
-		self.postMessage({ results: true });
+		self.postMessage({ results: true, exitCode: result.code, stage: currentStage });
 	} catch (error) {
 		const compilerOutput = [
 			...compilerStderr.flatMap(splitLines),
@@ -1326,9 +1370,9 @@ self.onmessage = async (event) => {
 		]
 			.slice(-60)
 			.join('\n');
-		const message = `${errorMessage(error)}${compilerOutput ? `\n${compilerOutput}` : ''}`;
+		const message = `${currentStage}: ${errorMessage(error)}${compilerOutput ? `\n${compilerOutput}` : ''}`;
 		if (log) console.error('[wasm-idle:nim-worker] failed', error);
-		self.postMessage({ error: message });
+		self.postMessage({ error: message, stage: currentStage });
 	} finally {
 		self.close();
 	}
