@@ -45,29 +45,34 @@ end program main`;
 
 // The adapter checks use Vite's real source module; the UI check exercises the
 // normal language registry, Monaco editor, terminal and streaming input path.
-describe.skipIf(process.env.WASM_IDLE_RUN_REAL_BROWSER_LFORTRAN !== '1')(
-	'real LFortran consumer in Chromium',
-	() => {
-		let server: Awaited<ReturnType<typeof startBrowserPreviewServer>>;
-		let browser: Browser;
-		beforeAll(async () => {
-			server = await startBrowserPreviewServer({
-				origin: 'http://127.0.0.1:4973',
-				serverMode: 'dev'
-			});
-			browser = await chromium.launch({
-				headless: true,
-				executablePath: await resolveChromiumExecutable(
-					process.env.WASM_IDLE_CHROMIUM_EXECUTABLE || ''
-				)
-			});
-		}, 120_000);
-		afterAll(async () => {
-			await browser?.close();
-			await server?.close();
-		});
+const enabled = process.env.WASM_IDLE_RUN_REAL_BROWSER_LFORTRAN === '1';
+const browserMeta = { browser: true, requiredBrowser: enabled };
 
-		it('compiles arrays/modules, waits for asynchronous input and EOF, reports diagnostics and enforces limits/cancellation', async () => {
+describe.skipIf(!enabled)('real LFortran consumer in Chromium', () => {
+	let server: Awaited<ReturnType<typeof startBrowserPreviewServer>>;
+	let browser: Browser;
+	beforeAll(async () => {
+		server = await startBrowserPreviewServer({
+			origin: 'http://127.0.0.1:4973',
+			serverMode: 'dev'
+		});
+		browser = await chromium.launch({
+			headless: true,
+			executablePath: await resolveChromiumExecutable(
+				process.env.WASM_IDLE_CHROMIUM_EXECUTABLE || ''
+			)
+		});
+	}, 120_000);
+	afterAll(async () => {
+		await browser?.close();
+		await server?.close();
+	});
+
+	it(
+		'compiles arrays/modules, waits for asynchronous input and EOF, reports diagnostics and enforces limits/cancellation',
+		{ timeout: 240_000, meta: browserMeta },
+		async () => {
+			expect.hasAssertions();
 			const context = await browser.newContext({ serviceWorkers: 'block' });
 			await addBrowserTestCookies(context, server.browserUrl);
 			const page = await context.newPage();
@@ -273,11 +278,17 @@ end program`,
 			} finally {
 				await context.close();
 			}
-		}, 240_000);
+		}
+	);
 
-		it('runs the default sample from the language selector with delayed terminal input', async () => {
+	it(
+		'runs the default sample from the language selector with delayed terminal input',
+		{ timeout: 240_000, meta: browserMeta },
+		async () => {
+			expect.hasAssertions();
+			const browserUrl = process.env.WASM_IDLE_BROWSER_URL || server.browserUrl;
 			const context = await browser.newContext();
-			await addBrowserTestCookies(context, server.browserUrl);
+			await addBrowserTestCookies(context, browserUrl);
 			await context.addInitScript(() => {
 				const target = window as any;
 				target.__lfortranConsumerRuns = [];
@@ -308,7 +319,7 @@ end program`,
 			page.setDefaultTimeout(60_000);
 			page.on('pageerror', (error) => pageErrors.push(error.message));
 			try {
-				await page.goto(server.browserUrl, { waitUntil: 'domcontentloaded' });
+				await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
 				await page.waitForFunction(
 					() =>
 						crossOriginIsolated &&
@@ -341,11 +352,12 @@ end program`,
 					await (window as any).__wasmIdleDebug.writeTerminalInput('10 20 30\n', false);
 					await (window as any).__wasmIdleDebug.writeTerminalInput('', true);
 				});
-				await page.waitForFunction(() =>
-					document
-						.querySelector('[data-testid="terminal-debug-output"]')
-						?.textContent?.includes('Process finished after')
+				await page.waitForFunction(
+					() => (window as any).__wasmIdleDebug.getExecutionState().endedAt !== null
 				);
+				expect(
+					await page.evaluate(() => (window as any).__wasmIdleDebug.getExecutionState())
+				).toMatchObject({ status: 'completed', exitCode: 0 });
 				const evidence = await page.evaluate(() => ({
 					runs: (window as any).__lfortranConsumerRuns,
 					memory: (window as any).__lfortranConsumerEvidence.at(-1),
@@ -382,6 +394,6 @@ end program`,
 			} finally {
 				await context.close();
 			}
-		}, 180_000);
-	}
-);
+		}
+	);
+});

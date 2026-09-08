@@ -7,18 +7,30 @@ import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
 import { editorDefaults } from '../../routes/editor-defaults';
 
-describe.skipIf(process.env.WASM_IDLE_RUN_REAL_BROWSER_C3 !== '1')(
-	'real C3 browser consumer',
-	() => {
-		it('compiles C3 sources and enforces byte I/O, cancellation and limits in Chromium', async () => {
-			await runC3BrowserProbe();
-		}, 240_000);
+const enabled = process.env.WASM_IDLE_RUN_REAL_BROWSER_C3 === '1';
+const browserMeta = { browser: true, requiredBrowser: enabled };
 
-		it('runs the default sample through the language selector with delayed terminal input and the C3 memory default', async () => {
-			const server = await startBrowserPreviewServer({
-				origin: 'http://127.0.0.1:4974',
-				serverMode: 'dev'
-			});
+describe.skipIf(!enabled)('real C3 browser consumer', () => {
+	it(
+		'compiles C3 sources and enforces byte I/O, cancellation and limits in Chromium',
+		{ timeout: 240_000, meta: browserMeta },
+		async () => {
+			expect.hasAssertions();
+			expect(await runC3BrowserProbe()).toBeDefined();
+		}
+	);
+
+	it(
+		'runs the default sample through the language selector with delayed terminal input and the C3 memory default',
+		{ timeout: 240_000, meta: browserMeta },
+		async () => {
+			expect.hasAssertions();
+			const server = process.env.WASM_IDLE_BROWSER_URL
+				? { browserUrl: process.env.WASM_IDLE_BROWSER_URL, close: async () => {} }
+				: await startBrowserPreviewServer({
+						origin: 'http://127.0.0.1:4974',
+						serverMode: 'dev'
+					});
 			const browser = await chromium.launch({
 				headless: true,
 				executablePath: await resolveChromiumExecutable()
@@ -127,11 +139,12 @@ describe.skipIf(process.env.WASM_IDLE_RUN_REAL_BROWSER_C3 !== '1')(
 				await page.evaluate(async () => {
 					await (window as any).__wasmIdleDebug.writeTerminalInput('', true);
 				});
-				await page.waitForFunction(() =>
-					document
-						.querySelector('[data-testid="terminal-debug-output"]')
-						?.textContent?.includes('Process finished after')
+				await page.waitForFunction(
+					() => (window as any).__wasmIdleDebug.getExecutionState().endedAt !== null
 				);
+				expect(
+					await page.evaluate(() => (window as any).__wasmIdleDebug.getExecutionState())
+				).toMatchObject({ status: 'completed', exitCode: 0 });
 				const evidence = await page.evaluate(() => ({
 					runs: (window as any).__c3ConsumerRuns,
 					memory: (window as any).__c3ConsumerEvidence.at(-1),
@@ -172,6 +185,6 @@ describe.skipIf(process.env.WASM_IDLE_RUN_REAL_BROWSER_C3 !== '1')(
 				await browser.close();
 				await server.close();
 			}
-		}, 180_000);
-	}
-);
+		}
+	);
+});
