@@ -11,11 +11,11 @@ export const bundledC3Profile = {
 		sha256: 'f84c768a8dcd679bf092b7cd7bb9ec5786bc70bedc9d8929cfbb2d79291d8c0e'
 	},
 	producerReceipt: {
-		bytes: 13855,
-		sha256: 'b558786dda3f97313c6634bfea15e68efc57a0f117936ac65c5f2357685fcae6'
+		bytes: 13996,
+		sha256: '3fec378b171e717bf08f5096291740fa313649e14280d156d0cf7cdcf50082f8'
 	}
 } as const;
 export const bundledC3WorkerReceipt = {
 	bytes: 14151,
-	sha256: '770b17d07ef23548252ab8841aeaa37098511ea585b297385fb8d52e03d3d6b7'
+	sha256: '358ee8aabac7e05c9eff87fcf3335410cc189e50b7fe9fc70bd318d9a90b1d56'
 } as const;
