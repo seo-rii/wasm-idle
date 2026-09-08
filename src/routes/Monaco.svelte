@@ -3610,8 +3610,7 @@
 			debugActionBindings?.dispose();
 		});
 		const nextDebugView = new MonacoDebugView(monacoApi, activeEditor, onBreakpointsChange);
-		nextDebugView.setBreakpoints(debugLanguage ? breakpoints : []);
-		nextDebugView.setPauseState(debugLanguage ? pausedLine : null, debugLocals, debugLanguage);
+		// The update effect applies pause data without recreating editor listeners and actions.
 		debugView = nextDebugView;
 		debugActionBindings = attachMonacoDebugActions(activeEditor, {
 			onCursorLineChange,
