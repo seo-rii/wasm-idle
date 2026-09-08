@@ -359,6 +359,7 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			bsdtarUrl: asset('wasm-haskell/bsdtar.wasm', WASM_HASKELL_ASSET_VERSION),
 			integrity: HASKELL_RUNTIME_ASSET_RECEIPTS
 		},
+		lfortran: { baseUrl: asset('wasm-lfortran/') },
 		fortran: {
 			baseUrl: asset('wasm-fortran/'),
 			f2cWasmUrl: asset('wasm-fortran/f2c.wasm', WASM_FORTRAN_EXECUTION_ASSET_VERSION),

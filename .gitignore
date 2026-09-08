@@ -30,3 +30,6 @@ static/wasm-d/runtime/bin/ldc2.wasm
 static/wasm-d/runtime/bin/lld.data
 static/wasm-d/runtime/bin/lld.wasm
 static/wasm-d/runtime/toolchain/toolchain.tar
+
+# LFortran producer artifacts are synced locally, never committed.
+static/wasm-lfortran/
