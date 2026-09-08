@@ -14,6 +14,7 @@ import type {
 import { createLanguageServerProgressReporter } from '../worker-client.js';
 import type { ClangdStatus } from './config.js';
 import type { ClangdPreloadedAssets, ClangdWorkerOutboundMessage } from './protocol.js';
+import { createClangdRequestPolicy, type ClangdRequestTrace } from './request-policy.js';
 import { ClangdWorkspaceFileRegistry } from './workspace.js';
 
 export interface ClangdLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
@@ -27,6 +28,8 @@ export interface ClangdLanguageServerOptions extends EditorLanguageServerRuntime
 		foundationHeadersUrl: string;
 		integrity: ResolvedLanguageToolAssetConfig['integrity'];
 	};
+	requestTimeoutMs?: number;
+	onRequestDelay?: (method: string | null) => void;
 }
 
 const currentUrl = () => globalThis.location?.href || '';
@@ -58,6 +61,7 @@ async function preloadClangdAssets(
 		for (const fraction of fractions.values()) loaded += fraction;
 		onStatus?.({
 			state: 'loading',
+			stage: 'asset-download',
 			loaded: loaded / fractions.size,
 			total: 1
 		});
@@ -157,6 +161,7 @@ async function createServer(
 						switch (event.data?.type) {
 							case 'progress': {
 								status.progress({
+									stage: event.data.stage,
 									loaded: event.data.value,
 									total: event.data.max
 								});
@@ -213,7 +218,12 @@ async function createServer(
 
 export async function createClangdLanguageServer(
 	options?: EditorLanguageServerOptions | ClangdLanguageServerOptions
-): Promise<EditorLanguageServerHandle> {
+): Promise<
+	EditorLanguageServerHandle & {
+		getDiagnosticTrace: () => ClangdRequestTrace[];
+		cancelEditorRequests: () => void;
+	}
+> {
 	const hostOptions = isClangdLanguageServerOptions(options) ? options : undefined;
 	const current = hostOptions?.currentUrl ?? currentUrl();
 	const assetConfig = resolveCppLanguageServerRuntimeAssetConfig(options, current);
@@ -224,10 +234,21 @@ export async function createClangdLanguageServer(
 			return false;
 		}
 	})();
+	const startupTrace: ClangdRequestTrace[] = [];
+	let startupStage: ClangdRequestTrace | undefined;
+	const reportStatus = (status: ClangdStatus) => {
+		const stage = status.state === 'loading' ? status.stage : `worker-${status.state}`;
+		if (stage && stage !== startupStage?.method) {
+			if (startupStage) startupStage.finishedAt = Date.now();
+			startupStage = { method: stage, sentAt: Date.now() };
+			startupTrace.push(startupStage);
+		}
+		hostOptions?.onStatus?.(status);
+	};
 	const worker = await createServer(
 		assetConfig,
 		hostOptions?.createWorker || createDefaultClangdWorker,
-		hostOptions?.onStatus,
+		reportStatus,
 		{
 			signal: hostOptions?.signal,
 			assetTimeoutMs: hostOptions?.assetTimeoutMs,
@@ -238,11 +259,18 @@ export async function createClangdLanguageServer(
 	);
 	const reader = new BrowserMessageReader(worker);
 	const writer = new BrowserMessageWriter(worker);
+	const policy = createClangdRequestPolicy(
+		{ reader, writer },
+		{ requestTimeoutMs: hostOptions?.requestTimeoutMs, onDelay: hostOptions?.onRequestDelay }
+	);
+	policy.trace.push(...startupTrace);
 	const workspaceFiles = new ClangdWorkspaceFileRegistry();
 
 	let disposed = false;
 	return {
-		transport: { reader, writer },
+		transport: policy.transport,
+		cancelEditorRequests: policy.cancelEditorRequests,
+		getDiagnosticTrace: () => policy.trace.map((entry) => ({ ...entry })),
 		syncFile: (path: string) => {
 			const registered = workspaceFiles.register(path);
 			try {
@@ -255,6 +283,7 @@ export async function createClangdLanguageServer(
 		dispose: () => {
 			if (disposed) return;
 			disposed = true;
+			policy.dispose();
 			worker.terminate();
 			reader.dispose();
 			writer.dispose();

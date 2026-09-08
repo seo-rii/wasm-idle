@@ -12,6 +12,7 @@ import {
 	createClangdConfiguration,
 	normalizeClangdBaseUrl
 } from './config.js';
+import { ClangdStdinQueue } from './stdin-queue.js';
 import { JsonStream } from '@wasm-idle/llvm-core/core/json-stream';
 import type { ClangdWorkerInboundMessage } from './protocol.js';
 import { ClangdWorkspaceFileRegistry, normalizeClangdWorkspaceFilePath } from './workspace.js';
@@ -31,9 +32,7 @@ const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const jsonStream = new JsonStream();
 
-let resolveStdinReady = () => {};
-const stdinChunks: string[] = [];
-const currentStdinChunk: (number | null)[] = [];
+const stdinQueue = new ClangdStdinQueue();
 let debugEnabled = false;
 let stderrBuffer = '';
 
@@ -54,23 +53,8 @@ const debugLog = (...args: unknown[]) => {
 	if (debugEnabled) console.debug('[wasm-idle:clangd-worker]', ...args);
 };
 
-const stdin = (): number | null => {
-	if (currentStdinChunk.length === 0) {
-		if (stdinChunks.length === 0) return null;
-		const nextChunk = stdinChunks.shift();
-		if (!nextChunk) return null;
-		currentStdinChunk.push(...textEncoder.encode(nextChunk));
-	}
-	return currentStdinChunk.shift() ?? null;
-};
-
-const stdinReady = async () => {
-	if (stdinChunks.length === 0) {
-		return new Promise<void>((resolve) => {
-			resolveStdinReady = resolve;
-		});
-	}
-};
+const stdin = () => stdinQueue.read();
+const stdinReady = () => stdinQueue.ready();
 
 let writer: BrowserMessageWriterInstance | null = null;
 let clangdRuntime: any = null;
@@ -141,14 +125,14 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 		debugLog('init', baseUrl);
 		if (!event.data.assets) throw new Error('clangd init requires preloaded runtime assets');
 		const jsBytes = new Uint8Array(event.data.assets.clangdJs);
-		self.postMessage({ type: 'progress', value: 1, max: 3 });
+		self.postMessage({ type: 'progress', stage: 'module-loading', value: 1, max: 3 });
 		const jsSource = textDecoder.decode(jsBytes);
 		const jsDataUrl = URL.createObjectURL(
 			new Blob([jsSource], { type: 'text/javascript;charset=utf-8' })
 		);
 
 		const compressedWasmBytes = new Uint8Array(event.data.assets.clangdWasmGz);
-		self.postMessage({ type: 'progress', value: 2, max: 3 });
+		self.postMessage({ type: 'progress', stage: 'decompression', value: 2, max: 3 });
 		const wasmBytes = await decompressGzip(compressedWasmBytes, 'clangd.wasm.gz');
 		if (event.data.assets.clangdWasmIntegrity) {
 			await verifyRuntimeAssetIntegrity({
@@ -160,7 +144,7 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 				runtimeId: 'clangd'
 			});
 		}
-		self.postMessage({ type: 'progress', value: 3, max: 3 });
+		self.postMessage({ type: 'progress', stage: 'wasm-initialization', value: 3, max: 3 });
 		const jsModule = import(/* @vite-ignore */ jsDataUrl);
 		const wasmBlobBytes = new Uint8Array(wasmBytes.byteLength);
 		wasmBlobBytes.set(wasmBytes);
@@ -217,9 +201,8 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 				return '\\u' + character.codePointAt(0)?.toString(16).padStart(4, '0');
 			});
 			const bodyByteLength = textEncoder.encode(body).byteLength;
-			stdinChunks.push(`Content-Length: ${bodyByteLength}\r\n\r\n${body}`);
+			stdinQueue.push(textEncoder.encode(`Content-Length: ${bodyByteLength}\r\n\r\n${body}`));
 			debugLog('stdin queued bytes', bodyByteLength);
-			resolveStdinReady();
 		});
 		self.postMessage({ type: 'ready', value: wasmBytes.byteLength });
 	} catch (error) {

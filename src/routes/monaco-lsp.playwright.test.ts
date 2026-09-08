@@ -22,6 +22,8 @@ interface LspBrowserCase {
 	statusKey?: string;
 	knownFailure?: string;
 	expectDiagnostics?: boolean;
+	validSource?: string;
+	errorLine?: number;
 	expectedResponses?: Array<string | RegExp>;
 	assertNoPreEnableRequests?: Array<string | RegExp>;
 	expectedRequestPathnames?: string[];
@@ -108,6 +110,9 @@ const lspBrowserCases: LspBrowserCase[] = [
 		label: 'C++',
 		fileName: 'main.cpp',
 		source: '#include <bits/stdc++.h>\n\nint main() {\n    int n = "nope";\n    std::cout << n << "\\n";\n}\n',
+		validSource:
+			'#include <bits/stdc++.h>\nint square(int value) { return value * value; }\nint main() { auto result = square(4); std::cout << result; }\n',
+		errorLine: 4,
 		aliases: ['c++', 'cpp', 'clangd'],
 		statusKey: 'clangd',
 		timeoutMs: 240_000
@@ -117,6 +122,8 @@ const lspBrowserCases: LspBrowserCase[] = [
 		label: 'C',
 		fileName: 'main.c',
 		source: 'int main(void) {\n    int n = "nope";\n    return n;\n}\n',
+		validSource: 'int main(void) {\n    int class = 42;\n    return class;\n}\n',
+		errorLine: 2,
 		aliases: ['clang'],
 		statusKey: 'clangd',
 		timeoutMs: 240_000
@@ -126,6 +133,9 @@ const lspBrowserCases: LspBrowserCase[] = [
 		label: 'Objective-C',
 		fileName: 'main.m',
 		source: '#import <Foundation/Foundation.h>\n\nint main(void) {\n    NSString *value = 42;\n    return value;\n}\n',
+		validSource:
+			'#import <Foundation/Foundation.h>\nint main(void) {\n    NSString *value = @"hello";\n    return [value length] == 5 ? 0 : 1;\n}\n',
+		errorLine: 4,
 		aliases: ['objective-c', 'objectivec', 'objc'],
 		statusKey: 'clangd',
 		timeoutMs: 240_000
@@ -868,7 +878,9 @@ async function waitForLspReady(page: Page, testCase: LspBrowserCase) {
 	await page.waitForFunction(
 		(statusKey) => {
 			const testGlobal = globalThis as typeof globalThis & MonacoTestGlobal;
-			return testGlobal.__wasmIdleMonacoLspStatus?.[statusKey]?.state === 'ready';
+			const status = testGlobal.__wasmIdleMonacoLspStatus?.[statusKey];
+			if (status?.state === 'error') throw new Error(status.message || `${statusKey} failed`);
+			return status?.state === 'ready';
 		},
 		lspStatusKeyFor(testCase),
 		{ timeout: testCase.timeoutMs ?? browserTimeoutMs }
@@ -924,6 +936,111 @@ async function waitForDiagnostics(page: Page, testCase: LspBrowserCase) {
 		diagnosticSelector,
 		{ timeout: testCase.timeoutMs ?? browserTimeoutMs }
 	);
+}
+
+async function waitForClangdDiagnosticsForCurrentVersion(page: Page) {
+	await page.waitForFunction(
+		() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			const trace = Reflect.get(globalThis, '__wasmIdleClangdTrace')?.() || [];
+			const uri = String(hooks.__wasmIdleMonacoEditor?.getModel?.()?.uri);
+			const latest = trace
+				.filter(
+					(entry: any) =>
+						['textDocument/didOpen', 'textDocument/didChange'].includes(entry.method) &&
+						entry.uri === uri
+				)
+				.at(-1);
+			return (
+				latest &&
+				trace.some(
+					(entry: any) =>
+						entry.method === 'textDocument/publishDiagnostics' &&
+						entry.uri === uri &&
+						entry.version === latest.version &&
+						entry.sentAt >= latest.sentAt
+				)
+			);
+		},
+		undefined,
+		{ timeout: 30_000 }
+	);
+	// Monaco consumes the same notification asynchronously after the transport records it.
+	await page.waitForTimeout(100);
+}
+
+async function checkCppEditorFeatures(page: Page) {
+	const source =
+		'int square(int value) { return value * value; }\nint main() { auto result = square(4); return result; }\n';
+	await replaceEditorSource(page, source);
+	await waitForClangdDiagnosticsForCurrentVersion(page);
+	expect((await readDiagnosticCounts(page)).markers).toBe(0);
+	await page.evaluate(() => {
+		const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+		editor.updateOptions({ inlayHints: { enabled: 'on' } });
+		editor.setPosition({ lineNumber: 2, column: 28 });
+		editor.focus();
+		editor.trigger('browser-regression', 'editor.action.showHover', {});
+	});
+	await page
+		.locator('.monaco-hover')
+		.filter({ hasText: 'square' })
+		.first()
+		.waitFor({ timeout: 10_000 });
+	expect(await page.locator('.monaco-hover').innerText()).toContain('int');
+	await page.keyboard.press('Escape');
+	await page.waitForFunction(
+		() => {
+			const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+			const hints = editor
+				.getModel()
+				.getAllDecorations()
+				.filter((entry: any) => entry.options.description === 'InlayHint');
+			const text = hints
+				.map(
+					(entry: any) =>
+						(entry.options.before?.content || '') + (entry.options.after?.content || '')
+				)
+				.join(' ');
+			return text.includes('int') && text.includes('value:');
+		},
+		undefined,
+		{ timeout: 10_000 }
+	);
+	const trace = await page.evaluate(() => Reflect.get(globalThis, '__wasmIdleClangdTrace')());
+	for (const method of ['textDocument/hover', 'textDocument/inlayHint']) {
+		expect(
+			trace.some(
+				(entry: any) =>
+					entry.method === method &&
+					entry.outcome === 'response' &&
+					entry.finishedAt - entry.sentAt < 10_000
+			)
+		).toBe(true);
+	}
+	await page.evaluate(() => {
+		const editor = Reflect.get(globalThis, '__wasmIdleMonacoEditor');
+		for (let i = 0; i < 5; i++)
+			editor.setValue(`int main() { auto result = ${i}.0; return 0; }`);
+	});
+	await waitForClangdDiagnosticsForCurrentVersion(page);
+	await page.waitForFunction(
+		() => {
+			const model = Reflect.get(globalThis, '__wasmIdleMonacoEditor').getModel();
+			const text = model
+				.getAllDecorations()
+				.filter((entry: any) => entry.options.description === 'InlayHint')
+				.map(
+					(entry: any) =>
+						(entry.options.before?.content || '') + (entry.options.after?.content || '')
+				)
+				.join(' ');
+			return text.includes('double') && !text.includes('value:');
+		},
+		undefined,
+		{ timeout: 10_000 }
+	);
+	expect(await page.locator('.view-lines').innerText()).toContain('double');
 }
 
 async function runLspCase(
@@ -1008,6 +1125,11 @@ async function runLspCase(
 		expect(entry.progressValue).toBeGreaterThanOrEqual(0);
 		expect(entry.progressValue).toBeLessThanOrEqual(100);
 	}
+	if (testCase.validSource) {
+		await replaceEditorSource(page, testCase.validSource);
+		await waitForClangdDiagnosticsForCurrentVersion(page);
+		expect((await readDiagnosticCounts(page)).markers).toBe(0);
+	}
 	await replaceEditorSource(page, testCase.source);
 
 	for (const response of await Promise.all(expectedResponses)) {
@@ -1048,6 +1170,30 @@ async function runLspCase(
 	} else {
 		expect(diagnostics.dom + diagnostics.markers).toBeGreaterThan(0);
 	}
+	if (testCase.validSource) {
+		await waitForClangdDiagnosticsForCurrentVersion(page);
+		const markers = await page.evaluate(() => {
+			const hooks = globalThis as typeof globalThis & MonacoTestGlobal;
+			return hooks.__wasmIdleMonacoApi!.editor.getModelMarkers({
+				resource: hooks.__wasmIdleMonacoEditor!.getModel!()!.uri
+			});
+		});
+		expect(
+			markers.some(
+				(marker) =>
+					marker.startLineNumber === testCase.errorLine && (marker.severity || 0) >= 4
+			)
+		).toBe(true);
+		expect(
+			markers.some((marker) =>
+				/file not found|unknown type name 'NSString'/i.test(marker.message || '')
+			)
+		).toBe(false);
+		await replaceEditorSource(page, testCase.validSource);
+		await waitForClangdDiagnosticsForCurrentVersion(page);
+		expect((await readDiagnosticCounts(page)).markers).toBe(0);
+	}
+	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
 	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];
 	if (selectedDotnetRuntime) {
 		expect(
@@ -1126,6 +1272,7 @@ async function collectPageDebugInfo(page: Page) {
 			`diagnostics=${document.querySelectorAll(selector).length}`,
 			`lspStatus=${JSON.stringify(testGlobal.__wasmIdleMonacoLspStatus || null)}`,
 			`lspTraffic=${JSON.stringify(testGlobal.__wasmIdleMonacoLspTraffic || null)}`,
+			`clangdTrace=${JSON.stringify(Reflect.get(globalThis, '__wasmIdleClangdTrace')?.() || [])}`,
 			`markers=${JSON.stringify(markers)}`,
 			`viewText=${JSON.stringify(viewText)}`,
 			`squiggles=${JSON.stringify(squiggles)}`,
@@ -1227,10 +1374,16 @@ describe('Monaco LSP browser integration', () => {
 
 	it(
 		'renders browser diagnostics for the Monaco LSP matrix',
-		async () => {
-			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_LSP !== '1') {
-				return;
+		{
+			skip: process.env.WASM_IDLE_RUN_REAL_BROWSER_LSP !== '1',
+			timeout: suiteTimeoutMs,
+			meta: {
+				browser: true,
+				requiredBrowser: process.env.WASM_IDLE_RUN_REAL_BROWSER_LSP === '1'
 			}
+		},
+		async () => {
+			expect.hasAssertions();
 
 			const cases = selectedCases();
 			if (!cases.length) {
@@ -1288,6 +1441,12 @@ describe('Monaco LSP browser integration', () => {
 
 						try {
 							await runLspCase(page, previewServer.browserUrl, testCase, lspRequests);
+							expect(pageErrors).toEqual([]);
+							expect(
+								consoleMessages.filter((message) =>
+									/Missing requestHandler.*provideInlayHints/u.test(message)
+								)
+							).toEqual([]);
 						} catch (error) {
 							const pageDebugInfo = await collectPageDebugInfo(page).catch(
 								(debugError) => [
@@ -1321,7 +1480,6 @@ describe('Monaco LSP browser integration', () => {
 					await previewServer.close();
 				}
 			});
-		},
-		suiteTimeoutMs
+		}
 	);
 });

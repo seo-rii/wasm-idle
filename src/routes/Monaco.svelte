@@ -2889,7 +2889,7 @@
 			};
 		}
 		if (status.state === 'ready') {
-			const text = `${label} ready`;
+			const text = `${label} ready${status === clangdStatus && clangdRequestDelay ? ` · ${clangdRequestDelay.replace('textDocument/', '')} delayed` : ''}`;
 			return { label, state: 'ready', text, title: text, progressPercent: null };
 		}
 		const text = `${label} failed`;
@@ -2901,6 +2901,7 @@
 			progressPercent: null
 		};
 	});
+	let clangdRequestDelay = $state<string | null>(null);
 	const lspRoutes: LspRoute[] = [
 		{
 			languages: ['c', 'cpp', 'objective-c'],
@@ -2921,10 +2922,22 @@
 								)
 							}
 						: {}),
+					onRequestDelay: (method) => (clangdRequestDelay = method),
 					onStatus: (status) => (clangdStatus = status)
 				});
+				if (monacoTestHooksEnabled())
+					Reflect.set(globalThis, '__wasmIdleClangdTrace', handle.getDiagnosticTrace);
 				handle.syncFile?.(normalizedFilePath);
-				return handle;
+				const cursorSubscription = editor?.onDidChangeCursorPosition(() =>
+					handle.cancelEditorRequests()
+				);
+				return {
+					...handle,
+					dispose: () => {
+						cursorSubscription?.dispose();
+						handle.dispose();
+					}
+				};
 			}
 		},
 		{

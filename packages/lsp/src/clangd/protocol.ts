@@ -23,6 +23,6 @@ export interface ClangdWorkerSyncFileMessage {
 export type ClangdWorkerInboundMessage = ClangdWorkerInitMessage | ClangdWorkerSyncFileMessage;
 
 export type ClangdWorkerOutboundMessage =
-	| { type: 'progress'; value: number; max?: number }
+	| { type: 'progress'; value: number; max?: number; stage?: string }
 	| { type: 'ready'; value: number }
 	| { type: 'error'; message: string };
