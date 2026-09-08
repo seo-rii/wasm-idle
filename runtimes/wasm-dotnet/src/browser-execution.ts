@@ -9,6 +9,7 @@ export interface BrowserDotnetExecutionOptions extends DotnetCompilerRuntimeOpti
 	args?: string[];
 	env?: Record<string, string>;
 	stdin?: string;
+	maxOutputBytes?: number;
 	stdout?: (chunk: string) => void;
 	stderr?: (chunk: string) => void;
 	runtime?: DotnetCompilerRuntime;
@@ -35,7 +36,8 @@ export async function executeBrowserDotnetArtifact(
 		assemblyId: artifact.assemblyId,
 		args: options.args || [],
 		env: options.env || {},
-		stdin: options.stdin || ''
+		stdin: options.stdin || '',
+		...(options.maxOutputBytes === undefined ? {} : { maxOutputBytes: options.maxOutputBytes })
 	});
 	if (response.error) {
 		throw new Error(response.error);

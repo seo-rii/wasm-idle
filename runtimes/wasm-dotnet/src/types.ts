@@ -86,6 +86,7 @@ export interface DotnetRuntimeRunRequest {
 	args?: string[];
 	env?: Record<string, string>;
 	stdin?: string;
+	maxOutputBytes?: number;
 }
 
 export interface DotnetRuntimeRunResponse {

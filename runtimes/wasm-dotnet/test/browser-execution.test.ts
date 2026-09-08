@@ -16,6 +16,7 @@ describe('executeBrowserDotnetArtifact', () => {
 				args: ['4'],
 				env: { USER: 'jungol' },
 				stdin: '5\n',
+				maxOutputBytes: 4096,
 				stdout: (chunk) => outputs.push(chunk),
 				runtime: {
 					async compile() {
@@ -41,7 +42,8 @@ describe('executeBrowserDotnetArtifact', () => {
 				assemblyId: 'asm-csharp',
 				args: ['4'],
 				env: { USER: 'jungol' },
-				stdin: '5\n'
+				stdin: '5\n',
+				maxOutputBytes: 4096
 			}
 		]);
 	});

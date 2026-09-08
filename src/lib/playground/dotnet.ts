@@ -1164,6 +1164,7 @@ class Dotnet implements Sandbox {
 							prepare,
 							args: request.programArgs,
 							stdin,
+							maxOutputBytes: limits.maxOutputBytes,
 							log: _log
 						});
 					})

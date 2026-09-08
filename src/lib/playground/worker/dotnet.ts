@@ -43,6 +43,7 @@ type DotnetRuntimeModule = {
 			args?: string[];
 			env?: Record<string, string>;
 			stdin?: string;
+			maxOutputBytes?: number;
 			stdout?: (chunk: string) => void;
 			stderr?: (chunk: string) => void;
 		}
@@ -103,6 +104,7 @@ workerSelf.onmessage = async (event: { data: any }) => {
 		prepare,
 		args = [],
 		stdin = '',
+		maxOutputBytes = 1024 * 1024,
 		log
 	} = event.data;
 	try {
@@ -165,12 +167,21 @@ workerSelf.onmessage = async (event: { data: any }) => {
 			return;
 		}
 
+		postMessage({
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: `Running ${languageLabel(compileLanguage)} program`
+			}
+		});
 		const execution = await runtime.executeBrowserDotnetArtifact(compiledArtifact, {
 			args,
 			env: {
 				USER: 'jungol'
 			},
 			stdin,
+			maxOutputBytes,
 			stdout: (output) => {
 				if (output) postMessage({ output });
 			},

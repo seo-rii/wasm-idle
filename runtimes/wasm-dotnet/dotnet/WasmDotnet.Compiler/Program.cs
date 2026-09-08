@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices.JavaScript;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Tasks;
@@ -138,8 +139,9 @@ public static partial class CompilerHost
                 }));
             }
 
-            using var stdout = new StringWriter();
-            using var stderr = new StringWriter();
+            var outputBudget = new OutputBudget(request.MaxOutputBytes ?? 1024 * 1024);
+            using var stdout = new BoundedOutput(outputBudget);
+            using var stderr = new BoundedOutput(outputBudget);
             StdinShim.Set(request.Stdin);
             Console.SetOut(stdout);
             Console.SetError(stderr);
@@ -567,11 +569,40 @@ public static partial class CompilerHost
         public string? BytesBase64 { get; set; }
     }
 
+    private sealed class OutputBudget(long limit)
+    {
+        private long used;
+
+        public void Add(ReadOnlySpan<char> text)
+        {
+            var count = Encoding.UTF8.GetByteCount(text);
+            if (limit <= 0 || count > limit - used)
+                throw new IOException($".NET output exceeded {limit} bytes.");
+            used += count;
+        }
+    }
+
+    private sealed class BoundedOutput(OutputBudget budget) : TextWriter
+    {
+        private readonly StringBuilder buffer = new();
+        public override Encoding Encoding => Encoding.UTF8;
+        public override void Write(char value) => Write(new ReadOnlySpan<char>(in value));
+        public override void Write(string? value) => Write(value.AsSpan());
+        public override void Write(char[] value, int index, int count) => Write(value.AsSpan(index, count));
+        public override void Write(ReadOnlySpan<char> value)
+        {
+            budget.Add(value);
+            buffer.Append(value);
+        }
+        public override string ToString() => buffer.ToString();
+    }
+
     public sealed class RunRequest
     {
         public string? AssemblyId { get; set; }
         public string[]? Args { get; set; }
         public string? Stdin { get; set; }
+        public long? MaxOutputBytes { get; set; }
     }
 
     private sealed class CompileResult
