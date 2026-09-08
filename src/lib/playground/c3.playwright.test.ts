@@ -25,6 +25,8 @@ describe.skipIf(process.env.WASM_IDLE_RUN_REAL_BROWSER_C3 !== '1')(
 			});
 			let page: Page | undefined;
 			const consoleMessages: string[] = [];
+			const requestFailures: string[] = [];
+			const pageErrors: string[] = [];
 			try {
 				const context = await browser.newContext();
 				await addBrowserTestCookies(context, server.browserUrl);
@@ -52,14 +54,53 @@ describe.skipIf(process.env.WASM_IDLE_RUN_REAL_BROWSER_C3 !== '1')(
 					};
 				});
 				page = await context.newPage();
+				page.setDefaultTimeout(60_000);
+				page.setDefaultNavigationTimeout(180_000);
 				page.on('console', (message) => consoleMessages.push(message.text()));
-				const pageErrors: string[] = [];
 				page.on('pageerror', (error) => pageErrors.push(error.message));
+				page.on('requestfailed', (request) =>
+					requestFailures.push(`${request.failure()?.errorText}: ${request.url()}`)
+				);
 				await page.goto(server.browserUrl, { waitUntil: 'domcontentloaded' });
-				await page.waitForFunction(
-					() =>
-						crossOriginIsolated &&
-						Boolean((window as any).__wasmIdleDebug?.getEditorValue)
+				let activeState = await page.evaluate(() => ({
+					crossOriginIsolated,
+					serviceWorkerControlled: Boolean(navigator.serviceWorker?.controller),
+					sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined'
+				}));
+				for (let attempt = 0; attempt < 4; attempt += 1) {
+					if (
+						activeState.crossOriginIsolated &&
+						activeState.serviceWorkerControlled &&
+						activeState.sharedArrayBuffer
+					) {
+						break;
+					}
+					await page
+						.evaluate(async () => {
+							if (!navigator.serviceWorker) return;
+							await Promise.race([
+								navigator.serviceWorker.ready,
+								new Promise((resolve) => setTimeout(resolve, 1_500))
+							]);
+						})
+						.catch(() => {});
+					await page
+						.goto(server.browserUrl, { waitUntil: 'domcontentloaded' })
+						.catch(() => null);
+					await page.waitForTimeout(2_000 + attempt * 500);
+					activeState = await page.evaluate(() => ({
+						crossOriginIsolated,
+						serviceWorkerControlled: Boolean(navigator.serviceWorker?.controller),
+						sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined'
+					}));
+				}
+				expect(activeState).toEqual({
+					crossOriginIsolated: true,
+					serviceWorkerControlled: true,
+					sharedArrayBuffer: true
+				});
+				await page.waitForFunction(() =>
+					Boolean((window as any).__wasmIdleDebug?.getEditorValue)
 				);
 				await page.locator('#language-select').selectOption('C3');
 				await page.waitForFunction(() =>
@@ -110,7 +151,13 @@ describe.skipIf(process.env.WASM_IDLE_RUN_REAL_BROWSER_C3 !== '1')(
 					'C3 UI failure:',
 					JSON.stringify({
 						console: consoleMessages.slice(-20),
+						pageErrors,
+						requestFailures: requestFailures.slice(-20),
 						state: await page?.evaluate(() => ({
+							crossOriginIsolated,
+							serviceWorkerControlled: Boolean(navigator.serviceWorker?.controller),
+							sharedArrayBuffer: typeof SharedArrayBuffer !== 'undefined',
+							debugHook: Object.keys((window as any).__wasmIdleDebug || {}),
 							transcript: document.querySelector(
 								'[data-testid="terminal-debug-output"]'
 							)?.textContent,
