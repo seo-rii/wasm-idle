@@ -2271,10 +2271,11 @@ describe('native-source browser debugging in Chromium', () => {
 									const array = Array.from(variables.values())
 										.flat()
 										.find((variable) => variable.name === 'values');
-									return {
-										array,
-										children: variables.get(array.variablesReference)
-									};
+									const children = variables.get(array.variablesReference);
+									if (!children) {
+										throw new Error('Paged array children were not loaded');
+									}
+									return { array, children };
 								});
 								expect(loaded.array.indexedVariables).toBe(1000);
 								expect(
@@ -3353,6 +3354,18 @@ describe('native-source browser debugging in Chromium', () => {
 									process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS || '5000'
 								)
 							});
+							await expect
+								.poll(
+									async () =>
+										(await readBrowserLifecycleMetrics(page)).activeDebug,
+									{
+										timeout: Number(
+											process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS ||
+												'5000'
+										)
+									}
+								)
+								.toBe(0);
 							await page.requestGC();
 							latestMetrics = await readBrowserLifecycleMetrics(page);
 							lifecycleMetrics.push(latestMetrics);
