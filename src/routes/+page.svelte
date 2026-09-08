@@ -424,6 +424,7 @@
 				? 'Rust LLDB debugging currently supports wasm32-wasip1 only'
 				: 'Debug'
 	);
+	let debugScopeOpen = $state<Record<string, boolean>>({});
 	const debug = createDebugSessionController({
 		syncBreakpointsWhile: () => runningMode === 'debug'
 	});
@@ -3183,7 +3184,7 @@
 							<span class="debug-count">
 								{debug.scopes.length
 									? debug.scopes.reduce(
-											(total, scope) => total + scope.variables.length,
+											(total, scope) => total + (debug.variablesByReference.get(scope.variablesReference) ?? scope.variables).length,
 											0
 										)
 									: debug.locals.length}
@@ -3198,12 +3199,17 @@
 											: debug.variablesByReference.get(
 													scope.variablesReference
 												)}
-									<section class="debug-scope">
-										<h4>{scope.name}</h4>
+									<details class="debug-scope" bind:open={() => debugScopeOpen[scope.name] ?? true, (open) => debugScopeOpen[scope.name] = open}>
+										<summary><h4>{scope.name}</h4></summary>
 										{#if loadedScopeVariables?.length}
 											<ul>
 												{@render debugVariableRows(loadedScopeVariables)}
 											</ul>
+											{#if loadedScopeVariables.length >= 50 && (scope.namedVariables === undefined ? loadedScopeVariables.length % 50 === 0 : loadedScopeVariables.length < scope.namedVariables + (scope.indexedVariables ?? 0))}
+												<button class="debug-load-scope" disabled={debug.loadingVariableReferences.has(scope.variablesReference)} onclick={() => debug.loadVariableChildren(scope.variablesReference, loadedScopeVariables.length, 50)}>
+													Load more {scope.name.toLowerCase()}
+												</button>
+											{/if}
 										{:else if loadedScopeVariables === undefined && scope.variablesReference > 0}
 											<button
 												class="debug-load-scope"
@@ -3220,7 +3226,7 @@
 										{:else}
 											<p class="empty">No variables</p>
 										{/if}
-									</section>
+									</details>
 								{/each}
 							</div>
 						{:else if debug.locals.length}

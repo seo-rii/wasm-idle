@@ -26,6 +26,13 @@ const MAX_WATCH_EXPRESSION_CODE_UNITS = 4096;
 const MAX_WATCH_EXPRESSIONS = 64;
 const MAX_WATCH_VARIABLE_PATH_SEGMENTS = 64;
 const VARIABLE_PAGE_SIZE = 50;
+const MAX_AUTO_LOADED_SCOPES = 2;
+
+function isLocalScope(scope: DebugScope) {
+	return scope.presentationHint
+		? scope.presentationHint === 'locals' || scope.presentationHint === 'arguments'
+		: /^(locals|arguments)$/iu.test(scope.name);
+}
 
 type WatchVariablePathSegment = { name: string } | { index: number };
 type WatchVariablePathParseResult =
@@ -229,6 +236,18 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			!terminal?.debugVariables
 		)
 			return Promise.resolve([]);
+		// Auto-loading, watches, and the panel must share the same bounded scope request.
+		if (
+			paging[0] === undefined &&
+			paging[1] === undefined &&
+			get(scopesStore).some(
+				(scope) => scope.variablesReference === variablesReference && isLocalScope(scope)
+			)
+		) {
+			const cached = get(variablesByReferenceStore).get(variablesReference);
+			if (cached) return Promise.resolve(cached);
+			paging = [0, VARIABLE_PAGE_SIZE];
+		}
 		const key = `${variablesReference}:${paging[0] ?? 0}:${paging[1] ?? 0}`;
 		const pending = variableRequests.get(key);
 		if (pending) return pending.promise;
@@ -241,7 +260,11 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		request.promise = (async () => {
 			try {
 				const variables = await terminal.debugVariables!(variablesReference, ...paging);
-				return version === frameRequestVersion && get(pausedStore) ? variables : [];
+				return version === frameRequestVersion && get(pausedStore)
+					? paging[1] === undefined
+						? variables
+						: variables.slice(0, paging[1])
+					: [];
 			} catch (error) {
 				if (version !== frameRequestVersion || !get(pausedStore)) return [];
 				throw error;
@@ -556,6 +579,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			frameIdStore.set(event.frameId ?? null);
 			stoppedReasonStore.set(event.stoppedReason ?? event.reason);
 			pausedStore.set(true);
+			loadTopLevelVariables();
 			refreshWatchValues();
 			return;
 		}
@@ -766,6 +790,19 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		return variables;
 	}
 
+	function loadTopLevelVariables() {
+		const scopes = get(scopesStore).filter((scope) => !scope.expensive && isLocalScope(scope));
+		for (const scope of scopes.slice(0, MAX_AUTO_LOADED_SCOPES)) {
+			if (
+				scope.variablesReference <= 0 ||
+				get(variablesByReferenceStore).has(scope.variablesReference)
+			)
+				continue;
+			// Failure leaves this scope unloaded so the panel can explicitly retry it.
+			void loadVariableChildren(scope.variablesReference).catch(() => undefined);
+		}
+	}
+
 	function loadMoreVariableChildren(variable: DebugVariable) {
 		const reference = variable.variablesReference ?? 0;
 		const children = get(variablesByReferenceStore).get(reference);
@@ -788,11 +825,17 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		if (!get(pausedStore) || !frame || !terminal?.debugScopes) return false;
 		invalidateVariableRequests();
 		const version = frameRequestVersion;
+		const previousLocals = get(localsStore);
+		// Values from the previous frame stop describing the editor as soon as selection begins.
+		localsStore.set([]);
 		let scopes: DebugScope[];
 		try {
 			scopes = await terminal.debugScopes(frameId);
 		} catch {
-			if (version === frameRequestVersion && get(pausedStore)) refreshWatchValues();
+			if (version === frameRequestVersion && get(pausedStore)) {
+				localsStore.set(previousLocals);
+				refreshWatchValues();
+			}
 			return false;
 		}
 		if (
@@ -809,7 +852,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			!!selectedSourcePath && get(staleSourcePathsStore).has(selectedSourcePath);
 		frameIdStore.set(frameId);
 		scopesStore.set(scopes);
-		localsStore.set([]);
+		localsStore.set(scopes.flatMap((scope) => scope.variables));
 		variablesByReferenceStore.set(
 			new Map(
 				scopes
@@ -822,6 +865,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		pausedLineStore.set(
 			!sourceRevisionStale && selectedSourcePath === get(sourcePathStore) ? frame.line : null
 		);
+		loadTopLevelVariables();
 		refreshWatchValues();
 		return true;
 	}

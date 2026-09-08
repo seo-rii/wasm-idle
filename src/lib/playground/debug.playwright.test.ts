@@ -2113,9 +2113,6 @@ describe('native-source browser debugging in Chromium', () => {
 									initialState.callStack[1].id,
 									{ timeout: 10_000 }
 								);
-								await page
-									.getByRole('button', { name: 'Load locals', exact: true })
-									.click();
 								await page.waitForFunction(
 									() => {
 										const state = (
@@ -2138,6 +2135,9 @@ describe('native-source browser debugging in Chromium', () => {
 									undefined,
 									{ timeout: 10_000 }
 								);
+								await expect.poll(() => page.locator('.debug-inline-values').allTextContents(), { timeout: 10_000 }).toEqual([expect.stringContaining('depth = 1')]);
+								const localsScope = page.locator('details.debug-scope').filter({ has: page.locator('summary', { hasText: 'Locals' }) });
+								await localsScope.locator('summary').click();
 								await page.locator('.debug-frame-select').first().click();
 								await page.waitForFunction(
 									(frameId) => {
@@ -2149,6 +2149,7 @@ describe('native-source browser debugging in Chromium', () => {
 									initialState.callStack[0].id,
 									{ timeout: 10_000 }
 								);
+								await expect.poll(() => localsScope.evaluate((element) => (element as HTMLDetailsElement).open)).toBe(false);
 								expect(
 									await page.evaluate(() =>
 										(window as any).__wasmIdleDebugTransport.begin()
@@ -2228,9 +2229,6 @@ describe('native-source browser debugging in Chromium', () => {
 									.getByRole('button', { name: 'Continue', exact: true })
 									.click();
 							} else if ('expectedArrayPageSize' in testCase) {
-								await page
-									.getByRole('button', { name: 'Load locals', exact: true })
-									.click();
 								const expand = page.getByRole('button', {
 									name: 'Load children for values',
 									exact: true
@@ -2301,10 +2299,20 @@ describe('native-source browser debugging in Chromium', () => {
 								const resumedState = await page.evaluate(() =>
 									(window as any).__wasmIdleDebug.getDebugState()
 								);
-								expect(resumedState.variablesByReference).toEqual([]);
+								expect(
+									resumedState.variablesByReference.every(
+										([, variables]: [number, any[]]) =>
+											variables.every(
+												(variable: any) => !/^\[\d+\]$/u.test(variable.name)
+											)
+									)
+								).toBe(true);
 								expect(await rows.count()).toBe(0);
 								await page
-									.getByRole('button', { name: 'Load locals', exact: true })
+									.getByRole('button', {
+										name: 'Load children for values',
+										exact: true
+									})
 									.waitFor({ state: 'visible', timeout: 10_000 });
 								await page
 									.getByRole('button', { name: 'Continue', exact: true })
@@ -2520,7 +2528,25 @@ describe('native-source browser debugging in Chromium', () => {
 							expect(debugState.paused).toBe(true);
 							expect(debugState.frameId).toBeTypeOf('number');
 							expect(debugState.scopes.length).toBeGreaterThan(0);
-							expect(debugState.variablesByReference).toEqual([]);
+							await page.waitForFunction(
+								() => {
+									const state = (window as any).__wasmIdleDebug.getDebugState();
+									return state.scopes
+										.filter(
+											(scope: any) =>
+												!scope.expensive &&
+												/^(locals|arguments)$/iu.test(scope.name)
+										)
+										.every((scope: any) =>
+											state.variablesByReference.some(
+												([reference]: [number]) =>
+													reference === scope.variablesReference
+											)
+										);
+								},
+								undefined,
+								{ timeout: 10_000 }
+							);
 
 							const loadedVariables = [];
 							for (const scope of debugState.scopes) {

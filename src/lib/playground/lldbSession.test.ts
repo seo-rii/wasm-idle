@@ -3370,6 +3370,7 @@ describe('LldbSandboxSession', () => {
 					name: 'Locals',
 					variablesReference: 10,
 					namedVariables: 2,
+					presentationHint: 'locals',
 					indexedVariables: 3,
 					expensive: false
 				}
@@ -3381,6 +3382,7 @@ describe('LldbSandboxSession', () => {
 				name: 'Locals',
 				variablesReference: 10,
 				namedVariables: 2,
+				presentationHint: 'locals',
 				indexedVariables: 3,
 				expensive: false,
 				variables: []

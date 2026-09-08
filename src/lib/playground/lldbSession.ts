@@ -1363,6 +1363,10 @@ export class LldbSandboxSession {
 					`${path}.variablesReference`
 				);
 				assertDapBoolean(scope.expensive, 'scopes', `${path}.expensive`);
+				const presentationHint = scope.presentationHint;
+				if (presentationHint !== undefined) {
+					assertDapString(presentationHint, 'scopes', `${path}.presentationHint`);
+				}
 				const namedVariables = dapOptionalNonNegativeSafeInteger(
 					scope,
 					'namedVariables',
@@ -1377,6 +1381,7 @@ export class LldbSandboxSession {
 				);
 				return {
 					name: scope.name,
+					...(presentationHint === undefined ? {} : { presentationHint }),
 					variablesReference: scope.variablesReference,
 					...(namedVariables === undefined ? {} : { namedVariables }),
 					...(indexedVariables === undefined ? {} : { indexedVariables }),

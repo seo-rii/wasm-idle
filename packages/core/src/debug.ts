@@ -52,6 +52,8 @@ export interface DebugFrame {
 
 export interface DebugScope {
 	name: string;
+	/** DAP scope meaning; adapters may supply additional implementation-specific hints. */
+	presentationHint?: string;
 	variablesReference: number;
 	namedVariables?: number;
 	indexedVariables?: number;

@@ -32,6 +32,92 @@ function createPausedVariableController(
 }
 
 describe('createDebugSessionController', () => {
+	it('automatically loads bounded locals and arguments without expanding arrays or expensive scopes', async () => {
+		const debugVariables = vi.fn(async (reference: number) => [
+			{
+				name: reference === 10 ? 'values' : 'argc',
+				value: reference === 10 ? '[...]' : '2',
+				variablesReference: reference === 10 ? 99 : 0,
+				indexedVariables: reference === 10 ? 1000 : 0
+			}
+		]);
+		const controller = createDebugSessionController({ terminal: { debugVariables } as never });
+		controller.handleEvent({
+			type: 'pause',
+			line: 7,
+			reason: 'breakpoint',
+			frameId: 1,
+			locals: [],
+			callStack: [{ id: 1, functionName: 'main', line: 7 }],
+			scopes: [
+				{
+					name: 'Local variables',
+					presentationHint: 'locals',
+					variablesReference: 10,
+					expensive: false,
+					variables: []
+				},
+				{
+					name: 'Arguments',
+					presentationHint: 'arguments',
+					variablesReference: 11,
+					expensive: false,
+					variables: []
+				},
+				{ name: 'Globals', variablesReference: 12, expensive: true, variables: [] },
+				{
+					name: 'Registers',
+					presentationHint: 'registers',
+					variablesReference: 13,
+					expensive: false,
+					variables: []
+				}
+			]
+		});
+		expect(controller.paused).toBe(true);
+		await vi.waitFor(() =>
+			expect(controller.locals.map((variable) => variable.name)).toEqual(['values', 'argc'])
+		);
+		expect(debugVariables.mock.calls).toEqual([
+			[10, 0, 50],
+			[11, 0, 50]
+		]);
+		expect(controller.variablesByReference.has(99)).toBe(false);
+	});
+
+	it('loads frame locals automatically and discards the prior stop response after a step', async () => {
+		const first = deferred<DebugVariable[]>();
+		const debugVariables = vi
+			.fn()
+			.mockReturnValueOnce(first.promise)
+			.mockResolvedValue([{ name: 'depth', value: '2' }]);
+		const controller = createPausedVariableController({
+			debugVariables,
+			debugScopes: async () => [
+				{ name: 'Locals', variablesReference: 20, expensive: false, variables: [] }
+			]
+		});
+		await controller.selectFrame(12);
+		await vi.waitFor(() => expect(controller.locals).toEqual([{ name: 'depth', value: '2' }]));
+		first.resolve([{ name: 'depth', value: '1' }]);
+		await Promise.resolve();
+		expect(controller.locals).toEqual([{ name: 'depth', value: '2' }]);
+		expect(controller.variablesByReference.has(10)).toBe(false);
+		controller.handleEvent({ type: 'resume', command: 'nextLine' });
+		expect(controller.locals).toEqual([]);
+	});
+
+	it('allows an automatic locals failure to be retried without leaving a loading reference', async () => {
+		const debugVariables = vi
+			.fn()
+			.mockRejectedValueOnce(new Error('unavailable'))
+			.mockResolvedValue([{ name: 'answer', value: '42' }]);
+		const controller = createPausedVariableController({ debugVariables });
+		await vi.waitFor(() => expect(controller.loadingVariableReferences.size).toBe(0));
+		expect(controller.variablesByReference.has(10)).toBe(false);
+		await controller.loadVariableChildren(10);
+		expect(controller.locals).toEqual([{ name: 'answer', value: '42' }]);
+	});
 	it('pauses an active LLDB terminal without requiring an existing stopped frame', async () => {
 		const debugPause = vi.fn(async () => undefined);
 		const controller = createDebugSessionController({
@@ -189,7 +275,7 @@ describe('createDebugSessionController', () => {
 				{ expression: 'items[2]', value: '73' }
 			])
 		);
-		expect(debugVariables).toHaveBeenCalledWith(10);
+		expect(debugVariables).toHaveBeenCalledWith(10, 0, 50);
 		expect(debugVariables).toHaveBeenCalledWith(20);
 		expect(debugVariables).toHaveBeenCalledWith(30, 2, 1);
 	});
@@ -651,7 +737,7 @@ describe('createDebugSessionController', () => {
 			});
 
 			const loading = controller.loadVariableChildren(50);
-			expect(debugVariables).toHaveBeenCalledWith(50, undefined, undefined);
+			expect(debugVariables).toHaveBeenCalledWith(50, 0, 50);
 			controller.handleEvent({ type: 'resume', command: 'continue' });
 			if (settlement === 'success') {
 				resolveVariables([{ name: 'late', value: '1' }]);
@@ -687,7 +773,7 @@ describe('createDebugSessionController', () => {
 			callStack: [{ id: 11, functionName: 'main', line: 7 }],
 			scopes: [
 				{
-					name: 'Locals',
+					name: 'Custom scope',
 					variablesReference: 50,
 					expensive: false,
 					variables: []
