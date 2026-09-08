@@ -29,10 +29,16 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 
 	it(
 		'runs the real OCaml page path through both bundled browser-native backends',
+		{
+			skip: process.env.WASM_IDLE_RUN_REAL_BROWSER_OCAML !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(process.env.WASM_IDLE_RUN_REAL_BROWSER_OCAML !== '1')
+			},
+			timeout: ocamlBrowserTestTimeoutMs
+		},
 		async () => {
-			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_OCAML !== '1') {
-				return;
-			}
+			expect.hasAssertions();
 
 			await runWithBrowserProbeSessionLock(async () => {
 				const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
@@ -127,16 +133,21 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 					await previewServer.close();
 				}
 			});
-		},
-		ocamlBrowserTestTimeoutMs
+		}
 	);
 
 	it(
 		'accepts terminal-typed stdin on the real browser-native OCaml backend paths',
+		{
+			skip: process.env.WASM_IDLE_RUN_REAL_BROWSER_OCAML !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(process.env.WASM_IDLE_RUN_REAL_BROWSER_OCAML !== '1')
+			},
+			timeout: ocamlBrowserTestTimeoutMs
+		},
 		async () => {
-			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_OCAML !== '1') {
-				return;
-			}
+			expect.hasAssertions();
 
 			await runWithBrowserProbeSessionLock(async () => {
 				const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
@@ -226,7 +237,6 @@ describe('wasm-idle OCaml browser playwright integration', () => {
 					await previewServer.close();
 				}
 			});
-		},
-		ocamlBrowserTestTimeoutMs
+		}
 	);
 });

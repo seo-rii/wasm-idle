@@ -95,8 +95,16 @@ async function runLanguage(
 describe('dotnet language switching', () => {
 	it(
 		'runs C#, F#, and VB.NET bundles sequentially on one page',
+		{
+			skip: process.env.WASM_IDLE_RUN_REAL_BROWSER_DOTNET_SWITCH !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(process.env.WASM_IDLE_RUN_REAL_BROWSER_DOTNET_SWITCH !== '1')
+			},
+			timeout: runTimeoutMs
+		},
 		async () => {
-			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_DOTNET_SWITCH !== '1') return;
+			expect.hasAssertions();
 
 			await runWithBrowserProbeSessionLock(async () => {
 				const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
@@ -192,7 +200,6 @@ describe('dotnet language switching', () => {
 					await previewServer.close();
 				}
 			});
-		},
-		runTimeoutMs
+		}
 	);
 });

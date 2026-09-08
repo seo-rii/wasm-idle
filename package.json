@@ -130,7 +130,7 @@
 		"prepack": "pnpm run package",
 		"verify:package": "node scripts/verify-package.mjs",
 		"test": "pnpm run build:publish-deps && vitest run",
-		"test:lsp:browser:smoke": "WASM_IDLE_RUN_REAL_BROWSER_LSP=1 WASM_IDLE_LSP_BROWSER_LANGUAGES=CPP pnpm exec vitest run src/routes/monaco-lsp.playwright.test.ts",
+		"test:lsp:browser:smoke": "WASM_IDLE_RUN_REAL_BROWSER_LSP=1 WASM_IDLE_LSP_BROWSER_LANGUAGES=C,CPP,OBJC pnpm exec vitest run src/routes/monaco-lsp.playwright.test.ts",
 		"test:lsp:browser:gleam:csp": "WASM_IDLE_STRICT_CSP=1 WASM_IDLE_RUN_REAL_BROWSER_LSP=1 WASM_IDLE_LSP_BROWSER_LANGUAGES=GLEAM pnpm exec vitest run src/routes/monaco-lsp.playwright.test.ts",
 		"test:lsp:browser:cpp-python": "WASM_IDLE_RUN_REAL_BROWSER_LSP=1 WASM_IDLE_LSP_BROWSER_GROUPS=cpp-python pnpm exec vitest run src/routes/monaco-lsp.playwright.test.ts",
 		"test:lsp:browser:document": "WASM_IDLE_RUN_REAL_BROWSER_LSP=1 WASM_IDLE_LSP_BROWSER_GROUPS=document pnpm exec vitest run src/routes/monaco-lsp.playwright.test.ts",
@@ -142,7 +142,7 @@
 		"check:watch": "pnpm run build:publish-deps && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
-		"page": "pnpm run page:build && node gh-pages.js"
+		"page": "pnpm run page:build && pnpm run test:browser:audit:full --use-build && node gh-pages.js"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

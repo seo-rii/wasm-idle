@@ -49,7 +49,47 @@ jobs:
             - run: pnpm --dir packages/llvm-core run verify:package-boundary
             - run: pnpm run verify:package
 
+    changed-runtimes:
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
+        runs-on: ubuntu-latest
+        outputs:
+            families: ${{ steps.changes.outputs.families }}
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+            - id: changes
+              env:
+                  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+              run: node scripts/changed-browser-families.mjs "$BASE_SHA"
+
+    runtime-browser-required:
+        needs: changed-runtimes
+        if: needs.changed-runtimes.outputs.families != '[]'
+        runs-on: ubuntu-latest
+        timeout-minutes: 120
+        strategy:
+            fail-fast: false
+            matrix:
+                family: ${{ fromJSON(needs.changed-runtimes.outputs.families) }}
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 10.30.0
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 24
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm exec playwright-core install --with-deps chromium
+            - if: matrix.family == 'clang'
+              run: pnpm run prepare:test-assets -- clang
+            - run: node scripts/run-all-language-browser-tests.mjs --family=${{ matrix.family }}
+
     lsp-browser-smoke:
+        env:
+            WASM_IDLE_REQUIRE_BROWSER_TESTS: '1'
         if: github.event_name == 'pull_request' || github.event_name == 'push'
         runs-on: ubuntu-latest
         timeout-minutes: 30
@@ -70,6 +110,8 @@ jobs:
             - run: pnpm run test:lsp:browser:gleam:csp
 
     lsp-browser-full:
+        env:
+            WASM_IDLE_REQUIRE_BROWSER_TESTS: '1'
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         runs-on: ubuntu-latest
         timeout-minutes: 90

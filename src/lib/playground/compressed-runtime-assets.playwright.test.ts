@@ -134,10 +134,16 @@ describe('compressed runtime assets', () => {
 
 	it(
 		'serves gzip-only runtime assets through their original URLs',
+		{
+			skip: process.env.WASM_IDLE_RUN_REAL_BROWSER_COMPRESSED_ASSETS !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(process.env.WASM_IDLE_RUN_REAL_BROWSER_COMPRESSED_ASSETS !== '1')
+			},
+			timeout: compressedAssetTestTimeoutMs
+		},
 		async () => {
-			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_COMPRESSED_ASSETS !== '1') {
-				return;
-			}
+			expect.hasAssertions();
 
 			await runWithBrowserProbeSessionLock(async () => {
 				const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
@@ -342,7 +348,6 @@ describe('compressed runtime assets', () => {
 					await previewServer.close();
 				}
 			});
-		},
-		compressedAssetTestTimeoutMs
+		}
 	);
 });

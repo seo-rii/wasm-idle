@@ -28,7 +28,14 @@ describe('all-language browser test runner', () => {
 			)
 		].sort();
 
-		expect(Object.keys(plan.env).sort()).toEqual(expectedEnvironments);
+		expect(Object.keys(plan.env).sort()).toEqual(
+			[
+				...expectedEnvironments,
+				'WASM_IDLE_RUN_REAL_BROWSER_DOTNET_RECOVERY',
+				'WASM_IDLE_RUN_REAL_BROWSER_DOTNET_SWITCH',
+				'WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY'
+			].sort()
+		);
 		for (const row of supportMatrixRows) {
 			if (!row.browserTest) continue;
 			expect(plan.env[row.browserTest.env]).toBe('1');
@@ -72,6 +79,16 @@ describe('all-language browser test runner', () => {
 						: row.browserTest!.env
 				)
 			);
+			if (shard === 'stdin') {
+				expectedFiles.add('src/lib/playground/runtime-recovery.playwright.test.ts');
+				expectedFiles.add('src/lib/playground/dotnet-switch.playwright.test.ts');
+				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_DOTNET_RECOVERY');
+				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_DOTNET_SWITCH');
+			}
+			if (shard === 'workers') {
+				expectedFiles.add('src/lib/playground/runtime-recovery.playwright.test.ts');
+				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY');
+			}
 			expect(new Set(plan.testFiles)).toEqual(expectedFiles);
 			expect(new Set(Object.keys(plan.env))).toEqual(expectedEnvironments);
 			for (const row of supportMatrixRows) {

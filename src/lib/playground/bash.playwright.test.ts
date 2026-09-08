@@ -500,64 +500,79 @@ describe('Bash outer-worker ordering instrumentation', () => {
 });
 
 describe('wasm-idle Bash browser playwright integration', () => {
-	it('runs stdin and repeatedly cancels and retries the real GNU Bash WASIX runtime', async () => {
-		if (process.env.WASM_IDLE_RUN_REAL_BROWSER_BASH !== '1') return;
+	it(
+		'runs stdin and repeatedly cancels and retries the real GNU Bash WASIX runtime',
+		{
+			skip: process.env.WASM_IDLE_RUN_REAL_BROWSER_BASH !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(process.env.WASM_IDLE_RUN_REAL_BROWSER_BASH !== '1')
+			},
+			timeout: 960_000
+		},
+		async () => {
+			expect.hasAssertions();
 
-		await runWithBrowserProbeSessionLock(async () => {
-			const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
-			const serverMode =
-				process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
-			const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
-			if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
-				await runBrowserPreparationScripts(
-					[
-						'sync:wasm-bash',
-						'build:static-runtime-modules',
-						'compress:static-runtimes',
-						'build:preview'
-					],
-					{ timeoutMs: Number(process.env.WASM_IDLE_BASH_PREP_TIMEOUT_MS || '900000') }
-				);
-			}
-			const previewServer = reuseProvidedBrowserUrl
-				? {
-						origin: new URL(configuredBrowserUrl).origin,
-						browserUrl: configuredBrowserUrl,
-						close: async () => {}
-					}
-				: await startBrowserPreviewServer(
-						configuredBrowserUrl
-							? {
-									origin: new URL(configuredBrowserUrl).origin,
-									basePath: new URL(configuredBrowserUrl).pathname,
-									serverMode
-								}
-							: { origin: 'http://127.0.0.1:4682', serverMode }
+			await runWithBrowserProbeSessionLock(async () => {
+				const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
+				const serverMode =
+					process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
+				const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
+				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
+					await runBrowserPreparationScripts(
+						[
+							'sync:wasm-bash',
+							'build:static-runtime-modules',
+							'compress:static-runtimes',
+							'build:preview'
+						],
+						{
+							timeoutMs: Number(
+								process.env.WASM_IDLE_BASH_PREP_TIMEOUT_MS || '900000'
+							)
+						}
 					);
+				}
+				const previewServer = reuseProvidedBrowserUrl
+					? {
+							origin: new URL(configuredBrowserUrl).origin,
+							browserUrl: configuredBrowserUrl,
+							close: async () => {}
+						}
+					: await startBrowserPreviewServer(
+							configuredBrowserUrl
+								? {
+										origin: new URL(configuredBrowserUrl).origin,
+										basePath: new URL(configuredBrowserUrl).pathname,
+										serverMode
+									}
+								: { origin: 'http://127.0.0.1:4682', serverMode }
+						);
 
-			try {
-				const stdinSummary = await runStdinBrowserProbe({
-					browserUrl: previewServer.browserUrl,
-					expectedOutput: 'main=73',
-					language: 'BASH',
-					preloadStdin: true,
-					runTimeoutMs: Number(process.env.WASM_IDLE_BASH_RUN_TIMEOUT_MS || '180000'),
-					source: bashStdinSource,
-					stdinText: '68\n'
-				});
-				expect(stdinSummary.activeState.crossOriginIsolated).toBe(true);
-				expect(stdinSummary.activeState.sharedArrayBuffer).toBe(true);
-				expect(stdinSummary.pageErrors).toEqual([]);
-				expect(stdinSummary.transcript).toContain('main=73');
-				expect(stdinSummary.transcript).toContain('Process finished after');
+				try {
+					const stdinSummary = await runStdinBrowserProbe({
+						browserUrl: previewServer.browserUrl,
+						expectedOutput: 'main=73',
+						language: 'BASH',
+						preloadStdin: true,
+						runTimeoutMs: Number(process.env.WASM_IDLE_BASH_RUN_TIMEOUT_MS || '180000'),
+						source: bashStdinSource,
+						stdinText: '68\n'
+					});
+					expect(stdinSummary.activeState.crossOriginIsolated).toBe(true);
+					expect(stdinSummary.activeState.sharedArrayBuffer).toBe(true);
+					expect(stdinSummary.pageErrors).toEqual([]);
+					expect(stdinSummary.transcript).toContain('main=73');
+					expect(stdinSummary.transcript).toContain('Process finished after');
 
-				await runBashCancellationProbe(
-					previewServer.browserUrl,
-					Number(process.env.WASM_IDLE_BASH_RUN_TIMEOUT_MS || '180000')
-				);
-			} finally {
-				await previewServer.close();
-			}
-		});
-	}, 960_000);
+					await runBashCancellationProbe(
+						previewServer.browserUrl,
+						Number(process.env.WASM_IDLE_BASH_RUN_TIMEOUT_MS || '180000')
+					);
+				} finally {
+					await previewServer.close();
+				}
+			});
+		}
+	);
 });

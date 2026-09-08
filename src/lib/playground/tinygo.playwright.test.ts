@@ -15,10 +15,16 @@ const tinyGoBrowserTestTimeoutMs = Number(process.env.WASM_IDLE_TINYGO_TEST_TIME
 describe('wasm-idle TinyGo browser playwright integration', () => {
 	it(
 		'runs the real TinyGo page path through the browser runtime by default',
+		{
+			skip: process.env.WASM_IDLE_RUN_REAL_BROWSER_TINYGO !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(process.env.WASM_IDLE_RUN_REAL_BROWSER_TINYGO !== '1')
+			},
+			timeout: tinyGoBrowserTestTimeoutMs
+		},
 		async () => {
-			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_TINYGO !== '1') {
-				return;
-			}
+			expect.hasAssertions();
 
 			await runWithBrowserProbeSessionLock(async () => {
 				const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
@@ -76,7 +82,6 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 					await previewServer.close();
 				}
 			});
-		},
-		tinyGoBrowserTestTimeoutMs
+		}
 	);
 });

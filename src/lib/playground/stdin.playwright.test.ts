@@ -231,6 +231,7 @@ const configuredStdinRunTimeoutMs = Number(process.env.WASM_IDLE_STDIN_RUN_TIMEO
 const browserStdinTestTimeoutMs = Math.max(700_000, configuredStdinRunTimeoutMs + 120_000);
 const runAllStdinBrowserCases = process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN === '1';
 const runLispStdinBrowserCase = process.env.WASM_IDLE_RUN_REAL_BROWSER_LISP === '1';
+const runDotnetBrowserCases = process.env.WASM_IDLE_RUN_REAL_BROWSER_DOTNET === '1';
 const runSharedStdinBrowserCases =
 	runAllStdinBrowserCases || process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN_SHARED_ONLY === '1';
 const sharedStdinBrowserCases = [
@@ -402,32 +403,46 @@ async function withBrowserPreview(action: (browserUrl: string) => Promise<void>)
 }
 
 describe('wasm-idle browser stdin connection', () => {
-	it.each(sharedStdinBrowserCases)(
-		'passes $language input and output through its real browser runtime path',
-		async ({ defaultRunTimeoutMs, expectedOutput, language, source, stdinText }) => {
-			if (
-				(!runSharedStdinBrowserCases && !runLispStdinBrowserCase) ||
-				(runLispStdinBrowserCase && !runAllStdinBrowserCases && language !== 'LISP')
-			) {
-				return;
-			}
+	for (const {
+		defaultRunTimeoutMs,
+		expectedOutput,
+		language,
+		source,
+		stdinText
+	} of sharedStdinBrowserCases)
+		it(
+			`passes ${language} input and output through its real browser runtime path`,
+			{
+				skip:
+					(!runSharedStdinBrowserCases && !runLispStdinBrowserCase) ||
+					(runLispStdinBrowserCase && !runAllStdinBrowserCases && language !== 'LISP'),
+				meta: {
+					browser: true,
+					requiredBrowser: !(
+						(!runSharedStdinBrowserCases && !runLispStdinBrowserCase) ||
+						(runLispStdinBrowserCase && !runAllStdinBrowserCases && language !== 'LISP')
+					)
+				},
+				timeout: browserStdinTestTimeoutMs
+			},
+			async () => {
+				expect.hasAssertions();
 
-			await withBrowserPreview(async (browserUrl) => {
-				const summary = await runStdinBrowserProbe({
-					browserUrl,
-					expectedOutput,
-					language,
-					runTimeoutMs: Number(
-						process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || defaultRunTimeoutMs
-					),
-					source,
-					stdinText
+				await withBrowserPreview(async (browserUrl) => {
+					const summary = await runStdinBrowserProbe({
+						browserUrl,
+						expectedOutput,
+						language,
+						runTimeoutMs: Number(
+							process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || defaultRunTimeoutMs
+						),
+						source,
+						stdinText
+					});
+					expect(summary.transcript).toContain(expectedOutput);
 				});
-				expect(summary.transcript).toContain(expectedOutput);
-			});
-		},
-		browserStdinTestTimeoutMs
-	);
+			}
+		);
 
 	function expectOnlySelectedDotnetRuntime(
 		requests: string[],
@@ -447,10 +462,16 @@ describe('wasm-idle browser stdin connection', () => {
 
 	it(
 		'passes C# stdin through a fresh dotnet browser runtime path',
+		{
+			skip: !runSharedStdinBrowserCases && !runDotnetBrowserCases,
+			meta: {
+				browser: true,
+				requiredBrowser: runSharedStdinBrowserCases || runDotnetBrowserCases
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
 		async () => {
-			if (!runSharedStdinBrowserCases) {
-				return;
-			}
+			expect.hasAssertions();
 
 			await withBrowserPreview(async (browserUrl) => {
 				const summary = await runStdinBrowserProbe({
@@ -466,16 +487,21 @@ describe('wasm-idle browser stdin connection', () => {
 				expect(summary.transcript).not.toContain('unreachable');
 				expectOnlySelectedDotnetRuntime(summary.runtimeRequests, 'csharp');
 			});
-		},
-		browserStdinTestTimeoutMs
+		}
 	);
 
 	it(
 		'passes F# stdin through a fresh dotnet browser runtime path',
+		{
+			skip: !runSharedStdinBrowserCases && !runDotnetBrowserCases,
+			meta: {
+				browser: true,
+				requiredBrowser: runSharedStdinBrowserCases || runDotnetBrowserCases
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
 		async () => {
-			if (!runSharedStdinBrowserCases) {
-				return;
-			}
+			expect.hasAssertions();
 
 			await withBrowserPreview(async (browserUrl) => {
 				const summary = await runStdinBrowserProbe({
@@ -490,19 +516,26 @@ describe('wasm-idle browser stdin connection', () => {
 				expect(summary.transcript).not.toContain('unreachable');
 				expectOnlySelectedDotnetRuntime(summary.runtimeRequests, 'fsharp');
 			});
-		},
-		browserStdinTestTimeoutMs
+		}
 	);
 
 	it.each(clangStdinBrowserCases)(
 		'passes $language stdin through the browser wasm-clang runtime path',
-		async ({ language, source }) => {
-			if (
+		{
+			skip:
 				!runAllStdinBrowserCases &&
-				process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1'
-			) {
-				return;
-			}
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(
+					!runAllStdinBrowserCases &&
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1'
+				)
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
+		async ({ language, source }) => {
+			expect.hasAssertions();
 
 			await withBrowserPreview(async (browserUrl) => {
 				const summary = await runStdinBrowserProbe({
@@ -516,19 +549,26 @@ describe('wasm-idle browser stdin connection', () => {
 				});
 				expect(summary.transcript).toContain('main=73');
 			});
-		},
-		browserStdinTestTimeoutMs
+		}
 	);
 
 	it(
 		'passes Objective-C stdin through the browser wasm-clang and libobjc2 runtime path',
-		async () => {
-			if (
+		{
+			skip:
 				!runAllStdinBrowserCases &&
-				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1'
-			) {
-				return;
-			}
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(
+					!runAllStdinBrowserCases &&
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1'
+				)
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			expect.hasAssertions();
 
 			await withBrowserPreview(async (browserUrl) => {
 				const summary = await runStdinBrowserProbe({
@@ -547,20 +587,28 @@ describe('wasm-idle browser stdin connection', () => {
 				});
 				expect(summary.transcript).toContain('main=73');
 			});
-		},
-		browserStdinTestTimeoutMs
+		}
 	);
 
 	it(
 		'passes Objective-C Foundation stdin through the browser wasm-clang and GNUstep runtime path',
-		async () => {
-			if (
+		{
+			skip:
 				!runAllStdinBrowserCases &&
 				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1' &&
-				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_FOUNDATION_INIT !== '1'
-			) {
-				return;
-			}
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_FOUNDATION_INIT !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(
+					!runAllStdinBrowserCases &&
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1' &&
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_FOUNDATION_INIT !== '1'
+				)
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			expect.hasAssertions();
 
 			await withBrowserPreview(async (browserUrl) => {
 				const summary = await runStdinBrowserProbe({
@@ -575,19 +623,26 @@ describe('wasm-idle browser stdin connection', () => {
 				});
 				expect(summary.transcript).toContain('main=73');
 			});
-		},
-		browserStdinTestTimeoutMs
+		}
 	);
 
 	it(
 		'passes Objective-C Foundation NSObject stdin through the browser GNUstep runtime path',
-		async () => {
-			if (
+		{
+			skip:
 				!runAllStdinBrowserCases &&
-				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1'
-			) {
-				return;
-			}
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(
+					!runAllStdinBrowserCases &&
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1'
+				)
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			expect.hasAssertions();
 
 			await withBrowserPreview(async (browserUrl) => {
 				const summary = await runStdinBrowserProbe({
@@ -602,19 +657,26 @@ describe('wasm-idle browser stdin connection', () => {
 				});
 				expect(summary.transcript).toContain('main=73');
 			});
-		},
-		browserStdinTestTimeoutMs
+		}
 	);
 
 	it(
 		'passes Objective-C Foundation constant NSString stdin through the browser GNUstep runtime path',
-		async () => {
-			if (
+		{
+			skip:
 				!runAllStdinBrowserCases &&
-				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1'
-			) {
-				return;
-			}
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(
+					!runAllStdinBrowserCases &&
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC !== '1'
+				)
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			expect.hasAssertions();
 
 			await withBrowserPreview(async (browserUrl) => {
 				const summary = await runStdinBrowserProbe({
@@ -629,19 +691,25 @@ describe('wasm-idle browser stdin connection', () => {
 				});
 				expect(summary.transcript).toContain('main=73');
 			});
-		},
-		browserStdinTestTimeoutMs
+		}
 	);
 
 	it(
 		'passes Fortran stdin through the browser f2c and wasm-clang runtime path',
+		{
+			skip:
+				!runAllStdinBrowserCases && process.env.WASM_IDLE_RUN_REAL_BROWSER_FORTRAN !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(
+					!runAllStdinBrowserCases &&
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_FORTRAN !== '1'
+				)
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
 		async () => {
-			if (
-				!runAllStdinBrowserCases &&
-				process.env.WASM_IDLE_RUN_REAL_BROWSER_FORTRAN !== '1'
-			) {
-				return;
-			}
+			expect.hasAssertions();
 
 			await withBrowserPreview(async (browserUrl) => {
 				const summary = await runStdinBrowserProbe({
@@ -656,16 +724,23 @@ describe('wasm-idle browser stdin connection', () => {
 				expect(summary.transcript).toContain('main=');
 				expect(summary.transcript).toContain('73');
 			});
-		},
-		browserStdinTestTimeoutMs
+		}
 	);
 
 	it(
 		'passes COBOL stdin through the browser GnuCOBOL and llvm-core runtime path',
+		{
+			skip: !runAllStdinBrowserCases && process.env.WASM_IDLE_RUN_REAL_BROWSER_COBOL !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(
+					!runAllStdinBrowserCases && process.env.WASM_IDLE_RUN_REAL_BROWSER_COBOL !== '1'
+				)
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
 		async () => {
-			if (!runAllStdinBrowserCases && process.env.WASM_IDLE_RUN_REAL_BROWSER_COBOL !== '1') {
-				return;
-			}
+			expect.hasAssertions();
 
 			await withBrowserPreview(async (browserUrl) => {
 				const summary = await runStdinBrowserProbe({
@@ -680,16 +755,21 @@ describe('wasm-idle browser stdin connection', () => {
 				});
 				expect(summary.transcript).toContain('main=73');
 			});
-		},
-		browserStdinTestTimeoutMs
+		}
 	);
 
 	it(
 		'passes VB.NET stdin through a fresh dotnet browser runtime path',
+		{
+			skip: !runSharedStdinBrowserCases && !runDotnetBrowserCases,
+			meta: {
+				browser: true,
+				requiredBrowser: runSharedStdinBrowserCases || runDotnetBrowserCases
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
 		async () => {
-			if (!runSharedStdinBrowserCases) {
-				return;
-			}
+			expect.hasAssertions();
 
 			await withBrowserPreview(async (browserUrl) => {
 				const summary = await runStdinBrowserProbe({
@@ -703,7 +783,6 @@ describe('wasm-idle browser stdin connection', () => {
 				expect(summary.transcript).toContain('main=73');
 				expectOnlySelectedDotnetRuntime(summary.runtimeRequests, 'vbnet');
 			});
-		},
-		browserStdinTestTimeoutMs
+		}
 	);
 });

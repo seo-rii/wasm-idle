@@ -1,10 +1,17 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vitest/config';
+import RequiredBrowserReporter from './scripts/required-browser-reporter.mjs';
 
 export default defineConfig({
-	define: { __WASM_IDLE_BUILD__: JSON.stringify({ commit: 'test', builtAt: '', runtimeAssets: {} }) },
+	define: {
+		__WASM_IDLE_BUILD__: JSON.stringify({ commit: 'test', builtAt: '', runtimeAssets: {} })
+	},
 	plugins: [sveltekit()],
 	test: {
+		reporters:
+			process.env.WASM_IDLE_REQUIRE_BROWSER_TESTS === '1'
+				? ['default', new RequiredBrowserReporter()]
+				: ['default'],
 		environment: 'jsdom',
 		include: ['src/**/*.test.ts'],
 		testTimeout:

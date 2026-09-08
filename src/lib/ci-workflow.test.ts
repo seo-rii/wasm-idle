@@ -3,6 +3,15 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
 describe('required CI workflow gates', () => {
+	it('runs affected real runtime families on PR and main push', async () => {
+		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+		expect(workflow).toContain('    runtime-browser-required:');
+		expect(workflow).toContain('needs: changed-runtimes');
+		expect(workflow).toContain(
+			'node scripts/run-all-language-browser-tests.mjs --family=${{ matrix.family }}'
+		);
+		expect(workflow).toContain("WASM_IDLE_REQUIRE_BROWSER_TESTS: '1'");
+	});
 	it('runs the root unit suite in the packages job', async () => {
 		const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
 		const packagesJobStart = workflow.indexOf('    packages:');

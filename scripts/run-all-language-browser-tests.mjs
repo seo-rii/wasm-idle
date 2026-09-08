@@ -57,13 +57,54 @@ function parseBrowserTestShard(shard) {
  *   includeCompressedAssets?: boolean;
  *   includeLspFull?: boolean;
  *   shard?: BrowserTestShard;
+ *   family?: 'dotnet' | 'nim' | 'clang';
  * }} options
  */
 export function createAllLanguageBrowserTestPlan({
 	includeCompressedAssets = false,
 	includeLspFull = false,
-	shard
+	shard,
+	family
 } = {}) {
+	if (family) {
+		const families = {
+			dotnet: {
+				env: {
+					WASM_IDLE_RUN_REAL_BROWSER_DOTNET: '1',
+					WASM_IDLE_RUN_REAL_BROWSER_DOTNET_SWITCH: '1',
+					WASM_IDLE_RUN_REAL_BROWSER_DOTNET_RECOVERY: '1'
+				},
+				testFiles: [
+					'src/lib/playground/stdin.playwright.test.ts',
+					'src/lib/playground/dotnet-switch.playwright.test.ts',
+					'src/lib/playground/runtime-recovery.playwright.test.ts'
+				]
+			},
+			nim: {
+				env: {
+					WASM_IDLE_RUN_REAL_BROWSER_NIM: '1',
+					WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY: '1'
+				},
+				testFiles: [
+					STATIC_WORKER_TEST_FILE,
+					'src/lib/playground/runtime-recovery.playwright.test.ts'
+				]
+			},
+			clang: {
+				env: {
+					WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN: '1',
+					WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC: '1',
+					WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX: '1'
+				},
+				testFiles: [
+					'src/lib/playground/stdin.playwright.test.ts',
+					'src/lib/playground/objectivecxx.playwright.test.ts'
+				]
+			}
+		};
+		if (!families[family]) throw new Error(`Unknown runtime browser family: ${family}`);
+		return families[family];
+	}
 	if (shard) parseBrowserTestShard(shard);
 	/** @type {Set<string>} */
 	const testFiles = new Set();
@@ -79,6 +120,16 @@ export function createAllLanguageBrowserTestPlan({
 		} else {
 			env[row.browserTest.env] = '1';
 		}
+	}
+	if (!shard || shard === 'stdin') {
+		testFiles.add('src/lib/playground/runtime-recovery.playwright.test.ts');
+		testFiles.add('src/lib/playground/dotnet-switch.playwright.test.ts');
+		env.WASM_IDLE_RUN_REAL_BROWSER_DOTNET_RECOVERY = '1';
+		env.WASM_IDLE_RUN_REAL_BROWSER_DOTNET_SWITCH = '1';
+	}
+	if (!shard || shard === 'workers') {
+		testFiles.add('src/lib/playground/runtime-recovery.playwright.test.ts');
+		env.WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY = '1';
 	}
 
 	if (includeCompressedAssets || shard === 'compressed-assets') {
@@ -109,6 +160,7 @@ export function createVitestChildInvocation(plan, browserUrl, baseEnv = process.
 		}
 	}
 	Object.assign(childEnv, plan.env, {
+		WASM_IDLE_REQUIRE_BROWSER_TESTS: '1',
 		WASM_IDLE_BROWSER_URL: browserUrl,
 		WASM_IDLE_BROWSER_SERVER_MODE: 'preview',
 		WASM_IDLE_REUSE_LOCAL_PREVIEW: '1'
@@ -174,6 +226,8 @@ async function startDedicatedPreviewServer(origin) {
  *   includeLspFull?: boolean;
  *   origin?: string;
  *   shard?: BrowserTestShard;
+ *   family?: 'dotnet' | 'nim' | 'clang';
+ *   useBuild?: boolean;
  * }} options
  * @param {{
  *   prepare?: typeof runBrowserPreparationScripts;
@@ -186,7 +240,9 @@ export async function runAllLanguageBrowserTests(
 		includeCompressedAssets = false,
 		includeLspFull = false,
 		origin = DEFAULT_PREVIEW_ORIGIN,
-		shard
+		shard,
+		family,
+		useBuild = false
 	} = {},
 	{
 		prepare = runBrowserPreparationScripts,
@@ -197,10 +253,12 @@ export async function runAllLanguageBrowserTests(
 	const plan = createAllLanguageBrowserTestPlan({
 		includeCompressedAssets,
 		includeLspFull,
-		shard
+		shard,
+		family
 	});
 
-	await prepare(['build:preview', 'compress:build-runtimes'], { timeoutMs: 900_000 });
+	if (!useBuild)
+		await prepare(['build:preview', 'compress:build-runtimes'], { timeoutMs: 900_000 });
 	const previewServer = await startPreview(origin);
 	try {
 		const invocation = createVitestChildInvocation(plan, previewServer.browserUrl);
@@ -221,6 +279,8 @@ export function parseAllLanguageBrowserTestArgs(args) {
 	 *   includeCompressedAssets: boolean;
 	 *   includeLspFull: boolean;
 	 *   shard?: BrowserTestShard;
+	 *   family?: 'dotnet' | 'nim' | 'clang';
+	 *   useBuild?: boolean;
 	 * }} */
 	const options = {
 		includeCompressedAssets: false,
@@ -241,10 +301,22 @@ export function parseAllLanguageBrowserTestArgs(args) {
 			index += 1;
 		} else if (arg.startsWith('--shard=')) {
 			options.shard = parseBrowserTestShard(arg.slice('--shard='.length));
+		} else if (arg === '--use-build') {
+			options.useBuild = true;
+		} else if (arg.startsWith('--family=')) {
+			const family = arg.slice('--family='.length);
+			if (!['dotnet', 'nim', 'clang'].includes(family))
+				throw new Error(`Unknown runtime browser family: ${family}`);
+			options.family = /** @type {'dotnet' | 'nim' | 'clang'} */ (family);
 		} else {
 			throw new Error(`Unknown option: ${arg}`);
 		}
 	}
+	if (
+		options.family &&
+		(options.shard || options.includeLspFull || options.includeCompressedAssets)
+	)
+		throw new Error('--family cannot be combined with shard or full-matrix options');
 	return options;
 }
 

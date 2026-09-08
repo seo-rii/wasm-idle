@@ -17,17 +17,23 @@ import {
 
 const goBrowserTestTimeoutMs = Number(process.env.WASM_IDLE_GO_TEST_TIMEOUT_MS || '1500000');
 
-	describe('wasm-idle Go browser playwright integration', () => {
+describe('wasm-idle Go browser playwright integration', () => {
 	it('expects the output produced by the current Go starter source', () => {
 		expect(DEFAULT_GO_BROWSER_EXPECTED_OUTPUT).toBe('fibonacci=11');
 	});
 
 	it(
 		'runs the real Go page path through the bundled wasm-go browser compiler',
+		{
+			skip: process.env.WASM_IDLE_RUN_REAL_BROWSER_GO !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(process.env.WASM_IDLE_RUN_REAL_BROWSER_GO !== '1')
+			},
+			timeout: goBrowserTestTimeoutMs
+		},
 		async () => {
-			if (process.env.WASM_IDLE_RUN_REAL_BROWSER_GO !== '1') {
-				return;
-			}
+			expect.hasAssertions();
 
 			await runWithBrowserProbeSessionLock(async () => {
 				const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
@@ -128,7 +134,6 @@ const goBrowserTestTimeoutMs = Number(process.env.WASM_IDLE_GO_TEST_TIMEOUT_MS |
 					await previewServer.close();
 				}
 			});
-		},
-		goBrowserTestTimeoutMs
+		}
 	);
 });
