@@ -67,6 +67,12 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
+	C3: {
+		label: 'C3 (byte ABI)',
+		editorLanguage: 'c',
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	C: {
 		label: 'C',
 		editorLanguage: 'c',
@@ -310,6 +316,12 @@ export const playgroundLanguageDescriptors: Readonly<
 		editorLanguage: 'octave',
 		runtimeLspCapability: 'octave',
 		supportsArgs: true,
+		diagnosticMarkers: true
+	},
+	LFORTRAN: {
+		label: 'LFortran (experimental)',
+		editorLanguage: 'fortran',
+		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
 	FORTRAN: {

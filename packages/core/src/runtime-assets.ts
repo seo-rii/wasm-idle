@@ -85,6 +85,7 @@ export interface RuntimeAssetKeySource {
 		mainSoPath?: string;
 		searchDirs?: string[];
 	};
+	lfortran?: { baseUrl?: string };
 	fortran?: {
 		baseUrl?: string;
 		f2cWasmUrl?: string;
@@ -280,6 +281,7 @@ export interface RuntimeAssetKeySource {
 		dataReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
+	c3?: { baseUrl?: string };
 	nim?: {
 		baseUrl?: string;
 		workerUrl?: string;
@@ -708,6 +710,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		key: 'haskellSearchDirs',
 		serialize: joinStringList
 	},
+	{ runtime: 'lfortran', property: 'baseUrl', key: 'lfortranBaseUrl' },
 	{ runtime: 'fortran', property: 'baseUrl', key: 'fortranBaseUrl' },
 	{ runtime: 'fortran', property: 'f2cWasmUrl', key: 'fortranF2cWasmUrl' },
 	{ runtime: 'fortran', property: 'libf2cUrl', key: 'fortranLibf2cUrl' },
@@ -1206,6 +1209,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		key: 'juliaWorkerReceipt',
 		serialize: serializeIntegrityEntry
 	},
+	{ runtime: 'c3', property: 'baseUrl', key: 'c3BaseUrl' },
 	{ runtime: 'nim', property: 'baseUrl', key: 'nimBaseUrl' },
 	{ runtime: 'nim', property: 'workerUrl', key: 'nimWorkerUrl' },
 	{ runtime: 'nim', property: 'manifestUrl', key: 'nimManifestUrl' },

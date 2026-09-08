@@ -3,10 +3,14 @@ import { existsSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyPageWasmDebugRelease } from './scripts/verify-page-wasm-debug.mjs';
+import { verifyPageC3Compiler } from './scripts/verify-page-c3-compiler.mjs';
+import { verifyPageLfortranCompiler } from './scripts/verify-page-lfortran-compiler.mjs';
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 const buildDir = path.join(repoRoot, 'build');
 
+await verifyPageC3Compiler({ rootDir: buildDir });
+await verifyPageLfortranCompiler({ rootDir: buildDir });
 await verifyPageWasmDebugRelease({ buildDir });
 
 const requiredBuildFiles = [

@@ -629,6 +629,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	bqn?: BqnRuntimeAssetConfig;
 	janet?: JanetRuntimeAssetConfig;
 	julia?: JuliaRuntimeAssetConfig;
+	c3?: { baseUrl?: string };
 	nim?: NimRuntimeAssetConfig;
 	bash?: BashRuntimeAssetConfig;
 	clojurescript?: ClojureScriptRuntimeAssetConfig;
@@ -4303,4 +4304,17 @@ export function resolveSqliteRuntimeModuleUrl(
 		'wasm-sqlite',
 		currentUrl
 	);
+}
+
+/** C3 uses one code-pinned compiler/worker receipt, served from this base URL. */
+export function resolveC3BaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configured =
+		(typeof options === 'object' && options?.c3?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_C3_BASE_URL || '').trim();
+	if (configured) return normalizeBaseUrl(configured, currentUrl);
+	const root = typeof options === 'string' ? options : options?.rootUrl;
+	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-c3/`, currentUrl);
 }

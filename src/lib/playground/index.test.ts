@@ -51,6 +51,11 @@ const { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox } = v
 	return { moduleLoads, sandboxInstances, createMockSandboxClass, MockSandbox };
 });
 
+vi.mock('$lib/playground/c3', () => {
+	moduleLoads.add('C3');
+	return { default: createMockSandboxClass('C3') };
+});
+
 vi.mock('$lib/playground/python', () => {
 	moduleLoads.add('PYTHON');
 	return {
@@ -224,6 +229,11 @@ vi.mock('$lib/playground/swift', () => {
 	return {
 		default: createMockSandboxClass('SWIFT')
 	};
+});
+
+vi.mock('$lib/playground/lfortran', () => {
+	moduleLoads.add('LFORTRAN');
+	return { default: createMockSandboxClass('LFORTRAN') };
 });
 
 vi.mock('$lib/playground/fortran', () => {
@@ -400,6 +410,7 @@ describe('playground runtime binding', () => {
 				'NIM',
 				'BASH',
 				'CLOJURESCRIPT',
+				'LFORTRAN',
 				'FORTRAN',
 				'COBOL',
 				'DUCKDB',

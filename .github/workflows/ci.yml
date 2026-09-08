@@ -32,6 +32,7 @@ jobs:
             - run: pnpm run verify:page-runtime-freshness
             - run: pnpm run check
             - run: pnpm test
+            - run: pnpm run test:page-compiler-assets
             - run: pnpm run test:wasm-debug-release
             - run: pnpm run check:support-matrix
             - run: pnpm run check:asset-sizes

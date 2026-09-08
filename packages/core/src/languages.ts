@@ -1,5 +1,6 @@
 const canonicalLanguageIds = [
 	'C',
+	'C3',
 	'CPP',
 	'OBJC',
 	'PYTHON3',
@@ -27,6 +28,7 @@ const canonicalLanguageIds = [
 	'BASH',
 	'CLOJURESCRIPT',
 	'FORTRAN',
+	'LFORTRAN',
 	'COBOL',
 	'TINYGO',
 	'OCAML',

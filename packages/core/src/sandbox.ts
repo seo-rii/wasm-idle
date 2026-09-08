@@ -92,6 +92,8 @@ export interface SandboxLifecycle {
 
 export interface Sandbox {
 	constructor: unknown;
+	/** Profile defaults, snapshotted by a binding; explicit caller limits always take precedence. */
+	readonly defaultExecutionLimits?: Readonly<Partial<ExecutionLimits>>;
 	eof: () => void;
 	load: (
 		runtimeAssets?: SandboxRuntimeAssets,
@@ -195,7 +197,8 @@ function validateSandboxExecutionOptions(
 	code: string,
 	options: SandboxExecutionOptions,
 	phase: RuntimePhase = 'execute',
-	trustProfile?: RuntimeTrustProfile
+	trustProfile?: RuntimeTrustProfile,
+	defaultExecutionLimits?: Readonly<Partial<ExecutionLimits>>
 ): ValidatedSandboxExecutionOptions {
 	if (options.signal?.aborted) {
 		throw new CancelledError('Runtime operation was cancelled before it started', {
@@ -206,7 +209,7 @@ function validateSandboxExecutionOptions(
 	if (options.interactive !== undefined && typeof options.interactive !== 'boolean') {
 		throw new RuntimeConfigurationError('Interactive execution must be a boolean', { phase });
 	}
-	const limits = resolveExecutionLimits(options.limits);
+	const limits = resolveExecutionLimits({ ...defaultExecutionLimits, ...options.limits });
 	const workspaceLimits = {
 		...options.workspaceLimits,
 		maxFileBytes: Math.min(
@@ -450,6 +453,7 @@ function bindRuntimeAssets(
 	runtimeAssets: SandboxRuntimeAssets,
 	trustProfile?: RuntimeTrustProfile
 ): BoundSandbox {
+	const defaultExecutionLimits = Object.freeze({ ...sandbox.defaultExecutionLimits });
 	let disposePromise: Promise<void> | undefined;
 	let disposed = false;
 	const operationState: SandboxOperationState = {
@@ -573,7 +577,8 @@ function bindRuntimeAssets(
 						code,
 						options,
 						'startup',
-						trustProfile
+						trustProfile,
+						defaultExecutionLimits
 					);
 					installBoundarySinks();
 					return runSandboxOperation(
@@ -611,7 +616,8 @@ function bindRuntimeAssets(
 							stdin: request.stdin
 						},
 						'execute',
-						trustProfile
+						trustProfile,
+						defaultExecutionLimits
 					);
 					installBoundarySinks();
 					return runSandboxOperation(
@@ -653,7 +659,8 @@ function bindRuntimeAssets(
 						code,
 						options,
 						'execute',
-						trustProfile
+						trustProfile,
+						defaultExecutionLimits
 					);
 					installBoundarySinks();
 					return runSandboxOperation(
@@ -672,9 +679,9 @@ function bindRuntimeAssets(
 							: validated.interactive === true
 								? null
 								: combinedPhaseTimeoutMs(
-									validated.limits.compileTimeoutMs,
-									validated.limits.runTimeoutMs
-								),
+										validated.limits.compileTimeoutMs,
+										validated.limits.runTimeoutMs
+									),
 						validated.limits,
 						'execute'
 					);

@@ -31,7 +31,11 @@ import {
 } from '$lib/playground/options';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import { StaticStdinRingHost } from '$lib/playground/staticStdinRing';
-import { inspectStaticRuntimePreflightBytes } from '$lib/playground/staticRuntimePreflightProtocol';
+import {
+	deserializeStaticRuntimePreflightError,
+	isStaticRuntimePreflightSerializedError,
+	inspectStaticRuntimePreflightBytes
+} from '$lib/playground/staticRuntimePreflightProtocol';
 import { reportWorkerProgress, type WorkerProgressPayload } from '$lib/playground/workerProgress';
 
 type StaticWorkerReceipt = Readonly<Required<Pick<RuntimeAssetIntegrityEntry, 'bytes' | 'sha256'>>>;
@@ -87,6 +91,10 @@ export interface StaticWorkerRuntimeConfig {
 	inlineVerifiedWorker?: boolean;
 	requireExactWorkerResponseUrl?: boolean;
 	moduleWorker?: boolean;
+	/** Opt in only when the worker enforces the resolved limits and reports execution-ready. */
+	includeExecutionLimits?: boolean;
+	enforcePhaseTimeouts?: boolean;
+	onEvidence?: (evidence: unknown) => void;
 	stdin: StaticWorkerRuntimeStdin;
 	workerLifetime?: RuntimeWorkerLifetimePolicy;
 	resolveRuntimeAssets: (
@@ -132,6 +140,8 @@ type StaticWorkerMessage = {
 	stream?: 'stdout' | 'stderr';
 	results?: boolean | string;
 	error?: string;
+	failure?: unknown;
+	evidence?: unknown;
 	diagnostic?: CompilerDiagnostic;
 	progress?: WorkerProgressPayload;
 };
@@ -153,6 +163,7 @@ type ActiveRun = {
 	reject: (reason: unknown) => void;
 	settledReported: boolean;
 	stdinRing?: StaticStdinRingHost;
+	startExecutionDeadline?: () => void;
 };
 
 type StaticWorkerExecutionControls = {
@@ -1051,7 +1062,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 		}
 		const prefix = `const __wasmIdleNativePostMessage = self.postMessage.bind(self);
 let __wasmIdleRunId = null;
-const __wasmIdleExecutionKeys = ['output', 'results', 'error', 'diagnostic', 'progress'];
+const __wasmIdleExecutionKeys = ['output', 'results', 'error', 'diagnostic', 'progress', 'evidence'];
 self.addEventListener('message', (event) => {
   const message = event.data;
   const runId = message?.runId;
@@ -1669,6 +1680,8 @@ self.postMessage = (message, transferOrOptions) => {
 		if (event.data?.runId !== activeRun.id) return;
 		try {
 			if (event.data?.type === 'execution-ready') {
+				activeRun.startExecutionDeadline?.();
+				activeRun.startExecutionDeadline = undefined;
 				this.reportRunReady(
 					activeRun,
 					'running',
@@ -1689,7 +1702,10 @@ self.postMessage = (message, transferOrOptions) => {
 				}
 				return;
 			}
-			const { output, stream, results, error, diagnostic, progress } = event.data || {};
+			const { output, stream, results, error, diagnostic, progress, failure, evidence } =
+				event.data || {};
+			if (evidence !== undefined) this.config.onEvidence?.(evidence);
+			if (this.activeRun !== activeRun) return;
 			if (progress && typeof progress === 'object' && 'kind' in progress) {
 				if (progress.kind !== 'settled') {
 					const lifecycleEvent = reportWorkerProgress(activeRun.progress, progress);
@@ -1755,7 +1771,12 @@ self.postMessage = (message, transferOrOptions) => {
 				if (this.activeRun !== activeRun) return;
 			}
 			if (typeof error === 'string') {
-				this.rejectRun(activeRun.id, error);
+				this.rejectRun(
+					activeRun.id,
+					isStaticRuntimePreflightSerializedError(failure)
+						? deserializeStaticRuntimePreflightError(failure, this.config.languageId)
+						: error
+				);
 				return;
 			}
 			if (results !== undefined) {
@@ -2187,23 +2208,34 @@ self.postMessage = (message, transferOrOptions) => {
 						? { stdin: undefined, stdinEof: false }
 						: await this.collectStdinForRun(code, options, activeRun);
 					if (this.activeRun?.id !== id) return;
-					const executionTimeoutMs = Math.min(
-						2_147_483_647,
-						controls.limits.compileTimeoutMs + controls.limits.runTimeoutMs
-					);
-					deadline = setTimeout(() => {
-						this.rejectRun(
-							id,
-							new TimeoutError(
-								`${this.config.displayName} execution timed out after ${executionTimeoutMs} ms`,
-								{
-									phase: 'execute',
-									runtimeId: this.config.languageId,
-									timeoutMs: executionTimeoutMs
-								}
-							)
+					const setDeadline = (timeoutMs: number, phase: 'compile' | 'execute') => {
+						timeoutMs = Math.min(2_147_483_647, timeoutMs);
+						if (deadline !== undefined) clearTimeout(deadline);
+						deadline = setTimeout(
+							() =>
+								this.rejectRun(
+									id,
+									new TimeoutError(
+										`${this.config.displayName} ${this.config.enforcePhaseTimeouts ? phase : 'execution'} timed out after ${timeoutMs} ms`,
+										{ phase, runtimeId: this.config.languageId, timeoutMs }
+									)
+								),
+							timeoutMs
 						);
-					}, executionTimeoutMs);
+					};
+					if (this.config.enforcePhaseTimeouts) {
+						setDeadline(controls.limits.compileTimeoutMs, 'compile');
+						activeRun.startExecutionDeadline = () =>
+							setDeadline(controls.limits.runTimeoutMs, 'execute');
+					} else {
+						setDeadline(
+							Math.min(
+								2_147_483_647,
+								controls.limits.compileTimeoutMs + controls.limits.runTimeoutMs
+							),
+							'execute'
+						);
+					}
 					const { programArgs } = resolveSandboxExecutionArgs(
 						this.config.languageId,
 						args,
@@ -2284,6 +2316,9 @@ self.postMessage = (message, transferOrOptions) => {
 								manifestFingerprint: this.manifestFingerprint,
 								...(runtimePreflight === undefined ? {} : { runtimePreflight }),
 								maxAssetBytes: controls.limits.maxAssetBytes,
+								...(this.config.includeExecutionLimits
+									? { limits: controls.limits }
+									: {}),
 								code,
 								args: programArgs,
 								stdin,
