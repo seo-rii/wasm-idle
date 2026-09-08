@@ -1043,6 +1043,25 @@ async function checkCppEditorFeatures(page: Page) {
 	expect(await page.locator('.view-lines').innerText()).toContain('double');
 }
 
+async function checkClangLanguageSwitches(page: Page) {
+	for (const language of ['C', 'CPP', 'OBJC']) {
+		const testCase = lspBrowserCases.find((entry) => entry.language === language)!;
+		await selectLanguage(page, testCase);
+		await enableLsp(page);
+		await waitForLspReady(page, testCase);
+		await replaceEditorSource(page, testCase.validSource!);
+		await waitForClangdDiagnosticsForCurrentVersion(page);
+		expect((await readDiagnosticCounts(page)).markers, `${language} after switching`).toBe(0);
+		const documentUri = await page.evaluate(() =>
+			String(Reflect.get(globalThis, '__wasmIdleMonacoEditor').getModel().uri)
+		);
+		expect(documentUri).toBe(`file:///workspace/${testCase.fileName}`);
+		await replaceEditorSource(page, testCase.source);
+		await waitForClangdDiagnosticsForCurrentVersion(page);
+		expect((await readDiagnosticCounts(page)).markers).toBeGreaterThan(0);
+	}
+}
+
 async function runLspCase(
 	page: Page,
 	browserUrl: string,
@@ -1194,6 +1213,7 @@ async function runLspCase(
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
 	if (testCase.language === 'CPP') await checkCppEditorFeatures(page);
+	if (testCase.language === 'OBJC') await checkClangLanguageSwitches(page);
 	const selectedDotnetRuntime = dotnetRuntimeLanguageByLanguage[testCase.language];
 	if (selectedDotnetRuntime) {
 		expect(

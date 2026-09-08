@@ -112,4 +112,56 @@ describe('clangd request policy', () => {
 		policy.dispose();
 		expect(vi.getTimerCount()).toBe(0);
 	});
+	it('bounds hint resolution and rejects a saved hint after its document changes', async () => {
+		vi.useFakeTimers();
+		const { policy, receive, received, write, onDelay } = setup();
+		const hint = { position: { line: 0, character: 4 }, label: ': int', data: 'hint-1' };
+		await policy.transport.writer.write(open);
+		await policy.transport.writer.write({ ...hover, method: 'textDocument/inlayHint' });
+		receive({ jsonrpc: '2.0', id: 1, result: [hint] });
+		const resolve = { jsonrpc: '2.0', id: 2, method: 'inlayHint/resolve', params: hint };
+		await policy.transport.writer.write(resolve);
+		await vi.advanceTimersByTimeAsync(100);
+		expect(received).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				id: 2,
+				error: { code: -32800, message: 'inlayHint/resolve timeout' }
+			})
+		);
+		expect(onDelay).toHaveBeenLastCalledWith('inlayHint/resolve');
+		await policy.transport.writer.write({
+			...open,
+			method: 'textDocument/didChange',
+			params: { textDocument: { ...open.params.textDocument, version: 2 } }
+		});
+		write.mockClear();
+		await policy.transport.writer.write({ ...resolve, id: 3 });
+		expect(write).not.toHaveBeenCalledWith(
+			expect.objectContaining({ method: 'inlayHint/resolve' })
+		);
+		expect(received).toHaveBeenLastCalledWith(
+			expect.objectContaining({ id: 3, error: expect.objectContaining({ code: -32801 }) })
+		);
+		expect(policy.trace.find((entry) => entry.requestId === 3)).toMatchObject({
+			uri: open.params.textDocument.uri,
+			version: 1,
+			outcome: 'stale'
+		});
+		policy.dispose();
+	});
+	it('cancels cursor-dependent requests without cancelling visible-range hints', async () => {
+		vi.useFakeTimers();
+		const { policy, receive, received } = setup();
+		await policy.transport.writer.write(open);
+		await policy.transport.writer.write(hover);
+		await policy.transport.writer.write({ ...hover, id: 2, method: 'textDocument/inlayHint' });
+		policy.cancelEditorRequests();
+		expect(received).toHaveBeenCalledTimes(1);
+		expect(received).toHaveBeenLastCalledWith(
+			expect.objectContaining({ id: 1, error: expect.objectContaining({ code: -32800 }) })
+		);
+		receive({ jsonrpc: '2.0', id: 2, result: [] });
+		expect(received).toHaveBeenLastCalledWith({ jsonrpc: '2.0', id: 2, result: [] });
+		policy.dispose();
+	});
 });
