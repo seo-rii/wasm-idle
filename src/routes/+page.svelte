@@ -2011,6 +2011,7 @@
 					}
 				});
 				if (result === false) {
+					executionError = terminal.getExecutionError?.();
 					progressOutcome = abortController.signal.aborted ? 'cancelled' : 'failed';
 				}
 			} catch (error) {

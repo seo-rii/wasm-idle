@@ -79,6 +79,7 @@
 			  }
 			| undefined;
 	let preparedExecutionGeneration = 0;
+	let lastExecutionError: unknown;
 	const progressController = new RuntimeProgressController();
 	const terminalOutputReadinessLanguages = new Set([
 		'C',
@@ -254,6 +255,7 @@
 				return x;
 			})
 			.catch((msg) => {
+				lastExecutionError = msg;
 				if (stopRequested) return false;
 				if (isTimeoutError(msg)) {
 					writeTerminalOutput(`\r\n\x1B[1;3;31m${msg}\u001B[?25l`);
@@ -376,8 +378,10 @@
 	}
 
 	const terminalControl: TerminalControl = {
+		getExecutionError: () => lastExecutionError,
 		async clear() {
 			await wait();
+			lastExecutionError = undefined;
 			invalidatePreparedExecution();
 			discardPendingSandboxInput();
 			term?.reset();

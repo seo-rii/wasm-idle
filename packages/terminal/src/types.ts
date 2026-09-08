@@ -90,6 +90,8 @@ export interface TerminalControl extends Omit<
 	CoreTerminalControl,
 	'prepare' | 'run' | 'debugCommand'
 > {
+	/** The original failure when the compatibility runner resolves false. */
+	getExecutionError?: () => unknown;
 	prepare: (
 		language: string,
 		code: string,
