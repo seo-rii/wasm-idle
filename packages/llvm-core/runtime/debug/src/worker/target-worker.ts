@@ -12,6 +12,9 @@ import {
 	validateDebugSessionGeneration
 } from './module-loader.js';
 
+// The pinned Emscripten libc maps EIO to WASI's __WASI_ERRNO_IO (29).
+const WASI_ERRNO_IO = 29;
+
 let activeGeneration: string | undefined;
 let disposed = false;
 let activeStdin: SharedByteQueue | undefined;
@@ -198,6 +201,32 @@ async function initialize(message: TargetWorkerInitializeMessage) {
 				new Uint8Array(buffer.buffer, buffer.byteOffset + offset, length)
 			);
 		};
+		const ErrnoError = module.FS.ErrnoError;
+		if (!ErrnoError) throw new Error('WAMR did not expose its filesystem errno constructor');
+		for (const [fd, output] of [
+			[1, stdoutQueue],
+			[2, stderrQueue]
+		] as const) {
+			const stream = module.FS.getStream?.(fd);
+			if (!stream?.stream_ops) {
+				throw new Error(`WAMR did not expose its standard output device ${fd}`);
+			}
+			// Publish the syscall's whole buffer rather than one atomic notification per byte.
+			// Registered device operations also apply to reopened/duplicated descriptors.
+			stream.stream_ops.write = (outputStream, buffer, offset, length) => {
+				let written: number;
+				try {
+					written = output.writeBlocking(
+						new Uint8Array(buffer.buffer, buffer.byteOffset + offset, length)
+					);
+				} catch {
+					// Match FS.createDevice: syscall handlers translate device failures to errno.
+					throw new ErrnoError(WASI_ERRNO_IO);
+				}
+				if (written) outputStream.node.mtime = outputStream.node.ctime = Date.now();
+				return written;
+			};
+		}
 		mountDebugFiles(module, message.module, message.workspaceFiles);
 		module.FS.chdir(cwd);
 		const stopMemoryTelemetry = startLinearMemoryTelemetry(

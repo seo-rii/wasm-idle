@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
+import { createHash } from 'node:crypto';
 import { afterAll, describe, expect, it, onTestFinished } from 'vitest';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 
@@ -415,6 +416,82 @@ int main() {
 		testId: 'cpp-memory-write'
 	},
 	{
+		activePath: 'deep-stack.c',
+		backend: 'lldb',
+		breakpointLine: 6,
+		expectedDeepStack: true,
+		expectedLocal: { name: 'depth', value: '0' },
+		expectedOutput: 'lldb-deep-stack=7263',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+__attribute__((noinline)) int descend(int depth) {
+    volatile int value = depth;
+    if (depth > 0) return value + descend(depth - 1);
+    value += 1;
+    value += 2;
+    return value;
+}
+int main(void) {
+    int result = descend(120);
+    printf("lldb-deep-stack=%d\\n", result);
+    return result == 7263 ? 0 : 2;
+}`,
+		testId: 'c-deep-stack'
+	},
+	{
+		activePath: 'array-pagination.c',
+		backend: 'lldb',
+		breakpointLine: 7,
+		expectedArrayPageSize: 50,
+		expectedLocal: { name: 'ready', value: '0' },
+		expectedOutput: 'lldb-array-pagination=1098',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    int values[1000];
+    for (int i = 0; i < 1000; ++i) values[i] = i;
+    volatile int ready = values[0];
+    ready += 1;
+    values[0] = ready;
+    printf("lldb-array-pagination=%d\\n", values[49] + values[50] + values[999]);
+    return ready == 1 ? 0 : 2;
+}`,
+		testId: 'c-array-pagination'
+	},
+	{
+		activePath: 'buffered-output.c',
+		backend: 'lldb',
+		breakpointLine: 7,
+		expectedBufferedOutputBytes: 65_536,
+		expectedLocal: { name: 'value', value: '0' },
+		expectedOutput: 'lldb-buffered-output=73',
+		expectedTitle: 'C · LLDB / WAMR',
+		language: 'C',
+		programArgs: [],
+		source: `#include <stdio.h>
+
+int main(void) {
+    static char block[65536];
+    for (unsigned int i = 0; i < sizeof(block); ++i) block[i] = 'A' + i % 26;
+    int value = 0;
+    fputs("lldb-buffer-begin\\n", stdout);
+    if (fwrite(block, 1, sizeof(block), stdout) != sizeof(block)) return 2;
+    fputs("\\nlldb-buffer-end\\n", stdout); fflush(stdout);
+    fputs("lldb-buffer-stderr\\n", stderr);
+    fputs("lldb-buffer-input? ", stdout); fflush(stdout);
+    if (scanf("%d", &value) != 1) return 3;
+    printf("\\nlldb-buffered-output=%d\\n", value);
+    return value == 73 ? 0 : 4;
+}`,
+		testId: 'c-buffered-output'
+	},
+	{
 		activePath: 'recursive.c',
 		backend: 'lldb',
 		breakpointLine: 6,
@@ -542,6 +619,7 @@ int main(void) {
     char chunk[16384];
     memset(chunk, 'x', sizeof(chunk));
     volatile int value = 0;
+    if (getchar() != 's') return 2;
     for (;;) {
         fwrite(chunk, 1, sizeof(chunk), stdout);
         fwrite(chunk, 1, sizeof(chunk), stderr);
@@ -1069,14 +1147,14 @@ async function typeTerminalLine(page: Page, line: string) {
 	await page.keyboard.press('Enter');
 }
 
-async function waitForTerminalOutput(page: Page, output: string) {
+async function waitForTerminalOutput(page: Page, output: string, timeoutMs = 5_000) {
 	await page.waitForFunction(
 		(output) =>
 			document
 				.querySelector('[data-testid="terminal-debug-output"]')
 				?.textContent?.includes(output),
 		output,
-		{ timeout: 5_000 }
+		{ timeout: timeoutMs }
 	);
 }
 
@@ -1186,7 +1264,17 @@ describe('native-source browser debugging in Chromium', () => {
 					data: SharedArrayBuffer;
 					generation: number;
 				};
-				const targetQueues = new Map<'stdin' | 'stdout' | 'stderr', DebugQueueDescriptor>();
+				const targetQueues = new Map<
+					'stdin' | 'stdout' | 'stderr' | 'rspInput',
+					DebugQueueDescriptor
+				>();
+				let lldbDapOutput: DebugQueueDescriptor | null = null;
+				let transportSample: Array<{
+					name: 'rspInput' | 'dapOutput' | 'stdout' | 'stderr';
+					descriptor: DebugQueueDescriptor;
+					write: number;
+					epoch: number;
+				}> = [];
 				const linearMemory = {
 					lldb: { peakBytes: 0, samples: 0 },
 					target: { peakBytes: 0, samples: 0 }
@@ -1247,11 +1335,25 @@ describe('native-source browser debugging in Chromium', () => {
 							targetQueues.set('stdout', message.stdout);
 							targetQueues.set('stderr', message.stderr);
 							if (
+								message.rspInput?.control instanceof SharedArrayBuffer &&
+								message.rspInput?.data instanceof SharedArrayBuffer
+							) {
+								// Register only the target endpoint: LLDB uses reversed RSP names.
+								targetQueues.set('rspInput', message.rspInput);
+							}
+							if (
 								message.stdin?.control instanceof SharedArrayBuffer &&
 								message.stdin?.data instanceof SharedArrayBuffer
 							) {
 								targetQueues.set('stdin', message.stdin);
 							}
+						}
+						if (
+							message?.type === 'initialize-lldb' &&
+							message.dapOutput?.control instanceof SharedArrayBuffer &&
+							message.dapOutput?.data instanceof SharedArrayBuffer
+						) {
+							lldbDapOutput = message.dapOutput;
 						}
 						if (Array.isArray(transferOrOptions)) {
 							super.postMessage(message, transferOrOptions);
@@ -1301,6 +1403,19 @@ describe('native-source browser debugging in Chromium', () => {
 					value: {
 						saturateOutputAndPause(durationMs: number) {
 							if (!Number.isFinite(durationMs) || durationMs < 0) return null;
+							const stdin = targetQueues.get('stdin');
+							if (!stdin) return null;
+							const inputHeader = new Int32Array(stdin.control);
+							const inputWrite = Atomics.load(inputHeader, 1) >>> 0;
+							if (inputWrite !== Atomics.load(inputHeader, 0) >>> 0) return null;
+							// Release the fixture's getchar gate and block readers in this same
+							// task. A Playwright round trip lets bulk output hit the 1 MiB limit
+							// before saturation can be injected.
+							new Uint8Array(stdin.data)[inputWrite & (stdin.data.byteLength - 1)] =
+								's'.charCodeAt(0);
+							Atomics.store(inputHeader, 1, (inputWrite + 1) | 0);
+							Atomics.add(inputHeader, 3, 1);
+							Atomics.notify(inputHeader, 3);
 							const deadline = performance.now() + durationMs;
 							while (performance.now() < deadline) {
 								// Deliberately stop the product-side output readers while WAMR fills both rings.
@@ -1380,6 +1495,66 @@ describe('native-source browser debugging in Chromium', () => {
 							);
 							worker.terminate();
 							return true;
+						}
+					}
+				});
+				Object.defineProperty(globalThis, '__wasmIdleDebugTransport', {
+					value: {
+						begin() {
+							const descriptors = {
+								rspInput: targetQueues.get('rspInput'),
+								dapOutput: lldbDapOutput,
+								stdout: targetQueues.get('stdout'),
+								stderr: targetQueues.get('stderr')
+							};
+							transportSample = [];
+							for (const name of [
+								'rspInput',
+								'dapOutput',
+								'stdout',
+								'stderr'
+							] as const) {
+								const descriptor = descriptors[name];
+								if (!descriptor) return false;
+								const header = new Int32Array(descriptor.control);
+								transportSample.push({
+									name,
+									descriptor,
+									write: Atomics.load(header, 1) >>> 0,
+									epoch: Atomics.load(header, 3) >>> 0
+								});
+							}
+							return true;
+						},
+						read() {
+							return Object.fromEntries(
+								transportSample.map(({ name, descriptor, write, epoch }) => {
+									const header = new Int32Array(descriptor.control);
+									const bytes = (Atomics.load(header, 1) - write) >>> 0;
+									const capacity = descriptor.data.byteLength;
+									const captureText = name === 'rspInput' || name === 'dapOutput';
+									const overrun = captureText && bytes > capacity;
+									let text = '';
+									if (captureText && !overrun) {
+										const ring = new Uint8Array(descriptor.data);
+										const copy = new Uint8Array(bytes);
+										for (let i = 0; i < bytes; i++)
+											copy[i] = ring[(write + i) & (capacity - 1)];
+										text = new TextDecoder().decode(copy);
+									}
+									return [
+										name,
+										{
+											bytes,
+											capacity,
+											overrun,
+											text,
+											// EPOCH includes writes, reads and close/interrupt notifications.
+											notifications: (Atomics.load(header, 3) - epoch) >>> 0
+										}
+									];
+								})
+							);
 						}
 					}
 				});
@@ -1472,9 +1647,14 @@ describe('native-source browser debugging in Chromium', () => {
 								typeof (window as any).__wasmIdleDebug?.setWorkspaceFiles ===
 								'function'
 						);
-						await page.locator('select').first().selectOption(testCase.language);
+						// The hook exists before Monaco loads. Wait for workspace restoration
+						// and its first save, otherwise startup can overwrite this selection.
+						await page.locator('[data-workspace-save-state="saved"]').waitFor();
+						await page.locator('#language-select').selectOption(testCase.language);
 						await page.waitForFunction(
-							(language) => document.querySelector('select')?.value === language,
+							(language) =>
+								document.querySelector<HTMLSelectElement>('#language-select')
+									?.value === language,
 							testCase.language
 						);
 						if (testCase.programArgs.length > 0) {
@@ -1886,6 +2066,300 @@ describe('native-source browser debugging in Chromium', () => {
 								}
 							);
 							stepStartLine = await readPausedLine(page);
+						}
+						if (
+							'expectedDeepStack' in testCase ||
+							'expectedArrayPageSize' in testCase ||
+							'expectedBufferedOutputBytes' in testCase
+						) {
+							const sourcePath = `/workspace/${testCase.activePath}`;
+							await waitForSourceStop(
+								page,
+								{
+									functionName:
+										'expectedDeepStack' in testCase ? 'descend' : 'main',
+									line: testCase.breakpointLine,
+									sourcePath
+								},
+								10_000
+							);
+							if ('expectedDeepStack' in testCase) {
+								const initialState = await page.evaluate(() =>
+									(window as any).__wasmIdleDebug.getDebugState()
+								);
+								expect(initialState.callStack).toHaveLength(100);
+								expect(
+									new Set(
+										initialState.callStack.map(
+											(frame: { id: number }) => frame.id
+										)
+									).size
+								).toBe(100);
+								for (const [index, frame] of initialState.callStack.entries()) {
+									expect(frame).toMatchObject({
+										functionName: 'descend',
+										sourcePath,
+										line: index === 0 ? 6 : 5
+									});
+								}
+								await page.locator('.debug-frame-select').nth(1).click();
+								await page.waitForFunction(
+									(frameId) => {
+										const state = (
+											window as any
+										).__wasmIdleDebug.getDebugState();
+										return state.frameId === frameId && state.pausedLine === 5;
+									},
+									initialState.callStack[1].id,
+									{ timeout: 10_000 }
+								);
+								await page
+									.getByRole('button', { name: 'Load locals', exact: true })
+									.click();
+								await page.waitForFunction(
+									() => {
+										const state = (
+											window as any
+										).__wasmIdleDebug.getDebugState();
+										const variables = state.variablesByReference.flatMap(
+											([, values]: [number, any[]]) => values
+										);
+										return (
+											variables.some(
+												(value: any) =>
+													value.name === 'depth' && value.value === '1'
+											) &&
+											variables.some(
+												(value: any) =>
+													value.name === 'value' && value.value === '1'
+											)
+										);
+									},
+									undefined,
+									{ timeout: 10_000 }
+								);
+								await page.locator('.debug-frame-select').first().click();
+								await page.waitForFunction(
+									(frameId) => {
+										const state = (
+											window as any
+										).__wasmIdleDebug.getDebugState();
+										return state.frameId === frameId && state.pausedLine === 6;
+									},
+									initialState.callStack[0].id,
+									{ timeout: 10_000 }
+								);
+								expect(
+									await page.evaluate(() =>
+										(window as any).__wasmIdleDebugTransport.begin()
+									)
+								).toBe(true);
+								await page
+									.getByRole('button', { name: 'Next Line', exact: true })
+									.click();
+								await waitForSourceStop(
+									page,
+									{ functionName: 'descend', line: 7, sourcePath },
+									10_000
+								);
+								const sample = await page.evaluate(() =>
+									(window as any).__wasmIdleDebugTransport.read()
+								);
+								expect(sample.rspInput.overrun).toBe(false);
+								expect(sample.dapOutput.overrun).toBe(false);
+								expect(sample.rspInput.text).toContain('$qWasmCallStack');
+								const pcReads = (
+									sample.rspInput.text.match(/\$p0(?:[^#]*)#[0-9a-f]{2}/giu) || []
+								).length;
+								// The stop-scoped stack snapshot supplies caller PCs. Reading every
+								// caller's p0 separately previously added 99 RSP round trips here.
+								expect(pcReads).toBeLessThanOrEqual(4);
+								const responses: any[] = [];
+								let pending = Buffer.from(sample.dapOutput.text);
+								while (pending.length) {
+									const headerEnd = pending.indexOf('\r\n\r\n');
+									expect(
+										headerEnd,
+										'Incomplete DAP capture header'
+									).toBeGreaterThanOrEqual(0);
+									const lengthHeader = /Content-Length:\s*(\d+)/iu.exec(
+										pending.subarray(0, headerEnd).toString()
+									);
+									expect(lengthHeader).not.toBeNull();
+									const end = headerEnd + 4 + Number(lengthHeader![1]);
+									expect(end, 'Incomplete DAP capture body').toBeLessThanOrEqual(
+										pending.length
+									);
+									responses.push(
+										JSON.parse(pending.subarray(headerEnd + 4, end).toString())
+									);
+									pending = pending.subarray(end);
+								}
+								const stackResponses = responses.filter(
+									(response) =>
+										response.type === 'response' &&
+										response.command === 'stackTrace'
+								);
+								expect(stackResponses).toHaveLength(1);
+								const frames = stackResponses[0].body.stackFrames;
+								expect(frames).toHaveLength(100);
+								for (const [index, frame] of frames.entries()) {
+									expect(frame).toMatchObject({
+										name: 'descend',
+										source: { path: sourcePath },
+										line: index === 0 ? 7 : 5
+									});
+									expect(frame.instructionPointerReference).toMatch(
+										/^0x[0-9a-f]+$/iu
+									);
+									if (index > 0) {
+										expect(frame.instructionPointerReference).toBe(
+											frames[1].instructionPointerReference
+										);
+										expect(frame.instructionPointerReference).not.toBe(
+											frames[0].instructionPointerReference
+										);
+									}
+								}
+								console.info(
+									`[wasm-idle:deep-stack] ${JSON.stringify({ frames: frames.length, pcReads, rspBytes: sample.rspInput.bytes })}`
+								);
+								await page
+									.getByRole('button', { name: 'Continue', exact: true })
+									.click();
+							} else if ('expectedArrayPageSize' in testCase) {
+								await page
+									.getByRole('button', { name: 'Load locals', exact: true })
+									.click();
+								const expand = page.getByRole('button', {
+									name: 'Load children for values',
+									exact: true
+								});
+								await expand.click();
+								const rows = page.locator(
+									'.debug-variable-children > ul > .debug-entry--local'
+								);
+								await expect
+									.poll(() => rows.count(), { timeout: 10_000 })
+									.toBe(testCase.expectedArrayPageSize);
+								expect(await rows.locator('.debug-key').allTextContents()).toEqual(
+									Array.from({ length: 50 }, (_, i) => `[${i}]`)
+								);
+								expect(
+									await rows.locator('.debug-value').allTextContents()
+								).toEqual(Array.from({ length: 50 }, (_, i) => String(i)));
+								await page
+									.getByRole('button', {
+										name: 'Load more children for values',
+										exact: true
+									})
+									.click();
+								await expect
+									.poll(() => rows.count(), { timeout: 10_000 })
+									.toBe(100);
+								expect(await rows.locator('.debug-key').allTextContents()).toEqual(
+									Array.from({ length: 100 }, (_, i) => `[${i}]`)
+								);
+								expect(
+									await rows.locator('.debug-value').allTextContents()
+								).toEqual(Array.from({ length: 100 }, (_, i) => String(i)));
+								const loaded = await page.evaluate(() => {
+									const state = (window as any).__wasmIdleDebug.getDebugState();
+									const variables = new Map<number, any[]>(
+										state.variablesByReference
+									);
+									const array = Array.from(variables.values())
+										.flat()
+										.find((variable) => variable.name === 'values');
+									const children = variables.get(array.variablesReference);
+									if (!children) {
+										throw new Error('Paged array children were not loaded');
+									}
+									return { array, children };
+								});
+								expect(loaded.array.indexedVariables).toBe(1000);
+								expect(
+									loaded.children.map(
+										({ name, value }: { name: string; value: string }) => ({
+											name,
+											value
+										})
+									)
+								).toEqual(
+									Array.from({ length: 100 }, (_, i) => ({
+										name: `[${i}]`,
+										value: String(i)
+									}))
+								);
+								await page
+									.getByRole('button', { name: 'Next Line', exact: true })
+									.click();
+								await waitForSourceStop(
+									page,
+									{ functionName: 'main', line: 8, sourcePath },
+									10_000
+								);
+								const resumedState = await page.evaluate(() =>
+									(window as any).__wasmIdleDebug.getDebugState()
+								);
+								expect(resumedState.variablesByReference).toEqual([]);
+								expect(await rows.count()).toBe(0);
+								await page
+									.getByRole('button', { name: 'Load locals', exact: true })
+									.waitFor({ state: 'visible', timeout: 10_000 });
+								await page
+									.getByRole('button', { name: 'Continue', exact: true })
+									.click();
+							} else {
+								expect(
+									await page.evaluate(() =>
+										(window as any).__wasmIdleDebugTransport.begin()
+									)
+								).toBe(true);
+								await page
+									.getByRole('button', { name: 'Continue', exact: true })
+									.click();
+								await waitForTerminalOutput(page, 'lldb-buffer-input? ', 30_000);
+								await waitForTerminalOutput(page, 'lldb-buffer-stderr', 10_000);
+								const transcript = (
+									(await page
+										.locator('[data-testid="terminal-debug-output"]')
+										.textContent()) || ''
+								).replaceAll('\r\n', '\n');
+								const stdout = transcript.replace('lldb-buffer-stderr\n', '');
+								const startMarker = 'lldb-buffer-begin\n';
+								const endMarker = '\nlldb-buffer-end\n';
+								const start = stdout.indexOf(startMarker);
+								const end = stdout.indexOf(endMarker, start + startMarker.length);
+								expect(start).toBeGreaterThanOrEqual(0);
+								expect(end).toBeGreaterThan(start);
+								const payload = stdout.slice(start + startMarker.length, end);
+								const expectedPayload = Array.from(
+									{ length: testCase.expectedBufferedOutputBytes },
+									(_, i) => String.fromCharCode(65 + (i % 26))
+								).join('');
+								expect(payload.length).toBe(testCase.expectedBufferedOutputBytes);
+								expect(createHash('sha256').update(payload).digest('hex')).toBe(
+									createHash('sha256').update(expectedPayload).digest('hex')
+								);
+								const sample = await page.evaluate(() =>
+									(window as any).__wasmIdleDebugTransport.read()
+								);
+								expect(sample.stdout.bytes).toBeGreaterThanOrEqual(
+									testCase.expectedBufferedOutputBytes
+								);
+								expect(sample.stdout.notifications).toBeGreaterThan(0);
+								expect(sample.stdout.notifications).toBeLessThanOrEqual(2048);
+								expect(sample.stderr.bytes).toBe('lldb-buffer-stderr\n'.length);
+								console.info(
+									`[wasm-idle:buffered-output] ${JSON.stringify({ bytes: sample.stdout.bytes, notifications: sample.stdout.notifications })}`
+								);
+								await typeTerminalLine(page, '73');
+							}
+							await waitForTerminalOutput(page, testCase.expectedOutput, 10_000);
+							await debugButton.waitFor({ state: 'visible', timeout: 10_000 });
+							expect(pageErrors).toEqual([]);
+							continue;
 						}
 						if ('keyboardStdin' in testCase) {
 							const sourcePath = `/workspace/${testCase.activePath}`;

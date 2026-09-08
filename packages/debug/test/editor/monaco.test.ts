@@ -113,6 +113,101 @@ describe('MonacoDebugView', () => {
 		]);
 	});
 
+	it('moves the same pause widget when selecting another frame and updates its locals', () => {
+		const breakpointDecorations = { set: vi.fn(), clear: vi.fn() };
+		const inlineValueDecorations = { set: vi.fn(), clear: vi.fn() };
+		const mouseDispose = vi.fn();
+		const onBreakpointsChange = vi.fn();
+		const editor = {
+			createDecorationsCollection: vi
+				.fn()
+				.mockReturnValueOnce(breakpointDecorations)
+				.mockReturnValueOnce(inlineValueDecorations),
+			onMouseDown: vi.fn(
+				(
+					_handler: (event: {
+						target: { type: number; position: { lineNumber: number } };
+					}) => void
+				) => ({
+					dispose: mouseDispose
+				})
+			),
+			getModel: vi.fn(() => ({
+				getLineCount: () => 20,
+				getLineMaxColumn: () => 14,
+				getLineContent: () => 'value += 1;'
+			})),
+			getOption: () => ({ lineHeight: 20 }),
+			getLayoutInfo: () => ({ contentWidth: 640 }),
+			addContentWidget: vi.fn(),
+			layoutContentWidget: vi.fn(),
+			removeContentWidget: vi.fn(),
+			revealLineInCenterIfOutsideViewport: vi.fn()
+		};
+		const Monaco = {
+			Range: class {
+				constructor(public startLineNumber: number) {}
+			},
+			editor: {
+				EditorOption: { fontInfo: 50 },
+				ContentWidgetPositionPreference: { EXACT: 0 },
+				MouseTargetType: { GUTTER_GLYPH_MARGIN: 2, GUTTER_LINE_DECORATIONS: 3 }
+			}
+		};
+		const adapter = {
+			id: 'cpp',
+			evaluateExpression: vi.fn(),
+			selectInlineLocals: vi.fn((_, locals) => locals)
+		};
+		const view = new MonacoDebugView(Monaco as never, editor as never, onBreakpointsChange);
+		view.setBreakpoints([8]);
+		view.setPauseState(8, [{ name: 'value', value: '1' }], adapter);
+		const widget = view.pausedLineWidget!;
+		const node = widget.getDomNode();
+		expect(widget.getPosition()?.position).toEqual({ lineNumber: 8, column: 1 });
+
+		view.setBreakpoints([12]);
+		view.setPauseState(12, [{ name: 'value', value: '2' }], adapter);
+		expect(view.pausedLineWidget).toBe(widget);
+		expect(widget.getDomNode()).toBe(node);
+		expect(widget.getPosition()?.position).toEqual({ lineNumber: 12, column: 1 });
+		expect(editor.addContentWidget).toHaveBeenCalledTimes(1);
+		expect(editor.layoutContentWidget).toHaveBeenCalledWith(widget);
+		expect(editor.revealLineInCenterIfOutsideViewport).toHaveBeenLastCalledWith(12);
+		expect(inlineValueDecorations.set).toHaveBeenLastCalledWith([
+			expect.objectContaining({
+				range: expect.objectContaining({ startLineNumber: 12 }),
+				options: expect.objectContaining({
+					after: expect.objectContaining({ content: '  value = 2' })
+				})
+			})
+		]);
+		const mouseHandler = editor.onMouseDown.mock.calls[0][0];
+		mouseHandler({ target: { type: 2, position: { lineNumber: 12 } } });
+		expect(onBreakpointsChange).toHaveBeenLastCalledWith([]);
+		mouseHandler({ target: { type: 2, position: { lineNumber: 9 } } });
+		expect(onBreakpointsChange).toHaveBeenLastCalledWith([9, 12]);
+
+		view.setPauseState(null, [], adapter);
+		expect(editor.removeContentWidget).toHaveBeenCalledWith(widget);
+		expect(widget.getPosition()?.position).toBeNull();
+		expect(inlineValueDecorations.set).toHaveBeenLastCalledWith([]);
+		view.setPauseState(5, [], adapter);
+		expect(view.pausedLineWidget?.getPosition()?.position).toEqual({
+			lineNumber: 5,
+			column: 1
+		});
+		expect(editor.createDecorationsCollection).toHaveBeenCalledTimes(2);
+		expect(editor.onMouseDown).toHaveBeenCalledTimes(1);
+		expect(mouseDispose).not.toHaveBeenCalled();
+
+		view.dispose();
+		expect(breakpointDecorations.clear).toHaveBeenCalledOnce();
+		expect(inlineValueDecorations.clear).toHaveBeenCalledOnce();
+		expect(mouseDispose).toHaveBeenCalledOnce();
+		expect(view.pausedLineWidget).toBeNull();
+	});
+
 	it('registers cursor sync and run-to-cursor actions together for host editors', () => {
 		let cursorHandler:
 			| ((event: { position?: { lineNumber?: number | null } | null }) => void)
