@@ -2135,8 +2135,16 @@ describe('native-source browser debugging in Chromium', () => {
 									undefined,
 									{ timeout: 10_000 }
 								);
-								await expect.poll(() => page.locator('.debug-inline-values').allTextContents(), { timeout: 10_000 }).toEqual([expect.stringContaining('depth = 1')]);
-								const localsScope = page.locator('details.debug-scope').filter({ has: page.locator('summary', { hasText: 'Locals' }) });
+								await expect
+									.poll(
+										() =>
+											page.locator('.debug-inline-values').allTextContents(),
+										{ timeout: 10_000 }
+									)
+									.toEqual([expect.stringContaining('depth = 1')]);
+								const localsScope = page.locator('details.debug-scope').filter({
+									has: page.locator('summary', { hasText: 'Locals' })
+								});
 								await localsScope.locator('summary').click();
 								await page.locator('.debug-frame-select').first().click();
 								await page.waitForFunction(
@@ -2149,7 +2157,13 @@ describe('native-source browser debugging in Chromium', () => {
 									initialState.callStack[0].id,
 									{ timeout: 10_000 }
 								);
-								await expect.poll(() => localsScope.evaluate((element) => (element as HTMLDetailsElement).open)).toBe(false);
+								await expect
+									.poll(() =>
+										localsScope.evaluate(
+											(element) => (element as HTMLDetailsElement).open
+										)
+									)
+									.toBe(false);
 								expect(
 									await page.evaluate(() =>
 										(window as any).__wasmIdleDebugTransport.begin()
@@ -2174,23 +2188,19 @@ describe('native-source browser debugging in Chromium', () => {
 								).length;
 								// The stop-scoped stack snapshot supplies caller PCs. Reading every
 								// caller's p0 separately previously added 99 RSP round trips here.
-								expect(pcReads).toBeLessThanOrEqual(4);
+								// Up to eight progressive argument labels can add one read each.
+								expect(pcReads).toBeLessThanOrEqual(12);
 								const responses: any[] = [];
 								let pending = Buffer.from(sample.dapOutput.text);
 								while (pending.length) {
 									const headerEnd = pending.indexOf('\r\n\r\n');
-									expect(
-										headerEnd,
-										'Incomplete DAP capture header'
-									).toBeGreaterThanOrEqual(0);
+									if (headerEnd < 0) break; // A background argument response may still be arriving.
 									const lengthHeader = /Content-Length:\s*(\d+)/iu.exec(
 										pending.subarray(0, headerEnd).toString()
 									);
 									expect(lengthHeader).not.toBeNull();
 									const end = headerEnd + 4 + Number(lengthHeader![1]);
-									expect(end, 'Incomplete DAP capture body').toBeLessThanOrEqual(
-										pending.length
-									);
+									if (end > pending.length) break;
 									responses.push(
 										JSON.parse(pending.subarray(headerEnd + 4, end).toString())
 									);
@@ -2199,7 +2209,8 @@ describe('native-source browser debugging in Chromium', () => {
 								const stackResponses = responses.filter(
 									(response) =>
 										response.type === 'response' &&
-										response.command === 'stackTrace'
+										response.command === 'stackTrace' &&
+										response.body?.stackFrames?.length === 100
 								);
 								expect(stackResponses).toHaveLength(1);
 								const frames = stackResponses[0].body.stackFrames;
@@ -2923,6 +2934,35 @@ describe('native-source browser debugging in Chromium', () => {
 										recursiveFrames.map((frame: { id?: number }) => frame.id)
 									).size
 								).toBe(recursiveFrames.length);
+								await page.waitForFunction(
+									({ frames, expected }) => {
+										const state = (
+											window as any
+										).__wasmIdleDebug.getDebugState();
+										return frames.every((frame: any, index: number) => {
+											const current = state.callStack.find(
+												(entry: any) => entry.id === frame.id
+											);
+											const label =
+												current?.displayName ??
+												current?.argumentsSummary ??
+												'';
+											return new RegExp(
+												`\\b${expected[index].name}\\s*=\\s*${expected[index].value}\\b`
+											).test(label);
+										});
+									},
+									{
+										frames: recursiveFrames,
+										expected: testCase.expectedFrameLocals
+									},
+									{ timeout: 10_000 }
+								);
+								const summarizedState = await page.evaluate(() =>
+									(window as any).__wasmIdleDebug.getDebugState()
+								);
+								// Filling caller labels must preserve the selected frame and its editor values.
+								expect(summarizedState.frameId).toBe(debugState.frameId);
 								for (
 									let index = 0;
 									index < testCase.expectedFrameLocals.length;
@@ -3014,13 +3054,7 @@ describe('native-source browser debugging in Chromium', () => {
 								const callStackPanel = page.locator('.debug-panel').filter({
 									has: page.locator('h3', { hasText: 'Call Stack' })
 								});
-								const mainFrameButton = callStackPanel
-									.locator('.debug-frame-select')
-									.filter({
-										has: page.locator('.stack-function', {
-											hasText: mainFrame.functionName
-										})
-									});
+								const mainFrameButton = callStackPanel.locator(`.debug-frame-select[data-frame-id="${mainFrame.id}"]`);
 								await mainFrameButton.click();
 								await page
 									.locator(`.file-tab.active[title="${testCase.activePath}"]`)
@@ -3040,13 +3074,7 @@ describe('native-source browser debugging in Chromium', () => {
 										state.pausedLine === null
 									);
 								}, `/workspace/${testCase.activePath}`);
-								const helperFrameButton = callStackPanel
-									.locator('.debug-frame-select')
-									.filter({
-										has: page.locator('.stack-function', {
-											hasText: helperFrame.functionName
-										})
-									});
+								const helperFrameButton = callStackPanel.locator(`.debug-frame-select[data-frame-id="${helperFrame.id}"]`);
 								await helperFrameButton.click();
 								await page
 									.locator(

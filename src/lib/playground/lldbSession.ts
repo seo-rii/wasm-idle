@@ -196,6 +196,8 @@ export class LldbSandboxSession {
 	private startupAbortController?: AbortController;
 	private activeThreadId = 1;
 	private activeFrameId?: number;
+	private stoppedFrames: DapStackFrame[] = [];
+	private supportsValueFormatting = false;
 	private command: DebugCommand | null = null;
 	private pauseRequested = false;
 	private pauseRequestVersion = 0;
@@ -394,6 +396,7 @@ export class LldbSandboxSession {
 				manifestSupportsWriteMemory && capabilities.supportsWriteMemoryRequest === true;
 			this.supportsDataBreakpoints =
 				manifestSupportsDataBreakpoints && capabilities.supportsDataBreakpoints === true;
+			this.supportsValueFormatting = capabilities.supportsValueFormattingOptions === true;
 			this.initialized = true;
 			if (configuredBreakpointVersion === this.breakpointVersion) {
 				for (const { sourcePath, lines } of sourceBreakpoints) {
@@ -652,6 +655,61 @@ export class LldbSandboxSession {
 		}
 	}
 
+	/** Ask the adapter to format one stopped frame, without changing evaluation selection. */
+	async formattedFrameName(frameId: number) {
+		assertPositiveSafeIntegerArgument(frameId, 'frameId');
+		if (!this.targetStopped || !this.supportsValueFormatting || !this.activeThreadId)
+			return null;
+		const index = this.stoppedFrames.findIndex((frame) => frame.id === frameId);
+		if (index < 0) return null;
+		const session = this.requireSession();
+		const version = this.stateVersion;
+		try {
+			const response = await session.request<unknown>('stackTrace', {
+				threadId: this.activeThreadId,
+				startFrame: index,
+				levels: 1,
+				format: {
+					parameters: true,
+					parameterNames: true,
+					parameterValues: true,
+					parameterTypes: false,
+					line: false,
+					module: false
+				}
+			});
+			if (!this.isCurrentValueRequest(session, version)) return null;
+			const frames = dapResponseCollection(response, 'stackTrace', 'stackFrames');
+			if (!frames.length) return null;
+			const frame = frames[0];
+			assertDapRecord(frame, 'stackTrace', 'stackFrames[0]');
+			assertDapPositiveSafeInteger(frame.id, 'stackTrace', 'stackFrames[0].id');
+			assertDapString(frame.name, 'stackTrace', 'stackFrames[0].name');
+			if (frame.id !== frameId || frame.name === this.stoppedFrames[index]?.name) return null;
+			return frame.name.length > 512 ? frame.name.slice(0, 511) + '…' : frame.name;
+		} catch (error) {
+			if (!this.isCurrentValueRequest(session, version)) return null;
+			this.rethrowProtocolError(error);
+			throw error;
+		}
+	}
+
+	/** Scope metadata lookup does not select a frame or retire other value requests. */
+	async frameScopes(frameId: number) {
+		assertPositiveSafeIntegerArgument(frameId, 'frameId');
+		const session = this.requireSession();
+		const stateVersion = this.stateVersion;
+		try {
+			const scopes = await this.requestScopes(session, frameId);
+			return this.isCurrentValueRequest(session, stateVersion) ? scopes : [];
+		} catch (error) {
+			if (!this.isCurrentValueRequest(session, stateVersion)) return [];
+			this.rethrowProtocolError(error);
+			throw error;
+		}
+	}
+
+	/** Select the evaluation frame, keeping the existing public debugScopes contract. */
 	async scopes(frameId: number) {
 		assertPositiveSafeIntegerArgument(frameId, 'frameId');
 		const session = this.requireSession();
@@ -1290,6 +1348,7 @@ export class LldbSandboxSession {
 		if (version !== this.stateVersion || this.session !== session) return;
 		this.activeThreadId = threadId;
 		this.activeFrameId = selectedFrame.id;
+		this.stoppedFrames = frames;
 		this.targetStopped = true;
 		const callStack = frames.map<DebugFrame>((frame) => {
 			const sourcePath = frame.source?.path;

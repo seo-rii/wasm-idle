@@ -132,6 +132,9 @@ export interface Sandbox {
 		count?: number
 	) => Promise<DebugVariable[]>;
 	debugScopes?: (frameId: number) => Promise<DebugScope[]>;
+	/** Read-only counterpart to debugScopes, which selects the evaluation frame. */
+	debugFrameScopes?: (frameId: number) => Promise<DebugScope[]>;
+	debugFrameName?: (frameId: number) => Promise<string | null>;
 	debugReadMemory?: (
 		memoryReference: string,
 		offset: number,

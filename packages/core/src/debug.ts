@@ -43,6 +43,10 @@ export interface DebugVariableMetadata {
 
 export interface DebugFrame {
 	functionName: string;
+	/** Current stopped-frame argument values, when the adapter distinguishes arguments. */
+	argumentsSummary?: string;
+	/** Adapter-formatted stopped-frame name including argument values, when supported. */
+	displayName?: string;
 	line: number;
 	id?: number;
 	column?: number;

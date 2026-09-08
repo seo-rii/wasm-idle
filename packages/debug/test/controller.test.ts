@@ -32,6 +32,116 @@ function createPausedVariableController(
 }
 
 describe('createDebugSessionController', () => {
+	it('uses the adapter-formatted frame name without adding another argument summary', async () => {
+		const debugFrameName = vi.fn(async (frameId: number) => `recurse(n = ${frameId})`);
+		const debugFrameScopes = vi.fn(async () => []);
+		const controller = createPausedVariableController({ debugFrameName, debugFrameScopes });
+		await controller.loadFrameArguments([11, 12]);
+		expect(controller.callStack.map((frame) => frame.displayName)).toEqual([
+			'recurse(n = 11)',
+			'recurse(n = 12)'
+		]);
+		expect(controller.callStack.every((frame) => frame.argumentsSummary === undefined)).toBe(
+			true
+		);
+		expect(controller.callStack.map((frame) => frame.functionName)).toEqual(['callee', 'main']);
+		expect(controller.frameId).toBe(11);
+		expect(debugFrameScopes).not.toHaveBeenCalled();
+	});
+
+	it('summarizes separate recursive frame arguments without changing selection or reading child objects', async () => {
+		const debugScopes = vi.fn();
+		const debugFrameScopes = vi.fn(async (frameId: number) => [
+			{
+				name: 'Parameters',
+				presentationHint: 'arguments',
+				variablesReference: frameId + 100,
+				expensive: false,
+				variables: []
+			},
+			{ name: 'Locals', variablesReference: frameId + 200, expensive: false, variables: [] }
+		]);
+		const debugVariables = vi.fn(async (reference: number) => [
+			{ name: 'n', value: String(reference - 100), variablesReference: 0 },
+			{ name: 'text', value: 'x'.repeat(200), variablesReference: 99 }
+		]);
+		const controller = createDebugSessionController({
+			terminal: { debugScopes, debugFrameScopes, debugVariables } as never
+		});
+		controller.handleEvent({
+			type: 'pause',
+			line: 7,
+			reason: 'breakpoint',
+			frameId: 1,
+			locals: [],
+			callStack: [1, 2, 3].map((id) => ({ id, functionName: 'recurse(int)', line: 7 })),
+			scopes: await debugFrameScopes(1)
+		});
+		await vi.waitFor(() =>
+			expect(
+				controller.callStack.every((frame) => frame.argumentsSummary !== undefined)
+			).toBe(true)
+		);
+		expect(controller.callStack.map((frame) => frame.argumentsSummary?.slice(0, 5))).toEqual([
+			'n = 1',
+			'n = 2',
+			'n = 3'
+		]);
+		expect(controller.callStack.every((frame) => frame.argumentsSummary!.length < 110)).toBe(
+			true
+		);
+		expect(controller.callStack.every((frame) => frame.argumentsSummary!.endsWith('…'))).toBe(
+			true
+		);
+		expect(controller.frameId).toBe(1);
+		expect(debugScopes).not.toHaveBeenCalled();
+		expect(debugVariables.mock.calls.flat()).not.toContain(99);
+		expect(debugVariables.mock.calls).not.toContainEqual([202, 0, 7]);
+	});
+
+	it('does not invent arguments from a combined Locals scope', async () => {
+		const debugFrameScopes = vi.fn(async () => []);
+		const controller = createPausedVariableController({
+			debugFrameScopes,
+			debugVariables: async () => [{ name: 'local', value: '42' }]
+		});
+		await controller.loadFrameArguments([11, 12]);
+		expect(debugFrameScopes).not.toHaveBeenCalled();
+		expect(controller.callStack.every((frame) => frame.argumentsSummary === undefined)).toBe(
+			true
+		);
+	});
+
+	it('discards late argument summaries after continue and keeps the stopped screen responsive', async () => {
+		const callerScopes = deferred<[]>();
+		const debugFrameScopes = vi.fn(() => callerScopes.promise);
+		const controller = createDebugSessionController({
+			terminal: { debugFrameScopes } as never
+		});
+		controller.handleEvent({
+			type: 'pause',
+			line: 7,
+			reason: 'breakpoint',
+			frameId: 1,
+			locals: [],
+			callStack: [1, 2].map((id) => ({ id, functionName: 'recurse', line: 7 })),
+			scopes: [
+				{
+					name: 'Arguments',
+					presentationHint: 'arguments',
+					variablesReference: 10,
+					expensive: false,
+					variables: [{ name: 'n', value: '1' }]
+				}
+			]
+		});
+		await vi.waitFor(() => expect(debugFrameScopes).toHaveBeenCalledWith(2));
+		expect(controller.callStack[0]?.argumentsSummary).toBe('n = 1');
+		controller.handleEvent({ type: 'resume', command: 'continue' });
+		callerScopes.resolve([]);
+		await Promise.resolve();
+		expect(controller.callStack).toEqual([]);
+	});
 	it('automatically loads bounded locals and arguments without expanding arrays or expensive scopes', async () => {
 		const debugVariables = vi.fn(async (reference: number) => [
 			{

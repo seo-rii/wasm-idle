@@ -76,6 +76,7 @@ export interface DebugEvaluateResult {
 }
 
 export interface DebugCapabilities {
+	supportsValueFormattingOptions?: boolean;
 	supportsConfigurationDoneRequest?: boolean;
 	supportsReadMemoryRequest?: boolean;
 	supportsWriteMemoryRequest?: boolean;

@@ -1582,6 +1582,17 @@
 		debug.setSourcePath(`/workspace/${workspacePath}`);
 	}
 
+	function observeDebugFrame(frameId: number | undefined) {
+		return (node: HTMLElement) => {
+			if (!frameId) return;
+			const observer = new IntersectionObserver((entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) void debug.loadFrameArguments([frameId]);
+			});
+			observer.observe(node);
+			return () => observer.disconnect();
+		};
+	}
+
 	function invalidateMemoryInspector() {
 		memoryRequestVersion += 1;
 		memoryResult = null;
@@ -3491,13 +3502,15 @@
 									>
 										<button
 											class="debug-frame-select"
+											data-frame-id={frame.id}
+											{@attach observeDebugFrame(frame.id)}
 											disabled={!frame.id || dataBreakpointLoading}
 											onclick={() => selectDebugFrame(frame)}
 										>
 											<div class="stack-meta">
 												<span class="stack-order">{index + 1}</span>
 												<span class="stack-function"
-													>{frame.functionName || '(entry)'}</span
+													>{frame.displayName ?? (frame.argumentsSummary === undefined ? frame.functionName || '(entry)' : `${frame.functionName.replace(/\([^()]*\)$/u, '')}(${frame.argumentsSummary})`)}</span
 												>
 											</div>
 											<code class="stack-line">L{frame.line}</code>

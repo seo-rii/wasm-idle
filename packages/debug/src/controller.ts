@@ -27,11 +27,19 @@ const MAX_WATCH_EXPRESSIONS = 64;
 const MAX_WATCH_VARIABLE_PATH_SEGMENTS = 64;
 const VARIABLE_PAGE_SIZE = 50;
 const MAX_AUTO_LOADED_SCOPES = 2;
+const MAX_AUTO_ARGUMENT_FRAMES = 8;
+const MAX_FRAME_ARGUMENTS = 6;
 
 function isLocalScope(scope: DebugScope) {
 	return scope.presentationHint
 		? scope.presentationHint === 'locals' || scope.presentationHint === 'arguments'
 		: /^(locals|arguments)$/iu.test(scope.name);
+}
+
+function isArgumentScope(scope: DebugScope) {
+	return scope.presentationHint
+		? scope.presentationHint === 'arguments'
+		: /^arguments$/iu.test(scope.name);
 }
 
 type WatchVariablePathSegment = { name: string } | { index: number };
@@ -108,6 +116,8 @@ export type DebugTerminalControl = Pick<
 	| 'debugEvaluate'
 	| 'debugVariables'
 	| 'debugScopes'
+	| 'debugFrameScopes'
+	| 'debugFrameName'
 	| 'debugReadMemory'
 	| 'debugWriteMemory'
 	| 'debugDataBreakpointInfo'
@@ -216,11 +226,15 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		string,
 		{ variablesReference: number; promise: Promise<DebugVariable[]> }
 	>();
+	let argumentQueue: Promise<void> = Promise.resolve();
+	const argumentRequests = new Map<number, Promise<void>>();
 
 	function invalidateVariableRequests() {
 		frameRequestVersion += 1;
 		watchRequestVersion += 1;
 		variableRequests.clear();
+		argumentRequests.clear();
+		argumentQueue = Promise.resolve();
 		loadingVariableReferencesStore.set(new Set());
 	}
 
@@ -791,7 +805,9 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 	}
 
 	function loadTopLevelVariables() {
+		const version = frameRequestVersion;
 		const scopes = get(scopesStore).filter((scope) => !scope.expensive && isLocalScope(scope));
+		const requests: Promise<DebugVariable[]>[] = [];
 		for (const scope of scopes.slice(0, MAX_AUTO_LOADED_SCOPES)) {
 			if (
 				scope.variablesReference <= 0 ||
@@ -799,8 +815,112 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 			)
 				continue;
 			// Failure leaves this scope unloaded so the panel can explicitly retry it.
-			void loadVariableChildren(scope.variablesReference).catch(() => undefined);
+			requests.push(loadVariableChildren(scope.variablesReference));
 		}
+		void Promise.allSettled(requests).then(() => {
+			if (version !== frameRequestVersion || !get(pausedStore)) return;
+			void loadFrameArguments(
+				[
+					get(frameIdStore),
+					...get(callStackStore)
+						.slice(0, MAX_AUTO_ARGUMENT_FRAMES)
+						.map((frame) => frame.id)
+				].filter((id): id is number => id != null)
+			);
+		});
+	}
+
+	/** Populate visible frames serially without changing the selected evaluation frame. */
+	async function loadFrameArguments(frameIds: number[]) {
+		const terminal = get(terminalStore);
+		// A mixed Locals scope does not identify arguments. Never label all locals as parameters.
+		if (
+			!get(pausedStore) ||
+			!terminal ||
+			(!terminal.debugFrameName &&
+				(!terminal.debugFrameScopes || !get(scopesStore).some(isArgumentScope)))
+		)
+			return;
+		const version = frameRequestVersion;
+		const pending: Promise<void>[] = [];
+		for (const frameId of [...new Set(frameIds)].slice(0, MAX_AUTO_ARGUMENT_FRAMES)) {
+			const frame = get(callStackStore).find((entry) => entry.id === frameId);
+			if (!frame || frame.argumentsSummary !== undefined || frame.displayName !== undefined)
+				continue;
+			const existing = argumentRequests.get(frameId);
+			if (existing) {
+				pending.push(existing);
+				continue;
+			}
+			const request = argumentQueue
+				.then(async () => {
+					if (version !== frameRequestVersion || !get(pausedStore)) return;
+					if (terminal.debugFrameName) {
+						const displayName = await terminal.debugFrameName(frameId);
+						if (version !== frameRequestVersion || !get(pausedStore)) return;
+						if (displayName !== null) {
+							callStackStore.update((frames) =>
+								frames.map((entry) =>
+									entry.id === frameId
+										? { ...entry, displayName: displayName.slice(0, 512) }
+										: entry
+								)
+							);
+							return;
+						}
+					}
+					if (!terminal.debugFrameScopes || !get(scopesStore).some(isArgumentScope))
+						return;
+					const scopes =
+						frameId === get(frameIdStore)
+							? get(scopesStore)
+							: await terminal.debugFrameScopes!(frameId);
+					if (version !== frameRequestVersion || !get(pausedStore)) return;
+					const arguments_: DebugVariable[] = [];
+					let hasArguments = false;
+					for (const scope of scopes
+						.filter((scope) => !scope.expensive && isArgumentScope(scope))
+						.slice(0, MAX_AUTO_LOADED_SCOPES)) {
+						hasArguments = true;
+						const values =
+							get(variablesByReferenceStore).get(scope.variablesReference) ??
+							(scope.variables.length
+								? scope.variables
+								: await requestVariableChildren(
+										scope.variablesReference,
+										0,
+										MAX_FRAME_ARGUMENTS + 1
+									));
+						if (version !== frameRequestVersion || !get(pausedStore)) return;
+						arguments_.push(
+							...values.slice(0, MAX_FRAME_ARGUMENTS + 1 - arguments_.length)
+						);
+						if (arguments_.length > MAX_FRAME_ARGUMENTS) break;
+					}
+					if (!hasArguments) return;
+					const summary =
+						arguments_
+							.slice(0, MAX_FRAME_ARGUMENTS)
+							.map(
+								({ name, value }) =>
+									`${name.slice(0, 40)} = ${value.length > 80 ? value.slice(0, 79) + '…' : value}`
+							)
+							.join(', ') + (arguments_.length > MAX_FRAME_ARGUMENTS ? ', …' : '');
+					callStackStore.update((frames) =>
+						frames.map((entry) =>
+							entry.id === frameId ? { ...entry, argumentsSummary: summary } : entry
+						)
+					);
+				})
+				.catch(() => undefined)
+				.finally(() => {
+					if (argumentRequests.get(frameId) === request) argumentRequests.delete(frameId);
+				});
+			argumentQueue = request;
+			argumentRequests.set(frameId, request);
+			pending.push(request);
+		}
+		await Promise.all(pending);
 	}
 
 	function loadMoreVariableChildren(variable: DebugVariable) {
@@ -1072,6 +1192,7 @@ export function createDebugSessionController(options: DebugSessionControllerOpti
 		clearWatches,
 		loadVariableChildren,
 		loadMoreVariableChildren,
+		loadFrameArguments,
 		selectFrame,
 		readMemory,
 		writeMemory,

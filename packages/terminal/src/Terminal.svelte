@@ -608,6 +608,14 @@
 			await wait();
 			return (await sandbox.debugScopes?.(frameId)) ?? [];
 		},
+		async debugFrameScopes(frameId: number) {
+			await wait();
+			return (await sandbox.debugFrameScopes?.(frameId)) ?? [];
+		},
+		async debugFrameName(frameId: number) {
+			await wait();
+			return (await sandbox.debugFrameName?.(frameId)) ?? null;
+		},
 		async debugReadMemory(memoryReference: string, offset: number, count: number) {
 			await wait();
 			return (await sandbox.debugReadMemory?.(memoryReference, offset, count)) ?? null;

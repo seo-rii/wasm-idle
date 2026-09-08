@@ -267,6 +267,151 @@ vi.mock('@wasm-idle/llvm-core/debug', () => ({
 import { LldbSandboxSession } from './lldbSession';
 
 describe('LldbSandboxSession', () => {
+	it.each([false, true])(
+		'requests one formatted frame only when the adapter supports value formatting (%s)',
+		async (supported) => {
+			runtimeState.initializeCapabilities.supportsValueFormattingOptions = supported;
+			const controller = new LldbSandboxSession({
+				manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+				runtimeBaseUrl: 'https://example.com/debug/',
+				artifact: {
+					bytes: Uint8Array.of(0),
+					sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+				},
+				sourcePath: '/workspace/main.cpp',
+				breakpoints: [],
+				pauseOnEntry: true,
+				onDebugEvent: () => undefined,
+				onOutput: () => undefined,
+				fetchImpl: vi.fn(async () => ({
+					ok: true,
+					json: async () => ({ manifestVersion: 2 })
+				})) as unknown as typeof fetch
+			});
+			const completion = controller.start();
+			await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+			await emitStoppedAndWait(runtimeState.session!);
+			const before = runtimeState.session!.requests.length;
+			runtimeState.responseOverrides.set('stackTrace', {
+				stackFrames: [{ id: 41, name: 'main(argc = 1)' }]
+			});
+			await expect(controller.formattedFrameName(41)).resolves.toBe(
+				supported ? 'main(argc = 1)' : null
+			);
+			if (supported)
+				expect(runtimeState.session!.requests.at(-1)).toEqual({
+					command: 'stackTrace',
+					args: {
+						threadId: 7,
+						startFrame: 0,
+						levels: 1,
+						format: {
+							parameters: true,
+							parameterNames: true,
+							parameterValues: true,
+							parameterTypes: false,
+							line: false,
+							module: false
+						}
+					}
+				});
+			else expect(runtimeState.session!.requests).toHaveLength(before);
+			await controller.disconnect();
+			await completion;
+		}
+	);
+
+	it('reads caller scopes without selecting that frame or invalidating in-flight values', async () => {
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({
+					manifestVersion: 2,
+					debugger: { capabilities: { evaluateExpressions: true } }
+				})
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
+		let resolveVariables!: (value: unknown) => void;
+		runtimeState.responseOverrides.set(
+			'variables',
+			new Promise((resolve) => {
+				resolveVariables = resolve;
+			})
+		);
+		const variables = controller.variables(11);
+		await controller.frameScopes(42);
+		resolveVariables({ variables: [{ name: 'answer', value: '42', variablesReference: 0 }] });
+		await expect(variables).resolves.toEqual([
+			expect.objectContaining({ name: 'answer', value: '42' })
+		]);
+		await controller.evaluate('answer');
+		expect(runtimeState.session!.requests.at(-1)).toEqual({
+			command: 'evaluate',
+			args: { expression: 'answer', frameId: 41, context: 'watch' }
+		});
+		await controller.disconnect();
+		await completion;
+	});
+
+	it('ignores a read-only frame scope response after the target resumes', async () => {
+		const controller = new LldbSandboxSession({
+			manifestUrl: 'https://example.com/debug/runtime-manifest.v2.json',
+			runtimeBaseUrl: 'https://example.com/debug/',
+			artifact: {
+				bytes: Uint8Array.of(0),
+				sources: [{ path: '/workspace/main.cpp', content: 'int main() {}' }]
+			},
+			sourcePath: '/workspace/main.cpp',
+			breakpoints: [],
+			pauseOnEntry: true,
+			onDebugEvent: () => undefined,
+			onOutput: () => undefined,
+			fetchImpl: vi.fn(async () => ({
+				ok: true,
+				json: async () => ({ manifestVersion: 2 })
+			})) as unknown as typeof fetch
+		});
+		const completion = controller.start();
+		await vi.waitFor(() => expect(runtimeState.session).not.toBeNull());
+		await emitStoppedAndWait(runtimeState.session!);
+		let resolveScopes!: (value: unknown) => void;
+		runtimeState.responseOverrides.set(
+			'scopes',
+			new Promise((resolve) => {
+				resolveScopes = resolve;
+			})
+		);
+		const scopes = controller.frameScopes(42);
+		runtimeState.session!.emit({ event: 'continued', body: { threadId: 7 } });
+		resolveScopes({
+			scopes: [
+				{
+					name: 'Arguments',
+					presentationHint: 'arguments',
+					variablesReference: 20,
+					expensive: false
+				}
+			]
+		});
+		await expect(scopes).resolves.toEqual([]);
+		await controller.disconnect();
+		await completion;
+	});
+
 	beforeEach(() => {
 		runtimeState.session = null;
 		runtimeState.sessions.length = 0;

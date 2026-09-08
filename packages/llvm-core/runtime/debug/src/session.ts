@@ -28,6 +28,7 @@ const MAX_INITIAL_BREAKPOINT_SOURCE_COUNT = 256;
 const MAX_BREAKPOINTS_PER_SOURCE = 1_024;
 const MAX_INITIAL_BREAKPOINT_COUNT = 4_096;
 const DAP_BOOLEAN_CAPABILITY_KEYS = [
+	'supportsValueFormattingOptions',
 	'supportsConfigurationDoneRequest',
 	'supportsReadMemoryRequest',
 	'supportsWriteMemoryRequest',

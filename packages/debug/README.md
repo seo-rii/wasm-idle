@@ -62,6 +62,21 @@ Both controller surfaces bind each lazy-variable request to the current stopped 
 disconnect, a newer stop, or another frame selection invalidates the request; a late success or
 failure resolves as an empty child list and cannot restore cleared locals or report an obsolete UI
 error.
+
+The playground controller automatically loads the first 50 variables from at most two inexpensive
+Locals/Arguments scopes after a stop or frame selection. The panel, inline values, and watches share
+the same cache; nested arrays and objects remain lazy. Scope disclosure state persists across stops.
+`debugScopes(frameId)` selects the evaluation frame; `debugFrameScopes(frameId)` only reads metadata.
+When the adapter advertises `supportsValueFormattingOptions`, `debugFrameName(frameId)` requests a
+single frame with the standard `stackTrace.format` parameter name/value options. The controller
+preserves `functionName` for identity and puts the bounded adapter label in `displayName`, so the UI
+never appends duplicate arguments. Otherwise, when the adapter supplies a distinct Arguments scope (`presentationHint: 'arguments'` or the standard
+scope name), `loadFrameArguments(frameIds)` progressively fills `DebugFrame.argumentsSummary` without
+changing selection. Initial loading covers eight frames; the playground also requests visible frames.
+Each scope-based summary is limited to six arguments and 80 characters per value; a native formatted
+frame name is limited to 512 characters. Adapters without formatting or a separate argument scope
+keep their original frame names rather than mislabelling local variables as parameters.
+
 Execution control follows the same event-authoritative ordering. Once a `continued` or `stopped`
 event supersedes a pending continue, step, or pause request, a late transport failure resolves
 without replacing the newer state or surfacing an obsolete command error; failures from the current

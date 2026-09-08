@@ -43,6 +43,9 @@ export interface TerminalControl {
 		count?: number
 	) => Promise<DebugVariable[]>;
 	debugScopes?: (frameId: number) => Promise<DebugScope[]>;
+	/** Read a frame's scopes without selecting it or invalidating value requests. */
+	debugFrameScopes?: (frameId: number) => Promise<DebugScope[]>;
+	debugFrameName?: (frameId: number) => Promise<string | null>;
 	debugReadMemory?: (
 		memoryReference: string,
 		offset: number,
