@@ -679,6 +679,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'LFortran',
+		ids: ['LFORTRAN'],
+		runtime: 'LFortran LLVM evaluator (experimental)',
+		stdin: 'Yes',
+		editorSupport: 'compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/lfortran.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_LFORTRAN',
+			marker: "selectOption('LFORTRAN')"
+		}
+	},
+	{
 		language: 'Fortran',
 		ids: ['FORTRAN'],
 		runtime: 'f2c + @wasm-idle/llvm-core',
@@ -774,6 +787,16 @@ export const supportMatrixRows = [
 /** @type {BlockedCandidateRow[]} */
 export const blockedCandidateRows = [
 	{
+		language: 'Odin',
+		candidateIds: ['ODIN'],
+		currentEvidence:
+			'[Pinned native WASI baseline](https://github.com/seo-rii/wasm-llvm/pull/2) compiles real multi-file Odin and passes stdin, EOF and nonzero-exit cases; the consumer target probe exercises the production WASM Worker',
+		blocker:
+			'The compiler-host Emscripten probe fails in upstream gb.h on unsupported OS/CPU definitions and missing sys/sendfile.h; no browser-hosted Odin compiler exists in the bundle',
+		requiredFollowUp:
+			'[Complete the compiler host port and consumer acceptance](docs/language-ports/odin.md) before registering ODIN; native target execution does not enable source compilation'
+	},
+	{
 		language: 'Modern Fortran',
 		candidateIds: ['F90', 'F95'],
 		currentEvidence:
@@ -789,11 +812,11 @@ export const blockedCandidateRows = [
 		language: 'Crystal',
 		candidateIds: ['CRYSTAL'],
 		currentEvidence:
-			'No browser Crystal compiler/runtime assets are packaged in this repository',
+			'[Pinned Crystal 1.21.0 producer](https://github.com/seo-rii/wasm-llvm/pull/3) emits a real WASI object; the consumer probe links that target with verified WASI libc and exercises standard input and EOF in the production WASM Worker',
 		blocker:
-			'Crystal cannot be treated as syntax-only or as a wasm-idle-authored translator/subset',
+			'Cross-compiling the compiler fails at Crystal::System::Process.prepare_args in the upstream WASI process implementation; no browser-hosted Crystal compiler bundle is available',
 		requiredFollowUp:
-			'Find or build a browser-hosted real Crystal compiler/runtime path with stdin/stdout coverage before registering the language'
+			'[Implement the compiler host and consumer source-execution contract](docs/language-ports/crystal.md) before registering CRYSTAL; a native object or linked target does not establish browser compilation'
 	},
 	{
 		language: 'Swift',
@@ -1368,6 +1391,14 @@ const runtimeDetailsByLanguage = new Map([
 			customization:
 				`${code('runtimeAssets.haskell.moduleUrl')}/${code('rootfsUrl')}/${code('bsdtarUrl')}; ` +
 				`${code('mainSoPath')}, ${code('searchDirs')}, ${code('activePath')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'LFortran',
+		{
+			packageBase: `receipt-pinned ${code('wasm-llvm/producer/lfortran-browser')} artifacts in ${code('static/wasm-lfortran')}`,
+			execution: `real LFortran 0.65.0-97-gab867a23 LLVM evaluator compiles and executes Emscripten side modules in a fresh Worker; shared-ring stdin supports delayed READ and EOF; experimental Fortran feature coverage`,
+			customization: `${code('runtimeAssets.lfortran.baseUrl')} relocates the reviewed bundle; ${code('stdin')}, ${code('activePath')}, workspace data/include files, cancellation and execution limits; no program arguments or multi-file module build orchestration`
 		}
 	],
 	[

@@ -34,3 +34,5 @@ static/wasm-d/runtime/toolchain/toolchain.tar
 
 # C3 assets are synced from the separately verified wasm-llvm producer.
 /static/wasm-c3/
+# LFortran producer artifacts are synced locally, never committed.
+static/wasm-lfortran/

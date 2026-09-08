@@ -42,6 +42,7 @@ export type EditorDefaultLanguage =
 	| 'r'
 	| 'octave'
 	| 'fortran'
+	| 'lfortran'
 	| 'cobol'
 	| 'graphql'
 	| 'duckdb'
@@ -97,6 +98,7 @@ export const editorDefaults: Record<
 	| 'r'
 	| 'octave'
 	| 'fortran'
+	| 'lfortran'
 	| 'cobol'
 	| 'graphql'
 	| 'duckdb'
@@ -1009,6 +1011,17 @@ if (isnan(n))
 endif
 
 	printf("fibonacci=%d\\n", fibonacci(n) + bonus);`,
+lfortran: `program main
+  implicit none
+  integer :: count
+  integer, allocatable :: values(:)
+  print '(A)', 'How many values?'
+  read(*,*) count
+  allocate(values(count))
+  print '(A)', 'Values:'
+  read(*,*) values
+  print '(A,I0)', 'sum=', sum(values)
+end program main`,
 fortran: `      PROGRAM MAIN
       INTEGER BONUS, N, RESULT
       INTEGER IO_STAT

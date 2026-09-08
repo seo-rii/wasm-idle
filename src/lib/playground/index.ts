@@ -215,6 +215,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'LFORTRAN',
+		load: async () => {
+			const { default: LFortran } = await import('$lib/playground/lfortran');
+			return new LFortran();
+		}
+	},
+	{
 		languageId: 'FORTRAN',
 		load: async () => {
 			const { default: Fortran } = await import('$lib/playground/fortran');

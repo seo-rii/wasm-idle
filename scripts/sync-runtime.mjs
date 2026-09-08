@@ -134,6 +134,15 @@ export const RUNTIMES = [
 		manual: true
 	},
 	{
+		name: 'wasm-lfortran',
+		module: './sync-wasm-lfortran.mjs',
+		exportName: 'syncWasmLfortranAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true,
+		sourceRequired: true
+	},
+	{
 		name: 'wasm-fortran',
 		module: './sync-wasm-fortran.mjs',
 		exportName: 'syncWasmFortranAssets',

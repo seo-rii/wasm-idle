@@ -88,6 +88,7 @@ const runtimeReadinessAudit = {
 		strategy: 'static-worker-fallback',
 		hostModule: 'clojurescript'
 	},
+	LFORTRAN: { strategy: 'static-worker-fallback', hostModule: 'lfortran' },
 	FORTRAN: { strategy: 'terminal-fallback', hostModule: 'fortran' },
 	COBOL: { strategy: 'terminal-fallback', hostModule: 'cobol' },
 	TINYGO: {
@@ -187,6 +188,11 @@ describe('runtime progress readiness audit', () => {
 			(counts, row) => ({ ...counts, [row.strategy]: (counts[row.strategy] ?? 0) + 1 }),
 			{}
 		);
+		expect(Object.keys(strategyCounts).sort()).toEqual([
+			'entry-signal',
+			'static-worker-fallback',
+			'terminal-fallback'
+		]);
 		expect(strategyCounts['entry-signal']).toBeGreaterThanOrEqual(20);
 		expect(strategyCounts['static-worker-fallback']).toBeGreaterThanOrEqual(13);
 		expect(strategyCounts['terminal-fallback']).toBeGreaterThanOrEqual(13);
@@ -223,7 +229,7 @@ describe('runtime progress readiness audit', () => {
 		}
 	});
 
-	it('routes the 13 standalone workers through run-correlated readiness fallbacks', () => {
+	it('routes standalone workers through run-correlated readiness fallbacks', () => {
 		const staticRuntimeSource = readProjectSource('src/lib/playground/staticWorkerRuntime.ts');
 		for (const [languageId, row] of Object.entries(runtimeReadinessAudit)) {
 			if (row.strategy !== 'static-worker-fallback') continue;

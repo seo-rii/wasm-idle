@@ -231,6 +231,11 @@ vi.mock('$lib/playground/swift', () => {
 	};
 });
 
+vi.mock('$lib/playground/lfortran', () => {
+	moduleLoads.add('LFORTRAN');
+	return { default: createMockSandboxClass('LFORTRAN') };
+});
+
 vi.mock('$lib/playground/fortran', () => {
 	moduleLoads.add('FORTRAN');
 	return {
@@ -405,6 +410,7 @@ describe('playground runtime binding', () => {
 				'NIM',
 				'BASH',
 				'CLOJURESCRIPT',
+				'LFORTRAN',
 				'FORTRAN',
 				'COBOL',
 				'DUCKDB',
