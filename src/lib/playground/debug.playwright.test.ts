@@ -3354,6 +3354,18 @@ describe('native-source browser debugging in Chromium', () => {
 									process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS || '5000'
 								)
 							});
+							await expect
+								.poll(
+									async () =>
+										(await readBrowserLifecycleMetrics(page)).activeDebug,
+									{
+										timeout: Number(
+											process.env.WASM_IDLE_DEBUG_DISCONNECT_TIMEOUT_MS ||
+												'5000'
+										)
+									}
+								)
+								.toBe(0);
 							await page.requestGC();
 							latestMetrics = await readBrowserLifecycleMetrics(page);
 							lifecycleMetrics.push(latestMetrics);
