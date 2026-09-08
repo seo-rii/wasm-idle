@@ -53,7 +53,7 @@ the build. The publish script repeats the output check before publishing. These
 checks never rewrite the committed profile or fetch an unpinned replacement.
 
 Run `pnpm verify:page-lfortran` to check local input or
-`pnpm verify:page-lfortran -- build` to check prepared page output.
+`pnpm verify:page-lfortran build` to check prepared page output.
 
 ## Supported execution contract
 
