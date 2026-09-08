@@ -11,6 +11,7 @@ import { D_OUTER_ASSETS } from './d/assets.js';
 export type LanguageToolAssetRuntime =
 	| 'awk'
 	| 'clangd'
+	| 'objectivec'
 	| 'd'
 	| 'janet'
 	| 'pascal'
@@ -476,6 +477,9 @@ export async function loadLanguageToolAsset(
 	reportProgress: (loaded: number, total?: number) => void,
 	options: LanguageToolAssetLoadOptions = {}
 ): Promise<LoadedLanguageToolAsset> {
+	if (runtime === 'objectivec' && !['headers.json', 'foundation-headers.json'].includes(asset)) {
+		throw new Error(`Unexpected Objective-C language tool asset: ${asset}`);
+	}
 	if (runtime === 'clangd' && !(CLANGD_ASSETS as readonly string[]).includes(asset)) {
 		throw new Error(`Unexpected clangd runtime asset: ${asset}`);
 	}

@@ -1,3 +1,9 @@
+import {
+	CLANG_WASI_TARGET,
+	OBJECTIVE_C_RUNTIME_FLAGS,
+	clangSystemIncludePaths,
+	resolveClangLanguageArgs
+} from '../../core/src/clang-profile.js';
 import type { BrowserClangArtifact, BrowserClangRuntime as Clang } from '../../clang/src/index.js';
 import {
 	BrowserClangRuntime,
@@ -863,34 +869,31 @@ async function compileObjectiveCObject(
 	const originalStdout = clangRuntime.stdout;
 	const compileOutput: string[] = [];
 	const resourceDir = (clang as any).compilerConfig?.resourceDir || '/lib/clang/8.0.1';
-	const resourceIncludeDir = `${resourceDir.replace(/\/+$/, '')}/include`;
 	const args = [
 		'-cc1',
 		'-triple',
-		'wasm32-wasi',
+		CLANG_WASI_TARGET,
 		'-emit-obj',
 		'-disable-free',
 		'-isysroot',
 		'/',
 		'-resource-dir',
 		resourceDir,
-		...(language === 'objective-c++' ? ['-internal-isystem', '/include/c++/v1'] : []),
-		'-internal-isystem',
-		resourceIncludeDir,
-		'-internal-isystem',
-		'/include/wasm32-wasi',
-		'-internal-isystem',
-		'/include',
+		...clangSystemIncludePaths(
+			language === 'objective-c++' ? 'OBJCXX' : 'OBJC',
+			'',
+			resourceDir
+		).flatMap((path) => ['-internal-isystem', path]),
 		'-I.',
 		'-ferror-limit',
 		'20',
 		'-O2',
 		'-o',
 		obj,
-		...(language === 'objective-c++' ? ['-std=gnu++20'] : []),
+		resolveClangLanguageArgs(language === 'objective-c++' ? 'CPP' : 'C', {}).standardArg,
 		'-x',
 		language,
-		...(usesObjectiveCRuntime(language) ? ['-fobjc-runtime=gnustep-2.0', '-fblocks'] : []),
+		...(usesObjectiveCRuntime(language) ? OBJECTIVE_C_RUNTIME_FLAGS : []),
 		input,
 		...compileArgs
 	];

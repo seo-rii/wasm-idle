@@ -15,6 +15,13 @@ import {
 	DebugVariableMetadata
 } from './types.js';
 import App from './app.js';
+import {
+	CLANG_WASI_TARGET,
+	OBJECTIVE_C_RUNTIME_FLAGS,
+	clangSystemIncludePaths,
+	resolveClangLanguageArgs,
+	type ClangSourceLanguage
+} from '../../core/src/clang-profile.js';
 import { installGccCompatibilityHeaders } from '../../core/src/gcc-compat.js';
 import MemFS from '../../core/src/memfs.js';
 import untar from '../../core/src/tar.js';
@@ -51,8 +58,6 @@ const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
 const internalBuildRoot = '__wasm_idle_build';
 const workspaceTranslationUnitPattern = /\.(?:c|cc|cpp|cxx)$/;
 
-const defaultCppStandardArg = '-std=gnu++20';
-const defaultCStandardArg = '-std=gnu11';
 const lldbForbiddenCompileArgs = new Set([
 	'-target',
 	'--target',
@@ -92,109 +97,7 @@ const lldbForbiddenCompileArgPrefixes = [
 	'-mllvm='
 ];
 
-export type ClangSourceLanguage = 'C' | 'CPP' | 'OBJC';
-
-function normalizeStandardCode(value?: string) {
-	return (value || '').trim().toUpperCase().replaceAll(/\s+/g, '');
-}
-
-function resolveCppStandardArg(version?: string) {
-	switch (normalizeStandardCode(version)) {
-		case '03':
-		case 'CPP03':
-		case 'C++03':
-		case 'GNU++03':
-		case 'GNUC++03':
-			return '-std=gnu++03';
-		case '11':
-		case 'CPP11':
-		case 'C++11':
-		case 'GNU++11':
-		case 'GNUC++11':
-			return '-std=gnu++11';
-		case '14':
-		case 'CPP14':
-		case 'C++14':
-		case 'GNU++14':
-		case 'GNUC++14':
-			return '-std=gnu++14';
-		case '17':
-		case 'CPP17':
-		case 'C++17':
-		case 'GNU++17':
-		case 'GNUC++17':
-			return '-std=gnu++17';
-		case '20':
-		case 'CPP20':
-		case 'C++20':
-		case 'GNU++20':
-		case 'GNUC++20':
-			return '-std=gnu++20';
-		case '23':
-		case 'CPP23':
-		case 'C++23':
-		case 'GNU++23':
-		case 'GNUC++23':
-			return '-std=gnu++23';
-		case '26':
-		case 'CPP26':
-		case 'C++26':
-		case 'GNU++26':
-		case 'GNUC++26':
-			return '-std=gnu++26';
-		default:
-			return defaultCppStandardArg;
-	}
-}
-
-function resolveCStandardArg(version?: string) {
-	switch (normalizeStandardCode(version)) {
-		case '99':
-		case 'C99':
-		case 'GNU99':
-		case 'GNUC99':
-			return '-std=gnu99';
-		case '11':
-		case 'C11':
-		case 'GNU11':
-		case 'GNUC11':
-			return '-std=gnu11';
-		case '17':
-		case '18':
-		case 'C17':
-		case 'C18':
-		case 'GNU17':
-		case 'GNU18':
-		case 'GNUC17':
-		case 'GNUC18':
-			return '-std=gnu17';
-		default:
-			return defaultCStandardArg;
-	}
-}
-
-function resolveClangLanguageArgs(
-	language: ClangSourceLanguage,
-	options: { cppVersion?: string; cVersion?: string }
-) {
-	if (language === 'C') {
-		return {
-			languageArg: 'c',
-			standardArg: resolveCStandardArg(options.cVersion)
-		};
-	}
-	if (language === 'OBJC') {
-		return {
-			languageArg: 'objective-c',
-			standardArg: resolveCStandardArg(options.cVersion)
-		};
-	}
-
-	return {
-		languageArg: 'c++',
-		standardArg: resolveCppStandardArg(options.cppVersion)
-	};
-}
+export type { ClangSourceLanguage } from '../../core/src/clang-profile.js';
 
 const toUtf8 = (text: string) => {
 	const surrogate = encodeURIComponent(text);
@@ -1383,31 +1286,13 @@ class Clang {
 		this.memfs.addFile(obj, new Uint8Array(0));
 		const clang = await this.getModule(this.assetUrls.clang);
 		const clangResourceDir = this.compilerConfig?.resourceDir || defaultClangResourceDir;
-		const clangResourceIncludeDir = `${clangResourceDir.replace(/\/+$/, '')}/include`;
-		const includeArgs =
-			language === 'CPP'
-				? [
-						'-internal-isystem',
-						'/include/c++/v1',
-						'-internal-isystem',
-						clangResourceIncludeDir,
-						'-internal-isystem',
-						'/include/wasm32-wasi',
-						'-internal-isystem',
-						'/include'
-					]
-				: [
-						'-internal-isystem',
-						clangResourceIncludeDir,
-						'-internal-isystem',
-						'/include/wasm32-wasi',
-						'-internal-isystem',
-						'/include'
-					];
+		const includeArgs = clangSystemIncludePaths(language, '', clangResourceDir).flatMap(
+			(path) => ['-internal-isystem', path]
+		);
 		const compilerArgs = [
 			'-cc1',
 			'-triple',
-			'wasm32-wasi',
+			CLANG_WASI_TARGET,
 			'-emit-obj',
 			'-disable-free',
 			'-isysroot',
@@ -1425,7 +1310,7 @@ class Clang {
 			standardArg,
 			'-x',
 			languageArg,
-			...(language === 'OBJC' ? ['-fobjc-runtime=gnustep-2.0', '-fblocks'] : []),
+			...(language === 'OBJC' ? OBJECTIVE_C_RUNTIME_FLAGS : []),
 			input,
 			...compileArgs,
 			...(lldbDebug

@@ -20,6 +20,13 @@ export interface ClangdLanguageServerOptions extends EditorLanguageServerRuntime
 	createWorker?: () => Worker;
 	currentUrl?: string;
 	onStatus?: (status: ClangdStatus) => void;
+	compileProfile?: { cppVersion?: string; cVersion?: string };
+	objectiveC?: {
+		baseUrl: string;
+		headersUrl: string;
+		foundationHeadersUrl: string;
+		integrity: ResolvedLanguageToolAssetConfig['integrity'];
+	};
 }
 
 const currentUrl = () => globalThis.location?.href || '';
@@ -49,7 +56,11 @@ async function preloadClangdAssets(
 	const emitProgress = () => {
 		let loaded = 0;
 		for (const fraction of fractions.values()) loaded += fraction;
-		onStatus?.({ state: 'loading', loaded: loaded / fractions.size, total: 1 });
+		onStatus?.({
+			state: 'loading',
+			loaded: loaded / fractions.size,
+			total: 1
+		});
 	};
 
 	const load = async (asset: (typeof CLANGD_ASSETS)[number]) => {
@@ -97,13 +108,39 @@ async function createServer(
 		EditorLanguageServerRuntimeOptions,
 		'signal' | 'assetTimeoutMs' | 'startupTimeoutMs'
 	>,
-	debug = false
+	debug = false,
+	hostOptions?: ClangdLanguageServerOptions
 ) {
 	const status = createLanguageServerProgressReporter(onStatus);
 	status.loading();
 	let preloaded: Awaited<ReturnType<typeof preloadClangdAssets>>;
 	try {
 		preloaded = await preloadClangdAssets(assetConfig, onStatus, lifecycle);
+		if (hostOptions?.objectiveC) {
+			const config = hostOptions.objectiveC;
+			const headers: Record<string, string> = Object.create(null);
+			for (const [asset, url] of [
+				['headers.json', config.headersUrl],
+				['foundation-headers.json', config.foundationHeadersUrl]
+			]) {
+				const loaded = await loadLanguageToolAsset(
+					'objectivec',
+					asset,
+					{
+						baseUrl: config.baseUrl,
+						integrity: config.integrity,
+						loader: () => new URL(url)
+					},
+					() => {},
+					{ signal: lifecycle.signal, timeoutMs: lifecycle.assetTimeoutMs }
+				);
+				const parsed = JSON.parse(new TextDecoder().decode(loaded.bytes));
+				if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object')
+					throw new Error(`Invalid Objective-C ${asset}`);
+				Object.assign(headers, parsed);
+			}
+			preloaded.assets.objectiveCHeaders = headers;
+		}
 	} catch (error) {
 		status.error(error instanceof Error ? error.message : String(error));
 		throw error;
@@ -155,6 +192,7 @@ async function createServer(
 							type: 'init',
 							baseUrl: assetConfig.baseUrl,
 							...(debug ? { debug } : {}),
+							compileProfile: hostOptions?.compileProfile,
 							assets: preloaded.assets
 						},
 						preloaded.transfer
@@ -195,7 +233,8 @@ export async function createClangdLanguageServer(
 			assetTimeoutMs: hostOptions?.assetTimeoutMs,
 			startupTimeoutMs: hostOptions?.startupTimeoutMs
 		},
-		debug
+		debug,
+		hostOptions
 	);
 	const reader = new BrowserMessageReader(worker);
 	const writer = new BrowserMessageWriter(worker);

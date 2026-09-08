@@ -29,6 +29,10 @@
 		WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
 		WASM_RUST_RUNTIME_PROFILE
 	} from '$lib/playground/wasmRustVersion';
+	import {
+		resolveObjectiveCRuntimeAssetConfig,
+		type PlaygroundRuntimeAssets
+	} from '$lib/playground/assets';
 	import type monaco from 'monaco-editor';
 	import { onMount, untrack } from 'svelte';
 	import { SvelteURL } from 'svelte/reactivity';
@@ -2357,6 +2361,9 @@
 		lspEnabled?: boolean;
 		clangdEnabled?: boolean;
 		clangdBaseUrl?: string;
+		clangdRuntimeAssets?: PlaygroundRuntimeAssets;
+		clangdCppVersion?: string;
+		clangdCVersion?: string;
 		dotnetLspEnabled?: boolean;
 		dotnetLspModuleUrl?: string;
 		elixirLspEnabled?: boolean;
@@ -2450,6 +2457,9 @@
 		lspEnabled = false,
 		clangdEnabled = false,
 		clangdBaseUrl,
+		clangdRuntimeAssets,
+		clangdCppVersion,
+		clangdCVersion,
 		dotnetLspEnabled = false,
 		dotnetLspModuleUrl,
 		elixirLspEnabled = false,
@@ -2617,6 +2627,8 @@
 			language,
 			normalizedFilePath,
 			clangdEnabled ? clangdBaseUrl || '' : '',
+			clangdCppVersion || '',
+			clangdCVersion || '',
 			dotnetLspEnabled ? dotnetLspModuleUrl || '' : '',
 			elixirLspEnabled ? elixirLspBundleUrl || '' : '',
 			elixirLspEnabled ? elixirLspWorkerUrl || '' : '',
@@ -2894,11 +2906,21 @@
 			languages: ['c', 'cpp', 'objective-c'],
 			isEnabled: () => clangdEnabled && !!clangdBaseUrl,
 			setStatus: (status) => (clangdStatus = status),
-			load: async (currentUrl) => {
+			load: async (currentUrl, signal) => {
 				const { getCppLanguageServer } = await import('@wasm-idle/lsp/clangd');
 				const handle = await getCppLanguageServer({
 					cpp: { baseUrl: clangdBaseUrl || '' },
 					currentUrl,
+					signal,
+					compileProfile: { cppVersion: clangdCppVersion, cVersion: clangdCVersion },
+					...(activeLspLanguage === 'objective-c'
+						? {
+								objectiveC: resolveObjectiveCRuntimeAssetConfig(
+									clangdRuntimeAssets,
+									currentUrl
+								)
+							}
+						: {}),
 					onStatus: (status) => (clangdStatus = status)
 				});
 				handle.syncFile?.(normalizedFilePath);

@@ -183,6 +183,47 @@ describe('getCppLanguageServer', () => {
 		expect(worker?.transfers[0]).toHaveLength(2);
 	});
 
+	it('preloads the same verified Objective-C headers used by execution', async () => {
+		const headerBytes = new TextEncoder().encode(
+			JSON.stringify({ 'objc/objc.h': 'typedef struct objc_object *id;' })
+		);
+		const foundationBytes = new TextEncoder().encode(
+			JSON.stringify({ 'Foundation/Foundation.h': '@interface NSString @end' })
+		);
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: string | URL) => {
+				const path = new URL(String(input)).pathname;
+				return new Response(
+					path.endsWith('foundation-headers.json') ? foundationBytes : headerBytes
+				);
+			})
+		);
+		const receipt = (bytes: Uint8Array) => ({
+			bytes: bytes.byteLength,
+			sha256: createHash('sha256').update(bytes).digest('hex')
+		});
+		const handle = await getCppLanguageServer({
+			cpp: { baseUrl: 'https://assets.example.com/clangd/', loader: () => new Uint8Array(3) },
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker,
+			objectiveC: {
+				baseUrl: 'https://assets.example.com/wasm-objectivec/',
+				headersUrl: 'https://assets.example.com/wasm-objectivec/headers.json?v=pinned',
+				foundationHeadersUrl:
+					'https://assets.example.com/wasm-objectivec/foundation-headers.json?v=pinned',
+				integrity: {
+					'headers.json': receipt(headerBytes),
+					'foundation-headers.json': receipt(foundationBytes)
+				}
+			}
+		});
+		expect(mockState.workers[0]?.messages[0].assets.objectiveCHeaders).toEqual({
+			'objc/objc.h': 'typedef struct objc_object *id;',
+			'Foundation/Foundation.h': '@interface NSString @end'
+		});
+		handle.dispose();
+	});
+
 	it('fails asset preflight before creating a worker', async () => {
 		const status = vi.fn();
 		vi.stubGlobal(

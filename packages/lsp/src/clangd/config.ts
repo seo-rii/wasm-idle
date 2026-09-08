@@ -1,3 +1,10 @@
+import {
+	CLANG_WASI_TARGET,
+	OBJECTIVE_C_RUNTIME_FLAGS,
+	clangSystemIncludePaths,
+	resolveClangLanguageArgs,
+	type ClangSourceLanguage
+} from '@wasm-idle/llvm-core/core/clang-profile';
 export const CLANGD_WORKSPACE_PATH = '/workspace';
 export const CLANGD_WORKSPACE_URI = `file://${CLANGD_WORKSPACE_PATH}`;
 export const CLANGD_CPP_FILE_PATH = `${CLANGD_WORKSPACE_PATH}/main.cpp`;
@@ -12,12 +19,35 @@ export type ClangdStatus =
 export const normalizeClangdBaseUrl = (baseUrl: string) =>
 	baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 
-export const createClangdCompileFlags = () => [
-	'-std=gnu++2a',
-	'-xc++',
-	'--target=wasm32-wasi',
-	'-isystem/usr/include/c++/v1',
-	'-isystem/usr/include/wasm32-wasi/c++/v1',
-	'-isystem/usr/include',
-	'-isystem/usr/include/wasm32-wasi'
-];
+export const createClangdCompileFlags = (
+	language: ClangSourceLanguage = 'CPP',
+	options: { cppVersion?: string; cVersion?: string } = {}
+) => {
+	const profile = resolveClangLanguageArgs(language, options);
+	return [
+		profile.standardArg,
+		'-x',
+		profile.languageArg,
+		`--target=${CLANG_WASI_TARGET}`,
+		...clangSystemIncludePaths(language, '/usr').map((path) => `-isystem${path}`),
+		...(language === 'OBJC' ? [...OBJECTIVE_C_RUNTIME_FLAGS, '-I/objc', '-I/objc/objc'] : [])
+	];
+};
+
+export const createClangdConfiguration = (
+	options: { cppVersion?: string; cVersion?: string } = {}
+) =>
+	(['C', 'CPP', 'OBJC'] as const)
+		.map((language) =>
+			JSON.stringify({
+				If: {
+					PathMatch: {
+						C: '.*\\.c',
+						CPP: '.*\\.(cc|cpp|cxx|h|hh|hpp|hxx)',
+						OBJC: '.*\\.m'
+					}[language]
+				},
+				CompileFlags: { Add: createClangdCompileFlags(language, options) }
+			})
+		)
+		.join('\n---\n');

@@ -3666,6 +3666,9 @@
 				{lspEnabled}
 				clangdEnabled={clangdLspEnabled}
 				{clangdBaseUrl}
+				clangdRuntimeAssets={runtimeAssets}
+				clangdCppVersion={cppVersion}
+				clangdCVersion={languageExecutionOptions.cVersion}
 				{dotnetLspEnabled}
 				{dotnetLspModuleUrl}
 				{elixirLspEnabled}

@@ -9,7 +9,7 @@ import { writeGccCompatibilityHeaders } from '@wasm-idle/llvm-core/core/gcc-comp
 import {
 	CLANGD_CPP_FILE_PATH,
 	CLANGD_WORKSPACE_PATH,
-	createClangdCompileFlags,
+	createClangdConfiguration,
 	normalizeClangdBaseUrl
 } from './config.js';
 import { JsonStream } from '@wasm-idle/llvm-core/core/json-stream';
@@ -186,12 +186,21 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 		syncWorkspaceFile(CLANGD_CPP_FILE_PATH);
 		clangdRuntime.FS.writeFile(
 			`${CLANGD_WORKSPACE_PATH}/.clangd`,
-			JSON.stringify({
-				CompileFlags: {
-					Add: createClangdCompileFlags()
-				}
-			})
+			createClangdConfiguration(event.data.compileProfile)
 		);
+		for (const [path, source] of Object.entries(event.data.assets.objectiveCHeaders || {})) {
+			if (
+				!path ||
+				path.startsWith('/') ||
+				path.split('/').some((part) => !part || part === '..' || part === '.') ||
+				/[\\\x00-\x1f]/u.test(path) ||
+				typeof source !== 'string'
+			)
+				throw new Error('Invalid Objective-C header path or contents');
+			const target = `/objc/${path}`;
+			clangdRuntime.FS.mkdirTree(target.slice(0, target.lastIndexOf('/')));
+			clangdRuntime.FS.writeFile(target, source);
+		}
 		debugLog('callMain start');
 		const callMainResult = clangdRuntime.callMain([]);
 		debugLog('callMain returned', callMainResult);
