@@ -306,6 +306,9 @@ export async function startBrowserPreviewServer({
 			'exec',
 			'vite',
 			serverMode,
+			...(serverMode === 'preview'
+				? ['--config', path.join(THIS_DIR, 'release-preview.config.mjs')]
+				: []),
 			'--host',
 			originUrl.hostname,
 			'--port',
