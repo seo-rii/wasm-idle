@@ -130,8 +130,28 @@ export function createClangdRequestPolicy(
 		callback?.(message);
 	};
 	const write = async (message: Message) => {
-		if (disposed) throw new Error('clangd transport is disposed');
 		const data = message as RequestMessage & { params?: any };
+		const emptyResult = data.method?.endsWith('/resolve')
+			? data.params
+			: data.method?.startsWith('textDocument/semanticTokens/')
+				? { data: [] }
+				: null;
+		if (disposed) {
+			// Providers already scheduled by the old Monaco model can run after a
+			// language switch. They must finish without reaching the retired Worker.
+			if (data.id != null) {
+				record({
+					requestId: data.id,
+					method: data.method,
+					uri: data.params?.textDocument?.uri,
+					sentAt: Date.now(),
+					finishedAt: Date.now(),
+					outcome: 'cancelled'
+				});
+				callback?.({ jsonrpc: '2.0', id: data.id, result: emptyResult } as ResponseMessage);
+			}
+			return;
+		}
 		const document = data.params?.textDocument;
 		if (
 			['textDocument/didOpen', 'textDocument/didChange', 'textDocument/didClose'].includes(
@@ -192,11 +212,7 @@ export function createClangdRequestPolicy(
 			pending.set(id, {
 				trace: entry,
 				key: featureMethods.has(data.method) ? JSON.stringify(data.params) : '',
-				emptyResult: data.method.endsWith('/resolve')
-					? data.params
-					: data.method.startsWith('textDocument/semanticTokens/')
-						? { data: [] }
-						: null,
+				emptyResult,
 				timer: setTimeout(() => cancel(id, 'timeout'), timeout)
 			});
 			// The pinned client can start providers as soon as initialize returns,

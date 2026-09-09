@@ -202,4 +202,32 @@ describe('clangd request policy', () => {
 		});
 		policy.dispose();
 	});
+	it('settles old-model providers after disposal without posting to the retired Worker', async () => {
+		vi.useFakeTimers();
+		const { policy, write, received, receive } = setup();
+		await policy.transport.writer.write(open);
+		policy.dispose();
+		write.mockClear();
+		for (const [index, method] of [
+			'textDocument/hover',
+			'textDocument/inlayHint',
+			'textDocument/documentSymbol'
+		].entries()) {
+			const id = index + 1;
+			await expect(
+				policy.transport.writer.write({ ...hover, id, method })
+			).resolves.toBeUndefined();
+			expect(received).toHaveBeenLastCalledWith({ jsonrpc: '2.0', id, result: null });
+		}
+		await policy.transport.writer.write({ ...open, method: 'textDocument/didClose' });
+		expect(write).not.toHaveBeenCalled();
+		received.mockClear();
+		receive({ jsonrpc: '2.0', id: 1, result: { contents: 'retired' } });
+		expect(received).not.toHaveBeenCalled();
+		expect(policy.trace.at(-1)).toMatchObject({
+			method: 'textDocument/documentSymbol',
+			outcome: 'cancelled'
+		});
+		expect(vi.getTimerCount()).toBe(0);
+	});
 });
