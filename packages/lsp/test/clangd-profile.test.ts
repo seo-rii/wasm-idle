@@ -33,4 +33,16 @@ describe('clangd compile profiles', () => {
 			expect.arrayContaining([...OBJECTIVE_C_RUNTIME_FLAGS, '-I/objc'])
 		);
 	});
+	it('finds the target-specific bundled libc++ headers', () => {
+		expect(createClangdCompileFlags('CPP')).toContain(
+			'-isystem/usr/include/wasm32-wasi/c++/v1'
+		);
+		expect(createClangdCompileFlags('C').join(' ')).not.toContain('c++/v1');
+	});
+	it('passes the execution frontend ABI through the driver and selects libobjc2 headers', () => {
+		const flags = createClangdCompileFlags('OBJC');
+		expect(flags[flags.indexOf('-fobjc-runtime=gnustep-2.0') - 1]).toBe('-Xclang');
+		expect(flags).toContain('-DOBJC2RUNTIME=1');
+		expect(OBJECTIVE_C_RUNTIME_FLAGS).toContain('-DOBJC2RUNTIME=1');
+	});
 });

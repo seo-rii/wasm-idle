@@ -30,7 +30,17 @@ export const createClangdCompileFlags = (
 		profile.languageArg,
 		`--target=${CLANG_WASI_TARGET}`,
 		...clangSystemIncludePaths(language, '/usr').map((path) => `-isystem${path}`),
-		...(language === 'OBJC' ? [...OBJECTIVE_C_RUNTIME_FLAGS, '-I/objc', '-I/objc/objc'] : [])
+		...(language === 'OBJC'
+			? [
+					// The execution compiler invokes cc1 directly. Pass the same runtime
+					// option to the frontend: the driver rejects GNUstep 2 for Wasm.
+					...OBJECTIVE_C_RUNTIME_FLAGS.flatMap((flag) =>
+						flag.startsWith('-fobjc-runtime=') ? ['-Xclang', flag] : [flag]
+					),
+					'-I/objc',
+					'-I/objc/objc'
+				]
+			: [])
 	];
 };
 

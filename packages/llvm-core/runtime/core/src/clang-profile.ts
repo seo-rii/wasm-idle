@@ -1,5 +1,9 @@
 export const CLANG_WASI_TARGET = 'wasm32-wasi';
-export const OBJECTIVE_C_RUNTIME_FLAGS = ['-fobjc-runtime=gnustep-2.0', '-fblocks'] as const;
+export const OBJECTIVE_C_RUNTIME_FLAGS = [
+	'-fobjc-runtime=gnustep-2.0',
+	'-fblocks',
+	'-DOBJC2RUNTIME=1'
+] as const;
 const defaultCppStandardArg = '-std=gnu++20';
 const defaultCStandardArg = '-std=gnu11';
 
@@ -114,7 +118,9 @@ export function clangSystemIncludePaths(
 	resourceDir?: string
 ) {
 	return [
-		...(['CPP', 'OBJCXX'].includes(language) ? [`${root}/include/c++/v1`] : []),
+		...(['CPP', 'OBJCXX'].includes(language)
+			? [`${root}/include/c++/v1`, `${root}/include/wasm32-wasi/c++/v1`]
+			: []),
 		...(resourceDir ? [`${resourceDir.replace(/\/+$/, '')}/include`] : []),
 		`${root}/include/wasm32-wasi`,
 		`${root}/include`
