@@ -59,6 +59,7 @@ function parseBrowserTestShard(shard) {
  *   shard?: BrowserTestShard;
  *   family?: 'dotnet' | 'nim' | 'clang';
  * }} options
+ * @returns {{ env: Record<string, string>; testFiles: string[] }}
  */
 export function createAllLanguageBrowserTestPlan({
 	includeCompressedAssets = false,

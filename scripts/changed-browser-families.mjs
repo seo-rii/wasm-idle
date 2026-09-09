@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
+/** @param {string[]} files */
 export function changedBrowserFamilies(files) {
 	const families = new Set();
 	for (const file of files) {

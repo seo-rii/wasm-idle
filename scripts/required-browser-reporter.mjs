@@ -1,4 +1,12 @@
-/** Fail closed when a selected browser test was filtered, skipped, or never finished. */
+/**
+ * @typedef {{ fullName: string; meta(): {requiredBrowser?: boolean}; result(): {state?: string} }} RequiredBrowserTest
+ * @typedef {{ children: { allTests(): Iterable<RequiredBrowserTest> } }} BrowserTestModule
+ */
+
+/**
+ * Fail closed when a selected browser test was filtered, skipped, or never finished.
+ * @param {BrowserTestModule[]} modules
+ */
 export function assertRequiredBrowserTests(modules) {
 	const required = modules.flatMap((module) =>
 		[...module.children.allTests()].filter((test) => test.meta().requiredBrowser === true)
@@ -15,6 +23,7 @@ export function assertRequiredBrowserTests(modules) {
 }
 
 export default class RequiredBrowserReporter {
+	/** @param {BrowserTestModule[]} modules */
 	onTestRunEnd(modules) {
 		assertRequiredBrowserTests(modules);
 	}

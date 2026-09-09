@@ -14,6 +14,7 @@ export function createBuildIdentity() {
 	} catch {
 		/* Archives may not contain .git. */
 	}
+	/** @type {Record<string, string>} */
 	const runtimeAssets = {};
 	for (const name of [
 		'worker.js',
