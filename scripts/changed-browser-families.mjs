@@ -6,6 +6,8 @@ import { pathToFileURL } from 'node:url';
 export function changedBrowserFamilies(files) {
 	const families = new Set();
 	for (const file of files) {
+		if (/(?:packages\/debug\/|lldbSession|wasm-debug|debug\.playwright)/.test(file))
+			families.add('debug');
 		if (/(?:dotnet|runtime-recovery)/.test(file)) families.add('dotnet');
 		if (/(?:nim|runtime-recovery)/.test(file)) families.add('nim');
 		if (/(?:clang|objectivec|packages\/llvm-core)/.test(file)) families.add('clang');
@@ -14,7 +16,7 @@ export function changedBrowserFamilies(files) {
 				file
 			)
 		) {
-			for (const family of ['clang', 'dotnet', 'nim']) families.add(family);
+			for (const family of ['clang', 'debug', 'dotnet', 'nim']) families.add(family);
 		}
 	}
 	return [...families].sort();

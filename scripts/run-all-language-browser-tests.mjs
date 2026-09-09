@@ -10,6 +10,13 @@ import { supportMatrixRows } from './support-matrix.mjs';
 
 const COMPRESSED_ASSET_TEST_FILE =
 	'src/lib/playground/compressed-runtime-assets.playwright.test.ts';
+const DEBUG_TEST_FILE = 'src/lib/playground/debug.playwright.test.ts';
+const DEBUG_REGRESSION_ENV = {
+	WASM_IDLE_RUN_REAL_BROWSER_DEBUG: '1',
+	WASM_IDLE_REQUIRE_LLDB_DEBUG: '1',
+	WASM_IDLE_DEBUG_BROWSER_LANGUAGES: 'C',
+	WASM_IDLE_DEBUG_BROWSER_CASES: 'c-deep-stack,c-array-pagination,c-recursive-frames'
+};
 const LSP_TEST_FILE = 'src/routes/monaco-lsp.playwright.test.ts';
 const DEFAULT_PREVIEW_ORIGIN = 'http://127.0.0.1:4573';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -57,7 +64,7 @@ function parseBrowserTestShard(shard) {
  *   includeCompressedAssets?: boolean;
  *   includeLspFull?: boolean;
  *   shard?: BrowserTestShard;
- *   family?: 'dotnet' | 'nim' | 'clang';
+ *   family?: 'dotnet' | 'nim' | 'clang' | 'debug';
  * }} options
  * @returns {{ env: Record<string, string>; testFiles: string[] }}
  */
@@ -69,6 +76,7 @@ export function createAllLanguageBrowserTestPlan({
 } = {}) {
 	if (family) {
 		const families = {
+			debug: { env: { ...DEBUG_REGRESSION_ENV }, testFiles: [DEBUG_TEST_FILE] },
 			dotnet: {
 				env: {
 					WASM_IDLE_RUN_REAL_BROWSER_DOTNET: '1',
@@ -121,6 +129,10 @@ export function createAllLanguageBrowserTestPlan({
 		} else {
 			env[row.browserTest.env] = '1';
 		}
+	}
+	if (!shard || shard === 'llvm') {
+		testFiles.add(DEBUG_TEST_FILE);
+		Object.assign(env, DEBUG_REGRESSION_ENV);
 	}
 	if (!shard || shard === 'stdin') {
 		testFiles.add('src/lib/playground/runtime-recovery.playwright.test.ts');
@@ -227,7 +239,7 @@ async function startDedicatedPreviewServer(origin) {
  *   includeLspFull?: boolean;
  *   origin?: string;
  *   shard?: BrowserTestShard;
- *   family?: 'dotnet' | 'nim' | 'clang';
+ *   family?: 'dotnet' | 'nim' | 'clang' | 'debug';
  *   useBuild?: boolean;
  * }} options
  * @param {{
@@ -259,7 +271,16 @@ export async function runAllLanguageBrowserTests(
 	});
 
 	if (!useBuild)
-		await prepare(['build:preview', 'compress:build-runtimes'], { timeoutMs: 900_000 });
+		await prepare(
+			[
+				...(plan.env.WASM_IDLE_RUN_REAL_BROWSER_DEBUG === '1'
+					? ['prepare:wasm-debug-release']
+					: []),
+				'build:preview',
+				'compress:build-runtimes'
+			],
+			{ timeoutMs: 900_000 }
+		);
 	const previewServer = await startPreview(origin);
 	try {
 		const invocation = createVitestChildInvocation(plan, previewServer.browserUrl);
@@ -280,7 +301,7 @@ export function parseAllLanguageBrowserTestArgs(args) {
 	 *   includeCompressedAssets: boolean;
 	 *   includeLspFull: boolean;
 	 *   shard?: BrowserTestShard;
-	 *   family?: 'dotnet' | 'nim' | 'clang';
+	 *   family?: 'dotnet' | 'nim' | 'clang' | 'debug';
 	 *   useBuild?: boolean;
 	 * }} */
 	const options = {
@@ -306,9 +327,9 @@ export function parseAllLanguageBrowserTestArgs(args) {
 			options.useBuild = true;
 		} else if (arg.startsWith('--family=')) {
 			const family = arg.slice('--family='.length);
-			if (!['dotnet', 'nim', 'clang'].includes(family))
+			if (!['dotnet', 'nim', 'clang', 'debug'].includes(family))
 				throw new Error(`Unknown runtime browser family: ${family}`);
-			options.family = /** @type {'dotnet' | 'nim' | 'clang'} */ (family);
+			options.family = /** @type {'dotnet' | 'nim' | 'clang' | 'debug'} */ (family);
 		} else {
 			throw new Error(`Unknown option: ${arg}`);
 		}

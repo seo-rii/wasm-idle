@@ -31,6 +31,10 @@ describe('all-language browser test runner', () => {
 		expect(Object.keys(plan.env).sort()).toEqual(
 			[
 				...expectedEnvironments,
+				'WASM_IDLE_RUN_REAL_BROWSER_DEBUG',
+				'WASM_IDLE_REQUIRE_LLDB_DEBUG',
+				'WASM_IDLE_DEBUG_BROWSER_LANGUAGES',
+				'WASM_IDLE_DEBUG_BROWSER_CASES',
 				'WASM_IDLE_RUN_REAL_BROWSER_DOTNET_RECOVERY',
 				'WASM_IDLE_RUN_REAL_BROWSER_DOTNET_SWITCH',
 				'WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY'
@@ -79,6 +83,16 @@ describe('all-language browser test runner', () => {
 						: row.browserTest!.env
 				)
 			);
+			if (shard === 'llvm') {
+				expectedFiles.add('src/lib/playground/debug.playwright.test.ts');
+				for (const key of [
+					'WASM_IDLE_RUN_REAL_BROWSER_DEBUG',
+					'WASM_IDLE_REQUIRE_LLDB_DEBUG',
+					'WASM_IDLE_DEBUG_BROWSER_LANGUAGES',
+					'WASM_IDLE_DEBUG_BROWSER_CASES'
+				])
+					expectedEnvironments.add(key);
+			}
 			if (shard === 'stdin') {
 				expectedFiles.add('src/lib/playground/runtime-recovery.playwright.test.ts');
 				expectedFiles.add('src/lib/playground/dotnet-switch.playwright.test.ts');
@@ -178,9 +192,12 @@ describe('all-language browser test runner', () => {
 			)
 		).resolves.toBe(23);
 		expect(prepare).toHaveBeenCalledTimes(1);
-		expect(prepare).toHaveBeenCalledWith(['build:preview', 'compress:build-runtimes'], {
-			timeoutMs: 900_000
-		});
+		expect(prepare).toHaveBeenCalledWith(
+			['prepare:wasm-debug-release', 'build:preview', 'compress:build-runtimes'],
+			{
+				timeoutMs: 900_000
+			}
+		);
 		expect(startPreview).toHaveBeenCalledTimes(1);
 		expect(spawnProcess).toHaveBeenCalledTimes(1);
 		expect(spawnProcess.mock.calls[0]?.[2]).toMatchObject({

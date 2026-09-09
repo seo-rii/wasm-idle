@@ -12,9 +12,11 @@ describe('runtime browser CI selection', () => {
 		).toEqual(['nim']);
 		expect(changedBrowserFamilies(['src/routes/execute.ts'])).toEqual([
 			'clang',
+			'debug',
 			'dotnet',
 			'nim'
 		]);
+		expect(changedBrowserFamilies(['packages/debug/src/controller.ts'])).toEqual(['debug']);
 		expect(changedBrowserFamilies(['README.md'])).toEqual([]);
 	});
 	it('selects recovery tests alongside normal .NET and Nim execution', () => {
@@ -23,6 +25,11 @@ describe('runtime browser CI selection', () => {
 		expect(dotnet.env.WASM_IDLE_RUN_REAL_BROWSER_DOTNET_RECOVERY).toBe('1');
 		expect(dotnet.testFiles).toContain(
 			'src/lib/playground/runtime-recovery.playwright.test.ts'
+		);
+		const debug = createAllLanguageBrowserTestPlan({ family: 'debug' });
+		expect(debug.env.WASM_IDLE_REQUIRE_LLDB_DEBUG).toBe('1');
+		expect(debug.env.WASM_IDLE_DEBUG_BROWSER_CASES).toBe(
+			'c-deep-stack,c-array-pagination,c-recursive-frames'
 		);
 		const nim = createAllLanguageBrowserTestPlan({ family: 'nim' });
 		expect(nim.env.WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY).toBe('1');

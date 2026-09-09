@@ -84,7 +84,7 @@ jobs:
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
             - run: pnpm exec playwright-core install --with-deps chromium
-            - if: matrix.family == 'clang'
+            - if: matrix.family == 'clang' || matrix.family == 'debug'
               run: pnpm run prepare:test-assets -- clang
             - run: node scripts/run-all-language-browser-tests.mjs --family=${{ matrix.family }}
 
