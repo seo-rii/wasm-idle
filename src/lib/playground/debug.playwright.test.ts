@@ -1199,8 +1199,15 @@ async function readBrowserLifecycleMetrics(page: Page) {
 }
 
 describe('native-source browser debugging in Chromium', () => {
-	const browserTest = process.env.WASM_IDLE_RUN_REAL_BROWSER_DEBUG === '1' ? it : it.skip;
-	browserTest('pauses, steps, and completes browser programs without page errors', async () => {
+	const enabled = process.env.WASM_IDLE_RUN_REAL_BROWSER_DEBUG === '1';
+	const selected = activeDebugCases.length > 0;
+	const browserTestOptions = {
+		skip: !enabled || !selected,
+		meta: { browser: true, requiredBrowser: enabled && selected }
+	};
+	it('pauses, steps, and completes browser programs', browserTestOptions, async () => {
+		expect.hasAssertions();
+		expect(activeDebugCases.length).toBeGreaterThan(0);
 		await runWithBrowserProbeSessionLock(async () => {
 			const configuredBrowserUrl = process.env.WASM_IDLE_BROWSER_URL || '';
 			const serverMode =
@@ -2084,6 +2091,29 @@ describe('native-source browser debugging in Chromium', () => {
 								10_000
 							);
 							if ('expectedDeepStack' in testCase) {
+								// The first stop must populate both surfaces before any frame or scope click.
+								await expect
+									.poll(
+										() =>
+											page.locator('.debug-inline-values').allTextContents(),
+										{
+											timeout: 10_000
+										}
+									)
+									.toEqual([expect.stringMatching(/\bvalue\s*=\s*0\b/u)]);
+								const initialLocals = page.locator('details.debug-scope').filter({
+									has: page.locator('summary', { hasText: 'Locals' })
+								});
+								expect(
+									await initialLocals.evaluate(
+										(element) => (element as HTMLDetailsElement).open
+									)
+								).toBe(true);
+								await expect
+									.poll(() =>
+										initialLocals.locator('.debug-key').allTextContents()
+									)
+									.toEqual(expect.arrayContaining(['depth', 'value']));
 								const initialState = await page.evaluate(() =>
 									(window as any).__wasmIdleDebug.getDebugState()
 								);
@@ -2141,7 +2171,7 @@ describe('native-source browser debugging in Chromium', () => {
 											page.locator('.debug-inline-values').allTextContents(),
 										{ timeout: 10_000 }
 									)
-									.toEqual([expect.stringContaining('depth = 1')]);
+									.toEqual([expect.stringMatching(/\bdepth\s*=\s*1\b/u)]);
 								const localsScope = page.locator('details.debug-scope').filter({
 									has: page.locator('summary', { hasText: 'Locals' })
 								});
@@ -2982,28 +3012,37 @@ describe('native-source browser debugging in Chromium', () => {
 										(window as any).__wasmIdleDebug.getDebugState()
 									);
 									expect(selectedState.frameId).toBe(frame.id);
-									const frameVariables = [];
-									for (const scope of selectedState.scopes) {
-										if (scope.variablesReference <= 0) continue;
-										frameVariables.push(
-											...(await page.evaluate(
-												(variablesReference) =>
-													(
+									await expect
+										.poll(
+											() =>
+												page.evaluate(() => {
+													const state = (
 														window as any
-													).__wasmIdleDebug.loadDebugVariables(
-														variablesReference
-													),
-												scope.variablesReference
-											))
+													).__wasmIdleDebug.getDebugState();
+													return state.variablesByReference.flatMap(
+														([, values]: [number, any[]]) => values
+													);
+												}),
+											{ timeout: 10_000 }
+										)
+										.toEqual(
+											expect.arrayContaining([
+												expect.objectContaining(
+													testCase.expectedFrameLocals[index]
+												)
+											])
 										);
-									}
-									expect(frameVariables).toEqual(
-										expect.arrayContaining([
-											expect.objectContaining(
-												testCase.expectedFrameLocals[index]
-											)
-										])
+									const expectedArgument = testCase.expectedFrameLocals[index];
+									const frameLabel = await page
+										.locator(`.debug-frame-select[data-frame-id="${frame.id}"]`)
+										.textContent();
+									expect(frameLabel).toMatch(
+										new RegExp(
+											`\\b${expectedArgument.name}\\s*=\\s*${expectedArgument.value}\\b`
+										)
 									);
+									// This fixture also has a local doubled; it must never be represented as an argument.
+									expect(frameLabel).not.toMatch(/\bdoubled\s*=/u);
 								}
 							}
 							if ('breakpointSourcePath' in testCase) {
