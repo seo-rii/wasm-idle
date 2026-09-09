@@ -522,6 +522,8 @@ const normalizeFilterToken = (value: string) =>
 	value
 		.trim()
 		.toLowerCase()
+		.replaceAll('++', 'pp')
+		.replaceAll('#', 'sharp')
 		.replace(/[^a-z0-9]+/gu, '');
 
 const filterTokensFor = (value: string) =>
@@ -1373,6 +1375,15 @@ describe('Monaco LSP browser integration', () => {
 				'FSHARP',
 				'VBNET'
 			]);
+			delete process.env.WASM_IDLE_LSP_BROWSER_GROUPS;
+			for (const [filter, expected] of [
+				['C', 'C'],
+				['C++', 'CPP'],
+				['C#', 'CSHARP']
+			]) {
+				process.env.WASM_IDLE_LSP_BROWSER_LANGUAGES = filter;
+				expect(selectedCases().map((testCase) => testCase.language)).toEqual([expected]);
+			}
 		} finally {
 			if (previousLanguages === undefined) {
 				delete process.env.WASM_IDLE_LSP_BROWSER_LANGUAGES;
