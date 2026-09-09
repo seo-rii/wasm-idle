@@ -29,7 +29,12 @@ export function createClangdRequestPolicy(
 	const trace: ClangdRequestTrace[] = [];
 	const pending = new Map<
 		number | string,
-		{ trace: ClangdRequestTrace; key: string; timer: ReturnType<typeof setTimeout> }
+		{
+			trace: ClangdRequestTrace;
+			key: string;
+			emptyResult: unknown;
+			timer: ReturnType<typeof setTimeout>;
+		}
 	>();
 	const retired = new Set<number | string>();
 	const versions = new Map<string, number>();
@@ -48,23 +53,30 @@ export function createClangdRequestPolicy(
 		Object.assign(request.trace, { finishedAt: Date.now(), outcome });
 		return request.trace;
 	};
-	const cancel = (id: number | string, outcome: 'cancelled' | 'stale' | 'timeout') => {
-		const request = finish(id, outcome);
+	const cancel = (
+		id: number | string,
+		outcome: 'cancelled' | 'stale' | 'timeout',
+		notifyServer = true
+	) => {
+		const request = pending.get(id);
 		if (!request) return;
+		finish(id, outcome);
 		retired.add(id);
 		if (retired.size > 256) retired.delete(retired.values().next().value!);
-		void transport.writer
-			.write({ jsonrpc: '2.0', method: '$/cancelRequest', params: { id } } as Message)
-			.catch(() => {});
+		if (notifyServer)
+			void transport.writer
+				.write({ jsonrpc: '2.0', method: '$/cancelRequest', params: { id } } as Message)
+				.catch(() => {});
 		callback?.({
 			jsonrpc: '2.0',
 			id,
-			error: {
-				code: outcome === 'stale' ? -32801 : -32800,
-				message: `${request.method} ${outcome}`
-			}
+			// Monaco 0.55.1's native providers surface RPC cancellation errors as
+			// unhandled errors. Settle features with their empty result instead.
+			...(request.trace.method === 'initialize'
+				? { error: { code: -32800, message: `initialize ${outcome}` } }
+				: { result: request.emptyResult })
 		} as ResponseMessage);
-		if (outcome === 'timeout') options.onDelay?.(request.method);
+		if (outcome === 'timeout') options.onDelay?.(request.trace.method);
 	};
 	const dispose = () => {
 		if (disposed) return;
@@ -79,11 +91,15 @@ export function createClangdRequestPolicy(
 			method?: string;
 			params?: any;
 			result?: any;
-			error?: unknown;
+			error?: { code?: number };
 		};
 		if (disposed) return;
 		if (data.id != null && !data.method) {
 			if (retired.has(data.id)) return;
+			if (data.error && [-32800, -32801, -32802].includes(data.error.code!)) {
+				cancel(data.id, data.error.code === -32801 ? 'stale' : 'cancelled', false);
+				return;
+			}
 			const request = finish(data.id, data.error ? 'error' : 'response');
 			if (request && featureMethods.has(request.method)) {
 				options.onDelay?.(null);
@@ -176,10 +192,21 @@ export function createClangdRequestPolicy(
 			pending.set(id, {
 				trace: entry,
 				key: featureMethods.has(data.method) ? JSON.stringify(data.params) : '',
+				emptyResult: data.method.endsWith('/resolve')
+					? data.params
+					: data.method.startsWith('textDocument/semanticTokens/')
+						? { data: [] }
+						: null,
 				timer: setTimeout(() => cancel(id, 'timeout'), timeout)
 			});
+			// The pinned client can start providers as soon as initialize returns,
+			// before its document synchronization has sent didOpen.
+			if (document?.uri && !versions.has(document.uri)) {
+				cancel(data.id, 'cancelled', false);
+				return;
+			}
 			if (hint?.uri && hint.version !== versions.get(hint.uri)) {
-				cancel(data.id, 'stale');
+				cancel(data.id, 'stale', false);
 				return;
 			}
 		}
