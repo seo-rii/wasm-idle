@@ -31,19 +31,44 @@ export function installClangResourceHeaders(
 	const missing: Array<[string, string]> = [];
 	for (const [name, contents] of Object.entries(CLANG_RESOURCE_HEADERS)) {
 		const path = `${resourceDir}/include/${name}`;
-		const existing = fs.readFile(path);
-		if (existing !== null) {
-			if (decoder.decode(existing) !== contents) {
-				throw new Error(
-					`Clang ${provenance.version} resource header differs from its pinned source: ${name}`
-				);
+		try {
+			const existing = fs.readFile(path);
+			if (existing !== null) {
+				if (decoder.decode(existing) !== contents) {
+					throw new Error(
+						`Clang ${provenance.version} resource header differs from its pinned source: ${name}`
+					);
+				}
+			} else {
+				missing.push([path, contents]);
 			}
-		} else {
-			missing.push([path, contents]);
+		} catch (error) {
+			throw new Error(
+				`Unable to inspect Clang ${provenance.version} resource header ${name}: ${error instanceof Error ? error.message : String(error)}`,
+				{ cause: error }
+			);
 		}
 	}
-	if (missing.length) fs.mkdirTree(`${resourceDir}/include`);
+	if (missing.length) {
+		try {
+			fs.mkdirTree(`${resourceDir}/include`);
+		} catch (error) {
+			throw new Error(
+				`Unable to prepare Clang ${provenance.version} resource header directory: ${error instanceof Error ? error.message : String(error)}`,
+				{ cause: error }
+			);
+		}
+	}
 	const encoder = new TextEncoder();
-	for (const [path, contents] of missing) fs.writeFile(path, encoder.encode(contents));
+	for (const [path, contents] of missing) {
+		try {
+			fs.writeFile(path, encoder.encode(contents));
+		} catch (error) {
+			throw new Error(
+				`Unable to install Clang ${provenance.version} resource header ${path.slice(path.lastIndexOf('/') + 1)}: ${error instanceof Error ? error.message : String(error)}`,
+				{ cause: error }
+			);
+		}
+	}
 	return true;
 }

@@ -599,6 +599,10 @@ async function loadObjectiveCRuntime(
 	objectivecAssets: ObjectiveCWorkerAssetConfig,
 	log: boolean
 ) {
+	const trace = (stage: string) => {
+		if (log) console.log(`[wasm-idle:objectivec-worker] load: ${stage}`);
+	};
+	trace('resolving asset configuration');
 	const hostedObjectiveCAssets = resolveObjectiveCAssetConfig(objectivecAssets);
 	configureWorkerRuntimeAssets(clangAssets || null);
 	const clangBaseUrl = clangAssets?.baseUrl || '';
@@ -608,6 +612,7 @@ async function loadObjectiveCRuntime(
 		undefined,
 		hostedObjectiveCAssets.maxAssetBytes
 	);
+	trace('compiler manifest loaded');
 	clang = new BrowserClangRuntime({
 		stdout: (output) => postMessage({ output }),
 		stdin: () => '',
@@ -618,6 +623,7 @@ async function loadObjectiveCRuntime(
 		runtimeBaseUrl: clangBaseUrl,
 		manifest
 	});
+	trace('compiler host constructed');
 
 	objectiveCAssetsObjectiveC = hostedObjectiveCAssets;
 	foundationAssetsLoadedObjectiveC = false;
@@ -639,12 +645,19 @@ async function loadObjectiveCRuntime(
 			hostedObjectiveCAssets.integrity
 		)
 	]);
+	trace('Objective-C base assets loaded');
 	await clang.ready;
+	trace('compiler host ready');
+	trace('installing Objective-C headers and runtime');
+	postMessage({
+		progress: { percent: 99, stage: 'Installing Objective-C headers and runtime' }
+	});
 	for (const [headerPath, headerSource] of Object.entries(headers)) {
 		installedHeaderPathsObjectiveC.add(headerPath);
 		await addFileWithDirectories(clang, headerPath, headerSource);
 	}
 	clang.memfs.addFile('libobjc.a', libobjcBytes);
+	trace('Objective-C headers and runtime installed');
 }
 
 async function ensureObjectiveCFoundationAssets() {

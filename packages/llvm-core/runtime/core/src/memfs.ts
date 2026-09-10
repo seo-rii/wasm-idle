@@ -32,6 +32,7 @@ export default class MemFS {
 	out = true;
 	private readonly filePaths = new Set<string>();
 	private readonly fileOverlays = new Map<string, Uint8Array>();
+	private readonly directoryPaths = new Set<string>();
 
 	constructor(options: MemFsOptions) {
 		this.stdin = options.stdin;
@@ -84,9 +85,12 @@ export default class MemFS {
 	}
 
 	addDirectory(path: string) {
+		const normalizedPath = this.normalizePath(path);
+		if (this.directoryPaths.has(normalizedPath)) return;
 		this.mem.check();
 		this.mem.write(this.exports.GetPathBuf(), path);
 		this.exports.AddDirectoryNode(path.length);
+		this.directoryPaths.add(normalizedPath);
 	}
 
 	addFile(path: string, contents: string | ArrayBuffer | Uint8Array) {

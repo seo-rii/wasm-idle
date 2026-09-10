@@ -129,4 +129,33 @@ describe('MemFS', () => {
 
 		instantiate.mockRestore();
 	});
+
+	it('does not consume another Wasm node for an existing directory path', async () => {
+		const module = {} as WebAssembly.Module;
+		const memory = new WebAssembly.Memory({ initial: 1 });
+		const addDirectoryNode = vi.fn();
+		vi.mocked(compile).mockResolvedValue(module);
+		const instantiate = vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({
+			exports: {
+				init: vi.fn(),
+				memory,
+				GetPathBuf: vi.fn(() => 0),
+				AddDirectoryNode: addDirectoryNode
+			}
+		} as unknown as WebAssembly.Instance);
+		const memfs = new MemFS({
+			moduleUrl: 'https://example.test/memfs.zip',
+			stdin: () => '',
+			stdout: vi.fn()
+		});
+		await memfs.ready;
+
+		memfs.addDirectory('include/objc');
+		memfs.addDirectory('/include/objc');
+		memfs.addDirectory('./include/objc');
+
+		expect(addDirectoryNode).toHaveBeenCalledOnce();
+
+		instantiate.mockRestore();
+	});
 });
