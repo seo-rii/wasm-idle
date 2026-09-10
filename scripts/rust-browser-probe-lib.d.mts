@@ -50,6 +50,7 @@ export function runRustBrowserProbe({
 	availableRustTargets: string[];
 	pageErrors: string[];
 	progressTrace: import('./browser-progress-probe.mjs').LoadingProgressEntry[];
+	executionState: import('../src/lib/playground/executionObservation').ExecutionObservation | null;
 	transcript: string;
 	consoleTail: string[];
 	bootstrapErrors: string[];

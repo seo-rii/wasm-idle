@@ -277,6 +277,9 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 		)
 		.catch(() => []);
 	const progressTrace = await readLoadingProgressTrace(page);
+	const executionState = await page.evaluate(
+		() => /** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.() ?? null
+	);
 	return {
 		url: browserUrl,
 		finalUrl: page.url(),
@@ -285,6 +288,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 		availableRustTargets,
 		pageErrors,
 		progressTrace,
+		executionState,
 		transcript,
 		consoleTail: summarizeConsole(consoleMessages),
 		bootstrapErrors: findBootstrapErrors(consoleMessages),
@@ -528,6 +532,10 @@ export async function runRustBrowserProbe({
 		rustBrowserUrl.searchParams.set('lang', 'RUST');
 		rustBrowserUrl.searchParams.set('rustTargetTriple', targetTriple);
 		rustBrowserUrl.searchParams.set('code64', Buffer.from(source).toString('base64url'));
+		// The bootstrap visits can autosave their default workspace. Workspace
+		// restoration takes precedence over URL parameters, so start the Rust case
+		// with fresh workspace storage while retaining the service worker context.
+		await page.evaluate(() => localStorage.clear());
 		await page.goto(rustBrowserUrl.toString(), { waitUntil: 'domcontentloaded' });
 		try {
 			await page.waitForFunction(
@@ -565,8 +573,11 @@ export async function runRustBrowserProbe({
 				.locator('[data-testid="terminal-debug-output"]')
 				.textContent()
 				.catch(() => '')) || '';
-		const initialFinishedCount = (initialTranscript.match(/Process finished after/g) || [])
-			.length;
+		const previousRunId = await page.evaluate(() => {
+			const state = /** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.();
+			if (!state) throw new Error('Structured execution state API is unavailable');
+			return state.id;
+		});
 		const editorSource = await page.evaluate(
 			() => window.__wasmIdleDebug?.getEditorValue() || ''
 		);
@@ -575,39 +586,57 @@ export async function runRustBrowserProbe({
 		}
 		await installLoadingProgressProbe(page);
 		await page.locator('button.action-button--run').first().click();
-		await page.waitForFunction(
-			() => typeof window.__wasmIdleDebug?.writeTerminalInput === 'function'
-		);
-		await page.evaluate(async (text) => {
-			await window.__wasmIdleDebug.writeTerminalInput(text, false);
-		}, stdinText);
-		if (sendEof) {
-			await page.waitForTimeout(500);
-			await page.evaluate(async () => {
-				await window.__wasmIdleDebug.writeTerminalInput('', true);
-			});
-		}
-
 		try {
+			// The Run handler clears pending input before preparing the runtime. Wait
+			// for this execution to accept input so that reset cannot discard it.
 			await page.waitForFunction(
-				({ previousTranscript, requiredOutput, previousFinishedCount }) => {
+				(previousId) => {
+					const state = /** @type {any} */ (
+						window
+					).__wasmIdleDebug?.getExecutionState?.();
+					return (
+						state &&
+						state.id > previousId &&
+						!['idle', 'preparing'].includes(state.status)
+					);
+				},
+				previousRunId,
+				{ polling: 50, timeout: runTimeoutMs }
+			);
+			const ended = await page.evaluate(
+				() =>
+					/** @type {any} */ (window).__wasmIdleDebug.getExecutionState().endedAt !== null
+			);
+			if (!ended) {
+				await page.evaluate(async (text) => {
+					await window.__wasmIdleDebug.writeTerminalInput(text, false);
+				}, stdinText);
+				if (sendEof) {
+					await page.waitForTimeout(500);
+					await page.evaluate(async () => {
+						await window.__wasmIdleDebug.writeTerminalInput('', true);
+					});
+				}
+			}
+			await page.waitForFunction(
+				({ previousTranscript, requiredOutput, previousId }) => {
+					const state = /** @type {any} */ (
+						window
+					).__wasmIdleDebug?.getExecutionState?.();
+					if (!state || state.id <= previousId || state.endedAt === null) return false;
+					if (state.status !== 'completed' || state.exitCode !== 0) return true;
 					const text =
 						document.querySelector('[data-testid="terminal-debug-output"]')
 							?.textContent || '';
-					if (text === previousTranscript) {
-						return false;
-					}
-					const finishedCount = (text.match(/Process finished after/g) || []).length;
-					return (
-						text.includes('Rust compilation failed') ||
-						(finishedCount >= previousFinishedCount + 1 &&
-							(!requiredOutput || text.includes(requiredOutput)))
-					);
+					const delta = text.startsWith(previousTranscript)
+						? text.slice(previousTranscript.length)
+						: text;
+					return !requiredOutput || delta.includes(requiredOutput);
 				},
 				{
 					previousTranscript: initialTranscript,
 					requiredOutput: expectedOutput,
-					previousFinishedCount: initialFinishedCount
+					previousId: previousRunId
 				},
 				{
 					polling: 250,
@@ -665,11 +694,13 @@ export async function runRustBrowserProbe({
 			);
 		}
 		if (
-			!summary.transcript.includes('Process finished after') &&
-			!summary.consoleTail.some((entry) => entry.includes('wasi run complete exitCode=0'))
+			!summary.executionState ||
+			summary.executionState.id <= previousRunId ||
+			summary.executionState.status !== 'completed' ||
+			summary.executionState.exitCode !== 0
 		) {
 			throw new Error(
-				`terminal transcript did not contain a completed rust run\n${JSON.stringify(summary, null, 2)}`
+				`rust execution did not complete successfully\n${JSON.stringify(summary, null, 2)}`
 			);
 		}
 		if (

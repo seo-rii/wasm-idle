@@ -202,7 +202,11 @@ describe('wasm-idle rust browser playwright integration', () => {
 									'preview3_transition=preview3-transition'
 								);
 							}
-							expect(summary.transcript).toContain('Process finished after');
+							expect(summary.executionState).toMatchObject({
+								language: 'RUST',
+								status: 'completed',
+								exitCode: 0
+							});
 							expect(summary.transcript).not.toContain('memory access out of bounds');
 							expect(summary.transcript).not.toMatch(/maximum call stack/i);
 							expect(
