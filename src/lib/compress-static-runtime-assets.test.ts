@@ -95,6 +95,45 @@ describe('compressStaticRuntimeAssets', () => {
 		expect(manifest.sizes['wasm-swift/swiftpm.wasm']).toBe(1_000_001);
 	});
 
+	it('preserves TinyGo executable identity URLs and removes stale compression entries', async () => {
+		const rootDir = await makeTempDir();
+		const graphPaths = [
+			'wasm-tinygo/upstream.js',
+			'wasm-tinygo/assets/upstream-compile-worker-Dat9LBTc.js',
+			'wasm-tinygo/assets/upstream-compile-worker-nextHash.js'
+		];
+		const bytes = repeatedBytes(STATIC_RUNTIME_MIN_COMPRESS_BYTES + 1, 7);
+		for (const graphPath of graphPaths) {
+			await writeAsset(rootDir, graphPath, bytes);
+			await writeAsset(rootDir, `${graphPath}.gz`, gzipSync(bytes));
+		}
+		await writeAsset(rootDir, 'wasm-tinygo/tools/upstream/tinygo-compiler.wasm', bytes);
+		await writeAsset(
+			rootDir,
+			'compressed-runtime-assets.v1.json',
+			new TextEncoder().encode(
+				JSON.stringify({
+					assets: graphPaths,
+					sizes: Object.fromEntries(
+						graphPaths.map((graphPath) => [graphPath, bytes.byteLength])
+					)
+				})
+			)
+		);
+
+		const result = await compressStaticRuntimeAssets({ rootDir });
+
+		expect(result.manifestAssets).toEqual(['wasm-tinygo/tools/upstream/tinygo-compiler.wasm']);
+		expect(
+			result.compressed.map((entry) => path.relative(rootDir, entry.originalPath))
+		).toEqual([path.join('wasm-tinygo', 'tools', 'upstream', 'tinygo-compiler.wasm')]);
+		for (const graphPath of graphPaths) {
+			await expect(readFile(path.join(rootDir, graphPath))).resolves.toEqual(
+				Buffer.from(bytes)
+			);
+		}
+	});
+
 	it('leaves inert Rust executable graph storage untouched and unregistered', async () => {
 		const rootDir = await makeTempDir();
 		const identityPath = 'wasm-rust/compiler-worker.js.bin';

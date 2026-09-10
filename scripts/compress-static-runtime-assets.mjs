@@ -65,6 +65,15 @@ function relativeToRoot(rootDir, filePath) {
 /** @param {string} rootDir @param {string} filePath */
 function isUnderCompressibleRuntime(rootDir, filePath) {
 	const relativePath = relativeToRoot(rootDir, filePath);
+	// TinyGo's receipt-verified executable graph fetches exact identity URLs. Its
+	// service worker deliberately preserves those network Responses, so replacing
+	// these files with .gz siblings makes the verified URLs disappear.
+	if (
+		/^wasm-tinygo\/(?:upstream\.js|assets\/upstream-compile-worker-[^/]+\.js)$/.test(
+			relativePath
+		)
+	)
+		return false;
 	if (/^_app\/immutable\/(assets|workers)\//.test(relativePath)) return true;
 	const [topLevel] = relativePath.split('/');
 	return topLevel.startsWith('wasm-') || RUNTIME_TOP_LEVEL_DIRS.has(topLevel);
