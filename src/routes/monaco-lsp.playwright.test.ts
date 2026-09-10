@@ -1051,6 +1051,9 @@ async function checkClangLanguageSwitches(page: Page) {
 		await selectLanguage(page, testCase);
 		await enableLsp(page);
 		await waitForLspReady(page, testCase);
+		// Observe the newly opened document before editing it: clangd can suppress
+		// identical diagnostics when didChange overtakes the initial AST build.
+		await waitForClangdDiagnosticsForCurrentVersion(page);
 		await replaceEditorSource(page, testCase.validSource!);
 		await waitForClangdDiagnosticsForCurrentVersion(page);
 		expect((await readDiagnosticCounts(page)).markers, `${language} after switching`).toBe(0);
@@ -1092,6 +1095,7 @@ async function runLspCase(
 
 	await waitForPreparedPage(page, browserUrl);
 	await selectLanguage(page, testCase);
+	if (testCase.validSource) await replaceEditorSource(page, testCase.validSource);
 	await page
 		.waitForFunction(
 			(selector) => document.querySelectorAll(selector).length === 0,
@@ -1147,7 +1151,6 @@ async function runLspCase(
 		expect(entry.progressValue).toBeLessThanOrEqual(100);
 	}
 	if (testCase.validSource) {
-		await replaceEditorSource(page, testCase.validSource);
 		await waitForClangdDiagnosticsForCurrentVersion(page);
 		expect((await readDiagnosticCounts(page)).markers).toBe(0);
 	}
@@ -1431,7 +1434,10 @@ describe('Monaco LSP browser integration', () => {
 					process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 				const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
 				if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
-					await runBrowserPreparationScripts(['build:preview']);
+					await runBrowserPreparationScripts([
+						'build:preview',
+						'compress:build-runtimes'
+					]);
 				}
 				const previewServer = reuseProvidedBrowserUrl
 					? {
