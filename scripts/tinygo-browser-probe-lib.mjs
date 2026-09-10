@@ -9,6 +9,7 @@ import {
 	stopLoadingProgressProbe
 } from './browser-progress-probe.mjs';
 import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
+import { classifyTerminalRun } from './stdin-browser-probe-lib.mjs';
 
 /**
  * @typedef {{ type: string; text: string }} BrowserConsoleMessage
@@ -46,6 +47,9 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 			.textContent()
 			.catch(() => '')) || '';
 	const progressTrace = await readLoadingProgressTrace(page);
+	const executionState = await page.evaluate(
+		() => /** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.() ?? null
+	);
 	return {
 		activeState,
 		browserUrl,
@@ -53,6 +57,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 		finalUrl: page.url(),
 		pageErrors,
 		progressTrace,
+		executionState,
 		title: await page.title().catch(() => ''),
 		transcript
 	};
@@ -79,7 +84,6 @@ export async function runTinyGoBrowserProbe({
 	});
 	const context = await browser.newContext();
 	const resolvedBrowserUrl = new URL(browserUrl);
-	const origin = resolvedBrowserUrl.origin;
 	await addBrowserTestCookies(context, browserUrl);
 	const page = await context.newPage();
 	page.setDefaultTimeout(runTimeoutMs);
@@ -143,6 +147,15 @@ export async function runTinyGoBrowserProbe({
 			timeout: runTimeoutMs
 		});
 		await page.locator('#language-select').selectOption('TINYGO');
+		await page.waitForFunction(() => {
+			const debug = /** @type {any} */ (window).__wasmIdleDebug;
+			const source = debug?.getEditorValue?.() ?? '';
+			return (
+				source.includes('package main') &&
+				source.includes('fibonacci=') &&
+				typeof debug?.getExecutionState === 'function'
+			);
+		});
 
 		const logToggle = page.locator('#log-toggle');
 		if (!(await logToggle.isChecked())) {
@@ -154,30 +167,32 @@ export async function runTinyGoBrowserProbe({
 				.locator('[data-testid="terminal-debug-output"]')
 				.textContent()
 				.catch(() => '')) || '';
+		const previousRunId = await page.evaluate(
+			() => /** @type {any} */ (window).__wasmIdleDebug.getExecutionState().id
+		);
 		await installLoadingProgressProbe(page);
 		await page.locator('button.action-button--run').first().click();
 		try {
 			await page.waitForFunction(
-				(previousTranscript) => {
+				({ previousTranscript, previousId }) => {
+					const state = /** @type {any} */ (
+						window
+					).__wasmIdleDebug?.getExecutionState?.();
+					if (!state || state.id <= previousId) return false;
+					if (state.endedAt !== null) return true;
 					const text =
 						document.querySelector('[data-testid="terminal-debug-output"]')
 							?.textContent || '';
-					if (text === previousTranscript) {
-						return false;
-					}
+					const delta = text.startsWith(previousTranscript)
+						? text.slice(previousTranscript.length)
+						: text;
 					return (
-						text.includes('upstream TinyGo artifact ready:') ||
-						text.includes('TinyGo compilation failed') ||
-						text.includes('RuntimeError:') ||
-						text.includes('Error:') ||
-						text.includes('Process finished after')
+						delta.includes('upstream TinyGo artifact ready:') &&
+						!['idle', 'preparing'].includes(state.status)
 					);
 				},
-				initialTranscript,
-				{
-					polling: 250,
-					timeout: runTimeoutMs
-				}
+				{ previousTranscript: initialTranscript, previousId: previousRunId },
+				{ polling: 50, timeout: runTimeoutMs }
 			);
 		} catch (error) {
 			throw new Error(
@@ -190,19 +205,14 @@ export async function runTinyGoBrowserProbe({
 				.locator('[data-testid="terminal-debug-output"]')
 				.textContent()
 				.catch(() => '')) || '';
-		const prepareFinishedCount = (prepareTranscript.match(/Process finished after/g) || [])
-			.length;
-		const prepareFailure = prepareTranscript.match(/(?:RuntimeError|Error):[^\r\n]*/u)?.[0];
-		if (prepareFailure) {
+		const prepareState = await page.evaluate(() =>
+			/** @type {any} */ (window).__wasmIdleDebug.getExecutionState()
+		);
+		if (prepareState.endedAt !== null) {
 			throw new Error(
-				`TinyGo prepare failed: ${prepareFailure}\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, resolvedBrowserUrl.toString()), null, 2)}`
+				`TinyGo execution ended before accepting input\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, resolvedBrowserUrl.toString()), null, 2)}`
 			);
 		}
-		await page.waitForFunction(
-			() =>
-				typeof (/** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput) ===
-				'function'
-		);
 		await page.evaluate(async (text) => {
 			await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, false);
 		}, stdinText);
@@ -210,30 +220,26 @@ export async function runTinyGoBrowserProbe({
 		let progressReadiness;
 		try {
 			const readinessHandle = await page.waitForFunction(
-				({ previousTranscript, previousFinishedCount, requiredOutput }) => {
+				({ previousTranscript, requiredOutput, previousId }) => {
+					const state = /** @type {any} */ (
+						window
+					).__wasmIdleDebug?.getExecutionState?.();
+					if (!state || state.id <= previousId) return false;
+					if (state.endedAt !== null) return 'TinyGo execution settled';
 					const text =
 						document.querySelector('[data-testid="terminal-debug-output"]')
 							?.textContent || '';
 					const delta = text.startsWith(previousTranscript)
 						? text.slice(previousTranscript.length)
 						: text;
-					if (requiredOutput && delta.includes(requiredOutput)) {
-						return 'expected terminal output';
-					}
-					const finishedCount = (text.match(/Process finished after/g) || []).length;
-					if (
-						delta.includes('TinyGo compilation failed') ||
-						/(?:RuntimeError|Error):/u.test(delta) ||
-						finishedCount >= previousFinishedCount + 1
-					) {
-						return 'TinyGo execution settled';
-					}
-					return false;
+					return requiredOutput && delta.includes(requiredOutput)
+						? 'expected terminal output'
+						: false;
 				},
 				{
 					previousTranscript: prepareTranscript,
-					previousFinishedCount: prepareFinishedCount,
-					requiredOutput: expectedOutput
+					requiredOutput: expectedOutput,
+					previousId: previousRunId
 				},
 				{ polling: 50, timeout: runTimeoutMs }
 			);
@@ -241,29 +247,14 @@ export async function runTinyGoBrowserProbe({
 			await readinessHandle.dispose();
 			progressReadiness = await markLoadingProgressReady(page, readinessReason);
 			await page.waitForFunction(
-				({ previousTranscript, previousFinishedCount, requiredOutput }) => {
-					const text =
-						document.querySelector('[data-testid="terminal-debug-output"]')
-							?.textContent || '';
-					if (text === previousTranscript) {
-						return false;
-					}
-					const finishedCount = (text.match(/Process finished after/g) || []).length;
-					return (
-						text.includes('TinyGo compilation failed') ||
-						(finishedCount >= previousFinishedCount + 1 &&
-							(!requiredOutput || text.includes(requiredOutput)))
-					);
+				(previousId) => {
+					const state = /** @type {any} */ (
+						window
+					).__wasmIdleDebug?.getExecutionState?.();
+					return state && state.id > previousId && state.endedAt !== null;
 				},
-				{
-					previousTranscript: prepareTranscript,
-					previousFinishedCount: prepareFinishedCount,
-					requiredOutput: expectedOutput
-				},
-				{
-					polling: 250,
-					timeout: runTimeoutMs
-				}
+				previousRunId,
+				{ polling: 50, timeout: runTimeoutMs }
 			);
 		} catch (error) {
 			throw new Error(
@@ -287,20 +278,17 @@ export async function runTinyGoBrowserProbe({
 			throw new Error(`page errors detected\n${JSON.stringify(summary, null, 2)}`);
 		}
 		assertLoadingProgressTrace(summary.progressTrace, 'TinyGo', progressReadiness);
-		if (summary.transcript.includes('TinyGo compilation failed')) {
-			throw new Error(`TinyGo run failed\n${JSON.stringify(summary, null, 2)}`);
-		}
-		if (!summary.transcript.includes(expectedOutput)) {
-			throw new Error(
-				`terminal transcript did not contain expected TinyGo output ${JSON.stringify(expectedOutput)}\n${JSON.stringify(summary, null, 2)}`
-			);
-		}
 		if (
-			!summary.transcript.includes('Process finished after') &&
-			!summary.consoleTail.some((entry) => entry.includes('wasi run complete exitCode=0'))
+			classifyTerminalRun(
+				initialTranscript,
+				summary.transcript,
+				expectedOutput,
+				summary.executionState,
+				previousRunId
+			) !== 'success'
 		) {
 			throw new Error(
-				`terminal transcript did not contain a completed TinyGo run\n${JSON.stringify(summary, null, 2)}`
+				`TinyGo execution did not complete successfully with the expected output\n${JSON.stringify(summary, null, 2)}`
 			);
 		}
 		if (

@@ -72,7 +72,11 @@ describe('wasm-idle TinyGo browser playwright integration', () => {
 					expect(summary.transcript).toContain('upstream TinyGo phase: compile');
 					expect(summary.transcript).toContain('upstream TinyGo artifact ready:');
 					expect(summary.transcript).toContain('fibonacci=11');
-					expect(summary.transcript).toContain('Process finished after');
+					expect(summary.executionState).toMatchObject({
+						language: 'TINYGO',
+						status: 'completed',
+						exitCode: 0
+					});
 					expect(
 						summary.consoleTail.some((entry: string) =>
 							entry.includes('[wasm-idle:tinygo-worker] wasi run complete exitCode=0')

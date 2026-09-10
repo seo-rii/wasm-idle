@@ -17,6 +17,8 @@ export function runTinyGoBrowserProbe({ browserUrl, chromiumExecutable, expected
     consoleTail: string[];
     finalUrl: string;
     pageErrors: string[];
+    progressTrace: import('./browser-progress-probe.mjs').LoadingProgressEntry[];
+    executionState: import('../src/lib/playground/executionObservation').ExecutionObservation | null;
     title: string;
     transcript: string;
 }>;
