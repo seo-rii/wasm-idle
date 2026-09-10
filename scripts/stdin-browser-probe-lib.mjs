@@ -455,6 +455,28 @@ export async function runStdinBrowserProbe(options) {
 		let stdinDelivery = Promise.resolve();
 		if (!usePreloadedStdin) {
 			stdinDelivery = (async () => {
+				// Run first clears the terminal and prepares the compiler. Input sent during
+				// that reset is discarded; wait for this execution's runtime readiness.
+				await page.waitForFunction(
+					(previousId) => {
+						const state = /** @type {any} */ (
+							window
+						).__wasmIdleDebug?.getExecutionState?.();
+						return (
+							state &&
+							state.id > previousId &&
+							!['idle', 'preparing'].includes(state.status)
+						);
+					},
+					previousRunId,
+					{ polling: 50, timeout: runTimeoutMs }
+				);
+				const ended = await page.evaluate(
+					() =>
+						/** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.()
+							.endedAt !== null
+				);
+				if (ended) return;
 				if (waitForOutputBeforeStdin) {
 					await page.waitForFunction(
 						({ initial, marker }) => {
