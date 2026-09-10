@@ -1184,6 +1184,47 @@ describe('Octave sandbox', () => {
 		expect(runMessage.stdin).toBe('42\n');
 	});
 
+	it('reports the pre-start input wait and accepts input from its readiness callback', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/absproxy/5173');
+		const report = vi.fn(() => {
+			expect(workerInstances).toHaveLength(0);
+			expect(sandbox.stdinWaiters).toHaveLength(1);
+			sandbox.write('73\n');
+		});
+		await expect(
+			sandbox.run('n = str2double(fgetl(stdin));', false, true, { report })
+		).resolves.toBe(true);
+		expect(report).toHaveBeenCalledWith(
+			expect.objectContaining({
+				kind: 'ready',
+				state: 'waiting-input',
+				reason: 'stdin-request'
+			})
+		);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ stdin: '73\n' })
+		);
+	});
+
+	it('does not consume replacement input after cancellation inside the readiness callback', async () => {
+		const sandbox = new Octave();
+		await sandbox.load('/absproxy/5173');
+		const reason = new Error('cancel input wait');
+		const running = sandbox.run('n = fgetl(stdin);', false, true, {
+			report() {
+				sandbox.terminate(reason);
+				sandbox.write('replacement\n');
+			}
+		});
+		await expect(running).rejects.toBe(reason);
+		expect(workerInstances).toHaveLength(0);
+		await expect(sandbox.run('n = fgetl(stdin);', false)).resolves.toBe(true);
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ stdin: 'replacement\n' })
+		);
+	});
+
 	it('isolates explicit Octave stdin from queued and subsequent terminal input', async () => {
 		const sandbox = new Octave();
 		const runMessages: any[] = [];

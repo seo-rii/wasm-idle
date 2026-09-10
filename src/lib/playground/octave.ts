@@ -295,15 +295,29 @@ class Octave implements Sandbox {
 		return /\bstdin\b|\binput\s*\(/.test(code);
 	}
 
-	private async collectStdinForRun(code: string, stdinOption: SandboxExecutionOptions['stdin']) {
+	private async collectStdinForRun(
+		code: string,
+		stdinOption: SandboxExecutionOptions['stdin'],
+		ownsRun: () => boolean,
+		progress?: SandboxProgress
+	) {
 		if (
 			typeof stdinOption !== 'string' &&
 			this.pendingInput.length === 0 &&
 			!this.pendingEof &&
 			this.readsOctaveStdin(code)
 		) {
-			await new Promise<void>((resolve) => this.stdinWaiters.push(resolve));
+			await new Promise<void>((resolve) => {
+				this.stdinWaiters.push(resolve);
+				progress?.report?.({
+					kind: 'ready',
+					state: 'waiting-input',
+					reason: 'stdin-request',
+					label: 'Octave is waiting for terminal input before starting'
+				});
+			});
 		}
+		if (!ownsRun()) return undefined;
 		if (typeof stdinOption === 'string') return stdinOption;
 		if (!this.readsOctaveStdin(code)) return undefined;
 		const stdin = this.pendingInput.join('');
@@ -622,7 +636,7 @@ class Octave implements Sandbox {
 				return;
 			}
 			this.begin = Date.now();
-			this.collectStdinForRun(code, stdinOption)
+			this.collectStdinForRun(code, stdinOption, ownsSnapshot, _prog)
 				.then((stdin) => {
 					if (
 						this.activeRun?.token !== runToken ||
