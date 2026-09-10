@@ -1,0 +1,184 @@
+{
+	"schemaVersion": 1,
+	"producerId": "wasm-llvm/lfortran-browser",
+	"inputs": {
+		"sources.lock.json": "b26dd0ef6f04efd70139b937653fb9859ab53939d608eed6e376ae0ccefc36d6",
+		"manifest.json": "6007f11c94e30bc1d1cc8d0549c1239ec9cf5ed3fd2737ac9e1bb356f55a9c70",
+		"patches/source-archive-and-bridge.patch": "ce474f3347ca592d280c528e67b90c15e4bb0816eff26383d92d624567ee16e6",
+		"src/CMakeLists.txt": "28c84fc6648a66ba9b8a7dec698dc7c74d4602a647cd7f064e461139663dc996",
+		"src/compiler.cpp": "02b66eb2c8d23716f3c6ed63541e432e39e3aa5ffb380a9fdf713fdb26d3ab1a",
+		"scripts/producer.mjs": "251a362b38345c3475087a6ea72bd3c383e14e9816e37fcd46414652fd0c9c29",
+		"scripts/shared.mjs": "72a0d3f87a38aabe29d2101fbae228ca98297797a4ff9eaf9ae0e2df9c011bfc",
+		"scripts/validate.mjs": "398955025f68c93080d0838dda3625660507c310805371f5c4648f21b6916de4",
+		"fixtures/read-array.f90": "c904e504a08189e4685957c2e0a80d167f85419ded12be25c9c32bd2e2aac163",
+		"fixtures/module.f90": "8fc66dd00ed1f7d3c7ca400b429920fa6813f033410cb102bf1c1ff9eae027b0",
+		"fixtures/invalid.f90": "4ca330729c774eb7e7202c79481edce44ad834e03f6730ed8f906d7803a10fe1",
+		"fixtures/nested-print.f90": "004bc9f85749d0aa611a6d3d44cce194c56577c7655cec7428dbc6f93a8eb1fd",
+		"fixtures/eof.f90": "b5090277e079ca18c7d5cbc2aaa55e1cf943a75bb41369938930811b3f645b2d"
+	},
+	"files": {
+		"lfortran.js": {
+			"sha256": "348d5472c307da2bae15eb73e8a38da0e7c2a4cfaebacbccbee2b163806a59c3",
+			"size": 968283
+		},
+		"lfortran.wasm": {
+			"sha256": "b7c8ef4e942e9965a511b8700955c47c1f48d4ef18c61953a4847a6dcd680181",
+			"size": 80662569
+		},
+		"lfortran.data": {
+			"sha256": "6d6dbe72e4f23f9761eb8005c8a737490750f54dbb173c6455a9c9cb9489c99f",
+			"size": 179758
+		}
+	},
+	"versions": {
+		"emcc": "emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 4.0.9 (bbf1caa6e24f64fca9eb6a13a9e02d3f42123e77)",
+		"nativeCxx": "c++ (Debian 12.2.0-14+deb12u1) 12.2.0",
+		"cmake": "cmake version 4.0.3",
+		"bison": "bison (GNU Bison) 3.8.2",
+		"re2c": "re2c 3.1"
+	},
+	"source": "ab867a23029b0c1b1c3131b5a0e2363709be37f0",
+	"sourceTreeSha256": "2382897b4c36a2094612ec9d386db6bedc87b18f7b8589a4bf1ef0517bf3c4e6",
+	"backend": "llvm",
+	"host": "emscripten",
+	"execution": "dynamic-side-module",
+	"validation": {
+		"passed": true,
+		"engine": "node",
+		"nodeVersion": "v24.1.0",
+		"validatorSha256": "398955025f68c93080d0838dda3625660507c310805371f5c4648f21b6916de4",
+		"cases": [
+			{
+				"name": "read-array",
+				"exitCode": 0,
+				"stdout": "60\n",
+				"diagnostic": "",
+				"sourceSha256": "c904e504a08189e4685957c2e0a80d167f85419ded12be25c9c32bd2e2aac163",
+				"stdinSha256": "d4a330f46bfd8e1a8de7b966a4917d8ce9fcbcb572112d520f209177c7e2009b",
+				"generated": [
+					{
+						"name": "__lfortran_evaluate_0_1.o",
+						"size": 8688,
+						"sha256": "7674c6283109220cd3b4b4d6f89555dfae740dbf5147f18eae236504328672ca"
+					},
+					{
+						"name": "__lfortran_evaluate_0_1.wasm",
+						"size": 6191,
+						"sha256": "d71680d3399275796fc5ad1dbae124eafe5ab61c41e259dbad8b117c8bd7ace3"
+					}
+				]
+			},
+			{
+				"name": "read-array-other-input",
+				"exitCode": 0,
+				"stdout": "16\n",
+				"diagnostic": "",
+				"sourceSha256": "c904e504a08189e4685957c2e0a80d167f85419ded12be25c9c32bd2e2aac163",
+				"stdinSha256": "08b444f4e9ca733a6491ae253963785bb1d974b4c05489efe599179df7aff82c",
+				"generated": [
+					{
+						"name": "__lfortran_evaluate_0_1.o",
+						"size": 8688,
+						"sha256": "7674c6283109220cd3b4b4d6f89555dfae740dbf5147f18eae236504328672ca"
+					},
+					{
+						"name": "__lfortran_evaluate_0_1.wasm",
+						"size": 6191,
+						"sha256": "d71680d3399275796fc5ad1dbae124eafe5ab61c41e259dbad8b117c8bd7ace3"
+					}
+				]
+			},
+			{
+				"name": "module",
+				"exitCode": 0,
+				"stdout": "42\n",
+				"diagnostic": "",
+				"sourceSha256": "8fc66dd00ed1f7d3c7ca400b429920fa6813f033410cb102bf1c1ff9eae027b0",
+				"stdinSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+				"generated": [
+					{
+						"name": "__lfortran_evaluate_0_1.o",
+						"size": 1605,
+						"sha256": "f1f4cb17a7c29d01b5eada310df6e7220619005aac051b1a684735bda3d8d7da"
+					},
+					{
+						"name": "__lfortran_evaluate_0_1.wasm",
+						"size": 1684,
+						"sha256": "b465eb88448a6478bcb37b7b616f1067abade131cb2cd3ed29be96b253ab4c5a"
+					}
+				]
+			},
+			{
+				"name": "nested-print",
+				"exitCode": 0,
+				"stdout": "if=1\nloop=1\nif=2\nloop=2\nloop=3\ntotal=6\n",
+				"diagnostic": "",
+				"sourceSha256": "004bc9f85749d0aa611a6d3d44cce194c56577c7655cec7428dbc6f93a8eb1fd",
+				"stdinSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+				"generated": [
+					{
+						"name": "__lfortran_evaluate_0_1.o",
+						"size": 2805,
+						"sha256": "421e4977765c11a456a821408bf95b593fcdec2b5b74fc615bb6b0b2efcf7b01"
+					},
+					{
+						"name": "__lfortran_evaluate_0_1.wasm",
+						"size": 1864,
+						"sha256": "54e10c4ed5cc0a809d5958d1f6bdf7793a7989380a4acb383ad0a273825e4646"
+					}
+				]
+			},
+			{
+				"name": "eof",
+				"exitCode": 0,
+				"stdout": "EOF\n",
+				"diagnostic": "",
+				"sourceSha256": "b5090277e079ca18c7d5cbc2aaa55e1cf943a75bb41369938930811b3f645b2d",
+				"stdinSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+				"generated": [
+					{
+						"name": "__lfortran_evaluate_0_1.o",
+						"size": 2029,
+						"sha256": "f577c6986c07ded17343e6ca3072d6f913aad7a544c292f980ce1078555ee89d"
+					},
+					{
+						"name": "__lfortran_evaluate_0_1.wasm",
+						"size": 1616,
+						"sha256": "7ddee7958e411acdb1c689728a4b67573d2641a59f6cb2343dad899d864e148a"
+					}
+				]
+			},
+			{
+				"name": "eof-other-input",
+				"exitCode": 0,
+				"stdout": "7\n",
+				"diagnostic": "",
+				"sourceSha256": "b5090277e079ca18c7d5cbc2aaa55e1cf943a75bb41369938930811b3f645b2d",
+				"stdinSha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58",
+				"generated": [
+					{
+						"name": "__lfortran_evaluate_0_1.o",
+						"size": 2029,
+						"sha256": "f577c6986c07ded17343e6ca3072d6f913aad7a544c292f980ce1078555ee89d"
+					},
+					{
+						"name": "__lfortran_evaluate_0_1.wasm",
+						"size": 1616,
+						"sha256": "7ddee7958e411acdb1c689728a4b67573d2641a59f6cb2343dad899d864e148a"
+					}
+				]
+			},
+			{
+				"name": "invalid-source",
+				"exitCode": 1,
+				"stdout": "",
+				"diagnostic": "semantic error: Variable 'this_symbol_is_not_declared' is not declared\n --> /program.f90:4:11\n  |\n4 |   value = this_symbol_is_not_declared\n  |           ^^^^^^^^^^^^^^^^^^^^^^^^^^^ 'this_symbol_is_not_declared' is undeclared\n\n\nNote: Please report unclear, confusing or incorrect messages as bugs at\nhttps://github.com/lfortran/lfortran/issues.\n",
+				"sourceSha256": "4ca330729c774eb7e7202c79481edce44ad834e03f6730ed8f906d7803a10fe1",
+				"stdinSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+				"generated": []
+			}
+		],
+		"browserAcceptance": false
+	},
+	"createdAt": "2026-09-05T13:31:13.362Z"
+}

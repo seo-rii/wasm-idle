@@ -9,7 +9,8 @@ export async function executeBrowserDotnetArtifact(artifact, options = {}) {
         assemblyId: artifact.assemblyId,
         args: options.args || [],
         env: options.env || {},
-        stdin: options.stdin || ''
+        stdin: options.stdin || '',
+        ...(options.maxOutputBytes === undefined ? {} : { maxOutputBytes: options.maxOutputBytes })
     });
     if (response.error) {
         throw new Error(response.error);
