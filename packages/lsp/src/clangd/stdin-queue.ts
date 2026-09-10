@@ -1,8 +1,9 @@
-/** UTF-8 chunks stay intact while clangd consumes one byte at a time. */
+/** Each UTF-8 chunk is one complete Content-Length framed JSON-RPC message. */
 export class ClangdStdinQueue {
 	private chunks: Uint8Array[] = [];
 	private chunkIndex = 0;
 	private offset = 0;
+	private readable = false;
 	private waiters: Array<() => void> = [];
 
 	get hasBytes() {
@@ -16,10 +17,15 @@ export class ClangdStdinQueue {
 	}
 
 	read(): number | null {
+		if (!this.readable) return null;
 		const chunk = this.chunks[this.chunkIndex];
 		if (!chunk) return null;
 		const byte = chunk[this.offset++];
 		if (this.offset === chunk.length) {
+			// libc may read ahead while parsing the header. Keep the next frame
+			// in this queue until JSONTransport calls stdinReady for its next loop,
+			// instead of leaving it hidden in libc while stdinReady waits forever.
+			this.readable = false;
 			this.offset = 0;
 			this.chunkIndex++;
 			if (this.chunkIndex === this.chunks.length) {
@@ -33,9 +39,8 @@ export class ClangdStdinQueue {
 		return byte;
 	}
 
-	ready(): Promise<void> {
-		return this.hasBytes
-			? Promise.resolve()
-			: new Promise((resolve) => this.waiters.push(resolve));
+	async ready(): Promise<void> {
+		if (!this.hasBytes) await new Promise<void>((resolve) => this.waiters.push(resolve));
+		this.readable = true;
 	}
 }
