@@ -107,7 +107,10 @@ async function beginRun(page: Page, source: string, keyboard = false) {
 		() => (globalThis as any).__wasmIdleDebug.getExecutionState().id
 	);
 	if (keyboard) {
-		await page.locator('.monaco-editor textarea.inputarea').first().focus();
+		await page
+			.locator('.monaco-editor .native-edit-context, .monaco-editor textarea.inputarea')
+			.first()
+			.focus({ timeout: 10_000 });
 		await page.keyboard.press('ControlOrMeta+A');
 		await page.keyboard.insertText(source);
 	} else {
@@ -293,6 +296,11 @@ describe('runtime failure and Stop recovery', () => {
 				await beginRun(
 					page,
 					'import strutils\ntry:\n  echo parseInt(stdin.readLine())\nexcept ValueError:\n  echo "nim-invalid-input-recovered"'
+				);
+				await page.waitForFunction(
+					() =>
+						(globalThis as any).__wasmIdleDebug.getExecutionState().status ===
+						'waiting-input'
 				);
 				await page.evaluate(async () => {
 					await (globalThis as any).__wasmIdleDebug.writeTerminalInput(
