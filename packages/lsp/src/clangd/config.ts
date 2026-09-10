@@ -1,5 +1,6 @@
 import {
 	CLANG_WASI_TARGET,
+	OBJECTIVE_C_LSP_DEFINES,
 	OBJECTIVE_C_RUNTIME_FLAGS,
 	clangSystemIncludePaths,
 	resolveClangLanguageArgs,
@@ -40,6 +41,7 @@ export const createClangdCompileFlags = (
 					...OBJECTIVE_C_RUNTIME_FLAGS.flatMap((flag) =>
 						flag.startsWith('-fobjc-runtime=') ? ['-Xclang', flag] : [flag]
 					),
+					...OBJECTIVE_C_LSP_DEFINES,
 					'-I/objc',
 					'-I/objc/objc'
 				]

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createClangdCompileFlags, createClangdConfiguration } from '../src/clangd/config.js';
 import {
+	OBJECTIVE_C_LSP_DEFINES,
 	resolveClangLanguageArgs,
 	OBJECTIVE_C_RUNTIME_FLAGS
 } from '@wasm-idle/llvm-core/core/clang-profile';
@@ -49,7 +50,8 @@ describe('clangd compile profiles', () => {
 	it('passes the execution frontend ABI through the driver and selects libobjc2 headers', () => {
 		const flags = createClangdCompileFlags('OBJC');
 		expect(flags[flags.indexOf('-fobjc-runtime=gnustep-2.0') - 1]).toBe('-Xclang');
-		expect(flags).toContain('-DOBJC2RUNTIME=1');
-		expect(OBJECTIVE_C_RUNTIME_FLAGS).toContain('-DOBJC2RUNTIME=1');
+		expect(flags).toEqual(expect.arrayContaining([...OBJECTIVE_C_LSP_DEFINES]));
+		expect(OBJECTIVE_C_LSP_DEFINES).toContain('-DOBJC2RUNTIME=1');
+		expect(OBJECTIVE_C_RUNTIME_FLAGS).not.toContain('-DOBJC2RUNTIME=1');
 	});
 });

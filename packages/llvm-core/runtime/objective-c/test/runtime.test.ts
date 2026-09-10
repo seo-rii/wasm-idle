@@ -801,6 +801,7 @@ describe('Objective-C worker', () => {
 					'-fblocks'
 				])
 			);
+			expect(compileRun).not.toContain('-DOBJC2RUNTIME=1');
 		}
 		expect(objectiveCxxRuns[0]).toEqual(
 			expect.arrayContaining([expect.stringMatching(/main\.mm$/)])

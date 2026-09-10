@@ -365,6 +365,7 @@ int main(void) {
 				'-fblocks'
 			])
 		);
+		expect(compileArgs).not.toContain('-DOBJC2RUNTIME=1');
 	});
 
 	it('does not insert standalone hooks into unbraced control-flow bodies', async () => {
