@@ -179,11 +179,15 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(
 			/activeProgressSession\?\.report\?\.\(\{\s*kind: 'ready',\s*state: 'paused',\s*reason: 'debug-paused'/s
 		);
-		expect(executionCatch).toMatch(/const executionWasCancelled = abortController\.signal\.aborted;/);
+		expect(executionCatch).toMatch(
+			/const executionWasCancelled = abortController\.signal\.aborted;/
+		);
 		expect(executionCatch).toMatch(
 			/const executionTimedOut = error instanceof Error && error\.name === 'TimeoutError';/
 		);
-		expect(executionCatch).toMatch(/if \(!executionWasCancelled && !executionTimedOut\) throw error;/);
+		expect(executionCatch).toMatch(
+			/if \(!executionWasCancelled && !executionTimedOut\) throw error;/
+		);
 		expect(source).toMatch(/if \(!debug\.paused\) debug\.reset\(\);/);
 		expect(source).toMatch(
 			/title=\{debug\.cursorLine\s+\?\s+`Run to Cursor \(L\$\{debug\.cursorLine\}\)`\s+:\s+'Run to Cursor'\}/
@@ -274,7 +278,7 @@ describe('example route debug actions', () => {
 			/onclick=\{\(\) => debug\.sendCommand\('continue'\)\}\s+disabled=\{!debug\.paused \|\| dataBreakpointLoading\}/
 		);
 		expect(source).toMatch(
-			/class="debug-frame-select"\s+disabled=\{!frame\.id \|\| dataBreakpointLoading\}/
+			/class="debug-frame-select"[^>]*?disabled=\{!frame\.id \|\| dataBreakpointLoading\}/
 		);
 	});
 
