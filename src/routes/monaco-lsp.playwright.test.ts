@@ -1054,6 +1054,13 @@ async function checkClangLanguageSwitches(page: Page) {
 		// Observe the newly opened document before editing it: clangd can suppress
 		// identical diagnostics when didChange overtakes the initial AST build.
 		await waitForClangdDiagnosticsForCurrentVersion(page);
+		// Make the diagnostic set change before checking the corrected document.
+		// A clean default and a different clean source can share the same empty
+		// diagnostics, which clangd need not publish again for the new version.
+		await replaceEditorSource(page, testCase.source);
+		await waitForClangdDiagnosticsForCurrentVersion(page);
+		expect((await readDiagnosticCounts(page)).markers, `${language} after introducing an error`)
+			.toBeGreaterThan(0);
 		await replaceEditorSource(page, testCase.validSource!);
 		await waitForClangdDiagnosticsForCurrentVersion(page);
 		expect((await readDiagnosticCounts(page)).markers, `${language} after switching`).toBe(0);
