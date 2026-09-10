@@ -3,9 +3,11 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 import { createServer } from 'vite';
 import { chromium } from 'playwright-core';
 import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
+import { installBrowserRuntimeDelivery } from './browser-runtime-delivery.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export async function runC3BrowserProbe() {
@@ -62,6 +64,7 @@ export async function runC3BrowserProbe() {
 		const browserErrors = [];
 		page.on('pageerror', (error) => browserErrors.push(error.message));
 		await page.goto(`http://127.0.0.1:${address.port}/`);
+		await installBrowserRuntimeDelivery(page, `http://127.0.0.1:${address.port}/`);
 		await page.addScriptTag({
 			type: 'module',
 			content:
@@ -254,10 +257,18 @@ fn void main() @wasm("main") {
 		assert.equal(byName['after-cancel'].output, 'recovered\n');
 		assert.equal(byName['guest-memory-grow'].output, 'Y');
 		const memory = byName.utf8.memory;
+		const compressedManifest = JSON.parse(
+			await readFile(path.join(root, 'static/compressed-runtime-assets.v1.json'), 'utf8')
+		);
+		const compilerPath = 'wasm-c3/c3c.wasm';
+		const compressedCompiler = compressedManifest.assets.includes(compilerPath);
+		const storedCompiler = await readFile(
+			path.join(root, 'static', `${compilerPath}${compressedCompiler ? '.gz' : ''}`)
+		);
 		assert.equal(
 			memory.compiler.originalSha256,
 			createHash('sha256')
-				.update(await readFile(path.join(root, 'static/wasm-c3/c3c.wasm')))
+				.update(compressedCompiler ? gunzipSync(storedCompiler) : storedCompiler)
 				.digest('hex')
 		);
 		assert.notEqual(memory.compiler.originalSha256, memory.compiler.limitedSha256);
@@ -272,6 +283,9 @@ fn void main() @wasm("main") {
 			})
 		);
 		await bufferedPage.goto(`http://127.0.0.1:${address.port}/buffered`);
+		// Claim this document without reloading: asset delivery is enabled while the
+		// non-isolated navigation still exercises the real prebuffered input path.
+		await installBrowserRuntimeDelivery(bufferedPage, `http://127.0.0.1:${address.port}/`);
 		await bufferedPage.addScriptTag({
 			type: 'module',
 			content:
@@ -315,7 +329,7 @@ fn void main() @wasm("main") { while (true) { int byte = next_byte(); if (byte <
 		assert.equal(buffered.result, true);
 		assert.equal(buffered.output, 'buffered 한글 🦀\n');
 		assert.equal(buffered.memory.limitBytes, 1024 ** 3);
-		await bufferedPage.route('**/wasm-c3/c3c.mjs', async (route) => {
+		await bufferedPage.context().route('**/wasm-c3/c3c.mjs', async (route) => {
 			const response = await route.fetch();
 			const body = Buffer.from(await response.body());
 			body[0] ^= 1;

@@ -7,6 +7,7 @@ import { chromium, type Browser } from 'playwright-core';
 import { startBrowserPreviewServer } from '../../../scripts/browser-preview-server.mjs';
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
+import { installBrowserRuntimeDelivery } from '../../../scripts/browser-runtime-delivery.mjs';
 import { editorDefaults } from '../../routes/editor-defaults';
 
 async function writeAcceptance(phase: string, chromiumVersion: string, result: unknown) {
@@ -73,7 +74,7 @@ describe.skipIf(!enabled)('real LFortran consumer in Chromium', () => {
 		{ timeout: 240_000, meta: browserMeta },
 		async () => {
 			expect.hasAssertions();
-			const context = await browser.newContext({ serviceWorkers: 'block' });
+			const context = await browser.newContext();
 			await addBrowserTestCookies(context, server.browserUrl);
 			const page = await context.newPage();
 			try {
@@ -92,6 +93,7 @@ describe.skipIf(!enabled)('real LFortran consumer in Chromium', () => {
 				);
 				await page.goto(harnessUrl, { waitUntil: 'domcontentloaded' });
 				const base = `${server.browserUrl.replace(/\/$/, '')}/`;
+				await installBrowserRuntimeDelivery(page, base);
 				await page.addScriptTag({
 					type: 'module',
 					content: `import LFortran from ${JSON.stringify(base + 'src/lib/playground/lfortran.ts')}; globalThis.__lfortranSandbox = LFortran;`
