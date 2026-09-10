@@ -1214,7 +1214,11 @@ describe('native-source browser debugging in Chromium', () => {
 				process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'dev' ? 'dev' : 'preview';
 			const reuseProvidedBrowserUrl = shouldReuseProvidedBrowserUrl(configuredBrowserUrl);
 			if (!reuseProvidedBrowserUrl && serverMode === 'preview') {
-				await runBrowserPreparationScripts(['build:preview'], { timeoutMs: 900_000 });
+				// Release preparation installs raw LLDB assets. Generate the matching gzip
+				// files and manifest before the service worker serves this preview.
+				await runBrowserPreparationScripts(['build:preview', 'compress:build-runtimes'], {
+					timeoutMs: 900_000
+				});
 			}
 			previewServerPromise ??= reuseProvidedBrowserUrl
 				? Promise.resolve({
