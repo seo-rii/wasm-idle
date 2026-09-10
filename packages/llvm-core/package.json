@@ -2,7 +2,7 @@
 	"name": "@wasm-idle/llvm-core",
 	"version": "1.0.0",
 	"description": "Browser LLVM runtime hosts for wasm-idle",
-	"license": "MIT",
+	"license": "MIT AND (Apache-2.0 WITH LLVM-exception)",
 	"type": "module",
 	"sideEffects": false,
 	"exports": {
@@ -45,6 +45,7 @@
 	},
 	"files": [
 		"dist",
+		"LICENSE.llvm.txt",
 		"!dist/**/*.map",
 		"!dist/**/*.{wasm,zip,tar,gz,tgz,data,zst,br,a,o,so,bc,pack}",
 		"README.md"

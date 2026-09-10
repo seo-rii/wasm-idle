@@ -1,0 +1,248 @@
+{
+	"format": "wasm-idle-clang-resource-headers-v1",
+	"version": "22.1.8",
+	"revision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+	"baseUrl": "https://raw.githubusercontent.com/llvm/llvm-project/ca7933e47d3a3451d81e72ac174dcb5aa28b59d1/",
+	"selection": "clang/lib/Headers/CMakeLists.txt core_files, excluding module.modulemap (references non-WASI architecture headers)",
+	"cmake": {
+		"path": "CMakeLists.txt",
+		"source": "clang/lib/Headers/CMakeLists.txt",
+		"bytes": 25049,
+		"sha256": "6fbe03bc7a1ae8309451851c666a76fe0929d12a9e140be18b53428574cdbd35"
+	},
+	"license": {
+		"source": "llvm/LICENSE.TXT",
+		"bytes": 15141,
+		"sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee"
+	},
+	"headers": [
+		{
+			"path": "builtins.h",
+			"source": "clang/lib/Headers/builtins.h",
+			"bytes": 846,
+			"sha256": "a7d1f052d48c4e27d0ae1023b1cb2419e443c686193a3ab392adc776595ee23f"
+		},
+		{
+			"path": "float.h",
+			"source": "clang/lib/Headers/float.h",
+			"bytes": 1416,
+			"sha256": "0242ed0a0c17fb6c24ef6953c51d02d28eadb067dfa41d7ef59fe230caee3a10"
+		},
+		{
+			"path": "__float_float.h",
+			"source": "clang/lib/Headers/__float_float.h",
+			"bytes": 5890,
+			"sha256": "bde8d423099e3bba501018bdde141cf2edea549ba528733d43dc534694181935"
+		},
+		{
+			"path": "__float_header_macro.h",
+			"source": "clang/lib/Headers/__float_header_macro.h",
+			"bytes": 449,
+			"sha256": "7ee2302b023d41fd787a326059980800594c6e2cbac134b3167947d0025a72d7"
+		},
+		{
+			"path": "__float_infinity_nan.h",
+			"source": "clang/lib/Headers/__float_infinity_nan.h",
+			"bytes": 613,
+			"sha256": "544272ca97c2ba51fd362d5f35c8d7287e57001e9a8f29d51896b82be253ef72"
+		},
+		{
+			"path": "inttypes.h",
+			"source": "clang/lib/Headers/inttypes.h",
+			"bytes": 2427,
+			"sha256": "eb8a7b2e17d57e9321043282bf0267fedd2ca58aadb11b04929ddbf8100fc3bc"
+		},
+		{
+			"path": "iso646.h",
+			"source": "clang/lib/Headers/iso646.h",
+			"bytes": 763,
+			"sha256": "3a190443022054d1fd72ec44316dce619b8f130bd10eacf906edf9486e8c270c"
+		},
+		{
+			"path": "limits.h",
+			"source": "clang/lib/Headers/limits.h",
+			"bytes": 3794,
+			"sha256": "6b59cc1b6f86c901bf41ce942b8434530e852eb16e79e6e9287f89441f71efca"
+		},
+		{
+			"path": "stdalign.h",
+			"source": "clang/lib/Headers/stdalign.h",
+			"bytes": 756,
+			"sha256": "0375392ce44c0bce9d2dda696b0b2e7129e2e58233e002f532d010c9ac02d27b"
+		},
+		{
+			"path": "stdarg.h",
+			"source": "clang/lib/Headers/stdarg.h",
+			"bytes": 2497,
+			"sha256": "ce6e43d79dc89b50208ecf259b1ffd519f5a78cd3a2c7fcaac6386f376b89fef"
+		},
+		{
+			"path": "__stdarg___gnuc_va_list.h",
+			"source": "clang/lib/Headers/__stdarg___gnuc_va_list.h",
+			"bytes": 467,
+			"sha256": "feca975bfdfb254d17458a8e3d51f8ad6d9bdc9fd6287727f0f8b2fb81fcb0b0"
+		},
+		{
+			"path": "__stdarg___va_copy.h",
+			"source": "clang/lib/Headers/__stdarg___va_copy.h",
+			"bytes": 445,
+			"sha256": "f0a8d3c963338173f2d57b2cbc209dde38c90536107b15eb0cf78166d4caee1f"
+		},
+		{
+			"path": "__stdarg_header_macro.h",
+			"source": "clang/lib/Headers/__stdarg_header_macro.h",
+			"bytes": 417,
+			"sha256": "7b3fbcc442af2508f36bb2dc98d9ad2b8a1f5c0f5333394fb2159c8bd5ecd5b8"
+		},
+		{
+			"path": "__stdarg_va_arg.h",
+			"source": "clang/lib/Headers/__stdarg_va_arg.h",
+			"bytes": 771,
+			"sha256": "274c75a1db86f649439aa3bcc1dead4170725e6f803925c3fc38a2e93307afdc"
+		},
+		{
+			"path": "__stdarg_va_copy.h",
+			"source": "clang/lib/Headers/__stdarg_va_copy.h",
+			"bytes": 451,
+			"sha256": "bb195f56cb08d4cee6a60bd9f62f34466e8ac4f89f6fed043b044cb2f7ead010"
+		},
+		{
+			"path": "__stdarg_va_list.h",
+			"source": "clang/lib/Headers/__stdarg_va_list.h",
+			"bytes": 448,
+			"sha256": "81c3055f7033e26e7f53705653bc9d69b5202f25c2692e03b3a4f77ff44a7d76"
+		},
+		{
+			"path": "stdatomic.h",
+			"source": "clang/lib/Headers/stdatomic.h",
+			"bytes": 8662,
+			"sha256": "728b690f127fc85faa32b9031e3a0019da92f77db92ca91b749571e45617a9ea"
+		},
+		{
+			"path": "stdbool.h",
+			"source": "clang/lib/Headers/stdbool.h",
+			"bytes": 1172,
+			"sha256": "48655faf4ebd4ca0af26a1ee8e3e16f8dc68385c9cd550ffb3629320681305b3"
+		},
+		{
+			"path": "stdcountof.h",
+			"source": "clang/lib/Headers/stdcountof.h",
+			"bytes": 473,
+			"sha256": "f042faf9ae255233e0dbaa5db23e42eaea2d213bd5d19b8d4af642bbfb0bf689"
+		},
+		{
+			"path": "stdckdint.h",
+			"source": "clang/lib/Headers/stdckdint.h",
+			"bytes": 1666,
+			"sha256": "808854b229028d66012bef0eb5f7cccb2d9a228edcdc5eb2bc710bc7cea4b25a"
+		},
+		{
+			"path": "stddef.h",
+			"source": "clang/lib/Headers/stddef.h",
+			"bytes": 5053,
+			"sha256": "b3e62a046ddf28d09eedebe6eb9461cb7060e47cad2c69964b222c4eea10347e"
+		},
+		{
+			"path": "stddefer.h",
+			"source": "clang/lib/Headers/stddefer.h",
+			"bytes": 610,
+			"sha256": "1370dad5543b648efb2c2070b9e66739488fcd36f284632b9ee3f32ac44cafaa"
+		},
+		{
+			"path": "__stddef_header_macro.h",
+			"source": "clang/lib/Headers/__stddef_header_macro.h",
+			"bytes": 417,
+			"sha256": "4cf46e8fbb809df048eecbbd63686fa741da27afa8db4245bd1f61c1fb1611dc"
+		},
+		{
+			"path": "__stddef_max_align_t.h",
+			"source": "clang/lib/Headers/__stddef_max_align_t.h",
+			"bytes": 857,
+			"sha256": "3c1e4de47f4f06b35e2c5890d670052e84f716760505ff51b022fc8b21a9400f"
+		},
+		{
+			"path": "__stddef_null.h",
+			"source": "clang/lib/Headers/__stddef_null.h",
+			"bytes": 875,
+			"sha256": "b1d71b08563ab3d2c22a1e4f8ddf4d9a1111c89e9404b859a45c307e8ebc6c69"
+		},
+		{
+			"path": "__stddef_nullptr_t.h",
+			"source": "clang/lib/Headers/__stddef_nullptr_t.h",
+			"bytes": 958,
+			"sha256": "898b4465c5d3040d27e760e82983a751b1b0cae23ba280b18a1b81451841f9eb"
+		},
+		{
+			"path": "__stddef_offsetof.h",
+			"source": "clang/lib/Headers/__stddef_offsetof.h",
+			"bytes": 708,
+			"sha256": "e5f0f4ff8ff5fc6a1cc8b535f5065f1728eadd2bf1e1401f021f803ec7b4222f"
+		},
+		{
+			"path": "__stddef_ptrdiff_t.h",
+			"source": "clang/lib/Headers/__stddef_ptrdiff_t.h",
+			"bytes": 717,
+			"sha256": "b4178a57f3711b7013cba747a72a2f178c29fa9364e77d75b2159754072ced43"
+		},
+		{
+			"path": "__stddef_rsize_t.h",
+			"source": "clang/lib/Headers/__stddef_rsize_t.h",
+			"bytes": 710,
+			"sha256": "132339d4f07e852bf2d879bc91c4ccdfcf08c581c7c97f6f3794510e0bdda7bd"
+		},
+		{
+			"path": "__stddef_size_t.h",
+			"source": "clang/lib/Headers/__stddef_size_t.h",
+			"bytes": 708,
+			"sha256": "d86ddc0238da09b385846ebef814ffc50a44e40cf85d4e3793f485952b7e73ad"
+		},
+		{
+			"path": "__stddef_unreachable.h",
+			"source": "clang/lib/Headers/__stddef_unreachable.h",
+			"bytes": 735,
+			"sha256": "bba07c327f8168f37b266a19aed625e0fa633a25cabef4f54f21faf3df5522b8"
+		},
+		{
+			"path": "__stddef_wchar_t.h",
+			"source": "clang/lib/Headers/__stddef_wchar_t.h",
+			"bytes": 853,
+			"sha256": "1900d4998aef3698b06399ed686db0c21e26509b08638a25734fb97ae89b1001"
+		},
+		{
+			"path": "__stddef_wint_t.h",
+			"source": "clang/lib/Headers/__stddef_wint_t.h",
+			"bytes": 443,
+			"sha256": "f2ededa38c5454397242aceaefa65b42b292a1b3cc258e7ca6e216f146e51f0d"
+		},
+		{
+			"path": "stdint.h",
+			"source": "clang/lib/Headers/stdint.h",
+			"bytes": 27519,
+			"sha256": "f43783466c93f77a6464274ebf18f9e4cc46f0d90770ddee2993c6cf39f7514f"
+		},
+		{
+			"path": "stdnoreturn.h",
+			"source": "clang/lib/Headers/stdnoreturn.h",
+			"bytes": 1316,
+			"sha256": "53912b2e9a149a73fe58d88d6c41e69f49020eab7884c81ebf0b4f3607e96847"
+		},
+		{
+			"path": "tgmath.h",
+			"source": "clang/lib/Headers/tgmath.h",
+			"bytes": 30389,
+			"sha256": "7aa69dc82ec404a51295498cc4cb07d0441e5dcd891819247c14ccb3f9745e3b"
+		},
+		{
+			"path": "unwind.h",
+			"source": "clang/lib/Headers/unwind.h",
+			"bytes": 11477,
+			"sha256": "fb7175e889f60907dbd0fd02fdc1571fcf33d867f3d0bbffb21356d2bd9b69ea"
+		},
+		{
+			"path": "varargs.h",
+			"source": "clang/lib/Headers/varargs.h",
+			"bytes": 584,
+			"sha256": "41bf9afa7c9cf7e5eb5e4a42aab8eee3f5a97977a6d33094b2c8f6b3ef1943bb"
+		}
+	]
+}

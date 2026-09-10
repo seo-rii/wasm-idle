@@ -21,7 +21,7 @@ export const normalizeClangdBaseUrl = (baseUrl: string) =>
 
 export const createClangdCompileFlags = (
 	language: ClangSourceLanguage = 'CPP',
-	options: { cppVersion?: string; cVersion?: string } = {}
+	options: { cppVersion?: string; cVersion?: string; resourceDir?: string } = {}
 ) => {
 	const profile = resolveClangLanguageArgs(language, options);
 	return [
@@ -29,7 +29,10 @@ export const createClangdCompileFlags = (
 		'-x',
 		profile.languageArg,
 		`--target=${CLANG_WASI_TARGET}`,
-		...clangSystemIncludePaths(language, '/usr').map((path) => `-isystem${path}`),
+		...(options.resourceDir ? ['-resource-dir', options.resourceDir] : []),
+		...clangSystemIncludePaths(language, '/usr', options.resourceDir).map(
+			(path) => `-isystem${path}`
+		),
 		...(language === 'OBJC'
 			? [
 					// The execution compiler invokes cc1 directly. Pass the same runtime
@@ -45,7 +48,7 @@ export const createClangdCompileFlags = (
 };
 
 export const createClangdConfiguration = (
-	options: { cppVersion?: string; cVersion?: string } = {}
+	options: { cppVersion?: string; cVersion?: string; resourceDir?: string } = {}
 ) =>
 	(['C', 'CPP', 'OBJC'] as const)
 		.map((language) =>

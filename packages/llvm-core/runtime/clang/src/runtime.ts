@@ -23,6 +23,7 @@ import {
 	type ClangSourceLanguage
 } from '../../core/src/clang-profile.js';
 import { installGccCompatibilityHeaders } from '../../core/src/gcc-compat.js';
+import { installClangResourceHeaders } from '../../core/src/clang-resource-headers.js';
 import MemFS from '../../core/src/memfs.js';
 import untar from '../../core/src/tar.js';
 import { green, yellow, normal } from '../../core/src/color.js';
@@ -234,6 +235,19 @@ class Clang {
 			await this.hostLogAsync(
 				`Untarring ${this.assetUrls.sysroot}`,
 				sysrootReady.then((buffer) => untar(buffer, this.memfs))
+			);
+			installClangResourceHeaders(
+				{
+					readFile: (path) =>
+						this.memfs.hasFile(path)
+							? this.memfs.getFileContents(path.replace(/^\/+/, ''))
+							: null,
+					mkdirTree: (path) => this.memfs.addDirectory(path.replace(/^\/+/, '')),
+					writeFile: (path, contents) =>
+						this.memfs.addFile(path.replace(/^\/+/, ''), contents)
+				},
+				this.compilerConfig?.provenance,
+				this.compilerConfig?.resourceDir
 			);
 			installGccCompatibilityHeaders(this.memfs);
 		});

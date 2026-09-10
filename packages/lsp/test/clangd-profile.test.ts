@@ -39,6 +39,13 @@ describe('clangd compile profiles', () => {
 		);
 		expect(createClangdCompileFlags('C').join(' ')).not.toContain('c++/v1');
 	});
+	it('uses the same compiler resource directory ahead of WASI headers', () => {
+		const flags = createClangdCompileFlags('OBJC', { resourceDir: '/lib/clang/22' });
+		expect(flags[flags.indexOf('-resource-dir') + 1]).toBe('/lib/clang/22');
+		expect(flags.indexOf('-isystem/lib/clang/22/include')).toBeLessThan(
+			flags.indexOf('-isystem/usr/include/wasm32-wasi')
+		);
+	});
 	it('passes the execution frontend ABI through the driver and selects libobjc2 headers', () => {
 		const flags = createClangdCompileFlags('OBJC');
 		expect(flags[flags.indexOf('-fobjc-runtime=gnustep-2.0') - 1]).toBe('-Xclang');

@@ -7,6 +7,11 @@ import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 import { decompressGzip } from '@wasm-idle/llvm-core';
 import { writeGccCompatibilityHeaders } from '@wasm-idle/llvm-core/core/gcc-compat';
 import {
+	CLANG_RESOURCE_HEADER_DIRECTORY,
+	CLANG_RESOURCE_HEADER_PROVENANCE,
+	installClangResourceHeaders
+} from '@wasm-idle/llvm-core/core/clang-resource-headers';
+import {
 	CLANGD_CPP_FILE_PATH,
 	CLANGD_WORKSPACE_PATH,
 	createClangdConfiguration,
@@ -167,10 +172,31 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 
 		clangdRuntime.FS.mkdirTree(CLANGD_WORKSPACE_PATH);
 		writeGccCompatibilityHeaders(clangdRuntime.FS, '/usr');
+		// This exact Wasm digest was verified above. Custom/older clangd builds
+		// keep their own resource headers instead of receiving LLVM 22 headers.
+		const resourceDir =
+			event.data.assets.clangdWasmIntegrity?.uncompressedSha256 ===
+			'0d71e7a7f8e6dd369cb2a0b22cc4016d649f370e5b905adb6092536deb0ee019'
+				? CLANG_RESOURCE_HEADER_DIRECTORY
+				: undefined;
+		if (resourceDir) {
+			installClangResourceHeaders(
+				{
+					readFile: (path) =>
+						clangdRuntime.FS.analyzePath(path).exists
+							? clangdRuntime.FS.readFile(path)
+							: null,
+					mkdirTree: (path) => clangdRuntime.FS.mkdirTree(path),
+					writeFile: (path, contents) => clangdRuntime.FS.writeFile(path, contents)
+				},
+				CLANG_RESOURCE_HEADER_PROVENANCE,
+				resourceDir
+			);
+		}
 		syncWorkspaceFile(CLANGD_CPP_FILE_PATH);
 		clangdRuntime.FS.writeFile(
 			`${CLANGD_WORKSPACE_PATH}/.clangd`,
-			createClangdConfiguration(event.data.compileProfile)
+			createClangdConfiguration({ ...event.data.compileProfile, resourceDir })
 		);
 		for (const [path, source] of Object.entries(event.data.assets.objectiveCHeaders || {})) {
 			if (
