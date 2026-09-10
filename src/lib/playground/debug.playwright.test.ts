@@ -1948,7 +1948,9 @@ describe('native-source browser debugging in Chromium', () => {
 								.locator('.debug-frame-select')
 								.allTextContents();
 							expect(steppedFrames).toHaveLength(3);
-							expect(steppedFrames[0]).toContain('calculate(int)');
+							// The stable symbol name is asserted above; the visible label can
+							// already contain the asynchronously loaded argument value.
+							expect(steppedFrames[0]).toMatch(/\bcalculate\((?:int|value\s*=\s*[^)]+)\)/u);
 							expect(steppedFrames[1]).toContain('main');
 							expect(steppedFrames[2]).toContain('_start');
 							// LLDB first stops at the callee's declaration/prologue, then its body.
