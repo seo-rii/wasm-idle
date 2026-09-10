@@ -23,10 +23,11 @@ async function runLanguage(
 	source: string,
 	expectedOutput: string
 ) {
-	await page.locator('select').selectOption(language);
+	await page.locator('#language-select').selectOption(language);
 	await page.waitForFunction(
 		(expectedLanguage) =>
-			document.querySelector('select')?.value === expectedLanguage &&
+			(document.querySelector('#language-select') as HTMLSelectElement | null)?.value ===
+				expectedLanguage &&
 			typeof (globalThis as any).__wasmIdleDebug?.setEditorValue === 'function',
 		language,
 		{ timeout: languageTimeoutMs }
@@ -66,21 +67,31 @@ async function runLanguage(
 		if (sourceInstalled) break;
 	}
 	expect(sourceInstalled).toBe(true);
+	const previousRunId = await page.evaluate(
+		() => (globalThis as any).__wasmIdleDebug.getExecutionState().id
+	);
 	await page.locator('button.action-button--run').click({ timeout: runTimeoutMs });
 	try {
 		await page.waitForFunction(
-			(output) => {
+			({ output, previousId }) => {
 				const transcript =
 					document.querySelector('[data-testid="terminal-debug-output"]')?.textContent ||
 					'';
-				return transcript.includes(output) && transcript.includes('Process finished after');
+				const state = (globalThis as any).__wasmIdleDebug.getExecutionState();
+				return (
+					state.id > previousId &&
+					transcript.includes(output) &&
+					state.status === 'completed' &&
+					state.exitCode === 0
+				);
 			},
-			expectedOutput,
+			{ output: expectedOutput, previousId: previousRunId },
 			{ timeout: languageTimeoutMs }
 		);
 	} catch (error) {
 		const state = await page.evaluate(() => ({
-			language: (document.querySelector('select') as HTMLSelectElement | null)?.value,
+			language: (document.querySelector('#language-select') as HTMLSelectElement | null)
+				?.value,
 			runButton: document.querySelector('button.action-button--run')?.textContent?.trim(),
 			stopButton: document.querySelector('button.action-button--stop')?.textContent?.trim(),
 			transcript:
