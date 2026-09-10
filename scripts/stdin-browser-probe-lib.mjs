@@ -516,26 +516,24 @@ export async function runStdinBrowserProbe(options) {
 		let terminalRunStatus = 'running';
 		while (terminalRunStatus === 'running' && !stdinDeliveryError && Date.now() < runDeadline) {
 			const pollTimeoutMs = Math.max(1, Math.min(1_000, runDeadline - Date.now()));
-			const transcript =
-				(await withWallClockTimeout(
-					page
-						.locator('[data-testid="terminal-debug-output"]')
-						.textContent({ timeout: pollTimeoutMs }),
-					pollTimeoutMs + 250,
-					'terminal poll'
-				).catch(() => '')) || '';
-			const executionState = await withWallClockTimeout(
-				page.evaluate(
-					() => /** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.() ?? null
-				),
+			// A run can finish between two browser calls. Read the output and state
+			// together so a completed state is never paired with an earlier transcript.
+			const snapshot = await withWallClockTimeout(
+				page.evaluate(() => ({
+					transcript:
+						document.querySelector('[data-testid="terminal-debug-output"]')
+							?.textContent || '',
+					state:
+						/** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.() ?? null
+				})),
 				pollTimeoutMs + 250,
-				'execution state poll'
+				'terminal execution poll'
 			).catch(() => null);
 			terminalRunStatus = classifyTerminalRun(
 				initialTranscript,
-				transcript,
+				snapshot?.transcript ?? '',
 				expectedOutput,
-				executionState,
+				snapshot?.state ?? null,
 				previousRunId
 			);
 			if (terminalRunStatus === 'running') {
