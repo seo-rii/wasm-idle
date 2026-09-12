@@ -84,10 +84,10 @@ function assertProducerReceipt(receipt, compilerEvidence, rootEvidence) {
 							? ['go-embed-objects', 'target-cgo-c']
 							: compileProtocolVersion === 4
 								? [
-									'go-embed-objects',
-									'target-cgo-c',
-									'target-cxx-freestanding',
-									'target-clang-assembly'
+										'go-embed-objects',
+										'target-cgo-c',
+										'target-cxx-freestanding',
+										'target-clang-assembly'
 									]
 								: compileProtocolVersion === 5
 									? [
@@ -114,8 +114,7 @@ function assertProducerReceipt(receipt, compilerEvidence, rootEvidence) {
 	}
 	if (
 		compileProtocolVersion >= 5 &&
-		receipt?.build?.rootArchive?.runtimeClosureFormat !==
-			'wasm-llvm-tinygo-runtime-closure-v2'
+		receipt?.build?.rootArchive?.runtimeClosureFormat !== 'wasm-llvm-tinygo-runtime-closure-v2'
 	) {
 		throw new Error('producer receipt does not bind TinyGo runtime closure v2');
 	}
@@ -141,7 +140,8 @@ function assertPackageGraphReceipt(receipt, packageGraphEvidence) {
 	}
 	if (
 		receipt.format === 'wasm-llvm-tinygo-package-graph-provider-v2' &&
-		(JSON.stringify(receipt?.protocol?.moduleModes) !== JSON.stringify(['readonly', 'vendor']) ||
+		(JSON.stringify(receipt?.protocol?.moduleModes) !==
+			JSON.stringify(['readonly', 'vendor']) ||
 			!receipt?.protocol?.argumentsByModuleMode?.readonly?.includes('-mod=readonly') ||
 			!receipt?.protocol?.argumentsByModuleMode?.vendor?.includes('-mod=vendor'))
 	) {

@@ -1,8 +1,5 @@
 export const CLANG_WASI_TARGET = 'wasm32-wasi';
-export const OBJECTIVE_C_RUNTIME_FLAGS = [
-	'-fobjc-runtime=gnustep-2.0',
-	'-fblocks'
-] as const;
+export const OBJECTIVE_C_RUNTIME_FLAGS = ['-fobjc-runtime=gnustep-2.0', '-fblocks'] as const;
 export const OBJECTIVE_C_LSP_DEFINES = ['-DOBJC2RUNTIME=1'] as const;
 const defaultCppStandardArg = '-std=gnu++20';
 const defaultCStandardArg = '-std=gnu11';

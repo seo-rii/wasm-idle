@@ -1950,7 +1950,9 @@ describe('native-source browser debugging in Chromium', () => {
 							expect(steppedFrames).toHaveLength(3);
 							// The stable symbol name is asserted above; the visible label can
 							// already contain the asynchronously loaded argument value.
-							expect(steppedFrames[0]).toMatch(/\bcalculate\((?:int|value\s*=\s*[^)]+)\)/u);
+							expect(steppedFrames[0]).toMatch(
+								/\bcalculate\((?:int|value\s*=\s*[^)]+)\)/u
+							);
 							expect(steppedFrames[1]).toContain('main');
 							expect(steppedFrames[2]).toContain('_start');
 							// LLDB first stops at the callee's declaration/prologue, then its body.
@@ -3100,7 +3102,9 @@ describe('native-source browser debugging in Chromium', () => {
 								const callStackPanel = page.locator('.debug-panel').filter({
 									has: page.locator('h3', { hasText: 'Call Stack' })
 								});
-								const mainFrameButton = callStackPanel.locator(`.debug-frame-select[data-frame-id="${mainFrame.id}"]`);
+								const mainFrameButton = callStackPanel.locator(
+									`.debug-frame-select[data-frame-id="${mainFrame.id}"]`
+								);
 								await mainFrameButton.click();
 								await page
 									.locator(`.file-tab.active[title="${testCase.activePath}"]`)
@@ -3120,7 +3124,9 @@ describe('native-source browser debugging in Chromium', () => {
 										state.pausedLine === null
 									);
 								}, `/workspace/${testCase.activePath}`);
-								const helperFrameButton = callStackPanel.locator(`.debug-frame-select[data-frame-id="${helperFrame.id}"]`);
+								const helperFrameButton = callStackPanel.locator(
+									`.debug-frame-select[data-frame-id="${helperFrame.id}"]`
+								);
 								await helperFrameButton.click();
 								await page
 									.locator(

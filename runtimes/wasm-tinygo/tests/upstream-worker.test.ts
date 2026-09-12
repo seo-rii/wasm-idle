@@ -28,9 +28,20 @@ function memoryModule(minimumPages = 1, maximumPages?: number) {
 	];
 	const exports = [1, 6, 109, 101, 109, 111, 114, 121, 2, 0];
 	return new Uint8Array([
-		0, 97, 115, 109, 1, 0, 0, 0,
-		5, ...wasmU32(memory.length), ...memory,
-		7, ...wasmU32(exports.length), ...exports
+		0,
+		97,
+		115,
+		109,
+		1,
+		0,
+		0,
+		0,
+		5,
+		...wasmU32(memory.length),
+		...memory,
+		7,
+		...wasmU32(exports.length),
+		...exports
 	]);
 }
 
@@ -53,10 +64,7 @@ test('caps a defined Wasm memory at an engine-enforced maximum', async () => {
 	const memory = instance.instance.exports.memory as WebAssembly.Memory;
 	assert.equal(memory.grow(1), 1);
 	assert.throws(() => memory.grow(1), /[Mm]aximum memory size|Unable to grow/u);
-	assert.throws(
-		() => capTinyGoWasmMemory(memoryModule(2), 65_536, 'fixture'),
-		/minimum memory/u
-	);
+	assert.throws(() => capTinyGoWasmMemory(memoryModule(2), 65_536, 'fixture'), /minimum memory/u);
 });
 
 test('caps Wasm memory without cloning every unchanged section', () => {
@@ -105,10 +113,22 @@ test('terminates the disposable compiler worker when one phase exceeds its deadl
 	await assert.rejects(
 		compileTinyGoInDisposableWorker(
 			emptyAssets(),
-			{ workspaceFiles: { 'go.mod': 'module example.com/app\n', 'main.go': 'package main\n' } },
+			{
+				workspaceFiles: {
+					'go.mod': 'module example.com/app\n',
+					'main.go': 'package main\n'
+				}
+			},
 			{
 				workerFactory: () => worker,
-				phaseTimeoutMs: { prepare: 20, graph: 20, validate: 20, compile: 20, link: 20, optimize: 20 },
+				phaseTimeoutMs: {
+					prepare: 20,
+					graph: 20,
+					validate: 20,
+					compile: 20,
+					link: 20,
+					optimize: 20
+				},
 				maxWasmMemoryBytes: 65_536
 			}
 		),
@@ -140,7 +160,14 @@ test('returns a successful worker result and always retires the one-shot worker'
 		{ workspaceFiles: { 'go.mod': 'module example.com/app\n', 'main.go': 'package main\n' } },
 		{
 			workerFactory: () => worker,
-			phaseTimeoutMs: { prepare: 100, graph: 100, validate: 100, compile: 100, link: 100, optimize: 100 },
+			phaseTimeoutMs: {
+				prepare: 100,
+				graph: 100,
+				validate: 100,
+				compile: 100,
+				link: 100,
+				optimize: 100
+			},
 			maxWasmMemoryBytes: 65_536
 		}
 	);

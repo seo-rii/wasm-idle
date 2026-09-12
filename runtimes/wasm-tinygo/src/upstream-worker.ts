@@ -7,13 +7,7 @@ import type {
 const WASM_PAGE_BYTES = 65_536;
 const WASM_HEADER = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00] as const;
 
-export type TinyGoWorkerPhase =
-	| 'prepare'
-	| 'graph'
-	| 'validate'
-	| 'compile'
-	| 'link'
-	| 'optimize';
+export type TinyGoWorkerPhase = 'prepare' | 'graph' | 'validate' | 'compile' | 'link' | 'optimize';
 
 export interface TinyGoCompileWorkerLike {
 	onmessage: ((event: MessageEvent<unknown>) => void) | null;
@@ -94,11 +88,14 @@ function assertNoImportedMemory(payload: Uint8Array, label: string) {
 				offset = readU32(payload, offset, label).offset;
 				break;
 			case 1:
-				if (offset >= payload.length) throw new Error(`${label} contains a truncated table`);
+				if (offset >= payload.length)
+					throw new Error(`${label} contains a truncated table`);
 				offset = skipLimits(payload, offset + 1, label);
 				break;
 			case 2:
-				throw new Error(`${label} imports memory and cannot receive an engine-enforced cap`);
+				throw new Error(
+					`${label} imports memory and cannot receive an engine-enforced cap`
+				);
 			case 3:
 				offset += 2;
 				break;
@@ -138,7 +135,11 @@ function capMemorySection(payload: Uint8Array, maxPages: number, label: string) 
 			changed ||= declaredMaximum.value > maxPages;
 			next = declaredMaximum.offset;
 		} else changed = true;
-		output.push(...writeU32(flags.value | 0x01), ...writeU32(minimum.value), ...writeU32(maximum));
+		output.push(
+			...writeU32(flags.value | 0x01),
+			...writeU32(minimum.value),
+			...writeU32(maximum)
+		);
 		offset = next;
 	}
 	if (offset !== payload.length) throw new Error(`${label} memory section has trailing bytes`);
@@ -241,13 +242,19 @@ export function compileTinyGoInDisposableWorker(
 			if (timer !== undefined) clearTimeout(timer);
 			timer = setTimeout(() => {
 				finish(() =>
-					reject(new Error(`TinyGo ${phase} phase exceeded ${timeoutMs} ms; compiler worker terminated`))
+					reject(
+						new Error(
+							`TinyGo ${phase} phase exceeded ${timeoutMs} ms; compiler worker terminated`
+						)
+					)
 				);
 			}, timeoutMs);
 			options.onPhase?.(phase);
 		};
 		const abort = () => {
-			finish(() => reject(options.signal?.reason ?? new Error('TinyGo compilation was aborted')));
+			finish(() =>
+				reject(options.signal?.reason ?? new Error('TinyGo compilation was aborted'))
+			);
 		};
 		worker.onmessage = (event) => {
 			const message = event.data as
@@ -257,10 +264,15 @@ export function compileTinyGoInDisposableWorker(
 			if (message?.type === 'phase') arm(message.phase);
 			else if (message?.type === 'result') finish(() => resolve(message.result));
 			else if (message?.type === 'error') finish(() => reject(new Error(message.error)));
-			else finish(() => reject(new Error('TinyGo compiler worker emitted an invalid message')));
+			else
+				finish(() =>
+					reject(new Error('TinyGo compiler worker emitted an invalid message'))
+				);
 		};
 		worker.onerror = (event) => {
-			finish(() => reject(event.error ?? new Error(event.message ?? 'TinyGo compiler worker crashed')));
+			finish(() =>
+				reject(event.error ?? new Error(event.message ?? 'TinyGo compiler worker crashed'))
+			);
 		};
 		if (options.signal?.aborted) {
 			abort();
@@ -277,16 +289,13 @@ export function compileTinyGoInDisposableWorker(
 			rootArchive: Uint8Array.from(assets.rootArchive),
 			lld: Uint8Array.from(assets.lld)
 		};
-		worker.postMessage(
-			{ type: 'compile', assets: copiedAssets, request, maxWasmMemoryBytes },
-			[
-				copiedAssets.producerReceipt.buffer,
-				copiedAssets.packageGraphReceipt.buffer,
-				copiedAssets.compiler.buffer,
-				copiedAssets.packageGraph.buffer,
-				copiedAssets.rootArchive.buffer,
-				copiedAssets.lld.buffer
-			]
-		);
+		worker.postMessage({ type: 'compile', assets: copiedAssets, request, maxWasmMemoryBytes }, [
+			copiedAssets.producerReceipt.buffer,
+			copiedAssets.packageGraphReceipt.buffer,
+			copiedAssets.compiler.buffer,
+			copiedAssets.packageGraph.buffer,
+			copiedAssets.rootArchive.buffer,
+			copiedAssets.lld.buffer
+		]);
 	});
 }

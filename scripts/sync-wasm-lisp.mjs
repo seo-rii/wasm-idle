@@ -167,7 +167,12 @@ async function resolveBoundaryPath(filePath) {
 
 /** @param {unknown} value @param {string} label @param {number} maxBytes */
 function validateByteSize(value, label, maxBytes) {
-	if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0 || value > maxBytes) {
+	if (
+		typeof value !== 'number' ||
+		!Number.isSafeInteger(value) ||
+		value <= 0 ||
+		value > maxBytes
+	) {
 		throw new Error(`${label} has an invalid byte size`);
 	}
 	return value;

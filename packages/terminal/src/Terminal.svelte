@@ -10,6 +10,7 @@
 		type ProgressLike
 	} from '@wasm-idle/core';
 	import { onMount } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import '@xterm/xterm/css/xterm.css';
 	import type { Terminal as TerminalType } from '@xterm/xterm';
 	import registerAllPlugins from './plugin/index.js';
@@ -58,7 +59,7 @@
 		input = '',
 		inputCursor = 0,
 		pendingSandboxInput: string[] = [],
-		pendingDebugBreakpoints = new Map<string, number[]>(),
+		pendingDebugBreakpoints = new SvelteMap<string, number[]>(),
 		pendingSandboxEof = false,
 		sandboxInputGeneration = 0,
 		sandbox: BoundSandbox,

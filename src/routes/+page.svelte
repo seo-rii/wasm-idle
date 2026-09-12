@@ -21,7 +21,10 @@
 		createApplicationRuntimeAssets
 	} from '$lib/playground/applicationAssets';
 	import { createLoadingProgressController } from '$lib/playground/loadingProgress';
-	import { createExecutionObserver, type ExecutionObservation } from '$lib/playground/executionObservation';
+	import {
+		createExecutionObserver,
+		type ExecutionObservation
+	} from '$lib/playground/executionObservation';
 	import { resolveDebugRuntimeUrls } from '$lib/playground/assets';
 	import { RUST_NON_DEBUG_RESOURCE_REQUIREMENTS } from '$lib/playground/rustWorkerLimits';
 	import type {
@@ -1593,7 +1596,8 @@
 		return (node: HTMLElement) => {
 			if (!frameId) return;
 			const observer = new IntersectionObserver((entries) => {
-				if (entries.some((entry) => entry.isIntersecting)) void debug.loadFrameArguments([frameId]);
+				if (entries.some((entry) => entry.isIntersecting))
+					void debug.loadFrameArguments([frameId]);
 			});
 			observer.observe(node);
 			return () => observer.disconnect();
@@ -1903,7 +1907,11 @@
 		const preflight = executionPreflight.begin();
 		const execution = (async () => {
 			const abortController = new AbortController();
-			const progressSession = executionObserver.start(generation, language, loadingProgress.start(`Loading ${language} runtime`));
+			const progressSession = executionObserver.start(
+				generation,
+				language,
+				loadingProgress.start(`Loading ${language} runtime`)
+			);
 			executionAbortController = abortController;
 			activeProgressSession = progressSession;
 			let progressOutcome: 'completed' | 'failed' | 'cancelled' | 'timed-out' = 'completed';
@@ -2302,8 +2310,15 @@
 			typeof globalThis & { __wasmIdleDebug?: WasmIdleDebugTestApi };
 		const debugHookVersion = ++browserDebugHookVersion;
 		const debugApi: WasmIdleDebugTestApi = {
-			getExecutionState() { return executionObserver.snapshot(); },
-			getBuildIdentity() { return { ...__WASM_IDLE_BUILD__, serviceWorkerUrl: navigator.serviceWorker?.controller?.scriptURL ?? null }; },
+			getExecutionState() {
+				return executionObserver.snapshot();
+			},
+			getBuildIdentity() {
+				return {
+					...__WASM_IDLE_BUILD__,
+					serviceWorkerUrl: navigator.serviceWorker?.controller?.scriptURL ?? null
+				};
+			},
 			async writeTerminalInput(text: string, eof = false) {
 				if (!terminal) return;
 				await terminal.waitForInput?.();
@@ -2700,7 +2715,7 @@
 						<span class="material-symbols-outlined">list_alt</span>
 						<input
 							bind:value={argsInput}
-							placeholder={'--name "Hong Gil" ""'}
+							placeholder="--name &quot;Hong Gil&quot; &quot;&quot;"
 							aria-label="Program arguments"
 							aria-invalid={!!parsedArgs.error}
 							title="Separate arguments with spaces. Single or double quotes group an argument, including empty strings. Backslash escapes the next character outside single quotes."
@@ -3221,7 +3236,13 @@
 							<span class="debug-count">
 								{debug.scopes.length
 									? debug.scopes.reduce(
-											(total, scope) => total + (debug.variablesByReference.get(scope.variablesReference) ?? scope.variables).length,
+											(total, scope) =>
+												total +
+												(
+													debug.variablesByReference.get(
+														scope.variablesReference
+													) ?? scope.variables
+												).length,
 											0
 										)
 									: debug.locals.length}
@@ -3236,14 +3257,31 @@
 											: debug.variablesByReference.get(
 													scope.variablesReference
 												)}
-									<details class="debug-scope" bind:open={() => debugScopeOpen[scope.name] ?? true, (open) => debugScopeOpen[scope.name] = open}>
+									<details
+										class="debug-scope"
+										bind:open={
+											() => debugScopeOpen[scope.name] ?? true,
+											(open) => (debugScopeOpen[scope.name] = open)
+										}
+									>
 										<summary><h4>{scope.name}</h4></summary>
 										{#if loadedScopeVariables?.length}
 											<ul>
 												{@render debugVariableRows(loadedScopeVariables)}
 											</ul>
 											{#if loadedScopeVariables.length >= 50 && (scope.namedVariables === undefined ? loadedScopeVariables.length % 50 === 0 : loadedScopeVariables.length < scope.namedVariables + (scope.indexedVariables ?? 0))}
-												<button class="debug-load-scope" disabled={debug.loadingVariableReferences.has(scope.variablesReference)} onclick={() => debug.loadVariableChildren(scope.variablesReference, loadedScopeVariables.length, 50)}>
+												<button
+													class="debug-load-scope"
+													disabled={debug.loadingVariableReferences.has(
+														scope.variablesReference
+													)}
+													onclick={() =>
+														debug.loadVariableChildren(
+															scope.variablesReference,
+															loadedScopeVariables.length,
+															50
+														)}
+												>
 													Load more {scope.name.toLowerCase()}
 												</button>
 											{/if}
@@ -3527,7 +3565,10 @@
 											<div class="stack-meta">
 												<span class="stack-order">{index + 1}</span>
 												<span class="stack-function"
-													>{frame.displayName ?? (frame.argumentsSummary === undefined ? frame.functionName || '(entry)' : `${frame.functionName.replace(/\([^()]*\)$/u, '')}(${frame.argumentsSummary})`)}</span
+													>{frame.displayName ??
+														(frame.argumentsSummary === undefined
+															? frame.functionName || '(entry)'
+															: `${frame.functionName.replace(/\([^()]*\)$/u, '')}(${frame.argumentsSummary})`)}</span
 												>
 											</div>
 											<code class="stack-line">L{frame.line}</code>

@@ -73,7 +73,11 @@ try {
 					);
 					worker.once('error', reject);
 					worker.once('exit', (code) =>
-						reject(new Error(`Stdin race Worker exited before returning a result (${code})`))
+						reject(
+							new Error(
+								`Stdin race Worker exited before returning a result (${code})`
+							)
+						)
 					);
 					worker.on('message', (message) => {
 						if (message.beforeWait) {

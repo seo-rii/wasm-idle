@@ -345,9 +345,9 @@ class WamrModuleValidator {
 				reader.readVarUint32('data count');
 				return;
 			case 13:
-				unsupported('exception-handling tag sections are not supported');
+				return unsupported('exception-handling tag sections are not supported');
 			default:
-				unsupported(`unknown core section id ${id}`);
+				return unsupported(`unknown core section id ${id}`);
 		}
 	}
 
@@ -737,11 +737,11 @@ class WamrModuleValidator {
 					this.readMiscInstruction(reader, context);
 					break;
 				case 0xfd:
-					unsupported('SIMD instructions are not supported');
+					return unsupported('SIMD instructions are not supported');
 				case 0xfe:
-					unsupported('atomic instructions are not supported');
+					return unsupported('atomic instructions are not supported');
 				case 0xfb:
-					unsupported('GC instructions are not supported');
+					return unsupported('GC instructions are not supported');
 				default:
 					if (this.isImmediateFreeCoreOpcode(opcode)) break;
 					unsupported(`instruction opcode 0x${opcode.toString(16)} is not supported`);

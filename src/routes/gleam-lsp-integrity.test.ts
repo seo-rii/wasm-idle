@@ -10,11 +10,7 @@ describe('Gleam LSP integrity wiring', () => {
 		);
 		expect(pageSource).toMatch(/\{gleamLspManifestFingerprint\}/);
 		expect(monacoSource).toMatch(/gleamLspManifestFingerprint\?: string;/);
-		expect(monacoSource).toMatch(
-			/gleamLspEnabled \? gleamLspManifestFingerprint \|\| '' : ''/
-		);
-		expect(monacoSource).toMatch(
-			/manifestFingerprint: gleamLspManifestFingerprint/
-		);
+		expect(monacoSource).toMatch(/gleamLspEnabled \? gleamLspManifestFingerprint \|\| '' : ''/);
+		expect(monacoSource).toMatch(/manifestFingerprint: gleamLspManifestFingerprint/);
 	});
 });

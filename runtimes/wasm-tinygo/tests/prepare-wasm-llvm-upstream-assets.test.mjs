@@ -53,10 +53,10 @@ for (const producer of [
 												? ['go-embed-objects', 'target-cgo-c']
 												: producer.schemaVersion === 4
 													? [
-														'go-embed-objects',
-														'target-cgo-c',
-														'target-cxx-freestanding',
-														'target-clang-assembly'
+															'go-embed-objects',
+															'target-cgo-c',
+															'target-cxx-freestanding',
+															'target-clang-assembly'
 														]
 													: producer.schemaVersion === 5
 														? [
@@ -78,7 +78,8 @@ for (const producer of [
 								...(producer.schemaVersion >= 5
 									? {
 											rootArchive: {
-												runtimeClosureFormat: 'wasm-llvm-tinygo-runtime-closure-v2'
+												runtimeClosureFormat:
+													'wasm-llvm-tinygo-runtime-closure-v2'
 											}
 										}
 									: {})

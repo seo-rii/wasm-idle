@@ -199,12 +199,11 @@ export const buildTinyGoCompilerWasm = async () => {
 				blockers,
 				implementationKind,
 				upstreamCompiler,
-				artifactKind:
-					upstreamCompiler
-						? 'compiler'
-						: usesWasmIdleBridge && buildMode === 'direct'
-							? 'porting-harness'
-							: 'bootstrap',
+				artifactKind: upstreamCompiler
+					? 'compiler'
+					: usesWasmIdleBridge && buildMode === 'direct'
+						? 'porting-harness'
+						: 'bootstrap',
 				outputPath,
 				wasmBytes: wasmBytes.length
 			},

@@ -7,9 +7,7 @@ const WASM_SYMBOL_EXPLICIT_NAME = 0x40;
 const WASM_SYMBOL_TLS = 0x100;
 const WASM_SEGMENT_TLS = 0x2;
 const WASM_RELOCATION_TYPES = new Set(Array.from({ length: 27 }, (_, index) => index));
-const WASM_RELOCATIONS_WITH_ADDEND = new Set([
-	3, 4, 5, 8, 9, 11, 14, 15, 16, 17, 21, 22, 23, 25
-]);
+const WASM_RELOCATIONS_WITH_ADDEND = new Set([3, 4, 5, 8, 9, 11, 14, 15, 16, 17, 21, 22, 23, 25]);
 const WASM_64_BIT_RELOCATIONS = new Set([14, 15, 16, 17, 18, 19, 22, 24, 25]);
 const WASM_TLS_RELOCATIONS = new Set([21, 25]);
 const MAX_WASM_SECTION_COUNT = 4096;
@@ -181,11 +179,7 @@ function readLimits(bytes: Uint8Array, start: number, end: number, label: string
 	return cursor;
 }
 
-function assertProtocolLimits(
-	bytes: Uint8Array,
-	sections: readonly WasmSection[],
-	label: string
-) {
+function assertProtocolLimits(bytes: Uint8Array, sections: readonly WasmSection[], label: string) {
 	let memoryCount = 0;
 	let tableCount = 0;
 	for (const section of sections) {
@@ -298,7 +292,9 @@ function inspectWasmCoreFeatures(
 				throw new Error(`${label} contains forbidden exception-handling instructions`);
 			}
 			if ([0x12, 0x13, 0x14, 0x15, 0x18, 0x19, 0x1f].includes(opcode)) {
-				throw new Error(`${label} contains forbidden tail-call, reference, or exception instructions`);
+				throw new Error(
+					`${label} contains forbidden tail-call, reference, or exception instructions`
+				);
 			}
 			if (opcode === 0x02 || opcode === 0x03 || opcode === 0x04) {
 				depth += 1;
@@ -350,7 +346,9 @@ function inspectWasmCoreFeatures(
 					cursor = readU32(bytes, cursor, end, label).next;
 					const memoryIndex = readU32(bytes, cursor, end, label);
 					if (memoryIndex.value !== 0) {
-						throw new Error(`${label} contains a nonzero bulk-memory instruction index`);
+						throw new Error(
+							`${label} contains a nonzero bulk-memory instruction index`
+						);
 					}
 					cursor = memoryIndex.next;
 				} else if (subopcode.value === 9) {
@@ -359,17 +357,23 @@ function inspectWasmCoreFeatures(
 					const destinationMemory = readU32(bytes, cursor, end, label);
 					const sourceMemory = readU32(bytes, destinationMemory.next, end, label);
 					if (destinationMemory.value !== 0 || sourceMemory.value !== 0) {
-						throw new Error(`${label} contains a nonzero bulk-memory instruction index`);
+						throw new Error(
+							`${label} contains a nonzero bulk-memory instruction index`
+						);
 					}
 					cursor = sourceMemory.next;
 				} else if (subopcode.value === 11) {
 					const memoryIndex = readU32(bytes, cursor, end, label);
 					if (memoryIndex.value !== 0) {
-						throw new Error(`${label} contains a nonzero bulk-memory instruction index`);
+						throw new Error(
+							`${label} contains a nonzero bulk-memory instruction index`
+						);
 					}
 					cursor = memoryIndex.next;
 				} else {
-					throw new Error(`${label} contains forbidden reference-type prefixed instructions`);
+					throw new Error(
+						`${label} contains forbidden reference-type prefixed instructions`
+					);
 				}
 			} else if (opcode === 0xfd) {
 				throw new Error(`${label} contains forbidden SIMD instructions`);
@@ -378,11 +382,13 @@ function inspectWasmCoreFeatures(
 			} else if (opcode === 0xfb || opcode >= 0xd0) {
 				throw new Error(`${label} contains forbidden GC or reference-type instructions`);
 			} else if (
-				!((opcode >= 0x00 && opcode <= 0x05) ||
+				!(
+					(opcode >= 0x00 && opcode <= 0x05) ||
 					opcode === 0x0f ||
 					opcode === 0x1a ||
 					opcode === 0x1b ||
-					(opcode >= 0x45 && opcode <= 0xc4))
+					(opcode >= 0x45 && opcode <= 0xc4)
+				)
 			) {
 				throw new Error(`${label} contains an instruction outside the protocol`);
 			}
@@ -397,7 +403,8 @@ function inspectWasmCoreFeatures(
 			assertVectorCount(count.value, 'type section');
 			cursor = count.next;
 			for (let index = 0; index < count.value; index += 1) {
-				if (bytes[cursor] !== 0x60) throw new Error(`${label} contains non-function core types`);
+				if (bytes[cursor] !== 0x60)
+					throw new Error(`${label} contains non-function core types`);
 				cursor += 1;
 				const parameterCount = readU32(bytes, cursor, section.payloadEnd, label);
 				assertVectorCount(parameterCount.value, 'function parameters');
@@ -407,7 +414,8 @@ function inspectWasmCoreFeatures(
 				}
 				const resultCount = readU32(bytes, cursor, section.payloadEnd, label);
 				assertVectorCount(resultCount.value, 'function results');
-				if (resultCount.value > 1) throw new Error(`${label} contains multivalue function types`);
+				if (resultCount.value > 1)
+					throw new Error(`${label} contains multivalue function types`);
 				cursor = resultCount.next;
 				for (let result = 0; result < resultCount.value; result += 1) {
 					cursor = readNumericValueType(cursor, section.payloadEnd, 'result');
@@ -486,7 +494,8 @@ function inspectWasmCoreFeatures(
 				const name = readName(bytes, cursor, section.payloadEnd, label);
 				cursor = name.next;
 				const kind = bytes[cursor];
-				if (kind === undefined || kind > 4) throw new Error(`${label} has an invalid export`);
+				if (kind === undefined || kind > 4)
+					throw new Error(`${label} has an invalid export`);
 				cursor += 1;
 				const itemIndex = readU32(bytes, cursor, section.payloadEnd, label);
 				cursor = itemIndex.next;
@@ -499,13 +508,16 @@ function inspectWasmCoreFeatures(
 			for (let index = 0; index < count.value; index += 1) {
 				const flags = readU32(bytes, cursor, section.payloadEnd, label);
 				cursor = flags.next;
-				if (flags.value > 3) throw new Error(`${label} contains reference-type element segments`);
+				if (flags.value > 3)
+					throw new Error(`${label} contains reference-type element segments`);
 				if (flags.value === 0 || flags.value === 2) {
-					if (flags.value === 2) cursor = readU32(bytes, cursor, section.payloadEnd, label).next;
+					if (flags.value === 2)
+						cursor = readU32(bytes, cursor, section.payloadEnd, label).next;
 					cursor = scanExpression(cursor, section.payloadEnd);
 				}
 				if (flags.value !== 0) {
-					if (bytes[cursor] !== 0) throw new Error(`${label} has a non-function element kind`);
+					if (bytes[cursor] !== 0)
+						throw new Error(`${label} has a non-function element kind`);
 					cursor += 1;
 				}
 				const functions = readU32(bytes, cursor, section.payloadEnd, label);
@@ -523,7 +535,8 @@ function inspectWasmCoreFeatures(
 				const bodySize = readU32(bytes, cursor, section.payloadEnd, label);
 				cursor = bodySize.next;
 				const bodyEnd = cursor + bodySize.value;
-				if (bodyEnd > section.payloadEnd) throw new Error(`${label} has a truncated function body`);
+				if (bodyEnd > section.payloadEnd)
+					throw new Error(`${label} has a truncated function body`);
 				const localGroups = readU32(bytes, cursor, bodyEnd, label);
 				assertVectorCount(localGroups.value, 'local groups');
 				cursor = localGroups.next;
@@ -533,13 +546,11 @@ function inspectWasmCoreFeatures(
 					cursor = readNumericValueType(locals.next, bodyEnd, 'local');
 				}
 				cursor = scanExpression(cursor, bodyEnd);
-				if (cursor !== bodyEnd) throw new Error(`${label} has trailing function-body bytes`);
+				if (cursor !== bodyEnd)
+					throw new Error(`${label} has trailing function-body bytes`);
 			}
 		}
-		if (
-			[1, 2, 3, 4, 6, 7, 9, 10].includes(section.id) &&
-			cursor !== section.payloadEnd
-		) {
+		if ([1, 2, 3, 4, 6, 7, 9, 10].includes(section.id) && cursor !== section.payloadEnd) {
 			throw new Error(`${label} has trailing core section metadata`);
 		}
 	}
@@ -549,12 +560,7 @@ function inspectWasmCoreFeatures(
 	return { types, importedFunctionTypes, definedFunctionTypes, exports };
 }
 
-function parseSegmentInfo(
-	bytes: Uint8Array,
-	start: number,
-	end: number,
-	label: string
-) {
+function parseSegmentInfo(bytes: Uint8Array, start: number, end: number, label: string) {
 	let cursor = start;
 	const count = readU32(bytes, cursor, end, label);
 	cursor = count.next;
@@ -838,7 +844,9 @@ function assertProtocolTargetFeatures(
 					: ALLOWED_ENABLED_TARGET_FEATURES
 				: ALLOWED_DISABLED_TARGET_FEATURES;
 		if (!allowlist.has(decoded.value)) {
-			throw new Error(`${label} contains target feature outside the protocol: ${decoded.value}`);
+			throw new Error(
+				`${label} contains target feature outside the protocol: ${decoded.value}`
+			);
 		}
 	}
 	if (cursor !== section.payloadEnd) {
@@ -875,7 +883,7 @@ export function assertTinyGoLLVMBitcodeEnvelope(bytes: Uint8Array, label: string
 			if (!Number.isSafeInteger(value)) {
 				throw new Error(`${label} contains an overflowing LLVM bitstream value`);
 			}
-			if ((chunk & 2 ** (width - 1)) === 0) return value;
+			if ((chunk & (2 ** (width - 1))) === 0) return value;
 			shift += width - 1;
 		}
 	};
@@ -988,7 +996,9 @@ export async function assertTinyGoFinalWasmModule(
 			section.customName?.startsWith('reloc.')
 	);
 	if (forbiddenCustom) {
-		throw new Error(`${label} retains relocatable-object metadata ${forbiddenCustom.customName}`);
+		throw new Error(
+			`${label} retains relocatable-object metadata ${forbiddenCustom.customName}`
+		);
 	}
 	const startExport = core.exports.find((entry) => entry.name === '_start');
 	if (!startExport || startExport.kind !== 0) {
@@ -1026,7 +1036,9 @@ export async function assertTinyGoFinalWasmModule(
 	if (unsupportedImports.length > 0) {
 		throw new Error(
 			`${label} imports outside the WASI function boundary: ${[
-				...new Set(unsupportedImports.map((entry) => `${entry.module}.${entry.name}:${entry.kind}`))
+				...new Set(
+					unsupportedImports.map((entry) => `${entry.module}.${entry.name}:${entry.kind}`)
+				)
 			].join(', ')}`
 		);
 	}

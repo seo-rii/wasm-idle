@@ -227,9 +227,7 @@ export async function decompressTinyGoRootArchive(
 		archive.buffer instanceof ArrayBuffer
 			? (archive as Uint8Array<ArrayBuffer>)
 			: Uint8Array.from(archive);
-	const body = new Blob([blobBytes])
-		.stream()
-		.pipeThrough(new DecompressionStream('gzip'));
+	const body = new Blob([blobBytes]).stream().pipeThrough(new DecompressionStream('gzip'));
 	const reader = body.getReader();
 	const chunks: Uint8Array[] = [];
 	let total = 0;

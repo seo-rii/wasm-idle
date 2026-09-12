@@ -52,8 +52,7 @@ const TINYGO_LLVM_VALIDATION = {
 	toolchain: 'llvm-20.1.1',
 	moduleVerified: true,
 	targetTriple: 'wasm32-unknown-wasi',
-	dataLayout:
-		'e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-i128:128-n32:64-S128-ni:1:10:20',
+	dataLayout: 'e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-i128:128-n32:64-S128-ni:1:10:20',
 	threadLocalGlobals: 0,
 	globalConstructors: 0,
 	globalDestructors: 0,
@@ -1386,7 +1385,12 @@ function validateTinyGoCXXFlags(flags: unknown, expected: readonly string[], lab
 		throw new Error(`${label} CXXFLAGS differ from the package graph`);
 	}
 	for (const flag of flags) {
-		if (typeof flag !== 'string' || flag.length === 0 || flag.length > 4096 || flag.includes('\0')) {
+		if (
+			typeof flag !== 'string' ||
+			flag.length === 0 ||
+			flag.length > 4096 ||
+			flag.includes('\0')
+		) {
 			throw new Error(`${label} contains invalid CXXFLAGS`);
 		}
 		for (const forbidden of [
@@ -1449,13 +1453,15 @@ function validateTinyGoCGoLinkerFlags(
 	root: TinyGoWasiDirectoryContents,
 	workspace: TinyGoWasiDirectoryContents
 ) {
-	if (!Array.isArray(value) || value.length > 256 || value.some((flag) => typeof flag !== 'string')) {
+	if (
+		!Array.isArray(value) ||
+		value.length > 256 ||
+		value.some((flag) => typeof flag !== 'string')
+	) {
 		throw new Error('TinyGo CGo linker flags must be a bounded string array');
 	}
 	const flags = value as string[];
-	if (
-		[...flags].sort().join('\0') !== [...expected].sort().join('\0')
-	) {
+	if ([...flags].sort().join('\0') !== [...expected].sort().join('\0')) {
 		throw new Error('TinyGo CGo linker flags differ from the package graph');
 	}
 	for (let index = 0; index < flags.length; index += 1) {
@@ -1475,18 +1481,29 @@ function validateTinyGoCGoLinkerFlags(
 		}
 		if (flag.startsWith('-l') && tinyGoLinkerLibraryName(flag.slice(2))) continue;
 		if (
-			['--start-group', '--end-group', '--whole-archive', '--no-whole-archive', '-Bstatic', '-Bdynamic', '-static'].includes(flag)
+			[
+				'--start-group',
+				'--end-group',
+				'--whole-archive',
+				'--no-whole-archive',
+				'-Bstatic',
+				'-Bdynamic',
+				'-static'
+			].includes(flag)
 		) {
 			continue;
 		}
 		if (
 			(flag.endsWith('.a') || flag.endsWith('.o')) &&
-			(flag.startsWith(`${TINYGO_ROOT_PATH}/`) || flag.startsWith(`${TINYGO_WORKSPACE_PATH}/`))
+			(flag.startsWith(`${TINYGO_ROOT_PATH}/`) ||
+				flag.startsWith(`${TINYGO_WORKSPACE_PATH}/`))
 		) {
 			validateTinyGoLinkerPath(flag, false, root, workspace);
 			continue;
 		}
-		throw new Error(`TinyGo CGo linker flag ${JSON.stringify(flag)} is outside the browser library-link policy`);
+		throw new Error(
+			`TinyGo CGo linker flag ${JSON.stringify(flag)} is outside the browser library-link policy`
+		);
 	}
 	return flags;
 }
@@ -1520,10 +1537,10 @@ async function validateTinyGoLinkPlanV4ToV6(
 				]
 			: protocolVersion === 5
 				? [
-					'go-embed-objects',
-					'target-cgo-c',
-					'target-cxx-hosted-noeh',
-					'target-clang-assembly'
+						'go-embed-objects',
+						'target-cgo-c',
+						'target-cxx-hosted-noeh',
+						'target-clang-assembly'
 					]
 				: [
 						'go-embed-objects',
@@ -1541,7 +1558,9 @@ async function validateTinyGoLinkPlanV4ToV6(
 		plan.linker !== 'wasm-ld' ||
 		plan.output !== 'program.unoptimized.wasm'
 	) {
-		throw new Error(`TinyGo link plan identity differs from compile protocol v${protocolVersion}`);
+		throw new Error(
+			`TinyGo link plan identity differs from compile protocol v${protocolVersion}`
+		);
 	}
 	if (
 		!Array.isArray(plan.compilerPackages) ||
@@ -1696,7 +1715,9 @@ async function validateTinyGoLinkPlanV4ToV6(
 				evidence.forbiddenAbiSymbols.length !== 0 ||
 				object.wasmValidation !== undefined
 			) {
-				throw new Error(`TinyGo native object ${index} lacks exact LLVM validation evidence`);
+				throw new Error(
+					`TinyGo native object ${index} lacks exact LLVM validation evidence`
+				);
 			}
 		} else {
 			const evidence = object.wasmValidation;
@@ -1709,13 +1730,17 @@ async function validateTinyGoLinkPlanV4ToV6(
 				evidence.symbolTable !== TINYGO_WASM_OBJECT_VALIDATION.symbolTable ||
 				object.llvmValidation !== undefined
 			) {
-				throw new Error(`TinyGo native object ${index} lacks exact Wasm validation evidence`);
+				throw new Error(
+					`TinyGo native object ${index} lacks exact Wasm validation evidence`
+				);
 			}
 		}
 		if (protocolVersion === 6 && expectedKind === 'target-cxx') {
 			validateTinyGoCXXFlags(
 				object.compilerFlags,
-				options.expectedCXXFlags?.get(`${expectedNative.importPath}\0${expectedNative.sourcePath}`) ?? [],
+				options.expectedCXXFlags?.get(
+					`${expectedNative.importPath}\0${expectedNative.sourcePath}`
+				) ?? [],
 				`TinyGo native object ${index}`
 			);
 		} else if (object.compilerFlags !== undefined) {
@@ -1775,7 +1800,9 @@ async function validateTinyGoLinkPlanV4ToV6(
 				)
 			: [];
 	if (protocolVersion !== 6 && 'cgoLinkerFlags' in plan) {
-		throw new Error(`TinyGo link plan has unexpected CGo linker flags in protocol v${protocolVersion}`);
+		throw new Error(
+			`TinyGo link plan has unexpected CGo linker flags in protocol v${protocolVersion}`
+		);
 	}
 	const expectedArguments = [
 		'--stack-first',
@@ -1804,7 +1831,9 @@ async function validateTinyGoLinkPlanV4ToV6(
 		plan.arguments.length !== expectedArguments.length ||
 		expectedArguments.some((argument, index) => plan.arguments?.[index] !== argument)
 	) {
-		throw new Error(`TinyGo link plan arguments differ from compile protocol v${protocolVersion}`);
+		throw new Error(
+			`TinyGo link plan arguments differ from compile protocol v${protocolVersion}`
+		);
 	}
 	if (
 		plan.arguments.some((argument) => /(?:^|[=,])--thinlto-cache-dir(?:$|[=,])/u.test(argument))
@@ -2024,10 +2053,9 @@ export async function compileUpstreamTinyGo(
 				bytes: sourceBytes.byteLength,
 				sha256: await sha256TinyGoBytes(sourceBytes)
 			});
-			expectedCXXFlags.set(
-				`${importPath}\0${sourcePath}`,
-				[...((pkg.CgoCXXFLAGS ?? []) as string[])]
-			);
+			expectedCXXFlags.set(`${importPath}\0${sourcePath}`, [
+				...((pkg.CgoCXXFLAGS ?? []) as string[])
+			]);
 		}
 		if (!inRoot) {
 			for (const sourcePath of (pkg.SFiles ?? []) as string[]) {

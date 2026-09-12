@@ -220,7 +220,7 @@ def fibonacci(n):
 tokens = input().split()
 n = int(tokens[0]) if tokens else 4
 print(f"fibonacci={fibonacci(n) + BONUS}")`,
-java: `import java.util.HashMap;
+	java: `import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 
@@ -249,7 +249,7 @@ public class Main {
         System.out.println("fibonacci=" + (fibonacci(n) + bonus));
     }
 }`,
-go: String.raw`package main
+	go: String.raw`package main
 
 import (
     "bufio"
@@ -282,7 +282,7 @@ func main() {
     }
     fmt.Printf("fibonacci=%d\n", fibonacci(n)+bonus)
 }`,
-d: `import std.stdio;
+	d: `import std.stdio;
 import std.conv;
 import std.string;
 
@@ -310,7 +310,7 @@ void main() {
     }
     writeln("fibonacci=", fibonacci(n) + bonus);
 }`,
-csharp: `using System;
+	csharp: `using System;
 using System.Collections.Generic;
 
 const int Bonus = 3;
@@ -337,7 +337,7 @@ var n = int.TryParse(input, out var stdinValue)
         : 4;
 
 Console.WriteLine($"fibonacci={Fibonacci(n) + Bonus}");`,
-fsharp: `let bonus = 3
+	fsharp: `let bonus = 3
 
 let memo = System.Collections.Generic.Dictionary<int, int>()
 
@@ -366,7 +366,7 @@ let n =
         | false, _ -> 4
 
 printfn "fibonacci=%d" (fibonacci n + bonus)`,
-vbnet: `Imports System
+	vbnet: `Imports System
 Imports System.Collections.Generic
 
 Module Program
@@ -403,7 +403,7 @@ Module Program
         Console.WriteLine("fibonacci={0}", Fibonacci(n) + Bonus)
     End Sub
 End Module`,
-elixir: `defmodule Demo do
+	elixir: `defmodule Demo do
   @bonus 3
 
   def run do
@@ -437,7 +437,7 @@ elixir: `defmodule Demo do
 end
 
 Demo.run()`,
-erlang: `ensure_fibonacci_cache() ->
+	erlang: `ensure_fibonacci_cache() ->
     case ets:info(fibonacci_cache) of
         undefined ->
             ets:new(fibonacci_cache, [named_table, public, set]),
@@ -517,7 +517,7 @@ pub fn main() {
   }
   io.println("fibonacci=" <> int.to_string(fibonacci(n) + bonus))
 }`,
-perl: `use strict;
+	perl: `use strict;
 use warnings;
 
 use constant BONUS => 3;
@@ -536,7 +536,7 @@ my $line = <STDIN>;
 chomp($line //= "");
 my $n = $line =~ /^-?\\d+$/ ? int($line) : 4;
 print "fibonacci=", fibonacci($n) + BONUS, "\\n";`,
-tcl: `set bonus 3
+	tcl: `set bonus 3
 array set memo {0 1 1 1}
 
 proc fibonacci {n} {
@@ -558,7 +558,7 @@ if {[gets stdin line] >= 0 && [string is integer -strict [string trim $line]]} {
 }
 
 puts "fibonacci=[expr {[fibonacci $n] + $bonus}]"`,
-awk: `BEGIN {
+	awk: `BEGIN {
     bonus = 3
     memo[0] = 1
     memo[1] = 1
@@ -581,7 +581,7 @@ function fibonacci(n) {
 	        print "fibonacci=" (fibonacci(4) + bonus)
 	    }
 	}`,
-pascal: `program Main;
+	pascal: `program Main;
 
 const
   Bonus = 3;
@@ -648,7 +648,7 @@ end.`,
 ;
 
 RUN`,
-j: `input =: 1!:1 [ 1
+	j: `input =: 1!:1 [ 1
 n =: ". input
 fib =: 3 : 0
   if. y < 2 do.
@@ -671,7 +671,7 @@ bonus + fibonacci n`,
 
 (def n (scan-number (string/trim (getline))))
 (print "fibonacci=" (+ bonus (fibonacci n)))`,
-julia: `const bonus = 3
+	julia: `const bonus = 3
 
 memo = Dict(0 => 1, 1 => 1)
 
@@ -696,7 +696,7 @@ if n === nothing
 end
 
 println("fibonacci=", fibonacci(n) + bonus)`,
-nim: `import tables
+	nim: `import tables
 import strutils
 
 const bonus = 3
@@ -722,7 +722,7 @@ let n =
     4
 
 echo "fibonacci=", fibonacci(n) + bonus`,
-bash: `bonus=3
+	bash: `bonus=3
 declare -A memo=( [0]=1 [1]=1 )
 
 fibonacci() {
@@ -743,7 +743,7 @@ fibonacci() {
 IFS= read -r input || input=''
 n="\${input:-\${1:-4}}"
 printf 'fibonacci=%d\\n' "$(( $(fibonacci "$n") + bonus ))"`,
-clojurescript: `(ns wasm-idle.main
+	clojurescript: `(ns wasm-idle.main
   (:require [wasm-idle.runtime :as runtime]))
 
 (def bonus 3)
@@ -763,7 +763,7 @@ clojurescript: `(ns wasm-idle.main
       parsed (js/parseInt (or line arg "4") 10)
       n (if (js/isNaN parsed) 4 parsed)]
   (println (str "fibonacci=" (+ (fibonacci n) bonus))))`,
-ocaml: `let bonus = 3
+	ocaml: `let bonus = 3
 
 let memo = Hashtbl.create 16
 
@@ -825,7 +825,7 @@ const input: string = (fs as any).readLineSync(0).trim();
 const parsed = Number.parseInt(input || '4', 10);
 const n = Number.isNaN(parsed) ? 4 : parsed;
 console.log(\`fibonacci=\${fibonacci(n) + bonus}\`);`,
-assemblyscript: `const bonus: i32 = 3;
+	assemblyscript: `const bonus: i32 = 3;
 const memo = new Int32Array(64);
 memo[0] = 1;
 memo[1] = 1;
@@ -873,7 +873,7 @@ export function fibonacci(): i32 {
   )
 )`,
 	wasm: `AGFzbQEAAAABBQFgAAF/AwIBAAcKAQZhbnN3ZXIAAAoGAQQAQSoL`,
-lua: `local bonus = 3
+	lua: `local bonus = 3
 
 local memo = { [0] = 1, [1] = 1 }
 
@@ -909,7 +909,7 @@ pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
     try stdout.print("fibonacci={d}\\n", .{fibonacci(n) + bonus});
 }`,
-lisp: `(define bonus 3)
+	lisp: `(define bonus 3)
 (define memo (make-hash-table))
 (setf (gethash 0 memo) 1)
 (setf (gethash 1 memo) 1)
@@ -930,7 +930,7 @@ lisp: `(define bonus 3)
 (display "fibonacci=")
 (display (+ (fibonacci (read-int-or-4)) bonus))
 (newline)`,
-ruby: `BONUS = 3
+	ruby: `BONUS = 3
 
 $cache = { 0 => 1, 1 => 1 }
 
@@ -943,7 +943,7 @@ end
 input = STDIN.gets&.strip
 n = Integer(input || ARGV[0] || 4, exception: false) || 4
 puts "fibonacci=#{fibonacci(n) + BONUS}"`,
-haskell: `import Text.Read (readMaybe)
+	haskell: `import Text.Read (readMaybe)
 
 bonus :: Int
 bonus = 3
@@ -986,7 +986,7 @@ n <- suppressWarnings(as.integer(if (length(line)) trimws(line[[1]]) else ""))
 if (is.na(n)) n <- 4
 
 cat(sprintf("fibonacci=%d\\n", fibonacci(n) + bonus))`,
-octave: `bonus = 3;
+	octave: `bonus = 3;
 
 global memo;
 memo = [1, 1];
@@ -1011,7 +1011,7 @@ if (isnan(n))
 endif
 
 	printf("fibonacci=%d\\n", fibonacci(n) + bonus);`,
-lfortran: `program main
+	lfortran: `program main
   implicit none
   integer :: count
   integer, allocatable :: values(:)
@@ -1022,7 +1022,7 @@ lfortran: `program main
   read(*,*) values
   print '(A,I0)', 'sum=', sum(values)
 end program main`,
-fortran: `      PROGRAM MAIN
+	fortran: `      PROGRAM MAIN
       INTEGER BONUS, N, RESULT
       INTEGER IO_STAT
       INTEGER MEMO(0:63)
@@ -1094,7 +1094,7 @@ stop run.`,
 query Fibonacci($n: Int = 4) {
   fibonacci(n: $n)
 }`,
-duckdb: `WITH RECURSIVE memo(n, prev, curr) AS (
+	duckdb: `WITH RECURSIVE memo(n, prev, curr) AS (
     SELECT 0, 1, 1
     UNION ALL
     SELECT n + 1, curr, prev + curr
@@ -1105,7 +1105,7 @@ SELECT 'fibonacci=' || CAST(curr + 3 AS VARCHAR) AS result
 FROM memo
 WHERE n = 4
 LIMIT 1;`,
-sqlite: `WITH RECURSIVE memo(n, prev, curr) AS (
+	sqlite: `WITH RECURSIVE memo(n, prev, curr) AS (
     SELECT 0, 1, 1
     UNION ALL
     SELECT n + 1, curr, prev + curr
@@ -1116,7 +1116,7 @@ SELECT 'fibonacci=' || CAST(curr + 3 AS TEXT) AS result
 FROM memo
 WHERE n = 4
 LIMIT 1;`,
-php: `<?php
+	php: `<?php
 const BONUS = 3;
 $memo = [
     0 => 1,

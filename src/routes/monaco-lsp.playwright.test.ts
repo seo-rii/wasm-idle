@@ -1059,8 +1059,10 @@ async function checkClangLanguageSwitches(page: Page) {
 		// diagnostics, which clangd need not publish again for the new version.
 		await replaceEditorSource(page, testCase.source);
 		await waitForClangdDiagnosticsForCurrentVersion(page);
-		expect((await readDiagnosticCounts(page)).markers, `${language} after introducing an error`)
-			.toBeGreaterThan(0);
+		expect(
+			(await readDiagnosticCounts(page)).markers,
+			`${language} after introducing an error`
+		).toBeGreaterThan(0);
 		await replaceEditorSource(page, testCase.validSource!);
 		await waitForClangdDiagnosticsForCurrentVersion(page);
 		expect((await readDiagnosticCounts(page)).markers, `${language} after switching`).toBe(0);

@@ -15,7 +15,9 @@ export async function copyUpstreamAssetsToDist({
 	const sourceManifestPath = path.join(sourceDir, 'upstream-toolchain.v2.json');
 	const sourceManifest = await stat(sourceManifestPath).catch(() => null);
 	if (!sourceManifest?.isFile()) {
-		throw new Error(`prepared upstream toolchain manifest was not found at ${sourceManifestPath}`);
+		throw new Error(
+			`prepared upstream toolchain manifest was not found at ${sourceManifestPath}`
+		);
 	}
 	const existingTarget = await stat(targetDir).catch(() => null);
 	if (existingTarget) {

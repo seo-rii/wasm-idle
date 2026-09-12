@@ -259,9 +259,7 @@ export interface DebugAdapter {
 	dataBreakpointInfo(
 		arguments_: DebugDataBreakpointInfoArguments
 	): Promise<DebugDataBreakpointInfo>;
-	setDataBreakpoints(
-		breakpoints: DebugDataBreakpoint[]
-	): Promise<ResolvedDataBreakpoint[]>;
+	setDataBreakpoints(breakpoints: DebugDataBreakpoint[]): Promise<ResolvedDataBreakpoint[]>;
 	evaluate(expression: string, frameId?: number): Promise<DebugEvaluateResult>;
 
 	onEvent(listener: (event: DebugAdapterEvent) => void): () => void;
