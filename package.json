@@ -131,6 +131,8 @@
 		"package": "pnpm run build:publish-deps && pnpm run package:root",
 		"prepack": "pnpm run package",
 		"verify:package": "node scripts/verify-package.mjs",
+		"release:npm": "node scripts/release-npm.mjs",
+		"test:release:npm": "node --test scripts/release-npm.test.mjs",
 		"test": "pnpm run build:publish-deps && vitest run",
 		"test:lsp:browser:smoke": "WASM_IDLE_RUN_REAL_BROWSER_LSP=1 WASM_IDLE_LSP_BROWSER_LANGUAGES=C,CPP,OBJC pnpm exec vitest run src/routes/monaco-lsp.playwright.test.ts",
 		"test:lsp:browser:gleam:csp": "WASM_IDLE_STRICT_CSP=1 WASM_IDLE_RUN_REAL_BROWSER_LSP=1 WASM_IDLE_LSP_BROWSER_LANGUAGES=GLEAM pnpm exec vitest run src/routes/monaco-lsp.playwright.test.ts",

@@ -125,19 +125,20 @@ describe('LLVM runtime package scripts', () => {
 
 	it('keeps the debugger package code-only with explicit host peers', async () => {
 		const debug = await readPackageManifest('packages/debug');
+		const core = await readPackageManifest('packages/core');
 
 		expect(debug.name).toBe('@wasm-idle/debug');
 		expect(debug.dependencies?.['@wasm-idle/core']).toBe('workspace:*');
-		expect(debug.peerDependencies?.['@wasm-idle/core']).toBe('1.0.0');
+		expect(debug.peerDependencies?.['@wasm-idle/core']).toBe(core.version);
 		expect(debug.peerDependencies?.svelte).toBe('^5.0.0');
 		expect(debug.peerDependencies?.['monaco-editor']).toBe('^0.55.0');
 		expect(debug.peerDependenciesMeta?.['monaco-editor']?.optional).toBe(true);
 		expect(debug.dependencies?.['monaco-editor']).toBeUndefined();
 	});
 
-	it('keeps all public packages aligned for the stable v1 release', async () => {
-		const releaseVersion = '1.0.0';
+	it('keeps all public package versions aligned', async () => {
 		const root = await readRootPackage();
+		const releaseVersion = root.version;
 		const packagePaths = [
 			'packages/core',
 			'packages/debug',
