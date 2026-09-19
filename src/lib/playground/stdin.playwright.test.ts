@@ -133,6 +133,14 @@ int main() {
     return 0;
 }`;
 
+const cppUnicodeStdinSource = `#include<bits/stdc++.h>
+using namespace std;
+int main() {
+    string s;
+    cin>>s;
+    cout<<s;
+}`;
+
 const objectiveCStdinSource = `#include <stdio.h>
 #include <objc/runtime.h>
 #include "Reader.h"
@@ -356,8 +364,27 @@ const sharedStdinBrowserCases = [
 	}
 ] as const;
 const clangStdinBrowserCases = [
-	{ language: 'C', source: cStdinSource },
-	{ language: 'CPP', source: cppStdinSource }
+	{
+		name: 'C',
+		language: 'C',
+		source: cStdinSource,
+		stdinText: '68\n',
+		expectedOutput: 'main=73'
+	},
+	{
+		name: 'CPP',
+		language: 'CPP',
+		source: cppStdinSource,
+		stdinText: '68\n',
+		expectedOutput: 'main=73'
+	},
+	{
+		name: 'CPP Unicode',
+		language: 'CPP',
+		source: cppUnicodeStdinSource,
+		stdinText: '안녕\n',
+		expectedOutput: '안녕'
+	}
 ] as const;
 
 let previewBuildReady: Promise<void> | null = null;
@@ -520,7 +547,7 @@ describe('wasm-idle browser stdin connection', () => {
 	);
 
 	it.each(clangStdinBrowserCases)(
-		'passes $language stdin through the browser wasm-clang runtime path',
+		'passes $name stdin through the browser wasm-clang runtime path',
 		{
 			skip:
 				!runAllStdinBrowserCases &&
@@ -534,20 +561,20 @@ describe('wasm-idle browser stdin connection', () => {
 			},
 			timeout: browserStdinTestTimeoutMs
 		},
-		async ({ language, source }) => {
+		async ({ expectedOutput, language, source, stdinText }) => {
 			expect.hasAssertions();
 
 			await withBrowserPreview(async (browserUrl) => {
 				const summary = await runStdinBrowserProbe({
 					browserUrl,
-					expectedOutput: 'main=73',
+					expectedOutput,
 					language,
 					requireSharedArrayBuffer: false,
 					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
 					source,
-					stdinText: '68\n'
+					stdinText
 				});
-				expect(summary.transcript).toContain('main=73');
+				expect(summary.transcript).toContain(expectedOutput);
 			});
 		}
 	);

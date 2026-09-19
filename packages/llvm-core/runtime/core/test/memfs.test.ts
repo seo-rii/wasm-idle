@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import MemFS from '../src/memfs.js';
+import Memory from '../src/memory.js';
 import { compile } from '../src/wasm.js';
 
 vi.mock('../src/wasm.js', () => ({
@@ -97,6 +98,44 @@ describe('MemFS', () => {
 			undefined,
 			4096
 		);
+		instantiate.mockRestore();
+	});
+
+	it('writes UTF-8 stdin bytes across bounded guest buffers', async () => {
+		const module = {} as WebAssembly.Module;
+		vi.mocked(compile).mockResolvedValue(module);
+		const instantiate = vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({
+			exports: {
+				init: vi.fn(),
+				memory: new WebAssembly.Memory({ initial: 1 })
+			}
+		} as WebAssembly.Instance);
+		const memfs = new MemFS({
+			moduleUrl: 'https://example.test/memfs.zip',
+			stdin: () => '',
+			stdinStr: '안녕\n',
+			stdout: vi.fn()
+		});
+		await memfs.ready;
+
+		const wasmMemory = new WebAssembly.Memory({ initial: 1 });
+		const memory = new Memory(wasmMemory);
+		memfs.hostMem = memory;
+		const iov = 0;
+		const nread = 16;
+		const buffer = 32;
+		memory.write32(iov, buffer);
+		memory.write32(iov + 4, 4);
+
+		const received: number[] = [];
+		for (let read = 0; read < 2; read += 1) {
+			memfs.host_read(0, iov, 1, nread);
+			const length = memory.read32(nread);
+			received.push(...new Uint8Array(wasmMemory.buffer, buffer, length));
+		}
+
+		expect(new TextDecoder().decode(Uint8Array.from(received))).toBe('안녕\n');
+		expect(received).toEqual(Array.from(new TextEncoder().encode('안녕\n')));
 		instantiate.mockRestore();
 	});
 

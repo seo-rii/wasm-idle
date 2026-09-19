@@ -4,6 +4,8 @@ import Memory from './memory.js';
 import { compile, type ProgressSink } from './wasm.js';
 
 const ESUCCESS = 0;
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 
 export interface MemFsOptions {
 	stdin: () => string;
@@ -24,6 +26,7 @@ export default class MemFS {
 	mem: Memory = <any>null;
 	hostMem_: Memory = <any>null;
 	stdinStr: string;
+	private stdinBytes = new Uint8Array(0);
 	stdin: () => string;
 	stdout: (str: string) => void;
 	trace: (message: string) => void;
@@ -82,6 +85,7 @@ export default class MemFS {
 
 	setStdinStr(str: string) {
 		this.stdinStr = str;
+		this.stdinBytes = new Uint8Array(0);
 	}
 
 	addDirectory(path: string) {
@@ -162,14 +166,20 @@ export default class MemFS {
 			iovs += 4;
 			const len = this.hostMem_.read32(iovs);
 			iovs += 4;
-			if (!this.stdinStr.length) this.stdinStr = this.stdin();
-			const lenToWrite = Math.min(len, this.stdinStr.length);
+			if (!this.stdinBytes.length) {
+				const input = this.stdinStr.length ? this.stdinStr : this.stdin();
+				this.stdinStr = '';
+				this.stdinBytes = textEncoder.encode(input);
+			}
+			const lenToWrite = Math.min(len, this.stdinBytes.length);
 			if (lenToWrite === 0) break;
-			const chunk = this.stdinStr.substring(0, lenToWrite);
-			this.hostMem_.write(buf, this.stdinStr.substring(0, lenToWrite));
-			this.stdinStr = this.stdinStr.substring(lenToWrite);
+			const chunk = this.stdinBytes.subarray(0, lenToWrite);
+			this.hostMem_.write(buf, chunk);
+			this.stdinBytes = this.stdinBytes.slice(lenToWrite);
 			size += lenToWrite;
-			this.trace(`host_read(fd=${fd}, bytes=${lenToWrite}, data=${previewText(chunk)})`);
+			this.trace(
+				`host_read(fd=${fd}, bytes=${lenToWrite}, data=${previewText(textDecoder.decode(chunk))})`
+			);
 			if (lenToWrite !== len) break;
 		}
 		this.hostMem_.write32(nread, size);
