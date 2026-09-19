@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/vue",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Vue composables for wasm-idle core",
 	"license": "MIT",
 	"type": "module",
@@ -19,7 +19,7 @@
 		"tag": "latest"
 	},
 	"peerDependencies": {
-		"@wasm-idle/core": "1.0.0",
+		"@wasm-idle/core": "1.0.1",
 		"vue": ">=3.4"
 	},
 	"dependencies": {

@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/llvm-core",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Browser LLVM runtime hosts for wasm-idle",
 	"license": "MIT AND (Apache-2.0 WITH LLVM-exception)",
 	"type": "module",

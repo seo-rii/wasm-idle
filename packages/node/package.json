@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/node",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Node.js host helpers for wasm-idle core",
 	"license": "MIT",
 	"type": "module",
@@ -19,7 +19,7 @@
 		"tag": "latest"
 	},
 	"peerDependencies": {
-		"@wasm-idle/core": "1.0.0"
+		"@wasm-idle/core": "1.0.1"
 	},
 	"dependencies": {
 		"@wasm-idle/core": "workspace:*"

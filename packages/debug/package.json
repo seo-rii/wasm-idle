@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/debug",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Optional debugger UI and controller utilities for wasm-idle",
 	"license": "MIT",
 	"type": "module",
@@ -40,7 +40,7 @@
 		"tag": "latest"
 	},
 	"peerDependencies": {
-		"@wasm-idle/core": "1.0.0",
+		"@wasm-idle/core": "1.0.1",
 		"monaco-editor": "^0.55.0",
 		"svelte": "^5.0.0"
 	},

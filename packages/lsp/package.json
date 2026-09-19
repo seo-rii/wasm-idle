@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/lsp",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Framework-neutral browser LSP hosts for wasm-idle language tools",
 	"license": "MIT",
 	"type": "module",
