@@ -1,51 +1,26 @@
-name: Verify followup integration against current main
+name: Verify PHP startup in real browser workers
 on:
   push:
     branches: [chore/runtime-followup-20260927]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  integrate:
+  php:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: ruby
-            ref: 3abecc50d260ceadd00e9626323b5cca5b7b93a1
-          - name: rust
-            ref: 7ec45071160435a6ae3675bc3cbcf73c8c138e52
-          - name: dotnet
-            ref: e93b20126ba87ea8de2ee8ee51231b88bac8e69f
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
           sparse-checkout: .github/runtime-followup
-      - name: Inspect merge without publishing or dropping changes
-        shell: bash
-        env:
-          REF: ${{ matrix.ref }}
-        run: |
-          set -euo pipefail
-          git fetch --depth=150 origin "$REF" 1b963d396b6587391a48688a577dd0ffa883727c
-          git worktree add --detach /tmp/integrated "$REF"
-          cd /tmp/integrated
-          git sparse-checkout set src packages scripts runtimes/wasm-rust runtimes/wasm-dotnet
-          git config user.name 'runtime review'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          set +e
-          git merge --no-commit --no-ff 1b963d396b6587391a48688a577dd0ffa883727c 2>&1 | tee /tmp/merge.log
-          set -e
-          git diff --name-only --diff-filter=U >> /tmp/merge.log
-          git diff --cc >> /tmp/merge.log
-          mkdir -p /tmp/conflicts
-          git diff --name-only --diff-filter=U | while read -r path; do mkdir -p "/tmp/conflicts/$(dirname "$path")"; cp "$path" "/tmp/conflicts/$path"; done
-          cp /tmp/merge.log /tmp/conflicts/
-          tar -C /tmp/conflicts -czf /tmp/merge-review.tar.gz .
-      - uses: actions/upload-artifact@v4
+      - uses: actions/setup-node@v4
         with:
-          name: merge-${{ matrix.name }}-review
-          path: /tmp/merge-review.tar.gz
+          node-version: '24'
+      - name: Build pinned runtime, exercise both engines, and publish
+        shell: bash
+        run: bash .github/runtime-followup/publish-php.sh 2>&1 | tee /tmp/php-validation.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: php-browser-validation
+          path: /tmp/php-validation.log
           retention-days: 1
