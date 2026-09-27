@@ -79,24 +79,32 @@ self.addEventListener('message', async (event) => {
 			configureWorkerRuntimeAssets(runtimeAssets || null);
 			const baseUrl = runtimeAssets?.baseUrl || '';
 			if (!compiler || loadedBaseUrl !== baseUrl) {
-				loadedBaseUrl = baseUrl;
-				const runtimeSource = decoder.decode(
-					(await loadWorkerRuntimeAsset('compiler.wasm-runtime.js')).bytes
-				);
-				const runtimeUrl = URL.createObjectURL(
-					new Blob([runtimeSource], { type: 'text/javascript;charset=utf-8' })
-				);
-				const runtimeModule = await import(/* @vite-ignore */ runtimeUrl);
-				URL.revokeObjectURL(runtimeUrl);
-				const runtimeLoadFn = runtimeModule.load as NonNullable<typeof runtimeLoad>;
-				runtimeLoad = runtimeLoadFn;
-				const compilerWasm = (await loadWorkerRuntimeAsset('compiler.wasm')).bytes;
-				const compilerModule = await runtimeLoadFn(compilerWasm, {
-					stackDeobfuscator: { enabled: false }
-				});
-				compilerLib = compilerModule.exports;
-				compiler = compilerLib.createCompiler();
-				const [sdk, runtimeClasslib] = await Promise.all([
+				// Observe every branch immediately: failed assets must not leave an
+				// unhandled rejection while another branch is still initializing Wasm.
+				const [nextRuntime, sdk, runtimeClasslib] = await Promise.all([
+					(async () => {
+						const [runtimeModule, compilerAsset] = await Promise.all([
+							(async () => {
+								const runtimeSource = decoder.decode(
+									(await loadWorkerRuntimeAsset('compiler.wasm-runtime.js')).bytes
+								);
+								const runtimeUrl = URL.createObjectURL(
+									new Blob([runtimeSource], { type: 'text/javascript;charset=utf-8' })
+								);
+								try {
+									return await import(/* @vite-ignore */ runtimeUrl);
+								} finally {
+									URL.revokeObjectURL(runtimeUrl);
+								}
+							})(),
+							loadWorkerRuntimeAsset('compiler.wasm')
+						]);
+						const load = runtimeModule.load as NonNullable<typeof runtimeLoad>;
+						const module = await load(compilerAsset.bytes, {
+							stackDeobfuscator: { enabled: false }
+						});
+						return { load, lib: module.exports, compiler: module.exports.createCompiler() };
+					})(),
 					loadWorkerRuntimeAsset('compile-classlib-teavm.bin').then(({ bytes }) =>
 						toInt8Array(bytes)
 					),
@@ -104,8 +112,14 @@ self.addEventListener('message', async (event) => {
 						toInt8Array(bytes)
 					)
 				]);
-				compiler.setSdk(sdk);
-				compiler.setTeaVMClasslib(runtimeClasslib);
+				// Publish only a fully initialized compiler; a failed first attempt
+				// must retry instead of acknowledging a partially initialized runtime.
+				nextRuntime.compiler.setSdk(sdk);
+				nextRuntime.compiler.setTeaVMClasslib(runtimeClasslib);
+				compilerLib = nextRuntime.lib;
+				compiler = nextRuntime.compiler;
+				runtimeLoad = nextRuntime.load;
+				loadedBaseUrl = baseUrl;
 				compiledCode = '';
 				compiledStdin = '';
 				compiledMainClass = '';
