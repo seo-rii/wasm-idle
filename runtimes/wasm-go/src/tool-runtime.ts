@@ -85,28 +85,41 @@ export async function executeGoToolInvocation(
 	throwIfAborted(options.signal);
 	const maxWasmMemoryBytes = options.maxWasmMemoryBytes ?? DEFAULT_MAX_WASM_MEMORY_BYTES;
 	const inputFiles = collectInputFiles(invocation, plan);
+	const startupController = new AbortController();
+	const relayAbort = () => startupController.abort(options.signal?.reason);
+	options.signal?.addEventListener('abort', relayAbort, { once: true });
+	const startupOptions = { ...options, signal: startupController.signal };
 	// Tool compilation does not need the sysroot. Observe both branches immediately
 	// so either failure is reported even while its peer is still pending.
-	const [sysrootFiles, module] = await Promise.all([
-		loadSysrootFiles(plan, runtimeBaseUrl, fetchImpl, reportAssetProgress, options),
-		(async () => {
-			const toolBytes = await fetchRuntimeAssetBytes(
-				resolveVersionedAssetUrl(runtimeBaseUrl, invocation.toolAsset),
-				`${invocation.tool}.wasm`,
-				fetchImpl,
-				true,
-				(loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total),
-				options
-			);
-			throwIfAborted(options.signal);
-			return await compileGoToolModule(
-				toolBytes,
-				maxWasmMemoryBytes,
-				`${invocation.tool}.wasm`,
-				options.signal
-			);
-		})()
-	]);
+	let sysrootFiles: Awaited<ReturnType<typeof loadSysrootFiles>>;
+	let module: WebAssembly.Module;
+	try {
+		[sysrootFiles, module] = await Promise.all([
+			loadSysrootFiles(plan, runtimeBaseUrl, fetchImpl, reportAssetProgress, startupOptions),
+			(async () => {
+				const toolBytes = await fetchRuntimeAssetBytes(
+					resolveVersionedAssetUrl(runtimeBaseUrl, invocation.toolAsset),
+					`${invocation.tool}.wasm`,
+					fetchImpl,
+					true,
+					(loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total),
+					startupOptions
+				);
+				throwIfAborted(startupController.signal);
+				return await compileGoToolModule(
+					toolBytes,
+					maxWasmMemoryBytes,
+					`${invocation.tool}.wasm`,
+					startupController.signal
+				);
+			})()
+		]);
+	} catch (error) {
+		startupController.abort(error);
+		throw error;
+	} finally {
+		options.signal?.removeEventListener('abort', relayAbort);
+	}
 	throwIfAborted(options.signal);
 	const root = new Directory(new Map());
 	ensureGuestDirectory(root, '/tmp');
