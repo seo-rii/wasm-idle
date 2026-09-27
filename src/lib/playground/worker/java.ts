@@ -29,6 +29,7 @@ let compiledCode = '';
 let compiledStdin = '';
 let compiledMainClass = '';
 let compiledWasm: Uint8Array | null = null;
+let compiledDiagnostics: object[] = [];
 let compiledActivePath = '';
 let compiledWorkspaceFiles: Array<{ path: string; content: string }> = [];
 let currentSourcePaths = new Set<string>();
@@ -79,24 +80,32 @@ self.addEventListener('message', async (event) => {
 			configureWorkerRuntimeAssets(runtimeAssets || null);
 			const baseUrl = runtimeAssets?.baseUrl || '';
 			if (!compiler || loadedBaseUrl !== baseUrl) {
-				loadedBaseUrl = baseUrl;
-				const runtimeSource = decoder.decode(
-					(await loadWorkerRuntimeAsset('compiler.wasm-runtime.js')).bytes
-				);
-				const runtimeUrl = URL.createObjectURL(
-					new Blob([runtimeSource], { type: 'text/javascript;charset=utf-8' })
-				);
-				const runtimeModule = await import(/* @vite-ignore */ runtimeUrl);
-				URL.revokeObjectURL(runtimeUrl);
-				const runtimeLoadFn = runtimeModule.load as NonNullable<typeof runtimeLoad>;
-				runtimeLoad = runtimeLoadFn;
-				const compilerWasm = (await loadWorkerRuntimeAsset('compiler.wasm')).bytes;
-				const compilerModule = await runtimeLoadFn(compilerWasm, {
-					stackDeobfuscator: { enabled: false }
-				});
-				compilerLib = compilerModule.exports;
-				compiler = compilerLib.createCompiler();
-				const [sdk, runtimeClasslib] = await Promise.all([
+				// Observe every branch immediately: failed assets must not leave an
+				// unhandled rejection while another branch is still initializing Wasm.
+				const [nextRuntime, sdk, runtimeClasslib] = await Promise.all([
+					(async () => {
+						const [runtimeModule, compilerAsset] = await Promise.all([
+							(async () => {
+								const runtimeSource = decoder.decode(
+									(await loadWorkerRuntimeAsset('compiler.wasm-runtime.js')).bytes
+								);
+								const runtimeUrl = URL.createObjectURL(
+									new Blob([runtimeSource], { type: 'text/javascript;charset=utf-8' })
+								);
+								try {
+									return await import(/* @vite-ignore */ runtimeUrl);
+								} finally {
+									URL.revokeObjectURL(runtimeUrl);
+								}
+							})(),
+							loadWorkerRuntimeAsset('compiler.wasm')
+						]);
+						const load = runtimeModule.load as NonNullable<typeof runtimeLoad>;
+						const module = await load(compilerAsset.bytes, {
+							stackDeobfuscator: { enabled: false }
+						});
+						return { load, lib: module.exports, compiler: module.exports.createCompiler() };
+					})(),
 					loadWorkerRuntimeAsset('compile-classlib-teavm.bin').then(({ bytes }) =>
 						toInt8Array(bytes)
 					),
@@ -104,12 +113,19 @@ self.addEventListener('message', async (event) => {
 						toInt8Array(bytes)
 					)
 				]);
-				compiler.setSdk(sdk);
-				compiler.setTeaVMClasslib(runtimeClasslib);
+				// Publish only a fully initialized compiler; a failed first attempt
+				// must retry instead of acknowledging a partially initialized runtime.
+				nextRuntime.compiler.setSdk(sdk);
+				nextRuntime.compiler.setTeaVMClasslib(runtimeClasslib);
+				compilerLib = nextRuntime.lib;
+				compiler = nextRuntime.compiler;
+				runtimeLoad = nextRuntime.load;
+				loadedBaseUrl = baseUrl;
 				compiledCode = '';
 				compiledStdin = '';
 				compiledMainClass = '';
 				compiledWasm = null;
+				compiledDiagnostics = [];
 				compiledActivePath = '';
 				compiledWorkspaceFiles = [];
 				currentSourcePaths = new Set();
@@ -156,12 +172,14 @@ self.addEventListener('message', async (event) => {
 		}
 
 		if (
-			prepare ||
 			compiledCode !== code ||
 			compiledStdin !== stdinInjection.stdinCacheKey ||
 			workspaceChanged ||
 			!compiledWasm
 		) {
+			// A failed rebuild must never leave a previous artifact eligible for reuse.
+			compiledWasm = null;
+			compiledDiagnostics = [];
 			const mainClass = sourceIdentity.mainClass;
 			currentSourcePaths = new Set(
 				[sourcePath, ...sourceFiles.map((file) => file.path)].flatMap((path) => [
@@ -170,6 +188,7 @@ self.addEventListener('message', async (event) => {
 				])
 			);
 			const diagnosticLines: string[] = [];
+			const diagnosticMessages: object[] = [];
 			const diagnosticRegistration = compiler.onDiagnostic((diagnostic: any) => {
 				const severity = diagnostic.severity
 					? String(diagnostic.severity).toLowerCase()
@@ -182,7 +201,7 @@ self.addEventListener('message', async (event) => {
 				if (fileName && !currentSourcePaths.has(fileName)) {
 					return;
 				}
-				self.postMessage({
+				const diagnosticMessage = {
 					diagnostic: {
 						fileName,
 						lineNumber: Number(diagnostic.lineNumber) || 1,
@@ -195,7 +214,9 @@ self.addEventListener('message', async (event) => {
 									: 'error',
 						message: String(diagnostic.message || '')
 					}
-				});
+				};
+				diagnosticMessages.push(diagnosticMessage);
+				self.postMessage(diagnosticMessage);
 			});
 			const disposeDiagnosticRegistration = () => {
 				if (typeof diagnosticRegistration === 'function') {
@@ -258,6 +279,10 @@ self.addEventListener('message', async (event) => {
 			compiledWasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
 			compiledActivePath = sourcePath;
 			compiledWorkspaceFiles = sourceFiles.map((file) => ({ ...file }));
+			compiledDiagnostics = diagnosticMessages;
+		} else {
+			// Every operation has its own diagnostic sink, even when compilation is reused.
+			for (const diagnostic of compiledDiagnostics) self.postMessage(diagnostic);
 		}
 
 		if (prepare) {
