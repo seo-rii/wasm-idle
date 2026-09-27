@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/react",
-	"version": "1.0.3",
+	"version": "1.0.4",
 	"description": "React hooks for wasm-idle core",
 	"license": "MIT",
 	"type": "module",
@@ -19,7 +19,7 @@
 		"tag": "latest"
 	},
 	"peerDependencies": {
-		"@wasm-idle/core": "1.0.3",
+		"@wasm-idle/core": "1.0.4",
 		"react": ">=18"
 	},
 	"dependencies": {
