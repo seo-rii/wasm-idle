@@ -5,53 +5,89 @@ on:
 permissions:
   contents: write
 jobs:
-  go-cache:
+  javascript:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           sparse-checkout: .github/runtime-perf-patches
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - name: Validate and publish isolated Go changes
+          node-version: '24'
+      - name: Reconstruct reviewed source patch
+        run: |
+          python3 - <<'PY'
+          import base64, gzip, hashlib
+          from pathlib import Path
+          blob = Path('.github/runtime-perf-patches/javascript.patch.gz').read_bytes()
+          expected = '30eddec3cf2a51aa797f2186bf5433de57dd5e78551d8a77ed9ff563a82fd314'
+          if hashlib.sha256(blob).hexdigest() != expected:
+              encoded = base64.b64encode(blob).decode()
+              repaired = encoded.replace('G6y6Yq', 'G6yYq')
+              blob = base64.b64decode(repaired + '===')
+          assert hashlib.sha256(blob).hexdigest() == expected, 'Source patch transport checksum mismatch'
+          Path('/tmp/javascript.patch').write_bytes(gzip.decompress(blob))
+          PY
+      - name: Build and verify both standalone entries
         shell: bash
         run: |
           set -euo pipefail
-          npm install --prefix /tmp/test-tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.0.18 @bjorn3/browser_wasi_shim@0.4.2 wabt@1.0.39
-          git fetch --depth=1 origin a1640827e6e3cf4a0b78639563bf26dda028f743
-          git worktree add --detach /tmp/change a1640827e6e3cf4a0b78639563bf26dda028f743
-          cd /tmp/change
-          git sparse-checkout set runtimes/wasm-go
+          npm install --prefix /tmp/test-tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.1.4 esbuild@0.27.3 buffer@6.0.3 @swc/wasm-typescript@1.15.33 @types/node@24.12.4
+          git fetch --depth=1 origin b45847d10f059463aa313dd61a7c12f4abec19bd
+          git worktree add --detach /tmp/js-change b45847d10f059463aa313dd61a7c12f4abec19bd
+          cd /tmp/js-change
+          git sparse-checkout set src packages/core runtimes/wasm-typescript scripts static/wasm-typescript
+          git apply /tmp/javascript.patch
           ln -s /tmp/test-tools/node_modules node_modules
-          python3 -c 'from pathlib import Path; p=Path("runtimes/wasm-go/test/tool-startup.test.ts"); s=p.read_text(); old="new Response(bytes.slice().buffer as ArrayBuffer)"; assert old in s; p.write_text(s.replace(old,"new Response(Uint8Array.from(bytes).buffer)"))'
-          printf 'export default {test:{environment:"node",include:["test/**/*.test.ts","src/tool-runtime.startup.test.ts"]}};' > /tmp/go-config.mjs
-          cd runtimes/wasm-go
-          node /tmp/test-tools/node_modules/vitest/vitest.mjs run --config /tmp/go-config.mjs --reporter=verbose | tee /tmp/go-base-tests.log
-          cd /tmp/change
+          ln -s /tmp/test-tools/node_modules runtimes/wasm-typescript/node_modules
+          cd runtimes/wasm-typescript
+          node /tmp/test-tools/node_modules/typescript/bin/tsc -p tsconfig.json --emitDeclarationOnly
+          node scripts/build.mjs
+          node /tmp/test-tools/node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
+          node /tmp/test-tools/node_modules/vitest/vitest.mjs run --reporter=verbose | tee /tmp/javascript-runtime-tests.log
+          cd /tmp/js-change
+          node scripts/sync-wasm-typescript.mjs
+          python3 - <<'PY'
+          import gzip, json
+          from pathlib import Path
+          path = Path('static/compressed-runtime-assets.v1.json')
+          manifest = json.loads(path.read_text())
+          for name in ['index.js','javascript.js']:
+              p = Path('static/wasm-typescript') / name
+              data = p.read_bytes()
+              p.with_suffix(p.suffix+'.gz').write_bytes(gzip.compress(data, compresslevel=9, mtime=0))
+              p.unlink()
+              key = 'wasm-typescript/' + name
+              if key not in manifest['assets']: manifest['assets'].append(key)
+              manifest['sizes'][key] = len(data)
+          manifest['assets'].sort()
+          path.write_text(json.dumps(manifest, indent=2)+'\n')
+          Path('/tmp/javascript-size-report.json').write_text(json.dumps({k:v for k,v in manifest['sizes'].items() if 'wasm-typescript/' in k}, indent=2))
+          PY
+          node scripts/sync-wasm-typescript.mjs --verify
+          mkdir -p .svelte-kit
+          printf '{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"bundler"}}' > .svelte-kit/tsconfig.json
+          printf 'export const env = {};' > /tmp/empty-env.mjs
+          printf 'globalThis.window={location:new URL("https://example.test/")}; globalThis.history={replaceState(_a,_b,url){window.location=new URL(url,window.location);}};' > /tmp/js-test-setup.mjs
+          cat > /tmp/js-config.mjs <<'JS'
+          export default {
+            resolve:{alias:{'$lib':'/tmp/js-change/src/lib','@wasm-idle/core':'/tmp/js-change/packages/core/src/index.ts','$env/dynamic/public':'/tmp/empty-env.mjs'}},
+            test:{environment:'node',include:['src/lib/playground/typescript*.test.ts','src/lib/playground/worker/typescript.test.ts','src/lib/playground/applicationAssets.test.ts','src/lib/sync-wasm-typescript.test.ts'],setupFiles:['/tmp/js-test-setup.mjs']}
+          };
+          JS
+          node /tmp/test-tools/node_modules/vitest/vitest.mjs run --config /tmp/js-config.mjs --reporter=verbose | tee /tmp/javascript-integration-tests.log
           git diff --check
-          git add runtimes/wasm-go/test/tool-startup.test.ts
-          git -c user.name='wasm-idle automation' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'test(go): preserve exact gzip Buffer view in response fixture'
-          git push origin HEAD:refs/heads/perf/go-parallel-tool-startup
-          git rev-parse HEAD > /tmp/go-base-head.txt
-          python3 -c 'from pathlib import Path; import os; s=(Path(os.environ["GITHUB_WORKSPACE"])/".github/runtime-perf-patches/go-cache.patch").read_text(); Path("/tmp/go-cache.patch").write_text(s.replace("new Response(bytes.slice().buffer as ArrayBuffer)","new Response(Uint8Array.from(bytes).buffer)"))'
-          git apply /tmp/go-cache.patch
-          cd runtimes/wasm-go
-          node /tmp/test-tools/node_modules/vitest/vitest.mjs run --config /tmp/go-config.mjs --reporter=verbose | tee /tmp/go-cache-tests.log
-          cd /tmp/change
-          git diff --check
-          git add runtimes/wasm-go/src/tool-module.ts runtimes/wasm-go/src/tool-runtime.ts runtimes/wasm-go/src/tool-runtime.startup.test.ts runtimes/wasm-go/test/tool-module.test.ts runtimes/wasm-go/test/tool-startup.test.ts
-          git -c user.name='wasm-idle automation' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'perf(go): cache tool modules by content and memory policy'
-          git push origin HEAD:refs/heads/perf/go-content-addressed-module-cache
-          git rev-parse HEAD > /tmp/go-cache-head.txt
+          git add packages/core/src/runtime-assets.ts runtimes/wasm-typescript/scripts runtimes/wasm-typescript/test/bundles.test.ts scripts/sync-wasm-typescript.mjs src/lib/playground/applicationAssets.ts src/lib/playground/applicationAssets.test.ts src/lib/playground/assets.ts src/lib/playground/typescript.ts src/lib/playground/typescript-integrity.test.ts src/lib/playground/wasmTypeScriptVersion.ts src/lib/sync-wasm-typescript.test.ts static/wasm-typescript static/compressed-runtime-assets.v1.json
+          git -c user.name='wasm-idle automation' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'perf(javascript): deliver a separately verified native-JS entry without SWC'
+          git push origin HEAD:refs/heads/perf/javascript-lightweight-entry
+          git rev-parse HEAD > /tmp/javascript-head.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: go-cache-validation
+          name: javascript-validation
           path: |
-            /tmp/go-base-tests.log
-            /tmp/go-base-head.txt
-            /tmp/go-cache-tests.log
-            /tmp/go-cache-head.txt
+            /tmp/javascript-*.log
+            /tmp/javascript-size-report.json
+            /tmp/javascript-head.txt
           retention-days: 1
