@@ -1,0 +1,39 @@
+name: Non-C/Python performance validation
+on:
+  push:
+    branches: [perf/non-cpython-validation]
+    paths: ['.github/workflows/non-cpython-validation.yml']
+permissions:
+  contents: read
+jobs:
+  sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github
+            src
+            scripts
+            runtimes
+            packages
+            producers
+      - name: Archive tracked source files only
+        run: |
+          python3 - <<'PY'
+          import pathlib, subprocess, tarfile
+          paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          extensions = {'.ts','.tsx','.js','.mjs','.cjs','.json','.yaml','.yml','.md','.svelte','.cs','.csproj','.props','.targets','.sh','.toml','.html','.css'}
+          with tarfile.open('/tmp/wasm-idle-sources.tar.gz', 'w:gz') as archive:
+              for name in paths:
+                  p = pathlib.Path(name)
+                  if p.is_file() and not p.is_symlink() and p.suffix in extensions and p.stat().st_size < 2_000_000:
+                      archive.add(p, arcname=name, recursive=False)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm-idle-validation-sources
+          path: /tmp/wasm-idle-sources.tar.gz
+          retention-days: 1
