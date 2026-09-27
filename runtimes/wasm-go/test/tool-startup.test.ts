@@ -51,7 +51,7 @@ function fixture() {
 	return { invocation, plan, sysroot, tool, fetchImpl, start };
 }
 
-const response = (bytes: Uint8Array) => new Response(bytes.slice().buffer as ArrayBuffer);
+const response = (bytes: Uint8Array) => new Response(Uint8Array.from(bytes).buffer);
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 afterEach(() => vi.restoreAllMocks());
 
