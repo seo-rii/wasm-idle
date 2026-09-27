@@ -1,3 +1,4 @@
+import { compileCappedGoToolModule } from './tool-module-cache.js';
 import { Directory, File, OpenFile, PreopenDirectory, WASI } from '@bjorn3/browser_wasi_shim';
 
 import { resolveVersionedAssetUrl } from './asset-url.js';
@@ -104,7 +105,7 @@ export async function executeGoToolInvocation(
 				maxWasmMemoryBytes,
 				`${invocation.tool}.wasm`
 			);
-			return await WebAssembly.compile(cappedToolBytes.slice().buffer as ArrayBuffer);
+			return await compileCappedGoToolModule(cappedToolBytes, maxWasmMemoryBytes, options.signal);
 		})()
 	]);
 	throwIfAborted(options.signal);

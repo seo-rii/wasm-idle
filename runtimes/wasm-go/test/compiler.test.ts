@@ -16,7 +16,7 @@ describe('compiler facade', () => {
 		expect(result.success).toBe(false);
 		expect(result.plan?.compile.tool).toBe('compile');
 		expect(result.stderr).toMatch(/failed to fetch/);
-		expect(result.stderr).toMatch(/wasip1\.(pack|index\.json)\.gz/);
+		expect(result.stderr).toMatch(/(wasip1\.(pack|index\.json)|tools\/compile\.wasm)\.gz/);
 	});
 
 	it('runs compile and link invocations through an injected runner', async () => {

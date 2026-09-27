@@ -14,7 +14,7 @@ function deferred<T>() {
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 const bytes = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
 const sysroot = [{ runtimePath: '/lib/fmt.a', bytes: new Uint8Array([7]) }];
-const source = readFileSync(new URL('./tool-runtime.ts', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/tool-runtime.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, {
 	compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
 }).outputText;
@@ -66,6 +66,12 @@ function harness(settings: Settings = {}) {
 			readGuestFile: (...args: unknown[]) => { log('read', ...args); return new Uint8Array([9]); },
 			toStandaloneBytes: (value: Uint8Array) => Uint8Array.from(value),
 			writeGuestFile: (...args: unknown[]) => log('write', ...args)
+		},
+		'./tool-module-cache.js': {
+			compileCappedGoToolModule: (value: Uint8Array) => {
+				log('compile', value);
+				return settings.compile?.(value.slice().buffer as ArrayBuffer) ?? WebAssembly.compile(value.slice().buffer as ArrayBuffer);
+			}
 		},
 		'./wasm-memory.js': {
 			capGoWasmMemory: (value: Uint8Array, ...args: unknown[]) => {
