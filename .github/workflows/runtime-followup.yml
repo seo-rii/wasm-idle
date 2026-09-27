@@ -15,6 +15,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Preserve both reviewed documentation additions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/runtime-followup/integrate-ruby.sh');s=p.read_text()
+          start=s.index("base=subprocess.check_output(")
+          end=s.index('\nPY',start)
+          s=s[:start]+'''p=Path('README.md'); text=p.read_text()
+          assert text.count('<<<<<<< ours\\n')==text.count('=======\\n')==text.count('>>>>>>> theirs\\n')==1
+          prefix,rest=text.split('<<<<<<< ours\\n');left,rest=rest.split('=======\\n');right,suffix=rest.split('>>>>>>> theirs\\n')
+          assert left.startswith('### Optional idle runtime prewarming\\n')
+          assert right.startswith('### Ruby split standard library\\n')
+          p.write_text(prefix+left+'\\n'+right+suffix)'''+s[end:]
+          p.write_text(s)
+          PY
       - name: Preserve concurrent main changes and validate Ruby
         shell: bash
         run: bash .github/runtime-followup/integrate-ruby.sh 2>&1 | tee /tmp/ruby-integration.log
