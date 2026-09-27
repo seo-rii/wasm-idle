@@ -18,65 +18,126 @@ function worker() {
 	let onDiagnostic: ((diagnostic: any) => void) | undefined;
 	let handler!: (event: { data: any }) => Promise<void>;
 	const compiler = {
-		setSdk() {}, setTeaVMClasslib() {}, clearSourceFiles() {},
-		clearInputClassFiles() {}, clearOutputFiles() {}, addSourceFile() {},
+		setSdk() {},
+		setTeaVMClasslib() {},
+		clearSourceFiles() {},
+		clearInputClassFiles() {},
+		clearOutputFiles() {},
+		addSourceFile() {},
 		onDiagnostic(callback: typeof onDiagnostic) {
 			onDiagnostic = callback;
-			return () => { onDiagnostic = undefined; };
+			return () => {
+				onDiagnostic = undefined;
+			};
 		},
 		compile() {
 			counts.compile++;
-			onDiagnostic?.({ fileName: 'Main.java', lineNumber: 1, severity: 'warning', message: 'warning' });
-			onDiagnostic?.({ fileName: 'Unrelated.java', lineNumber: 1, severity: 'warning', message: 'hidden' });
+			onDiagnostic?.({
+				fileName: 'Main.java',
+				lineNumber: 1,
+				severity: 'warning',
+				message: 'warning'
+			});
+			onDiagnostic?.({
+				fileName: 'Unrelated.java',
+				lineNumber: 1,
+				severity: 'warning',
+				message: 'hidden'
+			});
 			return !failure.compile;
 		},
 		detectMainClasses: () => ['Main'],
-		generateWebAssembly() { counts.generate++; return !failure.generate; },
+		generateWebAssembly() {
+			counts.generate++;
+			return !failure.generate;
+		},
 		getWebAssemblyOutputFile() {
 			if (failure.output) throw new Error('output failed');
 			return new Uint8Array([9]);
 		}
 	};
-	const runtime = { load: async (bytes: Uint8Array) => {
-		if (bytes[0] === 9) return { exports: { main: () => { counts.run++; } } };
-		counts.initialize++;
-		return { exports: { createCompiler: () => compiler } };
-	} };
+	const runtime = {
+		load: async (bytes: Uint8Array) => {
+			if (bytes[0] === 9)
+				return {
+					exports: {
+						main: () => {
+							counts.run++;
+						}
+					}
+				};
+			counts.initialize++;
+			return { exports: { createCompiler: () => compiler } };
+		}
+	};
 	vm.runInNewContext(compiled, {
-		exports: {}, TextDecoder, TextEncoder, Blob, Uint8Array, Int8Array, Int32Array, Error,
+		exports: {},
+		TextDecoder,
+		TextEncoder,
+		Blob,
+		Uint8Array,
+		Int8Array,
+		Int32Array,
+		Error,
 		URL: { createObjectURL: () => 'blob:loader', revokeObjectURL() {} },
 		self: {
-			addEventListener: (_: string, listener: typeof handler) => { handler = listener; },
+			addEventListener: (_: string, listener: typeof handler) => {
+				handler = listener;
+			},
 			postMessage: (message: any) => messages.push(message)
 		},
 		require: (id: string) => {
-			if (id === '$lib/playground/worker/assets') return {
-				configureWorkerRuntimeAssets() {}, handleWorkerAssetMessage: () => false,
-				loadWorkerRuntimeAsset: async () => ({ bytes: new Uint8Array([1]) })
-			};
-			if (id === '$lib/playground/javaStdin') return {
-				prepareJavaStdinInjection: (code: string, stdin: string, explicit: boolean) => ({
-					transformedCode: code, usesStdin: false,
-					stdinCacheKey: explicit ? `explicit:${stdin}` : 'interactive'
-				})
-			};
-			if (id === '$lib/playground/javaSource') return {
-				resolveJavaSourceIdentity: () => ({ mainClass: 'Main', sourcePath: 'Main.java' })
-			};
+			if (id === './javaStreaming')
+				return {
+					acceptCompiledTeaVmModule: (source: string) => source,
+					loadStreamingJavaCompiler: async () => undefined
+				};
+			if (id === '$lib/playground/worker/assets')
+				return {
+					configureWorkerRuntimeAssets() {},
+					handleWorkerAssetMessage: () => false,
+					loadWorkerRuntimeAsset: async () => ({ bytes: new Uint8Array([1]) })
+				};
+			if (id === '$lib/playground/javaStdin')
+				return {
+					prepareJavaStdinInjection: (
+						code: string,
+						stdin: string,
+						explicit: boolean
+					) => ({
+						transformedCode: code,
+						usesStdin: false,
+						stdinCacheKey: explicit ? `explicit:${stdin}` : 'interactive'
+					})
+				};
+			if (id === '$lib/playground/javaSource')
+				return {
+					resolveJavaSourceIdentity: () => ({
+						mainClass: 'Main',
+						sourcePath: 'Main.java'
+					})
+				};
 			if (id === '$lib/playground/stdinBuffer') return { waitForBufferedStdin: () => null };
 			if (id === 'blob:loader') return runtime;
 			throw new Error(`Unexpected dependency: ${id}`);
 		}
 	});
 	return {
-		counts, failure, messages,
+		counts,
+		failure,
+		messages,
 		load: (baseUrl = '/teavm/') => handler({ data: { load: true, assets: { baseUrl } } }),
 		run: (options: Record<string, unknown> = {}) => {
 			messages.length = 0;
-			return handler({ data: {
-				code: 'class Main {}', prepare: true, hasExplicitStdin: true,
-				buffer: new ArrayBuffer(16), ...options
-			} });
+			return handler({
+				data: {
+					code: 'class Main {}',
+					prepare: true,
+					hasExplicitStdin: true,
+					buffer: new ArrayBuffer(16),
+					...options
+				}
+			});
 		}
 	};
 }
@@ -135,7 +196,10 @@ for (const stage of ['compile', 'generate', 'output'] as const) {
 		w.failure[stage] = true;
 		await w.run({ code: 'class Main { int changed; }' });
 		assert.equal(typeof w.messages.at(-1)?.error, 'string');
-		assert.equal(w.messages.some((message) => message.results), false);
+		assert.equal(
+			w.messages.some((message) => message.results),
+			false
+		);
 		w.failure[stage] = false;
 		await w.run();
 		assert.equal(w.counts.compile, 3);

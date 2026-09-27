@@ -20,17 +20,22 @@ const compiled = ts.transpileModule(source, {
 function deferred<T>() {
 	let resolve!: (value: T) => void;
 	let reject!: (reason: Error) => void;
-	const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+	const promise = new Promise<T>((yes, no) => {
+		resolve = yes;
+		reject = no;
+	});
 	return { promise, resolve, reject };
 }
 
-function worker(options: {
-	asset?: (name: string) => Promise<{ bytes: Uint8Array }>;
-	initialize?: () => Promise<void>;
-	importError?: () => Error | undefined;
-	setSdk?: () => void;
-	setClasslib?: () => void;
-} = {}) {
+function worker(
+	options: {
+		asset?: (name: string) => Promise<{ bytes: Uint8Array }>;
+		initialize?: () => Promise<void>;
+		importError?: () => Error | undefined;
+		setSdk?: () => void;
+		setClasslib?: () => void;
+	} = {}
+) {
 	const requests: string[] = [];
 	const messages: any[] = [];
 	const revoked: string[] = [];
@@ -42,16 +47,20 @@ function worker(options: {
 		load: async () => {
 			initializationCount++;
 			await options.initialize?.();
-			return { exports: { createCompiler: () => ({
-				setSdk: (bytes: Int8Array) => {
-					options.setSdk?.();
-					registered.push({ kind: 'sdk', bytes: Array.from(bytes) });
-				},
-				setTeaVMClasslib: (bytes: Int8Array) => {
-					options.setClasslib?.();
-					registered.push({ kind: 'classlib', bytes: Array.from(bytes) });
+			return {
+				exports: {
+					createCompiler: () => ({
+						setSdk: (bytes: Int8Array) => {
+							options.setSdk?.();
+							registered.push({ kind: 'sdk', bytes: Array.from(bytes) });
+						},
+						setTeaVMClasslib: (bytes: Int8Array) => {
+							options.setClasslib?.();
+							registered.push({ kind: 'classlib', bytes: Array.from(bytes) });
+						}
+					})
 				}
-			}) } };
+			};
 		}
 	};
 	const assetApi = {
@@ -63,16 +72,30 @@ function worker(options: {
 		}
 	};
 	vm.runInNewContext(compiled, {
-		exports: {}, TextDecoder, TextEncoder, Blob, Uint8Array, Int8Array, Int32Array, Error,
+		exports: {},
+		TextDecoder,
+		TextEncoder,
+		Blob,
+		Uint8Array,
+		Int8Array,
+		Int32Array,
+		Error,
 		URL: {
 			createObjectURL: () => `blob:runtime-${imports.length}`,
 			revokeObjectURL: (url: string) => revoked.push(url)
 		},
 		self: {
-			addEventListener: (_: string, listener: typeof handler) => { handler = listener; },
+			addEventListener: (_: string, listener: typeof handler) => {
+				handler = listener;
+			},
 			postMessage: (message: any) => messages.push(message)
 		},
 		require: (id: string) => {
+			if (id === './javaStreaming')
+				return {
+					acceptCompiledTeaVmModule: (source: string) => source,
+					loadStreamingJavaCompiler: async () => undefined
+				};
 			if (id === '$lib/playground/worker/assets') return assetApi;
 			if (id.startsWith('blob:')) {
 				imports.push(id);
@@ -80,14 +103,27 @@ function worker(options: {
 				if (error) throw error;
 				return runtime;
 			}
-			if (['$lib/playground/javaStdin', '$lib/playground/javaSource', '$lib/playground/stdinBuffer'].includes(id)) return {};
+			if (
+				[
+					'$lib/playground/javaStdin',
+					'$lib/playground/javaSource',
+					'$lib/playground/stdinBuffer'
+				].includes(id)
+			)
+				return {};
 			throw new Error(`Unexpected dependency: ${id}`);
 		}
 	});
 	return {
 		load: (baseUrl = '/teavm/') => handler({ data: { load: true, assets: { baseUrl } } }),
-		requests, messages, revoked, imports, registered,
-		get initializationCount() { return initializationCount; }
+		requests,
+		messages,
+		revoked,
+		imports,
+		registered,
+		get initializationCount() {
+			return initializationCount;
+		}
 	};
 }
 
@@ -106,8 +142,12 @@ test('starts all verified asset requests before the runtime JavaScript is availa
 
 test('imports the loader without waiting for the compiler Wasm download', async () => {
 	const gate = deferred<{ bytes: Uint8Array }>();
-	const w = worker({ asset: (name) => name === 'compiler.wasm'
-		? gate.promise : Promise.resolve({ bytes: new Uint8Array([1]) }) });
+	const w = worker({
+		asset: (name) =>
+			name === 'compiler.wasm'
+				? gate.promise
+				: Promise.resolve({ bytes: new Uint8Array([1]) })
+	});
 	const loading = w.load();
 	await tick();
 	assert.equal(w.imports.length, 1);
@@ -119,8 +159,10 @@ test('imports the loader without waiting for the compiler Wasm download', async 
 
 test('initializes Wasm while class libraries are downloading, but does not announce ready', async () => {
 	const gate = deferred<{ bytes: Uint8Array }>();
-	const w = worker({ asset: (name) => name.endsWith('.bin')
-		? gate.promise : Promise.resolve({ bytes: new Uint8Array([1]) }) });
+	const w = worker({
+		asset: (name) =>
+			name.endsWith('.bin') ? gate.promise : Promise.resolve({ bytes: new Uint8Array([1]) })
+	});
 	const loading = w.load();
 	await tick();
 	assert.equal(w.initializationCount, 1);
@@ -128,27 +170,43 @@ test('initializes Wasm while class libraries are downloading, but does not annou
 	assert.equal(w.messages.length, 0);
 	gate.resolve({ bytes: new Uint8Array([3]) });
 	await loading;
-	assert.deepEqual(w.registered.map((entry) => entry.kind), ['sdk', 'classlib']);
+	assert.deepEqual(
+		w.registered.map((entry) => entry.kind),
+		['sdk', 'classlib']
+	);
 	assert.equal(w.messages.at(-1)?.load, true);
 });
 
 test('class libraries use only the verified typed-array view', async () => {
-	const w = worker({ asset: async () => ({ bytes: new Uint8Array([9, 1, 255, 9]).subarray(1, 3) }) });
+	const w = worker({
+		asset: async () => ({ bytes: new Uint8Array([9, 1, 255, 9]).subarray(1, 3) })
+	});
 	await w.load();
-	assert.deepEqual(w.registered.map((entry) => entry.bytes), [[1, -1], [1, -1]]);
+	assert.deepEqual(
+		w.registered.map((entry) => entry.bytes),
+		[
+			[1, -1],
+			[1, -1]
+		]
+	);
 });
 
 for (const failedAsset of assetNames) {
 	test(`retries after ${failedAsset} fails without caching partial initialization`, async () => {
 		let fail = true;
-		const w = worker({ asset: async (name) => {
-			if (fail && name === failedAsset) throw new Error(`failed: ${name}`);
-			return { bytes: new Uint8Array([1]) };
-		} });
+		const w = worker({
+			asset: async (name) => {
+				if (fail && name === failedAsset) throw new Error(`failed: ${name}`);
+				return { bytes: new Uint8Array([1]) };
+			}
+		});
 		await w.load();
 		await tick();
 		assert.equal(w.messages.at(-1)?.error, `failed: ${failedAsset}`);
-		assert.equal(w.messages.some((message) => message.load), false);
+		assert.equal(
+			w.messages.some((message) => message.load),
+			false
+		);
 		fail = false;
 		await w.load();
 		assert.equal(w.messages.at(-1)?.load, true);
@@ -158,7 +216,7 @@ for (const failedAsset of assetNames) {
 
 test('revokes the Blob URL even when importing the loader fails', async () => {
 	let fail = true;
-	const w = worker({ importError: () => fail ? new Error('import failed') : undefined });
+	const w = worker({ importError: () => (fail ? new Error('import failed') : undefined) });
 	await w.load();
 	assert.equal(w.messages.at(-1)?.error, 'import failed');
 	assert.deepEqual(w.revoked, w.imports);
@@ -170,7 +228,11 @@ test('revokes the Blob URL even when importing the loader fails', async () => {
 for (const stage of ['setSdk', 'setClasslib'] as const) {
 	test(`does not publish a compiler when ${stage} fails`, async () => {
 		let fail = true;
-		const w = worker({ [stage]: () => { if (fail) throw new Error(stage); } });
+		const w = worker({
+			[stage]: () => {
+				if (fail) throw new Error(stage);
+			}
+		});
 		await w.load();
 		assert.equal(w.messages.at(-1)?.error, stage);
 		fail = false;
@@ -196,8 +258,10 @@ test('observes a class-library rejection even while Wasm initialization is block
 	const classlib = deferred<{ bytes: Uint8Array }>();
 	const w = worker({
 		initialize: () => initialization.promise,
-		asset: (name) => name === 'runtime-classlib-teavm.bin'
-			? classlib.promise : Promise.resolve({ bytes: new Uint8Array([1]) })
+		asset: (name) =>
+			name === 'runtime-classlib-teavm.bin'
+				? classlib.promise
+				: Promise.resolve({ bytes: new Uint8Array([1]) })
 	});
 	const loading = w.load();
 	await tick();
@@ -207,5 +271,8 @@ test('observes a class-library rejection even while Wasm initialization is block
 	assert.equal(w.messages.at(-1)?.error, 'classlib rejected');
 	initialization.resolve();
 	await tick();
-	assert.equal(w.messages.some((message) => message.load), false);
+	assert.equal(
+		w.messages.some((message) => message.load),
+		false
+	);
 });
