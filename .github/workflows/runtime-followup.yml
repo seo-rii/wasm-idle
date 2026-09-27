@@ -1,55 +1,51 @@
-name: Runtime continuation browser validation
+name: Verify followup integration against current main
 on:
   push:
     branches: [chore/runtime-followup-20260927]
 permissions:
   contents: read
 jobs:
-  dotnet:
-    permissions:
-      contents: write
-      actions: read
+  integrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ruby
+            ref: 3abecc50d260ceadd00e9626323b5cca5b7b93a1
+          - name: rust
+            ref: 7ec45071160435a6ae3675bc3cbcf73c8c138e52
+          - name: dotnet
+            ref: e93b20126ba87ea8de2ee8ee51231b88bac8e69f
     steps:
       - uses: actions/checkout@v4
         with:
+          persist-credentials: false
           sparse-checkout: .github/runtime-followup
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - uses: actions/download-artifact@v4
-        with:
-          name: dotnet-reference-runtime
-          run-id: 36311848343
-          github-token: ${{ github.token }}
-          path: /tmp/built-runtime
-      - name: Validate in the actual sidecar worker and publish
+      - name: Inspect merge without publishing or dropping changes
         shell: bash
-        run: bash .github/runtime-followup/continue-dotnet.sh 2>&1 | tee /tmp/dotnet-validation.log
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: dotnet-sidecar-validation
-          path: /tmp/dotnet-validation.log
-          retention-days: 1
-  php-inspect:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - name: Retrieve exactly pinned PHP producer packages
+        env:
+          REF: ${{ matrix.ref }}
         run: |
-          mkdir -p /tmp/php-tools
-          printf '{"private":true,"type":"module"}' > /tmp/php-tools/package.json
-          cd /tmp/php-tools
-          npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund @php-wasm/universal@3.1.34 @php-wasm/web-8-4@3.1.34 vite@8.0.8 esbuild@0.28.0 playwright-core@1.59.1
-          tar -C /tmp/php-tools -czf /tmp/php-producer-tools.tar.gz .
+          set -euo pipefail
+          git fetch --depth=150 origin "$REF" 1b963d396b6587391a48688a577dd0ffa883727c
+          git worktree add --detach /tmp/integrated "$REF"
+          cd /tmp/integrated
+          git sparse-checkout set src packages scripts runtimes/wasm-rust runtimes/wasm-dotnet
+          git config user.name 'runtime review'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          set +e
+          git merge --no-commit --no-ff 1b963d396b6587391a48688a577dd0ffa883727c 2>&1 | tee /tmp/merge.log
+          set -e
+          git diff --name-only --diff-filter=U >> /tmp/merge.log
+          git diff --cc >> /tmp/merge.log
+          mkdir -p /tmp/conflicts
+          git diff --name-only --diff-filter=U | while read -r path; do mkdir -p "/tmp/conflicts/$(dirname "$path")"; cp "$path" "/tmp/conflicts/$path"; done
+          cp /tmp/merge.log /tmp/conflicts/
+          tar -C /tmp/conflicts -czf /tmp/merge-review.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
-          name: php-producer-tools
-          path: /tmp/php-producer-tools.tar.gz
-          compression-level: 0
+          name: merge-${{ matrix.name }}-review
+          path: /tmp/merge-review.tar.gz
           retention-days: 1
