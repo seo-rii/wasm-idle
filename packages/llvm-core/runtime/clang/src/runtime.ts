@@ -1540,11 +1540,12 @@ class Clang {
 			(file) => file.path === input || workspaceTranslationUnitPattern.test(file.path)
 		);
 		// Match compile()'s effective language, not just the active editor language.
-		// Arbitrary -x overrides are conservatively treated as requiring C++ libraries.
+		// -x overrides and response files may switch the effective language to C++.
+		// Keep the C++ libraries unless the arguments are inspectable here.
 		const cOnly =
 			language === 'C' &&
 			translationUnits.every((unit) => unit.path === input || unit.path.endsWith('.c')) &&
-			!compileArgs.some((argument) => argument.startsWith('-x'));
+			!compileArgs.some((argument) => argument.startsWith('-x') || argument.startsWith('@'));
 		const linkProfile: [] | ['C'] = cOnly ? ['C'] : [];
 		const traceDebug = debugMode === 'trace';
 		if (traceDebug && translationUnits.length > 1) {

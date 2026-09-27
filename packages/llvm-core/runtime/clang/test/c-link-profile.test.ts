@@ -53,6 +53,17 @@ describe('C-only linker profile', () => {
 		await clang.compileLink('int main() {}', { language: 'C', compileArgs });
 		expect(libraries(clang)).toContain('-lc++');
 	});
+	it('retains C++ archives when a response file could override the source language', async () => {
+		const clang = harness();
+		await clang.compileLink('int main() {}', {
+			language: 'C',
+			activePath: 'main.c',
+			workspaceFiles: [{ path: 'flags.rsp', content: '-x c++ -std=c++20' }],
+			compileArgs: ['@flags.rsp']
+		});
+		expect(libraries(clang)).toContain('-lc++');
+		expect(libraries(clang)).toContain('-lc++abi');
+	});
 	it('keeps the default C++ profile and existing direct-link API behavior', async () => {
 		const clang = harness();
 		await clang.compileLink('int main() {}');
