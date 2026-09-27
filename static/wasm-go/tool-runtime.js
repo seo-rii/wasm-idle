@@ -1,3 +1,4 @@
+import { compileCappedGoToolModule } from './tool-module-cache.js';
 import { Directory, File, OpenFile, PreopenDirectory, WASI } from './vendor/browser_wasi_shim/index.js';
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { fetchRuntimeAssetBytes, loadRuntimePackEntries } from './runtime-asset.js';
@@ -43,7 +44,7 @@ export async function executeGoToolInvocation(invocation, plan, runtimeBaseUrl, 
             const toolBytes = await fetchRuntimeAssetBytes(resolveVersionedAssetUrl(runtimeBaseUrl, invocation.toolAsset), `${invocation.tool}.wasm`, fetchImpl, true, (loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total), options);
             throwIfAborted(options.signal);
             const cappedToolBytes = capGoWasmMemory(toStandaloneBytes(toolBytes), maxWasmMemoryBytes, `${invocation.tool}.wasm`);
-            return await WebAssembly.compile(cappedToolBytes.slice().buffer);
+            return await compileCappedGoToolModule(cappedToolBytes, maxWasmMemoryBytes, options.signal);
         })()
     ]);
     throwIfAborted(options.signal);

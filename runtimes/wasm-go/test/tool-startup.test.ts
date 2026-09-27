@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gzipSync } from 'node:zlib';
 
 import { executeGoToolInvocation } from '../src/tool-runtime.js';
@@ -53,7 +53,9 @@ function fixture() {
 
 const response = (bytes: Uint8Array) => new Response(Uint8Array.from(bytes).buffer);
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-afterEach(() => vi.restoreAllMocks());
+// Dedicated module-cache tests exercise the cached path; these tests exercise cold startup.
+beforeEach(() => vi.stubGlobal('crypto', undefined));
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('Go tool startup', () => {
 	it('starts both asset requests before either response is available', async () => {
