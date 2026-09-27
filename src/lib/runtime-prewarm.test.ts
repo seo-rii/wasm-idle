@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRuntimePrewarmer, browserPrewarmEnvironment } from '../../packages/core/src/prewarm.js';
 import { createPlaygroundBinding } from '../../packages/core/src/sandbox.js';
@@ -82,16 +84,34 @@ describe('opt-in runtime prewarming', () => {
 		f.idle(); expect(await a).toBe(false); expect(await b).toBe(true);
 		expect(f.create).toHaveBeenCalledTimes(1); expect(f.create.mock.calls[0]![0]).toBe('RUBY');
 	});
+	it('waits for a cancelled startup to release before starting its replacement', async () => {
+		const f = fixture();
+		const first = deferred<typeof f.item>();
+		const second = resource();
+		f.create.mockImplementation((key) => key === 'JAVA' ? first.promise : Promise.resolve(second));
+		const java = f.warmer.warm('JAVA');
+		const duplicateJava = f.warmer.warm('JAVA');
+		f.idle(); await tick();
+		const ruby = f.warmer.warm('RUBY'); f.idle(); await tick();
+		expect(f.create.mock.calls.map(([key]) => key)).toEqual(['JAVA']);
+		first.resolve(f.item);
+		expect(await Promise.all([java, duplicateJava])).toEqual([false, false]);
+		expect(await ruby).toBe(true);
+		expect(f.create.mock.calls.map(([key]) => key)).toEqual(['JAVA', 'RUBY']);
+		expect(f.item.dispose).toHaveBeenCalledTimes(1);
+		await f.warmer.dispose();
+		expect(second.dispose).toHaveBeenCalledTimes(1);
+	});
 	it('a mismatched foreground request cancels the speculative runtime', async () => {
 		const f = fixture(); const warm = f.warmer.warm('JAVA'); f.idle(); await warm;
 		expect(await f.warmer.take('RUBY')).toBeUndefined(); await tick();
 		expect(f.item.dispose).toHaveBeenCalledTimes(1);
 	});
-	it('allows a failed warm-up to retry in the foreground', async () => {
+	it('discards a failed warm-up so the next speculative request can retry', async () => {
 		const f = fixture(); f.create.mockRejectedValueOnce(new Error('network'));
 		const warm = f.warmer.warm('JAVA'); f.idle(); expect(await warm).toBe(false);
-		expect(await f.warmer.take('JAVA')).toBeUndefined();
 		const again = f.warmer.warm('JAVA'); f.idle(); expect(await again).toBe(true);
+		expect(f.create).toHaveBeenCalledTimes(2);
 	});
 	it('rechecks hidden/save-data policy at idle time', async () => {
 		const f = fixture(); const warm = f.warmer.warm('JAVA'); f.canStart.mockReturnValue(false); f.idle();
@@ -144,6 +164,22 @@ describe('binding prewarm ownership', () => {
 	it('does not prepare an extra copy after a consumer claimed one', async () => {
 		const f = bindingFixture(); await f.binding.load('JAVA');
 		expect(await f.binding.prewarm!('JAVA')).toBe(false); expect(f.loader).toHaveBeenCalledTimes(1);
+	});
+	it('blocks a second prewarm while a foreground load is claiming the first one', async () => {
+		const f = bindingFixture();
+		const ready = deferred<void>();
+		f.sandbox.load.mockReturnValueOnce(ready.promise);
+		const warm = f.binding.prewarm!('JAVA');
+		const foreground = f.binding.load('JAVA');
+		await tick();
+		const duplicate = f.binding.prewarm!('JAVA');
+		f.idle();
+		ready.resolve();
+		expect(await duplicate).toBe(false);
+		expect(await warm).toBe(true);
+		await foreground;
+		expect(f.loader).toHaveBeenCalledTimes(1);
+		await f.binding.dispose();
 	});
 	it('factory failure disposes the partial worker and normal load retries', async () => {
 		const f = bindingFixture(); f.sandbox.load.mockRejectedValueOnce(new Error('offline'));

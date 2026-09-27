@@ -80,8 +80,13 @@ export function createRuntimePrewarmer<T extends PrewarmResource>(
 		},
 		warm(key: string): Promise<boolean> {
 			if (disposed || !enabled || !environment.canStart()) return Promise.resolve(false);
-			if (slot?.key === key) return slot.result.then(Boolean);
-			void cancel().catch(() => {});
+			if (slot?.key === key) {
+				const current = slot;
+				return current.result.then((resource) =>
+					Boolean(resource && !current.controller.signal.aborted && (current.taken || slot === current))
+				);
+			}
+			const predecessor = cancel().catch(() => {});
 			const controller = new AbortController();
 			let resolve!: (resource: T | undefined) => void;
 			const result = new Promise<T | undefined>((done) => { resolve = done; });
@@ -91,17 +96,24 @@ export function createRuntimePrewarmer<T extends PrewarmResource>(
 					if (next.started) return;
 					next.started = true;
 					next.cancelSchedule();
-					if (controller.signal.aborted || disposed || (!next.taken && !environment.canStart())) {
-						resolve(undefined);
-						return;
-					}
-					// The factory must clean up a partially-created resource on rejection.
-					void Promise.resolve().then(() => create(key, controller.signal)).then(resolve, () => resolve(undefined));
+					void predecessor.then(() => {
+						if (controller.signal.aborted || disposed || (!next.taken && !environment.canStart())) {
+							resolve(undefined);
+							return;
+						}
+						// The factory must clean up a partially-created resource on rejection.
+						void Promise.resolve().then(() => create(key, controller.signal)).then(resolve, () => resolve(undefined));
+					});
 				}
 			};
 			slot = next;
 			next.cancelSchedule = environment.schedule(next.start);
-			return result.then(Boolean);
+			void result.then((resource) => {
+				if (!resource && slot === next) slot = undefined;
+			});
+			return result.then((resource) =>
+				Boolean(resource && !controller.signal.aborted && (next.taken || slot === next))
+			);
 		},
 		take(key: string): Promise<T | undefined> | undefined {
 			const current = slot;

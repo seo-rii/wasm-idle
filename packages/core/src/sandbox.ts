@@ -746,6 +746,7 @@ export function createPlaygroundBinding(
 	};
 	const key = (language: string) => JSON.stringify([language, createRuntimeAssetsKey(runtimeAssets)]);
 	const claimedKeys = new Set<string>();
+	const loadingKeys = new Map<string, number>();
 	const prewarmer = createRuntimePrewarmer(async (cacheKey, signal) => {
 		const [language] = JSON.parse(cacheKey) as [string, string];
 		const sandbox = await create(language);
@@ -773,19 +774,28 @@ export function createPlaygroundBinding(
 		async load(language: string) {
 			const normalized = normalize(language);
 			const cacheKey = key(normalized);
-			const pendingWarm = prewarmer.take(cacheKey);
-			const warmed = pendingWarm ? await pendingWarm : undefined;
-			// Disposing a binding during warm-up must never hand out a dead resource.
-			normalize(normalized);
-			const sandbox = warmed ?? await create(normalized);
-			claimedKeys.add(cacheKey);
-			return sandbox;
+			loadingKeys.set(cacheKey, (loadingKeys.get(cacheKey) ?? 0) + 1);
+			try {
+				const pendingWarm = prewarmer.take(cacheKey);
+				const warmed = pendingWarm ? await pendingWarm : undefined;
+				// Disposing a binding during warm-up must never hand out a dead resource.
+				normalize(normalized);
+				const sandbox = warmed ?? await create(normalized);
+				claimedKeys.add(cacheKey);
+				return sandbox;
+			} finally {
+				const remaining = (loadingKeys.get(cacheKey) ?? 1) - 1;
+				if (remaining > 0) loadingKeys.set(cacheKey, remaining);
+				else loadingKeys.delete(cacheKey);
+			}
 		},
 		prewarm(language: string) {
 			if (!prewarmer.enabled) return Promise.resolve(false);
 			const cacheKey = key(normalize(language));
 			// Do not create a spare copy of a runtime already owned by a consumer.
-			return claimedKeys.has(cacheKey) ? Promise.resolve(false) : prewarmer.warm(cacheKey);
+			return claimedKeys.has(cacheKey) || loadingKeys.has(cacheKey)
+				? Promise.resolve(false)
+				: prewarmer.warm(cacheKey);
 		},
 		setPrewarmEnabled: prewarmer.setEnabled,
 		cancelPrewarm: prewarmer.cancel,
