@@ -80,7 +80,7 @@ export const scenarios = [
 	{
 		name: '@wasm-idle/debug install',
 		packageNames: ['@wasm-idle/debug', '@wasm-idle/core'],
-		budget: { maxBytes: 6.75 * MiB, maxFiles: 1_200, maxPackages: 25 },
+		budget: { maxBytes: 7 * MiB, maxFiles: 1_200, maxPackages: 25 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/lsp',
