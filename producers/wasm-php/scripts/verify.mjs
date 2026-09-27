@@ -68,10 +68,16 @@ assert.equal(
 );
 assert.equal(
 	actualFiles.filter((file) => file.path.startsWith('chunks/')).length,
-	3,
+	7,
 	'unexpected PHP runtime chunk count'
 );
 assert.ok(filePaths.has('LICENSE.txt'), 'PHP runtime license is missing');
+const startup = actualFiles.find(file => file.path === 'startup.mjs');
+assert.ok(startup && startup.bytes < 16 * 1024, 'PHP startup must remain a small standalone entry');
+const startupSource = await readFile(path.join(DIST_DIR, 'startup.mjs'), 'utf8');
+assert.match(startupSource, /compileStreaming/);
+assert.match(startupSource, /SHA-256/);
+assert.ok(!/^import[^;]*universal/m.test(startupSource), 'PHP bootstrap eagerly imports the large API');
 
 const runtimeSource = await readFile(path.join(DIST_DIR, manifest.runtimeModule), 'utf8');
 assert.match(runtimeSource, /createPhp84/, 'runtime does not export createPhp84');
