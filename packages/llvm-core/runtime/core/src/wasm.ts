@@ -796,7 +796,13 @@ export async function compile(
 	let pending = (async () => {
 		const bytes = await readBufferInternal(filename, progress, maxOutputBytes, signal);
 		throwIfRuntimeAssetAborted(signal);
-		const module = await waitForRuntimeAssetOperation(WebAssembly.compile(bytes), signal);
+		const buffer = bytes.buffer;
+		if (!(buffer instanceof ArrayBuffer)) {
+			throw new TypeError('Runtime asset compilation requires an ArrayBuffer');
+		}
+		// Narrow the backing store without copying the byte range.
+		const compileBytes = new Uint8Array(buffer, bytes.byteOffset, bytes.byteLength);
+		const module = await waitForRuntimeAssetOperation(WebAssembly.compile(compileBytes), signal);
 		throwIfRuntimeAssetAborted(signal);
 		return module;
 	})();
