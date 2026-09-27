@@ -1,36 +1,47 @@
-name: Scoped runtime continuation snapshots
+name: Ruby and PHP worker continuation validation
 on:
   push:
     branches: [chore/runtime-continuation-1244]
 permissions:
   contents: read
 jobs:
-  snapshot:
+  validate:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: ruby
+            base: 1c319a537c416ee87dc0e36a862706a2a2ae6c8c
+            branch: perf/ruby-initialized-vm-prewarm
+            message: 'perf(ruby): prepare a pristine VM for a single first execution'
+          - language: php
+            base: 1e77b741bd4b5658bd84853718b5b1b3f9c8bc25
+            branch: perf/php-verified-parallel-startup
+            message: 'fix(php): retry failed startup and suppress superseded load responses'
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
-          sparse-checkout: .github/workflows
-      - name: Archive exact source revisions and existing Ruby fixtures
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/snapshots
-          for pair in main:1c319a537c416ee87dc0e36a862706a2a2ae6c8c php:1e77b741bd4b5658bd84853718b5b1b3f9c8bc25 dotnet:32e47aa97fd2875896a4ec8abf38924ed3ea4c0c rust:7ec45071160435a6ae3675bc3cbcf73c8c138e52; do
-            name=${pair%%:*}; ref=${pair#*:}
-            git fetch --depth=1 origin "$ref"
-            mkdir -p "/tmp/snapshots/$name"
-            git archive "$ref" src packages scripts runtimes producers package.json pnpm-lock.yaml tsconfig.json vite.config.ts | tar -x -C "/tmp/snapshots/$name"
-            printf '%s\n' "$ref" > "/tmp/snapshots/$name/COMMIT.txt"
-          done
-          git archive 1c319a537c416ee87dc0e36a862706a2a2ae6c8c static/wasm-ruby | tar -x -C /tmp/snapshots/main
-          git archive 7ec45071160435a6ae3675bc3cbcf73c8c138e52 static/wasm-rust/runtime/runtime-manifest.v3.json | tar -x -C /tmp/snapshots/rust
-          tar -C /tmp/snapshots -czf /tmp/runtime-exact-sources.tar.gz .
-      - uses: actions/upload-artifact@v4
+          sparse-checkout: .github/runtime-continuation
+      - uses: actions/setup-node@v4
         with:
-          name: runtime-exact-sources
-          path: /tmp/runtime-exact-sources.tar.gz
-          compression-level: 0
+          node-version: '24'
+      - name: Verify source and actual Chromium worker execution before publishing
+        env:
+          LANGUAGE: ${{ matrix.language }}
+          BASE: ${{ matrix.base }}
+          BRANCH: ${{ matrix.branch }}
+          MESSAGE: ${{ matrix.message }}
+        shell: bash
+        run: bash .github/runtime-continuation/validate-publish.sh 2>&1 | tee /tmp/validation.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: worker-${{ matrix.language }}-validation
+          path: |
+            /tmp/validation.log
+            /tmp/published-head.txt
           retention-days: 1
