@@ -675,7 +675,9 @@ async function unzipFirstFile(
 	throw new Error('No entry found');
 }
 
-export const readBuffer = async (
+// The cached bytes remain private. Compilation can borrow this immutable view;
+// public readBuffer callers must still receive their own mutable copy.
+const readBufferInternal = async (
 	name: string,
 	progress?: ProgressSink,
 	maxOutputBytes = DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES,
@@ -765,6 +767,17 @@ export const readBuffer = async (
 	const data = await pending;
 	throwIfRuntimeAssetAborted(signal);
 	progress?.set?.(1);
+	return data;
+};
+
+export const readBuffer = async (
+	name: string,
+	progress?: ProgressSink,
+	maxOutputBytes = DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES,
+	signal?: AbortSignal
+) => {
+	const data = await readBufferInternal(name, progress, maxOutputBytes, signal);
+	throwIfRuntimeAssetAborted(signal);
 	return Uint8Array.from(data);
 };
 
@@ -781,7 +794,7 @@ export async function compile(
 	const cached = signal ? undefined : store.get(cacheKey);
 	if (cached) return cached;
 	let pending = (async () => {
-		const bytes = await readBuffer(filename, progress, maxOutputBytes, signal);
+		const bytes = await readBufferInternal(filename, progress, maxOutputBytes, signal);
 		throwIfRuntimeAssetAborted(signal);
 		const module = await waitForRuntimeAssetOperation(WebAssembly.compile(bytes), signal);
 		throwIfRuntimeAssetAborted(signal);
