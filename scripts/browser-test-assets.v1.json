@@ -1,20 +1,20 @@
 {
 	"format": "wasm-idle-browser-test-assets-v1",
-	"defaultBaseUrl": "https://raw.githubusercontent.com/seo-rii/wasm-idle/77ba00208fe3e31cd3349af83367ae5013a2c5ab/",
+	"defaultBaseUrl": "https://raw.githubusercontent.com/seo-rii/wasm-idle/8d37e074d817f13a28f2621fb97c96cd6f62d9ab/",
 	"assets": [
 		{
 			"group": "clang",
 			"source": "clang/bin/clang.wasm.gz",
 			"target": "clang/bin/clang.wasm.gz",
-			"size": 15721977,
-			"sha256": "b1174438d9a67b7ff11e623541b9a0572c024a9e798084b9b021dd9da2da0874"
+			"size": 13121917,
+			"sha256": "8dc032057fbeb41e4a9986dfc54b2336c17532033dee172eb0095eba9c5fbe75"
 		},
 		{
 			"group": "clang",
 			"source": "clang/bin/lld.wasm.gz",
 			"target": "clang/bin/lld.wasm.gz",
-			"size": 7837837,
-			"sha256": "f842a9b5df3c6d326f0260bfd313c11c2e22bc8b8ae0387deede9a4af55779cd"
+			"size": 6417339,
+			"sha256": "495813efde8f354c38483749cdface7a7d9e23c8411da45a6f5f80030159eb11"
 		},
 		{
 			"group": "clang",
@@ -27,36 +27,36 @@
 			"group": "clang",
 			"source": "clang/bin/sysroot.tar.gz",
 			"target": "clang/bin/sysroot.tar.gz",
-			"size": 5059892,
-			"sha256": "68437624a81c465b93895615e7afd3f235ff256de17dc1927b124e783614e3e4"
+			"size": 5059493,
+			"sha256": "c0ef46e903492383a3c7069bfd4aed0e764e8df988f92bb81eb96bea50bf2c00"
 		},
 		{
 			"group": "clang",
 			"source": "clangd/clangd.js",
 			"target": "clangd/clangd.js",
-			"size": 142904,
-			"sha256": "a7ff1c588eb5374783bbda84d949b92b8027c2381c786072448b96eba90c7027"
+			"size": 97002,
+			"sha256": "92dce989f2623a6e8930369dd205301c2815d70cf81312c64de1c47a16302b27"
 		},
 		{
 			"group": "clang",
 			"source": "clangd/clangd.wasm.gz",
 			"target": "clangd/clangd.wasm.gz",
-			"size": 24921957,
-			"sha256": "c6d45cb134ee41c0e9b37838c3375aedcf130a7feed902db22f59bc0d2c46b34"
+			"size": 16723115,
+			"sha256": "284e7117da923ca99ea9d64e4d9a80a739cdce4cc1c81dd099b040ab0a8a926f"
 		},
 		{
 			"group": "clangd",
 			"source": "clangd/clangd.js",
 			"target": "clangd/clangd.js",
-			"size": 142904,
-			"sha256": "a7ff1c588eb5374783bbda84d949b92b8027c2381c786072448b96eba90c7027"
+			"size": 97002,
+			"sha256": "92dce989f2623a6e8930369dd205301c2815d70cf81312c64de1c47a16302b27"
 		},
 		{
 			"group": "clangd",
 			"source": "clangd/clangd.wasm.gz",
 			"target": "clangd/clangd.wasm.gz",
-			"size": 24921957,
-			"sha256": "c6d45cb134ee41c0e9b37838c3375aedcf130a7feed902db22f59bc0d2c46b34"
+			"size": 16723115,
+			"sha256": "284e7117da923ca99ea9d64e4d9a80a739cdce4cc1c81dd099b040ab0a8a926f"
 		},
 		{
 			"group": "ocaml",

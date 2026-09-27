@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { unzipSync } from 'fflate';
+import { assertClangdStdinBridge } from './llvm-contracts/clangd-artifact-contract.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
@@ -268,18 +269,8 @@ async function validateBundle(bundleDir, layout) {
 	}
 
 	const clangdJs = await readFile(path.join(bundleDir, 'clangd', 'clangd.js'), 'utf8');
-	if (!clangdJs.includes('Module.stdinReady')) {
-		throw new Error('wasm-clang clangd.js is missing the browser stdin readiness callback');
-	}
 	const clangdWasm = gunzipSync(await readFile(path.join(bundleDir, 'clangd', 'clangd.wasm.gz')));
-	const clangdModule = await WebAssembly.compile(clangdWasm);
-	if (
-		!WebAssembly.Module.imports(clangdModule).some(
-			(entry) => entry.kind === 'function' && entry.name === '__asyncjs__waitForStdin'
-		)
-	) {
-		throw new Error('wasm-clang clangd.wasm is missing the Asyncify stdin import');
-	}
+	await assertClangdStdinBridge(clangdJs, clangdWasm);
 }
 
 /** @param {Buffer} bytes */

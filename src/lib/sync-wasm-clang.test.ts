@@ -57,6 +57,13 @@ const assets = [
 		entry: undefined
 	}
 ];
+const stdinCallback =
+	'function __asyncjs__waitForStdin(){return Asyncify.handleAsync(async()=>{await Module.stdinReady()})}';
+const minifiedLoader = `${stdinCallback};var wasmImports;
+function assignWasmImports(){wasmImports={ca:__asyncjs__waitForStdin}}
+function getWasmImports(){assignWasmImports();var imports={a:wasmImports};return imports}
+async function createWasm(){var info=getWasmImports();if(Module["instantiateWasm"]){Module["instantiateWasm"](info,()=>{})}return instantiateAsync(wasmBinary,wasmBinaryFile,info)}
+if(!ENVIRONMENT_IS_PTHREAD){createWasm()}`;
 
 async function makeTempDir() {
 	const directory = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-wasm-clang-'));
@@ -72,7 +79,7 @@ async function writeJson(filePath: string, value: unknown) {
 	await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-async function writeFixture(sourceDir: string) {
+async function writeFixture(sourceDir: string, minified = false) {
 	const payloads = new Map<string, Buffer>();
 	const contents = new Map<string, Buffer>();
 	for (const asset of assets) {
@@ -84,18 +91,16 @@ async function writeFixture(sourceDir: string) {
 		payloads.set(asset.source, payload);
 		contents.set(asset.source, Buffer.from(zipSync({ [asset.entry]: payload }, { level: 6 })));
 	}
-	const stdinImport = Buffer.from('__asyncjs__waitForStdin');
+	const stdinImport = Buffer.from(minified ? 'ca' : '__asyncjs__waitForStdin');
+	const importNamespace = Buffer.from(minified ? 'a' : 'env');
 	const importSection = Buffer.concat([
-		Buffer.from([0x01, 0x03]),
-		Buffer.from('env'),
+		Buffer.from([0x01, importNamespace.byteLength]),
+		importNamespace,
 		Buffer.from([stdinImport.byteLength]),
 		stdinImport,
 		Buffer.from([0x00, 0x00])
 	]);
-	contents.set(
-		'clangd/clangd.js',
-		Buffer.from('const stdinReady = Module.stdinReady; const wasm = WebAssembly;')
-	);
+	contents.set('clangd/clangd.js', Buffer.from(minified ? minifiedLoader : stdinCallback));
 	contents.set(
 		'clangd/clangd.wasm.gz',
 		gzipSync(
@@ -260,6 +265,34 @@ describe('syncWasmClangDist', () => {
 		await expect(stat(path.join(staticDir, 'clang', 'existing.txt'))).rejects.toThrow();
 		await expect(stat(path.join(staticDir, 'clangd', 'existing.txt'))).rejects.toThrow();
 		expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
+	});
+
+	it('installs a producer bundle with minified Asyncify import wiring', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const { contents } = await writeFixture(sourceDir, true);
+		await syncWasmClangDist({ sourceDir, staticDir });
+		expect(await readFile(path.join(staticDir, 'clangd/clangd.wasm.gz'))).toEqual(
+			contents.get('clangd/clangd.wasm.gz')
+		);
+	});
+
+	it('preserves existing targets when minified stdin wiring does not match Wasm', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const { contents, buildInfo } = await writeFixture(sourceDir, true);
+		await writeExistingTargets(staticDir);
+		await replaceFixtureAsset(
+			sourceDir,
+			buildInfo,
+			'clangd/clangd.js',
+			'clangd/clangd.js',
+			Buffer.from(contents.get('clangd/clangd.js')!.toString().replace('ca:', 'wrong:'))
+		);
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'missing the Asyncify stdin import'
+		);
+		await expectExistingTargets(staticDir);
 	});
 
 	it('accepts the pnpm argument separator in the CLI path', async () => {

@@ -90,6 +90,9 @@ importers:
       '@wasmer/sdk':
         specifier: 0.9.0
         version: 0.9.0
+      acorn:
+        specifier: 8.16.0
+        version: 8.16.0
       assemblyscript:
         specifier: 0.28.17
         version: 0.28.17

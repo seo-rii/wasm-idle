@@ -113,10 +113,10 @@ describe('LLDB browser integration workflow', () => {
 		);
 		expect(workflow).not.toContain('sync:wasm-clang');
 		for (const [asset, sha256] of [
-			['clang.wasm.gz', 'b1174438d9a67b7ff11e623541b9a0572c024a9e798084b9b021dd9da2da0874'],
-			['lld.wasm.gz', 'f842a9b5df3c6d326f0260bfd313c11c2e22bc8b8ae0387deede9a4af55779cd'],
+			['clang.wasm.gz', '8dc032057fbeb41e4a9986dfc54b2336c17532033dee172eb0095eba9c5fbe75'],
+			['lld.wasm.gz', '495813efde8f354c38483749cdface7a7d9e23c8411da45a6f5f80030159eb11'],
 			['memfs.wasm.gz', 'd86f141eacd58a93511fbfb7c4e81d498eb7106a8a57df1bea7d33df3ce1f403'],
-			['sysroot.tar.gz', '68437624a81c465b93895615e7afd3f235ff256de17dc1927b124e783614e3e4']
+			['sysroot.tar.gz', 'c0ef46e903492383a3c7069bfd4aed0e764e8df988f92bb81eb96bea50bf2c00']
 		]) {
 			expect(assetManifest.assets).toContainEqual(
 				expect.objectContaining({

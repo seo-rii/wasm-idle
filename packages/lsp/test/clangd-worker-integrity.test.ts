@@ -14,6 +14,16 @@ vi.mock('@wasm-idle/core', async (importOriginal) => ({
 	verifyRuntimeAssetIntegrity: mocks.verifyRuntimeAssetIntegrity
 }));
 
+vi.mock('../src/jsonrpc.js', () => ({
+	BrowserMessageReader: class {
+		listen() {}
+	},
+	BrowserMessageWriter: class {
+		write() {}
+		end() {}
+	}
+}));
+
 class FakeClangdWorkerScope {
 	readonly messages: unknown[] = [];
 	private messageListener?: (event: MessageEvent) => void | Promise<void>;
@@ -137,4 +147,94 @@ describe('clangd worker asset integrity', () => {
 		});
 		expect(scope.messages).not.toContainEqual(expect.objectContaining({ type: 'ready' }));
 	});
+
+	it.each([
+		[
+			'previous LLVM 22 build',
+			'0d71e7a7f8e6dd369cb2a0b22cc4016d649f370e5b905adb6092536deb0ee019',
+			'b'.repeat(64),
+			true
+		],
+		[
+			'slim LLVM 22 build',
+			'f2bef5c4b4aa8691f0b996286231c5778a17119c41537ae4108c7ff2795f7fc3',
+			'b'.repeat(64),
+			true
+		],
+		['unrecognized build', 'b'.repeat(64), 'b'.repeat(64), false],
+		[
+			'previous build without integrity metadata',
+			undefined,
+			'0d71e7a7f8e6dd369cb2a0b22cc4016d649f370e5b905adb6092536deb0ee019',
+			true
+		],
+		[
+			'slim build without integrity metadata',
+			undefined,
+			'f2bef5c4b4aa8691f0b996286231c5778a17119c41537ae4108c7ff2795f7fc3',
+			true
+		],
+		['unknown build without integrity metadata', undefined, 'b'.repeat(64), false]
+	] as const)(
+		'selects matching resource headers for %s',
+		async (_label, digest, rawDigest, expectedOverlay) => {
+			const runtimeBytes = Uint8Array.of(0, 97, 115, 109);
+			const deliveryBytes = Uint8Array.of(0x1f, 0x8b, 0x08);
+			const hash = vi
+				.fn()
+				.mockResolvedValue(
+					Uint8Array.from(rawDigest.match(/../g)!, (byte) => Number.parseInt(byte, 16))
+						.buffer
+				);
+			vi.stubGlobal('crypto', { subtle: { digest: hash } });
+			const files = new Map<string, Uint8Array | string>();
+			const runtime = {
+				FS: {
+					mkdirTree: vi.fn(),
+					analyzePath: (path: string) => ({ exists: files.has(path) }),
+					readFile: (path: string) => files.get(path),
+					writeFile: (path: string, contents: Uint8Array | string) =>
+						files.set(path, contents)
+				},
+				callMain: vi.fn()
+			};
+			vi.stubGlobal('__testClangdRuntime', runtime);
+			vi.mocked(URL.createObjectURL).mockReturnValue(
+				'data:text/javascript,export default async () => globalThis.__testClangdRuntime;'
+			);
+			mocks.decompressGzip.mockResolvedValue(runtimeBytes);
+			mocks.verifyRuntimeAssetIntegrity.mockResolvedValue(undefined);
+
+			await scope.dispatch({
+				type: 'init',
+				baseUrl: 'https://assets.example.com/clangd/',
+				assets: {
+					clangdJs: new ArrayBuffer(0),
+					clangdWasmGz: deliveryBytes.buffer,
+					clangdWasmIntegrity: digest
+						? {
+								bytes: deliveryBytes.byteLength,
+								sha256: 'a'.repeat(64),
+								uncompressedBytes: runtimeBytes.byteLength,
+								uncompressedSha256: digest
+							}
+						: undefined
+				}
+			});
+
+			expect(scope.messages).not.toContainEqual(expect.objectContaining({ type: 'error' }));
+			expect(scope.messages).toContainEqual({
+				type: 'ready',
+				value: runtimeBytes.byteLength
+			});
+			expect(mocks.verifyRuntimeAssetIntegrity).toHaveBeenCalledTimes(digest ? 1 : 0);
+			expect(hash).toHaveBeenCalledTimes(digest ? 0 : 1);
+			if (!digest) expect(hash).toHaveBeenCalledWith('SHA-256', runtimeBytes);
+			expect(files.has('/lib/clang/22/include/stddef.h')).toBe(expectedOverlay);
+			expect(String(files.get('/workspace/.clangd')).includes('-resource-dir')).toBe(
+				expectedOverlay
+			);
+			expect(runtime.callMain).toHaveBeenCalledWith([]);
+		}
+	);
 });
