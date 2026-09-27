@@ -285,11 +285,19 @@ export function resolveTargetManifest(manifest, target) {
     }
     return targetConfig;
 }
-export async function loadRuntimeManifest(manifestUrl, fetchImpl = fetch, reportProgress) {
+export async function loadRuntimeManifest(manifestUrl, fetchImpl = fetch, reportProgress, options = {}) {
     try {
-        return normalizeRuntimeManifest(await fetchRuntimeAssetJson(manifestUrl, 'wasm-go runtime manifest', fetchImpl, reportProgress));
+        return normalizeRuntimeManifest(await fetchRuntimeAssetJson(manifestUrl, 'wasm-go runtime manifest', fetchImpl, reportProgress, options));
     }
     catch (error) {
+        if (options.signal?.aborted) {
+            throw (options.signal.reason ??
+                new DOMException('wasm-go runtime manifest load aborted', 'AbortError'));
+        }
+        if (error instanceof DOMException &&
+            (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+            throw error;
+        }
         throw new Error(`failed to load wasm-go runtime manifest from ${manifestUrl.toString()}: ${error instanceof Error ? error.message : String(error)}`);
     }
 }

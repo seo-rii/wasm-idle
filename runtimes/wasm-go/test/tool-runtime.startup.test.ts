@@ -14,7 +14,7 @@ function deferred<T>() {
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
 const bytes = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
 const sysroot = [{ runtimePath: '/lib/fmt.a', bytes: new Uint8Array([7]) }];
-const source = readFileSync(new URL('./tool-runtime.ts', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../src/tool-runtime.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, {
 	compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
 }).outputText;
@@ -79,7 +79,7 @@ function harness(settings: Settings = {}) {
 	// Exercise the production module cache too, with the existing controlled memory
 	// and native-compile boundaries. No Web Crypto in this VM selects its uncached path.
 	const moduleExports: Record<string, unknown> = {};
-	const moduleSource = readFileSync(new URL('./tool-module.ts', import.meta.url), 'utf8');
+	const moduleSource = readFileSync(new URL('../src/tool-module.ts', import.meta.url), 'utf8');
 	runInNewContext(
 		ts.transpileModule(moduleSource, {
 			compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
@@ -92,7 +92,7 @@ function harness(settings: Settings = {}) {
 			WebAssembly: {
 				compile: (value: Uint8Array) => {
 					log('compile', value);
-					return settings.compile?.(value.slice().buffer) ?? WebAssembly.compile(value);
+					return settings.compile?.(value.slice().buffer) ?? WebAssembly.compile(Uint8Array.from(value));
 				}
 			}
 		}
