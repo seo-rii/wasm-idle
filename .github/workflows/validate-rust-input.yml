@@ -1,0 +1,61 @@
+name: Validate Rust compiler input optimization
+on:
+  push:
+    branches: [perf/rust-owned-module-input]
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/rust-owned-module-input
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter wasm-rust...
+      - name: Remove only the redundant compiler-input copy
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('runtimes/wasm-rust/src/compiler-worker.ts')
+          source = p.read_text()
+          anchor = 'export { fetchRuntimeAssetBytes };'
+          helper = '''
+
+          // fetchRuntimeAssetBytes returns privately owned, bounded and verified bytes.
+          // Pass that exact view to the engine without another asset-sized JS copy.
+          // Shared input still requires a snapshot; never expose mutable shared bytes.
+          export function compileRustcModule(bytes: Uint8Array): Promise<WebAssembly.Module> {
+          \tconst input = bytes.buffer instanceof ArrayBuffer
+          \t\t? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+          \t\t: Uint8Array.from(bytes);
+          \treturn WebAssembly.compile(input);
+          }
+          '''
+          if 'export function compileRustcModule' not in source:
+              assert source.count(anchor) == 1
+              source = source.replace(anchor, anchor + helper)
+              old = 'WebAssembly.compile(new Uint8Array(rustcBytes).buffer)'
+              assert source.count(old) == 1
+              source = source.replace(old, 'compileRustcModule(rustcBytes)')
+              p.write_text(source)
+          PY
+      - run: pnpm --dir runtimes/wasm-rust run check
+      - name: Native Wasm execution and existing worker regressions
+        run: pnpm --dir runtimes/wasm-rust exec vitest run test/compiler-module-input.test.ts test/compiler-worker.test.ts
+      - name: Fast Rust regression suite
+        run: pnpm --dir runtimes/wasm-rust run test:ci:fast
+      - name: Commit validated source only
+        run: |
+          git diff --check
+          git add runtimes/wasm-rust/src/compiler-worker.ts
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'perf(rust): compile the verified owned view without an extra full-buffer copy'
+            git push origin HEAD:refs/heads/perf/rust-owned-module-input
+          fi
