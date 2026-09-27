@@ -8,6 +8,8 @@ import {
 	type WorkerRuntimeAssetConfig
 } from '$lib/playground/worker/assets';
 
+import { withVerifiedStreaming } from './clangStreaming';
+
 declare var self: any;
 self.document = {
 	querySelectorAll() {
@@ -27,7 +29,12 @@ function postProgress(percent: number, stage: string) {
 	postMessage({ progress: { percent, stage } });
 }
 
-async function loadClang(path: string, log: boolean, maxAssetBytes: number | undefined) {
+async function loadClang(
+	path: string,
+	log: boolean,
+	maxAssetBytes: number | undefined,
+	verifiedStreaming = false
+) {
 	const { BrowserClangRuntime, loadRuntimeManifest, resolveRuntimeManifestUrl } =
 		await import('@wasm-idle/llvm-core/clang');
 	const manifest = await loadRuntimeManifest(
@@ -36,7 +43,10 @@ async function loadClang(path: string, log: boolean, maxAssetBytes: number | und
 		undefined,
 		maxAssetBytes
 	);
-	clang = new BrowserClangRuntime({
+	const Runtime = verifiedStreaming
+		? withVerifiedStreaming(BrowserClangRuntime, path, maxAssetBytes)
+		: BrowserClangRuntime;
+	clang = new Runtime({
 		stdout: (output) => postMessage({ output }),
 		onDebugEvent: (debugEvent) => postMessage({ debugEvent }),
 		stdin: () => {
@@ -91,7 +101,12 @@ self.onmessage = async (event: { data: any }) => {
 		try {
 			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
 			configureWorkerRuntimeAssets(runtimeAssets || null);
-			await loadClang(runtimeAssets?.baseUrl || path || '', log, maxAssetBytes);
+			await loadClang(
+				runtimeAssets?.baseUrl || path || '',
+				log,
+				maxAssetBytes,
+				event.data.verifiedStreaming === true
+			);
 			postMessage({ load: true });
 		} catch (error: any) {
 			self.postMessage({ error: error.message || 'Unable to load the C/C++ runtime.' });

@@ -5,6 +5,7 @@ import type {
 	DebugSessionEvent,
 	SandboxExecutionOptions
 } from '$lib/playground/options';
+import { shouldStreamBundledClang } from './clangStreamingPolicy';
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
 import {
 	resolveDebugRuntimeUrls,
@@ -163,6 +164,7 @@ class Clang implements Sandbox {
 				};
 				this.worker.postMessage({
 					load: true,
+					verifiedStreaming: shouldStreamBundledClang(assetConfig),
 					log,
 					code,
 					args,
