@@ -14,6 +14,7 @@ import {
 	type PreloadBrowserRustRuntimeOptions
 } from './compiler-preload.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
+import { createRustcModuleService } from './rustc-module-service.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
 import {
@@ -69,7 +70,7 @@ export { createBrowserRustCompileRequestIdentity, resolveBrowserRustDebugMode };
 export { preloadBrowserRustRuntime };
 
 interface WorkerLike {
-	postMessage(message: unknown): void;
+	postMessage(message: unknown, transfer?: Transferable[]): void;
 	terminate(): void;
 	addEventListener(
 		type: 'message',
@@ -242,6 +243,7 @@ export async function compileRust(
 			new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
 	const readCompileLogs = () => (request.log ? compileLogs.map((entry) => entry.message) : []);
 	const readCompileLogRecords = () => (request.log ? [...compileLogs] : []);
+	let activeWorkerCleanup: (() => void) | undefined;
 	emitCompileProgress('manifest', 1, {
 		completed: 0,
 		total: 1,
@@ -346,6 +348,19 @@ export async function compileRust(
 			const worker = (
 				dependencies.createWorker || ((url) => createModuleWorker(url) as WorkerLike)
 			)(workerUrl);
+			activeWorkerCleanup = () => worker.terminate();
+			// Only the activated, receipt-verified topology gets a private module service.
+			const rustcReceiptPath = `wasm-rust/runtime/${manifest.compiler.rustcWasm}`;
+			const moduleService = executableGraph ? createRustcModuleService(
+				manifest.assetReceipts?.[rustcReceiptPath]) : undefined;
+			let stopped = false;
+			const stopWorker = () => {
+				if (stopped) return;
+				stopped = true;
+				moduleService?.close();
+				worker.terminate();
+			};
+			activeWorkerCleanup = stopWorker;
 			const sharedBitcodeBuffer = new SharedArrayBuffer(
 				16 + manifest.compiler.workerSharedOutputBytes
 			);
@@ -386,6 +401,7 @@ export async function compileRust(
 
 			worker.postMessage({
 				type: 'compile',
+				...(moduleService ? { rustcModulePort: moduleService.port } : {}),
 				compilerWorkerUrl: workerUrl.toString(),
 				...(executableGraph
 					? {
@@ -399,7 +415,7 @@ export async function compileRust(
 				sharedBitcodeBuffer,
 				sharedWorkspaceBuffer,
 				sharedStatusBuffer
-			} satisfies CompileWorkerRequest);
+			} satisfies CompileWorkerRequest, moduleService ? [moduleService.port] : []);
 			recordAttemptCompileLog(
 				`[wasm-rust] compile worker started attempt=${attempt}/${maxBrowserAttempts}`
 			);
@@ -484,7 +500,7 @@ export async function compileRust(
 							deferredWorkerError = null;
 							break;
 						}
-						worker.terminate();
+						stopWorker();
 						attemptResult = makeFailure(pendingHelperThreadFailure);
 						break;
 					}
@@ -505,7 +521,7 @@ export async function compileRust(
 					mirrored.length > 0 &&
 					now() - lastSequenceChange >= manifest.compiler.artifactIdleMs
 				) {
-					worker.terminate();
+					stopWorker();
 					if (mirrored.overflowed) {
 						attemptResult = makeFailure(
 							`wasm-rust mirrored output buffer overflowed before ${outputFinalizationName}`
@@ -585,7 +601,7 @@ export async function compileRust(
 			}
 
 			if (!attemptResult && workerBootstrapError) {
-				worker.terminate();
+				stopWorker();
 				recordAttemptCompileLog(
 					`[wasm-rust] compile worker bootstrap failed ${workerBootstrapError.message}`,
 					'debug'
@@ -594,7 +610,7 @@ export async function compileRust(
 			}
 
 			if (!attemptResult && !settledMessage) {
-				worker.terminate();
+				stopWorker();
 				const mirrored = readMirroredBitcode(sharedBitcodeBuffer);
 				if (mirrored.length > 0 && !mirrored.overflowed) {
 					recordAttemptCompileLog(
@@ -682,7 +698,7 @@ export async function compileRust(
 			}
 
 			if (!attemptResult && settledMessage) {
-				worker.terminate();
+				stopWorker();
 				const mirrored = readMirroredBitcode(sharedBitcodeBuffer);
 				if (settledMessage.type === 'error') {
 					if (mirrored.length > 0 && !mirrored.overflowed) {
@@ -892,4 +908,5 @@ export async function compileRust(
 	} catch (error) {
 		return makeFailure(error instanceof Error ? error.message : String(error));
 	}
+	finally { activeWorkerCleanup?.(); }
 }
