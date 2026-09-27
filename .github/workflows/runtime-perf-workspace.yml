@@ -15,18 +15,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Validate and publish isolated Go change
+      - name: Validate and publish isolated Go changes
         shell: bash
         run: |
           set -euo pipefail
-          npm install --prefix /tmp/test-tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.0.18 @bjorn3/browser_wasi_shim@0.4.2
+          npm install --prefix /tmp/test-tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.0.18 @bjorn3/browser_wasi_shim@0.4.2 wabt@1.0.39
           git fetch --depth=1 origin a1640827e6e3cf4a0b78639563bf26dda028f743
           git worktree add --detach /tmp/change a1640827e6e3cf4a0b78639563bf26dda028f743
           cd /tmp/change
           git sparse-checkout set runtimes/wasm-go
-          git apply "$GITHUB_WORKSPACE/.github/runtime-perf-patches/go-cache.patch"
           ln -s /tmp/test-tools/node_modules node_modules
+          python3 -c 'from pathlib import Path; p=Path("runtimes/wasm-go/test/tool-startup.test.ts"); s=p.read_text(); old="new Response(bytes.slice().buffer as ArrayBuffer)"; assert old in s; p.write_text(s.replace(old,"new Response(Uint8Array.from(bytes).buffer)"))'
           printf 'export default {test:{environment:"node",include:["test/**/*.test.ts","src/tool-runtime.startup.test.ts"]}};' > /tmp/go-config.mjs
+          cd runtimes/wasm-go
+          node /tmp/test-tools/node_modules/vitest/vitest.mjs run --config /tmp/go-config.mjs --reporter=verbose | tee /tmp/go-base-tests.log
+          cd /tmp/change
+          git diff --check
+          git add runtimes/wasm-go/test/tool-startup.test.ts
+          git -c user.name='wasm-idle automation' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'test(go): preserve exact gzip Buffer view in response fixture'
+          git push origin HEAD:refs/heads/perf/go-parallel-tool-startup
+          git rev-parse HEAD > /tmp/go-base-head.txt
+          python3 -c 'from pathlib import Path; import os; s=(Path(os.environ["GITHUB_WORKSPACE"])/".github/runtime-perf-patches/go-cache.patch").read_text(); Path("/tmp/go-cache.patch").write_text(s.replace("new Response(bytes.slice().buffer as ArrayBuffer)","new Response(Uint8Array.from(bytes).buffer)"))'
+          git apply /tmp/go-cache.patch
           cd runtimes/wasm-go
           node /tmp/test-tools/node_modules/vitest/vitest.mjs run --config /tmp/go-config.mjs --reporter=verbose | tee /tmp/go-cache-tests.log
           cd /tmp/change
@@ -40,6 +50,8 @@ jobs:
         with:
           name: go-cache-validation
           path: |
+            /tmp/go-base-tests.log
+            /tmp/go-base-head.txt
             /tmp/go-cache-tests.log
             /tmp/go-cache-head.txt
           retention-days: 1
