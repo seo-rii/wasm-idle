@@ -1,26 +1,10 @@
-name: Runtime follow-up validation
+name: Pinned .NET reference-registration runtime build
 on:
   push:
     branches: [chore/runtime-followup-20260927]
 permissions:
   contents: read
 jobs:
-  pinned-packages:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - run: |
-          npm install --prefix /tmp/packages --ignore-scripts --no-audit --no-fund @ruby/3.4-wasm-wasi@2.9.3-2.9.4 @ruby/wasm-wasi@2.9.3-2.9.4 @php-wasm/universal@3.1.34 @php-wasm/web-8-4@3.1.34 vite@8.0.8 esbuild@0.28.0 svelte@5.55.4 prettier-plugin-svelte@3.5.1 prettier@3.8.3 typescript@6.0.2
-          tar -C /tmp/packages -czf /tmp/pinned-packages.tar.gz .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pinned-language-packages
-          path: /tmp/pinned-packages.tar.gz
-          retention-days: 1
-          compression-level: 0
   dotnet:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -34,48 +18,17 @@ jobs:
           node-version: '24'
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
-      - name: Validate managed source and bridge
+          dotnet-version: '9.0.314'
+      - name: Build and validate against the existing runtime version
         shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import gzip,hashlib
-          from pathlib import Path
-          b=Path('.github/runtime-followup/dotnet.patch.gz').read_bytes()
-          assert hashlib.sha256(b).hexdigest()=='83f852b6db4288312c4d47163a2122a5238037555fbb4e75c3de15301c7d54da'
-          Path('/tmp/dotnet.patch').write_bytes(gzip.decompress(b))
-          PY
-          git fetch --depth=1 origin 8286647cd88275d5fb3a0dfbddd63f542771cedb
-          git worktree add --detach /tmp/change 8286647cd88275d5fb3a0dfbddd63f542771cedb
-          cd /tmp/change
-          git sparse-checkout set runtimes/wasm-dotnet scripts src/lib static/wasm-dotnet
-          git apply /tmp/dotnet.patch
-          npm install --prefix /tmp/tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.1.4 @types/node@24.12.4
-          ln -s /tmp/tools/node_modules node_modules
-          mkdir -p .svelte-kit
-          printf '{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"bundler"}}' > .svelte-kit/tsconfig.json
-          cd runtimes/wasm-dotnet
-          node /tmp/tools/node_modules/vitest/vitest.mjs run --reporter=verbose
-          node scripts/clean-module-output.mjs
-          node /tmp/tools/node_modules/typescript/bin/tsc -p tsconfig.build.json
-          refs=$(find "$DOTNET_ROOT/packs/Microsoft.NETCore.App.Ref" -path '*/ref/net9.0' -type d | sort -V | tail -1)
-          for lang in csharp fsharp vbnet; do
-            rm -rf dotnet/ReferenceTests/bin dotnet/ReferenceTests/obj
-            dotnet run --project dotnet/ReferenceTests/ReferenceTests.csproj -c Release -p:WasmDotnetLanguage="$lang" -- "$refs"
-          done
-      - name: Build actual browser runtime bundles
-        shell: bash
-        run: |
-          set -euo pipefail
-          dotnet workload install wasm-tools --skip-manifest-update
-          cd /tmp/change/runtimes/wasm-dotnet
-          DOTNET=$(command -v dotnet) node scripts/build-runtime.mjs
-          tar -czf /tmp/dotnet-registered-runtime.tar.gz dist
+        run: bash .github/runtime-followup/dotnet-build.sh 2>&1 | tee /tmp/dotnet-validation.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: dotnet-reference-runtime
-          path: /tmp/dotnet-registered-runtime.tar.gz
+          path: |
+            /tmp/dotnet-registered-runtime.tar.gz
+            /tmp/dotnet-followup-tracked.patch
+            /tmp/dotnet-validation.log
           retention-days: 1
           compression-level: 0
