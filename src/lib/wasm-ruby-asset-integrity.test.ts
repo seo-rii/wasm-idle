@@ -57,7 +57,11 @@ describe('checked-in Ruby runtime trust root', () => {
 			'runtime-manifest.v1.json',
 			'runtime-manifest.v2.json',
 			'runtime.mjs',
-			'runtime.mjs.bin'
+			'runtime.mjs.bin',
+			'split/ruby-core.wasm.gz.bin',
+			'split/runtime-split.v1.json',
+			'split/runtime.mjs.bin',
+			'split/stdlib.pack.gz.bin'
 		]);
 
 		const manifest = JSON.parse(

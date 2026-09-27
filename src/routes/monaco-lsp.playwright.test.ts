@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
+import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 
@@ -385,15 +386,17 @@ const lspBrowserCases: LspBrowserCase[] = [
 		source: 'def main\n  puts(\n',
 		aliases: ['rb'],
 		expectedResponses: [
-			'/wasm-ruby/runtime-manifest.v2.json?',
-			'/wasm-ruby/runtime.mjs.bin?',
-			'/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin?'
+			'/wasm-ruby/split/runtime-split.v1.json?',
+			'/wasm-ruby/split/runtime.mjs.bin?',
+			'/wasm-ruby/split/ruby-core.wasm.gz.bin?',
+			'/wasm-ruby/split/stdlib.pack.gz.bin?'
 		],
 		assertNoPreEnableRequests: ['/wasm-ruby/'],
 		expectedRequestPathnames: [
-			'/wasm-ruby/runtime-manifest.v2.json',
-			'/wasm-ruby/runtime.mjs.bin',
-			'/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin'
+			'/wasm-ruby/split/runtime-split.v1.json',
+			'/wasm-ruby/split/runtime.mjs.bin',
+			'/wasm-ruby/split/ruby-core.wasm.gz.bin',
+			'/wasm-ruby/split/stdlib.pack.gz.bin'
 		],
 		forbiddenRequestPathnames: [
 			'/wasm-ruby/runtime.mjs',
@@ -632,6 +635,7 @@ function selectedCases() {
 
 async function prepareBrowserContext(context: BrowserContext, browserUrl: string) {
 	await addBrowserTestCookies(context, browserUrl);
+	await disableBrowserPrewarm(context);
 	await context.addInitScript(() => {
 		try {
 			for (const key of [
