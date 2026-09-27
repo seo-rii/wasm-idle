@@ -1382,7 +1382,8 @@ class Clang {
 	async link(
 		obj: string | readonly string[],
 		wasm: string,
-		debugModeOrLegacyDebug: BrowserClangDebugMode | boolean = 'none'
+		debugModeOrLegacyDebug: BrowserClangDebugMode | boolean = 'none',
+		language: ClangSourceLanguage = 'CPP'
 	) {
 		const objects = typeof obj === 'string' ? [obj] : [...obj];
 		if (
@@ -1416,8 +1417,9 @@ class Clang {
 			crt1,
 			...objects,
 			'-lc',
-			'-lc++',
-			'-lc++abi',
+			// Keep the legacy C++ default for direct link() callers. compileLink()
+			// selects C only after checking every translation unit and language override.
+			...(language === 'C' ? [] : ['-lc++', '-lc++abi']),
 			'-lm',
 			`-L${compilerRuntimeLibDir}`,
 			'-lclang_rt.builtins-wasm32',
@@ -1537,6 +1539,13 @@ class Clang {
 		const translationUnits = workspaceSnapshot.filter(
 			(file) => file.path === input || workspaceTranslationUnitPattern.test(file.path)
 		);
+		// Match compile()'s effective language, not just the active editor language.
+		// Arbitrary -x overrides are conservatively treated as requiring C++ libraries.
+		const cOnly =
+			language === 'C' &&
+			translationUnits.every((unit) => unit.path === input || unit.path.endsWith('.c')) &&
+			!compileArgs.some((argument) => argument.startsWith('-x'));
+		const linkProfile: [] | ['C'] = cOnly ? ['C'] : [];
 		const traceDebug = debugMode === 'trace';
 		if (traceDebug && translationUnits.length > 1) {
 			throw new Error('Trace debug mode does not support multiple C/C++ translation units');
@@ -1582,7 +1591,7 @@ class Clang {
 				cVersion,
 				debugMode
 			});
-			await this.link(obj, wasm, debugMode);
+			await this.link(obj, wasm, debugMode, ...linkProfile);
 		} else {
 			await this.ready;
 			this.addWorkspaceFiles(workspaceSnapshot);
@@ -1606,7 +1615,7 @@ class Clang {
 					sourceAlreadyMounted: true
 				});
 			}
-			await this.link(objects, wasm, debugMode);
+			await this.link(objects, wasm, debugMode, ...linkProfile);
 		}
 
 		this.lastBuildKey = buildKey;
