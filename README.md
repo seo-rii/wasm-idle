@@ -882,6 +882,14 @@ external static hosting and loaded by `@wasm-idle/llvm-core`. Also powered by Py
 `wasm-dotnet`, `wasm-of-js-of-ocaml`, `wasm-typescript`, `wasm-lisp`,
 `wasm-wat`, `wasm-lua`, `wasm-zig`, CBQN, Janet, AtomVM/Popcorn, and `ghc-in-browser`.
 
+### Ruby split standard library
+
+The bundled Ruby runtime also provides a verified `ruby.splitStdlib: true` profile. It compiles the genuine Ruby core Wasm while fetching the complete standard library and bundled gems as a separate read-only filesystem pack. The web demo selects this profile; library consumers retain the embedded-stdlib profile unless they opt in. Custom trust profiles continue to use the embedded path.
+
+The pack contains the same locked upstream files, not an import-based subset. Each execution gets fresh filesystem descriptors and directories. Both the host and worker verify fixed byte lengths and SHA-256 receipts before activation. Compiler payload size decreases, but total network transfer is not necessarily smaller.
+
+`node scripts/sync-runtime.mjs wasm-ruby` regenerates both profiles from the pinned producer inputs. `node scripts/sync-wasm-ruby-split.mjs --verify` additionally checks split-profile freshness without replacing published files.
+
 ### Optional idle runtime prewarming
 
 `createPlaygroundBinding(assets, { prewarm: true })` enables explicit

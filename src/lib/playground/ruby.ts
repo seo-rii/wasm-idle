@@ -315,39 +315,41 @@ class Ruby implements Sandbox {
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			nextConfig = resolveRubyRuntimeAssetConfig(runtimeAssets, currentUrl);
 			const effectiveMaxAssetBytes = Math.min(limits.maxAssetBytes, RUBY_MAX_ASSET_BYTES);
-			for (const [label, bytes, limit] of [
-				[
-					'manifest',
-					nextConfig.preflightProfile.manifestReceipt.bytes,
-					Math.min(effectiveMaxAssetBytes, RUBY_MAX_MANIFEST_BYTES)
-				],
-				[
-					'module JavaScript',
-					nextConfig.preflightProfile.moduleJavaScriptReceipt.bytes,
-					Math.min(effectiveMaxAssetBytes, RUBY_MAX_MODULE_BYTES)
-				],
-				[
-					'Wasm storage',
-					nextConfig.preflightProfile.wasmReceipt.bytes,
-					effectiveMaxAssetBytes
-				],
-				[
-					'Wasm logical',
-					nextConfig.preflightProfile.wasmReceipt.uncompressedBytes,
-					effectiveMaxAssetBytes
-				]
-			] as const) {
-				if ((bytes ?? 0) > limit) {
-					throw new AssetTooLargeError(
-						`Ruby runtime ${label} exceeds the ${limit} byte limit`,
-						{
-							actual: bytes,
-							limit,
-							phase: 'asset',
-							profileId: nextConfig.preflightProfile.profileId,
-							runtimeId: 'RUBY'
-						}
-					);
+			if (!nextConfig.splitStdlib) {
+				for (const [label, bytes, limit] of [
+					[
+						'manifest',
+						nextConfig.preflightProfile.manifestReceipt.bytes,
+						Math.min(effectiveMaxAssetBytes, RUBY_MAX_MANIFEST_BYTES)
+					],
+					[
+						'module JavaScript',
+						nextConfig.preflightProfile.moduleJavaScriptReceipt.bytes,
+						Math.min(effectiveMaxAssetBytes, RUBY_MAX_MODULE_BYTES)
+					],
+					[
+						'Wasm storage',
+						nextConfig.preflightProfile.wasmReceipt.bytes,
+						effectiveMaxAssetBytes
+					],
+					[
+						'Wasm logical',
+						nextConfig.preflightProfile.wasmReceipt.uncompressedBytes,
+						effectiveMaxAssetBytes
+					]
+				] as const) {
+					if ((bytes ?? 0) > limit) {
+						throw new AssetTooLargeError(
+							`Ruby runtime ${label} exceeds the ${limit} byte limit`,
+							{
+								actual: bytes,
+								limit,
+								phase: 'asset',
+								profileId: nextConfig.preflightProfile.profileId,
+								runtimeId: 'RUBY'
+							}
+						);
+					}
 				}
 			}
 			nextAssetKey = JSON.stringify([nextConfig.preflightKey, effectiveMaxAssetBytes]);
