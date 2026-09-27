@@ -1,34 +1,54 @@
-name: Pinned .NET reference-registration runtime build
+name: Optional prewarm validation
 on:
   push:
     branches: [chore/runtime-followup-20260927]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  dotnet:
+  prewarm:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
           sparse-checkout: .github/runtime-followup
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.0.314'
-      - name: Build and validate against the existing runtime version
+      - name: Apply, validate and publish prewarm option
         shell: bash
-        run: bash .github/runtime-followup/dotnet-build.sh 2>&1 | tee /tmp/dotnet-validation.log
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: dotnet-reference-runtime
-          path: |
-            /tmp/dotnet-registered-runtime.tar.gz
-            /tmp/dotnet-followup-tracked.patch
-            /tmp/dotnet-validation.log
-          retention-days: 1
-          compression-level: 0
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import gzip,hashlib
+          from pathlib import Path
+          b=Path('.github/runtime-followup/prewarm.patch.gz').read_bytes()
+          assert hashlib.sha256(b).hexdigest()=='d7ee24733c692589f53fb9c2cb813e58a6967008139fe84b4f4a84c60f9ffa3b'
+          Path('/tmp/prewarm.patch').write_bytes(gzip.decompress(b))
+          PY
+          npm install --prefix /tmp/tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.1.4 @types/node@24.12.4 svelte@5.55.4 prettier@3.8.3 prettier-plugin-svelte@3.5.1
+          git fetch --depth=1 origin b45847d10f059463aa313dd61a7c12f4abec19bd
+          git worktree add --detach /tmp/change b45847d10f059463aa313dd61a7c12f4abec19bd
+          cd /tmp/change
+          git sparse-checkout set src packages/core
+          git apply /tmp/prewarm.patch
+          ln -s /tmp/tools/node_modules node_modules
+          mkdir -p .svelte-kit
+          printf '{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"bundler"}}' > .svelte-kit/tsconfig.json
+          node /tmp/tools/node_modules/typescript/bin/tsc -p packages/core/tsconfig.json --noEmit
+          printf 'export default {test:{environment:"node",include:["src/lib/runtime-prewarm.test.ts","src/lib/core-execution-boundary.test.ts","src/lib/core-lifecycle-contract.test.ts","src/lib/core-runtime-trust-enforcement.test.ts"]}};' > /tmp/prewarm-config.mjs
+          node /tmp/tools/node_modules/vitest/vitest.mjs run --config /tmp/prewarm-config.mjs --reporter=verbose
+          node --input-type=module <<'JS'
+          import {readFile} from 'node:fs/promises';
+          import {compile} from '/tmp/tools/node_modules/svelte/compiler/index.js';
+          const source=await readFile('src/routes/+page.svelte','utf8');
+          for(const generate of ['client','server']) {
+            const result=compile(source,{filename:'src/routes/+page.svelte',generate});
+            console.log('Demo Svelte compile:',generate,result.js.code.length,'bytes;',result.warnings.length,'warnings');
+          }
+          JS
+          git diff --check
+          git add packages/core/src/prewarm.ts packages/core/src/sandbox.ts src/lib/index.ts src/lib/playground/index.ts src/lib/playground/sandbox.ts src/routes/+page.svelte src/lib/runtime-prewarm.test.ts README.md
+          git -c user.name='wasm-idle automation' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'feat(core): opt-in selected-language prewarm with demo toggle'
+          git push origin HEAD:refs/heads/feat/optional-runtime-prewarm
+          git show --stat --oneline HEAD
