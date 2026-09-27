@@ -118,6 +118,30 @@ function throwIfAborted(signal?: AbortSignal) {
 	}
 }
 
+function waitForSignal<T>(operation: Promise<T>, signal: AbortSignal) {
+	return new Promise<T>((resolve, reject) => {
+		let settled = false;
+		const finish = (callback: () => void) => {
+			if (settled) return;
+			settled = true;
+			signal.removeEventListener('abort', abort);
+			callback();
+		};
+		const abort = () =>
+			finish(() =>
+				reject(
+					signal.reason ?? new DOMException('wasm-go operation aborted', 'AbortError')
+				)
+			);
+		signal.addEventListener('abort', abort, { once: true });
+		if (signal.aborted) abort();
+		operation.then(
+			(value) => finish(() => resolve(value)),
+			(error) => finish(() => reject(error))
+		);
+	});
+}
+
 function positiveLimit(value: number | undefined, fallback: number, label: string) {
 	const resolved = value ?? fallback;
 	if (!Number.isSafeInteger(resolved) || resolved <= 0) {
@@ -379,12 +403,19 @@ export async function preloadBrowserGoRuntime(options: PreloadBrowserGoRuntimeOp
 		const preloadSysroot = async (): Promise<string[]> => {
 			if (options.includeSysroot === false) return [];
 			if (target.sysrootPack) {
-				await loadRuntimePackEntries(
-					runtimeBaseUrl,
-					target.sysrootPack,
-					fetchImpl,
-					undefined,
-					boundary
+				await waitForSignal(
+					loadRuntimePackEntries(
+						runtimeBaseUrl,
+						target.sysrootPack,
+						fetchImpl,
+						undefined,
+						{
+							assetTimeoutMs: options.assetTimeoutMs,
+							maxAssetBytes: options.maxAssetBytes,
+							maxWasmMemoryBytes: options.maxWasmMemoryBytes
+						}
+					),
+					controller.signal
 				);
 				return [target.sysrootPack.index, target.sysrootPack.asset].map((asset) =>
 					resolveVersionedAssetUrl(runtimeBaseUrl, asset).toString()

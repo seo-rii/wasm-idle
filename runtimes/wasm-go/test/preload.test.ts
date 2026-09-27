@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { preloadBrowserGoRuntime } from '../src/compiler.js';
+import { clearRuntimePackCache } from '../src/runtime-asset.js';
 import { createRuntimeManifest } from './helpers.js';
 
 function harness(count = 0) {
@@ -40,7 +41,57 @@ function harness(count = 0) {
 }
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+function packHarness() {
+	const manifest = createRuntimeManifest();
+	const requests: string[] = [];
+	const pending: Array<{
+		path: string;
+		resolve: (response: Response) => void;
+		signal: AbortSignal | null | undefined;
+	}> = [];
+	const fetchImpl = vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
+		const path = new URL(String(url)).pathname;
+		requests.push(path);
+		if (!path.startsWith('/sysroot/')) {
+			return Promise.resolve(new Response(new Uint8Array([1, 2, 3])));
+		}
+		return new Promise<Response>((resolve) =>
+			pending.push({ path, resolve, signal: init?.signal })
+		);
+	});
+	const start = (signal?: AbortSignal) =>
+		preloadBrowserGoRuntime({
+			manifest,
+			runtimeBaseUrl: 'https://example.test/',
+			fetchImpl,
+			...(signal ? { signal } : {})
+		});
+	const finish = () => {
+		for (const request of pending.splice(0)) {
+			request.resolve(
+				request.path.endsWith('.index.json.gz')
+					? new Response(
+							JSON.stringify({
+								format: 'wasm-go-runtime-pack-index-v1',
+								fileCount: 2,
+								totalBytes: 6,
+								entries: [
+									{ runtimePath: '/sysroot/fmt.a', offset: 0, length: 3 },
+									{ runtimePath: '/sysroot/runtime.a', offset: 3, length: 3 }
+								]
+							})
+						)
+					: new Response(new Uint8Array([1, 2, 3, 4, 5, 6]))
+			);
+		}
+	};
+	const count = (path: string) => requests.filter((request) => request === path).length;
+	return { count, fetchImpl, finish, pending, start };
+}
+
 describe('parallel Go preloading', () => {
+	afterEach(() => clearRuntimePackCache());
+
 	it('starts compiler, linker and sysroot independently and preserves manifest order', async () => {
 		const h = harness(2);
 		const operation = h.start();
@@ -130,5 +181,82 @@ describe('parallel Go preloading', () => {
 		h.finish('/sysroot/lib0.a');
 		await assertion;
 		expect(h.pending.get('/tools/link.wasm.gz')!.signal.aborted).toBe(true);
+	});
+	it('shares cold pack index and byte requests across concurrent preloads', async () => {
+		const h = packHarness();
+		const preloads = [h.start(), h.start()];
+
+		await tick();
+		const indexRequests = h.count('/sysroot/wasip1.index.json.gz');
+		const packRequests = h.count('/sysroot/wasip1.pack.gz');
+		h.finish();
+		await Promise.all(preloads);
+
+		expect(indexRequests).toBe(1);
+		expect(packRequests).toBe(1);
+	});
+	it('cancels one shared-pack waiter without cancelling another', async () => {
+		const h = packHarness();
+		const firstController = new AbortController();
+		const secondController = new AbortController();
+		const first = h.start(firstController.signal);
+		const second = h.start(secondController.signal);
+		const firstResult = expect(first).rejects.toThrow('first waiter stopped');
+
+		await tick();
+		firstController.abort(new Error('first waiter stopped'));
+		await firstResult;
+		expect(secondController.signal.aborted).toBe(false);
+		expect(h.count('/sysroot/wasip1.index.json.gz')).toBe(1);
+		expect(h.count('/sysroot/wasip1.pack.gz')).toBe(1);
+		expect(h.pending.every((request) => request.signal === undefined)).toBe(true);
+
+		h.finish();
+		await expect(second).resolves.toMatchObject({
+			fetchedAssets: expect.arrayContaining([
+				'https://example.test/sysroot/wasip1.index.json.gz',
+				'https://example.test/sysroot/wasip1.pack.gz'
+			])
+		});
+	});
+	it('evicts a failed shared pack request so a later preload can retry', async () => {
+		const manifest = createRuntimeManifest();
+		let packRequests = 0;
+		let indexRequests = 0;
+		const fetchImpl = vi.fn(async (url: RequestInfo | URL) => {
+			const path = new URL(String(url)).pathname;
+			if (path.endsWith('.index.json.gz')) {
+				indexRequests++;
+				return new Response(
+					JSON.stringify({
+						format: 'wasm-go-runtime-pack-index-v1',
+						fileCount: 2,
+						totalBytes: 6,
+						entries: [
+							{ runtimePath: '/sysroot/fmt.a', offset: 0, length: 3 },
+							{ runtimePath: '/sysroot/runtime.a', offset: 3, length: 3 }
+						]
+					})
+				);
+			}
+			if (path.endsWith('.pack.gz')) {
+				packRequests++;
+				return packRequests === 1
+					? new Response('failed pack', { status: 503 })
+					: new Response(new Uint8Array([1, 2, 3, 4, 5, 6]));
+			}
+			return new Response(new Uint8Array([1, 2, 3]));
+		});
+		const start = () =>
+			preloadBrowserGoRuntime({
+				manifest,
+				runtimeBaseUrl: 'https://retry.example.test/',
+				fetchImpl
+			});
+
+		await expect(start()).rejects.toThrow(/status 503/);
+		await expect(start()).resolves.toMatchObject({ target: { target: 'wasip1/wasm' } });
+		expect(indexRequests).toBe(1);
+		expect(packRequests).toBe(2);
 	});
 });

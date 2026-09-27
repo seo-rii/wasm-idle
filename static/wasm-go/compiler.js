@@ -37,6 +37,23 @@ function throwIfAborted(signal) {
         throw signal.reason ?? new DOMException('wasm-go operation aborted', 'AbortError');
     }
 }
+function waitForSignal(operation, signal) {
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (callback) => {
+            if (settled)
+                return;
+            settled = true;
+            signal.removeEventListener('abort', abort);
+            callback();
+        };
+        const abort = () => finish(() => reject(signal.reason ?? new DOMException('wasm-go operation aborted', 'AbortError')));
+        signal.addEventListener('abort', abort, { once: true });
+        if (signal.aborted)
+            abort();
+        operation.then((value) => finish(() => resolve(value)), (error) => finish(() => reject(error)));
+    });
+}
 function positiveLimit(value, fallback, label) {
     const resolved = value ?? fallback;
     if (!Number.isSafeInteger(resolved) || resolved <= 0) {
@@ -231,7 +248,11 @@ export async function preloadBrowserGoRuntime(options = {}) {
             if (options.includeSysroot === false)
                 return [];
             if (target.sysrootPack) {
-                await loadRuntimePackEntries(runtimeBaseUrl, target.sysrootPack, fetchImpl, undefined, boundary);
+                await waitForSignal(loadRuntimePackEntries(runtimeBaseUrl, target.sysrootPack, fetchImpl, undefined, {
+                    assetTimeoutMs: options.assetTimeoutMs,
+                    maxAssetBytes: options.maxAssetBytes,
+                    maxWasmMemoryBytes: options.maxWasmMemoryBytes
+                }), controller.signal);
                 return [target.sysrootPack.index, target.sysrootPack.asset].map((asset) => resolveVersionedAssetUrl(runtimeBaseUrl, asset).toString());
             }
             // Bound individual-library concurrency instead of starting hundreds of fetches.
