@@ -84,31 +84,54 @@ export async function executeGoToolInvocation(
 ): Promise<BrowserGoToolResult> {
 	throwIfAborted(options.signal);
 	const maxWasmMemoryBytes = options.maxWasmMemoryBytes ?? DEFAULT_MAX_WASM_MEMORY_BYTES;
+	const inputFiles = collectInputFiles(invocation, plan);
+	const startupController = new AbortController();
+	const relayAbort = () => startupController.abort(options.signal?.reason);
+	options.signal?.addEventListener('abort', relayAbort, { once: true });
+	const startupOptions = { ...options, signal: startupController.signal };
+	// Tool compilation does not need the sysroot. Observe both branches immediately
+	// so either failure is reported even while its peer is still pending.
+	let sysrootFiles: Awaited<ReturnType<typeof loadSysrootFiles>>;
+	let module: WebAssembly.Module;
+	try {
+		[sysrootFiles, module] = await Promise.all([
+			loadSysrootFiles(plan, runtimeBaseUrl, fetchImpl, reportAssetProgress, startupOptions),
+			(async () => {
+				const toolBytes = await fetchRuntimeAssetBytes(
+					resolveVersionedAssetUrl(runtimeBaseUrl, invocation.toolAsset),
+					`${invocation.tool}.wasm`,
+					fetchImpl,
+					true,
+					(loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total),
+					startupOptions
+				);
+				throwIfAborted(startupController.signal);
+				const cappedToolBytes = capGoWasmMemory(
+					toStandaloneBytes(toolBytes),
+					maxWasmMemoryBytes,
+					`${invocation.tool}.wasm`
+				);
+				return await WebAssembly.compile(cappedToolBytes.slice().buffer as ArrayBuffer);
+			})()
+		]);
+	} catch (error) {
+		startupController.abort(error);
+		throw error;
+	} finally {
+		options.signal?.removeEventListener('abort', relayAbort);
+	}
+	throwIfAborted(options.signal);
 	const root = new Directory(new Map());
 	ensureGuestDirectory(root, '/tmp');
-	for (const entry of await loadSysrootFiles(
-		plan,
-		runtimeBaseUrl,
-		fetchImpl,
-		reportAssetProgress,
-		options
-	)) {
+	for (const entry of sysrootFiles) {
 		writeGuestFile(root, entry.runtimePath, entry.bytes, true);
 	}
-	for (const file of collectInputFiles(invocation, plan)) {
+	for (const file of inputFiles) {
 		writeGuestFile(root, file.path, file.contents);
 	}
 	ensureGuestDirectory(
 		root,
 		normalizeGuestPath(invocation.outputPath).split('/').slice(0, -1).join('/')
-	);
-	const toolBytes = await fetchRuntimeAssetBytes(
-		resolveVersionedAssetUrl(runtimeBaseUrl, invocation.toolAsset),
-		`${invocation.tool}.wasm`,
-		fetchImpl,
-		true,
-		(loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total),
-		options
 	);
 	const stdout = new CaptureFd();
 	const stderr = new CaptureFd();
@@ -124,12 +147,6 @@ export async function executeGoToolInvocation(
 		{ debug: false }
 	);
 	throwIfAborted(options.signal);
-	const cappedToolBytes = capGoWasmMemory(
-		toStandaloneBytes(toolBytes),
-		maxWasmMemoryBytes,
-		`${invocation.tool}.wasm`
-	);
-	const module = await WebAssembly.compile(cappedToolBytes.slice().buffer as ArrayBuffer);
 	const instance = await WebAssembly.instantiate(module, {
 		wasi_snapshot_preview1: wasiInstance.wasiImport
 	});
