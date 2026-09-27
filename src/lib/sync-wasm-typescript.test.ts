@@ -18,6 +18,7 @@ import {
 } from '../../runtimes/wasm-typescript/scripts/provenance.mjs';
 import {
 	WASM_TYPESCRIPT_ASSET_VERSION,
+	WASM_JAVASCRIPT_MODULE_RECEIPT,
 	WASM_TYPESCRIPT_MODULE_RECEIPT
 } from './playground/wasmTypeScriptVersion';
 
@@ -201,12 +202,16 @@ describe('syncWasmTypeScriptDist', () => {
 				format: 'wasm-typescript-producer-build-v1',
 				source: await computeWasmTypeScriptSourceReceipt(producerDir),
 				toolchain: await readWasmTypeScriptToolchain(producerDir),
+				additionalArtifacts: { 'javascript.js': WASM_JAVASCRIPT_MODULE_RECEIPT },
 				artifact: {
 					path: 'index.js',
 					...WASM_TYPESCRIPT_MODULE_RECEIPT
 				}
 			},
-			assets: { 'index.js': WASM_TYPESCRIPT_MODULE_RECEIPT }
+			assets: {
+				'index.js': WASM_TYPESCRIPT_MODULE_RECEIPT,
+				'javascript.js': WASM_JAVASCRIPT_MODULE_RECEIPT
+			}
 		});
 		expect(actualReceipt).toEqual(WASM_TYPESCRIPT_MODULE_RECEIPT);
 	});
@@ -245,5 +250,58 @@ process.stdout.write(JSON.stringify({ execution, lifecycle }));
 		const result = JSON.parse(stdout);
 		expect(result.execution.exitCode).toBe(0);
 		expect(result.lifecycle).toEqual(['ready', 'body']);
+	});
+});
+
+describe('JavaScript entry provenance', () => {
+	async function dualFixture() {
+		const f = await createFixture();
+		await writeFile(path.join(f.sourceDir, 'index.js'), 'export const full = true;\n');
+		await writeFile(path.join(f.sourceDir, 'javascript.js'), 'export const light = true;\n');
+		await writeWasmTypeScriptProducerBuildReceipt(f);
+		return f;
+	}
+	it('pins and verifies both standalone entries independently', async () => {
+		const f = await dualFixture();
+		await syncWasmTypeScriptDist(f);
+		const receipt = JSON.parse(
+			await readFile(path.join(f.targetDir, 'runtime-build.json'), 'utf8')
+		);
+		expect(receipt.assets['javascript.js']).toEqual(
+			receipt.producer.additionalArtifacts['javascript.js']
+		);
+		expect(await readFile(f.versionModulePath, 'utf8')).toContain(
+			'WASM_JAVASCRIPT_MODULE_RECEIPT'
+		);
+		await expect(verifyWasmTypeScriptDist(f)).resolves.toBeDefined();
+		await writeFile(path.join(f.targetDir, 'javascript.js'), 'tampered');
+		await expect(verifyWasmTypeScriptDist(f)).rejects.toThrow(/JavaScript module/);
+	});
+	it('rejects tampered source bytes before replacing the installed runtime', async () => {
+		const f = await dualFixture();
+		await syncWasmTypeScriptDist(f);
+		const old = await readFile(path.join(f.targetDir, 'javascript.js'), 'utf8');
+		await writeFile(path.join(f.sourceDir, 'javascript.js'), 'tampered');
+		await expect(syncWasmTypeScriptDist(f)).rejects.toThrow(/additional artifact receipt/);
+		expect(await readFile(path.join(f.targetDir, 'javascript.js'), 'utf8')).toBe(old);
+	});
+	it('verifies compressed JavaScript and rejects ambiguous plain/gzip delivery', async () => {
+		const f = await dualFixture();
+		await syncWasmTypeScriptDist(f);
+		const p = path.join(f.targetDir, 'javascript.js');
+		await writeFile(p + '.gz', gzipSync(await readFile(p)));
+		await expect(verifyWasmTypeScriptDist(f)).rejects.toThrow(/both javascript/);
+		await rm(p);
+		await expect(verifyWasmTypeScriptDist(f)).resolves.toBeDefined();
+		await writeFile(p + '.gz', gzipSync(Buffer.from('tampered')));
+		await expect(verifyWasmTypeScriptDist(f)).rejects.toThrow(/JavaScript module/);
+	});
+	it('rejects a missing additional receipt for an existing JavaScript output', async () => {
+		const f = await dualFixture();
+		const p = path.join(f.sourceDir, 'runtime-build.json');
+		const receipt = JSON.parse(await readFile(p, 'utf8'));
+		delete receipt.additionalArtifacts;
+		await writeFile(p, JSON.stringify(receipt));
+		await expect(syncWasmTypeScriptDist(f)).rejects.toThrow(/additional artifact receipt/);
 	});
 });

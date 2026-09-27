@@ -18,9 +18,10 @@ describe('Python worker source', () => {
 	});
 
 	it('loads the Pyodide entry and asm modules through the bounded runtime asset loader', () => {
-		expect(source).toContain("importRuntimeAssetModule('pyodide.asm.js')");
-		expect(source).toContain("importRuntimeAssetModule(\n\t\t'pyodide.mjs'");
-		expect(source).toContain('loadWorkerRuntimeAsset(asset)');
+		expect(source).toContain("loadWorkerRuntimeAsset('pyodide.asm.js')");
+		expect(source).toContain("loadWorkerRuntimeAsset('pyodide.mjs')");
+		expect(source).toContain('await Promise.all([');
+		expect(source).toContain('await importRuntimeAssetModule(asmAsset)');
 		expect(source).toContain('/* @vite-ignore */ moduleUrl');
 		expect(source).not.toContain("await import('pyodide')");
 	});

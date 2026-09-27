@@ -20,8 +20,8 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 
 type Settings = {
-	pack?: () => Promise<typeof sysroot>;
-	asset?: () => Promise<Uint8Array>;
+	pack?: (...args: unknown[]) => Promise<typeof sysroot>;
+	asset?: (...args: unknown[]) => Promise<Uint8Array>;
 	compile?: (bytes: ArrayBuffer) => Promise<WebAssembly.Module>;
 	instantiate?: () => Promise<unknown>;
 	capError?: Error;
@@ -52,11 +52,11 @@ function harness(settings: Settings = {}) {
 		'./runtime-asset.js': {
 			loadRuntimePackEntries: (...args: unknown[]) => {
 				log('pack', ...args);
-				return settings.pack?.() ?? Promise.resolve(sysroot);
+				return settings.pack?.(...args) ?? Promise.resolve(sysroot);
 			},
 			fetchRuntimeAssetBytes: (...args: unknown[]) => {
 				log('asset', ...args);
-				return settings.asset?.() ?? Promise.resolve(bytes);
+				return settings.asset?.(...args) ?? Promise.resolve(bytes);
 			}
 		},
 		'./wasi-guest.js': {
@@ -102,7 +102,7 @@ function harness(settings: Settings = {}) {
 		exports, require: (id: string) => {
 			if (!(id in imports)) throw new Error(`Unexpected dependency ${id}`);
 			return imports[id];
-		}, URL, Uint8Array, DOMException, fetch,
+		}, URL, Uint8Array, AbortController, DOMException, fetch,
 		WebAssembly: {
 			compile: (value: ArrayBuffer) => {
 				log('compile', value);
@@ -174,6 +174,47 @@ for (const failed of ['pack', 'asset'] as const) {
 	});
 }
 
+for (const failed of ['pack', 'asset'] as const) {
+	it(`aborts pending ${failed === 'pack' ? 'tool' : 'sysroot'} work when ${failed} fails`, async () => {
+		const error = new Error(failed);
+		const callerController = new AbortController();
+		let peerSignal: AbortSignal | undefined;
+		let peerAborted = false;
+		const waitForAbort = (signal: AbortSignal) => {
+			peerSignal = signal;
+			return new Promise<never>((_resolve, reject) => {
+				signal.addEventListener(
+					'abort',
+					() => {
+						peerAborted = true;
+						reject(signal.reason);
+					},
+					{ once: true }
+				);
+			});
+		};
+		const h = harness({
+			pack:
+				failed === 'pack'
+					? () => Promise.reject(error)
+					: (...args) => waitForAbort((args[4] as { signal: AbortSignal }).signal),
+			asset:
+				failed === 'asset'
+					? () => Promise.reject(error)
+					: (...args) => waitForAbort((args[5] as { signal: AbortSignal }).signal)
+		});
+		await assert.rejects(
+			h.run({ signal: callerController.signal }),
+			(value) => value === error
+		);
+		assert.equal(peerAborted, true);
+		assert.equal(peerSignal?.aborted, true);
+		assert.equal(peerSignal?.reason, error);
+		assert.notEqual(peerSignal, callerController.signal);
+		assert.equal(callerController.signal.aborted, false);
+	});
+}
+
 it('observes synchronous loader failures without starting the program', async () => {
 	const error = new Error('sync failure');
 	const h = harness({ pack: () => { throw error; }, asset: () => Promise.reject(new Error('peer')) });
@@ -189,11 +230,17 @@ it('preserves fetch, boundary options and progress for both dependencies', async
 	await h.run(options);
 	const pack = h.calls.find((call) => call.kind === 'pack')!.args;
 	const asset = h.calls.find((call) => call.kind === 'asset')!.args;
+	const packOptions = pack[4] as typeof options;
+	const assetOptions = asset[5] as typeof options;
 	assert.equal(pack[2], h.fetchImpl);
-	assert.equal(pack[4], options);
+	assert.notEqual(packOptions, options);
 	assert.equal(asset[2], h.fetchImpl);
 	assert.equal(asset[3], true);
-	assert.equal(asset[5], options);
+	assert.equal(assetOptions, packOptions);
+	assert.notEqual(assetOptions.signal, options.signal);
+	assert.equal(assetOptions.maxAssetBytes, options.maxAssetBytes);
+	assert.equal(assetOptions.maxWasmMemoryBytes, options.maxWasmMemoryBytes);
+	assert.equal(assetOptions.assetTimeoutMs, options.assetTimeoutMs);
 	(asset[4] as Function)(8, 16);
 	(pack[3] as { index: Function; asset: Function }).index(1, 2);
 	(pack[3] as { index: Function; asset: Function }).asset(3, 4);
@@ -204,6 +251,37 @@ it('preserves fetch, boundary options and progress for both dependencies', async
 	assert.equal(cap[1], 65536);
 	assert.equal(cap[2], 'compile.wasm');
 	assert.equal(h.count('memory-check'), 2);
+});
+
+it('removes the caller abort relay after startup success and failure', async () => {
+	for (const error of [undefined, new Error('asset')]) {
+		let added = 0;
+		let removed = 0;
+		const listeners = new Set<EventListenerOrEventListenerObject>();
+		const signal = {
+			aborted: false,
+			reason: undefined,
+			addEventListener: (type: string, listener: EventListenerOrEventListenerObject) => {
+				assert.equal(type, 'abort');
+				added += 1;
+				listeners.add(listener);
+			},
+			removeEventListener: (type: string, listener: EventListenerOrEventListenerObject) => {
+				assert.equal(type, 'abort');
+				removed += 1;
+				listeners.delete(listener);
+			}
+		} as unknown as AbortSignal;
+		const h = harness(error ? { asset: () => Promise.reject(error) } : {});
+		if (error) {
+			await assert.rejects(h.run({ signal }), (value) => value === error);
+		} else {
+			await h.run({ signal });
+		}
+		assert.equal(added, 1);
+		assert.equal(removed, 1);
+		assert.equal(listeners.size, 0);
+	}
 });
 
 it('mounts sysroot before workspace inputs and preserves results', async () => {

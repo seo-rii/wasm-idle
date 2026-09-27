@@ -1,0 +1,12 @@
+/** Compile the private download view without an additional full-size JavaScript copy. */
+export function compileOwnedRustcModule(bytes: Uint8Array): Promise<WebAssembly.Module> {
+	// Native fetch/decompression produces an ordinary, worker-owned ArrayBuffer.
+	// Pass the view, not its backing buffer: a download may occupy only a subrange.
+	// WebAssembly.compile itself snapshots the BufferSource before asynchronous work.
+	if (bytes.buffer instanceof ArrayBuffer) {
+		return WebAssembly.compile(bytes as Uint8Array<ArrayBuffer>);
+	}
+	// Shared/cross-realm buffers are not the normal fetch path. Keep a private
+	// ordinary buffer for hosts that supply one instead of accepting shared bytes.
+	return WebAssembly.compile(Uint8Array.from(bytes));
+}
