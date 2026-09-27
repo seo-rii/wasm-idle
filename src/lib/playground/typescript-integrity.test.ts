@@ -125,7 +125,7 @@ describe('JavaScript-only runtime selection', () => {
 		await sandbox.load({
 			typescript: {
 				moduleUrl: 'https://example.test/index.js',
-				get javascriptModuleUrl() {
+				get javascriptModuleUrl(): string {
 					throw new Error('must not be read');
 				}
 			}
