@@ -32,16 +32,28 @@ jobs:
               s = s.replace(old, 'return await compileCappedGoToolModule(cappedToolBytes, maxWasmMemoryBytes, options.signal);')
               p.write_text(s)
           assert 'return await compileCappedGoToolModule(cappedToolBytes, maxWasmMemoryBytes, options.signal);' in s
-          p = Path('runtimes/wasm-go/src/tool-runtime.startup.test.ts')
+          old_path = Path('runtimes/wasm-go/src/tool-runtime.startup.test.ts')
+          p = Path('runtimes/wasm-go/test/tool-runtime.startup.test.ts')
+          if old_path.exists():
+              s = old_path.read_text().replace("new URL('./tool-runtime.ts', import.meta.url)", "new URL('../src/tool-runtime.ts', import.meta.url)")
+              p.write_text(s)
+              old_path.unlink()
           s = p.read_text()
           anchor = "\t\t'./wasm-memory.js': {"
           if "'./tool-module-cache.js':" not in s:
               assert s.count(anchor) == 1
               s = s.replace(anchor, "\t\t'./tool-module-cache.js': {\n\t\t\tcompileCappedGoToolModule: (value: Uint8Array) => {\n\t\t\t\tlog('compile', value);\n\t\t\t\treturn settings.compile?.(value.slice().buffer as ArrayBuffer) ?? WebAssembly.compile(value.slice().buffer as ArrayBuffer);\n\t\t\t}\n\t\t},\n" + anchor)
               p.write_text(s)
+          p = Path('runtimes/wasm-go/test/compiler.test.ts')
+          s = p.read_text()
+          old = r'/wasip1\.(pack|index\.json)\.gz/'
+          new = r'/(wasip1\.(pack|index\.json)|tools\/compile\.wasm)\.gz/'
+          assert old in s or new in s
+          s = s.replace(old, new)
+          p.write_text(s)
           PY
       - name: Focused tests
-        run: pnpm --dir runtimes/wasm-go exec vitest run test/tool-module-cache.test.ts src/tool-runtime.startup.test.ts
+        run: pnpm --dir runtimes/wasm-go exec vitest run test/tool-module-cache.test.ts test/tool-runtime.startup.test.ts
       - name: Package typecheck
         run: pnpm --dir runtimes/wasm-go run check
       - name: Full Go package tests
@@ -49,8 +61,8 @@ jobs:
       - name: Commit validated integration only
         run: |
           git diff --check
-          git add runtimes/wasm-go/src/tool-runtime.ts runtimes/wasm-go/src/tool-runtime.startup.test.ts
+          git add runtimes/wasm-go/src/tool-runtime.ts runtimes/wasm-go/src/tool-runtime.startup.test.ts runtimes/wasm-go/test/tool-runtime.startup.test.ts runtimes/wasm-go/test/compiler.test.ts
           if ! git diff --cached --quiet; then
-            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'perf(go): wire content-keyed module cache into tool execution'
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'perf(go): integrate module cache and cover concurrent startup errors'
             git push origin HEAD:refs/heads/perf/go-compiled-module-cache
           fi
