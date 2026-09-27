@@ -1,30 +1,45 @@
-name: Runtime performance review workspace
+name: Runtime performance scoped validation
 on:
   push:
     branches: [chore/runtime-perf-workspace-20260927]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  source:
+  go-cache:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
-          sparse-checkout: |
-            static/wasm-typescript
-            producers/wasm-php
-      - name: Read current Go regression suite
-        run: |
-          git fetch --depth=1 origin a1640827e6e3cf4a0b78639563bf26dda028f743
-          mkdir -p /tmp/review/runtimes/wasm-go/src
-          git show a1640827e6e3cf4a0b78639563bf26dda028f743:runtimes/wasm-go/src/tool-runtime.startup.test.ts > /tmp/review/runtimes/wasm-go/src/tool-runtime.startup.test.ts
-          cp -r static producers /tmp/review/
-          tar -C /tmp/review -czf /tmp/runtime-review-extra.tar.gz .
-      - uses: actions/upload-artifact@v4
+          sparse-checkout: .github/runtime-perf-patches
+      - uses: actions/setup-node@v4
         with:
-          name: runtime-review-extra
-          path: /tmp/runtime-review-extra.tar.gz
+          node-version: '22'
+      - name: Validate and publish isolated Go change
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --prefix /tmp/test-tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.0.18 @bjorn3/browser_wasi_shim@0.4.2
+          git fetch --depth=1 origin a1640827e6e3cf4a0b78639563bf26dda028f743
+          git worktree add --detach /tmp/change a1640827e6e3cf4a0b78639563bf26dda028f743
+          cd /tmp/change
+          git sparse-checkout set runtimes/wasm-go
+          git apply "$GITHUB_WORKSPACE/.github/runtime-perf-patches/go-cache.patch"
+          ln -s /tmp/test-tools/node_modules node_modules
+          printf 'export default {test:{environment:"node",include:["test/**/*.test.ts","src/tool-runtime.startup.test.ts"]}};' > /tmp/go-config.mjs
+          cd runtimes/wasm-go
+          node /tmp/test-tools/node_modules/vitest/vitest.mjs run --config /tmp/go-config.mjs --reporter=verbose | tee /tmp/go-cache-tests.log
+          cd /tmp/change
+          git diff --check
+          git add runtimes/wasm-go/src/tool-module.ts runtimes/wasm-go/src/tool-runtime.ts runtimes/wasm-go/src/tool-runtime.startup.test.ts runtimes/wasm-go/test/tool-module.test.ts runtimes/wasm-go/test/tool-startup.test.ts
+          git -c user.name='wasm-idle automation' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'perf(go): cache tool modules by content and memory policy'
+          git push origin HEAD:refs/heads/perf/go-content-addressed-module-cache
+          git rev-parse HEAD > /tmp/go-cache-head.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: go-cache-validation
+          path: |
+            /tmp/go-cache-tests.log
+            /tmp/go-cache-head.txt
           retention-days: 1
-          compression-level: 0
