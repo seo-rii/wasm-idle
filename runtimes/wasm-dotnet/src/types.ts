@@ -76,6 +76,8 @@ export interface DotnetRuntimeCompileRequest {
 	target: DotnetTarget;
 	args?: string[];
 	references?: DotnetReferenceAssembly[];
+	/** Managed-runtime-local token. Do not persist across runtime restarts. */
+	referenceSetId?: string;
 }
 
 export interface DotnetRuntimeCompileResponse {
