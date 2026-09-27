@@ -575,6 +575,79 @@ describe('wasm-idle browser stdin connection', () => {
 					stdinText
 				});
 				expect(summary.transcript).toContain(expectedOutput);
+				const requestedPaths = summary.runtimeRequests.map(
+					(request) => new URL(request).pathname
+				);
+				expect(
+					requestedPaths.some((pathname) =>
+						pathname.endsWith('/clang/bin/c-sysroot.tar.gz')
+					)
+				).toBe(true);
+				expect(
+					requestedPaths.some((pathname) =>
+						pathname.endsWith('/clang/bin/cpp-addon.tar.gz')
+					)
+				).toBe(language === 'CPP');
+				expect(
+					requestedPaths.some((pathname) =>
+						pathname.endsWith('/clang/bin/sysroot.tar.gz')
+					)
+				).toBe(false);
+			});
+		}
+	);
+
+	it(
+		'links a C-selected response-file C++ program in the real browser',
+		{
+			skip:
+				!runAllStdinBrowserCases &&
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser:
+					runAllStdinBrowserCases ||
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN === '1'
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			expect.hasAssertions();
+
+			await withBrowserPreview(async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					activePath: 'main.c',
+					argsInput: '@flags.rsp',
+					browserUrl,
+					expectedOutput: 'main=73',
+					language: 'C',
+					requireSharedArrayBuffer: false,
+					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+					source: `extern "C" int printf(const char *, ...);
+
+int main() {
+    int *values = new int[3]{70, 1, 2};
+    printf("main=%d\\n", values[0] + values[1] + values[2]);
+    delete[] values;
+    return 0;
+}`,
+					stdinText: '',
+					workspaceFiles: [{ path: 'flags.rsp', content: '-x c++ -std=c++20' }]
+				});
+				expect(summary.transcript).toContain('main=73');
+				const requestedPaths = summary.runtimeRequests.map(
+					(request) => new URL(request).pathname
+				);
+				expect(
+					requestedPaths.some((pathname) =>
+						pathname.endsWith('/clang/bin/cpp-addon.tar.gz')
+					)
+				).toBe(true);
+				expect(
+					requestedPaths.some((pathname) =>
+						pathname.endsWith('/clang/bin/sysroot.tar.gz')
+					)
+				).toBe(false);
 			});
 		}
 	);

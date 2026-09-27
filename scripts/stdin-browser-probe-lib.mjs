@@ -145,6 +145,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
 /**
  * @typedef {object} StdinBrowserProbeOptions
  * @property {string} [activePath]
+ * @property {string} [argsInput]
  * @property {string} browserUrl
  * @property {string} [chromiumExecutable]
  * @property {string} expectedOutput
@@ -165,6 +166,7 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
 export async function runStdinBrowserProbe(options) {
 	const {
 		activePath = '',
+		argsInput = '',
 		browserUrl = '',
 		chromiumExecutable = '',
 		expectedOutput = '',
@@ -181,6 +183,8 @@ export async function runStdinBrowserProbe(options) {
 	if (!browserUrl) {
 		throw new Error('runStdinBrowserProbe requires a browserUrl');
 	}
+	const requestedBrowserUrl = new URL(browserUrl);
+	if (argsInput) requestedBrowserUrl.searchParams.set('args', argsInput);
 	const executablePath = await resolveChromiumExecutable(chromiumExecutable);
 	const browser = await chromium.launch({
 		headless: true,
@@ -224,7 +228,7 @@ export async function runStdinBrowserProbe(options) {
 	});
 
 	try {
-		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+		await page.goto(requestedBrowserUrl.href, { waitUntil: 'domcontentloaded' });
 		await page.waitForTimeout(2_000);
 
 		const isProbeReady = (
@@ -249,7 +253,7 @@ export async function runStdinBrowserProbe(options) {
 					// Retry with a fresh navigation below.
 				}
 			});
-			await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+			await page.goto(requestedBrowserUrl.href, { waitUntil: 'domcontentloaded' });
 			await page.waitForTimeout(2_500 + attempt * 500);
 			activeState = await readActiveState(page);
 		}
@@ -264,7 +268,7 @@ export async function runStdinBrowserProbe(options) {
 		}
 
 		await page.evaluate(() => localStorage.clear());
-		await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
+		await page.goto(requestedBrowserUrl.href, { waitUntil: 'domcontentloaded' });
 		await page.waitForSelector('#language-select', {
 			state: 'attached',
 			timeout: runTimeoutMs
