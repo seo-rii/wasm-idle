@@ -556,10 +556,6 @@
 		) => Promise<DebugResolvedDataBreakpoint[]>;
 	};
 	let browserDebugHookVersion = 0;
-	type WasmGoRuntimeModule = {
-		preloadBrowserGoRuntime?: (options?: { target?: GoTarget }) => Promise<void>;
-	};
-
 	function cloneFiles(value: WorkspaceFile[]) {
 		return value.map((file) => ({ ...file }));
 	}
@@ -2274,7 +2270,9 @@
 
 	$effect(() => {
 		const binding = playground;
-		return () => { void binding.dispose?.().catch(() => {}); };
+		return () => {
+			void binding.dispose?.().catch(() => {});
+		};
 	});
 
 	$effect(() => {
@@ -2287,7 +2285,9 @@
 		const executing = untrack(() => !!runningMode);
 		void binding.setPrewarmEnabled?.(enabled).catch(() => {});
 		if (enabled && !executing) void binding.prewarm?.(selectedLanguage).catch(() => {});
-		return () => { void binding.cancelPrewarm?.().catch(() => {}); };
+		return () => {
+			void binding.cancelPrewarm?.().catch(() => {});
+		};
 	});
 
 	$effect(() => {
@@ -2695,7 +2695,11 @@
 					<span class="material-symbols-outlined">notes</span>
 					<span>Log</span>
 				</label>
-				<label class="toggle-chip" for="prewarm-toggle" title="Prepare the selected runtime during idle time. Does not run your code.">
+				<label
+					class="toggle-chip"
+					for="prewarm-toggle"
+					title="Prepare the selected runtime during idle time. Does not run your code."
+				>
 					<input id="prewarm-toggle" type="checkbox" bind:checked={prewarmEnabled} />
 					<span>Prewarm</span>
 				</label>

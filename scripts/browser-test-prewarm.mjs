@@ -1,26 +1,18 @@
 /**
- * Keep speculative work queued until a browser test's foreground load claims it.
- * This preserves cold-path request assertions while exercising prewarm handoff.
+ * Disable speculative runtime work through the public Save-Data policy while
+ * leaving requestIdleCallback available to Monaco and other browser code.
  * @param {{ addInitScript: (script: () => void) => Promise<unknown> }} context
  */
-export async function deferBrowserPrewarm(context) {
+export async function disableBrowserPrewarm(context) {
 	await context.addInitScript(() => {
-		let nextIdleCallbackId = 0;
-		/** @type {Set<number>} */
-		const pendingIdleCallbacks = new Set();
-		Object.defineProperty(window, 'requestIdleCallback', {
+		const connection = navigator.connection;
+		if (connection) {
+			Object.defineProperty(connection, 'saveData', { configurable: true, value: true });
+			return;
+		}
+		Object.defineProperty(navigator, 'connection', {
 			configurable: true,
-			value: () => {
-				const id = ++nextIdleCallbackId;
-				pendingIdleCallbacks.add(id);
-				return id;
-			}
-		});
-		Object.defineProperty(window, 'cancelIdleCallback', {
-			configurable: true,
-			value: (/** @type {number} */ id) => {
-				pendingIdleCallbacks.delete(id);
-			}
+			value: { saveData: true }
 		});
 	});
 }
