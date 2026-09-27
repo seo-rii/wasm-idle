@@ -104,6 +104,7 @@ jobs:
                   node-version: 24
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
+            - run: pnpm --dir packages/core build
             - run: pnpm exec playwright-core install --with-deps chromium
             - run: pnpm run prepare:test-assets -- clangd
             - run: pnpm --dir packages/lsp exec vitest run test/bundledClangdAssetIntegrity.test.ts
@@ -126,6 +127,7 @@ jobs:
                   node-version: 24
                   cache: pnpm
             - run: pnpm install --frozen-lockfile
+            - run: pnpm --dir packages/core build
             - run: pnpm exec playwright-core install --with-deps chromium
             - run: pnpm run prepare:test-assets -- clangd ocaml
             - run: pnpm run test:lsp:browser:full
