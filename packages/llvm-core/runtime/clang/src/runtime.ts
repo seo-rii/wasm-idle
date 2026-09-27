@@ -231,14 +231,21 @@ class Clang {
 			this.progress.clang,
 			options.signal
 		);
-		const fileSystemReady = this.memfs.ready.then(async () => {
-			const sysrootReady = options.signal
-				? readBuffer(this.assetUrls.sysroot, undefined, maxAssetBytes, options.signal)
-				: readBuffer(this.assetUrls.sysroot, undefined, maxAssetBytes);
+		// Download the sysroot while MemFS is still initializing. Observe both promises
+		// immediately so either failure rejects startup even if the other asset stalls.
+		const sysrootReady = options.signal
+			? readBuffer(this.assetUrls.sysroot, undefined, maxAssetBytes, options.signal)
+			: readBuffer(this.assetUrls.sysroot, undefined, maxAssetBytes);
+		const fileSystemInputsReady = Promise.all([this.memfs.ready, sysrootReady]);
+		const fileSystemReady = fileSystemInputsReady.then(async ([, buffer]) => {
 			await this.hostLogAsync(
 				`Untarring ${this.assetUrls.sysroot}`,
-				sysrootReady.then((buffer) => untar(buffer, this.memfs))
+				Promise.resolve().then(() => {
+					options.signal?.throwIfAborted();
+					return untar(buffer, this.memfs);
+				})
 			);
+			options.signal?.throwIfAborted();
 			installClangResourceHeaders(
 				{
 					readFile: (path) =>
