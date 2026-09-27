@@ -1,3 +1,5 @@
+import { createRuntimePrewarmer } from './prewarm.js';
+import { createRuntimeAssetsKey } from './runtime-assets.js';
 import type {
 	DebugCommand,
 	DebugDataBreakpoint,
@@ -182,12 +184,18 @@ export interface PlaygroundBinding {
 	trustProfile?: RuntimeTrustProfile;
 	terminalProps: PlaygroundTerminalProps;
 	load: (language: string) => Promise<BoundSandbox>;
+	/** Disabled by default. Only loads the runtime, never user source. */
+	prewarm?: (language: string) => Promise<boolean>;
+	setPrewarmEnabled?: (enabled: boolean) => Promise<void>;
+	cancelPrewarm?: () => Promise<void>;
 	dispose: () => Promise<void>;
 }
 
 export type SandboxLoader = (language: string) => Promise<Sandbox>;
 
 export interface PlaygroundBindingOptions {
+	/** Allow explicit prewarm(language) requests; no language is warmed automatically. */
+	prewarm?: boolean;
 	trustProfile?: RuntimeTrustProfile;
 }
 
@@ -711,63 +719,89 @@ export function createPlaygroundBinding(
 	loadSandbox: SandboxLoader,
 	options: PlaygroundBindingOptions = {}
 ): PlaygroundBinding {
+	if (options.prewarm !== undefined && typeof options.prewarm !== 'boolean') {
+		throw new TypeError('prewarm must be a boolean');
+	}
 	const trustProfile = options.trustProfile
 		? defineRuntimeTrustProfile(options.trustProfile)
 		: undefined;
 	const sandboxes = new Set<BoundSandbox>();
 	let disposed = false;
 	let disposePromise: Promise<void> | undefined;
+	const normalize = (language: string) => {
+		if (disposed) throw new RuntimeConfigurationError('Cannot load a sandbox from a disposed binding', { phase: 'dispose' });
+		const normalized = normalizeLanguageId(language);
+		if (!normalized) throw new UnsupportedLanguageError(language);
+		return normalized;
+	};
+	const create = async (language: string) => {
+		const sandbox = bindRuntimeAssets(await loadSandbox(language), runtimeAssets, trustProfile);
+		if (disposed) {
+			if (sandbox.dispose) await sandbox.dispose();
+			else await sandbox.terminate();
+			throw new RuntimeConfigurationError('Binding was disposed while loading a sandbox', { phase: 'dispose' });
+		}
+		sandboxes.add(sandbox);
+		return sandbox;
+	};
+	const key = (language: string) => JSON.stringify([language, createRuntimeAssetsKey(runtimeAssets)]);
+	const claimedKeys = new Set<string>();
+	const prewarmer = createRuntimePrewarmer(async (cacheKey, signal) => {
+		const [language] = JSON.parse(cacheKey) as [string, string];
+		const sandbox = await create(language);
+		try {
+			await sandbox.load('', false, [], { signal });
+			return sandbox;
+		} catch (error) {
+			sandboxes.delete(sandbox);
+			if (sandbox.dispose) await sandbox.dispose();
+			else await sandbox.terminate();
+			throw error;
+		}
+	}, {
+		enabled: options.prewarm,
+		async release(sandbox) {
+			sandboxes.delete(sandbox);
+			if (sandbox.dispose) await sandbox.dispose();
+			else await sandbox.terminate();
+		}
+	});
 	const binding = {
 		runtimeAssets,
 		trustProfile,
 		terminalProps: {} as PlaygroundBinding['terminalProps'],
 		async load(language: string) {
-			if (disposed) {
-				throw new RuntimeConfigurationError(
-					'Cannot load a sandbox from a disposed binding',
-					{
-						phase: 'dispose'
-					}
-				);
-			}
-			const normalizedLanguage = normalizeLanguageId(language);
-			if (!normalizedLanguage) throw new UnsupportedLanguageError(language);
-			const sandbox = bindRuntimeAssets(
-				await loadSandbox(normalizedLanguage),
-				runtimeAssets,
-				trustProfile
-			);
-			if (disposed) {
-				if (sandbox.dispose) await sandbox.dispose();
-				else await sandbox.terminate();
-				throw new RuntimeConfigurationError(
-					'Binding was disposed while loading a sandbox',
-					{
-						phase: 'dispose'
-					}
-				);
-			}
-			sandboxes.add(sandbox);
+			const normalized = normalize(language);
+			const cacheKey = key(normalized);
+			const pendingWarm = prewarmer.take(cacheKey);
+			const warmed = pendingWarm ? await pendingWarm : undefined;
+			// Disposing a binding during warm-up must never hand out a dead resource.
+			normalize(normalized);
+			const sandbox = warmed ?? await create(normalized);
+			claimedKeys.add(cacheKey);
 			return sandbox;
 		},
+		prewarm(language: string) {
+			if (!prewarmer.enabled) return Promise.resolve(false);
+			const cacheKey = key(normalize(language));
+			// Do not create a spare copy of a runtime already owned by a consumer.
+			return claimedKeys.has(cacheKey) ? Promise.resolve(false) : prewarmer.warm(cacheKey);
+		},
+		setPrewarmEnabled: prewarmer.setEnabled,
+		cancelPrewarm: prewarmer.cancel,
 		dispose() {
 			if (!disposePromise) {
 				disposed = true;
 				const ownedSandboxes = [...sandboxes];
 				sandboxes.clear();
-				disposePromise = Promise.all(
-					ownedSandboxes.map((sandbox) =>
-						sandbox.dispose ? sandbox.dispose() : sandbox.terminate()
-					)
-				).then(() => undefined);
+				disposePromise = Promise.all([
+					prewarmer.dispose(),
+					...ownedSandboxes.map((sandbox) => sandbox.dispose ? sandbox.dispose() : sandbox.terminate())
+				]).then(() => undefined);
 			}
 			return disposePromise;
 		}
 	} as PlaygroundBinding;
-	binding.terminalProps = {
-		playground: binding,
-		runtimeAssets,
-		trustProfile
-	};
+	binding.terminalProps = { playground: binding, runtimeAssets, trustProfile };
 	return binding;
 }

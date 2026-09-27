@@ -881,3 +881,26 @@ Compiler assets produced by [`wasm-llvm`](https://github.com/seo-rii/wasm-llvm) 
 external static hosting and loaded by `@wasm-idle/llvm-core`. Also powered by Pyodide, TeaVM, `wasm-rust`,
 `wasm-dotnet`, `wasm-of-js-of-ocaml`, `wasm-typescript`, `wasm-lisp`,
 `wasm-wat`, `wasm-lua`, `wasm-zig`, CBQN, Janet, AtomVM/Popcorn, and `ghc-in-browser`.
+
+### Optional idle runtime prewarming
+
+`createPlaygroundBinding(assets, { prewarm: true })` enables explicit
+`binding.prewarm(language)` requests. The default is **false**: constructing a
+binding or selecting a language in an embedding does not start network requests.
+The first-party web demo opts in and exposes a **Prewarm** checkbox.
+
+```ts
+const binding = createPlaygroundBinding(assets, { prewarm: true });
+void binding.prewarm('JAVA'); // idle priority; runtime only, never executes source
+const sandbox = await binding.load('JAVA'); // claims the same prepared sandbox
+await binding.setPrewarmEnabled?.(false); // cancels unclaimed preparation only
+await binding.dispose?.();
+```
+
+Only one unclaimed runtime is retained per binding. Selecting another language
+cancels that speculative work. A foreground load starts queued preparation
+immediately and owns the result; subsequent toggles cannot terminate it.
+Speculative failures are discarded so ordinary loading can retry. Prewarming
+skips server-side rendering, hidden documents, save-data mode and 2G connections.
+All normal runtime integrity, startup timeout and execution-limit checks remain
+in place. This does not compile user source or preload every language at once.

@@ -28,3 +28,5 @@ export type {
 	SandboxProgress,
 	SandboxRuntimeAssets
 } from '$lib/playground/sandbox';
+
+export type { PlaygroundBindingOptions } from "@wasm-idle/core";
