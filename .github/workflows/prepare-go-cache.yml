@@ -1,0 +1,56 @@
+name: Validate Go module cache
+on:
+  push:
+    branches: [perf/go-compiled-module-cache]
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/go-compiled-module-cache
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter wasm-go...
+      - name: Integrate the tested module cache
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('runtimes/wasm-go/src/tool-runtime.ts')
+          s = p.read_text()
+          old = 'return await WebAssembly.compile(cappedToolBytes.slice().buffer as ArrayBuffer);'
+          if old in s:
+              assert s.count(old) == 1
+              s = "import { compileCappedGoToolModule } from './tool-module-cache.js';\n" + s
+              s = s.replace(old, 'return await compileCappedGoToolModule(cappedToolBytes, maxWasmMemoryBytes, options.signal);')
+              p.write_text(s)
+          assert 'return await compileCappedGoToolModule(cappedToolBytes, maxWasmMemoryBytes, options.signal);' in s
+          p = Path('runtimes/wasm-go/src/tool-runtime.startup.test.ts')
+          s = p.read_text()
+          anchor = "\t\t'./wasm-memory.js': {"
+          if "'./tool-module-cache.js':" not in s:
+              assert s.count(anchor) == 1
+              s = s.replace(anchor, "\t\t'./tool-module-cache.js': {\n\t\t\tcompileCappedGoToolModule: (value: Uint8Array) => {\n\t\t\t\tlog('compile', value);\n\t\t\t\treturn settings.compile?.(value.slice().buffer as ArrayBuffer) ?? WebAssembly.compile(value.slice().buffer as ArrayBuffer);\n\t\t\t}\n\t\t},\n" + anchor)
+              p.write_text(s)
+          PY
+      - name: Focused tests
+        run: pnpm --dir runtimes/wasm-go exec vitest run test/tool-module-cache.test.ts src/tool-runtime.startup.test.ts
+      - name: Package typecheck
+        run: pnpm --dir runtimes/wasm-go run check
+      - name: Full Go package tests
+        run: pnpm --dir runtimes/wasm-go run test
+      - name: Commit validated integration only
+        run: |
+          git diff --check
+          git add runtimes/wasm-go/src/tool-runtime.ts runtimes/wasm-go/src/tool-runtime.startup.test.ts
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'perf(go): wire content-keyed module cache into tool execution'
+            git push origin HEAD:refs/heads/perf/go-compiled-module-cache
+          fi
