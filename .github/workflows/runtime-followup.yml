@@ -1,0 +1,43 @@
+name: Runtime follow-up development workspace
+on:
+  push:
+    branches: [chore/runtime-followup-20260927]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            producers/wasm-php
+            scripts
+            static/teavm
+            static/ruby
+            static/wasm-ruby
+            static/wasm-php
+            static/wasm-dotnet
+      - name: Collect pinned predecessor sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/followup/refs
+          for pair in 'java:eabdde1ef21e9abcaee243716632b654c9748e70' 'java-cache:e0780a8dea9c9a6f54a45ae56acdf8aeb3ef8db7' 'dotnet:8286647cd88275d5fb3a0dfbddd63f542771cedb' 'rust:15d609cf3642a9cd7bd8ff42465468f01a40e629'; do
+            name=${pair%%:*}; ref=${pair#*:}
+            git fetch --depth=2 origin "$ref"
+            sha=$(git rev-parse FETCH_HEAD)
+            mkdir -p "/tmp/followup/refs/$name"
+            git archive "$sha" src runtimes scripts packages | tar -x -C "/tmp/followup/refs/$name"
+            printf '%s\n' "$sha" > "/tmp/followup/refs/$name.sha"
+          done
+          cp -a producers static /tmp/followup/
+          tar -C /tmp/followup -czf /tmp/followup-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-followup-source
+          path: /tmp/followup-source.tar.gz
+          retention-days: 1
+          compression-level: 0
