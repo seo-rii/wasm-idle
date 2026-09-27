@@ -1100,7 +1100,7 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces PHP through the php-wasm browser runtime contract', () => {
-		expect(applicationRuntimeAssets.php?.moduleUrl).toContain('/wasm-php/runtime.mjs?');
+		expect(applicationRuntimeAssets.php?.moduleUrl).toContain('/wasm-php/startup.mjs?');
 		expectPlaygroundLanguage('PHP');
 		expect(source).toMatch(/php: 'PHP'/);
 		expectEditorLanguage('PHP', 'php');
