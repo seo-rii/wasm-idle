@@ -196,6 +196,7 @@ class Clang {
 	traceStartedAt = 0;
 	progress: CombinedProgressSlots;
 	private readonly maxAssetBytes: number;
+	private readonly signal?: AbortSignal;
 
 	constructor(options: BrowserClangRuntimeOptions) {
 		const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES;
@@ -203,6 +204,7 @@ class Clang {
 			throw new TypeError('Clang maxAssetBytes must be a positive safe integer');
 		}
 		this.maxAssetBytes = maxAssetBytes;
+		this.signal = options.signal;
 		this.moduleCache = {};
 		this.moduleLoads = {};
 		this.stdout = options.stdout || (() => {});
@@ -290,7 +292,11 @@ class Clang {
 		return result;
 	}
 
-	async getModule(name: string, progress?: ProgressSink, signal?: AbortSignal) {
+	async getModule(
+		name: string,
+		progress?: ProgressSink,
+		signal: AbortSignal | undefined = this.signal
+	) {
 		if (this.moduleCache[name]) return this.moduleCache[name];
 		const existingLoad = this.moduleLoads[name];
 		if (existingLoad) return await existingLoad;
