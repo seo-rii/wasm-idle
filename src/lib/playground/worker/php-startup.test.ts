@@ -5,6 +5,7 @@ vi.mock('$lib/playground/runtimeModule', () => ({
 	importRuntimeModule: mocks.importRuntime
 }));
 const runtime = () => ({
+	exit: vi.fn(),
 	mkdir: vi.fn(),
 	writeFile: vi.fn(),
 	rmdir: vi.fn(),
@@ -58,6 +59,7 @@ describe('PHP startup retry and ownership', () => {
 		await handle(load());
 		await handle(load());
 		expect(mocks.create).toHaveBeenCalledTimes(3);
+		expect(broken.exit).toHaveBeenCalledOnce();
 		expect(postMessage).toHaveBeenCalledWith({ error: 'VM' });
 		expect(postMessage).toHaveBeenCalledWith({ error: 'mkdir' });
 		expect(postMessage).toHaveBeenCalledWith({ load: true });
@@ -120,10 +122,21 @@ describe('PHP startup retry and ownership', () => {
 		await handle(load('/new.mjs'));
 		old.resolve(oldVm);
 		await a;
+		expect(oldVm.exit).toHaveBeenCalledOnce();
 		expect(oldVm.mkdir).not.toHaveBeenCalled();
 		expect(newVm.mkdir).toHaveBeenCalledOnce();
 		await handle(load('/new.mjs'));
 		expect(mocks.create).toHaveBeenCalledTimes(2);
+	});
+	it('disposes a completed runtime when a different module URL replaces it', async () => {
+		const oldVm = runtime(),
+			newVm = runtime();
+		mocks.create.mockResolvedValueOnce(oldVm).mockResolvedValueOnce(newVm);
+		const handle = await worker();
+		await handle(load('/old.mjs'));
+		await handle(load('/new.mjs'));
+		await vi.waitFor(() => expect(oldVm.exit).toHaveBeenCalledOnce());
+		expect(newVm.exit).not.toHaveBeenCalled();
 	});
 	it('a prepare operation initializes the VM but never runs user code', async () => {
 		const php = runtime();

@@ -93,6 +93,9 @@ importers:
       assemblyscript:
         specifier: 0.28.17
         version: 0.28.17
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
       eslint:
         specifier: ^10.2.0
         version: 10.2.0
