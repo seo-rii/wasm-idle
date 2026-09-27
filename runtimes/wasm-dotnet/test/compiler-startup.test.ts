@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { test } from 'vitest';
 
-const code = ts.transpileModule(readFileSync(new URL('./compiler.ts', import.meta.url), 'utf8'), {
+const code = ts.transpileModule(readFileSync(new URL('../src/compiler.ts', import.meta.url), 'utf8'), {
 	compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
 }).outputText;
 
