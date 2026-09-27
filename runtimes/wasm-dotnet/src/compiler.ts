@@ -2,6 +2,7 @@ import type {
 	BrowserDotnetCompileProgress,
 	BrowserDotnetCompileRequest,
 	BrowserDotnetCompiler,
+	BrowserDotnetCompilerPrepareOptions,
 	BrowserDotnetCompilerResult,
 	CompilerDiagnostic,
 	DotnetReferenceAssembly,
@@ -274,24 +275,49 @@ export async function compileDotnet(
 
 export function createDotnetCompiler(
 	options: CreateDotnetCompilerOptions = {}
-): BrowserDotnetCompiler {
+): BrowserDotnetCompiler & {
+	prepare(request?: BrowserDotnetCompilerPrepareOptions): Promise<void>;
+} {
+	const dependencies = {
+		loadRuntime: (
+			language: DotnetLanguage,
+			runtimeOptions: DotnetCompilerRuntimeOptions = {}
+		) =>
+			loadDotnetCompilerRuntime({
+				...options,
+				...runtimeOptions,
+				language,
+				diagnosticTracing: Boolean(
+					options.diagnosticTracing || runtimeOptions.diagnosticTracing
+				)
+			}),
+		loadReferences:
+			options.dotnetModule || options.loadReferences === false
+				? async () => []
+				: (language: DotnetLanguage) => loadDotnetReferenceAssemblies(options, language)
+	};
 	return {
+		async prepare(request = {}) {
+			const language = normalizeLanguage(request.language ?? options.language);
+			if (language !== 'fsharp' && language !== 'csharp' && language !== 'vbnet') {
+				throw new Error(`Unsupported .NET language: ${language}`);
+			}
+			// Warm the real runtime and references, not a facade or a dummy program.
+			// Existing caches deduplicate concurrent callers and evict failed/fatal loads.
+			await Promise.all([
+				Promise.resolve().then(() =>
+					dependencies.loadRuntime(language, {
+						diagnosticTracing: Boolean(request.runtimeDiagnosticTracing)
+					})
+				),
+				Promise.resolve().then(() => dependencies.loadReferences(language))
+			]);
+		},
 		async compile(request) {
-			return await compileDotnet(request, {
-				loadRuntime: (language, runtimeOptions = {}) =>
-					loadDotnetCompilerRuntime({
-						...options,
-						...runtimeOptions,
-						language,
-						diagnosticTracing: Boolean(
-							options.diagnosticTracing || runtimeOptions.diagnosticTracing
-						)
-					}),
-				loadReferences:
-					options.dotnetModule || options.loadReferences === false
-						? async () => []
-						: (language) => loadDotnetReferenceAssemblies(options, language)
-			});
+			return await compileDotnet(
+				{ ...request, language: request.language ?? options.language },
+				dependencies
+			);
 		}
 	};
 }
