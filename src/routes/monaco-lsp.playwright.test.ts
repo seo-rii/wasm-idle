@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
+import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 
@@ -632,6 +633,7 @@ function selectedCases() {
 
 async function prepareBrowserContext(context: BrowserContext, browserUrl: string) {
 	await addBrowserTestCookies(context, browserUrl);
+	await disableBrowserPrewarm(context);
 	await context.addInitScript(() => {
 		try {
 			for (const key of [

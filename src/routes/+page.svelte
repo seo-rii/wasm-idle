@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import Monaco from './Monaco.svelte';
 	import Terminal, { type TerminalControl } from '@wasm-idle/terminal';
 	import type { ProgressLike } from '@wasm-idle/core';
@@ -191,7 +192,7 @@
 				: '/wasm-debug/runtime-manifest.v2.json'
 		}
 	}));
-	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets));
+	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets, { prewarm: true }));
 
 	let editor = $state<monaco.editor.IStandaloneCodeEditor | null>(null),
 		terminal = $state<TerminalControl | undefined>(undefined),
@@ -205,6 +206,7 @@
 		ocamlWasmBinaryenMode = $state<OcamlWasmBinaryenMode>('fast'),
 		log = $state(true),
 		lspEnabled = $state(false),
+		prewarmEnabled = $state(true),
 		language = $state<PlaygroundLanguage>('CPP'),
 		runningMode = $state<'run' | 'debug' | null>(null),
 		activeDebugBackend = $state<'lldb' | 'trace' | null>(null),
@@ -554,10 +556,6 @@
 		) => Promise<DebugResolvedDataBreakpoint[]>;
 	};
 	let browserDebugHookVersion = 0;
-	type WasmGoRuntimeModule = {
-		preloadBrowserGoRuntime?: (options?: { target?: GoTarget }) => Promise<void>;
-	};
-
 	function cloneFiles(value: WorkspaceFile[]) {
 		return value.map((file) => ({ ...file }));
 	}
@@ -2271,24 +2269,24 @@
 	});
 
 	$effect(() => {
-		if (!browser || language !== 'GO') return;
-		const compilerUrl = runtimeAssets.go?.compilerUrl;
-		const preloadTarget = availableGoTargets.includes(goTarget)
-			? goTarget
-			: availableGoTargets[0];
-		if (!compilerUrl || !preloadTarget) return;
-		let cancelled = false;
-		(async () => {
-			const runtimeModule = (await import(
-				/* @vite-ignore */ compilerUrl
-			)) as WasmGoRuntimeModule;
-			if (cancelled) return;
-			await runtimeModule.preloadBrowserGoRuntime?.({
-				target: preloadTarget
-			});
-		})().catch(() => {});
+		const binding = playground;
 		return () => {
-			cancelled = true;
+			void binding.dispose?.().catch(() => {});
+		};
+	});
+
+	$effect(() => {
+		if (!browser) return;
+		const binding = playground;
+		const enabled = prewarmEnabled;
+		const selectedLanguage = language;
+		// A run owns its sandbox already. Never replace it with speculative work.
+		// Run must claim the pending warm-up; changing runningMode must not cancel it.
+		const executing = untrack(() => !!runningMode);
+		void binding.setPrewarmEnabled?.(enabled).catch(() => {});
+		if (enabled && !executing) void binding.prewarm?.(selectedLanguage).catch(() => {});
+		return () => {
+			void binding.cancelPrewarm?.().catch(() => {});
 		};
 	});
 
@@ -2696,6 +2694,14 @@
 					<input id="log-toggle" type="checkbox" bind:checked={log} />
 					<span class="material-symbols-outlined">notes</span>
 					<span>Log</span>
+				</label>
+				<label
+					class="toggle-chip"
+					for="prewarm-toggle"
+					title="Prepare the selected runtime during idle time. Does not run your code."
+				>
+					<input id="prewarm-toggle" type="checkbox" bind:checked={prewarmEnabled} />
+					<span>Prewarm</span>
 				</label>
 				<label class="toggle-chip" for="lsp-toggle">
 					<input id="lsp-toggle" type="checkbox" bind:checked={lspEnabled} />

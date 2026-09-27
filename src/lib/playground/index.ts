@@ -9,6 +9,7 @@ import {
 	isSupportedLanguageId,
 	normalizeLanguageId,
 	supportedLanguageIds,
+	type PlaygroundBindingOptions,
 	type CanonicalLanguageId
 } from '@wasm-idle/core';
 
@@ -371,10 +372,11 @@ for (const languageId of supportedLanguageIds) {
 
 export const supportedLanguages = [...supportedLanguageIds];
 
-export function createPlaygroundBinding(runtimeAssets: SandboxRuntimeAssets): PlaygroundBinding {
+export function createPlaygroundBinding(runtimeAssets: SandboxRuntimeAssets, options: PlaygroundBindingOptions = {}): PlaygroundBinding {
 	return createCorePlaygroundBinding(
 		runtimeAssets as never,
-		playground as never
+		playground as never,
+		options
 	) as PlaygroundBinding;
 }
 

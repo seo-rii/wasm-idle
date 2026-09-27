@@ -91,4 +91,8 @@ export interface PlaygroundBinding {
 	runtimeAssets: SandboxRuntimeAssets;
 	terminalProps: PlaygroundTerminalProps;
 	load: (language: string) => Promise<BoundSandbox>;
+	prewarm?: (language: string) => Promise<boolean>;
+	setPrewarmEnabled?: (enabled: boolean) => Promise<void>;
+	cancelPrewarm?: () => Promise<void>;
+	dispose?: () => Promise<void>;
 }

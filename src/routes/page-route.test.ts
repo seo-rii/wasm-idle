@@ -389,7 +389,7 @@ describe('example route debug actions', () => {
 		);
 		expect(source).not.toMatch(/import \{ WASM_[A-Z_]+_ASSET_VERSION \}/u);
 		expect(source).toMatch(
-			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
+			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets, \{ prewarm: true \}\)\);/
 		);
 		expect(source).toMatch(/<Terminal\s+bind:terminal\s+\{playground\}/s);
 		expect(applicationRuntimeAssets.rootUrl).toBe('/wasm-idle');
@@ -477,21 +477,13 @@ describe('example route debug actions', () => {
 	});
 
 	it('persists and forwards the Go target selection', () => {
-		expect(source).toMatch(
-			/type WasmGoRuntimeModule = \{\s+preloadBrowserGoRuntime\?: \(options\?: \{\s*target\?: GoTarget;?\s*\}\) => Promise<void>;\s+\};/s
-		);
+		expect(source).not.toContain('type WasmGoRuntimeModule');
+		expect(source).not.toContain('preloadBrowserGoRuntime');
 		expect(source).toMatch(/GoTarget,/);
 		expect(source).toMatch(/goTarget = \$state<GoTarget>\('wasip1\/wasm'\),/);
-		expect(source).toMatch(/if \(!browser \|\| language !== 'GO'\) return;/);
-		expect(source).toMatch(/const compilerUrl = runtimeAssets\.go\?\.compilerUrl;/);
+		expect(source).not.toMatch(/const compilerUrl = runtimeAssets\.go\?\.compilerUrl;/);
 		expect(source).toMatch(
-			/const preloadTarget = availableGoTargets\.includes\(goTarget\)\s+\?\s+goTarget\s+:\s+availableGoTargets\[0\];/
-		);
-		expect(source).toMatch(
-			/const runtimeModule = \(await import\(\s+\/\* @vite-ignore \*\/ compilerUrl\s+\)\) as WasmGoRuntimeModule;/
-		);
-		expect(source).toMatch(
-			/await runtimeModule\.preloadBrowserGoRuntime\?\.\(\{\s+target: preloadTarget\s+\}\);/s
+			/void binding\.prewarm\?\.\(selectedLanguage\)\.catch\(\(\) => \{\}\);/
 		);
 		expect(source).toMatch(
 			/const knownGoTargets = \['wasip1\/wasm', 'wasip2\/wasm', 'wasip3\/wasm', 'js\/wasm'\] as const;/
