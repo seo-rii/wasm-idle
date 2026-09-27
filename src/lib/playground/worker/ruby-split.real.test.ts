@@ -64,6 +64,18 @@ raise 'io' unless StringIO.new('text').read == 'text'
 raise 'input' unless STDIN.gets.strip == 'input-line'
 raise 'args' unless ARGV[0] == 'argument'
 raise 'workspace' unless File.read('/data.txt') == 'workspace'
+begin
+  File.delete('/usr/local/lib/ruby/3.4.0/json.rb')
+  raise 'stdlib delete was writable'
+rescue SystemCallError
+end
+begin
+  File.write('/usr/local/lib/ruby/3.4.0/wasm_idle_probe', 'x')
+  raise 'stdlib create was writable'
+rescue SystemCallError
+end
+raise 'stdlib delete changed the tree' unless File.file?('/usr/local/lib/ruby/3.4.0/json.rb')
+raise 'stdlib create changed the tree' if File.exist?('/usr/local/lib/ruby/3.4.0/wasm_idle_probe')
 File.write('/private.txt', 'must-not-leak')
 puts 'ruby-split-ok'
 `;

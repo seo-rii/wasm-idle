@@ -416,12 +416,165 @@ export function parseRubyStdlibPack(bytes: Uint8Array): ReadonlyArray<RubyStdlib
 	return Object.freeze(result);
 }
 
-/** Fresh directories and descriptors per run; only read-only file contents are shared. */
+/** Fresh read-only directories and descriptors per run; verified file bytes remain shared. */
 export function createRubyStdlibPreopens(
 	entries: ReadonlyArray<RubyStdlibEntry>,
 	shim: any,
 	root: Map<string, any> = new Map()
 ): any[] {
+	const { wasi } = shim;
+	const readOnly = wasi.ERRNO_ROFS;
+	const writeRights = [
+		wasi.RIGHTS_FD_WRITE,
+		wasi.RIGHTS_FD_ALLOCATE,
+		wasi.RIGHTS_FD_FILESTAT_SET_SIZE,
+		wasi.RIGHTS_FD_FILESTAT_SET_TIMES
+	].reduce((rights, value) => rights | BigInt(value), 0n);
+	const wantsWrite = (oflags: number, rights: bigint, fdFlags: number) =>
+		Boolean(oflags & (wasi.OFLAGS_CREAT | wasi.OFLAGS_TRUNC)) ||
+		Boolean(fdFlags & wasi.FDFLAGS_APPEND) ||
+		Boolean(rights & writeRights);
+
+	class ReadonlyOpenFile extends shim.OpenFile {
+		constructor(file: any) {
+			super(file);
+		}
+		fd_allocate() {
+			return readOnly;
+		}
+		fd_filestat_set_size() {
+			return readOnly;
+		}
+		fd_filestat_set_times() {
+			return readOnly;
+		}
+		fd_write() {
+			return { ret: readOnly, nwritten: 0 };
+		}
+		fd_pwrite() {
+			return { ret: readOnly, nwritten: 0 };
+		}
+	}
+
+	class SharedReadonlyFile extends shim.File {
+		constructor(bytes: Uint8Array) {
+			super(new Uint8Array(), { readonly: true });
+			// browser_wasi_shim copies constructor input. Adopt the already verified,
+			// worker-owned view so each execution does not copy the complete stdlib.
+			this.data = bytes;
+		}
+		path_open(oflags: number, rights: bigint, fdFlags: number) {
+			if (wantsWrite(oflags, rights, fdFlags)) return { ret: readOnly, fd_obj: null };
+			return { ret: wasi.ERRNO_SUCCESS, fd_obj: new ReadonlyOpenFile(this) };
+		}
+	}
+
+	class ReadonlyOpenDirectory extends shim.OpenDirectory {
+		constructor(directory: any) {
+			super(directory);
+		}
+		path_open(
+			dirflags: number,
+			path: string,
+			oflags: number,
+			rights: bigint,
+			inheriting: bigint,
+			fdFlags: number
+		) {
+			if (wantsWrite(oflags, rights | inheriting, fdFlags))
+				return { ret: readOnly, fd_obj: null };
+			return super.path_open(dirflags, path, oflags, rights, inheriting, fdFlags);
+		}
+		path_create_directory() {
+			return readOnly;
+		}
+		path_link() {
+			return readOnly;
+		}
+		path_unlink() {
+			return { ret: readOnly, inode_obj: null };
+		}
+		path_unlink_file() {
+			return readOnly;
+		}
+		path_remove_directory() {
+			return readOnly;
+		}
+		path_rename() {
+			return readOnly;
+		}
+	}
+
+	class ReadonlyDirectory extends shim.Directory {
+		constructor(contents: Map<string, any>) {
+			super(contents);
+		}
+		path_open(oflags: number, rights: bigint, fdFlags: number) {
+			if (wantsWrite(oflags, rights, fdFlags)) return { ret: readOnly, fd_obj: null };
+			return { ret: wasi.ERRNO_SUCCESS, fd_obj: new ReadonlyOpenDirectory(this) };
+		}
+	}
+
+	class ReadonlyPreopenDirectory extends ReadonlyOpenDirectory {
+		readonly prestat_name: string;
+		constructor(name: string, contents: Map<string, any>) {
+			super(new ReadonlyDirectory(contents));
+			this.prestat_name = name;
+		}
+		fd_prestat_get() {
+			return { ret: wasi.ERRNO_SUCCESS, prestat: wasi.Prestat.dir(this.prestat_name) };
+		}
+	}
+
+	const protectedPath = (path: string) => {
+		const parts: string[] = [];
+		for (const part of path.split('/')) {
+			if (!part || part === '.') continue;
+			if (part === '..') parts.pop();
+			else parts.push(part);
+		}
+		return parts[0] === 'usr' || parts[0] === 'bundle';
+	};
+	class GuardedRootPreopenDirectory extends shim.PreopenDirectory {
+		constructor(name: string, contents: Map<string, any>) {
+			super(name, contents);
+		}
+		path_open(
+			dirflags: number,
+			path: string,
+			oflags: number,
+			rights: bigint,
+			inheriting: bigint,
+			fdFlags: number
+		) {
+			if (protectedPath(path) && wantsWrite(oflags, rights | inheriting, fdFlags))
+				return { ret: readOnly, fd_obj: null };
+			return super.path_open(dirflags, path, oflags, rights, inheriting, fdFlags);
+		}
+		path_create_directory(path: string) {
+			return protectedPath(path) ? readOnly : super.path_create_directory(path);
+		}
+		path_link(path: string, inode: any, allowDirectory: boolean) {
+			return protectedPath(path) ? readOnly : super.path_link(path, inode, allowDirectory);
+		}
+		path_unlink(path: string) {
+			return protectedPath(path)
+				? { ret: readOnly, inode_obj: null }
+				: super.path_unlink(path);
+		}
+		path_unlink_file(path: string) {
+			return protectedPath(path) ? readOnly : super.path_unlink_file(path);
+		}
+		path_remove_directory(path: string) {
+			return protectedPath(path) ? readOnly : super.path_remove_directory(path);
+		}
+		path_rename(oldPath: string, newFd: any, newPath: string) {
+			return protectedPath(oldPath) ? readOnly : super.path_rename(oldPath, newFd, newPath);
+		}
+	}
+
+	for (const name of ['usr', 'bundle'])
+		if (root.has(name)) throw failure(`Workspace conflicts with the Ruby /${name} mount`);
 	const directories = new Map<string, Map<string, any>>([['', root]]);
 	for (const entry of entries) {
 		const slash = entry.path.lastIndexOf('/');
@@ -429,19 +582,20 @@ export function createRubyStdlibPreopens(
 		if (!parent) throw failure('Ruby stdlib parent directory disappeared');
 		const name = entry.path.slice(slash + 1);
 		if (entry.kind === 'directory') {
-			const existing = parent.get(name);
-			if (existing && !(existing instanceof shim.Directory))
-				throw failure('Workspace conflicts with a Ruby stdlib directory');
-			const contents = existing?.contents ?? new Map<string, any>();
-			if (!existing) parent.set(name, new shim.Directory(contents));
+			if (parent.has(name)) throw failure('Ruby stdlib directory unexpectedly exists');
+			const contents = new Map<string, any>();
+			parent.set(name, new ReadonlyDirectory(contents));
 			directories.set(entry.path, contents);
 		} else {
 			if (parent.has(name))
 				throw failure('Workspace conflicts with a read-only Ruby stdlib file');
-			parent.set(name, new shim.File(entry.bytes, { readonly: true }));
+			parent.set(name, new SharedReadonlyFile(entry.bytes));
 		}
 	}
-	return RUBY_SPLIT_BUNDLE.mountPaths.map(
-		(name) => new shim.PreopenDirectory(name, directories.get(name)!)
-	);
+	return [
+		new GuardedRootPreopenDirectory('/', root),
+		...RUBY_SPLIT_BUNDLE.mountPaths.map(
+			(name) => new ReadonlyPreopenDirectory(name, directories.get(name)!)
+		)
+	];
 }

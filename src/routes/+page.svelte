@@ -3050,10 +3050,10 @@
 		{/if}
 		{#if language === 'RUBY'}
 			<p class="hint">
-				Ruby runs through a receipt-verified CRuby WebAssembly profile. Its manifest,
-				module, and compressed Wasm are verified before the worker starts. Pass CLI args
-				here, type into the terminal below, and use Ctrl+D or the EOF button if the program
-				reads stdin until EOF.
+				Ruby runs through a receipt-verified split CRuby WebAssembly profile. Its manifest,
+				wrapper, core Wasm, and complete standard-library pack are verified before the
+				worker starts. Pass CLI args here, type into the terminal below, and use Ctrl+D or
+				the EOF button if the program reads stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'R'}

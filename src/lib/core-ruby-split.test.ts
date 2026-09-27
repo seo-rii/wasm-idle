@@ -200,7 +200,7 @@ describe('Ruby split stdlib', () => {
 		outer.set(good, 7);
 		expect(parseRubyStdlibPack(outer.subarray(7, 7 + good.length))).toHaveLength(8);
 	});
-	it('recreates mutable directory state for every program', async () => {
+	it('recreates read-only directory state while sharing verified file bytes', async () => {
 		const shim = await import('@bjorn3/browser_wasi_shim');
 		const entries = parseRubyStdlibPack(
 			pack(
@@ -212,5 +212,28 @@ describe('Ruby split stdlib', () => {
 		const b = createRubyStdlibPreopens(entries, shim);
 		expect(a[0]).not.toBe(b[0]);
 		expect(a[0].dir).not.toBe(b[0].dir);
+		const file = entries.find((entry) => entry.path === '/usr/file');
+		if (!file || file.kind !== 'file') throw new Error('fixture file is missing');
+		expect(a[1].dir.contents.get('file').data).toBe(file.bytes);
+		expect(b[1].dir.contents.get('file').data).toBe(file.bytes);
+		expect(a[0].path_unlink_file('usr/file')).toBe(shim.wasi.ERRNO_ROFS);
+		expect(a[0].path_create_directory('usr/new')).toBe(shim.wasi.ERRNO_ROFS);
+		expect(a[0].path_rename('usr/file', a[0], 'moved')).toBe(shim.wasi.ERRNO_ROFS);
+		expect(a[1].path_unlink_file('file')).toBe(shim.wasi.ERRNO_ROFS);
+		const opened = a[1].path_open(0, 'file', 0, BigInt(shim.wasi.RIGHTS_FD_READ), 0n, 0);
+		expect(opened.ret).toBe(shim.wasi.ERRNO_SUCCESS);
+		expect(opened.fd_obj.file.data).toBe(file.bytes);
+		expect(opened.fd_obj.fd_write(Uint8Array.of(7))).toEqual({
+			ret: shim.wasi.ERRNO_ROFS,
+			nwritten: 0
+		});
+		expect(a[0].path_create_directory('workspace')).toBe(shim.wasi.ERRNO_SUCCESS);
+		expect(() =>
+			createRubyStdlibPreopens(
+				entries,
+				shim,
+				new Map([['usr', new shim.Directory(new Map())]])
+			)
+		).toThrow(/conflicts/);
 	});
 });

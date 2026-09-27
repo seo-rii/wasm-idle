@@ -296,15 +296,14 @@ self.onmessage = async (event: { data: any }) => {
 		const { File, OpenFile, PreopenDirectory, WASI } = runtime.wasiShim;
 		const root = workspaceContents(runtime, workspaceFiles);
 		// Also expose ancestor directories through / for libc realpath and RubyGems.
-		const stdlibMounts = loadedRuntime.stdlib
+		const preopens = loadedRuntime.stdlib
 			? createRubyStdlibPreopens(loadedRuntime.stdlib, runtime.wasiShim, root)
-			: [];
+			: [new PreopenDirectory('/', root)];
 		const fds = [
 			rubyStdin,
 			new OpenFile(new File([])),
 			new OpenFile(new File([])),
-			new PreopenDirectory('/', root),
-			...stdlibMounts
+			...preopens
 		];
 		const wasiInstance = new WASI(['ruby.wasm', ...args], ['USER=jungol'], fds, {
 			debug: false

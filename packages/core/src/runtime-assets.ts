@@ -764,7 +764,12 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'ruby', property: 'manifestUrl', key: 'rubyManifestUrl' },
 	{ runtime: 'ruby', property: 'moduleUrl', key: 'rubyModuleUrl' },
 	{ runtime: 'ruby', property: 'wasmUrl', key: 'rubyWasmUrl' },
-	{ runtime: 'ruby', property: 'splitStdlib', key: 'rubySplitStdlib', serialize: value => value === true },
+	{
+		runtime: 'ruby',
+		property: 'splitStdlib',
+		key: 'rubySplitStdlib',
+		serialize: (value) => value === true
+	},
 	{ runtime: 'ruby', property: 'profileId', key: 'rubyProfileId' },
 	{ runtime: 'ruby', property: 'artifactRevision', key: 'rubyArtifactRevision' },
 	{ runtime: 'ruby', property: 'rubyVersion', key: 'rubyVersion' },
