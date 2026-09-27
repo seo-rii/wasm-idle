@@ -17,6 +17,8 @@ describe('runtime browser CI selection', () => {
 			'nim'
 		]);
 		expect(changedBrowserFamilies(['packages/debug/src/controller.ts'])).toEqual(['debug']);
+		expect(changedBrowserFamilies(['src/lib/playground/assetBridge.ts'])).toEqual(['clang']);
+		expect(changedBrowserFamilies(['src/lib/playground/assetBridge.test.ts'])).toEqual(['clang']);
 		expect(changedBrowserFamilies(['README.md'])).toEqual([]);
 	});
 	it('selects recovery tests alongside normal .NET and Nim execution', () => {

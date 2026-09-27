@@ -10,7 +10,7 @@ export function changedBrowserFamilies(files) {
 			families.add('debug');
 		if (/(?:dotnet|runtime-recovery)/.test(file)) families.add('dotnet');
 		if (/(?:nim|runtime-recovery)/.test(file)) families.add('nim');
-		if (/(?:clang|objectivec|packages\/llvm-core)/.test(file)) families.add('clang');
+		if (/(?:clang|objectivec|assetBridge|packages\/llvm-core)/.test(file)) families.add('clang');
 		if (
 			/^(src\/routes\/|packages\/(core|terminal)\/|scripts\/(stdin-browser|run-all-language|changed-browser|browser-preview|required-browser)|\.github\/workflows\/|(?:package\.json|pnpm-lock\.yaml|vite\.config\.ts)$)/.test(
 				file
