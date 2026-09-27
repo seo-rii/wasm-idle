@@ -90,19 +90,57 @@ describe('WorkerAssetBridge progress', () => {
 			total: 10
 		});
 		expect(update(10, 10)).toHaveProperty('measurement.completed', 10);
-		expect(update(2)).toHaveProperty('measurement', {
-			kind: 'bytes',
-			completed: 10,
-			total: 10
-		});
-		expect(update(9, 10)).toHaveProperty('measurement.completed', 10);
-		expect(update(10, 0)).not.toHaveProperty('measurement');
+		report.mockClear();
+		for (const [loaded, total] of [
+			[2, undefined],
+			[9, 10],
+			[10, 0],
+			[10, 11]
+		] as const) {
+			update(loaded, total);
+		}
+		expect(report).not.toHaveBeenCalled();
 
 		report.mockClear();
 		bridge.resetProgress({ report });
 		expect(update(2, 10)).toHaveProperty('measurement.completed', 2);
 		bridge.rebind(worker, config, { report }, undefined, true);
 		expect(update(1, 10)).toHaveProperty('measurement.completed', 1);
+	});
+
+	it('does not revive completed optional progress after aggregate phase interleaving', () => {
+		const report = vi.fn();
+		const bridge = new WorkerAssetBridge(
+			{ postMessage: vi.fn() } as unknown as Worker,
+			'clang',
+			{
+				baseUrl: 'https://assets.example.test/clang/',
+				integrity: BUNDLED_CLANG_ASSET_INTEGRITY,
+				useAssetBridge: true
+			},
+			{ report },
+			undefined,
+			true
+		);
+		const asset = BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES.cppAddon.asset;
+		bridge.handleMessage({
+			data: { assetProgress: { asset, loaded: 10, total: 10 } }
+		} as MessageEvent);
+		expect(report.mock.lastCall?.[0]).toHaveProperty('measurement.completed', 10);
+
+		bridge.handleMessage({
+			data: { assetProgress: { asset: 'bin/lld.wasm.gz', loaded: 5, total: 10 } }
+		} as MessageEvent);
+		expect(report.mock.lastCall?.[0]).toHaveProperty('phaseId', 'clang:runtime-assets');
+		report.mockClear();
+		for (const [loaded, total] of [
+			[10, 0],
+			[10, 11],
+			[2, undefined]
+		] as const) {
+			bridge.handleMessage({ data: { assetProgress: { asset, loaded, total } } } as MessageEvent);
+		}
+		expect(report).not.toHaveBeenCalled();
 	});
 
 	it('continues counting the full sysroot for bundled Clang without profile opt-in', () => {

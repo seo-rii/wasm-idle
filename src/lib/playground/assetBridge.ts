@@ -314,6 +314,10 @@ class RuntimeLoadProgress {
 		if (!this.expectedAssets.has(asset)) {
 			if (this.optionalAssets.has(asset) && this.progress) {
 				const previous = this.optionalSamples.get(asset) || { loaded: 0 };
+				// A completed optional transfer may receive a duplicate or an unrelated
+				// worker-side progress sample. Keep its final measurement terminal;
+				// a subsequent unmeasured activity would turn 100% back into 99%.
+				if (previous.total !== undefined && previous.loaded === previous.total) return;
 				const nextLoaded = Math.max(previous.loaded, loaded);
 				const nextTotal = total ?? previous.total;
 				const valid =
