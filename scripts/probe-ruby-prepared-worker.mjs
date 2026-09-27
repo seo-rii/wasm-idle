@@ -105,10 +105,14 @@ self.postMessage=(message,...rest)=>originalPost({...message,probeNativeInstance
 		}
 	});
 	await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-	browser = await chromium.launch({
-		channel: process.env.BROWSER_CHANNEL || 'chrome',
-		headless: true
-	});
+	browser = await chromium.launch(
+		process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+			? {
+					headless: true,
+					executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+				}
+			: { headless: true }
+	);
 	const page = await browser.newPage();
 	page.on('pageerror', (error) => console.error(error));
 	await page.goto(`http://127.0.0.1:${server.address().port}/`);
