@@ -1,1 +1,1 @@
-export const WASM_DOTNET_ASSET_VERSION = '9af2460d9bb92f76';
+export const WASM_DOTNET_ASSET_VERSION = '1b028c4804d367f6';
