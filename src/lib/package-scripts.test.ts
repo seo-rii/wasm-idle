@@ -253,6 +253,28 @@ describe('LLVM runtime package scripts', () => {
 		}
 	});
 
+	it('prepares the pinned Clang delivery snapshot on the page deployment path', async () => {
+		const pkg = await readRootPackage();
+		const pageBuildCommands = (pkg.scripts?.['page:build'] || '').split(' && ');
+		const prepareCommand = 'pnpm run prepare:test-assets -- clang';
+
+		expect(pageBuildCommands).toContain(prepareCommand);
+		for (const command of [
+			'pnpm run build:page-runtimes',
+			'pnpm run layer:static-runtimes',
+			'pnpm run compress:static-runtimes',
+			'pnpm run build'
+		]) {
+			expect(pageBuildCommands.indexOf(command)).toBeGreaterThan(
+				pageBuildCommands.indexOf(prepareCommand)
+			);
+		}
+
+		for (const scriptName of ['dev', 'build:preview', 'build', 'prepare:app']) {
+			expect(pkg.scripts?.[scriptName]).not.toContain(prepareCommand);
+		}
+	});
+
 	it('checks every public workspace package tarball for static assets', async () => {
 		const verifier = await readPackageVerifier();
 
