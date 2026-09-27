@@ -58,15 +58,14 @@ describe('Clang runtime startup', () => {
 		});
 
 		await vi.waitFor(() => {
-			expect(startupMocks.compile).toHaveBeenCalledTimes(2);
+			expect(startupMocks.compile).toHaveBeenCalledOnce();
 			expect(startupMocks.readBuffer).toHaveBeenCalledOnce();
 		});
 		expect(startupMocks.memfsOptions).toEqual([
 			expect.objectContaining({ signal: controller.signal })
 		]);
 		expect(startupMocks.compile.mock.calls.map(([url]) => url)).toEqual([
-			'https://cdn.test/clang/bin/clang.wasm.gz',
-			'https://cdn.test/clang/bin/lld.wasm.gz'
+			'https://cdn.test/clang/bin/clang.wasm.gz'
 		]);
 		for (const call of startupMocks.compile.mock.calls) {
 			expect(call[2]).toBe(controller.signal);
