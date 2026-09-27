@@ -285,6 +285,10 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages, 
 		finalUrl: page.url(),
 		title: await page.title().catch(() => ''),
 		activeState,
+		selectedLanguage: await page
+			.locator('#language-select')
+			.inputValue()
+			.catch(() => ''),
 		availableRustTargets,
 		pageErrors,
 		progressTrace,
@@ -535,6 +539,11 @@ export async function runRustBrowserProbe({
 		// The bootstrap visits can autosave their default workspace. Workspace
 		// restoration takes precedence over URL parameters, so start the Rust case
 		// with fresh workspace storage while retaining the service worker context.
+		// The old document can save its default workspace during beforeunload after
+		// localStorage.clear(), so clear that key again before the next app starts.
+		await page.addInitScript(() => {
+			localStorage.removeItem('wasm-idle:example-workspace:v3');
+		});
 		await page.evaluate(() => localStorage.clear());
 		await page.goto(rustBrowserUrl.toString(), { waitUntil: 'domcontentloaded' });
 		try {
