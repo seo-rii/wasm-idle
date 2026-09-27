@@ -45,6 +45,8 @@ jobs:
           };
           JS
           node /tmp/test-tools/node_modules/vitest/vitest.mjs run --config /tmp/php-config.mjs --reporter=verbose | tee /tmp/php-current-tests.log
+          export PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v google-chrome)"
+          test -x "$PLAYWRIGHT_CHROMIUM_EXECUTABLE"
           node scripts/probe-php-startup-retry.mjs | tee /tmp/php-current-browser.log
           git diff --exit-code
           git rev-parse HEAD | tee /tmp/verified-head.txt
