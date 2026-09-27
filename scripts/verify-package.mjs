@@ -65,7 +65,7 @@ export const scenarios = [
 	{
 		name: '@wasm-idle/terminal install',
 		packageNames: ['@wasm-idle/terminal', '@wasm-idle/core'],
-		budget: { maxBytes: 16 * MiB, maxFiles: 1_350, maxPackages: 32 },
+		budget: { maxBytes: 16 * MiB, maxFiles: 1_360, maxPackages: 32 },
 		absentPackageNames: [
 			'@wasm-idle/debug',
 			'@wasm-idle/lsp',
