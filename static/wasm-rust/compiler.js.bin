@@ -3,6 +3,7 @@ import { linkBitcodeWithLlvmWasm } from './browser-linker.js';
 import { attachCompileLogs, createBrowserRustCompileRequestIdentity, describeWorkerErrorEvent, makeFailure, resolveBrowserRustWorkerLimits, resolveBrowserRustDebugMode, validateCompileRequest } from './compiler-support.js';
 import { preloadBrowserRustRuntime } from './compiler-preload.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
+import { createRustcModuleService } from './rustc-module-service.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
 import { getVerifiedRuntimeExecutableGraphConfiguration, isIntegratedCompilerOutput } from './runtime-manifest.js';
@@ -144,6 +145,7 @@ export async function compileRust(request, dependencies = {}) {
         ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
     const readCompileLogs = () => (request.log ? compileLogs.map((entry) => entry.message) : []);
     const readCompileLogRecords = () => (request.log ? [...compileLogs] : []);
+    let activeWorkerCleanup;
     emitCompileProgress('manifest', 1, {
         completed: 0,
         total: 1,
@@ -218,6 +220,19 @@ export async function compileRust(request, dependencies = {}) {
             const workerUrl = resolveVersionedAssetUrl(versionedModuleBaseUrl, './compiler-worker.js');
             const executableGraph = getVerifiedRuntimeExecutableGraphConfiguration();
             const worker = (dependencies.createWorker || ((url) => createModuleWorker(url)))(workerUrl);
+            activeWorkerCleanup = () => worker.terminate();
+            // Only the activated, receipt-verified topology gets a private module service.
+            const rustcReceiptPath = `wasm-rust/runtime/${manifest.compiler.rustcWasm}`;
+            const moduleService = executableGraph ? createRustcModuleService(manifest.assetReceipts?.[rustcReceiptPath]) : undefined;
+            let stopped = false;
+            const stopWorker = () => {
+                if (stopped)
+                    return;
+                stopped = true;
+                moduleService?.close();
+                worker.terminate();
+            };
+            activeWorkerCleanup = stopWorker;
             const sharedBitcodeBuffer = new SharedArrayBuffer(16 + manifest.compiler.workerSharedOutputBytes);
             const sharedWorkspaceBuffer = new SharedArrayBuffer(manifest.compiler.workerSharedWorkspaceBytes);
             const sharedStatusBuffer = new SharedArrayBuffer(WORKER_STATUS_BUFFER_BYTES);
@@ -245,6 +260,7 @@ export async function compileRust(request, dependencies = {}) {
             });
             worker.postMessage({
                 type: 'compile',
+                ...(moduleService ? { rustcModulePort: moduleService.port } : {}),
                 compilerWorkerUrl: workerUrl.toString(),
                 ...(executableGraph
                     ? {
@@ -258,7 +274,7 @@ export async function compileRust(request, dependencies = {}) {
                 sharedBitcodeBuffer,
                 sharedWorkspaceBuffer,
                 sharedStatusBuffer
-            });
+            }, moduleService ? [moduleService.port] : []);
             recordAttemptCompileLog(`[wasm-rust] compile worker started attempt=${attempt}/${maxBrowserAttempts}`);
             emitCompileProgress('await-bitcode', attempt, {
                 completed: 0,
@@ -331,7 +347,7 @@ export async function compileRust(request, dependencies = {}) {
                             deferredWorkerError = null;
                             break;
                         }
-                        worker.terminate();
+                        stopWorker();
                         attemptResult = makeFailure(pendingHelperThreadFailure);
                         break;
                     }
@@ -349,7 +365,7 @@ export async function compileRust(request, dependencies = {}) {
                 }
                 if (mirrored.length > 0 &&
                     now() - lastSequenceChange >= manifest.compiler.artifactIdleMs) {
-                    worker.terminate();
+                    stopWorker();
                     if (mirrored.overflowed) {
                         attemptResult = makeFailure(`wasm-rust mirrored output buffer overflowed before ${outputFinalizationName}`);
                         break;
@@ -402,12 +418,12 @@ export async function compileRust(request, dependencies = {}) {
                 }
             }
             if (!attemptResult && workerBootstrapError) {
-                worker.terminate();
+                stopWorker();
                 recordAttemptCompileLog(`[wasm-rust] compile worker bootstrap failed ${workerBootstrapError.message}`, 'debug');
                 attemptResult = makeFailure(workerBootstrapError.message);
             }
             if (!attemptResult && !settledMessage) {
-                worker.terminate();
+                stopWorker();
                 const mirrored = readMirroredBitcode(sharedBitcodeBuffer);
                 if (mirrored.length > 0 && !mirrored.overflowed) {
                     recordAttemptCompileLog(`[wasm-rust] compile timeout reached after mirrored ${mirroredOutputName} appeared; proceeding to ${outputFinalizationName}`, 'debug');
@@ -463,7 +479,7 @@ export async function compileRust(request, dependencies = {}) {
                 }
             }
             if (!attemptResult && settledMessage) {
-                worker.terminate();
+                stopWorker();
                 const mirrored = readMirroredBitcode(sharedBitcodeBuffer);
                 if (settledMessage.type === 'error') {
                     if (mirrored.length > 0 && !mirrored.overflowed) {
@@ -599,5 +615,8 @@ export async function compileRust(request, dependencies = {}) {
     }
     catch (error) {
         return makeFailure(error instanceof Error ? error.message : String(error));
+    }
+    finally {
+        activeWorkerCleanup?.();
     }
 }

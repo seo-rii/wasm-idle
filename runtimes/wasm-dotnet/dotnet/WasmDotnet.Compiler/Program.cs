@@ -32,6 +32,47 @@ namespace WasmDotnet.Compiler;
 public static partial class CompilerHost
 {
     private static readonly Dictionary<string, Assembly> Assemblies = new();
+    private static readonly ReferenceSetRegistry<RegisteredReferences> ReferenceSets = new();
+
+    private sealed class RegisteredReferences
+    {
+        public required ReferenceAssembly[] Assemblies { get; init; }
+        public string? Directory { get; init; }
+    }
+
+    [JSExport]
+    public static string RegisterReferences(string requestJson)
+    {
+        try
+        {
+            if (requestJson.Length > 96 * 1024 * 1024) throw new InvalidDataException("Reference JSON exceeds its byte budget.");
+            var request = JsonSerializer.Deserialize(requestJson, CompilerJsonContext.Default.RegisterReferencesRequest)
+                ?? throw new InvalidDataException("Missing reference registration request.");
+            var id = ReferenceSets.Register((request.References ?? []).Select(r => (r.Name, r.BytesBase64 ?? "")).ToArray(), decoded =>
+            {
+                var references = decoded.Select(r => new ReferenceAssembly { Name = r.Name, DecodedBytes = r.Bytes }).ToArray();
+#if WASM_DOTNET_CSHARP || WASM_DOTNET_VBNET
+                // Validate PE metadata once, before publishing this set.
+                foreach (var reference in references) reference.GetMetadata();
+                return new RegisteredReferences { Assemblies = references };
+#else
+                var directory = Path.Combine(Path.GetTempPath(), "wasm-dotnet-refs-" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    System.IO.Directory.CreateDirectory(directory);
+                    foreach (var reference in references) File.WriteAllBytes(Path.Combine(directory, reference.Name), reference.GetBytes());
+                    return new RegisteredReferences { Assemblies = references, Directory = directory };
+                }
+                catch { if (System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, true); throw; }
+#endif
+            });
+            return JsonSerializer.Serialize(new RegisterReferencesResponse { ReferenceSetId = id }, CompilerJsonContext.Default.RegisterReferencesResponse);
+        }
+        catch (Exception error)
+        {
+            return JsonSerializer.Serialize(new RegisterReferencesResponse { Error = error.Message }, CompilerJsonContext.Default.RegisterReferencesResponse);
+        }
+    }
 #if WASM_DOTNET_CSHARP
     private const string RuntimeLanguage = "csharp";
 #elif WASM_DOTNET_FSHARP
@@ -82,12 +123,17 @@ public static partial class CompilerHost
                 });
             }
 
+            if (request.ReferenceSetId is not null && request.References is not null)
+                throw new InvalidDataException("Specify references or referenceSetId, not both.");
+            var registered = request.ReferenceSetId is null ? null : ReferenceSets.Get(request.ReferenceSetId);
+            var references = registered?.Assemblies ?? request.References;
+
 #if WASM_DOTNET_CSHARP
-            var result = CompileCSharp(request.Source, request.References);
+            var result = CompileCSharp(request.Source, references);
 #elif WASM_DOTNET_FSHARP
-            var result = await CompileFSharp(request.Source, request.References);
+            var result = await CompileFSharp(request.Source, references, registered?.Directory);
 #elif WASM_DOTNET_VBNET
-            var result = CompileVisualBasic(request.Source, request.References);
+            var result = CompileVisualBasic(request.Source, references);
 #endif
 
             if (!result.Success || result.Assembly is null)
@@ -266,7 +312,7 @@ public static partial class CompilerHost
 #endif
 
 #if WASM_DOTNET_FSHARP
-    private static async Task<CompileResult> CompileFSharp(string source, ReferenceAssembly[]? references)
+    private static async Task<CompileResult> CompileFSharp(string source, ReferenceAssembly[]? references, string? referenceDirectory = null)
     {
         var workDir = Path.Combine(Path.GetTempPath(), $"wasm-dotnet-{Guid.NewGuid():N}");
         Directory.CreateDirectory(workDir);
@@ -286,7 +332,7 @@ public static partial class CompilerHost
             $"--out:{outputPath}",
             sourcePath
         };
-        var referencePaths = ReferenceAssemblyPaths(workDir, references);
+        var referencePaths = ReferenceAssemblyPaths(workDir, references, referenceDirectory);
         argv.AddRange(referencePaths.Select(path => $"-r:{path}"));
 
         var disabled = Some(false);
@@ -346,7 +392,7 @@ public static partial class CompilerHost
         if (references is { Length: > 0 })
         {
             metadataReferences = references.Select(reference =>
-                MetadataReference.CreateFromImage(Convert.FromBase64String(reference.BytesBase64 ?? "")));
+                reference.GetMetadata());
         }
         else
         {
@@ -363,10 +409,14 @@ public static partial class CompilerHost
 #endif
 
 #if WASM_DOTNET_FSHARP
-    private static string[] ReferenceAssemblyPaths(string workDir, ReferenceAssembly[]? references)
+    private static string[] ReferenceAssemblyPaths(string workDir, ReferenceAssembly[]? references, string? registeredDirectory)
     {
         string[] paths;
-        if (references is not { Length: > 0 })
+        if (registeredDirectory is not null && references is not null)
+        {
+            paths = references.Select(r => Path.Combine(registeredDirectory, r.Name)).ToArray();
+        }
+        else if (references is not { Length: > 0 })
         {
             paths = TrustedPlatformReferencePaths();
         }
@@ -382,7 +432,7 @@ public static partial class CompilerHost
                     fileName = $"{Guid.NewGuid():N}.dll";
                 }
                 var path = Path.Combine(referenceDir, fileName);
-                File.WriteAllBytes(path, Convert.FromBase64String(reference.BytesBase64 ?? ""));
+                File.WriteAllBytes(path, reference.GetBytes());
                 return path;
             }).ToArray();
         }
@@ -561,10 +611,20 @@ public static partial class CompilerHost
         public string? Language { get; set; }
         public string[]? Args { get; set; }
         public ReferenceAssembly[]? References { get; set; }
+        public string? ReferenceSetId { get; set; }
     }
+
+    public sealed class RegisterReferencesRequest { public ReferenceAssembly[]? References { get; set; } }
+    public sealed class RegisterReferencesResponse { public string? ReferenceSetId { get; set; } public string? Error { get; set; } }
 
     public sealed class ReferenceAssembly
     {
+        [JsonIgnore] public byte[]? DecodedBytes { get; set; }
+        internal byte[] GetBytes() => DecodedBytes ??= Convert.FromBase64String(BytesBase64 ?? "");
+#if WASM_DOTNET_CSHARP || WASM_DOTNET_VBNET
+        private MetadataReference? metadata;
+        internal MetadataReference GetMetadata() => metadata ??= MetadataReference.CreateFromImage(GetBytes());
+#endif
         public string Name { get; set; } = "";
         public string? BytesBase64 { get; set; }
     }
@@ -647,6 +707,8 @@ public static partial class CompilerHost
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(CompilerHost.RegisterReferencesRequest))]
+[JsonSerializable(typeof(CompilerHost.RegisterReferencesResponse))]
 [JsonSerializable(typeof(CompilerHost.CompileRequest))]
 [JsonSerializable(typeof(CompilerHost.CompileResponse))]
 [JsonSerializable(typeof(CompilerHost.ReferenceAssembly))]

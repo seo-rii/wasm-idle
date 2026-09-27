@@ -111,7 +111,7 @@ if (!fsharpCoreReference || !stdinReference) {
 }
 
 await mkdir(referenceTarget, { recursive: true });
-const referencePackVersions = (await readdir(frameworkReferencePackRoot)).sort((left, right) =>
+const referencePackVersions = (await readdir(frameworkReferencePackRoot)).filter(version => version.startsWith('9.0.') && (!process.env.DOTNET_REFERENCE_PACK_VERSION || version === process.env.DOTNET_REFERENCE_PACK_VERSION)).sort((left, right) =>
 	left.localeCompare(right, undefined, { numeric: true })
 );
 const frameworkReferenceSource = resolve(
