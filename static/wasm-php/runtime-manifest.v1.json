@@ -73,8 +73,8 @@
     },
     {
       "path": "startup.mjs",
-      "bytes": 3726,
-      "sha256": "6eeee342a11ddebbe998927f6364e3482d3d88380a158bfc1987b68c892e1e8d"
+      "bytes": 4534,
+      "sha256": "994266d0e46ad8334bda5173fbaaefb7c2c17605995ad82e8e7aeb03427a91a9"
     }
   ]
 }

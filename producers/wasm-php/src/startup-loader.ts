@@ -1,133 +1,195 @@
-/** Native modules only: every PHP instance receives new memory and filesystem state. */
-export interface PhpWasmAsset {
-	url: string;
-	bytes: number;
-	sha256: string;
+import type { PHPLoaderModule } from '@php-wasm/universal';
+
+/** Build-pinned PHP engines. Only immutable code is retained, never a PHP instance. */
+export type PhpAsyncMode = 'jspi' | 'asyncify';
+export interface PhpEngineAsset {
+	readonly url: string;
+	readonly bytes: number;
+	readonly sha256: string;
+	readonly load: () => Promise<PHPLoaderModule>;
 }
+
 const MAX_WASM_BYTES = 64 * 1024 * 1024;
-const modules = new Map<string, Promise<WebAssembly.Module>>();
-export function clearPhpModuleCache() {
-	modules.clear();
-}
 
-async function compileVerifiedAsset(asset: PhpWasmAsset): Promise<WebAssembly.Module> {
-	const controller = new AbortController();
-	let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-	try {
-		const response = await fetch(asset.url, {
-			credentials: 'same-origin',
-			signal: controller.signal
-		});
-		if (!response.ok || !response.body)
-			throw new Error(`PHP Wasm fetch failed: ${response.status}`);
-		const bytes = new Uint8Array(asset.bytes);
-		let offset = 0;
-		reader = response.body.getReader();
-		let resolveBytes!: () => void;
-		let rejectBytes!: (error: unknown) => void;
-		const complete = new Promise<void>((resolve, reject) => {
-			resolveBytes = resolve;
-			rejectBytes = reject;
-		});
-		// Observe rejection even if compileStreaming throws synchronously.
-		void complete.catch(() => {});
-		const stream = new ReadableStream<Uint8Array>({
-			async pull(output) {
-				try {
-					const part = await reader!.read();
-					if (part.done) {
-						if (offset !== asset.bytes)
-							throw new Error('PHP Wasm byte length mismatch');
-						resolveBytes();
-						output.close();
-						return;
-					}
-					if (offset + part.value.byteLength > asset.bytes)
-						throw new Error('PHP Wasm byte limit exceeded');
-					bytes.set(part.value, offset);
-					offset += part.value.byteLength;
-					output.enqueue(part.value);
-				} catch (error) {
-					rejectBytes(error);
-					output.error(error);
-				}
-			},
-			cancel(reason) {
-				rejectBytes(reason ?? new Error('PHP Wasm compilation cancelled'));
-				return reader!.cancel(reason);
-			}
-		});
-		const verify = async () => {
-			await complete;
-			const digest = await crypto.subtle.digest('SHA-256', bytes);
-			const hash = Array.from(new Uint8Array(digest), (x) =>
-				x.toString(16).padStart(2, '0')
-			).join('');
-			if (hash !== asset.sha256) throw new Error('PHP Wasm SHA-256 mismatch');
+function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+	return new Promise((resolve, reject) => {
+		const abort = () => {
+			signal.removeEventListener('abort', abort);
+			reject(signal.reason);
 		};
-		if (typeof WebAssembly.compileStreaming === 'function') {
-			const [module] = await Promise.all([
-				WebAssembly.compileStreaming(
-					new Response(stream, { headers: { 'Content-Type': 'application/wasm' } })
-				),
-				verify()
-			]);
-			return module;
-		}
-		// The compatibility path preserves the same byte budget and receipt check.
-		const drain = stream.getReader();
-		try {
-			while (!(await drain.read()).done) {
-				/* Bounded snapshot already filled. */
+		signal.addEventListener('abort', abort, { once: true });
+		operation.then(
+			(value) => {
+				signal.removeEventListener('abort', abort);
+				resolve(value);
+			},
+			(error) => {
+				signal.removeEventListener('abort', abort);
+				reject(error);
 			}
-		} finally {
-			drain.releaseLock();
-		}
-		await verify();
-		return await WebAssembly.compile(bytes);
-	} finally {
-		controller.abort();
-		if (reader) {
-			try {
-				void reader.cancel().catch(() => {});
-			} catch {
-				/* Preserve the primary failure. */
-			}
-			try {
-				reader.releaseLock();
-			} catch {
-				/* A failed native stream may be releasing it. */
-			}
-		}
-	}
+		);
+		if (signal.aborted) abort();
+	});
 }
 
-export function loadPhpModule(asset: PhpWasmAsset): Promise<WebAssembly.Module> {
+async function compileVerifiedEngine(asset: PhpEngineAsset, signal: AbortSignal) {
 	if (
 		!Number.isSafeInteger(asset.bytes) ||
 		asset.bytes < 8 ||
 		asset.bytes > MAX_WASM_BYTES ||
 		!/^[a-f0-9]{64}$/.test(asset.sha256)
-	) {
-		return Promise.reject(new Error('Invalid pinned PHP Wasm receipt'));
-	}
-	if (!globalThis.crypto?.subtle)
-		return Promise.reject(
-			new Error('PHP startup requires Web Crypto for integrity verification')
-		);
-	const key = `php-default-compile-v1:${asset.bytes}:${asset.sha256}`;
-	let pending = modules.get(key);
-	if (pending) {
-		modules.delete(key);
-		modules.set(key, pending);
-		return pending;
-	}
-	pending = compileVerifiedAsset({ ...asset });
-	modules.set(key, pending);
-	const operation = pending;
-	void operation.catch(() => {
-		if (modules.get(key) === operation) modules.delete(key);
+	)
+		throw new Error('Invalid PHP engine receipt');
+	if (!globalThis.crypto?.subtle) throw new Error('PHP engine verification requires Web Crypto');
+	if (signal.aborted) throw signal.reason;
+	const response = await fetch(asset.url, {
+		signal,
+		credentials: 'omit',
+		redirect: 'error'
 	});
-	while (modules.size > 2) modules.delete(modules.keys().next().value!);
-	return pending;
+	if (signal.aborted) {
+		await response.body?.cancel().catch(() => {});
+		throw signal.reason;
+	}
+	if (
+		!response.ok ||
+		!response.body ||
+		response.redirected ||
+		(response.url && response.url !== new URL(asset.url).href)
+	) {
+		await response.body?.cancel();
+		throw new Error(`PHP engine request failed: ${response.status}`);
+	}
+	const reader = response.body.getReader();
+	const bytes = new Uint8Array(asset.bytes);
+	let offset = 0;
+	let stopped = false;
+	let verified = false;
+	const abort = () => {
+		void reader.cancel(signal.reason).catch(() => {});
+	};
+	signal.addEventListener('abort', abort, { once: true });
+	const stream = new ReadableStream<Uint8Array>({
+		async pull(controller) {
+			try {
+				if (signal.aborted) throw signal.reason;
+				const chunk = await reader.read();
+				if (stopped) return;
+				if (signal.aborted) throw signal.reason;
+				if (chunk.done) {
+					if (offset !== bytes.length) throw new Error('PHP engine byte length mismatch');
+					const hash = Array.from(
+						new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
+						(byte) => byte.toString(16).padStart(2, '0')
+					).join('');
+					if (signal.aborted) throw signal.reason;
+					if (hash !== asset.sha256) throw new Error('PHP engine integrity mismatch');
+					verified = true;
+					controller.close();
+					return;
+				}
+				if (chunk.value.length > bytes.length - offset)
+					throw new Error('PHP engine exceeds its byte budget');
+				const owned = chunk.value.slice();
+				bytes.set(owned, offset);
+				offset += owned.length;
+				controller.enqueue(owned);
+			} catch (error) {
+				controller.error(error);
+			}
+		},
+		cancel(reason) {
+			stopped = true;
+			return reader.cancel(reason);
+		}
+	});
+	try {
+		// Verification happens before closing the stream. Compilation may overlap
+		// transfer, but no caller can instantiate an unverified module.
+		if (typeof WebAssembly.compileStreaming === 'function') {
+			const module = await WebAssembly.compileStreaming(
+				new Response(stream, {
+					headers: { 'Content-Type': 'application/wasm' }
+				})
+			);
+			if (!verified) throw new Error('PHP engine stream was not verified');
+			return module;
+		}
+		const drained = stream.getReader();
+		try {
+			while (!(await drained.read()).done) {
+				/* Fill and verify the owned buffer. */
+			}
+		} finally {
+			drained.releaseLock();
+		}
+		if (!verified) throw new Error('PHP engine stream was not verified');
+		return await WebAssembly.compile(bytes);
+	} finally {
+		stopped = true;
+		signal.removeEventListener('abort', abort);
+		await reader.cancel().catch(() => {});
+		reader.releaseLock();
+	}
+}
+
+export function createPhpEngineBootstrap(
+	assets: Readonly<Record<PhpAsyncMode, PhpEngineAsset>>,
+	detectJspi: () => Promise<boolean>,
+	timeoutMs = 90_000
+) {
+	const prepared = new Map<
+		PhpAsyncMode,
+		Promise<{ mode: PhpAsyncMode; loader: PHPLoaderModule; module: WebAssembly.Module }>
+	>();
+	let supported: Promise<boolean> | undefined;
+	return async (requested: 'auto' | PhpAsyncMode = 'auto') => {
+		if (!['auto', 'jspi', 'asyncify'].includes(requested))
+			throw new TypeError('Invalid PHP async mode');
+		let mode: PhpAsyncMode = 'asyncify';
+		if (requested !== 'asyncify') {
+			supported ??= Promise.resolve()
+				.then(detectJspi)
+				.catch((error) => {
+					supported = undefined;
+					throw error;
+				});
+			const available = await supported;
+			if (requested === 'jspi' && !available)
+				throw new Error('PHP JSPI is not supported by this browser');
+			if (available) mode = 'jspi';
+		}
+		const previous = prepared.get(mode);
+		if (previous) return await previous;
+		const controller = new AbortController();
+		const timer = setTimeout(
+			() => controller.abort(new Error('PHP engine startup timed out')),
+			timeoutMs
+		);
+		const asset = assets[mode];
+		// Attach both observers before either operation can throw or reject.
+		const operation = abortable(
+			Promise.all([
+				Promise.resolve().then(() => asset.load()),
+				Promise.resolve().then(() => compileVerifiedEngine(asset, controller.signal))
+			]),
+			controller.signal
+		)
+			.then(([loader, module]) => {
+				if (
+					loader.dependencyFilename !== asset.url ||
+					loader.dependenciesTotalSize !== asset.bytes
+				)
+					throw new Error('PHP loader and pinned Wasm receipt disagree');
+				return { mode, loader, module };
+			})
+			.catch((error) => {
+				controller.abort(error);
+				if (prepared.get(mode) === operation) prepared.delete(mode);
+				throw error;
+			})
+			.finally(() => clearTimeout(timer));
+		prepared.set(mode, operation);
+		return await operation;
+	};
 }

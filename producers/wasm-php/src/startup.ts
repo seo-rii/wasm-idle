@@ -1,44 +1,27 @@
 import { jspi } from '@php-wasm/web-8-4';
 import { assets, loadLoader } from 'virtual:php-startup-assets';
-import { loadPhpModule } from './startup-loader';
+import { createPhpEngineBootstrap } from './startup-loader';
 
 export interface PhpStartupOptions {
 	asyncMode?: 'auto' | 'jspi' | 'asyncify';
 }
-let supportsJspi: Promise<boolean> | undefined;
-function detectJspi() {
-	if (!supportsJspi) {
-		const pending = jspi();
-		supportsJspi = pending;
-		void pending.catch(() => {
-			if (supportsJspi === pending) supportsJspi = undefined;
-		});
-	}
-	return supportsJspi;
-}
+const prepareEngine = createPhpEngineBootstrap(
+	{
+		jspi: { ...assets.jspi, load: () => loadLoader('jspi') },
+		asyncify: { ...assets.asyncify, load: () => loadLoader('asyncify') }
+	},
+	jspi
+);
 
 /** Importing this bootstrap never downloads or initializes a PHP runtime. */
 export async function createPhp84(options: PhpStartupOptions = {}) {
 	const requested = options.asyncMode ?? 'auto';
-	if (!['auto', 'jspi', 'asyncify'].includes(requested))
-		throw new TypeError('Invalid PHP async mode');
-	const supported = requested === 'asyncify' ? false : await detectJspi();
-	if (requested === 'jspi' && !supported)
-		throw new Error('This browser does not support PHP JSPI');
-	const mode = requested === 'asyncify' || !supported ? 'asyncify' : 'jspi';
 	// These three operations are independent. Native compilation and checksum
 	// validation finish before Emscripten is allowed to instantiate the module.
-	const [api, loader, module] = await Promise.all([
+	const [api, { mode, loader, module }] = await Promise.all([
 		import('./startup-runtime-api'),
-		loadLoader(mode),
-		loadPhpModule(assets[mode])
+		prepareEngine(requested)
 	]);
-	if (
-		loader.dependencyFilename !== assets[mode].url ||
-		loader.dependenciesTotalSize !== assets[mode].bytes
-	) {
-		throw new Error('PHP loader and pinned Wasm receipt disagree');
-	}
 	if (!('setImmediate' in globalThis)) {
 		(globalThis as any).setImmediate = (callback: (...args: any[]) => void) =>
 			setTimeout(callback, 0);
@@ -74,6 +57,7 @@ export async function createPhp84(options: PhpStartupOptions = {}) {
 			void WebAssembly.instantiate(module, imports)
 				.then((instance) => receive(instance, module))
 				.catch(rejectInitialization);
+			return {};
 		}
 	});
 	return new api.PHP(await Promise.race([runtime, failed]));
