@@ -464,3 +464,4 @@ export {
 	type SandboxProgress,
 	type SandboxRuntimeAssets
 } from './sandbox.js';
+export {RUBY_SPLIT_BUNDLE, RUBY_SPLIT_PROTOCOL, requireRubySplitPayload, verifyRubySplitPayload, preflightRubySplitRuntimeAssets, rewriteRubySplitRuntimeModule, parseRubyStdlibPack, createRubyStdlibPreopens, type RubySplitPayload, type RubyStdlibEntry} from './ruby-split.js';

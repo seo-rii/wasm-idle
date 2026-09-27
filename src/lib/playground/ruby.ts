@@ -315,7 +315,7 @@ class Ruby implements Sandbox {
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			nextConfig = resolveRubyRuntimeAssetConfig(runtimeAssets, currentUrl);
 			const effectiveMaxAssetBytes = Math.min(limits.maxAssetBytes, RUBY_MAX_ASSET_BYTES);
-			for (const [label, bytes, limit] of [
+			if(!nextConfig.splitStdlib) for (const [label, bytes, limit] of [
 				[
 					'manifest',
 					nextConfig.preflightProfile.manifestReceipt.bytes,

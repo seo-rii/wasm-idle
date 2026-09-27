@@ -3,6 +3,12 @@ import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import { importRuntimeModule } from '$lib/playground/runtimeModule';
 import {
 	RUBY_RUNTIME_VERIFIED_WASM_URL,
+	RUBY_SPLIT_PROTOCOL,
+	verifyRubySplitPayload,
+	rewriteRubySplitRuntimeModule,
+	parseRubyStdlibPack,
+	createRubyStdlibPreopens,
+	type RubyStdlibEntry,
 	rewriteVerifiedRubyRuntimeModule,
 	verifyRubyRuntimePreflightPayload
 } from '@wasm-idle/core';
@@ -23,6 +29,7 @@ interface RubyRuntimeModule {
 }
 
 interface LoadedRubyRuntime {
+	stdlib?: ReadonlyArray<RubyStdlibEntry>;
 	module: WebAssembly.Module;
 	runtime: RubyRuntimeModule;
 }
@@ -33,10 +40,20 @@ async function loadRubyModule(runtimePreflight: unknown, maxAssetBytes: number) 
 	}
 	runtimeState = 'loading';
 	try {
-		const payload = await verifyRubyRuntimePreflightPayload(runtimePreflight, {
-			maxAssetBytes
-		});
-		const buffers = [payload.manifestBytes, payload.moduleJavaScriptBytes, payload.wasmBytes];
+		const split =
+			!!runtimePreflight &&
+			typeof runtimePreflight === 'object' &&
+			Object.getOwnPropertyDescriptor(runtimePreflight, 'protocol')?.value ===
+				RUBY_SPLIT_PROTOCOL;
+		const payload = split
+			? await verifyRubySplitPayload(runtimePreflight, { maxAssetBytes })
+			: await verifyRubyRuntimePreflightPayload(runtimePreflight, { maxAssetBytes });
+		const buffers = [
+			payload.manifestBytes,
+			payload.moduleJavaScriptBytes,
+			payload.wasmBytes,
+			...('stdlibBytes' in payload ? [payload.stdlibBytes] : [])
+		];
 		if (
 			buffers.some(
 				(bytes) =>
@@ -53,7 +70,10 @@ async function loadRubyModule(runtimePreflight: unknown, maxAssetBytes: number) 
 			);
 		}
 		const wasmBytes = payload.wasmBytes as Uint8Array<ArrayBuffer>;
-		const moduleSource = rewriteVerifiedRubyRuntimeModule(payload);
+		const moduleSource =
+			'stdlibBytes' in payload
+				? rewriteRubySplitRuntimeModule(payload)
+				: rewriteVerifiedRubyRuntimeModule(payload);
 		if (
 			typeof Blob !== 'function' ||
 			typeof URL.createObjectURL !== 'function' ||
@@ -88,7 +108,13 @@ async function loadRubyModule(runtimePreflight: unknown, maxAssetBytes: number) 
 				'Ruby runtime module is missing required verified Ruby or WASI exports.'
 			);
 		}
-		loadedRuntime = { module, runtime };
+		loadedRuntime = {
+			module,
+			runtime,
+			...('stdlibBytes' in payload
+				? { stdlib: parseRubyStdlibPack(payload.stdlibBytes) }
+				: {})
+		};
 		runtimeState = 'ready';
 		return loadedRuntime;
 	} catch (error) {
@@ -268,11 +294,17 @@ self.onmessage = async (event: { data: any }) => {
 			return chunk;
 		});
 		const { File, OpenFile, PreopenDirectory, WASI } = runtime.wasiShim;
+		const root = workspaceContents(runtime, workspaceFiles);
+		// Also expose ancestor directories through / for libc realpath and RubyGems.
+		const stdlibMounts = loadedRuntime.stdlib
+			? createRubyStdlibPreopens(loadedRuntime.stdlib, runtime.wasiShim, root)
+			: [];
 		const fds = [
 			rubyStdin,
 			new OpenFile(new File([])),
 			new OpenFile(new File([])),
-			new PreopenDirectory('/', workspaceContents(runtime, workspaceFiles))
+			new PreopenDirectory('/', root),
+			...stdlibMounts
 		];
 		const wasiInstance = new WASI(['ruby.wasm', ...args], ['USER=jungol'], fds, {
 			debug: false
