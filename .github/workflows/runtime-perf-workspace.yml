@@ -5,88 +5,78 @@ on:
 permissions:
   contents: write
 jobs:
-  javascript:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - change: go-preload
+            package: wasm-go
+            branch: perf/go-parallel-preload
+            digest: 02d3d1e693fc04fa236fa152c722797d8be40733f3470d4402e15d594c31a21c
+            message: 'perf(go): preload independent toolchain assets concurrently'
+          - change: rust-copy
+            package: wasm-rust
+            branch: perf/rust-owned-wasm-view
+            digest: 09f7de992a1fecd8a362acdff25929e8ca455208d09a7a06c34574a248f8764a
+            message: 'perf(rust): compile the owned rustc view without another full copy'
     steps:
       - uses: actions/checkout@v4
         with:
           sparse-checkout: .github/runtime-perf-patches
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-      - name: Reconstruct reviewed source patch
-        run: |
-          python3 - <<'PY'
-          import base64, gzip, hashlib
-          from pathlib import Path
-          blob = Path('.github/runtime-perf-patches/javascript.patch.gz').read_bytes()
-          expected = '30eddec3cf2a51aa797f2186bf5433de57dd5e78551d8a77ed9ff563a82fd314'
-          if hashlib.sha256(blob).hexdigest() != expected:
-              encoded = base64.b64encode(blob).decode()
-              blob = base64.b64decode(encoded.replace('G6y6Yq', 'G6yYq') + '===')
-          assert hashlib.sha256(blob).hexdigest() == expected, 'Source patch transport checksum mismatch'
-          Path('/tmp/javascript.patch').write_bytes(gzip.decompress(blob))
-          PY
-      - name: Build and verify both standalone entries
+          node-version: '22'
+      - name: Apply reviewed patch and execute focused tests
+        env:
+          CHANGE: ${{ matrix.change }}
+          PACKAGE: ${{ matrix.package }}
+          BRANCH: ${{ matrix.branch }}
+          DIGEST: ${{ matrix.digest }}
+          MESSAGE: ${{ matrix.message }}
         shell: bash
         run: |
           set -euo pipefail
-          npm install --prefix /tmp/test-tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.1.4 esbuild@0.27.3 buffer@6.0.3 @swc/wasm-typescript@1.15.33 @types/node@24.12.4
+          python3 - <<'PY'
+          import os, gzip, hashlib
+          from pathlib import Path
+          blob=Path('.github/runtime-perf-patches/'+os.environ['CHANGE']+'.patch.gz').read_bytes()
+          assert hashlib.sha256(blob).hexdigest()==os.environ['DIGEST'], 'Source patch checksum mismatch'
+          Path('/tmp/change.patch').write_bytes(gzip.decompress(blob))
+          PY
+          npm install --prefix /tmp/test-tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.0.18 @bjorn3/browser_wasi_shim@0.4.2 wabt@1.0.39
           git fetch --depth=1 origin b45847d10f059463aa313dd61a7c12f4abec19bd
-          git worktree add --detach /tmp/js-change b45847d10f059463aa313dd61a7c12f4abec19bd
-          cd /tmp/js-change
-          git sparse-checkout set src packages/core runtimes/wasm-typescript scripts static/wasm-typescript
-          git apply /tmp/javascript.patch
+          git worktree add --detach /tmp/change b45847d10f059463aa313dd61a7c12f4abec19bd
+          cd /tmp/change
+          git sparse-checkout set "runtimes/$PACKAGE"
+          git apply /tmp/change.patch
           ln -s /tmp/test-tools/node_modules node_modules
-          ln -s /tmp/test-tools/node_modules runtimes/wasm-typescript/node_modules
           mkdir -p .svelte-kit
           printf '{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"bundler"}}' > .svelte-kit/tsconfig.json
-          cd runtimes/wasm-typescript
-          node /tmp/test-tools/node_modules/typescript/bin/tsc -p tsconfig.json --emitDeclarationOnly
-          node scripts/build.mjs
-          node /tmp/test-tools/node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
-          node /tmp/test-tools/node_modules/vitest/vitest.mjs run --reporter=verbose | tee /tmp/javascript-runtime-tests.log
-          cd /tmp/js-change
-          node scripts/sync-wasm-typescript.mjs
-          python3 - <<'PY'
-          import gzip, json
-          from pathlib import Path
-          path = Path('static/compressed-runtime-assets.v1.json')
-          manifest = json.loads(path.read_text())
-          for name in ['index.js','javascript.js']:
-              p = Path('static/wasm-typescript') / name
-              data = p.read_bytes()
-              p.with_suffix(p.suffix+'.gz').write_bytes(gzip.compress(data, compresslevel=9, mtime=0))
-              p.unlink()
-              key = 'wasm-typescript/' + name
-              if key not in manifest['assets']: manifest['assets'].append(key)
-              manifest['sizes'][key] = len(data)
-          manifest['assets'].sort()
-          path.write_text(json.dumps(manifest, indent=2)+'\n')
-          Path('/tmp/javascript-size-report.json').write_text(json.dumps({k:v for k,v in manifest['sizes'].items() if 'wasm-typescript/' in k}, indent=2))
-          PY
-          node scripts/sync-wasm-typescript.mjs --verify
-          printf 'export const env = {};' > /tmp/empty-env.mjs
-          printf 'globalThis.window={location:new URL("https://example.test/")}; globalThis.history={replaceState(_a,_b,url){window.location=new URL(url,window.location);}};' > /tmp/js-test-setup.mjs
-          cat > /tmp/js-config.mjs <<'JS'
-          export default {
-            resolve:{alias:{'$lib':'/tmp/js-change/src/lib','@wasm-idle/core':'/tmp/js-change/packages/core/src/index.ts','$env/dynamic/public':'/tmp/empty-env.mjs'}},
-            test:{environment:'node',include:['src/lib/playground/typescript*.test.ts','src/lib/playground/worker/typescript.test.ts','src/lib/playground/applicationAssets.test.ts','src/lib/sync-wasm-typescript.test.ts'],setupFiles:['/tmp/js-test-setup.mjs']}
-          };
-          JS
-          node /tmp/test-tools/node_modules/vitest/vitest.mjs run --config /tmp/js-config.mjs --reporter=verbose | tee /tmp/javascript-integration-tests.log
+          if [ "$CHANGE" = rust-copy ]; then
+            mkdir -p static/wasm-rust/runtime
+            git show b45847d10f059463aa313dd61a7c12f4abec19bd:static/wasm-rust/runtime/runtime-manifest.v3.json > static/wasm-rust/runtime/runtime-manifest.v3.json
+          fi
+          cd "runtimes/$PACKAGE"
+          if [ "$CHANGE" = rust-copy ]; then
+            node /tmp/test-tools/node_modules/vitest/vitest.mjs run test/rustc-module.test.ts test/compiler-worker.test.ts test/runtime-pack.test.ts test/runtime-manifest-edge.test.ts --reporter=verbose | tee /tmp/tests.log
+            node /tmp/test-tools/node_modules/typescript/bin/tsc --noEmit --skipLibCheck --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022,DOM src/rustc-module.ts
+          else
+            node /tmp/test-tools/node_modules/vitest/vitest.mjs run --reporter=verbose | tee /tmp/tests.log
+          fi
+          cd /tmp/change
           git diff --check
-          git add packages/core/src/runtime-assets.ts runtimes/wasm-typescript/scripts runtimes/wasm-typescript/test/bundles.test.ts scripts/sync-wasm-typescript.mjs src/lib/playground/applicationAssets.ts src/lib/playground/applicationAssets.test.ts src/lib/playground/assets.ts src/lib/playground/typescript.ts src/lib/playground/typescript-integrity.test.ts src/lib/playground/wasmTypeScriptVersion.ts src/lib/sync-wasm-typescript.test.ts static/wasm-typescript static/compressed-runtime-assets.v1.json
-          git -c user.name='wasm-idle automation' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'perf(javascript): deliver a separately verified native-JS entry without SWC'
-          git push origin HEAD:refs/heads/perf/javascript-lightweight-entry
-          git rev-parse HEAD > /tmp/javascript-head.txt
+          git add "runtimes/$PACKAGE"
+          git -c user.name='wasm-idle automation' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "$MESSAGE"
+          git push origin "HEAD:refs/heads/$BRANCH"
+          git rev-parse HEAD > /tmp/head.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: javascript-validation
+          name: ${{ matrix.change }}-validation
           path: |
-            /tmp/javascript-*.log
-            /tmp/javascript-size-report.json
-            /tmp/javascript-head.txt
+            /tmp/tests.log
+            /tmp/head.txt
           retention-days: 1
