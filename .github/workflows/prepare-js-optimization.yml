@@ -20,7 +20,27 @@ jobs:
           node-version: '22'
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Apply focused producer and consumer changes
-        run: python3 .github/workflows/patch-javascript.py
+        run: |
+          python3 .github/workflows/patch-javascript.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/lib/sync-wasm-typescript.test.ts')
+          s = p.read_text()
+          s = "import { WASM_JAVASCRIPT_MODULE_RECEIPT } from './playground/wasmTypeScriptVersion';\n" + s
+          old = "\t\t\tassets: { 'index.js': WASM_TYPESCRIPT_MODULE_RECEIPT }"
+          assert s.count(old) == 1
+          s = s.replace(old, "\t\t\tassets: { 'index.js': WASM_TYPESCRIPT_MODULE_RECEIPT, 'javascript.js': WASM_JAVASCRIPT_MODULE_RECEIPT }")
+          old = "\t\t\t\ttoolchain: await readWasmTypeScriptToolchain(producerDir),"
+          assert s.count(old) == 1
+          s = s.replace(old, old + "\n\t\t\t\tjavascriptArtifact: { path: 'javascript.js', ...WASM_JAVASCRIPT_MODULE_RECEIPT },")
+          old = '\t\texpect(actualReceipt).toEqual(WASM_TYPESCRIPT_MODULE_RECEIPT);'
+          assert s.count(old) == 1
+          s = s.replace(old, old + '''
+          \t\tconst javascriptBytes = gunzipSync(await readFile(path.join(repositoryRoot, 'static/wasm-typescript/javascript.js.gz')));
+          \t\texpect({ bytes: javascriptBytes.byteLength, sha256: createHash('sha256').update(javascriptBytes).digest('hex') }).toEqual(WASM_JAVASCRIPT_MODULE_RECEIPT);
+          ''')
+          p.write_text(s)
+          PY
       - name: Build and test the actual JS and TypeScript bundles
         run: |
           pnpm --dir runtimes/wasm-typescript run build
@@ -50,6 +70,7 @@ jobs:
           node scripts/sync-wasm-typescript.mjs --verify
       - name: Run consumer integrity and lifecycle tests
         run: |
+          pnpm --dir packages/core run build
           pnpm exec svelte-kit sync
           pnpm exec vitest run src/lib/sync-wasm-typescript.test.ts src/lib/playground/typescript.test.ts src/lib/playground/assets.test.ts src/lib/playground/applicationAssets.test.ts
       - name: Commit validated changes on the feature branch
