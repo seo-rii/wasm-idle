@@ -9,6 +9,9 @@ strings are retained only when they are part of an artifact provenance contract.
 
 When a producer contract changes, update the matching module and its consumer tests together:
 
+- `clangd-artifact-contract.mjs`: named and minified Emscripten stdin import wiring,
+  adapted from `wasm-llvm` commit `e88868c`. The loader is parsed without execution;
+  supported generated mappings must match an actual Wasm function import.
 - `emscripten-lld.mjs`: shared Emscripten LLD profile and asset-reference validation
 - `nim.mjs`: Nim LLVM profile validation
 - `rust.mjs`: split and integrated Rust runtime manifest validation

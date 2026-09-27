@@ -161,6 +161,7 @@
 		"test:unit:odin-consumer": "node --test scripts/probe-odin-wasi-consumer.test.mjs"
 	},
 	"devDependencies": {
+		"acorn": "8.16.0",
 		"@eslint/js": "^10.0.1",
 		"@sveltejs/adapter-auto": "^7.0.1",
 		"@sveltejs/adapter-static": "^3.0.10",
