@@ -1,8 +1,9 @@
 import { Directory, File, OpenFile, PreopenDirectory, WASI } from './vendor/browser_wasi_shim/index.js';
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import { fetchRuntimeAssetBytes, loadRuntimePackEntries } from './runtime-asset.js';
-import { CaptureFd, ensureGuestDirectory, normalizeGuestPath, readGuestFile, toStandaloneBytes, writeGuestFile } from './wasi-guest.js';
-import { assertGoInstanceMemoryLimit, capGoWasmMemory } from './wasm-memory.js';
+import { CaptureFd, ensureGuestDirectory, normalizeGuestPath, readGuestFile, writeGuestFile } from './wasi-guest.js';
+import { assertGoInstanceMemoryLimit } from './wasm-memory.js';
+import { compileGoToolModule } from './tool-module.js';
 const DEFAULT_MAX_WASM_MEMORY_BYTES = 512 * 1024 * 1024;
 function throwIfAborted(signal) {
     if (signal?.aborted) {
@@ -49,8 +50,7 @@ export async function executeGoToolInvocation(invocation, plan, runtimeBaseUrl, 
             (async () => {
                 const toolBytes = await fetchRuntimeAssetBytes(resolveVersionedAssetUrl(runtimeBaseUrl, invocation.toolAsset), `${invocation.tool}.wasm`, fetchImpl, true, (loaded, total) => reportAssetProgress?.(invocation.toolAsset, loaded, total), startupOptions);
                 throwIfAborted(startupController.signal);
-                const cappedToolBytes = capGoWasmMemory(toStandaloneBytes(toolBytes), maxWasmMemoryBytes, `${invocation.tool}.wasm`);
-                return await WebAssembly.compile(cappedToolBytes.slice().buffer);
+                return await compileGoToolModule(toolBytes, maxWasmMemoryBytes, `${invocation.tool}.wasm`, startupController.signal);
             })()
         ]);
     }

@@ -7,10 +7,10 @@ import {
 	ensureGuestDirectory,
 	normalizeGuestPath,
 	readGuestFile,
-	toStandaloneBytes,
 	writeGuestFile
 } from './wasi-guest.js';
-import { assertGoInstanceMemoryLimit, capGoWasmMemory } from './wasm-memory.js';
+import { assertGoInstanceMemoryLimit } from './wasm-memory.js';
+import { compileGoToolModule } from './tool-module.js';
 import type {
 	BrowserGoBuildPlan,
 	BrowserGoToolInvocation,
@@ -106,12 +106,12 @@ export async function executeGoToolInvocation(
 					startupOptions
 				);
 				throwIfAborted(startupController.signal);
-				const cappedToolBytes = capGoWasmMemory(
-					toStandaloneBytes(toolBytes),
+				return await compileGoToolModule(
+					toolBytes,
 					maxWasmMemoryBytes,
-					`${invocation.tool}.wasm`
+					`${invocation.tool}.wasm`,
+					startupController.signal
 				);
-				return await WebAssembly.compile(cappedToolBytes.slice().buffer as ArrayBuffer);
 			})()
 		]);
 	} catch (error) {
