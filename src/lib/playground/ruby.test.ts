@@ -105,11 +105,13 @@ describe('Ruby sandbox', () => {
 		expect(Object.keys(loadMessage).sort()).toEqual([
 			'load',
 			'maxAssetBytes',
-			'runtimePreflight'
+			'runtimePreflight',
+			'startupContext'
 		]);
 		expect(loadMessage).toEqual({
 			load: true,
 			runtimePreflight: expect.any(Object),
+			startupContext: { args: [], activePath: 'main.rb', workspaceFiles: [] },
 			maxAssetBytes: RUBY_MAX_ASSET_BYTES
 		});
 		expect(transfer).toEqual([
