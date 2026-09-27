@@ -57,6 +57,13 @@ const assets = [
 		entry: undefined
 	}
 ];
+const stdinCallback =
+	'function __asyncjs__waitForStdin(){return Asyncify.handleAsync(async()=>{await Module.stdinReady()})}';
+const minifiedLoader = `${stdinCallback};var wasmImports;
+function assignWasmImports(){wasmImports={ca:__asyncjs__waitForStdin}}
+function getWasmImports(){assignWasmImports();var imports={a:wasmImports};return imports}
+async function createWasm(){var info=getWasmImports();if(Module["instantiateWasm"]){Module["instantiateWasm"](info,()=>{})}return instantiateAsync(wasmBinary,wasmBinaryFile,info)}
+if(!ENVIRONMENT_IS_PTHREAD){createWasm()}`;
 
 async function makeTempDir() {
 	const directory = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-wasm-clang-'));
@@ -93,14 +100,7 @@ async function writeFixture(sourceDir: string, minified = false) {
 		stdinImport,
 		Buffer.from([0x00, 0x00])
 	]);
-	contents.set(
-		'clangd/clangd.js',
-		Buffer.from(
-			minified
-				? 'const stdinReady = Module.stdinReady; var wasmImports; function assignWasmImports(){wasmImports={ca:__asyncjs__waitForStdin}} function getWasmImports(){assignWasmImports();var imports={a:wasmImports};return imports}'
-				: 'const stdinReady = Module.stdinReady; const wasm = WebAssembly;'
-		)
-	);
+	contents.set('clangd/clangd.js', Buffer.from(minified ? minifiedLoader : stdinCallback));
 	contents.set(
 		'clangd/clangd.wasm.gz',
 		gzipSync(

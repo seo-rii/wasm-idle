@@ -40,7 +40,10 @@ const table =
 	'function assignWasmImports(){wasmImports={ca:__asyncjs__waitForStdin,D:otherImport}}';
 const namespace =
 	'function getWasmImports(){assignWasmImports();var imports={a:wasmImports};return imports}';
-const loader = `${callback};var wasmImports;${table};${namespace}`;
+const create =
+	'async function createWasm(){var info=getWasmImports();if(Module["instantiateWasm"]){Module["instantiateWasm"](info,()=>{})}return instantiateAsync(wasmBinary,wasmBinaryFile,info)}';
+const start = 'if(!ENVIRONMENT_IS_PTHREAD){createWasm()}';
+const loader = `${callback};var wasmImports;${table};${namespace};${create};${start}`;
 
 test('accepts the legacy named Asyncify import', async () => {
 	await assertClangdStdinBridge(callback, wasmImport('env', '__asyncjs__waitForStdin'));
@@ -76,6 +79,22 @@ test('requires the loader stdin readiness callback', async () => {
 	);
 });
 
+test('rejects decoy or disconnected optimized import wiring', async () => {
+	for (const source of [
+		`${callback};function wrapper(){var wasmImports;${table};${namespace};${create}}`,
+		`${loader};async function Module(){}`,
+		loader.replace(callback, 'const callbackName="__asyncjs__waitForStdin"'),
+		loader.replace(
+			callback,
+			'function __asyncjs__waitForStdin(){return "Module.stdinReady()"}'
+		),
+		loader.replace('var info=getWasmImports()', 'var info={}'),
+		loader.replace(start, 'if(!ENVIRONMENT_IS_PTHREAD){otherWasm()}')
+	]) {
+		await assert.rejects(assertClangdStdinBridge(source, wasmImport()), /missing/);
+	}
+});
+
 test('rejects unrelated tables and import mappings present only in comments or strings', async () => {
 	for (const source of [
 		`${callback};const unrelated={ca:__asyncjs__waitForStdin};${namespace}`,
@@ -103,9 +122,6 @@ test('rejects ambiguous, dynamic, or overridden import mappings', async () => {
 		loader.replace('};return imports', '};imports.a=otherImports;return imports'),
 		`function first(){${loader}} function second(){${loader}}`
 	]) {
-		await assert.rejects(
-			assertClangdStdinBridge(source, wasmImport()),
-			/missing the Asyncify stdin import/
-		);
+		await assert.rejects(assertClangdStdinBridge(source, wasmImport()), /missing/);
 	}
 });

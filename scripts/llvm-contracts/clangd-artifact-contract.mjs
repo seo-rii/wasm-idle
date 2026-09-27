@@ -31,30 +31,167 @@ function importBindings(object) {
 	return bindings;
 }
 
-/** @param {string} jsSource */
-function minifiedStdinImport(jsSource) {
-	const tree = parse(jsSource, { ecmaVersion: 'latest', sourceType: 'module' });
-	const functions = new Map();
-	/** @type {any[]} */
-	const pending = [tree];
-	while (pending.length) {
-		const node = pending.pop();
-		if (!node || typeof node !== 'object') continue;
-		if (
-			node.type === 'FunctionDeclaration' &&
-			['assignWasmImports', 'getWasmImports'].includes(node.id?.name)
-		) {
-			if (functions.has(node.id.name)) return null;
-			functions.set(node.id.name, node);
-		}
-		for (const value of Object.values(node)) {
-			if (Array.isArray(value)) pending.push(...value);
-			else if (value && typeof value === 'object') pending.push(value);
-		}
-	}
+/** @param {any} node @param {string} object @param {string} property */
+function isMember(node, object, property) {
+	return (
+		node?.type === 'MemberExpression' &&
+		node.object?.type === 'Identifier' &&
+		node.object.name === object &&
+		((!node.computed &&
+			node.property?.type === 'Identifier' &&
+			node.property.name === property) ||
+			(node.computed &&
+				node.property?.type === 'Literal' &&
+				node.property.value === property))
+	);
+}
 
-	const assign = functions.get('assignWasmImports')?.body.body;
-	const get = functions.get('getWasmImports')?.body.body;
+/** @param {any} node @param {string} name */
+const isCall = (node, name) =>
+	node?.type === 'CallExpression' &&
+	node.callee?.type === 'Identifier' &&
+	node.callee.name === name;
+
+/** @param {any} node @param {(node: any) => boolean} predicate @returns {boolean} */
+function containsNode(node, predicate) {
+	if (!node || typeof node !== 'object') return false;
+	if (predicate(node)) return true;
+	return Object.values(node).some((value) =>
+		Array.isArray(value)
+			? value.some((entry) => containsNode(entry, predicate))
+			: containsNode(value, predicate)
+	);
+}
+
+/** @param {any} callback */
+function isStdinCallback(callback) {
+	const statements = callback?.body?.body;
+	if (statements?.length !== 1 || statements[0].type !== 'ReturnStatement') return false;
+	const handler = statements[0].argument;
+	if (
+		handler?.type !== 'CallExpression' ||
+		!isMember(handler.callee, 'Asyncify', 'handleAsync') ||
+		handler.arguments.length !== 1
+	)
+		return false;
+	const operation = handler.arguments[0];
+	if (operation.type !== 'ArrowFunctionExpression' || !operation.async) return false;
+	const expression =
+		operation.body.type === 'BlockStatement' &&
+		operation.body.body.length === 1 &&
+		operation.body.body[0].type === 'ExpressionStatement'
+			? operation.body.body[0].expression
+			: operation.body;
+	return (
+		expression?.type === 'AwaitExpression' &&
+		expression.argument?.type === 'CallExpression' &&
+		isMember(expression.argument.callee, 'Module', 'stdinReady') &&
+		expression.argument.arguments.length === 0
+	);
+}
+
+/** @param {any[]} statements @param {string} name */
+const directFunctions = (statements, name) =>
+	statements.filter((node) => node.type === 'FunctionDeclaration' && node.id?.name === name);
+
+/** @param {any[]} statements @param {string} name @returns {any[]} */
+const directVariables = (statements, name) =>
+	statements.flatMap((statement) =>
+		statement.type === 'VariableDeclaration'
+			? statement.declarations.filter(
+					/** @param {any} declaration */
+					(declaration) =>
+						declaration.id.type === 'Identifier' && declaration.id.name === name
+				)
+			: []
+	);
+
+/** @param {any} create */
+function usesImportMapForInstantiation(create) {
+	const statements = create?.body?.body;
+	if (!Array.isArray(statements)) return false;
+	const infoBindings = directVariables(statements, 'info');
+	if (
+		infoBindings.length !== 1 ||
+		!isCall(infoBindings[0].init, 'getWasmImports') ||
+		infoBindings[0].init.arguments.length !== 0
+	)
+		return false;
+	const customInstantiation = statements.some(
+		(statement) =>
+			statement.type === 'IfStatement' &&
+			isMember(statement.test, 'Module', 'instantiateWasm') &&
+			containsNode(
+				statement.consequent,
+				(node) =>
+					node.type === 'CallExpression' &&
+					isMember(node.callee, 'Module', 'instantiateWasm') &&
+					node.arguments[0]?.type === 'Identifier' &&
+					node.arguments[0].name === 'info'
+			)
+	);
+	const asyncInstantiation = statements.some((statement) => {
+		/** @type {any[]} */
+		const expressions =
+			statement.type === 'VariableDeclaration'
+				? statement.declarations.map(
+						/** @param {any} declaration */
+						(declaration) => declaration.init
+					)
+				: statement.type === 'ReturnStatement'
+					? [statement.argument]
+					: [];
+		return expressions.some((expression) => {
+			const call = expression?.type === 'AwaitExpression' ? expression.argument : expression;
+			return (
+				isCall(call, 'instantiateAsync') &&
+				call.arguments[2]?.type === 'Identifier' &&
+				call.arguments[2].name === 'info'
+			);
+		});
+	});
+	return customInstantiation && asyncInstantiation;
+}
+
+/** @param {any[]} statements */
+function minifiedStdinImport(statements) {
+	const functionNames = [
+		'__asyncjs__waitForStdin',
+		'assignWasmImports',
+		'getWasmImports',
+		'createWasm'
+	];
+	const functions = new Map(
+		functionNames.map((name) => [name, directFunctions(statements, name)])
+	);
+	if ([...functions.values()].some((declarations) => declarations.length !== 1)) return null;
+	const callback = functions.get('__asyncjs__waitForStdin')?.[0];
+	const assignFunction = functions.get('assignWasmImports')?.[0];
+	const getFunction = functions.get('getWasmImports')?.[0];
+	const create = functions.get('createWasm')?.[0];
+	if (!callback || !assignFunction || !getFunction || !create || !isStdinCallback(callback))
+		return null;
+	if (
+		!create.async ||
+		!statements.some(
+			(statement) =>
+				statement.type === 'IfStatement' &&
+				statement.test?.type === 'UnaryExpression' &&
+				statement.test.operator === '!' &&
+				statement.test.argument?.type === 'Identifier' &&
+				statement.test.argument.name === 'ENVIRONMENT_IS_PTHREAD' &&
+				containsNode(
+					statement.consequent,
+					(node) => isCall(node, 'createWasm') && node.arguments.length === 0
+				)
+		)
+	)
+		return null;
+	const wasmImports = directVariables(statements, 'wasmImports');
+	if (wasmImports.length !== 1 || wasmImports[0].init != null) return null;
+
+	const assign = assignFunction.body.body;
+	const get = getFunction.body.body;
 	// Pinned Emscripten 6 emits one table assignment and a three-statement
 	// namespace wrapper: assignWasmImports(); var imports = {...}; return imports.
 	if (assign?.length !== 1 || get?.length !== 3) return null;
@@ -93,14 +230,34 @@ function minifiedStdinImport(jsSource) {
 	if (!table || !namespaces) return null;
 	const names = [...table].filter(([, value]) => value === '__asyncjs__waitForStdin');
 	const modules = [...namespaces].filter(([, value]) => value === 'wasmImports');
-	if (names.length !== 1 || modules.length !== 1) return null;
+	if (names.length !== 1 || modules.length !== 1 || !usesImportMapForInstantiation(create))
+		return null;
 	return { module: modules[0][0], name: names[0][0] };
+}
+
+/** @param {string} jsSource */
+function inspectLoader(jsSource) {
+	const tree = parse(jsSource, { ecmaVersion: 'latest', sourceType: 'module' });
+	const moduleFunctions = directFunctions(tree.body, 'Module');
+	if (moduleFunctions.length > 1) return { hasCallback: false, mapped: null };
+	const scopes = [moduleFunctions.length === 1 ? moduleFunctions[0].body.body : tree.body];
+	const callbacks = scopes.flatMap((statements) =>
+		directFunctions(statements, '__asyncjs__waitForStdin').filter(isStdinCallback)
+	);
+	const mappings = scopes
+		.map((statements) => minifiedStdinImport(statements))
+		.filter((mapping) => mapping !== null);
+	return {
+		hasCallback: callbacks.length === 1,
+		mapped: mappings.length === 1 ? mappings[0] : null
+	};
 }
 
 /** @param {string | Uint8Array} jsBytes @param {Uint8Array<ArrayBuffer>} wasmBytes */
 export async function assertClangdStdinBridge(jsBytes, wasmBytes) {
 	const jsSource = typeof jsBytes === 'string' ? jsBytes : textDecoder.decode(jsBytes);
-	if (!jsSource.includes('Module.stdinReady')) {
+	const loader = inspectLoader(jsSource);
+	if (!loader.hasCallback) {
 		throw new Error('clangd.js is missing the browser stdin readiness callback');
 	}
 
@@ -110,7 +267,7 @@ export async function assertClangdStdinBridge(jsBytes, wasmBytes) {
 		(entry) => entry.kind === 'function' && entry.name === '__asyncjs__waitForStdin'
 	);
 	if (!hasStdinImport) {
-		const mapped = minifiedStdinImport(jsSource);
+		const mapped = loader.mapped;
 		hasStdinImport =
 			mapped !== null &&
 			imports.some(
