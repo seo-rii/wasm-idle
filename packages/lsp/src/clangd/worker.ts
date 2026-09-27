@@ -172,12 +172,20 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 
 		clangdRuntime.FS.mkdirTree(CLANGD_WORKSPACE_PATH);
 		writeGccCompatibilityHeaders(clangdRuntime.FS, '/usr');
-		// These verified builds use the same pinned LLVM 22 sources. Other clangd
-		// builds keep their own resource headers instead of receiving this overlay.
+		// Explicit asset roots can omit integrity metadata. Identify those builds
+		// from the actual Wasm bytes before selecting the matching resource headers.
+		const wasmDigest =
+			event.data.assets.clangdWasmIntegrity?.uncompressedSha256 ||
+			Array.from(
+				new Uint8Array(await crypto.subtle.digest('SHA-256', wasmBlobBytes)),
+				(byte) => byte.toString(16).padStart(2, '0')
+			).join('');
+		// These builds use the same pinned LLVM 22 sources. Other clangd builds
+		// keep their own resource headers instead of receiving this overlay.
 		const resourceDir = [
 			'0d71e7a7f8e6dd369cb2a0b22cc4016d649f370e5b905adb6092536deb0ee019',
 			'f2bef5c4b4aa8691f0b996286231c5778a17119c41537ae4108c7ff2795f7fc3'
-		].includes(event.data.assets.clangdWasmIntegrity?.uncompressedSha256 || '')
+		].includes(wasmDigest)
 			? CLANG_RESOURCE_HEADER_DIRECTORY
 			: undefined;
 		if (resourceDir) {
