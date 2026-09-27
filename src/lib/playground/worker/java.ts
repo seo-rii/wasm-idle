@@ -1,3 +1,4 @@
+import { acceptCompiledTeaVmModule, loadStreamingJavaCompiler } from './javaStreaming';
 import { prepareJavaStdinInjection } from '$lib/playground/javaStdin';
 import { resolveJavaSourceIdentity } from '$lib/playground/javaSource';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
@@ -18,7 +19,7 @@ declare const self: {
 
 let compilerLib: any = null;
 let compiler: any = null;
-let runtimeLoad: ((code: string | ArrayBufferView, options?: object) => Promise<any>) | null = null;
+let runtimeLoad: ((code: string | ArrayBufferView | WebAssembly.Module, options?: object) => Promise<any>) | null = null;
 let loadedBaseUrl = '';
 let stdoutBuffer = '';
 let stderrBuffer = '';
@@ -76,9 +77,10 @@ self.addEventListener('message', async (event) => {
 	} = event.data;
 	try {
 		if (load) {
-			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
+			const runtimeAssets = assets as (WorkerRuntimeAssetConfig & { streamCompiler?: boolean }) | undefined;
 			configureWorkerRuntimeAssets(runtimeAssets || null);
 			const baseUrl = runtimeAssets?.baseUrl || '';
+			const streamCompiler = runtimeAssets?.streamCompiler === true;
 			if (!compiler || loadedBaseUrl !== baseUrl) {
 				// Observe every branch immediately: failed assets must not leave an
 				// unhandled rejection while another branch is still initializing Wasm.
@@ -86,9 +88,10 @@ self.addEventListener('message', async (event) => {
 					(async () => {
 						const [runtimeModule, compilerAsset] = await Promise.all([
 							(async () => {
-								const runtimeSource = decoder.decode(
+								let runtimeSource = decoder.decode(
 									(await loadWorkerRuntimeAsset('compiler.wasm-runtime.js')).bytes
 								);
+								if (streamCompiler) runtimeSource = acceptCompiledTeaVmModule(runtimeSource);
 								const runtimeUrl = URL.createObjectURL(
 									new Blob([runtimeSource], { type: 'text/javascript;charset=utf-8' })
 								);
@@ -98,7 +101,10 @@ self.addEventListener('message', async (event) => {
 									URL.revokeObjectURL(runtimeUrl);
 								}
 							})(),
-							loadWorkerRuntimeAsset('compiler.wasm')
+							(async () => {
+								const module = streamCompiler ? await loadStreamingJavaCompiler(baseUrl, runtimeAssets?.maxAssetBytes ?? 128 * 1024 * 1024) : undefined;
+								return module ? { bytes: module } : loadWorkerRuntimeAsset('compiler.wasm');
+							})()
 						]);
 						const load = runtimeModule.load as NonNullable<typeof runtimeLoad>;
 						const module = await load(compilerAsset.bytes, {
