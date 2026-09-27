@@ -1321,14 +1321,14 @@ async function collectPageDebugInfo(page: Page) {
 
 describe('Monaco LSP browser integration', () => {
 	it('binds the Rust case to all inert executable graph deliveries', () => {
-		expect(rustExecutableGraphModules).toHaveLength(44);
-		expect(rustExecutableStoragePathnames).toHaveLength(44);
-		expect(new Set(rustExecutableStoragePathnames).size).toBe(44);
+		expect(rustExecutableGraphModules).toHaveLength(45);
+		expect(rustExecutableStoragePathnames).toHaveLength(45);
+		expect(new Set(rustExecutableStoragePathnames).size).toBe(45);
 		expect(rustExecutableStoragePathnames.every((pathname) => pathname.endsWith('.bin'))).toBe(
 			true
 		);
-		expect(rustExecutableForbiddenPathnames).toHaveLength(88);
-		expect(Object.keys(rustExecutableStoragePins)).toHaveLength(44);
+		expect(rustExecutableForbiddenPathnames).toHaveLength(90);
+		expect(Object.keys(rustExecutableStoragePins)).toHaveLength(45);
 	});
 
 	it('selects browser LSP cases by named matrix group', () => {

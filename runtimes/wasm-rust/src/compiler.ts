@@ -350,8 +350,9 @@ export async function compileRust(
 			)(workerUrl);
 			activeWorkerCleanup = () => worker.terminate();
 			// Only the activated, receipt-verified topology gets a private module service.
+			const rustcReceiptPath = `wasm-rust/runtime/${manifest.compiler.rustcWasm}`;
 			const moduleService = executableGraph ? createRustcModuleService(
-				manifest.assetReceipts?.[manifest.compiler.rustcWasm]) : undefined;
+				manifest.assetReceipts?.[rustcReceiptPath]) : undefined;
 			let stopped = false;
 			const stopWorker = () => {
 				if (stopped) return;
