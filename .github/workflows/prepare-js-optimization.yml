@@ -1,54 +1,62 @@
-name: Prepare JavaScript optimization inputs
-
+name: Build and verify split JavaScript runtime
 on:
   push:
     branches: [perf/javascript-swc-split]
-    paths: [.github/workflows/prepare-js-optimization.yml]
-
 permissions:
-  contents: read
-
+  contents: write
 jobs:
-  prepare:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
+          ref: perf/javascript-swc-split
       - uses: pnpm/action-setup@v4
         with:
           version: 10.30.0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install pinned focused dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts --filter wasm-typescript... --filter wasm-go...
-      - name: Prepare portable test and build tools
-        env:
-          npm_config_ignore_scripts: 'true'
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Apply focused producer and consumer changes
+        run: python3 .github/workflows/patch-javascript.py
+      - name: Build and test the actual JS and TypeScript bundles
         run: |
-          pnpm --filter wasm-typescript deploy --legacy "$RUNNER_TEMP/typescript-deploy"
-          pnpm --filter wasm-go deploy --legacy "$RUNNER_TEMP/go-deploy"
-          mkdir -p optimization-inputs
-          tar -czf optimization-inputs/typescript-deps.tar.gz -C "$RUNNER_TEMP/typescript-deploy" node_modules
-          tar -czf optimization-inputs/go-deps.tar.gz -C "$RUNNER_TEMP/go-deploy" node_modules
-      - name: Archive tracked implementation and test sources
+          pnpm --dir runtimes/wasm-typescript run build
+          pnpm --dir runtimes/wasm-typescript run check
+          pnpm --dir runtimes/wasm-typescript run test
+      - name: Sync and compress only the two JavaScript-family runtime entries
         run: |
+          node scripts/sync-wasm-typescript.mjs
           python3 - <<'PY'
-          import pathlib, subprocess, tarfile
-          paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
-          extensions = {'.ts', '.tsx', '.js', '.mjs', '.cjs', '.json', '.yaml', '.yml', '.md', '.svelte', '.cs', '.csproj', '.props', '.targets', '.sh', '.html', '.css'}
-          with tarfile.open('optimization-inputs/sources.tar.gz', 'w:gz') as archive:
-              for name in paths:
-                  path = pathlib.Path(name)
-                  if name and path.is_file() and path.suffix in extensions and path.stat().st_size <= 2 * 1024 * 1024:
-                      archive.add(path, arcname=name, recursive=False)
-          pathlib.Path('optimization-inputs/commit.txt').write_text(subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode())
+          import gzip, json
+          from pathlib import Path
+          p = Path('static/compressed-runtime-assets.v1.json')
+          manifest = json.loads(p.read_text())
+          for name in ['index.js', 'javascript.js']:
+              logical = 'wasm-typescript/' + name
+              source = Path('static') / logical
+              data = source.read_bytes()
+              source.with_suffix(source.suffix + '.gz').write_bytes(gzip.compress(data, compresslevel=9, mtime=0))
+              source.unlink()
+              if logical not in manifest['assets']: manifest['assets'].append(logical)
+              manifest['sizes'][logical] = len(data)
+              print(logical, 'logical bytes', len(data), 'gzip bytes', (Path('static') / (logical + '.gz')).stat().st_size)
+          manifest['assets'].sort()
+          manifest['sizes'] = dict(sorted(manifest['sizes'].items()))
+          p.write_text(json.dumps(manifest, indent=2) + '\n')
           PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: javascript-optimization-inputs
-          path: optimization-inputs/
-          if-no-files-found: error
-          retention-days: 1
+          node scripts/sync-wasm-typescript.mjs --verify
+      - name: Run consumer integrity and lifecycle tests
+        run: |
+          pnpm exec svelte-kit sync
+          pnpm exec vitest run src/lib/sync-wasm-typescript.test.ts src/lib/playground/typescript.test.ts src/lib/playground/assets.test.ts src/lib/playground/applicationAssets.test.ts
+      - name: Commit validated changes on the feature branch
+        run: |
+          git diff --check
+          git add runtimes/wasm-typescript/scripts/build.mjs runtimes/wasm-typescript/scripts/provenance.mjs scripts/sync-wasm-typescript.mjs src/lib/playground/assets.ts src/lib/playground/applicationAssets.ts src/lib/playground/typescript.ts src/lib/playground/wasmTypeScriptVersion.ts src/lib/sync-wasm-typescript.test.ts static/wasm-typescript static/compressed-runtime-assets.v1.json
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'perf(javascript): ship an independently verified SWC-free runtime entry'
+            git push origin HEAD:refs/heads/perf/javascript-swc-split
+          fi
