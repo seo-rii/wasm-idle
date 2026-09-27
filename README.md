@@ -552,6 +552,11 @@ from GitHub without WAF credentials. Update the snapshot URL and all changed rec
 do not replace a receipt with bytes from a mutable deployment URL. Receipt failures report both
 expected and actual byte counts and SHA-256 digests.
 
+The slim Clang snapshot is retained on `artifacts/slim-clang-20260927`. Keep that branch while
+the manifest references its commit; the snapshot preserves the pinned OCaml inputs and replaces
+only Clang delivery files and their build receipt. Updating this download source does not deploy
+GitHub Pages.
+
 OCaml preparation keeps these verified download inputs in a separate receipt-keyed cache,
 compiles the tracked TypeScript browser adapter with the producer's locked compiler, and syncs
 that adapter together with the verified native bundle. The sync derives the final
