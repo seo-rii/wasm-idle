@@ -5,78 +5,61 @@ on:
 permissions:
   contents: write
 jobs:
-  verify:
+  dotnet-prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - change: go-preload
-            package: wasm-go
-            branch: perf/go-parallel-preload
-            digest: 02d3d1e693fc04fa236fa152c722797d8be40733f3470d4402e15d594c31a21c
-            message: 'perf(go): preload independent toolchain assets concurrently'
-          - change: rust-copy
-            package: wasm-rust
-            branch: perf/rust-owned-wasm-view
-            digest: 09f7de992a1fecd8a362acdff25929e8ca455208d09a7a06c34574a248f8764a
-            message: 'perf(rust): compile the owned rustc view without another full copy'
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           sparse-checkout: .github/runtime-perf-patches
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - name: Apply reviewed patch and execute focused tests
-        env:
-          CHANGE: ${{ matrix.change }}
-          PACKAGE: ${{ matrix.package }}
-          BRANCH: ${{ matrix.branch }}
-          DIGEST: ${{ matrix.digest }}
-          MESSAGE: ${{ matrix.message }}
+          node-version: '24'
+      - name: Apply reviewed patch, build wrapper and verify readiness
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import os, gzip, hashlib
+          import gzip,hashlib
           from pathlib import Path
-          blob=Path('.github/runtime-perf-patches/'+os.environ['CHANGE']+'.patch.gz').read_bytes()
-          assert hashlib.sha256(blob).hexdigest()==os.environ['DIGEST'], 'Source patch checksum mismatch'
-          Path('/tmp/change.patch').write_bytes(gzip.decompress(blob))
+          blob=Path('.github/runtime-perf-patches/dotnet-prepare.patch.gz').read_bytes()
+          assert hashlib.sha256(blob).hexdigest()=='91633e5ed0953ca1ce00049aef40806684bf14b496993fc46bc37cd6235cea96'
+          Path('/tmp/prepare.patch').write_bytes(gzip.decompress(blob))
           PY
-          npm install --prefix /tmp/test-tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.0.18 @bjorn3/browser_wasi_shim@0.4.2 wabt@1.0.39
-          git fetch --depth=1 origin b45847d10f059463aa313dd61a7c12f4abec19bd
-          git worktree add --detach /tmp/change b45847d10f059463aa313dd61a7c12f4abec19bd
+          npm install --prefix /tmp/test-tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.1.4 @types/node@24.12.4
+          git fetch --depth=1 origin 27a9131acbf5b01aecb208cfa0a860b5a85ba55a
+          git worktree add --detach /tmp/change 27a9131acbf5b01aecb208cfa0a860b5a85ba55a
           cd /tmp/change
-          git sparse-checkout set "runtimes/$PACKAGE"
-          git apply /tmp/change.patch
+          git sparse-checkout set runtimes/wasm-dotnet src packages/core scripts static/wasm-dotnet
+          git apply /tmp/prepare.patch
           ln -s /tmp/test-tools/node_modules node_modules
           mkdir -p .svelte-kit
           printf '{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"bundler"}}' > .svelte-kit/tsconfig.json
-          if [ "$CHANGE" = rust-copy ]; then
-            mkdir -p static/wasm-rust/runtime
-            git show b45847d10f059463aa313dd61a7c12f4abec19bd:static/wasm-rust/runtime/runtime-manifest.v3.json > static/wasm-rust/runtime/runtime-manifest.v3.json
-          fi
-          cd "runtimes/$PACKAGE"
-          if [ "$CHANGE" = rust-copy ]; then
-            node /tmp/test-tools/node_modules/vitest/vitest.mjs run test/rustc-module.test.ts test/compiler-worker.test.ts test/runtime-pack.test.ts test/runtime-manifest-edge.test.ts --reporter=verbose | tee /tmp/tests.log
-            node /tmp/test-tools/node_modules/typescript/bin/tsc --noEmit --skipLibCheck --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022,DOM src/rustc-module.ts
-          else
-            node /tmp/test-tools/node_modules/vitest/vitest.mjs run --reporter=verbose | tee /tmp/tests.log
-          fi
+          cd runtimes/wasm-dotnet
+          node /tmp/test-tools/node_modules/vitest/vitest.mjs run --reporter=verbose | tee /tmp/dotnet-runtime-tests.log
+          node scripts/clean-module-output.mjs
+          node /tmp/test-tools/node_modules/typescript/bin/tsc -p tsconfig.build.json
           cd /tmp/change
+          cp -a static/wasm-dotnet/runtime runtimes/wasm-dotnet/dist/runtime
+          node scripts/sync-wasm-dotnet.mjs
+          # This is a JS wrapper rebuild only. Managed runtime files must remain identical.
+          test -z "$(git diff --name-only -- static/wasm-dotnet/runtime)"
+          printf 'export const env={};' > /tmp/empty-env.mjs
+          printf 'globalThis.window={location:new URL("https://example.test/")}; globalThis.history={replaceState(_a,_b,url){window.location=new URL(url,window.location);}};' > /tmp/setup.mjs
+          cat > /tmp/config.mjs <<'JS'
+          export default {resolve:{alias:{'$lib':'/tmp/change/src/lib','@wasm-idle/core':'/tmp/change/packages/core/src/index.ts','$env/dynamic/public':'/tmp/empty-env.mjs'}},test:{environment:'node',include:['src/lib/playground/worker/dotnet-prepare.test.ts','src/lib/playground/dotnet.test.ts','src/lib/sync-wasm-dotnet.test.ts'],setupFiles:['/tmp/setup.mjs']}};
+          JS
+          node /tmp/test-tools/node_modules/vitest/vitest.mjs run --config /tmp/config.mjs --reporter=verbose | tee /tmp/dotnet-worker-tests.log
           git diff --check
-          git add "runtimes/$PACKAGE"
-          git -c user.name='wasm-idle automation' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "$MESSAGE"
-          git push origin "HEAD:refs/heads/$BRANCH"
-          git rev-parse HEAD > /tmp/head.txt
+          git add runtimes/wasm-dotnet/src/compiler.ts runtimes/wasm-dotnet/src/index.ts runtimes/wasm-dotnet/src/types.ts runtimes/wasm-dotnet/test/prepare.test.ts src/lib/playground/dotnet.ts src/lib/playground/dotnet.test.ts src/lib/playground/worker/dotnet.ts src/lib/playground/worker/dotnet-prepare.test.ts src/lib/playground/wasmDotnetVersion.ts static/wasm-dotnet
+          git -c user.name='wasm-idle automation' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'perf(dotnet): warm the real compiler before acknowledging worker readiness'
+          git push origin HEAD:refs/heads/perf/dotnet-real-compiler-prepare
+          git rev-parse HEAD > /tmp/dotnet-head.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ${{ matrix.change }}-validation
+          name: dotnet-prepare-validation
           path: |
-            /tmp/tests.log
-            /tmp/head.txt
+            /tmp/dotnet-*.log
+            /tmp/dotnet-head.txt
           retention-days: 1
