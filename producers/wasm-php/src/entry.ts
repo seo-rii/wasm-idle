@@ -1,5 +1,9 @@
 import { PHP, loadPHPRuntime } from '@php-wasm/universal';
-import { getPHPLoaderModule, jspi } from '@php-wasm/web-8-4';
+import { jspi } from '@php-wasm/web-8-4';
+import { phpEngineAssets } from 'virtual:wasm-idle-php-engines';
+import { createPhpEngineBootstrap, type PhpAsyncMode } from './startup';
+
+const prepareEngine = createPhpEngineBootstrap(phpEngineAssets, jspi);
 
 const disabledWebSocketOptions = {
 	websocket: {
@@ -20,16 +24,31 @@ const disabledWebSocketOptions = {
 	}
 };
 
-export async function createPhp84() {
+export async function createPhp84(options: { asyncMode?: 'auto' | PhpAsyncMode } = {}) {
 	if (!('setImmediate' in globalThis)) {
 		(globalThis as any).setImmediate = (callback: (...args: any[]) => void) =>
 			setTimeout(callback, 0);
 	}
-	const phpWasmAsyncMode = (await jspi()) ? 'jspi' : 'asyncify';
-	const runtimeId = await loadPHPRuntime(await getPHPLoaderModule(), {
-		...disabledWebSocketOptions,
-		phpWasmAsyncMode
+	const { mode: phpWasmAsyncMode, loader, module } = await prepareEngine(options.asyncMode);
+	let failInstantiation!: (error: unknown) => void;
+	const failed = new Promise<never>((_, reject) => {
+		failInstantiation = reject;
 	});
+	const initializing = loadPHPRuntime(loader, {
+		...disabledWebSocketOptions,
+		phpWasmAsyncMode,
+		instantiateWasm(
+			imports: WebAssembly.Imports,
+			receive: (instance: WebAssembly.Instance, module: WebAssembly.Module) => void
+		) {
+			// Reuse compiled code, but instantiate fresh globals/memory for every PHP VM.
+			void WebAssembly.instantiate(module, imports)
+				.then((instance) => receive(instance, module))
+				.catch(failInstantiation);
+			return {};
+		}
+	});
+	const runtimeId = await Promise.race([initializing, failed]);
 	return new PHP(runtimeId);
 }
 
