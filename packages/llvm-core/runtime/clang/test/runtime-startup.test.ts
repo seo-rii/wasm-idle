@@ -57,16 +57,8 @@ describe('Clang runtime startup', () => {
 			signal: controller.signal
 		});
 
-		const first = runtime.getModule(
-			'https://cdn.test/clang/bin/lld.wasm.gz',
-			undefined,
-			controller.signal
-		);
-		const second = runtime.getModule(
-			'https://cdn.test/clang/bin/lld.wasm.gz',
-			undefined,
-			controller.signal
-		);
+		const first = runtime.getModule('https://cdn.test/clang/bin/lld.wasm.gz');
+		const second = runtime.getModule('https://cdn.test/clang/bin/lld.wasm.gz');
 
 		await vi.waitFor(() => {
 			expect(startupMocks.compile).toHaveBeenCalledTimes(2);
@@ -75,6 +67,7 @@ describe('Clang runtime startup', () => {
 			'https://cdn.test/clang/bin/clang.wasm.gz',
 			'https://cdn.test/clang/bin/lld.wasm.gz'
 		]);
+		expect(startupMocks.compile.mock.calls[1]?.[2]).toBe(controller.signal);
 
 		controller.abort(reason);
 
