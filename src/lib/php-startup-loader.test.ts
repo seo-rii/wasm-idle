@@ -160,11 +160,19 @@ describe('verified PHP startup modules', () => {
 			'fetch',
 			vi.fn(async () => response())
 		);
-		vi.spyOn(WebAssembly, 'compileStreaming', 'get').mockReturnValue(undefined as any);
-		expect(await loadPhpModule(asset())).toBeInstanceOf(WebAssembly.Module);
-		await expect(loadPhpModule({ ...asset(), sha256: '0'.repeat(64) })).rejects.toThrow(
-			'SHA-256'
-		);
+		const descriptor = Object.getOwnPropertyDescriptor(WebAssembly, 'compileStreaming');
+		Object.defineProperty(WebAssembly, 'compileStreaming', {
+			configurable: true,
+			value: undefined
+		});
+		try {
+			expect(await loadPhpModule(asset())).toBeInstanceOf(WebAssembly.Module);
+			await expect(loadPhpModule({ ...asset(), sha256: '0'.repeat(64) })).rejects.toThrow(
+				'SHA-256'
+			);
+		} finally {
+			if (descriptor) Object.defineProperty(WebAssembly, 'compileStreaming', descriptor);
+		}
 	});
 	it('rejects invalid receipts and missing crypto before network I/O', async () => {
 		vi.stubGlobal('fetch', vi.fn());

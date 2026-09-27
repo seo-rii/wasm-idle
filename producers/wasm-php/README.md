@@ -43,7 +43,7 @@ failed promises evicted; each factory call still creates fresh runtime memory,
 filesystem and PHP state. There is no persistent or cross-tab cache.
 
 After building, run `node scripts/probe-startup.mjs` from this directory with the
-root development dependencies installed and Chrome available. The probe tests
+root development dependencies installed and Chromium available. The probe tests
 both modes, native-module reuse, isolated filesystems, I/O, legacy entry behavior
 and rejected instantiation. `PLAYWRIGHT_CHROMIUM_EXECUTABLE` may select a local
 Chromium executable. Unit tests are in `src/lib/php-startup-loader.test.ts` at

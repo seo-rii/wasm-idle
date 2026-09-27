@@ -97,7 +97,7 @@ await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const browser = await chromium.launch(
 	process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
 		? { headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE }
-		: { headless: true, channel: 'chrome' }
+		: { headless: true }
 );
 try {
 	for (const scenario of [
