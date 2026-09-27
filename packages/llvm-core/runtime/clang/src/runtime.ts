@@ -166,6 +166,7 @@ class Clang {
 	memfs: MemFS;
 	stdout: (str: string) => void;
 	moduleCache: { [key: string]: WebAssembly.Module };
+	moduleLoads: { [key: string]: Promise<WebAssembly.Module> };
 
 	showTiming: boolean;
 	log: boolean;
@@ -203,6 +204,7 @@ class Clang {
 		}
 		this.maxAssetBytes = maxAssetBytes;
 		this.moduleCache = {};
+		this.moduleLoads = {};
 		this.stdout = options.stdout || (() => {});
 		this.showTiming = options.showTiming || false;
 		this.log = options.log || false;
@@ -227,7 +229,6 @@ class Clang {
 			this.progress.clang,
 			options.signal
 		);
-		const lldReady = this.getModule(this.assetUrls.lld, this.progress.lld, options.signal);
 		const fileSystemReady = this.memfs.ready.then(async () => {
 			const sysrootReady = options.signal
 				? readBuffer(this.assetUrls.sysroot, undefined, maxAssetBytes, options.signal)
@@ -251,7 +252,7 @@ class Clang {
 			);
 			installGccCompatibilityHeaders(this.memfs);
 		});
-		this.ready = Promise.all([clangReady, lldReady, fileSystemReady]).then(() => undefined);
+		this.ready = Promise.all([clangReady, fileSystemReady]).then(() => undefined);
 	}
 
 	hostLog(message: string) {
@@ -284,12 +285,25 @@ class Clang {
 
 	async getModule(name: string, progress?: ProgressSink, signal?: AbortSignal) {
 		if (this.moduleCache[name]) return this.moduleCache[name];
-		const module = await this.hostLogAsync(
+		const existingLoad = this.moduleLoads[name];
+		if (existingLoad) return await existingLoad;
+
+		const pending = this.hostLogAsync(
 			`Fetching and compiling ${name}`,
 			compile(name, progress, signal, this.maxAssetBytes)
+		).then(
+			(module) => {
+				this.moduleCache[name] = module;
+				delete this.moduleLoads[name];
+				return module;
+			},
+			(error) => {
+				delete this.moduleLoads[name];
+				throw error;
+			}
 		);
-		this.moduleCache[name] = module;
-		return module;
+		this.moduleLoads[name] = pending;
+		return await pending;
 	}
 
 	addWorkspaceDirectories(path: string, addedDirectories = new Set<string>()) {
@@ -1537,6 +1551,12 @@ class Clang {
 			this.trace(`reuse ${wasm}`);
 			return this.wasm;
 		}
+
+		// Linking cannot start before source compilation completes. Start the linker download and
+		// Wasm compilation now so that its cold-start cost overlaps Clang's source compilation.
+		// getModule() keeps the in-flight promise, so link() later reuses this exact load.
+		void this.getModule(this.assetUrls.lld).catch(() => undefined);
+
 		if (translationUnits.length === 1) {
 			await this.compile({
 				input,
