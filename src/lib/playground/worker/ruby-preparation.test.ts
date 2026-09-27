@@ -33,7 +33,9 @@ const payload = Object.freeze({
 });
 const moduleSource = 'export const verified = true;';
 const rubyEvalMock = vi.fn();
-const rubyInstantiateMock = vi.fn(async () => ({ vm: { eval: rubyEvalMock } }));
+const rubyInstantiateMock = vi.fn(async (_options: any) => ({
+	vm: { eval: rubyEvalMock }
+}));
 class RubyFd {}
 class RubyFile {
 	constructor(
@@ -62,7 +64,7 @@ class RubyWasi {
 }
 const runtimeModule = {
 	RubyVM: { instantiateModule: rubyInstantiateMock },
-	consolePrinter: vi.fn(() => ({
+	consolePrinter: vi.fn((_options: any) => ({
 		addToImports: vi.fn(),
 		setMemory: vi.fn()
 	})),
@@ -206,6 +208,31 @@ describe('Ruby untouched VM preparation', () => {
 		expect(options.args).toEqual(['ruby.wasm', '-EUTF-8', '-e_=0', '--', ...args]);
 		expect(rubyEvalMock).not.toHaveBeenCalled();
 	});
+	it('hides an embedded-profile user bundle setup file until initialization completes', async () => {
+		let root: Map<string, any> | undefined;
+		rubyInstantiateMock.mockImplementationOnce(async (options: any) => {
+			root = options.wasip1.fds[3].contents;
+			expect(root?.has('bundle')).toBe(false);
+			return { vm: { eval: rubyEvalMock } };
+		});
+		const handle = await loadWorker();
+		vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:verified-ruby');
+		vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+		vi.spyOn(WebAssembly, 'compile').mockResolvedValue({} as WebAssembly.Module);
+		const startupContext = {
+			args: [],
+			activePath: 'main.rb',
+			workspaceFiles: [{ path: 'bundle/setup.rb', content: 'raise "prewarm ran me"' }]
+		};
+		await handle({ data: { ...load, startupContext } });
+		const bundle = root?.get('bundle') as RubyDirectory;
+		expect(new TextDecoder().decode((bundle.contents.get('setup.rb') as RubyFile).data)).toBe(
+			'raise "prewarm ran me"'
+		);
+		await handle({ data: request(startupContext) });
+		expect(rubyInstantiateMock).toHaveBeenCalledOnce();
+		expect(rubyEvalMock).toHaveBeenCalledWith('puts 42');
+	});
 	it('uses private snapshots so changed workspace content cannot claim an old VM', async () => {
 		const handle = await ready();
 		const workspaceFiles = [{ path: 'lib.rb', content: 'old' }];
@@ -282,10 +309,10 @@ describe('Ruby untouched VM preparation', () => {
 			states.push(state);
 			return {
 				vm: {
-					eval: () => {
+					eval: vi.fn(() => {
 						expect(state[0]++).toBe(0);
 						throw new Error('user error');
-					}
+					})
 				}
 			};
 		});

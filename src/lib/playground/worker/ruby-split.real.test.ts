@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { preflightRubySplitRuntimeAssets } from '@wasm-idle/core';
 const assetsRoot = new URL('../../../../static/wasm-ruby/split/', import.meta.url);
 const messages = vi.hoisted(() => [] as any[]);
-const stats = vi.hoisted(() => ({ instances: 0 }));
+const stats = vi.hoisted(() => ({ instances: 0, mounts: [] as string[][] }));
 vi.mock('$lib/playground/runtimeModule', () => ({
 	importRuntimeModule: async (url: string) => {
 		// Node cannot import blob: modules; only the test transport is replaced.
@@ -18,6 +18,11 @@ vi.mock('$lib/playground/runtimeModule', () => ({
 			RubyVM: {
 				instantiateModule: (...args: any[]) => {
 					stats.instances++;
+					stats.mounts.push(
+						args[0].wasip1.fds
+							.slice(3)
+							.map((fd: { prestat_name?: string }) => fd.prestat_name ?? '')
+					);
 					return runtime.RubyVM.instantiateModule(...args);
 				}
 			}
@@ -29,6 +34,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 	messages.length = 0;
 	stats.instances = 0;
+	stats.mounts.length = 0;
 });
 describe('real Ruby split runtime worker', () => {
 	it('runs the complete stdlib with stdin/workspace/args and isolates subsequent runs', async () => {
@@ -76,6 +82,7 @@ describe('real Ruby split runtime worker', () => {
 		expect(messages.some((x) => x.load === true)).toBe(true);
 		expect(messages.filter((x) => x.error || x.output || x.buffer)).toEqual([]);
 		expect(stats.instances).toBe(1);
+		expect(stats.mounts[0].filter((mount) => mount === '/')).toHaveLength(1);
 		for (let i = 0; i < 2; i++) {
 			await send({
 				...options,

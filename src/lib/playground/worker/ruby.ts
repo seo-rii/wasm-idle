@@ -352,32 +352,37 @@ async function initializeRubyExecution(
 	const { File, OpenFile, PreopenDirectory, WASI } = runtime.wasiShim;
 	const root = workspaceContents(runtime, snapshot.workspaceFiles);
 	// Preserve the complete split standard library and ancestor directories for realpath.
-	const stdlibMounts = loaded.stdlib
+	const preopens = loaded.stdlib
 		? createRubyStdlibPreopens(loaded.stdlib, runtime.wasiShim, root)
-		: [];
+		: [new PreopenDirectory('/', root)];
+	// @ruby/wasm-wasi automatically requires /bundle/setup.rb while initializing.
+	// The split profile owns and verifies that mount. For the embedded profile, hide a
+	// same-named user directory until initialization completes so prewarm cannot run
+	// workspace source; the live root map is restored before the VM can be claimed.
+	const deferredUserBundle = loaded.stdlib ? undefined : root.get('bundle');
+	if (deferredUserBundle) root.delete('bundle');
 	const wasiInstance = new WASI(
 		['ruby.wasm', ...snapshot.args],
 		['USER=jungol'],
-		[
-			rubyStdin,
-			new OpenFile(new File([])),
-			new OpenFile(new File([])),
-			new PreopenDirectory('/', root),
-			...stdlibMounts
-		],
+		[rubyStdin, new OpenFile(new File([])), new OpenFile(new File([])), ...preopens],
 		{ debug: false }
 	);
-	const { vm } = await runtime.RubyVM.instantiateModule({
-		module,
-		wasip1: wasiInstance,
-		args: ['ruby.wasm', '-EUTF-8', '-e_=0', '--', ...snapshot.args],
-		addToImports(imports: WebAssembly.Imports) {
-			printer.addToImports(imports);
-		},
-		setMemory(memory: WebAssembly.Memory) {
-			printer.setMemory(memory);
-		}
-	});
+	let vm: { eval(source: string): unknown };
+	try {
+		({ vm } = await runtime.RubyVM.instantiateModule({
+			module,
+			wasip1: wasiInstance,
+			args: ['ruby.wasm', '-EUTF-8', '-e_=0', '--', ...snapshot.args],
+			addToImports(imports: WebAssembly.Imports) {
+				printer.addToImports(imports);
+			},
+			setMemory(memory: WebAssembly.Memory) {
+				printer.setMemory(memory);
+			}
+		}));
+	} finally {
+		if (deferredUserBundle) root.set('bundle', deferredUserBundle);
+	}
 	if (!vm || typeof vm.eval !== 'function')
 		throw new Error('Ruby VM initialization did not return an evaluator.');
 	return {
