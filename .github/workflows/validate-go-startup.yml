@@ -32,16 +32,17 @@ jobs:
           p = Path('runtimes/wasm-go/test/compiler.test.ts')
           text = p.read_text()
           old = r'/wasip1\.(pack|index\.json)\.gz/'
-          new = r'/(wasip1\.(pack|index\.json)|tools\/compile\.wasm)\.gz/'
-          assert old in text or new in text
-          p.write_text(text.replace(old, new))
+          if old in text:
+              p.write_text(text.replace(old, r'/(wasip1\.(pack|index\.json)|tools\/compile\.wasm)\.gz/'))
+          else:
+              assert r'compile\.wasm' in text
           PY
       - run: pnpm --dir runtimes/wasm-go run check
       - run: pnpm --dir runtimes/wasm-go run test
       - name: Commit only validated Go tests
         run: |
           git diff --check
-          git add runtimes/wasm-go/src/tool-runtime.startup.test.ts runtimes/wasm-go/test/tool-runtime.startup.test.ts runtimes/wasm-go/test/compiler.test.ts
+          git add -A -- runtimes/wasm-go/src/tool-runtime.startup.test.ts runtimes/wasm-go/test/tool-runtime.startup.test.ts runtimes/wasm-go/test/compiler.test.ts
           if ! git diff --cached --quiet; then
             git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'test(go): exercise startup overlap in the full package suite'
             git push origin HEAD:refs/heads/perf/go-parallel-tool-startup
