@@ -922,6 +922,7 @@ describe('example route debug actions', () => {
 	});
 
 	it('surfaces Ruby through the CRuby WebAssembly runtime contract', () => {
+		expect(applicationRuntimeAssets.ruby?.splitStdlib).toBe(true);
 		expect(applicationRuntimeAssets.ruby?.manifestUrl).toContain(
 			'/wasm-ruby/runtime-manifest.v2.json?'
 		);
@@ -936,9 +937,11 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/'.rb': 'RUBY'/);
 		expect(source).toMatch(/RUBY: 'main\.rb'/);
 		expect(source).toMatch(/RUBY: 'ruby'/);
-		expect(source).toMatch(/Ruby runs through a receipt-verified CRuby WebAssembly profile/);
 		expect(source).toMatch(
-			/manifest,\s+module, and compressed Wasm are verified before the worker starts/
+			/Ruby runs through a receipt-verified split CRuby WebAssembly profile/
+		);
+		expect(source).toMatch(
+			/manifest,\s+wrapper, core Wasm, and complete standard-library pack are verified before the\s+worker starts/
 		);
 		expect(source).toMatch(/reads stdin until EOF/);
 	});

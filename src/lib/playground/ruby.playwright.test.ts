@@ -9,25 +9,24 @@ import {
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
 import { runStdinBrowserProbe } from '../../../scripts/stdin-browser-probe-lib.mjs';
-import {
-	RUBY_RUNTIME_MANIFEST_PATH,
-	RUBY_RUNTIME_MODULE_STORAGE_PATH,
-	RUBY_RUNTIME_PROFILE,
-	RUBY_RUNTIME_WASM_STORAGE_PATH
-} from '@wasm-idle/core';
+import { RUBY_SPLIT_BUNDLE } from '@wasm-idle/core';
 
 const rubyCanonicalRequests = [
 	{
-		path: `/wasm-ruby/${RUBY_RUNTIME_MANIFEST_PATH}`,
-		version: RUBY_RUNTIME_PROFILE.manifestFingerprint
+		path: `/wasm-ruby/split/${RUBY_SPLIT_BUNDLE.manifest.path}`,
+		version: RUBY_SPLIT_BUNDLE.manifest.sha256
 	},
 	{
-		path: `/wasm-ruby/${RUBY_RUNTIME_MODULE_STORAGE_PATH}`,
-		version: RUBY_RUNTIME_PROFILE.moduleJavaScriptReceipt.sha256
+		path: `/wasm-ruby/split/${RUBY_SPLIT_BUNDLE.assets.module.path}`,
+		version: RUBY_SPLIT_BUNDLE.assets.module.sha256
 	},
 	{
-		path: `/wasm-ruby/${RUBY_RUNTIME_WASM_STORAGE_PATH}`,
-		version: RUBY_RUNTIME_PROFILE.wasmReceipt.sha256
+		path: `/wasm-ruby/split/${RUBY_SPLIT_BUNDLE.assets.wasm.path}`,
+		version: RUBY_SPLIT_BUNDLE.assets.wasm.sha256
+	},
+	{
+		path: `/wasm-ruby/split/${RUBY_SPLIT_BUNDLE.assets.stdlib.path}`,
+		version: RUBY_SPLIT_BUNDLE.assets.stdlib.sha256
 	}
 ] as const;
 
@@ -52,7 +51,7 @@ function expectExactRubyPreflightRequests(requests: readonly string[]) {
 
 describe('wasm-idle Ruby browser playwright integration', () => {
 	it(
-		'streams stdin through the real runtime using only three canonical pinned assets',
+		'streams stdin through the real runtime using only four canonical pinned assets',
 		{
 			skip: process.env.WASM_IDLE_RUN_REAL_BROWSER_RUBY !== '1',
 			meta: {

@@ -97,8 +97,8 @@ export const RUNTIMES = [
 	},
 	{
 		name: 'wasm-ruby',
-		module: './sync-wasm-ruby.mjs',
-		exportName: 'syncWasmRubyAssets',
+		module: './sync-wasm-ruby-split.mjs',
+		exportName: 'syncWasmRubyProfiles',
 		sourceArg: 'nodeModulesDir',
 		targetArg: 'targetDir'
 	},

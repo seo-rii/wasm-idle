@@ -342,6 +342,7 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			manifestFingerprint: WASM_LISP_ASSET_VERSION
 		},
 		ruby: {
+			splitStdlib: true,
 			baseUrl: asset('wasm-ruby/'),
 			manifestUrl: asset(
 				`wasm-ruby/${RUBY_RUNTIME_MANIFEST_PATH}`,
