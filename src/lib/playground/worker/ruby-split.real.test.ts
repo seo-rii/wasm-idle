@@ -4,20 +4,37 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { preflightRubySplitRuntimeAssets } from '@wasm-idle/core';
 const assetsRoot = new URL('../../../../static/wasm-ruby/split/', import.meta.url);
 const messages = vi.hoisted(() => [] as any[]);
+const stats = vi.hoisted(() => ({ instances: 0, mounts: [] as string[][] }));
 vi.mock('$lib/playground/runtimeModule', () => ({
 	importRuntimeModule: async (url: string) => {
 		// Node cannot import blob: modules; only the test transport is replaced.
 		const source = await (await fetch(url)).text();
-		return await import(
+		const runtime = await import(
 			/* @vite-ignore */ 'data:text/javascript;base64,' +
 				Buffer.from(source).toString('base64')
 		);
+		return {
+			...runtime,
+			RubyVM: {
+				instantiateModule: (...args: any[]) => {
+					stats.instances++;
+					stats.mounts.push(
+						args[0].wasip1.fds
+							.slice(3)
+							.map((fd: { prestat_name?: string }) => fd.prestat_name ?? '')
+					);
+					return runtime.RubyVM.instantiateModule(...args);
+				}
+			}
+		};
 	}
 }));
 afterEach(() => {
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
 	messages.length = 0;
+	stats.instances = 0;
+	stats.mounts.length = 0;
 });
 describe('real Ruby split runtime worker', () => {
 	it('runs the complete stdlib with stdin/workspace/args and isolates subsequent runs', async () => {
@@ -38,16 +55,43 @@ describe('real Ruby split runtime worker', () => {
 		vi.stubGlobal('postMessage', (m: any) => messages.push(m));
 		await import('./ruby');
 		const send = (data: any) => (globalThis as any).self.onmessage({ data });
-		await send({ load: true, runtimePreflight: payload, maxAssetBytes: 40 * 1024 * 1024 });
-		expect(messages.some((x) => x.load === true)).toBe(true);
-		expect(messages.filter((x) => x.error)).toEqual([]);
 		const options = {
 			prepare: false,
 			buffer: new SharedArrayBuffer(4096),
-			args: ['argument'],
+			args: ['-r', 'must-not-be-loaded.rb'],
 			stdin: 'input-line\n',
-			workspaceFiles: [{ path: 'data.txt', content: 'workspace' }]
+			activePath: 'main.rb',
+			workspaceFiles: [
+				{ path: 'data.txt', content: 'workspace' },
+				{
+					path: 'must-not-be-loaded.rb',
+					content: 'raise "prewarm ran user source"'
+				}
+			]
 		};
+		await send({
+			load: true,
+			runtimePreflight: payload,
+			maxAssetBytes: 40 * 1024 * 1024,
+			startupContext: {
+				args: options.args,
+				activePath: options.activePath,
+				workspaceFiles: options.workspaceFiles
+			}
+		});
+		expect(messages.some((x) => x.load === true)).toBe(true);
+		expect(messages.filter((x) => x.error || x.output || x.buffer)).toEqual([]);
+		expect(stats.instances).toBe(1);
+		expect(stats.mounts[0].filter((mount) => mount === '/')).toHaveLength(1);
+		for (let i = 0; i < 2; i++) {
+			await send({
+				...options,
+				prepare: true,
+				code: 'raise "prepare ran user code"'
+			});
+			expect(messages.filter((x) => x.error || x.output || x.buffer)).toEqual([]);
+			expect(stats.instances).toBe(1);
+		}
 		const code = `require 'json'
 require 'set'
 require 'date'
@@ -62,7 +106,7 @@ raise 'date' unless Date.new(2026,9,27).to_s == '2026-09-27'
 raise 'zlib' unless Zlib.inflate(Zlib.deflate('abc')) == 'abc'
 raise 'io' unless StringIO.new('text').read == 'text'
 raise 'input' unless STDIN.gets.strip == 'input-line'
-raise 'args' unless ARGV[0] == 'argument'
+raise 'args' unless ARGV == ['-r', 'must-not-be-loaded.rb']
 raise 'workspace' unless File.read('/data.txt') == 'workspace'
 begin
   File.delete('/usr/local/lib/ruby/3.4.0/json.rb')
@@ -89,6 +133,7 @@ puts 'ruby-split-ok'
 				.join('')
 		).toBe('ruby-split-ok\n');
 		expect(messages.at(-1)).toEqual({ results: true });
+		expect(stats.instances).toBe(1);
 		messages.length = 0;
 		await send({
 			...options,
@@ -102,5 +147,6 @@ puts 'ruby-split-ok'
 				.map((x) => x.output)
 				.join('')
 		).toBe('[1,2]\n');
+		expect(stats.instances).toBe(2);
 	}, 30000);
 });

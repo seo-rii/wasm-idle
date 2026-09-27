@@ -295,6 +295,11 @@ class Ruby implements Sandbox {
 		}
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let nextConfig: ReturnType<typeof resolveRubyRuntimeAssetConfig>;
+		let startupContext: {
+			args: string[];
+			activePath: string;
+			workspaceFiles: NonNullable<SandboxExecutionOptions['workspaceFiles']>;
+		};
 		let nextAssetKey: string;
 		let signal: AbortSignal | undefined;
 		let unbindPreSessionAbort: () => void = () => undefined;
@@ -307,6 +312,37 @@ class Ruby implements Sandbox {
 				);
 			}
 			limits = resolveExecutionLimits(options.limits);
+			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
+				return Promise.reject(
+					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
+				);
+			}
+			const workspace = validateExecutionWorkspace(
+				_code,
+				options.workspaceFiles ?? [],
+				options.activePath ?? 'main.rb',
+				{
+					...options.workspaceLimits,
+					maxFileBytes: Math.min(
+						options.workspaceLimits?.maxFileBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+						limits.maxWorkspaceBytes
+					),
+					maxTotalBytes: Math.min(
+						options.workspaceLimits?.maxTotalBytes ??
+							DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+						limits.maxWorkspaceBytes
+					)
+				}
+			);
+			startupContext = {
+				args: [...resolveSandboxExecutionArgs('RUBY', _args, options).programArgs],
+				activePath: workspace.activePath ?? 'main.rb',
+				workspaceFiles: workspace.workspaceFiles.map((file) => ({
+					path: file.path,
+					content: file.content
+				}))
+			};
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'Ruby runtime startup cancelled')
@@ -470,6 +506,7 @@ class Ruby implements Sandbox {
 						{
 							load: true,
 							runtimePreflight: delivery.payload,
+							startupContext,
 							maxAssetBytes: Math.min(limits.maxAssetBytes, RUBY_MAX_ASSET_BYTES)
 						},
 						[...transferables]
