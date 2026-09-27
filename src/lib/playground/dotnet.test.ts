@@ -77,6 +77,19 @@ describe('Dotnet sandbox', () => {
 		vi.unstubAllGlobals();
 	});
 
+	it.each([
+		['CSHARP', 'csharp'],
+		['FSHARP', 'fsharp'],
+		['VBNET', 'vbnet']
+	] as const)('passes %s to worker bootstrap rather than warming the default language', async (language, expected) => {
+		const sandbox = new Dotnet(language);
+		await sandbox.load();
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ load: true, language: expected })
+		);
+		await sandbox.dispose();
+	});
+
 	it('terminates a fatally aborted worker immediately and loads a fresh worker for retry', async () => {
 		const sandbox = new Dotnet('CSHARP');
 		await sandbox.load();

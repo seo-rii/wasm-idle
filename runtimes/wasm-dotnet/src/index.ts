@@ -8,6 +8,7 @@ export type {
 	BrowserDotnetCompileProgress,
 	BrowserDotnetCompileRequest,
 	BrowserDotnetCompiler,
+	BrowserDotnetCompilerPrepareOptions,
 	BrowserDotnetCompilerResult,
 	CompilerDiagnostic,
 	CompilerLogRecord,

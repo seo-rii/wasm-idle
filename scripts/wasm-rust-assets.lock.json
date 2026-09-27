@@ -355,12 +355,12 @@
 						"encoding": "identity"
 					},
 					"storage": {
-						"bytes": 21326,
-						"sha256": "742fbfb33fc0eb89249c49832fbe57c33c392b86d9faaa8688f5213ef95aeae8"
+						"bytes": 21368,
+						"sha256": "ec3222cd238667ef070a58c4cfade0edfd869fd914c2b01c92dd5f13545797fc"
 					},
 					"logical": {
-						"bytes": 21326,
-						"sha256": "742fbfb33fc0eb89249c49832fbe57c33c392b86d9faaa8688f5213ef95aeae8"
+						"bytes": 21368,
+						"sha256": "ec3222cd238667ef070a58c4cfade0edfd869fd914c2b01c92dd5f13545797fc"
 					},
 					"imports": [
 						{
@@ -402,6 +402,11 @@
 							"kind": "static",
 							"specifier": "./runtime-manifest.js",
 							"target": "runtime-manifest.js"
+						},
+						{
+							"kind": "static",
+							"specifier": "./rustc-module.js",
+							"target": "rustc-module.js"
 						},
 						{
 							"kind": "static",
@@ -678,6 +683,24 @@
 							"target": "runtime-asset.js"
 						}
 					],
+					"assets": [],
+					"externals": []
+				},
+				{
+					"path": "rustc-module.js",
+					"delivery": {
+						"storagePath": "rustc-module.js.bin",
+						"encoding": "identity"
+					},
+					"storage": {
+						"bytes": 711,
+						"sha256": "81dee74032dd10187e9b576f2d2fe9291cee1ea6a829d0db37429dabd06c0d1e"
+					},
+					"logical": {
+						"bytes": 711,
+						"sha256": "81dee74032dd10187e9b576f2d2fe9291cee1ea6a829d0db37429dabd06c0d1e"
+					},
+					"imports": [],
 					"assets": [],
 					"externals": []
 				},
@@ -1770,12 +1793,12 @@
 						"encoding": "identity"
 					},
 					"storage": {
-						"bytes": 21326,
-						"sha256": "742fbfb33fc0eb89249c49832fbe57c33c392b86d9faaa8688f5213ef95aeae8"
+						"bytes": 21368,
+						"sha256": "ec3222cd238667ef070a58c4cfade0edfd869fd914c2b01c92dd5f13545797fc"
 					},
 					"logical": {
-						"bytes": 21326,
-						"sha256": "742fbfb33fc0eb89249c49832fbe57c33c392b86d9faaa8688f5213ef95aeae8"
+						"bytes": 21368,
+						"sha256": "ec3222cd238667ef070a58c4cfade0edfd869fd914c2b01c92dd5f13545797fc"
 					},
 					"imports": [
 						{
@@ -1817,6 +1840,11 @@
 							"kind": "static",
 							"specifier": "./runtime-manifest.js",
 							"target": "runtime-manifest.js"
+						},
+						{
+							"kind": "static",
+							"specifier": "./rustc-module.js",
+							"target": "rustc-module.js"
 						},
 						{
 							"kind": "static",
@@ -2093,6 +2121,24 @@
 							"target": "runtime-asset.js"
 						}
 					],
+					"assets": [],
+					"externals": []
+				},
+				{
+					"path": "rustc-module.js",
+					"delivery": {
+						"storagePath": "rustc-module.js",
+						"encoding": "identity"
+					},
+					"storage": {
+						"bytes": 711,
+						"sha256": "81dee74032dd10187e9b576f2d2fe9291cee1ea6a829d0db37429dabd06c0d1e"
+					},
+					"logical": {
+						"bytes": 711,
+						"sha256": "81dee74032dd10187e9b576f2d2fe9291cee1ea6a829d0db37429dabd06c0d1e"
+					},
+					"imports": [],
 					"assets": [],
 					"externals": []
 				},
