@@ -128,7 +128,16 @@ async function loadDotnetReferenceAssemblies(options = {}, language) {
         }));
     })();
     referenceAssemblyCache.set(cacheKey, promise);
-    return await promise;
+    try {
+        return await promise;
+    }
+    catch (error) {
+        // A transient download failure must not poison every subsequent compile.
+        if (referenceAssemblyCache.get(cacheKey) === promise) {
+            referenceAssemblyCache.delete(cacheKey);
+        }
+        throw error;
+    }
 }
 export async function compileDotnet(request, dependencies = {}) {
     const source = normalizeSource(request);
@@ -148,12 +157,14 @@ export async function compileDotnet(request, dependencies = {}) {
         const runtimeOptions = request.runtimeDiagnosticTracing
             ? { diagnosticTracing: true }
             : undefined;
-        const runtime = dependencies.loadRuntime
-            ? await dependencies.loadRuntime(language, runtimeOptions)
-            : await loadDotnetCompilerRuntime({ ...runtimeOptions, language });
-        const references = dependencies.loadReferences
-            ? await dependencies.loadReferences(language)
-            : [];
+        // Reference assemblies do not depend on runtime initialization. Observe
+        // both branches immediately, including synchronously throwing loaders.
+        const [runtime, references] = await Promise.all([
+            Promise.resolve().then(() => dependencies.loadRuntime
+                ? dependencies.loadRuntime(language, runtimeOptions)
+                : loadDotnetCompilerRuntime({ ...runtimeOptions, language })),
+            Promise.resolve().then(() => dependencies.loadReferences ? dependencies.loadReferences(language) : [])
+        ]);
         emitProgress(request, 'compile', 5, 10, `compiling ${languageLabel(language)} source`);
         const payload = await runtime.compile({
             source,
@@ -186,19 +197,34 @@ export async function compileDotnet(request, dependencies = {}) {
     }
 }
 export function createDotnetCompiler(options = {}) {
+    const dependencies = {
+        loadRuntime: (language, runtimeOptions = {}) => loadDotnetCompilerRuntime({
+            ...options,
+            ...runtimeOptions,
+            language,
+            diagnosticTracing: Boolean(options.diagnosticTracing || runtimeOptions.diagnosticTracing)
+        }),
+        loadReferences: options.dotnetModule || options.loadReferences === false
+            ? async () => []
+            : (language) => loadDotnetReferenceAssemblies(options, language)
+    };
     return {
+        async prepare(request = {}) {
+            const language = normalizeLanguage(request.language ?? options.language);
+            if (language !== 'fsharp' && language !== 'csharp' && language !== 'vbnet') {
+                throw new Error(`Unsupported .NET language: ${language}`);
+            }
+            // Warm the real runtime and references, not a facade or a dummy program.
+            // Existing caches deduplicate concurrent callers and evict failed/fatal loads.
+            await Promise.all([
+                Promise.resolve().then(() => dependencies.loadRuntime(language, {
+                    diagnosticTracing: Boolean(request.runtimeDiagnosticTracing)
+                })),
+                Promise.resolve().then(() => dependencies.loadReferences(language))
+            ]);
+        },
         async compile(request) {
-            return await compileDotnet(request, {
-                loadRuntime: (language, runtimeOptions = {}) => loadDotnetCompilerRuntime({
-                    ...options,
-                    ...runtimeOptions,
-                    language,
-                    diagnosticTracing: Boolean(options.diagnosticTracing || runtimeOptions.diagnosticTracing)
-                }),
-                loadReferences: options.dotnetModule || options.loadReferences === false
-                    ? async () => []
-                    : (language) => loadDotnetReferenceAssemblies(options, language)
-            });
+            return await compileDotnet({ ...request, language: request.language ?? options.language }, dependencies);
         }
     };
 }

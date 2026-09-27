@@ -16,7 +16,10 @@ export function createCombinedProgress(report: (value: number) => void): Combine
 	};
 
 	const emit = () => {
-		report((state.clang + state.lld + state.memfs) / 3);
+		// Runtime readiness only depends on Clang and the filesystem. The linker is deliberately
+		// loaded later, in parallel with source compilation, and must not hold startup progress
+		// below 100%.
+		report((state.clang + state.memfs) / 2);
 	};
 
 	const createSink = (key: keyof typeof state): ProgressSink => ({

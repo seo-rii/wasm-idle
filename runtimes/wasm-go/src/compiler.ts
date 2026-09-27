@@ -118,6 +118,30 @@ function throwIfAborted(signal?: AbortSignal) {
 	}
 }
 
+function waitForSignal<T>(operation: Promise<T>, signal: AbortSignal) {
+	return new Promise<T>((resolve, reject) => {
+		let settled = false;
+		const finish = (callback: () => void) => {
+			if (settled) return;
+			settled = true;
+			signal.removeEventListener('abort', abort);
+			callback();
+		};
+		const abort = () =>
+			finish(() =>
+				reject(
+					signal.reason ?? new DOMException('wasm-go operation aborted', 'AbortError')
+				)
+			);
+		signal.addEventListener('abort', abort, { once: true });
+		if (signal.aborted) abort();
+		operation.then(
+			(value) => finish(() => resolve(value)),
+			(error) => finish(() => reject(error))
+		);
+	});
+}
+
 function positiveLimit(value: number | undefined, fallback: number, label: string) {
 	const resolved = value ?? fallback;
 	if (!Number.isSafeInteger(resolved) || resolved <= 0) {
@@ -359,55 +383,86 @@ function success(
 }
 
 export async function preloadBrowserGoRuntime(options: PreloadBrowserGoRuntimeOptions = {}) {
-	const fetchImpl = options.fetchImpl || createRuntimeFetch();
-	const { manifest, runtimeBaseUrl } = await resolveCompilerRuntime(options, {
-		fetchImpl
-	});
-	const target = resolveTargetManifest(manifest, options.target);
-	const fetchedAssets: string[] = [];
-	const preloadAsset = async (assetPath: string, label: string) => {
-		await fetchRuntimeAssetBytes(
-			resolveVersionedAssetUrl(runtimeBaseUrl, assetPath),
-			label,
-			fetchImpl,
-			true,
-			undefined,
-			options
-		);
-		fetchedAssets.push(resolveVersionedAssetUrl(runtimeBaseUrl, assetPath).toString());
-	};
-	await preloadAsset(manifest.compiler.compile.asset, 'compile.wasm');
-	await preloadAsset(manifest.compiler.link.asset, 'link.wasm');
-	if (options.includeSysroot !== false) {
-		if (target.sysrootPack) {
-			await loadRuntimePackEntries(
-				runtimeBaseUrl,
-				target.sysrootPack,
-				fetchImpl,
-				undefined,
-				options
-			);
-			fetchedAssets.push(
-				resolveVersionedAssetUrl(runtimeBaseUrl, target.sysrootPack.index).toString()
-			);
-			fetchedAssets.push(
-				resolveVersionedAssetUrl(runtimeBaseUrl, target.sysrootPack.asset).toString()
-			);
-		} else {
-			for (const entry of target.sysrootFiles || []) {
-				await preloadAsset(entry.asset, `sysroot asset ${entry.runtimePath}`);
+	const parentSignal = options.signal;
+	throwIfAborted(parentSignal);
+	const controller = new AbortController();
+	const relayAbort = () => controller.abort(parentSignal?.reason);
+	parentSignal?.addEventListener('abort', relayAbort, { once: true });
+	if (parentSignal?.aborted) relayAbort();
+	const boundary = { ...options, signal: controller.signal };
+	try {
+		const fetchImpl = options.fetchImpl || createRuntimeFetch();
+		const { manifest, runtimeBaseUrl } = await resolveCompilerRuntime(boundary, { fetchImpl });
+		throwIfAborted(controller.signal);
+		const target = resolveTargetManifest(manifest, options.target);
+		const preloadAsset = async (assetPath: string, label: string) => {
+			const url = resolveVersionedAssetUrl(runtimeBaseUrl, assetPath);
+			await fetchRuntimeAssetBytes(url, label, fetchImpl, true, undefined, boundary);
+			return url.toString();
+		};
+		const preloadSysroot = async (): Promise<string[]> => {
+			if (options.includeSysroot === false) return [];
+			if (target.sysrootPack) {
+				await waitForSignal(
+					loadRuntimePackEntries(
+						runtimeBaseUrl,
+						target.sysrootPack,
+						fetchImpl,
+						undefined,
+						{
+							assetTimeoutMs: options.assetTimeoutMs,
+							maxAssetBytes: options.maxAssetBytes,
+							maxWasmMemoryBytes: options.maxWasmMemoryBytes
+						}
+					),
+					controller.signal
+				);
+				return [target.sysrootPack.index, target.sysrootPack.asset].map((asset) =>
+					resolveVersionedAssetUrl(runtimeBaseUrl, asset).toString()
+				);
 			}
-		}
+			// Bound individual-library concurrency instead of starting hundreds of fetches.
+			const files = target.sysrootFiles || [];
+			const loaded = new Array<string>(files.length);
+			let cursor = 0;
+			await Promise.all(
+				Array.from({ length: Math.min(4, files.length) }, async () => {
+					while (cursor < files.length) {
+						throwIfAborted(controller.signal);
+						const index = cursor++;
+						const entry = files[index]!;
+						loaded[index] = await preloadAsset(
+							entry.asset,
+							`sysroot asset ${entry.runtimePath}`
+						);
+					}
+				})
+			);
+			return loaded;
+		};
+		// Keep result order deterministic even when responses complete in a different order.
+		const [compile, link, sysroot, execution] = await Promise.all([
+			preloadAsset(manifest.compiler.compile.asset, 'compile.wasm'),
+			preloadAsset(manifest.compiler.link.asset, 'link.wasm'),
+			preloadSysroot(),
+			target.execution.kind === 'js-wasm-exec' && target.execution.wasmExecJs
+				? preloadAsset(target.execution.wasmExecJs, 'wasm_exec.js')
+				: undefined
+		]);
+		throwIfAborted(controller.signal);
+		return {
+			manifest,
+			target,
+			runtimeBaseUrl: runtimeBaseUrl.toString(),
+			fetchedAssets: [compile, link, ...sysroot, ...(execution ? [execution] : [])]
+		};
+	} catch (error) {
+		// Stop sibling I/O without aborting the caller's controller.
+		controller.abort(error);
+		throw error;
+	} finally {
+		parentSignal?.removeEventListener('abort', relayAbort);
 	}
-	if (target.execution.kind === 'js-wasm-exec' && target.execution.wasmExecJs) {
-		await preloadAsset(target.execution.wasmExecJs, 'wasm_exec.js');
-	}
-	return {
-		manifest,
-		target,
-		runtimeBaseUrl: runtimeBaseUrl.toString(),
-		fetchedAssets
-	};
 }
 
 async function resolveAutoDependencies(

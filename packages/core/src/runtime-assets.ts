@@ -74,7 +74,7 @@ export interface RuntimeAssetKeySource {
 		manifestReceipt?: RuntimeAssetIntegrityEntry;
 		assetReceipts?: RuntimeAssetIntegrityMap;
 	};
-	typescript?: { moduleUrl?: string; libUrl?: string };
+	typescript?: { moduleUrl?: string; javascriptModuleUrl?: string; libUrl?: string };
 	wat?: { moduleUrl?: string };
 	lua?: { moduleUrl?: string };
 	haskell?: {
@@ -691,6 +691,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		serialize: hasValue
 	},
 	{ runtime: 'typescript', property: 'moduleUrl', key: 'typeScriptModuleUrl' },
+	{ runtime: 'typescript', property: 'javascriptModuleUrl', key: 'javaScriptModuleUrl' },
 	{ runtime: 'typescript', property: 'libUrl', key: 'typeScriptLibUrl' },
 	{ runtime: 'wat', property: 'moduleUrl', key: 'watModuleUrl' },
 	{ runtime: 'lua', property: 'moduleUrl', key: 'luaModuleUrl' },

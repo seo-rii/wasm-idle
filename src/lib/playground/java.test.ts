@@ -1176,7 +1176,9 @@ public class Main {
 			expect.objectContaining({
 				assets: {
 					baseUrl: sandbox.baseUrl,
-					useAssetBridge: true
+					useAssetBridge: true,
+					maxAssetBytes: 128 * 1024 * 1024,
+					streamCompiler: false
 				}
 			})
 		);

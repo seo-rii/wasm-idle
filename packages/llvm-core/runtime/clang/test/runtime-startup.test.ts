@@ -49,6 +49,33 @@ describe('Clang runtime startup', () => {
 		);
 	});
 
+	it('deduplicates an in-flight deferred linker load', async () => {
+		const controller = new AbortController();
+		const reason = new Error('stop deferred linker load');
+		const runtime = new Clang({
+			runtimeBaseUrl: 'https://cdn.test/clang/',
+			signal: controller.signal
+		});
+
+		const first = runtime.getModule('https://cdn.test/clang/bin/lld.wasm.gz');
+		const second = runtime.getModule('https://cdn.test/clang/bin/lld.wasm.gz');
+
+		await vi.waitFor(() => {
+			expect(startupMocks.compile).toHaveBeenCalledTimes(2);
+		});
+		expect(startupMocks.compile.mock.calls.map(([url]) => url)).toEqual([
+			'https://cdn.test/clang/bin/clang.wasm.gz',
+			'https://cdn.test/clang/bin/lld.wasm.gz'
+		]);
+		expect(startupMocks.compile.mock.calls[1]?.[2]).toBe(controller.signal);
+
+		controller.abort(reason);
+
+		await expect(runtime.ready).rejects.toBe(reason);
+		await expect(first).rejects.toBe(reason);
+		await expect(second).rejects.toBe(reason);
+	});
+
 	it('cancels every startup asset with the caller signal', async () => {
 		const controller = new AbortController();
 		const reason = new Error('stop Clang runtime startup');
@@ -58,15 +85,14 @@ describe('Clang runtime startup', () => {
 		});
 
 		await vi.waitFor(() => {
-			expect(startupMocks.compile).toHaveBeenCalledTimes(2);
+			expect(startupMocks.compile).toHaveBeenCalledOnce();
 			expect(startupMocks.readBuffer).toHaveBeenCalledOnce();
 		});
 		expect(startupMocks.memfsOptions).toEqual([
 			expect.objectContaining({ signal: controller.signal })
 		]);
 		expect(startupMocks.compile.mock.calls.map(([url]) => url)).toEqual([
-			'https://cdn.test/clang/bin/clang.wasm.gz',
-			'https://cdn.test/clang/bin/lld.wasm.gz'
+			'https://cdn.test/clang/bin/clang.wasm.gz'
 		]);
 		for (const call of startupMocks.compile.mock.calls) {
 			expect(call[2]).toBe(controller.signal);
