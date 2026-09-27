@@ -1,12 +1,37 @@
 // Run from the repository root: node scripts/probe-ruby-prepared-worker.mjs
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { build } from 'esbuild';
+import { build as buildWithVite } from 'vite';
 import { chromium } from 'playwright-core';
+
+// Use the repository's declared Vite dependency rather than an undeclared bundler.
+async function build(options) {
+	let entry = options.entryPoints?.[0];
+	if (options.stdin) {
+		entry = path.join(path.dirname(options.outfile), 'probe-entry.ts');
+		await writeFile(entry, options.stdin.contents);
+	}
+	await buildWithVite({
+		root,
+		configFile: false,
+		publicDir: false,
+		logLevel: 'error',
+		resolve: { alias: options.alias },
+		build: {
+			target: options.target,
+			outDir: path.dirname(options.outfile),
+			emptyOutDir: false,
+			minify: false,
+			copyPublicDir: false,
+			lib: { entry, formats: ['es'], fileName: () => path.basename(options.outfile) },
+			rollupOptions: { output: { inlineDynamicImports: true } }
+		}
+	});
+}
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const tmp = await mkdtemp(path.join(os.tmpdir(), 'ruby-prepared-'));
@@ -18,21 +43,14 @@ let server, browser;
 try {
 	await build({
 		entryPoints: [path.join(root, 'src/lib/playground/worker/ruby.ts')],
-		bundle: true,
-		format: 'esm',
-		platform: 'browser',
 		target: 'es2022',
 		alias,
 		outfile: path.join(tmp, 'worker.mjs')
 	});
 	await build({
 		stdin: {
-			contents: "export { preflightRubySplitRuntimeAssets } from '@wasm-idle/core';",
-			resolveDir: root
+			contents: "export { preflightRubySplitRuntimeAssets } from '@wasm-idle/core';"
 		},
-		bundle: true,
-		format: 'esm',
-		platform: 'browser',
 		target: 'es2022',
 		alias,
 		outfile: path.join(tmp, 'preflight.mjs')
