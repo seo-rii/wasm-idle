@@ -1,0 +1,43 @@
+name: Runtime performance review workspace
+on:
+  push:
+    branches: [chore/runtime-perf-workspace-20260927]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            src
+            packages
+            scripts
+            runtimes/wasm-go
+            runtimes/wasm-rust
+            runtimes/wasm-dotnet
+            runtimes/wasm-typescript
+            runtimes/wasm-php
+            runtimes/ruby
+            runtimes/teavm
+            .github
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Assemble review source and test tools
+        run: |
+          mkdir -p /tmp/perf-tools
+          npm install --prefix /tmp/perf-tools --ignore-scripts --no-audit --no-fund typescript@5.8.3 vitest@3.2.4 esbuild@0.25.10 prettier@3.6.2
+          tar --exclude='./.git' --exclude='./.github/workflows/runtime-perf-workspace.yml' -czf /tmp/perf-source.tar.gz .
+          tar -C /tmp/perf-tools -czf /tmp/perf-tools.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-perf-review-workspace
+          path: |
+            /tmp/perf-source.tar.gz
+            /tmp/perf-tools.tar.gz
+          retention-days: 1
+          compression-level: 0
