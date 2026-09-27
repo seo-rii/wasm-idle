@@ -267,7 +267,7 @@ class Clang {
 				this.compilerConfig?.provenance,
 				this.compilerConfig?.resourceDir
 			);
-			installGccCompatibilityHeaders(this.memfs);
+			if (!this.assetUrls.cppAddon) installGccCompatibilityHeaders(this.memfs);
 		});
 		this.ready = Promise.all([clangReady, fileSystemReady]).then(() => undefined);
 	}
@@ -290,6 +290,7 @@ class Clang {
 				})
 			);
 			this.signal?.throwIfAborted();
+			installGccCompatibilityHeaders(this.memfs);
 		});
 		this.cppSysrootReady = pending;
 		// A failed download has not modified MemFS and can be retried. A failed mount is

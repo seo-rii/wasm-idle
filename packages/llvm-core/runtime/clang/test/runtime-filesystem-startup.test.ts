@@ -325,6 +325,40 @@ describe('Clang profiled sysroot consumption', () => {
 			[cArchive]
 		);
 		assert.equal(runtime.assetUrls.sysroot, sysrootUrl);
+		assert.equal(startup.installCompatibility.mock.calls.length, 0);
+	});
+
+	it('waits for C++ parent directories before installing GCC compatibility headers', async () => {
+		const directories = new Set<string>();
+		startup.untar.mockImplementation((bytes: Uint8Array, memfs: Clang['memfs']) => {
+			for (const path of bytes === cArchive
+				? ['include', 'include/bits']
+				: ['include/c++', 'include/c++/v1', 'include/c++/v1/ext']) {
+				memfs.addDirectory(path);
+			}
+		});
+		startup.installCompatibility.mockImplementation((memfs: Clang['memfs']) => {
+			memfs.addDirectory('include/c++/v1/ext/pb_ds');
+		});
+		const runtime = new Clang({ runtimeBaseUrl, manifest: profileManifest });
+		vi.spyOn(runtime.memfs, 'addDirectory').mockImplementation((path: string) => {
+			const separator = path.lastIndexOf('/');
+			const parent = separator < 0 ? '' : path.slice(0, separator);
+			if (parent) assert(directories.has(parent), `Missing parent directory: ${parent}`);
+			directories.add(path);
+		});
+		await runtime.ready;
+		assert.equal(startup.installCompatibility.mock.calls.length, 0);
+
+		runtime.run = vi.fn(async () => null);
+		await runtime.compile({
+			input: 'main.cc',
+			code: 'int main() { return 0; }',
+			obj: 'main.o',
+			language: 'CPP'
+		});
+		assert.equal(startup.installCompatibility.mock.calls.length, 1);
+		assert(directories.has('include/c++/v1/ext/pb_ds'));
 	});
 
 	it('mounts the C++ overlay before compilation and direct linking, only once', async () => {
