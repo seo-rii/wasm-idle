@@ -1,0 +1,60 @@
+name: Startup build verification
+
+on:
+  push:
+    branches: [perf/javascript-without-swc]
+
+permissions:
+  contents: read
+
+jobs:
+  typescript-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir runtimes/wasm-typescript build
+      - run: pnpm --dir runtimes/wasm-typescript test
+      - name: Collect reproducible source and build inputs for review
+        shell: bash
+        run: |
+          mkdir -p /tmp/startup-review
+          python3 - <<'PY'
+          import os, pathlib, subprocess, tarfile
+          roots = ('src/', 'scripts/', 'packages/', 'runtimes/', 'producers/wasm-php/src/', '.github/')
+          suffixes = ('.ts', '.svelte', '.js', '.mjs', '.cjs', '.json', '.yaml', '.yml', '.md', '.cs', '.fs', '.csproj')
+          tracked = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          with tarfile.open('/tmp/startup-review/source.tgz', 'w:gz') as archive:
+              for name in tracked:
+                  p = pathlib.Path(name)
+                  if not name or not p.is_file(): continue
+                  if (name.startswith(roots) or '/' not in name or name.startswith('static/wasm-typescript/')) and (name.endswith(suffixes) or name.startswith('static/wasm-typescript/')):
+                      archive.add(name, recursive=False)
+          wanted = ('esbuild@', '@esbuild+linux-x64@', '@swc+wasm-typescript@', 'buffer@', 'base64-js@', 'ieee754@', 'typescript@', '@types+node@', 'undici-types@')
+          with tarfile.open('/tmp/startup-review/build-deps.tgz', 'w:gz') as archive:
+              for p in pathlib.Path('node_modules/.pnpm').iterdir():
+                  if p.name.startswith(wanted): archive.add(str(p))
+              for root in ('node_modules', 'runtimes/wasm-typescript/node_modules'):
+                  for base, dirs, files in os.walk(root):
+                      dirs[:] = [d for d in dirs if d != '.pnpm']
+                      for name in dirs + files:
+                          p = pathlib.Path(base) / name
+                          if p.is_symlink(): archive.add(str(p), recursive=False)
+          subprocess.check_call(['git', 'rev-parse', 'HEAD'], stdout=open('/tmp/startup-review/commit.txt', 'w'))
+          PY
+          tar -czf /tmp/startup-review/typescript-dist.tgz -C runtimes/wasm-typescript dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: startup-build-review
+          path: /tmp/startup-review/
+          retention-days: 1
