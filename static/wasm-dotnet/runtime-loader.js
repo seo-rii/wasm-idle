@@ -123,17 +123,22 @@ export async function loadDotnetCompilerRuntime(options = {}) {
         if (!compile || !run) {
             throw new Error('wasm-dotnet compiler bridge is incomplete.');
         }
-        // This cache belongs to this exact runtime instance, not a URL. A fatal restart
-        // creates a new registry and cannot reuse an old managed reference-set ID.
         const referenceSets = new WeakMap();
-        const register = bridge.RegisterReferences;
+        const registeredReferenceSets = [];
+        const sameReferences = (left, right) => left.length === right.length &&
+            left.every((entry, i) => entry.name === right[i].name && entry.bytesBase64 === right[i].bytesBase64);
+        const register = typeof bridge.RegisterReferences === 'function' ? bridge.RegisterReferences : undefined;
         const referenceId = (references) => {
             const snapshot = references.map(({ name, bytesBase64 }) => ({ name, bytesBase64 }));
             const previous = referenceSets.get(references);
-            if (previous && previous.snapshot.length === snapshot.length &&
-                previous.snapshot.every((entry, i) => entry.name === snapshot[i].name &&
-                    entry.bytesBase64 === snapshot[i].bytesBase64))
+            if (previous && !previous.failed && sameReferences(previous.snapshot, snapshot)) {
                 return previous.id;
+            }
+            const equivalent = registeredReferenceSets.find((entry) => !entry.failed && sameReferences(entry.snapshot, snapshot));
+            if (equivalent) {
+                referenceSets.set(references, equivalent);
+                return equivalent.id;
+            }
             const id = call(async () => {
                 const response = await callJson(register.bind(bridge), { references: snapshot });
                 if (response.error || !/^[a-f0-9]{32}$/.test(response.referenceSetId || '')) {
@@ -141,21 +146,35 @@ export async function loadDotnetCompilerRuntime(options = {}) {
                 }
                 return response.referenceSetId;
             });
-            const entry = { snapshot, id };
+            const entry = { snapshot, id, failed: false };
+            registeredReferenceSets.push(entry);
             referenceSets.set(references, entry);
-            void id.catch(() => { if (referenceSets.get(references) === entry)
-                referenceSets.delete(references); });
+            void id.catch(() => {
+                entry.failed = true;
+                const index = registeredReferenceSets.indexOf(entry);
+                if (index >= 0)
+                    registeredReferenceSets.splice(index, 1);
+                if (referenceSets.get(references) === entry)
+                    referenceSets.delete(references);
+            });
             return id;
         };
         return {
-            ...(register ? { async prepareReferences(references) {
-                    if (references.length)
-                        await referenceId(references);
-                } } : {}),
+            ...(register
+                ? {
+                    async prepareReferences(references) {
+                        if (references.length)
+                            await referenceId(references);
+                    }
+                }
+                : {}),
             compile(request) {
                 if (register && request.references?.length) {
                     const { references, ...rest } = request;
-                    return call(async () => callJson(compile.bind(bridge), { ...rest, referenceSetId: await referenceId(references) }));
+                    return call(async () => callJson(compile.bind(bridge), {
+                        ...rest,
+                        referenceSetId: await referenceId(references)
+                    }));
                 }
                 return call(() => callJson(compile.bind(bridge), request));
             },
