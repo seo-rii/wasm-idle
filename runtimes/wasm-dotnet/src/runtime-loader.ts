@@ -1,5 +1,6 @@
 import type {
 	DotnetLanguage,
+	DotnetReferenceAssembly,
 	DotnetRuntimeCompileRequest,
 	DotnetRuntimeCompileResponse,
 	DotnetRuntimeRunRequest,
@@ -17,6 +18,7 @@ export interface DotnetCompilerRuntimeOptions {
 }
 
 export interface DotnetCompilerRuntime {
+	prepareReferences?(references: DotnetReferenceAssembly[]): Promise<void>;
 	compile(request: DotnetRuntimeCompileRequest): Promise<DotnetRuntimeCompileResponse>;
 	run(request: DotnetRuntimeRunRequest): Promise<DotnetRuntimeRunResponse>;
 }
@@ -35,6 +37,7 @@ type DotnetBuilder = {
 };
 
 type RuntimeBridge = {
+	RegisterReferences?: (requestJson: string) => string | Promise<string>;
 	Compile?: (requestJson: string) => string | Promise<string>;
 	compile?: (requestJson: string) => string | Promise<string>;
 	Run?: (requestJson: string) => string | Promise<string>;
@@ -180,8 +183,42 @@ export async function loadDotnetCompilerRuntime(
 		if (!compile || !run) {
 			throw new Error('wasm-dotnet compiler bridge is incomplete.');
 		}
+		// This cache belongs to this exact runtime instance, not a URL. A fatal restart
+		// creates a new registry and cannot reuse an old managed reference-set ID.
+		const referenceSets = new WeakMap<DotnetReferenceAssembly[], {
+			snapshot: DotnetReferenceAssembly[];
+			id: Promise<string>;
+		}>();
+		const register = bridge.RegisterReferences;
+		const referenceId = (references: DotnetReferenceAssembly[]): Promise<string> => {
+			const snapshot = references.map(({ name, bytesBase64 }) => ({ name, bytesBase64 }));
+			const previous = referenceSets.get(references);
+			if (previous && previous.snapshot.length === snapshot.length &&
+				previous.snapshot.every((entry, i) => entry.name === snapshot[i].name &&
+					entry.bytesBase64 === snapshot[i].bytesBase64)) return previous.id;
+			const id = call(async () => {
+				const response = await callJson<{ referenceSetId?: string; error?: string }>(
+					register!.bind(bridge), { references: snapshot });
+				if (response.error || !/^[a-f0-9]{32}$/.test(response.referenceSetId || '')) {
+					throw new Error(response.error || 'Invalid .NET reference registration response.');
+				}
+				return response.referenceSetId!;
+			});
+			const entry = { snapshot, id };
+			referenceSets.set(references, entry);
+			void id.catch(() => { if (referenceSets.get(references) === entry) referenceSets.delete(references); });
+			return id;
+		};
 		return {
+			...(register ? { async prepareReferences(references: DotnetReferenceAssembly[]) {
+				if (references.length) await referenceId(references);
+			} } : {}),
 			compile(request) {
+				if (register && request.references?.length) {
+					const { references, ...rest } = request;
+					return call(async () => callJson<DotnetRuntimeCompileResponse>(
+						compile.bind(bridge), { ...rest, referenceSetId: await referenceId(references) }));
+				}
 				return call(() =>
 					callJson<DotnetRuntimeCompileResponse>(compile.bind(bridge), request)
 				);
