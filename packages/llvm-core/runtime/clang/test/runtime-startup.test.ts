@@ -49,6 +49,40 @@ describe('Clang runtime startup', () => {
 		);
 	});
 
+	it('deduplicates an in-flight deferred linker load', async () => {
+		const controller = new AbortController();
+		const reason = new Error('stop deferred linker load');
+		const runtime = new Clang({
+			runtimeBaseUrl: 'https://cdn.test/clang/',
+			signal: controller.signal
+		});
+
+		const first = runtime.getModule(
+			'https://cdn.test/clang/bin/lld.wasm.gz',
+			undefined,
+			controller.signal
+		);
+		const second = runtime.getModule(
+			'https://cdn.test/clang/bin/lld.wasm.gz',
+			undefined,
+			controller.signal
+		);
+
+		await vi.waitFor(() => {
+			expect(startupMocks.compile).toHaveBeenCalledTimes(2);
+		});
+		expect(startupMocks.compile.mock.calls.map(([url]) => url)).toEqual([
+			'https://cdn.test/clang/bin/clang.wasm.gz',
+			'https://cdn.test/clang/bin/lld.wasm.gz'
+		]);
+
+		controller.abort(reason);
+
+		await expect(runtime.ready).rejects.toBe(reason);
+		await expect(first).rejects.toBe(reason);
+		await expect(second).rejects.toBe(reason);
+	});
+
 	it('cancels every startup asset with the caller signal', async () => {
 		const controller = new AbortController();
 		const reason = new Error('stop Clang runtime startup');
