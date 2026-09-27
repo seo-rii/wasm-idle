@@ -5,7 +5,9 @@
  */
 export async function disableBrowserPrewarm(context) {
 	await context.addInitScript(() => {
-		const connection = navigator.connection;
+		const connection = /** @type {Navigator & { connection?: { saveData?: boolean } }} */ (
+			navigator
+		).connection;
 		if (connection) {
 			Object.defineProperty(connection, 'saveData', { configurable: true, value: true });
 			return;
