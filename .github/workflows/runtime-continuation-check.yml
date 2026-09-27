@@ -1,4 +1,4 @@
-name: Ruby and PHP worker continuation validation
+name: Reproducible Ruby and PHP browser worker probes
 on:
   push:
     branches: [chore/runtime-continuation-1244]
@@ -15,13 +15,11 @@ jobs:
       matrix:
         include:
           - language: ruby
-            base: 1c319a537c416ee87dc0e36a862706a2a2ae6c8c
+            base: 502b64932eabf48aa08339e6357e8f24549e88c1
             branch: perf/ruby-initialized-vm-prewarm
-            message: 'perf(ruby): prepare a pristine VM for a single first execution'
           - language: php
-            base: c00710e5d05d04e222f3c9d33c7c4f4b79ab85e9
+            base: 51541b1b0cec14512fdfb92ce5700590d72f018f
             branch: perf/php-verified-parallel-startup
-            message: 'fix(php): retry failed startup and suppress superseded load responses'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,20 +27,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Align the probe server with the canonical split asset directory
-        run: bash .github/runtime-continuation/fix-probe.sh
-      - name: Verify source and actual Chromium worker execution before publishing
+      - name: Test native engines with Vite-built workers before publishing
         env:
           LANGUAGE: ${{ matrix.language }}
           BASE: ${{ matrix.base }}
           BRANCH: ${{ matrix.branch }}
-          MESSAGE: ${{ matrix.message }}
         shell: bash
-        run: bash .github/runtime-continuation/validate-publish.sh 2>&1 | tee /tmp/validation.log
+        run: bash .github/runtime-continuation/validate-probe-deps.sh 2>&1 | tee /tmp/validation.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: worker-${{ matrix.language }}-validation
+          name: vite-worker-${{ matrix.language }}-validation
           path: |
             /tmp/validation.log
             /tmp/published-head.txt
