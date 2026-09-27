@@ -1,11 +1,11 @@
 {
   "format": "wasm-typescript-runtime-build-v2",
-  "fingerprint": "1ed3672d1170db47",
+  "fingerprint": "2e80a0bb2f1f7b52",
   "producer": {
     "format": "wasm-typescript-producer-build-v1",
     "source": {
       "format": "wasm-typescript-source-inputs-v1",
-      "sha256": "bc0909b0bddfb39ec88c160f2f74a72ef47d9405a78c757b520e70e11e80b6b4",
+      "sha256": "a778a3056fe973b0328cedbb1d6bbbc8d2ad2fb0edab0a1e00048ce8279154fd",
       "files": [
         {
           "path": "package.json",
@@ -14,13 +14,18 @@
         },
         {
           "path": "scripts/build.mjs",
-          "bytes": 2877,
-          "sha256": "6a85fc1d87de13c84b48e9b1e1881ad87f50fd7697aaab6647ada4a523bb4283"
+          "bytes": 3860,
+          "sha256": "e4a8d277d2e3fe2538de0a73993a329644a652a3383932cfaa99d55c332e098c"
+        },
+        {
+          "path": "scripts/javascript-only-transform.mjs",
+          "bytes": 286,
+          "sha256": "50dfd1d97af151bb589fab0a2d2a65d672a220814165d9b728ea9fd9ecf84d7c"
         },
         {
           "path": "scripts/provenance.mjs",
-          "bytes": 5875,
-          "sha256": "85edcc439c8fa3ee804c12e53b55b8511671582da4fab81366064f32a23d8908"
+          "bytes": 6450,
+          "sha256": "72c39f9448ce5adff477d80433ad3c082d8cc961ac08e551eaec60ddf4463bb7"
         },
         {
           "path": "src/index.ts",
@@ -40,6 +45,11 @@
       "esbuild": "0.27.3",
       "typescript": "5.9.3"
     },
+    "javascriptArtifact": {
+      "path": "javascript.js",
+      "bytes": 35837,
+      "sha256": "eacd49d4c2bcc2eb5db0ea368940d7e45bc2490f47c7d550554a8e7bd87d501a"
+    },
     "artifact": {
       "path": "index.js",
       "bytes": 3766184,
@@ -50,6 +60,10 @@
     "index.js": {
       "bytes": 3766184,
       "sha256": "e7e38f188d8c5bf13d21e0b701723b9ec9c3c12b4226aa51c933497f09c1b874"
+    },
+    "javascript.js": {
+      "bytes": 35837,
+      "sha256": "eacd49d4c2bcc2eb5db0ea368940d7e45bc2490f47c7d550554a8e7bd87d501a"
     }
   }
 }

@@ -91,13 +91,14 @@ async function computeModuleReceipt(modulePath) {
  * @param {Readonly<TypeScriptModuleReceipt>} moduleReceipt
  * @param {Record<string, unknown>} producer
  */
-function runtimeBuildReceipt(fingerprint, moduleReceipt, producer) {
+function runtimeBuildReceipt(fingerprint, moduleReceipt, producer, javascriptModuleReceipt = null) {
 	return {
 		format: 'wasm-typescript-runtime-build-v2',
 		fingerprint,
 		producer,
 		assets: {
-			[ENTRY_MODULE]: moduleReceipt
+			[ENTRY_MODULE]: moduleReceipt,
+			...(javascriptModuleReceipt ? { 'javascript.js': javascriptModuleReceipt } : {})
 		}
 	};
 }
@@ -109,9 +110,9 @@ function runtimeBuildReceipt(fingerprint, moduleReceipt, producer) {
  * @param {Record<string, unknown>} producer
  * @returns {Promise<string>}
  */
-async function writeRuntimeBuildReceipt(targetDir, fingerprint, moduleReceipt, producer) {
+async function writeRuntimeBuildReceipt(targetDir, fingerprint, moduleReceipt, producer, javascriptModuleReceipt = null) {
 	const receiptPath = path.join(targetDir, RUNTIME_BUILD_RECEIPT);
-	const receipt = runtimeBuildReceipt(fingerprint, moduleReceipt, producer);
+	const receipt = runtimeBuildReceipt(fingerprint, moduleReceipt, producer, javascriptModuleReceipt);
 	await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, 'utf8');
 	return receiptPath;
 }
@@ -120,14 +121,20 @@ async function writeRuntimeBuildReceipt(targetDir, fingerprint, moduleReceipt, p
  * @param {string} fingerprint
  * @param {Readonly<TypeScriptModuleReceipt>} moduleReceipt
  */
-function renderVersionModule(fingerprint, moduleReceipt) {
-	return `export const WASM_TYPESCRIPT_ASSET_VERSION = '${fingerprint}';
+function renderVersionModule(fingerprint, moduleReceipt, javascriptModuleReceipt = null) {
+	const typescript = `export const WASM_TYPESCRIPT_ASSET_VERSION = '${fingerprint}';
 
 export const WASM_TYPESCRIPT_MODULE_RECEIPT = Object.freeze({
 \tbytes: ${moduleReceipt.bytes},
 \tsha256: '${moduleReceipt.sha256}'
 });
 `;
+	return typescript + (javascriptModuleReceipt ? `
+export const WASM_JAVASCRIPT_MODULE_RECEIPT = Object.freeze({
+\tbytes: ${javascriptModuleReceipt.bytes},
+\tsha256: '${javascriptModuleReceipt.sha256}'
+});
+` : '');
 }
 
 /**
@@ -136,24 +143,24 @@ export const WASM_TYPESCRIPT_MODULE_RECEIPT = Object.freeze({
  * @param {Readonly<TypeScriptModuleReceipt>} moduleReceipt
  * @returns {Promise<void>}
  */
-async function writeVersionModule(versionModulePath, fingerprint, moduleReceipt) {
+async function writeVersionModule(versionModulePath, fingerprint, moduleReceipt, javascriptModuleReceipt = null) {
 	await mkdir(path.dirname(versionModulePath), { recursive: true });
-	const moduleSource = renderVersionModule(fingerprint, moduleReceipt);
+	const moduleSource = renderVersionModule(fingerprint, moduleReceipt, javascriptModuleReceipt);
 	const current = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (current === moduleSource) return;
 	await writeFile(versionModulePath, moduleSource, 'utf8');
 }
 
 /** @param {string} targetDir */
-async function readInstalledEntryModule(targetDir) {
-	const modulePath = path.join(targetDir, ENTRY_MODULE);
+async function readInstalledEntryModule(targetDir, entryModule = ENTRY_MODULE) {
+	const modulePath = path.join(targetDir, entryModule);
 	const compressedModulePath = `${modulePath}.gz`;
 	const [moduleBytes, compressedModuleBytes] = await Promise.all([
 		readFile(modulePath).catch(() => null),
 		readFile(compressedModulePath).catch(() => null)
 	]);
 	if (moduleBytes && compressedModuleBytes) {
-		throw new Error('wasm-typescript target contains both index.js and index.js.gz');
+		throw new Error(`wasm-typescript target contains both ${entryModule} and ${entryModule}.gz`);
 	}
 	if (moduleBytes) return moduleBytes;
 	if (!compressedModuleBytes) {
@@ -173,6 +180,16 @@ async function readInstalledEntryModule(targetDir) {
 	}
 }
 
+/** @param {string} sourceDir @returns {Promise<Readonly<TypeScriptModuleReceipt> | null>} */
+async function readJavaScriptModuleReceipt(sourceDir) {
+	try {
+		return await computeModuleReceipt(path.join(sourceDir, 'javascript.js'));
+	} catch (error) {
+		if (error.code === 'ENOENT') return null;
+		throw error;
+	}
+}
+
 export async function verifyWasmTypeScriptDist({
 	sourceDir = DEFAULT_SOURCE_DIR,
 	targetDir = DEFAULT_TARGET_DIR,
@@ -184,6 +201,13 @@ export async function verifyWasmTypeScriptDist({
 		sourceDir
 	});
 	const sourceModuleReceipt = await computeModuleReceipt(path.join(sourceDir, ENTRY_MODULE));
+	const javascriptModuleReceipt = await readJavaScriptModuleReceipt(sourceDir);
+	if (javascriptModuleReceipt) {
+		const installedJavaScript = computeModuleReceiptFromBytes(await readInstalledEntryModule(targetDir, 'javascript.js'));
+		if (JSON.stringify(installedJavaScript) !== JSON.stringify(javascriptModuleReceipt)) {
+			throw new Error('wasm-typescript checked-in JavaScript module does not match the current producer output');
+		}
+	}
 	const installedModuleReceipt = await computeModuleReceiptFromBytes(
 		await readInstalledEntryModule(targetDir)
 	);
@@ -194,7 +218,7 @@ export async function verifyWasmTypeScriptDist({
 	}
 
 	const fingerprint = await computeBundleFingerprint(sourceDir);
-	const expectedReceipt = runtimeBuildReceipt(fingerprint, sourceModuleReceipt, producer);
+	const expectedReceipt = runtimeBuildReceipt(fingerprint, sourceModuleReceipt, producer, javascriptModuleReceipt);
 	let actualReceipt;
 	try {
 		actualReceipt = JSON.parse(
@@ -210,7 +234,7 @@ export async function verifyWasmTypeScriptDist({
 			'wasm-typescript checked-in runtime receipt does not match the current producer output'
 		);
 	}
-	const expectedVersionModule = renderVersionModule(fingerprint, sourceModuleReceipt);
+	const expectedVersionModule = renderVersionModule(fingerprint, sourceModuleReceipt, javascriptModuleReceipt);
 	const actualVersionModule = await readFile(versionModulePath, 'utf8').catch(() => '');
 	if (actualVersionModule !== expectedVersionModule) {
 		throw new Error(
@@ -262,13 +286,15 @@ export async function syncWasmTypeScriptDist({
 	await copyDirectory(sourceDir, targetDir);
 	const fingerprint = await computeBundleFingerprint(targetDir);
 	const moduleReceipt = await computeModuleReceipt(path.join(targetDir, ENTRY_MODULE));
+	const javascriptModuleReceipt = await readJavaScriptModuleReceipt(targetDir);
 	const receiptPath = await writeRuntimeBuildReceipt(
 		targetDir,
 		fingerprint,
 		moduleReceipt,
-		producer
+		producer,
+		javascriptModuleReceipt
 	);
-	await writeVersionModule(versionModulePath, fingerprint, moduleReceipt);
+	await writeVersionModule(versionModulePath, fingerprint, moduleReceipt, javascriptModuleReceipt);
 	return {
 		sourceDir,
 		targetDir,

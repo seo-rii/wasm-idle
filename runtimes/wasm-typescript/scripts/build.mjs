@@ -92,4 +92,29 @@ await build({
 	}
 });
 
+// Keep the JavaScript entry self-contained so the existing verified Blob loader
+// does not acquire an unverified dynamic-import graph.
+const javascriptBuild = await build({
+	entryPoints: [path.join(REPO_ROOT, 'src', 'index.ts')],
+	outfile: path.join(REPO_ROOT, 'dist', 'javascript.js'),
+	bundle: true,
+	format: 'esm',
+	platform: 'browser',
+	target: 'es2022',
+	sourcemap: false,
+	minify: true,
+	metafile: true,
+	alias: {
+		'@swc/wasm-typescript': path.join(THIS_DIR, 'javascript-only-transform.mjs')
+	},
+	plugins: [emptyNodeBuiltinPlugin, swcBrowserShimPlugin],
+	banner: { js: '/* wasm-idle JavaScript-only browser bundle */' }
+});
+if (Object.keys(javascriptBuild.metafile.inputs).some((name) => name.includes('node_modules/@swc/'))) {
+	throw new Error('The JavaScript-only bundle must not include SWC');
+}
+if (Object.values(javascriptBuild.metafile.outputs).some((output) => output.imports.length !== 0)) {
+	throw new Error('The JavaScript-only bundle must be self-contained');
+}
+
 await writeWasmTypeScriptProducerBuildReceipt({ producerDir: REPO_ROOT });

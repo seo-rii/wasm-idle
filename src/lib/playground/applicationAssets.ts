@@ -319,6 +319,7 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		typescript: {
 			moduleUrl: asset('wasm-typescript/index.js', WASM_TYPESCRIPT_ASSET_VERSION),
+			javascriptModuleUrl: asset('wasm-typescript/javascript.js', WASM_TYPESCRIPT_ASSET_VERSION),
 			libUrl: asset('lsp/typescript-libs.json.gz', WASM_TYPESCRIPT_ASSET_VERSION)
 		},
 		wat: {

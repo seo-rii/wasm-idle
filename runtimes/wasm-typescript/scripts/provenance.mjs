@@ -116,10 +116,21 @@ export async function createWasmTypeScriptProducerBuildReceipt({
 }) {
 	const artifactPath = path.join(path.resolve(sourceDir), 'index.js');
 	const artifactBytes = await readFile(artifactPath);
+	const javascriptBytes = await readFile(path.join(path.resolve(sourceDir), 'javascript.js')).catch((error) => {
+		if (error.code === 'ENOENT') return null;
+		throw error;
+	});
 	return {
 		format: WASM_TYPESCRIPT_PRODUCER_BUILD_FORMAT,
 		source: await computeWasmTypeScriptSourceReceipt(producerDir),
 		toolchain: await readWasmTypeScriptToolchain(producerDir),
+		...(javascriptBytes ? {
+			javascriptArtifact: {
+				path: 'javascript.js',
+				bytes: javascriptBytes.byteLength,
+				sha256: sha256(javascriptBytes)
+			}
+		} : {}),
 		artifact: {
 			path: 'index.js',
 			bytes: artifactBytes.byteLength,
@@ -186,6 +197,9 @@ export async function verifyWasmTypeScriptProducerBuildReceipt({
 		throw new Error(
 			'wasm-typescript producer artifact receipt does not match index.js; rebuild the runtime before syncing'
 		);
+	}
+	if (JSON.stringify(actual.javascriptArtifact) !== JSON.stringify(expected.javascriptArtifact)) {
+		throw new Error('wasm-typescript producer artifact receipt does not match javascript.js; rebuild the runtime before syncing');
 	}
 	return expected;
 }

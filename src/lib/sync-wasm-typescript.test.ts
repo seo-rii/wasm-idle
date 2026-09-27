@@ -1,3 +1,4 @@
+import { WASM_JAVASCRIPT_MODULE_RECEIPT } from './playground/wasmTypeScriptVersion';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
@@ -201,14 +202,18 @@ describe('syncWasmTypeScriptDist', () => {
 				format: 'wasm-typescript-producer-build-v1',
 				source: await computeWasmTypeScriptSourceReceipt(producerDir),
 				toolchain: await readWasmTypeScriptToolchain(producerDir),
+				javascriptArtifact: { path: 'javascript.js', ...WASM_JAVASCRIPT_MODULE_RECEIPT },
 				artifact: {
 					path: 'index.js',
 					...WASM_TYPESCRIPT_MODULE_RECEIPT
 				}
 			},
-			assets: { 'index.js': WASM_TYPESCRIPT_MODULE_RECEIPT }
+			assets: { 'index.js': WASM_TYPESCRIPT_MODULE_RECEIPT, 'javascript.js': WASM_JAVASCRIPT_MODULE_RECEIPT }
 		});
 		expect(actualReceipt).toEqual(WASM_TYPESCRIPT_MODULE_RECEIPT);
+		const javascriptBytes = gunzipSync(await readFile(path.join(repositoryRoot, 'static/wasm-typescript/javascript.js.gz')));
+		expect({ bytes: javascriptBytes.byteLength, sha256: createHash('sha256').update(javascriptBytes).digest('hex') }).toEqual(WASM_JAVASCRIPT_MODULE_RECEIPT);
+
 	});
 
 	it('signals readiness from the checked-in runtime before executing the program body', async () => {
@@ -245,5 +250,46 @@ process.stdout.write(JSON.stringify({ execution, lifecycle }));
 		const result = JSON.parse(stdout);
 		expect(result.execution.exitCode).toBe(0);
 		expect(result.lifecycle).toEqual(['ready', 'body']);
+	});
+});
+
+
+describe('JavaScript-only runtime receipts', () => {
+	it('publishes both independently verified entries and rejects modified JavaScript bytes', async () => {
+		const fixture = await createFixture();
+		await writeFile(path.join(fixture.sourceDir, 'index.js'), 'export const full = true;');
+		await writeFile(path.join(fixture.sourceDir, 'javascript.js'), 'export const lightweight = true;');
+		await writeWasmTypeScriptProducerBuildReceipt(fixture);
+		await syncWasmTypeScriptDist(fixture);
+		const receipt = JSON.parse(await readFile(path.join(fixture.targetDir, 'runtime-build.json'), 'utf8'));
+		expect(Object.keys(receipt.assets).sort()).toEqual(['index.js', 'javascript.js']);
+		expect(await readFile(fixture.versionModulePath, 'utf8')).toContain('WASM_JAVASCRIPT_MODULE_RECEIPT');
+		await expect(verifyWasmTypeScriptDist(fixture)).resolves.toBeDefined();
+		await writeFile(path.join(fixture.targetDir, 'javascript.js'), 'tampered');
+		await expect(verifyWasmTypeScriptDist(fixture)).rejects.toThrow(/JavaScript module does not match/);
+	});
+
+	it('verifies compressed JavaScript, rejects ambiguity, and fails on missing delivery bytes', async () => {
+		const fixture = await createFixture();
+		await writeFile(path.join(fixture.sourceDir, 'index.js'), 'export const full = true;');
+		await writeFile(path.join(fixture.sourceDir, 'javascript.js'), 'export const lightweight = true;');
+		await writeWasmTypeScriptProducerBuildReceipt(fixture);
+		await syncWasmTypeScriptDist(fixture);
+		const target = path.join(fixture.targetDir, 'javascript.js');
+		await writeFile(target + '.gz', gzipSync(await readFile(target)));
+		await expect(verifyWasmTypeScriptDist(fixture)).rejects.toThrow(/both javascript.js/);
+		await rm(target);
+		await expect(verifyWasmTypeScriptDist(fixture)).resolves.toBeDefined();
+		await rm(target + '.gz');
+		await expect(verifyWasmTypeScriptDist(fixture)).rejects.toThrow(/entry was not found/);
+	});
+
+	it('rejects a JavaScript producer artifact removed after receipt generation', async () => {
+		const fixture = await createFixture();
+		await writeFile(path.join(fixture.sourceDir, 'index.js'), 'export const full = true;');
+		await writeFile(path.join(fixture.sourceDir, 'javascript.js'), 'export const lightweight = true;');
+		await writeWasmTypeScriptProducerBuildReceipt(fixture);
+		await rm(path.join(fixture.sourceDir, 'javascript.js'));
+		await expect(syncWasmTypeScriptDist(fixture)).rejects.toThrow(/receipt does not match javascript.js/);
 	});
 });
