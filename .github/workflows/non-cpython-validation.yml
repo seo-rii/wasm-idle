@@ -6,34 +6,22 @@ on:
 permissions:
   contents: read
 jobs:
-  sources:
+  dependencies:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          persist-credentials: false
-          sparse-checkout: |
-            .github
-            src
-            scripts
-            runtimes
-            packages
-            producers
-      - name: Archive tracked source files only
+          node-version: '22.16.0'
+      - name: Install standalone pinned test dependencies
         run: |
-          python3 - <<'PY'
-          import pathlib, subprocess, tarfile
-          paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
-          extensions = {'.ts','.tsx','.js','.mjs','.cjs','.json','.yaml','.yml','.md','.svelte','.cs','.csproj','.props','.targets','.sh','.toml','.html','.css'}
-          with tarfile.open('/tmp/wasm-idle-sources.tar.gz', 'w:gz') as archive:
-              for name in paths:
-                  p = pathlib.Path(name)
-                  if p.is_file() and not p.is_symlink() and p.suffix in extensions and p.stat().st_size < 2_000_000:
-                      archive.add(p, arcname=name, recursive=False)
-          PY
+          mkdir -p /tmp/runtime-test-tools
+          cd /tmp/runtime-test-tools
+          npm init -y
+          npm install --no-audit --no-fund vitest@4.1.4 vite@8.0.8 typescript@5.9.3 esbuild@0.27.3 @types/node@24.12.4 @bjorn3/browser_wasi_shim@0.4.2 @swc/wasm-typescript@1.15.33 buffer@6.0.3 wabt@1.0.39
+          tar -czf /tmp/runtime-test-tools.tar.gz node_modules package-lock.json package.json
       - uses: actions/upload-artifact@v4
         with:
-          name: wasm-idle-validation-sources
-          path: /tmp/wasm-idle-sources.tar.gz
+          name: wasm-idle-validation-tools
+          path: /tmp/runtime-test-tools.tar.gz
           retention-days: 1
