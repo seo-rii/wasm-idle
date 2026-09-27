@@ -19,6 +19,7 @@ import {
 	OutputLimitError,
 	RuntimeConfigurationError,
 	TEAVM_RUNTIME_ASSET_NAMES,
+	TEAVM_RUNTIME_ASSET_RECEIPTS,
 	TimeoutError,
 	resolveExecutionLimits,
 	validateExecutionWorkspace
@@ -473,7 +474,13 @@ class Java implements Sandbox {
 						load: true,
 						assets: {
 							baseUrl: assetConfig.baseUrl,
-							useAssetBridge: assetConfig.useAssetBridge
+							useAssetBridge: assetConfig.useAssetBridge,
+							maxAssetBytes: limits.maxAssetBytes,
+							streamCompiler: !assetConfig.loader && TEAVM_RUNTIME_ASSET_NAMES.every((asset) => {
+								const receipt = assetConfig.integrity?.[asset];
+								const expected = TEAVM_RUNTIME_ASSET_RECEIPTS[asset];
+								return typeof receipt === 'object' && receipt.bytes === expected.bytes && receipt.sha256 === expected.sha256;
+							})
 						}
 					});
 				} else {
