@@ -1,0 +1,1 @@
+{"version":3,"file":"wasm-memory.d.ts","sourceRoot":"","sources":["../src/wasm-memory.ts"],"names":[],"mappings":"AAoHA,wBAAgB,eAAe,CAAC,KAAK,EAAE,UAAU,EAAE,QAAQ,EAAE,MAAM,EAAE,KAAK,EAAE,MAAM,+BA+CjF;AAED,wBAAgB,2BAA2B,CAC1C,QAAQ,EAAE,WAAW,CAAC,QAAQ,EAC9B,QAAQ,EAAE,MAAM,EAChB,KAAK,EAAE,MAAM,QASb"}

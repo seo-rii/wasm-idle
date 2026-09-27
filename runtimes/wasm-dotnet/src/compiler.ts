@@ -196,7 +196,15 @@ async function loadDotnetReferenceAssemblies(
 		);
 	})();
 	referenceAssemblyCache.set(cacheKey, promise);
-	return await promise;
+	try {
+		return await promise;
+	} catch (error) {
+		// A transient download failure must not poison every subsequent compile.
+		if (referenceAssemblyCache.get(cacheKey) === promise) {
+			referenceAssemblyCache.delete(cacheKey);
+		}
+		throw error;
+	}
 }
 
 export async function compileDotnet(
@@ -220,12 +228,18 @@ export async function compileDotnet(
 		const runtimeOptions = request.runtimeDiagnosticTracing
 			? { diagnosticTracing: true }
 			: undefined;
-		const runtime = dependencies.loadRuntime
-			? await dependencies.loadRuntime(language, runtimeOptions)
-			: await loadDotnetCompilerRuntime({ ...runtimeOptions, language });
-		const references = dependencies.loadReferences
-			? await dependencies.loadReferences(language)
-			: [];
+		// Reference assemblies do not depend on runtime initialization. Observe
+		// both branches immediately, including synchronously throwing loaders.
+		const [runtime, references] = await Promise.all([
+			Promise.resolve().then(() =>
+				dependencies.loadRuntime
+					? dependencies.loadRuntime(language, runtimeOptions)
+					: loadDotnetCompilerRuntime({ ...runtimeOptions, language })
+			),
+			Promise.resolve().then(() =>
+				dependencies.loadReferences ? dependencies.loadReferences(language) : []
+			)
+		]);
 		emitProgress(request, 'compile', 5, 10, `compiling ${languageLabel(language)} source`);
 		const payload = await runtime.compile({
 			source,

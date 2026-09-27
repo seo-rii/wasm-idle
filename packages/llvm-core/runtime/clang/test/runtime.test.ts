@@ -7,6 +7,7 @@ function createClangHarness(compilerConfig?: any, options: { mockLink?: boolean 
 	const clang = Object.assign(Object.create(Clang.prototype), {
 		ready: Promise.resolve(),
 		moduleCache: {},
+		moduleLoads: {},
 		stdout,
 		showTiming: false,
 		log: false,
@@ -37,6 +38,24 @@ function createClangHarness(compilerConfig?: any, options: { mockLink?: boolean 
 describe('Clang compile/debug flow', () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
+	});
+
+	it('starts the linker load before awaiting source compilation', async () => {
+		const compileWasm = vi
+			.spyOn(WebAssembly, 'compile')
+			.mockResolvedValue({ id: 'wasm-module' } as unknown as WebAssembly.Module);
+		const { clang } = createClangHarness();
+		const getModule = vi.mocked(clang.getModule);
+		clang.compile = vi.fn(async () => {
+			expect(getModule).toHaveBeenCalledWith('https://cdn.test/lld.zip');
+			return null;
+		}) as any;
+
+		await clang.compileLink('int main() {}');
+
+		expect(clang.compile).toHaveBeenCalledOnce();
+		expect(getModule).toHaveBeenCalledWith('https://cdn.test/lld.zip');
+		expect(compileWasm).toHaveBeenCalledOnce();
 	});
 
 	it('keeps workspace paths for inputs while deriving flat artifact names', () => {

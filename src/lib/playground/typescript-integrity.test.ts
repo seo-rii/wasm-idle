@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { WASM_TYPESCRIPT_MODULE_RECEIPT } from './wasmTypeScriptVersion';
+import {
+	WASM_TYPESCRIPT_MODULE_RECEIPT,
+	WASM_JAVASCRIPT_MODULE_RECEIPT
+} from './wasmTypeScriptVersion';
 
 const workerInstances: IntegrityWorker[] = [];
 const { publicEnv } = vi.hoisted(() => ({
@@ -81,5 +84,92 @@ describe('TypeScript runtime integrity handoff', () => {
 		expect(workerInstances).toHaveLength(1);
 		expect(workerInstances[0].postMessage).toHaveBeenCalledOnce();
 		expect(workerInstances[0].terminate).not.toHaveBeenCalled();
+	});
+});
+
+describe('JavaScript-only runtime selection', () => {
+	beforeEach(() => {
+		workerInstances.length = 0;
+	});
+	it('selects the pinned small entry within a limit too small for SWC', async () => {
+		const sandbox = new TypeScriptSandbox('JAVASCRIPT');
+		await sandbox.load(
+			{
+				typescript: {
+					moduleUrl: 'https://example.test/index.js',
+					javascriptModuleUrl: 'https://example.test/javascript.js?v=1'
+				}
+			},
+			'',
+			true,
+			[],
+			{ limits: { maxAssetBytes: WASM_JAVASCRIPT_MODULE_RECEIPT.bytes } }
+		);
+		const message = workerInstances[0].postMessage.mock.calls[0][0];
+		expect(message.moduleUrl).toBe('https://example.test/javascript.js?v=1');
+		expect(message.moduleReceipt).toEqual(WASM_JAVASCRIPT_MODULE_RECEIPT);
+		expect(message.moduleReceipt).not.toBe(WASM_JAVASCRIPT_MODULE_RECEIPT);
+		expect(message.maxAssetBytes).toBe(WASM_JAVASCRIPT_MODULE_RECEIPT.bytes);
+		await sandbox.dispose();
+	});
+	it('preserves the legacy custom module URL and its full receipt', async () => {
+		const sandbox = new TypeScriptSandbox('JAVASCRIPT');
+		await sandbox.load({ typescript: { moduleUrl: 'https://example.test/legacy.js' } });
+		const message = workerInstances[0].postMessage.mock.calls[0][0];
+		expect(message.moduleUrl).toBe('https://example.test/legacy.js');
+		expect(message.moduleReceipt).toEqual(WASM_TYPESCRIPT_MODULE_RECEIPT);
+		await sandbox.dispose();
+	});
+	it('does not inspect the JavaScript-only URL in a TypeScript sandbox', async () => {
+		const sandbox = new TypeScriptSandbox('TYPESCRIPT');
+		await sandbox.load({
+			typescript: {
+				moduleUrl: 'https://example.test/index.js',
+				get javascriptModuleUrl(): string {
+					throw new Error('must not be read');
+				}
+			}
+		});
+		expect(workerInstances[0].postMessage.mock.calls[0][0].moduleReceipt).toEqual(
+			WASM_TYPESCRIPT_MODULE_RECEIPT
+		);
+		await sandbox.dispose();
+	});
+	it('rejects an undersized JavaScript budget before creating a worker', async () => {
+		const sandbox = new TypeScriptSandbox('JAVASCRIPT');
+		await expect(
+			sandbox.load(
+				{ typescript: { javascriptModuleUrl: 'https://example.test/javascript.js' } },
+				'',
+				true,
+				[],
+				{ limits: { maxAssetBytes: WASM_JAVASCRIPT_MODULE_RECEIPT.bytes - 1 } }
+			)
+		).rejects.toMatchObject({
+			code: 'asset-too-large',
+			actual: WASM_JAVASCRIPT_MODULE_RECEIPT.bytes
+		});
+		expect(workerInstances).toHaveLength(0);
+	});
+	it('rejects invalid custom entry types before worker creation', async () => {
+		const sandbox = new TypeScriptSandbox('JAVASCRIPT');
+		await expect(
+			sandbox.load({ typescript: { javascriptModuleUrl: 123 as unknown as string } })
+		).rejects.toThrow('must be a string');
+		expect(workerInstances).toHaveLength(0);
+	});
+	it('observes disposal from a caller-owned entry getter', async () => {
+		const sandbox = new TypeScriptSandbox('JAVASCRIPT');
+		await expect(
+			sandbox.load({
+				typescript: {
+					get javascriptModuleUrl() {
+						void sandbox.dispose();
+						return 'https://example.test/javascript.js';
+					}
+				}
+			})
+		).rejects.toBeDefined();
+		expect(workerInstances).toHaveLength(0);
 	});
 });

@@ -12,6 +12,7 @@ import {
 	createApplicationRuntimeAssets,
 	normalizeApplicationAssetRootUrl
 } from './applicationAssets';
+import { WASM_TYPESCRIPT_ASSET_VERSION } from './wasmTypeScriptVersion';
 import { STATIC_RUNTIME_MODULE_VERSION } from './staticRuntimeModuleVersion';
 import { WASM_BASH_RUNTIME_PROFILE } from './wasmBashVersion';
 import { WASM_BQN_ASSET_VERSION, WASM_BQN_RUNNER_RECEIPT } from './wasmBqnVersion';
@@ -1190,4 +1191,12 @@ describe('application runtime asset root', () => {
 			).not.toBe(originalKey);
 		}
 	});
+});
+
+
+it('selects an independently pinned JavaScript entry and includes it in runtime cache identity', () => {
+	const assets = createApplicationRuntimeAssets('/foo/bar');
+	expect(assets.typescript?.javascriptModuleUrl).toBe(`/foo/bar/wasm-typescript/javascript.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`);
+	expect(assets.typescript?.moduleUrl).toBe(`/foo/bar/wasm-typescript/index.js?v=${WASM_TYPESCRIPT_ASSET_VERSION}`);
+	expect(createRuntimeAssetsKey(assets)).not.toBe(createRuntimeAssetsKey({...assets, typescript:{...assets.typescript, javascriptModuleUrl:'https://replacement.test/javascript.js'}}));
 });
