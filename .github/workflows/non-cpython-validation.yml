@@ -18,7 +18,7 @@ jobs:
           mkdir -p /tmp/runtime-test-tools
           cd /tmp/runtime-test-tools
           npm init -y
-          npm install --no-audit --no-fund vitest@4.1.4 vite@8.0.8 typescript@5.9.3 esbuild@0.27.3 @types/node@24.12.4 @bjorn3/browser_wasi_shim@0.4.2 @swc/wasm-typescript@1.15.33 buffer@6.0.3 wabt@1.0.39
+          npm install --legacy-peer-deps --no-audit --no-fund vitest@4.1.4 vite@8.0.8 typescript@5.9.3 esbuild@0.27.3 @types/node@24.12.4 @bjorn3/browser_wasi_shim@0.4.2 @swc/wasm-typescript@1.15.33 buffer@6.0.3 wabt@1.0.39
           tar -czf /tmp/runtime-test-tools.tar.gz node_modules package-lock.json package.json
       - uses: actions/upload-artifact@v4
         with:
