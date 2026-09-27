@@ -1,0 +1,54 @@
+name: Prepare JavaScript optimization inputs
+
+on:
+  push:
+    branches: [perf/javascript-swc-split]
+    paths: [.github/workflows/prepare-js-optimization.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned focused dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter wasm-typescript... --filter wasm-go...
+      - name: Prepare portable test and build tools
+        env:
+          npm_config_ignore_scripts: 'true'
+        run: |
+          pnpm --filter wasm-typescript deploy --legacy "$RUNNER_TEMP/typescript-deploy"
+          pnpm --filter wasm-go deploy --legacy "$RUNNER_TEMP/go-deploy"
+          mkdir -p optimization-inputs
+          tar -czf optimization-inputs/typescript-deps.tar.gz -C "$RUNNER_TEMP/typescript-deploy" node_modules
+          tar -czf optimization-inputs/go-deps.tar.gz -C "$RUNNER_TEMP/go-deploy" node_modules
+      - name: Archive tracked implementation and test sources
+        run: |
+          python3 - <<'PY'
+          import pathlib, subprocess, tarfile
+          paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          extensions = {'.ts', '.tsx', '.js', '.mjs', '.cjs', '.json', '.yaml', '.yml', '.md', '.svelte', '.cs', '.csproj', '.props', '.targets', '.sh', '.html', '.css'}
+          with tarfile.open('optimization-inputs/sources.tar.gz', 'w:gz') as archive:
+              for name in paths:
+                  path = pathlib.Path(name)
+                  if name and path.is_file() and path.suffix in extensions and path.stat().st_size <= 2 * 1024 * 1024:
+                      archive.add(path, arcname=name, recursive=False)
+          pathlib.Path('optimization-inputs/commit.txt').write_text(subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode())
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: javascript-optimization-inputs
+          path: optimization-inputs/
+          if-no-files-found: error
+          retention-days: 1
