@@ -13,31 +13,18 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: |
-            src
-            packages
-            scripts
-            runtimes/wasm-go
-            runtimes/wasm-rust
-            runtimes/wasm-dotnet
-            runtimes/wasm-typescript
-            runtimes/wasm-php
-            runtimes/ruby
-            runtimes/teavm
-            .github
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Assemble review source and test tools
+            static/wasm-typescript
+            producers/wasm-php
+      - name: Read current Go regression suite
         run: |
-          mkdir -p /tmp/perf-tools
-          npm install --prefix /tmp/perf-tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.0.18 esbuild@0.27.0 prettier@3.6.2 buffer@6.0.3 @swc/wasm-typescript@1.15.33 @bjorn3/browser_wasi_shim@0.4.2 wabt@1.0.39 @types/node@24.6.1
-          tar --exclude='./.git' --exclude='./.github/workflows/runtime-perf-workspace.yml' -czf /tmp/perf-source.tar.gz .
-          tar -C /tmp/perf-tools -czf /tmp/perf-tools.tar.gz .
+          git fetch --depth=1 origin a1640827e6e3cf4a0b78639563bf26dda028f743
+          mkdir -p /tmp/review/runtimes/wasm-go/src
+          git show a1640827e6e3cf4a0b78639563bf26dda028f743:runtimes/wasm-go/src/tool-runtime.startup.test.ts > /tmp/review/runtimes/wasm-go/src/tool-runtime.startup.test.ts
+          cp -r static producers /tmp/review/
+          tar -C /tmp/review -czf /tmp/runtime-review-extra.tar.gz .
       - uses: actions/upload-artifact@v4
         with:
-          name: runtime-perf-review-workspace
-          path: |
-            /tmp/perf-source.tar.gz
-            /tmp/perf-tools.tar.gz
+          name: runtime-review-extra
+          path: /tmp/runtime-review-extra.tar.gz
           retention-days: 1
           compression-level: 0
