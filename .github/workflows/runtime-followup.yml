@@ -1,12 +1,15 @@
-name: Publish tested .NET reference registration
+name: Ruby split profile and Rust module-cache validation
 on:
   push:
     branches: [chore/runtime-followup-20260927]
 permissions:
   contents: write
-  actions: read
 jobs:
-  dotnet:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        change: [ruby, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -16,18 +19,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - uses: actions/download-artifact@v4
-        with:
-          name: dotnet-reference-runtime
-          run-id: 36311848343
-          github-token: ${{ github.token }}
-          path: /tmp/built-runtime
-      - name: Browser verification and canonical distribution publication
+      - name: Install Rust sync dependency
+        if: matrix.change == 'rust'
+        run: npm install --prefix /tmp/tools --ignore-scripts --no-audit --no-fund prettier@3.8.3
+      - name: Validate source and publish canonical runtime assets
         shell: bash
-        run: bash .github/runtime-followup/publish-dotnet.sh 2>&1 | tee /tmp/validation.log
+        run: bash .github/runtime-followup/publish-${{ matrix.change }}.sh 2>&1 | tee /tmp/validation.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: dotnet-reference-browser-validation
+          name: followup-${{ matrix.change }}-validation
           path: /tmp/validation.log
           retention-days: 1
