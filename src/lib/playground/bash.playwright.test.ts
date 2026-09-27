@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { addBrowserTestCookies } from '../../../scripts/browser-test-cookies.mjs';
+import { disableBrowserPrewarm } from '../../../scripts/browser-test-prewarm.mjs';
 import { chromium, type CDPSession, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 
@@ -109,7 +110,9 @@ function matchCanonicalBashRequest(url: string) {
 }
 
 function expectCanonicalBashRequestBatch(urls: readonly string[]) {
-	expect(urls).toHaveLength(bashCanonicalRequests.length);
+	expect(urls, `Bash runtime request batch:\n${urls.join('\n')}`).toHaveLength(
+		bashCanonicalRequests.length
+	);
 	for (const expected of bashCanonicalRequests) {
 		const matches = urls.filter((url) => new URL(url).pathname.endsWith(expected.path));
 		expect(matches).toHaveLength(1);
@@ -227,6 +230,7 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 	await cdp.send('Target.setDiscoverTargets', { discover: true });
 	const context = await browser.newContext();
 	await addBrowserTestCookies(context, browserUrl);
+	await disableBrowserPrewarm(context);
 	const page = await context.newPage();
 	page.setDefaultTimeout(runTimeoutMs);
 	const pageErrors: string[] = [];

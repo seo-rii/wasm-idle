@@ -12,6 +12,12 @@ import {
 	startBrowserPreviewServer
 } from '../../scripts/browser-preview-server.mjs';
 import { resolveChromiumExecutable } from '../../scripts/rust-browser-probe-lib.mjs';
+import {
+	RUBY_RUNTIME_BUNDLE,
+	RUBY_RUNTIME_MANIFEST_PATH,
+	RUBY_RUNTIME_MODULE_STORAGE_PATH,
+	RUBY_RUNTIME_WASM_STORAGE_PATH
+} from '@wasm-idle/core';
 import { WASM_RUST_EXECUTABLE_GRAPH_PROFILE } from '$lib/playground/wasmRustVersion';
 
 interface LspBrowserCase {
@@ -386,25 +392,35 @@ const lspBrowserCases: LspBrowserCase[] = [
 		source: 'def main\n  puts(\n',
 		aliases: ['rb'],
 		expectedResponses: [
-			'/wasm-ruby/split/runtime-split.v1.json?',
-			'/wasm-ruby/split/runtime.mjs.bin?',
-			'/wasm-ruby/split/ruby-core.wasm.gz.bin?',
-			'/wasm-ruby/split/stdlib.pack.gz.bin?'
+			`/wasm-ruby/${RUBY_RUNTIME_MANIFEST_PATH}?`,
+			`/wasm-ruby/${RUBY_RUNTIME_MODULE_STORAGE_PATH}?`,
+			`/wasm-ruby/${RUBY_RUNTIME_WASM_STORAGE_PATH}?`
 		],
 		assertNoPreEnableRequests: ['/wasm-ruby/'],
 		expectedRequestPathnames: [
+			`/wasm-ruby/${RUBY_RUNTIME_MANIFEST_PATH}`,
+			`/wasm-ruby/${RUBY_RUNTIME_MODULE_STORAGE_PATH}`,
+			`/wasm-ruby/${RUBY_RUNTIME_WASM_STORAGE_PATH}`
+		],
+		forbiddenRequestPathnames: [
 			'/wasm-ruby/split/runtime-split.v1.json',
 			'/wasm-ruby/split/runtime.mjs.bin',
 			'/wasm-ruby/split/ruby-core.wasm.gz.bin',
-			'/wasm-ruby/split/stdlib.pack.gz.bin'
-		],
-		forbiddenRequestPathnames: [
+			'/wasm-ruby/split/stdlib.pack.gz.bin',
 			'/wasm-ruby/runtime.mjs',
 			'/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm',
 			'/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz'
 		],
 		requestPathMarker: '/wasm-ruby/',
 		requireSha256RequestPins: true,
+		expectedRequestSha256Pins: {
+			[`/wasm-ruby/${RUBY_RUNTIME_MANIFEST_PATH}`]:
+				RUBY_RUNTIME_BUNDLE.profile.manifestFingerprint,
+			[`/wasm-ruby/${RUBY_RUNTIME_MODULE_STORAGE_PATH}`]:
+				RUBY_RUNTIME_BUNDLE.profile.moduleJavaScriptReceipt.sha256,
+			[`/wasm-ruby/${RUBY_RUNTIME_WASM_STORAGE_PATH}`]:
+				RUBY_RUNTIME_BUNDLE.profile.wasmReceipt.sha256
+		},
 		timeoutMs: 240_000
 	},
 	{
