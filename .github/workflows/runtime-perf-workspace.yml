@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        change: [dotnet, go]
+        change: [go, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -19,7 +19,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Fix the moved Go test harness type annotation
+        if: matrix.change == 'go'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('.github/runtime-perf-patches/final-go.sh');s=p.read_text()
+          old='    if s!=t:p.write_text(t)'
+          new='    t=t.replace("WebAssembly.compile(value)","WebAssembly.compile(Uint8Array.from(value))")\n'+old
+          assert old in s;p.write_text(s.replace(old,new))
+          PY
       - name: Verify source, tests and generated distribution
+        shell: bash
         run: bash .github/runtime-perf-patches/final-${{ matrix.change }}.sh 2>&1 | tee /tmp/final-validation.log
       - uses: actions/upload-artifact@v4
         if: always()
