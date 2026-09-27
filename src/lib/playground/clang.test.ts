@@ -309,6 +309,7 @@ int main() {
 			1,
 			expect.objectContaining({
 				load: true,
+				verifiedStreaming: false,
 				assets: {
 					baseUrl: 'https://wasm-idle.invalid/clang/',
 					maxAssetBytes: 128 * 1024 * 1024,
@@ -317,6 +318,24 @@ int main() {
 			})
 		);
 	});
+
+	it.each(['C', 'CPP'] as const)(
+		'enables verified streaming for the default bundled %s runtime',
+		async (language) => {
+			const sandbox = new Clang(language);
+
+			await sandbox.load();
+
+			expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+				1,
+				expect.objectContaining({
+					load: true,
+					verifiedStreaming: true,
+					assets: expect.objectContaining({ useAssetBridge: true })
+				})
+			);
+		}
+	);
 
 	it('forwards the caller asset ceiling to the C++ worker', async () => {
 		const sandbox = new Clang('CPP');
