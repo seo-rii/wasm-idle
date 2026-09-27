@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
+import { phpEngineAssetsPlugin } from './engine-assets.mjs';
 import {
 	collectRuntimeFiles,
 	MANIFEST_FILE,
@@ -38,6 +39,9 @@ for (const packageName of PINNED_PACKAGE_NAMES) {
 
 await rm(DIST_DIR, { recursive: true, force: true });
 await build({
+	plugins: [
+		phpEngineAssetsPlugin(path.dirname(require.resolve('@php-wasm/web-8-4/package.json')))
+	],
 	root: PRODUCER_ROOT,
 	configFile: false,
 	publicDir: false,
