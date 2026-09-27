@@ -1,6 +1,6 @@
 {
 	"format": "wasm-idle-browser-test-assets-v1",
-	"defaultBaseUrl": "https://raw.githubusercontent.com/seo-rii/wasm-idle/77ba00208fe3e31cd3349af83367ae5013a2c5ab/",
+	"defaultBaseUrl": "https://raw.githubusercontent.com/seo-rii/wasm-idle/8d37e074d817f13a28f2621fb97c96cd6f62d9ab/",
 	"assets": [
 		{
 			"group": "clang",
