@@ -5,6 +5,11 @@ const integrityEntry = (
 	uncompressedSha256 = sha256
 ) => Object.freeze({ bytes, sha256, uncompressedBytes, uncompressedSha256 });
 
+export const BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES = Object.freeze({
+	c: Object.freeze({ asset: 'bin/c-sysroot.tar.gz' }),
+	cppAddon: Object.freeze({ asset: 'bin/cpp-addon.tar.gz' })
+});
+
 export const BUNDLED_CLANG_ASSET_INTEGRITY = Object.freeze({
 	'runtime-manifest.v1.json': integrityEntry(
 		876,
@@ -33,5 +38,21 @@ export const BUNDLED_CLANG_ASSET_INTEGRITY = Object.freeze({
 		'c0ef46e903492383a3c7069bfd4aed0e764e8df988f92bb81eb96bea50bf2c00',
 		19_312_640,
 		'e122f1acec0642d62d8976101c542aaa5346460df6eae5a3f8efb594ff32f5ae'
+	),
+	'bin/c-sysroot.tar.gz': integrityEntry(
+		1_216_797,
+		'fb3e1cdacac3eceddcfe2e57cbbf78e593ec2a298f01acb61c06e4b9d24fbbee',
+		3_736_064,
+		'720c620e459025e918747768b9f5f1aef7b48c6df1b34c1a31fb2e5b1b7a213e'
+	),
+	'bin/cpp-addon.tar.gz': integrityEntry(
+		3_840_608,
+		'47e9946c5aaeb3b35a1d42d6a80eae8987c596f4f858b207e492c00d8680af9e',
+		15_572_992,
+		'7d61b724d377dc4e5670725055fb2884ebc8153d697e05093992004d5859310d'
+	),
+	'language-sysroots.v1.json': integrityEntry(
+		175_348,
+		'd69acbdb636009dc5b2243f13f1580264f64a34362f0af67c9cd661388b565d0'
 	)
 });

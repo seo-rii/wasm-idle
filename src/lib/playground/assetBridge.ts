@@ -12,6 +12,8 @@ import {
 } from '@wasm-idle/core';
 import { decompressGzip } from '@wasm-idle/llvm-core';
 import { readPythonPackageAssets } from '$lib/playground/pythonPackageLock';
+import { BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES } from '$lib/playground/clangAssetIntegrity';
+import { shouldStreamBundledClang } from '$lib/playground/clangStreamingPolicy';
 
 interface AssetRequestMessage {
 	id: number;
@@ -235,8 +237,24 @@ const transferBuffer = (bytes: Uint8Array, transferOwnership = false) => {
 		: Uint8Array.from(canonicalBytes).buffer;
 };
 
-const expectedAssetsForRuntime = (runtime: RuntimeAssetRuntime) =>
-	new Set<string>(RUNTIME_LOAD_ASSETS[runtime]);
+const cSysrootAsset = BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES.c.asset;
+const cppAddonAsset = BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES.cppAddon.asset;
+const fullSysrootAsset = 'bin/sysroot.tar.gz';
+
+const canUseClangLanguageSysroots = (
+	runtime: RuntimeAssetRuntime,
+	config: ResolvedRuntimeAssetConfig,
+	requested: boolean
+) => runtime === 'clang' && requested && config.useAssetBridge && shouldStreamBundledClang(config);
+
+const expectedAssetsForRuntime = (runtime: RuntimeAssetRuntime, languageSysroots = false) => {
+	const assets = new Set<string>(RUNTIME_LOAD_ASSETS[runtime]);
+	if (runtime === 'clang' && languageSysroots) {
+		assets.add(cSysrootAsset);
+		assets.add(cppAddonAsset);
+	}
+	return assets;
+};
 
 const integrityKey = (config: ResolvedRuntimeAssetConfig) =>
 	JSON.stringify(
@@ -261,14 +279,23 @@ const allowedBaseUrlsKey = (config: ResolvedRuntimeAssetConfig) =>
 
 class RuntimeLoadProgress {
 	private readonly samples = new Map<string, { loaded: number; total?: number }>();
+	private readonly optionalSamples = new Map<string, { loaded: number; total?: number }>();
 	private readonly expectedAssets: Set<string>;
+	private readonly optionalAssets: Set<string>;
 	private readonly phaseId: string;
 	private progress?: ProgressLike;
 	private lockedTotal: number | undefined;
 	private measurementInvalid = false;
 
-	constructor(runtime: RuntimeAssetRuntime) {
+	constructor(runtime: RuntimeAssetRuntime, languageSysroots = false) {
 		this.expectedAssets = expectedAssetsForRuntime(runtime);
+		this.optionalAssets = new Set<string>();
+		if (runtime === 'clang' && languageSysroots) {
+			this.expectedAssets.delete(fullSysrootAsset);
+			this.expectedAssets.add(cSysrootAsset);
+			this.optionalAssets.add(fullSysrootAsset);
+			this.optionalAssets.add(cppAddonAsset);
+		}
 		this.phaseId = `${runtime}:runtime-assets`;
 		this.reset();
 	}
@@ -276,6 +303,7 @@ class RuntimeLoadProgress {
 	reset(progress?: ProgressLike) {
 		this.progress = progress;
 		this.samples.clear();
+		this.optionalSamples.clear();
 		this.lockedTotal = undefined;
 		this.measurementInvalid = false;
 		for (const asset of this.expectedAssets) this.samples.set(asset, { loaded: 0 });
@@ -283,7 +311,51 @@ class RuntimeLoadProgress {
 	}
 
 	update(asset: string, loaded: number, total?: number) {
-		if (!this.expectedAssets.has(asset)) return;
+		if (!this.expectedAssets.has(asset)) {
+			if (this.optionalAssets.has(asset) && this.progress) {
+				const previous = this.optionalSamples.get(asset) || { loaded: 0 };
+				const nextLoaded = Math.max(previous.loaded, loaded);
+				const nextTotal = total ?? previous.total;
+				const valid =
+					Number.isSafeInteger(loaded) &&
+					loaded >= 0 &&
+					(total === undefined ||
+						(Number.isSafeInteger(total) &&
+							total > 0 &&
+							(previous.total === undefined || previous.total === total))) &&
+					(nextTotal === undefined || nextLoaded <= nextTotal);
+				if (valid) {
+					this.optionalSamples.set(asset, {
+						loaded: nextLoaded,
+						...(nextTotal === undefined ? {} : { total: nextTotal })
+					});
+				}
+				const label = `Downloading ${asset}`;
+				if (this.progress.report) {
+					this.progress.report({
+						kind: 'activity',
+						phase: 'downloading',
+						phaseId: `${this.phaseId}:${asset}`,
+						label,
+						...(valid && nextTotal !== undefined
+							? {
+									measurement: {
+										kind: 'bytes',
+										completed: nextLoaded,
+										total: nextTotal
+									} as const
+								}
+							: {})
+					});
+				} else {
+					this.progress.set?.(
+						valid && nextTotal !== undefined ? nextLoaded / nextTotal : 0,
+						label
+					);
+				}
+			}
+			return;
+		}
 		if (!Number.isSafeInteger(loaded) || loaded < 0) {
 			this.measurementInvalid = true;
 			this.emit();
@@ -370,8 +442,9 @@ export class WorkerAssetBridge {
 	private worker: Worker;
 	private readonly runtime: RuntimeAssetRuntime;
 	private config: ResolvedRuntimeAssetConfig;
-	private readonly progress: RuntimeLoadProgress;
-	private readonly expectedAssets: Set<string>;
+	private progress: RuntimeLoadProgress;
+	private expectedAssets: Set<string>;
+	private languageSysroots: boolean;
 	private pythonPackageAssets = new Set<string>();
 	private generation = 0;
 	private state: AssetBridgeState = 'active';
@@ -383,20 +456,28 @@ export class WorkerAssetBridge {
 		runtime: RuntimeAssetRuntime,
 		config: ResolvedRuntimeAssetConfig,
 		progress?: ProgressLike,
-		maxAssetBytes = MAX_RUNTIME_ASSET_BYTES
+		maxAssetBytes = MAX_RUNTIME_ASSET_BYTES,
+		languageSysroots = false
 	) {
 		this.worker = worker;
 		this.runtime = runtime;
 		this.config = config;
 		this.maxAssetBytes = requireBridgeMaxAssetBytes(maxAssetBytes);
-		this.progress = new RuntimeLoadProgress(runtime);
-		this.expectedAssets = expectedAssetsForRuntime(runtime);
+		this.languageSysroots = canUseClangLanguageSysroots(runtime, config, languageSysroots);
+		this.progress = new RuntimeLoadProgress(runtime, this.languageSysroots);
+		this.expectedAssets = expectedAssetsForRuntime(runtime, this.languageSysroots);
 		this.progress.reset(progress);
 	}
 
-	matches(config: ResolvedRuntimeAssetConfig, maxAssetBytes = this.maxAssetBytes) {
+	matches(
+		config: ResolvedRuntimeAssetConfig,
+		maxAssetBytes = this.maxAssetBytes,
+		languageSysroots = this.languageSysroots
+	) {
 		return (
 			this.state === 'active' &&
+			this.languageSysroots ===
+				canUseClangLanguageSysroots(this.runtime, config, languageSysroots) &&
 			this.maxAssetBytes === requireBridgeMaxAssetBytes(maxAssetBytes) &&
 			this.config.baseUrl === config.baseUrl &&
 			this.config.loader === config.loader &&
@@ -410,7 +491,8 @@ export class WorkerAssetBridge {
 		worker: Worker,
 		config: ResolvedRuntimeAssetConfig,
 		progress?: ProgressLike,
-		maxAssetBytes = this.maxAssetBytes
+		maxAssetBytes = this.maxAssetBytes,
+		languageSysroots = this.languageSysroots
 	) {
 		if (this.state === 'disposed') {
 			throw new Error('Cannot rebind a disposed worker asset bridge');
@@ -419,7 +501,16 @@ export class WorkerAssetBridge {
 			throw new Error('Cannot rebind a worker asset bridge while another rebind is active');
 		}
 		const nextMaxAssetBytes = requireBridgeMaxAssetBytes(maxAssetBytes);
-		const preservePythonPackageAssets = this.matches(config, nextMaxAssetBytes);
+		const nextLanguageSysroots = canUseClangLanguageSysroots(
+			this.runtime,
+			config,
+			languageSysroots
+		);
+		const preservePythonPackageAssets = this.matches(
+			config,
+			nextMaxAssetBytes,
+			nextLanguageSysroots
+		);
 		this.state = 'rebinding';
 		const generation = ++this.generation;
 		this.progress.reset();
@@ -432,6 +523,9 @@ export class WorkerAssetBridge {
 			this.worker = worker;
 			this.config = config;
 			this.maxAssetBytes = nextMaxAssetBytes;
+			this.languageSysroots = nextLanguageSysroots;
+			this.expectedAssets = expectedAssetsForRuntime(this.runtime, nextLanguageSysroots);
+			this.progress = new RuntimeLoadProgress(this.runtime, nextLanguageSysroots);
 			this.progress.reset(progress);
 			if (this.state !== 'rebinding' || this.generation !== generation) {
 				throw new Error('Cannot rebind a disposed worker asset bridge');

@@ -14,6 +14,14 @@ interface RuntimeBuildAsset {
 	sha256: string;
 }
 
+interface LanguageSysrootReceipt {
+	bytes: number;
+	sha256: string;
+	uncompressedBytes: number;
+	uncompressedSha256: string;
+	files: Array<{ path: string; bytes: number; sha256: string }>;
+}
+
 const hasPreparedClangRuntime = existsSync(
 	resolve(process.cwd(), 'static/clang/bin/memfs.wasm.gz')
 );
@@ -24,6 +32,7 @@ describe('bundled clang asset integrity', () => {
 		const receiptPath = resolve(process.cwd(), 'static/clang/runtime-build.json');
 		const receipt = JSON.parse(await readFile(receiptPath, 'utf8')) as {
 			assets: RuntimeBuildAsset[];
+			toolchain: { llvmVersion: string; llvmCommit: string };
 		};
 		const receiptByAsset = new Map(receipt.assets.map((asset) => [asset.asset, asset]));
 		const sourceByRuntimeAsset = {
@@ -63,8 +72,52 @@ describe('bundled clang asset integrity', () => {
 			uncompressedBytes: manifestBytes.byteLength,
 			uncompressedSha256: createHash('sha256').update(manifestBytes).digest('hex')
 		});
+		const profileManifestBytes = await readFile(
+			resolve(process.cwd(), 'static/clang/language-sysroots.v1.json')
+		);
+		const profiles = JSON.parse(profileManifestBytes.toString()) as {
+			format: string;
+			source: { llvmVersion: string; llvmCommit: string; inventorySha256: string };
+			assets: Record<string, LanguageSysrootReceipt>;
+		};
+		expect(profiles.format).toBe('wasm-clang-language-sysroots-v1');
+		expect(profiles.source).toMatchObject({
+			llvmVersion: receipt.toolchain.llvmVersion,
+			llvmCommit: receipt.toolchain.llvmCommit
+		});
+		const profileNames = ['c-sysroot.tar.gz', 'cpp-addon.tar.gz'] as const;
+		const paths = new Set<string>();
+		for (const name of profileNames) {
+			const assetReceipt = profiles.assets[name];
+			const compressed = await readFile(resolve(process.cwd(), 'static/clang/bin', name));
+			const logical = gunzipSync(compressed);
+			expect(BUNDLED_CLANG_ASSET_INTEGRITY[`bin/${name}`]).toEqual({
+				bytes: compressed.byteLength,
+				sha256: createHash('sha256').update(compressed).digest('hex'),
+				uncompressedBytes: logical.byteLength,
+				uncompressedSha256: createHash('sha256').update(logical).digest('hex')
+			});
+			expect(assetReceipt).toMatchObject(BUNDLED_CLANG_ASSET_INTEGRITY[`bin/${name}`]);
+			for (const file of assetReceipt.files) {
+				expect(paths.has(file.path)).toBe(false);
+				paths.add(file.path);
+			}
+		}
+		expect(paths.size).toBe(900);
+		expect(BUNDLED_CLANG_ASSET_INTEGRITY['language-sysroots.v1.json']).toEqual({
+			bytes: profileManifestBytes.byteLength,
+			sha256: createHash('sha256').update(profileManifestBytes).digest('hex'),
+			uncompressedBytes: profileManifestBytes.byteLength,
+			uncompressedSha256: createHash('sha256').update(profileManifestBytes).digest('hex')
+		});
 		expect(Object.keys(BUNDLED_CLANG_ASSET_INTEGRITY).sort()).toEqual(
-			['runtime-manifest.v1.json', ...Object.keys(sourceByRuntimeAsset)].sort()
+			[
+				'runtime-manifest.v1.json',
+				'language-sysroots.v1.json',
+				'bin/c-sysroot.tar.gz',
+				'bin/cpp-addon.tar.gz',
+				...Object.keys(sourceByRuntimeAsset)
+			].sort()
 		);
 	}, 30_000);
 });

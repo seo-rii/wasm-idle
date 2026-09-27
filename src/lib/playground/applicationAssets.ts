@@ -94,6 +94,7 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 	const asset = createApplicationAssetResolver(normalizedRootUrl);
 	return {
 		rootUrl: normalizedRootUrl,
+		clang: { bundledLanguageSysroots: true },
 		assemblyscript: {
 			moduleUrl: asset('wasm-assemblyscript/runtime.mjs', STATIC_RUNTIME_MODULE_VERSION)
 		},

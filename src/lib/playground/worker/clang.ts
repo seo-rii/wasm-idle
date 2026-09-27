@@ -9,6 +9,7 @@ import {
 } from '$lib/playground/worker/assets';
 
 import { withVerifiedStreaming } from './clangStreaming';
+import { BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES } from '../clangAssetIntegrity';
 
 declare var self: any;
 self.document = {
@@ -33,7 +34,8 @@ async function loadClang(
 	path: string,
 	log: boolean,
 	maxAssetBytes: number | undefined,
-	verifiedStreaming = false
+	verifiedStreaming = false,
+	languageSysrootProfiles = false
 ) {
 	const { BrowserClangRuntime, loadRuntimeManifest, resolveRuntimeManifestUrl } =
 		await import('@wasm-idle/llvm-core/clang');
@@ -43,6 +45,18 @@ async function loadClang(
 		undefined,
 		maxAssetBytes
 	);
+	const runtimeManifest = languageSysrootProfiles
+		? {
+				...manifest,
+				compiler: {
+					...manifest.compiler,
+					sysroot: {
+						...manifest.compiler.sysroot,
+						profiles: BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES
+					}
+				}
+			}
+		: manifest;
 	const Runtime = verifiedStreaming
 		? withVerifiedStreaming(BrowserClangRuntime, path, maxAssetBytes)
 		: BrowserClangRuntime;
@@ -63,7 +77,7 @@ async function loadClang(
 		log,
 		maxAssetBytes,
 		runtimeBaseUrl: path,
-		manifest
+		manifest: runtimeManifest
 	});
 	await clang.ready;
 }
@@ -105,7 +119,8 @@ self.onmessage = async (event: { data: any }) => {
 				runtimeAssets?.baseUrl || path || '',
 				log,
 				maxAssetBytes,
-				event.data.verifiedStreaming === true
+				event.data.verifiedStreaming === true,
+				event.data.languageSysrootProfiles === true
 			);
 			postMessage({ load: true });
 		} catch (error: any) {

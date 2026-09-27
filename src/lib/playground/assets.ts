@@ -133,6 +133,8 @@ export interface RuntimeAssetConfig {
 	loaderKey?: string;
 	integrity?: RuntimeAssetIntegrityMap;
 	allowedBaseUrls?: string[];
+	/** Opt in to the pinned C/C++ sysroot split only for the built-in Clang asset profile. */
+	bundledLanguageSysroots?: boolean;
 }
 
 export interface RustRuntimeAssetConfig {

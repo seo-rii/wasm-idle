@@ -37,6 +37,7 @@ vi.mock('$lib/playground/worker/clang?worker', () => ({
 }));
 
 import Clang from './clang';
+import { createApplicationRuntimeAssets } from './applicationAssets';
 
 describe('Clang sandbox', () => {
 	beforeEach(() => {
@@ -310,6 +311,7 @@ int main() {
 			expect.objectContaining({
 				load: true,
 				verifiedStreaming: false,
+				languageSysrootProfiles: false,
 				assets: {
 					baseUrl: 'https://wasm-idle.invalid/clang/',
 					maxAssetBytes: 128 * 1024 * 1024,
@@ -317,6 +319,46 @@ int main() {
 				}
 			})
 		);
+	});
+
+	it.each(['C', 'CPP'] as const)(
+		'enables bundled language sysroots for the application %s runtime',
+		async (language) => {
+			const sandbox = new Clang(language);
+			await sandbox.load(createApplicationRuntimeAssets('/wasm-idle'));
+			expect(workerInstances[0].postMessage).toHaveBeenNthCalledWith(
+				1,
+				expect.objectContaining({
+					load: true,
+					languageSysrootProfiles: true,
+					assets: expect.objectContaining({ useAssetBridge: true })
+				})
+			);
+		}
+	);
+
+	it('replaces the worker when the same Clang base switches between split and full sysroots', async () => {
+		const sandbox = new Clang('C');
+		const rootUrl = '/wasm-idle';
+		await sandbox.load(createApplicationRuntimeAssets(rootUrl));
+		expect(workerInstances).toHaveLength(1);
+		expect(workerInstances[0].postMessage.mock.calls[0]?.[0]).toMatchObject({
+			languageSysrootProfiles: true
+		});
+
+		await sandbox.load(rootUrl);
+		expect(workerInstances).toHaveLength(2);
+		expect(workerInstances[0].terminate).toHaveBeenCalledOnce();
+		expect(workerInstances[1].postMessage.mock.calls[0]?.[0]).toMatchObject({
+			languageSysrootProfiles: false
+		});
+
+		await sandbox.load(createApplicationRuntimeAssets(rootUrl));
+		expect(workerInstances).toHaveLength(3);
+		expect(workerInstances[1].terminate).toHaveBeenCalledOnce();
+		expect(workerInstances[2].postMessage.mock.calls[0]?.[0]).toMatchObject({
+			languageSysrootProfiles: true
+		});
 	});
 
 	it.each(['C', 'CPP'] as const)(

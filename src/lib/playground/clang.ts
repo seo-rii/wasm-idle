@@ -134,10 +134,19 @@ class Clang implements Sandbox {
 			this.debugRuntimeBaseUrl = debugRuntime.baseUrl;
 			this.debugManifestUrl = debugRuntime.manifestUrl;
 			this.debugManifestReceipt = debugRuntime.manifestReceipt;
+			const bundledAssets = shouldStreamBundledClang(assetConfig);
+			const languageSysrootProfiles =
+				bundledAssets &&
+				typeof runtimeAssets !== 'string' &&
+				runtimeAssets.clang?.bundledLanguageSysroots === true;
 			const needsWorkerReset =
 				!this.worker ||
 				!this.assetBridge ||
-				!this.assetBridge.matches(assetConfig, limits.maxAssetBytes);
+				!this.assetBridge.matches(
+					assetConfig,
+					limits.maxAssetBytes,
+					languageSysrootProfiles
+				);
 			if (needsWorkerReset && this.worker) {
 				this.workerSession.reset();
 			}
@@ -153,7 +162,8 @@ class Clang implements Sandbox {
 					'clang',
 					assetConfig,
 					progress,
-					limits.maxAssetBytes
+					limits.maxAssetBytes,
+					languageSysrootProfiles
 				);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
 					if (!this.workerSession.isActive(operation)) return;
@@ -164,7 +174,8 @@ class Clang implements Sandbox {
 				};
 				this.worker.postMessage({
 					load: true,
-					verifiedStreaming: shouldStreamBundledClang(assetConfig),
+					verifiedStreaming: bundledAssets,
+					languageSysrootProfiles,
 					log,
 					code,
 					args,
@@ -176,7 +187,13 @@ class Clang implements Sandbox {
 					maxAssetBytes: limits.maxAssetBytes
 				});
 			} else {
-				this.assetBridge?.rebind(this.worker, assetConfig, progress, limits.maxAssetBytes);
+				this.assetBridge?.rebind(
+					this.worker,
+					assetConfig,
+					progress,
+					limits.maxAssetBytes,
+					languageSysrootProfiles
+				);
 				this.worker.postMessage({ log });
 				resolve();
 			}

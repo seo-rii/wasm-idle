@@ -7,6 +7,10 @@ vi.mock('$env/dynamic/public', () => ({ env: {} }));
 
 import { RUNTIME_LOAD_ASSETS } from '$lib/playground/assets';
 import { WorkerAssetBridge, boundedUtf8ByteLength } from '$lib/playground/assetBridge';
+import {
+	BUNDLED_CLANG_ASSET_INTEGRITY,
+	BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES
+} from '$lib/playground/clangAssetIntegrity';
 
 afterEach(() => {
 	vi.restoreAllMocks();
@@ -18,6 +22,113 @@ const setBridgeAssetByteLimit = (bridge: WorkerAssetBridge, maxAssetBytes: numbe
 };
 
 describe('WorkerAssetBridge progress', () => {
+	it('counts the C pack but keeps the lazy C++ addon outside initial aggregate progress', () => {
+		const report = vi.fn();
+		const config = {
+			baseUrl: 'https://assets.example.test/clang/',
+			integrity: BUNDLED_CLANG_ASSET_INTEGRITY,
+			useAssetBridge: true
+		};
+		const bridge = new WorkerAssetBridge(
+			{ postMessage: vi.fn() } as unknown as Worker,
+			'clang',
+			config,
+			{ report },
+			undefined,
+			true
+		);
+		report.mockClear();
+		const requiredAssets = RUNTIME_LOAD_ASSETS.clang.filter(
+			(asset) => asset !== 'bin/sysroot.tar.gz'
+		);
+		for (const asset of [...requiredAssets, BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES.c.asset]) {
+			bridge.handleMessage({
+				data: { assetProgress: { asset, loaded: 10, total: 10 } }
+			} as MessageEvent);
+		}
+		expect(report.mock.lastCall?.[0]).toMatchObject({
+			phaseId: 'clang:runtime-assets',
+			measurement: { kind: 'bytes', completed: 50, total: 50 }
+		});
+
+		bridge.handleMessage({
+			data: {
+				assetProgress: {
+					asset: BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES.cppAddon.asset,
+					loaded: 4,
+					total: 10
+				}
+			}
+		} as MessageEvent);
+		expect(report.mock.lastCall?.[0]).toMatchObject({
+			phaseId: 'clang:runtime-assets:bin/cpp-addon.tar.gz',
+			measurement: { kind: 'bytes', completed: 4, total: 10 }
+		});
+	});
+
+	it('keeps optional pack progress monotonic across reordered and total-less samples', () => {
+		const report = vi.fn();
+		const config = {
+			baseUrl: 'https://assets.example.test/clang/',
+			integrity: BUNDLED_CLANG_ASSET_INTEGRITY,
+			useAssetBridge: true
+		};
+		const worker = { postMessage: vi.fn() } as unknown as Worker;
+		const bridge = new WorkerAssetBridge(worker, 'clang', config, { report }, undefined, true);
+		const asset = BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES.cppAddon.asset;
+		const update = (loaded: number, total?: number) => {
+			bridge.handleMessage({
+				data: { assetProgress: { asset, loaded, total } }
+			} as MessageEvent);
+			return report.mock.lastCall?.[0];
+		};
+
+		expect(update(8)).not.toHaveProperty('measurement');
+		expect(update(5, 10)).toHaveProperty('measurement', {
+			kind: 'bytes',
+			completed: 8,
+			total: 10
+		});
+		expect(update(10, 10)).toHaveProperty('measurement.completed', 10);
+		expect(update(2)).toHaveProperty('measurement', {
+			kind: 'bytes',
+			completed: 10,
+			total: 10
+		});
+		expect(update(9, 10)).toHaveProperty('measurement.completed', 10);
+		expect(update(10, 0)).not.toHaveProperty('measurement');
+
+		report.mockClear();
+		bridge.resetProgress({ report });
+		expect(update(2, 10)).toHaveProperty('measurement.completed', 2);
+		bridge.rebind(worker, config, { report }, undefined, true);
+		expect(update(1, 10)).toHaveProperty('measurement.completed', 1);
+	});
+
+	it('continues counting the full sysroot for bundled Clang without profile opt-in', () => {
+		const report = vi.fn();
+		const bridge = new WorkerAssetBridge(
+			{ postMessage: vi.fn() } as unknown as Worker,
+			'clang',
+			{
+				baseUrl: 'https://assets.example.test/clang/',
+				integrity: BUNDLED_CLANG_ASSET_INTEGRITY,
+				useAssetBridge: true
+			},
+			{ report }
+		);
+		report.mockClear();
+		for (const asset of RUNTIME_LOAD_ASSETS.clang) {
+			bridge.handleMessage({
+				data: { assetProgress: { asset, loaded: 10, total: 10 } }
+			} as MessageEvent);
+		}
+		expect(report.mock.lastCall?.[0]).toMatchObject({
+			phaseId: 'clang:runtime-assets',
+			measurement: { kind: 'bytes', completed: 50, total: 50 }
+		});
+	});
+
 	it('keeps legacy progress indeterminate until every asset total is known', () => {
 		const progress = { set: vi.fn() };
 		const bridge = new WorkerAssetBridge(
@@ -138,6 +249,152 @@ describe('WorkerAssetBridge progress', () => {
 });
 
 describe('WorkerAssetBridge asset requests', () => {
+	it('allows only the two pinned language packs in opted-in bundled Clang mode', async () => {
+		const postMessage = vi.fn();
+		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const config = {
+			baseUrl: 'https://assets.example.test/clang/',
+			integrity: BUNDLED_CLANG_ASSET_INTEGRITY,
+			useAssetBridge: true
+		};
+		const bridge = new WorkerAssetBridge(
+			{ postMessage } as unknown as Worker,
+			'clang',
+			config,
+			undefined,
+			undefined,
+			true
+		);
+		const assets = [
+			BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES.c.asset,
+			BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES.cppAddon.asset
+		];
+		for (const [index, asset] of assets.entries()) {
+			bridge.handleMessage({
+				data: { assetRequest: { id: index + 1, asset } }
+			} as MessageEvent);
+		}
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+		for (const [index, asset] of assets.entries()) {
+			expect(fetchMock).toHaveBeenCalledWith(
+				`https://assets.example.test/clang/${asset}`,
+				expect.any(Object)
+			);
+			expect(postMessage).toHaveBeenCalledWith({
+				assetResponse: { id: index + 1, ok: false, error: `Failed to load ${asset}: 404` }
+			});
+		}
+		bridge.handleMessage({
+			data: { assetRequest: { id: 3, asset: 'bin/unpinned-sysroot.tar.gz' } }
+		} as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(3));
+		expect(postMessage).toHaveBeenCalledWith({
+			assetResponse: {
+				id: 3,
+				ok: false,
+				error: 'Unexpected clang runtime asset: bin/unpinned-sysroot.tar.gz'
+			}
+		});
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it('rejects language packs for non-opted-in and custom Clang asset profiles', async () => {
+		const asset = BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES.c.asset;
+		const fetchMock = vi.fn();
+		const loader = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		const configs = [
+			{
+				baseUrl: 'https://assets.example.test/clang/',
+				integrity: BUNDLED_CLANG_ASSET_INTEGRITY,
+				useAssetBridge: true,
+				optIn: false
+			},
+			{
+				baseUrl: 'https://assets.example.test/clang/',
+				integrity: BUNDLED_CLANG_ASSET_INTEGRITY,
+				loader,
+				useAssetBridge: true,
+				optIn: true
+			},
+			{
+				baseUrl: 'https://assets.example.test/clang/',
+				integrity: { ...BUNDLED_CLANG_ASSET_INTEGRITY },
+				useAssetBridge: true,
+				optIn: true
+			}
+		];
+		for (const [index, { optIn, ...config }] of configs.entries()) {
+			const postMessage = vi.fn();
+			const bridge = new WorkerAssetBridge(
+				{ postMessage } as unknown as Worker,
+				'clang',
+				config,
+				undefined,
+				undefined,
+				optIn
+			);
+			bridge.handleMessage({
+				data: { assetRequest: { id: index + 1, asset } }
+			} as MessageEvent);
+			await vi.waitFor(() =>
+				expect(postMessage).toHaveBeenCalledWith({
+					assetResponse: {
+						id: index + 1,
+						ok: false,
+						error: `Unexpected clang runtime asset: ${asset}`
+					}
+				})
+			);
+		}
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(loader).not.toHaveBeenCalled();
+	});
+
+	it('updates the language-pack allowlist and progress on rebind', async () => {
+		const postMessage = vi.fn();
+		const report = vi.fn();
+		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const config = {
+			baseUrl: 'https://assets.example.test/clang/',
+			integrity: BUNDLED_CLANG_ASSET_INTEGRITY,
+			useAssetBridge: true
+		};
+		const bridge = new WorkerAssetBridge(
+			{ postMessage } as unknown as Worker,
+			'clang',
+			config,
+			{ report },
+			undefined,
+			true
+		);
+		const cPack = BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES.c.asset;
+		expect(bridge.matches(config, undefined, false)).toBe(false);
+		bridge.rebind({ postMessage } as unknown as Worker, config, { report }, undefined, false);
+		expect(bridge.matches(config, undefined, false)).toBe(true);
+		bridge.handleMessage({ data: { assetRequest: { id: 1, asset: cPack } } } as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+		expect(fetchMock).not.toHaveBeenCalled();
+		report.mockClear();
+		for (const asset of RUNTIME_LOAD_ASSETS.clang) {
+			bridge.handleMessage({
+				data: { assetProgress: { asset, loaded: 10, total: 10 } }
+			} as MessageEvent);
+		}
+		expect(report.mock.lastCall?.[0]).toHaveProperty('measurement.total', 50);
+
+		bridge.rebind({ postMessage } as unknown as Worker, config, { report }, undefined, true);
+		expect(bridge.matches(config, undefined, true)).toBe(true);
+		bridge.handleMessage({ data: { assetRequest: { id: 2, asset: cPack } } } as MessageEvent);
+		await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+		expect(fetchMock).toHaveBeenCalledOnce();
+		expect(postMessage).toHaveBeenLastCalledWith({
+			assetResponse: { id: 2, ok: false, error: `Failed to load ${cPack}: 404` }
+		});
+	});
+
 	it('counts UTF-8 bytes without materializing an oversized encoded buffer', () => {
 		expect(boundedUtf8ByteLength('Aé𐀀\ud800', 100)).toBe(10);
 		expect(boundedUtf8ByteLength('€€', 5)).toBe(6);

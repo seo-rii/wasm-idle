@@ -146,6 +146,7 @@ describe('application runtime asset root', () => {
 			'awk',
 			'bash',
 			'bqn',
+			'clang',
 			'clojurescript',
 			'cobol',
 			'd',
@@ -185,6 +186,7 @@ describe('application runtime asset root', () => {
 			'zig'
 		]);
 		expect(assets.rootUrl).toBe('/foo/bar');
+		expect(assets.clang).toEqual({ bundledLanguageSysroots: true });
 		expect(assets.debug).toBeUndefined();
 		expect(assets.rust).toEqual({
 			compilerUrl: `/foo/bar/wasm-rust/index.js?v=${WASM_RUST_ASSET_VERSION}&rustManifestBytes=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.bytes}&rustManifestSha256=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.sha256}`,

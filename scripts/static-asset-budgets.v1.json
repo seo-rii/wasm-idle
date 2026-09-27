@@ -5,7 +5,7 @@
 		"maxFiles": 1859
 	},
 	"directories": {
-		"clang": { "maxBytes": 31000000, "maxFiles": 8 },
+		"clang": { "maxBytes": 31000000, "maxFiles": 9 },
 		"clangd": { "maxBytes": 28000000, "maxFiles": 4, "optional": true },
 		"lsp": { "maxBytes": 1000000, "maxFiles": 5 },
 		"pyodide": { "maxBytes": 7000000, "maxFiles": 12 },
