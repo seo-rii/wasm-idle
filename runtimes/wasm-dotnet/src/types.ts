@@ -54,7 +54,14 @@ export interface BrowserDotnetCompilerResult {
 	logRecords?: CompilerLogRecord[];
 }
 
+export interface BrowserDotnetCompilerPrepareOptions {
+	language?: DotnetLanguage;
+	runtimeDiagnosticTracing?: boolean;
+}
+
 export interface BrowserDotnetCompiler {
+	/** Initializes compiler dependencies without compiling or executing user code. */
+	prepare?(request?: BrowserDotnetCompilerPrepareOptions): Promise<void>;
 	compile(request: BrowserDotnetCompileRequest): Promise<BrowserDotnetCompilerResult>;
 }
 

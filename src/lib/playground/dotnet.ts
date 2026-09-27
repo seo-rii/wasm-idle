@@ -581,7 +581,8 @@ class Dotnet implements Sandbox {
 					};
 					worker.postMessage({
 						load: true,
-						moduleUrl: nextModuleUrl
+						moduleUrl: nextModuleUrl,
+						language: this.compileLanguage
 					});
 				} else {
 					if (!this.isOperationActive(operation)) return;
