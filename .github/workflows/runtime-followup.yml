@@ -1,13 +1,17 @@
-name: Optional prewarm validation
+name: Java and Rust verified runtime preparation
 on:
   push:
     branches: [chore/runtime-followup-20260927]
 permissions:
   contents: write
 jobs:
-  prewarm:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        change: [java, rust]
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -15,49 +19,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Apply, validate and publish prewarm option
+      - name: Validate and publish focused runtime change
         shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import gzip,hashlib
-          from pathlib import Path
-          b=Path('.github/runtime-followup/prewarm.patch.gz').read_bytes()
-          assert hashlib.sha256(b).hexdigest()=='d7ee24733c692589f53fb9c2cb813e58a6967008139fe84b4f4a84c60f9ffa3b'
-          Path('/tmp/prewarm.patch').write_bytes(gzip.decompress(b))
-          PY
-          npm install --prefix /tmp/tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.1.4 @types/node@24.12.4 svelte@5.55.4
-          git fetch --depth=1 origin b45847d10f059463aa313dd61a7c12f4abec19bd
-          git worktree add --detach /tmp/change b45847d10f059463aa313dd61a7c12f4abec19bd
-          cd /tmp/change
-          git sparse-checkout set src packages/core
-          git apply /tmp/prewarm.patch
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('src/routes/+page.svelte');s=p.read_text();assert 'const executing = !!runningMode;' in s
-          s=s.replace('<script lang="ts">','<script lang="ts">\n\timport { untrack } from \'svelte\';',1)
-          s=s.replace('const executing = !!runningMode;','// Run must claim the pending warm-up; changing runningMode must not cancel it.\n\t\tconst executing = untrack(() => !!runningMode);');p.write_text(s)
-          p=Path('packages/core/src/prewarm.ts');s=p.read_text();old='async take(key: string): Promise<T | undefined> {';assert old in s;p.write_text(s.replace(old,'take(key: string): Promise<T | undefined> | undefined {'))
-          p=Path('packages/core/src/sandbox.ts');s=p.read_text();old='const warmed = await prewarmer.take(cacheKey);';assert old in s;p.write_text(s.replace(old,'const pendingWarm = prewarmer.take(cacheKey);\n\t\t\tconst warmed = pendingWarm ? await pendingWarm : undefined;'))
-          PY
-          ln -s /tmp/tools/node_modules node_modules
-          mkdir -p .svelte-kit
-          printf '{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"bundler"}}' > .svelte-kit/tsconfig.json
-          node /tmp/tools/node_modules/typescript/bin/tsc -p packages/core/tsconfig.json --noEmit
-          cat > /tmp/prewarm-config.mjs <<'JS'
-          export default {resolve:{alias:{'@wasm-idle/core':'/tmp/change/packages/core/src/index.ts'}},test:{environment:'node',include:['src/lib/runtime-prewarm.test.ts','src/lib/core-execution-boundary.test.ts','src/lib/core-lifecycle-contract.test.ts','src/lib/core-runtime-trust-enforcement.test.ts']}};
-          JS
-          node /tmp/tools/node_modules/vitest/vitest.mjs run --config /tmp/prewarm-config.mjs --reporter=verbose
-          node <<'JS'
-          const {readFileSync}=require('node:fs');
-          const {compile}=require('/tmp/tools/node_modules/svelte/compiler/index.js');
-          for(const generate of ['client','server']){
-            const result=compile(readFileSync('src/routes/+page.svelte','utf8'),{filename:'src/routes/+page.svelte',generate});
-            console.log('Demo Svelte compile:',generate,result.js.code.length,'bytes;',result.warnings.length,'warnings');
-          }
-          JS
-          git diff --check
-          git add packages/core/src/prewarm.ts packages/core/src/sandbox.ts src/lib/index.ts src/lib/playground/index.ts src/lib/playground/sandbox.ts src/routes/+page.svelte src/lib/runtime-prewarm.test.ts README.md
-          git -c user.name='wasm-idle automation' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'feat(core): opt-in selected-language prewarm with demo toggle'
-          git push origin HEAD:refs/heads/feat/optional-runtime-prewarm
-          git show --stat --oneline HEAD
+        run: bash .github/runtime-followup/publish-${{ matrix.change }}.sh 2>&1 | tee /tmp/validation.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: followup-${{ matrix.change }}-validation
+          path: /tmp/validation.log
+          retention-days: 1
