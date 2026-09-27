@@ -101,7 +101,7 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			moduleUrl: asset('wasm-duckdb/runtime.mjs', STATIC_RUNTIME_MODULE_VERSION)
 		},
 		php: {
-			moduleUrl: asset('wasm-php/runtime.mjs', STATIC_RUNTIME_MODULE_VERSION)
+			moduleUrl: asset('wasm-php/startup.mjs', STATIC_RUNTIME_MODULE_VERSION)
 		},
 		rust: {
 			compilerUrl: `${asset('wasm-rust/index.js', WASM_RUST_ASSET_VERSION)}&rustManifestBytes=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.bytes}&rustManifestSha256=${WASM_RUST_RUNTIME_PROFILE.manifestReceipt.sha256}`,

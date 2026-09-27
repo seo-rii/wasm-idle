@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import {
 	createPhpEngineBootstrap,
 	type PhpEngineAsset
-} from '../../producers/wasm-php/src/startup';
+} from '../../producers/wasm-php/src/startup-loader';
 
 // Real core Wasm with exported memory and a no-op _start. No PHP binary is mocked as compiled.
 const wasm = new Uint8Array([
@@ -56,7 +56,13 @@ describe('PHP selected-engine startup', () => {
 		await vi.waitFor(() => expect(f.fetch).toHaveBeenCalledTimes(1));
 		expect(f.assets.asyncify.load).not.toHaveBeenCalled();
 		expect(f.fetch.mock.calls[0]![0]).toContain('jspi.wasm');
-		glue.resolve({ name: 'jspi' });
+		expect(f.fetch.mock.calls[0]![1]).toEqual(
+			expect.objectContaining({ credentials: 'omit', redirect: 'error' })
+		);
+		glue.resolve({
+			dependencyFilename: f.assets.jspi.url,
+			dependenciesTotalSize: f.assets.jspi.bytes
+		});
 		expect((await operation).module).toBeInstanceOf(WebAssembly.Module);
 	});
 	it('selects only Asyncify when JSPI is unavailable', async () => {
@@ -146,6 +152,37 @@ describe('PHP selected-engine startup', () => {
 		(f.assets.jspi as any).bytes = 1e9;
 		await expect(f.prepare()).rejects.toThrow('receipt');
 		expect(f.fetch).not.toHaveBeenCalled();
+	});
+	it('rejects loader metadata that disagrees with the pinned receipt', async () => {
+		const f = fixture();
+		vi.mocked(f.assets.jspi.load).mockResolvedValueOnce({
+			dependencyFilename: 'https://example.test/other.wasm',
+			dependenciesTotalSize: wasm.length
+		} as any);
+		await expect(f.prepare()).rejects.toThrow('pinned Wasm receipt');
+	});
+	it('rejects redirected responses and retries without retaining the failure', async () => {
+		const f = fixture();
+		const redirected = new Response(wasm.slice());
+		Object.defineProperty(redirected, 'redirected', { value: true });
+		f.fetch.mockResolvedValueOnce(redirected);
+		await expect(f.prepare()).rejects.toThrow('request failed');
+		expect((await f.prepare()).module).toBeInstanceOf(WebAssembly.Module);
+	});
+	it('requires Web Crypto before fetching the engine', async () => {
+		const f = fixture();
+		vi.stubGlobal('crypto', undefined);
+		await expect(f.prepare()).rejects.toThrow('Web Crypto');
+		expect(f.fetch).not.toHaveBeenCalled();
+	});
+	it('evicts a native compilation failure so the next attempt can retry', async () => {
+		const f = fixture();
+		vi.spyOn(WebAssembly, 'compileStreaming').mockRejectedValueOnce(
+			new Error('native compile failure')
+		);
+		await expect(f.prepare()).rejects.toThrow('native compile failure');
+		expect((await f.prepare()).module).toBeInstanceOf(WebAssembly.Module);
+		expect(f.fetch).toHaveBeenCalledTimes(2);
 	});
 	it('falls back to verified native compile without compileStreaming', async () => {
 		const f = fixture();

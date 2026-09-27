@@ -25,17 +25,26 @@ After verification, replace the consumer's PHP static-runtime directory with the
 static-asset URL. The consumer owns compression and deployment; this producer does not modify
 `wasm-idle/static`.
 
-## Startup and isolation
+## Deferred verified startup
 
-`createPhp84()` automatically selects JSPI when supported, otherwise Asyncify. An explicit
-`createPhp84({ asyncMode: 'asyncify' })` or `createPhp84({ asyncMode: 'jspi' })` selects a profile;
-unsupported JSPI fails before requesting engine assets. Only the selected engine's large loader
-and Wasm are fetched, in parallel. Build-pinned byte lengths and SHA-256 receipts are checked
-before a compiled module can be instantiated. Loading failures are retryable and preparation
-is bounded by a timeout.
+`dist/startup.mjs` is the lightweight factory used by the first-party application.
+Importing it does not download or initialize PHP. Calling `createPhp84()` selects
+the supported JSPI/Asyncify branch and starts the selected Wasm download, bounded
+SHA-256 verification and native compilation alongside the JavaScript loaders.
+Instantiation is gated on successful receipt verification. The other mode and
+unused intl extensions are not fetched. The existing `runtime.mjs` and its named
+`PHP` export remain available to legacy consumers. No built-in PHP extensions are
+removed from either binary, and this does not claim to reduce their download size.
 
-The module keeps at most the two engines' immutable compiled code in its own realm. Each factory
-call still creates a new PHP VM, memory and filesystem. This is not a cross-tab or persistent
-cache and does not remove extensions from the distribution. To exercise both actual engines in
-Chromium, run `node scripts/probe-wasm-php-startup.mjs producers/wasm-php/dist` from the repository
-root after building; the probe also checks the parallel fetch dependency and VM isolation.
+The new entry accepts `{ asyncMode: 'auto' | 'jspi' | 'asyncify' }` (default `auto`).
+An explicit unsupported JSPI request fails rather than loading an incompatible
+binary. Up to two immutable native modules are cached per worker realm, with
+failed promises evicted; each factory call still creates fresh runtime memory,
+filesystem and PHP state. There is no persistent or cross-tab cache.
+
+After building, run `node scripts/probe-startup.mjs` from this directory with the
+root development dependencies installed and Chromium available. The probe tests
+both modes, native-module reuse, isolated filesystems, I/O, legacy entry behavior
+and rejected instantiation. `PLAYWRIGHT_CHROMIUM_EXECUTABLE` may select a local
+Chromium executable. Unit tests are in `src/lib/php-startup-loader.test.ts` at
+the repository root and participate in the normal application test suite.

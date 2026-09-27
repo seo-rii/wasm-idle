@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
-import { phpEngineAssetsPlugin } from './engine-assets.mjs';
+import { phpStartupAssetsPlugin } from './startup-assets.mjs';
 import {
 	collectRuntimeFiles,
 	MANIFEST_FILE,
@@ -38,10 +38,9 @@ for (const packageName of PINNED_PACKAGE_NAMES) {
 }
 
 await rm(DIST_DIR, { recursive: true, force: true });
+const webPackageDir = path.dirname(require.resolve('@php-wasm/web-8-4/package.json'));
 await build({
-	plugins: [
-		phpEngineAssetsPlugin(path.dirname(require.resolve('@php-wasm/web-8-4/package.json')))
-	],
+	plugins: [await phpStartupAssetsPlugin(webPackageDir)],
 	root: PRODUCER_ROOT,
 	configFile: false,
 	publicDir: false,
@@ -57,10 +56,10 @@ await build({
 		minify: 'esbuild',
 		rollupOptions: {
 			preserveEntrySignatures: 'strict',
-			input: ENTRY_PATH,
+			input: { runtime: ENTRY_PATH, startup: path.join(PRODUCER_ROOT, 'src/startup.ts') },
 			output: {
 				format: 'es',
-				entryFileNames: 'runtime.mjs',
+				entryFileNames: '[name].mjs',
 				chunkFileNames: 'chunks/[name]-[hash].mjs',
 				assetFileNames: 'assets/[name]-[hash][extname]'
 			}
@@ -68,7 +67,6 @@ await build({
 	}
 });
 
-const webPackageDir = path.dirname(require.resolve('@php-wasm/web-8-4/package.json'));
 await cp(path.join(webPackageDir, 'LICENSE'), path.join(DIST_DIR, 'LICENSE.txt'));
 
 const manifest = {

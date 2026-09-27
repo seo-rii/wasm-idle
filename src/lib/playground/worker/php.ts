@@ -11,7 +11,11 @@ let runtimeModuleUrl = '';
 let phpPromise: Promise<PhpRuntime> | null = null;
 let workspaceDirty = false;
 
+// A superseded attempt must not send errors to a newer load or run's listener.
+class SupersededPhpStartup extends Error {}
+
 interface PhpRuntime {
+	exit?(): void;
 	mkdir(path: string): void;
 	rmdir(path: string, options?: { recursive?: boolean }): void;
 	writeFile(path: string, content: string): void;
@@ -20,6 +24,14 @@ interface PhpRuntime {
 		errors: string;
 		exitCode: number;
 	}>;
+}
+
+function disposePhp(php: PhpRuntime) {
+	try {
+		php.exit?.();
+	} catch {
+		// Preserve the startup failure or replacement that triggered cleanup.
+	}
 }
 
 interface PhpRuntimeModule {
@@ -33,24 +45,48 @@ function postProgress(percent: number) {
 async function loadPhp(moduleUrl: string, log = true) {
 	if (!moduleUrl) throw new Error('PHP runtime module URL is not configured.');
 	if (runtimeModuleUrl !== moduleUrl) {
+		const previous = phpPromise;
 		runtimeModuleUrl = moduleUrl;
 		phpPromise = null;
 		workspaceDirty = false;
+		void previous?.then(disposePhp, () => {});
 	}
 	if (phpPromise) return await phpPromise;
-	phpPromise = (async () => {
-		postProgress(5);
-		const runtime = await importRuntimeModule<PhpRuntimeModule>(moduleUrl);
-		const php = await runtime.createPhp84();
-		postProgress(95);
-		php.mkdir('/workspace');
-		if (log) {
-			console.log('[wasm-idle:php-worker] PHP 8.4 ready');
+	const operation = Promise.resolve().then(async () => {
+		let php: PhpRuntime | undefined;
+		try {
+			postProgress(5);
+			const runtime = await importRuntimeModule<PhpRuntimeModule>(moduleUrl);
+			if (phpPromise !== operation || runtimeModuleUrl !== moduleUrl) {
+				throw new SupersededPhpStartup('PHP runtime startup was superseded.');
+			}
+			php = await runtime.createPhp84();
+			if (phpPromise !== operation || runtimeModuleUrl !== moduleUrl) {
+				throw new SupersededPhpStartup('PHP runtime startup was superseded.');
+			}
+			postProgress(95);
+			php.mkdir('/workspace');
+			if (log) {
+				console.log('[wasm-idle:php-worker] PHP 8.4 ready');
+			}
+			postProgress(100);
+			return php;
+		} catch (error) {
+			if (php) disposePhp(php);
+			throw error;
 		}
-		postProgress(100);
-		return php;
-	})();
-	return await phpPromise;
+	});
+	phpPromise = operation;
+	try {
+		return await operation;
+	} catch (error) {
+		// Failed speculative startup must not poison the later explicit Run.
+		// A stale attempt must never clear a newer configuration's runtime.
+		if (phpPromise !== operation)
+			throw new SupersededPhpStartup('PHP runtime startup was superseded.');
+		phpPromise = null;
+		throw error;
+	}
 }
 
 function prepareWorkspace(php: PhpRuntime) {
@@ -301,6 +337,7 @@ self.onmessage = async (event: { data: any }) => {
 		}
 		postMessage({ results: true });
 	} catch (error: any) {
+		if (error instanceof SupersededPhpStartup) return;
 		if (log) {
 			console.error('[wasm-idle:php-worker] failed', error);
 		}

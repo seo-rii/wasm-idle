@@ -186,6 +186,7 @@
 		"@wasm-idle/terminal": "workspace:*",
 		"@wasmer/sdk": "0.9.0",
 		"assemblyscript": "0.28.17",
+		"esbuild": "0.28.0",
 		"eslint": "^10.2.0",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.17.0",
