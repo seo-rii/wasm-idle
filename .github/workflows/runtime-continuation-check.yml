@@ -19,7 +19,7 @@ jobs:
             branch: perf/ruby-initialized-vm-prewarm
             message: 'perf(ruby): prepare a pristine VM for a single first execution'
           - language: php
-            base: 1e77b741bd4b5658bd84853718b5b1b3f9c8bc25
+            base: c00710e5d05d04e222f3c9d33c7c4f4b79ab85e9
             branch: perf/php-verified-parallel-startup
             message: 'fix(php): retry failed startup and suppress superseded load responses'
     steps:
@@ -29,6 +29,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Align the probe server with the canonical split asset directory
+        run: bash .github/runtime-continuation/fix-probe.sh
       - name: Verify source and actual Chromium worker execution before publishing
         env:
           LANGUAGE: ${{ matrix.language }}
