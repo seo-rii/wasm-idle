@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net9.0</TargetFramework><Nullable>enable</Nullable><AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <StartupObject>ReferenceTests</StartupObject>
+    <WasmDotnetLanguage Condition="'$(WasmDotnetLanguage)' == ''">csharp</WasmDotnetLanguage>
+    <DefineConstants Condition="'$(WasmDotnetLanguage)' == 'csharp'">WASM_DOTNET_CSHARP</DefineConstants>
+    <DefineConstants Condition="'$(WasmDotnetLanguage)' == 'fsharp'">WASM_DOTNET_FSHARP</DefineConstants>
+    <DefineConstants Condition="'$(WasmDotnetLanguage)' == 'vbnet'">WASM_DOTNET_VBNET</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../WasmDotnet.Compiler/Program.cs" Link="CompilerHost.cs" />
+    <Compile Include="../WasmDotnet.Compiler/ReferenceSetRegistry.cs" Link="ReferenceSetRegistry.cs" />
+    <ProjectReference Include="../WasmDotnet.Stdin/WasmDotnet.Stdin.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(WasmDotnetLanguage)' == 'csharp'"><PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" /></ItemGroup>
+  <ItemGroup Condition="'$(WasmDotnetLanguage)' == 'vbnet'"><PackageReference Include="Microsoft.CodeAnalysis.VisualBasic" Version="4.14.0" /></ItemGroup>
+  <ItemGroup Condition="'$(WasmDotnetLanguage)' == 'fsharp'"><PackageReference Include="FSharp.Compiler.Service" Version="43.12.204" /></ItemGroup>
+</Project>

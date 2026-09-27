@@ -88,6 +88,11 @@ import {
 } from './wasmAwkVersion';
 
 describe('application runtime asset root', () => {
+	it('selects the deferred PHP startup entry only for the first-party application', () => {
+		expect(createApplicationRuntimeAssets('/demo').php?.moduleUrl).toBe(
+			`/demo/wasm-php/startup.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
+		);
+	});
 	it.each([
 		['', 'wasm-rust/index.js', '/wasm-rust/index.js'],
 		['/', '/wasm-rust/index.js', '/wasm-rust/index.js'],

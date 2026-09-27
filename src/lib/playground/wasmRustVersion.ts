@@ -1,8 +1,8 @@
 export const WASM_RUST_RUNTIME_PROFILE = Object.freeze({
-	profileId: 'wasm-rust-8b16b44d31af34ef49fa2a601e0d7bc6c5edf1013fe6a4440b9b92a4d5c254ba',
+	profileId: 'wasm-rust-b9d5b748f2d5e53045ef55890676e8ecb81a8ea07a31dfd20e70888c807bf9a6',
 	protocolVersion: 1,
 	manifestPath: 'runtime/runtime-manifest.v3.json',
-	manifestFingerprint: '8b16b44d31af34ef49fa2a601e0d7bc6c5edf1013fe6a4440b9b92a4d5c254ba',
+	manifestFingerprint: 'b9d5b748f2d5e53045ef55890676e8ecb81a8ea07a31dfd20e70888c807bf9a6',
 	manifestReceipt: {
 		bytes: 6185,
 		sha256: '30b210003632395a1effd19f7a46565d5f8c52a9d3a28a310fa24219f97a5a9a'
@@ -429,12 +429,12 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 				encoding: 'identity'
 			},
 			storage: {
-				bytes: 21368,
-				sha256: 'ec3222cd238667ef070a58c4cfade0edfd869fd914c2b01c92dd5f13545797fc'
+				bytes: 21605,
+				sha256: '19dd922fd7493a80cb46e9113368376dd8ffce32282d433caaaaebae4d5388f4'
 			},
 			logical: {
-				bytes: 21368,
-				sha256: 'ec3222cd238667ef070a58c4cfade0edfd869fd914c2b01c92dd5f13545797fc'
+				bytes: 21605,
+				sha256: '19dd922fd7493a80cb46e9113368376dd8ffce32282d433caaaaebae4d5388f4'
 			},
 			imports: [
 				{
@@ -479,6 +479,11 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 				},
 				{
 					kind: 'static',
+					specifier: './rustc-module-service.js',
+					target: 'rustc-module-service.js'
+				},
+				{
+					kind: 'static',
 					specifier: './rustc-module.js',
 					target: 'rustc-module.js'
 				},
@@ -512,12 +517,12 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 				encoding: 'identity'
 			},
 			storage: {
-				bytes: 33077,
-				sha256: '57610f3dd5babfb44e40a29bb40c1de78b1adfff8b9d1ce7dd5c83a991b9d865'
+				bytes: 33998,
+				sha256: '0a6c0bc4483c00265a7ecc228faa5f4252831b5953f0a9a00a685d8fcf4f0825'
 			},
 			logical: {
-				bytes: 33077,
-				sha256: '57610f3dd5babfb44e40a29bb40c1de78b1adfff8b9d1ce7dd5c83a991b9d865'
+				bytes: 33998,
+				sha256: '0a6c0bc4483c00265a7ecc228faa5f4252831b5953f0a9a00a685d8fcf4f0825'
 			},
 			imports: [
 				{
@@ -564,6 +569,11 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 					kind: 'static',
 					specifier: './runtime-manifest.js',
 					target: 'runtime-manifest.js'
+				},
+				{
+					kind: 'static',
+					specifier: './rustc-module-service.js',
+					target: 'rustc-module-service.js'
 				},
 				{
 					kind: 'static',
@@ -747,6 +757,34 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 					kind: 'static',
 					specifier: './runtime-asset.js',
 					target: 'runtime-asset.js'
+				}
+			],
+			assets: [],
+			externals: []
+		},
+		'rustc-module-service.js': {
+			delivery: {
+				storagePath: 'rustc-module-service.js.bin',
+				encoding: 'identity'
+			},
+			storage: {
+				bytes: 4926,
+				sha256: '643e87810870eadb9489f4161f2132a158e37c1e343426c58e04e3482e1d7045'
+			},
+			logical: {
+				bytes: 4926,
+				sha256: '643e87810870eadb9489f4161f2132a158e37c1e343426c58e04e3482e1d7045'
+			},
+			imports: [
+				{
+					kind: 'static',
+					specifier: './runtime-asset.js',
+					target: 'runtime-asset.js'
+				},
+				{
+					kind: 'static',
+					specifier: './rustc-module.js',
+					target: 'rustc-module.js'
 				}
 			],
 			assets: [],
@@ -1477,7 +1515,7 @@ export const WASM_RUST_EXECUTABLE_GRAPH_PROFILE = Object.freeze({
 			externals: []
 		}
 	},
-	fingerprint: 'c40f6a15772b25412ddd06ad7e0d484736e18fd1cfb4c5767c63e4790e4ad066'
+	fingerprint: '0c75869e3318fec8de28ba3732a65a4db9e92993cb517339fb729502e689f67f'
 } as const);
 
 export const WASM_RUST_ASSET_VERSION = WASM_RUST_RUNTIME_PROFILE.manifestFingerprint;

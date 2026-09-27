@@ -304,7 +304,7 @@ export function createDotnetCompiler(
 			}
 			// Warm the real runtime and references, not a facade or a dummy program.
 			// Existing caches deduplicate concurrent callers and evict failed/fatal loads.
-			await Promise.all([
+			const [runtime, references] = await Promise.all([
 				Promise.resolve().then(() =>
 					dependencies.loadRuntime(language, {
 						diagnosticTracing: Boolean(request.runtimeDiagnosticTracing)
@@ -312,6 +312,7 @@ export function createDotnetCompiler(
 				),
 				Promise.resolve().then(() => dependencies.loadReferences(language))
 			]);
+			await runtime.prepareReferences?.(references);
 		},
 		async compile(request) {
 			return await compileDotnet(
