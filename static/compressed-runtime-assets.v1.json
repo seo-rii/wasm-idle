@@ -116,7 +116,7 @@
     "webr/000bd2c7d2f13441/libRlapack.so"
   ],
   "sizes": {
-    "clangd/clangd.wasm": 126550863,
+    "clangd/clangd.wasm": 78993623,
     "pyodide/pyodide.asm.js": 1074322,
     "pyodide/pyodide.asm.wasm": 8647684,
     "teavm/compiler.wasm": 4299273,
