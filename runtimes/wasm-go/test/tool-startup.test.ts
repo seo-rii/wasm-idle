@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gzipSync } from 'node:zlib';
 
+import { clearGoToolModuleCache } from '../src/tool-module.js';
 import { executeGoToolInvocation } from '../src/tool-runtime.js';
 import type { BrowserGoBuildPlan, BrowserGoToolInvocation } from '../src/types.js';
 
@@ -53,7 +54,10 @@ function fixture() {
 
 const response = (bytes: Uint8Array) => new Response(Uint8Array.from(bytes).buffer);
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+	vi.restoreAllMocks();
+	clearGoToolModuleCache();
+});
 
 describe('Go tool startup', () => {
 	it('starts both asset requests before either response is available', async () => {

@@ -76,6 +76,28 @@ function harness(settings: Settings = {}) {
 			assertGoInstanceMemoryLimit: (...args: unknown[]) => log('memory-check', ...args)
 		}
 	};
+	// Exercise the production module cache too, with the existing controlled memory
+	// and native-compile boundaries. No Web Crypto in this VM selects its uncached path.
+	const moduleExports: Record<string, unknown> = {};
+	const moduleSource = readFileSync(new URL('./tool-module.ts', import.meta.url), 'utf8');
+	runInNewContext(
+		ts.transpileModule(moduleSource, {
+			compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
+		}).outputText,
+		{
+			exports: moduleExports,
+			require: (id: string) => imports[id],
+			Uint8Array,
+			DOMException,
+			WebAssembly: {
+				compile: (value: Uint8Array) => {
+					log('compile', value);
+					return settings.compile?.(value.slice().buffer) ?? WebAssembly.compile(value);
+				}
+			}
+		}
+	);
+	imports['./tool-module.js'] = moduleExports;
 	runInNewContext(compiled, {
 		exports, require: (id: string) => {
 			if (!(id in imports)) throw new Error(`Unexpected dependency ${id}`);
@@ -228,10 +250,11 @@ it('does not instantiate after cancellation during module compilation', async ()
 	const controller = new AbortController();
 	const h = harness({ compile: () => module.promise });
 	const run = h.run({ signal: controller.signal });
+	const rejection = assert.rejects(run, /cancelled/);
 	await tick();
 	controller.abort(new Error('cancelled'));
 	module.resolve(await WebAssembly.compile(bytes));
-	await assert.rejects(run, /cancelled/);
+	await rejection;
 	assert.equal(h.count('instantiate'), 0);
 });
 
