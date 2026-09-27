@@ -144,6 +144,45 @@ describe('loading progress controller', () => {
 		});
 	});
 
+	it('keeps an unmeasured phase estimate until its measured progress catches up', () => {
+		const states: LoadingProgressState[] = [];
+		const session = createLoadingProgressController({
+			onChange: (state) => states.push(state)
+		}).start();
+
+		session.report?.({
+			kind: 'activity',
+			phase: 'verifying',
+			label: 'Verifying compiler asset'
+		});
+		session.report?.({
+			kind: 'activity',
+			phase: 'downloading',
+			phaseId: 'runtime-assets',
+			label: 'Downloading runtime assets'
+		});
+		session.report?.({
+			kind: 'activity',
+			phase: 'downloading',
+			phaseId: 'runtime-assets',
+			label: 'Downloading runtime assets',
+			measurement: { kind: 'bytes', completed: 5, total: 100 }
+		});
+		expect(states.at(-1)).toMatchObject({
+			value: 0.45,
+			stage: 'Downloading runtime assets'
+		});
+
+		session.report?.({
+			kind: 'activity',
+			phase: 'downloading',
+			phaseId: 'runtime-assets',
+			label: 'Downloading runtime assets',
+			measurement: { kind: 'bytes', completed: 60, total: 100 }
+		});
+		expect(states.at(-1)?.value).toBe(0.6);
+	});
+
 	it('falls back to estimates when a denominator is invalid or changes mid-phase', () => {
 		const states: LoadingProgressState[] = [];
 		const session = createLoadingProgressController({

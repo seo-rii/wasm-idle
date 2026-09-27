@@ -153,7 +153,8 @@ export function createLoadingProgressController({
 		measurementValue = Math.max(measurementValue, measurement.completed / measurement.total);
 		state = {
 			visible: true,
-			value: measurementValue,
+			// Keep one visible label monotonic when an estimate preceded its first byte sample.
+			value: Math.max(measurementValue, state.stage === event.label ? state.value : 0),
 			stage: event.label,
 			indeterminate: false
 		};
