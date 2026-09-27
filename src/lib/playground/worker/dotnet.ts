@@ -21,6 +21,7 @@ type DotnetRuntimeModule = {
 		loadReferences?: boolean;
 		onFatalError?: (error: Error) => void;
 	}) => {
+		prepare?(request?: { language?: DotnetCompileLanguage }): Promise<void>;
 		compile(request: {
 			code: string;
 			language: DotnetCompileLanguage;
@@ -114,6 +115,8 @@ workerSelf.onmessage = async (event: { data: any }) => {
 				console.log(`[wasm-idle:dotnet-worker] load moduleUrl=${moduleUrl}`);
 			}
 			await loadRuntime(moduleUrl);
+			// Older/custom runtime modules remain compatible without this optional API.
+			await compiler?.prepare?.({ language });
 			postMessage({ load: true });
 			return;
 		}

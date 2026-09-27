@@ -531,9 +531,9 @@ describe('Monaco route debug sync', () => {
 			/\{#each availableRustTargetTriples as targetTriple \(targetTriple\)\}\s+<option value=\{targetTriple\}>\{targetTriple\}<\/option>\s+\{\/each\}/s
 		);
 		expect(pageSource).not.toMatch(/preloadBrowserRustRuntime/);
-		expect(pageSource).toMatch(/preloadBrowserGoRuntime/);
+		expect(pageSource).not.toMatch(/preloadBrowserGoRuntime/);
 		expect(pageSource).toMatch(
-			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets\)\);/
+			/const playground = \$derived\.by\(\(\) => createPlaygroundBinding\(runtimeAssets, \{ prewarm: true \}\)\);/
 		);
 		expect(pageSource).toMatch(/lspEnabled = \$state\(false\),/);
 		expect(pageSource).toMatch(/id="lsp-toggle"/);

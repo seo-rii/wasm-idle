@@ -24,7 +24,10 @@ import {
 	createWasmIdleSharedBuffer,
 	type WasmIdleSharedBuffer
 } from '$lib/playground/sharedBuffer';
-import { WASM_TYPESCRIPT_MODULE_RECEIPT } from '$lib/playground/wasmTypeScriptVersion';
+import {
+	WASM_TYPESCRIPT_MODULE_RECEIPT,
+	WASM_JAVASCRIPT_MODULE_RECEIPT
+} from '$lib/playground/wasmTypeScriptVersion';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
 
@@ -350,6 +353,8 @@ class TypeScriptSandbox implements Sandbox {
 		let signal: AbortSignal | undefined;
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		let nextModuleUrl: string;
+		let moduleReceipt: Readonly<{ bytes: number; sha256: string }> =
+			WASM_TYPESCRIPT_MODULE_RECEIPT;
 		let progressTarget: SandboxProgress | undefined;
 		let progressSet: SandboxProgress['set'] | undefined;
 		let unbindPreSessionAbort: () => void = () => undefined;
@@ -367,7 +372,19 @@ class TypeScriptSandbox implements Sandbox {
 			if (typeof runtimeAssets === 'object' && runtimeAssets !== null) {
 				const configuredTypeScript = runtimeAssets.typescript;
 				this.requireOperationActive(activeOperation);
-				const configuredModuleUrl = configuredTypeScript?.moduleUrl;
+				const javascriptModuleUrl =
+					this.language === 'JAVASCRIPT'
+						? configuredTypeScript?.javascriptModuleUrl
+						: undefined;
+				this.requireOperationActive(activeOperation);
+				if (javascriptModuleUrl !== undefined && typeof javascriptModuleUrl !== 'string') {
+					throw new TypeError('JavaScript runtime module URL must be a string');
+				}
+				const useJavascriptEntry = Boolean(javascriptModuleUrl);
+				const configuredModuleUrl = useJavascriptEntry
+					? javascriptModuleUrl
+					: configuredTypeScript?.moduleUrl;
+				if (useJavascriptEntry) moduleReceipt = WASM_JAVASCRIPT_MODULE_RECEIPT;
 				this.requireOperationActive(activeOperation);
 				if (configuredModuleUrl !== undefined && typeof configuredModuleUrl !== 'string') {
 					throw new TypeError(
@@ -394,13 +411,13 @@ class TypeScriptSandbox implements Sandbox {
 				nextModuleUrl = resolveTypeScriptModuleUrl(runtimeAssets, currentUrl);
 				this.requireOperationActive(activeOperation);
 			}
-			if (WASM_TYPESCRIPT_MODULE_RECEIPT.bytes > limits.maxAssetBytes) {
+			if (moduleReceipt.bytes > limits.maxAssetBytes) {
 				throw new AssetTooLargeError(
 					`${this.languageLabel} runtime module exceeds the ${limits.maxAssetBytes} byte limit`,
 					{
 						runtimeId: this.language,
 						limit: limits.maxAssetBytes,
-						actual: WASM_TYPESCRIPT_MODULE_RECEIPT.bytes
+						actual: moduleReceipt.bytes
 					}
 				);
 			}
@@ -515,7 +532,7 @@ class TypeScriptSandbox implements Sandbox {
 					worker.postMessage({
 						load: true,
 						moduleUrl: nextModuleUrl,
-						moduleReceipt: { ...WASM_TYPESCRIPT_MODULE_RECEIPT },
+						moduleReceipt: { ...moduleReceipt },
 						maxAssetBytes: limits.maxAssetBytes
 					});
 				} else {

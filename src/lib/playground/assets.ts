@@ -202,6 +202,8 @@ export interface ErlangRuntimeAssetConfig {
 
 export interface TypeScriptRuntimeAssetConfig {
 	moduleUrl?: string;
+	/** Optional official JavaScript-only bundle; must match its generated receipt. */
+	javascriptModuleUrl?: string;
 	libUrl?: string;
 }
 

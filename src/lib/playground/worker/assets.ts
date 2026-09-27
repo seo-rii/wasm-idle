@@ -1,3 +1,5 @@
+import { createBoundedAssetResponse } from './boundedAssetResponse';
+
 declare const self: {
 	postMessage: (message: any) => void;
 };
@@ -150,18 +152,29 @@ const loadAssetFromBridge = async (asset: string) => {
 	});
 };
 
-const loadAssetFromUrl = async (url: string, asset: string, integrity?: string) => {
+const fetchAssetFromUrl = async (
+	url: string,
+	asset: string,
+	integrity?: string,
+	signal?: AbortSignal
+) => {
 	const requestUrl = trackedAssetUrl(url);
 	if (!requestUrl || trackedAssetName(requestUrl) !== asset || !activeConfig) {
 		throw new Error('Untracked runtime asset request');
 	}
 	const maxAssetBytes = activeConfig.maxAssetBytes ?? DEFAULT_MAX_ASSET_BYTES;
+	signal?.throwIfAborted();
 	const response = await originalFetch(requestUrl, {
 		credentials: 'omit',
 		redirect: 'error',
 		referrerPolicy: 'no-referrer',
-		...(integrity ? { integrity } : {})
+		...(integrity ? { integrity } : {}),
+		...(signal ? { signal } : {})
 	});
+	if (signal?.aborted) {
+		cancelResponseBody(response, signal.reason);
+		signal.throwIfAborted();
+	}
 	if (response.url) {
 		let responseUrl: URL;
 		try {
@@ -201,6 +214,15 @@ const loadAssetFromUrl = async (url: string, asset: string, integrity?: string) 
 		throw error;
 	}
 	const mimeType = response.headers.get('content-type') || undefined;
+	return { response, maxAssetBytes, total, mimeType };
+};
+
+const loadAssetFromUrl = async (url: string, asset: string, integrity?: string) => {
+	const { response, maxAssetBytes, total, mimeType } = await fetchAssetFromUrl(
+		url,
+		asset,
+		integrity
+	);
 	if (!response.body) {
 		const bytes = new Uint8Array(await response.arrayBuffer());
 		if (bytes.byteLength > maxAssetBytes) {
@@ -433,17 +455,36 @@ function installRuntimeAssetInterceptors() {
 			}
 			return originalFetch(input, init);
 		}
-		const requestIntegrity =
-			init?.integrity ??
-			(typeof Request !== 'undefined' && input instanceof Request
-				? input.integrity
-				: undefined);
-		return createTrackedResponse(
-			await loadTrackedAsset(
+		const request =
+			typeof Request !== 'undefined' && input instanceof Request ? input : undefined;
+		const requestIntegrity = init?.integrity ?? request?.integrity;
+		const integrity = typeof requestIntegrity === 'string' ? requestIntegrity : undefined;
+		const method = (init?.method ?? request?.method ?? 'GET').toUpperCase();
+		if (
+			activeConfig?.useAssetBridge === false &&
+			method === 'GET' &&
+			new URL(resolvedUrl).pathname.endsWith('.wasm')
+		) {
+			const asset = trackedAssetName(resolvedUrl)!;
+			const signal = (init?.signal === undefined ? request?.signal : init.signal) ?? undefined;
+			const { response, maxAssetBytes, total } = await fetchAssetFromUrl(
 				resolvedUrl,
-				typeof requestIntegrity === 'string' ? requestIntegrity : undefined
-			)
-		);
+				asset,
+				integrity,
+				signal
+			);
+			return createBoundedAssetResponse(response, {
+				asset,
+				maxAssetBytes,
+				total,
+				signal,
+				onProgress: (loaded, total) =>
+					self.postMessage({ assetProgress: { asset, loaded, total } })
+			});
+		}
+		// Custom host bridges must finish receipt verification before exposing bytes.
+		// Archives, module imports, and XHR consumers retain their buffered contracts.
+		return createTrackedResponse(await loadTrackedAsset(resolvedUrl, integrity));
 	}) as typeof fetch;
 	installTrackedFetch();
 }

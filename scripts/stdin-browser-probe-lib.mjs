@@ -1,4 +1,5 @@
 import { addBrowserTestCookies } from './browser-test-cookies.mjs';
+import { disableBrowserPrewarm } from './browser-test-prewarm.mjs';
 
 import { chromium } from 'playwright-core';
 
@@ -187,6 +188,7 @@ export async function runStdinBrowserProbe(options) {
 	});
 	const context = await browser.newContext();
 	await addBrowserTestCookies(context, browserUrl);
+	await disableBrowserPrewarm(context);
 	const page = await context.newPage();
 	page.setDefaultTimeout(runTimeoutMs);
 
