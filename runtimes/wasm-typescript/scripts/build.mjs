@@ -77,19 +77,47 @@ const swcBrowserShimPlugin = {
 
 await mkdir(path.join(REPO_ROOT, 'dist'), { recursive: true });
 
-await build({
-	entryPoints: [path.join(REPO_ROOT, 'src', 'index.ts')],
-	outfile: path.join(REPO_ROOT, 'dist', 'index.js'),
-	bundle: true,
-	format: 'esm',
-	platform: 'browser',
-	target: 'es2022',
-	sourcemap: false,
-	minify: true,
-	plugins: [emptyNodeBuiltinPlugin, swcBrowserShimPlugin],
-	banner: {
-		js: '/* wasm-typescript browser bundle */'
+// The JavaScript entry executes the same native-JS runner without linking SWC.
+// A TypeScript request against this entry fails explicitly, never as a subset interpreter.
+const javascriptOnlyPlugin = {
+	name: 'javascript-only-entry',
+	setup(esbuild) {
+		esbuild.onResolve({ filter: /^@swc\/wasm-typescript$/ }, () => ({
+			path: 'typescript-disabled',
+			namespace: 'javascript-only-entry'
+		}));
+		esbuild.onLoad({ filter: /.*/, namespace: 'javascript-only-entry' }, () => ({
+			loader: 'js',
+			contents: `export function transformSync() {
+				throw new Error('This entry supports JavaScript only; use index.js for TypeScript.');
+			}`
+		}));
 	}
-});
+};
+
+for (const entry of ['index', 'javascript']) {
+	const result = await build({
+		entryPoints: [path.join(REPO_ROOT, 'src', 'index.ts')],
+		outfile: path.join(REPO_ROOT, 'dist', `${entry}.js`),
+		bundle: true,
+		format: 'esm',
+		platform: 'browser',
+		target: 'es2022',
+		sourcemap: false,
+		minify: true,
+		metafile: true,
+		plugins:
+			entry === 'javascript'
+				? [javascriptOnlyPlugin, emptyNodeBuiltinPlugin, swcBrowserShimPlugin]
+				: [emptyNodeBuiltinPlugin, swcBrowserShimPlugin],
+		banner: { js: `/* wasm-typescript ${entry} browser bundle */` }
+	});
+	if (
+		entry === 'javascript' &&
+		Object.keys(result.metafile.inputs).some((input) => /node_modules\/.*@swc/.test(input))
+	) {
+		throw new Error('JavaScript entry must not include the SWC compiler');
+	}
+}
 
 await writeWasmTypeScriptProducerBuildReceipt({ producerDir: REPO_ROOT });

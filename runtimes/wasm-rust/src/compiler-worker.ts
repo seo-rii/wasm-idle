@@ -1,4 +1,5 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
+import { compileOwnedRustcModule } from './rustc-module.js';
 import type {
 	CompileWorkerMessage,
 	CompileWorkerRequest,
@@ -216,7 +217,7 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 		bytesCompleted: rustcBytes.byteLength,
 		bytesTotal: rustcBytes.byteLength
 	});
-	const rustcModulePromise = WebAssembly.compile(new Uint8Array(rustcBytes).buffer);
+	const rustcModulePromise = compileOwnedRustcModule(rustcBytes);
 	let fetchedSysrootFiles = 0;
 	let fetchedSysrootBytes = 0;
 	let rustcModule: WebAssembly.Module;
