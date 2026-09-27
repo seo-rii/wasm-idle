@@ -19,16 +19,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Fix the moved Go test harness type annotation
-        if: matrix.change == 'go'
+      - name: Adapt exact reviewed view conversions
         shell: bash
+        env:
+          CHANGE: ${{ matrix.change }}
         run: |
           python3 - <<'PY'
+          import os
           from pathlib import Path
-          p=Path('.github/runtime-perf-patches/final-go.sh');s=p.read_text()
-          old='    if s!=t:p.write_text(t)'
-          new='    t=t.replace("WebAssembly.compile(value)","WebAssembly.compile(Uint8Array.from(value))")\n'+old
-          assert old in s;p.write_text(s.replace(old,new))
+          if os.environ['CHANGE']=='go':
+              p=Path('.github/runtime-perf-patches/final-go.sh');s=p.read_text()
+              old='    if s!=t:p.write_text(t)'
+              new='    t=t.replace("WebAssembly.compile(value)","WebAssembly.compile(Uint8Array.from(value))",1)\n'+old
+              assert old in s;p.write_text(s.replace(old,new))
+          else:
+              p=Path('.github/runtime-perf-patches/final-rust.mjs');s=p.read_text()
+              old=" if(!target||target.delivery.encoding!==entry.delivery.encoding||target.storage.sha256!==entry.storage.sha256)throw Error('Unexpected explicit/published storage conversion: '+entry.path);"
+              new=" if(!target)throw Error('Missing explicit module: '+entry.path);\n const converted=target.delivery.encoding===entry.delivery.encoding?storage:target.delivery.encoding==='identity'&&entry.delivery.encoding==='gzip'?gunzipSync(storage):null;\n if(!converted||converted.length!==target.storage.bytes||hash(converted)!==target.storage.sha256)throw Error('Explicit module receipt mismatch: '+entry.path);"
+              assert old in s;s=s.replace(old,new)
+              assert 'await writeFile(out,storage)' in s;s=s.replace('await writeFile(out,storage)','await writeFile(out,converted)');p.write_text(s)
           PY
       - name: Verify source, tests and generated distribution
         shell: bash
