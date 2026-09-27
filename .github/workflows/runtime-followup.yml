@@ -1,13 +1,13 @@
-name: Verify PHP startup in real browser workers
+name: Ruby split profile and prewarm integration validation
 on:
   push:
     branches: [chore/runtime-followup-20260927]
 permissions:
   contents: write
 jobs:
-  php:
+  ruby:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -15,12 +15,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Build pinned runtime, exercise both engines, and publish
+      - name: Preserve concurrent main changes and validate Ruby
         shell: bash
-        run: bash .github/runtime-followup/publish-php.sh 2>&1 | tee /tmp/php-validation.log
+        run: bash .github/runtime-followup/integrate-ruby.sh 2>&1 | tee /tmp/ruby-integration.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: php-browser-validation
-          path: /tmp/php-validation.log
+          name: ruby-prewarm-integration
+          path: /tmp/ruby-integration.log
           retention-days: 1
