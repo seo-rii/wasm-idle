@@ -29,6 +29,7 @@ let compiledCode = '';
 let compiledStdin = '';
 let compiledMainClass = '';
 let compiledWasm: Uint8Array | null = null;
+let compiledDiagnostics: object[] = [];
 let compiledActivePath = '';
 let compiledWorkspaceFiles: Array<{ path: string; content: string }> = [];
 let currentSourcePaths = new Set<string>();
@@ -110,6 +111,7 @@ self.addEventListener('message', async (event) => {
 				compiledStdin = '';
 				compiledMainClass = '';
 				compiledWasm = null;
+				compiledDiagnostics = [];
 				compiledActivePath = '';
 				compiledWorkspaceFiles = [];
 				currentSourcePaths = new Set();
@@ -156,12 +158,14 @@ self.addEventListener('message', async (event) => {
 		}
 
 		if (
-			prepare ||
 			compiledCode !== code ||
 			compiledStdin !== stdinInjection.stdinCacheKey ||
 			workspaceChanged ||
 			!compiledWasm
 		) {
+			// A failed rebuild must never leave a previous artifact eligible for reuse.
+			compiledWasm = null;
+			compiledDiagnostics = [];
 			const mainClass = sourceIdentity.mainClass;
 			currentSourcePaths = new Set(
 				[sourcePath, ...sourceFiles.map((file) => file.path)].flatMap((path) => [
@@ -170,6 +174,7 @@ self.addEventListener('message', async (event) => {
 				])
 			);
 			const diagnosticLines: string[] = [];
+			const diagnosticMessages: object[] = [];
 			const diagnosticRegistration = compiler.onDiagnostic((diagnostic: any) => {
 				const severity = diagnostic.severity
 					? String(diagnostic.severity).toLowerCase()
@@ -182,7 +187,7 @@ self.addEventListener('message', async (event) => {
 				if (fileName && !currentSourcePaths.has(fileName)) {
 					return;
 				}
-				self.postMessage({
+				const diagnosticMessage = {
 					diagnostic: {
 						fileName,
 						lineNumber: Number(diagnostic.lineNumber) || 1,
@@ -195,7 +200,9 @@ self.addEventListener('message', async (event) => {
 									: 'error',
 						message: String(diagnostic.message || '')
 					}
-				});
+				};
+				diagnosticMessages.push(diagnosticMessage);
+				self.postMessage(diagnosticMessage);
 			});
 			const disposeDiagnosticRegistration = () => {
 				if (typeof diagnosticRegistration === 'function') {
@@ -258,6 +265,10 @@ self.addEventListener('message', async (event) => {
 			compiledWasm = new Uint8Array(compiler.getWebAssemblyOutputFile('app.wasm'));
 			compiledActivePath = sourcePath;
 			compiledWorkspaceFiles = sourceFiles.map((file) => ({ ...file }));
+			compiledDiagnostics = diagnosticMessages;
+		} else {
+			// Every operation has its own diagnostic sink, even when compilation is reused.
+			for (const diagnostic of compiledDiagnostics) self.postMessage(diagnostic);
 		}
 
 		if (prepare) {
