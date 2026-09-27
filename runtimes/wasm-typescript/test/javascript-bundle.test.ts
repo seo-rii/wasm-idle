@@ -18,7 +18,9 @@ async function run(runtime: any, code: string, options: Record<string, unknown> 
 	const compiler = await runtime.createTypeScriptCompiler();
 	const result = await compiler.compile({ code, language });
 	expect(result.success, result.stderr).toBe(true);
-	return await runtime.executeBrowserTypeScriptArtifact(result.artifact, options);
+	const execution = await runtime.executeBrowserTypeScriptArtifact(result.artifact, options);
+	expect(execution.exitCode, execution.stderr).toBe(0);
+	return execution;
 }
 
 it('produces a substantially smaller, self-contained JavaScript entry', async () => {
@@ -32,7 +34,6 @@ it('produces a substantially smaller, self-contained JavaScript entry', async ()
 it('runs real JavaScript and standard output through the unchanged runner', async () => {
 	const result = await run(javascript, 'console.log(21 * 2);');
 	expect(result.stdout).toBe('42\n');
-	expect(result.exitCode).toBe(0);
 });
 
 it('preserves stdin and the existing fs builtin', async () => {
@@ -43,9 +44,12 @@ it('preserves stdin and the existing fs builtin', async () => {
 	expect(result.stdout).toBe('42\n');
 });
 
-it('preserves Unicode and buffer builtin semantics', async () => {
-	const result = await run(javascript, 'const { Buffer } = require("buffer"); console.log(Buffer.from("안녕").toString("utf8"));');
-	expect(result.stdout).toBe('안녕\n');
+it('preserves Unicode and buffer builtin semantics in both bundles', async () => {
+	for (const runtime of [javascript, typescript]) {
+		// Buffer is already an injected global in the existing runner.
+		const result = await run(runtime, 'const { Buffer: B } = require("buffer"); console.log(B.from("안녕").toString("utf8"));');
+		expect(result.stdout).toBe('안녕\n');
+	}
 });
 
 it('reports unsupported TypeScript explicitly rather than silently ignoring types', async () => {
