@@ -12,12 +12,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          fetch-depth: 1
           sparse-checkout: .github/runtime-followup
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - name: Assemble scoped source snapshots and tests
+          node-version: '24'
+      - name: Assemble scoped source snapshots
         shell: bash
         run: |
           set -euo pipefail
@@ -28,12 +27,19 @@ jobs:
             git archive "$ref" src packages scripts runtimes producers package.json pnpm-lock.yaml tsconfig.json vite.config.ts | tar -x -C "/tmp/recovery/$name"
           done
           cp -a .github/runtime-followup /tmp/recovery/helper/
-          git diff f85d57670dcadfc60d60b6d31d2088c27dcc3688 d558a0abebbb218fea11cc657474355fc46fecb5 > /tmp/recovery/java.diff
-          git diff f85d57670dcadfc60d60b6d31d2088c27dcc3688 3abecc50d260ceadd00e9626323b5cca5b7b93a1 > /tmp/recovery/ruby.diff
-          git diff f85d57670dcadfc60d60b6d31d2088c27dcc3688 7ec45071160435a6ae3675bc3cbcf73c8c138e52 > /tmp/recovery/rust.diff
-          npm install --prefix /tmp/recovery/tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.1.4 esbuild@0.27.3 prettier@3.8.3 @types/node@24.12.4 @bjorn3/browser_wasi_shim@0.4.2 wabt@1.0.39 buffer@6.0.3 svelte@5.55.4
-          tar -C /tmp/recovery -czf /tmp/runtime-continuation.tar.gz .
+          for pair in java:d558a0abebbb218fea11cc657474355fc46fecb5 ruby:3abecc50d260ceadd00e9626323b5cca5b7b93a1 rust:7ec45071160435a6ae3675bc3cbcf73c8c138e52; do
+            git diff f85d57670dcadfc60d60b6d31d2088c27dcc3688 "${pair#*:}" -- src packages scripts runtimes producers > "/tmp/recovery/${pair%%:*}.diff"
+          done
+      - name: Install isolated test tools
+        run: |
+          printf '{"private":true,"type":"module"}' > /tmp/recovery/tools/package.json
+          cd /tmp/recovery/tools
+          npm install --legacy-peer-deps --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.1.4 esbuild@0.27.3 prettier@3.8.3 @types/node@24.12.4 @bjorn3/browser_wasi_shim@0.4.2 wabt@1.0.39 buffer@6.0.3 svelte@5.55.4
+      - name: Archive sources and tools
+        if: always()
+        run: tar -C /tmp/recovery -czf /tmp/runtime-continuation.tar.gz .
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: runtime-continuation-workspace
           path: /tmp/runtime-continuation.tar.gz
