@@ -319,6 +319,10 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		typescript: {
 			moduleUrl: asset('wasm-typescript/index.js', WASM_TYPESCRIPT_ASSET_VERSION),
+			javascriptModuleUrl: asset(
+				'wasm-typescript/javascript.js',
+				WASM_TYPESCRIPT_ASSET_VERSION
+			),
 			libUrl: asset('lsp/typescript-libs.json.gz', WASM_TYPESCRIPT_ASSET_VERSION)
 		},
 		wat: {
@@ -338,6 +342,7 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			manifestFingerprint: WASM_LISP_ASSET_VERSION
 		},
 		ruby: {
+			splitStdlib: true,
 			baseUrl: asset('wasm-ruby/'),
 			manifestUrl: asset(
 				`wasm-ruby/${RUBY_RUNTIME_MANIFEST_PATH}`,

@@ -1,0 +1,103 @@
+{
+  "format": "wasm-ruby-split-v1",
+  "profileId": "ruby-3.4.1-ruby-wasm-2.9.3-2.9.4-split-stdlib-v1",
+  "source": {
+    "embeddedManifestFingerprint": "e8b1ff472882d0580a235bf31715b699fbb70d75d09ad0dc88b19ba7f42d9ed2",
+    "npmPackages": [
+      {
+        "name": "@ruby/3.4-wasm-wasi",
+        "version": "2.9.3-2.9.4",
+        "requestedRange": "2.9.3-2.9.4",
+        "tarballUrl": "https://registry.npmjs.org/@ruby/3.4-wasm-wasi/-/3.4-wasm-wasi-2.9.3-2.9.4.tgz",
+        "tarballBytes": 29998123,
+        "tarballSha256": "92c1821dd2f03e20d23a3ca86e1d844571722eab88bc168dd659fff1bc987ad4",
+        "integrity": "sha512-Ze2grGTnyT6meSI1j5NHKIpeadecOsMuKAjPFeyU5K85MSeHJWZdNXS7QLF0a0E1kIwQcYHafU10Gz5fPqECsw==",
+        "attestationUrl": "https://registry.npmjs.org/-/npm/v1/attestations/@ruby%2f3.4-wasm-wasi@2.9.3-2.9.4",
+        "repository": "https://github.com/ruby/ruby.wasm",
+        "revision": "3318796e2c9f0f75c98c669cabdc422cf8218ec2",
+        "license": "MIT",
+        "files": 20,
+        "bytes": 97451582,
+        "treeSha256": "b3e9c5a8939d5fe7b7af968ada4f04020846915536f331a4c87f953778ce3778"
+      },
+      {
+        "name": "@ruby/wasm-wasi",
+        "version": "2.9.3-2.9.4",
+        "requestedRange": "2.9.3-2.9.4",
+        "tarballUrl": "https://registry.npmjs.org/@ruby/wasm-wasi/-/wasm-wasi-2.9.3-2.9.4.tgz",
+        "tarballBytes": 84917,
+        "tarballSha256": "47487299c5be0e32cd6d761b6a11afd63d01b60da8362849fda5e0e007242997",
+        "integrity": "sha512-WxW9wON/TIf+8Ktng8qDJeV/6iH8kw+YwxOsOyXdAdLJgfYDPAXOqpIVd/96y2C9V8VJ2yqZm/IRv6nLeV6EKg==",
+        "attestationUrl": "https://registry.npmjs.org/-/npm/v1/attestations/@ruby%2fwasm-wasi@2.9.3-2.9.4",
+        "repository": "https://github.com/ruby/ruby.wasm",
+        "revision": "3318796e2c9f0f75c98c669cabdc422cf8218ec2",
+        "license": "MIT",
+        "files": 50,
+        "bytes": 472758,
+        "treeSha256": "9971e5cbb59e695715351d31c4c7079de5a678de63de87b814e4ee76b0adddf3"
+      },
+      {
+        "name": "@bjorn3/browser_wasi_shim",
+        "version": "0.4.2",
+        "requestedRange": "^0.4.2",
+        "tarballUrl": "https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz",
+        "tarballBytes": 31373,
+        "tarballSha256": "9c0281520d0e99f027ec7c1c79b4036c0f8168ed9bf98aba19db4737a1333782",
+        "integrity": "sha512-/iHkCVUG3VbcbmEHn5iIUpIrh7a7WPiwZ3sHy4HZKZzBdSadwdddYDZAII2zBvQYV0Lfi8naZngPCN7WPHI/hA==",
+        "attestationUrl": null,
+        "repository": "https://github.com/bjorn3/browser_wasi_shim",
+        "revision": "4a55f2a519d0ddfa7e4609c42e0c9769c37c9ae8",
+        "license": "MIT OR Apache-2.0",
+        "files": 26,
+        "bytes": 114555,
+        "treeSha256": "4454a5e0d68941440b947fdb705f8aa8fca789c5a3d040902bfe2cda8ffde248"
+      }
+    ],
+    "embeddedWasm": {
+      "bytes": 30608059,
+      "sha256": "81bc8bbb2130ea34f30826e03d850661bb6cb1c7fe72be598584f12b2810c9de"
+    },
+    "coreWasm": {
+      "bytes": 16626499,
+      "sha256": "0b8058bf32efd1edb51f5c2116d19c7680e07884fafa6b37ceb49212fee96152"
+    }
+  },
+  "mountPaths": [
+    "/usr",
+    "/usr/local",
+    "/usr/local/lib",
+    "/usr/local/lib/ruby",
+    "/usr/local/lib/ruby/3.4.0",
+    "/usr/local/lib/ruby/gems",
+    "/usr/local/lib/ruby/gems/3.4.0",
+    "/bundle"
+  ],
+  "fileCount": 1918,
+  "directoryCount": 439,
+  "assets": {
+    "module": {
+      "path": "runtime.mjs.bin",
+      "encoding": "identity",
+      "bytes": 54623,
+      "sha256": "d832ed230a34df7db0a7ed823d4fc974fb532b532e0b0de0ad76033acec05b71",
+      "logicalBytes": 54623,
+      "logicalSha256": "d832ed230a34df7db0a7ed823d4fc974fb532b532e0b0de0ad76033acec05b71"
+    },
+    "wasm": {
+      "path": "ruby-core.wasm.gz.bin",
+      "encoding": "gzip",
+      "bytes": 5048770,
+      "sha256": "116edf97a5fbe0ec4451692ae3c0b03157e8e9b8979fee1e3c2b226eb11c511a",
+      "logicalBytes": 16626499,
+      "logicalSha256": "0b8058bf32efd1edb51f5c2116d19c7680e07884fafa6b37ceb49212fee96152"
+    },
+    "stdlib": {
+      "path": "stdlib.pack.gz.bin",
+      "encoding": "gzip",
+      "bytes": 4016901,
+      "sha256": "3fba398455d2e32eb847906c3d9a2c616c45ece5620477739766b1222b8f1fc1",
+      "logicalBytes": 14791446,
+      "logicalSha256": "245a8cae10b581a1119d8b9ab6f993b447d31828a483d69a210d4d5e03c2d7b9"
+    }
+  }
+}

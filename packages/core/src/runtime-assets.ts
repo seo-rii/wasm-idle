@@ -74,7 +74,7 @@ export interface RuntimeAssetKeySource {
 		manifestReceipt?: RuntimeAssetIntegrityEntry;
 		assetReceipts?: RuntimeAssetIntegrityMap;
 	};
-	typescript?: { moduleUrl?: string; libUrl?: string };
+	typescript?: { moduleUrl?: string; javascriptModuleUrl?: string; libUrl?: string };
 	wat?: { moduleUrl?: string };
 	lua?: { moduleUrl?: string };
 	haskell?: {
@@ -111,6 +111,7 @@ export interface RuntimeAssetKeySource {
 	};
 	lisp?: { moduleUrl?: string; manifestUrl?: string; manifestFingerprint?: string };
 	ruby?: {
+		splitStdlib?: boolean;
 		baseUrl?: string;
 		manifestUrl?: string;
 		moduleUrl?: string;
@@ -691,6 +692,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		serialize: hasValue
 	},
 	{ runtime: 'typescript', property: 'moduleUrl', key: 'typeScriptModuleUrl' },
+	{ runtime: 'typescript', property: 'javascriptModuleUrl', key: 'javaScriptModuleUrl' },
 	{ runtime: 'typescript', property: 'libUrl', key: 'typeScriptLibUrl' },
 	{ runtime: 'wat', property: 'moduleUrl', key: 'watModuleUrl' },
 	{ runtime: 'lua', property: 'moduleUrl', key: 'luaModuleUrl' },
@@ -762,6 +764,12 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'ruby', property: 'manifestUrl', key: 'rubyManifestUrl' },
 	{ runtime: 'ruby', property: 'moduleUrl', key: 'rubyModuleUrl' },
 	{ runtime: 'ruby', property: 'wasmUrl', key: 'rubyWasmUrl' },
+	{
+		runtime: 'ruby',
+		property: 'splitStdlib',
+		key: 'rubySplitStdlib',
+		serialize: (value) => value === true
+	},
 	{ runtime: 'ruby', property: 'profileId', key: 'rubyProfileId' },
 	{ runtime: 'ruby', property: 'artifactRevision', key: 'rubyArtifactRevision' },
 	{ runtime: 'ruby', property: 'rubyVersion', key: 'rubyVersion' },

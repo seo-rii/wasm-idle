@@ -1,6 +1,10 @@
 import type { ResolvedRubyRuntimeAssetConfig } from '$lib/playground/assets';
 import {
 	preflightRubyRuntimeAssets,
+	preflightRubySplitRuntimeAssets,
+	RUBY_SPLIT_PROTOCOL,
+	requireRubySplitPayload,
+	type RubySplitPayload,
 	requireRubyRuntimePreflightPayload,
 	type ExecutionLimits,
 	type RubyRuntimePreflightPayload,
@@ -18,9 +22,9 @@ export interface RubyRuntimePreflightOptions {
 export type RubyRuntimePreflightDeliveryState = 'available' | 'consumed' | 'retired';
 
 export interface RubyRuntimeOwnedPreflightDelivery {
-	readonly payload: RubyRuntimePreflightPayload;
+	readonly payload: RubyRuntimePreflightPayload | RubySplitPayload;
 	readonly state: RubyRuntimePreflightDeliveryState;
-	consume(): readonly [ArrayBuffer, ArrayBuffer, ArrayBuffer];
+	consume(): readonly ArrayBuffer[];
 	retire(): void;
 }
 
@@ -55,11 +59,17 @@ export function createRubyRuntimeOwnedPreflightDelivery(
 	if (!isPlainFrozenRecord(value)) {
 		throw new TypeError('Ruby runtime preflight delivery requires one frozen plain payload');
 	}
-	const payload = requireRubyRuntimePreflightPayload(value);
+	const payload =
+		Object.getOwnPropertyDescriptor(value, 'protocol')?.value === RUBY_SPLIT_PROTOCOL
+			? requireRubySplitPayload(value)
+			: requireRubyRuntimePreflightPayload(value);
 	const transferables = [
 		requireOwnedWholeBuffer(payload.manifestBytes, 'manifest bytes'),
 		requireOwnedWholeBuffer(payload.moduleJavaScriptBytes, 'module JavaScript bytes'),
-		requireOwnedWholeBuffer(payload.wasmBytes, 'Wasm bytes')
+		requireOwnedWholeBuffer(payload.wasmBytes, 'Wasm bytes'),
+		...('stdlibBytes' in payload
+			? [requireOwnedWholeBuffer(payload.stdlibBytes, 'stdlib bytes')]
+			: [])
 	] as const;
 	if (new Set(transferables).size !== transferables.length) {
 		throw new TypeError('Ruby runtime preflight byte buffers must have unique ownership');
@@ -86,7 +96,9 @@ export function createRubyRuntimeOwnedPreflightDelivery(
 export async function preflightVerifiedRubyRuntimeAssets(
 	config: ResolvedRubyRuntimeAssetConfig,
 	options: RubyRuntimePreflightOptions = {}
-): Promise<RubyRuntimePreflightPayload> {
+): Promise<RubyRuntimePreflightPayload | RubySplitPayload> {
+	if (config.splitStdlib)
+		return await preflightRubySplitRuntimeAssets({ baseUrl: config.baseUrl, ...options });
 	return await preflightRubyRuntimeAssets({
 		baseUrl: config.baseUrl,
 		manifestUrl: config.manifestUrl,

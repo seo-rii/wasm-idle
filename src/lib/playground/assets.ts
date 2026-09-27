@@ -202,6 +202,8 @@ export interface ErlangRuntimeAssetConfig {
 
 export interface TypeScriptRuntimeAssetConfig {
 	moduleUrl?: string;
+	/** Optional official JavaScript-only bundle; must match its generated receipt. */
+	javascriptModuleUrl?: string;
 	libUrl?: string;
 }
 
@@ -265,6 +267,8 @@ export interface ResolvedLispRuntimeAssetConfig {
 }
 
 export interface RubyRuntimeAssetConfig {
+	/** Keep full stdlib compatibility, but load its data separately from the core Wasm. */
+	splitStdlib?: boolean;
 	baseUrl?: string;
 	manifestUrl?: string;
 	moduleUrl?: string;
@@ -283,6 +287,7 @@ export interface RubyRuntimeAssetConfig {
 }
 
 export interface ResolvedRubyRuntimeAssetConfig {
+	splitStdlib?: boolean;
 	baseUrl: string;
 	manifestUrl: string;
 	moduleUrl: string;
@@ -2013,6 +2018,7 @@ function snapshotRubyRuntimeAssetConfig(
 	if (!source) return undefined;
 	const snapshot: Record<string, unknown> = {};
 	for (const key of RUBY_RUNTIME_CONFIG_KEYS) snapshot[key] = source[key];
+	snapshot.splitStdlib = source.splitStdlib;
 	return Object.freeze(snapshot) as Readonly<RubyRuntimeAssetConfig>;
 }
 
@@ -2051,6 +2057,10 @@ export function resolveRubyRuntimeAssetConfig(
 	currentUrl = ''
 ): ResolvedRubyRuntimeAssetConfig {
 	const configured = snapshotRubyRuntimeAssetConfig(options);
+	if (configured?.splitStdlib !== undefined && typeof configured.splitStdlib !== 'boolean')
+		throw new RuntimeConfigurationError('Ruby splitStdlib must be a boolean', {
+			runtimeId: 'RUBY'
+		});
 	const publicModuleUrl = (publicEnv.PUBLIC_WASM_RUBY_MODULE_URL || '').trim();
 	const publicWasmUrl = (publicEnv.PUBLIC_WASM_RUBY_WASM_URL || '').trim();
 	const usesCustomTrustBoundary = Boolean(
@@ -2083,6 +2093,15 @@ export function resolveRubyRuntimeAssetConfig(
 			{ cause, runtimeId: 'RUBY' }
 		);
 	}
+	if (
+		configured?.splitStdlib &&
+		JSON.stringify(preflightProfile) !==
+			JSON.stringify(snapshotRubyRuntimePreflightProfile(RUBY_RUNTIME_BUNDLE.profile))
+	)
+		throw new RuntimeConfigurationError(
+			'Ruby split stdlib is supported only for the bundled profile',
+			{ runtimeId: 'RUBY' }
+		);
 	const baseUrl = resolveRubyBaseUrlFromSnapshot(options, configured, currentUrl);
 	const resolvePinnedUrl = (configuredUrl: string | undefined, path: string, pin: string) => {
 		const sentinelOrigin = 'https://wasm-idle.invalid';
@@ -2133,11 +2152,13 @@ export function resolveRubyRuntimeAssetConfig(
 		preflightProfile.wasmReceipt.sha256
 	);
 	return {
+		...(configured?.splitStdlib === true ? { splitStdlib: true } : {}),
 		baseUrl,
 		manifestUrl,
 		moduleUrl,
 		wasmUrl,
 		preflightKey: JSON.stringify({
+			...(configured?.splitStdlib === true ? { splitStdlib: true } : {}),
 			baseUrl,
 			manifestUrl,
 			moduleUrl,
