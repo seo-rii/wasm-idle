@@ -40,6 +40,9 @@ let stdinBufferPyodide: Int32Array,
 	baseUrl = '',
 	useAssetBridge = false;
 
+// Only the next matching run may reuse a successful package preparation.
+let preparedPackagesKey: string | undefined;
+
 const imageHook = `
 if not globals().get("__wasm_idle_img_inited__", False):
     globals()["__wasm_idle_img_inited__"] = True
@@ -205,8 +208,9 @@ function postProgress(percent: number, stage: string) {
 	self.postMessage({ progress: { percent, stage } });
 }
 
-async function importRuntimeAssetModule(asset: string) {
-	const loaded = await loadWorkerRuntimeAsset(asset);
+async function importRuntimeAssetModule(
+	loaded: Awaited<ReturnType<typeof loadWorkerRuntimeAsset>>
+) {
 	const moduleUrl = URL.createObjectURL(
 		new Blob([loaded.bytes.slice().buffer], {
 			type: loaded.mimeType || 'text/javascript'
@@ -222,15 +226,22 @@ async function importRuntimeAssetModule(asset: string) {
 async function loadPyodide(path: string) {
 	if (pyodide) return;
 	const runtimeBaseUrl = path.endsWith('/') ? path : `${path}/`;
-	await importRuntimeAssetModule('pyodide.asm.js');
+	// Download independent bootstrap files together, but preserve module evaluation order.
+	// The existing bounded loader (and host bridge, when configured) still owns every byte.
+	const [asmAsset, runtimeAsset, loadedLock] = await Promise.all([
+		loadWorkerRuntimeAsset('pyodide.asm.js'),
+		loadWorkerRuntimeAsset('pyodide.mjs'),
+		useAssetBridge ? undefined : loadWorkerRuntimeAsset('pyodide-lock.json')
+	]);
+	await importRuntimeAssetModule(asmAsset);
 	const runtimeModule = (await importRuntimeAssetModule(
-		'pyodide.mjs'
+		runtimeAsset
 	)) as typeof import('pyodide');
 	let packageBaseUrl = runtimeBaseUrl;
 	let lockFileContents: Lockfile | undefined;
 	if (!useAssetBridge) {
 		packageBaseUrl = resolvePinnedPackageBaseUrl(runtimeModule.version);
-		const loadedLock = await loadWorkerRuntimeAsset('pyodide-lock.json');
+		if (!loadedLock) throw new Error('Python runtime lock file is unavailable');
 		const parsedLock = parsePythonPackageLock(loadedLock.bytes);
 		// The interceptor caps downloaded (including browser-decoded transport) archive bytes.
 		// Pyodide owns package extraction after receiving that bounded archive.
@@ -252,6 +263,19 @@ async function loadPyodide(path: string) {
 async function loadPackages(code: string) {
 	if (!code) return;
 	await pyodide.loadPackagesFromImports(code);
+}
+
+function packagePreparationKey(
+	code: string,
+	activePath: string | undefined,
+	files: { path: string; content: string }[] = []
+) {
+	// Keep source boundaries and paths: joining contents alone can alias different workspaces.
+	return JSON.stringify([
+		code,
+		activePath ?? null,
+		files.map(({ path, content }) => [path, content])
+	]);
 }
 
 function normalizeWorkspacePath(path: string) {
@@ -294,6 +318,7 @@ self.onmessage = async (event: any) => {
 		workspaceFiles
 	} = event.data;
 	if (load) {
+		preparedPackagesKey = undefined;
 		try {
 			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
 			baseUrl = runtimeAssets?.baseUrl || baseUrl;
@@ -309,9 +334,11 @@ self.onmessage = async (event: any) => {
 			self.postMessage({ error: e.message || 'Unknown error' });
 		}
 	} else if (prepare) {
+		preparedPackagesKey = undefined;
 		postMessage({ output: 'Loading packages...' });
 		try {
 			postProgress(5, 'Preparing Python workspace');
+			const preparationKey = packagePreparationKey(code, activePath, workspaceFiles);
 			await loadPyodide(baseUrl);
 			writeWorkspaceFiles(workspaceFiles);
 			postProgress(15, 'Resolving Python imports');
@@ -321,22 +348,30 @@ self.onmessage = async (event: any) => {
 					...(workspaceFiles || []).map((file: { content: string }) => file.content)
 				].join('\n')
 			);
+			preparedPackagesKey = preparationKey;
 			postProgress(100, 'Python packages ready');
 			postMessage({ output: ' Done.\n\r' });
 			self.postMessage({ results: true });
 		} catch (e: any) {
+			preparedPackagesKey = undefined;
 			self.postMessage({ error: e.message || 'Unknown error' });
 		}
 	} else if (typeof code === 'string') {
+		const preparedKey = preparedPackagesKey;
+		// Consume before any await or user code, including executions that fail. Python can
+		// mutate imports and the filesystem, so this is not a cross-execution package cache.
+		preparedPackagesKey = undefined;
 		try {
 			await loadPyodide(baseUrl);
 			writeWorkspaceFiles(workspaceFiles);
-			await loadPackages(
-				[
-					code,
-					...(workspaceFiles || []).map((file: { content: string }) => file.content)
-				].join('\n')
-			);
+			if (preparedKey !== packagePreparationKey(code, activePath, workspaceFiles)) {
+				await loadPackages(
+					[
+						code,
+						...(workspaceFiles || []).map((file: { content: string }) => file.content)
+					].join('\n')
+				);
+			}
 		} catch (e: any) {
 			self.postMessage({ error: e.message || 'Unknown error' });
 			return;
