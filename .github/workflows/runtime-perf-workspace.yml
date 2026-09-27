@@ -24,8 +24,7 @@ jobs:
           expected = '30eddec3cf2a51aa797f2186bf5433de57dd5e78551d8a77ed9ff563a82fd314'
           if hashlib.sha256(blob).hexdigest() != expected:
               encoded = base64.b64encode(blob).decode()
-              repaired = encoded.replace('G6y6Yq', 'G6yYq')
-              blob = base64.b64decode(repaired + '===')
+              blob = base64.b64decode(encoded.replace('G6y6Yq', 'G6yYq') + '===')
           assert hashlib.sha256(blob).hexdigest() == expected, 'Source patch transport checksum mismatch'
           Path('/tmp/javascript.patch').write_bytes(gzip.decompress(blob))
           PY
@@ -41,6 +40,8 @@ jobs:
           git apply /tmp/javascript.patch
           ln -s /tmp/test-tools/node_modules node_modules
           ln -s /tmp/test-tools/node_modules runtimes/wasm-typescript/node_modules
+          mkdir -p .svelte-kit
+          printf '{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"bundler"}}' > .svelte-kit/tsconfig.json
           cd runtimes/wasm-typescript
           node /tmp/test-tools/node_modules/typescript/bin/tsc -p tsconfig.json --emitDeclarationOnly
           node scripts/build.mjs
@@ -66,8 +67,6 @@ jobs:
           Path('/tmp/javascript-size-report.json').write_text(json.dumps({k:v for k,v in manifest['sizes'].items() if 'wasm-typescript/' in k}, indent=2))
           PY
           node scripts/sync-wasm-typescript.mjs --verify
-          mkdir -p .svelte-kit
-          printf '{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"bundler"}}' > .svelte-kit/tsconfig.json
           printf 'export const env = {};' > /tmp/empty-env.mjs
           printf 'globalThis.window={location:new URL("https://example.test/")}; globalThis.history={replaceState(_a,_b,url){window.location=new URL(url,window.location);}};' > /tmp/js-test-setup.mjs
           cat > /tmp/js-config.mjs <<'JS'
