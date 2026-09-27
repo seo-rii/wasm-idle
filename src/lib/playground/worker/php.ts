@@ -11,6 +11,9 @@ let runtimeModuleUrl = '';
 let phpPromise: Promise<PhpRuntime> | null = null;
 let workspaceDirty = false;
 
+// A superseded attempt must not send errors to a newer load or run's listener.
+class SupersededPhpStartup extends Error {}
+
 interface PhpRuntime {
 	mkdir(path: string): void;
 	rmdir(path: string, options?: { recursive?: boolean }): void;
@@ -38,10 +41,16 @@ async function loadPhp(moduleUrl: string, log = true) {
 		workspaceDirty = false;
 	}
 	if (phpPromise) return await phpPromise;
-	phpPromise = (async () => {
+	const operation = Promise.resolve().then(async () => {
 		postProgress(5);
 		const runtime = await importRuntimeModule<PhpRuntimeModule>(moduleUrl);
+		if (phpPromise !== operation || runtimeModuleUrl !== moduleUrl) {
+			throw new SupersededPhpStartup('PHP runtime startup was superseded.');
+		}
 		const php = await runtime.createPhp84();
+		if (phpPromise !== operation || runtimeModuleUrl !== moduleUrl) {
+			throw new SupersededPhpStartup('PHP runtime startup was superseded.');
+		}
 		postProgress(95);
 		php.mkdir('/workspace');
 		if (log) {
@@ -49,8 +58,18 @@ async function loadPhp(moduleUrl: string, log = true) {
 		}
 		postProgress(100);
 		return php;
-	})();
-	return await phpPromise;
+	});
+	phpPromise = operation;
+	try {
+		return await operation;
+	} catch (error) {
+		// Failed speculative startup must not poison the later explicit Run.
+		// A stale attempt must never clear a newer configuration's runtime.
+		if (phpPromise !== operation)
+			throw new SupersededPhpStartup('PHP runtime startup was superseded.');
+		phpPromise = null;
+		throw error;
+	}
 }
 
 function prepareWorkspace(php: PhpRuntime) {
@@ -301,6 +320,7 @@ self.onmessage = async (event: { data: any }) => {
 		}
 		postMessage({ results: true });
 	} catch (error: any) {
+		if (error instanceof SupersededPhpStartup) return;
 		if (log) {
 			console.error('[wasm-idle:php-worker] failed', error);
 		}
