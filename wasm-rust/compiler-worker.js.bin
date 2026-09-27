@@ -1,4 +1,6 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
+import { compileRustcThroughPort } from './rustc-module-service.js';
+import { compileOwnedRustcModule } from './rustc-module.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
 import { resolveBrowserRustDebugMode, resolveBrowserRustThreadPoolSize, resolveBrowserRustWorkerLimits } from './compiler-support.js';
@@ -147,7 +149,9 @@ async function compileRustInWorker(request) {
         bytesCompleted: rustcBytes.byteLength,
         bytesTotal: rustcBytes.byteLength
     });
-    const rustcModulePromise = WebAssembly.compile(new Uint8Array(rustcBytes).buffer);
+    const rustcModulePromise = request.rustcModulePort
+        ? compileRustcThroughPort(rustcBytes, request.rustcModulePort, Math.max(120_000, request.manifest.compiler.compileTimeoutMs))
+        : compileOwnedRustcModule(rustcBytes);
     let fetchedSysrootFiles = 0;
     let fetchedSysrootBytes = 0;
     let rustcModule;
