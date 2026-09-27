@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import { chromium } from '@playwright/test';
+import { chromium } from 'playwright-core';
 
 const root = path.resolve(process.argv[2] || 'producers/wasm-php/dist');
 const manifest = JSON.parse(await readFile(path.join(root, 'runtime-manifest.v1.json'), 'utf8'));
@@ -67,7 +67,7 @@ const server = createServer(async (req, res) => {
 	}
 });
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-const browser = await chromium.launch({ channel: 'chrome', headless: true });
+const browser = await chromium.launch({ headless: true });
 try {
 	for (const mode of ['asyncify', 'jspi']) {
 		reset();
