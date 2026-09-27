@@ -1,9 +1,9 @@
-name: PHP verified parallel startup validation
+name: PHP final startup and distribution validation
 on:
   push:
     branches: [chore/runtime-finish-20260927]
 permissions:
-  contents: read
+  contents: write
 jobs:
   php:
     runs-on: ubuntu-latest
@@ -11,63 +11,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
           sparse-checkout: .github/runtime-finish
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Apply the reviewed source patch
+      - name: Execute regression tests, real PHP engines and publish verified distribution
         shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import gzip,hashlib
-          from pathlib import Path
-          b=Path('.github/runtime-finish/php.patch.gz').read_bytes()
-          assert hashlib.sha256(b).hexdigest()=='f98ba1331ba7d0fb49bf7a9e54b2fd91d1901e9c943abca8759ce89e7366ad7a', 'PHP source patch checksum mismatch'
-          Path('/tmp/php.patch').write_bytes(gzip.decompress(b))
-          PY
-          git fetch --depth=1 origin f85d57670dcadfc60d60b6d31d2088c27dcc3688
-          git worktree add --detach /tmp/change f85d57670dcadfc60d60b6d31d2088c27dcc3688
-          cd /tmp/change
-          git sparse-checkout set producers/wasm-php scripts src packages/core static/wasm-php
-          git apply /tmp/php.patch
-          mkdir -p /tmp/test-tools /tmp/producer-tools .svelte-kit
-          printf '{"private":true,"type":"module"}' > /tmp/test-tools/package.json
-          printf '{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"bundler"}}' > .svelte-kit/tsconfig.json
-          node --input-type=module -e "import fs from 'node:fs';const p=JSON.parse(fs.readFileSync('producers/wasm-php/package.json'));fs.writeFileSync('/tmp/producer-tools/package.json',JSON.stringify({private:true,type:'module',dependencies:{...p.dependencies,...p.devDependencies}}));"
-          cd /tmp/test-tools
-          npm install --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.1.4 @types/node@24.12.4 @playwright/test@1.59.1
-          cd /tmp/producer-tools
-          npm install --ignore-scripts --no-audit --no-fund
-          ln -s /tmp/test-tools/node_modules /tmp/change/node_modules
-          ln -s /tmp/producer-tools/node_modules /tmp/change/producers/wasm-php/node_modules
-      - name: Typecheck, build, verify and execute the real PHP engines
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd /tmp/change
-          node /tmp/test-tools/node_modules/typescript/bin/tsc --noEmit -p producers/wasm-php/tsconfig.json
-          printf 'export default {test:{environment:"node",include:["src/lib/wasm-php-startup.test.ts"]}};' > /tmp/php-config.mjs
-          node /tmp/test-tools/node_modules/vitest/vitest.mjs run --config /tmp/php-config.mjs --reporter=verbose
-          node producers/wasm-php/scripts/build.mjs
-          find producers/wasm-php/dist -type f -printf '%P %s bytes\n'
-          node producers/wasm-php/scripts/verify.mjs
-          node scripts/probe-wasm-php-startup.mjs producers/wasm-php/dist
-          git diff --check
-      - name: Export build and source for inspection
-        if: always()
-        shell: bash
-        run: |
-          if [ -d /tmp/change/producers/wasm-php/dist ]; then tar -C /tmp/change/producers/wasm-php -czf /tmp/php-startup-dist.tar.gz dist; fi
-          cd /tmp/change
-          git diff --binary > /tmp/php-build-diff.patch
+        run: bash .github/runtime-finish/publish-php.sh 2>&1 | tee /tmp/php-final-validation.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: php-startup-validation
-          path: |
-            /tmp/php-startup-dist.tar.gz
-            /tmp/php-build-diff.patch
+          name: php-final-validation
+          path: /tmp/php-final-validation.log
           retention-days: 1
-          compression-level: 0

@@ -1,0 +1,45 @@
+diff --git a/scripts/probe-wasm-php-startup.mjs b/scripts/probe-wasm-php-startup.mjs
+index defc306..3c9f348 100644
+--- a/scripts/probe-wasm-php-startup.mjs
++++ b/scripts/probe-wasm-php-startup.mjs
+@@ -90,7 +90,7 @@ try {
+ 					a.writeFile('/tmp/private-state.txt', 'owned by first PHP VM');
+ 					const first = await a.run({
+ 						code: '<?php echo json_encode([strlen(file_get_contents("php://input")), file_get_contents("/tmp/private-state.txt")]);',
+-						body: 'hello'
++						body: new TextEncoder().encode('hello')
+ 					});
+ 					const b = await api.createPhp84({ asyncMode: mode });
+ 					const second = await b.run({
+diff --git a/src/lib/wasm-php-startup.test.ts b/src/lib/wasm-php-startup.test.ts
+index 1273495..ba1feaa 100644
+--- a/src/lib/wasm-php-startup.test.ts
++++ b/src/lib/wasm-php-startup.test.ts
+@@ -24,11 +24,17 @@ function fixture(supported = true, timeout = 1000) {
+ 		url: `https://example.test/${mode}.wasm`,
+ 		bytes: wasm.length,
+ 		sha256: createHash('sha256').update(wasm).digest('hex'),
+-		load: vi.fn(async () => ({ name: mode }))
++		load: vi.fn(async () => ({
++			dependencyFilename: `https://example.test/${mode}.wasm`,
++			dependenciesTotalSize: wasm.length,
++			init() {
++				throw new Error('Startup tests must not initialize a PHP VM');
++			}
++		}))
+ 	});
+ 	const assets = { jspi: asset('jspi'), asyncify: asset('asyncify') };
+ 	const detect = vi.fn(async () => supported);
+-	const fetch = vi.fn(async () => new Response(wasm.slice()));
++	const fetch = vi.fn<typeof globalThis.fetch>(async (_url, _init) => new Response(wasm.slice()));
+ 	vi.stubGlobal('fetch', fetch);
+ 	return {
+ 		assets,
+@@ -143,7 +149,6 @@ describe('PHP selected-engine startup', () => {
+ 	});
+ 	it('falls back to verified native compile without compileStreaming', async () => {
+ 		const f = fixture();
+-		vi.spyOn(WebAssembly, 'compileStreaming').mockImplementation(undefined as any);
+ 		// Remove the feature rather than emulate a rejected streaming compilation.
+ 		vi.stubGlobal('WebAssembly', {
+ 			...WebAssembly,
