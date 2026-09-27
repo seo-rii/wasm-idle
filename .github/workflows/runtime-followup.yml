@@ -1,33 +1,41 @@
-name: Ruby split profile and Rust module-cache validation
+name: Scoped runtime continuation workspace
 on:
   push:
     branches: [chore/runtime-followup-20260927]
 permissions:
-  contents: write
+  contents: read
 jobs:
-  verify:
-    strategy:
-      fail-fast: false
-      matrix:
-        change: [ruby, rust]
+  workspace:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
+          persist-credentials: false
+          fetch-depth: 1
           sparse-checkout: .github/runtime-followup
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-      - name: Install Rust sync dependency
-        if: matrix.change == 'rust'
-        run: npm install --prefix /tmp/tools --ignore-scripts --no-audit --no-fund prettier@3.8.3
-      - name: Validate source and publish canonical runtime assets
+          node-version: '22'
+      - name: Assemble scoped source snapshots and tests
         shell: bash
-        run: bash .github/runtime-followup/publish-${{ matrix.change }}.sh 2>&1 | tee /tmp/validation.log
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/recovery/{main,java,ruby,rust,prewarm,helper,tools}
+          for pair in main:f85d57670dcadfc60d60b6d31d2088c27dcc3688 java:d558a0abebbb218fea11cc657474355fc46fecb5 ruby:3abecc50d260ceadd00e9626323b5cca5b7b93a1 rust:7ec45071160435a6ae3675bc3cbcf73c8c138e52 prewarm:526c61dab30e08db2bdbf560317716aaec0d1024; do
+            name=${pair%%:*}; ref=${pair#*:}
+            git fetch --depth=1 origin "$ref"
+            git archive "$ref" src packages scripts runtimes producers package.json pnpm-lock.yaml tsconfig.json vite.config.ts | tar -x -C "/tmp/recovery/$name"
+          done
+          cp -a .github/runtime-followup /tmp/recovery/helper/
+          git diff f85d57670dcadfc60d60b6d31d2088c27dcc3688 d558a0abebbb218fea11cc657474355fc46fecb5 > /tmp/recovery/java.diff
+          git diff f85d57670dcadfc60d60b6d31d2088c27dcc3688 3abecc50d260ceadd00e9626323b5cca5b7b93a1 > /tmp/recovery/ruby.diff
+          git diff f85d57670dcadfc60d60b6d31d2088c27dcc3688 7ec45071160435a6ae3675bc3cbcf73c8c138e52 > /tmp/recovery/rust.diff
+          npm install --prefix /tmp/recovery/tools --ignore-scripts --no-audit --no-fund typescript@5.9.3 vitest@4.1.4 esbuild@0.27.3 prettier@3.8.3 @types/node@24.12.4 @bjorn3/browser_wasi_shim@0.4.2 wabt@1.0.39 buffer@6.0.3 svelte@5.55.4
+          tar -C /tmp/recovery -czf /tmp/runtime-continuation.tar.gz .
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: followup-${{ matrix.change }}-validation
-          path: /tmp/validation.log
+          name: runtime-continuation-workspace
+          path: /tmp/runtime-continuation.tar.gz
+          compression-level: 0
           retention-days: 1
