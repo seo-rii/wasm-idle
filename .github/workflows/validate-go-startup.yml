@@ -1,0 +1,48 @@
+name: Validate parallel Go startup
+on:
+  push:
+    branches: [perf/go-parallel-tool-startup]
+    paths: [.github/workflows/validate-go-startup.yml]
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/go-parallel-tool-startup
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter wasm-go...
+      - name: Register startup regressions in the normal package test directory
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('runtimes/wasm-go/src/tool-runtime.startup.test.ts')
+          target = Path('runtimes/wasm-go/test/tool-runtime.startup.test.ts')
+          if source.exists():
+              target.write_text(source.read_text().replace("new URL('./tool-runtime.ts', import.meta.url)", "new URL('../src/tool-runtime.ts', import.meta.url)"))
+              source.unlink()
+          p = Path('runtimes/wasm-go/test/compiler.test.ts')
+          text = p.read_text()
+          old = r'/wasip1\.(pack|index\.json)\.gz/'
+          new = r'/(wasip1\.(pack|index\.json)|tools\/compile\.wasm)\.gz/'
+          assert old in text or new in text
+          p.write_text(text.replace(old, new))
+          PY
+      - run: pnpm --dir runtimes/wasm-go run check
+      - run: pnpm --dir runtimes/wasm-go run test
+      - name: Commit only validated Go tests
+        run: |
+          git diff --check
+          git add runtimes/wasm-go/src/tool-runtime.startup.test.ts runtimes/wasm-go/test/tool-runtime.startup.test.ts runtimes/wasm-go/test/compiler.test.ts
+          if ! git diff --cached --quiet; then
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'test(go): exercise startup overlap in the full package suite'
+            git push origin HEAD:refs/heads/perf/go-parallel-tool-startup
+          fi
