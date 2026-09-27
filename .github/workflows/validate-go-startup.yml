@@ -8,7 +8,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,30 +20,20 @@ jobs:
         with:
           node-version: '22'
       - run: pnpm install --frozen-lockfile --ignore-scripts --filter wasm-go...
-      - name: Register startup regressions in the normal package test directory
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          source = Path('runtimes/wasm-go/src/tool-runtime.startup.test.ts')
-          target = Path('runtimes/wasm-go/test/tool-runtime.startup.test.ts')
-          if source.exists():
-              target.write_text(source.read_text().replace("new URL('./tool-runtime.ts', import.meta.url)", "new URL('../src/tool-runtime.ts', import.meta.url)"))
-              source.unlink()
-          p = Path('runtimes/wasm-go/test/compiler.test.ts')
-          text = p.read_text()
-          old = r'/wasip1\.(pack|index\.json)\.gz/'
-          if old in text:
-              p.write_text(text.replace(old, r'/(wasip1\.(pack|index\.json)|tools\/compile\.wasm)\.gz/'))
-          else:
-              assert r'compile\.wasm' in text
-          PY
       - run: pnpm --dir runtimes/wasm-go run check
       - run: pnpm --dir runtimes/wasm-go run test
-      - name: Commit only validated Go tests
+      - name: Rebuild browser JavaScript without rebuilding the Go toolchain
+        run: |
+          pnpm --dir runtimes/wasm-go run build
+          cp -a static/wasm-go/runtime runtimes/wasm-go/dist/runtime
+          pnpm --dir runtimes/wasm-go run probe:runtime
+          node scripts/sync-wasm-go.mjs
+      - name: Verify only Go delivery files changed
         run: |
           git diff --check
-          git add -A -- runtimes/wasm-go/src/tool-runtime.startup.test.ts runtimes/wasm-go/test/tool-runtime.startup.test.ts runtimes/wasm-go/test/compiler.test.ts
+          git diff --stat
+          git add -- static/wasm-go src/lib/playground/wasmGoVersion.ts
           if ! git diff --cached --quiet; then
-            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'test(go): exercise startup overlap in the full package suite'
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'build(go): refresh browser distribution after parallel startup optimization'
             git push origin HEAD:refs/heads/perf/go-parallel-tool-startup
           fi
