@@ -91,6 +91,22 @@ describe('real compiler preparation contract', () => {
 			expect.objectContaining({ language: 'vbnet', diagnosticTracing: true })
 		);
 	});
+	it('keeps the factory language when compile follows a parameterless prepare', async () => {
+		const rt = runtime();
+		const load = vi.spyOn(loader, 'loadDotnetCompilerRuntime').mockResolvedValue(rt);
+		const compiler = createDotnetCompiler({
+			language: 'csharp',
+			loadReferences: false
+		});
+
+		await compiler.prepare();
+		const result = await compiler.compile({ code: 'Console.WriteLine(42);' });
+
+		expect(load).toHaveBeenCalledTimes(2);
+		expect(load).toHaveBeenLastCalledWith(expect.objectContaining({ language: 'csharp' }));
+		expect(rt.compile).toHaveBeenCalledWith(expect.objectContaining({ language: 'csharp' }));
+		expect(result.artifact).toMatchObject({ language: 'csharp' });
+	});
 	it('validates unsupported languages before any loader starts', async () => {
 		const load = vi.spyOn(loader, 'loadDotnetCompilerRuntime');
 		const fetchImpl = vi.fn();

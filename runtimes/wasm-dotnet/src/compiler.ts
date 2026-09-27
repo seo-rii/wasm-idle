@@ -314,7 +314,10 @@ export function createDotnetCompiler(
 			]);
 		},
 		async compile(request) {
-			return await compileDotnet(request, dependencies);
+			return await compileDotnet(
+				{ ...request, language: request.language ?? options.language },
+				dependencies
+			);
 		}
 	};
 }
