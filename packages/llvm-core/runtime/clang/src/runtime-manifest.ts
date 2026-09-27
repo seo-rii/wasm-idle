@@ -42,6 +42,26 @@ function parseCompilerProvenance(value: unknown): RuntimeCompilerProvenance {
 	};
 }
 
+function parseSysrootProfiles(
+	value: unknown
+): NonNullable<RuntimeCompilerConfig['sysroot']['profiles']> {
+	const profiles = expectObject(value, 'root.compiler.sysroot.profiles');
+	return {
+		c: {
+			asset: expectString(
+				expectObject(profiles.c, 'root.compiler.sysroot.profiles.c').asset,
+				'root.compiler.sysroot.profiles.c.asset'
+			)
+		},
+		cppAddon: {
+			asset: expectString(
+				expectObject(profiles.cppAddon, 'root.compiler.sysroot.profiles.cppAddon').asset,
+				'root.compiler.sysroot.profiles.cppAddon.asset'
+			)
+		}
+	};
+}
+
 function parseCompilerConfig(value: unknown): RuntimeCompilerConfig {
 	const compiler = expectObject(value, 'root.compiler');
 	const sysroot = expectObject(compiler.sysroot, 'root.compiler.sysroot');
@@ -78,7 +98,12 @@ function parseCompilerConfig(value: unknown): RuntimeCompilerConfig {
 		},
 		sysroot: {
 			asset: expectString(sysroot.asset, 'root.compiler.sysroot.asset'),
-			...(typeof sysroot.runtimeRoot === 'string' ? { runtimeRoot: sysroot.runtimeRoot } : {})
+			...(typeof sysroot.runtimeRoot === 'string'
+				? { runtimeRoot: sysroot.runtimeRoot }
+				: {}),
+			...(sysroot.profiles === undefined
+				? {}
+				: { profiles: parseSysrootProfiles(sysroot.profiles) })
 		},
 		...(compiler.resourceDir !== undefined
 			? { resourceDir: expectString(compiler.resourceDir, 'root.compiler.resourceDir') }

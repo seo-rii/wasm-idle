@@ -55,6 +55,31 @@ describe('runtime manifest', () => {
 		expect(parseRuntimeManifest(legacyValue).compiler.provenance).toBeUndefined();
 	});
 
+	it('accepts only a complete opt-in C base and C++ add-on pair', () => {
+		const profiled = structuredClone(manifestValue) as typeof manifestValue & {
+			compiler: { sysroot: { profiles?: unknown } };
+		};
+		profiled.compiler.sysroot.profiles = {
+			c: { asset: 'bin/c-sysroot.tar.gz' },
+			cppAddon: { asset: 'bin/cpp-addon.tar.gz' }
+		};
+		expect(parseRuntimeManifest(profiled).compiler.sysroot.profiles).toEqual(
+			profiled.compiler.sysroot.profiles
+		);
+
+		profiled.compiler.sysroot.profiles = { c: { asset: 'bin/c-sysroot.tar.gz' } };
+		expect(() => parseRuntimeManifest(profiled)).toThrow(
+			'root.compiler.sysroot.profiles.cppAddon'
+		);
+		profiled.compiler.sysroot.profiles = {
+			c: { asset: '' },
+			cppAddon: { asset: 'bin/cpp-addon.tar.gz' }
+		};
+		expect(() => parseRuntimeManifest(profiled)).toThrow(
+			'root.compiler.sysroot.profiles.c.asset'
+		);
+	});
+
 	it('loads only an explicitly hosted manifest URL', async () => {
 		const fetchImpl = vi.fn(
 			async () =>

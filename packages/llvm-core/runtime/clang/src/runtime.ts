@@ -59,6 +59,12 @@ const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
 const internalBuildRoot = '__wasm_idle_build';
 const workspaceTranslationUnitPattern = /\.(?:c|cc|cpp|cxx)$/;
 
+const hasUnknownLanguageOverride = (compileArgs: readonly unknown[]) =>
+	compileArgs.some(
+		(argument) =>
+			typeof argument !== 'string' || argument.startsWith('-x') || argument.startsWith('@')
+	);
+
 const lldbForbiddenCompileArgs = new Set([
 	'-target',
 	'--target',
@@ -197,6 +203,7 @@ class Clang {
 	progress: CombinedProgressSlots;
 	private readonly maxAssetBytes: number;
 	private readonly signal?: AbortSignal;
+	private cppSysrootReady?: Promise<void>;
 
 	constructor(options: BrowserClangRuntimeOptions) {
 		const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES;
@@ -233,13 +240,14 @@ class Clang {
 		);
 		// Download the sysroot while MemFS is still initializing. Observe both promises
 		// immediately so either failure rejects startup even if the other asset stalls.
+		const initialSysrootUrl = this.assetUrls.cSysroot || this.assetUrls.sysroot;
 		const sysrootReady = options.signal
-			? readBuffer(this.assetUrls.sysroot, undefined, maxAssetBytes, options.signal)
-			: readBuffer(this.assetUrls.sysroot, undefined, maxAssetBytes);
+			? readBuffer(initialSysrootUrl, undefined, maxAssetBytes, options.signal)
+			: readBuffer(initialSysrootUrl, undefined, maxAssetBytes);
 		const fileSystemInputsReady = Promise.all([this.memfs.ready, sysrootReady]);
 		const fileSystemReady = fileSystemInputsReady.then(async ([, buffer]) => {
 			await this.hostLogAsync(
-				`Untarring ${this.assetUrls.sysroot}`,
+				`Untarring ${initialSysrootUrl}`,
 				Promise.resolve().then(() => {
 					options.signal?.throwIfAborted();
 					return untar(buffer, this.memfs);
@@ -262,6 +270,34 @@ class Clang {
 			installGccCompatibilityHeaders(this.memfs);
 		});
 		this.ready = Promise.all([clangReady, fileSystemReady]).then(() => undefined);
+	}
+
+	private ensureCppSysroot(): Promise<void> {
+		const addonUrl = this.assetUrls.cppAddon;
+		if (!addonUrl) return this.ready;
+		if (this.cppSysrootReady) return this.cppSysrootReady;
+
+		// Start the download immediately, but mount only after the C base and MemFS are ready.
+		const download = this.signal
+			? readBuffer(addonUrl, undefined, this.maxAssetBytes, this.signal)
+			: readBuffer(addonUrl, undefined, this.maxAssetBytes);
+		const pending = Promise.all([this.ready, download]).then(async ([, buffer]) => {
+			await this.hostLogAsync(
+				`Untarring ${addonUrl}`,
+				Promise.resolve().then(() => {
+					this.signal?.throwIfAborted();
+					return untar(buffer, this.memfs);
+				})
+			);
+			this.signal?.throwIfAborted();
+		});
+		this.cppSysrootReady = pending;
+		// A failed download has not modified MemFS and can be retried. A failed mount is
+		// retained because it may have installed some entries before the failure.
+		void download.catch(() => {
+			if (this.cppSysrootReady === pending) this.cppSysrootReady = undefined;
+		});
+		return pending;
 	}
 
 	hostLog(message: string) {
@@ -1318,7 +1354,8 @@ class Clang {
 		}
 		const code = toUtf8(source);
 
-		await this.ready;
+		const needsCppSysroot = language !== 'C' || hasUnknownLanguageOverride(compileArgs);
+		await (needsCppSysroot ? this.ensureCppSysroot() : this.ready);
 		if (!options.sourceAlreadyMounted) {
 			this.addWorkspaceFiles(options.workspaceFiles, input);
 			this.addWorkspaceDirectories(input);
@@ -1401,7 +1438,7 @@ class Clang {
 		const compilerRuntimeLibDir =
 			this.compilerConfig?.compilerRuntimeLibDir || defaultCompilerRuntimeLibDir;
 		const crt1 = `${libdir}/crt1.o`;
-		await this.ready;
+		await (language === 'C' ? this.ready : this.ensureCppSysroot());
 		const lld = await this.getModule(this.assetUrls.lld);
 		this.trace(`link ${objects.join(', ')} -> ${wasm}`);
 		return await this.run(
@@ -1545,7 +1582,7 @@ class Clang {
 		const cOnly =
 			language === 'C' &&
 			translationUnits.every((unit) => unit.path === input || unit.path.endsWith('.c')) &&
-			!compileArgs.some((argument) => argument.startsWith('-x') || argument.startsWith('@'));
+			!hasUnknownLanguageOverride(compileArgs);
 		const linkProfile: [] | ['C'] = cOnly ? ['C'] : [];
 		const traceDebug = debugMode === 'trace';
 		if (traceDebug && translationUnits.length > 1) {

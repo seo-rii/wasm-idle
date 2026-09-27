@@ -33,6 +33,8 @@ describe('runtime asset urls', () => {
 		expect(urls.clang).toBe('https://cdn.example.com/pkg/runtime/bin/clang.wasm.gz');
 		expect(urls.lld).toBe('https://cdn.example.com/pkg/runtime/bin/lld.wasm.gz');
 		expect(urls.sysroot).toBe('https://cdn.example.com/pkg/runtime/bin/sysroot.tar.gz');
+		expect(urls.cSysroot).toBeUndefined();
+		expect(urls.cppAddon).toBeUndefined();
 	});
 
 	it('resolves externally hosted asset URLs from the runtime manifest', () => {
@@ -43,8 +45,42 @@ describe('runtime asset urls', () => {
 		expect(urls.clang).toBe('https://cdn.example.com/pkg/runtime/bin/clang.zip');
 		expect(urls.lld).toBe('https://cdn.example.com/pkg/runtime/bin/lld.zip');
 		expect(urls.sysroot).toBe('https://cdn.example.com/pkg/runtime/bin/sysroot.tar.zip');
+		expect(urls.cSysroot).toBeUndefined();
+		expect(urls.cppAddon).toBeUndefined();
 		expect(urls.clangdJs).toBe('https://cdn.example.com/pkg/runtime/clangd/clangd.js');
 		expect(urls.clangdWasm).toBe('https://cdn.example.com/pkg/runtime/clangd/clangd.wasm.gz');
+	});
+
+	it('resolves only explicitly provided C and C++ profile assets', () => {
+		const profiled: RuntimeManifestV1 = {
+			...manifest,
+			compiler: {
+				...manifest.compiler,
+				sysroot: {
+					...manifest.compiler.sysroot,
+					profiles: {
+						c: { asset: 'bin/c-sysroot.tar.gz' },
+						cppAddon: { asset: 'bin/cpp-addon.tar.gz' }
+					}
+				}
+			}
+		};
+		const urls = resolveRuntimeAssetUrls('https://cdn.example.com/pkg/runtime', profiled);
+		expect(urls.sysroot).toBe('https://cdn.example.com/pkg/runtime/bin/sysroot.tar.zip');
+		expect(urls.cSysroot).toBe('https://cdn.example.com/pkg/runtime/bin/c-sysroot.tar.gz');
+		expect(urls.cppAddon).toBe('https://cdn.example.com/pkg/runtime/bin/cpp-addon.tar.gz');
+		expect(() =>
+			resolveRuntimeAssetUrls('https://cdn.example.com/pkg/runtime', {
+				...profiled,
+				compiler: {
+					...profiled.compiler,
+					sysroot: {
+						...profiled.compiler.sysroot,
+						profiles: { c: { asset: 'bin/c-sysroot.tar.gz' } }
+					}
+				}
+			} as RuntimeManifestV1)
+		).toThrow('both C and C++ add-on assets');
 	});
 
 	it('rejects omitted and package-local runtime locations', () => {

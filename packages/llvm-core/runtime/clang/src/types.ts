@@ -247,6 +247,11 @@ export interface RuntimeCompilerConfig {
 	sysroot: {
 		asset: string;
 		runtimeRoot?: string;
+		/** Optional verified C base and C++ overlay, supplied by the hosting application. */
+		profiles?: {
+			c: { asset: string };
+			cppAddon: { asset: string };
+		};
 	};
 	resourceDir?: string;
 	compilerRuntimeLibDir?: string;

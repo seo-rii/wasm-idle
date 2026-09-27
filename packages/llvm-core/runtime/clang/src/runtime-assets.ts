@@ -7,6 +7,8 @@ export interface RuntimeAssetUrls {
 	clang: string;
 	lld: string;
 	sysroot: string;
+	cSysroot?: string;
+	cppAddon?: string;
 	clangdJs: string;
 	clangdWasm: string;
 }
@@ -16,6 +18,16 @@ export function resolveRuntimeAssetUrls(
 	manifest?: RuntimeManifestV1
 ): RuntimeAssetUrls {
 	const runtimeBaseUrl = resolveRuntimeBaseUrl(baseUrl);
+	const profiles = manifest?.compiler.sysroot.profiles;
+	if (
+		profiles &&
+		(typeof profiles.c?.asset !== 'string' ||
+			!profiles.c.asset ||
+			typeof profiles.cppAddon?.asset !== 'string' ||
+			!profiles.cppAddon.asset)
+	) {
+		throw new TypeError('Clang sysroot profiles require both C and C++ add-on assets');
+	}
 	return {
 		manifest: runtimeManifestUrl(runtimeBaseUrl).toString(),
 		memfs: resolveVersionedAssetUrl(
@@ -34,6 +46,15 @@ export function resolveRuntimeAssetUrls(
 			runtimeBaseUrl,
 			manifest?.compiler.sysroot.asset || 'bin/sysroot.tar.gz'
 		).toString(),
+		...(profiles
+			? {
+					cSysroot: resolveVersionedAssetUrl(runtimeBaseUrl, profiles.c.asset).toString(),
+					cppAddon: resolveVersionedAssetUrl(
+						runtimeBaseUrl,
+						profiles.cppAddon.asset
+					).toString()
+				}
+			: {}),
 		clangdJs: resolveVersionedAssetUrl(
 			runtimeBaseUrl,
 			manifest?.clangd.js || 'clangd/clangd.js'

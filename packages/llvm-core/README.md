@@ -25,6 +25,15 @@ loader pipes gzip response bodies through `DecompressionStream('gzip')`. Runtime
 older external deployments may still reference ZIP files; those load `fflate` only on the legacy
 compatibility path.
 
+The bundled application additionally pins two derived sysroot archives from the same verified
+Clang source: `c-sysroot.tar.gz` and `cpp-addon.tar.gz`. A host can opt in by supplying
+`compiler.sysroot.profiles.c.asset` and `compiler.sysroot.profiles.cppAddon.asset` in its runtime
+manifest. The C base mounts at startup; the add-on mounts before C++ compilation/linking, including
+mixed workspaces and opaque `@response` or `-x` arguments. Manifests without a profile field keep
+the original full `sysroot.tar.gz` path; partial profile pairs are rejected. Hosts must independently
+pin and verify every asset
+they opt into; the package does not trust a profile merely because its path appears in a manifest.
+
 The bundled Clang `runtime-manifest.v1.json` is routed through the same worker asset bridge as its
 four delivery assets. The compressed files remain pinned against their producer receipts in CI,
 while the browser bridge normalizes transparent HTTP gzip decoding and pins the exact decoded
