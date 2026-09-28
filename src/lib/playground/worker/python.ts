@@ -324,18 +324,15 @@ self.onmessage = async (event: any) => {
 			baseUrl = runtimeAssets?.baseUrl || baseUrl;
 			useAssetBridge = runtimeAssets?.useAssetBridge === true;
 			configureWorkerRuntimeAssets(runtimeAssets || null);
-			postMessage({ output: 'Loading Pyodide...' });
 			postProgress(2, 'Loading Pyodide module');
 			await loadPyodide(baseUrl);
 			postProgress(100, 'Pyodide runtime ready');
-			postMessage({ output: ' Done.\n\r' });
 			postMessage({ load: true });
 		} catch (e: any) {
 			self.postMessage({ error: e.message || 'Unknown error' });
 		}
 	} else if (prepare) {
 		preparedPackagesKey = undefined;
-		postMessage({ output: 'Loading packages...' });
 		try {
 			postProgress(5, 'Preparing Python workspace');
 			const preparationKey = packagePreparationKey(code, activePath, workspaceFiles);
@@ -350,7 +347,6 @@ self.onmessage = async (event: any) => {
 			);
 			preparedPackagesKey = preparationKey;
 			postProgress(100, 'Python packages ready');
-			postMessage({ output: ' Done.\n\r' });
 			self.postMessage({ results: true });
 		} catch (e: any) {
 			preparedPackagesKey = undefined;

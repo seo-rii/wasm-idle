@@ -271,6 +271,70 @@ function executionData(
 	};
 }
 
+describe('Python preparation output', () => {
+	it.each([false, true])(
+		'reports loading and preparation only through progress messages (log=%s)',
+		async (log) => {
+			const { onmessage, postMessage, pyodide } = await createRuntimeHarness();
+			await onmessage({ data: { load: true, assets: directAssets, log } });
+			expect(postMessage.mock.calls.map(([message]) => message)).toEqual([
+				{ progress: { percent: 2, stage: 'Loading Pyodide module' } },
+				{ progress: { percent: 100, stage: 'Pyodide runtime ready' } },
+				{ load: true }
+			]);
+
+			postMessage.mockClear();
+			await onmessage({ data: { ...executionData(), prepare: true, log } });
+			expect(pyodide.loadPackagesFromImports).toHaveBeenCalledOnce();
+			expect(pyodide.runPythonAsync).not.toHaveBeenCalled();
+			expect(postMessage.mock.calls.map(([message]) => message)).toEqual([
+				{ progress: { percent: 5, stage: 'Preparing Python workspace' } },
+				{ progress: { percent: 15, stage: 'Resolving Python imports' } },
+				{ progress: { percent: 100, stage: 'Python packages ready' } },
+				{ results: true }
+			]);
+		}
+	);
+
+	it('preserves user output that matches a former preparation message', async () => {
+		const { onmessage, postMessage, pyodide } = await createRuntimeHarness();
+		await onmessage({ data: { load: true, assets: directAssets } });
+		const data = executionData('print("Done.")');
+		await onmessage({ data: { ...data, prepare: true, log: false } });
+		postMessage.mockClear();
+		const runPython = pyodide.runPythonAsync.getMockImplementation()!;
+		pyodide.runPythonAsync.mockImplementationOnce(async () => {
+			await runPython();
+			const outputNames = Object.keys(globalThis).filter((name) =>
+				name.startsWith('__pyodide__output_')
+			);
+			const outputName = outputNames.at(-1)!;
+			(globalThis as any)[outputName]('Done.', { end: '\n' });
+		});
+		await onmessage({ data: { ...data, log: false } });
+		expect(
+			postMessage.mock.calls
+				.map(([message]) => message)
+				.filter((message) => 'output' in message)
+		).toEqual([{ output: 'Done.\n' }]);
+		expect(postMessage).toHaveBeenCalledWith({ results: true });
+	});
+
+	it('preserves preparation errors without writing status text to user output', async () => {
+		const { onmessage, postMessage, pyodide } = await createRuntimeHarness();
+		await onmessage({ data: { load: true, assets: directAssets } });
+		postMessage.mockClear();
+		pyodide.loadPackagesFromImports.mockRejectedValueOnce(new Error('package unavailable'));
+		await onmessage({ data: { ...executionData(), prepare: true, log: false } });
+		expect(postMessage.mock.calls.map(([message]) => message)).toEqual([
+			{ progress: { percent: 5, stage: 'Preparing Python workspace' } },
+			{ progress: { percent: 15, stage: 'Resolving Python imports' } },
+			{ error: 'package unavailable' }
+		]);
+		expect(pyodide.runPythonAsync).not.toHaveBeenCalled();
+	});
+});
+
 describe('Python bootstrap scheduling', () => {
 	it.each([false, true])(
 		'fetches independent assets concurrently and evaluates asm first (bridge=%s)',
