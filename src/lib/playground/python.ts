@@ -4,6 +4,7 @@ import type {
 	SandboxExecutionOptions
 } from '$lib/playground/options';
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import { RuntimeAssetCache } from './runtimeAssetCache';
 import { resolveRuntimeAssetConfig, type PlaygroundRuntimeAssets } from '$lib/playground/assets';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
 import {
@@ -59,6 +60,10 @@ class Python implements Sandbox {
 	exit = true;
 	assetBridge: WorkerAssetBridge | null = null;
 	private activeOperation: PythonOperation | null = null;
+	private runtimeAssetCache = new RuntimeAssetCache();
+	private ownsRuntimeAssetCache = true;
+	private disposed = false;
+	private disposal?: Promise<void>;
 	private readonly workerSession = new WorkerSession({
 		label: 'Python',
 		onDispose: (worker) => {
@@ -74,6 +79,7 @@ class Python implements Sandbox {
 	});
 
 	private beginOperation(phase: PythonOperation['phase']) {
+		if (this.disposed) throw new Error('Python runtime has been disposed');
 		if (this.activeOperation) {
 			throw new BusyError('Python runtime already has an active operation', {
 				runtimeId: 'PYTHON3',
@@ -260,7 +266,9 @@ class Python implements Sandbox {
 						'python',
 						assetConfig,
 						progress,
-						limits.maxAssetBytes
+						limits.maxAssetBytes,
+						false,
+						this.runtimeAssetCache
 					);
 					if (!this.isOperationActive(operation) || this.worker !== worker) {
 						assetBridge.dispose();
@@ -293,7 +301,8 @@ class Python implements Sandbox {
 						assets: {
 							baseUrl: assetConfig.baseUrl,
 							maxAssetBytes: limits.maxAssetBytes,
-							useAssetBridge: assetConfig.useAssetBridge
+							useAssetBridge: assetConfig.useAssetBridge,
+							useModuleBridge: true
 						}
 					});
 					return;
@@ -589,11 +598,31 @@ class Python implements Sandbox {
 		resetBufferedStdin(this.watchResultBuffer);
 		const debugBuffer = new Int32Array(this.debugBuffer);
 		debugBuffer.fill(0);
-		await new Promise((resolve) => setTimeout(resolve, 200));
-		if (!this.exit) {
-			this.workerSession.terminate();
-			this.exit = true;
-		}
+		new Uint8Array(this.interruptBuffer).fill(0);
+	}
+
+	setRuntimeAssetCache(cache: RuntimeAssetCache) {
+		if (this.disposed) throw new Error('Python runtime has been disposed');
+		if (this.worker || this.activeOperation)
+			throw new Error('Cannot replace an active runtime cache');
+		if (cache === this.runtimeAssetCache) return;
+		if (this.ownsRuntimeAssetCache) this.runtimeAssetCache.dispose();
+		this.runtimeAssetCache = cache;
+		this.ownsRuntimeAssetCache = false;
+	}
+
+	dispose(): Promise<void> {
+		if (this.disposal) return this.disposal;
+		this.disposed = true;
+		this.disposal = Promise.resolve()
+			.then(() => this.clear())
+			.finally(() => {
+				if (this.ownsRuntimeAssetCache) this.runtimeAssetCache.dispose();
+				this.output = null;
+				this.ondebug = undefined;
+				this.image = undefined;
+			});
+		return this.disposal;
 	}
 }
 

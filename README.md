@@ -900,6 +900,40 @@ The pack contains the same locked upstream files, not an import-based subset. Ea
 
 `node scripts/sync-runtime.mjs wasm-ruby` regenerates both profiles from the pinned producer inputs. `node scripts/sync-wasm-ruby-split.mjs --verify` additionally checks split-profile freshness without replacing published files.
 
+### Retaining compiler caches across editor navigation
+
+Create one `createRuntimeSession(assets)` owner per browser application and use
+`session.createBinding()` for each editor or execution panel. C/C++ and Python
+keep immutable compiler/runtime modules outside their disposable execution Workers:
+
+```ts
+import { createRuntimeSession } from 'wasm-idle';
+
+const session = createRuntimeSession(assets); // browser scope, not an SSR singleton
+const panel = session.createBinding();
+const sandbox = await panel.load('PYTHON');
+await sandbox.load('print("hi")', false);
+await sandbox.clear(); // reset execution state; retain compiler/runtime cache
+await panel.dispose(); // close this panel; retain the session's cache
+
+const nextPanel = session.createBinding(); // another problem, same language
+await nextPanel.load('PYTHON');
+await session.selectLanguage('CPP'); // release old-language panels and cache
+await session.dispose(); // full, terminal release of this owner
+```
+
+Selecting a language does not download assets. The owner retains only one language;
+selecting an unsupported/server-only language also releases the previous cache.
+Executions never share mutable Wasm instances, user files or stdin. C/C++ additionally
+reuse compiled programs when source, workspace and compiler options match, while
+custom loaders and debugging retain the original execution path. Python still creates
+a fresh interpreter after `clear()`; module reuse does not eliminate interpreter startup.
+
+The asset cache is LRU-bounded to 64 entries and 256 MiB of logical asset bytes
+(not a measurement of the browser engine's compiled-code memory). C/C++ program
+artifacts are independently bounded to 8 entries and 32 MiB. `getCacheStats()` exposes
+cache counters for diagnostics. Other languages currently keep their existing lifecycle.
+
 ### Optional idle runtime prewarming
 
 `createPlaygroundBinding(assets, { prewarm: true })` enables explicit

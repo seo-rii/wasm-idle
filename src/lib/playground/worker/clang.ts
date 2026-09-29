@@ -57,9 +57,7 @@ async function loadClang(
 				}
 			}
 		: manifest;
-	const Runtime = verifiedStreaming
-		? withVerifiedStreaming(BrowserClangRuntime, path, maxAssetBytes)
-		: BrowserClangRuntime;
+	const Runtime = withVerifiedStreaming(BrowserClangRuntime, path, maxAssetBytes, verifiedStreaming);
 	clang = new Runtime({
 		stdout: (output) => postMessage({ output }),
 		onDebugEvent: (debugEvent) => postMessage({ debugEvent }),

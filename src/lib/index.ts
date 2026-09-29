@@ -2,6 +2,8 @@ import playground, { createPlaygroundBinding } from '$lib/playground';
 
 export default playground;
 export { createPlaygroundBinding, playground };
+export { createRuntimeSession } from '$lib/playground/runtimeSession';
+export type { PlaygroundRuntimeSession } from '$lib/playground/runtimeSession';
 export {
 	isSharedArrayBufferAvailable,
 	requireSharedArrayBuffer

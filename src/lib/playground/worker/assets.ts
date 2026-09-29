@@ -8,6 +8,7 @@ export interface WorkerRuntimeAssetConfig {
 	baseUrl: string;
 	maxAssetBytes?: number;
 	useAssetBridge: boolean;
+	useModuleBridge?: boolean;
 }
 
 export interface WorkerRuntimeAssetAllowlist {
@@ -43,6 +44,10 @@ let interceptorsInstalled = false;
 let nextAssetRequestId = 0;
 
 const pendingAssetRequests = new Map<number, PendingAssetRequest>();
+const pendingModuleRequests = new Map<
+	number,
+	{ resolve: (module: WebAssembly.Module) => void; reject: (reason: unknown) => void }
+>();
 
 const cancelResponseBody = (response: Response, reason?: unknown) => {
 	try {
@@ -466,7 +471,8 @@ function installRuntimeAssetInterceptors() {
 			new URL(resolvedUrl).pathname.endsWith('.wasm')
 		) {
 			const asset = trackedAssetName(resolvedUrl)!;
-			const signal = (init?.signal === undefined ? request?.signal : init.signal) ?? undefined;
+			const signal =
+				(init?.signal === undefined ? request?.signal : init.signal) ?? undefined;
 			const { response, maxAssetBytes, total } = await fetchAssetFromUrl(
 				resolvedUrl,
 				asset,
@@ -496,6 +502,10 @@ export function configureWorkerRuntimeAssets(config: WorkerRuntimeAssetConfig | 
 	) {
 		throw new TypeError('Runtime asset maxAssetBytes must be a positive safe integer');
 	}
+	for (const pending of pendingModuleRequests.values()) {
+		pending.reject(new Error('Runtime module configuration changed'));
+	}
+	pendingModuleRequests.clear();
 	activeDirectAssetBaseUrl = null;
 	activeDirectAssetUrls = new Map();
 	activeConfig = config;
@@ -567,6 +577,18 @@ export function configureWorkerRuntimeAssetAllowlist(
 export function handleWorkerAssetMessage(data: any) {
 	const response = data?.assetResponse;
 	if (!response) return false;
+	const moduleRequest = pendingModuleRequests.get(response.id);
+	if (moduleRequest) {
+		pendingModuleRequests.delete(response.id);
+		if (!response.ok) {
+			moduleRequest.reject(new Error(response.error || 'Runtime module request failed'));
+		} else if (!(response.module instanceof WebAssembly.Module)) {
+			moduleRequest.reject(new Error('Runtime module response is invalid'));
+		} else {
+			moduleRequest.resolve(response.module);
+		}
+		return true;
+	}
 	const pending = pendingAssetRequests.get(response.id);
 	if (!pending) return true;
 	pendingAssetRequests.delete(response.id);
@@ -588,4 +610,26 @@ export async function loadWorkerRuntimeAsset(asset: string) {
 		throw new Error('Untracked runtime asset request');
 	}
 	return await loadTrackedAsset(assetUrl);
+}
+
+export function hasWorkerRuntimeModuleBridge() {
+	return activeConfig?.useAssetBridge === true || activeConfig?.useModuleBridge === true;
+}
+
+export async function loadWorkerRuntimeModule(asset: string) {
+	if (!hasWorkerRuntimeModuleBridge()) throw new Error('Runtime module bridge unavailable');
+	const assetUrl = trackedAssetUrl(asset);
+	if (!assetUrl || !isTrackedAssetUrl(assetUrl)) {
+		throw new Error('Untracked runtime module request');
+	}
+	const id = ++nextAssetRequestId;
+	return await new Promise<WebAssembly.Module>((resolve, reject) => {
+		pendingModuleRequests.set(id, { resolve, reject });
+		try {
+			self.postMessage({ assetRequest: { id, asset, module: true } });
+		} catch (error) {
+			pendingModuleRequests.delete(id);
+			reject(error);
+		}
+	});
 }

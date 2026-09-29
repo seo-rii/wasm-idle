@@ -72,6 +72,141 @@ describe('worker direct runtime asset fallback', () => {
 		vi.restoreAllMocks();
 	});
 
+	it.each([false, true])(
+		'requests compiled modules independently of the byte bridge: %s',
+		async (useAssetBridge) => {
+			const fetchMock = vi.fn();
+			const assets = await setupDirectAssetLoader(fetchMock);
+			assets.configureWorkerRuntimeAssets({
+				baseUrl: runtimeBaseUrl,
+				useAssetBridge,
+				useModuleBridge: true
+			});
+			const module = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+			const loading = assets.loadWorkerRuntimeModule('compiler.wasm');
+			expect(assets.hasWorkerRuntimeModuleBridge()).toBe(true);
+			expect(assets.postMessage).toHaveBeenCalledOnce();
+			const request = assets.postMessage.mock.calls[0][0].assetRequest;
+			expect(request).toEqual({
+				id: expect.any(Number),
+				asset: 'compiler.wasm',
+				module: true
+			});
+			expect(
+				assets.handleWorkerAssetMessage({
+					assetResponse: { id: request.id, ok: true, module }
+				})
+			).toBe(true);
+			await expect(loading).resolves.toBe(module);
+			expect(fetchMock).not.toHaveBeenCalled();
+		}
+	);
+
+	it.each([undefined, {}, new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])])(
+		'rejects module responses that are not compiled modules: %s',
+		async (module) => {
+			const assets = await setupDirectAssetLoader(vi.fn());
+			assets.configureWorkerRuntimeAssets({
+				baseUrl: runtimeBaseUrl,
+				useAssetBridge: false,
+				useModuleBridge: true
+			});
+			const loading = assets.loadWorkerRuntimeModule('compiler.wasm');
+			const request = assets.postMessage.mock.calls[0][0].assetRequest;
+			assets.handleWorkerAssetMessage({
+				assetResponse: { id: request.id, ok: true, module }
+			});
+			await expect(loading).rejects.toThrow('Runtime module response is invalid');
+		}
+	);
+
+	it('preserves host module errors without retrying a direct fetch', async () => {
+		const fetchMock = vi.fn();
+		const assets = await setupDirectAssetLoader(fetchMock);
+		assets.configureWorkerRuntimeAssets({ baseUrl: runtimeBaseUrl, useAssetBridge: true });
+		const loading = assets.loadWorkerRuntimeModule('compiler.wasm');
+		const request = assets.postMessage.mock.calls[0][0].assetRequest;
+		assets.handleWorkerAssetMessage({
+			assetResponse: { id: request.id, ok: false, error: 'receipt verification failed' }
+		});
+		await expect(loading).rejects.toThrow('receipt verification failed');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it.each([null, { baseUrl: 'https://replacement.example/runtime/', useAssetBridge: true }])(
+		'rejects pending modules when runtime configuration resets: %s',
+		async (replacement) => {
+			const assets = await setupDirectAssetLoader(vi.fn());
+			assets.configureWorkerRuntimeAssets({
+				baseUrl: runtimeBaseUrl,
+				useAssetBridge: false,
+				useModuleBridge: true
+			});
+			const loading = assets.loadWorkerRuntimeModule('compiler.wasm');
+			const rejection = expect(loading).rejects.toThrow(
+				'Runtime module configuration changed'
+			);
+			const oldRequest = assets.postMessage.mock.calls[0][0].assetRequest;
+			assets.configureWorkerRuntimeAssets(replacement);
+			await rejection;
+			const module = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+			expect(
+				assets.handleWorkerAssetMessage({
+					assetResponse: { id: oldRequest.id, ok: true, module }
+				})
+			).toBe(true);
+
+			assets.configureWorkerRuntimeAssets({
+				baseUrl: runtimeBaseUrl,
+				useAssetBridge: false,
+				useModuleBridge: true
+			});
+			const retry = assets.loadWorkerRuntimeModule('compiler.wasm');
+			const request = assets.postMessage.mock.calls[1][0].assetRequest;
+			expect(request.id).not.toBe(oldRequest.id);
+			assets.handleWorkerAssetMessage({
+				assetResponse: { id: request.id, ok: true, module }
+			});
+			await expect(retry).resolves.toBe(module);
+		}
+	);
+
+	it('rejects a failed module postMessage and allows the next request', async () => {
+		const assets = await setupDirectAssetLoader(vi.fn());
+		assets.configureWorkerRuntimeAssets({
+			baseUrl: runtimeBaseUrl,
+			useAssetBridge: false,
+			useModuleBridge: true
+		});
+		const failure = new Error('worker channel closed');
+		assets.postMessage.mockImplementationOnce(() => {
+			throw failure;
+		});
+		await expect(assets.loadWorkerRuntimeModule('compiler.wasm')).rejects.toBe(failure);
+		const retry = assets.loadWorkerRuntimeModule('compiler.wasm');
+		const request = assets.postMessage.mock.calls[1][0].assetRequest;
+		const module = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+		assets.handleWorkerAssetMessage({ assetResponse: { id: request.id, ok: true, module } });
+		await expect(retry).resolves.toBe(module);
+	});
+
+	it('rejects unavailable or unconfined module requests before sending them to the host', async () => {
+		const assets = await setupDirectAssetLoader(vi.fn());
+		expect(assets.hasWorkerRuntimeModuleBridge()).toBe(false);
+		await expect(assets.loadWorkerRuntimeModule('compiler.wasm')).rejects.toThrow(
+			'Runtime module bridge unavailable'
+		);
+		assets.configureWorkerRuntimeAssets({
+			baseUrl: runtimeBaseUrl,
+			useAssetBridge: false,
+			useModuleBridge: true
+		});
+		await expect(assets.loadWorkerRuntimeModule('../compiler.wasm')).rejects.toThrow(
+			'Untracked runtime module request'
+		);
+		expect(assets.postMessage).not.toHaveBeenCalled();
+	});
+
 	it('streams a confined asset with least-authority fetch options and bounded progress', async () => {
 		const streamed = createStreamResponse([new Uint8Array([1, 2]), new Uint8Array([3])], {
 			headers: {

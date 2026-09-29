@@ -7,6 +7,7 @@ import type {
 } from '$lib/playground/options';
 import { shouldStreamBundledClang } from './clangStreamingPolicy';
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
+import { RuntimeAssetCache } from './runtimeAssetCache';
 import {
 	resolveDebugRuntimeUrls,
 	resolveRuntimeAssetConfig,
@@ -71,6 +72,10 @@ class Clang implements Sandbox {
 	debugManifestUrl = '';
 	debugManifestReceipt?: Readonly<RuntimeAssetIntegrityEntry>;
 	private lldbSession?: LldbSandboxSession;
+	private runtimeAssetCache = new RuntimeAssetCache();
+	private ownsRuntimeAssetCache = true;
+	private disposed = false;
+	private disposal?: Promise<void>;
 	private debugMode: 'none' | 'trace' | 'lldb' = 'none';
 	private readonly lldbBreakpoints = new Map<`/workspace/${string}`, number[]>();
 	private debugEvaluationQueue: Promise<void> = Promise.resolve();
@@ -113,6 +118,7 @@ class Clang implements Sandbox {
 	) {
 		let limits: ReturnType<typeof resolveExecutionLimits>;
 		try {
+			if (this.disposed) throw new Error('Clang runtime has been disposed');
 			limits = resolveExecutionLimits(options.limits);
 		} catch (error) {
 			return Promise.reject(error);
@@ -163,7 +169,8 @@ class Clang implements Sandbox {
 					assetConfig,
 					progress,
 					limits.maxAssetBytes,
-					languageSysrootProfiles
+					languageSysrootProfiles,
+					this.runtimeAssetCache
 				);
 				this.worker.onmessage = (event: MessageEvent<any>) => {
 					if (!this.workerSession.isActive(operation)) return;
@@ -182,7 +189,8 @@ class Clang implements Sandbox {
 					assets: {
 						baseUrl: assetConfig.baseUrl,
 						maxAssetBytes: limits.maxAssetBytes,
-						useAssetBridge: assetConfig.useAssetBridge
+						useAssetBridge: assetConfig.useAssetBridge,
+						useModuleBridge: true
 					},
 					maxAssetBytes: limits.maxAssetBytes
 				});
@@ -240,6 +248,7 @@ class Clang implements Sandbox {
 		args: string[] = [],
 		options: SandboxExecutionOptions = {}
 	): Promise<boolean | string> {
+		if (this.disposed) return Promise.reject(new Error('Clang runtime has been disposed'));
 		const debugMode = options.debugMode || (options.debug ? 'trace' : 'none');
 		this.debugMode = debugMode;
 		if (debugMode !== 'none') requireSharedArrayBuffer(`${this.language} debugging`);
@@ -534,11 +543,29 @@ class Clang implements Sandbox {
 		resetBufferedStdin(this.watchResultBuffer);
 		const debugBuffer = new Int32Array(this.debugBuffer);
 		debugBuffer.fill(0);
-		await new Promise((resolve) => setTimeout(resolve, 200));
-		if (!this.exit) {
-			this.workerSession.terminate();
-			this.exit = true;
-		}
+		new Uint8Array(this.interruptBuffer).fill(0);
+	}
+
+	setRuntimeAssetCache(cache: RuntimeAssetCache) {
+		if (this.disposed) throw new Error('Clang runtime has been disposed');
+		if (this.worker) throw new Error('Cannot replace an active runtime cache');
+		if (cache === this.runtimeAssetCache) return;
+		if (this.ownsRuntimeAssetCache) this.runtimeAssetCache.dispose();
+		this.runtimeAssetCache = cache;
+		this.ownsRuntimeAssetCache = false;
+	}
+
+	dispose(): Promise<void> {
+		if (this.disposal) return this.disposal;
+		this.disposed = true;
+		this.disposal = Promise.resolve()
+			.then(() => this.clear())
+			.finally(() => {
+				if (this.ownsRuntimeAssetCache) this.runtimeAssetCache.dispose();
+				this.output = null;
+				this.ondebug = undefined;
+			});
+		return this.disposal;
 	}
 }
 

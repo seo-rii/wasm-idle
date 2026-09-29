@@ -6,7 +6,9 @@ const workerAssets = vi.hoisted(() => ({
 	configureWorkerRuntimeAssetAllowlist: vi.fn(),
 	configureWorkerRuntimeAssets: vi.fn(),
 	handleWorkerAssetMessage: vi.fn(() => false),
-	loadWorkerRuntimeAsset: vi.fn()
+	loadWorkerRuntimeAsset: vi.fn(),
+	hasWorkerRuntimeModuleBridge: vi.fn(() => true),
+	loadWorkerRuntimeModule: vi.fn(async () => new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])))
 }));
 
 vi.mock('$lib/playground/worker/assets', () => workerAssets);
@@ -19,6 +21,7 @@ afterEach(() => {
 	workerAssets.configureWorkerRuntimeAssets.mockReset();
 	workerAssets.handleWorkerAssetMessage.mockReset().mockReturnValue(false);
 	workerAssets.loadWorkerRuntimeAsset.mockReset();
+	workerAssets.loadWorkerRuntimeModule.mockClear();
 });
 
 const packageAsset = 'demo-1.0-py3-none-any.whl';

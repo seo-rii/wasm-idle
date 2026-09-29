@@ -14,11 +14,17 @@ import { decompressGzip } from '@wasm-idle/llvm-core';
 import { readPythonPackageAssets } from '$lib/playground/pythonPackageLock';
 import { BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES } from '$lib/playground/clangAssetIntegrity';
 import { shouldStreamBundledClang } from '$lib/playground/clangStreamingPolicy';
+import { compileVerifiedWasmAsset } from '@wasm-idle/llvm-core/core/verified-wasm';
+import { BUNDLED_CLANG_ASSET_INTEGRITY } from '$lib/playground/clangAssetIntegrity';
+import { RuntimeAssetCache } from '$lib/playground/runtimeAssetCache';
 
 interface AssetRequestMessage {
 	id: number;
 	asset: string;
+	module?: boolean;
 }
+
+type CachedRuntimeAsset = { bytes: Uint8Array; mimeType?: string; transferOwnership?: boolean };
 
 interface AssetProgressMessage {
 	asset: string;
@@ -461,7 +467,8 @@ export class WorkerAssetBridge {
 		config: ResolvedRuntimeAssetConfig,
 		progress?: ProgressLike,
 		maxAssetBytes = MAX_RUNTIME_ASSET_BYTES,
-		languageSysroots = false
+		languageSysroots = false,
+		private readonly cache?: RuntimeAssetCache
 	) {
 		this.worker = worker;
 		this.runtime = runtime;
@@ -632,60 +639,80 @@ export class WorkerAssetBridge {
 		const controller = new AbortController();
 		this.activeLoads.add(controller);
 		try {
-			const loaded = await this.loadAsset(request.asset, controller.signal);
-			const deliveryBytes = canonicalUint8Array(loaded.bytes);
-			const sourceAssetByteLimit = this.sourceAssetByteLimit(request.asset);
-			const runtimeAssetByteLimit = this.runtimeAssetByteLimit(request.asset);
-			requireRuntimeAssetSize(request.asset, deliveryBytes.byteLength, sourceAssetByteLimit);
-			let normalizedRuntimeBytes: Uint8Array;
-			if (request.asset.endsWith('.gz')) {
-				this.progress.activity('decompressing', request.asset);
-				normalizedRuntimeBytes = await decompressGzip(
-					deliveryBytes,
-					request.asset,
-					runtimeAssetByteLimit,
-					controller.signal
-				);
-			} else {
-				normalizedRuntimeBytes = deliveryBytes;
-			}
-			const runtimeBytes = canonicalUint8Array(normalizedRuntimeBytes);
-			requireRuntimeAssetSize(request.asset, runtimeBytes.byteLength, runtimeAssetByteLimit);
-			const httpDecodedGzip = (loaded.contentEncoding || '')
-				.toLowerCase()
-				.split(',')
-				.map((encoding) => encoding.trim())
-				.includes('gzip');
-			if (controller.signal.aborted || generation !== this.generation) return;
-			let cancelOnAbort: (() => void) | undefined;
-			const aborted = new Promise<never>((_resolve, reject) => {
-				cancelOnAbort = () => reject(runtimeAssetAbortReason(controller.signal));
-				controller.signal.addEventListener('abort', cancelOnAbort, { once: true });
-			});
-			try {
-				if (this.config.integrity?.[request.asset]) {
-					this.progress.activity('verifying', request.asset);
+			this.validateAssetRequest(request.asset);
+			const key = JSON.stringify([
+				this.runtime,
+				this.config.baseUrl,
+				this.cache?.identity(this.config.loader),
+				integrityKey(this.config),
+				allowedBaseUrlsKey(this.config),
+				this.config.useAssetBridge,
+				this.maxAssetBytes,
+				this.languageSysroots,
+				request.asset,
+				request.module === true ? 'module' : 'bytes'
+			]);
+			if (request.module === true) {
+				if (!/\.wasm(?:\.gz)?$/u.test(request.asset)) {
+					throw new Error('Only runtime Wasm assets can be compiled');
 				}
-				const verification = this.verifyIntegrity(
-					request.asset,
-					deliveryBytes,
-					runtimeBytes,
-					loaded.mimeType,
-					!httpDecodedGzip
-				);
-				await Promise.race([verification, aborted]);
-			} finally {
-				if (cancelOnAbort) {
-					controller.signal.removeEventListener('abort', cancelOnAbort);
+				let module = this.cache?.get<WebAssembly.Module>(key);
+				if (!module) {
+					const streaming =
+						this.runtime === 'clang' &&
+						shouldStreamBundledClang(this.config) &&
+						(request.asset === 'bin/clang.wasm.gz' ||
+							request.asset === 'bin/lld.wasm.gz');
+					let bytes: number;
+					if (streaming) {
+						const receipt =
+							BUNDLED_CLANG_ASSET_INTEGRITY[
+								request.asset as 'bin/clang.wasm.gz' | 'bin/lld.wasm.gz'
+							];
+						module = await compileVerifiedWasmAsset(
+							new URL(request.asset, this.config.baseUrl).href,
+							receipt,
+							{
+								fetch: globalThis.fetch.bind(globalThis),
+								maxAssetBytes: this.maxAssetBytes,
+								signal: controller.signal,
+								onProgress: (loaded, total) =>
+									this.progress.update(request.asset, loaded, total)
+							}
+						);
+						bytes = receipt.uncompressedBytes;
+					} else {
+						const loaded = await this.loadVerifiedAsset(
+							request.asset,
+							controller.signal
+						);
+						bytes = loaded.bytes.byteLength;
+						module = await WebAssembly.compile(Uint8Array.from(loaded.bytes));
+					}
+					if (controller.signal.aborted || generation !== this.generation) return;
+					this.cache?.set(key, module, bytes);
+				}
+				if (controller.signal.aborted || generation !== this.generation) return;
+				worker.postMessage({ assetResponse: { id: request.id, ok: true, module } });
+				return;
+			}
+			let loaded = this.cache?.get<CachedRuntimeAsset>(key);
+			if (!loaded) {
+				loaded = await this.loadVerifiedAsset(request.asset, controller.signal);
+				if (controller.signal.aborted || generation !== this.generation) return;
+				// Keep private copies: never transfer or lend the owner cache's backing buffer.
+				if (this.cache) {
+					loaded = { bytes: Uint8Array.from(loaded.bytes), mimeType: loaded.mimeType };
+					this.cache.set(key, loaded, loaded.bytes.byteLength);
 				}
 			}
-			if (controller.signal.aborted || generation !== this.generation) return;
 			if (this.runtime === 'python' && request.asset === 'pyodide-lock.json') {
-				this.pythonPackageAssets = readPythonPackageAssets(runtimeBytes);
+				this.pythonPackageAssets = readPythonPackageAssets(loaded.bytes);
 			}
+			if (controller.signal.aborted || generation !== this.generation) return;
 			const buffer = transferBuffer(
-				runtimeBytes,
-				normalizedRuntimeBytes === deliveryBytes ? loaded.transferOwnership : true
+				loaded.bytes,
+				this.cache ? false : loaded.transferOwnership
 			);
 			worker.postMessage(
 				{
@@ -709,20 +736,86 @@ export class WorkerAssetBridge {
 					}
 				});
 			} catch {
-				// The worker may already be terminated. There is no remaining response channel.
+				// The worker may already be terminated.
 			}
 		} finally {
 			this.activeLoads.delete(controller);
 		}
 	}
 
-	private async loadAsset(asset: string, signal: AbortSignal): Promise<LoadedAsset> {
+	private async loadVerifiedAsset(
+		asset: string,
+		signal: AbortSignal
+	): Promise<CachedRuntimeAsset> {
+		const loaded = await this.loadAsset(asset, signal);
+		const deliveryBytes = canonicalUint8Array(loaded.bytes);
+		const sourceAssetByteLimit = this.sourceAssetByteLimit(asset);
+		const runtimeAssetByteLimit = this.runtimeAssetByteLimit(asset);
+		requireRuntimeAssetSize(asset, deliveryBytes.byteLength, sourceAssetByteLimit);
+		let normalizedRuntimeBytes: Uint8Array;
+		if (asset.endsWith('.gz')) {
+			this.progress.activity('decompressing', asset);
+			normalizedRuntimeBytes = await decompressGzip(
+				deliveryBytes,
+				asset,
+				runtimeAssetByteLimit,
+				signal
+			);
+		} else {
+			normalizedRuntimeBytes = deliveryBytes;
+		}
+		const runtimeBytes = canonicalUint8Array(normalizedRuntimeBytes);
+		requireRuntimeAssetSize(asset, runtimeBytes.byteLength, runtimeAssetByteLimit);
+		const httpDecodedGzip = (loaded.contentEncoding || '')
+			.toLowerCase()
+			.split(',')
+			.map((encoding) => encoding.trim())
+			.includes('gzip');
+		if (signal.aborted) throw runtimeAssetAbortReason(signal);
+		let cancelOnAbort: (() => void) | undefined;
+		const aborted = new Promise<never>((_resolve, reject) => {
+			cancelOnAbort = () => reject(runtimeAssetAbortReason(signal));
+			signal.addEventListener('abort', cancelOnAbort, { once: true });
+		});
+		try {
+			if (this.config.integrity?.[asset]) {
+				this.progress.activity('verifying', asset);
+			}
+			const verification = this.verifyIntegrity(
+				asset,
+				deliveryBytes,
+				runtimeBytes,
+				loaded.mimeType,
+				!httpDecodedGzip
+			);
+			await Promise.race([verification, aborted]);
+		} finally {
+			if (cancelOnAbort) {
+				signal.removeEventListener('abort', cancelOnAbort);
+			}
+		}
+		if (signal.aborted) throw runtimeAssetAbortReason(signal);
+		if (this.runtime === 'python' && asset === 'pyodide-lock.json')
+			readPythonPackageAssets(runtimeBytes);
+		return {
+			bytes: runtimeBytes,
+			mimeType: loaded.mimeType,
+			transferOwnership:
+				normalizedRuntimeBytes === deliveryBytes ? loaded.transferOwnership : true
+		};
+	}
+
+	private validateAssetRequest(asset: string) {
 		if (!this.expectedAssets.has(asset) && !this.pythonPackageAssets.has(asset)) {
 			throw new Error(`Unexpected ${this.runtime} runtime asset: ${asset}`);
 		}
 		if (this.config.integrity && !Object.hasOwn(this.config.integrity, asset)) {
 			throw new Error(`Runtime asset ${asset} is missing integrity metadata`);
 		}
+	}
+
+	private async loadAsset(asset: string, signal: AbortSignal): Promise<LoadedAsset> {
+		this.validateAssetRequest(asset);
 		if (signal.aborted) {
 			throw runtimeAssetAbortReason(signal);
 		}

@@ -6,6 +6,7 @@ import {
 } from '$lib/playground/stdinBuffer';
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import { parsePythonPackageLock } from '$lib/playground/pythonPackageLock';
+import { withCachedPyodideModule } from './runtimeModule';
 import {
 	configureWorkerRuntimeAssetAllowlist,
 	configureWorkerRuntimeAssets,
@@ -253,11 +254,11 @@ async function loadPyodide(path: string) {
 		lockFileContents = parsedLock.lock as unknown as Lockfile;
 	}
 	const { loadPyodide } = runtimeModule;
-	pyodide = await loadPyodide({
+	pyodide = await withCachedPyodideModule(runtimeBaseUrl, () => loadPyodide({
 		indexURL: path,
 		packageBaseUrl,
 		...(lockFileContents ? { lockFileContents } : {})
-	});
+	}));
 }
 
 async function loadPackages(code: string) {

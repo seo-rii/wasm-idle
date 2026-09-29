@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushQueuedStdin } from './stdinBuffer';
+import { RuntimeAssetCache } from './runtimeAssetCache';
 
 vi.mock('$env/dynamic/public', () => ({
 	env: {}
@@ -44,6 +45,110 @@ describe('Clang sandbox', () => {
 		workerInstances.length = 0;
 		vi.stubGlobal('Worker', MockWorker);
 	});
+
+	it('clears execution state without dropping owned compiled modules, then fully disposes them', async () => {
+		const sandbox = new Clang('CPP');
+		const cache = (sandbox as unknown as { runtimeAssetCache: RuntimeAssetCache })
+			.runtimeAssetCache;
+		const module = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+		cache.set('clang.wasm', module, 8);
+		await sandbox.load('/');
+		const firstWorker = workerInstances[0];
+		const firstBridge = sandbox.assetBridge;
+		sandbox.write('previous case input');
+		sandbox.pendingEof = true;
+		new Int32Array(sandbox.debugBuffer).fill(7);
+		new Uint8Array(sandbox.interruptBuffer).fill(2);
+
+		await sandbox.clear();
+
+		expect(firstWorker.terminate).toHaveBeenCalledOnce();
+		expect(sandbox.worker).toBeUndefined();
+		expect(sandbox.assetBridge).toBeNull();
+		expect(sandbox.pendingInput).toEqual([]);
+		expect(sandbox.pendingEof).toBe(false);
+		expect(new Int32Array(sandbox.debugBuffer).every((value) => value === 0)).toBe(true);
+		expect(new Uint8Array(sandbox.interruptBuffer)[0]).toBe(0);
+		expect(cache.get('clang.wasm')).toBe(module);
+		expect(cache.stats().disposed).toBe(false);
+
+		await sandbox.load('/');
+		expect(workerInstances).toHaveLength(2);
+		expect(sandbox.assetBridge).not.toBe(firstBridge);
+		expect(cache.get('clang.wasm')).toBe(module);
+		await sandbox.dispose();
+		expect(workerInstances[1].terminate).toHaveBeenCalledOnce();
+		expect(cache.stats()).toMatchObject({ disposed: true, entries: 0 });
+	});
+
+	it('does not dispose a borrowed session cache and rejects reuse after disposal', async () => {
+		const sandbox = new Clang('CPP');
+		const original = (sandbox as unknown as { runtimeAssetCache: RuntimeAssetCache })
+			.runtimeAssetCache;
+		const shared = new RuntimeAssetCache();
+		const module = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+		shared.set('clang.wasm', module, 8);
+		sandbox.setRuntimeAssetCache(shared);
+		expect(original.stats().disposed).toBe(true);
+		await sandbox.load('/');
+		expect(() => sandbox.setRuntimeAssetCache(new RuntimeAssetCache())).toThrow(
+			'active runtime cache'
+		);
+		sandbox.output = vi.fn();
+		sandbox.ondebug = vi.fn();
+
+		await sandbox.dispose();
+
+		expect(shared.get('clang.wasm')).toBe(module);
+		expect(shared.stats().disposed).toBe(false);
+		expect(sandbox.output).toBeNull();
+		expect(sandbox.ondebug).toBeUndefined();
+		await expect(sandbox.load('/')).rejects.toThrow('disposed');
+		await expect(sandbox.run('int main() {}', false)).rejects.toThrow('disposed');
+		expect(() => sandbox.setRuntimeAssetCache(shared)).toThrow('disposed');
+		expect(workerInstances).toHaveLength(1);
+		shared.dispose();
+	});
+
+	it.each([false, true])(
+		'shares disposal completion and releases owned cache even if cleanup fails: %s',
+		async (fails) => {
+			const sandbox = new Clang('CPP');
+			const cache = (sandbox as unknown as { runtimeAssetCache: RuntimeAssetCache })
+				.runtimeAssetCache;
+			let finish!: () => void;
+			const failure = new Error('cleanup failed');
+			const clear = vi.spyOn(sandbox, 'clear').mockImplementation(
+				() =>
+					new Promise<void>((resolve, reject) => {
+						finish = () => (fails ? reject(failure) : resolve());
+					})
+			);
+			const first = sandbox.dispose();
+			const second = sandbox.dispose();
+			let settled = false;
+			void second.then(
+				() => {
+					settled = true;
+				},
+				() => {
+					settled = true;
+				}
+			);
+			expect(second).toBe(first);
+			await Promise.resolve();
+			expect(clear).toHaveBeenCalledOnce();
+			expect(settled).toBe(false);
+			expect(cache.stats().disposed).toBe(false);
+			await expect(sandbox.load('/')).rejects.toThrow('disposed');
+			finish();
+			if (fails) await expect(first).rejects.toBe(failure);
+			else await expect(first).resolves.toBeUndefined();
+			expect(cache.stats().disposed).toBe(true);
+			expect(sandbox.dispose()).toBe(first);
+			expect(clear).toHaveBeenCalledOnce();
+		}
+	);
 
 	it.each([false, true])('cancels initialization during import: %s', async (duringImport) => {
 		const sandbox = new Clang('CPP');
@@ -315,7 +420,8 @@ int main() {
 				assets: {
 					baseUrl: 'https://wasm-idle.invalid/clang/',
 					maxAssetBytes: 128 * 1024 * 1024,
-					useAssetBridge: true
+					useAssetBridge: true,
+					useModuleBridge: true
 				}
 			})
 		);
@@ -397,7 +503,8 @@ int main() {
 				assets: {
 					baseUrl: 'https://cdn.example.test/clang/',
 					maxAssetBytes: 4096,
-					useAssetBridge: false
+					useAssetBridge: false,
+					useModuleBridge: true
 				},
 				maxAssetBytes: 4096
 			})

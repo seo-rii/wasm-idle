@@ -1,5 +1,11 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ compile: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+	compile: vi.fn(),
+	bridge: vi.fn(() => false),
+	compileModule: vi.fn()
+}));
+vi.mock('./assets', () => ({ hasWorkerRuntimeModuleBridge: mocks.bridge }));
+vi.mock('./runtimeModule', () => ({ compileWorkerRuntimeAsset: mocks.compileModule }));
 vi.mock('@wasm-idle/llvm-core/core/verified-wasm', () => ({
 	compileVerifiedWasmAsset: mocks.compile
 }));
@@ -8,7 +14,8 @@ import { withVerifiedStreaming } from './clangStreaming';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from '../clangAssetIntegrity';
 import { shouldStreamBundledClang } from '../clangStreamingPolicy';
 const fallback = vi.fn(
-	async (..._args: unknown[]) => new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]))
+	async (..._args: unknown[]) =>
+		new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]))
 );
 class FakeRuntime {
 	async getModule(...args: unknown[]) {
@@ -23,10 +30,44 @@ const create = () =>
 	))({ runtimeBaseUrl: 'https://cdn.test/clang/' });
 beforeEach(() => {
 	mocks.compile.mockReset();
+	mocks.bridge.mockReset().mockReturnValue(false);
+	mocks.compileModule.mockReset();
 	fallback.mockClear();
 });
 afterEach(() => vi.unstubAllGlobals());
 describe('bundled Clang streaming routing', () => {
+	it('requests host-cached compiler modules even when direct streaming is unavailable', async () => {
+		mocks.bridge.mockReturnValue(true);
+		vi.stubGlobal('DecompressionStream', undefined);
+		const module = await WebAssembly.compile(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+		mocks.compileModule.mockResolvedValue(module);
+		const runtime = create();
+		for (const asset of ['bin/clang.wasm.gz', 'bin/lld.wasm.gz', 'bin/memfs.wasm.gz']) {
+			await expect(runtime.getModule(`https://cdn.test/clang/${asset}`)).resolves.toBe(
+				module
+			);
+			expect(mocks.compileModule).toHaveBeenCalledWith(asset);
+		}
+		expect(mocks.compile).not.toHaveBeenCalled();
+		expect(fallback).not.toHaveBeenCalled();
+	});
+
+	it('preserves custom bridge policy instead of using the bundled network stream', async () => {
+		mocks.bridge.mockReturnValue(true);
+		mocks.compileModule.mockRejectedValueOnce(new Error('custom receipt mismatch'));
+		const Runtime = withVerifiedStreaming(
+			FakeRuntime as unknown as typeof BrowserClangRuntime,
+			'https://cdn.test/clang/',
+			1024,
+			false
+		);
+		const runtime = new Runtime({ runtimeBaseUrl: 'https://cdn.test/clang/' });
+		await expect(runtime.getModule('https://cdn.test/clang/bin/clang.wasm.gz')).rejects.toThrow(
+			'custom receipt mismatch'
+		);
+		expect(mocks.compile).not.toHaveBeenCalled();
+		expect(fallback).not.toHaveBeenCalled();
+	});
 	it('enables only the built-in profile without a custom loader', () => {
 		expect(shouldStreamBundledClang({ integrity: BUNDLED_CLANG_ASSET_INTEGRITY })).toBe(true);
 		expect(
