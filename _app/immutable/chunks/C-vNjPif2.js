@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./DMZRjiQZ.js";t({id:`ruby`,extensions:[`.rb`,`.rbx`,`.rjs`,`.gemspec`,`.pp`],filenames:[`rakefile`,`Gemfile`],aliases:[`Ruby`,`rb`],loader:()=>e(()=>import(`./CcjRGaHD.js`),[],import.meta.url)});

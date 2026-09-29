@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./DMZRjiQZ.js";t({id:`markdown`,extensions:[`.md`,`.markdown`,`.mdown`,`.mkdn`,`.mkd`,`.mdwn`,`.mdtxt`,`.mdtext`],aliases:[`Markdown`,`markdown`],loader:()=>e(()=>import(`./CrfjazG5.js`),[],import.meta.url)});

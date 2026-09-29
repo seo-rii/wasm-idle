@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./DMZRjiQZ.js";t({id:`sql`,extensions:[`.sql`],aliases:[`SQL`],loader:()=>e(()=>import(`./BntoKn3P2.js`),[],import.meta.url)});

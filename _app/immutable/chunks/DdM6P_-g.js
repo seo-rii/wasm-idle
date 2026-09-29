@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./DMZRjiQZ.js";t({id:`rust`,extensions:[`.rs`,`.rlib`],aliases:[`Rust`,`rust`],loader:()=>e(()=>import(`./DCV7E6DW.js`),[],import.meta.url)});

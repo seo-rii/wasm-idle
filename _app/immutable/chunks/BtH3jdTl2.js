@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./DMZRjiQZ.js";t({id:`elixir`,extensions:[`.ex`,`.exs`],aliases:[`Elixir`,`elixir`,`ex`],loader:()=>e(()=>import(`./BXD2yw_p2.js`),[],import.meta.url)});

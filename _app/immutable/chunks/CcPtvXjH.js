@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./DMZRjiQZ.js";t({id:`shell`,extensions:[`.sh`,`.bash`],aliases:[`Shell`,`sh`],loader:()=>e(()=>import(`./BSSwLhBn.js`),[],import.meta.url)});

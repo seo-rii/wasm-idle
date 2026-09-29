@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./DMZRjiQZ.js";t({id:`pascal`,extensions:[`.pas`,`.p`,`.pp`],aliases:[`Pascal`,`pas`],mimetypes:[`text/x-pascal-source`,`text/x-pascal`],loader:()=>e(()=>import(`./B3lKBxQ5.js`),[],import.meta.url)});

@@ -1,0 +1,1 @@
+import{t as e}from"./BcgnSMxp.js";import{t}from"./DMZRjiQZ.js";t({id:`clojure`,extensions:[`.clj`,`.cljs`,`.cljc`,`.edn`],aliases:[`clojure`,`Clojure`],loader:()=>e(()=>import(`./CfjOLy402.js`),[],import.meta.url)});
