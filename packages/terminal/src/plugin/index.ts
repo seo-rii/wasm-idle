@@ -50,11 +50,18 @@ export async function loadWebglPlugin(term: Terminal, signal?: AbortSignal) {
 
 /** Preserve the complete plugin set for existing package consumers. */
 export default async function registerAllPlugins(term: Terminal) {
-	const [basic, search, serialize, webgl] = await Promise.all([
-		registerBasicPlugins(term),
-		loadSearchPlugin(term),
-		loadSerializePlugin(term),
-		loadWebglPlugin(term)
-	]);
-	return { ...basic, search, serialize, webgl };
+	const initialization = new AbortController();
+	try {
+		const [basic, search, serialize, webgl] = await Promise.all([
+			registerBasicPlugins(term, initialization.signal),
+			loadSearchPlugin(term, initialization.signal),
+			loadSerializePlugin(term, initialization.signal),
+			loadWebglPlugin(term, initialization.signal)
+		]);
+		return { ...basic, search, serialize, webgl };
+	} catch (error) {
+		// Imports cannot be cancelled, but their addons must not activate after failure.
+		initialization.abort();
+		throw error;
+	}
 }

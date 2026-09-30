@@ -86,6 +86,43 @@ describe('terminal addon loading', () => {
 		}
 	});
 
+	it('cancels delayed addon activation when registerAllPlugins fails', async () => {
+		let releaseFit!: () => void;
+		fitGate = new Promise<void>((resolve) => {
+			releaseFit = resolve;
+		});
+		const { default: registerAllPlugins } = await import('../src/plugin/index.js');
+		const term = terminal();
+		const activationFailure = new Error('No WebGL context');
+		let terminalDisposed = false;
+		const lateAttachments: string[] = [];
+		vi.mocked(term.loadAddon).mockImplementation((addon) => {
+			const { name } = addon as unknown as { name: string };
+			if (terminalDisposed) lateAttachments.push(name);
+			if (name === 'webgl') throw activationFailure;
+		});
+		term.dispose = vi.fn(() => {
+			terminalDisposed = true;
+		});
+
+		await expect(registerAllPlugins(term)).rejects.toBe(activationFailure);
+		expect([...imports].sort()).toEqual([
+			'fit',
+			'search',
+			'serialize',
+			'unicode11',
+			'web-links',
+			'webgl'
+		]);
+		term.dispose();
+		releaseFit();
+		await vi.dynamicImportSettled();
+
+		expect(lateAttachments).toEqual([]);
+		expect(term.unicode.activeVersion).toBe('6');
+		expect(disposed).toHaveBeenCalledWith('webgl');
+	});
+
 	it('does not activate addons if the terminal is disposed while an import is pending', async () => {
 		let releaseFit!: () => void;
 		fitGate = new Promise<void>((resolve) => {
