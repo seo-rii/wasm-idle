@@ -23,6 +23,12 @@ import {
 	type RuntimeRegistryAsset,
 	type RuntimeRegistryManifest
 } from './runtime-manifest.js';
+import {
+	readPersistentRuntimeAsset,
+	writePersistentRuntimeAsset,
+	resolveRuntimeAssetCacheOptions,
+	type RuntimeAssetCacheOptions
+} from './persistent-asset-cache.js';
 
 export interface RuntimeAssetPreflightProgress {
 	readonly runtimeId: string;
@@ -40,6 +46,8 @@ export interface RuntimeAssetPreflightRequest {
 	readonly signal?: AbortSignal;
 	readonly limits?: Partial<ExecutionLimits>;
 	readonly cache?: RequestCache;
+	/** Persistent, verified asset storage; independent of the browser HTTP cache. */
+	readonly persistentCache?: RuntimeAssetCacheOptions;
 	readonly redirect?: RequestRedirect;
 	readonly requireExactResponseUrl?: boolean;
 	readonly maxConcurrentDownloads?: number;
@@ -365,7 +373,7 @@ async function readBoundedResponse(
 	return loadedBytes;
 }
 
-async function preflightAsset(
+async function preflightAssetFromNetwork(
 	asset: RuntimeRegistryAsset,
 	assetRootUrl: URL,
 	requestUrlOverride: string | URL | undefined,
@@ -557,6 +565,129 @@ async function preflightAsset(
 	});
 }
 
+async function preflightAsset(
+	asset: RuntimeRegistryAsset,
+	assetRootUrl: URL,
+	requestUrlOverride: string | URL | undefined,
+	fetchImpl: typeof globalThis.fetch,
+	signal: AbortSignal,
+	maxAssetBytes: number,
+	cache: RequestCache | undefined,
+	redirect: RequestRedirect,
+	requireExactResponseUrl: boolean,
+	reportProgress: (loadedBytes: number) => void,
+	runtimeId: string,
+	profileId: string,
+	accountDeliveryBytes?: (bytes: number) => void,
+	persistentCache?: RuntimeAssetCacheOptions
+): Promise<PreflightedRuntimeAsset> {
+	// Policy and size checks apply even when the network is not needed.
+	if (asset.compressedBytes > maxAssetBytes || asset.uncompressedBytes > maxAssetBytes) {
+		throw new AssetTooLargeError(
+			`Runtime asset ${asset.key} exceeds its execution byte limit`,
+			{
+				limit: maxAssetBytes,
+				actual: Math.max(asset.compressedBytes, asset.uncompressedBytes),
+				runtimeId,
+				profileId
+			}
+		);
+	}
+	const url = requireConfinedUrl(
+		requestUrlOverride ?? asset.path,
+		assetRootUrl,
+		asset,
+		runtimeId,
+		profileId,
+		true,
+		requestUrlOverride !== undefined
+	).href;
+	const identity = {
+		url,
+		sha256: asset.compressedSha256,
+		bytes: asset.compressedBytes,
+		validationKey: JSON.stringify([
+			'preflight-v1',
+			assetRootUrl.href,
+			redirect,
+			requireExactResponseUrl,
+			asset.encoding,
+			asset.mediaType,
+			maxAssetBytes
+		])
+	};
+	const bytes = await readPersistentRuntimeAsset({ identity, cache: persistentCache, signal });
+	if (bytes) {
+		accountDeliveryBytes?.(bytes.byteLength);
+		const expected = {
+			sha256: asset.compressedSha256,
+			bytes: asset.compressedBytes,
+			uncompressedSha256: asset.uncompressedSha256,
+			uncompressedBytes: asset.uncompressedBytes,
+			mediaType: asset.mediaType
+		};
+		const deliveryIntegrity = await waitForAbortable(
+			verifyRuntimeAssetIntegrity({
+				asset: asset.path,
+				bytes,
+				expected,
+				stage: 'compressed',
+				runtimeId,
+				profileId
+			}),
+			signal
+		);
+		const runtimeIntegrity =
+			asset.encoding === 'identity'
+				? await waitForAbortable(
+						verifyRuntimeAssetIntegrity({
+							asset: asset.path,
+							bytes,
+							expected,
+							stage: 'uncompressed',
+							mimeType: asset.mediaType,
+							runtimeId,
+							profileId
+						}),
+						signal
+					)
+				: undefined;
+		reportProgress(bytes.byteLength);
+		return Object.freeze({
+			key: asset.key,
+			path: asset.path,
+			url,
+			cacheKey: `sha256:${deliveryIntegrity.sha256}`,
+			bytes,
+			mimeType: asset.mediaType,
+			deliveryIntegrity,
+			runtimeIntegrity
+		});
+	}
+	const loaded = await preflightAssetFromNetwork(
+		asset,
+		assetRootUrl,
+		requestUrlOverride,
+		fetchImpl,
+		signal,
+		maxAssetBytes,
+		cache,
+		redirect,
+		requireExactResponseUrl,
+		reportProgress,
+		runtimeId,
+		profileId,
+		accountDeliveryBytes
+	);
+	await writePersistentRuntimeAsset({
+		identity,
+		cache: persistentCache,
+		signal,
+		bytes: loaded.bytes
+	});
+	return loaded;
+}
+
 export async function preflightRuntimeAssets(
 	request: RuntimeAssetPreflightRequest
 ): Promise<RuntimeAssetPreflightResult> {
@@ -566,6 +697,7 @@ export async function preflightRuntimeAssets(
 		});
 	}
 	const manifest = defineRuntimeRegistryManifest(request.manifest);
+	const persistentCache = resolveRuntimeAssetCacheOptions(request.persistentCache);
 	const runtime = manifest.runtimes.find(
 		(candidate) => candidate.runtimeId === request.runtimeId
 	);
@@ -762,7 +894,8 @@ export async function preflightRuntimeAssets(
 								}),
 							runtime.runtimeId,
 							runtime.identity.profile.profileId,
-							accountDeliveryBytes
+							accountDeliveryBytes,
+							persistentCache
 						);
 						loaded[index] = [asset.key, preflighted];
 					} catch (error) {

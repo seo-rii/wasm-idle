@@ -18,6 +18,7 @@ export interface RuntimeAssetProfileKeySource {
 }
 
 export interface RuntimeAssetLoaderKeySource {
+	persistentCache?: import('./persistent-asset-cache.js').RuntimeAssetCacheOptions;
 	baseUrl?: string;
 	loader?: unknown;
 	loaderKey?: string;
@@ -26,6 +27,8 @@ export interface RuntimeAssetLoaderKeySource {
 }
 
 export interface RuntimeAssetKeySource {
+	/** Version-pinned browser disk cache. false disables its reads and writes. */
+	persistentCache?: import('./persistent-asset-cache.js').RuntimeAssetCacheOptions;
 	rootUrl?: string;
 	runtimeProfiles?: Readonly<Record<string, RuntimeAssetProfileKeySource>>;
 	python?: RuntimeAssetLoaderKeySource;
@@ -109,7 +112,12 @@ export interface RuntimeAssetKeySource {
 		libffiUrl?: string;
 		integrity?: RuntimeAssetIntegrityMap;
 	};
-	lisp?: { moduleUrl?: string; manifestUrl?: string; manifestFingerprint?: string };
+	lisp?: {
+		moduleUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	ruby?: {
 		splitStdlib?: boolean;
 		baseUrl?: string;
@@ -343,7 +351,10 @@ export interface RuntimeAssetKeySource {
 
 export type RuntimeAssetKeyInput = string | RuntimeAssetKeySource | undefined;
 
-type RuntimeAssetName = Exclude<keyof RuntimeAssetKeySource, 'rootUrl' | 'runtimeProfiles'>;
+type RuntimeAssetName = Exclude<
+	keyof RuntimeAssetKeySource,
+	'rootUrl' | 'runtimeProfiles' | 'persistentCache'
+>;
 
 type RuntimeAssetProperty<Runtime extends RuntimeAssetName> = Extract<
 	keyof NonNullable<RuntimeAssetKeySource[Runtime]>,
@@ -393,6 +404,21 @@ const joinStringList = (value: unknown) => (Array.isArray(value) ? value.join('\
 
 const joinSortedStringList = (value: unknown) =>
 	Array.isArray(value) ? [...value].sort().join('\0') : '';
+
+const serializeCacheOptions = (value: unknown): string => {
+	if (value === undefined) return '';
+	if (value === false) return 'false';
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		throw new TypeError('Runtime persistent cache options must be false or an object');
+	}
+	return JSON.stringify(
+		Object.fromEntries(
+			Object.entries(value)
+				.filter(([, entry]) => entry !== undefined)
+				.sort(([left], [right]) => left.localeCompare(right))
+		)
+	);
+};
 
 const serializeSafeInteger = (value: unknown) => {
 	if (value === undefined) return '';
@@ -532,6 +558,30 @@ const RUNTIME_ASSET_LOADER_FIELDS = [
 ] as const satisfies readonly RuntimeAssetLoaderField[];
 
 const RUNTIME_ASSET_KEY_FIELDS = [
+	{
+		runtime: 'python',
+		property: 'persistentCache',
+		key: 'pythonPersistentCache',
+		serialize: serializeCacheOptions
+	},
+	{
+		runtime: 'java',
+		property: 'persistentCache',
+		key: 'javaPersistentCache',
+		serialize: serializeCacheOptions
+	},
+	{
+		runtime: 'clang',
+		property: 'persistentCache',
+		key: 'clangPersistentCache',
+		serialize: serializeCacheOptions
+	},
+	{
+		runtime: 'clangd',
+		property: 'persistentCache',
+		key: 'clangdPersistentCache',
+		serialize: serializeCacheOptions
+	},
 	{ runtime: 'python', property: 'baseUrl', key: 'pythonBaseUrl' },
 	{ runtime: 'python', property: 'loader', key: 'hasPythonLoader', serialize: hasValue },
 	{
@@ -760,6 +810,12 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'lisp', property: 'moduleUrl', key: 'lispModuleUrl' },
 	{ runtime: 'lisp', property: 'manifestUrl', key: 'lispManifestUrl' },
 	{ runtime: 'lisp', property: 'manifestFingerprint', key: 'lispManifestFingerprint' },
+	{
+		runtime: 'lisp',
+		property: 'manifestReceipt',
+		key: 'lispManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
 	{ runtime: 'ruby', property: 'baseUrl', key: 'rubyBaseUrl' },
 	{ runtime: 'ruby', property: 'manifestUrl', key: 'rubyManifestUrl' },
 	{ runtime: 'ruby', property: 'moduleUrl', key: 'rubyModuleUrl' },
@@ -1406,6 +1462,9 @@ export function createRuntimeAssetsKey(runtimeAssets: RuntimeAssetKeyInput): str
 	const keyParts: Record<string, string | boolean> = {
 		rootUrl: runtimeAssets.rootUrl || ''
 	};
+	if (runtimeAssets.persistentCache !== undefined) {
+		keyParts.persistentCache = serializeCacheOptions(runtimeAssets.persistentCache);
+	}
 	const runtimeProfiles: Array<[string, RuntimeAssetProfileKeySource]> = [];
 	for (const [runtimeId, profile] of Object.entries(runtimeAssets.runtimeProfiles || {}).sort(
 		([left], [right]) => left.localeCompare(right)

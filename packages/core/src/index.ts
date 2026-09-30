@@ -1,4 +1,33 @@
 export {
+	fetchPinnedRuntimeAsset,
+	prefetchRuntimeAssets,
+	type PinnedRuntimeAssetRequest,
+	type PrefetchRuntimeAssetsOptions,
+	type PrefetchRuntimeAssetsResult
+} from './pinned-asset-fetch.js';
+export {
+	configureRuntimeAssetCache,
+	createRuntimeAssetCacheBackend,
+	getRuntimeAssetCacheOptions,
+	resolveRuntimeAssetCacheOptions,
+	readPersistentRuntimeAsset,
+	writePersistentRuntimeAsset,
+	loadPersistentRuntimeAsset,
+	getRuntimeAssetCacheStats,
+	clearRuntimeAssetCache,
+	pruneRuntimeAssetCache,
+	requestRuntimeAssetCachePersistence,
+	type RuntimeAssetCacheOptions,
+	type RuntimeAssetCacheBackend,
+	type RuntimeAssetCacheBackendIdentity,
+	type ResolvedRuntimeAssetCacheOptions,
+	type RuntimePersistentAssetIdentity,
+	type RuntimePersistentAssetRequest,
+	type RuntimeAssetCacheStats
+} from './persistent-asset-cache.js';
+export { resolveRuntimeAssetLockEntry } from './runtime-asset-lock.js';
+export { WASM_IDLE_ASSET_VERSION } from './runtime-asset-lock.generated.js';
+export {
 	DEFAULT_RESTRICTED_RUNTIME_TRUST_PROFILE,
 	RUNTIME_TRUST_PROFILE_SCHEMA_VERSION,
 	authorizeRuntimeNetworkRequest,

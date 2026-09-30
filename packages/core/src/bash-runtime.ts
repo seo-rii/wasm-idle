@@ -117,6 +117,7 @@ export interface BashRuntimePreflightRequest {
 	readonly limits?: Partial<ExecutionLimits>;
 	readonly signal?: AbortSignal;
 	readonly fetch?: typeof globalThis.fetch;
+	readonly persistentCache?: import('./persistent-asset-cache.js').RuntimeAssetCacheOptions;
 	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
 	readonly reportDecompressionProgress?: (
 		asset: 'wasmer-wasm' | 'webc',
@@ -1353,6 +1354,7 @@ export async function preflightBashRuntimeAssets(
 	}, limits.assetTimeoutMs);
 	try {
 		const preflight = await preflightRuntimeAssets({
+			persistentCache: request.persistentCache,
 			manifest: registry,
 			runtimeId: BASH_PREFLIGHT_RUNTIME_ID,
 			rootUrl: baseUrl,

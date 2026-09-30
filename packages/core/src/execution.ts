@@ -82,6 +82,7 @@ export interface ExecutionRuntimeRequirements extends Omit<RuntimeTrustRequest, 
 }
 
 export interface ExecutionRequest {
+	persistentCache?: import('./persistent-asset-cache.js').RuntimeAssetCacheOptions;
 	code: string;
 	activePath?: string;
 	workspaceFiles?: WorkspaceFile[];

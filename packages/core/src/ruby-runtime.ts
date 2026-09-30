@@ -63,6 +63,7 @@ export interface RubyRuntimePreflightRequest {
 	readonly maxAssetBytes?: number;
 	readonly signal?: AbortSignal;
 	readonly fetch?: typeof globalThis.fetch;
+	readonly persistentCache?: import('./persistent-asset-cache.js').RuntimeAssetCacheOptions;
 	readonly progress?: (progress: RuntimeAssetPreflightProgress) => void;
 	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
 	readonly reportDecompressionProgress?: (loadedBytes: number, totalBytes: number) => void;
@@ -1699,6 +1700,7 @@ export async function preflightRubyRuntimeAssets(
 	}, timeoutMs);
 	try {
 		const preflight = await preflightRuntimeAssets({
+			persistentCache: request.persistentCache,
 			manifest: registry,
 			runtimeId: RUBY_PREFLIGHT_RUNTIME_ID,
 			rootUrl: baseUrl,

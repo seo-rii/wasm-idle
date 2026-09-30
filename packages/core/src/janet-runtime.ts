@@ -114,6 +114,7 @@ export interface JanetRuntimePreflightRequest {
 	readonly limits?: Partial<ExecutionLimits>;
 	readonly signal?: AbortSignal;
 	readonly fetch?: typeof globalThis.fetch;
+	readonly persistentCache?: import('./persistent-asset-cache.js').RuntimeAssetCacheOptions;
 	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
 	readonly reportDecompressionProgress?: (
 		asset: 'wasm',
@@ -1025,6 +1026,7 @@ export async function preflightJanetRuntimeAssets(
 	}, limits.assetTimeoutMs);
 	try {
 		const preflight = await preflightRuntimeAssets({
+			persistentCache: request.persistentCache,
 			manifest: registry,
 			runtimeId: JANET_PREFLIGHT_RUNTIME_ID,
 			rootUrl: baseUrl,

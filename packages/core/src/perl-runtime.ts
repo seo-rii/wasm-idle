@@ -114,6 +114,7 @@ export interface PerlRuntimePreflightRequest {
 	readonly limits?: Partial<ExecutionLimits>;
 	readonly signal?: AbortSignal;
 	readonly fetch?: typeof globalThis.fetch;
+	readonly persistentCache?: import('./persistent-asset-cache.js').RuntimeAssetCacheOptions;
 	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
 	readonly reportDecompressionProgress?: (
 		asset: 'javascript' | 'wasm' | 'data',
@@ -1091,6 +1092,7 @@ export async function preflightPerlRuntimeAssets(
 	}, limits.assetTimeoutMs);
 	try {
 		const preflight = await preflightRuntimeAssets({
+			persistentCache: request.persistentCache,
 			manifest: registry,
 			runtimeId: PERL_PREFLIGHT_RUNTIME_ID,
 			rootUrl: baseUrl,

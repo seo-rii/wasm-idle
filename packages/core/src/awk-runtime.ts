@@ -138,6 +138,7 @@ export interface AwkRuntimePreflightRequest {
 	readonly limits?: Partial<ExecutionLimits>;
 	readonly signal?: AbortSignal;
 	readonly fetch?: typeof globalThis.fetch;
+	readonly persistentCache?: import('./persistent-asset-cache.js').RuntimeAssetCacheOptions;
 	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
 	readonly reportDecompressionProgress?: (loadedBytes: number, totalBytes: number) => void;
 }
@@ -1098,6 +1099,7 @@ export async function preflightAwkRuntimeAssets(
 	}, limits.assetTimeoutMs);
 	try {
 		const preflight = await preflightRuntimeAssets({
+			persistentCache: request.persistentCache,
 			manifest: registry,
 			runtimeId: AWK_PREFLIGHT_RUNTIME_ID,
 			rootUrl: baseUrl,
