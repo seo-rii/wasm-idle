@@ -195,6 +195,26 @@ Clone the repository, run the normal npm scripts, and let those assets be regene
 
 The real TinyGo host bridge also writes temporary `tinygo-host-probe.json` and `tinygo-driver-bridge.json` files inside its working directory under `/tmp/`.
 
+## External Binaryen payload
+
+The upstream worker build extracts Binaryen 129's embedded Wasm into a compressed
+`assets/upstream-binaryen-<sha256-prefix>.wasm.gz.bin` asset. The build parses the
+upstream source without evaluating it and rejects an unknown decoder layout. The
+browser checks both compressed and decoded receipts before creating the Wasm Blob;
+the worker also checks the decoded receipt before instantiation.
+
+After rebuilding the upstream consumer, regenerate and review the complete graph
+lock from the repository root, then sync against that lock:
+
+```sh
+node scripts/generate-tinygo-executable-lock.mjs runtimes/wasm-tinygo/dist scripts/wasm-tinygo-assets.lock.json
+node scripts/sync-wasm-tinygo.mjs runtimes/wasm-tinygo/dist
+```
+
+Sync requires the prepared raw toolchain files in the existing static target, as
+before. Compress static runtime assets after sync. Keep the service worker's exact
+response URL allowlist aligned with the reviewed graph module paths.
+
 ## Scope
 
 This repository ships the independent upstream compiler consumer used by wasm-idle's public

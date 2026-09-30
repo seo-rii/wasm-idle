@@ -14,7 +14,7 @@ export interface WasmTinyGoRuntimeProfile {
 	assetReceipts: Record<string, WasmTinyGoAssetReceipt>;
 }
 
-export type TinyGoExecutableGraphImportKind = 'static' | 'dynamic' | 'worker';
+export type TinyGoExecutableGraphImportKind = 'static' | 'dynamic' | 'worker' | 'asset';
 
 export interface TinyGoExecutableGraphImport {
 	specifier: string;
@@ -26,6 +26,8 @@ export interface TinyGoExecutableGraphLockModule {
 	path: string;
 	bytes: number;
 	sha256: string;
+	uncompressedBytes?: number;
+	uncompressedSha256?: string;
 	imports: TinyGoExecutableGraphImport[];
 }
 
@@ -37,6 +39,8 @@ export interface ParsedTinyGoExecutableGraphLock {
 export interface TinyGoExecutableGraphModule {
 	readonly bytes: number;
 	readonly sha256: string;
+	readonly uncompressedBytes?: number;
+	readonly uncompressedSha256?: string;
 	readonly imports: readonly Readonly<TinyGoExecutableGraphImport>[];
 }
 

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import { extractTinyGoExecutableImports } from '../../../scripts/sync-wasm-tinygo.mjs';
 import {
 	canonicalTinyGoExecutableGraphProfile,
 	snapshotTinyGoExecutableGraphProfile
@@ -99,14 +100,31 @@ describe('bundled wasm-tinygo runtime', () => {
 		const executablePaths = [
 			'upstream.js',
 			...readdirSync(assetsDir)
-				.filter((entry) => /^upstream-compile-worker-.+\.js$/u.test(entry))
+				.filter((entry) => /\.(?:[cm]?js|wasm(?:\.gz)?|bin)$/u.test(entry))
 				.map((entry) => `assets/${entry}`)
 		].sort();
 		expect(executablePaths).toEqual(Object.keys(profile.modules).sort());
 		for (const modulePath of executablePaths) {
 			const bytes = readFileSync(path.join(runtimeDir, modulePath));
-			expect(bytes.byteLength).toBe(profile.modules[modulePath]!.bytes);
-			expect(sha256(bytes)).toBe(profile.modules[modulePath]!.sha256);
+			const receipt = profile.modules[modulePath]!;
+			expect(bytes.byteLength).toBe(receipt.bytes);
+			expect(sha256(bytes)).toBe(receipt.sha256);
+			if (modulePath.endsWith('.wasm.gz.bin')) {
+				expect(modulePath).toMatch(
+					/^assets\/upstream-binaryen-[a-f0-9]{16}\.wasm\.gz\.bin$/u
+				);
+				expect(receipt.uncompressedBytes).toBeGreaterThan(0);
+				const logicalBytes = gunzipSync(bytes, {
+					maxOutputLength: receipt.uncompressedBytes!
+				});
+				expect(logicalBytes.byteLength).toBe(receipt.uncompressedBytes);
+				expect(sha256(logicalBytes)).toBe(receipt.uncompressedSha256);
+				expect(WebAssembly.validate(logicalBytes)).toBe(true);
+				expect(receipt.imports).toEqual([]);
+			} else {
+				const source = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+				expect(extractTinyGoExecutableImports(source, modulePath)).toEqual(receipt.imports);
+			}
 		}
 	});
 });

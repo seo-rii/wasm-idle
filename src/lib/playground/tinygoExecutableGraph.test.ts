@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -122,6 +123,78 @@ afterEach(() => {
 });
 
 describe('TinyGo executable graph', () => {
+	it('verifies compressed and logical Binaryen receipts before exposing a Wasm Blob', async () => {
+		const wasm = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
+		const compressed = gzipSync(wasm);
+		const assetPath = 'assets/upstream-binaryen-0123456789abcdef.wasm.gz.bin';
+		const source = `export const url = new URL('${assetPath}', import.meta.url);`;
+		const sourceBytes = encoder.encode(source);
+		const provisional: TinyGoExecutableGraphProfile = {
+			schemaVersion: 1,
+			format: TINYGO_EXECUTABLE_GRAPH_FORMAT,
+			entryPath: 'upstream.js',
+			fingerprint: '0'.repeat(64),
+			modules: {
+				'upstream.js': {
+					bytes: sourceBytes.length,
+					sha256: sha256(sourceBytes),
+					imports: [{ specifier: assetPath, target: assetPath, kind: 'asset' }]
+				},
+				[assetPath]: {
+					bytes: compressed.length,
+					sha256: sha256(compressed),
+					uncompressedBytes: wasm.length,
+					uncompressedSha256: sha256(wasm),
+					imports: []
+				}
+			}
+		};
+		const profile = {
+			...provisional,
+			fingerprint: sha256(canonicalTinyGoExecutableGraphProfile(provisional))
+		};
+		const blobs: Blob[] = [];
+		vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+			blobs.push(blob as Blob);
+			return `blob:https://app.test/${blobs.length}`;
+		});
+		const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+		const fetch = vi.fn(async (input: RequestInfo | URL) => {
+			const url = String(input);
+			const binary = url.includes('.wasm.gz.bin');
+			const response = new Response(binary ? compressed : sourceBytes, {
+				headers: { 'content-type': binary ? 'application/octet-stream' : 'text/javascript' }
+			});
+			Object.defineProperty(response, 'url', { value: url });
+			return response;
+		});
+		const graph = await loadVerifiedTinyGoExecutableGraph({
+			moduleUrl: 'https://cdn.test/mirror/upstream.js',
+			profile,
+			fetch
+		});
+		expect(blobs[0]!.type).toBe('application/wasm');
+		expect(new Uint8Array(await blobs[0]!.arrayBuffer())).toEqual(wasm);
+		expect(await blobs[1]!.text()).toContain('blob:https://app.test/1');
+		graph.dispose();
+		expect(revoke).toHaveBeenCalledTimes(2);
+		const corrupted = {
+			...profile,
+			modules: {
+				...profile.modules,
+				[assetPath]: { ...profile.modules[assetPath]!, uncompressedSha256: 'f'.repeat(64) }
+			}
+		};
+		corrupted.fingerprint = sha256(canonicalTinyGoExecutableGraphProfile(corrupted));
+		await expect(
+			loadVerifiedTinyGoExecutableGraph({
+				moduleUrl: 'https://cdn.test/mirror/upstream.js',
+				profile: corrupted,
+				fetch
+			})
+		).rejects.toThrow();
+		expect(blobs).toHaveLength(2);
+	});
 	it('verifies all receipts and rewrites the complete graph to owned Blob URLs', async () => {
 		const profile = createProfile();
 		const fetch = createFetch(profile);

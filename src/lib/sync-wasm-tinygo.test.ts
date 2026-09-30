@@ -11,20 +11,110 @@ import {
 	writeFile
 } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
 	computeTinyGoExecutableGraphFingerprint,
+	extractTinyGoExecutableImports,
 	getTinyGoSyncControlPaths,
 	parseTinyGoExecutableGraphLock,
 	syncWasmTinyGoDist,
 	TINYGO_EXECUTABLE_GRAPH_FINGERPRINT_DOMAIN,
 	TINYGO_EXECUTABLE_GRAPH_FORMAT
 } from '../../scripts/sync-wasm-tinygo.mjs';
+import { generateTinyGoExecutableLock } from '../../scripts/generate-tinygo-executable-lock.mjs';
 
 const tempDirs: string[] = [];
 const GRAPH_LOCK_FORMAT = 'wasm-idle-tinygo-executable-graph-lock-v1';
+
+describe('TinyGo executable graph generation', () => {
+	it('recognizes Vite empty-string URL bases while rejecting nonempty concatenation', () => {
+		const specifier = './upstream-binaryen-0123456789abcdef.wasm.gz.bin';
+		for (const base of [
+			'import.meta.url',
+			'``+import.meta.url',
+			'"" + import.meta.url',
+			"''+import.meta.url"
+		]) {
+			const source = `new URL('${specifier}',${base})`;
+			expect(extractTinyGoExecutableImports(source, 'assets/worker.js')).toEqual([
+				{
+					specifier,
+					target: specifier.replace('./', 'assets/'),
+					kind: 'asset'
+				}
+			]);
+		}
+		expect(
+			extractTinyGoExecutableImports(
+				`new URL('${specifier}','wrong/'+import.meta.url)`,
+				'assets/worker.js'
+			)
+		).toEqual([]);
+	});
+
+	it('generates both delivery and logical receipts from the actual emitted graph', async () => {
+		const root = await makeTempDir();
+		const sourceDir = path.join(root, 'dist');
+		const output = path.join(root, 'lock.json');
+		const assetPath = 'assets/upstream-binaryen-0123456789abcdef.wasm.gz.bin';
+		const wasm = Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]);
+		const compressed = gzipSync(wasm);
+		await writeFixtureFile(
+			sourceDir,
+			'upstream.js',
+			`export const asset = new URL('${assetPath}',\`\`+import.meta.url);`
+		);
+		await writeFixtureFile(sourceDir, assetPath, compressed);
+		await writeFixtureFile(sourceDir, 'tools/upstream/tinygo-compiler.wasm', wasm);
+		const generated = await generateTinyGoExecutableLock(sourceDir, output);
+		expect(generated.modules).toHaveLength(2);
+		expect(generated.modules[0]).toEqual({
+			path: assetPath,
+			bytes: compressed.length,
+			sha256: sha256(compressed),
+			imports: [],
+			uncompressedBytes: wasm.length,
+			uncompressedSha256: sha256(wasm)
+		});
+		expect(parseTinyGoExecutableGraphLock(await readFile(output)).modules.size).toBe(2);
+		const original = await readFile(output);
+		await generateTinyGoExecutableLock(sourceDir, output);
+		expect(await readFile(output)).toEqual(original);
+		await writeFixtureFile(sourceDir, 'assets/unreachable.js', 'export {};');
+		await expect(generateTinyGoExecutableLock(sourceDir, output)).rejects.toThrow(
+			'unreachable'
+		);
+		expect(await readFile(output)).toEqual(original);
+		await rm(path.join(sourceDir, 'assets/unreachable.js'));
+		await writeFixtureFile(sourceDir, assetPath, gzipSync(Buffer.from('not Wasm')));
+		await expect(generateTinyGoExecutableLock(sourceDir, output)).rejects.toThrow(
+			'not valid Wasm'
+		);
+		expect(await readFile(output)).toEqual(original);
+	});
+
+	it('rejects unknown graph binaries, symlinks and an output inside the source tree', async () => {
+		const root = await makeTempDir();
+		const sourceDir = path.join(root, 'dist');
+		const output = path.join(root, 'lock.json');
+		await writeFixtureFile(sourceDir, 'upstream.js', 'export {};');
+		await expect(
+			generateTinyGoExecutableLock(sourceDir, path.join(sourceDir, 'lock.json'))
+		).rejects.toThrow('outside');
+		await writeFixtureFile(sourceDir, 'assets/unrecognized.wasm.gz.bin', 'unknown');
+		await expect(generateTinyGoExecutableLock(sourceDir, output)).rejects.toThrow(
+			'unsupported executable'
+		);
+		await rm(path.join(sourceDir, 'assets/unrecognized.wasm.gz.bin'));
+		await symlink(path.join(sourceDir, 'upstream.js'), path.join(sourceDir, 'alias.js'));
+		await expect(generateTinyGoExecutableLock(sourceDir, output)).rejects.toThrow(
+			'non-regular'
+		);
+	});
+});
 
 async function makeTempDir() {
 	const dir = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-wasm-tinygo-'));
@@ -261,7 +351,7 @@ describe('syncWasmTinyGoDist', () => {
 			'wasm-idle:tinygo-executable-graph:v1\n'
 		);
 		expect(computeTinyGoExecutableGraphFingerprint(lock)).toBe(
-			'4f5712fb66d4d6e7e5f84a688911a1cdc0df96f30163c3036a453a505b4d409f'
+			'8ecbffd4b4e44ff67288d8c46328a1b06d0a0ac76d7a50a9e458603b68d0d795'
 		);
 		expect(
 			[...lock.modules.values()].map(({ path: modulePath, bytes, sha256: digest }) => ({
@@ -271,19 +361,24 @@ describe('syncWasmTinyGoDist', () => {
 			}))
 		).toEqual([
 			{
+				modulePath: 'assets/upstream-binaryen-59aad93503b5fd53.wasm.gz.bin',
+				bytes: 2366782,
+				digest: 'e497b67a6bcbee29639792a3d58ecacb22781287f7fe155bfdf079e6ca159dff'
+			},
+			{
 				modulePath: 'assets/upstream-compile-worker-CFw6Ych6.js',
 				bytes: 558,
 				digest: '03a76345c69f8bd751dac18894f65c0918f1690fbbb661f38052819cd5ae8209'
 			},
 			{
-				modulePath: 'assets/upstream-compile-worker-D5QWLpRH.js',
+				modulePath: 'assets/upstream-compile-worker-CUrboB1_.js',
 				bytes: 103559,
-				digest: '5d37a07cd8118d663f1be495b4187e733add0a7e44e368d637074cb10d0518f2'
+				digest: '42337c2f06d04b51d79f0ec66ae685f0cfb2a78718b0636df980dc92dd1db9d5'
 			},
 			{
-				modulePath: 'assets/upstream-compile-worker-Dat9LBTc.js',
-				bytes: 12538521,
-				digest: 'b8d987c32914715b0ba91ace85585f5db467957d14982aa163c1febe9d6dfc04'
+				modulePath: 'assets/upstream-compile-worker-CeYS3ydo.js',
+				bytes: 181175,
+				digest: 'faa2bf6a310cd23991babde1fb62cd34253d692fee03029fe3508eae4c24b1c0'
 			},
 			{
 				modulePath: 'assets/upstream-compile-worker-NPJcbr3r.js',
@@ -293,7 +388,7 @@ describe('syncWasmTinyGoDist', () => {
 			{
 				modulePath: 'upstream.js',
 				bytes: 126073,
-				digest: '233c5e931405ffc817ad39e2a9f2d02090eefe6612409f4cf0124b4418076e1f'
+				digest: '136a957aa940c3e2b8c7a925eb538f3fce81f699aa9113e1fd93ce0b35c879aa'
 			}
 		]);
 	});

@@ -5,12 +5,13 @@ import {
 	type ExecutionLimits,
 	type RuntimeRegistryManifest
 } from '@wasm-idle/core';
+import { decompressGzip } from '@wasm-idle/llvm-core';
 
 export const TINYGO_EXECUTABLE_GRAPH_FORMAT = 'wasm-idle-tinygo-executable-graph-v1' as const;
 export const TINYGO_EXECUTABLE_GRAPH_FINGERPRINT_DOMAIN =
 	'wasm-idle:tinygo-executable-graph:v1\n' as const;
 
-export type TinyGoExecutableImportKind = 'static' | 'dynamic' | 'worker';
+export type TinyGoExecutableImportKind = 'static' | 'dynamic' | 'worker' | 'asset';
 
 export interface TinyGoExecutableGraphImport {
 	readonly specifier: string;
@@ -21,6 +22,8 @@ export interface TinyGoExecutableGraphImport {
 export interface TinyGoExecutableGraphModule {
 	readonly bytes: number;
 	readonly sha256: string;
+	readonly uncompressedBytes?: number;
+	readonly uncompressedSha256?: string;
 	readonly imports: readonly TinyGoExecutableGraphImport[];
 }
 
@@ -177,13 +180,21 @@ export function snapshotTinyGoExecutableGraphProfile(
 	const modules: Record<string, Readonly<TinyGoExecutableGraphModule>> = {};
 	for (const rawPath of modulePaths) {
 		const modulePath = requireSafePath(rawPath, 'TinyGo executable module path');
+		const binary = /^assets\/upstream-binaryen-[a-f0-9]{16}\.wasm\.gz\.bin$/.test(modulePath);
+		if (!modulePath.endsWith('.js') && !binary)
+			throw configurationError('Unsupported TinyGo graph asset path');
 		const sourceModule = requireRecord(
 			sourceModules[rawPath],
 			`TinyGo executable module ${modulePath}`
 		);
 		requireExactKeys(
 			sourceModule,
-			['bytes', 'sha256', 'imports'],
+			[
+				'bytes',
+				'sha256',
+				'imports',
+				...(binary ? ['uncompressedBytes', 'uncompressedSha256'] : [])
+			],
 			`TinyGo executable module ${modulePath}`
 		);
 		if (!Number.isSafeInteger(sourceModule.bytes) || Number(sourceModule.bytes) <= 0) {
@@ -200,6 +211,17 @@ export function snapshotTinyGoExecutableGraphProfile(
 			);
 		}
 		const specifiers = new Set<string>();
+		if (
+			binary &&
+			(sourceModule.imports.length ||
+				!Number.isSafeInteger(sourceModule.uncompressedBytes) ||
+				Number(sourceModule.uncompressedBytes) < 8 ||
+				Number(sourceModule.uncompressedBytes) > 64 * 1024 * 1024 ||
+				typeof sourceModule.uncompressedSha256 !== 'string' ||
+				!SHA256_PATTERN.test(sourceModule.uncompressedSha256))
+		) {
+			throw configurationError('Binaryen Wasm has invalid logical receipts or imports');
+		}
 		const imports = sourceModule.imports.map((rawImport, index) => {
 			const graphImport = requireRecord(
 				rawImport,
@@ -221,7 +243,7 @@ export function snapshotTinyGoExecutableGraphProfile(
 				);
 			}
 			specifiers.add(specifier);
-			if (!['static', 'dynamic', 'worker'].includes(String(graphImport.kind))) {
+			if (!['static', 'dynamic', 'worker', 'asset'].includes(String(graphImport.kind))) {
 				throw configurationError(
 					`TinyGo executable module ${modulePath} import ${specifier} has an invalid kind`
 				);
@@ -231,6 +253,8 @@ export function snapshotTinyGoExecutableGraphProfile(
 					`TinyGo executable module ${modulePath} import ${specifier} does not resolve to ${target}`
 				);
 			}
+			if ((graphImport.kind === 'asset') !== target.endsWith('.wasm.gz.bin'))
+				throw configurationError('TinyGo graph import kind does not match its target');
 			importCount += 1;
 			if (importCount > MAX_IMPORTS) {
 				throw configurationError(`TinyGo executable graph exceeds ${MAX_IMPORTS} imports`);
@@ -244,10 +268,16 @@ export function snapshotTinyGoExecutableGraphProfile(
 		modules[modulePath] = Object.freeze({
 			bytes: Number(sourceModule.bytes),
 			sha256: sourceModule.sha256,
+			...(binary
+				? {
+						uncompressedBytes: Number(sourceModule.uncompressedBytes),
+						uncompressedSha256: sourceModule.uncompressedSha256 as string
+					}
+				: {}),
 			imports: Object.freeze(imports)
 		});
 	}
-	if (!Object.prototype.hasOwnProperty.call(modules, entryPath)) {
+	if (!Object.prototype.hasOwnProperty.call(modules, entryPath) || !entryPath.endsWith('.js')) {
 		throw configurationError('TinyGo executable graph entry module is missing');
 	}
 	for (const [modulePath, module] of Object.entries(modules)) {
@@ -296,6 +326,8 @@ export function canonicalTinyGoExecutableGraphProfile(
 	for (const modulePath of paths) {
 		const module = profile.modules[modulePath]!;
 		canonical += `module\0${modulePath}\0${module.bytes}\0${module.sha256}\n`;
+		if (module.uncompressedBytes !== undefined)
+			canonical += `wasm\0${modulePath}\0${module.uncompressedBytes}\0${module.uncompressedSha256}\n`;
 	}
 	const edges = paths.flatMap((modulePath) =>
 		profile.modules[modulePath]!.imports.map((graphImport) => ({
@@ -446,11 +478,17 @@ function createPreflightManifest(
 							key: keysByPath[modulePath]!,
 							path: modulePath,
 							compressedSha256: receipt.sha256,
-							uncompressedSha256: receipt.sha256,
+							uncompressedSha256: receipt.uncompressedSha256 ?? receipt.sha256,
 							compressedBytes: receipt.bytes,
-							uncompressedBytes: receipt.bytes,
-							mediaType: 'text/javascript',
-							encoding: 'identity' as const
+							uncompressedBytes: receipt.uncompressedBytes ?? receipt.bytes,
+							mediaType:
+								receipt.uncompressedBytes !== undefined
+									? 'application/wasm'
+									: 'text/javascript',
+							encoding:
+								receipt.uncompressedBytes !== undefined
+									? ('gzip' as const)
+									: ('identity' as const)
 						};
 					}),
 				contracts: {
@@ -530,7 +568,24 @@ export async function loadVerifiedTinyGoExecutableGraph(
 	});
 
 	const sources: Record<string, string> = {};
+	const binaries: Record<string, Uint8Array> = {};
 	for (const modulePath of Object.keys(profile.modules)) {
+		const receipt = profile.modules[modulePath]!;
+		if (receipt.uncompressedBytes !== undefined) {
+			const bytes = await decompressGzip(
+				preflight.assets[urls.keysByPath[modulePath]!]!.bytes,
+				modulePath,
+				receipt.uncompressedBytes,
+				options.signal
+			);
+			if (
+				bytes.byteLength !== receipt.uncompressedBytes ||
+				(await sha256Hex(bytes, options.signal)) !== receipt.uncompressedSha256
+			)
+				throw configurationError('Binaryen Wasm logical receipt mismatch');
+			binaries[modulePath] = bytes;
+			continue;
+		}
 		try {
 			sources[modulePath] = fatalDecoder.decode(
 				preflight.assets[urls.keysByPath[modulePath]!]!.bytes
@@ -575,6 +630,17 @@ export async function loadVerifiedTinyGoExecutableGraph(
 	};
 	try {
 		for (const modulePath of order) {
+			if (profile.modules[modulePath]!.uncompressedBytes !== undefined) {
+				const bytes = binaries[modulePath]!;
+				const blobUrl = URL.createObjectURL(
+					new Blob([Uint8Array.from(bytes)], { type: 'application/wasm' })
+				);
+				ownedUrls.push(blobUrl);
+				if (!SAFE_BLOB_URL_PATTERN.test(blobUrl))
+					throw configurationError('TinyGo graph received an unsafe Wasm Blob URL');
+				moduleUrls[modulePath] = blobUrl;
+				continue;
+			}
 			let source = sources[modulePath]!;
 			for (const graphImport of profile.modules[modulePath]!.imports) {
 				source = replaceUniqueSpecifier(
