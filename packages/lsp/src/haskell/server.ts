@@ -50,6 +50,9 @@ export async function getHaskellLanguageServer(
 			ghcArgs: config.ghcArgs
 		},
 		onStatus: hostOptions?.onStatus,
-		lifecycle: hostOptions
+		lifecycle: {
+			...hostOptions,
+			rootUrl: typeof options === 'string' ? options : hostOptions?.rootUrl
+		}
 	});
 }

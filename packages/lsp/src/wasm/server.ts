@@ -18,6 +18,9 @@ export async function getWasmLanguageServer(
 		createWorker: hostOptions?.createWorker || createDefaultWorker,
 		initOptions: {},
 		onStatus: hostOptions?.onStatus,
-		lifecycle: hostOptions
+		lifecycle: {
+			...hostOptions,
+			rootUrl: typeof options === 'string' ? options : hostOptions?.rootUrl
+		}
 	});
 }

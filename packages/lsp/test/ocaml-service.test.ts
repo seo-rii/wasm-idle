@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import * as persistentAssets from '../src/persistent-assets.js';
 
 import {
 	createOcamlWorkerService,
@@ -7,6 +9,82 @@ import {
 } from '../src/index.js';
 
 describe('createOcamlWorkerService', () => {
+	it.each([
+		{ enabled: true, stock: true, hasBackend: true },
+		{ enabled: false, stock: true, hasBackend: false },
+		{ enabled: true, stock: false, hasBackend: false }
+	])(
+		'forwards nested storage only for enabled pinned manifests: %j',
+		async ({ enabled, stock, hasBackend }) => {
+			const capture = vi.fn();
+			vi.stubGlobal('__captureOcamlCacheBackend', capture);
+			const moduleUrl = `data:text/javascript,${encodeURIComponent(`
+			export async function compile() { return {success:true,diagnostics:[]}; }
+			export function createBrowserWorkerSystemDispatcher(options) { globalThis.__captureOcamlCacheBackend(options.runtimeAssets?.persistentCache); return {}; }
+		`)}`;
+			const manifestPath =
+				'/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json';
+			const manifestBytes = new TextEncoder().encode(
+				JSON.stringify({ ocamlLibFiles: [], packages: [] })
+			);
+			const resolveReceipt = vi
+				.spyOn(persistentAssets, 'resolveLanguageToolPersistentReceipt')
+				.mockReturnValue(
+					stock
+						? {
+								bytes: manifestBytes.length,
+								sha256: createHash('sha256').update(manifestBytes).digest('hex')
+							}
+						: undefined
+				);
+			vi.stubGlobal(
+				'fetch',
+				vi.fn(async () => new Response(manifestBytes))
+			);
+			persistentAssets.configureWorkerLanguageToolPersistentAssets({
+				persistentCache: { enabled },
+				assetRoot: 'https://assets.example.test'
+			});
+			const service = createOcamlWorkerService();
+			const document: LspDocument = {
+				uri: 'file:///workspace/main.ml',
+				languageId: 'ocaml',
+				version: 1,
+				text: 'let () = ()'
+			};
+			const context: LspDocumentContext = {
+				documents: new Map([[document.uri, document]]),
+				publishDiagnostics: vi.fn(),
+				reportProgress: vi.fn()
+			};
+			try {
+				await service.initialize?.(
+					{
+						moduleUrl,
+						manifestUrl: stock
+							? `https://assets.example.test${manifestPath}`
+							: 'https://custom.example.test/manifest.json'
+					},
+					context
+				);
+				await service.diagnostics?.(document, context);
+				expect(capture).toHaveBeenCalledOnce();
+				if (hasBackend)
+					expect(capture.mock.calls[0][0]).toMatchObject({
+						read: expect.any(Function),
+						write: expect.any(Function)
+					});
+				else expect(capture.mock.calls[0][0]).toBeUndefined();
+			} finally {
+				resolveReceipt.mockRestore();
+				persistentAssets.configureWorkerLanguageToolPersistentAssets({
+					persistentCache: { enabled: true }
+				});
+				vi.unstubAllGlobals();
+			}
+		}
+	);
+
 	it('loads the default compiler manifest through the bounded asset boundary', async () => {
 		const moduleUrl = `data:text/javascript,${encodeURIComponent(`
 			export async function compile() { return { success: true }; }

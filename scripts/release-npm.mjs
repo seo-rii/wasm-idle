@@ -622,6 +622,7 @@ async function release(options) {
 	const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-npm-release-'));
 	try {
 		console.log('\nBuilding and running package install/import verification...');
+		await run('pnpm', ['run', 'assets:lock'], REPO_ROOT);
 		await run('pnpm', ['run', 'verify:package'], REPO_ROOT);
 		const artifacts = await packAndValidate(packages, options.version, tempRoot);
 		console.log(

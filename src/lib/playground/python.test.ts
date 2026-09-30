@@ -58,6 +58,28 @@ vi.mock('$env/dynamic/public', () => ({
 import Python from './python';
 
 describe('Python sandbox', () => {
+	it('applies nonsticky run cache overrides only after the busy guard', async () => {
+		const sandbox = new Python();
+		await sandbox.load({ rootUrl: '/', persistentCache: { enabled: true, maxBytes: 4096 } });
+		const select = vi.spyOn(sandbox.assetBridge!, 'setExecutionPersistentCache');
+		autoResolveRun = false;
+		const pending = sandbox.run('print(1)', false, false, undefined, [], {
+			persistentCache: false
+		});
+		await expect(
+			sandbox.run('print(2)', false, false, undefined, [], {
+				persistentCache: { enabled: true }
+			})
+		).rejects.toMatchObject({ code: 'busy' });
+		expect(select).toHaveBeenCalledOnce();
+		expect(select.mock.results.at(-1)?.value).toMatchObject({ enabled: false, maxBytes: 4096 });
+		workerInstances[0].resolveRun();
+		await pending;
+		autoResolveRun = true;
+		await sandbox.run('print(1)', false);
+		expect(select.mock.results.at(-1)?.value).toMatchObject({ enabled: true, maxBytes: 4096 });
+		await sandbox.dispose();
+	});
 	beforeEach(() => {
 		workerInstances.length = 0;
 		autoResolveLoad = true;

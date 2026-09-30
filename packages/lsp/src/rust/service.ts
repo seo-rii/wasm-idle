@@ -7,9 +7,12 @@ import {
 import type { RustLanguageServerRuntimeProfile } from '../types.js';
 import {
 	createRuntimeAssetDeliveryBudget,
+	createRuntimeAssetCacheBackend,
+	type RuntimeAssetCacheBackend,
 	resolveExecutionLimits,
 	type RuntimeAssetDeliveryBudgetDescriptor
 } from '@wasm-idle/core';
+import { resolveLanguageToolPersistentOptions } from '../persistent-assets.js';
 
 export type RustLanguageServerTargetTriple = 'wasm32-wasip1' | 'wasm32-wasip2' | 'wasm32-wasip3';
 
@@ -40,6 +43,7 @@ interface RustCompilerResult {
 
 interface RustCompiler {
 	compile: (request: {
+		assetCache?: RuntimeAssetCacheBackend;
 		code: string;
 		edition: string;
 		crateType: 'bin';
@@ -306,6 +310,7 @@ export function createRustWorkerService(
 		import(/* @vite-ignore */ url) as Promise<RustCompilerModule>
 ): WorkerLanguageService {
 	let compiler: RustCompiler | null = null;
+	let assetCache: RuntimeAssetCacheBackend | undefined;
 	let targetTriple: RustLanguageServerTargetTriple = 'wasm32-wasip1';
 	let edition = '2024';
 	let maxAssetDeliveryBytes = MAX_RUST_LSP_ASSET_DELIVERY_BYTES;
@@ -317,6 +322,8 @@ export function createRustWorkerService(
 		diagnosticDelay: 800,
 		capabilities: {},
 		async initialize(options, context) {
+			const cache = resolveLanguageToolPersistentOptions().persistentCache;
+			assetCache = cache.enabled ? createRuntimeAssetCacheBackend(cache) : undefined;
 			const config = (options || {}) as RustWorkerOptions;
 			const configuredMaxAssetBytes = resolveExecutionLimits(
 				config.maxAssetBytes === undefined ? {} : { maxAssetBytes: config.maxAssetBytes }
@@ -337,6 +344,7 @@ export function createRustWorkerService(
 			context.reportProgress('rustc-diagnostics');
 			const assetDeliveryBudget = createRuntimeAssetDeliveryBudget(maxAssetDeliveryBytes);
 			const result = await compiler.compile({
+				...(assetCache ? { assetCache } : {}),
 				code: document.text,
 				edition,
 				crateType: 'bin',

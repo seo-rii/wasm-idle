@@ -52,6 +52,7 @@ class Awk extends StaticWorkerRuntimeSandbox {
 					manifestUrl: resolved.manifestUrl,
 					profile,
 					limits: context.limits,
+					persistentCache: context.persistentCache,
 					signal: context.signal,
 					reportProgress(progress) {
 						loadedByAsset.set(progress.assetKey, progress.loadedBytes);

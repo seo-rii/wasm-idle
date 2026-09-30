@@ -1,4 +1,9 @@
 import { env as dynamicPublicEnv } from '$env/dynamic/public';
+import {
+	resolveRuntimeAssetCacheOptions,
+	resolveRuntimeAssetLockEntry,
+	type RuntimeAssetCacheOptions
+} from '@wasm-idle/core';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from '$lib/playground/clangAssetIntegrity';
 import { snapshotDOuterAssetConfig, type DOuterAssetReceipts } from '$lib/playground/dOuterAssets';
 import type { ElixirRuntimeAssetReceipts } from '$lib/playground/elixirAssets';
@@ -128,6 +133,7 @@ export type RuntimeAssetIntegrityEntry = CoreRuntimeAssetIntegrityEntry;
 export type RuntimeAssetIntegrityMap = Record<string, string | RuntimeAssetIntegrityEntry>;
 
 export interface RuntimeAssetConfig {
+	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 	baseUrl?: string;
 	loader?: RuntimeAssetLoader;
 	loaderKey?: string;
@@ -260,12 +266,15 @@ export interface LispRuntimeAssetConfig {
 	moduleUrl?: string;
 	manifestUrl?: string;
 	manifestFingerprint?: string;
+	/** Optional raw JSON byte receipt; distinct from the canonical manifest fingerprint. */
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
 }
 
 export interface ResolvedLispRuntimeAssetConfig {
 	moduleUrl: string;
 	manifestUrl: string;
 	manifestFingerprint: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
 }
 
 export interface RubyRuntimeAssetConfig {
@@ -669,6 +678,9 @@ export type TinyGoRuntimeAssetLoader = (
 ) => TinyGoRuntimeAssetLoaderResult | Promise<TinyGoRuntimeAssetLoaderResult>;
 
 export interface ResolvedRuntimeAssetConfig {
+	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
+	/** Built-in lock prefix; custom loaders use only explicitly supplied receipts. */
+	assetPrefix?: string;
 	baseUrl: string;
 	loader?: RuntimeAssetLoader;
 	integrity?: RuntimeAssetIntegrityMap;
@@ -830,6 +842,31 @@ const resolveRuntimeConfiguredBaseUrl = (
 	config.resolveConfiguredBaseUrl?.(baseUrl, currentUrl) || normalizeBaseUrl(baseUrl, currentUrl);
 
 export function resolveRuntimeAssetConfig(
+	runtime: RuntimeAssetRuntime,
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = '',
+	callCache?: RuntimeAssetCacheOptions
+): ResolvedRuntimeAssetConfig {
+	const config = resolveRuntimeAssetConfigWithoutCache(runtime, options, currentUrl);
+	const runtimeConfig = typeof options === 'object' ? options?.[runtime] : undefined;
+	const persistentCache = resolveRuntimeAssetCacheOptions(
+		typeof options === 'object' ? options?.persistentCache : undefined,
+		runtimeConfig?.persistentCache,
+		callCache
+	);
+	const assetPrefix =
+		!config.loader && !runtimeConfig?.baseUrl
+			? RUNTIME_ASSET_FOLDERS[runtime].folder
+			: undefined;
+	return {
+		...config,
+		persistentCache,
+		assetPrefix,
+		useAssetBridge: config.useAssetBridge || (persistentCache.enabled && !!assetPrefix)
+	};
+}
+
+function resolveRuntimeAssetConfigWithoutCache(
 	runtime: RuntimeAssetRuntime,
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
@@ -1985,13 +2022,23 @@ export function resolveLispRuntimeAssetConfig(
 		configured?.manifestFingerprint?.trim() ||
 		(publicEnv.PUBLIC_WASM_LISP_MANIFEST_FINGERPRINT || '').trim();
 	const usesBundledRoot = !configuredModuleUrl && !publicModuleUrl && rootUrl !== undefined;
+	const manifestUrl = configuredManifestUrl
+		? resolveConfiguredUrl(configuredManifestUrl, currentUrl)
+		: deriveLispManifestUrl(moduleUrl, currentUrl);
+	const manifestReceipt =
+		configured?.manifestReceipt ??
+		(usesBundledRoot && !configuredManifestUrl && !configuredFingerprint
+			? resolveRuntimeAssetLockEntry(manifestUrl, {
+					assetRoot: new URL('./', new URL(moduleUrl, currentUrl || 'http://localhost/')),
+					assetPrefix: 'wasm-lisp'
+				})
+			: undefined);
 	return {
 		moduleUrl,
-		manifestUrl: configuredManifestUrl
-			? resolveConfiguredUrl(configuredManifestUrl, currentUrl)
-			: deriveLispManifestUrl(moduleUrl, currentUrl),
+		manifestUrl,
 		manifestFingerprint:
-			configuredFingerprint || (usesBundledRoot ? WASM_LISP_ASSET_VERSION : '')
+			configuredFingerprint || (usesBundledRoot ? WASM_LISP_ASSET_VERSION : ''),
+		...(manifestReceipt ? { manifestReceipt: Object.freeze({ ...manifestReceipt }) } : {})
 	};
 }
 

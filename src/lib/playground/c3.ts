@@ -134,6 +134,7 @@ class C3 extends StaticWorkerRuntimeSandbox {
 					runtimeId: 'C3',
 					rootUrl: urls.baseUrl,
 					limits: context.limits,
+					persistentCache: context.persistentCache,
 					signal: context.signal,
 					redirect: 'error',
 					requireExactResponseUrl: true,

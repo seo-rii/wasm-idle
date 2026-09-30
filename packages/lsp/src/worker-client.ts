@@ -3,6 +3,7 @@ import { waitForLanguageServerStartup } from './lifecycle.js';
 import { isProgressValue, nextFallbackProgress, progressRatio } from './progress.js';
 import type { EditorLanguageServerHandle, EditorLanguageServerRuntimeOptions } from './types.js';
 import type { MessageReader } from 'vscode-jsonrpc';
+import { resolveRuntimeAssetCacheOptions } from '@wasm-idle/core';
 
 export type LanguageServerStatus =
 	| { state: 'disabled' }
@@ -21,7 +22,10 @@ export interface WorkerLanguageServerClientOptions {
 	initOptions?: unknown;
 	initTransfer?: readonly Transferable[];
 	onStatus?: (status: LanguageServerStatus) => void;
-	lifecycle?: Pick<EditorLanguageServerRuntimeOptions, 'signal' | 'startupTimeoutMs'>;
+	lifecycle?: Pick<
+		EditorLanguageServerRuntimeOptions,
+		'signal' | 'startupTimeoutMs' | 'persistentCache' | 'rootUrl' | 'currentUrl'
+	>;
 }
 
 interface WorkerControlMessage {
@@ -117,7 +121,21 @@ export async function createWorkerLanguageServerClient(
 					};
 					activeWorker.addEventListener('message', handleMessage);
 					activeWorker.addEventListener('error', handleError);
-					const initMessage = { type: 'init', options: options.initOptions };
+					const initMessage = {
+						type: 'init',
+						options: options.initOptions,
+						persistentAssets: {
+							persistentCache: resolveRuntimeAssetCacheOptions(
+								options.lifecycle?.persistentCache
+							),
+							assetRoot: options.lifecycle?.rootUrl
+								? new URL(
+										options.lifecycle.rootUrl,
+										options.lifecycle.currentUrl || globalThis.location?.href
+									).href
+								: undefined
+						}
+					};
 					if (options.initTransfer?.length) {
 						activeWorker.postMessage(initMessage, [...options.initTransfer]);
 					} else {

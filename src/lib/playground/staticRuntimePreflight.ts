@@ -4,7 +4,9 @@ import {
 	TimeoutError,
 	WorkerStartupError,
 	resolveExecutionLimits,
-	type ExecutionLimits
+	resolveRuntimeAssetCacheOptions,
+	type ExecutionLimits,
+	type RuntimeAssetCacheOptions
 } from '@wasm-idle/core';
 import {
 	STATIC_RUNTIME_PREFLIGHT_PROTOCOL_VERSION,
@@ -25,6 +27,7 @@ export interface StaticRuntimeWorkerPreflightRequest {
 	readonly manifestUrl: string;
 	readonly profile: unknown;
 	readonly limits?: Partial<ExecutionLimits>;
+	readonly persistentCache?: RuntimeAssetCacheOptions;
 	readonly signal?: AbortSignal;
 	readonly reportProgress?: (progress: StaticRuntimePreflightProgress) => void;
 }
@@ -43,6 +46,7 @@ export async function preflightStaticRuntimeAssetsInWorker<T extends object>(
 	request: StaticRuntimeWorkerPreflightRequest
 ): Promise<T> {
 	const limits = resolveExecutionLimits(request.limits);
+	const persistentCache = resolveRuntimeAssetCacheOptions(request.persistentCache);
 	if (request.signal?.aborted) {
 		throw new CancelledError(`${request.displayName} runtime preflight cancelled`, {
 			cause: request.signal.reason,
@@ -268,7 +272,8 @@ export async function preflightStaticRuntimeAssetsInWorker<T extends object>(
 						baseUrl: request.baseUrl,
 						manifestUrl: request.manifestUrl,
 						profile: request.profile,
-						limits
+						limits,
+						persistentCache
 					});
 				} catch (error) {
 					settle({

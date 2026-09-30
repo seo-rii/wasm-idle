@@ -15,12 +15,16 @@ import {
 } from './compiler-preload.js';
 import { loadBundledRuntimeContext } from './compiler-runtime.js';
 import { createRustcModuleService } from './rustc-module-service.js';
+import { createRuntimeAssetCacheService } from './runtime-asset-cache-service.js';
+import { withRuntimeAssetPersistentCache } from './runtime-asset-cache.js';
+import { isRegisteredRuntimeAssetCacheIdentity } from './runtime-asset.js';
 import { createModuleWorker } from './module-worker.js';
 import { classifyRetryableFailureKind } from './retryable-failure-kind.js';
 import {
 	getVerifiedRuntimeExecutableGraphConfiguration,
 	isIntegratedCompilerOutput,
 	loadRuntimeManifest,
+	registerRuntimeManifestAssetReceipts,
 	type WasmRustRuntimeProfile
 } from './runtime-manifest.js';
 import { readMirroredBitcode } from './rustc-runtime.js';
@@ -250,12 +254,14 @@ export async function compileRust(
 		message: 'loading runtime manifest'
 	});
 	try {
+		const fetchImpl = withRuntimeAssetPersistentCache(fetch, request.assetCache);
 		const { manifest, targetConfig, versionedModuleBaseUrl, versionedRuntimeBaseUrl } =
 			await loadBundledRuntimeContext(
 				dependencies.loadManifest,
 				request.targetTriple,
 				dependencies.runtimeProfile,
 				{
+					fetchImpl,
 					...(deliveryBudget ? { deliveryBudget } : {}),
 					onManifestProgress(progress) {
 						emitCompileProgress('manifest', 1, {
@@ -321,6 +327,7 @@ export async function compileRust(
 		);
 		let lastFailure = makeFailure(`browser rustc failed before emitting ${mirroredOutputName}`);
 		const {
+			assetCache: _ignoredAssetCache,
 			onProgress: _ignoredOnProgress,
 			workerLimits: _ignoredWorkerLimits,
 			assetDeliveryBudget: _ignoredAssetDeliveryBudget,
@@ -351,13 +358,24 @@ export async function compileRust(
 			activeWorkerCleanup = () => worker.terminate();
 			// Only the activated, receipt-verified topology gets a private module service.
 			const rustcReceiptPath = `wasm-rust/runtime/${manifest.compiler.rustcWasm}`;
-			const moduleService = executableGraph ? createRustcModuleService(
-				manifest.assetReceipts?.[rustcReceiptPath]) : undefined;
+			const moduleService = executableGraph
+				? createRustcModuleService(manifest.assetReceipts?.[rustcReceiptPath])
+				: undefined;
+			if (manifest.assetReceipts)
+				registerRuntimeManifestAssetReceipts(versionedRuntimeBaseUrl, manifest);
+			const assetCacheService =
+				request.assetCache && manifest.assetReceipts && typeof MessageChannel === 'function'
+					? createRuntimeAssetCacheService(
+							request.assetCache,
+							isRegisteredRuntimeAssetCacheIdentity
+						)
+					: undefined;
 			let stopped = false;
 			const stopWorker = () => {
 				if (stopped) return;
 				stopped = true;
 				moduleService?.close();
+				assetCacheService?.close();
 				worker.terminate();
 			};
 			activeWorkerCleanup = stopWorker;
@@ -399,23 +417,30 @@ export async function compileRust(
 				worker.addEventListener('error', handleError);
 			});
 
-			worker.postMessage({
-				type: 'compile',
-				...(moduleService ? { rustcModulePort: moduleService.port } : {}),
-				compilerWorkerUrl: workerUrl.toString(),
-				...(executableGraph
-					? {
-							executableGraphFingerprint: executableGraph.fingerprint,
-							verifiedExecutableModuleUrls: executableGraph.moduleUrls
-						}
-					: {}),
-				runtimeBaseUrl: versionedRuntimeBaseUrl.toString(),
-				manifest,
-				request: workerRequest,
-				sharedBitcodeBuffer,
-				sharedWorkspaceBuffer,
-				sharedStatusBuffer
-			} satisfies CompileWorkerRequest, moduleService ? [moduleService.port] : []);
+			worker.postMessage(
+				{
+					type: 'compile',
+					...(assetCacheService ? { assetCachePort: assetCacheService.port } : {}),
+					...(moduleService ? { rustcModulePort: moduleService.port } : {}),
+					compilerWorkerUrl: workerUrl.toString(),
+					...(executableGraph
+						? {
+								executableGraphFingerprint: executableGraph.fingerprint,
+								verifiedExecutableModuleUrls: executableGraph.moduleUrls
+							}
+						: {}),
+					runtimeBaseUrl: versionedRuntimeBaseUrl.toString(),
+					manifest,
+					request: workerRequest,
+					sharedBitcodeBuffer,
+					sharedWorkspaceBuffer,
+					sharedStatusBuffer
+				} satisfies CompileWorkerRequest,
+				[
+					...(moduleService ? [moduleService.port] : []),
+					...(assetCacheService ? [assetCacheService.port] : [])
+				]
+			);
 			recordAttemptCompileLog(
 				`[wasm-rust] compile worker started attempt=${attempt}/${maxBrowserAttempts}`
 			);
@@ -551,6 +576,7 @@ export async function compileRust(
 							targetConfig,
 							versionedRuntimeBaseUrl.toString(),
 							{
+								fetchImpl,
 								onProgress: (progress) =>
 									emitCompileProgress(progress.stage, attempt, progress),
 								...(deliveryBudget ? { deliveryBudget } : {})
@@ -907,6 +933,7 @@ export async function compileRust(
 		return attachCompileLogs(lastFailure, readCompileLogs(), readCompileLogRecords());
 	} catch (error) {
 		return makeFailure(error instanceof Error ? error.message : String(error));
+	} finally {
+		activeWorkerCleanup?.();
 	}
-	finally { activeWorkerCleanup?.(); }
 }

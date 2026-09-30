@@ -3,6 +3,7 @@ import {
 	RuntimeConfigurationError,
 	preflightRuntimeAssets,
 	type ExecutionLimits,
+	type RuntimeAssetCacheOptions,
 	type RuntimeAssetPreflightProgress,
 	type RuntimeRegistryManifest
 } from '@wasm-idle/core';
@@ -16,6 +17,7 @@ export interface ForthRuntimePreflightRequest {
 	readonly manifestUrl: string;
 	readonly profile: ForthRuntimePreflightProfile;
 	readonly limits?: Partial<ExecutionLimits>;
+	readonly persistentCache?: RuntimeAssetCacheOptions;
 	readonly signal?: AbortSignal;
 	readonly fetch?: typeof globalThis.fetch;
 	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
@@ -231,6 +233,7 @@ export async function preflightForthRuntimeAssets(
 			runtime: runtimeRequestUrl
 		},
 		fetch: request.fetch,
+		persistentCache: request.persistentCache,
 		signal: request.signal,
 		limits: request.limits,
 		maxConcurrentDownloads: 2,

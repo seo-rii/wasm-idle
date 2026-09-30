@@ -4,6 +4,11 @@ import {
 	resolveRuntimeAssetDeliveryBudget,
 	type RuntimeAssetDeliveryBudgetDescriptor
 } from './runtime-delivery-budget.js';
+import {
+	resolveRuntimeAssetPersistentCache,
+	waitForRuntimeAssetCache,
+	type RuntimeAssetPersistentCacheIdentity
+} from './runtime-asset-cache.js';
 
 export { withRuntimeAssetDeliveryBudget } from './runtime-delivery-budget.js';
 
@@ -117,6 +122,37 @@ export function clearRegisteredRuntimeAssetReceipts() {
 
 export function hasRegisteredRuntimeAssetReceipt(assetUrl: string | URL) {
 	return runtimeAssetReceipts.has(new URL(assetUrl.toString()).href);
+}
+
+/** Restrict nested worker storage to identities independently pinned by its parent manifest. */
+export function isRegisteredRuntimeAssetCacheIdentity(
+	identity: RuntimeAssetPersistentCacheIdentity
+) {
+	if (!identity || typeof identity.url !== 'string') return false;
+	const receipt = runtimeAssetReceipts.get(identity.url);
+	if (
+		!receipt ||
+		identity.bytes !== (receipt.uncompressedBytes ?? receipt.bytes) ||
+		identity.sha256 !== (receipt.uncompressedSha256 ?? receipt.sha256)
+	)
+		return false;
+	if (typeof identity.validationKey !== 'string' || identity.validationKey.length > 256)
+		return false;
+	try {
+		const policy = JSON.parse(identity.validationKey ?? '') as unknown[];
+		return (
+			Array.isArray(policy) &&
+			policy.length === 2 &&
+			policy[0] === 'wasm-rust-pinned-logical-v1' &&
+			Number.isSafeInteger(policy[1]) &&
+			Number(policy[1]) > 0 &&
+			Number(policy[1]) <= DEFAULT_MAX_RUNTIME_ASSET_BYTES &&
+			identity.bytes <= Number(policy[1]) &&
+			receipt.bytes <= Number(policy[1])
+		);
+	} catch {
+		return false;
+	}
 }
 
 export function runtimeAssetReceiptIdentity(receipt?: RuntimeAssetReceipt) {
@@ -448,6 +484,42 @@ export async function fetchRuntimeAssetBytes(
 	const downloadLimit = hasReceipt
 		? Math.max(receipt!.bytes, expectedLogicalBytes!)
 		: maxAssetBytes;
+	const persistentCache = resolveRuntimeAssetPersistentCache(fetchImpl);
+	const persistentIdentity = receipt
+		? {
+				url: resolvedAssetUrl,
+				sha256: receipt.uncompressedSha256 ?? receipt.sha256,
+				bytes: expectedLogicalBytes!,
+				validationKey: JSON.stringify(['wasm-rust-pinned-logical-v1', maxAssetBytes])
+			}
+		: undefined;
+	if (persistentCache && persistentIdentity) {
+		let cached: Uint8Array | undefined;
+		try {
+			cached = await waitForRuntimeAssetCache(
+				persistentCache.read(persistentIdentity, options.signal),
+				options.signal
+			);
+			if (cached)
+				await verifyRuntimeAssetReceipt(
+					assetLabel,
+					cached,
+					receipt!,
+					'logical',
+					options.signal
+				);
+		} catch {
+			cached = undefined;
+			throwIfRuntimeAssetAborted(options.signal);
+		}
+		if (cached) {
+			throwIfRuntimeAssetAborted(options.signal);
+			if (deliveryBudget) consumeRuntimeAssetDeliveryBytes(deliveryBudget, cached.byteLength);
+			onProgress?.({ loaded: cached.byteLength, total: cached.byteLength });
+			throwIfRuntimeAssetAborted(options.signal);
+			return Uint8Array.from(cached);
+		}
+	}
 	const requestInit: RequestInit = {
 		credentials: 'omit',
 		redirect: 'error',
@@ -541,6 +613,31 @@ export async function fetchRuntimeAssetBytes(
 			`failed to fetch ${assetLabel} from ${resolvedAssetUrl} (status ${response.status}). This usually means the browser loaded a stale wasm-rust bundle or a nested runtime asset is missing.`
 		);
 	}
+	const canPublish =
+		response.url === resolvedAssetUrl &&
+		!response.redirected &&
+		response.status === 200 &&
+		response.type !== 'opaque' &&
+		response.type !== 'opaqueredirect';
+	const publish = async (bytes: Uint8Array<ArrayBuffer>) => {
+		throwIfRuntimeAssetAborted(options.signal);
+		if (persistentCache && persistentIdentity && canPublish) {
+			try {
+				await waitForRuntimeAssetCache(
+					persistentCache.write(
+						persistentIdentity,
+						Uint8Array.from(bytes),
+						options.signal
+					),
+					options.signal
+				);
+			} catch {
+				throwIfRuntimeAssetAborted(options.signal);
+			}
+		}
+		throwIfRuntimeAssetAborted(options.signal);
+		return bytes;
+	};
 	const assetBytes = await readResponseBytes(
 		response,
 		assetLabel,
@@ -600,7 +697,7 @@ export async function fetchRuntimeAssetBytes(
 			assetBytes.byteLength === receipt!.uncompressedBytes &&
 			deliveredSha256 === receipt!.uncompressedSha256;
 		if (matchesLogical) {
-			return assetBytes;
+			return publish(assetBytes);
 		}
 		if (!matchesStorage) {
 			const matchesStorageLength = assetBytes.byteLength === receipt!.bytes;
@@ -615,7 +712,7 @@ export async function fetchRuntimeAssetBytes(
 			);
 		}
 		if (!hasDistinctLogicalReceipt) {
-			return assetBytes;
+			return publish(assetBytes);
 		}
 		if (assetBytes.byteLength < 2 || assetBytes[0] !== 0x1f || assetBytes[1] !== 0x8b) {
 			throw new Error(
@@ -644,15 +741,15 @@ export async function fetchRuntimeAssetBytes(
 			undefined,
 			options.signal
 		);
-		return hasReceipt
-			? await verifyRuntimeAssetReceipt(
-					assetLabel,
-					decompressedBytes,
-					receipt!,
-					'logical',
-					options.signal
-				)
-			: decompressedBytes;
+		if (hasReceipt)
+			await verifyRuntimeAssetReceipt(
+				assetLabel,
+				decompressedBytes,
+				receipt!,
+				'logical',
+				options.signal
+			);
+		return hasReceipt ? await publish(decompressedBytes) : decompressedBytes;
 	} catch (error) {
 		throwIfRuntimeAssetAborted(options.signal);
 		throw new Error(

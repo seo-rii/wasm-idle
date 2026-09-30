@@ -1,5 +1,6 @@
 import {
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
 	type Sandbox,
 	type SandboxExecutionOptions,
 	type SandboxProgress,
@@ -94,7 +95,8 @@ export function createCachedClangSandbox(
 		token: number,
 		progress?: SandboxProgress,
 		compileLimit = 0,
-		signal?: AbortSignal
+		signal?: AbortSignal,
+		executionAssetConfig = assetConfig
 	) {
 		const worker = await factory();
 		if (token !== generation || signal?.aborted) {
@@ -108,7 +110,7 @@ export function createCachedClangSandbox(
 					bridge = new WorkerAssetBridge(
 						worker,
 						'clang',
-						assetConfig,
+						executionAssetConfig,
 						progress,
 						compileLimit,
 						languageSysroots,
@@ -204,7 +206,8 @@ export function createCachedClangSandbox(
 			assetConfig = resolveRuntimeAssetConfig(
 				'clang',
 				assets as string | PlaygroundRuntimeAssets,
-				globalThis.location?.href || 'http://localhost/'
+				globalThis.location?.href || 'http://localhost/',
+				options.persistentCache
 			);
 			const debugMode = options.debugMode || (options.debug ? 'trace' : 'none');
 			const cacheEligible =
@@ -231,16 +234,33 @@ export function createCachedClangSandbox(
 			options: SandboxExecutionOptions = {}
 		) {
 			if (disposed) throw new Error('C/C++ sandbox was disposed');
+			if (running) throw new Error('C/C++ sandbox is already running');
 			if (
 				cached &&
 				((options.debugMode || (options.debug ? 'trace' : 'none')) !== 'none' ||
 					(options.stdin !== undefined && typeof options.stdin !== 'string') ||
 					options.workspaceFiles?.some((file) => typeof file.content !== 'string'))
 			) {
-				await overrides.load(loadedAssets, code, log, args, options, progress);
+				await overrides.load(
+					loadedAssets,
+					code,
+					log,
+					args,
+					{
+						...options,
+						persistentCache: assetConfig.persistentCache
+					},
+					progress
+				);
 			}
 			if (!cached) return legacy.run(code, prepare, log, progress, args, options);
-			if (running) throw new Error('C/C++ sandbox is already running');
+			const executionAssetConfig = {
+				...assetConfig,
+				persistentCache: resolveRuntimeAssetCacheOptions(
+					assetConfig.persistentCache,
+					options.persistentCache
+				)
+			};
 			options.signal?.throwIfAborted();
 			const token = ++generation;
 			// Reactive UI arrays/records are Proxies and cannot cross postMessage.
@@ -294,7 +314,8 @@ export function createCachedClangSandbox(
 						token,
 						progress,
 						limit,
-						options.signal
+						options.signal,
+						executionAssetConfig
 					);
 					if (token !== generation) throw new Error('Process terminated');
 					cache.set(key, artifact);

@@ -8,6 +8,12 @@ import {
 	ProtocolError,
 	verifyRuntimeAssetIntegrity,
 	verifyRuntimeAssetPair,
+	readPersistentRuntimeAsset,
+	writePersistentRuntimeAsset,
+	resolveRuntimeAssetLockEntry,
+	resolveRuntimeAssetCacheOptions,
+	type RuntimeAssetCacheOptions,
+	type ResolvedRuntimeAssetCacheOptions,
 	type ProgressLike
 } from '@wasm-idle/core';
 import { decompressGzip } from '@wasm-idle/llvm-core';
@@ -452,6 +458,11 @@ export class WorkerAssetBridge {
 	private worker: Worker;
 	private readonly runtime: RuntimeAssetRuntime;
 	private config: ResolvedRuntimeAssetConfig;
+	private persistentCacheBaseline: ResolvedRuntimeAssetCacheOptions;
+	private readonly persistentCacheBySignal = new WeakMap<
+		AbortSignal,
+		ResolvedRuntimeAssetCacheOptions
+	>();
 	private progress: RuntimeLoadProgress;
 	private expectedAssets: Set<string>;
 	private languageSysroots: boolean;
@@ -472,7 +483,8 @@ export class WorkerAssetBridge {
 	) {
 		this.worker = worker;
 		this.runtime = runtime;
-		this.config = config;
+		this.persistentCacheBaseline = resolveRuntimeAssetCacheOptions(config.persistentCache);
+		this.config = { ...config, persistentCache: this.persistentCacheBaseline };
 		this.maxAssetBytes = requireBridgeMaxAssetBytes(maxAssetBytes);
 		this.languageSysroots = canUseClangLanguageSysroots(runtime, config, languageSysroots);
 		this.progress = new RuntimeLoadProgress(runtime, this.languageSysroots);
@@ -494,8 +506,19 @@ export class WorkerAssetBridge {
 			this.config.loader === config.loader &&
 			integrityKey(this.config) === integrityKey(config) &&
 			allowedBaseUrlsKey(this.config) === allowedBaseUrlsKey(config) &&
-			this.config.useAssetBridge === config.useAssetBridge
+			this.config.useAssetBridge === config.useAssetBridge &&
+			JSON.stringify(this.persistentCacheBaseline) ===
+				JSON.stringify(resolveRuntimeAssetCacheOptions(config.persistentCache))
 		);
+	}
+
+	/** Apply one execution's policy without changing the configuration established by load(). */
+	setExecutionPersistentCache(override?: RuntimeAssetCacheOptions) {
+		if (this.state !== 'active')
+			throw new Error('Cannot configure an inactive worker asset bridge');
+		const cache = resolveRuntimeAssetCacheOptions(this.persistentCacheBaseline, override);
+		this.config = { ...this.config, persistentCache: cache };
+		return cache;
 	}
 
 	rebind(
@@ -532,7 +555,8 @@ export class WorkerAssetBridge {
 				throw new Error('Cannot rebind a disposed worker asset bridge');
 			}
 			this.worker = worker;
-			this.config = config;
+			this.persistentCacheBaseline = resolveRuntimeAssetCacheOptions(config.persistentCache);
+			this.config = { ...config, persistentCache: this.persistentCacheBaseline };
 			this.maxAssetBytes = nextMaxAssetBytes;
 			this.languageSysroots = nextLanguageSysroots;
 			this.expectedAssets = expectedAssetsForRuntime(this.runtime, nextLanguageSysroots);
@@ -637,6 +661,10 @@ export class WorkerAssetBridge {
 		const worker = this.worker;
 		const generation = this.generation;
 		const controller = new AbortController();
+		this.persistentCacheBySignal.set(
+			controller.signal,
+			resolveRuntimeAssetCacheOptions(this.config.persistentCache)
+		);
 		this.activeLoads.add(controller);
 		try {
 			this.validateAssetRequest(request.asset);
@@ -674,6 +702,9 @@ export class WorkerAssetBridge {
 							receipt,
 							{
 								fetch: globalThis.fetch.bind(globalThis),
+								persistentCache: this.persistentCacheBySignal.get(
+									controller.signal
+								),
 								maxAssetBytes: this.maxAssetBytes,
 								signal: controller.signal,
 								onProgress: (loaded, total) =>
@@ -986,6 +1017,64 @@ export class WorkerAssetBridge {
 	}
 
 	private async fetchAsset(
+		url: string,
+		asset: string,
+		signal: AbortSignal,
+		maxAssetBytes = this.sourceAssetByteLimit(asset)
+	): Promise<LoadedAsset> {
+		const requestUrl = this.requireAllowedAssetUrl(asset, url);
+		const persistentCache =
+			this.persistentCacheBySignal.get(signal) ?? this.config.persistentCache;
+		const configured = this.config.integrity?.[asset];
+		const expected = typeof configured === 'string' ? { sha256: configured } : configured;
+		const lock = this.config.assetPrefix
+			? resolveRuntimeAssetLockEntry(requestUrl, {
+					assetRoot: this.config.baseUrl,
+					assetPrefix: this.config.assetPrefix
+				})
+			: undefined;
+		// Existing .gz receipts without a pair describe logical bytes, not stored gzip bytes.
+		const receipt =
+			expected && (!asset.endsWith('.gz') || expected.uncompressedSha256) ? expected : lock;
+		const identity = receipt
+			? {
+					url: requestUrl.href,
+					sha256: receipt.sha256,
+					bytes: receipt.bytes,
+					validationKey: JSON.stringify([
+						'bridge-v1',
+						this.config.baseUrl,
+						allowedBaseUrlsKey(this.config),
+						maxAssetBytes
+					])
+				}
+			: undefined;
+		if (identity && (identity.bytes === undefined || identity.bytes <= maxAssetBytes)) {
+			const bytes = await readPersistentRuntimeAsset({
+				identity,
+				cache: persistentCache,
+				signal
+			});
+			if (bytes) {
+				requireRuntimeAssetSize(asset, bytes.byteLength, maxAssetBytes);
+				this.progress.update(asset, bytes.byteLength, bytes.byteLength);
+				return { bytes, mimeType: receipt?.mediaType, transferOwnership: true };
+			}
+		}
+		const loaded = await this.fetchAssetFromNetwork(url, asset, signal, maxAssetBytes);
+		if (identity && !loaded.contentEncoding) {
+			// Only checksum-matching bytes are published. Existing runtime validation still runs.
+			await writePersistentRuntimeAsset({
+				identity,
+				cache: persistentCache,
+				signal,
+				bytes: loaded.bytes
+			});
+		}
+		return loaded;
+	}
+
+	private async fetchAssetFromNetwork(
 		url: string,
 		asset: string,
 		signal: AbortSignal,

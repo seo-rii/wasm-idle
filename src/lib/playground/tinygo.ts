@@ -38,8 +38,11 @@ import {
 	TimeoutError,
 	WorkspaceValidationError,
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
+	fetchPinnedRuntimeAsset,
 	validateExecutionWorkspace,
-	type ExecutionLimits
+	type ExecutionLimits,
+	type ResolvedRuntimeAssetCacheOptions
 } from '@wasm-idle/core';
 
 type TinyGoRuntimeHooks = {
@@ -89,6 +92,7 @@ type TinyGoRuntimeModule = {
 		assetBaseUrl: string;
 		profile: TinyGoUpstreamRuntimeProfile;
 		loader?: TinyGoRuntimeAssetLoader;
+		fetchImpl?: typeof fetch;
 		onProgress?: (progress: TinyGoRuntimeAssetProgress) => void;
 		signal?: AbortSignal;
 		maxAssetBytes?: number;
@@ -150,6 +154,7 @@ type TinyGoRuntimeProgressOwner = {
 };
 
 type TinyGoRunRequest = {
+	persistentCache: ResolvedRuntimeAssetCacheOptions;
 	buffer: ArrayBufferLike;
 	programArgs: string[];
 	stdin?: string;
@@ -245,6 +250,8 @@ class TinyGo implements Sandbox {
 	rustRuntimeBaseUrl = '';
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	assetLoader: TinyGoRuntimeAssetLoader | undefined = undefined;
+	private persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
+	private persistentCacheBaseline?: ResolvedRuntimeAssetCacheOptions;
 	runtimeProfile: TinyGoUpstreamRuntimeProfile | undefined = undefined;
 	executableGraph: LoadedTinyGoExecutableGraph | null = null;
 	runtime: TinyGoRuntimeHooks | null = null;
@@ -297,8 +304,14 @@ class TinyGo implements Sandbox {
 		progress?: SandboxProgress
 	): Promise<void> {
 		return this.executeOperation('startup', options, async (operation) => {
+			const persistentCache = resolveRuntimeAssetCacheOptions(
+				typeof runtimeAssets === 'object' ? runtimeAssets.persistentCache : undefined,
+				options.persistentCache
+			);
 			try {
 				this.assertOperation(operation);
+				this.persistentCacheBaseline = persistentCache;
+				this.persistentCache = persistentCache;
 				this.clearPendingStdin();
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 				this.assertOperation(operation);
@@ -898,6 +911,7 @@ class TinyGo implements Sandbox {
 					);
 				}
 				nextExecutableGraph = await loadVerifiedTinyGoExecutableGraph({
+					persistentCache: this.persistentCache,
 					moduleUrl,
 					profile: WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE,
 					signal: operation.controller.signal,
@@ -906,6 +920,44 @@ class TinyGo implements Sandbox {
 				});
 				this.assertOperation(operation);
 				const executableGraph = nextExecutableGraph;
+				// The upstream loader owns gzip fallback and logical-byte verification.
+				// Preserve raw .wasm probes; cache only exact profile-pinned transport URLs.
+				const transportReceipts = new Map<string, RuntimeAssetIntegrityEntry>();
+				for (const [path, receipt] of [
+					[runtimeProfile.manifestPath, runtimeProfile.manifestReceipt],
+					...Object.entries(runtimeProfile.assetReceipts)
+				] as [string, RuntimeAssetIntegrityEntry][]) {
+					const transportPath = receipt.uncompressedSha256 ? `${path}.gz` : path;
+					transportReceipts.set(
+						new URL(transportPath, executableGraph.assetBaseUrl).href,
+						receipt
+					);
+				}
+				const pinnedFetch: typeof fetch = async (input, init) => {
+					const url =
+						typeof input === 'string'
+							? input
+							: input instanceof URL
+								? input.href
+								: input.url;
+					const receipt = transportReceipts.get(url);
+					if (!receipt) return globalThis.fetch(input, init);
+					const owner = this.activeOperation;
+					if (!owner) throw new Error('TinyGo asset load has no active operation');
+					this.assertOperation(owner);
+					const bytes = await fetchPinnedRuntimeAsset({
+						url,
+						receipt,
+						persistentCache: this.persistentCache,
+						maxAssetBytes: owner.limits?.maxAssetBytes ?? maxAssetBytes,
+						signal: init?.signal ?? owner.controller.signal
+					});
+					this.assertOperation(owner);
+					// This is a verified byte adapter, not a network response with a fabricated URL.
+					return new Response(Uint8Array.from(bytes).buffer, {
+						headers: { 'Content-Length': String(bytes.byteLength) }
+					});
+				};
 				const runtimeModule = (await import(
 					/* @vite-ignore */ executableGraph.entryUrl
 				)) as TinyGoRuntimeModule;
@@ -976,7 +1028,9 @@ class TinyGo implements Sandbox {
 								assetsPromise = loadUpstreamAssets({
 									assetBaseUrl: executableGraph.assetBaseUrl,
 									profile: runtimeProfile,
-									...(assetLoader ? { loader: assetLoader } : {}),
+									...(assetLoader
+										? { loader: assetLoader }
+										: { fetchImpl: pinnedFetch }),
 									onProgress: commonOptions.onProgress,
 									signal: controller.signal,
 									maxAssetBytes: assetLimit
@@ -1294,6 +1348,7 @@ class TinyGo implements Sandbox {
 			'execute',
 			options,
 			async (operation, request: TinyGoRunRequest) => {
+				this.persistentCache = request.persistentCache;
 				this.exit = false;
 				try {
 					this.begin = Date.now();
@@ -1404,6 +1459,11 @@ class TinyGo implements Sandbox {
 				}
 			},
 			(operation) => {
+				this.assertOperation(operation);
+				const persistentCache = resolveRuntimeAssetCacheOptions(
+					this.persistentCacheBaseline,
+					options.persistentCache
+				);
 				this.assertOperation(operation);
 				if (typeof code !== 'string') {
 					throw new TypeError('TinyGo source code must be a string');
@@ -1560,7 +1620,14 @@ class TinyGo implements Sandbox {
 				this.assertOperation(operation);
 				operation.buffer = buffer;
 
-				return { buffer, programArgs, stdin, target, workspaceFiles: runtimeWorkspace };
+				return {
+					buffer,
+					programArgs,
+					stdin,
+					target,
+					workspaceFiles: runtimeWorkspace,
+					persistentCache
+				};
 			}
 		);
 	}

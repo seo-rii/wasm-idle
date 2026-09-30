@@ -17,6 +17,7 @@ import {
 	WorkerStartupError,
 	TimeoutError,
 	type ExecutionLimits,
+	type RuntimeAssetCacheOptions,
 	type RuntimeAssetPreflightProgress,
 	type RuntimeErrorCode,
 	type RuntimePhase,
@@ -54,6 +55,7 @@ export interface StaticRuntimePreflightRequestMessage {
 	readonly manifestUrl: string;
 	readonly profile: unknown;
 	readonly limits: ExecutionLimits;
+	readonly persistentCache?: RuntimeAssetCacheOptions;
 }
 
 export interface StaticRuntimePreflightProgressMessage {

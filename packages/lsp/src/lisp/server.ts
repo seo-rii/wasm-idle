@@ -77,6 +77,8 @@ export async function getLispLanguageServer(
 					label: 'Scheme LSP runtime manifest',
 					maxBytes: MAX_LISP_MANIFEST_BYTES,
 					cache: 'no-cache',
+					persistentCache: hostOptions?.persistentCache,
+					assetRoot: typeof options === 'string' ? options : hostOptions?.rootUrl,
 					signal,
 					reportProgress: (loaded, total) => updateProgress('manifest', loaded, total)
 				});
@@ -97,6 +99,10 @@ export async function getLispLanguageServer(
 							label: `Scheme LSP runtime asset ${asset.logicalPath}`,
 							maxBytes: Math.max(asset.size, logicalAsset.size),
 							cache: 'force-cache',
+							persistentCache: hostOptions?.persistentCache,
+							assetRoot: typeof options === 'string' ? options : hostOptions?.rootUrl,
+							integrity: { sha256: asset.sha256, bytes: asset.size },
+							runtimeId: 'LISP',
 							signal: assetSignal,
 							reportProgress: (loaded, total) =>
 								updateProgress(asset.path, loaded, total)
@@ -126,6 +132,9 @@ export async function getLispLanguageServer(
 			storageAssets: Object.fromEntries(verified.storageAssets)
 		},
 		onStatus: hostOptions?.onStatus,
-		lifecycle: hostOptions
+		lifecycle: {
+			...hostOptions,
+			rootUrl: typeof options === 'string' ? options : hostOptions?.rootUrl
+		}
 	});
 }

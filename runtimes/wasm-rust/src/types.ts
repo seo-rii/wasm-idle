@@ -63,6 +63,8 @@ export interface BrowserRustWorkerLimits {
 }
 
 export interface BrowserRustCompileRequest {
+	/** Optional host-owned verified-byte storage; transferred to the nested worker as a private port. */
+	assetCache?: import('./runtime-asset-cache.js').RuntimeAssetPersistentCache;
 	code: string;
 	/**
 	 * Reserved for a future multi-channel compiler surface. Passing a value is currently rejected.
@@ -148,4 +150,7 @@ export interface BrowserRustCompiler {
 export type BrowserRustCompilerFactory = (
 	options?: import('./compiler.js').CreateRustCompilerOptions
 ) => Promise<BrowserRustCompiler>;
-export type BrowserRustCompileWorkerRequest = Omit<BrowserRustCompileRequest, 'onProgress'>;
+export type BrowserRustCompileWorkerRequest = Omit<
+	BrowserRustCompileRequest,
+	'onProgress' | 'assetCache'
+>;

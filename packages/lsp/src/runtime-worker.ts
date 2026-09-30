@@ -1,7 +1,8 @@
 import { loadLanguageToolAsset, type LanguageToolAssetRuntime } from './assets.js';
 import { verifyRuntimeAssetIntegrity, type RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
+import type { LanguageToolPersistentOptions } from './persistent-assets.js';
 
-export interface RuntimeWorkerDiagnosticRequest {
+export interface RuntimeWorkerDiagnosticRequest extends LanguageToolPersistentOptions {
 	runtime?: LanguageToolAssetRuntime;
 	workerAsset?: string;
 	workerUrl?: string;
@@ -71,6 +72,8 @@ export async function runRuntimeWorkerDiagnostics(
 				workerAsset,
 				{
 					baseUrl: new URL('.', requestedWorkerUrl).href,
+					persistentCache: request.persistentCache,
+					assetRoot: request.assetRoot,
 					loader: () => requestedWorkerUrl,
 					integrity: { [workerAsset]: request.workerReceipt },
 					cache: 'no-store',

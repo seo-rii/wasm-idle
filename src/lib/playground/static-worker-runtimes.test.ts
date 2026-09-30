@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { configureRuntimeAssetCache } from '@wasm-idle/core';
 import { computeJanetRuntimeFingerprint } from '../../../scripts/sync-wasm-janet.mjs';
 import { computeJuliaRuntimeFingerprint } from '../../../scripts/sync-wasm-julia.mjs';
 import { computeNimRuntimeFingerprint } from '../../../scripts/sync-wasm-nim.mjs';
@@ -1650,9 +1651,43 @@ describe('static worker backed language sandboxes', () => {
 	});
 
 	afterEach(() => {
+		configureRuntimeAssetCache({});
 		vi.useRealTimers();
 		vi.restoreAllMocks();
 		restoreCrossOriginIsolation(initialCrossOriginIsolation);
+	});
+
+	it('resolves cache defaults, instance settings and call overrides before preflight', async () => {
+		const contexts: StaticWorkerRuntimePreflightContext[] = [];
+		const sandbox = createOwnedPreflightTestSandbox((context) => {
+			contexts.push(context);
+			return context.createOwnedDelivery(
+				Object.freeze({ bytes: Uint8Array.from([1, 2, 3]) })
+			);
+		});
+		configureRuntimeAssetCache({ maxBytes: 12345, enabled: false });
+		try {
+			await sandbox.load({ persistentCache: { enabled: true, namespace: 'fixture' } });
+			expect(contexts.at(-1)?.persistentCache).toMatchObject({
+				enabled: true,
+				maxBytes: 12345,
+				namespace: 'fixture'
+			});
+			await sandbox.clear();
+			await sandbox.run('example', false, true, undefined, [], { persistentCache: false });
+			expect(contexts.at(-1)?.persistentCache).toMatchObject({
+				enabled: false,
+				namespace: 'fixture'
+			});
+			await sandbox.clear();
+			await sandbox.run('example', false, true);
+			expect(contexts.at(-1)?.persistentCache).toMatchObject({
+				enabled: true,
+				namespace: 'fixture'
+			});
+		} finally {
+			await sandbox.dispose();
+		}
 	});
 
 	it('delivers opted-in limits and correlates evidence and typed compilation failures', async () => {

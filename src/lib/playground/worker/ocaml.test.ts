@@ -259,6 +259,31 @@ describe('OCaml worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({ load: true });
 	});
 
+	it('restores the load cache baseline after an execution override', async () => {
+		const capture = vi.fn();
+		(globalThis as any).__ocamlCachePolicyCapture = capture;
+		const compilerModuleUrl = await createMockOcamlCompilerModule(`
+			export async function compile() { return { success:true,stdout:'',stderr:'',diagnostics:[],artifacts:[] }; }
+			export function createBrowserWorkerSystemDispatcher(options) {
+				globalThis.__ocamlCachePolicyCapture(!!options.runtimeAssets.persistentCache);
+				return {};
+			}
+		`);
+		await import('./ocaml');
+		await (globalThis as any).self.onmessage({
+			data: { ...loadRequest(compilerModuleUrl), persistentCache: false }
+		});
+		await (globalThis as any).self.onmessage({
+			data: { code: 'let x = 1', prepare: true, persistentCache: { enabled: true } }
+		});
+		await (globalThis as any).self.onmessage({ data: { code: 'let x = 2', prepare: true } });
+		expect(capture.mock.calls.map(([enabled]) => enabled)).toEqual([true, false]);
+		delete (globalThis as any).__ocamlCachePolicyCapture;
+		await (globalThis as any).self.onmessage({
+			data: { ...loadRequest(compilerModuleUrl), persistentCache: { enabled: true } }
+		});
+	});
+
 	it('rejects a corrupted outer module before creating its blob URL', async () => {
 		const moduleUrl = await createMockOcamlCompilerModule(`
 			export async function compile() { throw new Error('not used'); }
@@ -434,6 +459,7 @@ describe('OCaml worker', () => {
 		const options = await captureDispatcherOptions(maxAssetBytes);
 
 		expect(options.runtimeAssets).toEqual({
+			persistentCache: { read: expect.any(Function), write: expect.any(Function) },
 			limits: {
 				maxAssetBytes,
 				maxMetadataBytes: 4 * 1024 * 1024,

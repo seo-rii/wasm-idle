@@ -27,6 +27,9 @@ export async function getFortranLanguageServer(
 			analyzerUrl
 		},
 		onStatus: hostOptions?.onStatus,
-		lifecycle: hostOptions
+		lifecycle: {
+			...hostOptions,
+			rootUrl: typeof options === 'string' ? options : hostOptions?.rootUrl
+		}
 	});
 }

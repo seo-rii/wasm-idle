@@ -8,6 +8,7 @@
 		"exactOptionalPropertyTypes": true,
 		"noUncheckedIndexedAccess": true,
 		"skipLibCheck": true,
+		"rewriteRelativeImportExtensions": true,
 		"outDir": "browser-harness/dist",
 		"rootDir": "."
 	},

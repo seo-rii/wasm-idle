@@ -22,6 +22,92 @@ function sha256(value) {
 	return createHash('sha256').update(value).digest('hex');
 }
 
+test('verified persistent tool hits retain input accounting and bypass the network', async () => {
+	const bytes = new TextEncoder().encode('tool');
+	const receipt = { bytes: bytes.length, sha256: sha256(bytes) };
+	const entries = new Map();
+	let network = 0;
+	const persistentCache = {
+		async read(identity) {
+			return entries.get(JSON.stringify(identity));
+		},
+		async write(identity, value) {
+			entries.set(JSON.stringify(identity), value.slice());
+		}
+	};
+	const options = {
+		baseUrl: BASE_URL,
+		receipt,
+		persistentCache,
+		fetch: async (url) => {
+			network++;
+			return responseWithUrl(bytes, url);
+		}
+	};
+	for (let i = 0; i < 2; i++) {
+		const budget = createBrowserToolInputBudget({ maxAssetBytes: 8, maxTotalBytes: 8 });
+		assert.deepEqual(await fetchBrowserToolAsset('tool.js', 'tool', budget, options), bytes);
+		assert.equal(budget.usedBytes, bytes.length);
+	}
+	assert.equal(network, 1);
+	await assert.rejects(
+		fetchBrowserToolAsset(
+			'tool.js',
+			'tool',
+			{ maxAssetBytes: 8, maxTotalBytes: 8, usedBytes: 5 },
+			options
+		),
+		/aggregate/
+	);
+	assert.equal(network, 1);
+	await fetchBrowserToolAsset('tool.js', 'custom', createBrowserToolInputBudget(), {
+		...options,
+		receipt: undefined
+	});
+	assert.equal(network, 2);
+	assert.equal(entries.size, 1);
+});
+
+test('cache cannot bypass receipt validation, final URL checks, or cancellation', async () => {
+	const bytes = new TextEncoder().encode('tool');
+	const receipt = { bytes: bytes.length, sha256: sha256(bytes) };
+	const options = { baseUrl: BASE_URL, receipt };
+	await assert.rejects(
+		fetchBrowserToolAsset('tool.js', 'tool', createBrowserToolInputBudget(), {
+			...options,
+			persistentCache: {
+				read: async () => new Uint8Array(bytes.length),
+				write: async () => {}
+			}
+		}),
+		/SHA-256 mismatch/
+	);
+	let writes = 0;
+	await assert.rejects(
+		fetchBrowserToolAsset('tool.js', 'tool', createBrowserToolInputBudget(), {
+			...options,
+			persistentCache: {
+				read: async () => undefined,
+				write: async () => {
+					writes++;
+				}
+			},
+			fetch: async () => responseWithUrl(bytes, BASE_URL + 'wrong.js')
+		}),
+		/final URL mismatch/
+	);
+	assert.equal(writes, 0);
+	const controller = new AbortController();
+	const load = fetchBrowserToolAsset('tool.js', 'tool', createBrowserToolInputBudget(), {
+		...options,
+		signal: controller.signal,
+		persistentCache: { read: async () => new Promise(() => {}), write: async () => {} }
+	});
+	controller.abort(new Error('cancel cached tool'));
+	await assert.rejects(load, /cancel cached tool/);
+	assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+});
+
 test('loads browser-native tool inputs through a bounded exact-URL request', async () => {
 	const expectedUrl = new URL('tools/ocamlc.js', BASE_URL).href;
 	const source = new TextEncoder().encode('tool');

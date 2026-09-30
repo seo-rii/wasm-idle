@@ -48,6 +48,7 @@ class Bqn extends StaticWorkerRuntimeSandbox {
 						manifestUrl: urls.manifestUrl || '',
 						profile,
 						limits: context.limits,
+						persistentCache: context.persistentCache,
 						signal: context.signal,
 						reportProgress(progress) {
 							if (progress.kind === 'asset') {

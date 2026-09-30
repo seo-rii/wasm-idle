@@ -9,6 +9,7 @@ const bridges = vi.hoisted(() => ({
 	instances: [] as {
 		worker: Worker;
 		cache: unknown;
+		config: any;
 		handleMessage: ReturnType<typeof vi.fn>;
 		dispose: ReturnType<typeof vi.fn>;
 	}[]
@@ -20,7 +21,7 @@ vi.mock('./assetBridge', () => ({
 		constructor(
 			public worker: Worker,
 			_runtime: unknown,
-			_config: unknown,
+			public config: unknown,
 			_progress: unknown,
 			_limit: unknown,
 			_profiles: unknown,
@@ -127,6 +128,39 @@ async function run(
 }
 
 describe('cached C/C++ sandbox', () => {
+	it('uses one-call persistent overrides without mutating the load baseline', async () => {
+		const h = makeHarness();
+		await h.sandbox.load({ ...assets, persistentCache: { enabled: true, maxBytes: 4096 } });
+		await run(h.sandbox, source, { persistentCache: false }, true);
+		expect(bridges.instances.at(-1)?.config.persistentCache).toMatchObject({
+			enabled: false,
+			maxBytes: 4096
+		});
+		await run(h.sandbox, `${source}\n`, {}, true);
+		expect(bridges.instances.at(-1)?.config.persistentCache).toMatchObject({
+			enabled: true,
+			maxBytes: 4096
+		});
+		await run(h.sandbox, source, { debug: true, persistentCache: false });
+		expect(h.legacy.load).toHaveBeenLastCalledWith(
+			expect.anything(),
+			source,
+			false,
+			[],
+			expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true, maxBytes: 4096 })
+			}),
+			undefined
+		);
+		expect(h.legacy.run).toHaveBeenLastCalledWith(
+			source,
+			false,
+			false,
+			undefined,
+			[],
+			expect.objectContaining({ persistentCache: false })
+		);
+	});
 	it('disposal is terminal and waits for legacy cleanup on every call', async () => {
 		const h = makeHarness();
 		await h.sandbox.load(assets);

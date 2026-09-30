@@ -4,9 +4,16 @@ import {
 	ProtocolError,
 	RUBY_RUNTIME_ASSET_NAMES,
 	verifyRuntimeAssetIntegrity,
+	readPersistentRuntimeAsset,
+	writePersistentRuntimeAsset,
 	type RuntimeAssetIntegrityEntry
 } from '@wasm-idle/core';
 import { D_OUTER_ASSETS } from './d/assets.js';
+import {
+	resolveLanguageToolPersistentOptions,
+	resolveLanguageToolPersistentReceipt,
+	type LanguageToolPersistentOptions
+} from './persistent-assets.js';
 
 export type LanguageToolAssetRuntime =
 	| 'awk'
@@ -27,7 +34,7 @@ export interface LanguageToolAssetLoadRequest {
 	reportProgress: (loaded: number, total?: number) => void;
 }
 
-export interface LanguageToolAssetLoadOptions {
+export interface LanguageToolAssetLoadOptions extends LanguageToolPersistentOptions {
 	signal?: AbortSignal;
 	timeoutMs?: number;
 }
@@ -63,7 +70,7 @@ export type LanguageToolAssetIntegrityMap = Record<
 	string | LanguageToolAssetIntegrityEntry
 >;
 
-export interface LanguageToolAssetConfig {
+export interface LanguageToolAssetConfig extends LanguageToolPersistentOptions {
 	baseUrl?: string;
 	loader?: LanguageToolAssetLoader;
 	allowedBaseUrls?: string[];
@@ -73,7 +80,7 @@ export interface LanguageToolAssetConfig {
 	requireExactResponseUrl?: boolean;
 }
 
-export interface ResolvedLanguageToolAssetConfig {
+export interface ResolvedLanguageToolAssetConfig extends LanguageToolPersistentOptions {
 	baseUrl: string;
 	loader?: LanguageToolAssetLoader;
 	allowedBaseUrls?: string[];
@@ -197,6 +204,64 @@ const cancelResponseBody = (response: Response, reason?: unknown) => {
 };
 
 async function fetchAsset(
+	runtime: LanguageToolAssetRuntime,
+	url: string,
+	asset: string,
+	config: ResolvedLanguageToolAssetConfig,
+	reportProgress: (loaded: number, total?: number) => void,
+	signal: AbortSignal
+): Promise<LoadedLanguageToolAsset> {
+	const requestUrl = requireAllowedAssetUrl(asset, url, config);
+	const byteLimit = configuredAssetByteLimit(asset, config);
+	const receipt =
+		config.loader && !config.integrity?.[asset]
+			? undefined
+			: resolveLanguageToolPersistentReceipt(
+					requestUrl.href,
+					config,
+					config.integrity?.[asset]
+				);
+	if (!receipt?.sha256)
+		return fetchAssetNetwork(runtime, url, asset, config, reportProgress, signal);
+	const cache = resolveLanguageToolPersistentOptions(config).persistentCache;
+	// Include the validation policy: a permissive request may not seed a stricter
+	// exact-URL, MIME, origin allowlist or size-constrained request.
+	const identity = {
+		url: requestUrl.href,
+		sha256: receipt.sha256,
+		bytes: receipt.bytes,
+		validationKey: JSON.stringify([
+			'lsp-assets-v1',
+			runtime,
+			asset,
+			config.baseUrl,
+			config.allowedBaseUrls,
+			config.redirect,
+			config.requireExactResponseUrl,
+			byteLimit,
+			receipt
+		])
+	};
+	const cached = await readPersistentRuntimeAsset({ identity, cache, signal });
+	if (cached) {
+		enforceAssetSize(asset, cached, byteLimit);
+		reportProgress(cached.byteLength, cached.byteLength);
+		return { bytes: cached, mimeType: receipt.mediaType };
+	}
+	const loaded = await fetchAssetNetwork(runtime, url, asset, config, reportProgress, signal);
+	await verifyRuntimeAssetIntegrity({
+		asset,
+		bytes: loaded.bytes,
+		expected: receipt,
+		mimeType: loaded.mimeType,
+		stage: 'compressed',
+		runtimeId: runtime
+	});
+	await writePersistentRuntimeAsset({ identity, cache, signal, bytes: loaded.bytes });
+	return loaded;
+}
+
+async function fetchAssetNetwork(
 	runtime: LanguageToolAssetRuntime,
 	url: string,
 	asset: string,
@@ -477,6 +542,16 @@ export async function loadLanguageToolAsset(
 	reportProgress: (loaded: number, total?: number) => void,
 	options: LanguageToolAssetLoadOptions = {}
 ): Promise<LoadedLanguageToolAsset> {
+	config = {
+		...config,
+		...resolveLanguageToolPersistentOptions({
+			...config,
+			...(options.persistentCache !== undefined
+				? { persistentCache: options.persistentCache }
+				: {}),
+			...(options.assetRoot !== undefined ? { assetRoot: options.assetRoot } : {})
+		})
+	};
 	if (runtime === 'objectivec' && !['headers.json', 'foundation-headers.json'].includes(asset)) {
 		throw new Error(`Unexpected Objective-C language tool asset: ${asset}`);
 	}

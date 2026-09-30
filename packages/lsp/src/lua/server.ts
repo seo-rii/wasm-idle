@@ -24,6 +24,9 @@ export async function getLuaLanguageServer(
 			moduleUrl: resolveLuaLanguageServerModuleUrl(options, hostOptions?.currentUrl)
 		},
 		onStatus: hostOptions?.onStatus,
-		lifecycle: hostOptions
+		lifecycle: {
+			...hostOptions,
+			rootUrl: typeof options === 'string' ? options : hostOptions?.rootUrl
+		}
 	});
 }

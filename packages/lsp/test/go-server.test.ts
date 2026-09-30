@@ -83,6 +83,9 @@ describe('getGoLanguageServer', () => {
 
 		expect(worker?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				compilerUrl: 'https://static.example.com/repl_20240807/wasm-go/index.js',
 				target: 'wasip2/wasm'

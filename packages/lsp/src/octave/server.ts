@@ -33,6 +33,9 @@ export async function getOctaveLanguageServer(
 			manifestUrl: resolveOctaveLanguageServerManifestUrl(options, hostOptions?.currentUrl)
 		},
 		onStatus: hostOptions?.onStatus,
-		lifecycle: hostOptions
+		lifecycle: {
+			...hostOptions,
+			rootUrl: typeof options === 'string' ? options : hostOptions?.rootUrl
+		}
 	});
 }

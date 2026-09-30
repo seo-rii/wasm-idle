@@ -9,7 +9,11 @@ import {
 	wasi
 } from '@bjorn3/browser_wasi_shim';
 import { decompressGzip, untar } from '@wasm-idle/llvm-core';
-import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
+import {
+	configureRuntimeAssetCache,
+	verifyRuntimeAssetIntegrity,
+	type RuntimeAssetIntegrityEntry
+} from '@wasm-idle/core';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile, ZigTargetTriple } from '$lib/playground/options';
 import {
@@ -191,11 +195,14 @@ async function fetchBytes(
 	asset: string,
 	maxAssetBytes: number,
 	progressStart: number,
-	progressEnd: number
+	progressEnd: number,
+	expected: RuntimeAssetIntegrityEntry
 ) {
 	const data = await fetchRuntimeAssetBytes({
 		url,
 		label: asset,
+		expected,
+		integrityContext: { asset, runtimeId: 'ZIG' },
 		maxAssetBytes,
 		onProgress: ({ loaded, total }) => {
 			if (total && total > 0) {
@@ -484,7 +491,14 @@ async function loadAssets(
 	const pending = (async () => {
 		postProgress(5);
 		const [compilerBytes, stdlibBytes] = await Promise.all([
-			fetchBytes(nextCompilerUrl, 'zig_small.wasm', receipts['zig_small.wasm'].bytes, 5, 45),
+			fetchBytes(
+				nextCompilerUrl,
+				'zig_small.wasm',
+				receipts['zig_small.wasm'].bytes,
+				5,
+				45,
+				receipts['zig_small.wasm']
+			),
 			fetchBytes(
 				nextStdlibUrl,
 				'std.tar.gz',
@@ -493,7 +507,8 @@ async function loadAssets(
 					receipts['std.tar.gz'].uncompressedBytes || 0
 				),
 				45,
-				70
+				70,
+				receipts['std.tar.gz']
 			)
 		]);
 		await verifyRuntimeAssetIntegrity({
@@ -693,6 +708,7 @@ self.onmessage = async (event: { data: any }) => {
 	} = event.data;
 	try {
 		if (load) {
+			configureRuntimeAssetCache(event.data.persistentCache ?? {});
 			if (log) {
 				console.log(
 					`[wasm-idle:zig-worker] load compilerUrl=${nextCompilerUrl} stdlibUrl=${nextStdlibUrl}`

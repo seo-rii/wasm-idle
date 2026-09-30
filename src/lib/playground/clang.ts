@@ -71,6 +71,7 @@ class Clang implements Sandbox {
 	debugRuntimeBaseUrl = '';
 	debugManifestUrl = '';
 	debugManifestReceipt?: Readonly<RuntimeAssetIntegrityEntry>;
+	private persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 	private lldbSession?: LldbSandboxSession;
 	private runtimeAssetCache = new RuntimeAssetCache();
 	private ownsRuntimeAssetCache = true;
@@ -131,13 +132,15 @@ class Clang implements Sandbox {
 			const assetConfig = resolveRuntimeAssetConfig(
 				'clang',
 				runtimeAssets,
-				typeof window !== 'undefined' ? window.location.href : ''
+				typeof window !== 'undefined' ? window.location.href : '',
+				options.persistentCache
 			);
 			const debugRuntime = resolveDebugRuntimeUrls(
 				runtimeAssets,
 				typeof window !== 'undefined' ? window.location.href : ''
 			);
 			this.debugRuntimeBaseUrl = debugRuntime.baseUrl;
+			this.persistentCache = assetConfig.persistentCache;
 			this.debugManifestUrl = debugRuntime.manifestUrl;
 			this.debugManifestReceipt = debugRuntime.manifestReceipt;
 			const bundledAssets = shouldStreamBundledClang(assetConfig);
@@ -256,6 +259,10 @@ class Clang implements Sandbox {
 		return new Promise<boolean | string>((resolve, reject) => {
 			if (!this.worker) return reject('Worker not loaded');
 			const operation = this.workerSession.beginRun(this.worker, reject);
+			const persistentCacheOverride = options.persistentCache;
+			if (!this.workerSession.isActive(operation)) return;
+			const persistentCache =
+				this.assetBridge?.setExecutionPersistentCache(persistentCacheOverride);
 			const { compileArgs, programArgs } = resolveSandboxExecutionArgs(
 				this.language,
 				args,
@@ -304,6 +311,7 @@ class Clang implements Sandbox {
 				if (lldbArtifact) {
 					const compilerWorker = this.worker;
 					const lldbSession = new LldbSandboxSession({
+						persistentCache: persistentCache ?? this.persistentCache,
 						manifestUrl: this.debugManifestUrl,
 						manifestReceipt: this.debugManifestReceipt,
 						runtimeBaseUrl: this.debugRuntimeBaseUrl,

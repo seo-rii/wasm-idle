@@ -9,6 +9,7 @@ import {
 	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
 	validateExecutionWorkspace,
 	type ExecutionLimits,
 	type WorkspaceLimits
@@ -531,6 +532,12 @@ class TypeScriptSandbox implements Sandbox {
 					}
 					worker.postMessage({
 						load: true,
+						persistentCache: resolveRuntimeAssetCacheOptions(
+							typeof runtimeAssets === 'object'
+								? runtimeAssets?.persistentCache
+								: undefined,
+							options.persistentCache
+						),
 						moduleUrl: nextModuleUrl,
 						moduleReceipt: { ...moduleReceipt },
 						maxAssetBytes: limits.maxAssetBytes

@@ -79,6 +79,25 @@ vi.mock('$env/dynamic/public', () => ({
 import Java from './java';
 
 describe('TeaVM Java sandbox', () => {
+	it('applies nonsticky run cache overrides only after the busy guard', async () => {
+		const sandbox = new Java();
+		await sandbox.load({ rootUrl: '/', persistentCache: { enabled: true, maxBytes: 4096 } });
+		const select = vi.spyOn(sandbox.assetBridge!, 'setExecutionPersistentCache');
+		onPostMessage = () => undefined;
+		const code = 'public class Main { public static void main(String[] args) {} }';
+		const pending = sandbox.run(code, false, false, undefined, [], { persistentCache: false });
+		await expect(
+			sandbox.run(code, false, false, undefined, [], { persistentCache: { enabled: true } })
+		).rejects.toMatchObject({ code: 'busy' });
+		expect(select).toHaveBeenCalledOnce();
+		expect(select.mock.results.at(-1)?.value).toMatchObject({ enabled: false, maxBytes: 4096 });
+		workerInstances[0].onmessage?.({ data: { results: true } } as MessageEvent);
+		await pending;
+		onPostMessage = null;
+		await sandbox.run(code, false);
+		expect(select.mock.results.at(-1)?.value).toMatchObject({ enabled: true, maxBytes: 4096 });
+		await sandbox.dispose();
+	});
 	beforeEach(() => {
 		workerInstances.length = 0;
 		suppressAutoLoadAck = false;

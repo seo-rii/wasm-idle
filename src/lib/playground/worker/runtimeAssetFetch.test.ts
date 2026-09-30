@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
 
 const originalFetch = globalThis.fetch;
@@ -36,6 +38,81 @@ describe('runtime asset fetch', () => {
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
 		vi.restoreAllMocks();
+	});
+
+	it('validates pinned bytes even when persistent caching is disabled', async () => {
+		const bytes = new Uint8Array([1, 2, 3]);
+		const receipt = {
+			bytes: bytes.length,
+			sha256: createHash('sha256').update(bytes).digest('hex')
+		};
+		globalThis.fetch = vi.fn(
+			async () => createStreamResponse([bytes]).response
+		) as unknown as typeof fetch;
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'pinned',
+				expected: receipt,
+				persistentCache: false
+			})
+		).resolves.toEqual(bytes);
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'pinned',
+				expected: { ...receipt, sha256: '0'.repeat(64) },
+				persistentCache: false
+			})
+		).rejects.toThrow(/SHA-256 mismatch/);
+	});
+
+	it('supports compressed and already-decoded pinned transport without storing duplicate representations', async () => {
+		const logical = new Uint8Array([1, 2, 3]);
+		const compressed = new Uint8Array(gzipSync(logical));
+		const expected = {
+			bytes: compressed.length,
+			sha256: createHash('sha256').update(compressed).digest('hex'),
+			uncompressedBytes: logical.length,
+			uncompressedSha256: createHash('sha256').update(logical).digest('hex')
+		};
+		globalThis.fetch = vi.fn(
+			async () => createStreamResponse([compressed]).response
+		) as unknown as typeof fetch;
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'pinned gzip',
+				expected,
+				persistentCache: false
+			})
+		).resolves.toEqual(compressed);
+		globalThis.fetch = vi.fn(
+			async () => createStreamResponse([logical]).response
+		) as unknown as typeof fetch;
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'decoded gzip',
+				expected,
+				persistentCache: false
+			})
+		).resolves.toEqual(logical);
+	});
+
+	it('preserves exact response URL validation when adding persistent receipts', async () => {
+		const bytes = new Uint8Array([1, 2, 3]);
+		globalThis.fetch = vi.fn(
+			async () =>
+				createStreamResponse([bytes], { url: 'https://other.test/compiler.wasm' }).response
+		) as unknown as typeof fetch;
+		await expect(
+			fetchRuntimeAssetBytes({
+				url: assetUrl,
+				label: 'pinned',
+				expected: { bytes: 3, sha256: createHash('sha256').update(bytes).digest('hex') }
+			})
+		).rejects.toThrow(/response URL mismatch/);
 	});
 
 	it('uses least-authority fetch options and streams into a bounded buffer', async () => {

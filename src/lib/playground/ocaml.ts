@@ -30,6 +30,7 @@ import {
 	TimeoutError,
 	WorkspaceValidationError,
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
 	validateExecutionWorkspace,
 	type ExecutionLimits,
 	type RuntimeAssetIntegrityEntry,
@@ -113,6 +114,7 @@ class Ocaml implements Sandbox {
 	private moduleReceiptIdentity = '';
 	private manifestReceiptIdentity = '';
 	private maxAssetBytes = 0;
+	private persistentCache = resolveRuntimeAssetCacheOptions();
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -369,6 +371,7 @@ class Ocaml implements Sandbox {
 		let nextModuleReceipt: OcamlOuterAssetReceipt;
 		let nextManifestReceipt: OcamlOuterAssetReceipt;
 		let buffer: ArrayBufferLike;
+		let persistentCache: ReturnType<typeof resolveRuntimeAssetCacheOptions>;
 		try {
 			signal = options.signal;
 			if (!this.isOperationActive(operation)) {
@@ -389,6 +392,10 @@ class Ocaml implements Sandbox {
 				);
 			}
 			limits = this.resolveOperationLimits(operation, configuredLimits);
+			persistentCache = resolveRuntimeAssetCacheOptions(
+				typeof runtimeAssets === 'object' ? runtimeAssets?.persistentCache : undefined,
+				options.persistentCache
+			);
 			if (!this.isOperationActive(operation)) {
 				return Promise.reject(
 					this.releaseBeforeSession(operation, 'OCaml runtime startup cancelled')
@@ -553,6 +560,7 @@ class Ocaml implements Sandbox {
 							this.moduleReceiptIdentity = receiptIdentity(nextModuleReceipt);
 							this.manifestReceiptIdentity = receiptIdentity(nextManifestReceipt);
 							this.maxAssetBytes = limits.maxAssetBytes;
+							this.persistentCache = persistentCache;
 							resolve();
 							this.completeOperation(operation);
 							return;
@@ -565,6 +573,7 @@ class Ocaml implements Sandbox {
 				worker.onmessage = handler;
 				worker.postMessage({
 					load: true,
+					persistentCache,
 					moduleUrl: nextModuleUrl,
 					manifestUrl: nextManifestUrl,
 					moduleReceipt: nextModuleReceipt,
@@ -572,6 +581,7 @@ class Ocaml implements Sandbox {
 					maxAssetBytes: limits.maxAssetBytes
 				});
 			} else {
+				this.persistentCache = persistentCache;
 				progress?.set?.(1);
 				if (!this.isOperationActive(operation)) return;
 				resolve();
@@ -630,6 +640,7 @@ class Ocaml implements Sandbox {
 		let buffer: ArrayBufferLike;
 		let outputCallback: any;
 		let onDiagnostic: ((diagnostic: CompilerDiagnostic) => void) | undefined;
+		let persistentCache: ReturnType<typeof resolveRuntimeAssetCacheOptions>;
 		try {
 			signal = options.signal;
 			if (!this.isOperationActive(operation)) {
@@ -645,6 +656,12 @@ class Ocaml implements Sandbox {
 			}
 			if (!configuredWorker) throw 'Worker not loaded';
 			worker = configuredWorker;
+			persistentCache = resolveRuntimeAssetCacheOptions(
+				this.persistentCache,
+				options.persistentCache
+			);
+			if (!this.isOperationActive(operation))
+				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
 			const configuredTarget = options.ocamlBackend;
 			if (!this.isOperationActive(operation)) {
 				throw this.releaseBeforeSession(operation, 'OCaml execution cancelled');
@@ -933,6 +950,7 @@ class Ocaml implements Sandbox {
 				try {
 					worker.postMessage({
 						code,
+						persistentCache,
 						prepare,
 						target,
 						wasmBinaryenMode,

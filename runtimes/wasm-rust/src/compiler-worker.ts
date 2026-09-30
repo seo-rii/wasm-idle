@@ -28,6 +28,8 @@ import {
 	createThreadWorkerBudgetBuffer
 } from './thread-worker-budget.js';
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
+import { createRuntimeAssetCacheClient } from './runtime-asset-cache-service.js';
+import { withRuntimeAssetPersistentCache } from './runtime-asset-cache.js';
 import { loadRuntimePackEntries } from './runtime-asset-store.js';
 import {
 	assertRuntimeAssetDeliveryBudgetAvailable,
@@ -118,7 +120,7 @@ function emitCompileWorkerProgress(
 	} satisfies CompileWorkerMessage);
 }
 
-async function compileRustInWorker(request: CompileWorkerRequest) {
+async function compileRustInWorker(request: CompileWorkerRequest, fetchImpl: typeof fetch = fetch) {
 	let actualWorkerUrl: string;
 	try {
 		actualWorkerUrl = new URL(globalThis.location.href).href;
@@ -171,7 +173,7 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 		? loadRuntimePackEntries(
 				request.runtimeBaseUrl,
 				sysrootPack,
-				fetch,
+				fetchImpl,
 				(progress) =>
 					emitCompileWorkerProgress(request, {
 						stage: 'fetch-sysroot',
@@ -193,7 +195,7 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 	const rustcBytes = await fetchRuntimeAssetBytes(
 		rustcUrl,
 		'rustc.wasm',
-		fetch,
+		fetchImpl,
 		true,
 		(progress) =>
 			emitCompileWorkerProgress(request, {
@@ -219,7 +221,11 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 		bytesTotal: rustcBytes.byteLength
 	});
 	const rustcModulePromise = request.rustcModulePort
-		? compileRustcThroughPort(rustcBytes, request.rustcModulePort, Math.max(120_000, request.manifest.compiler.compileTimeoutMs))
+		? compileRustcThroughPort(
+				rustcBytes,
+				request.rustcModulePort,
+				Math.max(120_000, request.manifest.compiler.compileTimeoutMs)
+			)
 		: compileOwnedRustcModule(rustcBytes);
 	let fetchedSysrootFiles = 0;
 	let fetchedSysrootBytes = 0;
@@ -281,7 +287,7 @@ async function compileRustInWorker(request: CompileWorkerRequest) {
 				const bytes = await fetchRuntimeAssetBytes(
 					assetUrl,
 					`wasm-rust sysroot asset ${entry.asset}`,
-					fetch,
+					fetchImpl,
 					true,
 					(progress) =>
 						emitCompileWorkerProgress(request, {
@@ -598,18 +604,24 @@ if (typeof globalThis.addEventListener === 'function') {
 			return;
 		}
 		acceptedCompileRequest = true;
-		void compileRustInWorker(event.data).catch((error) => {
-			emitCompileWorkerLog(
-				event.data,
-				`[wasm-rust:compiler-worker] unhandled failure ${error instanceof Error ? error.message : String(error)}`
-			);
-			const message = error instanceof Error ? error.message : String(error);
-			const failureKind = classifyRetryableFailureKind(message);
-			postMessage({
-				type: 'error',
-				message,
-				...(failureKind ? { failureKind } : {})
-			} satisfies CompileWorkerMessage);
-		});
+		const assetCache = event.data.assetCachePort
+			? createRuntimeAssetCacheClient(event.data.assetCachePort)
+			: undefined;
+		const fetchImpl = withRuntimeAssetPersistentCache(fetch, assetCache);
+		void compileRustInWorker(event.data, fetchImpl)
+			.catch((error) => {
+				emitCompileWorkerLog(
+					event.data,
+					`[wasm-rust:compiler-worker] unhandled failure ${error instanceof Error ? error.message : String(error)}`
+				);
+				const message = error instanceof Error ? error.message : String(error);
+				const failureKind = classifyRetryableFailureKind(message);
+				postMessage({
+					type: 'error',
+					message,
+					...(failureKind ? { failureKind } : {})
+				} satisfies CompileWorkerMessage);
+			})
+			.finally(() => assetCache?.close());
 	});
 }

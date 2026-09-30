@@ -8,6 +8,7 @@ import {
 	wasi
 } from '@bjorn3/browser_wasi_shim';
 import { installWasiExtractionQuota } from '@wasm-idle/llvm-core';
+import { configureRuntimeAssetCache } from '@wasm-idle/core';
 import {
 	loadVerifiedHaskellRuntimeAssets,
 	snapshotHaskellRuntimeAssetConfig,
@@ -516,6 +517,7 @@ self.onmessage = async (event: { data: any }) => {
 	} = event.data;
 	try {
 		if (load) {
+			configureRuntimeAssetCache(event.data.persistentCache ?? {});
 			const nextConfig = snapshotHaskellRuntimeAssetConfig({
 				moduleUrl: nextModuleUrl,
 				rootfsUrl: nextRootfsUrl,

@@ -74,6 +74,7 @@ export async function getRubyLanguageServer(
 			signal: controller.signal,
 			timeoutMs: assetTimeoutMs,
 			maxAssetBytes,
+			persistentCache: hostOptions?.persistentCache,
 			progress(progress) {
 				if (!reportProgress) return;
 				status.progress({
@@ -106,6 +107,9 @@ export async function getRubyLanguageServer(
 		initOptions: { runtimePreflight },
 		initTransfer: transfer,
 		onStatus: hostOptions?.onStatus,
-		lifecycle: hostOptions
+		lifecycle: {
+			...hostOptions,
+			rootUrl: typeof options === 'string' ? options : hostOptions?.rootUrl
+		}
 	});
 }

@@ -80,7 +80,11 @@ test('browser-native dispatcher transfers transient preload buffers to the tool 
 		'utf8'
 	);
 
-	assert.match(dispatcherSource, /const transferPreloadBuffers = request\.preloadFiles\.flatMap/);
+	assert.match(
+		dispatcherSource,
+		/const transferPreloadBuffers: Transferable\[\] = request\.preloadFiles\.flatMap/
+	);
+	assert.match(dispatcherSource, /if \(cachePort\) transferPreloadBuffers\.push\(cachePort\)/);
 	assert.match(dispatcherSource, /\},\s*transferPreloadBuffers\s*\);/u);
 });
 
@@ -103,7 +107,10 @@ test('browser-native worker applies one bounded budget to compiler and preload i
 	const materializeSource = workerSource.slice(materializeStart, materializeEnd);
 
 	assert.match(workerSource, /const inputBudget = createBrowserToolInputBudget\(\);/);
-	assert.match(workerSource, /materializePreloadFiles\(request\.preloadFiles, inputBudget\)/);
+	assert.match(
+		workerSource,
+		/materializePreloadFiles\(\s*request\.preloadFiles,\s*inputBudget,\s*persistentCache\s*\)/
+	);
 	assert.match(
 		workerSource,
 		/fetchBrowserToolAsset\(\s*request\.tool\.url,[\s\S]*?inputBudget,[\s\S]*?receipt: request\.tool/u

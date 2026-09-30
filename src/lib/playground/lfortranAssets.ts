@@ -3,7 +3,8 @@ import {
 	preflightRuntimeAssets,
 	ResourceLimitError,
 	RuntimeConfigurationError,
-	type ExecutionLimits
+	type ExecutionLimits,
+	type RuntimeAssetCacheOptions
 } from '@wasm-idle/core';
 import type { PlaygroundRuntimeAssets } from './assets';
 import { WASM_LFORTRAN_PROFILE as profile } from './wasmLfortranVersion';
@@ -101,6 +102,7 @@ export async function preflightLfortranRuntimeAssets(
 	baseUrl: string,
 	options: {
 		limits: ExecutionLimits;
+		persistentCache?: RuntimeAssetCacheOptions;
 		signal?: AbortSignal;
 		reportProgress?: (value: number, stage: string) => void;
 		fetch?: typeof globalThis.fetch;
@@ -131,6 +133,7 @@ export async function preflightLfortranRuntimeAssets(
 			])
 		),
 		limits: options.limits,
+		persistentCache: options.persistentCache,
 		signal: options.signal,
 		fetch: options.fetch,
 		redirect: 'error',

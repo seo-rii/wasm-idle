@@ -1,7 +1,7 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
 import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch';
-import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
+import { configureRuntimeAssetCache, verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 
 declare var self: any;
 
@@ -106,6 +106,8 @@ async function loadRuntime(urlValue: unknown, receiptValue: unknown, maxAssetByt
 		const bytes = await fetchRuntimeAssetBytes({
 			url,
 			label: 'TypeScript runtime module',
+			expected: receipt,
+			integrityContext: { runtimeId: 'TYPESCRIPT' },
 			maxAssetBytes: receipt.bytes
 		});
 		await verifyRuntimeAssetIntegrity({
@@ -194,6 +196,7 @@ self.onmessage = async (event: { data: any }) => {
 	} = event.data;
 	try {
 		if (load) {
+			configureRuntimeAssetCache(event.data.persistentCache ?? {});
 			const configuredModuleUrl = requireModuleUrl(nextModuleUrl);
 			const configuredModuleReceipt = snapshotModuleReceipt(nextModuleReceipt);
 			const configuredMaxAssetBytes = requireMaxAssetBytes(nextMaxAssetBytes);

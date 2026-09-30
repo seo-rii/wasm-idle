@@ -4,6 +4,13 @@ import type {
 	BrowserToolAssetDescriptor,
 	BrowserToolAssetReceipt
 } from './browser-native-tool-assets.js';
+import {
+	readBrowserNativeAssetCache,
+	writeBrowserNativeAssetCache,
+	serveBrowserNativeAssetCache,
+	type BrowserNativeAssetCache
+} from './browser-native-asset-cache.ts';
+import { resolveBrowserToolAssetUrl } from './browser-native-tool-assets.ts';
 
 export type BrowserNativeManifestFile = {
 	path: string;
@@ -75,6 +82,7 @@ export type BrowserNativeRuntimeAssetLimits = {
 };
 
 export type BrowserNativeRuntimeAssetOptions = {
+	persistentCache?: BrowserNativeAssetCache;
 	baseUrl?: string | URL;
 	fetch?: typeof fetch;
 	limits?: BrowserNativeRuntimeAssetLimits;
@@ -209,14 +217,7 @@ async function readBoundedStream(
 	}
 }
 
-async function fetchBoundedRuntimeAsset(
-	value: string,
-	label: string,
-	maxBytes: number,
-	options: BrowserNativeRuntimeAssetOptions,
-	decodedGzipMaxBytes?: number
-): Promise<{ bytes: Uint8Array<ArrayBuffer>; decodedGzip: boolean }> {
-	throwIfAborted(options.signal);
+function resolveRuntimeAssetUrl(value: string, options: BrowserNativeRuntimeAssetOptions) {
 	const configuredBase = options.baseUrl;
 	const baseUrl =
 		configuredBase instanceof URL
@@ -243,6 +244,18 @@ async function fetchBoundedRuntimeAsset(
 			'browser-native runtime asset URLs must not include encoded path separators'
 		);
 	}
+	return requestUrl;
+}
+
+async function fetchBoundedRuntimeAsset(
+	value: string,
+	label: string,
+	maxBytes: number,
+	options: BrowserNativeRuntimeAssetOptions,
+	decodedGzipMaxBytes?: number
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; decodedGzip: boolean }> {
+	throwIfAborted(options.signal);
+	const requestUrl = resolveRuntimeAssetUrl(value, options);
 	const fetchImpl = options.fetch ?? globalThis.fetch?.bind(globalThis);
 	if (!fetchImpl) throw new Error(`fetch is required to load ${label}`);
 	const requestInit: RequestInit = {
@@ -830,12 +843,43 @@ export async function loadBrowserNativeRuntimePack(
 		throw new Error('browser-native runtime pack size does not match the manifest');
 	}
 
-	const { bytes: indexBytes } = await fetchBoundedRuntimeAsset(
-		runtimePack.index,
-		'browser-native runtime pack index',
-		runtimePack.indexBytes,
-		options
+	const validationKey = JSON.stringify([
+		'ocaml-runtime-pack-v1',
+		limits.maxAssetBytes,
+		limits.maxMetadataBytes
+	]);
+	const indexIdentity = {
+		url: resolveRuntimeAssetUrl(runtimePack.index, options).href,
+		bytes: runtimePack.indexBytes,
+		sha256: runtimePack.indexSha256,
+		validationKey
+	};
+	const compressedIdentity = {
+		url: resolveRuntimeAssetUrl(runtimePack.asset, options).href,
+		bytes: runtimePack.compressedBytes,
+		sha256: runtimePack.compressedSha256,
+		validationKey
+	};
+	const decodedIdentity = {
+		...compressedIdentity,
+		bytes: runtimePack.totalBytes,
+		sha256: runtimePack.uncompressedSha256
+	};
+	const cachedIndex = await readBrowserNativeAssetCache(
+		options.persistentCache,
+		indexIdentity,
+		options.signal
 	);
+	const indexBytes = cachedIndex
+		? Uint8Array.from(cachedIndex)
+		: (
+				await fetchBoundedRuntimeAsset(
+					runtimePack.index,
+					'browser-native runtime pack index',
+					runtimePack.indexBytes,
+					options
+				)
+			).bytes;
 	if (indexBytes.byteLength !== runtimePack.indexBytes) {
 		throw new Error('browser-native runtime pack index size does not match the manifest');
 	}
@@ -905,13 +949,29 @@ export async function loadBrowserNativeRuntimePack(
 		}
 	}
 
-	const delivery = await fetchBoundedRuntimeAsset(
-		runtimePack.asset,
-		'browser-native runtime pack asset',
-		runtimePack.compressedBytes,
-		options,
-		runtimePack.totalBytes
+	const cachedCompressed = await readBrowserNativeAssetCache(
+		options.persistentCache,
+		compressedIdentity,
+		options.signal
 	);
+	const cachedDecoded = cachedCompressed
+		? undefined
+		: await readBrowserNativeAssetCache(
+				options.persistentCache,
+				decodedIdentity,
+				options.signal
+			);
+	const delivery = cachedCompressed
+		? { bytes: Uint8Array.from(cachedCompressed), decodedGzip: false }
+		: cachedDecoded
+			? { bytes: Uint8Array.from(cachedDecoded), decodedGzip: true }
+			: await fetchBoundedRuntimeAsset(
+					runtimePack.asset,
+					'browser-native runtime pack asset',
+					runtimePack.compressedBytes,
+					options,
+					runtimePack.totalBytes
+				);
 	let bytes = delivery.bytes;
 	const encodedCompressedMatch =
 		delivery.decodedGzip &&
@@ -973,6 +1033,21 @@ export async function loadBrowserNativeRuntimePack(
 		'browser-native runtime pack expanded payload',
 		options.signal
 	);
+	// Persist only after both receipts and the complete index/payload contract pass.
+	if (!cachedIndex)
+		await writeBrowserNativeAssetCache(
+			options.persistentCache,
+			indexIdentity,
+			indexBytes,
+			options.signal
+		);
+	if (!cachedCompressed && !cachedDecoded)
+		await writeBrowserNativeAssetCache(
+			options.persistentCache,
+			compressedDelivery ? compressedIdentity : decodedIdentity,
+			delivery.bytes,
+			options.signal
+		);
 	return { bytes, entries };
 }
 
@@ -984,19 +1059,56 @@ export async function runBrowserNativeTool(request: {
 	outputPrefixes: string[];
 	systemBridge?: 'binaryen';
 	binaryenTools?: BrowserNativeManifest['binaryenTools'];
+	persistentCache?: BrowserNativeAssetCache;
+	signal?: AbortSignal;
 }) {
+	throwIfAborted(request.signal);
 	const worker = new Worker(
 		new URL('../browser-harness/native-tool-worker.js', import.meta.url),
 		{
 			type: 'module'
 		}
 	);
-
+	let closeCache: (() => void) | undefined;
+	let cachePort: MessagePort | undefined;
+	let cancelTool: (() => void) | undefined;
 	try {
+		if (request.persistentCache) {
+			const channel = new MessageChannel();
+			const assets = [
+				request.tool,
+				...Object.values(request.binaryenTools ?? {}),
+				...request.preloadFiles.flatMap((file) =>
+					file.url && file.receipt ? [{ url: file.url, ...file.receipt }] : []
+				)
+			];
+			closeCache = serveBrowserNativeAssetCache(
+				channel.port1,
+				request.persistentCache,
+				assets.map((asset) => ({
+					url: resolveBrowserToolAssetUrl(asset.url).href,
+					sha256: asset.sha256,
+					bytes: asset.bytes,
+					validationKey: JSON.stringify([
+						'ocaml-tool-exact-v1',
+						DEFAULT_MAX_BROWSER_NATIVE_TOOL_ASSET_BYTES
+					])
+				}))
+			);
+			cachePort = channel.port2;
+		}
+
 		return await new Promise<BrowserToolResult>((resolve, reject) => {
-			const transferPreloadBuffers = request.preloadFiles.flatMap((file) =>
+			cancelTool = () => reject(abortReason(request.signal!));
+			request.signal?.addEventListener('abort', cancelTool, { once: true });
+			if (request.signal?.aborted) {
+				cancelTool();
+				return;
+			}
+			const transferPreloadBuffers: Transferable[] = request.preloadFiles.flatMap((file) =>
 				file.bytes ? [file.bytes] : []
 			);
+			if (cachePort) transferPreloadBuffers.push(cachePort);
 			const handleMessage = (event: MessageEvent<WorkerResponse>) => {
 				const response = event.data;
 				if (!response || response.type !== 'tool-result') {
@@ -1026,6 +1138,7 @@ export async function runBrowserNativeTool(request: {
 			worker.postMessage(
 				{
 					type: 'run-tool',
+					...(cachePort ? { cachePort } : {}),
 					tool: request.tool,
 					argv: request.argv,
 					env: request.env,
@@ -1038,6 +1151,9 @@ export async function runBrowserNativeTool(request: {
 			);
 		});
 	} finally {
+		if (cancelTool) request.signal?.removeEventListener('abort', cancelTool);
+		closeCache?.();
+		cachePort?.close();
 		worker.terminate();
 	}
 }
@@ -1100,6 +1216,10 @@ export function createBrowserWorkerSystemDispatcher(options: {
 		}
 
 		const result = await runBrowserNativeTool({
+			...(options.runtimeAssets?.persistentCache
+				? { persistentCache: options.runtimeAssets.persistentCache }
+				: {}),
+			...(options.runtimeAssets?.signal ? { signal: options.runtimeAssets.signal } : {}),
 			tool: options.manifest.tools[commandName],
 			argv: toolArgv,
 			env,

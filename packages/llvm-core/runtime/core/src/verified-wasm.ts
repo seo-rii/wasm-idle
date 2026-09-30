@@ -1,3 +1,9 @@
+import {
+	readPersistentRuntimeAsset,
+	writePersistentRuntimeAsset,
+	type RuntimeAssetCacheOptions
+} from '@wasm-idle/core';
+
 /** Receipts describe transport bytes and the exact Wasm bytes consumed by the engine. */
 export interface VerifiedWasmReceipt {
 	readonly bytes: number;
@@ -7,6 +13,7 @@ export interface VerifiedWasmReceipt {
 }
 
 export interface VerifiedWasmOptions {
+	persistentCache?: RuntimeAssetCacheOptions;
 	fetch: typeof globalThis.fetch;
 	maxAssetBytes: number;
 	signal?: AbortSignal;
@@ -112,7 +119,7 @@ function verifiedStream(
 			cancel(error);
 		}
 	});
-	return { body, verified };
+	return { body, verified, snapshot };
 }
 
 /** Native fetch only; callers must select this path from their trusted asset profile. */
@@ -154,14 +161,27 @@ export async function compileVerifiedWasmAsset(
 	let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 	try {
 		signal.throwIfAborted();
-		const fetching = Promise.resolve().then(() =>
-			options.fetch(assetUrl.href, {
-				credentials: 'omit',
-				redirect: 'error',
-				referrerPolicy: 'no-referrer',
-				signal
-			})
-		);
+		const identity = {
+			url: assetUrl.href,
+			sha256: receipt.sha256,
+			bytes: receipt.bytes,
+			validationKey: 'verified-wasm-v1'
+		};
+		const cached = await readPersistentRuntimeAsset({
+			identity,
+			cache: options.persistentCache,
+			signal
+		});
+		const fetching = cached
+			? Promise.resolve(new Response(Uint8Array.from(cached)))
+			: Promise.resolve().then(() =>
+					options.fetch(assetUrl.href, {
+						credentials: 'omit',
+						redirect: 'error',
+						referrerPolicy: 'no-referrer',
+						signal
+					})
+				);
 		void fetching.then(
 			(late) => {
 				if (signal.aborted) void late.body?.cancel(reason(signal)).catch(() => {});
@@ -225,10 +245,12 @@ export async function compileVerifiedWasmAsset(
 		});
 		let logical = source;
 		const gates: Promise<void>[] = [];
+		let storageSnapshot: Uint8Array | undefined;
 		if (gzip) {
 			if (typeof DecompressionStream !== 'function')
 				throw new Error('Runtime gzip needs native decompression');
 			const storage = verifiedStream(source, receipt.bytes, receipt.sha256, signal);
+			storageSnapshot = storage.snapshot;
 			gates.push(storage.verified);
 			logical = storage.body.pipeThrough(new DecompressionStream('gzip'));
 		}
@@ -250,6 +272,14 @@ export async function compileVerifiedWasmAsset(
 				: wasmResponse.arrayBuffer().then((bytes) => WebAssembly.compile(bytes));
 		const [module] = await abortable(Promise.all([compiling, ...gates]), signal);
 		signal.throwIfAborted();
+		if (!cached && storageSnapshot) {
+			await writePersistentRuntimeAsset({
+				identity,
+				cache: options.persistentCache,
+				signal,
+				bytes: storageSnapshot
+			});
+		}
 		return module;
 	} catch (error) {
 		controller.abort(error);

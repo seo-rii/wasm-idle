@@ -59,6 +59,12 @@ const { executableGraphFixture } = vi.hoisted(() => ({
 	}
 }));
 
+const pinnedFetch = vi.hoisted(() => vi.fn());
+vi.mock('@wasm-idle/core', async (original) => ({
+	...(await original<typeof import('@wasm-idle/core')>()),
+	fetchPinnedRuntimeAsset: pinnedFetch
+}));
+
 function installExecutableGraphFixture() {
 	executableGraphFixture.disposeCalls = 0;
 	executableGraphFixture.load.mockReset();
@@ -145,6 +151,7 @@ export const createBundledTinyGoRuntime = (options = {}) => {
 const runtimeModuleUrl = `data:text/javascript;base64,${Buffer.from(runtimeModuleSource, 'utf8').toString('base64')}`;
 
 const createUpstreamFixtureState = () => ({
+	onLoad: null as ((options: { fetchImpl?: typeof fetch }) => Promise<void>) | null,
 	loadCalls: 0,
 	loadFailures: 0,
 	compileCalls: 0,
@@ -170,6 +177,7 @@ const state = globalThis.__wasmIdleTinyGoUpstreamFixtureState;
 export async function loadTinyGoUpstreamToolchainAssets(options) {
   state.loadCalls += 1;
   state.loadOptions = options;
+  await state.onLoad?.(options);
   if (state.loadFailures > 0) {
     state.loadFailures -= 1;
     throw new Error('fixture upstream asset load failed');
@@ -240,6 +248,89 @@ describe('TinyGo sandbox', () => {
 		Object.assign(runtimeFixtureState, createRuntimeFixtureState());
 		Object.assign(upstreamFixtureState, createUpstreamFixtureState());
 		installExecutableGraphFixture();
+		pinnedFetch.mockReset();
+		pinnedFetch.mockResolvedValue(new Uint8Array([0, 97, 115, 109]));
+	});
+
+	it('keeps raw TinyGo 404/query probes native and caches only exact pinned transport URLs', async () => {
+		const root = 'https://example.invalid/wasm-tinygo/';
+		const logical = `${root}tools/upstream/tinygo-compiler.wasm`;
+		const missing = new Response('missing', { status: 404 });
+		const fetcher = vi.fn(async () => missing);
+		vi.stubGlobal('fetch', fetcher);
+		upstreamFixtureState.onLoad = async ({ fetchImpl }) => {
+			expect(fetchImpl).toBeTypeOf('function');
+			// These original responses let the producer perform its existing gzip fallback.
+			expect(await fetchImpl!(logical)).toBe(missing);
+			expect(await fetchImpl!(`${logical}.gz?v=custom`)).toBe(missing);
+			expect(pinnedFetch).not.toHaveBeenCalled();
+			const verified = await fetchImpl!(`${logical}.gz`);
+			expect(verified.url).toBe('');
+			expect(new Uint8Array(await verified.arrayBuffer())).toEqual(
+				new Uint8Array([0, 97, 115, 109])
+			);
+		};
+		const sandbox = new TinyGo();
+		await sandbox.load({
+			tinygo: { moduleUrl: upstreamModuleUrl },
+			persistentCache: { enabled: true, maxBytes: 4096 }
+		});
+		await sandbox.run('package main\nfunc main() {}', true);
+		expect(fetcher).toHaveBeenCalledTimes(2);
+		expect(pinnedFetch).toHaveBeenCalledWith(
+			expect.objectContaining({
+				url: `${logical}.gz`,
+				persistentCache: expect.objectContaining({ enabled: true, maxBytes: 4096 }),
+				receipt: expect.objectContaining({ uncompressedSha256: expect.any(String) })
+			})
+		);
+		await sandbox.dispose();
+	});
+
+	it('snapshots lazy TinyGo run overrides and restores the load baseline on the next run', async () => {
+		const sandbox = new TinyGo();
+		await sandbox.load({
+			tinygo: { moduleUrl: upstreamModuleUrl },
+			persistentCache: { enabled: true, maxBytes: 4096 }
+		});
+		const requests: unknown[] = [];
+		upstreamFixtureState.onLoad = async ({ fetchImpl }) => {
+			await fetchImpl!(
+				'https://example.invalid/wasm-tinygo/tools/upstream/upstream-toolchain.v2.json'
+			);
+			requests.push(pinnedFetch.mock.calls.at(-1)?.[0].persistentCache);
+		};
+		// Retire only the in-memory runtime to exercise lazy recreation with the original load baseline.
+		await sandbox.clear();
+		await sandbox.run('package main\nfunc main() {}', true, false, undefined, [], {
+			persistentCache: false
+		});
+		expect(executableGraphFixture.load.mock.calls.at(-1)?.[0].persistentCache).toMatchObject({
+			enabled: false,
+			maxBytes: 4096
+		});
+		await sandbox.clear();
+		await sandbox.run('package main\nfunc main() {}', true);
+		expect(executableGraphFixture.load.mock.calls.at(-1)?.[0].persistentCache).toMatchObject({
+			enabled: true,
+			maxBytes: 4096
+		});
+		expect(requests).toEqual([
+			expect.objectContaining({ enabled: false, maxBytes: 4096 }),
+			expect.objectContaining({ enabled: true, maxBytes: 4096 })
+		]);
+		await sandbox.dispose();
+	});
+
+	it('keeps custom TinyGo asset loaders outside the default persistent adapter', async () => {
+		const assetLoader = vi.fn(async () => new Uint8Array([1]));
+		const sandbox = new TinyGo();
+		await sandbox.load({ tinygo: { moduleUrl: upstreamModuleUrl, assetLoader } });
+		await sandbox.run('package main\nfunc main() {}', true);
+		expect(upstreamFixtureState.loadOptions?.loader).toBe(assetLoader);
+		expect(upstreamFixtureState.loadOptions?.fetchImpl).toBeUndefined();
+		expect(pinnedFetch).not.toHaveBeenCalled();
+		await sandbox.dispose();
 	});
 
 	it('compiles public TinyGo with receipt-verified upstream assets in the disposable worker', async () => {

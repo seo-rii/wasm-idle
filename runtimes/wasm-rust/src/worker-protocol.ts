@@ -15,6 +15,7 @@ export interface CompileWorkerRequest {
 	type: 'compile';
 	/** Private, single-request capability supplied by the trusted parent runtime. */
 	rustcModulePort?: MessagePort;
+	assetCachePort?: MessagePort;
 	compilerWorkerUrl: string;
 	executableGraphFingerprint?: string;
 	verifiedExecutableModuleUrls?: Readonly<Record<string, string>>;

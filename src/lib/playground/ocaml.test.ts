@@ -101,6 +101,28 @@ describe('OCaml sandbox', () => {
 		vi.useRealTimers();
 	});
 
+	it('forwards an immutable load policy and resets per-run overrides to that baseline', async () => {
+		const sandbox = new Ocaml();
+		const policy = { enabled: false, namespace: 'ocaml-test', version: 'policy-version' };
+		await sandbox.load({ rootUrl: '/runtime', persistentCache: policy });
+		policy.enabled = true;
+		await sandbox.run('let () = ()', true, false, undefined, [], {
+			persistentCache: { enabled: true }
+		});
+		await sandbox.run('let () = ()', true, false);
+		const messages = workerInstances[0].postMessage.mock.calls.map(([message]) => message);
+		expect(messages.map((message) => message.persistentCache.enabled)).toEqual([
+			false,
+			true,
+			false
+		]);
+		expect(messages.map((message) => message.persistentCache.version)).toEqual([
+			'policy-version',
+			'policy-version',
+			'policy-version'
+		]);
+	});
+
 	it('loads the OCaml worker and forwards diagnostics plus run output', async () => {
 		const sandbox = new Ocaml();
 		const outputs: string[] = [];

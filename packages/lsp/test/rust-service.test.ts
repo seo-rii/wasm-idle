@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createRustWorkerService } from '../src/index.js';
+import { configureRuntimeAssetCache } from '@wasm-idle/core';
 
 const compilerUrl = 'blob:https://app.example/verified-rust-entry';
 const compilerMocks = vi.hoisted(() => {
@@ -63,11 +64,54 @@ const expectedNetworkModuleUrls = Object.freeze(Object.keys(verifiedModuleUrls))
 
 describe('createRustWorkerService', () => {
 	beforeEach(() => {
+		configureRuntimeAssetCache({});
 		(globalThis as any).__lastRustLspCompile = undefined;
 		compilerMocks.requests.length = 0;
 		compilerMocks.configure.mockClear();
 		compilerMocks.create.mockClear();
 	});
+
+	it.each([false, { enabled: true }])(
+		'forwards the worker cache policy to Rust diagnostics: %j',
+		async (policy) => {
+			configureRuntimeAssetCache(policy);
+			const service = createRustWorkerService(async () => ({
+				configureVerifiedRuntimeExecutableModuleUrls: compilerMocks.configure,
+				createRustCompiler: compilerMocks.create
+			}));
+			const context = {
+				documents: new Map(),
+				publishDiagnostics: vi.fn(),
+				reportProgress: vi.fn()
+			};
+			await service.initialize?.(
+				{
+					compilerUrl,
+					expectedNetworkModuleUrls,
+					verifiedModuleUrls,
+					graphFingerprint: 'a'.repeat(64),
+					runtimeProfile
+				},
+				context
+			);
+			await service.diagnostics?.(
+				{
+					uri: 'file:///workspace/main.rs',
+					languageId: 'rust',
+					version: 1,
+					text: 'fn main() {}'
+				},
+				context
+			);
+			if (policy === false) expect(compilerMocks.requests[0]?.assetCache).toBeUndefined();
+			else
+				expect(compilerMocks.requests[0]?.assetCache).toMatchObject({
+					read: expect.any(Function),
+					write: expect.any(Function)
+				});
+			configureRuntimeAssetCache({});
+		}
+	);
 
 	it('uses the real wasm-rust compiler API for diagnostics', async () => {
 		const service = createRustWorkerService(async () => ({

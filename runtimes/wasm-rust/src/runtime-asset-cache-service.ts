@@ -1,0 +1,218 @@
+import type {
+	RuntimeAssetPersistentCache,
+	RuntimeAssetPersistentCacheIdentity
+} from './runtime-asset-cache.js';
+import { waitForRuntimeAssetCache } from './runtime-asset-cache.js';
+
+const MAX_PENDING = 32;
+const MAX_REQUESTS = 4096;
+const TIMEOUT_MS = 15_000;
+
+type Request = {
+	id: number;
+	type: 'read' | 'write';
+	identity: RuntimeAssetPersistentCacheIdentity;
+	bytes?: ArrayBuffer;
+};
+type Response = { id: number; bytes?: ArrayBuffer; stored?: boolean; error?: string };
+
+/** Private per-compiler capability: callers cannot publish arbitrary receipt claims. */
+export function createRuntimeAssetCacheService(
+	cache: RuntimeAssetPersistentCache,
+	authorize: (identity: RuntimeAssetPersistentCacheIdentity) => boolean
+) {
+	const channel = new MessageChannel();
+	const pending = new Map<number, AbortController>();
+	let requests = 0;
+	let closed = false;
+	const close = () => {
+		if (closed) return;
+		closed = true;
+		try {
+			channel.port1.postMessage({ type: 'closed' });
+		} catch {}
+		for (const controller of pending.values())
+			controller.abort(new Error('Rust asset cache service closed'));
+		channel.port1.onmessage = null;
+		channel.port1.onmessageerror = null;
+		channel.port1.close();
+		channel.port2.close();
+		pending.clear();
+	};
+	channel.port1.onmessageerror = close;
+	channel.port1.onmessage = (
+		event: MessageEvent<Request | { type: 'close' } | { type: 'cancel'; id: number }>
+	) => {
+		const request = event.data;
+		if (closed) return;
+		if (request?.type === 'close') {
+			close();
+			return;
+		}
+		if (request?.type === 'cancel') {
+			pending.get(request.id)?.abort(new Error('Rust asset cache request cancelled'));
+			return;
+		}
+		if (
+			!request ||
+			!Number.isSafeInteger(request.id) ||
+			request.id <= 0 ||
+			pending.has(request.id) ||
+			pending.size >= MAX_PENDING ||
+			++requests > MAX_REQUESTS ||
+			(request.type !== 'read' && request.type !== 'write')
+		) {
+			close();
+			return;
+		}
+		const controller = new AbortController();
+		pending.set(request.id, controller);
+		const deadline = setTimeout(
+			() => controller.abort(new Error('Rust asset cache service timed out')),
+			TIMEOUT_MS
+		);
+		void (async () => {
+			if (!authorize(request.identity)) throw new Error('Unpinned Rust asset cache request');
+			if (request.type === 'read') {
+				const bytes = await waitForRuntimeAssetCache(
+					cache.read(request.identity, controller.signal),
+					controller.signal
+				);
+				if (closed) return;
+				if (bytes && bytes.byteLength !== request.identity.bytes)
+					throw new Error('Invalid cached Rust asset length');
+				const buffer = bytes ? Uint8Array.from(bytes).buffer : undefined;
+				channel.port1.postMessage(
+					{ id: request.id, ...(buffer ? { bytes: buffer } : {}) },
+					buffer ? [buffer] : []
+				);
+			} else {
+				if (
+					!(request.bytes instanceof ArrayBuffer) ||
+					request.bytes.byteLength !== request.identity.bytes
+				)
+					throw new Error('Invalid Rust cache publication');
+				const stored = await waitForRuntimeAssetCache(
+					cache.write(request.identity, new Uint8Array(request.bytes), controller.signal),
+					controller.signal
+				);
+				if (!closed) channel.port1.postMessage({ id: request.id, stored });
+			}
+		})()
+			.catch((error) => {
+				try {
+					if (!closed)
+						channel.port1.postMessage({
+							id: request.id,
+							error: error instanceof Error ? error.message : String(error)
+						});
+				} catch {
+					close();
+				}
+			})
+			.finally(() => {
+				clearTimeout(deadline);
+				pending.delete(request.id);
+			});
+	};
+	return { port: channel.port2, close };
+}
+
+export function createRuntimeAssetCacheClient(
+	port: MessagePort,
+	timeoutMs = TIMEOUT_MS
+): RuntimeAssetPersistentCache & { close(): void } {
+	let nextId = 0;
+	let closed = false;
+	const pending = new Map<number, (response?: Response, error?: unknown) => void>();
+	const close = () => {
+		if (closed) return;
+		closed = true;
+		try {
+			port.postMessage({ type: 'close' });
+		} catch {}
+		for (const finish of pending.values())
+			finish(undefined, new Error('Rust asset cache client closed'));
+		pending.clear();
+		port.onmessage = null;
+		port.onmessageerror = null;
+		port.close();
+	};
+	port.onmessageerror = close;
+	port.onmessage = (event: MessageEvent<Response | { type: 'closed' }>) => {
+		const response = event.data;
+		if (response && 'type' in response) {
+			close();
+			return;
+		}
+		if (!response || !Number.isSafeInteger(response.id)) {
+			close();
+			return;
+		}
+		pending.get(response.id)?.(response);
+	};
+	const call = (
+		type: Request['type'],
+		identity: RuntimeAssetPersistentCacheIdentity,
+		bytes?: Uint8Array,
+		signal?: AbortSignal
+	) =>
+		new Promise<Response>((resolve, reject) => {
+			if (closed || pending.size >= MAX_PENDING || nextId >= MAX_REQUESTS) {
+				reject(new Error('Rust asset cache capability unavailable'));
+				return;
+			}
+			if (signal?.aborted) {
+				reject(signal.reason);
+				return;
+			}
+			const id = ++nextId;
+			const abort = () => {
+				try {
+					port.postMessage({ type: 'cancel', id });
+				} catch {}
+				finish(undefined, signal?.reason ?? new Error('Rust asset cache request aborted'));
+			};
+			const timer = setTimeout(() => {
+				finish(undefined, new Error('Rust asset cache request timed out'));
+				close();
+			}, timeoutMs);
+			const finish = (response?: Response, error?: unknown) => {
+				if (!pending.delete(id)) return;
+				clearTimeout(timer);
+				signal?.removeEventListener('abort', abort);
+				if (error !== undefined) reject(error);
+				else if (response?.error) reject(new Error(response.error));
+				else resolve(response!);
+			};
+			pending.set(id, finish);
+			signal?.addEventListener('abort', abort, { once: true });
+			try {
+				// Never detach source bytes retained by rustc, packs, or the caller's in-memory cache.
+				const buffer = bytes ? Uint8Array.from(bytes).buffer : undefined;
+				port.postMessage(
+					{ id, type, identity, ...(buffer ? { bytes: buffer } : {}) },
+					buffer ? [buffer] : []
+				);
+			} catch (error) {
+				finish(undefined, error);
+			}
+			if (signal?.aborted) abort();
+		});
+	return {
+		close,
+		async read(identity, signal) {
+			const response = await call('read', identity, undefined, signal);
+			if (response.bytes === undefined) return undefined;
+			if (
+				!(response.bytes instanceof ArrayBuffer) ||
+				response.bytes.byteLength !== identity.bytes
+			)
+				throw new Error('Invalid Rust cache response');
+			return new Uint8Array(response.bytes);
+		},
+		async write(identity, bytes, signal) {
+			return (await call('write', identity, bytes, signal)).stored === true;
+		}
+	};
+}

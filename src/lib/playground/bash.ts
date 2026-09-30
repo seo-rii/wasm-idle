@@ -33,9 +33,11 @@ import {
 	WorkerStartupError,
 	preflightBashRuntimeAssets,
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
 	validateExecutionWorkspace,
 	type BashRuntimePreflightPayload,
 	type ExecutionLimits,
+	type RuntimeAssetCacheOptions,
 	type RuntimePhase,
 	type WorkspaceLimits
 } from '@wasm-idle/core';
@@ -80,6 +82,7 @@ type BashRunRequest = {
 };
 
 type BashOperation = {
+	persistentCache?: RuntimeAssetCacheOptions;
 	config: ResolvedBashConfig | null;
 	decoders: Readonly<{
 		stderr: TextDecoder;
@@ -141,6 +144,7 @@ class Bash implements Sandbox {
 	private activeOperation: BashOperation | null = null;
 	private readyWorker: BashWorkerHandle | null = null;
 	private loadedConfig: ResolvedBashConfig | null = null;
+	private persistentCache?: RuntimeAssetCacheOptions;
 	private requestUid = 0;
 	private sessionUid = 0;
 	private disposed = false;
@@ -211,6 +215,12 @@ class Bash implements Sandbox {
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const resolved = resolveBashRuntimeAssetConfig(runtimeAssets, currentUrl);
 			this.requireActive(operation);
+			this.persistentCache =
+				typeof runtimeAssets === 'string' ? undefined : runtimeAssets.persistentCache;
+			operation.persistentCache = resolveRuntimeAssetCacheOptions(
+				this.persistentCache,
+				options.persistentCache
+			);
 			const config: ResolvedBashConfig = {
 				...resolved,
 				identity: createBashConfigIdentity(resolved.preflightKey, limits),
@@ -306,6 +316,10 @@ class Bash implements Sandbox {
 			const signal = options.signal;
 			this.requireActive(operation);
 			if (signal?.aborted) throw abortReason(signal, operation.stage);
+			operation.persistentCache = resolveRuntimeAssetCacheOptions(
+				this.persistentCache,
+				options.persistentCache
+			);
 			const limits = resolveExecutionLimits(options.limits);
 			this.requireActive(operation);
 			if (!this.readyWorker) {
@@ -643,6 +657,7 @@ class Bash implements Sandbox {
 				webcUrl: config.webcUrl,
 				profile: config.preflightProfile,
 				limits: config.limits,
+				persistentCache: operation.persistentCache,
 				signal: preflightController.signal,
 				reportProgress: ({ assetKey, loadedBytes }) => {
 					loadedByAsset.set(assetKey, loadedBytes);

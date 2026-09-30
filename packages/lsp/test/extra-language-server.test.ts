@@ -195,6 +195,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				compilerUrl: 'https://static.example.com/repl_20240807/wasm-zig/zig_small.wasm',
 				stdlibUrl: 'https://static.example.com/repl_20240807/wasm-zig/std.tar.gz',
@@ -222,6 +225,9 @@ describe('additional language server workers', () => {
 		const elixir = await getElixirLanguageServer(options);
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				language: 'elixir',
 				bundleUrl: '/wasm-elixir/bundle.avm?v=123',
@@ -234,6 +240,9 @@ describe('additional language server workers', () => {
 		const erlang = await getErlangLanguageServer(options);
 		expect(mockState.workers[1]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				language: 'erlang',
 				bundleUrl: '/wasm-elixir/bundle.avm?v=123',
@@ -258,6 +267,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				language: 'erlang',
 				bundleUrl: '/custom-beam/bundle.avm',
@@ -277,6 +289,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-lua/index.js'
 			}
@@ -317,6 +332,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-d/index.js',
 				manifestUrl:
@@ -407,6 +425,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				workerReceipt: BUNDLED_TCL_RUNNER_RECEIPT,
 				runnerWorkerBytes: expect.any(Uint8Array),
@@ -482,6 +503,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toMatchObject({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				maxAssetBytes: PASCAL_MAX_ASSET_BYTES,
 				workerReceipt: BUNDLED_PASCAL_RUNNER_RECEIPT,
@@ -517,6 +541,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				maxAssetBytes: JANET_MAX_ASSET_BYTES,
 				workerReceipt: BUNDLED_JANET_RUNNER_RECEIPT,
@@ -558,6 +585,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toMatchObject({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				manifest: {
 					fingerprint: BUNDLED_LISP_MANIFEST_FINGERPRINT
@@ -612,6 +642,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				baseUrl: 'https://static.example.com/repl_20240807/wasm-octave/runtime/',
 				workerUrl: 'https://static.example.com/repl_20240807/wasm-octave/runner-worker.js',
@@ -632,6 +665,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				moduleUrl:
 					'https://static.example.com/repl_20240807/wasm-of-js-of-ocaml/browser-native/src/index.js',
@@ -659,6 +695,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-haskell/dyld.mjs',
 				rootfsUrl: 'https://static.example.com/repl_20240807/wasm-haskell/rootfs.tar.zst',
@@ -683,6 +722,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				dialect: 'sqlite',
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-sqlite/runtime.mjs',
@@ -710,6 +752,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				dialect: 'duckdb',
 				moduleUrl: 'https://static.example.com/repl_20240807/wasm-duckdb/runtime.mjs',
@@ -730,6 +775,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				moduleUrl:
 					'https://static.example.com/repl_20240807/wasm-assemblyscript/runtime.mjs',
@@ -748,6 +796,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				schema: 'type Query { hello: String }'
 			}
@@ -764,6 +815,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				analyzerUrl: '/wasm-fortran/analyzer.js'
 			}
@@ -781,6 +835,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				analyzerUrl: 'https://static.example.com/repl_20240807/wasm-fortran/analyzer.js'
 			}
@@ -798,6 +855,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				analyzerUrl: 'https://static.example.com/repl_20240807/wasm-fortran/analyzer.js'
 			}
@@ -822,6 +882,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				workerReceipt: BUNDLED_PROLOG_RUNNER_RECEIPT,
 				runnerWorkerBytes: expect.any(Uint8Array),
@@ -848,6 +911,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {}
 		});
 
@@ -879,6 +945,9 @@ describe('additional language server workers', () => {
 		);
 		expect(mockState.workers[0]?.messages[0]).toMatchObject({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				runtimePreflight: {
 					protocol: 'wasm-idle-ruby-preflight',
@@ -903,6 +972,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				baseUrl: 'https://static.example.com/repl_20240807/webr/0.6.0/'
 			}
@@ -929,6 +1001,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toMatchObject({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				manifestUrl: `https://static.example.com/repl_20240807/wasm-awk/runtime-manifest.v2.json?v=${BUNDLED_AWK_RUNTIME_PROFILE.manifestFingerprint}`,
 				maxAssetBytes: AWK_MAX_ASSET_BYTES,
@@ -961,6 +1036,9 @@ describe('additional language server workers', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toMatchObject({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				maxAssetBytes: PERL_MAX_ASSET_BYTES,
 				workerReceipt: BUNDLED_PERL_RUNNER_RECEIPT,
@@ -992,6 +1070,9 @@ describe('additional language server workers', () => {
 			});
 			expect(mockState.workers.at(-1)?.messages[0]).toEqual({
 				type: 'init',
+				persistentAssets: expect.objectContaining({
+					persistentCache: expect.objectContaining({ enabled: true })
+				}),
 				options: { language }
 			});
 			handle.dispose();

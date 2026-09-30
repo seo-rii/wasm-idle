@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
@@ -73,6 +74,69 @@ describe('verified Lisp runtime assets', () => {
 
 	afterEach(() => {
 		vi.unstubAllGlobals();
+	});
+
+	it('verifies a raw manifest byte receipt before loading any executable module', async () => {
+		const { environment } = moduleEnvironment();
+		await expect(
+			loadVerifiedLispRuntimeAssets(
+				{
+					...config,
+					manifestReceipt: {
+						bytes: installed['runtime-manifest.v2.json'].length,
+						sha256: '0'.repeat(64)
+					}
+				},
+				{
+					persistentCache: false,
+					moduleEnvironment: environment,
+					decompressGzip
+				}
+			)
+		).rejects.toThrow(/SHA-256 mismatch/);
+		expect(fetch).toHaveBeenCalledTimes(1);
+		expect(environment.importModule).not.toHaveBeenCalled();
+	});
+
+	it('accepts explicit raw JSON receipts without confusing them with canonical fingerprints', async () => {
+		const { environment } = moduleEnvironment();
+		const manifestReceipt = {
+			bytes: installed['runtime-manifest.v2.json'].length,
+			sha256: createHash('sha256').update(installed['runtime-manifest.v2.json']).digest('hex')
+		};
+		expect(manifestReceipt.sha256).not.toBe(config.manifestFingerprint);
+		const runtime = await loadVerifiedLispRuntimeAssets(
+			{ ...config, manifestReceipt },
+			{
+				persistentCache: false,
+				moduleEnvironment: environment,
+				decompressGzip
+			}
+		);
+		expect(runtime.manifest.fingerprint).toBe(config.manifestFingerprint);
+	});
+
+	it('does not force the bundled raw JSON checksum on custom manifests with the same semantic fingerprint', async () => {
+		const reformatted = new TextEncoder().encode(
+			JSON.stringify(
+				JSON.parse(new TextDecoder().decode(installed['runtime-manifest.v2.json']))
+			)
+		);
+		expect(createHash('sha256').update(reformatted).digest('hex')).not.toBe(
+			createHash('sha256').update(installed['runtime-manifest.v2.json']).digest('hex')
+		);
+		vi.mocked(fetch).mockImplementationOnce(async () => {
+			const response = new Response(reformatted.buffer);
+			Object.defineProperty(response, 'url', { value: config.manifestUrl });
+			return response;
+		});
+		const { environment } = moduleEnvironment();
+		const runtime = await loadVerifiedLispRuntimeAssets(config, {
+			persistentCache: false,
+			moduleEnvironment: environment,
+			decompressGzip
+		});
+		expect(runtime.manifest.fingerprint).toBe(config.manifestFingerprint);
 	});
 
 	it('verifies every storage and logical receipt before materializing modules', async () => {

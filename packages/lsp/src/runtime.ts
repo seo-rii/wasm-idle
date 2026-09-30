@@ -41,6 +41,7 @@ import {
 	RUBY_RUNTIME_PROFILE,
 	RUBY_RUNTIME_WASM_STORAGE_PATH,
 	AWK_RUNTIME_WORKER_PATH,
+	resolveRuntimeAssetCacheOptions,
 	snapshotAwkRuntimePreflightProfile,
 	snapshotJanetRuntimePreflightProfile,
 	snapshotPascalRuntimePreflightProfile,
@@ -83,16 +84,23 @@ export function resolveCppLanguageServerRuntimeAssetConfig(
 	if (typeof options === 'string') {
 		return {
 			baseUrl: resolveRootToolBaseUrl(options, '/clangd/', currentUrl),
+			assetRoot: normalizeBaseUrl(options, currentUrl),
+			persistentCache: resolveRuntimeAssetCacheOptions(),
 			integrity: BUNDLED_CLANGD_ASSET_INTEGRITY
 		};
 	}
 
 	const runtimeConfig = options?.cpp;
+	const persistentCache = resolveRuntimeAssetCacheOptions(
+		options?.persistentCache,
+		runtimeConfig?.persistentCache
+	);
 	const integrity = resolveCppAssetIntegrity(runtimeConfig);
 	const allowedBaseUrls = resolveAllowedBaseUrls(runtimeConfig?.allowedBaseUrls, currentUrl);
 	if (runtimeConfig?.baseUrl) {
 		return {
 			baseUrl: normalizeBaseUrl(runtimeConfig.baseUrl, currentUrl),
+			persistentCache,
 			loader: runtimeConfig.loader,
 			allowedBaseUrls,
 			integrity
@@ -102,6 +110,8 @@ export function resolveCppLanguageServerRuntimeAssetConfig(
 	if (options?.rootUrl) {
 		return {
 			baseUrl: resolveRootToolBaseUrl(options.rootUrl, '/clangd/', currentUrl),
+			assetRoot: normalizeBaseUrl(options.rootUrl, currentUrl),
+			persistentCache,
 			loader: runtimeConfig?.loader,
 			allowedBaseUrls,
 			integrity
@@ -111,6 +121,7 @@ export function resolveCppLanguageServerRuntimeAssetConfig(
 	if (runtimeConfig?.loader) {
 		return {
 			baseUrl: CLANGD_VIRTUAL_BASE_URL,
+			persistentCache,
 			loader: runtimeConfig.loader,
 			allowedBaseUrls,
 			integrity

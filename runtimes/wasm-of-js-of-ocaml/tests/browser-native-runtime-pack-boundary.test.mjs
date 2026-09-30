@@ -170,6 +170,53 @@ function createHttpDecodedPackFixture() {
 	return { payload, compressed, indexBytes, manifest };
 }
 
+for (const decoded of [false, true]) {
+	test(`persistent runtime pack caches authenticated ${decoded ? 'HTTP-decoded' : 'compressed'} delivery without weakening validation`, async () => {
+		const fixture = createHttpDecodedPackFixture();
+		const entries = new Map();
+		let network = 0;
+		const persistentCache = {
+			async read(identity) {
+				return entries.get(JSON.stringify(identity));
+			},
+			async write(identity, bytes) {
+				entries.set(JSON.stringify(identity), bytes.slice());
+			}
+		};
+		const options = {
+			baseUrl: BASE_URL,
+			persistentCache,
+			fetch: async (url) => {
+				network++;
+				if (url === INDEX_URL) return createResponse(fixture.indexBytes, url);
+				const response = createResponse(
+					decoded ? fixture.payload : fixture.compressed,
+					url,
+					fixture.compressed.length
+				);
+				if (decoded) response.headers.set('content-encoding', 'gzip');
+				return response;
+			}
+		};
+		for (let i = 0; i < 2; i++)
+			assert.deepEqual(
+				(await loadBrowserNativeRuntimePack(fixture.manifest, options)).bytes,
+				fixture.payload
+			);
+		assert.equal(network, 2);
+		assert.equal(entries.size, 2);
+		assert.ok(
+			[...entries.values()].some(
+				(bytes) => bytes.length === (decoded ? fixture.payload : fixture.compressed).length
+			)
+		);
+		const changed = structuredClone(fixture.manifest);
+		changed.runtimePack.uncompressedSha256 = 'f'.repeat(64);
+		await assert.rejects(loadBrowserNativeRuntimePack(changed, options), /SHA-256 mismatch/);
+		assert.equal(entries.size, 2);
+	});
+}
+
 function fetchHttpDecodedPack(fixture, payload = fixture.payload) {
 	const response = createResponse(payload, ASSET_URL, fixture.compressed.byteLength);
 	response.headers.set('content-encoding', 'gzip');

@@ -1,5 +1,9 @@
 import { resolveVersionedAssetUrl } from './asset-url.js';
 import {
+	withRuntimeAssetPersistentCache,
+	type RuntimeAssetPersistentCache
+} from './runtime-asset-cache.js';
+import {
 	fetchRuntimeAssetBytes,
 	hasRegisteredRuntimeAssetReceipt,
 	withRuntimeAssetDeliveryBudget
@@ -23,6 +27,7 @@ export interface PreloadBrowserRustRuntimeDependencies {
 }
 
 export interface PreloadBrowserRustRuntimeOptions {
+	assetCache?: RuntimeAssetPersistentCache;
 	targetTriple?: SupportedTargetTriple;
 	assetDeliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor;
 	dependencies?: PreloadBrowserRustRuntimeDependencies;
@@ -34,7 +39,10 @@ export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRunti
 	const defaultImportRuntimeModule = <T>(assetUrl: string) =>
 		import(/* @vite-ignore */ assetUrl) as Promise<T>;
 	const runPreloadOperation = async () => {
-		const fetchImpl = options.dependencies?.fetchImpl || fetch;
+		const fetchImpl = withRuntimeAssetPersistentCache(
+			options.dependencies?.fetchImpl || fetch,
+			options.assetCache
+		);
 		const importRuntimeModule =
 			options.dependencies?.importRuntimeModule || defaultImportRuntimeModule;
 		const preloadAsset = async (assetUrl: string, assetLabel: string) => {
@@ -64,7 +72,12 @@ export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRunti
 				options.dependencies?.loadManifest,
 				options.targetTriple,
 				options.dependencies?.runtimeProfile,
-				options.assetDeliveryBudget ? { deliveryBudget: options.assetDeliveryBudget } : {}
+				{
+					fetchImpl,
+					...(options.assetDeliveryBudget
+						? { deliveryBudget: options.assetDeliveryBudget }
+						: {})
+				}
 			);
 		const assetPreloads = [
 			preloadAsset(
@@ -213,6 +226,7 @@ export async function preloadBrowserRustRuntime(options: PreloadBrowserRustRunti
 		withRuntimeAssetDeliveryBudget(options.assetDeliveryBudget, runPreloadOperation);
 	if (
 		options.assetDeliveryBudget ||
+		options.assetCache ||
 		options.dependencies?.loadManifest ||
 		options.dependencies?.fetchImpl ||
 		options.dependencies?.importRuntimeModule

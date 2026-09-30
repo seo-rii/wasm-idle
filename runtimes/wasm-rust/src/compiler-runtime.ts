@@ -16,6 +16,7 @@ export async function loadBundledRuntimeContext(
 	targetTriple?: SupportedTargetTriple,
 	runtimeProfile?: WasmRustRuntimeProfile,
 	options: {
+		fetchImpl?: typeof fetch;
 		deliveryBudget?: RuntimeAssetDeliveryBudgetDescriptor;
 		onManifestProgress?: (progress: { loaded: number; total?: number }) => void;
 	} = {}
@@ -37,7 +38,7 @@ export async function loadBundledRuntimeContext(
 		try {
 			loadedManifest = await effectiveManifestLoader(
 				resolveVersionedAssetUrl(runtimeBaseUrl, manifestFileName),
-				fetch,
+				options.fetchImpl ?? fetch,
 				{
 					...(runtimeProfile ? { receipt: runtimeProfile.manifestReceipt } : {}),
 					...(options.deliveryBudget ? { deliveryBudget: options.deliveryBudget } : {}),

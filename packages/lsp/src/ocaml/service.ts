@@ -8,6 +8,11 @@ import {
 	type WorkerLanguageService
 } from '../lsp.js';
 import { fetchBoundedExternalAsset } from '../external-asset.js';
+import { createRuntimeAssetCacheBackend, type RuntimeAssetCacheBackend } from '@wasm-idle/core';
+import {
+	resolveLanguageToolPersistentOptions,
+	resolveLanguageToolPersistentReceipt
+} from '../persistent-assets.js';
 
 export type OcamlLanguageServerTarget = 'js' | 'wasm';
 export type OcamlLanguageServerEffectsMode = 'cps' | 'jspi';
@@ -88,7 +93,10 @@ interface OcamlCompilerModule {
 			toolchainRoot: string;
 		}
 	): Promise<OcamlCompilerResult>;
-	createBrowserWorkerSystemDispatcher(options: { manifest: BrowserNativeManifest }): unknown;
+	createBrowserWorkerSystemDispatcher(options: {
+		manifest: BrowserNativeManifest;
+		runtimeAssets?: { persistentCache: RuntimeAssetCacheBackend };
+	}): unknown;
 }
 
 interface OcamlWorkspaceFile {
@@ -335,6 +343,13 @@ async function loadDefaultOcamlCompilerHost(
 	options: OcamlWorkerOptions,
 	context: LspDocumentContext
 ): Promise<OcamlCompilerHost> {
+	const policy = resolveLanguageToolPersistentOptions();
+	// Custom manifests without a trusted outer receipt stay on the original network path.
+	const manifestReceipt = resolveLanguageToolPersistentReceipt(options.manifestUrl, {});
+	const persistentCache =
+		policy.persistentCache.enabled && manifestReceipt?.sha256
+			? createRuntimeAssetCacheBackend(policy.persistentCache)
+			: undefined;
 	const [compilerModule, manifest] = await Promise.all([
 		(async () => {
 			context.reportProgress('load-ocaml-compiler');
@@ -359,6 +374,8 @@ async function loadDefaultOcamlCompilerHost(
 						await fetchBoundedExternalAsset({
 							url: options.manifestUrl,
 							label: 'OCaml manifest',
+							integrity: manifestReceipt,
+							persistentCache: policy.persistentCache,
 							cache: 'no-store'
 						})
 					)
@@ -383,7 +400,8 @@ async function loadDefaultOcamlCompilerHost(
 				},
 				{
 					system: compilerModule.createBrowserWorkerSystemDispatcher({
-						manifest
+						manifest,
+						...(persistentCache ? { runtimeAssets: { persistentCache } } : {})
 					}),
 					toolchainRoot: '/static/toolchain'
 				}

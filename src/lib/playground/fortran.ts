@@ -14,6 +14,7 @@ import {
 	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
 import { FORTRAN_EXECUTION_ASSET_NAMES } from '$lib/playground/fortranAssets';
@@ -336,6 +337,7 @@ class Fortran implements Sandbox {
 							progress,
 							limits.maxAssetBytes
 						);
+						assetBridge.setExecutionPersistentCache(options.persistentCache);
 					} catch (error) {
 						try {
 							worker.terminate();
@@ -398,6 +400,12 @@ class Fortran implements Sandbox {
 					worker.onmessage = handler;
 					worker.postMessage({
 						load: true,
+						persistentCache: resolveRuntimeAssetCacheOptions(
+							typeof runtimeAssets === 'object'
+								? runtimeAssets?.persistentCache
+								: undefined,
+							options.persistentCache
+						),
 						log,
 						code,
 						args,
@@ -416,6 +424,7 @@ class Fortran implements Sandbox {
 					const assetBridge = this.assetBridge;
 					if (!assetBridge) return rejectOperation('Fortran asset bridge is not loaded');
 					assetBridge.rebind(worker, clangAssets, progress, limits.maxAssetBytes);
+					assetBridge.setExecutionPersistentCache(options.persistentCache);
 					if (
 						!this.isOperationActive(operation) ||
 						this.worker !== worker ||
@@ -508,6 +517,7 @@ class Fortran implements Sandbox {
 			if (!worker) throw 'Worker not loaded';
 			const assetBridge = this.assetBridge;
 			if (!assetBridge) throw 'Fortran asset bridge is not loaded';
+			assetBridge.setExecutionPersistentCache(options.persistentCache);
 			const hasExplicitStdin = stdin !== undefined;
 			if (hasExplicitStdin) {
 				activeOperation.explicitStdin = true;

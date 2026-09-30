@@ -60,6 +60,10 @@ export type {
 };
 export { createBrowserRustCompileRequestIdentity, resolveBrowserRustDebugMode };
 export { configureVerifiedRuntimeExecutableModuleUrls };
+export type {
+	RuntimeAssetPersistentCache,
+	RuntimeAssetPersistentCacheIdentity
+} from './runtime-asset-cache.js';
 
 const bundledRuntimeProfile = parseWasmRustRuntimeProfileFromModuleUrl(import.meta.url);
 

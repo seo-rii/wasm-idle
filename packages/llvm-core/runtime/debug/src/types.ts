@@ -4,6 +4,7 @@ import type {
 	RuntimeManifestTarget,
 	SupportedClangTarget
 } from '../../clang/src/types.js';
+import type { RuntimeAssetCacheOptions } from '@wasm-idle/core';
 
 export type DebugSessionGeneration = string;
 
@@ -341,6 +342,8 @@ export interface BrowserLldbSessionOptions {
 	transportWriteTimeoutMs?: number;
 	readyTimeoutMs?: number;
 	fetchImpl?: typeof fetch;
+	/** Persistent verified runtime bytes; false bypasses reads and writes. */
+	persistentCache?: RuntimeAssetCacheOptions;
 	onOutput?: (channel: 'stdout' | 'stderr', data: string) => void;
 	onMemory?: (worker: DebugWorkerKind, bytes: number) => void;
 	onLifecycle?: (

@@ -726,7 +726,8 @@ describe('LldbSandboxSession', () => {
 			'https://cdn.example/debug/runtime-manifest.v2.json',
 			undefined,
 			fetchImpl,
-			expect.any(AbortSignal)
+			expect.any(AbortSignal),
+			undefined
 		);
 		expect(runtimeState.session).toBeNull();
 	});

@@ -1,3 +1,12 @@
+import {
+	readPersistentRuntimeAsset,
+	resolveRuntimeAssetCacheOptions,
+	verifyRuntimeAssetIntegrity,
+	writePersistentRuntimeAsset,
+	type RuntimeAssetCacheOptions,
+	type RuntimeAssetIntegrityEntry
+} from '@wasm-idle/core';
+
 export interface RuntimeAssetDownloadProgress {
 	loaded: number;
 	total?: number;
@@ -10,6 +19,11 @@ export interface RuntimeAssetFetchOptions {
 	maxAssetBytes?: number;
 	onProgress?: (progress: RuntimeAssetDownloadProgress) => void;
 	signal?: AbortSignal;
+	expected?: RuntimeAssetIntegrityEntry;
+	persistentCache?: RuntimeAssetCacheOptions;
+	/** Preserve an existing runtime-specific verification boundary, including its diagnostics. */
+	verify?: (bytes: Uint8Array) => Promise<unknown>;
+	integrityContext?: { asset?: string; runtimeId?: string; profileId?: string };
 }
 
 export const DEFAULT_RUNTIME_ASSET_MAX_BYTES = 128 * 1024 * 1024;
@@ -50,7 +64,67 @@ function abortReason(signal: AbortSignal) {
 		: new DOMException('The runtime asset download was aborted', 'AbortError');
 }
 
-export async function fetchRuntimeAssetBytes({
+export async function fetchRuntimeAssetBytes(
+	options: RuntimeAssetFetchOptions
+): Promise<Uint8Array<ArrayBuffer>> {
+	// Unpinned custom assets retain their existing network path, with no implicit URL trust.
+	if (!options.expected) return fetchRuntimeAssetBytesFromNetwork(options);
+	const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_RUNTIME_ASSET_MAX_BYTES;
+	if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes <= 0) {
+		throw new TypeError('Runtime asset maxAssetBytes must be a positive safe integer');
+	}
+	const url = resolveRuntimeAssetUrl(options.url, options.label).href;
+	const cache = resolveRuntimeAssetCacheOptions(options.persistentCache);
+	const expected = { ...options.expected };
+	const candidates = [{ sha256: expected.sha256, bytes: expected.bytes }];
+	if (expected.uncompressedSha256 !== undefined && expected.uncompressedBytes !== undefined) {
+		candidates.push({ sha256: expected.uncompressedSha256, bytes: expected.uncompressedBytes });
+	}
+	const validationKey = JSON.stringify([
+		'worker-asset-fetch-v1',
+		'exact-url',
+		'redirect-error',
+		'mime-unchecked',
+		maxAssetBytes
+	]);
+	for (const receipt of candidates) {
+		if (receipt.bytes !== undefined && receipt.bytes > maxAssetBytes) continue;
+		const hit = await readPersistentRuntimeAsset({
+			identity: { url, ...receipt, validationKey },
+			cache,
+			signal: options.signal
+		});
+		if (hit) {
+			if (hit.byteLength > maxAssetBytes)
+				throw new Error(`${options.label} exceeds the ${maxAssetBytes} byte limit`);
+			await options.verify?.(hit);
+			options.onProgress?.({ loaded: hit.byteLength, total: hit.byteLength });
+			if (options.signal?.aborted) throw abortReason(options.signal);
+			return Uint8Array.from(hit);
+		}
+	}
+	const bytes = await fetchRuntimeAssetBytesFromNetwork(options);
+	const isGzip = bytes[0] === 0x1f && bytes[1] === 0x8b;
+	const receipt = !isGzip && candidates.length > 1 ? candidates[1] : candidates[0];
+	if (options.verify) await options.verify(bytes);
+	else
+		await verifyRuntimeAssetIntegrity({
+			asset: url,
+			...options.integrityContext,
+			bytes,
+			expected: receipt
+		});
+	await writePersistentRuntimeAsset({
+		identity: { url, ...receipt, validationKey },
+		cache,
+		signal: options.signal,
+		bytes
+	});
+	if (options.signal?.aborted) throw abortReason(options.signal);
+	return bytes;
+}
+
+async function fetchRuntimeAssetBytesFromNetwork({
 	url,
 	label,
 	cache,

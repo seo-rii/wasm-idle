@@ -101,6 +101,9 @@ describe('TypeScript language server host assets', () => {
 
 		expect(mockState.workers[0]?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				language: 'typescript',
 				compilerOptions: undefined,

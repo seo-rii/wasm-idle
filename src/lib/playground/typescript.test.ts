@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
+import { configureRuntimeAssetCache } from '@wasm-idle/core';
 
 const workerInstances: MockWorker[] = [];
 const { publicEnv } = vi.hoisted(() => ({
@@ -126,6 +127,32 @@ console.log(value);`;
 				message: 'demo warning'
 			}
 		]);
+	});
+
+	it('snapshots global, runtime-assets and per-call persistent-cache options into the worker', async () => {
+		configureRuntimeAssetCache(false);
+		try {
+			const assets = { rootUrl: '/absproxy/5173', persistentCache: { maxBytes: 1024 } };
+			const disabled = new TypeScriptSandbox();
+			await disabled.load(assets);
+			expect(workerInstances[0].postMessage.mock.calls[0][0].persistentCache).toMatchObject({
+				enabled: false,
+				maxBytes: 1024
+			});
+			await disabled.dispose();
+			const enabled = new TypeScriptSandbox();
+			await enabled.load(assets, '', true, [], {
+				persistentCache: { enabled: true, maxEntryBytes: 256 }
+			});
+			expect(workerInstances[1].postMessage.mock.calls[0][0].persistentCache).toMatchObject({
+				enabled: true,
+				maxBytes: 1024,
+				maxEntryBytes: 256
+			});
+			await enabled.dispose();
+		} finally {
+			configureRuntimeAssetCache({});
+		}
 	});
 
 	it('uses JavaScript mode when constructed for JavaScript', async () => {

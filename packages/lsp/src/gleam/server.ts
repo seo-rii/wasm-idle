@@ -31,6 +31,9 @@ export async function getGleamLanguageServer(
 			manifestFingerprint: resolveGleamLanguageServerManifestFingerprint(options)
 		},
 		onStatus: hostOptions?.onStatus,
-		lifecycle: hostOptions
+		lifecycle: {
+			...hostOptions,
+			rootUrl: typeof options === 'string' ? options : hostOptions?.rootUrl
+		}
 	});
 }

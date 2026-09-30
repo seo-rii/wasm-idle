@@ -1,4 +1,8 @@
 import { isProgressValue, nextFallbackProgress, progressRatio } from './progress.js';
+import {
+	configureWorkerLanguageToolPersistentAssets,
+	type LanguageToolPersistentOptions
+} from './persistent-assets.js';
 
 export interface LspPosition {
 	line: number;
@@ -427,6 +431,7 @@ export function startWorkerLanguageServer(
 		const message = event.data as JsonRpcMessage & {
 			type?: string;
 			options?: unknown;
+			persistentAssets?: LanguageToolPersistentOptions;
 		};
 		if (!message || typeof message !== 'object') return;
 		if (message.type === 'init') {
@@ -438,7 +443,12 @@ export function startWorkerLanguageServer(
 				console.debug(`[wasm-idle:lsp-worker:${service.name}] init`);
 			}
 			sendProgress('startup', 0, 1);
-			void Promise.resolve(service.initialize?.(message.options, context))
+			void Promise.resolve()
+				.then(() => {
+					if (message.persistentAssets)
+						configureWorkerLanguageToolPersistentAssets(message.persistentAssets);
+					return service.initialize?.(message.options, context);
+				})
 				.then(() => {
 					sendProgress('ready', 1, 1);
 					ready = true;

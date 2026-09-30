@@ -46,6 +46,7 @@ export interface TinyGoExecutableGraphProgress {
 }
 
 export interface LoadTinyGoExecutableGraphOptions {
+	readonly persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 	readonly moduleUrl: string;
 	readonly currentUrl?: string;
 	readonly profile: unknown;
@@ -505,6 +506,7 @@ export async function loadVerifiedTinyGoExecutableGraph(
 	if (options.maxAssetBytes !== undefined) limits.maxAssetBytes = options.maxAssetBytes;
 	if (options.assetTimeoutMs !== undefined) limits.assetTimeoutMs = options.assetTimeoutMs;
 	const preflight = await preflightRuntimeAssets({
+		persistentCache: options.persistentCache,
 		manifest: createPreflightManifest(profile, urls.keysByPath),
 		runtimeId: 'tinygo/executable-graph',
 		rootUrl: urls.baseUrl,

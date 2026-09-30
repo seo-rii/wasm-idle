@@ -2,6 +2,7 @@ import {
 	HASKELL_RUNTIME_ASSET_NAMES,
 	snapshotHaskellRuntimeAssetReceipts,
 	verifyRuntimeAssetIntegrity,
+	type RuntimeAssetCacheOptions,
 	type HaskellRuntimeAssetName,
 	type HaskellRuntimeAssetReceipt,
 	type HaskellRuntimeAssetReceipts
@@ -60,6 +61,7 @@ export async function loadVerifiedHaskellRuntimeAssets(
 	config: HaskellRuntimeAssetConfig,
 	options: {
 		readonly signal?: AbortSignal;
+		readonly persistentCache?: RuntimeAssetCacheOptions;
 		readonly onProgress?: (progress: HaskellRuntimeAssetProgress) => void;
 	} = {}
 ) {
@@ -91,18 +93,20 @@ export async function loadVerifiedHaskellRuntimeAssets(
 								? 'Haskell GHC rootfs'
 								: 'Haskell rootfs extractor',
 					cache: 'no-store',
+					expected: receipt,
+					verify: (bytes) =>
+						verifyRuntimeAssetIntegrity({
+							asset,
+							bytes,
+							expected: receipt,
+							runtimeId: 'HASKELL'
+						}),
+					persistentCache: options.persistentCache,
 					maxAssetBytes: Math.min(receipt.bytes, snapshot.maxAssetBytes),
 					signal: controller.signal,
 					onProgress(progress) {
 						options.onProgress?.({ asset, ...progress });
 					}
-				});
-				if (controller.signal.aborted) throw controller.signal.reason;
-				await verifyRuntimeAssetIntegrity({
-					asset,
-					bytes,
-					expected: receipt,
-					runtimeId: 'HASKELL'
 				});
 				if (controller.signal.aborted) throw controller.signal.reason;
 				return bytes;

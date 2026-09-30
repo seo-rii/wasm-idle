@@ -20,6 +20,7 @@ import {
 	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
 import type { Sandbox, SandboxProgress } from '$lib/playground/sandbox';
@@ -404,6 +405,12 @@ class Zig implements Sandbox {
 					worker.onmessage = handler;
 					worker.postMessage({
 						load: true,
+						persistentCache: resolveRuntimeAssetCacheOptions(
+							typeof runtimeAssets === 'object'
+								? runtimeAssets?.persistentCache
+								: undefined,
+							options.persistentCache
+						),
 						compilerUrl: nextCompilerUrl,
 						stdlibUrl: nextStdlibUrl,
 						integrity: nextIntegrity,

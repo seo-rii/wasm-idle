@@ -216,6 +216,8 @@ describe('lsp runtime asset resolution', () => {
 			)
 		).toEqual({
 			baseUrl: 'https://app.example.com/wasm-idle/clangd/',
+			assetRoot: 'https://app.example.com/wasm-idle/',
+			persistentCache: expect.objectContaining({ enabled: true }),
 			loader: undefined,
 			allowedBaseUrls: undefined,
 			integrity: BUNDLED_CLANGD_ASSET_INTEGRITY
@@ -228,8 +230,22 @@ describe('lsp runtime asset resolution', () => {
 			)
 		).toEqual({
 			baseUrl: 'https://app.example.com/wasm-idle/clangd/',
+			assetRoot: 'https://app.example.com/wasm-idle/',
+			persistentCache: expect.objectContaining({ enabled: true }),
 			integrity: BUNDLED_CLANGD_ASSET_INTEGRITY
 		});
+	});
+
+	it('merges clangd cache budget overrides without silently re-enabling disabled instance caches', () => {
+		const config = resolveCppLanguageServerRuntimeAssetConfig(
+			{
+				rootUrl: '/wasm-idle',
+				persistentCache: false,
+				cpp: { persistentCache: { maxBytes: 1024 } }
+			},
+			'https://app.example.com/editor'
+		);
+		expect(config.persistentCache).toMatchObject({ enabled: false, maxBytes: 1024 });
 	});
 
 	it('requires the host to declare clangd and Python asset roots', () => {
@@ -1293,6 +1309,7 @@ describe('lsp runtime asset resolution', () => {
 		).toEqual({
 			baseUrl: 'https://cpp.example.com/assets/',
 			loader,
+			persistentCache: expect.objectContaining({ enabled: true }),
 			allowedBaseUrls: ['https://app.example.com/wasm-idle/mirror/']
 		});
 	});

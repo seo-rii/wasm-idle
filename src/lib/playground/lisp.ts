@@ -11,6 +11,7 @@ import {
 	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
 import {
@@ -364,6 +365,12 @@ class Lisp implements Sandbox {
 					worker.onmessage = handler;
 					worker.postMessage({
 						load: true,
+						persistentCache: resolveRuntimeAssetCacheOptions(
+							typeof runtimeAssets === 'object'
+								? runtimeAssets?.persistentCache
+								: undefined,
+							options.persistentCache
+						),
 						runtimeConfig: nextRuntimeConfig,
 						maxAssetBytes: limits.maxAssetBytes
 					});

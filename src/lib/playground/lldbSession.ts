@@ -44,6 +44,7 @@ export interface LldbArtifactPayload {
 }
 
 export interface LldbSandboxSessionOptions {
+	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 	manifestUrl: string;
 	manifestReceipt?: Readonly<RuntimeAssetIntegrityEntry>;
 	runtimeBaseUrl: string;
@@ -290,7 +291,8 @@ export class LldbSandboxSession {
 				this.options.manifestUrl,
 				this.options.manifestReceipt,
 				this.options.fetchImpl ?? fetch,
-				startupAbortController.signal
+				startupAbortController.signal,
+				this.options.persistentCache
 			);
 		} catch (error) {
 			if (lifecycleVersion !== this.lifecycleVersion) return completion;
@@ -335,6 +337,7 @@ export class LldbSandboxSession {
 		}));
 		const configuredBreakpointVersion = this.breakpointVersion;
 		session = createBrowserLldbSession({
+			persistentCache: this.options.persistentCache,
 			manifest,
 			runtimeBaseUrl: this.options.runtimeBaseUrl,
 			module: this.options.artifact.bytes,

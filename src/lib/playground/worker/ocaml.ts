@@ -1,5 +1,14 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
-import { verifyRuntimeAssetIntegrity, type RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
+import {
+	configureRuntimeAssetCache,
+	createRuntimeAssetCacheBackend,
+	getRuntimeAssetCacheOptions,
+	resolveRuntimeAssetCacheOptions,
+	verifyRuntimeAssetIntegrity,
+	type RuntimeAssetCacheBackend,
+	type RuntimeAssetIntegrityEntry,
+	type RuntimeAssetCacheOptions
+} from '@wasm-idle/core';
 import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
 
 declare var self: any;
@@ -97,6 +106,7 @@ type CompilerModule = {
 	createBrowserWorkerSystemDispatcher: (options: {
 		manifest: BrowserNativeManifest;
 		runtimeAssets?: {
+			persistentCache?: RuntimeAssetCacheBackend;
 			limits?: {
 				maxAssetBytes?: number;
 				maxMetadataBytes?: number;
@@ -107,6 +117,7 @@ type CompilerModule = {
 };
 
 type LoadRequest = {
+	persistentCache?: RuntimeAssetCacheOptions;
 	load: true;
 	moduleUrl: string;
 	manifestUrl: string;
@@ -116,6 +127,7 @@ type LoadRequest = {
 };
 
 type RunRequest = {
+	persistentCache?: RuntimeAssetCacheOptions;
 	load?: false;
 	code: string;
 	activePath?: string;
@@ -137,6 +149,7 @@ let moduleUrl = '';
 let manifestUrl = '';
 let moduleReceipt: OuterAssetReceipt | null = null;
 let manifestReceipt: OuterAssetReceipt | null = null;
+let loadPersistentCache: RuntimeAssetCacheOptions | undefined;
 let maxAssetBytes = DEFAULT_MAX_OCAML_ASSET_BYTES;
 let loadedModuleIdentity = '';
 let loadedManifestIdentity = '';
@@ -307,6 +320,8 @@ async function loadCompiler(
 		const bytes = await fetchRuntimeAssetBytes({
 			url: nextModuleUrl,
 			label: 'OCaml runtime module',
+			expected: nextReceipt,
+			integrityContext: { runtimeId: 'OCAML' },
 			cache: 'no-store',
 			maxAssetBytes: nextReceipt.bytes
 		});
@@ -423,6 +438,8 @@ async function loadManifest(
 		const bytes = await fetchRuntimeAssetBytes({
 			url: nextManifestUrl,
 			label: 'OCaml manifest',
+			expected: nextReceipt,
+			integrityContext: { runtimeId: 'OCAML' },
 			cache: 'no-store',
 			maxAssetBytes: nextReceipt.bytes
 		});
@@ -739,6 +756,8 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 	let log = true;
 	try {
 		if (event.data.load) {
+			configureRuntimeAssetCache(event.data.persistentCache ?? {});
+			loadPersistentCache = getRuntimeAssetCacheOptions();
 			moduleUrl = event.data.moduleUrl;
 			manifestUrl = event.data.manifestUrl;
 			moduleReceipt = requireOuterAssetReceipt(event.data.moduleReceipt, 'module');
@@ -760,6 +779,12 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 			activePath = 'main.ml',
 			workspaceFiles = []
 		} = event.data;
+		configureRuntimeAssetCache(
+			resolveRuntimeAssetCacheOptions(loadPersistentCache, event.data.persistentCache)
+		);
+		const persistentCache = getRuntimeAssetCacheOptions().enabled
+			? createRuntimeAssetCacheBackend()
+			: undefined;
 		log = configuredLog;
 
 		stdinBufferOcaml = buffer ? new Int32Array(buffer) : null;
@@ -801,6 +826,7 @@ self.onmessage = async (event: { data: LoadRequest | RunRequest }) => {
 					system: compilerModule.createBrowserWorkerSystemDispatcher({
 						manifest,
 						runtimeAssets: {
+							...(persistentCache ? { persistentCache } : {}),
 							limits: {
 								maxAssetBytes,
 								maxMetadataBytes: Math.min(MAX_OCAML_MANIFEST_BYTES, maxAssetBytes),

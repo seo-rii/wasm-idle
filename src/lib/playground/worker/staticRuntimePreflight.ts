@@ -1,3 +1,4 @@
+import { configureRuntimeAssetCache } from '@wasm-idle/core';
 import { executeStaticRuntimePreflight } from '$lib/playground/staticRuntimePreflightExecute';
 import {
 	STATIC_RUNTIME_PREFLIGHT_PROTOCOL_VERSION,
@@ -43,6 +44,7 @@ workerSelf.onmessage = async (event) => {
 	if (handled || !isRequest(request)) return;
 	handled = true;
 	try {
+		configureRuntimeAssetCache(request.persistentCache ?? false);
 		const payload = await executeStaticRuntimePreflight(request, (progress) => {
 			workerSelf.postMessage({
 				protocolVersion: STATIC_RUNTIME_PREFLIGHT_PROTOCOL_VERSION,

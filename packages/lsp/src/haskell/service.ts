@@ -261,6 +261,8 @@ async function fetchBytes(
 		label: stage,
 		cache: 'no-store',
 		maxBytes: receipt.bytes,
+		integrity: receipt,
+		runtimeId: 'HASKELL',
 		signal,
 		reportProgress(loaded, total) {
 			const progress =

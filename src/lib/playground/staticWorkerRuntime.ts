@@ -16,10 +16,14 @@ import {
 	WorkerStartupError,
 	isWasmIdleError,
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
+	readPersistentRuntimeAsset,
+	writePersistentRuntimeAsset,
 	validateExecutionWorkspace,
 	verifyRuntimeAssetIntegrity,
 	type ExecutionLimits,
 	type RuntimeAssetIntegrityEntry,
+	type RuntimeAssetCacheOptions,
 	type RuntimeStdinMode,
 	type RuntimeWorkerLease,
 	type RuntimeWorkerLifetimePolicy
@@ -52,6 +56,7 @@ export interface StaticWorkerRuntimeUrls {
 
 export interface StaticWorkerRuntimePreflightContext {
 	readonly limits: ExecutionLimits;
+	readonly persistentCache?: RuntimeAssetCacheOptions;
 	readonly signal?: AbortSignal;
 	readonly reportProgress: (value: number, stage?: string) => void;
 	/**
@@ -168,6 +173,7 @@ type ActiveRun = {
 
 type StaticWorkerExecutionControls = {
 	limits: ExecutionLimits;
+	persistentCache?: RuntimeAssetCacheOptions;
 	signal?: AbortSignal;
 };
 
@@ -218,6 +224,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	private disposePromise: Promise<void> | null = null;
 	private disposeReason: CancelledError | null = null;
 	private lifecycleProgress?: SandboxProgress;
+	private persistentCache?: RuntimeAssetCacheOptions;
 	private readonly progressController = new RuntimeProgressController();
 	private progressUid = 0;
 	private startingRunId: string | null = null;
@@ -354,7 +361,9 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	) {
 		this.assertNotDisposed();
 		try {
-			const controls = this.resolveExecutionControls(options);
+			const persistentCache =
+				typeof runtimeAssets === 'string' ? undefined : runtimeAssets.persistentCache;
+			const controls = this.resolveExecutionControls(options, persistentCache ?? {});
 			this.assertOperationNotDisposed();
 			if (controls.signal?.aborted) {
 				throw new CancelledError(`${this.config.displayName} startup cancelled`, {
@@ -369,6 +378,7 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 			const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 			const urls = this.config.resolveRuntimeAssets(runtimeAssets, currentUrl);
 			this.assertOperationNotDisposed();
+			this.persistentCache = persistentCache;
 			const nextManifestUrl = urls.manifestUrl || '';
 			const nextManifestFingerprint = urls.manifestFingerprint || '';
 			const nextPreflightKey = urls.preflightKey || '';
@@ -564,10 +574,15 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 	}
 
 	private resolveExecutionControls(
-		options: SandboxExecutionOptions
+		options: SandboxExecutionOptions,
+		persistentCache: RuntimeAssetCacheOptions | undefined = this.persistentCache
 	): StaticWorkerExecutionControls {
 		return {
 			limits: resolveExecutionLimits(options.limits),
+			persistentCache: resolveRuntimeAssetCacheOptions(
+				persistentCache,
+				options.persistentCache
+			),
 			...(options.signal ? { signal: options.signal } : {})
 		};
 	}
@@ -706,6 +721,17 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 				{ runtimeId: this.config.languageId }
 			);
 		}
+		const persistentIdentity = workerReceipt
+			? {
+					url: workerRequestUrl.href,
+					sha256: workerReceipt.sha256,
+					bytes: workerReceipt.bytes,
+					validationKey: JSON.stringify([
+						'static-worker-v1',
+						this.config.requireExactWorkerResponseUrl === true
+					])
+				}
+			: undefined;
 		const phaseController = new AbortController();
 		let timedOut = false;
 		const onAbort = () => phaseController.abort(signal?.reason);
@@ -721,6 +747,18 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 					phaseController.signal.reason ??
 					new DOMException('Worker script fetch aborted', 'AbortError')
 				);
+			}
+			if (persistentIdentity && workerReceipt) {
+				const cached = await readPersistentRuntimeAsset({
+					identity: persistentIdentity,
+					cache: controls.persistentCache,
+					signal: phaseController.signal
+				});
+				if (cached) {
+					await this.verifyWorkerReceipt(cached, workerReceipt, phaseController.signal);
+					this.reportProgress(progress, 0.2, `${this.config.displayName} worker cached`);
+					return Uint8Array.from(cached);
+				}
 			}
 			const pendingResponse = Promise.resolve(
 				fetch(workerRequestUrl.href, {
@@ -882,6 +920,12 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 							workerReceipt,
 							phaseController.signal
 						);
+						await writePersistentRuntimeAsset({
+							identity: persistentIdentity!,
+							cache: controls.persistentCache,
+							signal: phaseController.signal,
+							bytes
+						});
 						return bytes;
 					}
 					return undefined;
@@ -994,6 +1038,12 @@ export class StaticWorkerRuntimeSandbox implements Sandbox {
 					offset += chunk.byteLength;
 				}
 				await this.verifyWorkerReceipt(bytes, workerReceipt, phaseController.signal);
+				await writePersistentRuntimeAsset({
+					identity: persistentIdentity!,
+					cache: controls.persistentCache,
+					signal: phaseController.signal,
+					bytes
+				});
 				return bytes;
 			}
 			return undefined;
@@ -1209,6 +1259,7 @@ self.postMessage = (message, transferOrOptions) => {
 				progress,
 				controls: {
 					limits: controls.limits,
+					persistentCache: controls.persistentCache,
 					signal: startAbortController.signal
 				}
 			};
@@ -1284,6 +1335,7 @@ self.postMessage = (message, transferOrOptions) => {
 			try {
 				runtimePreflight = await this.config.preflightRuntimeAssets(urls, {
 					limits: controls.limits,
+					persistentCache: controls.persistentCache,
 					signal: controls.signal,
 					reportProgress: (value, stage) => this.reportProgress(progress, value, stage),
 					createOwnedDelivery: (payload) => {

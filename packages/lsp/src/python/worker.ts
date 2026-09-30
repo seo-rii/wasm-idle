@@ -2,6 +2,11 @@ import type { PyodideInterface } from 'pyodide';
 import packageInitSource from './package/wasm_idle_python_lsp/__init__.py?raw';
 import packageServerSource from './package/wasm_idle_python_lsp/server.py?raw';
 import type { PythonLspWorkerInboundMessage } from './protocol.js';
+import {
+	configureWorkerLanguageToolPersistentAssets,
+	type LanguageToolPersistentOptions
+} from '../persistent-assets.js';
+import { withPersistentPythonLspAssets } from './persistent-fetch.js';
 
 interface PythonLspWorkerScope {
 	addEventListener(
@@ -19,6 +24,7 @@ let pyodide: PyodideInterface | null = null;
 let bridge: PythonBridge | null = null;
 let initPromise: Promise<void> | null = null;
 let configuredPyodideBaseUrl: string | null = null;
+let persistentAssets: LanguageToolPersistentOptions = {};
 
 function toErrorMessage(error: unknown) {
 	return error instanceof Error ? error.message : String(error);
@@ -52,7 +58,7 @@ async function bootstrapPythonBridge(pyodideBaseUrl: string) {
 	if (bridge) return;
 	if (initPromise) return initPromise;
 
-	initPromise = (async () => {
+	initPromise = withPersistentPythonLspAssets(persistentAssets, async () => {
 		self.postMessage({ type: 'progress', stage: 'load-pyodide' });
 		const { loadPyodide } = (await import(
 			/* @vite-ignore */ `${normalizeBaseUrl(pyodideBaseUrl)}pyodide.mjs`
@@ -88,7 +94,7 @@ _wasm_idle_python_lsp_bridge = create_bridge()
 			bridgeProxy(payload);
 		};
 		self.postMessage({ type: 'ready' });
-	})().catch((error) => {
+	}).catch((error) => {
 		const message = toErrorMessage(error);
 		console.error('Python LSP bootstrap failed', error);
 		self.postMessage({ type: 'error', error: message });
@@ -112,6 +118,10 @@ self.addEventListener('message', (event) => {
 			return;
 		}
 		configuredPyodideBaseUrl = payload.pyodideBaseUrl.trim();
+		if (payload.persistentAssets && typeof payload.persistentAssets === 'object') {
+			persistentAssets = payload.persistentAssets as LanguageToolPersistentOptions;
+			configureWorkerLanguageToolPersistentAssets(persistentAssets);
+		}
 		void bootstrapPythonBridge(configuredPyodideBaseUrl).catch((error) => {
 			console.error('Failed to initialize Python LSP worker', error);
 		});

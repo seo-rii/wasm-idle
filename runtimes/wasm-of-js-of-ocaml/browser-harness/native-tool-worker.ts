@@ -1,4 +1,8 @@
 import {
+	connectBrowserNativeAssetCache,
+	type BrowserNativeAssetCache
+} from '../runtime/browser-native-asset-cache.js';
+import {
 	accountBrowserToolInputBytes,
 	createBrowserToolInputBudget,
 	decodeBrowserToolSource,
@@ -17,6 +21,7 @@ type PreloadFile = {
 };
 
 type RunToolRequest = {
+	cachePort?: MessagePort;
 	type: 'run-tool';
 	tool: BrowserToolAssetDescriptor;
 	argv: string[];
@@ -784,7 +789,8 @@ function runBinaryenTool(
 async function materializeBinaryenToolSources(
 	toolAssets: BinaryenToolAssets | undefined,
 	budget: BrowserToolInputBudget,
-	fastMode: boolean
+	fastMode: boolean,
+	persistentCache?: BrowserNativeAssetCache
 ) {
 	if (!toolAssets) {
 		throw new Error('browser-native Binaryen tools are missing from the tool request');
@@ -804,7 +810,11 @@ async function materializeBinaryenToolSources(
 				toolAsset.url,
 				`browser-native Binaryen tool ${displayName}`,
 				budget,
-				{ cache: 'force-cache', receipt: toolAsset }
+				{
+					cache: 'force-cache',
+					receipt: toolAsset,
+					...(persistentCache ? { persistentCache } : {})
+				}
 			);
 			sources[toolName] = {
 				url: toolAsset.url,
@@ -820,7 +830,8 @@ async function materializeBinaryenToolSources(
 
 async function materializePreloadFiles(
 	preloadFiles: PreloadFile[],
-	budget: BrowserToolInputBudget
+	budget: BrowserToolInputBudget,
+	persistentCache?: BrowserNativeAssetCache
 ) {
 	const encoder = new TextEncoder();
 	const materialized = [];
@@ -847,6 +858,7 @@ async function materializePreloadFiles(
 				if (preloadFile.url) {
 					const content = await fetchBrowserToolAsset(preloadFile.url, label, budget, {
 						cache: 'force-cache',
+						...(persistentCache ? { persistentCache } : {}),
 						...(preloadFile.receipt ? { receipt: preloadFile.receipt } : {})
 					});
 					return {
@@ -867,6 +879,9 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 	if (!request || request.type !== 'run-tool') {
 		return;
 	}
+	const persistentCache = request.cachePort
+		? connectBrowserNativeAssetCache(request.cachePort)
+		: undefined;
 
 	const runtimeGlobal = globalThis as RuntimeGlobal;
 	const runtimeSlots = runtimeGlobal as Record<string, unknown>;
@@ -890,12 +905,20 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 
 	try {
 		const inputBudget = createBrowserToolInputBudget();
-		const preloadFiles = await materializePreloadFiles(request.preloadFiles, inputBudget);
+		const preloadFiles = await materializePreloadFiles(
+			request.preloadFiles,
+			inputBudget,
+			persistentCache
+		);
 		const toolBytes = await fetchBrowserToolAsset(
 			request.tool.url,
 			'browser-native tool source',
 			inputBudget,
-			{ cache: 'no-store', receipt: request.tool }
+			{
+				cache: 'no-store',
+				receipt: request.tool,
+				...(persistentCache ? { persistentCache } : {})
+			}
 		);
 		const toolSource = patchToolSource(
 			decodeBrowserToolSource(toolBytes, 'browser-native tool source')
@@ -905,7 +928,8 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 				? await materializeBinaryenToolSources(
 						request.binaryenTools,
 						inputBudget,
-						request.env['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'] === '1'
+						request.env['WASM_OF_JS_OF_OCAML_BROWSER_FAST_BINARYEN'] === '1',
+						persistentCache
 					)
 				: undefined;
 		const patchedToolSource = toolSource;
@@ -1200,6 +1224,7 @@ self.addEventListener('message', async (event: MessageEvent<RunToolRequest>) => 
 		};
 		self.postMessage(response);
 	} finally {
+		persistentCache?.close();
 		globalThis.console = originalConsole;
 		if (typeof originalProcess === 'undefined') {
 			delete runtimeSlots['process'];

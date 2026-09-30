@@ -48,6 +48,7 @@ export async function executeStaticRuntimePreflight(
 		baseUrl: request.baseUrl,
 		manifestUrl: request.manifestUrl,
 		limits: request.limits,
+		persistentCache: request.persistentCache,
 		signal,
 		reportProgress: (
 			progress: Parameters<NonNullable<BqnRuntimePreflightRequest['reportProgress']>>[0]

@@ -55,6 +55,7 @@ class Pascal extends StaticWorkerRuntimeSandbox {
 					systemPascalUrl: resolved.systemPascalUrl,
 					profile,
 					limits: context.limits,
+					persistentCache: context.persistentCache,
 					signal: context.signal,
 					reportProgress(progress) {
 						loadedByAsset.set(progress.assetKey, progress.loadedBytes);

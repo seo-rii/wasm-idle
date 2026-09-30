@@ -61,6 +61,7 @@ vi.mock('$lib/playground/worker/fortran?worker', () => ({
 }));
 
 import Fortran from './fortran';
+import { WorkerAssetBridge } from './assetBridge';
 import type { FortranExecutionAssetReceipts } from './fortranAssets';
 import { readBufferedStdin } from './stdinBuffer';
 
@@ -88,6 +89,24 @@ describe('Fortran worker lifecycle', () => {
 		loadDispatchError = undefined;
 		runDispatchError = undefined;
 		cachedLoadDispatchError = undefined;
+	});
+
+	it('applies per-call persistent cache policy to the Clang bridge without retaining a previous override', async () => {
+		const snapshot = vi.spyOn(WorkerAssetBridge.prototype, 'setExecutionPersistentCache');
+		const sandbox = new Fortran();
+		try {
+			await sandbox.load('/runtime', '', false, [], { persistentCache: false });
+			expect(snapshot).toHaveBeenLastCalledWith(false);
+			await sandbox.run('      END', false, false, undefined, [], {
+				persistentCache: { enabled: true }
+			});
+			expect(snapshot).toHaveBeenLastCalledWith({ enabled: true });
+			await sandbox.run('      END', false);
+			expect(snapshot).toHaveBeenLastCalledWith(undefined);
+		} finally {
+			await sandbox.dispose();
+			snapshot.mockRestore();
+		}
 	});
 
 	it('aborts owned asset work before starting a replacement worker', async () => {

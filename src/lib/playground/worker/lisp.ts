@@ -1,4 +1,5 @@
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
+import { configureRuntimeAssetCache } from '@wasm-idle/core';
 import { loadVerifiedLispRuntimeAssets } from '$lib/playground/lispAssets';
 import type { ResolvedLispRuntimeAssetConfig } from '$lib/playground/assets';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
@@ -127,6 +128,7 @@ self.onmessage = async (event: { data: any }) => {
 	} = event.data;
 	try {
 		if (load) {
+			configureRuntimeAssetCache(event.data.persistentCache ?? {});
 			runtimeConfig = nextRuntimeConfig;
 			runtimeMaxAssetBytes = resolveMaxAssetBytes(nextMaxAssetBytes);
 			if (log) {

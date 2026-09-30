@@ -1,3 +1,9 @@
+import {
+	readBrowserNativeAssetCache,
+	writeBrowserNativeAssetCache,
+	type BrowserNativeAssetCache
+} from './browser-native-asset-cache.ts';
+
 export const DEFAULT_MAX_BROWSER_TOOL_ASSET_BYTES = 32 * 1024 * 1024;
 export const DEFAULT_MAX_BROWSER_TOOL_INPUT_BYTES = 128 * 1024 * 1024;
 
@@ -24,6 +30,7 @@ export type BrowserToolAssetDescriptor = BrowserToolAssetReceipt & {
 };
 
 export type BrowserToolAssetOptions = {
+	persistentCache?: BrowserNativeAssetCache;
 	baseUrl?: string | URL;
 	cache?: RequestCache;
 	fetch?: typeof fetch;
@@ -105,7 +112,7 @@ function throwIfAborted(signal?: AbortSignal) {
 	if (signal?.aborted) throw abortReason(signal);
 }
 
-function resolveBrowserToolAssetUrl(value: string, baseUrl?: string | URL) {
+export function resolveBrowserToolAssetUrl(value: string, baseUrl?: string | URL) {
 	const configuredBase = baseUrl instanceof URL ? baseUrl.href : baseUrl;
 	let resolved: URL;
 	try {
@@ -329,6 +336,24 @@ export async function fetchBrowserToolAsset(
 		? validateBrowserToolAssetReceipt(options.receipt, label, budget.maxAssetBytes)
 		: undefined;
 	const requestUrl = resolveBrowserToolAssetUrl(value, options.baseUrl);
+	const identity = receipt
+		? {
+				url: requestUrl.href,
+				...receipt,
+				validationKey: JSON.stringify(['ocaml-tool-exact-v1', budget.maxAssetBytes])
+			}
+		: undefined;
+	const cached = identity
+		? await readBrowserNativeAssetCache(options.persistentCache, identity, options.signal)
+		: undefined;
+	if (cached) {
+		if (cached.byteLength !== receipt!.bytes)
+			throw new Error(`${label} cached size does not match its receipt`);
+		accountBrowserToolInputBytes(budget, label, cached.byteLength);
+		const bytes = Uint8Array.from(cached);
+		await verifyBrowserToolAssetSha256(bytes, receipt!.sha256, label, options.signal);
+		return bytes;
+	}
 	const fetchImpl = options.fetch ?? globalThis.fetch?.bind(globalThis);
 	if (!fetchImpl) throw new Error(`fetch is required to load ${label}`);
 	const requestInit: RequestInit = {
@@ -439,6 +464,13 @@ export async function fetchBrowserToolAsset(
 	if (receipt) {
 		await verifyBrowserToolAssetSha256(bytes, receipt.sha256, label, options.signal);
 	}
+	if (identity)
+		await writeBrowserNativeAssetCache(
+			options.persistentCache,
+			identity,
+			bytes,
+			options.signal
+		);
 	return bytes;
 }
 

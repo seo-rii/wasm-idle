@@ -403,7 +403,7 @@ function replaceQuotedSpecifier(input, specifier, replacement) {
 /**
  * @param {string} rootDir
  */
-async function rewriteBrowserWasiShimImports(rootDir) {
+export async function rewriteBrowserWasiShimImports(rootDir) {
 	const replacementTargets = [
 		{
 			specifier: '@bjorn3/browser_wasi_shim',

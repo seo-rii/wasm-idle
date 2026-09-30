@@ -75,6 +75,9 @@ describe('dotnet language server', () => {
 		expect(workers[0].options).toEqual({ type: 'module' });
 		expect(workers[0].postMessage).toHaveBeenCalledWith({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				language: 'csharp',
 				moduleUrl: 'https://static.example.com/wasm-dotnet/index.js',

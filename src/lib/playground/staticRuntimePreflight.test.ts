@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { configureRuntimeAssetCache } from '@wasm-idle/core';
 
 import {
 	STATIC_RUNTIME_PREFLIGHT_PROTOCOL_VERSION,
@@ -63,8 +64,43 @@ function request(overrides: Record<string, unknown> = {}) {
 }
 
 describe('static runtime preflight worker bridge', () => {
+	afterEach(() => configureRuntimeAssetCache({}));
 	beforeEach(() => {
 		workerInstances.length = 0;
+	});
+
+	it.each([false, { enabled: false }])(
+		'forwards an explicit disabled cache snapshot to the worker (%j)',
+		async (persistentCache) => {
+			configureRuntimeAssetCache({ maxBytes: 12345 });
+			const pending = preflightStaticRuntimeAssetsInWorker(request({ persistentCache }));
+			configureRuntimeAssetCache({ maxBytes: 67890 });
+			await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
+			const worker = workerInstances[0];
+			expect(worker.request?.persistentCache).toMatchObject({
+				enabled: false,
+				maxBytes: 12345
+			});
+			worker.emitResult(Object.freeze({ protocol: 'fixture', bytes: Uint8Array.from([1]) }));
+			await pending;
+		}
+	);
+
+	it('forwards globally disabled settings and explicit function-level re-enabling', async () => {
+		configureRuntimeAssetCache(false);
+		for (const [persistentCache, enabled] of [
+			[undefined, false],
+			[{ enabled: true, namespace: 'fixture' }, true]
+		] as const) {
+			const pending = preflightStaticRuntimeAssetsInWorker(request({ persistentCache }));
+			await vi.waitFor(() =>
+				expect(workerInstances.at(-1)?.request?.persistentCache).toMatchObject({ enabled })
+			);
+			workerInstances
+				.at(-1)!
+				.emitResult(Object.freeze({ protocol: 'fixture', bytes: Uint8Array.from([1]) }));
+			await pending;
+		}
 	});
 
 	it('uses a one-shot bundled worker and receives every payload buffer by transfer', async () => {

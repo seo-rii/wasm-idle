@@ -1,4 +1,10 @@
 import { parseRuntimeManifest } from '../../clang/src/runtime-manifest.js';
+import {
+	readPersistentRuntimeAsset,
+	writePersistentRuntimeAsset,
+	resolveRuntimeAssetCacheOptions,
+	type RuntimeAssetCacheOptions
+} from '@wasm-idle/core';
 import type { RuntimeManifestV1 } from '../../clang/src/types.js';
 import type {
 	DebugRuntimeAssets,
@@ -206,8 +212,10 @@ export async function preflightDebugRuntimeAssets(
 	manifest: RuntimeManifestV2,
 	runtimeBaseUrl: string | URL,
 	fetchImpl: typeof fetch = fetch,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	persistentCache?: RuntimeAssetCacheOptions
 ) {
+	const cache = resolveRuntimeAssetCacheOptions(persistentCache);
 	const assets = resolveDebugRuntimeAssets(manifest, runtimeBaseUrl);
 	const checks = [
 		[assets.lldb.js, manifest.debugger.lldb.jsSha256, 'LLDB JavaScript'],
@@ -247,6 +255,26 @@ export async function preflightDebugRuntimeAssets(
 	for (const [url, expectedSha256, label] of checks) {
 		if (signal?.aborted) {
 			throw signal.reason ?? new DOMException('The operation was aborted', 'AbortError');
+		}
+		const identity = {
+			url: url.href,
+			sha256: expectedSha256,
+			validationKey: 'lldb-preflight-v1'
+		};
+		const cached = await readPersistentRuntimeAsset({ identity, cache, signal });
+		if (cached) {
+			if (cached.byteLength > MAX_DEBUG_RUNTIME_ASSET_BYTES - totalBytes) {
+				throw new Error(
+					`${label} exceeds the ${MAX_DEBUG_RUNTIME_ASSET_BYTES.toLocaleString('en-US')} byte budget`
+				);
+			}
+			await verifyAssetSha256(cached, expectedSha256, label);
+			if (signal?.aborted)
+				throw signal.reason ?? new DOMException('The operation was aborted', 'AbortError');
+			totalBytes += cached.byteLength;
+			const [destination, key] = destinations[index++]!;
+			destination[key] = Uint8Array.from(cached).buffer;
+			continue;
 		}
 		const response = await fetchImpl(url, { signal });
 		if (!response.ok) {
@@ -373,6 +401,12 @@ export async function preflightDebugRuntimeAssets(
 		}
 		totalBytes += bytes.byteLength;
 		await verifyAssetSha256(bytes, expectedSha256, label);
+		await writePersistentRuntimeAsset({
+			identity,
+			cache,
+			signal,
+			bytes: new Uint8Array(bytes)
+		});
 		const [destination, key] = destinations[index++]!;
 		destination[key] = bytes;
 	}

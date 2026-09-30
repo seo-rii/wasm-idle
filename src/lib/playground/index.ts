@@ -372,7 +372,10 @@ for (const languageId of supportedLanguageIds) {
 
 export const supportedLanguages = [...supportedLanguageIds];
 
-export function createPlaygroundBinding(runtimeAssets: SandboxRuntimeAssets, options: PlaygroundBindingOptions = {}): PlaygroundBinding {
+export function createPlaygroundBinding(
+	runtimeAssets: SandboxRuntimeAssets,
+	options: PlaygroundBindingOptions = {}
+): PlaygroundBinding {
 	return createCorePlaygroundBinding(
 		runtimeAssets as never,
 		playground as never,
@@ -383,9 +386,14 @@ export function createPlaygroundBinding(runtimeAssets: SandboxRuntimeAssets, opt
 async function playground(language: string): Promise<Sandbox>;
 async function playground(
 	language: string,
-	runtimeAssets: SandboxRuntimeAssets
+	runtimeAssets: SandboxRuntimeAssets,
+	options?: PlaygroundBindingOptions
 ): Promise<BoundSandbox>;
-async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets) {
+async function playground(
+	language: string,
+	runtimeAssets?: SandboxRuntimeAssets,
+	options: PlaygroundBindingOptions = {}
+) {
 	const normalizedLanguage = normalizeLanguageId(language);
 	if (!isSupportedLanguageId(normalizedLanguage)) {
 		throw new Error(`Unsupported language: ${language}`);
@@ -393,7 +401,7 @@ async function playground(language: string, runtimeAssets?: SandboxRuntimeAssets
 	const route = sandboxRouteByLanguage.get(normalizedLanguage);
 	if (!route) throw new Error(`Missing sandbox route: ${normalizedLanguage}`);
 	return runtimeAssets
-		? createPlaygroundBinding(runtimeAssets).load(normalizedLanguage)
+		? createPlaygroundBinding(runtimeAssets, options).load(normalizedLanguage)
 		: route.load();
 }
 

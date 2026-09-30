@@ -1,5 +1,6 @@
 import {
 	loadVerifiedLispRuntime,
+	type RuntimeAssetCacheOptions,
 	type LispRuntimeModuleEnvironment,
 	type VerifiedLispRuntime
 } from '@wasm-idle/core';
@@ -11,6 +12,7 @@ const DEFAULT_MAX_LISP_ASSET_BYTES = 128 * 1024 * 1024;
 const decoder = new TextDecoder('utf-8', { fatal: true });
 
 export interface LoadVerifiedLispRuntimeAssetsOptions {
+	persistentCache?: RuntimeAssetCacheOptions;
 	signal?: AbortSignal;
 	maxAssetBytes?: number;
 	moduleEnvironment?: LispRuntimeModuleEnvironment;
@@ -73,6 +75,8 @@ export async function loadVerifiedLispRuntimeAssets(
 		url: manifestUrl.href,
 		label: 'Lisp runtime manifest',
 		cache: 'no-cache',
+		expected: config.manifestReceipt,
+		persistentCache: options.persistentCache,
 		maxAssetBytes: Math.min(MAX_LISP_MANIFEST_BYTES, maxAssetBytes),
 		signal: options.signal
 	});
@@ -96,6 +100,14 @@ export async function loadVerifiedLispRuntimeAssets(
 				url: assetUrl.href,
 				label: `Lisp runtime asset ${asset.logicalPath}`,
 				cache: 'force-cache',
+				expected: {
+					sha256: asset.sha256,
+					bytes: asset.size,
+					uncompressedSha256: logicalAsset.sha256,
+					uncompressedBytes: logicalAsset.size
+				},
+				persistentCache: options.persistentCache,
+				integrityContext: { asset: asset.logicalPath, runtimeId: 'LISP' },
 				maxAssetBytes: Math.min(maxAssetBytes, Math.max(asset.size, logicalAsset.size)),
 				signal
 			});

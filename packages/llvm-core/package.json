@@ -62,6 +62,7 @@
 		"verify:package-boundary": "node scripts/verify-package-boundary.mjs"
 	},
 	"dependencies": {
+		"@wasm-idle/core": "workspace:*",
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
 		"fflate": "0.8.3"
 	},

@@ -48,6 +48,8 @@ export interface SandboxWorkspaceFile {
 }
 
 export interface SandboxExecutionOptions {
+	/** Overrides instance/global persistent asset caching for this operation. */
+	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 	debugMode?: BrowserDebugMode;
 	/** @deprecated Use debugMode. true maps to trace unless the caller explicitly selects lldb. */
 	debug?: boolean;

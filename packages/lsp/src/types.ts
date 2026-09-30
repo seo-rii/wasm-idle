@@ -13,6 +13,7 @@ import type {
 	PrologRuntimePreflightProfile,
 	RubyRuntimePreflightProfile,
 	RuntimeAssetIntegrityEntry,
+	RuntimeAssetCacheOptions,
 	TclRuntimePreflightProfile
 } from '@wasm-idle/core';
 
@@ -43,6 +44,8 @@ export interface EditorLanguageServerRuntimeOptions {
 	createWorker?: () => Worker;
 	currentUrl?: string;
 	rootUrl?: string;
+	/** Persistent verified tool assets. Overrides the global cache configuration. */
+	persistentCache?: RuntimeAssetCacheOptions;
 	signal?: AbortSignal;
 	assetTimeoutMs?: number;
 	maxAssetBytes?: number;

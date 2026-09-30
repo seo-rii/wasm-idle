@@ -1,7 +1,8 @@
 import {
 	createPlaygroundBinding,
 	normalizeLanguageId,
-	RuntimeConfigurationError
+	RuntimeConfigurationError,
+	type PlaygroundBindingOptions
 } from '@wasm-idle/core';
 import playground from './index';
 import type { PlaygroundBinding, Sandbox, SandboxRuntimeAssets } from './sandbox';
@@ -25,7 +26,8 @@ export interface PlaygroundRuntimeSession {
  * compiler cache. A problem/editor change may release all leases without cooling it.
  */
 export function createRuntimeSession(
-	runtimeAssets: SandboxRuntimeAssets
+	runtimeAssets: SandboxRuntimeAssets,
+	options: PlaygroundBindingOptions = {}
 ): PlaygroundRuntimeSession {
 	let language: string | undefined;
 	let epoch = 0;
@@ -80,28 +82,32 @@ export function createRuntimeSession(
 					return closing;
 				}
 			};
-			const core = createPlaygroundBinding(runtimeAssets, async (target) => {
-				if (closed || disposed) throw stale();
-				const selected = session.selectLanguage(target);
-				const selectedEpoch = epoch;
-				await selected;
-				if (closed || disposed || epoch !== selectedEpoch) throw stale();
-				lease.epoch = selectedEpoch;
-				const cache = assetCache;
-				const artifacts = artifactCache;
-				const sandbox = (await playground(target)) as Sandbox & {
-					setRuntimeAssetCache?: (cache: RuntimeAssetCache) => void;
-				};
-				if (closed || disposed || epoch !== selectedEpoch) {
-					if (sandbox.dispose) await sandbox.dispose();
-					else await sandbox.terminate();
-					throw stale();
-				}
-				sandbox.setRuntimeAssetCache?.(cache);
-				return target === 'C' || target === 'CPP'
-					? createCachedClangSandbox(sandbox as never, target, cache, artifacts)
-					: (sandbox as never);
-			});
+			const core = createPlaygroundBinding(
+				runtimeAssets,
+				async (target) => {
+					if (closed || disposed) throw stale();
+					const selected = session.selectLanguage(target);
+					const selectedEpoch = epoch;
+					await selected;
+					if (closed || disposed || epoch !== selectedEpoch) throw stale();
+					lease.epoch = selectedEpoch;
+					const cache = assetCache;
+					const artifacts = artifactCache;
+					const sandbox = (await playground(target)) as Sandbox & {
+						setRuntimeAssetCache?: (cache: RuntimeAssetCache) => void;
+					};
+					if (closed || disposed || epoch !== selectedEpoch) {
+						if (sandbox.dispose) await sandbox.dispose();
+						else await sandbox.terminate();
+						throw stale();
+					}
+					sandbox.setRuntimeAssetCache?.(cache);
+					return target === 'C' || target === 'CPP'
+						? createCachedClangSandbox(sandbox as never, target, cache, artifacts)
+						: (sandbox as never);
+				},
+				options
+			);
 			leases.add(lease);
 			const binding = core as unknown as PlaygroundBinding & { dispose(): Promise<void> };
 			// Do not override core.dispose in place: the lease calls that exact owner method.

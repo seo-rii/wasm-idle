@@ -1,16 +1,30 @@
+import {
+	loadPersistentRuntimeAsset,
+	verifyRuntimeAssetIntegrity,
+	type RuntimeAssetIntegrityEntry
+} from '@wasm-idle/core';
+import {
+	resolveLanguageToolPersistentOptions,
+	resolveLanguageToolPersistentReceipt,
+	type LanguageToolPersistentOptions
+} from './persistent-assets.js';
+
 export const DEFAULT_MAX_EXTERNAL_ASSET_BYTES = 128 * 1024 * 1024;
 
 const DEFAULT_EXTERNAL_ASSET_BUFFER_BYTES = 64 * 1024;
 const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/u;
 const FALLBACK_URL_BASE = 'https://wasm-idle.invalid/';
 
-export interface FetchBoundedExternalAssetOptions {
+export interface FetchBoundedExternalAssetOptions extends LanguageToolPersistentOptions {
 	url: string | URL;
 	label: string;
 	fetch?: typeof fetch;
 	signal?: AbortSignal;
 	maxBytes?: number;
 	cache?: RequestCache;
+	integrity?: RuntimeAssetIntegrityEntry;
+	runtimeId?: string;
+	profileId?: string;
 	reportProgress?: (loaded: number, total?: number) => void;
 }
 
@@ -43,6 +57,44 @@ function abortReason(signal: AbortSignal) {
 }
 
 export async function fetchBoundedExternalAsset(
+	options: FetchBoundedExternalAssetOptions
+): Promise<Uint8Array<ArrayBuffer>> {
+	const maxBytes = options.maxBytes ?? DEFAULT_MAX_EXTERNAL_ASSET_BYTES;
+	if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+		throw new Error('External runtime asset maxBytes must be a non-negative safe integer');
+	}
+	if (options.signal?.aborted) throw abortReason(options.signal);
+	const { requestUrl, expectedFinalUrl } = resolveExternalAssetUrl(options.url);
+	const receipt = resolveLanguageToolPersistentReceipt(requestUrl, options, options.integrity);
+	if (!receipt?.sha256 || !expectedFinalUrl) return fetchBoundedExternalAssetNetwork(options);
+	const bytes = await loadPersistentRuntimeAsset({
+		identity: {
+			url: expectedFinalUrl,
+			sha256: receipt.sha256,
+			bytes: receipt.bytes,
+			validationKey: JSON.stringify(['lsp-external-exact-v1', maxBytes])
+		},
+		cache: resolveLanguageToolPersistentOptions(options).persistentCache,
+		signal: options.signal,
+		load: async () => {
+			const bytes = await fetchBoundedExternalAssetNetwork(options);
+			await verifyRuntimeAssetIntegrity({
+				asset: requestUrl,
+				bytes,
+				expected: { sha256: receipt.sha256!, bytes: receipt.bytes },
+				runtimeId: options.runtimeId,
+				profileId: options.profileId
+			});
+			return bytes;
+		}
+	});
+	if (bytes.byteLength > maxBytes)
+		throw new Error(`${options.label} exceeds the ${maxBytes} byte download limit`);
+	options.reportProgress?.(bytes.byteLength, bytes.byteLength);
+	return Uint8Array.from(bytes);
+}
+
+async function fetchBoundedExternalAssetNetwork(
 	options: FetchBoundedExternalAssetOptions
 ): Promise<Uint8Array<ArrayBuffer>> {
 	const maxBytes = options.maxBytes ?? DEFAULT_MAX_EXTERNAL_ASSET_BYTES;

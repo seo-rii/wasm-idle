@@ -11,6 +11,7 @@ import {
 	resolveExecutionLimits,
 	verifyRuntimeAssetIntegrity,
 	type ExecutionLimits,
+	type RuntimeAssetCacheOptions,
 	type RuntimeAssetPreflightProgress,
 	type RuntimeRegistryManifest
 } from '@wasm-idle/core';
@@ -28,6 +29,7 @@ export interface ClojureScriptRuntimePreflightRequest {
 	readonly manifestUrl: string;
 	readonly profile: ClojureScriptRuntimePreflightProfile;
 	readonly limits?: Partial<ExecutionLimits>;
+	readonly persistentCache?: RuntimeAssetCacheOptions;
 	readonly signal?: AbortSignal;
 	readonly fetch?: typeof globalThis.fetch;
 	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
@@ -301,6 +303,7 @@ export async function preflightClojureScriptRuntimeAssets(
 				compiler: compilerRequestUrl
 			},
 			fetch: request.fetch,
+			persistentCache: request.persistentCache,
 			signal: controller.signal,
 			limits: { ...limits, maxAssetBytes },
 			maxConcurrentDownloads: 2,

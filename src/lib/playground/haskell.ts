@@ -13,6 +13,7 @@ import {
 	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
 	snapshotHaskellRuntimeAssetReceipts,
 	type HaskellRuntimeAssetReceipts,
 	validateExecutionWorkspace
@@ -413,6 +414,12 @@ class Haskell implements Sandbox {
 					worker.onmessage = handler;
 					worker.postMessage({
 						load: true,
+						persistentCache: resolveRuntimeAssetCacheOptions(
+							typeof runtimeAssets === 'object'
+								? runtimeAssets?.persistentCache
+								: undefined,
+							options.persistentCache
+						),
 						...runtime,
 						log: _log
 					});

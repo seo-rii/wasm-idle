@@ -327,8 +327,12 @@ class Java implements Sandbox {
 				if (runtimeAssets && typeof runtimeAssets === 'object') {
 					const runtimeConfig = runtimeAssets.java;
 					if (!this.isOperationActive(activeOperation)) return;
+					const persistentCache = runtimeAssets.persistentCache;
+					if (!this.isOperationActive(activeOperation)) return;
 					let java: RuntimeAssetConfig | undefined;
 					if (runtimeConfig) {
+						const persistentCache = runtimeConfig.persistentCache;
+						if (!this.isOperationActive(activeOperation)) return;
 						const baseUrl = runtimeConfig.baseUrl;
 						if (!this.isOperationActive(activeOperation)) return;
 						const loader = runtimeConfig.loader;
@@ -379,7 +383,7 @@ class Java implements Sandbox {
 							? [...allowedBaseUrlsSource]
 							: undefined;
 						if (!this.isOperationActive(activeOperation)) return;
-						java = { baseUrl, loader, integrity, allowedBaseUrls };
+						java = { baseUrl, loader, integrity, allowedBaseUrls, persistentCache };
 					}
 					let rootUrl: string | undefined;
 					let rootUrlRead = false;
@@ -393,10 +397,16 @@ class Java implements Sandbox {
 							}
 							return rootUrl;
 						},
-						java
+						java,
+						persistentCache
 					};
 				}
-				const assetConfig = resolveRuntimeAssetConfig('java', resolverAssets, currentUrl);
+				const assetConfig = resolveRuntimeAssetConfig(
+					'java',
+					resolverAssets,
+					currentUrl,
+					options.persistentCache
+				);
 				if (!this.isOperationActive(activeOperation)) return;
 				for (const asset of TEAVM_RUNTIME_ASSET_NAMES) {
 					const receipt = assetConfig.integrity?.[asset];
@@ -476,11 +486,17 @@ class Java implements Sandbox {
 							baseUrl: assetConfig.baseUrl,
 							useAssetBridge: assetConfig.useAssetBridge,
 							maxAssetBytes: limits.maxAssetBytes,
-							streamCompiler: !assetConfig.loader && TEAVM_RUNTIME_ASSET_NAMES.every((asset) => {
-								const receipt = assetConfig.integrity?.[asset];
-								const expected = TEAVM_RUNTIME_ASSET_RECEIPTS[asset];
-								return typeof receipt === 'object' && receipt.bytes === expected.bytes && receipt.sha256 === expected.sha256;
-							})
+							streamCompiler:
+								!assetConfig.loader &&
+								TEAVM_RUNTIME_ASSET_NAMES.every((asset) => {
+									const receipt = assetConfig.integrity?.[asset];
+									const expected = TEAVM_RUNTIME_ASSET_RECEIPTS[asset];
+									return (
+										typeof receipt === 'object' &&
+										receipt.bytes === expected.bytes &&
+										receipt.sha256 === expected.sha256
+									);
+								})
 						}
 					});
 				} else {
@@ -597,11 +613,13 @@ class Java implements Sandbox {
 				)
 			});
 			stdin = options.stdin;
+			const persistentCache = options.persistentCache;
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'Java execution cancelled')
 				);
 			}
+			assetBridge?.setExecutionPersistentCache(persistentCache);
 			unbindPreSessionAbort();
 		} catch (error) {
 			return Promise.reject(this.releaseBeforeSession(activeOperation, error));

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { resolveRuntimeAssetCacheOptions } from '@wasm-idle/core';
 
 import {
 	createLanguageServerProgressReporter,
@@ -69,7 +70,14 @@ describe('createWorkerLanguageServerClient', () => {
 
 		await vi.advanceTimersByTimeAsync(25);
 		await rejection;
-		expect(worker.postMessage).toHaveBeenCalledWith({ type: 'init', options: undefined });
+		expect(worker.postMessage).toHaveBeenCalledWith({
+			type: 'init',
+			options: undefined,
+			persistentAssets: {
+				persistentCache: resolveRuntimeAssetCacheOptions(),
+				assetRoot: undefined
+			}
+		});
 		expect(worker.terminate).toHaveBeenCalledOnce();
 		expect(statuses.at(-1)).toEqual({
 			state: 'error',
@@ -128,7 +136,14 @@ describe('createWorkerLanguageServerClient', () => {
 		).rejects.toThrow('stop after init transfer');
 
 		expect(postMessage).toHaveBeenCalledWith(
-			{ type: 'init', options: { payload: expect.any(Uint8Array) } },
+			{
+				type: 'init',
+				options: { payload: expect.any(Uint8Array) },
+				persistentAssets: {
+					persistentCache: resolveRuntimeAssetCacheOptions(),
+					assetRoot: undefined
+				}
+			},
 			[buffer]
 		);
 	});

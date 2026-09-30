@@ -1,3 +1,5 @@
+import type { LanguageToolPersistentOptions } from '../persistent-assets.js';
+
 export type PythonLspStatus =
 	| { state: 'disabled' }
 	| { state: 'loading'; stage?: string; loaded?: number; total?: number }
@@ -7,6 +9,7 @@ export type PythonLspStatus =
 export interface PythonLspWorkerInitMessage {
 	type: 'init';
 	pyodideBaseUrl: string;
+	persistentAssets?: LanguageToolPersistentOptions;
 }
 
 export type PythonLspWorkerInboundMessage = PythonLspWorkerInitMessage | Record<string, unknown>;

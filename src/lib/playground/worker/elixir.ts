@@ -6,7 +6,7 @@ import {
 	type ElixirRuntimeAssetReceipts
 } from '$lib/playground/elixirAssets';
 import { fetchRuntimeAssetBytes } from '$lib/playground/worker/runtimeAssetFetch';
-import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
+import { configureRuntimeAssetCache, verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 
 declare var self: any;
 
@@ -465,14 +465,16 @@ async function loadRuntime(
 			const bytes = await fetchRuntimeAssetBytes({
 				url: assetUrl,
 				label: `Elixir runtime asset ${asset}`,
+				expected: { sha256: receipt.uncompressedSha256, bytes: receipt.uncompressedBytes },
+				verify: (bytes) =>
+					verifyRuntimeAssetIntegrity({
+						asset,
+						bytes,
+						expected: receipt,
+						stage: 'uncompressed',
+						runtimeId: 'ELIXIR'
+					}),
 				maxAssetBytes: Math.min(receipt.uncompressedBytes, effectiveMaxAssetBytes)
-			});
-			await verifyRuntimeAssetIntegrity({
-				asset,
-				bytes,
-				expected: receipt,
-				stage: 'uncompressed',
-				runtimeId: 'ELIXIR'
 			});
 			loadedAssets.push([asset, bytes]);
 		}
@@ -541,6 +543,7 @@ self.onmessage = async (event: { data: any }) => {
 	const evalLanguage = language === 'ERLANG' ? 'ERLANG' : 'ELIXIR';
 	try {
 		if (load) {
+			configureRuntimeAssetCache(event.data.persistentCache ?? {});
 			await loadRuntime(nextBundleUrl, nextAssetReceipts, nextMaxAssetBytes, log);
 			const configuredReceipts = snapshotElixirRuntimeAssetReceipts(nextAssetReceipts);
 			bundleUrl = nextBundleUrl;

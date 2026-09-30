@@ -12,6 +12,7 @@ export * from './types.js';
 export * from '../runtime/system-dispatch.js';
 export * from '../runtime/fs/memory-fs.js';
 export * from '../runtime/system-dispatch-browser-worker.js';
+export type { BrowserNativeAssetCache, BrowserNativeAssetIdentity } from '../runtime/browser-native-asset-cache.js';
 
 export interface CompileOptions {
 	manifest?: ToolchainManifest;

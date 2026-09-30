@@ -11,6 +11,7 @@ import {
 	resolveExecutionLimits,
 	verifyRuntimeAssetIntegrity,
 	type ExecutionLimits,
+	type RuntimeAssetCacheOptions,
 	type RuntimeAssetPreflightProgress,
 	type RuntimeRegistryManifest
 } from '@wasm-idle/core';
@@ -27,6 +28,7 @@ export interface JRuntimePreflightRequest {
 	readonly manifestUrl: string;
 	readonly profile: JRuntimePreflightProfile;
 	readonly limits?: Partial<ExecutionLimits>;
+	readonly persistentCache?: RuntimeAssetCacheOptions;
 	readonly signal?: AbortSignal;
 	readonly fetch?: typeof globalThis.fetch;
 	readonly reportProgress?: (progress: RuntimeAssetPreflightProgress) => void;
@@ -308,6 +310,7 @@ export async function preflightJRuntimeAssets(
 				wasm: wasmRequestUrl
 			},
 			fetch: request.fetch,
+			persistentCache: request.persistentCache,
 			signal: controller.signal,
 			limits,
 			maxConcurrentDownloads: 3,

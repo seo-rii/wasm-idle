@@ -9,6 +9,8 @@ import { buildPreopenedDirectories, instantiateRustcInstance } from './rustc-run
 import { dispatchThreadPoolSlotAndWait, reserveIdleThreadPoolSlot } from './thread-startup.js';
 import { createBudgetedThreadWorker, createThreadWorkerBudgetBuffer } from './thread-worker-budget.js';
 import { fetchRuntimeAssetBytes } from './runtime-asset.js';
+import { createRuntimeAssetCacheClient } from './runtime-asset-cache-service.js';
+import { withRuntimeAssetPersistentCache } from './runtime-asset-cache.js';
 import { loadRuntimePackEntries } from './runtime-asset-store.js';
 import { assertRuntimeAssetDeliveryBudgetAvailable, readRuntimeAssetDeliveryBudget, snapshotRuntimeAssetDeliveryBudget } from './runtime-delivery-budget.js';
 const ARCHIVE_MAGIC = new Uint8Array([0x21, 0x3c, 0x61, 0x72, 0x63, 0x68, 0x3e, 0x0a]);
@@ -78,7 +80,7 @@ function emitCompileWorkerProgress(request, progress) {
         progress: delivery ? { ...progress, delivery } : progress
     });
 }
-async function compileRustInWorker(request) {
+async function compileRustInWorker(request, fetchImpl = fetch) {
     let actualWorkerUrl;
     try {
         actualWorkerUrl = new URL(globalThis.location.href).href;
@@ -117,7 +119,7 @@ async function compileRustInWorker(request) {
     const sysrootPack = target.sysrootPack;
     const sysrootAssetTotal = sysrootPack?.fileCount || target.sysrootFiles?.length || 0;
     const packedSysrootEntriesPromise = sysrootPack
-        ? loadRuntimePackEntries(request.runtimeBaseUrl, sysrootPack, fetch, (progress) => emitCompileWorkerProgress(request, {
+        ? loadRuntimePackEntries(request.runtimeBaseUrl, sysrootPack, fetchImpl, (progress) => emitCompileWorkerProgress(request, {
             stage: 'fetch-sysroot',
             completed: 0,
             total: sysrootAssetTotal,
@@ -132,7 +134,7 @@ async function compileRustInWorker(request) {
         total: 1,
         message: 'fetching rustc.wasm'
     });
-    const rustcBytes = await fetchRuntimeAssetBytes(rustcUrl, 'rustc.wasm', fetch, true, (progress) => emitCompileWorkerProgress(request, {
+    const rustcBytes = await fetchRuntimeAssetBytes(rustcUrl, 'rustc.wasm', fetchImpl, true, (progress) => emitCompileWorkerProgress(request, {
         stage: 'fetch-rustc',
         completed: 0,
         total: 1,
@@ -204,7 +206,7 @@ async function compileRustInWorker(request) {
         });
         sysrootAssets = await Promise.all(target.sysrootFiles.map(async (entry) => {
             const assetUrl = resolveVersionedAssetUrl(request.runtimeBaseUrl, entry.asset);
-            const bytes = await fetchRuntimeAssetBytes(assetUrl, `wasm-rust sysroot asset ${entry.asset}`, fetch, true, (progress) => emitCompileWorkerProgress(request, {
+            const bytes = await fetchRuntimeAssetBytes(assetUrl, `wasm-rust sysroot asset ${entry.asset}`, fetchImpl, true, (progress) => emitCompileWorkerProgress(request, {
                 stage: 'fetch-sysroot',
                 completed: fetchedSysrootFiles,
                 total: sysrootAssetTotal,
@@ -455,7 +457,12 @@ if (typeof globalThis.addEventListener === 'function') {
             return;
         }
         acceptedCompileRequest = true;
-        void compileRustInWorker(event.data).catch((error) => {
+        const assetCache = event.data.assetCachePort
+            ? createRuntimeAssetCacheClient(event.data.assetCachePort)
+            : undefined;
+        const fetchImpl = withRuntimeAssetPersistentCache(fetch, assetCache);
+        void compileRustInWorker(event.data, fetchImpl)
+            .catch((error) => {
             emitCompileWorkerLog(event.data, `[wasm-rust:compiler-worker] unhandled failure ${error instanceof Error ? error.message : String(error)}`);
             const message = error instanceof Error ? error.message : String(error);
             const failureKind = classifyRetryableFailureKind(message);
@@ -464,6 +471,7 @@ if (typeof globalThis.addEventListener === 'function') {
                 message,
                 ...(failureKind ? { failureKind } : {})
             });
-        });
+        })
+            .finally(() => assetCache?.close());
     });
 }

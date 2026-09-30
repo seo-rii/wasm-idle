@@ -8,6 +8,9 @@ import {
 } from '$lib/playground/wasmRustVersion';
 import {
 	createRuntimeAssetDeliveryBudget,
+	createRuntimeAssetCacheBackend,
+	resolveRuntimeAssetCacheOptions,
+	type ResolvedRuntimeAssetCacheOptions,
 	type RuntimeAssetDeliveryBudgetDescriptor
 } from '@wasm-idle/core';
 
@@ -84,6 +87,7 @@ let loadedCompilerUrl = '';
 let loadedExecutableGraphFingerprint = '';
 let acceptedCompilerBootstrap = false;
 let activeExecution = false;
+let persistentCacheBaseline: ResolvedRuntimeAssetCacheOptions | undefined;
 let compilerPromise: Promise<{
 	compiler: any;
 	executeBrowserRustArtifact: NonNullable<RustCompilerModule['executeBrowserRustArtifact']>;
@@ -540,6 +544,7 @@ function createRustDebugHost(options: {
 self.onmessage = async (event: { data: any }) => {
 	const {
 		load,
+		persistentCache,
 		compilerUrl: nextCompilerUrl,
 		runtimeProfile: nextRuntimeProfile,
 		verifiedModuleUrls: nextVerifiedModuleUrls,
@@ -566,6 +571,7 @@ self.onmessage = async (event: { data: any }) => {
 				throw new Error('wasm-rust application worker accepts exactly one bootstrap');
 			}
 			acceptedCompilerBootstrap = true;
+			persistentCacheBaseline = resolveRuntimeAssetCacheOptions(persistentCache);
 			compilerUrl = nextCompilerUrl;
 			debugModuleUrl = nextDebugModuleUrl;
 			runtimeProfile = nextRuntimeProfile || null;
@@ -591,6 +597,13 @@ self.onmessage = async (event: { data: any }) => {
 		}
 		activeExecution = true;
 		ownsExecution = true;
+		const executionCache = resolveRuntimeAssetCacheOptions(
+			persistentCacheBaseline,
+			persistentCache
+		);
+		const assetCache = executionCache.enabled
+			? createRuntimeAssetCacheBackend(executionCache)
+			: undefined;
 
 		const debugMode: RustWorkerDebugMode =
 			requestedDebugMode === undefined ? (debug ? 'trace' : 'none') : requestedDebugMode;
@@ -649,6 +662,7 @@ self.onmessage = async (event: { data: any }) => {
 				);
 			}
 			const result = await runtime.compiler.compile({
+				...(assetCache ? { assetCache } : {}),
 				code: compileCode,
 				debugMode,
 				...(nonDebugResourceLimits

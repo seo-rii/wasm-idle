@@ -132,6 +132,7 @@ async function createServer(
 					asset,
 					{
 						baseUrl: config.baseUrl,
+						persistentCache: assetConfig.persistentCache,
 						integrity: config.integrity,
 						loader: () => new URL(url)
 					},

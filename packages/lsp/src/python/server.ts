@@ -8,6 +8,7 @@ import type {
 } from '../types.js';
 import { createLanguageServerProgressReporter } from '../worker-client.js';
 import type { PythonLspStatus, PythonLspWorkerOutboundMessage } from './protocol.js';
+import { resolveRuntimeAssetCacheOptions } from '@wasm-idle/core';
 
 export interface PythonLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
 	createWorker?: () => Worker;
@@ -30,7 +31,10 @@ async function createServer(
 	pyodideBaseUrl: string,
 	createWorker: () => Worker,
 	onStatus: ((status: PythonLspStatus) => void) | undefined,
-	lifecycle: Pick<EditorLanguageServerRuntimeOptions, 'signal' | 'startupTimeoutMs'>
+	lifecycle: Pick<
+		EditorLanguageServerRuntimeOptions,
+		'signal' | 'startupTimeoutMs' | 'persistentCache' | 'rootUrl' | 'currentUrl'
+	>
 ) {
 	const status = createLanguageServerProgressReporter(onStatus);
 	status.loading();
@@ -77,7 +81,21 @@ async function createServer(
 					};
 					activeWorker.addEventListener('message', readyListener);
 					activeWorker.addEventListener('error', errorListener);
-					activeWorker.postMessage({ type: 'init', pyodideBaseUrl });
+					activeWorker.postMessage({
+						type: 'init',
+						pyodideBaseUrl,
+						persistentAssets: {
+							persistentCache: resolveRuntimeAssetCacheOptions(
+								lifecycle.persistentCache
+							),
+							assetRoot: lifecycle.rootUrl
+								? new URL(
+										lifecycle.rootUrl,
+										lifecycle.currentUrl || globalThis.location?.href
+									).href
+								: undefined
+						}
+					});
 				}),
 			{ signal: lifecycle.signal, timeoutMs: lifecycle.startupTimeoutMs }
 		);
@@ -104,7 +122,18 @@ export async function createPythonLanguageServer(
 		pyodideBaseUrl,
 		hostOptions?.createWorker || createDefaultPythonLspWorker,
 		hostOptions?.onStatus,
-		{ signal: hostOptions?.signal, startupTimeoutMs: hostOptions?.startupTimeoutMs }
+		{
+			signal: hostOptions?.signal,
+			startupTimeoutMs: hostOptions?.startupTimeoutMs,
+			persistentCache: hostOptions?.persistentCache,
+			currentUrl: hostOptions?.currentUrl,
+			rootUrl:
+				typeof options === 'string'
+					? options
+					: hostOptions?.python?.baseUrl
+						? undefined
+						: hostOptions?.rootUrl
+		}
 	);
 	const reader = new BrowserMessageReader(worker);
 	const writer = new BrowserMessageWriter(worker);

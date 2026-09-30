@@ -15,6 +15,10 @@ Compiler source pins, patches, and reproducible asset builds live in
 [`seo-rii/wasm-llvm`](https://github.com/seo-rii/wasm-llvm); wasm-idle loads the generated
 artifacts from external URLs instead of embedding them in npm packages.
 
+Verified downloads can be retained across reloads using a version-pinned, capacity-bounded
+CacheStorage/IndexedDB cache. See [persistent asset cache configuration and coverage](docs/runtime-asset-cache.md)
+for global/per-call opt-out, cleanup and prefetch APIs.
+
 ## Language support policy
 
 wasm-idle language support must run user code through the real language implementation in the

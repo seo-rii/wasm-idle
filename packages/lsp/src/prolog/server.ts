@@ -108,6 +108,7 @@ export async function getPrologLanguageServer(
 		profile,
 		signal: controller.signal,
 		limits: { assetTimeoutMs, maxAssetBytes },
+		persistentCache: hostOptions?.persistentCache,
 		reportProgress(progress) {
 			updateProgress(progress.assetKey, progress.loadedBytes, progress.totalBytes);
 		}
@@ -124,7 +125,11 @@ export async function getPrologLanguageServer(
 			requireExactResponseUrl: true
 		},
 		(loaded, total) => updateProgress('runner', loaded, total ?? workerReceipt.bytes),
-		{ signal: controller.signal, timeoutMs: assetTimeoutMs }
+		{
+			signal: controller.signal,
+			timeoutMs: assetTimeoutMs,
+			persistentCache: hostOptions?.persistentCache
+		}
 	).then((loaded) => Uint8Array.from(loaded.bytes));
 	const pendingPreflights = [runtimePreflightPromise, runnerPreflightPromise] as const;
 	try {
@@ -157,6 +162,9 @@ export async function getPrologLanguageServer(
 		},
 		initTransfer: transfer,
 		onStatus: hostOptions?.onStatus,
-		lifecycle: hostOptions
+		lifecycle: {
+			...hostOptions,
+			rootUrl: typeof options === 'string' ? options : hostOptions?.rootUrl
+		}
 	});
 }

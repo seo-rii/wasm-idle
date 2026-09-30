@@ -20,6 +20,9 @@ export async function getWatLanguageServer(
 			features: hostOptions?.wat?.features
 		},
 		onStatus: hostOptions?.onStatus,
-		lifecycle: hostOptions
+		lifecycle: {
+			...hostOptions,
+			rootUrl: typeof options === 'string' ? options : hostOptions?.rootUrl
+		}
 	});
 }

@@ -87,6 +87,7 @@ export interface RustExecutableGraphProgress {
 }
 
 export interface LoadRustExecutableGraphOptions {
+	readonly persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 	readonly moduleUrl: string;
 	readonly currentUrl?: string;
 	readonly profile: unknown;
@@ -1184,6 +1185,7 @@ export async function loadVerifiedRustExecutableGraph(
 	if (maxAssetBytes !== undefined) limits.maxAssetBytes = maxAssetBytes;
 	if (options.assetTimeoutMs !== undefined) limits.assetTimeoutMs = options.assetTimeoutMs;
 	const preflight = await preflightRuntimeAssets({
+		persistentCache: options.persistentCache,
 		manifest: createPreflightManifest(profile, sourceContext.keysByPath),
 		runtimeId: 'rust/executable-graph',
 		rootUrl: sourceContext.storageRootUrl,

@@ -96,6 +96,9 @@ describe('getRustLanguageServer', () => {
 
 		expect(worker?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			options: {
 				compilerUrl,
 				expectedNetworkModuleUrls: [runtimeProfile.moduleUrl],

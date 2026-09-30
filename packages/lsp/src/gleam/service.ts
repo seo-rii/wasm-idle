@@ -334,7 +334,10 @@ async function collectStdlibSources(
 		const bytes = await fetchBoundedExternalAsset({
 			url,
 			label: `Gleam runtime asset ${assetPath}`,
-			maxBytes: receipt.size
+			maxBytes: receipt.size,
+			integrity: { bytes: receipt.size, sha256: receipt.sha256 },
+			runtimeId: 'gleam-lsp',
+			profileId: expectedFingerprint
 		});
 		await verifyRuntimeAssetIntegrity({
 			asset: assetPath,

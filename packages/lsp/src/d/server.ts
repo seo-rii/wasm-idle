@@ -105,7 +105,8 @@ export async function getDLanguageServer(
 					},
 					{
 						signal: hostOptions?.signal,
-						timeoutMs: hostOptions?.assetTimeoutMs
+						timeoutMs: hostOptions?.assetTimeoutMs,
+						persistentCache: hostOptions?.persistentCache
 					}
 				)
 			)
@@ -126,6 +127,9 @@ export async function getDLanguageServer(
 			compileArgs: config.compileArgs
 		},
 		onStatus: hostOptions?.onStatus,
-		lifecycle: hostOptions
+		lifecycle: {
+			...hostOptions,
+			rootUrl: typeof options === 'string' ? options : hostOptions?.rootUrl
+		}
 	});
 }

@@ -78,6 +78,9 @@ describe('getPythonLanguageServer', () => {
 
 		expect(worker?.messages[0]).toEqual({
 			type: 'init',
+			persistentAssets: expect.objectContaining({
+				persistentCache: expect.objectContaining({ enabled: true })
+			}),
 			pyodideBaseUrl: 'https://static.example.com/repl_20240807/pyodide/'
 		});
 		expect(status).toHaveBeenCalledWith({
@@ -111,5 +114,19 @@ describe('getPythonLanguageServer', () => {
 			})
 		).rejects.toThrow('Python LSP startup cancelled');
 		expect(mockState.workers).toHaveLength(0);
+	});
+
+	it('does not infer stock receipts for an explicitly customized Python runtime', async () => {
+		const handle = await getPythonLanguageServer({
+			rootUrl: 'https://static.example.com/repl',
+			python: { baseUrl: 'https://static.example.com/repl/custom-python' },
+			persistentCache: false,
+			createWorker: () => new mockState.FakeWorker() as unknown as Worker
+		});
+		expect(mockState.workers[0]?.messages[0]).toMatchObject({
+			pyodideBaseUrl: 'https://static.example.com/repl/custom-python/',
+			persistentAssets: { assetRoot: undefined, persistentCache: { enabled: false } }
+		});
+		handle.dispose();
 	});
 });

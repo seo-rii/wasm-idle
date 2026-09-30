@@ -240,7 +240,8 @@ class Python implements Sandbox {
 				const assetConfig = resolveRuntimeAssetConfig(
 					'python',
 					runtimeAssets,
-					typeof window !== 'undefined' ? window.location.href : ''
+					typeof window !== 'undefined' ? window.location.href : '',
+					options.persistentCache
 				);
 				if (!this.isOperationActive(operation)) return;
 				const needsWorkerReset =
@@ -386,12 +387,14 @@ class Python implements Sandbox {
 			activePath = options.activePath;
 			debugPath = options.debugPath;
 			workspaceFiles = options.workspaceFiles;
+			const persistentCache = options.persistentCache;
 			if (!this.isOperationActive(activeOperation)) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'Python execution cancelled')
 				);
 			}
 			if (debug) requireSharedArrayBuffer('Python debugging');
+			this.assetBridge?.setExecutionPersistentCache(persistentCache);
 			this.setBreakpoints(debug ? breakpoints : []);
 		} catch (error) {
 			return Promise.reject(this.releaseBeforeSession(activeOperation, error));

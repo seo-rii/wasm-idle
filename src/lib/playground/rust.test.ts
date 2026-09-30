@@ -152,6 +152,36 @@ describe('Rust sandbox', () => {
 		}));
 	});
 
+	it('forwards a serializable load policy and restores it after a one-run false override', async () => {
+		const sandbox = new Rust();
+		sandbox.output = vi.fn();
+		await sandbox.load({
+			rootUrl: '/',
+			persistentCache: { enabled: true, maxBytes: 8192, version: 'rust-policy-test' }
+		});
+		expect(workerInstances[0].postMessage.mock.calls[0][0].persistentCache).toMatchObject({
+			enabled: true,
+			maxBytes: 8192,
+			version: 'rust-policy-test'
+		});
+		await sandbox.run('fn main() {}', true, false, undefined, [], { persistentCache: false });
+		expect(workerInstances[0].postMessage.mock.lastCall?.[0].persistentCache).toMatchObject({
+			enabled: false,
+			maxBytes: 8192,
+			version: 'rust-policy-test'
+		});
+		await sandbox.run('fn main() {}', true);
+		expect(workerInstances[0].postMessage.mock.lastCall?.[0].persistentCache).toMatchObject({
+			enabled: true,
+			maxBytes: 8192,
+			version: 'rust-policy-test'
+		});
+		expect(() =>
+			structuredClone(workerInstances[0].postMessage.mock.lastCall?.[0])
+		).not.toThrow();
+		await sandbox.clear();
+	});
+
 	it('waits for the active LLDB session to disconnect before terminate resolves', async () => {
 		const sandbox = new Rust();
 		let releaseDisconnect!: () => void;

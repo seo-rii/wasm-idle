@@ -3,6 +3,10 @@ import {
 	AssetTooLargeError,
 	RuntimeConfigurationError,
 	verifyRuntimeAssetIntegrity,
+	readPersistentRuntimeAsset,
+	resolveRuntimeAssetCacheOptions,
+	writePersistentRuntimeAsset,
+	type RuntimeAssetCacheOptions,
 	type RuntimeAssetIntegrityEntry
 } from '@wasm-idle/core';
 import { parseDebugRuntimeManifest, type RuntimeManifestV2 } from '@wasm-idle/llvm-core/debug';
@@ -29,7 +33,8 @@ export async function loadVerifiedDebugRuntimeManifest(
 	url: string,
 	expected: Readonly<RuntimeAssetIntegrityEntry> | undefined,
 	fetchImpl: typeof fetch,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	persistentCache?: RuntimeAssetCacheOptions
 ): Promise<RuntimeManifestV2> {
 	if (!expected || !/^[a-f0-9]{64}$/u.test(expected.sha256)) {
 		throw new RuntimeConfigurationError(
@@ -60,6 +65,18 @@ export async function loadVerifiedDebugRuntimeManifest(
 		...(expected.bytes === undefined ? {} : { bytes: expected.bytes })
 	});
 	throwIfAborted(signal);
+	const policy = resolveRuntimeAssetCacheOptions(persistentCache);
+	const cache = {
+		...policy,
+		maxEntryBytes: Math.min(policy.maxEntryBytes, MAX_DEBUG_MANIFEST_BYTES)
+	};
+	const identity = { url, ...receipt, validationKey: 'lldb-manifest-v1' };
+	const cached = await readPersistentRuntimeAsset({ identity, cache, signal });
+	if (cached) {
+		if (cached.byteLength > MAX_DEBUG_MANIFEST_BYTES)
+			throw new Error('Cached LLDB manifest exceeds size limit');
+		return parseDebugRuntimeManifest(JSON.parse(new TextDecoder().decode(cached)));
+	}
 	const response = await fetchImpl(url, { cache: 'no-store', signal });
 	if (!response.ok) {
 		const error = new Error(`Unable to load the LLDB runtime manifest (${response.status}).`);
@@ -187,5 +204,7 @@ export async function loadVerifiedDebugRuntimeManifest(
 		runtimeId: 'wasm-debug',
 		profileId: 'lldb-v2'
 	});
-	return parseDebugRuntimeManifest(JSON.parse(new TextDecoder().decode(bytes)));
+	const manifest = parseDebugRuntimeManifest(JSON.parse(new TextDecoder().decode(bytes)));
+	await writePersistentRuntimeAsset({ identity, cache, signal, bytes });
+	return manifest;
 }

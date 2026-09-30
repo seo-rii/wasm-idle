@@ -117,7 +117,12 @@ import {
 	type PlaygroundRuntimeAssets
 } from './assets';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
-import { TEAVM_RUNTIME_ASSET_RECEIPTS, type RuntimeAssetKeySource } from '@wasm-idle/core';
+import {
+	configureRuntimeAssetCache,
+	getRuntimeAssetCacheOptions,
+	TEAVM_RUNTIME_ASSET_RECEIPTS,
+	type RuntimeAssetKeySource
+} from '@wasm-idle/core';
 import { WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS } from './wasmFortranExecutionAssets';
 import {
 	WASM_FORTH_ASSET_VERSION,
@@ -226,7 +231,9 @@ describe('runtime asset config resolution', () => {
 			resolveRuntimeAssetConfig('python', '/absproxy/5173', 'https://example.com/app')
 		).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/pyodide/',
-			useAssetBridge: false
+			useAssetBridge: true,
+			assetPrefix: 'pyodide',
+			persistentCache: getRuntimeAssetCacheOptions()
 		});
 	});
 
@@ -330,6 +337,8 @@ describe('runtime asset config resolution', () => {
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/teavm/',
+			assetPrefix: 'teavm',
+			persistentCache: getRuntimeAssetCacheOptions(),
 			loader: undefined,
 			integrity: TEAVM_RUNTIME_ASSET_RECEIPTS,
 			allowedBaseUrls: undefined,
@@ -341,6 +350,7 @@ describe('runtime asset config resolution', () => {
 		const loader = vi.fn();
 		expect(resolveRuntimeAssetConfig('python', { python: { loader } })).toEqual({
 			baseUrl: 'https://wasm-idle.invalid/python/',
+			persistentCache: getRuntimeAssetCacheOptions(),
 			loader,
 			useAssetBridge: true
 		});
@@ -363,6 +373,7 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://cdn.example.com/teavm/',
 			loader,
+			persistentCache: getRuntimeAssetCacheOptions(),
 			integrity: TEAVM_RUNTIME_ASSET_RECEIPTS,
 			allowedBaseUrls: undefined,
 			useAssetBridge: true
@@ -379,6 +390,7 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://cdn.example.com/teavm/',
 			loader: undefined,
+			persistentCache: getRuntimeAssetCacheOptions(),
 			integrity: TEAVM_RUNTIME_ASSET_RECEIPTS,
 			allowedBaseUrls: undefined,
 			useAssetBridge: true
@@ -430,6 +442,8 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/clang/',
 			integrity: BUNDLED_CLANG_ASSET_INTEGRITY,
+			assetPrefix: 'clang',
+			persistentCache: getRuntimeAssetCacheOptions(),
 			useAssetBridge: true
 		});
 	});
@@ -440,6 +454,8 @@ describe('runtime asset config resolution', () => {
 		).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/clang/',
 			integrity: BUNDLED_CLANG_ASSET_INTEGRITY,
+			assetPrefix: 'clang',
+			persistentCache: getRuntimeAssetCacheOptions(),
 			useAssetBridge: true
 		});
 	});
@@ -453,6 +469,7 @@ describe('runtime asset config resolution', () => {
 			)
 		).toEqual({
 			baseUrl: 'https://cdn.example.com/custom-clang/',
+			persistentCache: getRuntimeAssetCacheOptions(),
 			loader: undefined,
 			integrity: undefined,
 			allowedBaseUrls: undefined,
@@ -464,6 +481,7 @@ describe('runtime asset config resolution', () => {
 		const loader = vi.fn();
 		expect(resolveRuntimeAssetConfig('clang', { clang: { loader } })).toEqual({
 			baseUrl: 'https://wasm-idle.invalid/clang/',
+			persistentCache: getRuntimeAssetCacheOptions(),
 			loader,
 			useAssetBridge: true
 		});
@@ -484,6 +502,8 @@ describe('runtime asset config resolution', () => {
 			})
 		).toEqual({
 			baseUrl: '/absproxy/5173/clang/',
+			assetPrefix: 'clang',
+			persistentCache: getRuntimeAssetCacheOptions(),
 			integrity,
 			useAssetBridge: true
 		});
@@ -503,6 +523,7 @@ describe('runtime asset config resolution', () => {
 			)
 		).toEqual({
 			baseUrl: 'https://app.example.com/runtime/clang/',
+			persistentCache: getRuntimeAssetCacheOptions(),
 			allowedBaseUrls: ['https://app.example.com/mirror/clang/'],
 			useAssetBridge: true
 		});
@@ -517,7 +538,9 @@ describe('runtime asset config resolution', () => {
 			)
 		).toEqual({
 			baseUrl: 'https://example.com/absproxy/5173/clangd/',
-			useAssetBridge: false
+			useAssetBridge: true,
+			assetPrefix: 'clangd',
+			persistentCache: getRuntimeAssetCacheOptions()
 		});
 	});
 
@@ -537,9 +560,44 @@ describe('runtime asset config resolution', () => {
 			)
 		).toEqual({
 			baseUrl: 'https://cdn.example.com/clangd/',
+			persistentCache: getRuntimeAssetCacheOptions(),
 			loader,
 			useAssetBridge: true
 		});
+	});
+
+	it('resolves global, root, runtime and call cache settings without mutating defaults', () => {
+		configureRuntimeAssetCache({ maxBytes: 1000, maxEntries: 5 });
+		try {
+			const assets = {
+				rootUrl: 'https://example.com/',
+				persistentCache: { maxBytes: 2000 },
+				python: { persistentCache: { maxBytes: 3000 } }
+			};
+			expect(resolveRuntimeAssetConfig('python', assets).persistentCache).toMatchObject({
+				enabled: true,
+				maxBytes: 3000,
+				maxEntries: 5
+			});
+			expect(resolveRuntimeAssetConfig('python', assets, '', false)).toMatchObject({
+				useAssetBridge: false,
+				persistentCache: { enabled: false, maxBytes: 3000 }
+			});
+			expect(
+				resolveRuntimeAssetConfig('python', assets, '', { maxBytes: 4000 }).persistentCache
+			).toMatchObject({ enabled: true, maxBytes: 4000 });
+			expect(getRuntimeAssetCacheOptions()).toMatchObject({ enabled: true, maxBytes: 1000 });
+		} finally {
+			configureRuntimeAssetCache({});
+		}
+	});
+
+	it('does not infer release receipts for custom sources when persistence is enabled', () => {
+		const config = resolveRuntimeAssetConfig('python', {
+			python: { baseUrl: 'https://custom.example/pyodide/' }
+		});
+		expect(config.assetPrefix).toBeUndefined();
+		expect(config.useAssetBridge).toBe(false);
 	});
 
 	it('prefers an explicit rust compiler url over the public env override', async () => {
@@ -1092,8 +1150,35 @@ describe('runtime asset config resolution', () => {
 		expect(resolveLispRuntimeAssetConfig('/absproxy/5173', 'https://example.com/app')).toEqual({
 			moduleUrl: 'https://example.com/absproxy/5173/wasm-lisp/index.js',
 			manifestUrl: 'https://example.com/absproxy/5173/wasm-lisp/runtime-manifest.v2.json',
-			manifestFingerprint: WASM_LISP_ASSET_VERSION
+			manifestFingerprint: WASM_LISP_ASSET_VERSION,
+			manifestReceipt: expect.objectContaining({
+				sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+				bytes: expect.any(Number)
+			})
 		});
+	});
+
+	it('does not infer stock Lisp JSON receipts for a custom profile or manifest URL', async () => {
+		const { resolveLispRuntimeAssetConfig } = await import('./assets');
+		for (const lisp of [
+			{ manifestFingerprint: 'a'.repeat(64) },
+			{ manifestUrl: '/custom/runtime-manifest.v2.json' },
+			{ moduleUrl: '/custom/index.js' }
+		]) {
+			expect(
+				resolveLispRuntimeAssetConfig({ rootUrl: '/runtime', lisp }, 'https://example.com/')
+			).not.toHaveProperty('manifestReceipt');
+		}
+		const manifestReceipt = { bytes: 123, sha256: 'b'.repeat(64) };
+		const resolved = resolveLispRuntimeAssetConfig(
+			{
+				rootUrl: '/runtime',
+				lisp: { manifestUrl: '/custom/runtime-manifest.v2.json', manifestReceipt }
+			},
+			'https://example.com/'
+		);
+		expect(resolved.manifestReceipt).toEqual(manifestReceipt);
+		expect(resolved.manifestReceipt).not.toBe(manifestReceipt);
 	});
 
 	it('does not trust a custom Lisp module without an explicit fingerprint', async () => {
@@ -1111,6 +1196,21 @@ describe('runtime asset config resolution', () => {
 			manifestUrl: 'https://example.com/custom/runtime-manifest.v2.json?v=profile',
 			manifestFingerprint: ''
 		});
+	});
+
+	it('includes the Lisp raw manifest receipt in the runtime cache identity', async () => {
+		const { createRuntimeAssetsKey } =
+			await import('../../../packages/core/src/runtime-assets');
+		const lisp = { moduleUrl: '/runtime/index.js', manifestFingerprint: 'a'.repeat(64) };
+		expect(
+			createRuntimeAssetsKey({
+				lisp: { ...lisp, manifestReceipt: { sha256: 'b'.repeat(64), bytes: 100 } }
+			})
+		).not.toBe(
+			createRuntimeAssetsKey({
+				lisp: { ...lisp, manifestReceipt: { sha256: 'c'.repeat(64), bytes: 100 } }
+			})
+		);
 	});
 
 	it('fails closed when any explicit Ruby URL omits the complete trust profile', async () => {

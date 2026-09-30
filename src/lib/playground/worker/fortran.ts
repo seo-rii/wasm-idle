@@ -27,7 +27,7 @@ import {
 	loadRuntimeManifest,
 	resolveRuntimeManifestUrl
 } from '@wasm-idle/llvm-core/clang';
-import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
+import { configureRuntimeAssetCache, verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 
 declare var self: any;
 self.document = {
@@ -119,13 +119,10 @@ async function fetchVerifiedBytes(
 	const bytes = await fetchRuntimeAssetBytes({
 		url,
 		label: asset,
-		maxAssetBytes: receipt.bytes
-	});
-	await verifyRuntimeAssetIntegrity({
-		asset,
-		bytes,
 		expected: receipt,
-		runtimeId: 'FORTRAN'
+		verify: (bytes) =>
+			verifyRuntimeAssetIntegrity({ asset, bytes, expected: receipt, runtimeId: 'FORTRAN' }),
+		maxAssetBytes: receipt.bytes
 	});
 	return bytes;
 }
@@ -375,6 +372,7 @@ self.onmessage = async (event: { data: any }) => {
 		fortranAssets
 	} = event.data;
 	if (load) {
+		configureRuntimeAssetCache(event.data.persistentCache ?? {});
 		try {
 			await loadFortranRuntime(clangAssets, fortranAssets, log);
 			postMessage({ load: true });

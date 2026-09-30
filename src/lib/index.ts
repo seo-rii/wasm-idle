@@ -3,6 +3,25 @@ import playground, { createPlaygroundBinding } from '$lib/playground';
 export default playground;
 export { createPlaygroundBinding, playground };
 export { createRuntimeSession } from '$lib/playground/runtimeSession';
+export {
+	configureRuntimeAssetCache,
+	createRuntimeAssetCacheBackend,
+	fetchPinnedRuntimeAsset,
+	prefetchRuntimeAssets,
+	resolveRuntimeAssetLockEntry,
+	type PrefetchRuntimeAssetsOptions,
+	type PrefetchRuntimeAssetsResult,
+	type RuntimeAssetCacheStats,
+	type RuntimeAssetCacheBackend,
+	type RuntimeAssetCacheBackendIdentity,
+	type PinnedRuntimeAssetRequest,
+	getRuntimeAssetCacheOptions,
+	getRuntimeAssetCacheStats,
+	clearRuntimeAssetCache,
+	pruneRuntimeAssetCache,
+	requestRuntimeAssetCachePersistence,
+	type RuntimeAssetCacheOptions
+} from '@wasm-idle/core';
 export type { PlaygroundRuntimeSession } from '$lib/playground/runtimeSession';
 export {
 	isSharedArrayBufferAvailable,
@@ -31,4 +50,4 @@ export type {
 	SandboxRuntimeAssets
 } from '$lib/playground/sandbox';
 
-export type { PlaygroundBindingOptions } from "@wasm-idle/core";
+export type { PlaygroundBindingOptions } from '@wasm-idle/core';

@@ -535,7 +535,8 @@ export class BrowserLldbSession {
 				manifest,
 				runtimeBaseUrl,
 				fetchImpl,
-				this.lifecycleAbortController.signal
+				this.lifecycleAbortController.signal,
+				this.options.persistentCache
 			)
 		);
 		this.assertActive();

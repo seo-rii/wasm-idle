@@ -122,6 +122,45 @@ describe('Rust worker', () => {
 		};
 	});
 
+	it('gives the producer an immutable per-run cache backend and respects one-call false', async () => {
+		const compilerModuleUrl = await createMockRustRuntimeModule(`
+			export async function createRustCompiler() { return { async compile(options) {
+				globalThis.__lastCompileOptions = options;
+				return { success: true, artifact: { wasm: new Uint8Array([0,97,115,109]), targetTriple: 'wasm32-wasip1', format: 'core-wasm' } };
+			} }; }
+			export async function executeBrowserRustArtifact() { return { exitCode: 0, stdout: '', stderr: '' }; }
+		`);
+		await import('./rust');
+		await (globalThis as any).self.onmessage({
+			data: {
+				...compilerBootstrap(compilerModuleUrl),
+				persistentCache: {
+					enabled: true,
+					namespace: 'rust-worker-policy-test',
+					version: 'v1'
+				}
+			}
+		});
+		const run = async (code: string, persistentCache?: unknown) =>
+			(globalThis as any).self.onmessage({
+				data: {
+					code,
+					prepare: true,
+					buffer: new SharedArrayBuffer(1024),
+					limits: nonDebugExecutionLimits,
+					persistentCache
+				}
+			});
+		await run('fn main() {}', false);
+		expect((globalThis as any).__lastCompileOptions.assetCache).toBeUndefined();
+		await run('fn main() { }');
+		expect((globalThis as any).__lastCompileOptions.assetCache).toMatchObject({
+			read: expect.any(Function),
+			write: expect.any(Function)
+		});
+		expect(Object.isFrozen((globalThis as any).__lastCompileOptions.assetCache)).toBe(true);
+	});
+
 	it('loads a wasm-rust-style compiler module and runs the returned artifact through executeBrowserRustArtifact', async () => {
 		const compilerModuleUrl = await createMockRustRuntimeModule(`
 			export async function createRustCompiler() {

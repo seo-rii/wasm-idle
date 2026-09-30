@@ -33,7 +33,12 @@ import {
 } from '$lib/playground/wasmRustVersion';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
-import { resolveExecutionLimits, TimeoutError } from '@wasm-idle/core';
+import {
+	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
+	type ResolvedRuntimeAssetCacheOptions,
+	TimeoutError
+} from '@wasm-idle/core';
 
 const debugBreakpointBufferInts = 1028;
 const rustLldbSourcePath = '/workspace/main.rs' as const;
@@ -90,6 +95,7 @@ class Rust implements Sandbox {
 	debugManifestUrl = '';
 	debugManifestReceipt?: Readonly<RuntimeAssetIntegrityEntry>;
 	executableGraphFingerprint = '';
+	private persistentCacheBaseline?: ResolvedRuntimeAssetCacheOptions;
 	oncompilerdiagnostic?: (diagnostic: CompilerDiagnostic) => void;
 	waitingForInput = false;
 	pendingEof = false;
@@ -165,6 +171,10 @@ class Rust implements Sandbox {
 			let clearCandidateWait = () => {};
 			try {
 				const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+				const persistentCache = resolveRuntimeAssetCacheOptions(
+					typeof runtimeAssets === 'object' ? runtimeAssets.persistentCache : undefined,
+					_options.persistentCache
+				);
 				const nextCompilerUrl = resolveRustCompilerUrl(runtimeAssets, currentUrl);
 				const nextDebugModuleUrl = resolveRustDebugModuleUrl(runtimeAssets, currentUrl);
 				const debugRuntime = resolveDebugRuntimeUrls(runtimeAssets, currentUrl);
@@ -232,6 +242,7 @@ class Rust implements Sandbox {
 					this.executableGraphFingerprint !==
 						WASM_RUST_EXECUTABLE_GRAPH_PROFILE.fingerprint;
 				if (!needsWorkerReset) {
+					this.persistentCacheBaseline = persistentCache;
 					this.debugRuntimeBaseUrl = nextDebugRuntimeBaseUrl;
 					this.debugManifestUrl = nextDebugManifestUrl;
 					this.debugManifestReceipt = nextDebugManifestReceipt;
@@ -240,6 +251,7 @@ class Rust implements Sandbox {
 				}
 
 				nextExecutableGraph = await loadVerifiedRustExecutableGraph({
+					persistentCache,
 					moduleUrl: nextCompilerUrl,
 					currentUrl,
 					profile: WASM_RUST_EXECUTABLE_GRAPH_PROFILE,
@@ -337,6 +349,7 @@ class Rust implements Sandbox {
 					};
 					candidateWorker!.postMessage({
 						load: true,
+						persistentCache,
 						compilerUrl: nextExecutableGraph!.entryUrl,
 						debugModuleUrl: nextDebugModuleUrl,
 						path: nextAssetPath,
@@ -357,6 +370,7 @@ class Rust implements Sandbox {
 				this.waitingForInput = false;
 				this.pendingEof = false;
 				this.compilerUrl = nextCompilerUrl;
+				this.persistentCacheBaseline = persistentCache;
 				this.debugModuleUrl = nextDebugModuleUrl;
 				this.assetPath = nextAssetPath;
 				this.debugRuntimeBaseUrl = nextDebugRuntimeBaseUrl;
@@ -444,7 +458,12 @@ class Rust implements Sandbox {
 			}
 			let limits;
 			let nonDebugResourceLimits;
+			let persistentCache: ResolvedRuntimeAssetCacheOptions;
 			try {
+				persistentCache = resolveRuntimeAssetCacheOptions(
+					this.persistentCacheBaseline,
+					options.persistentCache
+				);
 				limits = resolveExecutionLimits(options.limits);
 				nonDebugResourceLimits =
 					debugMode === 'none' ? resolveRustNonDebugResourceLimits(limits) : undefined;
@@ -665,6 +684,7 @@ class Rust implements Sandbox {
 					startPhaseTimeout('run', limits.runTimeoutMs);
 					const compilerWorker = this.worker;
 					const lldbSession = new LldbSandboxSession({
+						persistentCache,
 						manifestUrl: this.debugManifestUrl,
 						manifestReceipt: this.debugManifestReceipt,
 						runtimeBaseUrl: this.debugRuntimeBaseUrl,
@@ -776,6 +796,7 @@ class Rust implements Sandbox {
 			this.begin = Date.now();
 			try {
 				this.worker.postMessage({
+					persistentCache,
 					code,
 					prepare,
 					buffer: this.buffer,

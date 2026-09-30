@@ -56,6 +56,7 @@ class Julia extends StaticWorkerRuntimeSandbox {
 					manifestUrl: urls.manifestUrl || '',
 					profile,
 					limits: context.limits,
+					persistentCache: context.persistentCache,
 					signal: context.signal,
 					reportProgress(progress) {
 						loadedByAsset.set(progress.assetKey, progress.loadedBytes);

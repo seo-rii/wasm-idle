@@ -15,6 +15,7 @@ import {
 	RuntimeConfigurationError,
 	TimeoutError,
 	resolveExecutionLimits,
+	resolveRuntimeAssetCacheOptions,
 	validateExecutionWorkspace
 } from '@wasm-idle/core';
 import {
@@ -351,6 +352,12 @@ class Elixir implements Sandbox {
 					worker.onmessage = handler;
 					worker.postMessage({
 						load: true,
+						persistentCache: resolveRuntimeAssetCacheOptions(
+							typeof runtimeAssets === 'object'
+								? runtimeAssets?.persistentCache
+								: undefined,
+							options.persistentCache
+						),
 						bundleUrl: this.bundleUrl,
 						assetReceipts,
 						maxAssetBytes: limits.maxAssetBytes,

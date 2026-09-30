@@ -52,6 +52,7 @@ describe('ci script contract', () => {
 		expect(fastScript).not.toContain('pnpm build');
 		expect(fastScript).toContain('test/browser-execution.test.ts');
 		expect(fastScript).toContain('test/build-output.test.ts');
+		expect(fastScript).toContain('test/runtime-asset-cache.test.ts');
 		expect(fastScript).toContain('test/runtime-compression-config.test.ts');
 		expect(fastScript).toContain('test/rustc-runtime.test.ts');
 		expect(workflow).toContain("gh release download --pattern 'wasm-rust-*.tgz'");
