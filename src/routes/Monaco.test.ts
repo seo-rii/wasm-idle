@@ -228,9 +228,9 @@ describe('Monaco route debug sync', () => {
 			'pascal',
 			'go',
 			'rust',
-			'typescript',
+			'typescript/client',
 			'assemblyscript',
-			'wat',
+			'wat/client',
 			'zig',
 			'lua',
 			'janet',
@@ -246,7 +246,7 @@ describe('Monaco route debug sync', () => {
 			'octave',
 			'awk',
 			'perl',
-			'document'
+			'document/client'
 		]) {
 			expect(source).toContain(`import('@wasm-idle/lsp/${entrypoint}')`);
 		}

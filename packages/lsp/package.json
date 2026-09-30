@@ -45,15 +45,30 @@
 			"import": "./dist/pascal/index.js",
 			"default": "./dist/pascal/index.js"
 		},
+		"./typescript/client": {
+			"types": "./dist/typescript/server.d.ts",
+			"import": "./dist/typescript/server.js",
+			"default": "./dist/typescript/server.js"
+		},
 		"./typescript": {
 			"types": "./dist/typescript/index.d.ts",
 			"import": "./dist/typescript/index.js",
 			"default": "./dist/typescript/index.js"
 		},
+		"./javascript/client": {
+			"types": "./dist/typescript/server.d.ts",
+			"import": "./dist/typescript/server.js",
+			"default": "./dist/typescript/server.js"
+		},
 		"./javascript": {
 			"types": "./dist/typescript/index.d.ts",
 			"import": "./dist/typescript/index.js",
 			"default": "./dist/typescript/index.js"
+		},
+		"./wat/client": {
+			"types": "./dist/wat/server.d.ts",
+			"import": "./dist/wat/server.js",
+			"default": "./dist/wat/server.js"
 		},
 		"./wat": {
 			"types": "./dist/wat/index.d.ts",
@@ -164,6 +179,11 @@
 			"types": "./dist/perl/index.d.ts",
 			"import": "./dist/perl/index.js",
 			"default": "./dist/perl/index.js"
+		},
+		"./document/client": {
+			"types": "./dist/document/server.d.ts",
+			"import": "./dist/document/server.js",
+			"default": "./dist/document/server.js"
 		},
 		"./document": {
 			"types": "./dist/document/index.d.ts",
