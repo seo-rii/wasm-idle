@@ -115,6 +115,7 @@
 		"sync:webr": "node scripts/sync-runtime.mjs webr",
 		"compress:static-runtimes": "node scripts/compress-static-runtime-assets.mjs static",
 		"compress:build-runtimes": "node scripts/compress-static-runtime-assets.mjs build",
+		"compact:build-runtimes": "node scripts/compact-runtime-aliases.mjs build",
 		"layer:static-runtimes": "node scripts/build-layered-runtime-assets.mjs static",
 		"asset:sizes": "node scripts/static-asset-sizes.mjs report",
 		"assets:lock": "node scripts/generate-runtime-asset-lock.mjs",

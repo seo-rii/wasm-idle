@@ -327,6 +327,15 @@ toolchains can be consumed from pinned external runtime repositories:
   normal runtime workspace packages. `tools/dool` contains the Docker judge backend for Elixir and
   the other server-side language runners.
 
+Deployment builds retain both legacy `.gz` and canonical `.gz.bin` URLs by default.
+After building and compressing the page, `pnpm run compact:build-runtimes` reports
+byte-identical duplicates without changing files. Add `--drop-legacy-aliases` to
+remove those duplicate files and add compatibility routing to the generated service
+worker. This only preserves legacy URLs in service-worker-controlled requests:
+external SDKs and uncontrolled first requests to the removed `.gz` URLs need to
+migrate to `.gz.bin` or use server aliases. Opt in only after that migration. Source
+assets and producer receipts stay intact; rerun compaction after each page build.
+
 Useful workspace commands:
 
 ```bash
