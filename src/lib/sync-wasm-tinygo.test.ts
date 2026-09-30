@@ -252,17 +252,16 @@ describe('syncWasmTinyGoDist', () => {
 		await expect(lstat(controls.transactionMarkerPath)).rejects.toThrow();
 	});
 
-	it('pins the exact five-module checked-in executable graph', async () => {
+	it('pins the checked-in executable graph receipts', async () => {
 		const repositoryRoot = path.resolve(import.meta.dirname, '..', '..');
 		const lock = parseTinyGoExecutableGraphLock(
 			await readFile(path.join(repositoryRoot, 'scripts', 'wasm-tinygo-assets.lock.json'))
 		);
-
 		expect(TINYGO_EXECUTABLE_GRAPH_FINGERPRINT_DOMAIN).toBe(
 			'wasm-idle:tinygo-executable-graph:v1\n'
 		);
 		expect(computeTinyGoExecutableGraphFingerprint(lock)).toBe(
-			'33fe04eb515aaaea7e7dd5571a4a614a48d51b991115f05288b236377c53c5b9'
+			'4f5712fb66d4d6e7e5f84a688911a1cdc0df96f30163c3036a453a505b4d409f'
 		);
 		expect(
 			[...lock.modules.values()].map(({ path: modulePath, bytes, sha256: digest }) => ({
@@ -277,8 +276,13 @@ describe('syncWasmTinyGoDist', () => {
 				digest: '03a76345c69f8bd751dac18894f65c0918f1690fbbb661f38052819cd5ae8209'
 			},
 			{
+				modulePath: 'assets/upstream-compile-worker-D5QWLpRH.js',
+				bytes: 103559,
+				digest: '5d37a07cd8118d663f1be495b4187e733add0a7e44e368d637074cb10d0518f2'
+			},
+			{
 				modulePath: 'assets/upstream-compile-worker-Dat9LBTc.js',
-				bytes: 12_538_521,
+				bytes: 12538521,
 				digest: 'b8d987c32914715b0ba91ace85585f5db467957d14982aa163c1febe9d6dfc04'
 			},
 			{
@@ -287,18 +291,12 @@ describe('syncWasmTinyGoDist', () => {
 				digest: '2ac9a6dff1bfd7198815ead612722d9b2ffbbc6c8a0e62958444ee84ff155b80'
 			},
 			{
-				modulePath: 'assets/upstream-compile-worker-R7P8Uy5f.js',
-				bytes: 100_032,
-				digest: '1cc51b6435aa72d0ad9c513658a8ed4b2e9d5f94a28b0902b1f200364bccbf82'
-			},
-			{
 				modulePath: 'upstream.js',
-				bytes: 123_164,
-				digest: 'bee971f17a538c1afc3fa01f2050a233a4b75030f0a8e258fd8ca76584cc93a6'
+				bytes: 126073,
+				digest: '233c5e931405ffc817ad39e2a9f2d02090eefe6612409f4cf0124b4418076e1f'
 			}
 		]);
 	});
-
 	it('is deterministic when only source mtimes change', async () => {
 		const fixture = await makeFixture();
 		const first = await syncWasmTinyGoDist(fixture);

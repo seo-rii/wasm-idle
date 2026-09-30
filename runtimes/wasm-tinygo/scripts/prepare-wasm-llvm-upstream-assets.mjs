@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { unwrapNameStrippedReceipt } from '../src/upstream-contract.ts';
 
 const FLAGS = new Map([
 	['--compiler', 'compilerPath'],
@@ -40,7 +41,11 @@ function evidence(assetPath, bytes) {
 	return { path: assetPath, bytes: bytes.byteLength, sha256: sha256(bytes) };
 }
 
-function assertProducerReceipt(receipt, compilerEvidence, rootEvidence) {
+async function assertProducerReceipt(receipt, compilerEvidence, rootEvidence) {
+	const publishedReceipt = receipt;
+	if (receipt?.format === 'wasm-llvm-tinygo-name-stripped-v1') {
+		receipt = await unwrapNameStrippedReceipt(receipt);
+	}
 	const compileProtocolVersion =
 		receipt?.schemaVersion === 1 && receipt?.format === 'wasm-llvm-tinygo-browser-compiler-v1'
 			? 1
@@ -119,7 +124,7 @@ function assertProducerReceipt(receipt, compilerEvidence, rootEvidence) {
 		throw new Error('producer receipt does not bind TinyGo runtime closure v2');
 	}
 	for (const expected of [compilerEvidence, rootEvidence]) {
-		const actual = receipt.assets?.find((asset) => asset?.path === expected.path);
+		const actual = publishedReceipt.assets?.find((asset) => asset?.path === expected.path);
 		if (actual?.bytes !== expected.bytes || actual?.sha256 !== expected.sha256) {
 			throw new Error(`producer receipt does not bind ${expected.path}`);
 		}
@@ -189,7 +194,7 @@ async function main() {
 	const packageGraphEvidence = evidence('tinygo-package-graph.wasm', packageGraph);
 	const rootReceiptEvidence = evidence('tinygoroot.tar.gz', rootArchive);
 	const rootEvidence = evidence('tinygoroot.tar.gz.bin', rootArchive);
-	assertProducerReceipt(receipt, compilerEvidence, rootReceiptEvidence);
+	await assertProducerReceipt(receipt, compilerEvidence, rootReceiptEvidence);
 	assertPackageGraphReceipt(graphReceipt, packageGraphEvidence);
 	const manifest = {
 		schemaVersion: 2,

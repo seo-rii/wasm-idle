@@ -1710,6 +1710,102 @@ test('binds compiler, root, LLD, and the passed upstream producer receipt by SHA
 		lld
 	});
 	assert.equal(verifiedV6.compileProtocolVersion, 6);
+	// The old acceptance remains attached to its exact original bytes. The
+	// derivative only changes name metadata and the root compiler hash binding.
+	const derivedCompiler = compiler.subarray(0, 2);
+	const derivedCompilerEvidence = await evidence('tinygo-compiler.wasm', derivedCompiler);
+	const originalCompilerEvidence = v6ReceiptValue.assets[0];
+	const stripPath = ({ bytes, sha256 }: { bytes: number; sha256: string }) => ({ bytes, sha256 });
+	const derivedValue = {
+		schemaVersion: 1,
+		format: 'wasm-llvm-tinygo-name-stripped-v1',
+		producerId: 'wasm-llvm/tinygo-browser',
+		inputReceipt: {
+			...stripPath(await evidence('input', v6ProducerReceipt)),
+			source: new TextDecoder().decode(v6ProducerReceipt)
+		},
+		transformation: {
+			id: 'strip-name-and-rebind-runtime-v1',
+			tool: {
+				path: 'producer/tinygo-browser/scripts/strip-compiler-names.mjs',
+				bytes: 1,
+				sha256: sha
+			},
+			compiler: {
+				input: stripPath(originalCompilerEvidence),
+				output: stripPath(derivedCompilerEvidence),
+				removedSections: 1,
+				removedBytes: 1,
+				preservedSectionsSha256: derivedCompilerEvidence.sha256
+			},
+			rootArchive: {
+				input: stripPath(v6ReceiptValue.assets[1]),
+				output: stripPath(v6ReceiptValue.assets[1]),
+				manifestPath: `runtime/${TINYGO_RUNTIME_PROFILE_ID}/manifest.json`,
+				field: 'compilerSha256',
+				before: originalCompilerEvidence.sha256,
+				after: derivedCompilerEvidence.sha256
+			},
+			verification: 'non-name-sections-byte-identical',
+			acceptance: 'preserved-input-receipt-only'
+		},
+		assets: [derivedCompilerEvidence, v6ReceiptValue.assets[1]]
+	};
+	async function verifyDerivative(value: unknown) {
+		const producerReceipt = new TextEncoder().encode(JSON.stringify(value));
+		return verifyTinyGoUpstreamAssetSet({
+			manifest: {
+				...manifest,
+				producerReceipt: await evidence('producer-receipt.json', producerReceipt),
+				assets: { ...manifest.assets, compiler: derivedCompilerEvidence }
+			},
+			producerReceipt,
+			compiler: derivedCompiler,
+			packageGraphReceipt,
+			packageGraph,
+			rootArchive,
+			lld
+		});
+	}
+	const verifiedDerived = await verifyDerivative(derivedValue);
+	assert.equal(verifiedDerived.compileProtocolVersion, 6);
+	assert.deepEqual(verifiedDerived.receipt.verification, v6ReceiptValue.verification);
+	for (const [change, expected] of [
+		[
+			(value: typeof derivedValue) => {
+				value.inputReceipt.source += ' ';
+			},
+			/bind the original receipt/
+		],
+		[
+			(value: typeof derivedValue) => {
+				value.transformation.compiler.output.sha256 = sha;
+			},
+			/does not bind tinygo-compiler/
+		],
+		[
+			(value: typeof derivedValue) => {
+				value.transformation.compiler.removedBytes = 2;
+			},
+			/evidence is inconsistent/
+		],
+		[
+			(value: typeof derivedValue) => {
+				value.transformation.rootArchive.after = sha;
+			},
+			/does not rebind/
+		],
+		[
+			(value: typeof derivedValue) => {
+				value.transformation.acceptance = 'passed';
+			},
+			/unsupported TinyGo derivation/
+		]
+	] as const) {
+		const mutated = structuredClone(derivedValue);
+		change(mutated);
+		await assert.rejects(verifyDerivative(mutated), expected);
+	}
 	const wrongV4Capabilities = structuredClone(v4ReceiptValue);
 	wrongV4Capabilities.build.compileProtocol.capabilities = ['go-embed-objects', 'target-cgo-c'];
 	const wrongV4Receipt = new TextEncoder().encode(JSON.stringify(wrongV4Capabilities));

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import { WASM_RUST_EXECUTABLE_GRAPH_PROFILE } from './wasmRustVersion';
+import { WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE } from './wasmTinyGoVersion';
 
 const serviceWorkerSource = await readFile(path.resolve('static/worker.js'), 'utf8');
 const scope = 'https://example.com/wasm-idle/';
@@ -28,13 +29,14 @@ const exactResponseRuntimeContracts: readonly ExactResponseRuntimeContract[] = [
 	},
 	{
 		runtime: 'TinyGo',
-		assetPaths: [
-			'wasm-tinygo/upstream.js',
-			'wasm-tinygo/assets/upstream-compile-worker-CFw6Ych6.js',
-			'wasm-tinygo/assets/upstream-compile-worker-Dat9LBTc.js',
-			'wasm-tinygo/assets/upstream-compile-worker-NPJcbr3r.js',
-			'wasm-tinygo/assets/upstream-compile-worker-R7P8Uy5f.js'
-		]
+		assetPaths: Object.keys(WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules).map(
+			(modulePath) => `wasm-tinygo/${modulePath}`
+		),
+		assetReceipts: Object.fromEntries(
+			Object.entries(WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE.modules).map(
+				([modulePath, module]) => [`wasm-tinygo/${modulePath}`, module.sha256]
+			)
+		)
 	},
 	{
 		runtime: 'Rust',

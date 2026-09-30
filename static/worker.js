@@ -12,11 +12,11 @@ const exactResponseUrlAssetPaths = new Set([
 	'wasm-awk/runner-worker.v2.js',
 	'wasm-awk/runtime-manifest.v2.json',
 	'wasm-awk/wasm_exec.js',
-	'wasm-tinygo/upstream.js',
 	'wasm-tinygo/assets/upstream-compile-worker-CFw6Ych6.js',
+	'wasm-tinygo/assets/upstream-compile-worker-D5QWLpRH.js',
 	'wasm-tinygo/assets/upstream-compile-worker-Dat9LBTc.js',
 	'wasm-tinygo/assets/upstream-compile-worker-NPJcbr3r.js',
-	'wasm-tinygo/assets/upstream-compile-worker-R7P8Uy5f.js'
+	'wasm-tinygo/upstream.js'
 ]);
 const exactResponseUrlAssetReceipts = new Map([
 	['wasm-rust/asset-url.js.bin', '0cfc9638ca814251f9ddf117a5cef1832a1ee1c5035226f6538cdf739c55772a'],
