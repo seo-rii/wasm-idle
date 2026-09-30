@@ -3,27 +3,35 @@
   "entryPath": "upstream.js",
   "modules": [
     {
+      "path": "assets/upstream-binaryen-59aad93503b5fd53.wasm.gz.bin",
+      "bytes": 2366782,
+      "sha256": "e497b67a6bcbee29639792a3d58ecacb22781287f7fe155bfdf079e6ca159dff",
+      "imports": [],
+      "uncompressedBytes": 9282194,
+      "uncompressedSha256": "59aad93503b5fd539993f2f5571c11dce9ddb4c5d10b681abc8e5dc124aed526"
+    },
+    {
       "path": "assets/upstream-compile-worker-CFw6Ych6.js",
       "bytes": 558,
       "sha256": "03a76345c69f8bd751dac18894f65c0918f1690fbbb661f38052819cd5ae8209",
       "imports": []
     },
     {
-      "path": "assets/upstream-compile-worker-D5QWLpRH.js",
+      "path": "assets/upstream-compile-worker-CUrboB1_.js",
       "bytes": 103559,
-      "sha256": "5d37a07cd8118d663f1be495b4187e733add0a7e44e368d637074cb10d0518f2",
+      "sha256": "42337c2f06d04b51d79f0ec66ae685f0cfb2a78718b0636df980dc92dd1db9d5",
       "imports": [
         {
-          "specifier": "./upstream-compile-worker-Dat9LBTc.js",
-          "target": "assets/upstream-compile-worker-Dat9LBTc.js",
+          "specifier": "./upstream-compile-worker-CeYS3ydo.js",
+          "target": "assets/upstream-compile-worker-CeYS3ydo.js",
           "kind": "dynamic"
         }
       ]
     },
     {
-      "path": "assets/upstream-compile-worker-Dat9LBTc.js",
-      "bytes": 12538521,
-      "sha256": "b8d987c32914715b0ba91ace85585f5db467957d14982aa163c1febe9d6dfc04",
+      "path": "assets/upstream-compile-worker-CeYS3ydo.js",
+      "bytes": 181175,
+      "sha256": "faa2bf6a310cd23991babde1fb62cd34253d692fee03029fe3508eae4c24b1c0",
       "imports": [
         {
           "specifier": "./upstream-compile-worker-CFw6Ych6.js",
@@ -34,6 +42,11 @@
           "specifier": "./upstream-compile-worker-NPJcbr3r.js",
           "target": "assets/upstream-compile-worker-NPJcbr3r.js",
           "kind": "dynamic"
+        },
+        {
+          "specifier": "./upstream-binaryen-59aad93503b5fd53.wasm.gz.bin",
+          "target": "assets/upstream-binaryen-59aad93503b5fd53.wasm.gz.bin",
+          "kind": "asset"
         }
       ]
     },
@@ -52,11 +65,11 @@
     {
       "path": "upstream.js",
       "bytes": 126073,
-      "sha256": "233c5e931405ffc817ad39e2a9f2d02090eefe6612409f4cf0124b4418076e1f",
+      "sha256": "136a957aa940c3e2b8c7a925eb538f3fce81f699aa9113e1fd93ce0b35c879aa",
       "imports": [
         {
-          "specifier": "assets/upstream-compile-worker-D5QWLpRH.js",
-          "target": "assets/upstream-compile-worker-D5QWLpRH.js",
+          "specifier": "assets/upstream-compile-worker-CUrboB1_.js",
+          "target": "assets/upstream-compile-worker-CUrboB1_.js",
           "kind": "worker"
         }
       ]

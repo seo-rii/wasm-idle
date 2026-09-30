@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 import { createTinyGoHostCompilePlugin } from './scripts/tinygo-host-compile-vite-plugin.mjs';
+import { createBinaryenWasmPlugin } from './scripts/binaryen-wasm-vite-plugin.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,6 +14,7 @@ export default defineConfig(({ mode }) => {
 		publicDir: upstreamOnly ? false : 'public',
 		plugins: upstreamOnly ? [] : [createTinyGoHostCompilePlugin()],
 		worker: {
+			plugins: () => [createBinaryenWasmPlugin()],
 			format: 'es',
 			rollupOptions: {
 				output: {
