@@ -11,6 +11,29 @@ const marker = '/* wasm-idle compact runtime aliases v1 */';
 /** @param {string | Uint8Array} bytes */
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
+/**
+ * A recorded path may have acquired a symlink since the initial tree scan.
+ * Check every component without following links before reading or deleting it.
+ * @param {string} root
+ * @param {string} relative
+ */
+async function regularCompactAssetPath(root, relative) {
+	const parts = relative.split('/');
+	let current = root;
+	for (const [index, part] of parts.entries()) {
+		if (!part || part === '.' || part === '..' || /[\\\0]/u.test(part)) {
+			throw new Error('Invalid compact alias receipt path');
+		}
+		current = path.join(current, part);
+		const stats = await lstat(current);
+		const expectedType = index === parts.length - 1 ? stats.isFile() : stats.isDirectory();
+		if (!expectedType || stats.isSymbolicLink()) {
+			throw new Error(`Refusing a non-regular compact asset path: ${relative}`);
+		}
+	}
+	return current;
+}
+
 /** @param {string} root @param {string} relative @returns {Promise<string[]>} */
 async function collectGzipAliases(root, relative = '') {
 	const files = [];
@@ -131,19 +154,16 @@ export async function compactRuntimeAliases(buildDir, { dropLegacyAliases = fals
 			) {
 				throw new Error('Invalid compact alias receipt path');
 			}
-			const bytes = await readFile(path.join(root, alias.to));
+			const canonicalPath = await regularCompactAssetPath(root, alias.to);
+			const bytes = await readFile(canonicalPath);
 			if (bytes.length !== alias.bytes || sha256(bytes) !== alias.sha256) {
 				throw new Error(`Compact canonical asset changed: ${alias.to}`);
 			}
-			const legacyPath = path.join(root, alias.from);
-			const legacyStats = await lstat(legacyPath).catch((error) => {
+			const legacyPath = await regularCompactAssetPath(root, alias.from).catch((error) => {
 				if (error.code !== 'ENOENT') throw error;
 				return null;
 			});
-			if (!legacyStats) continue;
-			if (!legacyStats.isFile()) {
-				throw new Error(`Refusing a non-regular gzip alias: ${alias.from}`);
-			}
+			if (!legacyPath) continue;
 			const legacyBytes = await readFile(legacyPath);
 			if (legacyBytes.length !== alias.bytes || sha256(legacyBytes) !== alias.sha256) {
 				throw new Error(`Compact legacy asset changed: ${alias.from}`);

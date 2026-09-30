@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { runInNewContext } from 'node:vm';
@@ -203,6 +203,47 @@ describe('opt-in generated runtime alias compaction', () => {
 		await expect(compactRuntimeAliases(root, { dropLegacyAliases: true })).rejects.toThrow(
 			'canonical asset changed'
 		);
+	});
+
+	it.each(['wasm-awk', 'wasm-awk/nested'])(
+		'refuses retry deletion through a replaced parent directory: %s',
+		async (parent) => {
+			const { root } = await fixture();
+			const alias = `${parent}/payload.gz`;
+			await mkdir(path.join(root, parent), { recursive: true });
+			await writeFile(path.join(root, alias), compressed);
+			await writeFile(path.join(root, `${alias}.bin`), compressed);
+			await compactRuntimeAliases(root, { dropLegacyAliases: true });
+			const outside = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-compact-outside-'));
+			roots.push(outside);
+			const movedParent = path.join(outside, 'producer');
+			await rename(path.join(root, parent), movedParent);
+			await writeFile(path.join(movedParent, 'payload.gz'), compressed);
+			await symlink(movedParent, path.join(root, parent), 'dir');
+
+			await expect(compactRuntimeAliases(root, { dropLegacyAliases: true })).rejects.toThrow(
+				'non-regular compact asset path'
+			);
+			expect(await readFile(path.join(movedParent, 'payload.gz'))).toEqual(compressed);
+			expect(await readFile(path.join(movedParent, 'payload.gz.bin'))).toEqual(compressed);
+		}
+	);
+
+	it('rejects a canonical file symlink before resuming alias deletion', async () => {
+		const { root } = await fixture();
+		await compactRuntimeAliases(root, { dropLegacyAliases: true });
+		const outside = await mkdtemp(path.join(os.tmpdir(), 'wasm-idle-compact-outside-'));
+		roots.push(outside);
+		const outsideAsset = path.join(outside, 'payload.gz.bin');
+		await rename(path.join(root, `${logical}.gz.bin`), outsideAsset);
+		await symlink(outsideAsset, path.join(root, `${logical}.gz.bin`));
+		await writeFile(path.join(root, `${logical}.gz`), compressed);
+
+		await expect(compactRuntimeAliases(root, { dropLegacyAliases: true })).rejects.toThrow(
+			'non-regular compact asset path'
+		);
+		expect(await readFile(path.join(root, `${logical}.gz`))).toEqual(compressed);
+		expect(await readFile(outsideAsset)).toEqual(compressed);
 	});
 
 	it('serves controlled legacy gzip URLs with query, MIME, HEAD, and range semantics', async () => {
