@@ -43,17 +43,6 @@ export {
 	resolveBuildArtifactNames
 } from './workspace.js';
 
-if (typeof globalThis.document === 'undefined') {
-	(
-		globalThis as typeof globalThis & {
-			document?: Document;
-		}
-	).document = {
-		querySelectorAll: (() =>
-			[] as unknown as NodeListOf<Element>) as Document['querySelectorAll']
-	} as unknown as Document;
-}
-
 const defaultClangResourceDir = '/lib/clang/8.0.1';
 const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
 const internalBuildRoot = '__wasm_idle_build';

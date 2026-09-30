@@ -12,11 +12,7 @@ import { withVerifiedStreaming } from './clangStreaming';
 import { BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES } from '../clangAssetIntegrity';
 
 declare var self: any;
-self.document = {
-	querySelectorAll() {
-		return [];
-	}
-};
+// Preserve native Worker globals: a partial document makes dev loaders misdetect a DOM.
 let stdinBufferClang: Int32Array,
 	debugBufferClang: Int32Array,
 	watchBufferClang: Int32Array,
@@ -57,7 +53,12 @@ async function loadClang(
 				}
 			}
 		: manifest;
-	const Runtime = withVerifiedStreaming(BrowserClangRuntime, path, maxAssetBytes, verifiedStreaming);
+	const Runtime = withVerifiedStreaming(
+		BrowserClangRuntime,
+		path,
+		maxAssetBytes,
+		verifiedStreaming
+	);
 	clang = new Runtime({
 		stdout: (output) => postMessage({ output }),
 		onDebugEvent: (debugEvent) => postMessage({ debugEvent }),
