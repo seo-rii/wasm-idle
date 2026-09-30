@@ -9,6 +9,7 @@ import type {
 	RuntimeManifestV1,
 	RuntimePlannerConfig,
 	RuntimeStdlibIndexAsset,
+	RuntimeSysrootChunk,
 	RuntimeTargetConfig,
 	RuntimeTargetExecutionConfig,
 	RuntimeToolConfig,
@@ -111,6 +112,56 @@ function parseRuntimeAssetFileArray(value: unknown, label: string): RuntimeAsset
 	});
 }
 
+function expectSha256(value: unknown, label: string): string {
+	if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) {
+		throw new Error(`invalid ${label} in wasm-go runtime manifest`);
+	}
+	return value;
+}
+
+function parseRuntimeChunks(value: unknown, label: string): RuntimeSysrootChunk[] {
+	if (!Array.isArray(value) || value.length === 0) {
+		throw new Error(`invalid ${label} in wasm-go runtime manifest`);
+	}
+	const paths = new Set<string>();
+	return value.map((entry, index) => {
+		const object = expectObject(entry, `${label}[${index}]`);
+		const reference = parseRuntimePackReference(object, `${label}[${index}]`);
+		const runtimePaths = expectStringArray(
+			object.runtimePaths,
+			`${label}[${index}].runtimePaths`
+		);
+		if (
+			runtimePaths.length !== reference.fileCount ||
+			!reference.sha256 ||
+			!reference.indexSha256 ||
+			(reference.delta && reference.decodedTotalBytes === undefined)
+		) {
+			throw new Error(`invalid ${label}[${index}] chunk paths or integrity`);
+		}
+		for (let base = reference.delta?.base; base; base = base.delta?.base) {
+			if (!base.sha256 || !base.indexSha256) {
+				throw new Error(`invalid ${label}[${index}] delta base integrity`);
+			}
+		}
+		for (const path of runtimePaths) {
+			if (
+				!path.startsWith('/sysroot/') ||
+				path
+					.slice(1)
+					.split('/')
+					.some((part) => !part || part === '..' || part === '.') ||
+				path.includes('\\') ||
+				paths.has(path)
+			) {
+				throw new Error(`invalid or duplicate ${label} runtime path ${path}`);
+			}
+			paths.add(path);
+		}
+		return { ...reference, runtimePaths };
+	});
+}
+
 function parseRuntimePackReference(
 	value: unknown,
 	label: string,
@@ -138,6 +189,12 @@ function parseRuntimePackReference(
 			index: expectString(object.index, `${label}.index`),
 			fileCount: expectNonNegativeInteger(object.fileCount, `${label}.fileCount`),
 			totalBytes: expectNonNegativeInteger(object.totalBytes, `${label}.totalBytes`),
+			...(object.sha256 !== undefined
+				? { sha256: expectSha256(object.sha256, `${label}.sha256`) }
+				: {}),
+			...(object.indexSha256 !== undefined
+				? { indexSha256: expectSha256(object.indexSha256, `${label}.indexSha256`) }
+				: {}),
 			...(object.decodedTotalBytes !== undefined
 				? {
 						decodedTotalBytes: expectNonNegativeInteger(
@@ -282,6 +339,9 @@ function parseTargetConfig(
 			: {}),
 		...(object.sysrootPack !== undefined
 			? { sysrootPack: parseRuntimePackReference(object.sysrootPack, `${label}.sysrootPack`) }
+			: {}),
+		...(object.sysrootChunks !== undefined
+			? { sysrootChunks: parseRuntimeChunks(object.sysrootChunks, `${label}.sysrootChunks`) }
 			: {}),
 		...(object.stdlibIndex !== undefined
 			? {

@@ -54,6 +54,7 @@ export type {
 	NormalizedRuntimeManifest,
 	RuntimeAssetFile,
 	RuntimeAssetPackReference,
+	RuntimeSysrootChunk,
 	RuntimeCompilerConfig,
 	RuntimeHostConfig,
 	RuntimeManifestV1,

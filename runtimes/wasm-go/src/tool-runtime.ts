@@ -1,7 +1,11 @@
 import { Directory, File, OpenFile, PreopenDirectory, WASI } from '@bjorn3/browser_wasi_shim';
 
 import { resolveVersionedAssetUrl } from './asset-url.js';
-import { fetchRuntimeAssetBytes, loadRuntimePackEntries } from './runtime-asset.js';
+import {
+	fetchRuntimeAssetBytes,
+	loadRuntimePackEntries,
+	loadRuntimeSysrootChunks
+} from './runtime-asset.js';
 import {
 	CaptureFd,
 	ensureGuestDirectory,
@@ -34,6 +38,15 @@ async function loadSysrootFiles(
 	reportAssetProgress?: (asset: string, loaded: number, total?: number) => void,
 	options: GoRuntimeBoundaryOptions = {}
 ) {
+	if (plan.sysrootChunks) {
+		return loadRuntimeSysrootChunks(
+			runtimeBaseUrl,
+			plan.sysrootChunks,
+			fetchImpl,
+			reportAssetProgress,
+			options
+		);
+	}
 	if (plan.sysrootPack) {
 		return await loadRuntimePackEntries(
 			runtimeBaseUrl,

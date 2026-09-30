@@ -4,6 +4,7 @@ import {
 	fetchRuntimeAssetJson,
 	fetchRuntimeAssetBytes,
 	loadRuntimePackEntries,
+	loadRuntimeSysrootChunks,
 	loadRuntimePackIndex
 } from './runtime-asset.js';
 import { executeGoToolInvocation } from './tool-runtime.js';
@@ -129,9 +130,7 @@ function waitForSignal<T>(operation: Promise<T>, signal: AbortSignal) {
 		};
 		const abort = () =>
 			finish(() =>
-				reject(
-					signal.reason ?? new DOMException('wasm-go operation aborted', 'AbortError')
-				)
+				reject(signal.reason ?? new DOMException('wasm-go operation aborted', 'AbortError'))
 			);
 		signal.addEventListener('abort', abort, { once: true });
 		if (signal.aborted) abort();
@@ -402,6 +401,18 @@ export async function preloadBrowserGoRuntime(options: PreloadBrowserGoRuntimeOp
 		};
 		const preloadSysroot = async (): Promise<string[]> => {
 			if (options.includeSysroot === false) return [];
+			if (target.sysrootChunks) {
+				await loadRuntimeSysrootChunks(
+					runtimeBaseUrl,
+					target.sysrootChunks,
+					fetchImpl,
+					undefined,
+					boundary
+				);
+				return target.sysrootChunks
+					.flatMap((chunk) => [chunk.index, chunk.asset])
+					.map((asset) => resolveVersionedAssetUrl(runtimeBaseUrl, asset).toString());
+			}
 			if (target.sysrootPack) {
 				await waitForSignal(
 					loadRuntimePackEntries(
@@ -509,6 +520,12 @@ async function resolveAutoDependencies(
 				request.packageKind
 			);
 		}
+	}
+	if (target.sysrootChunks) {
+		return target.sysrootChunks
+			.flatMap((chunk) => chunk.runtimePaths)
+			.map(createSysrootDependency)
+			.filter((entry) => entry !== null);
 	}
 	if (target.sysrootFiles && target.sysrootFiles.length > 0) {
 		return target.sysrootFiles
@@ -623,7 +640,15 @@ export async function compileGo(
 	let compileStageExecutionFraction = 0;
 	const compileStageFractions = new Map<string, number>();
 	const compileStageWeights = new Map<string, number>();
-	if (plan.sysrootPack) {
+	if (plan.sysrootChunks?.length) {
+		const total = plan.sysrootChunks.reduce((sum, chunk) => sum + chunk.totalBytes, 0);
+		for (const chunk of plan.sysrootChunks) {
+			compileStageFractions.set(chunk.index, 0);
+			compileStageWeights.set(chunk.index, 0.04 / plan.sysrootChunks.length);
+			compileStageFractions.set(chunk.asset, 0);
+			compileStageWeights.set(chunk.asset, (0.56 * chunk.totalBytes) / Math.max(total, 1));
+		}
+	} else if (plan.sysrootPack) {
 		compileStageFractions.set(plan.sysrootPack.index, 0);
 		compileStageWeights.set(plan.sysrootPack.index, 0.04);
 		compileStageFractions.set(plan.sysrootPack.asset, 0);
@@ -638,9 +663,10 @@ export async function compileGo(
 	compileStageFractions.set(plan.compile.toolAsset, 0);
 	compileStageWeights.set(
 		plan.compile.toolAsset,
-		plan.sysrootPack || plan.sysrootFiles?.length ? 0.18 : 0.45
+		plan.sysrootChunks?.length || plan.sysrootPack || plan.sysrootFiles?.length ? 0.18 : 0.45
 	);
-	const compileStageExecutionWeight = plan.sysrootPack || plan.sysrootFiles?.length ? 0.22 : 0.55;
+	const compileStageExecutionWeight =
+		plan.sysrootChunks?.length || plan.sysrootPack || plan.sysrootFiles?.length ? 0.22 : 0.55;
 	const emitCompileStage = (message: string) => {
 		let completed = compileStageExecutionFraction * compileStageExecutionWeight;
 		for (const [asset, fraction] of compileStageFractions) {

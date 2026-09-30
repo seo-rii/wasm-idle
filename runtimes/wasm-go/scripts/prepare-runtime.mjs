@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { spawn } from 'node:child_process';
+import { splitGoSysrootPacks } from './split-sysroot.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const scriptsDir = path.dirname(scriptPath);
@@ -622,6 +623,7 @@ async function main() {
 		path.join(distRuntimeDir, 'runtime-build.json'),
 		JSON.stringify(buildMetadata, null, 2)
 	);
+	await splitGoSysrootPacks(distRuntimeDir);
 	console.log(`prepared wasm-go runtime under ${distRuntimeDir}`);
 	if (process.argv.includes('--probe')) {
 		await runCommand(process.execPath, [path.join(scriptsDir, 'probe-runtime.mjs')], {

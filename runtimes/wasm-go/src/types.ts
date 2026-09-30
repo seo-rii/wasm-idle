@@ -16,11 +16,18 @@ export interface RuntimeAssetPackReference {
 	index: string;
 	fileCount: number;
 	totalBytes: number;
+	/** SHA-256 of decoded delivery bytes (before applying a delta). */
+	sha256?: string;
+	indexSha256?: string;
 	decodedTotalBytes?: number;
 	delta?: {
 		format: 'copy-literal-v1';
 		base: RuntimeAssetPackReference;
 	};
+}
+
+export interface RuntimeSysrootChunk extends RuntimeAssetPackReference {
+	runtimePaths: string[];
 }
 
 export interface RuntimeStdlibIndexAsset {
@@ -118,6 +125,7 @@ export interface RuntimeTargetConfig {
 	artifactFormat: Exclude<BrowserGoArtifactFormat, 'go-archive'>;
 	sysrootFiles?: RuntimeAssetFile[];
 	sysrootPack?: RuntimeAssetPackReference;
+	sysrootChunks?: RuntimeSysrootChunk[];
 	stdlibIndex?: RuntimeStdlibIndexAsset;
 	execution: RuntimeTargetExecutionConfig;
 	planner: RuntimePlannerConfig;
@@ -195,6 +203,7 @@ export interface BrowserGoBuildPlan {
 	embedcfg?: string;
 	sysrootFiles?: RuntimeAssetFile[];
 	sysrootPack?: RuntimeAssetPackReference;
+	sysrootChunks?: RuntimeSysrootChunk[];
 	execution: RuntimeTargetExecutionConfig;
 	compile: BrowserGoToolInvocation;
 	link?: BrowserGoToolInvocation;
