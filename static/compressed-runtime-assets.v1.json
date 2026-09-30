@@ -214,7 +214,7 @@
     "wasm-tcl/tcl/wacl-library.data": 2307994,
     "wasm-tcl/tcl/wacl.wasm": 1884110,
     "wasm-tinygo/tools/upstream/lld.wasm": 20795796,
-    "wasm-tinygo/tools/upstream/tinygo-compiler.wasm": 70288217,
+    "wasm-tinygo/tools/upstream/tinygo-compiler.wasm": 54057556,
     "wasm-tinygo/tools/upstream/tinygo-package-graph.wasm": 25870831,
     "wasm-typescript/index.js": 3766190,
     "wasm-wat/index.js": 920134,

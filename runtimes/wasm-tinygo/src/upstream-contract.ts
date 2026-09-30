@@ -473,6 +473,105 @@ async function verifyAsset(
 	}
 }
 
+export async function unwrapNameStrippedReceipt(derived: JsonObject) {
+	if (derived.schemaVersion !== 1 || derived.producerId !== 'wasm-llvm/tinygo-browser')
+		throw new Error('invalid TinyGo name-stripping receipt identity');
+	expectExactKeys(
+		derived,
+		['schemaVersion', 'format', 'producerId', 'inputReceipt', 'transformation', 'assets'],
+		'TinyGo derivation'
+	);
+	const input = expectObject(derived.inputReceipt, 'TinyGo derivation inputReceipt');
+	expectExactKeys(input, ['bytes', 'sha256', 'source'], 'TinyGo derivation inputReceipt');
+	const source = expectString(input.source, 'TinyGo derivation inputReceipt.source');
+	const bytes = new TextEncoder().encode(source);
+	if (
+		bytes.byteLength !== expectBytes(input.bytes, 'TinyGo input receipt size') ||
+		(await sha256TinyGoBytes(bytes)) !==
+			expectSha256(input.sha256, 'TinyGo input receipt digest')
+	)
+		throw new Error('TinyGo derivation does not bind the original receipt');
+	const receipt = expectObject(JSON.parse(source), 'original TinyGo producer receipt');
+	if (
+		receipt.schemaVersion !== 6 ||
+		receipt.format !== TINYGO_UPSTREAM_COMPILER_RECEIPT_FORMAT_V6
+	)
+		throw new Error('TinyGo derivation requires an original v6 receipt');
+	const transform = expectObject(derived.transformation, 'TinyGo derivation transformation');
+	expectExactKeys(
+		transform,
+		['id', 'tool', 'compiler', 'rootArchive', 'verification', 'acceptance'],
+		'TinyGo transformation'
+	);
+	if (
+		transform.id !== 'strip-name-and-rebind-runtime-v1' ||
+		transform.verification !== 'non-name-sections-byte-identical' ||
+		transform.acceptance !== 'preserved-input-receipt-only'
+	)
+		throw new Error('unsupported TinyGo derivation transformation');
+	const tool = parseAssetEvidence(transform.tool, 'TinyGo name-stripping tool');
+	if (tool.path !== 'producer/tinygo-browser/scripts/strip-compiler-names.mjs')
+		throw new Error('unexpected TinyGo name-stripping tool');
+	if (
+		!Array.isArray(receipt.assets) ||
+		!Array.isArray(derived.assets) ||
+		derived.assets.length !== 2
+	)
+		throw new Error('TinyGo derivation requires compiler and root asset receipts');
+	for (const [key, assetPath] of [
+		['compiler', 'tinygo-compiler.wasm'],
+		['rootArchive', 'tinygoroot.tar.gz']
+	] as const) {
+		const step = expectObject(transform[key], `TinyGo derivation ${key}`);
+		const originalAsset = receipt.assets
+			.map((asset) => parseAssetEvidence(asset, 'original TinyGo asset'))
+			.find((asset) => asset.path === assetPath);
+		const derivedAsset = derived.assets
+			.map((asset) => parseAssetEvidence(asset, 'derived TinyGo asset'))
+			.find((asset) => asset.path === assetPath);
+		const before = parseRuntimeAssetReceipt(step.input, 'TinyGo derivation input');
+		const after = parseRuntimeAssetReceipt(step.output, 'TinyGo derivation output');
+		if (
+			!originalAsset ||
+			!derivedAsset ||
+			originalAsset.bytes !== before.bytes ||
+			originalAsset.sha256 !== before.sha256 ||
+			derivedAsset.bytes !== after.bytes ||
+			derivedAsset.sha256 !== after.sha256
+		)
+			throw new Error(`TinyGo derivation does not bind ${assetPath}`);
+		if (key === 'compiler') {
+			expectExactKeys(
+				step,
+				['input', 'output', 'removedSections', 'removedBytes', 'preservedSectionsSha256'],
+				'TinyGo compiler transformation'
+			);
+			if (
+				expectBytes(step.removedSections, 'removed name sections') < 1 ||
+				expectBytes(step.removedBytes, 'removed name bytes') < 1 ||
+				before.bytes - after.bytes !== step.removedBytes ||
+				step.preservedSectionsSha256 !== after.sha256
+			)
+				throw new Error('TinyGo name-stripping evidence is inconsistent');
+		} else {
+			expectExactKeys(
+				step,
+				['input', 'output', 'manifestPath', 'field', 'before', 'after'],
+				'TinyGo root transformation'
+			);
+			const compiler = expectObject(transform.compiler, 'TinyGo compiler transformation');
+			if (
+				step.manifestPath !== `runtime/${TINYGO_RUNTIME_PROFILE_ID}/manifest.json` ||
+				step.field !== 'compilerSha256' ||
+				step.before !== expectObject(compiler.input, 'compiler input').sha256 ||
+				step.after !== expectObject(compiler.output, 'compiler output').sha256
+			)
+				throw new Error('TinyGo root derivation does not rebind the compiler');
+		}
+	}
+	return receipt;
+}
+
 export async function verifyTinyGoUpstreamAssetSet(options: {
 	manifest: unknown;
 	producerReceipt: Uint8Array;
@@ -506,7 +605,9 @@ export async function verifyTinyGoUpstreamAssetSet(options: {
 	} catch (error) {
 		throw new Error('TinyGo producer receipt is not valid JSON', { cause: error });
 	}
-	const receipt = expectObject(receiptValue, 'TinyGo producer receipt');
+	const publishedReceipt = expectObject(receiptValue, 'TinyGo producer receipt');
+	const derived = publishedReceipt.format === 'wasm-llvm-tinygo-name-stripped-v1';
+	const receipt = derived ? await unwrapNameStrippedReceipt(publishedReceipt) : publishedReceipt;
 	let compileProtocolVersion: TinyGoCompileProtocolVersion;
 	if (
 		receipt.schemaVersion === 1 &&
@@ -646,13 +747,14 @@ export async function verifyTinyGoUpstreamAssetSet(options: {
 			);
 		}
 	}
-	if (!Array.isArray(receipt.assets))
+	const deliveredAssets = derived ? publishedReceipt.assets : receipt.assets;
+	if (!Array.isArray(deliveredAssets))
 		throw new Error('TinyGo producer receipt.assets must be an array');
 	for (const [path, evidence] of [
 		['tinygo-compiler.wasm', manifest.assets.compiler],
 		['tinygoroot.tar.gz', manifest.assets.rootArchive]
 	] as const) {
-		const asset = receipt.assets.find((value): value is JsonObject =>
+		const asset = deliveredAssets.find((value): value is JsonObject =>
 			Boolean(
 				value && typeof value === 'object' && !Array.isArray(value) && value.path === path
 			)

@@ -1,65 +1,65 @@
 {
-	"format": "wasm-idle-tinygo-executable-graph-lock-v1",
-	"entryPath": "upstream.js",
-	"modules": [
-		{
-			"path": "assets/upstream-compile-worker-CFw6Ych6.js",
-			"bytes": 558,
-			"sha256": "03a76345c69f8bd751dac18894f65c0918f1690fbbb661f38052819cd5ae8209",
-			"imports": []
-		},
-		{
-			"path": "assets/upstream-compile-worker-Dat9LBTc.js",
-			"bytes": 12538521,
-			"sha256": "b8d987c32914715b0ba91ace85585f5db467957d14982aa163c1febe9d6dfc04",
-			"imports": [
-				{
-					"specifier": "./upstream-compile-worker-CFw6Ych6.js",
-					"target": "assets/upstream-compile-worker-CFw6Ych6.js",
-					"kind": "static"
-				},
-				{
-					"specifier": "./upstream-compile-worker-NPJcbr3r.js",
-					"target": "assets/upstream-compile-worker-NPJcbr3r.js",
-					"kind": "dynamic"
-				}
-			]
-		},
-		{
-			"path": "assets/upstream-compile-worker-NPJcbr3r.js",
-			"bytes": 110,
-			"sha256": "2ac9a6dff1bfd7198815ead612722d9b2ffbbc6c8a0e62958444ee84ff155b80",
-			"imports": [
-				{
-					"specifier": "./upstream-compile-worker-CFw6Ych6.js",
-					"target": "assets/upstream-compile-worker-CFw6Ych6.js",
-					"kind": "static"
-				}
-			]
-		},
-		{
-			"path": "assets/upstream-compile-worker-R7P8Uy5f.js",
-			"bytes": 100032,
-			"sha256": "1cc51b6435aa72d0ad9c513658a8ed4b2e9d5f94a28b0902b1f200364bccbf82",
-			"imports": [
-				{
-					"specifier": "./upstream-compile-worker-Dat9LBTc.js",
-					"target": "assets/upstream-compile-worker-Dat9LBTc.js",
-					"kind": "dynamic"
-				}
-			]
-		},
-		{
-			"path": "upstream.js",
-			"bytes": 123164,
-			"sha256": "bee971f17a538c1afc3fa01f2050a233a4b75030f0a8e258fd8ca76584cc93a6",
-			"imports": [
-				{
-					"specifier": "assets/upstream-compile-worker-R7P8Uy5f.js",
-					"target": "assets/upstream-compile-worker-R7P8Uy5f.js",
-					"kind": "worker"
-				}
-			]
-		}
-	]
+  "format": "wasm-idle-tinygo-executable-graph-lock-v1",
+  "entryPath": "upstream.js",
+  "modules": [
+    {
+      "path": "assets/upstream-compile-worker-CFw6Ych6.js",
+      "bytes": 558,
+      "sha256": "03a76345c69f8bd751dac18894f65c0918f1690fbbb661f38052819cd5ae8209",
+      "imports": []
+    },
+    {
+      "path": "assets/upstream-compile-worker-D5QWLpRH.js",
+      "bytes": 103559,
+      "sha256": "5d37a07cd8118d663f1be495b4187e733add0a7e44e368d637074cb10d0518f2",
+      "imports": [
+        {
+          "specifier": "./upstream-compile-worker-Dat9LBTc.js",
+          "target": "assets/upstream-compile-worker-Dat9LBTc.js",
+          "kind": "dynamic"
+        }
+      ]
+    },
+    {
+      "path": "assets/upstream-compile-worker-Dat9LBTc.js",
+      "bytes": 12538521,
+      "sha256": "b8d987c32914715b0ba91ace85585f5db467957d14982aa163c1febe9d6dfc04",
+      "imports": [
+        {
+          "specifier": "./upstream-compile-worker-CFw6Ych6.js",
+          "target": "assets/upstream-compile-worker-CFw6Ych6.js",
+          "kind": "static"
+        },
+        {
+          "specifier": "./upstream-compile-worker-NPJcbr3r.js",
+          "target": "assets/upstream-compile-worker-NPJcbr3r.js",
+          "kind": "dynamic"
+        }
+      ]
+    },
+    {
+      "path": "assets/upstream-compile-worker-NPJcbr3r.js",
+      "bytes": 110,
+      "sha256": "2ac9a6dff1bfd7198815ead612722d9b2ffbbc6c8a0e62958444ee84ff155b80",
+      "imports": [
+        {
+          "specifier": "./upstream-compile-worker-CFw6Ych6.js",
+          "target": "assets/upstream-compile-worker-CFw6Ych6.js",
+          "kind": "static"
+        }
+      ]
+    },
+    {
+      "path": "upstream.js",
+      "bytes": 126073,
+      "sha256": "233c5e931405ffc817ad39e2a9f2d02090eefe6612409f4cf0124b4418076e1f",
+      "imports": [
+        {
+          "specifier": "assets/upstream-compile-worker-D5QWLpRH.js",
+          "target": "assets/upstream-compile-worker-D5QWLpRH.js",
+          "kind": "worker"
+        }
+      ]
+    }
+  ]
 }
