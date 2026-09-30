@@ -3150,7 +3150,7 @@
 			setStatus: (status) => (typescriptLspStatus = status),
 			load: async (currentUrl) => {
 				const { getJavaScriptLanguageServer, getTypeScriptLanguageServer } =
-					await import('@wasm-idle/lsp/typescript');
+					await import('@wasm-idle/lsp/typescript/client');
 				if (activeLspLanguage === 'javascript') {
 					return await getJavaScriptLanguageServer({
 						currentUrl,
@@ -3184,7 +3184,7 @@
 			isEnabled: () => true,
 			setStatus: (status) => (watLspStatus = status),
 			load: async (currentUrl) => {
-				const { getWatLanguageServer } = await import('@wasm-idle/lsp/wat');
+				const { getWatLanguageServer } = await import('@wasm-idle/lsp/wat/client');
 				return await getWatLanguageServer({
 					currentUrl,
 					onStatus: (status) => (watLspStatus = status)
@@ -3478,7 +3478,7 @@
 					getMarkdownLanguageServer,
 					getTomlLanguageServer,
 					getYamlLanguageServer
-				} = await import('@wasm-idle/lsp/document');
+				} = await import('@wasm-idle/lsp/document/client');
 				const load = {
 					json: getJsonLanguageServer,
 					yaml: getYamlLanguageServer,

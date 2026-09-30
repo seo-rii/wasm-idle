@@ -51,3 +51,15 @@ the corresponding VS Code language-service packages for document languages. Impo
 server is initialized. The wasm-idle Pages app keeps `@wasm-idle/lsp` as a dev dependency and
 dynamically imports each provider only after LSP is enabled and its language is selected, so
 provider chunks are not downloaded before they are needed.
+
+For browser hosts using TypeScript, JavaScript, WAT, or document-language workers, use the
+client-only entry points so the language engine is bundled only into its worker:
+
+```ts
+import { getTypeScriptLanguageServer } from '@wasm-idle/lsp/typescript/client';
+import { getWatLanguageServer } from '@wasm-idle/lsp/wat/client';
+import { getJsonLanguageServer } from '@wasm-idle/lsp/document/client';
+```
+
+`@wasm-idle/lsp/javascript/client` is also available. The original provider entry points remain
+available, including their `create*WorkerService` exports for custom worker hosts.
