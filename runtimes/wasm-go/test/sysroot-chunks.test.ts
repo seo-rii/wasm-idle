@@ -453,6 +453,60 @@ describe('dependency-selected Go sysroot packs', () => {
 		expect(plan.sysrootChunks![0]!.runtimePaths).toEqual(['/sysroot/fmt.a']);
 	});
 
+	it.each(['/sysroot/./fmt.a', '/sysroot//fmt.a', '//sysroot/./fmt.a'])(
+		'selects the same chunk for equivalent guest archive path %s',
+		async (archivePath) => {
+			const { dir } = await fixture();
+			await splitGoSysrootPacks(dir);
+			const manifest = JSON.parse(
+				await readFile(path.join(dir, 'runtime-manifest.v1.json'), 'utf8')
+			);
+			const plan = createBrowserGoBuildPlan(
+				{
+					code: 'package util',
+					packageKind: 'library',
+					packageImportPath: 'util',
+					dependencies: [{ importPath: 'fmt', archivePath }]
+				},
+				manifest
+			);
+			expect(plan.sysrootChunks).toHaveLength(1);
+			expect(plan.sysrootChunks![0]!.runtimePaths).toEqual(['/sysroot/fmt.a']);
+			expect(plan.importcfg).toBe(`packagefile fmt=${archivePath}`);
+		}
+	);
+
+	it('preserves guest traversal rejection and does not resolve relative archives at guest root', async () => {
+		const { dir } = await fixture();
+		await splitGoSysrootPacks(dir);
+		const manifest = JSON.parse(
+			await readFile(path.join(dir, 'runtime-manifest.v1.json'), 'utf8')
+		);
+		const request = {
+			code: 'package util',
+			packageKind: 'library' as const,
+			packageImportPath: 'util'
+		};
+		expect(() =>
+			createBrowserGoBuildPlan(
+				{
+					...request,
+					dependencies: [{ importPath: 'fmt', archivePath: '/sysroot/../sysroot/fmt.a' }]
+				},
+				manifest
+			)
+		).toThrow(/guest path traversal/);
+		const relative = createBrowserGoBuildPlan(
+			{
+				...request,
+				dependencies: [{ importPath: 'fmt', archivePath: 'sysroot/./fmt.a' }]
+			},
+			manifest
+		);
+		expect(relative.sysrootChunks).toEqual([]);
+		expect(relative.importcfg).toBe('packagefile fmt=sysroot/./fmt.a');
+	});
+
 	it('rejects malformed chunk manifests, overlapping paths and missing integrity', async () => {
 		const { dir } = await fixture();
 		await splitGoSysrootPacks(dir);

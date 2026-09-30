@@ -632,7 +632,7 @@ export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = {
 		"wasm-gleam/src/gleam_stdlib.mjs": {"sha256":"8e048e1bb26b598abf4b7db14e062591a2c4880854d17381b5348c974f21229b","bytes":21144,"mediaType":"text/javascript"},
 		"wasm-go/asset-url.js": {"sha256":"467dab13423ed13a46bdea3bc4745fb95a93f6c986c12bc1e7277afe121f53ea","bytes":304,"mediaType":"text/javascript"},
 		"wasm-go/browser-execution.js": {"sha256":"28b336fa3d7fdb433ad6c5ef8927bfed518c1466a1333769f700dc33a9f5a347","bytes":14491,"mediaType":"text/javascript"},
-		"wasm-go/build-planner.js": {"sha256":"6760cea4897f797a06f24efb388636fe5458168670baca1420f8c7b4be8c7acd","bytes":9803,"mediaType":"text/javascript"},
+		"wasm-go/build-planner.js": {"sha256":"9968d69a75718914a45c6546cdd22b4b80440cd0f86895eb97a24e02e43d9309","bytes":10263,"mediaType":"text/javascript"},
 		"wasm-go/compiler-support.js": {"sha256":"62f37fb55e716a50e20e4bdbc61765de0486c34d4a68e8f0773b231b79f05251","bytes":5302,"mediaType":"text/javascript"},
 		"wasm-go/compiler.js": {"sha256":"5afb92116f071c71015a9a26d3c368e4388be04e8583a2780e8ebb66a454ac4f","bytes":27349,"mediaType":"text/javascript"},
 		"wasm-go/index.js": {"sha256":"a30e8a484b737a08e1710d7d9b0630603bbe55c4d7515e21118533c902ea54f6","bytes":1106,"mediaType":"text/javascript"},

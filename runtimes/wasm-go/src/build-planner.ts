@@ -14,6 +14,7 @@ import {
 	normalizeRequestedTarget
 } from './compiler-support.js';
 import { normalizeRuntimeManifest, resolveTargetManifest } from './runtime-manifest.js';
+import { normalizeGuestPath } from './wasi-guest.js';
 
 function normalizeWorkspacePath(path: string) {
 	const normalized = path.replace(/\\/g, '/').replace(/^\/+/, '');
@@ -183,6 +184,15 @@ export function createBrowserGoBuildPlan(
 	);
 	const sourceFiles = normalizeSourceFiles(normalizedFiles);
 	const dependencies = normalizeDependencies(normalizedRequest.dependencies || []);
+	// Compare guest paths, not their spelling, without rewriting the caller's importcfg.
+	// Relative archive paths resolve from the tool's working directory, not guest root.
+	const dependencyArchivePaths = new Set(
+		targetConfig.sysrootChunks
+			? dependencies
+					.filter((dependency) => dependency.archivePath.startsWith('/'))
+					.map((dependency) => normalizeGuestPath(dependency.archivePath))
+			: []
+	);
 	const packageKind = normalizedRequest.packageKind || 'main';
 	const workspaceRoot = targetConfig.planner.workspaceRoot.replace(/\/+$/, '');
 	const importcfg = createImportConfig(dependencies);
@@ -303,9 +313,7 @@ export function createBrowserGoBuildPlan(
 		...(targetConfig.sysrootChunks
 			? {
 					sysrootChunks: targetConfig.sysrootChunks.filter((chunk) =>
-						chunk.runtimePaths.some((path) =>
-							dependencies.some((dependency) => dependency.archivePath === path)
-						)
+						chunk.runtimePaths.some((path) => dependencyArchivePaths.has(path))
 					)
 				}
 			: {}),
