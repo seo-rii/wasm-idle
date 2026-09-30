@@ -21,4 +21,14 @@ describe('published declaration generation', () => {
 			expect.arrayContaining(['src/**/*.test.*', 'src/**/*.spec.*'])
 		);
 	});
+
+	it('excludes only source maps from Core publishing and preserves its declaration export', async () => {
+		const manifest = JSON.parse(await readFile('packages/core/package.json', 'utf8')) as {
+			files?: string[];
+			exports?: Record<string, { types?: string }>;
+		};
+
+		expect(manifest.files).toEqual(['dist', '!dist/**/*.map']);
+		expect(manifest.exports?.['.']?.types).toBe('./dist/index.d.ts');
+	});
 });
