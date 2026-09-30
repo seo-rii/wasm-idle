@@ -1,7 +1,18 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import {
+	chmod,
+	lstat,
+	mkdir,
+	mkdtemp,
+	readFile,
+	readdir,
+	realpath,
+	rename,
+	rm,
+	writeFile
+} from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
@@ -15,10 +26,34 @@ const BINARY_PATH = /^assets\/upstream-binaryen-[a-f0-9]{16}\.wasm\.gz\.bin$/;
 const MAX_BINARY_BYTES = 64 * 1024 * 1024;
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
+/** Resolve existing parent aliases without creating missing output directories. @param {string} directory */
+async function resolveOutputParent(directory) {
+	let cursor = directory;
+	const missing = [];
+	for (;;) {
+		try {
+			await lstat(cursor);
+		} catch (error) {
+			if (
+				!error ||
+				typeof error !== 'object' ||
+				!('code' in error) ||
+				error.code !== 'ENOENT'
+			)
+				throw error;
+			const parent = path.dirname(cursor);
+			if (parent === cursor) throw error;
+			missing.unshift(path.basename(cursor));
+			cursor = parent;
+			continue;
+		}
+		// An existing dangling symlink must fail here, not be treated as a missing directory.
+		return path.join(await realpath(cursor), ...missing);
+	}
+}
+
 /** @param {string} sourceDir @param {string} outputPath */
-export async function generateTinyGoExecutableLock(sourceDir, outputPath) {
-	sourceDir = path.resolve(sourceDir);
-	outputPath = path.resolve(outputPath);
+function assertOutputOutsideSource(sourceDir, outputPath) {
 	const relativeOutput = path.relative(sourceDir, outputPath);
 	if (
 		!relativeOutput ||
@@ -28,6 +63,36 @@ export async function generateTinyGoExecutableLock(sourceDir, outputPath) {
 	) {
 		throw new Error('TinyGo executable lock output must be outside the source directory');
 	}
+}
+
+/** @param {string} outputPath */
+async function inspectOutputFile(outputPath) {
+	let metadata;
+	try {
+		metadata = await lstat(outputPath);
+	} catch (error) {
+		if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')
+			return;
+		throw error;
+	}
+	if (!metadata.isFile() || metadata.isSymbolicLink()) {
+		throw new Error('TinyGo graph lock output must be a regular file, not a symlink');
+	}
+	return metadata;
+}
+
+/** @param {string} sourceDir @param {string} outputPath */
+export async function generateTinyGoExecutableLock(sourceDir, outputPath) {
+	sourceDir = path.resolve(sourceDir);
+	const sourceMetadata = await lstat(sourceDir);
+	if (!sourceMetadata.isDirectory() || sourceMetadata.isSymbolicLink())
+		throw new Error('TinyGo graph source directories must not be symlinks');
+	sourceDir = await realpath(sourceDir);
+	outputPath = path.resolve(outputPath);
+	const outputParent = await resolveOutputParent(path.dirname(outputPath));
+	outputPath = path.join(outputParent, path.basename(outputPath));
+	assertOutputOutsideSource(sourceDir, outputPath);
+	await inspectOutputFile(outputPath);
 	/** @type {Array<{ path: string; bytes: number; sha256: string; imports: import('./sync-wasm-tinygo.mjs').TinyGoExecutableGraphImport[]; uncompressedBytes?: number; uncompressedSha256?: string }>} */
 	const modules = [];
 	/** @param {string} relative */
@@ -107,8 +172,28 @@ export async function generateTinyGoExecutableLock(sourceDir, outputPath) {
 	// Enforce exact edges, supported receipt fields, reachability and acyclicity
 	// before replacing a reviewed lock with freshly generated build evidence.
 	parseTinyGoExecutableGraphLock(serialized);
-	await mkdir(path.dirname(outputPath), { recursive: true });
-	await writeFile(outputPath, serialized);
+	await mkdir(outputParent, { recursive: true });
+	if ((await realpath(outputParent)) !== outputParent)
+		throw new Error('TinyGo graph lock output parent changed during generation');
+	const previousOutput = await inspectOutputFile(outputPath);
+	const temporaryDirectory = await mkdtemp(path.join(outputParent, '.tinygo-graph-lock-'));
+	try {
+		const temporaryPath = path.join(temporaryDirectory, 'lock.json');
+		await writeFile(temporaryPath, serialized, {
+			flag: 'wx',
+			mode: previousOutput ? previousOutput.mode & 0o777 : 0o666
+		});
+		// Creation applies the current umask, unlike updating an existing file.
+		if (previousOutput) await chmod(temporaryPath, previousOutput.mode & 0o777);
+		if ((await realpath(outputParent)) !== outputParent)
+			throw new Error('TinyGo graph lock output parent changed during generation');
+		await inspectOutputFile(outputPath);
+		// Rename replaces the output directory entry; it never truncates an input
+		// inode through a hardlink or follows a leaf symlink installed after the check.
+		await rename(temporaryPath, outputPath);
+	} finally {
+		await rm(temporaryDirectory, { recursive: true, force: true });
+	}
 	return lock;
 }
 
