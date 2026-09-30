@@ -2,6 +2,7 @@ import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promi
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { splitGoSysrootPacks } from '../runtimes/wasm-go/scripts/split-sysroot.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const THIS_DIR = path.dirname(THIS_FILE);
@@ -136,6 +137,7 @@ export async function syncWasmGoDist({
 		throw new Error(`wasm-go runtime build metadata was not found at ${runtimeBuildPath}.`);
 	}
 
+	await splitGoSysrootPacks(path.join(sourceDir, 'runtime'));
 	await rm(targetDir, { recursive: true, force: true });
 	await mkdir(targetDir, { recursive: true });
 	await copyDirectory(sourceDir, targetDir);

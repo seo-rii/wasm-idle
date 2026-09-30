@@ -234,6 +234,11 @@ export function createBrowserGoBuildPlan(request, manifestInput) {
         ...(embedcfg ? { embedcfg } : {}),
         ...(targetConfig.sysrootFiles ? { sysrootFiles: targetConfig.sysrootFiles } : {}),
         ...(targetConfig.sysrootPack ? { sysrootPack: targetConfig.sysrootPack } : {}),
+        ...(targetConfig.sysrootChunks
+            ? {
+                sysrootChunks: targetConfig.sysrootChunks.filter((chunk) => chunk.runtimePaths.some((path) => dependencies.some((dependency) => dependency.archivePath === path)))
+            }
+            : {}),
         execution: targetConfig.execution,
         compile: compileInvocation,
         ...(linkInvocation ? { link: linkInvocation } : {}),

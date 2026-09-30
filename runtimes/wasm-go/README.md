@@ -12,7 +12,7 @@ Current checked-in scope:
 - browser/Node `wasm_exec.js` execution path for `js/wasm`
 - build planner that emits `compile`/`link` invocations plus `importcfg` and `embedcfg`
 - reproducible runtime packaging from the official Go `1.26.1` toolchain
-- runtime probe that compiles and runs `fmt.Println("probe-ok")`
+- runtime probe that compiles and runs console stdin and additional-stdlib programs for every target
 - code-only compile requests that auto-populate the reachable stdlib `importcfg` closure from the
   bundled sysroot
 
@@ -38,11 +38,11 @@ That writes:
 
 - `dist/runtime/tools/compile.wasm.gz`
 - `dist/runtime/tools/link.wasm.gz`
-- `dist/runtime/sysroot/wasip1.pack.gz`
-- `dist/runtime/sysroot/wasip1.index.json.gz`
+- `dist/runtime/sysroot/chunks/wasip1-*.pack.gz`
+- `dist/runtime/sysroot/chunks/wasip1-*.index.json.gz`
 - `dist/runtime/sysroot/wasip1.stdlib-index.json.gz`
-- `dist/runtime/sysroot/js.pack.gz`
-- `dist/runtime/sysroot/js.index.json.gz`
+- `dist/runtime/sysroot/chunks/js-*.pack.gz`
+- `dist/runtime/sysroot/chunks/js-*.index.json.gz`
 - `dist/runtime/sysroot/js.stdlib-index.json.gz`
 - `dist/runtime/runtime/wasm_exec.js`
 - `dist/runtime/runtime-manifest.v1.json`
@@ -51,6 +51,21 @@ That writes:
 `runtime-build.json` records the exact upstream archive URL and checksum so the same runtime can be
 rebuilt later, and records whether `wasip2/wasm` / `wasip3/wasm` were packaged as real targets or
 as `wasip1/wasm` aliases.
+
+The optional `sysrootChunks` manifest field replaces the bundled monolithic sysroot. Each chunk
+lists its runtime paths and SHA-256 receipts for the decoded pack and index. The planner selects
+chunks using the existing transitive import closure; the loader verifies them before mounting and
+fetches at most four chunks concurrently. The compulsory `runtime` closure and the common
+`fmt`/`bufio`/`os` closure are separate packs; remaining archives use deterministic groups of up to
+8 MiB (a larger individual archive remains whole). JS packs remain deltas against corresponding
+WASI chunks. Existing custom `sysrootPack` and `sysrootFiles` manifests continue to work.
+
+`prepare:runtime` and `scripts/sync-wasm-go.mjs` both apply the idempotent repackaging step. To
+repackage an existing dist without compiling Go again, run:
+
+```bash
+node scripts/split-sysroot.mjs dist/runtime
+```
 
 ## Validation
 
@@ -66,8 +81,9 @@ That sequence:
 1. builds `dist/`
 2. prepares the pinned `go1.26.1` runtime assets
 3. calls `compileGo()` against the generated bundled runtime
-4. links preview1-compatible `wasip1/wasm`, `wasip2/wasm`, `wasip3/wasm`, and `js/wasm` hello programs
-5. executes each linked artifact and checks for `probe-ok\n`
+4. links programs for `wasip1/wasm`, `wasip2/wasm`, `wasip3/wasm`, and `js/wasm`
+5. checks console stdin (`8 13` produces `21\n`) and `crypto/sha256`/`encoding/hex` output
+6. reports the selected chunks and actual compressed sysroot bytes fetched per fixture
 
 ## Target Support
 
