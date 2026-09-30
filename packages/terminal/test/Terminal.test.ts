@@ -14,7 +14,7 @@ describe('Terminal source', () => {
 		).not.toThrow();
 		expect(source).toMatch(/term\.write\('\\u001B\[\?25h'\);/);
 		expect(source).toMatch(
-			/const isCopyShortcut = \(ev\.ctrlKey \|\| ev\.metaKey\) && ev\.key\.toLowerCase\(\) === 'c';/
+			/const isCopyShortcut =\s+\(ev\.ctrlKey \|\| ev\.metaKey\) && ev\.key\.toLowerCase\(\) === 'c';/
 		);
 		expect(source).toMatch(
 			/if \(isCopyShortcut && term\.hasSelection\(\)\) \{\s+const selectedText = term\.getSelection\(\);\s+if \(selectedText\) \{\s+ev\.preventDefault\(\);\s+navigator\.clipboard\.writeText\(selectedText\)\.catch\(\(\) => \{\}\);\s+return;\s+\}\s+\}\s+if \(finish\) return;/s
@@ -124,7 +124,7 @@ describe('Terminal source', () => {
 
 	it('consumes arrow-key escape sequences for local cursor movement', () => {
 		expect(source).toMatch(
-			/data\.slice\(i\)\.match\(\/\^\\x1b\(\?:\\\[\[0-9;\?\]\*\[ABCD\]\|O\[ABCD\]\)\/\)/
+			/data\s*\.slice\(i\)\s*\.match\(\/\^\\x1b\(\?:\\\[\[0-9;\?\]\*\[ABCD\]\|O\[ABCD\]\)\/\)/
 		);
 		expect(source).toMatch(/direction === 'D' && inputCursor > 0/);
 		expect(source).toMatch(/direction === 'C' && inputCursor < inputCharacters\.length/);
@@ -217,7 +217,7 @@ describe('Terminal source', () => {
 		);
 		expect(source).toMatch(/finally \{\s+lifecycle\.end\(\);\s+\}/s);
 		expect(source).toMatch(
-			/return async \(\) => \{\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+discardPendingSandboxInput\(\);\s+term\?\.dispose\(\);/s
+			/return async \(\) => \{\s+initialization\.abort\(\);\s+progressController\.invalidate\(\);\s+invalidatePreparedExecution\(\);\s+discardPendingSandboxInput\(\);\s+term\?\.dispose\(\);/s
 		);
 		expect(source).toMatch(/sandbox\.load\(code, log, args, options, prepareProgress\)/);
 		expect(source).toMatch(

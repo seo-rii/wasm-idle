@@ -18,6 +18,12 @@ import type {
 } from './types.js';
 
 export { Terminal, Theme, registerAllPlugins };
+export {
+	loadSearchPlugin,
+	loadSerializePlugin,
+	loadWebglPlugin,
+	registerBasicPlugins
+} from './plugin/index.js';
 export type {
 	BoundSandbox,
 	CompilerDiagnostic,

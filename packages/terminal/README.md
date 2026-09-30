@@ -51,3 +51,12 @@ restart, component teardown, and a language or asset change discard queued input
 before retiring the sandbox. A later debug session therefore cannot consume stdin entered for an
 older generation. Clipboard reads are asynchronous, so pasted text is accepted only if the input
 generation that requested it is still current when the browser returns the clipboard contents.
+
+The component prepares Fit, Unicode 11, and Web Links addons in parallel. Search and serialization
+addons are loaded only when a host calls `loadSearchPlugin(terminal)` or
+`loadSerializePlugin(terminal)` with its xterm instance. Existing `registerAllPlugins(terminal)`
+callers still receive all six addons.
+
+The component uses xterm's default renderer. Pass `<Terminal {playground} webgl />` to load the
+optional WebGL renderer after the terminal is ready; it falls back to the default renderer if a
+GPU context is unavailable. The standalone `loadWebglPlugin(terminal)` helper is also exported.
