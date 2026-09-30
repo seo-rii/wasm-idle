@@ -153,25 +153,30 @@ describe('service worker exact network responses', () => {
 			);
 
 			expect(response).toBe(fetchedResponse);
+			expect(response.url).toBe(new URL(`${assetPath}?v=${assetReceipt}`, scope).href);
 			expect(response.headers.get('cross-origin-embedder-policy')).toBeNull();
 			expect(response.headers.get('cross-origin-opener-policy')).toBeNull();
 		}
 	);
 
-	it('clones a Rust graph response whose receipt does not match its exact storage path', async () => {
-		const [module] = Object.values(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules);
-		if (!module) throw new Error('Rust executable graph fixture is empty');
-		const assetPath = `wasm-rust/${module.delivery.storagePath}`;
-		const wrongReceipt = module.storage.sha256 === receipt ? 'b'.repeat(64) : receipt;
-		const harness = createServiceWorkerHarness();
-		const { fetchedResponse, response } = await harness.request(
-			`${assetPath}?v=${wrongReceipt}`
-		);
+	it.each(
+		Object.values(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules).map((module) => ({
+			assetPath: `wasm-rust/${module.delivery.storagePath}`,
+			wrongReceipt: module.storage.sha256 === receipt ? 'b'.repeat(64) : receipt
+		}))
+	)(
+		'clones a Rust graph response with the wrong receipt for $assetPath',
+		async ({ assetPath, wrongReceipt }) => {
+			const harness = createServiceWorkerHarness();
+			const { fetchedResponse, response } = await harness.request(
+				`${assetPath}?v=${wrongReceipt}`
+			);
 
-		expect(response).not.toBe(fetchedResponse);
-		expect(response.headers.get('cross-origin-embedder-policy')).toBe('require-corp');
-		expect(response.headers.get('cross-origin-opener-policy')).toBe('same-origin');
-	});
+			expect(response).not.toBe(fetchedResponse);
+			expect(response.headers.get('cross-origin-embedder-policy')).toBe('require-corp');
+			expect(response.headers.get('cross-origin-opener-policy')).toBe('same-origin');
+		}
+	);
 
 	it('clones an obsolete Rust executable URL even when its receipt matches', async () => {
 		const entry = Object.entries(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules).find(
