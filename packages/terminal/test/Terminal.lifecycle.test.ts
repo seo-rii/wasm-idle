@@ -2,6 +2,8 @@ import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { BoundSandbox, PlaygroundBinding, TerminalControl } from '../src/types.js';
+import { loadWebglPlugin } from '../src/plugin/index.js';
+import Terminal from '../src/Terminal.svelte';
 import TerminalHarness from './TerminalHarness.svelte';
 
 const xtermCallbacks = vi.hoisted(() => ({
@@ -44,7 +46,8 @@ vi.mock('@xterm/xterm', () => ({
 }));
 
 vi.mock('../src/plugin/index.js', () => ({
-	default: vi.fn(async () => ({ fit: { fit: vi.fn() } }))
+	registerBasicPlugins: vi.fn(async () => ({ fit: { fit: vi.fn() } })),
+	loadWebglPlugin: vi.fn(async () => undefined)
 }));
 
 type Deferred<T> = {
@@ -92,6 +95,45 @@ afterEach(async () => {
 	for (const component of mountedComponents.splice(0)) await unmount(component);
 	xtermCallbacks.onKey = undefined;
 	document.body.replaceChildren();
+});
+
+describe('Terminal optional renderer readiness', () => {
+	it('becomes ready without loading WebGL by default', async () => {
+		vi.mocked(loadWebglPlugin).mockClear();
+		const onload = vi.fn();
+		const component = mount(Terminal, {
+			target: document.body,
+			props: { playground: {} as PlaygroundBinding, onload }
+		});
+		mountedComponents.push(component);
+		await vi.waitFor(() => expect(onload).toHaveBeenCalledOnce());
+		expect(loadWebglPlugin).not.toHaveBeenCalled();
+	});
+
+	it('signals readiness before an optional renderer loads or fails', async () => {
+		let rejectRenderer!: (reason: Error) => void;
+		vi.mocked(loadWebglPlugin).mockClear();
+		vi.mocked(loadWebglPlugin).mockImplementationOnce(
+			() =>
+				new Promise((_, reject) => {
+					rejectRenderer = reject;
+				})
+		);
+		const onload = vi.fn();
+		const component = mount(Terminal, {
+			target: document.body,
+			props: { playground: {} as PlaygroundBinding, onload, webgl: true }
+		});
+		mountedComponents.push(component);
+		await vi.waitFor(() => expect(loadWebglPlugin).toHaveBeenCalledOnce());
+		expect(onload).toHaveBeenCalledOnce();
+		expect(onload.mock.invocationCallOrder[0]).toBeLessThan(
+			vi.mocked(loadWebglPlugin).mock.invocationCallOrder[0]
+		);
+		rejectRenderer(new Error('No GPU context'));
+		await Promise.resolve();
+		expect(onload).toHaveBeenCalledOnce();
+	});
 });
 
 describe('Terminal sandbox input generations', () => {

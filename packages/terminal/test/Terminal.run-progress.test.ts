@@ -37,7 +37,8 @@ vi.mock('@xterm/xterm', () => ({
 }));
 
 vi.mock('../src/plugin/index.js', () => ({
-	default: vi.fn(async () => ({}))
+	registerBasicPlugins: vi.fn(async () => ({})),
+	loadWebglPlugin: vi.fn(async () => undefined)
 }));
 
 const mountedComponents: unknown[] = [];

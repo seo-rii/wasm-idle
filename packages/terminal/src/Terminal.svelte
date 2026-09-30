@@ -13,7 +13,7 @@
 	import { SvelteMap } from 'svelte/reactivity';
 	import '@xterm/xterm/css/xterm.css';
 	import type { Terminal as TerminalType } from '@xterm/xterm';
-	import registerAllPlugins from './plugin/index.js';
+	import { loadWebglPlugin, registerBasicPlugins } from './plugin/index.js';
 	import Theme from './theme.js';
 	import type {
 		BoundSandbox,
@@ -27,6 +27,8 @@
 		dark?: boolean;
 		playground: PlaygroundBinding;
 		font?: string;
+		/** Load the optional WebGL renderer after the terminal is ready. */
+		webgl?: boolean;
 
 		onload?: () => void;
 		onfinish?: () => void;
@@ -41,6 +43,7 @@
 		dark = false,
 		playground,
 		font = "'D2 coding', monospace",
+		webgl = false,
 		onload,
 		onfinish,
 		onkey,
@@ -677,132 +680,146 @@
 	});
 
 	onMount(() => {
-		import('@xterm/xterm').then(async ({ Terminal }) => {
-			if (!ref) return;
-			term = new Terminal({
-				theme: dark ? Theme.Tango_Dark : Theme.Tango_Light,
-				cursorBlink: false,
-				allowTransparency: true,
-				fontFamily: font,
-				allowProposedApi: true
-			});
-			term.open(ref);
-			term.onData((data: string) => {
-				if (!term || finish) return;
-				let pendingText = '';
-				for (let i = 0; i < data.length; ) {
-					const escapeSequence = data.slice(i).match(/^\x1b(?:\[[0-9;?]*[ABCD]|O[ABCD])/);
-					if (escapeSequence) {
-						if (pendingText) {
-							appendInputText(pendingText);
-							pendingText = '';
-						}
-						const direction = escapeSequence[0].at(-1);
-						const inputCharacters = getInputCharacters(input);
-						if (direction === 'D' && inputCursor > 0) {
-							const inputCharacter = inputCharacters[inputCursor - 1];
-							const inputCharacterCellWidth = getInputCellWidth(inputCharacter);
-							if (inputCharacterCellWidth > 0)
-								term.write(`\x1b[${inputCharacterCellWidth}D`);
-							inputCursor--;
-						} else if (direction === 'C' && inputCursor < inputCharacters.length) {
-							const inputCharacter = inputCharacters[inputCursor];
-							const inputCharacterCellWidth = getInputCellWidth(inputCharacter);
-							if (inputCharacterCellWidth > 0)
-								term.write(`\x1b[${inputCharacterCellWidth}C`);
-							inputCursor++;
-						}
-						i += escapeSequence[0].length;
-						continue;
-					}
-					const codePoint = data.codePointAt(i);
-					if (codePoint === undefined) break;
-					const chunk = String.fromCodePoint(codePoint);
-					i += chunk.length;
-					if (chunk === '\r' || chunk === '\n') {
-						if (pendingText) {
-							appendInputText(pendingText);
-							pendingText = '';
-						}
-						submitCurrentInput();
-						continue;
-					}
-					if (chunk === '\u007f') {
-						if (pendingText) {
-							appendInputText(pendingText);
-							pendingText = '';
-						}
-						if (inputCursor > 0) {
-							const inputCharacters = getInputCharacters(input);
-							const removedInput = inputCharacters.splice(inputCursor - 1, 1)[0];
-							if (removedInput) {
-								inputCursor--;
-								const inputTail = inputCharacters.slice(inputCursor).join('');
-								const removedInputCellWidth = getInputCellWidth(removedInput);
-								const inputTailCellWidth = getInputCellWidth(inputTail);
-								let backspaceEcho = '';
-								if (removedInputCellWidth > 0)
-									backspaceEcho += `\x1b[${removedInputCellWidth}D`;
-								if (inputTail) backspaceEcho += inputTail;
-								if (removedInputCellWidth > 0)
-									backspaceEcho += ' '.repeat(removedInputCellWidth);
-								const cursorReturnCellWidth =
-									inputTailCellWidth + removedInputCellWidth;
-								if (cursorReturnCellWidth > 0)
-									backspaceEcho += `\x1b[${cursorReturnCellWidth}D`;
-								if (backspaceEcho) term.write(backspaceEcho);
-								input = inputCharacters.join('');
+		const initialization = new AbortController();
+		import('@xterm/xterm')
+			.then(async ({ Terminal }) => {
+				if (!ref || initialization.signal.aborted) return;
+				term = new Terminal({
+					theme: dark ? Theme.Tango_Dark : Theme.Tango_Light,
+					cursorBlink: false,
+					allowTransparency: true,
+					fontFamily: font,
+					allowProposedApi: true
+				});
+				term.open(ref);
+				term.onData((data: string) => {
+					if (!term || finish) return;
+					let pendingText = '';
+					for (let i = 0; i < data.length; ) {
+						const escapeSequence = data
+							.slice(i)
+							.match(/^\x1b(?:\[[0-9;?]*[ABCD]|O[ABCD])/);
+						if (escapeSequence) {
+							if (pendingText) {
+								appendInputText(pendingText);
+								pendingText = '';
 							}
+							const direction = escapeSequence[0].at(-1);
+							const inputCharacters = getInputCharacters(input);
+							if (direction === 'D' && inputCursor > 0) {
+								const inputCharacter = inputCharacters[inputCursor - 1];
+								const inputCharacterCellWidth = getInputCellWidth(inputCharacter);
+								if (inputCharacterCellWidth > 0)
+									term.write(`\x1b[${inputCharacterCellWidth}D`);
+								inputCursor--;
+							} else if (direction === 'C' && inputCursor < inputCharacters.length) {
+								const inputCharacter = inputCharacters[inputCursor];
+								const inputCharacterCellWidth = getInputCellWidth(inputCharacter);
+								if (inputCharacterCellWidth > 0)
+									term.write(`\x1b[${inputCharacterCellWidth}C`);
+								inputCursor++;
+							}
+							i += escapeSequence[0].length;
+							continue;
 						}
-						continue;
+						const codePoint = data.codePointAt(i);
+						if (codePoint === undefined) break;
+						const chunk = String.fromCodePoint(codePoint);
+						i += chunk.length;
+						if (chunk === '\r' || chunk === '\n') {
+							if (pendingText) {
+								appendInputText(pendingText);
+								pendingText = '';
+							}
+							submitCurrentInput();
+							continue;
+						}
+						if (chunk === '\u007f') {
+							if (pendingText) {
+								appendInputText(pendingText);
+								pendingText = '';
+							}
+							if (inputCursor > 0) {
+								const inputCharacters = getInputCharacters(input);
+								const removedInput = inputCharacters.splice(inputCursor - 1, 1)[0];
+								if (removedInput) {
+									inputCursor--;
+									const inputTail = inputCharacters.slice(inputCursor).join('');
+									const removedInputCellWidth = getInputCellWidth(removedInput);
+									const inputTailCellWidth = getInputCellWidth(inputTail);
+									let backspaceEcho = '';
+									if (removedInputCellWidth > 0)
+										backspaceEcho += `\x1b[${removedInputCellWidth}D`;
+									if (inputTail) backspaceEcho += inputTail;
+									if (removedInputCellWidth > 0)
+										backspaceEcho += ' '.repeat(removedInputCellWidth);
+									const cursorReturnCellWidth =
+										inputTailCellWidth + removedInputCellWidth;
+									if (cursorReturnCellWidth > 0)
+										backspaceEcho += `\x1b[${cursorReturnCellWidth}D`;
+									if (backspaceEcho) term.write(backspaceEcho);
+									input = inputCharacters.join('');
+								}
+							}
+							continue;
+						}
+						if ((chunk.codePointAt(0) || 0) >= 0x20) {
+							pendingText += chunk;
+						}
 					}
-					if ((chunk.codePointAt(0) || 0) >= 0x20) {
-						pendingText += chunk;
+					if (pendingText) {
+						appendInputText(pendingText);
 					}
-				}
-				if (pendingText) {
-					appendInputText(pendingText);
-				}
-			});
-			term.onKey((e: { key: string; domEvent: KeyboardEvent }) => {
-				if (!term) return;
-				const ev = e.domEvent;
-				const isCopyShortcut = (ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'c';
-				if (isCopyShortcut && term.hasSelection()) {
-					const selectedText = term.getSelection();
-					if (selectedText) {
+				});
+				term.onKey((e: { key: string; domEvent: KeyboardEvent }) => {
+					if (!term) return;
+					const ev = e.domEvent;
+					const isCopyShortcut =
+						(ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'c';
+					if (isCopyShortcut && term.hasSelection()) {
+						const selectedText = term.getSelection();
+						if (selectedText) {
+							ev.preventDefault();
+							navigator.clipboard.writeText(selectedText).catch(() => {});
+							return;
+						}
+					}
+					if (finish) return;
+					onkey?.(ev);
+					if (isCopyShortcut) {
 						ev.preventDefault();
-						navigator.clipboard.writeText(selectedText).catch(() => {});
-						return;
+						sandbox.kill?.();
+					} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') {
+						ev.preventDefault();
+						if (input.length > 0) submitCurrentInput();
+						submitSandboxEof();
+					} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') {
+						ev.preventDefault();
+						const generation = sandboxInputGeneration;
+						navigator.clipboard
+							.readText()
+							.then((text) => {
+								if (generation !== sandboxInputGeneration) return;
+								applyPastedText(text);
+							})
+							.catch(() => {});
 					}
-				}
-				if (finish) return;
-				onkey?.(ev);
-				if (isCopyShortcut) {
-					ev.preventDefault();
-					sandbox.kill?.();
-				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') {
-					ev.preventDefault();
-					if (input.length > 0) submitCurrentInput();
-					submitSandboxEof();
-				} else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'v') {
-					ev.preventDefault();
-					const generation = sandboxInputGeneration;
-					navigator.clipboard
-						.readText()
-						.then((text) => {
-							if (generation !== sandboxInputGeneration) return;
-							applyPastedText(text);
-						})
-						.catch(() => {});
-				}
-			});
-			plugin = await registerAllPlugins(term);
+				});
+				plugin = await registerBasicPlugins(term, initialization.signal);
 
-			onload?.();
-		});
+				onload?.();
+				if (webgl) {
+					// A missing GPU context must not prevent terminal input or output.
+					void loadWebglPlugin(term, initialization.signal).catch(() => {});
+				}
+			})
+			.catch((error) => {
+				if (!initialization.signal.aborted)
+					console.error('Failed to initialize terminal', error);
+			});
 
 		return async () => {
+			initialization.abort();
 			progressController.invalidate();
 			invalidatePreparedExecution();
 			discardPendingSandboxInput();
