@@ -1,6 +1,6 @@
 {
 	"name": "@wasm-idle/core",
-	"version": "1.0.6",
+	"version": "1.0.7",
 	"description": "Framework-neutral contracts and helpers for wasm-idle hosts",
 	"license": "MIT",
 	"type": "module",
