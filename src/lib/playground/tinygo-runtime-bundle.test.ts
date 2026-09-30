@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import {
 	canonicalTinyGoExecutableGraphProfile,
@@ -67,18 +67,18 @@ describe('bundled wasm-tinygo runtime', () => {
 			expectedPaths
 		);
 		for (const assetPath of expectedPaths) {
-			const logicalBytes = readFileSync(path.join(runtimeDir, assetPath));
 			const receipt = WASM_TINYGO_RUNTIME_PROFILE.assetReceipts[assetPath];
 			expect(receipt).toBeDefined();
+			const storagePath = 'uncompressedBytes' in receipt ? `${assetPath}.gz` : assetPath;
+			const storageBytes = readFileSync(path.join(runtimeDir, storagePath));
+			expect(storageBytes.byteLength).toBe(receipt.bytes);
+			expect(sha256(storageBytes)).toBe(receipt.sha256);
 			if ('uncompressedBytes' in receipt) {
+				const logicalBytes = gunzipSync(storageBytes, {
+					maxOutputLength: receipt.uncompressedBytes
+				});
 				expect(logicalBytes.byteLength).toBe(receipt.uncompressedBytes);
 				expect(sha256(logicalBytes)).toBe(receipt.uncompressedSha256);
-				const storageBytes = gzipSync(logicalBytes, { level: 9 });
-				expect(storageBytes.byteLength).toBe(receipt.bytes);
-				expect(sha256(storageBytes)).toBe(receipt.sha256);
-			} else {
-				expect(logicalBytes.byteLength).toBe(receipt.bytes);
-				expect(sha256(logicalBytes)).toBe(receipt.sha256);
 			}
 		}
 		const manifestBytes = readFileSync(
