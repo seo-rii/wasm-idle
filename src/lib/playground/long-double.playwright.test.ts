@@ -11,6 +11,7 @@ import {
 import { runStdinBrowserProbe } from '../../../scripts/stdin-browser-probe-lib.mjs';
 
 const enabled = process.env.WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE === '1';
+const objectiveCEnabled = process.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE === '1';
 const runTimeoutMs = Number(process.env.WASM_IDLE_LONG_DOUBLE_RUN_TIMEOUT_MS || '420000');
 let previewServerPromise: ReturnType<typeof startBrowserPreviewServer> | undefined;
 
@@ -44,7 +45,7 @@ async function browserPreview() {
 
 interface LongDoubleCase {
 	name: string;
-	language: 'C' | 'CPP';
+	language: 'C' | 'CPP' | 'OBJC';
 	activePath: string;
 	cppVersion?: string;
 	source: string;
@@ -104,12 +105,62 @@ int main() {
 `,
 			expectedOutput: `${cppVersion} cout=1.250 cin=3.750 precise=1.000000000000000000001`
 		})
-	)
+	),
+	{
+		name: 'Objective-C printf, snprintf and sscanf',
+		language: 'OBJC',
+		activePath: 'main.m',
+		source: `#if !defined(__OBJC__) || defined(__cplusplus)
+#error The source must compile as Objective-C
+#endif
+#include <stdio.h>
+#include <string.h>
+
+int main(void) {
+    printf("Objective-C printf=%.3Lf ", 1.25L);
+    char formatted[64];
+    if (snprintf(formatted, sizeof formatted, "%.3Lf", 2.5L) != 5) return 1;
+    if (strcmp(formatted, "2.500") != 0) return 2;
+    char precise[64];
+    if (snprintf(precise, sizeof precise, "%.21Lf", 1.0L + 0x1p-70L) != 23) return 5;
+    if (strcmp(precise, "1.000000000000000000001") != 0) return 6;
+    char input[64];
+    long double value = 0.0L;
+    if (!fgets(input, sizeof input, stdin)) return 3;
+    if (sscanf(input, "%Lf", &value) != 1) return 4;
+    printf("snprintf=%s sscanf=%.3Lf precise=%s\\n", formatted, value + 0.5L, precise);
+    return 0;
+}
+`,
+		expectedOutput:
+			'Objective-C printf=1.250 snprintf=2.500 sscanf=3.750 precise=1.000000000000000000001'
+	},
+	{
+		name: 'Objective-C++ cout and cin',
+		language: 'OBJC',
+		activePath: 'main.mm',
+		source: `#if !defined(__OBJC__) || !defined(__cplusplus)
+#error The source must compile as Objective-C++
+#endif
+#include <iomanip>
+#include <iostream>
+
+int main() {
+    std::cout << std::fixed << std::setprecision(3) << "Objective-C++ cout=" << 1.25L;
+    long double value = 0.0L;
+    if (!(std::cin >> value)) return 1;
+    std::cout << " cin=" << value + 0.5L << " precise="
+              << std::setprecision(21) << (1.0L + 0x1p-70L) << '\\n';
+    return 0;
+}
+`,
+		expectedOutput: 'Objective-C++ cout=1.250 cin=3.750 precise=1.000000000000000000001'
+	}
 ];
 
 describe('long double browser input and output', () => {
 	for (const { name, language, activePath, cppVersion, source, expectedOutput } of cases) {
-		const selected = enabled;
+		const selected = language === 'OBJC' ? objectiveCEnabled : enabled;
 		it(
 			`${name} formats and parses long double through the real runtime`,
 			{
@@ -138,9 +189,17 @@ describe('long double browser input and output', () => {
 						exitCode: 0
 					});
 					expect(summary.transcript).toContain(expectedOutput);
-					expect(summary.transcript).toContain(
-						language === 'C' ? '-x c main.c' : '-x c++ main.cpp'
-					);
+					if (language === 'OBJC') {
+						expect(
+							summary.consoleTail.some((line: string) =>
+								line.includes(`compiling ${activePath}`)
+							)
+						).toBe(true);
+					} else {
+						expect(summary.transcript).toContain(
+							language === 'C' ? '-x c main.c' : '-x c++ main.cpp'
+						);
+					}
 					expect(summary.transcript).not.toContain('formatting disabled');
 					expect(summary.transcript).not.toContain('unreachable');
 					expect(summary.pageErrors).toEqual([]);

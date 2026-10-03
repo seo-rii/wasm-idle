@@ -33,6 +33,7 @@ describe('all-language browser test runner', () => {
 				...expectedEnvironments,
 				'WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS',
 				'WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE',
+				'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE',
 				'WASM_IDLE_RUN_REAL_BROWSER_DEBUG',
 				'WASM_IDLE_REQUIRE_LLDB_DEBUG',
 				'WASM_IDLE_DEBUG_BROWSER_LANGUAGES',
@@ -52,6 +53,7 @@ describe('all-language browser test runner', () => {
 		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS).toBe('1');
 		expect(plan.testFiles).toContain('src/lib/playground/long-double.playwright.test.ts');
 		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE).toBe('1');
+		expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE).toBe('1');
 	});
 
 	it('runs C++ standard and long-double regressions with the Clang family', () => {
@@ -60,6 +62,7 @@ describe('all-language browser test runner', () => {
 				WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN: '1',
 				WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS: '1',
 				WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE: '1',
+				WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE: '1',
 				WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC: '1',
 				WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX: '1'
 			},
@@ -113,8 +116,10 @@ describe('all-language browser test runner', () => {
 				expectedFiles.add('src/lib/playground/long-double.playwright.test.ts');
 				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS');
 				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE');
+				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE');
 				expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS).toBe('1');
 				expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE).toBe('1');
+				expect(plan.env.WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE).toBe('1');
 				for (const key of [
 					'WASM_IDLE_RUN_REAL_BROWSER_DEBUG',
 					'WASM_IDLE_REQUIRE_LLDB_DEBUG',
@@ -194,6 +199,7 @@ describe('all-language browser test runner', () => {
 			WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN: '1',
 			WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS: '1',
 			WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE: '1',
+			WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE: '1',
 			WASM_IDLE_RUN_REAL_BROWSER_STDIN: '1'
 		});
 
@@ -201,6 +207,9 @@ describe('all-language browser test runner', () => {
 		expect(invocation.env).not.toHaveProperty('WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN');
 		expect(invocation.env).not.toHaveProperty('WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS');
 		expect(invocation.env).not.toHaveProperty('WASM_IDLE_RUN_REAL_BROWSER_LONG_DOUBLE');
+		expect(invocation.env).not.toHaveProperty(
+			'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC_LONG_DOUBLE'
+		);
 		expect(invocation.env).not.toHaveProperty('WASM_IDLE_RUN_REAL_BROWSER_STDIN');
 	});
 

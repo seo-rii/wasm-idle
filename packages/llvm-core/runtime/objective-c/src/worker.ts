@@ -1013,6 +1013,7 @@ async function compileAndLinkObjectiveC(
 	const libdir = 'lib/wasm32-wasi';
 	const compilerRuntimeLibDir =
 		(clang as any).compilerConfig?.compilerRuntimeLibDir || 'lib/clang/8.0.1/lib/wasi';
+	const longDoubleLinkArgs = await clang.prepareLongDoubleLinkArgs();
 	const lld = await clang.getModule(clang.assetUrls.lld);
 	if (needsFoundation) {
 		await installObjectiveCFoundationLibraries();
@@ -1040,6 +1041,7 @@ async function compileAndLinkObjectiveC(
 		'libobjc.a',
 		...(needsFoundation ? ['libffi.a'] : []),
 		'-lwasi-emulated-mman',
+		...longDoubleLinkArgs,
 		'-lc',
 		'-lc++',
 		'-lc++abi',

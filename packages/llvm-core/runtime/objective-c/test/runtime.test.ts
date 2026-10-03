@@ -164,6 +164,8 @@ vi.mock('../../clang/src/index.js', () => {
 			return { url };
 		}
 
+		prepareLongDoubleLinkArgs = vi.fn(async () => ['-lc-printscan-long-double']);
+
 		async run(_module: unknown, _log: boolean, argv0: string, ...args: string[]) {
 			runCalls.push([argv0, ...args]);
 			if (argv0 === 'clang') this.stdout('mock clang compile log\n');
@@ -672,6 +674,46 @@ describe('Objective-C worker', () => {
 		expect((globalThis as any).postMessage).toHaveBeenCalledWith({
 			error: `Runtime asset http://localhost/wasm-objectivec/libobjc.a size exceeds the ${limit} byte limit`
 		});
+	});
+
+	it.each(['main.m', 'main.mm'])(
+		'waits for long double support before directly linking %s',
+		async (activePath) => {
+			await installWorker();
+			await (globalThis as any).self.onmessage(objectiveCLoadEvent());
+			let release!: (args: string[]) => void;
+			const pending = new Promise<string[]>((resolve) => {
+				release = resolve;
+			});
+			const prepare = runtimeInstances[0].prepareLongDoubleLinkArgs.mockReturnValue(pending);
+			const operation = (globalThis as any).self.onmessage({
+				data: { code: 'int main(void) { return 0; }', activePath, prepare: true }
+			});
+			await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+			expect(runCalls.some((call) => call[0] === 'wasm-ld')).toBe(false);
+			release(['-lc-printscan-long-double']);
+			await operation;
+			const link = runCalls.find((call) => call[0] === 'wasm-ld')!;
+			expect(link).toContain('-lc-printscan-long-double');
+			expect(link.indexOf('-lc-printscan-long-double')).toBeLessThan(link.indexOf('-lc'));
+			expect(link).toContain('libobjc.a');
+			expect(link).toContain('-lc++');
+		}
+	);
+
+	it('reports a long double archive failure before invoking the Objective-C linker', async () => {
+		await installWorker();
+		await (globalThis as any).self.onmessage(objectiveCLoadEvent());
+		runtimeInstances[0].prepareLongDoubleLinkArgs.mockRejectedValue(
+			new Error('long double download failed')
+		);
+		await (globalThis as any).self.onmessage({
+			data: { code: 'int main(void) { return 0; }', activePath: 'main.m', prepare: true }
+		});
+		expect(runCalls.some((call) => call[0] === 'wasm-ld')).toBe(false);
+		expect((globalThis as any).postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ error: 'long double download failed' })
+		);
 	});
 
 	it('compiles and links Objective-C workspace implementation files', async () => {

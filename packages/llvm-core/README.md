@@ -38,6 +38,8 @@ For sysroots without `libc-printscan-long-double.a`, a host can supply
 `compiler.sysroot.printscanLongDouble.asset` pointing to a compatible archive (optionally gzip).
 The runtime loads it before linking and links it before libc to support C and C++ `long double`
 input/output. The bundled application pins the WASI SDK 33 archive separately from the sysroot.
+Hosts which call `wasm-ld` directly can await `runtime.prepareLongDoubleLinkArgs()` and insert
+the returned arguments before `-lc`. The Objective-C/Objective-C++ worker uses this same preparation.
 
 The bundled Clang `runtime-manifest.v1.json` is routed through the same worker asset bridge as its
 four delivery assets. The compressed files remain pinned against their producer receipts in CI,
