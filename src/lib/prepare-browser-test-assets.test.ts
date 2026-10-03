@@ -289,25 +289,37 @@ describe('browser test asset preparation', () => {
 		}
 	});
 
-	it('includes the relative module dependencies of the pinned OCaml producer graph', async () => {
-		const manifest = JSON.parse(
-			await readFile('scripts/browser-test-assets.v1.json', 'utf8')
-		) as {
-			assets: Array<{ group: string; target: string }>;
-		};
-		const prefix = 'wasm-of-js-of-ocaml/browser-native/';
-		const targets = new Set(
-			manifest.assets.filter((asset) => asset.group === 'ocaml').map((asset) => asset.target)
+	it('emits the relative module dependencies of the rebuilt OCaml wrapper', () => {
+		// Preparation rebuilds the wrapper from source; the download receipts describe
+		// immutable compiler inputs, not the current wrapper's generated module graph.
+		const configPath = path.resolve(
+			'runtimes/wasm-of-js-of-ocaml/tsconfig.browser-harness.json'
 		);
-		for (const target of targets) {
-			if (!target.startsWith(prefix) || !target.endsWith('.js')) continue;
-			const sourcePath = `runtimes/wasm-of-js-of-ocaml/${target.slice(prefix.length).replace(/\.js$/u, '.ts')}`;
-			const source = ts.createSourceFile(
-				sourcePath,
-				await readFile(sourcePath, 'utf8'),
-				ts.ScriptTarget.Latest,
-				true
-			);
+		const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
+		expect(configFile.error).toBeUndefined();
+		const config = ts.parseJsonConfigFileContent(
+			configFile.config,
+			ts.sys,
+			path.dirname(configPath)
+		);
+		expect(config.errors).toEqual([]);
+		const outputs = new Map<string, string>();
+		const program = ts.createProgram(config.fileNames, config.options);
+		const result = program.emit(undefined, (fileName, contents) => {
+			if (fileName.endsWith('.js')) outputs.set(path.resolve(fileName), contents);
+		});
+		expect(result.emitSkipped).toBe(false);
+		expect(result.diagnostics).toEqual([]);
+		for (const relativePath of [
+			'src/index.js',
+			'src/compiler-worker.js',
+			'browser-harness/native-tool-worker.js',
+			'runtime/browser-native-asset-cache.js'
+		]) {
+			expect(outputs.has(path.resolve(config.options.outDir!, relativePath))).toBe(true);
+		}
+		for (const [target, contents] of outputs) {
+			const source = ts.createSourceFile(target, contents, ts.ScriptTarget.Latest, true);
 			for (const node of source.statements) {
 				if (!ts.isImportDeclaration(node) && !ts.isExportDeclaration(node)) continue;
 				if (ts.isImportDeclaration(node) && node.importClause?.isTypeOnly) continue;
@@ -315,10 +327,8 @@ describe('browser test asset preparation', () => {
 				const specifier = node.moduleSpecifier;
 				if (!specifier || !ts.isStringLiteral(specifier) || !specifier.text.startsWith('.'))
 					continue;
-				const dependency = path.posix.normalize(
-					path.posix.join(path.posix.dirname(target), specifier.text)
-				);
-				expect(targets.has(dependency), `${target} requires ${dependency}`).toBe(true);
+				const dependency = path.resolve(path.dirname(target), specifier.text);
+				expect(outputs.has(dependency), `${target} requires ${dependency}`).toBe(true);
 			}
 		}
 	});
