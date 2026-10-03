@@ -24,7 +24,11 @@ describe('wasm-idle rust browser playwright integration', () => {
 		expect(
 			Object.values(defaultBrowserRepeats).reduce((total, value) => total + value, 0)
 		).toBe(10);
-		expect(Object.keys(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules)).toHaveLength(45);
+		expect(Object.keys(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules)).toHaveLength(47);
+		expect(WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules['runtime-asset-cache.js']).toBeDefined();
+		expect(
+			WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules['runtime-asset-cache-service.js']
+		).toBeDefined();
 		expect(
 			WASM_RUST_EXECUTABLE_GRAPH_PROFILE.modules['runtime-delivery-budget.js']
 		).toBeDefined();
