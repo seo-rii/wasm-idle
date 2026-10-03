@@ -390,7 +390,7 @@ test('the tracked release profile pins the qualified producer and manifest recei
 	const profile = JSON.parse(await readFile('scripts/wasm-debug-release.v2.json', 'utf8'));
 	assert.deepEqual(profile, {
 		schemaVersion: 1,
-		producerRevision: '3e4e327efad978f0598c07f79b33cc08ea9ec19d',
+		producerRevision: '286940595483460e65dd2569b9c85918c0dc7bd4',
 		manifestReceipt: {
 			bytes: 2853,
 			sha256: '97ea95e89667e97a5cb4f50dc0600ccdc58865eedaeaf42945f54cc1a3dfcddd'
