@@ -64,6 +64,11 @@ const ASSETS = [
 	}
 ];
 const REQUIRED_FILES = [...DOCUMENTS, ...ASSETS];
+const MEMFS_DOCUMENTS = [
+	'memfs-build-receipt.json',
+	'LICENSE.memfs-llvm.txt',
+	'LICENSE.memfs-stb_sprintf.txt'
+];
 
 const MANIFEST_ASSETS = {
 	source: {
@@ -267,6 +272,54 @@ async function validateBundle(bundleDir, layout) {
 			);
 		}
 	}
+	const memfsMetadata = buildInfo.toolchain.memfs;
+	if (isObject(memfsMetadata) && memfsMetadata.files !== undefined) {
+		const files = memfsMetadata.files;
+		const receipt = memfsMetadata.buildReceipt;
+		if (
+			!isObject(files) ||
+			Object.keys(files).length !== MEMFS_DOCUMENTS.length ||
+			!isObject(receipt) ||
+			receipt.format !== 'wasm-llvm-memfs-build-v1'
+		)
+			throw new Error('Invalid MemFS sidecar metadata');
+		const root = layout === 'source' ? bundleDir : path.join(bundleDir, 'clang');
+		for (const name of MEMFS_DOCUMENTS) {
+			const pin = files[name];
+			if (
+				!isObject(pin) ||
+				!Number.isSafeInteger(pin.bytes) ||
+				pin.bytes <= 0 ||
+				typeof pin.sha256 !== 'string' ||
+				!/^[0-9a-f]{64}$/.test(pin.sha256)
+			) {
+				throw new Error(`Invalid MemFS sidecar receipt: ${name}`);
+			}
+			const bytes = await readFile(path.join(root, name));
+			if (bytes.length !== pin.bytes || sha256(bytes) !== pin.sha256) {
+				throw new Error(`MemFS sidecar does not match its receipt: ${name}`);
+			}
+			if (
+				name === 'memfs-build-receipt.json' &&
+				JSON.stringify(JSON.parse(bytes.toString('utf8'))) !== JSON.stringify(receipt)
+			) {
+				throw new Error('MemFS build receipt does not match toolchain metadata');
+			}
+		}
+		const delivered = await readFile(
+			path.join(root, 'bin', layout === 'source' ? 'memfs.zip' : 'memfs.wasm.gz')
+		);
+		const wasm = layout === 'source' ? unzipSync(delivered).memfs : gunzipSync(delivered);
+		const pin = receipt.outputs?.['memfs.wasm'];
+		if (
+			!wasm ||
+			!isObject(pin) ||
+			wasm.length !== pin.bytes ||
+			createHash('sha256').update(wasm).digest('hex') !== pin.sha256
+		) {
+			throw new Error('MemFS payload does not match its source build receipt');
+		}
+	}
 
 	const clangdJs = await readFile(path.join(bundleDir, 'clangd', 'clangd.js'), 'utf8');
 	const clangdWasm = gunzipSync(await readFile(path.join(bundleDir, 'clangd', 'clangd.wasm.gz')));
@@ -324,6 +377,11 @@ async function writeDeliveryBundle(sourceDir, targetRoot) {
 	const sourceBuildInfo = JSON.parse(
 		await readFile(path.join(sourceDir, 'runtime-build.json'), 'utf8')
 	);
+	if (sourceBuildInfo.toolchain.memfs?.files) {
+		for (const name of MEMFS_DOCUMENTS) {
+			await cp(path.join(sourceDir, name), path.join(targetRoot, 'clang', name));
+		}
+	}
 	const deliveryAssets = [];
 	for (const asset of ASSETS) {
 		const bytes = await readFile(path.join(targetRoot, asset.target));

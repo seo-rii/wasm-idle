@@ -194,6 +194,40 @@ async function replaceFixtureAsset(
 	await writeJson(path.join(sourceDir, 'runtime-build.json'), nextBuildInfo);
 }
 
+async function writeMemfsSidecars(
+	sourceDir: string,
+	fixture: Awaited<ReturnType<typeof writeFixture>>,
+	wasm = fixture.payloads.get('bin/memfs.zip')!
+) {
+	const compressed = gzipSync(wasm, { level: 9 });
+	const buildReceipt = {
+		format: 'wasm-llvm-memfs-build-v1',
+		maxNodes: 8192,
+		outputs: {
+			'memfs.wasm': { bytes: wasm.byteLength, sha256: sha256(wasm) },
+			'memfs.wasm.gz': { bytes: compressed.byteLength, sha256: sha256(compressed) }
+		}
+	};
+	const contents = new Map([
+		['memfs-build-receipt.json', Buffer.from(`${JSON.stringify(buildReceipt, null, 2)}\n`)],
+		['LICENSE.memfs-llvm.txt', Buffer.from('fixture: pinned LLVM license\n')],
+		['LICENSE.memfs-stb_sprintf.txt', Buffer.from('fixture: pinned stb_sprintf license\n')]
+	]);
+	const files = Object.fromEntries(
+		[...contents].map(([name, bytes]) => [
+			name,
+			{ bytes: bytes.byteLength, sha256: sha256(bytes) }
+		])
+	);
+	const buildInfo = {
+		...fixture.buildInfo,
+		toolchain: { ...fixture.buildInfo.toolchain, memfs: { buildReceipt, files } }
+	};
+	for (const [name, bytes] of contents) await writeFile(path.join(sourceDir, name), bytes);
+	await writeJson(path.join(sourceDir, 'runtime-build.json'), buildInfo);
+	return { contents, buildInfo };
+}
+
 async function writeExistingTargets(staticDir: string) {
 	await mkdir(path.join(staticDir, 'clang', 'bin'), { recursive: true });
 	await mkdir(path.join(staticDir, 'clangd'), { recursive: true });
@@ -266,6 +300,130 @@ describe('syncWasmClangDist', () => {
 		await expect(stat(path.join(staticDir, 'clangd', 'existing.txt'))).rejects.toThrow();
 		expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
 	});
+
+	it('preserves verified MemFS sidecars and metadata without changing the six binary assets', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const fixture = await writeFixture(sourceDir);
+		const { contents, buildInfo } = await writeMemfsSidecars(sourceDir, fixture);
+		await writeExistingTargets(staticDir);
+
+		await syncWasmClangDist({ sourceDir, staticDir });
+
+		for (const [name, bytes] of contents) {
+			expect(await readFile(path.join(staticDir, 'clang', name))).toEqual(bytes);
+		}
+		const deliveredBuildInfo = JSON.parse(
+			await readFile(path.join(staticDir, 'clang/runtime-build.json'), 'utf8')
+		);
+		expect(deliveredBuildInfo.toolchain.memfs).toEqual(buildInfo.toolchain.memfs);
+		expect(deliveredBuildInfo.assets.map(({ asset }: { asset: string }) => asset)).toEqual(
+			assets.map(({ deliveryAsset }) => deliveryAsset)
+		);
+		expect(deliveredBuildInfo.delivery.sourceAssets).toEqual(fixture.buildInfo.assets);
+		const deliveredMemfs = gunzipSync(
+			await readFile(path.join(staticDir, 'clang/bin/memfs.wasm.gz'))
+		);
+		expect(deliveredMemfs).toEqual(fixture.payloads.get('bin/memfs.zip'));
+		expect(buildInfo.toolchain.memfs.buildReceipt.outputs['memfs.wasm']).toEqual({
+			bytes: deliveredMemfs.byteLength,
+			sha256: sha256(deliveredMemfs)
+		});
+		await expect(stat(path.join(staticDir, 'clang/existing.txt'))).rejects.toThrow();
+		await expect(stat(path.join(staticDir, 'clangd/existing.txt'))).rejects.toThrow();
+		expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
+	});
+
+	it.each(
+		[
+			'memfs-build-receipt.json',
+			'LICENSE.memfs-llvm.txt',
+			'LICENSE.memfs-stb_sprintf.txt'
+		].flatMap((name) => ['corrupt', 'missing'].map((failure) => ({ name, failure })))
+	)(
+		'rejects a $failure MemFS sidecar $name and preserves existing targets',
+		async ({ name, failure }) => {
+			const sourceDir = await makeTempDir();
+			const staticDir = path.join(await makeTempDir(), 'static');
+			const fixture = await writeFixture(sourceDir);
+			const { contents } = await writeMemfsSidecars(sourceDir, fixture);
+			await writeExistingTargets(staticDir);
+			if (failure === 'missing') {
+				await rm(path.join(sourceDir, name));
+			} else {
+				await writeFile(
+					path.join(sourceDir, name),
+					Buffer.alloc(contents.get(name)!.byteLength, 0x78)
+				);
+			}
+
+			await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+				failure === 'missing'
+					? /ENOENT/
+					: `MemFS sidecar does not match its receipt: ${name}`
+			);
+			await expectExistingTargets(staticDir);
+			expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
+			expect((await readdir(path.join(staticDir, 'clang'))).sort()).toEqual([
+				'bin',
+				'existing.txt'
+			]);
+		}
+	);
+
+	it('rejects a self-consistent MemFS receipt for a different raw payload and preserves existing targets', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const fixture = await writeFixture(sourceDir);
+		const rawMemfs = fixture.payloads.get('bin/memfs.zip')!;
+		await writeMemfsSidecars(sourceDir, fixture, Buffer.alloc(rawMemfs.byteLength, 0x78));
+		await writeExistingTargets(staticDir);
+
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'MemFS payload does not match its source build receipt'
+		);
+		await expectExistingTargets(staticDir);
+		expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
+	});
+
+	it('rejects sidecar bytes that disagree with the embedded MemFS receipt despite matching their file pin', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const fixture = await writeFixture(sourceDir);
+		const { buildInfo } = await writeMemfsSidecars(sourceDir, fixture);
+		buildInfo.toolchain.memfs.buildReceipt.maxNodes = 16384;
+		await writeJson(path.join(sourceDir, 'runtime-build.json'), buildInfo);
+		await writeExistingTargets(staticDir);
+
+		await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+			'MemFS build receipt does not match toolchain metadata'
+		);
+		await expectExistingTargets(staticDir);
+		expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
+	});
+
+	it.each(['extra.txt', '../LICENSE.memfs-llvm.txt', '/LICENSE.memfs-llvm.txt'])(
+		'rejects an unapproved MemFS file map entry %s and preserves existing targets',
+		async (name) => {
+			const sourceDir = await makeTempDir();
+			const staticDir = path.join(await makeTempDir(), 'static');
+			const fixture = await writeFixture(sourceDir);
+			const { buildInfo } = await writeMemfsSidecars(sourceDir, fixture);
+			const files = buildInfo.toolchain.memfs.files;
+			files[name] = files['LICENSE.memfs-llvm.txt'];
+			if (name !== 'extra.txt') delete files['LICENSE.memfs-llvm.txt'];
+			await writeJson(path.join(sourceDir, 'runtime-build.json'), buildInfo);
+			await writeExistingTargets(staticDir);
+
+			await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow(
+				name === 'extra.txt'
+					? 'Invalid MemFS sidecar metadata'
+					: 'Invalid MemFS sidecar receipt'
+			);
+			await expectExistingTargets(staticDir);
+			expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
+		}
+	);
 
 	it('installs a producer bundle with minified Asyncify import wiring', async () => {
 		const sourceDir = await makeTempDir();
