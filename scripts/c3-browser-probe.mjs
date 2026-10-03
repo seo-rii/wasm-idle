@@ -329,14 +329,18 @@ fn void main() @wasm("main") { while (true) { int byte = next_byte(); if (byte <
 		assert.equal(buffered.result, true);
 		assert.equal(buffered.output, 'buffered 한글 🦀\n');
 		assert.equal(buffered.memory.limitBytes, 1024 ** 3);
+		let corruptedCompilerResponses = 0;
 		await bufferedPage.context().route('**/wasm-c3/c3c.mjs', async (route) => {
 			const response = await route.fetch();
 			const body = Buffer.from(await response.body());
 			body[0] ^= 1;
+			corruptedCompilerResponses += 1;
 			await route.fulfill({ response, body });
 		});
 		const integrityError = await bufferedPage.evaluate(async () => {
 			const sandbox = await globalThis.__c3Playground('C3', {
+				// The successful run above cached verified bytes; this case must fetch the mutation.
+				persistentCache: false,
 				c3: { baseUrl: location.origin + '/wasm-c3/' }
 			});
 			try {
@@ -348,9 +352,12 @@ fn void main() @wasm("main") { while (true) { int byte = next_byte(); if (byte <
 				await sandbox.dispose();
 			}
 		});
+		assert.equal(corruptedCompilerResponses, 1);
 		assert.deepEqual(integrityError, { code: 'asset-integrity', phase: 'asset' });
-		console.log(JSON.stringify({ buffered, integrityError }, null, 2));
-		return { ...report, buffered, integrityError };
+		console.log(
+			JSON.stringify({ buffered, corruptedCompilerResponses, integrityError }, null, 2)
+		);
+		return { ...report, buffered, corruptedCompilerResponses, integrityError };
 	} finally {
 		await browser?.close();
 		await server.close();
