@@ -101,7 +101,16 @@ export async function getLispLanguageServer(
 							cache: 'force-cache',
 							persistentCache: hostOptions?.persistentCache,
 							assetRoot: typeof options === 'string' ? options : hostOptions?.rootUrl,
-							integrity: { sha256: asset.sha256, bytes: asset.size },
+							integrity: {
+								sha256: asset.sha256,
+								bytes: asset.size,
+								...(asset.encoding === 'gzip'
+									? {
+											uncompressedSha256: logicalAsset.sha256,
+											uncompressedBytes: logicalAsset.size
+										}
+									: {})
+							},
 							runtimeId: 'LISP',
 							signal: assetSignal,
 							reportProgress: (loaded, total) =>

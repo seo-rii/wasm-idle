@@ -1,6 +1,7 @@
 import {
-	loadPersistentRuntimeAsset,
+	readPersistentRuntimeAsset,
 	verifyRuntimeAssetIntegrity,
+	writePersistentRuntimeAsset,
 	type RuntimeAssetIntegrityEntry
 } from '@wasm-idle/core';
 import {
@@ -67,29 +68,55 @@ export async function fetchBoundedExternalAsset(
 	const { requestUrl, expectedFinalUrl } = resolveExternalAssetUrl(options.url);
 	const receipt = resolveLanguageToolPersistentReceipt(requestUrl, options, options.integrity);
 	if (!receipt?.sha256 || !expectedFinalUrl) return fetchBoundedExternalAssetNetwork(options);
-	const bytes = await loadPersistentRuntimeAsset({
-		identity: {
-			url: expectedFinalUrl,
-			sha256: receipt.sha256,
-			bytes: receipt.bytes,
-			validationKey: JSON.stringify(['lsp-external-exact-v1', maxBytes])
-		},
-		cache: resolveLanguageToolPersistentOptions(options).persistentCache,
-		signal: options.signal,
-		load: async () => {
-			const bytes = await fetchBoundedExternalAssetNetwork(options);
+	const candidates = [{ sha256: receipt.sha256, bytes: receipt.bytes }];
+	if (receipt.uncompressedSha256 !== undefined && receipt.uncompressedBytes !== undefined) {
+		candidates.push({ sha256: receipt.uncompressedSha256, bytes: receipt.uncompressedBytes });
+	}
+	const cache = resolveLanguageToolPersistentOptions(options).persistentCache;
+	const validationKey = JSON.stringify(['lsp-external-exact-v1', maxBytes]);
+	for (const candidate of candidates) {
+		if (candidate.bytes !== undefined && candidate.bytes > maxBytes) continue;
+		const hit = await readPersistentRuntimeAsset({
+			identity: { url: expectedFinalUrl, ...candidate, validationKey },
+			cache,
+			signal: options.signal
+		});
+		if (!hit) continue;
+		if (hit.byteLength > maxBytes)
+			throw new Error(`${options.label} exceeds the ${maxBytes} byte download limit`);
+		if (options.signal?.aborted) throw abortReason(options.signal);
+		options.reportProgress?.(hit.byteLength, hit.byteLength);
+		return Uint8Array.from(hit);
+	}
+	const bytes = await fetchBoundedExternalAssetNetwork(options);
+	let verifiedReceipt: (typeof candidates)[number] | undefined;
+	let verificationError: unknown;
+	for (const candidate of candidates) {
+		try {
 			await verifyRuntimeAssetIntegrity({
 				asset: requestUrl,
 				bytes,
-				expected: { sha256: receipt.sha256!, bytes: receipt.bytes },
+				expected: candidate,
 				runtimeId: options.runtimeId,
 				profileId: options.profileId
 			});
-			return bytes;
+			verifiedReceipt = candidate;
+			break;
+		} catch (error) {
+			verificationError ??= error;
 		}
+	}
+	if (!verifiedReceipt) throw verificationError;
+	if (options.signal?.aborted) throw abortReason(options.signal);
+	// Fetch can expose decoded bytes for Content-Encoding: gzip. Persist only the
+	// representation that matched a pinned receipt, under that representation's hash.
+	await writePersistentRuntimeAsset({
+		identity: { url: expectedFinalUrl, ...verifiedReceipt, validationKey },
+		cache,
+		signal: options.signal,
+		bytes
 	});
-	if (bytes.byteLength > maxBytes)
-		throw new Error(`${options.label} exceeds the ${maxBytes} byte download limit`);
+	if (options.signal?.aborted) throw abortReason(options.signal);
 	options.reportProgress?.(bytes.byteLength, bytes.byteLength);
 	return Uint8Array.from(bytes);
 }

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
 	AWK_MAX_ASSET_BYTES,
@@ -560,78 +561,108 @@ describe('additional language server workers', () => {
 		handle.dispose();
 	});
 
-	it('preloads and starts Scheme with the verified wasm-lisp profile', async () => {
-		vi.stubGlobal(
-			'fetch',
-			vi.fn(async (input: string | URL | Request) => {
-				const requestUrl = new URL(
-					typeof input === 'string' || input instanceof URL ? input : input.url
-				);
-				const file = path.basename(requestUrl.pathname);
-				const bytes = lispStaticBytes[file];
-				if (!bytes) throw new Error(`Unexpected Scheme asset request: ${requestUrl.href}`);
-				const response = new Response(bytes, {
-					headers: { 'content-length': String(bytes.byteLength) }
-				});
-				Object.defineProperty(response, 'url', { value: requestUrl.href });
-				return response;
-			})
-		);
-		const handle = await getLispLanguageServer({
-			rootUrl: 'https://static.example.com/repl_20240807',
-			currentUrl: 'https://app.example.com/editor',
-			createWorker: () => new mockState.FakeWorker() as unknown as Worker
-		});
-
-		expect(mockState.workers[0]?.messages[0]).toMatchObject({
-			type: 'init',
-			persistentAssets: expect.objectContaining({
-				persistentCache: expect.objectContaining({ enabled: true })
-			}),
-			options: {
-				manifest: {
-					fingerprint: BUNDLED_LISP_MANIFEST_FINGERPRINT
-				},
-				manifestFingerprint: BUNDLED_LISP_MANIFEST_FINGERPRINT,
-				storageAssets: expect.any(Object)
-			}
-		});
-		expect(
-			Object.keys(mockState.workers[0]?.messages[0]?.options.storageAssets || {}).sort()
-		).toEqual([...lispStorageFiles].sort());
-
-		handle.dispose();
-	});
-
-	it('rejects a corrupted Scheme asset before creating a worker', async () => {
-		const corruptedCompiler = Uint8Array.from(lispStaticBytes['puppyc.js']);
-		corruptedCompiler[0] ^= 0xff;
-		vi.stubGlobal(
-			'fetch',
-			vi.fn(async (input: string | URL | Request) => {
-				const requestUrl = new URL(
-					typeof input === 'string' || input instanceof URL ? input : input.url
-				);
-				const file = path.basename(requestUrl.pathname);
-				const bytes = file === 'puppyc.js' ? corruptedCompiler : lispStaticBytes[file];
-				if (!bytes) throw new Error(`Unexpected Scheme asset request: ${requestUrl.href}`);
-				const response = new Response(Uint8Array.from(bytes).buffer, {
-					headers: { 'content-length': String(bytes.byteLength) }
-				});
-				Object.defineProperty(response, 'url', { value: requestUrl.href });
-				return response;
-			})
-		);
-
-		await expect(
-			getLispLanguageServer({
+	it.each([false, true])(
+		'starts Scheme with verified assets (HTTP gzip decoding: %s)',
+		async (decoded) => {
+			vi.stubGlobal(
+				'fetch',
+				vi.fn(async (input: string | URL | Request) => {
+					const requestUrl = new URL(
+						typeof input === 'string' || input instanceof URL ? input : input.url
+					);
+					const file = path.basename(requestUrl.pathname);
+					const stored = lispStaticBytes[file];
+					if (!stored)
+						throw new Error(`Unexpected Scheme asset request: ${requestUrl.href}`);
+					const bytes = decoded && file.endsWith('.gz') ? gunzipSync(stored) : stored;
+					const response = new Response(bytes, {
+						headers: {
+							'content-length': String(stored.byteLength),
+							...(decoded && file.endsWith('.gz')
+								? { 'content-encoding': 'gzip' }
+								: {})
+						}
+					});
+					Object.defineProperty(response, 'url', { value: requestUrl.href });
+					return response;
+				})
+			);
+			const handle = await getLispLanguageServer({
 				rootUrl: 'https://static.example.com/repl_20240807',
 				currentUrl: 'https://app.example.com/editor',
 				createWorker: () => new mockState.FakeWorker() as unknown as Worker
-			})
-		).rejects.toMatchObject({ name: 'AssetIntegrityError', runtimeId: 'LISP' });
-		expect(mockState.workers).toHaveLength(0);
-	});
+			});
+
+			expect(mockState.workers[0]?.messages[0]).toMatchObject({
+				type: 'init',
+				persistentAssets: expect.objectContaining({
+					persistentCache: expect.objectContaining({ enabled: true })
+				}),
+				options: {
+					manifest: {
+						fingerprint: BUNDLED_LISP_MANIFEST_FINGERPRINT
+					},
+					manifestFingerprint: BUNDLED_LISP_MANIFEST_FINGERPRINT,
+					storageAssets: expect.any(Object)
+				}
+			});
+			expect(
+				Object.keys(mockState.workers[0]?.messages[0]?.options.storageAssets || {}).sort()
+			).toEqual([...lispStorageFiles].sort());
+			for (const file of lispStorageFiles) {
+				const actual = mockState.workers[0]?.messages[0]?.options.storageAssets[file];
+				const expected =
+					decoded && file.endsWith('.gz')
+						? gunzipSync(lispStaticBytes[file])
+						: lispStaticBytes[file];
+				expect(actual.byteLength).toBe(expected.byteLength);
+				expect(createHash('sha256').update(actual).digest('hex')).toBe(
+					createHash('sha256').update(expected).digest('hex')
+				);
+			}
+
+			handle.dispose();
+		}
+	);
+
+	it.each([
+		['puppyc.js', false],
+		['puppyc.core2.wasm.gz', false],
+		['puppyc.core2.wasm.gz', true]
+	] as const)(
+		'rejects corrupted Scheme %s (HTTP gzip decoding: %s) before creating a worker',
+		async (corruptFile, decoded) => {
+			const stored = lispStaticBytes[corruptFile];
+			const corruptedCompiler = Uint8Array.from(decoded ? gunzipSync(stored) : stored);
+			corruptedCompiler[0] ^= 0xff;
+			vi.stubGlobal(
+				'fetch',
+				vi.fn(async (input: string | URL | Request) => {
+					const requestUrl = new URL(
+						typeof input === 'string' || input instanceof URL ? input : input.url
+					);
+					const file = path.basename(requestUrl.pathname);
+					const bytes = file === corruptFile ? corruptedCompiler : lispStaticBytes[file];
+					if (!bytes)
+						throw new Error(`Unexpected Scheme asset request: ${requestUrl.href}`);
+					const response = new Response(Uint8Array.from(bytes).buffer, {
+						headers: { 'content-length': String(bytes.byteLength) }
+					});
+					Object.defineProperty(response, 'url', { value: requestUrl.href });
+					return response;
+				})
+			);
+
+			await expect(
+				getLispLanguageServer({
+					rootUrl: 'https://static.example.com/repl_20240807',
+					currentUrl: 'https://app.example.com/editor',
+					createWorker: () => new mockState.FakeWorker() as unknown as Worker
+				})
+			).rejects.toMatchObject({ name: 'AssetIntegrityError', runtimeId: 'LISP' });
+			expect(mockState.workers).toHaveLength(0);
+		}
+	);
 
 	it('starts Octave with browser Octave runtime assets', async () => {
 		const handle = await getOctaveLanguageServer({

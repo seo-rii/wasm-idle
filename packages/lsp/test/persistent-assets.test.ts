@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { configureRuntimeAssetCache, resolveRuntimeAssetCacheOptions } from '@wasm-idle/core';
 import { loadLanguageToolAsset } from '../src/assets.js';
 import { fetchBoundedExternalAsset } from '../src/external-asset.js';
@@ -185,6 +186,72 @@ describe('persistent language tool integration', () => {
 				fetch: vi.fn(() => Promise.resolve(new Response('corrupt')))
 			})
 		).rejects.toThrow();
+		expect(storage.writes).not.toHaveBeenCalled();
+	});
+
+	it.each([false, true])(
+		'verifies and reuses gzip asset bytes (HTTP decoded: %s)',
+		async (decoded) => {
+			const compressed = gzipSync(bytes);
+			const delivered = decoded ? bytes : Uint8Array.from(compressed);
+			const integrity = {
+				sha256: createHash('sha256').update(compressed).digest('hex'),
+				bytes: compressed.byteLength,
+				uncompressedSha256: receipt.sha256,
+				uncompressedBytes: bytes.byteLength
+			};
+			const fetch = vi.fn(
+				() =>
+					new Response(delivered, {
+						headers: {
+							'content-length': String(compressed.byteLength),
+							...(decoded ? { 'content-encoding': 'gzip' } : {})
+						}
+					})
+			);
+			const options = {
+				url: 'https://assets.example/compiler.js.gz',
+				label: 'compiler',
+				maxBytes: Math.max(compressed.byteLength, bytes.byteLength),
+				integrity,
+				fetch
+			};
+			const first = await fetchBoundedExternalAsset(options);
+			expect(first).toEqual(delivered);
+			first.fill(0);
+			expect(await fetchBoundedExternalAsset(options)).toEqual(delivered);
+			expect(fetch).toHaveBeenCalledOnce();
+			expect(storage.writes).toHaveBeenCalledOnce();
+			expect(storage.writes.mock.calls[0][0].identity).toMatchObject({
+				sha256: decoded ? receipt.sha256 : integrity.sha256,
+				bytes: delivered.byteLength
+			});
+			await expect(
+				fetchBoundedExternalAsset({ ...options, persistentCache: false })
+			).resolves.toEqual(delivered);
+			expect(fetch).toHaveBeenCalledTimes(2);
+		}
+	);
+
+	it('rejects corrupt decoded gzip bytes without persisting them', async () => {
+		const compressed = gzipSync(bytes);
+		const corrupt = bytes.slice();
+		corrupt[0] ^= 0xff;
+		await expect(
+			fetchBoundedExternalAsset({
+				url: 'https://assets.example/compiler.js.gz',
+				label: 'compiler',
+				integrity: {
+					sha256: createHash('sha256').update(compressed).digest('hex'),
+					bytes: compressed.byteLength,
+					uncompressedSha256: receipt.sha256,
+					uncompressedBytes: bytes.byteLength
+				},
+				fetch: vi.fn(
+					() => new Response(corrupt, { headers: { 'content-encoding': 'gzip' } })
+				)
+			})
+		).rejects.toMatchObject({ name: 'AssetIntegrityError' });
 		expect(storage.writes).not.toHaveBeenCalled();
 	});
 
