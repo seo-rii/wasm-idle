@@ -232,6 +232,7 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 	await addBrowserTestCookies(context, browserUrl);
 	await disableBrowserPrewarm(context);
 	const page = await context.newPage();
+	const storageSession = await context.newCDPSession(page);
 	page.setDefaultTimeout(runTimeoutMs);
 	const pageErrors: string[] = [];
 	const browserOrigin = new URL(browserUrl).origin;
@@ -324,6 +325,13 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 
 		const retiredTargetIds = new Set<string>();
 		for (let cycle = 1; cycle <= 3; cycle += 1) {
+			// Cancellation retires workers but preserves verified assets on disk.
+			// Each cycle checks a cold four-asset preflight, so clear that storage
+			// after the preceding workers have retired and before starting again.
+			await storageSession.send('Storage.clearDataForOrigin', {
+				origin: browserOrigin,
+				storageTypes: 'cache_storage,indexeddb'
+			});
 			const assetRequestStart = runtimeAssetRequests.length;
 			const marker = `bash-cancel-${cycle}-ready`;
 			await setEditorSource(
@@ -399,6 +407,12 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 			for (const targetId of generationTargetIds) retiredTargetIds.add(targetId);
 		}
 
+		// The retry also verifies cold loading; the following warm run keeps
+		// both the persistent cache and the successfully prepared worker.
+		await storageSession.send('Storage.clearDataForOrigin', {
+			origin: browserOrigin,
+			storageTypes: 'cache_storage,indexeddb'
+		});
 		const retryMarker = 'bash-cancel-retry-ok';
 		const retryAssetRequestStart = runtimeAssetRequests.length;
 		await setEditorSource(page, `printf '${retryMarker}\\n'\n`, runTimeoutMs);
@@ -471,6 +485,7 @@ async function runBashCancellationProbe(browserUrl: string, runTimeoutMs: number
 		).toEqual([]);
 		expect(pageErrors).toEqual([]);
 	} finally {
+		await storageSession.detach().catch(() => {});
 		await page.close().catch(() => {});
 		await context.close().catch(() => {});
 		await cdp.detach().catch(() => {});
