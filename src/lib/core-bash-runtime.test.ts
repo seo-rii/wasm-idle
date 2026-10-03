@@ -657,6 +657,10 @@ describe('Bash runtime host preflight contract', () => {
 		vi.useFakeTimers();
 		const fixture = createRuntimeFixture();
 		const aborted: unknown[] = [];
+		let markDownloadsStarted!: () => void;
+		const downloadsStarted = new Promise<void>((resolve) => {
+			markDownloadsStarted = resolve;
+		});
 		const fetch = vi.fn(
 			async (_input: RequestInfo | URL, init?: RequestInit) =>
 				await new Promise<Response>((_resolve, reject) => {
@@ -668,6 +672,7 @@ describe('Bash runtime host preflight contract', () => {
 						},
 						{ once: true }
 					);
+					if (fetch.mock.calls.length === 4) markDownloadsStarted();
 				})
 		);
 		const pending = preflightBashRuntimeAssets({
@@ -677,8 +682,7 @@ describe('Bash runtime host preflight contract', () => {
 			fetch,
 			limits: { assetTimeoutMs: 5 }
 		}).catch((reason: unknown) => reason);
-		await Promise.resolve();
-		await Promise.resolve();
+		await downloadsStarted;
 		expect(fetch).toHaveBeenCalledTimes(4);
 
 		await vi.advanceTimersByTimeAsync(5);
