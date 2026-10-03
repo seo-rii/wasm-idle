@@ -22,8 +22,9 @@ interface LanguageSysrootReceipt {
 	files: Array<{ path: string; bytes: number; sha256: string }>;
 }
 
-const hasPreparedClangRuntime = existsSync(
-	resolve(process.cwd(), 'static/clang/bin/memfs.wasm.gz')
+// MemFS is checked in; these compiler payloads are installed by prepare:test-assets.
+const hasPreparedClangRuntime = ['clang.wasm.gz', 'lld.wasm.gz', 'sysroot.tar.gz'].every((asset) =>
+	existsSync(resolve(process.cwd(), 'static/clang/bin', asset))
 );
 
 describe('bundled clang asset integrity', () => {

@@ -16,8 +16,9 @@ import {
 } from '@wasm-idle/llvm-core/clang';
 
 const textDecoder = new TextDecoder();
-const hasPreparedClangRuntime = existsSync(
-	path.resolve(process.cwd(), 'static/clang/bin/memfs.wasm.gz')
+// MemFS is checked in; these compiler payloads are installed by prepare:test-assets.
+const hasPreparedClangRuntime = ['clang.wasm.gz', 'lld.wasm.gz', 'sysroot.tar.gz'].every((asset) =>
+	existsSync(path.resolve(process.cwd(), 'static/clang/bin', asset))
 );
 
 const fortranStdinSource = `      PROGRAM MAIN
