@@ -1,0 +1,80 @@
+{
+	"format": "wasm-idle-clang-cpp-headers-v1",
+	"version": "22.1.8",
+	"revision": "ca7933e47d3a3451d81e72ac174dcb5aa28b59d1",
+	"baseUrl": "https://raw.githubusercontent.com/llvm/llvm-project/ca7933e47d3a3451d81e72ac174dcb5aa28b59d1/",
+	"selection": "Headers missing from the bundled WASI SDK 33 sysroot required by the C++23/C++26 iostream and bits/stdc++.h dependency closure; only for the matching libc++ ostream.",
+	"anchor": {
+		"path": "ostream",
+		"source": "libcxx/include/ostream",
+		"bytes": 8445,
+		"sha256": "f193fb44780e6aed1fb4cf9da83142fcceb62efc7d4087cd051c117db12fce81"
+	},
+	"license": {
+		"source": "llvm/LICENSE.TXT",
+		"bytes": 15141,
+		"sha256": "8d85c1057d742e597985c7d4e6320b015a9139385cff4cbae06ffc0ebe89afee"
+	},
+	"headers": [
+		{
+			"path": "__algorithm/ranges_contains_subrange.h",
+			"source": "libcxx/include/__algorithm/ranges_contains_subrange.h",
+			"bytes": 3072,
+			"sha256": "0ba1887fe51c2c1eb7b0fd9da36142c0bdb6b67ff41402296e2ccb554b6dd0d4"
+		},
+		{
+			"path": "__algorithm/ranges_ends_with.h",
+			"source": "libcxx/include/__algorithm/ranges_ends_with.h",
+			"bytes": 6713,
+			"sha256": "23e1b722e80390fa79bee0cd1c8d0f46d0b5ebb480d237f930c14db4753b7e1d"
+		},
+		{
+			"path": "__algorithm/ranges_find_last.h",
+			"source": "libcxx/include/__algorithm/ranges_find_last.h",
+			"bytes": 6098,
+			"sha256": "ff9346bd0f1bd8a81c3bd078b27ffa44734e40f469513826b68be1d98d44b5bc"
+		},
+		{
+			"path": "__algorithm/ranges_fold.h",
+			"source": "libcxx/include/__algorithm/ranges_fold.h",
+			"bytes": 4975,
+			"sha256": "87ef10131bdb9c2bfabc1ee857a0354db2494c52719b47b133a124d1d033aff6"
+		},
+		{
+			"path": "__algorithm/ranges_starts_with.h",
+			"source": "libcxx/include/__algorithm/ranges_starts_with.h",
+			"bytes": 2938,
+			"sha256": "9b360c6372639335b2e5a88ec566f9fcb65ea2e748ead94c9c86152c68cedac7"
+		},
+		{
+			"path": "__ostream/print.h",
+			"source": "libcxx/include/__ostream/print.h",
+			"bytes": 7054,
+			"sha256": "971da176275a3495490538b5aaaba03eed4d3e633d9074a0ccfa67eecbe715a0"
+		},
+		{
+			"path": "__type_traits/is_implicit_lifetime.h",
+			"source": "libcxx/include/__type_traits/is_implicit_lifetime.h",
+			"bytes": 1103,
+			"sha256": "7b57aacc776035beba3cacdf7635c6dbf42e400a7ea2066cff849361b8f489f2"
+		},
+		{
+			"path": "__type_traits/is_within_lifetime.h",
+			"source": "libcxx/include/__type_traits/is_within_lifetime.h",
+			"bytes": 920,
+			"sha256": "8b914f20947cdfb9c49fa6b960d8a0fb123aa72310d722526f0bd1607c06cd30"
+		},
+		{
+			"path": "__type_traits/reference_converts_from_temporary.h",
+			"source": "libcxx/include/__type_traits/reference_converts_from_temporary.h",
+			"bytes": 1164,
+			"sha256": "d9e28235fb3d39d3b4b741b453dc4d52770a7bdb836891e41dda039df3258283"
+		},
+		{
+			"path": "__vector/vector_bool_formatter.h",
+			"source": "libcxx/include/__vector/vector_bool_formatter.h",
+			"bytes": 1547,
+			"sha256": "60aec95ec7168ddf59e89173adeac68e4a48ee77bab567ee8919296b6aa4162a"
+		}
+	]
+}

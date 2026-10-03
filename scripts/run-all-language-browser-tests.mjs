@@ -11,6 +11,7 @@ import { supportMatrixRows } from './support-matrix.mjs';
 const COMPRESSED_ASSET_TEST_FILE =
 	'src/lib/playground/compressed-runtime-assets.playwright.test.ts';
 const DEBUG_TEST_FILE = 'src/lib/playground/debug.playwright.test.ts';
+const CPP_STANDARDS_TEST_FILE = 'src/lib/playground/cpp-standards.playwright.test.ts';
 const DEBUG_REGRESSION_ENV = {
 	WASM_IDLE_RUN_REAL_BROWSER_DEBUG: '1',
 	WASM_IDLE_REQUIRE_LLDB_DEBUG: '1',
@@ -102,11 +103,13 @@ export function createAllLanguageBrowserTestPlan({
 			clang: {
 				env: {
 					WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN: '1',
+					WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS: '1',
 					WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVEC: '1',
 					WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX: '1'
 				},
 				testFiles: [
 					'src/lib/playground/stdin.playwright.test.ts',
+					CPP_STANDARDS_TEST_FILE,
 					'src/lib/playground/objectivecxx.playwright.test.ts'
 				]
 			}
@@ -132,6 +135,8 @@ export function createAllLanguageBrowserTestPlan({
 	}
 	if (!shard || shard === 'llvm') {
 		testFiles.add(DEBUG_TEST_FILE);
+		testFiles.add(CPP_STANDARDS_TEST_FILE);
+		env.WASM_IDLE_RUN_REAL_BROWSER_CPP_STANDARDS = '1';
 		Object.assign(env, DEBUG_REGRESSION_ENV);
 	}
 	if (!shard || shard === 'stdin') {

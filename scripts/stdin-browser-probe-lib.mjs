@@ -147,7 +147,9 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
  * @property {string} [activePath]
  * @property {string} [argsInput]
  * @property {string} browserUrl
+ * @property {boolean} [checkLoadingProgress]
  * @property {string} [chromiumExecutable]
+ * @property {string} [cppVersion]
  * @property {string} expectedOutput
  * @property {string} language
  * @property {boolean} [preloadStdin]
@@ -168,7 +170,9 @@ export async function runStdinBrowserProbe(options) {
 		activePath = '',
 		argsInput = '',
 		browserUrl = '',
+		checkLoadingProgress = true,
 		chromiumExecutable = '',
+		cppVersion = '',
 		expectedOutput = '',
 		language = '',
 		preloadStdin = false,
@@ -296,6 +300,10 @@ export async function runStdinBrowserProbe(options) {
 		}
 		languageSelected = true;
 		await page.locator('#language-select').selectOption(language);
+		if (cppVersion) {
+			if (language !== 'CPP') throw new Error('cppVersion requires the CPP language');
+			await page.locator('#cpp-version').selectOption(cppVersion);
+		}
 		await page.waitForFunction(
 			(expectedLanguage) =>
 				/** @type {HTMLSelectElement | null} */ (document.querySelector('#language-select'))
@@ -430,7 +438,7 @@ export async function runStdinBrowserProbe(options) {
 				)}`
 			);
 		}
-		await installLoadingProgressProbe(page);
+		if (checkLoadingProgress) await installLoadingProgressProbe(page);
 		activeState = await readActiveState(page);
 		const usePreloadedStdin = preloadStdin || !activeState.sharedArrayBuffer;
 		if (usePreloadedStdin) {
@@ -577,7 +585,9 @@ export async function runStdinBrowserProbe(options) {
 				)}`
 			);
 		}
-		const progressReadiness = await markLoadingProgressReady(page, 'expected terminal output');
+		const progressReadiness = checkLoadingProgress
+			? await markLoadingProgressReady(page, 'expected terminal output')
+			: undefined;
 		await stdinDelivery;
 		if (stdinDeliveryError) {
 			throw new Error(
@@ -589,7 +599,7 @@ export async function runStdinBrowserProbe(options) {
 			);
 		}
 
-		await stopLoadingProgressProbe(page);
+		if (checkLoadingProgress) await stopLoadingProgressProbe(page);
 		const summary = {
 			...(await readProbeSummary(page, activeState, pageErrors, consoleMessages)),
 			progressReadiness,
@@ -615,7 +625,8 @@ export async function runStdinBrowserProbe(options) {
 		}
 
 		try {
-			assertLoadingProgressTrace(summary.progressTrace, language, progressReadiness);
+			if (checkLoadingProgress)
+				assertLoadingProgressTrace(summary.progressTrace, language, progressReadiness);
 		} catch (error) {
 			throw new Error(
 				`${error instanceof Error ? error.message : String(error)}\n${JSON.stringify(summary, null, 2)}`,

@@ -24,6 +24,7 @@ import {
 } from '../../core/src/clang-profile.js';
 import { installGccCompatibilityHeaders } from '../../core/src/gcc-compat.js';
 import { installClangResourceHeaders } from '../../core/src/clang-resource-headers.js';
+import { installClangCppHeaders } from '../../core/src/clang-cpp-headers.js';
 import MemFS from '../../core/src/memfs.js';
 import untar from '../../core/src/tar.js';
 import { green, yellow, normal } from '../../core/src/color.js';
@@ -256,7 +257,7 @@ class Clang {
 				this.compilerConfig?.provenance,
 				this.compilerConfig?.resourceDir
 			);
-			if (!this.assetUrls.cppAddon) installGccCompatibilityHeaders(this.memfs);
+			if (!this.assetUrls.cppAddon) await this.installCppHeaders();
 		});
 		this.ready = Promise.all([clangReady, fileSystemReady]).then(() => undefined);
 	}
@@ -279,7 +280,7 @@ class Clang {
 				})
 			);
 			this.signal?.throwIfAborted();
-			installGccCompatibilityHeaders(this.memfs);
+			await this.installCppHeaders();
 		});
 		this.cppSysrootReady = pending;
 		// A failed download has not modified MemFS and can be retried. A failed mount is
@@ -288,6 +289,22 @@ class Clang {
 			if (this.cppSysrootReady === pending) this.cppSysrootReady = undefined;
 		});
 		return pending;
+	}
+
+	private async installCppHeaders(): Promise<void> {
+		installGccCompatibilityHeaders(this.memfs);
+		await installClangCppHeaders(
+			{
+				readFile: (path) =>
+					this.memfs.hasFile(path)
+						? this.memfs.getFileContents(path.replace(/^\/+/, ''))
+						: null,
+				mkdirTree: (path) => this.memfs.addDirectory(path.replace(/^\/+/, '')),
+				writeFile: (path, contents) =>
+					this.memfs.addFile(path.replace(/^\/+/, ''), contents)
+			},
+			this.compilerConfig?.provenance
+		);
 	}
 
 	hostLog(message: string) {
