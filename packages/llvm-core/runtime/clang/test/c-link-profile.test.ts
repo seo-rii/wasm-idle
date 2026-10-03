@@ -6,7 +6,7 @@ function harness() {
 	return Object.assign(Object.create(Clang.prototype), {
 		ready: Promise.resolve(), stdout: vi.fn(), log: false, showTiming: false,
 		lastBuildKey: '', assetUrls: { clang: 'clang', lld: 'lld' },
-		memfs: { addDirectory: vi.fn(), addFile: vi.fn(), getFileContents: () => wasm },
+		memfs: { addDirectory: vi.fn(), addFile: vi.fn(), hasFile: vi.fn(() => false), getFileContents: () => wasm },
 		getModule: vi.fn(async () => WebAssembly.compile(wasm)),
 		compile: vi.fn(async () => null), run: vi.fn(async () => null),
 		hostLogAsync: async (_label: string, operation: Promise<unknown>) => operation

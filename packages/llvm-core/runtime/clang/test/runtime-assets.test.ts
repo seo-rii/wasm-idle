@@ -91,4 +91,25 @@ describe('runtime asset urls', () => {
 			'wasm-clang runtime base URL must use HTTP(S)'
 		);
 	});
+
+	it('resolves an explicitly hosted long double archive without requiring it from older hosts', () => {
+		expect(
+			resolveRuntimeAssetUrls('https://cdn.example.com/pkg/runtime', manifest)
+				.printscanLongDouble
+		).toBeUndefined();
+		const extended = {
+			...manifest,
+			compiler: {
+				...manifest.compiler,
+				sysroot: {
+					...manifest.compiler.sysroot,
+					printscanLongDouble: { asset: 'libc-printscan-long-double.a.gz' }
+				}
+			}
+		};
+		expect(
+			resolveRuntimeAssetUrls('https://cdn.example.com/pkg/runtime', extended)
+				.printscanLongDouble
+		).toBe('https://cdn.example.com/pkg/runtime/libc-printscan-long-double.a.gz');
+	});
 });

@@ -247,6 +247,8 @@ export interface RuntimeCompilerConfig {
 	sysroot: {
 		asset: string;
 		runtimeRoot?: string;
+		/** Optional external archive for libc long double printf/scanf support. */
+		printscanLongDouble?: { asset: string };
 		/** Optional verified C base and C++ overlay, supplied by the hosting application. */
 		profiles?: {
 			c: { asset: string };

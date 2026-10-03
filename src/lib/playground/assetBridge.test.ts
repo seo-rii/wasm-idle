@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { gzipSync } from 'node:zlib';
 
@@ -22,6 +24,67 @@ const setBridgeAssetByteLimit = (bridge: WorkerAssetBridge, maxAssetBytes: numbe
 };
 
 describe('WorkerAssetBridge progress', () => {
+	it.each([false, true])(
+		'permits the pinned long double archive without counting it in initial progress (profiles=%s)',
+		async (profiles) => {
+			const asset = 'libc-printscan-long-double.a.gz';
+			const compressed = await readFile(
+				resolve(process.cwd(), 'static/clang/libc-printscan-long-double.a.gz')
+			);
+			const fetchMock = vi.fn(
+				async () =>
+					new Response(compressed, { headers: { 'content-type': 'application/gzip' } })
+			);
+			vi.stubGlobal('fetch', fetchMock);
+			const report = vi.fn();
+			const postMessage = vi.fn();
+			const bridge = new WorkerAssetBridge(
+				{ postMessage } as unknown as Worker,
+				'clang',
+				{
+					baseUrl: 'https://assets.example.test/clang/',
+					integrity: BUNDLED_CLANG_ASSET_INTEGRITY,
+					useAssetBridge: true
+				},
+				{ report },
+				undefined,
+				profiles
+			);
+			const required = RUNTIME_LOAD_ASSETS.clang.filter(
+				(name) => !profiles || name !== 'bin/sysroot.tar.gz'
+			);
+			for (const name of [
+				...required,
+				...(profiles ? [BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES.c.asset] : [])
+			]) {
+				bridge.handleMessage({
+					data: { assetProgress: { asset: name, loaded: 10, total: 10 } }
+				} as MessageEvent);
+			}
+			expect(report.mock.lastCall?.[0]).toHaveProperty('measurement', {
+				kind: 'bytes',
+				completed: 50,
+				total: 50
+			});
+			bridge.handleMessage({ data: { assetRequest: { id: 1, asset } } } as MessageEvent);
+			await vi.waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
+			const response = postMessage.mock.calls[0][0].assetResponse;
+			expect(response.ok).toBe(true);
+			expect(new Uint8Array(response.bytes).byteLength).toBe(111_062);
+			expect(createHash('sha256').update(new Uint8Array(response.bytes)).digest('hex')).toBe(
+				BUNDLED_CLANG_ASSET_INTEGRITY[asset].uncompressedSha256
+			);
+			expect(fetchMock).toHaveBeenCalledWith(
+				`https://assets.example.test/clang/${asset}`,
+				expect.any(Object)
+			);
+			expect(report.mock.lastCall?.[0]).toHaveProperty(
+				'phaseId',
+				`clang:runtime-assets:${asset}`
+			);
+		}
+	);
+
 	it('counts the C pack but keeps the lazy C++ addon outside initial aggregate progress', () => {
 		const report = vi.fn();
 		const config = {
@@ -138,7 +201,9 @@ describe('WorkerAssetBridge progress', () => {
 			[10, 11],
 			[2, undefined]
 		] as const) {
-			bridge.handleMessage({ data: { assetProgress: { asset, loaded, total } } } as MessageEvent);
+			bridge.handleMessage({
+				data: { assetProgress: { asset, loaded, total } }
+			} as MessageEvent);
 		}
 		expect(report).not.toHaveBeenCalled();
 	});

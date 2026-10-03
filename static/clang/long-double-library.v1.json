@@ -1,0 +1,85 @@
+{
+  "format": "wasm-clang-long-double-library-v1",
+  "target": "wasm32-wasi",
+  "source": {
+    "sdkVersion": "33.0+m",
+    "releaseUrl": "https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-33",
+    "sysrootArchive": {
+      "url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-33/wasi-sysroot-33.0%2Bm.tar.gz",
+      "bytes": 124253494,
+      "sha256": "063bc1b56582b9923e08ac9b89e58789618d851763f01530b3ff20b9e5df0ca3"
+    },
+    "wasiLibc": {
+      "repository": "https://github.com/WebAssembly/wasi-libc",
+      "revision": "161b3195fc2558d2b1ba3eb9ffae3b2b47407623"
+    },
+    "sdkVersionFile": {
+      "path": "VERSION",
+      "bytes": 92,
+      "sha256": "973b79c8f797edfede7db06753dddd2b8db3e85d4859fb8ef17e0929ca64470e",
+      "contents": "33.0+m\nwasi-libc: 161b3195fc25\nllvm: 4434dabb6991\nllvm-version: 22.1.0\nconfig: f992bcc08219\n"
+    }
+  },
+  "archive": {
+    "path": "lib/wasm32-wasi/libc-printscan-long-double.a",
+    "sourceEntry": "wasi-sysroot-33.0+m/lib/wasm32-wasi/libc-printscan-long-double.a",
+    "bytes": 111062,
+    "sha256": "33e04007d3547095068391b42189d1ac5398dd04e9da3118dfa644ffea7f4148"
+  },
+  "asset": {
+    "path": "libc-printscan-long-double.a.gz",
+    "encoding": "gzip",
+    "bytes": 52723,
+    "sha256": "b3f11e17e40fb13371a97244fdde00d5bd951ad8e20dfdf88a069167d6be628b",
+    "uncompressedBytes": 111062,
+    "uncompressedSha256": "33e04007d3547095068391b42189d1ac5398dd04e9da3118dfa644ffea7f4148",
+    "compression": {
+      "implementation": "node:zlib.gzipSync",
+      "level": 9,
+      "nodeVersion": "v24.1.0",
+      "zlibVersion": "1.3.0.1-motley-780819f"
+    }
+  },
+  "compatibility": {
+    "sourceLibc": {
+      "path": "lib/wasm32-wasi/libc.a",
+      "bytes": 3085600,
+      "sha256": "d7ebab1b8ee60d06c31fe809c52b8fe8c12591d4bf1e8989431e67787eff3cf4"
+    },
+    "longDouble": {
+      "format": "IEEE 754 binary128",
+      "bytes": 16,
+      "mantissaBits": 113
+    },
+    "linkOrder": [
+      "-lc-printscan-long-double",
+      "-lc"
+    ]
+  },
+  "license": {
+    "path": "LICENSE.wasi-libc.txt",
+    "bytes": 9057,
+    "sha256": "abcde4d7e4b54b62e83f36756b23c741a160c3822222c20e2afb11453e7eac18",
+    "selectedLicense": "MIT",
+    "sources": [
+      {
+        "path": "LICENSE",
+        "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/161b3195fc2558d2b1ba3eb9ffae3b2b47407623/LICENSE",
+        "bytes": 910,
+        "sha256": "2711a8b5a5cdfef0e639f96c1aca12ae23d7d64a02d0507f1bdf14d2b27bbc3a"
+      },
+      {
+        "path": "LICENSE-MIT",
+        "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/161b3195fc2558d2b1ba3eb9ffae3b2b47407623/LICENSE-MIT",
+        "bytes": 1023,
+        "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+      },
+      {
+        "path": "libc-top-half/musl/COPYRIGHT",
+        "url": "https://raw.githubusercontent.com/WebAssembly/wasi-libc/161b3195fc2558d2b1ba3eb9ffae3b2b47407623/libc-top-half/musl/COPYRIGHT",
+        "bytes": 6204,
+        "sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af"
+      }
+    ]
+  }
+}

@@ -12,8 +12,14 @@ export const BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES = Object.freeze({
 
 export const BUNDLED_CLANG_ASSET_INTEGRITY = Object.freeze({
 	'runtime-manifest.v1.json': integrityEntry(
-		876,
-		'1420808d0391ff2d8a2fdf2a9f6bbce8f728e06b1ed1651029ed80b226101444'
+		967,
+		'0b854bc6b41924420cfcc840509ecbe03af3c63ca3edd4940897917e32c8d8ad'
+	),
+	'libc-printscan-long-double.a.gz': integrityEntry(
+		52_723,
+		'b3f11e17e40fb13371a97244fdde00d5bd951ad8e20dfdf88a069167d6be628b',
+		111_062,
+		'33e04007d3547095068391b42189d1ac5398dd04e9da3118dfa644ffea7f4148'
 	),
 	'bin/memfs.wasm.gz': integrityEntry(
 		18_974,

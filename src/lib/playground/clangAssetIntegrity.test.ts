@@ -27,6 +27,40 @@ const hasPreparedClangRuntime = existsSync(
 );
 
 describe('bundled clang asset integrity', () => {
+	it('pins the separate long double archive, its ABI receipt and bundled license', async () => {
+		const root = resolve(process.cwd(), 'static/clang');
+		const receipt = JSON.parse(
+			await readFile(resolve(root, 'long-double-library.v1.json'), 'utf8')
+		);
+		const compressed = await readFile(resolve(root, receipt.asset.path));
+		const archive = gunzipSync(compressed);
+		const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+		expect(receipt.format).toBe('wasm-clang-long-double-library-v1');
+		expect(receipt.target).toBe('wasm32-wasi');
+		expect(archive.subarray(0, 8).toString()).toBe('!<arch>\n');
+		expect(BUNDLED_CLANG_ASSET_INTEGRITY['libc-printscan-long-double.a.gz']).toEqual({
+			bytes: compressed.byteLength,
+			sha256: digest(compressed),
+			uncompressedBytes: archive.byteLength,
+			uncompressedSha256: digest(archive)
+		});
+		expect(receipt.asset).toMatchObject(
+			BUNDLED_CLANG_ASSET_INTEGRITY['libc-printscan-long-double.a.gz']
+		);
+		expect(receipt.archive).toMatchObject({
+			bytes: archive.byteLength,
+			sha256: digest(archive)
+		});
+		const license = await readFile(resolve(root, receipt.license.path));
+		expect(license.byteLength).toBe(receipt.license.bytes);
+		expect(digest(license)).toBe(receipt.license.sha256);
+		const manifest = JSON.parse(
+			await readFile(resolve(root, 'runtime-manifest.v1.json'), 'utf8')
+		);
+		expect(manifest.compiler.sysroot.printscanLongDouble.asset).toBe(receipt.asset.path);
+		expect(receipt.compatibility.linkOrder).toEqual(['-lc-printscan-long-double', '-lc']);
+	});
+
 	it('matches the checked-in runtime build receipt', async ({ skip }) => {
 		if (!hasPreparedClangRuntime) skip();
 		const receiptPath = resolve(process.cwd(), 'static/clang/runtime-build.json');
@@ -113,6 +147,7 @@ describe('bundled clang asset integrity', () => {
 		expect(Object.keys(BUNDLED_CLANG_ASSET_INTEGRITY).sort()).toEqual(
 			[
 				'runtime-manifest.v1.json',
+				'libc-printscan-long-double.a.gz',
 				'language-sysroots.v1.json',
 				'bin/c-sysroot.tar.gz',
 				'bin/cpp-addon.tar.gz',

@@ -34,6 +34,11 @@ the original full `sysroot.tar.gz` path; partial profile pairs are rejected. Hos
 pin and verify every asset
 they opt into; the package does not trust a profile merely because its path appears in a manifest.
 
+For sysroots without `libc-printscan-long-double.a`, a host can supply
+`compiler.sysroot.printscanLongDouble.asset` pointing to a compatible archive (optionally gzip).
+The runtime loads it before linking and links it before libc to support C and C++ `long double`
+input/output. The bundled application pins the WASI SDK 33 archive separately from the sysroot.
+
 The bundled Clang `runtime-manifest.v1.json` is routed through the same worker asset bridge as its
 four delivery assets. The compressed files remain pinned against their producer receipts in CI,
 while the browser bridge normalizes transparent HTTP gzip decoding and pins the exact decoded

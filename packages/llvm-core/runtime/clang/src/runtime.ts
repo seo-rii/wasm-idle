@@ -47,6 +47,7 @@ export {
 const defaultClangResourceDir = '/lib/clang/8.0.1';
 const defaultCompilerRuntimeLibDir = 'lib/clang/8.0.1/lib/wasi';
 const internalBuildRoot = '__wasm_idle_build';
+const printscanLongDoublePath = 'lib/wasm32-wasi/libc-printscan-long-double.a';
 const workspaceTranslationUnitPattern = /\.(?:c|cc|cpp|cxx)$/;
 
 const hasUnknownLanguageOverride = (compileArgs: readonly unknown[]) =>
@@ -194,6 +195,7 @@ class Clang {
 	private readonly maxAssetBytes: number;
 	private readonly signal?: AbortSignal;
 	private cppSysrootReady?: Promise<void>;
+	private printscanLongDoubleReady?: Promise<void>;
 
 	constructor(options: BrowserClangRuntimeOptions) {
 		const maxAssetBytes = options.maxAssetBytes ?? DEFAULT_MAX_DECOMPRESSED_ASSET_BYTES;
@@ -305,6 +307,31 @@ class Clang {
 			},
 			this.compilerConfig?.provenance
 		);
+	}
+
+	/** Prepare libc's optional long double replacement before a direct wasm-ld invocation. */
+	async prepareLongDoubleLinkArgs(): Promise<string[]> {
+		await this.ready;
+		const assetUrl = this.assetUrls.printscanLongDouble;
+		if (assetUrl && !this.memfs.hasFile(printscanLongDoublePath)) {
+			if (!this.printscanLongDoubleReady) {
+				const pending = (
+					this.signal
+						? readBuffer(assetUrl, undefined, this.maxAssetBytes, this.signal)
+						: readBuffer(assetUrl, undefined, this.maxAssetBytes)
+				).then((buffer) => {
+					this.signal?.throwIfAborted();
+					this.memfs.addFile(printscanLongDoublePath, buffer);
+				});
+				this.printscanLongDoubleReady = pending;
+				void pending.catch(() => {
+					if (this.printscanLongDoubleReady === pending)
+						this.printscanLongDoubleReady = undefined;
+				});
+			}
+			await this.printscanLongDoubleReady;
+		}
+		return this.memfs.hasFile(printscanLongDoublePath) ? ['-lc-printscan-long-double'] : [];
 	}
 
 	hostLog(message: string) {
@@ -1446,6 +1473,7 @@ class Clang {
 			this.compilerConfig?.compilerRuntimeLibDir || defaultCompilerRuntimeLibDir;
 		const crt1 = `${libdir}/crt1.o`;
 		await (language === 'C' ? this.ready : this.ensureCppSysroot());
+		const longDoubleLinkArgs = await this.prepareLongDoubleLinkArgs();
 		const lld = await this.getModule(this.assetUrls.lld);
 		this.trace(`link ${objects.join(', ')} -> ${wasm}`);
 		return await this.run(
@@ -1460,6 +1488,9 @@ class Clang {
 			`-L${libdir}`,
 			crt1,
 			...objects,
+			// This archive replaces libc's trapping printf/scanf implementations.
+			// It must precede libc so its full long double definitions win.
+			...longDoubleLinkArgs,
 			'-lc',
 			// Keep the legacy C++ default for direct link() callers. compileLink()
 			// selects C only after checking every translation unit and language override.

@@ -24,6 +24,7 @@ function createClangHarness(compilerConfig?: any, options: { mockLink?: boolean 
 		memfs: {
 			addDirectory: vi.fn(),
 			addFile: vi.fn(),
+			hasFile: vi.fn(() => false),
 			getFileContents: vi.fn(() => new Uint8Array([0x00]))
 		},
 		getModule: vi.fn(async () => ({ id: 'module' })),

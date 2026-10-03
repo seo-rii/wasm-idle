@@ -252,6 +252,7 @@ const transferBuffer = (bytes: Uint8Array, transferOwnership = false) => {
 const cSysrootAsset = BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES.c.asset;
 const cppAddonAsset = BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES.cppAddon.asset;
 const fullSysrootAsset = 'bin/sysroot.tar.gz';
+const printscanLongDoubleAsset = 'libc-printscan-long-double.a.gz';
 
 const canUseClangLanguageSysroots = (
 	runtime: RuntimeAssetRuntime,
@@ -261,6 +262,7 @@ const canUseClangLanguageSysroots = (
 
 const expectedAssetsForRuntime = (runtime: RuntimeAssetRuntime, languageSysroots = false) => {
 	const assets = new Set<string>(RUNTIME_LOAD_ASSETS[runtime]);
+	if (runtime === 'clang') assets.add(printscanLongDoubleAsset);
 	if (runtime === 'clang' && languageSysroots) {
 		assets.add(cSysrootAsset);
 		assets.add(cppAddonAsset);
@@ -302,6 +304,10 @@ class RuntimeLoadProgress {
 	constructor(runtime: RuntimeAssetRuntime, languageSysroots = false) {
 		this.expectedAssets = expectedAssetsForRuntime(runtime);
 		this.optionalAssets = new Set<string>();
+		if (runtime === 'clang') {
+			this.expectedAssets.delete(printscanLongDoubleAsset);
+			this.optionalAssets.add(printscanLongDoubleAsset);
+		}
 		if (runtime === 'clang' && languageSysroots) {
 			this.expectedAssets.delete(fullSysrootAsset);
 			this.expectedAssets.add(cSysrootAsset);

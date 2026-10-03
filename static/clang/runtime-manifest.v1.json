@@ -16,7 +16,10 @@
       "argv0": "wasm-ld"
     },
     "sysroot": {
-      "asset": "bin/sysroot.tar.gz"
+      "asset": "bin/sysroot.tar.gz",
+      "printscanLongDouble": {
+        "asset": "libc-printscan-long-double.a.gz"
+      }
     },
     "provenance": {
       "name": "clang",

@@ -55,6 +55,24 @@ describe('runtime manifest', () => {
 		expect(parseRuntimeManifest(legacyValue).compiler.provenance).toBeUndefined();
 	});
 
+	it('accepts an optional long double archive and rejects invalid references', () => {
+		const extended = structuredClone(manifestValue) as typeof manifestValue & {
+			compiler: { sysroot: { printscanLongDouble?: unknown } };
+		};
+		extended.compiler.sysroot.printscanLongDouble = {
+			asset: 'libc-printscan-long-double.a.gz'
+		};
+		expect(parseRuntimeManifest(extended).compiler.sysroot.printscanLongDouble).toEqual({
+			asset: 'libc-printscan-long-double.a.gz'
+		});
+		for (const invalid of [null, {}, { asset: '' }, { asset: 123 }]) {
+			extended.compiler.sysroot.printscanLongDouble = invalid;
+			expect(() => parseRuntimeManifest(extended)).toThrow(
+				'root.compiler.sysroot.printscanLongDouble'
+			);
+		}
+	});
+
 	it('accepts only a complete opt-in C base and C++ add-on pair', () => {
 		const profiled = structuredClone(manifestValue) as typeof manifestValue & {
 			compiler: { sysroot: { profiles?: unknown } };

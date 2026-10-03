@@ -24,6 +24,7 @@ vi.mock('../../core/src/memfs.js', () => ({
 		ready = startup.memfsReady;
 		addDirectory = vi.fn();
 		addFile = vi.fn();
+		hasFile = vi.fn(() => false);
 		getFileContents = vi.fn(() => new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
 
 		constructor(options: { signal?: AbortSignal; maxAssetBytes?: number }) {

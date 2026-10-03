@@ -9,6 +9,7 @@ export interface RuntimeAssetUrls {
 	sysroot: string;
 	cSysroot?: string;
 	cppAddon?: string;
+	printscanLongDouble?: string;
 	clangdJs: string;
 	clangdWasm: string;
 }
@@ -52,6 +53,14 @@ export function resolveRuntimeAssetUrls(
 					cppAddon: resolveVersionedAssetUrl(
 						runtimeBaseUrl,
 						profiles.cppAddon.asset
+					).toString()
+				}
+			: {}),
+		...(manifest?.compiler.sysroot.printscanLongDouble
+			? {
+					printscanLongDouble: resolveVersionedAssetUrl(
+						runtimeBaseUrl,
+						manifest.compiler.sysroot.printscanLongDouble.asset
 					).toString()
 				}
 			: {}),

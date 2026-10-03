@@ -98,6 +98,19 @@ function parseCompilerConfig(value: unknown): RuntimeCompilerConfig {
 		},
 		sysroot: {
 			asset: expectString(sysroot.asset, 'root.compiler.sysroot.asset'),
+			...(sysroot.printscanLongDouble === undefined
+				? {}
+				: {
+						printscanLongDouble: {
+							asset: expectString(
+								expectObject(
+									sysroot.printscanLongDouble,
+									'root.compiler.sysroot.printscanLongDouble'
+								).asset,
+								'root.compiler.sysroot.printscanLongDouble.asset'
+							)
+						}
+					}),
 			...(typeof sysroot.runtimeRoot === 'string'
 				? { runtimeRoot: sysroot.runtimeRoot }
 				: {}),
