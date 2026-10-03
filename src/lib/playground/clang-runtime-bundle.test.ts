@@ -5,7 +5,8 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import { describe, expect, it } from 'vitest';
+import { MemFS } from '@wasm-idle/llvm-core';
+import { describe, expect, it, vi } from 'vitest';
 
 const runtimeRoot = path.resolve(process.cwd(), 'static/clang');
 const hasPreparedClangRuntime = existsSync(path.join(runtimeRoot, 'bin', 'memfs.wasm.gz'));
@@ -17,6 +18,45 @@ interface RuntimeAssetReceipt {
 }
 
 describe('bundled wasm-clang runtime', () => {
+	it('can mount thousands of headers and project files in the shipped MemFS', async () => {
+		const compressed = await readFile(path.join(runtimeRoot, 'bin', 'memfs.wasm.gz'));
+		const fetch = vi
+			.spyOn(globalThis, 'fetch')
+			.mockImplementation(
+				async () =>
+					new Response(compressed, {
+						headers: { 'Content-Type': 'application/octet-stream' }
+					})
+			);
+		try {
+			const memfs = new MemFS({
+				moduleUrl: 'https://memfs-capacity.test/memfs.wasm.gz',
+				stdin: () => '',
+				stdout: () => {}
+			});
+			await memfs.ready;
+			// The C++ sysroot and Objective-C headers exhausted the old 1,024-node table.
+			// Exercise native nodes, including directories, rather than the JS overlay map.
+			for (let directory = 0; directory < 64; directory++) {
+				memfs.addDirectory(`headers-${directory}`);
+				for (let file = 0; file < 64; file++) {
+					memfs.addFile(`headers-${directory}/${file}.h`, `${directory}:${file}`);
+				}
+			}
+			for (let directory = 0; directory < 64; directory++) {
+				expect(
+					new TextDecoder().decode(memfs.getFileContents(`headers-${directory}/63.h`))
+				).toBe(`${directory}:63`);
+			}
+			memfs.addFile('main.m', 'int main(void) { return 0; }');
+			expect(new TextDecoder().decode(memfs.getFileContents('main.m'))).toBe(
+				'int main(void) { return 0; }'
+			);
+		} finally {
+			fetch.mockRestore();
+		}
+	});
+
 	it('ships receipt-backed native gzip compiler and sysroot assets', async ({ skip }) => {
 		if (!hasPreparedClangRuntime) skip();
 		const manifest = JSON.parse(

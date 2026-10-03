@@ -18,13 +18,6 @@
 		},
 		{
 			"group": "clang",
-			"source": "clang/bin/memfs.wasm.gz",
-			"target": "clang/bin/memfs.wasm.gz",
-			"size": 18974,
-			"sha256": "d86f141eacd58a93511fbfb7c4e81d498eb7106a8a57df1bea7d33df3ce1f403"
-		},
-		{
-			"group": "clang",
 			"source": "clang/bin/sysroot.tar.gz",
 			"target": "clang/bin/sysroot.tar.gz",
 			"size": 5059493,

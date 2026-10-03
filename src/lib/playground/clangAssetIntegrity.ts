@@ -22,10 +22,10 @@ export const BUNDLED_CLANG_ASSET_INTEGRITY = Object.freeze({
 		'33e04007d3547095068391b42189d1ac5398dd04e9da3118dfa644ffea7f4148'
 	),
 	'bin/memfs.wasm.gz': integrityEntry(
-		18_974,
-		'd86f141eacd58a93511fbfb7c4e81d498eb7106a8a57df1bea7d33df3ce1f403',
-		345_442,
-		'2c72ee42bd9430029dda8c6bafc9f37143f6fe88d5f1ea950a70259ab748bcfe'
+		16_111,
+		'a3e43451bc15ae69a7f113009e2ee82ab4db711625c1782cd45d0d3c4d38175a',
+		38_071,
+		'5b741e03dd3502bcfd80e4e5055232b5d633604e1461752efed0189f93407dc3'
 	),
 	'bin/clang.wasm.gz': integrityEntry(
 		13_121_917,
