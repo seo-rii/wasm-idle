@@ -1606,6 +1606,18 @@ describe('native-source browser debugging in Chromium', () => {
 						);
 					});
 					try {
+						// Each fixture verifies a cold download (or injects a missing asset).
+						// Pages share a context, so clear persistent asset bytes and metadata
+						// before navigating. Relaunches within this fixture keep their cache.
+						const storageSession = await context.newCDPSession(page);
+						try {
+							await storageSession.send('Storage.clearDataForOrigin', {
+								origin: previewServer.origin,
+								storageTypes: 'cache_storage,indexeddb'
+							});
+						} finally {
+							await storageSession.detach();
+						}
 						if ('missingDebugResource' in testCase) {
 							await page.addInitScript((resourcePath) => {
 								const nativeFetch = globalThis.fetch.bind(globalThis);
