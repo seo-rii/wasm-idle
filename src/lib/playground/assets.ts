@@ -646,6 +646,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	janet?: JanetRuntimeAssetConfig;
 	julia?: JuliaRuntimeAssetConfig;
 	c3?: { baseUrl?: string };
+	hy?: { baseUrl?: string };
 	nim?: NimRuntimeAssetConfig;
 	bash?: BashRuntimeAssetConfig;
 	clojurescript?: ClojureScriptRuntimeAssetConfig;
@@ -4387,4 +4388,17 @@ export function resolveC3BaseUrl(
 	if (configured) return normalizeBaseUrl(configured, currentUrl);
 	const root = typeof options === 'string' ? options : options?.rootUrl;
 	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-c3/`, currentUrl);
+}
+
+/** Hy wheels are code-pinned receipts served from this base URL and installed into Pyodide. */
+export function resolveHyBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configured =
+		(typeof options === 'object' && options?.hy?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_HY_BASE_URL || '').trim();
+	if (configured) return normalizeBaseUrl(configured, currentUrl);
+	const root = typeof options === 'string' ? options : options?.rootUrl;
+	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-hy/`, currentUrl);
 }

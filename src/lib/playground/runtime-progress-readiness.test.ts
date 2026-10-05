@@ -84,6 +84,11 @@ const runtimeReadinessAudit = {
 		hostModule: 'bash',
 		producerPath: 'src/lib/playground/worker/bashRuntime.ts'
 	},
+	HY: {
+		strategy: 'entry-signal',
+		hostModule: 'hy',
+		producerPath: 'src/lib/playground/worker/python.ts'
+	},
 	CLOJURESCRIPT: {
 		strategy: 'static-worker-fallback',
 		hostModule: 'clojurescript'
@@ -214,7 +219,11 @@ describe('runtime progress readiness audit', () => {
 		for (const [languageId, row] of Object.entries(runtimeReadinessAudit)) {
 			if (row.strategy !== 'entry-signal') continue;
 			const producerSource = readProjectSource(row.producerPath);
-			const hostSource = readProjectSource(`src/lib/playground/${row.hostModule}.ts`);
+			const ownHostSource = readProjectSource(`src/lib/playground/${row.hostModule}.ts`);
+			// Python-hosted languages inherit the Python host's worker progress forwarding.
+			const hostSource = ownHostSource.includes('extends Python')
+				? readProjectSource('src/lib/playground/python.ts')
+				: ownHostSource;
 
 			expect(producerSource, `${languageId} producer must emit ready`).toMatch(
 				/kind:\s*['"]ready['"]/u

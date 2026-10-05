@@ -7,6 +7,7 @@ import {
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import { parsePythonPackageLock } from '$lib/playground/pythonPackageLock';
 import { withCachedPyodideModule } from './runtimeModule';
+import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
 import {
 	configureWorkerRuntimeAssetAllowlist,
 	configureWorkerRuntimeAssets,
@@ -43,6 +44,84 @@ let stdinBufferPyodide: Int32Array,
 
 // Only the next matching run may reuse a successful package preparation.
 let preparedPackagesKey: string | undefined;
+let maxRuntimeAssetBytes: number | undefined;
+let installedHyVersion: string | undefined;
+
+const HY_WHEEL_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]*\.whl$/u;
+const HY_VERSION_PATTERN = /^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$/u;
+const MAX_HY_WHEELS = 8;
+
+interface HyWheelConfig {
+	url: string;
+	fileName: string;
+	bytes: number;
+	sha256: string;
+}
+
+function parseHyExtension(extension: unknown) {
+	const candidate = extension as { language?: unknown; version?: unknown; wheels?: unknown };
+	if (
+		!candidate ||
+		candidate.language !== 'hy' ||
+		typeof candidate.version !== 'string' ||
+		!HY_VERSION_PATTERN.test(candidate.version) ||
+		!Array.isArray(candidate.wheels) ||
+		candidate.wheels.length === 0 ||
+		candidate.wheels.length > MAX_HY_WHEELS
+	) {
+		throw new Error('Hy runtime configuration is invalid');
+	}
+	const wheels = candidate.wheels.map((wheel: Partial<HyWheelConfig>) => {
+		if (
+			!wheel ||
+			typeof wheel.url !== 'string' ||
+			typeof wheel.fileName !== 'string' ||
+			!HY_WHEEL_NAME_PATTERN.test(wheel.fileName) ||
+			!Number.isSafeInteger(wheel.bytes) ||
+			(wheel.bytes as number) <= 0 ||
+			typeof wheel.sha256 !== 'string' ||
+			!/^[a-f0-9]{64}$/u.test(wheel.sha256)
+		) {
+			throw new Error('Hy runtime wheel receipt is invalid');
+		}
+		return wheel as HyWheelConfig;
+	});
+	return { version: candidate.version, wheels };
+}
+
+/** Install the receipt-verified Hy wheels into the running Pyodide site-packages once per worker. */
+async function installHy(extension: unknown) {
+	const { version, wheels } = parseHyExtension(extension);
+	if (installedHyVersion === version) return;
+	if (installedHyVersion !== undefined) throw new Error('Hy runtime version changed');
+	const sitePackages = String(
+		pyodide.runPython('import sysconfig\nsysconfig.get_path("purelib")')
+	);
+	for (const [index, wheel] of wheels.entries()) {
+		postProgress(60 + Math.floor((index * 30) / wheels.length), `Loading ${wheel.fileName}`);
+		const bytes = await fetchRuntimeAssetBytes({
+			url: new URL(wheel.url, globalThis.location?.href).href,
+			label: `Hy wheel ${wheel.fileName}`,
+			cache: 'force-cache',
+			expected: { bytes: wheel.bytes, sha256: wheel.sha256 },
+			maxAssetBytes: Math.min(maxRuntimeAssetBytes ?? wheel.bytes, wheel.bytes),
+			integrityContext: { asset: wheel.fileName, runtimeId: 'HY' }
+		});
+		pyodide.unpackArchive(bytes, 'whl', { extractDir: sitePackages });
+	}
+	postProgress(92, 'Compiling Hy core');
+	const loadedVersion = String(
+		pyodide.runPython(
+			'import importlib\nimportlib.invalidate_caches()\nimport hy\nimport hy.compiler\nhy.__version__'
+		)
+	);
+	if (loadedVersion !== version) {
+		throw new Error(
+			`Hy runtime version mismatch: expected ${version}, loaded ${loadedVersion}`
+		);
+	}
+	installedHyVersion = version;
+}
 
 const imageHook = `
 if not globals().get("__wasm_idle_img_inited__", False):
@@ -254,11 +333,13 @@ async function loadPyodide(path: string) {
 		lockFileContents = parsedLock.lock as unknown as Lockfile;
 	}
 	const { loadPyodide } = runtimeModule;
-	pyodide = await withCachedPyodideModule(runtimeBaseUrl, () => loadPyodide({
-		indexURL: path,
-		packageBaseUrl,
-		...(lockFileContents ? { lockFileContents } : {})
-	}));
+	pyodide = await withCachedPyodideModule(runtimeBaseUrl, () =>
+		loadPyodide({
+			indexURL: path,
+			packageBaseUrl,
+			...(lockFileContents ? { lockFileContents } : {})
+		})
+	);
 }
 
 async function loadPackages(code: string) {
@@ -316,17 +397,22 @@ self.onmessage = async (event: any) => {
 		pauseOnEntry = false,
 		activePath,
 		debugPath,
-		workspaceFiles
+		workspaceFiles,
+		language = 'python',
+		extension
 	} = event.data;
+	const isHy = language === 'hy';
 	if (load) {
 		preparedPackagesKey = undefined;
 		try {
 			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
 			baseUrl = runtimeAssets?.baseUrl || baseUrl;
 			useAssetBridge = runtimeAssets?.useAssetBridge === true;
+			maxRuntimeAssetBytes = runtimeAssets?.maxAssetBytes;
 			configureWorkerRuntimeAssets(runtimeAssets || null);
 			postProgress(2, 'Loading Pyodide module');
 			await loadPyodide(baseUrl);
+			if (extension !== undefined) await installHy(extension);
 			postProgress(100, 'Pyodide runtime ready');
 			postMessage({ load: true });
 		} catch (e: any) {
@@ -340,12 +426,14 @@ self.onmessage = async (event: any) => {
 			await loadPyodide(baseUrl);
 			writeWorkspaceFiles(workspaceFiles);
 			postProgress(15, 'Resolving Python imports');
-			await loadPackages(
-				[
-					code,
-					...(workspaceFiles || []).map((file: { content: string }) => file.content)
-				].join('\n')
-			);
+			// Hy sources are not Python; imports resolve against the bundled runtime only.
+			if (!isHy)
+				await loadPackages(
+					[
+						code,
+						...(workspaceFiles || []).map((file: { content: string }) => file.content)
+					].join('\n')
+				);
 			preparedPackagesKey = preparationKey;
 			postProgress(100, 'Python packages ready');
 			self.postMessage({ results: true });
@@ -361,7 +449,11 @@ self.onmessage = async (event: any) => {
 		try {
 			await loadPyodide(baseUrl);
 			writeWorkspaceFiles(workspaceFiles);
-			if (preparedKey !== packagePreparationKey(code, activePath, workspaceFiles)) {
+			if (isHy && installedHyVersion === undefined) {
+				throw new Error('Hy runtime is not installed');
+			}
+			if (isHy && debug) throw new Error('Hy debugging is not supported');
+			if (!isHy && preparedKey !== packagePreparationKey(code, activePath, workspaceFiles)) {
 				await loadPackages(
 					[
 						code,
@@ -499,7 +591,8 @@ self.onmessage = async (event: any) => {
 			return JSON.stringify({ version, lines });
 		};
 		const executionFilename =
-			normalizeWorkspacePath(activePath || '') || '__wasm_idle_user__.py';
+			normalizeWorkspacePath(activePath || '') ||
+			(isHy ? '__wasm_idle_user__.hy' : '__wasm_idle_user__.py');
 		const debugFilename = normalizeWorkspacePath(debugPath || '') || executionFilename;
 		const executionFilenameLiteral = JSON.stringify(executionFilename);
 		const debugFilenameLiteral = JSON.stringify(debugFilename);
@@ -704,6 +797,32 @@ sys.settrace(__wasm_idle_debug_trace)
 		: ''
 }
 
+${
+	isHy
+		? `
+try:
+    import types
+    import hy
+    import hy.compiler
+    __wasm_idle_module = types.ModuleType("__main__")
+    __wasm_idle_module.__file__ = ${executionFilenameLiteral}
+    __wasm_idle_source = ${JSON.stringify(code)}
+    __wasm_idle_compiled = compile(
+        hy.compiler.hy_compile(
+            hy.read_many(__wasm_idle_source, filename = ${executionFilenameLiteral}),
+            __wasm_idle_module,
+            filename = ${executionFilenameLiteral},
+            source = __wasm_idle_source,
+        ),
+        ${executionFilenameLiteral},
+        "exec",
+    )
+    __wasm_idle_execution_ready()
+    exec(__wasm_idle_compiled, __wasm_idle_module.__dict__)
+finally:
+    del __wasm_idle_execution_ready
+`
+		: `
 try:
     __wasm_idle_globals = {
         "__name__": "__main__",
@@ -738,6 +857,8 @@ finally:
 `
 			: ''
 	}
+`
+}
 `);
 			self.postMessage({ results: true });
 		} catch (e: any) {
