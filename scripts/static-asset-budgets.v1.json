@@ -45,6 +45,7 @@
 		"wasm-pascal": { "maxBytes": 1300000, "maxFiles": 10 },
 		"wasm-perl": { "maxBytes": 8000000, "maxFiles": 12 },
 		"wasm-php": { "maxBytes": 24000000, "maxFiles": 15 },
+		"wasm-postgresql": { "maxBytes": 6500000, "maxFiles": 16 },
 		"wasm-prolog": { "maxBytes": 5000000, "maxFiles": 10 },
 		"wasm-ruby": { "maxBytes": 28000000, "maxFiles": 16 },
 		"wasm-rust": { "maxBytes": 68000000, "maxFiles": 85 },

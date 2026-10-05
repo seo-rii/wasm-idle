@@ -175,6 +175,7 @@
 		"@testing-library/user-event": "^14.6.1",
 		"@assemblyscript/loader": "0.28.17",
 		"@duckdb/duckdb-wasm": "1.33.1-dev45.0",
+		"@electric-sql/pglite": "0.5.8",
 		"@live-codes/gleam-precompiled": "0.5.0",
 		"@ruby/3.4-wasm-wasi": "2.9.3-2.9.4",
 		"@ruby/wasm-wasi": "2.9.3-2.9.4",
