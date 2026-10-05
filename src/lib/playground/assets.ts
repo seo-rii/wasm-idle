@@ -38,6 +38,7 @@ import {
 	WASM_J_RUNTIME_PROFILE
 } from '$lib/playground/wasmJVersion';
 import { WASM_JANET_RUNTIME_BUNDLE } from '$lib/playground/wasmJanetVersion';
+import { WASM_FENNEL_COMPILER_RECEIPT } from '$lib/playground/wasmFennelVersion';
 import { WASM_JULIA_RUNTIME_BUNDLE } from '$lib/playground/wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 import { WASM_NIM_RUNTIME_BUNDLE } from '$lib/playground/wasmNimVersion';
@@ -221,6 +222,10 @@ export interface WatRuntimeAssetConfig {
 
 export interface LuaRuntimeAssetConfig {
 	moduleUrl?: string;
+}
+
+export interface FennelRuntimeAssetConfig {
+	compilerUrl?: string;
 }
 
 export interface HaskellRuntimeAssetConfig {
@@ -625,6 +630,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	typescript?: TypeScriptRuntimeAssetConfig;
 	wat?: WatRuntimeAssetConfig;
 	lua?: LuaRuntimeAssetConfig;
+	fennel?: FennelRuntimeAssetConfig;
 	haskell?: HaskellRuntimeAssetConfig;
 	fortran?: FortranRuntimeAssetConfig;
 	cobol?: CobolRuntimeAssetConfig;
@@ -1449,6 +1455,29 @@ export function resolveLuaModuleUrl(
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
 			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-lua/index.js`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+export function resolveFennelCompilerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredCompilerUrl =
+		(typeof options === 'object' && options?.fennel?.compilerUrl) ||
+		(publicEnv.PUBLIC_WASM_FENNEL_COMPILER_URL || '').trim();
+
+	if (configuredCompilerUrl) {
+		return resolveConfiguredUrl(configuredCompilerUrl, currentUrl);
+	}
+
+	const rootUrl = typeof options === 'string' ? options : options?.rootUrl;
+	if (rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(rootUrl) || ''}/${WASM_FENNEL_COMPILER_RECEIPT.path}`,
 			currentUrl
 		);
 	}

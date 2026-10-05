@@ -671,6 +671,7 @@
 			'.wast': 'WAT',
 			'.wasm': 'WASM',
 			'.lua': 'LUA',
+			'.fnl': 'FENNEL',
 			'.zig': 'ZIG',
 			'.scm': 'LISP',
 			'.ss': 'LISP',
@@ -747,6 +748,7 @@
 			WAT: 'main.wat',
 			WASM: 'main.wasm',
 			LUA: 'main.lua',
+			FENNEL: 'main.fnl',
 			ZIG: 'main.zig',
 			LISP: 'main.scm',
 			RUBY: 'main.rb',
@@ -808,6 +810,7 @@
 			WAT: 'wat',
 			WASM: 'wasm',
 			LUA: 'lua',
+			FENNEL: 'fennel',
 			ZIG: 'zig',
 			LISP: 'lisp',
 			RUBY: 'ruby',
@@ -1504,6 +1507,8 @@
 			wasm: 'WASM',
 			wasm32: 'WASM',
 			lua: 'LUA',
+			fennel: 'FENNEL',
+			fnl: 'FENNEL',
 			zig: 'ZIG',
 			lisp: 'LISP',
 			scheme: 'LISP',
@@ -3046,6 +3051,13 @@
 				Lua runs through the bundled `wasmoon` Lua VM, backed by its local wasm payload.
 				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button
 				if the program reads stdin until EOF.
+			</p>
+		{/if}
+		{#if language === 'FENNEL'}
+			<p class="hint">
+				Fennel runs the official `fennel.lua` compiler on the bundled `wasmoon` Lua VM. Use
+				`(io.read)` to read a line from the terminal below and Ctrl+D or the EOF button for
+				programs that read stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'RUBY'}

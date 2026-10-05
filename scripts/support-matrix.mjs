@@ -627,6 +627,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Fennel',
+		ids: ['FENNEL'],
+		runtime: 'fennel.lua on Wasmoon',
+		stdin: 'Yes',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
+			language: 'FENNEL'
+		}
+	},
+	{
 		language: 'Zig',
 		ids: ['ZIG'],
 		runtime: 'zig_small.wasm',
@@ -1338,6 +1351,16 @@ const runtimeDetailsByLanguage = new Map([
 			execution: `Wasmoon Lua VM; supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.lua.moduleUrl')} or ${code('PUBLIC_WASM_LUA_MODULE_URL')}; ` +
+				`${code('programArgs')}`
+		}
+	],
+	[
+		'Fennel',
+		{
+			packageBase: `static wasm-fennel ${code('fennel-1.6.1.lua.gz')} (official Fennel 1.6.1) on ${workspacePackage('runtimes/wasm-lua')}`,
+			execution: `receipt-verified ${code('fennel.lua')} compiler evaluated by the Wasmoon Lua VM; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.fennel.compilerUrl')} or ${code('PUBLIC_WASM_FENNEL_COMPILER_URL')} plus the Lua module URL; ` +
 				`${code('programArgs')}`
 		}
 	],

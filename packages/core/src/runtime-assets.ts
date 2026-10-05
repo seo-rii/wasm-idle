@@ -80,6 +80,7 @@ export interface RuntimeAssetKeySource {
 	typescript?: { moduleUrl?: string; javascriptModuleUrl?: string; libUrl?: string };
 	wat?: { moduleUrl?: string };
 	lua?: { moduleUrl?: string };
+	fennel?: { compilerUrl?: string };
 	haskell?: {
 		moduleUrl?: string;
 		rootfsUrl?: string;
@@ -746,6 +747,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'typescript', property: 'libUrl', key: 'typeScriptLibUrl' },
 	{ runtime: 'wat', property: 'moduleUrl', key: 'watModuleUrl' },
 	{ runtime: 'lua', property: 'moduleUrl', key: 'luaModuleUrl' },
+	{ runtime: 'fennel', property: 'compilerUrl', key: 'fennelCompilerUrl' },
 	{ runtime: 'haskell', property: 'moduleUrl', key: 'haskellModuleUrl' },
 	{ runtime: 'haskell', property: 'rootfsUrl', key: 'haskellRootfsUrl' },
 	{ runtime: 'haskell', property: 'bsdtarUrl', key: 'haskellBsdtarUrl' },
