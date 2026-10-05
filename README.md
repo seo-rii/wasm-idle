@@ -5,7 +5,7 @@
 Executes C, C++, Objective-C, Fortran, COBOL, Python, Java, Rust, Go, D, C#, F#, VB.NET, Elixir, Erlang, Prolog,
 Gleam, Perl, Tcl, AWK, Pascal, Forth, J, BQN, Janet, Julia, Nim, Bash, ClojureScript, OCaml, JavaScript, TypeScript,
 AssemblyScript, WAT, WASM, Lua, Zig, Scheme, Ruby, Haskell, R, Octave, SQLite, DuckDB,
-and PHP code.
+PostgreSQL, and PHP code.
 
 Experimental LFortran execution is available separately from f2c Fortran; see
 [the LFortran consumer contract and local setup](docs/lfortran.md).
@@ -83,6 +83,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | Octave         | wasm-octave                             | Yes   | syntax               | -     |
 | DuckDB         | DuckDB-Wasm                             | Files | DuckDB LSP           | -     |
 | SQLite         | sql.js                                  | n/a   | syntax               | -     |
+| PostgreSQL     | PostgreSQL 18 / PGlite                  | Files | syntax               | -     |
 | PHP            | PHP 8.4 / php-wasm                      | Yes   | syntax               | -     |
 
 ## Browser LLDB debug runtime
@@ -271,6 +272,7 @@ when they exist.
 | Octave<br>`OCTAVE`                 | Octave 10.3.0 (octave-10.3.0-pl5321h996e327_3.tar.bz2)                                                                                                                         | Octave CLI Emscripten worker; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `runtimeAssets.octave.baseUrl`/`workerUrl`/`manifestUrl` or `PUBLIC_WASM_OCTAVE_*`                                                                                                                                                                                                                                                               |
 | DuckDB<br>`DUCKDB`                 | static ESM `static/wasm-duckdb/runtime.mjs` produced from @duckdb/duckdb-wasm@1.33.1-dev45.0                                                                                   | selects the best DuckDB-Wasm MVP/EH bundle on demand and creates a fresh in-memory database per run; `stdin` is registered as `stdin.txt` and `/dev/stdin` rather than terminal stdin                                                                                                                                                                                                                                                                                                                                                                                   | `runtimeAssets.duckdb.moduleUrl` or `PUBLIC_WASM_DUCKDB_MODULE_URL` or `rootUrl`; `stdin`, `activePath`, `workspaceFiles`                                                                                                                                                                                                                        |
 | SQLite<br>`SQLITE`                 | static ESM `static/wasm-sqlite/runtime.mjs` produced from sql.js@1.14.1                                                                                                        | sql.js loads `sql-wasm.wasm` on demand and executes SQL in a fresh in-memory database; terminal stdin is not applicable                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `runtimeAssets.sqlite.moduleUrl`/`wasmUrl` or `PUBLIC_WASM_SQLITE_MODULE_URL`/`PUBLIC_WASM_SQLITE_WASM_URL` or `rootUrl`; `workspaceFiles`                                                                                                                                                                                                       |
+| PostgreSQL<br>`POSTGRESQL`         | static ESM `static/wasm-postgresql/runtime.mjs` produced from @electric-sql/pglite@0.5.8                                                                                       | upstream PostgreSQL compiled to WebAssembly by PGlite; initdb runs once per worker and every run restores a fresh in-memory cluster, sends the script as one simple query, and prints result sets, notices, and `COPY ... TO STDOUT`; preloaded `stdin` is exposed as the server file `/dev/blob`                                                                                                                                                                                                                                                                       | `runtimeAssets.postgresql.moduleUrl` or `PUBLIC_WASM_POSTGRESQL_MODULE_URL` or `rootUrl`; `stdin`, `activePath`, `workspaceFiles`                                                                                                                                                                                                                |
 | PHP<br>`PHP`                       | static ESM `static/wasm-php/runtime.mjs` prebuilt by the standalone `producers/wasm-php` producer from @php-wasm/web-8-4@3.1.34 + @php-wasm/universal@3.1.34                   | fixed PHP `8.4` php-wasm runtime; injects `$argv`/`$argc` and runs the active workspace script with `php.run`; supports `stdin` and `programArgs`; there is no runtime version selector                                                                                                                                                                                                                                                                                                                                                                                 | `runtimeAssets.php.moduleUrl` or `PUBLIC_WASM_PHP_MODULE_URL` or `rootUrl`; `stdin`, `programArgs`, `activePath`, `workspaceFiles`                                                                                                                                                                                                               |
 
 ### Blocked candidates
@@ -368,7 +370,7 @@ pnpm run build:static-runtime-modules
 ```
 
 This producer step writes `runtime.mjs` trees under `static/wasm-assemblyscript/`,
-`static/wasm-duckdb/`, `static/wasm-ruby/`, and `static/wasm-sqlite/`. It also writes the Wasmer SDK
+`static/wasm-duckdb/`, `static/wasm-postgresql/`, `static/wasm-ruby/`, and `static/wasm-sqlite/`. It also writes the Wasmer SDK
 compatibility files and the unified Bash runtime profile under `static/wasm-bash/` through the same
 rollback-capable Bash producer used by `sync:wasm-bash`. The browser consumes only the profile's
 opaque, receipt-pinned storage paths; these files are deployed page assets, not npm package
@@ -721,6 +723,13 @@ SQLite dynamically imports `static/wasm-sqlite/runtime.mjs`, produced from `sql.
 its default `sql-wasm.wasm` from that static tree. Override the module and optional WASM payload
 with `runtimeAssets.sqlite.moduleUrl`/`wasmUrl` or the corresponding
 `PUBLIC_WASM_SQLITE_MODULE_URL`/`PUBLIC_WASM_SQLITE_WASM_URL` values.
+PostgreSQL dynamically imports `static/wasm-postgresql/runtime.mjs`, produced from the pinned
+`@electric-sql/pglite` package (upstream PostgreSQL compiled to WebAssembly). The worker runs initdb
+once, then restores a fresh in-memory cluster for every run and sends the script as one simple
+query. Result sets print as tab-separated tables, notices and `COPY ... TO STDOUT` print in order,
+and other workspace `.sql` files run first. Preloaded stdin is exposed as the server-side file
+`/dev/blob` (`COPY t FROM '/dev/blob'` or `pg_read_file('/dev/blob')`). Override the module with
+`PUBLIC_WASM_POSTGRESQL_MODULE_URL` or `runtimeAssets.postgresql.moduleUrl`.
 PHP dynamically imports the checked-in `static/wasm-php/runtime.mjs` output from the standalone
 `producers/wasm-php` build. That producer pins `@php-wasm/web-8-4@3.1.34` and
 `@php-wasm/universal@3.1.34`. It always creates PHP 8.4; there is no version field or
@@ -806,6 +815,9 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	},
 	php: {
 		moduleUrl: 'https://cdn.example.com/repl/wasm-php/runtime.mjs'
+	},
+	postgresql: {
+		moduleUrl: 'https://cdn.example.com/repl/wasm-postgresql/runtime.mjs'
 	},
 	sqlite: {
 		moduleUrl: 'https://cdn.example.com/repl/wasm-sqlite/runtime.mjs'

@@ -351,6 +351,11 @@ export const playgroundLanguageDescriptors: Readonly<
 		runtimeLspCapability: 'sql',
 		compilerDiagnostics: true
 	},
+	POSTGRESQL: {
+		label: 'SQL — PostgreSQL (PGlite)',
+		editorLanguage: 'pgsql',
+		compilerDiagnostics: true
+	},
 	PHP: {
 		label: 'PHP',
 		editorLanguage: 'php',
@@ -431,7 +436,8 @@ export const defaultLanguageAliases: Record<string, string> = {
 	'objective-c': 'objective-c',
 	objective_c: 'objective-c',
 	vb: 'vbnet',
-	sql: 'sqlite'
+	sql: 'sqlite',
+	pgsql: 'postgresql'
 };
 export const debugViewLanguages = new Set(['cpp']);
 export const diagnosticMarkerLanguages = new Set(
@@ -462,6 +468,7 @@ export const monacoLanguageContributionLoaders: Record<string, MonacoLanguageCon
 	pascal: () => import('monaco-editor/esm/vs/basic-languages/pascal/pascal.contribution.js'),
 	perl: () => import('monaco-editor/esm/vs/basic-languages/perl/perl.contribution.js'),
 	tcl: () => import('monaco-editor/esm/vs/basic-languages/tcl/tcl.contribution.js'),
+	pgsql: () => import('monaco-editor/esm/vs/basic-languages/pgsql/pgsql.contribution.js'),
 	php: () => import('monaco-editor/esm/vs/basic-languages/php/php.contribution.js'),
 	python: () => import('monaco-editor/esm/vs/basic-languages/python/python.contribution.js'),
 	r: () => import('monaco-editor/esm/vs/basic-languages/r/r.contribution.js'),

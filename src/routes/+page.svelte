@@ -160,6 +160,8 @@
 	const SHARE_PREFIX = 'workspace=';
 	const MAX_DEBUG_MEMORY_BYTES = 256;
 	const lldbDebugLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST']);
+	// Runtimes that consume stdin once at start, even when terminal streaming is available.
+	const preloadedStdinLanguages = new Set<PlaygroundLanguage>(['BASH', 'POSTGRESQL']);
 	const debugLanguageAdapters: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>> = {
 		C: cppDebugLanguageAdapter,
 		CPP: cppDebugLanguageAdapter,
@@ -694,6 +696,8 @@
 			'.duckdb': 'DUCKDB',
 			'.sql': 'SQLITE',
 			'.sqlite': 'SQLITE',
+			'.pgsql': 'POSTGRESQL',
+			'.psql': 'POSTGRESQL',
 			'.php': 'PHP',
 			'.json': 'JSON',
 			'.jsonc': 'JSON',
@@ -759,6 +763,7 @@
 			GRAPHQL: 'main.graphql',
 			DUCKDB: 'main.duckdb',
 			SQLITE: 'main.sql',
+			POSTGRESQL: 'main.sql',
 			PHP: 'main.php',
 			JSON: 'main.json',
 			YAML: 'main.yaml',
@@ -820,6 +825,7 @@
 			GRAPHQL: 'graphql',
 			DUCKDB: 'duckdb',
 			SQLITE: 'sqlite',
+			POSTGRESQL: 'postgresql',
 			PHP: 'php',
 			JSON: 'json',
 			YAML: 'yaml',
@@ -1529,6 +1535,10 @@
 			duckdb: 'DUCKDB',
 			sqlite: 'SQLITE',
 			sql: 'SQLITE',
+			postgresql: 'POSTGRESQL',
+			postgres: 'POSTGRESQL',
+			pgsql: 'POSTGRESQL',
+			pglite: 'POSTGRESQL',
 			php: 'PHP',
 			json: 'JSON',
 			jsonc: 'JSON',
@@ -1994,7 +2004,9 @@
 					return;
 				}
 				const preloadedStdin =
-					sharedBufferAvailable && language !== 'BASH' ? undefined : stdinInput;
+					sharedBufferAvailable && !preloadedStdinLanguages.has(language)
+						? undefined
+						: stdinInput;
 				const result = await executeTerminalRun({
 					terminal,
 					language,
@@ -2641,14 +2653,16 @@
 					</button>
 				</div>
 			</div>
-			{#if !sharedBufferAvailable || language === 'BASH'}
+			{#if !sharedBufferAvailable || preloadedStdinLanguages.has(language)}
 				<div class="stdin-panel">
 					<div>
 						<strong>Preloaded stdin</strong>
 						<span>
 							{language === 'BASH'
 								? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
-								: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+								: language === 'POSTGRESQL'
+									? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+									: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 						</span>
 					</div>
 					<textarea
@@ -3072,6 +3086,15 @@
 			<p class="hint">
 				SQLite runs through bundled sql.js WebAssembly assets against a fresh in-memory
 				database on every run. SELECT results are printed as tab-separated tables.
+			</p>
+		{/if}
+		{#if language === 'POSTGRESQL'}
+			<p class="hint">
+				PostgreSQL runs as real upstream PostgreSQL compiled to WebAssembly by PGlite,
+				against a fresh in-memory cluster on every run. The script is sent as one simple
+				query, so SELECT results are printed as tab-separated tables, notices and `COPY ...
+				TO STDOUT` are printed in order, and other workspace `.sql` files run first.
+				Preloaded stdin is readable as `/dev/blob`.
 			</p>
 		{/if}
 		{#if language === 'DUCKDB'}

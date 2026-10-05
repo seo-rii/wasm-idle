@@ -349,6 +349,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'POSTGRESQL',
+		load: async () => {
+			const { default: Postgresql } = await import('$lib/playground/postgresql');
+			return new Postgresql();
+		}
+	},
+	{
 		languageId: 'PHP',
 		load: async () => {
 			const { default: Php } = await import('$lib/playground/php');

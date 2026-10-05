@@ -407,6 +407,9 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 				WASM_OCTAVE_ASSET_VERSION
 			)
 		},
+		postgresql: {
+			moduleUrl: asset('wasm-postgresql/runtime.mjs', STATIC_RUNTIME_MODULE_VERSION)
+		},
 		sqlite: {
 			moduleUrl: asset('wasm-sqlite/runtime.mjs', STATIC_RUNTIME_MODULE_VERSION)
 		}

@@ -46,6 +46,7 @@ const canonicalLanguageIds = [
 	'OCTAVE',
 	'DUCKDB',
 	'SQLITE',
+	'POSTGRESQL',
 	'PHP'
 ] as const;
 
@@ -132,6 +133,13 @@ const languageAliasDefinitions = {
 		canonicalId: 'SQLITE',
 		kind: 'dialect',
 		message: 'SQL selects the SQLite dialect and engine.'
+	},
+	POSTGRES: { canonicalId: 'POSTGRESQL', kind: 'spelling' },
+	PGSQL: { canonicalId: 'POSTGRESQL', kind: 'spelling' },
+	PGLITE: {
+		canonicalId: 'POSTGRESQL',
+		kind: 'implementation',
+		message: 'PGLITE selects PostgreSQL running through the PGlite WebAssembly build.'
 	},
 	WASM32: { canonicalId: 'WASM', kind: 'spelling' }
 } as const satisfies Record<

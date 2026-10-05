@@ -345,6 +345,7 @@ export interface RuntimeAssetKeySource {
 	};
 	cobol?: { baseUrl?: string };
 	swift?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
+	postgresql?: { moduleUrl?: string };
 	sqlite?: { moduleUrl?: string; wasmUrl?: string };
 	php?: { moduleUrl?: string };
 }
@@ -1429,6 +1430,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'swift', property: 'baseUrl', key: 'swiftBaseUrl' },
 	{ runtime: 'swift', property: 'workerUrl', key: 'swiftWorkerUrl' },
 	{ runtime: 'swift', property: 'manifestUrl', key: 'swiftManifestUrl' },
+	{ runtime: 'postgresql', property: 'moduleUrl', key: 'postgresqlModuleUrl' },
 	{ runtime: 'sqlite', property: 'moduleUrl', key: 'sqliteModuleUrl' },
 	{ runtime: 'sqlite', property: 'wasmUrl', key: 'sqliteWasmUrl' },
 	{ runtime: 'php', property: 'moduleUrl', key: 'phpModuleUrl' }
