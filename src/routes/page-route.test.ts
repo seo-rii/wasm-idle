@@ -441,6 +441,7 @@ describe('example route debug actions', () => {
 		expectEditorLanguage('ERLANG', 'erlang');
 		expectEditorLanguage('PROLOG', 'prolog');
 		expectEditorLanguage('GLEAM', 'gleam');
+		expectEditorLanguage('GRAIN', 'rust');
 		expectEditorLanguage('PERL', 'perl');
 		expectEditorLanguage('JAVASCRIPT', 'javascript');
 		expectEditorLanguage('TYPESCRIPT', 'typescript');
@@ -1152,16 +1153,20 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/swipl: 'PROLOG'/);
 		expect(source).toMatch(/swi: 'PROLOG'/);
 		expect(source).toMatch(/gleam: 'GLEAM'/);
+		expect(source).toMatch(/grain: 'GRAIN'/);
 		expect(source).toMatch(/perl: 'PERL'/);
 		expect(source).toMatch(/'.prolog': 'PROLOG'/);
 		expect(source).toMatch(/'.pro': 'PROLOG'/);
 		expect(source).toMatch(/'.gleam': 'GLEAM'/);
+		expect(source).toMatch(/'.gr': 'GRAIN'/);
 		expect(source).toMatch(/'.pl': 'PERL'/);
 		expect(source).toMatch(/PROLOG: 'main\.prolog'/);
 		expect(source).toMatch(/GLEAM: 'main\.gleam'/);
+		expect(source).toMatch(/GRAIN: 'main\.gr'/);
 		expect(source).toMatch(/PERL: 'main\.pl'/);
 		expect(source).toMatch(/PROLOG: 'prolog'/);
 		expect(source).toMatch(/GLEAM: 'gleam'/);
+		expect(source).toMatch(/GRAIN: 'grain'/);
 		expect(source).toMatch(/PERL: 'perl'/);
 		expect(source).toMatch(/SWI-Prolog WebAssembly assets/);
 		expect(source).toMatch(/Gleam WebAssembly compiler/);

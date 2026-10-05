@@ -177,6 +177,13 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	GRAIN: {
+		label: 'Grain',
+		editorLanguage: 'rust',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	PERL: {
 		label: 'Perl',
 		editorLanguage: 'perl',

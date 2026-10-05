@@ -30,6 +30,8 @@ describe('editor defaults', () => {
 		expect(editorDefaults.prolog).toContain('read_line_to_string(user_input, Line)');
 		expect(editorDefaults.gleam).toContain('import wasm_idle/stdin');
 		expect(editorDefaults.gleam).toContain('stdin.read_line()');
+		expect(editorDefaults.grain).toContain('File.fdRead(File.stdin, 1)');
+		expect(editorDefaults.grain).toContain('print("Hello, " ++ String.trim(name) ++ "!")');
 		expect(editorDefaults.perl).toContain('my $line = <STDIN>;');
 		expect(editorDefaults.pascal).toContain('ReadLn(Line);');
 		expect(editorDefaults.forth).toContain('KEY DUP 10 <>');

@@ -367,6 +367,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Grain',
+		ids: ['GRAIN'],
+		runtime: 'Grain 0.7.2 js_of_ocaml compiler + WASI',
+		stdin: 'Yes',
+		editorSupport: 'compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/grain.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_GRAIN',
+			marker: 'real Grain compiler in Chromium'
+		}
+	},
+	{
 		language: 'Perl',
 		ids: ['PERL'],
 		runtime: 'Perl WASM worker',
@@ -1072,6 +1085,15 @@ const runtimeDetailsByLanguage = new Map([
 			customization:
 				`${code('runtimeAssets.gleam.baseUrl')}/${code('workerUrl')}/${code('manifestUrl')} or ` +
 				`${code('PUBLIC_WASM_GLEAM_*')}; ${code('programArgs')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'Grain',
+		{
+			packageBase:
+				'grain-lang/grain v0.7.2 release: upstream js_of_ocaml grainc.bc.js + @grain/stdlib 0.7.2 (precompiled .gro)',
+			execution: `Verified upstream grainc compiles ${code('.gr')} workspace files to WASI in a fresh browser Worker; stdio-only WASI host with streaming ${code('stdin')}`,
+			customization: `${code('runtimeAssets.grain.baseUrl')} or ${code('PUBLIC_WASM_GRAIN_BASE_URL')}; ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; Wasm memory bounded by ${code('limits.maxWasmMemoryBytes')}`
 		}
 	],
 	[

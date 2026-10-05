@@ -646,6 +646,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	janet?: JanetRuntimeAssetConfig;
 	julia?: JuliaRuntimeAssetConfig;
 	c3?: { baseUrl?: string };
+	grain?: { baseUrl?: string };
 	nim?: NimRuntimeAssetConfig;
 	bash?: BashRuntimeAssetConfig;
 	clojurescript?: ClojureScriptRuntimeAssetConfig;
@@ -4387,4 +4388,17 @@ export function resolveC3BaseUrl(
 	if (configured) return normalizeBaseUrl(configured, currentUrl);
 	const root = typeof options === 'string' ? options : options?.rootUrl;
 	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-c3/`, currentUrl);
+}
+
+/** Grain uses one code-pinned compiler/stdlib/worker receipt, served from this base URL. */
+export function resolveGrainBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configured =
+		(typeof options === 'object' && options?.grain?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_GRAIN_BASE_URL || '').trim();
+	if (configured) return normalizeBaseUrl(configured, currentUrl);
+	const root = typeof options === 'string' ? options : options?.rootUrl;
+	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-grain/`, currentUrl);
 }
