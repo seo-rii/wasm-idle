@@ -224,6 +224,13 @@ vi.mock('$lib/playground/clojurescript', () => {
 	};
 });
 
+vi.mock('$lib/playground/rescript', () => {
+	moduleLoads.add('RESCRIPT');
+	return {
+		default: createMockSandboxClass('RESCRIPT')
+	};
+});
+
 vi.mock('$lib/playground/swift', () => {
 	moduleLoads.add('SWIFT');
 	return {
@@ -410,6 +417,7 @@ describe('playground runtime binding', () => {
 				'NIM',
 				'BASH',
 				'CLOJURESCRIPT',
+				'RESCRIPT',
 				'LFORTRAN',
 				'FORTRAN',
 				'COBOL',
@@ -435,6 +443,12 @@ describe('playground runtime binding', () => {
 		const sandbox = await playground('CLJS');
 		expect(sandboxInstances.get('CLOJURESCRIPT')).toHaveLength(1);
 		expect(moduleLoads).toContain('CLOJURESCRIPT');
+	});
+
+	it('routes the RES alias through the ReScript sandbox', async () => {
+		await playground('RES');
+		expect(sandboxInstances.get('RESCRIPT')).toHaveLength(1);
+		expect(moduleLoads).toContain('RESCRIPT');
 	});
 
 	it('routes GnuCOBOL aliases through the COBOL sandbox', async () => {

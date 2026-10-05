@@ -29,7 +29,8 @@ function isRequest(value: unknown): value is StaticRuntimePreflightRequestMessag
 			request.runtimeId === 'FORTH' ||
 			request.runtimeId === 'J' ||
 			request.runtimeId === 'JANET' ||
-			request.runtimeId === 'PROLOG') &&
+			request.runtimeId === 'PROLOG' ||
+			request.runtimeId === 'RESCRIPT') &&
 		typeof request.baseUrl === 'string' &&
 		typeof request.manifestUrl === 'string' &&
 		request.profile !== null &&

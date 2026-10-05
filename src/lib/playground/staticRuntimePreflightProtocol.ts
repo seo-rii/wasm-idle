@@ -32,7 +32,8 @@ export type StaticRuntimePreflightRuntimeId =
 	| 'FORTH'
 	| 'J'
 	| 'JANET'
-	| 'PROLOG';
+	| 'PROLOG'
+	| 'RESCRIPT';
 
 export type StaticRuntimePreflightProgress =
 	| {
