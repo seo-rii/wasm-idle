@@ -611,12 +611,15 @@
 		if (filePath.toLowerCase().endsWith('.as.ts')) return 'ASSEMBLYSCRIPT';
 		const ext = extension(filePath);
 		if ((ext === '.m' || ext === '.h') && language === 'OBJC') return 'OBJC';
+		if ((ext === '.mm' || ext === '.h') && language === 'OBJECTIVECXX') return 'OBJECTIVECXX';
+		if (ext === '.m' && language === 'OBJECTIVECXX') return 'OBJC';
 		const match: Record<string, PlaygroundLanguage> = {
 			'.c': 'C',
 			'.cc': 'CPP',
 			'.cpp': 'CPP',
 			'.cxx': 'CPP',
 			'.objc': 'OBJC',
+			'.mm': 'OBJECTIVECXX',
 			'.h': 'CPP',
 			'.hpp': 'CPP',
 			'.java': 'JAVA',
@@ -714,6 +717,7 @@
 			C: 'main.c',
 			CPP: 'main.cpp',
 			OBJC: 'main.m',
+			OBJECTIVECXX: 'main.mm',
 			JAVA: 'Main.java',
 			PYTHON: 'main.py',
 			RUST: 'main.rs',
@@ -775,6 +779,7 @@
 			C: 'c',
 			CPP: 'cpp',
 			OBJC: 'objectivec',
+			OBJECTIVECXX: 'objectivecxx',
 			PYTHON: 'python',
 			JAVA: 'java',
 			RUST: 'rust',
@@ -1448,6 +1453,11 @@
 			objectivec: 'OBJC',
 			'objective-c': 'OBJC',
 			objective_c: 'OBJC',
+			objcxx: 'OBJECTIVECXX',
+			objcpp: 'OBJECTIVECXX',
+			objectivecxx: 'OBJECTIVECXX',
+			'objective-c++': 'OBJECTIVECXX',
+			objective_cxx: 'OBJECTIVECXX',
 			java: 'JAVA',
 			rust: 'RUST',
 			go: 'GO',

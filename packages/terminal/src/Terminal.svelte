@@ -89,6 +89,7 @@
 		'C',
 		'CPP',
 		'OBJC',
+		'OBJECTIVECXX',
 		'RUST',
 		'GO',
 		'D',

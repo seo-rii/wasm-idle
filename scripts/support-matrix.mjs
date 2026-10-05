@@ -211,6 +211,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Objective-C++',
+		ids: ['OBJECTIVECXX'],
+		runtime: 'GNUstep libobjc2 + @wasm-idle/llvm-core',
+		stdin: 'Yes',
+		editorSupport: 'clangd',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/objectivecxx.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX',
+			language: 'OBJECTIVECXX'
+		}
+	},
+	{
 		language: 'Python',
 		ids: ['PYTHON3'],
 		runtime: 'Pyodide',
@@ -909,6 +922,24 @@ const runtimeDetailsByLanguage = new Map([
 				`${code('loader')} for the clang toolchain; ${code('activePath')}, ` +
 				`${code('workspaceFiles')}, ${code('compileArgs')}, ${code('debug')}, ` +
 				`${code('breakpoints')}, ${code('pauseOnEntry')}`
+		}
+	],
+	[
+		'Objective-C++',
+		{
+			packageBase:
+				`Same GNUstep libobjc2 v2.3 + libc++ assets as Objective-C from the ${code('wasm-llvm')} ` +
+				`producer + ${workspacePackage('packages/llvm-core')}; no extra compiler assets`,
+			execution:
+				`${code('clang -x objective-c++ -std=gnu++20 -fobjc-runtime=gnustep-2.0 -fblocks')} for ` +
+				`${code('wasm32-wasi')} with libc++ headers; active file defaults to ${code('main.mm')}; ` +
+				`links ${code('libobjc.a')} (plus GNUstep Base and ${code('libffi.a')} when Foundation is ` +
+				`imported); auto-compiles ${code('.mm')}/${code('.m')}/${code('.c')} workspace files; ` +
+				`supports ${code('stdin')} and ${code('programArgs')}; trace debugging is not supported`,
+			customization:
+				`Shares ${code('runtimeAssets.objectivec')} and ${code('runtimeAssets.clang')} with ` +
+				`Objective-C; ${code('activePath')}, ${code('workspaceFiles')}, ${code('compileArgs')}, ` +
+				`${code('programArgs')}`
 		}
 	],
 	[

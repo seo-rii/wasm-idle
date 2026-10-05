@@ -93,6 +93,14 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	OBJECTIVECXX: {
+		label: 'Objective-C++',
+		editorLanguage: 'objective-c',
+		lspProvider: 'clangd',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	PYTHON: { label: 'Python — Pyodide', editorLanguage: 'python', diagnosticMarkers: true },
 	JAVA: {
 		label: 'Java',
