@@ -20,11 +20,20 @@ export type ClangdStatus =
 export const normalizeClangdBaseUrl = (baseUrl: string) =>
 	baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
 
+export type ClangdSourceLanguage = ClangSourceLanguage | 'OBJCXX';
+
 export const createClangdCompileFlags = (
-	language: ClangSourceLanguage = 'CPP',
+	language: ClangdSourceLanguage = 'CPP',
 	options: { cppVersion?: string; cVersion?: string; resourceDir?: string } = {}
 ) => {
-	const profile = resolveClangLanguageArgs(language, options);
+	// Objective-C++ uses the C++ standard selection with the Objective-C runtime ABI.
+	const profile =
+		language === 'OBJCXX'
+			? {
+					...resolveClangLanguageArgs('CPP', options),
+					languageArg: 'objective-c++'
+				}
+			: resolveClangLanguageArgs(language, options);
 	return [
 		profile.standardArg,
 		'-x',
@@ -34,7 +43,7 @@ export const createClangdCompileFlags = (
 		...clangSystemIncludePaths(language, '/usr', options.resourceDir).map(
 			(path) => `-isystem${path}`
 		),
-		...(language === 'OBJC'
+		...(language === 'OBJC' || language === 'OBJCXX'
 			? [
 					// The execution compiler invokes cc1 directly. Pass the same runtime
 					// option to the frontend: the driver rejects GNUstep 2 for Wasm.
@@ -52,14 +61,15 @@ export const createClangdCompileFlags = (
 export const createClangdConfiguration = (
 	options: { cppVersion?: string; cVersion?: string; resourceDir?: string } = {}
 ) =>
-	(['C', 'CPP', 'OBJC'] as const)
+	(['C', 'CPP', 'OBJC', 'OBJCXX'] as const)
 		.map((language) =>
 			JSON.stringify({
 				If: {
 					PathMatch: {
 						C: '.*\\.c',
 						CPP: '.*\\.(cc|cpp|cxx|h|hh|hpp|hxx)',
-						OBJC: '.*\\.m'
+						OBJC: '.*\\.m',
+						OBJCXX: '.*\\.mm'
 					}[language]
 				},
 				CompileFlags: { Add: createClangdCompileFlags(language, options) }
