@@ -160,7 +160,92 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
  * @property {string} stdinText
  * @property {string} [waitForOutputBeforeStdin]
  * @property {{ path: string; content: string }[]} [workspaceFiles]
+ * @property {FollowUpRun[]} [followUpRuns] Runs edited sources in the same page afterwards.
  */
+
+/**
+ * @typedef {{ source: string; stdinText: string; expectedOutput: string }} FollowUpRun
+ */
+
+/**
+ * Edit the source and run again in the same page, reusing the runtime session. Requires
+ * SharedArrayBuffer stdin.
+ * @param {import('playwright-core').Page} page
+ * @param {FollowUpRun} run
+ * @param {number} runTimeoutMs
+ */
+async function runFollowUp(page, run, runTimeoutMs) {
+	const editorValueSet = await page.evaluate(
+		async (text) => await /** @type {any} */ (window).__wasmIdleDebug.setEditorValue(text),
+		run.source
+	);
+	if (!editorValueSet) throw new Error('follow-up run could not set the editor contents');
+	await page.waitForFunction(
+		(expectedSource) =>
+			/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() === expectedSource,
+		run.source,
+		{ polling: 100, timeout: runTimeoutMs }
+	);
+	const initialTranscript =
+		(await page.locator('[data-testid="terminal-debug-output"]').textContent()) || '';
+	const previousRunId = await page.evaluate(
+		() => /** @type {any} */ (window).__wasmIdleDebug.getExecutionState().id
+	);
+	await installLoadingProgressProbe(page);
+	await page.locator('button.action-button--run').first().click();
+	await page.waitForFunction(
+		(previousId) => {
+			const state = /** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.();
+			return state && state.id > previousId && !['idle', 'preparing'].includes(state.status);
+		},
+		previousRunId,
+		{ polling: 50, timeout: runTimeoutMs }
+	);
+	const ended = await page.evaluate(
+		() => /** @type {any} */ (window).__wasmIdleDebug.getExecutionState().endedAt !== null
+	);
+	if (!ended && run.stdinText) {
+		await page.evaluate(async (text) => {
+			await /** @type {any} */ (window).__wasmIdleDebug.writeTerminalInput(text, false);
+		}, run.stdinText);
+	}
+	const deadline = Date.now() + runTimeoutMs;
+	let status = 'running';
+	let transcript = initialTranscript;
+	while (status === 'running' && Date.now() < deadline) {
+		const snapshot = await page.evaluate(() => ({
+			transcript:
+				document.querySelector('[data-testid="terminal-debug-output"]')?.textContent || '',
+			state: /** @type {any} */ (window).__wasmIdleDebug?.getExecutionState?.() ?? null
+		}));
+		transcript = snapshot.transcript;
+		status = classifyTerminalRun(
+			initialTranscript,
+			transcript,
+			run.expectedOutput,
+			snapshot.state,
+			previousRunId
+		);
+		if (status === 'running') await page.waitForTimeout(250);
+	}
+	const progressTrace = await readLoadingProgressTrace(page);
+	await stopLoadingProgressProbe(page);
+	const output = transcript.startsWith(initialTranscript)
+		? transcript.slice(initialTranscript.length)
+		: transcript;
+	if (status !== 'success') {
+		throw new Error(
+			`follow-up run ${status === 'running' ? 'timed out' : 'failed'} waiting for ${JSON.stringify(run.expectedOutput)}\n${output}`
+		);
+	}
+	return {
+		output,
+		progressTrace,
+		progressLabels: [
+			...new Set(progressTrace.map((/** @type {any} */ entry) => entry.label).filter(Boolean))
+		]
+	};
+}
 
 /**
  * @param {StdinBrowserProbeOptions & { preloadStdin?: boolean }} options
@@ -174,6 +259,7 @@ export async function runStdinBrowserProbe(options) {
 		chromiumExecutable = '',
 		cppVersion = '',
 		expectedOutput = '',
+		followUpRuns = [],
 		language = '',
 		preloadStdin = false,
 		requireSharedArrayBuffer = true,
@@ -633,7 +719,9 @@ export async function runStdinBrowserProbe(options) {
 				{ cause: error }
 			);
 		}
-		return summary;
+		const followUps = [];
+		for (const run of followUpRuns) followUps.push(await runFollowUp(page, run, runTimeoutMs));
+		return { ...summary, followUpRuns: followUps };
 	} finally {
 		await withWallClockTimeout(page.close(), 2_000, 'page close').catch(() => {});
 		await withWallClockTimeout(context.close(), 2_000, 'browser context close').catch(() => {});

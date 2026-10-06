@@ -598,6 +598,63 @@ describe('wasm-idle browser stdin connection', () => {
 	);
 
 	it(
+		'reuses a precompiled <bits/stdc++.h> for later C++ stdin runs in the real browser',
+		{
+			skip:
+				!runAllStdinBrowserCases &&
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(
+					!runAllStdinBrowserCases &&
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1'
+				)
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			expect.hasAssertions();
+			const stdcppSource = (offset: number) => `// precompiled header probe
+#include <bits/stdc++.h>
+using namespace std;
+int main() {
+	long long n;
+	cin >> n;
+	vector<long long> values{n, n + ${offset}};
+	cout << "pch=" << accumulate(values.begin(), values.end(), 0LL) << endl;
+}`;
+			// The header is built in the background after the first compile, so later runs
+			// keep editing the source until one compile reports that it used the header.
+			const followUpRuns = [1, 2, 3, 4, 5].map((offset) => ({
+				source: stdcppSource(offset),
+				stdinText: '40\n',
+				expectedOutput: `pch=${80 + offset}`
+			}));
+
+			await withBrowserPreview(async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					browserUrl,
+					expectedOutput: 'pch=80',
+					language: 'CPP',
+					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+					source: stdcppSource(0),
+					stdinText: '40\n',
+					followUpRuns
+				});
+				expect(summary.transcript).toContain('pch=80');
+				expect(summary.followUpRuns.map((run) => run.output)).toEqual(
+					followUpRuns.map((run) => expect.stringContaining(run.expectedOutput))
+				);
+				expect(
+					summary.followUpRuns.some((run) =>
+						run.progressLabels.includes('Compiled with precompiled <bits/stdc++.h>')
+					)
+				).toBe(true);
+			});
+		}
+	);
+
+	it(
 		'links a C-selected response-file C++ program in the real browser',
 		{
 			skip:

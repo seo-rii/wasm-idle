@@ -233,6 +233,11 @@ export interface BrowserClangRuntimeRunOptions {
 	interruptBuffer?: Uint8Array;
 	watchBuffer?: Int32Array;
 	watchResultBuffer?: Int32Array;
+	/**
+	 * A header from BrowserClangRuntime.buildPrecompiledHeader(). It is used only when its key
+	 * matches the current compile; otherwise the source is compiled normally.
+	 */
+	precompiledHeader?: import('./precompiled-header.js').BrowserClangPrecompiledHeader;
 }
 
 export interface RuntimeToolAssetConfig {
