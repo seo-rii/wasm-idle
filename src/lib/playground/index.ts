@@ -188,6 +188,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'RESCRIPT',
+		load: async () => {
+			const { default: ReScript } = await import('$lib/playground/rescript');
+			return new ReScript();
+		}
+	},
+	{
 		languageId: 'FORTH',
 		load: async () => {
 			const { default: Forth } = await import('$lib/playground/forth');

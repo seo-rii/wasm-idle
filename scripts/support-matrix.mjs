@@ -562,6 +562,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'ReScript',
+		ids: ['RESCRIPT'],
+		runtime: 'ReScript 12.3.1 compiler (js_of_ocaml)',
+		stdin: 'Yes',
+		editorSupport: 'compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/rescript.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_RESCRIPT',
+			language: 'RESCRIPT'
+		}
+	},
+	{
 		language: 'TinyGo',
 		ids: ['TINYGO'],
 		runtime: 'wasm-tinygo',
@@ -1339,6 +1352,20 @@ const runtimeDetailsByLanguage = new Map([
 				`static worker compiles and evaluates with the official ${code('cljs.js')} self-hosted compiler; ` +
 				`supports ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, and ${code('workspaceFiles')}`,
 			customization: staticWorkerCustomizationFor('clojurescript', 'CLOJURESCRIPT')
+		}
+	],
+	[
+		'ReScript',
+		{
+			packageBase:
+				`upstream ReScript ` +
+				manifestValue('static/wasm-rescript/runtime-build.json', ['rescriptVersion']) +
+				` playground ${code('compiler.js')} + ${code('compiler-builtins/cmij.js')} + ${code('@rescript/runtime@12.3.1')}`,
+			execution:
+				`static worker compiles ${code('Main.res')} to CommonJS with the official js_of_ocaml ReScript compiler, ` +
+				`then runs it against the upstream stdlib runtime; stdin via ${code('fs.readLineSync(0)')}/${code('fs.readFileSync(0)')}; ` +
+				`compiler errors/warnings become editor diagnostics; supports ${code('programArgs')}`,
+			customization: staticWorkerCustomizationFor('rescript', 'RESCRIPT')
 		}
 	],
 	[

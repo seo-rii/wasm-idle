@@ -346,6 +346,17 @@ export interface RuntimeAssetKeySource {
 		compilerReceipt?: RuntimeAssetIntegrityEntry;
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
+	rescript?: {
+		baseUrl?: string;
+		workerUrl?: string;
+		manifestUrl?: string;
+		manifestFingerprint?: string;
+		profileId?: string;
+		sourceRevision?: string;
+		manifestReceipt?: RuntimeAssetIntegrityEntry;
+		compilerReceipt?: RuntimeAssetIntegrityEntry;
+		workerReceipt?: RuntimeAssetIntegrityEntry;
+	};
 	cobol?: { baseUrl?: string };
 	swift?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
 	postgresql?: { moduleUrl?: string };
@@ -1430,6 +1441,30 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		runtime: 'clojurescript',
 		property: 'workerReceipt',
 		key: 'clojurescriptWorkerReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{ runtime: 'rescript', property: 'baseUrl', key: 'rescriptBaseUrl' },
+	{ runtime: 'rescript', property: 'workerUrl', key: 'rescriptWorkerUrl' },
+	{ runtime: 'rescript', property: 'manifestUrl', key: 'rescriptManifestUrl' },
+	{ runtime: 'rescript', property: 'manifestFingerprint', key: 'rescriptManifestFingerprint' },
+	{ runtime: 'rescript', property: 'profileId', key: 'rescriptProfileId' },
+	{ runtime: 'rescript', property: 'sourceRevision', key: 'rescriptSourceRevision' },
+	{
+		runtime: 'rescript',
+		property: 'manifestReceipt',
+		key: 'rescriptManifestReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'rescript',
+		property: 'compilerReceipt',
+		key: 'rescriptCompilerReceipt',
+		serialize: serializeIntegrityEntry
+	},
+	{
+		runtime: 'rescript',
+		property: 'workerReceipt',
+		key: 'rescriptWorkerReceipt',
 		serialize: serializeIntegrityEntry
 	},
 	{ runtime: 'cobol', property: 'baseUrl', key: 'cobolBaseUrl' },

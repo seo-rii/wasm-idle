@@ -237,6 +237,13 @@ export const playgroundLanguageDescriptors: Readonly<
 	NIM: { label: 'Nim', editorLanguage: 'nim', diagnosticMarkers: true },
 	BASH: { label: 'Bash', editorLanguage: 'shell', supportsArgs: true },
 	CLOJURESCRIPT: { label: 'ClojureScript', editorLanguage: 'clojure', supportsArgs: true },
+	RESCRIPT: {
+		label: 'ReScript',
+		editorLanguage: 'rust',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	HY: { label: 'Hy — Pyodide', editorLanguage: 'clojure' },
 	OCAML: {
 		label: 'OCaml',

@@ -30,6 +30,7 @@ export type EditorDefaultLanguage =
 	| 'nim'
 	| 'bash'
 	| 'clojurescript'
+	| 'rescript'
 	| 'hy'
 	| 'ocaml'
 	| 'javascript'
@@ -91,6 +92,7 @@ export const editorDefaults: Record<
 	| 'nim'
 	| 'bash'
 	| 'clojurescript'
+	| 'rescript'
 	| 'hy'
 	| 'ocaml'
 	| 'javascript'
@@ -856,6 +858,24 @@ printf 'fibonacci=%d\\n' "$(( $(fibonacci "$n") + bonus ))"`,
       parsed (js/parseInt (or line arg "4") 10)
       n (if (js/isNaN parsed) 4 parsed)]
   (println (str "fibonacci=" (+ (fibonacci n) bonus))))`,
+	rescript: `// stdin uses the same Node-style fs binding as the JavaScript runtime.
+@module("fs") external readLineSync: int => string = "readLineSync"
+
+let bonus = 3
+let memo = Map.make()
+
+let rec fibonacci = n =>
+  switch memo->Map.get(n) {
+  | Some(value) => value
+  | None =>
+    let value = n <= 1 ? 1 : fibonacci(n - 1) + fibonacci(n - 2)
+    memo->Map.set(n, value)
+    value
+  }
+
+let n = readLineSync(0)->String.trim->Int.fromString->Option.getOr(4)
+Console.log(\`fibonacci=\${Int.toString(fibonacci(n) + bonus)}\`)
+`,
 	ocaml: `let bonus = 3
 
 let memo = Hashtbl.create 16
@@ -1497,6 +1517,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.nim ||
 		source === editorDefaults.bash ||
 		source === editorDefaults.clojurescript ||
+		source === editorDefaults.rescript ||
 		source === editorDefaults.hy ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||

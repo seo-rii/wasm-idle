@@ -20,6 +20,7 @@ import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
 	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 } from './wasmClojureScriptVersion';
+import { WASM_RESCRIPT_ASSET_VERSION, WASM_RESCRIPT_RUNNER_RECEIPT } from './wasmReScriptVersion';
 import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 import { WASM_ELIXIR_ASSET_RECEIPTS, WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
 import {
@@ -176,6 +177,7 @@ describe('application runtime asset root', () => {
 			'postgresql',
 			'prolog',
 			'r',
+			'rescript',
 			'rootUrl',
 			'ruby',
 			'rust',
@@ -297,6 +299,13 @@ describe('application runtime asset root', () => {
 			manifestUrl: `/foo/bar/wasm-clojurescript/runtime-manifest.v2.json?v=${WASM_CLOJURESCRIPT_ASSET_VERSION}`,
 			manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
 			workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
+		});
+		expect(assets.rescript).toEqual({
+			baseUrl: '/foo/bar/wasm-rescript/',
+			workerUrl: `/foo/bar/wasm-rescript/runner-worker.js?v=${WASM_RESCRIPT_RUNNER_RECEIPT.sha256}`,
+			manifestUrl: `/foo/bar/wasm-rescript/runtime-manifest.v1.json?v=${WASM_RESCRIPT_ASSET_VERSION}`,
+			manifestFingerprint: WASM_RESCRIPT_ASSET_VERSION,
+			workerReceipt: WASM_RESCRIPT_RUNNER_RECEIPT
 		});
 		expect(assets.bash).toEqual({
 			baseUrl: '/foo/bar/wasm-bash/',
@@ -721,6 +730,9 @@ describe('application runtime asset root', () => {
 			clojurescriptManifestUrl: assets.clojurescript?.manifestUrl,
 			clojurescriptManifestFingerprint: assets.clojurescript?.manifestFingerprint,
 			clojurescriptWorkerReceipt: expect.any(String),
+			rescriptManifestUrl: assets.rescript?.manifestUrl,
+			rescriptManifestFingerprint: assets.rescript?.manifestFingerprint,
+			rescriptWorkerReceipt: expect.any(String),
 			janetManifestUrl: assets.janet?.manifestUrl,
 			janetManifestFingerprint: assets.janet?.manifestFingerprint,
 			janetProfileId: assets.janet?.profileId,

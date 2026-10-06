@@ -33,6 +33,11 @@ import {
 	WASM_CLOJURESCRIPT_RUNTIME_PROFILE
 } from '$lib/playground/wasmClojureScriptVersion';
 import {
+	WASM_RESCRIPT_ASSET_VERSION,
+	WASM_RESCRIPT_RUNNER_RECEIPT,
+	WASM_RESCRIPT_RUNTIME_PROFILE
+} from '$lib/playground/wasmReScriptVersion';
+import {
 	WASM_J_ASSET_VERSION,
 	WASM_J_RUNNER_RECEIPT,
 	WASM_J_RUNTIME_PROFILE
@@ -590,6 +595,31 @@ export interface ClojureScriptRuntimePreflightProfile {
 	}>;
 }
 
+export interface ReScriptRuntimeAssetConfig {
+	baseUrl?: string;
+	workerUrl?: string;
+	manifestUrl?: string;
+	manifestFingerprint?: string;
+	profileId?: string;
+	sourceRevision?: string;
+	manifestReceipt?: RuntimeAssetIntegrityEntry;
+	compilerReceipt?: RuntimeAssetIntegrityEntry;
+	workerReceipt?: Readonly<{ bytes: number; sha256: string }>;
+}
+
+export interface ReScriptRuntimePreflightProfile {
+	readonly profileId: string;
+	readonly sourceRevision: string;
+	readonly manifestFingerprint: string;
+	readonly manifestReceipt?: Readonly<{ bytes?: number; sha256: string }>;
+	readonly compilerReceipt?: Readonly<{
+		bytes?: number;
+		sha256: string;
+		uncompressedBytes?: number;
+		uncompressedSha256?: string;
+	}>;
+}
+
 export interface SwiftRuntimeAssetConfig {
 	baseUrl?: string;
 	workerUrl?: string;
@@ -661,6 +691,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	nim?: NimRuntimeAssetConfig;
 	bash?: BashRuntimeAssetConfig;
 	clojurescript?: ClojureScriptRuntimeAssetConfig;
+	rescript?: ReScriptRuntimeAssetConfig;
 	swift?: SwiftRuntimeAssetConfig;
 	assemblyscript?: AssemblyScriptRuntimeAssetConfig;
 	duckdb?: DuckDbRuntimeAssetConfig;
@@ -3346,6 +3377,117 @@ export function resolveClojureScriptRuntimeAssetConfig(
 		preflightKey: JSON.stringify(preflightProfile),
 		preflightProfile,
 		workerReceipt: configured?.workerReceipt || WASM_CLOJURESCRIPT_RUNNER_RECEIPT
+	};
+}
+
+export function resolveReScriptBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.rescript?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_RESCRIPT_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-rescript/`, currentUrl);
+	}
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-rescript/`,
+			currentUrl
+		);
+	}
+	return normalizeBaseUrl('/wasm-rescript/', currentUrl);
+}
+
+export function resolveReScriptWorkerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredWorkerUrl =
+		(typeof options === 'object' && options?.rescript?.workerUrl) ||
+		(publicEnv.PUBLIC_WASM_RESCRIPT_WORKER_URL || '').trim();
+
+	if (configuredWorkerUrl) return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
+	if (typeof options === 'string') {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options) || ''}/wasm-rescript/runner-worker.js`,
+			currentUrl
+		);
+	}
+	if (options?.rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-rescript/runner-worker.js`,
+			currentUrl
+		);
+	}
+	return resolveConfiguredUrl('/wasm-rescript/runner-worker.js', currentUrl);
+}
+
+export function resolveReScriptManifestUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredManifestUrl =
+		typeof options === 'object' ? options?.rescript?.manifestUrl : undefined;
+	if (configuredManifestUrl) {
+		return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
+	}
+	return `${resolveReScriptBaseUrl(options, currentUrl)}runtime-manifest.v1.json`;
+}
+
+export function resolveReScriptRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configured = typeof options === 'object' ? options?.rescript : undefined;
+	const manifestFingerprint =
+		configured?.manifestFingerprint?.trim() || WASM_RESCRIPT_ASSET_VERSION;
+	const usesBundledProfile = manifestFingerprint === WASM_RESCRIPT_ASSET_VERSION;
+	const receipt = (
+		configuredReceipt: RuntimeAssetIntegrityEntry | undefined,
+		bundledReceipt: RuntimeAssetIntegrityEntry
+	) => {
+		const selected = configuredReceipt || (usesBundledProfile ? bundledReceipt : undefined);
+		return selected
+			? Object.freeze({
+					bytes: selected.bytes,
+					sha256: selected.sha256,
+					...(selected.uncompressedBytes === undefined
+						? {}
+						: { uncompressedBytes: selected.uncompressedBytes }),
+					...(selected.uncompressedSha256 === undefined
+						? {}
+						: { uncompressedSha256: selected.uncompressedSha256 })
+				})
+			: undefined;
+	};
+	const preflightProfile: ReScriptRuntimePreflightProfile = Object.freeze({
+		profileId:
+			configured?.profileId?.trim() ||
+			(usesBundledProfile ? WASM_RESCRIPT_RUNTIME_PROFILE.profileId : ''),
+		sourceRevision:
+			configured?.sourceRevision?.trim() ||
+			(usesBundledProfile ? WASM_RESCRIPT_RUNTIME_PROFILE.sourceRevision : ''),
+		manifestFingerprint,
+		manifestReceipt: receipt(
+			configured?.manifestReceipt,
+			WASM_RESCRIPT_RUNTIME_PROFILE.manifestReceipt
+		),
+		compilerReceipt: receipt(
+			configured?.compilerReceipt,
+			WASM_RESCRIPT_RUNTIME_PROFILE.compilerReceipt
+		)
+	});
+	return {
+		baseUrl: resolveReScriptBaseUrl(options, currentUrl),
+		workerUrl: resolveReScriptWorkerUrl(options, currentUrl),
+		manifestUrl: resolveReScriptManifestUrl(options, currentUrl),
+		manifestFingerprint,
+		preflightKey: JSON.stringify(preflightProfile),
+		preflightProfile,
+		workerReceipt: configured?.workerReceipt || WASM_RESCRIPT_RUNNER_RECEIPT
 	};
 }
 

@@ -7,6 +7,7 @@ import {
 	WASM_CLOJURESCRIPT_ASSET_VERSION,
 	WASM_CLOJURESCRIPT_RUNNER_RECEIPT
 } from './wasmClojureScriptVersion';
+import { WASM_RESCRIPT_ASSET_VERSION, WASM_RESCRIPT_RUNNER_RECEIPT } from './wasmReScriptVersion';
 import { WASM_D_INTEGRITY_VERSION, WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 import { WASM_DOTNET_ASSET_VERSION } from './wasmDotnetVersion';
 import { WASM_ELIXIR_ASSET_RECEIPTS, WASM_ELIXIR_ASSET_VERSION } from './wasmElixirVersion';
@@ -291,6 +292,16 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			),
 			manifestFingerprint: WASM_CLOJURESCRIPT_ASSET_VERSION,
 			workerReceipt: WASM_CLOJURESCRIPT_RUNNER_RECEIPT
+		},
+		rescript: {
+			baseUrl: asset('wasm-rescript/'),
+			workerUrl: asset('wasm-rescript/runner-worker.js', WASM_RESCRIPT_RUNNER_RECEIPT.sha256),
+			manifestUrl: asset(
+				'wasm-rescript/runtime-manifest.v1.json',
+				WASM_RESCRIPT_ASSET_VERSION
+			),
+			manifestFingerprint: WASM_RESCRIPT_ASSET_VERSION,
+			workerReceipt: WASM_RESCRIPT_RUNNER_RECEIPT
 		},
 		swift: {
 			baseUrl: asset('wasm-swift/'),

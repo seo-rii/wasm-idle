@@ -666,6 +666,7 @@
 			'.cljs': 'CLOJURESCRIPT',
 			'.hy': 'HY',
 			'.cljc': 'CLOJURESCRIPT',
+			'.res': 'RESCRIPT',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
 			'.js': 'JAVASCRIPT',
@@ -751,6 +752,7 @@
 			NIM: 'main.nim',
 			BASH: 'main.sh',
 			CLOJURESCRIPT: 'main.cljs',
+			RESCRIPT: 'Main.res',
 			HY: 'main.hy',
 			TINYGO: 'main.go',
 			OCAML: 'main.ml',
@@ -817,6 +819,7 @@
 			NIM: 'nim',
 			BASH: 'bash',
 			CLOJURESCRIPT: 'clojurescript',
+			RESCRIPT: 'rescript',
 			HY: 'hy',
 			TINYGO: 'go',
 			OCAML: 'ocaml',
@@ -1518,6 +1521,8 @@
 			shell: 'BASH',
 			clojurescript: 'CLOJURESCRIPT',
 			cljs: 'CLOJURESCRIPT',
+			rescript: 'RESCRIPT',
+			res: 'RESCRIPT',
 			hy: 'HY',
 			hylang: 'HY',
 			ocaml: 'OCAML',
@@ -2998,6 +3003,14 @@
 				ClojureScript is compiled and evaluated locally with the official self-hosted
 				`cljs.js` compiler. Require `[wasm-idle.runtime :as runtime]` for `read-line`,
 				`stdin`, and `args` helpers.
+			</p>
+		{/if}
+		{#if language === 'RESCRIPT'}
+			<p class="hint">
+				ReScript 12.3.1 compiles locally with the official js_of_ocaml playground compiler,
+				then runs the generated CommonJS with the upstream stdlib runtime. Bind stdin like
+				the JavaScript runtime: `@module("fs") external readLineSync: int =&gt; string =
+				"readLineSync"`, or read everything with `readFileSync(0, "utf8")`.
 			</p>
 		{/if}
 		{#if language === 'COBOL'}
