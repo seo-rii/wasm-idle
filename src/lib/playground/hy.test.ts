@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { RUNTIME_ASSET_LOCK } from '../../../packages/core/src/runtime-asset-lock.generated';
 import { HY_WHEEL_RECEIPTS } from '../../../scripts/sync-wasm-hy.mjs';
 import { WASM_HY_VERSION, WASM_HY_WHEELS } from './wasmHyVersion';
 
@@ -50,6 +51,11 @@ describe('Hy sandbox', () => {
 				bytes: bytes.length,
 				sha256: createHash('sha256').update(bytes).digest('hex')
 			}).toEqual({ bytes: wheel.bytes, sha256: wheel.sha256 });
+			expect(RUNTIME_ASSET_LOCK.assets[`wasm-hy/${wheel.fileName}`]).toMatchObject({
+				bytes: wheel.bytes,
+				sha256: wheel.sha256,
+				mediaType: 'application/zip'
+			});
 		}
 	});
 

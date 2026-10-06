@@ -743,6 +743,8 @@ export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = {
 		"wasm-haskell/runtime-build.json": {"sha256":"e0a6ed90052a61c89c04796fc6cbd067836e093da80a3a3fe15eddba455ae7d7","bytes":8136,"mediaType":"application/json"},
 		"wasm-haskell/runtime-manifest.v1.json": {"sha256":"032712f2520fff6a3c04a2af32fa96a66d45e417126fe9858d1070a3966bc91e","bytes":581,"mediaType":"application/json"},
 		"wasm-haskell/runtime-manifest.v2.json": {"sha256":"98f814668532b2501da75d688efe844b48c0480e36b13a9063c6fb9a3d26676f","bytes":7842,"mediaType":"application/json"},
+		"wasm-hy/funcparserlib-1.0.1-py2.py3-none-any.whl": {"sha256":"95da15d3f0d00b9b6f4bf04005c708af3faa115f7b45692ace064ebe758c68e8","bytes":17842,"mediaType":"application/zip"},
+		"wasm-hy/hy-1.3.1-py3-none-any.whl": {"sha256":"fef54e98b2080cd3993d5ce5a4310ef2b0fc756c972203b86fedc0e0f2908f53","bytes":122343,"mediaType":"application/zip"},
 		"wasm-j/jamalgam.js": {"sha256":"a4abe92ddf874d06d01d6873e151b641837b79d4075529fa17541b576eeb92e3","bytes":170649,"mediaType":"text/javascript"},
 		"wasm-j/jamalgam.wasm": {"sha256":"22549b50a69575ce09326f08fbf35396edfe4eedc583c8dd273d06ebbe920358","bytes":4832581,"mediaType":"application/wasm","deliveryPath":"wasm-j/jamalgam.wasm.gz"},
 		"wasm-j/jamalgam.wasm.gz": {"sha256":"e49723087dd8c9b40e24a769e82269552ef16a39fcb4d2c0840815a695ee57e7","bytes":1418554,"encoding":"gzip","mediaType":"application/wasm","uncompressedSha256":"22549b50a69575ce09326f08fbf35396edfe4eedc583c8dd273d06ebbe920358","uncompressedBytes":4832581},
