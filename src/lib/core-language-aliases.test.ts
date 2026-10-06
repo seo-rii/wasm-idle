@@ -38,6 +38,14 @@ describe('language alias metadata', () => {
 		});
 	});
 
+	it('keeps Objective-C++ distinct from Objective-C', () => {
+		expect(supportedLanguageIds).toContain('OBJECTIVECXX');
+		for (const alias of ['objcxx', 'OBJCPP', 'objective-c++', 'objective_cxx']) {
+			expect(normalizeLanguageId(alias)).toBe('OBJECTIVECXX');
+		}
+		expect(normalizeLanguageId('objective-c')).toBe('OBJC');
+	});
+
 	it('does not expose mutable alias metadata', () => {
 		expect(Object.isFrozen(languageAliases)).toBe(true);
 		expect(Object.isFrozen(languageAliases.PYPY3)).toBe(true);

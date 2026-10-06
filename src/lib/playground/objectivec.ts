@@ -30,8 +30,10 @@ const debugBreakpointBufferInts = 1028;
 const objectiveCAssetsKey = (assets: ResolvedObjectiveCRuntimeAssetConfig) =>
 	createRuntimeAssetsKey({ objectivec: assets }) || '';
 
+export type ObjectiveCSandboxLanguage = 'OBJC' | 'OBJECTIVECXX';
+
 class ObjectiveC implements Sandbox {
-	language = 'OBJC';
+	language: ObjectiveCSandboxLanguage;
 	output?: (data: string) => void;
 	ondebug?: (event: DebugSessionEvent) => void;
 	worker?: Worker = <any>null;
@@ -72,6 +74,10 @@ class ObjectiveC implements Sandbox {
 			this.ondebug?.({ type: 'stop' });
 		}
 	});
+
+	constructor(language: ObjectiveCSandboxLanguage = 'OBJC') {
+		this.language = language;
+	}
 
 	load(
 		runtimeAssets: string | PlaygroundRuntimeAssets = '',
@@ -257,7 +263,9 @@ class ObjectiveC implements Sandbox {
 				log,
 				compileArgs,
 				programArgs,
-				activePath: options.activePath,
+				activePath:
+					options.activePath ||
+					(this.language === 'OBJECTIVECXX' ? 'main.mm' : undefined),
 				workspaceFiles: options.workspaceFiles,
 				debug: !!options.debug,
 				breakpoints: [...(options.breakpoints || [])],

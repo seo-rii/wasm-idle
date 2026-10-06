@@ -561,6 +561,7 @@ export const RUNTIME_ASSET_LOCK: RuntimeAssetLockManifest = {
 		"wasm-elixir/bundle.avm": {"sha256":"e848c7b1e0d73af284641afeb1dd5f235ace83a44a9d0a3d35a29c536042b21a","bytes":7118212,"mediaType":"application/octet-stream","deliveryPath":"wasm-elixir/bundle.avm.gz"},
 		"wasm-elixir/bundle.avm.gz": {"sha256":"8780669718b86172236754b1f00aad38e96cbe8879bf3b5f9c29696043a17ad1","bytes":3463541,"encoding":"gzip","mediaType":"application/octet-stream","uncompressedSha256":"e848c7b1e0d73af284641afeb1dd5f235ace83a44a9d0a3d35a29c536042b21a","uncompressedBytes":7118212},
 		"wasm-elixir/runtime-build.json": {"sha256":"a5b18f58f090d6384177a3770f900cd201ebc5b4fadd7ecffa5e82838cdf4c86","bytes":876,"mediaType":"application/json"},
+		"wasm-fennel/fennel-1.6.1.lua.gz": {"sha256":"108b12fe2acb5c47c74c461d7ecbf5e00fb72102a9b927df985b9b4b858e49c0","bytes":62385,"encoding":"gzip","mediaType":"application/octet-stream","uncompressedSha256":"c3d45602041e7d8ef8a212563573df040c48a85c648a29fb4597ebed4bc38ec2","uncompressedBytes":301522},
 		"wasm-forth/runner-worker.js": {"sha256":"8687b1564fe91c027ba258b18acdce370745c0ac2aec35c7d02cf0421460b145","bytes":11027,"mediaType":"text/javascript"},
 		"wasm-forth/runtime-manifest.v2.json": {"sha256":"1b8a12f15b6c2056b249c9b7680823ebaf7df4e86444e1efd5c0c70072c88c3c","bytes":364,"mediaType":"application/json"},
 		"wasm-forth/waforth.js": {"sha256":"254a973285f5c63b2be52db4a74090029075d8fe2cc52909d40e4c5f6d28eeb0","bytes":33434,"mediaType":"text/javascript"},

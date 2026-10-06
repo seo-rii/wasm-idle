@@ -55,6 +55,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'OBJECTIVECXX',
+		load: async () => {
+			const { default: ObjectiveC } = await import('$lib/playground/objectivec');
+			return new ObjectiveC('OBJECTIVECXX');
+		}
+	},
+	{
 		languageId: 'JAVA',
 		load: async () => {
 			const { default: Java } = await import('$lib/playground/java');
@@ -297,6 +304,13 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: Lua } = await import('$lib/playground/lua');
 			return new Lua();
+		}
+	},
+	{
+		languageId: 'FENNEL',
+		load: async () => {
+			const { default: Fennel } = await import('$lib/playground/fennel');
+			return new Fennel();
 		}
 	},
 	{
