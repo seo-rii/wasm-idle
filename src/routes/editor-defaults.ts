@@ -5,6 +5,7 @@ export type EditorDefaultLanguage =
 	| 'c3'
 	| 'cpp'
 	| 'objectivec'
+	| 'objectivecxx'
 	| 'python'
 	| 'java'
 	| 'go'
@@ -28,6 +29,7 @@ export type EditorDefaultLanguage =
 	| 'nim'
 	| 'bash'
 	| 'clojurescript'
+	| 'hy'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -35,6 +37,7 @@ export type EditorDefaultLanguage =
 	| 'wat'
 	| 'wasm'
 	| 'lua'
+	| 'fennel'
 	| 'zig'
 	| 'lisp'
 	| 'ruby'
@@ -62,6 +65,7 @@ export const editorDefaults: Record<
 	| 'c3'
 	| 'cpp'
 	| 'objectivec'
+	| 'objectivecxx'
 	| 'python'
 	| 'java'
 	| 'go'
@@ -85,6 +89,7 @@ export const editorDefaults: Record<
 	| 'nim'
 	| 'bash'
 	| 'clojurescript'
+	| 'hy'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -92,6 +97,7 @@ export const editorDefaults: Record<
 	| 'wat'
 	| 'wasm'
 	| 'lua'
+	| 'fennel'
 	| 'zig'
 	| 'lisp'
 	| 'ruby'
@@ -209,6 +215,45 @@ int main(void) {
     }
     id runner = class_createInstance(objc_getClass("FibonacciRunner"), 0);
     printf("fibonacci=%d\\n", [runner fibonacci:n] + 3);
+    return 0;
+}`,
+	objectivecxx: `#include <iostream>
+#include <string>
+#include <vector>
+#include <objc/runtime.h>
+
+static std::vector<int> memo(64, 0);
+
+__attribute__((objc_root_class))
+@interface FibonacciRunner {
+    Class isa;
+}
+- (int)fibonacci:(int)n;
+@end
+
+@implementation FibonacciRunner
+- (int)fibonacci:(int)n {
+    if (n <= 1) {
+        return 1;
+    }
+    if (memo[n] != 0) {
+        return memo[n];
+    }
+    memo[n] = [self fibonacci:n - 1] + [self fibonacci:n - 2];
+    return memo[n];
+}
+@end
+
+int main() {
+    int n = 4;
+    if (!(std::cin >> n) || n < 0 || n >= 64) {
+        n = 4;
+    }
+    FibonacciRunner *runner =
+        (FibonacciRunner *)class_createInstance(objc_getClass("FibonacciRunner"), 0);
+    const std::string label = "fibonacci=";
+    std::cout << label << [runner fibonacci:n] + 3 << "\\n";
+    object_dispose(runner);
     return 0;
 }`,
 	python: `from functools import lru_cache
@@ -745,6 +790,16 @@ fibonacci() {
 IFS= read -r input || input=''
 n="\${input:-\${1:-4}}"
 printf 'fibonacci=%d\\n' "$(( $(fibonacci "$n") + bonus ))"`,
+	hy: `(setv bonus 3)
+
+(defn fibonacci [n [memo {0 1  1 1}]]
+  (when (not-in n memo)
+    (setv (get memo n) (+ (fibonacci (- n 1) memo) (fibonacci (- n 2) memo))))
+  (get memo n))
+
+(setv line (.strip (input)))
+(setv n (if (.isdigit line) (int line) 4))
+(print (+ "fibonacci=" (str (+ (fibonacci n) bonus))))`,
 	clojurescript: `(ns wasm-idle.main
   (:require [wasm-idle.runtime :as runtime]))
 
@@ -894,6 +949,16 @@ end
 local input = io.read("*l")
 local n = tonumber(input or "") or tonumber(arg[1] or "") or 4
 print("fibonacci=" .. tostring(fibonacci(n) + bonus))`,
+	fennel: `(local bonus 3)
+
+(fn fibonacci [n]
+  (if (<= n 1)
+      1
+      (+ (fibonacci (- n 1)) (fibonacci (- n 2)))))
+
+(let [line (io.read)
+      n (or (tonumber (or line "")) (tonumber (or (. arg 1) "")) 4)]
+  (print (.. "fibonacci=" (+ (fibonacci n) bonus))))`,
 	zig: `const std = @import("std");
 
 const bonus: i32 = 3;
@@ -1395,6 +1460,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.nim ||
 		source === editorDefaults.bash ||
 		source === editorDefaults.clojurescript ||
+		source === editorDefaults.hy ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||
@@ -1402,6 +1468,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.wat ||
 		source === editorDefaults.wasm ||
 		source === editorDefaults.lua ||
+		source === editorDefaults.fennel ||
 		source === editorDefaults.zig ||
 		source === editorDefaults.lisp ||
 		source === editorDefaults.ruby ||

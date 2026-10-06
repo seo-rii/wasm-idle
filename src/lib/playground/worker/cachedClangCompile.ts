@@ -11,7 +11,7 @@ import type { ClangCompileWorkerRequest, ClangCompileWorkerResponse } from '../c
 
 const worker = globalThis as unknown as {
 	onmessage: ((event: MessageEvent<ClangCompileWorkerRequest>) => void) | null;
-	postMessage(message: ClangCompileWorkerResponse): void;
+	postMessage(message: ClangCompileWorkerResponse, transfer?: Transferable[]): void;
 };
 let started = false;
 
@@ -20,6 +20,7 @@ worker.onmessage = async ({ data }) => {
 	if (started) return;
 	started = true;
 	const output: string[] = [];
+	let runtime: BrowserClangRuntime | undefined;
 	try {
 		if (data.request.debug || (data.request.debugMode && data.request.debugMode !== 'none')) {
 			throw new Error('Cached C/C++ execution does not support debug artifacts.');
@@ -58,7 +59,7 @@ worker.onmessage = async ({ data }) => {
 		}
 		// Every source cache miss gets fresh compiler memory and files. The host
 		// session keeps the immutable tool Modules and verified asset bytes alive.
-		const runtime = new CachedRuntime({
+		runtime = new CachedRuntime({
 			runtimeBaseUrl: data.runtimeBaseUrl,
 			maxAssetBytes: data.maxAssetBytes,
 			manifest,
@@ -87,14 +88,50 @@ worker.onmessage = async ({ data }) => {
 				message: 'Compiling source'
 			}
 		});
-		const artifact = await runtime.compileArtifact(data.request.code, data.request);
-		worker.postMessage({ type: 'compiled', artifact, stdout: output.join(''), stderr: '' });
+		const artifact = await runtime.compileArtifact(data.request.code, {
+			...data.request,
+			precompiledHeader: data.precompiledHeader
+		});
+		if (runtime.usedPrecompiledHeader)
+			worker.postMessage({
+				type: 'progress',
+				progress: {
+					stage: 'compile',
+					completed: 100,
+					total: 100,
+					percent: 100,
+					message: 'Compiled with precompiled <bits/stdc++.h>'
+				}
+			});
+		worker.postMessage({
+			type: 'compiled',
+			artifact,
+			stdout: output.join(''),
+			stderr: '',
+			...buildingPrecompiledHeader(runtime)
+		});
 	} catch (error) {
 		worker.postMessage({
 			type: 'error',
 			error: error instanceof Error ? error.message : String(error),
 			stdout: output.join(''),
-			stderr: ''
+			stderr: '',
+			...buildingPrecompiledHeader(runtime)
 		});
 	}
+	// The program runs in another worker while this one, already holding the compiler and
+	// headers, prepares <bits/stdc++.h> for the next compile.
+	if (runtime && buildingPrecompiledHeader(runtime).precompiledHeader) {
+		const header = await runtime.buildPrecompiledHeader().catch(() => undefined);
+		worker.postMessage(
+			{ type: 'precompiled-header', header },
+			header ? [header.bytes.buffer] : []
+		);
+	}
 };
+
+function buildingPrecompiledHeader(runtime: BrowserClangRuntime | undefined) {
+	return runtime?.precompiledHeaderPlan && !runtime.usedPrecompiledHeader
+		? { precompiledHeader: 'building' as const }
+		: {};
+}

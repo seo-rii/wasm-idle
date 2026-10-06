@@ -864,6 +864,17 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/Use `getline` or[\s\S]*`file\/read stdin :line`/);
 	});
 
+	it('surfaces Hy through the shared Pyodide runtime', () => {
+		expectPlaygroundLanguage('HY');
+		expect(source).toMatch(/hy: 'HY'/);
+		expect(source).toMatch(/hylang: 'HY'/);
+		expectEditorLanguage('HY', 'clojure');
+		expect(source).toMatch(/'.hy': 'HY'/);
+		expect(source).toMatch(/HY: 'main\.hy'/);
+		expect(source).toMatch(/HY: 'hy'/);
+		expect(source).toMatch(/Hy 1\.3\.1 compiles to Python bytecode inside the bundled Pyodide/);
+	});
+
 	it('surfaces Julia through the Julia wasm worker runtime contract', () => {
 		expect(applicationRuntimeAssets.julia?.workerUrl).toContain(
 			'/wasm-julia/runner-worker.js?'

@@ -613,12 +613,15 @@
 		if (filePath.toLowerCase().endsWith('.as.ts')) return 'ASSEMBLYSCRIPT';
 		const ext = extension(filePath);
 		if ((ext === '.m' || ext === '.h') && language === 'OBJC') return 'OBJC';
+		if ((ext === '.mm' || ext === '.h') && language === 'OBJECTIVECXX') return 'OBJECTIVECXX';
+		if (ext === '.m' && language === 'OBJECTIVECXX') return 'OBJC';
 		const match: Record<string, PlaygroundLanguage> = {
 			'.c': 'C',
 			'.cc': 'CPP',
 			'.cpp': 'CPP',
 			'.cxx': 'CPP',
 			'.objc': 'OBJC',
+			'.mm': 'OBJECTIVECXX',
 			'.h': 'CPP',
 			'.hpp': 'CPP',
 			'.java': 'JAVA',
@@ -660,6 +663,7 @@
 			'.sh': 'BASH',
 			'.bash': 'BASH',
 			'.cljs': 'CLOJURESCRIPT',
+			'.hy': 'HY',
 			'.cljc': 'CLOJURESCRIPT',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
@@ -673,6 +677,7 @@
 			'.wast': 'WAT',
 			'.wasm': 'WASM',
 			'.lua': 'LUA',
+			'.fnl': 'FENNEL',
 			'.zig': 'ZIG',
 			'.scm': 'LISP',
 			'.ss': 'LISP',
@@ -718,6 +723,7 @@
 			C: 'main.c',
 			CPP: 'main.cpp',
 			OBJC: 'main.m',
+			OBJECTIVECXX: 'main.mm',
 			JAVA: 'Main.java',
 			PYTHON: 'main.py',
 			RUST: 'main.rs',
@@ -743,6 +749,7 @@
 			NIM: 'main.nim',
 			BASH: 'main.sh',
 			CLOJURESCRIPT: 'main.cljs',
+			HY: 'main.hy',
 			TINYGO: 'main.go',
 			OCAML: 'main.ml',
 			JAVASCRIPT: 'main.js',
@@ -751,6 +758,7 @@
 			WAT: 'main.wat',
 			WASM: 'main.wasm',
 			LUA: 'main.lua',
+			FENNEL: 'main.fnl',
 			ZIG: 'main.zig',
 			LISP: 'main.scm',
 			RUBY: 'main.rb',
@@ -780,6 +788,7 @@
 			C: 'c',
 			CPP: 'cpp',
 			OBJC: 'objectivec',
+			OBJECTIVECXX: 'objectivecxx',
 			PYTHON: 'python',
 			JAVA: 'java',
 			RUST: 'rust',
@@ -805,6 +814,7 @@
 			NIM: 'nim',
 			BASH: 'bash',
 			CLOJURESCRIPT: 'clojurescript',
+			HY: 'hy',
 			TINYGO: 'go',
 			OCAML: 'ocaml',
 			JAVASCRIPT: 'javascript',
@@ -813,6 +823,7 @@
 			WAT: 'wat',
 			WASM: 'wasm',
 			LUA: 'lua',
+			FENNEL: 'fennel',
 			ZIG: 'zig',
 			LISP: 'lisp',
 			RUBY: 'ruby',
@@ -1454,6 +1465,11 @@
 			objectivec: 'OBJC',
 			'objective-c': 'OBJC',
 			objective_c: 'OBJC',
+			objcxx: 'OBJECTIVECXX',
+			objcpp: 'OBJECTIVECXX',
+			objectivecxx: 'OBJECTIVECXX',
+			'objective-c++': 'OBJECTIVECXX',
+			objective_cxx: 'OBJECTIVECXX',
 			java: 'JAVA',
 			rust: 'RUST',
 			go: 'GO',
@@ -1498,6 +1514,8 @@
 			shell: 'BASH',
 			clojurescript: 'CLOJURESCRIPT',
 			cljs: 'CLOJURESCRIPT',
+			hy: 'HY',
+			hylang: 'HY',
 			ocaml: 'OCAML',
 			javascript: 'JAVASCRIPT',
 			js: 'JAVASCRIPT',
@@ -1510,6 +1528,8 @@
 			wasm: 'WASM',
 			wasm32: 'WASM',
 			lua: 'LUA',
+			fennel: 'FENNEL',
+			fnl: 'FENNEL',
 			zig: 'ZIG',
 			lisp: 'LISP',
 			scheme: 'LISP',
@@ -2955,6 +2975,13 @@
 				are not bundled yet.
 			</p>
 		{/if}
+		{#if language === 'HY'}
+			<p class="hint">
+				Hy 1.3.1 compiles to Python bytecode inside the bundled Pyodide runtime. Use
+				`(input)` for stdin and `(print)` for stdout; send Ctrl+D or use the EOF button to
+				finish input.
+			</p>
+		{/if}
 		{#if language === 'CLOJURESCRIPT'}
 			<p class="hint">
 				ClojureScript is compiled and evaluated locally with the official self-hosted
@@ -3060,6 +3087,13 @@
 				Lua runs through the bundled `wasmoon` Lua VM, backed by its local wasm payload.
 				Pass CLI args here, type into the terminal below, and use Ctrl+D or the EOF button
 				if the program reads stdin until EOF.
+			</p>
+		{/if}
+		{#if language === 'FENNEL'}
+			<p class="hint">
+				Fennel runs the official `fennel.lua` compiler on the bundled `wasmoon` Lua VM. Use
+				`(io.read)` to read a line from the terminal below and Ctrl+D or the EOF button for
+				programs that read stdin until EOF.
 			</p>
 		{/if}
 		{#if language === 'RUBY'}

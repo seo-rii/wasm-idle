@@ -41,6 +41,7 @@ const runtimeReadinessAudit = {
 	C: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	CPP: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	OBJC: { strategy: 'terminal-fallback', hostModule: 'objectivec' },
+	OBJECTIVECXX: { strategy: 'terminal-fallback', hostModule: 'objectivec' },
 	PYTHON3: {
 		strategy: 'entry-signal',
 		hostModule: 'python',
@@ -84,6 +85,11 @@ const runtimeReadinessAudit = {
 		hostModule: 'bash',
 		producerPath: 'src/lib/playground/worker/bashRuntime.ts'
 	},
+	HY: {
+		strategy: 'entry-signal',
+		hostModule: 'hy',
+		producerPath: 'src/lib/playground/worker/python.ts'
+	},
 	CLOJURESCRIPT: {
 		strategy: 'static-worker-fallback',
 		hostModule: 'clojurescript'
@@ -123,6 +129,12 @@ const runtimeReadinessAudit = {
 		producerPath: 'src/lib/playground/worker/wasm.ts'
 	},
 	LUA: {
+		strategy: 'entry-signal',
+		hostModule: 'lua',
+		producerPath: 'src/lib/playground/worker/lua.ts'
+	},
+	// Fennel's host extends the Lua host and runs on the same wasm-lua worker.
+	FENNEL: {
 		strategy: 'entry-signal',
 		hostModule: 'lua',
 		producerPath: 'src/lib/playground/worker/lua.ts'
@@ -219,7 +231,11 @@ describe('runtime progress readiness audit', () => {
 		for (const [languageId, row] of Object.entries(runtimeReadinessAudit)) {
 			if (row.strategy !== 'entry-signal') continue;
 			const producerSource = readProjectSource(row.producerPath);
-			const hostSource = readProjectSource(`src/lib/playground/${row.hostModule}.ts`);
+			const ownHostSource = readProjectSource(`src/lib/playground/${row.hostModule}.ts`);
+			// Python-hosted languages inherit the Python host's worker progress forwarding.
+			const hostSource = ownHostSource.includes('extends Python')
+				? readProjectSource('src/lib/playground/python.ts')
+				: ownHostSource;
 
 			expect(producerSource, `${languageId} producer must emit ready`).toMatch(
 				/kind:\s*['"]ready['"]/u

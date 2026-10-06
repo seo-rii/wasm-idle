@@ -38,6 +38,7 @@ import {
 	WASM_J_RUNTIME_PROFILE
 } from '$lib/playground/wasmJVersion';
 import { WASM_JANET_RUNTIME_BUNDLE } from '$lib/playground/wasmJanetVersion';
+import { WASM_FENNEL_COMPILER_RECEIPT } from '$lib/playground/wasmFennelVersion';
 import { WASM_JULIA_RUNTIME_BUNDLE } from '$lib/playground/wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 import { WASM_NIM_RUNTIME_BUNDLE } from '$lib/playground/wasmNimVersion';
@@ -221,6 +222,10 @@ export interface WatRuntimeAssetConfig {
 
 export interface LuaRuntimeAssetConfig {
 	moduleUrl?: string;
+}
+
+export interface FennelRuntimeAssetConfig {
+	compilerUrl?: string;
 }
 
 export interface HaskellRuntimeAssetConfig {
@@ -629,6 +634,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	typescript?: TypeScriptRuntimeAssetConfig;
 	wat?: WatRuntimeAssetConfig;
 	lua?: LuaRuntimeAssetConfig;
+	fennel?: FennelRuntimeAssetConfig;
 	haskell?: HaskellRuntimeAssetConfig;
 	fortran?: FortranRuntimeAssetConfig;
 	cobol?: CobolRuntimeAssetConfig;
@@ -650,6 +656,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	janet?: JanetRuntimeAssetConfig;
 	julia?: JuliaRuntimeAssetConfig;
 	c3?: { baseUrl?: string };
+	hy?: { baseUrl?: string };
 	nim?: NimRuntimeAssetConfig;
 	bash?: BashRuntimeAssetConfig;
 	clojurescript?: ClojureScriptRuntimeAssetConfig;
@@ -1454,6 +1461,29 @@ export function resolveLuaModuleUrl(
 	if (options?.rootUrl) {
 		return resolveConfiguredUrl(
 			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-lua/index.js`,
+			currentUrl
+		);
+	}
+
+	return '';
+}
+
+export function resolveFennelCompilerUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredCompilerUrl =
+		(typeof options === 'object' && options?.fennel?.compilerUrl) ||
+		(publicEnv.PUBLIC_WASM_FENNEL_COMPILER_URL || '').trim();
+
+	if (configuredCompilerUrl) {
+		return resolveConfiguredUrl(configuredCompilerUrl, currentUrl);
+	}
+
+	const rootUrl = typeof options === 'string' ? options : options?.rootUrl;
+	if (rootUrl) {
+		return resolveConfiguredUrl(
+			`${normalizeRootUrl(rootUrl) || ''}/${WASM_FENNEL_COMPILER_RECEIPT.path}`,
 			currentUrl
 		);
 	}
@@ -4405,4 +4435,17 @@ export function resolveC3BaseUrl(
 	if (configured) return normalizeBaseUrl(configured, currentUrl);
 	const root = typeof options === 'string' ? options : options?.rootUrl;
 	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-c3/`, currentUrl);
+}
+
+/** Hy wheels are code-pinned receipts served from this base URL and installed into Pyodide. */
+export function resolveHyBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configured =
+		(typeof options === 'object' && options?.hy?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_HY_BASE_URL || '').trim();
+	if (configured) return normalizeBaseUrl(configured, currentUrl);
+	const root = typeof options === 'string' ? options : options?.rootUrl;
+	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-hy/`, currentUrl);
 }

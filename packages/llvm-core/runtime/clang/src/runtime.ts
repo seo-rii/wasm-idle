@@ -37,6 +37,14 @@ import {
 	resolveBuildArtifactNames
 } from './workspace.js';
 import { createDwarfDebugDescriptor } from './dwarf.js';
+import {
+	PRECOMPILED_HEADER_PATH,
+	STDCPP_HEADER_PATH,
+	precompiledHeaderArgsEligible,
+	precompiledHeaderErrorPattern,
+	startsWithStdcppInclude,
+	type BrowserClangPrecompiledHeader
+} from './precompiled-header.js';
 
 export {
 	normalizeDwarfWorkspacePath,
@@ -185,6 +193,10 @@ class Clang {
 	debugGlobalMetadata: DebugVariableMetadata[] = [];
 	debugFunctionMetadata: Record<number, string> = {};
 	lastBuildKey = '';
+	/** Set by compile() when a translation unit can use a precompiled <bits/stdc++.h>. */
+	precompiledHeaderPlan?: { key: string; args: string[] };
+	usedPrecompiledHeader = false;
+	private mountedPrecompiledHeaderKey = '';
 	path: string;
 	assetUrls: RuntimeAssetUrls;
 	compilerConfig?: RuntimeCompilerConfig;
@@ -1401,11 +1413,17 @@ class Clang {
 		const includeArgs = clangSystemIncludePaths(language, '', clangResourceDir).flatMap(
 			(path) => ['-internal-isystem', path]
 		);
-		const compilerArgs = [
+		const cc1Args = (
+			action: string,
+			output: string,
+			languageType: string,
+			source: string,
+			includePch: string[] = []
+		) => [
 			'-cc1',
 			'-triple',
 			CLANG_WASI_TARGET,
-			'-emit-obj',
+			action,
 			'-disable-free',
 			'-isysroot',
 			'/',
@@ -1418,12 +1436,13 @@ class Clang {
 			'-fcolor-diagnostics',
 			...(lldbDebug ? [] : ['-O' + opt]),
 			'-o',
-			obj,
+			output,
 			standardArg,
 			'-x',
-			languageArg,
+			languageType,
 			...(language === 'OBJC' ? OBJECTIVE_C_RUNTIME_FLAGS : []),
-			input,
+			...includePch,
+			source,
 			...compileArgs,
 			...(lldbDebug
 				? [
@@ -1435,6 +1454,70 @@ class Clang {
 					]
 				: [])
 		];
+		const precompiledHeaderPlan =
+			language === 'CPP' &&
+			!traceDebug &&
+			typeof options.transformSource !== 'function' &&
+			startsWithStdcppInclude(source) &&
+			precompiledHeaderArgsEligible(compileArgs)
+				? (() => {
+						const args = cc1Args(
+							'-emit-pch',
+							`/${PRECOMPILED_HEADER_PATH}`,
+							'c++-header',
+							STDCPP_HEADER_PATH
+						);
+						// The asset URLs pin the compiler and headers the header was built from.
+						const key = JSON.stringify({ args, assets: this.assetUrls });
+						return { key, args };
+					})()
+				: undefined;
+		if (precompiledHeaderPlan) this.precompiledHeaderPlan = precompiledHeaderPlan;
+		if (options.planPrecompiledHeaderOnly) return null;
+		const precompiledHeader: BrowserClangPrecompiledHeader | undefined =
+			options.precompiledHeader;
+		if (precompiledHeaderPlan && precompiledHeader?.key === precompiledHeaderPlan.key) {
+			if (this.mountedPrecompiledHeaderKey !== precompiledHeader.key) {
+				this.addWorkspaceDirectories(PRECOMPILED_HEADER_PATH);
+				this.memfs.addFile(PRECOMPILED_HEADER_PATH, precompiledHeader.bytes);
+				this.mountedPrecompiledHeaderKey = precompiledHeader.key;
+			}
+			this.trace(`compile ${input} -> ${obj} with ${PRECOMPILED_HEADER_PATH}`);
+			const output: string[] = [];
+			const stdout = this.memfs.stdout;
+			this.memfs.stdout = (chunk) => output.push(chunk);
+			let rejected = false;
+			try {
+				const result = await this.run(
+					clang,
+					true,
+					'clang',
+					...cc1Args('-emit-obj', obj, languageArg, input, [
+						'-include-pch',
+						`/${PRECOMPILED_HEADER_PATH}`
+					])
+				);
+				this.usedPrecompiledHeader = true;
+				return result;
+			} catch (error) {
+				rejected = precompiledHeaderErrorPattern.test(output.join(''));
+				if (!rejected) {
+					if (Uint8Array.from(this.memfs.getFileContents(obj)).length > 0) {
+						// Same close-time stream recovery as the textual compile below.
+						this.usedPrecompiledHeader = true;
+						return null;
+					}
+					throw error;
+				}
+				// Fall back to the textual header below and let the caller rebuild the header.
+				this.trace(`precompiled header rejected; compiling ${input} without it`);
+				this.memfs.addFile(obj, new Uint8Array(0));
+			} finally {
+				this.memfs.stdout = stdout;
+				if (!rejected) for (const chunk of output) stdout(chunk);
+			}
+		}
+		const compilerArgs = cc1Args('-emit-obj', obj, languageArg, input);
 		this.trace(`compile ${input} -> ${obj}`);
 		try {
 			return await this.run(clang, true, 'clang', ...compilerArgs);
@@ -1578,7 +1661,8 @@ class Clang {
 			debugBuffer,
 			interruptBuffer,
 			watchBuffer,
-			watchResultBuffer
+			watchResultBuffer,
+			precompiledHeader
 		} = options;
 		const debugMode = resolveDebugMode({ debugMode: requestedDebugMode, debug });
 		const normalizeRequestedPath =
@@ -1650,6 +1734,9 @@ class Clang {
 			return this.wasm;
 		}
 
+		this.precompiledHeaderPlan = undefined;
+		this.usedPrecompiledHeader = false;
+
 		// Linking cannot start before source compilation completes. Start the linker download and
 		// Wasm compilation now so that its cold-start cost overlaps Clang's source compilation.
 		// getModule() keeps the in-flight promise, so link() later reuses this exact load.
@@ -1665,7 +1752,8 @@ class Clang {
 				workspaceFiles: normalizedWorkspaceFiles,
 				cppVersion,
 				cVersion,
-				debugMode
+				debugMode,
+				precompiledHeader
 			});
 			await this.link(obj, wasm, debugMode, ...linkProfile);
 		} else {
@@ -1688,6 +1776,7 @@ class Clang {
 					cppVersion,
 					cVersion,
 					debugMode,
+					precompiledHeader,
 					sourceAlreadyMounted: true
 				});
 			}
@@ -1700,6 +1789,62 @@ class Clang {
 			`Compiling ${wasm}`,
 			WebAssembly.compile(wasmBytes)
 		));
+	}
+
+	/**
+	 * Build the precompiled <bits/stdc++.h> planned by the last compile. Returns undefined when
+	 * that compile could not use one or Clang could not build it.
+	 */
+	async buildPrecompiledHeader(): Promise<BrowserClangPrecompiledHeader | undefined> {
+		const plan = this.precompiledHeaderPlan;
+		if (!plan) return undefined;
+		await this.ensureCppSysroot();
+		this.addWorkspaceDirectories(PRECOMPILED_HEADER_PATH);
+		this.memfs.addFile(PRECOMPILED_HEADER_PATH, new Uint8Array(0));
+		this.mountedPrecompiledHeaderKey = '';
+		const clang = await this.getModule(this.assetUrls.clang);
+		this.trace(`precompile ${STDCPP_HEADER_PATH} -> ${PRECOMPILED_HEADER_PATH}`);
+		try {
+			await this.run(clang, false, 'clang', ...plan.args);
+		} catch {
+			// The WASI LLVM stream can fail at close after a complete write; keep nonempty output.
+		}
+		const bytes = Uint8Array.from(this.memfs.getFileContents(PRECOMPILED_HEADER_PATH));
+		if (bytes.length === 0) return undefined;
+		this.mountedPrecompiledHeaderKey = plan.key;
+		return { key: plan.key, bytes };
+	}
+
+	/**
+	 * Build the precompiled <bits/stdc++.h> that compileLink() would use for this source without
+	 * compiling it, for hosts that prepare the header in another runtime instance.
+	 */
+	async buildPrecompiledHeaderFor(
+		code: string,
+		options: BrowserClangRuntimeRunOptions = {}
+	): Promise<BrowserClangPrecompiledHeader | undefined> {
+		const { language = 'CPP', fileName, activePath, args = [], compileArgs = args } = options;
+		const debugMode = resolveDebugMode(options);
+		const normalizeRequestedPath =
+			debugMode === 'lldb' ? normalizeDwarfWorkspacePath : normalizeWorkspacePath;
+		const requestedInput =
+			normalizeRequestedPath(activePath || '') ||
+			normalizeRequestedPath(fileName || '') ||
+			undefined;
+		const { input, obj } = resolveBuildArtifactNames(language, requestedInput);
+		this.precompiledHeaderPlan = undefined;
+		await this.compile({
+			input,
+			code,
+			obj,
+			language,
+			compileArgs,
+			cppVersion: options.cppVersion,
+			cVersion: options.cVersion,
+			debugMode,
+			planPrecompiledHeaderOnly: true
+		});
+		return this.buildPrecompiledHeader();
 	}
 
 	async compileArtifact(
@@ -1767,7 +1912,8 @@ class Clang {
 			debugBuffer,
 			interruptBuffer,
 			watchBuffer,
-			watchResultBuffer
+			watchResultBuffer,
+			precompiledHeader
 		} = options;
 		const debugMode = resolveDebugMode({ debugMode: requestedDebugMode, debug });
 		if (debugMode === 'lldb') {
@@ -1797,7 +1943,8 @@ class Clang {
 				debugBuffer,
 				interruptBuffer,
 				watchBuffer,
-				watchResultBuffer
+				watchResultBuffer,
+				...(precompiledHeader ? { precompiledHeader } : {})
 			}),
 			true,
 			wasm,

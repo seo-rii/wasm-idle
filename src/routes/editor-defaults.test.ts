@@ -44,6 +44,8 @@ describe('editor defaults', () => {
 		expect(editorDefaults.julia).toContain('fibonacci=');
 		expect(editorDefaults.nim).toContain('stdin.readLine()');
 		expect(editorDefaults.nim).toContain('fibonacci=');
+		expect(editorDefaults.hy).toContain('(input)');
+		expect(editorDefaults.hy).toContain('fibonacci=');
 		expect(editorDefaults.clojurescript).toContain('[wasm-idle.runtime :as runtime]');
 		expect(editorDefaults.clojurescript).toContain('(runtime/read-line)');
 		expect(editorDefaults.clojurescript).toContain('(runtime/args)');
@@ -56,6 +58,9 @@ describe('editor defaults', () => {
 		expect(editorDefaults.wat).toContain('(export "fibonacci")');
 		expect(editorDefaults.lua).toContain('local function fibonacci');
 		expect(editorDefaults.lua).toContain('io.read("*l")');
+		expect(editorDefaults.fennel).toContain('(fn fibonacci [n]');
+		expect(editorDefaults.fennel).toContain('(io.read)');
+		expect(editorDefaults.fennel).toContain('fibonacci=');
 		expect(editorDefaults.haskell).toContain('fibonacci :: Int -> Int');
 		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(editorDefaults.r).toContain('readLines(stdin(), n = 1');
@@ -176,11 +181,13 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.julia)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.nim)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.clojurescript)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.hy)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.javascript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.wat)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.lua)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.fennel)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.r)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.octave)).toBe(true);
