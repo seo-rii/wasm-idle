@@ -29,6 +29,7 @@ const staticRoot = path.join(repoRoot, 'static');
 const runtimePackages = [
 	'@assemblyscript/loader',
 	'@duckdb/duckdb-wasm',
+	'@electric-sql/pglite',
 	'@php-wasm/universal',
 	'@php-wasm/web-8-4',
 	'@ruby/3.4-wasm-wasi',
@@ -75,6 +76,7 @@ const staticRuntimeModules = [
 			'@ruby/wasm-wasi': '2.9.3-2.9.4'
 		}
 	},
+	{ directory: 'wasm-postgresql', packages: { '@electric-sql/pglite': '0.5.8' } },
 	{ directory: 'wasm-sqlite', packages: { 'sql.js': '^1.14.1' } },
 	{ directory: 'wasm-bash/sdk', packages: { '@wasmer/sdk': '0.9.0' } }
 ] as const;
@@ -158,6 +160,7 @@ describe('static language runtime assets', () => {
 			'wasm-bash/sdk',
 			'wasm-duckdb',
 			'wasm-php',
+			'wasm-postgresql',
 			'wasm-sqlite'
 		].sort()) {
 			hash.update(runtimeDirectory);

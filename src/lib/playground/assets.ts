@@ -639,6 +639,10 @@ export interface DuckDbRuntimeAssetConfig {
 	moduleUrl?: string;
 }
 
+export interface PostgresqlRuntimeAssetConfig {
+	moduleUrl?: string;
+}
+
 export interface PhpRuntimeAssetConfig {
 	moduleUrl?: string;
 }
@@ -682,6 +686,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	janet?: JanetRuntimeAssetConfig;
 	julia?: JuliaRuntimeAssetConfig;
 	c3?: { baseUrl?: string };
+	grain?: { baseUrl?: string };
 	hy?: { baseUrl?: string };
 	nim?: NimRuntimeAssetConfig;
 	bash?: BashRuntimeAssetConfig;
@@ -690,6 +695,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	swift?: SwiftRuntimeAssetConfig;
 	assemblyscript?: AssemblyScriptRuntimeAssetConfig;
 	duckdb?: DuckDbRuntimeAssetConfig;
+	postgresql?: PostgresqlRuntimeAssetConfig;
 	sqlite?: SqliteRuntimeAssetConfig;
 	php?: PhpRuntimeAssetConfig;
 }
@@ -4528,6 +4534,19 @@ export function resolvePhpRuntimeModuleUrl(
 	);
 }
 
+export function resolvePostgresqlRuntimeModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options?.postgresql?.moduleUrl : undefined,
+		publicEnv.PUBLIC_WASM_POSTGRESQL_MODULE_URL || '',
+		'wasm-postgresql',
+		currentUrl
+	);
+}
+
 export function resolveRubyRuntimeModuleUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
@@ -4559,6 +4578,19 @@ export function resolveC3BaseUrl(
 	if (configured) return normalizeBaseUrl(configured, currentUrl);
 	const root = typeof options === 'string' ? options : options?.rootUrl;
 	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-c3/`, currentUrl);
+}
+
+/** Grain uses one code-pinned compiler/stdlib/worker receipt, served from this base URL. */
+export function resolveGrainBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configured =
+		(typeof options === 'object' && options?.grain?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_GRAIN_BASE_URL || '').trim();
+	if (configured) return normalizeBaseUrl(configured, currentUrl);
+	const root = typeof options === 'string' ? options : options?.rootUrl;
+	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-grain/`, currentUrl);
 }
 
 /** Hy wheels are code-pinned receipts served from this base URL and installed into Pyodide. */

@@ -140,6 +140,11 @@ vi.mock('$lib/playground/gleam', () => {
 	};
 });
 
+vi.mock('$lib/playground/grain', () => {
+	moduleLoads.add('GRAIN');
+	return { default: createMockSandboxClass('GRAIN') };
+});
+
 vi.mock('$lib/playground/perl', () => {
 	moduleLoads.add('PERL');
 	return {
@@ -266,6 +271,13 @@ vi.mock('$lib/playground/sqlite', () => {
 	moduleLoads.add('SQLITE');
 	return {
 		default: createMockSandboxClass('SQLITE')
+	};
+});
+
+vi.mock('$lib/playground/postgresql', () => {
+	moduleLoads.add('POSTGRESQL');
+	return {
+		default: createMockSandboxClass('POSTGRESQL')
 	};
 });
 

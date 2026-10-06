@@ -30,6 +30,15 @@ const modules = [
 		licenses: [['node_modules/@duckdb/duckdb-wasm/LICENSE', 'LICENSE.txt']]
 	},
 	{
+		name: 'postgresql',
+		entry: 'scripts/runtime-modules/postgresql.ts',
+		packages: ['@electric-sql/pglite'],
+		licenses: [
+			['node_modules/@electric-sql/pglite/LICENSE', 'LICENSE.txt'],
+			['scripts/runtime-modules/postgresql-POSTGRES-LICENSE.txt', 'LICENSE.postgresql.txt']
+		]
+	},
+	{
 		name: 'sqlite',
 		entry: 'scripts/runtime-modules/sqlite.ts',
 		packages: ['sql.js'],

@@ -160,6 +160,8 @@
 	const SHARE_PREFIX = 'workspace=';
 	const MAX_DEBUG_MEMORY_BYTES = 256;
 	const lldbDebugLanguages = new Set<PlaygroundLanguage>(['C', 'CPP', 'RUST']);
+	// Runtimes that consume stdin once at start, even when terminal streaming is available.
+	const preloadedStdinLanguages = new Set<PlaygroundLanguage>(['BASH', 'POSTGRESQL']);
 	const debugLanguageAdapters: Partial<Record<PlaygroundLanguage, DebugLanguageAdapter>> = {
 		C: cppDebugLanguageAdapter,
 		CPP: cppDebugLanguageAdapter,
@@ -639,6 +641,7 @@
 			'.prolog': 'PROLOG',
 			'.pro': 'PROLOG',
 			'.gleam': 'GLEAM',
+			'.gr': 'GRAIN',
 			'.pl': 'PERL',
 			'.pm': 'PERL',
 			'.tcl': 'TCL',
@@ -700,6 +703,8 @@
 			'.duckdb': 'DUCKDB',
 			'.sql': 'SQLITE',
 			'.sqlite': 'SQLITE',
+			'.pgsql': 'POSTGRESQL',
+			'.psql': 'POSTGRESQL',
 			'.php': 'PHP',
 			'.json': 'JSON',
 			'.jsonc': 'JSON',
@@ -733,6 +738,7 @@
 			ERLANG: 'main.erl',
 			PROLOG: 'main.prolog',
 			GLEAM: 'main.gleam',
+			GRAIN: 'main.gr',
 			PERL: 'main.pl',
 			TCL: 'main.tcl',
 			AWK: 'main.awk',
@@ -769,6 +775,7 @@
 			GRAPHQL: 'main.graphql',
 			DUCKDB: 'main.duckdb',
 			SQLITE: 'main.sql',
+			POSTGRESQL: 'main.sql',
 			PHP: 'main.php',
 			JSON: 'main.json',
 			YAML: 'main.yaml',
@@ -798,6 +805,7 @@
 			ERLANG: 'erlang',
 			PROLOG: 'prolog',
 			GLEAM: 'gleam',
+			GRAIN: 'grain',
 			PERL: 'perl',
 			TCL: 'tcl',
 			AWK: 'awk',
@@ -834,6 +842,7 @@
 			GRAPHQL: 'graphql',
 			DUCKDB: 'duckdb',
 			SQLITE: 'sqlite',
+			POSTGRESQL: 'postgresql',
 			PHP: 'php',
 			JSON: 'json',
 			YAML: 'yaml',
@@ -1488,6 +1497,7 @@
 			swipl: 'PROLOG',
 			swi: 'PROLOG',
 			gleam: 'GLEAM',
+			grain: 'GRAIN',
 			perl: 'PERL',
 			tcl: 'TCL',
 			tclsh: 'TCL',
@@ -1554,6 +1564,10 @@
 			duckdb: 'DUCKDB',
 			sqlite: 'SQLITE',
 			sql: 'SQLITE',
+			postgresql: 'POSTGRESQL',
+			postgres: 'POSTGRESQL',
+			pgsql: 'POSTGRESQL',
+			pglite: 'POSTGRESQL',
 			php: 'PHP',
 			json: 'JSON',
 			jsonc: 'JSON',
@@ -2019,7 +2033,9 @@
 					return;
 				}
 				const preloadedStdin =
-					sharedBufferAvailable && language !== 'BASH' ? undefined : stdinInput;
+					sharedBufferAvailable && !preloadedStdinLanguages.has(language)
+						? undefined
+						: stdinInput;
 				const result = await executeTerminalRun({
 					terminal,
 					language,
@@ -2666,14 +2682,16 @@
 					</button>
 				</div>
 			</div>
-			{#if !sharedBufferAvailable || language === 'BASH'}
+			{#if !sharedBufferAvailable || preloadedStdinLanguages.has(language)}
 				<div class="stdin-panel">
 					<div>
 						<strong>Preloaded stdin</strong>
 						<span>
 							{language === 'BASH'
 								? 'The Bash WASIX package accepts stdin when the process starts. Enter it before Run; extra reads receive EOF.'
-								: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
+								: language === 'POSTGRESQL'
+									? "PostgreSQL reads this input as the server file '/dev/blob' (COPY ... FROM '/dev/blob' or pg_read_file('/dev/blob')). Enter it before Run."
+									: 'SharedArrayBuffer is unavailable here, so terminal input cannot be sent while the program is running. Enter stdin before Run; extra reads receive EOF.'}
 						</span>
 					</div>
 					<textarea
@@ -2940,6 +2958,13 @@
 				the JavaScript target output locally. Import `wasm_idle/stdin` for line input.
 			</p>
 		{/if}
+		{#if language === 'GRAIN'}
+			<p class="hint">
+				Grain 0.7.2 compiles in the browser with the upstream js_of_ocaml compiler and runs
+				the emitted WASI module locally. Read input with `File.fdRead(File.stdin, n)` from
+				`wasi/file`; send Ctrl+D or use the EOF button to finish input.
+			</p>
+		{/if}
 		{#if language === 'PERL'}
 			<p class="hint">
 				Perl runs through bundled WebPerl WebAssembly assets. Use `&lt;STDIN&gt;` for line
@@ -3119,6 +3144,15 @@
 			<p class="hint">
 				SQLite runs through bundled sql.js WebAssembly assets against a fresh in-memory
 				database on every run. SELECT results are printed as tab-separated tables.
+			</p>
+		{/if}
+		{#if language === 'POSTGRESQL'}
+			<p class="hint">
+				PostgreSQL runs as real upstream PostgreSQL compiled to WebAssembly by PGlite,
+				against a fresh in-memory cluster on every run. The script is sent as one simple
+				query, so SELECT results are printed as tab-separated tables, notices and `COPY ...
+				TO STDOUT` are printed in order, and other workspace `.sql` files run first.
+				Preloaded stdin is readable as `/dev/blob`.
 			</p>
 		{/if}
 		{#if language === 'DUCKDB'}

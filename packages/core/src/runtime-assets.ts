@@ -292,6 +292,7 @@ export interface RuntimeAssetKeySource {
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	c3?: { baseUrl?: string };
+	grain?: { baseUrl?: string };
 	hy?: { baseUrl?: string };
 	nim?: {
 		baseUrl?: string;
@@ -358,6 +359,7 @@ export interface RuntimeAssetKeySource {
 	};
 	cobol?: { baseUrl?: string };
 	swift?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
+	postgresql?: { moduleUrl?: string };
 	sqlite?: { moduleUrl?: string; wasmUrl?: string };
 	php?: { moduleUrl?: string };
 }
@@ -1288,6 +1290,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		serialize: serializeIntegrityEntry
 	},
 	{ runtime: 'c3', property: 'baseUrl', key: 'c3BaseUrl' },
+	{ runtime: 'grain', property: 'baseUrl', key: 'grainBaseUrl' },
 	{ runtime: 'hy', property: 'baseUrl', key: 'hyBaseUrl' },
 	{ runtime: 'nim', property: 'baseUrl', key: 'nimBaseUrl' },
 	{ runtime: 'nim', property: 'workerUrl', key: 'nimWorkerUrl' },
@@ -1468,6 +1471,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'swift', property: 'baseUrl', key: 'swiftBaseUrl' },
 	{ runtime: 'swift', property: 'workerUrl', key: 'swiftWorkerUrl' },
 	{ runtime: 'swift', property: 'manifestUrl', key: 'swiftManifestUrl' },
+	{ runtime: 'postgresql', property: 'moduleUrl', key: 'postgresqlModuleUrl' },
 	{ runtime: 'sqlite', property: 'moduleUrl', key: 'sqliteModuleUrl' },
 	{ runtime: 'sqlite', property: 'wasmUrl', key: 'sqliteWasmUrl' },
 	{ runtime: 'php', property: 'moduleUrl', key: 'phpModuleUrl' }

@@ -61,6 +61,11 @@ const sqliteOutputSource = `SELECT 'main=73' AS result;`;
 
 const duckdbOutputSource = `SELECT 'main=73' AS result;`;
 
+const postgresqlStdinSource = `CREATE TABLE input_numbers (n integer);
+COPY input_numbers FROM '/dev/blob';
+SELECT 'main=' || (sum(n) + 5)::text AS result FROM input_numbers;
+SELECT 'engine=' || split_part(version(), ' ', 1) AS engine;`;
+
 const phpStdinSource = `<?php
 $input = trim(file_get_contents('php://input'));
 echo "main=", $input, "\\n";`;
@@ -897,6 +902,49 @@ int main() {
 				});
 				expect(summary.transcript).toContain('main=');
 				expect(summary.transcript).toContain('73');
+			});
+		}
+	);
+
+	it(
+		'passes PostgreSQL preloaded stdin through the browser PGlite runtime path',
+		{
+			skip:
+				!runAllStdinBrowserCases &&
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_POSTGRESQL !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(
+					!runAllStdinBrowserCases &&
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_POSTGRESQL !== '1'
+				)
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			expect.hasAssertions();
+
+			await withBrowserPreview(async (browserUrl) => {
+				const postgresqlBrowserUrl = new URL(browserUrl);
+				postgresqlBrowserUrl.searchParams.set('lang', 'postgresql');
+				const summary = await runStdinBrowserProbe({
+					activePath: 'main.sql',
+					browserUrl: postgresqlBrowserUrl.href,
+					expectedOutput: 'engine=PostgreSQL',
+					language: 'POSTGRESQL',
+					preloadStdin: true,
+					requireSharedArrayBuffer: false,
+					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+					source: postgresqlStdinSource,
+					stdinText: '30\n38\n'
+				});
+				expect(summary.transcript).toMatch(/result\s+main=73/);
+				expect(summary.transcript).toMatch(/engine\s+engine=PostgreSQL/);
+				expect(
+					summary.runtimeRequests.some((request) =>
+						new URL(request).pathname.includes('/wasm-postgresql/assets/pglite-')
+					)
+				).toBe(true);
 			});
 		}
 	);

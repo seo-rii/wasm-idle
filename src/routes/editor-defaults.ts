@@ -17,6 +17,7 @@ export type EditorDefaultLanguage =
 	| 'erlang'
 	| 'prolog'
 	| 'gleam'
+	| 'grain'
 	| 'perl'
 	| 'tcl'
 	| 'awk'
@@ -51,6 +52,7 @@ export type EditorDefaultLanguage =
 	| 'graphql'
 	| 'duckdb'
 	| 'sqlite'
+	| 'postgresql'
 	| 'php'
 	| 'json'
 	| 'yaml'
@@ -77,6 +79,7 @@ export const editorDefaults: Record<
 	| 'erlang'
 	| 'prolog'
 	| 'gleam'
+	| 'grain'
 	| 'perl'
 	| 'tcl'
 	| 'awk'
@@ -111,6 +114,7 @@ export const editorDefaults: Record<
 	| 'graphql'
 	| 'duckdb'
 	| 'sqlite'
+	| 'postgresql'
 	| 'php'
 	| 'json'
 	| 'yaml'
@@ -564,6 +568,40 @@ pub fn main() {
   }
   io.println("fibonacci=" <> int.to_string(fibonacci(n) + bonus))
 }`,
+	grain: `module Main
+
+from "buffer" include Buffer
+from "bytes" include Bytes
+from "string" include String
+from "wasi/file" include File
+
+// Reads one line from stdin. Returns None at EOF (Ctrl+D or the EOF button).
+let readLine = () => {
+  let line = Buffer.make(64)
+  let mut reading = true
+  let mut sawInput = false
+  while (reading) {
+    match (File.fdRead(File.stdin, 1)) {
+      Ok((bytes, 1)) => {
+        sawInput = true
+        if (Bytes.getUint8(0, bytes) == 10us) {
+          reading = false
+        } else {
+          Buffer.addBytes(bytes, line)
+        }
+      },
+      _ => reading = false,
+    }
+  }
+  if (sawInput) Some(Buffer.toString(line)) else None
+}
+
+print("What is your name?")
+match (readLine()) {
+  Some(name) => print("Hello, " ++ String.trim(name) ++ "!"),
+  None => print("Hello, stranger!"),
+}
+`,
 	perl: `use strict;
 use warnings;
 
@@ -1201,6 +1239,18 @@ SELECT 'fibonacci=' || CAST(curr + 3 AS TEXT) AS result
 FROM memo
 WHERE n = 4
 LIMIT 1;`,
+	postgresql: `-- Program stdin is the server-side file '/dev/blob':
+--   COPY my_table FROM '/dev/blob';  or  SELECT pg_read_file('/dev/blob');
+WITH RECURSIVE memo(n, prev, curr) AS (
+    SELECT 0, 1, 1
+    UNION ALL
+    SELECT n + 1, curr, prev + curr
+    FROM memo
+    WHERE n < 4
+)
+SELECT 'fibonacci=' || (curr + 3)::text AS result
+FROM memo
+WHERE n = 4;`,
 	php: `<?php
 const BONUS = 3;
 $memo = [
@@ -1454,6 +1504,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.erlang ||
 		source === editorDefaults.prolog ||
 		source === editorDefaults.gleam ||
+		source === editorDefaults.grain ||
 		source === editorDefaults.perl ||
 		source === editorDefaults.tcl ||
 		source === editorDefaults.awk ||
@@ -1487,6 +1538,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.graphql ||
 		source === editorDefaults.duckdb ||
 		source === editorDefaults.sqlite ||
+		source === editorDefaults.postgresql ||
 		source === editorDefaults.php ||
 		source === editorDefaults.json ||
 		source === editorDefaults.yaml ||
