@@ -36,6 +36,11 @@
 			"import": "./dist/cobol/src/index.js",
 			"default": "./dist/cobol/src/index.js"
 		},
+		"./v": {
+			"types": "./dist/v/src/index.d.ts",
+			"import": "./dist/v/src/index.js",
+			"default": "./dist/v/src/index.js"
+		},
 		"./objective-c": {
 			"types": "./dist/objective-c/src/index.d.ts",
 			"import": "./dist/objective-c/src/index.js",

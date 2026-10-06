@@ -69,6 +69,9 @@ describe('editor defaults', () => {
 		expect(editorDefaults.r).toContain('fibonacci=%d');
 		expect(editorDefaults.octave).toContain('fgetl(stdin)');
 		expect(editorDefaults.octave).toContain('fibonacci=%d');
+		expect(editorDefaults.v).toContain('os.get_line()');
+		expect(editorDefaults.v).toContain("println('fibonacci=");
+		expect(editorDefaults.v).toContain('mut memo map[int]i64');
 		expect(editorDefaults.cobol).toContain('accept input-value');
 		expect(editorDefaults.cobol).toContain('display "fibonacci="');
 		expect(editorDefaults.cobol).toContain('memo');
@@ -148,6 +151,7 @@ describe('editor defaults', () => {
 		expect(resolveEditorDefaultSource('r', 'wasm32-wasip1')).toBe(editorDefaults.r);
 		expect(resolveEditorDefaultSource('octave', 'wasm32-wasip1')).toBe(editorDefaults.octave);
 		expect(resolveEditorDefaultSource('cobol', 'wasm32-wasip1')).toBe(editorDefaults.cobol);
+		expect(resolveEditorDefaultSource('v', 'wasm32-wasip1')).toBe(editorDefaults.v);
 		expect(resolveEditorDefaultSource('sqlite', 'wasm32-wasip1')).toBe(editorDefaults.sqlite);
 		expect(resolveEditorDefaultSource('php', 'wasm32-wasip1')).toBe(editorDefaults.php);
 		expect(resolveEditorDefaultSource('json', 'wasm32-wasip1')).toBe(editorDefaults.json);
@@ -194,6 +198,7 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.r)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.octave)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.cobol)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.v)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.sqlite)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.php)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.json)).toBe(true);

@@ -98,6 +98,7 @@
 		'VBNET',
 		'FORTRAN',
 		'COBOL',
+		'V',
 		'OCAML',
 		'HASKELL'
 	]);

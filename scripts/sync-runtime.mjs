@@ -285,6 +285,13 @@ export const RUNTIMES = [
 		targetArg: 'targetDir'
 	},
 	{
+		name: 'wasm-v',
+		module: './sync-wasm-v.mjs',
+		exportName: 'syncWasmVAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir'
+	},
+	{
 		name: 'wasm-of-js-of-ocaml',
 		module: './sync-wasm-of-js-of-ocaml.mjs',
 		exportName: 'syncWasmOfJsOfOcamlDist',

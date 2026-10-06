@@ -49,6 +49,7 @@ export type EditorDefaultLanguage =
 	| 'fortran'
 	| 'lfortran'
 	| 'cobol'
+	| 'v'
 	| 'graphql'
 	| 'duckdb'
 	| 'sqlite'
@@ -111,6 +112,7 @@ export const editorDefaults: Record<
 	| 'fortran'
 	| 'lfortran'
 	| 'cobol'
+	| 'v'
 	| 'graphql'
 	| 'duckdb'
 	| 'sqlite'
@@ -1213,6 +1215,26 @@ end-if.
 compute result-value = cached-result + 3.
 display "fibonacci=" result-value.
 stop run.`,
+	v: `import os
+
+fn fibonacci(n int, mut memo map[int]i64) i64 {
+	if n <= 1 {
+		return 1
+	}
+	if n in memo {
+		return memo[n]
+	}
+	value := fibonacci(n - 1, mut memo) + fibonacci(n - 2, mut memo)
+	memo[n] = value
+	return value
+}
+
+fn main() {
+	line := os.get_line().trim_space()
+	n := if line == '' { 4 } else { line.int() }
+	mut memo := map[int]i64{}
+	println('fibonacci=\${fibonacci(n, mut memo)}')
+}`,
 	graphql: `# memo cache: 0 => 1, 1 => 1
 query Fibonacci($n: Int = 4) {
   fibonacci(n: $n)
@@ -1535,6 +1557,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.octave ||
 		source === editorDefaults.fortran ||
 		source === editorDefaults.cobol ||
+		source === editorDefaults.v ||
 		source === editorDefaults.graphql ||
 		source === editorDefaults.duckdb ||
 		source === editorDefaults.sqlite ||

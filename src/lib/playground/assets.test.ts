@@ -33,6 +33,7 @@ const { publicEnv } = vi.hoisted(() => ({
 		PUBLIC_WASM_FORTRAN_F2C_HEADER_URL: '',
 		PUBLIC_WASM_FORTRAN_ANALYZER_URL: '',
 		PUBLIC_WASM_COBOL_BASE_URL: '',
+		PUBLIC_WASM_V_BASE_URL: '',
 		PUBLIC_WASM_OBJECTIVEC_BASE_URL: '',
 		PUBLIC_WASM_OBJECTIVEC_LIBOBJC_URL: '',
 		PUBLIC_WASM_OBJECTIVEC_HEADERS_URL: '',
@@ -110,6 +111,7 @@ vi.mock('$env/dynamic/public', () => ({
 import {
 	RUNTIME_LOAD_ASSETS,
 	resolveCobolBaseUrl,
+	resolveVBaseUrl,
 	resolveDebugRuntimeUrls,
 	resolveFortranRuntimeAssetConfig,
 	resolveObjectiveCRuntimeAssetConfig,
@@ -2651,6 +2653,15 @@ describe('runtime asset config resolution', () => {
 			analyzerUrl: 'https://example.com/absproxy/5173/wasm-fortran/analyzer.js',
 			integrity: WASM_FORTRAN_EXECUTION_ASSET_RECEIPTS
 		});
+	});
+
+	it('derives the V runtime base url from the shared root path or an explicit override', () => {
+		expect(resolveVBaseUrl('/absproxy/5173', 'https://example.com/app')).toBe(
+			'https://example.com/absproxy/5173/wasm-v/'
+		);
+		expect(
+			resolveVBaseUrl({ v: { baseUrl: 'https://cdn.example.com/v' } }, 'https://example.com/')
+		).toBe('https://cdn.example.com/v/');
 	});
 
 	it('derives the COBOL runtime base url from the shared root path', () => {

@@ -267,6 +267,13 @@ vi.mock('$lib/playground/cobol', () => {
 	};
 });
 
+vi.mock('$lib/playground/v', () => {
+	moduleLoads.add('V');
+	return {
+		default: createMockSandboxClass('V')
+	};
+});
+
 vi.mock('$lib/playground/sqlite', () => {
 	moduleLoads.add('SQLITE');
 	return {
@@ -445,6 +452,7 @@ describe('playground runtime binding', () => {
 				'LFORTRAN',
 				'FORTRAN',
 				'COBOL',
+				'V',
 				'DUCKDB',
 				'WASM'
 			])
@@ -473,6 +481,15 @@ describe('playground runtime binding', () => {
 		const sandbox = await playground('CLJS');
 		expect(sandboxInstances.get('CLOJURESCRIPT')).toHaveLength(1);
 		expect(moduleLoads).toContain('CLOJURESCRIPT');
+	});
+
+	it('routes the VLANG alias through the V sandbox', async () => {
+		const canonical = await playground('V');
+		const alias = await playground('VLANG');
+
+		expect(canonical).not.toBe(alias);
+		expect(sandboxInstances.get('V')).toHaveLength(2);
+		expect(moduleLoads).toContain('V');
 	});
 
 	it('routes the RES alias through the ReScript sandbox', async () => {

@@ -1053,6 +1053,17 @@ describe('example route debug actions', () => {
 		expect(editorOnlyLanguages.has('DUCKDB')).toBe(false);
 	});
 
+	it('surfaces V through the V compiler llvm-core runtime contract', () => {
+		expect(applicationRuntimeAssets.v?.baseUrl).toBe('/wasm-idle/wasm-v/');
+		expectPlaygroundLanguage('V');
+		expect(source).toMatch(/vlang: 'V'/);
+		expect(source).toMatch(/'.v': 'V'/);
+		expect(source).toMatch(/V: 'main\.v'/);
+		expect(source).toMatch(/V: 'v'/);
+		expect(source).toMatch(/real V 0\.5\.2 compiler/);
+		expect(editorOnlyLanguages.has('V')).toBe(false);
+	});
+
 	it('surfaces COBOL through the GnuCOBOL llvm-core runtime contract', () => {
 		expect(applicationRuntimeAssets.cobol?.baseUrl).toBe('/wasm-idle/wasm-cobol/');
 		expectPlaygroundLanguage('COBOL');

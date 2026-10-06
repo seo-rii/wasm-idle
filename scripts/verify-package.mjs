@@ -45,7 +45,8 @@ export const scenarios = [
 	{
 		name: 'wasm-idle root install',
 		packageNames: ['wasm-idle', '@wasm-idle/core', '@wasm-idle/llvm-core'],
-		budget: { maxBytes: 5.5 * MiB, maxFiles: 700, maxPackages: 6 },
+		// The V host and PostgreSQL/ReScript adapters bring the production install to 5.54 MiB.
+		budget: { maxBytes: 5.75 * MiB, maxFiles: 700, maxPackages: 6 },
 		absentPackageNames: [
 			'@lezer/rust',
 			'@wasm-idle/debug',

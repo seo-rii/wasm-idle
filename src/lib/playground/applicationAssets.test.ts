@@ -186,6 +186,7 @@ describe('application runtime asset root', () => {
 			'tcl',
 			'tinygo',
 			'typescript',
+			'v',
 			'wat',
 			'zig'
 		]);

@@ -20,7 +20,8 @@ package.
 
 The wasm-idle sync step deterministically repackages the producer's single-entry archives as native
 gzip delivery assets. Clang uses `memfs.wasm.gz`, `clang.wasm.gz`, `lld.wasm.gz`, and
-`sysroot.tar.gz`; COBOL uses `cobc.wasm.gz`, `rootfs.tar.gz`, and `c-sysroot.tar.gz`. The browser
+`sysroot.tar.gz`; COBOL uses `cobc.wasm.gz`, `rootfs.tar.gz`, and `c-sysroot.tar.gz`; V
+(`@wasm-idle/llvm-core/v`) uses `v.wasm.gz`, `vroot.tar.gz`, and `c-sysroot.tar.gz`. The browser
 loader pipes gzip response bodies through `DecompressionStream('gzip')`. Runtime manifests from
 older external deployments may still reference ZIP files; those load `fflate` only on the legacy
 compatibility path.

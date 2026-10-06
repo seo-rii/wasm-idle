@@ -366,6 +366,12 @@ export const playgroundLanguageDescriptors: Readonly<
 		supportsArgs: true,
 		diagnosticMarkers: true
 	},
+	V: {
+		label: 'V',
+		editorLanguage: 'go',
+		supportsArgs: true,
+		diagnosticMarkers: true
+	},
 	TINYGO: {
 		label: 'TinyGo',
 		editorLanguage: 'go',

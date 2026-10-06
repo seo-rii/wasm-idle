@@ -99,6 +99,7 @@ const runtimeReadinessAudit = {
 	LFORTRAN: { strategy: 'static-worker-fallback', hostModule: 'lfortran' },
 	FORTRAN: { strategy: 'terminal-fallback', hostModule: 'fortran' },
 	COBOL: { strategy: 'terminal-fallback', hostModule: 'cobol' },
+	V: { strategy: 'terminal-fallback', hostModule: 'v' },
 	TINYGO: {
 		strategy: 'entry-signal',
 		hostModule: 'tinygo',

@@ -9,6 +9,7 @@ import {
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
 import { runStdinBrowserProbe } from '../../../scripts/stdin-browser-probe-lib.mjs';
+import { editorDefaults } from '../../routes/editor-defaults';
 
 const pythonStdinSource = `line = input()
 print(f"main={int(line.strip()) + 5}")`;
@@ -234,6 +235,27 @@ const fortranStdinSource = `      PROGRAM MAIN
       READ *, N
       PRINT *, 'main=', N + 5
       END`;
+
+const vStdinSource = `import os
+
+struct Reply {
+	value int
+}
+
+fn parse(line string) !int {
+	return line.trim_space().int()
+}
+
+fn main() {
+	reply := &Reply{
+		value: parse(os.get_line()) or { 0 } + 5
+	}
+	println('main=\${reply.value}')
+}`;
+
+const vInvalidSource = `fn main() {
+	x := 1 +
+}`;
 
 const cobolStdinSource = `identification division.
 program-id. main.
@@ -976,6 +998,89 @@ int main() {
 					stdinText: '73\n'
 				});
 				expect(summary.transcript).toContain('main=73');
+			});
+		}
+	);
+
+	const runVBrowserCases =
+		runAllStdinBrowserCases || process.env.WASM_IDLE_RUN_REAL_BROWSER_V === '1';
+
+	it(
+		'passes V stdin through the browser V compiler and llvm-core runtime path',
+		{
+			skip: !runVBrowserCases,
+			meta: { browser: true, requiredBrowser: runVBrowserCases },
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			expect.hasAssertions();
+
+			await withBrowserPreview(async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					activePath: 'main.v',
+					browserUrl,
+					expectedOutput: 'main=73',
+					language: 'V',
+					requireSharedArrayBuffer: false,
+					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+					source: vStdinSource,
+					stdinText: '68\n'
+				});
+				expect(summary.transcript).toContain('main=73');
+			});
+		}
+	);
+
+	it(
+		'runs the default V editor sample with terminal stdin in the browser',
+		{
+			skip: !runVBrowserCases,
+			meta: { browser: true, requiredBrowser: runVBrowserCases },
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			expect.hasAssertions();
+
+			await withBrowserPreview(async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					activePath: 'main.v',
+					browserUrl,
+					expectedOutput: 'fibonacci=89',
+					language: 'V',
+					requireSharedArrayBuffer: false,
+					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+					source: editorDefaults.v,
+					stdinText: '10\n'
+				});
+				expect(summary.transcript).toContain('fibonacci=89');
+			});
+		}
+	);
+
+	it(
+		'reports V compiler diagnostics from the browser V compiler',
+		{
+			skip: !runVBrowserCases,
+			meta: { browser: true, requiredBrowser: runVBrowserCases },
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			expect.hasAssertions();
+
+			await withBrowserPreview(async (browserUrl) => {
+				// The failed compilation ends the run, so the probe rejects with the transcript.
+				await expect(
+					runStdinBrowserProbe({
+						activePath: 'main.v',
+						browserUrl,
+						expectedOutput: 'invalid expression: unexpected token',
+						language: 'V',
+						requireSharedArrayBuffer: false,
+						runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+						source: vInvalidSource,
+						stdinText: ''
+					})
+				).rejects.toThrow(/"status": "failed"[\s\S]*main\.v:3:1:[\s\S]*invalid expression: unexpected token/);
 			});
 		}
 	);

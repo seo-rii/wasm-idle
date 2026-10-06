@@ -134,6 +134,15 @@ describe('language registry', () => {
 		expect(monacoLanguageContributionLoaders.clojure).toBeTypeOf('function');
 	});
 
+	it('registers V with its browser runtime and Go-like editor syntax', () => {
+		expect(playgroundLanguages).toContain('V');
+		expect(languageLabels.V).toBe('V');
+		expect(editorLanguages.V).toBe('go');
+		expect(editorOnlyLanguages.has('V')).toBe(false);
+		expect(argsHelpLanguages.has('V')).toBe(true);
+		expect(diagnosticMarkerLanguages.has('go')).toBe(true);
+	});
+
 	it('registers Hy on Pyodide with Clojure-style syntax highlighting', () => {
 		expect(playgroundLanguages).toContain('HY');
 		expect(languageLabels.HY).toBe('Hy — Pyodide');

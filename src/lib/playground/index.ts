@@ -265,6 +265,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'V',
+		load: async () => {
+			const { default: VLang } = await import('$lib/playground/v');
+			return new VLang();
+		}
+	},
+	{
 		languageId: 'TINYGO',
 		load: async () => {
 			const { default: TinyGo } = await import('$lib/playground/tinygo');

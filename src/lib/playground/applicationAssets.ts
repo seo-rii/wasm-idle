@@ -392,6 +392,9 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		cobol: {
 			baseUrl: asset('wasm-cobol/')
 		},
+		v: {
+			baseUrl: asset('wasm-v/')
+		},
 		objectivec: {
 			baseUrl: asset('wasm-objectivec/'),
 			libobjcUrl: asset('wasm-objectivec/libobjc.a', WASM_OBJECTIVEC_ASSET_VERSION),
