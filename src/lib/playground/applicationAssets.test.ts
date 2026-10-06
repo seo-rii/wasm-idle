@@ -155,6 +155,7 @@ describe('application runtime asset root', () => {
 			'duckdb',
 			'elixir',
 			'erlang',
+			'fennel',
 			'forth',
 			'fortran',
 			'gleam',

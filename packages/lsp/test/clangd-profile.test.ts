@@ -47,6 +47,26 @@ describe('clangd compile profiles', () => {
 			flags.indexOf('-isystem/usr/include/wasm32-wasi')
 		);
 	});
+	it('maps .mm sources to an Objective-C++ profile with libc++ and the libobjc2 ABI', () => {
+		const configurations = createClangdConfiguration()
+			.split('\n---\n')
+			.map((entry) => JSON.parse(entry));
+		const matching = configurations.filter((entry) =>
+			new RegExp(`^(?:${entry.If.PathMatch})$`).test('main.mm')
+		);
+		expect(matching).toHaveLength(1);
+		const flags: string[] = matching[0].CompileFlags.Add;
+		expect(flags[flags.indexOf('-x') + 1]).toBe('objective-c++');
+		expect(flags).toContain(resolveClangLanguageArgs('CPP', {}).standardArg);
+		expect(flags).toContain('-isystem/usr/include/wasm32-wasi/c++/v1');
+		expect(flags).toEqual(
+			expect.arrayContaining([...OBJECTIVE_C_LSP_DEFINES, '-I/objc', '-fblocks'])
+		);
+		expect(flags[flags.indexOf('-fobjc-runtime=gnustep-2.0') - 1]).toBe('-Xclang');
+		expect(createClangdCompileFlags('OBJCXX', { cppVersion: 'CPP17' })).toContain(
+			'-std=gnu++17'
+		);
+	});
 	it('passes the execution frontend ABI through the driver and selects libobjc2 headers', () => {
 		const flags = createClangdCompileFlags('OBJC');
 		expect(flags[flags.indexOf('-fobjc-runtime=gnustep-2.0') - 1]).toBe('-Xclang');

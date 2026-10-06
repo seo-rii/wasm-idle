@@ -25,6 +25,7 @@ import { WASM_JANET_RUNTIME_BUNDLE } from './wasmJanetVersion';
 import { WASM_JULIA_RUNTIME_BUNDLE } from './wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from './wasmLispVersion';
 import { WASM_LUA_ASSET_VERSION } from './wasmLuaVersion';
+import { WASM_FENNEL_ASSET_VERSION, WASM_FENNEL_COMPILER_RECEIPT } from './wasmFennelVersion';
 import { WASM_NIM_RUNTIME_BUNDLE } from './wasmNimVersion';
 import {
 	WASM_OBJECTIVEC_ASSET_RECEIPTS,
@@ -342,6 +343,9 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		lua: {
 			moduleUrl: asset('wasm-lua/index.js', WASM_LUA_ASSET_VERSION)
+		},
+		fennel: {
+			compilerUrl: asset(WASM_FENNEL_COMPILER_RECEIPT.path, WASM_FENNEL_ASSET_VERSION)
 		},
 		zig: {
 			compilerUrl: asset('wasm-zig/zig_small.wasm', WASM_ZIG_ASSET_VERSION),

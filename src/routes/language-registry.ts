@@ -93,6 +93,14 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	OBJECTIVECXX: {
+		label: 'Objective-C++',
+		editorLanguage: 'objective-c',
+		lspProvider: 'clangd',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	PYTHON: { label: 'Python — Pyodide', editorLanguage: 'python', diagnosticMarkers: true },
 	JAVA: {
 		label: 'Java',
@@ -229,6 +237,7 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	HY: { label: 'Hy — Pyodide', editorLanguage: 'clojure' },
 	OCAML: {
 		label: 'OCaml',
 		editorLanguage: 'ocaml',
@@ -275,6 +284,13 @@ export const playgroundLanguageDescriptors: Readonly<
 		label: 'Lua',
 		editorLanguage: 'lua',
 		runtimeLspCapability: 'lua',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
+	FENNEL: {
+		label: 'Fennel',
+		editorLanguage: 'clojure',
 		supportsArgs: true,
 		compilerDiagnostics: true,
 		diagnosticMarkers: true

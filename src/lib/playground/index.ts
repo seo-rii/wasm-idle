@@ -34,6 +34,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'HY',
+		load: async () => {
+			const { default: Hy } = await import('$lib/playground/hy');
+			return new Hy();
+		}
+	},
+	{
 		languageId: 'C',
 		load: async () => {
 			const { default: Clang } = await import('$lib/playground/clang');
@@ -52,6 +59,13 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: ObjectiveC } = await import('$lib/playground/objectivec');
 			return new ObjectiveC();
+		}
+	},
+	{
+		languageId: 'OBJECTIVECXX',
+		load: async () => {
+			const { default: ObjectiveC } = await import('$lib/playground/objectivec');
+			return new ObjectiveC('OBJECTIVECXX');
 		}
 	},
 	{
@@ -297,6 +311,13 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: Lua } = await import('$lib/playground/lua');
 			return new Lua();
+		}
+	},
+	{
+		languageId: 'FENNEL',
+		load: async () => {
+			const { default: Fennel } = await import('$lib/playground/fennel');
+			return new Fennel();
 		}
 	},
 	{

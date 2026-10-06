@@ -97,6 +97,11 @@ const typescriptStdinSource = `import fs from 'node:fs';
 const line: string = (fs as any).readLineSync(0);
 console.log(\`main=\${Number(line.trim()) + 5}\`);`;
 
+const fennelStdinSource = `(macro add-five [x] \`(+ ,x 5))
+(let [line (or (io.read) "0")
+      n (tonumber line)]
+  (print (.. "main=" (add-five n))))`;
+
 const luaStdinSource = `local line = io.read("*l") or "0"
 print("main=" .. tostring((tonumber(line) or 0) + 5))`;
 
@@ -239,6 +244,16 @@ const configuredStdinRunTimeoutMs = Number(process.env.WASM_IDLE_STDIN_RUN_TIMEO
 const browserStdinTestTimeoutMs = Math.max(700_000, configuredStdinRunTimeoutMs + 120_000);
 const runAllStdinBrowserCases = process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN === '1';
 const runLispStdinBrowserCase = process.env.WASM_IDLE_RUN_REAL_BROWSER_LISP === '1';
+const runFennelStdinBrowserCase = process.env.WASM_IDLE_RUN_REAL_BROWSER_FENNEL === '1';
+const selectedStdinBrowserLanguages = new Set<string>([
+	...(runLispStdinBrowserCase ? ['LISP'] : []),
+	...(runFennelStdinBrowserCase ? ['FENNEL'] : [])
+]);
+const skipSharedStdinBrowserCase = (language: string) =>
+	(!runSharedStdinBrowserCases && selectedStdinBrowserLanguages.size === 0) ||
+	(selectedStdinBrowserLanguages.size > 0 &&
+		!runAllStdinBrowserCases &&
+		!selectedStdinBrowserLanguages.has(language));
 const runDotnetBrowserCases = process.env.WASM_IDLE_RUN_REAL_BROWSER_DOTNET === '1';
 const runSharedStdinBrowserCases =
 	runAllStdinBrowserCases || process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN_SHARED_ONLY === '1';
@@ -349,6 +364,13 @@ const sharedStdinBrowserCases = [
 		defaultRunTimeoutMs: 240_000
 	},
 	{
+		language: 'FENNEL',
+		source: fennelStdinSource,
+		stdinText: '68\n',
+		expectedOutput: 'main=73',
+		defaultRunTimeoutMs: 240_000
+	},
+	{
 		language: 'LISP',
 		source: schemeStdinSource,
 		stdinText: 'K\n',
@@ -440,15 +462,10 @@ describe('wasm-idle browser stdin connection', () => {
 		it(
 			`passes ${language} input and output through its real browser runtime path`,
 			{
-				skip:
-					(!runSharedStdinBrowserCases && !runLispStdinBrowserCase) ||
-					(runLispStdinBrowserCase && !runAllStdinBrowserCases && language !== 'LISP'),
+				skip: skipSharedStdinBrowserCase(language),
 				meta: {
 					browser: true,
-					requiredBrowser: !(
-						(!runSharedStdinBrowserCases && !runLispStdinBrowserCase) ||
-						(runLispStdinBrowserCase && !runAllStdinBrowserCases && language !== 'LISP')
-					)
+					requiredBrowser: !skipSharedStdinBrowserCase(language)
 				},
 				timeout: browserStdinTestTimeoutMs
 			},
@@ -593,6 +610,63 @@ describe('wasm-idle browser stdin connection', () => {
 						pathname.endsWith('/clang/bin/sysroot.tar.gz')
 					)
 				).toBe(false);
+			});
+		}
+	);
+
+	it(
+		'reuses a precompiled <bits/stdc++.h> for later C++ stdin runs in the real browser',
+		{
+			skip:
+				!runAllStdinBrowserCases &&
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(
+					!runAllStdinBrowserCases &&
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1'
+				)
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			expect.hasAssertions();
+			const stdcppSource = (offset: number) => `// precompiled header probe
+#include <bits/stdc++.h>
+using namespace std;
+int main() {
+	long long n;
+	cin >> n;
+	vector<long long> values{n, n + ${offset}};
+	cout << "pch=" << accumulate(values.begin(), values.end(), 0LL) << endl;
+}`;
+			// The header is built in the background after the first compile, so later runs
+			// keep editing the source until one compile reports that it used the header.
+			const followUpRuns = [1, 2, 3, 4, 5].map((offset) => ({
+				source: stdcppSource(offset),
+				stdinText: '40\n',
+				expectedOutput: `pch=${80 + offset}`
+			}));
+
+			await withBrowserPreview(async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					browserUrl,
+					expectedOutput: 'pch=80',
+					language: 'CPP',
+					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+					source: stdcppSource(0),
+					stdinText: '40\n',
+					followUpRuns
+				});
+				expect(summary.transcript).toContain('pch=80');
+				expect(summary.followUpRuns.map((run) => run.output)).toEqual(
+					followUpRuns.map((run) => expect.stringContaining(run.expectedOutput))
+				);
+				expect(
+					summary.followUpRuns.some((run) =>
+						run.progressLabels.includes('Compiled with precompiled <bits/stdc++.h>')
+					)
+				).toBe(true);
 			});
 		}
 	);

@@ -45,7 +45,7 @@ describe('language registry', () => {
 			expect(lspLanguageOverrides[language]).toBe(descriptor.lspLanguageOverride);
 		}
 
-		expect([...clangdLspLanguages].sort()).toEqual(['C', 'CPP', 'OBJC']);
+		expect([...clangdLspLanguages].sort()).toEqual(['C', 'CPP', 'OBJC', 'OBJECTIVECXX']);
 		expect([...dotnetLspLanguages].sort()).toEqual(['CSHARP', 'FSHARP', 'VBNET']);
 		expect([...typescriptLspLanguages].sort()).toEqual(['JAVASCRIPT', 'TYPESCRIPT']);
 	});
@@ -86,6 +86,15 @@ describe('language registry', () => {
 		expect(compilerDiagnosticLanguages.has('SWIFT' as never)).toBe(false);
 	});
 
+	it('registers Objective-C++ as a dedicated clangd language on the Objective-C toolchain', () => {
+		expect(supportedLanguageIds).toContain('OBJECTIVECXX');
+		expect(playgroundLanguages).toContain('OBJECTIVECXX');
+		expect(languageLabels.OBJECTIVECXX).toBe('Objective-C++');
+		expect(editorLanguages.OBJECTIVECXX).toBe(editorLanguages.OBJC);
+		expect(argsHelpLanguages.has('OBJECTIVECXX')).toBe(true);
+		expect(compilerDiagnosticLanguages.has('OBJECTIVECXX')).toBe(true);
+	});
+
 	it('registers receipt-verified upstream TinyGo with Go syntax and diagnostics', () => {
 		expect(supportedLanguageIds).toContain('TINYGO');
 		expect(playgroundLanguages).toContain('TINYGO');
@@ -99,6 +108,7 @@ describe('language registry', () => {
 		expect(clangdLspLanguages.has('C')).toBe(true);
 		expect(clangdLspLanguages.has('CPP')).toBe(true);
 		expect(clangdLspLanguages.has('OBJC')).toBe(true);
+		expect(clangdLspLanguages.has('OBJECTIVECXX')).toBe(true);
 		expect(dotnetLspLanguages.has('CSHARP')).toBe(true);
 		expect(dotnetLspLanguages.has('FSHARP')).toBe(true);
 		expect(dotnetLspLanguages.has('VBNET')).toBe(true);
@@ -121,6 +131,14 @@ describe('language registry', () => {
 		expect(languageLabels.CLOJURESCRIPT).toBe('ClojureScript');
 		expect(editorLanguages.CLOJURESCRIPT).toBe('clojure');
 		expect(argsHelpLanguages.has('CLOJURESCRIPT')).toBe(true);
+		expect(monacoLanguageContributionLoaders.clojure).toBeTypeOf('function');
+	});
+
+	it('registers Hy on Pyodide with Clojure-style syntax highlighting', () => {
+		expect(playgroundLanguages).toContain('HY');
+		expect(languageLabels.HY).toBe('Hy — Pyodide');
+		expect(editorLanguages.HY).toBe('clojure');
+		expect(argsHelpLanguages.has('HY')).toBe(false);
 		expect(monacoLanguageContributionLoaders.clojure).toBeTypeOf('function');
 	});
 

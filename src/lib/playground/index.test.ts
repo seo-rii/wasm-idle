@@ -217,6 +217,11 @@ vi.mock('$lib/playground/bash', () => {
 	};
 });
 
+vi.mock('$lib/playground/hy', () => {
+	moduleLoads.add('HY');
+	return { default: createMockSandboxClass('HY') };
+});
+
 vi.mock('$lib/playground/clojurescript', () => {
 	moduleLoads.add('CLOJURESCRIPT');
 	return {
@@ -353,6 +358,13 @@ vi.mock('$lib/playground/lua', () => {
 	};
 });
 
+vi.mock('$lib/playground/fennel', () => {
+	moduleLoads.add('FENNEL');
+	return {
+		default: createMockSandboxClass('FENNEL')
+	};
+});
+
 vi.mock('$lib/playground/zig', () => {
 	moduleLoads.add('ZIG');
 	return {
@@ -437,6 +449,12 @@ describe('playground runtime binding', () => {
 		const sandbox = await playground('SH');
 		expect(sandboxInstances.get('BASH')).toHaveLength(1);
 		expect(moduleLoads).toContain('BASH');
+	});
+
+	it('routes the HYLANG alias through the Hy sandbox', async () => {
+		await playground('HYLANG');
+		expect(sandboxInstances.get('HY')).toHaveLength(1);
+		expect(moduleLoads).toContain('HY');
 	});
 
 	it('routes the CLJS alias through the ClojureScript sandbox', async () => {
@@ -1190,6 +1208,29 @@ End Module`;
 		expect(sandboxInstances.get('LUA')).toHaveLength(1);
 		expect(sandboxInstances.get('LUA')?.[0]?.loadCalls).toEqual([
 			[runtimeAssets, 'print("hello")', true, ['demo'], expectedBoundOptions(), progress]
+		]);
+	});
+
+	it('routes Fennel and FNL requests through the Fennel sandbox on wasm-lua', async () => {
+		const runtimeAssets = {
+			rootUrl: '/absproxy/5173',
+			lua: {
+				moduleUrl: '/absproxy/5173/wasm-lua/index.js?v=test'
+			},
+			fennel: {
+				compilerUrl: '/absproxy/5173/wasm-fennel/fennel-1.6.1.lua.gz?v=test'
+			}
+		};
+		const binding = createPlaygroundBinding(runtimeAssets);
+		const progress = { set() {} };
+		const sandbox = await binding.load('FNL');
+
+		await sandbox.load('(print "hello")', true, ['demo'], {}, progress);
+
+		expect(sandbox.runtimeAssets).toEqual(runtimeAssets);
+		expect(sandboxInstances.get('FENNEL')).toHaveLength(1);
+		expect(sandboxInstances.get('FENNEL')?.[0]?.loadCalls).toEqual([
+			[runtimeAssets, '(print "hello")', true, ['demo'], expectedBoundOptions(), progress]
 		]);
 	});
 
