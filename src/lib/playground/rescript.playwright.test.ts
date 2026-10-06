@@ -118,17 +118,17 @@ describe('wasm-idle ReScript browser integration', () => {
 					).toBe(false);
 					const eof = await runStdinBrowserProbe({
 						browserUrl: rescriptBrowserUrl.href,
-						expectedOutput: 'eof=5',
+						expectedOutput: 'eof=6',
 						language: 'RESCRIPT',
 						runTimeoutMs: 60_000,
 						sendEof: true,
 						source: rescriptEofSource,
-						stdinText: 'input',
+						stdinText: 'input\n',
 						waitForOutputBeforeStdin: 'eof?'
 					});
 					expect(eof.pageErrors).toEqual([]);
 					expect(eof.transcript).toContain('exists true');
-					expect(eof.transcript).toContain('eof=5');
+					expect(eof.transcript).toContain('eof=6');
 					expect(eof.transcript).toContain('Process finished after');
 				}
 			);
