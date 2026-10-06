@@ -15,6 +15,7 @@ import {
 import { runGrainc } from '../../../scripts/sync-wasm-grain.mjs';
 import { editorDefaults } from '../../routes/editor-defaults';
 import { bundledGrainProfile as profile, bundledGrainWorkerReceipt } from './wasmGrainVersion';
+import { RUNTIME_ASSET_LOCK } from '../../../packages/core/src/runtime-asset-lock.generated';
 
 const staticAsset = (name: string) =>
 	readFile(new URL(`../../../static/wasm-grain/${name}`, import.meta.url));
@@ -108,6 +109,21 @@ describe('Grain browser runtime assets', () => {
 				: GRAIN_STDLIB_SOURCE_MTIME_MS
 		}));
 	}, 60_000);
+
+	it('includes deployed Grain assets in the bundled asset lock', async () => {
+		for (const name of [
+			'grainc.js.gz.bin',
+			'stdlib.pack.gz.bin',
+			'runner-worker.js',
+			'runtime-build.json',
+			'LICENSE-grain-compiler.txt',
+			'LICENSE-grain-stdlib.txt'
+		]) {
+			expect(RUNTIME_ASSET_LOCK.assets[`wasm-grain/${name}`], name).toMatchObject(
+				receipt(await staticAsset(name))
+			);
+		}
+	});
 
 	it('pins the upstream release, licenses and the generated worker', async () => {
 		const build = JSON.parse((await staticAsset('runtime-build.json')).toString('utf8'));
