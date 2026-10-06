@@ -173,6 +173,7 @@ describe('application runtime asset root', () => {
 			'pascal',
 			'perl',
 			'php',
+			'postgresql',
 			'prolog',
 			'r',
 			'rootUrl',
@@ -333,6 +334,9 @@ describe('application runtime asset root', () => {
 		expect(assets.r?.baseUrl).toBe(`/foo/bar/webr/${WASM_R_ASSET_VERSION}/`);
 		expect(assets.sqlite?.moduleUrl).toBe(
 			`/foo/bar/wasm-sqlite/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
+		);
+		expect(assets.postgresql?.moduleUrl).toBe(
+			`/foo/bar/wasm-postgresql/runtime.mjs?v=${STATIC_RUNTIME_MODULE_VERSION}`
 		);
 		expect(assets.ruby).toEqual({
 			splitStdlib: true,

@@ -176,6 +176,11 @@ const runtimeReadinessAudit = {
 		hostModule: 'sqlite',
 		producerPath: 'src/lib/playground/worker/sqlite.ts'
 	},
+	POSTGRESQL: {
+		strategy: 'entry-signal',
+		hostModule: 'postgresql',
+		producerPath: 'src/lib/playground/worker/postgresql.ts'
+	},
 	PHP: {
 		strategy: 'entry-signal',
 		hostModule: 'php',

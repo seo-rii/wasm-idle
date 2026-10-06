@@ -267,6 +267,13 @@ vi.mock('$lib/playground/sqlite', () => {
 	};
 });
 
+vi.mock('$lib/playground/postgresql', () => {
+	moduleLoads.add('POSTGRESQL');
+	return {
+		default: createMockSandboxClass('POSTGRESQL')
+	};
+});
+
 vi.mock('$lib/playground/duckdb', () => {
 	moduleLoads.add('DUCKDB');
 	return {

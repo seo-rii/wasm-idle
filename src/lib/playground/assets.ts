@@ -609,6 +609,10 @@ export interface DuckDbRuntimeAssetConfig {
 	moduleUrl?: string;
 }
 
+export interface PostgresqlRuntimeAssetConfig {
+	moduleUrl?: string;
+}
+
 export interface PhpRuntimeAssetConfig {
 	moduleUrl?: string;
 }
@@ -660,6 +664,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	swift?: SwiftRuntimeAssetConfig;
 	assemblyscript?: AssemblyScriptRuntimeAssetConfig;
 	duckdb?: DuckDbRuntimeAssetConfig;
+	postgresql?: PostgresqlRuntimeAssetConfig;
 	sqlite?: SqliteRuntimeAssetConfig;
 	php?: PhpRuntimeAssetConfig;
 }
@@ -4383,6 +4388,19 @@ export function resolvePhpRuntimeModuleUrl(
 		typeof options === 'object' ? options?.php?.moduleUrl : undefined,
 		publicEnv.PUBLIC_WASM_PHP_MODULE_URL || '',
 		'wasm-php',
+		currentUrl
+	);
+}
+
+export function resolvePostgresqlRuntimeModuleUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	return resolveStaticRuntimeModuleUrl(
+		options,
+		typeof options === 'object' ? options?.postgresql?.moduleUrl : undefined,
+		publicEnv.PUBLIC_WASM_POSTGRESQL_MODULE_URL || '',
+		'wasm-postgresql',
 		currentUrl
 	);
 }

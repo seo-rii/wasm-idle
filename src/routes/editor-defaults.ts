@@ -51,6 +51,7 @@ export type EditorDefaultLanguage =
 	| 'graphql'
 	| 'duckdb'
 	| 'sqlite'
+	| 'postgresql'
 	| 'php'
 	| 'json'
 	| 'yaml'
@@ -111,6 +112,7 @@ export const editorDefaults: Record<
 	| 'graphql'
 	| 'duckdb'
 	| 'sqlite'
+	| 'postgresql'
 	| 'php'
 	| 'json'
 	| 'yaml'
@@ -1217,6 +1219,18 @@ SELECT 'fibonacci=' || CAST(curr + 3 AS TEXT) AS result
 FROM memo
 WHERE n = 4
 LIMIT 1;`,
+	postgresql: `-- Program stdin is the server-side file '/dev/blob':
+--   COPY my_table FROM '/dev/blob';  or  SELECT pg_read_file('/dev/blob');
+WITH RECURSIVE memo(n, prev, curr) AS (
+    SELECT 0, 1, 1
+    UNION ALL
+    SELECT n + 1, curr, prev + curr
+    FROM memo
+    WHERE n < 4
+)
+SELECT 'fibonacci=' || (curr + 3)::text AS result
+FROM memo
+WHERE n = 4;`,
 	php: `<?php
 const BONUS = 3;
 $memo = [
@@ -1503,6 +1517,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.graphql ||
 		source === editorDefaults.duckdb ||
 		source === editorDefaults.sqlite ||
+		source === editorDefaults.postgresql ||
 		source === editorDefaults.php ||
 		source === editorDefaults.json ||
 		source === editorDefaults.yaml ||

@@ -822,6 +822,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'PostgreSQL',
+		ids: ['POSTGRESQL'],
+		runtime: 'PostgreSQL 18 / PGlite',
+		stdin: 'Files',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_POSTGRESQL',
+			language: 'POSTGRESQL'
+		}
+	},
+	{
 		language: 'PHP',
 		ids: ['PHP'],
 		runtime: 'PHP 8.4 / php-wasm',
@@ -1584,6 +1597,23 @@ const runtimeDetailsByLanguage = new Map([
 				`${code('runtimeAssets.sqlite.moduleUrl')}/${code('wasmUrl')} or ` +
 				`${code('PUBLIC_WASM_SQLITE_MODULE_URL')}/${code('PUBLIC_WASM_SQLITE_WASM_URL')} or ` +
 				`${code('rootUrl')}; ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'PostgreSQL',
+		{
+			packageBase:
+				`static ESM ${code('static/wasm-postgresql/runtime.mjs')} produced from ` +
+				`${npmPackage('@electric-sql/pglite')}`,
+			execution:
+				`upstream PostgreSQL compiled to WebAssembly by PGlite; initdb runs once per worker ` +
+				`and every run restores a fresh in-memory cluster, sends the script as one simple ` +
+				`query, and prints result sets, notices, and ${code('COPY ... TO STDOUT')}; preloaded ` +
+				`${code('stdin')} is exposed as the server file ${code('/dev/blob')}`,
+			customization:
+				`${code('runtimeAssets.postgresql.moduleUrl')} or ` +
+				`${code('PUBLIC_WASM_POSTGRESQL_MODULE_URL')} or ${code('rootUrl')}; ` +
+				`${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}`
 		}
 	],
 	[
