@@ -689,6 +689,7 @@
 			'.cob': 'COBOL',
 			'.cbl': 'COBOL',
 			'.cpy': 'COBOL',
+			'.v': 'V',
 			'.graphql': 'GRAPHQL',
 			'.gql': 'GRAPHQL',
 			'.duckdb': 'DUCKDB',
@@ -756,6 +757,7 @@
 			LFORTRAN: 'main.f90',
 			FORTRAN: 'main.f',
 			COBOL: 'main.cob',
+			V: 'main.v',
 			GRAPHQL: 'main.graphql',
 			DUCKDB: 'main.duckdb',
 			SQLITE: 'main.sql',
@@ -817,6 +819,7 @@
 			LFORTRAN: 'lfortran',
 			FORTRAN: 'fortran',
 			COBOL: 'cobol',
+			V: 'v',
 			GRAPHQL: 'graphql',
 			DUCKDB: 'duckdb',
 			SQLITE: 'sqlite',
@@ -1523,6 +1526,8 @@
 			cob: 'COBOL',
 			cbl: 'COBOL',
 			gnucobol: 'COBOL',
+			v: 'V',
+			vlang: 'V',
 			tinygo: 'TINYGO',
 			graphql: 'GRAPHQL',
 			gql: 'GRAPHQL',
@@ -2953,6 +2958,13 @@
 				COBOL compiles locally with GnuCOBOL 3.2, then the llvm-core Clang runtime compiles
 				and links the generated C to WebAssembly. Use `ACCEPT` for stdin and `DISPLAY` for
 				stdout.
+			</p>
+		{/if}
+		{#if language === 'V'}
+			<p class="hint">
+				V compiles locally with the real V 0.5.2 compiler to C, then the llvm-core Clang
+				runtime compiles and links that C to WebAssembly. Use `os.get_line()` for stdin and
+				`println` for stdout.
 			</p>
 		{/if}
 		{#if language === 'PASCAL'}

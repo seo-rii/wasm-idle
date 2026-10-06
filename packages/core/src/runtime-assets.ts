@@ -344,6 +344,7 @@ export interface RuntimeAssetKeySource {
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	cobol?: { baseUrl?: string };
+	v?: { baseUrl?: string };
 	swift?: { baseUrl?: string; workerUrl?: string; manifestUrl?: string };
 	sqlite?: { moduleUrl?: string; wasmUrl?: string };
 	php?: { moduleUrl?: string };
@@ -1426,6 +1427,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		serialize: serializeIntegrityEntry
 	},
 	{ runtime: 'cobol', property: 'baseUrl', key: 'cobolBaseUrl' },
+	{ runtime: 'v', property: 'baseUrl', key: 'vBaseUrl' },
 	{ runtime: 'swift', property: 'baseUrl', key: 'swiftBaseUrl' },
 	{ runtime: 'swift', property: 'workerUrl', key: 'swiftWorkerUrl' },
 	{ runtime: 'swift', property: 'manifestUrl', key: 'swiftManifestUrl' },

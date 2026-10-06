@@ -718,6 +718,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'V',
+		ids: ['V'],
+		runtime: 'V 0.5.2 + @wasm-idle/llvm-core',
+		stdin: 'Yes',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_V',
+			language: 'V'
+		}
+	},
+	{
 		language: 'R',
 		ids: ['R'],
 		runtime: 'WebR',
@@ -1431,6 +1444,23 @@ const runtimeDetailsByLanguage = new Map([
 				`with ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.cobol.baseUrl')} or ${code('PUBLIC_WASM_COBOL_BASE_URL')}; ` +
+				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} for the C backend; ` +
+				`${code('activePath')}, ${code('workspaceFiles')}, ${code('compileArgs')}`
+		}
+	],
+	[
+		'V',
+		{
+			packageBase:
+				`V 0.5.2 compiler, vlib and WASI C sysroot assets from the ${code('wasm-llvm')} producer + ` +
+				`${workspacePackage('packages/llvm-core')}`,
+			execution:
+				`native gzip delivery for the compiler Wasm and filesystem tar assets; translates V to C ` +
+				`with the real V compiler (built from the upstream ${code('vc')} bootstrap for WASI), compiles ` +
+				`the generated C with the llvm-core Clang host, and executes the resulting WASI module ` +
+				`with ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.v.baseUrl')} or ${code('PUBLIC_WASM_V_BASE_URL')}; ` +
 				`${code('runtimeAssets.clang.baseUrl')}/${code('loader')} for the C backend; ` +
 				`${code('activePath')}, ${code('workspaceFiles')}, ${code('compileArgs')}`
 		}

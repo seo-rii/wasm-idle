@@ -245,6 +245,10 @@ export interface CobolRuntimeAssetConfig {
 	baseUrl?: string;
 }
 
+export interface VRuntimeAssetConfig {
+	baseUrl?: string;
+}
+
 export interface ObjectiveCRuntimeAssetConfig {
 	baseUrl?: string;
 	libobjcUrl?: string;
@@ -628,6 +632,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	haskell?: HaskellRuntimeAssetConfig;
 	fortran?: FortranRuntimeAssetConfig;
 	cobol?: CobolRuntimeAssetConfig;
+	v?: VRuntimeAssetConfig;
 	objectivec?: ObjectiveCRuntimeAssetConfig;
 	zig?: ZigRuntimeAssetConfig;
 	lisp?: LispRuntimeAssetConfig;
@@ -1719,6 +1724,32 @@ export function resolveCobolBaseUrl(
 	}
 
 	return normalizeBaseUrl('/wasm-cobol/', currentUrl);
+}
+
+export function resolveVBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configuredBaseUrl =
+		(typeof options === 'object' && options?.v?.baseUrl) ||
+		(publicEnv.PUBLIC_WASM_V_BASE_URL || '').trim();
+
+	if (configuredBaseUrl) {
+		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
+	}
+
+	if (typeof options === 'string') {
+		return normalizeBaseUrl(`${normalizeRootUrl(options) || ''}/wasm-v/`, currentUrl);
+	}
+
+	if (options?.rootUrl) {
+		return normalizeBaseUrl(
+			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-v/`,
+			currentUrl
+		);
+	}
+
+	return normalizeBaseUrl('/wasm-v/', currentUrl);
 }
 
 export function resolveObjectiveCBaseUrl(

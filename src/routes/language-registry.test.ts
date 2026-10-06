@@ -124,6 +124,15 @@ describe('language registry', () => {
 		expect(monacoLanguageContributionLoaders.clojure).toBeTypeOf('function');
 	});
 
+	it('registers V with its browser runtime and Go-like editor syntax', () => {
+		expect(playgroundLanguages).toContain('V');
+		expect(languageLabels.V).toBe('V');
+		expect(editorLanguages.V).toBe('go');
+		expect(editorOnlyLanguages.has('V')).toBe(false);
+		expect(argsHelpLanguages.has('V')).toBe(true);
+		expect(diagnosticMarkerLanguages.has('go')).toBe(true);
+	});
+
 	it('registers COBOL with its browser runtime and editor syntax', () => {
 		expect(playgroundLanguages).toContain('COBOL');
 		expect(languageLabels.COBOL).toBe('COBOL');
