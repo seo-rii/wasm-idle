@@ -288,6 +288,10 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	COMMONLISP: {
+		label: 'Common Lisp — ECL',
+		editorLanguage: 'clojure'
+	},
 	RUBY: {
 		label: 'Ruby',
 		editorLanguage: 'ruby',

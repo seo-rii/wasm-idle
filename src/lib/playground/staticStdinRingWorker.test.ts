@@ -10,7 +10,8 @@ const readers = [
 	{ language: 'bqn', factory: 'createSharedInputReader', eof: null },
 	{ language: 'forth', factory: 'createSharedKeyReader', eof: -1 },
 	{ language: 'tcl', factory: 'createSharedStdinReader', eof: null },
-	{ language: 'lfortran', factory: 'createSharedStdinReader', eof: null }
+	{ language: 'lfortran', factory: 'createSharedStdinReader', eof: null },
+	{ language: 'commonlisp', factory: 'createSharedStdinReader', eof: null }
 ] as const;
 
 describe.each(readers)('$language shared stdin wakeup races', ({ language, factory, eof }) => {
@@ -32,7 +33,7 @@ describe.each(readers)('$language shared stdin wakeup races', ({ language, facto
 const { parentPort, workerData } = require('node:worker_threads');
 globalThis.self = globalThis;
 self.postMessage = () => {};
-const read = new Function(${JSON.stringify(`${source.replace('__WASM_IDLE_LFORTRAN_ASSET_LOCK__', '{}')}\nreturn ${factory};`)})()(workerData.channel);
+const read = new Function(${JSON.stringify(`${source.replace('__WASM_IDLE_LFORTRAN_ASSET_LOCK__', '{}').replace('__WASM_IDLE_COMMONLISP_ASSET_LOCK__', '{}')}\nreturn ${factory};`)})()(workerData.channel);
 const nativeWait = Atomics.wait;
 let interposed = false;
 Atomics.wait = (control, index, expected, timeout) => {

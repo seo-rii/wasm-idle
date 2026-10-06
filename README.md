@@ -34,56 +34,57 @@ implementations. `Editor support` lists browser LSP/compiler diagnostics when wi
 means Monaco syntax highlighting only. C, C++, and `wasm32-wasip1` Rust use the browser LLDB/WAMR
 debug runtime; the remaining debug-enabled languages retain wasm-idle's trace controls.
 
-| Language       | Browser runtime/compiler                | Stdin | Editor support       | Debug |
-| -------------- | --------------------------------------- | ----- | -------------------- | ----- |
-| C3             | C3 0.8.3 + LLVM/lld WASM (byte ABI)     | Yes   | compiler diagnostics | -     |
-| C              | @wasm-idle/llvm-core / Clang WASI       | Yes   | clangd               | LLDB  |
-| C++            | @wasm-idle/llvm-core / Clang WASI       | Yes   | clangd               | LLDB  |
-| Objective-C    | GNUstep libobjc2 + @wasm-idle/llvm-core | Yes   | clangd               | Trace |
-| Python         | Pyodide                                 | Yes   | Python LSP           | Trace |
-| Java           | TeaVM                                   | Yes   | syntax               | -     |
-| Rust           | wasm-rust / browser rustc               | Yes   | rustc diagnostics    | LLDB  |
-| Go             | wasm-go / browser Go compiler           | Yes   | compiler diagnostics | Trace |
-| D              | wasm-d                                  | Yes   | syntax               | -     |
-| C#             | wasm-dotnet                             | Yes   | compiler diagnostics | -     |
-| F#             | wasm-dotnet                             | Yes   | compiler diagnostics | -     |
-| VB.NET         | wasm-dotnet                             | Yes   | compiler diagnostics | -     |
-| Elixir         | AtomVM / Popcorn                        | Yes   | syntax               | -     |
-| Erlang         | AtomVM / Popcorn                        | Yes   | syntax               | -     |
-| Prolog         | SWI-Prolog WASM worker                  | Yes   | syntax               | -     |
-| Gleam          | Gleam precompiled browser runtime       | Yes   | compiler diagnostics | -     |
-| Perl           | Perl WASM worker                        | Yes   | syntax               | -     |
-| Tcl            | Wacl Tcl WASM worker                    | Yes   | syntax               | -     |
-| AWK            | GoAWK WASM worker                       | Yes   | syntax               | -     |
-| Pascal         | pas2js worker                           | Yes   | syntax               | -     |
-| Forth          | WAForth WASM worker                     | Yes   | syntax               | -     |
-| J              | J playground WASM worker                | Yes   | syntax               | -     |
-| BQN            | CBQN WASM worker                        | Yes   | syntax               | -     |
-| Janet          | Janet VM WASM worker                    | Yes   | syntax               | -     |
-| Julia          | Julia 1.3.0-DEV.560 legacy WASM worker  | Yes   | syntax               | -     |
-| Nim            | Nim 2.2.4 WASM + clang/lld WASM         | Yes   | syntax               | -     |
-| Bash           | GNU Bash WASIX / Wasmer SDK             | Yes   | syntax               | -     |
-| ClojureScript  | cljs.js self-hosted compiler            | Yes   | syntax               | -     |
-| TinyGo         | wasm-tinygo                             | Yes   | syntax               | -     |
-| OCaml          | wasm-of-js-of-ocaml / js_of_ocaml       | Yes   | syntax               | -     |
-| JavaScript     | wasm-typescript / TypeScript service    | Yes   | TypeScript LSP       | -     |
-| TypeScript     | wasm-typescript / TypeScript service    | Yes   | TypeScript LSP       | -     |
-| AssemblyScript | AssemblyScript compiler                 | Yes   | AssemblyScript LSP   | -     |
-| WAT            | WABT                                    | Yes   | WAT LSP              | -     |
-| WASM           | Browser WebAssembly + WASI shim         | Yes   | syntax               | -     |
-| Lua            | Wasmoon                                 | Yes   | syntax               | -     |
-| Zig            | zig_small.wasm                          | Yes   | syntax               | -     |
-| Scheme         | Puppy Scheme / wasm-lisp                | Yes   | syntax               | -     |
-| Ruby           | CRuby WASI                              | Yes   | syntax               | -     |
-| Haskell        | ghc-in-browser                          | Yes   | syntax               | -     |
-| LFortran       | LFortran LLVM evaluator (experimental)  | Yes   | compiler diagnostics | -     |
-| Fortran        | f2c + @wasm-idle/llvm-core              | Yes   | Fortran LSP          | -     |
-| COBOL          | GnuCOBOL 3.2 + @wasm-idle/llvm-core     | Yes   | syntax               | -     |
-| R              | WebR                                    | Yes   | syntax               | -     |
-| Octave         | wasm-octave                             | Yes   | syntax               | -     |
-| DuckDB         | DuckDB-Wasm                             | Files | DuckDB LSP           | -     |
-| SQLite         | sql.js                                  | n/a   | syntax               | -     |
-| PHP            | PHP 8.4 / php-wasm                      | Yes   | syntax               | -     |
+| Language       | Browser runtime/compiler                 | Stdin | Editor support       | Debug |
+| -------------- | ---------------------------------------- | ----- | -------------------- | ----- |
+| C3             | C3 0.8.3 + LLVM/lld WASM (byte ABI)      | Yes   | compiler diagnostics | -     |
+| C              | @wasm-idle/llvm-core / Clang WASI        | Yes   | clangd               | LLDB  |
+| C++            | @wasm-idle/llvm-core / Clang WASI        | Yes   | clangd               | LLDB  |
+| Objective-C    | GNUstep libobjc2 + @wasm-idle/llvm-core  | Yes   | clangd               | Trace |
+| Python         | Pyodide                                  | Yes   | Python LSP           | Trace |
+| Java           | TeaVM                                    | Yes   | syntax               | -     |
+| Rust           | wasm-rust / browser rustc                | Yes   | rustc diagnostics    | LLDB  |
+| Go             | wasm-go / browser Go compiler            | Yes   | compiler diagnostics | Trace |
+| D              | wasm-d                                   | Yes   | syntax               | -     |
+| C#             | wasm-dotnet                              | Yes   | compiler diagnostics | -     |
+| F#             | wasm-dotnet                              | Yes   | compiler diagnostics | -     |
+| VB.NET         | wasm-dotnet                              | Yes   | compiler diagnostics | -     |
+| Elixir         | AtomVM / Popcorn                         | Yes   | syntax               | -     |
+| Erlang         | AtomVM / Popcorn                         | Yes   | syntax               | -     |
+| Prolog         | SWI-Prolog WASM worker                   | Yes   | syntax               | -     |
+| Gleam          | Gleam precompiled browser runtime        | Yes   | compiler diagnostics | -     |
+| Perl           | Perl WASM worker                         | Yes   | syntax               | -     |
+| Tcl            | Wacl Tcl WASM worker                     | Yes   | syntax               | -     |
+| AWK            | GoAWK WASM worker                        | Yes   | syntax               | -     |
+| Pascal         | pas2js worker                            | Yes   | syntax               | -     |
+| Forth          | WAForth WASM worker                      | Yes   | syntax               | -     |
+| J              | J playground WASM worker                 | Yes   | syntax               | -     |
+| BQN            | CBQN WASM worker                         | Yes   | syntax               | -     |
+| Janet          | Janet VM WASM worker                     | Yes   | syntax               | -     |
+| Julia          | Julia 1.3.0-DEV.560 legacy WASM worker   | Yes   | syntax               | -     |
+| Nim            | Nim 2.2.4 WASM + clang/lld WASM          | Yes   | syntax               | -     |
+| Bash           | GNU Bash WASIX / Wasmer SDK              | Yes   | syntax               | -     |
+| ClojureScript  | cljs.js self-hosted compiler             | Yes   | syntax               | -     |
+| TinyGo         | wasm-tinygo                              | Yes   | syntax               | -     |
+| OCaml          | wasm-of-js-of-ocaml / js_of_ocaml        | Yes   | syntax               | -     |
+| JavaScript     | wasm-typescript / TypeScript service     | Yes   | TypeScript LSP       | -     |
+| TypeScript     | wasm-typescript / TypeScript service     | Yes   | TypeScript LSP       | -     |
+| AssemblyScript | AssemblyScript compiler                  | Yes   | AssemblyScript LSP   | -     |
+| WAT            | WABT                                     | Yes   | WAT LSP              | -     |
+| WASM           | Browser WebAssembly + WASI shim          | Yes   | syntax               | -     |
+| Lua            | Wasmoon                                  | Yes   | syntax               | -     |
+| Zig            | zig_small.wasm                           | Yes   | syntax               | -     |
+| Scheme         | Puppy Scheme / wasm-lisp                 | Yes   | syntax               | -     |
+| Common Lisp    | ECL 26.5.5 (Embeddable Common-Lisp) WASM | Yes   | syntax               | -     |
+| Ruby           | CRuby WASI                               | Yes   | syntax               | -     |
+| Haskell        | ghc-in-browser                           | Yes   | syntax               | -     |
+| LFortran       | LFortran LLVM evaluator (experimental)   | Yes   | compiler diagnostics | -     |
+| Fortran        | f2c + @wasm-idle/llvm-core               | Yes   | Fortran LSP          | -     |
+| COBOL          | GnuCOBOL 3.2 + @wasm-idle/llvm-core      | Yes   | syntax               | -     |
+| R              | WebR                                     | Yes   | syntax               | -     |
+| Octave         | wasm-octave                              | Yes   | syntax               | -     |
+| DuckDB         | DuckDB-Wasm                              | Files | DuckDB LSP           | -     |
+| SQLite         | sql.js                                   | n/a   | syntax               | -     |
+| PHP            | PHP 8.4 / php-wasm                       | Yes   | syntax               | -     |
 
 ## Browser LLDB debug runtime
 
@@ -262,6 +263,7 @@ when they exist.
 | Lua<br>`LUA`                       | wasm-lua@0.1.0 / wasmoon@1.16.0                                                                                                                                                | Wasmoon Lua VM; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `runtimeAssets.lua.moduleUrl` or `PUBLIC_WASM_LUA_MODULE_URL`; `programArgs`                                                                                                                                                                                                                                                                     |
 | Zig<br>`ZIG`                       | static wasm-zig assets / `zig_small.wasm` + `std.tar.gz`                                                                                                                       | native gzip delivery for the tar standard library; default target `wasm64-wasi`; Zig compile args are appended; supports `stdin`, `compileArgs`, `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                          | `runtimeAssets.zig.compilerUrl`/`stdlibUrl` or `PUBLIC_WASM_ZIG_*`; `zigTargetTriple`, `activePath`, `workspaceFiles`                                                                                                                                                                                                                            |
 | Scheme<br>`LISP`                   | wasm-lisp@0.1.0 / Puppy Scheme WASM component                                                                                                                                  | receipt-verified Puppy Scheme compiler/runtime; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `runtimeAssets.lisp.{moduleUrl,manifestUrl,manifestFingerprint}` or `PUBLIC_WASM_LISP_{MODULE_URL,MANIFEST_URL,MANIFEST_FINGERPRINT}`; `programArgs`                                                                                                                                                                                             |
+| Common Lisp<br>`COMMONLISP`        | receipt-pinned `wasm-llvm/producer/ecl-browser` ECL 26.5.5 artifacts downloaded into `static/wasm-commonlisp`                                                                  | real upstream ECL bytecode compiler/interpreter LOADs the active file in a fresh Worker; shared-ring stdin serves READ-LINE/READ with EOF; unhandled conditions print to stderr and fail the run; recursion deeper than the browser call stack (about 150 levels in a Chromium Worker) fails as a stack-overflow error                                                                                                                                                                                                                                                  | `runtimeAssets.commonlisp.baseUrl` relocates the reviewed bundle; `stdin`, `activePath`, workspace files loadable with `LOAD`, cancellation and Wasm memory limits; no program arguments, native compiler or contrib modules                                                                                                                     |
 | Ruby<br>`RUBY`                     | receipt-pinned `static/wasm-ruby` profile produced from @ruby/3.4-wasm-wasi@2.9.3-2.9.4 + @ruby/wasm-wasi@2.9.3-2.9.4                                                          | host-verifies the manifest, canonical stored module and gzip bytes, and logical WASM before transferring three owned buffers to a no-fetch CRuby 3.4 worker; supports `stdin`, `programArgs`, and workspace files                                                                                                                                                                                                                                                                                                                                                       | `rootUrl` mirrors reuse the bundled profile; explicit `runtimeAssets.ruby` overrides require one complete profile and same-origin canonical paths; URL-only `PUBLIC_WASM_RUBY_*` overrides fail closed; `stdin`, `programArgs`, `workspaceFiles`                                                                                                 |
 | Haskell<br>`HASKELL`               | ghc-in-browser / GHC 9.14.0.20251031 WASI rootfs                                                                                                                               | loads `dyld.mjs`, `rootfs.tar.zst`, `bsdtar.wasm`; `compileArgs` become GHC args, otherwise legacy `args` become GHC args                                                                                                                                                                                                                                                                                                                                                                                                                                               | `runtimeAssets.haskell.moduleUrl`/`rootfsUrl`/`bsdtarUrl`; `mainSoPath`, `searchDirs`, `activePath`, `workspaceFiles`                                                                                                                                                                                                                            |
 | LFortran<br>`LFORTRAN`             | receipt-pinned `wasm-llvm/producer/lfortran-browser` artifacts in `static/wasm-lfortran`                                                                                       | real LFortran 0.65.0-97-gab867a23 LLVM evaluator compiles and executes Emscripten side modules in a fresh Worker; shared-ring stdin supports delayed READ and EOF; experimental Fortran feature coverage                                                                                                                                                                                                                                                                                                                                                                | `runtimeAssets.lfortran.baseUrl` relocates the reviewed bundle; `stdin`, `activePath`, workspace data/include files, cancellation and execution limits; no program arguments or multi-file module build orchestration                                                                                                                            |
@@ -550,6 +552,9 @@ browser UI thread.
 
 C3 local asset setup, byte I/O ABI, and its 1 GiB default memory budget are documented in
 [C3 browser integration](docs/c3-browser.md).
+
+Common Lisp (ECL) asset download, stdin behaviour and limits are documented in
+[Common Lisp browser integration](docs/commonlisp.md).
 
 Clean checkouts can prepare the ignored Clang, clangd, and OCaml browser payloads from one
 receipt-verified manifest:

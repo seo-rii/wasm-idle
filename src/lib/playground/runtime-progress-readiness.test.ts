@@ -89,6 +89,7 @@ const runtimeReadinessAudit = {
 		hostModule: 'clojurescript'
 	},
 	LFORTRAN: { strategy: 'static-worker-fallback', hostModule: 'lfortran' },
+	COMMONLISP: { strategy: 'static-worker-fallback', hostModule: 'commonlisp' },
 	FORTRAN: { strategy: 'terminal-fallback', hostModule: 'fortran' },
 	COBOL: { strategy: 'terminal-fallback', hostModule: 'cobol' },
 	TINYGO: {

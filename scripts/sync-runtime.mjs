@@ -143,6 +143,14 @@ export const RUNTIMES = [
 		sourceRequired: true
 	},
 	{
+		name: 'wasm-commonlisp',
+		module: './sync-wasm-commonlisp.mjs',
+		exportName: 'syncWasmCommonLispAssets',
+		sourceArg: 'sourceDir',
+		targetArg: 'targetDir',
+		manual: true
+	},
+	{
 		name: 'wasm-fortran',
 		module: './sync-wasm-fortran.mjs',
 		exportName: 'syncWasmFortranAssets',

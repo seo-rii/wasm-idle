@@ -307,6 +307,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'COMMONLISP',
+		load: async () => {
+			const { default: CommonLisp } = await import('$lib/playground/commonlisp');
+			return new CommonLisp();
+		}
+	},
+	{
 		languageId: 'RUBY',
 		load: async () => {
 			const { default: Ruby } = await import('$lib/playground/ruby');

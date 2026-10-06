@@ -653,6 +653,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Common Lisp',
+		ids: ['COMMONLISP'],
+		runtime: 'ECL 26.5.5 (Embeddable Common-Lisp) WASM',
+		stdin: 'Yes',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/commonlisp.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_COMMONLISP',
+			marker: "selectOption('COMMONLISP')"
+		}
+	},
+	{
 		language: 'Ruby',
 		ids: ['RUBY'],
 		runtime: 'CRuby WASI',
@@ -1391,6 +1404,14 @@ const runtimeDetailsByLanguage = new Map([
 			customization:
 				`${code('runtimeAssets.haskell.moduleUrl')}/${code('rootfsUrl')}/${code('bsdtarUrl')}; ` +
 				`${code('mainSoPath')}, ${code('searchDirs')}, ${code('activePath')}, ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'Common Lisp',
+		{
+			packageBase: `receipt-pinned ${code('wasm-llvm/producer/ecl-browser')} ECL 26.5.5 artifacts downloaded into ${code('static/wasm-commonlisp')}`,
+			execution: `real upstream ECL bytecode compiler/interpreter LOADs the active file in a fresh Worker; shared-ring stdin serves READ-LINE/READ with EOF; unhandled conditions print to stderr and fail the run; recursion deeper than the browser call stack (about 150 levels in a Chromium Worker) fails as a stack-overflow error`,
+			customization: `${code('runtimeAssets.commonlisp.baseUrl')} relocates the reviewed bundle; ${code('stdin')}, ${code('activePath')}, workspace files loadable with ${code('LOAD')}, cancellation and Wasm memory limits; no program arguments, native compiler or contrib modules`
 		}
 	],
 	[

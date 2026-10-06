@@ -40,6 +40,7 @@ const canonicalLanguageIds = [
 	'LUA',
 	'ZIG',
 	'LISP',
+	'COMMONLISP',
 	'RUBY',
 	'HASKELL',
 	'R',
@@ -122,6 +123,10 @@ const languageAliasDefinitions = {
 		kind: 'compatibility',
 		message: 'SCM selects the bundled Puppy Scheme-compatible runtime.'
 	},
+	CL: { canonicalId: 'COMMONLISP', kind: 'spelling' },
+	COMMON_LISP: { canonicalId: 'COMMONLISP', kind: 'spelling' },
+	'COMMON-LISP': { canonicalId: 'COMMONLISP', kind: 'spelling' },
+	ECL: { canonicalId: 'COMMONLISP', kind: 'implementation' },
 	TS: { canonicalId: 'TYPESCRIPT', kind: 'spelling' },
 	MATLAB: {
 		canonicalId: 'OCTAVE',
