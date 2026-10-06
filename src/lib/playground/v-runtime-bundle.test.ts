@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import { RUNTIME_ASSET_LOCK } from '../../../packages/core/src/runtime-asset-lock.generated';
 
 const runtimeRoot = path.resolve(process.cwd(), 'static/wasm-v');
 
@@ -15,6 +16,31 @@ interface RuntimeAssetReceipt {
 }
 
 describe('bundled wasm-v runtime', () => {
+	it('pins every shipped V asset in the published core lock', async () => {
+		for (const asset of [
+			'runtime-manifest.v1.json',
+			'runtime-build.json',
+			'v.wasm.gz',
+			'vroot.tar.gz',
+			'c-sysroot.tar.gz'
+		]) {
+			const bytes = await readFile(path.join(runtimeRoot, asset));
+			const receipt = RUNTIME_ASSET_LOCK.assets[`wasm-v/${asset}`];
+			expect(receipt, `missing V asset receipt: ${asset}`).toMatchObject({
+				bytes: bytes.byteLength,
+				sha256: createHash('sha256').update(bytes).digest('hex')
+			});
+			if (asset.endsWith('.gz')) {
+				const decoded = gunzipSync(bytes);
+				expect(receipt).toMatchObject({
+					encoding: 'gzip',
+					uncompressedBytes: decoded.byteLength,
+					uncompressedSha256: createHash('sha256').update(decoded).digest('hex')
+				});
+			}
+		}
+	});
+
 	it('ships receipt-backed native gzip compiler, V root and C sysroot assets', async () => {
 		const manifest = JSON.parse(
 			await readFile(path.join(runtimeRoot, 'runtime-manifest.v1.json'), 'utf8')
