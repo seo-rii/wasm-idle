@@ -353,7 +353,8 @@ function createSharedByteReader(channel) {
 			}
 			if (Atomics.load(control, 2) === 1) return null;
 			self.postMessage({ type: 'stdin-request' });
-			Atomics.wait(control, 0, write);
+			// Closing changes a different slot, so its notification can race this wait.
+			Atomics.wait(control, 0, write, 100);
 		}
 	};
 }
@@ -487,12 +488,9 @@ function createModuleSystem({ runtimeModules, stdinReader, files, args, activePa
 			return stdinReader.readLine();
 		},
 		existsSync(pathLike) {
-			try {
-				lookupFile(pathLike);
-				return true;
-			} catch {
-				return false;
-			}
+			const raw = String(pathLike);
+			if (raw === '0' || raw === '/dev/stdin' || raw === 'dev/stdin') return true;
+			return Object.prototype.hasOwnProperty.call(files, normalizePath(raw));
 		}
 	});
 	const processModule = Object.freeze({

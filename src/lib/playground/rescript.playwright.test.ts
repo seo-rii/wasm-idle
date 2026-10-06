@@ -19,6 +19,14 @@ let n = readLineSync(0)->String.trim->Int.fromString->Option.getOr(0)
 Console.log(\`main=\${Int.toString(n + 5)}\`)
 `;
 
+const rescriptEofSource = `@module("fs") external existsSync: string => bool = "existsSync"
+@module("fs") external readFileSync: (int, string) => string = "readFileSync"
+Console.log("eof?")
+Console.log2("exists", existsSync("/dev/stdin"))
+let input = readFileSync(0, "utf8")
+Console.log(\`eof=\${Int.toString(String.length(input))}\`)
+`;
+
 async function withPreviewServer(
 	timeoutMs: number,
 	callback: (browserUrl: string) => Promise<void>
@@ -57,7 +65,7 @@ async function withPreviewServer(
 
 describe('wasm-idle ReScript browser integration', () => {
 	it(
-		'compiles with the real ReScript compiler and connects stdin on the page path',
+		'compiles with the real ReScript compiler and handles stdin and EOF on the page path',
 		{
 			skip: !runRealBrowser,
 			meta: { browser: true, requiredBrowser: runRealBrowser },
@@ -68,8 +76,10 @@ describe('wasm-idle ReScript browser integration', () => {
 			await withPreviewServer(
 				Number(process.env.WASM_IDLE_RESCRIPT_PREP_TIMEOUT_MS || '900000'),
 				async (browserUrl) => {
+					const rescriptBrowserUrl = new URL(browserUrl);
+					rescriptBrowserUrl.searchParams.set('lang', 'rescript');
 					const summary = await runStdinBrowserProbe({
-						browserUrl,
+						browserUrl: rescriptBrowserUrl.href,
 						expectedOutput: 'main=73',
 						language: 'RESCRIPT',
 						runTimeoutMs: Number(
@@ -106,6 +116,20 @@ describe('wasm-idle ReScript browser integration', () => {
 							path.endsWith('/wasm-rescript/compiler.js')
 						)
 					).toBe(false);
+					const eof = await runStdinBrowserProbe({
+						browserUrl: rescriptBrowserUrl.href,
+						expectedOutput: 'eof=5',
+						language: 'RESCRIPT',
+						runTimeoutMs: 60_000,
+						sendEof: true,
+						source: rescriptEofSource,
+						stdinText: 'input',
+						waitForOutputBeforeStdin: 'eof?'
+					});
+					expect(eof.pageErrors).toEqual([]);
+					expect(eof.transcript).toContain('exists true');
+					expect(eof.transcript).toContain('eof=5');
+					expect(eof.transcript).toContain('Process finished after');
 				}
 			);
 		}

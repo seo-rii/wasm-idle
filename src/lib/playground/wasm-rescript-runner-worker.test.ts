@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 import { computeReScriptRuntimeFingerprint } from '../../../scripts/sync-wasm-rescript.mjs';
 import { editorDefaults } from '../../routes/editor-defaults';
+import { RUNTIME_ASSET_LOCK } from '../../../packages/core/src/runtime-asset-lock.generated';
 import { StaticStdinRingHost } from './staticStdinRing';
 import {
 	WASM_RESCRIPT_ASSET_VERSION,
@@ -43,7 +44,7 @@ function loadRuntimeBytes() {
 	return runtimeBytesPromise;
 }
 
-async function createHarnessWorker() {
+async function createHarnessWorker(options: { closeStdinBeforeWait?: boolean } = {}) {
 	const workerSource = await readFile(workerSourceUrl, 'utf8');
 	// Runs the worker inside a browser-like vm realm (no Node `process`/`require`) so the
 	// js_of_ocaml compiler takes its browser path, exactly as in a dedicated Worker.
@@ -72,6 +73,22 @@ const context = vm.createContext({
 });
 context.self = context;
 context.postMessage = (message) => parentPort.postMessage(message);
+if (${Boolean(options.closeStdinBeforeWait)}) {
+  const nativeAtomics = vm.runInContext('Atomics', context);
+  const atomics = Object.create(nativeAtomics);
+  let closed = false;
+  atomics.wait = (control, index, expected, timeout) => {
+    if (!closed && index === 0) {
+      closed = true;
+      nativeAtomics.store(control, 2, 1);
+      // Close happens after the worker's EOF check, before it starts waiting.
+      nativeAtomics.notify(control, 0);
+      parentPort.postMessage({ harnessStdinClosedBeforeWait: true });
+    }
+    return nativeAtomics.wait(control, index, expected, timeout);
+  };
+  context.Atomics = atomics;
+}
 context.URL = {
   createObjectURL(blob) {
     const url = 'blob:wasm-rescript-fixture-' + ++blobCounter;
@@ -95,11 +112,22 @@ parentPort.on('message', (data) => context.onmessage({ data }));
 	return new NodeWorker(harness, { eval: true });
 }
 
-async function runHarness(request: Record<string, unknown>, onMessage?: (message: any) => void) {
-	const worker = await createHarnessWorker();
+async function runHarness(
+	request: Record<string, unknown>,
+	onMessage?: (message: any) => void,
+	harnessOptions: { closeStdinBeforeWait?: boolean; timeoutMs?: number } = {}
+) {
+	const worker = await createHarnessWorker(harnessOptions);
 	const messages: any[] = [];
+	let timeout: ReturnType<typeof setTimeout> | undefined;
 	try {
 		await new Promise<void>((resolve, reject) => {
+			if (harnessOptions.timeoutMs !== undefined) {
+				timeout = setTimeout(
+					() => reject(new Error('ReScript worker did not finish after stdin EOF')),
+					harnessOptions.timeoutMs
+				);
+			}
 			worker.on('message', (message) => {
 				messages.push(message);
 				try {
@@ -118,6 +146,7 @@ async function runHarness(request: Record<string, unknown>, onMessage?: (message
 		});
 		return messages;
 	} finally {
+		if (timeout !== undefined) clearTimeout(timeout);
 		await worker.terminate();
 	}
 }
@@ -161,6 +190,9 @@ describe('ReScript runner worker', () => {
 		expect(Buffer.byteLength(source)).toBe(WASM_RESCRIPT_RUNNER_RECEIPT.bytes);
 		expect(createHash('sha256').update(source).digest('hex')).toBe(
 			WASM_RESCRIPT_RUNNER_RECEIPT.sha256
+		);
+		expect(RUNTIME_ASSET_LOCK.assets['wasm-rescript/runner-worker.js']).toMatchObject(
+			WASM_RESCRIPT_RUNNER_RECEIPT
 		);
 		expect((await readdir(staticRuntimeUrl)).sort()).toEqual([
 			'LICENSE.txt',
@@ -265,6 +297,24 @@ describe('ReScript runner worker', () => {
 		expect(messages.some((message) => message?.type === 'stdin-request')).toBe(true);
 	}, 60_000);
 
+	it('finishes a streaming read when the EOF notification races the wait', async () => {
+		const stdin = new StaticStdinRingHost({ capacity: 16, maxBufferedBytes: 64 });
+		const messages = await runHarness(
+			await runRequest({
+				code: `@module("fs") external readFileSync: (int, string) => string = "readFileSync"
+Console.log("eof=" ++ readFileSync(0, "utf8"))`,
+				stdin: '',
+				stdinChannel: stdin.descriptor
+			}),
+			undefined,
+			{ closeStdinBeforeWait: true, timeoutMs: 5_000 }
+		);
+
+		expect(messages).toContainEqual({ harnessStdinClosedBeforeWait: true });
+		expect(messages.at(-1)).toEqual({ results: true });
+		expect(outputText(messages)).toBe('eof=\n');
+	}, 60_000);
+
 	it('loads upstream stdlib runtime modules and reads all stdin through fs.readFileSync', async () => {
 		const code = `@module("fs") external readFileSync: (int, string) => string = "readFileSync"
 
@@ -280,6 +330,17 @@ Console.log2("sum", total)
 
 		expect(messages.at(-1)).toEqual({ results: true });
 		expect(outputText(messages)).toBe('sum 6\n');
+	}, 60_000);
+
+	it('checks stdin existence without consuming the buffered input', async () => {
+		const code = `@module("fs") external existsSync: string => bool = "existsSync"
+@module("fs") external readFileSync: (int, string) => string = "readFileSync"
+Console.log(existsSync("/dev/stdin"))
+Console.log(readFileSync(0, "utf8"))`;
+		const messages = await runHarness(await runRequest({ code, stdin: 'input' }));
+
+		expect(messages.at(-1)).toEqual({ results: true });
+		expect(outputText(messages)).toBe('true\ninput\n');
 	}, 60_000);
 
 	it('reports compile errors as editor diagnostics without running the program', async () => {
