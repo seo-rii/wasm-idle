@@ -34,6 +34,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'HY',
+		load: async () => {
+			const { default: Hy } = await import('$lib/playground/hy');
+			return new Hy();
+		}
+	},
+	{
 		languageId: 'C',
 		load: async () => {
 			const { default: Clang } = await import('$lib/playground/clang');

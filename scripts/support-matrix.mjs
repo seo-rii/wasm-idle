@@ -237,6 +237,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Hy',
+		ids: ['HY'],
+		runtime: 'Hy 1.3.1 on Pyodide',
+		stdin: 'Yes',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/hy.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_HY',
+			language: 'HY'
+		}
+	},
+	{
 		language: 'Java',
 		ids: ['JAVA'],
 		runtime: 'TeaVM',
@@ -1247,6 +1260,16 @@ const runtimeDetailsByLanguage = new Map([
 				`explicit ${code('runtimeAssets.julia.baseUrl')}/${code('workerUrl')}/${code('manifestUrl')} overrides ` +
 				`require one complete profile-and-runner receipt bundle; URL-only ${code('PUBLIC_WASM_JULIA_*')} ` +
 				`overrides fail closed; ${code('activePath')}`
+		}
+	],
+	[
+		'Hy',
+		{
+			packageBase: `Hy 1.3.1 + funcparserlib 1.0.1 pure-Python wheels on ${npmPackage('pyodide')}`,
+			execution:
+				`receipt-verifies the bundled wheels, unpacks them into Pyodide site-packages, and compiles Hy with ${code('hy.compiler.hy_compile')}; ` +
+				`${code('(input)')}/${code('(print)')} share the Python stdin/stdout bridge; no debugger or automatic package loading`,
+			customization: `${code('runtimeAssets.hy.baseUrl')} or ${code('PUBLIC_WASM_HY_BASE_URL')} plus the Python runtime assets; ${code('stdin')}, ${code('activePath')}`
 		}
 	],
 	[

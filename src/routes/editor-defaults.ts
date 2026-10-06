@@ -30,6 +30,7 @@ export type EditorDefaultLanguage =
 	| 'nim'
 	| 'bash'
 	| 'clojurescript'
+	| 'hy'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -89,6 +90,7 @@ export const editorDefaults: Record<
 	| 'nim'
 	| 'bash'
 	| 'clojurescript'
+	| 'hy'
 	| 'ocaml'
 	| 'javascript'
 	| 'typescript'
@@ -822,6 +824,16 @@ fibonacci() {
 IFS= read -r input || input=''
 n="\${input:-\${1:-4}}"
 printf 'fibonacci=%d\\n' "$(( $(fibonacci "$n") + bonus ))"`,
+	hy: `(setv bonus 3)
+
+(defn fibonacci [n [memo {0 1  1 1}]]
+  (when (not-in n memo)
+    (setv (get memo n) (+ (fibonacci (- n 1) memo) (fibonacci (- n 2) memo))))
+  (get memo n))
+
+(setv line (.strip (input)))
+(setv n (if (.isdigit line) (int line) 4))
+(print (+ "fibonacci=" (str (+ (fibonacci n) bonus))))`,
 	clojurescript: `(ns wasm-idle.main
   (:require [wasm-idle.runtime :as runtime]))
 
@@ -1471,6 +1483,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.nim ||
 		source === editorDefaults.bash ||
 		source === editorDefaults.clojurescript ||
+		source === editorDefaults.hy ||
 		source === editorDefaults.ocaml ||
 		source === editorDefaults.javascript ||
 		source === editorDefaults.typescript ||

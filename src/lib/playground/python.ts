@@ -64,6 +64,17 @@ class Python implements Sandbox {
 	private ownsRuntimeAssetCache = true;
 	private disposed = false;
 	private disposal?: Promise<void>;
+	private workerExtensionKey?: string;
+	/** Language executed by the shared Pyodide worker; subclasses run other Python-hosted languages. */
+	protected readonly workerLanguage: 'python' | 'hy' = 'python';
+
+	/** Extra worker load configuration for Python-hosted languages, keyed for worker reuse. */
+	protected workerLoadExtension(
+		_runtimeAssets: string | PlaygroundRuntimeAssets,
+		_currentUrl: string
+	): Record<string, unknown> | undefined {
+		return undefined;
+	}
 	private readonly workerSession = new WorkerSession({
 		label: 'Python',
 		onDispose: (worker) => {
@@ -243,10 +254,16 @@ class Python implements Sandbox {
 					typeof window !== 'undefined' ? window.location.href : '',
 					options.persistentCache
 				);
+				const extension = this.workerLoadExtension(
+					runtimeAssets,
+					typeof window !== 'undefined' ? window.location.href : ''
+				);
+				const extensionKey = JSON.stringify(extension ?? null);
 				if (!this.isOperationActive(operation)) return;
 				const needsWorkerReset =
 					!this.worker ||
 					!this.assetBridge ||
+					this.workerExtensionKey !== extensionKey ||
 					!this.assetBridge.matches(assetConfig, limits.maxAssetBytes);
 				if (needsWorkerReset && this.worker) this.workerSession.reset();
 				if (!this.isOperationActive(operation)) return;
@@ -261,6 +278,7 @@ class Python implements Sandbox {
 						return;
 					}
 					this.worker = worker;
+					this.workerExtensionKey = extensionKey;
 					this.workerSession.attach(worker);
 					const assetBridge = new WorkerAssetBridge(
 						worker,
@@ -299,6 +317,7 @@ class Python implements Sandbox {
 						load: true,
 						log,
 						code,
+						...(extension ? { extension } : {}),
 						assets: {
 							baseUrl: assetConfig.baseUrl,
 							maxAssetBytes: limits.maxAssetBytes,
@@ -501,6 +520,7 @@ class Python implements Sandbox {
 				worker.postMessage({
 					code,
 					prepare,
+					language: this.workerLanguage,
 					buffer: this.buffer,
 					debugBuffer: this.debugBuffer,
 					watchBuffer: this.watchBuffer,
