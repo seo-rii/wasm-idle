@@ -143,6 +143,14 @@ describe('language registry', () => {
 		expect(diagnosticMarkerLanguages.has('go')).toBe(true);
 	});
 
+	it('registers Hy on Pyodide with Clojure-style syntax highlighting', () => {
+		expect(playgroundLanguages).toContain('HY');
+		expect(languageLabels.HY).toBe('Hy — Pyodide');
+		expect(editorLanguages.HY).toBe('clojure');
+		expect(argsHelpLanguages.has('HY')).toBe(false);
+		expect(monacoLanguageContributionLoaders.clojure).toBeTypeOf('function');
+	});
+
 	it('registers COBOL with its browser runtime and editor syntax', () => {
 		expect(playgroundLanguages).toContain('COBOL');
 		expect(languageLabels.COBOL).toBe('COBOL');
