@@ -74,6 +74,7 @@ export type {
 export type { CreateClangCompilerOptions, PreloadBrowserClangRuntimeOptions } from './compiler.js';
 export type { ClangRuntimeLocation } from './compiler.js';
 export type { RuntimeAssetUrls } from './runtime-assets.js';
+export type { BrowserClangPrecompiledHeader } from './precompiled-header.js';
 export type { MemFsOptions, TarFileSystem } from './memory/index.js';
 export type {
 	BrowserClangDebugRunRequest,

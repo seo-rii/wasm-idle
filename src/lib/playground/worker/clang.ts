@@ -1,4 +1,7 @@
-import type { BrowserClangRuntime as Clang } from '@wasm-idle/llvm-core/clang';
+import type {
+	BrowserClangPrecompiledHeader,
+	BrowserClangRuntime as Clang
+} from '@wasm-idle/llvm-core/clang';
 import { normalizeDwarfWorkspacePath } from '@wasm-idle/llvm-core/clang';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
@@ -21,6 +24,15 @@ let stdinBufferClang: Int32Array,
 	clang: Clang;
 let hasInitialStdinClang = false;
 let initialStdinClang: string | null = null;
+// Sent once per worker by the host; the runtime mounts it only for matching compiles.
+let precompiledHeaderClang: BrowserClangPrecompiledHeader | undefined;
+
+/** Ask the host to build the header in a helper worker when this compile could have used one. */
+function missingPrecompiledHeader() {
+	return clang?.precompiledHeaderPlan && !clang.usedPrecompiledHeader
+		? { precompiledHeaderKey: clang.precompiledHeaderPlan.key }
+		: {};
+}
 
 function postProgress(percent: number, stage: string) {
 	postMessage({ progress: { percent, stage } });
@@ -110,6 +122,7 @@ self.onmessage = async (event: { data: any }) => {
 		maxAssetBytes
 	} = event.data;
 	const resolvedDebugMode = debugMode || (debug ? 'trace' : 'none');
+	if (event.data.precompiledHeader) precompiledHeaderClang = event.data.precompiledHeader;
 	if (load) {
 		try {
 			const runtimeAssets = assets as WorkerRuntimeAssetConfig | undefined;
@@ -125,6 +138,21 @@ self.onmessage = async (event: { data: any }) => {
 		} catch (error: any) {
 			self.postMessage({ error: error.message || 'Unable to load the C/C++ runtime.' });
 		}
+	} else if (event.data.precompileHeader) {
+		const header = await clang
+			.buildPrecompiledHeaderFor(code, {
+				language,
+				compileArgs,
+				activePath,
+				cppVersion,
+				cVersion,
+				debugMode: resolvedDebugMode
+			})
+			.catch(() => undefined);
+		self.postMessage(
+			{ precompiledHeader: header ?? null },
+			header ? [header.bytes.buffer] : []
+		);
 	} else if (prepare) {
 		stdinBufferClang = new Int32Array(buffer);
 		debugBufferClang = new Int32Array(debugBuffer);
@@ -154,12 +182,15 @@ self.onmessage = async (event: { data: any }) => {
 				debugBuffer: debugBufferClang,
 				interruptBuffer: interruptBufferClang,
 				watchBuffer: watchBufferClang,
-				watchResultBuffer: watchResultBufferClang
+				watchResultBuffer: watchResultBufferClang,
+				precompiledHeader: precompiledHeaderClang
 			});
+			if (clang.usedPrecompiledHeader)
+				postProgress(95, 'Compiled with precompiled <bits/stdc++.h>');
 			postProgress(100, `${language === 'C' ? 'C' : 'C++'} program ready`);
-			self.postMessage({ results: true });
+			self.postMessage({ results: true, ...missingPrecompiledHeader() });
 		} catch (error: any) {
-			self.postMessage({ error: error.message });
+			self.postMessage({ error: error.message, ...missingPrecompiledHeader() });
 		}
 	} else if (code) {
 		clang.log = log;
@@ -185,7 +216,8 @@ self.onmessage = async (event: { data: any }) => {
 					workspaceFiles,
 					cppVersion,
 					cVersion,
-					debugMode: 'lldb'
+					debugMode: 'lldb',
+					precompiledHeader: precompiledHeaderClang
 				});
 				if (!artifact.debug) {
 					throw new Error('wasm-clang did not return an LLDB DWARF descriptor');
@@ -229,11 +261,12 @@ self.onmessage = async (event: { data: any }) => {
 				debugBuffer: debugBufferClang,
 				interruptBuffer: interruptBufferClang,
 				watchBuffer: watchBufferClang,
-				watchResultBuffer: watchResultBufferClang
+				watchResultBuffer: watchResultBufferClang,
+				precompiledHeader: precompiledHeaderClang
 			});
-			self.postMessage({ results: true });
+			self.postMessage({ results: true, ...missingPrecompiledHeader() });
 		} catch (error: any) {
-			self.postMessage({ error: error.message });
+			self.postMessage({ error: error.message, ...missingPrecompiledHeader() });
 		}
 	}
 };
