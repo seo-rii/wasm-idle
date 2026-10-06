@@ -55,6 +55,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'OBJECTIVECXX',
+		load: async () => {
+			const { default: ObjectiveC } = await import('$lib/playground/objectivec');
+			return new ObjectiveC('OBJECTIVECXX');
+		}
+	},
+	{
 		languageId: 'JAVA',
 		load: async () => {
 			const { default: Java } = await import('$lib/playground/java');

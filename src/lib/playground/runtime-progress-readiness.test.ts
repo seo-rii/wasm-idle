@@ -41,6 +41,7 @@ const runtimeReadinessAudit = {
 	C: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	CPP: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	OBJC: { strategy: 'terminal-fallback', hostModule: 'objectivec' },
+	OBJECTIVECXX: { strategy: 'terminal-fallback', hostModule: 'objectivec' },
 	PYTHON3: {
 		strategy: 'entry-signal',
 		hostModule: 'python',
