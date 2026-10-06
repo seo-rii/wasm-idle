@@ -851,9 +851,11 @@ int main() {
 			expect.hasAssertions();
 
 			await withBrowserPreview(async (browserUrl) => {
+				const postgresqlBrowserUrl = new URL(browserUrl);
+				postgresqlBrowserUrl.searchParams.set('lang', 'postgresql');
 				const summary = await runStdinBrowserProbe({
 					activePath: 'main.sql',
-					browserUrl,
+					browserUrl: postgresqlBrowserUrl.href,
 					expectedOutput: 'engine=PostgreSQL',
 					language: 'POSTGRESQL',
 					preloadStdin: true,
