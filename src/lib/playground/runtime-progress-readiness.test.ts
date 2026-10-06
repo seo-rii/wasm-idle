@@ -38,6 +38,7 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  */
 const runtimeReadinessAudit = {
 	C3: { strategy: 'static-worker-fallback', hostModule: 'c3' },
+	GRAIN: { strategy: 'static-worker-fallback', hostModule: 'grain' },
 	C: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	CPP: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	OBJC: { strategy: 'terminal-fallback', hostModule: 'objectivec' },
@@ -94,6 +95,7 @@ const runtimeReadinessAudit = {
 		strategy: 'static-worker-fallback',
 		hostModule: 'clojurescript'
 	},
+	RESCRIPT: { strategy: 'static-worker-fallback', hostModule: 'rescript' },
 	LFORTRAN: { strategy: 'static-worker-fallback', hostModule: 'lfortran' },
 	FORTRAN: { strategy: 'terminal-fallback', hostModule: 'fortran' },
 	COBOL: { strategy: 'terminal-fallback', hostModule: 'cobol' },
@@ -175,6 +177,11 @@ const runtimeReadinessAudit = {
 		strategy: 'entry-signal',
 		hostModule: 'sqlite',
 		producerPath: 'src/lib/playground/worker/sqlite.ts'
+	},
+	POSTGRESQL: {
+		strategy: 'entry-signal',
+		hostModule: 'postgresql',
+		producerPath: 'src/lib/playground/worker/postgresql.ts'
 	},
 	PHP: {
 		strategy: 'entry-signal',

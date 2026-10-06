@@ -62,6 +62,11 @@ const sqliteOutputSource = `SELECT 'main=73' AS result;`;
 
 const duckdbOutputSource = `SELECT 'main=73' AS result;`;
 
+const postgresqlStdinSource = `CREATE TABLE input_numbers (n integer);
+COPY input_numbers FROM '/dev/blob';
+SELECT 'main=' || (sum(n) + 5)::text AS result FROM input_numbers;
+SELECT 'engine=' || split_part(version(), ' ', 1) AS engine;`;
+
 const phpStdinSource = `<?php
 $input = trim(file_get_contents('php://input'));
 echo "main=", $input, "\\n";`;
@@ -637,6 +642,63 @@ describe('wasm-idle browser stdin connection', () => {
 	);
 
 	it(
+		'reuses a precompiled <bits/stdc++.h> for later C++ stdin runs in the real browser',
+		{
+			skip:
+				!runAllStdinBrowserCases &&
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(
+					!runAllStdinBrowserCases &&
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_CLANG_STDIN !== '1'
+				)
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			expect.hasAssertions();
+			const stdcppSource = (offset: number) => `// precompiled header probe
+#include <bits/stdc++.h>
+using namespace std;
+int main() {
+	long long n;
+	cin >> n;
+	vector<long long> values{n, n + ${offset}};
+	cout << "pch=" << accumulate(values.begin(), values.end(), 0LL) << endl;
+}`;
+			// The header is built in the background after the first compile, so later runs
+			// keep editing the source until one compile reports that it used the header.
+			const followUpRuns = [1, 2, 3, 4, 5].map((offset) => ({
+				source: stdcppSource(offset),
+				stdinText: '40\n',
+				expectedOutput: `pch=${80 + offset}`
+			}));
+
+			await withBrowserPreview(async (browserUrl) => {
+				const summary = await runStdinBrowserProbe({
+					browserUrl,
+					expectedOutput: 'pch=80',
+					language: 'CPP',
+					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+					source: stdcppSource(0),
+					stdinText: '40\n',
+					followUpRuns
+				});
+				expect(summary.transcript).toContain('pch=80');
+				expect(summary.followUpRuns.map((run) => run.output)).toEqual(
+					followUpRuns.map((run) => expect.stringContaining(run.expectedOutput))
+				);
+				expect(
+					summary.followUpRuns.some((run) =>
+						run.progressLabels.includes('Compiled with precompiled <bits/stdc++.h>')
+					)
+				).toBe(true);
+			});
+		}
+	);
+
+	it(
 		'links a C-selected response-file C++ program in the real browser',
 		{
 			skip:
@@ -862,6 +924,49 @@ int main() {
 				});
 				expect(summary.transcript).toContain('main=');
 				expect(summary.transcript).toContain('73');
+			});
+		}
+	);
+
+	it(
+		'passes PostgreSQL preloaded stdin through the browser PGlite runtime path',
+		{
+			skip:
+				!runAllStdinBrowserCases &&
+				process.env.WASM_IDLE_RUN_REAL_BROWSER_POSTGRESQL !== '1',
+			meta: {
+				browser: true,
+				requiredBrowser: !(
+					!runAllStdinBrowserCases &&
+					process.env.WASM_IDLE_RUN_REAL_BROWSER_POSTGRESQL !== '1'
+				)
+			},
+			timeout: browserStdinTestTimeoutMs
+		},
+		async () => {
+			expect.hasAssertions();
+
+			await withBrowserPreview(async (browserUrl) => {
+				const postgresqlBrowserUrl = new URL(browserUrl);
+				postgresqlBrowserUrl.searchParams.set('lang', 'postgresql');
+				const summary = await runStdinBrowserProbe({
+					activePath: 'main.sql',
+					browserUrl: postgresqlBrowserUrl.href,
+					expectedOutput: 'engine=PostgreSQL',
+					language: 'POSTGRESQL',
+					preloadStdin: true,
+					requireSharedArrayBuffer: false,
+					runTimeoutMs: Number(process.env.WASM_IDLE_STDIN_RUN_TIMEOUT_MS || '420000'),
+					source: postgresqlStdinSource,
+					stdinText: '30\n38\n'
+				});
+				expect(summary.transcript).toMatch(/result\s+main=73/);
+				expect(summary.transcript).toMatch(/engine\s+engine=PostgreSQL/);
+				expect(
+					summary.runtimeRequests.some((request) =>
+						new URL(request).pathname.includes('/wasm-postgresql/assets/pglite-')
+					)
+				).toBe(true);
 			});
 		}
 	);

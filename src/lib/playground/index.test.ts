@@ -140,6 +140,11 @@ vi.mock('$lib/playground/gleam', () => {
 	};
 });
 
+vi.mock('$lib/playground/grain', () => {
+	moduleLoads.add('GRAIN');
+	return { default: createMockSandboxClass('GRAIN') };
+});
+
 vi.mock('$lib/playground/perl', () => {
 	moduleLoads.add('PERL');
 	return {
@@ -229,6 +234,13 @@ vi.mock('$lib/playground/clojurescript', () => {
 	};
 });
 
+vi.mock('$lib/playground/rescript', () => {
+	moduleLoads.add('RESCRIPT');
+	return {
+		default: createMockSandboxClass('RESCRIPT')
+	};
+});
+
 vi.mock('$lib/playground/swift', () => {
 	moduleLoads.add('SWIFT');
 	return {
@@ -266,6 +278,13 @@ vi.mock('$lib/playground/sqlite', () => {
 	moduleLoads.add('SQLITE');
 	return {
 		default: createMockSandboxClass('SQLITE')
+	};
+});
+
+vi.mock('$lib/playground/postgresql', () => {
+	moduleLoads.add('POSTGRESQL');
+	return {
+		default: createMockSandboxClass('POSTGRESQL')
 	};
 });
 
@@ -429,6 +448,7 @@ describe('playground runtime binding', () => {
 				'NIM',
 				'BASH',
 				'CLOJURESCRIPT',
+				'RESCRIPT',
 				'LFORTRAN',
 				'FORTRAN',
 				'COBOL',
@@ -470,6 +490,12 @@ describe('playground runtime binding', () => {
 		expect(canonical).not.toBe(alias);
 		expect(sandboxInstances.get('V')).toHaveLength(2);
 		expect(moduleLoads).toContain('V');
+	});
+
+	it('routes the RES alias through the ReScript sandbox', async () => {
+		await playground('RES');
+		expect(sandboxInstances.get('RESCRIPT')).toHaveLength(1);
+		expect(moduleLoads).toContain('RESCRIPT');
 	});
 
 	it('routes GnuCOBOL aliases through the COBOL sandbox', async () => {

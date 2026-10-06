@@ -393,6 +393,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Grain',
+		ids: ['GRAIN'],
+		runtime: 'Grain 0.7.2 js_of_ocaml compiler + WASI',
+		stdin: 'Yes',
+		editorSupport: 'compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/grain.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_GRAIN',
+			marker: 'real Grain compiler in Chromium'
+		}
+	},
+	{
 		language: 'Perl',
 		ids: ['PERL'],
 		runtime: 'Perl WASM worker',
@@ -546,6 +559,19 @@ export const supportMatrixRows = [
 			file: 'src/lib/playground/static-worker-runtimes.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_CLOJURESCRIPT',
 			language: 'CLOJURESCRIPT'
+		}
+	},
+	{
+		language: 'ReScript',
+		ids: ['RESCRIPT'],
+		runtime: 'ReScript 12.3.1 compiler (js_of_ocaml)',
+		stdin: 'Yes',
+		editorSupport: 'compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/rescript.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_RESCRIPT',
+			language: 'RESCRIPT'
 		}
 	},
 	{
@@ -819,6 +845,19 @@ export const supportMatrixRows = [
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
 			language: 'SQLITE'
+		}
+	},
+	{
+		language: 'PostgreSQL',
+		ids: ['POSTGRESQL'],
+		runtime: 'PostgreSQL 18 / PGlite',
+		stdin: 'Files',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_POSTGRESQL',
+			language: 'POSTGRESQL'
 		}
 	},
 	{
@@ -1145,6 +1184,15 @@ const runtimeDetailsByLanguage = new Map([
 		}
 	],
 	[
+		'Grain',
+		{
+			packageBase:
+				'grain-lang/grain v0.7.2 release: upstream js_of_ocaml grainc.bc.js + @grain/stdlib 0.7.2 (precompiled .gro)',
+			execution: `Verified upstream grainc compiles ${code('.gr')} workspace files to WASI in a fresh browser Worker; stdio-only WASI host with streaming ${code('stdin')}`,
+			customization: `${code('runtimeAssets.grain.baseUrl')} or ${code('PUBLIC_WASM_GRAIN_BASE_URL')}; ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; Wasm memory bounded by ${code('limits.maxWasmMemoryBytes')}`
+		}
+	],
+	[
 		'Perl',
 		{
 			packageBase:
@@ -1317,6 +1365,20 @@ const runtimeDetailsByLanguage = new Map([
 				`static worker compiles and evaluates with the official ${code('cljs.js')} self-hosted compiler; ` +
 				`supports ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, and ${code('workspaceFiles')}`,
 			customization: staticWorkerCustomizationFor('clojurescript', 'CLOJURESCRIPT')
+		}
+	],
+	[
+		'ReScript',
+		{
+			packageBase:
+				`upstream ReScript ` +
+				manifestValue('static/wasm-rescript/runtime-build.json', ['rescriptVersion']) +
+				` playground ${code('compiler.js')} + ${code('compiler-builtins/cmij.js')} + ${code('@rescript/runtime@12.3.1')}`,
+			execution:
+				`static worker compiles ${code('Main.res')} to CommonJS with the official js_of_ocaml ReScript compiler, ` +
+				`then runs it against the upstream stdlib runtime; stdin via ${code('fs.readLineSync(0)')}/${code('fs.readFileSync(0)')}; ` +
+				`compiler errors/warnings become editor diagnostics; supports ${code('programArgs')}`,
+			customization: staticWorkerCustomizationFor('rescript', 'RESCRIPT')
 		}
 	],
 	[
@@ -1592,6 +1654,23 @@ const runtimeDetailsByLanguage = new Map([
 				`${code('runtimeAssets.sqlite.moduleUrl')}/${code('wasmUrl')} or ` +
 				`${code('PUBLIC_WASM_SQLITE_MODULE_URL')}/${code('PUBLIC_WASM_SQLITE_WASM_URL')} or ` +
 				`${code('rootUrl')}; ${code('workspaceFiles')}`
+		}
+	],
+	[
+		'PostgreSQL',
+		{
+			packageBase:
+				`static ESM ${code('static/wasm-postgresql/runtime.mjs')} produced from ` +
+				`${npmPackage('@electric-sql/pglite')}`,
+			execution:
+				`upstream PostgreSQL compiled to WebAssembly by PGlite; initdb runs once per worker ` +
+				`and every run restores a fresh in-memory cluster, sends the script as one simple ` +
+				`query, and prints result sets, notices, and ${code('COPY ... TO STDOUT')}; preloaded ` +
+				`${code('stdin')} is exposed as the server file ${code('/dev/blob')}`,
+			customization:
+				`${code('runtimeAssets.postgresql.moduleUrl')} or ` +
+				`${code('PUBLIC_WASM_POSTGRESQL_MODULE_URL')} or ${code('rootUrl')}; ` +
+				`${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}`
 		}
 	],
 	[

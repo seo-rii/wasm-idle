@@ -16,6 +16,7 @@ const canonicalLanguageIds = [
 	'ERLANG',
 	'PROLOG',
 	'GLEAM',
+	'GRAIN',
 	'PERL',
 	'TCL',
 	'AWK',
@@ -28,6 +29,7 @@ const canonicalLanguageIds = [
 	'NIM',
 	'BASH',
 	'CLOJURESCRIPT',
+	'RESCRIPT',
 	'HY',
 	'FORTRAN',
 	'LFORTRAN',
@@ -50,6 +52,7 @@ const canonicalLanguageIds = [
 	'OCTAVE',
 	'DUCKDB',
 	'SQLITE',
+	'POSTGRESQL',
 	'PHP'
 ] as const;
 
@@ -104,6 +107,7 @@ const languageAliasDefinitions = {
 	SH: { canonicalId: 'BASH', kind: 'compatibility' },
 	SHELL: { canonicalId: 'BASH', kind: 'compatibility' },
 	CLJS: { canonicalId: 'CLOJURESCRIPT', kind: 'spelling' },
+	RES: { canonicalId: 'RESCRIPT', kind: 'spelling' },
 	HYLANG: { canonicalId: 'HY', kind: 'spelling' },
 	F77: { canonicalId: 'FORTRAN', kind: 'dialect' },
 	COB: { canonicalId: 'COBOL', kind: 'spelling' },
@@ -143,6 +147,13 @@ const languageAliasDefinitions = {
 		canonicalId: 'SQLITE',
 		kind: 'dialect',
 		message: 'SQL selects the SQLite dialect and engine.'
+	},
+	POSTGRES: { canonicalId: 'POSTGRESQL', kind: 'spelling' },
+	PGSQL: { canonicalId: 'POSTGRESQL', kind: 'spelling' },
+	PGLITE: {
+		canonicalId: 'POSTGRESQL',
+		kind: 'implementation',
+		message: 'PGLITE selects PostgreSQL running through the PGlite WebAssembly build.'
 	},
 	WASM32: { canonicalId: 'WASM', kind: 'spelling' }
 } as const satisfies Record<

@@ -146,6 +146,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'GRAIN',
+		load: async () => {
+			const { default: Grain } = await import('$lib/playground/grain');
+			return new Grain();
+		}
+	},
+	{
 		languageId: 'PERL',
 		load: async () => {
 			const { default: Perl } = await import('$lib/playground/perl');
@@ -178,6 +185,13 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: ClojureScript } = await import('$lib/playground/clojurescript');
 			return new ClojureScript();
+		}
+	},
+	{
+		languageId: 'RESCRIPT',
+		load: async () => {
+			const { default: ReScript } = await import('$lib/playground/rescript');
+			return new ReScript();
 		}
 	},
 	{
@@ -374,6 +388,13 @@ const sandboxRoutes = [
 		load: async () => {
 			const { default: Sqlite } = await import('$lib/playground/sqlite');
 			return new Sqlite();
+		}
+	},
+	{
+		languageId: 'POSTGRESQL',
+		load: async () => {
+			const { default: Postgresql } = await import('$lib/playground/postgresql');
+			return new Postgresql();
 		}
 	},
 	{

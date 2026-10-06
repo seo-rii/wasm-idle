@@ -19,6 +19,11 @@ import type {
 } from '$lib/playground/jPreflight';
 import { preflightJRuntimeAssets } from '$lib/playground/jPreflight';
 import type {
+	ReScriptRuntimePreflightPayload,
+	ReScriptRuntimePreflightRequest
+} from '$lib/playground/rescriptPreflight';
+import { preflightReScriptRuntimeAssets } from '$lib/playground/rescriptPreflight';
+import type {
 	StaticRuntimePreflightProgress,
 	StaticRuntimePreflightRequestMessage
 } from '$lib/playground/staticRuntimePreflightProtocol';
@@ -37,7 +42,8 @@ export type StaticRuntimePreflightPayload =
 	| ForthRuntimePreflightPayload
 	| JRuntimePreflightPayload
 	| JanetRuntimePreflightPayload
-	| PrologRuntimePreflightPayload;
+	| PrologRuntimePreflightPayload
+	| ReScriptRuntimePreflightPayload;
 
 export async function executeStaticRuntimePreflight(
 	request: StaticRuntimePreflightRequestMessage,
@@ -103,6 +109,14 @@ export async function executeStaticRuntimePreflight(
 						loadedBytes,
 						totalBytes
 					});
+				}
+			});
+		case 'RESCRIPT':
+			return await preflightReScriptRuntimeAssets({
+				...shared,
+				profile: request.profile as ReScriptRuntimePreflightRequest['profile'],
+				reportDecompressionProgress(loadedBytes, totalBytes) {
+					reportProgress({ kind: 'decompression', loadedBytes, totalBytes });
 				}
 			});
 	}

@@ -357,17 +357,20 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/onclick=\{\(\) => selectDebugFrame\(frame\)\}/);
 	});
 
-	it('preloads stdin when SharedArrayBuffer is unavailable or Bash is selected', () => {
+	it('preloads stdin when SharedArrayBuffer is unavailable or a start-time stdin runtime is selected', () => {
 		expect(source).not.toMatch(/location\.reload\(\)/);
 		expect(source).toMatch(
 			/const sharedBufferAvailable = \$derived\(\s*!browser \|\| isSharedArrayBufferAvailable\(\)\s*\);/s
 		);
 		expect(source).toMatch(
-			/const preloadedStdin =\s+sharedBufferAvailable && language !== 'BASH' \? undefined : stdinInput;/s
+			/const preloadedStdinLanguages = new Set<PlaygroundLanguage>\(\['BASH', 'POSTGRESQL'\]\);/
+		);
+		expect(source).toMatch(
+			/const preloadedStdin =\s+sharedBufferAvailable && !preloadedStdinLanguages\.has\(language\)\s+\? undefined\s+: stdinInput;/s
 		);
 		expect(source).toMatch(/stdin: preloadedStdin/);
 		expect(source).toMatch(
-			/\{#if !sharedBufferAvailable \|\| language === 'BASH'\}\s+<div class="stdin-panel">/s
+			/\{#if !sharedBufferAvailable \|\| preloadedStdinLanguages\.has\(language\)\}\s+<div class="stdin-panel">/s
 		);
 		expect(source).toMatch(/bind:value=\{stdinInput\}/);
 		expect(source).toMatch(
@@ -441,6 +444,7 @@ describe('example route debug actions', () => {
 		expectEditorLanguage('ERLANG', 'erlang');
 		expectEditorLanguage('PROLOG', 'prolog');
 		expectEditorLanguage('GLEAM', 'gleam');
+		expectEditorLanguage('GRAIN', 'rust');
 		expectEditorLanguage('PERL', 'perl');
 		expectEditorLanguage('JAVASCRIPT', 'javascript');
 		expectEditorLanguage('TYPESCRIPT', 'typescript');
@@ -1019,6 +1023,23 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/SELECT results are printed as tab-separated tables/);
 	});
 
+	it('surfaces PostgreSQL through the bundled PGlite worker runtime contract', () => {
+		expect(applicationRuntimeAssets.postgresql?.moduleUrl).toContain(
+			'/wasm-postgresql/runtime.mjs?'
+		);
+		expectPlaygroundLanguage('POSTGRESQL');
+		expect(source).toMatch(/postgresql: 'POSTGRESQL'/);
+		expect(source).toMatch(/pgsql: 'POSTGRESQL'/);
+		expectEditorLanguage('POSTGRESQL', 'pgsql');
+		expect(source).toMatch(/'.pgsql': 'POSTGRESQL'/);
+		expect(source).toMatch(/POSTGRESQL: 'main\.sql'/);
+		expect(source).toMatch(/POSTGRESQL: 'postgresql'/);
+		expect(source).toMatch(
+			/PostgreSQL runs as real upstream PostgreSQL compiled to WebAssembly/
+		);
+		expect(source).toMatch(/readable as `\/dev\/blob`/);
+	});
+
 	it('surfaces DuckDB through the bundled DuckDB-Wasm worker runtime contract', () => {
 		expect(applicationRuntimeAssets.duckdb?.moduleUrl).toContain('/wasm-duckdb/runtime.mjs?');
 		expectPlaygroundLanguage('DUCKDB');
@@ -1174,16 +1195,20 @@ describe('example route debug actions', () => {
 		expect(source).toMatch(/swipl: 'PROLOG'/);
 		expect(source).toMatch(/swi: 'PROLOG'/);
 		expect(source).toMatch(/gleam: 'GLEAM'/);
+		expect(source).toMatch(/grain: 'GRAIN'/);
 		expect(source).toMatch(/perl: 'PERL'/);
 		expect(source).toMatch(/'.prolog': 'PROLOG'/);
 		expect(source).toMatch(/'.pro': 'PROLOG'/);
 		expect(source).toMatch(/'.gleam': 'GLEAM'/);
+		expect(source).toMatch(/'.gr': 'GRAIN'/);
 		expect(source).toMatch(/'.pl': 'PERL'/);
 		expect(source).toMatch(/PROLOG: 'main\.prolog'/);
 		expect(source).toMatch(/GLEAM: 'main\.gleam'/);
+		expect(source).toMatch(/GRAIN: 'main\.gr'/);
 		expect(source).toMatch(/PERL: 'main\.pl'/);
 		expect(source).toMatch(/PROLOG: 'prolog'/);
 		expect(source).toMatch(/GLEAM: 'gleam'/);
+		expect(source).toMatch(/GRAIN: 'grain'/);
 		expect(source).toMatch(/PERL: 'perl'/);
 		expect(source).toMatch(/SWI-Prolog WebAssembly assets/);
 		expect(source).toMatch(/Gleam WebAssembly compiler/);

@@ -143,6 +143,16 @@ even when LLDB reports the executable location in another file. IDs retired by a
 replacement remain ignored, so delayed events cannot attach themselves to a new ID-less breakpoint
 on the same line.
 
+C++ sources whose first directive is `#include <bits/stdc++.h>` (after comments only) can reuse a
+precompiled copy of that header. After such a compile, `precompiledHeaderPlan` is set and
+`buildPrecompiledHeader()` returns `{ key, bytes }`; `buildPrecompiledHeaderFor(code, options)`
+builds the same header in another runtime instance without compiling the source. Pass the result
+as `precompiledHeader` to later `compileArtifact()`/`compileLinkRun()` calls. Clang uses it only
+when its key matches the current arguments and runtime assets, and only when `compileArgs` are
+definitions, warnings, `-f`, `-O`, `-std=` or `-pedantic` flags that cannot change header lookup;
+otherwise the source compiles normally. Trace mode never uses it. If Clang rejects the header, the
+compile is retried without it and `usedPrecompiledHeader` stays false.
+
 Compile C/C++ LLDB artifacts with `compileArtifact(..., { debugMode: 'lldb' })`. They contain
 untouched source, embedded DWARF, stable `/workspace/...` paths, and exact Clang provenance.
 Lowercase `.c`, `.cc`, `.cpp`, and `.cxx` workspace siblings are compiled as independent

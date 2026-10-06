@@ -1,0 +1,69 @@
+{
+	"schemaVersion": 1,
+	"profileId": "rescript-12.3.1-playground-commonjs",
+	"source": {
+		"repository": "https://github.com/rescript-lang/rescript",
+		"revision": "v12.3.1",
+		"commit": "679406560d169f1124653ab50795d5077570f078"
+	},
+	"build": {
+		"rescriptVersion": "12.3.1",
+		"compilerBuild": "js_of_ocaml 6.0.1 playground bundle built and uploaded by upstream CI (make playground)",
+		"moduleSystem": "commonjs"
+	},
+	"license": {
+		"path": "LICENSE.txt",
+		"spdx": "LGPL-3.0-or-later AND MIT"
+	},
+	"components": [
+		{
+			"path": "compiler.js",
+			"url": "https://cdn.rescript-lang.org/v12.3.1/compiler.js",
+			"bytes": 2056670,
+			"sha256": "b0ce79f7afabff1ce2e1b4247b7ad4581c274a539385b37f9ce477cd697d6e8c"
+		},
+		{
+			"path": "compiler-builtins/cmij.js",
+			"url": "https://cdn.rescript-lang.org/v12.3.1/compiler-builtins/cmij.js",
+			"bytes": 4009994,
+			"sha256": "fcb20410fcd44743c0d8c37c657c4e57bf632a81d88dcb779a0691e522d6f9fb"
+		},
+		{
+			"path": "rescript-runtime-12.3.1.tgz",
+			"url": "https://registry.npmjs.org/@rescript/runtime/-/runtime-12.3.1.tgz",
+			"bytes": 5063051,
+			"sha256": "9ff6d4e23eac9de5968c726f62fd49701816ec7c8e3272adf8720a23404ec56d",
+			"integrity": "sha512-yTM0iTl6owyA37UEtPAZR0A3G1kFffJWb+UE6+rcG/N2kxYQnuSlNDfVvsry7l8O+o/ME6QE7Zt7efjCDGM3xg=="
+		}
+	],
+	"bundle": {
+		"bytes": 6496768,
+		"sha256": "17b16598b473bcd56367f29fb76d300ffe0073c814af68710d3b46964b200202"
+	},
+	"licenseSources": [
+		{
+			"path": "LICENSE",
+			"url": "https://raw.githubusercontent.com/rescript-lang/rescript/v12.3.1/LICENSE",
+			"bytes": 274,
+			"sha256": "20ea6fb99c51a06e28fe76af8a353dc362837be51ba2b8da8abc1b7143add8a9"
+		},
+		{
+			"path": "LICENSE.MIT",
+			"url": "https://raw.githubusercontent.com/rescript-lang/rescript/v12.3.1/LICENSE.MIT",
+			"bytes": 1138,
+			"sha256": "5fb9a2cbdb422b4bf31100b9208d661ab9abf96d33c137e8d3755f2626d0b83b"
+		},
+		{
+			"path": "COPYING.LESSER",
+			"url": "https://raw.githubusercontent.com/rescript-lang/rescript/v12.3.1/COPYING.LESSER",
+			"bytes": 7650,
+			"sha256": "ea8af5e789cb2d4e9b10bce3874982ade163b749b6bfbdb32e2df21c4d106de1"
+		},
+		{
+			"path": "COPYING",
+			"url": "https://raw.githubusercontent.com/rescript-lang/rescript/v12.3.1/COPYING",
+			"bytes": 35146,
+			"sha256": "c53a65c2fd561c87eaabf1072ef5dcab8653042bc15308465f52413585eb6271"
+		}
+	]
+}

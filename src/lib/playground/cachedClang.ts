@@ -14,7 +14,11 @@ import {
 import { WorkerAssetBridge } from './assetBridge';
 import { shouldStreamBundledClang } from './clangStreamingPolicy';
 import type { RuntimeAssetCache } from './runtimeAssetCache';
-import type { BrowserClangArtifact, BrowserClangCompileRequest } from '@wasm-idle/llvm-core/clang';
+import type {
+	BrowserClangArtifact,
+	BrowserClangCompileRequest,
+	BrowserClangPrecompiledHeader
+} from '@wasm-idle/llvm-core/clang';
 import { CompiledArtifactCache, clangCompileKey } from './compiledArtifactCache';
 
 type WorkerFactories = { compile(): Worker | Promise<Worker>; execute(): Worker | Promise<Worker> };
@@ -54,6 +58,31 @@ export function createCachedClangSandbox(
 	let pendingEof = false;
 	const pendingInput: Uint8Array[] = [];
 	const encoder = new TextEncoder();
+	// Built in the background by the compile worker after a <bits/stdc++.h> source; it outlives
+	// runs and cancellations and is discarded only with the sandbox.
+	let precompiledHeader: BrowserClangPrecompiledHeader | undefined;
+	let headerWorker: { worker: Worker; dispose(): void } | undefined;
+
+	function adoptHeaderWorker(worker: Worker, bridge?: WorkerAssetBridge) {
+		headerWorker?.dispose();
+		const dispose = () => {
+			if (headerWorker?.worker === worker) headerWorker = undefined;
+			bridge?.dispose();
+			worker.onmessage = null;
+			worker.onerror = null;
+			worker.onmessageerror = null;
+			worker.terminate();
+		};
+		headerWorker = { worker, dispose };
+		worker.onerror = dispose;
+		worker.onmessageerror = dispose;
+		worker.onmessage = (event) => {
+			if (bridge?.handleMessage(event)) return;
+			if (event.data?.type !== 'precompiled-header') return;
+			if (event.data.header) precompiledHeader = event.data.header;
+			dispose();
+		};
+	}
 
 	function resetInput() {
 		pendingInput.length = 0;
@@ -128,16 +157,19 @@ export function createCachedClangSandbox(
 						? signal.reason
 						: new Error('Process terminated')
 				);
-			const finish = (error?: Error, value?: T) => {
+			const finish = (error?: Error, value?: T, keepForHeader = false) => {
 				if (activeWorker !== worker) return;
 				activeWorker = undefined;
 				cancelWorker = undefined;
 				signal?.removeEventListener('abort', abort);
-				bridge?.dispose();
 				worker.onmessage = null;
 				worker.onerror = null;
 				worker.onmessageerror = null;
-				worker.terminate();
+				if (keepForHeader) adoptHeaderWorker(worker, bridge);
+				else {
+					bridge?.dispose();
+					worker.terminate();
+				}
 				if (error) reject(error);
 				else resolve(value!);
 			};
@@ -171,8 +203,10 @@ export function createCachedClangSandbox(
 					} else if (data.type === 'compiled' || data.type === 'error') {
 						if (data.stdout) legacy.output?.(data.stdout);
 						if (data.stderr) legacy.output?.(data.stderr);
-						if (data.type === 'error') finish(new Error(data.error));
-						else finish(undefined, data.artifact);
+						const keepForHeader = data.precompiledHeader === 'building';
+						if (data.type === 'error')
+							finish(new Error(data.error), undefined, keepForHeader);
+						else finish(undefined, data.artifact, keepForHeader);
 					} else if (data.type === 'done') {
 						if (data.exitCode !== 0 && data.exitCode !== null)
 							finish(new Error(`Program exited with code ${data.exitCode}`));
@@ -304,6 +338,9 @@ export function createCachedClangSandbox(
 							maxAssetBytes: limit,
 							languageSysroots,
 							log,
+							...(language === 'CPP' && precompiledHeader
+								? { precompiledHeader }
+								: {}),
 							assets: {
 								baseUrl: runtimeBaseUrl,
 								maxAssetBytes: limit,
@@ -375,6 +412,8 @@ export function createCachedClangSandbox(
 			if (disposal) return disposal;
 			disposed = true;
 			stop();
+			headerWorker?.dispose();
+			precompiledHeader = undefined;
 			disposal = Promise.resolve(legacy.dispose ? legacy.dispose() : legacy.terminate());
 			return disposal;
 		}
