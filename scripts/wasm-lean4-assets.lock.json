@@ -1,0 +1,118 @@
+{
+	"schemaVersion": 1,
+	"profileId": "lean4-4.34.1-wasm32-emscripten-v1",
+	"source": "5045d0056413266e57c625dcd7c365b10e377c52",
+	"version": "4.34.1",
+	"license": "Apache-2.0 AND MIT",
+	"producer": {
+		"repository": "https://github.com/seo-rii/wasm-llvm",
+		"revision": "5369745f777673710c25cd67c52310b004cfe41a",
+		"path": "artifacts/lean-browser"
+	},
+	"assets": {
+		"producer-receipt.json": {
+			"upstream": "producer-receipt.json",
+			"bytes": 4596,
+			"sha256": "e60eb3fdcc108fa7c6127c5a8925ffb622706facb17bc4f84e9ed27f82495fa1"
+		},
+		"lean.mjs": {
+			"upstream": "lean.mjs",
+			"bytes": 108528,
+			"sha256": "16d6d6cb07c844bedf745f856a364ec61e86c13c4fe13a2e57c0c698a5c5f727"
+		},
+		"lean.wasm.gz.bin": {
+			"upstream": "lean.wasm.gz",
+			"logicalName": "lean.wasm",
+			"encoding": "gzip",
+			"bytes": 20239874,
+			"sha256": "89dc3cb841d487f9e29c1dc3069e7aeb1a63e5ec0267b8250552e3fe90f855bf",
+			"uncompressed": {
+				"bytes": 113033667,
+				"sha256": "d81dbde2ba4aaf0546affca2756477b6d1365a5633080d7119f737e5906ed919"
+			}
+		},
+		"lean-init.index.json": {
+			"upstream": "lean-init.index.json",
+			"bytes": 321866,
+			"sha256": "030b375cee435f12f7163c58c16d128340f9e20fa27a77ab646198be61906555"
+		},
+		"lean-init-00.pack.gz.bin": {
+			"upstream": "lean-init-00.pack.gz",
+			"logicalName": "lean-init-00.pack",
+			"encoding": "gzip",
+			"bytes": 22626621,
+			"sha256": "c2cea0798b8b3e910188eb79d3d0101452c874f693294d2cf8c360fde125c08e",
+			"uncompressed": {
+				"bytes": 50331648,
+				"sha256": "19734bd892d96cbf4ec7b1d13e1bdccbbee022f3288908ee535e2facfc99d483"
+			}
+		},
+		"lean-init-01.pack.gz.bin": {
+			"upstream": "lean-init-01.pack.gz",
+			"logicalName": "lean-init-01.pack",
+			"encoding": "gzip",
+			"bytes": 22633878,
+			"sha256": "6e65383d8de425a0c0f5b48430aa5be7c9f2066138080bf213a0435b0fd1d874",
+			"uncompressed": {
+				"bytes": 50331648,
+				"sha256": "2ea9fcd0ede724bfc93bf032b7ee3d09724fbd83a17afaaaad534859e74b1200"
+			}
+		},
+		"lean-init-02.pack.gz.bin": {
+			"upstream": "lean-init-02.pack.gz",
+			"logicalName": "lean-init-02.pack",
+			"encoding": "gzip",
+			"bytes": 23039094,
+			"sha256": "57cc57d61067fc77d8b72008299e25956a121cd3fdf628941420966de1f762e5",
+			"uncompressed": {
+				"bytes": 50331648,
+				"sha256": "75273ea353191316cb8fc31900ef36ffa7424a4bd62061cdbbba8477510ed3bc"
+			}
+		},
+		"lean-init-03.pack.gz.bin": {
+			"upstream": "lean-init-03.pack.gz",
+			"logicalName": "lean-init-03.pack",
+			"encoding": "gzip",
+			"bytes": 22382973,
+			"sha256": "e310ddf310d6d89dc7cc583f01213a1eab2684c1ada9e77368ca16637009d72a",
+			"uncompressed": {
+				"bytes": 50331648,
+				"sha256": "480c12f5b808c18f692e9f5f5666bee3c6a2b0473075a3dd1417039b2bf05553"
+			}
+		},
+		"lean-init-04.pack.gz.bin": {
+			"upstream": "lean-init-04.pack.gz",
+			"logicalName": "lean-init-04.pack",
+			"encoding": "gzip",
+			"bytes": 21886461,
+			"sha256": "f1345c223483bbb8e3c25e73042c5526efbd24301df95c74d30b4799493e6697",
+			"uncompressed": {
+				"bytes": 50331648,
+				"sha256": "5daed6ecf33bfb049e294c72ed161d6a0260440aa371b2be34f26b78377e1178"
+			}
+		},
+		"lean-init-05.pack.gz.bin": {
+			"upstream": "lean-init-05.pack.gz",
+			"logicalName": "lean-init-05.pack",
+			"encoding": "gzip",
+			"bytes": 9812693,
+			"sha256": "9f8deb32469cbe66669381c8f0fb5d379d506f7935beb29393b19d2c52ac8a52",
+			"uncompressed": {
+				"bytes": 24923128,
+				"sha256": "73ca4bd7a0d07f15d3b88298b7dd273406a92e36da96cb555ebb986ee85b7b14"
+			}
+		}
+	},
+	"notices": {
+		"LICENSE": {
+			"upstream": "LICENSE",
+			"bytes": 9160,
+			"sha256": "8b28515ffffc5c0fe2807d8ae3735b00b324d9b7ce807dd63ff6ac8922fbce7e"
+		},
+		"LICENSE.libuv": {
+			"upstream": "LICENSE.libuv",
+			"bytes": 1079,
+			"sha256": "16de0c32b265cb7d46a6d3bd614f259dd4d693a5e26b3407b04aae8d73041f0c"
+		}
+	}
+}

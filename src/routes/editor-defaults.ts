@@ -43,6 +43,7 @@ export type EditorDefaultLanguage =
 	| 'octave'
 	| 'fortran'
 	| 'lfortran'
+	| 'lean4'
 	| 'cobol'
 	| 'graphql'
 	| 'duckdb'
@@ -99,6 +100,7 @@ export const editorDefaults: Record<
 	| 'octave'
 	| 'fortran'
 	| 'lfortran'
+	| 'lean4'
 	| 'cobol'
 	| 'graphql'
 	| 'duckdb'
@@ -1022,6 +1024,17 @@ endif
   read(*,*) values
   print '(A,I0)', 'sum=', sum(values)
 end program main`,
+	lean4: `def main : IO Unit := do
+  let stdin ← IO.getStdin
+  let stdout ← IO.getStdout
+  -- stdout is line-buffered: flush so the prompt appears before reading input.
+  stdout.putStr "What is your name? "
+  stdout.flush
+  let name := (← stdin.getLine).trimAscii.toString
+  IO.println s!"Hello, {name}!"
+  IO.println "Enter numbers separated by spaces:"
+  let nums := ((← stdin.getLine).trimAscii.toString.splitOn " ").filterMap String.toInt?
+  IO.println s!"sum = {nums.foldl (· + ·) 0}"`,
 	fortran: `      PROGRAM MAIN
       INTEGER BONUS, N, RESULT
       INTEGER IO_STAT
@@ -1357,6 +1370,7 @@ export function isEditorDefaultSource(source: string) {
 	return (
 		source === editorDefaults.c ||
 		source === editorDefaults.c3 ||
+		source === editorDefaults.lean4 ||
 		source === editorDefaults.cpp ||
 		source === editorDefaults.python ||
 		source === editorDefaults.java ||
