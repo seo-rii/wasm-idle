@@ -98,6 +98,11 @@ const typescriptStdinSource = `import fs from 'node:fs';
 const line: string = (fs as any).readLineSync(0);
 console.log(\`main=\${Number(line.trim()) + 5}\`);`;
 
+const fennelStdinSource = `(macro add-five [x] \`(+ ,x 5))
+(let [line (or (io.read) "0")
+      n (tonumber line)]
+  (print (.. "main=" (add-five n))))`;
+
 const luaStdinSource = `local line = io.read("*l") or "0"
 print("main=" .. tostring((tonumber(line) or 0) + 5))`;
 
@@ -261,6 +266,16 @@ const configuredStdinRunTimeoutMs = Number(process.env.WASM_IDLE_STDIN_RUN_TIMEO
 const browserStdinTestTimeoutMs = Math.max(700_000, configuredStdinRunTimeoutMs + 120_000);
 const runAllStdinBrowserCases = process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN === '1';
 const runLispStdinBrowserCase = process.env.WASM_IDLE_RUN_REAL_BROWSER_LISP === '1';
+const runFennelStdinBrowserCase = process.env.WASM_IDLE_RUN_REAL_BROWSER_FENNEL === '1';
+const selectedStdinBrowserLanguages = new Set<string>([
+	...(runLispStdinBrowserCase ? ['LISP'] : []),
+	...(runFennelStdinBrowserCase ? ['FENNEL'] : [])
+]);
+const skipSharedStdinBrowserCase = (language: string) =>
+	(!runSharedStdinBrowserCases && selectedStdinBrowserLanguages.size === 0) ||
+	(selectedStdinBrowserLanguages.size > 0 &&
+		!runAllStdinBrowserCases &&
+		!selectedStdinBrowserLanguages.has(language));
 const runDotnetBrowserCases = process.env.WASM_IDLE_RUN_REAL_BROWSER_DOTNET === '1';
 const runSharedStdinBrowserCases =
 	runAllStdinBrowserCases || process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN_SHARED_ONLY === '1';
@@ -371,6 +386,13 @@ const sharedStdinBrowserCases = [
 		defaultRunTimeoutMs: 240_000
 	},
 	{
+		language: 'FENNEL',
+		source: fennelStdinSource,
+		stdinText: '68\n',
+		expectedOutput: 'main=73',
+		defaultRunTimeoutMs: 240_000
+	},
+	{
 		language: 'LISP',
 		source: schemeStdinSource,
 		stdinText: 'K\n',
@@ -462,15 +484,10 @@ describe('wasm-idle browser stdin connection', () => {
 		it(
 			`passes ${language} input and output through its real browser runtime path`,
 			{
-				skip:
-					(!runSharedStdinBrowserCases && !runLispStdinBrowserCase) ||
-					(runLispStdinBrowserCase && !runAllStdinBrowserCases && language !== 'LISP'),
+				skip: skipSharedStdinBrowserCase(language),
 				meta: {
 					browser: true,
-					requiredBrowser: !(
-						(!runSharedStdinBrowserCases && !runLispStdinBrowserCase) ||
-						(runLispStdinBrowserCase && !runAllStdinBrowserCases && language !== 'LISP')
-					)
+					requiredBrowser: !skipSharedStdinBrowserCase(language)
 				},
 				timeout: browserStdinTestTimeoutMs
 			},

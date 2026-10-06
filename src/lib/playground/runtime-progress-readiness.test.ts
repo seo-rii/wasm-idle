@@ -41,6 +41,7 @@ const runtimeReadinessAudit = {
 	C: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	CPP: { strategy: 'terminal-fallback', hostModule: 'clang' },
 	OBJC: { strategy: 'terminal-fallback', hostModule: 'objectivec' },
+	OBJECTIVECXX: { strategy: 'terminal-fallback', hostModule: 'objectivec' },
 	PYTHON3: {
 		strategy: 'entry-signal',
 		hostModule: 'python',
@@ -124,6 +125,12 @@ const runtimeReadinessAudit = {
 		producerPath: 'src/lib/playground/worker/wasm.ts'
 	},
 	LUA: {
+		strategy: 'entry-signal',
+		hostModule: 'lua',
+		producerPath: 'src/lib/playground/worker/lua.ts'
+	},
+	// Fennel's host extends the Lua host and runs on the same wasm-lua worker.
+	FENNEL: {
 		strategy: 'entry-signal',
 		hostModule: 'lua',
 		producerPath: 'src/lib/playground/worker/lua.ts'

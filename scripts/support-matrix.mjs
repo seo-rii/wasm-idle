@@ -211,6 +211,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Objective-C++',
+		ids: ['OBJECTIVECXX'],
+		runtime: 'GNUstep libobjc2 + @wasm-idle/llvm-core',
+		stdin: 'Yes',
+		editorSupport: 'clangd',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/objectivecxx.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_OBJECTIVECXX',
+			language: 'OBJECTIVECXX'
+		}
+	},
+	{
 		language: 'Python',
 		ids: ['PYTHON3'],
 		runtime: 'Pyodide',
@@ -627,6 +640,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Fennel',
+		ids: ['FENNEL'],
+		runtime: 'fennel.lua on Wasmoon',
+		stdin: 'Yes',
+		editorSupport: 'syntax',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/stdin.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
+			language: 'FENNEL'
+		}
+	},
+	{
 		language: 'Zig',
 		ids: ['ZIG'],
 		runtime: 'zig_small.wasm',
@@ -922,6 +948,24 @@ const runtimeDetailsByLanguage = new Map([
 				`${code('loader')} for the clang toolchain; ${code('activePath')}, ` +
 				`${code('workspaceFiles')}, ${code('compileArgs')}, ${code('debug')}, ` +
 				`${code('breakpoints')}, ${code('pauseOnEntry')}`
+		}
+	],
+	[
+		'Objective-C++',
+		{
+			packageBase:
+				`Same GNUstep libobjc2 v2.3 + libc++ assets as Objective-C from the ${code('wasm-llvm')} ` +
+				`producer + ${workspacePackage('packages/llvm-core')}; no extra compiler assets`,
+			execution:
+				`${code('clang -x objective-c++ -std=gnu++20 -fobjc-runtime=gnustep-2.0 -fblocks')} for ` +
+				`${code('wasm32-wasi')} with libc++ headers; active file defaults to ${code('main.mm')}; ` +
+				`links ${code('libobjc.a')} (plus GNUstep Base and ${code('libffi.a')} when Foundation is ` +
+				`imported); auto-compiles ${code('.mm')}/${code('.m')}/${code('.c')} workspace files; ` +
+				`supports ${code('stdin')} and ${code('programArgs')}; trace debugging is not supported`,
+			customization:
+				`Shares ${code('runtimeAssets.objectivec')} and ${code('runtimeAssets.clang')} with ` +
+				`Objective-C; ${code('activePath')}, ${code('workspaceFiles')}, ${code('compileArgs')}, ` +
+				`${code('programArgs')}`
 		}
 	],
 	[
@@ -1351,6 +1395,16 @@ const runtimeDetailsByLanguage = new Map([
 			execution: `Wasmoon Lua VM; supports ${code('stdin')} and ${code('programArgs')}`,
 			customization:
 				`${code('runtimeAssets.lua.moduleUrl')} or ${code('PUBLIC_WASM_LUA_MODULE_URL')}; ` +
+				`${code('programArgs')}`
+		}
+	],
+	[
+		'Fennel',
+		{
+			packageBase: `static wasm-fennel ${code('fennel-1.6.1.lua.gz')} (official Fennel 1.6.1) on ${workspacePackage('runtimes/wasm-lua')}`,
+			execution: `receipt-verified ${code('fennel.lua')} compiler evaluated by the Wasmoon Lua VM; supports ${code('stdin')} and ${code('programArgs')}`,
+			customization:
+				`${code('runtimeAssets.fennel.compilerUrl')} or ${code('PUBLIC_WASM_FENNEL_COMPILER_URL')} plus the Lua module URL; ` +
 				`${code('programArgs')}`
 		}
 	],

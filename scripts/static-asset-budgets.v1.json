@@ -24,6 +24,7 @@
 		"wasm-dotnet": { "maxBytes": 52000000, "maxFiles": 25 },
 		"wasm-duckdb": { "maxBytes": 20000000, "maxFiles": 10 },
 		"wasm-elixir": { "maxBytes": 6000000, "maxFiles": 6 },
+		"wasm-fennel": { "maxBytes": 100000, "maxFiles": 3 },
 		"wasm-forth": { "maxBytes": 100000, "maxFiles": 5 },
 		"wasm-fortran": { "maxBytes": 4200000, "maxFiles": 15 },
 		"wasm-gleam": { "maxBytes": 2100000, "maxFiles": 60 },

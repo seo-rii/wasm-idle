@@ -56,6 +56,9 @@ describe('editor defaults', () => {
 		expect(editorDefaults.wat).toContain('(export "fibonacci")');
 		expect(editorDefaults.lua).toContain('local function fibonacci');
 		expect(editorDefaults.lua).toContain('io.read("*l")');
+		expect(editorDefaults.fennel).toContain('(fn fibonacci [n]');
+		expect(editorDefaults.fennel).toContain('(io.read)');
+		expect(editorDefaults.fennel).toContain('fibonacci=');
 		expect(editorDefaults.haskell).toContain('fibonacci :: Int -> Int');
 		expect(editorDefaults.haskell).toContain('putStrLn');
 		expect(editorDefaults.r).toContain('readLines(stdin(), n = 1');
@@ -185,6 +188,7 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.wat)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.lua)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.fennel)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.haskell)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.r)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.octave)).toBe(true);
