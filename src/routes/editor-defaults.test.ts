@@ -44,6 +44,8 @@ describe('editor defaults', () => {
 		expect(editorDefaults.julia).toContain('fibonacci=');
 		expect(editorDefaults.nim).toContain('stdin.readLine()');
 		expect(editorDefaults.nim).toContain('fibonacci=');
+		expect(editorDefaults.hy).toContain('(input)');
+		expect(editorDefaults.hy).toContain('fibonacci=');
 		expect(editorDefaults.clojurescript).toContain('[wasm-idle.runtime :as runtime]');
 		expect(editorDefaults.clojurescript).toContain('(runtime/read-line)');
 		expect(editorDefaults.clojurescript).toContain('(runtime/args)');
@@ -179,6 +181,7 @@ describe('editor defaults', () => {
 		expect(isEditorDefaultSource(editorDefaults.julia)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.nim)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.clojurescript)).toBe(true);
+		expect(isEditorDefaultSource(editorDefaults.hy)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.ocaml)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.javascript)).toBe(true);
 		expect(isEditorDefaultSource(editorDefaults.typescript)).toBe(true);

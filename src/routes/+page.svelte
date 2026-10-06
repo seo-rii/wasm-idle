@@ -661,6 +661,7 @@
 			'.sh': 'BASH',
 			'.bash': 'BASH',
 			'.cljs': 'CLOJURESCRIPT',
+			'.hy': 'HY',
 			'.cljc': 'CLOJURESCRIPT',
 			'.ml': 'OCAML',
 			'.mli': 'OCAML',
@@ -744,6 +745,7 @@
 			NIM: 'main.nim',
 			BASH: 'main.sh',
 			CLOJURESCRIPT: 'main.cljs',
+			HY: 'main.hy',
 			TINYGO: 'main.go',
 			OCAML: 'main.ml',
 			JAVASCRIPT: 'main.js',
@@ -807,6 +809,7 @@
 			NIM: 'nim',
 			BASH: 'bash',
 			CLOJURESCRIPT: 'clojurescript',
+			HY: 'hy',
 			TINYGO: 'go',
 			OCAML: 'ocaml',
 			JAVASCRIPT: 'javascript',
@@ -1505,6 +1508,8 @@
 			shell: 'BASH',
 			clojurescript: 'CLOJURESCRIPT',
 			cljs: 'CLOJURESCRIPT',
+			hy: 'HY',
+			hylang: 'HY',
 			ocaml: 'OCAML',
 			javascript: 'JAVASCRIPT',
 			js: 'JAVASCRIPT',
@@ -2954,6 +2959,13 @@
 				runtime. Enter stdin in the preloaded input panel, use `read -r` to consume it, and
 				read CLI args from `$1`, `$2`, …. Bash builtins are available; external coreutils
 				are not bundled yet.
+			</p>
+		{/if}
+		{#if language === 'HY'}
+			<p class="hint">
+				Hy 1.3.1 compiles to Python bytecode inside the bundled Pyodide runtime. Use
+				`(input)` for stdin and `(print)` for stdout; send Ctrl+D or use the EOF button to
+				finish input.
 			</p>
 		{/if}
 		{#if language === 'CLOJURESCRIPT'}

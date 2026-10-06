@@ -217,6 +217,11 @@ vi.mock('$lib/playground/bash', () => {
 	};
 });
 
+vi.mock('$lib/playground/hy', () => {
+	moduleLoads.add('HY');
+	return { default: createMockSandboxClass('HY') };
+});
+
 vi.mock('$lib/playground/clojurescript', () => {
 	moduleLoads.add('CLOJURESCRIPT');
 	return {
@@ -436,6 +441,12 @@ describe('playground runtime binding', () => {
 		const sandbox = await playground('SH');
 		expect(sandboxInstances.get('BASH')).toHaveLength(1);
 		expect(moduleLoads).toContain('BASH');
+	});
+
+	it('routes the HYLANG alias through the Hy sandbox', async () => {
+		await playground('HYLANG');
+		expect(sandboxInstances.get('HY')).toHaveLength(1);
+		expect(moduleLoads).toContain('HY');
 	});
 
 	it('routes the CLJS alias through the ClojureScript sandbox', async () => {
