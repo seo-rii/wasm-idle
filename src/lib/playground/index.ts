@@ -146,6 +146,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'GRAIN',
+		load: async () => {
+			const { default: Grain } = await import('$lib/playground/grain');
+			return new Grain();
+		}
+	},
+	{
 		languageId: 'PERL',
 		load: async () => {
 			const { default: Perl } = await import('$lib/playground/perl');

@@ -152,6 +152,8 @@
 		"format": "prettier --write .",
 		"page": "pnpm run page:build && pnpm run test:browser:audit:full --use-build && node gh-pages.js",
 		"sync:wasm-c3": "node scripts/sync-wasm-c3.mjs",
+		"sync:wasm-grain": "node scripts/sync-wasm-grain.mjs",
+		"test:browser:grain": "WASM_IDLE_RUN_REAL_BROWSER_GRAIN=1 pnpm exec vitest run src/lib/playground/grain.playwright.test.ts",
 		"sync:wasm-hy": "node scripts/sync-wasm-hy.mjs",
 		"test:browser:hy": "WASM_IDLE_RUN_REAL_BROWSER_HY=1 pnpm exec vitest run src/lib/playground/hy.playwright.test.ts",
 		"test:browser:c3": "WASM_IDLE_RUN_REAL_BROWSER_C3=1 pnpm exec vitest run src/lib/playground/c3.playwright.test.ts",

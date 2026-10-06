@@ -639,6 +639,7 @@
 			'.prolog': 'PROLOG',
 			'.pro': 'PROLOG',
 			'.gleam': 'GLEAM',
+			'.gr': 'GRAIN',
 			'.pl': 'PERL',
 			'.pm': 'PERL',
 			'.tcl': 'TCL',
@@ -732,6 +733,7 @@
 			ERLANG: 'main.erl',
 			PROLOG: 'main.prolog',
 			GLEAM: 'main.gleam',
+			GRAIN: 'main.gr',
 			PERL: 'main.pl',
 			TCL: 'main.tcl',
 			AWK: 'main.awk',
@@ -796,6 +798,7 @@
 			ERLANG: 'erlang',
 			PROLOG: 'prolog',
 			GLEAM: 'gleam',
+			GRAIN: 'grain',
 			PERL: 'perl',
 			TCL: 'tcl',
 			AWK: 'awk',
@@ -1485,6 +1488,7 @@
 			swipl: 'PROLOG',
 			swi: 'PROLOG',
 			gleam: 'GLEAM',
+			grain: 'GRAIN',
 			perl: 'PERL',
 			tcl: 'TCL',
 			tclsh: 'TCL',
@@ -2933,6 +2937,13 @@
 			<p class="hint">
 				Gleam compiles in the browser with the bundled Gleam WebAssembly compiler and runs
 				the JavaScript target output locally. Import `wasm_idle/stdin` for line input.
+			</p>
+		{/if}
+		{#if language === 'GRAIN'}
+			<p class="hint">
+				Grain 0.7.2 compiles in the browser with the upstream js_of_ocaml compiler and runs
+				the emitted WASI module locally. Read input with `File.fdRead(File.stdin, n)` from
+				`wasi/file`; send Ctrl+D or use the EOF button to finish input.
 			</p>
 		{/if}
 		{#if language === 'PERL'}

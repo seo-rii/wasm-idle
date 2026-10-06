@@ -292,6 +292,7 @@ export interface RuntimeAssetKeySource {
 		workerReceipt?: RuntimeAssetIntegrityEntry;
 	};
 	c3?: { baseUrl?: string };
+	grain?: { baseUrl?: string };
 	hy?: { baseUrl?: string };
 	nim?: {
 		baseUrl?: string;
@@ -1277,6 +1278,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 		serialize: serializeIntegrityEntry
 	},
 	{ runtime: 'c3', property: 'baseUrl', key: 'c3BaseUrl' },
+	{ runtime: 'grain', property: 'baseUrl', key: 'grainBaseUrl' },
 	{ runtime: 'hy', property: 'baseUrl', key: 'hyBaseUrl' },
 	{ runtime: 'nim', property: 'baseUrl', key: 'nimBaseUrl' },
 	{ runtime: 'nim', property: 'workerUrl', key: 'nimWorkerUrl' },

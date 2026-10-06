@@ -27,6 +27,7 @@
 		"wasm-forth": { "maxBytes": 100000, "maxFiles": 5 },
 		"wasm-fortran": { "maxBytes": 4200000, "maxFiles": 15 },
 		"wasm-gleam": { "maxBytes": 2100000, "maxFiles": 60 },
+		"wasm-grain": { "maxBytes": 5300000, "maxFiles": 6 },
 		"wasm-go": { "maxBytes": 50000000, "maxFiles": 130 },
 		"wasm-hy": { "maxBytes": 200000, "maxFiles": 2 },
 		"wasm-haskell": { "maxBytes": 54000000, "maxFiles": 18 },

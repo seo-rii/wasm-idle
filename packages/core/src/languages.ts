@@ -16,6 +16,7 @@ const canonicalLanguageIds = [
 	'ERLANG',
 	'PROLOG',
 	'GLEAM',
+	'GRAIN',
 	'PERL',
 	'TCL',
 	'AWK',

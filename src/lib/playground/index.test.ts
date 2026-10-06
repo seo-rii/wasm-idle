@@ -140,6 +140,11 @@ vi.mock('$lib/playground/gleam', () => {
 	};
 });
 
+vi.mock('$lib/playground/grain', () => {
+	moduleLoads.add('GRAIN');
+	return { default: createMockSandboxClass('GRAIN') };
+});
+
 vi.mock('$lib/playground/perl', () => {
 	moduleLoads.add('PERL');
 	return {
