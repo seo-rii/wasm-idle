@@ -300,6 +300,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'FENNEL',
+		load: async () => {
+			const { default: Fennel } = await import('$lib/playground/fennel');
+			return new Fennel();
+		}
+	},
+	{
 		languageId: 'ZIG',
 		load: async () => {
 			const { default: Zig } = await import('$lib/playground/zig');

@@ -39,6 +39,7 @@ const canonicalLanguageIds = [
 	'WAT',
 	'WASM',
 	'LUA',
+	'FENNEL',
 	'ZIG',
 	'LISP',
 	'RUBY',
@@ -115,6 +116,7 @@ const languageAliasDefinitions = {
 		deprecated: true,
 		message: 'PYPY3 runs the Pyodide implementation; use PYTHON3 instead.'
 	},
+	FNL: { canonicalId: 'FENNEL', kind: 'spelling' },
 	HS: { canonicalId: 'HASKELL', kind: 'spelling' },
 	RB: { canonicalId: 'RUBY', kind: 'spelling' },
 	SCHEME: {

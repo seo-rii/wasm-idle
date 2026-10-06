@@ -128,6 +128,12 @@ const runtimeReadinessAudit = {
 		hostModule: 'lua',
 		producerPath: 'src/lib/playground/worker/lua.ts'
 	},
+	// Fennel's host extends the Lua host and runs on the same wasm-lua worker.
+	FENNEL: {
+		strategy: 'entry-signal',
+		hostModule: 'lua',
+		producerPath: 'src/lib/playground/worker/lua.ts'
+	},
 	ZIG: {
 		strategy: 'entry-signal',
 		hostModule: 'zig',

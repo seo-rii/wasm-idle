@@ -280,6 +280,13 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	FENNEL: {
+		label: 'Fennel',
+		editorLanguage: 'clojure',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	ZIG: {
 		label: 'Zig',
 		editorLanguage: 'zig',

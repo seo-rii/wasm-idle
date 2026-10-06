@@ -36,6 +36,7 @@ export type EditorDefaultLanguage =
 	| 'wat'
 	| 'wasm'
 	| 'lua'
+	| 'fennel'
 	| 'zig'
 	| 'lisp'
 	| 'ruby'
@@ -93,6 +94,7 @@ export const editorDefaults: Record<
 	| 'wat'
 	| 'wasm'
 	| 'lua'
+	| 'fennel'
 	| 'zig'
 	| 'lisp'
 	| 'ruby'
@@ -933,6 +935,16 @@ end
 local input = io.read("*l")
 local n = tonumber(input or "") or tonumber(arg[1] or "") or 4
 print("fibonacci=" .. tostring(fibonacci(n) + bonus))`,
+	fennel: `(local bonus 3)
+
+(fn fibonacci [n]
+  (if (<= n 1)
+      1
+      (+ (fibonacci (- n 1)) (fibonacci (- n 2)))))
+
+(let [line (io.read)
+      n (or (tonumber (or line "")) (tonumber (or (. arg 1) "")) 4)]
+  (print (.. "fibonacci=" (+ (fibonacci n) bonus))))`,
 	zig: `const std = @import("std");
 
 const bonus: i32 = 3;
@@ -1429,6 +1441,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.wat ||
 		source === editorDefaults.wasm ||
 		source === editorDefaults.lua ||
+		source === editorDefaults.fennel ||
 		source === editorDefaults.zig ||
 		source === editorDefaults.lisp ||
 		source === editorDefaults.ruby ||

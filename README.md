@@ -4,7 +4,7 @@
 
 Executes C, C++, Objective-C, Objective-C++, Fortran, COBOL, Python, Java, Rust, Go, D, C#, F#, VB.NET, Elixir, Erlang, Prolog,
 Gleam, Perl, Tcl, AWK, Pascal, Forth, J, BQN, Janet, Julia, Nim, Bash, ClojureScript, OCaml, JavaScript, TypeScript,
-AssemblyScript, WAT, WASM, Lua, Zig, Scheme, Ruby, Haskell, R, Octave, SQLite, DuckDB,
+AssemblyScript, WAT, WASM, Lua, Fennel, Zig, Scheme, Ruby, Haskell, R, Octave, SQLite, DuckDB,
 and PHP code.
 
 Experimental LFortran execution is available separately from f2c Fortran; see
@@ -73,6 +73,7 @@ debug runtime; the remaining debug-enabled languages retain wasm-idle's trace co
 | WAT            | WABT                                    | Yes   | WAT LSP              | -     |
 | WASM           | Browser WebAssembly + WASI shim         | Yes   | syntax               | -     |
 | Lua            | Wasmoon                                 | Yes   | syntax               | -     |
+| Fennel         | fennel.lua on Wasmoon                   | Yes   | syntax               | -     |
 | Zig            | zig_small.wasm                          | Yes   | syntax               | -     |
 | Scheme         | Puppy Scheme / wasm-lisp                | Yes   | syntax               | -     |
 | Ruby           | CRuby WASI                              | Yes   | syntax               | -     |
@@ -262,6 +263,7 @@ when they exist.
 | WAT<br>`WAT`                       | wasm-wat@0.1.0 / wabt@1.0.39                                                                                                                                                   | WABT parses WAT to WASM then runs through WASI shim; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `runtimeAssets.wat.moduleUrl` or `PUBLIC_WASM_WAT_MODULE_URL`; `programArgs`                                                                                                                                                                                                                                                                     |
 | WASM<br>`WASM`                     | Browser WebAssembly + @bjorn3/browser_wasi_shim@0.4.2                                                                                                                          | loads provided WASM bytes and executes with WASI preview1 imports; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `programArgs`, `stdin`, `activePath`                                                                                                                                                                                                                                                                                                             |
 | Lua<br>`LUA`                       | wasm-lua@0.1.0 / wasmoon@1.16.0                                                                                                                                                | Wasmoon Lua VM; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `runtimeAssets.lua.moduleUrl` or `PUBLIC_WASM_LUA_MODULE_URL`; `programArgs`                                                                                                                                                                                                                                                                     |
+| Fennel<br>`FENNEL`                 | static wasm-fennel `fennel-1.6.1.lua.gz` (official Fennel 1.6.1) on wasm-lua@0.1.0                                                                                             | receipt-verified `fennel.lua` compiler evaluated by the Wasmoon Lua VM; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `runtimeAssets.fennel.compilerUrl` or `PUBLIC_WASM_FENNEL_COMPILER_URL` plus the Lua module URL; `programArgs`                                                                                                                                                                                                                                   |
 | Zig<br>`ZIG`                       | static wasm-zig assets / `zig_small.wasm` + `std.tar.gz`                                                                                                                       | native gzip delivery for the tar standard library; default target `wasm64-wasi`; Zig compile args are appended; supports `stdin`, `compileArgs`, `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                          | `runtimeAssets.zig.compilerUrl`/`stdlibUrl` or `PUBLIC_WASM_ZIG_*`; `zigTargetTriple`, `activePath`, `workspaceFiles`                                                                                                                                                                                                                            |
 | Scheme<br>`LISP`                   | wasm-lisp@0.1.0 / Puppy Scheme WASM component                                                                                                                                  | receipt-verified Puppy Scheme compiler/runtime; supports `stdin` and `programArgs`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `runtimeAssets.lisp.{moduleUrl,manifestUrl,manifestFingerprint}` or `PUBLIC_WASM_LISP_{MODULE_URL,MANIFEST_URL,MANIFEST_FINGERPRINT}`; `programArgs`                                                                                                                                                                                             |
 | Ruby<br>`RUBY`                     | receipt-pinned `static/wasm-ruby` profile produced from @ruby/3.4-wasm-wasi@2.9.3-2.9.4 + @ruby/wasm-wasi@2.9.3-2.9.4                                                          | host-verifies the manifest, canonical stored module and gzip bytes, and logical WASM before transferring three owned buffers to a no-fetch CRuby 3.4 worker; supports `stdin`, `programArgs`, and workspace files                                                                                                                                                                                                                                                                                                                                                       | `rootUrl` mirrors reuse the bundled profile; explicit `runtimeAssets.ruby` overrides require one complete profile and same-origin canonical paths; URL-only `PUBLIC_WASM_RUBY_*` overrides fail closed; `stdin`, `programArgs`, `workspaceFiles`                                                                                                 |
@@ -740,6 +742,10 @@ rejected because executable nested-worker substitution is outside the trust cont
 Lua uses the bundled `static/wasm-lua/` wasmoon browser module plus its local `glue.wasm`
 payload by default. Override it with `PUBLIC_WASM_LUA_MODULE_URL`, or pass
 `runtimeAssets.lua.moduleUrl`.
+Fennel runs the official Fennel 1.6.1 `fennel.lua` compiler on that same wasm-lua worker. The
+bundled `static/wasm-fennel/fennel-1.6.1.lua.gz` is the unmodified upstream release, and the
+worker verifies its size and SHA-256 receipt before use. Override it with
+`PUBLIC_WASM_FENNEL_COMPILER_URL`, or pass `runtimeAssets.fennel.compilerUrl`.
 Zig uses the bundled `static/wasm-zig/zig_small.wasm` compiler and `static/wasm-zig/std.tar.gz`
 standard library by default. Override them with `PUBLIC_WASM_ZIG_COMPILER_URL` and
 `PUBLIC_WASM_ZIG_STDLIB_URL`, or pass `runtimeAssets.zig.compilerUrl` and
@@ -840,6 +846,9 @@ const runtimeAssets: PlaygroundRuntimeAssets = {
 	lua: {
 		moduleUrl: 'https://cdn.example.com/wasm-lua/index.js'
 	},
+	fennel: {
+		compilerUrl: 'https://cdn.example.com/wasm-fennel/fennel-1.6.1.lua.gz'
+	},
 	zig: {
 		compilerUrl: 'https://cdn.example.com/wasm-zig/zig_small.wasm',
 		stdlibUrl: 'https://cdn.example.com/wasm-zig/std.tar.gz'
@@ -905,7 +914,7 @@ await sandbox.load('print("hi")', false);
 Compiler assets produced by [`wasm-llvm`](https://github.com/seo-rii/wasm-llvm) are deployed to
 external static hosting and loaded by `@wasm-idle/llvm-core`. Also powered by Pyodide, TeaVM, `wasm-rust`,
 `wasm-dotnet`, `wasm-of-js-of-ocaml`, `wasm-typescript`, `wasm-lisp`,
-`wasm-wat`, `wasm-lua`, `wasm-zig`, CBQN, Janet, AtomVM/Popcorn, and `ghc-in-browser`.
+`wasm-wat`, `wasm-lua`, Fennel, `wasm-zig`, CBQN, Janet, AtomVM/Popcorn, and `ghc-in-browser`.
 
 ### Ruby split standard library
 
