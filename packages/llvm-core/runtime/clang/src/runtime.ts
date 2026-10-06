@@ -1912,7 +1912,8 @@ class Clang {
 			debugBuffer,
 			interruptBuffer,
 			watchBuffer,
-			watchResultBuffer
+			watchResultBuffer,
+			precompiledHeader
 		} = options;
 		const debugMode = resolveDebugMode({ debugMode: requestedDebugMode, debug });
 		if (debugMode === 'lldb') {
@@ -1942,7 +1943,8 @@ class Clang {
 				debugBuffer,
 				interruptBuffer,
 				watchBuffer,
-				watchResultBuffer
+				watchResultBuffer,
+				...(precompiledHeader ? { precompiledHeader } : {})
 			}),
 			true,
 			wasm,

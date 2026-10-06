@@ -193,4 +193,19 @@ describe('BrowserClangRuntime precompiled headers', () => {
 			bytes: new Uint8Array([4, 2])
 		});
 	});
+
+	it('uses a supplied header when compiling and running through the combined API', async () => {
+		const { runtime } = harness();
+		const header = { key: 'matching-header', bytes: new Uint8Array([4, 2]) };
+		runtime.compileLink = vi.fn(
+			async () => new WebAssembly.Module(new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0]))
+		);
+
+		await runtime.compileLinkRun(stdcppSource, { precompiledHeader: header });
+
+		expect(runtime.compileLink).toHaveBeenCalledWith(
+			stdcppSource,
+			expect.objectContaining({ precompiledHeader: header })
+		);
+	});
 });
