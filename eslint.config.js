@@ -72,7 +72,6 @@ export default [
 			'runtimes/wasm-of-js-of-ocaml/dist/',
 			'runtimes/wasm-of-js-of-ocaml/toolchain/',
 			'runtimes/wasm-tinygo/public/vendor/',
-			'tools/dool/',
 			'**/RISK_REGISTER.md'
 		]
 	},

@@ -340,9 +340,6 @@ toolchains can be consumed from pinned external runtime repositories:
 - `static/wasm-zig`, `static/wasm-haskell`, `static/wasm-julia`, and `static/wasm-nim`: bundled browser runtime and
   compiler assets synced from
   upstream asset builds rather than local workspace packages.
-- `tools/*`: migrated local toolchain projects that are too broad or infrastructure-heavy to run as
-  normal runtime workspace packages. `tools/dool` contains the Docker judge backend for Elixir and
-  the other server-side language runners.
 
 Deployment builds retain both legacy `.gz` and canonical `.gz.bin` URLs by default.
 After building and compressing the page, `pnpm run compact:build-runtimes` reports
