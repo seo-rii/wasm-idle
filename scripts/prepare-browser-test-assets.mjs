@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { preparePinnedAssets } from './prepare-pinned-assets.mjs';
 import { prepareOcamlBrowserWrapper } from './prepare-ocaml-browser-wrapper.mjs';
+import { prepareClangdAssets } from './prepare-clangd-assets.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
@@ -121,6 +122,8 @@ export function normalizeBrowserTestAssetGroups(groups) {
  *   versionModulePath?: string;
  *   prepareOcamlWrapper?: (options: { sourceRoot: string; staticDir: string; versionModulePath?: string }) => Promise<unknown>;
  *   baseUrl?: string;
+ *   clangdSourceDir?: string;
+ *   clangdReceiptPath?: string;
  *   bypassCookie?: string;
  *   fetchImpl?: typeof fetch;
  *   timeoutMs?: number;
@@ -134,6 +137,12 @@ export async function prepareBrowserTestAssets({
 	versionModulePath,
 	prepareOcamlWrapper = prepareOcamlBrowserWrapper,
 	baseUrl,
+	clangdSourceDir = manifestPath === DEFAULT_MANIFEST_PATH &&
+	!baseUrl &&
+	!process.env.WASM_IDLE_TEST_ASSET_BASE_URL
+		? process.env.WASM_IDLE_TEST_CLANGD_SOURCE_DIR
+		: undefined,
+	clangdReceiptPath,
 	bypassCookie = process.env.WASM_IDLE_TEST_BYPASS_COOKIE || '',
 	fetchImpl = fetch,
 	timeoutMs = 120_000
@@ -145,9 +154,38 @@ export async function prepareBrowserTestAssets({
 	);
 	let downloaded = 0;
 	let reused = 0;
+	let copied = 0;
+	let preparedClangd = false;
+	const useCurrentClangdReceipt =
+		!!clangdSourceDir ||
+		(manifestPath === DEFAULT_MANIFEST_PATH &&
+			!baseUrl &&
+			!process.env.WASM_IDLE_TEST_ASSET_BASE_URL);
 
 	for (const group of selectedGroups) {
-		const assets = manifest.assets.filter((candidate) => candidate.group === group);
+		if (
+			useCurrentClangdReceipt &&
+			(group === 'clang' || group === 'clangd') &&
+			!preparedClangd
+		) {
+			const result = await prepareClangdAssets({
+				receiptPath: clangdReceiptPath || path.join(staticDir, 'clang/runtime-build.json'),
+				staticDir,
+				sourceDir: clangdSourceDir,
+				bypassCookie,
+				fetchImpl,
+				timeoutMs
+			});
+			downloaded += result.downloaded;
+			reused += result.reused;
+			if ('copied' in result) copied += result.copied;
+			preparedClangd = true;
+		}
+		const assets = manifest.assets.filter(
+			(candidate) =>
+				candidate.group === group &&
+				!(useCurrentClangdReceipt && candidate.target.startsWith('clangd/'))
+		);
 		const inputRoot =
 			group === 'ocaml'
 				? path.join(
@@ -175,13 +213,14 @@ export async function prepareBrowserTestAssets({
 		baseUrl: resolvedBaseUrl.href,
 		downloaded,
 		groups: selectedGroups,
-		reused
+		reused,
+		...(copied ? { copied } : {})
 	};
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
 	const result = await prepareBrowserTestAssets({ groups: process.argv.slice(2) });
 	console.log(
-		`Prepared browser test assets for ${result.groups.join(', ')} from ${result.baseUrl} (${result.downloaded} downloaded, ${result.reused} reused).`
+		`Prepared browser test assets for ${result.groups.join(', ')} from ${result.baseUrl} (${result.downloaded} downloaded, ${'copied' in result ? result.copied : 0} copied, ${result.reused} reused).`
 	);
 }

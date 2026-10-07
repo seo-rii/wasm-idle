@@ -2,6 +2,7 @@ import { BrowserMessageReader, BrowserMessageWriter } from '../jsonrpc.js';
 import {
 	CLANGD_ASSETS,
 	loadLanguageToolAsset,
+	requireAllowedAssetUrl,
 	type ResolvedLanguageToolAssetConfig
 } from '../assets.js';
 import { waitForLanguageServerStartup } from '../lifecycle.js';
@@ -16,6 +17,10 @@ import type { ClangdStatus } from './config.js';
 import type { ClangdPreloadedAssets, ClangdWorkerOutboundMessage } from './protocol.js';
 import { createClangdRequestPolicy, type ClangdRequestTrace } from './request-policy.js';
 import { ClangdWorkspaceFileRegistry } from './workspace.js';
+import { prepareClangdWasm } from './wasm.js';
+import { parseClangdHeaders } from './headers.js';
+import { decompressGzip } from '@wasm-idle/llvm-core';
+import { verifyRuntimeAssetIntegrity } from '@wasm-idle/core';
 
 export interface ClangdLanguageServerOptions extends EditorLanguageServerRuntimeOptions {
 	createWorker?: () => Worker;
@@ -56,6 +61,25 @@ async function preloadClangdAssets(
 ): Promise<{ assets: ClangdPreloadedAssets; transfer: Transferable[] }> {
 	const fractions = new Map<string, number>();
 	for (const asset of CLANGD_ASSETS) fractions.set(asset, 0);
+	const headers =
+		assetConfig.headerAsset === false
+			? undefined
+			: assetConfig.headerAsset ||
+				(assetConfig.integrity?.['clangd.headers.json.gz']
+					? 'clangd.headers.json.gz'
+					: undefined);
+	if (headers) requireAllowedAssetUrl(headers, headers, assetConfig);
+	if (headers) fractions.set(headers, 0);
+	// Custom workers can supply Web Crypto even when the host realm cannot.
+	// Keep the legacy transport for unreceipted assets in that configuration.
+	const legacyWasm =
+		typeof globalThis.crypto?.subtle?.digest !== 'function' &&
+		assetConfig.integrity?.['clangd.wasm.gz'] === undefined;
+	const controller = new AbortController();
+	const abort = () => controller.abort(lifecycle.signal?.reason);
+	lifecycle.signal?.addEventListener('abort', abort, { once: true });
+	if (lifecycle.signal?.aborted) abort();
+	const signal = controller.signal;
 	const emitProgress = () => {
 		let loaded = 0;
 		for (const fraction of fractions.values()) loaded += fraction;
@@ -67,41 +91,75 @@ async function preloadClangdAssets(
 		});
 	};
 
-	const load = async (asset: (typeof CLANGD_ASSETS)[number]) => {
-		const loaded = await loadLanguageToolAsset(
-			'clangd',
-			asset,
-			assetConfig,
-			(value, total) => {
-				fractions.set(
-					asset,
-					total && total > 0 ? Math.min(value / total, 1) : value > 0 ? 1 : 0
-				);
-				emitProgress();
-			},
-			{ signal: lifecycle.signal, timeoutMs: lifecycle.assetTimeoutMs }
-		);
-		return transferBuffer(loaded.bytes);
+	const progress = (asset: string) => (value: number, total?: number) => {
+		fractions.set(asset, total && total > 0 ? Math.min(value / total, 1) : value > 0 ? 1 : 0);
+		emitProgress();
+	};
+	const load = async (asset: string) => {
+		const loaded = await loadLanguageToolAsset('clangd', asset, assetConfig, progress(asset), {
+			signal,
+			timeoutMs: lifecycle.assetTimeoutMs
+		});
+		return loaded.bytes;
 	};
 
-	const clangdJs = await load('clangd.js');
-	const clangdWasmGz = await load('clangd.wasm.gz');
-	const configuredWasmIntegrity = assetConfig.integrity?.['clangd.wasm.gz'];
-	const runtimeIntegrity =
-		configuredWasmIntegrity &&
-		typeof configuredWasmIntegrity === 'object' &&
-		(configuredWasmIntegrity.uncompressedSha256 !== undefined ||
-			configuredWasmIntegrity.uncompressedBytes !== undefined)
-			? configuredWasmIntegrity
-			: undefined;
-	return {
-		assets: {
-			clangdJs,
-			clangdWasmGz,
-			...(runtimeIntegrity ? { clangdWasmIntegrity: runtimeIntegrity } : {})
-		},
-		transfer: [clangdJs, clangdWasmGz]
-	};
+	try {
+		const [js, wasm, headerTree] = await Promise.all([
+			load('clangd.js'),
+			legacyWasm
+				? load('clangd.wasm.gz').then((bytes) => ({ compressed: transferBuffer(bytes) }))
+				: prepareClangdWasm(assetConfig, progress('clangd.wasm.gz'), {
+						signal,
+						timeoutMs: lifecycle.assetTimeoutMs
+					}),
+			headers
+				? (async () => {
+						const bytes = await decompressGzip(
+							await load(headers),
+							headers,
+							128 * 1024 * 1024,
+							signal
+						);
+						const expected = assetConfig.integrity?.[headers];
+						if (
+							typeof expected === 'object' &&
+							(expected.uncompressedSha256 !== undefined ||
+								expected.uncompressedBytes !== undefined)
+						)
+							await verifyRuntimeAssetIntegrity({
+								asset: headers,
+								bytes,
+								expected,
+								stage: 'uncompressed',
+								runtimeId: 'clangd'
+							});
+						return parseClangdHeaders(bytes);
+					})()
+				: undefined
+		]);
+		signal.throwIfAborted();
+		const clangdJs = transferBuffer(js);
+		return {
+			assets: {
+				clangdJs,
+				...('compressed' in wasm
+					? { clangdWasmGz: wasm.compressed }
+					: {
+							clangdModule: wasm.module,
+							clangdWasmBytes: wasm.bytes,
+							clangdWasmSha256: wasm.sha256
+						}),
+				...(headerTree ? { clangdHeaders: headerTree } : {})
+			},
+			transfer: [clangdJs, ...('compressed' in wasm ? [wasm.compressed] : [])]
+		};
+	} catch (error) {
+		// A failed parallel branch must release downloads and compilation still in progress.
+		controller.abort(error);
+		throw error;
+	} finally {
+		lifecycle.signal?.removeEventListener('abort', abort);
+	}
 }
 
 async function createServer(

@@ -194,6 +194,52 @@ async function replaceFixtureAsset(
 	await writeJson(path.join(sourceDir, 'runtime-build.json'), nextBuildInfo);
 }
 
+async function writeHeaderFixture(sourceDir: string) {
+	const fixture = await writeFixture(sourceDir);
+	const tree = {
+		schemaVersion: 1,
+		version: `${fixture.manifest.version}:fixture-commit`,
+		targetTriple: 'wasm32-wasi',
+		resourceDir: '/lib/clang/22',
+		files: {
+			'/usr/include/wasm32-wasi/stdio.h': 'selected C header',
+			'/usr/include/wasm32-wasi/noeh/c++/v1/__config_site': 'selected C++ configuration',
+			'/usr/include/c++/v1/vector': 'shared C++ header',
+			'/lib/clang/22/include/stddef.h': 'matching resource header'
+		}
+	};
+	const raw = Buffer.from(JSON.stringify(tree));
+	const compressed = gzipSync(raw);
+	const headers = {
+		asset: 'clangd/clangd.headers.json.gz',
+		format: 'clangd-headers-v1',
+		version: sha256(raw),
+		targetTriple: tree.targetTriple,
+		resourceDir: tree.resourceDir,
+		bytes: compressed.length,
+		sha256: sha256(compressed),
+		uncompressedBytes: raw.length,
+		uncompressedSha256: sha256(raw)
+	};
+	const manifest = { ...fixture.manifest, clangd: { ...fixture.manifest.clangd, headers } };
+	const buildInfo = {
+		...fixture.buildInfo,
+		toolchain: {
+			...fixture.buildInfo.toolchain,
+			clangd: { ...fixture.buildInfo.toolchain.clangd, headers },
+			assets: { ...fixture.buildInfo.toolchain.assets, [headers.asset]: headers.sha256 }
+		},
+		assets: [
+			...fixture.buildInfo.assets,
+			{ asset: headers.asset, size: headers.bytes, sha256: headers.sha256 }
+		]
+	};
+	await writeFile(path.join(sourceDir, headers.asset), compressed);
+	await writeJson(path.join(sourceDir, 'runtime-manifest.v1.json'), manifest);
+	await writeJson(path.join(sourceDir, 'runtime-build.json'), buildInfo);
+	return { ...fixture, manifest, buildInfo, headers, tree, compressed };
+}
+
 async function writeMemfsSidecars(
 	sourceDir: string,
 	fixture: Awaited<ReturnType<typeof writeFixture>>,
@@ -333,6 +379,55 @@ describe('syncWasmClangDist', () => {
 		await expect(stat(path.join(staticDir, 'clangd/existing.txt'))).rejects.toThrow();
 		expect((await readdir(staticDir)).sort()).toEqual(['clang', 'clangd']);
 	});
+
+	it('preserves separately versioned clangd headers and pins through native-gzip delivery', async () => {
+		const sourceDir = await makeTempDir();
+		const staticDir = path.join(await makeTempDir(), 'static');
+		const fixture = await writeHeaderFixture(sourceDir);
+		await syncWasmClangDist({ sourceDir, staticDir });
+		expect(await readFile(path.join(staticDir, fixture.headers.asset))).toEqual(
+			fixture.compressed
+		);
+		const manifest = JSON.parse(
+			await readFile(path.join(staticDir, 'clang/runtime-manifest.v1.json'), 'utf8')
+		);
+		const receipt = JSON.parse(
+			await readFile(path.join(staticDir, 'clang/runtime-build.json'), 'utf8')
+		);
+		expect(manifest.clangd.headers).toEqual(fixture.headers);
+		expect(receipt.toolchain.clangd.headers).toEqual(fixture.headers);
+		expect(receipt.assets).toHaveLength(7);
+		expect(receipt.toolchain.assets[fixture.headers.asset]).toBe(fixture.headers.sha256);
+		expect(JSON.parse(gunzipSync(fixture.compressed).toString('utf8'))).toEqual(fixture.tree);
+	});
+
+	it.each(['missing', 'corrupt', 'stale-raw-receipt', 'manifest-mismatch'])(
+		'rejects a %s header asset before replacing existing targets',
+		async (failure) => {
+			const sourceDir = await makeTempDir();
+			const staticDir = path.join(await makeTempDir(), 'static');
+			const fixture = await writeHeaderFixture(sourceDir);
+			await writeExistingTargets(staticDir);
+			if (failure === 'missing') await rm(path.join(sourceDir, fixture.headers.asset));
+			if (failure === 'corrupt')
+				await writeFile(path.join(sourceDir, fixture.headers.asset), 'corrupt');
+			if (failure === 'stale-raw-receipt') {
+				fixture.headers.version = 'a'.repeat(64);
+				fixture.headers.uncompressedSha256 = 'a'.repeat(64);
+				await writeJson(path.join(sourceDir, 'runtime-manifest.v1.json'), fixture.manifest);
+				await writeJson(path.join(sourceDir, 'runtime-build.json'), fixture.buildInfo);
+			}
+			if (failure === 'manifest-mismatch') {
+				fixture.manifest.clangd.headers = {
+					...fixture.headers,
+					targetTriple: 'wasm32-wasip2'
+				};
+				await writeJson(path.join(sourceDir, 'runtime-manifest.v1.json'), fixture.manifest);
+			}
+			await expect(syncWasmClangDist({ sourceDir, staticDir })).rejects.toThrow();
+			await expectExistingTargets(staticDir);
+		}
+	);
 
 	it.each(
 		[
