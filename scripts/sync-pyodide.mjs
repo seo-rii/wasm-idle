@@ -1,4 +1,5 @@
-import { cp, mkdir, readFile, rm, stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -19,12 +20,48 @@ const PYODIDE_CORE_ASSETS = [
 	'python_stdlib.zip'
 ];
 
+/** @param {Record<string, { name: string; version: string; file_name: string; sha256: string; depends: string[] }>} packages */
+function collectWheelPackages(packages) {
+	const pending = ['numpy', 'jedi'];
+	const visited = new Set();
+	const wheels = [];
+	for (const name of pending) {
+		if (visited.has(name)) continue;
+		const entry = Object.hasOwn(packages, name) ? packages[name] : null;
+		if (
+			!entry ||
+			entry.name !== name ||
+			typeof entry.version !== 'string' ||
+			!entry.version ||
+			typeof entry.file_name !== 'string' ||
+			!/^[A-Za-z0-9][A-Za-z0-9._+-]*$/u.test(entry.file_name) ||
+			typeof entry.sha256 !== 'string' ||
+			!/^[a-f0-9]{64}$/u.test(entry.sha256) ||
+			!Array.isArray(entry.depends) ||
+			!entry.depends.every((dependency) => typeof dependency === 'string' && dependency)
+		) {
+			throw new Error(`Pyodide lock file has invalid wheel metadata for ${name}.`);
+		}
+		visited.add(name);
+		wheels.push({
+			name,
+			version: entry.version,
+			fileName: entry.file_name,
+			sha256: entry.sha256
+		});
+		pending.push(...entry.depends);
+	}
+	return wheels;
+}
+
 /**
- * @param {{ sourceDir?: string; targetDir?: string }} [options]
+ * @param {{ sourceDir?: string; targetDir?: string; wheelCacheDir?: string; fetchImpl?: typeof fetch }} [options]
  */
 export async function syncPyodidePackage({
 	sourceDir = DEFAULT_SOURCE_DIR,
-	targetDir = DEFAULT_TARGET_DIR
+	targetDir = DEFAULT_TARGET_DIR,
+	wheelCacheDir = process.env.WASM_IDLE_PYODIDE_WHEEL_CACHE_DIR,
+	fetchImpl = globalThis.fetch
 } = {}) {
 	const sourceStats = await stat(sourceDir).catch(() => null);
 	if (!sourceStats?.isDirectory()) {
@@ -61,11 +98,42 @@ export async function syncPyodidePackage({
 	) {
 		throw new Error('Pyodide lock file has invalid Python or ABI metadata.');
 	}
+
+	const wheels = [];
+	for (const wheel of collectWheelPackages(lock.packages)) {
+		let contents;
+		if (wheelCacheDir) {
+			contents = await readFile(path.join(wheelCacheDir, wheel.fileName));
+		} else {
+			const url = `https://cdn.jsdelivr.net/pyodide/v${encodeURIComponent(version)}/full/${wheel.fileName}`;
+			const response = await fetchImpl(url, { signal: AbortSignal.timeout(60_000) });
+			if (!response.ok) {
+				throw new Error(
+					`Failed to download Pyodide wheel ${wheel.name}: HTTP ${response.status}.`
+				);
+			}
+			contents = Buffer.from(await response.arrayBuffer());
+		}
+		if (createHash('sha256').update(contents).digest('hex') !== wheel.sha256) {
+			throw new Error(`Pyodide wheel SHA256 mismatch for ${wheel.name} (${wheel.fileName}).`);
+		}
+		wheels.push({
+			...wheel,
+			contents,
+			bytes: contents.length,
+			source: wheelCacheDir ? 'cache' : 'official-cdn'
+		});
+	}
+
+	// Validate every wheel, including transitive dependencies, before replacing the current runtime.
 	await rm(targetDir, { recursive: true, force: true });
 	await mkdir(targetDir, { recursive: true });
 
 	for (const asset of PYODIDE_CORE_ASSETS) {
 		await cp(path.join(sourceDir, asset), path.join(targetDir, asset));
+	}
+	for (const wheel of wheels) {
+		await writeFile(path.join(targetDir, wheel.fileName), wheel.contents);
 	}
 
 	return {
@@ -74,15 +142,17 @@ export async function syncPyodidePackage({
 		version,
 		pythonVersion: lock.info.python,
 		abiVersion: lock.info.abi_version,
-		assets: [...PYODIDE_CORE_ASSETS]
+		assets: [...PYODIDE_CORE_ASSETS, ...wheels.map((wheel) => wheel.fileName)],
+		wheels: wheels.map(({ contents, ...wheel }) => wheel)
 	};
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {
-	const [, , sourceDirArg, targetDirArg] = process.argv;
+	const [, , sourceDirArg, targetDirArg, wheelCacheDirArg] = process.argv;
 	const { sourceDir, targetDir } = await syncPyodidePackage({
 		sourceDir: sourceDirArg || DEFAULT_SOURCE_DIR,
-		targetDir: targetDirArg || DEFAULT_TARGET_DIR
+		targetDir: targetDirArg || DEFAULT_TARGET_DIR,
+		wheelCacheDir: wheelCacheDirArg || process.env.WASM_IDLE_PYODIDE_WHEEL_CACHE_DIR
 	});
 
 	console.log(`Synced pyodide from ${sourceDir} to ${targetDir}`);

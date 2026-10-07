@@ -8,7 +8,7 @@
 		"clang": { "maxBytes": 31000000, "maxFiles": 13 },
 		"clangd": { "maxBytes": 28000000, "maxFiles": 4, "optional": true },
 		"lsp": { "maxBytes": 1000000, "maxFiles": 5 },
-		"pyodide": { "maxBytes": 7000000, "maxFiles": 12 },
+		"pyodide": { "maxBytes": 11700000, "maxFiles": 12 },
 		"shared": { "maxBytes": 27000000, "maxFiles": 5 },
 		"teavm": { "maxBytes": 5000000, "maxFiles": 6 },
 		"wasm-assemblyscript": { "maxBytes": 3500000, "maxFiles": 10 },
