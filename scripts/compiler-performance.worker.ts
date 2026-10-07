@@ -76,13 +76,14 @@ self.onmessage = async ({ data: { spec, warm } }) => {
 					return loading;
 				}
 			}
-			runtime = new VerifiedRuntime({
+			const runtimeOptions = {
 				runtimeBaseUrl: spec.baseUrl,
 				manifest: spec.manifest,
 				persistentCache: cache,
 				stdout: () => {},
 				log: false
-			});
+			};
+			runtime = new VerifiedRuntime(runtimeOptions);
 			await runtime.ready;
 			stages.push({ stage: 'runtime-ready', ms: performance.now() - epoch });
 		}
