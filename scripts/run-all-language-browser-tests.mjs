@@ -13,6 +13,7 @@ const COMPRESSED_ASSET_TEST_FILE =
 const DEBUG_TEST_FILE = 'src/lib/playground/debug.playwright.test.ts';
 const CPP_STANDARDS_TEST_FILE = 'src/lib/playground/cpp-standards.playwright.test.ts';
 const LONG_DOUBLE_TEST_FILE = 'src/lib/playground/long-double.playwright.test.ts';
+const PYTHON_TEST_FILE = 'src/lib/playground/python.playwright.test.ts';
 const DEBUG_REGRESSION_ENV = {
 	WASM_IDLE_RUN_REAL_BROWSER_DEBUG: '1',
 	WASM_IDLE_REQUIRE_LLDB_DEBUG: '1',
@@ -156,6 +157,10 @@ export function createAllLanguageBrowserTestPlan({
 	if (!shard || shard === 'workers') {
 		testFiles.add('src/lib/playground/runtime-recovery.playwright.test.ts');
 		env.WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY = '1';
+	}
+	if (!shard || shard === 'specialized') {
+		testFiles.add(PYTHON_TEST_FILE);
+		env.WASM_IDLE_RUN_REAL_BROWSER_PYTHON = '1';
 	}
 
 	if (includeCompressedAssets || shard === 'compressed-assets') {

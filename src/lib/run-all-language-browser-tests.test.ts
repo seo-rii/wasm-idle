@@ -40,7 +40,8 @@ describe('all-language browser test runner', () => {
 				'WASM_IDLE_DEBUG_BROWSER_CASES',
 				'WASM_IDLE_RUN_REAL_BROWSER_DOTNET_RECOVERY',
 				'WASM_IDLE_RUN_REAL_BROWSER_DOTNET_SWITCH',
-				'WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY'
+				'WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY',
+				'WASM_IDLE_RUN_REAL_BROWSER_PYTHON'
 			].sort()
 		);
 		for (const row of supportMatrixRows) {
@@ -137,6 +138,10 @@ describe('all-language browser test runner', () => {
 			if (shard === 'workers') {
 				expectedFiles.add('src/lib/playground/runtime-recovery.playwright.test.ts');
 				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_NIM_RECOVERY');
+			}
+			if (shard === 'specialized') {
+				expectedFiles.add('src/lib/playground/python.playwright.test.ts');
+				expectedEnvironments.add('WASM_IDLE_RUN_REAL_BROWSER_PYTHON');
 			}
 			expect(new Set(plan.testFiles)).toEqual(expectedFiles);
 			expect(new Set(Object.keys(plan.env))).toEqual(expectedEnvironments);
