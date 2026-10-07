@@ -273,6 +273,18 @@ export interface RuntimeCompilerConfig {
 export interface RuntimeClangdConfig {
 	js: string;
 	wasm: string;
+	/** Independently versioned complete selected-target and matching resource headers. */
+	headers?: {
+		asset: 'clangd/clangd.headers.json.gz';
+		format: 'clangd-headers-v1';
+		version: string;
+		targetTriple: SupportedClangTarget;
+		resourceDir: string;
+		bytes: number;
+		sha256: string;
+		uncompressedBytes: number;
+		uncompressedSha256: string;
+	};
 }
 
 export interface RuntimeManifestTarget {

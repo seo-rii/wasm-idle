@@ -21,6 +21,7 @@ import { ClangdStdinQueue } from './stdin-queue.js';
 import { JsonStream } from '@wasm-idle/llvm-core/core/json-stream';
 import type { ClangdWorkerInboundMessage } from './protocol.js';
 import { ClangdWorkspaceFileRegistry, normalizeClangdWorkspaceFilePath } from './workspace.js';
+import { mountClangdHeaders } from './headers.js';
 
 interface ClangdWorkerScope {
 	addEventListener(
@@ -136,10 +137,16 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 			new Blob([jsSource], { type: 'text/javascript;charset=utf-8' })
 		);
 
-		const compressedWasmBytes = new Uint8Array(event.data.assets.clangdWasmGz);
-		self.postMessage({ type: 'progress', stage: 'decompression', value: 2, max: 3 });
-		const wasmBytes = await decompressGzip(compressedWasmBytes, 'clangd.wasm.gz');
-		if (event.data.assets.clangdWasmIntegrity) {
+		const preparedModule = event.data.assets.clangdModule;
+		let wasmBytes: Uint8Array | undefined;
+		if (!preparedModule) {
+			if (!event.data.assets.clangdWasmGz)
+				throw new Error('clangd init requires Wasm bytes or a verified Module');
+			const compressedWasmBytes = new Uint8Array(event.data.assets.clangdWasmGz);
+			self.postMessage({ type: 'progress', stage: 'decompression', value: 2, max: 3 });
+			wasmBytes = await decompressGzip(compressedWasmBytes, 'clangd.wasm.gz');
+		}
+		if (wasmBytes && event.data.assets.clangdWasmIntegrity) {
 			await verifyRuntimeAssetIntegrity({
 				asset: 'clangd.wasm.gz',
 				bytes: wasmBytes,
@@ -150,18 +157,45 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 			});
 		}
 		self.postMessage({ type: 'progress', stage: 'wasm-initialization', value: 3, max: 3 });
-		const jsModule = import(/* @vite-ignore */ jsDataUrl);
-		const wasmBlobBytes = new Uint8Array(wasmBytes.byteLength);
-		wasmBlobBytes.set(wasmBytes);
-		const wasmBlob = new Blob([wasmBlobBytes.buffer], { type: 'application/wasm' });
-		const wasmDataUrl = URL.createObjectURL(wasmBlob);
+		let wasmDataUrl: string | undefined;
+		if (wasmBytes) {
+			const wasmBlob = new Blob([Uint8Array.from(wasmBytes).buffer], {
+				type: 'application/wasm'
+			});
+			wasmDataUrl = URL.createObjectURL(wasmBlob);
+		} else if (
+			!(preparedModule instanceof WebAssembly.Module) ||
+			!Number.isSafeInteger(event.data.assets.clangdWasmBytes) ||
+			event.data.assets.clangdWasmBytes! <= 0 ||
+			event.data.assets.clangdWasmBytes! > 128 * 1024 * 1024 ||
+			!/^[a-f0-9]{64}$/.test(event.data.assets.clangdWasmSha256 || '')
+		) {
+			throw new Error('Invalid prepared clangd Module metadata');
+		}
 
+		const jsModule = import(/* @vite-ignore */ jsDataUrl);
 		const { default: Clangd } = await jsModule;
 		clangdRuntime = await Clangd({
 			thisProgram: '/usr/bin/clangd',
 			mainScriptUrlOrBlob: jsDataUrl,
 			locateFile: (path: string, prefix: string) =>
-				path.endsWith('.wasm') ? wasmDataUrl : `${prefix}${path}`,
+				path.endsWith('.wasm') && wasmDataUrl ? wasmDataUrl : `${prefix}${path}`,
+			...(preparedModule
+				? {
+						instantiateWasm: (
+							imports: WebAssembly.Imports,
+							receiveInstance: (
+								instance: WebAssembly.Instance,
+								module: WebAssembly.Module
+							) => void
+						) => {
+							const instance = new WebAssembly.Instance(preparedModule, imports);
+							// Supplying the Module is essential: Emscripten sends it to pthread workers.
+							receiveInstance(instance, preparedModule);
+							return instance.exports;
+						}
+					}
+				: {}),
 			stdinReady,
 			stdin,
 			stdout,
@@ -175,20 +209,23 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 		// Explicit asset roots can omit integrity metadata. Identify those builds
 		// from the actual Wasm bytes before selecting the matching resource headers.
 		const wasmDigest =
+			event.data.assets.clangdWasmSha256 ||
 			event.data.assets.clangdWasmIntegrity?.uncompressedSha256 ||
 			Array.from(
-				new Uint8Array(await crypto.subtle.digest('SHA-256', wasmBlobBytes)),
+				new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(wasmBytes!))),
 				(byte) => byte.toString(16).padStart(2, '0')
 			).join('');
 		// These builds use the same pinned LLVM 22 sources. Other clangd builds
 		// keep their own resource headers instead of receiving this overlay.
-		const resourceDir = [
-			'0d71e7a7f8e6dd369cb2a0b22cc4016d649f370e5b905adb6092536deb0ee019',
-			'f2bef5c4b4aa8691f0b996286231c5778a17119c41537ae4108c7ff2795f7fc3'
-		].includes(wasmDigest)
-			? CLANG_RESOURCE_HEADER_DIRECTORY
-			: undefined;
-		if (resourceDir) {
+		const resourceDir = event.data.assets.clangdHeaders
+			? mountClangdHeaders(clangdRuntime.FS, event.data.assets.clangdHeaders)
+			: [
+						'0d71e7a7f8e6dd369cb2a0b22cc4016d649f370e5b905adb6092536deb0ee019',
+						'f2bef5c4b4aa8691f0b996286231c5778a17119c41537ae4108c7ff2795f7fc3'
+				  ].includes(wasmDigest)
+				? CLANG_RESOURCE_HEADER_DIRECTORY
+				: undefined;
+		if (resourceDir && !event.data.assets.clangdHeaders) {
 			installClangResourceHeaders(
 				{
 					readFile: (path) =>
@@ -239,7 +276,10 @@ self.addEventListener('message', async (event: MessageEvent<ClangdWorkerInboundM
 			stdinQueue.push(textEncoder.encode(`Content-Length: ${bodyByteLength}\r\n\r\n${body}`));
 			debugLog('stdin queued bytes', bodyByteLength);
 		});
-		self.postMessage({ type: 'ready', value: wasmBytes.byteLength });
+		self.postMessage({
+			type: 'ready',
+			value: wasmBytes?.byteLength ?? event.data.assets.clangdWasmBytes!
+		});
 	} catch (error) {
 		self.postMessage({
 			type: 'error',

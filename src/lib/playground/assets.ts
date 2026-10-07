@@ -787,7 +787,11 @@ export const CLANG_RUNTIME_LOAD_ASSETS = [
 	'bin/sysroot.tar.gz'
 ] as const;
 
-export const CLANGD_RUNTIME_LOAD_ASSETS = ['clangd.js', 'clangd.wasm.gz'] as const;
+export const CLANGD_RUNTIME_LOAD_ASSETS = [
+	'clangd.js',
+	'clangd.wasm.gz',
+	'clangd.headers.json.gz'
+] as const;
 
 export const RUNTIME_LOAD_ASSETS = {
 	python: PYTHON_RUNTIME_LOAD_ASSETS,

@@ -313,9 +313,13 @@ class RuntimeLoadProgress {
 	private lockedTotal: number | undefined;
 	private measurementInvalid = false;
 
-	constructor(runtime: RuntimeAssetRuntime, languageSysroots = false) {
+	constructor(runtime: RuntimeAssetRuntime, languageSysroots = false, clangdHeaders = false) {
 		this.expectedAssets = expectedAssetsForRuntime(runtime);
 		this.optionalAssets = new Set<string>();
+		if (runtime === 'clangd' && !clangdHeaders) {
+			this.expectedAssets.delete('clangd.headers.json.gz');
+			this.optionalAssets.add('clangd.headers.json.gz');
+		}
 		if (runtime === 'clang') {
 			this.expectedAssets.delete(printscanLongDoubleAsset);
 			this.optionalAssets.add(printscanLongDoubleAsset);
@@ -501,7 +505,11 @@ export class WorkerAssetBridge {
 		this.config = { ...config, persistentCache: this.persistentCacheBaseline };
 		this.maxAssetBytes = requireBridgeMaxAssetBytes(maxAssetBytes);
 		this.languageSysroots = canUseClangLanguageSysroots(runtime, config, languageSysroots);
-		this.progress = new RuntimeLoadProgress(runtime, this.languageSysroots);
+		this.progress = new RuntimeLoadProgress(
+			runtime,
+			this.languageSysroots,
+			config.assetPrefix === 'clangd' || !!config.integrity?.['clangd.headers.json.gz']
+		);
 		this.expectedAssets = expectedAssetsForRuntime(runtime, this.languageSysroots);
 		this.progress.reset(progress);
 	}
@@ -574,7 +582,11 @@ export class WorkerAssetBridge {
 			this.maxAssetBytes = nextMaxAssetBytes;
 			this.languageSysroots = nextLanguageSysroots;
 			this.expectedAssets = expectedAssetsForRuntime(this.runtime, nextLanguageSysroots);
-			this.progress = new RuntimeLoadProgress(this.runtime, nextLanguageSysroots);
+			this.progress = new RuntimeLoadProgress(
+				this.runtime,
+				nextLanguageSysroots,
+				config.assetPrefix === 'clangd' || !!config.integrity?.['clangd.headers.json.gz']
+			);
 			this.progress.reset(progress);
 			if (this.state !== 'rebinding' || this.generation !== generation) {
 				throw new Error('Cannot rebind a disposed worker asset bridge');

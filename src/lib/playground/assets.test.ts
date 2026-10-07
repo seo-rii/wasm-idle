@@ -225,6 +225,7 @@ describe('runtime asset config resolution', () => {
 		expect(RUNTIME_LOAD_ASSETS.clang).toContain('runtime-manifest.v1.json');
 		expect(RUNTIME_LOAD_ASSETS.clang).toContain('bin/clang.wasm.gz');
 		expect(RUNTIME_LOAD_ASSETS.clangd).toContain('clangd.wasm.gz');
+		expect(RUNTIME_LOAD_ASSETS.clangd).toContain('clangd.headers.json.gz');
 		expect(RUNTIME_LOAD_ASSETS.python).toContain('pyodide.mjs');
 	});
 

@@ -193,6 +193,42 @@ describe('verified native Wasm streaming', () => {
 		Object.defineProperty(r, 'url', { value: 'https://other.test/a' });
 		await expect(load(r)).rejects.toThrow(/URL mismatch/);
 	});
+	it('applies a host response validator before streaming and keeps digest verification', async () => {
+		const r = response(wasm);
+		Object.defineProperty(r, 'url', { value: 'https://mirror.test/clang.wasm.gz' });
+		const validateResponse = vi.fn((actual: Response, requested: URL) => {
+			expect(actual).toBe(r);
+			expect(actual.bodyUsed).toBe(false);
+			expect(requested.href).toBe('https://example.test/clang.wasm.gz');
+		});
+		expect((await answer(await load(r, {}, { validateResponse })))()).toBe(42);
+		expect(validateResponse).toHaveBeenCalledOnce();
+		await expect(
+			load(
+				response(wasm),
+				{ uncompressedSha256: '0'.repeat(64) },
+				{ validateResponse: vi.fn() }
+			)
+		).rejects.toThrow(/SHA-256/);
+	});
+	it('cancels a response rejected by the host validator before compilation and permits a retry', async () => {
+		const cancel = vi.fn();
+		const compile = vi.spyOn(WebAssembly, 'compileStreaming');
+		await expect(
+			load(
+				new Response(new ReadableStream({ cancel })),
+				{},
+				{
+					validateResponse: () => {
+						throw new Error('host policy rejected redirect');
+					}
+				}
+			)
+		).rejects.toThrow('host policy rejected redirect');
+		expect(compile).not.toHaveBeenCalled();
+		expect(cancel).toHaveBeenCalled();
+		expect((await answer(await load(response(wasm))))()).toBe(42);
+	});
 	it('closes readers on native compiler failure and permits a later retry', async () => {
 		const cancel = vi.fn();
 		vi.spyOn(WebAssembly, 'compileStreaming').mockRejectedValueOnce(

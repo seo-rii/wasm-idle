@@ -1,10 +1,16 @@
 import type { RuntimeAssetIntegrityEntry } from '@wasm-idle/core';
+import type { ClangdHeaderAsset } from './headers.js';
 
 export interface ClangdPreloadedAssets {
 	objectiveCHeaders?: Record<string, string>;
 	clangdJs: ArrayBuffer;
-	clangdWasmGz: ArrayBuffer;
+	clangdWasmGz?: ArrayBuffer;
 	clangdWasmIntegrity?: RuntimeAssetIntegrityEntry;
+	/** Only supplied after both transport and logical integrity gates have passed. */
+	clangdModule?: WebAssembly.Module;
+	clangdWasmBytes?: number;
+	clangdWasmSha256?: string;
+	clangdHeaders?: ClangdHeaderAsset;
 }
 
 export interface ClangdWorkerInitMessage {

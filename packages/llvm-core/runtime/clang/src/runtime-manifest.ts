@@ -141,11 +141,51 @@ function parseCompilerConfig(value: unknown): RuntimeCompilerConfig {
 	};
 }
 
+function parseClangdHeaders(value: unknown): NonNullable<RuntimeClangdConfig['headers']> {
+	const headers = expectObject(value, 'root.clangd.headers');
+	const invalid = (field: string) => {
+		throw new Error(`invalid root.clangd.headers.${field} in wasm-clang runtime manifest`);
+	};
+	if (headers.asset !== 'clangd/clangd.headers.json.gz') invalid('asset');
+	if (headers.format !== 'clangd-headers-v1') invalid('format');
+	for (const field of ['sha256', 'uncompressedSha256', 'version']) {
+		if (typeof headers[field] !== 'string' || !/^[a-f0-9]{64}$/.test(headers[field]))
+			invalid(field);
+	}
+	if (headers.version !== headers.uncompressedSha256) invalid('version');
+	for (const field of ['bytes', 'uncompressedBytes']) {
+		if (
+			!Number.isSafeInteger(headers[field]) ||
+			(headers[field] as number) <= 0 ||
+			(headers[field] as number) > 128 * 1024 * 1024
+		)
+			invalid(field);
+	}
+	const resourceDir = expectString(headers.resourceDir, 'root.clangd.headers.resourceDir');
+	if (
+		!/^\/lib\/clang\/[a-zA-Z0-9_.-]+$/.test(resourceDir) ||
+		['.', '..'].includes(resourceDir.split('/').at(-1)!)
+	)
+		invalid('resourceDir');
+	return {
+		asset: 'clangd/clangd.headers.json.gz',
+		format: 'clangd-headers-v1',
+		version: headers.version as string,
+		targetTriple: expectTarget(headers.targetTriple, 'root.clangd.headers.targetTriple'),
+		resourceDir,
+		bytes: headers.bytes as number,
+		sha256: headers.sha256 as string,
+		uncompressedBytes: headers.uncompressedBytes as number,
+		uncompressedSha256: headers.uncompressedSha256 as string
+	};
+}
+
 function parseClangdConfig(value: unknown): RuntimeClangdConfig {
 	const clangd = expectObject(value, 'root.clangd');
 	return {
 		js: expectString(clangd.js, 'root.clangd.js'),
-		wasm: expectString(clangd.wasm, 'root.clangd.wasm')
+		wasm: expectString(clangd.wasm, 'root.clangd.wasm'),
+		...(clangd.headers === undefined ? {} : { headers: parseClangdHeaders(clangd.headers) })
 	};
 }
 
@@ -178,12 +218,23 @@ export function parseRuntimeManifest(value: unknown): RuntimeManifestV1 {
 	if (root.manifestVersion !== 1) {
 		throw new Error('invalid root.manifestVersion in wasm-clang runtime manifest');
 	}
+	const compiler = parseCompilerConfig(root.compiler);
+	const clangd = parseClangdConfig(root.clangd);
+	if (
+		clangd.headers &&
+		compiler.resourceDir &&
+		clangd.headers.resourceDir !== compiler.resourceDir
+	) {
+		throw new Error(
+			'root.clangd.headers.resourceDir does not match the compiler in wasm-clang runtime manifest'
+		);
+	}
 	return {
 		manifestVersion: 1,
 		version: expectString(root.version, 'root.version'),
 		defaultTarget: expectTarget(root.defaultTarget, 'root.defaultTarget'),
-		compiler: parseCompilerConfig(root.compiler),
-		clangd: parseClangdConfig(root.clangd),
+		compiler,
+		clangd,
 		targets: parseTargets(root.targets)
 	};
 }
