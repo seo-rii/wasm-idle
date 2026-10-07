@@ -91,6 +91,73 @@ describe('clangd verified Wasm preparation', () => {
 		expect(first.sha256).toBe(digest(bytes));
 		expect(fetch).toHaveBeenCalledTimes(1);
 	});
+	it.each(['native', 'loader'] as const)(
+		'keeps %s verification and cached metadata tied to the receipt captured before loading',
+		async (mode) => {
+			vi.stubGlobal('crypto', webcrypto);
+			let deliver!: (data: Uint8Array) => void;
+			const delivery = new Promise<Uint8Array>((resolve) => (deliver = resolve));
+			const fetch = vi.fn(async () => new Response(Uint8Array.from(await delivery)));
+			const loader = vi.fn(() => delivery);
+			vi.stubGlobal('fetch', fetch);
+			const callerReceipt = { ...receipt };
+			const config = {
+				baseUrl: `https://assets.example/mutable-receipt-${mode}/`,
+				integrity: { 'clangd.wasm.gz': callerReceipt },
+				persistentCache: false as const,
+				...(mode === 'loader' ? { loader } : {})
+			};
+			const preparing = prepareClangdWasm(config, vi.fn());
+			await vi.waitFor(() => expect(mode === 'loader' ? loader : fetch).toHaveBeenCalledOnce());
+			Object.assign(callerReceipt, {
+				sha256: '0'.repeat(64),
+				uncompressedBytes: bytes.length * 2,
+				uncompressedSha256: '0'.repeat(64)
+			});
+			config.integrity = { 'clangd.wasm.gz': { ...callerReceipt } };
+			deliver(gzip);
+			const first = await preparing;
+			expect(first).toMatchObject({ bytes: bytes.length, sha256: digest(bytes) });
+			const second = await prepareClangdWasm(
+				{ ...config, integrity: { 'clangd.wasm.gz': { ...receipt } } },
+				vi.fn()
+			);
+			expect(second.module).toBe(first.module);
+			expect(second).toMatchObject({ bytes: bytes.length, sha256: digest(bytes) });
+			expect(mode === 'loader' ? loader : fetch).toHaveBeenCalledTimes(mode === 'loader' ? 2 : 1);
+			await expect(prepareClangdWasm(config, vi.fn())).rejects.toThrow();
+		}
+	);
+	it('captures the allowed bases before loading without admitting the Module under a later policy', async () => {
+		vi.stubGlobal('crypto', webcrypto);
+		let deliver!: (response: Response) => void;
+		const delivery = new Promise<Response>((resolve) => (deliver = resolve));
+		const fetch = vi.fn(() => delivery);
+		vi.stubGlobal('fetch', fetch);
+		const config = {
+			baseUrl: 'https://assets.example/mutable-allowed-bases/',
+			allowedBaseUrls: ['https://mirror.example/clangd/'],
+			integrity: { 'clangd.wasm.gz': receipt },
+			persistentCache: false as const
+		};
+		const preparing = prepareClangdWasm(config, vi.fn());
+		await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+		config.allowedBaseUrls.splice(0);
+		const response = () => {
+			const value = new Response(gzip);
+			Object.defineProperty(value, 'url', {
+				value: 'https://mirror.example/clangd/clangd.wasm.gz'
+			});
+			return value;
+		};
+		deliver(response());
+		expect((await preparing).module).toBeInstanceOf(WebAssembly.Module);
+		fetch.mockImplementationOnce(async () => response());
+		await expect(prepareClangdWasm(config, vi.fn())).rejects.toThrow(
+			'outside the allowed asset bases'
+		);
+		expect(fetch).toHaveBeenCalledTimes(2);
+	});
 	it('does not let corruption seed the module cache and retries successfully', async () => {
 		vi.stubGlobal('crypto', webcrypto);
 		const fetch = vi

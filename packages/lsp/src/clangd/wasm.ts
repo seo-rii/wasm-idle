@@ -58,6 +58,21 @@ export async function prepareClangdWasm(
 	reportProgress: (loaded: number, total?: number) => void,
 	lifecycle: { signal?: AbortSignal; timeoutMs?: number } = {}
 ): Promise<PreparedClangdWasm> {
+	// Keep admission, verification, cache identity and Module metadata on one policy.
+	// Callers may replace their configuration while a download is still in progress.
+	config = {
+		...config,
+		...resolveLanguageToolPersistentOptions(config),
+		allowedBaseUrls: config.allowedBaseUrls?.slice(),
+		integrity: config.integrity
+			? Object.fromEntries(
+					Object.entries(config.integrity).map(([asset, expected]) => [
+						asset,
+						typeof expected === 'object' ? { ...expected } : expected
+					])
+				)
+			: undefined
+	};
 	return runWithSignalAndTimeout(
 		async (signal) => {
 			const expected = config.integrity?.['clangd.wasm.gz'];
