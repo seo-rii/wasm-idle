@@ -204,6 +204,7 @@ class Clang implements Sandbox {
 				};
 				this.worker.postMessage({
 					load: true,
+					persistentCache: assetConfig.persistentCache,
 					verifiedStreaming: bundledAssets,
 					languageSysrootProfiles,
 					log,
@@ -390,7 +391,8 @@ class Clang implements Sandbox {
 						activePath: options.activePath,
 						cppVersion: options.cppVersion,
 						cVersion: options.cVersion,
-						debugMode
+						debugMode,
+						persistentCache: persistentCache ?? this.persistentCache
 					});
 				if (results) {
 					this.elapse = Date.now() - this.begin;
@@ -425,6 +427,7 @@ class Clang implements Sandbox {
 			if (precompiledHeader)
 				this.precompiledHeaderSent = { worker: this.worker, header: precompiledHeader };
 			this.worker?.postMessage({
+				persistentCache: persistentCache ?? this.persistentCache,
 				...(precompiledHeader ? { precompiledHeader } : {}),
 				code,
 				prepare,
@@ -618,6 +621,7 @@ class Clang implements Sandbox {
 		};
 		worker.postMessage({
 			load: true,
+			persistentCache: runtime.assetConfig.persistentCache,
 			verifiedStreaming: runtime.verifiedStreaming,
 			languageSysrootProfiles: runtime.languageSysrootProfiles,
 			log: false,

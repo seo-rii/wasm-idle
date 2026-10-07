@@ -5,6 +5,7 @@ import {
 	clearRuntimeAssetCache,
 	configureRuntimeAssetCache,
 	createRuntimeAssetCacheBackend,
+	createRuntimeGeneratedAssetCacheBackend,
 	getRuntimeAssetCacheOptions,
 	getRuntimeAssetCacheStats,
 	loadPersistentRuntimeAsset,
@@ -127,6 +128,93 @@ describe('persistent runtime asset cache', () => {
 		configureRuntimeAssetCache({});
 		vi.unstubAllGlobals();
 		vi.restoreAllMocks();
+	});
+
+	it('persists generated artifacts for a new backend and isolates exact configuration keys', async () => {
+		const first = createRuntimeGeneratedAssetCacheBackend();
+		const bytes = payload('a generated PCH');
+		expect(await first.write('compiler+sysroot+headers+args:a', bytes)).toBe(true);
+		bytes.fill(0);
+		const reloaded = createRuntimeGeneratedAssetCacheBackend();
+		expect(await reloaded.read('compiler+sysroot+headers+args:a')).toEqual(
+			payload('a generated PCH')
+		);
+		expect(await reloaded.read('compiler+sysroot+headers+args:b')).toBeUndefined();
+		const hit = (await reloaded.read('compiler+sysroot+headers+args:a'))!;
+		hit.fill(0);
+		expect(await reloaded.read('compiler+sysroot+headers+args:a')).toEqual(
+			payload('a generated PCH')
+		);
+	});
+
+	it('applies shared LRU bounds and replaces or removes a rejected generated configuration', async () => {
+		const policy = { maxBytes: 8, maxEntryBytes: 8, maxEntries: 2, storageReserveBytes: 0 };
+		const downloaded = payload('123456');
+		expect(
+			await writePersistentRuntimeAsset({
+				identity: identity(downloaded),
+				bytes: downloaded,
+				cache: policy
+			})
+		).toBe(true);
+		const generated = createRuntimeGeneratedAssetCacheBackend(policy);
+		expect(await generated.write('pch-a', payload('abcd'))).toBe(true);
+		expect(
+			await readPersistentRuntimeAsset({ identity: identity(downloaded), cache: policy })
+		).toBeUndefined();
+		expect(await generated.write('pch-a', payload('efghij'))).toBe(true);
+		expect(await generated.read('pch-a')).toEqual(payload('efghij'));
+		expect(await getRuntimeAssetCacheStats(policy)).toMatchObject({ entries: 1, bytes: 6 });
+		await generated.remove('pch-a');
+		expect(await generated.read('pch-a')).toBeUndefined();
+		expect(await getRuntimeAssetCacheStats(policy)).toMatchObject({ entries: 0, bytes: 0 });
+		expect(await generated.write('oversized', payload('123456789'))).toBe(false);
+	});
+
+	it('deletes corrupt generated bodies and treats unavailable storage and quota errors as misses', async () => {
+		const generated = createRuntimeGeneratedAssetCacheBackend();
+		expect(await generated.write('pch-a', payload('abcd'))).toBe(true);
+		const bodies = [...storage.bodies.values()][0];
+		const key = [...bodies.keys()][0];
+		bodies.set(key, new Response(payload('evil')));
+		expect(await generated.read('pch-a')).toBeUndefined();
+		expect(bodies.size).toBe(0);
+		const originalCache = await storage.cacheOpen('wasm-idle-assets-v1:wasm-idle');
+		storage.cacheOpen.mockResolvedValue({
+			...originalCache,
+			put: async () => {
+				throw new DOMException('full', 'QuotaExceededError');
+			}
+		});
+		expect(await generated.write('pch-a', payload('abcd'))).toBe(false);
+		expect(await generated.read('pch-a')).toBeUndefined();
+		storage.databaseOpen.mockImplementation(() => {
+			throw new Error('storage denied');
+		});
+		expect(await generated.read('pch-a')).toBeUndefined();
+		expect(await generated.write('pch-a', payload('abcd'))).toBe(false);
+	});
+
+	it('honors disabled generated cache policies without accessing storage and isolates namespaces', async () => {
+		configureRuntimeAssetCache(false);
+		const disabled = createRuntimeGeneratedAssetCacheBackend({ maxBytes: 1024 });
+		expect(await disabled.read('pch-a')).toBeUndefined();
+		expect(await disabled.write('pch-a', payload('abcd'))).toBe(false);
+		await disabled.remove('pch-a');
+		expect(storage.databaseOpen).not.toHaveBeenCalled();
+		expect(storage.cacheOpen).not.toHaveBeenCalled();
+		const enabled = createRuntimeGeneratedAssetCacheBackend({
+			enabled: true,
+			namespace: 'pch-host'
+		});
+		expect(await enabled.write('pch-a', payload('abcd'))).toBe(true);
+		expect(await enabled.read('pch-a')).toEqual(payload('abcd'));
+		expect(
+			await createRuntimeGeneratedAssetCacheBackend({
+				enabled: true,
+				namespace: 'other-host'
+			}).read('pch-a')
+		).toBeUndefined();
 	});
 
 	it('merges global, instance and call policies without accidentally re-enabling a disabled layer', () => {

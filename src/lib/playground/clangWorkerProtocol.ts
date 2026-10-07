@@ -16,6 +16,7 @@ export type ClangCompileWorkerRequest = {
 	assets: WorkerRuntimeAssetConfig;
 	/** The last precompiled <bits/stdc++.h>; the worker ignores it when its key differs. */
 	precompiledHeader?: BrowserClangPrecompiledHeader;
+	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 };
 
 /**

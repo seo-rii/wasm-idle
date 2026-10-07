@@ -49,11 +49,21 @@ describe('Clang sandbox', () => {
 		const sandbox = new Clang('C');
 		sandbox.output = vi.fn();
 		await sandbox.load({ rootUrl: '/', persistentCache: { enabled: true, maxBytes: 4096 } });
+		expect(workerInstances[0].postMessage.mock.calls[0][0].persistentCache).toMatchObject({
+			enabled: true,
+			maxBytes: 4096
+		});
 		const select = vi.spyOn(sandbox.assetBridge!, 'setExecutionPersistentCache');
 		await sandbox.run('int main() {}', true, false, undefined, [], { persistentCache: false });
 		expect(select.mock.results.at(-1)?.value).toMatchObject({ enabled: false, maxBytes: 4096 });
+		expect(workerInstances[0].postMessage.mock.calls.at(-1)?.[0].persistentCache).toMatchObject(
+			{ enabled: false, maxBytes: 4096 }
+		);
 		await sandbox.run('int main() {}', true);
 		expect(select.mock.results.at(-1)?.value).toMatchObject({ enabled: true, maxBytes: 4096 });
+		expect(workerInstances[0].postMessage.mock.calls.at(-1)?.[0].persistentCache).toMatchObject(
+			{ enabled: true, maxBytes: 4096 }
+		);
 		await sandbox.dispose();
 	});
 	beforeEach(() => {

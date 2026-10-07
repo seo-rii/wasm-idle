@@ -61,6 +61,179 @@ export interface RuntimeAssetCacheBackend {
 	): Promise<boolean>;
 }
 
+/** Locally generated artifacts have a configuration key and a digest computed before storage. */
+export interface RuntimeGeneratedAssetCacheBackend {
+	read(key: string, signal?: AbortSignal): Promise<Uint8Array | undefined>;
+	write(key: string, bytes: Uint8Array, signal?: AbortSignal): Promise<boolean>;
+	remove(key: string, signal?: AbortSignal): Promise<void>;
+}
+
+const MAX_GENERATED_ENTRY_BYTES = 64 * 1024 * 1024;
+
+/** Generated artifacts share the same namespace, LRU and quota budget as downloaded assets. */
+export function createRuntimeGeneratedAssetCacheBackend(
+	cache?: RuntimeAssetCacheOptions
+): RuntimeGeneratedAssetCacheBackend {
+	const policy = Object.freeze(resolveRuntimeAssetCacheOptions(cache));
+	const identityFor = async (key: string) => {
+		if (!policy.enabled || typeof key !== 'string' || !key || key.length > 64 * 1024)
+			return undefined;
+		try {
+			const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key));
+			const hash = Array.from(new Uint8Array(digest), (byte) =>
+				byte.toString(16).padStart(2, '0')
+			).join('');
+			return {
+				url: `https://wasm-idle.invalid/.generated-assets/${policy.namespace}/${hash}`,
+				validationKey: `generated-v1:${hash}`
+			};
+		} catch {
+			return undefined;
+		}
+	};
+	const matches = (record: AssetRecord, identity: { url: string; validationKey: string }) =>
+		record.references.some(
+			(reference) =>
+				reference.url === identity.url && reference.validationKey === identity.validationKey
+		);
+	return Object.freeze({
+		async read(key: string, signal?: AbortSignal) {
+			checkAbort(signal);
+			const identity = await identityFor(key);
+			if (!identity) return undefined;
+			return withStorage(policy, signal, async (cache, db) => {
+				const record = (await records(db)).find((record) => matches(record, identity));
+				if (
+					!record ||
+					record.bytes >
+						Math.min(policy.maxEntryBytes, policy.maxBytes, MAX_GENERATED_ENTRY_BYTES)
+				)
+					return undefined;
+				const response = await cache.match(bodyKey(policy, record.sha256));
+				try {
+					if (!response) throw new Error('Generated artifact body is missing');
+					const bytes = await readBoundedBody(response, record.bytes);
+					await verifyRuntimeAssetIntegrity({
+						asset: identity.url,
+						bytes,
+						expected: record
+					});
+					checkAbort(signal);
+					try {
+						record.lastUsed = Date.now();
+						await transact(db, 'readwrite', (store) => store.put(record));
+					} catch {
+						/* Verified bytes survive a metadata/quota failure. */
+					}
+					return bytes;
+				} catch {
+					checkAbort(signal);
+					await removeRecord(cache, db, policy, record);
+					return undefined;
+				}
+			});
+		},
+		async write(key: string, contents: Uint8Array, signal?: AbortSignal) {
+			checkAbort(signal);
+			if (
+				!canStore(policy) ||
+				!contents.byteLength ||
+				contents.byteLength >
+					Math.min(policy.maxBytes, policy.maxEntryBytes, MAX_GENERATED_ENTRY_BYTES)
+			)
+				return false;
+			const identity = await identityFor(key);
+			if (!identity) return false;
+			const bytes = Uint8Array.from(contents);
+			let sha256: string;
+			try {
+				sha256 = Array.from(
+					new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)),
+					(byte) => byte.toString(16).padStart(2, '0')
+				).join('');
+			} catch {
+				return false;
+			}
+			return (
+				(await withStorage(policy, signal, async (cache, db) => {
+					let all = await records(db);
+					const known = new Set(all.map((record) => bodyKey(policy, record.sha256)));
+					for (const key of await cache.keys())
+						if (!known.has(key.url)) await cache.delete(key);
+					// A rebuilt configuration must replace its previous body, including rejected PCHs.
+					for (const old of all) {
+						if (old.sha256 === sha256 || !matches(old, identity)) continue;
+						old.references = old.references.filter(
+							(reference) =>
+								reference.url !== identity.url ||
+								reference.validationKey !== identity.validationKey
+						);
+						if (old.references.length)
+							await transact(db, 'readwrite', (store) => store.put(old));
+						else await removeRecord(cache, db, policy, old);
+					}
+					all = await records(db);
+					const existing = all.find((record) => record.sha256 === sha256);
+					const record: AssetRecord = existing ?? {
+						sha256,
+						bytes: bytes.byteLength,
+						lastUsed: 0,
+						references: []
+					};
+					if (record.bytes !== bytes.byteLength) return false;
+					addReference(record, { ...identity, sha256, bytes: bytes.byteLength }, policy);
+					if (
+						!(await makeRoom(
+							cache,
+							db,
+							policy,
+							all,
+							existing ? 0 : bytes.byteLength,
+							existing ? 0 : 1,
+							sha256
+						))
+					)
+						return false;
+					checkAbort(signal);
+					await cache.put(
+						bodyKey(policy, sha256),
+						new Response(bytes, {
+							headers: {
+								'Content-Type': 'application/octet-stream',
+								'Content-Length': String(bytes.byteLength)
+							}
+						})
+					);
+					try {
+						await transact(db, 'readwrite', (store) => store.put(record));
+					} catch (error) {
+						if (!existing) await cache.delete(bodyKey(policy, sha256));
+						throw error;
+					}
+					return true;
+				})) ?? false
+			);
+		},
+		async remove(key: string, signal?: AbortSignal) {
+			const identity = await identityFor(key);
+			if (!identity) return;
+			await withStorage(policy, signal, async (cache, db) => {
+				for (const record of await records(db)) {
+					if (!matches(record, identity)) continue;
+					record.references = record.references.filter(
+						(reference) =>
+							reference.url !== identity.url ||
+							reference.validationKey !== identity.validationKey
+					);
+					if (record.references.length)
+						await transact(db, 'readwrite', (store) => store.put(record));
+					else await removeRecord(cache, db, policy, record);
+				}
+			});
+		}
+	});
+}
+
 /** Capture a policy once per operation; later global changes cannot alter in-flight cache decisions. */
 export function createRuntimeAssetCacheBackend(
 	cache?: RuntimeAssetCacheOptions

@@ -24,6 +24,46 @@ export interface BrowserClangPrecompiledHeader {
 	bytes: Uint8Array;
 }
 
+/** A failed digest disables PCH reuse; compilation never depends on WebCrypto availability. */
+export async function fingerprintPrecompiledHeaderBytes(
+	bytes: Uint8Array
+): Promise<string | undefined> {
+	try {
+		return Array.from(
+			new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes).buffer)),
+			(byte) => byte.toString(16).padStart(2, '0')
+		).join('');
+	} catch {
+		return undefined;
+	}
+}
+
+/** Frame names and lengths so different header trees cannot produce ambiguous concatenations. */
+export async function fingerprintRuntimeHeaders(
+	headers: ReadonlyMap<string, Uint8Array>
+): Promise<string | undefined> {
+	const encoder = new TextEncoder();
+	const entries = [...headers]
+		.sort(([left], [right]) => left.localeCompare(right))
+		.map(([path, bytes]) => ({
+			bytes,
+			metadata: encoder.encode(JSON.stringify([path, bytes.byteLength]) + '\n')
+		}));
+	const size = entries.reduce(
+		(sum, entry) => sum + entry.metadata.byteLength + entry.bytes.byteLength,
+		0
+	);
+	const buffer = new Uint8Array(size);
+	let offset = 0;
+	for (const { metadata, bytes } of entries) {
+		buffer.set(metadata, offset);
+		offset += metadata.byteLength;
+		buffer.set(bytes, offset);
+		offset += bytes.byteLength;
+	}
+	return fingerprintPrecompiledHeaderBytes(buffer);
+}
+
 export function startsWithStdcppInclude(source: string) {
 	let rest = source.replace(/^\uFEFF/, '');
 	for (;;) {
