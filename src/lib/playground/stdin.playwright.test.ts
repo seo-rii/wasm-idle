@@ -272,9 +272,11 @@ const browserStdinTestTimeoutMs = Math.max(700_000, configuredStdinRunTimeoutMs 
 const runAllStdinBrowserCases = process.env.WASM_IDLE_RUN_REAL_BROWSER_STDIN === '1';
 const runLispStdinBrowserCase = process.env.WASM_IDLE_RUN_REAL_BROWSER_LISP === '1';
 const runFennelStdinBrowserCase = process.env.WASM_IDLE_RUN_REAL_BROWSER_FENNEL === '1';
+const runRubyStdinBrowserCase = process.env.WASM_IDLE_RUN_REAL_BROWSER_RUBY === '1';
 const selectedStdinBrowserLanguages = new Set<string>([
 	...(runLispStdinBrowserCase ? ['LISP'] : []),
-	...(runFennelStdinBrowserCase ? ['FENNEL'] : [])
+	...(runFennelStdinBrowserCase ? ['FENNEL'] : []),
+	...(runRubyStdinBrowserCase ? ['RUBY'] : [])
 ]);
 const skipSharedStdinBrowserCase = (language: string) =>
 	(!runSharedStdinBrowserCases && selectedStdinBrowserLanguages.size === 0) ||

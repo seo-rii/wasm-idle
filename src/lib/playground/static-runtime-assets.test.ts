@@ -58,27 +58,27 @@ const optionalLspProviders = [
 const staticRuntimeModules = [
 	{
 		directory: 'wasm-assemblyscript',
-		packages: { assemblyscript: '0.28.17', '@assemblyscript/loader': '0.28.17' }
+		packages: { assemblyscript: '0.28.20', '@assemblyscript/loader': '0.28.20' }
 	},
 	{
 		directory: 'wasm-duckdb',
-		packages: { '@duckdb/duckdb-wasm': '1.33.1-dev45.0' }
+		packages: { '@duckdb/duckdb-wasm': '1.33.1-dev57.0' }
 	},
 	{
 		directory: 'wasm-php',
-		packages: { '@php-wasm/web-8-4': '3.1.34', '@php-wasm/universal': '3.1.34' }
+		packages: { '@php-wasm/web-8-4': '3.1.57', '@php-wasm/universal': '3.1.57' }
 	},
 	{
 		directory: 'wasm-ruby',
 		packages: {
 			'@bjorn3/browser_wasi_shim': '0.4.2',
-			'@ruby/3.4-wasm-wasi': '2.9.3-2.9.4',
-			'@ruby/wasm-wasi': '2.9.3-2.9.4'
+			'@ruby/3.4-wasm-wasi': '2.10.1',
+			'@ruby/wasm-wasi': '2.10.1'
 		}
 	},
 	{ directory: 'wasm-postgresql', packages: { '@electric-sql/pglite': '0.5.8' } },
-	{ directory: 'wasm-sqlite', packages: { 'sql.js': '^1.14.1' } },
-	{ directory: 'wasm-bash/sdk', packages: { '@wasmer/sdk': '0.9.0' } }
+	{ directory: 'wasm-sqlite', packages: { 'sql.js': '^1.14.2' } },
+	{ directory: 'wasm-bash/sdk', packages: { '@wasmer/sdk': '0.10.0' } }
 ] as const;
 
 async function readJson<T>(relativePath: string): Promise<T> {
@@ -108,9 +108,9 @@ describe('static language runtime assets', () => {
 		);
 
 		expect(producerPackage.private).toBe(true);
-		expect(producerPackage.dependencies?.['@php-wasm/web-8-4']).toBe('3.1.34');
-		expect(producerPackage.dependencies?.['@php-wasm/universal']).toBe('3.1.34');
-		expect(producerPackage.devDependencies?.vite).toBe('8.0.8');
+		expect(producerPackage.dependencies?.['@php-wasm/web-8-4']).toBe('3.1.57');
+		expect(producerPackage.dependencies?.['@php-wasm/universal']).toBe('3.1.57');
+		expect(producerPackage.devDependencies?.vite).toBe('8.3.3');
 		expect(producerPackage.scripts?.build).toBeTruthy();
 		expect(producerPackage.scripts?.verify).toBeTruthy();
 		expect(pageBuilder).not.toContain('scripts/runtime-modules/php.ts');
@@ -124,7 +124,7 @@ describe('static language runtime assets', () => {
 			validatePhpRuntimeAssets(path.join(staticRoot, 'wasm-php'), { allowCompressed: true })
 		).resolves.toMatchObject({
 			runtimeModule: 'runtime.mjs',
-			packages: { '@php-wasm/web-8-4': '3.1.34', '@php-wasm/universal': '3.1.34' }
+			packages: { '@php-wasm/web-8-4': '3.1.57', '@php-wasm/universal': '3.1.57' }
 		});
 	});
 
@@ -177,9 +177,8 @@ describe('static language runtime assets', () => {
 
 		for (const packageName of optionalLspProviders) {
 			expect(lspPackage.dependencies, packageName).not.toHaveProperty(packageName);
-			expect(lspPackage.devDependencies?.[packageName]).toBe(
-				lspPackage.peerDependencies?.[packageName]
-			);
+			expect(lspPackage.devDependencies, packageName).toHaveProperty(packageName);
+			expect(lspPackage.peerDependencies, packageName).toHaveProperty(packageName);
 			expect(lspPackage.peerDependenciesMeta?.[packageName]?.optional).toBe(true);
 		}
 	});

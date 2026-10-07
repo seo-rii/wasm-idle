@@ -1,9 +1,10 @@
 import { readFile } from 'node:fs/promises';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
 	classifyTerminalRun,
+	isStdinEditorReady,
 	withWallClockTimeout
 } from '../../scripts/stdin-browser-probe-lib.mjs';
 
@@ -15,6 +16,44 @@ describe('classifyTerminalRun', () => {
 		).toBe('running');
 		expect(classifyTerminalRun('', 'main=73', 'main=73', completed, 2)).toBe('running');
 		expect(classifyTerminalRun('', 'main=73', 'main=73', null, 1)).toBe('running');
+	});
+	it.each(['preparing', 'running', 'completed'])(
+		'rejects a current %s execution in the wrong language even when output matches',
+		(status) => {
+			expect(
+				classifyTerminalRun(
+					'',
+					'main=73',
+					'main=73',
+					{ ...completed, status, language: 'CPP' },
+					1,
+					'PERL'
+				)
+			).toBe('failure');
+		}
+	);
+	it('requires the observed language but ignores the previous execution language', () => {
+		expect(classifyTerminalRun('', 'main=73', 'main=73', completed, 1, 'PERL')).toBe('failure');
+		expect(
+			classifyTerminalRun(
+				'',
+				'main=73',
+				'main=73',
+				{ ...completed, language: 'CPP' },
+				2,
+				'PERL'
+			)
+		).toBe('running');
+		expect(
+			classifyTerminalRun(
+				'',
+				'main=73',
+				'main=73',
+				{ ...completed, language: 'PERL' },
+				1,
+				'PERL'
+			)
+		).toBe('success');
 	});
 	it('accepts only current output with successful completion and zero exit', () => {
 		expect(
@@ -41,6 +80,55 @@ describe('classifyTerminalRun', () => {
 			).toBe('failure');
 		}
 	);
+});
+
+describe('stdin editor readiness', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	function installDebugApi() {
+		const api = {
+			getEditorValue: vi.fn(() => ''),
+			setEditorValue: vi.fn(),
+			writeTerminalInput: vi.fn(),
+			getExecutionState: vi.fn()
+		};
+		const selector = { value: 'CPP' };
+		vi.stubGlobal('window', { __wasmIdleDebug: api });
+		vi.stubGlobal('document', {
+			querySelector: vi.fn((selectorName) =>
+				selectorName === '#language-select' ? selector : null
+			)
+		});
+		return { api, selector };
+	}
+
+	it('waits for the real editor model after debug functions become available', () => {
+		const { api } = installDebugApi();
+		expect(isStdinEditorReady()).toBe(false);
+		api.getEditorValue.mockReturnValue('int main() {}');
+		expect(isStdinEditorReady()).toBe(true);
+	});
+
+	it('waits for the requested language as well as a populated model', () => {
+		const { api, selector } = installDebugApi();
+		api.getEditorValue.mockReturnValue('print "main=73";');
+		expect(isStdinEditorReady('PERL')).toBe(false);
+		selector.value = 'PERL';
+		expect(isStdinEditorReady('PERL')).toBe(true);
+	});
+
+	it('waits for debug functions that can edit and observe the run', () => {
+		const { api } = installDebugApi();
+		api.getEditorValue.mockReturnValue('int main() {}');
+		vi.stubGlobal('window', {
+			__wasmIdleDebug: { ...api, setEditorValue: undefined }
+		});
+		expect(isStdinEditorReady()).toBe(false);
+		vi.stubGlobal('window', {
+			__wasmIdleDebug: { ...api, getExecutionState: undefined }
+		});
+		expect(isStdinEditorReady()).toBe(false);
+	});
 });
 
 describe('withWallClockTimeout', () => {

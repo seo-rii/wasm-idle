@@ -43,9 +43,10 @@ vi.mock('$lib/playground/worker/elixir?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
+vi.mock('$app/env/public', async () => {
+	const { mockPublicEnv } = await import('../testPublicEnv');
+	return mockPublicEnv(publicEnv);
+});
 
 import Elixir from './elixir';
 import { readBufferedStdin } from './stdinBuffer';

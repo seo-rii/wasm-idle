@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPlaygroundBinding, DEFAULT_EXECUTION_LIMITS, type Sandbox } from '@wasm-idle/core';
 import C3 from './c3';
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
+vi.mock('$app/env/public', async () => {
+	const { mockPublicEnv } = await import('../testPublicEnv');
+	return mockPublicEnv();
+});
 
 afterEach(() => vi.restoreAllMocks());
 

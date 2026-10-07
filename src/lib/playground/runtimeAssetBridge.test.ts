@@ -6,7 +6,10 @@ import { RuntimeAssetCache } from './runtimeAssetCache';
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
 import { compileVerifiedWasmAsset } from '@wasm-idle/llvm-core/core/verified-wasm';
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
+vi.mock('$app/env/public', async () => {
+	const { mockPublicEnv } = await import('../testPublicEnv');
+	return mockPublicEnv();
+});
 vi.mock('@wasm-idle/llvm-core/core/verified-wasm', () => ({ compileVerifiedWasmAsset: vi.fn() }));
 const wasm = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]);
 const receipt = { sha256: createHash('sha256').update(wasm).digest('hex'), bytes: wasm.length };

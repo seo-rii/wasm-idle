@@ -2,7 +2,7 @@ export {
 	getErlangLanguageServer,
 	type ErlangLanguageServerConfig,
 	type ErlangLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export type { ElixirRuntimeAssetReceipts } from '../elixir/assets.js';
 export {
 	createBeamWorkerService,

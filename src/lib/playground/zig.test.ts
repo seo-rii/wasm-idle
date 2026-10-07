@@ -56,9 +56,10 @@ vi.mock('$lib/playground/worker/zig?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
+vi.mock('$app/env/public', async () => {
+	const { mockPublicEnv } = await import('../testPublicEnv');
+	return mockPublicEnv(publicEnv);
+});
 
 import Zig from './zig';
 import { WASM_ZIG_ASSET_RECEIPTS } from './wasmZigVersion';

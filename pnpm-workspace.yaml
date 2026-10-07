@@ -2,5 +2,16 @@ packages:
     - 'packages/*'
     - 'runtimes/*'
     - 'apps/*'
+minimumReleaseAgeExclude:
+    - '@bytecodealliance/jco-std@0.7.0'
+    - '@bytecodealliance/jco-transpile@0.18.0'
+    - '@bytecodealliance/jco@1.37.0'
+    - '@bytecodealliance/preview2-shim@0.28.0'
+    - '@bytecodealliance/preview3-shim@0.9.0'
+    - svelte@5.57.2
 patchedDependencies:
+    '@seorii/monaco@0.2.0': patches/@seorii__monaco@0.2.0.patch
     'monaco-editor@0.55.1': patches/monaco-editor@0.55.1.patch
+allowBuilds:
+    esbuild: true
+    bufferutil: false

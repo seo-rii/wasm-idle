@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 let nextRuntimeModuleId = 0;
-const sitePackages = '/lib/python3.13/site-packages';
+const sitePackages = '/lib/python3.14/site-packages';
 const bridgedAssets = {
 	baseUrl: 'https://wasm-idle.invalid/python/',
 	maxAssetBytes: 1024 * 1024,
@@ -67,8 +67,8 @@ async function createRuntimeHarness(loadedHyVersion = WASM_HY_VERSION) {
 		setInterruptBuffer: vi.fn()
 	};
 	const moduleSources: Record<string, string> = {
-		'pyodide.asm.js': 'globalThis._createPyodideModule = async () => ({});',
-		'pyodide.mjs': `export const version = '0.29.3';
+		'pyodide.asm.mjs': 'export default async function createPyodideModule() { return {}; }',
+		'pyodide.mjs': `export const version = '314.0.7';
 export async function loadPyodide() { return globalThis.__pythonRuntimeMock; }`
 	};
 	workerAssets.loadWorkerRuntimeAsset.mockImplementation(async (asset: string) => ({

@@ -7,10 +7,10 @@ legal file before publication.
 
 ## ruby.wasm and CRuby
 
-- Packages: `@ruby/3.4-wasm-wasi@2.9.3-2.9.4` and
-  `@ruby/wasm-wasi@2.9.3-2.9.4`
+- Packages: `@ruby/3.4-wasm-wasi@2.10.1` and
+  `@ruby/wasm-wasi@2.10.1`
 - Source: <https://github.com/ruby/ruby.wasm>
-- Attested source revision: `3318796e2c9f0f75c98c669cabdc422cf8218ec2`
+- Attested source revision: `c7151435f55e1f078ca823231593f56e6a855873`
 - Embedded CRuby identity: Ruby 3.4.1 revision
   `48d4efcb85000e1ebae42004e963b5d0cedddcf2`
 

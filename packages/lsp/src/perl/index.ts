@@ -2,7 +2,7 @@ export {
 	getPerlLanguageServer,
 	type PerlLanguageServerConfig,
 	type PerlLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createPerlWorkerService,
 	type PerlDiagnosticRunnerRequest,

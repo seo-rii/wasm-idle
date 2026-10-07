@@ -1,4 +1,4 @@
-import { env as dynamicPublicEnv } from '$env/dynamic/public';
+import * as publicEnv from '$app/env/public';
 import {
 	resolveRuntimeAssetCacheOptions,
 	resolveRuntimeAssetLockEntry,
@@ -97,8 +97,6 @@ import type {
 	ObjectiveCAssetIntegrityMap,
 	ObjectiveCAssetName
 } from '@wasm-idle/llvm-core/objective-c';
-
-const publicEnv = (dynamicPublicEnv || {}) as Record<string, string | undefined>;
 
 export type RuntimeAssetRuntime = 'python' | 'java' | 'clang' | 'clangd';
 
@@ -771,7 +769,7 @@ export interface ResolvedZigRuntimeAssetConfig {
 
 export const PYTHON_RUNTIME_LOAD_ASSETS = [
 	'pyodide.mjs',
-	'pyodide.asm.js',
+	'pyodide.asm.mjs',
 	'pyodide-lock.json',
 	'pyodide.asm.wasm',
 	'python_stdlib.zip'

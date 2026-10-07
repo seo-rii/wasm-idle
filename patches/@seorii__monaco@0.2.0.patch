@@ -1,0 +1,12 @@
+diff --git a/dist/customLanguages.js b/dist/customLanguages.js
+--- a/dist/customLanguages.js
++++ b/dist/customLanguages.js
+@@ -12,7 +12,7 @@
+     [/\b\d+(\.\d+)?([eE][+-]?\d+)?\b/, 'number']
+ ];
+ function wordList(words) {
+-    return new RegExp(`\\b(?:${words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`);
++    return new RegExp(`\\b(?:${words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/@/g, '\\x40')).join('|')})\\b`);
+ }
+ function createTokenizer({ keywords, lineComment, blockComment, brackets = [
+     ['{', '}'],

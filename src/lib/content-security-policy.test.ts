@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import svelteConfig from '../../svelte.config.js';
+import svelteConfig from '../../sveltekit.config.mjs';
 import {
 	applicationContentSecurityPolicyDirectives,
 	createReleasePreviewSecurityHeaders,
@@ -48,7 +48,7 @@ describe('release content security policy', () => {
 		]);
 		expect(isStrictContentSecurityPolicyEnabled({})).toBe(false);
 		expect(isStrictContentSecurityPolicyEnabled({ WASM_IDLE_STRICT_CSP: '1' })).toBe(true);
-		expect((svelteConfig.kit as { csp?: unknown }).csp).toBe(
+		expect((svelteConfig as { csp?: unknown }).csp).toBe(
 			isStrictContentSecurityPolicyEnabled() ? svelteContentSecurityPolicy : undefined
 		);
 	});

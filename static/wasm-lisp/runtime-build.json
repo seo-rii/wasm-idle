@@ -1,7 +1,7 @@
 {
   "format": "wasm-lisp-runtime-build-v2",
   "runtime": "puppy-scheme",
-  "profileId": "puppy-scheme-0.0.7-jco-1.19.0-preview2-shim-0.17.9",
+  "profileId": "puppy-scheme-0.0.7-jco-1.37.0-preview2-shim-0.28.0",
   "provenanceLevel": "pinned-release-artifact-and-receipted-derived-output",
   "licenseExpression": "BSD-3-Clause AND Apache-2.0 WITH LLVM-exception",
   "artifact": {
@@ -19,32 +19,40 @@
   "components": {
     "jco": {
       "name": "@bytecodealliance/jco",
-      "version": "1.19.0",
-      "packageManagerIntegrity": "sha512-I57cVbL24/u/zCBwHq7D9PyIMP81hFFYF4hL/pW5biRGVLQAZuwEAUaEmghOouyt77bU2ExqscP2wkLvr3nfDw==",
+      "version": "1.37.0",
+      "packageManagerIntegrity": "sha512-z/crtP4L3wumdFA74K1cEsLfdZ8Ki0dE/7m1fJ9SVq5Z9VsAf0yQXWQzMb6ZrJmXvRN+4wHC2MNkFwSFdaoBzQ==",
+      "repository": "https://github.com/bytecodealliance/jco",
+      "verifiedBuildInput": false,
+      "evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
+    },
+    "jcoTranspile": {
+      "name": "@bytecodealliance/jco-transpile",
+      "version": "0.18.0",
+      "packageManagerIntegrity": "sha512-Ou4MWoxGC6HKBjRpTJ4SEUxsN8DOAv9LIi2RD22Kosq2OZTnUvKikFrOAGS2vCGNMzvXkeKBS1jFMLKzYBk4pg==",
       "repository": "https://github.com/bytecodealliance/jco",
       "verifiedBuildInput": false,
       "evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
     },
     "preview2Shim": {
       "name": "@bytecodealliance/preview2-shim",
-      "version": "0.17.9",
-      "packageManagerIntegrity": "sha512-i0R3eQBe6PA/o/1EFE3Owe4In2rcccb6QxnjpntM/lPe3/duJ0bRQTVZM2Ufpo99X4eofGeltQUkape1C91FFA==",
+      "version": "0.28.0",
+      "packageManagerIntegrity": "sha512-55y59uAzYMTA1bTepmgC7LmK8DUyhOU+y7cfKQRV7wRVABMYna4t7KYpBUkO8VhI+FbDn5cq0ghPLelaP24OpQ==",
       "repository": "https://github.com/bytecodealliance/jco",
       "verifiedBuildInput": false,
       "evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
     },
     "typescript": {
       "name": "typescript",
-      "version": "5.9.3",
-      "packageManagerIntegrity": "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==",
+      "version": "6.0.3",
+      "packageManagerIntegrity": "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==",
       "repository": "https://github.com/microsoft/TypeScript",
       "verifiedBuildInput": false,
       "evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
     },
     "esbuild": {
       "name": "esbuild",
-      "version": "0.28.0",
-      "packageManagerIntegrity": "sha512-sNR9MHpXSUV/XB4zmsFKN+QgVG82Cc7+/aaxJ8Adi8hyOac+EXptIp45QBPaVyX3N70664wRbTcLTOemCAnyqw==",
+      "version": "0.28.2",
+      "packageManagerIntegrity": "sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==",
       "repository": "https://github.com/evanw/esbuild",
       "verifiedBuildInput": false,
       "evidence": "package name, version, and pnpm-lock integrity are pinned; the installed package tree is not independently re-attested"
@@ -52,20 +60,21 @@
   },
   "transformations": [
     {
-      "id": "jco-transpile-async-browser",
+      "id": "jco-generate-async-browser",
       "tool": "@bytecodealliance/jco",
-      "version": "1.19.0",
+      "version": "1.37.0",
       "arguments": [
-        "--name=puppyc",
-        "--instantiation=async",
-        "--no-typescript",
-        "--no-nodejs-compat"
+        "generate",
+        "name=puppyc",
+        "instantiation=async",
+        "noTypescript=true",
+        "noNodejsCompat=true"
       ]
     },
     {
       "id": "bundle-browser-runtime-and-inline-jco-core-modules",
       "tool": "esbuild",
-      "version": "0.28.0",
+      "version": "0.28.2",
       "arguments": [
         "bundle",
         "platform=browser",

@@ -1025,7 +1025,7 @@ const runtimeDetailsByLanguage = new Map([
 		{
 			packageBase: `static ESM ${code('static/pyodide/pyodide.mjs')} / ${npmPackage('pyodide')}`,
 			execution:
-				`loads ${code('pyodide.mjs')}, ${code('pyodide.asm.js')}, ${code('pyodide.asm.wasm')}, and ` +
+				`loads ${code('pyodide.mjs')}, ${code('pyodide.asm.mjs')}, ${code('pyodide.asm.wasm')}, and ` +
 				`${code('python_stdlib.zip')} from the configured static asset tree on demand; supports ` +
 				`${code('stdin')}, workspace files, and trace debugging`,
 			customization:

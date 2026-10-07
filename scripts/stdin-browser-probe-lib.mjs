@@ -24,12 +24,38 @@ function summarizeConsole(messages) {
 }
 
 /**
+ * Debug functions exist before Monaco creates its model and restores the workspace.
+ * This predicate also runs directly in the browser through waitForFunction.
+ * @param {string} [expectedLanguage]
+ */
+export function isStdinEditorReady(expectedLanguage = '') {
+	const api = /** @type {any} */ (window).__wasmIdleDebug;
+	if (
+		typeof api?.getEditorValue !== 'function' ||
+		typeof api?.setEditorValue !== 'function' ||
+		typeof api?.writeTerminalInput !== 'function' ||
+		typeof api?.getExecutionState !== 'function'
+	) {
+		return false;
+	}
+	const value = api.getEditorValue();
+	return (
+		typeof value === 'string' &&
+		value.length > 0 &&
+		(!expectedLanguage ||
+			/** @type {HTMLSelectElement | null} */ (document.querySelector('#language-select'))
+				?.value === expectedLanguage)
+	);
+}
+
+/**
  * Output is evidence only after the current execution has completed successfully.
  * @param {string} previousTranscript
  * @param {string} transcript
  * @param {string} expectedOutput
- * @param {{ id: number; status: string; exitCode: number | null } | null} state
+ * @param {{ id: number; status: string; exitCode: number | null; language?: string } | null} state
  * @param {number} previousRunId
+ * @param {string} [expectedLanguage]
  * @returns {'running' | 'success' | 'failure'}
  */
 export function classifyTerminalRun(
@@ -37,9 +63,11 @@ export function classifyTerminalRun(
 	transcript,
 	expectedOutput,
 	state,
-	previousRunId = 0
+	previousRunId = 0,
+	expectedLanguage = ''
 ) {
 	if (!state || state.id <= previousRunId) return 'running';
+	if (expectedLanguage && state.language !== expectedLanguage) return 'failure';
 	if (['failed', 'cancelled', 'timed-out'].includes(state.status)) return 'failure';
 	if (state.status !== 'completed') return 'running';
 	const delta = transcript.startsWith(previousTranscript)
@@ -173,8 +201,9 @@ async function readProbeSummary(page, activeState, pageErrors, consoleMessages) 
  * @param {import('playwright-core').Page} page
  * @param {FollowUpRun} run
  * @param {number} runTimeoutMs
+ * @param {string} language
  */
-async function runFollowUp(page, run, runTimeoutMs) {
+async function runFollowUp(page, run, runTimeoutMs, language) {
 	const editorValueSet = await page.evaluate(
 		async (text) => await /** @type {any} */ (window).__wasmIdleDebug.setEditorValue(text),
 		run.source
@@ -224,7 +253,8 @@ async function runFollowUp(page, run, runTimeoutMs) {
 			transcript,
 			run.expectedOutput,
 			snapshot.state,
-			previousRunId
+			previousRunId,
+			language
 		);
 		if (status === 'running') await page.waitForTimeout(250);
 	}
@@ -364,17 +394,7 @@ export async function runStdinBrowserProbe(options) {
 			timeout: runTimeoutMs
 		});
 		activeState = await readActiveState(page);
-		await page.waitForFunction(
-			() =>
-				typeof (/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue) ===
-					'function' &&
-				typeof (/** @type {any} */ (window).__wasmIdleDebug?.setEditorValue) ===
-					'function' &&
-				typeof (/** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput) ===
-					'function',
-			undefined,
-			{ timeout: runTimeoutMs }
-		);
+		await page.waitForFunction(isStdinEditorReady, undefined, { timeout: runTimeoutMs });
 		if (preselectionRuntimeRequests.length > 0) {
 			throw new Error(
 				`runtime assets loaded before selecting ${language}\n${JSON.stringify(
@@ -390,19 +410,7 @@ export async function runStdinBrowserProbe(options) {
 			if (language !== 'CPP') throw new Error('cppVersion requires the CPP language');
 			await page.locator('#cpp-version').selectOption(cppVersion);
 		}
-		await page.waitForFunction(
-			(expectedLanguage) =>
-				/** @type {HTMLSelectElement | null} */ (document.querySelector('#language-select'))
-					?.value === expectedLanguage &&
-				typeof (/** @type {any} */ (window).__wasmIdleDebug?.getEditorValue) ===
-					'function' &&
-				typeof (/** @type {any} */ (window).__wasmIdleDebug?.setEditorValue) ===
-					'function' &&
-				typeof (/** @type {any} */ (window).__wasmIdleDebug?.writeTerminalInput) ===
-					'function',
-			language,
-			{ timeout: runTimeoutMs }
-		);
+		await page.waitForFunction(isStdinEditorReady, language, { timeout: runTimeoutMs });
 		let previousEditorValue = await page.evaluate(
 			() => /** @type {any} */ (window).__wasmIdleDebug?.getEditorValue?.() ?? ''
 		);
@@ -634,7 +642,8 @@ export async function runStdinBrowserProbe(options) {
 				snapshot?.transcript ?? '',
 				expectedOutput,
 				snapshot?.state ?? null,
-				previousRunId
+				previousRunId,
+				language
 			);
 			if (terminalRunStatus === 'running') {
 				await withWallClockTimeout(
@@ -720,7 +729,8 @@ export async function runStdinBrowserProbe(options) {
 			);
 		}
 		const followUps = [];
-		for (const run of followUpRuns) followUps.push(await runFollowUp(page, run, runTimeoutMs));
+		for (const run of followUpRuns)
+			followUps.push(await runFollowUp(page, run, runTimeoutMs, language));
 		return { ...summary, followUpRuns: followUps };
 	} finally {
 		await withWallClockTimeout(page.close(), 2_000, 'page close').catch(() => {});

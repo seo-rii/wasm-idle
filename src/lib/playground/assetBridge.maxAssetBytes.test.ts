@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
+vi.mock('$app/env/public', async () => {
+	const { mockPublicEnv } = await import('../testPublicEnv');
+	return mockPublicEnv();
+});
 
 import { WorkerAssetBridge } from '$lib/playground/assetBridge';
 import { RUNTIME_LOAD_ASSETS } from '$lib/playground/assets';

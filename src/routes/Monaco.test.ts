@@ -645,7 +645,7 @@ describe('Monaco route debug sync', () => {
 		const viteConfig = await readFile(path.resolve(process.cwd(), 'vite.config.ts'), 'utf8');
 		const libIndex = await readFile(path.resolve(process.cwd(), 'src/lib/index.ts'), 'utf8');
 
-		expect(packageJson.devDependencies?.['@seorii/monaco']).toBe('0.1.1');
+		expect(packageJson.devDependencies?.['@seorii/monaco']).toBe('0.2.0');
 		expect(packageJson.dependencies).not.toHaveProperty('@seorii/monaco');
 		expect(packageJson.dependencies).not.toHaveProperty('@hancomac/monaco-languageclient');
 		expect(viteConfig).not.toContain('@hancomac/monaco-languageclient');

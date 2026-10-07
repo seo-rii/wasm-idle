@@ -186,7 +186,7 @@ const createProviderOptions = (
 	currentUrl: deployment.currentUrl,
 	createWorker: () => new mockState.FakeWorker() as unknown as Worker,
 	cpp: {
-		loader: async () => Uint8Array.of(0)
+		loader: async () => Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0)
 	},
 	typescript: {
 		libUrl: `${deployment.rootUrl}typescript-libs.json.gz`

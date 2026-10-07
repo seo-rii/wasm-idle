@@ -165,23 +165,23 @@ async function readInputLock(lockFilePath) {
 	if (
 		!isObject(value) ||
 		value.schemaVersion !== 1 ||
-		value.profileId !== 'swipl-wasm-8.0.1-swipl-10.1.9' ||
+		value.profileId !== 'swipl-wasm-8.2.1-swipl-10.1.15' ||
 		!isObject(value.package) ||
 		value.package.name !== 'swipl-wasm' ||
-		value.package.version !== '8.0.1' ||
+		value.package.version !== '8.2.1' ||
 		value.package.repository !== 'https://github.com/SWI-Prolog/npm-swipl-wasm.git' ||
-		value.package.revision !== '18fa003833dd4fb2531195063291687255038372' ||
-		value.package.tarball !== 'https://registry.npmjs.org/swipl-wasm/-/swipl-wasm-8.0.1.tgz' ||
+		value.package.revision !== '85167290994ede92eab1aa5e399007c031e6cb82' ||
+		value.package.tarball !== 'https://registry.npmjs.org/swipl-wasm/-/swipl-wasm-8.2.1.tgz' ||
 		value.package.integrity !==
-			'sha512-tP3bSRaMboFRWGD5cfBAGIzu2HH80yqRG+i/YL8BEgQ7xasvJAycwgx0DW16vqqRhUHyFOOPbzX4aXuy9s+b1g==' ||
+			'sha512-zRdeD+3aFuXFwQqRkBWOENDP3fCSnwErqNDt8yD42OApkui2dRcomqRtxt0tZYfB+uH2Elc4K6cZrUBla6ljRQ==' ||
 		!isObject(value.toolchain) ||
-		value.toolchain.swiplVersion !== '10.1.9' ||
-		value.toolchain.swiplRevision !== '6be143dbd030cc9ea621cde719a37f8385575453' ||
-		value.toolchain.emsdkVersion !== '6.0.0' ||
-		value.toolchain.emsdkRevision !== 'd223ae73c6998296e3ab27cf81dc2c2c9fd383de' ||
+		value.toolchain.swiplVersion !== '10.1.15' ||
+		value.toolchain.swiplRevision !== '5db27168f89b15186745ea401fbb99a017413788' ||
+		value.toolchain.emsdkVersion !== '6.0.11' ||
+		value.toolchain.emsdkRevision !== 'dd8e25632640cfc1fb570c7fa4cc374e8a5e5a72' ||
 		value.toolchain.zlibVersion !== '1.3.2' ||
-		value.toolchain.pcre2Version !== '10.47' ||
-		value.toolchain.pcre2Revision !== 'f454e231fe5006dd7ff8f4693fd2b8eb94333429' ||
+		value.toolchain.pcre2Version !== '10.49.0' ||
+		value.toolchain.pcre2Revision !== '6f9d7c1373262c541324a16a358785b33ef116cf' ||
 		!isObject(value.license) ||
 		value.license.path !== LICENSE_FILE ||
 		value.license.spdx !== 'BSD-2-Clause' ||
@@ -400,7 +400,7 @@ export async function syncWasmPrologAssets(options = {}) {
 	if (
 		!javascriptSource.includes('var SWIPL=') ||
 		!javascriptSource.includes('getPreloadedPackage') ||
-		!javascriptSource.includes('wasmBinary')
+		!/Module\[['"]instantiateWasm['"]\]/u.test(javascriptSource)
 	) {
 		throw new Error('swipl-web.js is missing the verified asset injection contract');
 	}

@@ -12,7 +12,10 @@ vi.mock('@wasm-idle/core', async (importOriginal) => ({
 	preflightRubyRuntimeAssets: mocks.preflightRubyRuntimeAssets
 }));
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
+vi.mock('$app/env/public', async () => {
+	const { mockPublicEnv } = await import('../testPublicEnv');
+	return mockPublicEnv();
+});
 
 import { resolveRubyRuntimeAssetConfig } from './assets';
 import {

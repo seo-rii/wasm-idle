@@ -28,9 +28,9 @@
 		"test:browser": "node --test tests/browser-smoke.test.mjs"
 	},
 	"devDependencies": {
-		"binaryen": "129.0.0",
-		"typescript": "~5.9.3",
-		"vite": "^8.0.0"
+		"binaryen": "132.0.0",
+		"typescript": "~6.0.3",
+		"vite": "^8.3.3"
 	},
 	"dependencies": {
 		"@bjorn3/browser_wasi_shim": "^0.4.2",

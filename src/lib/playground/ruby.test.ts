@@ -65,9 +65,10 @@ vi.mock('$lib/playground/worker/ruby?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
+vi.mock('$app/env/public', async () => {
+	const { mockPublicEnv } = await import('../testPublicEnv');
+	return mockPublicEnv(publicEnv);
+});
 
 import Ruby from './ruby';
 
@@ -168,7 +169,7 @@ describe('Ruby sandbox', () => {
 				baseUrl: 'http://localhost:3000/runtime/',
 				moduleUrl: expect.stringMatching(/\/runtime\/runtime\.mjs\.bin\?v=/),
 				wasmUrl: expect.stringMatching(
-					/\/runtime\/assets\/ruby_stdlib-C40Yu-vu\.wasm\.gz\.bin\?v=/
+					/\/runtime\/assets\/ruby_stdlib-D8-A_OuU\.wasm\.gz\.bin\?v=/
 				)
 			}),
 			expect.any(Object)

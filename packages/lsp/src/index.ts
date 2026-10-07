@@ -224,9 +224,9 @@ export {
 	getTypeScriptLanguageServer,
 	type TypeScriptLanguageServerConfig,
 	type TypeScriptLanguageServerOptions
-} from './typescript/server.js';
+} from './typescript/language-server.js';
 export type { TypeScriptLanguage, TypeScriptWorkerOptions } from './typescript/service.js';
-export { getWatLanguageServer, type WatLanguageServerOptions } from './wat/server.js';
+export { getWatLanguageServer, type WatLanguageServerOptions } from './wat/language-server.js';
 export type { WatWorkerOptions } from './wat/service.js';
 export {
 	createWasmWorkerService,
@@ -326,7 +326,7 @@ export {
 	getGraphqlLanguageServer,
 	type GraphqlLanguageServerConfig,
 	type GraphqlLanguageServerOptions
-} from './graphql/server.js';
+} from './graphql/language-server.js';
 export type { GraphqlWorkerOptions } from './graphql/service.js';
 export {
 	createFortranWorkerService,
@@ -400,7 +400,7 @@ export {
 	getYamlLanguageServer,
 	type DocumentLanguageServerConfig,
 	type DocumentLanguageServerOptions
-} from './document/server.js';
+} from './document/language-server.js';
 export type { DocumentLanguageId, DocumentWorkerOptions } from './document/service.js';
 export {
 	applyContentChanges,

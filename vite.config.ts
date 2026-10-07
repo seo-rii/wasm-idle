@@ -5,6 +5,7 @@ import { defineConfig } from 'vite';
 
 import { createReleasePreviewSecurityHeaders } from './scripts/content-security-policy.mjs';
 import { createBuildIdentity } from './scripts/build-identity.mjs';
+import sveltekitConfig from './sveltekit.config.mjs';
 
 const wasmIdleCoreEntry = join(
 	dirname(fileURLToPath(import.meta.url)),
@@ -27,7 +28,7 @@ export default defineConfig({
 				});
 			}
 		},
-		sveltekit()
+		sveltekit(sveltekitConfig)
 	],
 	assetsInclude: [/\.dat$/, /\.wasm$/, /\.so$/, /\.la$/],
 	resolve: {

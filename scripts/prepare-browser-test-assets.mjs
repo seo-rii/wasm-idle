@@ -178,7 +178,7 @@ export async function prepareBrowserTestAssets({
 			});
 			downloaded += result.downloaded;
 			reused += result.reused;
-			if ('copied' in result) copied += result.copied;
+			if ('copied' in result && typeof result.copied === 'number') copied += result.copied;
 			preparedClangd = true;
 		}
 		const assets = manifest.assets.filter(

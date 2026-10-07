@@ -21,39 +21,34 @@
       "sha256": "c574cc331d96e33311470ec57bf58c579d972c111dbd9c0ab54bb42d79ec4c0d"
     },
     {
-      "path": "chunks/__vite-browser-external-xriv8Cbn.mjs",
-      "bytes": 104,
-      "sha256": "f0e4f4d8caa31d2d0212f77029ac2a3943f9067ef8d0ecf6b03600a247b85373"
+      "path": "chunks/__vite-browser-external-BqTOPsad.mjs",
+      "bytes": 115,
+      "sha256": "96fc50b6105c0a7a1ea05492920e66bcf06fdadcd0cc1144822d3858b8f4051b"
     },
     {
-      "path": "chunks/chunk-CX7Lxw9a.mjs",
-      "bytes": 559,
-      "sha256": "48c83cdd73089c9d6dca5467b6609cb2cc687a3442be37b968105b9cb30838c2"
+      "path": "chunks/dist-CBe8LYV9.mjs",
+      "bytes": 606928,
+      "sha256": "47e27a78d70015cacb686635f1c1028e70d7b488470d428132e88e44f494e45c"
     },
     {
-      "path": "chunks/chunk-DDJLRBDX-DyoNevMi.mjs",
-      "bytes": 107829,
-      "sha256": "bd5ed9109142950d5592496dd394424e98338fc22342c1ced25c2cd3fec2b166"
+      "path": "chunks/nodefs-Lavu35aH.mjs",
+      "bytes": 544,
+      "sha256": "79858b804d87411352bd039da3e7cdb04a6ceac4de997b76ac841b56bc99bec3"
     },
     {
-      "path": "chunks/dist-D_qksehD.mjs",
-      "bytes": 490440,
-      "sha256": "34650985bacb86fb9aab1a47be6232fa9939e09d52f962b0b11b74391c9cbe0e"
+      "path": "chunks/opfs-ahp-CWXvZC5u.mjs",
+      "bytes": 10009,
+      "sha256": "bb2724c9ef9265c4792d516cd2892746ac856e5c233ed89d67f0155e90613033"
     },
     {
-      "path": "chunks/nodefs-BmRzFbzV.mjs",
-      "bytes": 543,
-      "sha256": "75f7641f7639ae1153e60af9baaaf925e0c5fac92ee5d17be644c94559526f3c"
+      "path": "chunks/preload-helper-CGPSMADP.mjs",
+      "bytes": 1573,
+      "sha256": "619e20fe75396cf1771978ff186d0753bca8f42ec931be5128516c33046a0a09"
     },
     {
-      "path": "chunks/opfs-ahp-vpOxD_sw.mjs",
-      "bytes": 10022,
-      "sha256": "6988cbc3ea9123fc82de19c301aff118cd9c951596996dc37edf93ddaa99b748"
-    },
-    {
-      "path": "chunks/preload-helper-Di021t7d.mjs",
-      "bytes": 1374,
-      "sha256": "8654151aa32cfd92affe83a8b91c715f2c5127cc9ca97c61a37d0c39edcb81c1"
+      "path": "chunks/rolldown-runtime-Dik6OG8R.mjs",
+      "bytes": 590,
+      "sha256": "75903e56b9b39037c0a8714463bccf8995790fa58a8d02837fdddf783146e99f"
     },
     {
       "path": "LICENSE.postgresql.txt",
@@ -67,8 +62,8 @@
     },
     {
       "path": "runtime.mjs",
-      "bytes": 592,
-      "sha256": "4909eddd44e11af2e689d2b8a82db331096b821842dd8ad5f1afdf3805cda4d2"
+      "bytes": 583,
+      "sha256": "5807d24d5e07cc79b96452f2cd31c8d787dca19491a9aec6af72b21febfe7a81"
     }
   ]
 }

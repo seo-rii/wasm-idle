@@ -5,7 +5,10 @@ import { resolve } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { gzipSync } from 'node:zlib';
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
+vi.mock('$app/env/public', async () => {
+	const { mockPublicEnv } = await import('../testPublicEnv');
+	return mockPublicEnv();
+});
 
 import { RUNTIME_LOAD_ASSETS } from '$lib/playground/assets';
 import { WorkerAssetBridge, boundedUtf8ByteLength } from '$lib/playground/assetBridge';

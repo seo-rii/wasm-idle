@@ -22,20 +22,20 @@ const staticWorkerUrl = new URL('../../../static/wasm-prolog/runner-worker.js', 
 const staticRuntimeUrl = new URL('../../../static/wasm-prolog/', import.meta.url);
 const fixturePackage = {
 	integrity:
-		'sha512-tP3bSRaMboFRWGD5cfBAGIzu2HH80yqRG+i/YL8BEgQ7xasvJAycwgx0DW16vqqRhUHyFOOPbzX4aXuy9s+b1g==',
+		'sha512-zRdeD+3aFuXFwQqRkBWOENDP3fCSnwErqNDt8yD42OApkui2dRcomqRtxt0tZYfB+uH2Elc4K6cZrUBla6ljRQ==',
 	name: 'swipl-wasm',
 	repository: 'https://github.com/SWI-Prolog/npm-swipl-wasm.git',
-	revision: '18fa003833dd4fb2531195063291687255038372',
-	tarball: 'https://registry.npmjs.org/swipl-wasm/-/swipl-wasm-8.0.1.tgz',
-	version: '8.0.1'
+	revision: '85167290994ede92eab1aa5e399007c031e6cb82',
+	tarball: 'https://registry.npmjs.org/swipl-wasm/-/swipl-wasm-8.2.1.tgz',
+	version: '8.2.1'
 };
 const fixtureToolchain = {
-	emsdkRevision: 'd223ae73c6998296e3ab27cf81dc2c2c9fd383de',
-	emsdkVersion: '6.0.0',
-	pcre2Revision: 'f454e231fe5006dd7ff8f4693fd2b8eb94333429',
-	pcre2Version: '10.47',
-	swiplRevision: '6be143dbd030cc9ea621cde719a37f8385575453',
-	swiplVersion: '10.1.9',
+	emsdkRevision: 'dd8e25632640cfc1fb570c7fa4cc374e8a5e5a72',
+	emsdkVersion: '6.0.11',
+	pcre2Revision: '6f9d7c1373262c541324a16a358785b33ef116cf',
+	pcre2Version: '10.49.0',
+	swiplRevision: '5db27168f89b15186745ea401fbb99a017413788',
+	swiplVersion: '10.1.15',
 	zlibVersion: '1.3.2'
 };
 const fixtureLicense = {
@@ -83,7 +83,7 @@ const fixtureStorage = Object.entries(fixtureStorageBytes).map(([path, bytes]) =
 	size: bytes.byteLength,
 	sha256: sha256(bytes)
 }));
-const fixtureProfileId = 'swipl-wasm-8.0.1-swipl-10.1.9';
+const fixtureProfileId = 'swipl-wasm-8.2.1-swipl-10.1.15';
 const fixtureFingerprint = computePrologRuntimeFingerprint({
 	profileId: fixtureProfileId,
 	package: fixturePackage,
@@ -185,11 +185,19 @@ globalThis.importScripts = (url) => {
     let undeclaredRejected = false;
     try { options.locateFile('undeclared.bin'); } catch { undeclaredRejected = true; }
     const data = Buffer.from(options.getPreloadedPackage(dataPath, logicalBytes['swipl-web.data'].byteLength));
+    let wasmInstance;
+    let wasmModule;
+    const wasmExports = options.instantiateWasm({}, (instance, module) => {
+      wasmInstance = instance;
+      wasmModule = module;
+    });
     parentPort.postMessage({
       harnessInjected: {
         wasmPath,
         dataPath,
         undeclaredRejected,
+        verifiedWasmInstantiated: wasmInstance instanceof WebAssembly.Instance &&
+          wasmModule instanceof WebAssembly.Module && wasmExports === wasmInstance.exports,
         wasmSha256: await webcrypto.subtle.digest('SHA-256', options.wasmBinary).then(
           (value) => Buffer.from(value).toString('hex')
         ),
@@ -477,6 +485,7 @@ describe('SWI-Prolog runner worker', () => {
 				wasmPath: 'wasm-idle-verified:swipl-web.wasm',
 				dataPath: 'wasm-idle-verified:swipl-web.data',
 				undeclaredRejected: true,
+				verifiedWasmInstantiated: true,
 				wasmSha256: sha256(fixtureLogicalBytes['swipl-web.wasm']),
 				dataSha256: sha256(fixtureLogicalBytes['swipl-web.data'])
 			}

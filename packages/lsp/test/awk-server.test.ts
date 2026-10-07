@@ -25,7 +25,7 @@ vi.mock('../src/jsonrpc.js', () => ({
 
 import { AWK_MAX_ASSET_BYTES, AWK_RUNTIME_WORKER_PATH } from '@wasm-idle/core';
 import { BUNDLED_AWK_RUNTIME_PROFILE } from '../src/bundledAwkRuntime.js';
-import { getAwkLanguageServer } from '../src/awk/server.js';
+import { getAwkLanguageServer } from '../src/awk/language-server.js';
 import {
 	awkTestAssetBytes,
 	createAwkTestAssetResponse,

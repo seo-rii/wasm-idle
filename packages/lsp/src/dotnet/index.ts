@@ -4,7 +4,7 @@ export {
 	getVisualBasicLanguageServer,
 	resolveDotnetLanguageServerModuleUrl,
 	type DotnetLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createDotnetWorkerService,
 	type DotnetLanguage,

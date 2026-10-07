@@ -11,6 +11,7 @@ import {
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
+import { isStdinEditorReady } from '../../../scripts/stdin-browser-probe-lib.mjs';
 
 const runTimeoutMs = Number(process.env.WASM_IDLE_DOTNET_SWITCH_TIMEOUT_MS || '600000');
 const languageTimeoutMs = Number(
@@ -24,14 +25,7 @@ async function runLanguage(
 	expectedOutput: string
 ) {
 	await page.locator('#language-select').selectOption(language);
-	await page.waitForFunction(
-		(expectedLanguage) =>
-			(document.querySelector('#language-select') as HTMLSelectElement | null)?.value ===
-				expectedLanguage &&
-			typeof (globalThis as any).__wasmIdleDebug?.setEditorValue === 'function',
-		language,
-		{ timeout: languageTimeoutMs }
-	);
+	await page.waitForFunction(isStdinEditorReady, language, { timeout: languageTimeoutMs });
 	let previousEditorValue = await page.evaluate(
 		() => (globalThis as any).__wasmIdleDebug?.getEditorValue?.() || ''
 	);
@@ -73,23 +67,25 @@ async function runLanguage(
 	await page.locator('button.action-button--run').click({ timeout: runTimeoutMs });
 	try {
 		await page.waitForFunction(
-			({ output, previousId }) => {
+			({ output, previousId, expectedLanguage }) => {
 				const transcript =
 					document.querySelector('[data-testid="terminal-debug-output"]')?.textContent ||
 					'';
 				const state = (globalThis as any).__wasmIdleDebug.getExecutionState();
 				return (
 					state.id > previousId &&
+					state.language === expectedLanguage &&
 					transcript.includes(output) &&
 					state.status === 'completed' &&
 					state.exitCode === 0
 				);
 			},
-			{ output: expectedOutput, previousId: previousRunId },
+			{ output: expectedOutput, previousId: previousRunId, expectedLanguage: language },
 			{ timeout: languageTimeoutMs }
 		);
 	} catch (error) {
 		const state = await page.evaluate(() => ({
+			execution: (globalThis as any).__wasmIdleDebug?.getExecutionState?.(),
 			language: (document.querySelector('#language-select') as HTMLSelectElement | null)
 				?.value,
 			runButton: document.querySelector('button.action-button--run')?.textContent?.trim(),
@@ -176,12 +172,13 @@ describe('dotnet language switching', () => {
 						() =>
 							crossOriginIsolated &&
 							typeof SharedArrayBuffer !== 'undefined' &&
-							!!navigator.serviceWorker?.controller &&
-							typeof (globalThis as any).__wasmIdleDebug?.setEditorValue ===
-								'function',
+							!!navigator.serviceWorker?.controller,
 						undefined,
 						{ timeout: runTimeoutMs }
 					);
+					await page.waitForFunction(isStdinEditorReady, undefined, {
+						timeout: runTimeoutMs
+					});
 					expect(runtimeRequests).toEqual([]);
 
 					await runLanguage(

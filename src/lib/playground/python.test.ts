@@ -51,9 +51,10 @@ vi.mock('$lib/playground/worker/python?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: {}
-}));
+vi.mock('$app/env/public', async () => {
+	const { mockPublicEnv } = await import('../testPublicEnv');
+	return mockPublicEnv();
+});
 
 import Python from './python';
 
@@ -685,7 +686,7 @@ print((left + right) // (left - left))`,
 			data: {
 				assetRequest: {
 					id: 7,
-					asset: 'pyodide.asm.js'
+					asset: 'pyodide.asm.mjs'
 				}
 			}
 		} as MessageEvent<any>);
@@ -706,7 +707,7 @@ print((left + right) // (left - left))`,
 		expect(loader).toHaveBeenCalledWith(
 			expect.objectContaining({
 				runtime: 'python',
-				asset: 'pyodide.asm.js',
+				asset: 'pyodide.asm.mjs',
 				reportProgress: expect.any(Function)
 			})
 		);

@@ -3,7 +3,7 @@ export {
 	getTypeScriptLanguageServer,
 	type TypeScriptLanguageServerConfig,
 	type TypeScriptLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createTypeScriptWorkerService,
 	type TypeScriptLanguage,

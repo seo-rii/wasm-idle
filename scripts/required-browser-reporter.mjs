@@ -5,7 +5,7 @@
 
 /**
  * Fail closed when a selected browser test was filtered, skipped, or never finished.
- * @param {BrowserTestModule[]} modules
+ * @param {readonly BrowserTestModule[]} modules
  */
 export function assertRequiredBrowserTests(modules) {
 	const required = modules.flatMap((module) =>
@@ -23,7 +23,7 @@ export function assertRequiredBrowserTests(modules) {
 }
 
 export default class RequiredBrowserReporter {
-	/** @param {BrowserTestModule[]} modules */
+	/** @param {readonly BrowserTestModule[]} modules */
 	onTestRunEnd(modules) {
 		assertRequiredBrowserTests(modules);
 	}

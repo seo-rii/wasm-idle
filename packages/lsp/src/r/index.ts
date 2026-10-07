@@ -2,7 +2,7 @@ export {
 	getRLanguageServer,
 	type RLanguageServerConfig,
 	type RLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createRWorkerService,
 	type LoadRSyntaxParser,

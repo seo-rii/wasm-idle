@@ -1,6 +1,6 @@
-import { cp, mkdir, rm, stat } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
@@ -11,7 +11,7 @@ const PYODIDE_CORE_ASSETS = [
 	'ffi.d.ts',
 	'package.json',
 	'pyodide-lock.json',
-	'pyodide.asm.js',
+	'pyodide.asm.mjs',
 	'pyodide.asm.wasm',
 	'pyodide.d.ts',
 	'pyodide.js',
@@ -40,6 +40,27 @@ export async function syncPyodidePackage({
 		}
 	}
 
+	const packageJson = JSON.parse(await readFile(path.join(sourceDir, 'package.json'), 'utf8'));
+	const lock = JSON.parse(await readFile(path.join(sourceDir, 'pyodide-lock.json'), 'utf8'));
+	const { version } = await import(pathToFileURL(path.join(sourceDir, 'pyodide.mjs')).href);
+	if (packageJson.name !== 'pyodide' || packageJson.version !== version) {
+		throw new Error('Pyodide package and loader versions do not match.');
+	}
+	if (
+		!lock.info ||
+		lock.info.arch !== 'wasm32' ||
+		typeof lock.info.abi_version !== 'string' ||
+		!/^\d{4}_\d+$/u.test(lock.info.abi_version) ||
+		typeof lock.info.python !== 'string' ||
+		!/^3\.\d+\.\d+$/u.test(lock.info.python) ||
+		typeof lock.info.platform !== 'string' ||
+		!/^emscripten_\d+_\d+_\d+$/u.test(lock.info.platform) ||
+		!lock.packages ||
+		typeof lock.packages !== 'object' ||
+		Array.isArray(lock.packages)
+	) {
+		throw new Error('Pyodide lock file has invalid Python or ABI metadata.');
+	}
 	await rm(targetDir, { recursive: true, force: true });
 	await mkdir(targetDir, { recursive: true });
 
@@ -50,6 +71,9 @@ export async function syncPyodidePackage({
 	return {
 		sourceDir,
 		targetDir,
+		version,
+		pythonVersion: lock.info.python,
+		abiVersion: lock.info.abi_version,
 		assets: [...PYODIDE_CORE_ASSETS]
 	};
 }

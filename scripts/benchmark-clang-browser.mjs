@@ -95,13 +95,25 @@ const snapshots = ['server', 'worker'].map((name) =>
 	path.join(repo, `packages/lsp/src/clangd/.performance-baseline-${name}.ts`)
 );
 for (const [index, name] of ['server', 'worker'].entries()) {
+	const baselineRef = args.get('--baseline-ref') || 'HEAD';
+	let sourceName = name;
+	if (name === 'server') {
+		try {
+			execFileSync(
+				'git',
+				['cat-file', '-e', `${baselineRef}:packages/lsp/src/clangd/language-server.ts`],
+				{ cwd: repo, stdio: 'ignore' }
+			);
+			sourceName = 'language-server';
+		} catch {
+			// Earlier baseline refs use the original browser language-server filename.
+		}
+	}
 	await writeFile(
 		snapshots[index],
-		execFileSync(
-			'git',
-			['show', `${args.get('--baseline-ref') || 'HEAD'}:packages/lsp/src/clangd/${name}.ts`],
-			{ cwd: repo }
-		)
+		execFileSync('git', ['show', `${baselineRef}:packages/lsp/src/clangd/${sourceName}.ts`], {
+			cwd: repo
+		})
 	);
 }
 const report = {

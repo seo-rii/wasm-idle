@@ -9,7 +9,10 @@ import {
 } from '@wasm-idle/core';
 import { resolveRuntimeAssetConfig, type PlaygroundRuntimeAssets } from './playground/assets';
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
+vi.mock('$app/env/public', async () => {
+	const { mockPublicEnv } = await import('./testPublicEnv');
+	return mockPublicEnv();
+});
 
 function bindingFor(
 	assets: PlaygroundRuntimeAssets,

@@ -42,9 +42,10 @@ vi.mock('$lib/playground/worker/typescript?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
+vi.mock('$app/env/public', async () => {
+	const { mockPublicEnv } = await import('../testPublicEnv');
+	return mockPublicEnv(publicEnv);
+});
 
 import TypeScriptSandbox from './typescript';
 

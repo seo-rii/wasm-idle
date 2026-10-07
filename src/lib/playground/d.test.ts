@@ -61,9 +61,10 @@ vi.mock('$lib/playground/worker/d?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({
-	env: publicEnv
-}));
+vi.mock('$app/env/public', async () => {
+	const { mockPublicEnv } = await import('../testPublicEnv');
+	return mockPublicEnv(publicEnv);
+});
 
 import D from './d';
 import { WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';

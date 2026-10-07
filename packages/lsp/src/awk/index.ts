@@ -2,7 +2,7 @@ export {
 	getAwkLanguageServer,
 	type AwkLanguageServerConfig,
 	type AwkLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createAwkWorkerService,
 	type AwkDiagnosticRunnerRequest,

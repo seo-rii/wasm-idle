@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
@@ -63,6 +65,7 @@ describe('Elixir worker', () => {
 		const popcornBrowserGlobal = ['globalThis', 'window'].join('.');
 		const popcornParentGlobal = [popcornBrowserGlobal, 'parent'].join('.');
 		(globalThis as any).self = globalThis as any;
+		(globalThis as any).location = new URL('http://localhost/');
 		(globalThis as any).document = undefined;
 		(globalThis as any).window = undefined;
 		(globalThis as any).parent = undefined;

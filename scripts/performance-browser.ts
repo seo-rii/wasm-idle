@@ -1,6 +1,6 @@
 import CompilerWorker from './compiler-performance.worker.ts?worker';
 import ClangdWorker from '../packages/lsp/src/clangd/worker.ts?worker';
-import { createClangdLanguageServer } from '../packages/lsp/src/clangd/server';
+import { createClangdLanguageServer } from '../packages/lsp/src/clangd/language-server';
 
 let compiler: Worker | undefined;
 let pending: { resolve(value: unknown): void; reject(error: Error): void } | undefined;

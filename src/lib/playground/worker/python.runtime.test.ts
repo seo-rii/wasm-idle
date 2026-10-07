@@ -28,13 +28,13 @@ const packageAsset = 'demo-1.0-py3-none-any.whl';
 let nextRuntimeModuleId = 0;
 
 async function createRuntimeHarness({
-	version = '0.29.3',
+	version = '314.0.7',
 	lock = {
 		info: {
 			arch: 'wasm32',
 			abi_version: 'test-abi',
 			platform: 'test-platform',
-			python: '3.13.2',
+			python: '3.14.2',
 			version
 		},
 		packages: {
@@ -72,15 +72,16 @@ async function createRuntimeHarness({
 		setInterruptBuffer: vi.fn()
 	};
 	const moduleSources: Record<string, string> = {
-		'pyodide.asm.js': `
+		'pyodide.asm.mjs': `
   globalThis.__pythonModuleEvaluations.push('asm');
-  globalThis._createPyodideModule = async () => ({});
+  export default async function createPyodideModule() { return {}; }
 `,
 		'pyodide.mjs': `
 globalThis.__pythonModuleEvaluations.push('entry');
-if (typeof globalThis._createPyodideModule !== 'function') throw new Error('asm not evaluated');
 export const version = ${JSON.stringify(version)};
 export async function loadPyodide(options) {
+  if (typeof options.createPyodideModule !== 'function') throw new Error('module factory missing');
+  await options.createPyodideModule();
   globalThis.__pythonRuntimeOptions.push(options);
   return globalThis.__pythonRuntimeMock;
 }
@@ -103,7 +104,6 @@ export async function loadPyodide(options) {
 	vi.stubGlobal('__pythonRuntimeMock', pyodide);
 	vi.stubGlobal('__pythonRuntimeOptions', runtimeOptions);
 	vi.stubGlobal('__pythonModuleEvaluations', moduleEvaluations);
-	vi.stubGlobal('_createPyodideModule', undefined);
 	vi.stubGlobal('Blob', ModuleBlob);
 	vi.spyOn(URL, 'createObjectURL').mockImplementation((source: Blob | MediaSource) => {
 		const bytes = (source as unknown as ModuleBlob).parts
@@ -130,6 +130,22 @@ export async function loadPyodide(options) {
 }
 
 describe('Python worker runtime dispatch', () => {
+	it('rejects an asm module without the exported factory before initializing Python', async () => {
+		const { moduleSources, onmessage, postMessage, runtimeOptions } =
+			await createRuntimeHarness();
+		moduleSources['pyodide.asm.mjs'] = 'export const unrelated = true;';
+		await onmessage({
+			data: {
+				load: true,
+				assets: { baseUrl: 'https://assets.example.test/python/', useAssetBridge: true }
+			}
+		});
+		expect(runtimeOptions).toHaveLength(0);
+		expect(postMessage).toHaveBeenCalledWith({
+			error: 'Pyodide module factory is unavailable'
+		});
+	});
+
 	it.each([
 		{
 			name: 'bridged',
@@ -138,7 +154,7 @@ describe('Python worker runtime dispatch', () => {
 				maxAssetBytes: 4096,
 				useAssetBridge: true
 			},
-			expectedAssets: ['pyodide.asm.js', 'pyodide.mjs'],
+			expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs'],
 			expectedPackageBaseUrl: 'https://wasm-idle.invalid/python/'
 		},
 		{
@@ -148,8 +164,8 @@ describe('Python worker runtime dispatch', () => {
 				maxAssetBytes: 4096,
 				useAssetBridge: false
 			},
-			expectedAssets: ['pyodide.asm.js', 'pyodide.mjs', 'pyodide-lock.json'],
-			expectedPackageBaseUrl: 'https://cdn.jsdelivr.net/pyodide/v0.29.3/full/'
+			expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json'],
+			expectedPackageBaseUrl: 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/'
 		}
 	])(
 		'loads $name runtime assets with bounded package configuration and settles empty code',
@@ -166,7 +182,8 @@ describe('Python worker runtime dispatch', () => {
 			expect(runtimeOptions).toHaveLength(1);
 			expect(runtimeOptions[0]).toMatchObject({
 				indexURL: assetConfig.baseUrl,
-				packageBaseUrl: expectedPackageBaseUrl
+				packageBaseUrl: expectedPackageBaseUrl,
+				createPyodideModule: expect.any(Function)
 			});
 			if (assetConfig.useAssetBridge) {
 				expect(runtimeOptions[0]).not.toHaveProperty('lockFileContents');
@@ -181,7 +198,7 @@ describe('Python worker runtime dispatch', () => {
 					assets: [packageAsset],
 					runtimeAssets: [
 						'pyodide.mjs',
-						'pyodide.asm.js',
+						'pyodide.asm.mjs',
 						'pyodide-lock.json',
 						'pyodide.asm.wasm',
 						'python_stdlib.zip'
@@ -213,17 +230,17 @@ describe('Python worker runtime dispatch', () => {
 	it.each([
 		{
 			name: 'untrusted runtime version',
-			version: '0.29.3/../../untrusted',
+			version: '314.0.7/../../untrusted',
 			lock: undefined,
 			error: 'Pyodide runtime version is invalid',
-			expectedAssets: ['pyodide.asm.js', 'pyodide.mjs', 'pyodide-lock.json']
+			expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json']
 		},
 		{
 			name: 'unsafe lock package path',
-			version: '0.29.3',
+			version: '314.0.7',
 			lock: { packages: { demo: { file_name: '../untrusted.whl' } } },
 			error: 'Python runtime lock file has an unsafe package asset name',
-			expectedAssets: ['pyodide.asm.js', 'pyodide.mjs', 'pyodide-lock.json']
+			expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json']
 		}
 	])('fails closed for an $name', async ({ version, lock, error, expectedAssets }) => {
 		const { onmessage, postMessage, runtimeOptions } = await createRuntimeHarness({
@@ -355,7 +372,7 @@ describe('Python bootstrap scheduling', () => {
 			const loading = harness.onmessage({
 				data: { load: true, assets: { ...directAssets, useAssetBridge } }
 			});
-			const expected = ['pyodide.asm.js', 'pyodide.mjs'];
+			const expected = ['pyodide.asm.mjs', 'pyodide.mjs'];
 			if (!useAssetBridge) expected.push('pyodide-lock.json');
 			expect([...pending.keys()]).toEqual(expected);
 			expect(harness.moduleEvaluations).toEqual([]);
@@ -372,13 +389,15 @@ describe('Python bootstrap scheduling', () => {
 		}
 	);
 
-	it.each(['pyodide.asm.js', 'pyodide.mjs', 'pyodide-lock.json'])(
+	it.each(['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json'])(
 		'fails closed and can retry when %s cannot be downloaded',
 		async (failedAsset) => {
 			const harness = await createRuntimeHarness();
 			const loadAsset = workerAssets.loadWorkerRuntimeAsset.getMockImplementation()!;
 			workerAssets.loadWorkerRuntimeAsset.mockImplementation((asset: string) =>
-				asset === failedAsset ? Promise.reject(new Error('asset unavailable')) : loadAsset(asset)
+				asset === failedAsset
+					? Promise.reject(new Error('asset unavailable'))
+					: loadAsset(asset)
 			);
 			await harness.onmessage({ data: { load: true, assets: directAssets } });
 			expect(harness.runtimeOptions).toHaveLength(0);
@@ -410,7 +429,9 @@ describe('Python prepare-to-run reuse', () => {
 		async (useAssetBridge) => {
 			const { onmessage, pyodide, postMessage } = await createRuntimeHarness();
 			await onmessage({ data: { load: true, assets: { ...directAssets, useAssetBridge } } });
-			const data = executionData('import demo', [{ path: 'helper.py', content: 'import demo' }]);
+			const data = executionData('import demo', [
+				{ path: 'helper.py', content: 'import demo' }
+			]);
 			await onmessage({ data: { ...data, prepare: true } });
 			expect(pyodide.loadPackagesFromImports).toHaveBeenCalledOnce();
 			expect(pyodide.runPythonAsync).not.toHaveBeenCalled();

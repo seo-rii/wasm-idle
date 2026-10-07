@@ -339,8 +339,8 @@ describe('browser test asset preparation', () => {
 		);
 	});
 
-	it('keeps OCaml outer receipts aligned with the consumer integrity profile', async () => {
-		const manifest = JSON.parse(await readFile('scripts/browser-test-assets.v1.json', 'utf8'));
+	it('keeps rebuilt OCaml outer receipts aligned with the consumer integrity profile', async () => {
+		// Download pins describe immutable compiler inputs; the current bundle is rebuilt.
 		for (const [target, receipt] of [
 			[
 				'wasm-of-js-of-ocaml/browser-native/src/index.js',
@@ -351,15 +351,13 @@ describe('browser test asset preparation', () => {
 				WASM_OCAML_RUNTIME_PROFILE.manifestReceipt
 			]
 		] as const) {
-			expect(
-				manifest.assets.find((asset: { target: string }) => asset.target === target)
-			).toMatchObject({
-				size: receipt.bytes,
-				sha256: receipt.sha256
-			});
+			const bytes = await readFile(path.join('static', target));
+			expect(bytes.byteLength).toBe(receipt.bytes);
+			expect(createHash('sha256').update(bytes).digest('hex')).toBe(receipt.sha256);
 		}
 	});
 
+	// The real TypeScript graph can take longer than the default 5 seconds in parallel runs.
 	it('emits the relative module dependencies of the rebuilt OCaml wrapper', () => {
 		// Preparation rebuilds the wrapper from source; the download receipts describe
 		// immutable compiler inputs, not the current wrapper's generated module graph.
@@ -402,5 +400,5 @@ describe('browser test asset preparation', () => {
 				expect(outputs.has(dependency), `${target} requires ${dependency}`).toBe(true);
 			}
 		}
-	});
+	}, 30_000);
 });

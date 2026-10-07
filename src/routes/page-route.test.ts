@@ -380,7 +380,7 @@ describe('example route debug actions', () => {
 
 	it('derives non-debug runtime assets from the deployed application base', () => {
 		expect(source).toContain("from '$lib/playground/applicationAssets';");
-		expect(source).toContain('const applicationRootUrl = base;');
+		expect(source).toContain("const applicationRootUrl = resolve('');");
 		expect(source).toContain(
 			'const resolveApplicationAsset = createApplicationAssetResolver(applicationRootUrl);'
 		);
@@ -943,7 +943,7 @@ describe('example route debug actions', () => {
 		);
 		expect(applicationRuntimeAssets.ruby?.moduleUrl).toContain('/wasm-ruby/runtime.mjs.bin?');
 		expect(applicationRuntimeAssets.ruby?.wasmUrl).toContain(
-			'/wasm-ruby/assets/ruby_stdlib-C40Yu-vu.wasm.gz.bin?'
+			'/wasm-ruby/assets/ruby_stdlib-D8-A_OuU.wasm.gz.bin?'
 		);
 		expectPlaygroundLanguage('RUBY');
 		expect(source).toMatch(/ruby: 'RUBY'/);

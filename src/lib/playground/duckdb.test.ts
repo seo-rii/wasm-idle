@@ -36,7 +36,10 @@ vi.mock('$lib/playground/worker/duckdb?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$env/dynamic/public', () => ({ env: {} }));
+vi.mock('$app/env/public', async () => {
+	const { mockPublicEnv } = await import('../testPublicEnv');
+	return mockPublicEnv();
+});
 
 import DuckDB from './duckdb';
 

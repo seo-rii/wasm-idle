@@ -1,7 +1,7 @@
 {
   "format": "wasm-bash-runtime-manifest-v2",
   "runtime": "wasmer-bash-wasix",
-  "profileId": "bash-1.0.25-wasmer-sdk-0.9.0-fc809648",
+  "profileId": "bash-1.0.25-wasmer-sdk-0.10.0-fc809648",
   "licenseExpression": "GPL-3.0-or-later AND MIT",
   "artifact": {
     "kind": "wasmer-package-webc",
@@ -22,9 +22,9 @@
       "evidence": "runtime-build.json and locked source receipts"
     },
     "wasmerSdk": {
-      "version": "0.9.0",
+      "version": "0.10.0",
       "package": "@wasmer/sdk",
-      "packageIntegrity": "sha512-k/CY19NfeLCjA9ZpX69JAoZKiuMT3hKjDFJYWdRGkCdfig9NtC9Op7Gpg2LeezuuQKd4WaSSq8bpSMdHw1BMgg==",
+      "packageIntegrity": "sha512-YQ+s5tGag6P/I8kp9BTH+XhjoS9UFvWiZJvnWEEovClHffhYToKhprWr4UJG7wLP7c/2HQpGkF7ZrjoUvKjdmA==",
       "repository": "https://github.com/wasmerio/wasmer-js",
       "verifiedBuildInput": true,
       "evidence": "pnpm package integrity and locked npm source receipts"
@@ -74,7 +74,7 @@
     },
     "wasmerSdk": {
       "path": "sdk/LICENSE.txt",
-      "sourceUrl": "https://registry.npmjs.org/@wasmer/sdk/-/sdk-0.9.0.tgz#package/LICENSE",
+      "sourceUrl": "https://registry.npmjs.org/@wasmer/sdk/-/sdk-0.10.0.tgz#package/LICENSE",
       "spdx": "MIT",
       "size": 1097,
       "sha256": "76dc7d305458d07478bc62669fe53dbfd3b94b95c5e00fbb45af1f492cbd7284"
@@ -90,14 +90,14 @@
     {
       "path": "sdk/index.mjs",
       "mediaType": "text/javascript",
-      "size": 49233,
-      "sha256": "c7e42dbbdf7d5ddbf2692bae24d732f14f09a879f8db1bc4cf23bef086a86b6a"
+      "size": 48694,
+      "sha256": "d5e0424d9de8173c0c7bc6a6b704aecde620d3f424050e0e6a079d863a44d58b"
     },
     {
       "path": "sdk/wasmer_js_bg.wasm",
       "mediaType": "application/wasm",
-      "size": 5701868,
-      "sha256": "10b42451b1be2cd25543ee14e1f87adf6019f64aa3e6cb74c296aecd15787509"
+      "size": 6598804,
+      "sha256": "49a6646209f5ab5e7c737eac33407d87d9a9959ac83e5ecaaab9261b2323589e"
     },
     {
       "path": "bash.webc",
@@ -111,15 +111,15 @@
       "path": "sdk/index.mjs.bin",
       "logicalPath": "sdk/index.mjs",
       "encoding": "identity",
-      "size": 49233,
-      "sha256": "c7e42dbbdf7d5ddbf2692bae24d732f14f09a879f8db1bc4cf23bef086a86b6a"
+      "size": 48694,
+      "sha256": "d5e0424d9de8173c0c7bc6a6b704aecde620d3f424050e0e6a079d863a44d58b"
     },
     {
       "path": "sdk/wasmer_js_bg.wasm.gz.bin",
       "logicalPath": "sdk/wasmer_js_bg.wasm",
       "encoding": "gzip",
-      "size": 2133033,
-      "sha256": "9fcf1430c0ba5233a2434ccf88248ae45a465f8f749c6efb13f9be125e039e4e"
+      "size": 2383903,
+      "sha256": "f592295111f5140a0afd5c5905e31e3ef1c9126df182d1249c86e7d6d4d260da"
     },
     {
       "path": "bash.webc.gz.bin",
@@ -129,5 +129,5 @@
       "sha256": "6f5be27b3c2e685e3ee823a6ff7380c5143e9c7e353975e39e4dbf297a3ea577"
     }
   ],
-  "fingerprint": "71a9b5962e7ec1517464c03e4f6ef3aff66dd97adb6807448bc15677e85d069b"
+  "fingerprint": "7feb4bf192c1c38e3e129528a5c038405012a4f09bc170719dfb6174cbb63f61"
 }

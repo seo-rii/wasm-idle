@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 
@@ -174,6 +176,7 @@ describe('OCaml worker', () => {
 		createdCompilerBlobs.length = 0;
 		pendingCompilerImportUrl = '';
 		(globalThis as any).self = globalThis as any;
+		(globalThis as any).location = new URL('http://localhost/');
 		(globalThis as any).document = undefined;
 		(globalThis as any).postMessage = vi.fn();
 		(globalThis as any).fetch = vi.fn(async (input: RequestInfo | URL) => {

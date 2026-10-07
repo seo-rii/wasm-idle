@@ -14,7 +14,7 @@ export async function compileWorkerRuntimeAsset(asset: string): Promise<WebAssem
 }
 
 /**
- * Pyodide 0.29.3 creates its own instantiateWasm hook, including its sentinel imports.
+ * Pyodide creates its own instantiateWasm hook, including its sentinel imports.
  * Intercept only the exact bootstrap fetch/Response during initialization so those imports
  * remain intact. Other Wasm (including the sentinel) and all package fetches are untouched.
  */

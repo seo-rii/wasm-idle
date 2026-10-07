@@ -26,8 +26,8 @@
 		"@wasm-idle/core": "workspace:*"
 	},
 	"devDependencies": {
-		"svelte": "^5.55.4",
-		"typescript": "^6.0.2"
+		"svelte": "^5.57.2",
+		"typescript": "^6.0.3"
 	},
 	"scripts": {
 		"build": "rm -rf dist && tsc -p tsconfig.json",

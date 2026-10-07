@@ -26,10 +26,10 @@ export async function runC3BrowserProbe() {
 			{
 				name: 'c3-probe-public-env',
 				resolveId(id) {
-					if (id === '$env/dynamic/public') return '\0c3-public-env';
+					if (id === '$app/env/public') return '\0c3-public-env';
 				},
 				load(id) {
-					if (id === '\0c3-public-env') return 'export const env = {};';
+					if (id === '\0c3-public-env') return 'export {};';
 				},
 				configureServer(vite) {
 					vite.middlewares.use((request, response, next) => {

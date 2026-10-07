@@ -1,4 +1,4 @@
-import type { Lockfile, PyodideInterface } from 'pyodide';
+import type { Lockfile, PyodideConfig, PyodideInterface } from 'pyodide';
 import {
 	flushQueuedStdin,
 	readBufferedStdin,
@@ -270,7 +270,7 @@ if not globals().get("__wasm_idle_img_inited__", False):
 const pyodideVersionPattern = /^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}(?:[A-Za-z0-9._+-]{0,64})?$/u;
 const directPyodideRuntimeAssets = [
 	'pyodide.mjs',
-	'pyodide.asm.js',
+	'pyodide.asm.mjs',
 	'pyodide-lock.json',
 	'pyodide.asm.wasm',
 	'python_stdlib.zip'
@@ -309,11 +309,16 @@ async function loadPyodide(path: string) {
 	// Download independent bootstrap files together, but preserve module evaluation order.
 	// The existing bounded loader (and host bridge, when configured) still owns every byte.
 	const [asmAsset, runtimeAsset, loadedLock] = await Promise.all([
-		loadWorkerRuntimeAsset('pyodide.asm.js'),
+		loadWorkerRuntimeAsset('pyodide.asm.mjs'),
 		loadWorkerRuntimeAsset('pyodide.mjs'),
 		useAssetBridge ? undefined : loadWorkerRuntimeAsset('pyodide-lock.json')
 	]);
-	await importRuntimeAssetModule(asmAsset);
+	const { default: createPyodideModule } = (await importRuntimeAssetModule(asmAsset)) as {
+		default: PyodideConfig['createPyodideModule'];
+	};
+	if (typeof createPyodideModule !== 'function') {
+		throw new Error('Pyodide module factory is unavailable');
+	}
 	const runtimeModule = (await importRuntimeAssetModule(
 		runtimeAsset
 	)) as typeof import('pyodide');
@@ -336,6 +341,7 @@ async function loadPyodide(path: string) {
 	pyodide = await withCachedPyodideModule(runtimeBaseUrl, () =>
 		loadPyodide({
 			indexURL: path,
+			createPyodideModule,
 			packageBaseUrl,
 			...(lockFileContents ? { lockFileContents } : {})
 		})

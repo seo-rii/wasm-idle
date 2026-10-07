@@ -2,7 +2,7 @@ export {
 	getHaskellLanguageServer,
 	type HaskellLanguageServerConfig,
 	type HaskellLanguageServerOptions
-} from './server.js';
+} from './language-server.js';
 export {
 	createHaskellWorkerService,
 	parseHaskellDiagnostics,

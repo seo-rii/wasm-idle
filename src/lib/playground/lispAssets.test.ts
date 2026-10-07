@@ -242,7 +242,7 @@ describe('verified Lisp runtime assets', () => {
 	});
 
 	it('rejects logical or stored receipts above the caller limit before asset fetches', async () => {
-		const maxAssetBytes = 5 * 1024 * 1024;
+		const maxAssetBytes = gunzipSync(installed['index.js.gz']).byteLength - 1;
 
 		await expect(loadVerifiedLispRuntimeAssets(config, { maxAssetBytes })).rejects.toThrow(
 			`Lisp runtime asset index.js exceeds the ${maxAssetBytes} byte limit`

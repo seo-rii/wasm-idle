@@ -13,9 +13,9 @@
 		type DebugLanguageAdapter
 	} from '@wasm-idle/debug';
 	import { page } from '$app/state';
-	import { browser } from '$app/environment';
+	import { browser } from '$app/env';
 	import { replaceState } from '$app/navigation';
-	import { base } from '$app/paths';
+	import { resolve } from '$app/paths';
 	import { SvelteURL } from 'svelte/reactivity';
 	import {
 		createApplicationAssetResolver,
@@ -182,7 +182,7 @@
 	let path = $derived(
 		page.url.pathname.endsWith('/') ? page.url.pathname.slice(0, -1) : page.url.pathname
 	);
-	const applicationRootUrl = base;
+	const applicationRootUrl = resolve('');
 	const resolveApplicationAsset = createApplicationAssetResolver(applicationRootUrl);
 	let clangdBaseUrl = $derived(resolveApplicationAsset('clangd/'));
 	let runtimeAssets = $derived.by(() => ({
@@ -1205,12 +1205,8 @@
 		saveWorkspace();
 		const shareHash = `${SHARE_PREFIX}${encodeBase64Url(JSON.stringify(snapshot()))}`;
 		const url = new SvelteURL(location.href);
-		const routePath =
-			base && url.pathname.startsWith(base)
-				? url.pathname.slice(base.length) || '/'
-				: url.pathname;
 		url.hash = shareHash;
-		replaceState(`${routePath}${url.search}#${shareHash}`, page.state);
+		await replaceState(url, page.state);
 		await navigator.clipboard?.writeText(url.toString());
 		saveStatus =
 			url.toString().length > 60000 ? 'Share URL copied, but large' : 'Share URL copied';

@@ -6,7 +6,7 @@ describe('page application asset root', () => {
 		expect(source).toMatch(
 			/import \{\s+createApplicationAssetResolver,\s+createApplicationRuntimeAssets\s+\} from '\$lib\/playground\/applicationAssets';/s
 		);
-		expect(source).toMatch(/const applicationRootUrl = base;/);
+		expect(source).toContain("const applicationRootUrl = resolve('');");
 		expect(source).toMatch(
 			/const resolveApplicationAsset = createApplicationAssetResolver\(applicationRootUrl\);/
 		);
