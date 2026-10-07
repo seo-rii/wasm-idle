@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** @type {Array<[string, string]>} */
@@ -138,6 +139,122 @@ export const scenarios = [
 ];
 
 const TOP_CONTRIBUTOR_COUNT = 5;
+
+/** @param {string} specifier */
+function isFrameworkModule(specifier) {
+	return (
+		specifier === '@sveltejs/kit' ||
+		specifier.startsWith('@sveltejs/kit/') ||
+		specifier.startsWith('$app/') ||
+		specifier.startsWith('$env/')
+	);
+}
+
+/** @param {ts.Node | undefined} node @returns {string | null} */
+function moduleSpecifierText(node) {
+	if (!node) return null;
+	if (ts.isStringLiteralLike(node)) return node.text;
+	if (ts.isParenthesizedExpression(node)) return moduleSpecifierText(node.expression);
+	if (ts.isTemplateExpression(node)) {
+		let text = node.head.text;
+		for (const span of node.templateSpans) {
+			const expression = moduleSpecifierText(span.expression);
+			if (expression === null) return text;
+			text += expression + span.literal.text;
+		}
+		return text;
+	}
+	if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+		const left = moduleSpecifierText(node.left);
+		const right = moduleSpecifierText(node.right);
+		return left === null ? null : left + (right ?? '');
+	}
+	return null;
+}
+
+/**
+ * @param {string} source
+ * @param {string} filePath
+ */
+export function assertFrameworkIndependentModule(source, filePath) {
+	const sourceFile = ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true);
+	/** @type {Set<string>} */
+	const violations = new Set();
+
+	/** @param {ts.Node | undefined} specifier */
+	function inspect(specifier) {
+		const text = moduleSpecifierText(specifier);
+		if (text !== null && isFrameworkModule(text)) violations.add(text);
+	}
+
+	/** @param {ts.Node} node */
+	function visit(node) {
+		if (
+			ts.isImportDeclaration(node) ||
+			ts.isExportDeclaration(node) ||
+			ts.isJSDocImportTag(node)
+		) {
+			inspect(node.moduleSpecifier);
+		} else if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) {
+			inspect(node.argument.literal);
+		} else if (
+			ts.isImportEqualsDeclaration(node) &&
+			ts.isExternalModuleReference(node.moduleReference)
+		) {
+			inspect(node.moduleReference.expression);
+		} else if (ts.isCallExpression(node)) {
+			const expression = node.expression;
+			if (
+				expression.kind === ts.SyntaxKind.ImportKeyword ||
+				(ts.isIdentifier(expression) && expression.text === 'require') ||
+				(ts.isPropertyAccessExpression(expression) &&
+					ts.isIdentifier(expression.expression) &&
+					expression.expression.text === 'module' &&
+					expression.name.text === 'require')
+			) {
+				inspect(node.arguments[0]);
+			}
+		}
+		ts.forEachChild(node, visit);
+		for (const doc of /** @type {ts.Node & { jsDoc?: ts.JSDoc[] }} */ (node).jsDoc ?? []) {
+			visit(doc);
+		}
+	}
+
+	visit(sourceFile);
+	for (const reference of sourceFile.typeReferenceDirectives) {
+		if (isFrameworkModule(reference.fileName)) violations.add(reference.fileName);
+	}
+	if (violations.size > 0) {
+		throw new Error(
+			`${filePath} contains SvelteKit module dependencies: ${[...violations].join(', ')}`
+		);
+	}
+}
+
+/**
+ * @param {string} packagePath
+ * @param {{ name: string; dependencies?: Record<string, string>; optionalDependencies?: Record<string, string>; peerDependencies?: Record<string, string> }} manifest
+ * @param {string[]} packedPaths
+ */
+export async function assertFrameworkIndependentPackage(packagePath, manifest, packedPaths) {
+	/** @type {Array<'dependencies' | 'optionalDependencies' | 'peerDependencies'>} */
+	const dependencyFields = ['dependencies', 'optionalDependencies', 'peerDependencies'];
+	for (const field of dependencyFields) {
+		for (const [name, version] of Object.entries(manifest[field] ?? {})) {
+			if (isFrameworkModule(name) || /^npm:@sveltejs\/kit(?:@|\/|$)/u.test(version)) {
+				throw new Error(
+					`${manifest.name} declares a SvelteKit dependency in ${field}: ${name}`
+				);
+			}
+		}
+	}
+	for (const packedPath of packedPaths) {
+		if (!/\.[cm]?[jt]sx?$/iu.test(packedPath)) continue;
+		const source = await readFile(path.join(packagePath, packedPath), 'utf8');
+		assertFrameworkIndependentModule(source, `${manifest.name}/${packedPath}`);
+	}
+}
 
 /**
  * @param {string} command
@@ -378,6 +495,9 @@ async function verifyScenario(tempRoot, tarballs, scenario, index) {
 		const installedPackageNames = new Set(
 			contributors.map((contributor) => contributor.packageName)
 		);
+		if (installedPackageNames.has('@sveltejs/kit')) {
+			throw new Error(`${scenario.name} unexpectedly installed @sveltejs/kit`);
+		}
 		for (const packageName of scenario.absentPackageNames ?? []) {
 			if (installedPackageNames.has(packageName)) {
 				throw new Error(`${scenario.name} unexpectedly installed ${packageName}`);
@@ -437,6 +557,7 @@ async function main() {
 				)[0]
 			);
 			const packedPaths = dryRun.files.map(({ path: packedPath }) => packedPath);
+			await assertFrameworkIndependentPackage(packagePath, manifest, packedPaths);
 			const forbiddenAssets = packedPaths.filter((packedPath) =>
 				/(^|\/)(?:assets?|artifacts?|static)(\/|$)|\.(?:a|bc|br|data|gz|o|pack|so|tar|tgz|wasm|zip|zst)$/iu.test(
 					packedPath
@@ -464,7 +585,14 @@ async function main() {
 			const tarballPath = path.join(tarballDir, `${fileName}.tgz`);
 			await run(
 				'pnpm',
-				['--dir', path.join(REPO_ROOT, packageDir), 'pack', '--out', tarballPath],
+				[
+					'--dir',
+					path.join(REPO_ROOT, packageDir),
+					'pack',
+					'--ignore-scripts',
+					'--out',
+					tarballPath
+				],
 				REPO_ROOT,
 				{ ...process.env, npm_config_ignore_scripts: 'true' }
 			);

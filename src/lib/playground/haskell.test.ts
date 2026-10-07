@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlaygroundRuntimeAssets } from './assets';
+
+const TEST_RUNTIME_ASSETS = {
+	haskell: {
+		moduleUrl: '/wasm-haskell/dyld.mjs',
+		rootfsUrl: '/wasm-haskell/rootfs.tar.zst',
+		bsdtarUrl: '/wasm-haskell/bsdtar.wasm'
+	}
+} satisfies PlaygroundRuntimeAssets;
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_HASKELL_MODULE_URL: '',
-		PUBLIC_WASM_HASKELL_ROOTFS_URL: '',
-		PUBLIC_WASM_HASKELL_BSDTAR_URL: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 
 class MockWorker {
@@ -66,20 +68,12 @@ vi.mock('$lib/playground/worker/haskell?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv(publicEnv);
-});
-
 import Haskell from './haskell';
 
 describe('Haskell sandbox', () => {
 	beforeEach(() => {
 		vi.useRealTimers();
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_HASKELL_MODULE_URL = '/wasm-haskell/dyld.mjs';
-		publicEnv.PUBLIC_WASM_HASKELL_ROOTFS_URL = '/wasm-haskell/rootfs.tar.zst';
-		publicEnv.PUBLIC_WASM_HASKELL_BSDTAR_URL = '/wasm-haskell/bsdtar.wasm';
 		suppressAutoLoadAck = false;
 	});
 
@@ -98,7 +92,7 @@ describe('Haskell sandbox', () => {
 		sandbox.oncompilerdiagnostic = (diagnostic) => diagnostics.push(diagnostic);
 
 		await sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -167,7 +161,7 @@ describe('Haskell sandbox', () => {
 		const sandbox = new Haskell();
 		const output = vi.fn();
 		sandbox.output = output;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('main = pure ()', false, true, undefined, [], {
@@ -195,7 +189,7 @@ describe('Haskell sandbox', () => {
 		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
 		expect(output).not.toHaveBeenCalledWith('stale\n');
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('main = pure ()', false)).resolves.toBe(true);
 		expect(workerInstances).toHaveLength(2);
 	});
@@ -204,7 +198,7 @@ describe('Haskell sandbox', () => {
 		const sandbox = new Haskell();
 		const oncompilerdiagnostic = vi.fn();
 		sandbox.oncompilerdiagnostic = oncompilerdiagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('main = pure ()', true, true, undefined, [], {
@@ -241,7 +235,7 @@ describe('Haskell sandbox', () => {
 
 	it('normalizes a valid Haskell workspace before worker dispatch', async () => {
 		const sandbox = new Haskell();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 
 		await expect(
 			sandbox.run('main = pure ()', false, true, undefined, [], {
@@ -332,7 +326,7 @@ describe('Haskell sandbox', () => {
 		'rejects a Haskell workspace with $name before changing execution state',
 		async ({ code, options, expected }) => {
 			const sandbox = new Haskell();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 			const loadHandler = worker.onmessage;
 
@@ -439,7 +433,7 @@ describe('Haskell sandbox', () => {
 		expect(outputs).toEqual([]);
 		expect(progress.set).not.toHaveBeenCalled();
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retryWorker = workerInstances.at(-1)!;
 		const settledController = new AbortController();
 		await expect(
@@ -456,12 +450,14 @@ describe('Haskell sandbox', () => {
 	it('rejects overlapping Haskell startup operations without superseding readiness', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Haskell();
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 		const loadHandler = worker.onmessage;
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
 			runtimeId: 'HASKELL'
@@ -482,7 +478,7 @@ describe('Haskell sandbox', () => {
 
 	it('rejects a pre-aborted Haskell startup without changing an existing worker', async () => {
 		const sandbox = new Haskell();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockClear();
 		const progress = { set: vi.fn() };
@@ -491,7 +487,14 @@ describe('Haskell sandbox', () => {
 		controller.abort(reason);
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal }, progress)
+			sandbox.load(
+				{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+				'',
+				true,
+				[],
+				{ signal: controller.signal },
+				progress
+			)
 		).rejects.toBe(reason);
 
 		expect(sandbox.worker).toBe(worker);
@@ -508,7 +511,7 @@ describe('Haskell sandbox', () => {
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const reason = new Error('Haskell startup aborted');
 		const loading = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -530,7 +533,7 @@ describe('Haskell sandbox', () => {
 
 		suppressAutoLoadAck = false;
 		const settledController = new AbortController();
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			signal: settledController.signal
 		});
 		const retryWorker = workerInstances.at(-1)!;
@@ -557,7 +560,7 @@ describe('Haskell sandbox', () => {
 				})
 			};
 			const loading = sandbox.load(
-				'/absproxy/5173',
+				{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 				'',
 				true,
 				[],
@@ -578,7 +581,9 @@ describe('Haskell sandbox', () => {
 			expect(progress.set).toHaveBeenCalledOnce();
 
 			suppressAutoLoadAck = false;
-			await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+			await expect(
+				sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+			).resolves.toBeUndefined();
 			expect(workerInstances).toHaveLength(2);
 		}
 	);
@@ -590,7 +595,7 @@ describe('Haskell sandbox', () => {
 		const callbackError = new Error('Haskell startup callback throw after termination');
 		let replacement: Promise<void> | undefined;
 		const loading = sandbox.load(
-			'/cancelled/',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/cancelled/' },
 			'',
 			true,
 			[],
@@ -599,7 +604,10 @@ describe('Haskell sandbox', () => {
 				set() {
 					sandbox.terminate(terminationReason);
 					suppressAutoLoadAck = false;
-					replacement = sandbox.load('/replacement/');
+					replacement = sandbox.load({
+						...TEST_RUNTIME_ASSETS,
+						rootUrl: '/replacement/'
+					});
 					throw callbackError;
 				}
 			}
@@ -626,7 +634,7 @@ describe('Haskell sandbox', () => {
 		let reentrantLoad: Promise<void> | undefined;
 		sandbox.output = () => {
 			reentrantRun = sandbox.run('main = pure ()', false);
-			reentrantLoad = sandbox.load('/replacement/');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 		};
 
 		const running = sandbox.run('main = putStrLn "active"', false);
@@ -659,7 +667,7 @@ describe('Haskell sandbox', () => {
 		let replacement: Promise<void> | undefined;
 		sandbox.output = () => {
 			controller.abort(abortReason);
-			replacement = sandbox.load('/replacement/');
+			replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 			throw callbackError;
 		};
 		const running = sandbox.run('main = pure ()', false, true, undefined, [], {
@@ -744,7 +752,7 @@ describe('Haskell sandbox', () => {
 			handler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
 			sandbox.output = vi.fn();
 			sandbox.oncompilerdiagnostic = vi.fn();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			await expect(sandbox.run('main = pure ()', false)).resolves.toBe(true);
 			expect(workerInstances.at(-1)).not.toBe(worker);
 		}
@@ -781,7 +789,9 @@ describe('Haskell sandbox', () => {
 
 		const running = sandbox.run('main = pure ()', false);
 		const runHandler = worker.onmessage;
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
 			runtimeId: 'HASKELL'
@@ -807,7 +817,7 @@ describe('Haskell sandbox', () => {
 		expect(sandbox.worker).toBeUndefined();
 		expect(sandbox.exit).toBe(true);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('main = pure ()', false)).resolves.toBe(true);
 	});
 
@@ -818,14 +828,14 @@ describe('Haskell sandbox', () => {
 		expect(sandbox.uid).toBe(0);
 		expect(sandbox.exit).toBe(true);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('main = pure ()', false)).resolves.toBe(true);
 	});
 
 	it('releases Haskell startup activity after termination', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Haskell();
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -834,14 +844,11 @@ describe('Haskell sandbox', () => {
 		expect(worker.terminate).toHaveBeenCalledOnce();
 
 		suppressAutoLoadAck = false;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('main = pure ()', false)).resolves.toBe(true);
 	});
 
 	it('rejects load when Haskell assets are not configured', async () => {
-		publicEnv.PUBLIC_WASM_HASKELL_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_HASKELL_ROOTFS_URL = '';
-		publicEnv.PUBLIC_WASM_HASKELL_BSDTAR_URL = '';
 		const sandbox = new Haskell();
 		let optionalReads = 0;
 		const runtimeAssets = {
@@ -866,7 +873,7 @@ describe('Haskell sandbox', () => {
 	it('rejects load when the worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Haskell();
-		const loadPromise = sandbox.load('/absproxy/5173');
+		const loadPromise = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -963,7 +970,7 @@ describe('Haskell sandbox', () => {
 
 	it('preserves an exact null pre-abort reason without changing idle Haskell state', async () => {
 		const sandbox = new Haskell();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const handler = worker.onmessage;
 		const runtimeKey = sandbox.runtimeKey;
@@ -973,7 +980,9 @@ describe('Haskell sandbox', () => {
 		controller.abort(null);
 
 		await expect(
-			sandbox.load('/replacement', '', true, [], { signal: controller.signal })
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' }, '', true, [], {
+				signal: controller.signal
+			})
 		).rejects.toBeNull();
 		await expect(
 			sandbox.run('main = pure ()', false, true, undefined, [], {
@@ -994,19 +1003,25 @@ describe('Haskell sandbox', () => {
 
 	it('preserves replacement startup when the outer signal getter terminates Haskell', async () => {
 		const sandbox = new Haskell();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace Haskell during startup option snapshot');
 		let replacement: Promise<void> | undefined;
 		const options = {
 			get signal() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' });
 				return undefined;
 			}
 		};
 
-		const superseded = sandbox.load('/outer', '', true, [], options);
+		const superseded = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/outer' },
+			'',
+			true,
+			[],
+			options
+		);
 
 		await expect(superseded).rejects.toBe(reason);
 		await expect(replacement).resolves.toBeUndefined();
@@ -1018,7 +1033,7 @@ describe('Haskell sandbox', () => {
 
 	it('preserves the first cancellation and replacement across later Haskell option failure', async () => {
 		const sandbox = new Haskell();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace Haskell during execution option snapshot');
 		const laterError = new Error('later Haskell workspace getter failed');
@@ -1026,7 +1041,7 @@ describe('Haskell sandbox', () => {
 		const options = {
 			get limits() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' });
 				return undefined;
 			},
 			get workspaceFiles(): never {
@@ -1047,7 +1062,7 @@ describe('Haskell sandbox', () => {
 
 	it('preserves a Haskell replacement when a later option getter aborts the snapshot', async () => {
 		const sandbox = new Haskell();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const controller = new AbortController();
 		const reason = new Error('abort Haskell during execution option snapshot');
@@ -1151,9 +1166,6 @@ describe('Haskell sandbox', () => {
 	});
 
 	it('reads the Haskell root URL once when runtime assets use fallback resolution', async () => {
-		publicEnv.PUBLIC_WASM_HASKELL_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_HASKELL_ROOTFS_URL = '';
-		publicEnv.PUBLIC_WASM_HASKELL_BSDTAR_URL = '';
 		const sandbox = new Haskell();
 		let rootUrlReads = 0;
 		const runtimeAssets = {
@@ -1177,7 +1189,7 @@ describe('Haskell sandbox', () => {
 
 	it('ignores resolved Haskell assets after the resolver starts a replacement', async () => {
 		const sandbox = new Haskell();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace Haskell while resolving assets');
 		let replacement: Promise<void> | undefined;
@@ -1216,7 +1228,7 @@ describe('Haskell sandbox', () => {
 
 	it('ignores a Haskell runtime key after serialization starts a replacement', async () => {
 		const sandbox = new Haskell();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace Haskell while serializing the runtime key');
 		let replacement: Promise<void> | undefined;
@@ -1257,7 +1269,7 @@ describe('Haskell sandbox', () => {
 
 	it('reads explicit Haskell stdin once and preserves compile argument precedence', async () => {
 		const sandbox = new Haskell();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		let reads = 0;
 		const options = {
 			compileArgs: ['-O2', '-Wall'],
@@ -1286,9 +1298,15 @@ describe('Haskell sandbox', () => {
 		vi.useFakeTimers();
 		suppressAutoLoadAck = true;
 		const sandbox = new Haskell();
-		const loading = sandbox.load('/absproxy/5173', '', true, [], {
-			limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
-		});
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+			'',
+			true,
+			[],
+			{
+				limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
+			}
+		);
 		const rejected = expect(loading).rejects.toMatchObject({
 			name: 'TimeoutError',
 			code: 'timeout',
@@ -1307,14 +1325,16 @@ describe('Haskell sandbox', () => {
 
 		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
 		suppressAutoLoadAck = false;
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
 
 	it('enforces the aggregate Haskell execution deadline and permits a clean retry', async () => {
 		const sandbox = new Haskell();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		retiredWorker.postMessage.mockImplementationOnce(() => undefined);
 		vi.useFakeTimers();
@@ -1336,7 +1356,7 @@ describe('Haskell sandbox', () => {
 		expect(sandbox.worker).toBeUndefined();
 
 		staleHandler?.({ data: { output: 'stale output', results: true } } as MessageEvent<any>);
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('main = pure ()', false)).resolves.toBe(true);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
@@ -1344,7 +1364,7 @@ describe('Haskell sandbox', () => {
 	it('clears settled Haskell deadlines before they can retire an idle worker', async () => {
 		vi.useFakeTimers();
 		const sandbox = new Haskell();
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
 		});
 		const worker = workerInstances[0];
@@ -1366,7 +1386,7 @@ describe('Haskell sandbox', () => {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 
 		await sandbox.clear();
@@ -1391,7 +1411,7 @@ describe('Haskell sandbox', () => {
 				pendingEof: sandbox.pendingEof,
 				bufferedInput: readBufferedStdin(sandbox.buffer)
 			};
-			reentrantLoad = sandbox.load('/reentrant');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/reentrant' });
 			reentrantDisposal = sandbox.dispose();
 		});
 		const firstDisposal = sandbox.dispose();
@@ -1426,7 +1446,9 @@ describe('Haskell sandbox', () => {
 		expect(sandbox.output).toBeNull();
 		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
 
-		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' })
+		).rejects.toMatchObject({
 			name: 'RuntimeConfigurationError',
 			code: 'runtime-configuration',
 			phase: 'dispose',
@@ -1452,7 +1474,7 @@ describe('Haskell sandbox', () => {
 	it('settles active Haskell startup with one stable disposal cancellation', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Haskell();
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
 		const worker = workerInstances[0];
 		const staleHandler = worker.onmessage;
@@ -1483,7 +1505,7 @@ describe('Haskell sandbox', () => {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('main = pure ()', false);

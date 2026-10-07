@@ -1,4 +1,3 @@
-import * as publicEnv from '$app/env/public';
 import {
 	resolveRuntimeAssetCacheOptions,
 	resolveRuntimeAssetLockEntry,
@@ -859,12 +858,10 @@ const RUNTIME_ASSET_FOLDERS = {
 	java: {
 		folder: 'teavm',
 		virtualBaseUrl: 'https://wasm-idle.invalid/java/',
-		resolveRootBaseUrl: (rootUrl: string, currentUrl: string) => {
-			const configuredBaseUrl = (publicEnv.PUBLIC_TEAVM_BASE_URL || '').trim();
-			return configuredBaseUrl || rootUrl
-				? resolveTeaVmBaseUrl(rootUrl, currentUrl, configuredBaseUrl)
-				: normalizeBaseUrl('teavm/', currentUrl);
-		},
+		resolveRootBaseUrl: (rootUrl: string, currentUrl: string) =>
+			rootUrl
+				? resolveTeaVmBaseUrl(rootUrl, currentUrl)
+				: normalizeBaseUrl('teavm/', currentUrl),
 		resolveConfiguredBaseUrl: normalizeTeaVmConfiguredBaseUrl
 	},
 	clang: {
@@ -990,8 +987,7 @@ export function resolveRustCompilerUrl(
 	currentUrl = ''
 ) {
 	const configuredCompilerUrl =
-		(typeof options === 'object' && options?.rust?.compilerUrl) ||
-		(publicEnv.PUBLIC_WASM_RUST_COMPILER_URL || '').trim();
+		typeof options === 'object' ? options?.rust?.compilerUrl : undefined;
 
 	if (!configuredCompilerUrl) return '';
 	return currentUrl ? new URL(configuredCompilerUrl, currentUrl).href : configuredCompilerUrl;
@@ -1002,8 +998,7 @@ export function resolveDebugRuntimeUrls(
 	currentUrl = ''
 ) {
 	const configuredDebug = typeof options === 'object' ? options?.debug : undefined;
-	const publicBaseUrl = (publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_URL || '').trim();
-	const configuredBaseUrl = configuredDebug?.baseUrl || publicBaseUrl;
+	const configuredBaseUrl = configuredDebug?.baseUrl;
 	const rootUrl = (typeof options === 'string' ? options : options?.rootUrl) || '';
 	const bundledBaseUrl = resolveFolderRuntimeBaseUrl('wasm-debug', rootUrl, currentUrl);
 	const baseUrl = configuredBaseUrl
@@ -1014,11 +1009,7 @@ export function resolveDebugRuntimeUrls(
 		? resolveConfiguredUrl(configuredManifestUrl, currentUrl)
 		: new URL('runtime-manifest.v2.json', baseUrl).href;
 	const bundledManifestUrl = new URL('runtime-manifest.v2.json', bundledBaseUrl).href;
-	const explicitManifestSha256 = (
-		configuredDebug
-			? configuredDebug.manifestSha256
-			: publicEnv.PUBLIC_WASM_DEBUG_RUNTIME_MANIFEST_SHA256
-	)?.trim();
+	const explicitManifestSha256 = configuredDebug?.manifestSha256?.trim();
 	const manifestReceipt = explicitManifestSha256
 		? Object.freeze({ sha256: explicitManifestSha256 })
 		: baseUrl === bundledBaseUrl && manifestUrl === bundledManifestUrl
@@ -1064,8 +1055,7 @@ export function resolveGoCompilerUrl(
 	currentUrl = ''
 ) {
 	const configuredCompilerUrl =
-		(typeof options === 'object' && options?.go?.compilerUrl) ||
-		(publicEnv.PUBLIC_WASM_GO_COMPILER_URL || '').trim();
+		typeof options === 'object' ? options?.go?.compilerUrl : undefined;
 
 	if (!configuredCompilerUrl) return '';
 	return currentUrl ? new URL(configuredCompilerUrl, currentUrl).href : configuredCompilerUrl;
@@ -1075,9 +1065,7 @@ export function resolveDModuleUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredModuleUrl =
-		(typeof options === 'object' && options?.d?.moduleUrl) ||
-		(publicEnv.PUBLIC_WASM_D_MODULE_URL || '').trim();
+	const configuredModuleUrl = typeof options === 'object' ? options?.d?.moduleUrl : undefined;
 
 	if (configuredModuleUrl) {
 		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
@@ -1106,13 +1094,9 @@ export function resolveDRuntimeAssetConfig(
 ): ResolvedDRuntimeAssetConfig {
 	const moduleUrl = resolveDModuleUrl(options, currentUrl);
 	if (!moduleUrl) {
-		throw new TypeError(
-			'D runtime is not configured. Set PUBLIC_WASM_D_MODULE_URL or runtimeAssets.d.moduleUrl.'
-		);
+		throw new TypeError('D runtime is not configured. Set runtimeAssets.d.moduleUrl.');
 	}
-	const configuredManifestUrl =
-		(typeof options === 'object' && options?.d?.manifestUrl) ||
-		(publicEnv.PUBLIC_WASM_D_MANIFEST_URL || '').trim();
+	const configuredManifestUrl = typeof options === 'object' ? options?.d?.manifestUrl : undefined;
 	let manifestUrl: string;
 	if (configuredManifestUrl) {
 		manifestUrl = resolveConfiguredUrl(configuredManifestUrl, currentUrl);
@@ -1135,8 +1119,7 @@ export function resolveDotnetModuleUrl(
 	currentUrl = ''
 ) {
 	const configuredModuleUrl =
-		(typeof options === 'object' && options?.dotnet?.moduleUrl) ||
-		(publicEnv.PUBLIC_WASM_DOTNET_MODULE_URL || '').trim();
+		typeof options === 'object' ? options?.dotnet?.moduleUrl : undefined;
 
 	if (configuredModuleUrl) {
 		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
@@ -1163,9 +1146,7 @@ export function resolveOcamlModuleUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredModuleUrl =
-		(typeof options === 'object' && options?.ocaml?.moduleUrl) ||
-		(publicEnv.PUBLIC_WASM_OCAML_MODULE_URL || '').trim();
+	const configuredModuleUrl = typeof options === 'object' ? options?.ocaml?.moduleUrl : undefined;
 
 	if (configuredModuleUrl) {
 		return currentUrl ? new URL(configuredModuleUrl, currentUrl).href : configuredModuleUrl;
@@ -1194,8 +1175,7 @@ export function resolveOcamlManifestUrl(
 	currentUrl = ''
 ) {
 	const configuredManifestUrl =
-		(typeof options === 'object' && options?.ocaml?.manifestUrl) ||
-		(publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL || '').trim();
+		typeof options === 'object' ? options?.ocaml?.manifestUrl : undefined;
 
 	if (configuredManifestUrl) {
 		return currentUrl ? new URL(configuredManifestUrl, currentUrl).href : configuredManifestUrl;
@@ -1223,9 +1203,7 @@ export function resolveTinyGoAppUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredAppUrl =
-		(typeof options === 'object' && options?.tinygo?.appUrl) ||
-		(publicEnv.PUBLIC_WASM_TINYGO_APP_URL || '').trim();
+	const configuredAppUrl = typeof options === 'object' ? options?.tinygo?.appUrl : undefined;
 
 	if (configuredAppUrl) {
 		return resolveConfiguredUrl(configuredAppUrl, currentUrl);
@@ -1316,8 +1294,7 @@ export function resolveTinyGoModuleUrl(
 	currentUrl = ''
 ) {
 	const configuredModuleUrl =
-		(typeof options === 'object' && options?.tinygo?.moduleUrl) ||
-		(publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL || '').trim();
+		typeof options === 'object' ? options?.tinygo?.moduleUrl : undefined;
 
 	if (configuredModuleUrl) {
 		return pinTinyGoExecutableModuleUrl(
@@ -1327,8 +1304,7 @@ export function resolveTinyGoModuleUrl(
 	}
 
 	const configuredLegacyAppUrl =
-		(typeof options === 'object' && options?.tinygo?.appUrl) ||
-		(publicEnv.PUBLIC_WASM_TINYGO_APP_URL || '').trim();
+		typeof options === 'object' ? options?.tinygo?.appUrl : undefined;
 
 	if (configuredLegacyAppUrl) {
 		return pinTinyGoExecutableModuleUrl(
@@ -1365,8 +1341,7 @@ export function resolveElixirBundleUrl(
 	currentUrl = ''
 ) {
 	const configuredBundleUrl =
-		(typeof options === 'object' && options?.elixir?.bundleUrl) ||
-		(publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL || '').trim();
+		typeof options === 'object' ? options?.elixir?.bundleUrl : undefined;
 
 	if (configuredBundleUrl) {
 		return resolveConfiguredUrl(configuredBundleUrl, currentUrl);
@@ -1395,9 +1370,7 @@ export function resolveErlangBundleUrl(
 ) {
 	const configuredBundleUrl =
 		(typeof options === 'object' && options?.erlang?.bundleUrl) ||
-		(publicEnv.PUBLIC_WASM_ERLANG_BUNDLE_URL || '').trim() ||
-		(typeof options === 'object' && options?.elixir?.bundleUrl) ||
-		(publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL || '').trim();
+		(typeof options === 'object' && options?.elixir?.bundleUrl);
 
 	if (configuredBundleUrl) {
 		return resolveConfiguredUrl(configuredBundleUrl, currentUrl);
@@ -1425,8 +1398,7 @@ export function resolveTypeScriptModuleUrl(
 	currentUrl = ''
 ) {
 	const configuredModuleUrl =
-		(typeof options === 'object' && options?.typescript?.moduleUrl) ||
-		(publicEnv.PUBLIC_WASM_TYPESCRIPT_MODULE_URL || '').trim();
+		typeof options === 'object' ? options?.typescript?.moduleUrl : undefined;
 
 	if (configuredModuleUrl) {
 		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
@@ -1453,9 +1425,7 @@ export function resolveWatModuleUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredModuleUrl =
-		(typeof options === 'object' && options?.wat?.moduleUrl) ||
-		(publicEnv.PUBLIC_WASM_WAT_MODULE_URL || '').trim();
+	const configuredModuleUrl = typeof options === 'object' ? options?.wat?.moduleUrl : undefined;
 
 	if (configuredModuleUrl) {
 		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
@@ -1482,9 +1452,7 @@ export function resolveLuaModuleUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredModuleUrl =
-		(typeof options === 'object' && options?.lua?.moduleUrl) ||
-		(publicEnv.PUBLIC_WASM_LUA_MODULE_URL || '').trim();
+	const configuredModuleUrl = typeof options === 'object' ? options?.lua?.moduleUrl : undefined;
 
 	if (configuredModuleUrl) {
 		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
@@ -1512,8 +1480,7 @@ export function resolveFennelCompilerUrl(
 	currentUrl = ''
 ) {
 	const configuredCompilerUrl =
-		(typeof options === 'object' && options?.fennel?.compilerUrl) ||
-		(publicEnv.PUBLIC_WASM_FENNEL_COMPILER_URL || '').trim();
+		typeof options === 'object' ? options?.fennel?.compilerUrl : undefined;
 
 	if (configuredCompilerUrl) {
 		return resolveConfiguredUrl(configuredCompilerUrl, currentUrl);
@@ -1535,8 +1502,7 @@ export function resolveZigCompilerUrl(
 	currentUrl = ''
 ) {
 	const configuredCompilerUrl =
-		(typeof options === 'object' && options?.zig?.compilerUrl) ||
-		(publicEnv.PUBLIC_WASM_ZIG_COMPILER_URL || '').trim();
+		typeof options === 'object' ? options?.zig?.compilerUrl : undefined;
 
 	if (configuredCompilerUrl) {
 		return resolveConfiguredUrl(configuredCompilerUrl, currentUrl);
@@ -1564,8 +1530,7 @@ export function resolveHaskellModuleUrl(
 	currentUrl = ''
 ) {
 	const configuredModuleUrl =
-		(typeof options === 'object' && options?.haskell?.moduleUrl) ||
-		(publicEnv.PUBLIC_WASM_HASKELL_MODULE_URL || '').trim();
+		typeof options === 'object' ? options?.haskell?.moduleUrl : undefined;
 
 	if (configuredModuleUrl) {
 		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
@@ -1593,8 +1558,7 @@ export function resolveHaskellRootfsUrl(
 	currentUrl = ''
 ) {
 	const configuredRootfsUrl =
-		(typeof options === 'object' && options?.haskell?.rootfsUrl) ||
-		(publicEnv.PUBLIC_WASM_HASKELL_ROOTFS_URL || '').trim();
+		typeof options === 'object' ? options?.haskell?.rootfsUrl : undefined;
 
 	if (configuredRootfsUrl) {
 		return resolveConfiguredUrl(configuredRootfsUrl, currentUrl);
@@ -1622,8 +1586,7 @@ export function resolveHaskellBsdtarUrl(
 	currentUrl = ''
 ) {
 	const configuredBsdtarUrl =
-		(typeof options === 'object' && options?.haskell?.bsdtarUrl) ||
-		(publicEnv.PUBLIC_WASM_HASKELL_BSDTAR_URL || '').trim();
+		typeof options === 'object' ? options?.haskell?.bsdtarUrl : undefined;
 
 	if (configuredBsdtarUrl) {
 		return resolveConfiguredUrl(configuredBsdtarUrl, currentUrl);
@@ -1650,9 +1613,7 @@ export function resolveFortranBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.fortran?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_FORTRAN_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.fortran?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -1679,13 +1640,9 @@ function resolveFortranAssetUrl(
 		FortranRuntimeAssetConfig,
 		'f2cWasmUrl' | 'libf2cUrl' | 'f2cHeaderUrl' | 'analyzerUrl'
 	>,
-	envKey: string,
 	defaultAsset: string
 ) {
-	const env = publicEnv as Record<string, string | undefined>;
-	const configuredUrl =
-		(typeof options === 'object' && options?.fortran?.[configKey]) ||
-		(env[envKey] || '').trim();
+	const configuredUrl = typeof options === 'object' ? options?.fortran?.[configKey] : undefined;
 
 	if (configuredUrl) {
 		return resolveConfiguredUrl(configuredUrl, currentUrl);
@@ -1701,52 +1658,28 @@ export function resolveFortranF2cWasmUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	return resolveFortranAssetUrl(
-		options,
-		currentUrl,
-		'f2cWasmUrl',
-		'PUBLIC_WASM_FORTRAN_F2C_WASM_URL',
-		'f2c.wasm'
-	);
+	return resolveFortranAssetUrl(options, currentUrl, 'f2cWasmUrl', 'f2c.wasm');
 }
 
 export function resolveFortranLibf2cUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	return resolveFortranAssetUrl(
-		options,
-		currentUrl,
-		'libf2cUrl',
-		'PUBLIC_WASM_FORTRAN_LIBF2C_URL',
-		'libf2c.a'
-	);
+	return resolveFortranAssetUrl(options, currentUrl, 'libf2cUrl', 'libf2c.a');
 }
 
 export function resolveFortranF2cHeaderUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	return resolveFortranAssetUrl(
-		options,
-		currentUrl,
-		'f2cHeaderUrl',
-		'PUBLIC_WASM_FORTRAN_F2C_HEADER_URL',
-		'f2c.h'
-	);
+	return resolveFortranAssetUrl(options, currentUrl, 'f2cHeaderUrl', 'f2c.h');
 }
 
 export function resolveFortranAnalyzerUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	return resolveFortranAssetUrl(
-		options,
-		currentUrl,
-		'analyzerUrl',
-		'PUBLIC_WASM_FORTRAN_ANALYZER_URL',
-		'analyzer.js'
-	);
+	return resolveFortranAssetUrl(options, currentUrl, 'analyzerUrl', 'analyzer.js');
 }
 
 export function resolveFortranRuntimeAssetConfig(
@@ -1773,9 +1706,7 @@ export function resolveCobolBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.cobol?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_COBOL_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.cobol?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -1799,9 +1730,7 @@ export function resolveVBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.v?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_V_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.v?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -1812,10 +1741,7 @@ export function resolveVBaseUrl(
 	}
 
 	if (options?.rootUrl) {
-		return normalizeBaseUrl(
-			`${normalizeRootUrl(options.rootUrl) || ''}/wasm-v/`,
-			currentUrl
-		);
+		return normalizeBaseUrl(`${normalizeRootUrl(options.rootUrl) || ''}/wasm-v/`, currentUrl);
 	}
 
 	return normalizeBaseUrl('/wasm-v/', currentUrl);
@@ -1826,8 +1752,7 @@ export function resolveObjectiveCBaseUrl(
 	currentUrl = ''
 ) {
 	const configuredBaseUrl =
-		(typeof options === 'object' && options?.objectivec?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_OBJECTIVEC_BASE_URL || '').trim();
+		typeof options === 'object' ? options?.objectivec?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -1859,13 +1784,10 @@ function resolveObjectiveCAssetUrl(
 		| 'foundationHeadersUrl'
 		| 'libffiUrl'
 	>,
-	envKey: string,
 	defaultAsset: string
 ) {
-	const env = publicEnv as Record<string, string | undefined>;
 	const configuredUrl =
-		(typeof options === 'object' && options?.objectivec?.[configKey]) ||
-		(env[envKey] || '').trim();
+		typeof options === 'object' ? options?.objectivec?.[configKey] : undefined;
 
 	if (configuredUrl) {
 		return resolveConfiguredUrl(configuredUrl, currentUrl);
@@ -1881,39 +1803,21 @@ export function resolveObjectiveCLibobjcUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	return resolveObjectiveCAssetUrl(
-		options,
-		currentUrl,
-		'libobjcUrl',
-		'PUBLIC_WASM_OBJECTIVEC_LIBOBJC_URL',
-		'libobjc.a'
-	);
+	return resolveObjectiveCAssetUrl(options, currentUrl, 'libobjcUrl', 'libobjc.a');
 }
 
 export function resolveObjectiveCHeadersUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	return resolveObjectiveCAssetUrl(
-		options,
-		currentUrl,
-		'headersUrl',
-		'PUBLIC_WASM_OBJECTIVEC_HEADERS_URL',
-		'headers.json'
-	);
+	return resolveObjectiveCAssetUrl(options, currentUrl, 'headersUrl', 'headers.json');
 }
 
 export function resolveObjectiveCLibgnustepBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	return resolveObjectiveCAssetUrl(
-		options,
-		currentUrl,
-		'libgnustepBaseUrl',
-		'PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_URL',
-		'libgnustep-base.a'
-	);
+	return resolveObjectiveCAssetUrl(options, currentUrl, 'libgnustepBaseUrl', 'libgnustep-base.a');
 }
 
 export function resolveObjectiveCLibgnustepBaseObjectUrl(
@@ -1924,7 +1828,6 @@ export function resolveObjectiveCLibgnustepBaseObjectUrl(
 		options,
 		currentUrl,
 		'libgnustepBaseObjectUrl',
-		'PUBLIC_WASM_OBJECTIVEC_GNUSTEP_BASE_OBJECT_URL',
 		'libgnustep-base.o'
 	);
 }
@@ -1937,7 +1840,6 @@ export function resolveObjectiveCFoundationHeadersUrl(
 		options,
 		currentUrl,
 		'foundationHeadersUrl',
-		'PUBLIC_WASM_OBJECTIVEC_FOUNDATION_HEADERS_URL',
 		'foundation-headers.json'
 	);
 }
@@ -1946,13 +1848,7 @@ export function resolveObjectiveCLibffiUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	return resolveObjectiveCAssetUrl(
-		options,
-		currentUrl,
-		'libffiUrl',
-		'PUBLIC_WASM_OBJECTIVEC_LIBFFI_URL',
-		'libffi.a'
-	);
+	return resolveObjectiveCAssetUrl(options, currentUrl, 'libffiUrl', 'libffi.a');
 }
 
 export function resolveObjectiveCRuntimeAssetConfig(
@@ -2015,9 +1911,7 @@ export function resolveZigStdlibUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredStdlibUrl =
-		(typeof options === 'object' && options?.zig?.stdlibUrl) ||
-		(publicEnv.PUBLIC_WASM_ZIG_STDLIB_URL || '').trim();
+	const configuredStdlibUrl = typeof options === 'object' ? options?.zig?.stdlibUrl : undefined;
 
 	if (configuredStdlibUrl) {
 		return resolveConfiguredUrl(configuredStdlibUrl, currentUrl);
@@ -2058,9 +1952,7 @@ export function resolveLispModuleUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredModuleUrl =
-		(typeof options === 'object' && options?.lisp?.moduleUrl) ||
-		(publicEnv.PUBLIC_WASM_LISP_MODULE_URL || '').trim();
+	const configuredModuleUrl = typeof options === 'object' ? options?.lisp?.moduleUrl : undefined;
 
 	if (configuredModuleUrl) {
 		return resolveConfiguredUrl(configuredModuleUrl, currentUrl);
@@ -2104,24 +1996,18 @@ export function resolveLispRuntimeAssetConfig(
 ): ResolvedLispRuntimeAssetConfig {
 	const configured = typeof options === 'object' ? options?.lisp : undefined;
 	const configuredModuleUrl = configured?.moduleUrl;
-	const publicModuleUrl = (publicEnv.PUBLIC_WASM_LISP_MODULE_URL || '').trim();
 	const rootUrl = typeof options === 'string' ? options : options?.rootUrl;
 	const moduleUrl = configuredModuleUrl
 		? resolveConfiguredUrl(configuredModuleUrl, currentUrl)
-		: publicModuleUrl
-			? resolveConfiguredUrl(publicModuleUrl, currentUrl)
-			: rootUrl !== undefined
-				? resolveConfiguredUrl(
-						`${normalizeRootUrl(rootUrl) || ''}/wasm-lisp/index.js`,
-						currentUrl
-					)
-				: '';
-	const configuredManifestUrl =
-		configured?.manifestUrl || (publicEnv.PUBLIC_WASM_LISP_MANIFEST_URL || '').trim();
-	const configuredFingerprint =
-		configured?.manifestFingerprint?.trim() ||
-		(publicEnv.PUBLIC_WASM_LISP_MANIFEST_FINGERPRINT || '').trim();
-	const usesBundledRoot = !configuredModuleUrl && !publicModuleUrl && rootUrl !== undefined;
+		: rootUrl !== undefined
+			? resolveConfiguredUrl(
+					`${normalizeRootUrl(rootUrl) || ''}/wasm-lisp/index.js`,
+					currentUrl
+				)
+			: '';
+	const configuredManifestUrl = configured?.manifestUrl;
+	const configuredFingerprint = configured?.manifestFingerprint?.trim();
+	const usesBundledRoot = !configuredModuleUrl && rootUrl !== undefined;
 	const manifestUrl = configuredManifestUrl
 		? resolveConfiguredUrl(configuredManifestUrl, currentUrl)
 		: deriveLispManifestUrl(moduleUrl, currentUrl);
@@ -2210,12 +2096,8 @@ export function resolveRubyRuntimeAssetConfig(
 		throw new RuntimeConfigurationError('Ruby splitStdlib must be a boolean', {
 			runtimeId: 'RUBY'
 		});
-	const publicModuleUrl = (publicEnv.PUBLIC_WASM_RUBY_MODULE_URL || '').trim();
-	const publicWasmUrl = (publicEnv.PUBLIC_WASM_RUBY_WASM_URL || '').trim();
 	const usesCustomTrustBoundary = Boolean(
-		(configured && RUBY_RUNTIME_CONFIG_KEYS.some((key) => configured[key] !== undefined)) ||
-		publicModuleUrl ||
-		publicWasmUrl
+		configured && RUBY_RUNTIME_CONFIG_KEYS.some((key) => configured[key] !== undefined)
 	);
 	let preflightProfile: Readonly<Required<RubyRuntimePreflightProfile>>;
 	try {
@@ -2291,12 +2173,12 @@ export function resolveRubyRuntimeAssetConfig(
 		preflightProfile.manifestFingerprint
 	);
 	const moduleUrl = resolvePinnedUrl(
-		configured?.moduleUrl || publicModuleUrl,
+		configured?.moduleUrl,
 		RUBY_RUNTIME_MODULE_STORAGE_PATH,
 		preflightProfile.moduleJavaScriptReceipt.sha256
 	);
 	const wasmUrl = resolvePinnedUrl(
-		configured?.wasmUrl || publicWasmUrl,
+		configured?.wasmUrl,
 		RUBY_RUNTIME_WASM_STORAGE_PATH,
 		preflightProfile.wasmReceipt.sha256
 	);
@@ -2329,9 +2211,7 @@ export function resolveRBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.r?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_R_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.r?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -2352,9 +2232,7 @@ export function resolveOctaveBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.octave?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_OCTAVE_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.octave?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -2382,8 +2260,7 @@ export function resolveOctaveWorkerUrl(
 	currentUrl = ''
 ) {
 	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.octave?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_OCTAVE_WORKER_URL || '').trim();
+		typeof options === 'object' ? options?.octave?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
@@ -2411,8 +2288,7 @@ export function resolveOctaveManifestUrl(
 	currentUrl = ''
 ) {
 	const configuredManifestUrl =
-		(typeof options === 'object' && options?.octave?.manifestUrl) ||
-		(publicEnv.PUBLIC_WASM_OCTAVE_MANIFEST_URL || '').trim();
+		typeof options === 'object' ? options?.octave?.manifestUrl : undefined;
 
 	if (configuredManifestUrl) {
 		return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
@@ -2450,9 +2326,7 @@ export function resolvePrologBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.prolog?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_PROLOG_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.prolog?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -2477,8 +2351,7 @@ export function resolvePrologWorkerUrl(
 	currentUrl = ''
 ) {
 	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.prolog?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_PROLOG_WORKER_URL || '').trim();
+		typeof options === 'object' ? options?.prolog?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
@@ -2574,9 +2447,7 @@ export function resolveGleamBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.gleam?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_GLEAM_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.gleam?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -2600,9 +2471,7 @@ export function resolveGleamWorkerUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.gleam?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_GLEAM_WORKER_URL || '').trim();
+	const configuredWorkerUrl = typeof options === 'object' ? options?.gleam?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
@@ -2630,8 +2499,7 @@ export function resolveGleamManifestUrl(
 	currentUrl = ''
 ) {
 	const configuredManifestUrl =
-		(typeof options === 'object' && options?.gleam?.manifestUrl) ||
-		(publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_URL || '').trim();
+		typeof options === 'object' ? options?.gleam?.manifestUrl : undefined;
 
 	if (configuredManifestUrl) {
 		return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
@@ -2659,25 +2527,8 @@ export function resolveGleamRuntimeAssetConfig(
 	currentUrl = ''
 ) {
 	const configured = typeof options === 'object' ? options?.gleam : undefined;
-	const envManifestFingerprint = (publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_FINGERPRINT || '').trim();
-	const envWorkerSha256 = (publicEnv.PUBLIC_WASM_GLEAM_WORKER_SHA256 || '').trim();
-	const envWorkerBytesSource = (publicEnv.PUBLIC_WASM_GLEAM_WORKER_BYTES || '').trim();
-	const envWorkerBytes = /^\d+$/u.test(envWorkerBytesSource)
-		? Number(envWorkerBytesSource)
-		: Number.NaN;
-	const envWorkerReceipt =
-		/^[a-f0-9]{64}$/u.test(envWorkerSha256) &&
-		Number.isSafeInteger(envWorkerBytes) &&
-		envWorkerBytes > 0
-			? { bytes: envWorkerBytes, sha256: envWorkerSha256 }
-			: undefined;
 	const usesCustomUrls = Boolean(
-		configured?.baseUrl ||
-		configured?.workerUrl ||
-		configured?.manifestUrl ||
-		(publicEnv.PUBLIC_WASM_GLEAM_BASE_URL || '').trim() ||
-		(publicEnv.PUBLIC_WASM_GLEAM_WORKER_URL || '').trim() ||
-		(publicEnv.PUBLIC_WASM_GLEAM_MANIFEST_URL || '').trim()
+		configured?.baseUrl || configured?.workerUrl || configured?.manifestUrl
 	);
 	return {
 		baseUrl: resolveGleamBaseUrl(options, currentUrl),
@@ -2685,12 +2536,9 @@ export function resolveGleamRuntimeAssetConfig(
 		manifestUrl: resolveGleamManifestUrl(options, currentUrl),
 		manifestFingerprint:
 			configured?.manifestFingerprint?.trim() ||
-			envManifestFingerprint ||
 			(!usesCustomUrls ? WASM_GLEAM_ASSET_VERSION : undefined),
 		workerReceipt:
-			configured?.workerReceipt ||
-			envWorkerReceipt ||
-			(!usesCustomUrls ? WASM_GLEAM_RUNNER_RECEIPT : undefined)
+			configured?.workerReceipt || (!usesCustomUrls ? WASM_GLEAM_RUNNER_RECEIPT : undefined)
 	};
 }
 
@@ -2698,9 +2546,7 @@ export function resolvePerlBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.perl?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_PERL_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.perl?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -2724,9 +2570,7 @@ export function resolvePerlWorkerUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.perl?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_PERL_WORKER_URL || '').trim();
+	const configuredWorkerUrl = typeof options === 'object' ? options?.perl?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
@@ -2754,8 +2598,7 @@ export function resolvePerlManifestUrl(
 	currentUrl = ''
 ) {
 	const configuredManifestUrl =
-		(typeof options === 'object' && options?.perl?.manifestUrl) ||
-		(publicEnv.PUBLIC_WASM_PERL_MANIFEST_URL || '').trim();
+		typeof options === 'object' ? options?.perl?.manifestUrl : undefined;
 	if (configuredManifestUrl) return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
 	return `${resolvePerlBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
 }
@@ -2766,12 +2609,7 @@ export function resolvePerlRuntimeAssetConfig(
 ) {
 	const configured = typeof options === 'object' ? options?.perl : undefined;
 	const usesCustomUrls = Boolean(
-		configured?.baseUrl ||
-		configured?.workerUrl ||
-		configured?.manifestUrl ||
-		(publicEnv.PUBLIC_WASM_PERL_BASE_URL || '').trim() ||
-		(publicEnv.PUBLIC_WASM_PERL_WORKER_URL || '').trim() ||
-		(publicEnv.PUBLIC_WASM_PERL_MANIFEST_URL || '').trim()
+		configured?.baseUrl || configured?.workerUrl || configured?.manifestUrl
 	);
 	const hasConfiguredTrust =
 		!!configured &&
@@ -2828,9 +2666,7 @@ export function resolveTclBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.tcl?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_TCL_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.tcl?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -2851,9 +2687,7 @@ export function resolveTclWorkerUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.tcl?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_TCL_WORKER_URL || '').trim();
+	const configuredWorkerUrl = typeof options === 'object' ? options?.tcl?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
@@ -2951,9 +2785,7 @@ export function resolveAwkBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.awk?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_AWK_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.awk?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -2974,9 +2806,7 @@ export function resolveAwkWorkerUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.awk?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_AWK_WORKER_URL || '').trim();
+	const configuredWorkerUrl = typeof options === 'object' ? options?.awk?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
@@ -3082,9 +2912,7 @@ export function resolveAwkRuntimeAssetConfig(
 	}
 	const baseUrl = resolveAwkBaseUrl(options, currentUrl);
 	const workerUrl = resolveAwkPinnedAssetUrl(
-		configured?.workerUrl ||
-			(publicEnv.PUBLIC_WASM_AWK_WORKER_URL || '').trim() ||
-			`${baseUrl}runner-worker.v2.js`,
+		configured?.workerUrl || `${baseUrl}runner-worker.v2.js`,
 		currentUrl,
 		'runner-worker.v2.js',
 		preflightProfile.workerReceipt.sha256
@@ -3111,9 +2939,7 @@ export function resolvePascalBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.pascal?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_PASCAL_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.pascal?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -3138,8 +2964,7 @@ export function resolvePascalWorkerUrl(
 	currentUrl = ''
 ) {
 	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.pascal?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_PASCAL_WORKER_URL || '').trim();
+		typeof options === 'object' ? options?.pascal?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
@@ -3168,9 +2993,7 @@ export function resolvePascalRuntimeAssetConfig(
 ) {
 	const configured = typeof options === 'object' ? options?.pascal : undefined;
 	const usesCustomTrustBoundary = Boolean(
-		(configured && Object.values(configured).some((value) => value !== undefined)) ||
-		(publicEnv.PUBLIC_WASM_PASCAL_BASE_URL || '').trim() ||
-		(publicEnv.PUBLIC_WASM_PASCAL_WORKER_URL || '').trim()
+		configured && Object.values(configured).some((value) => value !== undefined)
 	);
 	let preflightProfile;
 	try {
@@ -3246,9 +3069,7 @@ export function resolvePascalRuntimeAssetConfig(
 			: `${url.pathname}${url.search}`;
 	};
 	const workerUrl = resolvePinnedUrl(
-		configured?.workerUrl ||
-			(publicEnv.PUBLIC_WASM_PASCAL_WORKER_URL || '').trim() ||
-			resolvePascalWorkerUrl(options, currentUrl),
+		configured?.workerUrl || resolvePascalWorkerUrl(options, currentUrl),
 		'runner-worker.js',
 		workerReceipt.sha256
 	);
@@ -3301,8 +3122,7 @@ export function resolveClojureScriptBaseUrl(
 	currentUrl = ''
 ) {
 	const configuredBaseUrl =
-		(typeof options === 'object' && options?.clojurescript?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_CLOJURESCRIPT_BASE_URL || '').trim();
+		typeof options === 'object' ? options?.clojurescript?.baseUrl : undefined;
 
 	if (configuredBaseUrl) return normalizeBaseUrl(configuredBaseUrl, currentUrl);
 	if (typeof options === 'string') {
@@ -3325,8 +3145,7 @@ export function resolveClojureScriptWorkerUrl(
 	currentUrl = ''
 ) {
 	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.clojurescript?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_CLOJURESCRIPT_WORKER_URL || '').trim();
+		typeof options === 'object' ? options?.clojurescript?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
 	if (typeof options === 'string') {
@@ -3417,9 +3236,7 @@ export function resolveReScriptBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.rescript?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_RESCRIPT_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.rescript?.baseUrl : undefined;
 
 	if (configuredBaseUrl) return normalizeBaseUrl(configuredBaseUrl, currentUrl);
 	if (typeof options === 'string') {
@@ -3439,8 +3256,7 @@ export function resolveReScriptWorkerUrl(
 	currentUrl = ''
 ) {
 	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.rescript?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_RESCRIPT_WORKER_URL || '').trim();
+		typeof options === 'object' ? options?.rescript?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
 	if (typeof options === 'string') {
@@ -3528,9 +3344,7 @@ export function resolveForthBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.forth?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_FORTH_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.forth?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -3554,9 +3368,7 @@ export function resolveForthWorkerUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.forth?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_FORTH_WORKER_URL || '').trim();
+	const configuredWorkerUrl = typeof options === 'object' ? options?.forth?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
@@ -3619,9 +3431,7 @@ export function resolveJBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.j?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_J_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.j?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -3642,9 +3452,7 @@ export function resolveJWorkerUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.j?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_J_WORKER_URL || '').trim();
+	const configuredWorkerUrl = typeof options === 'object' ? options?.j?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
@@ -3733,9 +3541,7 @@ export function resolveBqnBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.bqn?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_BQN_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.bqn?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -3756,9 +3562,7 @@ export function resolveBqnWorkerUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.bqn?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_BQN_WORKER_URL || '').trim();
+	const configuredWorkerUrl = typeof options === 'object' ? options?.bqn?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
@@ -3848,9 +3652,7 @@ export function resolveJanetBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.janet?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_JANET_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.janet?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -3874,9 +3676,7 @@ export function resolveJanetWorkerUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.janet?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_JANET_WORKER_URL || '').trim();
+	const configuredWorkerUrl = typeof options === 'object' ? options?.janet?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
@@ -3904,8 +3704,7 @@ export function resolveJanetManifestUrl(
 	currentUrl = ''
 ) {
 	const configuredManifestUrl =
-		(typeof options === 'object' && options?.janet?.manifestUrl) ||
-		(publicEnv.PUBLIC_WASM_JANET_MANIFEST_URL || '').trim();
+		typeof options === 'object' ? options?.janet?.manifestUrl : undefined;
 	if (configuredManifestUrl) return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
 	return `${resolveJanetBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
 }
@@ -3915,16 +3714,8 @@ export function resolveJanetRuntimeAssetConfig(
 	currentUrl = ''
 ) {
 	const configured = typeof options === 'object' ? options?.janet : undefined;
-	const envManifestFingerprint = (publicEnv.PUBLIC_WASM_JANET_MANIFEST_FINGERPRINT || '').trim();
-	const envWorkerSha256 = (publicEnv.PUBLIC_WASM_JANET_WORKER_SHA256 || '').trim();
-	const envWorkerBytesSource = (publicEnv.PUBLIC_WASM_JANET_WORKER_BYTES || '').trim();
 	const usesCustomUrls = Boolean(
-		configured?.baseUrl ||
-		configured?.workerUrl ||
-		configured?.manifestUrl ||
-		(publicEnv.PUBLIC_WASM_JANET_BASE_URL || '').trim() ||
-		(publicEnv.PUBLIC_WASM_JANET_WORKER_URL || '').trim() ||
-		(publicEnv.PUBLIC_WASM_JANET_MANIFEST_URL || '').trim()
+		configured?.baseUrl || configured?.workerUrl || configured?.manifestUrl
 	);
 	const hasConfiguredTrust =
 		!!configured &&
@@ -3939,10 +3730,7 @@ export function resolveJanetRuntimeAssetConfig(
 			configured.wasmReceipt,
 			configured.workerReceipt
 		].some((value) => value !== undefined);
-	const usesCustomTrustBoundary =
-		usesCustomUrls ||
-		hasConfiguredTrust ||
-		Boolean(envManifestFingerprint || envWorkerSha256 || envWorkerBytesSource);
+	const usesCustomTrustBoundary = usesCustomUrls || hasConfiguredTrust;
 	const selectedProfile = usesCustomTrustBoundary
 		? {
 				profileId: configured?.profileId?.trim(),
@@ -3980,9 +3768,7 @@ export function resolveJuliaBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.julia?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_JULIA_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.julia?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -4006,9 +3792,7 @@ export function resolveJuliaWorkerUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.julia?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_JULIA_WORKER_URL || '').trim();
+	const configuredWorkerUrl = typeof options === 'object' ? options?.julia?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
@@ -4036,16 +3820,8 @@ export function resolveJuliaRuntimeAssetConfig(
 	currentUrl = ''
 ) {
 	const configured = typeof options === 'object' ? options?.julia : undefined;
-	const envManifestFingerprint = (publicEnv.PUBLIC_WASM_JULIA_MANIFEST_FINGERPRINT || '').trim();
-	const envWorkerSha256 = (publicEnv.PUBLIC_WASM_JULIA_WORKER_SHA256 || '').trim();
-	const envWorkerBytesSource = (publicEnv.PUBLIC_WASM_JULIA_WORKER_BYTES || '').trim();
 	const usesCustomUrls = Boolean(
-		configured?.baseUrl ||
-		configured?.workerUrl ||
-		configured?.manifestUrl ||
-		(publicEnv.PUBLIC_WASM_JULIA_BASE_URL || '').trim() ||
-		(publicEnv.PUBLIC_WASM_JULIA_WORKER_URL || '').trim() ||
-		(publicEnv.PUBLIC_WASM_JULIA_MANIFEST_URL || '').trim()
+		configured?.baseUrl || configured?.workerUrl || configured?.manifestUrl
 	);
 	const hasConfiguredTrust =
 		!!configured &&
@@ -4062,10 +3838,7 @@ export function resolveJuliaRuntimeAssetConfig(
 			configured.dataReceipt,
 			configured.workerReceipt
 		].some((value) => value !== undefined);
-	const usesCustomTrustBoundary =
-		usesCustomUrls ||
-		hasConfiguredTrust ||
-		Boolean(envManifestFingerprint || envWorkerSha256 || envWorkerBytesSource);
+	const usesCustomTrustBoundary = usesCustomUrls || hasConfiguredTrust;
 	const selectedProfile = usesCustomTrustBoundary
 		? {
 				profileId: configured?.profileId?.trim(),
@@ -4106,8 +3879,7 @@ export function resolveJuliaManifestUrl(
 	currentUrl = ''
 ) {
 	const configuredManifestUrl =
-		(typeof options === 'object' && options?.julia?.manifestUrl) ||
-		(publicEnv.PUBLIC_WASM_JULIA_MANIFEST_URL || '').trim();
+		typeof options === 'object' ? options?.julia?.manifestUrl : undefined;
 	if (configuredManifestUrl) return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
 	return `${resolveJuliaBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
 }
@@ -4116,9 +3888,7 @@ export function resolveNimBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.nim?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_NIM_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.nim?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -4139,9 +3909,7 @@ export function resolveNimWorkerUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.nim?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_NIM_WORKER_URL || '').trim();
+	const configuredWorkerUrl = typeof options === 'object' ? options?.nim?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
@@ -4169,25 +3937,8 @@ export function resolveNimRuntimeAssetConfig(
 	currentUrl = ''
 ) {
 	const configured = typeof options === 'object' ? options?.nim : undefined;
-	const envManifestFingerprint = (publicEnv.PUBLIC_WASM_NIM_MANIFEST_FINGERPRINT || '').trim();
-	const envWorkerSha256 = (publicEnv.PUBLIC_WASM_NIM_WORKER_SHA256 || '').trim();
-	const envWorkerBytesSource = (publicEnv.PUBLIC_WASM_NIM_WORKER_BYTES || '').trim();
-	const envWorkerBytes = /^\d+$/u.test(envWorkerBytesSource)
-		? Number(envWorkerBytesSource)
-		: Number.NaN;
-	const envWorkerReceipt =
-		/^[a-f0-9]{64}$/u.test(envWorkerSha256) &&
-		Number.isSafeInteger(envWorkerBytes) &&
-		envWorkerBytes > 0
-			? { bytes: envWorkerBytes, sha256: envWorkerSha256 }
-			: undefined;
 	const usesCustomUrls = Boolean(
-		configured?.baseUrl ||
-		configured?.workerUrl ||
-		configured?.manifestUrl ||
-		(publicEnv.PUBLIC_WASM_NIM_BASE_URL || '').trim() ||
-		(publicEnv.PUBLIC_WASM_NIM_WORKER_URL || '').trim() ||
-		(publicEnv.PUBLIC_WASM_NIM_MANIFEST_URL || '').trim()
+		configured?.baseUrl || configured?.workerUrl || configured?.manifestUrl
 	);
 	const hasConfiguredTrust =
 		!!configured &&
@@ -4210,10 +3961,7 @@ export function resolveNimRuntimeAssetConfig(
 			configured.sysrootReceipt,
 			configured.workerReceipt
 		].some((value) => value !== undefined);
-	const usesCustomTrustBoundary =
-		usesCustomUrls ||
-		hasConfiguredTrust ||
-		Boolean(envManifestFingerprint || envWorkerSha256 || envWorkerBytesSource);
+	const usesCustomTrustBoundary = usesCustomUrls || hasConfiguredTrust;
 	const selectedProfile = usesCustomTrustBoundary
 		? {
 				profileId: configured?.profileId?.trim(),
@@ -4222,8 +3970,7 @@ export function resolveNimRuntimeAssetConfig(
 				llvmRevision: configured?.llvmRevision?.trim(),
 				memfsRevision: configured?.memfsRevision?.trim(),
 				emscriptenRevision: configured?.emscriptenRevision?.trim(),
-				manifestFingerprint:
-					configured?.manifestFingerprint?.trim() || envManifestFingerprint,
+				manifestFingerprint: configured?.manifestFingerprint?.trim(),
 				manifestReceipt: configured?.manifestReceipt,
 				nimJavaScriptReceipt: configured?.nimJavaScriptReceipt,
 				nimWasmReceipt: configured?.nimWasmReceipt,
@@ -4237,7 +3984,7 @@ export function resolveNimRuntimeAssetConfig(
 		: WASM_NIM_RUNTIME_BUNDLE.profile;
 	const preflightProfile = snapshotNimRuntimePreflightProfile(selectedProfile);
 	const workerReceipt = usesCustomTrustBoundary
-		? configured?.workerReceipt || envWorkerReceipt
+		? configured?.workerReceipt
 		: WASM_NIM_RUNTIME_BUNDLE.workerReceipt;
 	if (
 		!workerReceipt ||
@@ -4250,9 +3997,7 @@ export function resolveNimRuntimeAssetConfig(
 			{ runtimeId: 'NIM' }
 		);
 	}
-	const hasConfiguredManifestUrl = Boolean(
-		configured?.manifestUrl || (publicEnv.PUBLIC_WASM_NIM_MANIFEST_URL || '').trim()
-	);
+	const hasConfiguredManifestUrl = Boolean(configured?.manifestUrl);
 	const baseUrl = resolveNimBaseUrl(options, currentUrl);
 	const resolvedManifestUrl = resolveNimManifestUrl(options, currentUrl);
 	const manifestUrl = hasConfiguredManifestUrl
@@ -4287,8 +4032,7 @@ export function resolveNimManifestUrl(
 	currentUrl = ''
 ) {
 	const configuredManifestUrl =
-		(typeof options === 'object' && options?.nim?.manifestUrl) ||
-		(publicEnv.PUBLIC_WASM_NIM_MANIFEST_URL || '').trim();
+		typeof options === 'object' ? options?.nim?.manifestUrl : undefined;
 	if (configuredManifestUrl) return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
 	return `${resolveNimBaseUrl(options, currentUrl)}runtime-manifest.v2.json`;
 }
@@ -4386,9 +4130,7 @@ export function resolveSwiftBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.swift?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_SWIFT_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.swift?.baseUrl : undefined;
 
 	if (configuredBaseUrl) {
 		return normalizeBaseUrl(configuredBaseUrl, currentUrl);
@@ -4412,17 +4154,13 @@ export function resolveSwiftWorkerUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredWorkerUrl =
-		(typeof options === 'object' && options?.swift?.workerUrl) ||
-		(publicEnv.PUBLIC_WASM_SWIFT_WORKER_URL || '').trim();
+	const configuredWorkerUrl = typeof options === 'object' ? options?.swift?.workerUrl : undefined;
 
 	if (configuredWorkerUrl) {
 		return resolveConfiguredUrl(configuredWorkerUrl, currentUrl);
 	}
 
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.swift?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_SWIFT_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.swift?.baseUrl : undefined;
 	if (configuredBaseUrl) {
 		return resolveConfiguredUrl(
 			`${normalizeBaseUrl(configuredBaseUrl, currentUrl)}runner-worker.js`,
@@ -4452,16 +4190,13 @@ export function resolveSwiftManifestUrl(
 	currentUrl = ''
 ) {
 	const configuredManifestUrl =
-		(typeof options === 'object' && options?.swift?.manifestUrl) ||
-		(publicEnv.PUBLIC_WASM_SWIFT_MANIFEST_URL || '').trim();
+		typeof options === 'object' ? options?.swift?.manifestUrl : undefined;
 
 	if (configuredManifestUrl) {
 		return resolveConfiguredUrl(configuredManifestUrl, currentUrl);
 	}
 
-	const configuredBaseUrl =
-		(typeof options === 'object' && options?.swift?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_SWIFT_BASE_URL || '').trim();
+	const configuredBaseUrl = typeof options === 'object' ? options?.swift?.baseUrl : undefined;
 	if (configuredBaseUrl) {
 		return resolveConfiguredUrl(
 			`${normalizeBaseUrl(configuredBaseUrl, currentUrl)}runtime-manifest.v1.json`,
@@ -4501,9 +4236,7 @@ export function resolveSqliteWasmUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configuredWasmUrl =
-		(typeof options === 'object' && options?.sqlite?.wasmUrl) ||
-		(publicEnv.PUBLIC_WASM_SQLITE_WASM_URL || '').trim();
+	const configuredWasmUrl = typeof options === 'object' ? options?.sqlite?.wasmUrl : undefined;
 
 	if (configuredWasmUrl) {
 		return resolveConfiguredUrl(configuredWasmUrl, currentUrl);
@@ -4515,11 +4248,10 @@ export function resolveSqliteWasmUrl(
 function resolveStaticRuntimeModuleUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	configuredModuleUrl: string | undefined,
-	publicModuleUrl: string,
 	folder: string,
 	currentUrl = ''
 ) {
-	const moduleUrl = configuredModuleUrl || publicModuleUrl.trim();
+	const moduleUrl = configuredModuleUrl;
 	if (moduleUrl) return resolveConfiguredUrl(moduleUrl, currentUrl);
 	const rootUrl = typeof options === 'string' ? options : options?.rootUrl || '';
 	return resolveConfiguredUrl(
@@ -4535,7 +4267,6 @@ export function resolveAssemblyScriptRuntimeModuleUrl(
 	return resolveStaticRuntimeModuleUrl(
 		options,
 		typeof options === 'object' ? options?.assemblyscript?.moduleUrl : undefined,
-		publicEnv.PUBLIC_WASM_ASSEMBLYSCRIPT_MODULE_URL || '',
 		'wasm-assemblyscript',
 		currentUrl
 	);
@@ -4548,7 +4279,6 @@ export function resolveDuckDbRuntimeModuleUrl(
 	return resolveStaticRuntimeModuleUrl(
 		options,
 		typeof options === 'object' ? options?.duckdb?.moduleUrl : undefined,
-		publicEnv.PUBLIC_WASM_DUCKDB_MODULE_URL || '',
 		'wasm-duckdb',
 		currentUrl
 	);
@@ -4561,7 +4291,6 @@ export function resolvePhpRuntimeModuleUrl(
 	return resolveStaticRuntimeModuleUrl(
 		options,
 		typeof options === 'object' ? options?.php?.moduleUrl : undefined,
-		publicEnv.PUBLIC_WASM_PHP_MODULE_URL || '',
 		'wasm-php',
 		currentUrl
 	);
@@ -4574,7 +4303,6 @@ export function resolvePostgresqlRuntimeModuleUrl(
 	return resolveStaticRuntimeModuleUrl(
 		options,
 		typeof options === 'object' ? options?.postgresql?.moduleUrl : undefined,
-		publicEnv.PUBLIC_WASM_POSTGRESQL_MODULE_URL || '',
 		'wasm-postgresql',
 		currentUrl
 	);
@@ -4594,7 +4322,6 @@ export function resolveSqliteRuntimeModuleUrl(
 	return resolveStaticRuntimeModuleUrl(
 		options,
 		typeof options === 'object' ? options?.sqlite?.moduleUrl : undefined,
-		publicEnv.PUBLIC_WASM_SQLITE_MODULE_URL || '',
 		'wasm-sqlite',
 		currentUrl
 	);
@@ -4605,9 +4332,7 @@ export function resolveC3BaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configured =
-		(typeof options === 'object' && options?.c3?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_C3_BASE_URL || '').trim();
+	const configured = typeof options === 'object' ? options?.c3?.baseUrl : undefined;
 	if (configured) return normalizeBaseUrl(configured, currentUrl);
 	const root = typeof options === 'string' ? options : options?.rootUrl;
 	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-c3/`, currentUrl);
@@ -4618,9 +4343,7 @@ export function resolveGrainBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configured =
-		(typeof options === 'object' && options?.grain?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_GRAIN_BASE_URL || '').trim();
+	const configured = typeof options === 'object' ? options?.grain?.baseUrl : undefined;
 	if (configured) return normalizeBaseUrl(configured, currentUrl);
 	const root = typeof options === 'string' ? options : options?.rootUrl;
 	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-grain/`, currentUrl);
@@ -4631,9 +4354,7 @@ export function resolveHyBaseUrl(
 	options: string | PlaygroundRuntimeAssets | undefined,
 	currentUrl = ''
 ) {
-	const configured =
-		(typeof options === 'object' && options?.hy?.baseUrl) ||
-		(publicEnv.PUBLIC_WASM_HY_BASE_URL || '').trim();
+	const configured = typeof options === 'object' ? options?.hy?.baseUrl : undefined;
 	if (configured) return normalizeBaseUrl(configured, currentUrl);
 	const root = typeof options === 'string' ? options : options?.rootUrl;
 	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-hy/`, currentUrl);

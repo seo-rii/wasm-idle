@@ -518,7 +518,7 @@ describe('Monaco route debug sync', () => {
 			/import \{\s+createApplicationAssetResolver,\s+createApplicationRuntimeAssets\s+\} from '\$lib\/playground\/applicationAssets';/s
 		);
 		expect(pageSource).toMatch(
-			/let runtimeAssets = \$derived\.by\(\(\) => \(\{\s+\.\.\.createApplicationRuntimeAssets\(applicationRootUrl\),/s
+			/let runtimeAssets = \$derived\.by\(\(\) =>\s+applyExampleRuntimeEnvironment\(\s+\{\s+\.\.\.createApplicationRuntimeAssets\(applicationRootUrl\),/s
 		);
 		expect(pageSource).toMatch(
 			/import elixirRuntimeWorkerUrl from '\$lib\/playground\/worker\/elixir\?worker&url';/

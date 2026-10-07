@@ -178,13 +178,6 @@ class MockWorker {
 	}
 }
 
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_TINYGO_APP_URL: '',
-		PUBLIC_WASM_TINYGO_MODULE_URL: ''
-	}
-}));
-
 const { executableGraphFixture } = vi.hoisted(() => ({
 	executableGraphFixture: {
 		disposeCalls: 0,
@@ -214,11 +207,6 @@ vi.mock('$lib/playground/worker/tinygo?worker', () => ({
 vi.mock('$lib/playground/tinygoExecutableGraph', () => ({
 	loadVerifiedTinyGoExecutableGraph: executableGraphFixture.load
 }));
-
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv(publicEnv);
-});
 
 import TinyGo from './tinygo';
 import type { SandboxExecutionOptions } from './options';
@@ -256,8 +244,6 @@ describe('TinyGo operation lifecycle', () => {
 		Object.assign(runtimeFixtureState, createRuntimeFixtureState());
 		installExecutableGraphFixture();
 		window.history.replaceState({}, '', 'http://localhost:3000/');
-		publicEnv.PUBLIC_WASM_TINYGO_APP_URL = '';
-		publicEnv.PUBLIC_WASM_TINYGO_MODULE_URL = '';
 	});
 
 	afterEach(() => {

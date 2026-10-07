@@ -17,7 +17,7 @@ class Fennel extends Lua {
 				const compilerUrl = resolveFennelCompilerUrl(runtimeAssets, currentUrl);
 				if (!compilerUrl) {
 					throw new RuntimeConfigurationError(
-						'Fennel compiler is not configured. Set PUBLIC_WASM_FENNEL_COMPILER_URL or runtimeAssets.fennel.compilerUrl.',
+						'Fennel compiler is not configured. Set runtimeAssets.fennel.compilerUrl.',
 						{ runtimeId: 'FENNEL' }
 					);
 				}

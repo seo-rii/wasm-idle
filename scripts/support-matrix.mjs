@@ -1937,8 +1937,9 @@ or the browser-side package/workspace runtime that backs each row. Static ESM en
 assets loaded over HTTP on demand, not files embedded in the published npm packages.
 \`Execution defaults / flags\` lists the default
 targets and flags wasm-idle applies, plus the public per-run options that change execution.
-\`Customization\` lists the \`runtimeAssets\` fields and matching \`PUBLIC_WASM_*\` env overrides
-when they exist.
+\`Customization\` lists the SDK's explicit \`runtimeAssets\` fields and the matching \`PUBLIC_WASM_*\`
+variables understood by this repository's example page. Published packages do not read environment
+variables or import SvelteKit modules.
 
 ${renderRuntimeDetailsTable(rows)}
 

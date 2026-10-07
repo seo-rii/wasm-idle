@@ -352,7 +352,7 @@ class Lua implements Sandbox {
 				if (!this.isOperationActive(activeOperation)) return;
 				if (!nextModuleUrl) {
 					return rejectLoad(
-						'Lua runtime is not configured. Set PUBLIC_WASM_LUA_MODULE_URL or runtimeAssets.lua.moduleUrl.'
+						'Lua runtime is not configured. Set runtimeAssets.lua.moduleUrl.'
 					);
 				}
 				const loadExtras =

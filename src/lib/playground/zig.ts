@@ -343,7 +343,7 @@ class Zig implements Sandbox {
 				if (!this.isOperationActive(activeOperation)) return;
 				if (!nextCompilerUrl || !nextStdlibUrl) {
 					return rejectLoad(
-						'Zig runtime is not configured. Set PUBLIC_WASM_ZIG_COMPILER_URL and PUBLIC_WASM_ZIG_STDLIB_URL, or runtimeAssets.zig.compilerUrl and runtimeAssets.zig.stdlibUrl.'
+						'Zig runtime is not configured. Set runtimeAssets.zig.compilerUrl and runtimeAssets.zig.stdlibUrl.'
 					);
 				}
 				for (const [asset, receipt] of Object.entries(nextIntegrity)) {

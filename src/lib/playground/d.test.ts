@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlaygroundRuntimeAssets } from './assets';
+
+const TEST_RUNTIME_ASSETS = {
+	d: { moduleUrl: '/wasm-d/index.js' }
+} satisfies PlaygroundRuntimeAssets;
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_D_MODULE_URL: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 
 class MockWorker {
@@ -61,11 +61,6 @@ vi.mock('$lib/playground/worker/d?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv(publicEnv);
-});
-
 import D from './d';
 import { WASM_D_OUTER_ASSET_RECEIPTS } from './wasmDIntegrity';
 
@@ -73,7 +68,6 @@ describe('D sandbox', () => {
 	beforeEach(() => {
 		vi.useRealTimers();
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_D_MODULE_URL = '/wasm-d/index.js';
 		suppressAutoLoadAck = false;
 	});
 
@@ -95,7 +89,7 @@ void main() {
 		sandbox.output = (chunk: string) => outputs.push(chunk);
 		sandbox.oncompilerdiagnostic = (diagnostic) => diagnostics.push(diagnostic);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(
 			sandbox.run(code, true, true, {
 				set(value: number) {
@@ -188,7 +182,7 @@ void main() {
 		const sandbox = new D();
 		const output = vi.fn();
 		sandbox.output = output;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('void main() {}', false, true, undefined, [], {
@@ -216,7 +210,7 @@ void main() {
 		staleHandler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
 		expect(output).not.toHaveBeenCalledWith('stale\n');
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
 		expect(workerInstances).toHaveLength(2);
 	});
@@ -225,7 +219,7 @@ void main() {
 		const sandbox = new D();
 		const oncompilerdiagnostic = vi.fn();
 		sandbox.oncompilerdiagnostic = oncompilerdiagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('void main() {}', true, true, undefined, [], {
@@ -262,7 +256,7 @@ void main() {
 
 	it('normalizes a valid D workspace before worker dispatch', async () => {
 		const sandbox = new D();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 
 		await expect(
 			sandbox.run('void main() {}', false, true, undefined, [], {
@@ -352,7 +346,7 @@ void main() {
 		'rejects a D workspace with $name before changing execution state',
 		async ({ code, options, expected }) => {
 			const sandbox = new D();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 			const loadHandler = worker.onmessage;
 
@@ -459,7 +453,7 @@ void main() {
 		expect(outputs).toEqual([]);
 		expect(progress.set).not.toHaveBeenCalled();
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retryWorker = workerInstances.at(-1)!;
 		const settledController = new AbortController();
 		await expect(
@@ -476,12 +470,14 @@ void main() {
 	it('rejects overlapping D startup operations without superseding readiness', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new D();
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 		const loadHandler = worker.onmessage;
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
 			runtimeId: 'D'
@@ -501,7 +497,7 @@ void main() {
 
 	it('rejects a pre-aborted D startup without changing an existing worker', async () => {
 		const sandbox = new D();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockClear();
 		const progress = { set: vi.fn() };
@@ -510,7 +506,14 @@ void main() {
 		controller.abort(reason);
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal }, progress)
+			sandbox.load(
+				{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+				'',
+				true,
+				[],
+				{ signal: controller.signal },
+				progress
+			)
 		).rejects.toBe(reason);
 
 		expect(sandbox.worker).toBe(worker);
@@ -527,7 +530,7 @@ void main() {
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const reason = new Error('D startup aborted');
 		const loading = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -549,7 +552,7 @@ void main() {
 
 		suppressAutoLoadAck = false;
 		const settledController = new AbortController();
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			signal: settledController.signal
 		});
 		const retryWorker = workerInstances.at(-1)!;
@@ -574,7 +577,7 @@ void main() {
 			})
 		};
 		const loading = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -595,7 +598,9 @@ void main() {
 		expect(progress.set).toHaveBeenCalledOnce();
 
 		suppressAutoLoadAck = false;
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 	});
 
@@ -608,7 +613,7 @@ void main() {
 		let reentrantLoad: Promise<void> | undefined;
 		sandbox.output = () => {
 			reentrantRun = sandbox.run('void main() {}', false);
-			reentrantLoad = sandbox.load('/replacement/');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 		};
 
 		const running = sandbox.run('void main() {}', false);
@@ -641,7 +646,7 @@ void main() {
 		let replacement: Promise<void> | undefined;
 		sandbox.output = () => {
 			controller.abort(abortReason);
-			replacement = sandbox.load('/replacement/');
+			replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 			throw callbackError;
 		};
 		const running = sandbox.run('void main() {}', false, true, undefined, [], {
@@ -728,7 +733,7 @@ void main() {
 			handler?.({ data: { output: 'stale\n', results: true } } as MessageEvent<any>);
 			sandbox.output = vi.fn();
 			sandbox.oncompilerdiagnostic = vi.fn();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
 			expect(workerInstances.at(-1)).not.toBe(worker);
 		}
@@ -748,12 +753,11 @@ void main() {
 		expect(sandbox.worker).toBeUndefined();
 		expect(sandbox.exit).toBe(true);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
 	});
 
 	it('rejects load when no D module url is configured', async () => {
-		publicEnv.PUBLIC_WASM_D_MODULE_URL = '';
 		const sandbox = new D();
 
 		await expect(sandbox.load({})).rejects.toThrow('D runtime is not configured');
@@ -762,7 +766,7 @@ void main() {
 	it('rejects load when the D worker script fails before posting load', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new D();
-		const loadPromise = sandbox.load('/absproxy/5173');
+		const loadPromise = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -859,7 +863,7 @@ void main() {
 
 	it('preserves an exact null pre-abort reason without changing idle D state', async () => {
 		const sandbox = new D();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const handler = worker.onmessage;
 		const moduleUrl = sandbox.moduleUrl;
@@ -869,7 +873,9 @@ void main() {
 		controller.abort(null);
 
 		await expect(
-			sandbox.load('/replacement', '', true, [], { signal: controller.signal })
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' }, '', true, [], {
+				signal: controller.signal
+			})
 		).rejects.toBeNull();
 		await expect(
 			sandbox.run('void main() {}', false, true, undefined, [], {
@@ -890,19 +896,25 @@ void main() {
 
 	it('preserves replacement startup when the outer signal getter terminates D', async () => {
 		const sandbox = new D();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace D during startup option snapshot');
 		let replacement: Promise<void> | undefined;
 		const options = {
 			get signal() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' });
 				return undefined;
 			}
 		};
 
-		const superseded = sandbox.load('/outer', '', true, [], options);
+		const superseded = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/outer' },
+			'',
+			true,
+			[],
+			options
+		);
 
 		await expect(superseded).rejects.toBe(reason);
 		await expect(replacement).resolves.toBeUndefined();
@@ -914,7 +926,7 @@ void main() {
 
 	it('preserves the first cancellation and replacement across later D option failure', async () => {
 		const sandbox = new D();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace D during execution option snapshot');
 		const laterError = new Error('later D workspace getter failed');
@@ -922,7 +934,7 @@ void main() {
 		const options = {
 			get limits() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' });
 				return undefined;
 			},
 			get workspaceFiles(): never {
@@ -943,7 +955,7 @@ void main() {
 
 	it('reads explicit D stdin once before worker dispatch', async () => {
 		const sandbox = new D();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		let reads = 0;
 		const options = {
 			get stdin() {
@@ -967,9 +979,15 @@ void main() {
 		vi.useFakeTimers();
 		suppressAutoLoadAck = true;
 		const sandbox = new D();
-		const loading = sandbox.load('/absproxy/5173', '', true, [], {
-			limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
-		});
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+			'',
+			true,
+			[],
+			{
+				limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
+			}
+		);
 		const rejected = expect(loading).rejects.toMatchObject({
 			name: 'TimeoutError',
 			code: 'timeout',
@@ -988,14 +1006,16 @@ void main() {
 
 		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
 		suppressAutoLoadAck = false;
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
 
 	it('enforces the aggregate D execution deadline and permits a clean retry', async () => {
 		const sandbox = new D();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		retiredWorker.postMessage.mockImplementationOnce(() => undefined);
 		vi.useFakeTimers();
@@ -1017,7 +1037,7 @@ void main() {
 		expect(sandbox.worker).toBeUndefined();
 
 		staleHandler?.({ data: { output: 'stale output', results: true } } as MessageEvent<any>);
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('void main() {}', false)).resolves.toBe(true);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
@@ -1025,7 +1045,7 @@ void main() {
 	it('clears settled D deadlines before they can retire an idle worker', async () => {
 		vi.useFakeTimers();
 		const sandbox = new D();
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
 		});
 		const worker = workerInstances[0];
@@ -1047,7 +1067,7 @@ void main() {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 
 		await sandbox.clear();
@@ -1075,7 +1095,7 @@ void main() {
 				pendingEof: sandbox.pendingEof,
 				bufferedInput: readBufferedStdin(sandbox.buffer)
 			};
-			reentrantLoad = sandbox.load('/reentrant');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/reentrant' });
 			reentrantDisposal = sandbox.dispose();
 		});
 		const firstDisposal = sandbox.dispose();
@@ -1116,7 +1136,9 @@ void main() {
 		expect(sandbox.output).toBeNull();
 		expect(sandbox.oncompilerdiagnostic).toBeUndefined();
 
-		await expect(sandbox.load('/replacement')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement' })
+		).rejects.toMatchObject({
 			name: 'RuntimeConfigurationError',
 			code: 'runtime-configuration',
 			phase: 'dispose',
@@ -1142,7 +1164,7 @@ void main() {
 	it('settles active D startup with one stable disposal cancellation', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new D();
-		const loading = sandbox.load('/absproxy/5173');
+		const loading = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.waitFor(() => expect(workerInstances).toHaveLength(1));
 		const worker = workerInstances[0];
 		const staleHandler = worker.onmessage;
@@ -1176,7 +1198,7 @@ void main() {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		worker.postMessage.mockImplementationOnce(() => undefined);
 		const running = sandbox.run('void main() {}', false);

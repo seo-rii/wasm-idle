@@ -1,4 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PlaygroundRuntimeAssets } from './assets';
+
+const TEST_RUNTIME_ASSETS = {
+	ocaml: {
+		moduleUrl: '/wasm-of-js-of-ocaml/browser-native/src/index.js',
+		manifestUrl: '/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json'
+	}
+} satisfies PlaygroundRuntimeAssets;
 
 import { BusyError, ProtocolError } from '@wasm-idle/core';
 
@@ -9,12 +17,6 @@ const moduleReceipt = { bytes: 1_892, sha256: 'a'.repeat(64) };
 const manifestReceipt = { bytes: 60_068, sha256: 'b'.repeat(64) };
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_OCAML_MODULE_URL: '',
-		PUBLIC_WASM_OCAML_MANIFEST_URL: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 let suppressAutoRunAck = false;
 let runDispatchError: unknown = null;
@@ -79,20 +81,12 @@ vi.mock('$lib/playground/worker/ocaml?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv(publicEnv);
-});
-
 import Ocaml from './ocaml';
 
 describe('OCaml sandbox', () => {
 	beforeEach(() => {
 		vi.useRealTimers();
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_OCAML_MODULE_URL = '/wasm-of-js-of-ocaml/browser-native/src/index.js';
-		publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL =
-			'/wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json';
 		suppressAutoLoadAck = false;
 		suppressAutoRunAck = false;
 		runDispatchError = null;
@@ -134,7 +128,7 @@ describe('OCaml sandbox', () => {
 		sandbox.output = (chunk: string) => outputs.push(chunk);
 		sandbox.oncompilerdiagnostic = (diagnostic) => diagnostics.push(diagnostic);
 
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(
 			sandbox.run(code, true, true, {
 				set(value: number) {
@@ -315,9 +309,15 @@ describe('OCaml sandbox', () => {
 		const controller = new AbortController();
 		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
-		const loadPromise = sandbox.load('/absproxy/5173', '', true, [], {
-			signal: controller.signal
-		});
+		const loadPromise = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+			'',
+			true,
+			[],
+			{
+				signal: controller.signal
+			}
+		);
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -336,8 +336,6 @@ describe('OCaml sandbox', () => {
 	});
 
 	it('rejects load when the OCaml bundle URLs are missing', async () => {
-		publicEnv.PUBLIC_WASM_OCAML_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL = '';
 		const sandbox = new Ocaml();
 
 		await expect(sandbox.load({ rootUrl: '' })).rejects.toContain(
@@ -352,20 +350,24 @@ describe('OCaml sandbox', () => {
 		controller.abort(reason);
 
 		await expect(
-			sandbox.load('/absproxy/5173', '', true, [], { signal: controller.signal })
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
+				signal: controller.signal
+			})
 		).rejects.toBe(reason);
 		expect(workerInstances).toHaveLength(0);
 		expect(sandbox.uid).toBe(0);
 		expect(sandbox.moduleUrl).toBe('');
 		expect(sandbox.manifestUrl).toBe('');
 
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(1);
 	});
 
 	it('reserves OCaml startup ownership before reading the signal getter', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/initial/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/initial/' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace OCaml while reading the startup signal');
 		let replacement: Promise<void> | undefined;
@@ -406,14 +408,14 @@ describe('OCaml sandbox', () => {
 
 	it('stops OCaml startup when the aborted getter replaces its operation', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/initial/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/initial/' });
 		const reason = new Error('replace OCaml while reading startup aborted');
 		let replacement: Promise<void> | undefined;
 		let staleAssetReads = 0;
 		const signal = {
 			get aborted() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement/');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 				return false;
 			},
 			get reason() {
@@ -443,7 +445,7 @@ describe('OCaml sandbox', () => {
 
 	it('stops snapshotting OCaml assets when a nested getter replaces the owner', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/initial/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/initial/' });
 		const retiredWorker = workerInstances[0];
 		const reason = new Error('replace OCaml while reading the module URL');
 		let replacement: Promise<void> | undefined;
@@ -499,8 +501,6 @@ describe('OCaml sandbox', () => {
 	});
 
 	it('reads the OCaml asset root once when both URLs need the fallback', async () => {
-		publicEnv.PUBLIC_WASM_OCAML_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_OCAML_MANIFEST_URL = '';
 		const sandbox = new Ocaml();
 		let rootReads = 0;
 		const runtimeAssets = {
@@ -526,7 +526,9 @@ describe('OCaml sandbox', () => {
 		const nullController = new AbortController();
 		nullController.abort(null);
 		await expect(
-			new Ocaml().load('/absproxy/5173', '', true, [], { signal: nullController.signal })
+			new Ocaml().load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
+				signal: nullController.signal
+			})
 		).rejects.toBeNull();
 
 		const fallbackSignal = {
@@ -536,14 +538,16 @@ describe('OCaml sandbox', () => {
 			removeEventListener: vi.fn()
 		} as unknown as AbortSignal;
 		await expect(
-			new Ocaml().load('/absproxy/5173', '', true, [], { signal: fallbackSignal })
+			new Ocaml().load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
+				signal: fallbackSignal
+			})
 		).rejects.toMatchObject({
 			name: 'AbortError',
 			message: 'OCaml runtime startup aborted'
 		});
 
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(
 			sandbox.run('let () = ()', false, true, undefined, [], { signal: fallbackSignal })
 		).rejects.toMatchObject({
@@ -556,7 +560,7 @@ describe('OCaml sandbox', () => {
 
 	it('rejects a pre-aborted OCaml execution without mutating worker or stdin state', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const handler = worker.onmessage;
 		const uid = sandbox.uid;
@@ -587,9 +591,15 @@ describe('OCaml sandbox', () => {
 		const reason = new Error('stop OCaml before worker import');
 		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
-		const loading = sandbox.load('/absproxy/5173', '', true, [], {
-			signal: controller.signal
-		});
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+			'',
+			true,
+			[],
+			{
+				signal: controller.signal
+			}
+		);
 
 		controller.abort(reason);
 
@@ -600,7 +610,9 @@ describe('OCaml sandbox', () => {
 		expect(abortRegistration).toBeDefined();
 		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
 
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(1);
 	});
 
@@ -610,9 +622,15 @@ describe('OCaml sandbox', () => {
 		const controller = new AbortController();
 		const reason = new Error('stop stalled OCaml startup');
 		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
-		const loading = sandbox.load('/absproxy/5173', '', true, [], {
-			signal: controller.signal
-		});
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+			'',
+			true,
+			[],
+			{
+				signal: controller.signal
+			}
+		);
 		const loadingResult = loading.catch((error) => error);
 		await vi.dynamicImportSettled();
 		const oldWorker = workerInstances[0];
@@ -621,7 +639,7 @@ describe('OCaml sandbox', () => {
 		const staleAbort = abortRegistration?.[1] as (() => void) | undefined;
 
 		controller.abort(reason);
-		const replacementLoad = sandbox.load('/absproxy/5173');
+		const replacementLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 
 		await vi.dynamicImportSettled();
 		await expect(loadingResult).resolves.toBe(reason);
@@ -643,9 +661,15 @@ describe('OCaml sandbox', () => {
 		const controller = new AbortController();
 		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
-		const loading = sandbox.load('/absproxy/5173', '', true, [], {
-			signal: controller.signal
-		});
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+			'',
+			true,
+			[],
+			{
+				signal: controller.signal
+			}
+		);
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
@@ -716,7 +740,7 @@ describe('OCaml sandbox', () => {
 
 	it('isolates empty explicit stdin from queued terminal input across runs', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		suppressAutoRunAck = true;
 		sandbox.write('queued before explicit run\n');
@@ -779,11 +803,13 @@ describe('OCaml sandbox', () => {
 	it('rejects overlapping startup and execution while load is pending', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Ocaml();
-		const firstLoad = sandbox.load('/absproxy/5173');
+		const firstLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const worker = workerInstances[0];
 
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			code: 'busy',
 			phase: 'startup'
@@ -797,7 +823,7 @@ describe('OCaml sandbox', () => {
 	it('releases a terminated startup before its rejection settles', async () => {
 		suppressAutoLoadAck = true;
 		const sandbox = new Ocaml();
-		const firstLoad = sandbox.load('/absproxy/5173');
+		const firstLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const firstResult = firstLoad.catch((reason) => reason);
 		await vi.dynamicImportSettled();
 		const oldWorker = workerInstances[0];
@@ -805,14 +831,16 @@ describe('OCaml sandbox', () => {
 		const reason = new Error('stop pending OCaml startup');
 
 		sandbox.terminate(reason);
-		const replacementLoad = sandbox.load('/absproxy/5173');
+		const replacementLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 
 		await vi.dynamicImportSettled();
 		await expect(firstResult).resolves.toBe(reason);
 		expect(oldWorker.terminate).toHaveBeenCalledOnce();
 		expect(workerInstances).toHaveLength(2);
 		const replacementWorker = workerInstances[1];
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			phase: 'startup'
 		});
@@ -831,7 +859,7 @@ describe('OCaml sandbox', () => {
 		const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
 		const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 		const loadPromise = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -855,13 +883,15 @@ describe('OCaml sandbox', () => {
 		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
 
 		suppressAutoLoadAck = false;
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 	});
 
 	it('rejects overlapping runs and loads until the active run settles', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const worker = workerInstances[0];
 		const firstRun = sandbox.run('let () = ()', false);
@@ -872,7 +902,9 @@ describe('OCaml sandbox', () => {
 			code: 'busy',
 			phase: 'execute'
 		});
-		await expect(sandbox.load('/absproxy/5173')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).rejects.toMatchObject({
 			name: 'BusyError',
 			phase: 'execute'
 		});
@@ -886,7 +918,7 @@ describe('OCaml sandbox', () => {
 
 	it('reserves OCaml run ownership before option getters and preserves its replacement', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/initial/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/initial/' });
 		const reason = new Error('replace OCaml while reading the execution backend');
 		let replacement: Promise<void> | undefined;
 		let staleModeReads = 0;
@@ -894,7 +926,7 @@ describe('OCaml sandbox', () => {
 		const options = {
 			get ocamlBackend() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement/');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 				return 'js' as const;
 			},
 			get ocamlWasmBinaryenMode() {
@@ -920,7 +952,7 @@ describe('OCaml sandbox', () => {
 
 	it('keeps the first OCaml cancellation when the signal reason getter replaces the run', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/initial/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/initial/' });
 		const firstReason = new Error('first OCaml cancellation');
 		const laterReason = new Error('later OCaml signal reason');
 		let replacement: Promise<void> | undefined;
@@ -929,7 +961,7 @@ describe('OCaml sandbox', () => {
 			aborted: true,
 			get reason() {
 				sandbox.terminate(firstReason);
-				replacement = sandbox.load('/replacement/');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 				return laterReason;
 			},
 			addEventListener: vi.fn(),
@@ -953,7 +985,7 @@ describe('OCaml sandbox', () => {
 
 	it('snapshots explicit OCaml stdin once before dispatch', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		let stdinReads = 0;
 		const options = {
 			get stdin() {
@@ -975,7 +1007,7 @@ describe('OCaml sandbox', () => {
 
 	it('validates and forwards a canonical multi-file OCaml workspace', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const code = 'let () = Helper.print_message ()';
 
 		await expect(
@@ -1007,7 +1039,7 @@ describe('OCaml sandbox', () => {
 
 	it('rejects an unsafe OCaml workspace before mutating the loaded worker', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 
 		await expect(
@@ -1027,7 +1059,7 @@ describe('OCaml sandbox', () => {
 
 	it('clamps OCaml workspace overrides to the execution byte ceiling', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 
 		await expect(
@@ -1050,14 +1082,14 @@ describe('OCaml sandbox', () => {
 
 	it('stops reading OCaml workspace entries after a getter replaces the run', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/initial/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/initial/' });
 		const reason = new Error('replace OCaml while reading a workspace path');
 		let replacement: Promise<void> | undefined;
 		let staleContentReads = 0;
 		const workspaceFile = {
 			get path() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement/');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 				return 'superseded.ml';
 			},
 			get content() {
@@ -1079,14 +1111,14 @@ describe('OCaml sandbox', () => {
 
 	it('stops reading OCaml limits after a getter replaces startup ownership', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/initial/');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/initial/' });
 		const reason = new Error('replace OCaml while reading startup limits');
 		let replacement: Promise<void> | undefined;
 		let staleLimitReads = 0;
 		const limits = {
 			get assetTimeoutMs() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement/');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 				return 5;
 			},
 			get startupTimeoutMs() {
@@ -1095,7 +1127,13 @@ describe('OCaml sandbox', () => {
 			}
 		};
 
-		const superseded = sandbox.load('/superseded/', '', true, [], { limits });
+		const superseded = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/superseded/' },
+			'',
+			true,
+			[],
+			{ limits }
+		);
 
 		await expect(superseded).rejects.toBe(reason);
 		await expect(replacement).resolves.toBeUndefined();
@@ -1106,7 +1144,7 @@ describe('OCaml sandbox', () => {
 
 	it('preserves an OCaml replacement started during signal listener cleanup', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const worker = workerInstances[0];
 		let replacement: Promise<boolean | string> | undefined;
@@ -1141,7 +1179,7 @@ describe('OCaml sandbox', () => {
 
 	it('stops reading an OCaml worker message after a getter replaces the run', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const oldWorker = workerInstances[0];
 		const reason = new Error('replace OCaml while reading worker output');
@@ -1152,7 +1190,7 @@ describe('OCaml sandbox', () => {
 		const message = {
 			get output() {
 				sandbox.terminate(reason);
-				replacement = sandbox.load('/replacement/');
+				replacement = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' });
 				return 'superseded output\n';
 			},
 			get results() {
@@ -1174,7 +1212,7 @@ describe('OCaml sandbox', () => {
 
 	it('enforces the OCaml output byte limit without an output callback', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const retiredWorker = workerInstances[0];
 		const running = sandbox.run('let () = ()', false, true, undefined, [], {
@@ -1199,7 +1237,7 @@ describe('OCaml sandbox', () => {
 
 		staleHandler?.({ data: { results: true } } as MessageEvent<any>);
 		suppressAutoRunAck = false;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
@@ -1208,7 +1246,7 @@ describe('OCaml sandbox', () => {
 		const sandbox = new Ocaml();
 		const output = vi.fn();
 		sandbox.output = output;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const worker = workerInstances[0];
 		const running = sandbox.run('let () = ()', false, true, undefined, [], {
@@ -1231,7 +1269,7 @@ describe('OCaml sandbox', () => {
 
 	it('enforces the OCaml diagnostic limit without a diagnostic callback', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const worker = workerInstances[0];
 		const running = sandbox.run('let () = ()', true, true, undefined, [], {
@@ -1263,7 +1301,7 @@ describe('OCaml sandbox', () => {
 
 	it('releases a terminated run before its rejection settles', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const oldWorker = workerInstances[0];
 		const firstRun = sandbox.run('let () = ()', false, true, undefined, [], {
@@ -1281,7 +1319,7 @@ describe('OCaml sandbox', () => {
 		expect(sandbox.pendingEof).toBe(false);
 		expect(sandbox.waitingForInput).toBe(false);
 		expect(readBufferedStdin(sandbox.buffer)).toBe('');
-		const replacementLoad = sandbox.load('/absproxy/5173');
+		const replacementLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 
 		await vi.dynamicImportSettled();
 		await expect(firstResult).resolves.toBe(reason);
@@ -1304,7 +1342,7 @@ describe('OCaml sandbox', () => {
 
 	it('keeps input written after explicit-run termination', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const running = sandbox.run('let () = ()', false, true, undefined, [], {
 			stdin: ''
@@ -1327,7 +1365,7 @@ describe('OCaml sandbox', () => {
 		const sandbox = new Ocaml();
 		const output = vi.fn();
 		sandbox.output = output;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const oldWorker = workerInstances[0];
 		const controller = new AbortController();
@@ -1359,7 +1397,7 @@ describe('OCaml sandbox', () => {
 		expect(output).not.toHaveBeenCalled();
 
 		suppressAutoLoadAck = true;
-		const replacementLoad = sandbox.load('/absproxy/5173');
+		const replacementLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await vi.dynamicImportSettled();
 		const replacementWorker = workerInstances[1];
 		staleAbort?.();
@@ -1376,7 +1414,7 @@ describe('OCaml sandbox', () => {
 		'aborts an OCaml run reentrantly from its $kind callback',
 		async (kind) => {
 			const sandbox = new Ocaml();
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			const worker = workerInstances[0];
 			const controller = new AbortController();
 			const reason = new Error(`stop from OCaml ${kind}`);
@@ -1409,14 +1447,14 @@ describe('OCaml sandbox', () => {
 				expect(sandbox.output).toHaveBeenCalledWith('hello from ocaml wasm\n');
 			}
 
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
 		}
 	);
 
 	it('preserves replacement input when an aborting output callback subsequently throws', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const controller = new AbortController();
 		const abortReason = new Error('stop before replacement OCaml input');
@@ -1443,7 +1481,7 @@ describe('OCaml sandbox', () => {
 
 	it('ignores an abort fired immediately after a successful OCaml result', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const worker = workerInstances[0];
 		const controller = new AbortController();
@@ -1467,7 +1505,7 @@ describe('OCaml sandbox', () => {
 
 	it('cancels a run reentrantly without accepting the rest of the worker message', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		sandbox.output = () => sandbox.terminate('stopped from output');
 		sandbox.write('queued before cancelled explicit run\n');
@@ -1485,13 +1523,13 @@ describe('OCaml sandbox', () => {
 		expect(readBufferedStdin(sandbox.buffer)).toBe('');
 
 		sandbox.output = vi.fn();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
 	});
 
 	it('quarantines a worker when an execution callback throws', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const callbackError = new Error('output callback failed');
 		const controller = new AbortController();
@@ -1519,14 +1557,14 @@ describe('OCaml sandbox', () => {
 		expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
 
 		sandbox.output = vi.fn();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
 		expect(workerInstances).toHaveLength(2);
 	});
 
 	it('keeps the loaded worker reusable after a synchronous run dispatch failure', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		const dispatchError = new Error('postMessage failed');
 		const controller = new AbortController();
@@ -1557,7 +1595,7 @@ describe('OCaml sandbox', () => {
 
 	it('clears explicit stdin state after a worker execution error', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const worker = workerInstances[0];
 		const controller = new AbortController();
@@ -1589,9 +1627,15 @@ describe('OCaml sandbox', () => {
 		vi.useFakeTimers();
 		suppressAutoLoadAck = true;
 		const sandbox = new Ocaml();
-		const loading = sandbox.load('/absproxy/5173', '', true, [], {
-			limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
-		});
+		const loading = sandbox.load(
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
+			'',
+			true,
+			[],
+			{
+				limits: { assetTimeoutMs: 5, startupTimeoutMs: 7 }
+			}
+		);
 		const rejected = expect(loading).rejects.toMatchObject({
 			name: 'TimeoutError',
 			code: 'timeout',
@@ -1610,14 +1654,16 @@ describe('OCaml sandbox', () => {
 
 		staleHandler?.({ data: { load: true } } as MessageEvent<any>);
 		suppressAutoLoadAck = false;
-		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' })
+		).resolves.toBeUndefined();
 		expect(workerInstances).toHaveLength(2);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
 
 	it('enforces the aggregate OCaml execution deadline and permits a clean retry', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const retiredWorker = workerInstances[0];
 		suppressAutoRunAck = true;
 		vi.useFakeTimers();
@@ -1640,7 +1686,7 @@ describe('OCaml sandbox', () => {
 
 		staleHandler?.({ data: { output: 'stale output', results: true } } as MessageEvent<any>);
 		suppressAutoRunAck = false;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
 		expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 	});
@@ -1648,7 +1694,7 @@ describe('OCaml sandbox', () => {
 	it('clears settled OCaml deadlines before they can retire an idle worker', async () => {
 		vi.useFakeTimers();
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173', '', true, [], {
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' }, '', true, [], {
 			limits: { assetTimeoutMs: 2, startupTimeoutMs: 3 }
 		});
 		const worker = workerInstances[0];
@@ -1666,7 +1712,7 @@ describe('OCaml sandbox', () => {
 
 	it('fails closed on the removed page-runtime protocol without patching globals', async () => {
 		const sandbox = new Ocaml();
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		suppressAutoRunAck = true;
 		const worker = workerInstances[0];
 		const originalConsole = window.console;
@@ -1703,7 +1749,7 @@ describe('OCaml sandbox', () => {
 		).toBeUndefined();
 
 		suppressAutoRunAck = false;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
 	});
 
@@ -1716,7 +1762,7 @@ describe('OCaml sandbox', () => {
 			const addEventListener = vi.spyOn(controller.signal, 'addEventListener');
 			const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
 			sandbox.output = output;
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			suppressAutoRunAck = true;
 			const worker = workerInstances[0];
 			const runPromise = sandbox.run('let () = ()', false, true, undefined, [], {
@@ -1755,7 +1801,7 @@ describe('OCaml sandbox', () => {
 			expect(removeEventListener).toHaveBeenCalledWith('abort', abortRegistration?.[1]);
 
 			suppressAutoRunAck = false;
-			await sandbox.load('/absproxy/5173');
+			await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 			controller.abort(new Error('late failed OCaml run abort'));
 			expect(workerInstances[1].terminate).not.toHaveBeenCalled();
 			await expect(sandbox.run('let () = ()', false)).resolves.toBe(true);
@@ -1769,7 +1815,7 @@ describe('OCaml sandbox', () => {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 
 		sandbox.write('stale before clear\n');
@@ -1802,7 +1848,7 @@ describe('OCaml sandbox', () => {
 				onerror: worker.onerror,
 				onmessageerror: worker.onmessageerror
 			};
-			reentrantLoad = sandbox.load('/reentrant/');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/reentrant/' });
 			reentrantRun = sandbox.run('let reentrant = true', false);
 			void reentrantLoad.catch(() => undefined);
 			void reentrantRun.catch(() => undefined);
@@ -1842,7 +1888,9 @@ describe('OCaml sandbox', () => {
 			phase: 'dispose',
 			runtimeId: 'OCAML'
 		});
-		await expect(sandbox.load('/replacement/')).rejects.toMatchObject({
+		await expect(
+			sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/replacement/' })
+		).rejects.toMatchObject({
 			name: 'RuntimeConfigurationError',
 			code: 'runtime-configuration',
 			phase: 'dispose',
@@ -1878,7 +1926,7 @@ describe('OCaml sandbox', () => {
 		let reentrantRun: Promise<boolean | string> | undefined;
 		let reentrantDisposal: Promise<void> | undefined;
 		const loading = sandbox.load(
-			'/absproxy/5173',
+			{ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' },
 			'',
 			true,
 			[],
@@ -1892,7 +1940,7 @@ describe('OCaml sandbox', () => {
 		const progressCallsBeforeDisposal = progress.set.mock.calls.length;
 		worker.terminate.mockImplementationOnce(() => {
 			controller.abort(racingReason);
-			reentrantLoad = sandbox.load('/reentrant/');
+			reentrantLoad = sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/reentrant/' });
 			reentrantRun = sandbox.run('let reentrant = true', false);
 			void reentrantLoad.catch(() => undefined);
 			void reentrantRun.catch(() => undefined);
@@ -1941,7 +1989,7 @@ describe('OCaml sandbox', () => {
 		const diagnostic = vi.fn();
 		sandbox.output = output;
 		sandbox.oncompilerdiagnostic = diagnostic;
-		await sandbox.load('/absproxy/5173');
+		await sandbox.load({ ...TEST_RUNTIME_ASSETS, rootUrl: '/absproxy/5173' });
 		const worker = workerInstances[0];
 		suppressAutoRunAck = true;
 		const running = sandbox.run('let () = read_line () |> print_endline', false);

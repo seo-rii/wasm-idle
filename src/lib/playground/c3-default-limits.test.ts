@@ -2,11 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPlaygroundBinding, DEFAULT_EXECUTION_LIMITS, type Sandbox } from '@wasm-idle/core';
 import C3 from './c3';
 
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv();
-});
-
 afterEach(() => vi.restoreAllMocks());
 
 describe('C3 memory profile at the Core binding boundary', () => {

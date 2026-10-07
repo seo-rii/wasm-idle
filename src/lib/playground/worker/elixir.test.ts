@@ -362,7 +362,7 @@ describe('Elixir worker', () => {
 
 		expect((globalThis as any).fetch).not.toHaveBeenCalled();
 		expect((globalThis as any).postMessage).toHaveBeenLastCalledWith({
-			error: 'Elixir runtime is not configured. Set PUBLIC_WASM_ELIXIR_BUNDLE_URL or runtimeAssets.elixir.bundleUrl.'
+			error: 'Elixir runtime is not configured. Set runtimeAssets.elixir.bundleUrl.'
 		});
 	});
 

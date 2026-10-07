@@ -3,11 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRuntimeAssetsKey } from '@wasm-idle/core';
 import { WASM_OBJECTIVEC_ASSET_RECEIPTS } from './wasmObjectiveCVersion';
 
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv();
-});
-
 const workerInstances: MockWorker[] = [];
 
 class MockWorker {

@@ -2,11 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_R_BASE_URL: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 
 class MockWorker {
@@ -42,18 +37,12 @@ vi.mock('$lib/playground/worker/r?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv(publicEnv);
-});
-
 import R from './r';
 
 describe('R sandbox', () => {
 	beforeEach(() => {
 		vi.useRealTimers();
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_R_BASE_URL = '';
 		suppressAutoLoadAck = false;
 	});
 

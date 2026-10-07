@@ -50,11 +50,6 @@ vi.mock('$lib/playground/worker/assemblyscript?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv();
-});
-
 import AssemblyScript from './assemblyscript';
 
 describe('AssemblyScript sandbox', () => {

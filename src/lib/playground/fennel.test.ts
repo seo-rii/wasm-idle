@@ -2,13 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WASM_FENNEL_COMPILER_RECEIPT } from './wasmFennelVersion';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_LUA_MODULE_URL: '',
-		PUBLIC_WASM_FENNEL_COMPILER_URL: ''
-	}
-}));
-
 class MockWorker {
 	onmessage: ((event: MessageEvent<any>) => void) | null = null;
 	onerror: ((event: ErrorEvent) => void) | null = null;
@@ -54,19 +47,12 @@ vi.mock('$lib/playground/worker/lua?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv(publicEnv);
-});
-
 import Fennel from './fennel';
 
 describe('Fennel sandbox', () => {
 	beforeEach(() => {
 		vi.useRealTimers();
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_LUA_MODULE_URL = '';
-		publicEnv.PUBLIC_WASM_FENNEL_COMPILER_URL = '';
 	});
 
 	afterEach(() => {

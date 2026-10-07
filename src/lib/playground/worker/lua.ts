@@ -39,9 +39,7 @@ let runtimeLabel = 'Lua';
 
 async function loadRuntime(url: string) {
 	if (!url) {
-		throw new Error(
-			'Lua runtime is not configured. Set PUBLIC_WASM_LUA_MODULE_URL or runtimeAssets.lua.moduleUrl.'
-		);
+		throw new Error('Lua runtime is not configured. Set runtimeAssets.lua.moduleUrl.');
 	}
 	if (loadedModuleUrl === url && runtimePromise) {
 		return await runtimePromise;

@@ -338,7 +338,7 @@ class TinyGo implements Sandbox {
 				this.assertOperation(operation);
 				if (!nextModuleUrl) {
 					throw new Error(
-						'TinyGo runtime is not configured. Set PUBLIC_WASM_TINYGO_MODULE_URL or runtimeAssets.tinygo.moduleUrl.'
+						'TinyGo runtime is not configured. Set runtimeAssets.tinygo.moduleUrl.'
 					);
 				}
 				if (

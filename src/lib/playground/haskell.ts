@@ -351,7 +351,7 @@ class Haskell implements Sandbox {
 				if (!this.isOperationActive(activeOperation)) return;
 				if (!moduleUrl || !rootfsUrl || !bsdtarUrl) {
 					return rejectLoad(
-						'Haskell runtime is not configured. Set PUBLIC_WASM_HASKELL_MODULE_URL, PUBLIC_WASM_HASKELL_ROOTFS_URL, and PUBLIC_WASM_HASKELL_BSDTAR_URL, or runtimeAssets.haskell.'
+						'Haskell runtime is not configured. Set runtimeAssets.haskell.'
 					);
 				}
 				const mainSoPath = runtimeConfig?.mainSoPath || DEFAULT_HASKELL_MAIN_SO_PATH;

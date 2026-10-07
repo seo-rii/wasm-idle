@@ -296,7 +296,7 @@ class Wat implements Sandbox {
 				if (!this.isOperationActive(activeOperation)) return;
 				if (!nextModuleUrl) {
 					return rejectLoad(
-						'WAT runtime is not configured. Set PUBLIC_WASM_WAT_MODULE_URL or runtimeAssets.wat.moduleUrl.'
+						'WAT runtime is not configured. Set runtimeAssets.wat.moduleUrl.'
 					);
 				}
 				const needsWorkerReset = !this.worker || this.moduleUrl !== nextModuleUrl;

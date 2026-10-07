@@ -29,11 +29,6 @@ class MockWorker {
 }
 
 vi.mock('$lib/playground/worker/python?worker', () => ({ default: MockWorker }));
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv();
-});
-
 import Hy from './hy';
 import Python from './python';
 

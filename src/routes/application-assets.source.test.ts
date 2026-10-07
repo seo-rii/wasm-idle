@@ -25,4 +25,14 @@ describe('page application asset root', () => {
 		);
 		expect(source).not.toMatch(/import \{ WASM_[A-Z_]+_ASSET_VERSION \}/u);
 	});
+
+	it('reads public environment values only while deriving explicit example runtime options', () => {
+		expect(source).toContain("import * as publicEnvironment from '$app/env/public';");
+		expect(source).toContain(
+			"import { applyExampleRuntimeEnvironment } from './runtimeEnvironment';"
+		);
+		expect(source).toMatch(
+			/let runtimeAssets = \$derived\.by\(\(\) =>\s+applyExampleRuntimeEnvironment\(\s+\{[\s\S]*?\},\s+publicEnvironment\s+\)\s+\);/s
+		);
+	});
 });

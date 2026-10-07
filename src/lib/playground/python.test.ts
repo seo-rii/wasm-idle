@@ -51,11 +51,6 @@ vi.mock('$lib/playground/worker/python?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv();
-});
-
 import Python from './python';
 
 describe('Python sandbox', () => {

@@ -3,10 +3,6 @@ import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const storage = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn() }));
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv();
-});
 vi.mock('@wasm-idle/core', async (original) => ({
 	...(await original<typeof import('@wasm-idle/core')>()),
 	readPersistentRuntimeAsset: storage.read,

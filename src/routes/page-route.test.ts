@@ -385,7 +385,7 @@ describe('example route debug actions', () => {
 			'const resolveApplicationAsset = createApplicationAssetResolver(applicationRootUrl);'
 		);
 		expect(source).toMatch(
-			/let runtimeAssets = \$derived\.by\(\(\) => \(\{\s+\.\.\.createApplicationRuntimeAssets\(applicationRootUrl\),/s
+			/let runtimeAssets = \$derived\.by\(\(\) =>\s+applyExampleRuntimeEnvironment\(\s+\{\s+\.\.\.createApplicationRuntimeAssets\(applicationRootUrl\),/s
 		);
 		expect(source).toMatch(
 			/\{#each playgroundLanguages as languageOption \(languageOption\)\}\s+<option value=\{languageOption\}>\{languageLabels\[languageOption\]\}<\/option>/s

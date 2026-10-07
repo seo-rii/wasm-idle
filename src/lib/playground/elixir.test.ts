@@ -1,12 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const workerInstances: MockWorker[] = [];
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_ELIXIR_BUNDLE_URL: '',
-		PUBLIC_WASM_ERLANG_BUNDLE_URL: ''
-	}
-}));
 let suppressAutoLoadAck = false;
 
 class MockWorker {
@@ -43,11 +37,6 @@ vi.mock('$lib/playground/worker/elixir?worker', () => ({
 	default: MockWorker
 }));
 
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv(publicEnv);
-});
-
 import Elixir from './elixir';
 import { readBufferedStdin } from './stdinBuffer';
 import { WASM_ELIXIR_ASSET_RECEIPTS } from './wasmElixirVersion';
@@ -55,8 +44,6 @@ import { WASM_ELIXIR_ASSET_RECEIPTS } from './wasmElixirVersion';
 describe('Elixir sandbox', () => {
 	beforeEach(() => {
 		workerInstances.length = 0;
-		publicEnv.PUBLIC_WASM_ELIXIR_BUNDLE_URL = '';
-		publicEnv.PUBLIC_WASM_ERLANG_BUNDLE_URL = '';
 		suppressAutoLoadAck = false;
 		history.replaceState({}, '', '/editor');
 	});
@@ -293,7 +280,7 @@ describe('Elixir sandbox', () => {
 		const sandbox = new Elixir();
 
 		await expect(sandbox.load({})).rejects.toBe(
-			'Elixir runtime is not configured. Set PUBLIC_WASM_ELIXIR_BUNDLE_URL or runtimeAssets.elixir.bundleUrl.'
+			'Elixir runtime is not configured. Set runtimeAssets.elixir.bundleUrl.'
 		);
 		expect(workerInstances).toHaveLength(0);
 	});

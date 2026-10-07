@@ -3,11 +3,6 @@ import type { Sandbox, SandboxExecutionOptions, SandboxRuntimeAssets } from '@wa
 import type { BrowserClangArtifact } from '@wasm-idle/llvm-core/clang';
 
 import type { RuntimeAssetCache } from './runtimeAssetCache';
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv();
-});
-
 const bridges = vi.hoisted(() => ({
 	instances: [] as {
 		worker: Worker;

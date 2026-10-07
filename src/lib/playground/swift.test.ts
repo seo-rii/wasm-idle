@@ -2,13 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const workerInstances: MockWorker[] = [];
 const workerBootstrapBlobs = new Map<string, Blob>();
-const { publicEnv } = vi.hoisted(() => ({
-	publicEnv: {
-		PUBLIC_WASM_SWIFT_BASE_URL: '',
-		PUBLIC_WASM_SWIFT_WORKER_URL: '',
-		PUBLIC_WASM_SWIFT_MANIFEST_URL: ''
-	}
-}));
 let onPostMessage: ((worker: MockWorker, message: any) => void) | null = null;
 let workerBootstrapId = 0;
 
@@ -44,11 +37,6 @@ class MockWorker {
 
 vi.stubGlobal('Worker', MockWorker);
 
-vi.mock('$app/env/public', async () => {
-	const { mockPublicEnv } = await import('../testPublicEnv');
-	return mockPublicEnv(publicEnv);
-});
-
 import Swift from './swift';
 
 describe('Swift sandbox', () => {
@@ -56,9 +44,6 @@ describe('Swift sandbox', () => {
 		workerInstances.length = 0;
 		workerBootstrapBlobs.clear();
 		workerBootstrapId = 0;
-		publicEnv.PUBLIC_WASM_SWIFT_BASE_URL = '';
-		publicEnv.PUBLIC_WASM_SWIFT_WORKER_URL = '';
-		publicEnv.PUBLIC_WASM_SWIFT_MANIFEST_URL = '';
 		onPostMessage = null;
 		vi.stubGlobal(
 			'fetch',

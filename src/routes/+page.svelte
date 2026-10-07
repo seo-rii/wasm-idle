@@ -14,6 +14,7 @@
 	} from '@wasm-idle/debug';
 	import { page } from '$app/state';
 	import { browser } from '$app/env';
+	import * as publicEnvironment from '$app/env/public';
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { SvelteURL } from 'svelte/reactivity';
@@ -49,6 +50,7 @@
 	import { executeTerminalRun } from './execute';
 	import { parseArgs } from './parseArgs';
 	import { createWorkspaceStorage, type WorkspaceSaveState } from './workspaceStorage';
+	import { applyExampleRuntimeEnvironment } from './runtimeEnvironment';
 	import { createExecutionPreflightGate } from './executionPreflight';
 	import elixirRuntimeWorkerUrl from '$lib/playground/worker/elixir?worker&url';
 	import {
@@ -185,15 +187,20 @@
 	const applicationRootUrl = resolve('');
 	const resolveApplicationAsset = createApplicationAssetResolver(applicationRootUrl);
 	let clangdBaseUrl = $derived(resolveApplicationAsset('clangd/'));
-	let runtimeAssets = $derived.by(() => ({
-		...createApplicationRuntimeAssets(applicationRootUrl),
-		debug: {
-			baseUrl: path ? `${path}/wasm-debug/` : '/wasm-debug/',
-			manifestUrl: path
-				? `${path}/wasm-debug/runtime-manifest.v2.json`
-				: '/wasm-debug/runtime-manifest.v2.json'
-		}
-	}));
+	let runtimeAssets = $derived.by(() =>
+		applyExampleRuntimeEnvironment(
+			{
+				...createApplicationRuntimeAssets(applicationRootUrl),
+				debug: {
+					baseUrl: path ? `${path}/wasm-debug/` : '/wasm-debug/',
+					manifestUrl: path
+						? `${path}/wasm-debug/runtime-manifest.v2.json`
+						: '/wasm-debug/runtime-manifest.v2.json'
+				}
+			},
+			publicEnvironment
+		)
+	);
 	const playground = $derived.by(() => createPlaygroundBinding(runtimeAssets, { prewarm: true }));
 
 	let editor = $state<monaco.editor.IStandaloneCodeEditor | null>(null),
