@@ -281,6 +281,48 @@ describe('WorkerAssetBridge progress', () => {
 			measurement: { kind: 'bytes', completed: 10, total: 100 }
 		});
 	});
+	it('includes separately receipted clangd headers in aggregate progress and restores legacy progress on rebind', () => {
+		const report = vi.fn();
+		const worker = { postMessage: vi.fn() } as unknown as Worker;
+		const legacy = { baseUrl: '/clangd/', useAssetBridge: true };
+		const bridge = new WorkerAssetBridge(
+			worker,
+			'clangd',
+			{
+				...legacy,
+				integrity: { 'clangd.headers.json.gz': { bytes: 20, sha256: 'a'.repeat(64) } }
+			},
+			{ report }
+		);
+		bridge.handleMessage({
+			data: { assetProgress: { asset: 'clangd.js', loaded: 10, total: 10 } }
+		} as MessageEvent);
+		bridge.handleMessage({
+			data: { assetProgress: { asset: 'clangd.wasm.gz', loaded: 90, total: 90 } }
+		} as MessageEvent);
+		expect(report.mock.lastCall?.[0]).not.toHaveProperty('measurement');
+		bridge.handleMessage({
+			data: { assetProgress: { asset: 'clangd.headers.json.gz', loaded: 20, total: 20 } }
+		} as MessageEvent);
+		expect(report.mock.lastCall?.[0]).toHaveProperty('measurement', {
+			kind: 'bytes',
+			completed: 120,
+			total: 120
+		});
+		bridge.rebind(worker, legacy, { report });
+		bridge.handleMessage({
+			data: { assetProgress: { asset: 'clangd.js', loaded: 10, total: 10 } }
+		} as MessageEvent);
+		bridge.handleMessage({
+			data: { assetProgress: { asset: 'clangd.wasm.gz', loaded: 90, total: 90 } }
+		} as MessageEvent);
+		expect(report.mock.lastCall?.[0]).toHaveProperty('measurement', {
+			kind: 'bytes',
+			completed: 100,
+			total: 100
+		});
+		bridge.dispose();
+	});
 
 	it('fails closed if an asset changes its declared total mid-phase', () => {
 		const report = vi.fn();

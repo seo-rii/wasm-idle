@@ -6,6 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { unzipSync } from 'fflate';
 import { assertClangdStdinBridge } from './llvm-contracts/clangd-artifact-contract.mjs';
+import {
+	CLANGD_HEADER_ASSET,
+	validateClangdHeaderMetadata,
+	verifyClangdHeaderAsset
+} from './llvm-contracts/clangd-header-asset-contract.mjs';
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const REPO_ROOT = path.resolve(path.dirname(THIS_FILE), '..');
@@ -63,6 +68,13 @@ const ASSETS = [
 		target: 'clangd/clangd.wasm.gz'
 	}
 ];
+const HEADER_ASSET = {
+	asset: CLANGD_HEADER_ASSET,
+	deliveryAsset: CLANGD_HEADER_ASSET,
+	source: CLANGD_HEADER_ASSET,
+	target: CLANGD_HEADER_ASSET,
+	entry: undefined
+};
 const REQUIRED_FILES = [...DOCUMENTS, ...ASSETS];
 const MEMFS_DOCUMENTS = [
 	'memfs-build-receipt.json',
@@ -211,6 +223,25 @@ async function validateBundle(bundleDir, layout) {
 	) {
 		throw new Error('wasm-clang runtime-build.json is missing the clangd stdin bridge receipt');
 	}
+	const bundleAssets = [...ASSETS];
+	const headerDescriptor = buildInfo.toolchain.clangd.headers;
+	if (headerDescriptor !== undefined || clangd.headers !== undefined) {
+		const headers = validateClangdHeaderMetadata(headerDescriptor);
+		const manifestHeaders = validateClangdHeaderMetadata(clangd.headers);
+		if (
+			JSON.stringify(headers) !== JSON.stringify(manifestHeaders) ||
+			headers.resourceDir !== compiler.resourceDir ||
+			headers.resourceDir !== buildInfo.toolchain.resourceDir ||
+			headers.targetTriple !== manifest.defaultTarget
+		)
+			throw new Error('wasm-clang header manifest does not match its toolchain metadata');
+		bundleAssets.push(HEADER_ASSET);
+		const fileStats = await stat(path.join(bundleDir, HEADER_ASSET[layout])).catch(() => null);
+		if (!fileStats?.isFile())
+			throw new Error(
+				`wasm-clang runtime asset ${CLANGD_HEADER_ASSET} was not found in ${bundleDir}`
+			);
+	}
 
 	const buildAssets = new Map();
 	for (const entry of buildInfo.assets) {
@@ -230,11 +261,11 @@ async function validateBundle(bundleDir, layout) {
 		buildAssets.set(entry.asset, entry);
 	}
 
-	const expectedAssetNames = ASSETS.map((asset) =>
+	const expectedAssetNames = bundleAssets.map((asset) =>
 		layout === 'source' ? asset.asset : asset.deliveryAsset
 	);
 	if (
-		buildAssets.size !== ASSETS.length ||
+		buildAssets.size !== bundleAssets.length ||
 		expectedAssetNames.some((asset) => !buildAssets.has(asset))
 	) {
 		throw new Error(
@@ -246,7 +277,7 @@ async function validateBundle(bundleDir, layout) {
 	if (toolchainAssets !== undefined) {
 		if (
 			!isObject(toolchainAssets) ||
-			Object.keys(toolchainAssets).length !== ASSETS.length ||
+			Object.keys(toolchainAssets).length !== bundleAssets.length ||
 			expectedAssetNames.some(
 				(asset) =>
 					typeof toolchainAssets[asset] !== 'string' ||
@@ -260,7 +291,7 @@ async function validateBundle(bundleDir, layout) {
 		}
 	}
 
-	for (const asset of ASSETS) {
+	for (const asset of bundleAssets) {
 		const filePath = path.join(bundleDir, asset[layout]);
 		const fileStats = await stat(filePath);
 		const hash = createHash('sha256');
@@ -272,6 +303,11 @@ async function validateBundle(bundleDir, layout) {
 			);
 		}
 	}
+	if (headerDescriptor !== undefined)
+		verifyClangdHeaderAsset(
+			await readFile(path.join(bundleDir, CLANGD_HEADER_ASSET)),
+			headerDescriptor
+		);
 	const memfsMetadata = buildInfo.toolchain.memfs;
 	if (isObject(memfsMetadata) && memfsMetadata.files !== undefined) {
 		const files = memfsMetadata.files;
@@ -339,7 +375,11 @@ async function writeJson(filePath, value) {
 
 /** @param {string} sourceDir @param {string} targetRoot */
 async function writeDeliveryBundle(sourceDir, targetRoot) {
-	for (const asset of ASSETS) {
+	const sourceManifest = JSON.parse(
+		await readFile(path.join(sourceDir, 'runtime-manifest.v1.json'), 'utf8')
+	);
+	const bundleAssets = [...ASSETS, ...(sourceManifest.clangd.headers ? [HEADER_ASSET] : [])];
+	for (const asset of bundleAssets) {
 		const sourcePath = path.join(sourceDir, asset.source);
 		const targetPath = path.join(targetRoot, asset.target);
 		await mkdir(path.dirname(targetPath), { recursive: true });
@@ -365,9 +405,6 @@ async function writeDeliveryBundle(sourceDir, targetRoot) {
 		await writeFile(targetPath, gzipSync(files[0][1], { level: 9 }));
 	}
 
-	const sourceManifest = JSON.parse(
-		await readFile(path.join(sourceDir, 'runtime-manifest.v1.json'), 'utf8')
-	);
 	const deliveryManifest = JSON.parse(JSON.stringify(sourceManifest));
 	deliveryManifest.compiler.memfs.asset = MANIFEST_ASSETS.target.memfs;
 	deliveryManifest.compiler.clang.asset = MANIFEST_ASSETS.target.clang;
@@ -383,7 +420,7 @@ async function writeDeliveryBundle(sourceDir, targetRoot) {
 		}
 	}
 	const deliveryAssets = [];
-	for (const asset of ASSETS) {
+	for (const asset of bundleAssets) {
 		const bytes = await readFile(path.join(targetRoot, asset.target));
 		deliveryAssets.push({
 			asset: asset.deliveryAsset,
