@@ -338,6 +338,7 @@ export function createCachedClangSandbox(
 							maxAssetBytes: limit,
 							languageSysroots,
 							log,
+							persistentCache: executionAssetConfig.persistentCache,
 							...(language === 'CPP' && precompiledHeader
 								? { precompiledHeader }
 								: {}),

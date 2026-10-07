@@ -132,11 +132,19 @@ describe('cached C/C++ sandbox', () => {
 		const h = makeHarness();
 		await h.sandbox.load({ ...assets, persistentCache: { enabled: true, maxBytes: 4096 } });
 		await run(h.sandbox, source, { persistentCache: false }, true);
+		expect(h.compileWorkers[0].messages[0].persistentCache).toMatchObject({
+			enabled: false,
+			maxBytes: 4096
+		});
 		expect(bridges.instances.at(-1)?.config.persistentCache).toMatchObject({
 			enabled: false,
 			maxBytes: 4096
 		});
 		await run(h.sandbox, `${source}\n`, {}, true);
+		expect(h.compileWorkers[1].messages[0].persistentCache).toMatchObject({
+			enabled: true,
+			maxBytes: 4096
+		});
 		expect(bridges.instances.at(-1)?.config.persistentCache).toMatchObject({
 			enabled: true,
 			maxBytes: 4096

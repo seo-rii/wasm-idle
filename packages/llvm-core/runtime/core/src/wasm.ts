@@ -4,6 +4,23 @@ export interface ProgressSink {
 
 const store = new Map<string, Promise<WebAssembly.Module>>();
 const bufferStore = new Map<string, Promise<Uint8Array>>();
+const moduleFingerprints = new WeakMap<WebAssembly.Module, Promise<string | undefined>>();
+
+/** The digest belongs to the exact bytes compiled, including cancellable uncached loads. */
+export function getCompiledModuleFingerprint(module: WebAssembly.Module) {
+	return moduleFingerprints.get(module) ?? Promise.resolve(undefined);
+}
+
+async function fingerprintCompiledBytes(bytes: Uint8Array<ArrayBuffer>) {
+	try {
+		return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (byte) =>
+			byte.toString(16).padStart(2, '0')
+		).join('');
+	} catch {
+		// Missing WebCrypto or digest failures affect optional cache reuse only.
+		return undefined;
+	}
+}
 
 const isGzip = (bytes: Uint8Array) =>
 	bytes.byteLength >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
@@ -802,8 +819,12 @@ export async function compile(
 		}
 		// Narrow the backing store without copying the byte range.
 		const compileBytes = new Uint8Array(buffer, bytes.byteOffset, bytes.byteLength);
-		const module = await waitForRuntimeAssetOperation(WebAssembly.compile(compileBytes), signal);
+		const module = await waitForRuntimeAssetOperation(
+			WebAssembly.compile(compileBytes),
+			signal
+		);
 		throwIfRuntimeAssetAborted(signal);
+		moduleFingerprints.set(module, fingerprintCompiledBytes(compileBytes));
 		return module;
 	})();
 	if (!signal) {

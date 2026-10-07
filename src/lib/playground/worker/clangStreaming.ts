@@ -28,6 +28,12 @@ export function withVerifiedStreaming(
 	// Scope the two immutable tool modules to this one runtime construction, not globals.
 	const loads = new Map<string, Promise<WebAssembly.Module>>();
 	return class extends Runtime {
+		async getCompilerFingerprint() {
+			// The opted-in bundled loader verifies this receipt before exposing the Module.
+			return verifiedStreaming
+				? BUNDLED_CLANG_ASSET_INTEGRITY['bin/clang.wasm.gz'].sha256
+				: super.getCompilerFingerprint();
+		}
 		async getModule(url: string, progress?: ProgressSink, signal?: AbortSignal) {
 			if (bridgeModules) {
 				const root = new URL(baseUrl);

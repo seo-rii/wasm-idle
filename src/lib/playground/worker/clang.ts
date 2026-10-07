@@ -43,7 +43,8 @@ async function loadClang(
 	log: boolean,
 	maxAssetBytes: number | undefined,
 	verifiedStreaming = false,
-	languageSysrootProfiles = false
+	languageSysrootProfiles = false,
+	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions
 ) {
 	const { BrowserClangRuntime, loadRuntimeManifest, resolveRuntimeManifestUrl } =
 		await import('@wasm-idle/llvm-core/clang');
@@ -88,7 +89,8 @@ async function loadClang(
 		log,
 		maxAssetBytes,
 		runtimeBaseUrl: path,
-		manifest: runtimeManifest
+		manifest: runtimeManifest,
+		persistentCache
 	});
 	await clang.ready;
 }
@@ -119,7 +121,8 @@ self.onmessage = async (event: { data: any }) => {
 		breakpoints,
 		pauseOnEntry,
 		stdin,
-		maxAssetBytes
+		maxAssetBytes,
+		persistentCache
 	} = event.data;
 	const resolvedDebugMode = debugMode || (debug ? 'trace' : 'none');
 	if (event.data.precompiledHeader) precompiledHeaderClang = event.data.precompiledHeader;
@@ -132,7 +135,8 @@ self.onmessage = async (event: { data: any }) => {
 				log,
 				maxAssetBytes,
 				event.data.verifiedStreaming === true,
-				event.data.languageSysrootProfiles === true
+				event.data.languageSysrootProfiles === true,
+				persistentCache
 			);
 			postMessage({ load: true });
 		} catch (error: any) {
@@ -146,7 +150,8 @@ self.onmessage = async (event: { data: any }) => {
 				activePath,
 				cppVersion,
 				cVersion,
-				debugMode: resolvedDebugMode
+				debugMode: resolvedDebugMode,
+				persistentCache
 			})
 			.catch(() => undefined);
 		self.postMessage(
@@ -183,7 +188,8 @@ self.onmessage = async (event: { data: any }) => {
 				interruptBuffer: interruptBufferClang,
 				watchBuffer: watchBufferClang,
 				watchResultBuffer: watchResultBufferClang,
-				precompiledHeader: precompiledHeaderClang
+				precompiledHeader: precompiledHeaderClang,
+				persistentCache
 			});
 			if (clang.usedPrecompiledHeader)
 				postProgress(95, 'Compiled with precompiled <bits/stdc++.h>');
@@ -217,7 +223,8 @@ self.onmessage = async (event: { data: any }) => {
 					cppVersion,
 					cVersion,
 					debugMode: 'lldb',
-					precompiledHeader: precompiledHeaderClang
+					precompiledHeader: precompiledHeaderClang,
+					persistentCache
 				});
 				if (!artifact.debug) {
 					throw new Error('wasm-clang did not return an LLDB DWARF descriptor');
@@ -262,7 +269,8 @@ self.onmessage = async (event: { data: any }) => {
 				interruptBuffer: interruptBufferClang,
 				watchBuffer: watchBufferClang,
 				watchResultBuffer: watchResultBufferClang,
-				precompiledHeader: precompiledHeaderClang
+				precompiledHeader: precompiledHeaderClang,
+				persistentCache
 			});
 			self.postMessage({ results: true, ...missingPrecompiledHeader() });
 		} catch (error: any) {

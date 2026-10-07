@@ -6,7 +6,10 @@ import {
 } from '@wasm-idle/llvm-core/clang';
 import { configureWorkerRuntimeAssets, handleWorkerAssetMessage } from './assets';
 import { compileWorkerRuntimeAsset } from './runtimeModule';
-import { BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES } from '../clangAssetIntegrity';
+import {
+	BUNDLED_CLANG_ASSET_INTEGRITY,
+	BUNDLED_CLANG_LANGUAGE_SYSROOT_PROFILES
+} from '../clangAssetIntegrity';
 import type { ClangCompileWorkerRequest, ClangCompileWorkerResponse } from '../clangWorkerProtocol';
 
 const worker = globalThis as unknown as {
@@ -47,6 +50,10 @@ worker.onmessage = async ({ data }) => {
 			].map(([asset, url]) => [url, asset])
 		);
 		class CachedRuntime extends BrowserClangRuntime {
+			async getCompilerFingerprint() {
+				// This worker is selected only for the bundled, integrity-checked host profile.
+				return BUNDLED_CLANG_ASSET_INTEGRITY['bin/clang.wasm.gz'].sha256;
+			}
 			async getModule(url: string, progress?: ProgressSink, signal?: AbortSignal) {
 				const asset = moduleAssets.get(url);
 				if (!asset) return super.getModule(url, progress, signal);
@@ -63,6 +70,7 @@ worker.onmessage = async ({ data }) => {
 			runtimeBaseUrl: data.runtimeBaseUrl,
 			maxAssetBytes: data.maxAssetBytes,
 			manifest,
+			persistentCache: data.persistentCache,
 			log: data.log ?? false,
 			stdout: (chunk) => output.push(chunk),
 			progress: (value) =>
@@ -90,6 +98,7 @@ worker.onmessage = async ({ data }) => {
 		});
 		const artifact = await runtime.compileArtifact(data.request.code, {
 			...data.request,
+			persistentCache: data.persistentCache,
 			precompiledHeader: data.precompiledHeader
 		});
 		if (runtime.usedPrecompiledHeader)

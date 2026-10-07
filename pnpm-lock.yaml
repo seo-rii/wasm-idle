@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  monaco-editor@0.55.1:
+    hash: ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb
+    path: patches/monaco-editor@0.55.1.patch
+
 importers:
 
   .:
@@ -125,7 +130,7 @@ importers:
         version: 29.0.2
       monaco-editor:
         specifier: ^0.55.1
-        version: 0.55.1
+        version: 0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb)
       playwright-core:
         specifier: ^1.59.1
         version: 1.59.1
@@ -192,7 +197,7 @@ importers:
         version: 29.0.2
       monaco-editor:
         specifier: ^0.55.1
-        version: 0.55.1
+        version: 0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb)
       svelte:
         specifier: ^5.55.4
         version: 5.55.4(@typescript-eslint/types@8.58.2)
@@ -4512,10 +4517,10 @@ snapshots:
 
   '@seorii/monaco@0.1.1(svelte@5.55.4(@typescript-eslint/types@8.58.2))':
     dependencies:
-      monaco-editor: 0.55.1
-      monaco-editor-workers: 0.45.0(monaco-editor@0.55.1)
-      monaco-emacs: 0.3.0(monaco-editor@0.55.1)
-      monaco-vim: 0.4.4(monaco-editor@0.55.1)
+      monaco-editor: 0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb)
+      monaco-editor-workers: 0.45.0(monaco-editor@0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb))
+      monaco-emacs: 0.3.0(monaco-editor@0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb))
+      monaco-vim: 0.4.4(monaco-editor@0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb))
       svelte: 5.55.4(@typescript-eslint/types@8.58.2)
 
   '@standard-schema/spec@1.1.0': {}
@@ -5876,24 +5881,24 @@ snapshots:
 
   mkdirp@3.0.1: {}
 
-  monaco-editor-workers@0.45.0(monaco-editor@0.55.1):
+  monaco-editor-workers@0.45.0(monaco-editor@0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb)):
     dependencies:
-      monaco-editor: 0.55.1
+      monaco-editor: 0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb)
 
-  monaco-editor@0.55.1:
+  monaco-editor@0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb):
     dependencies:
       dompurify: 3.2.7
       marked: 14.0.0
 
-  monaco-emacs@0.3.0(monaco-editor@0.55.1):
+  monaco-emacs@0.3.0(monaco-editor@0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb)):
     dependencies:
       lodash.kebabcase: 4.1.1
       lodash.throttle: 4.1.1
-      monaco-editor: 0.55.1
+      monaco-editor: 0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb)
 
-  monaco-vim@0.4.4(monaco-editor@0.55.1):
+  monaco-vim@0.4.4(monaco-editor@0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb)):
     dependencies:
-      monaco-editor: 0.55.1
+      monaco-editor: 0.55.1(patch_hash=ea369fa1ae54a0a7186c45dc98a642d6561bed9a9e66b69b1b7b1505198c4beb)
 
   mri@1.2.0: {}
 

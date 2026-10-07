@@ -211,6 +211,8 @@ export interface BrowserClangRuntimeOptions {
 	runtimeBaseUrl: string | URL;
 	manifest?: RuntimeManifestV1;
 	maxAssetBytes?: number;
+	/** Persistent generated headers obey the same policy as downloaded runtime assets. */
+	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 }
 
 export interface BrowserClangRuntimeRunOptions {
@@ -238,6 +240,7 @@ export interface BrowserClangRuntimeRunOptions {
 	 * matches the current compile; otherwise the source is compiled normally.
 	 */
 	precompiledHeader?: import('./precompiled-header.js').BrowserClangPrecompiledHeader;
+	persistentCache?: import('@wasm-idle/core').RuntimeAssetCacheOptions;
 }
 
 export interface RuntimeToolAssetConfig {
