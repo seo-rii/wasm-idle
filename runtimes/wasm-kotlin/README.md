@@ -4,11 +4,15 @@ Internal foundations for the official Kotlin compiler source port. **Kotlin is
 not publicly registered and there is no browser compiler bundle in this change.**
 These files are not an exported runtime package or a Kotlin source executor.
 
-Official Kotlin-generated Hello World and stdin-driven Fibonacci now execute in
-Chromium Workers. Their compiler runs on the development machine; browser Kotlin
-source compilation remains unimplemented. The executed bootstrap reference is
-`2.5.0-dev-10106`, which has not been proven to represent the selected source
-commit. Its results are separate from candidate R0–R3 compiler acceptance.
+The active producer work builds the official compiler source for a wasmJs browser
+host and ports its FIR, KLIB, IR and Wasm backend dependencies. The full compiler
+build still fails; this consumer has no callable compiler bundle and has not
+compiled fresh Kotlin input in a browser.
+
+The existing Hello World/Fibonacci browser runs are WASI runtime fixtures
+compiled on the development machine. They validate console execution and remain
+separate from browser compiler acceptance. The bootstrap reference
+`2.5.0-dev-10106` has not been proven to represent the selected source commit.
 
 The producer lives in
 [`wasm-llvm/producer/kotlin-browser`](https://github.com/seo-rii/wasm-llvm/tree/feat/kotlin-browser-foundation/producer/kotlin-browser).
@@ -96,7 +100,7 @@ while running the browser command. The receipt explicitly leaves Kotlin compiler
 build, Kotlin compile/run, and Kotlin stdlib allocator acceptance `not-run`.
 Changing the adapter or WAT fixture invalidates that probe receipt.
 
-## Actual Kotlin program execution
+## Execution of JVM-compiled runtime fixtures
 
 First use the producer's hash-verified bootstrap and two-stage official compiler
 build, then supply its newly created output directory explicitly:
