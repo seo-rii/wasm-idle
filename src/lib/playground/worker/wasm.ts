@@ -250,6 +250,14 @@ self.onmessage = async (event: { data: any }) => {
 			? validateExecutionWorkspace(code, workspaceFiles, activePath, workspaceLimits)
 			: undefined;
 		if (
+			interpreter?.maxSourceBytes !== undefined &&
+			encoder.encode(code).byteLength > interpreter.maxSourceBytes
+		) {
+			throw new Error(
+				`${interpreter.id} source exceeds ${interpreter.maxSourceBytes} UTF-8 bytes`
+			);
+		}
+		if (
 			interpreter?.maxSourcePathBytes !== undefined &&
 			encoder.encode(workspace!.activePath).byteLength > interpreter.maxSourcePathBytes
 		) {

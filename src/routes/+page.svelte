@@ -623,6 +623,7 @@
 		if ((ext === '.mm' || ext === '.h') && language === 'OBJECTIVECXX') return 'OBJECTIVECXX';
 		if (ext === '.m' && language === 'OBJECTIVECXX') return 'OBJC';
 		const match: Record<string, PlaygroundLanguage> = {
+			'.ws': 'WHITESPACE',
 			'.bf': 'BRAINFUCK',
 			'.b93': 'BEFUNGE93',
 			'.c': 'C',
@@ -771,6 +772,7 @@
 			ASSEMBLYSCRIPT: 'main.as.ts',
 			WAT: 'main.wat',
 			WASM: 'main.wasm',
+			WHITESPACE: 'main.ws',
 			BRAINFUCK: 'main.bf',
 			BEFUNGE93: 'main.b93',
 			LUA: 'main.lua',
@@ -841,6 +843,7 @@
 			ASSEMBLYSCRIPT: 'assemblyscript',
 			WAT: 'wat',
 			WASM: 'wasm',
+			WHITESPACE: 'whitespace',
 			BRAINFUCK: 'brainfuck',
 			BEFUNGE93: 'befunge93',
 			LUA: 'lua',
@@ -1473,6 +1476,7 @@
 		if (!value) return null;
 		const normalized = value.trim().toLowerCase();
 		const aliases: Record<string, PlaygroundLanguage> = {
+			"whitespace": 'WHITESPACE',
 			brainfuck: 'BRAINFUCK',
 			bf: 'BRAINFUCK',
 			befunge93: 'BEFUNGE93',

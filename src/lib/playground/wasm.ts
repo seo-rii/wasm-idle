@@ -452,6 +452,15 @@ class Wasm implements Sandbox {
 			);
 			stdin = options.stdin;
 			if (
+				this.interpreter?.maxSourceBytes !== undefined &&
+				OUTPUT_ENCODER.encode(code).byteLength > this.interpreter.maxSourceBytes
+			) {
+				throw new RuntimeConfigurationError(
+					`${this.interpreter.id} source exceeds ${this.interpreter.maxSourceBytes} UTF-8 bytes`,
+					{ runtimeId: this.interpreter.id }
+				);
+			}
+			if (
 				this.interpreter?.maxSourcePathBytes !== undefined &&
 				OUTPUT_ENCODER.encode(workspace.activePath).byteLength >
 					this.interpreter.maxSourcePathBytes

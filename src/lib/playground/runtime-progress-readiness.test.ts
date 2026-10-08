@@ -37,6 +37,11 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	WHITESPACE: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
 	BEFUNGE93: {
 		strategy: 'entry-signal',
 		hostModule: 'wasm',

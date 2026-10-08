@@ -50,6 +50,60 @@ type InterpreterResult = {
 	};
 };
 
+// These helpers construct Whitespace fixtures; execution uses the pinned upstream interpreter.
+function whitespaceNumber(value: number) {
+	return (
+		(value < 0 ? '\t' : ' ') +
+		Math.abs(value).toString(2).replace(/0/g, ' ').replace(/1/g, '\t') +
+		'\n'
+	);
+}
+
+const ws = {
+	push: (value: number) => '  ' + whitespaceNumber(value),
+	copy: (depth: number) => ' \t ' + whitespaceNumber(depth),
+	slide: (count: number) => ' \t\n' + whitespaceNumber(count),
+	duplicate: ' \n ',
+	swap: ' \n\t',
+	discard: ' \n\n',
+	add: '\t   ',
+	subtract: '\t  \t',
+	multiply: '\t  \n',
+	divide: '\t \t ',
+	remainder: '\t \t\t',
+	store: '\t\t ',
+	load: '\t\t\t',
+	label: (name: string) => '\n  ' + name + '\n',
+	call: (name: string) => '\n \t' + name + '\n',
+	jump: (name: string) => '\n \n' + name + '\n',
+	jumpZero: (name: string) => '\n\t ' + name + '\n',
+	jumpNegative: (name: string) => '\n\t\t' + name + '\n',
+	return: '\n\t\n',
+	halt: '\n\n\n',
+	readChar: '\t\n\t ',
+	readNumber: '\t\n\t\t',
+	printChar: '\t\n  ',
+	printNumber: '\t\n \t'
+};
+
+const whitespaceEcho =
+	ws.label(' ') +
+	ws.push(0) +
+	ws.readChar +
+	ws.push(0) +
+	ws.load +
+	ws.duplicate +
+	ws.push(1) +
+	ws.add +
+	ws.jumpZero('\t') +
+	ws.printChar +
+	ws.jump(' ') +
+	ws.label('\t') +
+	ws.halt;
+
+const whitespaceReadChar = ws.push(0) + ws.readChar + ws.push(0) + ws.load;
+const whitespaceNewline = ws.push(10) + ws.printChar;
+
 const profiles: InterpreterBrowserProfile[] = [
 	{
 		language: 'BRAINFUCK',
@@ -202,6 +256,248 @@ const profiles: InterpreterBrowserProfile[] = [
 				source: 'abc123...@',
 				stdin: '',
 				output: '3 2 1 '
+			}
+		]
+	},
+	{
+		language: 'WHITESPACE',
+		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_WHITESPACE === '1',
+		defaultSource: () => editorDefaults.whitespace,
+		echoSource: whitespaceEcho,
+		infiniteSource: ws.label(' ') + ws.jump(' '),
+		runtimePath: 'wasm-whitespace/whitespace.wasm',
+		cases: [
+			{
+				name: 'utf8-explicit-eof',
+				source: whitespaceEcho,
+				stdin: '첫째 줄 🦀\nsecond line\n',
+				output: '첫째 줄 🦀\nsecond line\n'
+			},
+			{ name: 'empty-explicit-eof', source: whitespaceEcho, stdin: '', output: '' },
+			{
+				name: 'nul-byte-is-not-eof',
+				source: whitespaceEcho,
+				stdin: '\0A\n',
+				output: '\0A\n'
+			},
+			{
+				name: 'partial-explicit-stdin',
+				source: whitespaceReadChar + ws.printChar + ws.halt,
+				stdin: 'AB',
+				output: 'A'
+			},
+			{ name: 'fresh-stdin', source: whitespaceEcho, stdin: 'C', output: 'C' },
+			{
+				name: 'character-eof-is-negative-one',
+				source: whitespaceReadChar + ws.printNumber + ws.halt,
+				stdin: '',
+				output: '-1'
+			},
+			{
+				name: 'whitespace-0.3-copy-slide',
+				source:
+					ws.push(10) +
+					ws.push(20) +
+					ws.push(30) +
+					ws.copy(2) +
+					ws.printNumber +
+					whitespaceNewline +
+					ws.slide(1) +
+					ws.printNumber +
+					whitespaceNewline +
+					ws.printNumber +
+					ws.halt,
+				stdin: '',
+				output: '10\n30\n10'
+			},
+			{
+				name: 'slide-zero-preserves-stack',
+				source: ws.push(1) + ws.push(2) + ws.slide(0) + ws.printNumber.repeat(2) + ws.halt,
+				stdin: '',
+				output: '21'
+			},
+			{
+				name: 'stack-swap-duplicate-discard',
+				source:
+					ws.push(65) +
+					ws.push(66) +
+					ws.swap +
+					ws.duplicate +
+					ws.printChar +
+					ws.discard +
+					ws.printChar +
+					ws.halt,
+				stdin: '',
+				output: 'AB'
+			},
+			{
+				name: 'signed-arithmetic',
+				source:
+					ws.push(7) +
+					ws.push(5) +
+					ws.add +
+					ws.printNumber +
+					whitespaceNewline +
+					ws.push(3) +
+					ws.push(8) +
+					ws.subtract +
+					ws.printNumber +
+					whitespaceNewline +
+					ws.push(-6) +
+					ws.push(7) +
+					ws.multiply +
+					ws.printNumber +
+					ws.halt,
+				stdin: '',
+				output: '12\n-5\n-42'
+			},
+			{
+				name: 'signed-division-remainder',
+				source:
+					ws.push(-7) +
+					ws.push(3) +
+					ws.divide +
+					ws.printNumber +
+					whitespaceNewline +
+					ws.push(-7) +
+					ws.push(3) +
+					ws.remainder +
+					ws.printNumber +
+					ws.halt,
+				stdin: '',
+				output: '-2\n-1'
+			},
+			{
+				name: '32bit-integer-wrap',
+				source: ws.push(2147483647) + ws.push(1) + ws.add + ws.printNumber + ws.halt,
+				stdin: '',
+				output: '-2147483648'
+			},
+			{
+				name: 'numeric-stdin',
+				source:
+					ws.push(0) +
+					ws.readNumber +
+					ws.push(1) +
+					ws.readNumber +
+					ws.push(0) +
+					ws.load +
+					ws.push(1) +
+					ws.load +
+					ws.add +
+					ws.printNumber +
+					ws.halt,
+				stdin: '-7 3\n',
+				output: '-4'
+			},
+			{
+				name: 'heap-store-load',
+				source:
+					ws.push(9) +
+					ws.push(65) +
+					ws.store +
+					ws.push(9) +
+					ws.load +
+					ws.printChar +
+					ws.halt,
+				stdin: '',
+				output: 'A'
+			},
+			{
+				name: 'seed-heap',
+				source: ws.push(5) + ws.push(66) + ws.store + ws.halt,
+				stdin: '',
+				output: ''
+			},
+			{
+				name: 'fresh-heap',
+				source: ws.push(5) + ws.load + ws.printNumber + ws.halt,
+				stdin: '',
+				output: '0'
+			},
+			{
+				name: 'nested-call-return',
+				source:
+					ws.call(' ') +
+					ws.halt +
+					ws.label(' ') +
+					ws.push(65) +
+					ws.printChar +
+					ws.call('\t') +
+					ws.push(67) +
+					ws.printChar +
+					ws.return +
+					ws.label('\t') +
+					ws.push(66) +
+					ws.printChar +
+					ws.return,
+				stdin: '',
+				output: 'ABC'
+			},
+			{
+				name: 'forward-jump',
+				source:
+					ws.jump(' ') +
+					ws.push(88) +
+					ws.printChar +
+					ws.label(' ') +
+					ws.push(65) +
+					ws.printChar +
+					ws.halt,
+				stdin: '',
+				output: 'A'
+			},
+			{
+				name: 'jump-if-zero',
+				source:
+					ws.push(0) +
+					ws.jumpZero(' ') +
+					ws.push(88) +
+					ws.printChar +
+					ws.halt +
+					ws.label(' ') +
+					ws.push(65) +
+					ws.printChar +
+					ws.halt,
+				stdin: '',
+				output: 'A'
+			},
+			{
+				name: 'jump-if-negative',
+				source:
+					ws.push(-1) +
+					ws.jumpNegative(' ') +
+					ws.push(88) +
+					ws.printChar +
+					ws.halt +
+					ws.label(' ') +
+					ws.push(65) +
+					ws.printChar +
+					ws.halt,
+				stdin: '',
+				output: 'A'
+			},
+			{
+				name: 'comments-ignore-nonwhitespace-characters',
+				source: [...whitespaceEcho].map((character) => 'COMMENT' + character).join(''),
+				stdin: 'comments\n',
+				output: 'comments\n'
+			},
+			{
+				name: 'source-buffer-boundary',
+				source: 'X'.repeat(65532) + ws.halt,
+				stdin: '',
+				output: ''
+			},
+			{
+				name: 'source-byte-limit',
+				source: ' '.repeat(65536),
+				stdin: '',
+				expectedError: {
+					code: 'runtime-configuration',
+					phase: 'configuration',
+					message: 'WHITESPACE source exceeds 65535 UTF-8 bytes'
+				}
 			}
 		]
 	}

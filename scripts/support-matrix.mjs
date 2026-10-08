@@ -159,6 +159,20 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'Whitespace',
+		ids: ['WHITESPACE'],
+		runtime: 'koturn/Whitespace 0.3 on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_WHITESPACE',
+			language: 'WHITESPACE'
+		}
+	},
+
+	{
 		language: 'C3',
 		ids: ['C3'],
 		runtime: 'C3 0.8.3 + LLVM/lld WASM (byte ABI)',
@@ -969,6 +983,16 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Whitespace',
+		{
+			packageBase: 'koturn/Whitespace 22a57aab (MIT), compiled with WASI SDK 33',
+			execution:
+				'Runs the original Whitespace 0.3 interpreter with copy/slide, heap, labels, calls and signed 32-bit integers; character/numeric stdin and exact stdout; character EOF is -1; source limit 65535 UTF-8 bytes',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+
 	[
 		'Befunge-93',
 		{

@@ -42,6 +42,7 @@ const canonicalLanguageIds = [
 	'ASSEMBLYSCRIPT',
 	'WAT',
 	'WASM',
+	'WHITESPACE',
 	'BRAINFUCK',
 	'BEFUNGE93',
 	'LUA',
