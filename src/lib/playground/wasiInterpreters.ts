@@ -4,6 +4,8 @@ export type WasiInterpreterProfile = {
 	readonly folder: string;
 	readonly fileName: string;
 	readonly sourcePath: string;
+	readonly sourcePathPrefix?: string;
+	readonly maxSourcePathBytes?: number;
 	readonly command: string;
 	readonly args: readonly string[];
 	readonly sha256: string;
@@ -20,5 +22,17 @@ export const WASI_INTERPRETERS: Readonly<Record<string, WasiInterpreterProfile>>
 		args: [],
 		sha256: '62c813c99c700d65e05974ec0ad07333c8ca40460330f1f835f28a8cb39657a5',
 		bytes: 34467
+	},
+	BEFUNGE93: {
+		id: 'BEFUNGE93',
+		folder: 'wasm-befunge93',
+		fileName: 'befunge93.wasm',
+		sourcePath: 'main.b93',
+		sourcePathPrefix: './',
+		maxSourcePathBytes: 125,
+		command: 'bef',
+		args: ['-q'],
+		sha256: '0b28bdff5085e98bcec4d30a4a3475f693f0ad6c0194ea083c7d1832d994df81',
+		bytes: 47871
 	}
 };

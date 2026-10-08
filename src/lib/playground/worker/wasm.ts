@@ -249,6 +249,14 @@ self.onmessage = async (event: { data: any }) => {
 		const workspace = interpreter
 			? validateExecutionWorkspace(code, workspaceFiles, activePath, workspaceLimits)
 			: undefined;
+		if (
+			interpreter?.maxSourcePathBytes !== undefined &&
+			encoder.encode(workspace!.activePath).byteLength > interpreter.maxSourcePathBytes
+		) {
+			throw new Error(
+				`${interpreter.id} source path exceeds ${interpreter.maxSourcePathBytes} UTF-8 bytes`
+			);
+		}
 		const source = sourceFromWorkspace(code, activePath, workspaceFiles);
 		const bytes = interpreterBytes ?? decodeWasmBytes(source);
 		const wasmBuffer = new ArrayBuffer(bytes.byteLength);
@@ -278,7 +286,11 @@ self.onmessage = async (event: { data: any }) => {
 		});
 		const wasiRuntime = new WASI(
 			interpreter && workspace
-				? [interpreter.command, ...interpreter.args, `/${workspace.activePath}`]
+				? [
+						interpreter.command,
+						...interpreter.args,
+						`${interpreter.sourcePathPrefix ?? '/'}${workspace.activePath}`
+					]
 				: args,
 			['USER=wasm-idle'],
 			[
