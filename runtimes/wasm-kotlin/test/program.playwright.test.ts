@@ -44,12 +44,35 @@ it.skipIf(process.env.WASM_IDLE_RUN_KOTLIN_PROGRAMS !== '1')(
 		expect(receipt.compiler.role).toBe('bootstrap-reference');
 		// The bootstrap binary has not been proven to represent the candidate source commit.
 		expect(receipt.compiler.sourceCommit).toBeNull();
+		expect(receipt.compiler.jarSha256).toBe(
+			'4bd26006f00c79dd5c80b7c7906ab9df3aeefa45f36a2843d13bc229ec6d7475'
+		);
+		if (receipt.stdlib.patched === true) {
+			expect(receipt.stdlib.sourceCommit).toBe('4d78aae1e337cd40f69baa865aed950fe807a775');
+			expect(receipt.stdlib.version).toBe('2.5.255-SNAPSHOT');
+			expect(receipt.stdlib.patchSha256).toBe(
+				'6994f87ecccf1de6abc06c01f8fe35018be5ebf1595cf9d9f127a8416e01fede'
+			);
+			const library = await baselineFile(directory, receipt.stdlib.path, 8 * 1024 * 1024);
+			expect(library.byteLength).toBe(receipt.stdlib.bytes);
+			expect(digest(library)).toBe(receipt.stdlib.sha256);
+		} else {
+			expect(receipt.stdlib.patched).toBe(false);
+			expect(receipt.stdlib.sourceCommit).toBeNull();
+			expect(receipt.stdlib.version).toBe('2.5.0-dev-10106');
+			expect(receipt.stdlib.sha256).toBe(
+				'7ac1ac3e9081e1e7b00716ddc8dd73723638753536ac13c510baa01530b45942'
+			);
+		}
 		expect(Array.isArray(receipt.cases) && receipt.cases.length <= 32).toBe(true);
 		const programs = await Promise.all(
 			['hello-world', 'fibonacci'].map(async (id) => {
 				const matches = receipt.cases.filter((entry: { id: string }) => entry.id === id);
 				expect(matches).toHaveLength(1);
 				const entry = matches[0];
+				expect(entry.build.status).toBe('pass');
+				expect(entry.build.sourcePhase.exitCode).toBe(0);
+				expect(entry.build.binaryPhase.exitCode).toBe(0);
 				const source = await baselineFile(directory, entry.sourcePath, 2 * 1024 * 1024);
 				const bytes = await baselineFile(directory, entry.wasmPath, 8 * 1024 * 1024);
 				expect(digest(source)).toBe(entry.sourceSha256);
@@ -331,7 +354,10 @@ it.skipIf(process.env.WASM_IDLE_RUN_KOTLIN_PROGRAMS !== '1')(
 								browserProgramExecution: 'passed',
 								browserKotlinCompilation: 'not-run',
 								candidateCompilerR0: 'not-run',
-								patchedTargetStdlib: 'not-run',
+								patchedTargetStdlib: receipt.stdlib.patched
+									? 'browser-examples-passed'
+									: 'not-run',
+								targetStdlibAllocatorCanaries: 'not-run',
 								publicLanguageSupport: false
 							}
 						},

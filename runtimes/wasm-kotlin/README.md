@@ -63,12 +63,14 @@ currently requests 20/26-byte polling buffers, whereas pinned
 [wasi-libc](https://github.com/WebAssembly/wasi-libc/blob/165235bc467d5fa52d424f5d82587dfb76ed9d54/libc-bottom-half/headers/public/wasi/wasip1.h)
 defines 48/32. Source inspection of Kotlin's allocator confirms 8-byte rounding:
 the original event receives 32 bytes, but the subscription receives only 24.
-The producer has an exact two-line source allocation patch; a matching patched
-stdlib has not been built. The host writes the full standard layout. Linear-memory bounds
+The producer now builds the complete selected-source target stdlib with an exact
+two-line allocation patch. Programs using this KLIB execute successfully in
+Chromium, including stdin polling. The host writes the full standard layout.
+Linear-memory bounds
 cannot detect an undersized logical allocation inside that memory; this host
 therefore cannot prove allocator compatibility or repair the upstream allocation.
-Real Kotlin-generated fixture/allocator canaries and any matched stdlib patch
-remain required.
+Kotlin allocator canaries and the complete ABI/runtime acceptance corpus remain
+required.
 
 ## Focused verification
 
@@ -129,12 +131,24 @@ Successful stdin polling does not prove the original stdlib's logical allocation
 matches the complete Preview 1 structure.
 
 [`evidence/chromium-kotlin-programs.json`](evidence/chromium-kotlin-programs.json)
-records these executions, artifact/source hashes and environments. Set
-`KOTLIN_PROGRAM_EVIDENCE_FILE=/path/to/new.json` to regenerate a receipt, and
+records execution with the official unpatched bootstrap stdlib. The separate
+[`evidence/chromium-kotlin-patched-stdlib.json`](evidence/chromium-kotlin-patched-stdlib.json)
+records all five scenarios with the complete target stdlib built from the selected
+Kotlin source pin and ABI patch. Its KLIB is 4,111,645 bytes; its source commit,
+patch, recipe, KLIB and producer receipt identities are recorded and the copied
+library payload is verified before the browser test. The compiler remains the
+JVM-hosted bootstrap reference, whose source commit is unknown.
+
+To reproduce this variant, follow the producer's
+[stdlib source recipe](https://github.com/seo-rii/wasm-llvm/tree/feat/kotlin-browser-foundation/producer/kotlin-browser/stdlib-probe)
+and set `KOTLIN_BASELINE_DIR` to that recipe's new baseline output directory.
+Set `KOTLIN_PROGRAM_EVIDENCE_FILE=/path/to/new.json` to regenerate a receipt, and
 `KOTLIN_BASELINE_SCREENSHOT=/path/to/preview.png` to capture the displayed real
 source/output results. Receipts explicitly keep browser Kotlin compilation,
-candidate R0 and patched target stdlib acceptance `not-run` and public support
-false. No precompiled fixture is counted as a browser compiler success.
+candidate R0 and target-allocator canaries `not-run` and public support false.
+The patched-target receipt distinguishes observed browser example success from
+full stdlib/ABI acceptance. No precompiled fixture is counted as a browser compiler
+success.
 
 ## Remaining integration
 

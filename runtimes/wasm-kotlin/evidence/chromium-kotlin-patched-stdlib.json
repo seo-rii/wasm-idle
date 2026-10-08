@@ -10,14 +10,18 @@
   },
   "compilerHost": "jvm",
   "programTarget": "wasmWasi",
-  "baselineReceiptSha256": "f41244550f42074721766fba8c0687241055c42e04e57fdd84be000cf1258500",
+  "baselineReceiptSha256": "e589e32469139a7e3900205279fe2d7bc5c32c7371af403b8a0045534ad59896",
   "stdlib": {
-    "version": "2.5.0-dev-10106",
-    "sourceCommit": null,
-    "patched": false,
-    "file": "kotlin-stdlib-wasm-wasi-2.5.0-dev-10106.klib",
-    "bytes": 4044976,
-    "sha256": "7ac1ac3e9081e1e7b00716ddc8dd73723638753536ac13c510baa01530b45942"
+    "path": "stdlib/kotlin-stdlib-wasm-wasi.klib",
+    "bytes": 4111645,
+    "sha256": "3c97b68581963cf32c18d8b6d93b467f3accc9eae2689c1655e8ed4b31f52d28",
+    "version": "2.5.255-SNAPSHOT",
+    "sourceCommit": "4d78aae1e337cd40f69baa865aed950fe807a775",
+    "patched": true,
+    "patchSha256": "6994f87ecccf1de6abc06c01f8fe35018be5ebf1595cf9d9f127a8416e01fede",
+    "file": "kotlin-stdlib-wasm-wasi.klib",
+    "recipeSha256": "78a1e578848593131aa1527cc22fabc7c883ce8a67800a16dde1d72edd6d12f8",
+    "buildReceiptSha256": "fe7d12a5f7328a72ac397356b1b8f6d72f826f6b3c8e6a3ccdebe1e3a142c655"
   },
   "adapterSources": [
     {
@@ -38,14 +42,14 @@
     {
       "id": "hello-world",
       "sourceSha256": "8830ed7da79c4782f43cc1a550547536794aee7836d85cc526c668ea289d96e5",
-      "wasmSha256": "ac77ed6e6db4bb8aaaa6c256764ffe35460c524798c5818d3afe728669861330",
-      "wasmBytes": 691555
+      "wasmSha256": "9e5c58c4878af735b1360b26477041c5b734a1494d4da6c6ef79bdea089e8b96",
+      "wasmBytes": 700186
     },
     {
       "id": "fibonacci",
       "sourceSha256": "1e3e4be9c3f5be891a5adb7d32022b4f3efc7237e6c8e98abbf41b1004ae4990",
-      "wasmSha256": "1730124e54f2b80ebd105035a80870958efb3b7f4db7f6fd31665e5104312205",
-      "wasmBytes": 700643
+      "wasmSha256": "e401539da51fcfddf450a7c6ede0a721dbc4f717516f6e2d6e5b6b2729a53496",
+      "wasmBytes": 709250
     }
   ],
   "browser": {
@@ -77,7 +81,7 @@
       "status": "completed",
       "exitCode": 0,
       "heartbeats": 12,
-      "elapsedMs": 135.90000000596046
+      "elapsedMs": 137.29999999701977
     },
     {
       "id": "fibonacci",
@@ -89,8 +93,8 @@
       "outputLimitExceeded": false,
       "status": "completed",
       "exitCode": 0,
-      "heartbeats": 9,
-      "elapsedMs": 33.5
+      "heartbeats": 10,
+      "elapsedMs": 38.599999994039536
     },
     {
       "id": "fibonacci",
@@ -102,8 +106,8 @@
       "outputLimitExceeded": false,
       "status": "completed",
       "exitCode": 0,
-      "heartbeats": 10,
-      "elapsedMs": 30.599999994039536
+      "heartbeats": 11,
+      "elapsedMs": 30.5
     },
     {
       "id": "hello-world",
@@ -117,7 +121,7 @@
       "exitCode": null,
       "error": "[object WebAssembly.Exception]",
       "heartbeats": 10,
-      "elapsedMs": 25.799999997019768
+      "elapsedMs": 30.700000002980232
     },
     {
       "id": "hello-world",
@@ -129,15 +133,15 @@
       "outputLimitExceeded": false,
       "status": "completed",
       "exitCode": 0,
-      "heartbeats": 9,
-      "elapsedMs": 20.599999994039536
+      "heartbeats": 11,
+      "elapsedMs": 27.400000005960464
     }
   ],
   "gates": {
     "browserProgramExecution": "passed",
     "browserKotlinCompilation": "not-run",
     "candidateCompilerR0": "not-run",
-    "patchedTargetStdlib": "not-run",
+    "patchedTargetStdlib": "browser-examples-passed",
     "targetStdlibAllocatorCanaries": "not-run",
     "publicLanguageSupport": false
   }
