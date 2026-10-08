@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "kind": "kotlin-wasi-program-browser-baseline",
+  "status": "passed",
+  "compiler": {
+    "version": "2.5.0-dev-10106",
+    "sourceCommit": null,
+    "role": "bootstrap-reference",
+    "jarSha256": "4bd26006f00c79dd5c80b7c7906ab9df3aeefa45f36a2843d13bc229ec6d7475"
+  },
+  "compilerHost": "jvm",
+  "programTarget": "wasmWasi",
+  "baselineReceiptSha256": "f41244550f42074721766fba8c0687241055c42e04e57fdd84be000cf1258500",
+  "stdlib": {
+    "version": "2.5.0-dev-10106",
+    "sourceCommit": null,
+    "patched": false,
+    "file": "kotlin-stdlib-wasm-wasi-2.5.0-dev-10106.klib",
+    "bytes": 4044976,
+    "sha256": "7ac1ac3e9081e1e7b00716ddc8dd73723638753536ac13c510baa01530b45942"
+  },
+  "adapterSources": [
+    {
+      "name": "wasi",
+      "sha256": "236c1976f66944231241535dc320f203f512c497866355e8dafe6a0e2d61c948"
+    },
+    {
+      "name": "program",
+      "sha256": "124c86aa081b5518e9c64b80d5c3d98657b34181793186c685e8aaa30545c40c"
+    },
+    {
+      "name": "program.worker",
+      "sha256": "f21a3b6da5d881fabc174bc84b5c4e7f42ea0fd515aed66b6b810ca3b3f7e093"
+    }
+  ],
+  "probeSha256": "01d9406f5705275aefe017d98fa2e00672a28d0865063e865a3a9b92885fd49b",
+  "programs": [
+    {
+      "id": "hello-world",
+      "sourceSha256": "8830ed7da79c4782f43cc1a550547536794aee7836d85cc526c668ea289d96e5",
+      "wasmSha256": "ac77ed6e6db4bb8aaaa6c256764ffe35460c524798c5818d3afe728669861330",
+      "wasmBytes": 691555
+    },
+    {
+      "id": "fibonacci",
+      "sourceSha256": "1e3e4be9c3f5be891a5adb7d32022b4f3efc7237e6c8e98abbf41b1004ae4990",
+      "wasmSha256": "1730124e54f2b80ebd105035a80870958efb3b7f4db7f6fd31665e5104312205",
+      "wasmBytes": 700643
+    }
+  ],
+  "browser": {
+    "name": "Chromium",
+    "version": "153.0.8010.12",
+    "headless": true
+  },
+  "environment": {
+    "os": "linux 6.1.0-53-cloud-amd64",
+    "arch": "x64",
+    "cpu": "AMD EPYC 7B12",
+    "ramBytes": 33664798720,
+    "node": "v24.1.0",
+    "typescript": "6.0.3"
+  },
+  "network": {
+    "offline": true,
+    "requests": []
+  },
+  "results": [
+    {
+      "id": "hello-world",
+      "stdin": "",
+      "maxOutputBytes": 1024,
+      "stdout": "Hello World\n",
+      "stderr": "",
+      "outputBytes": 12,
+      "outputLimitExceeded": false,
+      "status": "completed",
+      "exitCode": 0,
+      "heartbeats": 11,
+      "elapsedMs": 141.1000000089407
+    },
+    {
+      "id": "fibonacci",
+      "stdin": "10\n",
+      "maxOutputBytes": 1024,
+      "stdout": "55\n",
+      "stderr": "",
+      "outputBytes": 3,
+      "outputLimitExceeded": false,
+      "status": "completed",
+      "exitCode": 0,
+      "heartbeats": 10,
+      "elapsedMs": 43
+    },
+    {
+      "id": "fibonacci",
+      "stdin": "20\n",
+      "maxOutputBytes": 1024,
+      "stdout": "6765\n",
+      "stderr": "",
+      "outputBytes": 5,
+      "outputLimitExceeded": false,
+      "status": "completed",
+      "exitCode": 0,
+      "heartbeats": 11,
+      "elapsedMs": 31
+    },
+    {
+      "id": "hello-world",
+      "stdin": "",
+      "maxOutputBytes": 0,
+      "stdout": "",
+      "stderr": "",
+      "outputBytes": 0,
+      "outputLimitExceeded": true,
+      "status": "output-limit",
+      "exitCode": null,
+      "error": "[object WebAssembly.Exception]",
+      "heartbeats": 11,
+      "elapsedMs": 31.399999991059303
+    },
+    {
+      "id": "hello-world",
+      "stdin": "",
+      "maxOutputBytes": 1024,
+      "stdout": "Hello World\n",
+      "stderr": "",
+      "outputBytes": 12,
+      "outputLimitExceeded": false,
+      "status": "completed",
+      "exitCode": 0,
+      "heartbeats": 13,
+      "elapsedMs": 37.29999999701977
+    }
+  ],
+  "gates": {
+    "browserProgramExecution": "passed",
+    "browserKotlinCompilation": "not-run",
+    "candidateCompilerR0": "not-run",
+    "patchedTargetStdlib": "not-run",
+    "publicLanguageSupport": false
+  }
+}
