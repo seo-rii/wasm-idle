@@ -1,11 +1,24 @@
-import { ConsoleStdout, Fd, WASI, WASIProcExit, wasi } from '@bjorn3/browser_wasi_shim';
+import {
+	ConsoleStdout,
+	Directory,
+	File,
+	Fd,
+	PreopenDirectory,
+	WASI,
+	WASIProcExit,
+	wasi
+} from '@bjorn3/browser_wasi_shim';
+import { validateExecutionWorkspace } from '@wasm-idle/core';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import type { SandboxWorkspaceFile } from '$lib/playground/options';
+import type { WasiInterpreterProfile } from '$lib/playground/wasiInterpreters';
+import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
 
 declare var self: any;
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+let interpreter: WasiInterpreterProfile | undefined;
+let interpreterBytes: Uint8Array<ArrayBuffer> | undefined;
 
 let stdinChunkWasm = new Uint8Array(0);
 let stdinChunkOffsetWasm = 0;
@@ -126,6 +139,28 @@ function sourceFromWorkspace(
 	return file?.content || code;
 }
 
+function mountWorkspace(workspaceFiles: SandboxWorkspaceFile[]) {
+	const root = new Directory(new Map());
+	for (const file of workspaceFiles) {
+		const parts = file.path.split('/');
+		let directory = root;
+		for (const part of parts.slice(0, -1)) {
+			let child = directory.contents.get(part);
+			if (!child) {
+				child = new Directory(new Map());
+				directory.contents.set(part, child);
+			}
+			if (!(child instanceof Directory))
+				throw new Error(`Workspace file conflicts with directory: ${file.path}`);
+			directory = child;
+		}
+		const name = parts.at(-1)!;
+		if (directory.contents.has(name)) throw new Error(`Workspace path conflicts: ${file.path}`);
+		directory.contents.set(name, new File(encoder.encode(file.content), { readonly: true }));
+	}
+	return new PreopenDirectory('/', root.contents);
+}
+
 function decodeBase64(value: string) {
 	const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
 	const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
@@ -186,16 +221,36 @@ self.onmessage = async (event: { data: any }) => {
 		args = [],
 		activePath = 'main.wasm',
 		workspaceFiles = [],
+		workspaceLimits,
 		log
 	} = event.data;
 	try {
 		if (load) {
+			interpreter = undefined;
+			interpreterBytes = undefined;
+			if (event.data.interpreter) {
+				const profile = event.data.interpreter as WasiInterpreterProfile;
+				const bytes = await fetchRuntimeAssetBytes({
+					url: event.data.interpreterUrl,
+					label: `${profile.id} interpreter`,
+					expected: { sha256: profile.sha256, bytes: profile.bytes },
+					maxAssetBytes: profile.bytes,
+					persistentCache: event.data.persistentCache,
+					integrityContext: { runtimeId: profile.id }
+				});
+				await WebAssembly.compile(bytes);
+				interpreter = profile;
+				interpreterBytes = bytes;
+			}
 			postMessage({ load: true });
 			return;
 		}
 
+		const workspace = interpreter
+			? validateExecutionWorkspace(code, workspaceFiles, activePath, workspaceLimits)
+			: undefined;
 		const source = sourceFromWorkspace(code, activePath, workspaceFiles);
-		const bytes = decodeWasmBytes(source);
+		const bytes = interpreterBytes ?? decodeWasmBytes(source);
 		const wasmBuffer = new ArrayBuffer(bytes.byteLength);
 		new Uint8Array(wasmBuffer).set(bytes);
 		if (prepare) {
@@ -211,15 +266,35 @@ self.onmessage = async (event: { data: any }) => {
 			buffer ? new Int32Array(buffer) : null,
 			Boolean(log)
 		);
+		const stdoutDecoder = new TextDecoder();
+		const stderrDecoder = new TextDecoder();
 		const stdout = new ConsoleStdout((chunk) => {
-			const text = decoder.decode(chunk);
+			const text = stdoutDecoder.decode(chunk, { stream: true });
 			if (text) postMessage({ output: text });
 		});
 		const stderr = new ConsoleStdout((chunk) => {
-			const text = decoder.decode(chunk);
+			const text = stderrDecoder.decode(chunk, { stream: true });
 			if (text) postMessage({ output: text });
 		});
-		const wasiRuntime = new WASI(args, ['USER=wasm-idle'], [stdinReader, stdout, stderr]);
+		const wasiRuntime = new WASI(
+			interpreter && workspace
+				? [interpreter.command, ...interpreter.args, `/${workspace.activePath}`]
+				: args,
+			['USER=wasm-idle'],
+			[
+				stdinReader,
+				stdout,
+				stderr,
+				...(workspace
+					? [
+							mountWorkspace([
+								...workspace.workspaceFiles,
+								{ path: workspace.activePath!, content: code }
+							])
+						]
+					: [])
+			]
+		);
 		const compiledModule = await WebAssembly.compile(wasmBuffer);
 		const importModules = WebAssembly.Module.imports(compiledModule).map(
 			(entry) => entry.module
@@ -297,6 +372,11 @@ self.onmessage = async (event: { data: any }) => {
 				exitCode = error.code;
 			} else {
 				throw error;
+			}
+		} finally {
+			for (const stream of [stdoutDecoder, stderrDecoder]) {
+				const text = stream.decode();
+				if (text) postMessage({ output: text });
 			}
 		}
 

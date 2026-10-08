@@ -328,6 +328,7 @@ export async function runStdinBrowserProbe(options) {
 	page.on('request', (request) => {
 		const pathname = new URL(request.url()).pathname;
 		if (
+			!pathname.includes('/@fs/') &&
 			/\/(?:clang\/bin|clangd|pyodide|teavm|webr|wasm-(?!idle(?:\/|$))[^/]+)\//u.test(
 				pathname
 			)

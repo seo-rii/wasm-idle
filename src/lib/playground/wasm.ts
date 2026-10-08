@@ -20,6 +20,7 @@ import {
 import { createWasmIdleSharedBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerInputReady, reportWorkerProgress } from '$lib/playground/workerProgress';
+import type { WasiInterpreterProfile } from '$lib/playground/wasiInterpreters';
 
 type WasmOperation = {
 	token: symbol;
@@ -42,6 +43,8 @@ const abortReason = (signal: AbortSignal, phase: WasmOperation['phase']) =>
 			);
 
 class Wasm implements Sandbox {
+	constructor(private readonly interpreter?: WasiInterpreterProfile) {}
+
 	output: any = null;
 	worker?: Worker = <any>null;
 	buffer = createWasmIdleSharedBuffer(4096);
@@ -329,7 +332,20 @@ class Wasm implements Sandbox {
 					worker.onmessage = handler;
 					worker.postMessage({
 						load: true,
-						log: _log
+						log: _log,
+						...(this.interpreter
+							? {
+									interpreter: this.interpreter,
+									interpreterUrl: new URL(
+										`${(typeof _runtimeAssets === 'string' ? _runtimeAssets : (_runtimeAssets.rootUrl ?? '')).replace(/\/$/u, '')}/${this.interpreter.folder}/${this.interpreter.fileName}`,
+										globalThis.location.href
+									).href,
+									persistentCache:
+										typeof _runtimeAssets === 'object'
+											? _runtimeAssets.persistentCache
+											: undefined
+								}
+							: {})
 					});
 				} else {
 					const worker = this.worker;
@@ -408,10 +424,18 @@ class Wasm implements Sandbox {
 				);
 			}
 			limits = resolveExecutionLimits(options.limits);
+			if (this.interpreter && _args.length) {
+				throw new RuntimeConfigurationError(
+					'This interpreter does not accept program arguments',
+					{
+						runtimeId: this.interpreter.id
+					}
+				);
+			}
 			workspace = validateExecutionWorkspace(
 				code,
 				options.workspaceFiles ?? [],
-				options.activePath ?? 'main.wasm',
+				options.activePath ?? this.interpreter?.sourcePath ?? 'main.wasm',
 				{
 					...options.workspaceLimits,
 					maxFileBytes: Math.min(
@@ -571,6 +595,7 @@ class Wasm implements Sandbox {
 					args: _args,
 					activePath: workspace.activePath,
 					workspaceFiles: workspace.workspaceFiles,
+					...(this.interpreter ? { workspaceLimits: options.workspaceLimits } : {}),
 					log: _log
 				});
 			} catch (error) {

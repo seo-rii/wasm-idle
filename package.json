@@ -171,7 +171,10 @@
 		"test:browser:lfortran": "WASM_IDLE_RUN_REAL_BROWSER_LFORTRAN=1 pnpm exec vitest run src/lib/playground/lfortran.playwright.test.ts",
 		"verify:page-lfortran": "node scripts/verify-page-lfortran-compiler.mjs",
 		"probe:odin-wasi-consumer": "node scripts/probe-odin-wasi-consumer.mjs",
-		"test:unit:odin-consumer": "node --test scripts/probe-odin-wasi-consumer.test.mjs"
+		"test:unit:odin-consumer": "node --test scripts/probe-odin-wasi-consumer.test.mjs",
+		"build:esolangs": "node scripts/build-esolang-runtimes.mjs --write",
+		"check:esolangs": "node scripts/build-esolang-runtimes.mjs --check",
+		"test:browser:brainfuck": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_BRAINFUCK=1 vitest run src/lib/playground/esolangs.playwright.test.ts"
 	},
 	"devDependencies": {
 		"acorn": "8.19.0",

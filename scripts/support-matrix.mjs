@@ -237,6 +237,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Brainfuck',
+		ids: ['BRAINFUCK'],
+		runtime: 'susam/bfc on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_BRAINFUCK',
+			language: 'BRAINFUCK'
+		}
+	},
+	{
 		language: 'Hy',
 		ids: ['HY'],
 		runtime: 'Hy 1.3.1 on Pyodide',
@@ -943,6 +956,15 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Brainfuck',
+		{
+			packageBase: 'susam/bfc b1b92fc (MIT), compiled with WASI SDK 33',
+			execution:
+				'Runs the pinned upstream interpreter in a browser Worker with a fresh read-only source filesystem; 30000 wrapping 8-bit cells, UTF-8 byte stdin/stdout, EOF sets the cell to zero',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
 	[
 		'C',
 		{
