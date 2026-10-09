@@ -29,6 +29,7 @@ describe('runtime browser CI selection', () => {
 			'runtimes/esolangs/brainfuck/vendor/bfc.c',
 			'static/wasm-brainfuck/brainfuck.wasm',
 			'static/wasm-befunge93/befunge93.wasm',
+			'static/wasm-whitespace/whitespace.wasm',
 			'scripts/build-esolang-runtimes.mjs',
 			'scripts/support-matrix.mjs',
 			'src/lib/playground/index.ts',

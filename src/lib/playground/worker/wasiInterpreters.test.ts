@@ -254,3 +254,104 @@ describe('original Befunge-93 WASI interpreter', () => {
 		expect((await run('07-2/.07-2%.@')).output).toBe('-3 -1 ');
 	});
 });
+
+describe('upstream Whitespace 0.3 WASI interpreter', () => {
+	beforeEach(() => loadInterpreter('WHITESPACE'));
+	const push = (value: number) =>
+		'  ' +
+		(value < 0 ? '\t' : ' ') +
+		Math.abs(value).toString(2).replace(/0/gu, ' ').replace(/1/gu, '\t') +
+		'\n';
+	const halt = '\n\n\n';
+	const numberOut = '\t\n \t';
+	const charOut = '\t\n  ';
+	const label = (value: string) => '\n  ' + value + '\n';
+	const jump = (value: string) => '\n \n' + value + '\n';
+	const echo =
+		label(' ') +
+		push(0) +
+		'\t\n\t ' +
+		push(0) +
+		'\t\t\t' +
+		' \n ' +
+		'\n\t\t\t\n' +
+		charOut +
+		jump(' ') +
+		label('\t') +
+		' \n\n' +
+		halt;
+
+	it('echoes UTF-8 including a NUL byte and ends on character EOF', async () => {
+		expect(await run(echo, '아희\0🙂\n')).toEqual({
+			output: '아희\0🙂\n',
+			error: undefined,
+			completed: true
+		});
+	});
+
+	it('reads signed numeric input through heap storage', async () => {
+		const program = push(0) + '\t\n\t\t' + push(0) + '\t\t\t' + numberOut + halt;
+		expect((await run(program, '-42\n')).output).toBe('-42');
+	});
+
+	it.each([
+		['division', 0, 3, '\t \t ', '0'],
+		['division', 0, -3, '\t \t ', '0'],
+		['remainder', 0, 3, '\t \t\t', '0'],
+		['remainder', 0, -3, '\t \t\t', '0'],
+		['division', 7, -3, '\t \t ', '-2'],
+		['division', -7, -3, '\t \t ', '2'],
+		['remainder', 7, -3, '\t \t\t', '1'],
+		['remainder', -7, -3, '\t \t\t', '-1']
+	])(
+		'computes %s for dividend %i and divisor %i',
+		async (_name, dividend, divisor, operation, output) => {
+			expect(
+				await run(push(dividend) + push(divisor) + operation + numberOut + halt)
+			).toEqual({
+				output,
+				error: undefined,
+				completed: true
+			});
+		}
+	);
+
+	it.each([
+		['division', '\t \t '],
+		['remainder', '\t \t\t']
+	])(
+		'rejects a zero divisor in %s and runs a valid program afterwards',
+		async (_name, operation) => {
+			const invalid = await run(push(7) + push(0) + operation + numberOut + halt);
+			expect(invalid.completed).toBe(false);
+			expect(invalid.error).toBe('unreachable');
+			expect(invalid.output).toMatch(/Assertion failed: a != 0/u);
+			expect(await run(push(0) + push(-3) + operation + numberOut + halt)).toEqual({
+				output: '0',
+				error: undefined,
+				completed: true
+			});
+		}
+	);
+
+	it('executes stack copy and slide from Whitespace 0.3', async () => {
+		const copy =
+			push(10) + push(20) + ' \t ' + ' \t\n' + numberOut + numberOut + numberOut + halt;
+		expect((await run(copy)).output).toBe('102010');
+		const slide =
+			push(1) + push(2) + push(3) + ' \t\n' + ' \t\n' + numberOut + numberOut + halt;
+		expect((await run(slide)).output).toBe('31');
+	});
+
+	it('executes subroutine calls and returns', async () => {
+		const program = '\n \t \n' + halt + label(' ') + push(65) + charOut + '\n\t\n';
+		expect((await run(program)).output).toBe('A');
+	});
+
+	it('rejects an oversized source before entering the upstream parser', async () => {
+		const invalid = await run(' '.repeat(65536));
+		expect(invalid.completed).toBe(false);
+		expect(invalid.error).toMatch(/source exceeds 65535 UTF-8 bytes/u);
+		expect((await run(push(42) + numberOut + halt)).output).toBe('42');
+	});
+});

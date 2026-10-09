@@ -6,6 +6,7 @@ export type WasiInterpreterProfile = {
 	readonly sourcePath: string;
 	readonly sourcePathPrefix?: string;
 	readonly maxSourcePathBytes?: number;
+	readonly maxSourceBytes?: number;
 	readonly command: string;
 	readonly args: readonly string[];
 	readonly sha256: string;
@@ -35,5 +36,16 @@ export const WASI_INTERPRETERS: Readonly<Record<string, WasiInterpreterProfile>>
 		args: ['-q'],
 		sha256: '0b28bdff5085e98bcec4d30a4a3475f693f0ad6c0194ea083c7d1832d994df81',
 		bytes: 47871
+	},
+	WHITESPACE: {
+		id: 'WHITESPACE',
+		folder: 'wasm-whitespace',
+		fileName: 'whitespace.wasm',
+		sourcePath: 'main.ws',
+		maxSourceBytes: 65535,
+		command: 'whitespace',
+		args: [],
+		sha256: 'de0846c43446d8dcb01e43324313bed565764b852b82b9885cd7d25e4f36b537',
+		bytes: 59270
 	}
 };

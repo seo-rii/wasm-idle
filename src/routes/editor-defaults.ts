@@ -1,6 +1,7 @@
 import type { RustTargetTriple } from '$lib/playground/options';
 
 export type EditorDefaultLanguage =
+	| 'whitespace'
 	| 'brainfuck'
 	| 'befunge93'
 	| 'c'
@@ -67,6 +68,7 @@ export type EditorDefaultLanguage =
 
 export const editorDefaults: Record<
 	| 'befunge93'
+	| 'whitespace'
 	| 'brainfuck'
 	| 'c'
 	| 'c3'
@@ -130,6 +132,7 @@ export const editorDefaults: Record<
 	| 'markdown',
 	string
 > = {
+	whitespace: '\n   \n    \n\t\n\t     \n\t\t\t \n \n\t\t\t\n\t\n  \n \n \n\n  \t\n \n\n\n\n\n',
 	brainfuck: `Echo UTF8 input until EOF (use the EOF button to finish)
 ,[.,]
 `,
@@ -1522,6 +1525,7 @@ printfn "fibonacci=%d" (fibonacci n + bonus)`;
 
 export function isEditorDefaultSource(source: string) {
 	return (
+		source === editorDefaults.whitespace ||
 		source === editorDefaults.brainfuck ||
 		source === editorDefaults.befunge93 ||
 		source === editorDefaults.c ||

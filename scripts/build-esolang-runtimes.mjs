@@ -68,6 +68,37 @@ const RUNTIMES = [
 		},
 		flags: ['-D_POSIX_C_SOURCE=200809L'],
 		glue: []
+	},
+	{
+		language: 'whitespace',
+		id: 'WHITESPACE',
+		folder: 'wasm-whitespace',
+		fileName: 'whitespace.wasm',
+		sourcePath: 'main.ws',
+		maxSourceBytes: 65535,
+		command: 'whitespace',
+		args: [],
+		initialMemoryBytes: 3145728,
+		patches: [
+			{
+				path: 'runtimes/esolangs/whitespace/fix-zero-dividend.patch',
+				sha256: '4b98a9f9c66926a62bd9994f6585ecc691f665322d8cf220c33ff10894c7fa81'
+			}
+		],
+		repository: 'https://github.com/koturn/Whitespace',
+		commit: '22a57aab21ff4a0307642383b0eb3660e1bb412d',
+		license: 'MIT',
+		source: {
+			path: 'runtimes/esolangs/whitespace/vendor/whitespace.c',
+			url: 'https://raw.githubusercontent.com/koturn/Whitespace/22a57aab21ff4a0307642383b0eb3660e1bb412d/whitespace.c',
+			sha256: '22335d868995c910d6a0bed727e4f8bde3a8a23976a2fb7846bb7e90ec5f4556'
+		},
+		licenseFile: {
+			path: 'runtimes/esolangs/whitespace/LICENSE',
+			url: 'https://raw.githubusercontent.com/koturn/Whitespace/22a57aab21ff4a0307642383b0eb3660e1bb412d/LICENSE',
+			sha256: '90e9ef883686ffb3e388e26a52c0c4a612db85491cddefc774034ee3aefabcd4'
+		},
+		glue: []
 	}
 ];
 
@@ -91,6 +122,44 @@ async function readInputs(runtime) {
 	const license = await describeFile(runtime.licenseFile.path);
 	assertEqual(source.sha256, runtime.source.sha256, runtime.source.path);
 	assertEqual(license.sha256, runtime.licenseFile.sha256, runtime.licenseFile.path);
+	const patches = await Promise.all(
+		(runtime.patches ?? []).map(async (patch) => {
+			const input = await describeFile(patch.path);
+			assertEqual(input.sha256, patch.sha256, patch.path);
+			return input;
+		})
+	);
+	let patchedSource;
+	let compiledSource;
+	if (patches.length > 0) {
+		const directory = await mkdtemp(path.join(tmpdir(), 'wasm-idle-esolang-patch-'));
+		try {
+			const temporarySource = path.join(directory, path.basename(runtime.source.path));
+			await cp(path.join(REPO_ROOT, runtime.source.path), temporarySource);
+			for (const patch of patches) {
+				const result = spawnSync(
+					'patch',
+					[
+						'--batch',
+						'--fuzz=0',
+						'--silent',
+						temporarySource,
+						path.join(REPO_ROOT, patch.path)
+					],
+					{ encoding: 'utf8', timeout: 10000 }
+				);
+				if (result.error || result.status !== 0)
+					throw (
+						result.error ??
+						new Error(result.stderr || `patch exited with ${result.status}.`)
+					);
+			}
+			patchedSource = await readFile(temporarySource, 'utf8');
+			compiledSource = await describeFile('<stdin>', temporarySource);
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	}
 	return {
 		upstream: {
 			repository: runtime.repository,
@@ -98,7 +167,12 @@ async function readInputs(runtime) {
 			source: { ...source, url: runtime.source.url },
 			license: { ...license, url: runtime.licenseFile.url, spdx: runtime.license }
 		},
-		inputs: [source, ...(await Promise.all(runtime.glue.map((file) => describeFile(file))))],
+		inputs: [
+			source,
+			...(await Promise.all(runtime.glue.map((file) => describeFile(file)))),
+			...patches
+		],
+		...(compiledSource ? { patchedSource, compiledSource } : {}),
 		license: { ...license, path: 'LICENSE.txt', spdx: runtime.license }
 	};
 }
@@ -127,9 +201,13 @@ async function describeWasm(runtime, wasmPath) {
 
 function buildArgs(runtime, outputPath) {
 	return [
-		...BUILD_FLAGS,
+		...BUILD_FLAGS.map((flag) =>
+			runtime.initialMemoryBytes !== undefined && flag.startsWith('-Wl,--initial-memory=')
+				? `-Wl,--initial-memory=${runtime.initialMemoryBytes}`
+				: flag
+		),
 		...(runtime.flags ?? []),
-		runtime.source.path,
+		...(runtime.patches?.length ? ['-x', 'c', '-'] : [runtime.source.path]),
 		...runtime.glue,
 		'-o',
 		outputPath
@@ -146,7 +224,8 @@ function receiptFor(runtime, inputs, toolchain, wasm) {
 		build: {
 			toolchain,
 			command: 'WASI_SDK_PATH/bin/clang',
-			args: buildArgs(runtime, `static/${runtime.folder}/${runtime.fileName}`)
+			args: buildArgs(runtime, `static/${runtime.folder}/${runtime.fileName}`),
+			...(inputs.compiledSource ? { source: inputs.compiledSource } : {})
 		},
 		wasm
 	};
@@ -205,9 +284,13 @@ function renderProfiles(receipts) {
 			runtime.maxSourcePathBytes === undefined
 				? ''
 				: `\n\t\tmaxSourcePathBytes: ${runtime.maxSourcePathBytes},`;
-		return `\t${runtime.id}: {\n\t\tid: '${runtime.id}',\n\t\tfolder: '${runtime.folder}',\n\t\tfileName: '${runtime.fileName}',\n\t\tsourcePath: '${runtime.sourcePath}',${pathPrefix}${pathLimit}\n\t\tcommand: '${runtime.command}',\n\t\targs: [${args}],\n\t\tsha256: '${wasm.sha256}',\n\t\tbytes: ${wasm.bytes}\n\t}`;
+		const sourceLimit =
+			runtime.maxSourceBytes === undefined
+				? ''
+				: `\n\t\tmaxSourceBytes: ${runtime.maxSourceBytes},`;
+		return `\t${runtime.id}: {\n\t\tid: '${runtime.id}',\n\t\tfolder: '${runtime.folder}',\n\t\tfileName: '${runtime.fileName}',\n\t\tsourcePath: '${runtime.sourcePath}',${pathPrefix}${pathLimit}${sourceLimit}\n\t\tcommand: '${runtime.command}',\n\t\targs: [${args}],\n\t\tsha256: '${wasm.sha256}',\n\t\tbytes: ${wasm.bytes}\n\t}`;
 	}).join(',\n');
-	return `// Generated by scripts/build-esolang-runtimes.mjs --write.\nexport type WasiInterpreterProfile = {\n\treadonly id: string;\n\treadonly folder: string;\n\treadonly fileName: string;\n\treadonly sourcePath: string;\n\treadonly sourcePathPrefix?: string;\n\treadonly maxSourcePathBytes?: number;\n\treadonly command: string;\n\treadonly args: readonly string[];\n\treadonly sha256: string;\n\treadonly bytes: number;\n};\n\nexport const WASI_INTERPRETERS: Readonly<Record<string, WasiInterpreterProfile>> = {\n${profiles}\n};\n`;
+	return `// Generated by scripts/build-esolang-runtimes.mjs --write.\nexport type WasiInterpreterProfile = {\n\treadonly id: string;\n\treadonly folder: string;\n\treadonly fileName: string;\n\treadonly sourcePath: string;\n\treadonly sourcePathPrefix?: string;\n\treadonly maxSourcePathBytes?: number;\n\treadonly maxSourceBytes?: number;\n\treadonly command: string;\n\treadonly args: readonly string[];\n\treadonly sha256: string;\n\treadonly bytes: number;\n};\n\nexport const WASI_INTERPRETERS: Readonly<Record<string, WasiInterpreterProfile>> = {\n${profiles}\n};\n`;
 }
 
 async function main() {
@@ -243,6 +326,9 @@ async function main() {
 					{
 						cwd: REPO_ROOT,
 						encoding: 'utf8',
+						...(inputs.patchedSource !== undefined
+							? { input: inputs.patchedSource }
+							: {}),
 						env: { ...process.env, LC_ALL: 'C', SOURCE_DATE_EPOCH: '0' },
 						timeout: 60000
 					}
