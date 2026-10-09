@@ -159,6 +159,20 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'LOLCODE 1.3',
+		ids: ['LOLCODE'],
+		runtime: 'Original lci 1.3 interpreter on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_LOLCODE',
+			language: 'LOLCODE'
+		}
+	},
+
+	{
 		language: 'UHMLANG (엄준식)',
 		ids: ['UHMLANG'],
 		runtime: 'Original Umjunsik Go interpreter on WASI',
@@ -1025,6 +1039,16 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'LOLCODE 1.3',
+		{
+			packageBase: 'justinmeza/lci v1.3 (GPL-3.0-or-later), wasi-sdk 33.0 build',
+			execution:
+				'Runs the unchanged lci lexer, parser and interpreter for LOLCODE 1.3, including functions, loops, arrays, type casts and Unicode string escapes; GIMMEH reads a line and VISIBLE normally adds a newline; each run starts with fresh state',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+
 	[
 		'UHMLANG (엄준식)',
 		{

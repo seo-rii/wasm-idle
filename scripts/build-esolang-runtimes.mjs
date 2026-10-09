@@ -186,6 +186,49 @@ const RUNTIMES = [
 			}
 		],
 		glue: []
+	},
+	{
+		language: 'lolcode',
+		id: 'LOLCODE',
+		folder: 'wasm-lolcode',
+		fileName: 'lolcode.wasm',
+		sourcePath: 'main.lol',
+		command: 'lci',
+		args: [],
+		initialMemoryBytes: 2097152,
+		repository: 'https://github.com/justinmeza/lci',
+		commit: '0b32ed1cc52abd1971d199db9bd77c387316cae1',
+		license: 'GPL-3.0-or-later',
+		source: {
+			path: 'runtimes/esolangs/lolcode/vendor/main.c',
+			url: 'https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/main.c',
+			sha256: '53ead16414b357836db79249f5fdf19b8668d3b2b7553f1c553eade9282ab328'
+		},
+		additionalSources: [
+			['error.c', '2c7d96893974e5708cb8c6443e3053a94e71d550154a5e1e07f68fe8bc754fb9'],
+			['error.h', '04664eaaba5ccfc0861845805036263150474315466d51f4ce93f03671201f74'],
+			['interpreter.c', '9fe938ca9f76bac4e2410612e1cb05e4427ffb839b00c33b1a74c5417f0be320'],
+			['interpreter.h', 'efb7fc569a48ca7aeac92743f53e3022b6a936280f165a7afb4f85fbb97e0c10'],
+			['lexer.c', '219431cb1ba1d002010301734941431b9d26996758f45d3ec729fab2c9f6b41b'],
+			['lexer.h', 'bb664abce96c38ebf16633899b64a6f5ae007d3fccfa314d51b817538dfac9d5'],
+			['parser.c', 'f0b82a617c5428136c0e148eb1fc07003bf97f9a8098c990ac59b1c19e8e267b'],
+			['parser.h', '37704221ea38ecaba67749faad21ef0eced89d90b8d255f133fd625868be8d43'],
+			['tokenizer.c', '5794b13060deac5d00a1f2e5a94d26cd0f70c1b1c97e986d875a6cd908f545ed'],
+			['tokenizer.h', '335ec209b52236e6894c154ef88195e3655dd0e48bd9aa1f016fd2956033a3c2'],
+			['unicode.c', 'dfbeabe77f8419300359a3d965f9286ff6a1e7118a32f149e3bba4272a2570c1'],
+			['unicode.h', '64f19e2a4f0b49783cae30af637b75352590f9c495daad4d6a3cc46bbe0bc1a5']
+		].map(([relativePath, sha256]) => ({
+			path: `runtimes/esolangs/lolcode/vendor/${relativePath}`,
+			url: `https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/${relativePath}`,
+			sha256
+		})),
+		licenseFile: {
+			path: 'runtimes/esolangs/lolcode/COPYING',
+			url: 'https://raw.githubusercontent.com/justinmeza/lci/0b32ed1cc52abd1971d199db9bd77c387316cae1/COPYING',
+			sha256: '8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903'
+		},
+		libraries: ['m'],
+		glue: []
 	}
 ];
 
@@ -300,7 +343,11 @@ function buildArgs(runtime, outputPath) {
 		),
 		...(runtime.flags ?? []),
 		runtime.source.path,
+		...(runtime.additionalSources ?? [])
+			.filter((input) => input.path.endsWith('.c'))
+			.map((input) => input.path),
 		...runtime.glue,
+		...(runtime.libraries ?? []).map((library) => `-l${library}`),
 		'-o',
 		outputPath
 	];
