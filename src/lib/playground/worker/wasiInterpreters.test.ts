@@ -441,3 +441,61 @@ describe('original Umjunsik Go WASI interpreter', () => {
 		expect((await run(numberEcho, '42\n')).output).toBe('42');
 	});
 });
+
+describe('original lci LOLCODE 1.3 WASI interpreter', () => {
+	beforeEach(() => loadInterpreter('LOLCODE'));
+	const program = (lines: string[]) => ['HAI 1.3', ...lines, 'KTHXBYE'].join('\n');
+	const echo = program(['I HAS A name', 'GIMMEH name', 'VISIBLE name']);
+
+	it('preserves a leading Unicode BOM emitted by the original interpreter', async () => {
+		expect(await run('\ufeff' + program(['VISIBLE "BOM"']))).toEqual({
+			output: '\ufeffBOM\n',
+			error: undefined,
+			completed: true
+		});
+	});
+
+	it('reads UTF-8 input lines and preserves lci newline and EOF behavior', async () => {
+		expect(await run(echo, '한🦀\n')).toEqual({
+			output: '한🦀\n',
+			error: undefined,
+			completed: true
+		});
+		expect((await run(echo, 'last line')).output).toBe('last line\n');
+		expect((await run(echo)).output).toBe('\n');
+	});
+
+	it('mounts a selected Unicode filename and starts with fresh stdin on every run', async () => {
+		expect(await run(echo, 'first\nunused\n', { activePath: 'examples/한글.lol' })).toEqual({
+			output: 'first\n',
+			error: undefined,
+			completed: true
+		});
+		expect((await run(echo, 'fresh\n')).output).toBe('fresh\n');
+	});
+
+	it('uses the original function calls and counted loops', async () => {
+		const functionCall = program([
+			'HOW IZ I add YR a AN YR b',
+			'FOUND YR SUM OF a AN b',
+			'IF U SAY SO',
+			'VISIBLE I IZ add YR 40 AN YR 2 MKAY'
+		]);
+		expect((await run(functionCall)).output).toBe('42\n');
+		const loop = program([
+			'I HAS A index ITZ 0',
+			'IM IN YR loop UPPIN YR index TIL BOTH SAEM index AN 3',
+			'VISIBLE index!',
+			'IM OUTTA YR loop'
+		]);
+		expect((await run(loop)).output).toBe('012');
+	});
+
+	it('reports the upstream syntax diagnostic and runs a valid program afterwards', async () => {
+		const invalid = await run('HAI 1.3\nVISIBLE\nKTHXBYE');
+		expect(invalid.completed).toBe(false);
+		expect(invalid.error).toMatch(/exited with code/u);
+		expect(invalid.output.length).toBeGreaterThan(0);
+		expect((await run(echo, 'recovered\n')).output).toBe('recovered\n');
+	});
+});

@@ -180,7 +180,8 @@
 		"test:browser:malbolge": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_MALBOLGE=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
 		"test:browser:aheui": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_AHEUI=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
 		"sync:wasm-aheui": "node scripts/sync-wasm-aheui.mjs",
-		"test:browser:uhmlang": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_UHMLANG=1 vitest run src/lib/playground/esolangs.playwright.test.ts"
+		"test:browser:uhmlang": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_UHMLANG=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
+		"test:browser:lolcode": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_LOLCODE=1 vitest run src/lib/playground/esolangs.playwright.test.ts"
 	},
 	"devDependencies": {
 		"acorn": "8.19.0",

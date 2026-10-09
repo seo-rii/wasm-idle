@@ -33,6 +33,7 @@ describe('runtime browser CI selection', () => {
 			'static/wasm-malbolge/malbolge.wasm',
 			'static/wasm-aheui/aheui-1.2.5-py3-none-any.whl',
 			'static/wasm-uhmlang/uhmlang.wasm',
+			'static/wasm-lolcode/lolcode.wasm',
 			'scripts/sync-wasm-aheui.mjs',
 			'src/lib/playground/aheui.ts',
 			'src/lib/playground/assets.ts',

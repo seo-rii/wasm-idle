@@ -159,6 +159,20 @@ const uhmlangEcho = (output: string) =>
 const uhmlangCodepointInput = (output: string) =>
 	Array.from(output, (character) => `${character.codePointAt(0)}\n`).join('');
 
+const lolcodeProgram = (...lines: string[]) => ['HAI 1.3', ...lines, 'KTHXBYE'].join('\n');
+// GIMMEH consumes a line terminator; normal VISIBLE supplies the output newline.
+const lolcodeEcho = (output: string) => {
+	const lines = output.split('\n');
+	if (output.endsWith('\n')) lines.pop();
+	return lolcodeProgram(
+		'I HAS A line',
+		...lines.flatMap((_, index) => [
+			'GIMMEH line',
+			`VISIBLE line${index === lines.length - 1 && !output.endsWith('\n') ? '!' : ''}`
+		])
+	);
+};
+
 const profiles: InterpreterBrowserProfile[] = [
 	{
 		language: 'BRAINFUCK',
@@ -993,6 +1007,174 @@ const profiles: InterpreterBrowserProfile[] = [
 				name: 'after-runtime-failure',
 				source: uhmlangEcho('runtime-recovered\n'),
 				stdin: uhmlangCodepointInput('runtime-recovered\n'),
+				output: 'runtime-recovered\n'
+			}
+		]
+	},
+	{
+		language: 'LOLCODE',
+		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_LOLCODE === '1',
+		defaultSource: () => editorDefaults.lolcode,
+		echoSource: lolcodeEcho('A'),
+		echoSourceForInput: lolcodeEcho,
+		infiniteSource: lolcodeProgram('IM IN YR forever', 'WIN', 'IM OUTTA YR forever'),
+		runtimePath: 'wasm-lolcode/lolcode.wasm',
+		cases: [
+			{
+				name: 'utf8-line-input',
+				source: lolcodeEcho('첫째 줄 🦀\nsecond line\n'),
+				stdin: '첫째 줄 🦀\nsecond line\n',
+				output: '첫째 줄 🦀\nsecond line\n'
+			},
+			{
+				name: 'empty-explicit-eof-is-empty-yarn',
+				source: lolcodeProgram('I HAS A line', 'GIMMEH line', 'VISIBLE line'),
+				stdin: '',
+				output: '\n'
+			},
+			{
+				name: 'eof-without-line-ending',
+				source: lolcodeEcho('no final newline'),
+				stdin: 'no final newline',
+				output: 'no final newline'
+			},
+			{
+				name: 'visible-adds-newline-after-eof',
+				source: lolcodeProgram('I HAS A line', 'GIMMEH line', 'VISIBLE line'),
+				stdin: 'no final newline',
+				output: 'no final newline\n'
+			},
+			{
+				name: 'nul-terminates-original-gimmeh',
+				source: lolcodeProgram(
+					'I HAS A first',
+					'I HAS A second',
+					'GIMMEH first',
+					'GIMMEH second',
+					'VISIBLE first',
+					'VISIBLE second'
+				),
+				stdin: '\0A\n',
+				output: '\nA\n'
+			},
+			{
+				name: 'partial-explicit-stdin',
+				source: lolcodeEcho('A'),
+				stdin: 'A\nB\n',
+				output: 'A'
+			},
+			{
+				name: 'fresh-stdin',
+				source: lolcodeEcho('C'),
+				stdin: 'C',
+				output: 'C'
+			},
+			{
+				name: 'nested-unicode-source-path',
+				source: lolcodeEcho('한'),
+				stdin: '한',
+				output: '한',
+				options: { activePath: 'examples/한글🦀.lol' }
+			},
+			{
+				name: 'signed-arithmetic',
+				source: lolcodeProgram(
+					'VISIBLE SUM OF 20 AN 22',
+					'VISIBLE PRODUKT OF -7 AN 3',
+					'VISIBLE QUOSHUNT OF -7 AN 3'
+				),
+				stdin: '',
+				output: '42\n-21\n-2\n'
+			},
+			{
+				name: 'explicit-numeric-cast',
+				source: lolcodeProgram(
+					'I HAS A number ITZ "42"',
+					'number IS NOW A NUMBR',
+					'VISIBLE SUM OF number AN 1'
+				),
+				stdin: '',
+				output: '43\n'
+			},
+			{
+				name: 'string-concatenation-and-unicode',
+				source: lolcodeProgram('VISIBLE SMOOSH "한글" AN " 🦀" MKAY'),
+				stdin: '',
+				output: '한글 🦀\n'
+			},
+			{
+				name: 'source-bom-output-is-preserved',
+				source: '\ufeff' + lolcodeProgram('VISIBLE "BOM"'),
+				stdin: '',
+				output: '\ufeffBOM\n'
+			},
+			{
+				name: 'string-escapes',
+				source: lolcodeProgram('VISIBLE "A:)B:>C::D"'),
+				stdin: '',
+				output: 'A\nB\tC:D\n'
+			},
+			{
+				name: 'function-argument-and-return',
+				source: lolcodeProgram(
+					'HOW IZ I square YR number',
+					'FOUND YR PRODUKT OF number AN number',
+					'IF U SAY SO',
+					'VISIBLE I IZ square YR 7 MKAY'
+				),
+				stdin: '',
+				output: '49\n'
+			},
+			{
+				name: 'conditional-branches',
+				source: lolcodeProgram(
+					'BOTH SAEM 2 AN 2',
+					'O RLY?',
+					'YA RLY',
+					'VISIBLE "yes"',
+					'NO WAI',
+					'VISIBLE "no"',
+					'OIC'
+				),
+				stdin: '',
+				output: 'yes\n'
+			},
+			{
+				name: 'counted-loop',
+				source: lolcodeProgram(
+					'IM IN YR count UPPIN YR number TIL BOTH SAEM number AN 3',
+					'VISIBLE number!',
+					'IM OUTTA YR count'
+				),
+				stdin: '',
+				output: '012'
+			},
+			{
+				name: 'bucket-slot',
+				source: lolcodeProgram(
+					'I HAS A box ITZ A BUKKIT',
+					'box HAS A value ITZ 7',
+					"VISIBLE box'Z value"
+				),
+				stdin: '',
+				output: '7\n'
+			},
+			{
+				name: 'unterminated-string',
+				source: lolcodeProgram('VISIBLE "unclosed'),
+				stdin: '',
+				fails: true
+			},
+			{
+				name: 'undefined-variable',
+				source: lolcodeProgram('VISIBLE unknown'),
+				stdin: '',
+				fails: true
+			},
+			{
+				name: 'after-runtime-failure',
+				source: lolcodeEcho('runtime-recovered\n'),
+				stdin: 'runtime-recovered\n',
 				output: 'runtime-recovered\n'
 			}
 		]

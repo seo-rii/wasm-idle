@@ -69,5 +69,15 @@ export const WASI_INTERPRETERS: Readonly<Record<string, WasiInterpreterProfile>>
 		args: [],
 		sha256: 'f55e8a41f59654818af1d119d32d604165da369ce3aa269282b90fc319ed96dd',
 		bytes: 3017206
+	},
+	LOLCODE: {
+		id: 'LOLCODE',
+		folder: 'wasm-lolcode',
+		fileName: 'lolcode.wasm',
+		sourcePath: 'main.lol',
+		command: 'lci',
+		args: [],
+		sha256: '39cd197d5b8681ee37817f87ac86a07ca692407e0226e78e8470d37b57e0ce64',
+		bytes: 837757
 	}
 };

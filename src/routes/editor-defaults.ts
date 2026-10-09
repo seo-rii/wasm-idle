@@ -5,6 +5,7 @@ export type EditorDefaultLanguage =
 	| 'malbolge'
 	| 'aheui'
 	| 'uhmlang'
+	| 'lolcode'
 	| 'brainfuck'
 	| 'befunge93'
 	| 'c'
@@ -75,6 +76,7 @@ export const editorDefaults: Record<
 	| 'malbolge'
 	| 'aheui'
 	| 'uhmlang'
+	| 'lolcode'
 	| 'brainfuck'
 	| 'c'
 	| 'c3'
@@ -139,6 +141,7 @@ export const editorDefaults: Record<
 	string
 > = {
 	uhmlang: '어떻게\n엄식?\n식어!\n이 사람이름이냐ㅋㅋ\n',
+	lolcode: 'HAI 1.3\nI HAS A name\nGIMMEH name\nVISIBLE name\nKTHXBYE\n',
 	aheui: '밯맣희\n',
 	malbolge: 'ubO\n',
 	whitespace: '\n   \n    \n\t\n\t     \n\t\t\t \n \n\t\t\t\n\t\n  \n \n \n\n  \t\n \n\n\n\n\n',
@@ -1538,6 +1541,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.malbolge ||
 		source === editorDefaults.aheui ||
 		source === editorDefaults.uhmlang ||
+		source === editorDefaults.lolcode ||
 		source === editorDefaults.brainfuck ||
 		source === editorDefaults.befunge93 ||
 		source === editorDefaults.c ||

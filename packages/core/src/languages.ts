@@ -46,6 +46,7 @@ const canonicalLanguageIds = [
 	'MALBOLGE',
 	'AHEUI',
 	'UHMLANG',
+	'LOLCODE',
 	'BRAINFUCK',
 	'BEFUNGE93',
 	'LUA',

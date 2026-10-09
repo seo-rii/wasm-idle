@@ -20,6 +20,16 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'LOLCODE',
+		load: async () => {
+			const [{ default: Wasm }, { WASI_INTERPRETERS }] = await Promise.all([
+				import('$lib/playground/wasm'),
+				import('$lib/playground/wasiInterpreters')
+			]);
+			return new Wasm(WASI_INTERPRETERS.LOLCODE);
+		}
+	},
+	{
 		languageId: 'UHMLANG',
 		load: async () => {
 			const [{ default: Wasm }, { WASI_INTERPRETERS }] = await Promise.all([
