@@ -37,6 +37,11 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	BRAINFUCK: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
 	C3: { strategy: 'static-worker-fallback', hostModule: 'c3' },
 	GRAIN: { strategy: 'static-worker-fallback', hostModule: 'grain' },
 	C: { strategy: 'terminal-fallback', hostModule: 'clang' },

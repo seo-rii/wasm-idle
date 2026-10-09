@@ -42,6 +42,7 @@ const canonicalLanguageIds = [
 	'ASSEMBLYSCRIPT',
 	'WAT',
 	'WASM',
+	'BRAINFUCK',
 	'LUA',
 	'FENNEL',
 	'ZIG',
@@ -83,6 +84,7 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES: ReadonlySet<string> = new Set(
 );
 
 const languageAliasDefinitions = {
+	BF: { canonicalId: 'BRAINFUCK', kind: 'spelling' },
 	'C#': { canonicalId: 'CSHARP', kind: 'spelling' },
 	'F#': { canonicalId: 'FSHARP', kind: 'spelling' },
 	VB: { canonicalId: 'VBNET', kind: 'spelling' },

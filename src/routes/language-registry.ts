@@ -67,6 +67,7 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
+	BRAINFUCK: { label: 'Brainfuck', editorLanguage: 'plaintext' },
 	C3: {
 		label: 'C3 (byte ABI)',
 		editorLanguage: 'c',
