@@ -23,7 +23,7 @@ type InterpreterCase = {
 	fails?: boolean;
 	configurationError?: boolean;
 	options?: Pick<SandboxExecutionOptions, 'activePath' | 'workspaceFiles'>;
-	expectedError?: { code: string; phase: string; message: string };
+	expectedError?: { code?: string; phase?: string; message: string };
 };
 
 type InterpreterBrowserProfile = {
@@ -430,6 +430,60 @@ const profiles: InterpreterBrowserProfile[] = [
 					ws.halt,
 				stdin: '',
 				output: '-2\n-1'
+			},
+			...([3, -3] as const).flatMap((divisor) => [
+				{
+					name: `zero-dividend-division-${divisor}`,
+					source: ws.push(0) + ws.push(divisor) + ws.divide + ws.printNumber + ws.halt,
+					stdin: '',
+					output: '0'
+				},
+				{
+					name: `zero-dividend-remainder-${divisor}`,
+					source: ws.push(0) + ws.push(divisor) + ws.remainder + ws.printNumber + ws.halt,
+					stdin: '',
+					output: '0'
+				}
+			]),
+			...([7, -7] as const).map((dividend) => ({
+				name: `negative-divisor-${dividend}`,
+				source:
+					ws.push(dividend) +
+					ws.push(-3) +
+					ws.divide +
+					ws.printNumber +
+					whitespaceNewline +
+					ws.push(dividend) +
+					ws.push(-3) +
+					ws.remainder +
+					ws.printNumber +
+					ws.halt,
+				stdin: '',
+				output: dividend > 0 ? '-2\n1' : '2\n-1'
+			})),
+			{
+				name: 'zero-divisor-division',
+				source: ws.push(7) + ws.push(0) + ws.divide + ws.printNumber + ws.halt,
+				stdin: '',
+				expectedError: { message: 'unreachable' }
+			},
+			{
+				name: 'after-zero-divisor-division',
+				source: ws.push(0) + ws.push(3) + ws.divide + ws.printNumber + ws.halt,
+				stdin: '',
+				output: '0'
+			},
+			{
+				name: 'zero-divisor-remainder',
+				source: ws.push(-7) + ws.push(0) + ws.remainder + ws.printNumber + ws.halt,
+				stdin: '',
+				expectedError: { message: 'unreachable' }
+			},
+			{
+				name: 'after-zero-divisor-remainder',
+				source: ws.push(0) + ws.push(-3) + ws.remainder + ws.printNumber + ws.halt,
+				stdin: '',
+				output: '0'
 			},
 			{
 				name: '32bit-integer-wrap',

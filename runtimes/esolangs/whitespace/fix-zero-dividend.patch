@@ -1,0 +1,18 @@
+--- a/whitespace.c
++++ b/whitespace.c
+@@ -418,13 +418,13 @@
+       case ARITH_DIV:
+         a = stack_pop();
+         b = stack_pop();
+-        assert(b != 0);
++        assert(a != 0);
+         stack_push(b / a);
+         break;
+       case ARITH_MOD:
+         a = stack_pop();
+         b = stack_pop();
+-        assert(b != 0);
++        assert(a != 0);
+         stack_push(b % a);
+         break;
+       case HEAP_STORE:
