@@ -7,7 +7,7 @@ The source and license URLs and SHA256 hashes are pinned in
 `scripts/build-esolang-runtimes.mjs` and recorded in `static/wasm-brainfuck/runtime-build.json`.
 
 The playground mounts source at `main.bf` and starts the executable with
-`argv = ["bfi", "main.bf"]`. The upstream executable selects interpreter mode from the
+`argv = ["bfi", "/main.bf"]`. The upstream executable selects interpreter mode from the
 `bfi` command name. Its compiler mode requires native subprocesses and is not exposed.
 `wasi-process.c` supplies the missing `system()` ABI symbol with an ENOSYS result;
 it does not change the interpreter or execute subprocesses.
@@ -17,6 +17,13 @@ cells, wrapping modulo 256. It starts at the first cell and supports 256 nested 
 loops. Non-command source characters are ignored. `,` reads one byte from stdin and
 stores zero at EOF; `.` writes the cell byte to stdout. The browser worker supplies
 stdin, captures stdout/stderr, and enforces cancellation and time limits.
+
+Caller-selected source paths may contain Unicode. The normalized relative path is
+limited to **62 UTF-8 bytes** because the original interpreter's 64-byte source-name
+buffer must also hold the leading slash and NUL terminator. The host and worker
+reject longer paths before preparation or execution so truncation cannot select
+another workspace file. WASI argument sizes use UTF-8 byte counts, and the
+interpreter's stdout/stderr transport preserves a leading UTF-8 BOM as output data.
 
 ## Rebuild and verify
 
