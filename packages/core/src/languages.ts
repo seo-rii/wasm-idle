@@ -43,6 +43,7 @@ const canonicalLanguageIds = [
 	'WAT',
 	'WASM',
 	'BRAINFUCK',
+	'BEFUNGE93',
 	'LUA',
 	'FENNEL',
 	'ZIG',
@@ -84,6 +85,8 @@ export const DEFAULT_DEFERRED_PROGRESS_LANGUAGES: ReadonlySet<string> = new Set(
 );
 
 const languageAliasDefinitions = {
+	BEFUNGE: { canonicalId: 'BEFUNGE93', kind: 'dialect' },
+	'BEFUNGE-93': { canonicalId: 'BEFUNGE93', kind: 'spelling' },
 	BF: { canonicalId: 'BRAINFUCK', kind: 'spelling' },
 	'C#': { canonicalId: 'CSHARP', kind: 'spelling' },
 	'F#': { canonicalId: 'FSHARP', kind: 'spelling' },

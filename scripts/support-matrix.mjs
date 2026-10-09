@@ -237,6 +237,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Befunge-93',
+		ids: ['BEFUNGE93'],
+		runtime: 'Chris Pressey Befunge-93 on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_BEFUNGE93',
+			language: 'BEFUNGE93'
+		}
+	},
+	{
 		language: 'Brainfuck',
 		ids: ['BRAINFUCK'],
 		runtime: 'susam/bfc on WASI',
@@ -956,6 +969,15 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Befunge-93',
+		{
+			packageBase: 'catseye/Befunge-93 8fe4065c (BSD-3-Clause), compiled with WASI SDK 33',
+			execution:
+				'Runs the original interpreter with an 80 by 25 wrapping playfield, signed 32-bit stack, string mode and self-modifying p/g instructions; character and integer stdin share the WASI terminal; character EOF is -1',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed quiet argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
 	[
 		'Brainfuck',
 		{

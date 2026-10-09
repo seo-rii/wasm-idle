@@ -23,6 +23,7 @@ type InterpreterCase = {
 	fails?: boolean;
 	configurationError?: boolean;
 	options?: Pick<SandboxExecutionOptions, 'activePath' | 'workspaceFiles'>;
+	expectedError?: { code: string; phase: string; message: string };
 };
 
 type InterpreterBrowserProfile = {
@@ -158,6 +159,113 @@ const profiles: InterpreterBrowserProfile[] = [
 				source: ',[.,]',
 				stdin: 'parse-recovered\n',
 				output: 'parse-recovered\n'
+			}
+		]
+	},
+	{
+		language: 'BEFUNGE93',
+		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_BEFUNGE93 === '1',
+		defaultSource: () => editorDefaults.befunge93,
+		echoSource: '~:1+!#@_,',
+		infiniteSource: '>',
+		runtimePath: 'wasm-befunge93/befunge93.wasm',
+		cases: [
+			{
+				name: 'utf8-explicit-eof',
+				source: '~:1+!#@_,',
+				stdin: '첫째 줄 🦀\nsecond line\n',
+				output: '첫째 줄 🦀\nsecond line\n'
+			},
+			{ name: 'empty-explicit-eof', source: '~:1+!#@_,', stdin: '', output: '' },
+			{
+				name: 'nul-byte-is-not-eof',
+				source: '~:1+!#@_,',
+				stdin: '\0A\n',
+				output: '\0A\n'
+			},
+			{ name: 'partial-explicit-stdin', source: '~,@', stdin: 'AB', output: 'A' },
+			{ name: 'fresh-stdin', source: '~:1+!#@_,', stdin: 'C', output: 'C' },
+			{
+				name: 'extensionless-source-path',
+				source: '~,@',
+				stdin: 'Y',
+				output: 'Y',
+				options: { activePath: 'program' }
+			},
+			{
+				name: 'utf8-source-path-limit',
+				source: '@',
+				stdin: '',
+				options: { activePath: '가'.repeat(43) + '.b93' },
+				expectedError: {
+					code: 'runtime-configuration',
+					phase: 'configuration',
+					message: 'BEFUNGE93 source path exceeds the 125-byte interpreter limit'
+				}
+			},
+			{ name: 'signed-arithmetic', source: '38-.@', stdin: '', output: '-5 ' },
+			{
+				name: '32bit-integer-wrap',
+				source: '99*' + '9*'.repeat(8) + '.@',
+				stdin: '',
+				output: '-808182895 '
+			},
+			{
+				name: 'stack-swap-duplicate-underflow',
+				source: '12\\..:..@',
+				stdin: '',
+				output: '1 2 0 0 '
+			},
+			{ name: 'string-mode', source: '"olleH",,,,,@', stdin: '', output: 'Hello' },
+			{ name: '2d-directions', source: 'v\n>"A",@', stdin: '', output: 'A' },
+			{
+				name: 'horizontal-torus',
+				source: '<' + ' '.repeat(74) + '@,"H"',
+				stdin: '',
+				output: 'H'
+			},
+			{
+				name: 'vertical-torus',
+				source: ['^', ...Array<string>(23).fill(''), '>"V",@'].join('\n'),
+				stdin: '',
+				output: 'V'
+			},
+			{ name: 'bridge', source: '1#9.@', stdin: '', output: '1 ' },
+			{
+				name: 'vertical-branch-nonzero',
+				source: 'v >"U",@\n>1|\n  >"D",@',
+				stdin: '',
+				output: 'U'
+			},
+			{
+				name: 'vertical-branch-zero',
+				source: 'v >"U",@\n>0|\n  >"D",@',
+				stdin: '',
+				output: 'D'
+			},
+			{ name: 'playfield-put-get', source: '"A"00p00g,@', stdin: '', output: 'A' },
+			{
+				name: 'self-modifying-code',
+				// Replace the following print instruction with @ before reaching it.
+				source: '"@"70p0.@',
+				stdin: '',
+				output: ''
+			},
+			{ name: 'fresh-playfield', source: '70g.@', stdin: '', output: '32 ' },
+			{ name: 'seed-stack', source: '99@', stdin: '', output: '' },
+			{ name: 'fresh-stack', source: '.@', stdin: '', output: '0 ' },
+			{ name: 'numeric-stdin', source: '&&+.@', stdin: '20 22\n', output: '42 ' },
+			{
+				name: 'signed-division-remainder',
+				source: '&&/.&&%.@',
+				stdin: '-7 3 -7 3\n',
+				output: '-2 -1 '
+			},
+			{
+				name: 'unknown-instructions-are-noops',
+				source: 'abc123...@',
+				stdin: '',
+				output: '3 2 1 '
 			}
 		]
 	}
@@ -452,7 +560,11 @@ for (const profile of profiles) {
 						);
 						for (const testCase of profile.cases) {
 							const result = byName[testCase.name];
-							if (testCase.configurationError) {
+							if (testCase.expectedError) {
+								expect(result.error, JSON.stringify(result)).toMatchObject(
+									testCase.expectedError
+								);
+							} else if (testCase.configurationError) {
 								expect(result.error, JSON.stringify(result)).toMatchObject({
 									code: 'runtime-configuration',
 									phase: 'configuration'

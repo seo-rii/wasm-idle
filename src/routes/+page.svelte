@@ -624,6 +624,7 @@
 		if (ext === '.m' && language === 'OBJECTIVECXX') return 'OBJC';
 		const match: Record<string, PlaygroundLanguage> = {
 			'.bf': 'BRAINFUCK',
+			'.b93': 'BEFUNGE93',
 			'.c': 'C',
 			'.cc': 'CPP',
 			'.cpp': 'CPP',
@@ -771,6 +772,7 @@
 			WAT: 'main.wat',
 			WASM: 'main.wasm',
 			BRAINFUCK: 'main.bf',
+			BEFUNGE93: 'main.b93',
 			LUA: 'main.lua',
 			FENNEL: 'main.fnl',
 			ZIG: 'main.zig',
@@ -840,6 +842,7 @@
 			WAT: 'wat',
 			WASM: 'wasm',
 			BRAINFUCK: 'brainfuck',
+			BEFUNGE93: 'befunge93',
 			LUA: 'lua',
 			FENNEL: 'fennel',
 			ZIG: 'zig',
@@ -1472,6 +1475,9 @@
 		const aliases: Record<string, PlaygroundLanguage> = {
 			brainfuck: 'BRAINFUCK',
 			bf: 'BRAINFUCK',
+			befunge93: 'BEFUNGE93',
+			befunge: 'BEFUNGE93',
+			'befunge-93': 'BEFUNGE93',
 			python: 'PYTHON',
 			python3: 'PYTHON',
 			pypy3: 'PYTHON',

@@ -24,10 +24,11 @@ describe('runtime browser CI selection', () => {
 		]);
 		expect(changedBrowserFamilies(['README.md'])).toEqual([]);
 	});
-	it('requires interpreter browser coverage for Brainfuck assets and execution changes', () => {
+	it('requires interpreter browser coverage for interpreter assets and execution changes', () => {
 		for (const file of [
 			'runtimes/esolangs/brainfuck/vendor/bfc.c',
 			'static/wasm-brainfuck/brainfuck.wasm',
+			'static/wasm-befunge93/befunge93.wasm',
 			'scripts/build-esolang-runtimes.mjs',
 			'scripts/support-matrix.mjs',
 			'src/lib/playground/index.ts',

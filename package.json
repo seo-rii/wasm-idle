@@ -174,7 +174,8 @@
 		"test:unit:odin-consumer": "node --test scripts/probe-odin-wasi-consumer.test.mjs",
 		"build:esolangs": "node scripts/build-esolang-runtimes.mjs --write",
 		"check:esolangs": "node scripts/build-esolang-runtimes.mjs --check",
-		"test:browser:brainfuck": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_BRAINFUCK=1 vitest run src/lib/playground/esolangs.playwright.test.ts"
+		"test:browser:brainfuck": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_BRAINFUCK=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
+		"test:browser:befunge93": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_BEFUNGE93=1 vitest run src/lib/playground/esolangs.playwright.test.ts"
 	},
 	"devDependencies": {
 		"acorn": "8.19.0",

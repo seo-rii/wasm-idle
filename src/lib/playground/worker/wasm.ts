@@ -296,7 +296,11 @@ self.onmessage = async (event: { data: any }) => {
 		});
 		const wasiRuntime = new WASI(
 			interpreter && workspace
-				? [interpreter.command, ...interpreter.args, `/${workspace.activePath}`]
+				? [
+						interpreter.command,
+						...interpreter.args,
+						`${interpreter.sourcePathPrefix ?? '/'}${workspace.activePath}`
+					]
 				: args,
 			['USER=wasm-idle'],
 			[
