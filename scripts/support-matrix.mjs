@@ -1013,7 +1013,7 @@ const runtimeDetailsByLanguage = new Map([
 		{
 			packageBase: 'koturn/Whitespace 22a57aab (MIT), compiled with WASI SDK 33',
 			execution:
-				'Runs the original Whitespace 0.3 interpreter with copy/slide, heap, labels, calls and signed 32-bit integers; character/numeric stdin and exact stdout; character EOF is -1; source limit 65535 UTF-8 bytes',
+				'Runs the upstream Whitespace 0.3 interpreter with a documented divisor-guard correction, copy/slide, heap, labels, calls and signed 32-bit integers; character/numeric stdin and exact stdout; character EOF is -1; source limit 65535 UTF-8 bytes',
 			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
 		}
 	],
