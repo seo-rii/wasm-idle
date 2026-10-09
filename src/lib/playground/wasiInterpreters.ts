@@ -59,5 +59,15 @@ export const WASI_INTERPRETERS: Readonly<Record<string, WasiInterpreterProfile>>
 		args: [],
 		sha256: '27cc66d75e63524b000b62b1117ad45cb3dabc4885530800175affc40f895840',
 		bytes: 16067
+	},
+	UHMLANG: {
+		id: 'UHMLANG',
+		folder: 'wasm-uhmlang',
+		fileName: 'uhmlang.wasm',
+		sourcePath: 'main.um',
+		command: 'umjunsik',
+		args: [],
+		sha256: 'f55e8a41f59654818af1d119d32d604165da369ce3aa269282b90fc319ed96dd',
+		bytes: 3017206
 	}
 };

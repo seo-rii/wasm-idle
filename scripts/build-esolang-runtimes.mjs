@@ -7,6 +7,20 @@ import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PROFILE_PATH = 'src/lib/playground/wasiInterpreters.ts';
+const GO_VERSION = '1.25.3';
+const GO_BUILD_FLAGS = ['build', '-trimpath', '-buildvcs=false', '-ldflags=-s -w -buildid='];
+const GO_BUILD_ENV = {
+	GOOS: 'wasip1',
+	GOARCH: 'wasm',
+	CGO_ENABLED: '0',
+	GOTOOLCHAIN: 'local',
+	GOENV: 'off',
+	GOFLAGS: '',
+	GOEXPERIMENT: '',
+	GOWORK: 'off',
+	GOPROXY: 'off',
+	GOSUMDB: 'off'
+};
 const BUILD_FLAGS = [
 	'--target=wasm32-wasip1',
 	'-std=c99',
@@ -124,6 +138,61 @@ const RUNTIMES = [
 			sourceHeader: true
 		},
 		glue: []
+	},
+	{
+		language: 'uhmlang',
+		id: 'UHMLANG',
+		folder: 'wasm-uhmlang',
+		fileName: 'uhmlang.wasm',
+		sourcePath: 'main.um',
+		command: 'umjunsik',
+		args: [],
+		backend: 'go',
+		sourceRoot: 'runtimes/esolangs/uhmlang/vendor',
+		repository: 'https://github.com/rycont/umjunsik-lang',
+		commit: 'e973f9d22b9803ee86b53d8e60f1b65ab08c7547',
+		license: 'MIT',
+		source: {
+			path: 'runtimes/esolangs/uhmlang/vendor/main.go',
+			url: 'https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/umjunsik-lang-go/main.go',
+			sha256: 'a28612201b0002b0437a228e1145490459de62fbaa490c74f5f88de1c72bdf94'
+		},
+		additionalSources: [
+			['ast/ast.go', '0349b09911d80c3a0eb878d7b3beae87c6edd29617f4a12b3c1b132183709ae4'],
+			['eval/eval.go', '33992d30b12727576c51d3b9ab6ef469d46676b38279b23c4a29b7219190b839'],
+			['eval/util.go', '25227fe69086f99a11b72be4d1b163a757146a73495cb3c9692aa41ba405c15a'],
+			['go.mod', '9928e259f7d60c700eb942e933096b7ccaa5d8b5bc4ce719505ab4ba2796b06b'],
+			['lexer/lexer.go', '96b088ba20249046c6f5308cfc17fbedab3e155adce91209c874b34e8fe22643'],
+			[
+				'object/object.go',
+				'2cb7cb75f3de06aa432da5e04db6418259a797e7ed4dc339ee7523dee0ae5111'
+			],
+			[
+				'parser/parser.go',
+				'a1b4c53ad1f5e50de0270134beb61dcf99d8f4522f5959c3e7c0bb0a59a95bdd'
+			],
+			['parser/util.go', '1578d9209003d774b5c7a0319764ee1cca4d6b06e319a8c881a1bb1bf02fc599'],
+			['token/token.go', 'f251d827653cb0dd3f0e9714e9a956415dcdfb35584f7ec65357a8494e91d094']
+		].map(([relativePath, sha256]) => ({
+			path: `runtimes/esolangs/uhmlang/vendor/${relativePath}`,
+			url: `https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/umjunsik-lang-go/${relativePath}`,
+			sha256
+		})),
+		licenseFile: {
+			path: 'runtimes/esolangs/uhmlang/LICENSE',
+			url: 'https://raw.githubusercontent.com/rycont/umjunsik-lang/e973f9d22b9803ee86b53d8e60f1b65ab08c7547/LICENSE',
+			sha256: 'ca6ca5d8e587b5c8a3f8308214ecb7257c7d29c4d90b958cfeaaa4ac7b9e5321'
+		},
+		additionalLicenses: [
+			{
+				path: 'runtimes/esolangs/uhmlang/GO-LICENSE',
+				url: 'https://raw.githubusercontent.com/golang/go/go1.25.3/LICENSE',
+				sha256: '911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad',
+				spdx: 'BSD-3-Clause',
+				label: 'Go runtime and standard library (Go 1.25.3)'
+			}
+		],
+		glue: []
 	}
 ];
 
@@ -144,7 +213,26 @@ async function describeFile(filePath, absolutePath = path.join(REPO_ROOT, filePa
 
 async function readInputs(runtime) {
 	const source = await describeFile(runtime.source.path);
+	const additionalSources = await Promise.all(
+		(runtime.additionalSources ?? []).map(async (input) => {
+			const description = await describeFile(input.path);
+			assertEqual(description.sha256, input.sha256, input.path);
+			return { ...description, url: input.url };
+		})
+	);
 	const license = await describeFile(runtime.licenseFile.path);
+	let licenseData = await readFile(path.join(REPO_ROOT, runtime.licenseFile.path));
+	const additionalLicenses = [];
+	for (const input of runtime.additionalLicenses ?? []) {
+		const description = await describeFile(input.path);
+		assertEqual(description.sha256, input.sha256, input.path);
+		additionalLicenses.push({ ...description, url: input.url, spdx: input.spdx });
+		licenseData = Buffer.concat([
+			licenseData,
+			Buffer.from(`\n\n${input.label}\n\n`),
+			await readFile(path.join(REPO_ROOT, input.path))
+		]);
+	}
 	assertEqual(source.sha256, runtime.source.sha256, runtime.source.path);
 	assertEqual(license.sha256, runtime.licenseFile.sha256, runtime.licenseFile.path);
 	if (runtime.licenseFile.sourceHeader) {
@@ -199,6 +287,7 @@ async function readInputs(runtime) {
 			repository: runtime.repository,
 			commit: runtime.commit,
 			source: { ...source, url: runtime.source.url },
+			...(additionalSources.length ? { additionalSources } : {}),
 			license: {
 				...license,
 				url: runtime.licenseFile.url,
@@ -210,11 +299,19 @@ async function readInputs(runtime) {
 		},
 		inputs: [
 			source,
+			...additionalSources.map(({ path, bytes, sha256 }) => ({ path, bytes, sha256 })),
 			...(await Promise.all(runtime.glue.map((file) => describeFile(file)))),
 			...patches
 		],
+		...(additionalLicenses.length ? { additionalLicenses } : {}),
 		...(compiledSource ? { patchedSource, compiledSource } : {}),
-		license: { ...license, path: 'LICENSE.txt', spdx: runtime.license }
+		license: {
+			path: 'LICENSE.txt',
+			bytes: licenseData.byteLength,
+			sha256: createHash('sha256').update(licenseData).digest('hex'),
+			spdx: [runtime.license, ...additionalLicenses.map((input) => input.spdx)].join(' AND ')
+		},
+		licenseData
 	};
 }
 
@@ -241,6 +338,7 @@ async function describeWasm(runtime, wasmPath) {
 }
 
 function buildArgs(runtime, outputPath) {
+	if (runtime.backend === 'go') return [...GO_BUILD_FLAGS, '-o', outputPath, '.'];
 	return [
 		...BUILD_FLAGS.map((flag) =>
 			runtime.initialMemoryBytes !== undefined && flag.startsWith('-Wl,--initial-memory=')
@@ -262,10 +360,20 @@ function receiptFor(runtime, inputs, toolchain, wasm) {
 		upstream: inputs.upstream,
 		inputs: inputs.inputs,
 		license: inputs.license,
+		...(inputs.additionalLicenses ? { additionalLicenses: inputs.additionalLicenses } : {}),
 		build: {
 			toolchain,
-			command: 'WASI_SDK_PATH/bin/clang',
-			args: buildArgs(runtime, `static/${runtime.folder}/${runtime.fileName}`),
+			command: runtime.backend === 'go' ? 'GO_BINARY' : 'WASI_SDK_PATH/bin/clang',
+			...(runtime.backend === 'go' ? { cwd: runtime.sourceRoot, env: GO_BUILD_ENV } : {}),
+			args: buildArgs(
+				runtime,
+				runtime.backend === 'go'
+					? path.posix.relative(
+							runtime.sourceRoot,
+							`static/${runtime.folder}/${runtime.fileName}`
+						)
+					: `static/${runtime.folder}/${runtime.fileName}`
+			),
 			...(inputs.compiledSource ? { source: inputs.compiledSource } : {})
 		},
 		wasm
@@ -287,11 +395,31 @@ async function readToolchain(sdkPath) {
 	return { name: 'wasi-sdk', version, compiler: result.stdout.split('\n')[0] };
 }
 
+function readGoToolchain(goBinary) {
+	const result = spawnSync(goBinary, ['version'], {
+		encoding: 'utf8',
+		env: { ...process.env, ...GO_BUILD_ENV, LC_ALL: 'C' }
+	});
+	if (result.error || result.status !== 0) {
+		throw result.error ?? new Error(result.stderr || 'Could not read the Go version.');
+	}
+	if (!result.stdout.startsWith(`go version go${GO_VERSION} `)) {
+		throw new Error(`This build requires Go ${GO_VERSION}. Set GO_BINARY to that compiler.`);
+	}
+	return { name: 'Go', version: GO_VERSION, compiler: `go version go${GO_VERSION}` };
+}
+
 async function checkRuntime(runtime) {
 	const directory = path.join(REPO_ROOT, 'static', runtime.folder);
 	const inputs = await readInputs(runtime);
 	const receipt = JSON.parse(await readFile(path.join(directory, 'runtime-build.json'), 'utf8'));
-	if (
+	if (runtime.backend === 'go') {
+		assertEqual(
+			receipt.build?.toolchain,
+			{ name: 'Go', version: GO_VERSION, compiler: `go version go${GO_VERSION}` },
+			`${runtime.folder} Go toolchain`
+		);
+	} else if (
 		receipt.build?.toolchain?.name !== 'wasi-sdk' ||
 		!/^33\.0(?:\+[^\n]*)?\n/.test(`${receipt.build?.toolchain?.version}\n`) ||
 		!/^clang version 22\.1\.0-wasi-sdk /.test(receipt.build?.toolchain?.compiler ?? '')
@@ -359,41 +487,52 @@ async function main() {
 	if (!check) {
 		const sdkPath =
 			process.env.WASI_SDK_PATH ?? path.join(homedir(), '.local/share/wasi-sdk-33');
-		const toolchain = await readToolchain(sdkPath);
+		const goBinary = process.env.GO_BINARY ?? 'go';
+		const toolchains = {};
+		if (selected.some((runtime) => runtime.backend !== 'go'))
+			toolchains.c = await readToolchain(sdkPath);
+		if (selected.some((runtime) => runtime.backend === 'go'))
+			toolchains.go = readGoToolchain(goBinary);
 		const temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'wasm-idle-esolangs-'));
 		try {
 			for (const runtime of selected) {
+				const isGo = runtime.backend === 'go';
 				const inputs = await readInputs(runtime);
 				const wasmPath = path.join(temporaryDirectory, runtime.fileName);
 				const result = spawnSync(
-					path.join(sdkPath, 'bin/clang'),
+					isGo ? goBinary : path.join(sdkPath, 'bin/clang'),
 					buildArgs(runtime, wasmPath),
 					{
-						cwd: REPO_ROOT,
+						cwd: isGo ? path.join(REPO_ROOT, runtime.sourceRoot) : REPO_ROOT,
 						encoding: 'utf8',
 						...(inputs.patchedSource !== undefined
 							? { input: inputs.patchedSource }
 							: {}),
-						env: { ...process.env, LC_ALL: 'C', SOURCE_DATE_EPOCH: '0' },
-						timeout: 60000
+						env: {
+							...process.env,
+							...(isGo ? GO_BUILD_ENV : {}),
+							LC_ALL: 'C',
+							SOURCE_DATE_EPOCH: '0'
+						},
+						timeout: isGo ? 180000 : 60000
 					}
 				);
 				if (result.error || result.status !== 0) {
 					throw (
 						result.error ??
-						new Error(result.stderr || `clang exited with ${result.status}.`)
+						new Error(
+							result.stderr ||
+								`${isGo ? 'Go' : 'clang'} exited with ${result.status}.`
+						)
 					);
 				}
 				const wasm = await describeWasm(runtime, wasmPath);
-				const receipt = receiptFor(runtime, inputs, toolchain, wasm);
+				const receipt = receiptFor(runtime, inputs, toolchains[isGo ? 'go' : 'c'], wasm);
 				const targetDirectory = path.join(REPO_ROOT, 'static', runtime.folder);
 				if (write) {
 					await mkdir(targetDirectory, { recursive: true });
 					await cp(wasmPath, path.join(targetDirectory, runtime.fileName));
-					await cp(
-						path.join(REPO_ROOT, runtime.licenseFile.path),
-						path.join(targetDirectory, 'LICENSE.txt')
-					);
+					await writeFile(path.join(targetDirectory, 'LICENSE.txt'), inputs.licenseData);
 					await writeFile(
 						path.join(targetDirectory, 'runtime-build.json'),
 						`${JSON.stringify(receipt, null, 2)}\n`

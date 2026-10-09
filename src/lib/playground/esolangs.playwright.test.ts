@@ -35,6 +35,7 @@ type InterpreterBrowserProfile = {
 	defaultOutput?: string;
 	echoSource: string;
 	echoSourceForInput?: (stdin: string) => string;
+	echoInputForOutput?: (output: string) => string;
 	infiniteSource: string;
 	timeoutMaxOutputBytes?: number;
 	runtimePath: string;
@@ -149,6 +150,14 @@ const aheuiHelloWorld = `밤밣따빠밣밟따뿌
 뫃봌토범더벌뿌뚜
 뽑뽀멓멓더벓뻐뚠
 뽀덩벐멓뻐덕더벅`;
+
+// The upstream Go interpreter reads integers and prints their Unicode codepoints.
+const uhmlangProgram = (...lines: string[]) =>
+	['어떻게', ...lines, '이 사람이름이냐ㅋㅋ'].join('\n');
+const uhmlangEcho = (output: string) =>
+	uhmlangProgram(...Array.from(output, () => ['엄식?', '식어ㅋ']).flat());
+const uhmlangCodepointInput = (output: string) =>
+	Array.from(output, (character) => `${character.codePointAt(0)}\n`).join('');
 
 const profiles: InterpreterBrowserProfile[] = [
 	{
@@ -869,6 +878,124 @@ const profiles: InterpreterBrowserProfile[] = [
 				output: 'runtime-recovered\n'
 			}
 		]
+	},
+	{
+		language: 'UHMLANG',
+		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_UHMLANG === '1',
+		defaultSource: () => editorDefaults.uhmlang,
+		defaultInput: '42\n',
+		defaultOutput: '42',
+		echoSource: uhmlangEcho('A'),
+		echoSourceForInput: uhmlangEcho,
+		echoInputForOutput: uhmlangCodepointInput,
+		infiniteSource: uhmlangProgram('준..'),
+		runtimePath: 'wasm-uhmlang/uhmlang.wasm',
+		cases: [
+			{
+				name: 'unicode-codepoint-output',
+				source: uhmlangEcho('첫째 줄 🦀\nsecond line\n'),
+				stdin: uhmlangCodepointInput('첫째 줄 🦀\nsecond line\n'),
+				output: '첫째 줄 🦀\nsecond line\n'
+			},
+			{
+				name: 'numeric-stdin',
+				source: uhmlangProgram('엄식?', '식어!'),
+				stdin: '42\n',
+				output: '42'
+			},
+			{
+				name: 'numeric-multiple-lines',
+				source: uhmlangProgram('엄식?', '어엄식?', '식어!', '식ㅋ', '식어어!'),
+				stdin: '-7\n3\n',
+				output: '-7\n3'
+			},
+			{
+				name: 'empty-explicit-eof-is-zero',
+				source: uhmlangProgram('엄식?', '식어!'),
+				stdin: '',
+				output: '0'
+			},
+			{
+				name: 'invalid-numeric-input-original-zero',
+				source: uhmlangProgram('엄식?', '식어!'),
+				stdin: 'invalid\n',
+				output: '0'
+			},
+			{
+				name: 'partial-explicit-stdin',
+				source: uhmlangEcho('A'),
+				stdin: uhmlangCodepointInput('AB'),
+				output: 'A'
+			},
+			{
+				name: 'fresh-stdin',
+				source: uhmlangEcho('C'),
+				stdin: uhmlangCodepointInput('C'),
+				output: 'C'
+			},
+			{
+				name: 'nul-character-is-not-eof',
+				source: uhmlangEcho('\0A\n'),
+				stdin: uhmlangCodepointInput('\0A\n'),
+				output: '\0A\n'
+			},
+			{
+				name: 'nested-unicode-source-path',
+				source: uhmlangEcho('한'),
+				stdin: uhmlangCodepointInput('한'),
+				output: '한',
+				options: { activePath: 'examples/한글.umm' }
+			},
+			{
+				name: 'signed-literals-and-multiplication',
+				source: uhmlangProgram('식,,,!', '식ㅋ', '식... ....!'),
+				stdin: '',
+				output: '-3\n12'
+			},
+			{
+				name: 'variable-indices',
+				source: uhmlangProgram('엄..', '어엄...', '식어!', '식어어!'),
+				stdin: '',
+				output: '23'
+			},
+			{
+				name: 'zero-conditional',
+				source: uhmlangProgram('동탄.,?식.....!', '동탄.?식.......!'),
+				stdin: '',
+				output: '5'
+			},
+			{
+				name: 'forward-jump',
+				// The original Go parser counts the leading newline as an AST line.
+				source: uhmlangProgram('준.....', '식.......!', '식.....!'),
+				stdin: '',
+				output: '5'
+			},
+			{
+				name: 'tilde-line-separators',
+				source: uhmlangProgram('엄..', '식어!').replace(/\n/g, '~'),
+				stdin: '',
+				output: '2'
+			},
+			{
+				name: 'invalid-program-header',
+				source: 'invalid',
+				stdin: '',
+				fails: true
+			},
+			{
+				name: 'nonzero-program-exit',
+				source: uhmlangProgram('화이팅!..'),
+				stdin: '',
+				fails: true
+			},
+			{
+				name: 'after-runtime-failure',
+				source: uhmlangEcho('runtime-recovered\n'),
+				stdin: uhmlangCodepointInput('runtime-recovered\n'),
+				output: 'runtime-recovered\n'
+			}
+		]
 	}
 ];
 
@@ -970,12 +1097,20 @@ async function runInterpreterBrowserCases(
 			profile.echoSourceForInput?.(stdin) ?? profile.echoSource
 		])
 	);
+	const echoStdin = Object.fromEntries(
+		echoInputs.map((output) => [output, profile.echoInputForOutput?.(output) ?? output])
+	);
+	const streamingChunks = ['stream 한글 🦀\n', 'second chunk\n'].map(
+		(output) => profile.echoInputForOutput?.(output) ?? output
+	);
 	return await page.evaluate(
 		async ({
 			language,
 			cases,
 			echoSource,
 			echoPrograms,
+			echoStdin,
+			streamingChunks,
 			infiniteSource,
 			timeoutMaxOutputBytes,
 			rootUrl
@@ -1081,18 +1216,17 @@ async function runInterpreterBrowserCases(
 					async (inputReady) => {
 						await inputReady;
 						await new Promise((resolve) => setTimeout(resolve, 75));
-						sandbox.write?.('stream 한글 🦀\n');
-						sandbox.write?.('second chunk\n');
+						for (const chunk of streamingChunks) sandbox.write?.(chunk);
 						sandbox.eof();
 					}
 				);
 
 				await run('output-limit', echoPrograms['가'.repeat(512)], {
-					stdin: '가'.repeat(512),
+					stdin: echoStdin['가'.repeat(512)],
 					limits: { maxOutputBytes: 1024 }
 				});
 				await run('after-output-limit', echoPrograms['output-recovered\n'], {
-					stdin: 'output-recovered\n'
+					stdin: echoStdin['output-recovered\n']
 				});
 
 				await run('infinite-loop-timeout', infiniteSource, {
@@ -1104,7 +1238,7 @@ async function runInterpreterBrowserCases(
 					}
 				});
 				await run('after-timeout', echoPrograms['timeout-recovered\n'], {
-					stdin: 'timeout-recovered\n'
+					stdin: echoStdin['timeout-recovered\n']
 				});
 
 				const controller = new AbortController();
@@ -1118,7 +1252,7 @@ async function runInterpreterBrowserCases(
 					}
 				);
 				await run('after-abort', echoPrograms['abort-recovered\n'], {
-					stdin: 'abort-recovered\n'
+					stdin: echoStdin['abort-recovered\n']
 				});
 
 				await run('stop-stdin-wait', echoSource, {}, async (inputReady) => {
@@ -1126,12 +1260,12 @@ async function runInterpreterBrowserCases(
 					await sandbox.terminate();
 				});
 				await run('after-stop', echoPrograms['stop-recovered\n'], {
-					stdin: 'stop-recovered\n'
+					stdin: echoStdin['stop-recovered\n']
 				});
 
 				await sandbox.terminate();
 				await run('after-explicit-reload', echoPrograms['reload-recovered\n'], {
-					stdin: 'reload-recovered\n'
+					stdin: echoStdin['reload-recovered\n']
 				});
 			} finally {
 				await sandbox.dispose?.();
@@ -1143,6 +1277,8 @@ async function runInterpreterBrowserCases(
 			cases: profile.cases,
 			echoSource: profile.echoSource,
 			echoPrograms,
+			echoStdin,
+			streamingChunks,
 			infiniteSource: profile.infiniteSource,
 			timeoutMaxOutputBytes: profile.timeoutMaxOutputBytes,
 			rootUrl

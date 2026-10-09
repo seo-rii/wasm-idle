@@ -45,6 +45,7 @@ const canonicalLanguageIds = [
 	'WHITESPACE',
 	'MALBOLGE',
 	'AHEUI',
+	'UHMLANG',
 	'BRAINFUCK',
 	'BEFUNGE93',
 	'LUA',
