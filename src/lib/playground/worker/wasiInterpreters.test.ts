@@ -222,3 +222,37 @@ describe('upstream Whitespace 0.3 WASI interpreter', () => {
 		expect((await run(push(42) + numberOut + halt)).output).toBe('42');
 	});
 });
+
+describe('original Malbolge WASI interpreter', () => {
+	beforeEach(() => loadInterpreter('MALBOLGE'));
+
+	it('reads a byte from program stdin and writes it using the original interpreter', async () => {
+		expect(await run('ubO', 'A')).toEqual({ output: 'A', error: undefined, completed: true });
+		expect((await run('ubO', '\0')).output).toBe('\0');
+	});
+
+	it('ignores source whitespace and mounts a selected nested filename', async () => {
+		expect(await run('u\nb\tO ', 'Z', { activePath: 'src/main.mal' })).toEqual({
+			output: 'Z',
+			error: undefined,
+			completed: true
+		});
+	});
+
+	it('rejects invalid source instructions through the upstream loader', async () => {
+		const invalid = await run('@@');
+		expect(invalid.completed).toBe(false);
+		expect(invalid.error).toMatch(/exited with code/u);
+		expect(invalid.output).toMatch(/invalid/u);
+		expect((await run('QP')).completed).toBe(true);
+	});
+
+	it('rejects source that cannot safely initialize the upstream memory', async () => {
+		for (const code of ['', ' ', 'u', '\tu\n']) {
+			const invalid = await run(code);
+			expect(invalid.completed).toBe(false);
+			expect(invalid.error).toMatch(/requires at least 2/u);
+		}
+		expect((await run('ubO', 'Q')).output).toBe('Q');
+	});
+});

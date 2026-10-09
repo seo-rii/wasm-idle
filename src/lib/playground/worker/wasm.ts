@@ -250,6 +250,15 @@ self.onmessage = async (event: { data: any }) => {
 			? validateExecutionWorkspace(code, workspaceFiles, activePath, workspaceLimits)
 			: undefined;
 		if (
+			interpreter?.minSourceCharacters !== undefined &&
+			encoder.encode(code.replace(/[\t\n\v\f\r ]/gu, '')).byteLength <
+				interpreter.minSourceCharacters
+		) {
+			throw new Error(
+				`${interpreter.id} source requires at least ${interpreter.minSourceCharacters} non-whitespace characters`
+			);
+		}
+		if (
 			interpreter?.maxSourceBytes !== undefined &&
 			encoder.encode(code).byteLength > interpreter.maxSourceBytes
 		) {

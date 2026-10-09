@@ -159,6 +159,20 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'Malbolge',
+		ids: ['MALBOLGE'],
+		runtime: 'Ben Olmstead Malbolge on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_MALBOLGE',
+			language: 'MALBOLGE'
+		}
+	},
+
+	{
 		language: 'Whitespace',
 		ids: ['WHITESPACE'],
 		runtime: 'koturn/Whitespace 0.3 on WASI',
@@ -983,6 +997,17 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Malbolge',
+		{
+			packageBase:
+				'Original Ben Olmstead interpreter, TryItOnline/malbolge b0869870 (public domain), compiled with WASI SDK 33',
+			execution:
+				'Runs the original 59049-cell ternary and self-modifying interpreter; source-file input is separate from byte stdin/stdout; EOF stores 59048; requires at least two non-whitespace source bytes',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+
 	[
 		'Whitespace',
 		{

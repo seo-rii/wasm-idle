@@ -452,6 +452,16 @@ class Wasm implements Sandbox {
 			);
 			stdin = options.stdin;
 			if (
+				this.interpreter?.minSourceCharacters !== undefined &&
+				OUTPUT_ENCODER.encode(code.replace(/[\t\n\v\f\r ]/gu, '')).byteLength <
+					this.interpreter.minSourceCharacters
+			) {
+				throw new RuntimeConfigurationError(
+					`${this.interpreter.id} source requires at least ${this.interpreter.minSourceCharacters} non-whitespace characters`,
+					{ runtimeId: this.interpreter.id }
+				);
+			}
+			if (
 				this.interpreter?.maxSourceBytes !== undefined &&
 				OUTPUT_ENCODER.encode(code).byteLength > this.interpreter.maxSourceBytes
 			) {
