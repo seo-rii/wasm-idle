@@ -4,6 +4,7 @@ export type WasiInterpreterProfile = {
 	readonly folder: string;
 	readonly fileName: string;
 	readonly sourcePath: string;
+	readonly maxSourcePathBytes?: number;
 	readonly command: string;
 	readonly args: readonly string[];
 	readonly sha256: string;
@@ -16,6 +17,7 @@ export const WASI_INTERPRETERS: Readonly<Record<string, WasiInterpreterProfile>>
 		folder: 'wasm-brainfuck',
 		fileName: 'brainfuck.wasm',
 		sourcePath: 'main.bf',
+		maxSourcePathBytes: 62,
 		command: 'bfi',
 		args: [],
 		sha256: '62c813c99c700d65e05974ec0ad07333c8ca40460330f1f835f28a8cb39657a5',

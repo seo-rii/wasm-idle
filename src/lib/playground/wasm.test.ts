@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
+import { WASI_INTERPRETERS } from './wasiInterpreters';
 
 const workerInstances: MockWorker[] = [];
 let suppressAutoLoadAck = false;
@@ -192,6 +193,78 @@ describe('WASM sandbox', () => {
 				activePath: 'nested/main.wasm',
 				workspaceFiles: [{ path: 'fixtures/helper.wasm', content: 'AGFzbQ==' }]
 			})
+		);
+	});
+
+	it.each([
+		{ activePath: 'a'.repeat(59) + '.bf', normalizedPath: 'a'.repeat(59) + '.bf' },
+		{ activePath: '한'.repeat(19) + 'ab.bf', normalizedPath: '한'.repeat(19) + 'ab.bf' },
+		{ activePath: 'src\\한글.bf', normalizedPath: 'src/한글.bf' }
+	])(
+		'dispatches a Brainfuck source within the UTF-8 path limit: $activePath',
+		async ({ activePath, normalizedPath }) => {
+			const sandbox = new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+			await sandbox.load('/absproxy/5173');
+
+			await expect(
+				sandbox.run(',[.,]', false, false, undefined, [], { activePath, stdin: 'A' })
+			).resolves.toBe(true);
+			expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
+				expect.objectContaining({ activePath: normalizedPath, code: ',[.,]', stdin: 'A' })
+			);
+		}
+	);
+
+	it.each([
+		{ name: 'ASCII byte overflow', activePath: 'a'.repeat(60) + '.bf', prepare: false },
+		{ name: 'Unicode byte overflow', activePath: '한'.repeat(20) + '.bf', prepare: false },
+		{
+			name: 'filename truncation collision',
+			activePath: 'a'.repeat(62) + '.bf',
+			workspaceFiles: [{ path: 'a'.repeat(62), content: '+'.repeat(66) + '.' }],
+			prepare: false
+		},
+		{ name: 'prepare byte overflow', activePath: 'a'.repeat(60) + '.bf', prepare: true }
+	])(
+		'rejects Brainfuck $name before worker dispatch and allows recovery',
+		async ({ activePath, workspaceFiles, prepare }) => {
+			const sandbox = new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+			const output = vi.fn();
+			sandbox.output = output;
+			await sandbox.load('/absproxy/5173');
+
+			await expect(
+				sandbox.run('+'.repeat(65) + '.', prepare, false, undefined, [], {
+					activePath,
+					workspaceFiles,
+					stdin: ''
+				})
+			).rejects.toMatchObject({
+				name: 'RuntimeConfigurationError',
+				code: 'runtime-configuration',
+				phase: 'configuration',
+				runtimeId: 'BRAINFUCK',
+				message: expect.stringContaining('62')
+			});
+			expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
+			expect(output).not.toHaveBeenCalled();
+			await expect(
+				sandbox.run(',.', false, false, undefined, [], { stdin: 'Q' })
+			).resolves.toBe(true);
+			expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(2);
+		}
+	);
+
+	it('keeps longer source paths available to the raw WASM sandbox', async () => {
+		const sandbox = new Wasm();
+		await sandbox.load('/absproxy/5173');
+		const activePath = 'a'.repeat(80) + '.wasm';
+
+		await expect(
+			sandbox.run('AGFzbQ==', false, false, undefined, [], { activePath, stdin: '' })
+		).resolves.toBe(true);
+		expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({ activePath })
 		);
 	});
 

@@ -450,6 +450,16 @@ class Wasm implements Sandbox {
 					)
 				}
 			);
+			if (
+				this.interpreter?.maxSourcePathBytes !== undefined &&
+				OUTPUT_ENCODER.encode(workspace.activePath!).byteLength >
+					this.interpreter.maxSourcePathBytes
+			) {
+				throw new RuntimeConfigurationError(
+					`${this.interpreter.id} source path exceeds the ${this.interpreter.maxSourcePathBytes}-byte interpreter limit`,
+					{ runtimeId: this.interpreter.id, phase: 'configuration' }
+				);
+			}
 			stdin = options.stdin;
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(

@@ -21,6 +21,8 @@ type InterpreterCase = {
 	stdin: string;
 	output?: string;
 	fails?: boolean;
+	configurationError?: boolean;
+	options?: Pick<SandboxExecutionOptions, 'activePath' | 'workspaceFiles'>;
 };
 
 type InterpreterBrowserProfile = {
@@ -74,6 +76,57 @@ const profiles: InterpreterBrowserProfile[] = [
 				source: ',[.,]',
 				stdin: '\ufeffx',
 				output: '\ufeffx'
+			},
+			{
+				name: 'nested-unicode-source-path',
+				source: ',[.,]',
+				stdin: '경로 🦀\n',
+				output: '경로 🦀\n',
+				options: { activePath: 'examples/한글🦀.bf' }
+			},
+			{
+				name: 'ascii-source-path-byte-boundary',
+				source: '+'.repeat(65) + '.',
+				stdin: '',
+				output: 'A',
+				options: { activePath: 'a'.repeat(59) + '.bf' }
+			},
+			{
+				name: 'unicode-source-path-byte-boundary',
+				source: '+'.repeat(65) + '.',
+				stdin: '',
+				output: 'A',
+				options: { activePath: '한'.repeat(19) + 'ab.bf' }
+			},
+			{
+				name: 'ascii-source-path-byte-overflow',
+				source: '+'.repeat(65) + '.',
+				stdin: '',
+				configurationError: true,
+				options: { activePath: 'a'.repeat(60) + '.bf' }
+			},
+			{
+				name: 'unicode-source-path-byte-overflow',
+				source: '+'.repeat(65) + '.',
+				stdin: '',
+				configurationError: true,
+				options: { activePath: '한'.repeat(20) + '.bf' }
+			},
+			{
+				name: 'truncated-source-path-collision',
+				source: '+'.repeat(65) + '.',
+				stdin: '',
+				configurationError: true,
+				options: {
+					activePath: 'a'.repeat(62) + '.bf',
+					workspaceFiles: [{ path: 'a'.repeat(62), content: '+'.repeat(66) + '.' }]
+				}
+			},
+			{
+				name: 'after-source-path-rejection',
+				source: ',[.,]',
+				stdin: 'path-recovered\n',
+				output: 'path-recovered\n'
 			},
 			{ name: 'empty-explicit-eof', source: ',[.,]', stdin: '', output: '' },
 			{ name: 'partial-explicit-stdin', source: ',.', stdin: 'AB', output: 'A' },
@@ -271,7 +324,10 @@ async function runInterpreterBrowserCases(
 			}
 			try {
 				for (const testCase of cases)
-					await run(testCase.name, testCase.source, { stdin: testCase.stdin });
+					await run(testCase.name, testCase.source, {
+						...testCase.options,
+						stdin: testCase.stdin
+					});
 
 				await run('streaming-eof', echoSource, {}, async (inputReady) => {
 					await inputReady;
@@ -383,7 +439,15 @@ for (const profile of profiles) {
 						);
 						for (const testCase of profile.cases) {
 							const result = byName[testCase.name];
-							if (testCase.fails) {
+							if (testCase.configurationError) {
+								expect(result.error, JSON.stringify(result)).toMatchObject({
+									code: 'runtime-configuration',
+									phase: 'configuration'
+								});
+								expect(result.error?.message).toMatch(/source path.+62/iu);
+								expect(result.output).toBe('');
+								expect(result.inputRequests).toBe(0);
+							} else if (testCase.fails) {
 								expect(result.error, JSON.stringify(result)).toBeDefined();
 								expect(result.error?.message).toMatch(/exited|bracket|syntax/iu);
 							} else {
