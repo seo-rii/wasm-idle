@@ -100,6 +100,62 @@ describe('WASM sandbox', () => {
 		expect(outputs).toContain('main=65\n');
 	});
 
+	it.each([1, WASI_INTERPRETERS.BRAINFUCK.bytes - 1])(
+		'rejects an undersized interpreter asset budget before starting a worker: %s',
+		async (maxAssetBytes) => {
+			const sandbox = new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+			await expect(
+				sandbox.load('/absproxy/5173', '', false, [], { limits: { maxAssetBytes } })
+			).rejects.toMatchObject({
+				name: 'AssetTooLargeError',
+				code: 'asset-too-large',
+				phase: 'asset',
+				runtimeId: 'BRAINFUCK',
+				actual: WASI_INTERPRETERS.BRAINFUCK.bytes,
+				limit: maxAssetBytes
+			});
+			expect(workerInstances).toHaveLength(0);
+			await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+			expect(workerInstances).toHaveLength(1);
+		}
+	);
+
+	it('allows the exact interpreter receipt budget and forwards it to asset fetching', async () => {
+		const sandbox = new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+		const maxAssetBytes = WASI_INTERPRETERS.BRAINFUCK.bytes;
+		await expect(
+			sandbox.load('/absproxy/5173', '', false, [], { limits: { maxAssetBytes } })
+		).resolves.toBeUndefined();
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ load: true, maxAssetBytes })
+		);
+	});
+
+	it('rechecks a tighter interpreter asset budget when reusing a loaded worker', async () => {
+		const sandbox = new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		await expect(
+			sandbox.load('/absproxy/5173', '', false, [], { limits: { maxAssetBytes: 1 } })
+		).rejects.toMatchObject({ name: 'AssetTooLargeError', limit: 1 });
+		expect(sandbox.worker).toBe(worker);
+		expect(worker.postMessage).toHaveBeenCalledTimes(1);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(sandbox.run(',.', false, false, undefined, [], { stdin: 'Q' })).resolves.toBe(
+			true
+		);
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('keeps raw WASM startup independent of a downloadable interpreter budget', async () => {
+		const sandbox = new Wasm();
+		await expect(
+			sandbox.load('/absproxy/5173', '', false, [], { limits: { maxAssetBytes: 1 } })
+		).resolves.toBeUndefined();
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith({ load: true, log: false });
+	});
+
 	it('terminates WASM output before exceeding the cumulative UTF-8 byte limit', async () => {
 		const sandbox = new Wasm();
 		const output = vi.fn();

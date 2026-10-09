@@ -154,4 +154,48 @@ describe('pinned upstream Brainfuck WASI interpreter', () => {
 		expect(messages.some((message) => message.error)).toBe(true);
 	});
 
+	it.each([1, profile.bytes - 1])(
+		'rejects a caller asset budget below the pinned receipt before downloading: %s',
+		async (maxAssetBytes) => {
+			vi.mocked(fetch).mockClear();
+			await (globalThis as any).onmessage({
+				data: {
+					load: true,
+					interpreter: profile,
+					interpreterUrl: `https://wasm-idle.test/${profile.folder}/${profile.fileName}`,
+					maxAssetBytes,
+					persistentCache: false
+				}
+			});
+			expect(messages).toContainEqual({
+				error: `BRAINFUCK interpreter exceeds the ${maxAssetBytes} byte limit`
+			});
+			expect(messages.some((message) => message.load)).toBe(false);
+			expect(fetch).not.toHaveBeenCalled();
+		}
+	);
+
+	it('accepts an exact receipt-sized download budget and runs after a failed load', async () => {
+		await (globalThis as any).onmessage({
+			data: {
+				load: true,
+				interpreter: profile,
+				interpreterUrl: `https://wasm-idle.test/${profile.folder}/${profile.fileName}`,
+				maxAssetBytes: 1,
+				persistentCache: false
+			}
+		});
+		messages.length = 0;
+		await (globalThis as any).onmessage({
+			data: {
+				load: true,
+				interpreter: profile,
+				interpreterUrl: `https://wasm-idle.test/${profile.folder}/${profile.fileName}`,
+				maxAssetBytes: profile.bytes,
+				persistentCache: false
+			}
+		});
+		expect(messages).toContainEqual({ load: true });
+		expect(await run(',.', 'Q')).toEqual({ output: 'Q', error: undefined, completed: true });
+	});
 });

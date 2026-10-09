@@ -230,11 +230,20 @@ self.onmessage = async (event: { data: any }) => {
 			interpreterBytes = undefined;
 			if (event.data.interpreter) {
 				const profile = event.data.interpreter as WasiInterpreterProfile;
+				const maxAssetBytes = Math.min(
+					event.data.maxAssetBytes ?? profile.bytes,
+					profile.bytes
+				);
+				if (profile.bytes > maxAssetBytes) {
+					throw new Error(
+						`${profile.id} interpreter exceeds the ${maxAssetBytes} byte limit`
+					);
+				}
 				const bytes = await fetchRuntimeAssetBytes({
 					url: event.data.interpreterUrl,
 					label: `${profile.id} interpreter`,
 					expected: { sha256: profile.sha256, bytes: profile.bytes },
-					maxAssetBytes: profile.bytes,
+					maxAssetBytes,
 					persistentCache: event.data.persistentCache,
 					integrityContext: { runtimeId: profile.id }
 				});
