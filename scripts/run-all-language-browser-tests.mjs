@@ -14,6 +14,7 @@ const DEBUG_TEST_FILE = 'src/lib/playground/debug.playwright.test.ts';
 const CPP_STANDARDS_TEST_FILE = 'src/lib/playground/cpp-standards.playwright.test.ts';
 const LONG_DOUBLE_TEST_FILE = 'src/lib/playground/long-double.playwright.test.ts';
 const PYTHON_TEST_FILE = 'src/lib/playground/python.playwright.test.ts';
+const ESOLANG_TEST_FILE = 'src/lib/playground/esolangs.playwright.test.ts';
 const DEBUG_REGRESSION_ENV = {
 	WASM_IDLE_RUN_REAL_BROWSER_DEBUG: '1',
 	WASM_IDLE_REQUIRE_LLDB_DEBUG: '1',
@@ -68,7 +69,7 @@ function parseBrowserTestShard(shard) {
  *   includeCompressedAssets?: boolean;
  *   includeLspFull?: boolean;
  *   shard?: BrowserTestShard;
- *   family?: 'dotnet' | 'nim' | 'clang' | 'debug';
+ *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs';
  * }} options
  * @returns {{ env: Record<string, string>; testFiles: string[] }}
  */
@@ -81,6 +82,16 @@ export function createAllLanguageBrowserTestPlan({
 	if (family) {
 		const families = {
 			debug: { env: { ...DEBUG_REGRESSION_ENV }, testFiles: [DEBUG_TEST_FILE] },
+			esolangs: {
+				env: Object.fromEntries(
+					supportMatrixRows.flatMap((row) =>
+						row.browserTest?.file === ESOLANG_TEST_FILE
+							? [[row.browserTest.env, '1']]
+							: []
+					)
+				),
+				testFiles: [ESOLANG_TEST_FILE]
+			},
 			dotnet: {
 				env: {
 					WASM_IDLE_RUN_REAL_BROWSER_DOTNET: '1',
@@ -257,7 +268,7 @@ async function startDedicatedPreviewServer(origin) {
  *   includeLspFull?: boolean;
  *   origin?: string;
  *   shard?: BrowserTestShard;
- *   family?: 'dotnet' | 'nim' | 'clang' | 'debug';
+ *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs';
  *   useBuild?: boolean;
  * }} options
  * @param {{
@@ -319,7 +330,7 @@ export function parseAllLanguageBrowserTestArgs(args) {
 	 *   includeCompressedAssets: boolean;
 	 *   includeLspFull: boolean;
 	 *   shard?: BrowserTestShard;
-	 *   family?: 'dotnet' | 'nim' | 'clang' | 'debug';
+	 *   family?: 'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs';
 	 *   useBuild?: boolean;
 	 * }} */
 	const options = {
@@ -345,9 +356,11 @@ export function parseAllLanguageBrowserTestArgs(args) {
 			options.useBuild = true;
 		} else if (arg.startsWith('--family=')) {
 			const family = arg.slice('--family='.length);
-			if (!['dotnet', 'nim', 'clang', 'debug'].includes(family))
+			if (!['dotnet', 'nim', 'clang', 'debug', 'esolangs'].includes(family))
 				throw new Error(`Unknown runtime browser family: ${family}`);
-			options.family = /** @type {'dotnet' | 'nim' | 'clang' | 'debug'} */ (family);
+			options.family = /** @type {'dotnet' | 'nim' | 'clang' | 'debug' | 'esolangs'} */ (
+				family
+			);
 		} else {
 			throw new Error(`Unknown option: ${arg}`);
 		}

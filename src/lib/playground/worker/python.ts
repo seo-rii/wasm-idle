@@ -403,8 +403,8 @@ async function executeAheui(code: string, activePath: string | undefined, stdin:
 	const fs = (pyodide as any).FS;
 	const filename = `/tmp/__wasm_idle_aheui__/${normalizeWorkspacePath(activePath || '') || 'main.aheui'}`;
 	const encoder = new TextEncoder();
-	const stdoutDecoder = new TextDecoder();
-	const stderrDecoder = new TextDecoder();
+	const stdoutDecoder = new TextDecoder('utf-8', { ignoreBOM: true });
+	const stderrDecoder = new TextDecoder('utf-8', { ignoreBOM: true });
 	const hasInitialStdin = typeof stdin === 'string';
 	let initialStdin: string | null = hasInitialStdin ? stdin : null;
 	let stdinEnded = false;

@@ -20,6 +20,7 @@ export const WASI_INTERPRETERS: Readonly<Record<string, WasiInterpreterProfile>>
 		folder: 'wasm-brainfuck',
 		fileName: 'brainfuck.wasm',
 		sourcePath: 'main.bf',
+		maxSourcePathBytes: 62,
 		command: 'bfi',
 		args: [],
 		sha256: '62c813c99c700d65e05974ec0ad07333c8ca40460330f1f835f28a8cb39657a5',
@@ -45,8 +46,8 @@ export const WASI_INTERPRETERS: Readonly<Record<string, WasiInterpreterProfile>>
 		maxSourceBytes: 65535,
 		command: 'whitespace',
 		args: [],
-		sha256: '916bfbce7eb912b7b4d2f44b6a6c5d9fe9357fdb0ad291333587349708319957',
-		bytes: 59324
+		sha256: 'de0846c43446d8dcb01e43324313bed565764b852b82b9885cd7d25e4f36b537',
+		bytes: 59270
 	},
 	MALBOLGE: {
 		id: 'MALBOLGE',
