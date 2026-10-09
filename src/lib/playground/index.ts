@@ -20,6 +20,13 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'GOLFSCRIPT',
+		load: async () => {
+			const { default: Golfscript } = await import('$lib/playground/golfscript');
+			return new Golfscript();
+		}
+	},
+	{
 		languageId: 'APECODE',
 		load: async () => {
 			const { default: Apecode } = await import('$lib/playground/apecode');

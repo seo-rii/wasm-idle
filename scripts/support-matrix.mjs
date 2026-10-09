@@ -159,6 +159,20 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'GolfScript',
+		ids: ['GOLFSCRIPT'],
+		runtime: 'Original GolfScript interpreter on Ruby/WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_GOLFSCRIPT',
+			language: 'GOLFSCRIPT'
+		}
+	},
+
+	{
 		language: 'APECode',
 		ids: ['APECODE'],
 		runtime: 'Original APECode interpreter on Pyodide',
@@ -1053,6 +1067,17 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'GolfScript',
+		{
+			packageBase:
+				'darrenks/golfscript cded5425 (upstream MIT notice), original Ruby source on the bundled Ruby/WASI VM',
+			execution:
+				'Loads the unchanged GolfScript CLI in a fresh Ruby VM; supports stack operations, arrays, blocks, arbitrary integers, Ruby string interpolation and original -q/-n/-r options; reads stdin to EOF, or accepts argument-array input after --, with original implicit final output',
+			customization: `${code('runtimeAssets.golfscript.interpreterUrl')}, ${code('runtimeAssets.rootUrl')}, ${code('runtimeAssets.ruby')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; code-pinned original script, readonly source files, execution limits and cancellation; prepare initializes Ruby without running GolfScript source`
+		}
+	],
+
 	[
 		'APECode',
 		{

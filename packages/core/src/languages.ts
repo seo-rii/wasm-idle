@@ -48,6 +48,7 @@ const canonicalLanguageIds = [
 	'UHMLANG',
 	'LOLCODE',
 	'APECODE',
+	'GOLFSCRIPT',
 	'BRAINFUCK',
 	'BEFUNGE93',
 	'LUA',

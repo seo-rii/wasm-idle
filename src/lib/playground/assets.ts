@@ -43,6 +43,10 @@ import {
 } from '$lib/playground/wasmJVersion';
 import { WASM_JANET_RUNTIME_BUNDLE } from '$lib/playground/wasmJanetVersion';
 import { WASM_FENNEL_COMPILER_RECEIPT } from '$lib/playground/wasmFennelVersion';
+import {
+	WASM_GOLFSCRIPT_ASSET_VERSION,
+	WASM_GOLFSCRIPT_INTERPRETER_RECEIPT
+} from '$lib/playground/wasmGolfscriptVersion';
 import { WASM_JULIA_RUNTIME_BUNDLE } from '$lib/playground/wasmJuliaVersion';
 import { WASM_LISP_ASSET_VERSION } from '$lib/playground/wasmLispVersion';
 import { WASM_NIM_RUNTIME_BUNDLE } from '$lib/playground/wasmNimVersion';
@@ -692,6 +696,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	hy?: { baseUrl?: string };
 	aheui?: { baseUrl?: string };
 	apecode?: { baseUrl?: string };
+	golfscript?: { interpreterUrl?: string };
 	nim?: NimRuntimeAssetConfig;
 	bash?: BashRuntimeAssetConfig;
 	clojurescript?: ClojureScriptRuntimeAssetConfig;
@@ -4382,4 +4387,23 @@ export function resolveApecodeBaseUrl(
 	if (configured) return normalizeBaseUrl(configured, currentUrl);
 	const root = typeof options === 'string' ? options : options?.rootUrl;
 	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-apecode/`, currentUrl);
+}
+
+/** Resolve the unchanged GolfScript source; its receipt is pinned independently of the URL. */
+export function resolveGolfscriptRuntimeAssetConfig(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = globalThis.location?.href || 'http://localhost/'
+) {
+	const configured =
+		typeof options === 'object' ? options?.golfscript?.interpreterUrl : undefined;
+	const root = typeof options === 'string' ? options : options?.rootUrl;
+	const interpreterUrl = resolveConfiguredUrl(
+		configured ||
+			`${normalizeRootUrl(root || '')}/wasm-golfscript/golfscript.rb?v=${WASM_GOLFSCRIPT_ASSET_VERSION}`,
+		currentUrl || 'http://localhost/'
+	);
+	return {
+		interpreterUrl,
+		assetKey: JSON.stringify({ interpreterUrl, receipt: WASM_GOLFSCRIPT_INTERPRETER_RECEIPT })
+	};
 }

@@ -70,6 +70,12 @@ export const playgroundLanguageDescriptors: Readonly<
 	UHMLANG: { label: 'UHMLANG (엄준식)', editorLanguage: 'plaintext' },
 	LOLCODE: { label: 'LOLCODE 1.3', editorLanguage: 'plaintext' },
 	APECODE: { label: 'APECode', editorLanguage: 'plaintext' },
+	GOLFSCRIPT: {
+		label: 'GolfScript',
+		editorLanguage: 'plaintext',
+		supportsArgs: true,
+		argsLabel: 'Interpreter options / -- values'
+	},
 	AHEUI: { label: 'Aheui', editorLanguage: 'plaintext' },
 	MALBOLGE: { label: 'Malbolge', editorLanguage: 'plaintext' },
 	WHITESPACE: { label: 'Whitespace', editorLanguage: 'plaintext' },
