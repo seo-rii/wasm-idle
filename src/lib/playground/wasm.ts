@@ -1,4 +1,5 @@
 import {
+	AssetTooLargeError,
 	BusyError,
 	CancelledError,
 	DEFAULT_WORKSPACE_LIMITS,
@@ -263,6 +264,16 @@ class Wasm implements Sandbox {
 				);
 			}
 			limits = resolveExecutionLimits(options.limits);
+			if (this.interpreter && this.interpreter.bytes > limits.maxAssetBytes) {
+				throw new AssetTooLargeError(
+					`${this.interpreter.id} interpreter exceeds the ${limits.maxAssetBytes} byte limit`,
+					{
+						actual: this.interpreter.bytes,
+						limit: limits.maxAssetBytes,
+						runtimeId: this.interpreter.id
+					}
+				);
+			}
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'WASM runtime startup cancelled')
@@ -336,6 +347,7 @@ class Wasm implements Sandbox {
 						...(this.interpreter
 							? {
 									interpreter: this.interpreter,
+									maxAssetBytes: limits.maxAssetBytes,
 									interpreterUrl: new URL(
 										`${(typeof _runtimeAssets === 'string' ? _runtimeAssets : (_runtimeAssets.rootUrl ?? '')).replace(/\/$/u, '')}/${this.interpreter.folder}/${this.interpreter.fileName}`,
 										globalThis.location.href
@@ -450,7 +462,6 @@ class Wasm implements Sandbox {
 					)
 				}
 			);
-			stdin = options.stdin;
 			if (
 				this.interpreter?.maxSourceBytes !== undefined &&
 				OUTPUT_ENCODER.encode(code).byteLength > this.interpreter.maxSourceBytes
@@ -462,14 +473,15 @@ class Wasm implements Sandbox {
 			}
 			if (
 				this.interpreter?.maxSourcePathBytes !== undefined &&
-				OUTPUT_ENCODER.encode(workspace.activePath).byteLength >
+				OUTPUT_ENCODER.encode(workspace.activePath!).byteLength >
 					this.interpreter.maxSourcePathBytes
 			) {
 				throw new RuntimeConfigurationError(
-					`${this.interpreter.id} source path exceeds ${this.interpreter.maxSourcePathBytes} UTF-8 bytes`,
-					{ runtimeId: this.interpreter.id }
+					`${this.interpreter.id} source path exceeds the ${this.interpreter.maxSourcePathBytes}-byte interpreter limit`,
+					{ runtimeId: this.interpreter.id, phase: 'configuration' }
 				);
 			}
+			stdin = options.stdin;
 			if (!this.isOperationActive(activeOperation) || signal?.aborted) {
 				return Promise.reject(
 					this.releaseBeforeSession(activeOperation, 'WASM execution cancelled')

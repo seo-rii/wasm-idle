@@ -230,11 +230,20 @@ self.onmessage = async (event: { data: any }) => {
 			interpreterBytes = undefined;
 			if (event.data.interpreter) {
 				const profile = event.data.interpreter as WasiInterpreterProfile;
+				const maxAssetBytes = Math.min(
+					event.data.maxAssetBytes ?? profile.bytes,
+					profile.bytes
+				);
+				if (profile.bytes > maxAssetBytes) {
+					throw new Error(
+						`${profile.id} interpreter exceeds the ${maxAssetBytes} byte limit`
+					);
+				}
 				const bytes = await fetchRuntimeAssetBytes({
 					url: event.data.interpreterUrl,
 					label: `${profile.id} interpreter`,
 					expected: { sha256: profile.sha256, bytes: profile.bytes },
-					maxAssetBytes: profile.bytes,
+					maxAssetBytes,
 					persistentCache: event.data.persistentCache,
 					integrityContext: { runtimeId: profile.id }
 				});
@@ -259,7 +268,8 @@ self.onmessage = async (event: { data: any }) => {
 		}
 		if (
 			interpreter?.maxSourcePathBytes !== undefined &&
-			encoder.encode(workspace!.activePath).byteLength > interpreter.maxSourcePathBytes
+			workspace?.activePath &&
+			encoder.encode(workspace.activePath).byteLength > interpreter.maxSourcePathBytes
 		) {
 			throw new Error(
 				`${interpreter.id} source path exceeds ${interpreter.maxSourcePathBytes} UTF-8 bytes`
@@ -282,8 +292,8 @@ self.onmessage = async (event: { data: any }) => {
 			buffer ? new Int32Array(buffer) : null,
 			Boolean(log)
 		);
-		const stdoutDecoder = new TextDecoder();
-		const stderrDecoder = new TextDecoder();
+		const stdoutDecoder = new TextDecoder('utf-8', { ignoreBOM: Boolean(interpreter) });
+		const stderrDecoder = new TextDecoder('utf-8', { ignoreBOM: Boolean(interpreter) });
 		const stdout = new ConsoleStdout((chunk) => {
 			const text = stdoutDecoder.decode(chunk, { stream: true });
 			if (text) postMessage({ output: text });
@@ -315,6 +325,23 @@ self.onmessage = async (event: { data: any }) => {
 					: [])
 			]
 		);
+		if (interpreter) {
+			// The shim counts UTF-16 code units, but args_get writes UTF-8 bytes.
+			// C and Go runtimes allocate the reported size, including NUL terminators.
+			wasiRuntime.wasiImport.args_sizes_get = (argc: number, argvBufferSize: number) => {
+				const memory = new DataView(wasiRuntime.inst.exports.memory.buffer);
+				memory.setUint32(argc, wasiRuntime.args.length, true);
+				memory.setUint32(
+					argvBufferSize,
+					wasiRuntime.args.reduce(
+						(size, arg) => size + encoder.encode(arg).byteLength + 1,
+						0
+					),
+					true
+				);
+				return 0;
+			};
+		}
 		const compiledModule = await WebAssembly.compile(wasmBuffer);
 		const importModules = WebAssembly.Module.imports(compiledModule).map(
 			(entry) => entry.module

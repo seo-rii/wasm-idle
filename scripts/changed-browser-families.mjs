@@ -10,13 +10,21 @@ export function changedBrowserFamilies(files) {
 			families.add('debug');
 		if (/(?:dotnet|runtime-recovery)/.test(file)) families.add('dotnet');
 		if (/(?:nim|runtime-recovery)/.test(file)) families.add('nim');
-		if (/(?:clang|objectivec|assetBridge|packages\/llvm-core)/.test(file)) families.add('clang');
+		if (/(?:clang|objectivec|assetBridge|packages\/llvm-core)/.test(file))
+			families.add('clang');
+		if (
+			/^(?:runtimes\/esolangs\/|static\/wasm-(?:brainfuck|befunge93)\/|scripts\/(?:build-esolang-runtimes|support-matrix)\.mjs$|src\/lib\/playground\/(?:index|wasm|worker\/wasm|wasiInterpreters|worker\/wasiInterpreters\.test|esolangs\.playwright\.test)\.ts$)/.test(
+				file
+			)
+		)
+			families.add('esolangs');
 		if (
 			/^(src\/routes\/|packages\/(core|terminal)\/|scripts\/(stdin-browser|run-all-language|changed-browser|browser-preview|required-browser)|\.github\/workflows\/|(?:package\.json|pnpm-lock\.yaml|vite\.config\.ts)$)/.test(
 				file
 			)
 		) {
-			for (const family of ['clang', 'debug', 'dotnet', 'nim']) families.add(family);
+			for (const family of ['clang', 'debug', 'dotnet', 'esolangs', 'nim'])
+				families.add(family);
 		}
 	}
 	return [...families].sort();

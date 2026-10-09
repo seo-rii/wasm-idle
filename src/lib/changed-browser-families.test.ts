@@ -14,12 +14,35 @@ describe('runtime browser CI selection', () => {
 			'clang',
 			'debug',
 			'dotnet',
+			'esolangs',
 			'nim'
 		]);
 		expect(changedBrowserFamilies(['packages/debug/src/controller.ts'])).toEqual(['debug']);
 		expect(changedBrowserFamilies(['src/lib/playground/assetBridge.ts'])).toEqual(['clang']);
-		expect(changedBrowserFamilies(['src/lib/playground/assetBridge.test.ts'])).toEqual(['clang']);
+		expect(changedBrowserFamilies(['src/lib/playground/assetBridge.test.ts'])).toEqual([
+			'clang'
+		]);
 		expect(changedBrowserFamilies(['README.md'])).toEqual([]);
+	});
+	it('requires interpreter browser coverage for interpreter assets and execution changes', () => {
+		for (const file of [
+			'runtimes/esolangs/brainfuck/vendor/bfc.c',
+			'static/wasm-brainfuck/brainfuck.wasm',
+			'static/wasm-befunge93/befunge93.wasm',
+			'scripts/build-esolang-runtimes.mjs',
+			'scripts/support-matrix.mjs',
+			'src/lib/playground/index.ts',
+			'src/lib/playground/wasiInterpreters.ts',
+			'src/lib/playground/wasm.ts',
+			'src/lib/playground/worker/wasm.ts',
+			'src/lib/playground/worker/wasiInterpreters.test.ts',
+			'src/lib/playground/esolangs.playwright.test.ts'
+		]) {
+			expect(changedBrowserFamilies([file]), file).toEqual(['esolangs']);
+		}
+		expect(changedBrowserFamilies(['scripts/stdin-browser-probe-lib.mjs'])).toContain(
+			'esolangs'
+		);
 	});
 	it('selects recovery tests alongside normal .NET and Nim execution', () => {
 		const dotnet = createAllLanguageBrowserTestPlan({ family: 'dotnet' });
