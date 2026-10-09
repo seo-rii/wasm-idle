@@ -13,7 +13,7 @@ export function changedBrowserFamilies(files) {
 		if (/(?:clang|objectivec|assetBridge|packages\/llvm-core)/.test(file))
 			families.add('clang');
 		if (
-			/^(?:runtimes\/esolangs\/|static\/wasm-(?:brainfuck|befunge93|whitespace|malbolge|aheui|uhmlang|lolcode|apecode)\/|scripts\/(?:build-esolang-runtimes|sync-wasm-aheui|sync-wasm-apecode|support-matrix)\.mjs$|src\/lib\/playground\/(?:index|wasm|worker\/wasm|aheui|worker\/aheui\.runtime\.test|apecode|worker\/apecode\.runtime\.test|assets|python|worker\/python|wasmAheuiVersion|wasmApecodeVersion|wasiInterpreters|worker\/wasiInterpreters\.test|esolangs\.playwright\.test)\.ts$)/.test(
+			/^(?:runtimes\/(?:esolangs|ruby)\/|static\/wasm-(?:brainfuck|befunge93|whitespace|malbolge|aheui|uhmlang|lolcode|apecode|golfscript|ruby)\/|scripts\/(?:build-esolang-runtimes|sync-wasm-aheui|sync-wasm-apecode|sync-wasm-golfscript|support-matrix)\.mjs$|src\/lib\/playground\/(?:index|wasm|worker\/wasm|aheui|worker\/aheui\.runtime\.test|apecode|worker\/apecode\.runtime\.test|golfscript|worker\/golfscript\.runtime\.test|worker\/golfscriptMount|ruby|worker\/ruby|rubyAssets|assets|python|worker\/python|wasmAheuiVersion|wasmApecodeVersion|wasmGolfscriptVersion|wasiInterpreters|worker\/wasiInterpreters\.test|esolangs\.playwright\.test)\.ts$)/.test(
 				file
 			)
 		)
