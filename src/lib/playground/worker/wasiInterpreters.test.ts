@@ -256,3 +256,55 @@ describe('original Malbolge WASI interpreter', () => {
 		expect((await run('ubO', 'Q')).output).toBe('Q');
 	});
 });
+
+describe('original Umjunsik Go WASI interpreter', () => {
+	beforeEach(() => loadInterpreter('UHMLANG'));
+	const program = (lines: string[]) => ['어떻게', ...lines, '이 사람이름이냐ㅋㅋ'].join('\n');
+	const numberEcho = program(['엄식?', '식어!']);
+	const characterEcho = program(['엄식?', '식어ㅋ']);
+
+	it('passes a nested Unicode filename through UTF-8 WASI argv', async () => {
+		expect(
+			await run(numberEcho, '42\n', {
+				activePath: 'examples/한글🦀.umm',
+				workspaceFiles: [{ path: 'examples/unused.um', content: numberEcho }]
+			})
+		).toEqual({ output: '42', error: undefined, completed: true });
+	});
+
+	it('reads signed numeric stdin and uses the original Unicode character output', async () => {
+		expect(await run(numberEcho, '-42\n')).toEqual({
+			output: '-42',
+			error: undefined,
+			completed: true
+		});
+		expect(
+			await run(program(['엄식?', '식어ㅋ', '엄식?', '식어ㅋ']), '54620\n129408\n')
+		).toEqual({
+			output: '한🦀',
+			error: undefined,
+			completed: true
+		});
+	});
+
+	it('preserves original numeric EOF and invalid-input behavior', async () => {
+		expect((await run(numberEcho)).output).toBe('0');
+		expect((await run(numberEcho, 'invalid\n')).output).toBe('0');
+		expect((await run(characterEcho, '0\n')).output).toBe('\0');
+	});
+
+	it('starts a fresh stdin stream on each execution and mounts the requested source file', async () => {
+		expect((await run(characterEcho, '65\n66\n', { activePath: 'src/main.umm' })).output).toBe(
+			'A'
+		);
+		expect((await run(characterEcho, '67\n')).output).toBe('C');
+	});
+
+	it('reports an upstream parser failure and recovers with the original interpreter', async () => {
+		const invalid = await run('invalid source');
+		expect(invalid.completed).toBe(false);
+		expect(invalid.error).toMatch(/exited with code/u);
+		expect(invalid.output).toMatch(/panic/u);
+		expect((await run(numberEcho, '42\n')).output).toBe('42');
+	});
+});

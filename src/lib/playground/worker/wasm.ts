@@ -324,6 +324,23 @@ self.onmessage = async (event: { data: any }) => {
 					: [])
 			]
 		);
+		if (interpreter) {
+			// The shim counts UTF-16 code units, but args_get writes UTF-8 bytes.
+			// Go allocates exactly the reported buffer, including the NUL terminators.
+			wasiRuntime.wasiImport.args_sizes_get = (argc: number, argvBufferSize: number) => {
+				const memory = new DataView(wasiRuntime.inst.exports.memory.buffer);
+				memory.setUint32(argc, wasiRuntime.args.length, true);
+				memory.setUint32(
+					argvBufferSize,
+					wasiRuntime.args.reduce(
+						(size, arg) => size + encoder.encode(arg).byteLength + 1,
+						0
+					),
+					true
+				);
+				return 0;
+			};
+		}
 		const compiledModule = await WebAssembly.compile(wasmBuffer);
 		const importModules = WebAssembly.Module.imports(compiledModule).map(
 			(entry) => entry.module

@@ -159,6 +159,20 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'UHMLANG (엄준식)',
+		ids: ['UHMLANG'],
+		runtime: 'Original Umjunsik Go interpreter on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_UHMLANG',
+			language: 'UHMLANG'
+		}
+	},
+
+	{
 		language: 'Aheui',
 		ids: ['AHEUI'],
 		runtime: 'rpaheui 1.2.5 on Pyodide',
@@ -1011,6 +1025,16 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'UHMLANG (엄준식)',
+		{
+			packageBase: 'rycont/umjunsik-lang e973f9d2 (MIT), Go 1.25.3 WASI build',
+			execution:
+				'Runs the original Go lexer, parser and evaluator with signed 64-bit arithmetic, variables, jumps and conditional statements; numeric stdin is line based and character output writes Unicode code points; each execution starts with fresh state',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+
 	[
 		'Aheui',
 		{
