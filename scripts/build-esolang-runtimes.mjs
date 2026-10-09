@@ -25,6 +25,7 @@ const RUNTIMES = [
 		folder: 'wasm-brainfuck',
 		fileName: 'brainfuck.wasm',
 		sourcePath: 'main.bf',
+		maxSourcePathBytes: 62,
 		command: 'bfi',
 		args: [],
 		repository: 'https://github.com/susam/bfc',
