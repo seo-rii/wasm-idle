@@ -296,6 +296,7 @@ export interface RuntimeAssetKeySource {
 	hy?: { baseUrl?: string };
 	aheui?: { baseUrl?: string };
 	apecode?: { baseUrl?: string };
+	golfscript?: { interpreterUrl?: string };
 	nim?: {
 		baseUrl?: string;
 		workerUrl?: string;
@@ -1297,6 +1298,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'hy', property: 'baseUrl', key: 'hyBaseUrl' },
 	{ runtime: 'aheui', property: 'baseUrl', key: 'aheuiBaseUrl' },
 	{ runtime: 'apecode', property: 'baseUrl', key: 'apecodeBaseUrl' },
+	{ runtime: 'golfscript', property: 'interpreterUrl', key: 'golfscriptInterpreterUrl' },
 	{ runtime: 'nim', property: 'baseUrl', key: 'nimBaseUrl' },
 	{ runtime: 'nim', property: 'workerUrl', key: 'nimWorkerUrl' },
 	{ runtime: 'nim', property: 'manifestUrl', key: 'nimManifestUrl' },

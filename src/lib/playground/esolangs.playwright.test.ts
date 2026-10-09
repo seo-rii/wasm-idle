@@ -26,7 +26,7 @@ type InterpreterCase = {
 	fails?: boolean;
 	failureMessage?: string;
 	failureOutput?: string;
-	options?: Pick<SandboxExecutionOptions, 'activePath'>;
+	options?: Pick<SandboxExecutionOptions, 'activePath' | 'programArgs' | 'workspaceFiles'>;
 	expectedError?: { code: string; phase: string; message: string };
 };
 
@@ -1312,6 +1312,186 @@ state main { // Preserve the original grammar and dispatch.
 				stdin: '1 2 42 7',
 				output: '42 7\n'
 			}
+		]
+	},
+	{
+		language: 'GOLFSCRIPT',
+		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_GOLFSCRIPT === '1',
+		defaultSource: () => editorDefaults.golfscript,
+		defaultInput: '20 22\n',
+		defaultOutput: '42',
+		echoSource: '#',
+		echoOutputForInput: (input) => input + '\n',
+		infiniteSource: ';{1}do',
+		runtimePath: 'wasm-golfscript/golfscript.rb',
+		cases: [
+			{ name: 'numeric-stdin-evaluation', source: '~+', stdin: '20 22\n', output: '42\n' },
+			{
+				name: 'utf8-nul-stdin-implicit-output',
+				source: '#',
+				stdin: '가😀\0\n',
+				output: '가😀\0\n\n'
+			},
+			{ name: 'empty-explicit-eof', source: '#', stdin: '', output: '\n' },
+			{
+				name: 'eof-without-line-ending',
+				source: '#',
+				stdin: 'partial 한🦀',
+				output: 'partial 한🦀\n'
+			},
+			{ name: 'utf8-string-literal', source: ";'한🦀'", stdin: '', output: '한🦀\n' },
+			{ name: 'escaped-nul-string', source: ';"A\\0B"', stdin: '', output: 'A\0B\n' },
+			{
+				name: 'original-source-comments',
+				source: '# 한🦀 { } ~+ are ignored\n;42',
+				stdin: 'unrelated input',
+				output: '42\n'
+			},
+			{ name: 'stdin-byte-count', source: ',', stdin: '가😀\0', output: '8\n' },
+			{ name: 'stack-duplicate', source: ';2.+', stdin: '', output: '4\n' },
+			{ name: 'stack-swap', source: ';1 2\\-', stdin: '', output: '1\n' },
+			{ name: 'stack-rotate', source: ';1 2 3@', stdin: '', output: '231\n' },
+			{
+				name: 'named-block-function',
+				source: ';{2*}:double;21double',
+				stdin: '',
+				output: '42\n'
+			},
+			{ name: 'array-map', source: ';[1 2 3]{2*}%', stdin: '', output: '246\n' },
+			{ name: 'integer-range', source: ';5,', stdin: '', output: '01234\n' },
+			{ name: 'array-sort', source: ';[3 1 2]$', stdin: '', output: '123\n' },
+			{ name: 'named-variable', source: ';7:a;a 3 +', stdin: '', output: '10\n' },
+			{ name: 'variables-reset-between-runs', source: ';a', stdin: '', output: '\n' },
+			{
+				name: 'arbitrary-precision-integer',
+				source: ';2 100?',
+				stdin: '',
+				output: '1267650600228229401496703205376\n'
+			},
+			{ name: 'negative-integer-division', source: ';-7 3/', stdin: '', output: '-3\n' },
+			{
+				name: 'true-block-conditional',
+				source: ';1 {"yes"} {"no"} if',
+				stdin: '',
+				output: 'yes\n'
+			},
+			{
+				name: 'false-block-conditional',
+				source: ';0 {"yes"} {"no"} if',
+				stdin: '',
+				output: 'no\n'
+			},
+			{
+				name: 'original-block-optimization-after-55-calls',
+				source: ';{1+}:inc;0 80{inc}*',
+				stdin: '',
+				output: '80\n'
+			},
+			{
+				name: 'original-ruby-string-interpolation',
+				source: ';"#{3 + 4}"',
+				stdin: '',
+				output: '7\n'
+			},
+			{
+				name: 'original-quiet-flag',
+				source: ';42',
+				stdin: '',
+				output: '',
+				options: { programArgs: ['-q'] }
+			},
+			{
+				name: 'quiet-flag-preserves-explicit-output',
+				source: ';42puts',
+				stdin: '',
+				output: '42\n',
+				options: { programArgs: ['-q'] }
+			},
+			{
+				name: 'original-no-interpolation-flag',
+				source: ';"#{3 + 4}"',
+				stdin: '',
+				output: '#{3 + 4}\n',
+				options: { programArgs: ['-n'] }
+			},
+			{
+				name: 'original-rational-flag',
+				source: ';-4 -1 ?',
+				stdin: '',
+				output: '-1/4\n',
+				options: { programArgs: ['-r'] }
+			},
+			{
+				name: 'original-double-dash-input-array',
+				source: '#',
+				stdin: 'ignored stdin',
+				output: 'alpha-beta\n',
+				options: { programArgs: ['--', 'alpha', '-beta'] }
+			},
+			{
+				name: 'argument-unicode-quotes-and-interpolation-are-data',
+				source: '#',
+				stdin: 'ignored stdin',
+				output: "한🦀'#{3 + 4}\n",
+				options: { programArgs: ['--', "한🦀'", '#{3 + 4}'] }
+			},
+			{
+				name: 'nested-unicode-quoted-source-filename',
+				source: ';42',
+				stdin: '',
+				output: '42\n',
+				options: { activePath: "examples/한글🦀'#{3 + 4}.gs" }
+			},
+			{
+				name: 'original-workspace-file-read',
+				source: ';"#{File.read(\'data/value.txt\')}"',
+				stdin: '',
+				output: 'workspace 한🦀\n',
+				options: {
+					workspaceFiles: [{ path: 'data/value.txt', content: 'workspace 한🦀' }]
+				}
+			},
+			{
+				name: 'readonly-workspace-file-write-rejected',
+				source: ";\"#{File.write('data/value.txt', 'changed')}\"",
+				stdin: '',
+				fails: true,
+				failureMessage: 'Read-only file system',
+				options: { workspaceFiles: [{ path: 'data/value.txt', content: 'original' }] }
+			},
+			{
+				name: 'readonly-workspace-unlink-and-replace-rejected',
+				source: ";\"#{File.unlink('data/value.txt'); File.write('data/value.txt', 'changed')}\"",
+				stdin: '',
+				fails: true,
+				failureMessage: 'Read-only file system',
+				options: { workspaceFiles: [{ path: 'data/value.txt', content: 'original' }] }
+			},
+			{
+				name: 'original-zero-division-error',
+				source: ';1 0/',
+				stdin: '',
+				fails: true,
+				failureMessage: 'divided by 0'
+			},
+			{
+				name: 'original-stack-underflow-warning-and-error',
+				source: '+',
+				stdin: '20 22',
+				fails: true,
+				failureMessage: 'undefined method',
+				failureOutput: 'pop on empty stack'
+			},
+			{
+				name: 'original-unknown-option-diagnostic',
+				source: '#',
+				stdin: '',
+				fails: true,
+				failureMessage: 'SystemExit',
+				failureOutput: 'unknown options',
+				options: { programArgs: ['-x'] }
+			},
+			{ name: 'after-runtime-failure', source: '~+', stdin: '40 2', output: '42\n' }
 		]
 	}
 ];

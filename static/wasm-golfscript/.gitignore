@@ -1,0 +1,5 @@
+*
+!.gitignore
+!golfscript.rb
+!LICENSE.txt
+!runtime-build.json

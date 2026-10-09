@@ -5,6 +5,7 @@ import {
 	RUNTIME_LOAD_ASSETS,
 	resolveCobolBaseUrl,
 	resolveApecodeBaseUrl,
+	resolveGolfscriptRuntimeAssetConfig,
 	resolveVBaseUrl,
 	resolveDebugRuntimeUrls,
 	resolveFortranRuntimeAssetConfig,
@@ -86,6 +87,30 @@ import {
 } from './wasmAwkVersion';
 
 describe('runtime asset config resolution', () => {
+	it('pins the GolfScript interpreter URL to the app root and keeps mirror identities separate', () => {
+		const currentUrl = 'https://idle.example.test/editor/';
+		const bundled = resolveGolfscriptRuntimeAssetConfig('/wasm-idle/', currentUrl);
+		expect(new URL(bundled.interpreterUrl).pathname).toBe(
+			'/wasm-idle/wasm-golfscript/golfscript.rb'
+		);
+		expect(new URL(bundled.interpreterUrl).search).toMatch(/^\?v=[a-f0-9]+$/u);
+		const options = {
+			golfscript: { interpreterUrl: 'https://assets.example.test/golfscript.rb' }
+		};
+		const resolved = resolveGolfscriptRuntimeAssetConfig(options, currentUrl);
+		expect(resolved.interpreterUrl).toBe(options.golfscript.interpreterUrl);
+		options.golfscript.interpreterUrl = 'https://mirror.example.test/golfscript.rb';
+		expect(resolved.interpreterUrl).toBe('https://assets.example.test/golfscript.rb');
+		expect(resolveGolfscriptRuntimeAssetConfig(options, currentUrl).assetKey).not.toBe(
+			resolved.assetKey
+		);
+		expect(createRuntimeAssetsKey(options)).not.toBe(
+			createRuntimeAssetsKey({
+				golfscript: { interpreterUrl: 'https://assets.example.test/golfscript.rb' }
+			})
+		);
+	});
+
 	it('resolves the original APECode wheel under the app root or an explicit base URL', () => {
 		const currentUrl = 'https://idle.example.test/editor/';
 		expect(resolveApecodeBaseUrl('/wasm-idle/', currentUrl)).toBe(
