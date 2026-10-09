@@ -73,6 +73,14 @@ describe('pinned upstream Brainfuck WASI interpreter', () => {
 		).toEqual({ output: 'AZ', error: undefined, completed: true });
 	});
 
+	it('preserves a UTF-8 BOM from the upstream output stream', async () => {
+		expect(await run(',[.,]', '\ufeff첫 줄🙂\n')).toEqual({
+			output: '\ufeff첫 줄🙂\n',
+			error: undefined,
+			completed: true
+		});
+	});
+
 	it('reports the upstream syntax error and runs a valid program afterwards', async () => {
 		const invalid = await run('[');
 		expect(invalid.completed).toBe(false);

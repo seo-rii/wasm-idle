@@ -63,6 +63,18 @@ const profiles: InterpreterBrowserProfile[] = [
 				stdin: '첫째 줄 🦀\nsecond line\n',
 				output: '첫째 줄 🦀\nsecond line\n'
 			},
+			{
+				name: 'leading-utf8-bom',
+				source: ',[.,]',
+				stdin: '\ufeffBOM 한글 🦀\n',
+				output: '\ufeffBOM 한글 🦀\n'
+			},
+			{
+				name: 'leading-utf8-bom-without-newline',
+				source: ',[.,]',
+				stdin: '\ufeffx',
+				output: '\ufeffx'
+			},
 			{ name: 'empty-explicit-eof', source: ',[.,]', stdin: '', output: '' },
 			{ name: 'partial-explicit-stdin', source: ',.', stdin: 'AB', output: 'A' },
 			{

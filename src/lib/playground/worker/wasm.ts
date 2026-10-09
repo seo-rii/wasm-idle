@@ -266,8 +266,8 @@ self.onmessage = async (event: { data: any }) => {
 			buffer ? new Int32Array(buffer) : null,
 			Boolean(log)
 		);
-		const stdoutDecoder = new TextDecoder();
-		const stderrDecoder = new TextDecoder();
+		const stdoutDecoder = new TextDecoder('utf-8', { ignoreBOM: Boolean(interpreter) });
+		const stderrDecoder = new TextDecoder('utf-8', { ignoreBOM: Boolean(interpreter) });
 		const stdout = new ConsoleStdout((chunk) => {
 			const text = stdoutDecoder.decode(chunk, { stream: true });
 			if (text) postMessage({ output: text });

@@ -18,6 +18,8 @@ loops. Non-command source characters are ignored. `,` reads one byte from stdin 
 stores zero at EOF; `.` writes the cell byte to stdout. The browser worker supplies
 stdin, captures stdout/stderr, and enforces cancellation and time limits.
 
+The interpreter's stdout/stderr transport preserves a leading UTF-8 BOM as output data.
+
 ## Rebuild and verify
 
 Use wasi-sdk **33.0**, including its bundled Clang, linker, and wasi-libc sysroot.
