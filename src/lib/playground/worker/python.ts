@@ -46,54 +46,61 @@ let stdinBufferPyodide: Int32Array,
 let preparedPackagesKey: string | undefined;
 let maxRuntimeAssetBytes: number | undefined;
 let installedHyVersion: string | undefined;
+let installedAheuiVersion: string | undefined;
 
-const HY_WHEEL_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]*\.whl$/u;
-const HY_VERSION_PATTERN = /^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$/u;
-const MAX_HY_WHEELS = 8;
+const PYTHON_WHEEL_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._+-]*\.whl$/u;
+const PYTHON_EXTENSION_VERSION_PATTERN = /^[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}$/u;
+const MAX_PYTHON_EXTENSION_WHEELS = 8;
 
-interface HyWheelConfig {
+interface PythonWheelConfig {
 	url: string;
 	fileName: string;
 	bytes: number;
 	sha256: string;
 }
 
-function parseHyExtension(extension: unknown) {
+function parsePythonExtension(extension: unknown, language: 'hy' | 'aheui') {
+	const label = language === 'hy' ? 'Hy' : 'Aheui';
 	const candidate = extension as { language?: unknown; version?: unknown; wheels?: unknown };
 	if (
 		!candidate ||
-		candidate.language !== 'hy' ||
+		candidate.language !== language ||
 		typeof candidate.version !== 'string' ||
-		!HY_VERSION_PATTERN.test(candidate.version) ||
+		!PYTHON_EXTENSION_VERSION_PATTERN.test(candidate.version) ||
 		!Array.isArray(candidate.wheels) ||
 		candidate.wheels.length === 0 ||
-		candidate.wheels.length > MAX_HY_WHEELS
+		candidate.wheels.length > MAX_PYTHON_EXTENSION_WHEELS
 	) {
-		throw new Error('Hy runtime configuration is invalid');
+		throw new Error(`${label} runtime configuration is invalid`);
 	}
-	const wheels = candidate.wheels.map((wheel: Partial<HyWheelConfig>) => {
+	const wheels = candidate.wheels.map((wheel: Partial<PythonWheelConfig>) => {
 		if (
 			!wheel ||
 			typeof wheel.url !== 'string' ||
 			typeof wheel.fileName !== 'string' ||
-			!HY_WHEEL_NAME_PATTERN.test(wheel.fileName) ||
+			!PYTHON_WHEEL_NAME_PATTERN.test(wheel.fileName) ||
 			!Number.isSafeInteger(wheel.bytes) ||
 			(wheel.bytes as number) <= 0 ||
 			typeof wheel.sha256 !== 'string' ||
 			!/^[a-f0-9]{64}$/u.test(wheel.sha256)
 		) {
-			throw new Error('Hy runtime wheel receipt is invalid');
+			throw new Error(`${label} runtime wheel receipt is invalid`);
 		}
-		return wheel as HyWheelConfig;
+		return wheel as PythonWheelConfig;
 	});
 	return { version: candidate.version, wheels };
 }
 
-/** Install the receipt-verified Hy wheels into the running Pyodide site-packages once per worker. */
-async function installHy(extension: unknown) {
-	const { version, wheels } = parseHyExtension(extension);
-	if (installedHyVersion === version) return;
-	if (installedHyVersion !== undefined) throw new Error('Hy runtime version changed');
+/** Install receipt-verified original Python packages once per dedicated language worker. */
+async function installPythonExtension(extension: unknown, language: 'hy' | 'aheui') {
+	const label = language === 'hy' ? 'Hy' : 'Aheui';
+	const { version, wheels } = parsePythonExtension(extension, language);
+	const installedVersion = language === 'hy' ? installedHyVersion : installedAheuiVersion;
+	if (installedVersion === version) return;
+	if (installedVersion !== undefined) throw new Error(`${label} runtime version changed`);
+	if ((language === 'hy' ? installedAheuiVersion : installedHyVersion) !== undefined) {
+		throw new Error('Python runtime extension language changed');
+	}
 	const sitePackages = String(
 		pyodide.runPython('import sysconfig\nsysconfig.get_path("purelib")')
 	);
@@ -101,26 +108,32 @@ async function installHy(extension: unknown) {
 		postProgress(60 + Math.floor((index * 30) / wheels.length), `Loading ${wheel.fileName}`);
 		const bytes = await fetchRuntimeAssetBytes({
 			url: new URL(wheel.url, globalThis.location?.href).href,
-			label: `Hy wheel ${wheel.fileName}`,
+			label: `${label} wheel ${wheel.fileName}`,
 			cache: 'force-cache',
 			expected: { bytes: wheel.bytes, sha256: wheel.sha256 },
 			maxAssetBytes: Math.min(maxRuntimeAssetBytes ?? wheel.bytes, wheel.bytes),
-			integrityContext: { asset: wheel.fileName, runtimeId: 'HY' }
+			integrityContext: {
+				asset: wheel.fileName,
+				runtimeId: language === 'hy' ? 'HY' : 'AHEUI'
+			}
 		});
 		pyodide.unpackArchive(bytes, 'whl', { extractDir: sitePackages });
 	}
-	postProgress(92, 'Compiling Hy core');
+	postProgress(92, language === 'hy' ? 'Compiling Hy core' : 'Loading Aheui interpreter');
 	const loadedVersion = String(
 		pyodide.runPython(
-			'import importlib\nimportlib.invalidate_caches()\nimport hy\nimport hy.compiler\nhy.__version__'
+			language === 'hy'
+				? 'import importlib\nimportlib.invalidate_caches()\nimport hy\nimport hy.compiler\nhy.__version__'
+				: 'import importlib\nimportlib.invalidate_caches()\nfrom aheui.version import VERSION\nVERSION'
 		)
 	);
 	if (loadedVersion !== version) {
 		throw new Error(
-			`Hy runtime version mismatch: expected ${version}, loaded ${loadedVersion}`
+			`${label} runtime version mismatch: expected ${version}, loaded ${loadedVersion}`
 		);
 	}
-	installedHyVersion = version;
+	if (language === 'hy') installedHyVersion = version;
+	else installedAheuiVersion = version;
 }
 
 const imageHook = `
@@ -385,6 +398,80 @@ function writeWorkspaceFiles(files: { path: string; content: string }[] = []) {
 	}
 }
 
+/** Run the original interpreter with real file descriptors rather than Python builtins shims. */
+async function executeAheui(code: string, activePath: string | undefined, stdin: unknown) {
+	const fs = (pyodide as any).FS;
+	const filename = `/tmp/__wasm_idle_aheui__/${normalizeWorkspacePath(activePath || '') || 'main.aheui'}`;
+	const encoder = new TextEncoder();
+	const stdoutDecoder = new TextDecoder();
+	const stderrDecoder = new TextDecoder();
+	const hasInitialStdin = typeof stdin === 'string';
+	let initialStdin: string | null = hasInitialStdin ? stdin : null;
+	let stdinEnded = false;
+	const emit = (output: string) => {
+		if (output) postMessage({ output });
+	};
+	pyodide.setStdin({
+		stdin: () => {
+			if (stdinEnded) return null;
+			let chunk: string | null;
+			if (hasInitialStdin) {
+				chunk = initialStdin;
+				initialStdin = null;
+			} else {
+				chunk = waitForBufferedStdin(stdinBufferPyodide, () =>
+					postMessage({ buffer: true })
+				);
+			}
+			if (chunk === null) {
+				stdinEnded = true;
+				return null;
+			}
+			return encoder.encode(chunk);
+		},
+		// Pyodide's legacy stdin otherwise inserts EOF after chunks without a newline.
+		autoEOF: false,
+		isatty: false
+	});
+	pyodide.setStdout({
+		write: (bytes) => {
+			emit(stdoutDecoder.decode(bytes, { stream: true }));
+			return bytes.length;
+		}
+	});
+	pyodide.setStderr({
+		write: (bytes) => {
+			emit(stderrDecoder.decode(bytes, { stream: true }));
+			return bytes.length;
+		}
+	});
+	try {
+		fs.mkdirTree(filename.slice(0, filename.lastIndexOf('/')));
+		fs.writeFile(filename, code, { encoding: 'utf8' });
+		postMessage({
+			progress: {
+				kind: 'ready',
+				state: 'running',
+				reason: 'started',
+				label: 'Aheui program started'
+			}
+		});
+		await pyodide.runPythonAsync(`import importlib
+import aheui.aheui as __wasm_idle_aheui
+__wasm_idle_aheui = importlib.reload(__wasm_idle_aheui)
+__wasm_idle_aheui.entry_point(["aheui", "--no-c", "--warning-limit=0", ${JSON.stringify(filename)}])
+None
+`);
+	} finally {
+		emit(stdoutDecoder.decode());
+		emit(stderrDecoder.decode());
+		pyodide.setStdin({ error: true });
+		pyodide.setStdout({ write: (bytes) => bytes.length });
+		pyodide.setStderr({ write: (bytes) => bytes.length });
+		if (fs.analyzePath(filename).exists) fs.unlink(filename);
+	}
+}
+
 self.onmessage = async (event: any) => {
 	if (handleWorkerAssetMessage(event.data)) return;
 	const {
@@ -408,6 +495,8 @@ self.onmessage = async (event: any) => {
 		extension
 	} = event.data;
 	const isHy = language === 'hy';
+	const isAheui = language === 'aheui';
+	const isPython = !isHy && !isAheui;
 	if (load) {
 		preparedPackagesKey = undefined;
 		try {
@@ -418,7 +507,14 @@ self.onmessage = async (event: any) => {
 			configureWorkerRuntimeAssets(runtimeAssets || null);
 			postProgress(2, 'Loading Pyodide module');
 			await loadPyodide(baseUrl);
-			if (extension !== undefined) await installHy(extension);
+			if (extension !== undefined) {
+				await installPythonExtension(
+					extension,
+					(extension as { language?: unknown } | null)?.language === 'aheui'
+						? 'aheui'
+						: 'hy'
+				);
+			}
 			postProgress(100, 'Pyodide runtime ready');
 			postMessage({ load: true });
 		} catch (e: any) {
@@ -427,21 +523,27 @@ self.onmessage = async (event: any) => {
 	} else if (prepare) {
 		preparedPackagesKey = undefined;
 		try {
-			postProgress(5, 'Preparing Python workspace');
+			if (isAheui && installedAheuiVersion === undefined) {
+				throw new Error('Aheui runtime is not installed');
+			}
+			if (isAheui && debug) throw new Error('Aheui debugging is not supported');
+			postProgress(5, isAheui ? 'Preparing Aheui source' : 'Preparing Python workspace');
 			const preparationKey = packagePreparationKey(code, activePath, workspaceFiles);
 			await loadPyodide(baseUrl);
-			writeWorkspaceFiles(workspaceFiles);
-			postProgress(15, 'Resolving Python imports');
-			// Hy sources are not Python; imports resolve against the bundled runtime only.
-			if (!isHy)
+			if (!isAheui) writeWorkspaceFiles(workspaceFiles);
+			// The genuine Hy and Aheui compilers own their source, never Python's import scanner.
+			if (isPython) {
+				postProgress(15, 'Resolving Python imports');
 				await loadPackages(
 					[
 						code,
 						...(workspaceFiles || []).map((file: { content: string }) => file.content)
 					].join('\n')
 				);
+			}
 			preparedPackagesKey = preparationKey;
-			postProgress(100, 'Python packages ready');
+			if (isAheui) postProgress(100, 'Aheui source ready');
+			else postProgress(100, 'Python packages ready');
 			self.postMessage({ results: true });
 		} catch (e: any) {
 			preparedPackagesKey = undefined;
@@ -454,12 +556,19 @@ self.onmessage = async (event: any) => {
 		preparedPackagesKey = undefined;
 		try {
 			await loadPyodide(baseUrl);
-			writeWorkspaceFiles(workspaceFiles);
+			if (!isAheui) writeWorkspaceFiles(workspaceFiles);
 			if (isHy && installedHyVersion === undefined) {
 				throw new Error('Hy runtime is not installed');
 			}
+			if (isAheui && installedAheuiVersion === undefined) {
+				throw new Error('Aheui runtime is not installed');
+			}
 			if (isHy && debug) throw new Error('Hy debugging is not supported');
-			if (!isHy && preparedKey !== packagePreparationKey(code, activePath, workspaceFiles)) {
+			if (isAheui && debug) throw new Error('Aheui debugging is not supported');
+			if (
+				isPython &&
+				preparedKey !== packagePreparationKey(code, activePath, workspaceFiles)
+			) {
 				await loadPackages(
 					[
 						code,
@@ -483,6 +592,15 @@ self.onmessage = async (event: any) => {
 		}
 		if (isSharedBufferBackedView(interruptBufferPyodide)) {
 			pyodide.setInterruptBuffer(interruptBufferPyodide);
+		}
+		if (isAheui) {
+			try {
+				await executeAheui(code, activePath, stdin);
+				self.postMessage({ results: true });
+			} catch (e: any) {
+				self.postMessage({ error: e.message || 'Unknown error' });
+			}
+			return;
 		}
 		const toPythonStr = (obj: any) => {
 			if (obj === true) return 'True';

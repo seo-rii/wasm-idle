@@ -20,6 +20,13 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'AHEUI',
+		load: async () => {
+			const { default: Aheui } = await import('$lib/playground/aheui');
+			return new Aheui();
+		}
+	},
+	{
 		languageId: 'MALBOLGE',
 		load: async () => {
 			const [{ default: Wasm }, { WASI_INTERPRETERS }] = await Promise.all([
