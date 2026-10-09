@@ -13,6 +13,41 @@ import { resolveChromiumExecutable } from './rust-browser-probe-lib.mjs';
 const staleBinaryenBridgePath = '/' + 'api/binaryen-command';
 
 /**
+ * The page installs its debug API before the async Monaco editor is ready, and
+ * selecting OCaml replaces that editor. Poll the actual write, not API presence.
+ * This function runs in the browser through page.evaluate, which awaits the write.
+ * @param {string} code
+ */
+export async function setOcamlEditorSourceWhenReady(code) {
+	const api = /** @type {any} */ (window).__wasmIdleDebug;
+	if (
+		/** @type {HTMLSelectElement | null} */ (document.querySelector('#language-select'))
+			?.value !== 'OCAML' ||
+		typeof api?.setEditorValue !== 'function' ||
+		typeof api?.getEditorValue !== 'function'
+	) {
+		return false;
+	}
+	return (await api.setEditorValue(code)) === true && api.getEditorValue() === code;
+}
+
+/**
+ * Await each async write result explicitly; waitForFunction treats its Promise as
+ * truthy even when that Promise resolves to false.
+ * @param {import('playwright-core').Page} page
+ * @param {string} code
+ * @param {number} timeoutMs
+ */
+export async function waitForOcamlEditorSource(page, code, timeoutMs) {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (await page.evaluate(setOcamlEditorSourceWhenReady, code)) return;
+		await page.waitForTimeout(100);
+	}
+	throw new Error('timed out waiting for the OCaml editor');
+}
+
+/**
  * @typedef {{ type: string; text: string }} BrowserConsoleMessage
  */
 /**
@@ -276,19 +311,30 @@ export async function runOcamlBrowserProbe({
 			state: 'attached',
 			timeout: runTimeoutMs
 		});
+		// This fresh browser context starts with a nonempty default template. Wait
+		// for its real editor to mount and restore before changing language; the
+		// debug functions alone are available during initial navigation/hydration.
+		await page.waitForFunction(
+			() => {
+				const api = /** @type {any} */ (window).__wasmIdleDebug;
+				const initialSource = api?.getEditorValue?.();
+				return (
+					typeof api?.setEditorValue === 'function' &&
+					typeof initialSource === 'string' &&
+					initialSource.length > 0
+				);
+			},
+			undefined,
+			{ polling: 100, timeout: runTimeoutMs }
+		);
 		await page.locator('#language-select').selectOption('OCAML');
 		await page.waitForSelector('#ocaml-backend', { state: 'attached', timeout: runTimeoutMs });
-		await page.locator('#ocaml-backend').selectOption(backend);
-		await page.waitForFunction(
-			() =>
-				typeof (/** @type {any} */ (window).__wasmIdleDebug?.setEditorValue) === 'function'
-		);
-		const editorValueSet = await page.evaluate(async (nextCode) => {
-			return await /** @type {any} */ (window).__wasmIdleDebug.setEditorValue(nextCode);
-		}, code);
-		if (!editorValueSet) {
+		try {
+			await waitForOcamlEditorSource(page, code, runTimeoutMs);
+		} catch (error) {
 			throw new Error(
-				`OCaml browser probe could not write editor contents\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, binaryenToolRequests, binaryenToolResponses, targetUrl.toString()), null, 2)}`
+				`OCaml browser probe could not write editor contents\n${JSON.stringify(await readProbeSummary(page, activeState, pageErrors, consoleMessages, binaryenBridgeRequests, binaryenBridgeResponses, binaryenToolRequests, binaryenToolResponses, targetUrl.toString()), null, 2)}`,
+				{ cause: error }
 			);
 		}
 		await page.waitForFunction(
@@ -303,6 +349,7 @@ export async function runOcamlBrowserProbe({
 				timeout: runTimeoutMs
 			}
 		);
+		await page.locator('#ocaml-backend').selectOption(backend);
 		const logToggle = page.locator('#log-toggle');
 		if (!(await logToggle.isChecked())) {
 			await logToggle.check();
