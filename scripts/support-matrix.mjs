@@ -159,6 +159,20 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'Aheui',
+		ids: ['AHEUI'],
+		runtime: 'rpaheui 1.2.5 on Pyodide',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_AHEUI',
+			language: 'AHEUI'
+		}
+	},
+
+	{
 		language: 'Malbolge',
 		ids: ['MALBOLGE'],
 		runtime: 'Ben Olmstead Malbolge on WASI',
@@ -997,6 +1011,17 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'Aheui',
+		{
+			packageBase:
+				'aheui/rpaheui 1.2.5 (BSD-2-Clause) on Pyodide 314.0.7; one receipt-verified pure Python wheel',
+			execution:
+				'Runs the original rpaheui compiler and interpreter with --no-c --warning-limit=0, 26 stacks, a queue and a port, with Unicode character/integer stdin; normal halt returns its stack value; no handwritten parser or subset executor',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('runtimeAssets.aheui.baseUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare loads the interpreter without executing source`
+		}
+	],
+
 	[
 		'Malbolge',
 		{

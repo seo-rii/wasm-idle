@@ -17,9 +17,18 @@ import {
 import { createWasmIdleSharedBuffer, requireSharedArrayBuffer } from '$lib/playground/sharedBuffer';
 import { WorkerSession } from '$lib/playground/workerSession';
 import { reportWorkerProgress } from '$lib/playground/workerProgress';
-import { BusyError, TimeoutError, resolveExecutionLimits } from '@wasm-idle/core';
+import {
+	BusyError,
+	DEFAULT_WORKSPACE_LIMITS,
+	OutputLimitError,
+	RuntimeConfigurationError,
+	TimeoutError,
+	resolveExecutionLimits,
+	validateExecutionWorkspace
+} from '@wasm-idle/core';
 
 const debugBreakpointBufferInts = 1028;
+const outputEncoder = new TextEncoder();
 
 type PythonOperation = {
 	token: symbol;
@@ -30,11 +39,13 @@ type PythonOperation = {
 	cleanups: Array<() => void>;
 };
 
-const abortReason = (signal: AbortSignal, phase: PythonOperation['phase']) =>
+const abortReason = (signal: AbortSignal, phase: PythonOperation['phase'], label = 'Python') =>
 	signal.reason !== undefined
 		? signal.reason
 		: new DOMException(
-				phase === 'startup' ? 'Python runtime startup aborted' : 'Python execution aborted',
+				phase === 'startup'
+					? `${label} runtime startup aborted`
+					: `${label} execution aborted`,
 				'AbortError'
 			);
 
@@ -66,7 +77,21 @@ class Python implements Sandbox {
 	private disposal?: Promise<void>;
 	private workerExtensionKey?: string;
 	/** Language executed by the shared Pyodide worker; subclasses run other Python-hosted languages. */
-	protected readonly workerLanguage: 'python' | 'hy' = 'python';
+	protected readonly workerLanguage: 'python' | 'hy' | 'aheui' = 'python';
+
+	private get runtimeId() {
+		return this.workerLanguage === 'aheui' ? 'AHEUI' : 'PYTHON3';
+	}
+
+	private get runtimeLabel() {
+		return this.workerLanguage === 'aheui' ? 'Aheui' : 'Python';
+	}
+
+	private resetAheuiInput() {
+		if (this.workerLanguage !== 'aheui') return;
+		this.pendingInput = [];
+		resetBufferedStdin(this.buffer);
+	}
 
 	/** Extra worker load configuration for Python-hosted languages, keyed for worker reuse. */
 	protected workerLoadExtension(
@@ -90,10 +115,10 @@ class Python implements Sandbox {
 	});
 
 	private beginOperation(phase: PythonOperation['phase']) {
-		if (this.disposed) throw new Error('Python runtime has been disposed');
+		if (this.disposed) throw new Error(`${this.runtimeLabel} runtime has been disposed`);
 		if (this.activeOperation) {
-			throw new BusyError('Python runtime already has an active operation', {
-				runtimeId: 'PYTHON3',
+			throw new BusyError(`${this.runtimeLabel} runtime already has an active operation`, {
+				runtimeId: this.runtimeId,
 				phase: this.activeOperation.phase
 			});
 		}
@@ -144,6 +169,7 @@ class Python implements Sandbox {
 		this.activeOperation = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
+		this.resetAheuiInput();
 		this.uid += 1;
 		this.exit = true;
 		this.workerSession.terminate(reason);
@@ -157,7 +183,7 @@ class Python implements Sandbox {
 			if (!this.isOperationActive(operation)) return;
 			let reason: unknown;
 			try {
-				reason = abortReason(signal, operation.phase);
+				reason = abortReason(signal, operation.phase, this.runtimeLabel);
 			} catch (error) {
 				reason = error;
 			}
@@ -175,8 +201,9 @@ class Python implements Sandbox {
 		}
 	}
 
-	private bindStartupTimeout(operation: PythonOperation, timeoutMs: number) {
+	private bindOperationTimeout(operation: PythonOperation, timeoutMs: number) {
 		if (!this.isOperationActive(operation)) return;
+		timeoutMs = Math.min(2_147_483_647, timeoutMs);
 		let timeout: ReturnType<typeof setTimeout> | undefined;
 		operation.cleanups.push(() => {
 			if (timeout !== undefined) clearTimeout(timeout);
@@ -186,11 +213,14 @@ class Python implements Sandbox {
 				if (!this.isOperationActive(operation)) return;
 				this.cancelOperation(
 					operation,
-					new TimeoutError(`Python startup timed out after ${timeoutMs} ms`, {
-						phase: 'startup',
-						runtimeId: 'PYTHON3',
-						timeoutMs
-					})
+					new TimeoutError(
+						`${this.runtimeLabel} ${operation.phase === 'startup' ? 'startup' : 'execution'} timed out after ${timeoutMs} ms`,
+						{
+							phase: operation.phase,
+							runtimeId: this.runtimeId,
+							timeoutMs
+						}
+					)
 				);
 			}, timeoutMs);
 			if (operation.cleanedUp) clearTimeout(timeout);
@@ -225,7 +255,10 @@ class Python implements Sandbox {
 			}
 			if (signal?.aborted) {
 				return Promise.reject(
-					this.releaseBeforeSession(operation, abortReason(signal, 'startup'))
+					this.releaseBeforeSession(
+						operation,
+						abortReason(signal, 'startup', this.runtimeLabel)
+					)
 				);
 			}
 		} catch (error) {
@@ -342,7 +375,7 @@ class Python implements Sandbox {
 			}
 		});
 		const timeoutMs = Math.min(2_147_483_647, limits.assetTimeoutMs + limits.startupTimeoutMs);
-		this.bindStartupTimeout(operation, timeoutMs);
+		this.bindOperationTimeout(operation, timeoutMs);
 		this.bindAbortSignal(operation, signal);
 		return loading.finally(() => {
 			this.releaseOperation(operation);
@@ -397,6 +430,7 @@ class Python implements Sandbox {
 		let activePath: string | undefined;
 		let debugPath: string | undefined;
 		let workspaceFiles: SandboxExecutionOptions['workspaceFiles'];
+		let limits: ReturnType<typeof resolveExecutionLimits> | undefined;
 		try {
 			signal = options.signal;
 			debug = !!options.debug;
@@ -406,6 +440,39 @@ class Python implements Sandbox {
 			activePath = options.activePath;
 			debugPath = options.debugPath;
 			workspaceFiles = options.workspaceFiles;
+			if (this.workerLanguage === 'aheui') {
+				limits = resolveExecutionLimits(options.limits);
+				if (_args.length || options.programArgs?.length) {
+					throw new RuntimeConfigurationError('Aheui does not accept program arguments', {
+						runtimeId: 'AHEUI'
+					});
+				}
+				if (debug || (options.debugMode && options.debugMode !== 'none')) {
+					throw new RuntimeConfigurationError('Aheui debugging is not supported', {
+						runtimeId: 'AHEUI'
+					});
+				}
+				const workspace = validateExecutionWorkspace(
+					code,
+					workspaceFiles ?? [],
+					activePath ?? 'main.aheui',
+					{
+						...options.workspaceLimits,
+						maxFileBytes: Math.min(
+							options.workspaceLimits?.maxFileBytes ??
+								DEFAULT_WORKSPACE_LIMITS.maxFileBytes,
+							limits.maxWorkspaceBytes
+						),
+						maxTotalBytes: Math.min(
+							options.workspaceLimits?.maxTotalBytes ??
+								DEFAULT_WORKSPACE_LIMITS.maxTotalBytes,
+							limits.maxWorkspaceBytes
+						)
+					}
+				);
+				activePath = workspace.activePath;
+				workspaceFiles = workspace.workspaceFiles;
+			}
 			const persistentCache = options.persistentCache;
 			if (!this.isOperationActive(activeOperation)) {
 				return Promise.reject(
@@ -421,15 +488,26 @@ class Python implements Sandbox {
 		if (!worker || this.worker !== worker) {
 			return Promise.reject(this.releaseBeforeSession(activeOperation, 'Worker not loaded'));
 		}
+		this.resetAheuiInput();
+		if (this.workerLanguage === 'aheui') {
+			this.waitingForInput = false;
+			this.pendingEof = false;
+		}
 
 		this.exit = false;
 		const running = new Promise<boolean | string>((resolve, reject) => {
 			const workerOperation = this.workerSession.beginRun(worker, reject);
+			if (limits)
+				this.bindOperationTimeout(
+					activeOperation,
+					prepare ? limits.compileTimeoutMs : limits.runTimeoutMs
+				);
 			this.bindAbortSignal(activeOperation, signal);
 			if (!this.isOperationActive(activeOperation)) return;
 			const interrupt = new Uint8Array(this.interruptBuffer),
 				runUid = ++this.uid;
 			let handler: (event: Event & { data: any }) => void;
+			let outputBytes = 0;
 			const ownsRun = () =>
 				this.isOperationActive(activeOperation) &&
 				this.worker === worker &&
@@ -440,6 +518,7 @@ class Python implements Sandbox {
 				this.exit = true;
 				this.waitingForInput = false;
 				this.pendingEof = false;
+				this.resetAheuiInput();
 			};
 			const claimRun = () => {
 				if (!ownsRun()) return false;
@@ -485,7 +564,7 @@ class Python implements Sandbox {
 								kind: 'ready',
 								state: 'waiting-input',
 								reason: 'stdin-request',
-								label: 'Python program is waiting for input'
+								label: `${this.runtimeLabel} program is waiting for input`
 							});
 						}
 						this.waitingForInput = true;
@@ -494,7 +573,27 @@ class Python implements Sandbox {
 					}
 					if (type === 'img' && payload) this.image?.(payload);
 					if (!ownsRun()) return;
-					if (output) this.output?.(output);
+					if (output) {
+						if (limits) {
+							outputBytes += outputEncoder.encode(output).byteLength;
+							if (outputBytes > limits.maxOutputBytes) {
+								failRun(
+									new OutputLimitError(
+										'Aheui output exceeded the configured byte limit',
+										{
+											runtimeId: 'AHEUI',
+											phase: 'execute',
+											actual: outputBytes,
+											limit: limits.maxOutputBytes
+										}
+									),
+									true
+								);
+								return;
+							}
+						}
+						this.output?.(output);
+					}
 					if (!ownsRun()) return;
 					if (debugEvent) this.ondebug?.(debugEvent);
 					if (!ownsRun()) return;
@@ -545,6 +644,7 @@ class Python implements Sandbox {
 				this.exit = true;
 				this.waitingForInput = false;
 				this.pendingEof = false;
+				this.resetAheuiInput();
 			}
 			this.cleanupOperation(activeOperation);
 		});

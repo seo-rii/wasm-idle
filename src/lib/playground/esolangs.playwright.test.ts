@@ -21,6 +21,7 @@ type InterpreterCase = {
 	stdin: string;
 	output?: string;
 	fails?: boolean;
+	failureMessage?: string;
 	configurationError?: boolean;
 	options?: Pick<SandboxExecutionOptions, 'activePath' | 'workspaceFiles'>;
 	expectedError?: { code?: string; phase?: string; message: string };
@@ -127,6 +128,27 @@ const malbolgeEcho = (stdin: string) =>
 // Matthias Lutter's nonterminating cat: https://malbolge.org/cat.html.
 const malbolgeInfiniteCat =
 	'(=BA#9"=<;:3y7x54-21q/p-,+*)"!h%B0/.\n~P<\n<:(8&\n66#"!~}|{zyxwvu\ngJ%';
+
+// Aheui fixtures read and print Unicode codepoints using the original interpreter.
+const aheuiEcho = (stdin: string) => '밯맣'.repeat(Array.from(stdin).length) + '희';
+const aheuiStackIndices = Array.from({ length: 28 }, (_, index) => index).filter(
+	(index) => index !== 21 && index !== 27
+);
+const aheuiSelectStorage = (index: number) => String.fromCharCode(0xac00 + 9 * 588 + index);
+const aheuiAllStacks =
+	aheuiStackIndices.map((index) => aheuiSelectStorage(index) + '방').join('') +
+	aheuiStackIndices.map((index) => aheuiSelectStorage(index) + '망').join('') +
+	'희';
+
+// Published language-specification sample: https://aheui.readthedocs.io/ko/latest/specs.html.
+const aheuiHelloWorld = `밤밣따빠밣밟따뿌
+빠맣파빨받밤뚜뭏
+돋밬탕빠맣붏두붇
+볻뫃박발뚷투뭏붖
+뫃도뫃희멓뭏뭏붘
+뫃봌토범더벌뿌뚜
+뽑뽀멓멓더벓뻐뚠
+뽀덩벐멓뻐덕더벅`;
 
 const profiles: InterpreterBrowserProfile[] = [
 	{
@@ -739,6 +761,114 @@ const profiles: InterpreterBrowserProfile[] = [
 				}
 			}
 		]
+	},
+	{
+		language: 'AHEUI',
+		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_AHEUI === '1',
+		defaultSource: () => editorDefaults.aheui,
+		defaultInput: '가\n',
+		defaultOutput: '가',
+		echoSource: '밯맣희',
+		echoSourceForInput: aheuiEcho,
+		infiniteSource: '아',
+		runtimePath: 'wasm-aheui/aheui-1.2.5-py3-none-any.whl',
+		cases: [
+			{
+				name: 'leading-utf8-bom',
+				source: aheuiEcho('\ufeff첫 줄 🦀\n'),
+				stdin: '\ufeff첫 줄 🦀\n',
+				output: '\ufeff첫 줄 🦀\n'
+			},
+			{
+				name: 'bom-only-without-newline',
+				source: aheuiEcho('\ufeff'),
+				stdin: '\ufeff',
+				output: '\ufeff'
+			},
+			{
+				name: 'utf8-codepoints',
+				source: aheuiEcho('첫째 줄 🦀\nsecond line\n'),
+				stdin: '첫째 줄 🦀\nsecond line\n',
+				output: '첫째 줄 🦀\nsecond line\n'
+			},
+			{ name: 'empty-explicit-eof', source: '밯망희', stdin: '', output: '-1' },
+			{ name: 'numeric-input', source: '방망희', stdin: '42\n', output: '42' },
+			{ name: 'unicode-codepoint-input', source: '밯망희', stdin: '가', output: '44032' },
+			{
+				name: 'nul-codepoint-original-replacement',
+				source: aheuiEcho('\0A\n'),
+				stdin: '\0A\n',
+				output: '\ufffdA\n'
+			},
+			{ name: 'nul-byte-is-not-eof', source: '밯망밯망희', stdin: '\0A', output: '065' },
+			{ name: 'partial-explicit-stdin', source: '밯맣희', stdin: 'AB', output: 'A' },
+			{ name: 'fresh-stdin', source: '밯맣희', stdin: 'C', output: 'C' },
+			{
+				name: 'nested-unicode-source-path',
+				source: '밯맣희',
+				stdin: '한',
+				output: '한',
+				options: { activePath: 'examples/한글.aheui' }
+			},
+			{
+				name: 'specification-hello-world',
+				source: aheuiHelloWorld,
+				stdin: '',
+				output: 'Hello, world!\n'
+			},
+			{ name: 'stack-lifo', source: '박밪망망희', stdin: '', output: '32' },
+			{ name: 'queue-fifo', source: '상박밪망망희', stdin: '', output: '23' },
+			{
+				name: 'queue-swap-duplicate',
+				source: '상박밪파빠망망망희',
+				stdin: '',
+				output: '332'
+			},
+			{ name: 'move-between-stacks', source: '박싹밪싼삭망산망희', stdin: '', output: '23' },
+			{
+				name: 'all-26-independent-stacks',
+				source: aheuiAllStacks,
+				stdin: Array.from({ length: 26 }, (_, index) => `${index}\n`).join(''),
+				output: Array.from({ length: 26 }, (_, index) => String(index)).join('')
+			},
+			{
+				name: 'two-dimensional-direction',
+				source: '아우\n희붛\n희뭏\n희희',
+				stdin: '한',
+				output: '한'
+			},
+			{ name: 'horizontal-torus', source: '벅희멍', stdin: '', output: '2' },
+			{ name: 'vertical-torus', source: '보\n희\n몽', stdin: '', output: '0' },
+			{ name: 'double-step-vowels', source: '뱧X먛X희', stdin: '🦀', output: '🦀' },
+			{ name: 'underflow-reflects-direction', source: '마희', stdin: '', output: '' },
+			{ name: 'signed-subtraction', source: '방방타망희', stdin: '3\n8\n', output: '-5' },
+			{
+				name: 'arbitrary-precision-square',
+				source: '방빠따망희',
+				stdin: '12345678901234567890\n',
+				output: '152415787532388367501905199875019052100'
+			},
+			{ name: 'normal-nonzero-halt', source: '방희', stdin: '77\n', output: '' },
+			{
+				name: 'character-eof-original-replacement',
+				source: '밯맣희',
+				stdin: '',
+				output: '\ufffd'
+			},
+			{
+				name: 'division-by-zero',
+				source: '박바나망희',
+				stdin: '',
+				fails: true,
+				failureMessage: 'ZeroDivisionError'
+			},
+			{
+				name: 'after-runtime-failure',
+				source: aheuiEcho('runtime-recovered\n'),
+				stdin: 'runtime-recovered\n',
+				output: 'runtime-recovered\n'
+			}
+		]
 	}
 ];
 
@@ -1050,7 +1180,7 @@ for (const profile of profiles) {
 		);
 
 		it(
-			'uses the real WASI interpreter for byte I/O, language semantics, failures and recovery',
+			'uses the real interpreter for I/O, language semantics, failures and recovery',
 			{ timeout: 180_000, meta: browserMeta },
 			async () => {
 				await withBrowserPreview(async (browserUrl) => {
@@ -1092,7 +1222,9 @@ for (const profile of profiles) {
 								expect(result.inputRequests).toBe(0);
 							} else if (testCase.fails) {
 								expect(result.error, JSON.stringify(result)).toBeDefined();
-								expect(result.error?.message).toMatch(/exited|bracket|syntax/iu);
+								expect(result.error?.message).toMatch(
+									testCase.failureMessage ?? /exited|bracket|syntax/iu
+								);
 							} else {
 								expect(result.error, JSON.stringify(result)).toBeUndefined();
 								expect(result.result).toBe(true);

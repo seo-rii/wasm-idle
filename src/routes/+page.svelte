@@ -625,6 +625,7 @@
 		const match: Record<string, PlaygroundLanguage> = {
 			'.ws': 'WHITESPACE',
 			'.mal': 'MALBOLGE',
+			'.aheui': 'AHEUI',
 			'.bf': 'BRAINFUCK',
 			'.b93': 'BEFUNGE93',
 			'.c': 'C',
@@ -775,6 +776,7 @@
 			WASM: 'main.wasm',
 			WHITESPACE: 'main.ws',
 			MALBOLGE: 'main.mal',
+			AHEUI: 'main.aheui',
 			BRAINFUCK: 'main.bf',
 			BEFUNGE93: 'main.b93',
 			LUA: 'main.lua',
@@ -847,6 +849,7 @@
 			WASM: 'wasm',
 			WHITESPACE: 'whitespace',
 			MALBOLGE: 'malbolge',
+			AHEUI: 'aheui',
 			BRAINFUCK: 'brainfuck',
 			BEFUNGE93: 'befunge93',
 			LUA: 'lua',
@@ -1481,6 +1484,8 @@
 		const aliases: Record<string, PlaygroundLanguage> = {
 			"whitespace": 'WHITESPACE',
 			malbolge: 'MALBOLGE',
+			aheui: 'AHEUI',
+			'아희': 'AHEUI',
 			brainfuck: 'BRAINFUCK',
 			bf: 'BRAINFUCK',
 			befunge93: 'BEFUNGE93',

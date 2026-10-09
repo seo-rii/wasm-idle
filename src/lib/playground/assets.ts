@@ -690,6 +690,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	c3?: { baseUrl?: string };
 	grain?: { baseUrl?: string };
 	hy?: { baseUrl?: string };
+	aheui?: { baseUrl?: string };
 	nim?: NimRuntimeAssetConfig;
 	bash?: BashRuntimeAssetConfig;
 	clojurescript?: ClojureScriptRuntimeAssetConfig;
@@ -4358,4 +4359,15 @@ export function resolveHyBaseUrl(
 	if (configured) return normalizeBaseUrl(configured, currentUrl);
 	const root = typeof options === 'string' ? options : options?.rootUrl;
 	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-hy/`, currentUrl);
+}
+
+/** Aheui's receipt-verified upstream wheel is installed into Pyodide from this base URL. */
+export function resolveAheuiBaseUrl(
+	options: string | PlaygroundRuntimeAssets | undefined,
+	currentUrl = ''
+) {
+	const configured = typeof options === 'object' ? options?.aheui?.baseUrl : undefined;
+	if (configured) return normalizeBaseUrl(configured, currentUrl);
+	const root = typeof options === 'string' ? options : options?.rootUrl;
+	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-aheui/`, currentUrl);
 }

@@ -67,6 +67,7 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
+	AHEUI: { label: 'Aheui', editorLanguage: 'plaintext' },
 	MALBOLGE: { label: 'Malbolge', editorLanguage: 'plaintext' },
 	WHITESPACE: { label: 'Whitespace', editorLanguage: 'plaintext' },
 	BRAINFUCK: { label: 'Brainfuck', editorLanguage: 'plaintext' },

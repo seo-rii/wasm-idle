@@ -37,6 +37,11 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	AHEUI: {
+		strategy: 'entry-signal',
+		hostModule: 'aheui',
+		producerPath: 'src/lib/playground/worker/python.ts'
+	},
 	MALBOLGE: {
 		strategy: 'entry-signal',
 		hostModule: 'wasm',

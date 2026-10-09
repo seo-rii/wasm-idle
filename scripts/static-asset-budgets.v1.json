@@ -11,6 +11,7 @@
 		"pyodide": { "maxBytes": 11700000, "maxFiles": 12 },
 		"shared": { "maxBytes": 27000000, "maxFiles": 5 },
 		"teavm": { "maxBytes": 5000000, "maxFiles": 6 },
+		"wasm-aheui": { "maxBytes": 30000, "maxFiles": 4 },
 		"wasm-assemblyscript": { "maxBytes": 3500000, "maxFiles": 10 },
 		"wasm-awk": { "maxBytes": 2700000, "maxFiles": 8 },
 		"wasm-bash": { "maxBytes": 6500000, "maxFiles": 16 },

@@ -3,6 +3,7 @@ import type { RustTargetTriple } from '$lib/playground/options';
 export type EditorDefaultLanguage =
 	| 'whitespace'
 	| 'malbolge'
+	| 'aheui'
 	| 'brainfuck'
 	| 'befunge93'
 	| 'c'
@@ -71,6 +72,7 @@ export const editorDefaults: Record<
 	| 'befunge93'
 	| 'whitespace'
 	| 'malbolge'
+	| 'aheui'
 	| 'brainfuck'
 	| 'c'
 	| 'c3'
@@ -134,6 +136,7 @@ export const editorDefaults: Record<
 	| 'markdown',
 	string
 > = {
+	aheui: '밯맣희\n',
 	malbolge: 'ubO\n',
 	whitespace: '\n   \n    \n\t\n\t     \n\t\t\t \n \n\t\t\t\n\t\n  \n \n \n\n  \t\n \n\n\n\n\n',
 	brainfuck: `Echo UTF8 input until EOF (use the EOF button to finish)
@@ -1530,6 +1533,7 @@ export function isEditorDefaultSource(source: string) {
 	return (
 		source === editorDefaults.whitespace ||
 		source === editorDefaults.malbolge ||
+		source === editorDefaults.aheui ||
 		source === editorDefaults.brainfuck ||
 		source === editorDefaults.befunge93 ||
 		source === editorDefaults.c ||
