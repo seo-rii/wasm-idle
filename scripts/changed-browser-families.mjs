@@ -13,7 +13,7 @@ export function changedBrowserFamilies(files) {
 		if (/(?:clang|objectivec|assetBridge|packages\/llvm-core)/.test(file))
 			families.add('clang');
 		if (
-			/^(?:runtimes\/esolangs\/|static\/wasm-(?:brainfuck|befunge93|whitespace|malbolge|aheui|uhmlang)\/|scripts\/(?:build-esolang-runtimes|sync-wasm-aheui|support-matrix)\.mjs$|src\/lib\/playground\/(?:index|wasm|worker\/wasm|aheui|worker\/aheui\.runtime\.test|assets|python|worker\/python|wasmAheuiVersion|wasiInterpreters|worker\/wasiInterpreters\.test|esolangs\.playwright\.test)\.ts$)/.test(
+			/^(?:runtimes\/esolangs\/|static\/wasm-(?:brainfuck|befunge93|whitespace|malbolge|aheui|uhmlang|lolcode)\/|scripts\/(?:build-esolang-runtimes|sync-wasm-aheui|support-matrix)\.mjs$|src\/lib\/playground\/(?:index|wasm|worker\/wasm|aheui|worker\/aheui\.runtime\.test|assets|python|worker\/python|wasmAheuiVersion|wasiInterpreters|worker\/wasiInterpreters\.test|esolangs\.playwright\.test)\.ts$)/.test(
 				file
 			)
 		)
