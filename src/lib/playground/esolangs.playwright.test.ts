@@ -774,6 +774,18 @@ const profiles: InterpreterBrowserProfile[] = [
 		runtimePath: 'wasm-aheui/aheui-1.2.5-py3-none-any.whl',
 		cases: [
 			{
+				name: 'leading-utf8-bom',
+				source: aheuiEcho('\ufeff첫 줄 🦀\n'),
+				stdin: '\ufeff첫 줄 🦀\n',
+				output: '\ufeff첫 줄 🦀\n'
+			},
+			{
+				name: 'bom-only-without-newline',
+				source: aheuiEcho('\ufeff'),
+				stdin: '\ufeff',
+				output: '\ufeff'
+			},
+			{
 				name: 'utf8-codepoints',
 				source: aheuiEcho('첫째 줄 🦀\nsecond line\n'),
 				stdin: '첫째 줄 🦀\nsecond line\n',
