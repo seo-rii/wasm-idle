@@ -32,6 +32,7 @@ describe('runtime browser CI selection', () => {
 			'static/wasm-whitespace/whitespace.wasm',
 			'static/wasm-malbolge/malbolge.wasm',
 			'static/wasm-aheui/aheui-1.2.5-py3-none-any.whl',
+			'static/wasm-uhmlang/uhmlang.wasm',
 			'scripts/sync-wasm-aheui.mjs',
 			'src/lib/playground/aheui.ts',
 			'src/lib/playground/assets.ts',
