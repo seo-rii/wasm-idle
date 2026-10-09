@@ -13,7 +13,7 @@ export function changedBrowserFamilies(files) {
 		if (/(?:clang|objectivec|assetBridge|packages\/llvm-core)/.test(file))
 			families.add('clang');
 		if (
-			/^(?:runtimes\/esolangs\/|static\/wasm-(?:brainfuck|befunge93|whitespace)\/|scripts\/(?:build-esolang-runtimes|support-matrix)\.mjs$|src\/lib\/playground\/(?:index|wasm|worker\/wasm|wasiInterpreters|worker\/wasiInterpreters\.test|esolangs\.playwright\.test)\.ts$)/.test(
+			/^(?:runtimes\/esolangs\/|static\/wasm-(?:brainfuck|befunge93|whitespace|malbolge)\/|scripts\/(?:build-esolang-runtimes|support-matrix)\.mjs$|src\/lib\/playground\/(?:index|wasm|worker\/wasm|wasiInterpreters|worker\/wasiInterpreters\.test|esolangs\.playwright\.test)\.ts$)/.test(
 				file
 			)
 		)

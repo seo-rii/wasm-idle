@@ -30,8 +30,12 @@ type InterpreterBrowserProfile = {
 	language: string;
 	enabled: boolean;
 	defaultSource: () => string;
+	defaultInput?: string;
+	defaultOutput?: string;
 	echoSource: string;
+	echoSourceForInput?: (stdin: string) => string;
 	infiniteSource: string;
+	timeoutMaxOutputBytes?: number;
 	runtimePath: string;
 	cases: InterpreterCase[];
 };
@@ -104,6 +108,25 @@ const whitespaceEcho =
 
 const whitespaceReadChar = ws.push(0) + ws.readChar + ws.push(0) + ws.load;
 const whitespaceNewline = ws.push(10) + ws.printChar;
+
+// Denormalize valid input/output/halt instructions to build finite test programs.
+function malbolgeEchoBytes(count: number) {
+	const instructions = [...Array.from({ length: count }, () => [23, 5]).flat(), 81];
+	return instructions
+		.map((instruction, address) => {
+			let character = (((instruction - address) % 94) + 94) % 94;
+			if (character < 33) character += 94;
+			return String.fromCharCode(character);
+		})
+		.join('');
+}
+
+const malbolgeEcho = (stdin: string) =>
+	malbolgeEchoBytes(new TextEncoder().encode(stdin).byteLength);
+
+// Matthias Lutter's nonterminating cat: https://malbolge.org/cat.html.
+const malbolgeInfiniteCat =
+	'(=BA#9"=<;:3y7x54-21q/p-,+*)"!h%B0/.\n~P<\n<:(8&\n66#"!~}|{zyxwvu\ngJ%';
 
 const profiles: InterpreterBrowserProfile[] = [
 	{
@@ -618,6 +641,104 @@ const profiles: InterpreterBrowserProfile[] = [
 				}
 			}
 		]
+	},
+	{
+		language: 'MALBOLGE',
+		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_MALBOLGE === '1',
+		defaultSource: () => editorDefaults.malbolge,
+		defaultInput: 'A',
+		defaultOutput: 'A',
+		echoSource: malbolgeEchoBytes(1),
+		echoSourceForInput: malbolgeEcho,
+		infiniteSource: malbolgeInfiniteCat,
+		// The published cat prints EOF forever; let its execution timer settle first.
+		timeoutMaxOutputBytes: 64 * 1024 * 1024,
+		runtimePath: 'wasm-malbolge/malbolge.wasm',
+		cases: [
+			{
+				name: 'hello-world-crazy-rotate-and-encryption',
+				source: '(=<`#9]~6ZY32Vx/4Rs+0No-&Jk)"Fh}|Bcy?`=*z]Kw%oG4UUS0/@-ejc(:\'8dc',
+				stdin: '',
+				output: 'Hello World!'
+			},
+			{
+				name: 'utf8-input-bytes',
+				source: malbolgeEcho('첫째 줄 🦀\nsecond line\n'),
+				stdin: '첫째 줄 🦀\nsecond line\n',
+				output: '첫째 줄 🦀\nsecond line\n'
+			},
+			{
+				name: 'character-eof-original-value',
+				// Original EOF is 59048, whose low byte is 0xa8: invalid standalone UTF-8.
+				source: malbolgeEchoBytes(1),
+				stdin: '',
+				output: '\ufffd'
+			},
+			{
+				name: 'utf8-then-explicit-eof',
+				source: malbolgeEchoBytes(new TextEncoder().encode('한글 🦀\n').byteLength + 1),
+				stdin: '한글 🦀\n',
+				output: '한글 🦀\n\ufffd'
+			},
+			{
+				name: 'nul-byte-is-not-eof',
+				source: malbolgeEcho('\0A\n'),
+				stdin: '\0A\n',
+				output: '\0A\n'
+			},
+			{
+				name: 'partial-explicit-stdin',
+				source: malbolgeEchoBytes(1),
+				stdin: 'AB',
+				output: 'A'
+			},
+			{
+				name: 'fresh-stdin',
+				source: malbolgeEchoBytes(1),
+				stdin: 'C',
+				output: 'C'
+			},
+			{
+				name: 'fresh-accumulator',
+				source: 'cP',
+				stdin: '',
+				output: '\0'
+			},
+			{
+				name: 'loader-skips-ascii-whitespace',
+				source: [...malbolgeEcho('bytes')].join(' \t\r\n'),
+				stdin: 'bytes',
+				output: 'bytes'
+			},
+			{ name: 'halt-without-output', source: 'QP', stdin: '', output: '' },
+			{ name: 'invalid-source-character', source: '@@', stdin: '', fails: true },
+			{
+				name: 'after-parse-failure',
+				source: malbolgeEcho('parse-recovered\n'),
+				stdin: 'parse-recovered\n',
+				output: 'parse-recovered\n'
+			},
+			{
+				name: 'empty-source',
+				source: '',
+				stdin: '',
+				expectedError: {
+					code: 'runtime-configuration',
+					phase: 'configuration',
+					message: 'MALBOLGE source requires at least 2 non-whitespace characters'
+				}
+			},
+			{
+				name: 'source-with-one-significant-character',
+				source: ' \t\n A\r ',
+				stdin: '',
+				expectedError: {
+					code: 'runtime-configuration',
+					phase: 'configuration',
+					message: 'MALBOLGE source requires at least 2 non-whitespace characters'
+				}
+			}
+		]
 	}
 ];
 
@@ -704,8 +825,31 @@ async function runInterpreterBrowserCases(
 	profile: InterpreterBrowserProfile,
 	rootUrl: string
 ) {
+	const echoInputs = [
+		'stream 한글 🦀\nsecond chunk\n',
+		'가'.repeat(512),
+		'output-recovered\n',
+		'timeout-recovered\n',
+		'abort-recovered\n',
+		'stop-recovered\n',
+		'reload-recovered\n'
+	];
+	const echoPrograms = Object.fromEntries(
+		echoInputs.map((stdin) => [
+			stdin,
+			profile.echoSourceForInput?.(stdin) ?? profile.echoSource
+		])
+	);
 	return await page.evaluate(
-		async ({ language, cases, echoSource, infiniteSource, rootUrl }) => {
+		async ({
+			language,
+			cases,
+			echoSource,
+			echoPrograms,
+			infiniteSource,
+			timeoutMaxOutputBytes,
+			rootUrl
+		}) => {
 			const playground = (globalThis as any).__esolangPlayground as (
 				language: string
 			) => Promise<Sandbox>;
@@ -800,25 +944,38 @@ async function runInterpreterBrowserCases(
 						stdin: testCase.stdin
 					});
 
-				await run('streaming-eof', echoSource, {}, async (inputReady) => {
-					await inputReady;
-					await new Promise((resolve) => setTimeout(resolve, 75));
-					sandbox.write?.('stream 한글 🦀\n');
-					sandbox.write?.('second chunk\n');
-					sandbox.eof();
-				});
+				await run(
+					'streaming-eof',
+					echoPrograms['stream 한글 🦀\nsecond chunk\n'],
+					{},
+					async (inputReady) => {
+						await inputReady;
+						await new Promise((resolve) => setTimeout(resolve, 75));
+						sandbox.write?.('stream 한글 🦀\n');
+						sandbox.write?.('second chunk\n');
+						sandbox.eof();
+					}
+				);
 
-				await run('output-limit', echoSource, {
+				await run('output-limit', echoPrograms['가'.repeat(512)], {
 					stdin: '가'.repeat(512),
 					limits: { maxOutputBytes: 1024 }
 				});
-				await run('after-output-limit', echoSource, { stdin: 'output-recovered\n' });
+				await run('after-output-limit', echoPrograms['output-recovered\n'], {
+					stdin: 'output-recovered\n'
+				});
 
 				await run('infinite-loop-timeout', infiniteSource, {
 					stdin: '',
-					limits: { compileTimeoutMs: 1, runTimeoutMs: 500 }
+					limits: {
+						compileTimeoutMs: 1,
+						runTimeoutMs: 500,
+						...(timeoutMaxOutputBytes ? { maxOutputBytes: timeoutMaxOutputBytes } : {})
+					}
 				});
-				await run('after-timeout', echoSource, { stdin: 'timeout-recovered\n' });
+				await run('after-timeout', echoPrograms['timeout-recovered\n'], {
+					stdin: 'timeout-recovered\n'
+				});
 
 				const controller = new AbortController();
 				await run(
@@ -830,16 +987,22 @@ async function runInterpreterBrowserCases(
 						controller.abort(new Error('browser interpreter abort'));
 					}
 				);
-				await run('after-abort', echoSource, { stdin: 'abort-recovered\n' });
+				await run('after-abort', echoPrograms['abort-recovered\n'], {
+					stdin: 'abort-recovered\n'
+				});
 
 				await run('stop-stdin-wait', echoSource, {}, async (inputReady) => {
 					await inputReady;
 					await sandbox.terminate();
 				});
-				await run('after-stop', echoSource, { stdin: 'stop-recovered\n' });
+				await run('after-stop', echoPrograms['stop-recovered\n'], {
+					stdin: 'stop-recovered\n'
+				});
 
 				await sandbox.terminate();
-				await run('after-explicit-reload', echoSource, { stdin: 'reload-recovered\n' });
+				await run('after-explicit-reload', echoPrograms['reload-recovered\n'], {
+					stdin: 'reload-recovered\n'
+				});
 			} finally {
 				await sandbox.dispose?.();
 			}
@@ -849,7 +1012,9 @@ async function runInterpreterBrowserCases(
 			language: profile.language,
 			cases: profile.cases,
 			echoSource: profile.echoSource,
+			echoPrograms,
 			infiniteSource: profile.infiniteSource,
+			timeoutMaxOutputBytes: profile.timeoutMaxOutputBytes,
 			rootUrl
 		}
 	);
@@ -859,20 +1024,21 @@ for (const profile of profiles) {
 	const browserMeta = { browser: true, requiredBrowser: profile.enabled };
 	describe.skipIf(!profile.enabled)(`real ${profile.language} browser interpreter`, () => {
 		it(
-			'runs the default editor sample with UTF-8 terminal input and EOF',
+			'runs the default editor sample with terminal input and EOF',
 			{ timeout: 180_000, meta: browserMeta },
 			async () => {
 				await withBrowserPreview(async (browserUrl) => {
+					const expectedOutput = profile.defaultOutput ?? 'default 한글 🦀';
 					const summary = await runStdinBrowserProbe({
 						browserUrl,
 						language: profile.language,
 						source: profile.defaultSource(),
-						stdinText: 'default 한글 🦀\n',
-						expectedOutput: 'default 한글 🦀',
+						stdinText: profile.defaultInput ?? 'default 한글 🦀\n',
+						expectedOutput,
 						sendEof: true,
 						checkLoadingProgress: false
 					});
-					expect(summary.transcript).toContain('default 한글 🦀');
+					expect(summary.transcript).toContain(expectedOutput);
 					expect(summary.pageErrors).toEqual([]);
 					expect(
 						summary.runtimeRequests.some((request: string) =>
@@ -901,8 +1067,10 @@ for (const profile of profiles) {
 						await disableBrowserPrewarm(context);
 						const page = await context.newPage();
 						page.setDefaultTimeout(60_000);
-						page.on('pageerror', (error) => pageErrors.push(error.message));
 						const rootUrl = await prepareConsumerPage(page, browserUrl);
+						// The isolation reload can abort imports in the initial document.
+						// Record errors in the controlled document used by the consumer.
+						page.on('pageerror', (error) => pageErrors.push(error.message));
 						const report = await runInterpreterBrowserCases(page, profile, rootUrl);
 						expect(report.crossOriginIsolated).toBe(true);
 						const byName = Object.fromEntries(

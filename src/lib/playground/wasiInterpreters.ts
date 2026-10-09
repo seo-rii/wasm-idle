@@ -7,6 +7,7 @@ export type WasiInterpreterProfile = {
 	readonly sourcePathPrefix?: string;
 	readonly maxSourcePathBytes?: number;
 	readonly maxSourceBytes?: number;
+	readonly minSourceCharacters?: number;
 	readonly command: string;
 	readonly args: readonly string[];
 	readonly sha256: string;
@@ -47,5 +48,16 @@ export const WASI_INTERPRETERS: Readonly<Record<string, WasiInterpreterProfile>>
 		args: [],
 		sha256: 'de0846c43446d8dcb01e43324313bed565764b852b82b9885cd7d25e4f36b537',
 		bytes: 59270
+	},
+	MALBOLGE: {
+		id: 'MALBOLGE',
+		folder: 'wasm-malbolge',
+		fileName: 'malbolge.wasm',
+		sourcePath: 'main.mal',
+		minSourceCharacters: 2,
+		command: 'malbolge',
+		args: [],
+		sha256: '27cc66d75e63524b000b62b1117ad45cb3dabc4885530800175affc40f895840',
+		bytes: 16067
 	}
 };

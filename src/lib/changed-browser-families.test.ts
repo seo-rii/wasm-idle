@@ -30,6 +30,7 @@ describe('runtime browser CI selection', () => {
 			'static/wasm-brainfuck/brainfuck.wasm',
 			'static/wasm-befunge93/befunge93.wasm',
 			'static/wasm-whitespace/whitespace.wasm',
+			'static/wasm-malbolge/malbolge.wasm',
 			'scripts/build-esolang-runtimes.mjs',
 			'scripts/support-matrix.mjs',
 			'src/lib/playground/index.ts',

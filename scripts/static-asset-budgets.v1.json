@@ -40,6 +40,7 @@
 		"wasm-lfortran": { "maxBytes": 84000000, "maxFiles": 5, "optional": true },
 		"wasm-lisp": { "maxBytes": 5000000, "maxFiles": 50 },
 		"wasm-lua": { "maxBytes": 400000, "maxFiles": 5 },
+		"wasm-malbolge": { "maxBytes": 25000, "maxFiles": 3 },
 		"wasm-nim": { "maxBytes": 48000000, "maxFiles": 24 },
 		"wasm-objectivec": { "maxBytes": 11000000, "maxFiles": 10 },
 		"wasm-octave": { "maxBytes": 70000000, "maxFiles": 1250 },
