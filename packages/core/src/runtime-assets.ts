@@ -295,6 +295,7 @@ export interface RuntimeAssetKeySource {
 	grain?: { baseUrl?: string };
 	hy?: { baseUrl?: string };
 	aheui?: { baseUrl?: string };
+	apecode?: { baseUrl?: string };
 	nim?: {
 		baseUrl?: string;
 		workerUrl?: string;
@@ -1295,6 +1296,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	{ runtime: 'grain', property: 'baseUrl', key: 'grainBaseUrl' },
 	{ runtime: 'hy', property: 'baseUrl', key: 'hyBaseUrl' },
 	{ runtime: 'aheui', property: 'baseUrl', key: 'aheuiBaseUrl' },
+	{ runtime: 'apecode', property: 'baseUrl', key: 'apecodeBaseUrl' },
 	{ runtime: 'nim', property: 'baseUrl', key: 'nimBaseUrl' },
 	{ runtime: 'nim', property: 'workerUrl', key: 'nimWorkerUrl' },
 	{ runtime: 'nim', property: 'manifestUrl', key: 'nimManifestUrl' },

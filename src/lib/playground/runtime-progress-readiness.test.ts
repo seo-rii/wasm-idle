@@ -37,6 +37,11 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	APECODE: {
+		strategy: 'entry-signal',
+		hostModule: 'apecode',
+		producerPath: 'src/lib/playground/worker/python.ts'
+	},
 	LOLCODE: {
 		strategy: 'entry-signal',
 		hostModule: 'wasm',

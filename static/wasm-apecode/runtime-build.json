@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "language": "APECODE",
+  "runtime": "Original APECode interpreter on Pyodide",
+  "upstream": {
+    "project": "seo-rii/apecode",
+    "commit": "c7ae98d3dfc1713ecc800422a4c815628776e1e2",
+    "version": "0.1.0",
+    "url": "https://codeload.github.com/seo-rii/apecode/tar.gz/c7ae98d3dfc1713ecc800422a4c815628776e1e2",
+    "fileName": "apecode-c7ae98d3dfc1713ecc800422a4c815628776e1e2.tar.gz",
+    "bytes": 7277,
+    "sha256": "0ff71e149ec49a94211bb44b6a3d55e1290acb1387ca4f5f76a8f42f568ae629"
+  },
+  "license": {
+    "status": "not-declared-by-upstream",
+    "notice": {
+      "fileName": "UPSTREAM-LICENSE-NOTICE.txt",
+      "bytes": 469,
+      "sha256": "a8712f9407baa9a6db8b8bce91475c42b0e975080782719522e2d83abe840669"
+    }
+  },
+  "build": {
+    "backend": "setuptools==84.0.0",
+    "sourceDateEpoch": "315532800",
+    "command": [
+      "uv",
+      "build",
+      "--wheel",
+      "--no-config",
+      "--build-constraint",
+      "build-constraints.txt",
+      "--out-dir",
+      "dist",
+      "apecode-c7ae98d3dfc1713ecc800422a4c815628776e1e2.tar.gz"
+    ],
+    "modifications": []
+  },
+  "wheels": [
+    {
+      "fileName": "apecode-0.1.0-py3-none-any.whl",
+      "bytes": 7484,
+      "sha256": "30aecb8eeff9a40cd55bb5fe5c18104f6c8308bdba9e71ac0b95d077badae30c"
+    }
+  ]
+}

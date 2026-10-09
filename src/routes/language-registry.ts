@@ -69,6 +69,7 @@ export const playgroundLanguageDescriptors: Readonly<
 > = {
 	UHMLANG: { label: 'UHMLANG (엄준식)', editorLanguage: 'plaintext' },
 	LOLCODE: { label: 'LOLCODE 1.3', editorLanguage: 'plaintext' },
+	APECODE: { label: 'APECode', editorLanguage: 'plaintext' },
 	AHEUI: { label: 'Aheui', editorLanguage: 'plaintext' },
 	MALBOLGE: { label: 'Malbolge', editorLanguage: 'plaintext' },
 	WHITESPACE: { label: 'Whitespace', editorLanguage: 'plaintext' },

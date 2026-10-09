@@ -20,6 +20,13 @@ interface SandboxRoute {
 
 const sandboxRoutes = [
 	{
+		languageId: 'APECODE',
+		load: async () => {
+			const { default: Apecode } = await import('$lib/playground/apecode');
+			return new Apecode();
+		}
+	},
+	{
 		languageId: 'LOLCODE',
 		load: async () => {
 			const [{ default: Wasm }, { WASI_INTERPRETERS }] = await Promise.all([

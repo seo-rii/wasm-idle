@@ -159,6 +159,20 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'APECode',
+		ids: ['APECODE'],
+		runtime: 'Original APECode interpreter on Pyodide',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_APECODE',
+			language: 'APECODE'
+		}
+	},
+
+	{
 		language: 'LOLCODE 1.3',
 		ids: ['LOLCODE'],
 		runtime: 'Original lci 1.3 interpreter on WASI',
@@ -1039,6 +1053,17 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'APECode',
+		{
+			packageBase:
+				'seo-rii/apecode 0.1.0 (c7ae98d3), original pure Python wheel on Pyodide; upstream has no declared standalone license',
+			execution:
+				'Runs the original parser and state-machine interpreter through run_source; reads numeric test cases to EOF, models rock weights, grippers and built-in states, and writes original result/trace bytes through Python file descriptors; each run creates fresh interpreter state',
+			customization: `${code('runtimeAssets.apecode.baseUrl')}, ${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; code-pinned local wheel; execution timeout, output and workspace limits plus cancellation; prepare loads the interpreter without parsing or running user source`
+		}
+	],
+
 	[
 		'LOLCODE 1.3',
 		{
