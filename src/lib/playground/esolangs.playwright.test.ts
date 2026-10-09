@@ -167,13 +167,26 @@ async function withBrowserPreview(action: (browserUrl: string) => Promise<void>)
 	await runWithBrowserProbeSessionLock(async () => {
 		const configuredUrl = process.env.WASM_IDLE_BROWSER_URL || '';
 		const configured = configuredUrl ? new URL(configuredUrl) : undefined;
-		const server = shouldReuseProvidedBrowserUrl(configuredUrl)
-			? { browserUrl: configuredUrl, close: async () => {} }
-			: await startBrowserPreviewServer({
-					origin: configured?.origin ?? 'http://127.0.0.1:4980',
-					...(configured ? { basePath: configured.pathname } : {}),
-					serverMode: 'dev'
-				});
+		const previewMode = process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'preview';
+		const previousReuse = process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW;
+		let server: { browserUrl: string; close: () => Promise<void> };
+		try {
+			// The direct-consumer test imports a source module that built previews do not serve.
+			if (previewMode) process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW = '0';
+			server =
+				!previewMode && shouldReuseProvidedBrowserUrl(configuredUrl)
+					? { browserUrl: configuredUrl, close: async () => {} }
+					: await startBrowserPreviewServer({
+							origin: configured?.origin ?? 'http://127.0.0.1:4980',
+							...(configured ? { basePath: configured.pathname } : {}),
+							serverMode: 'dev'
+						});
+		} finally {
+			if (previewMode) {
+				if (previousReuse === undefined) delete process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW;
+				else process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW = previousReuse;
+			}
+		}
 		try {
 			await action(server.browserUrl);
 		} finally {
