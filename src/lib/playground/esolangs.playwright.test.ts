@@ -10,7 +10,10 @@ import {
 	startBrowserPreviewServer
 } from '../../../scripts/browser-preview-server.mjs';
 import { resolveChromiumExecutable } from '../../../scripts/rust-browser-probe-lib.mjs';
-import { runStdinBrowserProbe } from '../../../scripts/stdin-browser-probe-lib.mjs';
+import {
+	isStdinEditorReady,
+	runStdinBrowserProbe
+} from '../../../scripts/stdin-browser-probe-lib.mjs';
 import { editorDefaults } from '../../routes/editor-defaults';
 import type { SandboxExecutionOptions } from './options';
 import type { Sandbox } from './sandbox';
@@ -22,6 +25,7 @@ type InterpreterCase = {
 	output?: string;
 	fails?: boolean;
 	failureMessage?: string;
+	failureOutput?: string;
 	options?: Pick<SandboxExecutionOptions, 'activePath'>;
 	expectedError?: { code: string; phase: string; message: string };
 };
@@ -35,7 +39,10 @@ type InterpreterBrowserProfile = {
 	echoSource: string;
 	echoSourceForInput?: (stdin: string) => string;
 	echoInputForOutput?: (output: string) => string;
+	echoOutputForInput?: (input: string) => string;
+	streamingInputChunks?: string[];
 	infiniteSource: string;
+	infiniteInput?: string;
 	timeoutMaxOutputBytes?: number;
 	runtimePath: string;
 	cases: InterpreterCase[];
@@ -171,6 +178,84 @@ const lolcodeEcho = (output: string) => {
 		])
 	);
 };
+
+// APECode's original runner transforms numbered cases of integer rock weights.
+const apecodeIdentity = 'state main { return true; }';
+const apecodeInput = (text: string) => {
+	const weights = Array.from(text, (character) => character.codePointAt(0));
+	return `1\n${weights.length}\n${weights.join(' ')}\n`;
+};
+const apecodeOutput = (text: string) =>
+	Array.from(text, (character) => character.codePointAt(0)).join(' ') + '\n';
+const apecodeStreamingTexts = ['stream 한글 🦀\n', 'second chunk\n'];
+const apecodeStreamingChunks = [
+	`1\n${Array.from(apecodeStreamingTexts.join('')).length}\n` +
+		apecodeOutput(apecodeStreamingTexts[0]).trimEnd() +
+		' ',
+	apecodeOutput(apecodeStreamingTexts[1])
+];
+
+// The upstream test suite publishes this complete sorting program.
+const apecodeBubbleSort = `state false { return false; }
+state true { return true; }
+state remember_false {
+  call false;
+  call remember;
+  return false;
+}
+state remember_true {
+  call true;
+  call remember;
+  return true;
+}
+state move_completely_left {
+  call pick_up_left;
+  call if_empty_left;
+  then {
+    call move_right;
+    return true;
+  }
+  call put_down_left;
+  call move_left;
+}
+state bubble_sort_pass {
+  call pick_up_left;
+  call move_right;
+  call pick_up_right;
+  call if_empty_left;
+  then {
+    call put_down_right;
+    call move_left;
+    call put_down_left;
+    return true;
+  }
+  call if_empty_right;
+  then {
+    call put_down_right;
+    call move_left;
+    call put_down_left;
+    return true;
+  }
+  call if_tilt_left;
+  then {
+    call remember_true;
+    call put_down_left;
+    call move_left;
+    call put_down_right;
+  } else {
+    call put_down_right;
+    call move_left;
+    call put_down_left;
+    call move_right;
+  }
+}
+state main {
+  call remember_false;
+  call move_completely_left;
+  call bubble_sort_pass;
+  call recall;
+  then {} else { return true; }
+}`;
 
 const profiles: InterpreterBrowserProfile[] = [
 	{
@@ -1048,6 +1133,186 @@ const profiles: InterpreterBrowserProfile[] = [
 				output: 'runtime-recovered\n'
 			}
 		]
+	},
+	{
+		language: 'APECODE',
+		enabled: process.env.WASM_IDLE_RUN_REAL_BROWSER_APECODE === '1',
+		defaultSource: () => editorDefaults.apecode,
+		defaultInput: '1\n3\n3 1 2\n',
+		defaultOutput: '3 1 2',
+		echoSource: apecodeIdentity,
+		echoInputForOutput: apecodeInput,
+		echoOutputForInput: apecodeOutput,
+		streamingInputChunks: apecodeStreamingChunks,
+		infiniteSource: 'state main { }',
+		infiniteInput: '1\n0\n',
+		runtimePath: 'wasm-apecode/apecode-0.1.0-py3-none-any.whl',
+		cases: [
+			{
+				name: 'identity-rock-case',
+				source: apecodeIdentity,
+				stdin: '1\n3\n3 1 2\n',
+				output: '3 1 2\n'
+			},
+			{ name: 'empty-explicit-eof', source: apecodeIdentity, stdin: '', output: '' },
+			{
+				name: 'empty-rock-field',
+				source: apecodeIdentity,
+				stdin: '1\n0\n',
+				output: '\n'
+			},
+			{
+				name: 'zero-cases',
+				source: apecodeIdentity,
+				stdin: '0\n',
+				output: ''
+			},
+			{
+				name: 'eof-without-line-ending',
+				source: apecodeIdentity,
+				stdin: '1 2 4 5',
+				output: '4 5\n'
+			},
+			{
+				name: 'signed-arbitrary-integer-weights',
+				source: apecodeIdentity,
+				stdin: '1 3 -7 0 123456789012345678901234567890',
+				output: '-7 0 123456789012345678901234567890\n'
+			},
+			{
+				name: 'utf8-case-input',
+				source: apecodeIdentity,
+				stdin: apecodeInput('한🦀'),
+				output: apecodeOutput('한🦀')
+			},
+			{
+				name: 'original-input-number-tokenization',
+				source: apecodeIdentity,
+				stdin: 'cases=1; rocks=3; weights=(7,-1,2)',
+				output: '7 -1 2\n'
+			},
+			{
+				name: 'unused-trailing-input',
+				source: apecodeIdentity,
+				stdin: '1 1 7 8 9',
+				output: '7\n'
+			},
+			{
+				name: 'fresh-stdin',
+				source: apecodeIdentity,
+				stdin: '1 1 11',
+				output: '11\n'
+			},
+			{
+				name: 'nested-unicode-source-path',
+				source: apecodeIdentity,
+				stdin: '1 1 42',
+				output: '42\n',
+				options: { activePath: 'examples/한글🦀.ape' }
+			},
+			{
+				name: 'original-pick-and-put-program',
+				source: `state main {
+  call if_empty_right;
+  then { return false; }
+  call pick_up_right;
+  call put_down_right;
+  return true;
+}`,
+				stdin: '1 1 7',
+				output: '7\n'
+			},
+			{
+				name: 'builtin-pick-and-put',
+				source: 'state main { call pick_up_right; call put_down_right; return true; }',
+				stdin: '1 1 7',
+				output: '7\n'
+			},
+			{
+				name: 'ground-and-robot-reset-between-cases',
+				source: 'state main { call pick_up_left; return true; }',
+				stdin: '2 2 7 8 2 9 10',
+				output: '- 8\n- 10\n'
+			},
+			{
+				name: 'original-full-bubble-sort-program',
+				source: apecodeBubbleSort,
+				stdin: '1\n9\n7 1 6 3 4 9 2 5 8\n',
+				output: '1 2 3 4 5 6 7 8 9\n'
+			},
+			{
+				name: 'trace-and-final-rock-output',
+				source: 'state main { call trace; return true; }',
+				stdin: '1 3 3 1 2',
+				output: 'trace pos=0 left=- right=-: 3 1 2\n3 1 2\n'
+			},
+			{
+				name: 'comments-and-user-state-calls',
+				source: `/* 한글 🦀 */
+state finish { return true; }
+state main { // Preserve the original grammar and dispatch.
+  call finish;
+  return true;
+}`,
+				stdin: '1 2 2 3',
+				output: '2 3\n'
+			},
+			{
+				name: 'false-return-still-completes-case',
+				source: 'state main { return false; }',
+				stdin: '1 1 7',
+				output: '7\n'
+			},
+			{
+				name: 'original-binary-signature',
+				source: apecodeIdentity,
+				stdin: '1\n-1657206531\n',
+				output: new TextDecoder().decode(
+					Uint8Array.from([
+						107, 66, 113, 37, 70, 97, 7, 8, 107, 21, 36, 84, 120, 49, 122, 144, 144,
+						144, 144, 205, 114, 10
+					])
+				)
+			},
+			{
+				name: 'undefined-state-diagnostic',
+				source: 'state main { call missing; }',
+				stdin: '',
+				fails: true,
+				failureMessage: 'APECode interpreter exited with status 1',
+				failureOutput: "apecode: call to unknown state 'missing'\n"
+			},
+			{
+				name: 'missing-rock-count-diagnostic',
+				source: apecodeIdentity,
+				stdin: '1',
+				fails: true,
+				failureMessage: 'APECode interpreter exited with status 1',
+				failureOutput: 'apecode: missing rock count for case 1\n'
+			},
+			{
+				name: 'missing-rock-weights-diagnostic',
+				source: apecodeIdentity,
+				stdin: '1 2 7',
+				fails: true,
+				failureMessage: 'APECode interpreter exited with status 1',
+				failureOutput: 'apecode: missing rock weights for case 1\n'
+			},
+			{
+				name: 'runtime-ground-error',
+				source: 'state main { call pick_up_left; call pick_up_left; return true; }',
+				stdin: '1 1 7',
+				fails: true,
+				failureMessage: 'APECode interpreter exited with status 1',
+				failureOutput: 'apecode: left gripper is not empty\n'
+			},
+			{
+				name: 'after-runtime-failure',
+				source: apecodeIdentity,
+				stdin: '1 2 42 7',
+				output: '42 7\n'
+			}
+		]
 	}
 ];
 
@@ -1070,50 +1335,53 @@ async function withBrowserPreview(action: (browserUrl: string) => Promise<void>)
 	});
 }
 
-async function prepareConsumerPage(page: Page, browserUrl: string) {
+async function prepareConsumerPage(page: Page, browserUrl: string, language: string) {
+	const base = new URL('./', browserUrl);
+	const moduleUrl = new URL('src/lib/playground/index.ts', base).href;
+	let lastNavigationError: unknown;
 	for (let attempt = 0; attempt < 4; attempt += 1) {
 		try {
 			await page.goto(browserUrl, { waitUntil: 'domcontentloaded' });
-			await page.evaluate(async () => {
-				if (!navigator.serviceWorker) return;
-				await Promise.race([
-					navigator.serviceWorker.ready,
-					new Promise((resolve) => setTimeout(resolve, 1_500))
-				]);
+			await page.waitForFunction(
+				() =>
+					crossOriginIsolated &&
+					typeof SharedArrayBuffer !== 'undefined' &&
+					Boolean(navigator.serviceWorker?.controller)
+			);
+			await page.waitForFunction(isStdinEditorReady, undefined);
+			await page.addScriptTag({
+				type: 'module',
+				content: `import playground from ${JSON.stringify(moduleUrl)}; globalThis.__esolangPlayground = playground;`
 			});
-			if (
-				await page.evaluate(
-					() =>
-						crossOriginIsolated &&
-						typeof SharedArrayBuffer !== 'undefined' &&
-						Boolean(navigator.serviceWorker?.controller)
-				)
-			)
-				break;
+			await page.waitForFunction(() => Boolean((globalThis as any).__esolangPlayground));
+			// Warm lazy host/worker imports while the initial isolation reload can still occur.
+			// Semantic programs execute once after this setup has completed.
+			await page.evaluate(
+				async ({ language, rootUrl }) => {
+					const sandbox = (await (globalThis as any).__esolangPlayground(
+						language
+					)) as Sandbox;
+					try {
+						await sandbox.load({ rootUrl });
+					} finally {
+						await sandbox.dispose?.();
+					}
+				},
+				{ language, rootUrl: base.pathname }
+			);
+			return base.pathname;
 		} catch (error) {
-			// The isolation service worker reloads the first uncontrolled document.
+			// Navigation retries apply only to setup, never language execution or assertions.
 			if (
 				!String(error).includes('Execution context was destroyed') &&
 				!String(error).includes('net::ERR_ABORTED')
 			)
 				throw error;
+			lastNavigationError = error;
 			await page.waitForTimeout(250);
 		}
 	}
-	await page.waitForFunction(
-		() =>
-			crossOriginIsolated &&
-			typeof SharedArrayBuffer !== 'undefined' &&
-			Boolean(navigator.serviceWorker?.controller)
-	);
-	const base = new URL('./', browserUrl);
-	const moduleUrl = new URL('src/lib/playground/index.ts', base).href;
-	await page.addScriptTag({
-		type: 'module',
-		content: `import playground from ${JSON.stringify(moduleUrl)}; globalThis.__esolangPlayground = playground;`
-	});
-	await page.waitForFunction(() => Boolean((globalThis as any).__esolangPlayground));
-	return base.pathname;
+	throw lastNavigationError;
 }
 
 async function runInterpreterBrowserCases(
@@ -1139,9 +1407,11 @@ async function runInterpreterBrowserCases(
 	const echoStdin = Object.fromEntries(
 		echoInputs.map((output) => [output, profile.echoInputForOutput?.(output) ?? output])
 	);
-	const streamingChunks = ['stream 한글 🦀\n', 'second chunk\n'].map(
-		(output) => profile.echoInputForOutput?.(output) ?? output
-	);
+	const streamingChunks =
+		profile.streamingInputChunks ??
+		['stream 한글 🦀\n', 'second chunk\n'].map(
+			(output) => profile.echoInputForOutput?.(output) ?? output
+		);
 	return await page.evaluate(
 		async ({
 			language,
@@ -1151,6 +1421,7 @@ async function runInterpreterBrowserCases(
 			echoStdin,
 			streamingChunks,
 			infiniteSource,
+			infiniteInput,
 			timeoutMaxOutputBytes,
 			rootUrl
 		}) => {
@@ -1269,7 +1540,7 @@ async function runInterpreterBrowserCases(
 				});
 
 				await run('infinite-loop-timeout', infiniteSource, {
-					stdin: '',
+					stdin: infiniteInput ?? '',
 					limits: {
 						compileTimeoutMs: 1,
 						runTimeoutMs: 500,
@@ -1319,6 +1590,7 @@ async function runInterpreterBrowserCases(
 			echoStdin,
 			streamingChunks,
 			infiniteSource: profile.infiniteSource,
+			infiniteInput: profile.infiniteInput,
 			timeoutMaxOutputBytes: profile.timeoutMaxOutputBytes,
 			rootUrl
 		}
@@ -1372,7 +1644,11 @@ for (const profile of profiles) {
 						await disableBrowserPrewarm(context);
 						const page = await context.newPage();
 						page.setDefaultTimeout(60_000);
-						const rootUrl = await prepareConsumerPage(page, browserUrl);
+						const rootUrl = await prepareConsumerPage(
+							page,
+							browserUrl,
+							profile.language
+						);
 						// The isolation reload can abort imports in the initial document.
 						// Record errors in the controlled document used by the consumer.
 						page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -1392,6 +1668,8 @@ for (const profile of profiles) {
 								expect(result.error?.message).toMatch(
 									testCase.failureMessage ?? /exited|bracket|syntax/iu
 								);
+								if (testCase.failureOutput !== undefined)
+									expect(result.output).toContain(testCase.failureOutput);
 							} else {
 								expect(result.error, JSON.stringify(result)).toBeUndefined();
 								expect(result.result).toBe(true);
@@ -1401,7 +1679,8 @@ for (const profile of profiles) {
 						expect(byName['streaming-eof'].error).toBeUndefined();
 						expect(byName['streaming-eof'].inputRequests).toBeGreaterThan(0);
 						expect(byName['streaming-eof'].output).toBe(
-							'stream 한글 🦀\nsecond chunk\n'
+							profile.echoOutputForInput?.('stream 한글 🦀\nsecond chunk\n') ??
+								'stream 한글 🦀\nsecond chunk\n'
 						);
 						expect(byName['output-limit'].error).toMatchObject({
 							code: 'output-limit',
@@ -1435,7 +1714,9 @@ for (const profile of profiles) {
 								JSON.stringify(byName[name])
 							).toBeUndefined();
 							expect(byName[name].result).toBe(true);
-							expect(byName[name].output).toBe(output);
+							expect(byName[name].output).toBe(
+								profile.echoOutputForInput?.(output) ?? output
+							);
 						}
 						expect(pageErrors).toEqual([]);
 					} finally {

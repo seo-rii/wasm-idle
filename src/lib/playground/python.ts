@@ -77,18 +77,24 @@ class Python implements Sandbox {
 	private disposal?: Promise<void>;
 	private workerExtensionKey?: string;
 	/** Language executed by the shared Pyodide worker; subclasses run other Python-hosted languages. */
-	protected readonly workerLanguage: 'python' | 'hy' | 'aheui' = 'python';
+	protected readonly workerLanguage: 'python' | 'hy' | 'aheui' | 'apecode' = 'python';
+
+	private get usesInterpreterStdio() {
+		return this.workerLanguage === 'aheui' || this.workerLanguage === 'apecode';
+	}
 
 	private get runtimeId() {
+		if (this.workerLanguage === 'apecode') return 'APECODE';
 		return this.workerLanguage === 'aheui' ? 'AHEUI' : 'PYTHON3';
 	}
 
 	private get runtimeLabel() {
+		if (this.workerLanguage === 'apecode') return 'APECode';
 		return this.workerLanguage === 'aheui' ? 'Aheui' : 'Python';
 	}
 
-	private resetAheuiInput() {
-		if (this.workerLanguage !== 'aheui') return;
+	private resetInterpreterInput() {
+		if (!this.usesInterpreterStdio) return;
 		this.pendingInput = [];
 		resetBufferedStdin(this.buffer);
 	}
@@ -169,7 +175,7 @@ class Python implements Sandbox {
 		this.activeOperation = null;
 		this.waitingForInput = false;
 		this.pendingEof = false;
-		this.resetAheuiInput();
+		this.resetInterpreterInput();
 		this.uid += 1;
 		this.exit = true;
 		this.workerSession.terminate(reason);
@@ -440,22 +446,24 @@ class Python implements Sandbox {
 			activePath = options.activePath;
 			debugPath = options.debugPath;
 			workspaceFiles = options.workspaceFiles;
-			if (this.workerLanguage === 'aheui') {
+			if (this.usesInterpreterStdio) {
 				limits = resolveExecutionLimits(options.limits);
 				if (_args.length || options.programArgs?.length) {
-					throw new RuntimeConfigurationError('Aheui does not accept program arguments', {
-						runtimeId: 'AHEUI'
-					});
+					throw new RuntimeConfigurationError(
+						`${this.runtimeLabel} does not accept program arguments`,
+						{ runtimeId: this.runtimeId }
+					);
 				}
 				if (debug || (options.debugMode && options.debugMode !== 'none')) {
-					throw new RuntimeConfigurationError('Aheui debugging is not supported', {
-						runtimeId: 'AHEUI'
-					});
+					throw new RuntimeConfigurationError(
+						`${this.runtimeLabel} debugging is not supported`,
+						{ runtimeId: this.runtimeId }
+					);
 				}
 				const workspace = validateExecutionWorkspace(
 					code,
 					workspaceFiles ?? [],
-					activePath ?? 'main.aheui',
+					activePath ?? (this.workerLanguage === 'apecode' ? 'main.ape' : 'main.aheui'),
 					{
 						...options.workspaceLimits,
 						maxFileBytes: Math.min(
@@ -488,8 +496,8 @@ class Python implements Sandbox {
 		if (!worker || this.worker !== worker) {
 			return Promise.reject(this.releaseBeforeSession(activeOperation, 'Worker not loaded'));
 		}
-		this.resetAheuiInput();
-		if (this.workerLanguage === 'aheui') {
+		this.resetInterpreterInput();
+		if (this.usesInterpreterStdio) {
 			this.waitingForInput = false;
 			this.pendingEof = false;
 		}
@@ -518,7 +526,7 @@ class Python implements Sandbox {
 				this.exit = true;
 				this.waitingForInput = false;
 				this.pendingEof = false;
-				this.resetAheuiInput();
+				this.resetInterpreterInput();
 			};
 			const claimRun = () => {
 				if (!ownsRun()) return false;
@@ -579,9 +587,9 @@ class Python implements Sandbox {
 							if (outputBytes > limits.maxOutputBytes) {
 								failRun(
 									new OutputLimitError(
-										'Aheui output exceeded the configured byte limit',
+										`${this.runtimeLabel} output exceeded the configured byte limit`,
 										{
-											runtimeId: 'AHEUI',
+											runtimeId: this.runtimeId,
 											phase: 'execute',
 											actual: outputBytes,
 											limit: limits.maxOutputBytes
@@ -644,7 +652,7 @@ class Python implements Sandbox {
 				this.exit = true;
 				this.waitingForInput = false;
 				this.pendingEof = false;
-				this.resetAheuiInput();
+				this.resetInterpreterInput();
 			}
 			this.cleanupOperation(activeOperation);
 		});

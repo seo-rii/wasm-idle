@@ -691,6 +691,7 @@ export interface PlaygroundRuntimeAssets extends RuntimeAssetKeySource {
 	grain?: { baseUrl?: string };
 	hy?: { baseUrl?: string };
 	aheui?: { baseUrl?: string };
+	apecode?: { baseUrl?: string };
 	nim?: NimRuntimeAssetConfig;
 	bash?: BashRuntimeAssetConfig;
 	clojurescript?: ClojureScriptRuntimeAssetConfig;
@@ -4370,4 +4371,15 @@ export function resolveAheuiBaseUrl(
 	if (configured) return normalizeBaseUrl(configured, currentUrl);
 	const root = typeof options === 'string' ? options : options?.rootUrl;
 	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-aheui/`, currentUrl);
+}
+
+/** APECode's pinned original wheel is installed into Pyodide from this base URL. */
+export function resolveApecodeBaseUrl(
+	options: string | PlaygroundRuntimeAssets = '',
+	currentUrl: string = globalThis.location?.href || 'http://localhost/'
+) {
+	const configured = typeof options === 'object' ? options?.apecode?.baseUrl : undefined;
+	if (configured) return normalizeBaseUrl(configured, currentUrl);
+	const root = typeof options === 'string' ? options : options?.rootUrl;
+	return normalizeBaseUrl(`${normalizeRootUrl(root || '') || ''}/wasm-apecode/`, currentUrl);
 }
