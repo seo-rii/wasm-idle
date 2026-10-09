@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readBufferedStdin } from './stdinBuffer';
+import { WASI_INTERPRETERS } from './wasiInterpreters';
 
 const workerInstances: MockWorker[] = [];
 let suppressAutoLoadAck = false;
@@ -99,6 +100,62 @@ describe('WASM sandbox', () => {
 		expect(outputs).toContain('main=65\n');
 	});
 
+	it.each([1, WASI_INTERPRETERS.BRAINFUCK.bytes - 1])(
+		'rejects an undersized interpreter asset budget before starting a worker: %s',
+		async (maxAssetBytes) => {
+			const sandbox = new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+			await expect(
+				sandbox.load('/absproxy/5173', '', false, [], { limits: { maxAssetBytes } })
+			).rejects.toMatchObject({
+				name: 'AssetTooLargeError',
+				code: 'asset-too-large',
+				phase: 'asset',
+				runtimeId: 'BRAINFUCK',
+				actual: WASI_INTERPRETERS.BRAINFUCK.bytes,
+				limit: maxAssetBytes
+			});
+			expect(workerInstances).toHaveLength(0);
+			await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+			expect(workerInstances).toHaveLength(1);
+		}
+	);
+
+	it('allows the exact interpreter receipt budget and forwards it to asset fetching', async () => {
+		const sandbox = new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+		const maxAssetBytes = WASI_INTERPRETERS.BRAINFUCK.bytes;
+		await expect(
+			sandbox.load('/absproxy/5173', '', false, [], { limits: { maxAssetBytes } })
+		).resolves.toBeUndefined();
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith(
+			expect.objectContaining({ load: true, maxAssetBytes })
+		);
+	});
+
+	it('rechecks a tighter interpreter asset budget when reusing a loaded worker', async () => {
+		const sandbox = new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+		await sandbox.load('/absproxy/5173');
+		const worker = workerInstances[0];
+		await expect(
+			sandbox.load('/absproxy/5173', '', false, [], { limits: { maxAssetBytes: 1 } })
+		).rejects.toMatchObject({ name: 'AssetTooLargeError', limit: 1 });
+		expect(sandbox.worker).toBe(worker);
+		expect(worker.postMessage).toHaveBeenCalledTimes(1);
+		expect(worker.terminate).not.toHaveBeenCalled();
+		await expect(sandbox.load('/absproxy/5173')).resolves.toBeUndefined();
+		await expect(sandbox.run(',.', false, false, undefined, [], { stdin: 'Q' })).resolves.toBe(
+			true
+		);
+		expect(workerInstances).toHaveLength(1);
+	});
+
+	it('keeps raw WASM startup independent of a downloadable interpreter budget', async () => {
+		const sandbox = new Wasm();
+		await expect(
+			sandbox.load('/absproxy/5173', '', false, [], { limits: { maxAssetBytes: 1 } })
+		).resolves.toBeUndefined();
+		expect(workerInstances[0].postMessage).toHaveBeenCalledWith({ load: true, log: false });
+	});
+
 	it('terminates WASM output before exceeding the cumulative UTF-8 byte limit', async () => {
 		const sandbox = new Wasm();
 		const output = vi.fn();
@@ -192,6 +249,78 @@ describe('WASM sandbox', () => {
 				activePath: 'nested/main.wasm',
 				workspaceFiles: [{ path: 'fixtures/helper.wasm', content: 'AGFzbQ==' }]
 			})
+		);
+	});
+
+	it.each([
+		{ activePath: 'a'.repeat(59) + '.bf', normalizedPath: 'a'.repeat(59) + '.bf' },
+		{ activePath: '한'.repeat(19) + 'ab.bf', normalizedPath: '한'.repeat(19) + 'ab.bf' },
+		{ activePath: 'src\\한글.bf', normalizedPath: 'src/한글.bf' }
+	])(
+		'dispatches a Brainfuck source within the UTF-8 path limit: $activePath',
+		async ({ activePath, normalizedPath }) => {
+			const sandbox = new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+			await sandbox.load('/absproxy/5173');
+
+			await expect(
+				sandbox.run(',[.,]', false, false, undefined, [], { activePath, stdin: 'A' })
+			).resolves.toBe(true);
+			expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
+				expect.objectContaining({ activePath: normalizedPath, code: ',[.,]', stdin: 'A' })
+			);
+		}
+	);
+
+	it.each([
+		{ name: 'ASCII byte overflow', activePath: 'a'.repeat(60) + '.bf', prepare: false },
+		{ name: 'Unicode byte overflow', activePath: '한'.repeat(20) + '.bf', prepare: false },
+		{
+			name: 'filename truncation collision',
+			activePath: 'a'.repeat(62) + '.bf',
+			workspaceFiles: [{ path: 'a'.repeat(62), content: '+'.repeat(66) + '.' }],
+			prepare: false
+		},
+		{ name: 'prepare byte overflow', activePath: 'a'.repeat(60) + '.bf', prepare: true }
+	])(
+		'rejects Brainfuck $name before worker dispatch and allows recovery',
+		async ({ activePath, workspaceFiles, prepare }) => {
+			const sandbox = new Wasm(WASI_INTERPRETERS.BRAINFUCK);
+			const output = vi.fn();
+			sandbox.output = output;
+			await sandbox.load('/absproxy/5173');
+
+			await expect(
+				sandbox.run('+'.repeat(65) + '.', prepare, false, undefined, [], {
+					activePath,
+					workspaceFiles,
+					stdin: ''
+				})
+			).rejects.toMatchObject({
+				name: 'RuntimeConfigurationError',
+				code: 'runtime-configuration',
+				phase: 'configuration',
+				runtimeId: 'BRAINFUCK',
+				message: expect.stringContaining('62')
+			});
+			expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(1);
+			expect(output).not.toHaveBeenCalled();
+			await expect(
+				sandbox.run(',.', false, false, undefined, [], { stdin: 'Q' })
+			).resolves.toBe(true);
+			expect(workerInstances[0].postMessage).toHaveBeenCalledTimes(2);
+		}
+	);
+
+	it('keeps longer source paths available to the raw WASM sandbox', async () => {
+		const sandbox = new Wasm();
+		await sandbox.load('/absproxy/5173');
+		const activePath = 'a'.repeat(80) + '.wasm';
+
+		await expect(
+			sandbox.run('AGFzbQ==', false, false, undefined, [], { activePath, stdin: '' })
+		).resolves.toBe(true);
+		expect(workerInstances[0].postMessage).toHaveBeenLastCalledWith(
+			expect.objectContaining({ activePath })
 		);
 	});
 

@@ -363,18 +363,23 @@ export async function runStdinBrowserProbe(options) {
 			if (isProbeReady(activeState)) {
 				break;
 			}
-			await page.evaluate(async () => {
-				if (!navigator.serviceWorker) return;
-				try {
+			try {
+				await page.evaluate(async () => {
+					if (!navigator.serviceWorker) return;
 					await Promise.race([
 						navigator.serviceWorker.ready,
 						new Promise((resolve) => setTimeout(resolve, 1_500))
 					]);
-				} catch {
-					// Retry with a fresh navigation below.
-				}
-			});
-			await page.goto(requestedBrowserUrl.href, { waitUntil: 'domcontentloaded' });
+				});
+				await page.goto(requestedBrowserUrl.href, { waitUntil: 'domcontentloaded' });
+			} catch (error) {
+				// The isolation service worker can replace the first uncontrolled document.
+				if (
+					!String(error).includes('Execution context was destroyed') &&
+					!String(error).includes('net::ERR_ABORTED')
+				)
+					throw error;
+			}
 			await page.waitForTimeout(2_500 + attempt * 500);
 			activeState = await readActiveState(page);
 		}

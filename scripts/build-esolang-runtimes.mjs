@@ -39,6 +39,7 @@ const RUNTIMES = [
 		folder: 'wasm-brainfuck',
 		fileName: 'brainfuck.wasm',
 		sourcePath: 'main.bf',
+		maxSourcePathBytes: 62,
 		command: 'bfi',
 		args: [],
 		repository: 'https://github.com/susam/bfc',
@@ -92,6 +93,12 @@ const RUNTIMES = [
 		command: 'whitespace',
 		args: [],
 		initialMemoryBytes: 3145728,
+		patches: [
+			{
+				path: 'runtimes/esolangs/whitespace/fix-zero-dividend.patch',
+				sha256: '4b98a9f9c66926a62bd9994f6585ecc691f665322d8cf220c33ff10894c7fa81'
+			}
+		],
 		repository: 'https://github.com/koturn/Whitespace',
 		commit: '22a57aab21ff4a0307642383b0eb3660e1bb412d',
 		license: 'MIT',
@@ -280,6 +287,44 @@ async function readInputs(runtime) {
 			`${runtime.licenseFile.path} source header extraction`
 		);
 	}
+	const patches = await Promise.all(
+		(runtime.patches ?? []).map(async (patch) => {
+			const input = await describeFile(patch.path);
+			assertEqual(input.sha256, patch.sha256, patch.path);
+			return input;
+		})
+	);
+	let patchedSource;
+	let compiledSource;
+	if (patches.length > 0) {
+		const directory = await mkdtemp(path.join(tmpdir(), 'wasm-idle-esolang-patch-'));
+		try {
+			const temporarySource = path.join(directory, path.basename(runtime.source.path));
+			await cp(path.join(REPO_ROOT, runtime.source.path), temporarySource);
+			for (const patch of patches) {
+				const result = spawnSync(
+					'patch',
+					[
+						'--batch',
+						'--fuzz=0',
+						'--silent',
+						temporarySource,
+						path.join(REPO_ROOT, patch.path)
+					],
+					{ encoding: 'utf8', timeout: 10000 }
+				);
+				if (result.error || result.status !== 0)
+					throw (
+						result.error ??
+						new Error(result.stderr || `patch exited with ${result.status}.`)
+					);
+			}
+			patchedSource = await readFile(temporarySource, 'utf8');
+			compiledSource = await describeFile('<stdin>', temporarySource);
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	}
 	return {
 		upstream: {
 			repository: runtime.repository,
@@ -298,9 +343,11 @@ async function readInputs(runtime) {
 		inputs: [
 			source,
 			...additionalSources.map(({ path, bytes, sha256 }) => ({ path, bytes, sha256 })),
-			...(await Promise.all(runtime.glue.map((file) => describeFile(file))))
+			...(await Promise.all(runtime.glue.map((file) => describeFile(file)))),
+			...patches
 		],
 		...(additionalLicenses.length ? { additionalLicenses } : {}),
+		...(compiledSource ? { patchedSource, compiledSource } : {}),
 		license: {
 			path: 'LICENSE.txt',
 			bytes: licenseData.byteLength,
@@ -342,7 +389,7 @@ function buildArgs(runtime, outputPath) {
 				: flag
 		),
 		...(runtime.flags ?? []),
-		runtime.source.path,
+		...(runtime.patches?.length ? ['-x', 'c', '-'] : [runtime.source.path]),
 		...(runtime.additionalSources ?? [])
 			.filter((input) => input.path.endsWith('.c'))
 			.map((input) => input.path),
@@ -373,7 +420,8 @@ function receiptFor(runtime, inputs, toolchain, wasm) {
 							`static/${runtime.folder}/${runtime.fileName}`
 						)
 					: `static/${runtime.folder}/${runtime.fileName}`
-			)
+			),
+			...(inputs.compiledSource ? { source: inputs.compiledSource } : {})
 		},
 		wasm
 	};
@@ -504,6 +552,9 @@ async function main() {
 					{
 						cwd: isGo ? path.join(REPO_ROOT, runtime.sourceRoot) : REPO_ROOT,
 						encoding: 'utf8',
+						...(inputs.patchedSource !== undefined
+							? { input: inputs.patchedSource }
+							: {}),
 						env: {
 							...process.env,
 							...(isGo ? GO_BUILD_ENV : {}),

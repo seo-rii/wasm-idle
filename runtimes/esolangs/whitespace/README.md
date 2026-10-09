@@ -4,7 +4,8 @@ This runtime runs [koturn's Whitespace interpreter](https://github.com/koturn/Wh
 including the version 0.3 copy and slide instructions. `vendor/whitespace.c` and
 `LICENSE` are verbatim MIT-licensed upstream files pinned to
 `22a57aab21ff4a0307642383b0eb3660e1bb412d`. No handwritten language parser or
-instruction executor is used.
+instruction executor is used. The build applies the documented two-line
+`fix-zero-dividend.patch` to a temporary copy of that original source.
 
 The source and license URLs and SHA256 hashes are pinned in
 `scripts/build-esolang-runtimes.mjs` and recorded in
@@ -22,7 +23,10 @@ heap and call stack. Stack and heap values are signed 32-bit integers under wasm
 Its `getchar` instruction reads a byte into the heap and stores -1 at EOF;
 character output writes a byte, allowing UTF-8 text to be echoed byte for byte.
 Numeric input and output use the upstream `scanf("%d")` and `printf("%d")`
-behavior. Arithmetic division and remainder follow signed C integer operations.
+behavior. Arithmetic division and remainder follow signed C integer operations. The build
+patch corrects the original divide/remainder guards to check the divisor (`a`)
+instead of the dividend (`b`). Thus zero divided by a nonzero integer returns
+zero, while a zero divisor still aborts with the original assertion handling.
 Each browser execution starts with a new WebAssembly instance and receives the
 existing worker's stdin, output and cancellation handling.
 
@@ -50,15 +54,23 @@ WASI_SDK_PATH="$HOME/.local/share/wasi-sdk-33" TMPDIR=/data \
 then regenerates the shared interpreter profile. `--check` verifies pinned inputs
 and checked-in artifacts without requiring an SDK. Building with neither flag
 recompiles into a temporary directory and checks byte-for-byte reproducibility.
-No npm dependency or network fetch is required.
+The system `patch` command is required; no npm dependency or network fetch is required.
+The build verifies the patch SHA256, applies it with zero fuzz to a temporary
+source copy, and records both original and patched-source hashes in the receipt.
+Clang reads the patched source through stdin so assertion file names and the
+resulting WASM do not contain machine-specific temporary paths.
 
 The compiler command is:
 
 ```sh
+cp runtimes/esolangs/whitespace/vendor/whitespace.c /tmp/whitespace.c
+patch --batch --fuzz=0 --silent /tmp/whitespace.c \
+  runtimes/esolangs/whitespace/fix-zero-dividend.patch
+
 "$WASI_SDK_PATH/bin/clang" --target=wasm32-wasip1 -std=c99 -O2 -fno-ident \
   -Wl,--strip-all -Wl,-z,stack-size=131072 -Wl,--initial-memory=3145728 \
-  -Wl,--max-memory=67108864 runtimes/esolangs/whitespace/vendor/whitespace.c \
-  -o static/wasm-whitespace/whitespace.wasm
+  -Wl,--max-memory=67108864 -x c - \
+  -o static/wasm-whitespace/whitespace.wasm < /tmp/whitespace.c
 ```
 
 Only standard wasi-libc APIs are linked, including `getopt_long` for the original

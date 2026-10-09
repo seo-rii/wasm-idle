@@ -262,6 +262,35 @@ describe('Aheui on the Pyodide worker', { timeout: 30_000 }, () => {
 		expect(bufferedStdin.waitForBufferedStdin).toHaveBeenCalledTimes(3);
 	});
 
+	it.each(['stdout', 'stderr'] as const)(
+		'preserves leading BOMs in split %s writes and fresh executions',
+		async (stream) => {
+			const { onmessage, postMessage, pyodide } = await createRuntimeHarness();
+			await onmessage({
+				data: { load: true, assets: bridgedAssets, extension: aheuiExtension() }
+			});
+			const text = '\ufeff가🙂\ufeffx';
+			pyodide.runPythonAsync.mockImplementation(async () => {
+				const write =
+					stream === 'stdout'
+						? pyodide.setStdout.mock.calls.at(-1)![0].write
+						: pyodide.setStderr.mock.calls.at(-1)![0].write;
+				for (const byte of new TextEncoder().encode(text)) {
+					expect(write(new Uint8Array([byte]))).toBe(1);
+				}
+			});
+			for (let run = 0; run < 2; run += 1) {
+				postMessage.mockClear();
+				await onmessage({ data: executionData('밯맣희', { stdin: text }) });
+				const output = postMessage.mock.calls
+					.map(([message]) => message.output || '')
+					.join('');
+				expect(output).toBe(text);
+				expect(postMessage).toHaveBeenCalledWith({ results: true });
+			}
+		}
+	);
+
 	it('streams split UTF-8 and NUL, cleans up after errors, then permits a fresh execution', async () => {
 		const { onmessage, postMessage, pyodide, files } = await createRuntimeHarness();
 		await onmessage({
