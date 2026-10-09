@@ -194,6 +194,75 @@ describe('original GolfScript interpreter on the real Ruby/WASI VM', () => {
 		}
 	}, 60000);
 
+	it('preserves leading BOM characters from stdin, literals and split writes', async () => {
+		const send = await ready();
+		const fixtures: Array<[string, string, string]> = [
+			['#', '\ufeffA', '\ufeffA\n'],
+			[';"\ufeffB"', '', '\ufeffB\n'],
+			[
+				String.raw`;"#{[0xef,0xbb,0xbf].each { |byte| STDOUT.write([byte].pack('C')) }; 'A'}"`,
+				'',
+				'\ufeffA\n'
+			]
+		];
+		for (const [code, stdin, expected] of fixtures) {
+			messages.length = 0;
+			await send(request(code, { stdin }));
+			expect(messages.filter((message) => message.error)).toEqual([]);
+			expect(stdout()).toBe(expected);
+		}
+	}, 30000);
+
+	it('streams split UTF-8 independently for stdout and stderr and reports written bytes', async () => {
+		const send = await ready();
+		const fixtures: Array<[string, string]> = [
+			[
+				String.raw`;"#{[0xed,0x95,0x9c].each { |byte| STDOUT.write([byte].pack('C')) }; 'A'}"`,
+				'한A\n'
+			],
+			[
+				String.raw`;"#{STDOUT.write([0xed].pack('C')); STDERR.write([0xef,0xbb,0xbf].pack('C*') + 'stderr'); STDOUT.write([0x95,0x9c].pack('C*')); 'A'}"`,
+				'\ufeffstderr한A\n'
+			],
+			[
+				String.raw`;"#{written = STDOUT.write('A', [0xed,0x95,0x9c].pack('C*'), 'C'); raise 'wrong byte count' unless written == 5; 'D'}"`,
+				'A한CD\n'
+			]
+		];
+		for (const [code, expected] of fixtures) {
+			messages.length = 0;
+			await send(request(code));
+			expect(messages.filter((message) => message.error)).toEqual([]);
+			expect(stdout()).toBe(expected);
+		}
+	}, 30000);
+
+	it.each([false, true])(
+		'flushes incomplete UTF-8 on termination and resets both streams (failure=%s)',
+		async (failure) => {
+			const send = await ready();
+			messages.length = 0;
+			const ending = failure ? "raise 'decoder-failure'" : "''";
+			const code = `;"#{STDOUT.write([0xea].pack('C')); STDERR.write([0xed].pack('C')); ${ending}}"`;
+			await send(request(code, { args: ['-q'] }));
+			expect(stdout()).toBe('\ufffd\ufffd');
+			if (failure) {
+				expect(
+					messages.some((message) => String(message.error).includes('decoder-failure'))
+				).toBe(true);
+				expect(messages.some((message) => message.results)).toBe(false);
+			} else {
+				expect(messages.filter((message) => message.error)).toEqual([]);
+				expect(messages.at(-1)).toEqual({ results: true });
+			}
+			messages.length = 0;
+			await send(request('#', { stdin: '\ufefffresh' }));
+			expect(stdout()).toBe('\ufefffresh\n');
+			expect(messages.filter((message) => message.error)).toEqual([]);
+		},
+		30000
+	);
+
 	it('mounts the latest source at exact Unicode filenames and keeps source/helpers/interpreter readonly', async () => {
 		const activePath = "examples/한글#{1} 'quoted'.gs";
 		const workspaceFiles = [{ path: 'helper.txt', content: 'workspace-value' }];

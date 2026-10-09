@@ -1462,6 +1462,58 @@ state main { // Preserve the original grammar and dispatch.
 				stdin: '가😀\0\n',
 				output: '가😀\0\n\n'
 			},
+			{
+				name: 'leading-bom-stdin-is-preserved',
+				source: '#',
+				stdin: '\ufeff한🦀',
+				output: '\ufeff한🦀\n'
+			},
+			{
+				name: 'leading-bom-literal-is-preserved',
+				source: ';"\ufeffBOM"',
+				stdin: '',
+				output: '\ufeffBOM\n'
+			},
+			{
+				name: 'split-bom-writes',
+				source: String.raw`;"#{[0xef,0xbb,0xbf].each { |byte| STDOUT.write([byte].pack('C')) }; 'A'}"`,
+				stdin: '',
+				output: '\ufeffA\n'
+			},
+			{
+				name: 'split-utf8-writes',
+				source: String.raw`;"#{[0xed,0x95,0x9c].each { |byte| STDOUT.write([byte].pack('C')) }; 'A'}"`,
+				stdin: '',
+				output: '한A\n'
+			},
+			{
+				name: 'independent-stdout-stderr-decoders',
+				source: String.raw`;"#{STDOUT.write([0xed].pack('C')); STDERR.write([0xef,0xbb,0xbf].pack('C*') + 'stderr'); STDOUT.write([0x95,0x9c].pack('C*')); 'A'}"`,
+				stdin: '',
+				output: '\ufeffstderr한A\n'
+			},
+			{
+				name: 'incomplete-utf8-flushed-on-success',
+				source: String.raw`;"#{STDOUT.write([0xea].pack('C')); STDERR.write([0xed].pack('C')); ''}"`,
+				stdin: '',
+				output: '\ufffd\ufffd',
+				options: { programArgs: ['-q'] }
+			},
+			{
+				name: 'incomplete-utf8-flushed-on-failure',
+				source: String.raw`;"#{STDOUT.write([0xea].pack('C')); STDERR.write([0xed].pack('C')); raise 'decoder-failure'}"`,
+				stdin: '',
+				fails: true,
+				failureMessage: 'decoder-failure',
+				failureOutput: '\ufffd\ufffd',
+				options: { programArgs: ['-q'] }
+			},
+			{
+				name: 'fresh-bom-after-decoder-failure',
+				source: '#',
+				stdin: '\ufefffresh',
+				output: '\ufefffresh\n'
+			},
 			{ name: 'empty-explicit-eof', source: '#', stdin: '', output: '\n' },
 			{
 				name: 'eof-without-line-ending',

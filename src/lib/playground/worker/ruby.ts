@@ -272,6 +272,7 @@ interface PreparedRubyExecution {
 	activate(initial: string | null, provider: () => string | null): void;
 	hasOutput(): { stdout: boolean; stderr: boolean };
 	mountActiveSource?(source: string): void;
+	flushOutput?(): void;
 }
 const defaultContext = (golfscript = false): RubyExecutionContext => ({
 	args: [],
@@ -360,6 +361,15 @@ async function initializeRubyExecution(
 		stdout: (output: string) => emit(output, false),
 		stderr: (output: string) => emit(output, true)
 	});
+	// Ruby's default printer decodes each write separately and removes leading BOMs.
+	// GolfScript preserves the original CLI's bytes across writes and across iovecs.
+	const golfscriptDecoders = loaded.golfscriptBytes
+		? {
+				stdout: new TextDecoder('utf-8', { ignoreBOM: true }),
+				stderr: new TextDecoder('utf-8', { ignoreBOM: true })
+			}
+		: undefined;
+	let printerMemory: WebAssembly.Memory | undefined;
 	const rubyStdin = createRubyStdin(runtime, initial, provider, deferred);
 	const { File, OpenFile, PreopenDirectory, WASI } = runtime.wasiShim;
 	const root = workspaceContents(runtime, snapshot.workspaceFiles);
@@ -417,9 +427,39 @@ async function initializeRubyExecution(
 			args: ['ruby.wasm', '-EUTF-8', '-e_=0', '--', ...snapshot.args],
 			addToImports(imports: WebAssembly.Imports) {
 				printer.addToImports(imports);
+				if (!golfscriptDecoders) return;
+				const wasiImports = imports.wasi_snapshot_preview1 as Record<string, any>;
+				const defaultFdWrite = wasiImports.fd_write;
+				wasiImports.fd_write = (
+					fd: number,
+					iovs: number,
+					iovsLength: number,
+					nwritten: number
+				) => {
+					if (fd !== 1 && fd !== 2) return defaultFdWrite(fd, iovs, iovsLength, nwritten);
+					if (!printerMemory) throw new Error('Ruby output memory is not set.');
+					// Recreate the view after memory growth, which detaches the previous buffer.
+					const memory = new DataView(printerMemory.buffer);
+					const decoder =
+						fd === 1 ? golfscriptDecoders.stdout : golfscriptDecoders.stderr;
+					let written = 0;
+					let output = '';
+					for (let index = 0; index < iovsLength; index += 1) {
+						const entry = iovs + index * 8;
+						const offset = memory.getUint32(entry, true);
+						const length = memory.getUint32(entry + 4, true);
+						const bytes = new Uint8Array(printerMemory.buffer, offset, length);
+						output += decoder.decode(bytes, { stream: true });
+						written += length;
+					}
+					memory.setUint32(nwritten, written, true);
+					emit(output, fd === 2);
+					return runtime.wasiShim.wasi.ERRNO_SUCCESS;
+				};
 			},
 			setMemory(memory: WebAssembly.Memory) {
 				printer.setMemory(memory);
+				if (golfscriptDecoders) printerMemory = memory;
 			}
 		}));
 	} finally {
@@ -441,6 +481,10 @@ async function initializeRubyExecution(
 		hasOutput: () => ({ stdout: hasStdout, stderr: hasStderr }),
 		...(loaded.golfscriptBytes
 			? {
+					flushOutput() {
+						emit(golfscriptDecoders!.stdout.decode(), false);
+						emit(golfscriptDecoders!.stderr.decode(), true);
+					},
 					mountActiveSource(source: string) {
 						const parts = normalizeWorkspacePath(snapshot.activePath).split('/');
 						const name = parts.pop()!;
@@ -597,7 +641,8 @@ self.onmessage = async (event: { data: any }) => {
 			const argv = [`/${normalizeWorkspacePath(activePath)}`, ...args]
 				.map((value: string) => `'${value.replace(/\\/gu, '\\\\').replace(/'/gu, "\\'")}'`)
 				.join(', ');
-			vm.eval(`ARGV.replace([${argv}])
+			try {
+				vm.eval(`ARGV.replace([${argv}])
 STDIN.define_singleton_method(:isatty) { false }
 $0 = 'golfscript.rb'
 begin
@@ -606,6 +651,9 @@ ensure
   STDOUT.flush
   STDERR.flush
 end`);
+			} finally {
+				execution.flushOutput!();
+			}
 		} else {
 			vm.eval(code);
 		}
