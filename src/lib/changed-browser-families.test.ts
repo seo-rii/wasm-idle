@@ -14,12 +14,52 @@ describe('runtime browser CI selection', () => {
 			'clang',
 			'debug',
 			'dotnet',
+			'esolangs',
 			'nim'
 		]);
 		expect(changedBrowserFamilies(['packages/debug/src/controller.ts'])).toEqual(['debug']);
 		expect(changedBrowserFamilies(['src/lib/playground/assetBridge.ts'])).toEqual(['clang']);
-		expect(changedBrowserFamilies(['src/lib/playground/assetBridge.test.ts'])).toEqual(['clang']);
+		expect(changedBrowserFamilies(['src/lib/playground/assetBridge.test.ts'])).toEqual([
+			'clang'
+		]);
 		expect(changedBrowserFamilies(['README.md'])).toEqual([]);
+	});
+	it('requires interpreter browser coverage for interpreter assets and execution changes', () => {
+		for (const file of [
+			'runtimes/esolangs/brainfuck/vendor/bfc.c',
+			'static/wasm-brainfuck/brainfuck.wasm',
+			'static/wasm-befunge93/befunge93.wasm',
+			'static/wasm-whitespace/whitespace.wasm',
+			'static/wasm-malbolge/malbolge.wasm',
+			'static/wasm-aheui/aheui-1.2.5-py3-none-any.whl',
+			'static/wasm-uhmlang/uhmlang.wasm',
+			'static/wasm-lolcode/lolcode.wasm',
+			'static/wasm-apecode/apecode-0.1.0-py3-none-any.whl',
+			'scripts/sync-wasm-apecode.mjs',
+			'src/lib/playground/apecode.ts',
+			'src/lib/playground/worker/apecode.runtime.test.ts',
+			'src/lib/playground/wasmApecodeVersion.ts',
+			'scripts/sync-wasm-aheui.mjs',
+			'src/lib/playground/aheui.ts',
+			'src/lib/playground/assets.ts',
+			'src/lib/playground/worker/aheui.runtime.test.ts',
+			'src/lib/playground/python.ts',
+			'src/lib/playground/worker/python.ts',
+			'src/lib/playground/wasmAheuiVersion.ts',
+			'scripts/build-esolang-runtimes.mjs',
+			'scripts/support-matrix.mjs',
+			'src/lib/playground/index.ts',
+			'src/lib/playground/wasiInterpreters.ts',
+			'src/lib/playground/wasm.ts',
+			'src/lib/playground/worker/wasm.ts',
+			'src/lib/playground/worker/wasiInterpreters.test.ts',
+			'src/lib/playground/esolangs.playwright.test.ts'
+		]) {
+			expect(changedBrowserFamilies([file]), file).toEqual(['esolangs']);
+		}
+		expect(changedBrowserFamilies(['scripts/stdin-browser-probe-lib.mjs'])).toContain(
+			'esolangs'
+		);
 	});
 	it('selects recovery tests alongside normal .NET and Nim execution', () => {
 		const dotnet = createAllLanguageBrowserTestPlan({ family: 'dotnet' });

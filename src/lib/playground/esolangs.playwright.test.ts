@@ -26,8 +26,9 @@ type InterpreterCase = {
 	fails?: boolean;
 	failureMessage?: string;
 	failureOutput?: string;
+	configurationError?: boolean;
 	options?: Pick<SandboxExecutionOptions, 'activePath' | 'programArgs' | 'workspaceFiles'>;
-	expectedError?: { code: string; phase: string; message: string };
+	expectedError?: { code?: string; phase?: string; message: string };
 };
 
 type InterpreterBrowserProfile = {
@@ -272,6 +273,69 @@ const profiles: InterpreterBrowserProfile[] = [
 				stdin: '첫째 줄 🦀\nsecond line\n',
 				output: '첫째 줄 🦀\nsecond line\n'
 			},
+			{
+				name: 'leading-utf8-bom',
+				source: ',[.,]',
+				stdin: '\ufeffBOM 한글 🦀\n',
+				output: '\ufeffBOM 한글 🦀\n'
+			},
+			{
+				name: 'leading-utf8-bom-without-newline',
+				source: ',[.,]',
+				stdin: '\ufeffx',
+				output: '\ufeffx'
+			},
+			{
+				name: 'nested-unicode-source-path',
+				source: ',[.,]',
+				stdin: '경로 🦀\n',
+				output: '경로 🦀\n',
+				options: { activePath: 'examples/한글🦀.bf' }
+			},
+			{
+				name: 'ascii-source-path-byte-boundary',
+				source: '+'.repeat(65) + '.',
+				stdin: '',
+				output: 'A',
+				options: { activePath: 'a'.repeat(59) + '.bf' }
+			},
+			{
+				name: 'unicode-source-path-byte-boundary',
+				source: '+'.repeat(65) + '.',
+				stdin: '',
+				output: 'A',
+				options: { activePath: '한'.repeat(19) + 'ab.bf' }
+			},
+			{
+				name: 'ascii-source-path-byte-overflow',
+				source: '+'.repeat(65) + '.',
+				stdin: '',
+				configurationError: true,
+				options: { activePath: 'a'.repeat(60) + '.bf' }
+			},
+			{
+				name: 'unicode-source-path-byte-overflow',
+				source: '+'.repeat(65) + '.',
+				stdin: '',
+				configurationError: true,
+				options: { activePath: '한'.repeat(20) + '.bf' }
+			},
+			{
+				name: 'truncated-source-path-collision',
+				source: '+'.repeat(65) + '.',
+				stdin: '',
+				configurationError: true,
+				options: {
+					activePath: 'a'.repeat(62) + '.bf',
+					workspaceFiles: [{ path: 'a'.repeat(62), content: '+'.repeat(66) + '.' }]
+				}
+			},
+			{
+				name: 'after-source-path-rejection',
+				source: ',[.,]',
+				stdin: 'path-recovered\n',
+				output: 'path-recovered\n'
+			},
 			{ name: 'empty-explicit-eof', source: ',[.,]', stdin: '', output: '' },
 			{ name: 'partial-explicit-stdin', source: ',.', stdin: 'AB', output: 'A' },
 			{
@@ -343,7 +407,7 @@ const profiles: InterpreterBrowserProfile[] = [
 				expectedError: {
 					code: 'runtime-configuration',
 					phase: 'configuration',
-					message: 'BEFUNGE93 source path exceeds 125 UTF-8 bytes'
+					message: 'BEFUNGE93 source path exceeds the 125-byte interpreter limit'
 				}
 			},
 			{ name: 'signed-arithmetic', source: '38-.@', stdin: '', output: '-5 ' },
@@ -519,6 +583,60 @@ const profiles: InterpreterBrowserProfile[] = [
 					ws.halt,
 				stdin: '',
 				output: '-2\n-1'
+			},
+			...([3, -3] as const).flatMap((divisor) => [
+				{
+					name: `zero-dividend-division-${divisor}`,
+					source: ws.push(0) + ws.push(divisor) + ws.divide + ws.printNumber + ws.halt,
+					stdin: '',
+					output: '0'
+				},
+				{
+					name: `zero-dividend-remainder-${divisor}`,
+					source: ws.push(0) + ws.push(divisor) + ws.remainder + ws.printNumber + ws.halt,
+					stdin: '',
+					output: '0'
+				}
+			]),
+			...([7, -7] as const).map((dividend) => ({
+				name: `negative-divisor-${dividend}`,
+				source:
+					ws.push(dividend) +
+					ws.push(-3) +
+					ws.divide +
+					ws.printNumber +
+					whitespaceNewline +
+					ws.push(dividend) +
+					ws.push(-3) +
+					ws.remainder +
+					ws.printNumber +
+					ws.halt,
+				stdin: '',
+				output: dividend > 0 ? '-2\n1' : '2\n-1'
+			})),
+			{
+				name: 'zero-divisor-division',
+				source: ws.push(7) + ws.push(0) + ws.divide + ws.printNumber + ws.halt,
+				stdin: '',
+				expectedError: { message: 'unreachable' }
+			},
+			{
+				name: 'after-zero-divisor-division',
+				source: ws.push(0) + ws.push(3) + ws.divide + ws.printNumber + ws.halt,
+				stdin: '',
+				output: '0'
+			},
+			{
+				name: 'zero-divisor-remainder',
+				source: ws.push(-7) + ws.push(0) + ws.remainder + ws.printNumber + ws.halt,
+				stdin: '',
+				expectedError: { message: 'unreachable' }
+			},
+			{
+				name: 'after-zero-divisor-remainder',
+				source: ws.push(0) + ws.push(-3) + ws.remainder + ws.printNumber + ws.halt,
+				stdin: '',
+				output: '0'
 			},
 			{
 				name: '32bit-integer-wrap',
@@ -763,6 +881,18 @@ const profiles: InterpreterBrowserProfile[] = [
 		infiniteSource: '아',
 		runtimePath: 'wasm-aheui/aheui-1.2.5-py3-none-any.whl',
 		cases: [
+			{
+				name: 'leading-utf8-bom',
+				source: aheuiEcho('\ufeff첫 줄 🦀\n'),
+				stdin: '\ufeff첫 줄 🦀\n',
+				output: '\ufeff첫 줄 🦀\n'
+			},
+			{
+				name: 'bom-only-without-newline',
+				source: aheuiEcho('\ufeff'),
+				stdin: '\ufeff',
+				output: '\ufeff'
+			},
 			{
 				name: 'utf8-codepoints',
 				source: aheuiEcho('첫째 줄 🦀\nsecond line\n'),
@@ -1500,13 +1630,26 @@ async function withBrowserPreview(action: (browserUrl: string) => Promise<void>)
 	await runWithBrowserProbeSessionLock(async () => {
 		const configuredUrl = process.env.WASM_IDLE_BROWSER_URL || '';
 		const configured = configuredUrl ? new URL(configuredUrl) : undefined;
-		const server = shouldReuseProvidedBrowserUrl(configuredUrl)
-			? { browserUrl: configuredUrl, close: async () => {} }
-			: await startBrowserPreviewServer({
-					origin: configured?.origin ?? 'http://127.0.0.1:4980',
-					...(configured ? { basePath: configured.pathname } : {}),
-					serverMode: 'dev'
-				});
+		const previewMode = process.env.WASM_IDLE_BROWSER_SERVER_MODE === 'preview';
+		const previousReuse = process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW;
+		let server: { browserUrl: string; close: () => Promise<void> };
+		try {
+			// The direct-consumer test imports a source module that built previews do not serve.
+			if (previewMode) process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW = '0';
+			server =
+				!previewMode && shouldReuseProvidedBrowserUrl(configuredUrl)
+					? { browserUrl: configuredUrl, close: async () => {} }
+					: await startBrowserPreviewServer({
+							origin: configured?.origin ?? 'http://127.0.0.1:4980',
+							...(configured ? { basePath: configured.pathname } : {}),
+							serverMode: 'dev'
+						});
+		} finally {
+			if (previewMode) {
+				if (previousReuse === undefined) delete process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW;
+				else process.env.WASM_IDLE_REUSE_LOCAL_PREVIEW = previousReuse;
+			}
+		}
 		try {
 			await action(server.browserUrl);
 		} finally {
@@ -1843,6 +1986,14 @@ for (const profile of profiles) {
 								expect(result.error, JSON.stringify(result)).toMatchObject(
 									testCase.expectedError
 								);
+							} else if (testCase.configurationError) {
+								expect(result.error, JSON.stringify(result)).toMatchObject({
+									code: 'runtime-configuration',
+									phase: 'configuration'
+								});
+								expect(result.error?.message).toMatch(/source path.+62/iu);
+								expect(result.output).toBe('');
+								expect(result.inputRequests).toBe(0);
 							} else if (testCase.fails) {
 								expect(result.error, JSON.stringify(result)).toBeDefined();
 								expect(result.error?.message).toMatch(

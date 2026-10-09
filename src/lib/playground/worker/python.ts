@@ -448,8 +448,8 @@ async function withInterpreterFileDescriptors(
 	const defaultPath = language === 'aheui' ? 'main.aheui' : 'main.ape';
 	const filename = `/tmp/__wasm_idle_${language}__/${normalizeWorkspacePath(activePath || '') || defaultPath}`;
 	const encoder = new TextEncoder();
-	const stdoutDecoder = new TextDecoder();
-	const stderrDecoder = new TextDecoder();
+	const stdoutDecoder = new TextDecoder('utf-8', { ignoreBOM: true });
+	const stderrDecoder = new TextDecoder('utf-8', { ignoreBOM: true });
 	const hasInitialStdin = typeof stdin === 'string';
 	let initialStdin: string | null = hasInitialStdin ? stdin : null;
 	let stdinEnded = false;
