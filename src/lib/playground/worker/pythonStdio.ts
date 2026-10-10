@@ -122,11 +122,14 @@ def __wasm_idle_make_flush_installer():
     import builtins
     import sys
     original_input, original_print = builtins.input, builtins.print
-    stdout, stderr = sys.stdout, sys.stderr
+    stdin, stdout, stderr = sys.stdin, sys.stdout, sys.stderr
 
     def install(drain):
         builtins.input, builtins.print = original_input, original_print
-        sys.stdout, sys.stderr = stdout, stderr
+        # setStdin changes the device callback, but Python's buffered reader can
+        # still contain bytes from the previous run. Give each run its own reader.
+        run_stdin = open(0, "r", encoding=stdin.encoding, errors=stdin.errors, closefd=False)
+        sys.stdin, sys.stdout, sys.stderr = run_stdin, stdout, stderr
         patches = []
         writing = [0]
         restored = [False]
@@ -145,8 +148,11 @@ def __wasm_idle_make_flush_installer():
                         delattr(stream, name)
                     except AttributeError:
                         pass
-            sys.stdout, sys.stderr = stdout, stderr
-            builtins.input, builtins.print = original_input, original_print
+            try:
+                run_stdin.close()
+            finally:
+                sys.stdin, sys.stdout, sys.stderr = stdin, stdout, stderr
+                builtins.input, builtins.print = original_input, original_print
 
         def guarded_write(original):
             def write(*args, **kwargs):

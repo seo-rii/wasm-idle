@@ -33,3 +33,29 @@ it('preserves native streams, explicit flushes and binary input on real Pyodide'
 		}
 	} finally { install.destroy(); }
 }, 120_000);
+
+it('discards unread Python input buffers between executions', async () => {
+	const runtime = await loadPyodide();
+	const install = runtime.runPython(PYTHON_FLUSH_HOOK_FACTORY);
+	const output: string[] = [];
+	try {
+		for (const [input, code] of [
+			['old\nleftover\n', 'import sys\nprint(sys.stdin.read(1))'],
+			['fresh\n', 'print(input())'],
+			['unused\n', 'import sys\nsys.stdin.close()\nraise ValueError("expected")'],
+			['recovered\n', 'print(input())']
+		]) {
+			const io = createPythonStdio(runtime, {
+				initialInput: input, readInput: () => null, emit: (text) => output.push(text)
+			});
+			const restore = install(io.flush);
+			try {
+				if (input === 'unused\n') expect(() => runtime.runPython(code)).toThrow('expected');
+				else runtime.runPython(code);
+			} finally {
+				try { restore(); } finally { restore.destroy(); io.close(); }
+			}
+		}
+		expect(output.join('')).toBe('o\nfresh\nrecovered\n');
+	} finally { install.destroy(); }
+}, 120_000);
