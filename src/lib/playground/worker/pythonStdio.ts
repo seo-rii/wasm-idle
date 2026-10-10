@@ -122,13 +122,32 @@ def __wasm_idle_make_flush_installer():
     import builtins
     import sys
     original_input, original_print = builtins.input, builtins.print
+    original_open = builtins.open
     stdin, stdout, stderr = sys.stdin, sys.stdout, sys.stderr
+    output_configurations = [
+        {name: getattr(stream, name) for name in
+         ("encoding", "errors", "line_buffering", "write_through") if hasattr(stream, name)}
+        for stream in (stdout, stderr)
+    ]
+
+    def recover_output(stream, descriptor, configuration):
+        # Native stdio descriptors belong to the runtime. A closed Python wrapper
+        # can be replaced without closing or replacing the underlying descriptor.
+        if stream.closed:
+            stream = original_open(descriptor, "w", buffering=1, closefd=False,
+                                   encoding=configuration.get("encoding", "utf-8"),
+                                   errors=configuration.get("errors", "strict"))
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            # Native runtime text streams start with the platform newline policy.
+            reconfigure(newline=None, **configuration)
+        return stream
 
     def install(drain):
         builtins.input, builtins.print = original_input, original_print
         # setStdin changes the device callback, but Python's buffered reader can
         # still contain bytes from the previous run. Give each run its own reader.
-        run_stdin = open(0, "r", encoding=stdin.encoding, errors=stdin.errors, closefd=False)
+        run_stdin = original_open(0, "r", encoding=stdin.encoding, errors=stdin.errors, closefd=False)
         sys.stdin, sys.stdout, sys.stderr = run_stdin, stdout, stderr
         patches = []
         writing = [0]
@@ -140,6 +159,7 @@ def __wasm_idle_make_flush_installer():
             setattr(stream, name, replacement)
 
         def undo():
+            nonlocal stdout, stderr
             for stream, name, existed, value in reversed(patches):
                 if existed:
                     setattr(stream, name, value)
@@ -151,8 +171,17 @@ def __wasm_idle_make_flush_installer():
             try:
                 run_stdin.close()
             finally:
-                sys.stdin, sys.stdout, sys.stderr = stdin, stdout, stderr
-                builtins.input, builtins.print = original_input, original_print
+                try:
+                    previous_stdout, previous_stderr = stdout, stderr
+                    stdout = recover_output(stdout, 1, output_configurations[0])
+                    stderr = recover_output(stderr, 2, output_configurations[1])
+                    if sys.__stdout__ is previous_stdout:
+                        sys.__stdout__ = stdout
+                    if sys.__stderr__ is previous_stderr:
+                        sys.__stderr__ = stderr
+                finally:
+                    sys.stdin, sys.stdout, sys.stderr = stdin, stdout, stderr
+                    builtins.input, builtins.print = original_input, original_print
 
         def guarded_write(original):
             def write(*args, **kwargs):
@@ -193,9 +222,11 @@ def __wasm_idle_make_flush_installer():
             restored[0] = True
             try:
                 try:
-                    stdout.flush()
+                    if not stdout.closed:
+                        stdout.flush()
                 finally:
-                    stderr.flush()
+                    if not stderr.closed:
+                        stderr.flush()
             finally:
                 undo()
         return restore
