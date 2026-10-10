@@ -175,7 +175,21 @@
 		"test:browser:lfortran": "WASM_IDLE_RUN_REAL_BROWSER_LFORTRAN=1 pnpm exec vitest run src/lib/playground/lfortran.playwright.test.ts",
 		"verify:page-lfortran": "node scripts/verify-page-lfortran-compiler.mjs",
 		"probe:odin-wasi-consumer": "node scripts/probe-odin-wasi-consumer.mjs",
-		"test:unit:odin-consumer": "node --test scripts/probe-odin-wasi-consumer.test.mjs"
+		"test:unit:odin-consumer": "node --test scripts/probe-odin-wasi-consumer.test.mjs",
+		"build:esolangs": "node scripts/build-esolang-runtimes.mjs --write",
+		"check:esolangs": "node scripts/build-esolang-runtimes.mjs --check && node scripts/sync-wasm-aheui.mjs --check && node scripts/sync-wasm-apecode.mjs --check && node scripts/sync-wasm-golfscript.mjs --check",
+		"test:browser:brainfuck": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_BRAINFUCK=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
+		"test:browser:befunge93": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_BEFUNGE93=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
+		"test:browser:whitespace": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_WHITESPACE=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
+		"test:browser:malbolge": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_MALBOLGE=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
+		"test:browser:aheui": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_AHEUI=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
+		"sync:wasm-aheui": "node scripts/sync-wasm-aheui.mjs",
+		"test:browser:uhmlang": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_UHMLANG=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
+		"test:browser:lolcode": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_LOLCODE=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
+		"test:browser:apecode": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_APECODE=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
+		"sync:wasm-apecode": "node scripts/sync-wasm-apecode.mjs",
+		"test:browser:golfscript": "WASM_IDLE_REQUIRE_BROWSER_TESTS=1 WASM_IDLE_RUN_REAL_BROWSER_GOLFSCRIPT=1 vitest run src/lib/playground/esolangs.playwright.test.ts",
+		"sync:wasm-golfscript": "node scripts/sync-wasm-golfscript.mjs"
 	},
 	"devDependencies": {
 		"acorn": "8.19.0",

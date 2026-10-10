@@ -1,0 +1,21 @@
+/* Interpreter for Malbolge.                                          */
+/* '98 Ben Olmstead.                                                  */
+/*                                                                    */
+/* Malbolge is the name of Dante's Eighth circle of Hell.  This       */
+/* interpreter isn't even Copylefted; I hereby place it in the public */
+/* domain.  Have fun...                                               */
+/*                                                                    */
+/* Note: in keeping with the idea that programming in Malbolge is     */
+/* meant to be hell, there is no debugger.                            */
+/*                                                                    */
+/* By the way, this code assumes that short is 16 bits.  I haven't    */
+/* seen any case where it isn't, but it might happen.  If short is    */
+/* longer than 16 bits, it will still work, though it will take up    */
+/* considerably more memory.                                          */
+/*                                                                    */
+/* If you are compiling with a 16-bit Intel compiler, you will need   */
+/* >64K data arrays; this means using the HUGE memory model on most   */
+/* compilers, but MS C, as of 8.00, possibly earlier as well, allows  */
+/* you to specify a custom memory-model; the best model to choose in  */
+/* this case is /Ashd (near code, huge data), I think.                */
+

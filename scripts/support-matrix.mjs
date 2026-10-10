@@ -159,6 +159,104 @@ function codeList(values) {
 /** @type {SupportMatrixRow[]} */
 export const supportMatrixRows = [
 	{
+		language: 'GolfScript',
+		ids: ['GOLFSCRIPT'],
+		runtime: 'Original GolfScript interpreter on Ruby/WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_GOLFSCRIPT',
+			language: 'GOLFSCRIPT'
+		}
+	},
+
+	{
+		language: 'APECode',
+		ids: ['APECODE'],
+		runtime: 'Original APECode interpreter on Pyodide',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_APECODE',
+			language: 'APECODE'
+		}
+	},
+
+	{
+		language: 'LOLCODE 1.3',
+		ids: ['LOLCODE'],
+		runtime: 'Original lci 1.3 interpreter on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_LOLCODE',
+			language: 'LOLCODE'
+		}
+	},
+
+	{
+		language: 'UHMLANG (엄준식)',
+		ids: ['UHMLANG'],
+		runtime: 'Original Umjunsik Go interpreter on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_UHMLANG',
+			language: 'UHMLANG'
+		}
+	},
+
+	{
+		language: 'Aheui',
+		ids: ['AHEUI'],
+		runtime: 'rpaheui 1.2.5 on Pyodide',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_AHEUI',
+			language: 'AHEUI'
+		}
+	},
+
+	{
+		language: 'Malbolge',
+		ids: ['MALBOLGE'],
+		runtime: 'Ben Olmstead Malbolge on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_MALBOLGE',
+			language: 'MALBOLGE'
+		}
+	},
+
+	{
+		language: 'Whitespace',
+		ids: ['WHITESPACE'],
+		runtime: 'koturn/Whitespace 0.3 on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_WHITESPACE',
+			language: 'WHITESPACE'
+		}
+	},
+
+	{
 		language: 'C3',
 		ids: ['C3'],
 		runtime: 'C3 0.8.3 + LLVM/lld WASM (byte ABI)',
@@ -234,6 +332,32 @@ export const supportMatrixRows = [
 			file: 'src/lib/playground/stdin.playwright.test.ts',
 			env: 'WASM_IDLE_RUN_REAL_BROWSER_STDIN',
 			language: 'PYTHON'
+		}
+	},
+	{
+		language: 'Befunge-93',
+		ids: ['BEFUNGE93'],
+		runtime: 'Chris Pressey Befunge-93 on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_BEFUNGE93',
+			language: 'BEFUNGE93'
+		}
+	},
+	{
+		language: 'Brainfuck',
+		ids: ['BRAINFUCK'],
+		runtime: 'susam/bfc on WASI',
+		stdin: 'Yes',
+		editorSupport: 'plain text',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/esolangs.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_BRAINFUCK',
+			language: 'BRAINFUCK'
 		}
 	},
 	{
@@ -943,6 +1067,98 @@ function staticWorkerCustomizationFor(runtimeKey, envKey = runtimeKey.toUpperCas
 
 /** @type {Map<string, RuntimeDetail>} */
 const runtimeDetailsByLanguage = new Map([
+	[
+		'GolfScript',
+		{
+			packageBase:
+				'darrenks/golfscript cded5425 (upstream MIT notice), original Ruby source on the bundled Ruby/WASI VM',
+			execution:
+				'Loads the unchanged GolfScript CLI in a fresh Ruby VM; supports stack operations, arrays, blocks, arbitrary integers, Ruby string interpolation and original -q/-n/-r options; reads stdin to EOF, or accepts argument-array input after --, with original implicit final output',
+			customization: `${code('runtimeAssets.golfscript.interpreterUrl')}, ${code('runtimeAssets.rootUrl')}, ${code('runtimeAssets.ruby')}, ${code('stdin')}, ${code('programArgs')}, ${code('activePath')}, ${code('workspaceFiles')}; code-pinned original script, readonly source files, execution limits and cancellation; prepare initializes Ruby without running GolfScript source`
+		}
+	],
+
+	[
+		'APECode',
+		{
+			packageBase:
+				'seo-rii/apecode 0.1.0 (c7ae98d3), original pure Python wheel on Pyodide; upstream has no declared standalone license',
+			execution:
+				'Runs the original parser and state-machine interpreter through run_source; reads numeric test cases to EOF, models rock weights, grippers and built-in states, and writes original result/trace bytes through Python file descriptors; each run creates fresh interpreter state',
+			customization: `${code('runtimeAssets.apecode.baseUrl')}, ${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; code-pinned local wheel; execution timeout, output and workspace limits plus cancellation; prepare loads the interpreter without parsing or running user source`
+		}
+	],
+
+	[
+		'LOLCODE 1.3',
+		{
+			packageBase: 'justinmeza/lci v1.3 (GPL-3.0-or-later), wasi-sdk 33.0 build',
+			execution:
+				'Runs the unchanged lci lexer, parser and interpreter for LOLCODE 1.3, including functions, loops, arrays, type casts and Unicode string escapes; GIMMEH reads a line and VISIBLE normally adds a newline; each run starts with fresh state',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+
+	[
+		'UHMLANG (엄준식)',
+		{
+			packageBase: 'rycont/umjunsik-lang e973f9d2 (MIT), Go 1.25.3 WASI build',
+			execution:
+				'Runs the original Go lexer, parser and evaluator with signed 64-bit arithmetic, variables, jumps and conditional statements; numeric stdin is line based and character output writes Unicode code points; each execution starts with fresh state',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+
+	[
+		'Aheui',
+		{
+			packageBase:
+				'aheui/rpaheui 1.2.5 (BSD-2-Clause) on Pyodide 314.0.7; one receipt-verified pure Python wheel',
+			execution:
+				'Runs the original rpaheui compiler and interpreter with --no-c --warning-limit=0, 26 stacks, a queue and a port, with Unicode character/integer stdin; normal halt returns its stack value; no handwritten parser or subset executor',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('runtimeAssets.aheui.baseUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare loads the interpreter without executing source`
+		}
+	],
+
+	[
+		'Malbolge',
+		{
+			packageBase:
+				'Original Ben Olmstead interpreter, TryItOnline/malbolge b0869870 (public domain), compiled with WASI SDK 33',
+			execution:
+				'Runs the original 59049-cell ternary and self-modifying interpreter; source-file input is separate from byte stdin/stdout; EOF stores 59048; requires at least two non-whitespace source bytes',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+
+	[
+		'Whitespace',
+		{
+			packageBase: 'koturn/Whitespace 22a57aab (MIT), compiled with WASI SDK 33',
+			execution:
+				'Runs the upstream Whitespace 0.3 interpreter with a documented divisor-guard correction, copy/slide, heap, labels, calls and signed 32-bit integers; character/numeric stdin and exact stdout; character EOF is -1; source limit 65535 UTF-8 bytes',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+
+	[
+		'Befunge-93',
+		{
+			packageBase: 'catseye/Befunge-93 8fe4065c (BSD-3-Clause), compiled with WASI SDK 33',
+			execution:
+				'Runs the original interpreter with an 80 by 25 wrapping playfield, signed 32-bit stack, string mode and self-modifying p/g instructions; character and integer stdin share the WASI terminal; character EOF is -1',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed quiet argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
+	[
+		'Brainfuck',
+		{
+			packageBase: 'susam/bfc b1b92fc (MIT), compiled with WASI SDK 33',
+			execution:
+				'Runs the pinned upstream interpreter in a browser Worker with a fresh read-only source filesystem; 30000 wrapping 8-bit cells, UTF-8 byte stdin/stdout, EOF sets the cell to zero',
+			customization: `${code('runtimeAssets.rootUrl')}, ${code('stdin')}, ${code('activePath')}, ${code('workspaceFiles')}; fixed interpreter argv; prepare compiles the runtime without executing or validating the source`
+		}
+	],
 	[
 		'C',
 		{

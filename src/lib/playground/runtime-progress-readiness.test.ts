@@ -37,6 +37,51 @@ type RuntimeReadinessAudit = EntryReadiness | StaticWorkerReadiness | TerminalRe
  * is the first safe user-visible readiness signal.
  */
 const runtimeReadinessAudit = {
+	GOLFSCRIPT: {
+		strategy: 'entry-signal',
+		hostModule: 'golfscript',
+		producerPath: 'src/lib/playground/worker/ruby.ts'
+	},
+	APECODE: {
+		strategy: 'entry-signal',
+		hostModule: 'apecode',
+		producerPath: 'src/lib/playground/worker/python.ts'
+	},
+	LOLCODE: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	UHMLANG: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	AHEUI: {
+		strategy: 'entry-signal',
+		hostModule: 'aheui',
+		producerPath: 'src/lib/playground/worker/python.ts'
+	},
+	MALBOLGE: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	WHITESPACE: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	BEFUNGE93: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
+	BRAINFUCK: {
+		strategy: 'entry-signal',
+		hostModule: 'wasm',
+		producerPath: 'src/lib/playground/worker/wasm.ts'
+	},
 	C3: { strategy: 'static-worker-fallback', hostModule: 'c3' },
 	GRAIN: { strategy: 'static-worker-fallback', hostModule: 'grain' },
 	C: { strategy: 'terminal-fallback', hostModule: 'clang' },
@@ -235,10 +280,12 @@ describe('runtime progress readiness audit', () => {
 			if (row.strategy !== 'entry-signal') continue;
 			const producerSource = readProjectSource(row.producerPath);
 			const ownHostSource = readProjectSource(`src/lib/playground/${row.hostModule}.ts`);
-			// Python-hosted languages inherit the Python host's worker progress forwarding.
+			// Interpreter wrappers inherit worker progress forwarding from their runtime host.
 			const hostSource = ownHostSource.includes('extends Python')
 				? readProjectSource('src/lib/playground/python.ts')
-				: ownHostSource;
+				: ownHostSource.includes('extends Ruby')
+					? readProjectSource('src/lib/playground/ruby.ts')
+					: ownHostSource;
 
 			expect(producerSource, `${languageId} producer must emit ready`).toMatch(
 				/kind:\s*['"]ready['"]/u

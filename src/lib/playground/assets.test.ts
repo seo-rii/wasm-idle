@@ -4,6 +4,8 @@ import { WASM_TINYGO_EXECUTABLE_GRAPH_PROFILE } from './wasmTinyGoVersion';
 import {
 	RUNTIME_LOAD_ASSETS,
 	resolveCobolBaseUrl,
+	resolveApecodeBaseUrl,
+	resolveGolfscriptRuntimeAssetConfig,
 	resolveVBaseUrl,
 	resolveDebugRuntimeUrls,
 	resolveFortranRuntimeAssetConfig,
@@ -14,6 +16,7 @@ import {
 import { BUNDLED_CLANG_ASSET_INTEGRITY } from './clangAssetIntegrity';
 import {
 	configureRuntimeAssetCache,
+	createRuntimeAssetsKey,
 	getRuntimeAssetCacheOptions,
 	TEAVM_RUNTIME_ASSET_RECEIPTS,
 	type RuntimeAssetKeySource
@@ -84,6 +87,54 @@ import {
 } from './wasmAwkVersion';
 
 describe('runtime asset config resolution', () => {
+	it('pins the GolfScript interpreter URL to the app root and keeps mirror identities separate', () => {
+		const currentUrl = 'https://idle.example.test/editor/';
+		const bundled = resolveGolfscriptRuntimeAssetConfig('/wasm-idle/', currentUrl);
+		expect(new URL(bundled.interpreterUrl).pathname).toBe(
+			'/wasm-idle/wasm-golfscript/golfscript.rb'
+		);
+		expect(new URL(bundled.interpreterUrl).search).toMatch(/^\?v=[a-f0-9]+$/u);
+		const options = {
+			golfscript: { interpreterUrl: 'https://assets.example.test/golfscript.rb' }
+		};
+		const resolved = resolveGolfscriptRuntimeAssetConfig(options, currentUrl);
+		expect(resolved.interpreterUrl).toBe(options.golfscript.interpreterUrl);
+		options.golfscript.interpreterUrl = 'https://mirror.example.test/golfscript.rb';
+		expect(resolved.interpreterUrl).toBe('https://assets.example.test/golfscript.rb');
+		expect(resolveGolfscriptRuntimeAssetConfig(options, currentUrl).assetKey).not.toBe(
+			resolved.assetKey
+		);
+		expect(createRuntimeAssetsKey(options)).not.toBe(
+			createRuntimeAssetsKey({
+				golfscript: { interpreterUrl: 'https://assets.example.test/golfscript.rb' }
+			})
+		);
+	});
+
+	it('resolves the original APECode wheel under the app root or an explicit base URL', () => {
+		const currentUrl = 'https://idle.example.test/editor/';
+		expect(resolveApecodeBaseUrl('/wasm-idle/', currentUrl)).toBe(
+			'https://idle.example.test/wasm-idle/wasm-apecode/'
+		);
+		expect(resolveApecodeBaseUrl({ rootUrl: '/playground' }, currentUrl)).toBe(
+			'https://idle.example.test/playground/wasm-apecode/'
+		);
+		expect(
+			resolveApecodeBaseUrl(
+				{
+					rootUrl: '/ignored',
+					apecode: { baseUrl: 'https://assets.example.test/apecode' }
+				},
+				currentUrl
+			)
+		).toBe('https://assets.example.test/apecode/');
+		expect(
+			createRuntimeAssetsKey({ apecode: { baseUrl: 'https://assets.example.test/apecode/' } })
+		).not.toBe(
+			createRuntimeAssetsKey({ apecode: { baseUrl: 'https://mirror.example.test/apecode/' } })
+		);
+	});
+
 	it('keeps asset options isolated between sessions without ambient environment settings', async () => {
 		const { resolveGoCompilerUrl, resolveTypeScriptModuleUrl } = await import('./assets');
 		const first = {
