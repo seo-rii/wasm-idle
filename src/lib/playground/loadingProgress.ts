@@ -112,7 +112,10 @@ export function createLoadingProgressController({
 			typeof event.estimatedFraction === 'number' && Number.isFinite(event.estimatedFraction)
 				? event.estimatedFraction
 				: estimatedPhaseProgress[event.phase];
-		const estimatedValue = Math.min(0.99, Math.max(state.value, estimate, 0));
+		// Cap new estimates, not a previously completed byte measurement. Otherwise a
+		// late unmeasured sample regresses the same visible phase from 100% to 99%.
+		// A different measured phase still uses its own local denominator below.
+		const estimatedValue = Math.max(state.value, Math.min(0.99, Math.max(estimate, 0)));
 		const { measurement } = event;
 		if (!measurement) {
 			state = {
