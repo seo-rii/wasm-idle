@@ -18,7 +18,7 @@ const dir = new URL('../packages/llvm-core/runtime/clang/src/', import.meta.url)
 const normalize = (s) => s.replaceAll('\\', '/').split('/').filter((part) => part && part !== '.' && part !== '..').join('/');
 const workspace = { normalizeWorkspacePath: normalize, normalizeDwarfWorkspacePath: (s) => normalize(s).replace(/^workspace\//, ''),
  resolveBuildArtifactNames(language, input) { input ||= language === 'C' ? 'main.c' : 'main.cc'; const stem = input.split('/').pop().replace(/\.[^.]+$/, ''); return { input, obj: stem + '.o', wasm: stem + '.wasm' }; } };
-const resolveDebugMode = (o) => o.debugMode ?? (o.debug ? 'trace' : 'none');
+const { resolveDebugMode } = load(new URL('types.ts', dir));
 const wasmBytes = new Uint8Array([0,97,115,109,1,0,0,0]);
 class LegacyRuntime {
  constructor() {
@@ -98,6 +98,31 @@ test('reserved paths and multi-file trace debug are rejected', async () => {
  const r = new Runtime(); await assert.rejects(r.compileArtifact('A', { activePath: '__wasm_idle_build/a.c' }), /reserved/);
  await assert.rejects(r.compileArtifact('A', { debugMode: 'trace', workspaceFiles: [{ path: 'helper.c', content: 'B' }] }), /multiple/);
  assert.equal(r.compiles.length, 0);
+});
+test('rejected build requests invalidate an earlier executable before returning an error', async () => {
+ for (const request of [
+  { activePath: '__wasm_idle_build/a.c' },
+  { debugMode: 'trace', workspaceFiles: [{ path: 'helper.c', content: 'B' }] },
+  { debugMode: 'unsupported' }
+ ]) {
+  const r = new Runtime(); await r.compileArtifact('A');
+  await assert.rejects(r.compileArtifact('B', request));
+  assert.ok(r.wasm === undefined);
+  assert.equal(r.lastBuildKey, '');
+  await r.compileArtifact('A');
+  assert.equal(r.compiles.length, 2);
+ }
+});
+test('browser Module compilation failures invalidate linked artifact reuse', async () => {
+ const r = new Runtime(); await r.compileArtifact('A');
+ const getFileContents = r.memfs.getFileContents;
+ r.memfs.getFileContents = () => Uint8Array.of(0, 97, 115, 109, 255, 0, 0, 0);
+ await assert.rejects(r.compileArtifact('B'), /WebAssembly/);
+ assert.ok(r.wasm === undefined);
+ assert.equal(r.lastBuildKey, '');
+ r.memfs.getFileContents = getFileContents;
+ await r.compileArtifact('B');
+ assert.equal(r.compiles.length, 3);
 });
 test('LLVM native producer experiment verifies export removal and execution equivalence', async (t) => {
  let clang, lld;

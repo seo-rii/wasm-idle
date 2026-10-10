@@ -19,19 +19,21 @@ export default class ArtifactRuntime extends Runtime {
 	private minimalLink = false;
 	private linked?: LinkedArtifact;
 
-	override async compile(options: any) {
+	private invalidateArtifact() {
 		this.linked = undefined;
 		this.lastBuildKey = '';
 		this.wasm = undefined;
+	}
+
+	override async compile(options: any) {
+		this.invalidateArtifact();
 		return super.compile(options);
 	}
 
 	override async link(obj: string | readonly string[], wasm: string,
 		debugModeOrLegacyDebug: BrowserClangDebugMode | boolean = 'none',
 		language: ClangSourceLanguage = 'CPP') {
-		this.linked = undefined;
-		this.lastBuildKey = '';
-		this.wasm = undefined;
+		this.invalidateArtifact();
 		const mode = typeof debugModeOrLegacyDebug === 'boolean'
 			? resolveDebugMode({ debug: debugModeOrLegacyDebug })
 			: resolveDebugMode({ debugMode: debugModeOrLegacyDebug });
@@ -50,6 +52,16 @@ export default class ArtifactRuntime extends Runtime {
 	}
 
 	private async buildBytes(code: string, options: BrowserClangRuntimeRunOptions): Promise<LinkedArtifact> {
+		try {
+			return await this.buildLinkedBytes(code, options);
+		} catch (error) {
+			// Validation can fail before the rebuild starts. Never leave an old executable published.
+			this.invalidateArtifact();
+			throw error;
+		}
+	}
+
+	private async buildLinkedBytes(code: string, options: BrowserClangRuntimeRunOptions): Promise<LinkedArtifact> {
 		const { language = 'CPP', fileName, activePath, workspaceFiles = [], args = [],
 			compileArgs = args, cppVersion, cVersion, breakpoints = [], pauseOnEntry = false,
 			debugBuffer, interruptBuffer, watchBuffer, watchResultBuffer, precompiledHeader } = options;
@@ -88,9 +100,7 @@ export default class ArtifactRuntime extends Runtime {
 			return this.linked;
 		}
 		// Invalidate before any operation that can fail; a previous program must not survive a failed rebuild.
-		this.linked = undefined;
-		this.wasm = undefined;
-		this.lastBuildKey = '';
+		this.invalidateArtifact();
 		this.precompiledHeaderPlan = undefined;
 		this.usedPrecompiledHeader = false;
 		void this.getModule(this.assetUrls.lld).catch(() => undefined);
@@ -125,19 +135,24 @@ export default class ArtifactRuntime extends Runtime {
 
 	override async compileLink(code: string, options: BrowserClangRuntimeRunOptions = {}) {
 		const linked = await this.buildBytes(code, options);
-		if (!linked.module) {
-			linked.module = await this.hostLogAsync(`Compiling ${this.lastArtifactPath}`,
-				WebAssembly.compile(Uint8Array.from(linked.bytes)));
+		try {
+			if (!linked.module) {
+				linked.module = await this.hostLogAsync(`Compiling ${this.lastArtifactPath}`,
+					WebAssembly.compile(Uint8Array.from(linked.bytes)));
+			}
+			this.wasm = linked.module;
+			return linked.module;
+		} catch (error) {
+			this.invalidateArtifact();
+			throw error;
 		}
-		this.wasm = linked.module;
-		return linked.module;
 	}
 
 	override async compileArtifact(code: string, options: BrowserClangRuntimeRunOptions = {}): Promise<BrowserClangArtifact> {
-		const debugMode = resolveDebugMode(options);
 		// WAMR consumes linked bytes, not a browser-compiled Module. Normal/trace callers retain
 		// the existing ready-to-execute Module contract and can reuse its compilation.
 		const linked = await this.buildBytes(code, options);
+		const debugMode = resolveDebugMode(options);
 		const wasm = debugMode === 'lldb' ? undefined : await this.compileLink(code, options);
 		const bytes = Uint8Array.from(linked.bytes);
 		const language = options.language || 'CPP';
