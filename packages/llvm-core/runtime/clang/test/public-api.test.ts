@@ -17,7 +17,7 @@ const wasiState = vi.hoisted(() => ({
 	start: vi.fn((..._args: unknown[]) => 0)
 }));
 
-vi.mock('../src/runtime.js', () => ({
+vi.mock('../src/artifact-runtime.js', () => ({
 	default: class MockRuntime {
 		readonly ready = Promise.resolve();
 		readonly memfs = {
@@ -36,6 +36,33 @@ vi.mock('../src/runtime.js', () => ({
 		constructor(options: Record<string, unknown>) {
 			this.options = options;
 			runtimeState.instances.push(this as unknown as Record<string, unknown>);
+		}
+
+		async compileArtifact(code: string, options: Record<string, unknown>) {
+			const wasm = await this.compileLink(code, options);
+			const { createDwarfDebugDescriptor } = await import('../src/dwarf.js');
+			const mode = options.debugMode ?? (options.debug ? 'trace' : 'none');
+			return {
+				bytes: new Uint8Array(wasmFixture.bytes),
+				...(mode === 'lldb' ? {} : { wasm }),
+				target: 'wasm32-wasi',
+				format: 'wasi-core-wasm',
+				fileName: this.lastArtifactPath,
+				language: options.language || 'CPP',
+				...(mode === 'trace'
+					? { debugMetadata: {
+						variableMetadata: this.debugVariableMetadata,
+						globalVariableMetadata: this.debugGlobalMetadata,
+						functionMetadata: this.debugFunctionMetadata
+					} }
+					: {}),
+				...(mode === 'lldb'
+					? { debug: await createDwarfDebugDescriptor(
+						{ code, ...options }, wasmFixture.bytes,
+						(this.options.manifest as RuntimeManifestV1).compiler.provenance
+					) }
+					: {})
+			};
 		}
 
 		async compileLink(code: string, options: Record<string, unknown>) {
@@ -309,14 +336,8 @@ describe('public wasm-clang API contract', () => {
 		delete legacyManifest.compiler.provenance;
 
 		const result = await compileClang(
-			{
-				code: 'int main() { return 0; }',
-				debugMode: 'lldb'
-			},
-			{
-				runtimeBaseUrl: 'https://cdn.example.com/pkg/runtime/',
-				manifest: legacyManifest
-			}
+			{ code: 'int main() { return 0; }', debugMode: 'lldb' },
+			{ runtimeBaseUrl: 'https://cdn.example.com/pkg/runtime/', manifest: legacyManifest }
 		);
 
 		expect(result.success).toBe(false);
@@ -341,31 +362,21 @@ describe('public wasm-clang API contract', () => {
 
 	it('derives the runtime base URL from an explicit manifest URL', async () => {
 		const fetchImpl = vi.fn(
-			async () =>
-				new Response(JSON.stringify(manifest), {
-					status: 200,
-					headers: { 'content-type': 'application/json' }
-				})
+			async () => new Response(JSON.stringify(manifest), {
+				status: 200, headers: { 'content-type': 'application/json' }
+			})
 		);
 
 		await preloadBrowserClangRuntime({
-			manifestUrl: 'https://cdn.example.com/clang/v2/custom-manifest.json',
-			fetchImpl
+			manifestUrl: 'https://cdn.example.com/clang/v2/custom-manifest.json', fetchImpl
 		});
 
 		expect(fetchImpl).toHaveBeenCalledWith(
 			'https://cdn.example.com/clang/v2/custom-manifest.json',
-			{
-				cache: 'no-store',
-				credentials: 'omit',
-				redirect: 'error',
-				referrerPolicy: 'no-referrer'
-			}
+			{ cache: 'no-store', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer' }
 		);
 		expect(runtimeState.instances[0]?.options).toEqual(
-			expect.objectContaining({
-				runtimeBaseUrl: 'https://cdn.example.com/clang/v2/'
-			})
+			expect.objectContaining({ runtimeBaseUrl: 'https://cdn.example.com/clang/v2/' })
 		);
 	});
 
@@ -380,54 +391,33 @@ describe('public wasm-clang API contract', () => {
 		runtimeState.shouldFail = true;
 
 		const result = await compileClang(
-			{
-				language: 'C',
-				fileName: 'hello.c',
-				code: 'int main(void) { return }\n'
-			},
-			{
-				runtimeBaseUrl: 'https://cdn.example.com/pkg/runtime/',
-				manifest
-			}
+			{ language: 'C', fileName: 'hello.c', code: 'int main(void) { return }\n' },
+			{ runtimeBaseUrl: 'https://cdn.example.com/pkg/runtime/', manifest }
 		);
 
 		expect(result.success).toBe(false);
 		expect(result.stderr).toContain('hello.c:7:3: error: expected ; after expression');
 		expect(result.diagnostics).toEqual([
-			{
-				fileName: 'hello.c',
-				lineNumber: 7,
-				columnNumber: 3,
-				severity: 'error',
-				message: 'expected ; after expression'
-			}
+			{ fileName: 'hello.c', lineNumber: 7, columnNumber: 3, severity: 'error', message: 'expected ; after expression' }
 		]);
 	});
 
 	it('reuses the provided compiled module and artifact file name during execution', async () => {
 		const compileSpy = vi.spyOn(WebAssembly, 'compile');
 		const instantiateSpy = vi.spyOn(WebAssembly, 'instantiate').mockResolvedValue({
-			exports: {
-				memory: new WebAssembly.Memory({ initial: 1 }),
-				_start() {}
-			}
+			exports: { memory: new WebAssembly.Memory({ initial: 1 }), _start() {} }
 		} as unknown as WebAssembly.Instance);
 		const module = new WebAssembly.Module(wasmFixture.bytes);
 
 		const result = await executeBrowserClangArtifact({
-			bytes: wasmFixture.bytes,
-			wasm: module,
-			fileName: 'hello.wasm',
-			target: 'wasm32-wasi',
-			format: 'wasi-core-wasm'
+			bytes: wasmFixture.bytes, wasm: module, fileName: 'hello.wasm',
+			target: 'wasm32-wasi', format: 'wasi-core-wasm'
 		});
 
 		expect(compileSpy).not.toHaveBeenCalled();
 		expect(instantiateSpy).toHaveBeenCalledWith(
-			module,
-			expect.objectContaining({
-				wasi_unstable: expect.any(Object),
-				wasi_snapshot_preview1: expect.any(Object)
+			module, expect.objectContaining({
+				wasi_unstable: expect.any(Object), wasi_snapshot_preview1: expect.any(Object)
 			})
 		);
 		expect(wasiState.lastArgs[0]).toBe('hello.wasm');
