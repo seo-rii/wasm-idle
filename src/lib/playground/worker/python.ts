@@ -8,6 +8,7 @@ import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import { parsePythonPackageLock } from '$lib/playground/pythonPackageLock';
 import { WASM_APECODE_VERSION, WASM_APECODE_WHEELS } from '$lib/playground/wasmApecodeVersion';
 import { withCachedPyodideModule } from './runtimeModule';
+import { PYTHON_DEBUG_PREVIEW } from './pythonDebugPreview';
 import { createPythonStdio, PYTHON_FLUSH_HOOK_FACTORY } from './pythonStdio';
 import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
 import {
@@ -778,8 +779,9 @@ self.onmessage = async (event: any) => {
 		self[debugWriteWatchName] = (value: string) => {
 			flushQueuedStdin([value], watchResultBufferPyodide);
 		};
-		self[debugReadBreakpointsName] = () => {
+		self[debugReadBreakpointsName] = (knownVersion: number) => {
 			const version = Atomics.load(debugBufferPyodide, 2);
+			if (version === knownVersion) return null;
 			const count = Math.max(
 				0,
 				Math.min(Atomics.load(debugBufferPyodide, 3), debugBufferPyodide.length - 4)
@@ -838,7 +840,11 @@ __wasm_idle_debug_step_out_depth = None
 def __wasm_idle_debug_refresh_breakpoints():
     global __wasm_idle_debug_breakpoints
     global __wasm_idle_debug_breakpoint_version
-    snapshot = json.loads(${debugReadBreakpointsName}())
+    payload = ${debugReadBreakpointsName}(__wasm_idle_debug_breakpoint_version)
+    # JavaScript null crosses Pyodide as JsNull rather than Python None.
+    if not isinstance(payload, str):
+        return
+    snapshot = json.loads(payload)
     version = int(snapshot.get("version", -1))
     if version == __wasm_idle_debug_breakpoint_version:
         return
@@ -854,51 +860,7 @@ def __wasm_idle_debug_depth(frame):
         current = current.f_back
     return depth
 
-def __wasm_idle_debug_preview(value, depth = 0):
-    if depth >= 2:
-        return "..."
-    if value is None:
-        return "None"
-    if isinstance(value, bool):
-        return "True" if value else "False"
-    if isinstance(value, (int, float)):
-        return repr(value)
-    if isinstance(value, (bytes, bytearray)):
-        text = repr(bytes(value))
-        return text if len(text) <= 80 else text[:77] + "..."
-    if isinstance(value, str):
-        text = repr(value)
-        return text if len(text) <= 80 else text[:77] + "..."
-    if isinstance(value, list):
-        items = [__wasm_idle_debug_preview(item, depth + 1) for item in value[:8]]
-        if len(value) > 8:
-            items.append("...")
-        return "[" + ", ".join(items) + "]"
-    if isinstance(value, tuple):
-        items = [__wasm_idle_debug_preview(item, depth + 1) for item in value[:8]]
-        if len(value) > 8:
-            items.append("...")
-        if len(value) == 1 and items:
-            return "(" + items[0] + ",)"
-        return "(" + ", ".join(items) + ")"
-    if isinstance(value, dict):
-        items = []
-        for index, (key, item) in enumerate(value.items()):
-            if index >= 6:
-                items.append("...")
-                break
-            items.append(__wasm_idle_debug_preview(key, depth + 1) + ": " + __wasm_idle_debug_preview(item, depth + 1))
-        return "{" + ", ".join(items) + "}"
-    if isinstance(value, set):
-        items = [__wasm_idle_debug_preview(item, depth + 1) for item in sorted(list(value), key = repr)[:6]]
-        if len(value) > 6:
-            items.append("...")
-        return "{" + ", ".join(items) + "}"
-    try:
-        text = repr(value)
-        return text if len(text) <= 80 else text[:77] + "..."
-    except Exception:
-        return "?"
+${PYTHON_DEBUG_PREVIEW}
 
 def __wasm_idle_debug_locals(frame):
     locals_preview = []
@@ -932,7 +894,8 @@ def __wasm_idle_debug_trace(frame, event, arg):
         return __wasm_idle_debug_trace
 
     __wasm_idle_debug_refresh_breakpoints()
-    depth = __wasm_idle_debug_depth(frame)
+    needs_depth = (__wasm_idle_debug_resume_skip is not None or __wasm_idle_debug_step_mode in ("next", "out"))
+    depth = __wasm_idle_debug_depth(frame) if needs_depth else None
     line = frame.f_lineno
     if __wasm_idle_debug_resume_skip == (depth, line):
         return __wasm_idle_debug_trace
@@ -954,6 +917,8 @@ def __wasm_idle_debug_trace(frame, event, arg):
     if reason is None:
         return __wasm_idle_debug_trace
 
+    if depth is None:
+        depth = __wasm_idle_debug_depth(frame)
     __wasm_idle_debug_pause_on_entry = False
     __wasm_idle_debug_step_mode = None
     __wasm_idle_debug_next_depth = None

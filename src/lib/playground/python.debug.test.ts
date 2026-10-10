@@ -6,9 +6,12 @@ describe('Python debug tracer source', () => {
 	it('keeps bytes preview and hidden-local filtering in the injected debug script', () => {
 		const source = readFileSync('src/lib/playground/worker/python.ts', 'utf8');
 
-		expect(source).toContain('if isinstance(value, (bytes, bytearray)):');
+		const preview = readFileSync('src/lib/playground/worker/pythonDebugPreview.ts', 'utf8');
+		expect(source).toContain('${PYTHON_DEBUG_PREVIEW}');
+		expect(preview).toContain('if kind in (bytes, bytearray, str):');
+		expect(preview).toContain('prefix = value[:32]');
 		expect(source).toContain('name.startswith(".")');
-		expect(source).toContain('sorted(list(value), key = repr)[:6]');
+		expect(preview).not.toContain('sorted(list(value), key = repr)');
 		expect(source).toContain('sys.settrace(None)');
 		expect(source).toContain('if command != 5:');
 		expect(source).toContain('expression = ${debugReadWatchName}()');
