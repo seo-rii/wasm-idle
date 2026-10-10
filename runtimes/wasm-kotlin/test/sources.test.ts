@@ -15,6 +15,20 @@ describe('Kotlin source boundary', () => {
 		expect(Object.isFrozen(sources[0])).toBe(true);
 	});
 
+	it('keeps the validated file count when a source getter appends input files', () => {
+		const input = [
+			{
+				path: 'Main.kt',
+				get text() {
+					input.push({ path: 'Extra.kt', text: 'val extra = 1' });
+					return 'fun main() {}';
+				}
+			}
+		];
+		const sources = prepareKotlinSources(input, { ...KOTLIN_SOURCE_LIMITS, maxFiles: 1 });
+		expect(sources).toEqual([{ path: 'Main.kt', text: 'fun main() {}' }]);
+	});
+
 	it.each([
 		'/Main.kt',
 		'../Main.kt',

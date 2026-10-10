@@ -32,12 +32,14 @@ export function prepareKotlinSources(
 	if (!Array.isArray(input) || input.length === 0 || input.length > limits.maxFiles) {
 		throw new Error('Kotlin source file count is outside the allowed range');
 	}
+	// Fix the accepted array entries before source getters can mutate its count.
+	const sourceSnapshot = Array.from({ length: input.length }, (_, index) => input[index]);
 	const paths = new Set<string>();
 	const parents = new Set<string>();
 	const encoder = new TextEncoder();
 	let totalBytes = 0;
 	const files: KotlinSourceFile[] = [];
-	for (const file of input) {
+	for (const file of sourceSnapshot) {
 		if (!file || typeof file !== 'object' || Array.isArray(file)) {
 			throw new Error('Kotlin source file must be an object');
 		}

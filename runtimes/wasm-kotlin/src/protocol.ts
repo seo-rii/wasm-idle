@@ -18,7 +18,9 @@ export function readKotlinCompileRequest(
 	if (!input || typeof input !== 'object' || Array.isArray(input)) {
 		throw new Error('Invalid Kotlin compile request');
 	}
-	const value = input as Record<string, unknown>;
+	// Snapshot caller-owned accessors once so the returned fields are the same
+	// values checked below, including identity and byte-limited diagnostics.
+	const value = { ...(input as Record<string, unknown>) };
 	if (
 		value.protocolVersion !== 1 ||
 		typeof value.requestId !== 'string' ||
@@ -40,7 +42,7 @@ export function readKotlinCompileRequest(
 	if (!value.entry || typeof value.entry !== 'object' || Array.isArray(value.entry)) {
 		throw new Error('Kotlin entry must be selected explicitly');
 	}
-	const entry = value.entry as Record<string, unknown>;
+	const entry = { ...(value.entry as Record<string, unknown>) };
 	if (
 		typeof entry.file !== 'string' ||
 		!files.some((file) => file.path === entry.file) ||
@@ -94,7 +96,7 @@ export function readKotlinCompileFailure(
 	if (!input || typeof input !== 'object' || Array.isArray(input)) {
 		throw new Error('Invalid Kotlin compile failure');
 	}
-	const value = input as Record<string, unknown>;
+	const value = { ...(input as Record<string, unknown>) };
 	if (
 		value.requestId !== request.requestId ||
 		value.generation !== request.generation ||
@@ -108,9 +110,14 @@ export function readKotlinCompileFailure(
 		throw new Error('Kotlin failure is stale, malformed, or contains an artifact');
 	}
 	const diagnostics: KotlinCompileDiagnostic[] = [];
+	const inputDiagnostics = value.diagnostics;
+	const diagnosticSnapshot = Array.from(
+		{ length: inputDiagnostics.length },
+		(_, index) => inputDiagnostics[index]
+	);
 	const encoder = new TextEncoder();
 	let bytes = 0;
-	for (const inputDiagnostic of value.diagnostics) {
+	for (const inputDiagnostic of diagnosticSnapshot) {
 		if (
 			!inputDiagnostic ||
 			typeof inputDiagnostic !== 'object' ||
@@ -118,7 +125,7 @@ export function readKotlinCompileFailure(
 		) {
 			throw new Error('Invalid Kotlin diagnostic');
 		}
-		const diagnostic = inputDiagnostic as Record<string, unknown>;
+		const diagnostic = { ...(inputDiagnostic as Record<string, unknown>) };
 		if (
 			!['error', 'warning', 'information'].includes(diagnostic.severity as string) ||
 			typeof diagnostic.code !== 'string' ||
