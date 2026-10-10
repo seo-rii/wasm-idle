@@ -67,6 +67,20 @@ export const playgroundLanguages: PlaygroundLanguage[] = [
 export const playgroundLanguageDescriptors: Readonly<
 	Record<PlaygroundLanguage, PlaygroundLanguageDescriptor>
 > = {
+	UHMLANG: { label: 'UHMLANG (엄준식)', editorLanguage: 'plaintext' },
+	LOLCODE: { label: 'LOLCODE 1.3', editorLanguage: 'plaintext' },
+	APECODE: { label: 'APECode', editorLanguage: 'plaintext' },
+	GOLFSCRIPT: {
+		label: 'GolfScript',
+		editorLanguage: 'plaintext',
+		supportsArgs: true,
+		argsLabel: 'Interpreter options / -- values'
+	},
+	AHEUI: { label: 'Aheui', editorLanguage: 'plaintext' },
+	MALBOLGE: { label: 'Malbolge', editorLanguage: 'plaintext' },
+	WHITESPACE: { label: 'Whitespace', editorLanguage: 'plaintext' },
+	BRAINFUCK: { label: 'Brainfuck', editorLanguage: 'plaintext' },
+	BEFUNGE93: { label: 'Befunge-93', editorLanguage: 'plaintext' },
 	C3: {
 		label: 'C3 (byte ABI)',
 		editorLanguage: 'c',

@@ -21,6 +21,28 @@ describe('Kotlin candidate compile request contract', () => {
 		expect(request.entry.file).toBe('Main.kt');
 	});
 
+	it('validates and returns one snapshot of caller-owned request fields', () => {
+		let identityReads = 0;
+		let entryReads = 0;
+		const input = {
+			...requestInput(),
+			get requestId() {
+				return ++identityReads === 1 ? 'compile-1' : 'changed';
+			},
+			entry: {
+				get file() {
+					return ++entryReads === 1 ? 'Main.kt' : 'Other.kt';
+				},
+				qualifiedFunction: 'main'
+			}
+		};
+		const request = readKotlinCompileRequest(input, 'candidate');
+		expect(request.requestId).toBe('compile-1');
+		expect(request.entry.file).toBe('Main.kt');
+		expect(identityReads).toBe(1);
+		expect(entryReads).toBe(1);
+	});
+
 	it.each([
 		{ protocolVersion: 2 },
 		{ requestId: '' },
@@ -68,6 +90,58 @@ describe('Kotlin compile failure contract', () => {
 		expect(Object.isFrozen(output.diagnostics[0])).toBe(true);
 		const internal = { ...failure(), status: 'internal-error', diagnostics: [] };
 		expect(readKotlinCompileFailure(internal, request, limits).status).toBe('internal-error');
+	});
+
+	it('returns the failure status that was validated', () => {
+		const request = readKotlinCompileRequest(requestInput(), 'candidate');
+		let statusReads = 0;
+		const input = {
+			...failure(),
+			get status() {
+				return ++statusReads === 1 ? 'compile-error' : 'ok';
+			}
+		};
+		const output = readKotlinCompileFailure(input, request, limits);
+		expect(output.status).toBe('compile-error');
+		expect(statusReads).toBe(1);
+	});
+
+	it('keeps diagnostic snapshots within the validated byte budget', () => {
+		const request = readKotlinCompileRequest(requestInput(), 'candidate');
+		let messageReads = 0;
+		const input = {
+			...failure(),
+			diagnostics: [
+				{
+					severity: 'error',
+					code: 'X',
+					get message() {
+						return ++messageReads <= 3 ? 'small' : '한'.repeat(100);
+					}
+				}
+			]
+		};
+		const output = readKotlinCompileFailure(input, request, limits);
+		expect(output.diagnostics[0]?.message).toBe('small');
+		expect(messageReads).toBe(1);
+	});
+
+	it('keeps the validated diagnostic count when a field getter appends diagnostics', () => {
+		const request = readKotlinCompileRequest(requestInput(), 'candidate');
+		const appended = { severity: 'warning', code: 'X', message: 'late' };
+		const diagnostics = [
+			{
+				severity: 'error',
+				code: 'X',
+				get message() {
+					diagnostics.push(appended, appended);
+					return 'original';
+				}
+			}
+		];
+		const output = readKotlinCompileFailure({ ...failure(), diagnostics }, request, limits);
+		expect(output.diagnostics).toHaveLength(1);
+		expect(output.diagnostics[0]?.message).toBe('original');
 	});
 
 	it.each([

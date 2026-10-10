@@ -1,0 +1,66 @@
+{
+  "formatVersion": 1,
+  "language": "BRAINFUCK",
+  "upstream": {
+    "repository": "https://github.com/susam/bfc",
+    "commit": "b1b92fc552707bbea50b396f6f6a3e3c1e51cb55",
+    "source": {
+      "path": "runtimes/esolangs/brainfuck/vendor/bfc.c",
+      "bytes": 19096,
+      "sha256": "6a5286882cd7692700d66b276e6b10ab3bc9f3c6083fe598e5c595a6fd292deb",
+      "url": "https://raw.githubusercontent.com/susam/bfc/b1b92fc552707bbea50b396f6f6a3e3c1e51cb55/bfc.c"
+    },
+    "license": {
+      "path": "runtimes/esolangs/brainfuck/LICENSE.md",
+      "bytes": 1103,
+      "sha256": "3dc731e5f3b4ec786824dacf2052bda86ff6e603da4a79f56344d7756f7371a8",
+      "url": "https://raw.githubusercontent.com/susam/bfc/b1b92fc552707bbea50b396f6f6a3e3c1e51cb55/LICENSE.md",
+      "spdx": "MIT"
+    }
+  },
+  "inputs": [
+    {
+      "path": "runtimes/esolangs/brainfuck/vendor/bfc.c",
+      "bytes": 19096,
+      "sha256": "6a5286882cd7692700d66b276e6b10ab3bc9f3c6083fe598e5c595a6fd292deb"
+    },
+    {
+      "path": "runtimes/esolangs/brainfuck/wasi-process.c",
+      "bytes": 318,
+      "sha256": "acfc150646b61f96798a1501764f94e88947f3ffe17de6935c66b380b80cb97b"
+    }
+  ],
+  "license": {
+    "path": "LICENSE.txt",
+    "bytes": 1103,
+    "sha256": "3dc731e5f3b4ec786824dacf2052bda86ff6e603da4a79f56344d7756f7371a8",
+    "spdx": "MIT"
+  },
+  "build": {
+    "toolchain": {
+      "name": "wasi-sdk",
+      "version": "33.0+m\nwasi-libc: 161b3195fc25\nllvm: 4434dabb6991\nllvm-version: 22.1.0\nconfig: f992bcc08219",
+      "compiler": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)"
+    },
+    "command": "WASI_SDK_PATH/bin/clang",
+    "args": [
+      "--target=wasm32-wasip1",
+      "-std=c99",
+      "-O2",
+      "-fno-ident",
+      "-Wl,--strip-all",
+      "-Wl,-z,stack-size=131072",
+      "-Wl,--initial-memory=262144",
+      "-Wl,--max-memory=67108864",
+      "runtimes/esolangs/brainfuck/vendor/bfc.c",
+      "runtimes/esolangs/brainfuck/wasi-process.c",
+      "-o",
+      "static/wasm-brainfuck/brainfuck.wasm"
+    ]
+  },
+  "wasm": {
+    "path": "brainfuck.wasm",
+    "bytes": 34467,
+    "sha256": "62c813c99c700d65e05974ec0ad07333c8ca40460330f1f835f28a8cb39657a5"
+  }
+}

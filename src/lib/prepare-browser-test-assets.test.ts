@@ -339,26 +339,8 @@ describe('browser test asset preparation', () => {
 		);
 	});
 
-	it('keeps rebuilt OCaml outer receipts aligned with the consumer integrity profile', async () => {
-		// Download pins describe immutable compiler inputs; the current bundle is rebuilt.
-		for (const [target, receipt] of [
-			[
-				'wasm-of-js-of-ocaml/browser-native/src/index.js',
-				WASM_OCAML_RUNTIME_PROFILE.moduleReceipt
-			],
-			[
-				'wasm-of-js-of-ocaml/browser-native-bundle/browser-native-manifest.v1.json',
-				WASM_OCAML_RUNTIME_PROFILE.manifestReceipt
-			]
-		] as const) {
-			const bytes = await readFile(path.join('static', target));
-			expect(bytes.byteLength).toBe(receipt.bytes);
-			expect(createHash('sha256').update(bytes).digest('hex')).toBe(receipt.sha256);
-		}
-	});
-
 	// The real TypeScript graph can take longer than the default 5 seconds in parallel runs.
-	it('emits the relative module dependencies of the rebuilt OCaml wrapper', () => {
+	it('rebuilds the OCaml wrapper with its consumer receipt and relative module dependencies', () => {
 		// Preparation rebuilds the wrapper from source; the download receipts describe
 		// immutable compiler inputs, not the current wrapper's generated module graph.
 		const configPath = path.resolve(
@@ -379,6 +361,13 @@ describe('browser test asset preparation', () => {
 		});
 		expect(result.emitSkipped).toBe(false);
 		expect(result.diagnostics).toEqual([]);
+		const modulePath = path.resolve(config.options.outDir!, 'src/index.js');
+		expect(outputs.has(modulePath)).toBe(true);
+		const moduleBytes = Buffer.from(outputs.get(modulePath)!, 'utf8');
+		expect(moduleBytes.byteLength).toBe(WASM_OCAML_RUNTIME_PROFILE.moduleReceipt.bytes);
+		expect(createHash('sha256').update(moduleBytes).digest('hex')).toBe(
+			WASM_OCAML_RUNTIME_PROFILE.moduleReceipt.sha256
+		);
 		for (const relativePath of [
 			'src/index.js',
 			'src/compiler-worker.js',

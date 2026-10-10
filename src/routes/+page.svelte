@@ -623,6 +623,16 @@
 		if ((ext === '.mm' || ext === '.h') && language === 'OBJECTIVECXX') return 'OBJECTIVECXX';
 		if (ext === '.m' && language === 'OBJECTIVECXX') return 'OBJC';
 		const match: Record<string, PlaygroundLanguage> = {
+			'.ws': 'WHITESPACE',
+			'.mal': 'MALBOLGE',
+			'.aheui': 'AHEUI',
+			'.um': 'UHMLANG',
+			'.umm': 'UHMLANG',
+			'.lol': 'LOLCODE',
+			'.ape': 'APECODE',
+			'.gs': 'GOLFSCRIPT',
+			'.bf': 'BRAINFUCK',
+			'.b93': 'BEFUNGE93',
 			'.c': 'C',
 			'.cc': 'CPP',
 			'.cpp': 'CPP',
@@ -769,6 +779,15 @@
 			ASSEMBLYSCRIPT: 'main.as.ts',
 			WAT: 'main.wat',
 			WASM: 'main.wasm',
+			WHITESPACE: 'main.ws',
+			MALBOLGE: 'main.mal',
+			AHEUI: 'main.aheui',
+			UHMLANG: 'main.um',
+			LOLCODE: 'main.lol',
+			APECODE: 'main.ape',
+			GOLFSCRIPT: 'main.gs',
+			BRAINFUCK: 'main.bf',
+			BEFUNGE93: 'main.b93',
 			LUA: 'main.lua',
 			FENNEL: 'main.fnl',
 			ZIG: 'main.zig',
@@ -837,6 +856,15 @@
 			ASSEMBLYSCRIPT: 'assemblyscript',
 			WAT: 'wat',
 			WASM: 'wasm',
+			WHITESPACE: 'whitespace',
+			MALBOLGE: 'malbolge',
+			AHEUI: 'aheui',
+			UHMLANG: 'uhmlang',
+			LOLCODE: 'lolcode',
+			APECODE: 'apecode',
+			GOLFSCRIPT: 'golfscript',
+			BRAINFUCK: 'brainfuck',
+			BEFUNGE93: 'befunge93',
 			LUA: 'lua',
 			FENNEL: 'fennel',
 			ZIG: 'zig',
@@ -939,6 +967,8 @@
 	}
 
 	function handleLanguageChange(event: Event) {
+		// Initial storage/share restoration owns the workspace until it completes.
+		if (!workspaceInitialized) return;
 		const nextLanguage = normalizeRequestedLanguage(
 			(event.currentTarget as HTMLSelectElement).value
 		);
@@ -1467,6 +1497,24 @@
 		if (!value) return null;
 		const normalized = value.trim().toLowerCase();
 		const aliases: Record<string, PlaygroundLanguage> = {
+			"whitespace": 'WHITESPACE',
+			malbolge: 'MALBOLGE',
+			aheui: 'AHEUI',
+			'아희': 'AHEUI',
+			uhmlang: 'UHMLANG',
+			umjunsik: 'UHMLANG',
+			'엄준식': 'UHMLANG',
+			lolcode: 'LOLCODE',
+			lol: 'LOLCODE',
+			apecode: 'APECODE',
+			ape: 'APECODE',
+			golfscript: 'GOLFSCRIPT',
+			'golf-script': 'GOLFSCRIPT',
+			brainfuck: 'BRAINFUCK',
+			bf: 'BRAINFUCK',
+			befunge93: 'BEFUNGE93',
+			befunge: 'BEFUNGE93',
+			'befunge-93': 'BEFUNGE93',
 			python: 'PYTHON',
 			python3: 'PYTHON',
 			pypy3: 'PYTHON',
@@ -2761,7 +2809,13 @@
 				</label>
 				<label class="select-chip">
 					<span class="material-symbols-outlined">code_blocks</span>
-					<select id="language-select" value={language} onchange={handleLanguageChange}>
+					<select
+						id="language-select"
+						value={language}
+						disabled={!workspaceInitialized}
+						data-workspace-ready={workspaceInitialized}
+						onchange={handleLanguageChange}
+					>
 						{#each playgroundLanguages as languageOption (languageOption)}
 							<option value={languageOption}>{languageLabels[languageOption]}</option>
 						{/each}

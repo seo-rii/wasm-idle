@@ -1,0 +1,61 @@
+{
+  "formatVersion": 1,
+  "language": "MALBOLGE",
+  "upstream": {
+    "repository": "https://github.com/TryItOnline/malbolge",
+    "commit": "b08698709872be370c050a825f4f3c0b224e0be8",
+    "source": {
+      "path": "runtimes/esolangs/malbolge/vendor/malbolge.c",
+      "bytes": 4738,
+      "sha256": "fe29a717f9f684d6cc81d5c63273d446d9c65fec73e62164538514d5737b07a6",
+      "url": "https://raw.githubusercontent.com/TryItOnline/malbolge/b08698709872be370c050a825f4f3c0b224e0be8/malbolge.c"
+    },
+    "license": {
+      "path": "runtimes/esolangs/malbolge/LICENSE",
+      "bytes": 1461,
+      "sha256": "6af5019015f2f9541fa1e417727c54bb677b23bde84e9e444862b7ece3200329",
+      "url": "https://raw.githubusercontent.com/TryItOnline/malbolge/b08698709872be370c050a825f4f3c0b224e0be8/malbolge.c",
+      "spdx": "LicenseRef-Public-Domain",
+      "extraction": "Opening source comment before #include <stdio.h>"
+    }
+  },
+  "inputs": [
+    {
+      "path": "runtimes/esolangs/malbolge/vendor/malbolge.c",
+      "bytes": 4738,
+      "sha256": "fe29a717f9f684d6cc81d5c63273d446d9c65fec73e62164538514d5737b07a6"
+    }
+  ],
+  "license": {
+    "path": "LICENSE.txt",
+    "bytes": 1461,
+    "sha256": "6af5019015f2f9541fa1e417727c54bb677b23bde84e9e444862b7ece3200329",
+    "spdx": "LicenseRef-Public-Domain"
+  },
+  "build": {
+    "toolchain": {
+      "name": "wasi-sdk",
+      "version": "33.0+m\nwasi-libc: 161b3195fc25\nllvm: 4434dabb6991\nllvm-version: 22.1.0\nconfig: f992bcc08219",
+      "compiler": "clang version 22.1.0-wasi-sdk (https://github.com/llvm/llvm-project 4434dabb69916856b824f68a64b029c67175e532)"
+    },
+    "command": "WASI_SDK_PATH/bin/clang",
+    "args": [
+      "--target=wasm32-wasip1",
+      "-std=c99",
+      "-O2",
+      "-fno-ident",
+      "-Wl,--strip-all",
+      "-Wl,-z,stack-size=131072",
+      "-Wl,--initial-memory=262144",
+      "-Wl,--max-memory=67108864",
+      "runtimes/esolangs/malbolge/vendor/malbolge.c",
+      "-o",
+      "static/wasm-malbolge/malbolge.wasm"
+    ]
+  },
+  "wasm": {
+    "path": "malbolge.wasm",
+    "bytes": 16067,
+    "sha256": "27cc66d75e63524b000b62b1117ad45cb3dabc4885530800175affc40f895840"
+  }
+}

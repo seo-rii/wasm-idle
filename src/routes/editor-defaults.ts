@@ -1,6 +1,15 @@
 import type { RustTargetTriple } from '$lib/playground/options';
 
 export type EditorDefaultLanguage =
+	| 'whitespace'
+	| 'malbolge'
+	| 'aheui'
+	| 'uhmlang'
+	| 'lolcode'
+	| 'apecode'
+	| 'golfscript'
+	| 'brainfuck'
+	| 'befunge93'
 	| 'c'
 	| 'c3'
 	| 'cpp'
@@ -64,6 +73,15 @@ export type EditorDefaultLanguage =
 	| 'rust';
 
 export const editorDefaults: Record<
+	| 'befunge93'
+	| 'whitespace'
+	| 'malbolge'
+	| 'aheui'
+	| 'uhmlang'
+	| 'lolcode'
+	| 'apecode'
+	| 'golfscript'
+	| 'brainfuck'
 	| 'c'
 	| 'c3'
 	| 'cpp'
@@ -126,6 +144,20 @@ export const editorDefaults: Record<
 	| 'markdown',
 	string
 > = {
+	uhmlang: '어떻게\n엄식?\n식어!\n이 사람이름이냐ㅋㅋ\n',
+	lolcode: 'HAI 1.3\nI HAS A name\nGIMMEH name\nVISIBLE name\nKTHXBYE\n',
+	apecode:
+		'// Input: case count, rock count, then rock weights. Send EOF to finish.\n// Example input: 1\n//                3\n//                3 1 2\nstate main {\n  return true;\n}\n',
+	golfscript: '# Input: 20 22 (send EOF).\n~+\n',
+	aheui: '밯맣희\n',
+	malbolge: 'ubO\n',
+	whitespace: '\n   \n    \n\t\n\t     \n\t\t\t \n \n\t\t\t\n\t\n  \n \n \n\n  \t\n \n\n\n\n\n',
+	brainfuck: `Echo UTF8 input until EOF (use the EOF button to finish)
+,[.,]
+`,
+	befunge93: `~:1+!#@_,
+Echo UTF8 input until EOF using the EOF button
+`,
 	c3: `module main;
 
 // UTF-8 bytes; read_byte returns -1 after EOF (Ctrl+D or the EOF button).
@@ -1512,6 +1544,15 @@ printfn "fibonacci=%d" (fibonacci n + bonus)`;
 
 export function isEditorDefaultSource(source: string) {
 	return (
+		source === editorDefaults.whitespace ||
+		source === editorDefaults.malbolge ||
+		source === editorDefaults.aheui ||
+		source === editorDefaults.uhmlang ||
+		source === editorDefaults.lolcode ||
+		source === editorDefaults.apecode ||
+		source === editorDefaults.golfscript ||
+		source === editorDefaults.brainfuck ||
+		source === editorDefaults.befunge93 ||
 		source === editorDefaults.c ||
 		source === editorDefaults.c3 ||
 		source === editorDefaults.cpp ||
