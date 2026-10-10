@@ -68,3 +68,6 @@ The Chromium suite drives the real sandbox (delayed `READ-LINE`/`READ` input and
 conditions, reader errors, workspace `LOAD`, CLOS and bignums, recursion overflow, cancellation,
 output/memory/time limits) and the playground UI (language selector, default editor sample and
 delayed terminal input).
+
+The synced runtime includes `THIRD_PARTY_NOTICES.txt` with the copyright notices and
+licenses of ECL, its bundled GMP and Boehm GC, and the Emscripten runtime.

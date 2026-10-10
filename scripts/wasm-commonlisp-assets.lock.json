@@ -1,10 +1,10 @@
 {
 	"schemaVersion": 1,
-	"profileId": "ecl-26.5.5-emscripten-6.0.0-wasm-llvm-f2739f3",
+	"profileId": "ecl-26.5.5-emscripten-6.0.0-wasm-llvm-71568b3",
 	"licenseExpression": "LGPL-2.1-or-later",
 	"source": "74780fa2cd2874889793a657d55b557488d3e346",
 	"version": "26.5.5",
-	"producerRevision": "f2739f33d477e93f96845aa010c8abb9efc4e819",
+	"producerRevision": "71568b3cb598c0705bd75a59730ffd74ef8dee2d",
 	"assets": {
 		"producer-receipt.json": {
 			"bytes": 6154,
@@ -23,6 +23,13 @@
 		"ecl.wasm": {
 			"bytes": 4560196,
 			"sha256": "9aa43374a0fd991d841628eb209fbfd78e938636732692662f719383e52184c4"
+		}
+	},
+	"notices": {
+		"THIRD_PARTY_NOTICES.txt": {
+			"upstream": "../ecl-browser-notices/THIRD_PARTY_NOTICES.txt",
+			"bytes": 43801,
+			"sha256": "7ba01a2b46315ba8684c290abfd812d1ec14634789a235dabc030952c6cbeedc"
 		}
 	}
 }
