@@ -22,7 +22,7 @@ it('validates cache regressions and JSON-RPC resolve with real Pyodide and pinne
 		'scripts/test-python-lsp-cache.py'
 	]) {
 		const target = `/work/${path}`;
-		runtime.FS.mkdirTree(target.slice(0, target.lastIndexOf('/')));
+		runtime.runPython(`import os\nos.makedirs(${JSON.stringify(target.slice(0, target.lastIndexOf('/')))}, exist_ok=True)`);
 		runtime.FS.writeFile(target, readFileSync(new URL(path, root)));
 	}
 	const result = await runtime.runPythonAsync(`
