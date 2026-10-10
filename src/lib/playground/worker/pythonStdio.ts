@@ -25,6 +25,7 @@ export function createPythonStdio(runtime: StdioRuntime, options: StdioOptions) 
 	const encoder = new TextEncoder();
 	const parts: string[] = [];
 	let chars = 0;
+	let hasEmitted = false;
 	let lastFlush = now();
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let closed = false;
@@ -41,6 +42,7 @@ export function createPythonStdio(runtime: StdioRuntime, options: StdioOptions) 
 		const output = parts.join('');
 		parts.length = 0;
 		chars = 0;
+		hasEmitted = true;
 		options.emit(output);
 	}
 
@@ -58,7 +60,9 @@ export function createPythonStdio(runtime: StdioRuntime, options: StdioOptions) 
 			if (chars === maxChars || parts.length >= 256) flush();
 		}
 		if (!chars) return;
-		if (!batch || now() - lastFlush >= maxDelayMs) flush();
+		// A synchronous Wasm loop prevents timers from running after its first write.
+		// Publish that first output immediately; retain batching for later writes.
+		if (!hasEmitted || !batch || now() - lastFlush >= maxDelayMs) flush();
 		else if (timer === undefined) timer = setTimeout(flush, maxDelayMs);
 	}
 

@@ -18,6 +18,8 @@ The helper owns retained Python function references. Each invocation owns its te
 
 Normal worker execution passes only source, filename and the readiness callback to the cached helper. Native Python print/input and the per-run stdio observer retain input buffering, explicit flushes and output cleanup. Explicit helper callers can still supply bridges; absent bridges use Python's default None arguments rather than JavaScript null, which Pyodide exposes as a JsNull object. Debug and Hy retain their own execution paths with the same stdio lifecycle.
 
+The first nonempty decoded output in each run reaches the host immediately. A warm cached program can print once and enter a synchronous CPU loop before the batch timer runs; holding that first output hides execution progress until the loop ends or is interrupted. Later output retains bounded batching, with explicit flush, input and completion boundaries unchanged.
+
 ## CI repair and genuine interpreter coverage
 
 The worker dispatch fixture retains all 27 cases in python.runtime.cases.ts, including asset trust, startup ordering, diagnostics and prepare-to-run assertions. Its native byte writers and flush-hook boundary compose with the collected entrypoint's narrow execution-helper mock. Actual interpreter behavior remains covered separately from dispatch mocks.

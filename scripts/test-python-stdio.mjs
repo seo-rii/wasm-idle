@@ -27,6 +27,23 @@ test('many small writes are delivered as bounded batches without losing order', 
 	assert.ok(f.messages.length < 10);
 	assert.ok(f.messages.every((s) => s.length <= 32));
 });
+test('first decoded output reaches the host before a synchronous program blocks', () => {
+	const f = fixture({ now: () => 0 });
+	f.io.flush(); // Empty lifecycle drains must not consume first-output delivery.
+	const bytes = encoder.encode('한');
+	f.write(bytes.subarray(0, 1));
+	assert.equal(f.messages.length, 0);
+	f.write(bytes.subarray(1));
+	assert.equal(f.messages.join(''), '한');
+	f.write('batched');
+	assert.equal(f.messages.join(''), '한');
+	f.io.close();
+	assert.equal(f.messages.join(''), '한batched');
+	const next = fixture({ now: () => 0 });
+	next.stderr('next run');
+	assert.equal(next.messages.join(''), 'next run');
+	next.io.close();
+});
 test('UTF-8 and surrogate pairs survive arbitrary byte and message boundaries', () => {
 	const f = fixture({ maxChars: 3 });
 	const text = '한🙂글😎\n';
@@ -64,20 +81,24 @@ test('explicit empty input is not interactive input', () => {
 test('elapsed-time flush works without an event-loop turn', () => {
 	let clock = 0;
 	const f = fixture({ now: () => clock, maxDelayMs: 16 });
+	f.write('ready');
 	f.write('a');
+	assert.equal(f.messages.join(''), 'ready');
 	clock = 17;
 	f.write('b');
-	assert.equal(f.messages.join(''), 'ab');
+	assert.equal(f.messages.join(''), 'readyab');
 	f.io.close();
 });
 test('explicit flush and unbatched fallback publish immediately', () => {
 	const f = fixture();
 	f.write('first');
-	f.io.flush();
-	assert.equal(f.messages.join(''), 'first');
-	f.io.disableBatching();
 	f.write('second');
+	assert.equal(f.messages.join(''), 'first');
+	f.io.flush();
 	assert.equal(f.messages.join(''), 'firstsecond');
+	f.io.disableBatching();
+	f.write('third');
+	assert.equal(f.messages.join(''), 'firstsecondthird');
 	f.io.close();
 });
 test('close flushes pending bytes once and resets the runtime callbacks', () => {
@@ -91,8 +112,10 @@ test('close flushes pending bytes once and resets the runtime callbacks', () => 
 });
 test('timer flush delivers output when an async program yields', async () => {
 	const f = fixture({ maxDelayMs: 5 });
+	f.write('first');
 	f.write('async');
+	assert.equal(f.messages.join(''), 'first');
 	await new Promise((resolve) => setTimeout(resolve, 25));
-	assert.equal(f.messages.join(''), 'async');
+	assert.equal(f.messages.join(''), 'firstasync');
 	f.io.close();
 });
