@@ -9,6 +9,7 @@ import { parsePythonPackageLock } from '$lib/playground/pythonPackageLock';
 import { WASM_APECODE_VERSION, WASM_APECODE_WHEELS } from '$lib/playground/wasmApecodeVersion';
 import { withCachedPyodideModule } from './runtimeModule';
 import { PYTHON_DEBUG_PREVIEW } from './pythonDebugPreview';
+import { createPythonStdio, PYTHON_FLUSH_HOOK_FACTORY } from './pythonStdio';
 import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
 import {
 	configureWorkerRuntimeAssetAllowlist,
@@ -50,6 +51,8 @@ let maxRuntimeAssetBytes: number | undefined;
 let installedHyVersion: string | undefined;
 let installedAheuiVersion: string | undefined;
 let installedApecodeVersion: string | undefined;
+type PythonStdioRestore = (() => void) & { destroy(): void };
+let installPythonFlushHooks: ((drain: () => void) => PythonStdioRestore) | undefined;
 
 type PythonExtensionLanguage = 'hy' | 'aheui' | 'apecode';
 const PYTHON_EXTENSIONS = {
@@ -398,6 +401,7 @@ async function loadPyodide(path: string) {
 			...(lockFileContents ? { lockFileContents } : {})
 		})
 	);
+	installPythonFlushHooks = pyodide.runPython(PYTHON_FLUSH_HOOK_FACTORY);
 }
 
 async function loadPackages(code: string) {
@@ -694,42 +698,23 @@ self.onmessage = async (event: any) => {
 			}
 			return;
 		}
-		const toPythonStr = (obj: any) => {
-			if (obj === true) return 'True';
-			if (obj === false) return 'False';
-			if (obj === null) return 'None';
-			if (obj === undefined) return 'None';
-			return obj.toString();
-		};
-		const hasInitialStdin = typeof stdin === 'string';
-		let initialStdin: string | null = hasInitialStdin ? stdin : null;
-		self.prompt = self['__pyodide__input_' + ts] = (output?: string) => {
-			if (output) postMessage({ output });
-			if (hasInitialStdin) {
-				const chunk = initialStdin;
-				initialStdin = null;
-				return chunk;
+		const stdio = createPythonStdio(pyodide, {
+			initialInput: typeof stdin === 'string' ? stdin : undefined,
+			readInput: () => waitForBufferedStdin(stdinBufferPyodide, () => postMessage({ buffer: true })),
+			emit: (output) => postMessage({ output })
+		});
+		self.prompt = stdio.prompt;
+		let restoreStdio: PythonStdioRestore | undefined;
+		let stdioFinished = false;
+		const finishStdio = () => {
+			if (stdioFinished) return;
+			stdioFinished = true;
+			try {
+				restoreStdio?.();
+			} finally {
+				try { restoreStdio?.destroy(); }
+				finally { stdio.close(); delete self.prompt; }
 			}
-			return waitForBufferedStdin(stdinBufferPyodide, () => postMessage({ buffer: true }));
-		};
-		self['__pyodide__output_' + ts] = (...data: any[]) => {
-			let sep = ' ',
-				end = '\r\n',
-				output = '';
-			const clear = [];
-			for (const i of data) {
-				if (i?.end !== undefined) end = toPythonStr(i.end);
-				else if (i?.sep !== undefined) sep = toPythonStr(i.sep);
-				else clear.push(i);
-			}
-			for (let i = 0; i < clear.length; i++) {
-				if (typeof clear[i] === 'string' || (!clear[i]?.end && !clear[i]?.sep)) {
-					output += toPythonStr(clear[i]);
-					if (i < clear.length - 1) output += sep;
-				}
-			}
-			output += end;
-			postMessage({ output });
 		};
 		const debugPauseName = `__wasm_idle_python_debug_pause_${ts}`;
 		const debugWaitName = `__wasm_idle_python_debug_wait_${ts}`;
@@ -757,6 +742,7 @@ self.onmessage = async (event: any) => {
 			localsJson: string,
 			callStackJson: string
 		) => {
+			stdio.flush();
 			let locals: unknown[];
 			let callStack: unknown[];
 			try {
@@ -820,30 +806,22 @@ self.onmessage = async (event: any) => {
 		);
 
 		try {
+			try {
+				if (!installPythonFlushHooks) throw new Error('Python flush hooks are unavailable');
+				restoreStdio = installPythonFlushHooks(stdio.flush);
+			} catch {
+				// Unusual non-mutable streams remain correct, without batching their writes.
+				stdio.disableBatching();
+			}
 			await pyodide.runPythonAsync(`import ast
 import builtins
 import inspect
 import json
 import sys
-from js import __pyodide__input_${ts}, __pyodide__output_${ts}
 from js import ${executionReadyName} as __wasm_idle_execution_ready
 ${debug ? `from js import ${debugPauseName}, ${debugWaitName}` : ''}
 ${debug ? `from js import ${debugReadWatchName}, ${debugWriteWatchName}` : ''}
 ${debug ? `from js import ${debugReadBreakpointsName}` : ''}
-
-__wasm_idle_input = __pyodide__input_${ts}
-def __wasm_idle_input_wrapper(prompt = ""):
-    value = __wasm_idle_input(prompt)
-    if value is None:
-        raise EOFError
-    if value.endswith("\\r\\n"):
-        value = value[:-2]
-    elif value.endswith("\\n") or value.endswith("\\r"):
-        value = value[:-1]
-    return value
-__wasm_idle_output = __pyodide__output_${ts}
-builtins.input = __wasm_idle_input_wrapper
-builtins.print = __wasm_idle_output
 
 ${imageHook}
 
@@ -946,6 +924,8 @@ def __wasm_idle_debug_trace(frame, event, arg):
     __wasm_idle_debug_next_line = None
     __wasm_idle_debug_step_out_depth = None
 
+    sys.stdout.flush()
+    sys.stderr.flush()
     ${debugPauseName}(line, reason, json.dumps(__wasm_idle_debug_locals(frame)), json.dumps(__wasm_idle_debug_stack(frame)))
     while True:
         command = ${debugWaitName}()
@@ -1039,8 +1019,10 @@ finally:
 `
 }
 `);
+			finishStdio();
 			self.postMessage({ results: true });
 		} catch (e: any) {
+			try { finishStdio(); } catch { /* Preserve the execution error. */ }
 			self.postMessage({ error: e.message || 'Unknown error' });
 		} finally {
 			delete self[executionReadyName];

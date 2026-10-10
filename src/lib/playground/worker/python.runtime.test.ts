@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PYTHON_FLUSH_HOOK_FACTORY } from './pythonStdio';
 
 const workerAssets = vi.hoisted(() => ({
 	configureWorkerRuntimeAssetAllowlist: vi.fn(),
@@ -8,7 +9,9 @@ const workerAssets = vi.hoisted(() => ({
 	handleWorkerAssetMessage: vi.fn(() => false),
 	loadWorkerRuntimeAsset: vi.fn(),
 	hasWorkerRuntimeModuleBridge: vi.fn(() => true),
-	loadWorkerRuntimeModule: vi.fn(async () => new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0])))
+	loadWorkerRuntimeModule: vi.fn(
+		async () => new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]))
+	)
 }));
 
 vi.mock('$lib/playground/worker/assets', () => workerAssets);
@@ -57,11 +60,20 @@ async function createRuntimeHarness({
 	const postMessage = vi.fn();
 	const runtimeOptions: Array<Record<string, unknown>> = [];
 	const moduleEvaluations: string[] = [];
+	const installFlushHooks = Object.assign(
+		(drain: () => void) => Object.assign(() => drain(), { destroy: vi.fn() }),
+		{ destroy: vi.fn() }
+	);
 	const pyodide = {
-		FS: {
-			mkdirTree: vi.fn(),
-			writeFile: vi.fn()
-		},
+		setStdin: vi.fn(),
+		setStdout: vi.fn<(options: { write: (bytes: Uint8Array) => number }) => void>(),
+		setStderr: vi.fn<(options: { write: (bytes: Uint8Array) => number }) => void>(),
+		FS: { mkdirTree: vi.fn(), writeFile: vi.fn() },
+		runPython: vi.fn((source: string) => {
+			if (source !== PYTHON_FLUSH_HOOK_FACTORY)
+				throw new Error('Unexpected Python initialization');
+			return installFlushHooks;
+		}),
 		loadPackagesFromImports: vi.fn(async () => undefined),
 		runPythonAsync: vi.fn(async () => {
 			const readyName = Object.keys(globalThis).find((name) =>
@@ -131,190 +143,101 @@ export async function loadPyodide(options) {
 
 describe('Python worker runtime dispatch', () => {
 	it('rejects an asm module without the exported factory before initializing Python', async () => {
-		const { moduleSources, onmessage, postMessage, runtimeOptions } =
-			await createRuntimeHarness();
+		const { moduleSources, onmessage, postMessage, runtimeOptions } = await createRuntimeHarness();
 		moduleSources['pyodide.asm.mjs'] = 'export const unrelated = true;';
-		await onmessage({
-			data: {
-				load: true,
-				assets: { baseUrl: 'https://assets.example.test/python/', useAssetBridge: true }
-			}
-		});
+		await onmessage({ data: {
+			load: true,
+			assets: { baseUrl: 'https://assets.example.test/python/', useAssetBridge: true }
+		} });
 		expect(runtimeOptions).toHaveLength(0);
-		expect(postMessage).toHaveBeenCalledWith({
-			error: 'Pyodide module factory is unavailable'
-		});
+		expect(postMessage).toHaveBeenCalledWith({ error: 'Pyodide module factory is unavailable' });
 	});
 
 	it.each([
 		{
 			name: 'bridged',
-			assetConfig: {
-				baseUrl: 'https://wasm-idle.invalid/python/',
-				maxAssetBytes: 4096,
-				useAssetBridge: true
-			},
+			assetConfig: { baseUrl: 'https://wasm-idle.invalid/python/', maxAssetBytes: 4096, useAssetBridge: true },
 			expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs'],
 			expectedPackageBaseUrl: 'https://wasm-idle.invalid/python/'
 		},
 		{
 			name: 'direct',
-			assetConfig: {
-				baseUrl: 'https://assets.example.test/python/',
-				maxAssetBytes: 4096,
-				useAssetBridge: false
-			},
+			assetConfig: { baseUrl: 'https://assets.example.test/python/', maxAssetBytes: 4096, useAssetBridge: false },
 			expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json'],
 			expectedPackageBaseUrl: 'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/'
 		}
-	])(
-		'loads $name runtime assets with bounded package configuration and settles empty code',
+	])('loads $name runtime assets with bounded package configuration and settles empty code',
 		async ({ assetConfig, expectedAssets, expectedPackageBaseUrl }) => {
-			const { onmessage, postMessage, pyodide, revokeObjectURL, runtimeOptions } =
-				await createRuntimeHarness();
-
+			const { onmessage, postMessage, pyodide, revokeObjectURL, runtimeOptions } = await createRuntimeHarness();
 			await onmessage({ data: { load: true, assets: assetConfig } });
-
 			expect(workerAssets.configureWorkerRuntimeAssets).toHaveBeenCalledWith(assetConfig);
-			expect(workerAssets.loadWorkerRuntimeAsset.mock.calls.map(([asset]) => asset)).toEqual(
-				expectedAssets
-			);
+			expect(workerAssets.loadWorkerRuntimeAsset.mock.calls.map(([asset]) => asset)).toEqual(expectedAssets);
 			expect(runtimeOptions).toHaveLength(1);
-			expect(runtimeOptions[0]).toMatchObject({
-				indexURL: assetConfig.baseUrl,
-				packageBaseUrl: expectedPackageBaseUrl,
-				createPyodideModule: expect.any(Function)
-			});
+			expect(runtimeOptions[0]).toMatchObject({ indexURL: assetConfig.baseUrl, packageBaseUrl: expectedPackageBaseUrl, createPyodideModule: expect.any(Function) });
 			if (assetConfig.useAssetBridge) {
 				expect(runtimeOptions[0]).not.toHaveProperty('lockFileContents');
 				expect(workerAssets.configureWorkerRuntimeAssetAllowlist).not.toHaveBeenCalled();
 			} else {
-				expect(runtimeOptions[0]).toHaveProperty(
-					'lockFileContents.packages.demo.file_name',
-					packageAsset
-				);
+				expect(runtimeOptions[0]).toHaveProperty('lockFileContents.packages.demo.file_name', packageAsset);
 				expect(workerAssets.configureWorkerRuntimeAssetAllowlist).toHaveBeenCalledWith({
 					baseUrl: expectedPackageBaseUrl,
 					assets: [packageAsset],
-					runtimeAssets: [
-						'pyodide.mjs',
-						'pyodide.asm.mjs',
-						'pyodide-lock.json',
-						'pyodide.asm.wasm',
-						'python_stdlib.zip'
-					]
+					runtimeAssets: ['pyodide.mjs', 'pyodide.asm.mjs', 'pyodide-lock.json', 'pyodide.asm.wasm', 'python_stdlib.zip']
 				});
 			}
 			expect(revokeObjectURL).toHaveBeenCalledTimes(2);
 			expect(postMessage).toHaveBeenCalledWith({ load: true });
-
 			postMessage.mockClear();
-			await onmessage({
-				data: {
-					code: '',
-					prepare: false,
-					buffer: new SharedArrayBuffer(4096),
-					debugBuffer: new SharedArrayBuffer(4096),
-					watchBuffer: new SharedArrayBuffer(4096),
-					watchResultBuffer: new SharedArrayBuffer(4096),
-					interrupt: new SharedArrayBuffer(1),
-					workspaceFiles: []
-				}
-			});
-
+			await onmessage({ data: {
+				code: '', prepare: false,
+				buffer: new SharedArrayBuffer(4096), debugBuffer: new SharedArrayBuffer(4096),
+				watchBuffer: new SharedArrayBuffer(4096), watchResultBuffer: new SharedArrayBuffer(4096),
+				interrupt: new SharedArrayBuffer(1), workspaceFiles: []
+			} });
 			expect(pyodide.runPythonAsync).toHaveBeenCalledOnce();
 			expect(postMessage).toHaveBeenCalledWith({ results: true });
 		}
 	);
 
 	it.each([
-		{
-			name: 'untrusted runtime version',
-			version: '314.0.7/../../untrusted',
-			lock: undefined,
-			error: 'Pyodide runtime version is invalid',
-			expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json']
-		},
-		{
-			name: 'unsafe lock package path',
-			version: '314.0.7',
-			lock: { packages: { demo: { file_name: '../untrusted.whl' } } },
-			error: 'Python runtime lock file has an unsafe package asset name',
-			expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json']
-		}
+		{ name: 'untrusted runtime version', version: '314.0.7/../../untrusted', lock: undefined, error: 'Pyodide runtime version is invalid', expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json'] },
+		{ name: 'unsafe lock package path', version: '314.0.7', lock: { packages: { demo: { file_name: '../untrusted.whl' } } }, error: 'Python runtime lock file has an unsafe package asset name', expectedAssets: ['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json'] }
 	])('fails closed for an $name', async ({ version, lock, error, expectedAssets }) => {
-		const { onmessage, postMessage, runtimeOptions } = await createRuntimeHarness({
-			version,
-			...(lock ? { lock } : {})
-		});
-
-		await onmessage({
-			data: {
-				load: true,
-				assets: {
-					baseUrl: 'https://assets.example.test/python/',
-					maxAssetBytes: 4096,
-					useAssetBridge: false
-				}
-			}
-		});
-
-		expect(workerAssets.loadWorkerRuntimeAsset.mock.calls.map(([asset]) => asset)).toEqual(
-			expectedAssets
-		);
+		const { onmessage, postMessage, runtimeOptions } = await createRuntimeHarness({ version, ...(lock ? { lock } : {}) });
+		await onmessage({ data: { load: true, assets: { baseUrl: 'https://assets.example.test/python/', maxAssetBytes: 4096, useAssetBridge: false } } });
+		expect(workerAssets.loadWorkerRuntimeAsset.mock.calls.map(([asset]) => asset)).toEqual(expectedAssets);
 		expect(workerAssets.configureWorkerRuntimeAssetAllowlist).not.toHaveBeenCalled();
 		expect(runtimeOptions).toHaveLength(0);
 		expect(postMessage).toHaveBeenCalledWith({ error });
 	});
 });
 
-const directAssets = {
-	baseUrl: 'https://assets.example.test/python/',
-	maxAssetBytes: 4096,
-	useAssetBridge: false
-};
+const directAssets = { baseUrl: 'https://assets.example.test/python/', maxAssetBytes: 4096, useAssetBridge: false };
 
-function executionData(
-	code = 'import demo',
-	workspaceFiles: { path: string; content: string }[] = [],
-	activePath = 'main.py'
-) {
-	return {
-		code,
-		activePath,
-		workspaceFiles,
-		buffer: new SharedArrayBuffer(4096),
-		debugBuffer: new SharedArrayBuffer(4096),
-		watchBuffer: new SharedArrayBuffer(4096),
-		watchResultBuffer: new SharedArrayBuffer(4096),
-		interrupt: new SharedArrayBuffer(1)
-	};
+function executionData(code = 'import demo', workspaceFiles: { path: string; content: string }[] = [], activePath = 'main.py') {
+	return { code, activePath, workspaceFiles,
+		buffer: new SharedArrayBuffer(4096), debugBuffer: new SharedArrayBuffer(4096),
+		watchBuffer: new SharedArrayBuffer(4096), watchResultBuffer: new SharedArrayBuffer(4096), interrupt: new SharedArrayBuffer(1) };
 }
 
 describe('Python preparation output', () => {
-	it.each([false, true])(
-		'reports loading and preparation only through progress messages (log=%s)',
-		async (log) => {
-			const { onmessage, postMessage, pyodide } = await createRuntimeHarness();
-			await onmessage({ data: { load: true, assets: directAssets, log } });
-			expect(postMessage.mock.calls.map(([message]) => message)).toEqual([
-				{ progress: { percent: 2, stage: 'Loading Pyodide module' } },
-				{ progress: { percent: 100, stage: 'Pyodide runtime ready' } },
-				{ load: true }
-			]);
-
-			postMessage.mockClear();
-			await onmessage({ data: { ...executionData(), prepare: true, log } });
-			expect(pyodide.loadPackagesFromImports).toHaveBeenCalledOnce();
-			expect(pyodide.runPythonAsync).not.toHaveBeenCalled();
-			expect(postMessage.mock.calls.map(([message]) => message)).toEqual([
-				{ progress: { percent: 5, stage: 'Preparing Python workspace' } },
-				{ progress: { percent: 15, stage: 'Resolving Python imports' } },
-				{ progress: { percent: 100, stage: 'Python packages ready' } },
-				{ results: true }
-			]);
-		}
-	);
+	it.each([false, true])('reports loading and preparation only through progress messages (log=%s)', async (log) => {
+		const { onmessage, postMessage, pyodide } = await createRuntimeHarness();
+		await onmessage({ data: { load: true, assets: directAssets, log } });
+		expect(postMessage.mock.calls.map(([message]) => message)).toEqual([
+			{ progress: { percent: 2, stage: 'Loading Pyodide module' } },
+			{ progress: { percent: 100, stage: 'Pyodide runtime ready' } }, { load: true }
+		]);
+		postMessage.mockClear();
+		await onmessage({ data: { ...executionData(), prepare: true, log } });
+		expect(pyodide.loadPackagesFromImports).toHaveBeenCalledOnce();
+		expect(pyodide.runPythonAsync).not.toHaveBeenCalled();
+		expect(postMessage.mock.calls.map(([message]) => message)).toEqual([
+			{ progress: { percent: 5, stage: 'Preparing Python workspace' } },
+			{ progress: { percent: 15, stage: 'Resolving Python imports' } },
+			{ progress: { percent: 100, stage: 'Python packages ready' } }, { results: true }
+		]);
+	});
 
 	it('preserves user output that matches a former preparation message', async () => {
 		const { onmessage, postMessage, pyodide } = await createRuntimeHarness();
@@ -325,18 +248,11 @@ describe('Python preparation output', () => {
 		const runPython = pyodide.runPythonAsync.getMockImplementation()!;
 		pyodide.runPythonAsync.mockImplementationOnce(async () => {
 			await runPython();
-			const outputNames = Object.keys(globalThis).filter((name) =>
-				name.startsWith('__pyodide__output_')
-			);
-			const outputName = outputNames.at(-1)!;
-			(globalThis as any)[outputName]('Done.', { end: '\n' });
+			// Native Python writes bytes through Pyodide, not an emulated print callback.
+			pyodide.setStdout.mock.calls.at(-1)![0].write(new TextEncoder().encode('Done.\n'));
 		});
 		await onmessage({ data: { ...data, log: false } });
-		expect(
-			postMessage.mock.calls
-				.map(([message]) => message)
-				.filter((message) => 'output' in message)
-		).toEqual([{ output: 'Done.\n' }]);
+		expect(postMessage.mock.calls.map(([message]) => message).filter((message) => 'output' in message)).toEqual([{ output: 'Done.\n' }]);
 		expect(postMessage).toHaveBeenCalledWith({ results: true });
 	});
 
@@ -348,70 +264,51 @@ describe('Python preparation output', () => {
 		await onmessage({ data: { ...executionData(), prepare: true, log: false } });
 		expect(postMessage.mock.calls.map(([message]) => message)).toEqual([
 			{ progress: { percent: 5, stage: 'Preparing Python workspace' } },
-			{ progress: { percent: 15, stage: 'Resolving Python imports' } },
-			{ error: 'package unavailable' }
+			{ progress: { percent: 15, stage: 'Resolving Python imports' } }, { error: 'package unavailable' }
 		]);
 		expect(pyodide.runPythonAsync).not.toHaveBeenCalled();
 	});
 });
 
 describe('Python bootstrap scheduling', () => {
-	it.each([false, true])(
-		'fetches independent assets concurrently and evaluates asm first (bridge=%s)',
-		async (useAssetBridge) => {
-			const harness = await createRuntimeHarness();
-			const loadAsset = workerAssets.loadWorkerRuntimeAsset.getMockImplementation()!;
-			const pending = new Map<string, () => void>();
-			workerAssets.loadWorkerRuntimeAsset.mockImplementation(
-				(asset: string) =>
-					new Promise((resolve) => {
-						pending.set(asset, () => resolve(loadAsset(asset)));
-					})
-			);
+	it.each([false, true])('fetches independent assets concurrently and evaluates asm first (bridge=%s)', async (useAssetBridge) => {
+		const harness = await createRuntimeHarness();
+		const loadAsset = workerAssets.loadWorkerRuntimeAsset.getMockImplementation()!;
+		const pending = new Map<string, () => void>();
+		workerAssets.loadWorkerRuntimeAsset.mockImplementation((asset: string) => new Promise((resolve) => {
+			pending.set(asset, () => resolve(loadAsset(asset)));
+		}));
+		const loading = harness.onmessage({ data: { load: true, assets: { ...directAssets, useAssetBridge } } });
+		const expected = ['pyodide.asm.mjs', 'pyodide.mjs'];
+		if (!useAssetBridge) expected.push('pyodide-lock.json');
+		expect([...pending.keys()]).toEqual(expected);
+		expect(harness.moduleEvaluations).toEqual([]);
+		expect(harness.runtimeOptions).toHaveLength(0);
+		expect(harness.postMessage).not.toHaveBeenCalledWith({ load: true });
+		// Reverse completion order must not change module evaluation dependencies.
+		for (const asset of [...expected].reverse()) pending.get(asset)!();
+		await loading;
+		expect(harness.moduleEvaluations).toEqual(['asm', 'entry']);
+		expect(harness.runtimeOptions).toHaveLength(1);
+		expect(harness.revokeObjectURL).toHaveBeenCalledTimes(2);
+		expect(harness.postMessage).toHaveBeenCalledWith({ load: true });
+	});
 
-			const loading = harness.onmessage({
-				data: { load: true, assets: { ...directAssets, useAssetBridge } }
-			});
-			const expected = ['pyodide.asm.mjs', 'pyodide.mjs'];
-			if (!useAssetBridge) expected.push('pyodide-lock.json');
-			expect([...pending.keys()]).toEqual(expected);
-			expect(harness.moduleEvaluations).toEqual([]);
-			expect(harness.runtimeOptions).toHaveLength(0);
-			expect(harness.postMessage).not.toHaveBeenCalledWith({ load: true });
-
-			// Reverse completion order must not change module evaluation dependencies.
-			for (const asset of [...expected].reverse()) pending.get(asset)!();
-			await loading;
-			expect(harness.moduleEvaluations).toEqual(['asm', 'entry']);
-			expect(harness.runtimeOptions).toHaveLength(1);
-			expect(harness.revokeObjectURL).toHaveBeenCalledTimes(2);
-			expect(harness.postMessage).toHaveBeenCalledWith({ load: true });
-		}
-	);
-
-	it.each(['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json'])(
-		'fails closed and can retry when %s cannot be downloaded',
-		async (failedAsset) => {
-			const harness = await createRuntimeHarness();
-			const loadAsset = workerAssets.loadWorkerRuntimeAsset.getMockImplementation()!;
-			workerAssets.loadWorkerRuntimeAsset.mockImplementation((asset: string) =>
-				asset === failedAsset
-					? Promise.reject(new Error('asset unavailable'))
-					: loadAsset(asset)
-			);
-			await harness.onmessage({ data: { load: true, assets: directAssets } });
-			expect(harness.runtimeOptions).toHaveLength(0);
-			expect(harness.moduleEvaluations).toEqual([]);
-			expect(workerAssets.configureWorkerRuntimeAssetAllowlist).not.toHaveBeenCalled();
-			expect(harness.postMessage).toHaveBeenCalledWith({ error: 'asset unavailable' });
-			expect(harness.postMessage).not.toHaveBeenCalledWith({ load: true });
-
-			workerAssets.loadWorkerRuntimeAsset.mockImplementation(loadAsset);
-			await harness.onmessage({ data: { load: true, assets: directAssets } });
-			expect(harness.runtimeOptions).toHaveLength(1);
-			expect(harness.postMessage).toHaveBeenCalledWith({ load: true });
-		}
-	);
+	it.each(['pyodide.asm.mjs', 'pyodide.mjs', 'pyodide-lock.json'])('fails closed and can retry when %s cannot be downloaded', async (failedAsset) => {
+		const harness = await createRuntimeHarness();
+		const loadAsset = workerAssets.loadWorkerRuntimeAsset.getMockImplementation()!;
+		workerAssets.loadWorkerRuntimeAsset.mockImplementation((asset: string) => asset === failedAsset ? Promise.reject(new Error('asset unavailable')) : loadAsset(asset));
+		await harness.onmessage({ data: { load: true, assets: directAssets } });
+		expect(harness.runtimeOptions).toHaveLength(0);
+		expect(harness.moduleEvaluations).toEqual([]);
+		expect(workerAssets.configureWorkerRuntimeAssetAllowlist).not.toHaveBeenCalled();
+		expect(harness.postMessage).toHaveBeenCalledWith({ error: 'asset unavailable' });
+		expect(harness.postMessage).not.toHaveBeenCalledWith({ load: true });
+		workerAssets.loadWorkerRuntimeAsset.mockImplementation(loadAsset);
+		await harness.onmessage({ data: { load: true, assets: directAssets } });
+		expect(harness.runtimeOptions).toHaveLength(1);
+		expect(harness.postMessage).toHaveBeenCalledWith({ load: true });
+	});
 
 	it('revokes both module URLs when the entry module throws during evaluation', async () => {
 		const harness = await createRuntimeHarness();
@@ -424,48 +321,29 @@ describe('Python bootstrap scheduling', () => {
 });
 
 describe('Python prepare-to-run reuse', () => {
-	it.each([false, true])(
-		'reuses import analysis only for the next matching run (bridge=%s)',
-		async (useAssetBridge) => {
-			const { onmessage, pyodide, postMessage } = await createRuntimeHarness();
-			await onmessage({ data: { load: true, assets: { ...directAssets, useAssetBridge } } });
-			const data = executionData('import demo', [
-				{ path: 'helper.py', content: 'import demo' }
-			]);
-			await onmessage({ data: { ...data, prepare: true } });
-			expect(pyodide.loadPackagesFromImports).toHaveBeenCalledOnce();
-			expect(pyodide.runPythonAsync).not.toHaveBeenCalled();
-
-			await onmessage({ data });
-			expect(pyodide.loadPackagesFromImports).toHaveBeenCalledOnce();
-			expect(pyodide.runPythonAsync).toHaveBeenCalledOnce();
-			// Rewriting files is intentional: preparation does not change workspace semantics.
-			expect(pyodide.FS.writeFile).toHaveBeenCalledTimes(2);
-			expect(postMessage).toHaveBeenCalledWith({ results: true });
-
-			await onmessage({ data });
-			expect(pyodide.loadPackagesFromImports).toHaveBeenCalledTimes(2);
-			expect(pyodide.runPythonAsync).toHaveBeenCalledTimes(2);
-		}
-	);
+	it.each([false, true])('reuses import analysis only for the next matching run (bridge=%s)', async (useAssetBridge) => {
+		const { onmessage, pyodide, postMessage } = await createRuntimeHarness();
+		await onmessage({ data: { load: true, assets: { ...directAssets, useAssetBridge } } });
+		const data = executionData('import demo', [{ path: 'helper.py', content: 'import demo' }]);
+		await onmessage({ data: { ...data, prepare: true } });
+		expect(pyodide.loadPackagesFromImports).toHaveBeenCalledOnce();
+		expect(pyodide.runPythonAsync).not.toHaveBeenCalled();
+		await onmessage({ data });
+		expect(pyodide.loadPackagesFromImports).toHaveBeenCalledOnce();
+		expect(pyodide.runPythonAsync).toHaveBeenCalledOnce();
+		// Rewriting files is intentional: preparation does not change workspace semantics.
+		expect(pyodide.FS.writeFile).toHaveBeenCalledTimes(2);
+		expect(postMessage).toHaveBeenCalledWith({ results: true });
+		await onmessage({ data });
+		expect(pyodide.loadPackagesFromImports).toHaveBeenCalledTimes(2);
+		expect(pyodide.runPythonAsync).toHaveBeenCalledTimes(2);
+	});
 
 	it.each([
-		[
-			'active source',
-			executionData('import another', [{ path: 'a.py', content: 'import demo' }])
-		],
-		[
-			'active path',
-			executionData('import demo', [{ path: 'a.py', content: 'import demo' }], 'other.py')
-		],
-		[
-			'workspace source',
-			executionData('import demo', [{ path: 'a.py', content: 'import other' }])
-		],
-		[
-			'workspace path',
-			executionData('import demo', [{ path: 'b.py', content: 'import demo' }])
-		],
+		['active source', executionData('import another', [{ path: 'a.py', content: 'import demo' }])],
+		['active path', executionData('import demo', [{ path: 'a.py', content: 'import demo' }], 'other.py')],
+		['workspace source', executionData('import demo', [{ path: 'a.py', content: 'import other' }])],
+		['workspace path', executionData('import demo', [{ path: 'b.py', content: 'import demo' }])],
 		['removed file', executionData('import demo')]
 	])('reanalyzes imports after a changed %s', async (_label, changed) => {
 		const { onmessage, pyodide } = await createRuntimeHarness();
@@ -480,17 +358,10 @@ describe('Python prepare-to-run reuse', () => {
 	it('does not confuse source boundaries that produce the same joined text', async () => {
 		const { onmessage, pyodide } = await createRuntimeHarness();
 		await onmessage({ data: { load: true, assets: directAssets } });
-		await onmessage({
-			data: {
-				...executionData('import demo', [{ path: 'a.py', content: 'import other' }]),
-				prepare: true
-			}
-		});
+		await onmessage({ data: { ...executionData('import demo', [{ path: 'a.py', content: 'import other' }]), prepare: true } });
 		await onmessage({ data: executionData('import demo\nimport other') });
 		expect(pyodide.loadPackagesFromImports).toHaveBeenCalledTimes(2);
-		expect(pyodide.loadPackagesFromImports.mock.calls[0]).toEqual(
-			pyodide.loadPackagesFromImports.mock.calls[1]
-		);
+		expect(pyodide.loadPackagesFromImports.mock.calls[0]).toEqual(pyodide.loadPackagesFromImports.mock.calls[1]);
 	});
 
 	it('does not reuse an old preparation after a later preparation fails', async () => {

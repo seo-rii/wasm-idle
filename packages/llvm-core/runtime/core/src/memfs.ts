@@ -6,6 +6,8 @@ import { compile, type ProgressSink } from './wasm.js';
 const ESUCCESS = 0;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+const emptyBytes = new Uint8Array(0);
+const noopTrace = () => {};
 
 export interface MemFsOptions {
 	stdin: () => string;
@@ -26,7 +28,8 @@ export default class MemFS {
 	mem: Memory = <any>null;
 	hostMem_: Memory = <any>null;
 	stdinStr: string;
-	private stdinBytes = new Uint8Array(0);
+	private stdinBytes = emptyBytes;
+	private stdinOffset = 0;
 	stdin: () => string;
 	stdout: (str: string) => void;
 	trace: (message: string) => void;
@@ -41,7 +44,7 @@ export default class MemFS {
 		this.stdin = options.stdin;
 		this.stdout = options.stdout;
 		this.stdinStr = options.stdinStr || '';
-		this.trace = options.trace || (() => {});
+		this.trace = options.trace || noopTrace;
 
 		const env = bindNew(
 			this,
@@ -85,7 +88,8 @@ export default class MemFS {
 
 	setStdinStr(str: string) {
 		this.stdinStr = str;
-		this.stdinBytes = new Uint8Array(0);
+		this.stdinBytes = emptyBytes;
+		this.stdinOffset = 0;
 	}
 
 	addDirectory(path: string) {
@@ -152,7 +156,9 @@ export default class MemFS {
 			size += len;
 		}
 		this.hostMem_.write32(nwritten_out, size);
-		this.trace(`host_write(fd=${fd}, bytes=${size}, data=${previewText(str)})`);
+		if (this.trace !== noopTrace) {
+			this.trace(`host_write(fd=${fd}, bytes=${size}, data=${previewText(str)})`);
+		}
 		if (this.out) this.stdout(str);
 		return ESUCCESS;
 	}
@@ -166,28 +172,39 @@ export default class MemFS {
 			iovs += 4;
 			const len = this.hostMem_.read32(iovs);
 			iovs += 4;
-			if (!this.stdinBytes.length) {
+			// A zero-length iovec must not consume input or request interactive input.
+			if (len === 0) continue;
+			if (this.stdinOffset === this.stdinBytes.length) {
 				const input = this.stdinStr.length ? this.stdinStr : this.stdin();
 				this.stdinStr = '';
 				this.stdinBytes = textEncoder.encode(input);
+				this.stdinOffset = 0;
 			}
-			const lenToWrite = Math.min(len, this.stdinBytes.length);
+			const lenToWrite = Math.min(len, this.stdinBytes.length - this.stdinOffset);
 			if (lenToWrite === 0) break;
-			const chunk = this.stdinBytes.subarray(0, lenToWrite);
+			const chunk = this.stdinBytes.subarray(this.stdinOffset, this.stdinOffset + lenToWrite);
 			this.hostMem_.write(buf, chunk);
-			this.stdinBytes = this.stdinBytes.slice(lenToWrite);
+			this.stdinOffset += lenToWrite;
+			if (this.stdinOffset === this.stdinBytes.length) {
+				// Release the consumed input without copying the unread suffix on each read.
+				this.stdinBytes = emptyBytes;
+				this.stdinOffset = 0;
+			}
 			size += lenToWrite;
-			this.trace(
-				`host_read(fd=${fd}, bytes=${lenToWrite}, data=${previewText(textDecoder.decode(chunk))})`
-			);
+			if (this.trace !== noopTrace) {
+				this.trace(
+					`host_read(fd=${fd}, bytes=${lenToWrite}, data=${previewText(textDecoder.decode(chunk))})`
+				);
+			}
 			if (lenToWrite !== len) break;
 		}
 		this.hostMem_.write32(nread, size);
-		if (size === 0) this.trace(`host_read(fd=${fd}, bytes=0)`);
+		if (size === 0 && this.trace !== noopTrace) this.trace(`host_read(fd=${fd}, bytes=0)`);
 		return ESUCCESS;
 	}
 
 	memfs_log(buf: number, len: number) {
+		if (this.trace === noopTrace) return;
 		this.mem.check();
 		const message = this.mem.readStr(buf, len);
 		this.trace(`memfs_log(${previewText(message)})`);
