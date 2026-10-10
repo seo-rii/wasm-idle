@@ -1,0 +1,54 @@
+name: Materialize reviewed editor readiness patches
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/one-shot-reviewed-editor-patch.yml'
+
+# Temporary editing aid while the interactive container is unavailable.
+# Only creates unreferenced Git blobs from two fixed, hash-checked inputs.
+# Does not check out or execute PR code, create commits, or update any ref.
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.repository == 'seo-rii/wasm-idle' && github.event.pull_request.number == 74 && github.event.pull_request.head.ref == 'perf/runtime-experiment-evidence-20261010' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const ref = 'a0545c2c9f5d5ecc6683398460b5a7c99e3438bd';
+            const edits = [
+              {
+                path: 'src/routes/+page.svelte',
+                sha: '1bd0284ff33293e0a364da04f132256db74a78ae',
+                replacements: [
+                  ['<select id="language-select" value={language} onchange={handleLanguageChange}>', '<select\n\t\t\t\t\t\tid="language-select"\n\t\t\t\t\t\tvalue={language}\n\t\t\t\t\t\tdisabled={!workspaceInitialized}\n\t\t\t\t\t\tdata-workspace-ready={workspaceInitialized}\n\t\t\t\t\t\tonchange={handleLanguageChange}\n\t\t\t\t\t>'],
+                  ['\tfunction handleLanguageChange(event: Event) {\n', '\tfunction handleLanguageChange(event: Event) {\n\t\t// Initial storage/share restoration owns the workspace until it completes.\n\t\tif (!workspaceInitialized) return;\n']
+                ]
+              },
+              {
+                path: 'src/routes/monaco-lsp.playwright.test.ts',
+                sha: 'd1f394534356c3722e27def73cefb2dd510b4785',
+                replacements: [
+                  ["import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';", "import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';\nimport { waitForEditorWorkspace, waitForSelectedEditorModel } from '../../scripts/browser-editor-readiness.mjs';"],
+                  ["\t\t\tawait page.locator('#language-select').waitFor();\n\t\t\treturn;", '\t\t\tawait waitForEditorWorkspace(page);\n\t\t\treturn;'],
+                  ['async function selectLanguage(page: Page, testCase: LspBrowserCase) {\n', 'async function selectLanguage(page: Page, testCase: LspBrowserCase) {\n\tawait waitForEditorWorkspace(page);\n'],
+                  ["\tawait page.locator('.monaco-editor textarea').waitFor();\n}\n\nasync function enableLsp", "\tawait page.locator('.monaco-editor textarea').waitFor();\n\tawait waitForSelectedEditorModel(page, testCase.language, testCase.fileName);\n}\n\nasync function enableLsp"]
+                ]
+              }
+            ];
+            for (const edit of edits) {
+              const { data } = await github.rest.repos.getContent({ ...context.repo, path: edit.path, ref });
+              if (Array.isArray(data) || data.type !== 'file' || data.sha !== edit.sha) throw new Error('Pinned source mismatch: ' + edit.path);
+              let content = Buffer.from(data.content, 'base64').toString('utf8');
+              for (const [before, after] of edit.replacements) {
+                if (content.split(before).length !== 2) throw new Error('Non-unique patch context: ' + edit.path);
+                content = content.replace(before, after);
+              }
+              const { data: blob } = await github.rest.git.createBlob({ ...context.repo, content, encoding: 'utf-8' });
+              core.info('REVIEWED_PATCH_BLOB ' + JSON.stringify({ path: edit.path, original: edit.sha, sha: blob.sha, bytes: Buffer.byteLength(content) }));
+            }
