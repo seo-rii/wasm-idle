@@ -1,4 +1,4 @@
-import Runtime from './runtime.js';
+import Runtime from './artifact-runtime.js';
 import { resolveDebugMode } from './types.js';
 import {
 	compileClang,
