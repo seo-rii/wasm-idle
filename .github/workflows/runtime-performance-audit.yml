@@ -1,0 +1,39 @@
+name: Runtime performance experiment audit
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/performance/**'
+      - 'docs/performance/**'
+      - '.github/workflows/runtime-performance-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test scripts/performance/*.test.mjs
+      - name: Record reproducible source snapshot
+        run: |
+          mkdir -p performance-audit
+          git rev-parse HEAD > performance-audit/revision.txt
+          node --version > performance-audit/node-version.txt
+          git archive --format=tar HEAD packages src scripts docs .github package.json pnpm-lock.yaml > performance-audit/source.tar
+          sha256sum performance-audit/source.tar > performance-audit/source.sha256
+          printf '%s\n' 'No compiler build, Python profile build, browser measurement or performance promotion was performed by this audit job.' > performance-audit/NOT-A-BENCHMARK.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-performance-evidence-tools
+          path: performance-audit/
+          retention-days: 7
+          if-no-files-found: error

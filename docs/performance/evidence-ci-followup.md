@@ -1,0 +1,7 @@
+# Evidence-tool CI follow-up
+
+LLDB workflow 38021014376 on the adapter head 22859e3f2cd300db7177f2e49da58e3ace4966bf failed the existing post-stop heap assertion (88098233 bytes growth versus 67108864). Stepping, transport stress, crash recovery and worker termination had already passed. The evidence tools do not modify the executed compiler/debugger implementation; this is retained as an independent failed observation, not dismissed as a successful run.
+
+The branch now includes the same four test-only Chromium heap measurement files as PR #75, with strict JSDoc parameter types. The launcher enables fresh performance.memory sampling. Before the unchanged product test, a real Chromium calibration requires a retained 96 MiB buffer to exceed the same 64 MiB guard and released memory to return near baseline after GC. No product memory budget, lifecycle assertion, relaunch count, CSP or runtime asset is relaxed.
+
+The source investigation and actual local calibration are documented in PR #75 at docs/performance/lldb-memory-measurement.md, commit ac9cb83cb88510b1cec9697642c26fcc82178984. Its preceding precision-enabled LLDB workflow 38020694849 passed; this branch still requires its own exact-head CI. Calibration is measurement validation, not a claim to have reduced debugger memory. Identical shared instrumentation in #69/#74/#75 should be reconciled once during eventual integration; no merge has occurred.
