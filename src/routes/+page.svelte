@@ -3143,8 +3143,9 @@
 			<p class="hint">
 				Common Lisp runs upstream ECL 26.5.5 compiled to WebAssembly. The active file is
 				loaded with <code>LOAD</code> using ECL's bytecode compiler; read input with
-				<code>read-line</code> or <code>read</code>. Unhandled conditions stop the run, and
-				very deep recursion (about 1000 levels) fails with a stack-overflow error.
+				<code>read-line</code> or <code>read</code>. Unhandled conditions stop the run.
+				The browser call-stack limit varies (about 150 recursive calls in a Chromium Worker);
+				deeper recursion fails with a stack-overflow error.
 			</p>
 		{/if}
 		{#if language === 'C3'}
