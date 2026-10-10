@@ -2,6 +2,7 @@
 
 import { addBrowserTestCookies } from '../../scripts/browser-test-cookies.mjs';
 import { disableBrowserPrewarm } from '../../scripts/browser-test-prewarm.mjs';
+import { waitForEditorWorkspace, waitForSelectedEditorModel } from '../../scripts/browser-editor-readiness.mjs';
 import { chromium, type BrowserContext, type Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 
@@ -783,7 +784,7 @@ async function waitForPreparedPage(page: Page, browserUrl: string) {
 			)
 			.catch(() => false);
 		if (ready) {
-			await page.locator('#language-select').waitFor();
+			await waitForEditorWorkspace(page);
 			return;
 		}
 		await page
@@ -801,6 +802,7 @@ async function waitForPreparedPage(page: Page, browserUrl: string) {
 }
 
 async function selectLanguage(page: Page, testCase: LspBrowserCase) {
+	await waitForEditorWorkspace(page);
 	await page.locator('#language-select').selectOption(testCase.language);
 	await page.waitForFunction(
 		(language) =>
@@ -816,6 +818,7 @@ async function selectLanguage(page: Page, testCase: LspBrowserCase) {
 		testCase.fileName
 	);
 	await page.locator('.monaco-editor textarea').waitFor();
+	await waitForSelectedEditorModel(page, testCase.language, testCase.fileName);
 }
 
 async function enableLsp(page: Page) {
