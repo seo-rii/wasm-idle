@@ -4,9 +4,14 @@ import { constants } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+/** @param {string} text */
 const quote = (text) => `'${text.replaceAll("'", "'\\''")}'`;
 
-/** Linux CI launcher: fresh heap statistics, unchanged browser and caller flags. */
+/**
+ * Linux CI launcher: fresh heap statistics, unchanged browser and caller flags.
+ * @param {string} executable
+ * @param {string} destination
+ */
 export async function createPreciseChromiumLauncher(executable, destination) {
 	if (typeof executable !== 'string' || typeof destination !== 'string' ||
 		!path.isAbsolute(executable) || !path.isAbsolute(destination) ||
