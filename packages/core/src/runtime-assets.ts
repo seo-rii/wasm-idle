@@ -91,6 +91,7 @@ export interface RuntimeAssetKeySource {
 	};
 	lfortran?: { baseUrl?: string };
 	lean4?: { baseUrl?: string };
+	commonlisp?: { baseUrl?: string };
 	fortran?: {
 		baseUrl?: string;
 		f2cWasmUrl?: string;
@@ -785,6 +786,7 @@ const RUNTIME_ASSET_KEY_FIELDS = [
 	},
 	{ runtime: 'lfortran', property: 'baseUrl', key: 'lfortranBaseUrl' },
 	{ runtime: 'lean4', property: 'baseUrl', key: 'lean4BaseUrl' },
+	{ runtime: 'commonlisp', property: 'baseUrl', key: 'commonlispBaseUrl' },
 	{ runtime: 'fortran', property: 'baseUrl', key: 'fortranBaseUrl' },
 	{ runtime: 'fortran', property: 'f2cWasmUrl', key: 'fortranF2cWasmUrl' },
 	{ runtime: 'fortran', property: 'libf2cUrl', key: 'fortranLibf2cUrl' },

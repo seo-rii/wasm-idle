@@ -35,6 +35,8 @@ static/wasm-d/runtime/toolchain/toolchain.tar
 
 # C3 assets are synced from the separately verified wasm-llvm producer.
 /static/wasm-c3/
+# Common Lisp (ECL) assets are downloaded from the pinned wasm-llvm revision, never committed.
+/static/wasm-commonlisp/
 # LFortran producer artifacts are synced locally, never committed.
 static/wasm-lfortran/
 # Lean 4 assets are downloaded from the pinned wasm-llvm release, never committed.

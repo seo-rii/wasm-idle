@@ -248,6 +248,11 @@ vi.mock('$lib/playground/swift', () => {
 	};
 });
 
+vi.mock('$lib/playground/commonlisp', () => {
+	moduleLoads.add('COMMONLISP');
+	return { default: createMockSandboxClass('COMMONLISP') };
+});
+
 vi.mock('$lib/playground/lfortran', () => {
 	moduleLoads.add('LFORTRAN');
 	return { default: createMockSandboxClass('LFORTRAN') };
@@ -455,6 +460,7 @@ describe('playground runtime binding', () => {
 				'CLOJURESCRIPT',
 				'RESCRIPT',
 				'LFORTRAN',
+				'COMMONLISP',
 				'FORTRAN',
 				'COBOL',
 				'V',
@@ -474,6 +480,14 @@ describe('playground runtime binding', () => {
 		const sandbox = await playground('SH');
 		expect(sandboxInstances.get('BASH')).toHaveLength(1);
 		expect(moduleLoads).toContain('BASH');
+	});
+
+	it('routes Common Lisp aliases through the ECL sandbox without touching Scheme', async () => {
+		await playground('CL');
+		await playground('ECL');
+		expect(sandboxInstances.get('COMMONLISP')).toHaveLength(2);
+		expect(moduleLoads).toContain('COMMONLISP');
+		expect(moduleLoads).not.toContain('LISP');
 	});
 
 	it('routes the HYLANG alias through the Hy sandbox', async () => {

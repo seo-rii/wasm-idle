@@ -143,6 +143,7 @@ const runtimeReadinessAudit = {
 	RESCRIPT: { strategy: 'static-worker-fallback', hostModule: 'rescript' },
 	LFORTRAN: { strategy: 'static-worker-fallback', hostModule: 'lfortran' },
 	LEAN4: { strategy: 'static-worker-fallback', hostModule: 'lean4' },
+	COMMONLISP: { strategy: 'static-worker-fallback', hostModule: 'commonlisp' },
 	FORTRAN: { strategy: 'terminal-fallback', hostModule: 'fortran' },
 	COBOL: { strategy: 'terminal-fallback', hostModule: 'cobol' },
 	V: { strategy: 'terminal-fallback', hostModule: 'v' },

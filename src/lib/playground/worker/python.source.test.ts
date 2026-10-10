@@ -2,12 +2,12 @@ import source from './python.ts?raw';
 import { describe, expect, it } from 'vitest';
 
 describe('Python worker source', () => {
-	it('strips the submitted line terminator from builtins.input return values', () => {
-		expect(source).toContain('def __wasm_idle_input_wrapper(prompt = ""):');
-		expect(source).toContain('if value.endswith("\\\\r\\\\n"):');
-		expect(source).toContain('value = value[:-2]');
-		expect(source).toContain('elif value.endswith("\\\\n") or value.endswith("\\\\r"):');
-		expect(source).toContain('value = value[:-1]');
+	it('uses native Python input and print through the standard stream adapter', () => {
+		expect(source).toContain('const stdio = createPythonStdio(pyodide, {');
+		expect(source).toContain('installPythonFlushHooks(stdio.flush)');
+		expect(source).toContain('self.prompt = stdio.prompt;');
+		expect(source).not.toContain('builtins.input = __wasm_idle_input_wrapper');
+		expect(source).not.toContain('builtins.print = __wasm_idle_output');
 	});
 
 	it('reports Pyodide initialization and package preparation stages', () => {

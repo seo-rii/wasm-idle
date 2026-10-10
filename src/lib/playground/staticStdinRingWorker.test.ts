@@ -11,7 +11,8 @@ const readers = [
 	{ language: 'forth', factory: 'createSharedKeyReader', eof: -1 },
 	{ language: 'tcl', factory: 'createSharedStdinReader', eof: null },
 	{ language: 'lfortran', factory: 'createSharedStdinReader', eof: null },
-	{ language: 'lean4', factory: 'createSharedStdinReader', eof: null }
+	{ language: 'lean4', factory: 'createSharedStdinReader', eof: null },
+	{ language: 'commonlisp', factory: 'createSharedStdinReader', eof: null }
 ] as const;
 
 describe.each(readers)('$language shared stdin wakeup races', ({ language, factory, eof }) => {

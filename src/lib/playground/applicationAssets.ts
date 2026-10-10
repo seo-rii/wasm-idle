@@ -382,6 +382,7 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 		},
 		lfortran: { baseUrl: asset('wasm-lfortran/') },
 		lean4: { baseUrl: asset('wasm-lean4/') },
+		commonlisp: { baseUrl: asset('wasm-commonlisp/') },
 		fortran: {
 			baseUrl: asset('wasm-fortran/'),
 			f2cWasmUrl: asset('wasm-fortran/f2c.wasm', WASM_FORTRAN_EXECUTION_ASSET_VERSION),

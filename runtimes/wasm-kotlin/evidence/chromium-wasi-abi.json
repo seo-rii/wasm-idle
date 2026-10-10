@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "kind": "wasi-console-abi-microprobe",
+  "status": "passed",
+  "kotlinSourceCommit": "4d78aae1e337cd40f69baa865aed950fe807a775",
+  "wasiLibcCommit": "165235bc467d5fa52d424f5d82587dfb76ed9d54",
+  "adapterSha256": "236c1976f66944231241535dc320f203f512c497866355e8dafe6a0e2d61c948",
+  "fixtureSha256": "9b7580e22e10fb85488f78ea54f8440414dd5c8b4c90bb07236ae7c48d547c95",
+  "probeSha256": "d535f7fc92f8885da051116ad9d2bc074748c7b685bdd4f762c2028edff08328",
+  "wasmSha256": "8659dd567da622cdc9c0191a5d49022374061c6d15ff633ae1ea41275e1c7253",
+  "wasmBytes": 214,
+  "command": "pnpm test:browser:kotlin-wasi",
+  "environment": {
+    "os": "linux 6.1.0-53-cloud-amd64",
+    "arch": "x64",
+    "cpu": "AMD EPYC 7B12",
+    "ramBytes": 33664798720,
+    "node": "v24.1.0",
+    "typescript": "6.0.3"
+  },
+  "browser": {
+    "name": "Chromium",
+    "version": "153.0.8010.12",
+    "headless": true
+  },
+  "network": {
+    "offline": true,
+    "requests": []
+  },
+  "result": {
+    "stdout": "한😀\r\n",
+    "stderr": "오류",
+    "outputBytes": 15,
+    "outputLimitExceeded": false,
+    "fullSizedCanaries": true,
+    "eofReady": true
+  },
+  "gates": {
+    "kotlinCompilerBuild": "not-run",
+    "kotlinCompileRun": "not-run",
+    "kotlinStdlibAllocatorAbi": "not-run",
+    "publicLanguageSupport": false
+  }
+}
