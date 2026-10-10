@@ -970,6 +970,8 @@
 	}
 
 	function handleLanguageChange(event: Event) {
+		// Initial storage/share restoration owns the workspace until it completes.
+		if (!workspaceInitialized) return;
 		const nextLanguage = normalizeRequestedLanguage(
 			(event.currentTarget as HTMLSelectElement).value
 		);
@@ -2812,7 +2814,13 @@
 				</label>
 				<label class="select-chip">
 					<span class="material-symbols-outlined">code_blocks</span>
-					<select id="language-select" value={language} onchange={handleLanguageChange}>
+					<select
+						id="language-select"
+						value={language}
+						disabled={!workspaceInitialized}
+						data-workspace-ready={workspaceInitialized}
+						onchange={handleLanguageChange}
+					>
 						{#each playgroundLanguages as languageOption (languageOption)}
 							<option value={languageOption}>{languageLabels[languageOption]}</option>
 						{/each}
