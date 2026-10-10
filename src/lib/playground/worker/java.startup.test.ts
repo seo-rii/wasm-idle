@@ -106,6 +106,7 @@ function worker(
 			if (
 				[
 					'$lib/playground/javaStdin',
+					'$lib/playground/javaRuntimeStdin',
 					'$lib/playground/javaSource',
 					'$lib/playground/stdinBuffer'
 				].includes(id)

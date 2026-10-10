@@ -5,23 +5,34 @@ import { test } from 'node:test';
 import vm from 'node:vm';
 const ts = createRequire(import.meta.url)('typescript');
 function transpile(source) {
-	const result = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, reportDiagnostics: true });
+	const result = ts.transpileModule(source, {
+		compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+		reportDiagnostics: true
+	});
 	assert.equal(result.diagnostics.length, 0);
 	return result.outputText;
 }
 function load(relative, dependencies = {}) {
 	const exports = {};
 	vm.runInNewContext(transpile(readFileSync(new URL(relative, import.meta.url), 'utf8')), {
-		exports, TextEncoder, Uint8Array, Int8Array,
-		require(id) { if (id in dependencies) return dependencies[id]; throw new Error(id); }
+		exports,
+		TextEncoder,
+		Uint8Array,
+		Int8Array,
+		require(id) {
+			if (id in dependencies) return dependencies[id];
+			throw new Error(id);
+		}
 	});
 	return exports;
 }
 const snapshot = load('../src/lib/playground/javaStdin.ts');
 const helpers = load('../src/lib/playground/javaRuntimeStdin.ts', { './javaStdin': snapshot });
 const { prepareJavaRuntimeStdinInjection: prepare, createJavaStdinBridge: bridge } = helpers;
-const source = 'public class Main { public static void main(String[] args) throws Exception { System.out.println(System.in.read()); } }';
-const decode = (chunks) => new TextDecoder().decode(Uint8Array.from(chunks.flatMap((c) => Array.from(c, (n) => n & 255))));
+const source =
+	'public class Main { public static void main(String[] args) throws Exception { System.out.println(System.in.read()); } }';
+const decode = (chunks) =>
+	new TextDecoder().decode(Uint8Array.from(chunks.flatMap((c) => Array.from(c, (n) => n & 255))));
 function drain(input) {
 	const chunks = [];
 	for (let chunk; (chunk = input.readChunk()) !== null;) chunks.push(chunk);
@@ -30,7 +41,7 @@ function drain(input) {
 
 test('runtime helper has a constant cache key and no embedded input or input mode', () => {
 	const result = prepare(source);
-	assert.equal(result.stdinCacheKey, 'host-chunks-v1');
+	assert.equal(result.stdinCacheKey, 'host-chunks-v2-jso');
 	assert.ok(!result.helperSource.includes('INITIAL_DATA'));
 	assert.ok(!result.helperSource.includes('HAS_EXPLICIT_INPUT'));
 	assert.match(result.helperSource, /System.arraycopy\(chunk, position, bytes, offset, count\)/);
@@ -87,17 +98,20 @@ test('dispose ends both read APIs and chunk limits are validated', () => {
 	assert.equal(input.readChunk(), null);
 	for (const size of [0, -1, NaN, 1.5]) assert.throws(() => bridge('', true, () => null, size));
 });
-test('actual generated JSBody uses block input and retains a byte-reader fallback', () => {
-	const expression = prepare(source).helperSource.match(/@JSBody\(script = ([\s\S]*?)\)\n    private/)[1];
-	const body = vm.runInNewContext(expression);
-	const invoke = (input) => vm.runInNewContext(`(function(){${body}})()`, { Int8Array, globalThis: { wasmIdleJavaStdin: input } });
-	assert.deepEqual(Array.from(invoke({ readChunk: () => new Int8Array([1, -1]) })), [1, -1]);
-	assert.deepEqual(Array.from(invoke({ readByte: () => 255 })), [-1]);
-	assert.equal(invoke({ readByte: () => -1 }), null);
-	assert.equal(invoke(undefined), null);
+test('generated helper uses classlib JSO overlays and retains a byte-reader fallback', () => {
+	const helper = prepare(source).helperSource;
+	assert.doesNotMatch(helper, /@JSBody\(/);
+	assert.match(helper, /Window.current\(\)/);
+	assert.match(helper, /Int8Array array = result.cast\(\)/);
+	assert.match(helper, /next\[i\] = array.get\(i\)/);
+	assert.match(helper, /input.get\("readByte"\)/);
+	// The Java method itself is compiled and executed in javaRuntimeStdin.integration.test.ts.
 });
 
-const workerCode = transpile(readFileSync(new URL('../src/lib/playground/worker/java.ts', import.meta.url), 'utf8') + '\nexport function __inject(c: any, r: any) { compiler = c; runtimeLoad = r; }');
+const workerCode = transpile(
+	readFileSync(new URL('../src/lib/playground/worker/java.ts', import.meta.url), 'utf8') +
+		'\nexport function __inject(c: any, r: any) { compiler = c; runtimeLoad = r; }'
+);
 function worker() {
 	const counts = { compile: 0, generate: 0, run: 0 };
 	const inputs = [], addedSources = [], messages = [], queue = [];
@@ -107,7 +121,10 @@ function worker() {
 	const context = {
 		exports: {}, TextDecoder, TextEncoder, Blob, URL, Uint8Array, Int8Array, Int32Array, Error,
 		window: originalWindow, wasmIdleJavaStdin: originalBridge,
-		self: { addEventListener(_, listener) { handler = listener; }, postMessage(message) { messages.push(message); } },
+		self: {
+			addEventListener(_, listener) { handler = listener; },
+			postMessage(message) { messages.push(message); }
+		},
 		require(id) {
 			if (id === '$lib/playground/javaRuntimeStdin') return helpers;
 			if (id === '$lib/playground/javaSource') return { resolveJavaSourceIdentity: () => ({ mainClass: 'Main', sourcePath: 'Main.java' }) };

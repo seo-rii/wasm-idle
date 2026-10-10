@@ -9,9 +9,14 @@ export function prepareJavaRuntimeStdinInjection(code: string): PreparedJavaStdi
 	const packageName = parts.join('.');
 	return {
 		...injection,
-		stdinCacheKey: 'host-chunks-v1',
+		stdinCacheKey: 'host-chunks-v2-jso',
 		helperSource: `${packageName ? `package ${packageName};\n\n` : ''}import java.io.InputStream;
-import org.teavm.jso.JSBody;
+import org.teavm.jso.JSObject;
+import org.teavm.jso.browser.Window;
+import org.teavm.jso.core.JSFunction;
+import org.teavm.jso.core.JSMapLike;
+import org.teavm.jso.core.JSObjects;
+import org.teavm.jso.typedarrays.Int8Array;
 
 final class ${className} extends InputStream {
     private static final ${className} INSTANCE = new ${className}();
@@ -25,13 +30,29 @@ final class ${className} extends InputStream {
         return INSTANCE;
     }
 
-    // Normal copied byte[] conversion is supported by TeaVM Wasm GC; do not use @JSByRef.
-    @JSBody(script = "var input = globalThis.wasmIdleJavaStdin; "
-        + "if (!input) return null; "
-        + "if (typeof input.readChunk === 'function') return input.readChunk(); "
-        + "var value = input.readByte(); "
-        + "return value < 0 ? null : new Int8Array([value]);")
-    private static native byte[] readFromHost();
+    // Use classlib overlay methods: the pinned source compiler cannot compile @JSBody.
+    // A host call obtains a block; copying its bytes keeps Java array ownership explicit.
+    private static byte[] readFromHost() {
+        Window current = Window.current();
+        if (current == null) return null;
+        JSMapLike<JSObject> globals = current.cast();
+        JSObject stdin = globals.get("wasmIdleJavaStdin");
+        if (stdin == null) return null;
+        JSMapLike<JSObject> input = stdin.cast();
+        if (JSObjects.hasProperty(stdin, "readChunk")) {
+            JSFunction readChunk = input.get("readChunk").cast();
+            JSObject result = (JSObject) readChunk.call(stdin);
+            if (result == null) return null;
+            Int8Array array = result.cast();
+            byte[] next = new byte[array.getLength()];
+            for (int i = 0; i < next.length; i++) next[i] = array.get(i);
+            return next;
+        }
+        JSFunction readByte = input.get("readByte").cast();
+        Object value = readByte.call(stdin);
+        int next = value != null ? Integer.parseInt(value.toString()) : -1;
+        return next < 0 ? null : new byte[] { (byte) next };
+    }
 
     private boolean ensureChunk() {
         while (position == chunk.length && !ended) {
