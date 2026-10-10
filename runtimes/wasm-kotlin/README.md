@@ -73,8 +73,11 @@ Chromium, including stdin polling. The host writes the full standard layout.
 Linear-memory bounds
 cannot detect an undersized logical allocation inside that memory; this host
 therefore cannot prove allocator compatibility or repair the upstream allocation.
-Kotlin allocator canaries and the complete ABI/runtime acceptance corpus remain
-required.
+The producer's separate [actual allocator proof](https://github.com/seo-rii/wasm-llvm/tree/feat/kotlin-browser-foundation/producer/kotlin-browser/stdlib-probe/allocator-canary)
+now measures 81 allocation cases and the patched stdlib's full poll structures
+in Node and two fresh offline Chromium Workers. It does not execute the
+unpatched stdlib or claim observed corruption in it. Complete ABI/runtime
+acceptance remains required.
 
 ## Focused verification
 
@@ -153,6 +156,15 @@ candidate R0 and target-allocator canaries `not-run` and public support false.
 The patched-target receipt distinguishes observed browser example success from
 full stdlib/ABI acceptance. No precompiled fixture is counted as a browser compiler
 success.
+
+The producer's [selected-target console corpus](https://github.com/seo-rii/wasm-llvm/tree/feat/kotlin-browser-foundation/producer/kotlin-browser/stdlib-probe/console-runtime)
+also snapshots these exact `wasi.ts`, `program.ts` and `program.worker.ts` sources
+and executes 24 real Kotlin cases in Node and 24 fresh offline Chromium Workers.
+EOF, Unicode, stderr exception chains, caught/uncaught exceptions, exact output
+budgets and fresh-state recovery match, including raw consumer error strings.
+This uses the genuine source-built patched target library and JVM bootstrap
+compiler. It does not establish uncaught Kotlin exception-payload decoding,
+cancellation, full WASI coverage or browser Kotlin source compilation.
 
 ## Remaining integration
 
