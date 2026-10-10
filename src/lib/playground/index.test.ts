@@ -258,6 +258,11 @@ vi.mock('$lib/playground/lfortran', () => {
 	return { default: createMockSandboxClass('LFORTRAN') };
 });
 
+vi.mock('$lib/playground/lean4', () => {
+	moduleLoads.add('LEAN4');
+	return { default: createMockSandboxClass('LEAN4') };
+});
+
 vi.mock('$lib/playground/fortran', () => {
 	moduleLoads.add('FORTRAN');
 	return {

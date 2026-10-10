@@ -677,6 +677,7 @@
 			'.janet': 'JANET',
 			'.jl': 'JULIA',
 			'.c3': 'C3',
+			'.lean': 'LEAN4',
 			'.nim': 'NIM',
 			'.nims': 'NIM',
 			'.sh': 'BASH',
@@ -800,6 +801,7 @@
 			R: 'main.R',
 			OCTAVE: 'main.m',
 			LFORTRAN: 'main.f90',
+			LEAN4: 'Main.lean',
 			FORTRAN: 'main.f',
 			COBOL: 'main.cob',
 			V: 'main.v',
@@ -878,6 +880,7 @@
 			R: 'r',
 			OCTAVE: 'octave',
 			LFORTRAN: 'lfortran',
+			LEAN4: 'lean4',
 			FORTRAN: 'fortran',
 			COBOL: 'cobol',
 			V: 'v',
@@ -1613,6 +1616,8 @@
 			octave: 'OCTAVE',
 			matlab: 'OCTAVE',
 			lfortran: 'LFORTRAN',
+			lean: 'LEAN4',
+			lean4: 'LEAN4',
 			fortran: 'FORTRAN',
 			f90: 'FORTRAN',
 			f95: 'FORTRAN',
@@ -3138,8 +3143,9 @@
 			<p class="hint">
 				Common Lisp runs upstream ECL 26.5.5 compiled to WebAssembly. The active file is
 				loaded with <code>LOAD</code> using ECL's bytecode compiler; read input with
-				<code>read-line</code> or <code>read</code>. Unhandled conditions stop the run, and
-				very deep recursion (about 1000 levels) fails with a stack-overflow error.
+				<code>read-line</code> or <code>read</code>. Unhandled conditions stop the run.
+				The browser call-stack limit varies (about 150 recursive calls in a Chromium Worker);
+				deeper recursion fails with a stack-overflow error.
 			</p>
 		{/if}
 		{#if language === 'C3'}

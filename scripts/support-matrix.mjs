@@ -894,6 +894,19 @@ export const supportMatrixRows = [
 		}
 	},
 	{
+		language: 'Lean 4',
+		ids: ['LEAN4'],
+		runtime: 'Lean 4.34.1 lean --run (Emscripten)',
+		stdin: 'Yes',
+		editorSupport: 'compiler diagnostics',
+		debug: '-',
+		browserTest: {
+			file: 'src/lib/playground/lean4.playwright.test.ts',
+			env: 'WASM_IDLE_RUN_REAL_BROWSER_LEAN4',
+			marker: "selectOption('LEAN4')"
+		}
+	},
+	{
 		language: 'Fortran',
 		ids: ['FORTRAN'],
 		runtime: 'f2c + @wasm-idle/llvm-core',
@@ -1788,6 +1801,14 @@ const runtimeDetailsByLanguage = new Map([
 			packageBase: `receipt-pinned ${code('wasm-llvm/producer/lfortran-browser')} artifacts in ${code('static/wasm-lfortran')}`,
 			execution: `real LFortran 0.65.0-97-gab867a23 LLVM evaluator compiles and executes Emscripten side modules in a fresh Worker; shared-ring stdin supports delayed READ and EOF; experimental Fortran feature coverage`,
 			customization: `${code('runtimeAssets.lfortran.baseUrl')} relocates the reviewed bundle; ${code('stdin')}, ${code('activePath')}, workspace data/include files, cancellation and execution limits; no program arguments or multi-file module build orchestration`
+		}
+	],
+	[
+		'Lean 4',
+		{
+			packageBase: `receipt-pinned ${code('wasm-llvm/producer/lean-browser')} release downloaded from its immutable commit into ${code('static/wasm-lean4')}`,
+			execution: `real Lean 4.34.1 frontend and IR interpreter (${code('lean --run')}) built for wasm32 Emscripten with pthreads; imports a wasm32 ${code('Init')} library compiled by that build; shared-ring stdin supports interactive ${code('getLine')} and EOF`,
+			customization: `${code('runtimeAssets.lean4.baseUrl')} relocates the reviewed bundle; ${code('stdin')}, program arguments, ${code('activePath')}, cancellation and execution limits; single-file programs importing ${code('Init')} only (no ${code('Std')}/${code('Lean')} imports or Lake packages)`
 		}
 	],
 	[

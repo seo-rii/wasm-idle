@@ -35,6 +35,17 @@ describe('core language contract', () => {
 		expect(isDeferredProgressLanguage('haskell')).toBe(true);
 	});
 
+	it('exposes Lean 4 as a deferred browser runtime language with a relocatable asset base', () => {
+		expect(supportedLanguageIds).toContain('LEAN4');
+		expect(normalizeLanguageId('lean4')).toBe('LEAN4');
+		expect(normalizeLanguageId('lean')).toBe('LEAN4');
+		expect(isDeferredProgressLanguage('lean4')).toBe(true);
+		const key = JSON.parse(
+			createRuntimeAssetsKey({ rootUrl: '/repl', lean4: { baseUrl: '/wasm-lean4/' } }) || '{}'
+		);
+		expect(key).toMatchObject({ lean4BaseUrl: '/wasm-lean4/' });
+	});
+
 	it('includes Haskell module, rootfs, bsdtar, and search path urls in runtime asset cache keys', () => {
 		const key = createRuntimeAssetsKey({
 			rootUrl: '/repl',

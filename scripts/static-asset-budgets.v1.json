@@ -1,8 +1,8 @@
 {
 	"schemaVersion": 1,
 	"total": {
-		"maxBytes": 965000000,
-		"maxFiles": 1935
+		"maxBytes": 1110000000,
+		"maxFiles": 1951
 	},
 	"directories": {
 		"clang": { "maxBytes": 31000000, "maxFiles": 13 },
@@ -42,6 +42,7 @@
 		"wasm-j": { "maxBytes": 3200000, "maxFiles": 8 },
 		"wasm-janet": { "maxBytes": 800000, "maxFiles": 8 },
 		"wasm-julia": { "maxBytes": 32000000, "maxFiles": 13 },
+		"wasm-lean4": { "maxBytes": 145000000, "maxFiles": 16, "optional": true },
 		"wasm-commonlisp": { "maxBytes": 12000000, "maxFiles": 6, "optional": true },
 		"wasm-lfortran": { "maxBytes": 84000000, "maxFiles": 5, "optional": true },
 		"wasm-lisp": { "maxBytes": 5000000, "maxFiles": 50 },
