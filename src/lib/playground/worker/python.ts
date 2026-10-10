@@ -8,6 +8,7 @@ import { isSharedBufferBackedView } from '$lib/playground/sharedBuffer';
 import { parsePythonPackageLock } from '$lib/playground/pythonPackageLock';
 import { WASM_APECODE_VERSION, WASM_APECODE_WHEELS } from '$lib/playground/wasmApecodeVersion';
 import { withCachedPyodideModule } from './runtimeModule';
+import { createPythonExecutionHelpers } from './pythonExecution';
 import { PYTHON_DEBUG_PREVIEW } from './pythonDebugPreview';
 import { createPythonStdio, PYTHON_FLUSH_HOOK_FACTORY } from './pythonStdio';
 import { fetchRuntimeAssetBytes } from './runtimeAssetFetch';
@@ -51,6 +52,7 @@ let maxRuntimeAssetBytes: number | undefined;
 let installedHyVersion: string | undefined;
 let installedAheuiVersion: string | undefined;
 let installedApecodeVersion: string | undefined;
+let executionHelpers: ReturnType<typeof createPythonExecutionHelpers> | undefined;
 type PythonStdioRestore = (() => void) & { destroy(): void };
 let installPythonFlushHooks: ((drain: () => void) => PythonStdioRestore) | undefined;
 
@@ -404,9 +406,17 @@ async function loadPyodide(path: string) {
 	installPythonFlushHooks = pyodide.runPython(PYTHON_FLUSH_HOOK_FACTORY);
 }
 
-async function loadPackages(code: string) {
-	if (!code) return;
-	await pyodide.loadPackagesFromImports(code);
+function getExecutionHelpers() {
+	return (executionHelpers ??= createPythonExecutionHelpers(pyodide, imageHook));
+}
+
+async function loadPackages(code: string, files: { path: string; content: string }[] = []) {
+	const helpers = getExecutionHelpers();
+	// Cache analysis only. Package availability is still checked for each unprepared run.
+	// Parse files separately so one file's syntax or a data file cannot corrupt its neighbors.
+	const imports = new Set([code, ...files.map((file) => file.content)].map((source) => helpers.importSource(source)));
+	const stub = [...imports].filter(Boolean).join('\n');
+	if (stub) await pyodide.loadPackagesFromImports(stub);
 }
 
 function packagePreparationKey(
@@ -623,12 +633,7 @@ self.onmessage = async (event: any) => {
 			// The genuine language implementations own their source, never Python's import scanner.
 			if (isPython) {
 				postProgress(15, 'Resolving Python imports');
-				await loadPackages(
-					[
-						code,
-						...(workspaceFiles || []).map((file: { content: string }) => file.content)
-					].join('\n')
-				);
+				await loadPackages(code, workspaceFiles);
 			}
 			preparedPackagesKey = preparationKey;
 			if (usesInterpreterFileDescriptors)
@@ -664,12 +669,7 @@ self.onmessage = async (event: any) => {
 				isPython &&
 				preparedKey !== packagePreparationKey(code, activePath, workspaceFiles)
 			) {
-				await loadPackages(
-					[
-						code,
-						...(workspaceFiles || []).map((file: { content: string }) => file.content)
-					].join('\n')
-				);
+				await loadPackages(code, workspaceFiles);
 			}
 		} catch (e: any) {
 			self.postMessage({ error: e.message || 'Unknown error' });
@@ -813,6 +813,9 @@ self.onmessage = async (event: any) => {
 				// Unusual non-mutable streams remain correct, without batching their writes.
 				stdio.disableBatching();
 			}
+			if (isPython && !debug) {
+				await getExecutionHelpers().run(code, executionFilename, self[executionReadyName]);
+			} else {
 			await pyodide.runPythonAsync(`import ast
 import builtins
 import inspect
@@ -1020,12 +1023,16 @@ finally:
 `
 }
 `);
+			}
 			finishStdio();
 			self.postMessage({ results: true });
 		} catch (e: any) {
 			try { finishStdio(); } catch { /* Preserve the execution error. */ }
 			self.postMessage({ error: e.message || 'Unknown error' });
 		} finally {
+			delete self['__pyodide__input_' + ts];
+			delete self['__pyodide__output_' + ts];
+			delete self.prompt;
 			delete self[executionReadyName];
 			delete self[debugPauseName];
 			delete self[debugWaitName];

@@ -27,6 +27,7 @@ async function run(check) {
 		ArrayBuffer, SharedArrayBuffer, Int32Array, Uint8Array, Atomics,
 		require(id) {
 			if (id === './pythonDebugPreview') return preview;
+			if (id === './pythonExecution') return { createPythonExecutionHelpers: () => ({ importSource: () => '' }) };
 			if (id === './pythonStdio') return stdio;
 			if (id.includes('sharedBuffer')) return { isSharedBufferBackedView: () => true };
 			if (id.endsWith('/assets')) return { handleWorkerAssetMessage: () => false };

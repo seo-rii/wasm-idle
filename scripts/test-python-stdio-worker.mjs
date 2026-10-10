@@ -35,6 +35,11 @@ async function execute({ debug = false, language = 'python', fail = false, hookF
 		TextEncoder, TextDecoder, URL, Blob, ArrayBuffer, SharedArrayBuffer, Int32Array, Uint8Array, Atomics,
 		require(id) {
 			if (id === './pythonStdio') return stdioExports;
+			if (id === './pythonExecution') return { createPythonExecutionHelpers: () => ({
+				importSource: () => '',
+				async run(source, _filename, ready) { ready(); await runtime.runPythonAsync(source); }
+			}) };
+			if (id === './pythonDebugPreview') return { PYTHON_DEBUG_PREVIEW: 'def __wasm_idle_debug_preview(value):\n    return "preview"' };
 			if (id.includes('stdinBuffer')) return { waitForBufferedStdin: () => null };
 			if (id.includes('sharedBuffer')) return { isSharedBufferBackedView: () => true };
 			if (id.endsWith('/assets')) return { handleWorkerAssetMessage: () => false };

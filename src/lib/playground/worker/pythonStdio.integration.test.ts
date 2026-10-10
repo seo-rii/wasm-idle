@@ -3,6 +3,31 @@ import { expect, it } from 'vitest';
 import { loadPyodide } from 'pyodide';
 import { createPythonStdio, PYTHON_FLUSH_HOOK_FACTORY } from './pythonStdio';
 
+it('returns an interactive input line without waiting for another line or EOF', async () => {
+	const runtime = await loadPyodide();
+	const install = runtime.runPython(PYTHON_FLUSH_HOOK_FACTORY);
+	const output: string[] = [];
+	let reads = 0;
+	const io = createPythonStdio(runtime, {
+		readInput: () => {
+			reads++;
+			if (reads !== 1) throw new Error('input requested another line before returning the first');
+			return '한글🙂\n';
+		},
+		emit: (text) => output.push(text)
+	});
+	const restore = install(io.flush);
+	try {
+		expect(() => runtime.runPython('print(input())')).not.toThrow();
+		io.flush();
+		expect(output.join('')).toBe('한글🙂\n');
+		expect(reads).toBe(1);
+	} finally {
+		try { restore(); }
+		finally { restore.destroy(); io.close(); install.destroy(); }
+	}
+}, 120_000);
+
 it('preserves native streams, explicit flushes and binary input on real Pyodide', async () => {
 	const runtime = await loadPyodide();
 	const install = runtime.runPython(PYTHON_FLUSH_HOOK_FACTORY);
