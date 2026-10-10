@@ -98,17 +98,14 @@ function worker() {
 					handleWorkerAssetMessage: () => false,
 					loadWorkerRuntimeAsset: async () => ({ bytes: new Uint8Array([1]) })
 				};
-			if (id === '$lib/playground/javaStdin')
+			if (id === '$lib/playground/javaRuntimeStdin')
 				return {
-					prepareJavaStdinInjection: (
-						code: string,
-						stdin: string,
-						explicit: boolean
-					) => ({
+					prepareJavaRuntimeStdinInjection: (code: string) => ({
 						transformedCode: code,
 						usesStdin: false,
-						stdinCacheKey: explicit ? `explicit:${stdin}` : 'interactive'
-					})
+						stdinCacheKey: 'host-chunks-v1'
+					}),
+					createJavaStdinBridge: () => ({ readByte: () => -1, readChunk: () => null, dispose() {} })
 				};
 			if (id === '$lib/playground/javaSource')
 				return {
@@ -164,8 +161,6 @@ test('execution after preparation reuses the artifact, including when only args 
 
 for (const [label, options] of Object.entries({
 	source: { code: 'class Main { int x; }' },
-	stdin: { stdin: 'changed input' },
-	stdinMode: { hasExplicitStdin: false },
 	activePath: { activePath: 'other/Main.java' },
 	workspace: { workspaceFiles: [{ path: 'Helper.java', content: 'class Helper {}' }] }
 })) {
@@ -236,3 +231,16 @@ test('invalid workspaces are rejected even when the source would otherwise be ca
 	assert.equal(w.messages.at(-1)?.error, 'Invalid Java workspace files');
 	assert.equal(w.counts.compile, 1);
 });
+
+for (const options of [{ stdin: 'changed input' }, { hasExplicitStdin: false }]) {
+	test(`runtime input changes do not invalidate compilation: ${JSON.stringify(options)}`, async () => {
+		const w = worker();
+		await w.load();
+		await w.run();
+		await w.run({ ...options, prepare: false });
+		assert.equal(w.counts.compile, 1);
+		assert.equal(w.counts.generate, 1);
+		assert.equal(w.counts.run, 1);
+		assert.equal(w.messages.at(-1)?.results, true);
+	});
+}
