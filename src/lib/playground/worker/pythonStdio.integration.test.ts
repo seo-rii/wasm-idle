@@ -34,6 +34,49 @@ it('preserves native streams, explicit flushes and binary input on real Pyodide'
 	} finally { install.destroy(); }
 }, 120_000);
 
+it('recovers native stdout and stderr after a program closes them', async () => {
+	const runtime = await loadPyodide();
+	const install = runtime.runPython(PYTHON_FLUSH_HOOK_FACTORY);
+	const output: string[] = [];
+	try {
+		for (const code of [
+			'import sys\nprint("before")\nsys.stdout.close()\nsys.stderr.close()',
+			'import sys\nprint("한글🙂")\nprint("오류", file=sys.stderr)'
+		]) {
+			const io = createPythonStdio(runtime, {
+				initialInput: '', readInput: () => null, emit: (text) => output.push(text)
+			});
+			const restore = install(io.flush);
+			try { runtime.runPython(code); }
+			finally { try { restore(); } finally { restore.destroy(); io.close(); } }
+		}
+		expect(output.join('')).toBe('before\n한글🙂\n오류\n');
+		expect(runtime.runPython('not sys.stdout.closed and not sys.stderr.closed')).toBe(true);
+	} finally { install.destroy(); }
+}, 120_000);
+
+it('restores native output stream configuration without replacing open streams', async () => {
+	const runtime = await loadPyodide();
+	const install = runtime.runPython(PYTHON_FLUSH_HOOK_FACTORY);
+	const original = runtime.runPython('import sys\nstr([(id(s), s.encoding, s.errors, s.line_buffering, s.write_through) for s in (sys.stdout, sys.stderr)])');
+	const output: string[] = [];
+	try {
+		for (const code of [
+			'import sys\nsys.stdout.reconfigure(encoding="ascii", errors="replace", newline="\\r\\n", line_buffering=False, write_through=True)\nsys.stderr.reconfigure(encoding="ascii", errors="backslashreplace", newline="\\r\\n", line_buffering=False, write_through=True)\nprint("changed")',
+			'import sys\nprint("한글🙂")\nprint("오류", file=sys.stderr)'
+		]) {
+			const io = createPythonStdio(runtime, {
+				initialInput: '', readInput: () => null, emit: (text) => output.push(text)
+			});
+			const restore = install(io.flush);
+			try { runtime.runPython(code); }
+			finally { try { restore(); } finally { restore.destroy(); io.close(); } }
+			expect(runtime.runPython('str([(id(s), s.encoding, s.errors, s.line_buffering, s.write_through) for s in (sys.stdout, sys.stderr)])')).toBe(original);
+		}
+		expect(output.join('')).toBe('changed\r\n한글🙂\n오류\n');
+	} finally { install.destroy(); }
+}, 120_000);
+
 it('discards unread Python input buffers between executions', async () => {
 	const runtime = await loadPyodide();
 	const install = runtime.runPython(PYTHON_FLUSH_HOOK_FACTORY);
