@@ -844,7 +844,8 @@ def __wasm_idle_debug_refresh_breakpoints():
     global __wasm_idle_debug_breakpoints
     global __wasm_idle_debug_breakpoint_version
     payload = ${debugReadBreakpointsName}(__wasm_idle_debug_breakpoint_version)
-    if payload is None:
+    # JavaScript null crosses Pyodide as JsNull rather than Python None.
+    if not isinstance(payload, str):
         return
     snapshot = json.loads(payload)
     version = int(snapshot.get("version", -1))
