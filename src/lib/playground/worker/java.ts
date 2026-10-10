@@ -1,5 +1,5 @@
 import { acceptCompiledTeaVmModule, loadStreamingJavaCompiler } from './javaStreaming';
-import { prepareJavaStdinInjection } from '$lib/playground/javaStdin';
+import { createJavaStdinBridge, prepareJavaRuntimeStdinInjection } from '$lib/playground/javaRuntimeStdin';
 import { resolveJavaSourceIdentity } from '$lib/playground/javaSource';
 import { waitForBufferedStdin } from '$lib/playground/stdinBuffer';
 import {
@@ -23,9 +23,6 @@ let runtimeLoad: ((code: string | ArrayBufferView | WebAssembly.Module, options?
 let loadedBaseUrl = '';
 let stdoutBuffer = '';
 let stderrBuffer = '';
-let stdinBufferJava: Int32Array | null = null;
-let stdinChunkJava = new Uint8Array(0);
-let stdinChunkOffsetJava = 0;
 let compiledCode = '';
 let compiledStdin = '';
 let compiledMainClass = '';
@@ -144,7 +141,7 @@ self.addEventListener('message', async (event) => {
 		stdoutBuffer = '';
 		stderrBuffer = '';
 		const explicitStdin = hasExplicitStdin === true;
-		const stdinInjection = prepareJavaStdinInjection(code, stdin, explicitStdin);
+		const stdinInjection = prepareJavaRuntimeStdinInjection(code);
 		const sourceIdentity = resolveJavaSourceIdentity(code);
 		const sourcePath =
 			typeof activePath === 'string' && activePath ? activePath : sourceIdentity.sourcePath;
@@ -296,33 +293,22 @@ self.addEventListener('message', async (event) => {
 			return;
 		}
 
-		stdinBufferJava = new Int32Array(buffer);
-		stdinChunkJava = explicitStdin ? new Uint8Array(0) : new TextEncoder().encode(stdin);
-		stdinChunkOffsetJava = 0;
+		const stdinBufferJava = new Int32Array(buffer);
+		const stdinBridge = createJavaStdinBridge(stdin, explicitStdin, () => {
+			// Publish prompts before the host blocks waiting for interactive input.
+			flushStdout();
+			flushStderr();
+			return waitForBufferedStdin(stdinBufferJava, () => self.postMessage({ buffer: true }));
+		});
 		const workerGlobal = globalThis as typeof globalThis & {
 			window?: Window & typeof globalThis;
-			wasmIdleJavaStdin?: { readByte: () => number };
+			wasmIdleJavaStdin?: unknown;
 		};
 		const previousWindow = workerGlobal.window;
+		const hadStdinBridge = Object.prototype.hasOwnProperty.call(workerGlobal, 'wasmIdleJavaStdin');
+		const previousStdinBridge = workerGlobal.wasmIdleJavaStdin;
 		workerGlobal.window = workerGlobal as Window & typeof globalThis;
-		workerGlobal.wasmIdleJavaStdin = {
-			readByte() {
-				while (true) {
-					if (stdinChunkOffsetJava < stdinChunkJava.length) {
-						return stdinChunkJava[stdinChunkOffsetJava++] ?? -1;
-					}
-					if (explicitStdin) return -1;
-					const chunk = waitForBufferedStdin(stdinBufferJava!, () =>
-						self.postMessage({ buffer: true })
-					);
-					if (chunk === null) {
-						return -1;
-					}
-					stdinChunkJava = new TextEncoder().encode(chunk);
-					stdinChunkOffsetJava = 0;
-				}
-			}
-		};
+		workerGlobal.wasmIdleJavaStdin = stdinBridge;
 		try {
 			const module = await runtimeLoad(compiledWasm!, {
 				installImports(imports: any) {
@@ -346,15 +332,14 @@ self.addEventListener('message', async (event) => {
 			flushStderr();
 			self.postMessage({ results: true, mainClass: compiledMainClass });
 		} finally {
-			delete workerGlobal.wasmIdleJavaStdin;
+			stdinBridge.dispose();
+			if (hadStdinBridge) workerGlobal.wasmIdleJavaStdin = previousStdinBridge;
+			else delete workerGlobal.wasmIdleJavaStdin;
 			if (previousWindow === undefined) {
 				Reflect.deleteProperty(workerGlobal, 'window');
 			} else {
 				workerGlobal.window = previousWindow;
 			}
-			stdinChunkJava = new Uint8Array(0);
-			stdinChunkOffsetJava = 0;
-			stdinBufferJava = null;
 		}
 	} catch (error) {
 		flushStdout();
