@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "kind": "kotlin-wasi-program-browser-baseline",
+  "status": "passed",
+  "compiler": {
+    "version": "2.5.0-dev-10106",
+    "sourceCommit": null,
+    "role": "bootstrap-reference",
+    "jarSha256": "4bd26006f00c79dd5c80b7c7906ab9df3aeefa45f36a2843d13bc229ec6d7475"
+  },
+  "compilerHost": "jvm",
+  "programTarget": "wasmWasi",
+  "baselineReceiptSha256": "e589e32469139a7e3900205279fe2d7bc5c32c7371af403b8a0045534ad59896",
+  "stdlib": {
+    "path": "stdlib/kotlin-stdlib-wasm-wasi.klib",
+    "bytes": 4111645,
+    "sha256": "3c97b68581963cf32c18d8b6d93b467f3accc9eae2689c1655e8ed4b31f52d28",
+    "version": "2.5.255-SNAPSHOT",
+    "sourceCommit": "4d78aae1e337cd40f69baa865aed950fe807a775",
+    "patched": true,
+    "patchSha256": "6994f87ecccf1de6abc06c01f8fe35018be5ebf1595cf9d9f127a8416e01fede",
+    "file": "kotlin-stdlib-wasm-wasi.klib",
+    "recipeSha256": "78a1e578848593131aa1527cc22fabc7c883ce8a67800a16dde1d72edd6d12f8",
+    "buildReceiptSha256": "fe7d12a5f7328a72ac397356b1b8f6d72f826f6b3c8e6a3ccdebe1e3a142c655"
+  },
+  "adapterSources": [
+    {
+      "name": "wasi",
+      "sha256": "236c1976f66944231241535dc320f203f512c497866355e8dafe6a0e2d61c948"
+    },
+    {
+      "name": "program",
+      "sha256": "124c86aa081b5518e9c64b80d5c3d98657b34181793186c685e8aaa30545c40c"
+    },
+    {
+      "name": "program.worker",
+      "sha256": "f21a3b6da5d881fabc174bc84b5c4e7f42ea0fd515aed66b6b810ca3b3f7e093"
+    }
+  ],
+  "probeSha256": "c33ffc9d7a2faf0b3102d582a71590ede35e64276273dc5ab81034cc137af2f2",
+  "programs": [
+    {
+      "id": "hello-world",
+      "sourceSha256": "8830ed7da79c4782f43cc1a550547536794aee7836d85cc526c668ea289d96e5",
+      "wasmSha256": "9e5c58c4878af735b1360b26477041c5b734a1494d4da6c6ef79bdea089e8b96",
+      "wasmBytes": 700186
+    },
+    {
+      "id": "fibonacci",
+      "sourceSha256": "1e3e4be9c3f5be891a5adb7d32022b4f3efc7237e6c8e98abbf41b1004ae4990",
+      "wasmSha256": "e401539da51fcfddf450a7c6ede0a721dbc4f717516f6e2d6e5b6b2729a53496",
+      "wasmBytes": 709250
+    }
+  ],
+  "browser": {
+    "name": "Chromium",
+    "version": "153.0.8010.12",
+    "headless": true
+  },
+  "environment": {
+    "os": "linux 6.1.0-53-cloud-amd64",
+    "arch": "x64",
+    "cpu": "AMD EPYC 7B12",
+    "ramBytes": 33664798720,
+    "node": "v24.1.0",
+    "typescript": "6.0.3"
+  },
+  "network": {
+    "offline": true,
+    "requests": []
+  },
+  "results": [
+    {
+      "id": "hello-world",
+      "stdin": "",
+      "maxOutputBytes": 1024,
+      "stdout": "Hello World\n",
+      "stderr": "",
+      "outputBytes": 12,
+      "outputLimitExceeded": false,
+      "status": "completed",
+      "exitCode": 0,
+      "heartbeats": 12,
+      "elapsedMs": 137.29999999701977
+    },
+    {
+      "id": "fibonacci",
+      "stdin": "10\n",
+      "maxOutputBytes": 1024,
+      "stdout": "55\n",
+      "stderr": "",
+      "outputBytes": 3,
+      "outputLimitExceeded": false,
+      "status": "completed",
+      "exitCode": 0,
+      "heartbeats": 10,
+      "elapsedMs": 38.599999994039536
+    },
+    {
+      "id": "fibonacci",
+      "stdin": "20\n",
+      "maxOutputBytes": 1024,
+      "stdout": "6765\n",
+      "stderr": "",
+      "outputBytes": 5,
+      "outputLimitExceeded": false,
+      "status": "completed",
+      "exitCode": 0,
+      "heartbeats": 11,
+      "elapsedMs": 30.5
+    },
+    {
+      "id": "hello-world",
+      "stdin": "",
+      "maxOutputBytes": 0,
+      "stdout": "",
+      "stderr": "",
+      "outputBytes": 0,
+      "outputLimitExceeded": true,
+      "status": "output-limit",
+      "exitCode": null,
+      "error": "[object WebAssembly.Exception]",
+      "heartbeats": 10,
+      "elapsedMs": 30.700000002980232
+    },
+    {
+      "id": "hello-world",
+      "stdin": "",
+      "maxOutputBytes": 1024,
+      "stdout": "Hello World\n",
+      "stderr": "",
+      "outputBytes": 12,
+      "outputLimitExceeded": false,
+      "status": "completed",
+      "exitCode": 0,
+      "heartbeats": 11,
+      "elapsedMs": 27.400000005960464
+    }
+  ],
+  "gates": {
+    "browserProgramExecution": "passed",
+    "browserKotlinCompilation": "not-run",
+    "candidateCompilerR0": "not-run",
+    "patchedTargetStdlib": "browser-examples-passed",
+    "targetStdlibAllocatorCanaries": "not-run",
+    "publicLanguageSupport": false
+  }
+}

@@ -1,5 +1,4 @@
-import Runtime from './runtime.js';
-import { createDwarfDebugDescriptor } from './dwarf.js';
+import Runtime from './artifact-runtime.js';
 import { loadRuntimeManifest, resolveRuntimeManifestUrl } from './runtime-manifest.js';
 import { resolveRuntimeBaseUrl, resolveRuntimeBaseUrlFromManifestUrl } from './url.js';
 import {
@@ -65,9 +64,6 @@ function resolveMaxAssetBytes(maxAssetBytes?: number) {
 	return resolved;
 }
 
-function toStandaloneBytes(value: Uint8Array | ArrayBuffer) {
-	return value instanceof Uint8Array ? new Uint8Array(value) : new Uint8Array(value);
-}
 
 function pushRecord(
 	records: CompilerLogRecord[],
@@ -217,7 +213,7 @@ export async function compileClang(
 	try {
 		await runtime.ready;
 		pushRecord(logRecords, enabledLogs, '[wasm-clang] runtime ready');
-		const wasmModule = await runtime.compileLink(request.code, {
+		const builtArtifact = await runtime.compileArtifact(request.code, {
 			language: request.language || 'CPP',
 			fileName: request.fileName,
 			activePath: request.activePath,
@@ -231,35 +227,7 @@ export async function compileClang(
 		});
 		const output = compilerOutput.join('');
 		const diagnostics = extractCompilerDiagnostics(output);
-		const artifactBytes = toStandaloneBytes(
-			runtime.memfs.getFileContents(runtime.lastArtifactPath)
-		);
-		const artifact: BrowserClangArtifact = {
-			bytes: artifactBytes,
-			wasm: wasmModule,
-			target: 'wasm32-wasi',
-			format: 'wasi-core-wasm',
-			fileName: runtime.lastArtifactPath,
-			language: request.language || 'CPP',
-			...(debugMode === 'trace'
-				? {
-						debugMetadata: {
-							variableMetadata: runtime.debugVariableMetadata,
-							globalVariableMetadata: runtime.debugGlobalMetadata,
-							functionMetadata: runtime.debugFunctionMetadata
-						}
-					}
-				: {}),
-			...(debugMode === 'lldb'
-				? {
-						debug: await createDwarfDebugDescriptor(
-							request,
-							artifactBytes,
-							manifest.compiler.provenance
-						)
-					}
-				: {})
-		};
+		const artifact = builtArtifact;
 		emitProgress(request, 'done', 100, 'done');
 		return {
 			success: true,

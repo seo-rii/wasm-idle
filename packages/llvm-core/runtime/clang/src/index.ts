@@ -1,4 +1,4 @@
-import Runtime from './runtime.js';
+import Runtime from './artifact-runtime.js';
 import { resolveDebugMode } from './types.js';
 import {
 	compileClang,
@@ -112,3 +112,8 @@ export {
 
 const defaultFactory = createClangCompiler;
 export default defaultFactory;
+
+// Experimental, explicit opt-in: does not change the default compiler/worker selection.
+export { default as ExperimentalIncrementalClangRuntime } from './incremental-runtime.js';
+export type { ExperimentalIncrementalClangRuntimeOptions } from './incremental-runtime.js';
+export type { IncrementalCompilationOptions } from './incremental-compilation.js';
