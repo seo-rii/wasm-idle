@@ -39,3 +39,5 @@ static/wasm-d/runtime/toolchain/toolchain.tar
 /static/wasm-commonlisp/
 # LFortran producer artifacts are synced locally, never committed.
 static/wasm-lfortran/
+# Lean 4 assets are downloaded from the pinned wasm-llvm release, never committed.
+/static/wasm-lean4/

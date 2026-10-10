@@ -372,6 +372,14 @@ export const playgroundLanguageDescriptors: Readonly<
 		compilerDiagnostics: true,
 		diagnosticMarkers: true
 	},
+	// Monaco ships no Lean grammar; plain text avoids borrowing another language's LSP.
+	LEAN4: {
+		label: 'Lean 4',
+		editorLanguage: 'plaintext',
+		supportsArgs: true,
+		compilerDiagnostics: true,
+		diagnosticMarkers: true
+	},
 	FORTRAN: {
 		label: 'Fortran',
 		editorLanguage: 'fortran',

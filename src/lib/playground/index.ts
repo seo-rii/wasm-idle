@@ -332,6 +332,13 @@ const sandboxRoutes = [
 		}
 	},
 	{
+		languageId: 'LEAN4',
+		load: async () => {
+			const { default: Lean4 } = await import('$lib/playground/lean4');
+			return new Lean4();
+		}
+	},
+	{
 		languageId: 'FORTRAN',
 		load: async () => {
 			const { default: Fortran } = await import('$lib/playground/fortran');

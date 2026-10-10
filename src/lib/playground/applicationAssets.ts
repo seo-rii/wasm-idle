@@ -381,6 +381,7 @@ export function createApplicationRuntimeAssets(rootUrl: string): PlaygroundRunti
 			integrity: HASKELL_RUNTIME_ASSET_RECEIPTS
 		},
 		lfortran: { baseUrl: asset('wasm-lfortran/') },
+		lean4: { baseUrl: asset('wasm-lean4/') },
 		commonlisp: { baseUrl: asset('wasm-commonlisp/') },
 		fortran: {
 			baseUrl: asset('wasm-fortran/'),
