@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+from collections import OrderedDict
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -19,6 +20,9 @@ WORKSPACE_ROOT = "/workspace"
 
 TEXT_DOCUMENT_SYNC_FULL = 1
 DIAGNOSTIC_SEVERITY_ERROR = 1
+MAX_CACHED_SCRIPTS = 8
+MAX_COMPLETION_RESULTS = 2
+MAX_COMPLETION_ITEMS = 2048
 
 COMPLETION_ITEM_KIND = {
     "text": 1,
@@ -154,6 +158,14 @@ class WasmIdlePythonLsp:
         self.project = self._create_project(self.workspace_root)
         self.documents: dict[str, Document] = {}
         self.shutdown_requested = False
+        self._script_cache: OrderedDict = OrderedDict()
+        self._completion_results: OrderedDict = OrderedDict()
+        self._completion_sequence = 0
+
+    def _invalidate_analysis(self) -> None:
+        # Imported documents affect other files too: invalidate the entire workspace epoch.
+        self._script_cache.clear()
+        self._completion_results.clear()
 
     def handle(self, payload: str) -> None:
         message = json.loads(payload)
@@ -189,6 +201,7 @@ class WasmIdlePythonLsp:
 
         Path(self.workspace_root).mkdir(parents=True, exist_ok=True)
         self.project = self._create_project(self.workspace_root)
+        self._invalidate_analysis()
 
     def _create_project(self, path: str):
         if Project is None:
@@ -212,7 +225,16 @@ class WasmIdlePythonLsp:
         if Script is None:
             raise RuntimeError("Python semantic LSP features require jedi")
         document = self._document(uri)
-        return Script(code=document.source, path=document.path, project=self.project)
+        cached = self._script_cache.get(uri)
+        if cached is not None and cached[:2] == (document.source, document.version):
+            self._script_cache.move_to_end(uri)
+            return cached[2]
+        script = Script(code=document.source, path=document.path, project=self.project)
+        self._script_cache[uri] = (document.source, document.version, script)
+        self._script_cache.move_to_end(uri)
+        while len(self._script_cache) > MAX_CACHED_SCRIPTS:
+            self._script_cache.popitem(last=False)
+        return script
 
     def _range_for_name(self, name) -> dict | None:
         if name.line is None or name.column is None:
@@ -294,7 +316,7 @@ class WasmIdlePythonLsp:
                 {
                     "completionProvider": {
                         "triggerCharacters": [".", "(", "[", '"', "'"],
-                        "resolveProvider": False,
+                        "resolveProvider": True,
                     },
                     "hoverProvider": True,
                     "definitionProvider": True,
@@ -307,29 +329,64 @@ class WasmIdlePythonLsp:
             "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
         }
 
-    def _shutdown(self):
+    def _shutdown(self, _params: dict | None = None):
         self.shutdown_requested = True
+        self._invalidate_analysis()
         return None
 
     def _completion(self, params: dict) -> dict:
         position = params["position"]
-        completions = self._script(params["textDocument"]["uri"]).complete(
+        uri = params["textDocument"]["uri"]
+        document = self._document(uri)
+        completions = self._script(uri).complete(
             line=position["line"] + 1,
             column=position["character"],
         )
+        incomplete = len(completions) > MAX_COMPLETION_ITEMS
+        completions = completions[:MAX_COMPLETION_ITEMS]
+        self._completion_sequence += 1
+        token = self._completion_sequence
+        self._completion_results[token] = (uri, document.version, completions, {})
+        while len(self._completion_results) > MAX_COMPLETION_RESULTS:
+            self._completion_results.popitem(last=False)
         items = []
-        for completion in completions:
-            item = {
+        for index, completion in enumerate(completions):
+            items.append({
                 "label": completion.name_with_symbols or completion.name,
                 "kind": self._completion_kind(completion.type),
                 "detail": completion.type,
                 "insertText": completion.complete or completion.name,
-            }
-            doc = completion.docstring(raw=False).strip()
-            if doc:
-                item["documentation"] = doc
-            items.append(item)
-        return {"isIncomplete": False, "items": items}
+                "data": {"wasmIdleCompletion": token, "index": index},
+            })
+        return {"isIncomplete": incomplete, "items": items}
+
+    def _completion_resolve(self, params: dict) -> dict:
+        # Never reinterpret a stale token against a new source or a different completion list.
+        data = params.get("data")
+        if not isinstance(data, dict):
+            return params
+        token, index = data.get("wasmIdleCompletion"), data.get("index")
+        if type(token) is not int or type(index) is not int:
+            return params
+        cached = self._completion_results.get(token)
+        if cached is None:
+            return params
+        uri, version, completions, docs = cached
+        document = self.documents.get(uri)
+        if document is None or document.version != version or not 0 <= index < len(completions):
+            return params
+        completion = completions[index]
+        if params.get("label") != (completion.name_with_symbols or completion.name):
+            return params
+        try:
+            if index not in docs:
+                docs[index] = completion.docstring(raw=False).strip()
+            doc = docs[index]
+        except Exception:
+            return params
+        if not doc:
+            return params
+        return {**params, "documentation": doc}
 
     def _signature_help(self, params: dict) -> dict | None:
         position = params["position"]
@@ -414,6 +471,7 @@ class WasmIdlePythonLsp:
                 handlers.update(
                     {
                         "textDocument/completion": self._completion,
+                        "completionItem/resolve": self._completion_resolve,
                         "textDocument/signatureHelp": self._signature_help,
                         "textDocument/hover": self._hover,
                         "textDocument/definition": self._definition,
@@ -440,8 +498,13 @@ class WasmIdlePythonLsp:
                 return
             if method == "exit":
                 self.shutdown_requested = True
+                self._invalidate_analysis()
+                return
+            if method == "workspace/didChangeWatchedFiles":
+                self._invalidate_analysis()
                 return
             if method == "textDocument/didOpen":
+                self._invalidate_analysis()
                 text_document = params["textDocument"]
                 self.documents[text_document["uri"]] = Document(
                     uri=text_document["uri"],
@@ -453,6 +516,7 @@ class WasmIdlePythonLsp:
                 self._publish_diagnostics(text_document["uri"])
                 return
             if method == "textDocument/didChange":
+                self._invalidate_analysis()
                 text_document = params["textDocument"]
                 document = self._document(text_document["uri"])
                 for change in params.get("contentChanges", []):
@@ -462,6 +526,7 @@ class WasmIdlePythonLsp:
                 self._publish_diagnostics(text_document["uri"])
                 return
             if method == "textDocument/didSave":
+                self._invalidate_analysis()
                 text_document = params["textDocument"]
                 document = self._document(text_document["uri"])
                 if "text" in params and params["text"] is not None:
@@ -470,6 +535,7 @@ class WasmIdlePythonLsp:
                 self._publish_diagnostics(text_document["uri"])
                 return
             if method == "textDocument/didClose":
+                self._invalidate_analysis()
                 text_document = params["textDocument"]
                 self.documents.pop(text_document["uri"], None)
                 self._notify(
