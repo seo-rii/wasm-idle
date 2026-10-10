@@ -51,6 +51,7 @@ export type EditorDefaultLanguage =
 	| 'fennel'
 	| 'zig'
 	| 'lisp'
+	| 'commonlisp'
 	| 'ruby'
 	| 'haskell'
 	| 'r'
@@ -123,6 +124,7 @@ export const editorDefaults: Record<
 	| 'fennel'
 	| 'zig'
 	| 'lisp'
+	| 'commonlisp'
 	| 'ruby'
 	| 'haskell'
 	| 'r'
@@ -1066,6 +1068,21 @@ pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
     try stdout.print("fibonacci={d}\\n", .{fibonacci(n) + bonus});
 }`,
+	commonlisp: `(defun fibonacci (n)
+  (if (< n 2)
+      n
+      (+ (fibonacci (- n 1)) (fibonacci (- n 2)))))
+
+(format t "What is your name? ")
+(finish-output)
+(let ((name (read-line *standard-input* nil "stranger")))
+  (format t "Hello, ~a!~%" name))
+
+(format t "Enter a number: ")
+(finish-output)
+(let ((n (read *standard-input* nil 10)))
+  (format t "fibonacci(~d) = ~d~%" n (fibonacci n)))
+`,
 	lisp: `(define bonus 3)
 (define memo (make-hash-table))
 (setf (gethash 0 memo) 1)
@@ -1592,6 +1609,7 @@ export function isEditorDefaultSource(source: string) {
 		source === editorDefaults.fennel ||
 		source === editorDefaults.zig ||
 		source === editorDefaults.lisp ||
+		source === editorDefaults.commonlisp ||
 		source === editorDefaults.ruby ||
 		source === editorDefaults.haskell ||
 		source === editorDefaults.r ||

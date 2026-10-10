@@ -142,6 +142,7 @@ describe('application runtime asset root', () => {
 		const assets = createApplicationRuntimeAssets('/foo/bar/');
 
 		expect(assets.lfortran).toEqual({ baseUrl: '/foo/bar/wasm-lfortran/' });
+		expect(assets.commonlisp).toEqual({ baseUrl: '/foo/bar/wasm-commonlisp/' });
 		expect(Object.keys(assets).sort()).toEqual([
 			'assemblyscript',
 			'awk',
@@ -150,6 +151,7 @@ describe('application runtime asset root', () => {
 			'clang',
 			'clojurescript',
 			'cobol',
+			'commonlisp',
 			'd',
 			'dotnet',
 			'duckdb',
