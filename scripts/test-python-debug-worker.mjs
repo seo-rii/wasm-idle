@@ -12,8 +12,10 @@ function transpile(source) {
 }
 const preview = {};
 vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonDebugPreview.ts', import.meta.url), 'utf8')), { exports: preview });
+const stdio = {};
+vm.runInNewContext(transpile(readFileSync(new URL('../src/lib/playground/worker/pythonStdio.ts', import.meta.url), 'utf8')), { exports: stdio, TextEncoder, TextDecoder, performance, setTimeout, clearTimeout });
 const source = readFileSync(new URL('../src/lib/playground/worker/python.ts', import.meta.url), 'utf8');
-const compiled = transpile(source + '\nexport function __inject(runtime: any) { pyodide = runtime; }');
+const compiled = transpile(source + '\nexport function __inject(runtime: any) { pyodide = runtime; installPythonFlushHooks = () => Object.assign(() => {}, { destroy() {} }); }');
 async function run(check) {
 	const debugBuffer = new SharedArrayBuffer(64);
 	const control = new Int32Array(debugBuffer);
@@ -21,10 +23,11 @@ async function run(check) {
 	const self = { postMessage: (value) => messages.push(value) };
 	const exports = {};
 	vm.runInNewContext(compiled, {
-		exports, self, postMessage: self.postMessage, TextEncoder, TextDecoder, URL, Blob,
+		exports, self, postMessage: self.postMessage, TextEncoder, TextDecoder, URL, Blob, performance, setTimeout, clearTimeout,
 		ArrayBuffer, SharedArrayBuffer, Int32Array, Uint8Array, Atomics,
 		require(id) {
 			if (id === './pythonDebugPreview') return preview;
+			if (id === './pythonStdio') return stdio;
 			if (id.includes('sharedBuffer')) return { isSharedBufferBackedView: () => true };
 			if (id.endsWith('/assets')) return { handleWorkerAssetMessage: () => false };
 			return {};
@@ -32,6 +35,7 @@ async function run(check) {
 	});
 	let calls = 0;
 	exports.__inject({
+		setStdin() {}, setStdout() {}, setStderr() {},
 		FS: { mkdirTree() {}, writeFile() {} }, async loadPackagesFromImports() {}, setInterruptBuffer() {},
 		async runPythonAsync(python) {
 			calls++;
