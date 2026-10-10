@@ -40,7 +40,7 @@ class LegacyRuntime {
 }
 let moduleCompiles = 0;
 const Runtime = load(new URL('artifact-runtime.ts', dir), {
- './runtime.js': { default: LegacyRuntime }, './workspace.js': workspace, './types.js': { resolveDebugMode },
+ './runtime.js': { __esModule: true, default: LegacyRuntime }, './workspace.js': workspace, './types.js': { resolveDebugMode },
  './dwarf.js': { createDwarfDebugDescriptor: async (request) => ({ kind: 'dwarf', sourceRoot: '/workspace', files: [], requested: request }) }
 }, { WebAssembly: { compile: async (bytes) => { moduleCompiles++; return WebAssembly.compile(bytes); } } }).default;
 
